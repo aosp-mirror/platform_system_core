@@ -1,0 +1,34 @@
+this version of init contains code to perform "bootcharting", i.e. generating log
+files that can be later processed by the tools provided by www.bootchart.org.
+
+to activate it, you need to define build 'init' with the INIT_BOOTCHART environment
+variable defined to 'true', then create a file on the /data partition with a command
+like the following:
+
+  adb shell 'echo 1 > /data/bootchart'
+
+if the '/data/bootchart' file doesn't exist, or doesn't contain a '1' in its first
+byte, init will proceed normally.
+
+by default, the bootchart log stops after 2 minutes, but you can stop it earlier
+with the following command while the device is booting:
+
+  adb shell 'echo 1 > /data/bootchart-stop'
+
+note that /data/bootchart-stop is deleted automatically by init at the end of the
+bootcharting. this is not the case of /data/bootchart, so don't forget to delete it
+when you're done collecting data:
+
+  adb shell rm /data/bootchart
+
+the log files are placed in /tmp/bootchart/. you must run the script tools/grab-bootchart.sh
+which will use ADB to retrieve them and create a bootchart.tgz file that can be used with
+the bootchart parser/renderer, or even uploaded directly to the form located at:
+
+  http://www.bootchart.org/download.html
+
+technical note:
+
+this implementation of bootcharting does use the 'bootchartd' script provided by
+www.bootchart.org, but a C re-implementation that is directly compiled into our init
+program.

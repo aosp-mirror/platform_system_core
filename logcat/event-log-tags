@@ -1,0 +1,305 @@
+# The entries in this file map a sparse set of log tag numbers to tag names.
+# This is installed on the device, in /system/etc, and parsed by logcat.
+#
+# Tag numbers are decimal integers, from 0 to 2^31.  (Let's leave the
+# negative values alone for now.)
+#
+# Tag names are one or more ASCII letters and numbers or underscores, i.e.
+# "[A-Z][a-z][0-9]_".  Do not include spaces or punctuation (the former
+# impacts log readability, the latter makes regex searches more annoying).
+#
+# Tag numbers and names are separated by whitespace.  Blank lines and lines
+# starting with '#' are ignored.
+#
+# Optionally, after the tag names can be put a description for the value(s)
+# of the tag. Description are in the format
+#    (<name>|data type[|data unit])
+# Multiple values are separated by commas.
+#
+# The data type is a number from the following values:
+# 1: int
+# 2: long
+# 3: string
+# 4: list
+# 
+# The data unit is a number taken from the following list:
+# 1: Number of objects
+# 2: Number of bytes
+# 3: Number of milliseconds
+# 4: Number of allocations
+# 5: Id
+# 6: Percent
+# Default value for data of type int/long is 2 (bytes).
+#
+# TODO: generate ".java" and ".h" files with integer constants from this file.
+
+# These are used for testing, do not modify without updating
+# tests/framework-tests/src/android/util/EventLogFunctionalTest.java.
+42    answer (to life the universe etc|3)
+314   pi
+2718  e
+
+2719 configuration_changed (config mask|1|5)
+2720 sync (id|3),(event|1|5),(source|1|5)
+2721 cpu (total|1|6),(user|1|6),(system|1|6),(iowait|1|6),(irq|1|6),(softirq|1|6)
+2722 battery_level (level|1|6),(voltage|1|1),(temperature|1|1)
+2723 battery_status (status|1|5),(health|1|5),(present|1|5),(plugged|1|5),(technology|3)
+# This is logged when the device is being forced to sleep (typically by
+# the user pressing the power button).
+2724 power_sleep_requested (wakeLocksCleared|1|1)
+# This is logged when the screen on broadcast has completed
+2725 power_screen_broadcast_send (wakelockCount|1|1)
+# This is logged when the screen broadcast has completed
+2726 power_screen_broadcast_done (on|1|5),(broadcastDuration|2|3),(wakelockCount|1|1)
+# This is logged when the screen on broadcast has completed
+2727 power_screen_broadcast_stop (which|1|5),(wakelockCount|1|1)
+# This is logged when the screen is turned on or off.
+2728 power_screen_state (offOrOn|1|5),(becauseOfUser|1|5),(totalTouchDownTime|2|3),(touchCycles|1|1)
+# This is logged when the partial wake lock (keeping the device awake
+# regardless of whether the screen is off) is acquired or released.
+2729 power_partial_wake_state (releasedorAcquired|1|5),(tag|3)
+#
+# Leave IDs through 2739 for more power logs 
+#
+
+# This event is logged when the location service uploads location data.
+2740 location_controller
+# This event is logged when someone is deciding to force a garbage collection
+2741 force_gc (reason|3)
+# This event is logged on each tickle
+2742 tickle (authority|3)
+# What happens in a sync operation (bytes sent and received, and
+# operation details)
+2743 sync_details (authority|3),(send|1|2),(recv|1|2),(details|3)
+
+# The disk space free on the /data partition, in bytes
+2744 free_storage_changed (data|2|2)
+# Device low memory notification and disk space free on the /data partition, in bytes at that time
+2745 low_storage (data|2|2)
+# disk space free on the /data partition in bytes
+2746 free_storage_left (data|2|2)
+
+# when a NotificationManager.notify is called
+2750 notification_enqueue (pkg|3),(id|1|5),(notification|3)
+# when someone tries to cancel a notification, the notification manager sometimes
+# calls this with flags too
+2751 notification_cancel (pkg|3),(id|1|5),(required_flags|1)
+# when someone tries to cancel all of the notifications for a particular package
+2752 notification_cancel_all (pkg|3),(required_flags|1)
+
+# This event is logged when GTalkService encounters important events
+2800 gtalkservice (eventType|1)
+# This event is logged for GTalk connection state changes. The status field is an int, but
+# it really contains 4 separate values, each taking up a byte
+# (eventType, connection state, connection error, network state)
+2801 gtalk_connection (status|1)
+
+2802 watchdog (Service|3)
+2803 watchdog_proc_pss (Process|3),(Pid|1|5),(Pss|1|2)
+2804 watchdog_soft_reset (Process|3),(Pid|1|5),(MaxPss|1|2),(Pss|1|2),(Skip|3)
+2805 watchdog_hard_reset (Process|3),(Pid|1|5),(MaxPss|1|2),(Pss|1|2)
+2806 watchdog_pss_stats (EmptyPss|1|2),(EmptyCount|1|1),(BackgroundPss|1|2),(BackgroundCount|1|1),(ServicePss|1|2),(ServiceCount|1|1),(VisiblePss|1|2),(VisibleCount|1|1),(ForegroundPss|1|2),(ForegroundCount|1|1),(NoPssCount|1|1)
+2807 watchdog_proc_stats (DeathsInOne|1|1),(DeathsInTwo|1|1),(DeathsInThree|1|1),(DeathsInFour|1|1),(DeathsInFive|1|1)
+2808 watchdog_scheduled_reboot (Now|2|1),(Interval|1|3),(StartTime|1|3),(Window|1|3),(Skip|3)
+2809 watchdog_meminfo (MemFree|1|2),(Buffers|1|2),(Cached|1|2),(Active|1|2),(Inactive|1|2),(AnonPages|1|2),(Mapped|1|2),(Slab|1|2),(SReclaimable|1|2),(SUnreclaim|1|2),(PageTables|1|2)
+2810 watchdog_vmstat (runtime|2|3),(pgfree|1|1),(pgactivate|1|1),(pgdeactivate|1|1),(pgfault|1|1),(pgmajfault|1|1)
+2811 watchdog_requested_reboot (NoWait|1|1),(ScheduleInterval|1|3),(RecheckInterval|1|3),(StartTime|1|3),(Window|1|3),(MinScreenOff|1|3),(MinNextAlarm|1|3)
+
+# Device boot timings.  We include monotonic clock values because the
+# intrinsic event log times are wall-clock.
+#
+# Runtime starts:
+3000 boot_progress_start (time|2|3)
+# SystemServer.run() starts:
+3010 boot_progress_system_run (time|2|3)
+# ZygoteInit class preloading starts:
+3020 boot_progress_preload_start (time|2|3)
+# ZygoteInit class preloading ends:
+3030 boot_progress_preload_end (time|2|3)
+# ActivityManagerService.systemReady() starts:
+3040 boot_progress_ams_ready (time|2|3)
+# ActivityManagerService calls enableScreenAfterBoot():
+3050 boot_progress_enable_screen (time|2|3)
+# Package Manager starts:
+3060 boot_progress_pms_start (time|2|3)
+# Package Manager .apk scan starts:
+3070 boot_progress_pms_system_scan_start (time|2|3)
+# Package Manager .apk scan starts:
+3080 boot_progress_pms_data_scan_start (time|2|3)
+# Package Manager .apk scan ends:
+3090 boot_progress_pms_scan_end (time|2|3)
+# Package Manager ready:
+3100 boot_progress_pms_ready (time|2|3)
+# + check activity_launch_time for Home app
+
+# Do not change these names without updating the checkin_events setting in
+# google3/googledata/wireless/android/provisioning/gservices.config !!
+#
+# An activity is being finished:
+30001 am_finish_activity (Token|1|5),(Task ID|1|5),(Component Name|3),(Reason|3)
+# A task is being brought to the front of the screen:
+30002 am_task_to_front (Task|1|5)
+# An existing activity is being given a new intent:
+30003 am_new_intent (Token|1|5),(Task ID|1|5),(Component Name|3),(Action|3),(MIME Type|3),(URI|3),(Flags|1|5)
+# A new task is being created:
+30004 am_create_task (Task ID|1|5)
+# A new activity is being created in an existing task:
+30005 am_create_activity (Token|1|5),(Task ID|1|5),(Component Name|3),(Action|3),(MIME Type|3),(URI|3),(Flags|1|5)
+# An activity has been resumed into the foreground but was not already running:
+30006 am_restart_activity (Token|1|5),(Task ID|1|5),(Component Name|3)
+# An activity has been resumed and is now in the foreground:
+30007 am_resume_activity (Token|1|5),(Task ID|1|5),(Component Name|3)
+# Application Not Responding
+30008 anr (pid|1|5),(Package Name|3),(reason|3)
+# Activity launch time
+30009 activity_launch_time (Token|1|5),(Component Name|3),(time|2|3)
+# Application process bound to work
+30010 am_proc_bound (PID|1|5),(Process Name|3)
+# Application process died
+30011 am_proc_died (PID|1|5),(Process Name|3)
+# The Activity Manager failed to pause the given activity. 
+30012 am_failed_to_pause (Token|1|5),(Wanting to pause|3),(Currently pausing|3)
+# Attempting to pause the current activity 
+30013 am_pause_activity (Token|1|5),(Component Name|3)
+# Application process has been started
+30014 am_proc_start (PID|1|5),(UID|1|5),(Process Name|3),(Type|3),(Component|3)
+# An application process has been marked as bad
+30015 am_proc_bad (UID|1|5),(Process Name|3)
+# An application process that was bad is now marked as good
+30016 am_proc_good (UID|1|5),(Process Name|3)
+# Reporting to applications that memory is low
+30017 am_low_memory (Num Processes|1|1)
+# An activity is being destroyed:
+30018 am_destroy_activity (Token|1|5),(Task ID|1|5),(Component Name|3)
+# An activity has been relaunched, resumed, and is now in the foreground:
+30019 am_relaunch_resume_activity (Token|1|5),(Task ID|1|5),(Component Name|3)
+# An activity has been relaunched:
+30020 am_relaunch_activity (Token|1|5),(Task ID|1|5),(Component Name|3)
+# The activity's onPause has been called.
+30021 am_on_paused_called (Component Name|3)
+# The activity's onResume has been called.
+30022 am_on_resume_called (Component Name|3)
+# Kill a process to reclaim memory.
+30023 am_kill_for_memory (PID|1|5),(Process Name|3),(OomAdj|1|5)
+# Discard an undelivered serialized broadcast (timeout/ANR/crash)
+30024 am_broadcast_discard_filter (Broadcast|1|5),(Action|3),(Receiver Number|1|1),(BroadcastFilter|1|5)
+30025 am_broadcast_discard_app (Broadcast|1|5),(Action|3),(Receiver Number|1|1),(App|3)
+# A service is being created
+30030 am_create_service (Service Record|1|5),(Name|3),(Intent|3),(PID|1|5)
+# A service is being destroyed
+30031 am_destroy_service (Service Record|1|5),(Name|3),(PID|1|5)
+
+# Out of memory for surfaces.
+31000 wm_no_surface_memory (Window|3),(PID|1|5),(Operation|3)
+
+# dvm_gc_info: LIST (LONG, LONG, LONG)
+#
+# First LONG:
+#
+#    [63]    1
+#    [62-24] ASCII process identifier
+#    [23-12] GC time in ms
+#    [11- 0] Bytes freed
+#
+# Second LONG (aggregated heap info):
+#
+#    [63-62] 10
+#    [61-60] Reserved; must be zero
+#    [59-48] Objects freed
+#    [47-36] Actual size (current footprint)
+#    [35-24] Allowed size (current hard max)
+#    [23-12] Objects allocated
+#    [11- 0] Bytes allocated
+#
+# Third LONG (zygote heap info):
+#
+#    [63-62] 11
+#    [61-60] Reserved; must be zero
+#    [59-48] Soft limit
+#    [47-36] Actual size (current footprint)
+#    [35-24] Allowed size (current hard max)
+#    [23-12] Objects allocated
+#    [11- 0] Bytes allocated
+#
+# Fourth LONG:
+#
+#    [63-48] Reserved; must be zero
+#    [47-36] dlmallocFootprint
+#    [35-24] mallinfo: total allocated space
+#    [23-12] External byte limit
+#    [11- 0] External bytes allocated
+#
+# See HeapDebug.c
+#
+20001 dvm_gc_info (custom|2),(custom|2),(custom|2),(custom|2)
+20002 dvm_gc_madvise_info (total|1|2),(zygote|1|2)
+
+75000 sqlite_mem_alarm_current (current|1|2)
+75001 sqlite_mem_alarm_max (max|1|2)
+75002 sqlite_mem_alarm_alloc_attempt (attempts|1|4)
+75003 sqlite_mem_released (Memory released|1|2)
+
+40000 checkin (Check in time|2|3)
+
+50000 menu_item_selected (Menu type where 0 is options and 1 is context|1|5),(Menu item title|3)
+50001 menu_opened (Menu type where 0 is options and 1 is context|1|5)
+# Connectivity state changed:
+# [31-11] Reserved for future use
+# [10-9] Mobile network connection type (as defined by the TelephonyManager)
+# [ 8- 3] Detailed state ordinal (as defined by NetworkInfo.DetailedState)   
+# [ 2- 0] Network type (as defined by ConnectivityManager)
+50020 connectivity_state_changed (custom|1|5)
+
+# Wi-Fi network state changed:
+# [31- 6] Reserved for future use
+# [ 5- 0] Detailed state ordinal (as defined by NetworkInfo.DetailedState)   
+50021 wifi_network_state_changed (network_state|1|5)
+
+# Wi-Fi supplicant state changed:
+# [31- 6] Reserved for future use
+# [ 5- 0] Supplicant state ordinal (as defined by SupplicantState)   
+50022 wifi_supplicant_state_changed (supplicant_state|1|5)
+
+# Wi-Fi driver state changed:
+# [31- 1] Reserved for future use
+# [ 0- 0] Driver start (1) or stopped (0)   
+50023 wifi_driver_state_changed (driver_state|1|5)
+
+# Wi-Fi interface configuration state changed:
+# [31- 1] Reserved for future use
+# [ 0- 0] Interface configuration succeeded (1) or failed (0)   
+50024 wifi_interface_configuration_state_changed (IP_configuration|1|5)
+
+# Wi-Fi supplicant connection state changed:
+# [31- 1] Reserved for future use
+# [ 0- 0] Connected to supplicant (1) or disconnected from supplicant (0)   
+50025 wifi_supplicant_connection_state_changed (connected|1|5)
+
+# PDP Context has a bad DNS address
+50100 pdp_bad_dns_address (dns_address|3)
+
+# For data connection on PDP context, reached the data-out-without-data-in
+# packet count that triggers a countdown to radio restart
+50101 pdp_radio_reset_countdown_triggered (out_packet_count|1|1)
+
+# Radio restart - timed out with no incoming packets.
+50102 pdp_radio_reset (out_packet_count|1|1)
+
+# PDP context reset - timed out with no incoming packets.
+50103 pdp_context_reset (out_packet_count|1|1)
+
+# Reregister to data network - timed out with no incoming packets.
+50104 pdp_reregister_network (out_packet_count|1|1)
+
+
+# Do not change these names without updating tag in:
+#//device/dalvik/libcore/luni/src/main/native/org_apache_harmony_luni_platform_OSNetworkSystem.c
+51000 socket_stats (send|1|2),(recv|1|2),(ip|1|5),(port|1|5),(close|1|5)
+
+60000 viewroot_draw (Draw time|1|3)
+60001 viewroot_layout (Layout time|1|3)
+60002 view_build_drawing_cache (View created drawing cache|1|5)
+60003 view_use_drawing_cache (View drawn using bitmap cache|1|5)
+
+# 0 for screen off, 1 for screen on, 2 for key-guard done
+70000 screen_toggled (screen_state|1|5)
