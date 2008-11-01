@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include "private/android_filesystem_config.h"
 #include "cutils/log.h"
 
 void fatal(const char *msg) {
@@ -118,6 +119,12 @@ int main(int argc, char* argv[]) {
 
     } else {
         close(*child_write);
+
+        // switch user and group to "log"
+        // this may fail if we are not root, 
+        // but in that case switching user/group is unnecessary 
+        setgid(AID_LOG);
+        setuid(AID_LOG);
 
         parent(argv[1], *parent_read);
     }
