@@ -23,7 +23,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <alloca.h>
 #include <assert.h>
 #include <arpa/inet.h>
 

@@ -152,8 +152,14 @@
  * HAVE_LITTLE_ENDIAN -- we are little endian.
  * HAVE_BIG_ENDIAN -- we are big endian.
  */
-#define HAVE_ENDIAN_H
+/* #define HAVE_ENDIAN_H */
 #define HAVE_LITTLE_ENDIAN
+
+/*
+ * Define this if you have sys/endian.h
+ * NOTE: mutually exclusive with HAVE_ENDIAN_H
+ */
+#define HAVE_SYS_ENDIAN_H
 
 /*
  * We need to choose between 32-bit and 64-bit off_t.  All of our code should
@@ -292,5 +298,20 @@
  * Define if writev() exists
  */
 #define HAVE_WRITEV 1
+
+/*
+ * Define if <alloca.h> does not exist
+ * NOTE: <alloca.h> defines alloca() which
+ *   on FreeBSD is defined in <stdlib.h>
+ */
+#define HAVE_NO_ALLOCA_H
+
+/*
+ * Defines CLOCK_PROCESS_CPUTIME_ID for clock_gettime()
+ * XXX: CLOCK_PROF seems to be commonly used replacement
+ */
+#ifndef  CLOCK_PROCESS_CPUTIME_ID
+#define CLOCK_PROCESS_CPUTIME_ID CLOCK_PROF
+#endif
 
 #endif /*_ANDROID_CONFIG_H*/
