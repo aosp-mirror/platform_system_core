@@ -131,6 +131,18 @@ static void service_start_if_not_disabled(struct service *svc)
     }
 }
 
+int do_chdir(int nargs, char **args)
+{
+    chdir(args[1]);
+    return 0;
+}
+
+int do_chroot(int nargs, char **args)
+{
+    chroot(args[1]);
+    return 0;
+}
+
 int do_class_start(int nargs, char **args)
 {
         /* Starting a class does not start services
