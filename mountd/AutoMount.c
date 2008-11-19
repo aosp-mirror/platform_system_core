@@ -254,9 +254,6 @@ static int DoMountDevice(const char* device, const char* mountPoint)
 
     if (result == 0) {
         NotifyMediaState(mountPoint, MEDIA_MOUNTED, (flags & MS_RDONLY) != 0);
-    } else if (errno == EBUSY) {
-    // ignore EBUSY, since it usually means the device is already mounted
-        result = 0;
     } else {
 #if CREATE_MOUNT_POINTS
         rmdir(mountPoint);
