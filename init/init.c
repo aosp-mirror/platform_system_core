@@ -253,7 +253,9 @@ void service_start(struct service *svc)
             setuid(svc->uid);
         }
 
-        execve(svc->args[0], (char**) svc->args, (char**) ENV);
+        if (execve(svc->args[0], (char**) svc->args, (char**) ENV) < 0) {
+            ERROR("cannot execve('%s'): %s\n", svc->args[0], strerror(errno));
+        }
         _exit(127);
     }
 
