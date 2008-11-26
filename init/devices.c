@@ -127,6 +127,7 @@ static struct perms_ devperms[] = {
     { "/dev/qmi1",          0640,   AID_RADIO,      AID_RADIO,      0 },
     { "/dev/qmi2",          0640,   AID_RADIO,      AID_RADIO,      0 },
     { "/dev/htc-acoustic",  0640,   AID_RADIO,      AID_RADIO,      0 },
+    { "/dev/snd/",          0664,   AID_SYSTEM,     AID_AUDIO,      1 },
     { NULL, 0, 0, 0, 0 },
 };
 
@@ -382,6 +383,9 @@ static void handle_device_event(struct uevent *uevent)
             mkdir(base, 0755);
         } else if(!strncmp(uevent->path, "/class/mtd/", 11)) {
             base = "/dev/mtd/";
+            mkdir(base, 0755);
+        } else if(!strncmp(uevent->subsystem, "sound", 5)) {
+            base = "/dev/snd/";
             mkdir(base, 0755);
         } else if(!strncmp(uevent->path, "/class/misc/", 12) &&
                     !strncmp(name, "log_", 4)) {
