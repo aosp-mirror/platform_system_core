@@ -206,7 +206,7 @@ int do_insmod(int nargs, char **args)
 
 int do_import(int nargs, char **args)
 {
-    return -1;
+    return parse_config_file(args[1]);
 }
 
 int do_mkdir(int nargs, char **args)
