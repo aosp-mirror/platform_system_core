@@ -296,8 +296,8 @@ static void *stdin_read_thread(void *x)
                             buf_ptr[cmdlen] = '\0';
                             if( (item = shListFindItem( &history, (void *)buf_ptr, shItemCmp )) == NULL ) {
                                 shListInsFirstItem( &history, (void *)buf_ptr );
-				item = &history;
-			    }
+                                item = &history;
+                            }
                         }
                     }
                     cmdlen = 0;
@@ -322,8 +322,8 @@ static void *stdin_read_thread(void *x)
                 default:
 #ifdef SH_HISTORY
                     if( buf[n] == SH_DEL_CHAR ) {
-			if( cmdlen > 0 )
-                    	    cmdlen--;
+                        if( cmdlen > 0 )
+                            cmdlen--;
                     }
                     else {
                         realbuf[cmdlen] = buf[n];
@@ -478,7 +478,7 @@ static void status_window(transport_type ttype, const char* serial)
 #ifdef _WIN32
     /* XXX: TODO */
 #else
-	int  fd;
+    int  fd;
     fd = unix_open("/dev/null", O_WRONLY);
     dup2(fd, 2);
     adb_close(fd);
@@ -512,7 +512,7 @@ static void status_window(transport_type ttype, const char* serial)
     }
 }
 
-/** duplicate string and quote all \ " ( ) chars */
+/** duplicate string and quote all \ " ( ) chars + space character. */
 static char *
 dupAndQuote(const char *s)
 {
@@ -527,7 +527,7 @@ dupAndQuote(const char *s)
 
     for( ;*ts != '\0'; ts++) {
         alloc_len++;
-        if (*ts == '"' || *ts == '\\') {
+        if (*ts == ' ' || *ts == '"' || *ts == '\\' || *ts == '(' || *ts == ')') {
             alloc_len++;
         }
     }
@@ -538,7 +538,7 @@ dupAndQuote(const char *s)
     dest = ret;
 
     for ( ;*ts != '\0'; ts++) {
-        if (*ts == '"' || *ts == '\\' || *ts == '(' || *ts == ')') {
+        if (*ts == ' ' || *ts == '"' || *ts == '\\' || *ts == '(' || *ts == ')') {
             *dest++ = '\\';
         }
 
@@ -561,7 +561,7 @@ int ppp(int argc, char **argv)
 {
 #ifdef HAVE_WIN32_PROC
     fprintf(stderr, "error: adb %s not implemented on Win32\n", argv[0]);
-	return -1;
+    return -1;
 #else
     char *adb_service_name;
     pid_t pid;
@@ -657,8 +657,8 @@ static int logcat(transport_type transport, char* serial, int argc, char **argv)
     quoted_log_tags = dupAndQuote(log_tags == NULL ? "" : log_tags);
 
     snprintf(buf, sizeof(buf),
-            "shell:export ANDROID_LOG_TAGS=\"\%s\" ; exec logcat",
-	    quoted_log_tags);
+        "shell:export ANDROID_LOG_TAGS=\"\%s\" ; exec logcat",
+        quoted_log_tags);
 
     free(quoted_log_tags);
 
@@ -847,7 +847,7 @@ int adb_commandline(int argc, char **argv)
     if (gProductOutPath == NULL || gProductOutPath[0] == '\0') {
         gProductOutPath = NULL;
     }
-    // TODO: also try TARGET_PRODUCT as a hint
+    // TODO: also try TARGET_PRODUCT/TARGET_DEVICE as a hint
 
         /* modifiers and flags */
     while(argc > 0) {
@@ -1077,15 +1077,15 @@ top:
             return 1;
         }
 
-		/* Allow a command to be run after wait-for-device,
-		 * e.g. 'adb wait-for-device shell'.
-		 */
-		if(argc > 1) {
-			argc--;
-			argv++;
-			goto top;
-		}
-		return 0;
+        /* Allow a command to be run after wait-for-device,
+            * e.g. 'adb wait-for-device shell'.
+            */
+        if(argc > 1) {
+            argc--;
+            argv++;
+            goto top;
+        }
+        return 0;
     }
 
     if(!strcmp(argv[0], "forward")) {
@@ -1299,7 +1299,7 @@ static int pm_command(transport_type transport, char* serial,
     while(argc-- > 0) {
         char *quoted;
 
-        quoted = dupAndQuote (*argv++);
+        quoted = dupAndQuote(*argv++);
 
         strncat(buf, " ", sizeof(buf)-1);
         strncat(buf, quoted, sizeof(buf)-1);
@@ -1312,6 +1312,18 @@ static int pm_command(transport_type transport, char* serial,
 
 int uninstall_app(transport_type transport, char* serial, int argc, char** argv)
 {
+    /* if the user choose the -k option, we refuse to do it until devices are
+       out with the option to uninstall the remaining data somehow (adb/ui) */
+    if (argc == 3 && strcmp(argv[1], "-k") == 0)
+    {
+        printf(
+            "The -k option uninstalls the application while retaining the data/cache.\n"
+            "At the moment, there is no way to remove the remaining data.\n"
+            "You will have to reinstall the application with the same signature, and fully uninstall it.\n"
+            "If you truly wish to continue, execute 'adb shell pm uninstall -k %s'\n", argv[2]);
+        return -1;
+    }
+
     /* 'adb uninstall' takes the same arguments as 'pm uninstall' on device */
     return pm_command(transport, serial, argc, argv);
 }

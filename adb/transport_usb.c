@@ -55,7 +55,7 @@ static int remote_read(apacket *p, atransport *t)
     }
 
     fix_endians(p);
-    
+
     if(check_header(p)) {
         D("remote usb: check_header failed\n");
         return -1;
@@ -79,9 +79,9 @@ static int remote_read(apacket *p, atransport *t)
 static int remote_write(apacket *p, atransport *t)
 {
     unsigned size = p->msg.data_length;
-    
+
     fix_endians(p);
-    
+
     if(usb_write(t->usb, &p->msg, sizeof(amessage))) {
         D("remote usb: 1 - write terminated\n");
         return -1;
@@ -91,7 +91,7 @@ static int remote_write(apacket *p, atransport *t)
         D("remote usb: 2 - write terminated\n");
         return -1;
     }
-        
+
     return 0;
 }
 
@@ -117,7 +117,7 @@ void init_usb_transport(atransport *t, usb_handle *h)
     t->connection_state = CS_OFFLINE;
     t->type = kTransportUsb;
     t->usb = h;
-    
+
 #if ADB_HOST
     HOST = 1;
 #else
@@ -135,7 +135,7 @@ int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_
             /* not supported */
         return 0;
     }
-    
+
         /* class:vendor (0xff) subclass:android (0x42) proto:adb (0x01) */
     if(usb_class == 0xff) {
         if((usb_subclass == 0x42) && (usb_protocol == 0x01)) {

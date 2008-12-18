@@ -1,5 +1,7 @@
 # Copyright 2005 The Android Open Source Project
 
+ifeq ($(TARGET_ARCH),arm)
+
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -20,3 +22,5 @@ LOCAL_MODULE_TAGS := eng
 #LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_SHARED_LIBRARIES := libcutils libc
 include $(BUILD_EXECUTABLE)
+
+endif # TARGET_ARCH == arm

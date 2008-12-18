@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2008 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 /* this code is used to generate a boot sequence profile that can be used
  * with the 'bootchart' graphics generation tool. see www.bootchart.org
  * note that unlike the original bootchartd, this is not a Bash script but
@@ -16,17 +32,18 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include "bootchart.h"
 
 #define VERSION         "0.8"
 #define SAMPLE_PERIOD   0.2
-#define LOG_ROOT        "/tmp/bootchart"
+#define LOG_ROOT        "/data/bootchart"
 #define LOG_STAT        LOG_ROOT"/proc_stat.log"
 #define LOG_PROCS       LOG_ROOT"/proc_ps.log"
 #define LOG_DISK        LOG_ROOT"/proc_diskstats.log"
 #define LOG_HEADER      LOG_ROOT"/header"
 #define LOG_ACCT        LOG_ROOT"/kernel_pacct"
 
-#define LOG_STARTFILE   "/data/bootchart"
+#define LOG_STARTFILE   "/data/bootchart-start"
 #define LOG_STOPFILE    "/data/bootchart-stop"
 
 static int
@@ -54,12 +71,11 @@ proc_read(const char*  filename, char* buff, size_t  buffsize)
         len = unix_read(fd, buff, buffsize-1);
         close(fd);
     }
-    buff[len] = 0;
+    buff[len > 0 ? len : 0] = 0;
     return len;
 }
 
 #define FILE_BUFF_SIZE    65536
-#define FILE_BUFF_RESERVE (FILE_BUFF_SIZE - 4096)
 
 typedef struct {
     int   count;
@@ -81,7 +97,7 @@ file_buff_write( FileBuff  buff, const void*  src, int  len )
         int  avail = sizeof(buff->data) - buff->count;
         if (avail > len)
             avail = len;
-        
+
         memcpy( buff->data + buff->count, src, avail );
         len -= avail;
         src  = (char*)src + avail;
@@ -115,7 +131,7 @@ log_header(void)
     time_t     now_t = time(NULL);
     struct tm  now = *localtime(&now_t);
     strftime(date, sizeof(date), "%x %X", &now);
-    
+
     out = fopen( LOG_HEADER, "w" );
     if (out == NULL)
         return;
@@ -123,7 +139,7 @@ log_header(void)
     proc_read("/proc/cmdline", cmdline, sizeof(cmdline));
     proc_read("/proc/version", uname, sizeof(uname));
     proc_read("/proc/cpuinfo", cpuinfo, sizeof(cpuinfo));
-   
+
     cpu = strchr( cpuinfo, ':' );
     if (cpu) {
         char*  p = strchr(cpu, '\n');
@@ -131,7 +147,7 @@ log_header(void)
         if (p)
             *p = 0;
     }
-   
+
     fprintf(out, "version = %s\n", VERSION);
     fprintf(out, "title = Boot chart for Android ( %s )\n", date);
     fprintf(out, "system.uname = %s\n", uname);
@@ -174,7 +190,6 @@ do_log_uptime(FileBuff  log)
     fd = open("/proc/uptime",O_RDONLY);
     if (fd >= 0) {
         int  ret;
-        close_on_exec(fd);
         ret = unix_read(fd, buff, 64);
         close(fd);
         buff[64] = 0;
@@ -212,7 +227,7 @@ do_log_file(FileBuff  log, const char*  procfile)
             ret = unix_read(fd, buff, sizeof(buff));
             if (ret <= 0)
                 break;
-                
+
             file_buff_write(log, buff, ret);
             if (ret < (int)sizeof(buff))
                 break;
@@ -230,7 +245,7 @@ do_log_procs(FileBuff  log)
     struct dirent*  entry;
 
     do_log_uptime(log);
-    
+
     while ((entry = readdir(dir)) != NULL) {
         /* only match numeric values */
         char*  end;
@@ -241,7 +256,7 @@ do_log_procs(FileBuff  log)
             char  cmdline[1024];
             int   len;
             int   fd;
-            
+
             /* read command line and extract program name */
             snprintf(filename,sizeof(filename),"/proc/%d/cmdline",pid);
             proc_read(filename, cmdline, sizeof(cmdline));
@@ -285,11 +300,36 @@ int   bootchart_init( void )
 {
     int  ret;
     char buff[4];
-    
+    int  timeout = 0, count = 0;
+
     buff[0] = 0;
     proc_read( LOG_STARTFILE, buff, sizeof(buff) );
-    if (buff[0] != '1')
-        return -1;
+    if (buff[0] != 0) {
+        timeout = atoi(buff);
+    }
+    else {
+        /* when running with emulator, androidboot.bootchart=<timeout>
+         * might be passed by as kernel parameters to specify the bootchart
+         * timeout. this is useful when using -wipe-data since the /data
+         * partition is fresh
+         */
+        char  cmdline[1024];
+        char* s;
+#define  KERNEL_OPTION  "androidboot.bootchart="
+        proc_read( "/proc/cmdline", cmdline, sizeof(cmdline) );
+        s = strstr(cmdline, KERNEL_OPTION);
+        if (s) {
+            s      += sizeof(KERNEL_OPTION)-1;
+            timeout = atoi(s);
+        }
+    }
+    if (timeout == 0)
+        return 0;
+
+    if (timeout > BOOTCHART_MAX_TIME_SEC)
+        timeout = BOOTCHART_MAX_TIME_SEC;
+
+    count = (timeout*1000 + BOOTCHART_POLLING_MS-1)/BOOTCHART_POLLING_MS;
 
     do {ret=mkdir(LOG_ROOT,0755);}while (ret < 0 && errno == EINTR);
 
@@ -307,7 +347,7 @@ int   bootchart_init( void )
     }
 
     log_header();
-    return 0;
+    return count;
 }
 
 /* called each time you want to perform a bootchart sampling op */
@@ -324,6 +364,7 @@ int  bootchart_step( void )
             return -1;
         }
     }
+
     return 0;
 }
 

@@ -43,21 +43,12 @@
 #include "devices.h"
 #include "init.h"
 #include "property_service.h"
-
-#ifndef BOOTCHART
-# define  BOOTCHART  0
-#endif
+#include "bootchart.h"
 
 static int property_triggers_enabled = 0;
 
 #if BOOTCHART
 static int   bootchart_count;
-extern int   bootchart_init(void);
-extern int   bootchart_step(void);
-extern void  bootchart_finish(void);
-# define BOOTCHART_POLLING_MS   200 /* polling period in ms */
-# define BOOTCHART_MAX_TIME_MS  (2*60*1000) /* max polling time from boot */
-# define BOOTCHART_MAX_COUNT    (BOOTCHART_MAX_TIME_MS/BOOTCHART_POLLING_MS)
 #endif
 
 static char console[32];
@@ -834,11 +825,13 @@ int main(int argc, char **argv)
     ufds[2].events = POLLIN;
 
 #if BOOTCHART
-    if (bootchart_init() < 0)
+    bootchart_count = bootchart_init();
+    if (bootchart_count < 0) {
         ERROR("bootcharting init failure\n");
-    else {
-        NOTICE("bootcharting started\n");
-        bootchart_count = BOOTCHART_MAX_COUNT;
+    } else if (bootchart_count > 0) {
+        NOTICE("bootcharting started (period=%d ms)\n", bootchart_count*BOOTCHART_POLLING_MS);
+    } else {
+        NOTICE("bootcharting ignored\n");
     }
 #endif
 

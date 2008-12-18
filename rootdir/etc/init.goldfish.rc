@@ -16,11 +16,11 @@ on boot
     stop dund
     stop akmd
 
-    setprop app.setupwizard.disable 1
+    setprop ro.setupwizard.mode EMULATOR
 
 # enable Google-specific location features,
 # like NetworkLocationProvider and LocationCollector
-    setprop ro.com.google.enable_google_location_features 1
+    setprop ro.com.google.locationfeatures 1
 
 # For the emulator, which bypasses Setup Wizard, you can specify
 # account info for the device via these two properties.  Google
@@ -39,8 +39,9 @@ service goldfish-setup /system/etc/init.goldfish.sh
     oneshot
 
 service qemud /system/bin/qemud
-    socket qemud_gsm stream 666
-    socket qemud_gps stream 666
+    socket qemud_gsm     stream 666
+    socket qemud_gps     stream 666
+    socket qemud_control stream 666
     oneshot
 
 # -Q is a special logcat option that forces the

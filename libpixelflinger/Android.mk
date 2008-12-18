@@ -85,3 +85,6 @@ ifeq ($(TARGET_ARCH),arm)
 LOCAL_WHOLE_STATIC_LIBRARIES := libpixelflinger_armv6
 endif
 include $(BUILD_STATIC_LIBRARY)
+
+
+include $(call all-makefiles-under,$(LOCAL_PATH))

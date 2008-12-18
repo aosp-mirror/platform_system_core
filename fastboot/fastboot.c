@@ -47,6 +47,7 @@ static const char *serial = 0;
 static const char *product = 0;
 static const char *cmdline = 0;
 static int wipe_data = 0;
+static unsigned short vendor_id = 0;
 
 void die(const char *fmt, ...)
 {
@@ -135,7 +136,8 @@ oops:
 
 int match_fastboot(usb_ifc_info *info)
 {
-    if((info->dev_vendor != 0x18d1) &&
+    if(!(vendor_id && (info->dev_vendor == vendor_id)) &&
+       (info->dev_vendor != 0x18d1) &&
        (info->dev_vendor != 0x0bb4)) return -1;
     if(info->ifc_class != 0xff) return -1;
     if(info->ifc_subclass != 0x42) return -1;
@@ -208,6 +210,7 @@ void usage(void)
             "  -s <serial number>                       specify device serial number\n"
             "  -p <product>                             specify product name\n"
             "  -c <cmdline>                             override kernel commandline\n"
+            "  -i <vendor id>                           specify a custom USB vendor id\n"
         );
     exit(1);
 }
@@ -552,6 +555,16 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "-c")) {
             require(2);
             cmdline = argv[1];
+            skip(2);
+        } else if(!strcmp(*argv, "-i")) {
+            char *endptr = NULL;
+            unsigned long val;
+
+            require(2);
+            val = strtoul(argv[1], &endptr, 0);
+            if (!endptr || *endptr != '\0' || (val & ~0xffff))
+                die("invalid vendor id '%s'", argv[1]);
+            vendor_id = (unsigned short)val;
             skip(2);
         } else if(!strcmp(*argv, "getvar")) {
             require(2);

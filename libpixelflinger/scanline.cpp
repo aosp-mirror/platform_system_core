@@ -55,8 +55,10 @@
 #   define ANDROID_ARM_CODEGEN  0
 #endif
 
-
 #define DEBUG__CODEGEN_ONLY     0
+
+
+#define ASSEMBLY_SCRATCH_SIZE   2048
 
 // ----------------------------------------------------------------------------
 namespace android {
@@ -247,7 +249,8 @@ static void pick_scanline(context_t* c)
     sp<Assembly> assembly = gCodeCache.lookup(key);
     if (assembly == 0) {
         // create a new assembly region
-        sp<ScanlineAssembly> a = new ScanlineAssembly(c->state.needs, 1024);
+        sp<ScanlineAssembly> a = new ScanlineAssembly(c->state.needs, 
+                ASSEMBLY_SCRATCH_SIZE);
         // initialize our assembler
         GGLAssembler assembler( new ARMAssembler(a) );
         //GGLAssembler assembler(
@@ -674,6 +677,12 @@ void scanline(context_t* c)
                             else if (sf<8)  Cc = (Cc - (Cc>>(8-sf)))>>(8-sf);
                             uint32_t factor = Ct + (Ct>>(st-1));
                             Cf = ((((1<<st) - factor) * Cf) + Ct*Cc)>>st;
+                        }
+                        break;
+                    case GGL_ADD:
+                        if (st) {
+                            rescale(Cf, sf, Ct, st);
+                            Cf += Ct;
                         }
                         break;
                     }
@@ -1473,7 +1482,7 @@ extern "C" void ggl_test_codegen(uint32_t n, uint32_t p, uint32_t t0, uint32_t t
     needs.p = p;
     needs.t[0] = t0;
     needs.t[1] = t1;
-    sp<ScanlineAssembly> a(new ScanlineAssembly(needs, 1024));
+    sp<ScanlineAssembly> a(new ScanlineAssembly(needs, ASSEMBLY_SCRATCH_SIZE));
     GGLAssembler assembler( new ARMAssembler(a) );
     int err = assembler.scanline(needs, (context_t*)c);
     if (err != 0) {

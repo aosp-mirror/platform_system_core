@@ -118,7 +118,7 @@ void usb_init()
     h->fd = -1;
     adb_cond_init(&h->notify, 0);
     adb_mutex_init(&h->lock, 0);
-    
+
     // Open the file /dev/android_adb_enable to trigger 
     // the enabling of the adb USB function in the kernel.
     // We never touch this file again - just leave it open

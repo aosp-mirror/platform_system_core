@@ -1,6 +1,8 @@
 
 on init
 
+sysclktz 0
+
 loglevel 3
 
 # setup the global environment
@@ -118,6 +120,12 @@ on boot
     chown radio system /sys/android_power/acquire_full_wake_lock
     chown radio system /sys/android_power/acquire_partial_wake_lock
     chown radio system /sys/android_power/release_wake_lock
+    chown radio system /sys/power/state
+    chown radio system /sys/power/wake_lock
+    chown radio system /sys/power/wake_unlock
+    chmod 0660 /sys/power/state
+    chmod 0660 /sys/power/wake_lock
+    chmod 0660 /sys/power/wake_unlock
     chown system system /sys/class/timed_output/vibrator/enable
     chown system system /sys/class/leds/keyboard-backlight/brightness
     chown system system /sys/class/leds/lcd-backlight/brightness
@@ -193,6 +201,7 @@ service ril-daemon /system/bin/rild
 service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
     socket zygote stream 666
     onrestart write /sys/android_power/request_state wake
+    onrestart write /sys/power/state on
 
 service media /system/bin/mediaserver
     user media
@@ -208,7 +217,8 @@ service dbus /system/bin/dbus-daemon --system --nofork
     user bluetooth
     group bluetooth net_bt_admin
 
-service hcid /system/bin/hcid -s -n -f /etc/hcid.conf
+#STOPSHIP: disable the verbose logging
+service hcid /system/bin/logwrapper /system/bin/hcid -d -s -n -f /etc/bluez/hcid.conf
     socket bluetooth stream 660 bluetooth bluetooth
     socket dbus_bluetooth stream 660 bluetooth bluetooth
     # init.rc does not yet support applying capabilities, so run as root and

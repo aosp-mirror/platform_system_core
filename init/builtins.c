@@ -64,7 +64,7 @@ static int write_file(const char *path, const char *value)
     }
 }
 
-static int insmod(const char *filename)
+static int insmod(const char *filename, char *options)
 {
     void *module;
     unsigned size;
@@ -74,7 +74,7 @@ static int insmod(const char *filename)
     if (!module)
         return -1;
 
-    ret = init_module(module, size, "");
+    ret = init_module(module, size, options);
 
     free(module);
 
@@ -172,9 +172,35 @@ int do_ifup(int nargs, char **args)
     return __ifupdown(args[1], 1);
 }
 
+
+static int do_insmod_inner(int nargs, char **args, int opt_len)
+{
+    char options[opt_len + 1];
+    int i;
+
+    options[0] = '\0';
+    if (nargs > 2) {
+        strcpy(options, args[2]);
+        for (i = 3; i < nargs; ++i) {
+            strcat(options, " ");
+            strcat(options, args[i]);
+        }
+    }
+
+    return insmod(args[1], options);
+}
+
 int do_insmod(int nargs, char **args)
 {
-    return insmod(args[1]);
+    int i;
+    int size = 0;
+
+    if (nargs > 2) {
+        for (i = 2; i < nargs; ++i)
+            size += strlen(args[i]) + 1;
+    }
+
+    return do_insmod_inner(nargs, args, size);
 }
 
 int do_import(int nargs, char **args)
@@ -324,6 +350,20 @@ int do_trigger(int nargs, char **args)
 int do_symlink(int nargs, char **args)
 {
     return symlink(args[1], args[2]);
+}
+
+int do_sysclktz(int nargs, char **args)
+{
+    struct timezone tz;
+
+    if (nargs != 2)
+        return -1;
+
+    memset(&tz, 0, sizeof(tz));
+    tz.tz_minuteswest = atoi(args[1]);   
+    if (settimeofday(NULL, &tz))
+        return -1;
+    return 0;
 }
 
 int do_write(int nargs, char **args)

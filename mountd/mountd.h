@@ -20,20 +20,27 @@
 #define LOG_TAG "mountd"
 #include "cutils/log.h"
 
+#include "ASEC.h"
+
 typedef int boolean;
 enum {
     false = 0,
     true = 1
 };
 
+#define WEXITSTATUS(status) (((status) & 0xff00) >> 8)
+
 // Set this for logging error messages
 #define ENABLE_LOG_ERROR
 
 // set this to log automounter events
-//#define ENABLE_LOG_MOUNT
+#define ENABLE_LOG_MOUNT
 
 // set this to log server events
 //#define ENABLE_LOG_SERVER
+
+// set this to log ASEC events
+#define ENABLE_LOG_ASEC
 
 #ifdef ENABLE_LOG_ERROR
 #define LOG_ERROR(fmt, args...) \
@@ -58,6 +65,14 @@ enum {
 #define LOG_SERVER(fmt, args...) \
     do { } while (0)
 #endif /* ENABLE_LOG_SERVER */
+
+#ifdef ENABLE_LOG_ASEC
+#define LOG_ASEC(fmt, args...) \
+    { LOGD(fmt , ## args); }
+#else
+#define LOG_ASEC(fmt, args...) \
+    do { } while (0)
+#endif /* ENABLE_LOG_ASEC */
 
 
 typedef enum MediaState {
@@ -135,7 +150,11 @@ void UnmountMedia(const char* mountPoint);
 void EnableMassStorage(boolean enable);
 
 // call this before StartAutoMounter() to add a mount point to monitor
-void AddMountPoint(const char* device, const char* mountPoint, boolean enableUms);
+void *AddMountPoint(const char* device, const char* mountPoint, const char* driverStorePath,
+                    boolean enableUms);
+
+int AddAsecToMountPoint(void *Mp, const char *name, const char *backing_file,
+                        const char *size, const char *mount_point, const char *crypt);
 
 // start automounter thread
 void StartAutoMounter();
@@ -144,9 +163,19 @@ void StartAutoMounter();
 void NotifyExistingMounts();
 
 
+// ASEC.c
+
+void *AsecInit(const char *Name, const char *SrcPath, const char *BackingFile,
+               const char *Size, const char *DstPath, const char *Crypt);
+int AsecStart(void *Handle);
+int AsecStop(void *Handle);
+void AsecDeinit(void *Handle);
+boolean AsecIsStarted(void *Handle);
+const char *AsecMountPoint(void *Handle);
+
 // ProcessKiller.c
 
-void KillProcessesWithOpenFiles(const char* mountPoint, boolean sigkill);
+void KillProcessesWithOpenFiles(const char* mountPoint, boolean sigkill, pid_t *excluded, int num_excluded);
 
 
 // Server.c
@@ -155,5 +184,5 @@ int RunServer();
 void SendMassStorageConnected(boolean connected); 
 void SendUnmountRequest(const char* path);
 void NotifyMediaState(const char* path, MediaState state, boolean readOnly);
-
+void NotifyAsecState(AsecState state, const char *argument);
 #endif // MOUNTD_H__

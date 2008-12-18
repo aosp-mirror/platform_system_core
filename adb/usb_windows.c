@@ -308,11 +308,11 @@ int usb_read(usb_handle *handle, void* data, int len) {
     while (len > 0) {
       int xfer = (len > 4096) ? 4096 : len;
 
-	    ret = AdbReadEndpointSync(handle->adb_read_pipe,
-	                              (void*)data,
-	                              (unsigned long)xfer,
-	                              &read,
-	                              time_out);
+      ret = AdbReadEndpointSync(handle->adb_read_pipe,
+                                  (void*)data,
+                                  (unsigned long)xfer,
+                                  &read,
+                                  time_out);
       errno = GetLastError();
       D("usb_write got: %ld, expected: %d, errno: %d\n", read, xfer, errno);
       if (ret) {
@@ -475,11 +475,11 @@ void find_devices() {
     // Lets see if we already have this device in the list
     if (!known_device(interf_name)) {
       // This seems to be a new device. Open it!
-	    handle = do_usb_open(next_interface->device_name);
-	    if (NULL != handle) {
+        handle = do_usb_open(next_interface->device_name);
+        if (NULL != handle) {
         // Lets see if this interface (device) belongs to us
         if (recognized_device(handle)) {
-	        D("adding a new device %s\n", interf_name);
+          D("adding a new device %s\n", interf_name);
           char serial_number[512];
           unsigned long serial_number_len = sizeof(serial_number);
           if (AdbGetSerialNumber(handle->adb_interface,
@@ -488,7 +488,7 @@ void find_devices() {
                                 true)) {
             // Lets make sure that we don't duplicate this device
             if (register_new_device(handle)) {
-	            register_usb_transport(handle, serial_number);
+              register_usb_transport(handle, serial_number);
             } else {
               D("register_new_device failed for %s\n", interf_name);
               usb_cleanup_handle(handle);

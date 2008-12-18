@@ -19,6 +19,7 @@
 */
 
 #include "mountd.h"
+#include "ASEC.h"
 
 #include <cutils/properties.h>
 #include <cutils/sockets.h>
@@ -42,6 +43,10 @@ static pthread_mutex_t sWriteMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // path for media that failed to mount before the runtime is connected
 static char* sDeferredUnmountableMediaPath = NULL;
+
+// last asec msg before the runtime was connected
+static char* sAsecDeferredMessage = NULL;
+static char* sAsecDeferredArgument = NULL;
 
 static int Write(const char* message)
 {
@@ -107,6 +112,18 @@ static void DoCommand(const char* command)
     {
         const char* path = command + strlen(MOUNTD_EJECT_MEDIA);
         UnmountMedia(path);
+    } 
+    else if (strncmp(command, ASEC_CMD_ENABLE, strlen(ASEC_CMD_ENABLE)) == 0) {
+        LOG_ASEC("Got ASEC_CMD_ENABLE\n");
+	// XXX: SAN: Impliment
+    }
+    else if (strncmp(command, ASEC_CMD_DISABLE, strlen(ASEC_CMD_DISABLE)) == 0) {
+        LOG_ASEC("Got ASEC_CMD_DISABLE\n");
+	// XXX: SAN: Impliment
+    }
+    else if (strncmp(command, ASEC_CMD_SEND_STATUS, strlen(ASEC_CMD_SEND_STATUS)) == 0) {
+        LOG_ASEC("Got ASEC_CMD_SEND_STATUS\n");
+	// XXX: SAN: Impliment
     }
     else
         LOGE("unknown command %s\n", command);
@@ -143,6 +160,15 @@ int RunServer()
             NotifyMediaState(sDeferredUnmountableMediaPath, MEDIA_UNMOUNTABLE, false);
             free(sDeferredUnmountableMediaPath);
             sDeferredUnmountableMediaPath = NULL;
+        }
+
+        if (sAsecDeferredMessage) {
+    
+            if (Write2(sAsecDeferredMessage, sAsecDeferredArgument) < 0)
+                LOG_ERROR("Failed to deliver deferred ASEC msg to framework\n");
+            free(sAsecDeferredMessage);
+            free(sAsecDeferredArgument);
+            sAsecDeferredMessage = sAsecDeferredArgument = NULL;
         }
 
         while (1)
@@ -185,6 +211,61 @@ void SendMassStorageConnected(boolean connected)
 void SendUnmountRequest(const char* path)
 {
     Write2(MOUNTD_REQUEST_EJECT, path);
+}
+
+void NotifyAsecState(AsecState state, const char *argument)
+{
+    const char *event = NULL;
+    const char *status = NULL;
+    boolean deferr = true;;
+
+    switch (state) {
+        case ASEC_DISABLED:
+            event = ASEC_EVENT_DISABLED;
+            status = ASEC_STATUS_DISABLED;
+            break;
+        case ASEC_AVAILABLE:
+            event = ASEC_EVENT_AVAILABLE;
+            status = ASEC_STATUS_AVAILABLE;
+            break;
+        case ASEC_BUSY:
+            event = ASEC_EVENT_BUSY;
+            status = ASEC_STATUS_BUSY;
+            deferr = false;
+            break;
+        case ASEC_FAILED_INTERR:
+            event = ASEC_EVENT_FAILED_INTERR;
+            status = ASEC_STATUS_FAILED_INTERR;
+            break;
+        case ASEC_FAILED_NOMEDIA:
+            event = ASEC_EVENT_FAILED_NOMEDIA;
+            status = ASEC_STATUS_FAILED_NOMEDIA;
+            break;
+        case ASEC_FAILED_BADMEDIA:
+            event = ASEC_EVENT_FAILED_BADMEDIA;
+            status = ASEC_STATUS_FAILED_BADMEDIA;
+            break;
+        case ASEC_FAILED_BADKEY:
+            event = ASEC_EVENT_FAILED_BADKEY;
+            status = ASEC_STATUS_FAILED_BADKEY;
+            break;
+        default:
+            LOG_ERROR("unknown AsecState %d in NotifyAsecState\n", state);
+            return;
+    }
+
+    property_set(ASEC_STATUS, status);
+
+    int result = Write2(event, argument);
+    if ((result < 0) && deferr) {
+        if (sAsecDeferredMessage) 
+            free(sAsecDeferredMessage);
+        sAsecDeferredMessage = strdup(event);
+        if (sAsecDeferredArgument)
+            free(sAsecDeferredArgument);
+        sAsecDeferredArgument = strdup(argument);
+        LOG_ASEC("Deferring event '%s' arg '%s' until framework connects\n", event, argument);
+    }
 }
 
 void NotifyMediaState(const char* path, MediaState state, boolean readOnly)

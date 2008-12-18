@@ -50,6 +50,15 @@ static asocket local_socket_list = {
     .prev = &local_socket_list,
 };
 
+/* the the list of currently closing local sockets.
+** these have no peer anymore, but still packets to
+** write to their fd.
+*/
+static asocket local_socket_closing_list = {
+    .next = &local_socket_closing_list,
+    .prev = &local_socket_closing_list,
+};
+
 asocket *find_local_socket(unsigned id)
 {
     asocket *s;
@@ -64,16 +73,22 @@ asocket *find_local_socket(unsigned id)
     return result;
 }
 
+static void
+insert_local_socket(asocket*  s, asocket*  list)
+{
+    s->next       = list;
+    s->prev       = s->next->prev;
+    s->prev->next = s;
+    s->next->prev = s;
+}
+
+
 void install_local_socket(asocket *s)
 {
     adb_mutex_lock(&socket_list_lock);
 
     s->id = local_socket_next_id++;
-
-    s->next = &local_socket_list;
-    s->prev = local_socket_list.prev;
-    s->prev->next = s;
-    s->next->prev = s;
+    insert_local_socket(s, &local_socket_list);
 
     adb_mutex_unlock(&socket_list_lock);
 }
@@ -177,18 +192,10 @@ static void local_socket_close(asocket *s)
     adb_mutex_unlock(&socket_list_lock);
 }
 
-static void local_socket_close_locked(asocket *s)
+// be sure to hold the socket list lock when calling this
+static void local_socket_destroy(asocket  *s)
 {
     apacket *p, *n;
-
-    if(s->peer) {
-        s->peer->peer = 0;
-        // tweak to avoid deadlock
-        if (s->peer->close == local_socket_close)
-            local_socket_close_locked(s->peer);
-        else
-            s->peer->close(s->peer);
-    }
 
         /* IMPORTANT: the remove closes the fd
         ** that belongs to this socket
@@ -201,15 +208,93 @@ static void local_socket_close_locked(asocket *s)
         n = p->next;
         put_apacket(p);
     }
-
-    D("LS(%d): closed\n", s->id);
     remove_socket(s);
     free(s);
+}
+
+
+static void local_socket_close_locked(asocket *s)
+{
+    if(s->peer) {
+        s->peer->peer = 0;
+        // tweak to avoid deadlock
+        if (s->peer->close == local_socket_close)
+            local_socket_close_locked(s->peer);
+        else
+            s->peer->close(s->peer);
+    }
+
+        /* If we are already closing, or if there are no
+        ** pending packets, destroy immediately
+        */
+    if (s->closing || s->pkt_first == NULL) {
+        int   id = s->id;
+        local_socket_destroy(s);
+        D("LS(%d): closed\n", id);
+        return;
+    }
+
+        /* otherwise, put on the closing list
+        */
+    D("LS(%d): closing\n", s->id);
+    s->closing = 1;
+    fdevent_del(&s->fde, FDE_READ);
+    remove_socket(s);
+    insert_local_socket(s, &local_socket_closing_list);
 }
 
 static void local_socket_event_func(int fd, unsigned ev, void *_s)
 {
     asocket *s = _s;
+
+    /* put the FDE_WRITE processing before the FDE_READ
+    ** in order to simplify the code.
+    */
+    if(ev & FDE_WRITE){
+        apacket *p;
+
+        while((p = s->pkt_first) != 0) {
+            while(p->len > 0) {
+                int r = adb_write(fd, p->ptr, p->len);
+                if(r > 0) {
+                    p->ptr += r;
+                    p->len -= r;
+                    continue;
+                }
+                if(r < 0) {
+                    /* returning here is ok because FDE_READ will
+                    ** be processed in the next iteration loop
+                    */
+                    if(errno == EAGAIN) return;
+                    if(errno == EINTR) continue;
+                }
+                s->close(s);
+                return;
+            }
+
+            if(p->len == 0) {
+                s->pkt_first = p->next;
+                if(s->pkt_first == 0) s->pkt_last = 0;
+                put_apacket(p);
+            }
+        }
+
+            /* if we sent the last packet of a closing socket,
+            ** we can now destroy it.
+            */
+        if (s->closing) {
+            s->close(s);
+            return;
+        }
+
+            /* no more packets queued, so we can ignore
+            ** writable events again and tell our peer
+            ** to resume writing
+            */
+        fdevent_del(&s->fde, FDE_WRITE);
+        s->peer->ready(s->peer);
+    }
+
 
     if(ev & FDE_READ){
         apacket *p = get_apacket();
@@ -244,7 +329,12 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
 
             if(r < 0) {
                     /* error return means they closed us as a side-effect
-                    ** and we must retutn immediately
+                    ** and we must return immediately.
+                    **
+                    ** note that if we still have buffered packets, the
+                    ** socket will be placed on the closing socket list.
+                    ** this handler function will be called again
+                    ** to process FDE_WRITE events.
                     */
                 return;
             }
@@ -261,42 +351,6 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
         if(is_eof) {
             s->close(s);
         }
-        return;
-    }
-
-    if(ev & FDE_WRITE){
-        apacket *p;
-
-        while((p = s->pkt_first) != 0) {
-            while(p->len > 0) {
-                int r = adb_write(fd, p->ptr, p->len);
-                if(r > 0) {
-                    p->ptr += r;
-                    p->len -= r;
-                    continue;
-                }
-                if(r < 0) {
-                    if(errno == EAGAIN) return;
-                    if(errno == EINTR) continue;
-                }
-                s->close(s);
-                return;
-            }
-
-            if(p->len == 0) {
-                s->pkt_first = p->next;
-                if(s->pkt_first == 0) s->pkt_last = 0;
-                put_apacket(p);
-            }
-        }
-
-            /* no more packets queued, so we can ignore
-            ** writable events again and tell our peer
-            ** to resume writing
-            */
-        fdevent_del(&s->fde, FDE_WRITE);
-        s->peer->ready(s->peer);
-        return;
     }
 
     if(ev & FDE_ERROR){

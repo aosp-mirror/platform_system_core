@@ -50,6 +50,12 @@ void GGLAssembler::build_fog(
         integer_t factor(scratches.obtain(), 16, CORRUPTIBLE);
         CONTEXT_LOAD(factor.reg, generated_vars.f);
 
+        // clamp fog factor (TODO: see if there is a way to guarantee
+        // we won't overflow, when setting the iterators)
+        BIC(AL, 0, factor.reg, factor.reg, reg_imm(factor.reg, ASR, 31));
+        CMP(AL, factor.reg, imm( 0x10000 ));
+        MOV(HS, 0, factor.reg, imm( 0x10000 ));
+
         build_blendFOneMinusF(temp, factor, fragment, fogColor);
     }
 }

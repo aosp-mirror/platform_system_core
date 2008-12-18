@@ -30,6 +30,7 @@ enum GGLPixelFormat {
     GGL_PIXEL_FORMAT_RGBX_8888   =   2,  // 3x8-bit RGB stored in 32-bit chunks
     GGL_PIXEL_FORMAT_RGB_888     =   3,  // 3x8-bit RGB
     GGL_PIXEL_FORMAT_RGB_565     =   4,  // 16-bit RGB
+    GGL_PIXEL_FORMAT_BGRA_8888   =   5,  // 4x8-bit BGRA
     GGL_PIXEL_FORMAT_RGBA_5551   =   6,  // 16-bit RGBA
     GGL_PIXEL_FORMAT_RGBA_4444   =   7,  // 16-bit RGBA
 
@@ -38,9 +39,11 @@ enum GGLPixelFormat {
     GGL_PIXEL_FORMAT_LA_88       = 0xA,  // 16-bit LA
     GGL_PIXEL_FORMAT_RGB_332     = 0xB,  // 8-bit RGB (non paletted)
 
-    // YCbCr formats
+    // YCbCr formats (SP=semi-planar, P=planar)
     GGL_PIXEL_FORMAT_YCbCr_422_SP= 0x10,
     GGL_PIXEL_FORMAT_YCbCr_420_SP= 0x11,
+    GGL_PIXEL_FORMAT_YCbCr_422_P = 0x14,
+    GGL_PIXEL_FORMAT_YCbCr_420_P = 0x15,
 
     // reserved/special formats
     GGL_PIXEL_FORMAT_Z_16       =  0x18,

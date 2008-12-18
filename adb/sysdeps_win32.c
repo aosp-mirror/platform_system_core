@@ -940,12 +940,12 @@ bip_buffer_write( BipBuffer  bip, const void* src, int  len )
         /* we can append to region A */
         if (avail > len)
             avail = len;
-         
+
         memcpy( bip->buff + bip->a_end, src, avail );
         src   += avail;
         count += avail;
         len   -= avail;
-     
+
         bip->a_end += avail;
         if (bip->a_end == BIP_BUFFER_SIZE && bip->a_start == 0) {
             bip->can_write = 0;
@@ -953,25 +953,25 @@ bip_buffer_write( BipBuffer  bip, const void* src, int  len )
             goto Exit;
         }
     }
-    
+
     if (len == 0)
         goto Exit;
 
     avail = bip->a_start - bip->b_end;
     assert( avail > 0 );  /* since can_write is TRUE */
-    
+
     if (avail > len)
         avail = len;
-        
+
     memcpy( bip->buff + bip->b_end, src, avail );
     count += avail;
     bip->b_end += avail;
-    
+
     if (bip->b_end == bip->a_start) {
         bip->can_write = 0;
         ResetEvent( bip->evt_write );
     }
-    
+
 Exit:
     assert( count > 0 );
 
@@ -979,7 +979,7 @@ Exit:
         bip->can_read = 1;
         SetEvent( bip->evt_read );
     }
-  
+
     BIPD(( "bip_buffer_write: exit %d->%d count %d (as=%d ae=%d be=%d cw=%d cr=%d\n", 
             bip->fdin, bip->fdout, count, bip->a_start, bip->a_end, bip->b_end, bip->can_write, bip->can_read ));
     LeaveCriticalSection( &bip->lock );
@@ -991,12 +991,12 @@ static int
 bip_buffer_read( BipBuffer  bip, void*  dst, int  len )
 {
     int  avail, count = 0;
-    
+
     if (len <= 0)
         return 0;
-    
+
     BIPD(( "bip_buffer_read: enter %d->%d len %d\n", bip->fdin, bip->fdout, len ));
-    
+
     EnterCriticalSection( &bip->lock );
     while ( !bip->can_read )
     {
@@ -1007,7 +1007,7 @@ bip_buffer_read( BipBuffer  bip, void*  dst, int  len )
 #else    
         int  ret;
         LeaveCriticalSection( &bip->lock );
-        
+
         if (bip->closed) {
             errno = EPIPE;
             return -1;
@@ -1023,30 +1023,30 @@ bip_buffer_read( BipBuffer  bip, void*  dst, int  len )
             return -1;
         }
         EnterCriticalSection( &bip->lock );
-#endif        
+#endif
     }
 
     BIPD(( "bip_buffer_read: exec %d->%d len %d\n", bip->fdin, bip->fdout, len ));
-   
+
     avail = bip->a_end - bip->a_start;
     assert( avail > 0 );  /* since can_read is TRUE */
-    
+
     if (avail > len)
         avail = len;
-    
+
     memcpy( dst, bip->buff + bip->a_start, avail );
     dst   += avail;
     count += avail;
     len   -= avail;
-    
+
     bip->a_start += avail;
     if (bip->a_start < bip->a_end)
         goto Exit;
-    
+
     bip->a_start = 0;
     bip->a_end   = bip->b_end;
     bip->b_end   = 0;
-    
+
     avail = bip->a_end;
     if (avail > 0) {
         if (avail > len)
@@ -1054,13 +1054,13 @@ bip_buffer_read( BipBuffer  bip, void*  dst, int  len )
         memcpy( dst, bip->buff, avail );
         count += avail;
         bip->a_start += avail;
-        
+
         if ( bip->a_start < bip->a_end )
             goto Exit;
-            
+
         bip->a_start = bip->a_end = 0;
     }
-    
+
     bip->can_read = 0;
     ResetEvent( bip->evt_read );
 
@@ -1071,22 +1071,22 @@ Exit:
         bip->can_write = 1;
         SetEvent( bip->evt_write );
     }
-    
+
     BIPDUMP( (const unsigned char*)dst - count, count );
     BIPD(( "bip_buffer_read: exit %d->%d count %d (as=%d ae=%d be=%d cw=%d cr=%d\n", 
             bip->fdin, bip->fdout, count, bip->a_start, bip->a_end, bip->b_end, bip->can_write, bip->can_read ));
     LeaveCriticalSection( &bip->lock );
-    
+
     return count;
 }
- 
+
 typedef struct SocketPairRec_ 
 {
     BipBufferRec  a2b_bip;
     BipBufferRec  b2a_bip;
     FH            a_fd;
     int           used;
-    
+
 } SocketPairRec;
 
 void _fh_socketpair_init( FH  f )
@@ -1103,7 +1103,7 @@ _fh_socketpair_close( FH  f )
         if ( f == pair->a_fd ) {
             pair->a_fd = NULL;
         }
-        
+
         bip_buffer_close( &pair->b2a_bip );
         bip_buffer_close( &pair->a2b_bip );
 
@@ -1199,7 +1199,7 @@ int  adb_socketpair( int  sv[2] )
 
     sv[0] = _fh_to_int(fa);
     sv[1] = _fh_to_int(fb);
-    
+
     pair->a2b_bip.fdin  = sv[0];
     pair->a2b_bip.fdout = sv[1];
     pair->b2a_bip.fdin  = sv[1];
@@ -1303,7 +1303,7 @@ event_hook_alloc( FH  fh )
     hook->stop    = NULL;
     hook->check   = NULL;
     hook->peek    = NULL;
-    
+
     return hook;
 }
 
@@ -1324,7 +1324,7 @@ event_hook_signal( EventHook  hook )
     FH        f   = hook->fh;
     int       fd  = _fh_to_int(f);
     fdevent*  fde = fd_table[ fd - WIN32_FH_BASE ];
-    
+
     if (fde != NULL && fde->fd == fd) {
         if ((fde->state & FDE_PENDING) == 0) {
             fde->state |= FDE_PENDING;
@@ -1365,7 +1365,7 @@ event_looper_hook( EventLooper  looper, int  fd, int  events )
     FH          f = _fh_from_int(fd);
     EventHook  *pnode;
     EventHook   node;
-    
+
     if (f == NULL)  /* invalid arg */ {
         D("event_looper_hook: invalid fd=%d\n", fd);
         return;
@@ -1397,7 +1397,7 @@ event_looper_unhook( EventLooper  looper, int  fd, int  events )
     FH          fh    = _fh_from_int(fd);
     EventHook  *pnode = event_looper_find_p( looper, fh );
     EventHook   node  = *pnode;
-    
+
     if (node != NULL) {
         int  events2 = events & node->wanted;
         if ( events2 == 0 ) {
@@ -1424,7 +1424,7 @@ static void fdevent_connect(fdevent *fde)
 {
     EventLooper  looper = &win32_looper;
     int          events = fde->state & FDE_EVENTMASK;
-    
+
     if (events != 0)
         event_looper_hook( looper, fde->fd, events );
 }
@@ -1433,7 +1433,7 @@ static void fdevent_disconnect(fdevent *fde)
 {
     EventLooper  looper = &win32_looper;
     int          events = fde->state & FDE_EVENTMASK;
-    
+
     if (events != 0)
         event_looper_unhook( looper, fde->fd, events );
 }
@@ -1462,7 +1462,7 @@ static void fdevent_process()
     EventLooper  looper = &win32_looper;
     EventHook    hook;
     int          gotone = 0;
-    
+
     /* if we have at least one ready hook, execute it/them */
     for (hook = looper->hooks; hook; hook = hook->next) {
         hook->ready = 0;
@@ -1479,7 +1479,7 @@ static void fdevent_process()
     if (!gotone)
     {
         looper->htab_count = 0;
-            
+
         for (hook = looper->hooks; hook; hook = hook->next) 
         {
             if (hook->start && !hook->start(hook)) {
@@ -1519,7 +1519,7 @@ static void fdevent_process()
                 D( "adb_win32: wait failed, error %ld\n", GetLastError() );
             } else {
                 D( "adb_win32: got one (index %d)\n", wait_ret );
-            
+
                 /* according to Cygwin, some objects like consoles wake up on "inappropriate" events
                  * like mouse movements. we need to filter these with the "check" function
                  */
@@ -1561,7 +1561,7 @@ static void fdevent_register(fdevent *fde)
     if(fd < 0) {
         FATAL("bogus negative fd (%d)\n", fde->fd);
     }
-    
+
     if(fd >= fd_table_max) {
         int oldmax = fd_table_max;
         if(fde->fd > 32000) {
@@ -1587,7 +1587,7 @@ static void fdevent_register(fdevent *fde)
 static void fdevent_unregister(fdevent *fde)
 {
     int  fd = fde->fd - WIN32_FH_BASE;
-    
+
     if((fd < 0) || (fd >= fd_table_max)) {
         FATAL("fd out of range (%d)\n", fde->fd);
     }
@@ -1626,9 +1626,9 @@ static fdevent *fdevent_plist_dequeue(void)
 {
     fdevent *list = &list_pending;
     fdevent *node = list->next;
-    
+
     if(node == list) return 0;
-    
+
     list->next = node->next;
     list->next->prev = list;
     node->next = 0;
@@ -1689,9 +1689,9 @@ void fdevent_remove(fdevent *fde)
 void fdevent_set(fdevent *fde, unsigned events)
 {
     events &= FDE_EVENTMASK;
-    
+
     if((fde->state & FDE_EVENTMASK) == (int)events) return;
-    
+
     if(fde->state & FDE_ACTIVE) {
         fdevent_update(fde, events);
         dump_fde(fde, "update");
@@ -1727,13 +1727,13 @@ void fdevent_del(fdevent *fde, unsigned events)
 void fdevent_loop()
 {
     fdevent *fde;
-    
+
     for(;;) {
 #if DEBUG
         fprintf(stderr,"--- ---- waiting for events\n");
 #endif
         fdevent_process();
-        
+
         while((fde = fdevent_plist_dequeue())) {
             unsigned events = fde->events;
             fde->events = 0;
@@ -1793,7 +1793,7 @@ static void  _event_socket_verify( EventHook  hook, WSANETWORKEVENTS*  evts )
 static void  _event_socket_prepare( EventHook  hook )
 {
     WSANETWORKEVENTS  evts;
-    
+
     /* look if some of the events we want already happened ? */
     if (!WSAEnumNetworkEvents( hook->fh->fh_socket, NULL, &evts ))
         _event_socket_verify( hook, &evts );
@@ -1819,13 +1819,13 @@ static int _event_socket_start( EventHook  hook )
     /* create an event which we're going to wait for */
     FH    fh    = hook->fh;
     long  flags = _socket_wanted_to_flags( hook->wanted );
-    
+
     hook->h = fh->event;
     if (hook->h == INVALID_HANDLE_VALUE) {
         D( "_event_socket_start: no event for %s\n", fh->name );
         return 0;
     }
-    
+
     if ( flags != fh->mask ) {
         D( "_event_socket_start: hooking %s for %x (flags %ld)\n", hook->fh->name, hook->wanted, flags );
         if ( WSAEventSelect( fh->fh_socket, hook->h, flags ) ) {
@@ -1850,7 +1850,7 @@ static int  _event_socket_check( EventHook  hook )
     int               result = 0;
     FH                fh = hook->fh;
     WSANETWORKEVENTS  evts;
-    
+
     if (!WSAEnumNetworkEvents( fh->fh_socket, hook->h, &evts ) ) {
         _event_socket_verify( hook, &evts );
         result = (hook->ready != 0);
@@ -1866,7 +1866,7 @@ static int  _event_socket_peek( EventHook  hook )
 {
     WSANETWORKEVENTS  evts;
     FH                fh = hook->fh;
-    
+
     /* look if some of the events we want already happened ? */
     if (!WSAEnumNetworkEvents( fh->fh_socket, NULL, &evts )) {
         _event_socket_verify( hook, &evts );
@@ -1886,40 +1886,40 @@ static void  _fh_socket_hook( FH  f, int  events, EventHook  hook )
     hook->stop    = _event_socket_stop;
     hook->check   = _event_socket_check;
     hook->peek    = _event_socket_peek;
-    
+
     _event_socket_start( hook );
 }
 
 /** SOCKETPAIR EVENT HOOKS
  **/
- 
+
 static void  _event_socketpair_prepare( EventHook  hook )
 {
     FH          fh   = hook->fh;
     SocketPair  pair = fh->fh_pair;
     BipBuffer   rbip = (pair->a_fd == fh) ? &pair->b2a_bip : &pair->a2b_bip;
     BipBuffer   wbip = (pair->a_fd == fh) ? &pair->a2b_bip : &pair->b2a_bip;
-   
+
     if (hook->wanted & FDE_READ && rbip->can_read)
         hook->ready |= FDE_READ;
-    
+
     if (hook->wanted & FDE_WRITE && wbip->can_write) 
         hook->ready |= FDE_WRITE;
  }
- 
+
  static int  _event_socketpair_start( EventHook  hook )
  {
     FH          fh   = hook->fh;
     SocketPair  pair = fh->fh_pair;
     BipBuffer   rbip = (pair->a_fd == fh) ? &pair->b2a_bip : &pair->a2b_bip;
     BipBuffer   wbip = (pair->a_fd == fh) ? &pair->a2b_bip : &pair->b2a_bip;
-    
+
     if (hook->wanted == FDE_READ)
         hook->h = rbip->evt_read;
-        
+
     else if (hook->wanted == FDE_WRITE)
         hook->h = wbip->evt_write;
-    
+
     else {
         D("_event_socketpair_start: can't handle FDE_READ+FDE_WRITE\n" );
         return 0;

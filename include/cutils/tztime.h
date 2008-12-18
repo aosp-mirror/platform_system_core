@@ -24,6 +24,21 @@ extern "C" {
 time_t mktime_tz(struct tm * const tmp, char const * tz);
 void localtime_tz(const time_t * const timep, struct tm * tmp, const char* tz);
 
+struct strftime_locale {
+    const char *mon[12];    /* short names */
+    const char *month[12];  /* long names */
+    const char *wday[7];    /* short names */
+    const char *weekday[7]; /* long names */
+    const char *X_fmt;
+    const char *x_fmt;
+    const char *c_fmt;
+    const char *am;
+    const char *pm;
+    const char *date_fmt;
+};
+
+size_t strftime_tz(char *s, size_t max, const char *format, const struct tm *tm, const struct strftime_locale *locale);
+
 #ifdef __cplusplus
 }
 #endif

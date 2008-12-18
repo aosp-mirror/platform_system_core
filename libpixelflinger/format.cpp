@@ -21,13 +21,13 @@
 namespace android {
 
 static GGLFormat const gPixelFormatInfos[] =
-{
+{   //          Alpha    Red     Green   Blue
     {  0,  0, {{ 0, 0,   0, 0,   0, 0,   0, 0 }},        0 },   // PIXEL_FORMAT_NONE
     {  4, 32, {{32,24,   8, 0,  16, 8,  24,16 }}, GGL_RGBA },   // PIXEL_FORMAT_RGBA_8888
     {  4, 24, {{ 0, 0,   8, 0,  16, 8,  24,16 }}, GGL_RGB  },   // PIXEL_FORMAT_RGBX_8888
     {  3, 24, {{ 0, 0,   8, 0,  16, 8,  24,16 }}, GGL_RGB  },   // PIXEL_FORMAT_RGB_888
     {  2, 16, {{ 0, 0,  16,11,  11, 5,   5, 0 }}, GGL_RGB  },   // PIXEL_FORMAT_RGB_565
-    {  0,  0, {{ 0, 0,   0, 0,   0, 0,   0, 0 }},        0 },   // PIXEL_FORMAT_NONE
+    {  4, 32, {{32,24,  24,16,  16, 8,   8, 0 }}, GGL_RGBA },   // PIXEL_FORMAT_BGRA_8888
     {  2, 16, {{ 1, 0,  16,11,  11, 6,   6, 1 }}, GGL_RGBA },   // PIXEL_FORMAT_RGBA_5551
     {  2, 16, {{ 4, 0,  16,12,  12, 8,   8, 4 }}, GGL_RGBA },   // PIXEL_FORMAT_RGBA_4444
     {  1,  8, {{ 8, 0,   0, 0,   0, 0,   0, 0 }}, GGL_ALPHA},   // PIXEL_FORMAT_A8

@@ -181,6 +181,22 @@ int dhcp_stop(const char *interface)
     return 0;
 }
 
+/**
+ * Release the current DHCP client lease.
+ */
+int dhcp_release_lease(const char *interface)
+{
+    const char *ctrl_prop = "ctl.stop";
+    const char *desired_status = "stopped";
+
+    /* Stop the daemon and wait until it's reported to be stopped */
+    property_set(ctrl_prop, DAEMON_NAME);
+    if (wait_for_property(DAEMON_PROP_NAME, desired_status, 5) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
 char *dhcp_get_errmsg() {
     return errmsg;
 }

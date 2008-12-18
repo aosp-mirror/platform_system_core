@@ -7,8 +7,7 @@ copy_from := \
 	etc/mountd.conf \
 	etc/dbus.conf \
 	etc/init.goldfish.sh \
-	etc/hosts \
-	etc/hcid.conf 
+	etc/hosts
 
 dont_copy := \
 	etc/init.gprs-pppd \
@@ -28,10 +27,13 @@ ALL_PREBUILT += $(copy_to)
 
 # files that live under /...
 
+# Only copy init.rc if the target doesn't have its own.
+ifneq ($(TARGET_PROVIDES_INIT_RC),true)
 file := $(TARGET_ROOT_OUT)/init.rc
 $(file) : $(LOCAL_PATH)/init.rc | $(ACP)
 	$(transform-prebuilt-to-target)
 ALL_PREBUILT += $(file)
+endif
 
 file := $(TARGET_ROOT_OUT)/init.goldfish.rc
 $(file) : $(LOCAL_PATH)/etc/init.goldfish.rc | $(ACP)

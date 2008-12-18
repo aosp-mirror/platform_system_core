@@ -79,6 +79,11 @@ struct asocket {
         */
     unsigned id;
 
+        /* flag: set when the socket's peer has closed
+        ** but packets are still queued for delivery
+        */
+    int    closing;
+
         /* the asocket we are connected to
         */
 
@@ -309,15 +314,15 @@ int writex(int fd, const void *ptr, size_t len);
  * the adb_trace_init() function implemented in adb.c
  */
 typedef enum {
-	TRACE_ADB = 0,
-	TRACE_SOCKETS,
-	TRACE_PACKETS,
-	TRACE_TRANSPORT,
-	TRACE_RWX,
-	TRACE_USB,
-	TRACE_SYNC,
-	TRACE_SYSDEPS,
-        TRACE_JDWP,
+    TRACE_ADB = 0,
+    TRACE_SOCKETS,
+    TRACE_PACKETS,
+    TRACE_TRANSPORT,
+    TRACE_RWX,
+    TRACE_USB,
+    TRACE_SYNC,
+    TRACE_SYSDEPS,
+    TRACE_JDWP,
 } AdbTrace;
 
 #if ADB_TRACE

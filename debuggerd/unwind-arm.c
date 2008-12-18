@@ -381,13 +381,15 @@ get_eit_entry (_Unwind_Control_Block *ucbp, _uw return_address, pid_t pid,
 }
 
 /* Print out the current call level, pc, and module name in the crash log */
-static _Unwind_Reason_Code log_function(_Unwind_Context *context, int tfd,
+static _Unwind_Reason_Code log_function(_Unwind_Context *context, pid_t pid, 
+                                        int tfd,
                                         int stack_level,
                                         mapinfo *map,
                                         unsigned int sp_list[],
                                         bool at_fault)
 {
     _uw pc;
+    _uw rel_pc; 
     phase2_vrs *vrs = (phase2_vrs*) context;
     const mapinfo *mi;
     bool only_in_tombstone = !at_fault;
@@ -404,19 +406,53 @@ static _Unwind_Reason_Code log_function(_Unwind_Context *context, int tfd,
     // For deeper framers, rollback pc by one instruction
     else {
         pc = vrs->core.r[R_PC];
-        // Thumb mode
+        /* Thumb mode - need to check whether the bl(x) has long offset or not.
+         * Examples:
+         *
+         * arm blx in the middle of thumb:
+         * 187ae:       2300            movs    r3, #0
+         * 187b0:       f7fe ee1c       blx     173ec
+         * 187b4:       2c00            cmp     r4, #0
+         *
+         * arm bl in the middle of thumb:
+         * 187d8:       1c20            adds    r0, r4, #0
+         * 187da:       f136 fd15       bl      14f208
+         * 187de:       2800            cmp     r0, #0
+         *
+         * pure thumb:
+         * 18894:       189b            adds    r3, r3, r2
+         * 18896:       4798            blx     r3
+         * 18898:       b001            add     sp, #4
+         */
         if (pc & 1) {
-            pc = (pc & ~1) - 2;
+            _uw prev_word;
+            pc = (pc & ~1);
+            prev_word = get_remote_word(pid, (void *) pc-4);
+            // Long offset 
+            if ((prev_word & 0xf0000000) == 0xf0000000 && 
+                (prev_word & 0x0000e000) == 0x0000e000) {
+                pc -= 4;
+            }
+            else {
+                pc -= 2;
+            }
         }
         else { 
             pc -= 4;
         }
     }
 
-    mi = pc_to_mapinfo(map, pc);
+    /* We used to print the absolute PC in the back trace, and mask out the top
+     * 3 bits to guesstimate the offset in the .so file. This is not working for
+     * non-prelinked libraries since the starting offset may not be aligned on 
+     * 1MB boundaries, and the library may be larger than 1MB. So for .so 
+     * addresses we print the relative offset in back trace.
+     */
+    rel_pc = pc;
+    mi = pc_to_mapinfo(map, pc, &rel_pc);
 
     _LOG(tfd, only_in_tombstone, 
-         "         #%02d  pc %08x  %s\n", stack_level, pc, 
+         "         #%02d  pc %08x  %s\n", stack_level, rel_pc, 
          mi ? mi->name : "");
 
     return _URC_NO_REASON;
@@ -459,7 +495,7 @@ int unwind_backtrace_with_ptrace(int tfd, pid_t pid, mapinfo *map,
      */
     if (get_eitp(saved_vrs.core.r[R_PC], pid, map, NULL) == NULL) { 
         *frame0_pc_sane = 0;
-        log_function ((_Unwind_Context *) &saved_vrs, tfd, stack_level, 
+        log_function ((_Unwind_Context *) &saved_vrs, pid, tfd, stack_level, 
                       map, sp_list, at_fault);
         saved_vrs.core.r[R_PC] = saved_vrs.core.r[R_LR];
         stack_level++;
@@ -493,7 +529,7 @@ int unwind_backtrace_with_ptrace(int tfd, pid_t pid, mapinfo *map,
         _Unwind_SetGR((_Unwind_Context *)&saved_vrs, 12, (_Unwind_Ptr) ucbp);
 
         /* Call log function.  */
-        if (log_function ((_Unwind_Context *) &saved_vrs, tfd, stack_level, 
+        if (log_function ((_Unwind_Context *) &saved_vrs, pid, tfd, stack_level,
                           map, sp_list, at_fault) != _URC_NO_REASON) {
             code = _URC_FAILURE;
             break;

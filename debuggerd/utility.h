@@ -45,7 +45,7 @@ extern int get_remote_word(int pid, void *src);
 extern void get_remote_struct(int pid, void *src, void *dst, size_t size);
 
 /* Find the containing map for the pc */
-const mapinfo *pc_to_mapinfo (mapinfo *mi, unsigned pc);
+const mapinfo *pc_to_mapinfo (mapinfo *mi, unsigned pc, unsigned *rel_pc);
 
 /* Map a pc address to the name of the containing ELF file */
 const char *map_to_name(mapinfo *mi, unsigned pc, const char* def);

@@ -1000,6 +1000,9 @@ void GGLAssembler::build_texture_environment(
                 case GGL_BLEND:
                     blend(fragment, incoming, texel, component, i);
                     break;
+                case GGL_ADD:
+                    add(fragment, incoming, texel, component);
+                    break;
                 }
             }
         }
@@ -1200,6 +1203,46 @@ void GGLAssembler::blend(
     }
     ADD(AL, 0, factor.reg, factor.reg, reg_imm(factor.reg, LSR, factor.s-1));
     build_blendOneMinusFF(dest, factor, incomingNorm, color);
+}
+
+void GGLAssembler::add(
+        component_t& dest, 
+        const component_t& incoming,
+        const pixel_t& incomingTexel, int component)
+{
+    // RGBA:
+    // Cv = Cf + Ct;
+    Scratch locals(registerFile());
+    
+    component_t incomingTemp(incoming);
+
+    // use "dest" as a temporary for extracting the texel, unless "dest"
+    // overlaps "incoming".
+    integer_t texel(dest.reg, 32, CORRUPTIBLE);
+    if (dest.reg == incomingTemp.reg)
+        texel.reg = locals.obtain();
+    extract(texel, incomingTexel, component);
+
+    if (texel.s < incomingTemp.size()) {
+        expand(texel, texel, incomingTemp.size());
+    } else if (texel.s > incomingTemp.size()) {
+        if (incomingTemp.flags & CORRUPTIBLE) {
+            expand(incomingTemp, incomingTemp, texel.s);
+        } else {
+            incomingTemp.reg = locals.obtain();
+            expand(incomingTemp, incoming, texel.s);
+        }
+    }
+
+    if (incomingTemp.l) {
+        ADD(AL, 0, dest.reg, texel.reg,
+                reg_imm(incomingTemp.reg, LSR, incomingTemp.l));
+    } else {
+        ADD(AL, 0, dest.reg, texel.reg, incomingTemp.reg);
+    }
+    dest.l = 0;
+    dest.h = texel.size();
+    component_sat(dest);
 }
 
 // ----------------------------------------------------------------------------
