@@ -147,11 +147,11 @@ GGL_RESERVE_NEEDS( P_FOG,           9, 1 )
 GGL_RESERVE_NEEDS( P_RESERVED1,    10,22 )
 
 GGL_RESERVE_NEEDS( T_FORMAT,        0, 6 )
-GGL_RESERVE_NEEDS( T_RESERVED0,     6, 2 )
+GGL_RESERVE_NEEDS( T_RESERVED0,     6, 1 )
+GGL_RESERVE_NEEDS( T_POT,           7, 1 )
 GGL_RESERVE_NEEDS( T_S_WRAP,        8, 2 )
 GGL_RESERVE_NEEDS( T_T_WRAP,       10, 2 )
-GGL_RESERVE_NEEDS( T_ENV,          12, 2 )
-GGL_RESERVE_NEEDS( T_POT,          14, 1 )
+GGL_RESERVE_NEEDS( T_ENV,          12, 3 )
 GGL_RESERVE_NEEDS( T_LINEAR,       15, 1 )
 
 const int GGL_NEEDS_WRAP_CLAMP_TO_EDGE  = 0;
@@ -182,12 +182,14 @@ inline uint32_t ggl_env_to_needs(uint32_t e) {
     case GGL_MODULATE:  return 1;
     case GGL_DECAL:     return 2;
     case GGL_BLEND:     return 3;
+    case GGL_ADD:       return 4;
     }
     return 0;
 }
 
 inline uint32_t ggl_needs_to_env(uint32_t n) {
-    const uint32_t envs[] = { GGL_REPLACE, GGL_MODULATE, GGL_DECAL, GGL_BLEND };
+    const uint32_t envs[] = { GGL_REPLACE, GGL_MODULATE, 
+            GGL_DECAL, GGL_BLEND, GGL_ADD };
     return envs[n];
 
 }

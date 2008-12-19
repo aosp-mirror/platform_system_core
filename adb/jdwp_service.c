@@ -287,7 +287,7 @@ jdwp_process_event( int  socket, unsigned  events, void*  _proc )
                 if (len <= 0) {
                     if (len < 0 && errno == EINTR)
                         continue;
-		    if (len < 0 && errno == EAGAIN)
+                    if (len < 0 && errno == EAGAIN)
                         return;
                     else {
                         D("terminating JDWP %d connection: %s\n", proc->pid,
@@ -295,7 +295,7 @@ jdwp_process_event( int  socket, unsigned  events, void*  _proc )
                         break;
                     }
                 }
-		else {
+                else {
                     D( "ignoring unexpected JDWP %d control socket activity (%d bytes)\n",
                        proc->pid, len );
                 }

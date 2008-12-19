@@ -194,6 +194,9 @@ stop <service>
 symlink <target> <path>
    Create a symbolic link at <path> with the value <target>
 
+sysclktz <mins_west_of_gmt>
+   Set the system clock base (0 if system clock ticks in GMT)
+
 trigger <event>
    Trigger an event.  Used to queue an action from another
    action.

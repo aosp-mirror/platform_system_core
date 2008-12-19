@@ -67,59 +67,59 @@ int   adb_trace_mask;
  */
 void  adb_trace_init(void)
 {
-	const char*  p = getenv("ADB_TRACE");
-	const char*  q;
+    const char*  p = getenv("ADB_TRACE");
+    const char*  q;
 
-	static const struct {
-		const char*  tag;
-		int           flag;
-	} tags[] = {
-	    { "1", 0 },
-		{ "all", 0 },
-		{ "adb", TRACE_ADB },
-		{ "sockets", TRACE_SOCKETS },
-		{ "packets", TRACE_PACKETS },
-		{ "rwx", TRACE_RWX },
-		{ "usb", TRACE_USB },
-		{ "sync", TRACE_SYNC },
-		{ "sysdeps", TRACE_SYSDEPS },
+    static const struct {
+        const char*  tag;
+        int           flag;
+    } tags[] = {
+        { "1", 0 },
+        { "all", 0 },
+        { "adb", TRACE_ADB },
+        { "sockets", TRACE_SOCKETS },
+        { "packets", TRACE_PACKETS },
+        { "rwx", TRACE_RWX },
+        { "usb", TRACE_USB },
+        { "sync", TRACE_SYNC },
+        { "sysdeps", TRACE_SYSDEPS },
         { "transport", TRACE_TRANSPORT },
         { "jdwp", TRACE_JDWP },
-		{ NULL, 0 }
-	};
+        { NULL, 0 }
+    };
 
-	if (p == NULL)
-		return;
+    if (p == NULL)
+            return;
 
-	/* use a comma/column/semi-colum/space separated list */
-	while (*p) {
-		int  len, tagn;
+    /* use a comma/column/semi-colum/space separated list */
+    while (*p) {
+        int  len, tagn;
 
-		q = strpbrk(p, " ,:;");
-		if (q == NULL) {
-			q = p + strlen(p);
-		}
-		len = q - p;
+        q = strpbrk(p, " ,:;");
+        if (q == NULL) {
+            q = p + strlen(p);
+        }
+        len = q - p;
 
-		for (tagn = 0; tags[tagn].tag != NULL; tagn++)
-		{
-			int  taglen = strlen(tags[tagn].tag);
+        for (tagn = 0; tags[tagn].tag != NULL; tagn++)
+        {
+            int  taglen = strlen(tags[tagn].tag);
 
-			if (len == taglen && !memcmp(tags[tagn].tag, p, len) )
-			{
-				int  flag = tags[tagn].flag;
-				if (flag == 0) {
-					adb_trace_mask = ~0;
-					return;
-				}
-				adb_trace_mask |= (1 << flag);
-				break;
-			}
-		}
-		p = q;
-		if (*p)
-			p++;
-	}
+            if (len == taglen && !memcmp(tags[tagn].tag, p, len) )
+            {
+                int  flag = tags[tagn].flag;
+                if (flag == 0) {
+                    adb_trace_mask = ~0;
+                    return;
+                }
+                adb_trace_mask |= (1 << flag);
+                break;
+            }
+        }
+        p = q;
+        if (*p)
+            p++;
+    }
 }
 
 
@@ -783,8 +783,8 @@ int launch_server()
 
         // child process
         int result = execl(path, "adb", "fork-server", "server", NULL);
-	    // this should not return
-	    fprintf(stderr, "OOPS! execl returned %d, errno: %d\n", result, errno);
+        // this should not return
+        fprintf(stderr, "OOPS! execl returned %d, errno: %d\n", result, errno);
     } else  {
         // parent side of the fork
 
@@ -894,7 +894,7 @@ int adb_main(int is_daemon)
     if(access("/dev/android_adb", F_OK) == 0 ||
        access("/dev/android", F_OK) == 0) {
         usb_init();
-	} else {
+    } else {
         local_init();
     }
     init_jdwp();

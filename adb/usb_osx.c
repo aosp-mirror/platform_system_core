@@ -72,13 +72,13 @@ InitUSB()
     CFRunLoopSourceRef      runLoopSource;
     SInt32					vendor, product;
     int                     i;
-    
+
     //* To set up asynchronous notifications, create a notification port and
     //* add its run loop event source to the program's run loop
     notificationPort = IONotificationPortCreate(kIOMasterPortDefault);
     runLoopSource = IONotificationPortGetRunLoopSource(notificationPort);
     CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, kCFRunLoopDefaultMode);
-    
+
     memset(notificationIterators, 0, sizeof(notificationIterators));
 
     //* loop through all supported vendor/product pairs
@@ -86,19 +86,19 @@ InitUSB()
         //* Create our matching dictionary to find the Android device
         //* IOServiceAddMatchingNotification consumes the reference, so we do not need to release this
         matchingDict = IOServiceMatching(kIOUSBDeviceClassName);
-    
+
         if (!matchingDict) {
             DBG("ERR: Couldn't create USB matching dictionary.\n");
             return -1;
         }
-    
+
         //* Set up two matching dictionaries, one for each product ID we support.
         //* This will cause the kernel to notify us only if the vendor and product IDs match.
         vendor = kSupportedDevices[i].vid;
         product = kSupportedDevices[i].pid;
-      	CFDictionarySetValue(matchingDict, CFSTR(kUSBVendorID), CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &vendor));
-      	CFDictionarySetValue(matchingDict, CFSTR(kUSBProductID), CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &product));
-    
+        CFDictionarySetValue(matchingDict, CFSTR(kUSBVendorID), CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &vendor));
+        CFDictionarySetValue(matchingDict, CFSTR(kUSBProductID), CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &product));
+
         //* Now set up two notifications: one to be called when a raw device
         //* is first matched by the I/O Kit and another to be called when the
         //* device is terminated.
@@ -110,7 +110,7 @@ InitUSB()
                 AndroidDeviceAdded,
                 NULL,
                 &notificationIterators[i]);
-    
+
         //* Iterate over set of matching devices to access already-present devices
         //* and to arm the notification
         AndroidDeviceAdded(NULL, notificationIterators[i]);
@@ -173,7 +173,7 @@ AndroidDeviceAdded(void *refCon, io_iterator_t iterator)
 
             if (kr == kIOReturnSuccess && req.wLenDone > 0) {
                 int i, count;
-                
+
                 // skip first word, and copy the rest to the serial string, changing shorts to bytes.
                 count = (req.wLenDone - 1) / 2;
                 for (i = 0; i < count; i++)
@@ -401,8 +401,8 @@ void* RunLoopThread(void* unused)
     currentRunLoop = 0;
 
     for (i = 0; i < kSupportedDeviceCount; i++) {
-	    IOObjectRelease(notificationIterators[i]);
-	}
+        IOObjectRelease(notificationIterators[i]);
+    }
     IONotificationPortDestroy(notificationPort);
 
     DBG("RunLoopThread done\n");

@@ -76,16 +76,19 @@ typedef struct MountPoint {
     
     // mount point for device
     const char* mountPoint;
+
+    // path to the UMS driver file for specifying the block device path
+    const char* driverStorePath;
     
     // true if device can be shared via
     // USB mass storage
     boolean enableUms;
-    
+ 
+    // Array of ASEC handles
+    void *asecHandles[ASEC_STORES_MAX];
+
     // true if the device is being shared via USB mass storage
     boolean umsActive;
-    
-    // logical unit number (for UMS)
-    int lun;
     
     // current state of the mount point
     MountState state;
@@ -100,11 +103,13 @@ typedef struct MountPoint {
 
 // list of our mount points (does not change after initialization)
 static MountPoint* sMountPointList = NULL;
-static int sNextLun = 0;
 boolean gMassStorageEnabled = false;
 boolean gMassStorageConnected = false;
 
 static pthread_t sAutoMountThread = 0;
+static pid_t gExcludedPids[2] = {-1, -1};
+
+static const char FSCK_MSDOS_PATH[] = "/system/bin/fsck_msdos";
 
 // number of mount points that have timeouts pending
 static int sRetriesPending = 0;
@@ -116,15 +121,18 @@ static pthread_mutex_t sMutex = PTHREAD_MUTEX_INITIALIZER;
 // via USB mass storage.
 static void SetBackingStore(MountPoint* mp, boolean enable) 
 {
-    char path[PATH_MAX];
     int fd;
 
+    if (!mp->driverStorePath) {
+        LOG_ERROR("no driver_store_path specified in config file for %s", mp->device);
+        return;
+    }
+
     LOG_MOUNT("SetBackingStore enable: %s\n", (enable ? "true" : "false"));
-    snprintf(path, sizeof(path), "/sys/devices/platform/usb_mass_storage/lun%d/file", mp->lun);
-    fd = open(path, O_WRONLY);
+    fd = open(mp->driverStorePath, O_WRONLY);
     if (fd < 0)
     {
-        LOG_ERROR("could not open %s\n", path);
+        LOG_ERROR("could not open driver_store_path %s\n", mp->driverStorePath);
     }
     else
     {
@@ -192,6 +200,56 @@ static boolean IsLoopMounted(const char* path)
     return result;
 }
 
+static int CheckFilesystem(const char *device)
+{
+    char cmdline[255];
+    int rc;
+
+    // XXX: SAN: Check for FAT signature
+    
+    int result = access(FSCK_MSDOS_PATH, X_OK);
+    if (result != 0) {
+        LOG_MOUNT("CheckFilesystem(%s): fsck_msdos not found (skipping checks)\n", device);
+        return 0;
+    }
+ 
+    sprintf(cmdline, "%s -p %s", FSCK_MSDOS_PATH, device);
+    LOG_MOUNT("Checking filesystem (%s)\n", cmdline);
+
+    // XXX: Notify framework we're disk checking
+  
+    // XXX: PROTECT FROM VIKING KILLER
+    if ((rc = system(cmdline)) < 0) {
+        LOG_ERROR("Error executing disk check command (%d)\n", errno);
+        return -errno;
+    } 
+
+    rc = WEXITSTATUS(rc);
+  
+    if (rc == 0) {
+        LOG_MOUNT("Filesystem check completed OK\n");
+        return 0;
+    } else if (rc == 1) {
+        LOG_MOUNT("Filesystem check failed (invalid usage)\n");
+        return -EINVAL;
+    } else if (rc == 2) {
+        LOG_MOUNT("Filesystem check failed (unresolved issues)\n");
+        return -EIO;
+    } else if (rc == 4) {
+        LOG_MOUNT("Filesystem check failed (root changed)\n");
+        return -EIO;
+    } else if (rc == 8) {
+        LOG_MOUNT("Filesystem check failed (general failure)\n");
+        return -EIO;
+    } else if (rc == 12) {
+        LOG_MOUNT("Filesystem check failed (exit signaled)\n");
+        return -EIO;
+    } else {
+        LOG_MOUNT("Filesystem check failed (unknown exit code %d)\n", rc);
+        return -EIO;
+    }
+}
+
 static int DoMountDevice(const char* device, const char* mountPoint)
 {
     LOG_MOUNT("mounting %s at %s\n", device, mountPoint);
@@ -237,6 +295,17 @@ static int DoMountDevice(const char* device, const char* mountPoint)
     if (result != 0)
         return result;
 
+    if ((result = CheckFilesystem(device))) {
+        LOG_ERROR("Not mounting filesystem due to check failure (%d)\n", result);
+        // XXX:  Notify framework - need a new SDCARD state for the following:
+        //       - SD cards which are not present
+        //       - SD cards with no partition table
+        //       - SD cards with no filesystem
+        //       - SD cards with bad filesystem
+        return result;
+    }
+    
+
     // Extra safety measures:
     flags |= MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_DIRSYNC;
     // Also, set fmask = 711 so that files cannot be marked executable,
@@ -254,6 +323,27 @@ static int DoMountDevice(const char* device, const char* mountPoint)
 
     if (result == 0) {
         NotifyMediaState(mountPoint, MEDIA_MOUNTED, (flags & MS_RDONLY) != 0);
+
+        MountPoint* mp = sMountPointList;
+        while (mp) {
+            if (!strcmp(mountPoint, mp->mountPoint)) {
+                int i;
+             
+                for (i = 0; i < ASEC_STORES_MAX; i++) {
+                    if (mp->asecHandles[i] != NULL) {
+                        int a_result;
+                        if ((a_result = AsecStart(mp->asecHandles[i])) < 0) {
+                            LOG_ERROR("ASEC start failure (%d)\n", a_result);
+                        }
+                    }
+                }
+                break;
+            }
+            mp = mp -> next;
+        }
+    } else if (errno == EBUSY) {
+    // ignore EBUSY, since it usually means the device is already mounted
+        result = 0;
     } else {
 #if CREATE_MOUNT_POINTS
         rmdir(mountPoint);
@@ -264,32 +354,39 @@ static int DoMountDevice(const char* device, const char* mountPoint)
     return result;
 }
 
-static int DoUnmountDevice(const char* mountPoint)
+static int DoUnmountDevice(MountPoint *mp)
 {
-    boolean loop = IsLoopMounted(mountPoint);
-    int result = umount(mountPoint);
+    boolean loop = IsLoopMounted(mp->mountPoint);
+    int i;
+
+    for (i = 0; i < ASEC_STORES_MAX; i++) {
+        if (mp->asecHandles[i] && AsecIsStarted(mp->asecHandles[i]))
+            AsecStop(mp->asecHandles[i]);
+    }
+
+    int result = umount(mp->mountPoint);
     LOG_MOUNT("umount returned %d errno: %d\n", result, errno);
 
     if (result == 0)
     {
-        if (loop)
-        {
-            // free the loop device
-            int loop_fd = open(LOOP_DEVICE, O_RDONLY);
-            if (loop_fd < -1) {
-                LOG_ERROR("open loop device failed\n");
-            }
-            if (ioctl(loop_fd, LOOP_CLR_FD, 0) < 0) {
-                LOG_ERROR("ioctl LOOP_CLR_FD failed\n");
-            }
-
-            close(loop_fd);
-        }
-
 #if CREATE_MOUNT_POINTS
         rmdir(mountPoint);
 #endif
-        NotifyMediaState(mountPoint, MEDIA_UNMOUNTED, false);
+        NotifyMediaState(mp->mountPoint, MEDIA_UNMOUNTED, false);
+    }
+
+    if (loop)
+    {
+        // free the loop device
+        int loop_fd = open(LOOP_DEVICE, O_RDONLY);
+        if (loop_fd < -1) {
+            LOG_ERROR("open loop device failed\n");
+        }
+        if (ioctl(loop_fd, LOOP_CLR_FD, 0) < 0) {
+            LOG_ERROR("ioctl LOOP_CLR_FD failed\n");
+        }
+
+        close(loop_fd);
     }
 
     // ignore EINVAL and ENOENT, since it usually means the device is already unmounted
@@ -405,7 +502,7 @@ static void RequestUnmount(MountPoint* mp, MountState retryState)
         sync();
         DropSystemCaches();
 
-        if (DoUnmountDevice(mp->mountPoint) == 0) 
+        if (DoUnmountDevice(mp) == 0) 
         {
             SetState(mp, kUnmounted);
             if (retryState == kUnmountingForUms) 
@@ -499,6 +596,8 @@ static void HandleMediaInserted(const char* device)
 {
     MountPoint* mp = sMountPointList;
     
+    LOG_MOUNT("HandleMediaInserted(%s):\n", device);
+
     while (mp)
     {
         // see if the device matches mount point's block device
@@ -570,7 +669,7 @@ static void HandleRetries()
        } 
        else if (mp->state == kUnmountingForEject || mp->state == kUnmountingForUms)
        {
-            if (DoUnmountDevice(mp->mountPoint) == 0)
+            if (DoUnmountDevice(mp) == 0)
             {
                 // unmounting succeeded
                 // start mass storage, if state is kUnmountingForUms
@@ -591,8 +690,25 @@ static void HandleRetries()
                     // send SIGKILL instead of SIGTERM if the first attempt did not succeed
                     boolean sigkill = (mp->retryCount > MAX_UNMOUNT_RETRIES);
                     
+                    int i;
+
+                    for (i = 0; i < ASEC_STORES_MAX; i++) {
+                        if (mp->asecHandles[i] && AsecIsStarted(mp->asecHandles[i])) {
+                            LOG_MOUNT("Killing processes for ASEC path '%s'\n",
+                                      AsecMountPoint(mp->asecHandles[i]));
+                            KillProcessesWithOpenFiles(AsecMountPoint(mp->asecHandles[i]),
+                                                       sigkill,
+                                                       gExcludedPids, sizeof(gExcludedPids) / sizeof(pid_t));
+
+                            // Now that we've killed the processes, try to stop the volume again
+                            AsecStop(mp->asecHandles[i]);
+                        }
+                    }
+
                     // unmounting the device is failing, so start killing processes
-                    KillProcessesWithOpenFiles(mp->mountPoint, sigkill);
+                    KillProcessesWithOpenFiles(mp->mountPoint, sigkill, gExcludedPids, 
+                                               sizeof(gExcludedPids) / sizeof(pid_t));
+
                 }
             }
        } 
@@ -672,6 +788,8 @@ static void* AutoMountThread(void* arg)
     int uevent_fd;
     int id;
     struct sigaction    actions;
+
+    gExcludedPids[1] = getpid();
 
     memset(&actions, 0, sizeof(actions));
     sigemptyset(&actions.sa_mask);
@@ -826,7 +944,9 @@ void EnableMassStorage(boolean enable)
 void MountMedia(const char* mountPoint)
 {
     MountPoint* mp = sMountPointList;
-    
+ 
+    LOG_MOUNT("MountMedia(%s)\n", mountPoint);
+   
     pthread_mutex_lock(&sMutex);
     while (mp)
     {
@@ -880,27 +1000,48 @@ boolean IsMassStorageConnected()
  * 
  ***********************************************/
  
-void AddMountPoint(const char* device, const char* mountPoint, boolean enableUms)
+void *AddMountPoint(const char* device, const char* mountPoint, const char * driverStorePath, boolean enableUms)
 {
     MountPoint* newMountPoint;
     
-    LOG_MOUNT("AddMountPoint device: %s, mountPoint: %s\n", device, mountPoint);
+    LOG_MOUNT("AddMountPoint device: %s, mountPoint: %s driverStorePath: %s\n", device, mountPoint, driverStorePath);
     // add a new MountPoint to the head of our linked list
     newMountPoint = (MountPoint *)malloc(sizeof(MountPoint));
     newMountPoint->device = device;
     newMountPoint->mountPoint = mountPoint;
+    newMountPoint->driverStorePath = driverStorePath;
     newMountPoint->enableUms = enableUms;
     newMountPoint->umsActive = false;
-    if (enableUms)
-        newMountPoint->lun = sNextLun++;
     newMountPoint->state = kUnmounted;
     newMountPoint->retryCount = 0;
 
     // add to linked list
     newMountPoint->next = sMountPointList;
     sMountPointList = newMountPoint;
+    return newMountPoint;
 }
 
+int AddAsecToMountPoint(void *Mp, const char *name, const char *backing_file, const char *size,
+                        const char *mount_point, const char *crypt)
+{
+    MountPoint *mp = (MountPoint *) Mp;
+    int i;
+
+    for (i = 0; i < ASEC_STORES_MAX; i++) {
+        if (!mp->asecHandles[i])
+            break;   
+    }
+
+    if (i == ASEC_STORES_MAX) {
+        LOG_ERROR("Maximum # of ASEC stores exceeded\n");
+        return -EINVAL;
+    }
+
+    if (!(mp->asecHandles[i] = AsecInit(name, mp->mountPoint, backing_file, size, mount_point, crypt)))
+        return -1;
+
+    return 0;
+}
 static void MountDevices()
 {
     MountPoint* mp = sMountPointList;
@@ -913,6 +1054,8 @@ static void MountDevices()
 
 void StartAutoMounter()
 {
+    gExcludedPids[0] = getpid();
+
     gMassStorageConnected = ReadMassStorageState();
     LOG_MOUNT(gMassStorageConnected ? "USB online\n" : "USB offline\n");
 

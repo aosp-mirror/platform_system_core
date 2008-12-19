@@ -19,6 +19,7 @@ int do_start(int nargs, char **args);
 int do_stop(int nargs, char **args);
 int do_trigger(int nargs, char **args);
 int do_symlink(int nargs, char **args);
+int do_sysclktz(int nargs, char **args);
 int do_write(int nargs, char **args);
 int do_chown(int nargs, char **args);
 int do_chmod(int nargs, char **args);
@@ -60,6 +61,7 @@ enum {
     KEYWORD(stop,        COMMAND, 1, do_stop)
     KEYWORD(trigger,     COMMAND, 1, do_trigger)
     KEYWORD(symlink,     COMMAND, 1, do_symlink)
+    KEYWORD(sysclktz,    COMMAND, 1, do_sysclktz)
     KEYWORD(user,        OPTION,  0, 0)
     KEYWORD(write,       COMMAND, 2, do_write)
     KEYWORD(chown,       COMMAND, 2, do_chown)

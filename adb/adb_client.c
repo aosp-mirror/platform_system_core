@@ -211,7 +211,7 @@ int adb_connect(const char *service)
             return -1;
         } else {
             fprintf(stdout,"* daemon started successfully *\n");
-		}
+        }
         /* give the server some time to start properly and detect devices */
         adb_sleep_ms(2000);
         // fall through to _adb_connect
@@ -223,13 +223,13 @@ int adb_connect(const char *service)
 
         // if we have a file descriptor, then parse version result
         if(fd >= 0) {
-	        if(readx(fd, buf, 4)) goto error;
+            if(readx(fd, buf, 4)) goto error;
 
-		    buf[4] = 0;
-		    n = strtoul(buf, 0, 16);
-		    if(n > (int)sizeof(buf)) goto error;
-		    if(readx(fd, buf, n)) goto error;
-		    adb_close(fd);
+            buf[4] = 0;
+            n = strtoul(buf, 0, 16);
+            if(n > (int)sizeof(buf)) goto error;
+            if(readx(fd, buf, n)) goto error;
+            adb_close(fd);
 
             if (sscanf(buf, "%04x", &version) != 1) goto error;
         } else {
@@ -240,14 +240,14 @@ int adb_connect(const char *service)
         }
 
         if(version != ADB_SERVER_VERSION) {
-	        printf("adb server is out of date.  killing...\n");
-	        fd = _adb_connect("host:kill");
-	        adb_close(fd);
+            printf("adb server is out of date.  killing...\n");
+            fd = _adb_connect("host:kill");
+            adb_close(fd);
 
-                /* XXX can we better detect its death? */
-	        adb_sleep_ms(2000);
+            /* XXX can we better detect its death? */
+            adb_sleep_ms(2000);
             goto start_server;
-	    }
+        }
     }
 
     // if the command is start-server, we are done.

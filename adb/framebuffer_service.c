@@ -24,6 +24,7 @@
 #include "adb.h"
 
 #include <linux/fb.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 
 /* TODO:
@@ -37,9 +38,9 @@ void framebuffer_service(int fd, void *cookie)
     int fb;
     void *ptr = MAP_FAILED;
     char x;
-    
+
     unsigned fbinfo[4];
-    
+
     fb = open("/dev/graphics/fb0", O_RDONLY);
     if(fb < 0) goto done;
 
@@ -53,14 +54,14 @@ void framebuffer_service(int fd, void *cookie)
 
     ptr = mmap(0, fbinfo[1], PROT_READ, MAP_SHARED, fb, 0);
     if(ptr == MAP_FAILED) goto done;
-    
+
     if(writex(fd, fbinfo, sizeof(unsigned) * 4)) goto done;
 
     for(;;) {
         if(readx(fd, &x, 1)) goto done;
         if(writex(fd, ptr, fbinfo[1])) goto done;
     }
-    
+
 done:
     if(ptr != MAP_FAILED) munmap(ptr, fbinfo[1]);
     if(fb >= 0) close(fb);

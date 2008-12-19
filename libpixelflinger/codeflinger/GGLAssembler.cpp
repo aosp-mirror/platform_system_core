@@ -151,6 +151,7 @@ int GGLAssembler::scanline_core(const needs_t& needs, context_t const* c)
         // Destination is zero (beware of logic ops)
     }
     
+    int fbComponents = 0;
     const int masking = GGL_READ_NEEDS(MASK_ARGB, needs.n);
     for (int i=0 ; i<4 ; i++) {
         const int mask = 1<<i;
@@ -176,9 +177,14 @@ int GGLAssembler::scanline_core(const needs_t& needs, context_t const* c)
 
         mBlending |= (info.blend ? mask : 0);
         mMasking |= (mCbFormat.c[i].h && info.masked) ? mask : 0;
+        fbComponents |= mCbFormat.c[i].h ? mask : 0;
     }
 
-
+    mAllMasked = (mMasking == fbComponents);
+    if (mAllMasked) {
+        mDithering = 0;
+    }
+    
     fragment_parts_t parts;
 
     // ------------------------------------------------------------------------
@@ -226,8 +232,10 @@ int GGLAssembler::scanline_core(const needs_t& needs, context_t const* c)
             build_textures(parts, regs);
         }        
 
-        if ((blending & (FACTOR_DST|BLEND_DST)) || mMasking ||
-                (mLogicOp & LOGIC_OP_DST)) {
+        if ((blending & (FACTOR_DST|BLEND_DST)) || 
+                (mMasking && !mAllMasked) ||
+                (mLogicOp & LOGIC_OP_DST)) 
+        {
             // blending / logic_op / masking need the framebuffer
             mDstPixel.setTo(regs.obtain(), &mCbFormat);
 
@@ -284,14 +292,16 @@ int GGLAssembler::scanline_core(const needs_t& needs, context_t const* c)
             pixel = mDstPixel;
         }
         
-        // logic operation
-        build_logic_op(pixel, regs);
-
-        // masking
-        build_masking(pixel, regs); 
-
-        comment("store");
-        store(parts.cbPtr, pixel, WRITE_BACK);
+        if (!mAllMasked) {
+            // logic operation
+            build_logic_op(pixel, regs);
+    
+            // masking
+            build_masking(pixel, regs); 
+    
+            comment("store");
+            store(parts.cbPtr, pixel, WRITE_BACK);
+        }
     }
 
     if (registerFile().status())
@@ -322,7 +332,9 @@ int GGLAssembler::scanline_core(const needs_t& needs, context_t const* c)
         build_smooth_shade(parts);
         build_iterate_z(parts);
         build_iterate_f(parts);
-        ADD(AL, 0, parts.cbPtr.reg, parts.cbPtr.reg, imm(parts.cbPtr.size>>3));
+        if (!mAllMasked) {
+            ADD(AL, 0, parts.cbPtr.reg, parts.cbPtr.reg, imm(parts.cbPtr.size>>3));
+        }
         SUB(AL, S, parts.count.reg, parts.count.reg, imm(1<<16));
         B(PL, "fragment_loop");
         epilog(registerFile().touched());
@@ -370,16 +382,18 @@ void GGLAssembler::build_scanline_prolog(
         MOV(AL, 0, parts.count.reg, reg_imm(parts.count.reg, LSL, 16));
     }
 
-    // compute dst ptr
-    comment("compute color-buffer pointer");
-    const int cb_bits = mCbFormat.size*8;
-    int Rs = scratches.obtain();
-    parts.cbPtr.setTo(obtainReg(), cb_bits);
-    CONTEXT_LOAD(Rs, state.buffers.color.stride);
-    CONTEXT_LOAD(parts.cbPtr.reg, state.buffers.color.data);
-    SMLABB(AL, Rs, Ry, Rs, Rx);  // Rs = Rx + Ry*Rs
-    base_offset(parts.cbPtr, parts.cbPtr, Rs);
-    scratches.recycle(Rs);
+    if (!mAllMasked) {
+        // compute dst ptr
+        comment("compute color-buffer pointer");
+        const int cb_bits = mCbFormat.size*8;
+        int Rs = scratches.obtain();
+        parts.cbPtr.setTo(obtainReg(), cb_bits);
+        CONTEXT_LOAD(Rs, state.buffers.color.stride);
+        CONTEXT_LOAD(parts.cbPtr.reg, state.buffers.color.data);
+        SMLABB(AL, Rs, Ry, Rs, Rx);  // Rs = Rx + Ry*Rs
+        base_offset(parts.cbPtr, parts.cbPtr, Rs);
+        scratches.recycle(Rs);
+    }
     
     // init fog
     const int need_fog = GGL_READ_NEEDS(P_FOG, needs.p);
@@ -904,8 +918,9 @@ void GGLAssembler::build_and_immediate(int d, int s, uint32_t mask, int bits)
 
 void GGLAssembler::build_masking(pixel_t& pixel, Scratch& regs)
 {
-    if (!mMasking)
+    if (!mMasking || mAllMasked) {
         return;
+    }
 
     comment("color mask");
 
@@ -928,7 +943,7 @@ void GGLAssembler::build_masking(pixel_t& pixel, Scratch& regs)
 
     // There is no need to clear the masked components of the source
     // (unless we applied a logic op), because they're already zeroed 
-    // by contruction (masked components are not computed)
+    // by construction (masked components are not computed)
 
     if (mLogicOp) {
         const needs_t& needs = mBuilderContext.needs;

@@ -55,7 +55,7 @@ static void END()
     if(total_bytes == 0) return;
 
     if (t == 0)  /* prevent division by 0 :-) */
-		t = 1000000;
+        t = 1000000;
 
     fprintf(stderr,"%lld KB/s (%d bytes in %lld.%03llds)\n",
             ((((long long) total_bytes) * 1000000LL) / t) / 1024LL,
@@ -227,14 +227,14 @@ static int write_data_file(int fd, const char *path, syncsendbuf *sbuf)
 
         if(ret < 0) {
             if(errno == EINTR)
-	        continue;
+                continue;
             fprintf(stderr,"cannot read '%s': %s\n", path, strerror(errno));
             break;
         }
 
         sbuf->size = htoll(ret);
         if(writex(fd, sbuf, sizeof(unsigned) * 2 + ret)){
-	        err = -1;
+            err = -1;
             break;
         }
         total_bytes += ret;
@@ -259,7 +259,7 @@ static int write_data_buffer(int fd, char* file_buffer, int size, syncsendbuf *s
         memcpy(sbuf->data, &file_buffer[total], count);
         sbuf->size = htoll(count);
         if(writex(fd, sbuf, sizeof(unsigned) * 2 + count)){
-	        err = -1;
+            err = -1;
             break;
         }
         total += count;
@@ -277,7 +277,7 @@ static int write_data_link(int fd, const char *path, syncsendbuf *sbuf)
     len = readlink(path, sbuf->data, SYNC_DATA_MAX-1);
     if(len < 0) {
         fprintf(stderr, "error reading link '%s': %s\n", path, strerror(errno));
-	return -1;
+        return -1;
     }
     sbuf->data[len] = '\0';
 
@@ -377,10 +377,10 @@ static int sync_send(int fd, const char *lpath, const char *rpath,
     }
 
     if (file_buffer) {
-	    write_data_buffer(fd, file_buffer, size, sbuf);
-	    free(file_buffer);
+        write_data_buffer(fd, file_buffer, size, sbuf);
+        free(file_buffer);
     } else if (S_ISREG(mode))
-    	write_data_file(fd, lpath, sbuf);
+        write_data_file(fd, lpath, sbuf);
 #ifdef HAVE_SYMLINKS
     else if (S_ISLNK(mode))
         write_data_link(fd, lpath, sbuf);
@@ -641,7 +641,7 @@ static int local_build_list(copyinfo **filelist,
         } else {
             ci = mkcopyinfo(lpath, rpath, name, 0);
             if(lstat(ci->src, &st)) {
-            	closedir(d);
+                closedir(d);
                 fprintf(stderr,"cannot stat '%s': %s\n", ci->src, strerror(errno));
                 return -1;
             }
@@ -651,7 +651,7 @@ static int local_build_list(copyinfo **filelist,
             } else {
                 ci->time = st.st_mtime;
                 ci->mode = st.st_mode;
-		ci->size = st.st_size;
+                ci->size = st.st_size;
                 ci->next = *filelist;
                 *filelist = ci;
             }
@@ -707,12 +707,12 @@ static int copy_local_dir_remote(int fd, const char *lpath, const char *rpath, i
             unsigned int timestamp, mode, size;
             if(sync_finish_readtime(fd, &timestamp, &mode, &size))
                 return 1;
-	    if(size == ci->size) {
+            if(size == ci->size) {
                 /* for links, we cannot update the atime/mtime */
                 if((S_ISREG(ci->mode & mode) && timestamp == ci->time) ||
-		   (S_ISLNK(ci->mode & mode) && timestamp >= ci->time))
+                    (S_ISLNK(ci->mode & mode) && timestamp >= ci->time))
                     ci->flag = 1;
-	    }
+            }
         }
     }
     for(ci = filelist; ci != 0; ci = next) {

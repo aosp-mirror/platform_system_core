@@ -168,7 +168,7 @@ void GGLAssembler::expand(integer_t& d, const component_t& s, int dbits)
 void GGLAssembler::expand(component_t& d, const component_t& s, int dbits)
 {
     integer_t r(d.reg, 32, d.flags);
-    expand(r, d, dbits);
+    expand(r, s, dbits);
     d = component_t(r);
 }
 

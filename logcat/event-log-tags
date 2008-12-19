@@ -244,8 +244,8 @@
 50000 menu_item_selected (Menu type where 0 is options and 1 is context|1|5),(Menu item title|3)
 50001 menu_opened (Menu type where 0 is options and 1 is context|1|5)
 # Connectivity state changed:
-# [31-11] Reserved for future use
-# [10-9] Mobile network connection type (as defined by the TelephonyManager)
+# [31-13] Reserved for future use
+# [12- 9] Network subtype (for mobile network, as defined by TelephonyManager)
 # [ 8- 3] Detailed state ordinal (as defined by NetworkInfo.DetailedState)   
 # [ 2- 0] Network type (as defined by ConnectivityManager)
 50020 connectivity_state_changed (custom|1|5)
@@ -271,8 +271,9 @@
 50024 wifi_interface_configuration_state_changed (IP_configuration|1|5)
 
 # Wi-Fi supplicant connection state changed:
-# [31- 1] Reserved for future use
-# [ 0- 0] Connected to supplicant (1) or disconnected from supplicant (0)   
+# [31- 2] Reserved for future use
+# [ 1- 0] Connected to supplicant (1) or disconnected from supplicant (0),
+#         or supplicant died (2)
 50025 wifi_supplicant_connection_state_changed (connected|1|5)
 
 # PDP Context has a bad DNS address
@@ -291,6 +292,17 @@
 # Reregister to data network - timed out with no incoming packets.
 50104 pdp_reregister_network (out_packet_count|1|1)
 
+# PDP Setup failures
+50105 pdp_setup_fail (cause|1|5), (cid|1|5), (network_type|1|5)
+
+# Call drops 
+50106 call_drop (cause|1|5), (cid|1|5), (network_type|1|5)
+
+# Data network registration failed after successful voice registration
+50107 data_network_registration_fail (op_numeric|1|5), (cid|1|5)
+
+# Suspicious status of data connection while radio poweroff 
+50108 data_network_status_on_radio_off (dc_state|3), (enable|1|5)
 
 # Do not change these names without updating tag in:
 #//device/dalvik/libcore/luni/src/main/native/org_apache_harmony_luni_platform_OSNetworkSystem.c

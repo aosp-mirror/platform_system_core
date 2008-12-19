@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include "private/android_filesystem_config.h"
 #include "cutils/log.h"
@@ -33,48 +34,74 @@ void fatal(const char *msg) {
 
 void usage() {
     fatal(
-        "Usage: logwrapper BINARY [ARGS ...]\n"
+        "Usage: logwrapper [-x] BINARY [ARGS ...]\n"
         "\n"
         "Forks and executes BINARY ARGS, redirecting stdout and stderr to\n"
         "the Android logging system. Tag is set to BINARY, priority is\n"
-        "always LOG_INFO.\n");
+        "always LOG_INFO.\n"
+        "\n"
+        "-x: Causes logwrapper to SIGSEGV when BINARY terminates\n"
+        "    fault address is set to the status of wait()\n");
 }
 
-void parent(const char *tag, int parent_read) {
+void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
     int status;
-    char buffer[1024];
+    char buffer[4096];
 
     int a = 0;  // start index of unprocessed data
     int b = 0;  // end index of unprocessed data
     int sz;
-    while ((sz = read(parent_read, &buffer[b], 1023 - b)) > 0) {
+    while ((sz = read(parent_read, &buffer[b], sizeof(buffer) - 1 - b)) > 0) {
+
+        sz += b;
         // Log one line at a time
-        for (b = a; b < sz; b++) {
-            if (buffer[b] == '\n') {
+        for (b = 0; b < sz; b++) {
+            if (buffer[b] == '\r') {
+                buffer[b] = '\0';
+            } else if (buffer[b] == '\n') {
                 buffer[b] = '\0';
                 LOG(LOG_INFO, tag, &buffer[a]);
                 a = b + 1;
             }
         }
 
-        if (a == 0 && b == 1023) {
+        if (a == 0 && b == sizeof(buffer) - 1) {
             // buffer is full, flush
             buffer[b] = '\0';
             LOG(LOG_INFO, tag, &buffer[a]);
             b = 0;
-        } else {
+        } else if (a != b) {
             // Keep left-overs
-            b = sz - a;
+            b -= a;
             memmove(buffer, &buffer[a], b);
             a = 0;
+        } else {
+            a = 0;
+            b = 0;
         }
+
     }
     // Flush remaining data
     if (a != b) {
         buffer[b] = '\0';
         LOG(LOG_INFO, tag, &buffer[a]);
     }
-    wait(&status);  // Wait for child
+    status = 0xAAAA;
+    if (wait(&status) != -1) {  // Wait for child
+        if (WIFEXITED(status))
+            LOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", tag,
+                    WEXITSTATUS(status));
+        else if (WIFSIGNALED(status))
+            LOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", tag,
+                    WTERMSIG(status));
+        else if (WIFSTOPPED(status))
+            LOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", tag,
+                    WSTOPSIG(status));
+    } else
+        LOG(LOG_INFO, "logwrapper", "%s wait() failed: %s (%d)", tag,
+                strerror(errno), errno);
+    if (seg_fault_on_exit)
+        *(int *)status = 0;  // causes SIGSEGV with fault_address = status
 }
 
 void child(int argc, char* argv[]) {
@@ -92,41 +119,62 @@ void child(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     pid_t pid;
+    int seg_fault_on_exit = 0;
 
-    int pipe_fds[2];
-    int *parent_read = &pipe_fds[0];
-    int *child_write = &pipe_fds[1];
+    int parent_ptty;
+    int child_ptty;
+    char *child_devname = NULL;
 
     if (argc < 2) {
         usage();
     }
 
-    if (pipe(pipe_fds) < 0) {
-        fatal("Cannot create pipe\n");
+    if (strncmp(argv[1], "-d", 2) == 0) {
+        seg_fault_on_exit = 1;
+        argc--;
+        argv++;
+    }
+
+    if (argc < 2) {
+        usage();
+    }
+
+    /* Use ptty instead of socketpair so that STDOUT is not buffered */
+    parent_ptty = open("/dev/ptmx", O_RDWR);
+    if (parent_ptty < 0) {
+        fatal("Cannot create parent ptty\n");
+    }
+
+    if (grantpt(parent_ptty) || unlockpt(parent_ptty) ||
+            ((child_devname = (char*)ptsname(parent_ptty)) == 0)) {
+        fatal("Problem with /dev/ptmx\n");
     }
 
     pid = fork();
     if (pid < 0) {
         fatal("Failed to fork\n");
     } else if (pid == 0) {
+        child_ptty = open(child_devname, O_RDWR);
+        if (child_ptty < 0) {
+            fatal("Problem with child ptty\n");
+        }
+
         // redirect stdout and stderr
-        close(*parent_read);
-        dup2(*child_write, 1);
-        dup2(*child_write, 2);
-        close(*child_write);
+        close(parent_ptty);
+        dup2(child_ptty, 1);
+        dup2(child_ptty, 2);
+        close(child_ptty);
 
         child(argc - 1, &argv[1]);
 
     } else {
-        close(*child_write);
-
         // switch user and group to "log"
         // this may fail if we are not root, 
         // but in that case switching user/group is unnecessary 
         setgid(AID_LOG);
         setuid(AID_LOG);
 
-        parent(argv[1], *parent_read);
+        parent(argv[1], seg_fault_on_exit, parent_ptty);
     }
 
     return 0;

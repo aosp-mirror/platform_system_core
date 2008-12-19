@@ -60,6 +60,7 @@ else
         selector.c \
         fdevent.c \
         tztime.c \
+        tzstrftime.c \
         adb_networking.c \
 	zygote.c
 endif
@@ -91,8 +92,14 @@ else #!sim
 # ========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) memset32.S atomic-android-arm.S mq.c \
-	ashmem-dev.c
+LOCAL_SRC_FILES := $(commonSources) ashmem-dev.c mq.c
+
+ifeq ($(TARGET_ARCH),arm)
+LOCAL_SRC_FILES += memset32.S atomic-android-arm.S
+else  # !arm
+LOCAL_SRC_FILES += memory.c
+endif # !arm
+
 LOCAL_C_INCLUDES := $(KERNEL_HEADERS)
 LOCAL_STATIC_LIBRARIES := liblog
 include $(BUILD_STATIC_LIBRARY)

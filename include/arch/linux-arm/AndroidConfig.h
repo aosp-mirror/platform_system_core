@@ -48,6 +48,12 @@
 #define HAVE_FUTEX
 
 /*
+ * Define if we already have the futex wrapper functions defined. Yes if
+ * compiling against bionic.
+ */
+#define HAVE_FUTEX_WRAPPERS 1
+
+/*
  * Process creation model.  Choose one:
  *
  * HAVE_FORKEXEC - use fork() and exec()

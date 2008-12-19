@@ -76,7 +76,7 @@ static int remote_read(apacket *p, atransport *t)
     }
 
     if(check_data(p)) {
-	D("bad data: terminated (data)\n");
+        D("bad data: terminated (data)\n");
         return -1;
     }
 
@@ -107,15 +107,16 @@ int  local_connect(int  port)
     char buf[64];
     int  fd = -1;
 
-    fd = socket_loopback_client(port, SOCK_STREAM);
 #if ADB_HOST
-    if(fd < 0) {
-        const char *host = getenv("ADBHOST");
-        if(host) {
-            fd = socket_network_client(host, port, SOCK_STREAM);
-        }
+    const char *host = getenv("ADBHOST");
+    if (host) {
+        fd = socket_network_client(host, port, SOCK_STREAM);
     }
 #endif
+    if (fd < 0) {
+        fd = socket_loopback_client(port, SOCK_STREAM);
+    }
+
     if (fd >= 0) {
         D("client: connected on remote on fd %d\n", fd);
         close_on_exec(fd);

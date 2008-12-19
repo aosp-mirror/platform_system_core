@@ -98,9 +98,12 @@ static struct perms_ devperms[] = {
         /* these should not be world writable */
     { "/dev/android_adb",   0660,   AID_ADB,        AID_ADB,        0 },
     { "/dev/android_adb_enable",   0660,   AID_ADB,        AID_ADB,        0 },
-    { "/dev/ttyMSM0",       0660,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
+    /* TODO: remove legacy ttyMSM0 */
+    { "/dev/ttyMSM0",       0600,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
+    { "/dev/ttyHS0",        0600,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
+    { "/dev/uinput",        0600,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
     { "/dev/alarm",         0664,   AID_SYSTEM,     AID_RADIO,      0 },
-    { "/dev/tty0",          0666,   AID_ROOT,       AID_SYSTEM,     0 },
+    { "/dev/tty0",          0660,   AID_ROOT,       AID_SYSTEM,     0 },
     { "/dev/graphics/",     0660,   AID_ROOT,       AID_GRAPHICS,   1 },
     { "/dev/hw3d",          0660,   AID_SYSTEM,     AID_GRAPHICS,   0 },
     { "/dev/input/",        0660,   AID_ROOT,       AID_INPUT,      1 },
@@ -362,32 +365,32 @@ static void handle_device_event(struct uevent *uevent)
         return;
 
         /* are we block or char? where should we live? */
-    if(!strncmp(uevent->path, "/block", 6)) {
+    if(!strncmp(uevent->subsystem, "block", 5)) {
         block = 1;
         base = "/dev/block/";
         mkdir(base, 0755);
     } else {
         block = 0;
             /* this should probably be configurable somehow */
-        if(!strncmp(uevent->path, "/class/graphics/", 16)) {
+        if(!strncmp(uevent->subsystem, "graphics", 8)) {
             base = "/dev/graphics/";
             mkdir(base, 0755);
-        } else if (!strncmp(uevent->path, "/class/oncrpc/", 14)) {
+        } else if (!strncmp(uevent->subsystem, "oncrpc", 6)) {
             base = "/dev/oncrpc/";
             mkdir(base, 0755);
-        } else if (!strncmp(uevent->path, "/class/adsp/", 12)) {
+        } else if (!strncmp(uevent->subsystem, "adsp", 4)) {
             base = "/dev/adsp/";
             mkdir(base, 0755);
-      } else if(!strncmp(uevent->path, "/class/input/", 13)) {
+      } else if(!strncmp(uevent->subsystem, "input", 5)) {
             base = "/dev/input/";
             mkdir(base, 0755);
-        } else if(!strncmp(uevent->path, "/class/mtd/", 11)) {
+        } else if(!strncmp(uevent->subsystem, "mtd", 3)) {
             base = "/dev/mtd/";
             mkdir(base, 0755);
         } else if(!strncmp(uevent->subsystem, "sound", 5)) {
             base = "/dev/snd/";
             mkdir(base, 0755);
-        } else if(!strncmp(uevent->path, "/class/misc/", 12) &&
+        } else if(!strncmp(uevent->subsystem, "misc", 4) &&
                     !strncmp(name, "log_", 4)) {
             base = "/dev/log/";
             mkdir(base, 0755);

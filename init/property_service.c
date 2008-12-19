@@ -343,7 +343,7 @@ void handle_property_set_fd(int fd)
     socklen_t addr_size = sizeof(addr);
     socklen_t cr_size = sizeof(cr);
 
-    if ((s = accept(fd, &addr, &addr_size)) < 0) {
+    if ((s = accept(fd, (struct sockaddr *) &addr, &addr_size)) < 0) {
         return;
     }
 

@@ -6,7 +6,8 @@ LOCAL_SRC_FILES:=        \
     AutoMount.c          \
     ProcessKiller.c      \
     Server.c             \
-    mountd.c
+    mountd.c		 \
+    ASEC.c
 
 LOCAL_MODULE:= mountd
 

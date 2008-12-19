@@ -164,12 +164,12 @@ static int handle_send_file(int s, char *path, mode_t mode, char *buffer)
     }
     if(fd < 0) {
         if(fail_errno(s))
-	    return -1;
+            return -1;
         fd = -1;
     }
 
     for(;;) {
-	unsigned int len;
+        unsigned int len;
 
         if(readx(s, &msg.data, sizeof(msg.data)))
             goto fail;
@@ -264,7 +264,7 @@ static int handle_send_link(int s, char *path, char *buffer)
             return -1;
     } else {
         fail_message(s, "invalid data message: expected ID_DONE");
-	return -1;
+        return -1;
     }
 
     return 0;

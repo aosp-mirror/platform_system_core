@@ -20,12 +20,12 @@
 
 void get_my_path(char exe[PATH_MAX])
 {
-	char*  r;
+    char*  r;
 
-	GetModuleFileName( NULL, exe, PATH_MAX-1 );
-	exe[PATH_MAX-1] = 0;
-	r = strrchr( exe, '\\' );
-	if (r)
-		*r = 0;
+    GetModuleFileName( NULL, exe, PATH_MAX-1 );
+    exe[PATH_MAX-1] = 0;
+    r = strrchr( exe, '\\' );
+    if (r)
+        *r = 0;
 }
 

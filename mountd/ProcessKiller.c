@@ -177,7 +177,7 @@ static int get_pid(const char* s)
 }
 
 // hunt down and kill processes that have files open on the given mount point
-void KillProcessesWithOpenFiles(const char* mountPoint, boolean sigkill)
+void KillProcessesWithOpenFiles(const char* mountPoint, boolean sigkill, int *excluded, int num_excluded)
 {
     DIR*    dir;
     struct dirent* de;
@@ -200,8 +200,21 @@ void KillProcessesWithOpenFiles(const char* mountPoint, boolean sigkill)
                 || CheckSymLink(pid, mountPoint, "exe", "executable path")      // check executable path
             ) 
         {
-            LOG_ERROR("Killing process %d\n", pid);
-            kill(pid, (sigkill ? SIGKILL : SIGTERM));
+            int i;
+            boolean hit = false;
+
+            for (i = 0; i < num_excluded; i++) {
+                if (pid == excluded[i]) {
+                    LOG_ERROR("I just need a little more TIME captain!\n");
+                    hit = true;
+                    break;
+                }
+            }
+
+            if (!hit) {
+                LOG_ERROR("Killing process %d\n", pid);
+                kill(pid, (sigkill ? SIGKILL : SIGTERM));
+            }
         }
     }
 

@@ -9,13 +9,13 @@ TMPDIR=/tmp/android-bootchart
 rm -rf $TMPDIR
 mkdir -p $TMPDIR
 
-LOGROOT=/tmp/bootchart
+LOGROOT=/data/bootchart
 TARBALL=bootchart.tgz
 
 FILES="header proc_stat.log proc_ps.log proc_diskstats.log kernel_pacct"
 
 for f in $FILES; do
-    adb pull $LOGROOT/$f $TMPDIR/$f &> /dev/null
+    adb pull $LOGROOT/$f $TMPDIR/$f 2>&1 > /dev/null
 done
 (cd $TMPDIR && tar -czf $TARBALL $FILES)
 cp -f $TMPDIR/$TARBALL ./$TARBALL
