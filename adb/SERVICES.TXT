@@ -91,7 +91,7 @@ host:<request>
 <host-prefix>:get-state
     Returns the state of a given device as a string.
 
-<host-prefix>:forward:<local>:<remote>
+<host-prefix>:forward:<local>;<remote>
     Asks the ADB server to forward local connections from <local>
     to the <remote> address on a given device.
 
@@ -134,15 +134,6 @@ shell:
     stdin/stdout/stderr as appropriate. Note that the ADB server uses
     this to implement "adb shell", but will also cook the input before
     sending it to the device (see interactive_shell() in commandline.c)
-
-bootdebug:
-    Ask debugging information to the bootloader. The adbd daemon will
-    respond with FAIL to this request.
-
-bootloader:<command>
-    Send a request to the bootloader. This can also work if the device
-    is currently in the bootloader state. The adbd daemon will respond
-    with FAIL to such requests.
 
 remount:
     Ask adbd to remount the device's filesystem in read-write mode,

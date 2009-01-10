@@ -109,7 +109,7 @@ boolean gMassStorageConnected = false;
 static pthread_t sAutoMountThread = 0;
 static pid_t gExcludedPids[2] = {-1, -1};
 
-static const char FSCK_MSDOS_PATH[] = "/system/bin/fsck_msdos";
+static const char FSCK_MSDOS_PATH[] = "/system/bin/dosfsck";
 
 // number of mount points that have timeouts pending
 static int sRetriesPending = 0;
@@ -209,40 +209,32 @@ static int CheckFilesystem(const char *device)
     
     int result = access(FSCK_MSDOS_PATH, X_OK);
     if (result != 0) {
-        LOG_MOUNT("CheckFilesystem(%s): fsck_msdos not found (skipping checks)\n", device);
+        LOG_MOUNT("CheckFilesystem(%s): %s not found (skipping checks)\n", FSCK_MSDOS_PATH, device);
         return 0;
     }
  
-    sprintf(cmdline, "%s -p %s", FSCK_MSDOS_PATH, device);
-    LOG_MOUNT("Checking filesystem (%s)\n", cmdline);
+    char *args[7];
+    args[0] = FSCK_MSDOS_PATH;
+    args[1] = "-v";
+    args[2] = "-V";
+    args[3] = "-w";
+    args[4] = "-p";
+    args[5] = device;
+    args[6] = NULL;
 
-    // XXX: Notify framework we're disk checking
+    LOG_MOUNT("Checking filesystem on %s\n", device);
+    rc = logwrap(6, args);
   
-    // XXX: PROTECT FROM VIKING KILLER
-    if ((rc = system(cmdline)) < 0) {
-        LOG_ERROR("Error executing disk check command (%d)\n", errno);
-        return -errno;
-    } 
-
-    rc = WEXITSTATUS(rc);
-  
+    // XXX: We need to be able to distinguish between a FS with an error
+    // and a block device which does not have a FAT fs at all on it
     if (rc == 0) {
         LOG_MOUNT("Filesystem check completed OK\n");
         return 0;
     } else if (rc == 1) {
-        LOG_MOUNT("Filesystem check failed (invalid usage)\n");
+        LOG_MOUNT("Filesystem check failed (general failure)\n");
         return -EINVAL;
     } else if (rc == 2) {
-        LOG_MOUNT("Filesystem check failed (unresolved issues)\n");
-        return -EIO;
-    } else if (rc == 4) {
-        LOG_MOUNT("Filesystem check failed (root changed)\n");
-        return -EIO;
-    } else if (rc == 8) {
-        LOG_MOUNT("Filesystem check failed (general failure)\n");
-        return -EIO;
-    } else if (rc == 12) {
-        LOG_MOUNT("Filesystem check failed (exit signaled)\n");
+        LOG_MOUNT("Filesystem check failed (invalid usage)\n");
         return -EIO;
     } else {
         LOG_MOUNT("Filesystem check failed (unknown exit code %d)\n", rc);
@@ -252,7 +244,7 @@ static int CheckFilesystem(const char *device)
 
 static int DoMountDevice(const char* device, const char* mountPoint)
 {
-    LOG_MOUNT("mounting %s at %s\n", device, mountPoint);
+    LOG_MOUNT("Attempting mount of %s on %s\n", device, mountPoint);
 
 #if CREATE_MOUNT_POINTS
     // make sure mount point exists
@@ -292,8 +284,10 @@ static int DoMountDevice(const char* device, const char* mountPoint)
     }
 
     int result = access(device, R_OK);
-    if (result != 0)
-        return result;
+    if (result) {
+	LOG_ERROR("Unable to access '%s' (%d)\n", device, errno);
+   	return -errno;
+    }
 
     if ((result = CheckFilesystem(device))) {
         LOG_ERROR("Not mounting filesystem due to check failure (%d)\n", result);
@@ -304,7 +298,6 @@ static int DoMountDevice(const char* device, const char* mountPoint)
         //       - SD cards with bad filesystem
         return result;
     }
-    
 
     // Extra safety measures:
     flags |= MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_DIRSYNC;
@@ -319,9 +312,9 @@ static int DoMountDevice(const char* device, const char* mountPoint)
         result = mount(device, mountPoint, "vfat", flags,
                        "utf8,uid=1000,gid=1000,fmask=711,dmask=700");
     }
-    LOG_MOUNT("mount returned %d errno: %d\n", result, errno);
 
     if (result == 0) {
+        LOG_MOUNT("Partition %s mounted on %s\n", device, mountPoint);
         NotifyMediaState(mountPoint, MEDIA_MOUNTED, (flags & MS_RDONLY) != 0);
 
         MountPoint* mp = sMountPointList;
@@ -342,13 +335,13 @@ static int DoMountDevice(const char* device, const char* mountPoint)
             mp = mp -> next;
         }
     } else if (errno == EBUSY) {
-    // ignore EBUSY, since it usually means the device is already mounted
+        LOG_MOUNT("Mount failed (already mounted)\n");
         result = 0;
     } else {
 #if CREATE_MOUNT_POINTS
         rmdir(mountPoint);
 #endif
-        LOG_MOUNT("mount failed, errno: %d\n", errno);
+        LOG_MOUNT("Unable to mount %s on %s\n", device, mountPoint);
     }
 
     return result;
@@ -404,8 +397,11 @@ static int MountPartition(const char* device, const char* mountPoint)
     // attempt to mount subpartitions of the device
     for (i = 1; i < 10; i++)
     {
+        int rc;
         snprintf(buf, sizeof(buf), "%sp%d", device, i);
-        if (DoMountDevice(buf, mountPoint) == 0)
+        rc = DoMountDevice(buf, mountPoint);
+        LOG_MOUNT("DoMountDevice(%s, %s) = %d\n", buf, mountPoint, rc);
+        if (rc == 0)
             return 0;
     }
 

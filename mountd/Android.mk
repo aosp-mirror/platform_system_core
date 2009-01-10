@@ -7,7 +7,8 @@ LOCAL_SRC_FILES:=        \
     ProcessKiller.c      \
     Server.c             \
     mountd.c		 \
-    ASEC.c
+    ASEC.c		 \
+    logwrapper.c
 
 LOCAL_MODULE:= mountd
 

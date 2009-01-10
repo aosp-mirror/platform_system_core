@@ -177,6 +177,8 @@ const char *AsecMountPoint(void *Handle);
 
 void KillProcessesWithOpenFiles(const char* mountPoint, boolean sigkill, pid_t *excluded, int num_excluded);
 
+// logwrapper.c
+int logwrap(int argc, char* argv[]);
 
 // Server.c
 
