@@ -985,16 +985,6 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         return 0;
     }
 
-    if(!strncmp(service,"get-product",strlen("get-product"))) {
-        char *out = "unknown";
-        transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
-        if (transport && transport->product) {
-            out = transport->product;
-        }
-        snprintf(buf, sizeof buf, "OKAY%04x%s",(unsigned)strlen(out),out);
-        writex(reply_fd, buf, strlen(buf));
-        return 0;
-    }
     if(!strncmp(service,"get-serialno",strlen("get-serialno"))) {
         char *out = "unknown";
          transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);

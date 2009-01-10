@@ -45,6 +45,7 @@ enum {
     KEYWORD(ifup,        COMMAND, 1, do_ifup)
     KEYWORD(insmod,      COMMAND, 1, do_insmod)
     KEYWORD(import,      COMMAND, 1, do_import)
+    KEYWORD(keycodes,    OPTION,  0, 0)
     KEYWORD(mkdir,       COMMAND, 1, do_mkdir)
     KEYWORD(mount,       COMMAND, 3, do_mount)
     KEYWORD(on,          SECTION, 0, 0)

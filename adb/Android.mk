@@ -77,14 +77,6 @@ ifeq ($(HOST_OS),windows)
 $(LOCAL_INSTALLED_MODULE): $(HOST_OUT_EXECUTABLES)/AdbWinApi.dll
 endif
 
-ifeq ($(HOST_OS),linux)
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := \
-	kdbg.c
-LOCAL_MODULE := kdbg
-include $(BUILD_HOST_EXECUTABLE)
-endif
-
 endif
 
 # adbd device daemon

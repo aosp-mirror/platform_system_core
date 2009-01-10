@@ -139,12 +139,19 @@ struct service {
     int nargs;
     char *args[1];
     struct action onrestart;  /* Actions to execute on restart. */
+    
+    /* keycodes for triggering this service via /dev/keychord */
+    int *keycodes;
+    int nkeycodes;
+    int keychord_id;
 };
 
 int parse_config_file(const char *fn);
 
 struct service *service_find_by_name(const char *name);
 struct service *service_find_by_pid(pid_t pid);
+struct service *service_find_by_keychord(int keychord_id);
+void service_for_each(void (*func)(struct service *svc));
 void service_for_each_class(const char *classname,
                             void (*func)(struct service *svc));
 void service_for_each_flags(unsigned matchflags,

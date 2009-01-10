@@ -345,10 +345,7 @@ asocket*  host_service_to_socket(const char*  name, const char *serial)
 
         name += strlen("wait-for-");
 
-        if (!strncmp(name, "bootloader", strlen("bootloader"))) {
-            sinfo->transport = kTransportUsb;
-            sinfo->state = CS_BOOTLOADER;
-        } else if (!strncmp(name, "local", strlen("local"))) {
+        if (!strncmp(name, "local", strlen("local"))) {
             sinfo->transport = kTransportLocal;
             sinfo->state = CS_DEVICE;
         } else if (!strncmp(name, "usb", strlen("usb"))) {

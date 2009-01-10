@@ -35,13 +35,15 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 
+#include <linux/dm-ioctl.h>
 #include <linux/loop.h>
 
 #include <cutils/properties.h>
 #include <cutils/misc.h>
 
 #include "ASEC.h"
-#include "dm-ioctl.h"
+
+//#define MODULE_FAILURE_IS_FATAL
 
 extern int init_module(void *, unsigned long, const char *);
 extern int delete_module(const char *, unsigned int);
@@ -104,13 +106,11 @@ void *AsecInit(const char *Name, const char *SrcPath, const char *BackingFile,
 {
     struct asec_context *ctx;
 
+    if (!AsecIsEnabled())
+        return NULL;
+
     LOG_ASEC("AsecInit(%s, %s, %s, %s, %s, %s):\n",
              Name, SrcPath, BackingFile, Size, DstPath, Crypt);
-
-    if (!AsecIsEnabled()) {
-        LOG_ERROR("AsecInit(): Disabled\n");
-        return NULL;
-    }
 
     if (!Name || !SrcPath || !BackingFile || !Size || !DstPath || !Crypt) {
         LOG_ERROR("AsecInit(): Invalid arguments\n");
@@ -159,7 +159,7 @@ static int AsecLoadModules()
         sprintf(moduleFile, "%s/%s.ko", MODULE_PATH, moduleName);
         module = load_file(moduleFile, &size);
         if (!module) {
-            LOG_ERROR("Failed to load module %s\n", moduleFile);
+            LOG_ERROR("Failed to load module %s (%d)\n", moduleFile, errno);
             return -1;
         }
 
@@ -659,8 +659,10 @@ int AsecStart(void *Handle)
 
     if ((rc = AsecLoadModules()) < 0) {
         LOG_ERROR("AsecStart: Failed to load kernel modules\n");
+#ifdef MODULE_FAILURE_IS_FATAL
         NotifyAsecState(ASEC_FAILED_INTERR, ctx->dstPath);
 	return rc;
+#endif
     }
 
     if ((rc = AsecLoadGenerateKey(ctx))) {
@@ -759,8 +761,10 @@ int AsecStop(void *Handle)
             LOG_ASEC("AsecStop: Kernel modules still in use\n");
         } else {
             LOG_ERROR("AsecStop: Failed to unload kernel modules (%d)\n", rc);
+#ifdef MODULE_FAILURE_IS_FATAL
             NotifyAsecState(ASEC_FAILED_INTERR, ctx->dstPath);
 	    return rc;
+#endif
         }
     }
 

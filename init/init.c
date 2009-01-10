@@ -37,6 +37,7 @@
 #include <cutils/sockets.h>
 #include <termios.h>
 #include <linux/kd.h>
+#include <linux/keychord.h>
 
 #include <sys/system_properties.h>
 
@@ -60,6 +61,9 @@ static char bootloader[32];
 static char hardware[32];
 static unsigned revision = 0;
 static char qemu[32];
+static struct input_keychord *keychords = 0;
+static int keychords_count = 0;
+static int keychords_length = 0;
 
 static void drain_action_queue(void);
 
@@ -233,7 +237,7 @@ void service_start(struct service *svc)
 
         setpgid(0, getpid());
 
-	/* as requested, set our gid, supplemental gids, and uid */
+    /* as requested, set our gid, supplemental gids, and uid */
         if (svc->gid) {
             setgid(svc->gid);
         }
@@ -660,17 +664,101 @@ void open_devnull_stdio(void)
     exit(1);
 }
 
+void add_service_keycodes(struct service *svc)
+{
+    struct input_keychord *keychord;
+    int i, size;
+
+    if (svc->keycodes) {
+        /* add a new keychord to the list */
+        size = sizeof(*keychord) + svc->nkeycodes * sizeof(keychord->keycodes[0]);
+        keychords = realloc(keychords, keychords_length + size);
+        if (!keychords) {
+            ERROR("could not allocate keychords\n");
+            keychords_length = 0;
+            keychords_count = 0;
+            return;
+        }
+
+        keychord = (struct input_keychord *)((char *)keychords + keychords_length);
+        keychord->version = KEYCHORD_VERSION;
+        keychord->id = keychords_count + 1;
+        keychord->count = svc->nkeycodes;
+        svc->keychord_id = keychord->id;
+
+        for (i = 0; i < svc->nkeycodes; i++) {
+            keychord->keycodes[i] = svc->keycodes[i];
+        }
+        keychords_count++;
+        keychords_length += size;
+    }
+}
+
+int open_keychord()
+{
+    int fd, ret;
+
+    service_for_each(add_service_keycodes);
+    
+    /* nothing to do if no services require keychords */
+    if (!keychords)
+        return -1;
+
+    fd = open("/dev/keychord", O_RDWR);
+    if (fd < 0) {
+        ERROR("could not open /dev/keychord\n");
+        return fd;
+    }
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+
+    ret = write(fd, keychords, keychords_length);
+    if (ret != keychords_length) {
+        ERROR("could not configure /dev/keychord %d (%d)\n", ret, errno);
+        close(fd);
+        fd = -1;
+    }
+
+    free(keychords);
+    keychords = 0;
+
+    return fd;
+}
+
+void handle_keychord(int fd)
+{
+    struct service *svc;
+    int ret;
+    __u16 id;
+
+    ret = read(fd, &id, sizeof(id));
+    if (ret != sizeof(id)) {
+        ERROR("could not read keychord id\n");
+        return;
+    }
+
+    svc = service_find_by_keychord(id);
+    if (svc) {
+        INFO("starting service %s from keychord\n", svc->name);
+        service_start(svc);   
+    } else {
+        ERROR("service for keychord %d not found\n", id);
+    }
+}
+
 int main(int argc, char **argv)
 {
     int device_fd = -1;
     int property_set_fd = -1;
     int signal_recv_fd = -1;
+    int keychord_fd = -1;
+    int fd_count;
     int s[2];
     int fd;
     struct sigaction act;
     char tmp[PROP_VALUE_MAX];
     struct pollfd ufds[4];
     char *tmpdev;
+    char* debuggable;
 
     act.sa_handler = sigchld_handler;
     act.sa_flags = SA_NOCLDSTOP;
@@ -723,6 +811,12 @@ int main(int argc, char **argv)
     device_fd = device_init();
 
     property_init();
+    
+    // only listen for keychords if ro.debuggable is true
+    debuggable = property_get("ro.debuggable");
+    if (debuggable && !strcmp(debuggable, "1")) {
+        keychord_fd = open_keychord();
+    }
 
     if (console[0]) {
         snprintf(tmp, sizeof(tmp), "/dev/%s", console);
@@ -735,27 +829,27 @@ int main(int argc, char **argv)
     close(fd);
 
     if( load_565rle_image(INIT_IMAGE_FILE) ) {
-	fd = open("/dev/tty0", O_WRONLY);
-	if (fd >= 0) {
-	    const char *msg;
+    fd = open("/dev/tty0", O_WRONLY);
+    if (fd >= 0) {
+        const char *msg;
             msg = "\n"
-		"\n"
-		"\n"
-		"\n"
-		"\n"
-		"\n"
-		"\n"  // console is 40 cols x 30 lines
-		"\n"
-		"\n"
-		"\n"
-		"\n"
-		"\n"
-		"\n"
-		"\n"
-		"             A N D R O I D ";
-	    write(fd, msg, strlen(msg));
-	    close(fd);
-	}
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"  // console is 40 cols x 30 lines
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "\n"
+        "             A N D R O I D ";
+        write(fd, msg, strlen(msg));
+        close(fd);
+    }
     }
 
     if (qemu[0])
@@ -825,6 +919,16 @@ int main(int argc, char **argv)
     ufds[1].events = POLLIN;
     ufds[2].fd = signal_recv_fd;
     ufds[2].events = POLLIN;
+    fd_count = 3;
+
+    if (keychord_fd > 0) {
+        ufds[3].fd = keychord_fd;
+        ufds[3].events = POLLIN;
+        fd_count++;
+    } else {
+        ufds[3].events = 0;
+        ufds[3].revents = 0;
+    }
 
 #if BOOTCHART
     bootchart_count = bootchart_init();
@@ -838,11 +942,10 @@ int main(int argc, char **argv)
 #endif
 
     for(;;) {
-        int nr, timeout = -1;
+        int nr, i, timeout = -1;
 
-        ufds[0].revents = 0;
-        ufds[1].revents = 0;
-        ufds[2].revents = 0;
+        for (i = 0; i < fd_count; i++)
+            ufds[i].revents = 0;
 
         drain_action_queue();
         restart_processes();
@@ -863,7 +966,7 @@ int main(int argc, char **argv)
             }
         }
 #endif
-        nr = poll(ufds, 3, timeout);
+        nr = poll(ufds, fd_count, timeout);
         if (nr <= 0)
             continue;
 
@@ -880,6 +983,8 @@ int main(int argc, char **argv)
 
         if (ufds[1].revents == POLLIN)
             handle_property_set_fd(property_set_fd);
+        if (ufds[3].revents == POLLIN)
+            handle_keychord(keychord_fd);
     }
 
     return 0;
