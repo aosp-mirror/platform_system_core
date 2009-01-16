@@ -23,7 +23,7 @@
 #include <cutils/properties.h>
 
 #if defined(WITH_LIB_HARDWARE)
-#include <hardware/qemu_tracing.h>
+#include <hardware_legacy/qemu_tracing.h>
 #endif
 
 #include <private/pixelflinger/ggl_context.h>

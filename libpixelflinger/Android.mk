@@ -48,7 +48,9 @@ ifeq ($(TARGET_ARCH),arm)
 PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
 endif
 
-LOCAL_SHARED_LIBRARIES := libcutils
+LOCAL_SHARED_LIBRARIES := \
+	libhardware_legacy	\
+	libcutils
 
 ifneq ($(TARGET_ARCH),arm)
 # Required to define logging functions on the simulator.
