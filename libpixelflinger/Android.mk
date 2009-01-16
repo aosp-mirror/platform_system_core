@@ -49,7 +49,7 @@ PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
 endif
 
 LOCAL_SHARED_LIBRARIES := \
-	libhardware	\
+	libhardware_legacy	\
 	libcutils
 
 ifneq ($(TARGET_ARCH),arm)

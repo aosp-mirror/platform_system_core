@@ -144,6 +144,7 @@ int __android_log_write(int prio, const char *tag, const char *msg)
     if (!strcmp(tag, "HTC_RIL") ||
         !strcmp(tag, "RILJ") ||
         !strcmp(tag, "RILC") ||
+        !strcmp(tag, "RILD") ||
         !strcmp(tag, "RIL") ||
         !strcmp(tag, "AT") ||
         !strcmp(tag, "GSM") ||
