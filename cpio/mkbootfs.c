@@ -25,7 +25,7 @@
 void die(const char *why, ...)
 {
     va_list ap;
-    
+
     va_start(ap, why);
     fprintf(stderr,"error: ");
     vfprintf(stderr, why, ap);
@@ -44,6 +44,11 @@ static void fix_stat(const char *path, struct stat *s)
 
 static void _eject(struct stat *s, char *out, int olen, char *data, unsigned datasize)
 {
+    // Nothing is special about this value, just picked something in the
+    // approximate range that was being used already, and avoiding small
+    // values which may be special.
+    static unsigned next_inode = 300000;
+
     while(total_size & 3) {
         total_size++;
         putchar(0);
@@ -55,12 +60,12 @@ static void _eject(struct stat *s, char *out, int olen, char *data, unsigned dat
     printf("%06x%08x%08x%08x%08x%08x%08x"
            "%08x%08x%08x%08x%08x%08x%08x%s%c",
            0x070701,
-           (unsigned) s->st_ino,
+           next_inode++,  //  s.st_ino,
            s->st_mode,
            0, // s.st_uid,
            0, // s.st_gid,
            1, // s.st_nlink,
-           (unsigned) s->st_mtime,
+           0, // s.st_mtime,
            datasize,
            0, // volmajor
            0, // volminor
@@ -75,7 +80,7 @@ static void _eject(struct stat *s, char *out, int olen, char *data, unsigned dat
     total_size += 6 + 8*13 + olen + 1;
 
     if(strlen(out) != olen) die("ACK!");
-    
+
     while(total_size & 3) {
         total_size++;
         putchar(0);
@@ -101,9 +106,13 @@ static void _eject_trailer()
 
 static void _archive(char *in, char *out, int ilen, int olen);
 
+static int compare(const void* a, const void* b) {
+  return strcmp(*(const char**)a, *(const char**)b);
+}
+
 static void _archive_dir(char *in, char *out, int ilen, int olen)
 {
-    int t;
+    int i, t;
     DIR *d;
     struct dirent *de;
 
@@ -111,33 +120,65 @@ static void _archive_dir(char *in, char *out, int ilen, int olen)
         fprintf(stderr,"_archive_dir('%s','%s',%d,%d)\n",
                 in, out, ilen, olen);
     }
-    
+
     d = opendir(in);
     if(d == 0) die("cannot open directory '%s'", in);
-    
+
+    int size = 32;
+    int entries = 0;
+    char** names = malloc(size * sizeof(char*));
+    if (names == NULL) {
+      fprintf(stderr, "failed to allocate dir names array (size %d)\n", size);
+      exit(1);
+    }
+
     while((de = readdir(d)) != 0){
             /* xxx: feature? maybe some dotfiles are okay */
         if(de->d_name[0] == '.') continue;
 
             /* xxx: hack. use a real exclude list */
         if(!strcmp(de->d_name, "root")) continue;
-        
-        t = strlen(de->d_name);
+
+        if (entries >= size) {
+          size *= 2;
+          names = realloc(names, size * sizeof(char*));
+          if (names == NULL) {
+            fprintf(stderr, "failed to reallocate dir names array (size %d)\n",
+                    size);
+            exit(1);
+          }
+        }
+        names[entries] = strdup(de->d_name);
+        if (names[entries] == NULL) {
+          fprintf(stderr, "failed to strdup name \"%s\"\n",
+                  de->d_name);
+          exit(1);
+        }
+        ++entries;
+    }
+
+    qsort(names, entries, sizeof(char*), compare);
+
+    for (i = 0; i < entries; ++i) {
+        t = strlen(names[i]);
         in[ilen] = '/';
-        memcpy(in + ilen + 1, de->d_name, t + 1);
+        memcpy(in + ilen + 1, names[i], t + 1);
 
         if(olen > 0) {
             out[olen] = '/';
-            memcpy(out + olen + 1, de->d_name, t + 1);
+            memcpy(out + olen + 1, names[i], t + 1);
             _archive(in, out, ilen + t + 1, olen + t + 1);
         } else {
-            memcpy(out, de->d_name, t + 1);
+            memcpy(out, names[i], t + 1);
             _archive(in, out, ilen + t + 1, t);
         }
 
         in[ilen] = 0;
         out[olen] = 0;
+
+        free(names[i]);
     }
+    free(names);
 }
 
 static void _archive(char *in, char *out, int ilen, int olen)
@@ -148,7 +189,7 @@ static void _archive(char *in, char *out, int ilen, int olen)
         fprintf(stderr,"_archive('%s','%s',%d,%d)\n",
                 in, out, ilen, olen);
     }
-    
+
     if(lstat(in, &s)) die("could not stat '%s'\n", in);
 
     if(S_ISREG(s.st_mode)){
@@ -166,7 +207,7 @@ static void _archive(char *in, char *out, int ilen, int olen)
         }
 
         _eject(&s, out, olen, tmp, s.st_size);
-        
+
         free(tmp);
         close(fd);
     } else if(S_ISDIR(s.st_mode)) {
@@ -208,13 +249,13 @@ int main(int argc, char *argv[])
         } else {
             x = "";
         }
-        
+
         archive(*argv, x);
 
         argv++;
     }
 
     _eject_trailer();
-    
+
     return 0;
 }
