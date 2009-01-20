@@ -289,6 +289,7 @@ static int DoMountDevice(const char* device, const char* mountPoint)
    	return -errno;
     }
 
+#if 0
     if ((result = CheckFilesystem(device))) {
         LOG_ERROR("Not mounting filesystem due to check failure (%d)\n", result);
         // XXX:  Notify framework - need a new SDCARD state for the following:
@@ -298,6 +299,7 @@ static int DoMountDevice(const char* device, const char* mountPoint)
         //       - SD cards with bad filesystem
         return result;
     }
+#endif
 
     // Extra safety measures:
     flags |= MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_DIRSYNC;
