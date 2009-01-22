@@ -98,7 +98,6 @@ static struct perms_ devperms[] = {
         /* these should not be world writable */
     { "/dev/android_adb",   0660,   AID_ADB,        AID_ADB,        0 },
     { "/dev/android_adb_enable",   0660,   AID_ADB,        AID_ADB,        0 },
-    /* TODO: remove legacy ttyMSM0 */
     { "/dev/ttyMSM0",       0600,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
     { "/dev/ttyHS0",        0600,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
     { "/dev/uinput",        0600,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
