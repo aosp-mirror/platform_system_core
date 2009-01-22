@@ -78,9 +78,9 @@ static void volume_setstate(volume_t *vol, volume_state_t state);
 static char *conv_volstate_to_eventstr(volume_state_t state);
 static char *conv_volstate_to_propstr(volume_state_t state);
 static int volume_send_state(volume_t *vol);
-static void _cb_volstopped_for_ums_enable(volume_t *v);
+static void _cb_volstopped_for_ums_enable(volume_t *v, void *arg);
 static int _volmgr_enable_ums(volume_t *);
-static int volmgr_shutdown_volume(volume_t *v, void (* cb) (volume_t *));
+static int volmgr_shutdown_volume(volume_t *v, void (* cb) (volume_t *, void *arg));
 static int volmgr_stop_volume(volume_t *v, void (*cb) (volume_t *, void *), void *arg, int emit_statechange);
 static void _cb_volume_stopped_for_eject(volume_t *v, void *arg);
 static void _cb_volume_stopped_for_shutdown(volume_t *v, void *arg);
@@ -171,7 +171,7 @@ int volmgr_stop_volume_by_mountpoint(char *mount_point)
     while(v) {
         if (!strcmp(v->mount_point, mount_point)) {
             pthread_mutex_lock(&v->lock);
-            if (volmgr_shutdown_volume(v, _cb_volstopped_for_ums_enable) < 0)
+            if (volmgr_shutdown_volume(v, NULL) < 0)
                 LOGE("unable to shutdown volume '%s'\n", v->mount_point);
             pthread_mutex_unlock(&v->lock);
             return 0;
@@ -229,13 +229,14 @@ int volmgr_enable_ums(boolean enable)
         if (v->ums_path) {
             int rc;
 
-            pthread_mutex_lock(&v->lock);
             if (enable) {
+                pthread_mutex_lock(&v->lock);
                 // Stop the volume, and enable UMS in the callback
                 if ((rc = volmgr_shutdown_volume(v, _cb_volstopped_for_ums_enable)) < 0)
                     LOGE("unable to shutdown volume '%s'\n", v->mount_point);
             } else {
                 // Disable UMS
+                pthread_mutex_lock(&v->lock);
                 if ((rc = ums_disable(v->ums_path)) < 0) {
                     LOGE("unable to disable ums on '%s'\n", v->mount_point);
                     pthread_mutex_unlock(&v->lock);
@@ -248,8 +249,8 @@ int volmgr_enable_ums(boolean enable)
                 if ((rc = _volmgr_consider_disk_and_vol(v, v->dev->disk)) < 0) {
                     LOGE("volmgr failed to consider disk '%s'\n", v->dev->disk->dev_fspath);
                 }
+                pthread_mutex_unlock(&v->lock);
             }
-            pthread_mutex_unlock(&v->lock);
         }
         v = v->next;
     }
@@ -269,7 +270,9 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
     LOG_VOL("volmgr_consider_disk_and_vol(%s, %s):\n", vol->mount_point, dev->dev_fspath);
 #endif
 
-    if (vol->state != volstate_nomedia && vol->state != volstate_unmounted) {
+    if (vol->state != volstate_nomedia &&
+        vol->state != volstate_unmounted &&
+        vol->state != volstate_badremoval) {
         LOGE("Volume manager is already handling volume '%s' (currently in state %d)\n", vol->mount_point, vol->state);
         return -EADDRINUSE;
     }
@@ -467,9 +470,9 @@ static int volmgr_stop_volume(volume_t *v, void (*cb) (volume_t *, void *), void
 /*
  * Gracefully stop a volume
  */
-static int volmgr_shutdown_volume(volume_t *v, void (* cb) (volume_t *))
+static int volmgr_shutdown_volume(volume_t *v, void (* cb) (volume_t *, void *))
 {
-    return volmgr_stop_volume(v, NULL, cb, true);
+    return volmgr_stop_volume(v, cb, NULL, true);
 }
 
 static void _cb_volume_stopped_for_shutdown(volume_t *v, void *arg)
@@ -483,15 +486,17 @@ static void _cb_volume_stopped_for_shutdown(volume_t *v, void *arg)
 /*
  * Called when a volume is sucessfully unmounted for UMS enable
  */
-static void _cb_volstopped_for_ums_enable(volume_t *v)
+static void _cb_volstopped_for_ums_enable(volume_t *v, void *arg)
 {
     int rc;
 
-    if ((rc = ums_enable(v->dev->dev_fspath, v->ums_path)) < 0) {
+    LOG_VOL("_cb_volstopped_for_ums_enable(%s):\n", v->dev->dev_fspath);
+    if ((rc = ums_enable(v->dev->disk->dev_fspath, v->ums_path)) < 0) {
         LOGE("Error enabling ums (%d)\n", rc);
         return;
     }
     volume_setstate(v, volstate_ums);
+    pthread_mutex_unlock(&v->lock);
 }
 
 static int volmgr_readconfig(char *cfg_path)
