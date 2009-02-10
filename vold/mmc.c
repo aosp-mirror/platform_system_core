@@ -118,7 +118,7 @@ static int mmc_bootstrap_card(char *sysfs_path)
      * sysfs_path is based on /sys/class, but we want the actual device class
      */
     if (!getcwd(saved_cwd, sizeof(saved_cwd))) {
-        LOGE("Buffer too small for working dir path\n");
+        LOGE("Error getting working dir path\n");
         return -errno;
     }
     

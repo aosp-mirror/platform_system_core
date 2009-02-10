@@ -27,7 +27,6 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/inotify.h>
 #include <sys/un.h>
 
 #include <cutils/config_utils.h>
@@ -57,7 +56,6 @@ static int fw_sock = -1;
 int main(int argc, char **argv)
 {
     int door_sock = -1;
-    int inotify_sock = -1;
     int uevent_sock = -1;
     struct sockaddr_nl nladdr;
     int uevent_sz = 64 * 1024;
@@ -81,18 +79,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    // Socket to listen on for changes to /dev/block
-    if ((inotify_sock = inotify_init()) < 0) {
-        LOGE("Unable to initialize inotify interface (%s)\n", strerror(errno));
-        exit(1);
-    }
-
-    fcntl(inotify_sock, F_SETFL, O_NONBLOCK | fcntl(inotify_sock, F_GETFL));
-    
-    if (inotify_add_watch(inotify_sock, DEVPATH, IN_CREATE | IN_DELETE) < 0) {
-        LOGE("Unable to add inotify watch (%s)\n", strerror(errno));
-        exit(1);
-    }
+    mkdir("/dev/block/vold", 0755);
 
     // Socket to listen on for uevent changes
     memset(&nladdr, 0, sizeof(nladdr));
@@ -121,22 +108,22 @@ int main(int argc, char **argv)
      * Bootstrap 
      */
 
+    // Volume Manager
+    volmgr_bootstrap();
+
     // SD Card system
     mmc_bootstrap();
 
     // USB Mass Storage
     ums_bootstrap();
 
-    // Volume Manager
-    volmgr_bootstrap();
-
-    // Block device system
-    inotify_bootstrap();
+    // Switch
+    switch_bootstrap();
 
     /*
      * Main loop
      */
-
+    LOG_VOL("Bootstrapping complete\n");
     while(1) {
         fd_set read_fds;
         struct timeval to;
@@ -146,12 +133,10 @@ int main(int argc, char **argv)
         to.tv_sec = (60 * 60);
         to.tv_usec = 0;
 
+        FD_ZERO(&read_fds);
         FD_SET(door_sock, &read_fds);
         if (door_sock > max)
             max = door_sock;
-        FD_SET(inotify_sock, &read_fds);
-        if (inotify_sock > max)
-            max = inotify_sock;
         FD_SET(uevent_sock, &read_fds);
         if (uevent_sock > max)
             max = uevent_sock;
@@ -178,6 +163,13 @@ int main(int argc, char **argv)
 
             alen = sizeof(addr);
 
+            if (fw_sock != -1) {
+                LOGE("Dropping duplicate framework connection\n");
+                int tmp = accept(door_sock, &addr, &alen);
+                close(tmp);
+                continue;
+            }
+
             if ((fw_sock = accept(door_sock, &addr, &alen)) < 0) {
                 LOGE("Unable to accept framework connection (%s)\n",
                      strerror(errno));
@@ -201,19 +193,11 @@ int main(int argc, char **argv)
             }
         }
 
-        if (FD_ISSET(inotify_sock, &read_fds)) {
-            if ((rc = process_inotify_event(inotify_sock)) < 0) {
-                LOGE("Error processing inotify msg (%s)\n", strerror(errno));
-            }
-        }
-
         if (FD_ISSET(uevent_sock, &read_fds)) {
             if ((rc = process_uevent_message(uevent_sock)) < 0) {
                 LOGE("Error processing uevent msg (%s)\n", strerror(errno));
             }
         }
-      
-
     } // while
 
 }

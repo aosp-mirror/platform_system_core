@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-#ifndef _INOTIFY_EVT_H
-#define _INOTIFY_EVT_H
+#ifndef _FORMAT_H
+#define _FORMAT_H
 
-
+int format_partition(blkdev_t *part);
+int initialize_mbr(blkdev_t *disk);
 #endif

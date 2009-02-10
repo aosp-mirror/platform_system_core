@@ -33,13 +33,15 @@ static int do_send_ums_status(char *cmd);
 static int do_set_ums_enable(char *cmd);
 static int do_mount_volume(char *cmd);
 static int do_eject_media(char *cmd);
+static int do_format_media(char *cmd);
 
 static struct cmd_dispatch dispatch_table[] = {
     { VOLD_CMD_ENABLE_UMS,      do_set_ums_enable },
     { VOLD_CMD_DISABLE_UMS,     do_set_ums_enable },
     { VOLD_CMD_SEND_UMS_STATUS, do_send_ums_status },
-    { VOLD_CMD_MOUNT_VOLUME,     do_mount_volume },
+    { VOLD_CMD_MOUNT_VOLUME,    do_mount_volume },
     { VOLD_CMD_EJECT_MEDIA,     do_eject_media },
+    { VOLD_CMD_FORMAT_MEDIA,    do_format_media },
     { NULL, NULL }
 };
 
@@ -51,7 +53,8 @@ int process_framework_command(int socket)
     if ((rc = read(socket, buffer, sizeof(buffer) -1)) < 0) {
         LOGE("Unable to read framework command (%s)\n", strerror(errno));
         return -errno;
-    }
+    } else if (!rc)
+        return -ECONNRESET;
 
     int start = 0;
     int i;
@@ -99,6 +102,11 @@ static int do_set_ums_enable(char *cmd)
 static int do_mount_volume(char *cmd)
 {
     return volmgr_start_volume_by_mountpoint(&cmd[strlen("mount_volume:")]);
+}
+
+static int do_format_media(char *cmd)
+{
+    return volmgr_format_volume(&cmd[strlen("format_media:")]);
 }
 
 static int do_eject_media(char *cmd)

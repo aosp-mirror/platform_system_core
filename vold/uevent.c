@@ -71,6 +71,9 @@ static struct uevent_dispatch dispatch_table[] = {
     { NULL, NULL }
 };
 
+static boolean low_batt = false;
+static boolean door_open = false;
+
 int process_uevent_message(int socket)
 {
     char buffer[64 * 1024]; // Thank god we're not in the kernel :)
@@ -120,7 +123,7 @@ int process_uevent_message(int socket)
             else
                 event->param[param_idx++] = strdup(s);
         }
-        s+= (strlen(s) + 1);
+        s+= strlen(s) + 1;
     }
 
     rc = dispatch_uevent(event);
@@ -172,6 +175,9 @@ static int dispatch_uevent(struct uevent *event)
 {
     int i;
 
+#if DEBUG_UEVENT
+    dump_uevent(event);
+#endif
     for (i = 0; dispatch_table[i].subsystem != NULL; i++) {
         if (!strcmp(dispatch_table[i].subsystem, event->subsystem))
             return dispatch_table[i].dispatch(event);
@@ -232,7 +238,19 @@ static char *get_uevent_param(struct uevent *event, char *param_name)
 
 static int handle_powersupply_event(struct uevent *event)
 {
-    dump_uevent(event);
+    char *ps_type = get_uevent_param(event, "POWER_SUPPLY_TYPE");
+    char *ps_cap = get_uevent_param(event, "POWER_SUPPLY_CAPACITY");
+
+    if (!strcasecmp(ps_type, "battery")) {
+        int capacity = atoi(ps_cap);
+  
+        if (capacity < 5)
+            low_batt = true;
+        else
+            low_batt = false;
+LOG_VOL("handle_powersupply_event(): low_batt = %d, door_open = %d\n", low_batt, door_open);
+        volmgr_safe_mode(low_batt || door_open);
+    }
     return 0;
 }
 
@@ -241,12 +259,21 @@ static int handle_switch_event(struct uevent *event)
     char *name = get_uevent_param(event, "SWITCH_NAME");
     char *state = get_uevent_param(event, "SWITCH_STATE");
 
+
     if (!strcmp(name, "usb_mass_storage")) {
         if (!strcmp(state, "online")) {
             ums_hostconnected_set(true);
         } else {
             ums_hostconnected_set(false);
+            volmgr_enable_ums(false);
         }
+    } else if (!strcmp(name, "sd-door")) {
+        if (!strcmp(state, "open"))
+            door_open = true;
+        else
+            door_open = false;
+LOG_VOL("handle_powersupply_event(): low_batt = %d, door_open = %d\n", low_batt, door_open);
+        volmgr_safe_mode(low_batt || door_open);
     } else
         LOG_VOL("handle_switch_event(): Ignoring switch '%s'\n", name);
 
@@ -255,7 +282,6 @@ static int handle_switch_event(struct uevent *event)
 
 static int handle_battery_event(struct uevent *event)
 {
-    dump_uevent(event);
     return 0;
 }
 
@@ -293,7 +319,6 @@ static int handle_block_event(struct uevent *event)
 
     if (event->action == action_add) {
         blkdev_t *disk;
-        boolean pending = false;
 
         /*
          * If there isn't a disk already its because *we*
@@ -301,25 +326,17 @@ static int handle_block_event(struct uevent *event)
          */
         disk = blkdev_lookup_by_devno(maj, 0);
 
-        /*
-         * It is possible that there is already a blkdev
-         * for this device (created by blkdev_create_pending_partition())
-         */
-
-        if ((blkdev = blkdev_lookup_by_devno(maj, min))) {
-            blkdev_devpath_set(blkdev, event->path);
-            pending = true;
-        } else {
-            if (!(blkdev = blkdev_create(disk,
-                                         event->path,
-                                         maj,
-                                         min,
-                                         media,
-                                         get_uevent_param(event, "DEVTYPE")))) {
-                LOGE("Unable to allocate new blkdev (%m)\n");
-                return -1;
-            }
+        if (!(blkdev = blkdev_create(disk,
+                                     event->path,
+                                     maj,
+                                     min,
+                                     media,
+                                     get_uevent_param(event, "DEVTYPE")))) {
+            LOGE("Unable to allocate new blkdev (%m)\n");
+            return -1;
         }
+
+        blkdev_refresh(blkdev);
 
         /*
          * Add the blkdev to media
@@ -330,39 +347,33 @@ static int handle_block_event(struct uevent *event)
             return rc;
         }
 
-        LOG_VOL("New blkdev %d.%d on media %s, media path %s\n", blkdev->major, blkdev->minor, media->name, mediapath);
+        LOG_VOL("New blkdev %d.%d on media %s, media path %s, Dpp %d\n",
+                blkdev->major, blkdev->minor, media->name, mediapath,
+                blkdev_get_num_pending_partitions(blkdev->disk));
 
-        if (pending) {
-            /*
-             * This blkdev already has its dev_fspath set so 
-             * if all partitions are read, pass it off to
-             * the volume manager
-             */
-            LOG_VOL("Pending disk '%d.%d' has %d pending partitions\n",
-                    blkdev->disk->major, blkdev->disk->minor, 
-                    blkdev_get_num_pending_partitions(blkdev->disk));
-
-            if (blkdev_get_num_pending_partitions(blkdev->disk) == 0) {
-                if ((rc = volmgr_consider_disk(blkdev->disk)) < 0) {
-                    LOGE("Volmgr failed to handle pending device (%d)\n", rc);
-                    return rc;
-                }
+        if (blkdev_get_num_pending_partitions(blkdev->disk) == 0) {
+            if ((rc = volmgr_consider_disk(blkdev->disk)) < 0) {
+                LOGE("Volmgr failed to handle device (%d)\n", rc);
+                return rc;
             }
         }
     } else if (event->action == action_remove) {
-        int rc;
-
-        if (!(blkdev = blkdev_lookup_by_devno(maj, min))) {
-#if DEBUG_UEVENT
-            LOG_VOL("We aren't handling blkdev @ %s\n", event->path);
-#endif
+        if (!(blkdev = blkdev_lookup_by_devno(maj, min)))
             return 0;
-        }
 
-        LOG_VOL("Destroying blkdev %d.%d @ %s on media %s\n", blkdev->major, blkdev->minor, blkdev->devpath, media->name);
-        if ((rc = volmgr_notify_eject(blkdev, _cb_blkdev_ok_to_destroy)) < 0)
-            LOGE("Error notifying volmgr of eject\n");
-    } else {
+        LOG_VOL("Destroying blkdev %d.%d @ %s on media %s\n", blkdev->major,
+                blkdev->minor, blkdev->devpath, media->name);
+        volmgr_notify_eject(blkdev, _cb_blkdev_ok_to_destroy);
+
+    } else if (event->action == action_change) {
+        if (!(blkdev = blkdev_lookup_by_devno(maj, min)))
+            return 0;
+
+        LOG_VOL("Modified blkdev %d.%d @ %s on media %s\n", blkdev->major,
+                blkdev->minor, blkdev->devpath, media->name);
+        
+        blkdev_refresh(blkdev);
+    } else  {
 #if DEBUG_UEVENT
         LOG_VOL("No handler implemented for action %d\n", event->action);
 #endif
@@ -417,9 +428,6 @@ static int handle_mmc_event(struct uevent *event)
 
         LOG_VOL("MMC card '%s' (serial %u) @ %s removed\n", media->name, 
                   media->serial, media->devpath);
-        /*
-         * If this media is still mounted, then we have an unsafe removal
-         */
         media_destroy(media);
     } else {
 #if DEBUG_UEVENT

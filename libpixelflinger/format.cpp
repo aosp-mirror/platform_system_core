@@ -40,12 +40,12 @@ static GGLFormat const gPixelFormatInfos[] =
     {  0,  0, {{ 0, 0,   0, 0,   0, 0,   0, 0 }},        0 },   // PIXEL_FORMAT_NONE
     {  0,  0, {{ 0, 0,   0, 0,   0, 0,   0, 0 }},        0 },   // PIXEL_FORMAT_NONE
 
-    {  1, 16, {{ 0, 8,   0, 8,   0, 8,   0, 0 }}, GGL_Y_CB_CR },// PIXEL_FORMAT_YCbCr_422_SP
-    {  1, 12, {{ 0, 8,   0, 8,   0, 8,   0, 0 }}, GGL_Y_CB_CR },// PIXEL_FORMAT_YCbCr_420_SP
-    {  0,  0, {{ 0, 0,   0, 0,   0, 0,   0, 0 }},        0 },   // PIXEL_FORMAT_NONE
-    {  0,  0, {{ 0, 0,   0, 0,   0, 0,   0, 0 }},        0 },   // PIXEL_FORMAT_NONE
-    {  0,  0, {{ 0, 0,   0, 0,   0, 0,   0, 0 }},        0 },   // PIXEL_FORMAT_NONE
-    {  0,  0, {{ 0, 0,   0, 0,   0, 0,   0, 0 }},        0 },   // PIXEL_FORMAT_NONE
+    {  1, 16, {{ 0, 8,   0, 8,   0, 8,   0, 0 }}, GGL_Y_CB_CR_SP },// PIXEL_FORMAT_YCbCr_422_SP
+    {  1, 12, {{ 0, 8,   0, 8,   0, 8,   0, 0 }}, GGL_Y_CB_CR_SP },// PIXEL_FORMAT_YCbCr_420_SP
+    {  1, 16, {{ 0, 8,   0, 8,   0, 8,   0, 0 }}, GGL_Y_CB_CR_P }, // PIXEL_FORMAT_YCbCr_422_P
+    {  1, 12, {{ 0, 8,   0, 8,   0, 8,   0, 0 }}, GGL_Y_CB_CR_P }, // PIXEL_FORMAT_YCbCr_420_P
+    {  1, 16, {{ 0, 8,   0, 8,   0, 8,   0, 0 }}, GGL_Y_CB_CR_I }, // PIXEL_FORMAT_YCbCr_422_I
+    {  1, 12, {{ 0, 8,   0, 8,   0, 8,   0, 0 }}, GGL_Y_CB_CR_I }, // PIXEL_FORMAT_YCbCr_420_I
     {  0,  0, {{ 0, 0,   0, 0,   0, 0,   0, 0 }},        0 },   // PIXEL_FORMAT_NONE
     {  0,  0, {{ 0, 0,   0, 0,   0, 0,   0, 0 }},        0 },   // PIXEL_FORMAT_NONE
     

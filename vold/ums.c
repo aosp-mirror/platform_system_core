@@ -21,6 +21,8 @@
 #include "vold.h"
 #include "ums.h"
 
+#define DEBUG_UMS 0
+
 static boolean host_connected = false;
 static boolean ums_enabled = false;
 
@@ -42,7 +44,9 @@ boolean ums_enabled_get()
 
 void ums_hostconnected_set(boolean connected)
 {
+#if DEBUG_UMS
     LOG_VOL("ums_hostconnected_set(%d):\n", connected);
+#endif
     host_connected = connected;
 
     if (!connected)
@@ -75,7 +79,9 @@ int ums_enable(char *dev_fspath, char *lun_syspath)
 
 int ums_disable(char *lun_syspath)
 {
+#if DEBUG_UMS
     LOG_VOL("ums_disable(%s):\n", lun_syspath);
+#endif
 
     int fd;
     char filename[255];
@@ -107,7 +113,9 @@ int ums_send_status(void)
 {
     int rc;
 
+#if DEBUG_UMS
     LOG_VOL("ums_send_status():\n");
+#endif
 
     rc = send_msg(ums_enabled_get() ? VOLD_EVT_UMS_ENABLED :
                                       VOLD_EVT_UMS_DISABLED);

@@ -44,6 +44,17 @@ le32dec(const void *buf)
         return ((p[3] << 24) | (p[2] << 16) | (p[1] << 8) | p[0]);
 }
 
+static __inline void
+le32enc(void *pp, uint32_t u)
+{
+        unsigned char *p = (unsigned char *)pp;
+
+        p[0] = u & 0xff;
+        p[1] = (u >> 8) & 0xff;
+        p[2] = (u >> 16) & 0xff;
+        p[3] = (u >> 24) & 0xff;
+}
+
 void
 dos_partition_dec(void const *pp, struct dos_partition *d)
 {
@@ -59,4 +70,21 @@ dos_partition_dec(void const *pp, struct dos_partition *d)
         d->dp_ecyl = p[7];
         d->dp_start = le32dec(p + 8);
         d->dp_size = le32dec(p + 12);
+}
+
+void
+dos_partition_enc(void *pp, struct dos_partition *d)
+{
+        unsigned char *p = pp;
+
+        p[0] = d->dp_flag;
+        p[1] = d->dp_shd;
+        p[2] = d->dp_ssect;
+        p[3] = d->dp_scyl;
+        p[4] = d->dp_typ;
+        p[5] = d->dp_ehd;
+        p[6] = d->dp_esect;
+        p[7] = d->dp_ecyl;
+        le32enc(p + 8, d->dp_start);
+        le32enc(p + 12, d->dp_size);
 }

@@ -85,8 +85,8 @@ void media_destroy(media_t *media)
     free(media->devpath);
     free(media->name);
 
-    if (media->devs)
-        LOGE("media_destroy(): media still has blkdevs associated with it! Possible leak\n");
+    while(media->devs)
+        media_remove_blkdev(media, media->devs->dev);
     free(media);
 }
 

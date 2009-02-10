@@ -25,7 +25,7 @@
 typedef enum media_type {
     media_unknown,
     media_mmc,
-    media_dm
+    media_devmapper,
 } media_type_t;
 
 typedef struct media {

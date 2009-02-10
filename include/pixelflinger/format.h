@@ -42,8 +42,10 @@ enum GGLPixelFormat {
     // YCbCr formats (SP=semi-planar, P=planar)
     GGL_PIXEL_FORMAT_YCbCr_422_SP= 0x10,
     GGL_PIXEL_FORMAT_YCbCr_420_SP= 0x11,
-    GGL_PIXEL_FORMAT_YCbCr_422_P = 0x14,
-    GGL_PIXEL_FORMAT_YCbCr_420_P = 0x15,
+    GGL_PIXEL_FORMAT_YCbCr_422_P = 0x12,
+    GGL_PIXEL_FORMAT_YCbCr_420_P = 0x13,
+    GGL_PIXEL_FORMAT_YCbCr_422_I = 0x14,
+    GGL_PIXEL_FORMAT_YCbCr_420_I = 0x15,
 
     // reserved/special formats
     GGL_PIXEL_FORMAT_Z_16       =  0x18,
@@ -60,7 +62,10 @@ enum GGLFormatComponents {
 	GGL_RGBA				= 0x1908,
 	GGL_LUMINANCE			= 0x1909,
 	GGL_LUMINANCE_ALPHA		= 0x190A,
-	GGL_Y_CB_CR             = 0x8000,
+    GGL_Y_CB_CR_SP          = 0x8000,
+    GGL_Y_CB_CR             = GGL_Y_CB_CR_SP,
+    GGL_Y_CB_CR_P           = 0x8001,
+    GGL_Y_CB_CR_I           = 0x8002,
 };
 
 enum GGLFormatComponentIndex {

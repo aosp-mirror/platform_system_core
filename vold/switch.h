@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-#ifndef _VOLMGR_EXT3_H
-#define _VOLMGR_EXT3_H
+#ifndef _SWITCH_H
+#define _SWITCH_H
 
-#include "volmgr.h"
-#include "blkdev.h"
+#include "vold.h"
 
-int ext_identify(blkdev_t *blkdev);
-int ext_check(blkdev_t *blkdev);
-int ext_mount(blkdev_t *blkdev, volume_t *vol, boolean safe_mode);
+#define SYSFS_CLASS_SWITCH_PATH "/sys/class/switch"
+
 #endif
