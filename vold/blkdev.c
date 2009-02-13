@@ -68,12 +68,12 @@ int blkdev_refresh(blkdev_t *blk)
     devpath = blkdev_get_devpath(blk);
 
     if ((fd = open(devpath, O_RDONLY)) < 0) {
-        LOGE("Unable to open device '%s' (%s)\n", devpath, strerror(errno));
+        LOGE("Unable to open device '%s' (%s)", devpath, strerror(errno));
         return -errno;
     }
 
     if (ioctl(fd, BLKGETSIZE, &blk->nr_sec)) {
-        LOGE("Unable to get device size (%m)\n");
+        LOGE("Unable to get device size (%m)");
         return -errno;
     }
     close(fd);
@@ -84,7 +84,7 @@ int blkdev_refresh(blkdev_t *blk)
      */
     devpath = blkdev_get_devpath(blk->disk);
     if ((fd = open(devpath, O_RDONLY)) < 0) {
-        LOGE("Unable to open device '%s' (%s)\n", devpath,
+        LOGE("Unable to open device '%s' (%s)", devpath,
              strerror(errno));
         free(devpath);
         return -errno;
@@ -93,7 +93,7 @@ int blkdev_refresh(blkdev_t *blk)
     free(devpath);
 
     if ((rc = read(fd, block, 512)) != 512) {
-        LOGE("Unable to read device partition table (%d, %s)\n",
+        LOGE("Unable to read device partition table (%d, %s)",
              rc, strerror(errno));
         goto out;
     }
@@ -107,7 +107,7 @@ int blkdev_refresh(blkdev_t *blk)
         blk->nr_parts = 0;
 
         if ((block[0x1fe] != 0x55) || (block[0x1ff] != 0xAA)) {
-            LOG_VOL("Disk %d:%d does not contain a partition table\n",
+            LOG_VOL("Disk %d:%d does not contain a partition table",
                     blk->major, blk->minor);
             goto out;
         }
@@ -120,10 +120,10 @@ int blkdev_refresh(blkdev_t *blk)
                 struct fat_boot_sector *fb = (struct fat_boot_sector *) &block[0];
              
                 if (!i && fb->reserved && fb->fats && fat_valid_media(fb->media)) {
-                    LOG_VOL("Detected FAT filesystem in partition table\n");
+                    LOG_VOL("Detected FAT filesystem in partition table");
                     break;
                 } else {
-                    LOG_VOL("Partition table looks corrupt\n");
+                    LOG_VOL("Partition table looks corrupt");
                     break;
                 }
             }
@@ -152,9 +152,9 @@ int blkdev_refresh(blkdev_t *blk)
                  ((blk->nr_sec * 512) / 1024) / 1024);
 
     if (blk->type == blkdev_disk) 
-        sprintf(tmp2, " %d partitions\n", blk->nr_parts);
+        sprintf(tmp2, " %d partitions", blk->nr_parts);
     else
-        sprintf(tmp2, " type 0x%x\n", blk->part_type);
+        sprintf(tmp2, " type 0x%x", blk->part_type);
 
     strcat(tmp, tmp2);
     LOG_VOL(tmp);
@@ -176,7 +176,7 @@ static blkdev_t *_blkdev_create(blkdev_t *disk, char *devpath, int major,
     struct blkdev_list *list_entry;
 
     if (disk && disk->type != blkdev_disk) {
-        LOGE("Non disk parent specified for blkdev!\n");
+        LOGE("Non disk parent specified for blkdev!");
         return NULL;
     }
 
@@ -220,7 +220,7 @@ static blkdev_t *_blkdev_create(blkdev_t *disk, char *devpath, int major,
 
     sprintf(nodepath, "%s/vold/%d:%d", DEVPATH, major, minor);
     if (mknod(nodepath, mode, dev) < 0) {
-        LOGE("Error making device nodes for '%s' (%s)\n",
+        LOGE("Error making device nodes for '%s' (%s)",
              nodepath, strerror(errno));
     }
 
@@ -229,7 +229,7 @@ static blkdev_t *_blkdev_create(blkdev_t *disk, char *devpath, int major,
     else if (!strcmp(type, "partition"))
         new->type = blkdev_partition;
     else {
-        LOGE("Unknown block device type '%s'\n", type);
+        LOGE("Unknown block device type '%s'", type);
         new->type = blkdev_unknown;
     }
 

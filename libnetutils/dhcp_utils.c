@@ -170,14 +170,19 @@ int dhcp_do_request(const char *interface,
  */
 int dhcp_stop(const char *interface)
 {
+    char result_prop_name[PROPERTY_KEY_MAX];
     const char *ctrl_prop = "ctl.stop";
     const char *desired_status = "stopped";
 
+    snprintf(result_prop_name, sizeof(result_prop_name), "%s.%s.result",
+            DHCP_PROP_NAME_PREFIX,
+            interface);
     /* Stop the daemon and wait until it's reported to be stopped */
     property_set(ctrl_prop, DAEMON_NAME);
     if (wait_for_property(DAEMON_PROP_NAME, desired_status, 5) < 0) {
         return -1;
     }
+    property_set(result_prop_name, "failed");
     return 0;
 }
 

@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     struct sockaddr_nl nladdr;
     int uevent_sz = 64 * 1024;
 
-    LOG_VOL("Android Volume Daemon version %d.%d\n", ver_major, ver_minor);
+    LOG_VOL("Android Volume Daemon version %d.%d", ver_major, ver_minor);
 
     /*
      * Create all the various sockets we'll need
@@ -68,13 +68,13 @@ int main(int argc, char **argv)
 
     // Socket to listen on for incomming framework connections
     if ((door_sock = android_get_control_socket(VOLD_SOCKET)) < 0) {
-        LOGE("Obtaining file descriptor socket '%s' failed: %s\n",
+        LOGE("Obtaining file descriptor socket '%s' failed: %s",
              VOLD_SOCKET, strerror(errno));
         exit(1);
     }
 
     if (listen(door_sock, 4) < 0) {
-        LOGE("Unable to listen on fd '%d' for socket '%s': %s\n", 
+        LOGE("Unable to listen on fd '%d' for socket '%s': %s", 
              door_sock, VOLD_SOCKET, strerror(errno));
         exit(1);
     }
@@ -89,18 +89,18 @@ int main(int argc, char **argv)
 
     if ((uevent_sock = socket(PF_NETLINK,
                              SOCK_DGRAM,NETLINK_KOBJECT_UEVENT)) < 0) {
-        LOGE("Unable to create uevent socket: %s\n", strerror(errno));
+        LOGE("Unable to create uevent socket: %s", strerror(errno));
         exit(1);
     }
 
     if (setsockopt(uevent_sock, SOL_SOCKET, SO_RCVBUFFORCE, &uevent_sz,
                    sizeof(uevent_sz)) < 0) {
-        LOGE("Unable to set uevent socket options: %s\n", strerror(errno));
+        LOGE("Unable to set uevent socket options: %s", strerror(errno));
         exit(1);
     }
 
     if (bind(uevent_sock, (struct sockaddr *) &nladdr, sizeof(nladdr)) < 0) {
-        LOGE("Unable to bind uevent socket: %s\n", strerror(errno));
+        LOGE("Unable to bind uevent socket: %s", strerror(errno));
         exit(1);
     }
 
@@ -123,7 +123,7 @@ int main(int argc, char **argv)
     /*
      * Main loop
      */
-    LOG_VOL("Bootstrapping complete\n");
+    LOG_VOL("Bootstrapping complete");
     while(1) {
         fd_set read_fds;
         struct timeval to;
@@ -148,7 +148,7 @@ int main(int argc, char **argv)
         }
 
         if ((rc = select(max + 1, &read_fds, NULL, NULL, &to)) < 0) {
-            LOGE("select() failed (%s)\n", strerror(errno));
+            LOGE("select() failed (%s)", strerror(errno));
             sleep(1);
             continue;
         }
@@ -164,30 +164,30 @@ int main(int argc, char **argv)
             alen = sizeof(addr);
 
             if (fw_sock != -1) {
-                LOGE("Dropping duplicate framework connection\n");
+                LOGE("Dropping duplicate framework connection");
                 int tmp = accept(door_sock, &addr, &alen);
                 close(tmp);
                 continue;
             }
 
             if ((fw_sock = accept(door_sock, &addr, &alen)) < 0) {
-                LOGE("Unable to accept framework connection (%s)\n",
+                LOGE("Unable to accept framework connection (%s)",
                      strerror(errno));
             }
-            LOG_VOL("Accepted connection from framework\n");
+            LOG_VOL("Accepted connection from framework");
             if ((rc = volmgr_send_states()) < 0) {
-                LOGE("Unable to send volmgr status to framework (%d)\n", rc);
+                LOGE("Unable to send volmgr status to framework (%d)", rc);
             }
         }
 
         if (FD_ISSET(fw_sock, &read_fds)) {
             if ((rc = process_framework_command(fw_sock)) < 0) {
                 if (rc == -ECONNRESET) {
-                    LOGE("Framework disconnected\n");
+                    LOGE("Framework disconnected");
                     close(fw_sock);
                     fw_sock = -1;
                 } else {
-                    LOGE("Error processing framework command (%s)\n",
+                    LOGE("Error processing framework command (%s)",
                          strerror(errno));
                 }
             }
@@ -195,7 +195,7 @@ int main(int argc, char **argv)
 
         if (FD_ISSET(uevent_sock, &read_fds)) {
             if ((rc = process_uevent_message(uevent_sock)) < 0) {
-                LOGE("Error processing uevent msg (%s)\n", strerror(errno));
+                LOGE("Error processing uevent msg (%s)", strerror(errno));
             }
         }
     } // while
@@ -208,7 +208,7 @@ int send_msg(char* message)
 
     pthread_mutex_lock(&write_mutex);
 
-    LOG_VOL("send_msg(%s):\n", message);
+    LOG_VOL("send_msg(%s):", message);
 
     if (fw_sock >= 0)
         result = write(fw_sock, message, strlen(message) + 1);
@@ -224,7 +224,7 @@ int send_msg_with_data(char *message, char *data)
 
     char* buffer = (char *)alloca(strlen(message) + strlen(data) + 1);
     if (!buffer) {
-        LOGE("alloca failed in send_msg_with_data\n");
+        LOGE("alloca failed in send_msg_with_data");
         return -1;
     }
 

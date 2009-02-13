@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
-#include <utils/logger.h>
+#include <cutils/logger.h>
 #include <cutils/logd.h>
 
 #define LOG_BUF_SIZE	1024

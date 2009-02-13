@@ -31,7 +31,7 @@ static char FSCK_MSDOS_PATH[] = "/system/bin/dosfsck";
 int vfat_identify(blkdev_t *dev)
 {
 #if VFAT_DEBUG
-    LOG_VOL("vfat_identify(%d:%d):\n", dev->major, dev->minor);
+    LOG_VOL("vfat_identify(%d:%d):", dev->major, dev->minor);
 #endif
     return 0; // XXX: Implement
 }
@@ -41,11 +41,11 @@ int vfat_check(blkdev_t *dev)
     int rc;
 
 #if VFAT_DEBUG
-    LOG_VOL("vfat_check(%d:%d):\n", dev->major, dev->minor);
+    LOG_VOL("vfat_check(%d:%d):", dev->major, dev->minor);
 #endif
 
     if (access(FSCK_MSDOS_PATH, X_OK)) {
-        LOGE("vfat_check(%d:%d): %s not found (skipping checks)\n",
+        LOGE("vfat_check(%d:%d): %s not found (skipping checks)",
              dev->major, dev->minor, FSCK_MSDOS_PATH);
         return 0;
     }
@@ -74,21 +74,21 @@ int vfat_check(blkdev_t *dev)
 #endif
 
     if (rc == 0) {
-        LOG_VOL("Filesystem check completed OK\n");
+        LOG_VOL("Filesystem check completed OK");
         return 0;
     } else if (rc == 1) {
-        LOG_VOL("Filesystem check failed (general failure)\n");
+        LOG_VOL("Filesystem check failed (general failure)");
         return -EINVAL;
     } else if (rc == 2) {
-        LOG_VOL("Filesystem check failed (invalid usage)\n");
+        LOG_VOL("Filesystem check failed (invalid usage)");
         return -EIO;
     } else if (rc == 4) {
-        LOG_VOL("Filesystem check completed (errors fixed)\n");
+        LOG_VOL("Filesystem check completed (errors fixed)");
     } else if (rc == 8) {
-        LOG_VOL("Filesystem check failed (not a FAT filesystem)\n");
+        LOG_VOL("Filesystem check failed (not a FAT filesystem)");
         return -ENODATA;
     } else {
-        LOG_VOL("Filesystem check failed (unknown exit code %d)\n", rc);
+        LOG_VOL("Filesystem check failed (unknown exit code %d)", rc);
         return -EIO;
     }
     return 0;
@@ -102,7 +102,7 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
     devpath = blkdev_get_devpath(dev);
 
 #if VFAT_DEBUG
-    LOG_VOL("vfat_mount(%d:%d, %s, %d):\n", dev->major, dev->minor, vol->mount_point, safe_mode);
+    LOG_VOL("vfat_mount(%d:%d, %s, %d):", dev->major, dev->minor, vol->mount_point, safe_mode);
 #endif
 
     flags = MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_DIRSYNC;
@@ -110,7 +110,7 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
     if (safe_mode)
         flags |= MS_SYNCHRONOUS;
     if (vol->state == volstate_mounted) {
-        LOG_VOL("Remounting %d:%d on %s, safe mode %d\n", dev->major,
+        LOG_VOL("Remounting %d:%d on %s, safe mode %d", dev->major,
                 dev->minor, vol->mount_point, safe_mode);
         flags |= MS_REMOUNT;
     }
@@ -119,7 +119,7 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
                "utf8,uid=1000,gid=1000,fmask=711,dmask=700");
 
     if (rc && errno == EROFS) {
-        LOGE("vfat_mount(%d:%d, %s): Read only filesystem - retrying mount RO\n",
+        LOGE("vfat_mount(%d:%d, %s): Read only filesystem - retrying mount RO",
              dev->major, dev->minor, vol->mount_point);
         flags |= MS_RDONLY;
         rc = mount(devpath, vol->mount_point, "vfat", flags,
@@ -127,7 +127,7 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
     }
 
 #if VFAT_DEBUG
-    LOG_VOL("vfat_mount(%s, %d:%d): mount rc = %d\n", dev->major,k dev->minor,
+    LOG_VOL("vfat_mount(%s, %d:%d): mount rc = %d", dev->major,k dev->minor,
             vol->mount_point, rc);
 #endif
     free (devpath);

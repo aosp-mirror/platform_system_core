@@ -43,7 +43,7 @@ int mmc_bootstrap()
     struct dirent *de;
 
     if (!(d = opendir(SYSFS_CLASS_MMC_PATH))) {
-        LOG_ERROR("Unable to open '%s' (%m)\n", SYSFS_CLASS_MMC_PATH);
+        LOG_ERROR("Unable to open '%s' (%m)", SYSFS_CLASS_MMC_PATH);
         return -errno;
     }
 
@@ -55,7 +55,7 @@ int mmc_bootstrap()
 
         sprintf(tmp, "%s/%s", SYSFS_CLASS_MMC_PATH, de->d_name);
         if (mmc_bootstrap_controller(tmp))
-            LOG_ERROR("Error bootstrapping controller '%s' (%m)\n", tmp);
+            LOG_ERROR("Error bootstrapping controller '%s' (%m)", tmp);
     }
 
     closedir(d);
@@ -69,10 +69,10 @@ static int mmc_bootstrap_controller(char *sysfs_path)
     struct dirent *de;
 
 #if DEBUG_BOOTSTRAP
-    LOG_VOL("bootstrap_controller(%s):\n", sysfs_path);
+    LOG_VOL("bootstrap_controller(%s):", sysfs_path);
 #endif
     if (!(d = opendir(sysfs_path))) {
-        LOG_ERROR("Unable to open '%s' (%m)\n", sysfs_path);
+        LOG_ERROR("Unable to open '%s' (%m)", sysfs_path);
         return -errno;
     }
 
@@ -92,7 +92,7 @@ static int mmc_bootstrap_controller(char *sysfs_path)
         sprintf(tmp, "%s/%s", sysfs_path, de->d_name);
 
         if (mmc_bootstrap_card(tmp) < 0)
-            LOG_ERROR("Error bootstrapping card '%s' (%m)\n", tmp);
+            LOG_ERROR("Error bootstrapping card '%s' (%m)", tmp);
     } // while
 
     closedir(d);
@@ -111,29 +111,29 @@ static int mmc_bootstrap_card(char *sysfs_path)
     ssize_t sz;
 
 #if DEBUG_BOOTSTRAP
-    LOG_VOL("bootstrap_card(%s):\n", sysfs_path);
+    LOG_VOL("bootstrap_card(%s):", sysfs_path);
 #endif
 
     /*
      * sysfs_path is based on /sys/class, but we want the actual device class
      */
     if (!getcwd(saved_cwd, sizeof(saved_cwd))) {
-        LOGE("Error getting working dir path\n");
+        LOGE("Error getting working dir path");
         return -errno;
     }
     
     if (chdir(sysfs_path) < 0) {
-        LOGE("Unable to chdir to %s (%m)\n", sysfs_path);
+        LOGE("Unable to chdir to %s (%m)", sysfs_path);
         return -errno;
     }
 
     if (!getcwd(new_cwd, sizeof(new_cwd))) {
-        LOGE("Buffer too small for device path\n");
+        LOGE("Buffer too small for device path");
         return -errno;
     }
 
     if (chdir(saved_cwd) < 0) {
-        LOGE("Unable to restore working dir\n");
+        LOGE("Unable to restore working dir");
         return -errno;
     }
 
@@ -162,7 +162,7 @@ static int mmc_bootstrap_card(char *sysfs_path)
     uevent_params[3] = (char *) NULL;
 
     if (simulate_uevent("mmc", devpath, "add", uevent_params) < 0) {
-        LOGE("Error simulating uevent (%m)\n");
+        LOGE("Error simulating uevent (%m)");
         return -errno;
     }
 
@@ -174,7 +174,7 @@ static int mmc_bootstrap_card(char *sysfs_path)
     sprintf(filename, "/sys%s/block", devpath);
     if (!access(filename, F_OK)) {
         if (mmc_bootstrap_block(tmp)) {
-            LOGE("Error bootstrapping block @ %s\n", tmp);
+            LOGE("Error bootstrapping block @ %s", tmp);
         }
     }
 
@@ -188,13 +188,13 @@ static int mmc_bootstrap_block(char *devpath)
     struct dirent *de;
 
 #if DEBUG_BOOTSTRAP
-    LOG_VOL("mmc_bootstrap_block(%s):\n", devpath);
+    LOG_VOL("mmc_bootstrap_block(%s):", devpath);
 #endif
 
     sprintf(blockdir_path, "/sys%s", devpath);
 
     if (!(d = opendir(blockdir_path))) {
-        LOGE("Failed to opendir %s\n", devpath);
+        LOGE("Failed to opendir %s", devpath);
         return -errno;
     }
 
@@ -205,7 +205,7 @@ static int mmc_bootstrap_block(char *devpath)
             continue;
         sprintf(tmp, "%s/%s", devpath, de->d_name);
         if (mmc_bootstrap_mmcblk(tmp))
-            LOGE("Error bootstraping mmcblk @ %s\n", tmp);
+            LOGE("Error bootstraping mmcblk @ %s", tmp);
     }
     closedir(d);
     return 0;
@@ -218,11 +218,11 @@ static int mmc_bootstrap_mmcblk(char *devpath)
     int rc;
 
 #if DEBUG_BOOTSTRAP
-    LOG_VOL("mmc_bootstrap_mmcblk(%s):\n", devpath);
+    LOG_VOL("mmc_bootstrap_mmcblk(%s):", devpath);
 #endif
 
     if ((rc = mmc_bootstrap_mmcblk_partition(devpath))) {
-        LOGE("Error bootstrapping mmcblk partition '%s'\n", devpath);
+        LOGE("Error bootstrapping mmcblk partition '%s'", devpath);
         return rc;
     }
 
@@ -238,7 +238,7 @@ static int mmc_bootstrap_mmcblk(char *devpath)
 
             sprintf(part_devpath, "%s/%sp%d", devpath, mmcblk_devname, part_no);
             if (mmc_bootstrap_mmcblk_partition(part_devpath)) 
-                LOGE("Error bootstrapping mmcblk partition '%s'\n", part_devpath);
+                LOGE("Error bootstrapping mmcblk partition '%s'", part_devpath);
         }
     }
 
@@ -256,7 +256,7 @@ static int mmc_bootstrap_mmcblk_partition(char *devpath)
     char line[255];
 
 #if DEBUG_BOOTSTRAP
-    LOG_VOL("mmc_bootstrap_mmcblk_partition(%s):\n", devpath);
+    LOG_VOL("mmc_bootstrap_mmcblk_partition(%s):", devpath);
 #endif
 
     sprintf(tmp, "DEVPATH=%s", devpath);
@@ -264,7 +264,7 @@ static int mmc_bootstrap_mmcblk_partition(char *devpath)
 
     sprintf(filename, "/sys%s/uevent", devpath);
     if (!(fp = fopen(filename, "r"))) {
-        LOGE("Unable to open '%s' (%m)\n", filename);
+        LOGE("Unable to open '%s' (%m)", filename);
         return -errno;
     }
 
@@ -280,13 +280,13 @@ static int mmc_bootstrap_mmcblk_partition(char *devpath)
     fclose(fp);
 
     if (!uevent_params[1] || !uevent_params[2] || !uevent_params[3]) {
-        LOGE("mmcblk uevent missing required params\n");
+        LOGE("mmcblk uevent missing required params");
         return -1;
     }
     uevent_params[4] = '\0';
     
     if (simulate_uevent("block", devpath, "add", uevent_params) < 0) {
-        LOGE("Error simulating uevent (%m)\n");
+        LOGE("Error simulating uevent (%m)");
         return -errno;
     }
     return 0;

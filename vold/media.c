@@ -105,7 +105,7 @@ media_t *media_lookup_by_path(char *devpath, boolean fuzzy_match)
         list_scan = list_scan->next;
     }
 #if DEBUG_MEDIA
-    LOG_VOL("media_lookup_by_path(): No media found @ %s\n", devpath);
+    LOG_VOL("media_lookup_by_path(): No media found @ %s", devpath);
 #endif
     return NULL;
 }
@@ -115,7 +115,7 @@ int media_add_blkdev(media_t *card, blkdev_t *dev)
     blkdev_list_t *list_entry;
 
     if (!(list_entry = malloc(sizeof(blkdev_list_t)))) {
-        LOGE("Out of memory\n");
+        LOGE("Out of memory");
         return -ENOMEM;
     }
     

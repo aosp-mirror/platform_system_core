@@ -103,7 +103,7 @@ static boolean _mountpoint_mounted(char *mp)
     char line[1024];
 
     if (!(fp = fopen("/proc/mounts", "r"))) {
-        LOGE("Error opening /proc/mounts (%s)\n", strerror(errno));
+        LOGE("Error opening /proc/mounts (%s)", strerror(errno));
         return false;
     }
 
@@ -125,22 +125,20 @@ static boolean _mountpoint_mounted(char *mp)
  * Public functions
  */
 
-int volmgr_set_volume_key(char *mount_point, unsigned char *key, unsigned int keysize)
+int volmgr_set_volume_key(char *mount_point, unsigned char *key)
 {
     volume_t *v = volmgr_lookup_volume_by_mountpoint(mount_point, true);
  
     if (!v)
         return -ENOENT;
 
-    if (v->key)
-        free(v->key);
-
-    if (!(v->key = malloc(keysize))) {
+    if (v->media_type != media_devmapper) {
+        LOGE("Cannot set key on a non devmapper volume");
         pthread_mutex_unlock(&v->lock);
-        return -ENOMEM;
+        return -EINVAL;
     }
 
-    memcpy(v->key, key, keysize);
+    memcpy(v->dm->key, key, sizeof(v->dm->key));
     pthread_mutex_unlock(&v->lock);
     return 0;
 }
@@ -150,31 +148,41 @@ int volmgr_format_volume(char *mount_point)
     int rc;
     volume_t *v;
 
-    LOG_VOL("volmgr_format_volume(%s):\n", mount_point);
+    LOG_VOL("volmgr_format_volume(%s):", mount_point);
 
     v = volmgr_lookup_volume_by_mountpoint(mount_point, true);
 
     if (!v)
         return -ENOENT;
 
-
     if (v->state == volstate_mounted ||
         v->state == volstate_mounted_ro ||
         v->state == volstate_ums ||
         v->state == volstate_checking) {
-            LOGE("Can't format '%s', currently in state %d\n", mount_point, v->state);
+            LOGE("Can't format '%s', currently in state %d", mount_point, v->state);
             pthread_mutex_unlock(&v->lock);
             return -EBUSY;
-        } else if (v->state == volstate_nomedia) {
-            LOGE("Can't format '%s', (no media)\n", mount_point);
+        } else if (v->state == volstate_nomedia &&
+                   v->media_type != media_devmapper) {
+            LOGE("Can't format '%s', (no media)", mount_point);
             pthread_mutex_unlock(&v->lock);
             return -ENOMEDIUM;
         }
 
-    if ((rc = initialize_mbr(v->dev->disk)) < 0) {
-        LOGE("MBR init failed for %s (%d)\n", mount_point, rc);
-        pthread_mutex_unlock(&v->lock);
-         return rc;
+    // XXX:Reject if the underlying source media is not present
+
+    if (v->media_type == media_devmapper) {
+        if ((rc = devmapper_genesis(v->dm)) < 0) {
+            LOGE("devmapper genesis failed for %s (%d)", mount_point, rc);
+            pthread_mutex_unlock(&v->lock);
+            return rc;
+        }
+    } else {
+        if ((rc = initialize_mbr(v->dev->disk)) < 0) {
+            LOGE("MBR init failed for %s (%d)", mount_point, rc);
+            pthread_mutex_unlock(&v->lock);
+            return rc;
+        }
     }
 
     volume_setstate(v, volstate_formatting);
@@ -187,7 +195,7 @@ int volmgr_bootstrap(void)
     int rc;
 
     if ((rc = volmgr_readconfig("/system/etc/vold.conf")) < 0) {
-        LOGE("Unable to process config\n");
+        LOGE("Unable to process config");
         return rc;
     }
 
@@ -197,7 +205,7 @@ int volmgr_bootstrap(void)
     volume_t *v = vol_root;
     while (v) {
         if (_mountpoint_mounted(v->mount_point)) {
-            LOG_VOL("Volume '%s' already mounted at startup\n", v->mount_point);
+            LOG_VOL("Volume '%s' already mounted at startup", v->mount_point);
             v->state = volstate_mounted;
         }
         v = v->next;
@@ -221,9 +229,9 @@ int volmgr_safe_mode(boolean enable)
         if (v->state == volstate_mounted && v->fs) {
             rc = v->fs->mount_fn(v->dev, v, safe_mode);
             if (!rc) {
-                LOG_VOL("Safe mode %s on %s\n", (enable ? "enabled" : "disabled"), v->mount_point);
+                LOG_VOL("Safe mode %s on %s", (enable ? "enabled" : "disabled"), v->mount_point);
             } else {
-                LOGE("Failed to %s safe-mode on %s (%s)\n",
+                LOGE("Failed to %s safe-mode on %s (%s)",
                      (enable ? "enable" : "disable" ), v->mount_point, strerror(-rc));
             }
         }
@@ -243,7 +251,7 @@ int volmgr_send_states(void)
     while (vol_scan) {
         pthread_mutex_lock(&vol_scan->lock);
         if ((rc = volume_send_state(vol_scan)) < 0) {
-            LOGE("Error sending state to framework (%d)\n", rc);
+            LOGE("Error sending state to framework (%d)", rc);
         }
         pthread_mutex_unlock(&vol_scan->lock);
         vol_scan = vol_scan->next;
@@ -267,7 +275,7 @@ int volmgr_consider_disk(blkdev_t *dev)
     pthread_mutex_lock(&vol->lock);
 
     if (vol->state == volstate_mounted) {
-        LOGE("Volume %s already mounted (did we just crash?)\n", vol->mount_point);
+        LOGE("Volume %s already mounted (did we just crash?)", vol->mount_point);
         pthread_mutex_unlock(&vol->lock);
         return 0;
     }
@@ -281,31 +289,36 @@ int volmgr_start_volume_by_mountpoint(char *mount_point)
 { 
     volume_t *v;
 
-LOG_VOL("volmgr_start_volume_by_mountpoint(%s):", mount_point);
     v = volmgr_lookup_volume_by_mountpoint(mount_point, true);
     if (!v)
         return -ENOENT;
 
-LOG_VOL("volmgr_start_volume_by_mountpoint(%s): got %p", mount_point, v);
     if (v->media_type == media_devmapper) {
         if (devmapper_start(v->dm) < 0)  {
-            LOGE("volmgr failed to start devmapper volume '%s'\n",
+            LOGE("volmgr failed to start devmapper volume '%s'",
                  v->mount_point);
         }
     } else if (v->media_type == media_mmc) {
         if (!v->dev) {
-            LOGE("Cannot start volume '%s' (volume is not bound)\n", mount_point);
+            LOGE("Cannot start volume '%s' (volume is not bound)", mount_point);
             pthread_mutex_unlock(&v->lock);
             return -ENOENT;
         }
 
         if (_volmgr_consider_disk_and_vol(v, v->dev->disk) < 0) {
-            LOGE("volmgr failed to start volume '%s'\n", v->mount_point);
+            LOGE("volmgr failed to start volume '%s'", v->mount_point);
         }
     }
 
     pthread_mutex_unlock(&v->lock);
     return 0;
+}
+
+static void _cb_volstopped_for_devmapper_teardown(volume_t *v, void *arg)
+{
+    devmapper_stop(v->dm);
+    volume_setstate(v, volstate_nomedia);
+    pthread_mutex_unlock(&v->lock);
 }
 
 int volmgr_stop_volume_by_mountpoint(char *mount_point)
@@ -320,7 +333,10 @@ int volmgr_stop_volume_by_mountpoint(char *mount_point)
     if (v->state == volstate_mounted)
         volmgr_send_eject_request(v);
 
-    rc = volmgr_shutdown_volume(v, NULL, true);
+    if (v->media_type == media_devmapper)
+        rc = volmgr_shutdown_volume(v, _cb_volstopped_for_devmapper_teardown, false);
+    else
+        rc = volmgr_shutdown_volume(v, NULL, true);
 
     /*
      * If shutdown returns -EINPROGRESS,
@@ -329,7 +345,7 @@ int volmgr_stop_volume_by_mountpoint(char *mount_point)
      */
     if (rc != -EINPROGRESS) {
         if (rc)
-            LOGE("unable to shutdown volume '%s'\n", v->mount_point);
+            LOGE("unable to shutdown volume '%s'", v->mount_point);
         pthread_mutex_unlock(&v->lock);
     }
     return 0;
@@ -337,7 +353,7 @@ int volmgr_stop_volume_by_mountpoint(char *mount_point)
 
 int volmgr_notify_eject(blkdev_t *dev, void (* cb) (blkdev_t *))
 {
-    LOG_VOL("Volmgr notified of %d:%d eject\n", dev->major, dev->minor);
+    LOG_VOL("Volmgr notified of %d:%d eject", dev->major, dev->minor);
 
     volume_t *v;
 
@@ -362,7 +378,7 @@ int volmgr_notify_eject(blkdev_t *dev, void (* cb) (blkdev_t *))
          * The device is being ejected due to
          * kernel disk revalidation.
          */
-        LOG_VOL("Volmgr ignoring eject of %d:%d (volume formatting)\n",
+        LOG_VOL("Volmgr ignoring eject of %d:%d (volume formatting)",
                 dev->major, dev->minor);
         if (cb)
             cb(dev);
@@ -378,7 +394,7 @@ int volmgr_notify_eject(blkdev_t *dev, void (* cb) (blkdev_t *))
         int rc = volmgr_stop_volume(v, _cb_volume_stopped_for_eject, cb, false);
         if (rc != -EINPROGRESS) {
             if (rc)
-                LOGE("unable to shutdown volume '%s'\n", v->mount_point);
+                LOGE("unable to shutdown volume '%s'", v->mount_point);
             pthread_mutex_unlock(&v->lock);
         }
     }
@@ -390,7 +406,7 @@ static void _cb_volume_stopped_for_eject(volume_t *v, void *arg)
     void (* eject_cb) (blkdev_t *) = arg;
 
 #if DEBUG_VOLMGR
-    LOG_VOL("Volume %s has been stopped for eject\n", v->mount_point);
+    LOG_VOL("Volume %s has been stopped for eject", v->mount_point);
 #endif
 
     eject_cb(v->dev);
@@ -422,7 +438,7 @@ int volmgr_enable_ums(boolean enable)
                 rc = volmgr_shutdown_volume(v, _cb_volstopped_for_ums_enable, false);
                 if (rc != -EINPROGRESS) {
                     if (rc)
-                        LOGE("unable to shutdown volume '%s'\n", v->mount_point);
+                        LOGE("unable to shutdown volume '%s'", v->mount_point);
                     pthread_mutex_unlock(&v->lock);
                 }
             } else {
@@ -434,16 +450,16 @@ int volmgr_enable_ums(boolean enable)
                 }
 
                 if ((rc = ums_disable(v->ums_path)) < 0) {
-                    LOGE("unable to disable ums on '%s'\n", v->mount_point);
+                    LOGE("unable to disable ums on '%s'", v->mount_point);
                     pthread_mutex_unlock(&v->lock);
                     continue;
                 }
 
-                LOG_VOL("Kick-starting volume %d:%d after UMS disable\n",
+                LOG_VOL("Kick-starting volume %d:%d after UMS disable",
                         v->dev->disk->major, v->dev->disk->minor);
                 // Start volume
                 if ((rc = _volmgr_consider_disk_and_vol(v, v->dev->disk)) < 0) {
-                    LOGE("volmgr failed to consider disk %d:%d\n",
+                    LOGE("volmgr failed to consider disk %d:%d",
                          v->dev->disk->major, v->dev->disk->minor);
                 }
                 pthread_mutex_unlock(&v->lock);
@@ -470,7 +486,7 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
     int rc = 0;
 
 #if DEBUG_VOLMGR
-    LOG_VOL("volmgr_consider_disk_and_vol(%s, %d:%d):\n", vol->mount_point,
+    LOG_VOL("volmgr_consider_disk_and_vol(%s, %d:%d):", vol->mount_point,
             dev->major, dev->minor); 
 #endif
 
@@ -478,13 +494,13 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
         vol->state == volstate_mounted ||
         vol->state == volstate_mounted_ro ||
         vol->state == volstate_damaged) {
-        LOGE("Cannot consider volume '%s' because it is in state '%d\n", 
+        LOGE("Cannot consider volume '%s' because it is in state '%d", 
              vol->mount_point, vol->state);
         return -EADDRINUSE;
     }
 
     if (vol->state == volstate_formatting) {
-        LOG_VOL("Evaluating dev '%s' for formattable filesystems for '%s'\n",
+        LOG_VOL("Evaluating dev '%s' for formattable filesystems for '%s'",
                 dev->devpath, vol->mount_point);
         /*
          * Since we only support creating 1 partition (right now),
@@ -492,24 +508,29 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
          */
         blkdev_t *part = blkdev_lookup_by_devno(dev->major, 1);
         if (!part) {
-            LOGE("Can't find partition to format!\n");
-            return -ENOENT;
+            part = blkdev_lookup_by_devno(dev->major, 0);
+            if (!part) {
+                LOGE("Unable to find device to format");
+                return -ENODEV;
+            }
         }
 
-        if ((rc = format_partition(part)) < 0) {
-            LOGE("format failed (%d)\n", rc);
+        if ((rc = format_partition(part,
+                                   vol->media_type == media_devmapper ?
+                                   FORMAT_TYPE_EXT2 : FORMAT_TYPE_FAT32)) < 0) {
+            LOGE("format failed (%d)", rc);
             return rc;
         }
         
     }
 
-    LOG_VOL("Evaluating dev '%s' for mountable filesystems for '%s'\n",
+    LOG_VOL("Evaluating dev '%s' for mountable filesystems for '%s'",
             dev->devpath, vol->mount_point);
 
     if (dev->nr_parts == 0) {
         rc = _volmgr_start(vol, dev);
 #if DEBUG_VOLMGR
-        LOG_VOL("_volmgr_start(%s, %d:%d) rc = %d\n", vol->mount_point,
+        LOG_VOL("_volmgr_start(%s, %d:%d) rc = %d", vol->mount_point,
                 dev->major, dev->minor, rc);
 #endif
     } else {
@@ -524,12 +545,12 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
         for (i = 0; i < dev->nr_parts; i++) {
             blkdev_t *part = blkdev_lookup_by_devno(dev->major, (i+1));
             if (!part) {
-                LOGE("Error - unable to lookup partition for blkdev %d:%d\n", dev->major, (i+1));
+                LOGE("Error - unable to lookup partition for blkdev %d:%d", dev->major, (i+1));
                 continue;
             }
             rc = _volmgr_start(vol, part);
 #if DEBUG_VOLMGR
-            LOG_VOL("_volmgr_start(%s, %d:%d) rc = %d\n",
+            LOG_VOL("_volmgr_start(%s, %d:%d) rc = %d",
                     vol->mount_point, part->major, part->minor, rc);
 #endif
             if (!rc) 
@@ -538,13 +559,13 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
 
         if (rc == -ENODEV) {
             // Assert to make sure each partition had a backing blkdev
-            LOGE("Internal consistency error\n");
+            LOGE("Internal consistency error");
             return 0;
         }
     }
 
     if (rc == -ENODATA) {
-        LOGE("Device %d:%d contains no usable filesystems\n",
+        LOGE("Device %d:%d contains no usable filesystems",
              dev->major, dev->minor);
         rc = 0;
     }
@@ -554,7 +575,7 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
 
 static void volmgr_reaper_thread_sighandler(int signo)
 {
-    LOGE("Volume reaper thread got signal %d\n", signo);
+    LOGE("Volume reaper thread got signal %d", signo);
 }
 
 static void __reaper_cleanup(void *arg)
@@ -590,7 +611,7 @@ static void *volmgr_reaper_thread(void *arg)
     actions.sa_handler = volmgr_reaper_thread_sighandler;
     sigaction(SIGUSR1, &actions, NULL);
 
-    LOG_VOL("Reaper here - working on %s\n", vol->mount_point);
+    LOG_VOL("Reaper here - working on %s", vol->mount_point);
 
     boolean send_sig_kill = false;
     int i, rc;
@@ -598,7 +619,7 @@ static void *volmgr_reaper_thread(void *arg)
     for (i = 0; i < 10; i++) {
         errno = 0;
         rc = umount(vol->mount_point);
-        LOG_VOL("volmngr reaper umount(%s) attempt %d (%s)\n",
+        LOG_VOL("volmngr reaper umount(%s) attempt %d (%s)",
                 vol->mount_point, i + 1, strerror(errno));
         if (!rc)
             break;
@@ -615,11 +636,11 @@ static void *volmgr_reaper_thread(void *arg)
     }
 
     if (!rc) {
-        LOG_VOL("Reaper sucessfully unmounted %s\n", vol->mount_point);
+        LOG_VOL("Reaper sucessfully unmounted %s", vol->mount_point);
         vol->fs = NULL;
         volume_setstate(vol, volstate_unmounted);
     } else {
-        LOGE("Unable to unmount!! (%d)\n", rc);
+        LOGE("Unable to unmount!! (%d)", rc);
     }
 
  out:
@@ -633,9 +654,9 @@ static void volmgr_uncage_reaper(volume_t *vol, void (* cb) (volume_t *, void *a
 {
 
     if (vol->worker_running) {
-        LOGE("Worker thread is currently running.. waiting..\n");
+        LOGE("Worker thread is currently running.. waiting..");
         pthread_mutex_lock(&vol->worker_sem);
-        LOG_VOL("Worker thread now available\n");
+        LOG_VOL("Worker thread now available");
     }
 
     vol->worker_args.reaper_args.cb = cb;
@@ -664,7 +685,7 @@ static int volmgr_stop_volume(volume_t *v, void (*cb) (volume_t *, void *), void
                 break;
             }
 
-            LOG_VOL("volmngr quick stop umount(%s) attempt %d (%s)\n",
+            LOG_VOL("volmngr quick stop umount(%s) attempt %d (%s)",
                     v->mount_point, i + 1, strerror(errno));
 
             if (i == 0)
@@ -674,7 +695,7 @@ static int volmgr_stop_volume(volume_t *v, void (*cb) (volume_t *, void *), void
         }
 
         if (!rc) {
-            LOG_VOL("volmgr_stop_volume(%s): Volume unmounted sucessfully\n",
+            LOG_VOL("volmgr_stop_volume(%s): Volume unmounted sucessfully",
                     v->mount_point);
             if (emit_statechange)
                 volume_setstate(v, volstate_unmounted);
@@ -686,16 +707,16 @@ static int volmgr_stop_volume(volume_t *v, void (*cb) (volume_t *, void *), void
          * Since the volume is still in use, dispatch the stopping to
          * a thread
          */
-        LOG_VOL("Volume %s is busy (%d) - uncaging the reaper\n", v->mount_point, rc);
+        LOG_VOL("Volume %s is busy (%d) - uncaging the reaper", v->mount_point, rc);
         volmgr_uncage_reaper(v, cb, arg);
         return -EINPROGRESS;
     } else if (v->state == volstate_checking) {
         volume_setstate(v, volstate_unmounted);
         if (v->worker_running) {
-            LOG_VOL("Cancelling worker thread\n");
+            LOG_VOL("Cancelling worker thread");
             pthread_kill(v->worker_thread, SIGUSR1);
         } else
-            LOGE("Strange... we were in checking state but worker thread wasn't running..\n");
+            LOGE("Strange... we were in checking state but worker thread wasn't running..");
         goto out_cb_immed;
     }
 
@@ -722,10 +743,11 @@ static void _cb_volume_stopped_for_shutdown(volume_t *v, void *arg)
     void (* shutdown_cb) (volume_t *) = arg;
 
 #if DEBUG_VOLMGR
-    LOG_VOL("Volume %s has been stopped for shutdown\n", v->mount_point);
+    LOG_VOL("Volume %s has been stopped for shutdown", v->mount_point);
 #endif
     shutdown_cb(v);
 }
+
 
 /*
  * Called when a volume is sucessfully unmounted for UMS enable
@@ -736,13 +758,13 @@ static void _cb_volstopped_for_ums_enable(volume_t *v, void *arg)
     char *devdir_path;
 
 #if DEBUG_VOLMGR
-    LOG_VOL("_cb_volstopped_for_ums_enable(%s):\n", v->mount_point);
+    LOG_VOL("_cb_volstopped_for_ums_enable(%s):", v->mount_point);
 #endif
     devdir_path = blkdev_get_devpath(v->dev->disk);
 
     if ((rc = ums_enable(devdir_path, v->ums_path)) < 0) {
         free(devdir_path);
-        LOGE("Error enabling ums (%d)\n", rc);
+        LOGE("Error enabling ums (%d)", rc);
         return;
     }
     free(devdir_path);
@@ -762,7 +784,7 @@ static int volmgr_readconfig(char *cfg_path)
         if (!strncmp(node->name, "volume_", 7))
             volmgr_config_volume(node);
         else
-            LOGE("Skipping unknown configuration node '%s'\n", node->name);
+            LOGE("Skipping unknown configuration node '%s'", node->name);
         node = node->next;
     }
     return 0;
@@ -773,7 +795,7 @@ static void volmgr_add_mediapath_to_volume(volume_t *v, char *media_path)
     int i;
 
 #if DEBUG_VOLMGR
-    LOG_VOL("volmgr_add_mediapath_to_volume(%p, %s):\n", v, media_path);
+    LOG_VOL("volmgr_add_mediapath_to_volume(%p, %s):", v, media_path);
 #endif
     for (i = 0; i < VOLMGR_MAX_MEDIAPATHS_PER_VOLUME; i++) {
         if (!v->media_paths[i]) {
@@ -781,7 +803,7 @@ static void volmgr_add_mediapath_to_volume(volume_t *v, char *media_path)
             return;
         }
     }
-    LOGE("Unable to add media path '%s' to volume (out of media slots)\n", media_path);
+    LOGE("Unable to add media path '%s' to volume (out of media slots)", media_path);
 }
 
 static int volmgr_config_volume(cnode *node)
@@ -794,7 +816,7 @@ static int volmgr_config_volume(cnode *node)
 
     dm_src = dm_src_type = dm_tgt = dm_param = dm_tgtfs = NULL;
 #if DEBUG_VOLMGR
-    LOG_VOL("volmgr_configure_volume(%s):\n", node->name);
+    LOG_VOL("volmgr_configure_volume(%s):", node->name);
 #endif
     if (!(new = malloc(sizeof(volume_t))))
         return -ENOMEM;
@@ -817,7 +839,7 @@ static int volmgr_config_volume(cnode *node)
             else if (!strcmp(child->value, "devmapper"))
                 new->media_type = media_devmapper;
             else {
-                LOGE("Invalid media type '%s'\n", child->value);
+                LOGE("Invalid media type '%s'", child->value);
                 rc = -EINVAL;
                 goto out_free;
             }
@@ -838,29 +860,32 @@ static int volmgr_config_volume(cnode *node)
         else if (!strcmp(child->name, "dm_target_fs")) 
             dm_tgtfs = strdup(child->value);
         else
-            LOGE("Ignoring unknown config entry '%s'\n", child->name);
+            LOGE("Ignoring unknown config entry '%s'", child->name);
         child = child->next;
     }
 
     if (new->media_type == media_mmc) {
         if (!new->media_paths[0] || !new->mount_point || new->media_type == media_unknown) {
-            LOGE("Required configuration parameter missing for mmc volume\n");
+            LOGE("Required configuration parameter missing for mmc volume");
             rc = -EINVAL;
             goto out_free;
         }
     } else if (new->media_type == media_devmapper) {
         if (!dm_src || !dm_src_type || !dm_tgt ||
             !dm_param || !dm_tgtfs || !dm_size_mb) {
-            LOGE("Required configuration parameter missing for devmapper volume\n");
+            LOGE("Required configuration parameter missing for devmapper volume");
             rc = -EINVAL;
             goto out_free;
         }
+
+        char dm_mediapath[255];
         if (!(new->dm = devmapper_init(dm_src, dm_src_type, dm_size_mb,
-                                       dm_tgt, dm_param, dm_tgtfs))) {
+                                       dm_tgt, dm_param, dm_tgtfs, dm_mediapath))) {
             LOGE("Unable to initialize devmapping");
-           goto out_free;
+            goto out_free;
         }
-        
+        LOG_VOL("media path for devmapper volume = '%s'", dm_mediapath);
+        volmgr_add_mediapath_to_volume(new, dm_mediapath);
     }
 
     if (!vol_root)
@@ -932,6 +957,7 @@ static volume_t *volmgr_lookup_volume_by_mountpoint(char *mount_point, boolean l
                 pthread_mutex_unlock(&v->lock);
             return v;
         }
+        pthread_mutex_unlock(&v->lock);
         v = v->next;
     }
     return NULL;
@@ -971,12 +997,12 @@ static int _volmgr_start(volume_t *vol, blkdev_t *dev)
     int rc = ENODATA;
 
 #if DEBUG_VOLMGR
-    LOG_VOL("_volmgr_start(%s, %d:%d):\n", vol->mount_point,
+    LOG_VOL("_volmgr_start(%s, %d:%d):", vol->mount_point,
             dev->major, dev->minor);
 #endif
 
     if (vol->state == volstate_mounted) {
-        LOGE("Unable to start volume '%s' (already mounted)\n", vol->mount_point);
+        LOGE("Unable to start volume '%s' (already mounted)", vol->mount_point);
         return -EBUSY;
     }
 
@@ -986,7 +1012,7 @@ static int _volmgr_start(volume_t *vol, blkdev_t *dev)
     }
 
     if (!fs) {
-        LOGE("No supported filesystems on %d:%d\n", dev->major, dev->minor);
+        LOGE("No supported filesystems on %d:%d", dev->major, dev->minor);
         volume_setstate(vol, volstate_nofs);
         return -ENODATA;
     }
@@ -1002,9 +1028,9 @@ static int volmgr_start_fs(struct volmgr_fstable_entry *fs, volume_t *vol, blkde
      */
 
     if (vol->worker_running) {
-        LOGE("Worker thread is currently running.. waiting..\n");
+        LOGE("Worker thread is currently running.. waiting..");
         pthread_mutex_lock(&vol->worker_sem);
-        LOG_VOL("Worker thread now available\n");
+        LOG_VOL("Worker thread now available");
     }
 
     vol->dev = dev; 
@@ -1026,7 +1052,7 @@ static void __start_fs_thread_lock_cleanup(void *arg)
     volume_t *vol = (volume_t *) arg;
 
 #if DEBUG_VOLMGR
-    LOG_VOL("__start_fs_thread_lock_cleanup(%s):\n", vol->mount_point);
+    LOG_VOL("__start_fs_thread_lock_cleanup(%s):", vol->mount_point);
 #endif
 
     vol->worker_running = false;
@@ -1061,13 +1087,13 @@ static void *volmgr_start_fs_thread(void *arg)
     int                          rc;
   
 #if DEBUG_VOLMGR
-    LOG_VOL("Worker thread pid %d starting %s fs %d:%d on %s\n", getpid(),
+    LOG_VOL("Worker thread pid %d starting %s fs %d:%d on %s", getpid(),
              fs->name, dev->major, dev->minor, vol->mount_point);
 #endif
 
     if (fs->check_fn) {
 #if DEBUG_VOLMGR
-        LOG_VOL("Starting %s filesystem check on %d:%d\n", fs->name,
+        LOG_VOL("Starting %s filesystem check on %d:%d", fs->name,
                 dev->major, dev->minor);
 #endif
         volume_setstate(vol, volstate_checking);
@@ -1075,12 +1101,12 @@ static void *volmgr_start_fs_thread(void *arg)
         rc = fs->check_fn(dev);
         pthread_mutex_lock(&vol->lock);
         if (vol->state != volstate_checking) {
-            LOG_VOL("filesystem check aborted\n");
+            LOG_VOL("filesystem check aborted");
             goto out;
         }
         
         if (rc < 0) {
-            LOGE("%s filesystem check failed on %d:%d (%s)\n", fs->name,
+            LOGE("%s filesystem check failed on %d:%d (%s)", fs->name,
                     dev->major, dev->minor, strerror(-rc));
             if (rc == -ENODATA) {
                volume_setstate(vol, volstate_nofs);
@@ -1089,14 +1115,14 @@ static void *volmgr_start_fs_thread(void *arg)
             goto out_unmountable;
         }
 #if DEBUG_VOLMGR
-        LOG_VOL("%s filesystem check of %d:%d OK\n", fs->name,
+        LOG_VOL("%s filesystem check of %d:%d OK", fs->name,
                 dev->major, dev->minor);
 #endif
     }
 
     rc = fs->mount_fn(dev, vol, safe_mode);
     if (!rc) {
-        LOG_VOL("Sucessfully mounted %s filesystem %d:%d on %s (safe-mode %s)\n",
+        LOG_VOL("Sucessfully mounted %s filesystem %d:%d on %s (safe-mode %s)",
                 fs->name, dev->major, dev->minor, vol->mount_point,
                 (safe_mode ? "on" : "off"));
         vol->fs = fs;
@@ -1104,7 +1130,7 @@ static void *volmgr_start_fs_thread(void *arg)
         goto out;
     }
 
-    LOGE("%s filesystem mount of %d:%d failed (%d)\n", fs->name, dev->major,
+    LOGE("%s filesystem mount of %d:%d failed (%d)", fs->name, dev->major,
          dev->minor, rc);
 
  out_unmountable:
@@ -1117,7 +1143,7 @@ static void *volmgr_start_fs_thread(void *arg)
 
 static void volmgr_start_fs_thread_sighandler(int signo)
 {
-    LOGE("Volume startup thread got signal %d\n", signo);
+    LOGE("Volume startup thread got signal %d", signo);
 }
 
 static void volume_setstate(volume_t *vol, volume_state_t state)
@@ -1126,7 +1152,7 @@ static void volume_setstate(volume_t *vol, volume_state_t state)
         return;
 
 #if DEBUG_VOLMGR
-    LOG_VOL("Volume %s state change from %d -> %d\n", vol->mount_point, vol->state, state);
+    LOG_VOL("Volume %s state change from %d -> %d", vol->mount_point, vol->state, state);
 #endif
     
     vol->state = state;

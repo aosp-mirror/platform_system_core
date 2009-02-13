@@ -191,9 +191,22 @@
 30030 am_create_service (Service Record|1|5),(Name|3),(Intent|3),(PID|1|5)
 # A service is being destroyed
 30031 am_destroy_service (Service Record|1|5),(Name|3),(PID|1|5)
+# A process has crashed too many times, it is being cleared
+30032 am_process_crashed_too_much (Name|3),(PID|1|5)
+# An unknown process is trying to attach to the activity manager
+30033 am_drop_process (PID|1|5)
+# A service has crashed too many times, it is being stopped
+30034 am_service_crashed_too_much (Crash Count|1|1),(Component Name|3),(PID|1|5)
+# A service is going to be restarted after its process went away
+30035 am_schedule_service_restart (Component Name|3),(Time|2|3)
+# A client was waiting for a content provider, but its process was lost
+30036 am_provider_lost_process (Package Name|3),(UID|1|5),(Name|3)
 
 # Out of memory for surfaces.
 31000 wm_no_surface_memory (Window|3),(PID|1|5),(Operation|3)
+
+# Re-connecting to input method service because we haven't received its interface
+32000 imf_force_reconnect_ime (IME|4),(Time Since Connect|2|3),(Showing|1|1)
 
 # dvm_gc_info: LIST (LONG, LONG, LONG)
 #

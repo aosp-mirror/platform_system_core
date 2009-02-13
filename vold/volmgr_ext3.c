@@ -43,26 +43,26 @@ int ext_identify(blkdev_t *dev)
     char *devpath;
 
 #if EXT_DEBUG
-    LOG_VOL("ext_identify(%d:%d):\n", dev-major, dev->minor);
+    LOG_VOL("ext_identify(%d:%d):", dev-major, dev->minor);
 #endif
 
     devpath = blkdev_get_devpath(dev);
 
     if ((fd = open(devpath, O_RDWR)) < 0) {
-        LOGE("Unable to open device '%s' (%s)\n", devpath,
+        LOGE("Unable to open device '%s' (%s)", devpath,
              strerror(errno));
         free(devpath);
         return -errno;
     }
 
     if (lseek(fd, 1024, SEEK_SET) < 0) {
-        LOGE("Unable to lseek to get superblock (%s)\n", strerror(errno));
+        LOGE("Unable to lseek to get superblock (%s)", strerror(errno));
         rc =  -errno;
         goto out;
     }
 
     if (read(fd, &sb, sizeof(sb)) != sizeof(sb)) {
-        LOGE("Unable to read superblock (%s)\n", strerror(errno));
+        LOGE("Unable to read superblock (%s)", strerror(errno));
         rc =  -errno;
         goto out;
     }
@@ -75,7 +75,7 @@ int ext_identify(blkdev_t *dev)
 
  out:
 #if EXT_DEBUG
-    LOG_VOL("ext_identify(%s): rc = %d\n", devpath, rc);
+    LOG_VOL("ext_identify(%s): rc = %d", devpath, rc);
 #endif
     free(devpath);
     close(fd);
@@ -87,13 +87,13 @@ int ext_check(blkdev_t *dev)
     char *devpath;
 
 #if EXT_DEBUG
-    LOG_VOL("ext_check(%s):\n", dev->dev_fspath);
+    LOG_VOL("ext_check(%s):", dev->dev_fspath);
 #endif
 
     devpath = blkdev_get_devpath(dev);
 
     if (access(E2FSCK_PATH, X_OK)) {
-        LOGE("ext_check(%s): %s not found (skipping checks)\n",
+        LOGE("ext_check(%s): %s not found (skipping checks)",
              devpath, E2FSCK_PATH);
         free(devpath);
         return 0;
@@ -110,21 +110,21 @@ int ext_check(blkdev_t *dev)
     int rc = logwrap(4, args);
 
     if (rc == 0) {
-        LOG_VOL("filesystem '%s' had no errors\n", devpath);
+        LOG_VOL("filesystem '%s' had no errors", devpath);
     } else if (rc == 1) {
-        LOG_VOL("filesystem '%s' had corrected errors\n", devpath);
+        LOG_VOL("filesystem '%s' had corrected errors", devpath);
         rc = 0;
     } else if (rc == 2) {
-        LOGE("VOL volume '%s' had corrected errors (system should be rebooted)\n", devpath);
+        LOGE("VOL volume '%s' had corrected errors (system should be rebooted)", devpath);
         rc = -EIO;
     } else if (rc == 4) {
-        LOGE("VOL volume '%s' had uncorrectable errors\n", devpath);
+        LOGE("VOL volume '%s' had uncorrectable errors", devpath);
         rc = -EIO;
     } else if (rc == 8) {
-        LOGE("Operational error while checking volume '%s'\n", devpath);
+        LOGE("Operational error while checking volume '%s'", devpath);
         rc = -EIO;
     } else {
-        LOGE("Unknown e2fsck exit code (%d)\n", rc);
+        LOGE("Unknown e2fsck exit code (%d)", rc);
         rc = -EIO;
     }
     free(devpath);
@@ -134,7 +134,7 @@ int ext_check(blkdev_t *dev)
 int ext_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
 {
 #if EXT_DEBUG
-    LOG_VOL("ext_mount(%s, %s, %d):\n", dev->dev_fspath, vol->mount_point, safe_mode);
+    LOG_VOL("ext_mount(%s, %s, %d):", dev->dev_fspath, vol->mount_point, safe_mode);
 #endif
 
     char *fs[] = { "ext3", "ext2", NULL };
@@ -150,7 +150,7 @@ int ext_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
         flags |= MS_SYNCHRONOUS;
 
     if (vol->state == volstate_mounted) {
-        LOG_VOL("Remounting %s on %s, safe mode %d\n", devpath,
+        LOG_VOL("Remounting %s on %s, safe mode %d", devpath,
                 vol->mount_point, safe_mode);
         flags |= MS_REMOUNT;
     }
@@ -159,13 +159,13 @@ int ext_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
     for (f = fs; *f != NULL; f++) {
         rc = mount(devpath, vol->mount_point, *f, flags, NULL);
         if (rc && errno == EROFS) {
-            LOGE("ext_mount(%s, %s): Read only filesystem - retrying mount RO\n",
+            LOGE("ext_mount(%s, %s): Read only filesystem - retrying mount RO",
                  devpath, vol->mount_point);
             flags |= MS_RDONLY;
             rc = mount(devpath, vol->mount_point, *f, flags, NULL);
         }
 #if EXT_DEBUG
-        LOG_VOL("ext_mount(%s, %s): %s mount rc = %d\n", devpath, *f,
+        LOG_VOL("ext_mount(%s, %s): %s mount rc = %d", devpath, *f,
                 vol->mount_point, rc);
 #endif
         if (!rc)
@@ -176,7 +176,7 @@ int ext_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
     // Chmod the mount point so that its a free-for-all.
     // (required for consistency with VFAT.. sigh)
     if (chmod(vol->mount_point, 0777) < 0) {
-        LOGE("Failed to chmod %s (%s)\n", vol->mount_point, strerror(errno));
+        LOGE("Failed to chmod %s (%s)", vol->mount_point, strerror(errno));
         return -errno;
     }
     

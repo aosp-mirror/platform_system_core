@@ -95,7 +95,7 @@ void child(int argc, char* argv[]) {
     // XXX: PROTECT FROM VIKING KILLER
     if (execvp(argv_child[0], argv_child)) {
         LOG(LOG_ERROR, "logwrapper",
-            "executing %s failed: %s\n", argv_child[0], strerror(errno));
+            "executing %s failed: %s", argv_child[0], strerror(errno));
         exit(-1);
     }
 }
@@ -111,24 +111,24 @@ int logwrap(int argc, char* argv[], pid_t *childPid)
     /* Use ptty instead of socketpair so that STDOUT is not buffered */
     parent_ptty = open("/dev/ptmx", O_RDWR);
     if (parent_ptty < 0) {
-	LOG(LOG_ERROR, "logwrapper", "Cannot create parent ptty\n");
+	LOG(LOG_ERROR, "logwrapper", "Cannot create parent ptty");
 	return -errno;
     }
 
     if (grantpt(parent_ptty) || unlockpt(parent_ptty) ||
             ((child_devname = (char*)ptsname(parent_ptty)) == 0)) {
-	LOG(LOG_ERROR, "logwrapper", "Problem with /dev/ptmx\n");
+	LOG(LOG_ERROR, "logwrapper", "Problem with /dev/ptmx");
 	return -1;
     }
 
     pid = fork();
     if (pid < 0) {
-	LOG(LOG_ERROR, "logwrapper", "Failed to fork\n");
+	LOG(LOG_ERROR, "logwrapper", "Failed to fork");
         return -errno;
     } else if (pid == 0) {
         child_ptty = open(child_devname, O_RDWR);
         if (child_ptty < 0) {
-	    LOG(LOG_ERROR, "logwrapper", "Problem with child ptty\n");
+	    LOG(LOG_ERROR, "logwrapper", "Problem with child ptty");
             return -errno;
         }
 

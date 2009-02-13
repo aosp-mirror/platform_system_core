@@ -51,7 +51,7 @@ int process_framework_command(int socket)
     char buffer[101];
 
     if ((rc = read(socket, buffer, sizeof(buffer) -1)) < 0) {
-        LOGE("Unable to read framework command (%s)\n", strerror(errno));
+        LOGE("Unable to read framework command (%s)", strerror(errno));
         return -errno;
     } else if (!rc)
         return -ECONNRESET;
@@ -74,7 +74,7 @@ static void dispatch_cmd(char *cmd)
 {
     struct cmd_dispatch *c;
 
-    LOG_VOL("dispatch_cmd(%s):\n", cmd);
+    LOG_VOL("dispatch_cmd(%s):", cmd);
 
     for (c = dispatch_table; c->cmd != NULL; c++) {
         if (!strncmp(c->cmd, cmd, strlen(c->cmd))) {
@@ -83,7 +83,7 @@ static void dispatch_cmd(char *cmd)
         }
     }
 
-    LOGE("No cmd handlers defined for '%s'\n", cmd);
+    LOGE("No cmd handlers defined for '%s'", cmd);
 }
 
 static int do_send_ums_status(char *cmd)

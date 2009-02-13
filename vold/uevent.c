@@ -87,12 +87,12 @@ int process_uevent_message(int socket)
     int rc = 0;
 
     if ((count = recv(socket, buffer, sizeof(buffer), 0)) < 0) {
-        LOGE("Error receiving uevent (%s)\n", strerror(errno));
+        LOGE("Error receiving uevent (%s)", strerror(errno));
         return -errno;
     }
 
     if (!(event = malloc(sizeof(struct uevent)))) {
-        LOGE("Error allocating memory (%s)\n", strerror(errno));
+        LOGE("Error allocating memory (%s)", strerror(errno));
         return -errno;
     }
 
@@ -139,7 +139,7 @@ int simulate_uevent(char *subsys, char *path, char *action, char **params)
     int i, rc;
 
     if (!(event = malloc(sizeof(struct uevent)))) {
-        LOGE("Error allocating memory (%s)\n", strerror(errno));
+        LOGE("Error allocating memory (%s)", strerror(errno));
         return -errno;
     }
 
@@ -154,7 +154,7 @@ int simulate_uevent(char *subsys, char *path, char *action, char **params)
     else if (!strcmp(action, "remove"))
         event->action = action_remove;
     else {
-        LOGE("Invalid action '%s'\n", action);
+        LOGE("Invalid action '%s'", action);
         return -1;
     }
 
@@ -184,7 +184,7 @@ static int dispatch_uevent(struct uevent *event)
     }
 
 #if DEBUG_UEVENT
-    LOG_VOL("No uevent handlers registered for '%s' subsystem\n", event->subsystem);
+    LOG_VOL("No uevent handlers registered for '%s' subsystem", event->subsystem);
 #endif
     return 0;
 }
@@ -193,12 +193,12 @@ static void dump_uevent(struct uevent *event)
 {
     int i;
 
-    LOG_VOL("[UEVENT] Sq: %u S: %s A: %d P: %s\n",
+    LOG_VOL("[UEVENT] Sq: %u S: %s A: %d P: %s",
               event->seqnum, event->subsystem, event->action, event->path);
     for (i = 0; i < UEVENT_PARAMS_MAX; i++) {
         if (!event->param[i])
             break;
-        LOG_VOL("%s\n", event->param[i]);
+        LOG_VOL("%s", event->param[i]);
     }
 }
 
@@ -226,7 +226,7 @@ static char *get_uevent_param(struct uevent *event, char *param_name)
             return &event->param[i][strlen(param_name) + 1];
     }
 
-    LOGE("get_uevent_param(): No parameter '%s' found\n", param_name);
+    LOGE("get_uevent_param(): No parameter '%s' found", param_name);
     return NULL;
 }
 
@@ -248,7 +248,7 @@ static int handle_powersupply_event(struct uevent *event)
             low_batt = true;
         else
             low_batt = false;
-LOG_VOL("handle_powersupply_event(): low_batt = %d, door_open = %d\n", low_batt, door_open);
+LOG_VOL("handle_powersupply_event(): low_batt = %d, door_open = %d", low_batt, door_open);
         volmgr_safe_mode(low_batt || door_open);
     }
     return 0;
@@ -272,10 +272,10 @@ static int handle_switch_event(struct uevent *event)
             door_open = true;
         else
             door_open = false;
-LOG_VOL("handle_powersupply_event(): low_batt = %d, door_open = %d\n", low_batt, door_open);
+LOG_VOL("handle_powersupply_event(): low_batt = %d, door_open = %d", low_batt, door_open);
         volmgr_safe_mode(low_batt || door_open);
     } else
-        LOG_VOL("handle_switch_event(): Ignoring switch '%s'\n", name);
+        LOG_VOL("handle_switch_event(): Ignoring switch '%s'", name);
 
     return 0;
 }
@@ -296,12 +296,16 @@ static int handle_block_event(struct uevent *event)
     /*
      * Look for backing media for this block device
      */
-    if (!strcmp(get_uevent_param(event, "DEVTYPE"), "disk"))
+    if (!strncmp(get_uevent_param(event, "DEVPATH"),
+                 "/devices/virtual/",
+                 strlen("/devices/virtual/"))) {
+        n = 0;
+    } else if (!strcmp(get_uevent_param(event, "DEVTYPE"), "disk"))
         n = 2;
     else if (!strcmp(get_uevent_param(event, "DEVTYPE"), "partition"))
         n = 3;
     else {
-        LOGE("Bad blockdev type '%s'\n", get_uevent_param(event, "DEVTYPE"));
+        LOGE("Bad blockdev type '%s'", get_uevent_param(event, "DEVTYPE"));
         return -EINVAL;
     }
 
@@ -309,7 +313,7 @@ static int handle_block_event(struct uevent *event)
 
     if (!(media = media_lookup_by_path(mediapath, false))) {
 #if DEBUG_UEVENT
-        LOG_VOL("No backend media found @ device path '%s'\n", mediapath);
+        LOG_VOL("No backend media found @ device path '%s'", mediapath);
 #endif
         return 0;
     }
@@ -332,7 +336,7 @@ static int handle_block_event(struct uevent *event)
                                      min,
                                      media,
                                      get_uevent_param(event, "DEVTYPE")))) {
-            LOGE("Unable to allocate new blkdev (%m)\n");
+            LOGE("Unable to allocate new blkdev (%m)");
             return -1;
         }
 
@@ -343,17 +347,17 @@ static int handle_block_event(struct uevent *event)
          */
         int rc;
         if ((rc = media_add_blkdev(media, blkdev)) < 0) {
-            LOGE("Unable to add blkdev to card (%d)\n", rc);
+            LOGE("Unable to add blkdev to card (%d)", rc);
             return rc;
         }
 
-        LOG_VOL("New blkdev %d.%d on media %s, media path %s, Dpp %d\n",
+        LOG_VOL("New blkdev %d.%d on media %s, media path %s, Dpp %d",
                 blkdev->major, blkdev->minor, media->name, mediapath,
                 blkdev_get_num_pending_partitions(blkdev->disk));
 
         if (blkdev_get_num_pending_partitions(blkdev->disk) == 0) {
             if ((rc = volmgr_consider_disk(blkdev->disk)) < 0) {
-                LOGE("Volmgr failed to handle device (%d)\n", rc);
+                LOGE("Volmgr failed to handle device (%d)", rc);
                 return rc;
             }
         }
@@ -361,7 +365,7 @@ static int handle_block_event(struct uevent *event)
         if (!(blkdev = blkdev_lookup_by_devno(maj, min)))
             return 0;
 
-        LOG_VOL("Destroying blkdev %d.%d @ %s on media %s\n", blkdev->major,
+        LOG_VOL("Destroying blkdev %d.%d @ %s on media %s", blkdev->major,
                 blkdev->minor, blkdev->devpath, media->name);
         volmgr_notify_eject(blkdev, _cb_blkdev_ok_to_destroy);
 
@@ -369,13 +373,13 @@ static int handle_block_event(struct uevent *event)
         if (!(blkdev = blkdev_lookup_by_devno(maj, min)))
             return 0;
 
-        LOG_VOL("Modified blkdev %d.%d @ %s on media %s\n", blkdev->major,
+        LOG_VOL("Modified blkdev %d.%d @ %s on media %s", blkdev->major,
                 blkdev->minor, blkdev->devpath, media->name);
         
         blkdev_refresh(blkdev);
     } else  {
 #if DEBUG_UEVENT
-        LOG_VOL("No handler implemented for action %d\n", event->action);
+        LOG_VOL("No handler implemented for action %d", event->action);
 #endif
     }
     return 0;
@@ -413,25 +417,25 @@ static int handle_mmc_event(struct uevent *event)
                                    get_uevent_param(event, "MMC_NAME"),
                                    serial,
                                    media_mmc))) {
-            LOGE("Unable to allocate new media (%m)\n");
+            LOGE("Unable to allocate new media (%m)");
             return -1;
         }
-        LOG_VOL("New MMC card '%s' (serial %u) added @ %s\n", media->name,
+        LOG_VOL("New MMC card '%s' (serial %u) added @ %s", media->name,
                   media->serial, media->devpath);
     } else if (event->action == action_remove) {
         media_t *media;
 
         if (!(media = media_lookup_by_path(event->path, false))) {
-            LOGE("Unable to lookup media '%s'\n", event->path);
+            LOGE("Unable to lookup media '%s'", event->path);
             return -1;
         }
 
-        LOG_VOL("MMC card '%s' (serial %u) @ %s removed\n", media->name, 
+        LOG_VOL("MMC card '%s' (serial %u) @ %s removed", media->name, 
                   media->serial, media->devpath);
         media_destroy(media);
     } else {
 #if DEBUG_UEVENT
-        LOG_VOL("No handler implemented for action %d\n", event->action);
+        LOG_VOL("No handler implemented for action %d", event->action);
 #endif
     }
 

@@ -27,31 +27,44 @@
 #include "logwrapper.h"
 
 static char MKDOSFS_PATH[] = "/system/bin/mkdosfs";
+static char MKE2FS_PATH[] = "/system/bin/mke2fs";
 
-int format_partition(blkdev_t *part)
+int format_partition(blkdev_t *part, char *type)
 {
     char *devpath;
-    char *args[7];
+    int rc = -EINVAL;
 
     devpath = blkdev_get_devpath(part);
 
-    args[0] = MKDOSFS_PATH;
-    args[1] = "-F 32";
-    args[2] = "-c 32";
-    args[3] = "-n 2";
-    args[4] = "-O android";
-    args[5] = devpath;
-    args[6] = NULL;
-
-    int rc = logwrap(6, args);
+    if (!strcmp(type, FORMAT_TYPE_FAT32)) {
+        char *args[7];
+        args[0] = MKDOSFS_PATH;
+        args[1] = "-F 32";
+        args[2] = "-c 32";
+        args[3] = "-n 2";
+        args[4] = "-O android";
+        args[5] = devpath;
+        args[6] = NULL;
+        rc = logwrap(6, args);
+    } else {
+        char *args[7];
+        args[0] = MKE2FS_PATH;
+        args[1] = "-b 4096";
+        args[2] = "-m 1";
+        args[3] = "-L android";
+        args[4] = "-v";
+        args[5] = devpath;
+        args[6] = NULL;
+        rc = logwrap(6, args);
+    }
  
     free(devpath);
 
     if (rc == 0) {
-        LOG_VOL("Filesystem formatted OK\n");
+        LOG_VOL("Filesystem formatted OK");
         return 0;
     } else {
-        LOGE("Format failed (unknokwn exit code %d)\n", rc);
+        LOGE("Format failed (unknokwn exit code %d)", rc);
         return -EIO;
     }
     return 0;
@@ -79,19 +92,19 @@ int initialize_mbr(blkdev_t *disk)
     dos_partition_enc(block + DOSPARTOFF, &part);
 
     if ((fd = open(devpath, O_RDWR)) < 0) {
-        LOGE("Error opening disk file (%s)\n", strerror(errno));
+        LOGE("Error opening disk file (%s)", strerror(errno));
         return -errno;
     }
     free(devpath);
 
     if (write(fd, block, sizeof(block)) < 0) {
-        LOGE("Error writing MBR (%s)\n", strerror(errno));
+        LOGE("Error writing MBR (%s)", strerror(errno));
         close(fd);
         return -errno;
     }
 
     if (ioctl(fd, BLKRRPART, NULL) < 0) {
-        LOGE("Error re-reading partition table (%s)\n", strerror(errno));
+        LOGE("Error re-reading partition table (%s)", strerror(errno));
         close(fd);
         return -errno;
     }

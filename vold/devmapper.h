@@ -56,9 +56,15 @@ struct devmapping {
 	char             *target;
         char             *params;
         char             *tgt_fs;
+
+        unsigned char key[16];
+        int           dm_no;
+
+        media_t *media;
 };
 
-struct devmapping *devmapper_init(char *, char *, unsigned int, char *, char *, char*);
+struct devmapping *devmapper_init(char *, char *, unsigned int, char *, char *, char *, char *);
 int devmapper_start(struct devmapping *);
 int devmapper_stop(struct devmapping *);
+int devmapper_genesis(struct devmapping *);
 #endif

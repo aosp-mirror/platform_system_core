@@ -1,7 +1,6 @@
 // Copyright 2006 The Android Open Source Project
 
-#include <utils/misc.h>
-#include <utils/logger.h>
+#include <cutils/logger.h>
 #include <cutils/logd.h>
 #include <cutils/sockets.h>
 #include <cutils/logprint.h>

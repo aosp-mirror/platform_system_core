@@ -35,7 +35,7 @@ int switch_bootstrap()
     struct dirent *de;
 
     if (!(d = opendir(SYSFS_CLASS_SWITCH_PATH))) {
-        LOG_ERROR("Unable to open '%s' (%m)\n", SYSFS_CLASS_SWITCH_PATH);
+        LOG_ERROR("Unable to open '%s' (%m)", SYSFS_CLASS_SWITCH_PATH);
         return -errno;
     }
 
@@ -47,7 +47,7 @@ int switch_bootstrap()
 
         sprintf(tmp, "%s/%s", SYSFS_CLASS_SWITCH_PATH, de->d_name);
         if (mmc_bootstrap_switch(tmp))
-            LOG_ERROR("Error bootstrapping switch '%s' (%m)\n", tmp);
+            LOG_ERROR("Error bootstrapping switch '%s' (%m)", tmp);
     }
 
     closedir(d);
@@ -58,7 +58,7 @@ int switch_bootstrap()
 static int mmc_bootstrap_switch(char *sysfs_path)
 {
 #if DEBUG_BOOTSTRAP
-    LOG_VOL("bootstrap_switch(%s):\n", sysfs_path);
+    LOG_VOL("bootstrap_switch(%s):", sysfs_path);
 #endif
 
     char filename[255];
@@ -74,12 +74,12 @@ static int mmc_bootstrap_switch(char *sysfs_path)
      */
     sprintf(filename, "%s/name", sysfs_path);
     if (!(fp = fopen(filename, "r"))) {
-        LOGE("Error opening switch name path '%s' (%s)\n",
+        LOGE("Error opening switch name path '%s' (%s)",
              sysfs_path, strerror(errno));
        return -errno;
     }
     if (!fgets(name, sizeof(name), fp)) {
-        LOGE("Unable to read switch name\n");
+        LOGE("Unable to read switch name");
         fclose(fp);
         return -EIO;
     }
@@ -95,12 +95,12 @@ static int mmc_bootstrap_switch(char *sysfs_path)
      */
     sprintf(filename, "%s/state", sysfs_path);
     if (!(fp = fopen(filename, "r"))) {
-        LOGE("Error opening switch state path '%s' (%s)\n",
+        LOGE("Error opening switch state path '%s' (%s)",
              sysfs_path, strerror(errno));
        return -errno;
     }
     if (!fgets(state, sizeof(state), fp)) {
-        LOGE("Unable to read switch state\n");
+        LOGE("Unable to read switch state");
         fclose(fp);
         return -EIO;
     }
@@ -113,7 +113,7 @@ static int mmc_bootstrap_switch(char *sysfs_path)
     uevent_params[2] = (char *) NULL;
 
     if (simulate_uevent("switch", devpath, "add", uevent_params) < 0) {
-        LOGE("Error simulating uevent (%s)\n", strerror(errno));
+        LOGE("Error simulating uevent (%s)", strerror(errno));
         return -errno;
     }
 

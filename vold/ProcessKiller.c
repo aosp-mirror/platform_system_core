@@ -112,7 +112,7 @@ static boolean CheckFileDescriptorSymLinks(int pid, const char* mountPoint)
         {
             char    name[PATH_MAX];
             GetProcessName(pid, name);
-            LOG_ERROR("process %s (%d) has open file %s\n", name, pid, link);
+            LOG_ERROR("process %s (%d) has open file %s", name, pid, link);
             fileOpen = true;
         }
     }
@@ -140,7 +140,7 @@ static boolean CheckFileMaps(int pid, const char* mountPoint)
         {
             char    name[PATH_MAX];
             GetProcessName(pid, name);
-            LOG_ERROR("process %s (%d) has open file map for %s\n", name, pid, path);
+            LOG_ERROR("process %s (%d) has open file map for %s", name, pid, path);
             mapOpen = true;
         }
     }
@@ -159,7 +159,7 @@ static boolean CheckSymLink(int pid, const char* mountPoint, const char* name, c
     {
         char    name[PATH_MAX];
         GetProcessName(pid, name);
-        LOG_ERROR("process %s (%d) has %s in %s\n", name, pid, message, mountPoint);
+        LOG_ERROR("process %s (%d) has %s in %s", name, pid, message, mountPoint);
         return true;
     }
     else
@@ -182,7 +182,7 @@ void KillProcessesWithOpenFiles(const char* mountPoint, boolean sigkill, int *ex
     DIR*    dir;
     struct dirent* de;
 
-    LOG_ERROR("KillProcessesWithOpenFiles %s\n", mountPoint);
+    LOG_ERROR("KillProcessesWithOpenFiles %s", mountPoint);
     dir = opendir("/proc");
     if (!dir) return;
 
@@ -205,14 +205,14 @@ void KillProcessesWithOpenFiles(const char* mountPoint, boolean sigkill, int *ex
 
             for (i = 0; i < num_excluded; i++) {
                 if (pid == excluded[i]) {
-                    LOG_ERROR("I just need a little more TIME captain!\n");
+                    LOG_ERROR("I just need a little more TIME captain!");
                     hit = true;
                     break;
                 }
             }
 
             if (!hit) {
-                LOG_ERROR("Killing process %d\n", pid);
+                LOG_ERROR("Killing process %d", pid);
                 kill(pid, (sigkill ? SIGKILL : SIGTERM));
             }
         }

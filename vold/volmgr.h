@@ -119,9 +119,6 @@ typedef struct volume {
 
     struct volmgr_fstable_entry *fs;
 
-    unsigned char            *key;
-    unsigned int             keysize;
-
     struct volume            *next;
 } volume_t;
 
@@ -133,6 +130,6 @@ int volmgr_stop_volume_by_mountpoint(char *mount_point);
 int volmgr_start_volume_by_mountpoint(char *mount_point);
 int volmgr_safe_mode(boolean enable);
 int volmgr_format_volume(char *mount_point);
-int volmgr_set_volume_key(char *mount_point, unsigned char *key, unsigned int keysize);
+int volmgr_set_volume_key(char *mount_point, unsigned char *key);
 void KillProcessesWithOpenFiles(const char* mountPoint, boolean sigkill, int *excluded, int num_excluded);
 #endif

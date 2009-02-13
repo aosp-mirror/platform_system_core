@@ -18,6 +18,9 @@
 #ifndef _FORMAT_H
 #define _FORMAT_H
 
-int format_partition(blkdev_t *part);
+#define FORMAT_TYPE_EXT2  "ext2"
+#define FORMAT_TYPE_FAT32 "fat32"
+
+int format_partition(blkdev_t *part, char *type);
 int initialize_mbr(blkdev_t *disk);
 #endif
