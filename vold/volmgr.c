@@ -356,6 +356,7 @@ int volmgr_notify_eject(blkdev_t *dev, void (* cb) (blkdev_t *))
     LOG_VOL("Volmgr notified of %d:%d eject", dev->major, dev->minor);
 
     volume_t *v;
+    int rc;
 
     // XXX: Partitioning support is going to need us to stop *all*
     // devices in this volume
@@ -371,9 +372,38 @@ int volmgr_notify_eject(blkdev_t *dev, void (* cb) (blkdev_t *))
 
     if (v->state == volstate_mounted ||
         v->state == volstate_ums ||
-        v->state == volstate_checking)
+        v->state == volstate_checking) {
+
         volume_setstate(v, volstate_badremoval);
-    else if (v->state == volstate_formatting) {
+
+        /*
+         * Stop any devmapper volumes which
+         * are using us as a source
+         * XXX: We may need to enforce stricter
+         * order here
+         */
+        volume_t *dmvol = vol_root;
+        while (dmvol) {
+            if ((dmvol->media_type == media_devmapper) &&
+                (dmvol->dm->src_type == dmsrc_loopback) &&
+                (!strncmp(dmvol->dm->type_data.loop.loop_src, 
+                          v->mount_point, strlen(v->mount_point)))) {
+
+                pthread_mutex_lock(&dmvol->lock);
+                if (dmvol->state != volstate_nomedia) {
+                    rc = volmgr_shutdown_volume(dmvol, _cb_volstopped_for_devmapper_teardown, false);
+                    if (rc != -EINPROGRESS) {
+                        if (rc)
+                            LOGE("unable to shutdown volume '%s'", v->mount_point);
+                        pthread_mutex_unlock(&dmvol->lock);
+                    }
+                } else 
+                    pthread_mutex_unlock(&dmvol->lock);
+            }
+            dmvol = dmvol->next;
+        }
+
+    } else if (v->state == volstate_formatting) {
         /*
          * The device is being ejected due to
          * kernel disk revalidation.
@@ -409,7 +439,8 @@ static void _cb_volume_stopped_for_eject(volume_t *v, void *arg)
     LOG_VOL("Volume %s has been stopped for eject", v->mount_point);
 #endif
 
-    eject_cb(v->dev);
+    if (eject_cb)
+        eject_cb(v->dev);
     v->dev = NULL; // Clear dev because its being ejected
 }
 

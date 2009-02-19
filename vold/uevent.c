@@ -72,7 +72,7 @@ static struct uevent_dispatch dispatch_table[] = {
 };
 
 static boolean low_batt = false;
-static boolean door_open = false;
+static boolean door_open = true;
 
 int process_uevent_message(int socket)
 {

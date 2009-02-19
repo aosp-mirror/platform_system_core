@@ -49,8 +49,11 @@ void *read_file(char *filename, ssize_t *_size)
 
 	/* slurp it into our buffer */
 	ret = read(fd, buffer, size);
-	if (ret != size)
+	if (ret != size) {
+	        free(buffer);
+	        buffer = NULL;
 		goto bail;
+        }
 
 	/* let the caller know how big it is */
 	*_size = size;
@@ -59,33 +62,90 @@ bail:
 	close(fd);
 	return buffer;
 }
-char *truncate_sysfs_path(char *path, int num_elements_to_remove, char *buffer)
+
+char *truncate_sysfs_path(char *path, int count, char *buffer, size_t bufflen)
 {
-    int i;
+    char*  p;
 
-    strcpy(buffer, path);
+    strlcpy(buffer, path, bufflen);
+    p = buffer + strlen(buffer);
 
-    for (i = 0; i < num_elements_to_remove; i++) {
-        char *p = &buffer[strlen(buffer)-1];
+    for ( ; count > 0; count-- ) {
+        while (p > buffer && p[-1] != '/') {
+            p--; 
+        }
+        if (p == buffer)
+            break;
 
-        for (p = &buffer[strlen(buffer) -1]; *p != '/'; p--);
-        *p = '\0';
+        p -= 1;
     }
+    p[0] = '\0';
 
     return buffer;
 }
 
-char *read_sysfs_var(char *buffer, size_t maxlen, char *devpath, char *var)
+/* used to read the first line of a /sys file into a heap-allocated buffer
+ * this assumes that reading the file returns a list of zero-terminated strings,
+ * each could also have a terminating \n before the 0
+ *
+ * returns NULL on error, of a new string on success, which must be freed by the
+ * caller.
+ */
+char *read_first_line_of(const char*  filepath)
 {
-    char filename[255];
-    char *p;
+    char *p, *q, *line;
+    size_t  len;
     ssize_t sz;
 
-    sprintf(filename, "/sys%s/%s", devpath, var);
-    p = read_file(filename, &sz);
-    p[(strlen(p) - 1)] = '\0';
-    strncpy(buffer, p, maxlen);
+    p = read_file((char*)filepath, &sz);
+    if (p == NULL)
+        goto FAIL;
+
+    /* search end of first line */
+    q = memchr(p, sz, '\0');
+    if (q == NULL)
+        q = p + sz;  /* let's be flexible */
+
+    len = (size_t)(q - p); /* compute line length */
+    if (len == 0)
+        goto FAIL;
+
+    if (p[len-1] == '\n') { /* strip trailing \n */
+        len -= 1;
+        if (len == 0)
+            goto FAIL;
+    }
+
+    line = malloc(len+1);
+    if (line == NULL)
+        goto FAIL;
+
+    memcpy(line, p, len);
+    line[len] = 0;
     free(p);
+
+    return line;
+
+FAIL:
+    if (p != NULL)
+        free(p);
+
+    return NULL;
+}
+
+char *read_sysfs_var(char *buffer, size_t maxlen, char *devpath, char *var)
+{
+    char filename[255], *line;
+
+    snprintf(filename, sizeof filename, "/sys%s/%s", devpath, var);
+
+    line = read_first_line_of(filename);
+    if (line == NULL)
+        return NULL;
+
+    snprintf(buffer, maxlen, "%s", line);
+    free(line);
+
     return buffer;
 }
 

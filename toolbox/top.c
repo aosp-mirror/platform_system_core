@@ -41,7 +41,11 @@
 
 struct cpu_info {
     long unsigned utime, ntime, stime, itime;
+    long unsigned iowtime, irqtime, sirqtime;
 };
+
+#define PROC_NAME_LEN 64
+#define THREAD_NAME_LEN 32
 
 struct proc_info {
     struct proc_info *next;
@@ -49,7 +53,8 @@ struct proc_info {
     pid_t tid;
     uid_t uid;
     gid_t gid;
-    char name[256];
+    char name[PROC_NAME_LEN];
+    char tname[THREAD_NAME_LEN];
     char state;
     long unsigned utime;
     long unsigned stime;
@@ -69,7 +74,7 @@ struct proc_list {
 #define die(...) { fprintf(stderr, __VA_ARGS__); exit(EXIT_FAILURE); }
 
 #define INIT_PROCS 50
-#define THREAD_MULT 4
+#define THREAD_MULT 8
 static struct proc_info **old_procs, **new_procs;
 static int num_old_procs, num_new_procs;
 static struct proc_info *free_procs;
@@ -228,7 +233,8 @@ static void read_procs(void) {
 
     file = fopen("/proc/stat", "r");
     if (!file) die("Could not open /proc/stat.\n");
-    fscanf(file, "cpu  %lu %lu %lu %lu", &new_cpu.utime, &new_cpu.ntime, &new_cpu.stime, &new_cpu.itime);
+    fscanf(file, "cpu  %lu %lu %lu %lu %lu %lu %lu", &new_cpu.utime, &new_cpu.ntime, &new_cpu.stime,
+            &new_cpu.itime, &new_cpu.iowtime, &new_cpu.irqtime, &new_cpu.sirqtime);
     fclose(file);
 
     proc_num = 0;
@@ -237,7 +243,9 @@ static void read_procs(void) {
             continue;
 
         pid = atoi(pid_dir->d_name);
-
+        
+        struct proc_info cur_proc;
+        
         if (!threads) {
             proc = alloc_proc();
 
@@ -254,6 +262,12 @@ static void read_procs(void) {
 
             proc->num_threads = 0;
         } else {
+            sprintf(filename, "/proc/%d/cmdline", pid);
+            read_cmdline(filename, &cur_proc);
+
+            sprintf(filename, "/proc/%d/status", pid);
+            read_status(filename, &cur_proc);
+            
             proc = NULL;
         }
 
@@ -275,11 +289,9 @@ static void read_procs(void) {
                 sprintf(filename, "/proc/%d/task/%d/stat", pid, tid);
                 read_stat(filename, proc);
 
-                sprintf(filename, "/proc/%d/task/%d/cmdline", pid, tid);
-                read_cmdline(filename, proc);
-
-                sprintf(filename, "/proc/%d/task/%d/status", pid, tid);
-                read_status(filename, proc);
+                strcpy(proc->name, cur_proc.name);
+                proc->uid = cur_proc.uid;
+                proc->gid = cur_proc.gid;
 
                 add_proc(proc_num++, proc);
             } else {
@@ -315,8 +327,9 @@ static int read_stat(char *filename, struct proc_info *proc) {
     if (!open_paren || !close_paren) return 1;
 
     *open_paren = *close_paren = '\0';
-    strcpy(proc->name, open_paren + 1);
-
+    strncpy(proc->tname, open_paren + 1, THREAD_NAME_LEN);
+    proc->tname[THREAD_NAME_LEN-1] = 0;
+    
     /* Scan rest of string. */
     sscanf(close_paren + 1, " %c %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d "
                  "%lu %lu %*d %*d %*d %*d %*d %*d %*d %lu %ld",
@@ -347,8 +360,11 @@ static int read_cmdline(char *filename, struct proc_info *proc) {
     if (!file) return 1;
     fgets(line, MAX_LINE, file);
     fclose(file);
-    if (strlen(line) > 0)
-        strcpy(proc->name, line);
+    if (strlen(line) > 0) {
+        strncpy(proc->name, line, PROC_NAME_LEN);
+        proc->name[PROC_NAME_LEN-1] = 0;
+    } else
+        proc->name[0] = 0;
     return 0;
 }
 
@@ -391,16 +407,34 @@ static void print_procs(void) {
         }
     }
 
-    total_delta_time = (new_cpu.utime + new_cpu.ntime + new_cpu.stime + new_cpu.itime)
-                     - (old_cpu.utime + old_cpu.ntime + old_cpu.stime + old_cpu.itime);
+    total_delta_time = (new_cpu.utime + new_cpu.ntime + new_cpu.stime + new_cpu.itime
+                        + new_cpu.iowtime + new_cpu.irqtime + new_cpu.sirqtime)
+                     - (old_cpu.utime + old_cpu.ntime + old_cpu.stime + old_cpu.itime
+                        + old_cpu.iowtime + old_cpu.irqtime + old_cpu.sirqtime);
 
     qsort(new_procs, num_new_procs, sizeof(struct proc_info *), proc_cmp);
 
     printf("\n\n\n");
+    printf("User %ld%%, System %ld%%, IOW %ld%%, IRQ %ld%%\n",
+            ((new_cpu.utime + new_cpu.ntime) - (old_cpu.utime + old_cpu.ntime)) * 100  / total_delta_time,
+            ((new_cpu.stime ) - (old_cpu.stime)) * 100 / total_delta_time,
+            ((new_cpu.iowtime) - (old_cpu.iowtime)) * 100 / total_delta_time,
+            ((new_cpu.irqtime + new_cpu.sirqtime)
+                    - (old_cpu.irqtime + old_cpu.sirqtime)) * 100 / total_delta_time);
+    printf("User %ld + Nice %ld + Sys %ld + Idle %ld + IOW %ld + IRQ %ld + SIRQ %ld = %ld\n",
+            new_cpu.utime - old_cpu.utime,
+            new_cpu.ntime - old_cpu.ntime,
+            new_cpu.stime - old_cpu.stime,
+            new_cpu.itime - old_cpu.itime,
+            new_cpu.iowtime - old_cpu.iowtime,
+            new_cpu.irqtime - old_cpu.irqtime,
+            new_cpu.sirqtime - old_cpu.sirqtime,
+            total_delta_time);
+    printf("\n");
     if (!threads) 
         printf("%5s %4s %1s %5s %7s %7s %-8s %s\n", "PID", "CPU%", "S", "#THR", "VSS", "RSS", "UID", "Name");
     else
-        printf("%5s %5s %4s %1s %7s %7s %-8s %s\n", "PID", "TID", "CPU%", "S", "VSS", "RSS", "UID", "Name");
+        printf("%5s %5s %4s %1s %7s %7s %-8s %-15s %s\n", "PID", "TID", "CPU%", "S", "VSS", "RSS", "UID", "Thread", "Proc");
 
     for (i = 0; i < num_new_procs; i++) {
         proc = new_procs[i];
@@ -423,10 +457,10 @@ static void print_procs(void) {
         }
         if (!threads) 
             printf("%5d %3ld%% %c %5d %6ldK %6ldK %-8.8s %s\n", proc->pid, proc->delta_time * 100 / total_delta_time, proc->state, proc->num_threads,
-                proc->vss / 1024, proc->rss * getpagesize() / 1024, user_str, proc->name);
+                proc->vss / 1024, proc->rss * getpagesize() / 1024, user_str, proc->name[0] != 0 ? proc->name : proc->tname);
         else
-            printf("%5d %5d %3ld%% %c %6ldK %6ldK %-8.8s %s\n", proc->pid, proc->tid, proc->delta_time * 100 / total_delta_time, proc->state,
-                proc->vss / 1024, proc->rss * getpagesize() / 1024, user_str, proc->name);
+            printf("%5d %5d %3ld%% %c %6ldK %6ldK %-8.8s %-15s %s\n", proc->pid, proc->tid, proc->delta_time * 100 / total_delta_time, proc->state,
+                proc->vss / 1024, proc->rss * getpagesize() / 1024, user_str, proc->tname, proc->name);
     }
 }
 
