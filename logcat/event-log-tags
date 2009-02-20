@@ -341,3 +341,6 @@
 # 0 for screen off, 1 for screen on, 2 for key-guard done
 70000 screen_toggled (screen_state|1|5)
 
+# browser stats for diary study
+70101 browser_zoom_level_change (start level|1|5),(end level|1|5),(time|2|3)
+70102 browser_double_tap_duration (duration|1|3),(time|2|3)

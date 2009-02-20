@@ -1256,7 +1256,7 @@ finish:
 void scanline_t32cb16(context_t* c)
 {
     int32_t x = c->iterators.xl;
-    size_t ct = c->iterators.xr - x;
+    size_t ct = c->iterators.xr - x;    
     int32_t y = c->iterators.y;
     surface_t* cb = &(c->state.buffers.color);
     union {
@@ -1282,7 +1282,7 @@ last_one:
         ct--;
     }
 
-    while (ct > 0) {
+    while (ct >= 2) {
         s = GGL_RGBA_TO_HOST( *src++ );
         sR = (s >> (   3))&0x1F;
         sG = (s >> ( 8+2))&0x3F;
