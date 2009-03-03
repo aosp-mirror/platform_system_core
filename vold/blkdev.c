@@ -149,7 +149,7 @@ int blkdev_refresh(blkdev_t *blk)
                  (blk->type == blkdev_disk ? "Disk" : "Partition"),
                  blk->major, blk->minor,
                  blk->nr_sec,
-                 ((blk->nr_sec * 512) / 1024) / 1024);
+                 (uint32_t) (((uint64_t) blk->nr_sec * 512) / 1024) / 1024);
 
     if (blk->type == blkdev_disk) 
         sprintf(tmp2, " %d partitions", blk->nr_parts);

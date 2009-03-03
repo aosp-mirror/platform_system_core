@@ -387,9 +387,8 @@ mkdosfs_main(int argc, char *argv[])
 	    exit(1);
 	}
 
-    lseek(fd1, 0, SEEK_SET);
-    off_t length = lseek(fd1, 0, SEEK_END);
-    fprintf(stderr, "lseek returned %ld\n", length);
+    lseek64(fd1, 0, SEEK_SET);
+    loff_t length = lseek64(fd1, 0, SEEK_END);
     if (length > 0) {
         bpb.bsec = length / bpb.bps;
         bpb.spt = bpb.bsec;
@@ -615,8 +614,8 @@ mkdosfs_main(int argc, char *argv[])
 		fat == 32 && bpb.bkbs != MAXU16 &&
 		bss <= bpb.bkbs && x >= bpb.bkbs) {
 		x -= bpb.bkbs;
-		if (!x && lseek(fd1, 0, SEEK_SET))
-		    fprintf(stderr, "lseek failed for %s\n", bname);
+		if (!x && lseek64(fd1, 0, SEEK_SET))
+		    fprintf(stderr, "lseek64 failed for %s\n", bname);
 	    }
 	    if (opt_B && x < bss) {
 		if ((n = read(fd1, img, bpb.bps)) == -1)
