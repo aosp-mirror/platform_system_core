@@ -92,6 +92,7 @@ on boot
     setprop ro.FOREGROUND_APP_ADJ 0
     setprop ro.VISIBLE_APP_ADJ 1
     setprop ro.SECONDARY_SERVER_ADJ 2
+    setprop ro.HOME_APP_ADJ 4
     setprop ro.HIDDEN_APP_MIN_ADJ 7
     setprop ro.CONTENT_PROVIDER_ADJ 14
     setprop ro.EMPTY_APP_ADJ 15
@@ -101,14 +102,18 @@ on boot
     setprop ro.FOREGROUND_APP_MEM 1536
     setprop ro.VISIBLE_APP_MEM 2048
     setprop ro.SECONDARY_SERVER_MEM 4096
+    setprop ro.HOME_APP_MEM 4096
     setprop ro.HIDDEN_APP_MEM 5120
     setprop ro.CONTENT_PROVIDER_MEM 5632
     setprop ro.EMPTY_APP_MEM 6144
 
 # Write value must be consistent with the above properties.
+# Note that the driver only supports 6 slots, so we have HOME_APP at the
+# same memory level as services.
     write /sys/module/lowmemorykiller/parameters/adj 0,1,2,7,14,15
 
     write /proc/sys/vm/overcommit_memory 1
+    write /proc/sys/vm/min_free_order_shift 2
     write /sys/module/lowmemorykiller/parameters/minfree 1536,2048,4096,5120,5632,6144
 
     # Set init its forked children's oom_adj.
@@ -187,8 +192,11 @@ service servicemanager /system/bin/servicemanager
     onrestart restart zygote
     onrestart restart media
 
-service mountd /system/bin/mountd
-    socket mountd stream 0660 root mount
+service vold /system/bin/vold
+    socket vold stream 0660 root mount
+
+#service mountd /system/bin/mountd
+#    socket mountd stream 0660 root mount
 
 service debuggerd /system/bin/debuggerd
 
@@ -217,8 +225,8 @@ service dbus /system/bin/dbus-daemon --system --nofork
     user bluetooth
     group bluetooth net_bt_admin
 
-#STOPSHIP: disable the verbose logging
-service hcid /system/bin/logwrapper /system/bin/hcid -d -s -n -f /etc/bluez/hcid.conf
+#STOPSHIP: dont use logwrapper in production
+service hcid /system/bin/logwrapper /system/bin/hcid -s -n -f /etc/bluez/hcid.conf
     socket bluetooth stream 660 bluetooth bluetooth
     socket dbus_bluetooth stream 660 bluetooth bluetooth
     # init.rc does not yet support applying capabilities, so run as root and
