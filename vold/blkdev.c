@@ -107,8 +107,8 @@ int blkdev_refresh(blkdev_t *blk)
         blk->nr_parts = 0;
 
         if ((block[0x1fe] != 0x55) || (block[0x1ff] != 0xAA)) {
-            LOG_VOL("Disk %d:%d does not contain a partition table",
-                    blk->major, blk->minor);
+            LOGI("Disk %d:%d does not contain a partition table",
+                 blk->major, blk->minor);
             goto out;
         }
 
@@ -120,10 +120,10 @@ int blkdev_refresh(blkdev_t *blk)
                 struct fat_boot_sector *fb = (struct fat_boot_sector *) &block[0];
              
                 if (!i && fb->reserved && fb->fats && fat_valid_media(fb->media)) {
-                    LOG_VOL("Detected FAT filesystem in partition table");
+                    LOGI("Detected FAT filesystem in partition table");
                     break;
                 } else {
-                    LOG_VOL("Partition table looks corrupt");
+                    LOGI("Partition table looks corrupt");
                     break;
                 }
             }
@@ -157,7 +157,7 @@ int blkdev_refresh(blkdev_t *blk)
         sprintf(tmp2, " type 0x%x", blk->part_type);
 
     strcat(tmp, tmp2);
-    LOG_VOL(tmp);
+    LOGI(tmp);
 
     close(fd);
 

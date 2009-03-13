@@ -103,6 +103,34 @@ static void recover_service(int s, void *cookie)
     adb_close(fd);
 }
 
+void restart_root_service(int fd, void *cookie)
+{
+    char buf[100];
+    char value[PROPERTY_VALUE_MAX];
+
+    if (getuid() == 0) {
+        snprintf(buf, sizeof(buf), "adbd is already running as root\n");
+        writex(fd, buf, strlen(buf));
+        adb_close(fd);
+    } else {
+        property_get("ro.debuggable", value, "");
+        if (strcmp(value, "1") != 0) {
+            snprintf(buf, sizeof(buf), "adbd cannot run as root in production builds\n");
+            writex(fd, buf, strlen(buf));
+            return;
+        }
+
+        property_set("service.adb.root", "1");
+        snprintf(buf, sizeof(buf), "restarting adbd as root\n");
+        writex(fd, buf, strlen(buf));
+        adb_close(fd);
+
+        // quit, and init will restart us as root
+        sleep(1);
+        exit(1);
+    }
+}
+
 #endif
 
 #if 0
@@ -289,6 +317,8 @@ int service_to_fd(const char *name)
         ret = create_service_thread(file_sync_service, NULL);
     } else if(!strncmp(name, "remount:", 8)) {
         ret = create_service_thread(remount_service, NULL);
+    } else if(!strncmp(name, "root:", 5)) {
+        ret = create_service_thread(restart_root_service, NULL);
 #endif
 #if 0
     } else if(!strncmp(name, "echo:", 5)){

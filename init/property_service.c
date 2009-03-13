@@ -69,6 +69,7 @@ struct {
     { "dhcp.",		AID_DHCP },
     { "debug.",		AID_SHELL },
     { "log.",		AID_SHELL },
+    { "service.adb.root",	AID_SHELL },
     { "persist.sys.",	AID_SYSTEM },
     { "persist.service.",   AID_SYSTEM },
     { NULL, 0 }

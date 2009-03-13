@@ -859,8 +859,20 @@ int adb_main(int is_daemon)
     property_get("ro.kernel.qemu", value, "");
     if (strcmp(value, "1") != 0) {
         property_get("ro.secure", value, "");
-        if (strcmp(value, "1") == 0)
+        if (strcmp(value, "1") == 0) {
+            // don't run as root if ro.secure is set...
             secure = 1;
+
+            // ... except we allow running as root in userdebug builds if the 
+            // service.adb.root property has been set by the "adb root" command
+            property_get("ro.debuggable", value, "");
+            if (strcmp(value, "1") == 0) {
+                property_get("service.adb.root", value, "");
+                if (strcmp(value, "1") == 0) {
+                    secure = 0;
+                }
+            }
+        }
     }
 
     /* don't listen on port 5037 if we are running in secure mode */

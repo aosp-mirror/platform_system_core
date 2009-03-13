@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     struct sockaddr_nl nladdr;
     int uevent_sz = 64 * 1024;
 
-    LOG_VOL("Android Volume Daemon version %d.%d", ver_major, ver_minor);
+    LOGI("Android Volume Daemon version %d.%d", ver_major, ver_minor);
 
     /*
      * Create all the various sockets we'll need
@@ -208,7 +208,7 @@ int send_msg(char* message)
 
     pthread_mutex_lock(&write_mutex);
 
-    LOG_VOL("send_msg(%s):", message);
+//    LOG_VOL("send_msg(%s):", message);
 
     if (fw_sock >= 0)
         result = write(fw_sock, message, strlen(message) + 1);

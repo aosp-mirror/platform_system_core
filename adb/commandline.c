@@ -147,6 +147,7 @@ void help()
         "  adb get-serialno             - prints: <serial-number>\n"
         "  adb status-window            - continuously print device status for a specified device\n"
         "  adb remount                  - remounts the /system partition on the device read-write\n"
+        "  adb root                     - restarts adb with root permissions\n"
         "\n"
         "networking:\n"
         "  adb ppp <tty> [parameters]   - Run PPP over USB.\n"
@@ -905,6 +906,17 @@ top:
 
     if(!strcmp(argv[0], "remount")) {
         int fd = adb_connect("remount:");
+        if(fd >= 0) {
+            read_and_dump(fd);
+            adb_close(fd);
+            return 0;
+        }
+        fprintf(stderr,"error: %s\n", adb_error());
+        return 1;
+    }
+
+    if(!strcmp(argv[0], "root")) {
+        int fd = adb_connect("root:");
         if(fd >= 0) {
             read_and_dump(fd);
             adb_close(fd);

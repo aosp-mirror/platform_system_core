@@ -114,10 +114,8 @@ int media_add_blkdev(media_t *card, blkdev_t *dev)
 {
     blkdev_list_t *list_entry;
 
-    if (!(list_entry = malloc(sizeof(blkdev_list_t)))) {
-        LOGE("Out of memory");
+    if (!(list_entry = malloc(sizeof(blkdev_list_t))))
         return -ENOMEM;
-    }
     
     list_entry->next = NULL;
     list_entry->dev = dev;

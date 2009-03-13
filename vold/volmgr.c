@@ -205,7 +205,7 @@ int volmgr_bootstrap(void)
     volume_t *v = vol_root;
     while (v) {
         if (_mountpoint_mounted(v->mount_point)) {
-            LOG_VOL("Volume '%s' already mounted at startup", v->mount_point);
+            LOGW("Volume '%s' already mounted at startup", v->mount_point);
             v->state = volstate_mounted;
         }
         v = v->next;
@@ -229,7 +229,7 @@ int volmgr_safe_mode(boolean enable)
         if (v->state == volstate_mounted && v->fs) {
             rc = v->fs->mount_fn(v->dev, v, safe_mode);
             if (!rc) {
-                LOG_VOL("Safe mode %s on %s", (enable ? "enabled" : "disabled"), v->mount_point);
+                LOGI("Safe mode %s on %s", (enable ? "enabled" : "disabled"), v->mount_point);
             } else {
                 LOGE("Failed to %s safe-mode on %s (%s)",
                      (enable ? "enable" : "disable" ), v->mount_point, strerror(-rc));
@@ -555,7 +555,7 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
         
     }
 
-    LOG_VOL("Evaluating dev '%s' for mountable filesystems for '%s'",
+    LOGI("Evaluating dev '%s' for mountable filesystems for '%s'",
             dev->devpath, vol->mount_point);
 
     if (dev->nr_parts == 0) {
@@ -642,7 +642,7 @@ static void *volmgr_reaper_thread(void *arg)
     actions.sa_handler = volmgr_reaper_thread_sighandler;
     sigaction(SIGUSR1, &actions, NULL);
 
-    LOG_VOL("Reaper here - working on %s", vol->mount_point);
+    LOGW("Reaper here - working on %s", vol->mount_point);
 
     boolean send_sig_kill = false;
     int i, rc;
@@ -650,7 +650,7 @@ static void *volmgr_reaper_thread(void *arg)
     for (i = 0; i < 10; i++) {
         errno = 0;
         rc = umount(vol->mount_point);
-        LOG_VOL("volmngr reaper umount(%s) attempt %d (%s)",
+        LOGW("volmngr reaper umount(%s) attempt %d (%s)",
                 vol->mount_point, i + 1, strerror(errno));
         if (!rc)
             break;
@@ -667,7 +667,7 @@ static void *volmgr_reaper_thread(void *arg)
     }
 
     if (!rc) {
-        LOG_VOL("Reaper sucessfully unmounted %s", vol->mount_point);
+        LOGI("Reaper sucessfully unmounted %s", vol->mount_point);
         vol->fs = NULL;
         volume_setstate(vol, volstate_unmounted);
     } else {
@@ -687,7 +687,7 @@ static void volmgr_uncage_reaper(volume_t *vol, void (* cb) (volume_t *, void *a
     if (vol->worker_running) {
         LOGE("Worker thread is currently running.. waiting..");
         pthread_mutex_lock(&vol->worker_sem);
-        LOG_VOL("Worker thread now available");
+        LOGI("Worker thread now available");
     }
 
     vol->worker_args.reaper_args.cb = cb;
@@ -716,7 +716,7 @@ static int volmgr_stop_volume(volume_t *v, void (*cb) (volume_t *, void *), void
                 break;
             }
 
-            LOG_VOL("volmngr quick stop umount(%s) attempt %d (%s)",
+            LOGI("volmngr quick stop umount(%s) attempt %d (%s)",
                     v->mount_point, i + 1, strerror(errno));
 
             if (i == 0)
@@ -726,7 +726,7 @@ static int volmgr_stop_volume(volume_t *v, void (*cb) (volume_t *, void *), void
         }
 
         if (!rc) {
-            LOG_VOL("volmgr_stop_volume(%s): Volume unmounted sucessfully",
+            LOGI("volmgr_stop_volume(%s): Volume unmounted sucessfully",
                     v->mount_point);
             if (emit_statechange)
                 volume_setstate(v, volstate_unmounted);
@@ -738,7 +738,7 @@ static int volmgr_stop_volume(volume_t *v, void (*cb) (volume_t *, void *), void
          * Since the volume is still in use, dispatch the stopping to
          * a thread
          */
-        LOG_VOL("Volume %s is busy (%d) - uncaging the reaper", v->mount_point, rc);
+        LOGW("Volume %s is busy (%d) - uncaging the reaper", v->mount_point, rc);
         volmgr_uncage_reaper(v, cb, arg);
         return -EINPROGRESS;
     } else if (v->state == volstate_checking) {
@@ -1061,7 +1061,7 @@ static int volmgr_start_fs(struct volmgr_fstable_entry *fs, volume_t *vol, blkde
     if (vol->worker_running) {
         LOGE("Worker thread is currently running.. waiting..");
         pthread_mutex_lock(&vol->worker_sem);
-        LOG_VOL("Worker thread now available");
+        LOGI("Worker thread now available");
     }
 
     vol->dev = dev; 
@@ -1132,7 +1132,7 @@ static void *volmgr_start_fs_thread(void *arg)
         rc = fs->check_fn(dev);
         pthread_mutex_lock(&vol->lock);
         if (vol->state != volstate_checking) {
-            LOG_VOL("filesystem check aborted");
+            LOGE("filesystem check aborted");
             goto out;
         }
         
@@ -1146,14 +1146,14 @@ static void *volmgr_start_fs_thread(void *arg)
             goto out_unmountable;
         }
 #if DEBUG_VOLMGR
-        LOG_VOL("%s filesystem check of %d:%d OK", fs->name,
+        LOGI("%s filesystem check of %d:%d OK", fs->name,
                 dev->major, dev->minor);
 #endif
     }
 
     rc = fs->mount_fn(dev, vol, safe_mode);
     if (!rc) {
-        LOG_VOL("Sucessfully mounted %s filesystem %d:%d on %s (safe-mode %s)",
+        LOGI("Sucessfully mounted %s filesystem %d:%d on %s (safe-mode %s)",
                 fs->name, dev->major, dev->minor, vol->mount_point,
                 (safe_mode ? "on" : "off"));
         vol->fs = fs;

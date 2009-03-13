@@ -248,7 +248,6 @@ static int handle_powersupply_event(struct uevent *event)
             low_batt = true;
         else
             low_batt = false;
-LOG_VOL("handle_powersupply_event(): low_batt = %d, door_open = %d", low_batt, door_open);
         volmgr_safe_mode(low_batt || door_open);
     }
     return 0;
@@ -272,7 +271,6 @@ static int handle_switch_event(struct uevent *event)
             door_open = true;
         else
             door_open = false;
-LOG_VOL("handle_powersupply_event(): low_batt = %d, door_open = %d", low_batt, door_open);
         volmgr_safe_mode(low_batt || door_open);
     } else
         LOG_VOL("handle_switch_event(): Ignoring switch '%s'", name);
@@ -351,7 +349,7 @@ static int handle_block_event(struct uevent *event)
             return rc;
         }
 
-        LOG_VOL("New blkdev %d.%d on media %s, media path %s, Dpp %d",
+        LOGI("New blkdev %d.%d on media %s, media path %s, Dpp %d",
                 blkdev->major, blkdev->minor, media->name, mediapath,
                 blkdev_get_num_pending_partitions(blkdev->disk));
 
@@ -365,7 +363,7 @@ static int handle_block_event(struct uevent *event)
         if (!(blkdev = blkdev_lookup_by_devno(maj, min)))
             return 0;
 
-        LOG_VOL("Destroying blkdev %d.%d @ %s on media %s", blkdev->major,
+        LOGI("Destroying blkdev %d.%d @ %s on media %s", blkdev->major,
                 blkdev->minor, blkdev->devpath, media->name);
         volmgr_notify_eject(blkdev, _cb_blkdev_ok_to_destroy);
 
@@ -373,7 +371,7 @@ static int handle_block_event(struct uevent *event)
         if (!(blkdev = blkdev_lookup_by_devno(maj, min)))
             return 0;
 
-        LOG_VOL("Modified blkdev %d.%d @ %s on media %s", blkdev->major,
+        LOGI("Modified blkdev %d.%d @ %s on media %s", blkdev->major,
                 blkdev->minor, blkdev->devpath, media->name);
         
         blkdev_refresh(blkdev);
@@ -420,7 +418,7 @@ static int handle_mmc_event(struct uevent *event)
             LOGE("Unable to allocate new media (%m)");
             return -1;
         }
-        LOG_VOL("New MMC card '%s' (serial %u) added @ %s", media->name,
+        LOGI("New MMC card '%s' (serial %u) added @ %s", media->name,
                   media->serial, media->devpath);
     } else if (event->action == action_remove) {
         media_t *media;
@@ -430,7 +428,7 @@ static int handle_mmc_event(struct uevent *event)
             return -1;
         }
 
-        LOG_VOL("MMC card '%s' (serial %u) @ %s removed", media->name, 
+        LOGI("MMC card '%s' (serial %u) @ %s removed", media->name, 
                   media->serial, media->devpath);
         media_destroy(media);
     } else {
