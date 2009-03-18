@@ -4,7 +4,6 @@ include $(CLEAR_VARS)
 # files that live under /system/etc/...
 
 copy_from := \
-	etc/mountd.conf \
 	etc/dbus.conf \
 	etc/init.goldfish.sh \
 	etc/hosts

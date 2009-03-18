@@ -15,8 +15,11 @@
  * limitations under the License.
  */
 
-#ifndef _INOTIFY_EVT_H
-#define _INOTIFY_EVT_H
+#ifndef _SWITCH_H
+#define _SWITCH_H
 
+#include "vold.h"
+
+#define SYSFS_CLASS_SWITCH_PATH "/sys/class/switch"
 
 #endif

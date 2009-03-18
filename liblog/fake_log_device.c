@@ -438,31 +438,38 @@ static void showLog(LogState *state,
         if (*p++ == '\n') numLines++;
     }
     if (p > msg && *(p-1) != '\n') numLines++;
-    
+
     /*
      * Create an array of iovecs large enough to write all of
      * the lines with a prefix and a suffix.
      */
     const size_t INLINE_VECS = 6;
+    const size_t MAX_LINES   = ((size_t)~0)/(3*sizeof(struct iovec*));
     struct iovec stackVec[INLINE_VECS];
     struct iovec* vec = stackVec;
-    
-    numLines *= 3;  // 3 iovecs per line.
-    if (numLines > INLINE_VECS) {
+    size_t numVecs;
+
+    if (numLines > MAX_LINES)
+        numLines = MAX_LINES;
+
+    numVecs = numLines*3;  // 3 iovecs per line.
+    if (numVecs > INLINE_VECS) {
         vec = (struct iovec*)malloc(sizeof(struct iovec)*numLines);
         if (vec == NULL) {
             msg = "LOG: write failed, no memory";
-            numLines = 3;
+            numVecs = 3;
+            numLines = 1;
+            vec = stackVec;
         }
     }
-    
+
     /*
      * Fill in the iovec pointers.
      */
     p = msg;
     struct iovec* v = vec;
     int totalLen = 0;
-    while (p < end) {
+    while (numLines > 0 && p < end) {
         if (prefixLen > 0) {
             v->iov_base = prefixBuf;
             v->iov_len = prefixLen;
@@ -484,6 +491,7 @@ static void showLog(LogState *state,
             totalLen += suffixLen;
             v++;
         }
+        numLines -= 1;
     }
     
     /*

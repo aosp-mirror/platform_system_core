@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-#ifndef _VOLMGR_EXT3_H
-#define _VOLMGR_EXT3_H
+#ifndef _FORMAT_H
+#define _FORMAT_H
 
-#include "volmgr.h"
-#include "blkdev.h"
+#define FORMAT_TYPE_EXT2  "ext2"
+#define FORMAT_TYPE_FAT32 "fat32"
 
-int ext_identify(blkdev_t *blkdev);
-int ext_check(blkdev_t *blkdev);
-int ext_mount(blkdev_t *blkdev, volume_t *vol, boolean safe_mode);
+int format_partition(blkdev_t *part, char *type);
+int initialize_mbr(blkdev_t *disk);
 #endif

@@ -18,6 +18,7 @@
 #include <cutils/jstring.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <limits.h>
 
 /* See http://www.unicode.org/reports/tr22/ for discussion
  * on invalid sequences
@@ -47,6 +48,10 @@ extern char16_t * strdup8to16 (const char* s, size_t *out_len)
     if (s == NULL) return NULL;
 
     len = strlen8to16(s);
+
+    // fail on overflow
+    if (len && SIZE_MAX/len < sizeof(char16_t))
+        return NULL;
 
     // no plus-one here. UTF-16 strings are not null terminated
     ret = (char16_t *) malloc (sizeof(char16_t) * len);

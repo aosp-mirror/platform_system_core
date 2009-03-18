@@ -48,9 +48,7 @@ ifeq ($(TARGET_ARCH),arm)
 PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
 endif
 
-LOCAL_SHARED_LIBRARIES := \
-	libhardware_legacy	\
-	libcutils
+LOCAL_SHARED_LIBRARIES := libcutils
 
 ifneq ($(TARGET_ARCH),arm)
 # Required to define logging functions on the simulator.
@@ -68,11 +66,9 @@ LOCAL_SRC_FILES := $(PIXELFLINGER_SRC_FILES)
 LOCAL_CFLAGS := $(PIXELFLINGER_CFLAGS)
 
 ifneq ($(BUILD_TINY_ANDROID),true)
-# this is for some qemu-tracing cruft, which
-# 1. should not depend on libhardware
-# 2. should not be build except in emulator builds
-# but this at least stops it from breaking the tiny android build
-LOCAL_SHARED_LIBRARIES += libhardware
+# Really this should go away entirely or at least not depend on
+# libhardware, but this at least gets us built.
+LOCAL_SHARED_LIBRARIES += libhardware_legacy
 LOCAL_CFLAGS += -DWITH_LIB_HARDWARE
 endif
 

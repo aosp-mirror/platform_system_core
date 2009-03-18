@@ -41,6 +41,7 @@ TOOLS := \
 	printenv \
 	smd \
 	chmod \
+    chown \
 	mkdosfs \
 	netstat \
 	ioctl \

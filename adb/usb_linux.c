@@ -292,7 +292,8 @@ static int find_usb_device(const char *base,
                         }
                     }
 
-                    register_device_callback(devname, local_ep_in, local_ep_out, i, serial, zero_mask);
+                    register_device_callback(devname, local_ep_in, local_ep_out,
+                            interface->bInterfaceNumber, serial, zero_mask);
 
                     found_device = 1;
                     break;

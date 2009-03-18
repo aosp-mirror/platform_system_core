@@ -86,6 +86,8 @@ int ums_bootstrap(void);
 
 int volmgr_bootstrap(void);
 
+int switch_bootstrap(void);
+
 void *read_file(char *filename, ssize_t *_size);
 char *truncate_sysfs_path(char *path, int num_elements_to_remove, char *buffer);
 char *read_sysfs_var(char *buffer, size_t maxlen, char *devpath, char *var);

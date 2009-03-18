@@ -85,8 +85,8 @@ void media_destroy(media_t *media)
     free(media->devpath);
     free(media->name);
 
-    if (media->devs)
-        LOGE("media_destroy(): media still has blkdevs associated with it! Possible leak\n");
+    while(media->devs)
+        media_remove_blkdev(media, media->devs->dev);
     free(media);
 }
 
@@ -105,7 +105,7 @@ media_t *media_lookup_by_path(char *devpath, boolean fuzzy_match)
         list_scan = list_scan->next;
     }
 #if DEBUG_MEDIA
-    LOG_VOL("media_lookup_by_path(): No media found @ %s\n", devpath);
+    LOG_VOL("media_lookup_by_path(): No media found @ %s", devpath);
 #endif
     return NULL;
 }
@@ -114,10 +114,8 @@ int media_add_blkdev(media_t *card, blkdev_t *dev)
 {
     blkdev_list_t *list_entry;
 
-    if (!(list_entry = malloc(sizeof(blkdev_list_t)))) {
-        LOGE("Out of memory\n");
+    if (!(list_entry = malloc(sizeof(blkdev_list_t))))
         return -ENOMEM;
-    }
     
     list_entry->next = NULL;
     list_entry->dev = dev;

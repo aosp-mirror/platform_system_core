@@ -21,6 +21,8 @@
 #include "vold.h"
 #include "ums.h"
 
+#define DEBUG_UMS 0
+
 static boolean host_connected = false;
 static boolean ums_enabled = false;
 
@@ -42,7 +44,9 @@ boolean ums_enabled_get()
 
 void ums_hostconnected_set(boolean connected)
 {
-    LOG_VOL("ums_hostconnected_set(%d):\n", connected);
+#if DEBUG_UMS
+    LOG_VOL("ums_hostconnected_set(%d):", connected);
+#endif
     host_connected = connected;
 
     if (!connected)
@@ -52,19 +56,19 @@ void ums_hostconnected_set(boolean connected)
 
 int ums_enable(char *dev_fspath, char *lun_syspath)
 {
-    LOG_VOL("ums_enable(%s, %s):\n", dev_fspath, lun_syspath);
+    LOG_VOL("ums_enable(%s, %s):", dev_fspath, lun_syspath);
 
     int fd;
     char filename[255];
 
     sprintf(filename, "/sys/%s/file", lun_syspath);
     if ((fd = open(filename, O_WRONLY)) < 0) {
-        LOGE("Unable to open '%s' (%s)\n", filename, strerror(errno));
+        LOGE("Unable to open '%s' (%s)", filename, strerror(errno));
         return -errno;
     }
 
     if (write(fd, dev_fspath, strlen(dev_fspath)) < 0) {
-        LOGE("Unable to write to ums lunfile (%s)\n", strerror(errno));
+        LOGE("Unable to write to ums lunfile (%s)", strerror(errno));
         close(fd);
         return -errno;
     }
@@ -75,21 +79,23 @@ int ums_enable(char *dev_fspath, char *lun_syspath)
 
 int ums_disable(char *lun_syspath)
 {
-    LOG_VOL("ums_disable(%s):\n", lun_syspath);
+#if DEBUG_UMS
+    LOG_VOL("ums_disable(%s):", lun_syspath);
+#endif
 
     int fd;
     char filename[255];
 
     sprintf(filename, "/sys/%s/file", lun_syspath);
     if ((fd = open(filename, O_WRONLY)) < 0) {
-        LOGE("Unable to open '%s' (%s)\n", filename, strerror(errno));
+        LOGE("Unable to open '%s' (%s)", filename, strerror(errno));
         return -errno;
     }
 
     char ch = 0;
 
     if (write(fd, &ch, 1) < 0) {
-        LOGE("Unable to write to ums lunfile (%s)\n", strerror(errno));
+        LOGE("Unable to write to ums lunfile (%s)", strerror(errno));
         close(fd);
         return -errno;
     }
@@ -107,7 +113,9 @@ int ums_send_status(void)
 {
     int rc;
 
-    LOG_VOL("ums_send_status():\n");
+#if DEBUG_UMS
+    LOG_VOL("ums_send_status():");
+#endif
 
     rc = send_msg(ums_enabled_get() ? VOLD_EVT_UMS_ENABLED :
                                       VOLD_EVT_UMS_DISABLED);

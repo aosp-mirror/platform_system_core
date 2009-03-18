@@ -18,8 +18,10 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #define INITIAL_CAPACITY (4)
+#define MAX_CAPACITY     ((int)(UINT_MAX/sizeof(void*)))
 
 struct Array {
     void** contents;
@@ -45,13 +47,26 @@ void arrayFree(Array* array) {
 static int ensureCapacity(Array* array, int capacity) {
     int oldCapacity = array->capacity;
     if (capacity > oldCapacity) {
-        int newCapacity = (oldCapacity == 0) ? INITIAL_CAPACITY : oldCapacity * 2;
-    
-        // Keep doubling capacity until we surpass necessary capacity. 
+        int newCapacity = (oldCapacity == 0) ? INITIAL_CAPACITY : oldCapacity;
+
+        // Ensure we're not doing something nasty
+        if (capacity > MAX_CAPACITY)
+            return -1;
+
+        // Keep doubling capacity until we surpass necessary capacity.
         while (newCapacity < capacity) {
-            newCapacity *= 2;
+            int  newCap = newCapacity*2;
+            // Handle integer overflows
+            if (newCap < newCapacity || newCap > MAX_CAPACITY) {
+                newCap = MAX_CAPACITY;
+            }
+            newCapacity = newCap;
         }
-    
+
+        // Should not happen, but better be safe than sorry
+        if (newCapacity < 0 || newCapacity > MAX_CAPACITY)
+            return -1;
+
         void** newContents;
         if (array->contents == NULL) {
             // Allocate new array.
@@ -151,5 +166,5 @@ int arraySize(Array* array) {
 }
 
 const void** arrayUnwrap(Array* array) {
-    return array->contents;
+    return (const void**)array->contents;
 }

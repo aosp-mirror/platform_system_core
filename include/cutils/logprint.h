@@ -17,8 +17,8 @@
 #ifndef _LOGPRINT_H
 #define _LOGPRINT_H
 
-#include <utils/Log.h>
-#include <utils/logger.h>
+#include <cutils/log.h>
+#include <cutils/logger.h>
 #include <cutils/event_tag_map.h>
 #include <pthread.h>
 

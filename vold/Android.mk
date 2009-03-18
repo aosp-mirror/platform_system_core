@@ -1,7 +1,3 @@
-BUILD_VOLD := false
-
-ifeq ($(BUILD_VOLD),true)
-
 LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
@@ -10,7 +6,6 @@ LOCAL_SRC_FILES:=                \
                   vold.c       \
                   cmd_dispatch.c \
                   uevent.c       \
-                  inotify.c      \
                   mmc.c          \
 		  misc.c         \
                   blkdev.c       \
@@ -22,6 +17,9 @@ LOCAL_SRC_FILES:=                \
                   volmgr_ext3.c  \
                   logwrapper.c   \
                   ProcessKiller.c\
+                  switch.c       \
+                  format.c       \
+                  devmapper.c
 
 LOCAL_MODULE:= vold
 
@@ -32,5 +30,3 @@ LOCAL_CFLAGS :=
 LOCAL_SHARED_LIBRARIES := libcutils
 
 include $(BUILD_EXECUTABLE)
-
-endif

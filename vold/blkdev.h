@@ -41,7 +41,6 @@ struct blkdev {
 
     int           major;
     int           minor;
-    char          *dev_fspath;
 };
 
 struct blkdev_list {
@@ -56,11 +55,10 @@ blkdev_t *blkdev_create(blkdev_t *disk, char *devpath, int major, int minor, str
 blkdev_t *blkdev_create_pending_partition(blkdev_t *disk, char *dev_fspath, int major, int minor, struct media *media);
 blkdev_t *blkdev_lookup_by_path(char *devpath);
 blkdev_t *blkdev_lookup_by_devno(int maj, int min);
-blkdev_t *blkdev_lookup_by_dev_fspath(char *dev_fspath);
+char *blkdev_get_devpath(blkdev_t *blk);
+
 void blkdev_destroy(blkdev_t *blk);
 
-int blkdev_handle_devicefile_created(blkdev_t *blk, char *dev_fspath);
-int blkdev_handle_devicefile_removed(blkdev_t *blk, char *dev_fspath);
 int blkdev_get_num_pending_partitions(blkdev_t *blk);
-void blkdev_devpath_set(blkdev_t *blk, char *dev_fspath);
+int blkdev_refresh(blkdev_t *blk);
 #endif

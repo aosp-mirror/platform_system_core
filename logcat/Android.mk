@@ -16,8 +16,6 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := event-log-tags
 
-#LOCAL_MODULE_TAGS := user development
-
 # This will install the file in /system/etc
 #
 LOCAL_MODULE_CLASS := ETC

@@ -859,8 +859,20 @@ int adb_main(int is_daemon)
     property_get("ro.kernel.qemu", value, "");
     if (strcmp(value, "1") != 0) {
         property_get("ro.secure", value, "");
-        if (strcmp(value, "1") == 0)
+        if (strcmp(value, "1") == 0) {
+            // don't run as root if ro.secure is set...
             secure = 1;
+
+            // ... except we allow running as root in userdebug builds if the 
+            // service.adb.root property has been set by the "adb root" command
+            property_get("ro.debuggable", value, "");
+            if (strcmp(value, "1") == 0) {
+                property_get("service.adb.root", value, "");
+                if (strcmp(value, "1") == 0) {
+                    secure = 0;
+                }
+            }
+        }
     }
 
     /* don't listen on port 5037 if we are running in secure mode */
@@ -872,8 +884,10 @@ int adb_main(int is_daemon)
         ** AID_INPUT to diagnose input issues (getevent)
         ** AID_INET to diagnose network issues (netcfg, ping)
         ** AID_GRAPHICS to access the frame buffer
+        ** AID_NET_BT and AID_NET_BT_ADMIN to diagnose bluetooth (hcidump)
         */
-        gid_t groups[] = { AID_ADB, AID_LOG, AID_INPUT, AID_INET, AID_GRAPHICS };
+        gid_t groups[] = { AID_ADB, AID_LOG, AID_INPUT, AID_INET, AID_GRAPHICS,
+                           AID_NET_BT, AID_NET_BT_ADMIN };
         setgroups(sizeof(groups)/sizeof(groups[0]), groups);
 
         /* then switch user and group to "shell" */
@@ -1080,4 +1094,3 @@ int main(int argc, char **argv)
     return adb_main(0);
 #endif
 }
-

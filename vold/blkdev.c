@@ -27,6 +27,7 @@
 #include <sys/mman.h>
 
 #include <linux/fs.h>
+#include <linux/msdos_fs.h>
 
 #include "vold.h"
 #include "blkdev.h"
@@ -37,158 +38,145 @@
 static blkdev_list_t *list_root = NULL;
 
 static blkdev_t *_blkdev_create(blkdev_t *disk, char *devpath, int major,
-                                int minor, char *type, struct media *media, char *dev_fspath);
-static void blkdev_dev_fspath_set(blkdev_t *blk, char *dev_fspath);
+                                int minor, char *type, struct media *media);
 
-int blkdev_handle_devicefile_removed(blkdev_t *blk, char *dev_fspath)
+static int fat_valid_media(unsigned char media)
+{                       
+        return 0xf8 <= media || media == 0xf0;
+}                               
+
+char *blkdev_get_devpath(blkdev_t *blk)
 {
-#if DEBUG_BLKDEV
-    LOG_VOL("blkdev_handle_devicefile_removed(%s):\n", dev_fspath);
-#endif
-    blkdev_dev_fspath_set(blk, NULL);
-    return 0;
+    char *dp = malloc(256);
+    sprintf(dp, "%s/vold/%d:%d", DEVPATH, blk->major, blk->minor);
+    return dp;
 }
 
-int blkdev_handle_devicefile_created(blkdev_t *blk, char *dev_fspath)
+int blkdev_refresh(blkdev_t *blk)
 {
-    int rc = 0;
-    blkdev_t *disk;
- 
-#if DEBUG_BLKDEV
-    LOG_VOL("blkdev_handle_devicefile_created(%s):\n", dev_fspath);
-#endif
+    int fd = 0;
+    char *devpath = NULL;
+    unsigned char *block = NULL;
+    int i, rc;
 
-    if (!blk) {
-        /*
-         * This device does not yet have a backing blkdev associated with it.
-         * Create a new one in the pending state and fill in the information
-         * we have.
-         */
-        struct stat sbuf;
-
-        if (stat(dev_fspath, &sbuf) < 0) {
-            LOGE("Unable to stat device '%s' (%s)\n", dev_fspath, strerror(errno));
-            return -errno;
-        }
-
-        int major = (sbuf.st_rdev & 0xfff00) >> 8;
-        int minor = (sbuf.st_rdev & 0xff) | ((sbuf.st_rdev >> 12) & 0xfff00);
-
-        disk = blkdev_lookup_by_devno(major, 0);
-
-        if (!disk) {
-            /*
-             * If there isn't a disk associated with this device, then
-             * its not what we're looking for
-             */
-#if DEBUG_BLKDEV
-            LOG_VOL("Ignoring device file '%s' (no disk found)\n", dev_fspath);
-#endif
-            return 0;
-        }
-
-        if (!(blk = blkdev_create_pending_partition(disk, dev_fspath, major,
-                                                    minor, disk->media))) {
-            LOGE("Unable to create pending blkdev\n");
-            return -1;
-        }
-    } else
-        blkdev_dev_fspath_set(blk, dev_fspath);
+    if (!(block = malloc(512)))
+        goto out;
 
     /*
-     * If we're a disk, then read the partition table. Otherwise we're
-     * a partition so get the partition type
+     * Get the device size
      */
-    disk = blk->disk;
+    devpath = blkdev_get_devpath(blk);
 
-    int fd;
-
-    if ((fd = open(disk->dev_fspath, O_RDWR)) < 0) {
-        LOGE("Unable to open device '%s' (%s)\n", disk->dev_fspath, strerror(errno));
+    if ((fd = open(devpath, O_RDONLY)) < 0) {
+        LOGE("Unable to open device '%s' (%s)", devpath, strerror(errno));
         return -errno;
     }
 
     if (ioctl(fd, BLKGETSIZE, &blk->nr_sec)) {
-        LOGE("Unable to get device size (%m)\n");
+        LOGE("Unable to get device size (%m)");
+        return -errno;
+    }
+    close(fd);
+    free(devpath);
+
+    /*
+     * Open the disk partition table
+     */
+    devpath = blkdev_get_devpath(blk->disk);
+    if ((fd = open(devpath, O_RDONLY)) < 0) {
+        LOGE("Unable to open device '%s' (%s)", devpath,
+             strerror(errno));
+        free(devpath);
         return -errno;
     }
 
-#if DEBUG_BLKDEV
-    LOG_VOL("New device '%s' size = %u sectors\n", dev_fspath, blk->nr_sec);
-#endif
+    free(devpath);
 
-    void *raw_pt;
-    unsigned char *chr_pt;
-    int i;
-
-    raw_pt = chr_pt = mmap(NULL, 512, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (raw_pt == MAP_FAILED) {
-        LOGE("Unable to mmap device paritition table (%m)\n");
-        goto out_nommap;
+    if ((rc = read(fd, block, 512)) != 512) {
+        LOGE("Unable to read device partition table (%d, %s)",
+             rc, strerror(errno));
+        goto out;
     }
+
+    /*
+     * If we're a disk, then process the partition table. Otherwise we're
+     * a partition so get the partition type
+     */
 
     if (blk->type == blkdev_disk) {
         blk->nr_parts = 0;
 
-        if ((chr_pt[0x1fe] != 0x55) && (chr_pt[0x1ff] != 0xAA)) {
-            LOG_VOL("Disk '%s' does not contain a partition table\n", dev_fspath);
+        if ((block[0x1fe] != 0x55) || (block[0x1ff] != 0xAA)) {
+            LOGI("Disk %d:%d does not contain a partition table",
+                 blk->major, blk->minor);
             goto out;
         }
 
         for (i = 0; i < 4; i++) {
             struct dos_partition part;
 
-            dos_partition_dec(raw_pt + DOSPARTOFF + i * sizeof(struct dos_partition), &part);
+            dos_partition_dec(block + DOSPARTOFF + i * sizeof(struct dos_partition), &part);
+            if (part.dp_flag != 0 && part.dp_flag != 0x80) {
+                struct fat_boot_sector *fb = (struct fat_boot_sector *) &block[0];
+             
+                if (!i && fb->reserved && fb->fats && fat_valid_media(fb->media)) {
+                    LOGI("Detected FAT filesystem in partition table");
+                    break;
+                } else {
+                    LOGI("Partition table looks corrupt");
+                    break;
+                }
+            }
             if (part.dp_size != 0 && part.dp_typ != 0)
                 blk->nr_parts++;
         }
-        LOG_VOL("Disk device '%s' (blkdev %s) contains %d partitions\n",
-                dev_fspath, blk->devpath, blk->nr_parts);
     } else if (blk->type == blkdev_partition) {
         struct dos_partition part;
         int part_no = blk->minor -1;
 
-        dos_partition_dec(raw_pt + DOSPARTOFF + part_no * sizeof(struct dos_partition), &part);
-
-        if (!part.dp_typ)
-            LOG_VOL("Warning - Partition device '%s' (blkdev %s) has no partition type set\n",
-                    dev_fspath, blk->devpath);
+        dos_partition_dec(block + DOSPARTOFF + part_no * sizeof(struct dos_partition), &part);
         blk->part_type = part.dp_typ;
-
-        LOG_VOL("Partition device '%s' (blkdev %s) partition type 0x%x\n",
-                 dev_fspath, blk->devpath, blk->part_type);
-    } else {
-        LOGE("Bad blkdev type '%d'\n", blk->type);
-        rc = -EINVAL;
-        goto out;
     }
 
  out:
-    munmap(raw_pt, 512);
- out_nommap:
-    close(fd);
-    return rc;
-}
 
-blkdev_t *blkdev_create_pending_partition(blkdev_t *disk, char *dev_fspath, int major,
-                                int minor, struct media *media)
-{
-    return _blkdev_create(disk, NULL, major, minor, "partition", media, dev_fspath);
+    if (block)
+        free(block);
+
+    char tmp[255];
+    char tmp2[32];
+    sprintf(tmp, "%s (blkdev %d:%d), %u secs (%u MB)",
+                 (blk->type == blkdev_disk ? "Disk" : "Partition"),
+                 blk->major, blk->minor,
+                 blk->nr_sec,
+                 (uint32_t) (((uint64_t) blk->nr_sec * 512) / 1024) / 1024);
+
+    if (blk->type == blkdev_disk) 
+        sprintf(tmp2, " %d partitions", blk->nr_parts);
+    else
+        sprintf(tmp2, " type 0x%x", blk->part_type);
+
+    strcat(tmp, tmp2);
+    LOGI(tmp);
+
+    close(fd);
+
+    return 0;
 }
 
 blkdev_t *blkdev_create(blkdev_t *disk, char *devpath, int major, int minor, struct media *media, char *type)
 {
-    return _blkdev_create(disk, devpath, major, minor, type, media, NULL);
+    return _blkdev_create(disk, devpath, major, minor, type, media);
 }
 
 static blkdev_t *_blkdev_create(blkdev_t *disk, char *devpath, int major,
-                                int minor, char *type, struct media *media, char *dev_fspath)
+                                int minor, char *type, struct media *media)
 {
     blkdev_t *new;
     struct blkdev_list *list_entry;
 
     if (disk && disk->type != blkdev_disk) {
-        LOGE("Non disk parent specified for blkdev!\n");
+        LOGE("Non disk parent specified for blkdev!");
         return NULL;
     }
 
@@ -218,8 +206,6 @@ static blkdev_t *_blkdev_create(blkdev_t *disk, char *devpath, int major,
     new->major = major;
     new->minor = minor;
     new->media = media;
-    if (dev_fspath)
-        new->dev_fspath = strdup(dev_fspath);
     new->nr_sec = 0xffffffff;
 
     if (disk)
@@ -227,12 +213,23 @@ static blkdev_t *_blkdev_create(blkdev_t *disk, char *devpath, int major,
     else 
         new->disk = new; // Note the self disk pointer
 
+    /* Create device nodes */
+    char nodepath[255];
+    mode_t mode = 0666 | S_IFBLK;
+    dev_t dev = (major << 8) | minor;
+
+    sprintf(nodepath, "%s/vold/%d:%d", DEVPATH, major, minor);
+    if (mknod(nodepath, mode, dev) < 0) {
+        LOGE("Error making device nodes for '%s' (%s)",
+             nodepath, strerror(errno));
+    }
+
     if (!strcmp(type, "disk"))
         new->type = blkdev_disk;
     else if (!strcmp(type, "partition"))
         new->type = blkdev_partition;
     else {
-        LOGE("Unknown block device type '%s'\n", type);
+        LOGE("Unknown block device type '%s'", type);
         new->type = blkdev_unknown;
     }
 
@@ -258,8 +255,11 @@ void blkdev_destroy(blkdev_t *blkdev)
 
     if (blkdev->devpath)
         free(blkdev->devpath);
-    if (blkdev->dev_fspath)
-        free(blkdev->dev_fspath);
+
+    char nodepath[255];
+    sprintf(nodepath, "%s/vold/%d:%d", DEVPATH, blkdev->major, blkdev->minor);
+    unlink(nodepath);
+
     free(blkdev);
 }
 
@@ -272,9 +272,6 @@ blkdev_t *blkdev_lookup_by_path(char *devpath)
             return list_scan->dev;
         list_scan = list_scan->next;
     }
-#if DEBUG_BLKDEV
-    LOG_VOL("blkdev_lookup_by_path(): No blkdev found @ %s\n", devpath);
-#endif
     return NULL;
 }
 
@@ -288,32 +285,12 @@ blkdev_t *blkdev_lookup_by_devno(int maj, int min)
             return list_scan->dev;
         list_scan = list_scan->next;
     }
-#if DEBUG_BLKDEV
-    LOG_VOL("blkdev_lookup_by_devno(): No blkdev found for %d.%d\n", maj, min);
-#endif
     return NULL;
 }
-
-blkdev_t *blkdev_lookup_by_dev_fspath(char *dev_fspath)
-{
-    struct blkdev_list *list_scan = list_root;
-
-    while (list_scan) {
-        if (list_scan->dev->dev_fspath) {
-            if (!strcmp(list_scan->dev->dev_fspath, dev_fspath)) 
-                return list_scan->dev;
-        }
-
-        list_scan = list_scan->next;
-    }
-//    LOG_VOL("blkdev_lookup_by_devno(): No blkdev found for %d.%d\n", maj, min);
-    return NULL;
-}
-
 
 /*
- * Given a disk device, return the number of partitions yet to be 
- * processed.
+ * Given a disk device, return the number of partitions which 
+ * have yet to be processed.
  */
 int blkdev_get_num_pending_partitions(blkdev_t *blk)
 {
@@ -330,25 +307,13 @@ int blkdev_get_num_pending_partitions(blkdev_t *blk)
         if (list_scan->dev->major != blk->major)
             goto next;
 
-        if (list_scan->dev->nr_sec != 0xffffffff)
+        if (list_scan->dev->nr_sec != 0xffffffff &&
+            list_scan->dev->devpath) {
             num--;
+        }
  next:
         list_scan = list_scan->next;
     }
     return num;
 }
 
-void blkdev_devpath_set(blkdev_t *blk, char *devpath)
-{
-    blk->devpath = strdup(devpath);
-}
-
-static void blkdev_dev_fspath_set(blkdev_t *blk, char *dev_fspath)
-{
-    if (dev_fspath)
-        blk->dev_fspath = strdup(dev_fspath);
-    else {
-        free(blk->dev_fspath);
-        blk->dev_fspath = NULL;
-    }
-}
