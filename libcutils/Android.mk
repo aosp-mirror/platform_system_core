@@ -37,6 +37,9 @@ commonSources := \
 	properties.c \
 	threads.c
 
+commonHostSources := \
+        ashmem-host.c
+
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
 # which are also hard or even impossible to port to native Win32
@@ -60,16 +63,18 @@ else
         selector.c \
         fdevent.c \
         tztime.c \
-        tzstrftime.c \
         adb_networking.c \
-	zygote.c
+        zygote.c
+
+    commonHostSources += \
+        tzstrftime.c
 endif
 
 
 # Static library for host
 # ========================================================
 LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) ashmem-host.c
+LOCAL_SRC_FILES := $(commonSources) $(commonHostSources)
 LOCAL_LDLIBS := -lpthread
 LOCAL_STATIC_LIBRARIES := liblog
 include $(BUILD_HOST_STATIC_LIBRARY)
@@ -81,7 +86,7 @@ ifeq ($(TARGET_SIMULATOR),true)
 # ========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) memory.c dlmalloc_stubs.c ashmem-host.c
+LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) memory.c dlmalloc_stubs.c
 LOCAL_LDLIBS := -lpthread
 LOCAL_SHARED_LIBRARIES := liblog
 include $(BUILD_SHARED_LIBRARY)
