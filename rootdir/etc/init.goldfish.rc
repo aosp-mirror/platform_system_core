@@ -39,9 +39,7 @@ service goldfish-setup /system/etc/init.goldfish.sh
     oneshot
 
 service qemud /system/bin/qemud
-    socket qemud_gsm     stream 666
-    socket qemud_gps     stream 666
-    socket qemud_control stream 666
+    socket qemud    stream 666
     oneshot
 
 # -Q is a special logcat option that forces the

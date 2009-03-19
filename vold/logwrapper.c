@@ -93,7 +93,7 @@ void child(int argc, char* argv[]) {
     argv_child[argc] = NULL;
 
     // XXX: PROTECT FROM VIKING KILLER
-    if (execvp(argv_child[0], argv_child)) {
+    if (execv(argv_child[0], argv_child)) {
         LOG(LOG_ERROR, "logwrapper",
             "executing %s failed: %s", argv_child[0], strerror(errno));
         exit(-1);

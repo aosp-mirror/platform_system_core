@@ -239,9 +239,9 @@ static char *get_uevent_param(struct uevent *event, char *param_name)
 static int handle_powersupply_event(struct uevent *event)
 {
     char *ps_type = get_uevent_param(event, "POWER_SUPPLY_TYPE");
-    char *ps_cap = get_uevent_param(event, "POWER_SUPPLY_CAPACITY");
 
     if (!strcasecmp(ps_type, "battery")) {
+        char *ps_cap = get_uevent_param(event, "POWER_SUPPLY_CAPACITY");
         int capacity = atoi(ps_cap);
   
         if (capacity < 5)
@@ -307,7 +307,7 @@ static int handle_block_event(struct uevent *event)
         return -EINVAL;
     }
 
-    truncate_sysfs_path(event->path, n, mediapath);
+    truncate_sysfs_path(event->path, n, mediapath, sizeof(mediapath));
 
     if (!(media = media_lookup_by_path(mediapath, false))) {
 #if DEBUG_UEVENT

@@ -134,8 +134,12 @@ int blkdev_refresh(blkdev_t *blk)
         struct dos_partition part;
         int part_no = blk->minor -1;
 
-        dos_partition_dec(block + DOSPARTOFF + part_no * sizeof(struct dos_partition), &part);
-        blk->part_type = part.dp_typ;
+        if (part_no < 4) {
+            dos_partition_dec(block + DOSPARTOFF + part_no * sizeof(struct dos_partition), &part);
+            blk->part_type = part.dp_typ;
+        } else {
+            LOGW("Skipping partition %d", part_no);
+        }
     }
 
  out:
