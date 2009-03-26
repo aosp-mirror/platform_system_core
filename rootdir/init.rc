@@ -229,8 +229,7 @@ service dbus /system/bin/dbus-daemon --system --nofork
     user bluetooth
     group bluetooth net_bt_admin
 
-#STOPSHIP: dont use logwrapper in production
-service hcid /system/bin/logwrapper /system/bin/hcid -s -n -f /etc/bluez/hcid.conf
+service hcid /system/bin/hcid -s -n -f /etc/bluez/hcid.conf
     socket bluetooth stream 660 bluetooth bluetooth
     socket dbus_bluetooth stream 660 bluetooth bluetooth
     # init.rc does not yet support applying capabilities, so run as root and
