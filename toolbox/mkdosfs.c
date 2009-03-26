@@ -393,7 +393,7 @@ mkdosfs_main(int argc, char *argv[])
         bpb.bsec = length / bpb.bps;
         bpb.spt = bpb.bsec;
         // use FAT32 for 2 gig or greater 
-        if (length >= 2 *1024 *1024 *1024) {
+        if (length >= 2LL *1024 *1024 *1024) {
             fat = 32;
         } else {
             fat = 16;
