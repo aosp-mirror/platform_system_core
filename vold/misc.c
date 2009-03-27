@@ -59,11 +59,11 @@ bail:
 	close(fd);
 	return buffer;
 }
-char *truncate_sysfs_path(char *path, int num_elements_to_remove, char *buffer)
+char *truncate_sysfs_path(char *path, int num_elements_to_remove, char *buffer, int buffer_size)
 {
     int i;
 
-    strcpy(buffer, path);
+    strncpy(buffer, path, buffer_size);
 
     for (i = 0; i < num_elements_to_remove; i++) {
         char *p = &buffer[strlen(buffer)-1];
@@ -81,7 +81,7 @@ char *read_sysfs_var(char *buffer, size_t maxlen, char *devpath, char *var)
     char *p;
     ssize_t sz;
 
-    sprintf(filename, "/sys%s/%s", devpath, var);
+    snprintf(filename, sizeof(filename), "/sys%s/%s", devpath, var);
     p = read_file(filename, &sz);
     p[(strlen(p) - 1)] = '\0';
     strncpy(buffer, p, maxlen);

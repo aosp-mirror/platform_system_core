@@ -43,7 +43,7 @@ static volume_t *vol_root = NULL;
 static boolean safe_mode = true;
 
 static struct volmgr_fstable_entry fs_table[] = {
-    { "ext3", ext_identify, ext_check, ext_mount , true },
+//    { "ext3", ext_identify, ext_check, ext_mount , true },
     { "vfat", vfat_identify, vfat_check, vfat_mount , false },
     { NULL, NULL, NULL, NULL , false}
 };
