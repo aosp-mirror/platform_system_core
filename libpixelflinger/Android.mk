@@ -64,12 +64,14 @@ endif
 LOCAL_MODULE:= libpixelflinger
 LOCAL_SRC_FILES := $(PIXELFLINGER_SRC_FILES)
 LOCAL_CFLAGS := $(PIXELFLINGER_CFLAGS)
+
 ifneq ($(BUILD_TINY_ANDROID),true)
 # Really this should go away entirely or at least not depend on
 # libhardware, but this at least gets us built.
 LOCAL_SHARED_LIBRARIES += libhardware_legacy
 LOCAL_CFLAGS += -DWITH_LIB_HARDWARE
 endif
+
 ifeq ($(TARGET_ARCH),arm)
 LOCAL_WHOLE_STATIC_LIBRARIES := libpixelflinger_armv6
 endif
