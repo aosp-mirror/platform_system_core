@@ -143,12 +143,16 @@ int __android_log_write(int prio, const char *tag, const char *msg)
     /* XXX: This needs to go! */
     if (!strcmp(tag, "HTC_RIL") ||
         !strcmp(tag, "RILJ") ||
+        !strcmp(tag, "RILB") ||
         !strcmp(tag, "RILC") ||
         !strcmp(tag, "RILD") ||
         !strcmp(tag, "RIL") ||
         !strcmp(tag, "AT") ||
         !strcmp(tag, "GSM") ||
-        !strcmp(tag, "STK"))
+        !strcmp(tag, "STK") ||
+        !strcmp(tag, "CDMA") ||
+        !strcmp(tag, "PHONE") ||
+        !strcmp(tag, "SMS"))
             log_id = LOG_ID_RADIO;
 
     vec[0].iov_base   = (unsigned char *) &prio;
