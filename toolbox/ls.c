@@ -15,9 +15,10 @@
 #include <linux/kdev_t.h>
 
 // bits for flags argument
-#define LIST_LONG       (1 << 0)
-#define LIST_ALL        (1 << 1)
-#define LIST_RECURSIVE  (1 << 2)
+#define LIST_LONG           (1 << 0)
+#define LIST_ALL            (1 << 1)
+#define LIST_RECURSIVE      (1 << 2)
+#define LIST_DIRECTORIES    (1 << 3)
 
 // fwd
 static int listpath(const char *name, int flags);
@@ -238,7 +239,7 @@ static int listpath(const char *name, int flags)
         return -1;
     }
 
-    if (S_ISDIR(s.st_mode)) {
+    if ((flags & LIST_DIRECTORIES) == 0 && S_ISDIR(s.st_mode)) {
         if (flags & LIST_RECURSIVE)
             printf("\n%s:\n", name);
         return listdir(name, flags);
@@ -269,6 +270,8 @@ int ls_main(int argc, char **argv)
                 flags |= LIST_ALL;
             } else if (!strcmp(argv[i], "-R")) {
                 flags |= LIST_RECURSIVE;
+            } else if (!strcmp(argv[i], "-d")) {
+                flags |= LIST_DIRECTORIES;
             } else {
                 listed++;
                 if(listpath(argv[i], flags) != 0) {
