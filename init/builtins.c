@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <sys/mount.h>
 #include <sys/resource.h>
+#include <linux/loop.h>
 
 #include "init.h"
 #include "keywords.h"
@@ -257,7 +258,7 @@ static struct {
 int do_mount(int nargs, char **args)
 {
     char tmp[64];
-    char *source;
+    char *source, *target, *system;
     char *options = NULL;
     unsigned flags = 0;
     int n, i;
@@ -275,15 +276,70 @@ int do_mount(int nargs, char **args)
             options = args[n];
     }
 
+    system = args[1];
     source = args[2];
+    target = args[3];
+
     if (!strncmp(source, "mtd@", 4)) {
         n = mtd_name_to_number(source + 4);
-        if (n >= 0) {
-            sprintf(tmp, "/dev/block/mtdblock%d", n);
-            source = tmp;
+        if (n < 0) {
+            return -1;
         }
+
+        sprintf(tmp, "/dev/block/mtdblock%d", n);
+
+        if (mount(tmp, target, system, flags, options) < 0) {
+            return -1;
+        }
+
+        return 0;
+    } else if (!strncmp(source, "loop@", 5)) {
+        int mode, loop, fd;
+        struct loop_info info;
+
+        mode = (flags & MS_RDONLY) ? O_RDONLY : O_RDWR;
+        fd = open(source + 5, mode);
+        if (fd < 0) {
+            return -1;
+        }
+
+        for (n = 0; ; n++) {
+            sprintf(tmp, "/dev/block/loop%d", n);
+            loop = open(tmp, mode);
+            if (loop < 0) {
+                return -1;
+            }
+
+            /* if it is a blank loop device */
+            if (ioctl(loop, LOOP_GET_STATUS, &info) < 0 && errno == ENXIO) {
+                /* if it becomes our loop device */
+                if (ioctl(loop, LOOP_SET_FD, fd) >= 0) {
+                    close(fd);
+
+                    if (mount(tmp, target, system, flags, options) < 0) {
+                        ioctl(loop, LOOP_CLR_FD, 0);
+                        close(loop);
+                        return -1;
+                    }
+
+                    close(loop);
+                    return 0;
+                }
+            }
+
+            close(loop);
+        }
+
+        close(fd);
+        ERROR("out of loopback devices");
+        return -1;
+    } else {
+        if (mount(source, target, system, flags, options) < 0) {
+            return -1;
+        }
+
+        return 0;
     }
-    return mount(source, args[3], args[1], flags, options);
 }
 
 int do_setkey(int nargs, char **args)
