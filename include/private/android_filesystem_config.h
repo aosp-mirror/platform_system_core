@@ -48,6 +48,7 @@
 #define AID_INSTALL       1012  /* group for installing packages */
 #define AID_MEDIA         1013  /* mediaserver process */
 #define AID_DHCP          1014  /* dhcp client */
+#define AID_SDCARD_RW     1015  /* external storage write access */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -93,6 +94,7 @@ static struct android_id_info android_ids[] = {
     { "diag",      AID_DIAG, },
     { "net_bt_admin", AID_NET_BT_ADMIN, },
     { "net_bt",    AID_NET_BT, },
+    { "sdcard_rw", AID_SDCARD_RW, },
     { "inet",      AID_INET, }, 
     { "net_raw",   AID_NET_RAW, },
     { "misc",      AID_MISC, },
