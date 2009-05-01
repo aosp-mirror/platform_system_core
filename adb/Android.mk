@@ -7,7 +7,6 @@ LOCAL_PATH:= $(call my-dir)
 
 # adb host tool
 # =========================================================
-ifneq ($(TARGET_SIMULATOR),true) # not 64 bit clean (also unused with the sim)
 include $(CLEAR_VARS)
 
 # Default to a virtual (sockets) usb interface
@@ -77,7 +76,6 @@ ifeq ($(HOST_OS),windows)
 $(LOCAL_INSTALLED_MODULE): $(HOST_OUT_EXECUTABLES)/AdbWinApi.dll
 endif
 
-endif
 
 # adbd device daemon
 # =========================================================
