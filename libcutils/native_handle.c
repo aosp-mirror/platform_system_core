@@ -46,37 +46,6 @@ int native_handle_delete(native_handle* h)
     return 0;
 }
 
-int native_handle_dup(native_handle* lhs, native_handle const* rhs)
-{
-    if (rhs->version != sizeof(native_handle))
-        return -EINVAL;
-
-    if (lhs->version != sizeof(native_handle))
-        return -EINVAL;
-    
-    const int numFds = rhs->numFds;
-    const int numInts = rhs->numInts;
-
-    if (lhs->numFds == 0 && lhs->numInts == 0) {
-        lhs->numFds = numFds; 
-        lhs->numInts = numInts;
-        return 0;
-    }
-
-    if (lhs->numFds != numFds)
-        return -EINVAL;
-
-    if (lhs->numInts != numInts)
-        return -EINVAL;
-    
-    int i;
-    for (i=0 ; i<numFds ; i++) {
-        lhs->data[i] = dup( rhs->data[i] );
-    }
-    memcpy(&lhs->data[i], &rhs->data[i], numInts*sizeof(int));
-    return 0;
-}
-
 int native_handle_close(const native_handle* h)
 {
     if (h->version != sizeof(native_handle))
@@ -88,17 +57,4 @@ int native_handle_close(const native_handle* h)
         close(h->data[i]);
     }
     return 0;
-}
-
-native_handle* native_handle_copy(const native_handle* rhs)
-{
-    if (rhs == 0)
-        return 0;
-    
-    native_handle* lhs = native_handle_create(rhs->numFds, rhs->numInts);
-    if (native_handle_dup(lhs, rhs) < 0) {
-        native_handle_delete(lhs);
-        lhs = 0;
-    }
-    return lhs;
 }
