@@ -74,7 +74,7 @@ loglevel 3
 
 # create basic filesystem structure
     mkdir /data/misc 01771 system misc
-    mkdir /data/misc/hcid 0770 bluetooth bluetooth
+    mkdir /data/misc/bluetoothd 0770 bluetooth bluetooth
     mkdir /data/misc/keystore 0770 keystore keystore
     mkdir /data/misc/vpn 0770 system system
     mkdir /data/misc/vpn/profiles 0770 system system
@@ -258,16 +258,18 @@ service bootanim /system/bin/bootanimation
     disabled
     oneshot
 
-service dbus /system/bin/dbus-daemon --system --nofork
+#STOPSHIP: Remove logwrapper before production
+service dbus /system/bin/logwrapper /system/bin/dbus-daemon --system --nofork
     socket dbus stream 660 bluetooth bluetooth
     user bluetooth
     group bluetooth net_bt_admin
 
-service hcid /system/bin/hcid -s -n -f /etc/bluez/hcid.conf
+#STOPSHIP: Remove logwrapper and -d option before production
+service bluetoothd /system/bin/logwrapper /system/bin/bluetoothd -d -n
     socket bluetooth stream 660 bluetooth bluetooth
     socket dbus_bluetooth stream 660 bluetooth bluetooth
     # init.rc does not yet support applying capabilities, so run as root and
-    # let hcid drop uid to bluetooth with the right linux capabilities
+    # let bluetoothd drop uid to bluetooth with the right linux capabilities
     group bluetooth net_bt_admin misc
     disabled
 
