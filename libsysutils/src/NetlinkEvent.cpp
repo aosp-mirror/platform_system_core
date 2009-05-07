@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include <stdlib.h>
+#include <string.h>
 
 #define LOG_TAG "NetlinkEvent"
 #include <cutils/log.h>
