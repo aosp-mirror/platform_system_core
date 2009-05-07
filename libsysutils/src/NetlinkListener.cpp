@@ -17,6 +17,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <string.h>
 
 #define LOG_TAG "NetlinkListener"
 #include <cutils/log.h>

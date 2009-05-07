@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include <errno.h>
+#include <string.h>
 
 #define LOG_TAG "FrameworkListener"
 
