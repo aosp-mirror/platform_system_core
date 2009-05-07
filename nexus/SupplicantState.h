@@ -18,16 +18,16 @@
 
 class SupplicantState {
 public:
-    static const int UNKNOWN           = 0;
-    static const int DISCONNECTED      = 1;
-    static const int INACTIVE          = 2;
-    static const int SCANNING          = 3;
-    static const int ASSOCIATING       = 4;
-    static const int ASSOCIATED        = 5;
-    static const int FOURWAY_HANDSHAKE = 6;
-    static const int GROUP_HANDSHAKE   = 7;
-    static const int COMPLETED         = 8;
-    static const int IDLE              = 9;
+    static const int UNKNOWN           = -1;
+    static const int DISCONNECTED      = 0;
+    static const int INACTIVE          = 1;
+    static const int SCANNING          = 2;
+    static const int ASSOCIATING       = 3;
+    static const int ASSOCIATED        = 4;
+    static const int FOURWAY_HANDSHAKE = 5;
+    static const int GROUP_HANDSHAKE   = 6;
+    static const int COMPLETED         = 7;
+    static const int IDLE              = 8;
 };
 
 #endif

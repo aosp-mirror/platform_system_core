@@ -21,36 +21,30 @@
 #include <cutils/log.h>
 
 #include "NetworkManager.h"
-#include "CommandListener.h"
-#include "LoopController.h"
-#include "VpnController.h"
 
-#include "TiwlanWifiController.h"
+NetworkManager *NetworkManager::sInstance = NULL;
+
+NetworkManager *NetworkManager::Instance() {
+    if (!sInstance)
+        sInstance = new NetworkManager();
+    return sInstance;
+}
 
 NetworkManager::NetworkManager() {
-    mListener = new CommandListener(this);
-    mFm = new FrameworkManager(mListener);
+    mBroadcaster = NULL;
     mControllers = new ControllerCollection();
 }
 
 int NetworkManager::run() {
-    LOGD("NetworkManager::start()");
-
-    // XXX: Factory needed
-    addController(new LoopController());
-    addController(new TiwlanWifiController("/system/lib/modules/wlan.ko", "wlan", ""));
-    addController(new VpnController());
-    //addController(new GenericController("rmnet0"));
-
     if (startControllers()) {
         LOGW("Unable to start all controllers (%s)", strerror(errno));
     }
-    mFm->run();
     return 0;
 }
 
-void NetworkManager::addController(Controller *c) {
+int NetworkManager::attachController(Controller *c) {
     mControllers->push_back(c);
+    return 0;
 }
 
 int NetworkManager::startControllers() {

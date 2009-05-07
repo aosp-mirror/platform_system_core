@@ -46,7 +46,7 @@ public:
 
     int getState() { return mState; }
 
-    const ScanResultCollection *getLatestScanResults();
+    ScanResultCollection *createLatestScanResults();
 
 // XXX: Extract these into an interface
 public:

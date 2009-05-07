@@ -38,6 +38,7 @@ public:
 
     const char *getBssid() { return mBssid; }
     uint32_t getFreq() { return mFreq; }
+    int getLevel() { return mLevel; }
     const char *getFlags() { return mFlags; }
     const char *getSsid() { return mSsid; }
 };

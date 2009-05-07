@@ -19,6 +19,7 @@ LOCAL_SRC_FILES:=                          \
                   SupplicantListener.cpp   \
                   VpnController.cpp        \
                   ScanResult.cpp           \
+                  WifiScanner.cpp          \
 
 LOCAL_MODULE:= nexus
 

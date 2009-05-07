@@ -65,14 +65,13 @@ int main(int argc, char **argv) {
 
         buffer[strlen(buffer) -1] = 0;
 
-        printf("sending '%s'\n", buffer);
         if (write(sock, buffer, strlen(buffer) +1) < 0) {
             fprintf(stderr, "Error writing data (%s)\n", strerror(errno));
             exit(2);
         }
 
 wait:
-        to.tv_sec = 5;
+        to.tv_sec = 10;
         to.tv_usec = 0;
         FD_ZERO(&read_fds);
         FD_SET(sock, &read_fds);
@@ -88,12 +87,11 @@ wait:
             printf("{response timeout}\n");
             continue;
         } else if (FD_ISSET(sock, &read_fds)) {
-printf("got data!\n");
-             if ((rc = read(sock, buffer, sizeof(buffer)-1)) < 0) {
+             if ((rc = read(sock, buffer, sizeof(buffer)-1)) <= 0) {
                  fprintf(stderr, "Error reading response (%s)\n", strerror(errno));
                  exit(2);
              }
-            printf(" |%s|\n", buffer);
+            printf(" %s\n", buffer);
             goto wait;
         }
     }
