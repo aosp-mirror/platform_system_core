@@ -21,6 +21,7 @@ else
   include $(addprefix $(LOCAL_PATH)/,$(addsuffix /Android.mk, \
 	      adb \
 	      libcutils \
+	      libsysutils \
 	      liblog \
 	      libnetutils \
 	      libpixelflinger \

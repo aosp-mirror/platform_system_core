@@ -29,7 +29,8 @@ void *read_file(const char *fn, unsigned *_sz);
 void log_init(void);
 void log_set_level(int level);
 void log_close(void);
-void log_write(int level, const char *fmt, ...);
+void log_write(int level, const char *fmt, ...)
+    __attribute__ ((format(printf, 2, 3)));
 
 #define ERROR(x...)   log_write(3, "<3>init: " x)
 #define NOTICE(x...)  log_write(5, "<5>init: " x)

@@ -222,6 +222,7 @@ void usage(void)
             "  -p <product>                             specify product name\n"
             "  -c <cmdline>                             override kernel commandline\n"
             "  -i <vendor id>                           specify a custom USB vendor id\n"
+            "  -b <base_addr>                           specify a custom kernel base address\n"
         );
     exit(1);
 }
