@@ -23,124 +23,135 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int d, z, C, h, K, q, G, W;
-static char* L;
+#define TOKEN_OPERATOR 1
+#define TOKEN_NUMBER 2
+#define TOKEN_DEFINE 536
+
+static int currentToken;
+static int currentTokenData;
+static int C;
+static int currentChar;
+static int K;
+static int q;
+static int G;
+static int savedChar;
+static char* pInProgressMacro;
 static char* P;
 static char* ac;
 static char* v;
-static char* D;
+static char* pSymbolTable;
 static char* M;
 static char* R;
-static FILE* Q;
+static FILE* pInput;
 
 static void ab (int j);
 static void w();
 
 static void addToSymbolTable(char e) {
-    *D++ = e;
+    *pSymbolTable++ = e;
 }
 
-static void next() {
-    if (L) {
-        h = *(char*) L++;
-        if (h == 2) {
-            L = 0;
-            h = W;
+static void nextChar() {
+    if (pInProgressMacro) {
+        currentChar = *(char*) pInProgressMacro++;
+        if (currentChar == 2) {
+            pInProgressMacro = NULL;
+            currentChar = savedChar;
         }
     } else
-        h = fgetc(Q);
+        currentChar = fgetc(pInput);
 }
 
-static int X() {
-    return isalnum(h) || h == '_';
+static int isSymbolChar() {
+    return isalnum(currentChar) || currentChar == '_';
 }
 
-static void Y() {
-    if (h == 92) {
-        next();
-        if (h == 110)
-            h = 10;
+static void unescapeCurrentChar() {
+    if (currentChar == '\\') {
+        nextChar();
+        if (currentChar == 'n')
+            currentChar = '\n';
     }
 }
 
-static void ad() {
+static void nextToken() {
     int j, m;
-    while (isspace(h) | h == 35) {
-        if (h == 35) {
-            next();
-            ad();
-            if (d == 536) {
-                ad();
-                addToSymbolTable(32);
-                *(int*) d = 1;
-                *(int*) (d + 4) = (int) D;
+    while (isspace(currentChar) || currentChar == '#') {
+        if (currentChar == '#') {
+            nextChar();
+            nextToken();
+            if (currentToken == TOKEN_DEFINE) {
+                nextToken();
+                addToSymbolTable(' ');
+                *(int*) currentToken = 1;
+                *(int*) (currentToken + 4) = (int) pSymbolTable;
             }
-            while (h != '\n') {
-                addToSymbolTable(h);
-                next();
+            while (currentChar != '\n') {
+                addToSymbolTable(currentChar);
+                nextChar();
             }
-            addToSymbolTable(h);
+            addToSymbolTable(currentChar);
             addToSymbolTable(2);
         }
-        next();
+        nextChar();
     }
     C = 0;
-    d = h;
-    if (X()) {
-        addToSymbolTable(32);
-        M = D;
-        while (X()) {
-            addToSymbolTable(h);
-            next();
+    currentToken = currentChar;
+    if (isSymbolChar()) {
+        addToSymbolTable(' ');
+        M = pSymbolTable;
+        while (isSymbolChar()) {
+            addToSymbolTable(currentChar);
+            nextChar();
         }
-        if (isdigit(d)) {
-            z = strtol(M, 0, 0);
-            d = 2;
+        if (isdigit(currentToken)) {
+            currentTokenData = strtol(M, 0, 0);
+            currentToken = TOKEN_NUMBER;
         } else {
-            *(char*) D = 32;
-            d = strstr(R, M - 1) - R;
-            *(char*) D = 0;
-            d = d * 8 + 256;
-            if (d > 536) {
-                d = ((int) P) + d;
-                if (*(int*) d == 1) {
-                    L = (char*) (*(int*) (d + 4));
-                    W = h;
-                    next();
-                    ad();
+            *(char*) pSymbolTable = ' ';
+            currentToken = strstr(R, M - 1) - R;
+            *(char*) pSymbolTable = 0;
+            currentToken = currentToken * 8 + 256;
+            if (currentToken > TOKEN_DEFINE) {
+                currentToken = ((int) P) + currentToken;
+                if (*(int*) currentToken == 1) {
+                    pInProgressMacro = (char*) (*(int*) (currentToken + 4));
+                    savedChar = currentChar;
+                    nextChar();
+                    nextToken();
                 }
             }
         }
     } else {
-        next();
-        if (d == 39) {
-            d = 2;
-            Y();
-            z = h;
-            next();
-            next();
-        } else if (d == 47 & h == 42) {
-            next();
-            while (h) {
-                while (h != 42)
-                    next();
-                next();
-                if (h == 47)
-                    h = 0;
+        nextChar();
+        if (currentToken == '\'') {
+            currentToken = TOKEN_NUMBER;
+            unescapeCurrentChar();
+            currentTokenData = currentChar;
+            nextChar();
+            nextChar();
+        } else if (currentToken == '/' & currentChar == '*') {
+            nextChar();
+            while (currentChar) {
+                while (currentChar != '*')
+                    nextChar();
+                nextChar();
+                if (currentChar == '/')
+                    currentChar = 0;
             }
-            next();
-            ad();
+            nextChar();
+            nextToken();
         } else {
             char* e = "++#m--%am*@R<^1c/@%[_[H3c%@%[_[H3c+@.B#d-@%:_^BKd<<Z/03e>>`/03e<=0f>=/f<@.f>@1f==&g!='g&&k||#l&@.BCh^@.BSi|@.B+j~@/%Yd!@&d*@b";
             while (j = *(char*) e++) {
                 m = *(char*) e++;
-                z = 0;
+                currentTokenData = 0;
                 while ((C = *(char*) e++ - 98) < 0)
-                    z = z * 64 + C + 64;
-                if (j == d & (m == h | m == 64)) {
-                    if (m == h) {
-                        next();
-                        d = 1;
+                    currentTokenData = currentTokenData * 64 + C + 64;
+                if (j == currentToken && (m == currentChar || m == 64)) {
+                    if (m == currentChar) {
+                        nextChar();
+                        currentToken = TOKEN_OPERATOR;
                     }
                     break;
                 }
@@ -150,7 +161,7 @@ static void ad() {
 }
 
 static void ae( g) {
-    while( g&&g!=-1) {
+    while( g && g != -1) {
         *(char*) q++=g;
         g=g>>8;
     }
@@ -202,23 +213,23 @@ static void N( j, e) {
 static void T (j) {
     int g,e,m,aa;
     g=1;
-    if( d == 34) {
+    if( currentToken == 34) {
         H(v);
-        while( h!=34) {
-            Y ();
-            *(char*) v++=h;
-            next ();
+        while( currentChar!=34) {
+            unescapeCurrentChar ();
+            *(char*) v++=currentChar;
+            nextChar ();
         }
         *(char*) v=0;
         v= (char*) (((int)v) +4&-4);
-        next ();
-        ad();
+        nextChar ();
+        nextToken();
     }
     else {
         aa=C;
-        m= z;
-        e=d;
-        ad();
+        m= currentTokenData;
+        e=currentToken;
+        nextToken();
         if( e == 2) {
             H(m);
         }
@@ -230,24 +241,24 @@ static void T (j) {
         }
         else if( e == 40) {
             w ();
-            ad();
+            nextToken();
         }
         else if( e == 42) {
-            ad();
-            e=d;
-            ad();
-            ad();
-            if( d == 42) {
-                ad();
-                ad();
-                ad();
-                ad();
+            nextToken();
+            e=currentToken;
+            nextToken();
+            nextToken();
+            if( currentToken == 42) {
+                nextToken();
+                nextToken();
+                nextToken();
+                nextToken();
                 e=0;
             }
-            ad();
+            nextToken();
             T(0);
-            if( d == 61) {
-                ad();
+            if( currentToken == 61) {
+                nextToken();
                 ae( 80);
                 w ();
                 ae( 89);
@@ -260,40 +271,40 @@ static void T (j) {
             }
         }
         else if( e == 38) {
-            N(10,*(int*) d);
-            ad();
+            N(10,*(int*) currentToken);
+            nextToken();
         }
         else {
             g=*(int*) e;
             if(!g)g=dlsym(0,M);
-            if( d == 61&j) {
-                ad();
+            if( currentToken == 61&j) {
+                nextToken();
                 w ();
                 N(6,g);
             }
-            else if( d!= 40) {
+            else if( currentToken!= 40) {
                 N(8,g);
                 if( C == 11) {
                     N(0,g);
-                    ae( z);
-                    ad();
+                    ae( currentTokenData);
+                    nextToken();
                 }
             }
         }
     }
-    if( d == 40) {
+    if( currentToken == 40) {
         if( g == 1)ae( 80);
         m= s(60545,0);
-        ad();
+        nextToken();
         j=0;
-        while( d!= 41) {
+        while( currentToken!= 41) {
             w ();
             s(2393225,j);
-            if( d == 44)ad();
+            if( currentToken == 44)nextToken();
             j=j +4;
         }
         *(int*) m= j;
-        ad();
+        nextToken();
         if(!g) {
             e=e +4;
             *(int*) e=s(232,*(int*) e);
@@ -316,9 +327,9 @@ static void O (j) {
         O (j);
         m= 0;
         while( j == C) {
-            g=d;
-            e=z;
-            ad();
+            g=currentToken;
+            e=currentTokenData;
+            nextToken();
             if( j>8) {
                 m= S(e,m);
                 O (j);
@@ -357,14 +368,14 @@ static int U() {
 
 static void I (j) {
     int m,g,e;
-    if( d == 288) {
-        ad();
-        ad();
+    if( currentToken == 288) {
+        nextToken();
+        nextToken();
         m= U ();
-        ad();
+        nextToken();
         I (j);
-        if( d == 312) {
-            ad();
+        if( currentToken == 312) {
+            nextToken();
             g=B(0);
             A(m);
             I (j);
@@ -374,22 +385,22 @@ static void I (j) {
             A(m);
         }
     }
-    else if( d == 352|d == 504) {
-        e=d;
-        ad();
-        ad();
+    else if( currentToken == 352|currentToken == 504) {
+        e=currentToken;
+        nextToken();
+        nextToken();
         if( e == 352) {
             g=q;
             m= U ();
         }
         else {
-            if( d!= 59)w ();
-            ad();
+            if( currentToken!= 59)w ();
+            nextToken();
             g=q;
             m= 0;
-            if( d!= 59)m= U ();
-            ad();
-            if( d!= 41) {
+            if( currentToken!= 59)m= U ();
+            nextToken();
+            if( currentToken!= 41) {
                 e=B(0);
                 w ();
                 B(g-q-5);
@@ -397,64 +408,64 @@ static void I (j) {
                 g=e +4;
             }
         }
-        ad();
+        nextToken();
         I(&m);
         B(g-q-5);
         A(m);
     }
-    else if( d == 123) {
-        ad();
+    else if( currentToken == 123) {
+        nextToken();
         ab(1);
-        while( d!= 125)I (j);
-        ad();
+        while( currentToken!= 125)I (j);
+        nextToken();
     }
     else {
-        if( d == 448) {
-            ad();
-            if( d!= 59)w ();
+        if( currentToken == 448) {
+            nextToken();
+            if( currentToken!= 59)w ();
             K=B(K);
         }
-        else if( d == 400) {
-            ad();
+        else if( currentToken == 400) {
+            nextToken();
             *(int*) j=B(*(int*) j);
         }
-        else if( d!= 59)w ();
-        ad();
+        else if( currentToken!= 59)w ();
+        nextToken();
     }
 }
 
 static void ab (int j) {
     int m;
-    while( d == 256 | d != -1 & !j ) {
-        if( d == 256) {
-            ad();
-            while( d!= 59) {
+    while( currentToken == 256 | currentToken != -1 & !j ) {
+        if( currentToken == 256) {
+            nextToken();
+            while( currentToken!= 59) {
                 if( j ) {
                     G=G +4;
-                    *(int*) d=-G;
+                    *(int*) currentToken=-G;
                 }
                 else {
-                    *(char**) d = v;
+                    *(char**) currentToken = v;
                     v=v +4;
                 }
-                ad();
-                if( d == 44)ad();
+                nextToken();
+                if( currentToken == 44)nextToken();
             }
-            ad();
+            nextToken();
         }
         else {
-            A(*(int*)(d +4));
-            *(int*) d=q;
-            ad();
-            ad();
+            A(*(int*)(currentToken +4));
+            *(int*) currentToken=q;
+            nextToken();
+            nextToken();
             m= 8;
-            while( d!= 41) {
-                *(int*) d=m;
+            while( currentToken!= 41) {
+                *(int*) currentToken=m;
                 m= m +4;
-                ad();
-                if( d == 44)ad();
+                nextToken();
+                if( currentToken == 44)nextToken();
             }
-            ad();
+            nextToken();
             K=G=0;
             ae( 15042901);
             m= s(60545,0);
@@ -467,24 +478,24 @@ static void ab (int j) {
 }
 
 int main( int argc, char** argv) {
-    Q = stdin;
+    pInput = stdin;
     if (argc-- > 1) {
         char* file = argv[1];
         argv += 1;
-        Q = fopen(file, "r");
-        if (Q == NULL) {
+        pInput = fopen(file, "r");
+        if (pInput == NULL) {
             fprintf(stderr, "Could not open file \"%s\"\n", file);
             return -1;
         }
     }
-    D = strcpy(R = calloc(1, 99999),
+    pSymbolTable = strcpy(R = calloc(1, 99999),
             " int if else while break return for define main ") + 48;
     v = calloc(1, 99999);
     ac = calloc(1, 99999);
     q = (int) ac;
     P = calloc(1, 99999);
-    next();
-    ad();
+    nextChar();
+    nextToken();
     ab(0);
 #if 1
     fwrite(R, 1, 99999, stdout);
