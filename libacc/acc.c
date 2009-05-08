@@ -16,14 +16,15 @@
  */
 
 /* Based upon the freeware version of the Obfuscated Tiny C Compiler
- * by Francis Bellard.
+ * by Francis Bellard. <francis@bellard.org>.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int d, z, C, h, P, K, q, G, L, W;
+int d, z, C, h, K, q, G, L, W;
+char* P;
 char* ac;
 char* v;
 char* D;
@@ -38,7 +39,7 @@ void E(e) {
     *(char*) D++=e;
 }
 
-o() {
+void o() {
     if (L) {
         h = *(char*) L++;
         if (h == 2) {
@@ -49,11 +50,11 @@ o() {
         h = fgetc(Q);
 }
 
-X() {
+int X() {
     return isalnum(h) | h == 95;
 }
 
-Y() {
+void Y() {
     if (h == 92) {
         o();
         if (h == 110)
@@ -100,7 +101,7 @@ void ad() {
             *(char*) D = 0;
             d = d * 8 + 256;
             if (d > 536) {
-                d = P + d;
+                d = ((int) P) + d;
                 if (*(int*) d == 1) {
                     L = *(int*) (d + 4);
                     W = h;
@@ -478,7 +479,8 @@ int main( int argc, char** argv) {
     D = strcpy(R = calloc(1, 99999),
             " int if else while break return for define main ") + 48;
     v = calloc(1, 99999);
-    q = ac = calloc(1, 99999);
+    ac = calloc(1, 99999);
+    q = (int) ac;
     P = calloc(1, 99999);
     o();
     ad();
