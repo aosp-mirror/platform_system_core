@@ -23,23 +23,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-int d, z, C, h, K, q, G, L, W;
-char* P;
-char* ac;
-char* v;
-char* D;
-char* M;
-char* R;
-FILE* Q;
+static int d, z, C, h, K, q, G, W;
+static char* L;
+static char* P;
+static char* ac;
+static char* v;
+static char* D;
+static char* M;
+static char* R;
+static FILE* Q;
 
-void ab (int j);
-void w();
+static void ab (int j);
+static void w();
 
-void E(e) {
-    *(char*) D++=e;
+static void addToSymbolTable(char e) {
+    *D++ = e;
 }
 
-void o() {
+static void next() {
     if (L) {
         h = *(char*) L++;
         if (h == 2) {
@@ -50,47 +51,47 @@ void o() {
         h = fgetc(Q);
 }
 
-int X() {
-    return isalnum(h) | h == 95;
+static int X() {
+    return isalnum(h) || h == '_';
 }
 
-void Y() {
+static void Y() {
     if (h == 92) {
-        o();
+        next();
         if (h == 110)
             h = 10;
     }
 }
 
-void ad() {
+static void ad() {
     int j, m;
     while (isspace(h) | h == 35) {
         if (h == 35) {
-            o();
+            next();
             ad();
             if (d == 536) {
                 ad();
-                E(32);
+                addToSymbolTable(32);
                 *(int*) d = 1;
                 *(int*) (d + 4) = (int) D;
             }
-            while (h != 10) {
-                E(h);
-                o();
+            while (h != '\n') {
+                addToSymbolTable(h);
+                next();
             }
-            E(h);
-            E(2);
+            addToSymbolTable(h);
+            addToSymbolTable(2);
         }
-        o();
+        next();
     }
     C = 0;
     d = h;
     if (X()) {
-        E(32);
+        addToSymbolTable(32);
         M = D;
         while (X()) {
-            E(h);
-            o();
+            addToSymbolTable(h);
+            next();
         }
         if (isdigit(d)) {
             z = strtol(M, 0, 0);
@@ -103,31 +104,31 @@ void ad() {
             if (d > 536) {
                 d = ((int) P) + d;
                 if (*(int*) d == 1) {
-                    L = *(int*) (d + 4);
+                    L = (char*) (*(int*) (d + 4));
                     W = h;
-                    o();
+                    next();
                     ad();
                 }
             }
         }
     } else {
-        o();
+        next();
         if (d == 39) {
             d = 2;
             Y();
             z = h;
-            o();
-            o();
+            next();
+            next();
         } else if (d == 47 & h == 42) {
-            o();
+            next();
             while (h) {
                 while (h != 42)
-                    o();
-                o();
+                    next();
+                next();
                 if (h == 47)
                     h = 0;
             }
-            o();
+            next();
             ad();
         } else {
             char* e = "++#m--%am*@R<^1c/@%[_[H3c%@%[_[H3c+@.B#d-@%:_^BKd<<Z/03e>>`/03e<=0f>=/f<@.f>@1f==&g!='g&&k||#l&@.BCh^@.BSi|@.B+j~@/%Yd!@&d*@b";
@@ -138,7 +139,7 @@ void ad() {
                     z = z * 64 + C + 64;
                 if (j == d & (m == h | m == 64)) {
                     if (m == h) {
-                        o();
+                        next();
                         d = 1;
                     }
                     break;
@@ -148,14 +149,14 @@ void ad() {
     }
 }
 
-void ae( g) {
+static void ae( g) {
     while( g&&g!=-1) {
         *(char*) q++=g;
         g=g>>8;
     }
 }
 
-void A(e) {
+static void A(e) {
     int g;
     while( e) {
         g=*(int*) e;
@@ -164,7 +165,7 @@ void A(e) {
     }
 }
 
-int s( g, e) {
+static int s( g, e) {
     ae(g);
     *(int*) q = e;
     e = q;
@@ -172,20 +173,20 @@ int s( g, e) {
     return e;
 }
 
-int H(e) {
+static int H(e) {
     s(184,e);
 }
 
-int B(e) {
+static int B(e) {
     return s(233,e);
 }
 
-S( j, e) {
+static int S( j, e) {
     ae(1032325);
     return s(132 + j, e);
 }
 
-void Z(e) {
+static void Z(e) {
     ae( 49465);
     H(0);
     ae( 15);
@@ -193,12 +194,12 @@ void Z(e) {
     ae( 192);
 }
 
-void N( j, e) {
+static void N( j, e) {
     ae(j + 131);
     s((e < 512) << 7 | 5, e);
 }
 
-void T (j) {
+static void T (j) {
     int g,e,m,aa;
     g=1;
     if( d == 34) {
@@ -206,11 +207,11 @@ void T (j) {
         while( h!=34) {
             Y ();
             *(char*) v++=h;
-            o ();
+            next ();
         }
         *(char*) v=0;
         v= (char*) (((int)v) +4&-4);
-        o ();
+        next ();
         ad();
     }
     else {
@@ -308,7 +309,7 @@ void T (j) {
     }
 }
 
-void O (j) {
+static void O (j) {
     int e,g,m;
     if( j--== 1)T(1);
     else {
@@ -345,16 +346,16 @@ void O (j) {
     }
 }
 
-void w() {
+static void w() {
     O(11);
 }
 
-U() {
+static int U() {
     w();
     return S(0, 0);
 }
 
-void I (j) {
+static void I (j) {
     int m,g,e;
     if( d == 288) {
         ad();
@@ -422,7 +423,7 @@ void I (j) {
     }
 }
 
-void ab (int j) {
+static void ab (int j) {
     int m;
     while( d == 256 | d != -1 & !j ) {
         if( d == 256) {
@@ -482,7 +483,7 @@ int main( int argc, char** argv) {
     ac = calloc(1, 99999);
     q = (int) ac;
     P = calloc(1, 99999);
-    o();
+    next();
     ad();
     ab(0);
 #if 1
