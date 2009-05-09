@@ -38,16 +38,16 @@
 
 static int currentToken;
 static int currentTokenData;
-static int C;
+static int gCurrentTokenOperatorLevel;
 static int currentChar;
-static int K;
-static int q;
-static int G;
+static int gEndOfFunctionTarget;
+static int gProgramCounter;
+static int gFunctionStackSize;
 static int savedChar;
 static char* pInProgressMacro;
 static char* P;
 static char* ac;
-static char* v;
+static char* gStringTable;
 static char* pSymbolTable;
 static char* M;
 static char* R;
@@ -104,7 +104,7 @@ static void nextToken() {
         }
         nextChar();
     }
-    C = 0;
+    gCurrentTokenOperatorLevel = 0;
     currentToken = currentChar;
     if (isSymbolChar()) {
         addToSymbolTable(' ');
@@ -155,8 +155,8 @@ static void nextToken() {
             while (j = *(char*) e++) {
                 m = *(char*) e++;
                 currentTokenData = 0;
-                while ((C = *(char*) e++ - 98) < 0)
-                    currentTokenData = currentTokenData * 64 + C + 64;
+                while ((gCurrentTokenOperatorLevel = *(char*) e++ - 98) < 0)
+                    currentTokenData = currentTokenData * 64 + gCurrentTokenOperatorLevel + 64;
                 if (j == currentToken && (m == currentChar || m == 64)) {
                     if (m == currentChar) {
                         nextChar();
@@ -171,11 +171,11 @@ static void nextToken() {
 
 /*
  * Emit 1 to 4 bytes of code. Little-endian, doesn't emit high bytes that
- * are 0x0 or 0xff
+ * are 0x00 or 0xff
  */
 static void emitCode(int g) {
     while( g && g != -1) {
-        *(char*) q++=g;
+        *(char*) gProgramCounter++=g;
         g=g>>8;
     }
 }
@@ -184,16 +184,16 @@ static void fixupAddress(e) {
     int g;
     while( e) {
         g=*(int*) e;
-        *(int*) e=q-e-4;
+        *(int*) e=gProgramCounter-e-4;
         e=g;
     }
 }
 
 static int emitCodeWithImmediate( g, e) {
     emitCode(g);
-    *(int*) q = e;
-    e = q;
-    q = q + 4;
+    *(int*) gProgramCounter = e;
+    e = gProgramCounter;
+    gProgramCounter = gProgramCounter + 4;
     return e;
 }
 
@@ -205,41 +205,41 @@ static int emitBranch(e) {
     return emitCodeWithImmediate(0xe9,e); /* Jump relative */
 }
 
-static int S( j, e) {
-    emitCode(0x0FC085); /* XADD 85 r/m8, r8  exchange and add */
+static int emitTest( j, e) {
+    emitCode(0x0FC085); /* 85 C0 FC TEST */
     return emitCodeWithImmediate(0x84 + j, e); /* TEST */
 }
 
-static void Z(e) {
-    emitCode( 0xC139);
+static void emitSetCC(int condition) {
+    emitCode( 0xC139); /* 39 C1 CMP */
     emitLoadAccumulatorImmediate(0);
-    emitCode( 0x0F);
-    emitCode( e+0x90);
-    emitCode( 0xC0);
+    emitCode( 0x0F); /* Two byte opcode prefix */
+    emitCode( condition+0x90); /* Set byte on condition (controlled by e) */
+    emitCode( 0xC0); /* I think this is part of the SETcc instruction */
 }
 
-static void N( j, e) {
-    emitCode(j + 0x83);
+static void emitNumericOp( int op, int e) {
+    emitCode(op + 0x83);
     emitCodeWithImmediate((e < 512) << 7 | 5, e);
 }
 
-static void T (int j) {
+static void parseTerminal (int level) {
     int g,e,m,aa;
     g=1;
     if( currentToken == '"') {
-        emitLoadAccumulatorImmediate(v);
+        emitLoadAccumulatorImmediate(gStringTable);
         while( currentChar != '"') {
             unescapeCurrentChar ();
-            *(char*) v++=currentChar;
+            *(char*) gStringTable++=currentChar;
             nextChar ();
         }
-        *(char*) v=0;
-        v= (char*) (((int)v) +4&-4);
+        *(char*) gStringTable=0;
+        gStringTable= (char*) (((int)gStringTable) +4&-4);
         nextChar();
         nextToken();
     }
     else {
-        aa=C;
+        aa=gCurrentTokenOperatorLevel;
         m= currentTokenData;
         e=currentToken;
         nextToken();
@@ -247,9 +247,9 @@ static void T (int j) {
             emitLoadAccumulatorImmediate(m);
         }
         else if( aa == 2) {
-            T(0);
-            emitCodeWithImmediate(0xB9,0);
-            if( e == '!')Z(m);
+            parseTerminal(0);
+            emitCodeWithImmediate(0xB9,0); /* MOV r1, immediate */
+            if( e == '!')emitSetCC(m);
             else emitCode( m);
         }
         else if( e == '(') {
@@ -269,36 +269,36 @@ static void T (int j) {
                 e=0;
             }
             nextToken();
-            T(0);
+            parseTerminal(0);
             if( currentToken == '=') {
                 nextToken();
-                emitCode( 0x50);
+                emitCode( 0x50); /* PUSH r0 */
                 parseExpression ();
-                emitCode( 0x59);
-                emitCode( 0x188 + (e == TOKEN_INT));
+                emitCode( 0x59); /* POP r1 */
+                emitCode( 0x188 + (e == TOKEN_INT)); /* 88 01 MOV */
             }
             else if( e) {
-                if( e == TOKEN_INT)emitCode( 0x8B);
-                else emitCode( 0xBE0F);
-                q++;
+                if( e == TOKEN_INT)emitCode( 0x8B); /* MOV */
+                else emitCode( 0xBE0F); /* 0F BE MOVSX move with sign extension */
+                gProgramCounter++;
             }
         }
         else if( e == '&') {
-            N(10,*(int*) currentToken);
+            emitNumericOp(10,*(int*) currentToken); /* 8D LEA */
             nextToken();
         }
         else {
             g=*(int*) e;
             if(!g)g=dlsym(0,M);
-            if( currentToken == '=' & j) {
+            if( currentToken == '=' & level) {
                 nextToken();
                 parseExpression ();
-                N(6,g);
+                emitNumericOp(6,g); /* 89 MOV */
             }
             else if( currentToken!= '(') {
-                N(8,g);
-                if( C == 11) {
-                    N(0,g);
+                emitNumericOp(8,g); /* 8B MOV sreg */
+                if( gCurrentTokenOperatorLevel == 11) {
+                    emitNumericOp(0,g); /* 83 ADD */
                     emitCode( currentTokenData);
                     nextToken();
                 }
@@ -306,45 +306,45 @@ static void T (int j) {
         }
     }
     if( currentToken == '(') {
-        if( g == 1)emitCode( 0x50);
-        m= emitCodeWithImmediate(0xEC81,0);
+        if( g == 1)emitCode( 0x50); /* push */
+        m= emitCodeWithImmediate(0xEC81,0); /* 81 EC Cmp ?? */
         nextToken();
-        j=0;
+        level=0;
         while( currentToken!= ')') {
             parseExpression ();
-            emitCodeWithImmediate(0x248489,j);
+            emitCodeWithImmediate(0x248489,level); /* 89 84 24 MOV sp + level*/
             if( currentToken == ',')nextToken();
-            j=j +4;
+            level=level +4;
         }
-        *(int*) m= j;
+        *(int*) m= level;
         nextToken();
         if(!g) {
             e=e +4;
-            *(int*) e=emitCodeWithImmediate(0xE8,*(int*) e);
+            *(int*) e=emitCodeWithImmediate(0xE8,*(int*) e); /* Call */
         }
         else if( g == 1) {
-            emitCodeWithImmediate(0x2494FF,j);
-            j=j +4;
+            emitCodeWithImmediate(0x2494FF,level); /* FF 94 24 */
+            level=level +4;
         }
         else {
-            emitCodeWithImmediate(0xE8,g-q-5);
+            emitCodeWithImmediate(0xE8,g-gProgramCounter-5); /* CALL */
         }
-        if( j)emitCodeWithImmediate(0xC481,j);
+        if( level)emitCodeWithImmediate(0xC481,level); /* 81 C4 adjust stack pointer */
     }
 }
 
 static void parseBinaryOp (int level) {
     int e,g,m;
-    if( level--== 1)T(1);
+    if( level--== 1)parseTerminal(1);
     else {
         parseBinaryOp (level);
         m= 0;
-        while( level == C) {
+        while( level == gCurrentTokenOperatorLevel) {
             g=currentToken;
             e=currentTokenData;
             nextToken();
             if( level>8) {
-                m= S(e,m);
+                m= emitTest(e,m);
                 parseBinaryOp (level);
             }
             else {
@@ -352,18 +352,18 @@ static void parseBinaryOp (int level) {
                 parseBinaryOp (level);
                 emitCode( 0x59);
                 if( level == 4 | level == 5) {
-                    Z(e);
+                    emitSetCC(e);
                 }
                 else {
                     emitCode( e);
-                    if( g == '%')emitCode( 0x92);
+                    if( g == '%')emitCode( 0x92); /* XCHG */
                 }
             }
         }
         if( m&&level>8) {
-            m= S(e,m);
+            m= emitTest(e,m);
             emitLoadAccumulatorImmediate(e^1);
-            emitBranch(5);
+            emitBranch(5); /* Jump relative +5 */
             fixupAddress(m);
             emitLoadAccumulatorImmediate(e);
         }
@@ -374,9 +374,9 @@ static void parseExpression() {
     parseBinaryOp(11);
 }
 
-static int U() {
+static int parseExpressionEmitTest() {
     parseExpression();
-    return S(0, 0);
+    return emitTest(0, 0);
 }
 
 static void parseStatement (int* pBreakTarget) {
@@ -384,7 +384,7 @@ static void parseStatement (int* pBreakTarget) {
     if( currentToken == TOKEN_IF) {
         nextToken();
         nextToken();
-        m= U ();
+        m= parseExpressionEmitTest ();
         nextToken();
         parseStatement (pBreakTarget);
         if( currentToken == TOKEN_ELSE) {
@@ -403,27 +403,27 @@ static void parseStatement (int* pBreakTarget) {
         nextToken();
         nextToken();
         if( e == TOKEN_WHILE) {
-            g=q;
-            m= U ();
+            g=gProgramCounter;
+            m= parseExpressionEmitTest ();
         }
         else {
             if( currentToken != ';')parseExpression ();
             nextToken();
-            g=q;
+            g=gProgramCounter;
             m= 0;
-            if( currentToken != ';')m= U ();
+            if( currentToken != ';')m= parseExpressionEmitTest ();
             nextToken();
             if( currentToken!= ')') {
                 e=emitBranch(0);
                 parseExpression ();
-                emitBranch(g-q-5);
+                emitBranch(g-gProgramCounter-5);
                 fixupAddress(e);
                 g=e +4;
             }
         }
         nextToken();
         parseStatement(&m);
-        emitBranch(g-q-5);
+        emitBranch(g-gProgramCounter-5);
         fixupAddress(m);
     }
     else if( currentToken == '{') {
@@ -436,7 +436,7 @@ static void parseStatement (int* pBreakTarget) {
         if( currentToken == TOKEN_RETURN) {
             nextToken();
             if( currentToken != ';') parseExpression();
-            K=emitBranch(K);
+            gEndOfFunctionTarget=emitBranch(gEndOfFunctionTarget);
         }
         else if( currentToken == TOKEN_BREAK) {
             nextToken();
@@ -454,12 +454,12 @@ static void parseDeclarations (int isLocal) {
             nextToken();
             while( currentToken != ';') {
                 if( isLocal ) {
-                    G=G +4;
-                    *(int*) currentToken=-G;
+                    gFunctionStackSize=gFunctionStackSize +4;
+                    *(int*) currentToken=-gFunctionStackSize;
                 }
                 else {
-                    *(char**) currentToken = v;
-                    v=v +4;
+                    *(char**) currentToken = gStringTable;
+                    gStringTable=gStringTable +4;
                 }
                 nextToken();
                 if( currentToken == ',')nextToken();
@@ -468,7 +468,7 @@ static void parseDeclarations (int isLocal) {
         }
         else {
             fixupAddress(*(int*)(currentToken + 4));
-            *(int*) currentToken=q;
+            *(int*) currentToken=gProgramCounter;
             nextToken();
             nextToken();
             m= 8;
@@ -479,13 +479,13 @@ static void parseDeclarations (int isLocal) {
                 if( currentToken == ',')nextToken();
             }
             nextToken();
-            K=G=0;
-            emitCode( 0xE58955);
-            m= emitCodeWithImmediate(0xEC81,0);
+            gEndOfFunctionTarget=gFunctionStackSize=0;
+            emitCode( 0xE58955); /* 55 89 E5 PUSH */
+            m= emitCodeWithImmediate(0xEC81,0); /* 81 EC */
             parseStatement(0);
-            fixupAddress(K);
-            emitCode( 0xC3C9);
-            *(int*) m= G;
+            fixupAddress(gEndOfFunctionTarget);
+            emitCode( 0xC3C9); /* C9 C3 LEAVE */
+            *(int*) m= gFunctionStackSize;
         }
     }
 }
@@ -503,9 +503,9 @@ int main( int argc, char** argv) {
     }
     pSymbolTable = strcpy(R = calloc(1, 99999),
             " int if else while break return for define main ") + 48;
-    v = calloc(1, 99999);
+    gStringTable = calloc(1, 99999);
     ac = calloc(1, 99999);
-    q = (int) ac;
+    gProgramCounter = (int) ac;
     P = calloc(1, 99999);
     nextChar();
     nextToken();
@@ -516,6 +516,9 @@ int main( int argc, char** argv) {
     fwrite(P, 1, 99999, stdout);
     return 0;
 #else
+    /* Look up the address of "main" in the symbol table and call it.
+     * We put main in at a known offset, so we know the address.
+     */
     return (*(int(*)()) *(int*) (P + 592))(argc, argv);
 #endif
 }
