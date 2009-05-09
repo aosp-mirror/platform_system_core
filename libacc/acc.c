@@ -25,7 +25,16 @@
 
 #define TOKEN_OPERATOR 1
 #define TOKEN_NUMBER 2
-#define TOKEN_DEFINE 536
+
+#define TOKEN_SYMBOL_BASE     256
+#define TOKEN_INT             256
+#define TOKEN_IF              288
+#define TOKEN_ELSE            312
+#define TOKEN_WHILE           352
+#define TOKEN_BREAK           400
+#define TOKEN_RETURN          448
+#define TOKEN_FOR             504
+#define TOKEN_DEFINE          536
 
 static int currentToken;
 static int currentTokenData;
@@ -44,8 +53,8 @@ static char* M;
 static char* R;
 static FILE* pInput;
 
-static void ab (int j);
-static void w();
+static void parseDeclarations (int isLocal);
+static void parseExpression();
 
 static void addToSymbolTable(char e) {
     *pSymbolTable++ = e;
@@ -111,7 +120,7 @@ static void nextToken() {
             *(char*) pSymbolTable = ' ';
             currentToken = strstr(R, M - 1) - R;
             *(char*) pSymbolTable = 0;
-            currentToken = currentToken * 8 + 256;
+            currentToken = currentToken * 8 + TOKEN_SYMBOL_BASE;
             if (currentToken > TOKEN_DEFINE) {
                 currentToken = ((int) P) + currentToken;
                 if (*(int*) currentToken == 1) {
@@ -160,14 +169,18 @@ static void nextToken() {
     }
 }
 
-static void ae( g) {
+/*
+ * Emit 1 to 4 bytes of code. Little-endian, doesn't emit high bytes that
+ * are 0x0 or 0xff
+ */
+static void emitCode(int g) {
     while( g && g != -1) {
         *(char*) q++=g;
         g=g>>8;
     }
 }
 
-static void A(e) {
+static void fixupAddress(e) {
     int g;
     while( e) {
         g=*(int*) e;
@@ -176,53 +189,53 @@ static void A(e) {
     }
 }
 
-static int s( g, e) {
-    ae(g);
+static int emitCodeWithImmediate( g, e) {
+    emitCode(g);
     *(int*) q = e;
     e = q;
     q = q + 4;
     return e;
 }
 
-static int H(e) {
-    s(184,e);
+static int emitLoadAccumulatorImmediate(e) {
+    emitCodeWithImmediate(0xb8,e); /* Move immediate a, e */
 }
 
-static int B(e) {
-    return s(233,e);
+static int emitBranch(e) {
+    return emitCodeWithImmediate(0xe9,e); /* Jump relative */
 }
 
 static int S( j, e) {
-    ae(1032325);
-    return s(132 + j, e);
+    emitCode(0x0FC085); /* XADD 85 r/m8, r8  exchange and add */
+    return emitCodeWithImmediate(0x84 + j, e); /* TEST */
 }
 
 static void Z(e) {
-    ae( 49465);
-    H(0);
-    ae( 15);
-    ae( e+144);
-    ae( 192);
+    emitCode( 0xC139);
+    emitLoadAccumulatorImmediate(0);
+    emitCode( 0x0F);
+    emitCode( e+0x90);
+    emitCode( 0xC0);
 }
 
 static void N( j, e) {
-    ae(j + 131);
-    s((e < 512) << 7 | 5, e);
+    emitCode(j + 0x83);
+    emitCodeWithImmediate((e < 512) << 7 | 5, e);
 }
 
-static void T (j) {
+static void T (int j) {
     int g,e,m,aa;
     g=1;
-    if( currentToken == 34) {
-        H(v);
-        while( currentChar!=34) {
+    if( currentToken == '"') {
+        emitLoadAccumulatorImmediate(v);
+        while( currentChar != '"') {
             unescapeCurrentChar ();
             *(char*) v++=currentChar;
             nextChar ();
         }
         *(char*) v=0;
         v= (char*) (((int)v) +4&-4);
-        nextChar ();
+        nextChar();
         nextToken();
     }
     else {
@@ -230,25 +243,25 @@ static void T (j) {
         m= currentTokenData;
         e=currentToken;
         nextToken();
-        if( e == 2) {
-            H(m);
+        if( e == TOKEN_NUMBER) {
+            emitLoadAccumulatorImmediate(m);
         }
         else if( aa == 2) {
             T(0);
-            s(185,0);
-            if( e == 33)Z(m);
-            else ae( m);
+            emitCodeWithImmediate(0xB9,0);
+            if( e == '!')Z(m);
+            else emitCode( m);
         }
-        else if( e == 40) {
-            w ();
+        else if( e == '(') {
+            parseExpression ();
             nextToken();
         }
-        else if( e == 42) {
+        else if( e == '*') {
             nextToken();
             e=currentToken;
             nextToken();
             nextToken();
-            if( currentToken == 42) {
+            if( currentToken == '*') {
                 nextToken();
                 nextToken();
                 nextToken();
@@ -257,190 +270,190 @@ static void T (j) {
             }
             nextToken();
             T(0);
-            if( currentToken == 61) {
+            if( currentToken == '=') {
                 nextToken();
-                ae( 80);
-                w ();
-                ae( 89);
-                ae( 392+(e == 256));
+                emitCode( 0x50);
+                parseExpression ();
+                emitCode( 0x59);
+                emitCode( 0x188 + (e == TOKEN_INT));
             }
             else if( e) {
-                if( e == 256)ae( 139);
-                else ae( 48655);
+                if( e == TOKEN_INT)emitCode( 0x8B);
+                else emitCode( 0xBE0F);
                 q++;
             }
         }
-        else if( e == 38) {
+        else if( e == '&') {
             N(10,*(int*) currentToken);
             nextToken();
         }
         else {
             g=*(int*) e;
             if(!g)g=dlsym(0,M);
-            if( currentToken == 61&j) {
+            if( currentToken == '=' & j) {
                 nextToken();
-                w ();
+                parseExpression ();
                 N(6,g);
             }
-            else if( currentToken!= 40) {
+            else if( currentToken!= '(') {
                 N(8,g);
                 if( C == 11) {
                     N(0,g);
-                    ae( currentTokenData);
+                    emitCode( currentTokenData);
                     nextToken();
                 }
             }
         }
     }
-    if( currentToken == 40) {
-        if( g == 1)ae( 80);
-        m= s(60545,0);
+    if( currentToken == '(') {
+        if( g == 1)emitCode( 0x50);
+        m= emitCodeWithImmediate(0xEC81,0);
         nextToken();
         j=0;
-        while( currentToken!= 41) {
-            w ();
-            s(2393225,j);
-            if( currentToken == 44)nextToken();
+        while( currentToken!= ')') {
+            parseExpression ();
+            emitCodeWithImmediate(0x248489,j);
+            if( currentToken == ',')nextToken();
             j=j +4;
         }
         *(int*) m= j;
         nextToken();
         if(!g) {
             e=e +4;
-            *(int*) e=s(232,*(int*) e);
+            *(int*) e=emitCodeWithImmediate(0xE8,*(int*) e);
         }
         else if( g == 1) {
-            s(2397439,j);
+            emitCodeWithImmediate(0x2494FF,j);
             j=j +4;
         }
         else {
-            s(232,g-q-5);
+            emitCodeWithImmediate(0xE8,g-q-5);
         }
-        if( j)s(50305,j);
+        if( j)emitCodeWithImmediate(0xC481,j);
     }
 }
 
-static void O (j) {
+static void parseBinaryOp (int level) {
     int e,g,m;
-    if( j--== 1)T(1);
+    if( level--== 1)T(1);
     else {
-        O (j);
+        parseBinaryOp (level);
         m= 0;
-        while( j == C) {
+        while( level == C) {
             g=currentToken;
             e=currentTokenData;
             nextToken();
-            if( j>8) {
+            if( level>8) {
                 m= S(e,m);
-                O (j);
+                parseBinaryOp (level);
             }
             else {
-                ae( 80);
-                O (j);
-                ae( 89);
-                if( j == 4|j == 5) {
+                emitCode( 0x50);
+                parseBinaryOp (level);
+                emitCode( 0x59);
+                if( level == 4 | level == 5) {
                     Z(e);
                 }
                 else {
-                    ae( e);
-                    if( g == 37)ae( 146);
+                    emitCode( e);
+                    if( g == '%')emitCode( 0x92);
                 }
             }
         }
-        if( m&&j>8) {
+        if( m&&level>8) {
             m= S(e,m);
-            H(e^1);
-            B(5);
-            A(m);
-            H(e);
+            emitLoadAccumulatorImmediate(e^1);
+            emitBranch(5);
+            fixupAddress(m);
+            emitLoadAccumulatorImmediate(e);
         }
     }
 }
 
-static void w() {
-    O(11);
+static void parseExpression() {
+    parseBinaryOp(11);
 }
 
 static int U() {
-    w();
+    parseExpression();
     return S(0, 0);
 }
 
-static void I (j) {
+static void parseStatement (int* pBreakTarget) {
     int m,g,e;
-    if( currentToken == 288) {
+    if( currentToken == TOKEN_IF) {
         nextToken();
         nextToken();
         m= U ();
         nextToken();
-        I (j);
-        if( currentToken == 312) {
+        parseStatement (pBreakTarget);
+        if( currentToken == TOKEN_ELSE) {
             nextToken();
-            g=B(0);
-            A(m);
-            I (j);
-            A(g);
+            g=emitBranch(0);
+            fixupAddress(m);
+            parseStatement (pBreakTarget);
+            fixupAddress(g);
         }
         else {
-            A(m);
+            fixupAddress(m);
         }
     }
-    else if( currentToken == 352|currentToken == 504) {
-        e=currentToken;
+    else if ( currentToken == TOKEN_WHILE || currentToken == TOKEN_FOR) {
+        e = currentToken;
         nextToken();
         nextToken();
-        if( e == 352) {
+        if( e == TOKEN_WHILE) {
             g=q;
             m= U ();
         }
         else {
-            if( currentToken!= 59)w ();
+            if( currentToken != ';')parseExpression ();
             nextToken();
             g=q;
             m= 0;
-            if( currentToken!= 59)m= U ();
+            if( currentToken != ';')m= U ();
             nextToken();
-            if( currentToken!= 41) {
-                e=B(0);
-                w ();
-                B(g-q-5);
-                A(e);
+            if( currentToken!= ')') {
+                e=emitBranch(0);
+                parseExpression ();
+                emitBranch(g-q-5);
+                fixupAddress(e);
                 g=e +4;
             }
         }
         nextToken();
-        I(&m);
-        B(g-q-5);
-        A(m);
+        parseStatement(&m);
+        emitBranch(g-q-5);
+        fixupAddress(m);
     }
-    else if( currentToken == 123) {
+    else if( currentToken == '{') {
         nextToken();
-        ab(1);
-        while( currentToken!= 125)I (j);
+        parseDeclarations(1);
+        while( currentToken != '}') parseStatement(pBreakTarget);
         nextToken();
     }
     else {
-        if( currentToken == 448) {
+        if( currentToken == TOKEN_RETURN) {
             nextToken();
-            if( currentToken!= 59)w ();
-            K=B(K);
+            if( currentToken != ';') parseExpression();
+            K=emitBranch(K);
         }
-        else if( currentToken == 400) {
+        else if( currentToken == TOKEN_BREAK) {
             nextToken();
-            *(int*) j=B(*(int*) j);
+            *pBreakTarget = emitBranch(*pBreakTarget);
         }
-        else if( currentToken!= 59)w ();
+        else if( currentToken != ';') parseExpression();
         nextToken();
     }
 }
 
-static void ab (int j) {
+static void parseDeclarations (int isLocal) {
     int m;
-    while( currentToken == 256 | currentToken != -1 & !j ) {
-        if( currentToken == 256) {
+    while( currentToken == TOKEN_INT | currentToken != -1 & !isLocal ) {
+        if( currentToken == TOKEN_INT) {
             nextToken();
-            while( currentToken!= 59) {
-                if( j ) {
+            while( currentToken != ';') {
+                if( isLocal ) {
                     G=G +4;
                     *(int*) currentToken=-G;
                 }
@@ -449,29 +462,29 @@ static void ab (int j) {
                     v=v +4;
                 }
                 nextToken();
-                if( currentToken == 44)nextToken();
+                if( currentToken == ',')nextToken();
             }
             nextToken();
         }
         else {
-            A(*(int*)(currentToken +4));
+            fixupAddress(*(int*)(currentToken + 4));
             *(int*) currentToken=q;
             nextToken();
             nextToken();
             m= 8;
-            while( currentToken!= 41) {
+            while( currentToken != ')') {
                 *(int*) currentToken=m;
                 m= m +4;
                 nextToken();
-                if( currentToken == 44)nextToken();
+                if( currentToken == ',')nextToken();
             }
             nextToken();
             K=G=0;
-            ae( 15042901);
-            m= s(60545,0);
-            I(0);
-            A(K);
-            ae( 50121);
+            emitCode( 0xE58955);
+            m= emitCodeWithImmediate(0xEC81,0);
+            parseStatement(0);
+            fixupAddress(K);
+            emitCode( 0xC3C9);
             *(int*) m= G;
         }
     }
@@ -496,7 +509,7 @@ int main( int argc, char** argv) {
     P = calloc(1, 99999);
     nextChar();
     nextToken();
-    ab(0);
+    parseDeclarations(0);
 #if 1
     fwrite(R, 1, 99999, stdout);
     fwrite(ac, 1, 99999, stdout);
