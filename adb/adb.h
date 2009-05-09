@@ -359,16 +359,9 @@ typedef enum {
 
 // Google's USB Vendor ID
 #define VENDOR_ID_GOOGLE        0x18d1
+
 // HTC's USB Vendor ID
 #define VENDOR_ID_HTC           0x0bb4
-
-// products for VENDOR_ID_GOOGLE
-#define PRODUCT_ID_SOONER       0xd00d  // Sooner bootloader
-#define PRODUCT_ID_SOONER_COMP  0xdeed  // Sooner composite device
-
-// products for VENDOR_ID_HTC
-#define PRODUCT_ID_DREAM        0x0c01  // Dream bootloader
-#define PRODUCT_ID_DREAM_COMP   0x0c02  // Dream composite device
 
 void local_init();
 int  local_connect(int  port);
