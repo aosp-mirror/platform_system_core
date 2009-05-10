@@ -93,11 +93,8 @@ out_powerdown:
     return -1;
 }
 
-void WifiController::sendStatusBroadcast(const char *msg) {
-    char tmp[255];
-
-    sprintf(tmp, "WIFI_STATUS:%s", msg);
-    NetworkManager::Instance()->getBroadcaster()->sendBroadcast(tmp);
+void WifiController::sendStatusBroadcast(char *msg) {
+    NetworkManager::Instance()->getBroadcaster()->sendBroadcast(600, msg, false);
 }
 
 int WifiController::disable() {
