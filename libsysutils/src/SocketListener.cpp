@@ -24,26 +24,28 @@
 
 #define LOG_TAG "SocketListener"
 #include <cutils/log.h>
-
 #include <cutils/sockets.h>
 
 #include <sysutils/SocketListener.h>
+#include <sysutils/SocketClient.h>
 
-SocketListener::SocketListener(const char *socketName, bool acceptClients) {
-    mAcceptClients = acceptClients;
-    mCsock = -1;
+SocketListener::SocketListener(const char *socketName, bool listen) {
+    mListen = listen;
     mSocketName = socketName;
     mSock = -1;
+    pthread_mutex_init(&mClientsLock, NULL);
+    mClients = new SocketClientCollection();
 }
 
-SocketListener::SocketListener(int socketFd, bool acceptClients) {
-    mAcceptClients = acceptClients;
-    mCsock = -1;
+SocketListener::SocketListener(int socketFd, bool listen) {
+    mListen = listen;
     mSocketName = NULL;
     mSock = socketFd;
+    pthread_mutex_init(&mClientsLock, NULL);
+    mClients = new SocketClientCollection();
 }
 
-int SocketListener::run() {
+int SocketListener::startListener() {
 
     if (!mSocketName && mSock == -1) {
         errno = EINVAL;
@@ -56,72 +58,155 @@ int SocketListener::run() {
         }
     }
 
-    if (mAcceptClients) {
-        if (listen(mSock, 4) < 0) {
-            LOGE("Unable to listen on socket (%s)", strerror(errno));
-            return -1;
-        }
+    if (mListen && listen(mSock, 4) < 0) {
+        LOGE("Unable to listen on socket (%s)", strerror(errno));
+        return -1;
+    } else if (!mListen) {
+        mClients->push_back(new SocketClient(mSock));
+        LOGD("Created phantom client");
     }
 
+    if (pipe(mCtrlPipe))
+        return -1;
+
+    if (pthread_create(&mThread, NULL, SocketListener::threadStart, this))
+        return -1;
+
+    return 0;
+}
+
+int SocketListener::stopListener() {
+    char c = 0;
+
+    if (write(mCtrlPipe[1], &c, 1) != 1) {
+        LOGE("Error writing to control pipe (%s)", strerror(errno));
+        return -1;
+    }
+
+    LOGD("Signaled listener thread - waiting for it to die");
+    void *ret;
+    if (pthread_join(mThread, &ret)) {
+        LOGE("Error joining to listener thread (%s)", strerror(errno));
+        return -1;
+    }
+    LOGD("Listener stopped");
+    return 0;
+}
+
+void *SocketListener::threadStart(void *obj) {
+    SocketListener *me = reinterpret_cast<SocketListener *>(obj);
+
+    me->runListener();
+    LOGD("Listener thread shutting down");
+    pthread_exit(NULL);
+    return NULL;
+}
+
+void SocketListener::runListener() {
+
     while(1) {
+        SocketClientCollection::iterator it;
         fd_set read_fds;
         struct timeval to;
-        int max = 0;
         int rc = 0;
 
         to.tv_sec = 60 * 60;
         to.tv_usec = 0;
 
+        int max = 0;
+
         FD_ZERO(&read_fds);
 
-        if ((mAcceptClients == false) ||
-            (mAcceptClients == true && mCsock == -1)) {
-            FD_SET(mSock, &read_fds);
+        if (mListen) {
             max = mSock;
-        } else if (mCsock != -1) {
-            FD_SET(mCsock, &read_fds);
-            max = mCsock;
+            FD_SET(mSock, &read_fds);
         }
 
+        FD_SET(mCtrlPipe[0], &read_fds);
+        if (mCtrlPipe[0] > max)
+            max = mCtrlPipe[0];
+
+        pthread_mutex_lock(&mClientsLock);
+        for (it = mClients->begin(); it != mClients->end(); ++it) {
+            FD_SET((*it)->getSocket(), &read_fds);
+            if ((*it)->getSocket() > max)
+                max = (*it)->getSocket();
+        }
+        pthread_mutex_unlock(&mClientsLock);
+        
         if ((rc = select(max + 1, &read_fds, NULL, NULL, &to)) < 0) {
             LOGE("select failed (%s)", strerror(errno));
-            return -errno;
-        } else if (!rc)
+            sleep(1);
             continue;
-        else if (FD_ISSET(mSock, &read_fds)) {
-            /*
-             * If we're accepting client connections then 
-             * accept and gobble the event. Otherwise
-             * pass it on to the handlers.
-             */
-            if (mAcceptClients) {
-                struct sockaddr addr;
-                socklen_t alen = sizeof(addr);
+        } else if (!rc) {
+            LOGD("select timeout");
+            continue;
+        }
 
-                if ((mCsock = accept(mSock, &addr, &alen)) < 0) {
-                    LOGE("accept failed (%s)", strerror(errno));
-                    return -errno;
+        if (FD_ISSET(mCtrlPipe[0], &read_fds)) {
+            LOGD("Control message received");
+            break;
+        }
+        if (mListen && FD_ISSET(mSock, &read_fds)) {
+            struct sockaddr addr;
+            socklen_t alen = sizeof(addr);
+            int c;
+
+            if ((c = accept(mSock, &addr, &alen)) < 0) {
+                LOGE("accept failed (%s)", strerror(errno));
+                sleep(1);
+                continue;
+            }
+            LOGD("SocketListener client connection accepted");
+            pthread_mutex_lock(&mClientsLock);
+            mClients->push_back(new SocketClient(c));
+            pthread_mutex_unlock(&mClientsLock);
+        }
+
+        do {
+            pthread_mutex_lock(&mClientsLock);
+            for (it = mClients->begin(); it != mClients->end(); ++it) {
+                int fd = (*it)->getSocket();
+                if (FD_ISSET(fd, &read_fds)) {
+                    pthread_mutex_unlock(&mClientsLock);
+                    if (!onDataAvailable(*it)) {
+                        LOGD("SocketListener closing client socket");
+                        close(fd);
+                        pthread_mutex_lock(&mClientsLock);
+                        delete *it;
+                        it = mClients->erase(it);
+                        pthread_mutex_unlock(&mClientsLock);
+                    }
+                    FD_CLR(fd, &read_fds);
+                    continue;
                 }
-                LOGD("SocketListener client connection accepted");
-            } else if (!onDataAvailable(mSock)) {
-                LOGW("SocketListener closing listening socket (Will shut down)");
-                close(mSock);
-                return -ESHUTDOWN;
             }
-        } else if ((FD_ISSET(mCsock, &read_fds)) &&
-                   !onDataAvailable(mCsock)) {
-                /*
-                 * Once mCsock == -1, we'll start
-                 * accepting connections on mSock again.
-                 */
-                LOGD("SocketListener closing client socket");
-                close(mCsock);
-                mCsock = -1;
-            }
+            pthread_mutex_unlock(&mClientsLock);
+        } while (0);
     }
-    return 0;
 }
 
-bool SocketListener::onDataAvailable(int socket) {
-    return false;
+void SocketListener::sendBroadcast(char *msg) {
+    pthread_mutex_lock(&mClientsLock);
+    SocketClientCollection::iterator i;
+
+    for (i = mClients->begin(); i != mClients->end(); ++i) {
+        if ((*i)->sendMsg(msg)) {
+            LOGW("Error sending broadcast (%s)", strerror(errno));
+        }
+    }
+    pthread_mutex_unlock(&mClientsLock);
 }
+
+void SocketListener::sendBroadcast(char *msg, char *data) {
+    pthread_mutex_lock(&mClientsLock);
+    SocketClientCollection::iterator i;
+
+    for (i = mClients->begin(); i != mClients->end(); ++i) {
+        if ((*i)->sendMsg(msg, data)) {
+            LOGW("Error sending broadcast (%s)", strerror(errno));
+        }
+    }
+    pthread_mutex_unlock(&mClientsLock);
+}
+

@@ -25,7 +25,7 @@ FrameworkCommand::FrameworkCommand(const char *cmd) {
     mCommand = cmd;
 }
 
-int FrameworkCommand::runCommand(char *data) {
+int FrameworkCommand::runCommand(SocketClient *c, char *data) {
     LOGW("Command %s has no run handler!", getCommand());
     errno = ENOSYS;
     return -1;

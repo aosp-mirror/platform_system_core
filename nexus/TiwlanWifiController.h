@@ -27,5 +27,6 @@ public:
     virtual int powerDown();
     virtual bool isPoweredUp();
     virtual int loadFirmware();
+    virtual bool isFirmwareLoaded();
 };
 #endif

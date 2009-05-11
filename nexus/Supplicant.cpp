@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#include <stdlib.h>
 #include <errno.h>
 
 #define LOG_TAG "Supplicant"
@@ -31,6 +33,7 @@
 #include "SupplicantState.h"
 #include "SupplicantEvent.h"
 #include "ScanResult.h"
+#include "NetworkManager.h"
 
 #include "libwpa_client/wpa_ctrl.h"
 
@@ -52,7 +55,6 @@ Supplicant::Supplicant() {
 }
 
 int Supplicant::start() {
-    LOGD("start():");
     // XXX: Validate supplicant config file
     
     char status[PROPERTY_VALUE_MAX] = {'\0'};
@@ -63,47 +65,47 @@ int Supplicant::start() {
 #endif
 
     if (property_get(SUPP_PROP_NAME, status, NULL) &&
-        strcmp(status, "running") == 0) {
-        return 0;
+        !strcmp(status, "running")) {
+        LOGD("Supplicant already started");
+    } else {
+#ifdef HAVE_LIBC_SYSTEM_PROPERTIES
+        pi = __system_property_find(SUPP_PROP_NAME);
+        if (pi != NULL)
+            serial = pi->serial;
+#endif
+
+        LOGD("Starting Supplicant");
+        property_set("ctl.start", SUPPLICANT_NAME);
+        sched_yield();
+        while (count--) {
+#ifdef HAVE_LIBC_SYSTEM_PROPERTIES
+            if (!pi)
+                pi = __system_property_find(SUPP_PROP_NAME);
+            if (pi) {
+                __system_property_read(pi, NULL, status);
+                if (strcmp(status, "running") == 0)
+                    break;
+                else if (pi->serial != serial &&
+                        strcmp(status, "stopped") == 0) {
+                    errno = EIO;
+                    return -1;
+                }
+            }
+#else
+            if (property_get(SUPP_PROP_NAME, status, NULL)) {
+                if (strcmp(status, "running") == 0)
+                    break;
+            }
+#endif
+            usleep(100000);
+        }
+        if (!count) {
+            errno = ETIMEDOUT;
+            return -1;
+        }
     }
 
     wpa_ctrl_cleanup();
-#ifdef HAVE_LIBC_SYSTEM_PROPERTIES
-    pi = __system_property_find(SUPP_PROP_NAME);
-    if (pi != NULL)
-        serial = pi->serial;
-#endif
-
-    property_set("ctl.start", SUPPLICANT_NAME);
-    sched_yield();
-    while (count--) {
-#ifdef HAVE_LIBC_SYSTEM_PROPERTIES
-        if (!pi)
-            pi = __system_property_find(SUPP_PROP_NAME);
-        if (pi) {
-            __system_property_read(pi, NULL, status);
-            if (strcmp(status, "running") == 0)
-                return 0;
-            else if (pi->serial != serial &&
-                    strcmp(status, "stopped") == 0) {
-                errno = EIO;
-                return -1;
-            }
-        }
-#else
-        if (property_get(SUPP_PROP_NAME, status, NULL)) {
-            if (strcmp(status, "running") == 0)
-                break;
-        }
-#endif
-        usleep(100000);
-    }
-
-    if (!count) {
-        errno = ETIMEDOUT;
-        return -1;
-    }
-  
     if (connectToSupplicant()) {
         LOGE("Error connecting to supplicant (%s)\n", strerror(errno));
         return -1;
@@ -112,7 +114,6 @@ int Supplicant::start() {
 }
 
 int Supplicant::stop() {
-    LOGD("stop()");
 
     char supp_status[PROPERTY_VALUE_MAX] = {'\0'};
     int count = 50; 
@@ -124,9 +125,11 @@ int Supplicant::stop() {
 
     if (property_get(SUPP_PROP_NAME, supp_status, NULL)
         && strcmp(supp_status, "stopped") == 0) {
+        LOGD("Supplicant already stopped");
         return 0;
     }
 
+    LOGD("Stopping Supplicant");
     property_set("ctl.stop", SUPPLICANT_NAME);
     sched_yield();
 
@@ -153,24 +156,29 @@ int Supplicant::stop() {
         return -1;
     }
 
-    LOGD("Stopped OK");
+    LOGD("Supplicant shutdown");
 
     return 0;
 }
 
 bool Supplicant::isStarted() {
     char supp_status[PROPERTY_VALUE_MAX] = {'\0'};
-    if (!property_get(SUPP_PROP_NAME, supp_status, NULL) ||
-        !strcmp(supp_status, "running")) {
-        return false;
-    }
-    return true;
+
+    int rc = property_get(SUPP_PROP_NAME, supp_status, NULL);
+
+    LOGD("rc = %d, property = '%s'", rc, supp_status);
+
+    if (!strcmp(supp_status, "running"))
+        return true;
+
+    return false;
 }
 
 int Supplicant::connectToSupplicant() {
     char ifname[256];
     char supp_status[PROPERTY_VALUE_MAX] = {'\0'};
 
+    LOGD("connectToSupplicant()");
     if (!property_get(SUPP_PROP_NAME, supp_status, NULL)
             || strcmp(supp_status, "running") != 0) {
         LOGE("Supplicant not running, cannot connect");
@@ -213,13 +221,14 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len)
         return -1;
     }
 
-    LOGD("sendCommand(): -> '%s'", cmd);
+//    LOGD("sendCommand(): -> '%s'", cmd);
 
     int rc;
     if ((rc = wpa_ctrl_request(mCtrl, cmd, strlen(cmd), reply, reply_len, NULL)) == -2)  {
         errno = ETIMEDOUT;
         return -1;
     } else if (rc < 0 || !strncmp(reply, "FAIL", 4)) {
+        LOGW("sendCommand(): <- '%s'", reply);
         errno = EIO;
         return -1;
     }
@@ -228,7 +237,7 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len)
         !strncmp(cmd, "SCAN_RESULTS", 12)) 
         reply[*reply_len] = '\0';
 
-    LOGD("sendCommand(): <- '%s'", reply);
+//    LOGD("sendCommand(): <- '%s'", reply);
     return 0;
 }
 
@@ -332,12 +341,16 @@ int Supplicant::onScanResultsEvent(SupplicantEvent *evt) {
 
         if (!strtok_r(reply, "\n", &linep_next)) {
             free(reply);
-            return 0;;
+            pthread_mutex_unlock(&mLatestScanResultsLock);
+            return 0;
         }
 
         while((linep = strtok_r(NULL, "\n", &linep_next)))
             mLatestScanResults->push_back(new ScanResult(linep));
-
+    
+        char tmp[32];
+        sprintf(tmp, "WIFI_SCAN_RESULTS_READY:%d", mLatestScanResults->size());
+        NetworkManager::Instance()->getBroadcaster()->sendBroadcast(tmp);
         pthread_mutex_unlock(&mLatestScanResultsLock);
         free(reply);
     } else {
@@ -347,8 +360,24 @@ int Supplicant::onScanResultsEvent(SupplicantEvent *evt) {
 }
 
 int Supplicant::onStateChangeEvent(SupplicantEvent *evt) {
-    LOGD("onStateChangeEvent(%s)", evt->getEvent());
-    // XXX: Update mState
+    char *bword, *last;
+    char *tmp = strdup(evt->getEvent());
+
+    if (!(bword = strtok_r(tmp, " ", &last))) {
+        LOGE("Malformatted state update (%s)", evt->getEvent());
+        free(tmp);
+        return 0;
+    }
+
+    if (!(bword = strtok_r(NULL, " ", &last))) {
+        LOGE("Malformatted state update (%s)", evt->getEvent());
+        free(tmp);
+        return 0;
+    }
+
+    mState = atoi(&bword[strlen("state=")]);
+    LOGD("State changed to %d", mState);
+    free(tmp);
     return 0;
 }
 
@@ -363,7 +392,7 @@ int Supplicant::onDriverStateEvent(SupplicantEvent *evt) {
 }
 
 // XXX: Use a cursor + smartptr instead
-const ScanResultCollection *Supplicant::getLatestScanResults() {
+ScanResultCollection *Supplicant::createLatestScanResults() {
     ScanResultCollection *d = new ScanResultCollection();
     ScanResultCollection::iterator i;
 

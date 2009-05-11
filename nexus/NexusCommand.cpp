@@ -15,7 +15,6 @@
  */
 #include "NexusCommand.h"
 
-NexusCommand::NexusCommand(const char *cmd, NetworkManager *netman) :
+NexusCommand::NexusCommand(const char *cmd) :
               FrameworkCommand(cmd)  {
-    mNetman = netman;
 }
