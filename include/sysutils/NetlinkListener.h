@@ -27,6 +27,6 @@ public:
     NetlinkListener(int socket);
     virtual ~NetlinkListener() {}
 protected:
-    virtual bool onDataAvailable(int socket);
+    virtual bool onDataAvailable(SocketClient *cli);
 };
 #endif

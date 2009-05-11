@@ -18,14 +18,9 @@
 
 #include <sysutils/FrameworkCommand.h>
 
-class NetworkManager;
-
 class NexusCommand : public FrameworkCommand {
-protected:
-    NetworkManager *mNetman;
-
 public:
-    NexusCommand(const char *cmd, NetworkManager *netman);
+    NexusCommand(const char *cmd);
     virtual ~NexusCommand() {}
 };
 

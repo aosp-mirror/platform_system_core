@@ -19,50 +19,52 @@
 #include <sysutils/FrameworkListener.h>
 #include "NexusCommand.h"
 
-class NetworkManager;
-
 class CommandListener : public FrameworkListener {
-protected:
-    NetworkManager *mNetman;
-
 public:
-    CommandListener(NetworkManager *netman);
+    CommandListener();
     virtual ~CommandListener() {}
 
 private:
     class WifiEnableCmd : public NexusCommand {
     public:
-        WifiEnableCmd(NetworkManager *);
+        WifiEnableCmd();
         virtual ~WifiEnableCmd() {}
-        int runCommand(char *data);
+        int runCommand(SocketClient *c, char *data);
     };
 
     class WifiDisableCmd : public NexusCommand {
     public:
-        WifiDisableCmd(NetworkManager *);
+        WifiDisableCmd();
         virtual ~WifiDisableCmd() {}
-        int runCommand(char *data);
+        int runCommand(SocketClient *c, char *data);
     };
 
     class WifiScanCmd : public NexusCommand {
     public:
-        WifiScanCmd(NetworkManager *);
+        WifiScanCmd();
         virtual ~WifiScanCmd() {}
-        int runCommand(char *data);
+        int runCommand(SocketClient *c, char *data);
+    };
+
+    class WifiScanResultsCmd : public NexusCommand {
+    public:
+        WifiScanResultsCmd();
+        virtual ~WifiScanResultsCmd() {}
+        int runCommand(SocketClient *c, char *data);
     };
 
     class VpnEnableCmd : public NexusCommand {
     public:
-        VpnEnableCmd(NetworkManager *);
+        VpnEnableCmd();
         virtual ~VpnEnableCmd() {}
-        int runCommand(char *data);
+        int runCommand(SocketClient *c, char *data);
     };
 
     class VpnDisableCmd : public NexusCommand {
     public:
-        VpnDisableCmd(NetworkManager *);
+        VpnDisableCmd();
         virtual ~VpnDisableCmd() {}
-        int runCommand(char *data);
+        int runCommand(SocketClient *c, char *data);
     };
 
 };

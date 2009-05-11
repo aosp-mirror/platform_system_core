@@ -16,33 +16,27 @@
 #ifndef _SUPPLICANTLISTENER_H__
 #define _SUPPLICANTLISTENER_H__
 
-#include <pthread.h>
-
 #include <sysutils/SocketListener.h>
 
 struct wpa_ctrl;
 class Supplicant;
+class SocketClient;
 
 class SupplicantListener: public SocketListener {
 private:
     struct wpa_ctrl *mMonitor;
     Supplicant      *mSupplicant;
-    pthread_t       mThread;
 
 public:
     SupplicantListener(Supplicant *supplicant, struct wpa_ctrl *monitor);
     virtual ~SupplicantListener() {}
-    int startListener();
-    int stopListener();
 
     struct wpa_ctrl *getMonitor() { return mMonitor; }
     Supplicant *getSupplicant() { return mSupplicant; }
 
 protected:
-    virtual bool onDataAvailable(int socket);
+    virtual bool onDataAvailable(SocketClient *c);
 
-private:
-    static void *threadStart(void *obj);
 };
 
 #endif

@@ -19,60 +19,64 @@
 #define LOG_TAG "CommandListener"
 #include <cutils/log.h>
 
+#include <sysutils/SocketClient.h>
+
 #include "CommandListener.h"
 #include "Controller.h"
 #include "NetworkManager.h"
 #include "WifiController.h"
 
-CommandListener::CommandListener(NetworkManager *netman) :
+CommandListener::CommandListener() :
                  FrameworkListener("nexus") {
-    mNetman = netman;
+    registerCmd(new WifiEnableCmd());
+    registerCmd(new WifiDisableCmd());
+    registerCmd(new WifiScanCmd());
+    registerCmd(new WifiScanResultsCmd());
 
-    registerCmd(new WifiEnableCmd(netman));
-    registerCmd(new WifiDisableCmd(netman));
-    registerCmd(new WifiScanCmd(netman));
-
-    registerCmd(new VpnEnableCmd(netman));
-    registerCmd(new VpnDisableCmd(netman));
+    registerCmd(new VpnEnableCmd());
+    registerCmd(new VpnDisableCmd());
 }
  
 /* -------------
  * Wifi Commands
  * ------------ */
 
-CommandListener::WifiEnableCmd::WifiEnableCmd(NetworkManager *netman) :
-                 NexusCommand("wifi_enable", netman) {
+CommandListener::WifiEnableCmd::WifiEnableCmd() :
+                 NexusCommand("wifi_enable") {
 } 
                
-int CommandListener::WifiEnableCmd::runCommand(char *data) {
-    Controller *c = mNetman->findController("WIFI");
+int CommandListener::WifiEnableCmd::runCommand(SocketClient *cli, char *data) {
+    Controller *c = NetworkManager::Instance()->findController("WIFI");
     char buffer[32];
 
     sprintf(buffer, "WIFI_ENABLE:%d", (c->enable() ? errno : 0));
-    mNetman->getFrameworkManager()->sendMsg(buffer);
+
+    cli->sendMsg(buffer);
     return 0;
 }
 
-CommandListener::WifiDisableCmd::WifiDisableCmd(NetworkManager *netman) :
-                 NexusCommand("wifi_disable", netman) {
+CommandListener::WifiDisableCmd::WifiDisableCmd() :
+                 NexusCommand("wifi_disable") {
 } 
                
-int CommandListener::WifiDisableCmd::runCommand(char *data) {
-    Controller *c = mNetman->findController("WIFI");
+int CommandListener::WifiDisableCmd::runCommand(SocketClient *cli, char *data) {
+    Controller *c = NetworkManager::Instance()->findController("WIFI");
     char buffer[32];
 
     sprintf(buffer, "WIFI_DISABLE:%d", (c->disable() ? errno : 0));
-    mNetman->getFrameworkManager()->sendMsg(buffer);
+    cli->sendMsg(buffer);
     return 0;
 }
 
-CommandListener::WifiScanCmd::WifiScanCmd(NetworkManager *netman) :
-                 NexusCommand("wifi_scan", netman) {
+CommandListener::WifiScanCmd::WifiScanCmd() :
+                 NexusCommand("wifi_scan") {
 } 
 
-int CommandListener::WifiScanCmd::runCommand(char *data) {
+int CommandListener::WifiScanCmd::runCommand(SocketClient *cli, char *data) {
     LOGD("WifiScanCmd(%s)", data);
-    WifiController *wc = (WifiController *) mNetman->findController("WIFI");
+
+    WifiController *wc = (WifiController *) NetworkManager::Instance()->findController("WIFI");
+
     char buffer[32];
     int mode = 0;
     char *bword, *last;
@@ -90,35 +94,62 @@ int CommandListener::WifiScanCmd::runCommand(char *data) {
     mode = atoi(bword);
 
     sprintf(buffer, "WIFI_SCAN:%d", (wc->setScanMode(mode) ? errno : 0));
-    mNetman->getFrameworkManager()->sendMsg(buffer);
+    cli->sendMsg(buffer);
+    return 0;
+}
+
+CommandListener::WifiScanResultsCmd::WifiScanResultsCmd() :
+                 NexusCommand("wifi_scan_results") {
+} 
+
+int CommandListener::WifiScanResultsCmd::runCommand(SocketClient *cli, char *data) {
+    NetworkManager *nm = NetworkManager::Instance();
+
+    WifiController *wc = (WifiController *) nm->findController("WIFI");
+
+    ScanResultCollection *src = wc->createScanResults();
+    ScanResultCollection::iterator it;
+    char buffer[256];
+    
+    for(it = src->begin(); it != src->end(); ++it) {
+        sprintf(buffer, "WIFI_SCAN_RESULT:%s:%u:%d:%s:%s",
+                (*it)->getBssid(), (*it)->getFreq(), (*it)->getLevel(),
+                (*it)->getFlags(), (*it)->getSsid());
+        cli->sendMsg(buffer);
+        delete (*it);
+        it = src->erase(it);
+    }
+
+    delete src;
+    cli->sendMsg("WIFI_SCAN_RESULT:0");
     return 0;
 }
 
 /* ------------
  * Vpn Commands
  * ------------ */
-CommandListener::VpnEnableCmd::VpnEnableCmd(NetworkManager *netman) :
-                 NexusCommand("vpn_enable", netman) {
+CommandListener::VpnEnableCmd::VpnEnableCmd() :
+                 NexusCommand("vpn_enable") {
 } 
                
-int CommandListener::VpnEnableCmd::runCommand(char *data) {
-    Controller *c = mNetman->findController("VPN");
+int CommandListener::VpnEnableCmd::runCommand(SocketClient *cli, char *data) {
+    Controller *c = NetworkManager::Instance()->findController("VPN");
     char buffer[32];
 
     sprintf(buffer, "VPN_ENABLE:%d", (c->enable() ? errno : 0));
-    mNetman->getFrameworkManager()->sendMsg(buffer);
+    cli->sendMsg(buffer);
     return 0;
 }
 
-CommandListener::VpnDisableCmd::VpnDisableCmd(NetworkManager *netman) :
-                 NexusCommand("vpn_disable", netman) {
+CommandListener::VpnDisableCmd::VpnDisableCmd() :
+                 NexusCommand("vpn_disable") {
 } 
                
-int CommandListener::VpnDisableCmd::runCommand(char *data) {
-    Controller *c = mNetman->findController("VPN");
+int CommandListener::VpnDisableCmd::runCommand(SocketClient *cli, char *data) {
+    Controller *c = NetworkManager::Instance()->findController("VPN");
     char buffer[32];
 
     sprintf(buffer, "VPN_DISABLE:%d", (c->disable() ? errno : 0));
-    mNetman->getFrameworkManager()->sendMsg(buffer);
+    cli->sendMsg(buffer);
     return 0;
 }

@@ -20,20 +20,42 @@
 
 #include "cutils/log.h"
 #include "NetworkManager.h"
+#include "CommandListener.h"
+
+#include "LoopController.h"
+#include "VpnController.h"
+#include "TiwlanWifiController.h"
 
 int main() {
-    NetworkManager    *nm;
-
     LOGI("Nexus version 0.1 firing up");
 
-    if (!(nm = new NetworkManager())) {
+    CommandListener *cl = new CommandListener();
+
+    NetworkManager *nm;
+    if (!(nm = NetworkManager::Instance())) {
         LOGE("Unable to create NetworkManager");
         exit (-1);
     };
 
-    if (nm->run()) {
+    nm->setBroadcaster((SocketListener *) cl);
+
+    nm->attachController(new LoopController());
+    nm->attachController(new TiwlanWifiController("/system/lib/modules/wlan.ko", "wlan", ""));
+    nm->attachController(new VpnController());
+
+
+    if (NetworkManager::Instance()->run()) {
         LOGE("Unable to Run NetworkManager (%s)", strerror(errno));
         exit (1);
+    }
+
+    if (cl->startListener()) {
+        LOGE("Unable to start  CommandListener (%s)", strerror(errno));
+        exit (1);
+    }
+
+    while(1) {
+        sleep(1000);
     }
 
     LOGI("Nexus exiting");
