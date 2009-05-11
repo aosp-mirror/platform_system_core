@@ -1,2 +1,2 @@
 #!/bin/sh
-gcc acc.c -ldl -o tests/acc && tests/acc tests/otcc.c >tests/otcc.out && diff tests/otcc.out tests/otcc.out-orig
+gcc acc.c -DTEST -ldl -o tests/acc && tests/acc tests/otcc.c tests/otcc.out && diff tests/otcc.out tests/otcc.out-orig

@@ -1,525 +1,625 @@
 /*
- **
- ** Copyright 2009, The Android Open Source Project
- **
- ** Licensed under the Apache License, Version 2.0 (the "License");
- ** you may not use this file except in compliance with the License.
- ** You may obtain a copy of the License at
- **
- **     http://www.apache.org/licenses/LICENSE-2.0
- **
- ** Unless required by applicable law or agreed to in writing, software
- ** distributed under the License is distributed on an "AS IS" BASIS,
- ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- ** See the License for the specific language governing permissions and
- ** limitations under the License.
- */
+  Obfuscated Tiny C Compiler
 
-/* Based upon the freeware version of the Obfuscated Tiny C Compiler
- * by Francis Bellard. <francis@bellard.org>.
- */
+  Copyright (C) 2001-2003 Fabrice Bellard
 
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product and its documentation 
+     *is* required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+*/
+
+#include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-#define TOKEN_OPERATOR 1
-#define TOKEN_NUMBER 2
+/* vars: value of variables 
+   loc : local variable index
+   glo : global variable index
+   ind : output code ptr
+   rsym: return symbol
+   prog: output code
+   dstk: define stack
+   dptr, dch: macro state
+*/
+int tok, tokc, tokl, ch, vars, rsym, prog, ind, loc, glo, file, sym_stk, dstk, dptr, dch, last_id;
 
-#define TOKEN_SYMBOL_BASE     256
-#define TOKEN_INT             256
-#define TOKEN_IF              288
-#define TOKEN_ELSE            312
-#define TOKEN_WHILE           352
-#define TOKEN_BREAK           400
-#define TOKEN_RETURN          448
-#define TOKEN_FOR             504
-#define TOKEN_DEFINE          536
+#define ALLOC_SIZE 99999
 
-static int currentToken;
-static int currentTokenData;
-static int gCurrentTokenOperatorLevel;
-static int currentChar;
-static int gEndOfFunctionTarget;
-static int gProgramCounter;
-static int gFunctionStackSize;
-static int savedChar;
-static char* pInProgressMacro;
-static char* P;
-static char* ac;
-static char* gStringTable;
-static char* pSymbolTable;
-static char* M;
-static char* R;
-static FILE* pInput;
+/* depends on the init string */
+#define TOK_STR_SIZE 48
+#define TOK_IDENT    0x100
+#define TOK_INT      0x100
+#define TOK_IF       0x120
+#define TOK_ELSE     0x138
+#define TOK_WHILE    0x160
+#define TOK_BREAK    0x190
+#define TOK_RETURN   0x1c0
+#define TOK_FOR      0x1f8
+#define TOK_DEFINE   0x218
+#define TOK_MAIN     0x250
 
-static void parseDeclarations (int isLocal);
-static void parseExpression();
+#define TOK_DUMMY   1
+#define TOK_NUM     2
 
-static void addToSymbolTable(char e) {
-    *pSymbolTable++ = e;
+#define LOCAL   0x200
+
+#define SYM_FORWARD 0
+#define SYM_DEFINE  1
+
+/* tokens in string heap */
+#define TAG_TOK    ' '
+#define TAG_MACRO  2
+
+pdef(t)
+{
+    *(char *)dstk++ = t;
 }
 
-static void nextChar() {
-    if (pInProgressMacro) {
-        currentChar = *(char*) pInProgressMacro++;
-        if (currentChar == 2) {
-            pInProgressMacro = NULL;
-            currentChar = savedChar;
+inp()
+{
+    if (dptr) {
+        ch = *(char *)dptr++;
+        if (ch == TAG_MACRO) {
+            dptr = 0;
+            ch = dch;
         }
     } else
-        currentChar = fgetc(pInput);
+        ch = fgetc(file);
+    /*    printf("ch=%c 0x%x\n", ch, ch); */
 }
 
-static int isSymbolChar() {
-    return isalnum(currentChar) || currentChar == '_';
+isid()
+{
+    return isalnum(ch) | ch == '_';
 }
 
-static void unescapeCurrentChar() {
-    if (currentChar == '\\') {
-        nextChar();
-        if (currentChar == 'n')
-            currentChar = '\n';
+/* read a character constant */
+getq()
+{
+    if (ch == '\\') {
+        inp();
+        if (ch == 'n')
+            ch = '\n';
     }
 }
 
-static void nextToken() {
-    int j, m;
-    while (isspace(currentChar) || currentChar == '#') {
-        if (currentChar == '#') {
-            nextChar();
-            nextToken();
-            if (currentToken == TOKEN_DEFINE) {
-                nextToken();
-                addToSymbolTable(' ');
-                *(int*) currentToken = 1;
-                *(int*) (currentToken + 4) = (int) pSymbolTable;
+next()
+{
+    int t, l, a;
+
+    while (isspace(ch) | ch == '#') {
+        if (ch == '#') {
+            inp();
+            next();
+            if (tok == TOK_DEFINE) {
+                next();
+                pdef(TAG_TOK); /* fill last ident tag */
+                *(int *)tok = SYM_DEFINE;
+                *(int *)(tok + 4) = dstk; /* define stack */
             }
-            while (currentChar != '\n') {
-                addToSymbolTable(currentChar);
-                nextChar();
+            /* well we always save the values ! */
+            while (ch != '\n') {
+                pdef(ch);
+                inp();
             }
-            addToSymbolTable(currentChar);
-            addToSymbolTable(2);
+            pdef(ch);
+            pdef(TAG_MACRO);
         }
-        nextChar();
+        inp();
     }
-    gCurrentTokenOperatorLevel = 0;
-    currentToken = currentChar;
-    if (isSymbolChar()) {
-        addToSymbolTable(' ');
-        M = pSymbolTable;
-        while (isSymbolChar()) {
-            addToSymbolTable(currentChar);
-            nextChar();
+    tokl = 0;
+    tok = ch;
+    /* encode identifiers & numbers */
+    if (isid()) {
+        pdef(TAG_TOK);
+        last_id = dstk;
+        while (isid()) {
+            pdef(ch);
+            inp();
         }
-        if (isdigit(currentToken)) {
-            currentTokenData = strtol(M, 0, 0);
-            currentToken = TOKEN_NUMBER;
+        if (isdigit(tok)) {
+            tokc = strtol(last_id, 0, 0);
+            tok = TOK_NUM;
         } else {
-            *(char*) pSymbolTable = ' ';
-            currentToken = strstr(R, M - 1) - R;
-            *(char*) pSymbolTable = 0;
-            currentToken = currentToken * 8 + TOKEN_SYMBOL_BASE;
-            if (currentToken > TOKEN_DEFINE) {
-                currentToken = ((int) P) + currentToken;
-                if (*(int*) currentToken == 1) {
-                    pInProgressMacro = (char*) (*(int*) (currentToken + 4));
-                    savedChar = currentChar;
-                    nextChar();
-                    nextToken();
+            *(char *)dstk = TAG_TOK; /* no need to mark end of string (we
+                                        suppose data is initied to zero */
+            tok = strstr(sym_stk, last_id - 1) - sym_stk;
+            *(char *)dstk = 0;   /* mark real end of ident for dlsym() */
+            tok = tok * 8 + TOK_IDENT;
+            if (tok > TOK_DEFINE) {
+                tok = vars + tok;
+                /*        printf("tok=%s %x\n", last_id, tok); */
+                /* define handling */
+                if (*(int *)tok == SYM_DEFINE) {
+                    dptr = *(int *)(tok + 4);
+                    dch = ch;
+                    inp();
+                    next();
                 }
             }
         }
     } else {
-        nextChar();
-        if (currentToken == '\'') {
-            currentToken = TOKEN_NUMBER;
-            unescapeCurrentChar();
-            currentTokenData = currentChar;
-            nextChar();
-            nextChar();
-        } else if (currentToken == '/' & currentChar == '*') {
-            nextChar();
-            while (currentChar) {
-                while (currentChar != '*')
-                    nextChar();
-                nextChar();
-                if (currentChar == '/')
-                    currentChar = 0;
+        inp();
+        if (tok == '\'') {
+            tok = TOK_NUM;
+            getq();
+            tokc = ch;
+            inp();
+            inp();
+        } else if (tok == '/' & ch == '*') {
+            inp();
+            while (ch) {
+                while (ch != '*')
+                    inp();
+                inp();
+                if (ch == '/')
+                    ch = 0;
             }
-            nextChar();
-            nextToken();
-        } else {
-            char* e = "++#m--%am*@R<^1c/@%[_[H3c%@%[_[H3c+@.B#d-@%:_^BKd<<Z/03e>>`/03e<=0f>=/f<@.f>@1f==&g!='g&&k||#l&@.BCh^@.BSi|@.B+j~@/%Yd!@&d*@b";
-            while (j = *(char*) e++) {
-                m = *(char*) e++;
-                currentTokenData = 0;
-                while ((gCurrentTokenOperatorLevel = *(char*) e++ - 98) < 0)
-                    currentTokenData = currentTokenData * 64 + gCurrentTokenOperatorLevel + 64;
-                if (j == currentToken && (m == currentChar || m == 64)) {
-                    if (m == currentChar) {
-                        nextChar();
-                        currentToken = TOKEN_OPERATOR;
+            inp();
+            next();
+        } else
+        {
+            t = "++#m--%am*@R<^1c/@%[_[H3c%@%[_[H3c+@.B#d-@%:_^BKd<<Z/03e>>`/03e<=0f>=/f<@.f>@1f==&g!=\'g&&k||#l&@.BCh^@.BSi|@.B+j~@/%Yd!@&d*@b";
+            while (l = *(char *)t++) {
+                a = *(char *)t++;
+                tokc = 0;
+                while ((tokl = *(char *)t++ - 'b') < 0)
+                    tokc = tokc * 64 + tokl + 64;
+                if (l == tok & (a == ch | a == '@')) {
+#if 0
+                    printf("%c%c -> tokl=%d tokc=0x%x\n", 
+                           l, a, tokl, tokc);
+#endif
+                    if (a == ch) {
+                        inp();
+                        tok = TOK_DUMMY; /* dummy token for double tokens */
                     }
                     break;
                 }
             }
         }
     }
-}
+#if 0
+    {
+        int p;
 
-/*
- * Emit 1 to 4 bytes of code. Little-endian, doesn't emit high bytes that
- * are 0x00 or 0xff
- */
-static void emitCode(int g) {
-    while( g && g != -1) {
-        *(char*) gProgramCounter++=g;
-        g=g>>8;
-    }
-}
-
-static void fixupAddress(e) {
-    int g;
-    while( e) {
-        g=*(int*) e;
-        *(int*) e=gProgramCounter-e-4;
-        e=g;
-    }
-}
-
-static int emitCodeWithImmediate( g, e) {
-    emitCode(g);
-    *(int*) gProgramCounter = e;
-    e = gProgramCounter;
-    gProgramCounter = gProgramCounter + 4;
-    return e;
-}
-
-static int emitLoadAccumulatorImmediate(e) {
-    emitCodeWithImmediate(0xb8,e); /* Move immediate a, e */
-}
-
-static int emitBranch(e) {
-    return emitCodeWithImmediate(0xe9,e); /* Jump relative */
-}
-
-static int emitTest( j, e) {
-    emitCode(0x0FC085); /* 85 C0 FC TEST */
-    return emitCodeWithImmediate(0x84 + j, e); /* TEST */
-}
-
-static void emitSetCC(int condition) {
-    emitCode( 0xC139); /* 39 C1 CMP */
-    emitLoadAccumulatorImmediate(0);
-    emitCode( 0x0F); /* Two byte opcode prefix */
-    emitCode( condition+0x90); /* Set byte on condition (controlled by e) */
-    emitCode( 0xC0); /* I think this is part of the SETcc instruction */
-}
-
-static void emitNumericOp( int op, int e) {
-    emitCode(op + 0x83);
-    emitCodeWithImmediate((e < 512) << 7 | 5, e);
-}
-
-static void parseTerminal (int level) {
-    int g,e,m,aa;
-    g=1;
-    if( currentToken == '"') {
-        emitLoadAccumulatorImmediate(gStringTable);
-        while( currentChar != '"') {
-            unescapeCurrentChar ();
-            *(char*) gStringTable++=currentChar;
-            nextChar ();
-        }
-        *(char*) gStringTable=0;
-        gStringTable= (char*) (((int)gStringTable) +4&-4);
-        nextChar();
-        nextToken();
-    }
-    else {
-        aa=gCurrentTokenOperatorLevel;
-        m= currentTokenData;
-        e=currentToken;
-        nextToken();
-        if( e == TOKEN_NUMBER) {
-            emitLoadAccumulatorImmediate(m);
-        }
-        else if( aa == 2) {
-            parseTerminal(0);
-            emitCodeWithImmediate(0xB9,0); /* MOV r1, immediate */
-            if( e == '!')emitSetCC(m);
-            else emitCode( m);
-        }
-        else if( e == '(') {
-            parseExpression ();
-            nextToken();
-        }
-        else if( e == '*') {
-            nextToken();
-            e=currentToken;
-            nextToken();
-            nextToken();
-            if( currentToken == '*') {
-                nextToken();
-                nextToken();
-                nextToken();
-                nextToken();
-                e=0;
-            }
-            nextToken();
-            parseTerminal(0);
-            if( currentToken == '=') {
-                nextToken();
-                emitCode( 0x50); /* PUSH r0 */
-                parseExpression ();
-                emitCode( 0x59); /* POP r1 */
-                emitCode( 0x188 + (e == TOKEN_INT)); /* 88 01 MOV */
-            }
-            else if( e) {
-                if( e == TOKEN_INT)emitCode( 0x8B); /* MOV */
-                else emitCode( 0xBE0F); /* 0F BE MOVSX move with sign extension */
-                gProgramCounter++;
-            }
-        }
-        else if( e == '&') {
-            emitNumericOp(10,*(int*) currentToken); /* 8D LEA */
-            nextToken();
-        }
-        else {
-            g=*(int*) e;
-            if(!g)g=dlsym(0,M);
-            if( currentToken == '=' & level) {
-                nextToken();
-                parseExpression ();
-                emitNumericOp(6,g); /* 89 MOV */
-            }
-            else if( currentToken!= '(') {
-                emitNumericOp(8,g); /* 8B MOV sreg */
-                if( gCurrentTokenOperatorLevel == 11) {
-                    emitNumericOp(0,g); /* 83 ADD */
-                    emitCode( currentTokenData);
-                    nextToken();
-                }
-            }
+        printf("tok=0x%x ", tok);
+        if (tok >= TOK_IDENT) {
+            printf("'");
+            if (tok > TOK_DEFINE) 
+                p = sym_stk + 1 + (tok - vars - TOK_IDENT) / 8;
+            else
+                p = sym_stk + 1 + (tok - TOK_IDENT) / 8;
+            while (*(char *)p != TAG_TOK && *(char *)p)
+                printf("%c", *(char *)p++);
+            printf("'\n");
+        } else if (tok == TOK_NUM) {
+            printf("%d\n", tokc);
+        } else {
+            printf("'%c'\n", tok);
         }
     }
-    if( currentToken == '(') {
-        if( g == 1)emitCode( 0x50); /* push */
-        m= emitCodeWithImmediate(0xEC81,0); /* 81 EC Cmp ?? */
-        nextToken();
-        level=0;
-        while( currentToken!= ')') {
-            parseExpression ();
-            emitCodeWithImmediate(0x248489,level); /* 89 84 24 MOV sp + level*/
-            if( currentToken == ',')nextToken();
-            level=level +4;
-        }
-        *(int*) m= level;
-        nextToken();
-        if(!g) {
-            e=e +4;
-            *(int*) e=emitCodeWithImmediate(0xE8,*(int*) e); /* Call */
-        }
-        else if( g == 1) {
-            emitCodeWithImmediate(0x2494FF,level); /* FF 94 24 */
-            level=level +4;
-        }
-        else {
-            emitCodeWithImmediate(0xE8,g-gProgramCounter-5); /* CALL */
-        }
-        if( level)emitCodeWithImmediate(0xC481,level); /* 81 C4 adjust stack pointer */
-    }
-}
-
-static void parseBinaryOp (int level) {
-    int e,g,m;
-    if( level--== 1)parseTerminal(1);
-    else {
-        parseBinaryOp (level);
-        m= 0;
-        while( level == gCurrentTokenOperatorLevel) {
-            g=currentToken;
-            e=currentTokenData;
-            nextToken();
-            if( level>8) {
-                m= emitTest(e,m);
-                parseBinaryOp (level);
-            }
-            else {
-                emitCode( 0x50);
-                parseBinaryOp (level);
-                emitCode( 0x59);
-                if( level == 4 | level == 5) {
-                    emitSetCC(e);
-                }
-                else {
-                    emitCode( e);
-                    if( g == '%')emitCode( 0x92); /* XCHG */
-                }
-            }
-        }
-        if( m&&level>8) {
-            m= emitTest(e,m);
-            emitLoadAccumulatorImmediate(e^1);
-            emitBranch(5); /* Jump relative +5 */
-            fixupAddress(m);
-            emitLoadAccumulatorImmediate(e);
-        }
-    }
-}
-
-static void parseExpression() {
-    parseBinaryOp(11);
-}
-
-static int parseExpressionEmitTest() {
-    parseExpression();
-    return emitTest(0, 0);
-}
-
-static void parseStatement (int* pBreakTarget) {
-    int m,g,e;
-    if( currentToken == TOKEN_IF) {
-        nextToken();
-        nextToken();
-        m= parseExpressionEmitTest ();
-        nextToken();
-        parseStatement (pBreakTarget);
-        if( currentToken == TOKEN_ELSE) {
-            nextToken();
-            g=emitBranch(0);
-            fixupAddress(m);
-            parseStatement (pBreakTarget);
-            fixupAddress(g);
-        }
-        else {
-            fixupAddress(m);
-        }
-    }
-    else if ( currentToken == TOKEN_WHILE || currentToken == TOKEN_FOR) {
-        e = currentToken;
-        nextToken();
-        nextToken();
-        if( e == TOKEN_WHILE) {
-            g=gProgramCounter;
-            m= parseExpressionEmitTest ();
-        }
-        else {
-            if( currentToken != ';')parseExpression ();
-            nextToken();
-            g=gProgramCounter;
-            m= 0;
-            if( currentToken != ';')m= parseExpressionEmitTest ();
-            nextToken();
-            if( currentToken!= ')') {
-                e=emitBranch(0);
-                parseExpression ();
-                emitBranch(g-gProgramCounter-5);
-                fixupAddress(e);
-                g=e +4;
-            }
-        }
-        nextToken();
-        parseStatement(&m);
-        emitBranch(g-gProgramCounter-5);
-        fixupAddress(m);
-    }
-    else if( currentToken == '{') {
-        nextToken();
-        parseDeclarations(1);
-        while( currentToken != '}') parseStatement(pBreakTarget);
-        nextToken();
-    }
-    else {
-        if( currentToken == TOKEN_RETURN) {
-            nextToken();
-            if( currentToken != ';') parseExpression();
-            gEndOfFunctionTarget=emitBranch(gEndOfFunctionTarget);
-        }
-        else if( currentToken == TOKEN_BREAK) {
-            nextToken();
-            *pBreakTarget = emitBranch(*pBreakTarget);
-        }
-        else if( currentToken != ';') parseExpression();
-        nextToken();
-    }
-}
-
-static void parseDeclarations (int isLocal) {
-    int m;
-    while( currentToken == TOKEN_INT | currentToken != -1 & !isLocal ) {
-        if( currentToken == TOKEN_INT) {
-            nextToken();
-            while( currentToken != ';') {
-                if( isLocal ) {
-                    gFunctionStackSize=gFunctionStackSize +4;
-                    *(int*) currentToken=-gFunctionStackSize;
-                }
-                else {
-                    *(char**) currentToken = gStringTable;
-                    gStringTable=gStringTable +4;
-                }
-                nextToken();
-                if( currentToken == ',')nextToken();
-            }
-            nextToken();
-        }
-        else {
-            fixupAddress(*(int*)(currentToken + 4));
-            *(int*) currentToken=gProgramCounter;
-            nextToken();
-            nextToken();
-            m= 8;
-            while( currentToken != ')') {
-                *(int*) currentToken=m;
-                m= m +4;
-                nextToken();
-                if( currentToken == ',')nextToken();
-            }
-            nextToken();
-            gEndOfFunctionTarget=gFunctionStackSize=0;
-            emitCode( 0xE58955); /* 55 89 E5 PUSH */
-            m= emitCodeWithImmediate(0xEC81,0); /* 81 EC */
-            parseStatement(0);
-            fixupAddress(gEndOfFunctionTarget);
-            emitCode( 0xC3C9); /* C9 C3 LEAVE */
-            *(int*) m= gFunctionStackSize;
-        }
-    }
-}
-
-int main( int argc, char** argv) {
-    pInput = stdin;
-    if (argc-- > 1) {
-        char* file = argv[1];
-        argv += 1;
-        pInput = fopen(file, "r");
-        if (pInput == NULL) {
-            fprintf(stderr, "Could not open file \"%s\"\n", file);
-            return -1;
-        }
-    }
-    pSymbolTable = strcpy(R = calloc(1, 99999),
-            " int if else while break return for define main ") + 48;
-    gStringTable = calloc(1, 99999);
-    ac = calloc(1, 99999);
-    gProgramCounter = (int) ac;
-    P = calloc(1, 99999);
-    nextChar();
-    nextToken();
-    parseDeclarations(0);
-#if 1
-    fwrite(R, 1, 99999, stdout);
-    fwrite(ac, 1, 99999, stdout);
-    fwrite(P, 1, 99999, stdout);
-    return 0;
-#else
-    /* Look up the address of "main" in the symbol table and call it.
-     * We put main in at a known offset, so we know the address.
-     */
-    return (*(int(*)()) *(int*) (P + 592))(argc, argv);
 #endif
 }
 
+void error(char *fmt,...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    fprintf(stderr, "%d: ", ftell((FILE *)file));
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    exit(1);
+    va_end(ap);
+}
+
+void skip(c)
+{
+    if (tok != c) {
+        error("'%c' expected", c);
+    }
+    next();
+}
+
+o(n)
+{
+    /* cannot use unsigned, so we must do a hack */
+    while (n && n != -1) {
+        *(char *)ind++ = n;
+        n = n >> 8;
+    }
+}
+
+/* output a symbol and patch all calls to it */
+gsym(t)
+{
+    int n;
+    while (t) {
+        n = *(int *)t; /* next value */
+        *(int *)t = ind - t - 4;
+        t = n;
+    }
+}
+
+/* psym is used to put an instruction with a data field which is a
+   reference to a symbol. It is in fact the same as oad ! */
+#define psym oad
+
+/* instruction + address */
+oad(n, t)
+{
+    o(n);
+    *(int *)ind = t;
+    t = ind;
+    ind = ind + 4;
+    return t;
+}
+
+/* load immediate value */
+li(t)
+{
+    oad(0xb8, t); /* mov $xx, %eax */
+}
+
+gjmp(t)
+{
+    return psym(0xe9, t);
+}
+
+/* l = 0: je, l == 1: jne */
+gtst(l, t)
+{
+    o(0x0fc085); /* test %eax, %eax, je/jne xxx */
+    return psym(0x84 + l, t);
+}
+
+gcmp(t)
+{
+    o(0xc139); /* cmp %eax,%ecx */
+    li(0);
+    o(0x0f); /* setxx %al */
+    o(t + 0x90);
+    o(0xc0);
+}
+
+gmov(l, t)
+{
+    o(l + 0x83);
+    oad((t < LOCAL) << 7 | 5, t);
+}
+
+/* l is one if '=' parsing wanted (quick hack) */
+unary(l)
+{
+    int n, t, a, c;
+
+    n = 1; /* type of expression 0 = forward, 1 = value, other =
+              lvalue */
+    if (tok == '\"') {
+        li(glo);
+        while (ch != '\"') {
+            getq();
+            *(char *)glo++ = ch;
+            inp();
+        }
+        *(char *)glo = 0;
+        glo = glo + 4 & -4; /* align heap */
+        inp();
+        next();
+    } else {
+        c = tokl;
+        a = tokc;
+        t = tok;
+        next();
+        if (t == TOK_NUM) {
+            li(a);
+        } else if (c == 2) {
+            /* -, +, !, ~ */
+            unary(0);
+            oad(0xb9, 0); /* movl $0, %ecx */
+            if (t == '!')
+                gcmp(a);
+            else
+                o(a);
+        } else if (t == '(') {
+            expr();
+            skip(')');
+        } else if (t == '*') {
+            /* parse cast */
+            skip('(');
+            t = tok; /* get type */
+            next(); /* skip int/char/void */
+            next(); /* skip '*' or '(' */
+            if (tok == '*') {
+                /* function type */
+                skip('*');
+                skip(')');
+                skip('(');
+                skip(')');
+                t = 0;
+            }
+            skip(')');
+            unary(0);
+            if (tok == '=') {
+                next();
+                o(0x50); /* push %eax */
+                expr();
+                o(0x59); /* pop %ecx */
+                o(0x0188 + (t == TOK_INT)); /* movl %eax/%al, (%ecx) */
+            } else if (t) {
+                if (t == TOK_INT)
+                    o(0x8b); /* mov (%eax), %eax */
+                else 
+                    o(0xbe0f); /* movsbl (%eax), %eax */
+                ind++; /* add zero in code */
+            }
+        } else if (t == '&') {
+            gmov(10, *(int *)tok); /* leal EA, %eax */
+            next();
+        } else {
+            n = *(int *)t;
+            /* forward reference: try dlsym */
+            if (!n)
+                n = dlsym(0, last_id);
+            if (tok == '=' & l) {
+                /* assignment */
+                next();
+                expr();
+                gmov(6, n); /* mov %eax, EA */
+            } else if (tok != '(') {
+                /* variable */
+                gmov(8, n); /* mov EA, %eax */
+                if (tokl == 11) {
+                    gmov(0, n);
+                    o(tokc);
+                    next();
+                }
+            }
+        }
+    }
+
+    /* function call */
+    if (tok == '(') {
+        if (n == 1)
+            o(0x50); /* push %eax */
+
+        /* push args and invert order */
+        a = oad(0xec81, 0); /* sub $xxx, %esp */
+        next();
+        l = 0;
+        while(tok != ')') {
+            expr();
+            oad(0x248489, l); /* movl %eax, xxx(%esp) */
+            if (tok == ',')
+                next();
+            l = l + 4;
+        }
+        *(int *)a = l;
+        next();
+        if (!n) {
+            /* forward reference */
+            t = t + 4;
+            *(int *)t = psym(0xe8, *(int *)t);
+        } else if (n == 1) {
+            oad(0x2494ff, l); /* call *xxx(%esp) */
+            l = l + 4;
+        } else {
+            oad(0xe8, n - ind - 5); /* call xxx */
+        }
+        if (l)
+            oad(0xc481, l); /* add $xxx, %esp */
+    }
+}
+
+sum(l)
+{
+    int t, n, a;
+
+    if (l-- == 1)
+        unary(1);
+    else {
+        sum(l);
+        a = 0;
+        while (l == tokl) {
+            n = tok;
+            t = tokc;
+            next();
+
+            if (l > 8) {
+                a = gtst(t, a); /* && and || output code generation */
+                sum(l);
+            } else {
+                o(0x50); /* push %eax */
+                sum(l);
+                o(0x59); /* pop %ecx */
+                
+                if (l == 4 | l == 5) {
+                    gcmp(t);
+                } else {
+                    o(t);
+                    if (n == '%')
+                        o(0x92); /* xchg %edx, %eax */
+                }
+            }
+        }
+        /* && and || output code generation */
+        if (a && l > 8) {
+            a = gtst(t, a);
+            li(t ^ 1);
+            gjmp(5); /* jmp $ + 5 */
+            gsym(a);
+            li(t);
+        }
+    }
+}
+
+expr()
+{
+    sum(11);
+}
+
+
+test_expr()
+{
+    expr();
+    return gtst(0, 0);
+}
+
+block(l)
+{
+    int a, n, t;
+
+    if (tok == TOK_IF) {
+        next();
+        skip('(');
+        a = test_expr();
+        skip(')');
+        block(l);
+        if (tok == TOK_ELSE) {
+            next();
+            n = gjmp(0); /* jmp */
+            gsym(a);
+            block(l);
+            gsym(n); /* patch else jmp */
+        } else {
+            gsym(a); /* patch if test */
+        }
+    } else if (tok == TOK_WHILE | tok == TOK_FOR) {
+        t = tok;
+        next();
+        skip('(');
+        if (t == TOK_WHILE) {
+            n = ind;
+            a = test_expr();
+        } else {
+            if (tok != ';')
+                expr();
+            skip(';');
+            n = ind;
+            a = 0;
+            if (tok != ';')
+                a = test_expr();
+            skip(';');
+            if (tok != ')') {
+                t = gjmp(0);
+                expr();
+                gjmp(n - ind - 5);
+                gsym(t);
+                n = t + 4;
+            }
+        }
+        skip(')');
+        block(&a);
+        gjmp(n - ind - 5); /* jmp */
+        gsym(a);
+    } else if (tok == '{') {
+        next();
+        /* declarations */
+        decl(1);
+        while(tok != '}')
+            block(l);
+        next();
+    } else {
+        if (tok == TOK_RETURN) {
+            next();
+            if (tok != ';')
+                expr();
+            rsym = gjmp(rsym); /* jmp */
+        } else if (tok == TOK_BREAK) {
+            next();
+            *(int *)l = gjmp(*(int *)l);
+        } else if (tok != ';')
+            expr();
+        skip(';');
+    }
+}
+
+/* 'l' is true if local declarations */
+decl(l)
+{
+    int a;
+
+    while (tok == TOK_INT | tok != -1 & !l) {
+        if (tok == TOK_INT) {
+            next();
+            while (tok != ';') {
+                if (l) {
+                    loc = loc + 4;
+                    *(int *)tok = -loc;
+                } else {
+                    *(int *)tok = glo;
+                    glo = glo + 4;
+                }
+                next();
+                if (tok == ',') 
+                    next();
+            }
+            skip(';');
+        } else {
+            /* patch forward references (XXX: do not work for function
+               pointers) */
+            gsym(*(int *)(tok + 4));
+            /* put function address */
+            *(int *)tok = ind;
+            next();
+            skip('(');
+            a = 8;
+            while (tok != ')') {
+                /* read param name and compute offset */
+                *(int *)tok = a;
+                a = a + 4;
+                next();
+                if (tok == ',')
+                    next();
+            }
+            next(); /* skip ')' */
+            rsym = loc = 0;
+            o(0xe58955); /* push   %ebp, mov %esp, %ebp */
+            a = oad(0xec81, 0); /* sub $xxx, %esp */
+            block(0);
+            gsym(rsym);
+            o(0xc3c9); /* leave, ret */
+            *(int *)a = loc; /* save local variables */
+        }
+    }
+}
+
+main(n, t)
+{
+    file = stdin;
+    if (n-- > 1) {
+        t = t + 4;
+        file = fopen(*(int *)t, "r");
+    }
+    dstk = strcpy(sym_stk = calloc(1, ALLOC_SIZE), 
+                  " int if else while break return for define main ") + TOK_STR_SIZE;
+    glo = calloc(1, ALLOC_SIZE);
+    ind = prog = calloc(1, ALLOC_SIZE);
+    vars = calloc(1, ALLOC_SIZE);
+    inp();
+    next();
+    decl(0);
+#ifdef TEST
+    { 
+        FILE *f;
+        f = fopen(*(char **)(t + 4), "w");
+        fwrite((void *)prog, 1, ind - prog, f);
+        fclose(f);
+        return 0;
+    }
+#else
+    return (*(int (*)())*(int *)(vars + TOK_MAIN)) (n, t);
+#endif
+}
