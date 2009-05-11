@@ -22,6 +22,8 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* vars: value of variables 
    loc : local variable index
@@ -32,7 +34,8 @@
    dstk: define stack
    dptr, dch: macro state
 */
-int tok, tokc, tokl, ch, vars, rsym, prog, ind, loc, glo, file, sym_stk, dstk, dptr, dch, last_id;
+int tok, tokc, tokl, ch, vars, rsym, prog, ind, loc, glo, sym_stk, dstk, dptr, dch, last_id;
+FILE* file;
 
 #define ALLOC_SIZE 99999
 
@@ -96,7 +99,7 @@ getq()
 
 next()
 {
-    int t, l, a;
+    int l, a;
 
     while (isspace(ch) | ch == '#') {
         if (ch == '#') {
@@ -129,12 +132,12 @@ next()
             inp();
         }
         if (isdigit(tok)) {
-            tokc = strtol(last_id, 0, 0);
+            tokc = strtol((char*) last_id, 0, 0);
             tok = TOK_NUM;
         } else {
             *(char *)dstk = TAG_TOK; /* no need to mark end of string (we
                                         suppose data is initied to zero */
-            tok = strstr(sym_stk, last_id - 1) - sym_stk;
+            tok = (int) (strstr((char*) sym_stk, (char*) (last_id - 1)) - sym_stk);
             *(char *)dstk = 0;   /* mark real end of ident for dlsym() */
             tok = tok * 8 + TOK_IDENT;
             if (tok > TOK_DEFINE) {
@@ -170,7 +173,7 @@ next()
             next();
         } else
         {
-            t = "++#m--%am*@R<^1c/@%[_[H3c%@%[_[H3c+@.B#d-@%:_^BKd<<Z/03e>>`/03e<=0f>=/f<@.f>@1f==&g!=\'g&&k||#l&@.BCh^@.BSi|@.B+j~@/%Yd!@&d*@b";
+            char* t = "++#m--%am*@R<^1c/@%[_[H3c%@%[_[H3c+@.B#d-@%:_^BKd<<Z/03e>>`/03e<=0f>=/f<@.f>@1f==&g!=\'g&&k||#l&@.BCh^@.BSi|@.B+j~@/%Yd!@&d*@b";
             while (l = *(char *)t++) {
                 a = *(char *)t++;
                 tokc = 0;
@@ -596,25 +599,26 @@ decl(l)
     }
 }
 
-main(n, t)
+main(int n, char** t)
 {
     file = stdin;
     if (n-- > 1) {
-        t = t + 4;
-        file = fopen(*(int *)t, "r");
+        t = t + 1;
+        file = fopen(*t, "r");
     }
-    dstk = strcpy(sym_stk = calloc(1, ALLOC_SIZE), 
+    sym_stk = (int) calloc(1, ALLOC_SIZE);
+    dstk = (int) strcpy((char*) sym_stk, 
                   " int if else while break return for define main ") + TOK_STR_SIZE;
-    glo = calloc(1, ALLOC_SIZE);
-    ind = prog = calloc(1, ALLOC_SIZE);
-    vars = calloc(1, ALLOC_SIZE);
+    glo = (int) calloc(1, ALLOC_SIZE);
+    ind = prog = (int) calloc(1, ALLOC_SIZE);
+    vars = (int) calloc(1, ALLOC_SIZE);
     inp();
     next();
     decl(0);
 #ifdef TEST
     { 
         FILE *f;
-        f = fopen(*(char **)(t + 4), "w");
+        f = fopen(t[1], "w");
         fwrite((void *)prog, 1, ind - prog, f);
         fclose(f);
         return 0;
