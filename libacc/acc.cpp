@@ -13,7 +13,7 @@
 
   1. The origin of this software must not be misrepresented; you must not
      claim that you wrote the original software. If you use this software
-     in a product, an acknowledgment in the product and its documentation 
+     in a product, an acknowledgment in the product and its documentation
      *is* required.
   2. Altered source versions must be plainly marked as such, and must not be
      misrepresented as being the original software.
@@ -27,8 +27,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+namespace acc {
+
 class compiler {
-/* vars: value of variables 
+/* vars: value of variables
    loc : local variable index
    glo : global variable index
    ind : output code ptr
@@ -176,15 +178,15 @@ void next()
             next();
         } else
         {
-            char* t = "++#m--%am*@R<^1c/@%[_[H3c%@%[_[H3c+@.B#d-@%:_^BKd<<Z/03e>>`/03e<=0f>=/f<@.f>@1f==&g!=\'g&&k||#l&@.BCh^@.BSi|@.B+j~@/%Yd!@&d*@b";
-            while (l = *(char *)t++) {
-                a = *(char *)t++;
+            const char* t = "++#m--%am*@R<^1c/@%[_[H3c%@%[_[H3c+@.B#d-@%:_^BKd<<Z/03e>>`/03e<=0f>=/f<@.f>@1f==&g!=\'g&&k||#l&@.BCh^@.BSi|@.B+j~@/%Yd!@&d*@b";
+            while (l = *t++) {
+                a = *t++;
                 tokc = 0;
-                while ((tokl = *(char *)t++ - 'b') < 0)
+                while ((tokl = *t++ - 'b') < 0)
                     tokc = tokc * 64 + tokl + 64;
                 if (l == tok & (a == ch | a == '@')) {
 #if 0
-                    printf("%c%c -> tokl=%d tokc=0x%x\n", 
+                    printf("%c%c -> tokl=%d tokc=0x%x\n",
                            l, a, tokl, tokc);
 #endif
                     if (a == ch) {
@@ -203,7 +205,7 @@ void next()
         printf("tok=0x%x ", tok);
         if (tok >= TOK_IDENT) {
             printf("'");
-            if (tok > TOK_DEFINE) 
+            if (tok > TOK_DEFINE)
                 p = sym_stk + 1 + (tok - vars - TOK_IDENT) / 8;
             else
                 p = sym_stk + 1 + (tok - TOK_IDENT) / 8;
@@ -219,12 +221,12 @@ void next()
 #endif
 }
 
-void error(char *fmt,...)
+void error(const char *fmt,...)
 {
     va_list ap;
 
     va_start(ap, fmt);
-    fprintf(stderr, "%d: ", ftell((FILE *)file));
+    fprintf(stderr, "%ld: ", ftell((FILE *)file));
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
     va_end(ap);
@@ -367,7 +369,7 @@ void unary(int l)
             } else if (t) {
                 if (t == TOK_INT)
                     o(0x8b); /* mov (%eax), %eax */
-                else 
+                else
                     o(0xbe0f); /* movsbl (%eax), %eax */
                 ind++; /* add zero in code */
             }
@@ -450,7 +452,7 @@ void sum(int l)
                 o(0x50); /* push %eax */
                 sum(l);
                 o(0x59); /* pop %ecx */
-                
+
                 if (l == 4 | l == 5) {
                     gcmp(t);
                 } else {
@@ -570,7 +572,7 @@ void decl(int l)
                     glo = glo + 4;
                 }
                 next();
-                if (tok == ',') 
+                if (tok == ',')
                     next();
             }
             skip(';');
@@ -604,17 +606,18 @@ void decl(int l)
 }
 
 public:
-compiler(){}
-
-int compile(int n, char** t)
+compiler() :
+    tok(0), tokc(0), tokl(0), ch(0),
+    vars(0), rsym(0), prog(0), ind(0), loc(0), glo(0), sym_stk(0),
+    dstk(0), dptr(0), dch(0), last_id(0), file(0)
 {
-    file = stdin;
-    if (n-- > 1) {
-        t = t + 1;
-        file = fopen(*t, "r");
-    }
+}
+
+int compile(FILE* in) {
+
+    file = in;
     sym_stk = (int) calloc(1, ALLOC_SIZE);
-    dstk = (int) strcpy((char*) sym_stk, 
+    dstk = (int) strcpy((char*) sym_stk,
                   " int if else while break return for define main ") + TOK_STR_SIZE;
     glo = (int) calloc(1, ALLOC_SIZE);
     ind = prog = (int) calloc(1, ALLOC_SIZE);
@@ -622,22 +625,90 @@ int compile(int n, char** t)
     inp();
     next();
     decl(0);
-#ifdef TEST
-    { 
-        FILE *f;
-        f = fopen(t[1], "w");
-        fwrite((void *)prog, 1, ind - prog, f);
-        fclose(f);
-        return 0;
+    return 0;
+}
+
+int run(int argc, char** argv)
+{
+    typedef int (*mainPtr)(int argc, char** argv);
+    mainPtr aMain = (mainPtr) * (int*) (vars + TOK_MAIN);
+    if (! aMain) {
+        fprintf(stderr, "Could not find main");
+        return -1;
     }
-#else
-    return (*(int (*)())*(int *)(vars + TOK_MAIN)) (n, t);
-#endif
+    return aMain(argc, argv);
+}
+
+int dump(FILE* out) {
+    fwrite((void *)prog, 1, ind - prog, out);
+    return 0;
 }
 
 };
 
+
+} // namespace acc
+
 int main(int argc, char** argv) {
-    compiler c;
-    return c.compile(argc, argv);
+    bool doTest = false;
+    const char* inFile = NULL;
+    const char* outFile = NULL;
+    int i;
+    for(i = 1; i < argc; i++) {
+        char* arg = argv[i];
+        if (arg[0] == '-') {
+            switch (arg[1]) {
+            case 'T':
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "Expected filename after -T\n");
+                    return 2;
+                }
+                doTest = true;
+                outFile = argv[i + 1];
+                i += 1;
+                break;
+            default:
+                fprintf(stderr, "Unrecognized flag %s\n", arg);
+                return 3;
+            }
+        } else if (inFile == NULL) {
+            inFile = arg;
+        } else {
+            break;
+        }
+    }
+
+    FILE* in = stdin;
+    if (inFile) {
+        in = fopen(inFile, "r");
+        if (! in) {
+            fprintf(stderr, "Could not open input file %s\n", inFile);
+            return 1;
+        }
+    }
+    acc::compiler compiler;
+    int compileResult = compiler.compile(in);
+    if (in != stdin) {
+        fclose(in);
+    }
+    if (compileResult) {
+        fprintf(stderr, "Compile failed: %d\n", compileResult);
+        return 6;
+    }
+    if (doTest) {
+        FILE* save = fopen(outFile, "w");
+        if (! save) {
+            fprintf(stderr, "Could not open output file %s\n", outFile);
+            return 5;
+        }
+        compiler.dump(save);
+        fclose(save);
+    } else {
+        int codeArgc = argc-i+1;
+        char** codeArgv=argv + i - 1;
+        codeArgv[0] = (char*) (inFile ? inFile : "stdin");
+        return compiler.run(codeArgc, codeArgv);
+    }
+
+    return 0;
 }

@@ -1,2 +1,2 @@
 #!/bin/sh
-g++ acc.cpp -DTEST -ldl -o tests/acc && tests/acc tests/otcc.c tests/otcc.out && diff tests/otcc.out tests/otcc.out-orig
+g++ acc.cpp -ldl -o tests/acc && tests/acc tests/otcc.c -T tests/otcc.out && diff tests/otcc.out tests/otcc.out-orig
