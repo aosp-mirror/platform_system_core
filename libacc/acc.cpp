@@ -20,11 +20,14 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 
+#include <ctype.h>
+#include <dlfcn.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+class compiler {
 /* vars: value of variables 
    loc : local variable index
    glo : global variable index
@@ -64,12 +67,12 @@ FILE* file;
 #define TAG_TOK    ' '
 #define TAG_MACRO  2
 
-pdef(t)
+void pdef(int t)
 {
     *(char *)dstk++ = t;
 }
 
-inp()
+void inp()
 {
     if (dptr) {
         ch = *(char *)dptr++;
@@ -82,13 +85,13 @@ inp()
     /*    printf("ch=%c 0x%x\n", ch, ch); */
 }
 
-isid()
+int isid()
 {
     return isalnum(ch) | ch == '_';
 }
 
 /* read a character constant */
-getq()
+void getq()
 {
     if (ch == '\\') {
         inp();
@@ -97,7 +100,7 @@ getq()
     }
 }
 
-next()
+void next()
 {
     int l, a;
 
@@ -224,11 +227,11 @@ void error(char *fmt,...)
     fprintf(stderr, "%d: ", ftell((FILE *)file));
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
-    exit(1);
     va_end(ap);
+    exit(1);
 }
 
-void skip(c)
+void skip(int c)
 {
     if (tok != c) {
         error("'%c' expected", c);
@@ -236,7 +239,7 @@ void skip(c)
     next();
 }
 
-o(n)
+void o(int n)
 {
     /* cannot use unsigned, so we must do a hack */
     while (n && n != -1) {
@@ -246,7 +249,7 @@ o(n)
 }
 
 /* output a symbol and patch all calls to it */
-gsym(t)
+void gsym(int t)
 {
     int n;
     while (t) {
@@ -261,7 +264,7 @@ gsym(t)
 #define psym oad
 
 /* instruction + address */
-oad(n, t)
+int oad(int n, int t)
 {
     o(n);
     *(int *)ind = t;
@@ -271,24 +274,24 @@ oad(n, t)
 }
 
 /* load immediate value */
-li(t)
+int li(int t)
 {
     oad(0xb8, t); /* mov $xx, %eax */
 }
 
-gjmp(t)
+int gjmp(int t)
 {
     return psym(0xe9, t);
 }
 
 /* l = 0: je, l == 1: jne */
-gtst(l, t)
+int gtst(int l, int t)
 {
     o(0x0fc085); /* test %eax, %eax, je/jne xxx */
     return psym(0x84 + l, t);
 }
 
-gcmp(t)
+int gcmp(int t)
 {
     o(0xc139); /* cmp %eax,%ecx */
     li(0);
@@ -297,14 +300,14 @@ gcmp(t)
     o(0xc0);
 }
 
-gmov(l, t)
+int gmov(int l, int t)
 {
     o(l + 0x83);
     oad((t < LOCAL) << 7 | 5, t);
 }
 
 /* l is one if '=' parsing wanted (quick hack) */
-unary(l)
+void unary(int l)
 {
     int n, t, a, c;
 
@@ -375,7 +378,7 @@ unary(l)
             n = *(int *)t;
             /* forward reference: try dlsym */
             if (!n)
-                n = dlsym(0, last_id);
+                n = (int) dlsym(0, (char*) last_id);
             if (tok == '=' & l) {
                 /* assignment */
                 next();
@@ -426,7 +429,7 @@ unary(l)
     }
 }
 
-sum(l)
+void sum(int l)
 {
     int t, n, a;
 
@@ -468,19 +471,20 @@ sum(l)
     }
 }
 
-expr()
+void expr()
 {
     sum(11);
 }
 
 
-test_expr()
+int test_expr()
 {
     expr();
     return gtst(0, 0);
 }
 
-block(l)
+
+void block(int l)
 {
     int a, n, t;
 
@@ -524,7 +528,7 @@ block(l)
             }
         }
         skip(')');
-        block(&a);
+        block((int) &a);
         gjmp(n - ind - 5); /* jmp */
         gsym(a);
     } else if (tok == '{') {
@@ -550,7 +554,7 @@ block(l)
 }
 
 /* 'l' is true if local declarations */
-decl(l)
+void decl(int l)
 {
     int a;
 
@@ -599,7 +603,10 @@ decl(l)
     }
 }
 
-main(int n, char** t)
+public:
+compiler(){}
+
+int compile(int n, char** t)
 {
     file = stdin;
     if (n-- > 1) {
@@ -626,4 +633,11 @@ main(int n, char** t)
 #else
     return (*(int (*)())*(int *)(vars + TOK_MAIN)) (n, t);
 #endif
+}
+
+};
+
+int main(int argc, char** argv) {
+    compiler c;
+    return c.compile(argc, argv);
 }
