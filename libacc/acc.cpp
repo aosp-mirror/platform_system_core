@@ -161,6 +161,17 @@ class compiler {
         X86CodeGenerator() {}
         virtual ~X86CodeGenerator() {}
 
+        /* returns address to patch with local variable size
+        */
+        int functionEntry() {
+            o(0xe58955); /* push   %ebp, mov %esp, %ebp */
+            return oad(0xec81, 0); /* sub $xxx, %esp */
+        }
+
+        void functionExit() {
+            o(0xc3c9); /* leave, ret */
+        }
+
         /* load immediate value */
         int li(int t) {
             oad(0xb8, t); /* mov $xx, %eax */
@@ -176,12 +187,19 @@ class compiler {
             return psym(0x84 + l, t);
         }
 
-        int gcmp(int t) {
+        int gcmp(int op) {
+            int t = decodeOp(op);
             o(0xc139); /* cmp %eax,%ecx */
             li(0);
             o(0x0f); /* setxx %al */
             o(t + 0x90);
             o(0xc0);
+        }
+
+        int genOp(int op) {
+            o(decodeOp(op));
+            if (op == OP_MOD)
+                o(0x92); /* xchg %edx, %eax */
         }
 
         void clearECX() {
@@ -192,8 +210,11 @@ class compiler {
             o(0x50); /* push %eax */
         }
 
-        void storeEAXIntoPoppedLVal(bool isInt) {
+        void popECX() {
             o(0x59); /* pop %ecx */
+        }
+
+        void storeEAXToAddressECX(bool isInt) {
             o(0x0188 + isInt); /* movl %eax/%al, (%ecx) */
         }
 
@@ -217,12 +238,11 @@ class compiler {
             gmov(8, ea); /* mov EA, %eax */
         }
 
-        void puzzleAdd(int n, int tokc) {
-            /* Not sure what this does, related to variable loading with an
-             * operator at level 11.
+        void postIncrementOrDecrement(int n, int op) {
+            /* Implement post-increment or post decrement.
              */
             gmov(0, n); /* 83 ADD */
-            o(tokc);
+            o(decodeOp(op));
         }
 
         int allocStackSpaceForArgs() {
@@ -249,14 +269,16 @@ class compiler {
             oad(0xc481, l); /* add $xxx, %esp */
         }
 
-        void oHack(int n) {
-            o(n);
-        }
-
-        void oadHack(int n, int t) {
-            oad(n, t);
-        }
     private:
+        static const int operatorHelper[];
+
+        int decodeOp(int op) {
+            if (op < 0 || op > OP_COUNT) {
+                fprintf(stderr, "Out-of-range operator: %d\n", op);
+                exit(1);
+            }
+            return operatorHelper[op];
+        }
 
         int gmov(int l, int t) {
             o(l + 0x83);
@@ -309,6 +331,37 @@ class compiler {
     /* tokens in string heap */
     static const int TAG_TOK = ' ';
     static const int TAG_MACRO = 2;
+
+    static const int OP_INCREMENT = 0;
+    static const int OP_DECREMENT = 1;
+    static const int OP_MUL = 2;
+    static const int OP_DIV = 3;
+    static const int OP_MOD = 4;
+    static const int OP_PLUS = 5;
+    static const int OP_MINUS = 6;
+    static const int OP_SHIFT_LEFT = 7;
+    static const int OP_SHIFT_RIGHT = 8;
+    static const int OP_LESS_EQUAL = 9;
+    static const int OP_GREATER_EQUAL = 10;
+    static const int OP_LESS = 11;
+    static const int OP_GREATER = 12;
+    static const int OP_EQUALS = 13;
+    static const int OP_NOT_EQUALS = 14;
+    static const int OP_LOGICAL_AND = 15;
+    static const int OP_LOGICAL_OR = 16;
+    static const int OP_BIT_AND = 17;
+    static const int OP_BIT_XOR = 18;
+    static const int OP_BIT_OR = 19;
+    static const int OP_BIT_NOT = 20;
+    static const int OP_LOGICAL_NOT = 21;
+    static const int OP_COUNT = 22;
+
+    /* Operators are searched from front, the two-character operators appear
+     * before the single-character operators with the same first character.
+     * @ is used to pad out single-character operators.
+     */
+    static const char* operatorChars;
+    static const char operatorLevel[];
 
     void pdef(int t) {
         *(char *) dstk++ = t;
@@ -414,14 +467,12 @@ class compiler {
                 inp();
                 next();
             } else {
-                const char
-                        * t =
-                                "++#m--%am*@R<^1c/@%[_[H3c%@%[_[H3c+@.B#d-@%:_^BKd<<Z/03e>>`/03e<=0f>=/f<@.f>@1f==&g!=\'g&&k||#l&@.BCh^@.BSi|@.B+j~@/%Yd!@&d*@b";
+                const char* t = operatorChars;
+                int opIndex = 0;
                 while (l = *t++) {
                     a = *t++;
-                    tokc = 0;
-                    while ((tokl = *t++ - 'b') < 0)
-                        tokc = tokc * 64 + tokl + 64;
+                    tokl = operatorLevel[opIndex];
+                    tokc = opIndex;
                     if (l == tok & (a == ch | a == '@')) {
 #if 0
                         printf("%c%c -> tokl=%d tokc=0x%x\n",
@@ -433,6 +484,11 @@ class compiler {
                         }
                         break;
                     }
+                    opIndex++;
+                }
+                if (l == 0) {
+                    tokl = 0;
+                    tokc = 0;
                 }
             }
         }
@@ -477,59 +533,6 @@ class compiler {
         next();
     }
 
-    /* load immediate value */
-    int li(int t) {
-        return pGen->li(t);
-    }
-
-    int gjmp(int t) {
-        return pGen->gjmp(t);
-    }
-
-    /* l = 0: je, l == 1: jne */
-    int gtst(int l, int t) {
-        return pGen->gtst(l, t);
-    }
-
-    int gcmp(int t) {
-        return pGen->gcmp(t);
-    }
-
-    void clearEXC() {
-        pGen->clearECX();
-    }
-
-    void storeEAXIntoPoppedLVal(bool isInt) {
-        pGen->storeEAXIntoPoppedLVal(isInt);
-    }
-
-    void loadEAXIndirect(bool isInt) {
-        pGen->loadEAXIndirect(isInt);
-    }
-
-    void leaEAX(int ea) {
-        pGen->leaEAX(ea);
-    }
-
-    /* Temporary hack for emitting x86 code directly. */
-    void o(int n) {
-        pGen->oHack(n);
-    }
-
-    /* instruction + address */
-    int oad(int n, int t) {
-        pGen->oadHack(n,t);
-    }
-
-    /* instruction + address */
-    int psym(int n, int t) {
-        pGen->oadHack(n,t);
-    }
-
-    void gsym(int n) {
-        pGen->gsym(n);
-    }
-
     /* l is one if '=' parsing wanted (quick hack) */
     void unary(int l) {
         int n, t, a, c;
@@ -537,7 +540,7 @@ class compiler {
         n = 1; /* type of expression 0 = forward, 1 = value, other =
          lvalue */
         if (tok == '\"') {
-            li(glo);
+            pGen->li(glo);
             while (ch != '\"') {
                 getq();
                 *(char *) glo++ = ch;
@@ -553,15 +556,15 @@ class compiler {
             t = tok;
             next();
             if (t == TOK_NUM) {
-                li(a);
+                pGen->li(a);
             } else if (c == 2) {
                 /* -, +, !, ~ */
                 unary(0);
-                clearEXC();
+                pGen->clearECX();
                 if (t == '!')
-                    gcmp(a);
+                    pGen->gcmp(a);
                 else
-                    o(a);
+                    pGen->genOp(a);
             } else if (t == '(') {
                 expr();
                 skip(')');
@@ -585,12 +588,13 @@ class compiler {
                     next();
                     pGen->pushEAX();
                     expr();
-                    storeEAXIntoPoppedLVal(t == TOK_INT);
+                    pGen->popECX();
+                    pGen->storeEAXToAddressECX(t == TOK_INT);
                 } else if (t) {
-                    loadEAXIndirect(t == TOK_INT);
+                    pGen->loadEAXIndirect(t == TOK_INT);
                 }
             } else if (t == '&') {
-                leaEAX(*(int *) tok);
+                pGen->leaEAX(*(int *) tok);
                 next();
             } else {
                 n = *(int *) t;
@@ -606,7 +610,7 @@ class compiler {
                     /* variable */
                     pGen->loadEAX(n);
                     if (tokl == 11) {
-                        pGen->puzzleAdd(n, tokc);
+                        pGen->postIncrementOrDecrement(n, tokc);
                         next();
                     }
                 }
@@ -660,29 +664,27 @@ class compiler {
                 next();
 
                 if (l > 8) {
-                    a = gtst(t, a); /* && and || output code generation */
+                    a = pGen->gtst(t == OP_LOGICAL_OR, a); /* && and || output code generation */
                     sum(l);
                 } else {
-                    o(0x50); /* push %eax */
+                    pGen->pushEAX();
                     sum(l);
-                    o(0x59); /* pop %ecx */
+                    pGen->popECX();
 
                     if (l == 4 | l == 5) {
-                        gcmp(t);
+                        pGen->gcmp(t);
                     } else {
-                        o(t);
-                        if (n == '%')
-                            o(0x92); /* xchg %edx, %eax */
+                        pGen->genOp(t);
                     }
                 }
             }
             /* && and || output code generation */
             if (a && l > 8) {
-                a = gtst(t, a);
-                li(t ^ 1);
-                gjmp(5); /* jmp $ + 5 */
-                gsym(a);
-                li(t);
+                a = pGen->gtst(t == OP_LOGICAL_OR, a);
+                pGen->li(t != OP_LOGICAL_OR);
+                pGen->gjmp(5); /* jmp $ + 5 */
+                pGen->gsym(a);
+                pGen->li(t == OP_LOGICAL_OR);
             }
         }
     }
@@ -693,7 +695,7 @@ class compiler {
 
     int test_expr() {
         expr();
-        return gtst(0, 0);
+        return pGen->gtst(0, 0);
     }
 
     void block(int l) {
@@ -707,12 +709,12 @@ class compiler {
             block(l);
             if (tok == TOK_ELSE) {
                 next();
-                n = gjmp(0); /* jmp */
-                gsym(a);
+                n = pGen->gjmp(0); /* jmp */
+                pGen->gsym(a);
                 block(l);
-                gsym(n); /* patch else jmp */
+                pGen->gsym(n); /* patch else jmp */
             } else {
-                gsym(a); /* patch if test */
+                pGen->gsym(a); /* patch if test */
             }
         } else if (tok == TOK_WHILE | tok == TOK_FOR) {
             t = tok;
@@ -731,17 +733,17 @@ class compiler {
                     a = test_expr();
                 skip(';');
                 if (tok != ')') {
-                    t = gjmp(0);
+                    t = pGen->gjmp(0);
                     expr();
-                    gjmp(n - codeBuf.getPC() - 5);
-                    gsym(t);
+                    pGen->gjmp(n - codeBuf.getPC() - 5);
+                    pGen->gsym(t);
                     n = t + 4;
                 }
             }
             skip(')');
             block((int) &a);
-            gjmp(n - codeBuf.getPC() - 5); /* jmp */
-            gsym(a);
+            pGen->gjmp(n - codeBuf.getPC() - 5); /* jmp */
+            pGen->gsym(a);
         } else if (tok == '{') {
             next();
             /* declarations */
@@ -754,10 +756,10 @@ class compiler {
                 next();
                 if (tok != ';')
                     expr();
-                rsym = gjmp(rsym); /* jmp */
+                rsym = pGen->gjmp(rsym); /* jmp */
             } else if (tok == TOK_BREAK) {
                 next();
-                *(int *) l = gjmp(*(int *) l);
+                *(int *) l = pGen->gjmp(*(int *) l);
             } else if (tok != ';')
                 expr();
             skip(';');
@@ -787,7 +789,7 @@ class compiler {
             } else {
                 /* patch forward references (XXX: do not work for function
                  pointers) */
-                gsym(*(int *) (tok + 4));
+                pGen->gsym(*(int *) (tok + 4));
                 /* put function address */
                 *(int *) tok = codeBuf.getPC();
                 next();
@@ -803,11 +805,10 @@ class compiler {
                 }
                 next(); /* skip ')' */
                 rsym = loc = 0;
-                o(0xe58955); /* push   %ebp, mov %esp, %ebp */
-                a = oad(0xec81, 0); /* sub $xxx, %esp */
+                a = pGen->functionEntry();
                 block(0);
-                gsym(rsym);
-                o(0xc3c9); /* leave, ret */
+                pGen->gsym(rsym);
+                pGen->functionExit();
                 *(int *) a = loc; /* save local variables */
             }
         }
@@ -899,6 +900,42 @@ public:
 
 };
 
+const char* compiler::operatorChars =
+    "++--*@/@%@+@-@<<>><=>=<@>@==!=&&||&@^@|@~@!@";
+
+const char compiler::operatorLevel[] =
+    {11, 11, 1, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4,
+            5, 5, /* ==, != */
+            9, 10, /* &&, || */
+            6, 7, 8, /* & ^ | */
+            2, 2 /* ~ ! */
+            };
+
+const int compiler::X86CodeGenerator::operatorHelper[] = {
+        0x1,     // ++
+        0xff,    // --
+        0xc1af0f, // *
+        0xf9f79991, // /
+        0xf9f79991, // % (With manual assist to swap results)
+        0xc801, // +
+        0xd8f7c829, // -
+        0xe0d391, // <<
+        0xf8d391, // >>
+        0xe, // <=
+        0xd, // >=
+        0xc, // <
+        0xf, // >
+        0x4, // ==
+        0x5, // !=
+        0x0, // &&
+        0x1, // ||
+        0xc821, // &
+        0xc831, // ^
+        0xc809, // |
+        0xd0f7, // ~
+        0x4     // !
+};
+
 } // namespace acc
 
 int main(int argc, char** argv) {
@@ -956,6 +993,7 @@ int main(int argc, char** argv) {
         compiler.dump(save);
         fclose(save);
     } else {
+        fprintf(stderr, "Executing compiled code:\n");
         int codeArgc = argc - i + 1;
         char** codeArgv = argv + i - 1;
         codeArgv[0] = (char*) (inFile ? inFile : "stdin");
