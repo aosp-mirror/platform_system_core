@@ -30,7 +30,7 @@ FrameworkListener::FrameworkListener(const char *socketName) :
 }
 
 bool FrameworkListener::onDataAvailable(SocketClient *c) {
-    char buffer[101];
+    char buffer[255];
     int len;
 
     if ((len = read(c->getSocket(), buffer, sizeof(buffer) -1)) < 0) {
@@ -41,15 +41,14 @@ bool FrameworkListener::onDataAvailable(SocketClient *c) {
         return false;
     }
 
-    int start = 0;
+    int offset = 0;
     int i;
 
-    buffer[len] = '\0';
-
     for (i = 0; i < len; i++) {
-        if (buffer[i] == '\0') {
-            dispatchCommand(c, buffer + start);
-            start = i + 1;
+        if (buffer[i] == '\n') {
+            buffer[i] = '\0';
+            dispatchCommand(c, buffer + offset);
+            offset = i + 1;
         }
     }
     return true;
@@ -60,11 +59,11 @@ void FrameworkListener::registerCmd(FrameworkCommand *cmd) {
 }
 
 void FrameworkListener::dispatchCommand(SocketClient *cli, char *cmd) {
-
+    LOGD("Dispatching '%s'", cmd);
     char *cm, *last;
 
     if (!(cm = strtok_r(cmd, ":", &last))) {
-        cli->sendMsg("BAD_MSG");
+        cli->sendMsg(500, "Malformatted message", false);
         return;
     }
 
@@ -81,7 +80,6 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *cmd) {
         }
     }
 
-    LOGE("No cmd handlers defined for '%s'", cmd);
-    cli->sendMsg("UNKNOWN_CMD");
+    cli->sendMsg(500, "Command not recognized", false);
     return;
 }
