@@ -67,6 +67,7 @@ public:
 private:
     int connectToSupplicant();
     int sendCommand(const char *cmd, char *reply, size_t *reply_len);
+    int setupConfig();
 };
 
 #endif

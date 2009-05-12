@@ -77,7 +77,7 @@ protected:
     virtual bool isFirmwareLoaded() = 0;
     virtual bool isPoweredUp() = 0;
 
-    void sendStatusBroadcast(const char *msg);
+    void sendStatusBroadcast(char *msg);
 };
 
 #endif

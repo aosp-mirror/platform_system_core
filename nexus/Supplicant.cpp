@@ -15,11 +15,15 @@
  */
 
 #include <stdlib.h>
+#include <sys/types.h>
+#include <fcntl.h>
 #include <errno.h>
 
 #define LOG_TAG "Supplicant"
 #include <cutils/log.h>
 #include <cutils/properties.h>
+
+#include "private/android_filesystem_config.h"
 
 #undef HAVE_LIBC_SYSTEM_PROPERTIES
 
@@ -41,6 +45,9 @@
 #define DRIVER_PROP_NAME "wlan.driver.status"
 #define SUPPLICANT_NAME  "wpa_supplicant"
 #define SUPP_PROP_NAME   "init.svc.wpa_supplicant"
+#define SUPP_CONFIG_TEMPLATE "/system/etc/wifi/wpa_supplicant.conf"
+#define SUPP_CONFIG_FILE "/data/misc/wifi/wpa_supplicant.conf"
+
 
 Supplicant::Supplicant() {
     mCtrl = NULL;
@@ -55,7 +62,10 @@ Supplicant::Supplicant() {
 }
 
 int Supplicant::start() {
-    // XXX: Validate supplicant config file
+
+    if (setupConfig()) {
+        LOGW("Unable to setup supplicant.conf");
+    }
     
     char status[PROPERTY_VALUE_MAX] = {'\0'};
     int count = 200;
@@ -66,7 +76,6 @@ int Supplicant::start() {
 
     if (property_get(SUPP_PROP_NAME, status, NULL) &&
         !strcmp(status, "running")) {
-        LOGD("Supplicant already started");
     } else {
 #ifdef HAVE_LIBC_SYSTEM_PROPERTIES
         pi = __system_property_find(SUPP_PROP_NAME);
@@ -93,7 +102,7 @@ int Supplicant::start() {
             }
 #else
             if (property_get(SUPP_PROP_NAME, status, NULL)) {
-                if (strcmp(status, "running") == 0)
+                if (!strcmp(status, "running"))
                     break;
             }
 #endif
@@ -348,9 +357,9 @@ int Supplicant::onScanResultsEvent(SupplicantEvent *evt) {
         while((linep = strtok_r(NULL, "\n", &linep_next)))
             mLatestScanResults->push_back(new ScanResult(linep));
     
-        char tmp[32];
-        sprintf(tmp, "WIFI_SCAN_RESULTS_READY:%d", mLatestScanResults->size());
-        NetworkManager::Instance()->getBroadcaster()->sendBroadcast(tmp);
+        char tmp[128];
+        sprintf(tmp, "%d scan results ready", mLatestScanResults->size());
+        NetworkManager::Instance()->getBroadcaster()->sendBroadcast(600, tmp, false);
         pthread_mutex_unlock(&mLatestScanResultsLock);
         free(reply);
     } else {
@@ -403,4 +412,52 @@ ScanResultCollection *Supplicant::createLatestScanResults() {
 
     pthread_mutex_unlock(&mLatestScanResultsLock);
     return d;
-};
+}
+
+int Supplicant::setupConfig() {
+    char buf[2048];
+    int srcfd, destfd;
+    int nread;
+
+    if (access(SUPP_CONFIG_FILE, R_OK|W_OK) == 0) {
+        return 0;
+    } else if (errno != ENOENT) {
+        LOGE("Cannot access \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
+        return -1;
+    }
+
+    srcfd = open(SUPP_CONFIG_TEMPLATE, O_RDONLY);
+    if (srcfd < 0) {
+        LOGE("Cannot open \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
+        return -1;
+    }
+
+    destfd = open(SUPP_CONFIG_FILE, O_CREAT|O_WRONLY, 0660);
+    if (destfd < 0) {
+        close(srcfd);
+        LOGE("Cannot create \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
+        return -1;
+    }
+
+    while ((nread = read(srcfd, buf, sizeof(buf))) != 0) {
+        if (nread < 0) {
+            LOGE("Error reading \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
+            close(srcfd);
+            close(destfd);
+            unlink(SUPP_CONFIG_FILE);
+            return -1;
+        }
+        write(destfd, buf, nread);
+    }
+
+    close(destfd);
+    close(srcfd);
+
+    if (chown(SUPP_CONFIG_FILE, AID_SYSTEM, AID_WIFI) < 0) {
+        LOGE("Error changing group ownership of %s to %d: %s",
+             SUPP_CONFIG_FILE, AID_WIFI, strerror(errno));
+        unlink(SUPP_CONFIG_FILE);
+        return -1;
+    }
+    return 0;
+}

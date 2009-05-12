@@ -47,11 +47,11 @@ CommandListener::WifiEnableCmd::WifiEnableCmd() :
                
 int CommandListener::WifiEnableCmd::runCommand(SocketClient *cli, char *data) {
     Controller *c = NetworkManager::Instance()->findController("WIFI");
-    char buffer[32];
 
-    sprintf(buffer, "WIFI_ENABLE:%d", (c->enable() ? errno : 0));
-
-    cli->sendMsg(buffer);
+    if (c->enable())
+        cli->sendMsg(400, "Failed to enable wifi", true);
+    else
+        cli->sendMsg(200, "Wifi Enabled", false);
     return 0;
 }
 
@@ -61,10 +61,11 @@ CommandListener::WifiDisableCmd::WifiDisableCmd() :
                
 int CommandListener::WifiDisableCmd::runCommand(SocketClient *cli, char *data) {
     Controller *c = NetworkManager::Instance()->findController("WIFI");
-    char buffer[32];
 
-    sprintf(buffer, "WIFI_DISABLE:%d", (c->disable() ? errno : 0));
-    cli->sendMsg(buffer);
+    if (c->disable())
+        cli->sendMsg(400, "Failed to disable wifi", true);
+    else
+        cli->sendMsg(200, "Wifi Disabled", false);
     return 0;
 }
 
@@ -77,7 +78,6 @@ int CommandListener::WifiScanCmd::runCommand(SocketClient *cli, char *data) {
 
     WifiController *wc = (WifiController *) NetworkManager::Instance()->findController("WIFI");
 
-    char buffer[32];
     int mode = 0;
     char *bword, *last;
 
@@ -93,8 +93,11 @@ int CommandListener::WifiScanCmd::runCommand(SocketClient *cli, char *data) {
 
     mode = atoi(bword);
 
-    sprintf(buffer, "WIFI_SCAN:%d", (wc->setScanMode(mode) ? errno : 0));
-    cli->sendMsg(buffer);
+    if (wc->setScanMode(mode))
+        cli->sendMsg(400, "Failed to set scan mode", true);
+    else
+        cli->sendMsg(200, "Scan mode set", false);
+
     return 0;
 }
 
@@ -112,16 +115,16 @@ int CommandListener::WifiScanResultsCmd::runCommand(SocketClient *cli, char *dat
     char buffer[256];
     
     for(it = src->begin(); it != src->end(); ++it) {
-        sprintf(buffer, "WIFI_SCAN_RESULT:%s:%u:%d:%s:%s",
+        sprintf(buffer, "%s:%u:%d:%s:%s",
                 (*it)->getBssid(), (*it)->getFreq(), (*it)->getLevel(),
                 (*it)->getFlags(), (*it)->getSsid());
-        cli->sendMsg(buffer);
+        cli->sendMsg(125, buffer, false);
         delete (*it);
         it = src->erase(it);
     }
 
     delete src;
-    cli->sendMsg("WIFI_SCAN_RESULT:0");
+    cli->sendMsg(200, "Scan results complete", false);
     return 0;
 }
 
@@ -134,10 +137,11 @@ CommandListener::VpnEnableCmd::VpnEnableCmd() :
                
 int CommandListener::VpnEnableCmd::runCommand(SocketClient *cli, char *data) {
     Controller *c = NetworkManager::Instance()->findController("VPN");
-    char buffer[32];
 
-    sprintf(buffer, "VPN_ENABLE:%d", (c->enable() ? errno : 0));
-    cli->sendMsg(buffer);
+    if (c->enable())
+        cli->sendMsg(400, "Failed to enable VPN", true);
+    else
+        cli->sendMsg(200, "VPN enabled", false);
     return 0;
 }
 
@@ -147,9 +151,10 @@ CommandListener::VpnDisableCmd::VpnDisableCmd() :
                
 int CommandListener::VpnDisableCmd::runCommand(SocketClient *cli, char *data) {
     Controller *c = NetworkManager::Instance()->findController("VPN");
-    char buffer[32];
 
-    sprintf(buffer, "VPN_DISABLE:%d", (c->disable() ? errno : 0));
-    cli->sendMsg(buffer);
+    if (c->disable())
+        cli->sendMsg(400, "Failed to disable VPN", true);
+    else
+        cli->sendMsg(200, "VPN disabled", false);
     return 0;
 }

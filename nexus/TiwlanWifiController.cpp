@@ -67,15 +67,6 @@ int TiwlanWifiController::loadFirmware() {
 }
 
 bool TiwlanWifiController::isFirmwareLoaded() {
-    char driver_status[PROPERTY_VALUE_MAX];
-    if (property_get(DRIVER_PROP_NAME, driver_status, NULL)) {
-        if (!strcmp(driver_status, "ok"))
-            return true;
-        else {
-            LOGD("Driver status '%s'", driver_status);
-            return false;
-        }
-    }
-    LOGW("Unable to get property '%s'", DRIVER_PROP_NAME);
+    // Always load the firmware
     return false;
 }

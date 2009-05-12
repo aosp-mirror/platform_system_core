@@ -54,6 +54,8 @@ int main() {
         exit (1);
     }
 
+    // XXX: we'll use the main thread for the NetworkManager eventuall
+    
     while(1) {
         sleep(1000);
     }
