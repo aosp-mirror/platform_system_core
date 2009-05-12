@@ -83,13 +83,13 @@ int SocketListener::stopListener() {
         return -1;
     }
 
-    LOGD("Signaled listener thread - waiting for it to die");
     void *ret;
     if (pthread_join(mThread, &ret)) {
         LOGE("Error joining to listener thread (%s)", strerror(errno));
         return -1;
     }
-    LOGD("Listener stopped");
+    close(mCtrlPipe[0]);
+    close(mCtrlPipe[1]);
     return 0;
 }
 
@@ -97,7 +97,6 @@ void *SocketListener::threadStart(void *obj) {
     SocketListener *me = reinterpret_cast<SocketListener *>(obj);
 
     me->runListener();
-    LOGD("Listener thread shutting down");
     pthread_exit(NULL);
     return NULL;
 }
@@ -143,10 +142,8 @@ void SocketListener::runListener() {
             continue;
         }
 
-        if (FD_ISSET(mCtrlPipe[0], &read_fds)) {
-            LOGD("Control message received");
+        if (FD_ISSET(mCtrlPipe[0], &read_fds))
             break;
-        }
         if (mListen && FD_ISSET(mSock, &read_fds)) {
             struct sockaddr addr;
             socklen_t alen = sizeof(addr);
@@ -157,7 +154,6 @@ void SocketListener::runListener() {
                 sleep(1);
                 continue;
             }
-            LOGD("SocketListener client connection accepted");
             pthread_mutex_lock(&mClientsLock);
             mClients->push_back(new SocketClient(c));
             pthread_mutex_unlock(&mClientsLock);
