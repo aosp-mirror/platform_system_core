@@ -38,17 +38,20 @@ public:
     Supplicant();
     virtual ~Supplicant() {}
 
-    virtual int start();
-    virtual int stop();
-    virtual bool isStarted();
+    int start();
+    int stop();
+    bool isStarted();
+    int triggerScan(bool active);
 
-    virtual int triggerScan(bool active);
+    ScanResultCollection *createLatestScanResults();
+    WifiNetworkCollection *createWifiNetworkList();
+
 
     int getState() { return mState; }
 
-    ScanResultCollection *createLatestScanResults();
 
 // XXX: Extract these into an interface
+// handlers for SupplicantListener
 public:
     virtual int onConnectedEvent(SupplicantEvent *evt);
     virtual int onDisconnectedEvent(SupplicantEvent *evt);

@@ -141,12 +141,13 @@ int WifiController::setScanMode(uint32_t mode) {
 
     if (!(mode & SCAN_ENABLE_MASK)) {
         if (mCurrentScanMode & SCAN_REPEAT_MASK)
-            mScanner->stopPeriodicScan();
+            mScanner->stop();
     } else if (mode & SCAN_REPEAT_MASK)
-        rc = mScanner->startPeriodicScan(mode & SCAN_ACTIVE_MASK);
+        rc = mScanner->start(mode & SCAN_ACTIVE_MASK);
     else
         rc = mSupplicant->triggerScan(mode & SCAN_ACTIVE_MASK);
-    
+
+    mCurrentScanMode = mode;
     return rc;
 }
 

@@ -6,12 +6,8 @@
 class Supplicant;
 
 class WifiScanner {
-    pthread_t       mWorker;
-    pthread_mutex_t mWorkerLock;
-    bool            mWorkerRunning;
-    bool            mAbortRequest;
-    pthread_mutex_t mAbortRequestLock;
-
+    pthread_t  mThread;
+    int        mCtrlPipe[2];
     Supplicant *mSuppl;
     int        mPeriod;
     bool       mActive;
@@ -23,12 +19,11 @@ public:
 
     int getPeriod() { return mPeriod; }
 
-    int startPeriodicScan(bool active);
-    int stopPeriodicScan();
+    int start(bool active);
+    int stop();
 
 private:
     static void *threadStart(void *obj);
-    static void threadCleanup(void *obj);
 
     void run();
 };
