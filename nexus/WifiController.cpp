@@ -23,6 +23,7 @@
 #include "WifiController.h"
 #include "WifiScanner.h"
 #include "NetworkManager.h"
+#include "ErrorCode.h";
 
 WifiController::WifiController(char *modpath, char *modname, char *modargs) :
                 Controller("WIFI") {
@@ -94,7 +95,9 @@ out_powerdown:
 }
 
 void WifiController::sendStatusBroadcast(char *msg) {
-    NetworkManager::Instance()->getBroadcaster()->sendBroadcast(600, msg, false);
+    NetworkManager::Instance()->
+                    getBroadcaster()->
+                    sendBroadcast(ErrorCode::UnsolicitedInformational, msg, false);
 }
 
 int WifiController::disable() {
