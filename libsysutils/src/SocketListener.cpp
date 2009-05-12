@@ -186,6 +186,18 @@ void SocketListener::runListener() {
     }
 }
 
+void SocketListener::sendBroadcast(int code, char *msg, bool addErrno) {
+    pthread_mutex_lock(&mClientsLock);
+    SocketClientCollection::iterator i;
+
+    for (i = mClients->begin(); i != mClients->end(); ++i) {
+        if ((*i)->sendMsg(code, msg, addErrno)) {
+            LOGW("Error sending broadcast (%s)", strerror(errno));
+        }
+    }
+    pthread_mutex_unlock(&mClientsLock);
+}
+
 void SocketListener::sendBroadcast(char *msg) {
     pthread_mutex_lock(&mClientsLock);
     SocketClientCollection::iterator i;
@@ -197,16 +209,3 @@ void SocketListener::sendBroadcast(char *msg) {
     }
     pthread_mutex_unlock(&mClientsLock);
 }
-
-void SocketListener::sendBroadcast(char *msg, char *data) {
-    pthread_mutex_lock(&mClientsLock);
-    SocketClientCollection::iterator i;
-
-    for (i = mClients->begin(); i != mClients->end(); ++i) {
-        if ((*i)->sendMsg(msg, data)) {
-            LOGW("Error sending broadcast (%s)", strerror(errno));
-        }
-    }
-    pthread_mutex_unlock(&mClientsLock);
-}
-
