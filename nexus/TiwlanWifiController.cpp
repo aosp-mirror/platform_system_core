@@ -48,7 +48,6 @@ int TiwlanWifiController::loadFirmware() {
     char driver_status[PROPERTY_VALUE_MAX];
     int count = 100;
 
-    LOGD("loadFirmware()");
     property_set("ctl.start", "wlan_loader");
     sched_yield();
 

@@ -13,24 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef _VPN_CONTROLLER_H
-#define _VPN_CONTROLLER_H
 
-#include "Controller.h"
+#ifndef _OPEN_VPN_CONTROLLER_H
+#define _OPEN_VPN_CONTROLLER_H
 
-class VpnController : public Controller {
+#include "VpnController.h"
+
+class OpenVpnController : public VpnController {
 
 public:
-    VpnController();
-    virtual ~VpnController() {}
+    OpenVpnController();
+    virtual ~OpenVpnController() {}
 
-    virtual int start();
-    virtual int stop();
-
-    virtual int enable();
-    virtual int disable();
+    int start();
+    int stop();
+    int enable();
+    int disable();
 
 protected:
+
+private:
+    int startServiceDaemon();
+    int stopServiceDaemon();
 };
 
 #endif
