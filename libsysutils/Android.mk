@@ -1,3 +1,10 @@
+BUILD_LIBSYSUTILS := false
+ifneq ($(TARGET_SIMULATOR),true)
+    BUILD_LIBSYSUTILS := true
+endif
+
+ifeq ($(BUILD_LIBSYSUTILS),true)
+
 LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
@@ -23,3 +30,5 @@ ifeq ($(TARGET_SIMULATOR),true)
 endif
 
 include $(BUILD_SHARED_LIBRARY)
+
+endif

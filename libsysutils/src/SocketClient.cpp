@@ -28,8 +28,6 @@ int SocketClient::sendMsg(int code, char *msg, bool addErrno) {
 }
 
 int SocketClient::sendMsg(char *msg) {
-    LOGD("SocketClient::sendMsg(%s)", msg);
-
     if (mSocket < 0) {
         errno = EHOSTUNREACH;
         return -1;
