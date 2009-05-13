@@ -33,6 +33,12 @@ static inline void init_sockaddr_in(struct sockaddr_in *sin, const char *addr)
 	sin->sin_addr.s_addr = inet_addr(addr);
 }
 
+static void setdstaddr(int s, struct ifreq *ifr, const char *addr)
+{
+	init_sockaddr_in((struct sockaddr_in *) &ifr->ifr_dstaddr, addr);
+    if(ioctl(s, SIOCSIFDSTADDR, ifr) < 0) die("SIOCSIFDSTADDR");
+}
+
 static void setnetmask(int s, struct ifreq *ifr, const char *addr)
 {
 	init_sockaddr_in((struct sockaddr_in *) &ifr->ifr_netmask, addr);
@@ -120,6 +126,16 @@ int ifconfig_main(int argc, char *argv[])
     while(argc > 0){
         if(!strcmp(argv[0], "up")) {
             setflags(s, &ifr, IFF_UP, 0);
+        } else if(!strcmp(argv[0], "-pointtopoint")) {
+            setflags(s, &ifr, IFF_POINTOPOINT, 1);
+        } else if(!strcmp(argv[0], "pointtopoint")) {
+		argc--, argv++;
+		if (0 == argc) { 
+			errno = EINVAL;
+			die("expecting an IP address for parameter \"pointtopoint\"");
+		}
+		setdstaddr(s, &ifr, argv[0]);
+                setflags(s, &ifr, IFF_POINTOPOINT, 0);
         } else if(!strcmp(argv[0], "down")) {
             setflags(s, &ifr, 0, IFF_UP);
 		} else if(!strcmp(argv[0], "netmask")) {
