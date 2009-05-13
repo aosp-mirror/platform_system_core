@@ -73,7 +73,8 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *cmd) {
         FrameworkCommand *c = *i;
 
         if (!strcmp(cm, c->getCommand())) {
-            if (c->runCommand(cli, cmd)) {
+            cm += strlen(cm) +1;
+            if (c->runCommand(cli, cm)) {
                 LOGW("Handler '%s' error (%s)", c->getCommand(), strerror(errno));
             }
             return;
