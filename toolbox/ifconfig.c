@@ -126,9 +126,9 @@ int ifconfig_main(int argc, char *argv[])
     while(argc > 0){
         if(!strcmp(argv[0], "up")) {
             setflags(s, &ifr, IFF_UP, 0);
-        } else if(!strcmp(argv[0], "-pointtopoint")) {
+        } else if(!strcmp(argv[0], "-pointopoint")) {
             setflags(s, &ifr, IFF_POINTOPOINT, 1);
-        } else if(!strcmp(argv[0], "pointtopoint")) {
+        } else if(!strcmp(argv[0], "pointopoint")) {
 		argc--, argv++;
 		if (0 == argc) { 
 			errno = EINVAL;
