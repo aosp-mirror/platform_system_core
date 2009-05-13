@@ -31,6 +31,8 @@
 #include <unistd.h>
 #endif
 
+#include "disassem.h"
+
 namespace acc {
 
 class compiler {
@@ -178,6 +180,8 @@ class compiler {
 
         virtual void adjustStackAfterCall(int l) = 0;
 
+        virtual int disassemble(FILE* out) = 0;
+
         /* output a symbol and patch all calls to it */
         virtual void gsym(int t) {
             pCodeBuf->gsym(t);
@@ -185,14 +189,19 @@ class compiler {
 
         virtual int finishCompile() {
 #if defined(__arm__)
-        const long base = long(pCodeBuf->getBase());
-        const long curr = base + long(pCodeBuf->getSize());
-        int err = cacheflush(base, curr, 0);
-        return err;
+            const long base = long(pCodeBuf->getBase());
+            const long curr = base + long(pCodeBuf->getSize());
+            int err = cacheflush(base, curr, 0);
+            return err;
 #else
-        return 0;
+            return 0;
 #endif
         }
+
+        /**
+         * Adjust relative branches by this amount.
+         */
+        virtual int jumpOffset() = 0;
 
     protected:
         void o(int n) {
@@ -215,6 +224,10 @@ class compiler {
         /* instruction + address */
         int oad(int n, int t) {
             return pCodeBuf->oad(n,t);
+        }
+
+        int getBase() {
+            return (int) pCodeBuf->getBase();
         }
 
         int getPC() {
@@ -271,12 +284,19 @@ class compiler {
         /* load immediate value */
         virtual void li(int t) {
             fprintf(stderr, "li(%d);\n", t);
-            oad(0xb8, t); /* mov $xx, %eax */
+            if (t >= 0 && t < 255) {
+                 o4(0xE3A00000 + t); // E3A00000 mov    r0, #0
+            } else if (t >= -256 && t < 0) {
+                // mvn means move constant ^ ~0
+                o4(0xE3E00001 - t); // E3E00000         mvn    r0, #0
+            } else {
+                error("immediate constant out of range -256..255: %d", t);
+            }
         }
 
         virtual int gjmp(int t) {
             fprintf(stderr, "gjmp(%d);\n", t);
-            return psym(0xe9, t);
+            return o4(0xEA000000 + encodeAddress(t));
         }
 
         /* l = 0: je, l == 1: jne */
@@ -397,7 +417,86 @@ class compiler {
             oad(0xc481, l); /* add $xxx, %esp */
         }
 
+        virtual int jumpOffset() {
+            return 4;
+        }
+
+        /* output a symbol and patch all calls to it */
+        virtual void gsym(int t) {
+            fprintf(stderr, "gsym(0x%x)\n", t);
+            int n;
+            int base = getBase();
+            int pc = getPC();
+            fprintf(stderr, "pc = 0x%x\n", pc);
+            while (t) {
+                int data = * (int*) t;
+                int decodedOffset = ((BRANCH_REL_ADDRESS_MASK & data) << 2);
+                if (decodedOffset == 0) {
+                    n = 0;
+                } else {
+                    n = base + decodedOffset; /* next value */
+                }
+                *(int *) t = (data & ~BRANCH_REL_ADDRESS_MASK)
+                    | encodeRelAddress(pc - t - 8);
+                t = n;
+            }
+        }
+
+        virtual int disassemble(FILE* out) {
+               disasmOut = out;
+            disasm_interface_t  di;
+            di.di_readword = disassemble_readword;
+            di.di_printaddr = disassemble_printaddr;
+            di.di_printf = disassemble_printf;
+
+            int base = getBase();
+            int pc = getPC();
+            for(int i = base; i < pc; i += 4) {
+                fprintf(out, "%08x: %08x  ", i, *(int*) i);
+                ::disasm(&di, i, 0);
+            }
+            return 0;
+        }
     private:
+        static FILE* disasmOut;
+
+        static u_int
+        disassemble_readword(u_int address)
+        {
+            return(*((u_int *)address));
+        }
+
+        static void
+        disassemble_printaddr(u_int address)
+        {
+            fprintf(disasmOut, "0x%08x", address);
+        }
+
+        static void
+        disassemble_printf(const char *fmt, ...) {
+            va_list ap;
+            va_start(ap, fmt);
+            vfprintf(disasmOut, fmt, ap);
+            va_end(ap);
+        }
+
+        static const int BRANCH_REL_ADDRESS_MASK = 0x00ffffff;
+
+        /** Encode a relative address that might also be
+         * a label.
+         */
+        int encodeAddress(int value) {
+            int base = getBase();
+            if (value >= base && value <= getPC() ) {
+                // This is a label, encode it relative to the base.
+                value = value - base;
+            }
+            return encodeRelAddress(value);
+        }
+
+        int encodeRelAddress(int value) {
+            return BRANCH_REL_ADDRESS_MASK & (value >> 2);
+        }
 
         void error(const char* fmt,...) {
             va_list ap;
@@ -520,6 +619,14 @@ class compiler {
 
         virtual void adjustStackAfterCall(int l) {
             oad(0xc481, l); /* add $xxx, %esp */
+        }
+
+        virtual int jumpOffset() {
+            return 5;
+        }
+
+        virtual int disassemble(FILE* out) {
+            return 1;
         }
 
     private:
@@ -896,7 +1003,7 @@ class compiler {
                 pGen->callIndirect(l);
                 l = l + 4;
             } else {
-                pGen->callRelative(n - codeBuf.getPC() - 5); /* call xxx */
+                pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset()); /* call xxx */
             }
             if (l)
                 pGen->adjustStackAfterCall(l);
@@ -935,7 +1042,7 @@ class compiler {
             if (a && l > 8) {
                 a = pGen->gtst(t == OP_LOGICAL_OR, a);
                 pGen->li(t != OP_LOGICAL_OR);
-                pGen->gjmp(5); /* jmp $ + 5 */
+                pGen->gjmp(5); /* jmp $ + 5 (sizeof li, FIXME for ARM) */
                 pGen->gsym(a);
                 pGen->li(t == OP_LOGICAL_OR);
             }
@@ -974,7 +1081,7 @@ class compiler {
             next();
             skip('(');
             if (t == TOK_WHILE) {
-                n = codeBuf.getPC();
+                n = codeBuf.getPC(); // top of loop, target of "next" iteration
                 a = test_expr();
             } else {
                 if (tok != ';')
@@ -988,14 +1095,14 @@ class compiler {
                 if (tok != ')') {
                     t = pGen->gjmp(0);
                     expr();
-                    pGen->gjmp(n - codeBuf.getPC() - 5);
+                    pGen->gjmp(n - codeBuf.getPC() - pGen->jumpOffset());
                     pGen->gsym(t);
                     n = t + 4;
                 }
             }
             skip(')');
             block((int) &a);
-            pGen->gjmp(n - codeBuf.getPC() - 5); /* jmp */
+            pGen->gjmp(n - codeBuf.getPC() - pGen->jumpOffset()); /* jmp */
             pGen->gsym(a);
         } else if (tok == '{') {
             next();
@@ -1179,6 +1286,10 @@ public:
         return 0;
     }
 
+    int disassemble(FILE* out) {
+        return pGen->disassemble(out);
+    }
+
 };
 
 const char* compiler::operatorChars =
@@ -1191,6 +1302,8 @@ const char compiler::operatorLevel[] =
             6, 7, 8, /* & ^ | */
             2, 2 /* ~ ! */
             };
+
+FILE* compiler::ARMCodeGenerator::disasmOut;
 
 const int compiler::X86CodeGenerator::operatorHelper[] = {
         0x1,     // ++
@@ -1226,6 +1339,7 @@ int run(acc::compiler& c, int argc, char** argv) {
 
 int main(int argc, char** argv) {
     bool doDump = false;
+    bool doDisassemble = false;
     const char* inFile = NULL;
     const char* outFile = NULL;
     const char* architecture = "arm";
@@ -1250,6 +1364,9 @@ int main(int argc, char** argv) {
                 doDump = true;
                 outFile = argv[i + 1];
                 i += 1;
+                break;
+            case 'S':
+                doDisassemble = true;
                 break;
             default:
                 fprintf(stderr, "Unrecognized flag %s\n", arg);
@@ -1280,6 +1397,9 @@ int main(int argc, char** argv) {
     if (compileResult) {
         fprintf(stderr, "Compile failed: %d\n", compileResult);
         return 6;
+    }
+    if (doDisassemble) {
+        compiler.disassemble(stderr);
     }
     if (doDump) {
         FILE* save = fopen(outFile, "w");
