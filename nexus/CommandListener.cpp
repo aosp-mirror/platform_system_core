@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) ErrorCode::CommandOkay8 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@
 #include "Controller.h"
 #include "NetworkManager.h"
 #include "WifiController.h"
+#include "ErrorCode.h"
 
 CommandListener::CommandListener() :
                  FrameworkListener("nexus") {
@@ -49,9 +50,9 @@ int CommandListener::WifiEnableCmd::runCommand(SocketClient *cli, char *data) {
     Controller *c = NetworkManager::Instance()->findController("WIFI");
 
     if (c->enable())
-        cli->sendMsg(400, "Failed to enable wifi", true);
+        cli->sendMsg(ErrorCode::OperationFailed, "Failed to enable wifi", true);
     else
-        cli->sendMsg(200, "Wifi Enabled", false);
+        cli->sendMsg(ErrorCode::CommandOkay, "Wifi Enabled", false);
     return 0;
 }
 
@@ -63,9 +64,9 @@ int CommandListener::WifiDisableCmd::runCommand(SocketClient *cli, char *data) {
     Controller *c = NetworkManager::Instance()->findController("WIFI");
 
     if (c->disable())
-        cli->sendMsg(400, "Failed to disable wifi", true);
+        cli->sendMsg(ErrorCode::OperationFailed, "Failed to disable wifi", true);
     else
-        cli->sendMsg(200, "Wifi Disabled", false);
+        cli->sendMsg(ErrorCode::CommandOkay, "Wifi Disabled", false);
     return 0;
 }
 
@@ -78,25 +79,10 @@ int CommandListener::WifiScanCmd::runCommand(SocketClient *cli, char *data) {
 
     WifiController *wc = (WifiController *) NetworkManager::Instance()->findController("WIFI");
 
-    int mode = 0;
-    char *bword, *last;
-
-    if (!(bword = strtok_r(data, ":", &last))) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    if (!(bword = strtok_r(NULL, ":", &last))) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    mode = atoi(bword);
-
-    if (wc->setScanMode(mode))
-        cli->sendMsg(400, "Failed to set scan mode", true);
+    if (wc->setScanMode(atoi(data)))
+        cli->sendMsg(ErrorCode::OperationFailed, "Failed to set scan mode", true);
     else
-        cli->sendMsg(200, "Scan mode set", false);
+        cli->sendMsg(ErrorCode::CommandOkay, "Scan mode set", false);
 
     return 0;
 }
@@ -124,7 +110,7 @@ int CommandListener::WifiScanResultsCmd::runCommand(SocketClient *cli, char *dat
     }
 
     delete src;
-    cli->sendMsg(200, "Scan results complete", false);
+    cli->sendMsg(ErrorCode::CommandOkay, "Scan results complete", false);
     return 0;
 }
 
@@ -139,9 +125,9 @@ int CommandListener::VpnEnableCmd::runCommand(SocketClient *cli, char *data) {
     Controller *c = NetworkManager::Instance()->findController("VPN");
 
     if (c->enable())
-        cli->sendMsg(400, "Failed to enable VPN", true);
+        cli->sendMsg(ErrorCode::OperationFailed, "Failed to enable VPN", true);
     else
-        cli->sendMsg(200, "VPN enabled", false);
+        cli->sendMsg(ErrorCode::CommandOkay, "VPN enabled", false);
     return 0;
 }
 
@@ -153,8 +139,8 @@ int CommandListener::VpnDisableCmd::runCommand(SocketClient *cli, char *data) {
     Controller *c = NetworkManager::Instance()->findController("VPN");
 
     if (c->disable())
-        cli->sendMsg(400, "Failed to disable VPN", true);
+        cli->sendMsg(ErrorCode::OperationFailed, "Failed to disable VPN", true);
     else
-        cli->sendMsg(200, "VPN disabled", false);
+        cli->sendMsg(ErrorCode::CommandOkay, "VPN disabled", false);
     return 0;
 }

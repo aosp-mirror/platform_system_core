@@ -38,6 +38,7 @@
 #include "SupplicantEvent.h"
 #include "ScanResult.h"
 #include "NetworkManager.h"
+#include "ErrorCode.h"
 
 #include "libwpa_client/wpa_ctrl.h"
 
@@ -173,9 +174,7 @@ int Supplicant::stop() {
 bool Supplicant::isStarted() {
     char supp_status[PROPERTY_VALUE_MAX] = {'\0'};
 
-    int rc = property_get(SUPP_PROP_NAME, supp_status, NULL);
-
-    LOGD("rc = %d, property = '%s'", rc, supp_status);
+    property_get(SUPP_PROP_NAME, supp_status, NULL);
 
     if (!strcmp(supp_status, "running"))
         return true;
@@ -359,7 +358,8 @@ int Supplicant::onScanResultsEvent(SupplicantEvent *evt) {
     
         char tmp[128];
         sprintf(tmp, "%d scan results ready", mLatestScanResults->size());
-        NetworkManager::Instance()->getBroadcaster()->sendBroadcast(600, tmp, false);
+        NetworkManager::Instance()->getBroadcaster()->
+                                    sendBroadcast(ErrorCode::UnsolicitedInformational, tmp, false);
         pthread_mutex_unlock(&mLatestScanResultsLock);
         free(reply);
     } else {
