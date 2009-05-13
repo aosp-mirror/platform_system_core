@@ -314,8 +314,6 @@ int Supplicant::onEapFailureEvent(SupplicantEvent *evt) {
 }
 
 int Supplicant::onScanResultsEvent(SupplicantEvent *evt) {
-    LOGD("onScanResultsEvent(%s)", evt->getEvent());
-
     if (!strcmp(evt->getEvent(), "Ready")) {
         char *reply;
 
