@@ -61,10 +61,8 @@ int SocketListener::startListener() {
     if (mListen && listen(mSock, 4) < 0) {
         LOGE("Unable to listen on socket (%s)", strerror(errno));
         return -1;
-    } else if (!mListen) {
+    } else if (!mListen)
         mClients->push_back(new SocketClient(mSock));
-        LOGD("Created phantom client");
-    }
 
     if (pipe(mCtrlPipe))
         return -1;
@@ -106,12 +104,7 @@ void SocketListener::runListener() {
     while(1) {
         SocketClientCollection::iterator it;
         fd_set read_fds;
-        struct timeval to;
         int rc = 0;
-
-        to.tv_sec = 60 * 60;
-        to.tv_usec = 0;
-
         int max = 0;
 
         FD_ZERO(&read_fds);
@@ -133,14 +126,12 @@ void SocketListener::runListener() {
         }
         pthread_mutex_unlock(&mClientsLock);
         
-        if ((rc = select(max + 1, &read_fds, NULL, NULL, &to)) < 0) {
+        if ((rc = select(max + 1, &read_fds, NULL, NULL, NULL)) < 0) {
             LOGE("select failed (%s)", strerror(errno));
             sleep(1);
             continue;
-        } else if (!rc) {
-            LOGD("select timeout");
+        } else if (!rc)
             continue;
-        }
 
         if (FD_ISSET(mCtrlPipe[0], &read_fds))
             break;

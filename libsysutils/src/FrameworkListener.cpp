@@ -59,7 +59,6 @@ void FrameworkListener::registerCmd(FrameworkCommand *cmd) {
 }
 
 void FrameworkListener::dispatchCommand(SocketClient *cli, char *cmd) {
-    LOGD("Dispatching '%s'", cmd);
     char *cm, *last;
 
     if (!(cm = strtok_r(cmd, ":", &last))) {
