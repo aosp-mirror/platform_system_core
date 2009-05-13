@@ -23,7 +23,7 @@
 #include "CommandListener.h"
 
 #include "LoopController.h"
-#include "VpnController.h"
+#include "OpenVpnController.h"
 #include "TiwlanWifiController.h"
 
 int main() {
@@ -41,7 +41,8 @@ int main() {
 
     nm->attachController(new LoopController());
     nm->attachController(new TiwlanWifiController("/system/lib/modules/wlan.ko", "wlan", ""));
-    nm->attachController(new VpnController());
+//    nm->attachController(new AndroidL2TPVpnController());
+    nm->attachController(new OpenVpnController());
 
 
     if (NetworkManager::Instance()->run()) {
@@ -50,11 +51,11 @@ int main() {
     }
 
     if (cl->startListener()) {
-        LOGE("Unable to start  CommandListener (%s)", strerror(errno));
+        LOGE("Unable to start CommandListener (%s)", strerror(errno));
         exit (1);
     }
 
-    // XXX: we'll use the main thread for the NetworkManager eventuall
+    // XXX: we'll use the main thread for the NetworkManager eventually
     
     while(1) {
         sleep(1000);

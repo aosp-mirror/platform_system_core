@@ -31,9 +31,6 @@ int VpnController::stop() {
 }
 
 int VpnController::enable() {
-
-    // Load modules
-    // Start daemons
     errno = -ENOSYS;
     return -1;
 }
