@@ -33,6 +33,11 @@ CommandListener::CommandListener() :
     registerCmd(new WifiDisableCmd());
     registerCmd(new WifiScanCmd());
     registerCmd(new WifiScanResultsCmd());
+    registerCmd(new WifiListNetworksCmd());
+    registerCmd(new WifiAddNetworkCmd());
+    registerCmd(new WifiRemoveNetworkCmd());
+    registerCmd(new WifiSetVarCmd());
+    registerCmd(new WifiGetVarCmd());
 
     registerCmd(new VpnEnableCmd());
     registerCmd(new VpnDisableCmd());
@@ -70,13 +75,46 @@ int CommandListener::WifiDisableCmd::runCommand(SocketClient *cli, char *data) {
     return 0;
 }
 
+CommandListener::WifiAddNetworkCmd::WifiAddNetworkCmd() :
+                 NexusCommand("wifi_add_network") {
+} 
+               
+int CommandListener::WifiAddNetworkCmd::runCommand(SocketClient *cli, char *data) {
+    NetworkManager *nm = NetworkManager::Instance();
+    WifiController *wc = (WifiController *) nm->findController("WIFI");
+    int networkId;
+
+    if ((networkId = wc->addNetwork()) < 0)
+        cli->sendMsg(ErrorCode::OperationFailed, "Failed to add network", true);
+    else {
+        char tmp[128];
+        sprintf(tmp, "Added network id %d.", networkId);
+        cli->sendMsg(ErrorCode::CommandOkay, tmp, false);
+    }
+    return 0;
+}
+
+CommandListener::WifiRemoveNetworkCmd::WifiRemoveNetworkCmd() :
+                 NexusCommand("wifi_remove_network") {
+} 
+               
+int CommandListener::WifiRemoveNetworkCmd::runCommand(SocketClient *cli, char *data) {
+    NetworkManager *nm = NetworkManager::Instance();
+    WifiController *wc = (WifiController *) nm->findController("WIFI");
+
+    if (wc->removeNetwork(atoi(data)))
+        cli->sendMsg(ErrorCode::OperationFailed, "Failed to remove network", true);
+    else {
+        cli->sendMsg(ErrorCode::CommandOkay, "Network removed.", false);
+    }
+    return 0;
+}
+
 CommandListener::WifiScanCmd::WifiScanCmd() :
                  NexusCommand("wifi_scan") {
 } 
 
 int CommandListener::WifiScanCmd::runCommand(SocketClient *cli, char *data) {
-    LOGD("WifiScanCmd(%s)", data);
-
     WifiController *wc = (WifiController *) NetworkManager::Instance()->findController("WIFI");
 
     if (wc->setScanMode(atoi(data)))
@@ -93,7 +131,6 @@ CommandListener::WifiScanResultsCmd::WifiScanResultsCmd() :
 
 int CommandListener::WifiScanResultsCmd::runCommand(SocketClient *cli, char *data) {
     NetworkManager *nm = NetworkManager::Instance();
-
     WifiController *wc = (WifiController *) nm->findController("WIFI");
 
     ScanResultCollection *src = wc->createScanResults();
@@ -104,13 +141,106 @@ int CommandListener::WifiScanResultsCmd::runCommand(SocketClient *cli, char *dat
         sprintf(buffer, "%s:%u:%d:%s:%s",
                 (*it)->getBssid(), (*it)->getFreq(), (*it)->getLevel(),
                 (*it)->getFlags(), (*it)->getSsid());
-        cli->sendMsg(125, buffer, false);
+        cli->sendMsg(ErrorCode::WifiScanResult, buffer, false);
         delete (*it);
         it = src->erase(it);
     }
 
     delete src;
     cli->sendMsg(ErrorCode::CommandOkay, "Scan results complete", false);
+    return 0;
+}
+
+CommandListener::WifiListNetworksCmd::WifiListNetworksCmd() :
+                 NexusCommand("wifi_list_networks") {
+} 
+
+int CommandListener::WifiListNetworksCmd::runCommand(SocketClient *cli, char *data) {
+    NetworkManager *nm = NetworkManager::Instance();
+    WifiController *wc = (WifiController *) nm->findController("WIFI");
+
+    WifiNetworkCollection *src = wc->createNetworkList();
+    WifiNetworkCollection::iterator it;
+    char buffer[256];
+    
+    for(it = src->begin(); it != src->end(); ++it) {
+        sprintf(buffer, "%d:%s", (*it)->getNetworkId(), (*it)->getSsid());
+        cli->sendMsg(ErrorCode::WifiNetworkList, buffer, false);
+        delete (*it);
+        it = src->erase(it);
+    }
+
+    delete src;
+    cli->sendMsg(ErrorCode::CommandOkay, "Network listing complete.", false);
+    return 0;
+}
+
+CommandListener::WifiSetVarCmd::WifiSetVarCmd() :
+                 NexusCommand("wifi_setvar") {
+} 
+
+int CommandListener::WifiSetVarCmd::runCommand(SocketClient *cli, char *data) {
+    WifiController *wc = (WifiController *) NetworkManager::Instance()->findController("WIFI");
+
+    char *bword;
+    char *last;
+    char varname[32];
+    char val[250];
+    int networkId;
+
+    if (!(bword = strtok_r(data, ":", &last)))
+        goto out_inval;
+
+    networkId = atoi(bword);
+   
+    if (!(bword = strtok_r(NULL, ":", &last)))
+        goto out_inval;
+
+    strncpy(varname, bword, sizeof(varname));
+
+    if (!(bword = strtok_r(NULL, ":", &last)))
+        goto out_inval;
+
+    strncpy(val, bword, sizeof(val));
+
+    LOGD("Network id %d, varname '%s', value '%s'", networkId, varname, val);
+
+    return 0;
+
+out_inval:
+    errno = EINVAL;
+    cli->sendMsg(ErrorCode::CommandParameterError, "Failed to set variable.", true);
+    return 0;
+}
+
+CommandListener::WifiGetVarCmd::WifiGetVarCmd() :
+                 NexusCommand("wifi_getvar") {
+} 
+
+int CommandListener::WifiGetVarCmd::runCommand(SocketClient *cli, char *data) {
+    WifiController *wc = (WifiController *) NetworkManager::Instance()->findController("WIFI");
+
+    char *bword;
+    char *last;
+    char varname[32];
+    int networkId;
+
+    if (!(bword = strtok_r(data, ":", &last)))
+        goto out_inval;
+   
+    networkId = atoi(bword);
+
+    if (!(bword = strtok_r(NULL, ":", &last)))
+        goto out_inval;
+
+    strncpy(varname, bword, sizeof(varname));
+
+    LOGD("networkId = %d, varname '%s'", networkId, varname);
+
+    return 0;
+out_inval:
+    errno = EINVAL;
+    cli->sendMsg(ErrorCode::CommandParameterError, "Failed to get variable.", true);
     return 0;
 }
 

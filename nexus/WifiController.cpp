@@ -23,7 +23,7 @@
 #include "WifiController.h"
 #include "WifiScanner.h"
 #include "NetworkManager.h"
-#include "ErrorCode.h";
+#include "ErrorCode.h"
 
 WifiController::WifiController(char *modpath, char *modname, char *modargs) :
                 Controller("WIFI") {
@@ -151,6 +151,19 @@ int WifiController::setScanMode(uint32_t mode) {
     return rc;
 }
 
+int WifiController::addNetwork() {
+    return mSupplicant->addNetwork();
+}
+
+int WifiController::removeNetwork(int networkId) {
+    return mSupplicant->removeNetwork(networkId);
+}
+
 ScanResultCollection *WifiController::createScanResults() {
     return mSupplicant->createLatestScanResults();
+}
+
+// XXX: This should be a const list
+WifiNetworkCollection *WifiController::createNetworkList() {
+    return mSupplicant->createNetworkList();
 }

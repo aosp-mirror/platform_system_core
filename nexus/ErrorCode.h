@@ -23,6 +23,9 @@ public:
     // before proceeding with a new command.
     static const int ActionInitiated = 100;
 
+    static const int WifiScanResult = 125;
+    static const int WifiNetworkList = 126;
+
     // 200 series - Requested action has been successfully completed
     static const int CommandOkay = 200;
 
@@ -33,6 +36,7 @@ public:
     // 500 series - The command was not accepted and the requested
     // action did not take place.
     static const int CommandSyntaxError = 500;
+    static const int CommandParameterError = 501;
 
     // 600 series - Unsolicited broadcasts
     static const int UnsolicitedInformational = 600;

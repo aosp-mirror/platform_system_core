@@ -23,6 +23,7 @@ class SupplicantEvent;
 #include <pthread.h>
 
 #include "ScanResult.h"
+#include "WifiNetwork.h"
 
 class Supplicant {
 private:
@@ -41,10 +42,13 @@ public:
     int start();
     int stop();
     bool isStarted();
-    int triggerScan(bool active);
 
+    int triggerScan(bool active);
     ScanResultCollection *createLatestScanResults();
-    WifiNetworkCollection *createWifiNetworkList();
+
+    int addNetwork();
+    int removeNetwork(int networkId);
+    WifiNetworkCollection *createNetworkList();
 
 
     int getState() { return mState; }

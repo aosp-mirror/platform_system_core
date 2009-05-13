@@ -53,6 +53,41 @@ private:
         int runCommand(SocketClient *c, char *data);
     };
 
+    class WifiAddNetworkCmd : public NexusCommand {
+    public:
+        WifiAddNetworkCmd();
+        virtual ~WifiAddNetworkCmd() {}
+        int runCommand(SocketClient *c, char *data);
+    };
+
+    class WifiRemoveNetworkCmd : public NexusCommand {
+    public:
+        WifiRemoveNetworkCmd();
+        virtual ~WifiRemoveNetworkCmd() {}
+        int runCommand(SocketClient *c, char *data);
+    };
+
+    class WifiListNetworksCmd : public NexusCommand {
+    public:
+        WifiListNetworksCmd();
+        virtual ~WifiListNetworksCmd() {}
+        int runCommand(SocketClient *c, char *data);
+    };
+
+    class WifiSetVarCmd : public NexusCommand {
+    public:
+        WifiSetVarCmd();
+        virtual ~WifiSetVarCmd() {}
+        int runCommand(SocketClient *c, char *data);
+    };
+
+    class WifiGetVarCmd : public NexusCommand {
+    public:
+        WifiGetVarCmd();
+        virtual ~WifiGetVarCmd() {}
+        int runCommand(SocketClient *c, char *data);
+    };
+
     class VpnEnableCmd : public NexusCommand {
     public:
         VpnEnableCmd();

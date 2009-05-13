@@ -25,6 +25,7 @@ class Supplicant;
 class WifiScanner;
 
 #include "ScanResult.h"
+#include "WifiNetwork.h"
 
 class WifiController : public Controller {
 public:
@@ -56,18 +57,19 @@ public:
     int enable();
     int disable();
 
-    ScanResultCollection *createScanResults();
+    int addNetwork();
+    int removeNetwork(int networkId);
+    WifiNetworkCollection *createNetworkList();
 
-    int getType();
+    int getScanMode() { return mCurrentScanMode; }
+    int setScanMode(uint32_t mode);
+    ScanResultCollection *createScanResults();
 
     char *getModulePath() { return mModulePath; }
     char *getModuleName() { return mModuleName; }
     char *getModuleArgs() { return mModuleArgs; }
 
     Supplicant *getSupplicant() { return mSupplicant; }
-
-    int getScanMode() { return mCurrentScanMode; }
-    int setScanMode(uint32_t mode);
 
 protected:
     virtual int powerUp() = 0;
