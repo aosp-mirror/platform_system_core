@@ -18,4 +18,8 @@ LOCAL_CFLAGS :=
 
 LOCAL_SHARED_LIBRARIES := libcutils
 
+ifeq ($(TARGET_SIMULATOR),true)
+  LOCAL_LDLIBS += -lpthread
+endif
+
 include $(BUILD_SHARED_LIBRARY)
