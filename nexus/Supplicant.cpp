@@ -229,7 +229,7 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len)
         return -1;
     }
 
-//    LOGD("sendCommand(): -> '%s'", cmd);
+    LOGD("sendCommand(): -> '%s'", cmd);
 
     int rc;
     if ((rc = wpa_ctrl_request(mCtrl, cmd, strlen(cmd), reply, reply_len, NULL)) == -2)  {
@@ -245,7 +245,7 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len)
         !strncmp(cmd, "SCAN_RESULTS", 12)) 
         reply[*reply_len] = '\0';
 
-//    LOGD("sendCommand(): <- '%s'", reply);
+    LOGD("sendCommand(): <- '%s'", reply);
     return 0;
 }
 
@@ -355,7 +355,7 @@ int Supplicant::onScanResultsEvent(SupplicantEvent *evt) {
             mLatestScanResults->push_back(new ScanResult(linep));
     
         char tmp[128];
-        sprintf(tmp, "%d scan results ready", mLatestScanResults->size());
+        sprintf(tmp, "Scan results ready (%d)", mLatestScanResults->size());
         NetworkManager::Instance()->getBroadcaster()->
                                     sendBroadcast(ErrorCode::UnsolicitedInformational, tmp, false);
         pthread_mutex_unlock(&mLatestScanResultsLock);
@@ -410,6 +410,35 @@ ScanResultCollection *Supplicant::createLatestScanResults() {
 
     pthread_mutex_unlock(&mLatestScanResultsLock);
     return d;
+}
+
+WifiNetworkCollection *Supplicant::createNetworkList() {
+    WifiNetworkCollection *d = new WifiNetworkCollection();
+    return d;
+}
+
+int Supplicant::addNetwork() {
+    char reply[32];
+    size_t len = sizeof(reply) -1;
+
+    memset(reply, 0, sizeof(reply));
+    if (sendCommand("ADD_NETWORK", reply, &len))
+        return -1;
+
+    return atoi(reply);
+}
+
+int Supplicant::removeNetwork(int networkId) {
+    char req[64];
+
+    sprintf(req, "REMOVE_NETWORK %d", networkId);
+    char reply[32];
+    size_t len = sizeof(reply) -1;
+    memset(reply, 0, sizeof(reply));
+    
+    if (sendCommand(req, reply, &len))
+        return -1;
+    return 0;
 }
 
 int Supplicant::setupConfig() {
