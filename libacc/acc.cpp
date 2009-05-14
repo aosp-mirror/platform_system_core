@@ -248,49 +248,57 @@ class compiler {
         ARMCodeGenerator() {}
         virtual ~ARMCodeGenerator() {}
 
-        // The gnu ARM assembler prints the constants in little-endian,
-        // but C hexidecimal constants are big-endian. We trick the
-        // gnu assembler into putting out big-endian constants by
-        // using the -mbig-endian flag when assembling.
-
         /* returns address to patch with local variable size
         */
         virtual int functionEntry(int argCount) {
             fprintf(stderr, "functionEntry(%d);\n", argCount);
-            /*
-              19 0000 E1A0C00D         mov    ip, sp
-              20 0004 E92DD800         stmfd    sp!, {fp, ip, lr, pc}
-              21 0008 E24CB004         sub    fp, ip, #4
-              22 000c E24DD008         sub    sp, sp, #8
-            */
-            o4(0xE1A0C00D);
-            o4(0xE92DD800);
-            o4(0xE24CB004);
-            return o4(0xE24DD008);
+            // sp -> arg4 arg5 ...
+            // Push our register-based arguments back on the stack
+            if (argCount > 0) {
+                int regArgCount = argCount <= 4 ? argCount : 4;
+                o4(0xE92D0000 | ((1 << argCount) - 1)); // stmfd    sp!, {}
+            }
+            // sp -> arg0 arg1 ...
+            o4(0xE92D4800); // stmfd sp!, {fp, lr}
+            // sp, fp -> oldfp, retadr, arg0 arg1 ....
+            o4(0xE1A0B00D); // mov    fp, sp
+            return o4(0xE24DD000); // sub    sp, sp, # <local variables>
         }
 
         virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) {
             fprintf(stderr, "functionExit(%d, %d, %d);\n", argCount, localVariableAddress, localVariableSize);
-            /*
-              23 0010 E24BD00C         sub    sp, fp, #12
-              24 0014 E89DA800         ldmfd    sp, {fp, sp, pc}
-            */
-            o4(0xE24BD00C);
-            o4(0xE89DA800);
-            if (localVariableSize < 0 || localVariableSize > 255-8) {
+            // Patch local variable allocation code:
+            if (localVariableSize < 0 || localVariableSize > 255) {
                 error("LocalVariableSize");
             }
-            *(char*) (localVariableAddress) = localVariableSize + 8;
+            *(char*) (localVariableAddress) = localVariableSize;
+
+            // sp -> locals .... fp -> oldfp, retadr, arg0, arg1, ...
+            o4(0xE1A0E00B); // mov lr, fp
+            o4(0xE59BB000); // ldr fp, [fp]
+            o4(0xE28ED004); // add sp, lr, #4
+            // sp -> retadr, arg0, ...
+            o4(0xE8BD4000); // ldmfd    sp!, {lr}
+            // sp -> arg0 ....
+            if (argCount > 0) {
+                // We store the PC into the lr so we can adjust the sp before
+                // returning. (We need to pull off the registers we pushed
+                // earlier. We don't need to actually store them anywhere,
+                // just adjust the stack.
+                int regArgCount = argCount <= 4 ? argCount : 4;
+                o4(0xE28DD000 | (regArgCount << 2)); // add sp, sp, #argCount << 2
+            }
+            o4(0xE12FFF1E); // bx lr
         }
 
         /* load immediate value */
         virtual void li(int t) {
             fprintf(stderr, "li(%d);\n", t);
             if (t >= 0 && t < 255) {
-                 o4(0xE3A00000 + t); // E3A00000 mov    r0, #0
+                 o4(0xE3A00000 + t); // mov    r0, #0
             } else if (t >= -256 && t < 0) {
                 // mvn means move constant ^ ~0
-                o4(0xE3E00001 - t); // E3E00000         mvn    r0, #0
+                o4(0xE3E00001 - t); // mvn    r0, #0
             } else {
                   o4(0xE51F0000); //         ldr    r0, .L3
                   o4(0xEA000000); //         b .L99
@@ -307,12 +315,14 @@ class compiler {
         /* l = 0: je, l == 1: jne */
         virtual int gtst(bool l, int t) {
             fprintf(stderr, "gtst(%d, %d);\n", l, t);
+            error("Unimplemented");
             o(0x0fc085); /* test %eax, %eax, je/jne xxx */
             return psym(0x84 + l, t);
         }
 
         virtual void gcmp(int op) {
             fprintf(stderr, "gcmp(%d);\n", op);
+            error("Unimplemented");
 #if 0
             int t = decodeOp(op);
             o(0xc139); /* cmp %eax,%ecx */
@@ -354,7 +364,7 @@ class compiler {
                 o4(0xE1E00000);  // mvn     r0, r0
                 break;
             default:
-                error("Unhandled op %d\n", op);
+                error("Unimplemented op %d\n", op);
                 break;
             }
 #if 0
@@ -387,37 +397,52 @@ class compiler {
         virtual void loadEAXIndirect(bool isInt) {
             fprintf(stderr, "loadEAXIndirect(%d);\n", isInt);
             if (isInt)
-                o(0x8b); /* mov (%eax), %eax */
+                o4(0xE5900000); // ldr r0, [r0]
             else
-                o(0xbe0f); /* movsbl (%eax), %eax */
-            ob(0); /* add zero in code */
+                o4(0xE5D00000); // ldrb r0, [r0]
         }
 
         virtual void leaEAX(int ea) {
-            fprintf(stderr, "leaEAX(%d);\n", ea);
-#if 0
-            gmov(10, ea); /* leal EA, %eax */
-#endif
+            fprintf(stderr, "[!!! fixme !!!] leaEAX(%d);\n", ea);
+            error("Unimplemented");
+            if (ea < -4095 || ea > 4095) {
+                error("Offset out of range: %08x", ea);
+            }
+            o4(0xE59B0000 | (0x1fff & ea)); //ldr r0, [fp,#ea]
         }
 
         virtual void storeEAX(int ea) {
             fprintf(stderr, "storeEAX(%d);\n", ea);
-#if 0
-            gmov(6, ea); /* mov %eax, EA */
-#endif
+            int fpOffset = ea;
+            if (fpOffset < -4095 || fpOffset > 4095) {
+                error("Offset out of range: %08x", ea);
+            }
+            if (fpOffset < 0) {
+                o4(0xE50B0000 | (0xfff & (-fpOffset))); // str r0, [fp,#-ea]
+            } else {
+                o4(0xE58B0000 | (0xfff & fpOffset)); // str r0, [fp,#ea]
+            }
         }
 
         virtual void loadEAX(int ea) {
             fprintf(stderr, "loadEAX(%d);\n", ea);
-#if 0
-            gmov(8, ea); /* mov EA, %eax */
-#endif
+            int fpOffset = ea;
+            if (fpOffset < -4095 || fpOffset > 4095) {
+                error("Offset out of range: %08x", ea);
+            }
+            if (fpOffset < 0) {
+                o4(0xE51B0000 | (0xfff & (-fpOffset))); // ldr r0, [fp,#-ea]
+            } else {
+                o4(0xE59B0000 | (0xfff & fpOffset)); //ldr r0, [fp,#ea]
+            }
         }
 
         virtual void postIncrementOrDecrement(int n, int op) {
             fprintf(stderr, "postIncrementOrDecrement(%d, %d);\n", n, op);
             /* Implement post-increment or post decrement.
              */
+
+            error("Unimplemented");
 #if 0
             gmov(0, n); /* 83 ADD */
             o(decodeOp(op));
@@ -459,7 +484,7 @@ class compiler {
         virtual void callRelative(int t) {
             fprintf(stderr, "callRelative(%d);\n", t);
             int abs = t + getPC() + jumpOffset();
-            fprintf(stderr, "abs=%d\n", abs);
+            fprintf(stderr, "abs=%d (0x08%x)\n", abs, abs);
             if (t >= - (1 << 25) && t < (1 << 25)) {
                 o4(0xEB000000 | encodeAddress(t));
             } else {
