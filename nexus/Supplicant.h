@@ -19,6 +19,7 @@
 struct wpa_ctrl;
 class SupplicantListener;
 class SupplicantEvent;
+class ServiceManager;
 
 #include <pthread.h>
 
@@ -31,13 +32,14 @@ private:
     struct wpa_ctrl      *mMonitor;
     SupplicantListener   *mListener;
     int                  mState;
+    ServiceManager       *mServiceManager;
 
     ScanResultCollection *mLatestScanResults;
     pthread_mutex_t      mLatestScanResultsLock;
   
 public:
     Supplicant();
-    virtual ~Supplicant() {}
+    virtual ~Supplicant();
 
     int start();
     int stop();
@@ -49,7 +51,6 @@ public:
     int addNetwork();
     int removeNetwork(int networkId);
     WifiNetworkCollection *createNetworkList();
-
 
     int getState() { return mState; }
 

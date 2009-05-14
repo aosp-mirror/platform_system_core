@@ -95,6 +95,20 @@ private:
         int runCommand(SocketClient *c, char *data);
     };
 
+    class VpnSetVarCmd : public NexusCommand {
+    public:
+        VpnSetVarCmd();
+        virtual ~VpnSetVarCmd() {}
+        int runCommand(SocketClient *c, char *data);
+    };
+
+    class VpnGetVarCmd : public NexusCommand {
+    public:
+        VpnGetVarCmd();
+        virtual ~VpnGetVarCmd() {}
+        int runCommand(SocketClient *c, char *data);
+    };
+
     class VpnDisableCmd : public NexusCommand {
     public:
         VpnDisableCmd();
