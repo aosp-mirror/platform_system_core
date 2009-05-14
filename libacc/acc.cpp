@@ -27,6 +27,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__arm__)
+#include <unistd.h>
+#endif
+
 namespace acc {
 
 class compiler {
@@ -63,6 +67,13 @@ class compiler {
                 *ind++ = n;
                 n = n >> 8;
             }
+        }
+
+        int o4(int n) {
+            int result = (int) ind;
+            * (int*) ind = n;
+            ind += 4;
+            return result;
         }
 
         /*
@@ -121,12 +132,12 @@ class compiler {
 
         /* returns address to patch with local variable size
         */
-        virtual int functionEntry() = 0;
+        virtual int functionEntry(int argCount) = 0;
 
-        virtual void functionExit() = 0;
+        virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) = 0;
 
         /* load immediate value */
-        virtual int li(int t) = 0;
+        virtual void li(int t) = 0;
 
         virtual int gjmp(int t) = 0;
 
@@ -135,7 +146,7 @@ class compiler {
 
         virtual void gcmp(int op) = 0;
 
-        virtual int genOp(int op) = 0;
+        virtual void genOp(int op) = 0;
 
         virtual void clearECX() = 0;
 
@@ -172,6 +183,17 @@ class compiler {
             pCodeBuf->gsym(t);
         }
 
+        virtual int finishCompile() {
+#if defined(__arm__)
+        const long base = long(pCodeBuf->getBase());
+        const long curr = base + long(pCodeBuf->getSize());
+        int err = cacheflush(base, curr, 0);
+        return err;
+#else
+        return 0;
+#endif
+        }
+
     protected:
         void o(int n) {
             pCodeBuf->o(n);
@@ -199,6 +221,9 @@ class compiler {
             return pCodeBuf->getPC();
         }
 
+        int o4(int data) {
+            return pCodeBuf->o4(data);
+        }
     private:
         CodeBuf* pCodeBuf;
     };
@@ -208,21 +233,43 @@ class compiler {
         ARMCodeGenerator() {}
         virtual ~ARMCodeGenerator() {}
 
+        // The gnu ARM assembler prints the constants in little-endian,
+        // but C hexidecimal constants are big-endian. We trick the
+        // gnu assembler into putting out big-endian constants by
+        // using the -mbig-endian flag when assembling.
+
         /* returns address to patch with local variable size
         */
-        virtual int functionEntry() {
-            fprintf(stderr, "functionEntry();\n");
-            o(0xe58955); /* push   %ebp, mov %esp, %ebp */
-            return oad(0xec81, 0); /* sub $xxx, %esp */
+        virtual int functionEntry(int argCount) {
+            fprintf(stderr, "functionEntry(%d);\n", argCount);
+            /*
+              19 0000 E1A0C00D         mov    ip, sp
+              20 0004 E92DD800         stmfd    sp!, {fp, ip, lr, pc}
+              21 0008 E24CB004         sub    fp, ip, #4
+              22 000c E24DD008         sub    sp, sp, #8
+            */
+            o4(0xE1A0C00D);
+            o4(0xE92DD800);
+            o4(0xE24CB004);
+            return o4(0xE24DD008);
         }
 
-        virtual void functionExit() {
-            fprintf(stderr, "functionExit();\n");
-            o(0xc3c9); /* leave, ret */
+        virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) {
+            fprintf(stderr, "functionExit(%d, %d, %d);\n", argCount, localVariableAddress, localVariableSize);
+            /*
+              23 0010 E24BD00C         sub    sp, fp, #12
+              24 0014 E89DA800         ldmfd    sp, {fp, sp, pc}
+            */
+            o4(0xE24BD00C);
+            o4(0xE89DA800);
+            if (localVariableSize < 0 || localVariableSize > 255-8) {
+                error("LocalVariableSize");
+            }
+            *(char*) (localVariableAddress) = localVariableSize + 8;
         }
 
         /* load immediate value */
-        virtual int li(int t) {
+        virtual void li(int t) {
             fprintf(stderr, "li(%d);\n", t);
             oad(0xb8, t); /* mov $xx, %eax */
         }
@@ -251,7 +298,7 @@ class compiler {
 #endif
         }
 
-        virtual int genOp(int op) {
+        virtual void genOp(int op) {
             fprintf(stderr, "genOp(%d);\n", op);
 #if 0
             o(decodeOp(op));
@@ -352,6 +399,13 @@ class compiler {
 
     private:
 
+        void error(const char* fmt,...) {
+            va_list ap;
+            va_start(ap, fmt);
+            vfprintf(stderr, fmt, ap);
+            va_end(ap);
+            exit(12);
+        }
     };
 
     class X86CodeGenerator : public CodeGenerator {
@@ -361,17 +415,18 @@ class compiler {
 
         /* returns address to patch with local variable size
         */
-        virtual int functionEntry() {
+        virtual int functionEntry(int argCount) {
             o(0xe58955); /* push   %ebp, mov %esp, %ebp */
             return oad(0xec81, 0); /* sub $xxx, %esp */
         }
 
-        virtual void functionExit() {
+        virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) {
             o(0xc3c9); /* leave, ret */
+            *(int *) localVariableAddress = localVariableSize; /* save local variables */
         }
 
         /* load immediate value */
-        virtual int li(int t) {
+        virtual void li(int t) {
             oad(0xb8, t); /* mov $xx, %eax */
         }
 
@@ -394,7 +449,7 @@ class compiler {
             o(0xc0);
         }
 
-        virtual int genOp(int op) {
+        virtual void genOp(int op) {
             o(decodeOp(op));
             if (op == OP_MOD)
                 o(0x92); /* xchg %edx, %eax */
@@ -478,7 +533,7 @@ class compiler {
             return operatorHelper[op];
         }
 
-        int gmov(int l, int t) {
+        void gmov(int l, int t) {
             o(l + 0x83);
             oad((t < LOCAL) << 7 | 5, t);
         }
@@ -578,7 +633,7 @@ class compiler {
     }
 
     int isid() {
-        return isalnum(ch) | ch == '_';
+        return isalnum(ch) | (ch == '_');
     }
 
     /* read a character constant */
@@ -593,7 +648,7 @@ class compiler {
     void next() {
         int l, a;
 
-        while (isspace(ch) | ch == '#') {
+        while (isspace(ch) | (ch == '#')) {
             if (ch == '#') {
                 inp();
                 next();
@@ -653,7 +708,7 @@ class compiler {
                 tokc = ch;
                 inp();
                 inp();
-            } else if (tok == '/' & ch == '*') {
+            } else if ((tok == '/') & (ch == '*')) {
                 inp();
                 while (ch) {
                     while (ch != '*')
@@ -667,11 +722,11 @@ class compiler {
             } else {
                 const char* t = operatorChars;
                 int opIndex = 0;
-                while (l = *t++) {
+                while ((l = *t++) != 0) {
                     a = *t++;
                     tokl = operatorLevel[opIndex];
                     tokc = opIndex;
-                    if (l == tok & (a == ch | a == '@')) {
+                    if ((l == tok) & ((a == ch) | (a == '@'))) {
 #if 0
                         printf("%c%c -> tokl=%d tokc=0x%x\n",
                                 l, a, tokl, tokc);
@@ -734,7 +789,7 @@ class compiler {
     /* l is one if '=' parsing wanted (quick hack) */
     void unary(int l) {
         int n, t, a, c;
-
+        t = 0;
         n = 1; /* type of expression 0 = forward, 1 = value, other =
          lvalue */
         if (tok == '\"') {
@@ -745,7 +800,7 @@ class compiler {
                 inp();
             }
             *(char *) glo = 0;
-            glo = glo + 4 & -4; /* align heap */
+            glo = (glo + 4) & -4; /* align heap */
             inp();
             next();
         } else {
@@ -799,7 +854,7 @@ class compiler {
                 /* forward reference: try dlsym */
                 if (!n)
                     n = (int) dlsym(0, (char*) last_id);
-                if (tok == '=' & l) {
+                if ((tok == '=') & l) {
                     /* assignment */
                     next();
                     expr();
@@ -850,7 +905,7 @@ class compiler {
 
     void sum(int l) {
         int t, n, a;
-
+        t = 0;
         if (l-- == 1)
             unary(1);
         else {
@@ -869,7 +924,7 @@ class compiler {
                     sum(l);
                     pGen->popECX();
 
-                    if (l == 4 | l == 5) {
+                    if ((l == 4) | (l == 5)) {
                         pGen->gcmp(t);
                     } else {
                         pGen->genOp(t);
@@ -914,7 +969,7 @@ class compiler {
             } else {
                 pGen->gsym(a); /* patch if test */
             }
-        } else if (tok == TOK_WHILE | tok == TOK_FOR) {
+        } else if ((tok == TOK_WHILE) | (tok == TOK_FOR)) {
             t = tok;
             next();
             skip('(');
@@ -968,7 +1023,7 @@ class compiler {
     void decl(int l) {
         int a;
 
-        while (tok == TOK_INT | tok != -1 & !l) {
+        while ((tok == TOK_INT) | ((tok != -1) & (!l))) {
             if (tok == TOK_INT) {
                 next();
                 while (tok != ';') {
@@ -993,6 +1048,7 @@ class compiler {
                 next();
                 skip('(');
                 a = 8;
+                int argCount = 0;
                 while (tok != ')') {
                     /* read param name and compute offset */
                     *(int *) tok = a;
@@ -1000,14 +1056,14 @@ class compiler {
                     next();
                     if (tok == ',')
                         next();
+                    argCount++;
                 }
                 next(); /* skip ')' */
                 rsym = loc = 0;
-                a = pGen->functionEntry();
+                a = pGen->functionEntry(argCount);
                 block(0);
                 pGen->gsym(rsym);
-                pGen->functionExit();
-                *(int *) a = loc; /* save local variables */
+                pGen->functionExit(argCount, a, loc);
             }
         }
     }
@@ -1104,6 +1160,7 @@ public:
         inp();
         next();
         decl(0);
+        pGen->finishCompile();
         return 0;
     }
 
@@ -1161,6 +1218,11 @@ const int compiler::X86CodeGenerator::operatorHelper[] = {
 };
 
 } // namespace acc
+
+// This is a separate function so it can easily be set by breakpoint in gdb.
+int run(acc::compiler& c, int argc, char** argv) {
+    return c.run(argc, argv);
+}
 
 int main(int argc, char** argv) {
     bool doDump = false;
@@ -1232,7 +1294,7 @@ int main(int argc, char** argv) {
         int codeArgc = argc - i + 1;
         char** codeArgv = argv + i - 1;
         codeArgv[0] = (char*) (inFile ? inFile : "stdin");
-        int result = compiler.run(codeArgc, codeArgv);
+        int result = run(compiler, codeArgc, codeArgv);
         fprintf(stderr, "result: %d\n", result);
         return result;
     }
