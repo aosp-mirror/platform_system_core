@@ -168,7 +168,9 @@ class compiler {
 
         virtual void postIncrementOrDecrement(int n, int op) = 0;
 
-        virtual int allocStackSpaceForArgs() = 0;
+        virtual int beginFunctionCallArguments() = 0;
+
+        virtual void endFunctionCallArguments(int a, int l) = 0;
 
         virtual void storeEAToArg(int l) = 0;
 
@@ -290,13 +292,16 @@ class compiler {
                 // mvn means move constant ^ ~0
                 o4(0xE3E00001 - t); // E3E00000         mvn    r0, #0
             } else {
-                error("immediate constant out of range -256..255: %d", t);
+                  o4(0xE51F0000); //         ldr    r0, .L3
+                  o4(0xEA000000); //         b .L99
+                  o4(t);          // .L3:   .word 0
+                                  // .L99:
             }
         }
 
         virtual int gjmp(int t) {
             fprintf(stderr, "gjmp(%d);\n", t);
-            return o4(0xEA000000 + encodeAddress(t));
+            return o4(0xEA000000 + encodeAddress(t)); // b .L33
         }
 
         /* l = 0: je, l == 1: jne */
@@ -320,6 +325,38 @@ class compiler {
 
         virtual void genOp(int op) {
             fprintf(stderr, "genOp(%d);\n", op);
+            switch(op) {
+            case OP_MUL:
+                o4(0x0E0000091); // mul     r0,r1,r0
+                break;
+            case OP_PLUS:
+                o4(0xE0810000);  // add     r0,r1,r0
+                break;
+            case OP_MINUS:
+                o4(0xE0410000);  // sub     r0,r1,r0
+                break;
+            case OP_SHIFT_LEFT:
+                o4(0xE1A00011);  // lsl     r0,r1,r0
+                break;
+            case OP_SHIFT_RIGHT:
+                o4(0xE1A00051);  // asr     r0,r1,r0
+                break;
+            case OP_BIT_AND:
+                o4(0xE0010000);  // and     r0,r1,r0
+                break;
+            case OP_BIT_XOR:
+                o4(0xE0210000);  // eor     r0,r1,r0
+                break;
+            case OP_BIT_OR:
+                o4(0xE1810000);  // orr     r0,r1,r0
+                break;
+            case OP_BIT_NOT:
+                o4(0xE1E00000);  // mvn     r0, r0
+                break;
+            default:
+                error("Unhandled op %d\n", op);
+                break;
+            }
 #if 0
             o(decodeOp(op));
             if (op == OP_MOD)
@@ -329,22 +366,22 @@ class compiler {
 
         virtual void clearECX() {
             fprintf(stderr, "clearECX();\n");
-            oad(0xb9, 0); /* movl $0, %ecx */
+            o4(0xE3A01000);  // mov    r1, #0
         }
 
         virtual void pushEAX() {
             fprintf(stderr, "pushEAX();\n");
-            o(0x50); /* push %eax */
+            o4(0xE92D0001);  // stmfd   sp!,{r0}
         }
 
         virtual void popECX() {
             fprintf(stderr, "popECX();\n");
-            o(0x59); /* pop %ecx */
+            o4(0xE8BD0002);  // ldmfd   sp!,{r1}
         }
 
         virtual void storeEAXToAddressECX(bool isInt) {
             fprintf(stderr, "storeEAXToAddressECX(%d);\n", isInt);
-            o(0x0188 + isInt); /* movl %eax/%al, (%ecx) */
+            o4(0x0188 + isInt); /* movl %eax/%al, (%ecx) */
         }
 
         virtual void loadEAXIndirect(bool isInt) {
@@ -387,24 +424,52 @@ class compiler {
 #endif
         }
 
-        virtual int allocStackSpaceForArgs() {
-            fprintf(stderr, "allocStackSpaceForArgs();\n");
-            return oad(0xec81, 0); /* sub $xxx, %esp */
+        virtual int beginFunctionCallArguments() {
+            fprintf(stderr, "beginFunctionCallArguments();\n");
+            return o4(0xE24DDF00); // Placeholder
+        }
+
+        virtual void endFunctionCallArguments(int a, int l) {
+            fprintf(stderr, "endFunctionCallArguments(0x%08x, %d);\n", a, l);
+            if (l < 0 || l > 0x3FC) {
+                error("L out of range for stack adjustment: 0x%08x", l);
+            }
+            * (int*) a = 0xE24DDF00 | (l >> 2); // sub    sp, sp, #0 << 2
+            int argCount = l >> 2;
+            if (argCount > 0) {
+                int regArgCount = argCount > 4 ? 4 : argCount;
+                o4(0xE8BD0000 | ((1 << regArgCount) - 1)); // ldmfd   sp!,{}
+            }
         }
 
         virtual void storeEAToArg(int l) {
             fprintf(stderr, "storeEAToArg(%d);\n", l);
-            oad(0x248489, l); /* movl %eax, xxx(%esp) */
+            if (l < 0 || l > 4096-4) {
+                error("l out of range for stack offset: 0x%08x", l);
+            }
+            o4(0xE58D0000 + l); // str r0, [sp, #4]
         }
 
         virtual int callForward(int symbol) {
             fprintf(stderr, "callForward(%d);\n", symbol);
-            return psym(0xe8, symbol); /* call xxx */
+            // Forward calls are always short (local)
+            return o4(0xEB000000 | encodeAddress(symbol));
         }
 
         virtual void callRelative(int t) {
             fprintf(stderr, "callRelative(%d);\n", t);
-            psym(0xe8, t); /* call xxx */
+            int abs = t + getPC() + jumpOffset();
+            fprintf(stderr, "abs=%d\n", abs);
+            if (t >= - (1 << 25) && t < (1 << 25)) {
+                o4(0xEB000000 | encodeAddress(t));
+            } else {
+                // Long call.
+                o4(0xE59FC000); //         ldr    r12, .L1
+                o4(0xEA000000); //         b .L99
+                o4(t - 16);     // .L1:    .word 0
+                o4(0xE08CC00F); // .L99:   add r12,pc
+                o4(0xE12FFF3C); //         blx r12
+           }
         }
 
         virtual void callIndirect(int l) {
@@ -414,7 +479,15 @@ class compiler {
 
         virtual void adjustStackAfterCall(int l) {
             fprintf(stderr, "adjustStackAfterCall(%d);\n", l);
-            oad(0xc481, l); /* add $xxx, %esp */
+            if (l < 0 || l > 0x3FC) {
+                error("L out of range for stack adjustment: 0x%08x", l);
+            }
+            int argCount = l >> 2;
+            if (argCount > 4) {
+                int remainingArgs = argCount - 4;
+                o4(0xE28DDF00 | remainingArgs); // add    sp, sp, #0x3fc
+            }
+
         }
 
         virtual int jumpOffset() {
@@ -597,8 +670,12 @@ class compiler {
             o(decodeOp(op));
         }
 
-        virtual int allocStackSpaceForArgs() {
+        virtual int beginFunctionCallArguments() {
             return oad(0xec81, 0); /* sub $xxx, %esp */
+        }
+
+        virtual void endFunctionCallArguments(int a, int l) {
+            * (int*) a = l;
         }
 
         virtual void storeEAToArg(int l) {
@@ -959,8 +1036,9 @@ class compiler {
             } else {
                 n = *(int *) t;
                 /* forward reference: try dlsym */
-                if (!n)
-                    n = (int) dlsym(0, (char*) last_id);
+                if (!n) {
+                    n = (int) dlsym(RTLD_DEFAULT, (char*) last_id);
+                }
                 if ((tok == '=') & l) {
                     /* assignment */
                     next();
@@ -983,7 +1061,7 @@ class compiler {
                 pGen->pushEAX();
 
             /* push args and invert order */
-            a = pGen->allocStackSpaceForArgs();
+            a = pGen->beginFunctionCallArguments();
             next();
             l = 0;
             while (tok != ')') {
@@ -993,7 +1071,7 @@ class compiler {
                     next();
                 l = l + 4;
             }
-            *(int *) a = l;
+            pGen->endFunctionCallArguments(a, l);
             next();
             if (!n) {
                 /* forward reference */
