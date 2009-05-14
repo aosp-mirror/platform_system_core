@@ -30,7 +30,6 @@
 namespace acc {
 
 class compiler {
-
     class CodeBuf {
         char* ind;
         char* pProgramBase;
@@ -116,12 +115,60 @@ class compiler {
         CodeGenerator() {}
         virtual ~CodeGenerator() {}
 
-        void init(CodeBuf* pCodeBuf) {
+        virtual void init(CodeBuf* pCodeBuf) {
             this->pCodeBuf = pCodeBuf;
         }
 
+        /* returns address to patch with local variable size
+        */
+        virtual int functionEntry() = 0;
+
+        virtual void functionExit() = 0;
+
+        /* load immediate value */
+        virtual int li(int t) = 0;
+
+        virtual int gjmp(int t) = 0;
+
+        /* l = 0: je, l == 1: jne */
+        virtual int gtst(bool l, int t) = 0;
+
+        virtual void gcmp(int op) = 0;
+
+        virtual int genOp(int op) = 0;
+
+        virtual void clearECX() = 0;
+
+        virtual void pushEAX() = 0;
+
+        virtual void popECX() = 0;
+
+        virtual void storeEAXToAddressECX(bool isInt) = 0;
+
+        virtual void loadEAXIndirect(bool isInt) = 0;
+
+        virtual void leaEAX(int ea) = 0;
+
+        virtual void storeEAX(int ea) = 0;
+
+        virtual void loadEAX(int ea) = 0;
+
+        virtual void postIncrementOrDecrement(int n, int op) = 0;
+
+        virtual int allocStackSpaceForArgs() = 0;
+
+        virtual void storeEAToArg(int l) = 0;
+
+        virtual int callForward(int symbol) = 0;
+
+        virtual void callRelative(int t) = 0;
+
+        virtual void callIndirect(int l) = 0;
+
+        virtual void adjustStackAfterCall(int l) = 0;
+
         /* output a symbol and patch all calls to it */
-        void gsym(int t) {
+        virtual void gsym(int t) {
             pCodeBuf->gsym(t);
         }
 
@@ -156,6 +203,157 @@ class compiler {
         CodeBuf* pCodeBuf;
     };
 
+    class ARMCodeGenerator : public CodeGenerator {
+    public:
+        ARMCodeGenerator() {}
+        virtual ~ARMCodeGenerator() {}
+
+        /* returns address to patch with local variable size
+        */
+        virtual int functionEntry() {
+            fprintf(stderr, "functionEntry();\n");
+            o(0xe58955); /* push   %ebp, mov %esp, %ebp */
+            return oad(0xec81, 0); /* sub $xxx, %esp */
+        }
+
+        virtual void functionExit() {
+            fprintf(stderr, "functionExit();\n");
+            o(0xc3c9); /* leave, ret */
+        }
+
+        /* load immediate value */
+        virtual int li(int t) {
+            fprintf(stderr, "li(%d);\n", t);
+            oad(0xb8, t); /* mov $xx, %eax */
+        }
+
+        virtual int gjmp(int t) {
+            fprintf(stderr, "gjmp(%d);\n", t);
+            return psym(0xe9, t);
+        }
+
+        /* l = 0: je, l == 1: jne */
+        virtual int gtst(bool l, int t) {
+            fprintf(stderr, "gtst(%d, %d);\n", l, t);
+            o(0x0fc085); /* test %eax, %eax, je/jne xxx */
+            return psym(0x84 + l, t);
+        }
+
+        virtual void gcmp(int op) {
+            fprintf(stderr, "gcmp(%d);\n", op);
+#if 0
+            int t = decodeOp(op);
+            o(0xc139); /* cmp %eax,%ecx */
+            li(0);
+            o(0x0f); /* setxx %al */
+            o(t + 0x90);
+            o(0xc0);
+#endif
+        }
+
+        virtual int genOp(int op) {
+            fprintf(stderr, "genOp(%d);\n", op);
+#if 0
+            o(decodeOp(op));
+            if (op == OP_MOD)
+                o(0x92); /* xchg %edx, %eax */
+#endif
+        }
+
+        virtual void clearECX() {
+            fprintf(stderr, "clearECX();\n");
+            oad(0xb9, 0); /* movl $0, %ecx */
+        }
+
+        virtual void pushEAX() {
+            fprintf(stderr, "pushEAX();\n");
+            o(0x50); /* push %eax */
+        }
+
+        virtual void popECX() {
+            fprintf(stderr, "popECX();\n");
+            o(0x59); /* pop %ecx */
+        }
+
+        virtual void storeEAXToAddressECX(bool isInt) {
+            fprintf(stderr, "storeEAXToAddressECX(%d);\n", isInt);
+            o(0x0188 + isInt); /* movl %eax/%al, (%ecx) */
+        }
+
+        virtual void loadEAXIndirect(bool isInt) {
+            fprintf(stderr, "loadEAXIndirect(%d);\n", isInt);
+            if (isInt)
+                o(0x8b); /* mov (%eax), %eax */
+            else
+                o(0xbe0f); /* movsbl (%eax), %eax */
+            ob(0); /* add zero in code */
+        }
+
+        virtual void leaEAX(int ea) {
+            fprintf(stderr, "leaEAX(%d);\n", ea);
+#if 0
+            gmov(10, ea); /* leal EA, %eax */
+#endif
+        }
+
+        virtual void storeEAX(int ea) {
+            fprintf(stderr, "storeEAX(%d);\n", ea);
+#if 0
+            gmov(6, ea); /* mov %eax, EA */
+#endif
+        }
+
+        virtual void loadEAX(int ea) {
+            fprintf(stderr, "loadEAX(%d);\n", ea);
+#if 0
+            gmov(8, ea); /* mov EA, %eax */
+#endif
+        }
+
+        virtual void postIncrementOrDecrement(int n, int op) {
+            fprintf(stderr, "postIncrementOrDecrement(%d, %d);\n", n, op);
+            /* Implement post-increment or post decrement.
+             */
+#if 0
+            gmov(0, n); /* 83 ADD */
+            o(decodeOp(op));
+#endif
+        }
+
+        virtual int allocStackSpaceForArgs() {
+            fprintf(stderr, "allocStackSpaceForArgs();\n");
+            return oad(0xec81, 0); /* sub $xxx, %esp */
+        }
+
+        virtual void storeEAToArg(int l) {
+            fprintf(stderr, "storeEAToArg(%d);\n", l);
+            oad(0x248489, l); /* movl %eax, xxx(%esp) */
+        }
+
+        virtual int callForward(int symbol) {
+            fprintf(stderr, "callForward(%d);\n", symbol);
+            return psym(0xe8, symbol); /* call xxx */
+        }
+
+        virtual void callRelative(int t) {
+            fprintf(stderr, "callRelative(%d);\n", t);
+            psym(0xe8, t); /* call xxx */
+        }
+
+        virtual void callIndirect(int l) {
+            fprintf(stderr, "callIndirect(%d);\n", l);
+            oad(0x2494ff, l); /* call *xxx(%esp) */
+        }
+
+        virtual void adjustStackAfterCall(int l) {
+            fprintf(stderr, "adjustStackAfterCall(%d);\n", l);
+            oad(0xc481, l); /* add $xxx, %esp */
+        }
+
+    private:
+
+    };
+
     class X86CodeGenerator : public CodeGenerator {
     public:
         X86CodeGenerator() {}
@@ -163,31 +361,31 @@ class compiler {
 
         /* returns address to patch with local variable size
         */
-        int functionEntry() {
+        virtual int functionEntry() {
             o(0xe58955); /* push   %ebp, mov %esp, %ebp */
             return oad(0xec81, 0); /* sub $xxx, %esp */
         }
 
-        void functionExit() {
+        virtual void functionExit() {
             o(0xc3c9); /* leave, ret */
         }
 
         /* load immediate value */
-        int li(int t) {
+        virtual int li(int t) {
             oad(0xb8, t); /* mov $xx, %eax */
         }
 
-        int gjmp(int t) {
+        virtual int gjmp(int t) {
             return psym(0xe9, t);
         }
 
         /* l = 0: je, l == 1: jne */
-        int gtst(int l, int t) {
+        virtual int gtst(bool l, int t) {
             o(0x0fc085); /* test %eax, %eax, je/jne xxx */
             return psym(0x84 + l, t);
         }
 
-        int gcmp(int op) {
+        virtual void gcmp(int op) {
             int t = decodeOp(op);
             o(0xc139); /* cmp %eax,%ecx */
             li(0);
@@ -196,29 +394,29 @@ class compiler {
             o(0xc0);
         }
 
-        int genOp(int op) {
+        virtual int genOp(int op) {
             o(decodeOp(op));
             if (op == OP_MOD)
                 o(0x92); /* xchg %edx, %eax */
         }
 
-        void clearECX() {
+        virtual void clearECX() {
             oad(0xb9, 0); /* movl $0, %ecx */
         }
 
-        void pushEAX() {
+        virtual void pushEAX() {
             o(0x50); /* push %eax */
         }
 
-        void popECX() {
+        virtual void popECX() {
             o(0x59); /* pop %ecx */
         }
 
-        void storeEAXToAddressECX(bool isInt) {
+        virtual void storeEAXToAddressECX(bool isInt) {
             o(0x0188 + isInt); /* movl %eax/%al, (%ecx) */
         }
 
-        void loadEAXIndirect(bool isInt) {
+        virtual void loadEAXIndirect(bool isInt) {
             if (isInt)
                 o(0x8b); /* mov (%eax), %eax */
             else
@@ -226,46 +424,46 @@ class compiler {
             ob(0); /* add zero in code */
         }
 
-        void leaEAX(int ea) {
+        virtual void leaEAX(int ea) {
             gmov(10, ea); /* leal EA, %eax */
         }
 
-        void storeEAX(int ea) {
+        virtual void storeEAX(int ea) {
             gmov(6, ea); /* mov %eax, EA */
         }
 
-        void loadEAX(int ea) {
+        virtual void loadEAX(int ea) {
             gmov(8, ea); /* mov EA, %eax */
         }
 
-        void postIncrementOrDecrement(int n, int op) {
+        virtual void postIncrementOrDecrement(int n, int op) {
             /* Implement post-increment or post decrement.
              */
             gmov(0, n); /* 83 ADD */
             o(decodeOp(op));
         }
 
-        int allocStackSpaceForArgs() {
+        virtual int allocStackSpaceForArgs() {
             return oad(0xec81, 0); /* sub $xxx, %esp */
         }
 
-        void storeEAToArg(int l) {
+        virtual void storeEAToArg(int l) {
             oad(0x248489, l); /* movl %eax, xxx(%esp) */
         }
 
-        int callForward(int symbol) {
+        virtual int callForward(int symbol) {
             return psym(0xe8, symbol); /* call xxx */
         }
 
-        void callRelative(int t) {
+        virtual void callRelative(int t) {
             psym(0xe8, t); /* call xxx */
         }
 
-        void callIndirect(int l) {
+        virtual void callIndirect(int l) {
             oad(0x2494ff, l); /* call *xxx(%esp) */
         }
 
-        void adjustStackAfterCall(int l) {
+        virtual void adjustStackAfterCall(int l) {
             oad(0xc481, l); /* add $xxx, %esp */
         }
 
@@ -303,7 +501,7 @@ class compiler {
     FILE* file;
 
     CodeBuf codeBuf;
-    X86CodeGenerator* pGen;
+    CodeGenerator* pGen;
 
     static const int ALLOC_SIZE = 99999;
 
@@ -853,7 +1051,33 @@ class compiler {
         pGen = 0;
     }
 
+    void setArchitecture(const char* architecture) {
+        delete pGen;
+        pGen = 0;
+
+        if (architecture != NULL) {
+            if (strcmp(architecture, "arm") == 0) {
+                pGen = new ARMCodeGenerator();
+            } else if (strcmp(architecture, "x86") == 0) {
+                pGen = new X86CodeGenerator();
+            } else {
+                fprintf(stderr, "Unknown architecture %s", architecture);
+            }
+        }
+
+        if (pGen == NULL) {
+            pGen = new ARMCodeGenerator();
+        }
+    }
+
 public:
+    struct args {
+        args() {
+            architecture = 0;
+        }
+        const char* architecture;
+    };
+
     compiler() {
         clear();
     }
@@ -862,11 +1086,11 @@ public:
         cleanup();
     }
 
-    int compile(FILE* in) {
+    int compile(FILE* in, args& args) {
         cleanup();
         clear();
         codeBuf.init(ALLOC_SIZE);
-        pGen = new X86CodeGenerator();
+        setArchitecture(args.architecture);
         pGen->init(&codeBuf);
         file = in;
         sym_stk = (int) calloc(1, ALLOC_SIZE);
@@ -939,20 +1163,29 @@ const int compiler::X86CodeGenerator::operatorHelper[] = {
 } // namespace acc
 
 int main(int argc, char** argv) {
-    bool doTest = false;
+    bool doDump = false;
     const char* inFile = NULL;
     const char* outFile = NULL;
+    const char* architecture = "arm";
     int i;
     for (i = 1; i < argc; i++) {
         char* arg = argv[i];
         if (arg[0] == '-') {
             switch (arg[1]) {
-            case 'T':
+            case 'a':
                 if (i + 1 >= argc) {
-                    fprintf(stderr, "Expected filename after -T\n");
+                    fprintf(stderr, "Expected architecture after -a\n");
                     return 2;
                 }
-                doTest = true;
+                architecture = argv[i+1];
+                i += 1;
+                break;
+            case 'd':
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "Expected filename after -d\n");
+                    return 2;
+                }
+                doDump = true;
                 outFile = argv[i + 1];
                 i += 1;
                 break;
@@ -976,7 +1209,9 @@ int main(int argc, char** argv) {
         }
     }
     acc::compiler compiler;
-    int compileResult = compiler.compile(in);
+    acc::compiler::args args;
+    args.architecture = architecture;
+    int compileResult = compiler.compile(in, args);
     if (in != stdin) {
         fclose(in);
     }
@@ -984,7 +1219,7 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Compile failed: %d\n", compileResult);
         return 6;
     }
-    if (doTest) {
+    if (doDump) {
         FILE* save = fopen(outFile, "w");
         if (!save) {
             fprintf(stderr, "Could not open output file %s\n", outFile);
@@ -997,7 +1232,9 @@ int main(int argc, char** argv) {
         int codeArgc = argc - i + 1;
         char** codeArgv = argv + i - 1;
         codeArgv[0] = (char*) (inFile ? inFile : "stdin");
-        return compiler.run(codeArgc, codeArgv);
+        int result = compiler.run(codeArgc, codeArgv);
+        fprintf(stderr, "result: %d\n", result);
+        return result;
     }
 
     return 0;
