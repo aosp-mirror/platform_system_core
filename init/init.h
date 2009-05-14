@@ -137,15 +137,17 @@ struct service {
     struct socketinfo *sockets;
     struct svcenvinfo *envvars;
 
-    int nargs;
-    char *args[1];
     struct action onrestart;  /* Actions to execute on restart. */
     
     /* keycodes for triggering this service via /dev/keychord */
     int *keycodes;
     int nkeycodes;
     int keychord_id;
-};
+
+    int nargs;
+    /* "MUST BE AT THE END OF THE STRUCT" */
+    char *args[1];
+}; /*     ^-------'args' MUST be at the end of this struct! */
 
 int parse_config_file(const char *fn);
 
