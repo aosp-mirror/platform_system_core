@@ -359,6 +359,12 @@ class compiler {
             case OP_MUL:
                 o4(0x0E0000091); // mul     r0,r1,r0
                 break;
+            case OP_DIV:
+                callRuntime(runtime_DIV);
+                break;
+            case OP_MOD:
+                callRuntime(runtime_MOD);
+                break;
             case OP_PLUS:
                 o4(0xE0810000);  // add     r0,r1,r0
                 break;
@@ -668,6 +674,22 @@ class compiler {
 
         int encodeRelAddress(int value) {
             return BRANCH_REL_ADDRESS_MASK & (value >> 2);
+        }
+
+        typedef int (*int2FnPtr)(int a, int b);
+        void callRuntime(int2FnPtr fn) {
+            o4(0xE59F2000); // ldr    r2, .L1
+            o4(0xEA000000); // b      .L99
+            o4((int) fn);   //.L1:  .word  fn
+            o4(0xE12FFF32); //.L99: blx    r2
+        }
+
+        static int runtime_DIV(int a, int b) {
+            return b / a;
+        }
+
+        static int runtime_MOD(int a, int b) {
+            return b % a;
         }
 
         void error(const char* fmt,...) {
@@ -1189,7 +1211,7 @@ class compiler {
             } else {
                 pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset());
             }
-            if (l || n == 1)
+            if (l | (n == 1))
                 pGen->adjustStackAfterCall(l, n == 1);
         }
     }
