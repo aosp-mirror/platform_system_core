@@ -164,9 +164,7 @@ class compiler {
 
         virtual void storeEAX(int ea) = 0;
 
-        virtual void loadEAX(int ea) = 0;
-
-        virtual void postIncrementOrDecrement(int n, int op) = 0;
+        virtual void loadEAX(int ea, bool isIncDec, int op) = 0;
 
         virtual int beginFunctionCallArguments() = 0;
 
@@ -429,62 +427,90 @@ class compiler {
 
         virtual void leaEAX(int ea) {
             fprintf(stderr, "leaEAX(%d);\n", ea);
-            if (ea < -1023 || ea > 1023 || ((ea & 3) != 0)) {
-                error("Offset out of range: %08x", ea);
-            }
-            if (ea < 0) {
-                o4(0xE24B0F00 | (0xff & ((-ea) >> 2))); // sub    r0, fp, #ea
+            if (ea < LOCAL) {
+                // Local, fp relative
+                if (ea < -1023 || ea > 1023 || ((ea & 3) != 0)) {
+                    error("Offset out of range: %08x", ea);
+                }
+                if (ea < 0) {
+                    o4(0xE24B0F00 | (0xff & ((-ea) >> 2))); // sub    r0, fp, #ea
+                } else {
+                    o4(0xE28B0F00 | (0xff & (ea >> 2))); // add    r0, fp, #ea
+                }
             } else {
-                o4(0xE28B0F00 | (0xff & (ea >> 2))); // add    r0, fp, #ea
+                // Global, absolute.
+                o4(0xE59F0000); //        ldr    r0, .L1
+                o4(0xEA000000); //        b .L99
+                o4(ea);         // .L1:   .word 0
+                                // .L99:
             }
-
         }
 
         virtual void storeEAX(int ea) {
             fprintf(stderr, "storeEAX(%d);\n", ea);
-            if (ea < -4095 || ea > 4095) {
-                error("Offset out of range: %08x", ea);
-            }
-            if (ea < 0) {
-                o4(0xE50B0000 | (0xfff & (-ea))); // str r0, [fp,#-ea]
-            } else {
-                o4(0xE58B0000 | (0xfff & ea)); // str r0, [fp,#ea]
-            }
-        }
-
-        virtual void loadEAX(int ea) {
-            fprintf(stderr, "loadEAX(%d);\n", ea);
-            if (ea < -4095 || ea > 4095) {
-                error("Offset out of range: %08x", ea);
-            }
-            if (ea < 0) {
-                o4(0xE51B0000 | (0xfff & (-ea))); // ldr r0, [fp,#-ea]
-            } else {
-                o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
+            if (ea < LOCAL) {
+                // Local, fp relative
+                if (ea < -4095 || ea > 4095) {
+                    error("Offset out of range: %08x", ea);
+                }
+                if (ea < 0) {
+                    o4(0xE50B0000 | (0xfff & (-ea))); // str r0, [fp,#-ea]
+                } else {
+                    o4(0xE58B0000 | (0xfff & ea)); // str r0, [fp,#ea]
+                }
+            } else{
+                // Global, absolute
+                o4(0xE59F1000); //         ldr r1, .L1
+                o4(0xEA000000); //         b .L99
+                o4(ea);         // .L1:    .word 0
+                o4(0xE5810000); // .L99:   str r0, [r1]
             }
         }
 
-        virtual void postIncrementOrDecrement(int ea, int op) {
-            fprintf(stderr, "postIncrementOrDecrement(%d, %d);\n", ea, op);
-            /* R0 has the original value.
-             */
-            switch (op) {
-            case OP_INCREMENT:
-                o4(0xE2801001); // add r1, r0, #1
-                break;
-            case OP_DECREMENT:
-                o4(0xE2401001); // sub r1, r0, #1
-                break;
-            default:
-                error("unknown opcode: %d", op);
-            }
-            if (ea < -4095 || ea > 4095) {
-                error("Offset out of range: %08x", ea);
-            }
-            if (ea < 0) {
-                o4(0xE50B1000 | (0xfff & (-ea))); // str r1, [fp,#-ea]
+        virtual void loadEAX(int ea, bool isIncDec, int op) {
+            fprintf(stderr, "loadEAX(%d, %d, %d);\n", ea, isIncDec, op);
+            if (ea < LOCAL) {
+                // Local, fp relative
+                if (ea < -4095 || ea > 4095) {
+                    error("Offset out of range: %08x", ea);
+                }
+                if (ea < 0) {
+                    o4(0xE51B0000 | (0xfff & (-ea))); // ldr r0, [fp,#-ea]
+                } else {
+                    o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
+                }
             } else {
-                o4(0xE58B1000 | (0xfff & ea));    // str r1, [fp,#ea]
+                // Global, absolute
+                o4(0xE59F2000); //        ldr r2, .L1
+                o4(0xEA000000); //        b .L99
+                o4(ea);         // .L1:   .word ea
+                o4(0xE5920000); // .L99:  ldr r0, [r2]
+            }
+
+            if (isIncDec) {
+                switch (op) {
+                case OP_INCREMENT:
+                    o4(0xE2801001); // add r1, r0, #1
+                    break;
+                case OP_DECREMENT:
+                    o4(0xE2401001); // sub r1, r0, #1
+                    break;
+                default:
+                    error("unknown opcode: %d", op);
+                }
+                if (ea < LOCAL) {
+                    // Local, fp relative
+                    // Don't need range check, was already checked above
+                    if (ea < 0) {
+                        o4(0xE50B1000 | (0xfff & (-ea))); // str r1, [fp,#-ea]
+                    } else {
+                        o4(0xE58B1000 | (0xfff & ea));    // str r1, [fp,#ea]
+                    }
+                } else{
+                    // Global, absolute
+                    // r2 is already set up from before.
+                    o4(0xE5821000); // str r1, [r2]
+               }
             }
         }
 
@@ -723,15 +749,14 @@ class compiler {
             gmov(6, ea); /* mov %eax, EA */
         }
 
-        virtual void loadEAX(int ea) {
+        virtual void loadEAX(int ea, bool isIncDec, int op) {
             gmov(8, ea); /* mov EA, %eax */
-        }
-
-        virtual void postIncrementOrDecrement(int n, int op) {
-            /* Implement post-increment or post decrement.
-             */
-            gmov(0, n); /* 83 ADD */
-            o(decodeOp(op));
+            if (isIncDec) {
+                /* Implement post-increment or post decrement.
+                 */
+                gmov(0, ea); /* 83 ADD */
+                o(decodeOp(op));
+            }
         }
 
         virtual int beginFunctionCallArguments() {
@@ -1117,9 +1142,8 @@ class compiler {
                     pGen->storeEAX(n);
                 } else if (tok != '(') {
                     /* variable */
-                    pGen->loadEAX(n);
+                    pGen->loadEAX(n, tokl == 11, tokc);
                     if (tokl == 11) {
-                        pGen->postIncrementOrDecrement(n, tokc);
                         next();
                     }
                 }
