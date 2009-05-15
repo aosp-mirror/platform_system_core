@@ -1,14 +1,21 @@
+BUILD_LIBSYSUTILS := false
+ifneq ($(TARGET_SIMULATOR),true)
+    BUILD_LIBSYSUTILS := true
+endif
+
+ifeq ($(BUILD_LIBSYSUTILS),true)
+
 LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:=                             \
-                  src/FrameworkManager.cpp    \
                   src/SocketListener.cpp      \
                   src/FrameworkListener.cpp   \
                   src/NetlinkListener.cpp     \
                   src/NetlinkEvent.cpp        \
                   src/FrameworkCommand.cpp    \
+                  src/SocketClient.cpp        \
 
 LOCAL_MODULE:= libsysutils
 
@@ -18,4 +25,10 @@ LOCAL_CFLAGS :=
 
 LOCAL_SHARED_LIBRARIES := libcutils
 
+ifeq ($(TARGET_SIMULATOR),true)
+  LOCAL_LDLIBS += -lpthread
+endif
+
 include $(BUILD_SHARED_LIBRARY)
+
+endif

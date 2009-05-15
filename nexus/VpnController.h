@@ -31,8 +31,6 @@ public:
     virtual int disable();
 
 protected:
-
-private:
 };
 
 #endif

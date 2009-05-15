@@ -18,6 +18,7 @@
 
 #include "../../../frameworks/base/include/utils/List.h"
 
+class SocketClient;
 
 class FrameworkCommand { 
 private:
@@ -28,7 +29,7 @@ public:
     FrameworkCommand(const char *cmd);
     virtual ~FrameworkCommand() { }
 
-    virtual int runCommand(char *data);
+    virtual int runCommand(SocketClient *c, char *data) = 0;
 
     const char *getCommand() { return mCommand; }
 };

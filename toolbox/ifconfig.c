@@ -28,20 +28,32 @@ static void setflags(int s, struct ifreq *ifr, int set, int clr)
 
 static inline void init_sockaddr_in(struct sockaddr_in *sin, const char *addr)
 {
-	sin->sin_family = AF_INET;
-	sin->sin_port = 0;
-	sin->sin_addr.s_addr = inet_addr(addr);
+    sin->sin_family = AF_INET;
+    sin->sin_port = 0;
+    sin->sin_addr.s_addr = inet_addr(addr);
+}
+
+static void setmtu(int s, struct ifreq *ifr, const char *mtu)
+{
+    int m = atoi(mtu);
+    ifr->ifr_mtu = m;
+    if(ioctl(s, SIOCSIFMTU, ifr) < 0) die("SIOCSIFMTU");
+}
+static void setdstaddr(int s, struct ifreq *ifr, const char *addr)
+{
+    init_sockaddr_in((struct sockaddr_in *) &ifr->ifr_dstaddr, addr);
+    if(ioctl(s, SIOCSIFDSTADDR, ifr) < 0) die("SIOCSIFDSTADDR");
 }
 
 static void setnetmask(int s, struct ifreq *ifr, const char *addr)
 {
-	init_sockaddr_in((struct sockaddr_in *) &ifr->ifr_netmask, addr);
+    init_sockaddr_in((struct sockaddr_in *) &ifr->ifr_netmask, addr);
     if(ioctl(s, SIOCSIFNETMASK, ifr) < 0) die("SIOCSIFNETMASK");
 }
 
 static void setaddr(int s, struct ifreq *ifr, const char *addr)
 {
-	init_sockaddr_in((struct sockaddr_in *) &ifr->ifr_addr, addr);
+    init_sockaddr_in((struct sockaddr_in *) &ifr->ifr_addr, addr);
     if(ioctl(s, SIOCSIFADDR, ifr) < 0) die("SIOCSIFADDR");
 }
 
@@ -109,31 +121,43 @@ int ifconfig_main(int argc, char *argv[])
         running = (flags & IFF_RUNNING)      ? " running" : "";
         multi =   (flags & IFF_MULTICAST)    ? " multicast" : "";
         printf("%s%s%s%s%s%s]\n", updown, brdcst, loopbk, ppp, running, multi);
-
-
-
-/*    char *updown, *brdcst, *loopbk, *ppp, *running, *multi; */
-
         return 0;
     }
     
-    while(argc > 0){
-        if(!strcmp(argv[0], "up")) {
+    while(argc > 0) {
+        if (!strcmp(argv[0], "up")) {
             setflags(s, &ifr, IFF_UP, 0);
-        } else if(!strcmp(argv[0], "down")) {
+        } else if (!strcmp(argv[0], "mtu")) {
+            argc--, argv++;
+            if (!argc) {
+                errno = EINVAL;
+                die("expecting a value for parameter \"mtu\"");
+            }
+            setmtu(s, &ifr, argv[0]);
+        } else if (!strcmp(argv[0], "-pointopoint")) {
+            setflags(s, &ifr, IFF_POINTOPOINT, 1);
+        } else if (!strcmp(argv[0], "pointopoint")) {
+            argc--, argv++;
+            if (!argc) { 
+                errno = EINVAL;
+                die("expecting an IP address for parameter \"pointtopoint\"");
+            }
+            setdstaddr(s, &ifr, argv[0]);
+            setflags(s, &ifr, IFF_POINTOPOINT, 0);
+        } else if (!strcmp(argv[0], "down")) {
             setflags(s, &ifr, 0, IFF_UP);
-		} else if(!strcmp(argv[0], "netmask")) {
-			argc--, argv++;
-			if (0 == argc) { 
-				errno = EINVAL;
-				die("expecting an IP address for parameter \"netmask\"");
-			}
-			setnetmask(s, &ifr, argv[0]);
-        } else if(isdigit(argv[0][0])){
+        } else if (!strcmp(argv[0], "netmask")) {
+            argc--, argv++;
+            if (!argc) { 
+                errno = EINVAL;
+                die("expecting an IP address for parameter \"netmask\"");
+            }
+            setnetmask(s, &ifr, argv[0]);
+        } else if (isdigit(argv[0][0])) {
             setaddr(s, &ifr, argv[0]);
+            setflags(s, &ifr, IFF_UP, 0);
         }
         argc--, argv++;
     }
-
     return 0;
 }

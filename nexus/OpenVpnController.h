@@ -13,28 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef _FRAMEWORKMANAGER_H
-#define _FRAMEWORKMANAGER_H
 
-#include <pthread.h>
+#ifndef _OPEN_VPN_CONTROLLER_H
+#define _OPEN_VPN_CONTROLLER_H
 
-class FrameworkListener;
+#include "VpnController.h"
 
-class FrameworkManager {
-    int mDoorbell;        // Socket used to accept connections from framework
-    int mFwSock;          // Socket used to communicate with framework
-    const char *mSocketName;
-
-    FrameworkListener *mListener;
-    
-    pthread_mutex_t mWriteMutex;
+class OpenVpnController : public VpnController {
 
 public:
-    FrameworkManager(FrameworkListener *Listener);
-    virtual ~FrameworkManager() {}
+    OpenVpnController();
+    virtual ~OpenVpnController() {}
 
-    int run();
-    int sendMsg(char *msg);
-    int sendMsg(char *msg, char *data);
+    int start();
+    int stop();
+    int enable();
+    int disable();
+
+protected:
+
+private:
+    int startServiceDaemon();
+    int stopServiceDaemon();
 };
+
 #endif

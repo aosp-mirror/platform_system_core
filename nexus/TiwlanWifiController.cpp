@@ -48,7 +48,6 @@ int TiwlanWifiController::loadFirmware() {
     char driver_status[PROPERTY_VALUE_MAX];
     int count = 100;
 
-    LOGD("loadFirmware()");
     property_set("ctl.start", "wlan_loader");
     sched_yield();
 
@@ -64,4 +63,9 @@ int TiwlanWifiController::loadFirmware() {
     }
     property_set(DRIVER_PROP_NAME, "timeout");
     return -1;
+}
+
+bool TiwlanWifiController::isFirmwareLoaded() {
+    // Always load the firmware
+    return false;
 }

@@ -51,75 +51,79 @@ int route_main(int argc, char *argv[])
 {
     struct ifreq ifr;
     int s,i;
-	struct rtentry rt;
-	struct sockaddr_in ina;
+    struct rtentry rt;
+    struct sockaddr_in ina;
    
-    if(argc == 0) return 0;
-    
+    if (!argc)
+        return 0;
+
     strncpy(ifr.ifr_name, argv[0], IFNAMSIZ);
     ifr.ifr_name[IFNAMSIZ-1] = 0;
-	ADVANCE(argc, argv);
+    ADVANCE(argc, argv);
 
-    if((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+    if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         die("cannot open control socket\n");
     }
 
     while(argc > 0){
-        if(!strcmp(argv[0], "add")) {
-			EXPECT_NEXT(argc, argv);
-			if(!strcmp(argv[0], "default")) {
-				EXPECT_NEXT(argc, argv);
-				memset((char *) &rt, 0, sizeof(struct rtentry));
-				rt.rt_dst.sa_family = AF_INET;	
-				if(!strcmp(argv[0], "dev")) {
-				  EXPECT_NEXT(argc, argv);
-				  rt.rt_flags = RTF_UP | RTF_HOST;
-				  rt.rt_dev = argv[0];
-				  if (ioctl(s, SIOCADDRT, &rt) < 0) die("SIOCADDRT\n");
-				}else if(!strcmp(argv[0], "gw")) {
-				  EXPECT_NEXT(argc, argv);
-				  rt.rt_flags = RTF_UP | RTF_GATEWAY;
-				  init_sockaddr_in((struct sockaddr_in *)&(rt.rt_genmask), "0.0.0.0");
-				  if(isdigit(argv[0][0])){
-					init_sockaddr_in((struct sockaddr_in *)&(rt.rt_gateway), argv[0]);
-				  }else{
-					die("expecting an IP address for parameter \"gw\"\n");
-				  }
-				  EXPECT_NEXT(argc, argv);
-				  if(!strcmp(argv[0], "dev")) {
-					EXPECT_NEXT(argc, argv);
-					rt.rt_dev = argv[0];
-					if (ioctl(s, SIOCADDRT, &rt) < 0){
-					  die("SIOCADDRT\n");
-					}
-				  }
-				}
-			} else  {
-                          char keywords[3][5] = { "net", "mask", "gw" };
-                          struct sockaddr_in *paddr[3] = { &rt.rt_dst, &rt.rt_genmask, &rt.rt_gateway };
-                          int k = 0;
-
-                          memset((char *) &rt, 0, sizeof(struct rtentry));
-                          rt.rt_flags = RTF_UP | RTF_GATEWAY;
-                          do {
-                            if(!strcmp(argv[0], keywords[k])) {
-                              EXPECT_NEXT(argc, argv);
-                              if(isdigit(argv[0][0])) {
-                                init_sockaddr_in(paddr[k], argv[0]);
-                              } else {
-                                die("expecting an IP/MASK address for parameter %s\n", keywords[k]);
-                              }
-                              if(k < 2) EXPECT_NEXT(argc, argv);
-                            } else {
-                              die("expecting keyword(s)\n");
-                            }
-                          } while(++k < 3);
-                          if(ioctl(s, SIOCADDRT, &rt) < 0) {
+        if (!strcmp(argv[0], "add")) {
+            EXPECT_NEXT(argc, argv);
+            if (!strcmp(argv[0], "default")) {
+                EXPECT_NEXT(argc, argv);
+                memset((char *) &rt, 0, sizeof(struct rtentry));
+                rt.rt_dst.sa_family = AF_INET;	
+                if(!strcmp(argv[0], "dev")) {
+                    EXPECT_NEXT(argc, argv);
+                    rt.rt_flags = RTF_UP | RTF_HOST;
+                    rt.rt_dev = argv[0];
+                    if (ioctl(s, SIOCADDRT, &rt) < 0)
+                        die("SIOCADDRT\n");
+                } else if (!strcmp(argv[0], "gw")) {
+                    EXPECT_NEXT(argc, argv);
+                    rt.rt_flags = RTF_UP | RTF_GATEWAY;
+                    init_sockaddr_in((struct sockaddr_in *)&(rt.rt_genmask), "0.0.0.0");
+                    if(isdigit(argv[0][0])) {
+                        init_sockaddr_in((struct sockaddr_in *)&(rt.rt_gateway), argv[0]);
+                    } else {
+                        die("expecting an IP address for parameter \"gw\"\n");
+                    }
+                    EXPECT_NEXT(argc, argv);
+                    if (!strcmp(argv[0], "dev")) {
+                        EXPECT_NEXT(argc, argv);
+                        rt.rt_dev = argv[0];
+                        if (ioctl(s, SIOCADDRT, &rt) < 0) {
                             die("SIOCADDRT\n");
-                          }
                         }
+                    }
+                }
+            } else {
+                char keywords[3][10] = { "-net", "netmask", "gw" };
+                struct sockaddr_in *paddr[3] = { &rt.rt_dst, &rt.rt_genmask, &rt.rt_gateway };
+                int k = 0;
+
+                memset((char *) &rt, 0, sizeof(struct rtentry));
+                rt.rt_flags = RTF_UP | RTF_GATEWAY;
+                do {
+                     if (!strcmp(argv[0], keywords[k])) {
+                         EXPECT_NEXT(argc, argv);
+                         if (isdigit(argv[0][0])) {
+                             init_sockaddr_in(paddr[k], argv[0]);
+                         } else {
+                            die("expecting an IP/MASK address for parameter %s\n", keywords[k]);
+                         }
+                     if (k < 2)
+                         EXPECT_NEXT(argc, argv);
+                     } else {
+                         die("expecting keyword(s)\n");
+                     }
+                 } while (++k < 3);
+
+                if (ioctl(s, SIOCADDRT, &rt) < 0) {
+                    die("SIOCADDRT\n");
+                }
+            }
         }
-		ADVANCE(argc, argv);
+        ADVANCE(argc, argv);
     }
 
     return 0;

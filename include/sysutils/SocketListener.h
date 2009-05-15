@@ -16,20 +16,35 @@
 #ifndef _SOCKETLISTENER_H
 #define _SOCKETLISTENER_H
 
+#include <pthread.h>
+
+#include <sysutils/SocketClient.h>
+
 class SocketListener {
-    int mSock;
-    int mCsock;
-    int mAcceptClients;
-    const char *mSocketName;
+    int                     mSock;
+    const char              *mSocketName;
+    SocketClientCollection  *mClients;
+    pthread_mutex_t         mClientsLock;
+    bool                    mListen;
+    int                     mCtrlPipe[2];
+    pthread_t               mThread;
 
 public:
-    SocketListener(const char *socketName, bool acceptClients);
-    SocketListener(int socketFd, bool acceptClients);
+    SocketListener(const char *socketNames, bool listen);
+    SocketListener(int socketFd, bool listen);
 
     virtual ~SocketListener() {}
-    virtual int run();
+    int startListener();
+    int stopListener();
+
+    void sendBroadcast(int code, char *msg, bool addErrno);
+    void sendBroadcast(char *msg);
 
 protected:
-    virtual bool onDataAvailable(int socket);
+    virtual bool onDataAvailable(SocketClient *c) = 0;
+
+private:
+    static void *threadStart(void *obj);
+    void runListener();
 };
 #endif

@@ -22,6 +22,10 @@
 
 class NetInterface;
 class Supplicant;
+class WifiScanner;
+
+#include "ScanResult.h"
+#include "WifiNetwork.h"
 
 class WifiController : public Controller {
 public:
@@ -40,8 +44,8 @@ private:
     char        mModulePath[255];
     char        mModuleName[64];
     char        mModuleArgs[255];
-    int         mCurrentScanMode;
-
+    uint32_t    mCurrentScanMode;
+    WifiScanner *mScanner;
 
 public:
     WifiController(char *modpath, char *modname, char *modargs);
@@ -53,7 +57,13 @@ public:
     int enable();
     int disable();
 
-    int getType();
+    int addNetwork();
+    int removeNetwork(int networkId);
+    WifiNetworkCollection *createNetworkList();
+
+    int getScanMode() { return mCurrentScanMode; }
+    int setScanMode(uint32_t mode);
+    ScanResultCollection *createScanResults();
 
     char *getModulePath() { return mModulePath; }
     char *getModuleName() { return mModuleName; }
@@ -61,18 +71,15 @@ public:
 
     Supplicant *getSupplicant() { return mSupplicant; }
 
-    int getScanMode() { return mCurrentScanMode; }
-    int setScanMode(int mode);
-
 protected:
     virtual int powerUp() = 0;
     virtual int powerDown() = 0;
     virtual int loadFirmware();
+
+    virtual bool isFirmwareLoaded() = 0;
     virtual bool isPoweredUp() = 0;
 
-private:
-    int startPeriodicScan();
-    int stopPeriodicScan();
+    void sendStatusBroadcast(char *msg);
 };
 
 #endif

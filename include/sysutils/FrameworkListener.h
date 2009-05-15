@@ -19,6 +19,8 @@
 #include "SocketListener.h"
 #include "FrameworkCommand.h"
 
+class SocketClient;
+
 class FrameworkListener : public SocketListener {
 private:
     FrameworkCommandCollection *mCommands;
@@ -29,9 +31,9 @@ public:
 
 protected:
     void registerCmd(FrameworkCommand *cmd);
-    virtual bool onDataAvailable(int socket);
+    virtual bool onDataAvailable(SocketClient *c);
 
 private:
-    void dispatchCommand(char *cmd);
+    void dispatchCommand(SocketClient *c, char *cmd);
 };
 #endif

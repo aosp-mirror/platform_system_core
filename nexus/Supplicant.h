@@ -23,6 +23,7 @@ class SupplicantEvent;
 #include <pthread.h>
 
 #include "ScanResult.h"
+#include "WifiNetwork.h"
 
 class Supplicant {
 private:
@@ -38,17 +39,23 @@ public:
     Supplicant();
     virtual ~Supplicant() {}
 
-    virtual int start();
-    virtual int stop();
-    virtual bool isStarted();
+    int start();
+    int stop();
+    bool isStarted();
 
-    virtual int triggerScan(bool active);
+    int triggerScan(bool active);
+    ScanResultCollection *createLatestScanResults();
+
+    int addNetwork();
+    int removeNetwork(int networkId);
+    WifiNetworkCollection *createNetworkList();
+
 
     int getState() { return mState; }
 
-    const ScanResultCollection *getLatestScanResults();
 
 // XXX: Extract these into an interface
+// handlers for SupplicantListener
 public:
     virtual int onConnectedEvent(SupplicantEvent *evt);
     virtual int onDisconnectedEvent(SupplicantEvent *evt);
@@ -67,6 +74,7 @@ public:
 private:
     int connectToSupplicant();
     int sendCommand(const char *cmd, char *reply, size_t *reply_len);
+    int setupConfig();
 };
 
 #endif

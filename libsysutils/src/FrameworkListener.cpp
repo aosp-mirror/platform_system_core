@@ -22,17 +22,18 @@
 
 #include <sysutils/FrameworkListener.h>
 #include <sysutils/FrameworkCommand.h>
+#include <sysutils/SocketClient.h>
 
 FrameworkListener::FrameworkListener(const char *socketName) :
                             SocketListener(socketName, true) {
     mCommands = new FrameworkCommandCollection();
 }
 
-bool FrameworkListener::onDataAvailable(int socket) {
-    char buffer[101];
+bool FrameworkListener::onDataAvailable(SocketClient *c) {
+    char buffer[255];
     int len;
 
-    if ((len = read(socket, buffer, sizeof(buffer) -1)) < 0) {
+    if ((len = read(c->getSocket(), buffer, sizeof(buffer) -1)) < 0) {
         LOGE("read() failed (%s)", strerror(errno));
         return errno;
     } else if (!len) {
@@ -40,15 +41,14 @@ bool FrameworkListener::onDataAvailable(int socket) {
         return false;
     }
 
-    int start = 0;
+    int offset = 0;
     int i;
 
-    buffer[len] = '\0';
-
     for (i = 0; i < len; i++) {
-        if (buffer[i] == '\0') {
-            dispatchCommand(buffer + start);
-            start = i + 1;
+        if (buffer[i] == '\n') {
+            buffer[i] = '\0';
+            dispatchCommand(c, buffer + offset);
+            offset = i + 1;
         }
     }
     return true;
@@ -58,20 +58,28 @@ void FrameworkListener::registerCmd(FrameworkCommand *cmd) {
     mCommands->push_back(cmd);
 }
 
-void FrameworkListener::dispatchCommand(char *cmd) {
+void FrameworkListener::dispatchCommand(SocketClient *cli, char *cmd) {
+    char *cm, *last;
+
+    if (!(cm = strtok_r(cmd, ":", &last))) {
+        cli->sendMsg(500, "Malformatted message", false);
+        return;
+    }
+
     FrameworkCommandCollection::iterator i;
 
     for (i = mCommands->begin(); i != mCommands->end(); ++i) {
         FrameworkCommand *c = *i;
 
-        if (!strncmp(cmd, c->getCommand(), strlen(c->getCommand()))) {
-            if (c->runCommand(cmd)) {
+        if (!strcmp(cm, c->getCommand())) {
+            cm += strlen(cm) +1;
+            if (c->runCommand(cli, cm)) {
                 LOGW("Handler '%s' error (%s)", c->getCommand(), strerror(errno));
             }
             return;
         }
     }
 
-    LOGE("No cmd handlers defined for '%s'", cmd);
+    cli->sendMsg(500, "Command not recognized", false);
+    return;
 }
-

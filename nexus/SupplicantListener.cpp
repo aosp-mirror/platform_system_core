@@ -30,31 +30,9 @@ SupplicantListener::SupplicantListener(Supplicant *supplicant, struct wpa_ctrl *
                     SocketListener(wpa_ctrl_get_fd(monitor), false) {
     mSupplicant = supplicant;
     mMonitor = monitor;
-    mThread = NULL;
 }
 
-int SupplicantListener::startListener() {
-    LOGD("startListener()");
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-    return pthread_create(&mThread, &attr, &SupplicantListener::threadStart, this);
-}
-
-int SupplicantListener::stopListener() {
-    errno = -ENOSYS;
-    return -1;
-}
-
-void *SupplicantListener::threadStart(void *obj) {
-    LOGD("threadStart(): Worker thread started");
-    reinterpret_cast<SupplicantListener *>(obj)->run();
-    LOGD("threadStart(): Worker thread exited");
-    return NULL;
-}
-
-bool SupplicantListener::onDataAvailable(int socket) {
+bool SupplicantListener::onDataAvailable(SocketClient *cli) {
     char buf[255];
     size_t buflen = sizeof(buf);
     int rc;
@@ -62,7 +40,7 @@ bool SupplicantListener::onDataAvailable(int socket) {
 
     if ((rc = wpa_ctrl_recv(mMonitor, buf, &nread))) {
         LOGE("wpa_ctrl_recv failed (%s)", strerror(errno));
-        return -errno;
+        return false;
     }
 
     buf[nread] = '\0';
@@ -108,7 +86,9 @@ bool SupplicantListener::onDataAvailable(int socket) {
 
     delete evt;
     
-    if (rc)
+    if (rc) {
+        LOGW("Handler %d (%s) error: %s", evt->getType(), evt->getEvent(), strerror(errno));
         return false;
+    }
     return true;
 }

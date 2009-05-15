@@ -16,31 +16,36 @@
 #ifndef _NETWORKMANAGER_H
 #define _NETWORKMANAGER_H
 
-#include "Controller.h"
+#include <sysutils/SocketListener.h>
 
-#include <sysutils/FrameworkManager.h>
+#include "Controller.h"
 
 class NetworkManager {
 private:
-    FrameworkListener    *mListener;
-    FrameworkManager     *mFm;
+    static NetworkManager *sInstance;
+
+private:
     ControllerCollection *mControllers;
+    SocketListener       *mBroadcaster;
 
 public:
-    NetworkManager();
     virtual ~NetworkManager() {}
 
     int run();
 
+    int attachController(Controller *controller);
+
+    Controller *findController(const char *name);
+
+    void setBroadcaster(SocketListener *sl) { mBroadcaster = sl; }
+    SocketListener *getBroadcaster() { return mBroadcaster; }
+
+    static NetworkManager *Instance();
+
 private:
-    void addController(Controller *c);
     int startControllers();
     int stopControllers();
-
-public:
-    Controller *findController(const char *name);
-    ControllerCollection *getControllers() { return mControllers; }
-    FrameworkManager *getFrameworkManager() { return mFm; }
+    NetworkManager();
 
 public:
 // XXX: Extract these into an interface

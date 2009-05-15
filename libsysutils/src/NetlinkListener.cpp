@@ -29,8 +29,9 @@ NetlinkListener::NetlinkListener(int socket) :
                             SocketListener(socket, false) {
 }
 
-bool NetlinkListener::onDataAvailable(int socket)
+bool NetlinkListener::onDataAvailable(SocketClient *cli)
 {
+    int socket = cli->getSocket();
     LOGD("NetlinkListener::onDataAvailable()");
 
     int count;

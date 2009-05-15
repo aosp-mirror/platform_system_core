@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include <stdlib.h>
+#include <ctype.h>
 
 #define LOG_TAG "ScanResult"
 #include <cutils/log.h>
@@ -24,30 +25,53 @@ ScanResult::ScanResult() {
 }
 
 ScanResult::ScanResult(char *rawResult) {
-    char *tok, *next = NULL;
+    char *p = rawResult, *q = rawResult;
+    char tmp[255];
 
-    if (!(tok = strtok_r(rawResult, "\t", &next)))
-        goto out_bad;
-    mBssid = strdup(tok);
+    // BSSID
+    for (q = p; *q != '\t'; ++q);
+    strncpy(tmp, p, (q - p));
+    tmp[q-p] = '\0';
+    mBssid = strdup(tmp);
+    ++q;
 
-    if (!(tok = strtok_r(NULL, "\t", &next)))
-        goto out_bad;
-    mFreq = atoi(tok);
+    // FREQ
+    for (p = q; *q != '\t'; ++q);
+    strncpy(tmp, p, (q - p));
+    tmp[q-p] = '\0';
+    mFreq = atoi(tmp);
+    ++q;
 
-    if (!(tok = strtok_r(NULL, "\t", &next)))
-        goto out_bad;
-    mLevel = atoi(tok);
+    // LEVEL 
+    for (p = q; *q != '\t'; ++q);
+    strncpy(tmp, p, (q - p));
+    tmp[q-p] = '\0';
+    mLevel = atoi(tmp);
+    ++q;
 
-    if (!(tok = strtok_r(rawResult, "\t", &next)))
-        goto out_bad;
-    mFlags = strdup(tok);
+    // FLAGS
+    for (p = q; *q != '\t'; ++q);
+    strncpy(tmp, p, (q - p));
+    tmp[q-p] = '\0';
+    mFlags = strdup(tmp);
+    ++q;
 
-    if (!(tok = strtok_r(rawResult, "\t", &next)))
-        goto out_bad;
-    mSsid = strdup(tok);
+    // XXX: For some reason Supplicant sometimes sends a double-tab here.
+    // haven't had time to dig into it ...
+    if (*q == '\t')
+        q++;
+ 
+    for (p = q; *q != '\t'; ++q) {
+        if (*q == '\0')
+            break;
+    }
+
+    strncpy(tmp, p, (q - p));
+    tmp[q-p] = '\0';
+    mSsid = strdup(tmp);
+    ++q;
 
     return;
-
  out_bad:
     LOGW("Malformatted scan result (%s)", rawResult);
 }
