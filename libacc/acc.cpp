@@ -269,7 +269,7 @@ class compiler {
             fprintf(stderr, "functionExit(%d, %d, %d);\n", argCount, localVariableAddress, localVariableSize);
             // Patch local variable allocation code:
             if (localVariableSize < 0 || localVariableSize > 255) {
-                error("LocalVariableSize");
+                error("localVariables out of range: %d", localVariableSize);
             }
             *(char*) (localVariableAddress) = localVariableSize;
 
@@ -282,7 +282,7 @@ class compiler {
             // sp -> arg0 ....
             if (argCount > 0) {
                 // We store the PC into the lr so we can adjust the sp before
-                // returning. (We need to pull off the registers we pushed
+                // returning. We need to pull off the registers we pushed
                 // earlier. We don't need to actually store them anywhere,
                 // just adjust the stack.
                 int regArgCount = argCount <= 4 ? argCount : 4;
@@ -309,28 +309,49 @@ class compiler {
 
         virtual int gjmp(int t) {
             fprintf(stderr, "gjmp(%d);\n", t);
-            return o4(0xEA000000 + encodeAddress(t)); // b .L33
+            return o4(0xEA000000 | encodeAddress(t)); // b .L33
         }
 
         /* l = 0: je, l == 1: jne */
         virtual int gtst(bool l, int t) {
             fprintf(stderr, "gtst(%d, %d);\n", l, t);
-            error("Unimplemented");
-            o(0x0fc085); /* test %eax, %eax, je/jne xxx */
-            return psym(0x84 + l, t);
+            o4(0xE3500000); // cmp r0,#0
+            int branch = l ? 0x1A000000 : 0x0A000000; // bne : beq
+            return o4(branch | encodeAddress(t));
         }
 
         virtual void gcmp(int op) {
             fprintf(stderr, "gcmp(%d);\n", op);
-            error("Unimplemented");
-#if 0
-            int t = decodeOp(op);
-            o(0xc139); /* cmp %eax,%ecx */
-            li(0);
-            o(0x0f); /* setxx %al */
-            o(t + 0x90);
-            o(0xc0);
-#endif
+            o4(0xE1510000); // cmp r1, r1
+            switch(op) {
+            case OP_EQUALS:
+                o4(0x03A00001); // moveq r0,#1
+                o4(0x13A00000); // movne r0,#0
+                break;
+            case OP_NOT_EQUALS:
+                o4(0x03A00000); // moveq r0,#0
+                o4(0x13A00001); // movne r0,#1
+                break;
+            case OP_LESS_EQUAL:
+                o4(0xD3A00001); // movle r0,#1
+                o4(0xC3A00000); // movgt r0,#0
+                break;
+            case OP_GREATER:
+                o4(0xD3A00000); // movle r0,#0
+                o4(0xC3A00001); // movgt r0,#1
+                break;
+            case OP_GREATER_EQUAL:
+                o4(0xA3A00001); // movge r0,#1
+                o4(0xB3A00000); // movlt r0,#0
+                break;
+            case OP_LESS:
+                o4(0xA3A00000); // movge r0,#0
+                o4(0xB3A00001); // movlt r0,#1
+                break;
+            default:
+                error("Unknown comparison op %d", op);
+                break;
+            }
         }
 
         virtual void genOp(int op) {
