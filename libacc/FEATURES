@@ -56,7 +56,7 @@ Supported C language subset (read joint example 'otccex.c' to have
     - C Strings and C character constants are supported. Only '\n',
       '\"', '\'' and '\\' escapes are recognized.
 
-    - C Comments can be used (but no C++ comments).
+    - Both C comments ( /* */ ) and C++ comments ( // ... end-of-line ) can be used.
 
     - No error is displayed if an incorrect program is given.
 
