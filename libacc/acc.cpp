@@ -168,9 +168,10 @@ class compiler {
 
         virtual int beginFunctionCallArguments() = 0;
 
+        virtual void storeEAToArg(int l) = 0;
+
         virtual void endFunctionCallArguments(int a, int l) = 0;
 
-        virtual void storeEAToArg(int l) = 0;
 
         virtual int callForward(int symbol) = 0;
 
@@ -178,7 +179,7 @@ class compiler {
 
         virtual void callIndirect(int l) = 0;
 
-        virtual void adjustStackAfterCall(int l) = 0;
+        virtual void adjustStackAfterCall(int l, bool isIndirect) = 0;
 
         virtual int disassemble(FILE* out) = 0;
 
@@ -519,6 +520,14 @@ class compiler {
             return o4(0xE24DDF00); // Placeholder
         }
 
+        virtual void storeEAToArg(int l) {
+            fprintf(stderr, "storeEAToArg(%d);\n", l);
+            if (l < 0 || l > 4096-4) {
+                error("l out of range for stack offset: 0x%08x", l);
+            }
+            o4(0xE58D0000 + l); // str r0, [sp, #4]
+        }
+
         virtual void endFunctionCallArguments(int a, int l) {
             fprintf(stderr, "endFunctionCallArguments(0x%08x, %d);\n", a, l);
             if (l < 0 || l > 0x3FC) {
@@ -530,14 +539,6 @@ class compiler {
                 int regArgCount = argCount > 4 ? 4 : argCount;
                 o4(0xE8BD0000 | ((1 << regArgCount) - 1)); // ldmfd   sp!,{}
             }
-        }
-
-        virtual void storeEAToArg(int l) {
-            fprintf(stderr, "storeEAToArg(%d);\n", l);
-            if (l < 0 || l > 4096-4) {
-                error("l out of range for stack offset: 0x%08x", l);
-            }
-            o4(0xE58D0000 + l); // str r0, [sp, #4]
         }
 
         virtual int callForward(int symbol) {
@@ -564,20 +565,27 @@ class compiler {
 
         virtual void callIndirect(int l) {
             fprintf(stderr, "callIndirect(%d);\n", l);
-            oad(0x2494ff, l); /* call *xxx(%esp) */
+            int argCount = l >> 2;
+            int poppedArgs = argCount > 4 ? 4 : argCount;
+            int adjustedL = l - (poppedArgs << 2);
+            if (adjustedL < 0 || adjustedL > 4096-4) {
+                error("l out of range for stack offset: 0x%08x", l);
+            }
+            o4(0xE59DC000 | (0xfff & adjustedL)); // ldr    r12, [sp,#adjustedL]
+            o4(0xE12FFF3C); // blx r12
         }
 
-        virtual void adjustStackAfterCall(int l) {
-            fprintf(stderr, "adjustStackAfterCall(%d);\n", l);
-            if (l < 0 || l > 0x3FC) {
-                error("L out of range for stack adjustment: 0x%08x", l);
-            }
+        virtual void adjustStackAfterCall(int l, bool isIndirect) {
+            fprintf(stderr, "adjustStackAfterCall(%d, %d);\n", l, isIndirect);
             int argCount = l >> 2;
-            if (argCount > 4) {
-                int remainingArgs = argCount - 4;
-                o4(0xE28DDF00 | remainingArgs); // add    sp, sp, #0x3fc
+            int stackArgs = argCount > 4 ? argCount - 4 : 0;
+            int stackUse = stackArgs + (isIndirect ? 1 : 0);
+            if (stackUse) {
+                if (stackUse < 0 || stackUse > 255) {
+                    error("L out of range for stack adjustment: 0x%08x", l);
+                }
+                o4(0xE28DDF00 | stackUse); // add    sp, sp, #stackUse << 2
             }
-
         }
 
         virtual int jumpOffset() {
@@ -620,6 +628,7 @@ class compiler {
             }
             return 0;
         }
+
     private:
         static FILE* disasmOut;
 
@@ -763,12 +772,12 @@ class compiler {
             return oad(0xec81, 0); /* sub $xxx, %esp */
         }
 
-        virtual void endFunctionCallArguments(int a, int l) {
-            * (int*) a = l;
-        }
-
         virtual void storeEAToArg(int l) {
             oad(0x248489, l); /* movl %eax, xxx(%esp) */
+        }
+
+        virtual void endFunctionCallArguments(int a, int l) {
+            * (int*) a = l;
         }
 
         virtual int callForward(int symbol) {
@@ -783,7 +792,10 @@ class compiler {
             oad(0x2494ff, l); /* call *xxx(%esp) */
         }
 
-        virtual void adjustStackAfterCall(int l) {
+        virtual void adjustStackAfterCall(int l, bool isIndirect) {
+            if (isIndirect) {
+                l += 4;
+            }
             oad(0xc481, l); /* add $xxx, %esp */
         }
 
@@ -1174,12 +1186,11 @@ class compiler {
                 *(int *) t = pGen->callForward(*(int *) t);
             } else if (n == 1) {
                 pGen->callIndirect(l);
-                l = l + 4;
             } else {
-                pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset()); /* call xxx */
+                pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset());
             }
-            if (l)
-                pGen->adjustStackAfterCall(l);
+            if (l || n == 1)
+                pGen->adjustStackAfterCall(l, n == 1);
         }
     }
 
