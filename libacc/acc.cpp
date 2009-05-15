@@ -412,7 +412,11 @@ class compiler {
 
         virtual void storeEAXToAddressECX(bool isInt) {
             fprintf(stderr, "storeEAXToAddressECX(%d);\n", isInt);
-            o4(0x0188 + isInt); /* movl %eax/%al, (%ecx) */
+            if (isInt) {
+                o4(0xE5810000); // str r0, [r1]
+            } else {
+                o4(0xE5C10000); // strb r0, [r1]
+            }
         }
 
         virtual void loadEAXIndirect(bool isInt) {
@@ -424,50 +428,64 @@ class compiler {
         }
 
         virtual void leaEAX(int ea) {
-            fprintf(stderr, "[!!! fixme !!!] leaEAX(%d);\n", ea);
-            error("Unimplemented");
-            if (ea < -4095 || ea > 4095) {
+            fprintf(stderr, "leaEAX(%d);\n", ea);
+            if (ea < -1023 || ea > 1023 || ((ea & 3) != 0)) {
                 error("Offset out of range: %08x", ea);
             }
-            o4(0xE59B0000 | (0x1fff & ea)); //ldr r0, [fp,#ea]
+            if (ea < 0) {
+                o4(0xE24B0F00 | (0xff & ((-ea) >> 2))); // sub    r0, fp, #ea
+            } else {
+                o4(0xE28B0F00 | (0xff & (ea >> 2))); // add    r0, fp, #ea
+            }
+
         }
 
         virtual void storeEAX(int ea) {
             fprintf(stderr, "storeEAX(%d);\n", ea);
-            int fpOffset = ea;
-            if (fpOffset < -4095 || fpOffset > 4095) {
+            if (ea < -4095 || ea > 4095) {
                 error("Offset out of range: %08x", ea);
             }
-            if (fpOffset < 0) {
-                o4(0xE50B0000 | (0xfff & (-fpOffset))); // str r0, [fp,#-ea]
+            if (ea < 0) {
+                o4(0xE50B0000 | (0xfff & (-ea))); // str r0, [fp,#-ea]
             } else {
-                o4(0xE58B0000 | (0xfff & fpOffset)); // str r0, [fp,#ea]
+                o4(0xE58B0000 | (0xfff & ea)); // str r0, [fp,#ea]
             }
         }
 
         virtual void loadEAX(int ea) {
             fprintf(stderr, "loadEAX(%d);\n", ea);
-            int fpOffset = ea;
-            if (fpOffset < -4095 || fpOffset > 4095) {
+            if (ea < -4095 || ea > 4095) {
                 error("Offset out of range: %08x", ea);
             }
-            if (fpOffset < 0) {
-                o4(0xE51B0000 | (0xfff & (-fpOffset))); // ldr r0, [fp,#-ea]
+            if (ea < 0) {
+                o4(0xE51B0000 | (0xfff & (-ea))); // ldr r0, [fp,#-ea]
             } else {
-                o4(0xE59B0000 | (0xfff & fpOffset)); //ldr r0, [fp,#ea]
+                o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
             }
         }
 
-        virtual void postIncrementOrDecrement(int n, int op) {
-            fprintf(stderr, "postIncrementOrDecrement(%d, %d);\n", n, op);
-            /* Implement post-increment or post decrement.
+        virtual void postIncrementOrDecrement(int ea, int op) {
+            fprintf(stderr, "postIncrementOrDecrement(%d, %d);\n", ea, op);
+            /* R0 has the original value.
              */
-
-            error("Unimplemented");
-#if 0
-            gmov(0, n); /* 83 ADD */
-            o(decodeOp(op));
-#endif
+            switch (op) {
+            case OP_INCREMENT:
+                o4(0xE2801001); // add r1, r0, #1
+                break;
+            case OP_DECREMENT:
+                o4(0xE2401001); // sub r1, r0, #1
+                break;
+            default:
+                error("unknown opcode: %d", op);
+            }
+            if (ea < -4095 || ea > 4095) {
+                error("Offset out of range: %08x", ea);
+            }
+            if (ea < 0) {
+                o4(0xE50B1000 | (0xfff & (-ea))); // str r1, [fp,#-ea]
+            } else {
+                o4(0xE58B1000 | (0xfff & ea));    // str r1, [fp,#ea]
+            }
         }
 
         virtual int beginFunctionCallArguments() {
@@ -505,14 +523,14 @@ class compiler {
         virtual void callRelative(int t) {
             fprintf(stderr, "callRelative(%d);\n", t);
             int abs = t + getPC() + jumpOffset();
-            fprintf(stderr, "abs=%d (0x08%x)\n", abs, abs);
+            fprintf(stderr, "abs=%d (0x%08x)\n", abs, abs);
             if (t >= - (1 << 25) && t < (1 << 25)) {
                 o4(0xEB000000 | encodeAddress(t));
             } else {
                 // Long call.
                 o4(0xE59FC000); //         ldr    r12, .L1
                 o4(0xEA000000); //         b .L99
-                o4(t - 16);     // .L1:    .word 0
+                o4(t - 12);     // .L1:    .word 0
                 o4(0xE08CC00F); // .L99:   add r12,pc
                 o4(0xE12FFF3C); //         blx r12
            }
@@ -537,7 +555,7 @@ class compiler {
         }
 
         virtual int jumpOffset() {
-            return 4;
+            return 8;
         }
 
         /* output a symbol and patch all calls to it */
@@ -946,6 +964,13 @@ class compiler {
                     inp();
                     if (ch == '/')
                         ch = 0;
+                }
+                inp();
+                next();
+            } else if ((tok == '/') & (ch == '/')) {
+                inp();
+                while (ch && (ch != '\n')) {
+                    inp();
                 }
                 inp();
                 next();
