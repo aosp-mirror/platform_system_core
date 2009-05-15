@@ -25,12 +25,7 @@
 
 #include "private/android_filesystem_config.h"
 
-#undef HAVE_LIBC_SYSTEM_PROPERTIES
-
-#ifdef HAVE_LIBC_SYSTEM_PROPERTIES
-#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
-#include <sys/_system_properties.h>
-#endif
+#include <sysutils/ServiceManager.h>
 
 #include "Supplicant.h"
 #include "SupplicantListener.h"
@@ -44,11 +39,9 @@
 
 #define IFACE_DIR        "/data/system/wpa_supplicant"
 #define DRIVER_PROP_NAME "wlan.driver.status"
-#define SUPPLICANT_NAME  "wpa_supplicant"
-#define SUPP_PROP_NAME   "init.svc.wpa_supplicant"
+#define SUPPLICANT_SERVICE_NAME  "wpa_supplicant"
 #define SUPP_CONFIG_TEMPLATE "/system/etc/wifi/wpa_supplicant.conf"
 #define SUPP_CONFIG_FILE "/data/misc/wifi/wpa_supplicant.conf"
-
 
 Supplicant::Supplicant() {
     mCtrl = NULL;
@@ -57,9 +50,14 @@ Supplicant::Supplicant() {
 
     mState = SupplicantState::UNKNOWN;
 
-    mLatestScanResults = new ScanResultCollection();
+    mServiceManager = new ServiceManager();
 
+    mLatestScanResults = new ScanResultCollection();
     pthread_mutex_init(&mLatestScanResultsLock, NULL);
+}
+
+Supplicant::~Supplicant() {
+    delete mServiceManager;
 }
 
 int Supplicant::start() {
@@ -67,52 +65,10 @@ int Supplicant::start() {
     if (setupConfig()) {
         LOGW("Unable to setup supplicant.conf");
     }
-    
-    char status[PROPERTY_VALUE_MAX] = {'\0'};
-    int count = 200;
-#ifdef HAVE_LIBC_SYSTEM_PROPERTIES
-    const prop_info *pi;
-    unsigned int serial = 0;
-#endif
-
-    if (property_get(SUPP_PROP_NAME, status, NULL) &&
-        !strcmp(status, "running")) {
-    } else {
-#ifdef HAVE_LIBC_SYSTEM_PROPERTIES
-        pi = __system_property_find(SUPP_PROP_NAME);
-        if (pi != NULL)
-            serial = pi->serial;
-#endif
-
-        LOGD("Starting Supplicant");
-        property_set("ctl.start", SUPPLICANT_NAME);
-        sched_yield();
-        while (count--) {
-#ifdef HAVE_LIBC_SYSTEM_PROPERTIES
-            if (!pi)
-                pi = __system_property_find(SUPP_PROP_NAME);
-            if (pi) {
-                __system_property_read(pi, NULL, status);
-                if (strcmp(status, "running") == 0)
-                    break;
-                else if (pi->serial != serial &&
-                        strcmp(status, "stopped") == 0) {
-                    errno = EIO;
-                    return -1;
-                }
-            }
-#else
-            if (property_get(SUPP_PROP_NAME, status, NULL)) {
-                if (!strcmp(status, "running"))
-                    break;
-            }
-#endif
-            usleep(100000);
-        }
-        if (!count) {
-            errno = ETIMEDOUT;
-            return -1;
-        }
+ 
+    if (mServiceManager->start(SUPPLICANT_SERVICE_NAME)) {
+        LOGE("Error starting supplicant (%s)", strerror(errno));
+        return -1;
     }
 
     wpa_ctrl_cleanup();
@@ -125,30 +81,13 @@ int Supplicant::start() {
 
 int Supplicant::stop() {
 
-    char supp_status[PROPERTY_VALUE_MAX] = {'\0'};
-    int count = 50; 
-
     if (mListener->stopListener()) {
         LOGW("Unable to stop supplicant listener (%s)", strerror(errno));
         return -1;
     }
 
-    if (property_get(SUPP_PROP_NAME, supp_status, NULL)
-        && strcmp(supp_status, "stopped") == 0) {
-        LOGD("Supplicant already stopped");
-        return 0;
-    }
-
-    LOGD("Stopping Supplicant");
-    property_set("ctl.stop", SUPPLICANT_NAME);
-    sched_yield();
-
-    while (count-- > 0) {
-        if (property_get(SUPP_PROP_NAME, supp_status, NULL)) {
-            if (strcmp(supp_status, "stopped") == 0)
-                break;
-        }
-        usleep(100000);
+    if (mServiceManager->stop(SUPPLICANT_SERVICE_NAME)) {
+        LOGW("Error stopping supplicant (%s)", strerror(errno));
     }
 
     if (mCtrl) {
@@ -160,35 +99,15 @@ int Supplicant::stop() {
         mMonitor = NULL;
     }
 
-    if (!count) {
-        LOGD("Timed out waiting for supplicant to stop");
-        errno = ETIMEDOUT;
-        return -1;
-    }
-
-    LOGD("Supplicant shutdown");
-
     return 0;
 }
 
 bool Supplicant::isStarted() {
-    char supp_status[PROPERTY_VALUE_MAX] = {'\0'};
-
-    property_get(SUPP_PROP_NAME, supp_status, NULL);
-
-    if (!strcmp(supp_status, "running"))
-        return true;
-
-    return false;
+    return mServiceManager->isRunning(SUPPLICANT_SERVICE_NAME);
 }
 
 int Supplicant::connectToSupplicant() {
-    char ifname[256];
-    char supp_status[PROPERTY_VALUE_MAX] = {'\0'};
-
-    LOGD("connectToSupplicant()");
-    if (!property_get(SUPP_PROP_NAME, supp_status, NULL)
-            || strcmp(supp_status, "running") != 0) {
+    if (!isStarted()) {
         LOGE("Supplicant not running, cannot connect");
         return -1;
     }
@@ -229,7 +148,7 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len)
         return -1;
     }
 
-    LOGD("sendCommand(): -> '%s'", cmd);
+//    LOGD("sendCommand(): -> '%s'", cmd);
 
     int rc;
     if ((rc = wpa_ctrl_request(mCtrl, cmd, strlen(cmd), reply, reply_len, NULL)) == -2)  {
@@ -245,7 +164,7 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len)
         !strncmp(cmd, "SCAN_RESULTS", 12)) 
         reply[*reply_len] = '\0';
 
-    LOGD("sendCommand(): <- '%s'", reply);
+//    LOGD("sendCommand(): <- '%s'", reply);
     return 0;
 }
 
