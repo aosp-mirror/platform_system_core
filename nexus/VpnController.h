@@ -16,9 +16,15 @@
 #ifndef _VPN_CONTROLLER_H
 #define _VPN_CONTROLLER_H
 
+#include <netinet/in.h>
+
 #include "Controller.h"
 
 class VpnController : public Controller {
+    /*
+     * Gateway of the VPN server to connect to
+     */
+    struct in_addr mVpnGateway;
 
 public:
     VpnController();
@@ -29,6 +35,10 @@ public:
 
     virtual int enable();
     virtual int disable();
+
+    struct in_addr &getVpnGateway() { return mVpnGateway; }
+    int setVpnGateway(const char *vpnGw);
+    int setVpnGateway(struct in_addr *vpnGw);
 
 protected:
 };
