@@ -172,6 +172,7 @@ static struct fs_path_config android_files[] = {
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/librank" },
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/procrank" },
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/procmem" },
+    { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/tcpdump" },
     { 00755, AID_ROOT,      AID_SHELL,     "system/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     "system/xbin/*" },
     { 00750, AID_ROOT,      AID_SHELL,     "sbin/*" },
