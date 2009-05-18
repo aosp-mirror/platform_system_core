@@ -118,15 +118,22 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
         flags |= MS_REMOUNT;
     }
 
+    /*
+     * The mount masks restrict access so that:
+     * 1. The 'system' user cannot access the SD card at all - 
+     *    (protects system_server from grabbing file references)
+     * 2. Group users can RWX
+     * 3. Others can only RX
+     */
     rc = mount(devpath, vol->mount_point, "vfat", flags,
-               "utf8,uid=1000,gid=1000,fmask=711,dmask=700,shortname=mixed");
+               "utf8,uid=1000,gid=1015,fmask=702,dmask=702,shortname=mixed");
 
     if (rc && errno == EROFS) {
         LOGE("vfat_mount(%d:%d, %s): Read only filesystem - retrying mount RO",
              dev->major, dev->minor, vol->mount_point);
         flags |= MS_RDONLY;
         rc = mount(devpath, vol->mount_point, "vfat", flags,
-                   "utf8,uid=1000,gid=1000,fmask=711,dmask=700,shortname=mixed");
+                   "utf8,uid=1000,gid=1015,fmask=702,dmask=702,shortname=mixed");
     }
 
 #if VFAT_DEBUG
