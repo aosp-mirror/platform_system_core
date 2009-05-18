@@ -26,7 +26,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 
-#include <cutils/fdevent.h>
+#include "fdevent.h"
 
 #define TRACE(x...) fprintf(stderr,x)
 
