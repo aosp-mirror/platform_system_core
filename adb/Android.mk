@@ -57,6 +57,8 @@ LOCAL_SRC_FILES := \
 
 ifneq ($(USE_SYSDEPS_WIN32),)
   LOCAL_SRC_FILES += sysdeps_win32.c
+else
+  LOCAL_SRC_FILES += fdevent.c
 endif
 
 LOCAL_CFLAGS += -O2 -g -DADB_HOST=1  -Wall -Wno-unused-parameter
@@ -98,6 +100,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	adb.c \
+	fdevent.c \
 	transport.c \
 	transport_local.c \
 	transport_usb.c \

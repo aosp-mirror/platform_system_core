@@ -20,7 +20,7 @@
 #include <string.h>
 #include <fcntl.h>
 
-#include <cutils/fdevent.h>
+#include "fdevent.h"
 #include "adb.h"
 
 #include <linux/fb.h>

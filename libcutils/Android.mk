@@ -61,7 +61,6 @@ else
     commonSources += \
         mspace.c \
         selector.c \
-        fdevent.c \
         tztime.c \
         adb_networking.c \
         zygote.c

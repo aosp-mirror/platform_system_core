@@ -169,7 +169,7 @@ extern int socket_network_client(const char *host, int port, int type);
 extern int socket_loopback_server(int port, int type);
 extern int socket_inaddr_any_server(int port, int type);
 
-/* normally provided by <cutils/fdevent.h> */
+/* normally provided by "fdevent.h" */
 
 #define FDE_READ              0x0001
 #define FDE_WRITE             0x0002
@@ -252,7 +252,7 @@ static __inline__  int  adb_is_absolute_host_path( const char*  path )
 
 #else /* !_WIN32 a.k.a. Unix */
 
-#include <cutils/fdevent.h>
+#include "fdevent.h"
 #include <cutils/sockets.h>
 #include <cutils/properties.h>
 #include <cutils/misc.h>
