@@ -116,6 +116,8 @@ struct svcenvinfo {
 
 #define NR_SVC_SUPP_GIDS 6    /* six supplementary groups */
 
+#define SVC_MAXARGS 64
+
 struct service {
         /* list of all services */
     struct listnode slist;
@@ -160,7 +162,7 @@ void service_for_each_class(const char *classname,
 void service_for_each_flags(unsigned matchflags,
                             void (*func)(struct service *svc));
 void service_stop(struct service *svc);
-void service_start(struct service *svc);
+void service_start(struct service *svc, const char *dynamic_args);
 void property_changed(const char *name, const char *value);
 
 struct action *action_remove_queue_head(void);
