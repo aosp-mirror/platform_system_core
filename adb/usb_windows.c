@@ -446,7 +446,7 @@ int recognized_device(usb_handle* handle) {
 }
 
 void find_devices() {
-	usb_handle* handle = NULL;
+        usb_handle* handle = NULL;
   char entry_buffer[2048];
   char interf_name[2048];
   AdbInterfaceInfo* next_interface = (AdbInterfaceInfo*)(&entry_buffer[0]);
