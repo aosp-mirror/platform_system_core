@@ -739,12 +739,12 @@ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrle
 {
     FH   serverfh = _fh_from_int(serverfd);
     FH   fh;
-    
+
     if ( !serverfh || serverfh->clazz != &_fh_socket_class ) {
         D( "adb_socket_accept: invalid fd %d\n", serverfd );
         return -1;
     }
-    
+
     fh = _fh_alloc( &_fh_socket_class );
     if (!fh) {
         D( "adb_socket_accept: not enough memory to allocate accepted socket descriptor\n" );
@@ -757,7 +757,7 @@ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrle
         D( "adb_socket_accept: accept on fd %d return error %ld\n", serverfd, GetLastError() );
         return -1;
     }
-    
+
     snprintf( fh->name, sizeof(fh->name), "%d(accept:%s)", _fh_to_int(fh), serverfh->name );
     D( "adb_socket_accept on fd %d returns fd %d\n", serverfd, _fh_to_int(fh) );
     return  _fh_to_int(fh);
@@ -768,7 +768,7 @@ void  disable_tcp_nagle(int fd)
 {
     FH   fh = _fh_from_int(fd);
     int  on;
-    
+
     if ( !fh || fh->clazz != &_fh_socket_class )
         return;
 
@@ -1746,7 +1746,7 @@ void fdevent_loop()
 
 /**  FILE EVENT HOOKS
  **/
- 
+
 static void  _event_file_prepare( EventHook  hook )
 {
     if (hook->wanted & (FDE_READ|FDE_WRITE)) {

@@ -23,7 +23,7 @@ implementation to be much more robust.
 
 
 --- protocol overview and basics ---------------------------------------
- 
+
 The transport layer deals in "messages", which consist of a 24 byte
 header followed (optionally) by a payload.  The header consists of 6
 32 bit words which are sent across the wire in little endian format.
@@ -52,7 +52,7 @@ The identifiers "local-id" and "remote-id" are always relative to the
 reversed.
 
 
-
+
 --- CONNECT(version, maxdata, "system-identity-string") ----------------
 
 The CONNECT message establishes the presence of a remote system.
@@ -114,7 +114,7 @@ is used to establish the connection).  Nonetheless, the local-id MUST
 not change on later READY messages sent to the same stream.
 
 
-
+
 --- WRITE(0, remote-id, "data") ----------------------------------------
 
 The WRITE message sends data to the recipient's stream identified by
@@ -172,7 +172,7 @@ to send across the wire.
 #define A_WRTE 0x45545257
 
 
-
+
 --- implementation details ---------------------------------------------
 
 The core of the bridge program will use three threads.  One thread
