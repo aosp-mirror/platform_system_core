@@ -193,7 +193,8 @@ void service_start(struct service *svc, const char *dynamic_args)
     }
 
     if ((!(svc->flags & SVC_ONESHOT)) && dynamic_args) {
-        ERROR("service '%s' must be one-shot to use dynamic args, disabling\n", svc->args[0]);
+        ERROR("service '%s' must be one-shot to use dynamic args, disabling\n",
+               svc->args[0]);
         svc->flags |= SVC_DISABLED;
         return;
     }
@@ -260,42 +261,18 @@ void service_start(struct service *svc, const char *dynamic_args)
             }
         } else {
             char *arg_ptrs[SVC_MAXARGS+1];
-            int arg_idx;
+            int arg_idx = svc->nargs;
             char *tmp = strdup(dynamic_args);
-            char *p = tmp;
+            char *next = tmp;
+            char *bword;
 
             /* Copy the static arguments */
-            for (arg_idx = 0; arg_idx < svc->nargs; arg_idx++) {
-                arg_ptrs[arg_idx] = svc->args[arg_idx];
-            }
+            memcpy(arg_ptrs, svc->args, (svc->nargs * sizeof(char *)));
 
-            int done = 0;
-            while(!done) {
-
-                if (arg_idx == SVC_MAXARGS) 
+            while((bword = strsep(&next, " "))) {
+                arg_ptrs[arg_idx++] = bword;
+                if (arg_idx == SVC_MAXARGS)
                     break;
-
-                /* Advance over any leading whitespace */
-                if (*p == ' ') {
-                    for (p; *p != ' '; p++);
-                    p++;
-                }
-                /* Locate next argument */
-                char *q = p;
-                while(1) {
-                    if (*q == ' ') {
-                        *q = '\0';
-                        break;
-                    } else if (*q == '\0') {
-                        done = 1;
-                        break;
-                    }
-                    q++;
-                }
-                arg_ptrs[arg_idx++] = p;
-
-                q++; // Advance q to the next string
-                p = q;
             }
             arg_ptrs[arg_idx] = '\0';
             execve(svc->args[0], (char**) arg_ptrs, (char**) ENV);
@@ -464,7 +441,6 @@ static void msg_start(const char *name)
         svc = service_find_by_name(name);
     else {
         tmp = strdup(name);
-        strcpy(tmp, name);
         args = strchr(tmp, ':');
         *args = '\0';
         args++;
@@ -804,7 +780,7 @@ void handle_keychord(int fd)
     svc = service_find_by_keychord(id);
     if (svc) {
         INFO("starting service %s from keychord\n", svc->name);
-        service_start(svc, NULL);   
+        service_start(svc, NULL);
     } else {
         ERROR("service for keychord %d not found\n", id);
     }
