@@ -14,7 +14,7 @@ SocketClient::SocketClient(int socket) {
     pthread_mutex_init(&mWriteMutex, NULL);
 }
 
-int SocketClient::sendMsg(int code, char *msg, bool addErrno) {
+int SocketClient::sendMsg(int code, const char *msg, bool addErrno) {
     char *buf;
     
     if (addErrno) {
@@ -27,23 +27,24 @@ int SocketClient::sendMsg(int code, char *msg, bool addErrno) {
     return sendMsg(buf);
 }
 
-int SocketClient::sendMsg(char *msg) {
+int SocketClient::sendMsg(const char *msg) {
     if (mSocket < 0) {
         errno = EHOSTUNREACH;
         return -1;
     }
 
-    char *bp;
-  
+    char *tmp;
+    const char *bp = msg;
+
     if (msg[strlen(msg)] != '\n') {
-        bp = (char *) alloca(strlen(msg) + 1);
-        strcpy(bp, msg);
-        strcat(bp, "\n");
-    } else
-        bp = msg;
+        tmp = (char *) alloca(strlen(msg) + 1);
+        strcpy(tmp, msg);
+        strcat(tmp, "\n");
+        bp = tmp;
+    }
        
     int rc = 0;
-    char *p = bp;
+    const char *p = bp;
     int brtw = strlen(bp);
 
     pthread_mutex_lock(&mWriteMutex);
