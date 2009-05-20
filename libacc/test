@@ -1,3 +1,13 @@
 #!/bin/sh
+rm -f tests/acc
 g++ acc.cpp disassem.cpp -g -ldl -o tests/acc && tests/acc tests/otcc.c -a x86 -d tests/otcc.out && diff tests/otcc.out tests/otcc.out-orig
-tests/acc -S tests/returnval.c
+if [ -x "tests/acc" ]; then
+  tests/acc -S tests/returnval.c
+
+  if [ "$(uname)" = "Linux" ]; then
+    if [ "$(uname -m)" = "i686" ]; then
+      echo "Linux i686. Testing otcc.c"
+      tests/acc tests/otcc.c tests/otcc.c tests/returnval.c
+    fi
+  fi
+fi
