@@ -1,4 +1,15 @@
 /*
+ * Android "Almost" C Compiler.
+ * This is a compiler for a small subset of the C language, intended for use
+ * in scripting environments where speed and memory footprint are important.
+ *
+ * This code is based upon the "unobfuscated" version of the
+ * Obfuscated Tiny C compiler, and retains the
+ * original copyright notice and license from that compiler, see below.
+ *
+ */
+
+/*
  Obfuscated Tiny C Compiler
 
  Copyright (C) 2001-2003 Fabrice Bellard
@@ -31,11 +42,24 @@
 #include <unistd.h>
 #endif
 
+#if defined(__arm__)
+#define DEFAULT_ARM_CODEGEN
+#elif defined(__i386__)
+#define DEFAULT_X86_CODEGEN
+#elif defined(__x86_64__)
+#define DEFAULT_X64_CODEGEN
+#endif
+
+#define PROVIDE_X86_CODEGEN
+#define PROVIDE_ARM_CODEGEN
+
+#ifdef PROVIDE_ARM_CODEGEN
 #include "disassem.h"
+#endif
 
 namespace acc {
 
-class compiler {
+class Compiler {
     class CodeBuf {
         char* ind;
         char* pProgramBase;
@@ -63,14 +87,6 @@ class compiler {
             ind = pProgramBase;
         }
 
-        void o(int n) {
-            /* cannot use unsigned, so we must do a hack */
-            while (n && n != -1) {
-                *ind++ = n;
-                n = n >> 8;
-            }
-        }
-
         int o4(int n) {
             int result = (int) ind;
             * (int*) ind = n;
@@ -83,31 +99,6 @@ class compiler {
          */
         void ob(int n) {
             *ind++ = n;
-        }
-
-        /* output a symbol and patch all calls to it */
-        void gsym(int t) {
-            int n;
-            while (t) {
-                n = *(int *) t; /* next value */
-                *(int *) t = ((int) ind) - t - 4;
-                t = n;
-            }
-        }
-
-        /* psym is used to put an instruction with a data field which is a
-         reference to a symbol. It is in fact the same as oad ! */
-        int psym(int n, int t) {
-            return oad(n, t);
-        }
-
-        /* instruction + address */
-        int oad(int n, int t) {
-            o(n);
-            *(int *) ind = t;
-            t = (int) ind;
-            ind = ind + 4;
-            return t;
         }
 
         inline void* getBase() {
@@ -184,9 +175,7 @@ class compiler {
         virtual int disassemble(FILE* out) = 0;
 
         /* output a symbol and patch all calls to it */
-        virtual void gsym(int t) {
-            pCodeBuf->gsym(t);
-        }
+        virtual void gsym(int t) = 0;
 
         virtual int finishCompile() {
 #if defined(__arm__)
@@ -205,10 +194,6 @@ class compiler {
         virtual int jumpOffset() = 0;
 
     protected:
-        void o(int n) {
-            pCodeBuf->o(n);
-        }
-
         /*
          * Output a byte. Handles all values, 0..ff.
          */
@@ -216,15 +201,8 @@ class compiler {
             pCodeBuf->ob(n);
         }
 
-        /* psym is used to put an instruction with a data field which is a
-         reference to a symbol. It is in fact the same as oad ! */
-        int psym(int n, int t) {
-            return oad(n, t);
-        }
-
-        /* instruction + address */
-        int oad(int n, int t) {
-            return pCodeBuf->oad(n,t);
+        int o4(int data) {
+            return pCodeBuf->o4(data);
         }
 
         int getBase() {
@@ -234,13 +212,11 @@ class compiler {
         int getPC() {
             return pCodeBuf->getPC();
         }
-
-        int o4(int data) {
-            return pCodeBuf->o4(data);
-        }
     private:
         CodeBuf* pCodeBuf;
     };
+
+#ifdef PROVIDE_ARM_CODEGEN
 
     class ARMCodeGenerator : public CodeGenerator {
     public:
@@ -701,6 +677,10 @@ class compiler {
         }
     };
 
+#endif // PROVIDE_X86_CODEGEN
+
+#ifdef PROVIDE_X86_CODEGEN
+
     class X86CodeGenerator : public CodeGenerator {
     public:
         X86CodeGenerator() {}
@@ -829,7 +809,45 @@ class compiler {
             return 1;
         }
 
+        /* output a symbol and patch all calls to it */
+        virtual void gsym(int t) {
+            int n;
+            int pc = getPC();
+            while (t) {
+                n = *(int *) t; /* next value */
+                *(int *) t = pc - t - 4;
+                t = n;
+            }
+        }
+
     private:
+
+        /** Output 1 to 4 bytes.
+         *
+         */
+        void o(int n) {
+            /* cannot use unsigned, so we must do a hack */
+            while (n && n != -1) {
+                ob(n & 0xff);
+                n = n >> 8;
+            }
+        }
+
+        /* psym is used to put an instruction with a data field which is a
+         reference to a symbol. It is in fact the same as oad ! */
+        int psym(int n, int t) {
+            return oad(n, t);
+        }
+
+        /* instruction + address */
+        int oad(int n, int t) {
+            o(n);
+            int result = getPC();
+            o4(t);
+            return result;
+        }
+
+
         static const int operatorHelper[];
 
         int decodeOp(int op) {
@@ -845,6 +863,8 @@ class compiler {
             oad((t < LOCAL) << 7 | 5, t);
         }
     };
+
+#endif // PROVIDE_X86_CODEGEN
 
     /* vars: value of variables
      loc : local variable index
@@ -1426,16 +1446,31 @@ class compiler {
 
         if (architecture != NULL) {
             if (strcmp(architecture, "arm") == 0) {
+#ifdef PROVIDE_ARM_CODEGEN
                 pGen = new ARMCodeGenerator();
+#else
+                fprintf(stderr, "Unsupported architecture %s", architecture);
+#endif
             } else if (strcmp(architecture, "x86") == 0) {
+#ifdef PROVIDE_X86_CODEGEN
                 pGen = new X86CodeGenerator();
+#else
+                fprintf(stderr, "Unsupported architecture %s", architecture);
+#endif
             } else {
                 fprintf(stderr, "Unknown architecture %s", architecture);
             }
         }
 
         if (pGen == NULL) {
+#if defined(DEFAULT_ARM_CODEGEN)
             pGen = new ARMCodeGenerator();
+#elif defined(DEFAULT_X86_CODEGEN)
+            pGen = new X86CodeGenerator();
+#endif
+        }
+        if (pGen == NULL) {
+            fprintf(stderr, "No code generator defined.");
         }
     }
 
@@ -1447,11 +1482,11 @@ public:
         const char* architecture;
     };
 
-    compiler() {
+    Compiler() {
         clear();
     }
 
-    ~compiler() {
+    ~Compiler() {
         cleanup();
     }
 
@@ -1498,10 +1533,10 @@ public:
 
 };
 
-const char* compiler::operatorChars =
+const char* Compiler::operatorChars =
     "++--*@/@%@+@-@<<>><=>=<@>@==!=&&||&@^@|@~@!@";
 
-const char compiler::operatorLevel[] =
+const char Compiler::operatorLevel[] =
     {11, 11, 1, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4,
             5, 5, /* ==, != */
             9, 10, /* &&, || */
@@ -1509,9 +1544,9 @@ const char compiler::operatorLevel[] =
             2, 2 /* ~ ! */
             };
 
-FILE* compiler::ARMCodeGenerator::disasmOut;
+FILE* Compiler::ARMCodeGenerator::disasmOut;
 
-const int compiler::X86CodeGenerator::operatorHelper[] = {
+const int Compiler::X86CodeGenerator::operatorHelper[] = {
         0x1,     // ++
         0xff,    // --
         0xc1af0f, // *
@@ -1539,7 +1574,7 @@ const int compiler::X86CodeGenerator::operatorHelper[] = {
 } // namespace acc
 
 // This is a separate function so it can easily be set by breakpoint in gdb.
-int run(acc::compiler& c, int argc, char** argv) {
+int run(acc::Compiler& c, int argc, char** argv) {
     return c.run(argc, argv);
 }
 
@@ -1548,7 +1583,7 @@ int main(int argc, char** argv) {
     bool doDisassemble = false;
     const char* inFile = NULL;
     const char* outFile = NULL;
-    const char* architecture = "arm";
+    const char* architecture = NULL;
     int i;
     for (i = 1; i < argc; i++) {
         char* arg = argv[i];
@@ -1593,9 +1628,11 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
-    acc::compiler compiler;
-    acc::compiler::args args;
-    args.architecture = architecture;
+    acc::Compiler compiler;
+    acc::Compiler::args args;
+    if (architecture != NULL) {
+        args.architecture = architecture;
+    }
     int compileResult = compiler.compile(in, args);
     if (in != stdin) {
         fclose(in);
