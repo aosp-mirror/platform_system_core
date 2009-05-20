@@ -17,6 +17,7 @@ LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
 commonSources := \
+	abort_socket.c \
 	array.c \
 	hashmap.c \
 	atomic.c \
