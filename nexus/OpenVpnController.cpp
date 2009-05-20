@@ -26,6 +26,7 @@
 #include "OpenVpnController.h"
 
 #define DAEMON_PROP_NAME "vpn.openvpn.status"
+
 #define DAEMON_CONFIG_FILE "/data/misc/openvpn/openvpn.conf"
 
 OpenVpnController::OpenVpnController() :
@@ -46,13 +47,16 @@ int OpenVpnController::stop() {
 }
 
 int OpenVpnController::enable() {
-
-    if (validateConfig()) {
-        LOGE("Error validating configuration file");
+    char svc[PROPERTY_VALUE_MAX];
+    char tmp[64];
+    
+    if (!getProperty("vpn.gateway", tmp, sizeof(tmp))) {
+        LOGE("Error reading property 'vpn.gateway' (%s)", strerror(errno));
         return -1;
     }
+    snprintf(svc, sizeof(svc), "openvpn:--remote %s 1194", tmp);
 
-    if (mServiceManager->start("openvpn"))
+    if (mServiceManager->start(svc))
         return -1;
 
     return 0;
@@ -62,17 +66,5 @@ int OpenVpnController::disable() {
 
     if (mServiceManager->stop("openvpn"))
         return -1;
-    return 0;
-}
-
-int OpenVpnController::validateConfig() {
-    unlink(DAEMON_CONFIG_FILE);
-
-    FILE *fp = fopen(DAEMON_CONFIG_FILE, "w");
-    if (!fp)
-        return -1;
-
-    fprintf(fp, "remote %s 1194\n", inet_ntoa(getVpnGateway()));
-    fclose(fp);
     return 0;
 }
