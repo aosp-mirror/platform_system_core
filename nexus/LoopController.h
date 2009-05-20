@@ -23,6 +23,7 @@ public:
     LoopController();
     virtual ~LoopController() {}
 
+private:
     int enable();
     int disable();
 };

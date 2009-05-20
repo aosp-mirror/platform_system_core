@@ -25,19 +25,6 @@ public:
     virtual ~CommandListener() {}
 
 private:
-    class WifiEnableCmd : public NexusCommand {
-    public:
-        WifiEnableCmd();
-        virtual ~WifiEnableCmd() {}
-        int runCommand(SocketClient *c, char *data);
-    };
-
-    class WifiDisableCmd : public NexusCommand {
-    public:
-        WifiDisableCmd();
-        virtual ~WifiDisableCmd() {}
-        int runCommand(SocketClient *c, char *data);
-    };
 
     class WifiScanCmd : public NexusCommand {
     public:
@@ -74,48 +61,19 @@ private:
         int runCommand(SocketClient *c, char *data);
     };
 
-    class WifiSetVarCmd : public NexusCommand {
+    class SetCmd : public NexusCommand {
     public:
-        WifiSetVarCmd();
-        virtual ~WifiSetVarCmd() {}
+        SetCmd();
+        virtual ~SetCmd() {}
         int runCommand(SocketClient *c, char *data);
     };
 
-    class WifiGetVarCmd : public NexusCommand {
+    class GetCmd : public NexusCommand {
     public:
-        WifiGetVarCmd();
-        virtual ~WifiGetVarCmd() {}
+        GetCmd();
+        virtual ~GetCmd() {}
         int runCommand(SocketClient *c, char *data);
     };
-
-    class VpnEnableCmd : public NexusCommand {
-    public:
-        VpnEnableCmd();
-        virtual ~VpnEnableCmd() {}
-        int runCommand(SocketClient *c, char *data);
-    };
-
-    class VpnSetVarCmd : public NexusCommand {
-    public:
-        VpnSetVarCmd();
-        virtual ~VpnSetVarCmd() {}
-        int runCommand(SocketClient *c, char *data);
-    };
-
-    class VpnGetVarCmd : public NexusCommand {
-    public:
-        VpnGetVarCmd();
-        virtual ~VpnGetVarCmd() {}
-        int runCommand(SocketClient *c, char *data);
-    };
-
-    class VpnDisableCmd : public NexusCommand {
-    public:
-        VpnDisableCmd();
-        virtual ~VpnDisableCmd() {}
-        int runCommand(SocketClient *c, char *data);
-    };
-
 };
 
 #endif

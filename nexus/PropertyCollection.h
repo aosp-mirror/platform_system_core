@@ -13,34 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef _VPN_CONTROLLER_H
-#define _VPN_CONTROLLER_H
 
-#include <netinet/in.h>
+#ifndef _PROPERTY_COLLECTION_H
+#define _PROPERTY_COLLECTION_H
 
-#include "Controller.h"
+#include "../../../frameworks/base/include/utils/List.h"
 
-class VpnController : public Controller {
-    /*
-     * Gateway of the VPN server to connect to
-     */
-    struct in_addr mVpnGateway;
-
-public:
-    VpnController();
-    virtual ~VpnController() {}
-
-    virtual int start();
-    virtual int stop();
-
-    virtual int setProperty(const char *name, char *value);
-    virtual const char *getProperty(const char *name, char *buffer,
-                                    size_t maxlen);
-
-private:
-    virtual int enable();
-    virtual int disable();
-
-};
+typedef android::List<const char *> PropertyCollection;
 
 #endif
+

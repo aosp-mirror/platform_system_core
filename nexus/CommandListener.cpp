@@ -33,53 +33,18 @@
 
 CommandListener::CommandListener() :
                  FrameworkListener("nexus") {
-    registerCmd(new WifiEnableCmd());
-    registerCmd(new WifiDisableCmd());
-    registerCmd(new WifiScanCmd());
     registerCmd(new WifiScanResultsCmd());
     registerCmd(new WifiListNetworksCmd());
     registerCmd(new WifiAddNetworkCmd());
     registerCmd(new WifiRemoveNetworkCmd());
-    registerCmd(new WifiSetVarCmd());
-    registerCmd(new WifiGetVarCmd());
 
-    registerCmd(new VpnEnableCmd());
-    registerCmd(new VpnSetVarCmd());
-    registerCmd(new VpnGetVarCmd());
-    registerCmd(new VpnDisableCmd());
+    registerCmd(new GetCmd());
+    registerCmd(new SetCmd());
 }
  
 /* -------------
  * Wifi Commands
  * ------------ */
-
-CommandListener::WifiEnableCmd::WifiEnableCmd() :
-                 NexusCommand("wifi_enable") {
-} 
-               
-int CommandListener::WifiEnableCmd::runCommand(SocketClient *cli, char *data) {
-    Controller *c = NetworkManager::Instance()->findController("WIFI");
-
-    if (c->enable())
-        cli->sendMsg(ErrorCode::OperationFailed, "Failed to enable wifi", true);
-    else
-        cli->sendMsg(ErrorCode::CommandOkay, "Wifi Enabled", false);
-    return 0;
-}
-
-CommandListener::WifiDisableCmd::WifiDisableCmd() :
-                 NexusCommand("wifi_disable") {
-} 
-               
-int CommandListener::WifiDisableCmd::runCommand(SocketClient *cli, char *data) {
-    Controller *c = NetworkManager::Instance()->findController("WIFI");
-
-    if (c->disable())
-        cli->sendMsg(ErrorCode::OperationFailed, "Failed to disable wifi", true);
-    else
-        cli->sendMsg(ErrorCode::CommandOkay, "Wifi Disabled", false);
-    return 0;
-}
 
 CommandListener::WifiAddNetworkCmd::WifiAddNetworkCmd() :
                  NexusCommand("wifi_add_network") {
@@ -113,21 +78,6 @@ int CommandListener::WifiRemoveNetworkCmd::runCommand(SocketClient *cli, char *d
     else {
         cli->sendMsg(ErrorCode::CommandOkay, "Network removed.", false);
     }
-    return 0;
-}
-
-CommandListener::WifiScanCmd::WifiScanCmd() :
-                 NexusCommand("wifi_scan") {
-} 
-
-int CommandListener::WifiScanCmd::runCommand(SocketClient *cli, char *data) {
-    WifiController *wc = (WifiController *) NetworkManager::Instance()->findController("WIFI");
-
-    if (wc->setScanMode(atoi(data)))
-        cli->sendMsg(ErrorCode::OperationFailed, "Failed to set scan mode", true);
-    else
-        cli->sendMsg(ErrorCode::CommandOkay, "Scan mode set", false);
-
     return 0;
 }
 
@@ -181,158 +131,39 @@ int CommandListener::WifiListNetworksCmd::runCommand(SocketClient *cli, char *da
     return 0;
 }
 
-CommandListener::WifiSetVarCmd::WifiSetVarCmd() :
-                 NexusCommand("wifi_setvar") {
-} 
-
-int CommandListener::WifiSetVarCmd::runCommand(SocketClient *cli, char *data) {
-    WifiController *wc = (WifiController *) NetworkManager::Instance()->findController("WIFI");
-
-    char *bword;
-    char *last;
-    char varname[32];
-    char val[250];
-    int networkId;
-
-    if (!(bword = strtok_r(data, ":", &last)))
-        goto out_inval;
-
-    networkId = atoi(bword);
-   
-    if (!(bword = strtok_r(NULL, ":", &last)))
-        goto out_inval;
-
-    strncpy(varname, bword, sizeof(varname));
-
-    if (!(bword = strtok_r(NULL, ":", &last)))
-        goto out_inval;
-
-    strncpy(val, bword, sizeof(val));
-
-    LOGD("Network id %d, varname '%s', value '%s'", networkId, varname, val);
-
-    return 0;
-
-out_inval:
-    errno = EINVAL;
-    cli->sendMsg(ErrorCode::CommandParameterError, "Failed to set variable.", true);
-    return 0;
-}
-
-CommandListener::WifiGetVarCmd::WifiGetVarCmd() :
-                 NexusCommand("wifi_getvar") {
-} 
-
-int CommandListener::WifiGetVarCmd::runCommand(SocketClient *cli, char *data) {
-    WifiController *wc = (WifiController *) NetworkManager::Instance()->findController("WIFI");
-
-    char *bword;
-    char *last;
-    char varname[32];
-    int networkId;
-
-    if (!(bword = strtok_r(data, ":", &last)))
-        goto out_inval;
-   
-    networkId = atoi(bword);
-
-    if (!(bword = strtok_r(NULL, ":", &last)))
-        goto out_inval;
-
-    strncpy(varname, bword, sizeof(varname));
-
-    LOGD("networkId = %d, varname '%s'", networkId, varname);
-
-    return 0;
-out_inval:
-    errno = EINVAL;
-    cli->sendMsg(ErrorCode::CommandParameterError, "Failed to get variable.", true);
-    return 0;
-}
-
 /* ------------
  * Vpn Commands
  * ------------ */
-CommandListener::VpnEnableCmd::VpnEnableCmd() :
-                 NexusCommand("vpn_enable") {
-} 
-               
-int CommandListener::VpnEnableCmd::runCommand(SocketClient *cli, char *data) {
-    Controller *c = NetworkManager::Instance()->findController("VPN");
 
-    if (c->enable())
-        cli->sendMsg(ErrorCode::OperationFailed, "Failed to enable VPN", true);
-    else
-        cli->sendMsg(ErrorCode::CommandOkay, "VPN enabled", false);
-    return 0;
-}
-
-CommandListener::VpnSetVarCmd::VpnSetVarCmd() :
-                 NexusCommand("vpn_setvar") {
+/* ----------------
+ * Generic Commands
+ * ---------------- */
+CommandListener::GetCmd::GetCmd() :
+                 NexusCommand("get") {
 } 
 
-int CommandListener::VpnSetVarCmd::runCommand(SocketClient *cli, char *data) {
-    VpnController *vc = (VpnController *) NetworkManager::Instance()->findController("VPN");
-
+int CommandListener::GetCmd::runCommand(SocketClient *cli, char *data) {
     char *bword;
     char *last;
-    char varname[32];
-    char val[250];
-
-    if (!(bword = strtok_r(data, ":", &last)))
-        goto out_inval;
-
-    strncpy(varname, bword, sizeof(varname));
-
-    if (!(bword = strtok_r(NULL, ":", &last)))
-        goto out_inval;
-
-    strncpy(val, bword, sizeof(val));
-
-    if (!strcasecmp(varname, "vpn_gateway")) {
-        if (vc->setVpnGateway(val))
-            goto out_inval;
-    } else {
-        cli->sendMsg(ErrorCode::CommandParameterError, "Variable not found.", true);
-        return 0;
-    }
-
-    cli->sendMsg(ErrorCode::CommandOkay, "Variable written.", false);
-    return 0;
-
-out_inval:
-    errno = EINVAL;
-    cli->sendMsg(ErrorCode::CommandParameterError, "Failed to set variable.", true);
-    return 0;
-}
-
-CommandListener::VpnGetVarCmd::VpnGetVarCmd() :
-                 NexusCommand("vpn_getvar") {
-} 
-
-int CommandListener::VpnGetVarCmd::runCommand(SocketClient *cli, char *data) {
-    VpnController *vc = (VpnController *) NetworkManager::Instance()->findController("VPN");
-
-    char *bword;
-    char *last;
-    char varname[32];
+    char propname[32];
 
     if (!(bword = strtok_r(data, ":", &last)))
         goto out_inval;
    
-    strncpy(varname, bword, sizeof(varname));
+    strncpy(propname, bword, sizeof(propname));
 
-    if (!strcasecmp(varname, "vpn_gateway")) {
-        char buffer[255];
+    char pb[255];
+    snprintf(pb, sizeof(pb), "%s:", propname);
 
-        sprintf(buffer, "%s:%s", varname, inet_ntoa(vc->getVpnGateway()));
-        cli->sendMsg(ErrorCode::VariableRead, buffer, false);
-    } else {
-        cli->sendMsg(ErrorCode::CommandParameterError, "Variable not found.", true);
-        return 0;
+    if (!NetworkManager::Instance()->getProperty(propname,
+                                                 &pb[strlen(pb)],
+                                                 sizeof(pb) - strlen(pb))) {
+        goto out_inval;
     }
 
-    cli->sendMsg(ErrorCode::CommandOkay, "Variable read.", false);
+    cli->sendMsg(ErrorCode::VariableRead, pb, false);
+
+    cli->sendMsg(ErrorCode::CommandOkay, "Property read.", false);
     return 0;
 out_inval:
     errno = EINVAL;
@@ -340,16 +171,34 @@ out_inval:
     return 0;
 }
 
-CommandListener::VpnDisableCmd::VpnDisableCmd() :
-                 NexusCommand("vpn_disable") {
-} 
-               
-int CommandListener::VpnDisableCmd::runCommand(SocketClient *cli, char *data) {
-    Controller *c = NetworkManager::Instance()->findController("VPN");
+CommandListener::SetCmd::SetCmd() :
+                 NexusCommand("set") {
+}
 
-    if (c->disable())
-        cli->sendMsg(ErrorCode::OperationFailed, "Failed to disable VPN", true);
-    else
-        cli->sendMsg(ErrorCode::CommandOkay, "VPN disabled", false);
+int CommandListener::SetCmd::runCommand(SocketClient *cli, char *data) {
+    char *bword;
+    char *last;
+    char propname[32];
+    char propval[250];
+
+    if (!(bword = strtok_r(data, ":", &last)))
+        goto out_inval;
+
+    strncpy(propname, bword, sizeof(propname));
+
+    if (!(bword = strtok_r(NULL, ":", &last)))
+        goto out_inval;
+
+    strncpy(propval, bword, sizeof(propval));
+
+    if (NetworkManager::Instance()->setProperty(propname, propval))
+        goto out_inval;
+
+    cli->sendMsg(ErrorCode::CommandOkay, "Property set.", false);
+    return 0;
+
+out_inval:
+    errno = EINVAL;
+    cli->sendMsg(ErrorCode::CommandParameterError, "Failed to set property.", true);
     return 0;
 }
