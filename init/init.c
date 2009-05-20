@@ -156,7 +156,7 @@ static void publish_socket(const char *name, int fd)
     fcntl(fd, F_SETFD, 0);
 }
 
-void service_start(struct service *svc)
+void service_start(struct service *svc, const char *dynamic_args)
 {
     struct stat s;
     pid_t pid;
@@ -188,6 +188,12 @@ void service_start(struct service *svc)
 
     if (stat(svc->args[0], &s) != 0) {
         ERROR("cannot find '%s', disabling '%s'\n", svc->args[0], svc->name);
+        svc->flags |= SVC_DISABLED;
+        return;
+    }
+
+    if ((!(svc->flags & SVC_ONESHOT)) && dynamic_args) {
+        ERROR("service '%s' must be one-shot to use dynamic args, disabling\n", svc->args[0]);
         svc->flags |= SVC_DISABLED;
         return;
     }
@@ -248,8 +254,51 @@ void service_start(struct service *svc)
             setuid(svc->uid);
         }
 
-        if (execve(svc->args[0], (char**) svc->args, (char**) ENV) < 0) {
-            ERROR("cannot execve('%s'): %s\n", svc->args[0], strerror(errno));
+        if (!dynamic_args) {
+            if (execve(svc->args[0], (char**) svc->args, (char**) ENV) < 0) {
+                ERROR("cannot execve('%s'): %s\n", svc->args[0], strerror(errno));
+            }
+        } else {
+            char *arg_ptrs[SVC_MAXARGS+1];
+            int arg_idx;
+            char *tmp = strdup(dynamic_args);
+            char *p = tmp;
+
+            /* Copy the static arguments */
+            for (arg_idx = 0; arg_idx < svc->nargs; arg_idx++) {
+                arg_ptrs[arg_idx] = svc->args[arg_idx];
+            }
+
+            int done = 0;
+            while(!done) {
+
+                if (arg_idx == SVC_MAXARGS) 
+                    break;
+
+                /* Advance over any leading whitespace */
+                if (*p == ' ') {
+                    for (p; *p != ' '; p++);
+                    p++;
+                }
+                /* Locate next argument */
+                char *q = p;
+                while(1) {
+                    if (*q == ' ') {
+                        *q = '\0';
+                        break;
+                    } else if (*q == '\0') {
+                        done = 1;
+                        break;
+                    }
+                    q++;
+                }
+                arg_ptrs[arg_idx++] = p;
+
+                q++; // Advance q to the next string
+                p = q;
+            }
+            arg_ptrs[arg_idx] = '\0';
+            execve(svc->args[0], (char**) arg_ptrs, (char**) ENV);
         }
         _exit(127);
     }
@@ -381,7 +430,7 @@ static void restart_service_if_needed(struct service *svc)
 
     if (next_start_time <= gettime()) {
         svc->flags &= (~SVC_RESTARTING);
-        service_start(svc);
+        service_start(svc, NULL);
         return;
     }
 
@@ -407,13 +456,29 @@ static void sigchld_handler(int s)
 
 static void msg_start(const char *name)
 {
-    struct service *svc = service_find_by_name(name);
+    struct service *svc;
+    char *tmp = NULL;
+    char *args = NULL;
+
+    if (!strchr(name, ':'))
+        svc = service_find_by_name(name);
+    else {
+        tmp = strdup(name);
+        strcpy(tmp, name);
+        args = strchr(tmp, ':');
+        *args = '\0';
+        args++;
+
+        svc = service_find_by_name(tmp);
+    }
     
     if (svc) {
-        service_start(svc);
+        service_start(svc, args);
     } else {
         ERROR("no such service '%s'\n", name);
     }
+    if (tmp)
+        free(tmp);
 }
 
 static void msg_stop(const char *name)
@@ -739,7 +804,7 @@ void handle_keychord(int fd)
     svc = service_find_by_keychord(id);
     if (svc) {
         INFO("starting service %s from keychord\n", svc->name);
-        service_start(svc);   
+        service_start(svc, NULL);   
     } else {
         ERROR("service for keychord %d not found\n", id);
     }
