@@ -34,6 +34,7 @@
 #include <ctype.h>
 #include <dlfcn.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,14 +45,15 @@
 
 #if defined(__arm__)
 #define DEFAULT_ARM_CODEGEN
+#define PROVIDE_ARM_CODEGEN
 #elif defined(__i386__)
 #define DEFAULT_X86_CODEGEN
+#define PROVIDE_X86_CODEGEN
 #elif defined(__x86_64__)
 #define DEFAULT_X64_CODEGEN
+#define PROVIDE_X64_CODEGEN
 #endif
 
-#define PROVIDE_X86_CODEGEN
-#define PROVIDE_ARM_CODEGEN
 
 #ifdef PROVIDE_ARM_CODEGEN
 #include "disassem.h"
@@ -88,7 +90,7 @@ class Compiler {
         }
 
         int o4(int n) {
-            int result = (int) ind;
+            intptr_t result = (intptr_t) ind;
             * (int*) ind = n;
             ind += 4;
             return result;
@@ -105,12 +107,12 @@ class Compiler {
             return (void*) pProgramBase;
         }
 
-        int getSize() {
+        intptr_t getSize() {
             return ind - pProgramBase;
         }
 
-        int getPC() {
-            return (int) ind;
+        intptr_t getPC() {
+            return (intptr_t) ind;
         }
     };
 
@@ -201,15 +203,15 @@ class Compiler {
             pCodeBuf->ob(n);
         }
 
-        int o4(int data) {
+        intptr_t o4(int data) {
             return pCodeBuf->o4(data);
         }
 
-        int getBase() {
-            return (int) pCodeBuf->getBase();
+        intptr_t getBase() {
+            return (intptr_t) pCodeBuf->getBase();
         }
 
-        int getPC() {
+        intptr_t getPC() {
             return pCodeBuf->getPC();
         }
     private:
@@ -875,7 +877,7 @@ class Compiler {
      dstk: define stack
      dptr, dch: macro state
      */
-    int tok, tokc, tokl, ch, vars, rsym, loc, glo, sym_stk, dstk,
+    intptr_t tok, tokc, tokl, ch, vars, rsym, loc, glo, sym_stk, dstk,
             dptr, dch, last_id;
     void* pSymbolBase;
     void* pGlobalBase;
@@ -1011,7 +1013,7 @@ class Compiler {
             } else {
                 *(char *) dstk = TAG_TOK; /* no need to mark end of string (we
                  suppose data is initialized to zero by calloc) */
-                tok = (int) (strstr((char*) sym_stk, (char*) (last_id - 1))
+                tok = (intptr_t) (strstr((char*) sym_stk, (char*) (last_id - 1))
                         - sym_stk);
                 *(char *) dstk = 0; /* mark real end of ident for dlsym() */
                 tok = tok * 8 + TOK_IDENT;
@@ -1113,7 +1115,7 @@ class Compiler {
         exit(1);
     }
 
-    void skip(int c) {
+    void skip(intptr_t c) {
         if (tok != c) {
             error("'%c' expected", c);
         }
@@ -1121,8 +1123,8 @@ class Compiler {
     }
 
     /* l is one if '=' parsing wanted (quick hack) */
-    void unary(int l) {
-        int n, t, a, c;
+    void unary(intptr_t l) {
+        intptr_t n, t, a, c;
         t = 0;
         n = 1; /* type of expression 0 = forward, 1 = value, other =
          lvalue */
@@ -1187,7 +1189,7 @@ class Compiler {
                 n = *(int *) t;
                 /* forward reference: try dlsym */
                 if (!n) {
-                    n = (int) dlsym(RTLD_DEFAULT, (char*) last_id);
+                    n = (intptr_t) dlsym(RTLD_DEFAULT, (char*) last_id);
                 }
                 if ((tok == '=') & l) {
                     /* assignment */
@@ -1236,8 +1238,8 @@ class Compiler {
         }
     }
 
-    void sum(int l) {
-        int t, n, a;
+    void sum(intptr_t l) {
+        intptr_t t, n, a;
         t = 0;
         if (l-- == 1)
             unary(1);
@@ -1284,8 +1286,8 @@ class Compiler {
         return pGen->gtst(0, 0);
     }
 
-    void block(int l) {
-        int a, n, t;
+    void block(intptr_t l) {
+        intptr_t a, n, t;
 
         if (tok == TOK_IF) {
             next();
@@ -1327,7 +1329,7 @@ class Compiler {
                 }
             }
             skip(')');
-            block((int) &a);
+            block((intptr_t) &a);
             pGen->gjmp(n - codeBuf.getPC() - pGen->jumpOffset()); /* jmp */
             pGen->gsym(a);
         } else if (tok == '{') {
@@ -1353,8 +1355,8 @@ class Compiler {
     }
 
     /* 'l' is true if local declarations */
-    void decl(int l) {
-        int a;
+    void decl(bool l) {
+        intptr_t a;
 
         while ((tok == TOK_INT) | ((tok != -1) & (!l))) {
             if (tok == TOK_INT) {
@@ -1445,20 +1447,18 @@ class Compiler {
         pGen = 0;
 
         if (architecture != NULL) {
-            if (strcmp(architecture, "arm") == 0) {
 #ifdef PROVIDE_ARM_CODEGEN
+            if (! pGen && strcmp(architecture, "arm") == 0) {
                 pGen = new ARMCodeGenerator();
-#else
-                fprintf(stderr, "Unsupported architecture %s", architecture);
+            }
 #endif
-            } else if (strcmp(architecture, "x86") == 0) {
 #ifdef PROVIDE_X86_CODEGEN
+            if (! pGen && strcmp(architecture, "x86") == 0) {
                 pGen = new X86CodeGenerator();
-#else
-                fprintf(stderr, "Unsupported architecture %s", architecture);
+            }
 #endif
-            } else {
-                fprintf(stderr, "Unknown architecture %s", architecture);
+            if (!pGen ) {
+                fprintf(stderr, "Unknown architecture %s\n", architecture);
             }
         }
 
@@ -1495,16 +1495,19 @@ public:
         clear();
         codeBuf.init(ALLOC_SIZE);
         setArchitecture(args.architecture);
+        if (!pGen) {
+            return -1;
+        }
         pGen->init(&codeBuf);
         file = in;
-        sym_stk = (int) calloc(1, ALLOC_SIZE);
-        dstk = (int) strcpy((char*) sym_stk,
+        sym_stk = (intptr_t) calloc(1, ALLOC_SIZE);
+        dstk = (intptr_t) strcpy((char*) sym_stk,
                 " int if else while break return for define main ")
                 + TOK_STR_SIZE;
         pGlobalBase = calloc(1, ALLOC_SIZE);
-        glo = (int) pGlobalBase;
+        glo = (intptr_t) pGlobalBase;
         pVarsBase = calloc(1, ALLOC_SIZE);
-        vars = (int) pVarsBase;
+        vars = (intptr_t) pVarsBase;
         inp();
         next();
         decl(0);
@@ -1544,8 +1547,11 @@ const char Compiler::operatorLevel[] =
             2, 2 /* ~ ! */
             };
 
+#ifdef PROVIDE_ARM_CODEGEN
 FILE* Compiler::ARMCodeGenerator::disasmOut;
+#endif
 
+#ifdef PROVIDE_X86_CODEGEN
 const int Compiler::X86CodeGenerator::operatorHelper[] = {
         0x1,     // ++
         0xff,    // --
@@ -1570,6 +1576,7 @@ const int Compiler::X86CodeGenerator::operatorHelper[] = {
         0xd0f7, // ~
         0x4     // !
 };
+#endif
 
 } // namespace acc
 
