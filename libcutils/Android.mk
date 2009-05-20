@@ -20,6 +20,7 @@ commonSources := \
 	array.c \
 	hashmap.c \
 	atomic.c \
+        native_handle.c \
 	buffer.c \
 	socket_inaddr_any_server.c \
 	socket_local_client.c \
