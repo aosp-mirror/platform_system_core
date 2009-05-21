@@ -246,6 +246,12 @@ service bootsound /system/bin/playmp3
     group audio
     oneshot
 
+service bootanim /system/bin/bootanimation
+    user graphics
+    group graphics
+    disabled
+    oneshot
+
 service dbus /system/bin/dbus-daemon --system --nofork
     socket dbus stream 660 bluetooth bluetooth
     user bluetooth
