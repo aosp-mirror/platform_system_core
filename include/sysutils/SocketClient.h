@@ -15,8 +15,8 @@ public:
 
     int getSocket() { return mSocket; }
 
-    int sendMsg(int code, char *msg, bool addErrno);
-    int sendMsg(char *msg);
+    int sendMsg(int code, const char *msg, bool addErrno);
+    int sendMsg(const char *msg);
 };
 
 typedef android::List<SocketClient *> SocketClientCollection;

@@ -13,8 +13,7 @@ FrameworkClient::FrameworkClient(int socket) {
     pthread_mutex_init(&mWriteMutex, NULL);
 }
 
-int FrameworkClient::sendMsg(char *msg) {
-    LOGD("FrameworkClient::sendMsg(%s)", msg);
+int FrameworkClient::sendMsg(const char *msg) {
     if (mSocket < 0) {
         errno = EHOSTUNREACH;
         return -1;
@@ -28,7 +27,7 @@ int FrameworkClient::sendMsg(char *msg) {
     return 0;
 }
 
-int FrameworkClient::sendMsg(char *msg, char *data) {
+int FrameworkClient::sendMsg(const char *msg, const char *data) {
     char *buffer = (char *) alloca(strlen(msg) + strlen(data) + 1);
     if (!buffer) {
         errno = -ENOMEM;

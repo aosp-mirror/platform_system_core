@@ -13,8 +13,8 @@ public:
     FrameworkClient(int sock);
     virtual ~FrameworkClient() {}
 
-    int sendMsg(char *msg);
-    int sendMsg(char *msg, char *data);
+    int sendMsg(const char *msg);
+    int sendMsg(const char *msg, const char *data);
 };
 
 typedef android::List<FrameworkClient *> FrameworkClientCollection;

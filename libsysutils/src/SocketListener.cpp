@@ -173,7 +173,7 @@ void SocketListener::runListener() {
     }
 }
 
-void SocketListener::sendBroadcast(int code, char *msg, bool addErrno) {
+void SocketListener::sendBroadcast(int code, const char *msg, bool addErrno) {
     pthread_mutex_lock(&mClientsLock);
     SocketClientCollection::iterator i;
 
@@ -185,7 +185,7 @@ void SocketListener::sendBroadcast(int code, char *msg, bool addErrno) {
     pthread_mutex_unlock(&mClientsLock);
 }
 
-void SocketListener::sendBroadcast(char *msg) {
+void SocketListener::sendBroadcast(const char *msg) {
     pthread_mutex_lock(&mClientsLock);
     SocketClientCollection::iterator i;
 
