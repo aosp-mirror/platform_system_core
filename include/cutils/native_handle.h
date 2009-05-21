@@ -17,9 +17,9 @@
 #ifndef NATIVE_HANDLE_H_
 #define NATIVE_HANDLE_H_
 
-#include <sys/cdefs.h>
-
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct
 {
@@ -66,6 +66,8 @@ native_handle_t* native_handle_create(int numFds, int numInts);
 int native_handle_delete(native_handle_t* h);
 
 
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* NATIVE_HANDLE_H_ */
