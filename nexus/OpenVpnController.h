@@ -33,11 +33,6 @@ public:
     int stop();
     int enable();
     int disable();
-
-protected:
-
-private:
-    int validateConfig();
 };
 
 #endif
