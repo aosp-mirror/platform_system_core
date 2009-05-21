@@ -110,7 +110,7 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
     LOG_VOL("vfat_mount(%d:%d, %s, %d):", dev->major, dev->minor, vol->mount_point, safe_mode);
 #endif
 
-    flags = MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_DIRSYNC;
+    flags = MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_DIRSYNC | MS_SYNCHRONOUS;
 
     if (vol->state == volstate_mounted) {
         LOG_VOL("Remounting %d:%d on %s, safe mode %d", dev->major,
