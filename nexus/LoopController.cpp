@@ -18,7 +18,7 @@
 #include "LoopController.h"
 
 LoopController::LoopController() :
-                Controller("LOOP") {
+                Controller("LOOP", "loop") {
 }
 
 int LoopController::enable() {

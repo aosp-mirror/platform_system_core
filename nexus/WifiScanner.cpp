@@ -65,7 +65,7 @@ void WifiScanner::run() {
         struct timeval to;
         int rc = 0;
 
-        to.tv_sec = 0;
+        to.tv_usec = 0;
         to.tv_sec = mPeriod;
 
         FD_ZERO(&read_fds);
@@ -83,4 +83,5 @@ void WifiScanner::run() {
         } else if (FD_ISSET(mCtrlPipe[0], &read_fds))
             break;
     } // while
+    LOGD("Stopping wifi scanner");
 }

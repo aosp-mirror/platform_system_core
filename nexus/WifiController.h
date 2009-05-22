@@ -54,15 +54,14 @@ public:
     int start();
     int stop();
 
-    int enable();
-    int disable();
-
     int addNetwork();
     int removeNetwork(int networkId);
     WifiNetworkCollection *createNetworkList();
 
-    int getScanMode() { return mCurrentScanMode; }
-    int setScanMode(uint32_t mode);
+    virtual int setProperty(const char *name, char *value);
+    virtual const char *getProperty(const char *name, char *buffer,
+                                    size_t maxlen);
+
     ScanResultCollection *createScanResults();
 
     char *getModulePath() { return mModulePath; }
@@ -79,7 +78,13 @@ protected:
     virtual bool isFirmwareLoaded() = 0;
     virtual bool isPoweredUp() = 0;
 
-    void sendStatusBroadcast(char *msg);
+    void sendStatusBroadcast(const char *msg);
+
+private:
+    int setScanMode(uint32_t mode);
+    int enable();
+    int disable();
+
 };
 
 #endif
