@@ -919,9 +919,6 @@ int adb_main(int is_daemon)
     fdevent_loop();
 
     usb_cleanup();
-#if ADB_HOST
-    usb_vendors_cleanup();
-#endif
 
     return 0;
 }

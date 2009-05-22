@@ -135,11 +135,9 @@ int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_
     unsigned i;
     for (i = 0; i < vendorIdCount; i++) {
         if (vid == vendorIds[i]) {
-            /* class:vendor (0xff) subclass:android (0x42) proto:adb (0x01) */
-            if(usb_class == 0xff) {
-                if((usb_subclass == 0x42) && (usb_protocol == 0x01)) {
-                    return 1;
-                }
+            if (usb_class == ADB_CLASS && usb_subclass == ADB_SUBCLASS &&
+                    usb_protocol == ADB_PROTOCOL) {
+                return 1;
             }
 
             return 0;
