@@ -213,7 +213,7 @@ int adb_connect(const char *service)
             fprintf(stdout,"* daemon started successfully *\n");
         }
         /* give the server some time to start properly and detect devices */
-        adb_sleep_ms(2000);
+        adb_sleep_ms(3000);
         // fall through to _adb_connect
     } else {
         // if server was running, check its version to make sure it is not out of date

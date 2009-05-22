@@ -17,10 +17,9 @@
 #ifndef __USB_VENDORS_H
 #define __USB_VENDORS_H
 
-extern int* vendorIds;
+extern int vendorIds[];
 extern unsigned  vendorIdCount;
 
 void usb_vendors_init(void);
-void usb_vendors_cleanup(void);
 
 #endif
