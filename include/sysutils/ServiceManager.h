@@ -13,34 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef _VPN_CONTROLLER_H
-#define _VPN_CONTROLLER_H
 
-#include <netinet/in.h>
+#ifndef _SERVICE_MANAGER_H
+#define _SERVICE_MANAGER_H
 
-#include "Controller.h"
-
-class VpnController : public Controller {
-    /*
-     * Gateway of the VPN server to connect to
-     */
-    struct in_addr mVpnGateway;
-
+class ServiceManager {
 public:
-    VpnController();
-    virtual ~VpnController() {}
+    ServiceManager();
+    virtual ~ServiceManager() {}
 
-    virtual int start();
-    virtual int stop();
-
-    virtual int enable();
-    virtual int disable();
-
-    struct in_addr &getVpnGateway() { return mVpnGateway; }
-    int setVpnGateway(const char *vpnGw);
-    int setVpnGateway(struct in_addr *vpnGw);
-
-protected:
+    int start(const char *name);
+    int stop(const char *name);
+    bool isRunning(const char *name);
 };
 
 #endif

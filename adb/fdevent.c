@@ -26,7 +26,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 
-#include <cutils/fdevent.h>
+#include "fdevent.h"
 
 #define TRACE(x...) fprintf(stderr,x)
 
@@ -87,7 +87,7 @@ static void fdevent_init()
 {
         /* XXX: what's a good size for the passed in hint? */
     epoll_fd = epoll_create(256);
-    
+
     if(epoll_fd < 0) {
         perror("epoll_create() failed");
         exit(1);
@@ -105,7 +105,7 @@ static void fdevent_connect(fdevent *fde)
     ev.events = 0;
     ev.data.ptr = fde;
 
-#if 0    
+#if 0
     if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fde->fd, &ev)) {
         perror("epoll_ctl() failed\n");
         exit(1);
@@ -116,7 +116,7 @@ static void fdevent_connect(fdevent *fde)
 static void fdevent_disconnect(fdevent *fde)
 {
     struct epoll_event ev;
-    
+
     memset(&ev, 0, sizeof(ev));
     ev.events = 0;
     ev.data.ptr = fde;
@@ -133,9 +133,9 @@ static void fdevent_update(fdevent *fde, unsigned events)
 {
     struct epoll_event ev;
     int active;
-    
+
     active = (fde->state & FDE_EVENTMASK) != 0;
-    
+
     memset(&ev, 0, sizeof(ev));
     ev.events = 0;
     ev.data.ptr = fde;
@@ -241,7 +241,7 @@ static void fdevent_connect(fdevent *fde)
 static void fdevent_disconnect(fdevent *fde)
 {
     int i, n;
-    
+
     FD_CLR(fde->fd, &read_fds);
     FD_CLR(fde->fd, &write_fds);
     FD_CLR(fde->fd, &error_fds);
@@ -283,9 +283,9 @@ static void fdevent_process()
     memcpy(&rfd, &read_fds, sizeof(fd_set));
     memcpy(&wfd, &write_fds, sizeof(fd_set));
     memcpy(&efd, &error_fds, sizeof(fd_set));
-    
+
     n = select(select_n, &rfd, &wfd, &efd, 0);
-    
+
     if(n < 0) {
         if(errno == EINTR) return;
         perror("select");
@@ -300,12 +300,12 @@ static void fdevent_process()
 
         if(events) {
             n--;
-            
+
             fde = fd_table[i];
             if(fde == 0) FATAL("missing fde for fd %d\n", i);
 
             fde->events |= events;
-            
+
             if(fde->state & FDE_PENDING) continue;
             fde->state |= FDE_PENDING;
             fdevent_plist_enqueue(fde);
@@ -320,7 +320,7 @@ static void fdevent_register(fdevent *fde)
     if(fde->fd < 0) {
         FATAL("bogus negative fd (%d)\n", fde->fd);
     }
-    
+
     if(fde->fd >= fd_table_max) {
         int oldmax = fd_table_max;
         if(fde->fd > 32000) {
@@ -383,9 +383,9 @@ static fdevent *fdevent_plist_dequeue(void)
 {
     fdevent *list = &list_pending;
     fdevent *node = list->next;
-    
+
     if(node == list) return 0;
-    
+
     list->next = node->next;
     list->next->prev = list;
     node->next = 0;
@@ -449,9 +449,9 @@ void fdevent_remove(fdevent *fde)
 void fdevent_set(fdevent *fde, unsigned events)
 {
     events &= FDE_EVENTMASK;
-    
+
     if((fde->state & FDE_EVENTMASK) == events) return;
-    
+
     if(fde->state & FDE_ACTIVE) {
         fdevent_update(fde, events);
         dump_fde(fde, "update");
@@ -487,13 +487,13 @@ void fdevent_del(fdevent *fde, unsigned events)
 void fdevent_loop()
 {
     fdevent *fde;
-    
+
     for(;;) {
 #if DEBUG
         fprintf(stderr,"--- ---- waiting for events\n");
 #endif
         fdevent_process();
-        
+
         while((fde = fdevent_plist_dequeue())) {
             unsigned events = fde->events;
             fde->events = 0;

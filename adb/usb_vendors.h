@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2009 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef _OPEN_VPN_CONTROLLER_H
-#define _OPEN_VPN_CONTROLLER_H
+#ifndef __USB_VENDORS_H
+#define __USB_VENDORS_H
 
-#include "VpnController.h"
+extern int* vendorIds;
+extern unsigned  vendorIdCount;
 
-class ServiceManager;
-
-class OpenVpnController : public VpnController {
-private:
-    ServiceManager *mServiceManager;
-
-public:
-    OpenVpnController();
-    virtual ~OpenVpnController();
-
-    int start();
-    int stop();
-    int enable();
-    int disable();
-};
+void usb_vendors_init(void);
+void usb_vendors_cleanup(void);
 
 #endif

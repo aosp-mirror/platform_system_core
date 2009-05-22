@@ -1,4 +1,15 @@
 /*
+ * Android "Almost" C Compiler.
+ * This is a compiler for a small subset of the C language, intended for use
+ * in scripting environments where speed and memory footprint are important.
+ *
+ * This code is based upon the "unobfuscated" version of the
+ * Obfuscated Tiny C compiler, and retains the
+ * original copyright notice and license from that compiler, see below.
+ *
+ */
+
+/*
  Obfuscated Tiny C Compiler
 
  Copyright (C) 2001-2003 Fabrice Bellard
@@ -23,6 +34,7 @@
 #include <ctype.h>
 #include <dlfcn.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,11 +43,25 @@
 #include <unistd.h>
 #endif
 
+#if defined(__arm__)
+#define DEFAULT_ARM_CODEGEN
+#define PROVIDE_ARM_CODEGEN
+#elif defined(__i386__)
+#define DEFAULT_X86_CODEGEN
+#define PROVIDE_X86_CODEGEN
+#elif defined(__x86_64__)
+#define DEFAULT_X64_CODEGEN
+#define PROVIDE_X64_CODEGEN
+#endif
+
+
+#ifdef PROVIDE_ARM_CODEGEN
 #include "disassem.h"
+#endif
 
 namespace acc {
 
-class compiler {
+class Compiler {
     class CodeBuf {
         char* ind;
         char* pProgramBase;
@@ -63,16 +89,8 @@ class compiler {
             ind = pProgramBase;
         }
 
-        void o(int n) {
-            /* cannot use unsigned, so we must do a hack */
-            while (n && n != -1) {
-                *ind++ = n;
-                n = n >> 8;
-            }
-        }
-
         int o4(int n) {
-            int result = (int) ind;
+            intptr_t result = (intptr_t) ind;
             * (int*) ind = n;
             ind += 4;
             return result;
@@ -85,41 +103,16 @@ class compiler {
             *ind++ = n;
         }
 
-        /* output a symbol and patch all calls to it */
-        void gsym(int t) {
-            int n;
-            while (t) {
-                n = *(int *) t; /* next value */
-                *(int *) t = ((int) ind) - t - 4;
-                t = n;
-            }
-        }
-
-        /* psym is used to put an instruction with a data field which is a
-         reference to a symbol. It is in fact the same as oad ! */
-        int psym(int n, int t) {
-            return oad(n, t);
-        }
-
-        /* instruction + address */
-        int oad(int n, int t) {
-            o(n);
-            *(int *) ind = t;
-            t = (int) ind;
-            ind = ind + 4;
-            return t;
-        }
-
         inline void* getBase() {
             return (void*) pProgramBase;
         }
 
-        int getSize() {
+        intptr_t getSize() {
             return ind - pProgramBase;
         }
 
-        int getPC() {
-            return (int) ind;
+        intptr_t getPC() {
+            return (intptr_t) ind;
         }
     };
 
@@ -164,15 +157,14 @@ class compiler {
 
         virtual void storeEAX(int ea) = 0;
 
-        virtual void loadEAX(int ea) = 0;
-
-        virtual void postIncrementOrDecrement(int n, int op) = 0;
+        virtual void loadEAX(int ea, bool isIncDec, int op) = 0;
 
         virtual int beginFunctionCallArguments() = 0;
 
+        virtual void storeEAToArg(int l) = 0;
+
         virtual void endFunctionCallArguments(int a, int l) = 0;
 
-        virtual void storeEAToArg(int l) = 0;
 
         virtual int callForward(int symbol) = 0;
 
@@ -180,14 +172,12 @@ class compiler {
 
         virtual void callIndirect(int l) = 0;
 
-        virtual void adjustStackAfterCall(int l) = 0;
+        virtual void adjustStackAfterCall(int l, bool isIndirect) = 0;
 
         virtual int disassemble(FILE* out) = 0;
 
         /* output a symbol and patch all calls to it */
-        virtual void gsym(int t) {
-            pCodeBuf->gsym(t);
-        }
+        virtual void gsym(int t) = 0;
 
         virtual int finishCompile() {
 #if defined(__arm__)
@@ -206,10 +196,6 @@ class compiler {
         virtual int jumpOffset() = 0;
 
     protected:
-        void o(int n) {
-            pCodeBuf->o(n);
-        }
-
         /*
          * Output a byte. Handles all values, 0..ff.
          */
@@ -217,31 +203,22 @@ class compiler {
             pCodeBuf->ob(n);
         }
 
-        /* psym is used to put an instruction with a data field which is a
-         reference to a symbol. It is in fact the same as oad ! */
-        int psym(int n, int t) {
-            return oad(n, t);
-        }
-
-        /* instruction + address */
-        int oad(int n, int t) {
-            return pCodeBuf->oad(n,t);
-        }
-
-        int getBase() {
-            return (int) pCodeBuf->getBase();
-        }
-
-        int getPC() {
-            return pCodeBuf->getPC();
-        }
-
-        int o4(int data) {
+        intptr_t o4(int data) {
             return pCodeBuf->o4(data);
+        }
+
+        intptr_t getBase() {
+            return (intptr_t) pCodeBuf->getBase();
+        }
+
+        intptr_t getPC() {
+            return pCodeBuf->getPC();
         }
     private:
         CodeBuf* pCodeBuf;
     };
+
+#ifdef PROVIDE_ARM_CODEGEN
 
     class ARMCodeGenerator : public CodeGenerator {
     public:
@@ -360,6 +337,12 @@ class compiler {
             case OP_MUL:
                 o4(0x0E0000091); // mul     r0,r1,r0
                 break;
+            case OP_DIV:
+                callRuntime(runtime_DIV);
+                break;
+            case OP_MOD:
+                callRuntime(runtime_MOD);
+                break;
             case OP_PLUS:
                 o4(0xE0810000);  // add     r0,r1,r0
                 break;
@@ -429,68 +412,104 @@ class compiler {
 
         virtual void leaEAX(int ea) {
             fprintf(stderr, "leaEAX(%d);\n", ea);
-            if (ea < -1023 || ea > 1023 || ((ea & 3) != 0)) {
-                error("Offset out of range: %08x", ea);
-            }
-            if (ea < 0) {
-                o4(0xE24B0F00 | (0xff & ((-ea) >> 2))); // sub    r0, fp, #ea
+            if (ea < LOCAL) {
+                // Local, fp relative
+                if (ea < -1023 || ea > 1023 || ((ea & 3) != 0)) {
+                    error("Offset out of range: %08x", ea);
+                }
+                if (ea < 0) {
+                    o4(0xE24B0F00 | (0xff & ((-ea) >> 2))); // sub    r0, fp, #ea
+                } else {
+                    o4(0xE28B0F00 | (0xff & (ea >> 2))); // add    r0, fp, #ea
+                }
             } else {
-                o4(0xE28B0F00 | (0xff & (ea >> 2))); // add    r0, fp, #ea
+                // Global, absolute.
+                o4(0xE59F0000); //        ldr    r0, .L1
+                o4(0xEA000000); //        b .L99
+                o4(ea);         // .L1:   .word 0
+                                // .L99:
             }
-
         }
 
         virtual void storeEAX(int ea) {
             fprintf(stderr, "storeEAX(%d);\n", ea);
-            if (ea < -4095 || ea > 4095) {
-                error("Offset out of range: %08x", ea);
-            }
-            if (ea < 0) {
-                o4(0xE50B0000 | (0xfff & (-ea))); // str r0, [fp,#-ea]
-            } else {
-                o4(0xE58B0000 | (0xfff & ea)); // str r0, [fp,#ea]
-            }
-        }
-
-        virtual void loadEAX(int ea) {
-            fprintf(stderr, "loadEAX(%d);\n", ea);
-            if (ea < -4095 || ea > 4095) {
-                error("Offset out of range: %08x", ea);
-            }
-            if (ea < 0) {
-                o4(0xE51B0000 | (0xfff & (-ea))); // ldr r0, [fp,#-ea]
-            } else {
-                o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
+            if (ea < LOCAL) {
+                // Local, fp relative
+                if (ea < -4095 || ea > 4095) {
+                    error("Offset out of range: %08x", ea);
+                }
+                if (ea < 0) {
+                    o4(0xE50B0000 | (0xfff & (-ea))); // str r0, [fp,#-ea]
+                } else {
+                    o4(0xE58B0000 | (0xfff & ea)); // str r0, [fp,#ea]
+                }
+            } else{
+                // Global, absolute
+                o4(0xE59F1000); //         ldr r1, .L1
+                o4(0xEA000000); //         b .L99
+                o4(ea);         // .L1:    .word 0
+                o4(0xE5810000); // .L99:   str r0, [r1]
             }
         }
 
-        virtual void postIncrementOrDecrement(int ea, int op) {
-            fprintf(stderr, "postIncrementOrDecrement(%d, %d);\n", ea, op);
-            /* R0 has the original value.
-             */
-            switch (op) {
-            case OP_INCREMENT:
-                o4(0xE2801001); // add r1, r0, #1
-                break;
-            case OP_DECREMENT:
-                o4(0xE2401001); // sub r1, r0, #1
-                break;
-            default:
-                error("unknown opcode: %d", op);
-            }
-            if (ea < -4095 || ea > 4095) {
-                error("Offset out of range: %08x", ea);
-            }
-            if (ea < 0) {
-                o4(0xE50B1000 | (0xfff & (-ea))); // str r1, [fp,#-ea]
+        virtual void loadEAX(int ea, bool isIncDec, int op) {
+            fprintf(stderr, "loadEAX(%d, %d, %d);\n", ea, isIncDec, op);
+            if (ea < LOCAL) {
+                // Local, fp relative
+                if (ea < -4095 || ea > 4095) {
+                    error("Offset out of range: %08x", ea);
+                }
+                if (ea < 0) {
+                    o4(0xE51B0000 | (0xfff & (-ea))); // ldr r0, [fp,#-ea]
+                } else {
+                    o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
+                }
             } else {
-                o4(0xE58B1000 | (0xfff & ea));    // str r1, [fp,#ea]
+                // Global, absolute
+                o4(0xE59F2000); //        ldr r2, .L1
+                o4(0xEA000000); //        b .L99
+                o4(ea);         // .L1:   .word ea
+                o4(0xE5920000); // .L99:  ldr r0, [r2]
+            }
+
+            if (isIncDec) {
+                switch (op) {
+                case OP_INCREMENT:
+                    o4(0xE2801001); // add r1, r0, #1
+                    break;
+                case OP_DECREMENT:
+                    o4(0xE2401001); // sub r1, r0, #1
+                    break;
+                default:
+                    error("unknown opcode: %d", op);
+                }
+                if (ea < LOCAL) {
+                    // Local, fp relative
+                    // Don't need range check, was already checked above
+                    if (ea < 0) {
+                        o4(0xE50B1000 | (0xfff & (-ea))); // str r1, [fp,#-ea]
+                    } else {
+                        o4(0xE58B1000 | (0xfff & ea));    // str r1, [fp,#ea]
+                    }
+                } else{
+                    // Global, absolute
+                    // r2 is already set up from before.
+                    o4(0xE5821000); // str r1, [r2]
+               }
             }
         }
 
         virtual int beginFunctionCallArguments() {
             fprintf(stderr, "beginFunctionCallArguments();\n");
             return o4(0xE24DDF00); // Placeholder
+        }
+
+        virtual void storeEAToArg(int l) {
+            fprintf(stderr, "storeEAToArg(%d);\n", l);
+            if (l < 0 || l > 4096-4) {
+                error("l out of range for stack offset: 0x%08x", l);
+            }
+            o4(0xE58D0000 + l); // str r0, [sp, #4]
         }
 
         virtual void endFunctionCallArguments(int a, int l) {
@@ -504,14 +523,6 @@ class compiler {
                 int regArgCount = argCount > 4 ? 4 : argCount;
                 o4(0xE8BD0000 | ((1 << regArgCount) - 1)); // ldmfd   sp!,{}
             }
-        }
-
-        virtual void storeEAToArg(int l) {
-            fprintf(stderr, "storeEAToArg(%d);\n", l);
-            if (l < 0 || l > 4096-4) {
-                error("l out of range for stack offset: 0x%08x", l);
-            }
-            o4(0xE58D0000 + l); // str r0, [sp, #4]
         }
 
         virtual int callForward(int symbol) {
@@ -538,20 +549,27 @@ class compiler {
 
         virtual void callIndirect(int l) {
             fprintf(stderr, "callIndirect(%d);\n", l);
-            oad(0x2494ff, l); /* call *xxx(%esp) */
+            int argCount = l >> 2;
+            int poppedArgs = argCount > 4 ? 4 : argCount;
+            int adjustedL = l - (poppedArgs << 2);
+            if (adjustedL < 0 || adjustedL > 4096-4) {
+                error("l out of range for stack offset: 0x%08x", l);
+            }
+            o4(0xE59DC000 | (0xfff & adjustedL)); // ldr    r12, [sp,#adjustedL]
+            o4(0xE12FFF3C); // blx r12
         }
 
-        virtual void adjustStackAfterCall(int l) {
-            fprintf(stderr, "adjustStackAfterCall(%d);\n", l);
-            if (l < 0 || l > 0x3FC) {
-                error("L out of range for stack adjustment: 0x%08x", l);
-            }
+        virtual void adjustStackAfterCall(int l, bool isIndirect) {
+            fprintf(stderr, "adjustStackAfterCall(%d, %d);\n", l, isIndirect);
             int argCount = l >> 2;
-            if (argCount > 4) {
-                int remainingArgs = argCount - 4;
-                o4(0xE28DDF00 | remainingArgs); // add    sp, sp, #0x3fc
+            int stackArgs = argCount > 4 ? argCount - 4 : 0;
+            int stackUse = stackArgs + (isIndirect ? 1 : 0);
+            if (stackUse) {
+                if (stackUse < 0 || stackUse > 255) {
+                    error("L out of range for stack adjustment: 0x%08x", l);
+                }
+                o4(0xE28DDF00 | stackUse); // add    sp, sp, #stackUse << 2
             }
-
         }
 
         virtual int jumpOffset() {
@@ -594,6 +612,7 @@ class compiler {
             }
             return 0;
         }
+
     private:
         static FILE* disasmOut;
 
@@ -635,6 +654,22 @@ class compiler {
             return BRANCH_REL_ADDRESS_MASK & (value >> 2);
         }
 
+        typedef int (*int2FnPtr)(int a, int b);
+        void callRuntime(int2FnPtr fn) {
+            o4(0xE59F2000); // ldr    r2, .L1
+            o4(0xEA000000); // b      .L99
+            o4((int) fn);   //.L1:  .word  fn
+            o4(0xE12FFF32); //.L99: blx    r2
+        }
+
+        static int runtime_DIV(int a, int b) {
+            return b / a;
+        }
+
+        static int runtime_MOD(int a, int b) {
+            return b % a;
+        }
+
         void error(const char* fmt,...) {
             va_list ap;
             va_start(ap, fmt);
@@ -643,6 +678,10 @@ class compiler {
             exit(12);
         }
     };
+
+#endif // PROVIDE_X86_CODEGEN
+
+#ifdef PROVIDE_X86_CODEGEN
 
     class X86CodeGenerator : public CodeGenerator {
     public:
@@ -723,27 +762,26 @@ class compiler {
             gmov(6, ea); /* mov %eax, EA */
         }
 
-        virtual void loadEAX(int ea) {
+        virtual void loadEAX(int ea, bool isIncDec, int op) {
             gmov(8, ea); /* mov EA, %eax */
-        }
-
-        virtual void postIncrementOrDecrement(int n, int op) {
-            /* Implement post-increment or post decrement.
-             */
-            gmov(0, n); /* 83 ADD */
-            o(decodeOp(op));
+            if (isIncDec) {
+                /* Implement post-increment or post decrement.
+                 */
+                gmov(0, ea); /* 83 ADD */
+                o(decodeOp(op));
+            }
         }
 
         virtual int beginFunctionCallArguments() {
             return oad(0xec81, 0); /* sub $xxx, %esp */
         }
 
-        virtual void endFunctionCallArguments(int a, int l) {
-            * (int*) a = l;
-        }
-
         virtual void storeEAToArg(int l) {
             oad(0x248489, l); /* movl %eax, xxx(%esp) */
+        }
+
+        virtual void endFunctionCallArguments(int a, int l) {
+            * (int*) a = l;
         }
 
         virtual int callForward(int symbol) {
@@ -758,7 +796,10 @@ class compiler {
             oad(0x2494ff, l); /* call *xxx(%esp) */
         }
 
-        virtual void adjustStackAfterCall(int l) {
+        virtual void adjustStackAfterCall(int l, bool isIndirect) {
+            if (isIndirect) {
+                l += 4;
+            }
             oad(0xc481, l); /* add $xxx, %esp */
         }
 
@@ -770,7 +811,45 @@ class compiler {
             return 1;
         }
 
+        /* output a symbol and patch all calls to it */
+        virtual void gsym(int t) {
+            int n;
+            int pc = getPC();
+            while (t) {
+                n = *(int *) t; /* next value */
+                *(int *) t = pc - t - 4;
+                t = n;
+            }
+        }
+
     private:
+
+        /** Output 1 to 4 bytes.
+         *
+         */
+        void o(int n) {
+            /* cannot use unsigned, so we must do a hack */
+            while (n && n != -1) {
+                ob(n & 0xff);
+                n = n >> 8;
+            }
+        }
+
+        /* psym is used to put an instruction with a data field which is a
+         reference to a symbol. It is in fact the same as oad ! */
+        int psym(int n, int t) {
+            return oad(n, t);
+        }
+
+        /* instruction + address */
+        int oad(int n, int t) {
+            o(n);
+            int result = getPC();
+            o4(t);
+            return result;
+        }
+
+
         static const int operatorHelper[];
 
         int decodeOp(int op) {
@@ -787,6 +866,8 @@ class compiler {
         }
     };
 
+#endif // PROVIDE_X86_CODEGEN
+
     /* vars: value of variables
      loc : local variable index
      glo : global variable index
@@ -796,7 +877,7 @@ class compiler {
      dstk: define stack
      dptr, dch: macro state
      */
-    int tok, tokc, tokl, ch, vars, rsym, loc, glo, sym_stk, dstk,
+    intptr_t tok, tokc, tokl, ch, vars, rsym, loc, glo, sym_stk, dstk,
             dptr, dch, last_id;
     void* pSymbolBase;
     void* pGlobalBase;
@@ -932,7 +1013,7 @@ class compiler {
             } else {
                 *(char *) dstk = TAG_TOK; /* no need to mark end of string (we
                  suppose data is initialized to zero by calloc) */
-                tok = (int) (strstr((char*) sym_stk, (char*) (last_id - 1))
+                tok = (intptr_t) (strstr((char*) sym_stk, (char*) (last_id - 1))
                         - sym_stk);
                 *(char *) dstk = 0; /* mark real end of ident for dlsym() */
                 tok = tok * 8 + TOK_IDENT;
@@ -1034,7 +1115,7 @@ class compiler {
         exit(1);
     }
 
-    void skip(int c) {
+    void skip(intptr_t c) {
         if (tok != c) {
             error("'%c' expected", c);
         }
@@ -1042,8 +1123,8 @@ class compiler {
     }
 
     /* l is one if '=' parsing wanted (quick hack) */
-    void unary(int l) {
-        int n, t, a, c;
+    void unary(intptr_t l) {
+        intptr_t n, t, a, c;
         t = 0;
         n = 1; /* type of expression 0 = forward, 1 = value, other =
          lvalue */
@@ -1108,7 +1189,7 @@ class compiler {
                 n = *(int *) t;
                 /* forward reference: try dlsym */
                 if (!n) {
-                    n = (int) dlsym(RTLD_DEFAULT, (char*) last_id);
+                    n = (intptr_t) dlsym(RTLD_DEFAULT, (char*) last_id);
                 }
                 if ((tok == '=') & l) {
                     /* assignment */
@@ -1117,9 +1198,8 @@ class compiler {
                     pGen->storeEAX(n);
                 } else if (tok != '(') {
                     /* variable */
-                    pGen->loadEAX(n);
+                    pGen->loadEAX(n, tokl == 11, tokc);
                     if (tokl == 11) {
-                        pGen->postIncrementOrDecrement(n, tokc);
                         next();
                     }
                 }
@@ -1150,17 +1230,16 @@ class compiler {
                 *(int *) t = pGen->callForward(*(int *) t);
             } else if (n == 1) {
                 pGen->callIndirect(l);
-                l = l + 4;
             } else {
-                pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset()); /* call xxx */
+                pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset());
             }
-            if (l)
-                pGen->adjustStackAfterCall(l);
+            if (l | (n == 1))
+                pGen->adjustStackAfterCall(l, n == 1);
         }
     }
 
-    void sum(int l) {
-        int t, n, a;
+    void sum(intptr_t l) {
+        intptr_t t, n, a;
         t = 0;
         if (l-- == 1)
             unary(1);
@@ -1207,8 +1286,8 @@ class compiler {
         return pGen->gtst(0, 0);
     }
 
-    void block(int l) {
-        int a, n, t;
+    void block(intptr_t l) {
+        intptr_t a, n, t;
 
         if (tok == TOK_IF) {
             next();
@@ -1250,7 +1329,7 @@ class compiler {
                 }
             }
             skip(')');
-            block((int) &a);
+            block((intptr_t) &a);
             pGen->gjmp(n - codeBuf.getPC() - pGen->jumpOffset()); /* jmp */
             pGen->gsym(a);
         } else if (tok == '{') {
@@ -1276,8 +1355,8 @@ class compiler {
     }
 
     /* 'l' is true if local declarations */
-    void decl(int l) {
-        int a;
+    void decl(bool l) {
+        intptr_t a;
 
         while ((tok == TOK_INT) | ((tok != -1) & (!l))) {
             if (tok == TOK_INT) {
@@ -1368,17 +1447,30 @@ class compiler {
         pGen = 0;
 
         if (architecture != NULL) {
-            if (strcmp(architecture, "arm") == 0) {
+#ifdef PROVIDE_ARM_CODEGEN
+            if (! pGen && strcmp(architecture, "arm") == 0) {
                 pGen = new ARMCodeGenerator();
-            } else if (strcmp(architecture, "x86") == 0) {
+            }
+#endif
+#ifdef PROVIDE_X86_CODEGEN
+            if (! pGen && strcmp(architecture, "x86") == 0) {
                 pGen = new X86CodeGenerator();
-            } else {
-                fprintf(stderr, "Unknown architecture %s", architecture);
+            }
+#endif
+            if (!pGen ) {
+                fprintf(stderr, "Unknown architecture %s\n", architecture);
             }
         }
 
         if (pGen == NULL) {
+#if defined(DEFAULT_ARM_CODEGEN)
             pGen = new ARMCodeGenerator();
+#elif defined(DEFAULT_X86_CODEGEN)
+            pGen = new X86CodeGenerator();
+#endif
+        }
+        if (pGen == NULL) {
+            fprintf(stderr, "No code generator defined.");
         }
     }
 
@@ -1390,11 +1482,11 @@ public:
         const char* architecture;
     };
 
-    compiler() {
+    Compiler() {
         clear();
     }
 
-    ~compiler() {
+    ~Compiler() {
         cleanup();
     }
 
@@ -1403,16 +1495,19 @@ public:
         clear();
         codeBuf.init(ALLOC_SIZE);
         setArchitecture(args.architecture);
+        if (!pGen) {
+            return -1;
+        }
         pGen->init(&codeBuf);
         file = in;
-        sym_stk = (int) calloc(1, ALLOC_SIZE);
-        dstk = (int) strcpy((char*) sym_stk,
+        sym_stk = (intptr_t) calloc(1, ALLOC_SIZE);
+        dstk = (intptr_t) strcpy((char*) sym_stk,
                 " int if else while break return for define main ")
                 + TOK_STR_SIZE;
         pGlobalBase = calloc(1, ALLOC_SIZE);
-        glo = (int) pGlobalBase;
+        glo = (intptr_t) pGlobalBase;
         pVarsBase = calloc(1, ALLOC_SIZE);
-        vars = (int) pVarsBase;
+        vars = (intptr_t) pVarsBase;
         inp();
         next();
         decl(0);
@@ -1441,10 +1536,10 @@ public:
 
 };
 
-const char* compiler::operatorChars =
+const char* Compiler::operatorChars =
     "++--*@/@%@+@-@<<>><=>=<@>@==!=&&||&@^@|@~@!@";
 
-const char compiler::operatorLevel[] =
+const char Compiler::operatorLevel[] =
     {11, 11, 1, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4,
             5, 5, /* ==, != */
             9, 10, /* &&, || */
@@ -1452,9 +1547,12 @@ const char compiler::operatorLevel[] =
             2, 2 /* ~ ! */
             };
 
-FILE* compiler::ARMCodeGenerator::disasmOut;
+#ifdef PROVIDE_ARM_CODEGEN
+FILE* Compiler::ARMCodeGenerator::disasmOut;
+#endif
 
-const int compiler::X86CodeGenerator::operatorHelper[] = {
+#ifdef PROVIDE_X86_CODEGEN
+const int Compiler::X86CodeGenerator::operatorHelper[] = {
         0x1,     // ++
         0xff,    // --
         0xc1af0f, // *
@@ -1478,11 +1576,12 @@ const int compiler::X86CodeGenerator::operatorHelper[] = {
         0xd0f7, // ~
         0x4     // !
 };
+#endif
 
 } // namespace acc
 
 // This is a separate function so it can easily be set by breakpoint in gdb.
-int run(acc::compiler& c, int argc, char** argv) {
+int run(acc::Compiler& c, int argc, char** argv) {
     return c.run(argc, argv);
 }
 
@@ -1491,7 +1590,7 @@ int main(int argc, char** argv) {
     bool doDisassemble = false;
     const char* inFile = NULL;
     const char* outFile = NULL;
-    const char* architecture = "arm";
+    const char* architecture = NULL;
     int i;
     for (i = 1; i < argc; i++) {
         char* arg = argv[i];
@@ -1536,9 +1635,11 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
-    acc::compiler compiler;
-    acc::compiler::args args;
-    args.architecture = architecture;
+    acc::Compiler compiler;
+    acc::Compiler::args args;
+    if (architecture != NULL) {
+        args.architecture = architecture;
+    }
     int compileResult = compiler.compile(in, args);
     if (in != stdin) {
         fclose(in);

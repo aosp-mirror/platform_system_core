@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 #include <stdlib.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <errno.h>
 
 #define LOG_TAG "CommandListener"
@@ -25,6 +28,7 @@
 #include "Controller.h"
 #include "NetworkManager.h"
 #include "WifiController.h"
+#include "VpnController.h"
 #include "ErrorCode.h"
 
 CommandListener::CommandListener() :
@@ -40,6 +44,8 @@ CommandListener::CommandListener() :
     registerCmd(new WifiGetVarCmd());
 
     registerCmd(new VpnEnableCmd());
+    registerCmd(new VpnSetVarCmd());
+    registerCmd(new VpnGetVarCmd());
     registerCmd(new VpnDisableCmd());
 }
  
@@ -258,6 +264,79 @@ int CommandListener::VpnEnableCmd::runCommand(SocketClient *cli, char *data) {
         cli->sendMsg(ErrorCode::OperationFailed, "Failed to enable VPN", true);
     else
         cli->sendMsg(ErrorCode::CommandOkay, "VPN enabled", false);
+    return 0;
+}
+
+CommandListener::VpnSetVarCmd::VpnSetVarCmd() :
+                 NexusCommand("vpn_setvar") {
+} 
+
+int CommandListener::VpnSetVarCmd::runCommand(SocketClient *cli, char *data) {
+    VpnController *vc = (VpnController *) NetworkManager::Instance()->findController("VPN");
+
+    char *bword;
+    char *last;
+    char varname[32];
+    char val[250];
+
+    if (!(bword = strtok_r(data, ":", &last)))
+        goto out_inval;
+
+    strncpy(varname, bword, sizeof(varname));
+
+    if (!(bword = strtok_r(NULL, ":", &last)))
+        goto out_inval;
+
+    strncpy(val, bword, sizeof(val));
+
+    if (!strcasecmp(varname, "vpn_gateway")) {
+        if (vc->setVpnGateway(val))
+            goto out_inval;
+    } else {
+        cli->sendMsg(ErrorCode::CommandParameterError, "Variable not found.", true);
+        return 0;
+    }
+
+    cli->sendMsg(ErrorCode::CommandOkay, "Variable written.", false);
+    return 0;
+
+out_inval:
+    errno = EINVAL;
+    cli->sendMsg(ErrorCode::CommandParameterError, "Failed to set variable.", true);
+    return 0;
+}
+
+CommandListener::VpnGetVarCmd::VpnGetVarCmd() :
+                 NexusCommand("vpn_getvar") {
+} 
+
+int CommandListener::VpnGetVarCmd::runCommand(SocketClient *cli, char *data) {
+    VpnController *vc = (VpnController *) NetworkManager::Instance()->findController("VPN");
+
+    char *bword;
+    char *last;
+    char varname[32];
+
+    if (!(bword = strtok_r(data, ":", &last)))
+        goto out_inval;
+   
+    strncpy(varname, bword, sizeof(varname));
+
+    if (!strcasecmp(varname, "vpn_gateway")) {
+        char buffer[255];
+
+        sprintf(buffer, "%s:%s", varname, inet_ntoa(vc->getVpnGateway()));
+        cli->sendMsg(ErrorCode::VariableRead, buffer, false);
+    } else {
+        cli->sendMsg(ErrorCode::CommandParameterError, "Variable not found.", true);
+        return 0;
+    }
+
+    cli->sendMsg(ErrorCode::CommandOkay, "Variable read.", false);
+    return 0;
+out_inval:
+    errno = EINVAL;
+    cli->sendMsg(ErrorCode::CommandParameterError, "Failed to get variable.", true);
     return 0;
 }
 

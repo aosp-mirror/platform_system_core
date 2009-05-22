@@ -39,6 +39,7 @@ int vfat_identify(blkdev_t *dev)
 int vfat_check(blkdev_t *dev)
 {
     int rc;
+    boolean rw = true;
 
 #if VFAT_DEBUG
     LOG_VOL("vfat_check(%d:%d):", dev->major, dev->minor);
@@ -50,47 +51,51 @@ int vfat_check(blkdev_t *dev)
         return 0;
     }
 
-#ifdef VERIFY_PASS
-    char *args[7];
-    args[0] = FSCK_MSDOS_PATH;
-    args[1] = "-v";
-    args[2] = "-V";
-    args[3] = "-w";
-    args[4] = "-p";
-    args[5] = blkdev_get_devpath(dev);
-    args[6] = NULL;
-    rc = logwrap(6, args);
-    free(args[5]);
-#else
-    char *args[6];
-    args[0] = FSCK_MSDOS_PATH;
-    args[1] = "-v";
-    args[2] = "-w";
-    args[3] = "-p";
-    args[4] = blkdev_get_devpath(dev);
-    args[5] = NULL;
-    rc = logwrap(5, args);
-    free(args[4]);
-#endif
+    do {
 
-    if (rc == 0) {
-        LOG_VOL("Filesystem check completed OK");
-        return 0;
-    } else if (rc == 1) {
-        LOG_VOL("Filesystem check failed (general failure)");
-        return -EINVAL;
-    } else if (rc == 2) {
-        LOG_VOL("Filesystem check failed (invalid usage)");
-        return -EIO;
-    } else if (rc == 4) {
-        LOG_VOL("Filesystem check completed (errors fixed)");
-    } else if (rc == 8) {
-        LOG_VOL("Filesystem check failed (not a FAT filesystem)");
-        return -ENODATA;
-    } else {
-        LOG_VOL("Filesystem check failed (unknown exit code %d)", rc);
-        return -EIO;
-    }
+        char *args[6];
+        args[0] = FSCK_MSDOS_PATH;
+        args[1] = "-v";
+
+        if (rw) {
+            args[2] = "-w";
+            args[3] = "-p";
+            args[4] = blkdev_get_devpath(dev);
+            args[5] = NULL;
+            rc = logwrap(5, args);
+            free(args[4]);
+        } else {
+            args[2] = "-n";
+            args[3] = blkdev_get_devpath(dev);
+            args[4] = NULL;
+            rc = logwrap(4, args);
+            free(args[3]);
+        }
+
+        if (rc == 0) {
+            LOG_VOL("Filesystem check completed OK");
+            return 0;
+        } else if (rc == 1) {
+            LOG_VOL("Filesystem check failed (general failure)");
+            return -EINVAL;
+        } else if (rc == 2) {
+            LOG_VOL("Filesystem check failed (invalid usage)");
+            return -EIO;
+        } else if (rc == 4) {
+            LOG_VOL("Filesystem check completed (errors fixed)");
+        } else if (rc == 6) {
+            LOG_VOL("Filesystem read-only - retrying check RO");
+            rw = false;
+            continue;
+        } else if (rc == 8) {
+            LOG_VOL("Filesystem check failed (not a FAT filesystem)");
+            return -ENODATA;
+        } else {
+            LOG_VOL("Filesystem check failed (unknown exit code %d)", rc);
+            return -EIO;
+        }
+    } while (0);
+
     return 0;
 }
 
@@ -105,7 +110,7 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
     LOG_VOL("vfat_mount(%d:%d, %s, %d):", dev->major, dev->minor, vol->mount_point, safe_mode);
 #endif
 
-    flags = MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_DIRSYNC;
+    flags = MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_DIRSYNC | MS_SYNCHRONOUS;
 
     if (vol->state == volstate_mounted) {
         LOG_VOL("Remounting %d:%d on %s, safe mode %d", dev->major,
@@ -113,15 +118,22 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
         flags |= MS_REMOUNT;
     }
 
+    /*
+     * The mount masks restrict access so that:
+     * 1. The 'system' user cannot access the SD card at all - 
+     *    (protects system_server from grabbing file references)
+     * 2. Group users can RWX
+     * 3. Others can only RX
+     */
     rc = mount(devpath, vol->mount_point, "vfat", flags,
-               "utf8,uid=1000,gid=1000,fmask=711,dmask=700,shortname=mixed");
+               "utf8,uid=1000,gid=1015,fmask=702,dmask=702,shortname=mixed");
 
     if (rc && errno == EROFS) {
         LOGE("vfat_mount(%d:%d, %s): Read only filesystem - retrying mount RO",
              dev->major, dev->minor, vol->mount_point);
         flags |= MS_RDONLY;
         rc = mount(devpath, vol->mount_point, "vfat", flags,
-                   "utf8,uid=1000,gid=1000,fmask=711,dmask=700,shortname=mixed");
+                   "utf8,uid=1000,gid=1015,fmask=702,dmask=702,shortname=mixed");
     }
 
 #if VFAT_DEBUG

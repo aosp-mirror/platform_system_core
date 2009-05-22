@@ -29,6 +29,8 @@
 
 #if !ADB_HOST
 #include <private/android_filesystem_config.h>
+#else
+#include "usb_vendors.h"
 #endif
 
 
@@ -818,19 +820,6 @@ int adb_main(int is_daemon)
 #if !ADB_HOST
     int secure = 0;
     char value[PROPERTY_VALUE_MAX];
-
-    // prevent the OOM killer from killing us
-    char text[64];
-    snprintf(text, sizeof text, "/proc/%d/oom_adj", (int)getpid());
-    int fd = adb_open(text, O_WRONLY);
-    if (fd >= 0) {
-        // -17 should make us immune to OOM
-        snprintf(text, sizeof text, "%d", -17);
-        adb_write(fd, text, strlen(text));
-        adb_close(fd);
-    } else {
-       D("adb: unable to open %s\n", text);
-    }
 #endif
 
     atexit(adb_cleanup);
@@ -846,6 +835,7 @@ int adb_main(int is_daemon)
 
 #if ADB_HOST
     HOST = 1;
+    usb_vendors_init();
     usb_init();
     local_init();
 
@@ -929,6 +919,9 @@ int adb_main(int is_daemon)
     fdevent_loop();
 
     usb_cleanup();
+#if ADB_HOST
+    usb_vendors_cleanup();
+#endif
 
     return 0;
 }

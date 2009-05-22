@@ -26,6 +26,9 @@ public:
     static const int WifiScanResult = 125;
     static const int WifiNetworkList = 126;
 
+    static const int VariableRead = 127;
+    static const int VariableWrite = 128;
+
     // 200 series - Requested action has been successfully completed
     static const int CommandOkay = 200;
 
