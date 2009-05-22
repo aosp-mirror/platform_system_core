@@ -1,4 +1,0 @@
-#!/bin/sh
-adb remount
-adb push tests/returnval.c /system/bin/returnval.c
-mm -j8 && adb sync && adb shell /system/bin/acc -S /system/bin/returnval.c
