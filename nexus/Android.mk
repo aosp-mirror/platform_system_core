@@ -22,6 +22,7 @@ LOCAL_SRC_FILES:=                          \
                   WifiScanner.cpp          \
                   WifiNetwork.cpp          \
                   OpenVpnController.cpp    \
+                  InterfaceConfig.cpp      \
 
 LOCAL_MODULE:= nexus
 

@@ -21,6 +21,7 @@
 #include <cutils/log.h>
 
 #include "NetworkManager.h"
+#include "InterfaceConfig.h"
 
 NetworkManager *NetworkManager::sInstance = NULL;
 
@@ -150,12 +151,23 @@ const PropertyCollection &NetworkManager::getProperties() {
     return *mProperties;
 }
 
-int NetworkManager::onInterfaceCreated(Controller *c, char *name) {
-    LOGD("Interface %s created by controller %s", name, c->getName());
+int NetworkManager::onInterfaceStart(Controller *c, const InterfaceConfig *cfg) {
+    LOGD("Interface %s started by controller %s", cfg->getName(), c->getName());
+
+    // Look up the interface
+
+    if (0) { // already started?
+        errno = EADDRINUSE;
+        return -1;
+    }
+
+    if (cfg->getUseDhcp()) {
+    } else {
+    }
     return 0;
 }
 
-int NetworkManager::onInterfaceDestroyed(Controller *c, char *name) {
-    LOGD("Interface %s destroyed by controller %s", name, c->getName());
+int NetworkManager::onInterfaceStop(Controller *c, const char *name) {
+    LOGD("Interface %s stopped by controller %s", name, c->getName());
     return 0;
 }
