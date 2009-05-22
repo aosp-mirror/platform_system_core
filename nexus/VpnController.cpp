@@ -16,55 +16,61 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "PropertyManager.h"
 #include "VpnController.h"
 
-VpnController::VpnController() :
-               Controller("VPN", "vpn") {
-    registerProperty("gateway");
+VpnController::VpnController(PropertyManager *propmngr) :
+               Controller("VPN", propmngr) {
+    mEnabled = false;
+    propmngr->registerProperty("vpn.enabled", this);
+    propmngr->registerProperty("vpn.gateway", this);
 }
 
 int VpnController::start() {
-    errno = ENOSYS;
-    return -1;
+    return 0;
 }
 
 int VpnController::stop() {
-    errno = ENOSYS;
-    return -1;
+    return 0;
 }
 
-int VpnController::enable() {
-    errno = ENOSYS;
-    return -1;
-}
+int VpnController::set(const char *name, const char *value) {
+    if (!strcmp(name, "vpn.enabled")) {
+        int en = atoi(value);
+        int rc;
 
-int VpnController::disable() {
-    errno = ENOSYS;
-    return -1;
-}
+        if (en == mEnabled)
+            return 0;
+        rc = (en ? enable() : disable());
 
-int VpnController::setProperty(const char *name, char *value) {
-    if (!strcmp(name, "gateway")) {
+        if (!rc)
+            mEnabled = en;
+        return rc;
+    } if (!strcmp(name, "vpn.gateway")) {
         if (!inet_aton(value, &mVpnGateway)) {
             errno = EINVAL;
             return -1;
         }
         return 0;
-    } 
+    }
 
-    return Controller::setProperty(name, value);
+    return Controller::set(name, value);
 }
 
-const char *VpnController::getProperty(const char *name, char *buffer, size_t maxsize) {
-    if (!strcmp(name, "gateway")) {
+const char *VpnController::get(const char *name, char *buffer, size_t maxsize) {
+    if (!strcmp(name, "vpn.enabled")) {
+        snprintf(buffer, maxsize, "%d", mEnabled);
+        return buffer;
+    } if (!strcmp(name, "vpn.gateway")) {
         snprintf(buffer, maxsize, "%s", inet_ntoa(mVpnGateway));
         return buffer;
     }
 
-    return Controller::getProperty(name, buffer, maxsize);
+    return Controller::get(name, buffer, maxsize);
 }

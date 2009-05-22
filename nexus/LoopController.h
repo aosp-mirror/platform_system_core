@@ -13,19 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef _LOOP_CONTROLLER_H
 #define _LOOP_CONTROLLER_H
 
 #include "Controller.h"
 
+
 class LoopController : public Controller {
 public:
-    LoopController();
+    LoopController(PropertyManager *propmngr);
     virtual ~LoopController() {}
 
-private:
-    int enable();
-    int disable();
+    int set(const char *name, const char *value);
+    const char *get(const char *name, char *buffer, size_t maxsize);
 };
 
 #endif

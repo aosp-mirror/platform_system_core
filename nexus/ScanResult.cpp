@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <stdlib.h>
 #include <ctype.h>
 
@@ -42,7 +43,7 @@ ScanResult::ScanResult(char *rawResult) {
     mFreq = atoi(tmp);
     ++q;
 
-    // LEVEL 
+    // LEVEL
     for (p = q; *q != '\t'; ++q);
     strncpy(tmp, p, (q - p));
     tmp[q-p] = '\0';
@@ -60,7 +61,7 @@ ScanResult::ScanResult(char *rawResult) {
     // haven't had time to dig into it ...
     if (*q == '\t')
         q++;
- 
+
     for (p = q; *q != '\t'; ++q) {
         if (*q == '\0')
             break;

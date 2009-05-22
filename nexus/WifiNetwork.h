@@ -19,7 +19,7 @@
 
 #include <sys/types.h>
 
-#include "../../../frameworks/base/include/utils/List.h"
+#include <utils/List.h>
 
 class KeyManagementMask {
 public:
@@ -43,14 +43,14 @@ public:
     static const uint32_t LEAP   = 0x04;
 };
 
-class PairwiseCipherMask {
+class PairwiseCiphersMask {
 public:
     static const uint32_t NONE = 0x00;
     static const uint32_t TKIP = 0x01;
     static const uint32_t CCMP = 0x02;
 };
 
-class GroupCipherMask {
+class GroupCiphersMask {
 public:
     static const uint32_t WEP40  = 0x01;
     static const uint32_t WEP104 = 0x02;
@@ -59,9 +59,20 @@ public:
 };
 
 class Supplicant;
+class InterfaceConfig;
+class Controller;
+class WifiController;
 
-class WifiNetwork {
+#include "IPropertyProvider.h"
+
+class WifiNetwork : public IPropertyProvider{
+public:
+    static const char *PropertyNames[];
+
+private:
     Supplicant *mSuppl;
+    InterfaceConfig *mIfaceCfg;
+    WifiController *mController;
 
     /*
      * Unique network id - normally provided by supplicant
@@ -138,9 +149,23 @@ class WifiNetwork {
      */
     uint32_t mAllowedGroupCiphers;
 
+    /*
+     * Set if this Network is enabled
+     */
+    bool mEnabled;
+
+private:
+    WifiNetwork();
+    int registerProperties();
+    int unregisterProperties();
+
 public:
-    WifiNetwork(Supplicant *suppl);
+    WifiNetwork(WifiController *c, Supplicant *suppl, int networkId);
+    WifiNetwork(WifiController *c, Supplicant *suppl, const char *data);
+
     virtual ~WifiNetwork();
+
+    WifiNetwork *clone();
 
     int getNetworkId() { return mNetid; }
     const char *getSsid() { return mSsid; }
@@ -155,18 +180,30 @@ public:
     uint32_t getAllowedAuthAlgorithms() { return mAllowedAuthAlgorithms; }
     uint32_t getAllowedPairwiseCiphers() { return mAllowedPairwiseCiphers; }
     uint32_t getAllowedGroupCiphers() { return mAllowedGroupCiphers; }
+    bool getEnabled() { return mEnabled; }
+    Controller *getController() { return (Controller *) mController; }
 
-    int setSsid(char *ssid);
-    int setBssid(char *bssid);
-    int setPsk(char *psk);
-    int setWepKey(int idx, char *key);
+    int set(const char *name, const char *value);
+    const char *get(const char *name, char *buffer, size_t maxsize);
+
+//    InterfaceConfig *getIfaceCfg() { return mIfaceCfg; }
+
+    int setEnabled(bool enabled);
+    int setSsid(const char *ssid);
+    int setBssid(const char *bssid);
+    int setPsk(const char *psk);
+    int setWepKey(int idx, const char *key);
     int setDefaultKeyIndex(int idx);
     int setPriority(int pri);
-    int setHiddenSsid(char *ssid);
+    int setHiddenSsid(const char *ssid);
     int setAllowedKeyManagement(uint32_t mask);
     int setAllowedProtocols(uint32_t mask);
+    int setAllowedAuthAlgorithms(uint32_t mask);
     int setAllowedPairwiseCiphers(uint32_t mask);
     int setAllowedGroupCiphers(uint32_t mask);
+
+    // XXX:Should this really be exposed?.. meh
+    int refresh();
 };
 
 typedef android::List<WifiNetwork *> WifiNetworkCollection;

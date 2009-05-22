@@ -26,18 +26,21 @@
 #include "WifiScanner.h"
 #include "NetworkManager.h"
 #include "ErrorCode.h"
+#include "WifiNetwork.h"
 
-WifiController::WifiController(char *modpath, char *modname, char *modargs) :
-                Controller("WIFI", "wifi") {
+WifiController::WifiController(PropertyManager *propmngr, char *modpath, char *modname, char *modargs) :
+                Controller("WIFI", propmngr) {
     strncpy(mModulePath, modpath, sizeof(mModulePath));
     strncpy(mModuleName, modname, sizeof(mModuleName));
     strncpy(mModuleArgs, modargs, sizeof(mModuleArgs));
 
-    mSupplicant = new Supplicant();
+    mSupplicant = new Supplicant(this, propmngr);
     mScanner = new WifiScanner(mSupplicant, 10);
     mCurrentScanMode = 0;
 
-    registerProperty("scanmode");
+    mEnabled = false;
+
+    propmngr->registerProperty("wifi.enabled", this);
 }
 
 int WifiController::start() {
@@ -82,6 +85,17 @@ int WifiController::enable() {
         }
     }
 
+    if (Controller::bindInterface(mSupplicant->getInterfaceName())) {
+        LOGE("Error binding interface (%s)", strerror(errno));
+        goto out_unloadmodule;
+    }
+
+    if (mSupplicant->refreshNetworkList())
+        LOGW("Error getting list of networks (%s)", strerror(errno));
+
+    mPropMngr->registerProperty("wifi.scanmode", this);
+    mPropMngr->registerProperty("wifi.interface", this);
+
     return 0;
 
 out_unloadmodule:
@@ -106,13 +120,14 @@ void WifiController::sendStatusBroadcast(const char *msg) {
 
 int WifiController::disable() {
 
+    mPropMngr->unregisterProperty("wifi.scanmode");
     if (mSupplicant->isStarted()) {
         sendStatusBroadcast("STOPPING_SUPPLICANT");
         if (mSupplicant->stop()) {
             LOGE("Supplicant stop failed (%s)", strerror(errno));
             return -1;
         }
-    } else 
+    } else
         LOGW("disable(): Supplicant not running?");
 
     if (mModuleName[0] != '\0' && isKernelModuleLoaded(mModuleName)) {
@@ -155,36 +170,60 @@ int WifiController::setScanMode(uint32_t mode) {
     return rc;
 }
 
-int WifiController::addNetwork() {
-    return mSupplicant->addNetwork();
+WifiNetwork *WifiController::createNetwork() {
+    WifiNetwork *wn = mSupplicant->createNetwork();
+    return wn;
 }
 
 int WifiController::removeNetwork(int networkId) {
-    return mSupplicant->removeNetwork(networkId);
+    WifiNetwork *wn = mSupplicant->lookupNetwork(networkId);
+
+    if (!wn)
+        return -1;
+    return mSupplicant->removeNetwork(wn);
 }
 
 ScanResultCollection *WifiController::createScanResults() {
     return mSupplicant->createLatestScanResults();
 }
 
-// XXX: This should be a const list
 WifiNetworkCollection *WifiController::createNetworkList() {
     return mSupplicant->createNetworkList();
 }
 
-int WifiController::setProperty(const char *name, char *value) {
-    if (!strcmp(name, "scanmode")) 
-        return setScanMode((uint32_t) strtoul(value, NULL, 0));
+int WifiController::set(const char *name, const char *value) {
+    int rc;
 
-    return Controller::setProperty(name, value);
+    if (!strcmp(name, "wifi.enabled")) {
+        int en = atoi(value);
+
+        if (en == mEnabled)
+            return 0;
+        rc = (en ? enable() : disable());
+        if (!rc)
+            mEnabled = en;
+    } else if (!strcmp(name, "wifi.interface")) {
+        errno = EROFS;
+        return -1;
+    } else if (!strcmp(name, "wifi.scanmode"))
+        return setScanMode((uint32_t) strtoul(value, NULL, 0));
+    else
+        return Controller::set(name, value);
+    return rc;
 }
 
-const char *WifiController::getProperty(const char *name, char *buffer, size_t maxsize) {
-    if (!strcmp(name, "scanmode")) {
-        snprintf(buffer, maxsize, "0x%.8x", mCurrentScanMode);
-        return buffer;
-    } 
+const char *WifiController::get(const char *name, char *buffer, size_t maxsize) {
 
-    return Controller::getProperty(name, buffer, maxsize);
+    if (!strcmp(name, "wifi.enabled"))
+        snprintf(buffer, maxsize, "%d", mEnabled);
+    else if (!strcmp(name, "wifi.interface")) {
+        snprintf(buffer, maxsize, "%s",
+                 (getBoundInterface() ? getBoundInterface() : "none"));
+    } else if (!strcmp(name, "wifi.scanmode"))
+        snprintf(buffer, maxsize, "0x%.8x", mCurrentScanMode);
+    else
+        return Controller::get(name, buffer, maxsize);
+
+    return buffer;
 }
 

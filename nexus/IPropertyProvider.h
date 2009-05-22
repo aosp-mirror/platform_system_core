@@ -14,12 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef _PROPERTY_COLLECTION_H
-#define _PROPERTY_COLLECTION_H
+#ifndef _IPROPERTY_PROVIDER_H
+#define _IPROPERTY_PROVIDER_H
 
-#include "../../../frameworks/base/include/utils/List.h"
+#include <unistd.h>
+#include <sys/types.h>
 
-typedef android::List<const char *> PropertyCollection;
+#include <utils/List.h>
+
+class IPropertyProvider {
+public:
+    virtual int set(const char *name, const char *value) = 0;
+    virtual const char *get(const char *name, char *buffer, size_t max) = 0;
+};
+
+typedef android::List<IPropertyProvider *> IPropertyProviderCollection;
 
 #endif
-

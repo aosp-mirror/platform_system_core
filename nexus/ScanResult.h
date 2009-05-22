@@ -13,12 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef _SCAN_RESULT_H
 #define _SCAN_RESULT_H
 
 #include <sys/types.h>
 
-#include "../../../frameworks/base/include/utils/List.h"
+#include <utils/List.h>
 
 class ScanResult {
     char     *mBssid;

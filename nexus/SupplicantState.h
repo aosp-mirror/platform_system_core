@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef _SUPPLICANT_STATE_H
 #define _SUPPLICANT_STATE_H
 
@@ -28,6 +29,8 @@ public:
     static const int GROUP_HANDSHAKE   = 6;
     static const int COMPLETED         = 7;
     static const int IDLE              = 8;
+
+    static char *toString(int val, char *buffer, int max);
 };
 
 #endif
