@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
@@ -26,7 +28,7 @@
 #include "ErrorCode.h"
 
 WifiController::WifiController(char *modpath, char *modname, char *modargs) :
-                Controller("WIFI") {
+                Controller("WIFI", "wifi") {
     strncpy(mModulePath, modpath, sizeof(mModulePath));
     strncpy(mModuleName, modname, sizeof(mModuleName));
     strncpy(mModuleArgs, modargs, sizeof(mModuleArgs));
@@ -34,6 +36,8 @@ WifiController::WifiController(char *modpath, char *modname, char *modargs) :
     mSupplicant = new Supplicant();
     mScanner = new WifiScanner(mSupplicant, 10);
     mCurrentScanMode = 0;
+
+    registerProperty("scanmode");
 }
 
 int WifiController::start() {
@@ -94,7 +98,7 @@ out_powerdown:
     return -1;
 }
 
-void WifiController::sendStatusBroadcast(char *msg) {
+void WifiController::sendStatusBroadcast(const char *msg) {
     NetworkManager::Instance()->
                     getBroadcaster()->
                     sendBroadcast(ErrorCode::UnsolicitedInformational, msg, false);
@@ -167,3 +171,20 @@ ScanResultCollection *WifiController::createScanResults() {
 WifiNetworkCollection *WifiController::createNetworkList() {
     return mSupplicant->createNetworkList();
 }
+
+int WifiController::setProperty(const char *name, char *value) {
+    if (!strcmp(name, "scanmode")) 
+        return setScanMode((uint32_t) strtoul(value, NULL, 0));
+
+    return Controller::setProperty(name, value);
+}
+
+const char *WifiController::getProperty(const char *name, char *buffer, size_t maxsize) {
+    if (!strcmp(name, "scanmode")) {
+        snprintf(buffer, maxsize, "0x%.8x", mCurrentScanMode);
+        return buffer;
+    } 
+
+    return Controller::getProperty(name, buffer, maxsize);
+}
+

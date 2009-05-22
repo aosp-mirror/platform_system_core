@@ -19,6 +19,7 @@
 #include <sysutils/SocketListener.h>
 
 #include "Controller.h"
+#include "PropertyCollection.h"
 
 class NetworkManager {
 private:
@@ -27,6 +28,7 @@ private:
 private:
     ControllerCollection *mControllers;
     SocketListener       *mBroadcaster;
+    PropertyCollection   *mProperties;
 
 public:
     virtual ~NetworkManager() {}
@@ -37,6 +39,10 @@ public:
 
     Controller *findController(const char *name);
 
+    const PropertyCollection &getProperties();
+    int setProperty(const char *name, char *value);
+    const char *getProperty(const char *name, char *buffer, size_t maxsize);
+
     void setBroadcaster(SocketListener *sl) { mBroadcaster = sl; }
     SocketListener *getBroadcaster() { return mBroadcaster; }
 
@@ -45,6 +51,9 @@ public:
 private:
     int startControllers();
     int stopControllers();
+    int registerProperty(const char *name);
+    int unregisterProperty(const char *name);
+
     NetworkManager();
 
 public:

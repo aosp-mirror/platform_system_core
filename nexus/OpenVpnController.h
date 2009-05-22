@@ -31,6 +31,8 @@ public:
 
     int start();
     int stop();
+
+private:
     int enable();
     int disable();
 };

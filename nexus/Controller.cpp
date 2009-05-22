@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -32,8 +33,13 @@
 extern "C" int init_module(void *, unsigned int, const char *);
 extern "C" int delete_module(const char *, unsigned int);
 
-Controller::Controller(const char *name) {
+Controller::Controller(const char *name, const char *prefix) {
     mName = name;
+    mPropertyPrefix = prefix;
+    mProperties = new PropertyCollection();
+
+    mEnabled = false;
+    registerProperty("enable");
 }
 
 int Controller::start() {
@@ -44,11 +50,68 @@ int Controller::stop() {
     return 0;
 }
 
+const PropertyCollection & Controller::getProperties() {
+    return *mProperties;
+}
+
+int Controller::setProperty(const char *name, char *value) {
+    if (!strcmp(name, "enable")) {
+        int en = atoi(value);
+        int rc;
+
+        rc = (en ? enable() : disable());
+
+        if (!rc)
+            mEnabled = en;
+
+        return rc;
+    }
+
+    errno = ENOENT;
+    return -1;
+}
+
+const char *Controller::getProperty(const char *name, char *buffer, size_t maxsize) {
+    if (!strcmp(name, "enable")) {
+        snprintf(buffer, maxsize, "%d", mEnabled);
+        return buffer;
+    }
+
+    errno = ENOENT;
+    return NULL;
+}
+
+int Controller::registerProperty(const char *name) {
+    PropertyCollection::iterator it;
+
+    for (it = mProperties->begin(); it != mProperties->end(); ++it) {
+        if (!strcmp(name, (*it))) {
+            errno = EADDRINUSE;
+            LOGE("Failed to register property (%s)", strerror(errno));
+            return -1;
+        }
+    }
+
+    mProperties->push_back(name);
+    return 0;
+}
+
+int Controller::unregisterProperty(const char *name) {
+    PropertyCollection::iterator it;
+
+    for (it = mProperties->begin(); it != mProperties->end(); ++it) {
+        if (!strcmp(name, (*it))) {
+            mProperties->erase(it);
+            return 0;
+        }
+    }
+    errno = ENOENT;
+    return -1;
+}
+
 int Controller::loadKernelModule(char *modpath, const char *args) {
     void *module;
     unsigned int size;
-
-    LOGD("loadKernelModule(%s, %s)", modpath, args);
 
     module = loadFile(modpath, &size);
     if (!module) {
@@ -65,7 +128,6 @@ int Controller::unloadKernelModule(const char *modtag) {
     int rc = -1;
     int retries = 10;
 
-    LOGD("unloadKernelModule(%s)", modtag);
     while (retries--) {
         rc = delete_module(modtag, O_NONBLOCK | O_EXCL);
         if (rc < 0 && errno == EAGAIN)
@@ -106,7 +168,6 @@ bool Controller::isKernelModuleLoaded(const char *modtag) {
     fclose(fp);
     return false;
 }
-
 
 void *Controller::loadFile(char *filename, unsigned int *_size)
 {
