@@ -32,9 +32,6 @@
 
 #define  DBG   D
 
-#define ADB_SUBCLASS           0x42
-#define ADB_PROTOCOL           0x1
-
 static IONotificationPortRef    notificationPort = 0;
 static io_iterator_t*           notificationIterators;
 
