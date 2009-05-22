@@ -239,7 +239,7 @@ int asocket_write(struct asocket *s, const void *buf, size_t count,
     }
 
     if (pfd[0].revents) {
-        if (pfd[0].revents & POLLIN) {
+        if (pfd[0].revents & POLLOUT) {
             /* ready to write() without blocking */
             do {
                 ret = write(s->fd, buf, count);
