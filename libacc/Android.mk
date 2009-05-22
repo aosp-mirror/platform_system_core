@@ -5,8 +5,15 @@ include $(CLEAR_VARS)
 # Shared library
 #
 
-LOCAL_MODULE:= acc
-LOCAL_SRC_FILES := acc.cpp disassem.cpp
-LOCAL_MODULE_TAGS := tests
+LOCAL_MODULE:= libacc
+LOCAL_SRC_FILES := acc.cpp
 
-include $(BUILD_EXECUTABLE)
+ifeq ($(TARGET_ARCH),arm)
+LOCAL_SRC_FILES += disassem.cpp
+endif
+
+LOCAL_SHARED_LIBRARIES := libdl
+
+include $(BUILD_SHARED_LIBRARY)
+
+include $(call all-makefiles-under,$(LOCAL_PATH))
