@@ -345,11 +345,6 @@ typedef enum {
 #endif
 
 
-/* set this to log to /data/adb/adb_<time>.txt on the device.
- * has no effect if the /data/adb/ directory does not exist.
- */
-#define ADB_DEVICE_LOG 0
-
 #if !TRACE_PACKETS
 #define print_packet(tag,p) do {} while (0)
 #endif
