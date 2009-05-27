@@ -83,6 +83,73 @@ Controller *NetworkManager::findController(const char *name) {
     return NULL;
 }
 
+int NetworkManager::setProperty(const char *name, char *value) {
+    char *tmp = strdup(name);
+    char *next = tmp;
+    char *prefix;
+    char *rest;
+    ControllerCollection::iterator it;
+
+    if (!(prefix = strsep(&next, ".")))
+        goto out_inval;
+
+    rest = next;
+
+    if (!strncasecmp(prefix, "netman", 6)) {
+        errno = ENOSYS;
+        return -1;
+    }
+
+    for (it = mControllers->begin(); it != mControllers->end(); ++it) {
+        if (!strcasecmp(prefix, (*it)->getPropertyPrefix())) {
+            return (*it)->setProperty(rest, value);
+        }
+    }
+
+    errno = ENOENT;
+    return -1;
+
+out_inval:
+    errno = EINVAL;
+    return -1;
+}
+
+const char *NetworkManager::getProperty(const char *name, char *buffer,
+                                                          size_t maxsize) {
+    char *tmp = strdup(name);
+    char *next = tmp;
+    char *prefix;
+    char *rest;
+    ControllerCollection::iterator it;
+
+    if (!(prefix = strsep(&next, ".")))
+        goto out_inval;
+
+    rest = next;
+
+    if (!strncasecmp(prefix, "netman", 6)) {
+        errno = ENOSYS;
+        return NULL;
+    }
+
+    for (it = mControllers->begin(); it != mControllers->end(); ++it) {
+        if (!strcasecmp(prefix, (*it)->getPropertyPrefix())) {
+            return (*it)->getProperty(rest, buffer, maxsize);
+        }
+    }
+
+    errno = ENOENT;
+    return NULL;
+
+out_inval:
+    errno = EINVAL;
+    return NULL;
+}
+
+const PropertyCollection &NetworkManager::getProperties() {
+    return *mProperties;
+}
+
 int NetworkManager::onInterfaceCreated(Controller *c, char *name) {
     LOGD("Interface %s created by controller %s", name, c->getName());
     return 0;

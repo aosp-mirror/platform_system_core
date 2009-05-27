@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <sys/socket.h>
@@ -23,7 +24,8 @@
 #include "VpnController.h"
 
 VpnController::VpnController() :
-               Controller("VPN") {
+               Controller("VPN", "vpn") {
+    registerProperty("gateway");
 }
 
 int VpnController::start() {
@@ -46,15 +48,23 @@ int VpnController::disable() {
     return -1;
 }
 
-int VpnController::setVpnGateway(const char *vpnGw) {
-    if (!inet_aton(vpnGw, &mVpnGateway)) {
-        errno = EINVAL;
-        return -1;
-    }
-    return 0;
+int VpnController::setProperty(const char *name, char *value) {
+    if (!strcmp(name, "gateway")) {
+        if (!inet_aton(value, &mVpnGateway)) {
+            errno = EINVAL;
+            return -1;
+        }
+        return 0;
+    } 
+
+    return Controller::setProperty(name, value);
 }
 
-int VpnController::setVpnGateway(struct in_addr *vpnGw) {
-    memcpy(&mVpnGateway, vpnGw, sizeof(struct in_addr));
-    return 0;
+const char *VpnController::getProperty(const char *name, char *buffer, size_t maxsize) {
+    if (!strcmp(name, "gateway")) {
+        snprintf(buffer, maxsize, "%s", inet_ntoa(mVpnGateway));
+        return buffer;
+    }
+
+    return Controller::getProperty(name, buffer, maxsize);
 }

@@ -63,7 +63,6 @@ int OpenVpnController::enable() {
 }
 
 int OpenVpnController::disable() {
-
     if (mServiceManager->stop("openvpn"))
         return -1;
     return 0;

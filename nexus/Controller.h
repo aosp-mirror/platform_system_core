@@ -16,31 +16,48 @@
 #ifndef _CONTROLLER_H
 #define _CONTROLLER_H
 
+#include <unistd.h>
+#include <sys/types.h>
+
 #include "../../../frameworks/base/include/utils/List.h"
+
+#include "PropertyCollection.h"
 
 class Controller {
 private:
     const char *mName;
+    const char *mPropertyPrefix;
+    PropertyCollection *mProperties;
+    bool mEnabled;
     
 public:
-    Controller(const char *name);
+    Controller(const char *name, const char *prefix);
     virtual ~Controller() {}
 
     virtual int start();
     virtual int stop();
 
-    virtual int enable() = 0;
-    virtual int disable() = 0;
+    virtual const PropertyCollection &getProperties();
+    virtual int setProperty(const char *name, char *value);
+    virtual const char *getProperty(const char *name, char *buffer, size_t maxsize);
 
-    virtual const char *getName() { return mName; }
+    const char *getName() { return mName; }
+    const char *getPropertyPrefix() { return mPropertyPrefix; }
 
 protected:
     int loadKernelModule(char *modpath, const char *args);
     bool isKernelModuleLoaded(const char *modtag);
     int unloadKernelModule(const char *modtag);
 
+    int registerProperty(const char *name);
+    int unregisterProperty(const char *name);
+
 private:
     void *loadFile(char *filename, unsigned int *_size);
+
+    virtual int enable() = 0;
+    virtual int disable() = 0;
+
 };
 
 typedef android::List<Controller *> ControllerCollection;

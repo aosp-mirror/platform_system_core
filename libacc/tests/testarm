@@ -1,0 +1,9 @@
+#!/bin/sh
+adb remount
+adb shell rm /system/bin/acc
+adb push data/returnval.c /system/bin/returnval.c
+cd ..
+mm -j8
+cd tests
+adb sync
+adb shell /system/bin/acc -S /system/bin/returnval.c

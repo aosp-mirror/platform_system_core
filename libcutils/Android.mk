@@ -17,7 +17,6 @@ LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
 commonSources := \
-	abort_socket.c \
 	array.c \
 	hashmap.c \
 	atomic.c \
@@ -45,22 +44,23 @@ commonHostSources := \
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
 # which are also hard or even impossible to port to native Win32
-WITH_MINGW :=
+WINDOWS_HOST_ONLY :=
 ifeq ($(HOST_OS),windows)
     ifeq ($(strip $(USE_CYGWIN)),)
-        WITH_MINGW := 1
+        WINDOWS_HOST_ONLY := 1
     endif
 endif
 # USE_MINGW is defined when we build against Mingw on Linux
 ifneq ($(strip $(USE_MINGW)),)
-    WITH_MINGW := 1
+    WINDOWS_HOST_ONLY := 1
 endif
 
-ifeq ($(WITH_MINGW),1)
+ifeq ($(WINDOWS_HOST_ONLY),1)
     commonSources += \
         uio.c
 else
     commonSources += \
+        abort_socket.c \
         mspace.c \
         selector.c \
         tztime.c \
