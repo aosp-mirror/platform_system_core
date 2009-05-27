@@ -38,6 +38,11 @@
 
 #include <acc/acc.h>
 
+#define LOG_API(...) do {} while(0)
+// #define LOG_API(...) fprintf (stderr, __VA_ARGS__)
+
+// #define ENABLE_ARM_DISASSEMBLY
+
 namespace acc {
 
 class Compiler {
@@ -332,7 +337,7 @@ class Compiler {
         /* returns address to patch with local variable size
         */
         virtual int functionEntry(int argCount) {
-            fprintf(stderr, "functionEntry(%d);\n", argCount);
+            LOG_API(stderr, "functionEntry(%d);\n", argCount);
             // sp -> arg4 arg5 ...
             // Push our register-based arguments back on the stack
             if (argCount > 0) {
@@ -347,7 +352,7 @@ class Compiler {
         }
 
         virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) {
-            fprintf(stderr, "functionExit(%d, %d, %d);\n", argCount, localVariableAddress, localVariableSize);
+            LOG_API("functionExit(%d, %d, %d);\n", argCount, localVariableAddress, localVariableSize);
             // Patch local variable allocation code:
             if (localVariableSize < 0 || localVariableSize > 255) {
                 error("localVariables out of range: %d", localVariableSize);
@@ -374,7 +379,7 @@ class Compiler {
 
         /* load immediate value */
         virtual void li(int t) {
-            fprintf(stderr, "li(%d);\n", t);
+            LOG_API("li(%d);\n", t);
             if (t >= 0 && t < 255) {
                  o4(0xE3A00000 + t); // mov    r0, #0
             } else if (t >= -256 && t < 0) {
@@ -389,20 +394,20 @@ class Compiler {
         }
 
         virtual int gjmp(int t) {
-            fprintf(stderr, "gjmp(%d);\n", t);
+            LOG_API("gjmp(%d);\n", t);
             return o4(0xEA000000 | encodeAddress(t)); // b .L33
         }
 
         /* l = 0: je, l == 1: jne */
         virtual int gtst(bool l, int t) {
-            fprintf(stderr, "gtst(%d, %d);\n", l, t);
+            LOG_API("gtst(%d, %d);\n", l, t);
             o4(0xE3500000); // cmp r0,#0
             int branch = l ? 0x1A000000 : 0x0A000000; // bne : beq
             return o4(branch | encodeAddress(t));
         }
 
         virtual void gcmp(int op) {
-            fprintf(stderr, "gcmp(%d);\n", op);
+            LOG_API("gcmp(%d);\n", op);
             o4(0xE1510000); // cmp r1, r1
             switch(op) {
             case OP_EQUALS:
@@ -436,7 +441,7 @@ class Compiler {
         }
 
         virtual void genOp(int op) {
-            fprintf(stderr, "genOp(%d);\n", op);
+            LOG_API("genOp(%d);\n", op);
             switch(op) {
             case OP_MUL:
                 o4(0x0E0000091); // mul     r0,r1,r0
@@ -483,22 +488,22 @@ class Compiler {
         }
 
         virtual void clearR1() {
-            fprintf(stderr, "clearR1();\n");
+            LOG_API("clearR1();\n");
             o4(0xE3A01000);  // mov    r1, #0
         }
 
         virtual void pushR0() {
-            fprintf(stderr, "pushR0();\n");
+            LOG_API("pushR0();\n");
             o4(0xE92D0001);  // stmfd   sp!,{r0}
         }
 
         virtual void popR1() {
-            fprintf(stderr, "popR1();\n");
+            LOG_API("popR1();\n");
             o4(0xE8BD0002);  // ldmfd   sp!,{r1}
         }
 
         virtual void storeR0ToR1(bool isInt) {
-            fprintf(stderr, "storeR0ToR1(%d);\n", isInt);
+            LOG_API("storeR0ToR1(%d);\n", isInt);
             if (isInt) {
                 o4(0xE5810000); // str r0, [r1]
             } else {
@@ -507,7 +512,7 @@ class Compiler {
         }
 
         virtual void loadR0FromR0(bool isInt) {
-            fprintf(stderr, "loadR0FromR0(%d);\n", isInt);
+            LOG_API("loadR0FromR0(%d);\n", isInt);
             if (isInt)
                 o4(0xE5900000); // ldr r0, [r0]
             else
@@ -515,7 +520,7 @@ class Compiler {
         }
 
         virtual void leaR0(int ea) {
-            fprintf(stderr, "leaR0(%d);\n", ea);
+            LOG_API("leaR0(%d);\n", ea);
             if (ea < LOCAL) {
                 // Local, fp relative
                 if (ea < -1023 || ea > 1023 || ((ea & 3) != 0)) {
@@ -536,7 +541,7 @@ class Compiler {
         }
 
         virtual void storeR0(int ea) {
-            fprintf(stderr, "storeR0(%d);\n", ea);
+            LOG_API("storeR0(%d);\n", ea);
             if (ea < LOCAL) {
                 // Local, fp relative
                 if (ea < -4095 || ea > 4095) {
@@ -557,7 +562,7 @@ class Compiler {
         }
 
         virtual void loadR0(int ea, bool isIncDec, int op) {
-            fprintf(stderr, "loadR0(%d, %d, %d);\n", ea, isIncDec, op);
+            LOG_API("loadR0(%d, %d, %d);\n", ea, isIncDec, op);
             if (ea < LOCAL) {
                 // Local, fp relative
                 if (ea < -4095 || ea > 4095) {
@@ -604,12 +609,12 @@ class Compiler {
         }
 
         virtual int beginFunctionCallArguments() {
-            fprintf(stderr, "beginFunctionCallArguments();\n");
+            LOG_API("beginFunctionCallArguments();\n");
             return o4(0xE24DDF00); // Placeholder
         }
 
         virtual void storeR0ToArg(int l) {
-            fprintf(stderr, "storeR0ToArg(%d);\n", l);
+            LOG_API("storeR0ToArg(%d);\n", l);
             if (l < 0 || l > 4096-4) {
                 error("l out of range for stack offset: 0x%08x", l);
             }
@@ -617,7 +622,7 @@ class Compiler {
         }
 
         virtual void endFunctionCallArguments(int a, int l) {
-            fprintf(stderr, "endFunctionCallArguments(0x%08x, %d);\n", a, l);
+            LOG_API("endFunctionCallArguments(0x%08x, %d);\n", a, l);
             if (l < 0 || l > 0x3FC) {
                 error("L out of range for stack adjustment: 0x%08x", l);
             }
@@ -630,13 +635,13 @@ class Compiler {
         }
 
         virtual int callForward(int symbol) {
-            fprintf(stderr, "callForward(%d);\n", symbol);
+            LOG_API("callForward(%d);\n", symbol);
             // Forward calls are always short (local)
             return o4(0xEB000000 | encodeAddress(symbol));
         }
 
         virtual void callRelative(int t) {
-            fprintf(stderr, "callRelative(%d);\n", t);
+            LOG_API("callRelative(%d);\n", t);
             int abs = t + getPC() + jumpOffset();
             fprintf(stderr, "abs=%d (0x%08x)\n", abs, abs);
             if (t >= - (1 << 25) && t < (1 << 25)) {
@@ -652,7 +657,7 @@ class Compiler {
         }
 
         virtual void callIndirect(int l) {
-            fprintf(stderr, "callIndirect(%d);\n", l);
+            LOG_API("callIndirect(%d);\n", l);
             int argCount = l >> 2;
             int poppedArgs = argCount > 4 ? 4 : argCount;
             int adjustedL = l - (poppedArgs << 2);
@@ -664,7 +669,7 @@ class Compiler {
         }
 
         virtual void adjustStackAfterCall(int l, bool isIndirect) {
-            fprintf(stderr, "adjustStackAfterCall(%d, %d);\n", l, isIndirect);
+            LOG_API("adjustStackAfterCall(%d, %d);\n", l, isIndirect);
             int argCount = l >> 2;
             int stackArgs = argCount > 4 ? argCount - 4 : 0;
             int stackUse = stackArgs + (isIndirect ? 1 : 0);
@@ -682,11 +687,11 @@ class Compiler {
 
         /* output a symbol and patch all calls to it */
         virtual void gsym(int t) {
-            fprintf(stderr, "gsym(0x%x)\n", t);
+            LOG_API("gsym(0x%x)\n", t);
             int n;
             int base = getBase();
             int pc = getPC();
-            fprintf(stderr, "pc = 0x%x\n", pc);
+            LOG_API("pc = 0x%x\n", pc);
             while (t) {
                 int data = * (int*) t;
                 int decodedOffset = ((BRANCH_REL_ADDRESS_MASK & data) << 2);
@@ -713,7 +718,8 @@ class Compiler {
         }
 
         virtual int disassemble(FILE* out) {
-               disasmOut = out;
+#ifdef ENABLE_ARM_DISASSEMBLY
+            disasmOut = out;
             disasm_interface_t  di;
             di.di_readword = disassemble_readword;
             di.di_printaddr = disassemble_printaddr;
@@ -725,6 +731,7 @@ class Compiler {
                 fprintf(out, "%08x: %08x  ", i, *(int*) i);
                 ::disasm(&di, i, 0);
             }
+#endif
             return 0;
         }
 
@@ -794,7 +801,7 @@ class Compiler {
         }
     };
 
-#endif // PROVIDE_X86_CODEGEN
+#endif // PROVIDE_ARM_CODEGEN
 
 #ifdef PROVIDE_X86_CODEGEN
 
@@ -1833,6 +1840,7 @@ void accScriptSource(ACCscript* script,
     char* text = new char[totalLength + 1];
     script->text = text;
     script->textLength = totalLength;
+    char* dest = text;
     for(int i = 0; i < count; i++) {
         int len = -1;
         const ACCchar* s = string[i];
@@ -1842,8 +1850,8 @@ void accScriptSource(ACCscript* script,
         if (len < 0) {
             len = strlen(s);
         }
-        memcpy(text, s, len);
-        text += len;
+        memcpy(dest, s, len);
+        dest += len;
     }
     text[totalLength] = '\0';
 }
