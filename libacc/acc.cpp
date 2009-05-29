@@ -47,7 +47,7 @@ namespace acc {
 
 class Compiler {
     class CodeBuf {
-        char* ind;
+        char* ind; // Output code pointer
         char* pProgramBase;
 
         void release() {
@@ -1027,20 +1027,21 @@ class Compiler {
         size_t mPosition;
     };
 
-    /* vars: value of variables
-     loc : local variable index
-     glo : global variable index
-     ind : output code ptr
-     rsym: return symbol
-     prog: output code
-     dstk: define stack
-     dptr, dch: macro state
-     */
-    intptr_t tok, tokc, tokl, ch, vars, rsym, loc, glo, sym_stk, dstk,
-            dptr, dch, last_id;
+    int ch; // Current input character, or EOF
+    intptr_t tok;     // token
+    intptr_t tokc;    // token extra info
+    int tokl;         // token operator level
+    intptr_t rsym; // return symbol
+    intptr_t loc; // local variable index
+    char* glo;  // global variable index
+    char* sym_stk;
+    char* dstk; // Define stack
+    char* dptr; // Macro state: Points to macro text during macro playback.
+    int dch;    // Macro state: Saves old value of ch during a macro playback.
+    char* last_id;
     void* pSymbolBase;
     void* pGlobalBase;
-    void* pVarsBase;
+    char* pVarsBase; // Value of variables
 
     InputStream* file;
 
@@ -1106,12 +1107,12 @@ class Compiler {
     static const char operatorLevel[];
 
     void pdef(int t) {
-        *(char *) dstk++ = t;
+        *dstk++ = t;
     }
 
     void inp() {
         if (dptr) {
-            ch = *(char *) dptr++;
+            ch = *dptr++;
             if (ch == TAG_MACRO) {
                 dptr = 0;
                 ch = dch;
@@ -1145,7 +1146,7 @@ class Compiler {
                     next();
                     pdef(TAG_TOK); /* fill last ident tag */
                     *(int *) tok = SYM_DEFINE;
-                    *(int *) (tok + 4) = dstk; /* define stack */
+                    *(char* *) (tok + 4) = dstk; /* define stack */
                 }
                 /* well we always save the values ! */
                 while (ch != '\n') {
@@ -1168,21 +1169,21 @@ class Compiler {
                 inp();
             }
             if (isdigit(tok)) {
-                tokc = strtol((char*) last_id, 0, 0);
+                tokc = strtol(last_id, 0, 0);
                 tok = TOK_NUM;
             } else {
-                *(char *) dstk = TAG_TOK; /* no need to mark end of string (we
+                * dstk = TAG_TOK; /* no need to mark end of string (we
                  suppose data is initialized to zero by calloc) */
-                tok = (intptr_t) (strstr((char*) sym_stk, (char*) (last_id - 1))
+                tok = (intptr_t) (strstr(sym_stk, (last_id - 1))
                         - sym_stk);
-                *(char *) dstk = 0; /* mark real end of ident for dlsym() */
+                * dstk = 0; /* mark real end of ident for dlsym() */
                 tok = tok * 8 + TOK_IDENT;
                 if (tok > TOK_DEFINE) {
-                    tok = vars + tok;
+                    tok = (intptr_t) (pVarsBase + tok);
                     /*        printf("tok=%s %x\n", last_id, tok); */
                     /* define handling */
                     if (*(int *) tok == SYM_DEFINE) {
-                        dptr = *(int *) (tok + 4);
+                        dptr = *(char* *) (tok + 4);
                         dch = ch;
                         inp();
                         next();
@@ -1243,17 +1244,17 @@ class Compiler {
         }
 #if 0
         {
-            int p;
+            char* p;
 
             printf("tok=0x%x ", tok);
             if (tok >= TOK_IDENT) {
                 printf("'");
                 if (tok> TOK_DEFINE)
-                p = sym_stk + 1 + (tok - vars - TOK_IDENT) / 8;
+                p = sym_stk + 1 + ((char*) tok - pVarsBase - TOK_IDENT) / 8;
                 else
                 p = sym_stk + 1 + (tok - TOK_IDENT) / 8;
-                while (*(char *)p != TAG_TOK && *(char *)p)
-                printf("%c", *(char *)p++);
+                while (*p != TAG_TOK && *p)
+                printf("%c", *p++);
                 printf("'\n");
             } else if (tok == TOK_NUM) {
                 printf("%d\n", tokc);
@@ -1284,19 +1285,20 @@ class Compiler {
 
     /* l is one if '=' parsing wanted (quick hack) */
     void unary(intptr_t l) {
-        intptr_t n, t, a, c;
+        intptr_t n, t, a;
+        int c;
         t = 0;
         n = 1; /* type of expression 0 = forward, 1 = value, other =
          lvalue */
         if (tok == '\"') {
-            pGen->li(glo);
+            pGen->li((int) glo);
             while (ch != '\"') {
                 getq();
-                *(char *) glo++ = ch;
+                *glo++ = ch;
                 inp();
             }
-            *(char *) glo = 0;
-            glo = (glo + 4) & -4; /* align heap */
+            *glo = 0;
+            glo = (char*) (((intptr_t) glo + 4) & -4); /* align heap */
             inp();
             next();
         } else {
@@ -1349,7 +1351,7 @@ class Compiler {
                 n = *(int *) t;
                 /* forward reference: try dlsym */
                 if (!n) {
-                    n = (intptr_t) dlsym(RTLD_DEFAULT, (char*) last_id);
+                    n = (intptr_t) dlsym(RTLD_DEFAULT, last_id);
                 }
                 if ((tok == '=') & l) {
                     /* assignment */
@@ -1398,7 +1400,7 @@ class Compiler {
         }
     }
 
-    void sum(intptr_t l) {
+    void sum(int l) {
         intptr_t t, n, a;
         t = 0;
         if (l-- == 1)
@@ -1518,7 +1520,7 @@ class Compiler {
     void decl(bool l) {
         intptr_t a;
 
-        while ((tok == TOK_INT) | ((tok != -1) & (!l))) {
+        while ((tok == TOK_INT) | ((tok != EOF) & (!l))) {
             if (tok == TOK_INT) {
                 next();
                 while (tok != ';') {
@@ -1526,7 +1528,7 @@ class Compiler {
                         loc = loc + 4;
                         *(int *) tok = -loc;
                     } else {
-                        *(int *) tok = glo;
+                        *(int* *) tok = (int*) glo;
                         glo = glo + 4;
                     }
                     next();
@@ -1565,7 +1567,7 @@ class Compiler {
 
     void cleanup() {
         if (sym_stk != 0) {
-            free((void*) sym_stk);
+            free(sym_stk);
             sym_stk = 0;
         }
         if (pGlobalBase != 0) {
@@ -1591,7 +1593,7 @@ class Compiler {
         tokc = 0;
         tokl = 0;
         ch = 0;
-        vars = 0;
+        pVarsBase = 0;
         rsym = 0;
         loc = 0;
         glo = 0;
@@ -1664,14 +1666,13 @@ public:
         }
         pGen->init(&codeBuf);
         file = new TextInputStream(text, textLength);
-        sym_stk = (intptr_t) calloc(1, ALLOC_SIZE);
-        dstk = (intptr_t) strcpy((char*) sym_stk,
+        sym_stk = (char*) calloc(1, ALLOC_SIZE);
+        dstk = strcpy(sym_stk,
                 " int if else while break return for define main ")
                 + TOK_STR_SIZE;
         pGlobalBase = calloc(1, ALLOC_SIZE);
-        glo = (intptr_t) pGlobalBase;
-        pVarsBase = calloc(1, ALLOC_SIZE);
-        vars = (intptr_t) pVarsBase;
+        glo = (char*) pGlobalBase;
+        pVarsBase = (char*) calloc(1, ALLOC_SIZE);
         inp();
         next();
         decl(0);
@@ -1681,7 +1682,7 @@ public:
 
     int run(int argc, char** argv) {
         typedef int (*mainPtr)(int argc, char** argv);
-        mainPtr aMain = (mainPtr) *(int*) (vars + TOK_MAIN);
+        mainPtr aMain = (mainPtr) *(int*) (pVarsBase + TOK_MAIN);
         if (!aMain) {
             fprintf(stderr, "Could not find function \"main\".\n");
             return -1;
@@ -1706,7 +1707,7 @@ public:
             return NULL;
         }
         size_t nameLen = strlen(name);
-        char* pSym = (char*) sym_stk;
+        char* pSym = sym_stk;
         char c;
         for(;;) {
             c = *pSym++;
@@ -1716,12 +1717,12 @@ public:
             if (c == TAG_TOK) {
                 if (memcmp(pSym, name, nameLen) == 0
                         && pSym[nameLen] == TAG_TOK) {
-                    int tok = pSym - 1 - (char*) sym_stk;
+                    int tok = pSym - 1 - sym_stk;
                     tok = tok * 8 + TOK_IDENT;
                     if (tok <= TOK_DEFINE) {
                         return 0;
                     } else {
-                        tok = vars + tok;
+                        tok = (intptr_t) (pVarsBase + tok);
                         return * (void**) tok;
                     }
                 }
