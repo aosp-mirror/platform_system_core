@@ -81,12 +81,18 @@ int main(int argc, char** argv) {
     delete[] text;
 
     accCompileScript(script);
-
+    int result = accGetError(script);
     MainPtr mainPointer = 0;
+    if (result != 0) {
+        char buf[1024];
+        accGetScriptInfoLog(script, sizeof(buf), NULL, buf);
+        fprintf(stderr, "%ss", buf);
+        goto exit;
+    }
 
     accGetScriptLabel(script, "main", (ACCvoid**) & mainPointer);
 
-    int result = accGetError(script);
+    result = accGetError(script);
     if (result == ACC_NO_ERROR) {
         fprintf(stderr, "Executing compiled code:\n");
         int codeArgc = argc - i + 1;
@@ -95,6 +101,8 @@ int main(int argc, char** argv) {
         result = run(mainPointer, codeArgc, codeArgv);
         fprintf(stderr, "result: %d\n", result);
     }
+
+exit:
 
     accDeleteScript(script);
 

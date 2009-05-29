@@ -10,6 +10,7 @@
 
 #include <ctype.h>
 #include <dlfcn.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -45,10 +46,24 @@
 
 namespace acc {
 
-class Compiler {
+class ErrorSink {
+public:
+    void error(const char *fmt, ...) {
+        va_list ap;
+        va_start(ap, fmt);
+        verror(fmt, ap);
+        va_end(ap);
+    }
+
+    virtual void verror(const char* fmt, va_list ap) = 0;
+};
+
+class Compiler : public ErrorSink {
     class CodeBuf {
         char* ind; // Output code pointer
         char* pProgramBase;
+        ErrorSink* mErrorSink;
+        int mSize;
 
         void release() {
             if (pProgramBase != 0) {
@@ -57,10 +72,21 @@ class Compiler {
             }
         }
 
+        void check(int n) {
+            int newSize = ind - pProgramBase + n;
+            if (newSize > mSize) {
+                if (mErrorSink) {
+                    mErrorSink->error("Code too large: %d bytes", newSize);
+                }
+            }
+        }
+
     public:
         CodeBuf() {
             pProgramBase = 0;
             ind = 0;
+            mErrorSink = 0;
+            mSize = 0;
         }
 
         ~CodeBuf() {
@@ -69,11 +95,17 @@ class Compiler {
 
         void init(int size) {
             release();
+            mSize = size;
             pProgramBase = (char*) calloc(1, size);
             ind = pProgramBase;
         }
 
+        void setErrorSink(ErrorSink* pErrorSink) {
+            mErrorSink = pErrorSink;
+        }
+
         int o4(int n) {
+            check(4);
             intptr_t result = (intptr_t) ind;
             * (int*) ind = n;
             ind += 4;
@@ -84,6 +116,7 @@ class Compiler {
          * Output a byte. Handles all values, 0..ff.
          */
         void ob(int n) {
+            check(1);
             *ind++ = n;
         }
 
@@ -123,11 +156,22 @@ class Compiler {
 
     class CodeGenerator {
     public:
-        CodeGenerator() {}
+        CodeGenerator() {
+            mErrorSink = 0;
+            pCodeBuf = 0;
+        }
         virtual ~CodeGenerator() {}
 
         virtual void init(CodeBuf* pCodeBuf) {
             this->pCodeBuf = pCodeBuf;
+            pCodeBuf->setErrorSink(mErrorSink);
+        }
+
+        void setErrorSink(ErrorSink* pErrorSink) {
+            mErrorSink = pErrorSink;
+            if (pCodeBuf) {
+                pCodeBuf->setErrorSink(mErrorSink);
+            }
         }
 
         /* Emit a function prolog.
@@ -323,8 +367,16 @@ class Compiler {
         intptr_t getSize() {
             return pCodeBuf->getSize();
         }
+
+        void error(const char* fmt,...) {
+            va_list ap;
+            va_start(ap, fmt);
+            mErrorSink->verror(fmt, ap);
+            va_end(ap);
+        }
     private:
         CodeBuf* pCodeBuf;
+        ErrorSink* mErrorSink;
     };
 
 #ifdef PROVIDE_ARM_CODEGEN
@@ -643,7 +695,7 @@ class Compiler {
         virtual void callRelative(int t) {
             LOG_API("callRelative(%d);\n", t);
             int abs = t + getPC() + jumpOffset();
-            fprintf(stderr, "abs=%d (0x%08x)\n", abs, abs);
+            LOG_API("abs=%d (0x%08x)\n", abs, abs);
             if (t >= - (1 << 25) && t < (1 << 25)) {
                 o4(0xEB000000 | encodeAddress(t));
             } else {
@@ -790,14 +842,6 @@ class Compiler {
 
         static int runtime_MOD(int a, int b) {
             return b % a;
-        }
-
-        void error(const char* fmt,...) {
-            va_list ap;
-            va_start(ap, fmt);
-            vfprintf(stderr, fmt, ap);
-            va_end(ap);
-            exit(12);
         }
     };
 
@@ -980,8 +1024,7 @@ class Compiler {
 
         int decodeOp(int op) {
             if (op < 0 || op > OP_COUNT) {
-                fprintf(stderr, "Out-of-range operator: %d\n", op);
-                exit(1);
+                error("Out-of-range operator: %d\n", op);
             }
             return operatorHelper[op];
         }
@@ -1047,6 +1090,10 @@ class Compiler {
 
     CodeBuf codeBuf;
     CodeGenerator* pGen;
+
+    static const int ERROR_BUF_SIZE = 512;
+    char mErrorBuf[ERROR_BUF_SIZE];
+    jmp_buf mErrorRecoveryJumpBuf;
 
     static const int ALLOC_SIZE = 99999;
 
@@ -1265,15 +1312,24 @@ class Compiler {
 #endif
     }
 
-    void error(const char *fmt, ...) {
-        va_list ap;
 
-        va_start(ap, fmt);
-        fprintf(stderr, "%ld: ", file->tell());
-        vfprintf(stderr, fmt, ap);
-        fprintf(stderr, "\n");
-        va_end(ap);
-        exit(1);
+    virtual void verror(const char* fmt, va_list ap) {
+        char* pBase = mErrorBuf;
+        int bytesLeft = sizeof(mErrorBuf);
+        int bytesAdded = snprintf(pBase, bytesLeft, "%ld: ", file->tell());
+        bytesLeft -= bytesAdded;
+        pBase += bytesAdded;
+        if (bytesLeft > 0) {
+            bytesAdded = vsnprintf(pBase, bytesLeft, fmt, ap);
+            bytesLeft -= bytesAdded;
+            pBase += bytesAdded;
+        }
+        if (bytesLeft > 0) {
+            bytesAdded = snprintf(pBase, bytesLeft, "\n");
+            bytesLeft -= bytesAdded;
+            pBase += bytesAdded;
+        }
+        longjmp(mErrorRecoveryJumpBuf, 1);
     }
 
     void skip(intptr_t c) {
@@ -1606,6 +1662,7 @@ class Compiler {
         pGlobalBase = 0;
         pVarsBase = 0;
         pGen = 0;
+        mErrorBuf[0] = 0;
     }
 
     void setArchitecture(const char* architecture) {
@@ -1624,7 +1681,7 @@ class Compiler {
             }
 #endif
             if (!pGen ) {
-                fprintf(stderr, "Unknown architecture %s\n", architecture);
+                error("Unknown architecture %s\n", architecture);
             }
         }
 
@@ -1636,8 +1693,9 @@ class Compiler {
 #endif
         }
         if (pGen == NULL) {
-            fprintf(stderr, "No code generator defined.\n");
+            error("No code generator defined.");
         }
+        pGen->setErrorSink(this);
     }
 
 public:
@@ -1657,27 +1715,30 @@ public:
     }
 
     int compile(const char* text, size_t textLength) {
-        cleanup();
-        clear();
-        codeBuf.init(ALLOC_SIZE);
-        setArchitecture(NULL);
-        if (!pGen) {
-            return -1;
+        int result;
+        if (! (result = setjmp(mErrorRecoveryJumpBuf))) {
+            cleanup();
+            clear();
+            codeBuf.init(ALLOC_SIZE);
+            setArchitecture(NULL);
+            if (!pGen) {
+                return -1;
+            }
+            pGen->init(&codeBuf);
+            file = new TextInputStream(text, textLength);
+            sym_stk = (char*) calloc(1, ALLOC_SIZE);
+            dstk = strcpy(sym_stk,
+                    " int if else while break return for define main ")
+                    + TOK_STR_SIZE;
+            pGlobalBase = calloc(1, ALLOC_SIZE);
+            glo = (char*) pGlobalBase;
+            pVarsBase = (char*) calloc(1, ALLOC_SIZE);
+            inp();
+            next();
+            decl(0);
+            pGen->finishCompile();
         }
-        pGen->init(&codeBuf);
-        file = new TextInputStream(text, textLength);
-        sym_stk = (char*) calloc(1, ALLOC_SIZE);
-        dstk = strcpy(sym_stk,
-                " int if else while break return for define main ")
-                + TOK_STR_SIZE;
-        pGlobalBase = calloc(1, ALLOC_SIZE);
-        glo = (char*) pGlobalBase;
-        pVarsBase = (char*) calloc(1, ALLOC_SIZE);
-        inp();
-        next();
-        decl(0);
-        pGen->finishCompile();
-        return 0;
+        return result;
     }
 
     int run(int argc, char** argv) {
@@ -1729,6 +1790,10 @@ public:
             }
         }
         return NULL;
+    }
+
+    char* getErrorMessage() {
+        return mErrorBuf;
     }
 
 };
@@ -1881,11 +1946,16 @@ void accGetScriptInfoLog(ACCscript* script,
     ACCsizei maxLength,
     ACCsizei * length,
     ACCchar * infoLog) {
+    char* message = script->compiler.getErrorMessage();
+    int messageLength = strlen(message) + 1;
     if (length) {
-        *length = 0;
+        *length = messageLength;
     }
-    if (maxLength > 0 && infoLog) {
-        *infoLog = 0;
+    if (infoLog && maxLength > 0) {
+        int trimmedLength = maxLength < messageLength ?
+                maxLength : messageLength;
+        memcpy(infoLog, message, trimmedLength);
+        infoLog[trimmedLength] = 0;
     }
 }
 
