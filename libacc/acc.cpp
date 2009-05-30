@@ -1083,7 +1083,7 @@ class Compiler : public ErrorSink {
     int dch;    // Macro state: Saves old value of ch during a macro playback.
     char* last_id;
     void* pSymbolBase;
-    void* pGlobalBase;
+    char* pGlobalBase;
     char* pVarsBase; // Value of variables
 
     InputStream* file;
@@ -1154,6 +1154,9 @@ class Compiler : public ErrorSink {
     static const char operatorLevel[];
 
     void pdef(int t) {
+        if (dstk - sym_stk >= ALLOC_SIZE) {
+            error("Symbol table exhausted");
+        }
         *dstk++ = t;
     }
 
@@ -1219,6 +1222,9 @@ class Compiler : public ErrorSink {
                 tokc = strtol(last_id, 0, 0);
                 tok = TOK_NUM;
             } else {
+                if (dstk - sym_stk + 1 > ALLOC_SIZE) {
+                    error("symbol stack overflow");
+                }
                 * dstk = TAG_TOK; /* no need to mark end of string (we
                  suppose data is initialized to zero by calloc) */
                 tok = (intptr_t) (strstr(sym_stk, (last_id - 1))
@@ -1226,6 +1232,9 @@ class Compiler : public ErrorSink {
                 * dstk = 0; /* mark real end of ident for dlsym() */
                 tok = tok * 8 + TOK_IDENT;
                 if (tok > TOK_DEFINE) {
+                    if (tok + 8 > ALLOC_SIZE) {
+                        error("Variable Table overflow.");
+                    }
                     tok = (intptr_t) (pVarsBase + tok);
                     /*        printf("tok=%s %x\n", last_id, tok); */
                     /* define handling */
@@ -1350,11 +1359,12 @@ class Compiler : public ErrorSink {
             pGen->li((int) glo);
             while (ch != '\"') {
                 getq();
-                *glo++ = ch;
+                *allocGlobalSpace(1) = ch;
                 inp();
             }
             *glo = 0;
-            glo = (char*) (((intptr_t) glo + 4) & -4); /* align heap */
+            /* align heap */
+            allocGlobalSpace((char*) (((intptr_t) glo + 4) & -4) - glo);
             inp();
             next();
         } else {
@@ -1584,8 +1594,7 @@ class Compiler : public ErrorSink {
                         loc = loc + 4;
                         *(int *) tok = -loc;
                     } else {
-                        *(int* *) tok = (int*) glo;
-                        glo = glo + 4;
+                        *(int* *) tok = (int*) allocGlobalSpace(4);
                     }
                     next();
                     if (tok == ',')
@@ -1621,13 +1630,22 @@ class Compiler : public ErrorSink {
         }
     }
 
+    char* allocGlobalSpace(int bytes) {
+        if (glo - pGlobalBase + bytes > ALLOC_SIZE) {
+            error("Global space exhausted");
+        }
+        char* result = glo;
+        glo += bytes;
+        return result;
+    }
+
     void cleanup() {
         if (sym_stk != 0) {
             free(sym_stk);
             sym_stk = 0;
         }
         if (pGlobalBase != 0) {
-            free((void*) pGlobalBase);
+            free(pGlobalBase);
             pGlobalBase = 0;
         }
         if (pVarsBase != 0) {
@@ -1730,8 +1748,8 @@ public:
             dstk = strcpy(sym_stk,
                     " int if else while break return for define main ")
                     + TOK_STR_SIZE;
-            pGlobalBase = calloc(1, ALLOC_SIZE);
-            glo = (char*) pGlobalBase;
+            pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
+            glo = pGlobalBase;
             pVarsBase = (char*) calloc(1, ALLOC_SIZE);
             inp();
             next();
