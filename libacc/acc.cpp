@@ -10,6 +10,7 @@
 
 #include <ctype.h>
 #include <dlfcn.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -45,10 +46,24 @@
 
 namespace acc {
 
-class Compiler {
+class ErrorSink {
+public:
+    void error(const char *fmt, ...) {
+        va_list ap;
+        va_start(ap, fmt);
+        verror(fmt, ap);
+        va_end(ap);
+    }
+
+    virtual void verror(const char* fmt, va_list ap) = 0;
+};
+
+class Compiler : public ErrorSink {
     class CodeBuf {
-        char* ind;
+        char* ind; // Output code pointer
         char* pProgramBase;
+        ErrorSink* mErrorSink;
+        int mSize;
 
         void release() {
             if (pProgramBase != 0) {
@@ -57,10 +72,21 @@ class Compiler {
             }
         }
 
+        void check(int n) {
+            int newSize = ind - pProgramBase + n;
+            if (newSize > mSize) {
+                if (mErrorSink) {
+                    mErrorSink->error("Code too large: %d bytes", newSize);
+                }
+            }
+        }
+
     public:
         CodeBuf() {
             pProgramBase = 0;
             ind = 0;
+            mErrorSink = 0;
+            mSize = 0;
         }
 
         ~CodeBuf() {
@@ -69,11 +95,17 @@ class Compiler {
 
         void init(int size) {
             release();
+            mSize = size;
             pProgramBase = (char*) calloc(1, size);
             ind = pProgramBase;
         }
 
+        void setErrorSink(ErrorSink* pErrorSink) {
+            mErrorSink = pErrorSink;
+        }
+
         int o4(int n) {
+            check(4);
             intptr_t result = (intptr_t) ind;
             * (int*) ind = n;
             ind += 4;
@@ -84,6 +116,7 @@ class Compiler {
          * Output a byte. Handles all values, 0..ff.
          */
         void ob(int n) {
+            check(1);
             *ind++ = n;
         }
 
@@ -123,11 +156,22 @@ class Compiler {
 
     class CodeGenerator {
     public:
-        CodeGenerator() {}
+        CodeGenerator() {
+            mErrorSink = 0;
+            pCodeBuf = 0;
+        }
         virtual ~CodeGenerator() {}
 
         virtual void init(CodeBuf* pCodeBuf) {
             this->pCodeBuf = pCodeBuf;
+            pCodeBuf->setErrorSink(mErrorSink);
+        }
+
+        void setErrorSink(ErrorSink* pErrorSink) {
+            mErrorSink = pErrorSink;
+            if (pCodeBuf) {
+                pCodeBuf->setErrorSink(mErrorSink);
+            }
         }
 
         /* Emit a function prolog.
@@ -323,8 +367,16 @@ class Compiler {
         intptr_t getSize() {
             return pCodeBuf->getSize();
         }
+
+        void error(const char* fmt,...) {
+            va_list ap;
+            va_start(ap, fmt);
+            mErrorSink->verror(fmt, ap);
+            va_end(ap);
+        }
     private:
         CodeBuf* pCodeBuf;
+        ErrorSink* mErrorSink;
     };
 
 #ifdef PROVIDE_ARM_CODEGEN
@@ -643,7 +695,7 @@ class Compiler {
         virtual void callRelative(int t) {
             LOG_API("callRelative(%d);\n", t);
             int abs = t + getPC() + jumpOffset();
-            fprintf(stderr, "abs=%d (0x%08x)\n", abs, abs);
+            LOG_API("abs=%d (0x%08x)\n", abs, abs);
             if (t >= - (1 << 25) && t < (1 << 25)) {
                 o4(0xEB000000 | encodeAddress(t));
             } else {
@@ -790,14 +842,6 @@ class Compiler {
 
         static int runtime_MOD(int a, int b) {
             return b % a;
-        }
-
-        void error(const char* fmt,...) {
-            va_list ap;
-            va_start(ap, fmt);
-            vfprintf(stderr, fmt, ap);
-            va_end(ap);
-            exit(12);
         }
     };
 
@@ -980,8 +1024,7 @@ class Compiler {
 
         int decodeOp(int op) {
             if (op < 0 || op > OP_COUNT) {
-                fprintf(stderr, "Out-of-range operator: %d\n", op);
-                exit(1);
+                error("Out-of-range operator: %d\n", op);
             }
             return operatorHelper[op];
         }
@@ -1027,25 +1070,30 @@ class Compiler {
         size_t mPosition;
     };
 
-    /* vars: value of variables
-     loc : local variable index
-     glo : global variable index
-     ind : output code ptr
-     rsym: return symbol
-     prog: output code
-     dstk: define stack
-     dptr, dch: macro state
-     */
-    intptr_t tok, tokc, tokl, ch, vars, rsym, loc, glo, sym_stk, dstk,
-            dptr, dch, last_id;
+    int ch; // Current input character, or EOF
+    intptr_t tok;     // token
+    intptr_t tokc;    // token extra info
+    int tokl;         // token operator level
+    intptr_t rsym; // return symbol
+    intptr_t loc; // local variable index
+    char* glo;  // global variable index
+    char* sym_stk;
+    char* dstk; // Define stack
+    char* dptr; // Macro state: Points to macro text during macro playback.
+    int dch;    // Macro state: Saves old value of ch during a macro playback.
+    char* last_id;
     void* pSymbolBase;
-    void* pGlobalBase;
-    void* pVarsBase;
+    char* pGlobalBase;
+    char* pVarsBase; // Value of variables
 
     InputStream* file;
 
     CodeBuf codeBuf;
     CodeGenerator* pGen;
+
+    static const int ERROR_BUF_SIZE = 512;
+    char mErrorBuf[ERROR_BUF_SIZE];
+    jmp_buf mErrorRecoveryJumpBuf;
 
     static const int ALLOC_SIZE = 99999;
 
@@ -1106,12 +1154,15 @@ class Compiler {
     static const char operatorLevel[];
 
     void pdef(int t) {
-        *(char *) dstk++ = t;
+        if (dstk - sym_stk >= ALLOC_SIZE) {
+            error("Symbol table exhausted");
+        }
+        *dstk++ = t;
     }
 
     void inp() {
         if (dptr) {
-            ch = *(char *) dptr++;
+            ch = *dptr++;
             if (ch == TAG_MACRO) {
                 dptr = 0;
                 ch = dch;
@@ -1145,7 +1196,7 @@ class Compiler {
                     next();
                     pdef(TAG_TOK); /* fill last ident tag */
                     *(int *) tok = SYM_DEFINE;
-                    *(int *) (tok + 4) = dstk; /* define stack */
+                    *(char* *) (tok + 4) = dstk; /* define stack */
                 }
                 /* well we always save the values ! */
                 while (ch != '\n') {
@@ -1168,21 +1219,27 @@ class Compiler {
                 inp();
             }
             if (isdigit(tok)) {
-                tokc = strtol((char*) last_id, 0, 0);
+                tokc = strtol(last_id, 0, 0);
                 tok = TOK_NUM;
             } else {
-                *(char *) dstk = TAG_TOK; /* no need to mark end of string (we
+                if (dstk - sym_stk + 1 > ALLOC_SIZE) {
+                    error("symbol stack overflow");
+                }
+                * dstk = TAG_TOK; /* no need to mark end of string (we
                  suppose data is initialized to zero by calloc) */
-                tok = (intptr_t) (strstr((char*) sym_stk, (char*) (last_id - 1))
+                tok = (intptr_t) (strstr(sym_stk, (last_id - 1))
                         - sym_stk);
-                *(char *) dstk = 0; /* mark real end of ident for dlsym() */
+                * dstk = 0; /* mark real end of ident for dlsym() */
                 tok = tok * 8 + TOK_IDENT;
                 if (tok > TOK_DEFINE) {
-                    tok = vars + tok;
+                    if (tok + 8 > ALLOC_SIZE) {
+                        error("Variable Table overflow.");
+                    }
+                    tok = (intptr_t) (pVarsBase + tok);
                     /*        printf("tok=%s %x\n", last_id, tok); */
                     /* define handling */
                     if (*(int *) tok == SYM_DEFINE) {
-                        dptr = *(int *) (tok + 4);
+                        dptr = *(char* *) (tok + 4);
                         dch = ch;
                         inp();
                         next();
@@ -1243,17 +1300,17 @@ class Compiler {
         }
 #if 0
         {
-            int p;
+            char* p;
 
             printf("tok=0x%x ", tok);
             if (tok >= TOK_IDENT) {
                 printf("'");
                 if (tok> TOK_DEFINE)
-                p = sym_stk + 1 + (tok - vars - TOK_IDENT) / 8;
+                p = sym_stk + 1 + ((char*) tok - pVarsBase - TOK_IDENT) / 8;
                 else
                 p = sym_stk + 1 + (tok - TOK_IDENT) / 8;
-                while (*(char *)p != TAG_TOK && *(char *)p)
-                printf("%c", *(char *)p++);
+                while (*p != TAG_TOK && *p)
+                printf("%c", *p++);
                 printf("'\n");
             } else if (tok == TOK_NUM) {
                 printf("%d\n", tokc);
@@ -1264,15 +1321,24 @@ class Compiler {
 #endif
     }
 
-    void error(const char *fmt, ...) {
-        va_list ap;
 
-        va_start(ap, fmt);
-        fprintf(stderr, "%ld: ", file->tell());
-        vfprintf(stderr, fmt, ap);
-        fprintf(stderr, "\n");
-        va_end(ap);
-        exit(1);
+    virtual void verror(const char* fmt, va_list ap) {
+        char* pBase = mErrorBuf;
+        int bytesLeft = sizeof(mErrorBuf);
+        int bytesAdded = snprintf(pBase, bytesLeft, "%ld: ", file->tell());
+        bytesLeft -= bytesAdded;
+        pBase += bytesAdded;
+        if (bytesLeft > 0) {
+            bytesAdded = vsnprintf(pBase, bytesLeft, fmt, ap);
+            bytesLeft -= bytesAdded;
+            pBase += bytesAdded;
+        }
+        if (bytesLeft > 0) {
+            bytesAdded = snprintf(pBase, bytesLeft, "\n");
+            bytesLeft -= bytesAdded;
+            pBase += bytesAdded;
+        }
+        longjmp(mErrorRecoveryJumpBuf, 1);
     }
 
     void skip(intptr_t c) {
@@ -1284,19 +1350,21 @@ class Compiler {
 
     /* l is one if '=' parsing wanted (quick hack) */
     void unary(intptr_t l) {
-        intptr_t n, t, a, c;
+        intptr_t n, t, a;
+        int c;
         t = 0;
         n = 1; /* type of expression 0 = forward, 1 = value, other =
          lvalue */
         if (tok == '\"') {
-            pGen->li(glo);
+            pGen->li((int) glo);
             while (ch != '\"') {
                 getq();
-                *(char *) glo++ = ch;
+                *allocGlobalSpace(1) = ch;
                 inp();
             }
-            *(char *) glo = 0;
-            glo = (glo + 4) & -4; /* align heap */
+            *glo = 0;
+            /* align heap */
+            allocGlobalSpace((char*) (((intptr_t) glo + 4) & -4) - glo);
             inp();
             next();
         } else {
@@ -1349,7 +1417,7 @@ class Compiler {
                 n = *(int *) t;
                 /* forward reference: try dlsym */
                 if (!n) {
-                    n = (intptr_t) dlsym(RTLD_DEFAULT, (char*) last_id);
+                    n = (intptr_t) dlsym(RTLD_DEFAULT, last_id);
                 }
                 if ((tok == '=') & l) {
                     /* assignment */
@@ -1398,7 +1466,7 @@ class Compiler {
         }
     }
 
-    void sum(intptr_t l) {
+    void sum(int l) {
         intptr_t t, n, a;
         t = 0;
         if (l-- == 1)
@@ -1518,7 +1586,7 @@ class Compiler {
     void decl(bool l) {
         intptr_t a;
 
-        while ((tok == TOK_INT) | ((tok != -1) & (!l))) {
+        while ((tok == TOK_INT) | ((tok != EOF) & (!l))) {
             if (tok == TOK_INT) {
                 next();
                 while (tok != ';') {
@@ -1526,8 +1594,7 @@ class Compiler {
                         loc = loc + 4;
                         *(int *) tok = -loc;
                     } else {
-                        *(int *) tok = glo;
-                        glo = glo + 4;
+                        *(int* *) tok = (int*) allocGlobalSpace(4);
                     }
                     next();
                     if (tok == ',')
@@ -1563,13 +1630,22 @@ class Compiler {
         }
     }
 
+    char* allocGlobalSpace(int bytes) {
+        if (glo - pGlobalBase + bytes > ALLOC_SIZE) {
+            error("Global space exhausted");
+        }
+        char* result = glo;
+        glo += bytes;
+        return result;
+    }
+
     void cleanup() {
         if (sym_stk != 0) {
-            free((void*) sym_stk);
+            free(sym_stk);
             sym_stk = 0;
         }
         if (pGlobalBase != 0) {
-            free((void*) pGlobalBase);
+            free(pGlobalBase);
             pGlobalBase = 0;
         }
         if (pVarsBase != 0) {
@@ -1591,7 +1667,7 @@ class Compiler {
         tokc = 0;
         tokl = 0;
         ch = 0;
-        vars = 0;
+        pVarsBase = 0;
         rsym = 0;
         loc = 0;
         glo = 0;
@@ -1604,6 +1680,7 @@ class Compiler {
         pGlobalBase = 0;
         pVarsBase = 0;
         pGen = 0;
+        mErrorBuf[0] = 0;
     }
 
     void setArchitecture(const char* architecture) {
@@ -1622,7 +1699,7 @@ class Compiler {
             }
 #endif
             if (!pGen ) {
-                fprintf(stderr, "Unknown architecture %s\n", architecture);
+                error("Unknown architecture %s\n", architecture);
             }
         }
 
@@ -1634,8 +1711,9 @@ class Compiler {
 #endif
         }
         if (pGen == NULL) {
-            fprintf(stderr, "No code generator defined.\n");
+            error("No code generator defined.");
         }
+        pGen->setErrorSink(this);
     }
 
 public:
@@ -1655,33 +1733,35 @@ public:
     }
 
     int compile(const char* text, size_t textLength) {
-        cleanup();
-        clear();
-        codeBuf.init(ALLOC_SIZE);
-        setArchitecture(NULL);
-        if (!pGen) {
-            return -1;
+        int result;
+        if (! (result = setjmp(mErrorRecoveryJumpBuf))) {
+            cleanup();
+            clear();
+            codeBuf.init(ALLOC_SIZE);
+            setArchitecture(NULL);
+            if (!pGen) {
+                return -1;
+            }
+            pGen->init(&codeBuf);
+            file = new TextInputStream(text, textLength);
+            sym_stk = (char*) calloc(1, ALLOC_SIZE);
+            dstk = strcpy(sym_stk,
+                    " int if else while break return for define main ")
+                    + TOK_STR_SIZE;
+            pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
+            glo = pGlobalBase;
+            pVarsBase = (char*) calloc(1, ALLOC_SIZE);
+            inp();
+            next();
+            decl(0);
+            pGen->finishCompile();
         }
-        pGen->init(&codeBuf);
-        file = new TextInputStream(text, textLength);
-        sym_stk = (intptr_t) calloc(1, ALLOC_SIZE);
-        dstk = (intptr_t) strcpy((char*) sym_stk,
-                " int if else while break return for define main ")
-                + TOK_STR_SIZE;
-        pGlobalBase = calloc(1, ALLOC_SIZE);
-        glo = (intptr_t) pGlobalBase;
-        pVarsBase = calloc(1, ALLOC_SIZE);
-        vars = (intptr_t) pVarsBase;
-        inp();
-        next();
-        decl(0);
-        pGen->finishCompile();
-        return 0;
+        return result;
     }
 
     int run(int argc, char** argv) {
         typedef int (*mainPtr)(int argc, char** argv);
-        mainPtr aMain = (mainPtr) *(int*) (vars + TOK_MAIN);
+        mainPtr aMain = (mainPtr) *(int*) (pVarsBase + TOK_MAIN);
         if (!aMain) {
             fprintf(stderr, "Could not find function \"main\".\n");
             return -1;
@@ -1706,7 +1786,7 @@ public:
             return NULL;
         }
         size_t nameLen = strlen(name);
-        char* pSym = (char*) sym_stk;
+        char* pSym = sym_stk;
         char c;
         for(;;) {
             c = *pSym++;
@@ -1716,18 +1796,22 @@ public:
             if (c == TAG_TOK) {
                 if (memcmp(pSym, name, nameLen) == 0
                         && pSym[nameLen] == TAG_TOK) {
-                    int tok = pSym - 1 - (char*) sym_stk;
+                    int tok = pSym - 1 - sym_stk;
                     tok = tok * 8 + TOK_IDENT;
                     if (tok <= TOK_DEFINE) {
                         return 0;
                     } else {
-                        tok = vars + tok;
+                        tok = (intptr_t) (pVarsBase + tok);
                         return * (void**) tok;
                     }
                 }
             }
         }
         return NULL;
+    }
+
+    char* getErrorMessage() {
+        return mErrorBuf;
     }
 
 };
@@ -1880,11 +1964,16 @@ void accGetScriptInfoLog(ACCscript* script,
     ACCsizei maxLength,
     ACCsizei * length,
     ACCchar * infoLog) {
+    char* message = script->compiler.getErrorMessage();
+    int messageLength = strlen(message) + 1;
     if (length) {
-        *length = 0;
+        *length = messageLength;
     }
-    if (maxLength > 0 && infoLog) {
-        *infoLog = 0;
+    if (infoLog && maxLength > 0) {
+        int trimmedLength = maxLength < messageLength ?
+                maxLength : messageLength;
+        memcpy(infoLog, message, trimmedLength);
+        infoLog[trimmedLength] = 0;
     }
 }
 
