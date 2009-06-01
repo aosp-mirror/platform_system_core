@@ -26,7 +26,6 @@
  * SUCH DAMAGE.
  */
 
-#include <utils/executablepath.h>
 #import <Carbon/Carbon.h>
 #include <unistd.h>
 
