@@ -13,14 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef _TIWLAN_WIFI_CONTROLLER_H
 #define _TIWLAN_WIFI_CONTROLLER_H
 
+#include "PropertyManager.h"
 #include "WifiController.h"
 
 class TiwlanWifiController : public WifiController {
 public:
-    TiwlanWifiController(char *modpath, char *modname, char *modargs);
+    TiwlanWifiController(PropertyManager *propmngr, char *modpath, char *modname, char *modargs);
     virtual ~TiwlanWifiController() {}
 
     virtual int powerUp();

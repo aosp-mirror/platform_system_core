@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <stdlib.h>
 #include <errno.h>
 
@@ -39,10 +40,10 @@ int main() {
 
     nm->setBroadcaster((SocketListener *) cl);
 
-    nm->attachController(new LoopController());
-    nm->attachController(new TiwlanWifiController("/system/lib/modules/wlan.ko", "wlan", ""));
+    nm->attachController(new LoopController(nm->getPropMngr()));
+    nm->attachController(new TiwlanWifiController(nm->getPropMngr(), "/system/lib/modules/wlan.ko", "wlan", ""));
 //    nm->attachController(new AndroidL2TPVpnController());
-    nm->attachController(new OpenVpnController());
+    nm->attachController(new OpenVpnController(nm->getPropMngr()));
 
 
     if (NetworkManager::Instance()->run()) {
@@ -56,7 +57,7 @@ int main() {
     }
 
     // XXX: we'll use the main thread for the NetworkManager eventually
-    
+
     while(1) {
         sleep(1000);
     }

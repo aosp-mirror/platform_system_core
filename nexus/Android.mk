@@ -23,10 +23,12 @@ LOCAL_SRC_FILES:=                          \
                   WifiNetwork.cpp          \
                   OpenVpnController.cpp    \
                   InterfaceConfig.cpp      \
+                  PropertyManager.cpp      \
+                  SupplicantState.cpp 
 
 LOCAL_MODULE:= nexus
 
-LOCAL_C_INCLUDES := $(KERNEL_HEADERS)
+LOCAL_C_INCLUDES := $(KERNEL_HEADERS) -I../../../frameworks/base/include/
 
 LOCAL_CFLAGS := 
 

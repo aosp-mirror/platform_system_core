@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <stdlib.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -22,14 +23,15 @@
 #define LOG_TAG "TiwlanWifiController"
 #include <cutils/log.h>
 
+#include "PropertyManager.h"
 #include "TiwlanWifiController.h"
 
 #define DRIVER_PROP_NAME "wlan.driver.status"
 
 extern "C" int sched_yield(void);
 
-TiwlanWifiController::TiwlanWifiController(char *modpath, char *modname, char *modargs) :
-                      WifiController(modpath, modname, modargs) {
+TiwlanWifiController::TiwlanWifiController(PropertyManager *propmngr, char *modpath, char *modname, char *modargs) :
+                      WifiController(propmngr, modpath, modname, modargs) {
 }
 
 int TiwlanWifiController::powerUp() {

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <errno.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -24,13 +25,13 @@
 #include <sysutils/ServiceManager.h>
 
 #include "OpenVpnController.h"
+#include "PropertyManager.h"
 
 #define DAEMON_PROP_NAME "vpn.openvpn.status"
-
 #define DAEMON_CONFIG_FILE "/data/misc/openvpn/openvpn.conf"
 
-OpenVpnController::OpenVpnController() :
-                   VpnController() {
+OpenVpnController::OpenVpnController(PropertyManager *propmngr) :
+                   VpnController(propmngr) {
     mServiceManager = new ServiceManager();
 }
 
@@ -49,8 +50,8 @@ int OpenVpnController::stop() {
 int OpenVpnController::enable() {
     char svc[PROPERTY_VALUE_MAX];
     char tmp[64];
-    
-    if (!getProperty("vpn.gateway", tmp, sizeof(tmp))) {
+
+    if (!mPropMngr->get("vpn.gateway", tmp, sizeof(tmp))) {
         LOGE("Error reading property 'vpn.gateway' (%s)", strerror(errno));
         return -1;
     }
