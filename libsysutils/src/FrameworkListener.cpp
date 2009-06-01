@@ -59,9 +59,11 @@ void FrameworkListener::registerCmd(FrameworkCommand *cmd) {
 }
 
 void FrameworkListener::dispatchCommand(SocketClient *cli, char *cmd) {
-    char *cm, *last;
+    char *next = cmd;
+    char *cm;
+    char *arg;
 
-    if (!(cm = strtok_r(cmd, ":", &last))) {
+    if (!(cm = strsep(&next, ":"))) {
         cli->sendMsg(500, "Malformatted message", false);
         return;
     }
@@ -72,8 +74,7 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *cmd) {
         FrameworkCommand *c = *i;
 
         if (!strcmp(cm, c->getCommand())) {
-            cm += strlen(cm) +1;
-            if (c->runCommand(cli, cm)) {
+            if (c->runCommand(cli, next)) {
                 LOGW("Handler '%s' error (%s)", c->getCommand(), strerror(errno));
             }
             return;

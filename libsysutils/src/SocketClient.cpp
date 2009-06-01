@@ -16,7 +16,7 @@ SocketClient::SocketClient(int socket) {
 
 int SocketClient::sendMsg(int code, const char *msg, bool addErrno) {
     char *buf;
-    
+
     if (addErrno) {
         buf = (char *) alloca(strlen(msg) + strlen(strerror(errno)) + 8);
         sprintf(buf, "%.3d %s (%s)", code, msg, strerror(errno));
@@ -42,7 +42,7 @@ int SocketClient::sendMsg(const char *msg) {
         strcat(tmp, "\n");
         bp = tmp;
     }
-       
+
     int rc = 0;
     const char *p = bp;
     int brtw = strlen(bp);
