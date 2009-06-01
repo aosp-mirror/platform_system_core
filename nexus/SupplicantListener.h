@@ -22,22 +22,22 @@
 struct wpa_ctrl;
 class Supplicant;
 class SocketClient;
+class ISupplicantEventHandler;
 
 class SupplicantListener: public SocketListener {
 private:
-    struct wpa_ctrl *mMonitor;
-    Supplicant      *mSupplicant;
+    struct wpa_ctrl         *mMonitor;
+    ISupplicantEventHandler *mHandlers;
 
 public:
-    SupplicantListener(Supplicant *supplicant, struct wpa_ctrl *monitor);
+    SupplicantListener(ISupplicantEventHandler *handlers,
+                       struct wpa_ctrl *monitor);
     virtual ~SupplicantListener() {}
 
     struct wpa_ctrl *getMonitor() { return mMonitor; }
-    Supplicant *getSupplicant() { return mSupplicant; }
 
 protected:
     virtual bool onDataAvailable(SocketClient *c);
-
 };
 
 #endif
