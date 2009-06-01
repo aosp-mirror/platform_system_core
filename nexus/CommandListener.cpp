@@ -202,3 +202,11 @@ out_inval:
     cli->sendMsg(ErrorCode::CommandParameterError, "Failed to set property.", true);
     return 0;
 }
+
+CommandListener::ListCmd::ListCmd() :
+                 NexusCommand("list") {
+}
+
+int CommandListener::ListCmd::runCommand(SocketClient *cli, char *data) {
+    return 0;
+}

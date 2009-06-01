@@ -21,6 +21,8 @@
 #include "Controller.h"
 #include "PropertyCollection.h"
 
+class InterfaceConfig;
+
 class NetworkManager {
 private:
     static NetworkManager *sInstance;
@@ -57,9 +59,15 @@ private:
     NetworkManager();
 
 public:
-// XXX: Extract these into an interface
-    int onInterfaceCreated(Controller *c, char *name);
-    int onInterfaceDestroyed(Controller *c, char *name);
+    /*
+     * Called from a controller when an interface is available/ready for use.
+     * 'cfg' contains information on how this interface should be configured.
+     */
+    int onInterfaceStart(Controller *c, const InterfaceConfig *cfg);
 
+    /*
+     * Called from a controller when an interface should be shut down
+     */
+    int onInterfaceStop(Controller *c, const char *name);
 };
 #endif

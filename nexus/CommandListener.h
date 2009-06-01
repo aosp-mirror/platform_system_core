@@ -74,6 +74,13 @@ private:
         virtual ~GetCmd() {}
         int runCommand(SocketClient *c, char *data);
     };
+
+    class ListCmd : public NexusCommand {
+    public:
+        ListCmd();
+        virtual ~ListCmd() {}
+        int runCommand(SocketClient *c, char *data);
+    };
 };
 
 #endif
