@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <stdio.h>
 #include <errno.h>
 
@@ -21,18 +22,23 @@
 #include <cutils/log.h>
 
 #include "NetworkManager.h"
+#include "InterfaceConfig.h"
 
 NetworkManager *NetworkManager::sInstance = NULL;
 
 NetworkManager *NetworkManager::Instance() {
     if (!sInstance)
-        sInstance = new NetworkManager();
+        sInstance = new NetworkManager(new PropertyManager());
     return sInstance;
 }
 
-NetworkManager::NetworkManager() {
+NetworkManager::NetworkManager(PropertyManager *propMngr) {
     mBroadcaster = NULL;
     mControllers = new ControllerCollection();
+    mPropMngr = propMngr;
+}
+
+NetworkManager::~NetworkManager() {
 }
 
 int NetworkManager::run() {
@@ -54,7 +60,7 @@ int NetworkManager::startControllers() {
     for (i = mControllers->begin(); i != mControllers->end(); ++i) {
         int irc = (*i)->start();
         LOGD("Controller '%s' start rc = %d", (*i)->getName(), irc);
-        if (irc && !rc) 
+        if (irc && !rc)
             rc = irc;
     }
     return rc;
@@ -67,7 +73,7 @@ int NetworkManager::stopControllers() {
     for (i = mControllers->begin(); i != mControllers->end(); ++i) {
         int irc = (*i)->stop();
         LOGD("Controller '%s' stop rc = %d", (*i)->getName(), irc);
-        if (irc && !rc) 
+        if (irc && !rc)
             rc = irc;
     }
     return rc;
@@ -83,79 +89,23 @@ Controller *NetworkManager::findController(const char *name) {
     return NULL;
 }
 
-int NetworkManager::setProperty(const char *name, char *value) {
-    char *tmp = strdup(name);
-    char *next = tmp;
-    char *prefix;
-    char *rest;
-    ControllerCollection::iterator it;
+int NetworkManager::onInterfaceStart(Controller *c, const InterfaceConfig *cfg) {
+    LOGD("Interface %s started by controller %s", c->getBoundInterface(), c->getName());
 
-    if (!(prefix = strsep(&next, ".")))
-        goto out_inval;
+    // Look up the interface
 
-    rest = next;
-
-    if (!strncasecmp(prefix, "netman", 6)) {
-        errno = ENOSYS;
+    if (0) { // already started?
+        errno = EADDRINUSE;
         return -1;
     }
 
-    for (it = mControllers->begin(); it != mControllers->end(); ++it) {
-        if (!strcasecmp(prefix, (*it)->getPropertyPrefix())) {
-            return (*it)->setProperty(rest, value);
-        }
+    if (cfg->getUseDhcp()) {
+    } else {
     }
-
-    errno = ENOENT;
-    return -1;
-
-out_inval:
-    errno = EINVAL;
-    return -1;
-}
-
-const char *NetworkManager::getProperty(const char *name, char *buffer,
-                                                          size_t maxsize) {
-    char *tmp = strdup(name);
-    char *next = tmp;
-    char *prefix;
-    char *rest;
-    ControllerCollection::iterator it;
-
-    if (!(prefix = strsep(&next, ".")))
-        goto out_inval;
-
-    rest = next;
-
-    if (!strncasecmp(prefix, "netman", 6)) {
-        errno = ENOSYS;
-        return NULL;
-    }
-
-    for (it = mControllers->begin(); it != mControllers->end(); ++it) {
-        if (!strcasecmp(prefix, (*it)->getPropertyPrefix())) {
-            return (*it)->getProperty(rest, buffer, maxsize);
-        }
-    }
-
-    errno = ENOENT;
-    return NULL;
-
-out_inval:
-    errno = EINVAL;
-    return NULL;
-}
-
-const PropertyCollection &NetworkManager::getProperties() {
-    return *mProperties;
-}
-
-int NetworkManager::onInterfaceCreated(Controller *c, char *name) {
-    LOGD("Interface %s created by controller %s", name, c->getName());
     return 0;
 }
 
-int NetworkManager::onInterfaceDestroyed(Controller *c, char *name) {
-    LOGD("Interface %s destroyed by controller %s", name, c->getName());
+int NetworkManager::onInterfaceStop(Controller *c, const char *name) {
+    LOGD("Interface %s stopped by controller %s", name, c->getName());
     return 0;
 }

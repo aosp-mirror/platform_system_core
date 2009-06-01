@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef _WIFI_CONTROLLER_H
 #define _WIFI_CONTROLLER_H
 
@@ -46,21 +47,21 @@ private:
     char        mModuleArgs[255];
     uint32_t    mCurrentScanMode;
     WifiScanner *mScanner;
+    bool        mEnabled;
 
 public:
-    WifiController(char *modpath, char *modname, char *modargs);
+    WifiController(PropertyManager *propmngr, char *modpath, char *modname, char *modargs);
     virtual ~WifiController() {}
 
     int start();
     int stop();
 
-    int addNetwork();
+    WifiNetwork *createNetwork();
     int removeNetwork(int networkId);
     WifiNetworkCollection *createNetworkList();
 
-    virtual int setProperty(const char *name, char *value);
-    virtual const char *getProperty(const char *name, char *buffer,
-                                    size_t maxlen);
+    virtual int set(const char *name, const char *value);
+    virtual const char *get(const char *name, char *buffer, size_t maxlen);
 
     ScanResultCollection *createScanResults();
 
@@ -71,6 +72,7 @@ public:
     Supplicant *getSupplicant() { return mSupplicant; }
 
 protected:
+    // Move this crap into a 'driver'
     virtual int powerUp() = 0;
     virtual int powerDown() = 0;
     virtual int loadFirmware();
@@ -78,13 +80,11 @@ protected:
     virtual bool isFirmwareLoaded() = 0;
     virtual bool isPoweredUp() = 0;
 
-    void sendStatusBroadcast(const char *msg);
-
 private:
+    void sendStatusBroadcast(const char *msg);
     int setScanMode(uint32_t mode);
     int enable();
     int disable();
-
 };
 
 #endif

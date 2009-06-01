@@ -13,20 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <errno.h>
 
 #include "LoopController.h"
+#include "PropertyManager.h"
 
-LoopController::LoopController() :
-                Controller("LOOP", "loop") {
+LoopController::LoopController(PropertyManager *propmngr) :
+                Controller("LOOP", propmngr) {
 }
 
-int LoopController::enable() {
-    errno = ENOSYS;
-    return -1;
+int LoopController::set(const char *name, const char *value) {
+    return Controller::set(name, value);
 }
 
-int LoopController::disable() {
-    errno = ENOSYS;
-    return -1;
+const char *LoopController::get(const char *name, char *buffer, size_t maxsize) {
+    return Controller::get(name, buffer, maxsize);
 }
+

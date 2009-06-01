@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,13 +34,17 @@
 extern "C" int init_module(void *, unsigned int, const char *);
 extern "C" int delete_module(const char *, unsigned int);
 
-Controller::Controller(const char *name, const char *prefix) {
-    mName = name;
-    mPropertyPrefix = prefix;
-    mProperties = new PropertyCollection();
+Controller::Controller(const char *name, PropertyManager *propMngr) {
+    mPropMngr = propMngr;
+    mName = strdup(name);
+    mBoundInterface = NULL;
+}
 
-    mEnabled = false;
-    registerProperty("enable");
+Controller::~Controller() {
+    if (mBoundInterface)
+        free(mBoundInterface);
+    if (mName)
+        free(mName);
 }
 
 int Controller::start() {
@@ -50,63 +55,14 @@ int Controller::stop() {
     return 0;
 }
 
-const PropertyCollection & Controller::getProperties() {
-    return *mProperties;
-}
-
-int Controller::setProperty(const char *name, char *value) {
-    if (!strcmp(name, "enable")) {
-        int en = atoi(value);
-        int rc;
-
-        rc = (en ? enable() : disable());
-
-        if (!rc)
-            mEnabled = en;
-
-        return rc;
-    }
-
+int Controller::set(const char *name, const char *value) {
     errno = ENOENT;
     return -1;
 }
 
-const char *Controller::getProperty(const char *name, char *buffer, size_t maxsize) {
-    if (!strcmp(name, "enable")) {
-        snprintf(buffer, maxsize, "%d", mEnabled);
-        return buffer;
-    }
-
+const char *Controller::get(const char *name, char *buffer, size_t maxsize) {
     errno = ENOENT;
     return NULL;
-}
-
-int Controller::registerProperty(const char *name) {
-    PropertyCollection::iterator it;
-
-    for (it = mProperties->begin(); it != mProperties->end(); ++it) {
-        if (!strcmp(name, (*it))) {
-            errno = EADDRINUSE;
-            LOGE("Failed to register property (%s)", strerror(errno));
-            return -1;
-        }
-    }
-
-    mProperties->push_back(name);
-    return 0;
-}
-
-int Controller::unregisterProperty(const char *name) {
-    PropertyCollection::iterator it;
-
-    for (it = mProperties->begin(); it != mProperties->end(); ++it) {
-        if (!strcmp(name, (*it))) {
-            mProperties->erase(it);
-            return 0;
-        }
-    }
-    errno = ENOENT;
-    return -1;
 }
 
 int Controller::loadKernelModule(char *modpath, const char *args) {
@@ -137,7 +93,7 @@ int Controller::unloadKernelModule(const char *modtag) {
     }
 
     if (rc != 0) {
-        LOGW("Unable to unload kernel driver '%s' (%s)", modtag, 
+        LOGW("Unable to unload kernel driver '%s' (%s)", modtag,
              strerror(errno));
     }
     return rc;
@@ -202,4 +158,17 @@ void *Controller::loadFile(char *filename, unsigned int *_size)
 bail:
 	close(fd);
 	return buffer;
+}
+
+int Controller::bindInterface(const char *ifname) {
+    mBoundInterface = strdup(ifname);
+    LOGD("Controller %s bound to %s", mName, ifname);
+    return 0;
+}
+
+int Controller::unbindInterface(const char *ifname) {
+    free(mBoundInterface);
+    mBoundInterface = NULL;
+    LOGD("Controller %s unbound from %s", mName, ifname);
+    return 0;
 }

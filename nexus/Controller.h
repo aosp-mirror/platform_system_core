@@ -13,51 +13,59 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef _CONTROLLER_H
 #define _CONTROLLER_H
 
 #include <unistd.h>
 #include <sys/types.h>
 
-#include "../../../frameworks/base/include/utils/List.h"
+#include <utils/List.h>
 
-#include "PropertyCollection.h"
+class PropertyManager;
 
-class Controller {
+#include "PropertyManager.h"
+#include "IPropertyProvider.h"
+
+class Controller : public IPropertyProvider {
 private:
-    const char *mName;
-    const char *mPropertyPrefix;
-    PropertyCollection *mProperties;
-    bool mEnabled;
+    /*
+     * Name of this controller - WIFI/VPN/USBNET/BTNET/BTDUN/LOOP/etc
+     */
+    char *mName;
+
+    /*
+     * Name of the system ethernet interface which this controller is
+     * bound to.
+     */
+    char *mBoundInterface;
+
+protected:
+    PropertyManager *mPropMngr;
     
 public:
-    Controller(const char *name, const char *prefix);
-    virtual ~Controller() {}
+    Controller(const char *name, PropertyManager *propMngr);
+    virtual ~Controller();
 
     virtual int start();
     virtual int stop();
 
-    virtual const PropertyCollection &getProperties();
-    virtual int setProperty(const char *name, char *value);
-    virtual const char *getProperty(const char *name, char *buffer, size_t maxsize);
-
     const char *getName() { return mName; }
-    const char *getPropertyPrefix() { return mPropertyPrefix; }
+    const char *getBoundInterface() { return mBoundInterface; }
+
+    /* IPropertyProvider methods */
+    virtual int set(const char *name, const char *value);
+    virtual const char *get(const char *name, char *buffer, size_t maxsize);
 
 protected:
     int loadKernelModule(char *modpath, const char *args);
     bool isKernelModuleLoaded(const char *modtag);
     int unloadKernelModule(const char *modtag);
-
-    int registerProperty(const char *name);
-    int unregisterProperty(const char *name);
+    int bindInterface(const char *ifname);
+    int unbindInterface(const char *ifname);
 
 private:
     void *loadFile(char *filename, unsigned int *_size);
-
-    virtual int enable() = 0;
-    virtual int disable() = 0;
-
 };
 
 typedef android::List<Controller *> ControllerCollection;

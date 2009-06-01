@@ -14,28 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef _OPEN_VPN_CONTROLLER_H
-#define _OPEN_VPN_CONTROLLER_H
-
-#include "PropertyManager.h"
-#include "VpnController.h"
-
-class ServiceManager;
-
-class OpenVpnController : public VpnController {
-private:
-    ServiceManager *mServiceManager;
-
+class Property {
 public:
-    OpenVpnController(PropertyManager *propmngr);
-    virtual ~OpenVpnController();
-
-    int start();
-    int stop();
-
-private:
-    int enable();
-    int disable();
+    static const int NameMaxSize = 128;
+    static const int ValueMaxSize  = 255;
 };
-
-#endif

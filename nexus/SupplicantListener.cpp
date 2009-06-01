@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <errno.h>
 #include <sys/types.h>
 #include <pthread.h>
@@ -85,7 +86,7 @@ bool SupplicantListener::onDataAvailable(SocketClient *cli) {
     }
 
     delete evt;
-    
+
     if (rc) {
         LOGW("Handler %d (%s) error: %s", evt->getType(), evt->getEvent(), strerror(errno));
         return false;

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef _COMMANDLISTENER_H__
 #define _COMMANDLISTENER_H__
 
@@ -40,10 +41,10 @@ private:
         int runCommand(SocketClient *c, char *data);
     };
 
-    class WifiAddNetworkCmd : public NexusCommand {
+    class WifiCreateNetworkCmd : public NexusCommand {
     public:
-        WifiAddNetworkCmd();
-        virtual ~WifiAddNetworkCmd() {}
+        WifiCreateNetworkCmd();
+        virtual ~WifiCreateNetworkCmd() {}
         int runCommand(SocketClient *c, char *data);
     };
 
@@ -72,6 +73,13 @@ private:
     public:
         GetCmd();
         virtual ~GetCmd() {}
+        int runCommand(SocketClient *c, char *data);
+    };
+
+    class ListCmd : public NexusCommand {
+    public:
+        ListCmd();
+        virtual ~ListCmd() {}
         int runCommand(SocketClient *c, char *data);
     };
 };

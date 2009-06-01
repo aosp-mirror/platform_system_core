@@ -125,7 +125,7 @@ void SocketListener::runListener() {
                 max = (*it)->getSocket();
         }
         pthread_mutex_unlock(&mClientsLock);
-        
+
         if ((rc = select(max + 1, &read_fds, NULL, NULL, NULL)) < 0) {
             LOGE("select failed (%s)", strerror(errno));
             sleep(1);

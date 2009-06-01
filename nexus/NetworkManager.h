@@ -13,13 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef _NETWORKMANAGER_H
 #define _NETWORKMANAGER_H
 
 #include <sysutils/SocketListener.h>
 
 #include "Controller.h"
-#include "PropertyCollection.h"
+
+#include "PropertyManager.h"
+
+class InterfaceConfig;
 
 class NetworkManager {
 private:
@@ -28,10 +32,10 @@ private:
 private:
     ControllerCollection *mControllers;
     SocketListener       *mBroadcaster;
-    PropertyCollection   *mProperties;
+    PropertyManager      *mPropMngr;
 
 public:
-    virtual ~NetworkManager() {}
+    virtual ~NetworkManager();
 
     int run();
 
@@ -39,27 +43,28 @@ public:
 
     Controller *findController(const char *name);
 
-    const PropertyCollection &getProperties();
-    int setProperty(const char *name, char *value);
-    const char *getProperty(const char *name, char *buffer, size_t maxsize);
-
     void setBroadcaster(SocketListener *sl) { mBroadcaster = sl; }
     SocketListener *getBroadcaster() { return mBroadcaster; }
+    PropertyManager *getPropMngr() { return mPropMngr; }
 
     static NetworkManager *Instance();
 
 private:
     int startControllers();
     int stopControllers();
-    int registerProperty(const char *name);
-    int unregisterProperty(const char *name);
 
-    NetworkManager();
+    NetworkManager(PropertyManager *propMngr);
 
 public:
-// XXX: Extract these into an interface
-    int onInterfaceCreated(Controller *c, char *name);
-    int onInterfaceDestroyed(Controller *c, char *name);
+    /*
+     * Called from a controller when an interface is available/ready for use.
+     * 'cfg' contains information on how this interface should be configured.
+     */
+    int onInterfaceStart(Controller *c, const InterfaceConfig *cfg);
 
+    /*
+     * Called from a controller when an interface should be shut down
+     */
+    int onInterfaceStop(Controller *c, const char *name);
 };
 #endif

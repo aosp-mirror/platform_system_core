@@ -32,8 +32,10 @@
 #include "SupplicantState.h"
 #include "SupplicantEvent.h"
 #include "ScanResult.h"
+#include "PropertyManager.h"
 #include "NetworkManager.h"
 #include "ErrorCode.h"
+#include "WifiController.h"
 
 #include "libwpa_client/wpa_ctrl.h"
 
@@ -43,21 +45,29 @@
 #define SUPP_CONFIG_TEMPLATE "/system/etc/wifi/wpa_supplicant.conf"
 #define SUPP_CONFIG_FILE "/data/misc/wifi/wpa_supplicant.conf"
 
-Supplicant::Supplicant() {
+Supplicant::Supplicant(WifiController *wc, PropertyManager *propmngr) {
+    mController = wc;
+    mPropMngr = propmngr;
+    mInterfaceName = NULL;
     mCtrl = NULL;
     mMonitor = NULL;
     mListener = NULL;
-
+   
     mState = SupplicantState::UNKNOWN;
 
     mServiceManager = new ServiceManager();
 
     mLatestScanResults = new ScanResultCollection();
     pthread_mutex_init(&mLatestScanResultsLock, NULL);
+
+    mNetworks = new WifiNetworkCollection();
+    pthread_mutex_init(&mNetworksLock, NULL);
 }
 
 Supplicant::~Supplicant() {
     delete mServiceManager;
+    if (mInterfaceName)
+        free(mInterfaceName);
 }
 
 int Supplicant::start() {
@@ -65,7 +75,7 @@ int Supplicant::start() {
     if (setupConfig()) {
         LOGW("Unable to setup supplicant.conf");
     }
- 
+
     if (mServiceManager->start(SUPPLICANT_SERVICE_NAME)) {
         LOGE("Error starting supplicant (%s)", strerror(errno));
         return -1;
@@ -76,10 +86,19 @@ int Supplicant::start() {
         LOGE("Error connecting to supplicant (%s)\n", strerror(errno));
         return -1;
     }
+    
+    if (retrieveInterfaceName()) {
+        LOGE("Error retrieving interface name (%s)\n", strerror(errno));
+        return -1;
+    }
+
+    mPropMngr->registerProperty("wifi.supplicant.state", this);
     return 0;
 }
 
 int Supplicant::stop() {
+
+    mPropMngr->unregisterProperty("wifi.supplicant.state");
 
     if (mListener->stopListener()) {
         LOGW("Unable to stop supplicant listener (%s)", strerror(errno));
@@ -106,13 +125,55 @@ bool Supplicant::isStarted() {
     return mServiceManager->isRunning(SUPPLICANT_SERVICE_NAME);
 }
 
-int Supplicant::connectToSupplicant() {
-    if (!isStarted()) {
-        LOGE("Supplicant not running, cannot connect");
+int Supplicant::refreshNetworkList() {
+    char *reply;
+    size_t len = 4096;
+
+    if (!(reply = (char *) malloc(len))) {
+        errno = ENOMEM;
         return -1;
     }
 
-    mCtrl = wpa_ctrl_open("tiwlan0");
+    if (sendCommand("LIST_NETWORKS", reply, &len)) {
+        free(reply);
+        return -1;
+    }
+
+    char *linep;
+    char *linep_next = NULL;
+
+    if (!strtok_r(reply, "\n", &linep_next)) {
+        LOGW("Malformatted network list\n");
+    } else {
+        pthread_mutex_lock(&mNetworksLock);
+        if (!mNetworks->empty()) {
+            WifiNetworkCollection::iterator i;
+
+            for (i = mNetworks->begin(); i !=mNetworks->end(); ++i)
+                delete *i;
+            mNetworks->clear();
+        }
+
+        while((linep = strtok_r(NULL, "\n", &linep_next))) {
+            WifiNetwork *wn = new WifiNetwork(mController, this, linep);
+            mNetworks->push_back(wn);
+            if (wn->refresh())
+                LOGW("Unable to refresh network id %d", wn->getNetworkId());
+        }
+
+        LOGD("Loaded %d networks\n", mNetworks->size());
+        pthread_mutex_unlock(&mNetworksLock);
+    }
+
+    free(reply);
+    return 0;
+}
+
+int Supplicant::connectToSupplicant() {
+    if (!isStarted())
+        LOGW("Supplicant service not running");
+
+    mCtrl = wpa_ctrl_open("tiwlan0"); // XXX:
     if (mCtrl == NULL) {
         LOGE("Unable to open connection to supplicant on \"%s\": %s",
              "tiwlan0", strerror(errno));
@@ -132,7 +193,7 @@ int Supplicant::connectToSupplicant() {
     }
 
     mListener = new SupplicantListener(this, mMonitor);
-    
+
     if (mListener->startListener()) {
         LOGE("Error - unable to start supplicant listener");
         stop();
@@ -151,20 +212,17 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len)
 //    LOGD("sendCommand(): -> '%s'", cmd);
 
     int rc;
+    memset(reply, 0, *reply_len);
     if ((rc = wpa_ctrl_request(mCtrl, cmd, strlen(cmd), reply, reply_len, NULL)) == -2)  {
         errno = ETIMEDOUT;
         return -1;
     } else if (rc < 0 || !strncmp(reply, "FAIL", 4)) {
-        LOGW("sendCommand(): <- '%s'", reply);
+        strcpy(reply, "FAIL");
         errno = EIO;
         return -1;
     }
 
-    if (!strncmp(cmd, "PING", 4) ||
-        !strncmp(cmd, "SCAN_RESULTS", 12)) 
-        reply[*reply_len] = '\0';
-
-//    LOGD("sendCommand(): <- '%s'", reply);
+//   LOGD("sendCommand(): <- '%s'", reply);
     return 0;
 }
 
@@ -185,6 +243,22 @@ int Supplicant::triggerScan(bool active) {
         return -1;
     }
     return 0;
+}
+
+int Supplicant::set(const char *name, const char *value) {
+    const char *n = name + strlen("wifi.supplicant.");
+
+    errno = -EROFS;
+    return -1;
+}
+
+const char *Supplicant::get(const char *name, char *buffer, size_t max) {
+    const char *n = name + strlen("wifi.supplicant.");
+
+    if (!strcasecmp(n, "state"))
+        return SupplicantState::toString(mState, buffer, max);
+    errno = ENOENT;
+    return NULL;
 }
 
 int Supplicant::onConnectedEvent(SupplicantEvent *evt) {
@@ -237,12 +311,12 @@ int Supplicant::onScanResultsEvent(SupplicantEvent *evt) {
         char *reply;
 
         if (!(reply = (char *) malloc(4096))) {
-            errno = -ENOMEM;
+            errno = ENOMEM;
             return -1;
         }
 
         size_t len = 4096;
- 
+
         if (sendCommand("SCAN_RESULTS", reply, &len)) {
             LOGW("onScanResultsEvent(%s): Error getting scan results (%s)",
                   evt->getEvent(), strerror(errno));
@@ -272,7 +346,7 @@ int Supplicant::onScanResultsEvent(SupplicantEvent *evt) {
 
         while((linep = strtok_r(NULL, "\n", &linep_next)))
             mLatestScanResults->push_back(new ScanResult(linep));
-    
+
         char tmp[128];
         sprintf(tmp, "Scan results ready (%d)", mLatestScanResults->size());
         NetworkManager::Instance()->getBroadcaster()->
@@ -323,41 +397,76 @@ ScanResultCollection *Supplicant::createLatestScanResults() {
     ScanResultCollection::iterator i;
 
     pthread_mutex_lock(&mLatestScanResultsLock);
-    for (i = mLatestScanResults->begin(); i != mLatestScanResults->end(); ++i) {
+    for (i = mLatestScanResults->begin(); i != mLatestScanResults->end(); ++i)
         d->push_back((*i)->clone());
-    }
 
     pthread_mutex_unlock(&mLatestScanResultsLock);
     return d;
 }
 
-WifiNetworkCollection *Supplicant::createNetworkList() {
-    WifiNetworkCollection *d = new WifiNetworkCollection();
-    return d;
-}
-
-int Supplicant::addNetwork() {
-    char reply[32];
+WifiNetwork *Supplicant::createNetwork() {
+    char reply[255];
     size_t len = sizeof(reply) -1;
 
-    memset(reply, 0, sizeof(reply));
     if (sendCommand("ADD_NETWORK", reply, &len))
-        return -1;
+        return NULL;
 
-    return atoi(reply);
+    if (reply[strlen(reply) -1] == '\n')
+        reply[strlen(reply) -1] = '\0';
+
+    WifiNetwork *wn = new WifiNetwork(mController, this, atoi(reply));
+    pthread_mutex_lock(&mNetworksLock);
+    mNetworks->push_back(wn);
+    pthread_mutex_unlock(&mNetworksLock);
+    return wn;
 }
 
-int Supplicant::removeNetwork(int networkId) {
+int Supplicant::removeNetwork(WifiNetwork *wn) {
     char req[64];
 
-    sprintf(req, "REMOVE_NETWORK %d", networkId);
+    sprintf(req, "REMOVE_NETWORK %d", wn->getNetworkId());
     char reply[32];
     size_t len = sizeof(reply) -1;
-    memset(reply, 0, sizeof(reply));
-    
+
     if (sendCommand(req, reply, &len))
         return -1;
+
+    pthread_mutex_lock(&mNetworksLock);
+    WifiNetworkCollection::iterator it;
+    for (it = mNetworks->begin(); it != mNetworks->end(); ++it) {
+        if ((*it) == wn) {
+            mNetworks->erase(it);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&mNetworksLock);
     return 0;
+}
+
+WifiNetwork *Supplicant::lookupNetwork(int networkId) {
+    pthread_mutex_lock(&mNetworksLock);
+    WifiNetworkCollection::iterator it;
+    for (it = mNetworks->begin(); it != mNetworks->end(); ++it) {
+        if ((*it)->getNetworkId() == networkId) {
+            pthread_mutex_unlock(&mNetworksLock);
+            return *it;
+        }
+    }
+    pthread_mutex_unlock(&mNetworksLock);
+    errno = ENOENT;
+    return NULL;
+}
+
+WifiNetworkCollection *Supplicant::createNetworkList() {
+    WifiNetworkCollection *d = new WifiNetworkCollection();
+    WifiNetworkCollection::iterator i;
+
+    pthread_mutex_lock(&mNetworksLock);
+    for (i = mNetworks->begin(); i != mNetworks->end(); ++i)
+        d->push_back((*i)->clone());
+
+    pthread_mutex_unlock(&mNetworksLock);
+    return d;
 }
 
 int Supplicant::setupConfig() {
@@ -405,5 +514,62 @@ int Supplicant::setupConfig() {
         unlink(SUPP_CONFIG_FILE);
         return -1;
     }
+    return 0;
+}
+
+int Supplicant::setNetworkVar(int networkId, const char *var, const char *val) {
+    char reply[255];
+    size_t len = sizeof(reply) -1;
+
+    char *tmp;
+    asprintf(&tmp, "SET_NETWORK %d %s \"%s\"", networkId, var, val);
+    if (sendCommand(tmp, reply, &len)) {
+        free(tmp);
+        return -1;
+    }
+    free(tmp);
+    return 0;
+}
+
+const char *Supplicant::getNetworkVar(int networkId, const char *var,
+                                      char *buffer, size_t max) {
+    size_t len = max - 1;
+    char *tmp;
+
+    asprintf(&tmp, "GET_NETWORK %d %s", networkId, var);
+    if (sendCommand(tmp, buffer, &len)) {
+        free(tmp);
+        return NULL;
+    }
+    free(tmp);
+    return buffer;
+}
+
+int Supplicant::enableNetwork(int networkId, bool enabled) {
+    char req[64];
+
+    if (enabled)
+        sprintf(req, "ENABLE_NETWORK %d", networkId);
+    else
+        sprintf(req, "DISABLE_NETWORK %d", networkId);
+
+    char reply[16];
+    size_t len = sizeof(reply) -1;
+
+    if (sendCommand(req, reply, &len))
+        return -1;
+    return 0;
+}
+
+
+int Supplicant::retrieveInterfaceName() {
+    char reply[255];
+    size_t len = sizeof(reply) -1;
+
+    if (sendCommand("INTERFACES", reply, &len))
+        return -1;
+
+    reply[strlen(reply)-1] = '\0';
+    mInterfaceName = strdup(reply);
     return 0;
 }

@@ -67,9 +67,9 @@ bool NetlinkEvent::decode(char *buffer, int size) {
                     mAction = NlActionRemove;
                 else if (!strcmp(a, "change"))
                     mAction = NlActionChange;
-            } else if (!strncmp(s, "SEQNUM=", strlen("SEQNUM="))) 
+            } else if (!strncmp(s, "SEQNUM=", strlen("SEQNUM=")))
                 mSeq = atoi(s + strlen("SEQNUM="));
-            else if (!strncmp(s, "SUBSYSTEM=", strlen("SUBSYSTEM="))) 
+            else if (!strncmp(s, "SUBSYSTEM=", strlen("SUBSYSTEM=")))
                 mSubsystem = strdup(s + strlen("SUBSYSTEM="));
             else
                 mParams[param_idx++] = strdup(s);
