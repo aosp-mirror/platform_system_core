@@ -92,3 +92,23 @@ int ashmem_unpin_region(int fd, size_t offset, size_t len)
 {
 	return ASHMEM_IS_UNPINNED;
 }
+
+int ashmem_get_size_region(int fd)
+{
+        struct stat buf;
+        int result;
+
+        result = fstat(fd, &buf);
+        if (result == -1) {
+                return -1;
+        }
+
+        // Check if this is an "ashmem" region.
+        // TODO: This is very hacky, and can easily break. We need some reliable indicator.
+        if (!(buf.st_nlink == 0 && S_ISREG(buf.st_mode))) {
+                errno = ENOTTY;
+                return -1;
+        }
+
+        return (int)buf.st_size;  // TODO: care about overflow (> 2GB file)?
+}
