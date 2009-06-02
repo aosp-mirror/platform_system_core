@@ -23,10 +23,11 @@
 
 class KeyManagementMask {
 public:
-    static const uint32_t NONE      = 0;
-    static const uint32_t WPA_PSK   = 0x01;
-    static const uint32_t WPA_EAP   = 0x02;
-    static const uint32_t IEEE8021X = 0x04;
+    static const uint32_t UNKNOWN   = 0;
+    static const uint32_t NONE      = 0x01;
+    static const uint32_t WPA_PSK   = 0x02;
+    static const uint32_t WPA_EAP   = 0x04;
+    static const uint32_t IEEE8021X = 0x08;
     static const uint32_t ALL       = WPA_PSK | WPA_EAP | IEEE8021X;
 };
 
