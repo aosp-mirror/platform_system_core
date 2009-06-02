@@ -54,6 +54,7 @@ LOCAL_SRC_FILES := \
 	$(USB_SRCS) \
 	shlist.c \
 	utils.c \
+	usb_vendors.c \
 
 
 ifneq ($(USE_SYSDEPS_WIN32),)
