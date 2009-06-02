@@ -23,8 +23,7 @@
 #include <pthread.h>
 #include <sys/types.h>
 
-#include <utils/KeyedVector.h>
-
+#include "tinyutils/KeyedVector.h"
 #include "tinyutils/smartpointer.h"
 
 namespace android {
