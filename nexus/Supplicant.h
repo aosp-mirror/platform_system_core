@@ -30,8 +30,9 @@ class WifiController;
 #include "ScanResult.h"
 #include "WifiNetwork.h"
 #include "IPropertyProvider.h"
+#include "ISupplicantEventHandler.h"
 
-class Supplicant : public IPropertyProvider {
+class Supplicant : public IPropertyProvider, public ISupplicantEventHandler {
 private:
     struct wpa_ctrl      *mCtrl;
     struct wpa_ctrl      *mMonitor;
@@ -77,9 +78,13 @@ public:
     int set(const char *name, const char *value);
     const char *get(const char *name, char *buffer, size_t max);
 
-// XXX: Extract these into an interface
-// handlers for SupplicantListener
-public:
+private:
+    int connectToSupplicant();
+    int sendCommand(const char *cmd, char *reply, size_t *reply_len);
+    int setupConfig();
+    int retrieveInterfaceName();
+
+    // ISupplicantEventHandler methods
     virtual int onConnectedEvent(SupplicantEvent *evt);
     virtual int onDisconnectedEvent(SupplicantEvent *evt);
     virtual int onTerminatingEvent(SupplicantEvent *evt);
@@ -93,12 +98,6 @@ public:
     virtual int onStateChangeEvent(SupplicantEvent *evt);
     virtual int onLinkSpeedEvent(SupplicantEvent *evt);
     virtual int onDriverStateEvent(SupplicantEvent *evt);
-
-private:
-    int connectToSupplicant();
-    int sendCommand(const char *cmd, char *reply, size_t *reply_len);
-    int setupConfig();
-    int retrieveInterfaceName();
 };
 
 #endif

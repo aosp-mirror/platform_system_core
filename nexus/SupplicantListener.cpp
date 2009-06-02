@@ -23,13 +23,14 @@
 
 #include "libwpa_client/wpa_ctrl.h"
 
-#include "Supplicant.h"
 #include "SupplicantListener.h"
 #include "SupplicantEvent.h"
+#include "ISupplicantEventHandler.h"
 
-SupplicantListener::SupplicantListener(Supplicant *supplicant, struct wpa_ctrl *monitor) :
+SupplicantListener::SupplicantListener(ISupplicantEventHandler *handlers, 
+                                       struct wpa_ctrl *monitor) :
                     SocketListener(wpa_ctrl_get_fd(monitor), false) {
-    mSupplicant = supplicant;
+    mHandlers = handlers;
     mMonitor = monitor;
 }
 
@@ -58,29 +59,29 @@ bool SupplicantListener::onDataAvailable(SocketClient *cli) {
     // XXX: Instead of calling Supplicant directly
     // extract an Interface and use that instead
     if (evt->getType() == SupplicantEvent::EVENT_CONNECTED)
-        rc = mSupplicant->onConnectedEvent(evt);
+        rc = mHandlers->onConnectedEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_DISCONNECTED)
-        rc = mSupplicant->onDisconnectedEvent(evt);
+        rc = mHandlers->onDisconnectedEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_TERMINATING)
-        rc = mSupplicant->onTerminatingEvent(evt);
+        rc = mHandlers->onTerminatingEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_PASSWORD_CHANGED)
-        rc = mSupplicant->onPasswordChangedEvent(evt);
+        rc = mHandlers->onPasswordChangedEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_EAP_NOTIFICATION)
-        rc = mSupplicant->onEapNotificationEvent(evt);
+        rc = mHandlers->onEapNotificationEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_EAP_STARTED)
-        rc = mSupplicant->onEapStartedEvent(evt);
+        rc = mHandlers->onEapStartedEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_EAP_SUCCESS)
-        rc = mSupplicant->onEapSuccessEvent(evt);
+        rc = mHandlers->onEapSuccessEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_EAP_FAILURE)
-        rc = mSupplicant->onEapFailureEvent(evt);
+        rc = mHandlers->onEapFailureEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_SCAN_RESULTS)
-        rc = mSupplicant->onScanResultsEvent(evt);
+        rc = mHandlers->onScanResultsEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_STATE_CHANGE)
-        rc = mSupplicant->onStateChangeEvent(evt);
+        rc = mHandlers->onStateChangeEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_LINK_SPEED)
-        rc = mSupplicant->onLinkSpeedEvent(evt);
+        rc = mHandlers->onLinkSpeedEvent(evt);
     else if (evt->getType() == SupplicantEvent::EVENT_DRIVER_STATE)
-        rc = mSupplicant->onDriverStateEvent(evt);
+        rc = mHandlers->onDriverStateEvent(evt);
     else {
         LOGW("Ignoring unknown event");
     }
