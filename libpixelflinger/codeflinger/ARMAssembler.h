@@ -21,8 +21,9 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <utils/Vector.h>
-#include <utils/KeyedVector.h>
+#include "tinyutils/Vector.h"
+#include "tinyutils/KeyedVector.h"
+#include "tinyutils/smartpointer.h"
 
 #include "tinyutils/smartpointer.h"
 #include "codeflinger/ARMAssemblerInterface.h"
