@@ -33,6 +33,10 @@
 #  endif
 #endif
 
+#ifndef HAVE_WIN32_PROC
+#include <sys/poll.h>
+#endif
+
 typedef struct stinfo stinfo;
 
 struct stinfo {
@@ -199,8 +203,8 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
 static int create_subprocess(const char *cmd, const char *arg0, const char *arg1)
 {
 #ifdef HAVE_WIN32_PROC
-	fprintf(stderr, "error: create_subprocess not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
-	return -1;
+    fprintf(stderr, "error: create_subprocess not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
+    return -1;
 #else /* !HAVE_WIN32_PROC */
     char *devname;
     int ptm;
@@ -267,6 +271,54 @@ static int create_subprocess(const char *cmd, const char *arg0, const char *arg1
 #define SHELL_COMMAND "/system/bin/sh"
 #endif
 
+static void shell_service(int s, void *command)
+{
+    char    buffer[MAX_PAYLOAD];
+    int     fd, ret = 0;
+    unsigned count = 0;
+
+    fd = create_subprocess(SHELL_COMMAND, "-c", (char *)command);
+
+    while (1) {
+        while (count < sizeof(buffer)) {
+#ifndef HAVE_WIN32_PROC
+            /* add a 200ms timeout so we don't block indefinitely with our
+               buffer partially filled.
+            */
+            if (count > 0) {
+                struct pollfd pollfd;
+
+                pollfd.fd = fd;
+                pollfd.events = POLLIN;
+                ret = poll(&pollfd, 1, 200);
+                if (ret <= 0) {
+                    D("poll returned %d\n", ret);
+                    // file has closed or we timed out
+                    // set ret to 1 so we don't exit the outer loop
+                    ret = 1;
+                    break;
+                }
+            }
+#endif
+            ret = adb_read(fd, buffer + count, sizeof(buffer) - count);
+            D("ret: %d, count: %d\n", ret, count);
+            if (ret > 0)
+                count += ret;
+            else
+                break;
+        }
+
+        D("writing: %d\n", count);
+        adb_write(s, buffer, count);
+        count = 0;
+        if (ret <= 0)
+            break;
+    }
+
+    adb_close(fd);
+    adb_close(s);
+}
+
 int service_to_fd(const char *name)
 {
     int ret = -1;
@@ -320,7 +372,7 @@ int service_to_fd(const char *name)
 #endif
     } else if(!HOST && !strncmp(name, "shell:", 6)) {
         if(name[6]) {
-            ret = create_subprocess(SHELL_COMMAND, "-c", name + 6);
+            ret = create_service_thread(shell_service, (void *)(name + 6));
         } else {
             ret = create_subprocess(SHELL_COMMAND, "-", 0);
         }
