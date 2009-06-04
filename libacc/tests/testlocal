@@ -8,8 +8,8 @@ if [ -x "test-acc" ]; then
 
   if [ "$(uname)" = "Linux" ]; then
     if [ "$(uname -m)" = "i686" ]; then
-      echo "Linux i686. Testing otcc.c"
-      ./test-acc data/otcc.c data/otcc.c data/returnval.c
+      echo "Linux i686. Testing otcc-noinclude.c"
+      ./test-acc data/otcc-noinclude.c data/otcc.c data/returnval.c
     fi
   fi
 fi

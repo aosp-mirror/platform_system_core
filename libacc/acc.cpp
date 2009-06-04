@@ -1039,16 +1039,35 @@ class Compiler : public ErrorSink {
 
     class InputStream {
     public:
+        int getChar() {
+            if (bumpLine) {
+                line++;
+                bumpLine = false;
+            }
+            int ch = get();
+            if (ch == '\n') {
+                bumpLine = true;
+            }
+            return ch;
+        }
+        int getLine() {
+            return line;
+        }
+    protected:
+        InputStream() :
+            line(1), bumpLine(false) {
+        }
+    private:
         virtual int get() = 0;
-        virtual long tell() = 0;
+        int line;
+        bool bumpLine;
     };
 
     class FileInputStream : public InputStream {
     public:
         FileInputStream(FILE* in) : f(in) {}
-        virtual int get() { return fgetc(f); }
-        virtual long tell() { return ftell(f); }
     private:
+        virtual int get() { return fgetc(f); }
         FILE* f;
     };
 
@@ -1057,14 +1076,12 @@ class Compiler : public ErrorSink {
         TextInputStream(const char* text, size_t textLength)
             : pText(text), mTextLength(textLength), mPosition(0) {
         }
+
+    private:
         virtual int get() {
             return mPosition < mTextLength ? pText[mPosition++] : EOF;
         }
-        virtual long tell() {
-            return mPosition;
-        }
 
-    private:
         const char* pText;
         size_t mTextLength;
         size_t mPosition;
@@ -1091,14 +1108,83 @@ class Compiler : public ErrorSink {
     CodeBuf codeBuf;
     CodeGenerator* pGen;
 
-    static const int ERROR_BUF_SIZE = 512;
-    char mErrorBuf[ERROR_BUF_SIZE];
+    class String {
+    public:
+        String() {
+            mpBase = 0;
+            mUsed = 0;
+            mSize = 0;
+        }
+
+        ~String() {
+            if (mpBase) {
+                free(mpBase);
+            }
+        }
+
+        char* getUnwrapped() {
+            return mpBase;
+        }
+
+        void appendCStr(const char* s) {
+            int n = strlen(s);
+            memcpy(ensure(n), s, n + 1);
+        }
+
+        void append(char c) {
+            * ensure(1) = c;
+        }
+
+        void printf(const char* fmt,...) {
+            va_list ap;
+            va_start(ap, fmt);
+            vprintf(fmt, ap);
+            va_end(ap);
+        }
+
+        void vprintf(const char* fmt, va_list ap) {
+            char* temp;
+            int numChars = vasprintf(&temp, fmt, ap);
+            memcpy(ensure(numChars), temp, numChars+1);
+            free(temp);
+        }
+
+        size_t len() {
+            return mUsed;
+        }
+
+    private:
+        char* ensure(int n) {
+            size_t newUsed = mUsed + n;
+            if (newUsed > mSize) {
+                size_t newSize = mSize * 2 + 10;
+                if (newSize < newUsed) {
+                    newSize = newUsed;
+                }
+                mpBase = (char*) realloc(mpBase, newSize + 1);
+                mSize = newSize;
+            }
+            mpBase[newUsed] = '\0';
+            char* result = mpBase + mUsed;
+            mUsed = newUsed;
+            return result;
+        }
+
+        char* mpBase;
+        size_t mUsed;
+        size_t mSize;
+    };
+
+    String mErrorBuf;
+
     jmp_buf mErrorRecoveryJumpBuf;
+
+    String mPragmas;
+    int mPragmaStringCount;
 
     static const int ALLOC_SIZE = 99999;
 
-    /* depends on the init string */
-    static const int TOK_STR_SIZE = 48;
+    // Indentifiers start at 0x100 and increase by # (chars + 1) * 8
     static const int TOK_IDENT = 0x100;
     static const int TOK_INT = 0x100;
     static const int TOK_IF = 0x120;
@@ -1107,8 +1193,9 @@ class Compiler : public ErrorSink {
     static const int TOK_BREAK = 0x190;
     static const int TOK_RETURN = 0x1c0;
     static const int TOK_FOR = 0x1f8;
-    static const int TOK_DEFINE = 0x218;
-    static const int TOK_MAIN = 0x250;
+    static const int TOK_PRAGMA = 0x218;
+    static const int TOK_DEFINE = TOK_PRAGMA + (7*8);
+    static const int TOK_MAIN = TOK_DEFINE + (7*8);
 
     static const int TOK_DUMMY = 1;
     static const int TOK_NUM = 2;
@@ -1168,7 +1255,7 @@ class Compiler : public ErrorSink {
                 ch = dch;
             }
         } else
-            ch = file->get();
+            ch = file->getChar();
         /*    printf("ch=%c 0x%x\n", ch, ch); */
     }
 
@@ -1197,14 +1284,18 @@ class Compiler : public ErrorSink {
                     pdef(TAG_TOK); /* fill last ident tag */
                     *(int *) tok = SYM_DEFINE;
                     *(char* *) (tok + 4) = dstk; /* define stack */
-                }
-                /* well we always save the values ! */
-                while (ch != '\n') {
+                    while (ch != '\n') {
+                        pdef(ch);
+                        inp();
+                    }
                     pdef(ch);
-                    inp();
+                    pdef(TAG_MACRO);
+                } else if (tok == TOK_PRAGMA) {
+                    doPragma();
+                } else {
+                    error("Unsupported preprocessor directive \"%s\"", last_id);
                 }
-                pdef(ch);
-                pdef(TAG_MACRO);
+
             }
             inp();
         }
@@ -1321,23 +1412,54 @@ class Compiler : public ErrorSink {
 #endif
     }
 
+    void doPragma() {
+        // # pragma name(val)
+        int state = 0;
+        while(ch != EOF && ch != '\n' && state < 10) {
+            switch(state) {
+                case 0:
+                    if (isspace(ch)) {
+                        inp();
+                    } else {
+                        state++;
+                    }
+                    break;
+                case 1:
+                    if (isalnum(ch)) {
+                        mPragmas.append(ch);
+                        inp();
+                    } else if (ch == '(') {
+                        mPragmas.append(0);
+                        inp();
+                        state++;
+                    } else {
+                        state = 11;
+                    }
+                    break;
+                case 2:
+                    if (isalnum(ch)) {
+                        mPragmas.append(ch);
+                        inp();
+                    } else if (ch == ')') {
+                        mPragmas.append(0);
+                        inp();
+                        state = 10;
+                    } else {
+                        state = 11;
+                    }
+                    break;
+            }
+        }
+        if(state != 10) {
+            error("Unexpected pragma syntax");
+        }
+        mPragmaStringCount += 2;
+    }
 
     virtual void verror(const char* fmt, va_list ap) {
-        char* pBase = mErrorBuf;
-        int bytesLeft = sizeof(mErrorBuf);
-        int bytesAdded = snprintf(pBase, bytesLeft, "%ld: ", file->tell());
-        bytesLeft -= bytesAdded;
-        pBase += bytesAdded;
-        if (bytesLeft > 0) {
-            bytesAdded = vsnprintf(pBase, bytesLeft, fmt, ap);
-            bytesLeft -= bytesAdded;
-            pBase += bytesAdded;
-        }
-        if (bytesLeft > 0) {
-            bytesAdded = snprintf(pBase, bytesLeft, "\n");
-            bytesLeft -= bytesAdded;
-            pBase += bytesAdded;
-        }
+        mErrorBuf.printf("%ld: ", file->getLine());
+        mErrorBuf.vprintf(fmt, ap);
+        mErrorBuf.printf("\n");
         longjmp(mErrorRecoveryJumpBuf, 1);
     }
 
@@ -1680,7 +1802,7 @@ class Compiler : public ErrorSink {
         pGlobalBase = 0;
         pVarsBase = 0;
         pGen = 0;
-        mErrorBuf[0] = 0;
+        mPragmaStringCount = 0;
     }
 
     void setArchitecture(const char* architecture) {
@@ -1745,9 +1867,10 @@ public:
             pGen->init(&codeBuf);
             file = new TextInputStream(text, textLength);
             sym_stk = (char*) calloc(1, ALLOC_SIZE);
-            dstk = strcpy(sym_stk,
-                    " int if else while break return for define main ")
-                    + TOK_STR_SIZE;
+            static const char* predefinedSymbols =
+                " int if else while break return for pragma define main ";
+            dstk = strcpy(sym_stk, predefinedSymbols)
+                    + strlen(predefinedSymbols);
             pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
             glo = pGlobalBase;
             pVarsBase = (char*) calloc(1, ALLOC_SIZE);
@@ -1810,8 +1933,26 @@ public:
         return NULL;
     }
 
+    void getPragmas(ACCsizei* actualStringCount,
+                    ACCsizei maxStringCount, ACCchar** strings) {
+        int stringCount = mPragmaStringCount;
+        if (actualStringCount) {
+            *actualStringCount = stringCount;
+        }
+        if (stringCount > maxStringCount) {
+            stringCount = maxStringCount;
+        }
+        if (strings) {
+            char* pPragmas = mPragmas.getUnwrapped();
+            while (stringCount-- > 0) {
+                *strings++ = pPragmas;
+                pPragmas += strlen(pPragmas) + 1;
+            }
+        }
+    }
+
     char* getErrorMessage() {
-        return mErrorBuf;
+        return mErrorBuf.getUnwrapped();
     }
 
 };
@@ -1987,6 +2128,13 @@ void accGetScriptLabel(ACCscript* script, const ACCchar * name,
         script->setError(ACC_INVALID_VALUE);
     }
 }
+
+extern "C"
+void accGetPragmas(ACCscript* script, ACCsizei* actualStringCount,
+                   ACCsizei maxStringCount, ACCchar** strings){
+    script->compiler.getPragmas(actualStringCount, maxStringCount, strings);
+}
+
 
 } // namespace acc
 
