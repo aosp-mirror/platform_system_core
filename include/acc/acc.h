@@ -69,6 +69,9 @@ void accGetScriptInfoLog(ACCscript* script,
 void accGetScriptLabel(ACCscript* script, const ACCchar * name,
                        ACCvoid** address);
 
+void accGetPragmas(ACCscript* script, ACCsizei* actualStringCount,
+                   ACCsizei maxStringCount, ACCchar** strings);
+
 #ifdef __cplusplus
 };
 #endif

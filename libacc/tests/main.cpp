@@ -68,11 +68,13 @@ int main(int argc, char** argv) {
     fseek(in, 0, SEEK_END);
     size_t fileSize = (size_t) ftell(in);
     rewind(in);
-    ACCchar* text = new ACCchar[fileSize];
+    ACCchar* text = new ACCchar[fileSize + 1];
     size_t bytesRead = fread(text, 1, fileSize, in);
     if (bytesRead != fileSize) {
         fprintf(stderr, "Could not read all of file %s\n", inFile);
     }
+
+    text[fileSize] = '\0';
 
     ACCscript* script = accCreateScript();
 
@@ -86,8 +88,21 @@ int main(int argc, char** argv) {
     if (result != 0) {
         char buf[1024];
         accGetScriptInfoLog(script, sizeof(buf), NULL, buf);
-        fprintf(stderr, "%ss", buf);
+        fprintf(stderr, "%s", buf);
         goto exit;
+    }
+
+    {
+        ACCsizei numPragmaStrings;
+        accGetPragmas(script, &numPragmaStrings, 0, NULL);
+        if (numPragmaStrings) {
+            char** strings = new char*[numPragmaStrings];
+            accGetPragmas(script, NULL, numPragmaStrings, strings);
+            for(ACCsizei i = 0; i < numPragmaStrings; i += 2) {
+                fprintf(stderr, "#pragma %s(%s)\n", strings[i], strings[i+1]);
+            }
+            delete[] strings;
+        }
     }
 
     accGetScriptLabel(script, "main", (ACCvoid**) & mainPointer);

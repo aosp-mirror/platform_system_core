@@ -83,3 +83,8 @@ int ashmem_unpin_region(int fd, size_t offset, size_t len)
 	struct ashmem_pin pin = { offset, len };
 	return ioctl(fd, ASHMEM_UNPIN, &pin);
 }
+
+int ashmem_get_size_region(int fd)
+{
+  return ioctl(fd, ASHMEM_GET_SIZE, NULL);
+}

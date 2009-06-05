@@ -32,7 +32,7 @@ LOCAL_C_INCLUDES := $(KERNEL_HEADERS) -I../../../frameworks/base/include/
 
 LOCAL_CFLAGS := 
 
-LOCAL_SHARED_LIBRARIES := libsysutils libwpa_client libutils
+LOCAL_SHARED_LIBRARIES := libsysutils libwpa_client
 
 include $(BUILD_EXECUTABLE)
 
@@ -46,7 +46,7 @@ LOCAL_C_INCLUDES := $(KERNEL_HEADERS)
 
 LOCAL_CFLAGS := 
 
-LOCAL_SHARED_LIBRARIES := libutils
+LOCAL_SHARED_LIBRARIES := libcutils
 
 include $(BUILD_EXECUTABLE)
 

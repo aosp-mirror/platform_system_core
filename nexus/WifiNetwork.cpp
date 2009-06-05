@@ -551,6 +551,20 @@ int WifiNetwork::setAllowedGroupCiphers(uint32_t mask) {
 }
 
 int WifiNetwork::setEnabled(bool enabled) {
+
+    if (enabled) {
+        if (getPriority() == -1) {
+            LOGE("Cannot enable network when priority is not set");
+            errno = EAGAIN;
+            return -1;
+        }
+        if (getAllowedKeyManagement() == KeyManagementMask::UNKNOWN) {
+            LOGE("Cannot enable network when KeyManagement is not set");
+            errno = EAGAIN;
+            return -1;
+        }
+    }
+
     if (mSuppl->enableNetwork(mNetid, enabled))
         return -1;
 
