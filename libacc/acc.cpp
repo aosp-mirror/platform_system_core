@@ -41,7 +41,6 @@
 
 #define LOG_API(...) do {} while(0)
 // #define LOG_API(...) fprintf (stderr, __VA_ARGS__)
-
 // #define ENABLE_ARM_DISASSEMBLY
 
 namespace acc {
@@ -389,7 +388,7 @@ class Compiler : public ErrorSink {
         /* returns address to patch with local variable size
         */
         virtual int functionEntry(int argCount) {
-            LOG_API(stderr, "functionEntry(%d);\n", argCount);
+            LOG_API("functionEntry(%d);\n", argCount);
             // sp -> arg4 arg5 ...
             // Push our register-based arguments back on the stack
             if (argCount > 0) {
@@ -1187,15 +1186,17 @@ class Compiler : public ErrorSink {
     // Indentifiers start at 0x100 and increase by # (chars + 1) * 8
     static const int TOK_IDENT = 0x100;
     static const int TOK_INT = 0x100;
-    static const int TOK_IF = 0x120;
-    static const int TOK_ELSE = 0x138;
-    static const int TOK_WHILE = 0x160;
-    static const int TOK_BREAK = 0x190;
-    static const int TOK_RETURN = 0x1c0;
-    static const int TOK_FOR = 0x1f8;
-    static const int TOK_PRAGMA = 0x218;
-    static const int TOK_DEFINE = TOK_PRAGMA + (7*8);
-    static const int TOK_MAIN = TOK_DEFINE + (7*8);
+    static const int TOK_CHAR = TOK_INT + 4*8;
+    static const int TOK_VOID = TOK_CHAR + 5*8;
+    static const int TOK_IF = TOK_VOID + 5*8;
+    static const int TOK_ELSE = TOK_IF + 3*8;
+    static const int TOK_WHILE = TOK_ELSE + 5*8;
+    static const int TOK_BREAK = TOK_WHILE + 6*8;
+    static const int TOK_RETURN = TOK_BREAK + 6*8;
+    static const int TOK_FOR = TOK_RETURN + 7*8;
+    static const int TOK_PRAGMA = TOK_FOR + 4*8;
+    static const int TOK_DEFINE = TOK_PRAGMA + 7*8;
+    static const int TOK_MAIN = TOK_DEFINE + 7*8;
 
     static const int TOK_DUMMY = 1;
     static const int TOK_NUM = 2;
@@ -1256,7 +1257,9 @@ class Compiler : public ErrorSink {
             }
         } else
             ch = file->getChar();
-        /*    printf("ch=%c 0x%x\n", ch, ch); */
+#if 0
+        printf("ch='%c' 0x%x\n", ch, ch);
+#endif
     }
 
     int isid() {
@@ -1685,7 +1688,7 @@ class Compiler : public ErrorSink {
         } else if (tok == '{') {
             next();
             /* declarations */
-            decl(1);
+            localDeclarations();
             while (tok != '}')
                 block(l);
             next();
@@ -1704,36 +1707,125 @@ class Compiler : public ErrorSink {
         }
     }
 
-    /* 'l' is true if local declarations */
-    void decl(bool l) {
-        intptr_t a;
+    typedef int Type;
+    static const Type TY_UNKNOWN = 0;
+    static const Type TY_INT = 1;
+    static const Type TY_CHAR = 2;
+    static const Type TY_VOID = 3;
+    static const int TY_BASE_TYPE_MASK = 0xf;
+    static const int TY_INDIRECTION_MASK = 0xf0;
+    static const int TY_INDIRECTION_SHIFT = 4;
+    static const int MAX_INDIRECTION_COUNT = 15;
 
-        while ((tok == TOK_INT) | ((tok != EOF) & (!l))) {
-            if (tok == TOK_INT) {
+    Type getBaseType(Type t) {
+        return t & TY_BASE_TYPE_MASK;
+    }
+
+    int getIndirectionCount(Type t) {
+        return (TY_INDIRECTION_MASK & t) >> TY_INDIRECTION_SHIFT;
+    }
+
+    void setIndirectionCount(Type& t, int count) {
+        t = ((TY_INDIRECTION_MASK & (count << TY_INDIRECTION_SHIFT))
+                | (t & ~TY_INDIRECTION_MASK));
+    }
+
+    bool acceptType(Type& t) {
+        t = TY_UNKNOWN;
+        if (tok == TOK_INT) {
+            t = TY_INT;
+        } else if (tok == TOK_CHAR) {
+            t = TY_CHAR;
+        } else if (tok == TOK_VOID) {
+            t = TY_VOID;
+        } else {
+            return false;
+        }
+        next();
+        return true;
+    }
+
+    Type acceptPointerDeclaration(Type& base) {
+        Type t = base;
+        int indirectionCount = 0;
+        while (tok == '*' && indirectionCount <= MAX_INDIRECTION_COUNT) {
+            next();
+            indirectionCount++;
+        }
+        if (indirectionCount > MAX_INDIRECTION_COUNT) {
+            error("Too many levels of pointer. Max %d", MAX_INDIRECTION_COUNT);
+        }
+        setIndirectionCount(t, indirectionCount);
+        return t;
+    }
+
+    void expectType(Type& t) {
+        if (!acceptType(t)) {
+            error("Expected a type.");
+        }
+    }
+
+    void checkSymbol() {
+        if (tok <= TOK_DEFINE) {
+            error("Expected a symbol");
+        }
+    }
+
+    void localDeclarations() {
+        intptr_t a;
+        Type base;
+
+        while (acceptType(base)) {
+            while (tok != ';') {
+                Type t = acceptPointerDeclaration(t);
+                checkSymbol();
+                loc = loc + 4;
+                *(int *) tok = -loc;
+
                 next();
-                while (tok != ';') {
-                    if (l) {
-                        loc = loc + 4;
-                        *(int *) tok = -loc;
-                    } else {
-                        *(int* *) tok = (int*) allocGlobalSpace(4);
+                if (tok == ',')
+                    next();
+            }
+            skip(';');
+        }
+    }
+
+    void globalDeclarations() {
+        while (tok != EOF) {
+            Type base;
+            expectType(base);
+            Type t = acceptPointerDeclaration(t);
+            checkSymbol();
+            int name = tok;
+            next();
+            if (tok == ',' || tok == ';') {
+                // it's a variable declaration
+                for(;;) {
+                    *(int* *) name = (int*) allocGlobalSpace(4);
+                    if (tok != ',') {
+                        break;
                     }
                     next();
-                    if (tok == ',')
-                        next();
+                    t = acceptPointerDeclaration(t);
+                    checkSymbol();
+                    name = tok;
+                    next();
                 }
                 skip(';');
             } else {
-                /* patch forward references (XXX: do not work for function
+                /* patch forward references (XXX: does not work for function
                  pointers) */
-                pGen->gsym(*(int *) (tok + 4));
+                pGen->gsym(*(int *) (name + 4));
                 /* put function address */
-                *(int *) tok = codeBuf.getPC();
-                next();
+                *(int *) name = codeBuf.getPC();
                 skip('(');
-                a = 8;
+                intptr_t a = 8;
                 int argCount = 0;
                 while (tok != ')') {
+                    Type aType;
+                    expectType(aType);
+                    aType = acceptPointerDeclaration(aType);
+                    checkSymbol();
                     /* read param name and compute offset */
                     *(int *) tok = a;
                     a = a + 4;
@@ -1742,7 +1834,7 @@ class Compiler : public ErrorSink {
                         next();
                     argCount++;
                 }
-                next(); /* skip ')' */
+                skip(')'); /* skip ')' */
                 rsym = loc = 0;
                 a = pGen->functionEntry(argCount);
                 block(0);
@@ -1868,7 +1960,9 @@ public:
             file = new TextInputStream(text, textLength);
             sym_stk = (char*) calloc(1, ALLOC_SIZE);
             static const char* predefinedSymbols =
-                " int if else while break return for pragma define main ";
+                " int char void"
+                " if else while break return for"
+                " pragma define main ";
             dstk = strcpy(sym_stk, predefinedSymbols)
                     + strlen(predefinedSymbols);
             pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
@@ -1876,7 +1970,7 @@ public:
             pVarsBase = (char*) calloc(1, ALLOC_SIZE);
             inp();
             next();
-            decl(0);
+            globalDeclarations();
             pGen->finishCompile();
         }
         return result;

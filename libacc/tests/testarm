@@ -1,9 +1,9 @@
 #!/bin/sh
 adb remount
 adb shell rm /system/bin/acc
-adb push data/returnval.c /system/bin/returnval.c
+adb push data/returnval-ansi.c /system/bin/returnval-ansi.c
 cd ..
 mm -j8
 cd tests
 adb sync
-adb shell /system/bin/acc -S /system/bin/returnval.c
+adb shell /system/bin/acc -S /system/bin/returnval-ansi.c
