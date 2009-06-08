@@ -32,6 +32,7 @@ int run(MainPtr mainFunc, int argc, char** argv) {
 int main(int argc, char** argv) {
     const char* inFile = NULL;
     bool printListing;
+    bool runResults = false;
     FILE* in = stdin;
     int i;
     for (i = 1; i < argc; i++) {
@@ -40,6 +41,9 @@ int main(int argc, char** argv) {
             switch (arg[1]) {
                 case 'S':
                     printListing = true;
+                    break;
+                case 'R':
+                    runResults = true;
                     break;
             default:
                 fprintf(stderr, "Unrecognized flag %s\n", arg);
@@ -108,7 +112,7 @@ int main(int argc, char** argv) {
     accGetScriptLabel(script, "main", (ACCvoid**) & mainPointer);
 
     result = accGetError(script);
-    if (result == ACC_NO_ERROR) {
+    if (result == ACC_NO_ERROR && runResults) {
         fprintf(stderr, "Executing compiled code:\n");
         int codeArgc = argc - i + 1;
         char** codeArgv = argv + i - 1;
