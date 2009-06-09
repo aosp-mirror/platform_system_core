@@ -10,6 +10,7 @@
 
 #include <ctype.h>
 #include <dlfcn.h>
+#include <errno.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -17,6 +18,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <cutils/hashmap.h>
+
+#if defined(__i386__)
+#include <sys/mman.h>
+#endif
 
 #if defined(__arm__)
 #include <unistd.h>
@@ -989,7 +994,14 @@ class Compiler : public ErrorSink {
         }
 
         virtual int finishCompile() {
-            return 0;
+            size_t pagesize = 4096;
+            size_t base = (size_t) getBase() & ~ (pagesize - 1);
+            size_t top =  ((size_t) getPC() + pagesize - 1) & ~ (pagesize - 1);
+            int err = mprotect((void*) base, top - base, PROT_READ | PROT_WRITE | PROT_EXEC);
+            if (err) {
+               error("mprotect() failed: %d", errno);
+            }
+            return err;
         }
 
     private:
@@ -1031,7 +1043,7 @@ class Compiler : public ErrorSink {
 
         void gmov(int l, int t) {
             o(l + 0x83);
-            oad((t < LOCAL) << 7 | 5, t);
+            oad((t > -LOCAL && t < LOCAL) << 7 | 5, t);
         }
     };
 
@@ -2165,7 +2177,7 @@ public:
             inp();
             next();
             globalDeclarations();
-            pGen->finishCompile();
+            result = pGen->finishCompile();
         }
         return result;
     }

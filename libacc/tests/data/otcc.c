@@ -441,6 +441,8 @@ P V;
 o f;
 c;
 ab(0);
+mprotect(ac & (~ 4095), (99999 + 4095) & (~ 4095), 7);
+fprintf(stderr, "otcc.c: about to execute compiled code.\n");
 J(*(int(*)f)k(P+592))(g,n;
 }
 
