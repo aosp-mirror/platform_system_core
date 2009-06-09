@@ -1,5 +1,9 @@
 LOCAL_PATH:= $(call my-dir)
+
+# Executable for host
+# ========================================================
 include $(CLEAR_VARS)
+LOCAL_MODULE:= acc
 
 LOCAL_SRC_FILES:= \
 	main.cpp
@@ -7,9 +11,22 @@ LOCAL_SRC_FILES:= \
 LOCAL_SHARED_LIBRARIES := \
     libacc
 
+LOCAL_MODULE_TAGS := tests
+
+include $(BUILD_HOST_EXECUTABLE)
+
+# Executable for target
+# ========================================================
+include $(CLEAR_VARS)
 LOCAL_MODULE:= acc
+
+LOCAL_SRC_FILES:= \
+	main.cpp
+
+LOCAL_SHARED_LIBRARIES := \
+    libacc
+
 
 LOCAL_MODULE_TAGS := tests
 
 include $(BUILD_EXECUTABLE)
-

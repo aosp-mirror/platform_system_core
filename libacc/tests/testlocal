@@ -1,17 +1,18 @@
-#!/bin/sh
-rm -f test-acc
-cd ..
-g++ -I../include acc.cpp disassem.cpp tests/main.cpp -g -ldl -o tests/test-acc
-cd tests
-if [ -x "test-acc" ]; then
-  ./test-acc -S data/returnval-ansi.c
+#!/bin/bash
 
-  if [ "$(uname)" = "Linux" ]; then
-    if [ "$(uname -m)" = "i686" ]; then
-      echo "Linux i686. Testing otcc-ansi.c"
-      ./test-acc data/otcc-ansi.c data/returnval.c
-      echo "Linux i686. Testing otcc-ansi.c data/otcc.c"
-      ./test-acc data/otcc-ansi.c data/otcc.c data/returnval.c
-    fi
-  fi
+SCRIPT_DIR=`dirname $BASH_SOURCE`
+DATA=$SCRIPT_DIR/data
+
+echo "Compiling returnval-ansi.c"
+acc -S $DATA/returnval-ansi.c
+
+echo "Compiling whole compiler."
+acc -S "$DATA/otcc-ansi.c"
+
+if (( "$(uname)" = "Linux" )) && (( "$(uname -m)" = "i686" )); then
+	echo "Linux i686. Testing otcc-ansi.c"
+	acc -R "$DATA/otcc-ansi.c" "$DATA/returnval.c"
+	acc -R $DATA/otcc-ansi.c $DATA/otcc.c $DATA/returnval.c
 fi
+
+echo "Done with tests."

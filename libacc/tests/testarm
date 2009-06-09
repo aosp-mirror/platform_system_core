@@ -6,4 +6,4 @@ cd ..
 mm -j8
 cd tests
 adb sync
-adb shell /system/bin/acc -S /system/bin/returnval-ansi.c
+adb shell /system/bin/acc -R -S /system/bin/returnval-ansi.c

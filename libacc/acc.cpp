@@ -1087,26 +1087,6 @@ class Compiler : public ErrorSink {
         size_t mPosition;
     };
 
-    int ch; // Current input character, or EOF
-    intptr_t tok;     // token
-    intptr_t tokc;    // token extra info
-    int tokl;         // token operator level
-    intptr_t rsym; // return symbol
-    intptr_t loc; // local variable index
-    char* glo;  // global variable index
-    char* sym_stk;
-    char* dstk; // Define stack
-    char* dptr; // Macro state: Points to macro text during macro playback.
-    int dch;    // Macro state: Saves old value of ch during a macro playback.
-    char* last_id;
-    char* pGlobalBase;
-    char* pVarsBase; // Value of variables
-
-    InputStream* file;
-
-    CodeBuf codeBuf;
-    CodeGenerator* pGen;
-
     class String {
     public:
         String() {
@@ -1306,6 +1286,8 @@ class Compiler : public ErrorSink {
         void pop() {
             if (mUsed > 0) {
                 mUsed -= 1;
+            } else {
+                error("internal error: Popped empty stack.");
             }
         }
 
@@ -1338,7 +1320,34 @@ class Compiler : public ErrorSink {
         size_t mSize;
     };
 
+    struct InputState {
+        InputStream* pStream;
+        int oldCh;
+    };
+
+
+    int ch; // Current input character, or EOF
+    intptr_t tok;     // token
+    intptr_t tokc;    // token extra info
+    int tokl;         // token operator level
+    intptr_t rsym; // return symbol
+    intptr_t loc; // local variable index
+    char* glo;  // global variable index
+    char* sym_stk;
+    char* dstk; // Define stack
+    char* dptr; // Macro state: Points to macro text during macro playback.
+    int dch;    // Macro state: Saves old value of ch during a macro playback.
+    char* last_id;
+    char* pGlobalBase;
+    char* pVarsBase; // Value of variables
+
+    InputStream* file;
+
+    CodeBuf codeBuf;
+    CodeGenerator* pGen;
+
     MacroTable mMacros;
+    Array<InputState> mInputStateStack;
 
     String mErrorBuf;
 
