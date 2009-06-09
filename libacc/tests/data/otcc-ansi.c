@@ -50,7 +50,7 @@ void ad() {
         o();
     }
     C = 0;
-    d = h;
+    d = h;	
     if (X()) {
         E(32);
         M = D;
@@ -162,7 +162,7 @@ void Z(int e) {
 
 void N(int j, int e) {
     ae(j + 131);
-    s((e < 512) << 7 | 5, e);
+    s((e > -512 && e < 512) << 7 | 5, e);
 }
 
 void T (int j) {
@@ -404,7 +404,7 @@ void ab (int j) {
                     v=v +4;
                 }
                 ad();
-                if( d == 44)ad();
+                if( d == 44)ad()	;
             }
             ad();
         }
@@ -432,7 +432,12 @@ void ab (int j) {
     }
 }
 
+int run(int g, int e) {
+    return (*(int(*)()) *(int*) (P + 592))(g, e);
+}
+
 int main(int g, int e) {
+    int result;
     Q = stdin;
     if (g-- > 1) {
         e = e + 4;
@@ -445,5 +450,13 @@ int main(int g, int e) {
     o();
     ad();
     ab(0);
-    return (*(int(*)()) *(int*) (P + 592))(g, e);
+    if (mprotect((ac + 592) & (~ 4095), (99999 + 4095) & (~ 4095), 7)) {
+        printf("Mprotect failed. %d\n", errno);
+        return -1;
+    }
+    fprintf(stderr, "otcc-ansi.c: About to execute compiled code:\n");
+    result = run(g, e);
+    fprintf(stderr, "atcc-ansi.c: result: %d\n", result);
+    return result;
 }
+

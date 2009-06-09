@@ -2,17 +2,20 @@
 
 SCRIPT_DIR=`dirname $BASH_SOURCE`
 DATA=$SCRIPT_DIR/data
+ACC=`which acc`
 
 echo "Compiling returnval-ansi.c"
-acc -S $DATA/returnval-ansi.c
+$ACC -S $DATA/returnval-ansi.c
 
 echo "Compiling whole compiler."
-acc -S "$DATA/otcc-ansi.c"
+$ACC -S "$DATA/otcc-ansi.c"
 
-if (( "$(uname)" = "Linux" )) && (( "$(uname -m)" = "i686" )); then
-	echo "Linux i686. Testing otcc-ansi.c"
-	acc -R "$DATA/otcc-ansi.c" "$DATA/returnval.c"
-	acc -R $DATA/otcc-ansi.c $DATA/otcc.c $DATA/returnval.c
+if file $ACC | grep -q "ELF 32-bit LSB executable, Intel 80386"; then
+	echo "Linux 32bit Intel."
+        $ACC -R $DATA/returnval-ansi.c
+        echo Testing otcc-ansi.c
+	$ACC -R "$DATA/otcc-ansi.c" "$DATA/returnval.c"
+	$ACC -R $DATA/otcc-ansi.c $DATA/otcc.c $DATA/returnval.c
 fi
 
 echo "Done with tests."
