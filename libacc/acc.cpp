@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cutils/hashmap.h>
 
 #if defined(__arm__)
 #include <unistd.h>
@@ -1098,7 +1099,6 @@ class Compiler : public ErrorSink {
     char* dptr; // Macro state: Points to macro text during macro playback.
     int dch;    // Macro state: Saves old value of ch during a macro playback.
     char* last_id;
-    void* pSymbolBase;
     char* pGlobalBase;
     char* pVarsBase; // Value of variables
 
@@ -1115,23 +1115,47 @@ class Compiler : public ErrorSink {
             mSize = 0;
         }
 
+        String(char* item, int len, bool adopt) {
+            if (adopt) {
+                mpBase = item;
+                mUsed = len;
+                mSize = len + 1;
+            } else {
+                mpBase = 0;
+                mUsed = 0;
+                mSize = 0;
+                appendBytes(item, len);
+            }
+        }
+
         ~String() {
             if (mpBase) {
                 free(mpBase);
             }
         }
 
-        char* getUnwrapped() {
+        inline char* getUnwrapped() {
             return mpBase;
         }
 
         void appendCStr(const char* s) {
-            int n = strlen(s);
+            appendBytes(s, strlen(s));
+        }
+
+        void appendBytes(const char* s, int n) {
             memcpy(ensure(n), s, n + 1);
         }
 
         void append(char c) {
             * ensure(1) = c;
+        }
+
+        char* orphan() {
+            char* result = mpBase;
+            mpBase = 0;
+            mUsed = 0;
+            mSize = 0;
+            return result;
         }
 
         void printf(const char* fmt,...) {
@@ -1148,7 +1172,7 @@ class Compiler : public ErrorSink {
             free(temp);
         }
 
-        size_t len() {
+        inline size_t len() {
             return mUsed;
         }
 
@@ -1173,6 +1197,148 @@ class Compiler : public ErrorSink {
         size_t mUsed;
         size_t mSize;
     };
+
+    /**
+     * Wrap an externally allocated string for use as a hash key.
+     */
+    class FakeString : public String {
+    public:
+        FakeString(char* string, size_t length) :
+            String(string, length, true) {}
+
+        ~FakeString() {
+            orphan();
+        }
+    };
+
+    template<class V> class StringTable {
+    public:
+        StringTable(size_t initialCapacity) {
+            mpMap = hashmapCreate(initialCapacity, hashFn, equalsFn);
+        }
+
+        ~StringTable() {
+            clear();
+        }
+
+        void clear() {
+            hashmapForEach(mpMap, freeKeyValue, this);
+        }
+
+        bool contains(String* pKey) {
+            bool result = hashmapContainsKey(mpMap, pKey);
+            return result;
+        }
+
+        V* get(String* pKey) {
+            V* result = (V*) hashmapGet(mpMap, pKey);
+            return result;
+        }
+
+        V* remove(String* pKey) {
+            V* result = (V*) hashmapRemove(mpMap, pKey);
+            return result;
+        }
+
+        V* put(String* pKey, V* value) {
+            V* result = (V*) hashmapPut(mpMap, pKey, value);
+            if (result) {
+                // The key was not adopted by the map, so delete it here.
+                delete pKey;
+            }
+            return result;
+        }
+
+    protected:
+        static int hashFn(void* pKey) {
+            String* pString = (String*) pKey;
+            return hashmapHash(pString->getUnwrapped(), pString->len());
+        }
+
+        static bool equalsFn(void* keyA, void* keyB) {
+            String* pStringA = (String*) keyA;
+            String* pStringB = (String*) keyB;
+            return pStringA->len() == pStringB->len()
+                && strcmp(pStringA->getUnwrapped(), pStringB->getUnwrapped())
+                    == 0;
+        }
+
+        static bool freeKeyValue(void* key, void* value, void* context) {
+            delete (String*) key;
+            delete (V*) value;
+            return true;
+        }
+
+        Hashmap* mpMap;
+    };
+
+    class MacroTable : public StringTable<String> {
+    public:
+        MacroTable() : StringTable<String>(10) {}
+    };
+
+    template<class E> class Array {
+        public:
+        Array() {
+            mpBase = 0;
+            mUsed = 0;
+            mSize = 0;
+        }
+
+        ~Array() {
+            if (mpBase) {
+                free(mpBase);
+            }
+        }
+
+        E get(int i) {
+            if (i < 0 || i > mUsed) {
+                error("internal error: Index out of range");
+                return E();
+            }
+            return mpBase[i];
+        }
+
+        void set(int i, E val) {
+            mpBase[i] =  val;
+        }
+
+        void pop() {
+            if (mUsed > 0) {
+                mUsed -= 1;
+            }
+        }
+
+        void push(E item) {
+            * ensure(1) = item;
+        }
+
+        size_t len() {
+            return mUsed;
+        }
+
+    private:
+        E* ensure(int n) {
+            size_t newUsed = mUsed + n;
+            if (newUsed > mSize) {
+                size_t newSize = mSize * 2 + 10;
+                if (newSize < newUsed) {
+                    newSize = newUsed;
+                }
+                mpBase = (E*) realloc(mpBase, sizeof(E) * newSize);
+                mSize = newSize;
+            }
+            E* result = mpBase + mUsed;
+            mUsed = newUsed;
+            return result;
+        }
+
+        E* mpBase;
+        size_t mUsed;
+        size_t mSize;
+    };
+
+    MacroTable mMacros;
 
     String mErrorBuf;
 
@@ -1208,7 +1374,6 @@ class Compiler : public ErrorSink {
 
     /* tokens in string heap */
     static const int TAG_TOK = ' ';
-    static const int TAG_MACRO = 2;
 
     static const int OP_INCREMENT = 0;
     static const int OP_DECREMENT = 1;
@@ -1251,7 +1416,7 @@ class Compiler : public ErrorSink {
     void inp() {
         if (dptr) {
             ch = *dptr++;
-            if (ch == TAG_MACRO) {
+            if (ch == 0) {
                 dptr = 0;
                 ch = dch;
             }
@@ -1283,16 +1448,7 @@ class Compiler : public ErrorSink {
                 inp();
                 next();
                 if (tok == TOK_DEFINE) {
-                    next();
-                    pdef(TAG_TOK); /* fill last ident tag */
-                    *(int *) tok = SYM_DEFINE;
-                    *(char* *) (tok + 4) = dstk; /* define stack */
-                    while (ch != '\n') {
-                        pdef(ch);
-                        inp();
-                    }
-                    pdef(ch);
-                    pdef(TAG_MACRO);
+                    doDefine();
                 } else if (tok == TOK_PRAGMA) {
                     doPragma();
                 } else {
@@ -1319,24 +1475,29 @@ class Compiler : public ErrorSink {
                 if (dstk - sym_stk + 1 > ALLOC_SIZE) {
                     error("symbol stack overflow");
                 }
-                * dstk = TAG_TOK; /* no need to mark end of string (we
-                 suppose data is initialized to zero by calloc) */
-                tok = (intptr_t) (strstr(sym_stk, (last_id - 1))
-                        - sym_stk);
-                * dstk = 0; /* mark real end of ident for dlsym() */
-                tok = tok * 8 + TOK_IDENT;
-                if (tok > TOK_DEFINE) {
-                    if (tok + 8 > ALLOC_SIZE) {
-                        error("Variable Table overflow.");
-                    }
-                    tok = (intptr_t) (pVarsBase + tok);
-                    /*        printf("tok=%s %x\n", last_id, tok); */
-                    /* define handling */
-                    if (*(int *) tok == SYM_DEFINE) {
-                        dptr = *(char* *) (tok + 4);
-                        dch = ch;
-                        inp();
-                        next();
+                FakeString token(last_id, dstk-last_id);
+                // Is this a macro?
+                String* pValue = mMacros.get(&token);
+                if (pValue) {
+                    // Yes, it is a macro
+                    dstk = last_id-1;
+                    dptr = pValue->getUnwrapped();
+                    dch = ch;
+                    inp();
+                    next();
+                } else {
+                    * dstk = TAG_TOK; /* no need to mark end of string (we
+                     suppose data is initialized to zero by calloc) */
+                    tok = (intptr_t) (strstr(sym_stk, (last_id - 1))
+                            - sym_stk);
+                    * dstk = 0; /* mark real end of ident for dlsym() */
+                    tok = tok * 8 + TOK_IDENT;
+                    if (tok > TOK_DEFINE) {
+                        if (tok + 8 > ALLOC_SIZE) {
+                            error("Variable Table overflow.");
+                        }
+                        tok = (intptr_t) (pVarsBase + tok);
+                        /*        printf("tok=%s %x\n", last_id, tok); */
                     }
                 }
             }
@@ -1413,6 +1574,30 @@ class Compiler : public ErrorSink {
             }
         }
 #endif
+    }
+
+    void doDefine() {
+        String* pName = new String();
+        while (isspace(ch)) {
+            inp();
+        }
+        while (isid()) {
+            pName->append(ch);
+            inp();
+        }
+        if (ch == '(') {
+            delete pName;
+            error("Defines with arguments not supported");
+        }
+        while (isspace(ch)) {
+            inp();
+        }
+        String* pValue = new String();
+        while (ch != '\n' && ch != EOF) {
+            pValue->append(ch);
+            inp();
+        }
+        delete mMacros.put(pName, pValue);
     }
 
     void doPragma() {

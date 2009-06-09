@@ -12,7 +12,7 @@ ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += disassem.cpp
 endif
 
-LOCAL_SHARED_LIBRARIES := libdl
+LOCAL_SHARED_LIBRARIES := libdl libcutils
 
 include $(BUILD_SHARED_LIBRARY)
 
