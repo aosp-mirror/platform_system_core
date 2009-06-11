@@ -1204,8 +1204,8 @@ class Compiler : public ErrorSink {
      */
     class FakeString : public String {
     public:
-        FakeString(char* string, size_t length) :
-            String(string, length, true) {}
+        FakeString(const char* string, size_t length) :
+            String((char*) string, length, true) {}
 
         ~FakeString() {
             orphan();
@@ -1220,6 +1220,7 @@ class Compiler : public ErrorSink {
 
         ~StringTable() {
             clear();
+            hashmapFree(mpMap);
         }
 
         void clear() {
@@ -1276,6 +1277,71 @@ class Compiler : public ErrorSink {
     class MacroTable : public StringTable<String> {
     public:
         MacroTable() : StringTable<String>(10) {}
+    };
+
+    class KeywordTable {
+    public:
+
+        KeywordTable(){
+            mpMap = hashmapCreate(40, hashFn, equalsFn);
+            put("int", TOK_INT);
+            put("char", TOK_CHAR);
+            put("void", TOK_VOID);
+            put("if", TOK_IF);
+            put("else", TOK_ELSE);
+            put("while", TOK_WHILE);
+            put("break", TOK_BREAK);
+            put("return", TOK_RETURN);
+            put("for", TOK_FOR);
+            put("pragma", TOK_PRAGMA);
+        }
+
+        ~KeywordTable() {
+            hashmapFree(mpMap);
+        }
+
+        int get(char* key) {
+            return (int) hashmapGet(mpMap, key);
+        }
+
+        const char* lookupKeyFor(int value) {
+            FindValContext context;
+            context.key = 0;
+            hashmapForEach(mpMap, findKeyFn, &context);
+            return context.key;
+        }
+
+    private:
+        void put(const char* kw, int val) {
+            hashmapPut(mpMap, (void*) kw, (void*) val);
+        }
+
+        static int hashFn(void* pKey) {
+            char* pString = (char*) pKey;
+            return hashmapHash(pString, strlen(pString));
+        }
+
+        static bool equalsFn(void* keyA, void* keyB) {
+            const char* pStringA = (const char*) keyA;
+            const char* pStringB = (const char*) keyB;
+            return strcmp(pStringA, pStringB)  == 0;
+        }
+
+        struct FindValContext {
+            char* key;
+            int value;
+        };
+
+        static bool findKeyFn(void* key, void* value, void* context) {
+            FindValContext* pContext = (FindValContext*) context;
+            if ((int) value == pContext->value) {
+                pContext->key = (char*) key;
+                return false;
+            }
+            return true;
+        }
+
+        Hashmap* mpMap;
     };
 
     template<class E> class Array {
@@ -1346,6 +1412,11 @@ class Compiler : public ErrorSink {
         int oldCh;
     };
 
+    struct VariableInfo {
+        void* pA;
+        void* pB;
+    };
+
 
     int ch; // Current input character, or EOF
     intptr_t tok;     // token
@@ -1360,7 +1431,8 @@ class Compiler : public ErrorSink {
     int dch;    // Macro state: Saves old value of ch during a macro playback.
     char* last_id;
     char* pGlobalBase;
-    char* pVarsBase; // Value of variables
+    VariableInfo* pVarsBase; // Value of variables
+    KeywordTable mKeywords;
 
     InputStream* file;
 
@@ -1377,20 +1449,22 @@ class Compiler : public ErrorSink {
 
     static const int ALLOC_SIZE = 99999;
 
-    // Indentifiers start at 0x100 and increase by # (chars + 1) * 8
-    static const int TOK_IDENT = 0x100;
-    static const int TOK_INT = 0x100;
-    static const int TOK_CHAR = TOK_INT + 4*8;
-    static const int TOK_VOID = TOK_CHAR + 5*8;
-    static const int TOK_IF = TOK_VOID + 5*8;
-    static const int TOK_ELSE = TOK_IF + 3*8;
-    static const int TOK_WHILE = TOK_ELSE + 5*8;
-    static const int TOK_BREAK = TOK_WHILE + 6*8;
-    static const int TOK_RETURN = TOK_BREAK + 6*8;
-    static const int TOK_FOR = TOK_RETURN + 7*8;
-    static const int TOK_PRAGMA = TOK_FOR + 4*8;
-    static const int TOK_DEFINE = TOK_PRAGMA + 7*8;
-    static const int TOK_MAIN = TOK_DEFINE + 7*8;
+    // Keywords start at 0x100 and increase by 1
+    static const int TOK_KEYWORD = 0x100;
+    static const int TOK_INT = TOK_KEYWORD + 0;
+    static const int TOK_CHAR = TOK_KEYWORD + 1;
+    static const int TOK_VOID = TOK_KEYWORD + 2;
+    static const int TOK_IF = TOK_KEYWORD + 3;
+    static const int TOK_ELSE = TOK_KEYWORD + 4;
+    static const int TOK_WHILE = TOK_KEYWORD + 5;
+    static const int TOK_BREAK = TOK_KEYWORD + 6;
+    static const int TOK_RETURN = TOK_KEYWORD + 7;
+    static const int TOK_FOR = TOK_KEYWORD + 8;
+    static const int TOK_PRAGMA = TOK_KEYWORD + 9;
+    static const int TOK_DEFINE = TOK_KEYWORD + 10;
+
+    // Symbols start at 0x200
+    static const int TOK_SYMBOL = 0x200;
 
     static const int TOK_DUMMY = 1;
     static const int TOK_NUM = 2;
@@ -1514,18 +1588,20 @@ class Compiler : public ErrorSink {
                     inp();
                     next();
                 } else {
-                    * dstk = TAG_TOK; /* no need to mark end of string (we
-                     suppose data is initialized to zero by calloc) */
-                    tok = (intptr_t) (strstr(sym_stk, (last_id - 1))
-                            - sym_stk);
-                    * dstk = 0; /* mark real end of ident for dlsym() */
-                    tok = tok * 8 + TOK_IDENT;
-                    if (tok > TOK_DEFINE) {
-                        if (tok + 8 > ALLOC_SIZE) {
-                            error("Variable Table overflow.");
-                        }
-                        tok = (intptr_t) (pVarsBase + tok);
-                        /*        printf("tok=%s %x\n", last_id, tok); */
+                    // Is this a keyword?
+                    * dstk = 0;
+                    int kwtok = mKeywords.get(last_id);
+                    if (kwtok) {
+                        tok = kwtok;
+                        // fprintf(stderr, "tok= keyword %s %x\n", last_id, tok);
+                    } else {
+                        * dstk = TAG_TOK; /* no need to mark end of string (we
+                         suppose data is initialized to zero by calloc) */
+                        tok = (intptr_t) (strstr(sym_stk, (last_id - 1))
+                                - sym_stk);
+                        * dstk = 0; /* mark real end of ident for dlsym() */
+                        tok = (intptr_t) & (pVarsBase[tok]);
+                        // fprintf(stderr, "tok= symbol %s %x\n", last_id, tok);
                     }
                 }
             }
@@ -1583,15 +1659,19 @@ class Compiler : public ErrorSink {
         }
 #if 0
         {
-            char* p;
+            const char* p;
 
             printf("tok=0x%x ", tok);
-            if (tok >= TOK_IDENT) {
+            if (tok >= TOK_KEYWORD) {
                 printf("'");
-                if (tok> TOK_DEFINE)
-                p = sym_stk + 1 + ((char*) tok - pVarsBase - TOK_IDENT) / 8;
-                else
-                p = sym_stk + 1 + (tok - TOK_IDENT) / 8;
+                if (tok>= TOK_SYMBOL)
+                    p = sym_stk + 1 + ((char*) tok - (char*) pVarsBase) / 8;
+                else {
+                    p = mKeywords.lookupKeyFor(tok);
+                    if (!p) {
+                        p = "unknown keyword";
+                    }
+                }
                 while (*p != TAG_TOK && *p)
                 printf("%c", *p++);
                 printf("'\n");
@@ -1979,7 +2059,7 @@ class Compiler : public ErrorSink {
     }
 
     void checkSymbol() {
-        if (tok <= TOK_DEFINE) {
+        if (tok < TOK_SYMBOL) {
             error("Expected a symbol");
         }
     }
@@ -2174,15 +2254,10 @@ public:
         pGen->init(&codeBuf);
         file = new TextInputStream(text, textLength);
         sym_stk = (char*) calloc(1, ALLOC_SIZE);
-        static const char* predefinedSymbols =
-            " int char void"
-            " if else while break return for"
-            " pragma define main ";
-        dstk = strcpy(sym_stk, predefinedSymbols)
-                + strlen(predefinedSymbols);
+        dstk = sym_stk;
         pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
         glo = pGlobalBase;
-        pVarsBase = (char*) calloc(1, ALLOC_SIZE);
+        pVarsBase = (VariableInfo*) calloc(1, ALLOC_SIZE);
         inp();
         next();
         globalDeclarations();
@@ -2193,16 +2268,6 @@ public:
             }
         }
         return result;
-    }
-
-    int run(int argc, char** argv) {
-        typedef int (*mainPtr)(int argc, char** argv);
-        mainPtr aMain = (mainPtr) *(int*) (pVarsBase + TOK_MAIN);
-        if (!aMain) {
-            fprintf(stderr, "Could not find function \"main\".\n");
-            return -1;
-        }
-        return aMain(argc, argv);
     }
 
     int dump(FILE* out) {
@@ -2233,13 +2298,9 @@ public:
                 if (memcmp(pSym, name, nameLen) == 0
                         && pSym[nameLen] == TAG_TOK) {
                     int tok = pSym - 1 - sym_stk;
-                    tok = tok * 8 + TOK_IDENT;
-                    if (tok <= TOK_DEFINE) {
-                        return 0;
-                    } else {
-                        tok = (intptr_t) (pVarsBase + tok);
-                        return * (void**) tok;
-                    }
+                    tok = tok * sizeof(VariableInfo);
+                    tok = (intptr_t) ((intptr_t) pVarsBase + tok);
+                    return * (void**) tok;
                 }
             }
         }
