@@ -450,7 +450,7 @@ int main(int g, int e) {
     o();
     ad();
     ab(0);
-    if (mprotect((ac + 592) & (~ 4095), (99999 + 4095) & (~ 4095), 7)) {
+    if (mprotect(ac & (~ 4095), (99999 + 4095) & (~ 4095), 7)) {
         printf("Mprotect failed. %d\n", errno);
         return -1;
     }

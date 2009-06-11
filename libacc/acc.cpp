@@ -11,7 +11,6 @@
 #include <ctype.h>
 #include <dlfcn.h>
 #include <errno.h>
-#include <setjmp.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -69,6 +68,7 @@ class Compiler : public ErrorSink {
         char* pProgramBase;
         ErrorSink* mErrorSink;
         int mSize;
+        bool mOverflowed;
 
         void release() {
             if (pProgramBase != 0) {
@@ -77,13 +77,16 @@ class Compiler : public ErrorSink {
             }
         }
 
-        void check(int n) {
+        bool check(int n) {
             int newSize = ind - pProgramBase + n;
-            if (newSize > mSize) {
+            bool overflow = newSize > mSize;
+            if (overflow && !mOverflowed) {
+                mOverflowed = true;
                 if (mErrorSink) {
                     mErrorSink->error("Code too large: %d bytes", newSize);
                 }
             }
+            return overflow;
         }
 
     public:
@@ -92,6 +95,7 @@ class Compiler : public ErrorSink {
             ind = 0;
             mErrorSink = 0;
             mSize = 0;
+            mOverflowed = false;
         }
 
         ~CodeBuf() {
@@ -110,7 +114,9 @@ class Compiler : public ErrorSink {
         }
 
         int o4(int n) {
-            check(4);
+            if(check(4)) {
+                return 0;
+            }
             intptr_t result = (intptr_t) ind;
             * (int*) ind = n;
             ind += 4;
@@ -121,7 +127,9 @@ class Compiler : public ErrorSink {
          * Output a byte. Handles all values, 0..ff.
          */
         void ob(int n) {
-            check(1);
+            if(check(1)) {
+                return;
+            }
             *ind++ = n;
         }
 
@@ -1037,6 +1045,7 @@ class Compiler : public ErrorSink {
         int decodeOp(int op) {
             if (op < 0 || op > OP_COUNT) {
                 error("Out-of-range operator: %d\n", op);
+                op = 0;
             }
             return operatorHelper[op];
         }
@@ -1363,8 +1372,6 @@ class Compiler : public ErrorSink {
 
     String mErrorBuf;
 
-    jmp_buf mErrorRecoveryJumpBuf;
-
     String mPragmas;
     int mPragmaStringCount;
 
@@ -1430,6 +1437,7 @@ class Compiler : public ErrorSink {
     void pdef(int t) {
         if (dstk - sym_stk >= ALLOC_SIZE) {
             error("Symbol table exhausted");
+            return;
         }
         *dstk++ = t;
     }
@@ -1475,7 +1483,6 @@ class Compiler : public ErrorSink {
                 } else {
                     error("Unsupported preprocessor directive \"%s\"", last_id);
                 }
-
             }
             inp();
         }
@@ -1609,6 +1616,7 @@ class Compiler : public ErrorSink {
         if (ch == '(') {
             delete pName;
             error("Defines with arguments not supported");
+            return;
         }
         while (isspace(ch)) {
             inp();
@@ -1669,7 +1677,6 @@ class Compiler : public ErrorSink {
         mErrorBuf.printf("%ld: ", file->getLine());
         mErrorBuf.vprintf(fmt, ap);
         mErrorBuf.printf("\n");
-        longjmp(mErrorRecoveryJumpBuf, 1);
     }
 
     void skip(intptr_t c) {
@@ -2053,6 +2060,7 @@ class Compiler : public ErrorSink {
     char* allocGlobalSpace(int bytes) {
         if (glo - pGlobalBase + bytes > ALLOC_SIZE) {
             error("Global space exhausted");
+            return NULL;
         }
         char* result = glo;
         glo += bytes;
@@ -2132,8 +2140,9 @@ class Compiler : public ErrorSink {
         }
         if (pGen == NULL) {
             error("No code generator defined.");
+        } else {
+            pGen->setErrorSink(this);
         }
-        pGen->setErrorSink(this);
     }
 
 public:
@@ -2154,30 +2163,34 @@ public:
 
     int compile(const char* text, size_t textLength) {
         int result;
-        if (! (result = setjmp(mErrorRecoveryJumpBuf))) {
-            cleanup();
-            clear();
-            codeBuf.init(ALLOC_SIZE);
-            setArchitecture(NULL);
-            if (!pGen) {
-                return -1;
+
+        cleanup();
+        clear();
+        codeBuf.init(ALLOC_SIZE);
+        setArchitecture(NULL);
+        if (!pGen) {
+            return -1;
+        }
+        pGen->init(&codeBuf);
+        file = new TextInputStream(text, textLength);
+        sym_stk = (char*) calloc(1, ALLOC_SIZE);
+        static const char* predefinedSymbols =
+            " int char void"
+            " if else while break return for"
+            " pragma define main ";
+        dstk = strcpy(sym_stk, predefinedSymbols)
+                + strlen(predefinedSymbols);
+        pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
+        glo = pGlobalBase;
+        pVarsBase = (char*) calloc(1, ALLOC_SIZE);
+        inp();
+        next();
+        globalDeclarations();
+        result = pGen->finishCompile();
+        if (result == 0) {
+            if (mErrorBuf.len()) {
+                result = -2;
             }
-            pGen->init(&codeBuf);
-            file = new TextInputStream(text, textLength);
-            sym_stk = (char*) calloc(1, ALLOC_SIZE);
-            static const char* predefinedSymbols =
-                " int char void"
-                " if else while break return for"
-                " pragma define main ";
-            dstk = strcpy(sym_stk, predefinedSymbols)
-                    + strlen(predefinedSymbols);
-            pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
-            glo = pGlobalBase;
-            pVarsBase = (char*) calloc(1, ALLOC_SIZE);
-            inp();
-            next();
-            globalDeclarations();
-            result = pGen->finishCompile();
         }
         return result;
     }
