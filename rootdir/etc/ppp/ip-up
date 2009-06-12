@@ -1,24 +1,33 @@
 #!/system/bin/sh
-case $1 in
-    ppp1)
-	/android/bin/iptables --flush;
-	/android/bin/iptables --table nat --flush;
-	/android/bin/iptables --delete-chain;
-	/android/bin/iptables --table nat --append POSTROUTING --out-interface ppp0 -j MASQUERADE;
-	/android/bin/iptables --append FORWARD --in-interface ppp1 -j ACCEPT;
-	echo 0 > /proc/sys/net/ipv4/ip_forward;
-	echo 1 > /proc/sys/net/ipv4/ip_forward;
-	;;
-    ppp0)
-        /system/bin/setprop "net.interfaces.defaultroute" "gprs"
-        ;;
-esac
 
 # Use interface name if linkname is not available
-NAME=${LINKNAME:-"$1"}
 
-/system/bin/setprop "net.$NAME.dns1" "$DNS1"
-/system/bin/setprop "net.$NAME.dns2" "$DNS2" 
-/system/bin/setprop "net.$NAME.local-ip" "$IPLOCAL" 
-/system/bin/setprop "net.$NAME.remote-ip" "$IPREMOTE" 
+/system/bin/setprop "net.dns1" "$DNS1"
+/system/bin/setprop "net.dns2" "$DNS2"
+
+# Retrieve the default gateway from /proc/net/route
+RTAB=`cat /proc/net/route`
+flag=-1; i=0;
+for l in $RTAB; do
+    if (exp flag==1) then DGW=$l; flag=0; fi;
+    if (exp i%11 == 1) then
+        if (exp $l=="00000000") then flag=1; fi;
+    fi;
+    i=`exp i+1`;
+done
+FH=${DGW%????}
+LH=${DGW#????}
+A=`exp 0x${LH#??}`
+B=`exp 0x${LH%??}`
+C=`exp 0x${FH#??}`
+D=`exp 0x${FH%??}`
+GATEWAY="$A.$B.$C.$D"
+VPNSERVER=`getprop "net.vpn.server_ip"`
+
+# Protect the route to vpn server
+/system/bin/route add -net $VPNSERVER netmask 255.255.255.255 gw $GATEWAY
+
+# Route all traffic to vpn connection
+/system/bin/route add -net 0.0.0.0 netmask 128.0.0.0 gw $IPREMOTE
+/system/bin/route add -net 128.0.0.0 netmask 128.0.0.0 gw $IPREMOTE
 
