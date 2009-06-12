@@ -1502,6 +1502,41 @@ class Compiler : public ErrorSink {
             // be able to have symbols named pragma or define.
             put("pragma", TOK_PRAGMA);
             put("define", TOK_DEFINE);
+
+            const char* unsupported[] = {
+                "auto",
+                "case",
+                "const",
+                "continue",
+                "default",
+                "do",
+                "double",
+                "enum",
+                "extern",
+                "float",
+                "goto",
+                "long",
+                "register",
+                "short",
+                "signed",
+                "sizeof",
+                "static",
+                "struct",
+                "switch",
+                "typedef",
+                "union",
+                "unsigned",
+                "volatile",
+                "_Bool",
+                "_Complex",
+                "_Imaginary",
+                "inline",
+                "restrict",
+                0};
+
+            for(int i = 0; unsupported[i]; i++) {
+                put(unsupported[i], TOK_UNSUPPORTED_KEYWORD);
+            }
         }
 
         ~KeywordTable() {
@@ -1773,6 +1808,7 @@ class Compiler : public ErrorSink {
     static const int TOK_FOR = TOK_KEYWORD + 8;
     static const int TOK_PRAGMA = TOK_KEYWORD + 9;
     static const int TOK_DEFINE = TOK_KEYWORD + 10;
+    static const int TOK_UNSUPPORTED_KEYWORD = TOK_KEYWORD + 0xff;
 
     static const int TOK_UNDEFINED_SYMBOL = 0x200;
 
@@ -2463,12 +2499,6 @@ class Compiler : public ErrorSink {
         }
     }
 
-    void checkSymbol() {
-        if (tok < TOK_SYMBOL) {
-            error("Expected a symbol");
-        }
-    }
-
     void addGlobalSymbol() {
         tok = (intptr_t) mSymbolTable.addGlobal(
             new String(mTokenString));
@@ -2494,10 +2524,12 @@ class Compiler : public ErrorSink {
         while (acceptType(base)) {
             while (tok != ';' && tok != EOF) {
                 Type t = acceptPointerDeclaration(t);
-                addLocalSymbol();
-                if (tok) {
-                    loc = loc + 4;
-                    *(int *) tok = -loc;
+                if (checkSymbol()) {
+                    addLocalSymbol();
+                    if (tok) {
+                        loc = loc + 4;
+                        *(int *) tok = -loc;
+                    }
                 }
                 next();
                 if (tok == ',')
@@ -2507,11 +2539,37 @@ class Compiler : public ErrorSink {
         }
     }
 
+    bool checkSymbol() {
+        bool result = isSymbol();
+        if (!result) {
+            String temp;
+            if (tok >= 0 && tok < 256) {
+                temp.printf("char \'%c\'", tok);
+            } else if (tok >= TOK_KEYWORD && tok < TOK_UNSUPPORTED_KEYWORD) {
+                temp.printf("keyword \"%s\"", mTokenString.getUnwrapped());
+            } else {
+                temp.printf("reserved keyword \"%s\"",
+                            mTokenString.getUnwrapped());
+            }
+            error("Expected symbol. Got %s", temp.getUnwrapped());
+        }
+        return result;
+    }
+
+    /* Is a possibly undefined symbol */
+    bool isSymbol() {
+        return tok < EOF || tok >= TOK_UNDEFINED_SYMBOL;
+    }
+
     void globalDeclarations() {
         while (tok != EOF) {
             Type base;
             expectType(base);
             Type t = acceptPointerDeclaration(t);
+            if (tok >=  0 && tok < TOK_UNDEFINED_SYMBOL) {
+                error("Unexpected token %d", tok);
+                break;
+            }
             if (tok == TOK_UNDEFINED_SYMBOL) {
                 addGlobalSymbol();
             }
@@ -2553,11 +2611,13 @@ class Compiler : public ErrorSink {
                     Type aType;
                     expectType(aType);
                     aType = acceptPointerDeclaration(aType);
-                    addLocalSymbol();
-                    if (tok) {
-                        /* read param name and compute offset */
-                        *(int *) tok = a;
-                        a = a + 4;
+                    if (checkSymbol()) {
+                        addLocalSymbol();
+                        if (tok) {
+                            /* read param name and compute offset */
+                            *(int *) tok = a;
+                            a = a + 4;
+                        }
                     }
                     next();
                     if (tok == ',')
