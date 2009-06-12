@@ -1498,7 +1498,10 @@ class Compiler : public ErrorSink {
             put("break", TOK_BREAK);
             put("return", TOK_RETURN);
             put("for", TOK_FOR);
+            // TODO: remove these preprocessor-specific keywords. You should
+            // be able to have symbols named pragma or define.
             put("pragma", TOK_PRAGMA);
+            put("define", TOK_DEFINE);
         }
 
         ~KeywordTable() {
