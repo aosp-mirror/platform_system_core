@@ -2254,8 +2254,9 @@ class Compiler : public ErrorSink {
                 next();
             } else if (t == EOF ) {
                 error("Unexpected EOF.");
-            } else if (t < TOK_UNDEFINED_SYMBOL) {
-                error("Unexpected symbol or keyword");
+            } else if (!checkSymbol(t, &tString)) {
+                // Don't have to do anything special here, the error
+                // message was printed by checkSymbol() above.
             } else {
                 if (t == TOK_UNDEFINED_SYMBOL) {
                     t = (intptr_t) mSymbolTable.addGlobal(
@@ -2370,7 +2371,10 @@ class Compiler : public ErrorSink {
     void block(intptr_t l, bool outermostFunctionBlock) {
         intptr_t a, n, t;
 
-        if (tok == TOK_IF) {
+        if (tok == TOK_INT || tok == TOK_CHAR) {
+            /* declarations */
+            localDeclarations();
+        } else if (tok == TOK_IF) {
             next();
             skip('(');
             a = test_expr();
@@ -2418,8 +2422,6 @@ class Compiler : public ErrorSink {
                 mSymbolTable.pushLevel();
             }
             next();
-            /* declarations */
-            localDeclarations();
             while (tok != '}' && tok != EOF)
                 block(l, false);
             skip('}');
@@ -2548,29 +2550,28 @@ class Compiler : public ErrorSink {
     }
 
     bool checkSymbol() {
-        bool result = isSymbol();
+        return checkSymbol(tok, &mTokenString);
+    }
+
+    bool checkSymbol(int token, String* pText) {
+        bool result = token < EOF || token >= TOK_UNDEFINED_SYMBOL;
         if (!result) {
             String temp;
-            if (tok == EOF ) {
+            if (token == EOF ) {
                 temp.printf("EOF");
-            } else if (tok == TOK_NUM) {
+            } else if (token == TOK_NUM) {
                 temp.printf("numeric constant");
-            } else if (tok >= 0 && tok < 256) {
-                temp.printf("char \'%c\'", tok);
-            } else if (tok >= TOK_KEYWORD && tok < TOK_UNSUPPORTED_KEYWORD) {
-                temp.printf("keyword \"%s\"", mTokenString.getUnwrapped());
+            } else if (token >= 0 && token < 256) {
+                temp.printf("char \'%c\'", token);
+            } else if (token >= TOK_KEYWORD && token < TOK_UNSUPPORTED_KEYWORD) {
+                temp.printf("keyword \"%s\"", pText->getUnwrapped());
             } else {
                 temp.printf("reserved keyword \"%s\"",
-                            mTokenString.getUnwrapped());
+                            pText->getUnwrapped());
             }
             error("Expected symbol. Got %s", temp.getUnwrapped());
         }
         return result;
-    }
-
-    /* Is a possibly undefined symbol */
-    bool isSymbol() {
-        return tok < EOF || tok >= TOK_UNDEFINED_SYMBOL;
     }
 
     void globalDeclarations() {
