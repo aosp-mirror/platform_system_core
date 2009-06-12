@@ -19,5 +19,5 @@
 #define _LOGWRAPPER_H
 
 #include <stdlib.h>
-int logwrap(int argc, char* argv[]);
+int logwrap(int argc, char* argv[], int background);
 #endif
