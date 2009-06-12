@@ -1995,18 +1995,21 @@ class Compiler : public ErrorSink {
                 }
             } else if ((tok == '/') & (ch == '*')) {
                 inp();
-                while (ch) {
-                    while (ch != '*')
+                while (ch && ch != EOF) {
+                    while (ch != '*' && ch != EOF)
                         inp();
                     inp();
                     if (ch == '/')
                         ch = 0;
                 }
+                if (ch == EOF) {
+                    error("End of file inside comment.");
+                }
                 inp();
                 next();
             } else if ((tok == '/') & (ch == '/')) {
                 inp();
-                while (ch && (ch != '\n')) {
+                while (ch && (ch != '\n') && (ch != EOF)) {
                     inp();
                 }
                 inp();
@@ -2489,7 +2492,7 @@ class Compiler : public ErrorSink {
         Type base;
 
         while (acceptType(base)) {
-            while (tok != ';') {
+            while (tok != ';' && tok != EOF) {
                 Type t = acceptPointerDeclaration(t);
                 addLocalSymbol();
                 if (tok) {
