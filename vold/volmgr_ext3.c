@@ -107,7 +107,7 @@ int ext_check(blkdev_t *dev)
     args[3] = devpath;
     args[4] = NULL;
 
-    int rc = logwrap(4, args);
+    int rc = logwrap(4, args, 1);
 
     if (rc == 0) {
         LOG_VOL("filesystem '%s' had no errors", devpath);
