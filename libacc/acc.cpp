@@ -1841,13 +1841,92 @@ class Compiler : public ErrorSink {
         return isalnum(ch) | (ch == '_');
     }
 
-    /* read a character constant */
-    void getq() {
+    /* read a character constant, advances ch to after end of constant */
+    int getq() {
+        int val = ch;
         if (ch == '\\') {
             inp();
-            if (ch == 'n')
-                ch = '\n';
+            if (isoctal(ch)) {
+                // 1 to 3 octal characters.
+                val = 0;
+                for(int i = 0; i < 3; i++) {
+                    if (isoctal(ch)) {
+                        val = (val << 3) + ch - '0';
+                        inp();
+                    }
+                }
+                return val;
+            } else if (ch == 'x' || ch == 'X') {
+                // N hex chars
+                inp();
+                if (! isxdigit(ch)) {
+                    error("'x' character escape requires at least one digit.");
+                } else {
+                    val = 0;
+                    while (isxdigit(ch)) {
+                        int d = ch;
+                        if (isdigit(d)) {
+                            d -= '0';
+                        } else if (d <= 'F') {
+                            d = d - 'A' + 10;
+                        } else {
+                            d = d - 'a' + 10;
+                        }
+                        val = (val << 4) + d;
+                        inp();
+                    }
+                }
+            } else {
+                int val = ch;
+                switch (ch) {
+                    case 'a':
+                        val = '\a';
+                        break;
+                    case 'b':
+                        val = '\b';
+                        break;
+                    case 'f':
+                        val = '\f';
+                        break;
+                    case 'n':
+                        val = '\n';
+                        break;
+                    case 'r':
+                        val = '\r';
+                        break;
+                    case 't':
+                        val = '\t';
+                        break;
+                    case 'v':
+                        val = '\v';
+                        break;
+                    case '\\':
+                        val = '\\';
+                        break;
+                    case '\'':
+                        val = '\'';
+                        break;
+                    case '"':
+                        val = '"';
+                        break;
+                    case '?':
+                        val = '?';
+                        break;
+                    default:
+                        error("Undefined character escape %c", ch);
+                        break;
+                }
+                inp();
+                return val;
+            }
+        } else {
+            inp();
         }
+        return val;
+    }
+
+    static bool isoctal(int ch) {
+        return ch >= '0' && ch <= '7';
     }
 
     void next() {
@@ -1908,10 +1987,12 @@ class Compiler : public ErrorSink {
             inp();
             if (tok == '\'') {
                 tok = TOK_NUM;
-                getq();
-                tokc = ch;
-                inp();
-                inp();
+                tokc = getq();
+                if (ch != '\'') {
+                    error("Expected a ' character, got %c", ch);
+                } else {
+                  inp();
+                }
             } else if ((tok == '/') & (ch == '*')) {
                 inp();
                 while (ch) {
@@ -2071,14 +2152,14 @@ class Compiler : public ErrorSink {
         int c;
         String tString;
         t = 0;
-        n = 1; /* type of expression 0 = forward, 1 = value, other =
-         lvalue */
+        n = 1; /* type of expression 0 = forward, 1 = value, other = lvalue */
         if (tok == '\"') {
             pGen->li((int) glo);
-            while (ch != '\"') {
-                getq();
-                *allocGlobalSpace(1) = ch;
-                inp();
+            while (ch != '\"' && ch != EOF) {
+                *allocGlobalSpace(1) = getq();
+            }
+            if (ch != '\"') {
+                error("Unterminated string constant.");
             }
             *glo = 0;
             /* align heap */
@@ -2176,7 +2257,7 @@ class Compiler : public ErrorSink {
             a = pGen->beginFunctionCallArguments();
             next();
             l = 0;
-            while (tok != ')') {
+            while (tok != ')' && tok != EOF) {
                 expr();
                 pGen->storeR0ToArg(l);
                 if (tok == ',')
@@ -2184,7 +2265,7 @@ class Compiler : public ErrorSink {
                 l = l + 4;
             }
             pGen->endFunctionCallArguments(a, l);
-            next();
+            skip(')');
             if (!n) {
                 /* forward reference */
                 t = t + 4;
