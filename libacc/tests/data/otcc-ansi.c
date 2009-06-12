@@ -442,6 +442,10 @@ int main(int g, int e) {
     if (g-- > 1) {
         e = e + 4;
         Q = fopen(*(int*) e, "r");
+        if (!Q) {
+            fprintf(stderr, "otcc-ansi.c: could not open file %s\n", *(int*) e);
+            return -2;
+        }
     }
     D = strcpy(R = calloc(1, 99999), " int if else while break return for define main ") + 48;
     v = calloc(1, 99999);

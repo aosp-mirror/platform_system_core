@@ -26,6 +26,7 @@ LOCAL_SRC_FILES:= \
 LOCAL_SHARED_LIBRARIES := \
     libacc
 
+LOCAL_CFLAGS := -O0 -g 
 
 LOCAL_MODULE_TAGS := tests
 

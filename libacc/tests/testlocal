@@ -12,9 +12,11 @@ $ACC -S "$DATA/otcc-ansi.c"
 
 if file $ACC | grep -q "ELF 32-bit LSB executable, Intel 80386"; then
 	echo "Linux 32bit Intel."
+	echo "TESTING returnval-ansi.c:"
         $ACC -R $DATA/returnval-ansi.c
-        echo Testing otcc-ansi.c
+        echo TESTING otcc-ansi.c returnval-ansi.c
 	$ACC -R "$DATA/otcc-ansi.c" "$DATA/returnval.c"
+	echo TESTING otcc-ansi.c otcc.c returnval-ansi.c
 	$ACC -R $DATA/otcc-ansi.c $DATA/otcc.c $DATA/returnval.c
 fi
 

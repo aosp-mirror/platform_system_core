@@ -22,6 +22,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE:= libacc
 LOCAL_SRC_FILES := acc.cpp
 
+LOCAL_CFLAGS := -O0 -g
+
 ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += disassem.cpp
 endif
