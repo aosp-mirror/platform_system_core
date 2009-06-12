@@ -33,6 +33,20 @@ int b() {
     printf("b()\n");
 }
 
+int nested() {
+    int a;
+    printf("nested 0: a = %d\n", a);
+    a = 50;
+    printf("nested 1: a = %d\n", a);
+    {
+        int a;
+        printf("nested 2: a = %d\n", a);
+        a = 51;
+        printf("nested 3: a = %d\n", a);
+    }
+    printf("nested 4: a = %d\n", a);
+}
+
 int main() {
     globCheck();
     fwdCheck();
@@ -45,5 +59,7 @@ int main() {
     printf("main 3: a = %d\n", a);
     h(30);
     printf("main 4: a = %d\n", a);
+    nested();
+    printf("main 5: a = %d\n", a);
     return 0;
 }
