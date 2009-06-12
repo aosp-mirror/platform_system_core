@@ -1312,6 +1312,12 @@ class Compiler : public ErrorSink {
             }
         }
 
+        String& operator=(const String& other) {
+            clear();
+            appendBytes(other.getUnwrapped(), other.len());
+            return *this;
+        }
+
         inline char* getUnwrapped() const {
             return mpBase;
         }
@@ -1437,6 +1443,12 @@ class Compiler : public ErrorSink {
                 delete pKey;
             }
             return result;
+        }
+
+        void forEach(bool (*callback)(String* key, V* value, void* context),
+                     void* context) {
+            hashmapForEach(mpMap, (bool (*)(void*, void*, void*)) callback,
+                           context);
         }
 
     protected:
@@ -1670,11 +1682,21 @@ class Compiler : public ErrorSink {
             return addImp(0, pName);
         }
 
+        void forEachGlobal(
+            bool (*callback)(String* key, VariableInfo* value, void* context),
+            void* context) {
+            mStack.get(0).pTable->forEach(callback, context);
+        }
+
     private:
         VariableInfo* addImp(int entryIndex, String* pName) {
             Entry e = mStack.get(entryIndex);
             SymbolTable* pTable = e.pTable;
+            if (pTable->contains(pName)) {
+                return NULL;
+            }
             VariableInfo* v = new VariableInfo();
+
             delete pTable->put(pName, v);
 #if 0
             fprintf(stderr, "Add \"%s\" %08x level %d\n", pName->getUnwrapped(), v, e.level);
@@ -2044,6 +2066,7 @@ class Compiler : public ErrorSink {
     void unary(intptr_t l) {
         intptr_t n, t, a;
         int c;
+        String tString;
         t = 0;
         n = 1; /* type of expression 0 = forward, 1 = value, other =
          lvalue */
@@ -2063,6 +2086,7 @@ class Compiler : public ErrorSink {
             c = tokl;
             a = tokc;
             t = tok;
+            tString = mTokenString;
             next();
             if (t == TOK_NUM) {
                 pGen->li(a);
@@ -2112,14 +2136,15 @@ class Compiler : public ErrorSink {
             } else {
                 if (t == TOK_UNDEFINED_SYMBOL) {
                     t = (intptr_t) mSymbolTable.addGlobal(
-                        new String(mTokenString));
+                        new String(tString));
                 }
 
-                n = *(int *) t;
+                n = (intptr_t) ((VariableInfo*) t)->pAddress;
                 /* forward reference: try dlsym */
                 if (!n) {
                     n = (intptr_t) dlsym(RTLD_DEFAULT,
-                                         mTokenString.getUnwrapped());
+                                         tString.getUnwrapped());
+                    ((VariableInfo*) t)->pAddress = (void*) n;
                 }
                 if ((tok == '=') & l) {
                     /* assignment */
@@ -2128,6 +2153,9 @@ class Compiler : public ErrorSink {
                     pGen->storeR0(n);
                 } else if (tok != '(') {
                     /* variable */
+                    if (!n) {
+                        error("Undefined variable %s", tString.getUnwrapped());
+                    }
                     pGen->loadR0(n, tokl == 11, tokc);
                     if (tokl == 11) {
                         next();
@@ -2216,7 +2244,7 @@ class Compiler : public ErrorSink {
         return pGen->gtst(0, 0);
     }
 
-    void block(intptr_t l) {
+    void block(intptr_t l, bool outermostFunctionBlock) {
         intptr_t a, n, t;
 
         if (tok == TOK_IF) {
@@ -2224,12 +2252,12 @@ class Compiler : public ErrorSink {
             skip('(');
             a = test_expr();
             skip(')');
-            block(l);
+            block(l, false);
             if (tok == TOK_ELSE) {
                 next();
                 n = pGen->gjmp(0); /* jmp */
                 pGen->gsym(a);
-                block(l);
+                block(l, false);
                 pGen->gsym(n); /* patch else jmp */
             } else {
                 pGen->gsym(a); /* patch if test */
@@ -2259,18 +2287,22 @@ class Compiler : public ErrorSink {
                 }
             }
             skip(')');
-            block((intptr_t) &a);
+            block((intptr_t) &a, false);
             pGen->gjmp(n - codeBuf.getPC() - pGen->jumpOffset()); /* jmp */
             pGen->gsym(a);
         } else if (tok == '{') {
-            mSymbolTable.pushLevel();
+            if (! outermostFunctionBlock) {
+                mSymbolTable.pushLevel();
+            }
             next();
             /* declarations */
             localDeclarations();
             while (tok != '}' && tok != EOF)
-                block(l);
+                block(l, false);
             skip('}');
-            mSymbolTable.popLevel();
+            if (! outermostFunctionBlock) {
+                mSymbolTable.popLevel();
+            }
         } else {
             if (tok == TOK_RETURN) {
                 next();
@@ -2350,18 +2382,22 @@ class Compiler : public ErrorSink {
         }
     }
 
-    void defineGlobalSymbol() {
-        if (tok == TOK_UNDEFINED_SYMBOL) {
-            // TODO: don't allow multiple definitions at same level.
-            tok = (intptr_t) mSymbolTable.addGlobal(
-                new String(mTokenString));
+    void addGlobalSymbol() {
+        tok = (intptr_t) mSymbolTable.addGlobal(
+            new String(mTokenString));
+        reportIfDuplicate();
+    }
+
+    void reportIfDuplicate() {
+        if (!tok) {
+            error("Duplicate definition of %s", mTokenString.getUnwrapped());
         }
     }
 
-    void defineLocalSymbol() {
-        // TODO: don't allow multiple definitions at same level.
+    void addLocalSymbol() {
         tok = (intptr_t) mSymbolTable.addLocal(
                 new String(mTokenString));
+        reportIfDuplicate();
     }
 
     void localDeclarations() {
@@ -2371,10 +2407,11 @@ class Compiler : public ErrorSink {
         while (acceptType(base)) {
             while (tok != ';') {
                 Type t = acceptPointerDeclaration(t);
-                defineLocalSymbol();
-                loc = loc + 4;
-                *(int *) tok = -loc;
-
+                addLocalSymbol();
+                if (tok) {
+                    loc = loc + 4;
+                    *(int *) tok = -loc;
+                }
                 next();
                 if (tok == ',')
                     next();
@@ -2388,29 +2425,39 @@ class Compiler : public ErrorSink {
             Type base;
             expectType(base);
             Type t = acceptPointerDeclaration(t);
-            defineGlobalSymbol();
+            if (tok == TOK_UNDEFINED_SYMBOL) {
+                addGlobalSymbol();
+            }
             VariableInfo* name = (VariableInfo*) tok;
+            if (name && name->pAddress) {
+                error("Already defined global %s",
+                      mTokenString.getUnwrapped());
+            }
             next();
             if (tok == ',' || tok == ';') {
                 // it's a variable declaration
                 for(;;) {
-                    name->pAddress = (int*) allocGlobalSpace(4);
+                    if (name) {
+                        name->pAddress = (int*) allocGlobalSpace(4);
+                    }
                     if (tok != ',') {
                         break;
                     }
                     skip(',');
                     t = acceptPointerDeclaration(t);
-                    defineGlobalSymbol();
+                    addGlobalSymbol();
                     name = (VariableInfo*) tok;
                     next();
                 }
                 skip(';');
             } else {
-                /* patch forward references (XXX: does not work for function
-                 pointers) */
-                pGen->gsym((int) name->pForward);
-                /* put function address */
-                name->pAddress = (void*) codeBuf.getPC();
+                if (name) {
+                    /* patch forward references (XXX: does not work for function
+                     pointers) */
+                    pGen->gsym((int) name->pForward);
+                    /* put function address */
+                    name->pAddress = (void*) codeBuf.getPC();
+                }
                 skip('(');
                 mSymbolTable.pushLevel();
                 intptr_t a = 8;
@@ -2419,10 +2466,12 @@ class Compiler : public ErrorSink {
                     Type aType;
                     expectType(aType);
                     aType = acceptPointerDeclaration(aType);
-                    defineLocalSymbol();
-                    /* read param name and compute offset */
-                    *(int *) tok = a;
-                    a = a + 4;
+                    addLocalSymbol();
+                    if (tok) {
+                        /* read param name and compute offset */
+                        *(int *) tok = a;
+                        a = a + 4;
+                    }
                     next();
                     if (tok == ',')
                         next();
@@ -2431,7 +2480,7 @@ class Compiler : public ErrorSink {
                 skip(')');
                 rsym = loc = 0;
                 a = pGen->functionEntry(argCount);
-                block(0);
+                block(0, true);
                 pGen->gsym(rsym);
                 pGen->functionExit(argCount, a, loc);
                 mSymbolTable.popLevel();
@@ -2551,6 +2600,7 @@ public:
         inp();
         next();
         globalDeclarations();
+        checkForUndefinedForwardReferences();
         result = pGen->finishCompile();
         if (result == 0) {
             if (mErrorBuf.len()) {
@@ -2558,6 +2608,27 @@ public:
             }
         }
         return result;
+    }
+
+    void checkForUndefinedForwardReferences() {
+        mSymbolTable.forEachGlobal(static_ufrcFn, this);
+    }
+
+    static bool static_ufrcFn(String* key, VariableInfo* value,
+                                                 void* context) {
+        Compiler* pCompiler = (Compiler*) context;
+        return pCompiler->undefinedForwardReferenceCheck(key, value);
+    }
+
+    bool undefinedForwardReferenceCheck(String* key, VariableInfo* value) {
+#if 0
+        fprintf(stderr, "%s 0x%8x 0x%08x\n", key->getUnwrapped(),
+                value->pAddress, value->pForward);
+#endif
+        if (!value->pAddress && value->pForward) {
+            error("Undefined forward reference: %s", key->getUnwrapped());
+        }
+        return true;
     }
 
     int dump(FILE* out) {

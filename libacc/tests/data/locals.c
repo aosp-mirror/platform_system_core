@@ -2,7 +2,9 @@ int a;
 
 int f() {
     int a;
-    printf("f 0: a = %d b = %d\n", a, b);
+    // Undefined variable b
+    // printf("f 0: a = %d b = %d\n", a, b);
+    printf("f 0: a = %d\n", a);
     a = 2;
     printf("f 1: a = %d\n", a);
 }
@@ -14,19 +16,23 @@ int g(int a) {
 }
 
 int h(int a) {
-    int a; // gcc 4.3 says error: 'a' redeclared as different kind of symbol
+    // int a; // gcc 4.3 says error: 'a' redeclared as different kind of symbol
 
     printf("h 0: a = %d\n", a);
     a = 4;
     printf("h 1: a = %d\n", a);
 }
 
+// Already defined global 
+// int h() {}
 int globCheck() {
     fprintf(stdout, "globCheck()\n");
 }
 
 int fwdCheck() {
     b();
+    // Undefined forward reference
+    // c();
 }
 
 int b() {
