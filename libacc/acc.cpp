@@ -48,6 +48,8 @@
 // #define LOG_API(...) fprintf (stderr, __VA_ARGS__)
 // #define ENABLE_ARM_DISASSEMBLY
 
+// #define PROVIDE_TRACE_CODEGEN
+
 namespace acc {
 
 class ErrorSink {
@@ -180,7 +182,7 @@ class Compiler : public ErrorSink {
             pCodeBuf->setErrorSink(mErrorSink);
         }
 
-        void setErrorSink(ErrorSink* pErrorSink) {
+        virtual void setErrorSink(ErrorSink* pErrorSink) {
             mErrorSink = pErrorSink;
             if (pCodeBuf) {
                 pCodeBuf->setErrorSink(mErrorSink);
@@ -1057,6 +1059,171 @@ class Compiler : public ErrorSink {
     };
 
 #endif // PROVIDE_X86_CODEGEN
+
+#ifdef PROVIDE_TRACE_CODEGEN
+    class TraceCodeGenerator : public CodeGenerator {
+    private:
+        CodeGenerator* mpBase;
+
+    public:
+        TraceCodeGenerator(CodeGenerator* pBase) {
+            mpBase = pBase;
+        }
+
+        virtual ~TraceCodeGenerator() {
+            delete mpBase;
+        }
+
+        virtual void init(CodeBuf* pCodeBuf) {
+            mpBase->init(pCodeBuf);
+        }
+
+        void setErrorSink(ErrorSink* pErrorSink) {
+            mpBase->setErrorSink(pErrorSink);
+        }
+
+        /* returns address to patch with local variable size
+        */
+        virtual int functionEntry(int argCount) {
+            int result = mpBase->functionEntry(argCount);
+            fprintf(stderr, "functionEntry(%d) -> %d\n", argCount, result);
+            return result;
+        }
+
+        virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) {
+            fprintf(stderr, "functionExit(%d, %d, %d)\n",
+                    argCount, localVariableAddress, localVariableSize);
+            mpBase->functionExit(argCount, localVariableAddress, localVariableSize);
+        }
+
+        /* load immediate value */
+        virtual void li(int t) {
+            fprintf(stderr, "li(%d)\n", t);
+            mpBase->li(t);
+        }
+
+        virtual int gjmp(int t) {
+            int result = mpBase->gjmp(t);
+            fprintf(stderr, "gjmp(%d) = %d\n", t, result);
+            return result;
+        }
+
+        /* l = 0: je, l == 1: jne */
+        virtual int gtst(bool l, int t) {
+            int result = mpBase->gtst(l, t);
+            fprintf(stderr, "gtst(%d,%d) = %d\n", l, t, result);
+            return result;
+        }
+
+        virtual void gcmp(int op) {
+            fprintf(stderr, "gcmp(%d)\n", op);
+            mpBase->gcmp(op);
+        }
+
+        virtual void genOp(int op) {
+            fprintf(stderr, "genOp(%d)\n", op);
+            mpBase->genOp(op);
+        }
+
+        virtual void clearR1() {
+            fprintf(stderr, "clearR1()\n");
+            mpBase->clearR1();
+        }
+
+        virtual void pushR0() {
+            fprintf(stderr, "pushR0()\n");
+            mpBase->pushR0();
+        }
+
+        virtual void popR1() {
+            fprintf(stderr, "popR1()\n");
+            mpBase->popR1();
+        }
+
+        virtual void storeR0ToR1(bool isInt) {
+            fprintf(stderr, "storeR0ToR1(%d)\n", isInt);
+            mpBase->storeR0ToR1(isInt);
+        }
+
+        virtual void loadR0FromR0(bool isInt) {
+            fprintf(stderr, "loadR0FromR0(%d)\n", isInt);
+            mpBase->loadR0FromR0(isInt);
+        }
+
+        virtual void leaR0(int ea) {
+            fprintf(stderr, "leaR0(%d)\n", ea);
+            mpBase->leaR0(ea);
+        }
+
+        virtual void storeR0(int ea) {
+            fprintf(stderr, "storeR0(%d)\n", ea);
+            mpBase->storeR0(ea);
+        }
+
+        virtual void loadR0(int ea, bool isIncDec, int op) {
+            fprintf(stderr, "loadR0(%d, %d, %d)\n", ea, isIncDec, op);
+            mpBase->loadR0(ea, isIncDec, op);
+        }
+
+        virtual int beginFunctionCallArguments() {
+            int result = mpBase->beginFunctionCallArguments();
+            fprintf(stderr, "beginFunctionCallArguments() = %d\n", result);
+            return result;
+        }
+
+        virtual void storeR0ToArg(int l) {
+            fprintf(stderr, "storeR0ToArg(%d)\n", l);
+            mpBase->storeR0ToArg(l);
+        }
+
+        virtual void endFunctionCallArguments(int a, int l) {
+            fprintf(stderr, "endFunctionCallArguments(%d, %d)\n", a, l);
+            mpBase->endFunctionCallArguments(a, l);
+        }
+
+        virtual int callForward(int symbol) {
+            int result = mpBase->callForward(symbol);
+            fprintf(stderr, "callForward(%d) = %d\n", symbol, result);
+            return result;
+        }
+
+        virtual void callRelative(int t) {
+            fprintf(stderr, "callRelative(%d)\n", t);
+            mpBase->callRelative(t);
+        }
+
+        virtual void callIndirect(int l) {
+            fprintf(stderr, "callIndirect(%d)\n", l);
+            mpBase->callIndirect(l);
+        }
+
+        virtual void adjustStackAfterCall(int l, bool isIndirect) {
+            fprintf(stderr, "adjustStackAfterCall(%d, %d)\n", l, isIndirect);
+            mpBase->adjustStackAfterCall(l, isIndirect);
+        }
+
+        virtual int jumpOffset() {
+            return mpBase->jumpOffset();
+        }
+
+        virtual int disassemble(FILE* out) {
+            return mpBase->disassemble(out);
+        }
+
+        /* output a symbol and patch all calls to it */
+        virtual void gsym(int t) {
+            fprintf(stderr, "gsym(%d)\n", t);
+            mpBase->gsym(t);
+        }
+
+        virtual int finishCompile() {
+            int result = mpBase->finishCompile();
+            fprintf(stderr, "finishCompile() = %d\n", result);
+            return result;
+        }
+    };
+
+#endif // PROVIDE_TRACE_CODEGEN
 
     class InputStream {
     public:
@@ -2373,6 +2540,10 @@ public:
         if (!pGen) {
             return -1;
         }
+#ifdef PROVIDE_TRACE_CODEGEN
+            pGen = new TraceCodeGenerator(pGen);
+#endif
+            pGen->setErrorSink(this);
         pGen->init(&codeBuf);
         file = new TextInputStream(text, textLength);
         pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
