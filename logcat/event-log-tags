@@ -353,3 +353,6 @@
 
 # aggregation service
 70200 aggregation (aggregation time|2|3)
+
+# NOTE - the range 1000000-2000000 is reserved for partners and others who
+# want to define their own log tags without conflicting with the core platform.
