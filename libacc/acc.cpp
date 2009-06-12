@@ -2524,14 +2524,22 @@ class Compiler : public ErrorSink {
         while (acceptType(base)) {
             while (tok != ';' && tok != EOF) {
                 Type t = acceptPointerDeclaration(t);
+                int variableAddress = 0;
                 if (checkSymbol()) {
                     addLocalSymbol();
                     if (tok) {
                         loc = loc + 4;
-                        *(int *) tok = -loc;
+                        variableAddress = -loc;
+                        ((VariableInfo*) tok)->pAddress = (void*) variableAddress;
                     }
                 }
                 next();
+                if (tok == '=') {
+                    /* assignment */
+                    next();
+                    expr();
+                    pGen->storeR0(variableAddress);
+                }
                 if (tok == ',')
                     next();
             }
@@ -2543,7 +2551,11 @@ class Compiler : public ErrorSink {
         bool result = isSymbol();
         if (!result) {
             String temp;
-            if (tok >= 0 && tok < 256) {
+            if (tok == EOF ) {
+                temp.printf("EOF");
+            } else if (tok == TOK_NUM) {
+                temp.printf("numeric constant");
+            } else if (tok >= 0 && tok < 256) {
                 temp.printf("char \'%c\'", tok);
             } else if (tok >= TOK_KEYWORD && tok < TOK_UNSUPPORTED_KEYWORD) {
                 temp.printf("keyword \"%s\"", mTokenString.getUnwrapped());
@@ -2579,11 +2591,22 @@ class Compiler : public ErrorSink {
                       mTokenString.getUnwrapped());
             }
             next();
-            if (tok == ',' || tok == ';') {
+            if (tok == ',' || tok == ';' || tok == '=') {
                 // it's a variable declaration
                 for(;;) {
                     if (name) {
                         name->pAddress = (int*) allocGlobalSpace(4);
+                    }
+                    if (tok == '=') {
+                        next();
+                        if (tok == TOK_NUM) {
+                            if (name) {
+                                * (int*) name->pAddress = tokc;
+                            }
+                            next();
+                        } else {
+                            error("Expected an integer constant");
+                        }
                     }
                     if (tok != ',') {
                         break;
