@@ -89,23 +89,26 @@ Controller *NetworkManager::findController(const char *name) {
     return NULL;
 }
 
-int NetworkManager::onInterfaceStart(Controller *c, const InterfaceConfig *cfg) {
+void NetworkManager::onInterfaceStarted(Controller *c, const InterfaceConfig *cfg) {
     LOGD("Interface %s started by controller %s", c->getBoundInterface(), c->getName());
 
     // Look up the interface
 
     if (0) { // already started?
-        errno = EADDRINUSE;
-        return -1;
     }
 
-    if (cfg->getUseDhcp()) {
+    if (cfg) {
+        if (cfg->getUseDhcp()) {
+            // Launch DHCP thread
+        } else {
+            // Static configuration
+        }
     } else {
+        LOGD("No InterfaceConfig for %s:%s - assuming self-managed",
+            c->getName(), c->getBoundInterface());
     }
-    return 0;
 }
 
-int NetworkManager::onInterfaceStop(Controller *c, const char *name) {
+void NetworkManager::onInterfaceStopping(Controller *c, const char *name) {
     LOGD("Interface %s stopped by controller %s", name, c->getName());
-    return 0;
 }

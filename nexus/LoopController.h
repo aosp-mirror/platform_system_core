@@ -19,10 +19,11 @@
 
 #include "Controller.h"
 
+class ControllerHandler;
 
 class LoopController : public Controller {
 public:
-    LoopController(PropertyManager *propmngr);
+    LoopController(PropertyManager *propmngr, IControllerHandler *h);
     virtual ~LoopController() {}
 
     int set(const char *name, const char *value);

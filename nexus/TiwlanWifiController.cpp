@@ -30,8 +30,12 @@
 
 extern "C" int sched_yield(void);
 
-TiwlanWifiController::TiwlanWifiController(PropertyManager *propmngr, char *modpath, char *modname, char *modargs) :
-                      WifiController(propmngr, modpath, modname, modargs) {
+TiwlanWifiController::TiwlanWifiController(PropertyManager *propmngr,
+                                           IControllerHandler *handlers,
+                                           char *modpath, char *modname,
+                                           char *modargs) :
+                      WifiController(propmngr, handlers, modpath, modname,
+                                     modargs) {
 }
 
 int TiwlanWifiController::powerUp() {

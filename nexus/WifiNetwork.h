@@ -157,8 +157,6 @@ private:
 
 private:
     WifiNetwork();
-    int registerProperties();
-    int unregisterProperties();
 
 public:
     WifiNetwork(WifiController *c, Supplicant *suppl, int networkId);
@@ -167,6 +165,8 @@ public:
     virtual ~WifiNetwork();
 
     WifiNetwork *clone();
+    int registerProperties();
+    int unregisterProperties();
 
     int getNetworkId() { return mNetid; }
     const char *getSsid() { return mSsid; }
@@ -187,7 +187,7 @@ public:
     int set(const char *name, const char *value);
     const char *get(const char *name, char *buffer, size_t maxsize);
 
-//    InterfaceConfig *getIfaceCfg() { return mIfaceCfg; }
+    InterfaceConfig *getIfaceCfg() { return mIfaceCfg; }
 
     int setEnabled(bool enabled);
     int setSsid(const char *ssid);

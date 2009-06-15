@@ -23,12 +23,12 @@
 #include <utils/List.h>
 
 class PropertyManager;
+class IControllerHandler;
 
 #include "PropertyManager.h"
 #include "IPropertyProvider.h"
 
 class Controller : public IPropertyProvider {
-private:
     /*
      * Name of this controller - WIFI/VPN/USBNET/BTNET/BTDUN/LOOP/etc
      */
@@ -42,9 +42,11 @@ private:
 
 protected:
     PropertyManager *mPropMngr;
+    IControllerHandler *mHandlers;
     
 public:
-    Controller(const char *name, PropertyManager *propMngr);
+    Controller(const char *name, PropertyManager *propMngr,
+               IControllerHandler *handlers);
     virtual ~Controller();
 
     virtual int start();

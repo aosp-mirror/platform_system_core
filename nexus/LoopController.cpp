@@ -19,8 +19,9 @@
 #include "LoopController.h"
 #include "PropertyManager.h"
 
-LoopController::LoopController(PropertyManager *propmngr) :
-                Controller("LOOP", propmngr) {
+LoopController::LoopController(PropertyManager *propmngr,
+                               IControllerHandler *handlers) :
+                Controller("LOOP", propmngr, handlers) {
 }
 
 int LoopController::set(const char *name, const char *value) {

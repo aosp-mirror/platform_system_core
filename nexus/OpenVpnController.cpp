@@ -30,8 +30,9 @@
 #define DAEMON_PROP_NAME "vpn.openvpn.status"
 #define DAEMON_CONFIG_FILE "/data/misc/openvpn/openvpn.conf"
 
-OpenVpnController::OpenVpnController(PropertyManager *propmngr) :
-                   VpnController(propmngr) {
+OpenVpnController::OpenVpnController(PropertyManager *propmngr,
+                                     IControllerHandler *handlers) :
+                   VpnController(propmngr, handlers) {
     mServiceManager = new ServiceManager();
 }
 
@@ -40,11 +41,11 @@ OpenVpnController::~OpenVpnController() {
 }
 
 int OpenVpnController::start() {
-    return 0;
+    return VpnController::start();
 }
 
 int OpenVpnController::stop() {
-    return 0;
+    return VpnController::stop();
 }
 
 int OpenVpnController::enable() {

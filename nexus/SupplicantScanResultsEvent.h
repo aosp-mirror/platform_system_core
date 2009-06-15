@@ -14,29 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef _OPEN_VPN_CONTROLLER_H
-#define _OPEN_VPN_CONTROLLER_H
+#ifndef _SupplicantScanResultsEvent_H
+#define _SupplicantScanResultsEvent_H
 
-#include "PropertyManager.h"
-#include "VpnController.h"
+#include "SupplicantEvent.h"
 
-class ServiceManager;
-class IControllerHandler;
-
-class OpenVpnController : public VpnController {
-private:
-    ServiceManager *mServiceManager;
+class SupplicantScanResultsEvent : public SupplicantEvent {
 
 public:
-    OpenVpnController(PropertyManager *propmngr, IControllerHandler *handlers);
-    virtual ~OpenVpnController();
-
-    int start();
-    int stop();
-
-private:
-    int enable();
-    int disable();
+    SupplicantScanResultsEvent(int level, char *event, size_t len);
+    SupplicantScanResultsEvent();
+    virtual ~SupplicantScanResultsEvent();
 };
 
 #endif
