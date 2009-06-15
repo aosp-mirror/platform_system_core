@@ -14,29 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef _OPEN_VPN_CONTROLLER_H
-#define _OPEN_VPN_CONTROLLER_H
+#define LOG_TAG "SupplicantDisconnectedEvent"
+#include <cutils/log.h>
 
-#include "PropertyManager.h"
-#include "VpnController.h"
+#include "SupplicantDisconnectedEvent.h"
 
-class ServiceManager;
-class IControllerHandler;
+SupplicantDisconnectedEvent::SupplicantDisconnectedEvent(int level, char *event,
+                                                       size_t len) :
+                            SupplicantEvent(SupplicantEvent::EVENT_DISCONNECTED,
+                                            level) {
+}
 
-class OpenVpnController : public VpnController {
-private:
-    ServiceManager *mServiceManager;
+SupplicantDisconnectedEvent::SupplicantDisconnectedEvent() :
+                            SupplicantEvent(SupplicantEvent::EVENT_DISCONNECTED, -1) {
+}
 
-public:
-    OpenVpnController(PropertyManager *propmngr, IControllerHandler *handlers);
-    virtual ~OpenVpnController();
-
-    int start();
-    int stop();
-
-private:
-    int enable();
-    int disable();
-};
-
-#endif
+SupplicantDisconnectedEvent::~SupplicantDisconnectedEvent() {
+}

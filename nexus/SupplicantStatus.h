@@ -14,29 +14,29 @@
  * limitations under the License.
  */
 
-#ifndef _OPEN_VPN_CONTROLLER_H
-#define _OPEN_VPN_CONTROLLER_H
+#ifndef _SupplicantStatus_H
+#define _SupplicantStatus_H
 
-#include "PropertyManager.h"
-#include "VpnController.h"
-
-class ServiceManager;
-class IControllerHandler;
-
-class OpenVpnController : public VpnController {
+class SupplicantStatus {
 private:
-    ServiceManager *mServiceManager;
+    int mWpaState;
+    int mId;
+    char *mBssid;
+    char *mSsid;
+
+private:
+    SupplicantStatus();
+    SupplicantStatus(int state, int id, char *bssid, char *ssid);
 
 public:
-    OpenVpnController(PropertyManager *propmngr, IControllerHandler *handlers);
-    virtual ~OpenVpnController();
+    virtual ~SupplicantStatus();
+    static SupplicantStatus *createStatus(char *data, int len);
 
-    int start();
-    int stop();
-
-private:
-    int enable();
-    int disable();
+    int getWpaState() { return mWpaState; }
+    int getId() { return mId; }
+    const char *getBssid() { return mBssid; }
+    const char *getSsid() { return mSsid; }
+   
 };
 
 #endif

@@ -14,29 +14,23 @@
  * limitations under the License.
  */
 
-#ifndef _OPEN_VPN_CONTROLLER_H
-#define _OPEN_VPN_CONTROLLER_H
+#ifndef _SupplicantConnectedEvent_H
+#define _SupplicantConnectedEvent_H
 
-#include "PropertyManager.h"
-#include "VpnController.h"
+#include "SupplicantEvent.h"
 
-class ServiceManager;
-class IControllerHandler;
-
-class OpenVpnController : public VpnController {
+class SupplicantConnectedEvent : public SupplicantEvent {
 private:
-    ServiceManager *mServiceManager;
+    char *mBssid;
+    bool mReassociated;
 
 public:
-    OpenVpnController(PropertyManager *propmngr, IControllerHandler *handlers);
-    virtual ~OpenVpnController();
+    SupplicantConnectedEvent(int level, char *event, size_t len);
+    SupplicantConnectedEvent(const char *bssid, bool reassicated);
+    virtual ~SupplicantConnectedEvent();
 
-    int start();
-    int stop();
-
-private:
-    int enable();
-    int disable();
+    const char *getBssid() { return mBssid; }
+    bool getReassociated() { return mReassociated; }
 };
 
 #endif

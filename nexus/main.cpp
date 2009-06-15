@@ -40,10 +40,10 @@ int main() {
 
     nm->setBroadcaster((SocketListener *) cl);
 
-    nm->attachController(new LoopController(nm->getPropMngr()));
-    nm->attachController(new TiwlanWifiController(nm->getPropMngr(), "/system/lib/modules/wlan.ko", "wlan", ""));
-//    nm->attachController(new AndroidL2TPVpnController());
-    nm->attachController(new OpenVpnController(nm->getPropMngr()));
+    nm->attachController(new LoopController(nm->getPropMngr(), nm));
+    nm->attachController(new TiwlanWifiController(nm->getPropMngr(), nm, "/system/lib/modules/wlan.ko", "wlan", ""));
+//    nm->attachController(new AndroidL2TPVpnController(nm->getPropMngr(), nm));
+    nm->attachController(new OpenVpnController(nm->getPropMngr(), nm));
 
 
     if (NetworkManager::Instance()->run()) {

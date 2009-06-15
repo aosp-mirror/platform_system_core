@@ -14,29 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef _OPEN_VPN_CONTROLLER_H
-#define _OPEN_VPN_CONTROLLER_H
+#ifndef _ICONTROLLER_HANDLER_H
+#define _ICONTROLLER_HANDLER_H
 
-#include "PropertyManager.h"
-#include "VpnController.h"
+class Controller;
+class InterfaceConfig;
 
-class ServiceManager;
-class IControllerHandler;
-
-class OpenVpnController : public VpnController {
-private:
-    ServiceManager *mServiceManager;
-
+class IControllerHandler {
 public:
-    OpenVpnController(PropertyManager *propmngr, IControllerHandler *handlers);
-    virtual ~OpenVpnController();
-
-    int start();
-    int stop();
-
-private:
-    int enable();
-    int disable();
+    virtual void onInterfaceStarted(Controller *c, const InterfaceConfig *cfg) = 0;
+    virtual void onInterfaceStopping(Controller *c, const char *name) = 0;
 };
 
 #endif
+

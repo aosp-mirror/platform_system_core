@@ -20,9 +20,11 @@
 #include "PropertyManager.h"
 #include "WifiController.h"
 
+class IControllerHandler;
+
 class TiwlanWifiController : public WifiController {
 public:
-    TiwlanWifiController(PropertyManager *propmngr, char *modpath, char *modname, char *modargs);
+    TiwlanWifiController(PropertyManager *propmngr, IControllerHandler *handlers, char *modpath, char *modname, char *modargs);
     virtual ~TiwlanWifiController() {}
 
     virtual int powerUp();

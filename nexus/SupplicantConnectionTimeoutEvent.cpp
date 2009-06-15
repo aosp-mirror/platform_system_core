@@ -14,16 +14,23 @@
  * limitations under the License.
  */
 
-#include <stdlib.h>
-
-#define LOG_TAG "SupplicantEvent"
+#define LOG_TAG "SupplicantConnectionTimeoutEvent"
 #include <cutils/log.h>
 
-#include "SupplicantEvent.h"
+#include "SupplicantConnectionTimeoutEvent.h"
 
-#include "libwpa_client/wpa_ctrl.h"
-
-SupplicantEvent::SupplicantEvent(int type, int level) {
-    mType = type;
-    mLevel = level;
+SupplicantConnectionTimeoutEvent::SupplicantConnectionTimeoutEvent(int level, char *event,
+                                                   size_t len) :
+                          SupplicantEvent(SupplicantEvent::EVENT_CONNECTIONTIMEOUT,
+                                          level) {
+    // 00:13:46:40:40:aa timed out.'
+    mBssid = (char *) malloc(18);
+    strncpy(mBssid, event, 17);
+    mBssid[17] = '\0';
 }
+
+SupplicantConnectionTimeoutEvent::~SupplicantConnectionTimeoutEvent() {
+    if (mBssid)
+        free(mBssid);
+}
+

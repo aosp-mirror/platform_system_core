@@ -23,12 +23,13 @@ struct wpa_ctrl;
 class Supplicant;
 class SocketClient;
 class ISupplicantEventHandler;
+class SupplicantEventFactory;
 
 class SupplicantListener: public SocketListener {
-private:
     struct wpa_ctrl         *mMonitor;
     ISupplicantEventHandler *mHandlers;
-
+    SupplicantEventFactory  *mFactory;
+    
 public:
     SupplicantListener(ISupplicantEventHandler *handlers,
                        struct wpa_ctrl *monitor);

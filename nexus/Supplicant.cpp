@@ -29,13 +29,10 @@
 
 #include "Supplicant.h"
 #include "SupplicantListener.h"
-#include "SupplicantState.h"
-#include "SupplicantEvent.h"
-#include "ScanResult.h"
-#include "PropertyManager.h"
 #include "NetworkManager.h"
 #include "ErrorCode.h"
 #include "WifiController.h"
+#include "SupplicantStatus.h"
 
 #include "libwpa_client/wpa_ctrl.h"
 
@@ -45,20 +42,15 @@
 #define SUPP_CONFIG_TEMPLATE "/system/etc/wifi/wpa_supplicant.conf"
 #define SUPP_CONFIG_FILE "/data/misc/wifi/wpa_supplicant.conf"
 
-Supplicant::Supplicant(WifiController *wc, PropertyManager *propmngr) {
+Supplicant::Supplicant(WifiController *wc, ISupplicantEventHandler *handlers) {
+    mHandlers = handlers;
     mController = wc;
-    mPropMngr = propmngr;
     mInterfaceName = NULL;
     mCtrl = NULL;
     mMonitor = NULL;
     mListener = NULL;
    
-    mState = SupplicantState::UNKNOWN;
-
     mServiceManager = new ServiceManager();
-
-    mLatestScanResults = new ScanResultCollection();
-    pthread_mutex_init(&mLatestScanResultsLock, NULL);
 
     mNetworks = new WifiNetworkCollection();
     pthread_mutex_init(&mNetworksLock, NULL);
@@ -92,13 +84,10 @@ int Supplicant::start() {
         return -1;
     }
 
-    mPropMngr->registerProperty("wifi.supplicant.state", this);
     return 0;
 }
 
 int Supplicant::stop() {
-
-    mPropMngr->unregisterProperty("wifi.supplicant.state");
 
     if (mListener->stopListener()) {
         LOGW("Unable to stop supplicant listener (%s)", strerror(errno));
@@ -125,6 +114,30 @@ bool Supplicant::isStarted() {
     return mServiceManager->isRunning(SUPPLICANT_SERVICE_NAME);
 }
 
+SupplicantStatus *Supplicant::getStatus() {
+    char *reply;
+    size_t len = 4096;
+
+    if (!(reply = (char *) malloc(len))) {
+        errno = ENOMEM;
+        return NULL;
+    }
+
+    if (sendCommand("STATUS", reply, &len)) {
+        free(reply);
+        return NULL;
+    }
+
+    SupplicantStatus *ss = SupplicantStatus::createStatus(reply, len);
+  
+    free (reply);
+    return ss;
+}
+
+/*
+ * Retrieves the list of networks from Supplicant
+ * and merge them into our current list
+ */
 int Supplicant::refreshNetworkList() {
     char *reply;
     size_t len = 4096;
@@ -144,26 +157,58 @@ int Supplicant::refreshNetworkList() {
 
     if (!strtok_r(reply, "\n", &linep_next)) {
         LOGW("Malformatted network list\n");
-    } else {
-        pthread_mutex_lock(&mNetworksLock);
-        if (!mNetworks->empty()) {
-            WifiNetworkCollection::iterator i;
-
-            for (i = mNetworks->begin(); i !=mNetworks->end(); ++i)
-                delete *i;
-            mNetworks->clear();
-        }
-
-        while((linep = strtok_r(NULL, "\n", &linep_next))) {
-            WifiNetwork *wn = new WifiNetwork(mController, this, linep);
-            mNetworks->push_back(wn);
-            if (wn->refresh())
-                LOGW("Unable to refresh network id %d", wn->getNetworkId());
-        }
-
-        LOGD("Loaded %d networks\n", mNetworks->size());
-        pthread_mutex_unlock(&mNetworksLock);
+        free(reply);
+        errno = EIO;
+        return -1;
     }
+
+    pthread_mutex_lock(&mNetworksLock);
+
+    int num_added = 0;
+    int num_refreshed = 0;
+    int num_removed = 0;
+    while((linep = strtok_r(NULL, "\n", &linep_next))) {
+        // TODO: Move the decode into a static method so we
+        // don't create new_wn when we don't have to.
+        WifiNetwork *new_wn = new WifiNetwork(mController, this, linep);
+        WifiNetwork *merge_wn;
+
+        if ((merge_wn = this->lookupNetwork_UNLOCKED(new_wn->getNetworkId()))) {
+            num_refreshed++;
+            if (merge_wn->refresh()) {
+                LOGW("Error refreshing network %d (%s)",
+                     merge_wn->getNetworkId(), strerror(errno));
+                }
+            delete new_wn;
+        } else {
+            num_added++;
+            new_wn->registerProperties();
+            mNetworks->push_back(new_wn);
+            if (new_wn->refresh()) {
+                LOGW("Unable to refresh network id %d (%s)",
+                    new_wn->getNetworkId(), strerror(errno));
+            }
+        }
+    }
+
+    if (!mNetworks->empty()) {
+        // TODO: Add support for detecting removed networks
+        WifiNetworkCollection::iterator i;
+
+        for (i = mNetworks->begin(); i != mNetworks->end(); ++i) {
+            if (0) {
+                num_removed++;
+                (*i)->unregisterProperties();
+                delete (*i);
+                i = mNetworks->erase(i);
+            }
+        }
+    }
+
+
+    LOGD("Networks added %d, refreshed %d, removed %d\n", 
+         num_added, num_refreshed, num_removed);
+    pthread_mutex_unlock(&mNetworksLock);
 
     free(reply);
     return 0;
@@ -192,7 +237,7 @@ int Supplicant::connectToSupplicant() {
         return -1;
     }
 
-    mListener = new SupplicantListener(this, mMonitor);
+    mListener = new SupplicantListener(mHandlers, mMonitor);
 
     if (mListener->startListener()) {
         LOGE("Error - unable to start supplicant listener");
@@ -245,165 +290,6 @@ int Supplicant::triggerScan(bool active) {
     return 0;
 }
 
-int Supplicant::set(const char *name, const char *value) {
-    const char *n = name + strlen("wifi.supplicant.");
-
-    errno = -EROFS;
-    return -1;
-}
-
-const char *Supplicant::get(const char *name, char *buffer, size_t max) {
-    const char *n = name + strlen("wifi.supplicant.");
-
-    if (!strcasecmp(n, "state"))
-        return SupplicantState::toString(mState, buffer, max);
-    errno = ENOENT;
-    return NULL;
-}
-
-int Supplicant::onConnectedEvent(SupplicantEvent *evt) {
-    LOGD("onConnectedEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-int Supplicant::onDisconnectedEvent(SupplicantEvent *evt) {
-    LOGD("onDisconnectedEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-int Supplicant::onTerminatingEvent(SupplicantEvent *evt) {
-    LOGD("onTerminatingEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-int Supplicant::onPasswordChangedEvent(SupplicantEvent *evt) {
-    LOGD("onPasswordChangedEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-int Supplicant::onEapNotificationEvent(SupplicantEvent *evt) {
-    LOGD("onEapNotificationEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-int Supplicant::onEapStartedEvent(SupplicantEvent *evt) {
-    LOGD("onEapStartedEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-int Supplicant::onEapMethodEvent(SupplicantEvent *evt) {
-    LOGD("onEapMethodEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-int Supplicant::onEapSuccessEvent(SupplicantEvent *evt) {
-    LOGD("onEapSuccessEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-int Supplicant::onEapFailureEvent(SupplicantEvent *evt) {
-    LOGD("onEapFailureEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-int Supplicant::onScanResultsEvent(SupplicantEvent *evt) {
-    if (!strcmp(evt->getEvent(), "Ready")) {
-        char *reply;
-
-        if (!(reply = (char *) malloc(4096))) {
-            errno = ENOMEM;
-            return -1;
-        }
-
-        size_t len = 4096;
-
-        if (sendCommand("SCAN_RESULTS", reply, &len)) {
-            LOGW("onScanResultsEvent(%s): Error getting scan results (%s)",
-                  evt->getEvent(), strerror(errno));
-            free(reply);
-            return -1;
-        }
-
-        pthread_mutex_lock(&mLatestScanResultsLock);
-        if (!mLatestScanResults->empty()) {
-            ScanResultCollection::iterator i;
-
-            for (i = mLatestScanResults->begin();
-                 i !=mLatestScanResults->end(); ++i) {
-                delete *i;
-            }
-            mLatestScanResults->clear();
-        }
-
-        char *linep;
-        char *linep_next = NULL;
-
-        if (!strtok_r(reply, "\n", &linep_next)) {
-            free(reply);
-            pthread_mutex_unlock(&mLatestScanResultsLock);
-            return 0;
-        }
-
-        while((linep = strtok_r(NULL, "\n", &linep_next)))
-            mLatestScanResults->push_back(new ScanResult(linep));
-
-        char tmp[128];
-        sprintf(tmp, "Scan results ready (%d)", mLatestScanResults->size());
-        NetworkManager::Instance()->getBroadcaster()->
-                                    sendBroadcast(ErrorCode::UnsolicitedInformational, tmp, false);
-        pthread_mutex_unlock(&mLatestScanResultsLock);
-        free(reply);
-    } else {
-        LOGW("Unknown SCAN_RESULTS event (%s)", evt->getEvent());
-    }
-    return 0;
-}
-
-int Supplicant::onStateChangeEvent(SupplicantEvent *evt) {
-    char *bword, *last;
-    char *tmp = strdup(evt->getEvent());
-
-    if (!(bword = strtok_r(tmp, " ", &last))) {
-        LOGE("Malformatted state update (%s)", evt->getEvent());
-        free(tmp);
-        return 0;
-    }
-
-    if (!(bword = strtok_r(NULL, " ", &last))) {
-        LOGE("Malformatted state update (%s)", evt->getEvent());
-        free(tmp);
-        return 0;
-    }
-
-    mState = atoi(&bword[strlen("state=")]);
-    LOGD("State changed to %d", mState);
-    free(tmp);
-    return 0;
-}
-
-int Supplicant::onLinkSpeedEvent(SupplicantEvent *evt) {
-    LOGD("onLinkSpeedEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-int Supplicant::onDriverStateEvent(SupplicantEvent *evt) {
-    LOGD("onDriverStateEvent(%s)", evt->getEvent());
-    return 0;
-}
-
-// XXX: Use a cursor + smartptr instead
-ScanResultCollection *Supplicant::createLatestScanResults() {
-    ScanResultCollection *d = new ScanResultCollection();
-    ScanResultCollection::iterator i;
-
-    pthread_mutex_lock(&mLatestScanResultsLock);
-    for (i = mLatestScanResults->begin(); i != mLatestScanResults->end(); ++i)
-        d->push_back((*i)->clone());
-
-    pthread_mutex_unlock(&mLatestScanResultsLock);
-    return d;
-}
-
 WifiNetwork *Supplicant::createNetwork() {
     char reply[255];
     size_t len = sizeof(reply) -1;
@@ -445,14 +331,18 @@ int Supplicant::removeNetwork(WifiNetwork *wn) {
 
 WifiNetwork *Supplicant::lookupNetwork(int networkId) {
     pthread_mutex_lock(&mNetworksLock);
+    WifiNetwork *wn = lookupNetwork_UNLOCKED(networkId);
+    pthread_mutex_unlock(&mNetworksLock);
+    return wn;
+}
+
+WifiNetwork *Supplicant::lookupNetwork_UNLOCKED(int networkId) {
     WifiNetworkCollection::iterator it;
     for (it = mNetworks->begin(); it != mNetworks->end(); ++it) {
         if ((*it)->getNetworkId() == networkId) {
-            pthread_mutex_unlock(&mNetworksLock);
             return *it;
         }
     }
-    pthread_mutex_unlock(&mNetworksLock);
     errno = ENOENT;
     return NULL;
 }
@@ -528,6 +418,12 @@ int Supplicant::setNetworkVar(int networkId, const char *var, const char *val) {
         return -1;
     }
     free(tmp);
+
+    len = sizeof(reply) -1;
+    if (sendCommand("SAVE_CONFIG", reply, &len)) {
+        LOGE("Error saving config after %s = %s", var, val);
+        return -1;
+    }
     return 0;
 }
 

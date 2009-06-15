@@ -14,29 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef _OPEN_VPN_CONTROLLER_H
-#define _OPEN_VPN_CONTROLLER_H
+#ifndef _SupplicantStateChangeEvent_H
+#define _SupplicantStateChangeEvent_H
 
-#include "PropertyManager.h"
-#include "VpnController.h"
+#include "SupplicantEvent.h"
 
-class ServiceManager;
-class IControllerHandler;
-
-class OpenVpnController : public VpnController {
+class SupplicantStateChangeEvent : public SupplicantEvent {
 private:
-    ServiceManager *mServiceManager;
+    int mState;
 
 public:
-    OpenVpnController(PropertyManager *propmngr, IControllerHandler *handlers);
-    virtual ~OpenVpnController();
+    SupplicantStateChangeEvent(int level, char *event, size_t len);
+    SupplicantStateChangeEvent(int state);
+    virtual ~SupplicantStateChangeEvent();
 
-    int start();
-    int stop();
-
-private:
-    int enable();
-    int disable();
+    int getState() { return mState; }
 };
 
 #endif

@@ -16,14 +16,25 @@
 
 #include <stdlib.h>
 
-#define LOG_TAG "SupplicantEvent"
+#define LOG_TAG "SupplicantAssociatedEvent"
 #include <cutils/log.h>
 
-#include "SupplicantEvent.h"
+#include "SupplicantAssociatedEvent.h"
 
-#include "libwpa_client/wpa_ctrl.h"
+SupplicantAssociatedEvent::SupplicantAssociatedEvent(int level, char *event,
+                                                     size_t len) :
+                           SupplicantEvent(SupplicantEvent::EVENT_ASSOCIATED,
+                                           level) {
+    char *p = event;
 
-SupplicantEvent::SupplicantEvent(int type, int level) {
-    mType = type;
-    mLevel = level;
+    // "00:13:46:40:40:aa"
+    mBssid = (char *) malloc(18);
+    strncpy(mBssid, p, 17);
+    mBssid[17] = '\0';
 }
+
+SupplicantAssociatedEvent::~SupplicantAssociatedEvent() {
+    if (mBssid)
+        free(mBssid);
+}
+

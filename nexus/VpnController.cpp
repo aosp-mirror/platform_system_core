@@ -25,18 +25,19 @@
 #include "PropertyManager.h"
 #include "VpnController.h"
 
-VpnController::VpnController(PropertyManager *propmngr) :
-               Controller("VPN", propmngr) {
+VpnController::VpnController(PropertyManager *propmngr,
+                             IControllerHandler *handlers) :
+               Controller("VPN", propmngr, handlers) {
     mEnabled = false;
-    propmngr->registerProperty("vpn.enabled", this);
-    propmngr->registerProperty("vpn.gateway", this);
 }
 
 int VpnController::start() {
+    mPropMngr->registerProperty("vpn.enabled", this);
     return 0;
 }
 
 int VpnController::stop() {
+    mPropMngr->unregisterProperty("vpn.enabled");
     return 0;
 }
 
@@ -49,8 +50,13 @@ int VpnController::set(const char *name, const char *value) {
             return 0;
         rc = (en ? enable() : disable());
 
-        if (!rc)
+        if (!rc) {
             mEnabled = en;
+            if (en) 
+                mPropMngr->unregisterProperty("vpn.gateway");
+            else
+                mPropMngr->unregisterProperty("vpn.gateway");
+        }
         return rc;
     } if (!strcmp(name, "vpn.gateway")) {
         if (!inet_aton(value, &mVpnGateway)) {

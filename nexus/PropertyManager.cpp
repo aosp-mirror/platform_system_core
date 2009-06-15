@@ -37,7 +37,8 @@ int PropertyManager::registerProperty(const char *name, IPropertyProvider *pp) {
     for (it = mPropertyPairs->begin(); it != mPropertyPairs->end(); ++it) {
         if (!strcmp(name, (*it)->getName())) {
             errno = EADDRINUSE;
-            LOGE("Failed to register property (%s)", strerror(errno));
+            LOGE("Failed to register property %s (%s)",
+                 name, strerror(errno));
             pthread_mutex_unlock(&mLock);
             return -1;
         }
