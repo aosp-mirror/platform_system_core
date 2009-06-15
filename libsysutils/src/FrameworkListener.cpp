@@ -36,17 +36,14 @@ bool FrameworkListener::onDataAvailable(SocketClient *c) {
     if ((len = read(c->getSocket(), buffer, sizeof(buffer) -1)) < 0) {
         LOGE("read() failed (%s)", strerror(errno));
         return errno;
-    } else if (!len) {
-        LOGW("Lost connection to client");
+    } else if (!len)
         return false;
-    }
 
     int offset = 0;
     int i;
 
     for (i = 0; i < len; i++) {
-        if (buffer[i] == '\n') {
-            buffer[i] = '\0';
+        if (buffer[i] == '\0') {
             dispatchCommand(c, buffer + offset);
             offset = i + 1;
         }
@@ -58,13 +55,20 @@ void FrameworkListener::registerCmd(FrameworkCommand *cmd) {
     mCommands->push_back(cmd);
 }
 
-void FrameworkListener::dispatchCommand(SocketClient *cli, char *cmd) {
-    char *next = cmd;
-    char *cm;
-    char *arg;
+void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
+    int argc;
+    char *argv[FrameworkListener::CMD_ARGS_MAX];
 
-    if (!(cm = strsep(&next, ":"))) {
-        cli->sendMsg(500, "Malformatted message", false);
+    if (!index(data, '"')) {
+        char *next = data;
+        char *field;
+        int i;
+
+        for (i = 0; (i < FrameworkListener::CMD_ARGS_MAX) &&
+                    (argv[i] = strsep(&next, " ")); i++);
+        argc = i+1;
+    } else {
+        LOGD("blehhh not supported");
         return;
     }
 
@@ -73,8 +77,8 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *cmd) {
     for (i = mCommands->begin(); i != mCommands->end(); ++i) {
         FrameworkCommand *c = *i;
 
-        if (!strcmp(cm, c->getCommand())) {
-            if (c->runCommand(cli, next)) {
+        if (!strcmp(argv[0], c->getCommand())) {
+            if (c->runCommand(cli, argc, argv)) {
                 LOGW("Handler '%s' error (%s)", c->getCommand(), strerror(errno));
             }
             return;

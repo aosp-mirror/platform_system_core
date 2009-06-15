@@ -29,7 +29,7 @@ public:
     FrameworkCommand(const char *cmd);
     virtual ~FrameworkCommand() { }
 
-    virtual int runCommand(SocketClient *c, char *data) = 0;
+    virtual int runCommand(SocketClient *c, int argc, char **argv) = 0;
 
     const char *getCommand() { return mCommand; }
 };
