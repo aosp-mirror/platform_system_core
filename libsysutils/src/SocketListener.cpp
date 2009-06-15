@@ -157,7 +157,6 @@ void SocketListener::runListener() {
                 if (FD_ISSET(fd, &read_fds)) {
                     pthread_mutex_unlock(&mClientsLock);
                     if (!onDataAvailable(*it)) {
-                        LOGD("SocketListener closing client socket");
                         close(fd);
                         pthread_mutex_lock(&mClientsLock);
                         delete *it;
