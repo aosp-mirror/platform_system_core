@@ -5,26 +5,35 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:=                          \
-                  main.cpp                 \
-                  NetworkManager.cpp       \
-                  CommandListener.cpp      \
-                  Controller.cpp           \
-                  WifiController.cpp       \
-                  LoopController.cpp       \
-                  NexusCommand.cpp         \
-                  TiwlanWifiController.cpp \
-                  Supplicant.cpp           \
-                  SupplicantEvent.cpp      \
-                  SupplicantListener.cpp   \
-                  VpnController.cpp        \
-                  ScanResult.cpp           \
-                  WifiScanner.cpp          \
-                  WifiNetwork.cpp          \
-                  OpenVpnController.cpp    \
-                  InterfaceConfig.cpp      \
-                  PropertyManager.cpp      \
-                  SupplicantState.cpp 
+LOCAL_SRC_FILES:=                                      \
+                  main.cpp                             \
+                  NetworkManager.cpp                   \
+                  CommandListener.cpp                  \
+                  Controller.cpp                       \
+                  WifiController.cpp                   \
+                  LoopController.cpp                   \
+                  NexusCommand.cpp                     \
+                  TiwlanWifiController.cpp             \
+                  Supplicant.cpp                       \
+                  SupplicantEvent.cpp                  \
+                  SupplicantListener.cpp               \
+                  VpnController.cpp                    \
+                  ScanResult.cpp                       \
+                  WifiScanner.cpp                      \
+                  WifiNetwork.cpp                      \
+                  OpenVpnController.cpp                \
+                  InterfaceConfig.cpp                  \
+                  PropertyManager.cpp                  \
+                  SupplicantState.cpp                  \
+                  SupplicantEventFactory.cpp           \
+                  SupplicantConnectedEvent.cpp         \
+                  SupplicantAssociatingEvent.cpp       \
+                  SupplicantAssociatedEvent.cpp        \
+                  SupplicantStateChangeEvent.cpp       \
+                  SupplicantScanResultsEvent.cpp       \
+                  SupplicantConnectionTimeoutEvent.cpp \
+                  SupplicantDisconnectedEvent.cpp      \
+                  SupplicantStatus.cpp
 
 LOCAL_MODULE:= nexus
 

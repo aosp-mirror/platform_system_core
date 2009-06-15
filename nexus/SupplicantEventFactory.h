@@ -1,3 +1,4 @@
+
 /*
  * Copyright (C) 2008 The Android Open Source Project
  *
@@ -14,29 +15,17 @@
  * limitations under the License.
  */
 
-#ifndef _OPEN_VPN_CONTROLLER_H
-#define _OPEN_VPN_CONTROLLER_H
+#ifndef _SupplicantEventFactory_H
+#define _SupplicantEventFactory_H
 
-#include "PropertyManager.h"
-#include "VpnController.h"
+class SupplicantEvent;
 
-class ServiceManager;
-class IControllerHandler;
-
-class OpenVpnController : public VpnController {
-private:
-    ServiceManager *mServiceManager;
-
+class SupplicantEventFactory {
 public:
-    OpenVpnController(PropertyManager *propmngr, IControllerHandler *handlers);
-    virtual ~OpenVpnController();
+    SupplicantEventFactory();
+    virtual ~SupplicantEventFactory() {}
 
-    int start();
-    int stop();
-
-private:
-    int enable();
-    int disable();
+    SupplicantEvent *createEvent(char *event, size_t len);
 };
 
 #endif

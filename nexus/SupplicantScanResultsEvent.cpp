@@ -14,29 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef _OPEN_VPN_CONTROLLER_H
-#define _OPEN_VPN_CONTROLLER_H
+#define LOG_TAG "SupplicantScanResultsEvent"
+#include <cutils/log.h>
 
-#include "PropertyManager.h"
-#include "VpnController.h"
+#include "SupplicantScanResultsEvent.h"
 
-class ServiceManager;
-class IControllerHandler;
+SupplicantScanResultsEvent::SupplicantScanResultsEvent(int level, char *event,
+                                                       size_t len) :
+                            SupplicantEvent(SupplicantEvent::EVENT_SCAN_RESULTS,
+                                            level) {
+}
 
-class OpenVpnController : public VpnController {
-private:
-    ServiceManager *mServiceManager;
+SupplicantScanResultsEvent::SupplicantScanResultsEvent() :
+                            SupplicantEvent(SupplicantEvent::EVENT_SCAN_RESULTS, -1) {
+}
 
-public:
-    OpenVpnController(PropertyManager *propmngr, IControllerHandler *handlers);
-    virtual ~OpenVpnController();
+SupplicantScanResultsEvent::~SupplicantScanResultsEvent() {
+}
 
-    int start();
-    int stop();
-
-private:
-    int enable();
-    int disable();
-};
-
-#endif

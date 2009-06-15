@@ -20,12 +20,12 @@
 #include <sysutils/SocketListener.h>
 
 #include "Controller.h"
-
 #include "PropertyManager.h"
+#include "IControllerHandler.h"
 
 class InterfaceConfig;
 
-class NetworkManager {
+class NetworkManager : public IControllerHandler {
 private:
     static NetworkManager *sInstance;
 
@@ -55,16 +55,7 @@ private:
 
     NetworkManager(PropertyManager *propMngr);
 
-public:
-    /*
-     * Called from a controller when an interface is available/ready for use.
-     * 'cfg' contains information on how this interface should be configured.
-     */
-    int onInterfaceStart(Controller *c, const InterfaceConfig *cfg);
-
-    /*
-     * Called from a controller when an interface should be shut down
-     */
-    int onInterfaceStop(Controller *c, const char *name);
+    void onInterfaceStarted(Controller *c, const InterfaceConfig *cfg);
+    void onInterfaceStopping(Controller *c, const char *name);
 };
 #endif
