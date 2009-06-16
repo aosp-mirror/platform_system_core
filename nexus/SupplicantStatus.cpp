@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define LOG_TAG "SupplicantState"
+#define LOG_TAG "SupplicantStatus"
 #include <cutils/log.h>
 
 #include "SupplicantStatus.h"
@@ -52,18 +52,37 @@ SupplicantStatus *SupplicantStatus::createStatus(char *data, int len) {
     char *next = data;
     char *line;
     while((line = strsep(&next, "\n"))) {
-        char *token = strsep(&next, "=");
-        char *value = strsep(&next, "=");
-
+        char *line_next =  line;
+        char *token = strsep(&line_next, "=");
+        char *value = strsep(&line_next, "=");
         if (!strcmp(token, "bssid"))
             bssid = strdup(value);
         else if (!strcmp(token, "ssid"))
             ssid = strdup(value);
         else if (!strcmp(token, "id"))
             id = atoi(value);
-        else if (!strcmp(token, "wpa_state"))
-            state = atoi(value);
-        else
+        else if (!strcmp(token, "wpa_state")) {
+            if (!strcmp(value, "DISCONNECTED"))
+                state = SupplicantState::DISCONNECTED;
+            else if (!strcmp(value, "INACTIVE"))
+                state = SupplicantState::INACTIVE;
+            else if (!strcmp(value, "SCANNING"))
+                state = SupplicantState::SCANNING;
+            else if (!strcmp(value, "ASSOCIATING"))
+                state = SupplicantState::ASSOCIATING;
+            else if (!strcmp(value, "ASSOCIATED"))
+                state = SupplicantState::ASSOCIATED;
+            else if (!strcmp(value, "FOURWAY_HANDSHAKE"))
+                state = SupplicantState::FOURWAY_HANDSHAKE;
+            else if (!strcmp(value, "GROUP_HANDSHAKE"))
+                state = SupplicantState::GROUP_HANDSHAKE;
+            else if (!strcmp(value, "COMPLETED"))
+                state = SupplicantState::COMPLETED;
+            else if (!strcmp(value, "IDLE"))
+                state = SupplicantState::IDLE;
+            else 
+                LOGE("Unknown supplicant state '%s'", value);
+        } else
             LOGD("Ignoring unsupported status token '%s'", token);
     }
 
