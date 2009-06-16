@@ -33,19 +33,10 @@ int SocketClient::sendMsg(const char *msg) {
         return -1;
     }
 
-    char *tmp;
-    const char *bp = msg;
-
-    if (msg[strlen(msg)] != '\n') {
-        tmp = (char *) alloca(strlen(msg) + 1);
-        strcpy(tmp, msg);
-        strcat(tmp, "\n");
-        bp = tmp;
-    }
-
+    // Send the message including null character
     int rc = 0;
-    const char *p = bp;
-    int brtw = strlen(bp);
+    const char *p = msg;
+    int brtw = strlen(msg) + 1;
 
     pthread_mutex_lock(&mWriteMutex);
     while(brtw) {

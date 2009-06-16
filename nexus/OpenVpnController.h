@@ -21,13 +21,14 @@
 #include "VpnController.h"
 
 class ServiceManager;
+class IControllerHandler;
 
 class OpenVpnController : public VpnController {
 private:
     ServiceManager *mServiceManager;
 
 public:
-    OpenVpnController(PropertyManager *propmngr);
+    OpenVpnController(PropertyManager *propmngr, IControllerHandler *handlers);
     virtual ~OpenVpnController();
 
     int start();

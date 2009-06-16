@@ -17,21 +17,34 @@
 #ifndef _ISUPPLICANT_EVENT_HANDLER_H
 #define _ISUPPLICANT_EVENT_HANDLER_H
 
+class SupplicantAssociatingEvent;
+class SupplicantAssociatedEvent;
+class SupplicantConnectedEvent;
+class SupplicantScanResultsEvent;
+class SupplicantStateChangeEvent;
+class SupplicantConnectionTimeoutEvent;
+class SupplicantDisconnectedEvent;
+
 class ISupplicantEventHandler {
 public:
-    virtual int onConnectedEvent(SupplicantEvent *evt) = 0;
-    virtual int onDisconnectedEvent(SupplicantEvent *evt) = 0;
-    virtual int onTerminatingEvent(SupplicantEvent *evt) = 0;
-    virtual int onPasswordChangedEvent(SupplicantEvent *evt) = 0;
-    virtual int onEapNotificationEvent(SupplicantEvent *evt) = 0;
-    virtual int onEapStartedEvent(SupplicantEvent *evt) = 0;
-    virtual int onEapMethodEvent(SupplicantEvent *evt) = 0;
-    virtual int onEapSuccessEvent(SupplicantEvent *evt) = 0;
-    virtual int onEapFailureEvent(SupplicantEvent *evt) = 0;
-    virtual int onScanResultsEvent(SupplicantEvent *evt) = 0;
-    virtual int onStateChangeEvent(SupplicantEvent *evt) = 0;
-    virtual int onLinkSpeedEvent(SupplicantEvent *evt) = 0;
-    virtual int onDriverStateEvent(SupplicantEvent *evt) = 0;
+    virtual void onAssociatingEvent(SupplicantAssociatingEvent *evt) = 0;
+    virtual void onAssociatedEvent(SupplicantAssociatedEvent *evt) = 0;
+    virtual void onConnectedEvent(SupplicantConnectedEvent *evt) = 0;
+    virtual void onScanResultsEvent(SupplicantScanResultsEvent *evt) = 0;
+    virtual void onStateChangeEvent(SupplicantStateChangeEvent *evt) = 0;
+    virtual void onConnectionTimeoutEvent(SupplicantConnectionTimeoutEvent *evt) = 0;
+    virtual void onDisconnectedEvent(SupplicantDisconnectedEvent *evt) = 0;
+#if 0
+    virtual void onTerminatingEvent(SupplicantEvent *evt) = 0;
+    virtual void onPasswordChangedEvent(SupplicantEvent *evt) = 0;
+    virtual void onEapNotificationEvent(SupplicantEvent *evt) = 0;
+    virtual void onEapStartedEvent(SupplicantEvent *evt) = 0;
+    virtual void onEapMethodEvent(SupplicantEvent *evt) = 0;
+    virtual void onEapSuccessEvent(SupplicantEvent *evt) = 0;
+    virtual void onEapFailureEvent(SupplicantEvent *evt) = 0;
+    virtual void onLinkSpeedEvent(SupplicantEvent *evt) = 0;
+    virtual void onDriverStateEvent(SupplicantEvent *evt) = 0;
+#endif
 };
 
 #endif

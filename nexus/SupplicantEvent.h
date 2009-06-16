@@ -22,33 +22,32 @@
 class SupplicantEvent {
 private:
     int mType;
-    char *mEvent;
-    size_t mLen;
     int mLevel;
 
 public:
-    static const int EVENT_UNKNOWN          = 0;
-    static const int EVENT_CONNECTED        = 1;
-    static const int EVENT_DISCONNECTED     = 2;
-    static const int EVENT_TERMINATING      = 3;
-    static const int EVENT_PASSWORD_CHANGED = 4;
-    static const int EVENT_EAP_NOTIFICATION = 5;
-    static const int EVENT_EAP_STARTED      = 6;
-    static const int EVENT_EAP_METHOD       = 7;
-    static const int EVENT_EAP_SUCCESS      = 8;
-    static const int EVENT_EAP_FAILURE      = 9;
-    static const int EVENT_SCAN_RESULTS     = 10;
-    static const int EVENT_STATE_CHANGE     = 11;
-    static const int EVENT_LINK_SPEED       = 12;
-    static const int EVENT_DRIVER_STATE     = 13;
+    static const int EVENT_UNKNOWN           = 0;
+    static const int EVENT_CONNECTED         = 1;
+    static const int EVENT_DISCONNECTED      = 2;
+    static const int EVENT_TERMINATING       = 3;
+    static const int EVENT_PASSWORD_CHANGED  = 4;
+    static const int EVENT_EAP_NOTIFICATION  = 5;
+    static const int EVENT_EAP_STARTED       = 6;
+    static const int EVENT_EAP_METHOD        = 7;
+    static const int EVENT_EAP_SUCCESS       = 8;
+    static const int EVENT_EAP_FAILURE       = 9;
+    static const int EVENT_SCAN_RESULTS      = 10;
+    static const int EVENT_STATE_CHANGE      = 11;
+    static const int EVENT_LINK_SPEED        = 12;
+    static const int EVENT_DRIVER_STATE      = 13;
+    static const int EVENT_ASSOCIATING       = 14;
+    static const int EVENT_ASSOCIATED        = 15;
+    static const int EVENT_CONNECTIONTIMEOUT = 16;
 
 public:
-    SupplicantEvent(char *event, size_t len);
-    virtual ~SupplicantEvent();
+    SupplicantEvent(int type, int level);
+    virtual ~SupplicantEvent() {}
 
     int getType() { return mType; }
-    const char *getEvent() { return mEvent; }
-    int getLen() { return mLen; }
     int getLevel() { return mLevel; }
 };
 

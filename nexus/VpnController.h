@@ -21,6 +21,8 @@
 
 #include "Controller.h"
 
+class IControllerHandler;
+
 class VpnController : public Controller {
     bool           mEnabled;
     /*
@@ -29,7 +31,7 @@ class VpnController : public Controller {
     struct in_addr mVpnGateway;
 
 public:
-    VpnController(PropertyManager *propmngr);
+    VpnController(PropertyManager *propmngr, IControllerHandler *handlers);
     virtual ~VpnController() {}
 
     virtual int start();

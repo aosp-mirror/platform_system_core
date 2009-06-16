@@ -53,7 +53,8 @@ CommandListener::WifiCreateNetworkCmd::WifiCreateNetworkCmd() :
                  NexusCommand("wifi_create_network") {
 }
 
-int CommandListener::WifiCreateNetworkCmd::runCommand(SocketClient *cli, char *data) {
+int CommandListener::WifiCreateNetworkCmd::runCommand(SocketClient *cli,
+                                                      int argc, char **argv) {
     NetworkManager *nm = NetworkManager::Instance();
     WifiController *wc = (WifiController *) nm->findController("WIFI");
     WifiNetwork *wn;
@@ -72,11 +73,12 @@ CommandListener::WifiRemoveNetworkCmd::WifiRemoveNetworkCmd() :
                  NexusCommand("wifi_remove_network") {
 }
 
-int CommandListener::WifiRemoveNetworkCmd::runCommand(SocketClient *cli, char *data) {
+int CommandListener::WifiRemoveNetworkCmd::runCommand(SocketClient *cli,
+                                                      int argc, char **argv) {
     NetworkManager *nm = NetworkManager::Instance();
     WifiController *wc = (WifiController *) nm->findController("WIFI");
 
-    if (wc->removeNetwork(atoi(data)))
+    if (wc->removeNetwork(atoi(argv[1])))
         cli->sendMsg(ErrorCode::OperationFailed, "Failed to remove network", true);
     else {
         cli->sendMsg(ErrorCode::CommandOkay, "Network removed.", false);
@@ -88,7 +90,8 @@ CommandListener::WifiScanResultsCmd::WifiScanResultsCmd() :
                  NexusCommand("wifi_scan_results") {
 }
 
-int CommandListener::WifiScanResultsCmd::runCommand(SocketClient *cli, char *data) {
+int CommandListener::WifiScanResultsCmd::runCommand(SocketClient *cli,
+                                                    int argc, char **argv) {
     NetworkManager *nm = NetworkManager::Instance();
     WifiController *wc = (WifiController *) nm->findController("WIFI");
 
@@ -114,7 +117,8 @@ CommandListener::WifiListNetworksCmd::WifiListNetworksCmd() :
                  NexusCommand("wifi_list_networks") {
 }
 
-int CommandListener::WifiListNetworksCmd::runCommand(SocketClient *cli, char *data) {
+int CommandListener::WifiListNetworksCmd::runCommand(SocketClient *cli,
+                                                     int argc, char **argv) {
     NetworkManager *nm = NetworkManager::Instance();
     WifiController *wc = (WifiController *) nm->findController("WIFI");
 
@@ -144,23 +148,19 @@ CommandListener::GetCmd::GetCmd() :
                  NexusCommand("get") {
 }
 
-int CommandListener::GetCmd::runCommand(SocketClient *cli, char *data) {
-    char *next = data;
-    char *propname;
+int CommandListener::GetCmd::runCommand(SocketClient *cli, int argc, char **argv) {
+    char val[Property::ValueMaxSize];
 
-    if (!(propname = strsep(&next, ":")))
-        goto out_inval;
-
-    char pb[Property::NameMaxSize + 6];
-    snprintf(pb, sizeof(pb), "%s:", propname);
-
-    if (!NetworkManager::Instance()->getPropMngr()->get(propname,
-                                                        &pb[strlen(pb)],
-                                                        sizeof(pb) - strlen(pb))) {
+    if (!NetworkManager::Instance()->getPropMngr()->get(argv[1],
+                                                        val,
+                                                        sizeof(val))) {
         goto out_inval;
     }
 
-    cli->sendMsg(ErrorCode::PropertyRead, pb, false);
+    char *tmp;
+    asprintf(&tmp, "%s %s", argv[1], val);
+    cli->sendMsg(ErrorCode::PropertyRead, tmp, false);
+    free(tmp);
 
     cli->sendMsg(ErrorCode::CommandOkay, "Property read.", false);
     return 0;
@@ -174,23 +174,9 @@ CommandListener::SetCmd::SetCmd() :
                  NexusCommand("set") {
 }
 
-int CommandListener::SetCmd::runCommand(SocketClient *cli, char *data) {
-    char *bword;
-    char *last;
-    char propname[Property::NameMaxSize];
-    char propval[Property::ValueMaxSize];
-
-    if (!(bword = strtok_r(data, ":", &last)))
-        goto out_inval;
-
-    strncpy(propname, bword, sizeof(propname));
-
-    if (!(bword = strtok_r(NULL, ":", &last)))
-        goto out_inval;
-
-    strncpy(propval, bword, sizeof(propval));
-
-    if (NetworkManager::Instance()->getPropMngr()->set(propname, propval))
+int CommandListener::SetCmd::runCommand(SocketClient *cli, int argc,
+                                        char **argv) {
+    if (NetworkManager::Instance()->getPropMngr()->set(argv[1], argv[2]))
         goto out_inval;
 
     cli->sendMsg(ErrorCode::CommandOkay, "Property set.", false);
@@ -206,7 +192,7 @@ CommandListener::ListCmd::ListCmd() :
                  NexusCommand("list") {
 }
 
-int CommandListener::ListCmd::runCommand(SocketClient *cli, char *data) {
+int CommandListener::ListCmd::runCommand(SocketClient *cli, int argc, char **argv) {
     android::List<char *> *pc;
 
     if (!(pc = NetworkManager::Instance()->getPropMngr()->createPropertyList())) {
@@ -227,7 +213,7 @@ int CommandListener::ListCmd::runCommand(SocketClient *cli, char *data) {
         }
 
         char *buf;
-        if (asprintf(&buf, "%s:%s", (*it), p_v) < 0) {
+        if (asprintf(&buf, "%s %s", (*it), p_v) < 0) {
             LOGE("Failed to allocate memory");
             free((*it));
             continue;

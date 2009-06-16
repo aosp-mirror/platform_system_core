@@ -34,9 +34,11 @@
 extern "C" int init_module(void *, unsigned int, const char *);
 extern "C" int delete_module(const char *, unsigned int);
 
-Controller::Controller(const char *name, PropertyManager *propMngr) {
+Controller::Controller(const char *name, PropertyManager *propMngr,
+                       IControllerHandler *handlers) {
     mPropMngr = propMngr;
     mName = strdup(name);
+    mHandlers = handlers;
     mBoundInterface = NULL;
 }
 

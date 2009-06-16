@@ -44,7 +44,7 @@ int format_partition(blkdev_t *part, char *type)
         args[3] = "-O android";
         args[4] = devpath;
         args[5] = NULL;
-        rc = logwrap(5, args);
+        rc = logwrap(5, args, 1);
     } else {
         char *args[7];
         args[0] = MKE2FS_PATH;
@@ -54,7 +54,7 @@ int format_partition(blkdev_t *part, char *type)
         args[4] = "-v";
         args[5] = devpath;
         args[6] = NULL;
-        rc = logwrap(6, args);
+        rc = logwrap(6, args, 1);
     }
  
     free(devpath);

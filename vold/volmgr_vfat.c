@@ -62,13 +62,13 @@ int vfat_check(blkdev_t *dev)
             args[3] = "-p";
             args[4] = blkdev_get_devpath(dev);
             args[5] = NULL;
-            rc = logwrap(5, args);
+            rc = logwrap(5, args, 1);
             free(args[4]);
         } else {
             args[2] = "-n";
             args[3] = blkdev_get_devpath(dev);
             args[4] = NULL;
-            rc = logwrap(4, args);
+            rc = logwrap(4, args, 1);
             free(args[3]);
         }
 

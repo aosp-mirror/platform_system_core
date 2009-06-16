@@ -22,6 +22,8 @@
 class SocketClient;
 
 class FrameworkListener : public SocketListener {
+public:
+    static const int CMD_ARGS_MAX = 8;
 private:
     FrameworkCommandCollection *mCommands;
 
@@ -34,6 +36,6 @@ protected:
     virtual bool onDataAvailable(SocketClient *c);
 
 private:
-    void dispatchCommand(SocketClient *c, char *cmd);
+    void dispatchCommand(SocketClient *c, char *data);
 };
 #endif

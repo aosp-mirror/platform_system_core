@@ -76,7 +76,7 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, const char *data)
     mDefaultKeyIndex = -1;
     mPriority = -1;
     mHiddenSsid = NULL;
-    mAllowedKeyManagement = 0;
+    mAllowedKeyManagement = KeyManagementMask::UNKNOWN;
     mAllowedProtocols = 0;
     mAllowedAuthAlgorithms = 0;
     mAllowedPairwiseCiphers = 0;
@@ -94,8 +94,6 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, const char *data)
     asprintf(&tmp2, "wifi.net.%d", mNetid);
     mIfaceCfg = new InterfaceConfig(tmp2);
     free(tmp2);
-
-    registerProperties();
     free(tmp);
 }
 
@@ -121,8 +119,6 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, int networkId) {
     asprintf(&tmp2, "wifi.net.%d", mNetid);
     mIfaceCfg = new InterfaceConfig(tmp2);
     free(tmp2);
-
-    registerProperties();
 }
 
 WifiNetwork *WifiNetwork::clone() {
@@ -153,7 +149,6 @@ WifiNetwork *WifiNetwork::clone() {
 }
 
 WifiNetwork::~WifiNetwork() {
-    unregisterProperties();
     if (mSsid)
         free(mSsid);
     if (mBssid)
@@ -203,7 +198,26 @@ int WifiNetwork::refresh() {
 
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "key_mgmt", buffer, len)) {
-        // TODO
+        if (!strcmp(buffer, "NONE"))
+            setAllowedKeyManagement(KeyManagementMask::NONE);
+        else if (index(buffer, ' ')) {
+            char *next = buffer;
+            char *token;
+            uint32_t mask = 0;
+
+            while((token = strsep(&next, " "))) {
+                if (!strcmp(token, "WPA-PSK"))
+                    mask |= KeyManagementMask::WPA_PSK;
+                else if (!strcmp(token, "WPA-EAP"))
+                    mask |= KeyManagementMask::WPA_EAP;
+                else if (!strcmp(token, "IEE8021X"))
+                    mask |= KeyManagementMask::IEEE8021X;
+                else
+                    LOGW("Unsupported key management scheme '%s'" , token);
+            }
+            setAllowedKeyManagement(mask);
+        } else
+            LOGE("Unsupported key management '%s'", buffer);
     }
 
     len = sizeof(buffer);
@@ -273,7 +287,7 @@ int WifiNetwork::set(const char *name, const char *value) {
 
         while((v_token = strsep(&v_next, " "))) {
             if (!strcasecmp(v_token, "NONE")) {
-                mask = 0;
+                mask = KeyManagementMask::NONE;
                 none = true;
             } else if (!none) {
                 if (!strcasecmp(v_token, "WPA_PSK"))
@@ -363,7 +377,29 @@ const char *WifiNetwork::get(const char *name, char *buffer, size_t maxsize) {
         snprintf(buffer, maxsize, "%d", getDefaultKeyIndex());
     else if (!strcasecmp(fc, "pri"))
         snprintf(buffer, maxsize, "%d", getPriority());
-    else if (!strcasecmp(fc, "hiddenssid")) {
+    else if (!strcasecmp(fc, "AllowedKeyManagement")) {
+        if (getAllowedKeyManagement() == KeyManagementMask::NONE) 
+            strncpy(buffer, "NONE", maxsize);
+        else {
+            char tmp[80] = { '\0' };
+
+            if (getAllowedKeyManagement() & KeyManagementMask::WPA_PSK)
+                strcat(tmp, "WPA_PSK ");
+            if (getAllowedKeyManagement() & KeyManagementMask::WPA_EAP)
+                strcat(tmp, "WPA_EAP ");
+            if (getAllowedKeyManagement() & KeyManagementMask::IEEE8021X)
+                strcat(tmp, "IEEE8021X");
+            if (tmp[0] == '\0') {
+                strncpy(buffer, "(internal error)", maxsize);
+                errno = ENOENT;
+                return NULL;
+            }
+            if (tmp[strlen(tmp)] == ' ')
+                tmp[strlen(tmp)] = '\0';
+
+            strncpy(buffer, tmp, maxsize);
+        }
+    } else if (!strcasecmp(fc, "hiddenssid")) {
         strncpy(buffer,
                 getHiddenSsid() ? getHiddenSsid() : "none",
                 maxsize);

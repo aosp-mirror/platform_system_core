@@ -29,25 +29,59 @@
 #include <sys/un.h>
 
 #include <cutils/sockets.h>
-
 #include <private/android_filesystem_config.h>
+
+static void usage(char *progname);
+static int do_monitor(int sock, int stop_after_cmd);
+static int do_cmd(int sock, int argc, char **argv);
 
 int main(int argc, char **argv) {
     int sock;
+
+    if (argc < 2)
+        usage(argv[0]);
 
     if ((sock = socket_local_client("nexus",
                                      ANDROID_SOCKET_NAMESPACE_RESERVED,
                                      SOCK_STREAM)) < 0) {
         fprintf(stderr, "Error connecting (%s)\n", strerror(errno));
-        exit(1);
+        exit(4);
     }
 
-    printf("Connected to nexus\n");
+    if (!strcmp(argv[1], "monitor"))
+        exit(do_monitor(sock, 0));
+    exit(do_cmd(sock, argc, argv));
+}
 
-    char line[255];
+static int do_cmd(int sock, int argc, char **argv) {
+    char final_cmd[255] = { '\0' };
+    int i;
+
+    for (i = 1; i < argc; i++) {
+        char *cmp;
+
+        if (!index(argv[i], ' '))
+            asprintf(&cmp, "%s%s", argv[i], (i == (argc -1)) ? "" : " ");
+        else
+            asprintf(&cmp, "\"%s\"%s", argv[i], (i == (argc -1)) ? "" : " ");
+
+        strcat(final_cmd, cmp);
+        free(cmp);
+    }
+
+    if (write(sock, final_cmd, strlen(final_cmd) + 1) < 0) {
+        perror("write");
+        return errno;
+    }
+
+    return do_monitor(sock, 1);
+}
+
+static int do_monitor(int sock, int stop_after_cmd) {
     char *buffer = malloc(4096);
-    int cursor = 0;
-    int col = 0;
+
+    if (!stop_after_cmd)
+        printf("[Connected to Nexus]\n");
 
     while(1) {
         fd_set read_fds;
@@ -59,66 +93,56 @@ int main(int argc, char **argv) {
 
         FD_ZERO(&read_fds);
         FD_SET(sock, &read_fds);
-        FD_SET(0, &read_fds);
 
-        if (col == 0) {
-            fprintf(stdout, "-> ");
-            fflush(stdout);
-            col = 3;
-        }
-    
         if ((rc = select(sock +1, &read_fds, NULL, NULL, &to)) < 0) {
             fprintf(stderr, "Error in select (%s)\n", strerror(errno));
-            exit(2);
+            free(buffer);
+            return errno;
         } else if (!rc) {
             continue;
+            fprintf(stderr, "[TIMEOUT]\n");
+            return ETIMEDOUT;
         } else if (FD_ISSET(sock, &read_fds)) {
             memset(buffer, 0, 4096);
             if ((rc = read(sock, buffer, 4096)) <= 0) {
-                 fprintf(stderr, "Error reading response (%s)\n", strerror(errno));
-                 exit(2);
+                if (rc == 0)
+                    fprintf(stderr, "Lost connection to Nexus - did it crash?\n");
+                else
+                    fprintf(stderr, "Error reading data (%s)\n", strerror(errno));
+                free(buffer);
+                if (rc == 0)
+                    return ECONNRESET;
+                return errno;
             }
-            int i;
-            for (i = 0; i < col; i++) {
-                fprintf(stdout, "%c", 8);
-            }
+            
+            int offset = 0;
+            int i = 0;
 
-            printf("%s", buffer);
-            printf("-> ");
-            for (i = 0; i < cursor; i++) {
-                fprintf(stdout, "%c", line[i]);
-            }
-            fflush(stdout);
-        } else if (FD_ISSET(0, &read_fds)) {
-            char c;
+            for (i = 0; i < rc; i++) {
+                if (buffer[i] == '\0') {
+                    int code;
+                    char tmp[4];
 
-            if ((rc = read(0, &c, 1)) < 0) {
-                fprintf(stderr, "Error reading from terminal (%s)\n", strerror(errno));
-                exit(2);
-            } else if (!rc) {
-                fprintf(stderr, "0 length read from terminal\n");
-                exit(2);
-            }
+                    strncpy(tmp, buffer + offset, 3);
+                    tmp[3] = '\0';
+                    code = atoi(tmp);
 
-            fprintf(stdout, "%c", c);
-            fflush(stdout);
-
-            line[cursor] = c;
-
-            if (c == '\n') {
-                if ((rc = write(sock, line, strlen(line))) < 0) {
-                    fprintf(stderr, "Error writing to nexus (%s)\n", strerror(errno));
-                    exit(2);
+                    printf("%s\n", buffer + offset);
+                    if (stop_after_cmd) {
+                        if (code >= 200 && code < 600)
+                            return 0;
+                    }
+                    offset = i + 1;
                 }
-                memset(line, 0, sizeof(line));
-                cursor = 0;
-                col = 0;
-            } else {
-                cursor++;
-                col++;
             }
         }
     }
-
-    exit(0);
+    free(buffer);
+    return 0;
 }
+
+static void usage(char *progname) {
+    fprintf(stderr, "Usage: %s <monitor>|<cmd> [arg1] [arg2...]\n", progname);
+    exit(1);
+}
+

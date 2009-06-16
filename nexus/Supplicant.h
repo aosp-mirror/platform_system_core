@@ -19,38 +19,31 @@
 
 struct wpa_ctrl;
 class SupplicantListener;
-class SupplicantEvent;
 class ServiceManager;
-class PropertyManager;
 class Controller;
 class WifiController;
+class SupplicantStatus;
 
 #include <pthread.h>
 
-#include "ScanResult.h"
 #include "WifiNetwork.h"
-#include "IPropertyProvider.h"
 #include "ISupplicantEventHandler.h"
 
-class Supplicant : public IPropertyProvider, public ISupplicantEventHandler {
+class Supplicant {
 private:
     struct wpa_ctrl      *mCtrl;
     struct wpa_ctrl      *mMonitor;
     SupplicantListener   *mListener;
-    int                  mState;
     ServiceManager       *mServiceManager;
-    PropertyManager      *mPropMngr;
     WifiController       *mController;
     char                 *mInterfaceName;
 
-    ScanResultCollection *mLatestScanResults;
-    pthread_mutex_t      mLatestScanResultsLock;
-
-    WifiNetworkCollection *mNetworks;
-    pthread_mutex_t        mNetworksLock;
+    WifiNetworkCollection   *mNetworks;
+    pthread_mutex_t         mNetworksLock;
+    ISupplicantEventHandler *mHandlers;
  
 public:
-    Supplicant(WifiController *wc, PropertyManager *propmngr);
+    Supplicant(WifiController *wc, ISupplicantEventHandler *handlers);
     virtual ~Supplicant();
 
     int start();
@@ -58,7 +51,6 @@ public:
     bool isStarted();
 
     int triggerScan(bool active);
-    ScanResultCollection *createLatestScanResults();
 
     WifiNetwork *createNetwork();
     WifiNetwork *lookupNetwork(int networkId);
@@ -71,33 +63,18 @@ public:
                               size_t max);
     int enableNetwork(int networkId, bool enabled);
 
-    int getState() { return mState; }
+    SupplicantStatus *getStatus();
+
     Controller *getController() { return (Controller *) mController; }
     const char *getInterfaceName() { return mInterfaceName; }
 
-    int set(const char *name, const char *value);
-    const char *get(const char *name, char *buffer, size_t max);
+    int sendCommand(const char *cmd, char *reply, size_t *reply_len);
 
 private:
     int connectToSupplicant();
-    int sendCommand(const char *cmd, char *reply, size_t *reply_len);
     int setupConfig();
     int retrieveInterfaceName();
-
-    // ISupplicantEventHandler methods
-    virtual int onConnectedEvent(SupplicantEvent *evt);
-    virtual int onDisconnectedEvent(SupplicantEvent *evt);
-    virtual int onTerminatingEvent(SupplicantEvent *evt);
-    virtual int onPasswordChangedEvent(SupplicantEvent *evt);
-    virtual int onEapNotificationEvent(SupplicantEvent *evt);
-    virtual int onEapStartedEvent(SupplicantEvent *evt);
-    virtual int onEapMethodEvent(SupplicantEvent *evt);
-    virtual int onEapSuccessEvent(SupplicantEvent *evt);
-    virtual int onEapFailureEvent(SupplicantEvent *evt);
-    virtual int onScanResultsEvent(SupplicantEvent *evt);
-    virtual int onStateChangeEvent(SupplicantEvent *evt);
-    virtual int onLinkSpeedEvent(SupplicantEvent *evt);
-    virtual int onDriverStateEvent(SupplicantEvent *evt);
+    WifiNetwork *lookupNetwork_UNLOCKED(int networkId);
 };
 
 #endif

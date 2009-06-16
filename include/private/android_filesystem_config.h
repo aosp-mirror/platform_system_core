@@ -50,6 +50,7 @@
 #define AID_DHCP          1014  /* dhcp client */
 #define AID_SDCARD_RW     1015  /* external storage write access */
 #define AID_VPN           1016  /* vpn system */
+#define AID_KEYSTORE      1017  /* keystore subsystem */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -97,7 +98,8 @@ static struct android_id_info android_ids[] = {
     { "net_bt",    AID_NET_BT, },
     { "sdcard_rw", AID_SDCARD_RW, },
     { "vpn",       AID_VPN, },
-    { "inet",      AID_INET, }, 
+    { "keystore",  AID_KEYSTORE, },
+    { "inet",      AID_INET, },
     { "net_raw",   AID_NET_RAW, },
     { "misc",      AID_MISC, },
     { "nobody",    AID_NOBODY, },
@@ -155,7 +157,7 @@ static struct fs_path_config android_files[] = {
     { 00550, AID_ROOT,      AID_SHELL,     "system/etc/init.gprs-pppd" },
     { 00550, AID_DHCP,      AID_SHELL,     "system/etc/dhcpcd/dhcpcd-run-hooks" },
     { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/dbus.conf" },
-    { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluez/hcid.conf" },
+    { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluez/main.conf" },
     { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluez/input.conf" },
     { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluez/audio.conf" },
     { 00440, AID_RADIO,     AID_AUDIO,     "/system/etc/AudioPara4.csv" },

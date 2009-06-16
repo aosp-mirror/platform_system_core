@@ -20,15 +20,21 @@
 #include <sys/types.h>
 
 #include "Controller.h"
+#include "ScanResult.h"
+#include "WifiNetwork.h"
+#include "ISupplicantEventHandler.h"
 
 class NetInterface;
 class Supplicant;
 class WifiScanner;
+class SupplicantAssociatingEvent;
+class SupplicantAssociatedEvent;
+class SupplicantConnectedEvent;
+class SupplicantScanResultsEvent;
+class SupplicantStateChangeEvent;
+class SupplicantDisconnectedEvent;
 
-#include "ScanResult.h"
-#include "WifiNetwork.h"
-
-class WifiController : public Controller {
+class WifiController : public Controller, public ISupplicantEventHandler {
 public:
     static const uint32_t SCAN_ENABLE_MASK       = 0x01;
     static const uint32_t SCAN_ACTIVE_MASK       = 0x02;
@@ -45,12 +51,18 @@ private:
     char        mModulePath[255];
     char        mModuleName[64];
     char        mModuleArgs[255];
+
     uint32_t    mCurrentScanMode;
     WifiScanner *mScanner;
+    int         mSupplicantState;
+
+    ScanResultCollection *mLatestScanResults;
+    pthread_mutex_t      mLatestScanResultsLock;
+
     bool        mEnabled;
 
 public:
-    WifiController(PropertyManager *propmngr, char *modpath, char *modname, char *modargs);
+    WifiController(PropertyManager *propmngr, IControllerHandler *handlers, char *modpath, char *modname, char *modargs);
     virtual ~WifiController() {}
 
     int start();
@@ -85,6 +97,27 @@ private:
     int setScanMode(uint32_t mode);
     int enable();
     int disable();
+
+    // ISupplicantEventHandler methods
+    virtual void onAssociatingEvent(SupplicantAssociatingEvent *evt);
+    virtual void onAssociatedEvent(SupplicantAssociatedEvent *evt);
+    virtual void onConnectedEvent(SupplicantConnectedEvent *evt);
+    virtual void onScanResultsEvent(SupplicantScanResultsEvent *evt);
+    virtual void onStateChangeEvent(SupplicantStateChangeEvent *evt);
+    virtual void onConnectionTimeoutEvent(SupplicantConnectionTimeoutEvent *evt);
+    virtual void onDisconnectedEvent(SupplicantDisconnectedEvent *evt);
+#if 0
+    virtual void onTerminatingEvent(SupplicantEvent *evt);
+    virtual void onPasswordChangedEvent(SupplicantEvent *evt);
+    virtual void onEapNotificationEvent(SupplicantEvent *evt);
+    virtual void onEapStartedEvent(SupplicantEvent *evt);
+    virtual void onEapMethodEvent(SupplicantEvent *evt);
+    virtual void onEapSuccessEvent(SupplicantEvent *evt);
+    virtual void onEapFailureEvent(SupplicantEvent *evt);
+    virtual void onLinkSpeedEvent(SupplicantEvent *evt);
+    virtual void onDriverStateEvent(SupplicantEvent *evt);
+#endif
+
 };
 
 #endif

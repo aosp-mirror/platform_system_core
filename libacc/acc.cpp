@@ -10,12 +10,17 @@
 
 #include <ctype.h>
 #include <dlfcn.h>
-#include <setjmp.h>
+#include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cutils/hashmap.h>
+
+#if defined(__i386__)
+#include <sys/mman.h>
+#endif
 
 #if defined(__arm__)
 #include <unistd.h>
@@ -43,6 +48,8 @@
 // #define LOG_API(...) fprintf (stderr, __VA_ARGS__)
 // #define ENABLE_ARM_DISASSEMBLY
 
+// #define PROVIDE_TRACE_CODEGEN
+
 namespace acc {
 
 class ErrorSink {
@@ -63,6 +70,7 @@ class Compiler : public ErrorSink {
         char* pProgramBase;
         ErrorSink* mErrorSink;
         int mSize;
+        bool mOverflowed;
 
         void release() {
             if (pProgramBase != 0) {
@@ -71,13 +79,16 @@ class Compiler : public ErrorSink {
             }
         }
 
-        void check(int n) {
+        bool check(int n) {
             int newSize = ind - pProgramBase + n;
-            if (newSize > mSize) {
+            bool overflow = newSize > mSize;
+            if (overflow && !mOverflowed) {
+                mOverflowed = true;
                 if (mErrorSink) {
                     mErrorSink->error("Code too large: %d bytes", newSize);
                 }
             }
+            return overflow;
         }
 
     public:
@@ -86,6 +97,7 @@ class Compiler : public ErrorSink {
             ind = 0;
             mErrorSink = 0;
             mSize = 0;
+            mOverflowed = false;
         }
 
         ~CodeBuf() {
@@ -104,7 +116,9 @@ class Compiler : public ErrorSink {
         }
 
         int o4(int n) {
-            check(4);
+            if(check(4)) {
+                return 0;
+            }
             intptr_t result = (intptr_t) ind;
             * (int*) ind = n;
             ind += 4;
@@ -115,7 +129,9 @@ class Compiler : public ErrorSink {
          * Output a byte. Handles all values, 0..ff.
          */
         void ob(int n) {
-            check(1);
+            if(check(1)) {
+                return;
+            }
             *ind++ = n;
         }
 
@@ -166,7 +182,7 @@ class Compiler : public ErrorSink {
             pCodeBuf->setErrorSink(mErrorSink);
         }
 
-        void setErrorSink(ErrorSink* pErrorSink) {
+        virtual void setErrorSink(ErrorSink* pErrorSink) {
             mErrorSink = pErrorSink;
             if (pCodeBuf) {
                 pCodeBuf->setErrorSink(mErrorSink);
@@ -988,7 +1004,14 @@ class Compiler : public ErrorSink {
         }
 
         virtual int finishCompile() {
-            return 0;
+            size_t pagesize = 4096;
+            size_t base = (size_t) getBase() & ~ (pagesize - 1);
+            size_t top =  ((size_t) getPC() + pagesize - 1) & ~ (pagesize - 1);
+            int err = mprotect((void*) base, top - base, PROT_READ | PROT_WRITE | PROT_EXEC);
+            if (err) {
+               error("mprotect() failed: %d", errno);
+            }
+            return err;
         }
 
     private:
@@ -1024,17 +1047,183 @@ class Compiler : public ErrorSink {
         int decodeOp(int op) {
             if (op < 0 || op > OP_COUNT) {
                 error("Out-of-range operator: %d\n", op);
+                op = 0;
             }
             return operatorHelper[op];
         }
 
         void gmov(int l, int t) {
             o(l + 0x83);
-            oad((t < LOCAL) << 7 | 5, t);
+            oad((t > -LOCAL && t < LOCAL) << 7 | 5, t);
         }
     };
 
 #endif // PROVIDE_X86_CODEGEN
+
+#ifdef PROVIDE_TRACE_CODEGEN
+    class TraceCodeGenerator : public CodeGenerator {
+    private:
+        CodeGenerator* mpBase;
+
+    public:
+        TraceCodeGenerator(CodeGenerator* pBase) {
+            mpBase = pBase;
+        }
+
+        virtual ~TraceCodeGenerator() {
+            delete mpBase;
+        }
+
+        virtual void init(CodeBuf* pCodeBuf) {
+            mpBase->init(pCodeBuf);
+        }
+
+        void setErrorSink(ErrorSink* pErrorSink) {
+            mpBase->setErrorSink(pErrorSink);
+        }
+
+        /* returns address to patch with local variable size
+        */
+        virtual int functionEntry(int argCount) {
+            int result = mpBase->functionEntry(argCount);
+            fprintf(stderr, "functionEntry(%d) -> %d\n", argCount, result);
+            return result;
+        }
+
+        virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) {
+            fprintf(stderr, "functionExit(%d, %d, %d)\n",
+                    argCount, localVariableAddress, localVariableSize);
+            mpBase->functionExit(argCount, localVariableAddress, localVariableSize);
+        }
+
+        /* load immediate value */
+        virtual void li(int t) {
+            fprintf(stderr, "li(%d)\n", t);
+            mpBase->li(t);
+        }
+
+        virtual int gjmp(int t) {
+            int result = mpBase->gjmp(t);
+            fprintf(stderr, "gjmp(%d) = %d\n", t, result);
+            return result;
+        }
+
+        /* l = 0: je, l == 1: jne */
+        virtual int gtst(bool l, int t) {
+            int result = mpBase->gtst(l, t);
+            fprintf(stderr, "gtst(%d,%d) = %d\n", l, t, result);
+            return result;
+        }
+
+        virtual void gcmp(int op) {
+            fprintf(stderr, "gcmp(%d)\n", op);
+            mpBase->gcmp(op);
+        }
+
+        virtual void genOp(int op) {
+            fprintf(stderr, "genOp(%d)\n", op);
+            mpBase->genOp(op);
+        }
+
+        virtual void clearR1() {
+            fprintf(stderr, "clearR1()\n");
+            mpBase->clearR1();
+        }
+
+        virtual void pushR0() {
+            fprintf(stderr, "pushR0()\n");
+            mpBase->pushR0();
+        }
+
+        virtual void popR1() {
+            fprintf(stderr, "popR1()\n");
+            mpBase->popR1();
+        }
+
+        virtual void storeR0ToR1(bool isInt) {
+            fprintf(stderr, "storeR0ToR1(%d)\n", isInt);
+            mpBase->storeR0ToR1(isInt);
+        }
+
+        virtual void loadR0FromR0(bool isInt) {
+            fprintf(stderr, "loadR0FromR0(%d)\n", isInt);
+            mpBase->loadR0FromR0(isInt);
+        }
+
+        virtual void leaR0(int ea) {
+            fprintf(stderr, "leaR0(%d)\n", ea);
+            mpBase->leaR0(ea);
+        }
+
+        virtual void storeR0(int ea) {
+            fprintf(stderr, "storeR0(%d)\n", ea);
+            mpBase->storeR0(ea);
+        }
+
+        virtual void loadR0(int ea, bool isIncDec, int op) {
+            fprintf(stderr, "loadR0(%d, %d, %d)\n", ea, isIncDec, op);
+            mpBase->loadR0(ea, isIncDec, op);
+        }
+
+        virtual int beginFunctionCallArguments() {
+            int result = mpBase->beginFunctionCallArguments();
+            fprintf(stderr, "beginFunctionCallArguments() = %d\n", result);
+            return result;
+        }
+
+        virtual void storeR0ToArg(int l) {
+            fprintf(stderr, "storeR0ToArg(%d)\n", l);
+            mpBase->storeR0ToArg(l);
+        }
+
+        virtual void endFunctionCallArguments(int a, int l) {
+            fprintf(stderr, "endFunctionCallArguments(%d, %d)\n", a, l);
+            mpBase->endFunctionCallArguments(a, l);
+        }
+
+        virtual int callForward(int symbol) {
+            int result = mpBase->callForward(symbol);
+            fprintf(stderr, "callForward(%d) = %d\n", symbol, result);
+            return result;
+        }
+
+        virtual void callRelative(int t) {
+            fprintf(stderr, "callRelative(%d)\n", t);
+            mpBase->callRelative(t);
+        }
+
+        virtual void callIndirect(int l) {
+            fprintf(stderr, "callIndirect(%d)\n", l);
+            mpBase->callIndirect(l);
+        }
+
+        virtual void adjustStackAfterCall(int l, bool isIndirect) {
+            fprintf(stderr, "adjustStackAfterCall(%d, %d)\n", l, isIndirect);
+            mpBase->adjustStackAfterCall(l, isIndirect);
+        }
+
+        virtual int jumpOffset() {
+            return mpBase->jumpOffset();
+        }
+
+        virtual int disassemble(FILE* out) {
+            return mpBase->disassemble(out);
+        }
+
+        /* output a symbol and patch all calls to it */
+        virtual void gsym(int t) {
+            fprintf(stderr, "gsym(%d)\n", t);
+            mpBase->gsym(t);
+        }
+
+        virtual int finishCompile() {
+            int result = mpBase->finishCompile();
+            fprintf(stderr, "finishCompile() = %d\n", result);
+            return result;
+        }
+    };
+
+#endif // PROVIDE_TRACE_CODEGEN
 
     class InputStream {
     public:
@@ -1086,27 +1275,6 @@ class Compiler : public ErrorSink {
         size_t mPosition;
     };
 
-    int ch; // Current input character, or EOF
-    intptr_t tok;     // token
-    intptr_t tokc;    // token extra info
-    int tokl;         // token operator level
-    intptr_t rsym; // return symbol
-    intptr_t loc; // local variable index
-    char* glo;  // global variable index
-    char* sym_stk;
-    char* dstk; // Define stack
-    char* dptr; // Macro state: Points to macro text during macro playback.
-    int dch;    // Macro state: Saves old value of ch during a macro playback.
-    char* last_id;
-    void* pSymbolBase;
-    char* pGlobalBase;
-    char* pVarsBase; // Value of variables
-
-    InputStream* file;
-
-    CodeBuf codeBuf;
-    CodeGenerator* pGen;
-
     class String {
     public:
         String() {
@@ -1115,23 +1283,70 @@ class Compiler : public ErrorSink {
             mSize = 0;
         }
 
+        String(const char* item, int len, bool adopt) {
+            if (len < 0) {
+                len = strlen(item);
+            }
+            if (adopt) {
+                mpBase = (char*) item;
+                mUsed = len;
+                mSize = len + 1;
+            } else {
+                mpBase = 0;
+                mUsed = 0;
+                mSize = 0;
+                appendBytes(item, len);
+            }
+        }
+
+        String(const String& other) {
+            mpBase = 0;
+            mUsed = 0;
+            mSize = 0;
+            appendBytes(other.getUnwrapped(), other.len());
+        }
+
         ~String() {
             if (mpBase) {
                 free(mpBase);
             }
         }
 
-        char* getUnwrapped() {
+        String& operator=(const String& other) {
+            clear();
+            appendBytes(other.getUnwrapped(), other.len());
+            return *this;
+        }
+
+        inline char* getUnwrapped() const {
             return mpBase;
         }
 
+        void clear() {
+            mUsed = 0;
+            if (mSize > 0) {
+                mpBase[0] = 0;
+            }
+        }
+
         void appendCStr(const char* s) {
-            int n = strlen(s);
+            appendBytes(s, strlen(s));
+        }
+
+        void appendBytes(const char* s, int n) {
             memcpy(ensure(n), s, n + 1);
         }
 
         void append(char c) {
             * ensure(1) = c;
+        }
+
+        char* orphan() {
+            char* result = mpBase;
+            mpBase = 0;
+            mUsed = 0;
+            mSize = 0;
+            return result;
         }
 
         void printf(const char* fmt,...) {
@@ -1148,7 +1363,7 @@ class Compiler : public ErrorSink {
             free(temp);
         }
 
-        size_t len() {
+        inline size_t len() const {
             return mUsed;
         }
 
@@ -1174,32 +1389,432 @@ class Compiler : public ErrorSink {
         size_t mSize;
     };
 
-    String mErrorBuf;
+    /**
+     * Wrap an externally allocated string for use as a hash key.
+     */
+    class FakeString : public String {
+    public:
+        FakeString(const char* string, size_t length) :
+            String((char*) string, length, true) {}
 
-    jmp_buf mErrorRecoveryJumpBuf;
+        ~FakeString() {
+            orphan();
+        }
+    };
+
+    template<class V> class StringTable {
+    public:
+        StringTable() {
+            init(10);
+        }
+
+        StringTable(size_t initialCapacity) {
+            init(initialCapacity);
+        }
+
+        ~StringTable() {
+            clear();
+            hashmapFree(mpMap);
+        }
+
+        void clear() {
+            hashmapForEach(mpMap, freeKeyValue, this);
+        }
+
+        bool contains(String* pKey) {
+            bool result = hashmapContainsKey(mpMap, pKey);
+            return result;
+        }
+
+        V* get(String* pKey) {
+            V* result = (V*) hashmapGet(mpMap, pKey);
+            return result;
+        }
+
+        V* remove(String* pKey) {
+            V* result = (V*) hashmapRemove(mpMap, pKey);
+            return result;
+        }
+
+        V* put(String* pKey, V* value) {
+            V* result = (V*) hashmapPut(mpMap, pKey, value);
+            if (result) {
+                // The key was not adopted by the map, so delete it here.
+                delete pKey;
+            }
+            return result;
+        }
+
+        void forEach(bool (*callback)(String* key, V* value, void* context),
+                     void* context) {
+            hashmapForEach(mpMap, (bool (*)(void*, void*, void*)) callback,
+                           context);
+        }
+
+    protected:
+
+        void init(size_t initialCapacity) {
+            mpMap = hashmapCreate(initialCapacity, hashFn, equalsFn);
+        }
+
+        static int hashFn(void* pKey) {
+            String* pString = (String*) pKey;
+            return hashmapHash(pString->getUnwrapped(), pString->len());
+        }
+
+        static bool equalsFn(void* keyA, void* keyB) {
+            String* pStringA = (String*) keyA;
+            String* pStringB = (String*) keyB;
+            return pStringA->len() == pStringB->len()
+                && strcmp(pStringA->getUnwrapped(), pStringB->getUnwrapped())
+                    == 0;
+        }
+
+        static bool freeKeyValue(void* key, void* value, void* context) {
+            delete (String*) key;
+            delete (V*) value;
+            return true;
+        }
+
+        Hashmap* mpMap;
+    };
+
+    class MacroTable : public StringTable<String> {
+    public:
+        MacroTable() : StringTable<String>(10) {}
+    };
+
+    class KeywordTable {
+    public:
+
+        KeywordTable(){
+            mpMap = hashmapCreate(40, hashFn, equalsFn);
+            put("int", TOK_INT);
+            put("char", TOK_CHAR);
+            put("void", TOK_VOID);
+            put("if", TOK_IF);
+            put("else", TOK_ELSE);
+            put("while", TOK_WHILE);
+            put("break", TOK_BREAK);
+            put("return", TOK_RETURN);
+            put("for", TOK_FOR);
+            // TODO: remove these preprocessor-specific keywords. You should
+            // be able to have symbols named pragma or define.
+            put("pragma", TOK_PRAGMA);
+            put("define", TOK_DEFINE);
+
+            const char* unsupported[] = {
+                "auto",
+                "case",
+                "const",
+                "continue",
+                "default",
+                "do",
+                "double",
+                "enum",
+                "extern",
+                "float",
+                "goto",
+                "long",
+                "register",
+                "short",
+                "signed",
+                "sizeof",
+                "static",
+                "struct",
+                "switch",
+                "typedef",
+                "union",
+                "unsigned",
+                "volatile",
+                "_Bool",
+                "_Complex",
+                "_Imaginary",
+                "inline",
+                "restrict",
+                0};
+
+            for(int i = 0; unsupported[i]; i++) {
+                put(unsupported[i], TOK_UNSUPPORTED_KEYWORD);
+            }
+        }
+
+        ~KeywordTable() {
+            hashmapFree(mpMap);
+        }
+
+        int get(String* key) {
+            return (int) hashmapGet(mpMap, key->getUnwrapped());
+        }
+
+        const char* lookupKeyFor(int value) {
+            FindValContext context;
+            context.key = 0;
+            hashmapForEach(mpMap, findKeyFn, &context);
+            return context.key;
+        }
+
+    private:
+        void put(const char* kw, int val) {
+            hashmapPut(mpMap, (void*) kw, (void*) val);
+        }
+
+        static int hashFn(void* pKey) {
+            char* pString = (char*) pKey;
+            return hashmapHash(pString, strlen(pString));
+        }
+
+        static bool equalsFn(void* keyA, void* keyB) {
+            const char* pStringA = (const char*) keyA;
+            const char* pStringB = (const char*) keyB;
+            return strcmp(pStringA, pStringB)  == 0;
+        }
+
+        struct FindValContext {
+            char* key;
+            int value;
+        };
+
+        static bool findKeyFn(void* key, void* value, void* context) {
+            FindValContext* pContext = (FindValContext*) context;
+            if ((int) value == pContext->value) {
+                pContext->key = (char*) key;
+                return false;
+            }
+            return true;
+        }
+
+        Hashmap* mpMap;
+    };
+
+    template<class E> class Array {
+        public:
+        Array() {
+            mpBase = 0;
+            mUsed = 0;
+            mSize = 0;
+        }
+
+        ~Array() {
+            if (mpBase) {
+                free(mpBase);
+            }
+        }
+
+        E get(int i) {
+            if (i < 0 || i > (int) mUsed) {
+                // error("internal error: Index out of range");
+                return E();
+            }
+            return mpBase[i];
+        }
+
+        void set(int i, E val) {
+            mpBase[i] =  val;
+        }
+
+        void pop() {
+            if (mUsed > 0) {
+                mUsed -= 1;
+            } else {
+                // error("internal error: Popped empty stack.");
+            }
+        }
+
+        void push(E item) {
+            * ensure(1) = item;
+        }
+
+        size_t len() {
+            return mUsed;
+        }
+
+    private:
+        E* ensure(int n) {
+            size_t newUsed = mUsed + n;
+            if (newUsed > mSize) {
+                size_t newSize = mSize * 2 + 10;
+                if (newSize < newUsed) {
+                    newSize = newUsed;
+                }
+                mpBase = (E*) realloc(mpBase, sizeof(E) * newSize);
+                mSize = newSize;
+            }
+            E* result = mpBase + mUsed;
+            mUsed = newUsed;
+            return result;
+        }
+
+        E* mpBase;
+        size_t mUsed;
+        size_t mSize;
+    };
+
+    struct InputState {
+        InputStream* pStream;
+        int oldCh;
+    };
+
+    struct VariableInfo {
+        VariableInfo() {
+            pAddress = 0;
+            pForward = 0;
+        }
+        void* pAddress;
+        void* pForward; // For a forward direction, linked list of data to fix up
+    };
+
+    typedef StringTable<VariableInfo> SymbolTable;
+
+    class SymbolStack {
+    public:
+        SymbolStack() {
+            mLevel = 0;
+            addEntry();
+        }
+
+        void pushLevel() {
+            mLevel++;
+        }
+
+        void popLevel() {
+            mLevel--;
+            Entry e = mStack.get(mStack.len()-1);
+            if (mLevel < e.level) {
+                mStack.pop();
+                delete e.pTable;
+            }
+        }
+
+        VariableInfo* get(String* pName) {
+            int len = mStack.len();
+            VariableInfo* v = NULL;
+            int level = -1;
+            for (int i = len - 1; i >= 0; i--) {
+                Entry e = mStack.get(i);
+                v = e.pTable->get(pName);
+                if (v) {
+                    level = e.level;
+                    break;
+                }
+            }
+#if 0
+            fprintf(stderr, "Lookup %s %08x level %d\n", pName->getUnwrapped(), v, level);
+            if (v) {
+                fprintf(stderr, "  %08x %08x\n", v->pAddress, v->pForward);
+            }
+#endif
+            return v;
+        }
+
+        VariableInfo* addLocal(String* pName) {
+            int len = mStack.len();
+            if (mStack.get(len-1).level != mLevel) {
+                addEntry();
+                len++;
+            }
+            return addImp(len-1, pName);
+        }
+
+        VariableInfo* addGlobal(String* pName) {
+            return addImp(0, pName);
+        }
+
+        void forEachGlobal(
+            bool (*callback)(String* key, VariableInfo* value, void* context),
+            void* context) {
+            mStack.get(0).pTable->forEach(callback, context);
+        }
+
+    private:
+        VariableInfo* addImp(int entryIndex, String* pName) {
+            Entry e = mStack.get(entryIndex);
+            SymbolTable* pTable = e.pTable;
+            if (pTable->contains(pName)) {
+                return NULL;
+            }
+            VariableInfo* v = new VariableInfo();
+
+            delete pTable->put(pName, v);
+#if 0
+            fprintf(stderr, "Add \"%s\" %08x level %d\n", pName->getUnwrapped(), v, e.level);
+#endif
+            return v;
+        }
+
+        void addEntry() {
+            Entry e;
+            e.level = mLevel;
+            e.pTable = new SymbolTable();
+            mStack.push(e);
+        }
+
+        struct Entry {
+            Entry() {
+                level = 0;
+                pTable = NULL;
+            }
+            int level;
+            SymbolTable* pTable;
+        };
+
+        int mLevel;
+        Array<Entry> mStack;
+    };
+
+    int ch; // Current input character, or EOF
+    intptr_t tok;     // token
+    intptr_t tokc;    // token extra info
+    int tokl;         // token operator level
+    intptr_t rsym; // return symbol
+    intptr_t loc; // local variable index
+    char* glo;  // global variable index
+    String mTokenString;
+    char* dptr; // Macro state: Points to macro text during macro playback.
+    int dch;    // Macro state: Saves old value of ch during a macro playback.
+    char* pGlobalBase;
+    KeywordTable mKeywords;
+    SymbolStack mSymbolTable;
+    InputStream* file;
+
+    CodeBuf codeBuf;
+    CodeGenerator* pGen;
+
+    MacroTable mMacros;
+    Array<InputState> mInputStateStack;
+
+    String mErrorBuf;
 
     String mPragmas;
     int mPragmaStringCount;
 
     static const int ALLOC_SIZE = 99999;
 
-    // Indentifiers start at 0x100 and increase by # (chars + 1) * 8
-    static const int TOK_IDENT = 0x100;
-    static const int TOK_INT = 0x100;
-    static const int TOK_CHAR = TOK_INT + 4*8;
-    static const int TOK_VOID = TOK_CHAR + 5*8;
-    static const int TOK_IF = TOK_VOID + 5*8;
-    static const int TOK_ELSE = TOK_IF + 3*8;
-    static const int TOK_WHILE = TOK_ELSE + 5*8;
-    static const int TOK_BREAK = TOK_WHILE + 6*8;
-    static const int TOK_RETURN = TOK_BREAK + 6*8;
-    static const int TOK_FOR = TOK_RETURN + 7*8;
-    static const int TOK_PRAGMA = TOK_FOR + 4*8;
-    static const int TOK_DEFINE = TOK_PRAGMA + 7*8;
-    static const int TOK_MAIN = TOK_DEFINE + 7*8;
-
     static const int TOK_DUMMY = 1;
     static const int TOK_NUM = 2;
+
+    // 3..255 are character and/or operators
+
+    // Keywords start at 0x100 and increase by 1
+    static const int TOK_KEYWORD = 0x100;
+    static const int TOK_INT = TOK_KEYWORD + 0;
+    static const int TOK_CHAR = TOK_KEYWORD + 1;
+    static const int TOK_VOID = TOK_KEYWORD + 2;
+    static const int TOK_IF = TOK_KEYWORD + 3;
+    static const int TOK_ELSE = TOK_KEYWORD + 4;
+    static const int TOK_WHILE = TOK_KEYWORD + 5;
+    static const int TOK_BREAK = TOK_KEYWORD + 6;
+    static const int TOK_RETURN = TOK_KEYWORD + 7;
+    static const int TOK_FOR = TOK_KEYWORD + 8;
+    static const int TOK_PRAGMA = TOK_KEYWORD + 9;
+    static const int TOK_DEFINE = TOK_KEYWORD + 10;
+    static const int TOK_UNSUPPORTED_KEYWORD = TOK_KEYWORD + 0xff;
+
+    static const int TOK_UNDEFINED_SYMBOL = 0x200;
+
+    // Symbols start at 0x300, but are really pointers to VariableInfo structs.
+    static const int TOK_SYMBOL = 0x300;
+
 
     static const int LOCAL = 0x200;
 
@@ -1208,7 +1823,6 @@ class Compiler : public ErrorSink {
 
     /* tokens in string heap */
     static const int TAG_TOK = ' ';
-    static const int TAG_MACRO = 2;
 
     static const int OP_INCREMENT = 0;
     static const int OP_DECREMENT = 1;
@@ -1242,16 +1856,13 @@ class Compiler : public ErrorSink {
     static const char operatorLevel[];
 
     void pdef(int t) {
-        if (dstk - sym_stk >= ALLOC_SIZE) {
-            error("Symbol table exhausted");
-        }
-        *dstk++ = t;
+        mTokenString.append(t);
     }
 
     void inp() {
         if (dptr) {
             ch = *dptr++;
-            if (ch == TAG_MACRO) {
+            if (ch == 0) {
                 dptr = 0;
                 ch = dch;
             }
@@ -1266,13 +1877,92 @@ class Compiler : public ErrorSink {
         return isalnum(ch) | (ch == '_');
     }
 
-    /* read a character constant */
-    void getq() {
+    /* read a character constant, advances ch to after end of constant */
+    int getq() {
+        int val = ch;
         if (ch == '\\') {
             inp();
-            if (ch == 'n')
-                ch = '\n';
+            if (isoctal(ch)) {
+                // 1 to 3 octal characters.
+                val = 0;
+                for(int i = 0; i < 3; i++) {
+                    if (isoctal(ch)) {
+                        val = (val << 3) + ch - '0';
+                        inp();
+                    }
+                }
+                return val;
+            } else if (ch == 'x' || ch == 'X') {
+                // N hex chars
+                inp();
+                if (! isxdigit(ch)) {
+                    error("'x' character escape requires at least one digit.");
+                } else {
+                    val = 0;
+                    while (isxdigit(ch)) {
+                        int d = ch;
+                        if (isdigit(d)) {
+                            d -= '0';
+                        } else if (d <= 'F') {
+                            d = d - 'A' + 10;
+                        } else {
+                            d = d - 'a' + 10;
+                        }
+                        val = (val << 4) + d;
+                        inp();
+                    }
+                }
+            } else {
+                int val = ch;
+                switch (ch) {
+                    case 'a':
+                        val = '\a';
+                        break;
+                    case 'b':
+                        val = '\b';
+                        break;
+                    case 'f':
+                        val = '\f';
+                        break;
+                    case 'n':
+                        val = '\n';
+                        break;
+                    case 'r':
+                        val = '\r';
+                        break;
+                    case 't':
+                        val = '\t';
+                        break;
+                    case 'v':
+                        val = '\v';
+                        break;
+                    case '\\':
+                        val = '\\';
+                        break;
+                    case '\'':
+                        val = '\'';
+                        break;
+                    case '"':
+                        val = '"';
+                        break;
+                    case '?':
+                        val = '?';
+                        break;
+                    default:
+                        error("Undefined character escape %c", ch);
+                        break;
+                }
+                inp();
+                return val;
+            }
+        } else {
+            inp();
         }
+        return val;
+    }
+
+    static bool isoctal(int ch) {
+        return ch >= '0' && ch <= '7';
     }
 
     void next() {
@@ -1283,22 +1973,13 @@ class Compiler : public ErrorSink {
                 inp();
                 next();
                 if (tok == TOK_DEFINE) {
-                    next();
-                    pdef(TAG_TOK); /* fill last ident tag */
-                    *(int *) tok = SYM_DEFINE;
-                    *(char* *) (tok + 4) = dstk; /* define stack */
-                    while (ch != '\n') {
-                        pdef(ch);
-                        inp();
-                    }
-                    pdef(ch);
-                    pdef(TAG_MACRO);
+                    doDefine();
                 } else if (tok == TOK_PRAGMA) {
                     doPragma();
                 } else {
-                    error("Unsupported preprocessor directive \"%s\"", last_id);
+                    error("Unsupported preprocessor directive \"%s\"",
+                          mTokenString.getUnwrapped());
                 }
-
             }
             inp();
         }
@@ -1306,37 +1987,35 @@ class Compiler : public ErrorSink {
         tok = ch;
         /* encode identifiers & numbers */
         if (isid()) {
-            pdef(TAG_TOK);
-            last_id = dstk;
+            mTokenString.clear();
             while (isid()) {
                 pdef(ch);
                 inp();
             }
             if (isdigit(tok)) {
-                tokc = strtol(last_id, 0, 0);
+                tokc = strtol(mTokenString.getUnwrapped(), 0, 0);
                 tok = TOK_NUM;
             } else {
-                if (dstk - sym_stk + 1 > ALLOC_SIZE) {
-                    error("symbol stack overflow");
-                }
-                * dstk = TAG_TOK; /* no need to mark end of string (we
-                 suppose data is initialized to zero by calloc) */
-                tok = (intptr_t) (strstr(sym_stk, (last_id - 1))
-                        - sym_stk);
-                * dstk = 0; /* mark real end of ident for dlsym() */
-                tok = tok * 8 + TOK_IDENT;
-                if (tok > TOK_DEFINE) {
-                    if (tok + 8 > ALLOC_SIZE) {
-                        error("Variable Table overflow.");
-                    }
-                    tok = (intptr_t) (pVarsBase + tok);
-                    /*        printf("tok=%s %x\n", last_id, tok); */
-                    /* define handling */
-                    if (*(int *) tok == SYM_DEFINE) {
-                        dptr = *(char* *) (tok + 4);
-                        dch = ch;
-                        inp();
-                        next();
+                // Is this a macro?
+                String* pValue = mMacros.get(&mTokenString);
+                if (pValue) {
+                    // Yes, it is a macro
+                    dptr = pValue->getUnwrapped();
+                    dch = ch;
+                    inp();
+                    next();
+                } else {
+                    // Is this a keyword?
+                    int kwtok = mKeywords.get(&mTokenString);
+                    if (kwtok) {
+                        tok = kwtok;
+                        // fprintf(stderr, "tok= keyword %s %x\n", last_id, tok);
+                    } else {
+                        tok = (intptr_t) mSymbolTable.get(&mTokenString);
+                        if (!tok) {
+                            tok = TOK_UNDEFINED_SYMBOL;
+                        }
+                        // fprintf(stderr, "tok= symbol %s %x\n", last_id, tok);
                     }
                 }
             }
@@ -1344,24 +2023,29 @@ class Compiler : public ErrorSink {
             inp();
             if (tok == '\'') {
                 tok = TOK_NUM;
-                getq();
-                tokc = ch;
-                inp();
-                inp();
+                tokc = getq();
+                if (ch != '\'') {
+                    error("Expected a ' character, got %c", ch);
+                } else {
+                  inp();
+                }
             } else if ((tok == '/') & (ch == '*')) {
                 inp();
-                while (ch) {
-                    while (ch != '*')
+                while (ch && ch != EOF) {
+                    while (ch != '*' && ch != EOF)
                         inp();
                     inp();
                     if (ch == '/')
                         ch = 0;
                 }
+                if (ch == EOF) {
+                    error("End of file inside comment.");
+                }
                 inp();
                 next();
             } else if ((tok == '/') & (ch == '/')) {
                 inp();
-                while (ch && (ch != '\n')) {
+                while (ch && (ch != '\n') && (ch != EOF)) {
                     inp();
                 }
                 inp();
@@ -1394,15 +2078,19 @@ class Compiler : public ErrorSink {
         }
 #if 0
         {
-            char* p;
+            const char* p;
 
             printf("tok=0x%x ", tok);
-            if (tok >= TOK_IDENT) {
+            if (tok >= TOK_KEYWORD) {
                 printf("'");
-                if (tok> TOK_DEFINE)
-                p = sym_stk + 1 + ((char*) tok - pVarsBase - TOK_IDENT) / 8;
-                else
-                p = sym_stk + 1 + (tok - TOK_IDENT) / 8;
+                if (tok>= TOK_SYMBOL)
+                    p = sym_stk + 1 + ((char*) tok - (char*) pVarsBase) / 8;
+                else {
+                    p = mKeywords.lookupKeyFor(tok);
+                    if (!p) {
+                        p = "unknown keyword";
+                    }
+                }
                 while (*p != TAG_TOK && *p)
                 printf("%c", *p++);
                 printf("'\n");
@@ -1413,6 +2101,31 @@ class Compiler : public ErrorSink {
             }
         }
 #endif
+    }
+
+    void doDefine() {
+        String* pName = new String();
+        while (isspace(ch)) {
+            inp();
+        }
+        while (isid()) {
+            pName->append(ch);
+            inp();
+        }
+        if (ch == '(') {
+            delete pName;
+            error("Defines with arguments not supported");
+            return;
+        }
+        while (isspace(ch)) {
+            inp();
+        }
+        String* pValue = new String();
+        while (ch != '\n' && ch != EOF) {
+            pValue->append(ch);
+            inp();
+        }
+        delete mMacros.put(pName, pValue);
     }
 
     void doPragma() {
@@ -1463,7 +2176,6 @@ class Compiler : public ErrorSink {
         mErrorBuf.printf("%ld: ", file->getLine());
         mErrorBuf.vprintf(fmt, ap);
         mErrorBuf.printf("\n");
-        longjmp(mErrorRecoveryJumpBuf, 1);
     }
 
     void skip(intptr_t c) {
@@ -1477,15 +2189,16 @@ class Compiler : public ErrorSink {
     void unary(intptr_t l) {
         intptr_t n, t, a;
         int c;
+        String tString;
         t = 0;
-        n = 1; /* type of expression 0 = forward, 1 = value, other =
-         lvalue */
+        n = 1; /* type of expression 0 = forward, 1 = value, other = lvalue */
         if (tok == '\"') {
             pGen->li((int) glo);
-            while (ch != '\"') {
-                getq();
-                *allocGlobalSpace(1) = ch;
-                inp();
+            while (ch != '\"' && ch != EOF) {
+                *allocGlobalSpace(1) = getq();
+            }
+            if (ch != '\"') {
+                error("Unterminated string constant.");
             }
             *glo = 0;
             /* align heap */
@@ -1496,6 +2209,7 @@ class Compiler : public ErrorSink {
             c = tokl;
             a = tokc;
             t = tok;
+            tString = mTokenString;
             next();
             if (t == TOK_NUM) {
                 pGen->li(a);
@@ -1538,11 +2252,23 @@ class Compiler : public ErrorSink {
             } else if (t == '&') {
                 pGen->leaR0(*(int *) tok);
                 next();
+            } else if (t == EOF ) {
+                error("Unexpected EOF.");
+            } else if (!checkSymbol(t, &tString)) {
+                // Don't have to do anything special here, the error
+                // message was printed by checkSymbol() above.
             } else {
-                n = *(int *) t;
+                if (t == TOK_UNDEFINED_SYMBOL) {
+                    t = (intptr_t) mSymbolTable.addGlobal(
+                        new String(tString));
+                }
+
+                n = (intptr_t) ((VariableInfo*) t)->pAddress;
                 /* forward reference: try dlsym */
                 if (!n) {
-                    n = (intptr_t) dlsym(RTLD_DEFAULT, last_id);
+                    n = (intptr_t) dlsym(RTLD_DEFAULT,
+                                         tString.getUnwrapped());
+                    ((VariableInfo*) t)->pAddress = (void*) n;
                 }
                 if ((tok == '=') & l) {
                     /* assignment */
@@ -1551,6 +2277,9 @@ class Compiler : public ErrorSink {
                     pGen->storeR0(n);
                 } else if (tok != '(') {
                     /* variable */
+                    if (!n) {
+                        error("Undefined variable %s", tString.getUnwrapped());
+                    }
                     pGen->loadR0(n, tokl == 11, tokc);
                     if (tokl == 11) {
                         next();
@@ -1568,7 +2297,7 @@ class Compiler : public ErrorSink {
             a = pGen->beginFunctionCallArguments();
             next();
             l = 0;
-            while (tok != ')') {
+            while (tok != ')' && tok != EOF) {
                 expr();
                 pGen->storeR0ToArg(l);
                 if (tok == ',')
@@ -1576,7 +2305,7 @@ class Compiler : public ErrorSink {
                 l = l + 4;
             }
             pGen->endFunctionCallArguments(a, l);
-            next();
+            skip(')');
             if (!n) {
                 /* forward reference */
                 t = t + 4;
@@ -1639,20 +2368,23 @@ class Compiler : public ErrorSink {
         return pGen->gtst(0, 0);
     }
 
-    void block(intptr_t l) {
+    void block(intptr_t l, bool outermostFunctionBlock) {
         intptr_t a, n, t;
 
-        if (tok == TOK_IF) {
+        if (tok == TOK_INT || tok == TOK_CHAR) {
+            /* declarations */
+            localDeclarations();
+        } else if (tok == TOK_IF) {
             next();
             skip('(');
             a = test_expr();
             skip(')');
-            block(l);
+            block(l, false);
             if (tok == TOK_ELSE) {
                 next();
                 n = pGen->gjmp(0); /* jmp */
                 pGen->gsym(a);
-                block(l);
+                block(l, false);
                 pGen->gsym(n); /* patch else jmp */
             } else {
                 pGen->gsym(a); /* patch if test */
@@ -1682,16 +2414,20 @@ class Compiler : public ErrorSink {
                 }
             }
             skip(')');
-            block((intptr_t) &a);
+            block((intptr_t) &a, false);
             pGen->gjmp(n - codeBuf.getPC() - pGen->jumpOffset()); /* jmp */
             pGen->gsym(a);
         } else if (tok == '{') {
+            if (! outermostFunctionBlock) {
+                mSymbolTable.pushLevel();
+            }
             next();
-            /* declarations */
-            localDeclarations();
-            while (tok != '}')
-                block(l);
-            next();
+            while (tok != '}' && tok != EOF)
+                block(l, false);
+            skip('}');
+            if (! outermostFunctionBlock) {
+                mSymbolTable.popLevel();
+            }
         } else {
             if (tok == TOK_RETURN) {
                 next();
@@ -1765,10 +2501,22 @@ class Compiler : public ErrorSink {
         }
     }
 
-    void checkSymbol() {
-        if (tok <= TOK_DEFINE) {
-            error("Expected a symbol");
+    void addGlobalSymbol() {
+        tok = (intptr_t) mSymbolTable.addGlobal(
+            new String(mTokenString));
+        reportIfDuplicate();
+    }
+
+    void reportIfDuplicate() {
+        if (!tok) {
+            error("Duplicate definition of %s", mTokenString.getUnwrapped());
         }
+    }
+
+    void addLocalSymbol() {
+        tok = (intptr_t) mSymbolTable.addLocal(
+                new String(mTokenString));
+        reportIfDuplicate();
     }
 
     void localDeclarations() {
@@ -1776,13 +2524,24 @@ class Compiler : public ErrorSink {
         Type base;
 
         while (acceptType(base)) {
-            while (tok != ';') {
+            while (tok != ';' && tok != EOF) {
                 Type t = acceptPointerDeclaration(t);
-                checkSymbol();
-                loc = loc + 4;
-                *(int *) tok = -loc;
-
+                int variableAddress = 0;
+                if (checkSymbol()) {
+                    addLocalSymbol();
+                    if (tok) {
+                        loc = loc + 4;
+                        variableAddress = -loc;
+                        ((VariableInfo*) tok)->pAddress = (void*) variableAddress;
+                    }
+                }
                 next();
+                if (tok == '=') {
+                    /* assignment */
+                    next();
+                    expr();
+                    pGen->storeR0(variableAddress);
+                }
                 if (tok == ',')
                     next();
             }
@@ -1790,56 +2549,112 @@ class Compiler : public ErrorSink {
         }
     }
 
+    bool checkSymbol() {
+        return checkSymbol(tok, &mTokenString);
+    }
+
+    bool checkSymbol(int token, String* pText) {
+        bool result = token < EOF || token >= TOK_UNDEFINED_SYMBOL;
+        if (!result) {
+            String temp;
+            if (token == EOF ) {
+                temp.printf("EOF");
+            } else if (token == TOK_NUM) {
+                temp.printf("numeric constant");
+            } else if (token >= 0 && token < 256) {
+                temp.printf("char \'%c\'", token);
+            } else if (token >= TOK_KEYWORD && token < TOK_UNSUPPORTED_KEYWORD) {
+                temp.printf("keyword \"%s\"", pText->getUnwrapped());
+            } else {
+                temp.printf("reserved keyword \"%s\"",
+                            pText->getUnwrapped());
+            }
+            error("Expected symbol. Got %s", temp.getUnwrapped());
+        }
+        return result;
+    }
+
     void globalDeclarations() {
         while (tok != EOF) {
             Type base;
             expectType(base);
             Type t = acceptPointerDeclaration(t);
-            checkSymbol();
-            int name = tok;
+            if (tok >=  0 && tok < TOK_UNDEFINED_SYMBOL) {
+                error("Unexpected token %d", tok);
+                break;
+            }
+            if (tok == TOK_UNDEFINED_SYMBOL) {
+                addGlobalSymbol();
+            }
+            VariableInfo* name = (VariableInfo*) tok;
+            if (name && name->pAddress) {
+                error("Already defined global %s",
+                      mTokenString.getUnwrapped());
+            }
             next();
-            if (tok == ',' || tok == ';') {
+            if (tok == ',' || tok == ';' || tok == '=') {
                 // it's a variable declaration
                 for(;;) {
-                    *(int* *) name = (int*) allocGlobalSpace(4);
+                    if (name) {
+                        name->pAddress = (int*) allocGlobalSpace(4);
+                    }
+                    if (tok == '=') {
+                        next();
+                        if (tok == TOK_NUM) {
+                            if (name) {
+                                * (int*) name->pAddress = tokc;
+                            }
+                            next();
+                        } else {
+                            error("Expected an integer constant");
+                        }
+                    }
                     if (tok != ',') {
                         break;
                     }
-                    next();
+                    skip(',');
                     t = acceptPointerDeclaration(t);
-                    checkSymbol();
-                    name = tok;
+                    addGlobalSymbol();
+                    name = (VariableInfo*) tok;
                     next();
                 }
                 skip(';');
             } else {
-                /* patch forward references (XXX: does not work for function
-                 pointers) */
-                pGen->gsym(*(int *) (name + 4));
-                /* put function address */
-                *(int *) name = codeBuf.getPC();
+                if (name) {
+                    /* patch forward references (XXX: does not work for function
+                     pointers) */
+                    pGen->gsym((int) name->pForward);
+                    /* put function address */
+                    name->pAddress = (void*) codeBuf.getPC();
+                }
                 skip('(');
+                mSymbolTable.pushLevel();
                 intptr_t a = 8;
                 int argCount = 0;
-                while (tok != ')') {
+                while (tok != ')' && tok != EOF) {
                     Type aType;
                     expectType(aType);
                     aType = acceptPointerDeclaration(aType);
-                    checkSymbol();
-                    /* read param name and compute offset */
-                    *(int *) tok = a;
-                    a = a + 4;
+                    if (checkSymbol()) {
+                        addLocalSymbol();
+                        if (tok) {
+                            /* read param name and compute offset */
+                            *(int *) tok = a;
+                            a = a + 4;
+                        }
+                    }
                     next();
                     if (tok == ',')
                         next();
                     argCount++;
                 }
-                skip(')'); /* skip ')' */
+                skip(')');
                 rsym = loc = 0;
                 a = pGen->functionEntry(argCount);
-                block(0);
+                block(0, true);
                 pGen->gsym(rsym);
                 pGen->functionExit(argCount, a, loc);
+                mSymbolTable.popLevel();
             }
         }
     }
@@ -1847,6 +2662,7 @@ class Compiler : public ErrorSink {
     char* allocGlobalSpace(int bytes) {
         if (glo - pGlobalBase + bytes > ALLOC_SIZE) {
             error("Global space exhausted");
+            return NULL;
         }
         char* result = glo;
         glo += bytes;
@@ -1854,17 +2670,9 @@ class Compiler : public ErrorSink {
     }
 
     void cleanup() {
-        if (sym_stk != 0) {
-            free(sym_stk);
-            sym_stk = 0;
-        }
         if (pGlobalBase != 0) {
             free(pGlobalBase);
             pGlobalBase = 0;
-        }
-        if (pVarsBase != 0) {
-            free(pVarsBase);
-            pVarsBase = 0;
         }
         if (pGen) {
             delete pGen;
@@ -1881,18 +2689,13 @@ class Compiler : public ErrorSink {
         tokc = 0;
         tokl = 0;
         ch = 0;
-        pVarsBase = 0;
         rsym = 0;
         loc = 0;
         glo = 0;
-        sym_stk = 0;
-        dstk = 0;
         dptr = 0;
         dch = 0;
-        last_id = 0;
         file = 0;
         pGlobalBase = 0;
-        pVarsBase = 0;
         pGen = 0;
         mPragmaStringCount = 0;
     }
@@ -1926,8 +2729,9 @@ class Compiler : public ErrorSink {
         }
         if (pGen == NULL) {
             error("No code generator defined.");
+        } else {
+            pGen->setErrorSink(this);
         }
-        pGen->setErrorSink(this);
     }
 
 public:
@@ -1948,42 +2752,54 @@ public:
 
     int compile(const char* text, size_t textLength) {
         int result;
-        if (! (result = setjmp(mErrorRecoveryJumpBuf))) {
-            cleanup();
-            clear();
-            codeBuf.init(ALLOC_SIZE);
-            setArchitecture(NULL);
-            if (!pGen) {
-                return -1;
+
+        cleanup();
+        clear();
+        codeBuf.init(ALLOC_SIZE);
+        setArchitecture(NULL);
+        if (!pGen) {
+            return -1;
+        }
+#ifdef PROVIDE_TRACE_CODEGEN
+            pGen = new TraceCodeGenerator(pGen);
+#endif
+            pGen->setErrorSink(this);
+        pGen->init(&codeBuf);
+        file = new TextInputStream(text, textLength);
+        pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
+        glo = pGlobalBase;
+        inp();
+        next();
+        globalDeclarations();
+        checkForUndefinedForwardReferences();
+        result = pGen->finishCompile();
+        if (result == 0) {
+            if (mErrorBuf.len()) {
+                result = -2;
             }
-            pGen->init(&codeBuf);
-            file = new TextInputStream(text, textLength);
-            sym_stk = (char*) calloc(1, ALLOC_SIZE);
-            static const char* predefinedSymbols =
-                " int char void"
-                " if else while break return for"
-                " pragma define main ";
-            dstk = strcpy(sym_stk, predefinedSymbols)
-                    + strlen(predefinedSymbols);
-            pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
-            glo = pGlobalBase;
-            pVarsBase = (char*) calloc(1, ALLOC_SIZE);
-            inp();
-            next();
-            globalDeclarations();
-            pGen->finishCompile();
         }
         return result;
     }
 
-    int run(int argc, char** argv) {
-        typedef int (*mainPtr)(int argc, char** argv);
-        mainPtr aMain = (mainPtr) *(int*) (pVarsBase + TOK_MAIN);
-        if (!aMain) {
-            fprintf(stderr, "Could not find function \"main\".\n");
-            return -1;
+    void checkForUndefinedForwardReferences() {
+        mSymbolTable.forEachGlobal(static_ufrcFn, this);
+    }
+
+    static bool static_ufrcFn(String* key, VariableInfo* value,
+                                                 void* context) {
+        Compiler* pCompiler = (Compiler*) context;
+        return pCompiler->undefinedForwardReferenceCheck(key, value);
+    }
+
+    bool undefinedForwardReferenceCheck(String* key, VariableInfo* value) {
+#if 0
+        fprintf(stderr, "%s 0x%8x 0x%08x\n", key->getUnwrapped(),
+                value->pAddress, value->pForward);
+#endif
+        if (!value->pAddress && value->pForward) {
+            error("Undefined forward reference: %s", key->getUnwrapped());
         }
-        return aMain(argc, argv);
+        return true;
     }
 
     int dump(FILE* out) {
@@ -1999,30 +2815,10 @@ public:
      * If found, return its value.
      */
     void* lookup(const char* name) {
-        if (!sym_stk) {
-            return NULL;
-        }
-        size_t nameLen = strlen(name);
-        char* pSym = sym_stk;
-        char c;
-        for(;;) {
-            c = *pSym++;
-            if (c == 0) {
-                break;
-            }
-            if (c == TAG_TOK) {
-                if (memcmp(pSym, name, nameLen) == 0
-                        && pSym[nameLen] == TAG_TOK) {
-                    int tok = pSym - 1 - sym_stk;
-                    tok = tok * 8 + TOK_IDENT;
-                    if (tok <= TOK_DEFINE) {
-                        return 0;
-                    } else {
-                        tok = (intptr_t) (pVarsBase + tok);
-                        return * (void**) tok;
-                    }
-                }
-            }
+        String string(name, -1, false);
+        VariableInfo* pVariableInfo = mSymbolTable.get(&string);
+        if (pVariableInfo) {
+            return pVariableInfo->pAddress;
         }
         return NULL;
     }
