@@ -45,13 +45,13 @@ bool TiwlanEventListener::onDataAvailable(SocketClient *cli) {
     if (data->event_type == IPC_EVENT_LINK_SPEED) {
         uint32_t *spd = (uint32_t *) data->buffer;
         *spd /= 2;
-        LOGD("Link speed = %u MB/s", *spd);
+//        LOGD("Link speed = %u MB/s", *spd);
     } else if (data->event_type == IPC_EVENT_LOW_SNR) {
-        LOGD("Low signal/noise ratio");
+        LOGW("Low signal/noise ratio");
     } else if (data->event_type == IPC_EVENT_LOW_RSSI) {
-        LOGD("Low RSSI");
+        LOGW("Low RSSI");
     } else {
-        LOGD("Dropping unhandled driver event %d", data->event_type);
+//        LOGD("Dropping unhandled driver event %d", data->event_type);
     }
 
     // TODO: Tell WifiController about the event
