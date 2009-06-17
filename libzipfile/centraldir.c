@@ -13,7 +13,7 @@ enum {
     // central directory entries
     ENTRY_SIGNATURE = 0x02014b50,
     ENTRY_LEN = 46,          // CentralDirEnt len, excl. var fields
-    
+
     // local file header
     LFH_SIZE = 30,
 };
@@ -73,8 +73,6 @@ read_central_directory_entry(Zipfile* file, Zipentry* entry,
     unsigned short  lastModFileTime;
     unsigned short  lastModFileDate;
     unsigned long   crc32;
-    unsigned long   compressedSize;
-    unsigned long   uncompressedSize;
     unsigned short  extraFieldLength;
     unsigned short  fileCommentLength;
     unsigned short  diskNumberStart;
@@ -85,7 +83,7 @@ read_central_directory_entry(Zipfile* file, Zipentry* entry,
     const unsigned char*  fileComment;
     unsigned int dataOffset;
     unsigned short lfhExtraFieldSize;
-    
+
 
     p = *buf;
 
@@ -106,7 +104,7 @@ read_central_directory_entry(Zipfile* file, Zipentry* entry,
     lastModFileTime = read_le_short(&p[0x0c]);
     lastModFileDate = read_le_short(&p[0x0e]);
     crc32 = read_le_int(&p[0x10]);
-    compressedSize = read_le_int(&p[0x14]);
+    entry->compressedSize = read_le_int(&p[0x14]);
     entry->uncompressedSize = read_le_int(&p[0x18]);
     entry->fileNameLength = read_le_short(&p[0x1c]);
     extraFieldLength = read_le_short(&p[0x1e]);
@@ -141,14 +139,14 @@ read_central_directory_entry(Zipfile* file, Zipentry* entry,
         fileComment = NULL;
     }
     p += fileCommentLength;
-    
+
     *buf = p;
 
     // the size of the extraField in the central dir is how much data there is,
     // but the one in the local file header also contains some padding.
     p = file->buf + localHeaderRelOffset;
     extraFieldLength = read_le_short(&p[0x1c]);
-    
+
     dataOffset = localHeaderRelOffset + LFH_SIZE
         + entry->fileNameLength + extraFieldLength;
     entry->data = file->buf + dataOffset;
@@ -243,7 +241,7 @@ read_central_dir(Zipfile *file)
             free(entry);
             goto bail;
         }
-        
+
         // add it to our list
         entry->next = file->entries;
         file->entries = entry;
@@ -253,4 +251,3 @@ read_central_dir(Zipfile *file)
 bail:
     return -1;
 }
-
