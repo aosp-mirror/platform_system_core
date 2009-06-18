@@ -46,8 +46,11 @@
 
 #define LOG_API(...) do {} while(0)
 // #define LOG_API(...) fprintf (stderr, __VA_ARGS__)
-// #define ENABLE_ARM_DISASSEMBLY
 
+#define LOG_STACK(...) do {} while(0)
+// #define LOG_STACK(...) fprintf (stderr, __VA_ARGS__)
+
+// #define ENABLE_ARM_DISASSEMBLY
 // #define PROVIDE_TRACE_CODEGEN
 
 namespace acc {
@@ -399,27 +402,38 @@ class Compiler : public ErrorSink {
     class ARMCodeGenerator : public CodeGenerator {
     public:
         ARMCodeGenerator() {}
+
         virtual ~ARMCodeGenerator() {}
 
         /* returns address to patch with local variable size
         */
         virtual int functionEntry(int argCount) {
             LOG_API("functionEntry(%d);\n", argCount);
+            mStackUse = 0;
             // sp -> arg4 arg5 ...
             // Push our register-based arguments back on the stack
             if (argCount > 0) {
                 int regArgCount = argCount <= 4 ? argCount : 4;
                 o4(0xE92D0000 | ((1 << argCount) - 1)); // stmfd    sp!, {}
+                mStackUse += regArgCount * 4;
             }
             // sp -> arg0 arg1 ...
             o4(0xE92D4800); // stmfd sp!, {fp, lr}
+            mStackUse += 2 * 4;
             // sp, fp -> oldfp, retadr, arg0 arg1 ....
             o4(0xE1A0B00D); // mov    fp, sp
+            LOG_STACK("functionEntry: %d\n", mStackUse);
             return o4(0xE24DD000); // sub    sp, sp, # <local variables>
+            // We don't know how many local variables we are going to use,
+            // but we will round the allocation up to a multiple of
+            // STACK_ALIGNMENT, so it won't affect the stack alignment.
         }
 
         virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) {
             LOG_API("functionExit(%d, %d, %d);\n", argCount, localVariableAddress, localVariableSize);
+            // Round local variable size up to a multiple of stack alignment
+            localVariableSize = ((localVariableSize + STACK_ALIGNMENT - 1) /
+                STACK_ALIGNMENT) * STACK_ALIGNMENT;
             // Patch local variable allocation code:
             if (localVariableSize < 0 || localVariableSize > 255) {
                 error("localVariables out of range: %d", localVariableSize);
@@ -547,11 +561,6 @@ class Compiler : public ErrorSink {
                 error("Unimplemented op %d\n", op);
                 break;
             }
-#if 0
-            o(decodeOp(op));
-            if (op == OP_MOD)
-                o(0x92); /* xchg %edx, %eax */
-#endif
         }
 
         virtual void clearR1() {
@@ -562,11 +571,15 @@ class Compiler : public ErrorSink {
         virtual void pushR0() {
             LOG_API("pushR0();\n");
             o4(0xE92D0001);  // stmfd   sp!,{r0}
+            mStackUse += 4;
+            LOG_STACK("pushR0: %d\n", mStackUse);
         }
 
         virtual void popR1() {
             LOG_API("popR1();\n");
             o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+            mStackUse -= 4;
+            LOG_STACK("popR1: %d\n", mStackUse);
         }
 
         virtual void storeR0ToR1(bool isInt) {
@@ -690,15 +703,31 @@ class Compiler : public ErrorSink {
 
         virtual void endFunctionCallArguments(int a, int l) {
             LOG_API("endFunctionCallArguments(0x%08x, %d);\n", a, l);
+            int argCount = l >> 2;
+            int argumentStackUse = l;
+            if (argCount > 0) {
+                int regArgCount = argCount > 4 ? 4 : argCount;
+                argumentStackUse -= regArgCount * 4;
+                o4(0xE8BD0000 | ((1 << regArgCount) - 1)); // ldmfd   sp!,{}
+            }
+            mStackUse += argumentStackUse;
+
+            // Align stack.
+            int missalignment = mStackUse - ((mStackUse / STACK_ALIGNMENT)
+                    * STACK_ALIGNMENT);
+            mStackAlignmentAdjustment = 0;
+            if (missalignment > 0) {
+                mStackAlignmentAdjustment = STACK_ALIGNMENT - missalignment;
+            }
+            l += mStackAlignmentAdjustment;
+
             if (l < 0 || l > 0x3FC) {
                 error("L out of range for stack adjustment: 0x%08x", l);
             }
             * (int*) a = 0xE24DDF00 | (l >> 2); // sub    sp, sp, #0 << 2
-            int argCount = l >> 2;
-            if (argCount > 0) {
-                int regArgCount = argCount > 4 ? 4 : argCount;
-                o4(0xE8BD0000 | ((1 << regArgCount) - 1)); // ldmfd   sp!,{}
-            }
+            mStackUse += mStackAlignmentAdjustment;
+            LOG_STACK("endFunctionCallArguments mStackUse: %d, mStackAlignmentAdjustment %d\n",
+                      mStackUse, mStackAlignmentAdjustment);
         }
 
         virtual int callForward(int symbol) {
@@ -727,7 +756,7 @@ class Compiler : public ErrorSink {
             LOG_API("callIndirect(%d);\n", l);
             int argCount = l >> 2;
             int poppedArgs = argCount > 4 ? 4 : argCount;
-            int adjustedL = l - (poppedArgs << 2);
+            int adjustedL = l - (poppedArgs << 2) + mStackAlignmentAdjustment;
             if (adjustedL < 0 || adjustedL > 4096-4) {
                 error("l out of range for stack offset: 0x%08x", l);
             }
@@ -739,12 +768,15 @@ class Compiler : public ErrorSink {
             LOG_API("adjustStackAfterCall(%d, %d);\n", l, isIndirect);
             int argCount = l >> 2;
             int stackArgs = argCount > 4 ? argCount - 4 : 0;
-            int stackUse = stackArgs + (isIndirect ? 1 : 0);
+            int stackUse =  stackArgs + (isIndirect ? 1 : 0)
+                + (mStackAlignmentAdjustment >> 2);
             if (stackUse) {
                 if (stackUse < 0 || stackUse > 255) {
                     error("L out of range for stack adjustment: 0x%08x", l);
                 }
                 o4(0xE28DDF00 | stackUse); // add    sp, sp, #stackUse << 2
+                mStackUse -= stackUse * 4;
+                LOG_STACK("adjustStackAfterCall: %d\n", mStackUse);
             }
         }
 
@@ -858,6 +890,13 @@ class Compiler : public ErrorSink {
         static int runtime_MOD(int a, int b) {
             return b % a;
         }
+
+        static const int STACK_ALIGNMENT = 8;
+        int mStackUse;
+        // This variable holds the amount we adjusted the stack in the most
+        // recent endFunctionCallArguments call. It's examined by the
+        // following adjustStackAfterCall call.
+        int mStackAlignmentAdjustment;
     };
 
 #endif // PROVIDE_ARM_CODEGEN
@@ -981,7 +1020,9 @@ class Compiler : public ErrorSink {
             if (isIndirect) {
                 l += 4;
             }
-            oad(0xc481, l); /* add $xxx, %esp */
+            if (l > 0) {
+                oad(0xc481, l); /* add $xxx, %esp */
+            }
         }
 
         virtual int jumpOffset() {
@@ -2315,8 +2356,7 @@ class Compiler : public ErrorSink {
             } else {
                 pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset());
             }
-            if (l | (n == 1))
-                pGen->adjustStackAfterCall(l, n == 1);
+            pGen->adjustStackAfterCall(l, n == 1);
         }
     }
 
@@ -3023,6 +3063,11 @@ extern "C"
 void accGetPragmas(ACCscript* script, ACCsizei* actualStringCount,
                    ACCsizei maxStringCount, ACCchar** strings){
     script->compiler.getPragmas(actualStringCount, maxStringCount, strings);
+}
+
+extern "C"
+void accDisassemble(ACCscript* script) {
+    script->compiler.disassemble(stderr);
 }
 
 

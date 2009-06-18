@@ -29,6 +29,11 @@ int run(MainPtr mainFunc, int argc, char** argv) {
     return mainFunc(argc, argv);
 }
 
+// Private API for development:
+
+extern "C"
+void accDisassemble(ACCscript* script);
+
 int main(int argc, char** argv) {
     const char* inFile = NULL;
     bool printListing;
@@ -107,6 +112,10 @@ int main(int argc, char** argv) {
             }
             delete[] strings;
         }
+    }
+
+    if (printListing) {
+        accDisassemble(script);
     }
 
     if (runResults) {
