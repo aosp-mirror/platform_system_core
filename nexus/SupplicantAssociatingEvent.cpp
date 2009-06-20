@@ -29,6 +29,7 @@ SupplicantAssociatingEvent::SupplicantAssociatingEvent(int level, char *event,
 
     mBssid = NULL;
     mSsid = NULL;
+    mFreq = -1;
 
     // SSID 'default' 
     // OR

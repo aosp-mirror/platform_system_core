@@ -33,7 +33,8 @@ LOCAL_SRC_FILES:=                                      \
                   SupplicantScanResultsEvent.cpp       \
                   SupplicantConnectionTimeoutEvent.cpp \
                   SupplicantDisconnectedEvent.cpp      \
-                  SupplicantStatus.cpp
+                  SupplicantStatus.cpp                 \
+                  TiwlanEventListener.cpp
 
 LOCAL_MODULE:= nexus
 

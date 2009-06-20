@@ -21,8 +21,12 @@
 #include "WifiController.h"
 
 class IControllerHandler;
+class TiwlanEventListener;
 
 class TiwlanWifiController : public WifiController {
+    int                 mListenerSock;
+    TiwlanEventListener *mEventListener;
+
 public:
     TiwlanWifiController(PropertyManager *propmngr, IControllerHandler *handlers, char *modpath, char *modname, char *modargs);
     virtual ~TiwlanWifiController() {}
@@ -32,5 +36,8 @@ public:
     virtual bool isPoweredUp();
     virtual int loadFirmware();
     virtual bool isFirmwareLoaded();
+
+private:
+    int startDriverEventListener();
 };
 #endif

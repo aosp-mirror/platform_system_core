@@ -94,7 +94,7 @@
 2800 gtalkservice (eventType|1)
 # This event is logged for GTalk connection state changes. The status field is an int, but
 # it really contains 4 separate values, each taking up a byte
-# (eventType, connection state, connection error, network state)
+#     (eventType << 24) + (connection state << 16) + (connection error << 8) + network state
 2801 gtalk_connection (status|1)
 
 2802 watchdog (Service|3)
@@ -134,6 +134,26 @@
 # Package Manager ready:
 3100 boot_progress_pms_ready (time|2|3)
 # + check activity_launch_time for Home app
+
+# This event is logged when GTalk connection is closed.
+# The status field is an int, but contains 2 different values, it's represented as
+#
+#     (networkType << 8) + connection error
+#
+# the possible error values are
+#
+# no_error=0, no_network=1, connection_failed=2, unknown_host=3, auth_failed=4,
+# auth_expired=5, heart_beat_timeout=6, server_error=7, server_reject_rate_limiting=8, unknown=10
+#
+# duration is the connection duration.
+4000 gtalk_conn_close (status|1),(duration|1)
+
+# This event is logged for GTalk heartbeat resets
+# interval_and_nt contains both the heartbeat interval and the network type, It's represented as
+#     (networkType << 16) + interval
+# interval is in seconds; network type can be 0 (mobile) or 1 (wifi); ip is the host ip addr.
+4001 gtalk_heartbeat_reset (interval_and_nt|1),(ip|3)
+
 
 # Do not change these names without updating the checkin_events setting in
 # google3/googledata/wireless/android/provisioning/gservices.config !!

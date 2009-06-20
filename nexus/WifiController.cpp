@@ -69,7 +69,9 @@ int WifiController::stop() {
 }
 
 int WifiController::enable() {
+
     if (!isPoweredUp()) {
+        LOGI("Powering up");
         sendStatusBroadcast("Powering up WiFi hardware");
         if (powerUp()) {
             LOGE("Powerup failed (%s)", strerror(errno));
@@ -78,6 +80,7 @@ int WifiController::enable() {
     }
 
     if (mModuleName[0] != '\0' && !isKernelModuleLoaded(mModuleName)) {
+        LOGI("Loading driver");
         sendStatusBroadcast("Loading WiFi driver");
         if (loadKernelModule(mModulePath, mModuleArgs)) {
             LOGE("Kernel module load failed (%s)", strerror(errno));
@@ -86,6 +89,7 @@ int WifiController::enable() {
     }
 
     if (!isFirmwareLoaded()) {
+        LOGI("Loading firmware");
         sendStatusBroadcast("Loading WiFI firmware");
         if (loadFirmware()) {
             LOGE("Firmware load failed (%s)", strerror(errno));
@@ -94,6 +98,7 @@ int WifiController::enable() {
     }
 
     if (!mSupplicant->isStarted()) {
+        LOGI("Starting WPA Supplicant");
         sendStatusBroadcast("Starting WPA Supplicant");
         if (mSupplicant->start()) {
             LOGE("Supplicant start failed (%s)", strerror(errno));
@@ -113,6 +118,7 @@ int WifiController::enable() {
     mPropMngr->registerProperty("wifi.scanmode", this);
     mPropMngr->registerProperty("wifi.interface", this);
 
+    LOGI("Enabled successfully");
     return 0;
 
 out_unloadmodule:
