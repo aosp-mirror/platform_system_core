@@ -22,10 +22,12 @@
 #include "Controller.h"
 #include "PropertyManager.h"
 #include "IControllerHandler.h"
+#include "IDhcpEventHandlers.h"
 
 class InterfaceConfig;
+class DhcpClient;
 
-class NetworkManager : public IControllerHandler {
+class NetworkManager : public IControllerHandler, public IDhcpEventHandlers {
 private:
     static NetworkManager *sInstance;
 
@@ -33,6 +35,7 @@ private:
     ControllerCollection *mControllers;
     SocketListener       *mBroadcaster;
     PropertyManager      *mPropMngr;
+    DhcpClient           *mDhcp;
 
 public:
     virtual ~NetworkManager();
@@ -55,7 +58,7 @@ private:
 
     NetworkManager(PropertyManager *propMngr);
 
-    void onInterfaceStarted(Controller *c, const InterfaceConfig *cfg);
-    void onInterfaceStopping(Controller *c, const char *name);
+    void onInterfaceConnected(Controller *c, const InterfaceConfig *cfg);
+    void onInterfaceDisconnected(Controller *c, const char *name);
 };
 #endif

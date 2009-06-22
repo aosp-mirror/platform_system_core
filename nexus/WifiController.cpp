@@ -279,33 +279,31 @@ void WifiController::onAssociatedEvent(SupplicantAssociatedEvent *evt) {
 
 void WifiController::onConnectedEvent(SupplicantConnectedEvent *evt) {
     LOGD("onConnectedEvent(%s, %d)", evt->getBssid(), evt->getReassociated());
-    if (!evt->getReassociated()) {
-        SupplicantStatus *ss = mSupplicant->getStatus();
-        WifiNetwork *wn;
+    SupplicantStatus *ss = mSupplicant->getStatus();
+    WifiNetwork *wn;
 
-        if (ss->getWpaState() != SupplicantState::COMPLETED) {
-            char tmp[32];
+    if (ss->getWpaState() != SupplicantState::COMPLETED) {
+        char tmp[32];
 
-            LOGW("onConnected() with SupplicantState = %s!",
-                 SupplicantState::toString(ss->getWpaState(), tmp,
-                 sizeof(tmp)));
-            return;
-        }
-
-        if (ss->getId() == -1) {
-            LOGW("onConnected() with id = -1!");
-            return;
-        }
-        
-        if (!(wn = mSupplicant->lookupNetwork(ss->getId()))) {
-            LOGW("Error looking up connected network id %d (%s)",
-                 ss->getId(), strerror(errno));
-            return;
-        }
-      
-        delete ss;
-        mHandlers->onInterfaceStarted(this, wn->getIfaceCfg());
+        LOGW("onConnected() with SupplicantState = %s!",
+             SupplicantState::toString(ss->getWpaState(), tmp,
+             sizeof(tmp)));
+        return;
     }
+
+    if (ss->getId() == -1) {
+        LOGW("onConnected() with id = -1!");
+        return;
+    }
+    
+    if (!(wn = mSupplicant->lookupNetwork(ss->getId()))) {
+        LOGW("Error looking up connected network id %d (%s)",
+             ss->getId(), strerror(errno));
+        return;
+    }
+  
+    delete ss;
+    mHandlers->onInterfaceConnected(this, wn->getIfaceCfg());
 }
 
 void WifiController::onScanResultsEvent(SupplicantScanResultsEvent *evt) {
@@ -373,7 +371,7 @@ void WifiController::onConnectionTimeoutEvent(SupplicantConnectionTimeoutEvent *
 }
 
 void WifiController::onDisconnectedEvent(SupplicantDisconnectedEvent *evt) {
-    LOGD("onDisconnectedEvent()");
+    mHandlers->onInterfaceDisconnected(this, getBoundInterface());
 }
 
 #if 0
