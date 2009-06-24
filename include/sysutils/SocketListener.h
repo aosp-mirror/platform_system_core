@@ -33,7 +33,7 @@ public:
     SocketListener(const char *socketNames, bool listen);
     SocketListener(int socketFd, bool listen);
 
-    virtual ~SocketListener() {}
+    virtual ~SocketListener();
     int startListener();
     int stopListener();
 

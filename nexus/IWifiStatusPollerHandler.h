@@ -14,20 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef _IPROPERTY_PROVIDER_H
-#define _IPROPERTY_PROVIDER_H
+#ifndef _IWIFISTATUSPOLLER_HANDLER_H
+#define _IWIFISTATUSPOLLER_HANDLER_H
 
-#include <unistd.h>
-#include <sys/types.h>
-
-#include <utils/List.h>
-
-class IPropertyProvider {
+class IWifiStatusPollerHandler {
 public:
-    virtual int set(const char *name, const char *value) = 0;
-    virtual const char *get(const char *name, char *buffer, size_t max) = 0;
+    virtual ~IWifiStatusPollerHandler() {}
+    virtual void onStatusPollInterval() = 0;
 };
-
-typedef android::List<IPropertyProvider *> IPropertyProviderCollection;
 
 #endif

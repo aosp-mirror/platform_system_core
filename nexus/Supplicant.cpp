@@ -30,7 +30,6 @@
 #include "Supplicant.h"
 #include "SupplicantListener.h"
 #include "NetworkManager.h"
-#include "ErrorCode.h"
 #include "WifiController.h"
 #include "SupplicantStatus.h"
 
@@ -114,6 +113,29 @@ bool Supplicant::isStarted() {
     return mServiceManager->isRunning(SUPPLICANT_SERVICE_NAME);
 }
 
+int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len) {
+
+    if (!mCtrl) {
+        errno = ENOTCONN;
+        return -1;
+    }
+
+//    LOGD("sendCommand(): -> '%s'", cmd);
+
+    int rc;
+    memset(reply, 0, *reply_len);
+    if ((rc = wpa_ctrl_request(mCtrl, cmd, strlen(cmd), reply, reply_len, NULL)) == -2)  {
+        errno = ETIMEDOUT;
+        return -1;
+    } else if (rc < 0 || !strncmp(reply, "FAIL", 4)) {
+        strcpy(reply, "FAIL");
+        errno = EIO;
+        return -1;
+    }
+
+ //   LOGD("sendCommand(): <- '%s'", reply);
+    return 0;
+}
 SupplicantStatus *Supplicant::getStatus() {
     char *reply;
     size_t len = 4096;
@@ -162,6 +184,7 @@ int Supplicant::refreshNetworkList() {
         return -1;
     }
 
+    PropertyManager *pm = NetworkManager::Instance()->getPropMngr();
     pthread_mutex_lock(&mNetworksLock);
 
     int num_added = 0;
@@ -182,7 +205,9 @@ int Supplicant::refreshNetworkList() {
             delete new_wn;
         } else {
             num_added++;
-            new_wn->registerProperties();
+            char new_ns[20];
+            snprintf(new_ns, sizeof(new_ns), "wifi.net.%d", new_wn->getNetworkId());
+            new_wn->attachProperties(pm, new_ns);
             mNetworks->push_back(new_wn);
             if (new_wn->refresh()) {
                 LOGW("Unable to refresh network id %d (%s)",
@@ -198,7 +223,9 @@ int Supplicant::refreshNetworkList() {
         for (i = mNetworks->begin(); i != mNetworks->end(); ++i) {
             if (0) {
                 num_removed++;
-                (*i)->unregisterProperties();
+                char del_ns[20];
+                snprintf(del_ns, sizeof(del_ns), "wifi.net.%d", (*i)->getNetworkId());
+                (*i)->detachProperties(pm, del_ns);
                 delete (*i);
                 i = mNetworks->erase(i);
             }
@@ -247,31 +274,7 @@ int Supplicant::connectToSupplicant() {
     return 0;
 }
 
-int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len)
-{
-    if (!mCtrl) {
-        errno = ENOTCONN;
-        return -1;
-    }
-
-//    LOGD("sendCommand(): -> '%s'", cmd);
-
-    int rc;
-    memset(reply, 0, *reply_len);
-    if ((rc = wpa_ctrl_request(mCtrl, cmd, strlen(cmd), reply, reply_len, NULL)) == -2)  {
-        errno = ETIMEDOUT;
-        return -1;
-    } else if (rc < 0 || !strncmp(reply, "FAIL", 4)) {
-        strcpy(reply, "FAIL");
-        errno = EIO;
-        return -1;
-    }
-
-//   LOGD("sendCommand(): <- '%s'", reply);
-    return 0;
-}
-
-int Supplicant::triggerScan(bool active) {
+int Supplicant::setScanMode(bool active) {
     char reply[255];
     size_t len = sizeof(reply);
 
@@ -281,10 +284,88 @@ int Supplicant::triggerScan(bool active) {
              strerror(errno));
         return -1;
     }
-    len = sizeof(reply);
+    return 0;
+}
+
+int Supplicant::triggerScan() {
+    char reply[255];
+    size_t len = sizeof(reply);
 
     if (sendCommand("SCAN", reply, &len)) {
-        LOGW("triggerScan(%d): Error initiating scan", active);
+        LOGW("triggerScan(): Error initiating scan");
+        return -1;
+    }
+    return 0;
+}
+
+int Supplicant::getRssi(int *buffer) {
+    char reply[64];
+    size_t len = sizeof(reply);
+
+    if (sendCommand("DRIVER RSSI", reply, &len)) {
+        LOGW("Failed to get RSSI (%s)", strerror(errno));
+        return -1;
+    }
+
+    char *next = reply;
+    char *s;
+    for (int i = 0; i < 3; i++) {
+        if (!(s = strsep(&next, " "))) {
+            LOGE("Error parsing RSSI");
+            errno = EIO;
+            return -1;
+        }
+    }
+    *buffer = atoi(s);
+    return 0;
+}
+
+int Supplicant::getLinkSpeed() {
+    char reply[64];
+    size_t len = sizeof(reply);
+
+    if (sendCommand("DRIVER LINKSPEED", reply, &len)) {
+        LOGW("Failed to get LINKSPEED (%s)", strerror(errno));
+        return -1;
+    }
+
+    char *next = reply;
+    char *s;
+
+    if (!(s = strsep(&next, " "))) {
+        LOGE("Error parsing LINKSPEED");
+        errno = EIO;
+        return -1;
+    }
+
+    if (!(s = strsep(&next, " "))) {
+        LOGE("Error parsing LINKSPEED");
+        errno = EIO;
+        return -1;
+    }
+    return atoi(s);
+}
+
+int Supplicant::stopDriver() {
+    char reply[64];
+    size_t len = sizeof(reply);
+
+    LOGD("stopDriver()");
+
+    if (sendCommand("DRIVER STOP", reply, &len)) {
+        LOGW("Failed to stop driver (%s)", strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+int Supplicant::startDriver() {
+    char reply[64];
+    size_t len = sizeof(reply);
+
+    LOGD("startDriver()");
+    if (sendCommand("DRIVER START", reply, &len)) {
+        LOGW("Failed to start driver (%s)", strerror(errno));
         return -1;
     }
     return 0;
@@ -301,7 +382,11 @@ WifiNetwork *Supplicant::createNetwork() {
         reply[strlen(reply) -1] = '\0';
 
     WifiNetwork *wn = new WifiNetwork(mController, this, atoi(reply));
+    PropertyManager *pm = NetworkManager::Instance()->getPropMngr();
     pthread_mutex_lock(&mNetworksLock);
+    char new_ns[20];
+    snprintf(new_ns, sizeof(new_ns), "wifi.net.%d", wn->getNetworkId());
+    wn->attachProperties(pm, new_ns);
     mNetworks->push_back(wn);
     pthread_mutex_unlock(&mNetworksLock);
     return wn;
@@ -411,8 +496,9 @@ int Supplicant::setNetworkVar(int networkId, const char *var, const char *val) {
     char reply[255];
     size_t len = sizeof(reply) -1;
 
+    LOGD("netid %d, var '%s' = '%s'", networkId, var, val);
     char *tmp;
-    asprintf(&tmp, "SET_NETWORK %d %s \"%s\"", networkId, var, val);
+    asprintf(&tmp, "SET_NETWORK %d %s %s", networkId, var, val);
     if (sendCommand(tmp, reply, &len)) {
         free(tmp);
         return -1;
@@ -457,6 +543,95 @@ int Supplicant::enableNetwork(int networkId, bool enabled) {
     return 0;
 }
 
+int Supplicant::enablePacketFilter() {
+    char req[128];
+    char reply[16];
+    size_t len;
+    int i;
+    
+    for (i = 0; i <=3; i++) {
+        snprintf(req, sizeof(req), "DRIVER RXFILTER-ADD %d", i);
+        len = sizeof(reply);
+        if (sendCommand(req, reply, &len))
+            return -1;
+    }
+
+    len = sizeof(reply);
+    if (sendCommand("DRIVER RXFILTER-START", reply, &len))
+        return -1;
+    return 0;
+}
+  
+int Supplicant::disablePacketFilter() {
+    char req[128];
+    char reply[16];
+    size_t len;
+    int i;
+    
+    len = sizeof(reply);
+    if (sendCommand("DRIVER RXFILTER-STOP", reply, &len))
+        return -1;
+
+    for (i = 3; i >=0; i--) {
+        snprintf(req, sizeof(req), "DRIVER RXFILTER-REMOVE %d", i);
+        len = sizeof(reply);
+        if (sendCommand(req, reply, &len))
+            return -1;
+    }
+    return 0;
+}
+
+int Supplicant::enableBluetoothCoexistenceScan() {
+    char req[128];
+    char reply[16];
+    size_t len;
+    int i;
+    
+    len = sizeof(reply);
+    if (sendCommand("DRIVER BTCOEXSCAN-START", reply, &len))
+        return -1;
+    return 0;
+}
+
+int Supplicant::disableBluetoothCoexistenceScan() {
+    char req[128];
+    char reply[16];
+    size_t len;
+    int i;
+    
+    len = sizeof(reply);
+    if (sendCommand("DRIVER BTCOEXSCAN-STOP", reply, &len))
+        return -1;
+    return 0;
+}
+
+int Supplicant::setBluetoothCoexistenceMode(int mode) {
+    char req[64];
+
+    sprintf(req, "DRIVER BTCOEXMODE %d", mode);
+
+    char reply[16];
+    size_t len = sizeof(reply) -1;
+
+    if (sendCommand(req, reply, &len))
+        return -1;
+    return 0;
+}
+
+int Supplicant::setApScanMode(int mode) {
+    char req[64];
+
+//    LOGD("setApScanMode(%d)", mode);
+    sprintf(req, "AP_SCAN %d", mode);
+
+    char reply[16];
+    size_t len = sizeof(reply) -1;
+
+    if (sendCommand(req, reply, &len))
+        return -1;
+    return 0;
+}
+
 
 int Supplicant::retrieveInterfaceName() {
     char reply[255];
@@ -468,4 +643,35 @@ int Supplicant::retrieveInterfaceName() {
     reply[strlen(reply)-1] = '\0';
     mInterfaceName = strdup(reply);
     return 0;
+}
+
+int Supplicant::reconnect() {
+    char req[128];
+    char reply[16];
+    size_t len;
+    int i;
+    
+    len = sizeof(reply);
+    if (sendCommand("RECONNECT", reply, &len))
+        return -1;
+    return 0;
+}
+
+int Supplicant::disconnect() {
+    char req[128];
+    char reply[16];
+    size_t len;
+    int i;
+    
+    len = sizeof(reply);
+    if (sendCommand("DISCONNECT", reply, &len))
+        return -1;
+    return 0;
+}
+
+int Supplicant::getNetworkCount() {
+    pthread_mutex_lock(&mNetworksLock);
+    int cnt = mNetworks->size();
+    pthread_mutex_unlock(&mNetworksLock);
+    return cnt;
 }

@@ -51,6 +51,7 @@ int TiwlanWifiController::powerUp() {
 int TiwlanWifiController::powerDown() {
     if (mEventListener) {
         delete mEventListener;
+        shutdown(mListenerSock, SHUT_RDWR);
         close(mListenerSock);
         mListenerSock = -1;
         mEventListener = NULL;
@@ -77,7 +78,8 @@ int TiwlanWifiController::loadFirmware() {
                 LOGD("Firmware loaded OK");
 
                 if (startDriverEventListener()) {
-                    LOGW("Failed to start driver event listener");
+                    LOGW("Failed to start driver event listener (%s)",
+                         strerror(errno));
                 }
 
                 return 0;
@@ -95,32 +97,48 @@ int TiwlanWifiController::loadFirmware() {
 
 int TiwlanWifiController::startDriverEventListener() {
     struct sockaddr_in addr;
-    int s;
 
-    if ((s = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
+    if (mListenerSock != -1) {
+        LOGE("Listener already started!");
+        errno = EBUSY;
         return -1;
+    }
+
+    if ((mListenerSock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
+        LOGE("socket failed (%s)", strerror(errno));
+        return -1;
+    }
 
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(TI_DRIVER_MSG_PORT);
 
-    if (bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        close(s);
-        return -1;
+    if (bind(mListenerSock,
+             (struct sockaddr *) &addr,
+             sizeof(addr)) < 0) {
+        LOGE("bind failed (%s)", strerror(errno));
+        goto out_err;
     }
 
-    mEventListener = new TiwlanEventListener(s);
+    mEventListener = new TiwlanEventListener(mListenerSock);
 
     if (mEventListener->startListener()) {
         LOGE("Error starting driver listener (%s)", strerror(errno));
+        goto out_err;
+    }
+    return 0;
+out_err:
+    if (mEventListener) {
         delete mEventListener;
         mEventListener = NULL;
-        close(s);
-        return -1;
     }
-    mListenerSock = s;
-    return 0;
+    if (mListenerSock != -1) {
+        shutdown(mListenerSock, SHUT_RDWR);
+        close(mListenerSock);
+        mListenerSock = -1;
+    }
+    return -1;
 }
 
 bool TiwlanWifiController::isFirmwareLoaded() {

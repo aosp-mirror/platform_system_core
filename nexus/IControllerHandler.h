@@ -22,8 +22,11 @@ class InterfaceConfig;
 
 class IControllerHandler {
 public:
-    virtual void onInterfaceConnected(Controller *c, const InterfaceConfig *cfg) = 0;
-    virtual void onInterfaceDisconnected(Controller *c, const char *name) = 0;
+    virtual ~IControllerHandler() {}
+    virtual void onInterfaceConnected(Controller *c) = 0;
+    virtual void onInterfaceDisconnected(Controller *c) = 0;
+    virtual void onControllerSuspending(Controller *c) = 0;
+    virtual void onControllerResumed(Controller *c) = 0;
 };
 
 #endif

@@ -26,17 +26,7 @@
 #include "WifiNetwork.h"
 #include "Supplicant.h"
 #include "WifiController.h"
-#include "InterfaceConfig.h"
 
-const char *WifiNetwork::PropertyNames[] = { "ssid", "bssid", "psk", "wepkey.1",
-                                             "wepkey.2", "wepkey.3", "wepkey.4",
-                                             "defkeyidx", "pri", "hiddenssid",
-                                             "AllowedKeyManagement",
-                                             "AllowedProtocols",
-                                             "AllowedAuthAlgorithms",
-                                             "AllowedPairwiseCiphers",
-                                             "AllowedGroupCiphers",
-                                             "enabled", '\0' };
 WifiNetwork::WifiNetwork() {
    // This is private to restrict copy constructors
 }
@@ -76,11 +66,11 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, const char *data)
     mDefaultKeyIndex = -1;
     mPriority = -1;
     mHiddenSsid = NULL;
-    mAllowedKeyManagement = KeyManagementMask::UNKNOWN;
-    mAllowedProtocols = 0;
-    mAllowedAuthAlgorithms = 0;
-    mAllowedPairwiseCiphers = 0;
-    mAllowedGroupCiphers = 0;
+    mKeyManagement = KeyManagementMask::UNKNOWN;
+    mProtocols = 0;
+    mAuthAlgorithms = 0;
+    mPairwiseCiphers = 0;
+    mGroupCiphers = 0;
     mEnabled = true;
 
     if (flags && flags[0] != '\0') {
@@ -90,11 +80,8 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, const char *data)
             LOGW("Unsupported flags '%s'", flags);
     }
 
-    char *tmp2;
-    asprintf(&tmp2, "wifi.net.%d", mNetid);
-    mIfaceCfg = new InterfaceConfig(tmp2);
-    free(tmp2);
     free(tmp);
+    createProperties();
 }
 
 WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, int networkId) {
@@ -108,17 +95,13 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, int networkId) {
     mDefaultKeyIndex = -1;
     mPriority = -1;
     mHiddenSsid = NULL;
-    mAllowedKeyManagement = 0;
-    mAllowedProtocols = 0;
-    mAllowedAuthAlgorithms = 0;
-    mAllowedPairwiseCiphers = 0;
-    mAllowedGroupCiphers = 0;
+    mKeyManagement = 0;
+    mProtocols = 0;
+    mAuthAlgorithms = 0;
+    mPairwiseCiphers = 0;
+    mGroupCiphers = 0;
     mEnabled = false;
-
-    char *tmp2;
-    asprintf(&tmp2, "wifi.net.%d", mNetid);
-    mIfaceCfg = new InterfaceConfig(tmp2);
-    free(tmp2);
+    createProperties();
 }
 
 WifiNetwork *WifiNetwork::clone() {
@@ -140,15 +123,35 @@ WifiNetwork *WifiNetwork::clone() {
     r->mPriority = mPriority;
     if (mHiddenSsid)
         r->mHiddenSsid = strdup(mHiddenSsid);
-    r->mAllowedKeyManagement = mAllowedKeyManagement;
-    r->mAllowedProtocols = mAllowedProtocols;
-    r->mAllowedAuthAlgorithms = mAllowedAuthAlgorithms;
-    r->mAllowedPairwiseCiphers = mAllowedPairwiseCiphers;
-    r->mAllowedGroupCiphers = mAllowedGroupCiphers;
+    r->mKeyManagement = mKeyManagement;
+    r->mProtocols = mProtocols;
+    r->mAuthAlgorithms = mAuthAlgorithms;
+    r->mPairwiseCiphers = mPairwiseCiphers;
+    r->mGroupCiphers = mGroupCiphers;
     return r;
 }
 
+void WifiNetwork::createProperties() {
+    asprintf(&mPropNamespace, "wifi.net.%d", mNetid);
+
+    mStaticProperties.propEnabled = new WifiNetworkEnabledProperty(this);
+    mStaticProperties.propSsid = new WifiNetworkSsidProperty(this);
+    mStaticProperties.propBssid = new WifiNetworkBssidProperty(this);
+    mStaticProperties.propPsk = new WifiNetworkPskProperty(this);
+    mStaticProperties.propWepKey = new WifiNetworkWepKeyProperty(this);
+    mStaticProperties.propDefKeyIdx = new WifiNetworkDefaultKeyIndexProperty(this);
+    mStaticProperties.propPriority = new WifiNetworkPriorityProperty(this);
+    mStaticProperties.propKeyManagement = new WifiNetworkKeyManagementProperty(this);
+    mStaticProperties.propProtocols = new WifiNetworkProtocolsProperty(this);
+    mStaticProperties.propAuthAlgorithms = new WifiNetworkAuthAlgorithmsProperty(this);
+    mStaticProperties.propPairwiseCiphers = new WifiNetworkPairwiseCiphersProperty(this);
+    mStaticProperties.propGroupCiphers = new WifiNetworkGroupCiphersProperty(this);
+    mStaticProperties.propHiddenSsid = new WifiNetworkHiddenSsidProperty(this);
+}
+
 WifiNetwork::~WifiNetwork() {
+    if (mPropNamespace)
+        free(mPropNamespace);
     if (mSsid)
         free(mSsid);
     if (mBssid)
@@ -162,13 +165,26 @@ WifiNetwork::~WifiNetwork() {
 
     if (mHiddenSsid)
         free(mHiddenSsid);
-    if (mIfaceCfg)
-        delete(mIfaceCfg);
+
+    delete mStaticProperties.propEnabled;
+    delete mStaticProperties.propSsid;
+    delete mStaticProperties.propBssid;
+    delete mStaticProperties.propPsk;
+    delete mStaticProperties.propWepKey;
+    delete mStaticProperties.propDefKeyIdx;
+    delete mStaticProperties.propPriority;
+    delete mStaticProperties.propKeyManagement;
+    delete mStaticProperties.propProtocols;
+    delete mStaticProperties.propAuthAlgorithms;
+    delete mStaticProperties.propPairwiseCiphers;
+    delete mStaticProperties.propGroupCiphers;
+    delete mStaticProperties.propHiddenSsid;
 }
 
 int WifiNetwork::refresh() {
     char buffer[255];
     size_t len;
+    uint32_t mask;
 
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "psk", buffer, len))
@@ -198,46 +214,47 @@ int WifiNetwork::refresh() {
 
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "key_mgmt", buffer, len)) {
-        if (!strcmp(buffer, "NONE"))
-            setAllowedKeyManagement(KeyManagementMask::NONE);
-        else if (index(buffer, ' ')) {
-            char *next = buffer;
-            char *token;
-            uint32_t mask = 0;
-
-            while((token = strsep(&next, " "))) {
-                if (!strcmp(token, "WPA-PSK"))
-                    mask |= KeyManagementMask::WPA_PSK;
-                else if (!strcmp(token, "WPA-EAP"))
-                    mask |= KeyManagementMask::WPA_EAP;
-                else if (!strcmp(token, "IEE8021X"))
-                    mask |= KeyManagementMask::IEEE8021X;
-                else
-                    LOGW("Unsupported key management scheme '%s'" , token);
-            }
-            setAllowedKeyManagement(mask);
-        } else
-            LOGE("Unsupported key management '%s'", buffer);
+        if (WifiNetwork::parseKeyManagementMask(buffer, &mask)) {
+            LOGE("Error parsing key_mgmt (%s)", strerror(errno));
+        } else {
+           mKeyManagement = mask;
+        }
     }
 
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "proto", buffer, len)) {
-        // TODO
+        if (WifiNetwork::parseProtocolsMask(buffer, &mask)) {
+            LOGE("Error parsing proto (%s)", strerror(errno));
+        } else {
+           mProtocols = mask;
+        }
     }
 
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "auth_alg", buffer, len)) {
-        // TODO
+        if (WifiNetwork::parseAuthAlgorithmsMask(buffer, &mask)) {
+            LOGE("Error parsing auth_alg (%s)", strerror(errno));
+        } else {
+           mAuthAlgorithms = mask;
+        }
     }
 
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "pairwise", buffer, len)) {
-        // TODO
+        if (WifiNetwork::parsePairwiseCiphersMask(buffer, &mask)) {
+            LOGE("Error parsing pairwise (%s)", strerror(errno));
+        } else {
+           mPairwiseCiphers = mask;
+        }
     }
 
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "group", buffer, len)) {
-        // TODO
+        if (WifiNetwork::parseGroupCiphersMask(buffer, &mask)) {
+            LOGE("Error parsing group (%s)", strerror(errno));
+        } else {
+           mGroupCiphers = mask;
+        }
     }
 
     return 0;
@@ -246,179 +263,10 @@ out_err:
     return -1;
 }
 
-int WifiNetwork::set(const char *name, const char *value) {
-    char *n_tmp = strdup(name + strlen("wifi.net."));
-    char *n_next = n_tmp;
-    char *n_local;
-    char *n_rest;
-    int rc = 0;
-
-    if (!strsep(&n_next, ".")) // skip net id
-        goto out_inval;
-
-    if (!(n_local = strsep(&n_next, ".")))
-        goto out_inval;
-
-    n_rest = n_next;
-
-//    LOGD("set(): var '%s'(%s / %s) = %s", name, n_local, n_rest, value);
-    if (!strcasecmp(n_local, "enabled"))
-        rc = setEnabled(atoi(value));
-    else if (!strcmp(n_local, "ssid"))
-        rc = setSsid(value);
-    else if (!strcasecmp(n_local, "bssid"))
-        rc = setBssid(value);
-    else if (!strcasecmp(n_local, "psk"))
-        rc = setPsk(value);
-    else if (!strcasecmp(n_local, "wepkey"))
-        rc = setWepKey(atoi(n_rest) -1, value);
-    else if (!strcasecmp(n_local, "defkeyidx"))
-        rc = setDefaultKeyIndex(atoi(value));
-    else if (!strcasecmp(n_local, "pri"))
-        rc = setPriority(atoi(value));
-    else if (!strcasecmp(n_local, "hiddenssid"))
-        rc = setHiddenSsid(value);
-    else if (!strcasecmp(n_local, "AllowedKeyManagement")) {
-        uint32_t mask = 0;
-        bool none = false;
-        char *v_tmp = strdup(value);
-        char *v_next = v_tmp;
-        char *v_token;
-
-        while((v_token = strsep(&v_next, " "))) {
-            if (!strcasecmp(v_token, "NONE")) {
-                mask = KeyManagementMask::NONE;
-                none = true;
-            } else if (!none) {
-                if (!strcasecmp(v_token, "WPA_PSK"))
-                    mask |= KeyManagementMask::WPA_PSK;
-                else if (!strcasecmp(v_token, "WPA_EAP"))
-                    mask |= KeyManagementMask::WPA_EAP;
-                else if (!strcasecmp(v_token, "IEEE8021X"))
-                    mask |= KeyManagementMask::IEEE8021X;
-                else {
-                    errno = EINVAL;
-                    rc = -1;
-                    free(v_tmp);
-                    goto out;
-                }
-            } else {
-                errno = EINVAL;
-                rc = -1;
-                free(v_tmp);
-                goto out;
-            }
-        }
-        free(v_tmp);
-    } else if (!strcasecmp(n_local, "AllowedProtocols")) {
-        // TODO
-    } else if (!strcasecmp(n_local, "AllowedPairwiseCiphers")) {
-        // TODO
-    } else if (!strcasecmp(n_local, "AllowedAuthAlgorithms")) {
-        // TODO
-    } else if (!strcasecmp(n_local, "AllowedGroupCiphers")) {
-        // TODO
-    } else {
-        errno = ENOENT;
-        free(n_tmp);
-        return -1;
-    }
-
-out:
-    free(n_tmp);
-    return rc;
-
-out_inval:
-    errno = EINVAL;
-    free(n_tmp);
-    return -1;
-}
-
-const char *WifiNetwork::get(const char *name, char *buffer, size_t maxsize) {
-    char *n_tmp = strdup(name + strlen("wifi.net."));
-    char *n_next = n_tmp;
-    char *n_local;
-    char fc[64];
-    char rc[128];
-
-    if (!strsep(&n_next, ".")) // skip net id
-        goto out_inval;
-
-    if (!(n_local = strsep(&n_next, ".")))
-        goto out_inval;
-
-
-    strncpy(fc, n_local, sizeof(fc));
-    rc[0] = '\0';
-    if (n_next)
-        strncpy(rc, n_next, sizeof(rc));
-
-    free(n_tmp);
-
-    if (!strcasecmp(fc, "enabled"))
-        snprintf(buffer, maxsize, "%d", getEnabled());
-    else if (!strcasecmp(fc, "ssid")) {
-        strncpy(buffer,
-                getSsid() ? getSsid() : "none",
-                maxsize);
-    } else if (!strcasecmp(fc, "bssid")) {
-        strncpy(buffer,
-                getBssid() ? getBssid() : "none",
-                maxsize);
-    } else if (!strcasecmp(fc, "psk")) {
-        strncpy(buffer,
-                getPsk() ? getPsk() : "none",
-                maxsize);
-    } else if (!strcasecmp(fc, "wepkey")) {
-        strncpy(buffer,
-                getWepKey(atoi(rc)-1) ? getWepKey(atoi(rc)-1) : "none",
-                maxsize);
-    } else if (!strcasecmp(fc, "defkeyidx"))
-        snprintf(buffer, maxsize, "%d", getDefaultKeyIndex());
-    else if (!strcasecmp(fc, "pri"))
-        snprintf(buffer, maxsize, "%d", getPriority());
-    else if (!strcasecmp(fc, "AllowedKeyManagement")) {
-        if (getAllowedKeyManagement() == KeyManagementMask::NONE) 
-            strncpy(buffer, "NONE", maxsize);
-        else {
-            char tmp[80] = { '\0' };
-
-            if (getAllowedKeyManagement() & KeyManagementMask::WPA_PSK)
-                strcat(tmp, "WPA_PSK ");
-            if (getAllowedKeyManagement() & KeyManagementMask::WPA_EAP)
-                strcat(tmp, "WPA_EAP ");
-            if (getAllowedKeyManagement() & KeyManagementMask::IEEE8021X)
-                strcat(tmp, "IEEE8021X");
-            if (tmp[0] == '\0') {
-                strncpy(buffer, "(internal error)", maxsize);
-                errno = ENOENT;
-                return NULL;
-            }
-            if (tmp[strlen(tmp)] == ' ')
-                tmp[strlen(tmp)] = '\0';
-
-            strncpy(buffer, tmp, maxsize);
-        }
-    } else if (!strcasecmp(fc, "hiddenssid")) {
-        strncpy(buffer,
-                getHiddenSsid() ? getHiddenSsid() : "none",
-                maxsize);
-    } else {
-        strncpy(buffer, "(internal error)", maxsize);
-        errno = ENOENT;
-        return NULL;
-    }
-
-    return buffer;
-
-out_inval:
-    errno = EINVAL;
-    free(n_tmp);
-    return NULL;
-}
-
 int WifiNetwork::setSsid(const char *ssid) {
-    if (mSuppl->setNetworkVar(mNetid, "ssid", ssid))
+    char tmp[255];
+    snprintf(tmp, sizeof(tmp), "\"%s\"", ssid);
+    if (mSuppl->setNetworkVar(mNetid, "ssid", tmp))
         return -1;
     if (mSsid)
         free(mSsid);
@@ -436,7 +284,9 @@ int WifiNetwork::setBssid(const char *bssid) {
 }
 
 int WifiNetwork::setPsk(const char *psk) {
-    if (mSuppl->setNetworkVar(mNetid, "psk", psk))
+    char tmp[255];
+    snprintf(tmp, sizeof(tmp), "\"%s\"", psk);
+    if (mSuppl->setNetworkVar(mNetid, "psk", tmp))
         return -1;
 
     if (mPsk)
@@ -491,28 +341,34 @@ int WifiNetwork::setHiddenSsid(const char *ssid) {
     return 0;
 }
 
-int WifiNetwork::setAllowedKeyManagement(uint32_t mask) {
-    char accum[255];
+int WifiNetwork::setKeyManagement(uint32_t mask) {
+    char accum[64] = {'\0'};
 
     if (mask == KeyManagementMask::NONE)
         strcpy(accum, "NONE");
     else {
-        if (mask & KeyManagementMask::WPA_PSK)
-            strcat(accum, "WPA_PSK ");
-        if (mask & KeyManagementMask::WPA_EAP)
-            strcat(accum, "WPA_EAP ");
-        if (mask & KeyManagementMask::IEEE8021X)
-            strcat(accum, "IEEE8021X ");
+        if (mask & KeyManagementMask::WPA_PSK) 
+            strcat(accum, "WPA-PSK");
+        if (mask & KeyManagementMask::WPA_EAP) {
+            if (accum[0] != '\0')
+                strcat(accum, " ");
+            strcat(accum, "WPA-EAP");
+        }
+        if (mask & KeyManagementMask::IEEE8021X) {
+            if (accum[0] != '\0')
+                strcat(accum, " ");
+            strcat(accum, "IEEE8021X");
+        }
     }
 
     if (mSuppl->setNetworkVar(mNetid, "key_mgmt", accum))
         return -1;
-    mAllowedKeyManagement = mask;
+    mKeyManagement = mask;
     return 0;
 }
 
-int WifiNetwork::setAllowedProtocols(uint32_t mask) {
-    char accum[255];
+int WifiNetwork::setProtocols(uint32_t mask) {
+    char accum[64];
 
     accum[0] = '\0';
 
@@ -524,14 +380,17 @@ int WifiNetwork::setAllowedProtocols(uint32_t mask) {
 
     if (mSuppl->setNetworkVar(mNetid, "proto", accum))
         return -1;
-    mAllowedProtocols = mask;
+    mProtocols = mask;
     return 0;
 }
 
-int WifiNetwork::setAllowedAuthAlgorithms(uint32_t mask) {
-    char accum[255];
+int WifiNetwork::setAuthAlgorithms(uint32_t mask) {
+    char accum[64];
 
     accum[0] = '\0';
+
+    if (mask == 0)
+        strcpy(accum, "");
 
     if (mask & AuthenticationAlgorithmMask::OPEN)
         strcpy(accum, "OPEN ");
@@ -545,12 +404,14 @@ int WifiNetwork::setAllowedAuthAlgorithms(uint32_t mask) {
     if (mSuppl->setNetworkVar(mNetid, "auth_alg", accum))
         return -1;
 
-    mAllowedAuthAlgorithms = mask;
+    mAuthAlgorithms = mask;
     return 0;
 }
 
-int WifiNetwork::setAllowedPairwiseCiphers(uint32_t mask) {
-    char accum[255];
+int WifiNetwork::setPairwiseCiphers(uint32_t mask) {
+    char accum[64];
+
+    accum[0] = '\0';
 
     if (mask == PairwiseCiphersMask::NONE)
         strcpy(accum, "NONE");
@@ -564,12 +425,14 @@ int WifiNetwork::setAllowedPairwiseCiphers(uint32_t mask) {
     if (mSuppl->setNetworkVar(mNetid, "pairwise", accum))
         return -1;
 
-    mAllowedPairwiseCiphers = mask;
+    mPairwiseCiphers = mask;
     return 0;
 }
 
-int WifiNetwork::setAllowedGroupCiphers(uint32_t mask) {
-    char accum[255];
+int WifiNetwork::setGroupCiphers(uint32_t mask) {
+    char accum[64];
+
+    accum[0] = '\0';
 
     if (mask & GroupCiphersMask::WEP40)
         strcat(accum, "WEP40 ");
@@ -582,7 +445,7 @@ int WifiNetwork::setAllowedGroupCiphers(uint32_t mask) {
 
     if (mSuppl->setNetworkVar(mNetid, "group", accum))
         return -1;
-    mAllowedGroupCiphers = mask;
+    mGroupCiphers = mask;
     return 0;
 }
 
@@ -594,7 +457,7 @@ int WifiNetwork::setEnabled(bool enabled) {
             errno = EAGAIN;
             return -1;
         }
-        if (getAllowedKeyManagement() == KeyManagementMask::UNKNOWN) {
+        if (getKeyManagement() == KeyManagementMask::UNKNOWN) {
             LOGE("Cannot enable network when KeyManagement is not set");
             errno = EAGAIN;
             return -1;
@@ -608,29 +471,500 @@ int WifiNetwork::setEnabled(bool enabled) {
     return 0;
 }
 
-int WifiNetwork::registerProperties() {
-    for (const char **p = WifiNetwork::PropertyNames; *p != '\0'; p++) {
-        char *tmp;
-        asprintf(&tmp, "wifi.net.%d.%s", mNetid, *p);
-
-        if (NetworkManager::Instance()->getPropMngr()->registerProperty(tmp,
-                                                                        this)) {
-            free(tmp);
-            return -1;
-        }
-        free(tmp);
-    }
+int WifiNetwork::attachProperties(PropertyManager *pm, const char *nsName) {
+    pm->attachProperty(nsName, mStaticProperties.propSsid);
+    pm->attachProperty(nsName, mStaticProperties.propBssid);
+    pm->attachProperty(nsName, mStaticProperties.propPsk);
+    pm->attachProperty(nsName, mStaticProperties.propWepKey);
+    pm->attachProperty(nsName, mStaticProperties.propDefKeyIdx);
+    pm->attachProperty(nsName, mStaticProperties.propPriority);
+    pm->attachProperty(nsName, mStaticProperties.propKeyManagement);
+    pm->attachProperty(nsName, mStaticProperties.propProtocols);
+    pm->attachProperty(nsName, mStaticProperties.propAuthAlgorithms);
+    pm->attachProperty(nsName, mStaticProperties.propPairwiseCiphers);
+    pm->attachProperty(nsName, mStaticProperties.propGroupCiphers);
+    pm->attachProperty(nsName, mStaticProperties.propHiddenSsid);
+    pm->attachProperty(nsName, mStaticProperties.propEnabled);
     return 0;
 }
 
-int WifiNetwork::unregisterProperties() {
-    for (const char **p = WifiNetwork::PropertyNames; *p != '\0'; p++) {
-        char *tmp;
-        asprintf(&tmp, "wifi.net.%d.%s", mNetid, *p);
+int WifiNetwork::detachProperties(PropertyManager *pm, const char *nsName) {
+    pm->detachProperty(nsName, mStaticProperties.propEnabled);
+    pm->detachProperty(nsName, mStaticProperties.propSsid);
+    pm->detachProperty(nsName, mStaticProperties.propBssid);
+    pm->detachProperty(nsName, mStaticProperties.propPsk);
+    pm->detachProperty(nsName, mStaticProperties.propWepKey);
+    pm->detachProperty(nsName, mStaticProperties.propDefKeyIdx);
+    pm->detachProperty(nsName, mStaticProperties.propPriority);
+    pm->detachProperty(nsName, mStaticProperties.propKeyManagement);
+    pm->detachProperty(nsName, mStaticProperties.propProtocols);
+    pm->detachProperty(nsName, mStaticProperties.propAuthAlgorithms);
+    pm->detachProperty(nsName, mStaticProperties.propPairwiseCiphers);
+    pm->detachProperty(nsName, mStaticProperties.propGroupCiphers);
+    pm->detachProperty(nsName, mStaticProperties.propHiddenSsid);
+    return 0;
+}
 
-        if (NetworkManager::Instance()->getPropMngr()->unregisterProperty(tmp))
-            LOGW("Unable to remove property '%s' (%s)", tmp, strerror(errno));
-        free(tmp);
+int WifiNetwork::parseKeyManagementMask(const char *buffer, uint32_t *mask) {
+    bool none = false;
+    char *v_tmp = strdup(buffer);
+    char *v_next = v_tmp;
+    char *v_token;
+
+//    LOGD("parseKeyManagementMask(%s)", buffer);
+    *mask = 0;
+
+    while((v_token = strsep(&v_next, " "))) {
+        if (!strcasecmp(v_token, "NONE")) {
+            *mask = KeyManagementMask::NONE;
+            none = true;
+        } else if (!none) {
+            if (!strcasecmp(v_token, "WPA-PSK"))
+                *mask |= KeyManagementMask::WPA_PSK;
+            else if (!strcasecmp(v_token, "WPA-EAP"))
+                *mask |= KeyManagementMask::WPA_EAP;
+            else if (!strcasecmp(v_token, "IEEE8021X"))
+                *mask |= KeyManagementMask::IEEE8021X;
+            else {
+                LOGW("Invalid KeyManagementMask value '%s'", v_token);
+                errno = EINVAL;
+                free(v_tmp);
+                return -1;
+            }
+        } else {
+            LOGW("KeyManagementMask value '%s' when NONE", v_token);
+            errno = EINVAL;
+            free(v_tmp);
+            return -1;
+        }
+    }
+    free(v_tmp);
+    return 0;
+}
+
+int WifiNetwork::parseProtocolsMask(const char *buffer, uint32_t *mask) {
+    bool none = false;
+    char *v_tmp = strdup(buffer);
+    char *v_next = v_tmp;
+    char *v_token;
+
+//    LOGD("parseProtocolsMask(%s)", buffer);
+    *mask = 0;
+    while((v_token = strsep(&v_next, " "))) {
+        if (!strcasecmp(v_token, "WPA"))
+            *mask |= SecurityProtocolMask::WPA;
+        else if (!strcasecmp(v_token, "RSN"))
+            *mask |= SecurityProtocolMask::RSN;
+        else {
+            LOGW("Invalid ProtocolsMask value '%s'", v_token);
+            errno = EINVAL;
+            free(v_tmp);
+            return -1;
+        }
+    }
+
+    free(v_tmp);
+    return 0;
+}
+
+int WifiNetwork::parseAuthAlgorithmsMask(const char *buffer, uint32_t *mask) {
+    bool none = false;
+    char *v_tmp = strdup(buffer);
+    char *v_next = v_tmp;
+    char *v_token;
+
+//    LOGD("parseAuthAlgorithmsMask(%s)", buffer);
+
+    *mask = 0;
+    if (buffer[0] == '\0')
+        return 0;
+
+    while((v_token = strsep(&v_next, " "))) {
+        if (!strcasecmp(v_token, "OPEN"))
+            *mask |= AuthenticationAlgorithmMask::OPEN;
+        else if (!strcasecmp(v_token, "SHARED"))
+            *mask |= AuthenticationAlgorithmMask::SHARED;
+        else if (!strcasecmp(v_token, "LEAP"))
+            *mask |= AuthenticationAlgorithmMask::LEAP;
+        else {
+            LOGW("Invalid AuthAlgorithmsMask value '%s'", v_token);
+            errno = EINVAL;
+            free(v_tmp);
+            return -1;
+        }
+    }
+    free(v_tmp);
+    return 0;
+}
+
+int WifiNetwork::parsePairwiseCiphersMask(const char *buffer, uint32_t *mask) {
+    bool none = false;
+    char *v_tmp = strdup(buffer);
+    char *v_next = v_tmp;
+    char *v_token;
+
+//    LOGD("parsePairwiseCiphersMask(%s)", buffer);
+
+    *mask = 0;
+    while((v_token = strsep(&v_next, " "))) {
+        if (!strcasecmp(v_token, "NONE")) {
+            *mask = PairwiseCiphersMask::NONE;
+            none = true;
+        } else if (!none) {
+            if (!strcasecmp(v_token, "TKIP"))
+                *mask |= PairwiseCiphersMask::TKIP;
+            else if (!strcasecmp(v_token, "CCMP"))
+                *mask |= PairwiseCiphersMask::CCMP;
+        else {
+                LOGW("PairwiseCiphersMask value '%s' when NONE", v_token);
+                errno = EINVAL;
+                free(v_tmp);
+                return -1;
+            }
+        } else {
+            LOGW("Invalid PairwiseCiphersMask value '%s'", v_token);
+            errno = EINVAL;
+            free(v_tmp);
+            return -1;
+        }
+    }
+    free(v_tmp);
+    return 0;
+}
+
+int WifiNetwork::parseGroupCiphersMask(const char *buffer, uint32_t *mask) {
+    bool none = false;
+    char *v_tmp = strdup(buffer);
+    char *v_next = v_tmp;
+    char *v_token;
+
+//    LOGD("parseGroupCiphersMask(%s)", buffer);
+
+    *mask = 0;
+    while((v_token = strsep(&v_next, " "))) {
+        if (!strcasecmp(v_token, "WEP40"))
+            *mask |= GroupCiphersMask::WEP40;
+        else if (!strcasecmp(v_token, "WEP104"))
+            *mask |= GroupCiphersMask::WEP104;
+        else if (!strcasecmp(v_token, "TKIP"))
+            *mask |= GroupCiphersMask::TKIP;
+        else if (!strcasecmp(v_token, "CCMP"))
+            *mask |= GroupCiphersMask::CCMP;
+        else {
+            LOGW("Invalid GroupCiphersMask value '%s'", v_token);
+            errno = EINVAL;
+            free(v_tmp);
+            return -1;
+        }
+    }
+    free(v_tmp);
+    return 0;
+}
+
+WifiNetwork::WifiNetworkIntegerProperty::WifiNetworkIntegerProperty(WifiNetwork *wn,
+                                                      const char *name,
+                                                      bool ro,
+                                                      int elements) :
+             IntegerProperty(name, ro, elements) {
+    mWn = wn;
+}
+
+WifiNetwork::WifiNetworkStringProperty::WifiNetworkStringProperty(WifiNetwork *wn,
+                                                                  const char *name,
+                                                              bool ro, int elements) :
+             StringProperty(name, ro, elements) {
+    mWn = wn;
+}
+
+WifiNetwork::WifiNetworkEnabledProperty::WifiNetworkEnabledProperty(WifiNetwork *wn) :
+                WifiNetworkIntegerProperty(wn, "Enabled", false, 1) {
+}
+
+int WifiNetwork::WifiNetworkEnabledProperty::get(int idx, int *buffer) {
+    *buffer = mWn->mEnabled;
+    return 0;
+}
+int WifiNetwork::WifiNetworkEnabledProperty::set(int idx, int value) {
+    return mWn->setEnabled(value == 1);
+}
+
+WifiNetwork::WifiNetworkSsidProperty::WifiNetworkSsidProperty(WifiNetwork *wn) :
+                WifiNetworkStringProperty(wn, "Ssid", false, 1) {
+}
+
+int WifiNetwork::WifiNetworkSsidProperty::get(int idx, char *buffer, size_t max) {
+    strncpy(buffer,
+            mWn->getSsid() ? mWn->getSsid() : "none",
+            max);
+    return 0;
+}
+int WifiNetwork::WifiNetworkSsidProperty::set(int idx, const char *value) {
+    return mWn->setSsid(value);
+}
+
+WifiNetwork::WifiNetworkBssidProperty::WifiNetworkBssidProperty(WifiNetwork *wn) :
+                WifiNetworkStringProperty(wn, "Bssid", false, 1) {
+}
+int WifiNetwork::WifiNetworkBssidProperty::get(int idx, char *buffer, size_t max) {
+    strncpy(buffer,
+            mWn->getBssid() ? mWn->getBssid() : "none",
+            max);
+    return 0;
+}
+int WifiNetwork::WifiNetworkBssidProperty::set(int idx, const char *value) {
+    return mWn->setBssid(value);
+}
+
+WifiNetwork::WifiNetworkPskProperty::WifiNetworkPskProperty(WifiNetwork *wn) :
+                WifiNetworkStringProperty(wn, "Psk", false, 1) {
+}
+int WifiNetwork::WifiNetworkPskProperty::get(int idx, char *buffer, size_t max) {
+    strncpy(buffer,
+            mWn->getPsk() ? mWn->getPsk() : "none",
+            max);
+    return 0;
+}
+int WifiNetwork::WifiNetworkPskProperty::set(int idx, const char *value) {
+    return mWn->setPsk(value);
+}
+
+WifiNetwork::WifiNetworkWepKeyProperty::WifiNetworkWepKeyProperty(WifiNetwork *wn) :
+                WifiNetworkStringProperty(wn, "WepKey", false, 4) {
+}
+
+int WifiNetwork::WifiNetworkWepKeyProperty::get(int idx, char *buffer, size_t max) {
+    const char *key = mWn->getWepKey(idx);
+
+    strncpy(buffer, (key ? key : "none"), max);
+    return 0;
+}
+int WifiNetwork::WifiNetworkWepKeyProperty::set(int idx, const char *value) {
+    return mWn->setWepKey(idx, value);
+}
+
+WifiNetwork::WifiNetworkDefaultKeyIndexProperty::WifiNetworkDefaultKeyIndexProperty(WifiNetwork *wn) :
+                WifiNetworkIntegerProperty(wn, "DefaultKeyIndex", false,  1) {
+}
+int WifiNetwork::WifiNetworkDefaultKeyIndexProperty::get(int idx, int *buffer) {
+    *buffer = mWn->getDefaultKeyIndex();
+    return 0;
+}
+int WifiNetwork::WifiNetworkDefaultKeyIndexProperty::set(int idx, int value) {
+    return mWn->setDefaultKeyIndex(value);
+}
+
+WifiNetwork::WifiNetworkPriorityProperty::WifiNetworkPriorityProperty(WifiNetwork *wn) :
+                WifiNetworkIntegerProperty(wn, "Priority", false, 1) {
+}
+int WifiNetwork::WifiNetworkPriorityProperty::get(int idx, int *buffer) {
+    *buffer = mWn->getPriority();
+    return 0;
+}
+int WifiNetwork::WifiNetworkPriorityProperty::set(int idx, int value) {
+    return mWn->setPriority(value);
+}
+
+WifiNetwork::WifiNetworkKeyManagementProperty::WifiNetworkKeyManagementProperty(WifiNetwork *wn) :
+                WifiNetworkStringProperty(wn, "KeyManagement", false, 1) {
+}
+int WifiNetwork::WifiNetworkKeyManagementProperty::get(int idx, char *buffer, size_t max) {
+
+    if (mWn->getKeyManagement() == KeyManagementMask::NONE)
+        strncpy(buffer, "NONE", max);
+    else {
+        char tmp[80] = { '\0' };
+
+        if (mWn->getKeyManagement() & KeyManagementMask::WPA_PSK)
+            strcat(tmp, "WPA-PSK");
+        if (mWn->getKeyManagement() & KeyManagementMask::WPA_EAP) {
+            if (tmp[0] != '\0')
+                strcat(tmp, " ");
+            strcat(tmp, "WPA-EAP");
+        }
+        if (mWn->getKeyManagement() & KeyManagementMask::IEEE8021X) {
+            if (tmp[0] != '\0')
+                strcat(tmp, " ");
+            strcat(tmp, "IEEE8021X");
+        }
+        if (tmp[0] == '\0') {
+            strncpy(buffer, "(internal error)", max);
+            errno = ENOENT;
+            return -1;
+        }
+        if (tmp[strlen(tmp)] == ' ')
+            tmp[strlen(tmp)] = '\0';
+
+        strncpy(buffer, tmp, max);
     }
     return 0;
+}
+int WifiNetwork::WifiNetworkKeyManagementProperty::set(int idx, const char *value) {
+    uint32_t mask;
+    if (mWn->parseKeyManagementMask(value, &mask))
+        return -1;
+    return mWn->setKeyManagement(mask);
+}
+
+WifiNetwork::WifiNetworkProtocolsProperty::WifiNetworkProtocolsProperty(WifiNetwork *wn) :
+                WifiNetworkStringProperty(wn, "Protocols", false, 1) {
+}
+int WifiNetwork::WifiNetworkProtocolsProperty::get(int idx, char *buffer, size_t max) {
+    char tmp[80] = { '\0' };
+
+    if (mWn->getProtocols() & SecurityProtocolMask::WPA)
+        strcat(tmp, "WPA");
+    if (mWn->getProtocols() & SecurityProtocolMask::RSN) {
+        if (tmp[0] != '\0')
+            strcat(tmp, " ");
+        strcat(tmp, "RSN");
+    }
+
+    if (tmp[0] == '\0') {
+        strncpy(buffer, "(internal error)", max);
+        errno = ENOENT;
+        return NULL;
+    }
+    if (tmp[strlen(tmp)] == ' ')
+        tmp[strlen(tmp)] = '\0';
+
+    strncpy(buffer, tmp, max);
+    return 0;
+}
+int WifiNetwork::WifiNetworkProtocolsProperty::set(int idx, const char *value) {
+    uint32_t mask;
+    if (mWn->parseProtocolsMask(value, &mask))
+        return -1;
+    return mWn->setProtocols(mask);
+}
+
+WifiNetwork::WifiNetworkAuthAlgorithmsProperty::WifiNetworkAuthAlgorithmsProperty(WifiNetwork *wn) :
+                WifiNetworkStringProperty(wn, "AuthAlgorithms", false, 1) {
+}
+int WifiNetwork::WifiNetworkAuthAlgorithmsProperty::get(int idx, char *buffer, size_t max) {
+    char tmp[80] = { '\0' };
+
+    if (mWn->getAuthAlgorithms() == 0) {
+        strncpy(buffer, "NONE", max);
+        return 0;
+    }
+
+    if (mWn->getAuthAlgorithms() & AuthenticationAlgorithmMask::OPEN)
+        strcat(tmp, "OPEN");
+    if (mWn->getAuthAlgorithms() & AuthenticationAlgorithmMask::SHARED) {
+        if (tmp[0] != '\0')
+            strcat(tmp, " ");
+        strcat(tmp, "SHARED");
+    }
+    if (mWn->getAuthAlgorithms() & AuthenticationAlgorithmMask::LEAP) {
+        if (tmp[0] != '\0')
+            strcat(tmp, " ");
+        strcat(tmp, "LEAP");
+    }
+
+    if (tmp[0] == '\0') {
+        strncpy(buffer, "(internal error)", max);
+        errno = ENOENT;
+        return NULL;
+    }
+    if (tmp[strlen(tmp)] == ' ')
+        tmp[strlen(tmp)] = '\0';
+
+    strncpy(buffer, tmp, max);
+    return 0;
+}
+int WifiNetwork::WifiNetworkAuthAlgorithmsProperty::set(int idx, const char *value) {
+    uint32_t mask;
+    if (mWn->parseAuthAlgorithmsMask(value, &mask))
+        return -1;
+    return mWn->setAuthAlgorithms(mask);
+}
+
+WifiNetwork::WifiNetworkPairwiseCiphersProperty::WifiNetworkPairwiseCiphersProperty(WifiNetwork *wn) :
+                WifiNetworkStringProperty(wn, "PairwiseCiphers", false, 1) {
+}
+int WifiNetwork::WifiNetworkPairwiseCiphersProperty::get(int idx, char *buffer, size_t max) {
+    if (mWn->getPairwiseCiphers() == PairwiseCiphersMask::NONE)
+        strncpy(buffer, "NONE", max);
+    else {
+        char tmp[80] = { '\0' };
+
+        if (mWn->getPairwiseCiphers() & PairwiseCiphersMask::TKIP)
+            strcat(tmp, "TKIP");
+        if (mWn->getPairwiseCiphers() & PairwiseCiphersMask::CCMP) {
+            if (tmp[0] != '\0')
+                strcat(tmp, " ");
+            strcat(tmp, "CCMP");
+        }
+        if (tmp[0] == '\0') {
+            strncpy(buffer, "(internal error)", max);
+            errno = ENOENT;
+            return NULL;
+        }
+        if (tmp[strlen(tmp)] == ' ')
+            tmp[strlen(tmp)] = '\0';
+
+        strncpy(buffer, tmp, max);
+    }
+    return 0;
+}
+int WifiNetwork::WifiNetworkPairwiseCiphersProperty::set(int idx, const char *value) {
+    uint32_t mask;
+    if (mWn->parsePairwiseCiphersMask(value, &mask))
+        return -1;
+    return mWn->setPairwiseCiphers(mask);
+}
+
+WifiNetwork::WifiNetworkGroupCiphersProperty::WifiNetworkGroupCiphersProperty(WifiNetwork *wn) :
+                WifiNetworkStringProperty(wn, "GroupCiphers", false, 1) {
+}
+int WifiNetwork::WifiNetworkGroupCiphersProperty::get(int idx, char *buffer, size_t max) {
+   char tmp[80] = { '\0' };
+
+    if (mWn->getGroupCiphers() & GroupCiphersMask::WEP40)
+        strcat(tmp, "WEP40");
+    if (mWn->getGroupCiphers() & GroupCiphersMask::WEP104) {
+        if (tmp[0] != '\0')
+            strcat(tmp, " ");
+        strcat(tmp, "WEP104");
+    }
+    if (mWn->getGroupCiphers() & GroupCiphersMask::TKIP) {
+        if (tmp[0] != '\0')
+            strcat(tmp, " ");
+        strcat(tmp, "TKIP");
+    }
+    if (mWn->getGroupCiphers() & GroupCiphersMask::CCMP) {
+        if (tmp[0] != '\0')
+            strcat(tmp, " ");
+        strcat(tmp, "CCMP");
+    }
+
+    if (tmp[0] == '\0') {
+        strncpy(buffer, "(internal error)", max);
+        errno = ENOENT;
+        return -1;
+    }
+    if (tmp[strlen(tmp)] == ' ')
+        tmp[strlen(tmp)] = '\0';
+
+    strncpy(buffer, tmp, max);
+    return 0;
+}
+int WifiNetwork::WifiNetworkGroupCiphersProperty::set(int idx, const char *value) {
+    uint32_t mask;
+    if (mWn->parseGroupCiphersMask(value, &mask))
+        return -1;
+    return mWn->setGroupCiphers(mask);
+}
+
+WifiNetwork::WifiNetworkHiddenSsidProperty::WifiNetworkHiddenSsidProperty(WifiNetwork *wn) :
+                WifiNetworkStringProperty(wn, "HiddenSsid", false, 1) {
+}
+int WifiNetwork::WifiNetworkHiddenSsidProperty::get(int idx, char *buffer, size_t max) {
+    const char *scan_ssid = mWn->getHiddenSsid();
+    
+    strncpy(buffer, (scan_ssid ? scan_ssid : "none"), max);
+    return 0;
+}
+int WifiNetwork::WifiNetworkHiddenSsidProperty::set(int idx, const char *value) {
+    return mWn->setHiddenSsid(value);
 }

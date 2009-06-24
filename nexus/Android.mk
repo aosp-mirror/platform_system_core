@@ -7,23 +7,22 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:=                                      \
                   main.cpp                             \
-                  NetworkManager.cpp                   \
+                  NexusCommand.cpp                     \
                   CommandListener.cpp                  \
+                  Property.cpp                         \
+                  PropertyManager.cpp                  \
+                  InterfaceConfig.cpp                  \
+                  NetworkManager.cpp                   \
                   Controller.cpp                       \
                   WifiController.cpp                   \
-                  LoopController.cpp                   \
-                  NexusCommand.cpp                     \
                   TiwlanWifiController.cpp             \
+                  TiwlanEventListener.cpp              \
+                  WifiNetwork.cpp                      \
+                  WifiStatusPoller.cpp                 \
+                  ScanResult.cpp                       \
                   Supplicant.cpp                       \
                   SupplicantEvent.cpp                  \
                   SupplicantListener.cpp               \
-                  VpnController.cpp                    \
-                  ScanResult.cpp                       \
-                  WifiScanner.cpp                      \
-                  WifiNetwork.cpp                      \
-                  OpenVpnController.cpp                \
-                  InterfaceConfig.cpp                  \
-                  PropertyManager.cpp                  \
                   SupplicantState.cpp                  \
                   SupplicantEventFactory.cpp           \
                   SupplicantConnectedEvent.cpp         \
@@ -34,8 +33,11 @@ LOCAL_SRC_FILES:=                                      \
                   SupplicantConnectionTimeoutEvent.cpp \
                   SupplicantDisconnectedEvent.cpp      \
                   SupplicantStatus.cpp                 \
-                  TiwlanEventListener.cpp              \
+                  OpenVpnController.cpp                \
+                  VpnController.cpp                    \
+                  LoopController.cpp                   \
                   DhcpClient.cpp DhcpListener.cpp      \
+                  DhcpState.cpp DhcpEvent.cpp          \
 
 LOCAL_MODULE:= nexus
 

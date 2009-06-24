@@ -27,56 +27,66 @@
 
 VpnController::VpnController(PropertyManager *propmngr,
                              IControllerHandler *handlers) :
-               Controller("VPN", propmngr, handlers) {
+               Controller("vpn", propmngr, handlers) {
     mEnabled = false;
+
+    mStaticProperties.propEnabled = new VpnEnabledProperty(this);
+    mDynamicProperties.propGateway = new IPV4AddressPropertyHelper("Gateway",
+                                                                   false,
+                                                                   &mGateway);
 }
 
 int VpnController::start() {
-    mPropMngr->registerProperty("vpn.enabled", this);
+    mPropMngr->attachProperty("vpn", mStaticProperties.propEnabled);
     return 0;
 }
 
 int VpnController::stop() {
-    mPropMngr->unregisterProperty("vpn.enabled");
+    mPropMngr->detachProperty("vpn", mStaticProperties.propEnabled);
     return 0;
 }
 
-int VpnController::set(const char *name, const char *value) {
-    if (!strcmp(name, "vpn.enabled")) {
-        int en = atoi(value);
-        int rc;
-
-        if (en == mEnabled)
-            return 0;
-        rc = (en ? enable() : disable());
-
-        if (!rc) {
-            mEnabled = en;
-            if (en) 
-                mPropMngr->unregisterProperty("vpn.gateway");
-            else
-                mPropMngr->unregisterProperty("vpn.gateway");
-        }
-        return rc;
-    } if (!strcmp(name, "vpn.gateway")) {
-        if (!inet_aton(value, &mVpnGateway)) {
-            errno = EINVAL;
-            return -1;
-        }
-        return 0;
-    }
-
-    return Controller::set(name, value);
+VpnController::VpnIntegerProperty::VpnIntegerProperty(VpnController *c,
+                                                      const char *name,
+                                                      bool ro,
+                                                      int elements) :
+                IntegerProperty(name, ro, elements) {
+    mVc = c;
 }
 
-const char *VpnController::get(const char *name, char *buffer, size_t maxsize) {
-    if (!strcmp(name, "vpn.enabled")) {
-        snprintf(buffer, maxsize, "%d", mEnabled);
-        return buffer;
-    } if (!strcmp(name, "vpn.gateway")) {
-        snprintf(buffer, maxsize, "%s", inet_ntoa(mVpnGateway));
-        return buffer;
-    }
+VpnController::VpnStringProperty::VpnStringProperty(VpnController *c,
+                                                    const char *name,
+                                                    bool ro, int elements) :
+                StringProperty(name, ro, elements) {
+    mVc = c;
+}
 
-    return Controller::get(name, buffer, maxsize);
+VpnController::VpnIPV4AddressProperty::VpnIPV4AddressProperty(VpnController *c,
+                                                              const char *name,
+                                                              bool ro, int elements) :
+                IPV4AddressProperty(name, ro, elements) {
+    mVc = c;
+}
+
+VpnController::VpnEnabledProperty::VpnEnabledProperty(VpnController *c) :
+                VpnIntegerProperty(c, "Enabled", false, 1) {
+}
+int VpnController::VpnEnabledProperty::get(int idx, int *buffer) {
+    *buffer = mVc->mEnabled;
+    return 0;
+}
+int VpnController::VpnEnabledProperty::set(int idx, int value) {
+    int rc;
+    if (!value) {
+        mVc->mPropMngr->detachProperty("vpn", mVc->mDynamicProperties.propGateway);
+        rc = mVc->disable();
+    } else {
+        rc = mVc->enable();
+        if (!rc) {
+            mVc->mPropMngr->attachProperty("vpn", mVc->mDynamicProperties.propGateway);
+        }
+    }
+    if (!rc)
+        mVc->mEnabled = value;
+    return rc;
 }
