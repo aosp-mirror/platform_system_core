@@ -66,6 +66,9 @@ int vfat_check(blkdev_t *dev)
     } else if (rc == 2) {
         LOG_VOL("Filesystem check failed (not a FAT filesystem)");
         return -ENODATA;
+    } else if (rc == -11) {
+        LOG_VOL("Filesystem check crashed");
+        return -EIO;
     } else {
         LOG_VOL("Filesystem check failed (unknown exit code %d)", rc);
         return -EIO;
