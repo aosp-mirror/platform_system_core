@@ -14,17 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef _ICONTROLLER_HANDLER_H
-#define _ICONTROLLER_HANDLER_H
+#ifndef _DhcpState_H
+#define _DhcpState_H
 
-class Controller;
-class InterfaceConfig;
-
-class IControllerHandler {
+class DhcpState {
 public:
-    virtual void onInterfaceConnected(Controller *c, const InterfaceConfig *cfg) = 0;
-    virtual void onInterfaceDisconnected(Controller *c, const char *name) = 0;
+    static const int UNKNOWN = 0;
+    static const int STOPPED = 1;
+    static const int STARTED = 2;
 };
 
 #endif
-

@@ -23,6 +23,7 @@
 
 #include "NetworkManager.h"
 #include "InterfaceConfig.h"
+#include "DhcpClient.h"
 
 NetworkManager *NetworkManager::sInstance = NULL;
 
@@ -36,6 +37,7 @@ NetworkManager::NetworkManager(PropertyManager *propMngr) {
     mBroadcaster = NULL;
     mControllers = new ControllerCollection();
     mPropMngr = propMngr;
+    mDhcp = new DhcpClient(this);
 }
 
 NetworkManager::~NetworkManager() {
@@ -89,8 +91,8 @@ Controller *NetworkManager::findController(const char *name) {
     return NULL;
 }
 
-void NetworkManager::onInterfaceStarted(Controller *c, const InterfaceConfig *cfg) {
-    LOGD("Interface %s started by controller %s", c->getBoundInterface(), c->getName());
+void NetworkManager::onInterfaceConnected(Controller *c, const InterfaceConfig *cfg) {
+    LOGD("Controller %s interface %s connected", c->getName(), c->getBoundInterface());
 
     // Look up the interface
 
@@ -98,9 +100,9 @@ void NetworkManager::onInterfaceStarted(Controller *c, const InterfaceConfig *cf
     }
 
     if (cfg) {
-        if (cfg->getUseDhcp()) {
-            // Launch DHCP thread
-        } else {
+        if (cfg->getUseDhcp() && mDhcp->start(c->getBoundInterface())) {
+            LOGE("DHCP start failed");
+        } else if (!cfg->getUseDhcp()) {
             // Static configuration
         }
     } else {
@@ -109,6 +111,11 @@ void NetworkManager::onInterfaceStarted(Controller *c, const InterfaceConfig *cf
     }
 }
 
-void NetworkManager::onInterfaceStopping(Controller *c, const char *name) {
-    LOGD("Interface %s stopped by controller %s", name, c->getName());
+void NetworkManager::onInterfaceDisconnected(Controller *c, const char *name) {
+    LOGD("Controller %s interface %s disconnected", c->getName(), name);
+
+    // If we have a DHCP request out on this interface then stop it
+    if (1) {
+        mDhcp->stop();
+    }
 }

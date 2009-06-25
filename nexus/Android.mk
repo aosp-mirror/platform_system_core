@@ -34,7 +34,8 @@ LOCAL_SRC_FILES:=                                      \
                   SupplicantConnectionTimeoutEvent.cpp \
                   SupplicantDisconnectedEvent.cpp      \
                   SupplicantStatus.cpp                 \
-                  TiwlanEventListener.cpp
+                  TiwlanEventListener.cpp              \
+                  DhcpClient.cpp DhcpListener.cpp      \
 
 LOCAL_MODULE:= nexus
 

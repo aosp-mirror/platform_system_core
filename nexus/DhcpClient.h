@@ -1,3 +1,4 @@
+
 /*
  * Copyright (C) 2008 The Android Open Source Project
  *
@@ -14,17 +15,27 @@
  * limitations under the License.
  */
 
-#ifndef _ICONTROLLER_HANDLER_H
-#define _ICONTROLLER_HANDLER_H
+#ifndef _DhcpClient_H
+#define _DhcpClient_H
 
-class Controller;
-class InterfaceConfig;
+class IDhcpEventHandlers;
+class ServiceManager;
+class DhcpListener;
 
-class IControllerHandler {
+class DhcpClient {
+    int                mState;
+    IDhcpEventHandlers *mHandlers;
+    ServiceManager     *mServiceManager;
+    DhcpListener       *mListener;
+
 public:
-    virtual void onInterfaceConnected(Controller *c, const InterfaceConfig *cfg) = 0;
-    virtual void onInterfaceDisconnected(Controller *c, const char *name) = 0;
+    DhcpClient(IDhcpEventHandlers *handlers);
+    virtual ~DhcpClient();
+
+    int getState() { return mState; }
+
+    int start(const char *interface);
+    int stop();
 };
 
 #endif
-

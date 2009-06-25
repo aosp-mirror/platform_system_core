@@ -14,17 +14,23 @@
  * limitations under the License.
  */
 
-#ifndef _ICONTROLLER_HANDLER_H
-#define _ICONTROLLER_HANDLER_H
+#ifndef _DhcpListener_H
+#define _DhcpListener_H
 
-class Controller;
-class InterfaceConfig;
+#include <sysutils/SocketListener.h>
 
-class IControllerHandler {
+class IDhcpEventHandlers;
+
+class DhcpListener : public SocketListener {
+    IDhcpEventHandlers *mHandlers;
+
 public:
-    virtual void onInterfaceConnected(Controller *c, const InterfaceConfig *cfg) = 0;
-    virtual void onInterfaceDisconnected(Controller *c, const char *name) = 0;
+
+    DhcpListener(IDhcpEventHandlers *handlers);
+    virtual ~DhcpListener();
+
+private:
+    bool onDataAvailable(SocketClient *cli);
 };
 
 #endif
-

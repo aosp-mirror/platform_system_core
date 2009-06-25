@@ -14,17 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef _ICONTROLLER_HANDLER_H
-#define _ICONTROLLER_HANDLER_H
+#define LOG_TAG "DhcpListener"
+#include <cutils/log.h>
 
-class Controller;
-class InterfaceConfig;
+#include <DhcpListener.h>
+#include "IDhcpEventHandlers.h"
 
-class IControllerHandler {
-public:
-    virtual void onInterfaceConnected(Controller *c, const InterfaceConfig *cfg) = 0;
-    virtual void onInterfaceDisconnected(Controller *c, const char *name) = 0;
-};
+DhcpListener::DhcpListener(IDhcpEventHandlers *handlers) :
+              SocketListener("dhcp_ng", false) {
+    mHandlers = handlers;
+}
 
-#endif
+DhcpListener::~DhcpListener() {
+}
 
+bool DhcpListener::onDataAvailable(SocketClient *cli) {
+    LOGD("onDataAvailable()");
+    return true;
+}
