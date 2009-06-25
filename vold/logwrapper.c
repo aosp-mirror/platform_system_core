@@ -42,7 +42,8 @@ int parent(const char *tag, int parent_read) {
                 buffer[b] = '\0';
             } else if (buffer[b] == '\n') {
                 buffer[b] = '\0';
-                LOG(LOG_INFO, tag, &buffer[a]);
+
+                LOG(LOG_INFO, tag, "%s", &buffer[a]);
                 a = b + 1;
             }
         }
