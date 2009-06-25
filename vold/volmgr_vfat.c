@@ -26,7 +26,7 @@
 
 #define VFAT_DEBUG 0
 
-static char FSCK_MSDOS_PATH[] = "/system/bin/dosfsck";
+static char FSCK_MSDOS_PATH[] = "/system/bin/fsck_msdos";
 
 int vfat_identify(blkdev_t *dev)
 {
@@ -51,51 +51,25 @@ int vfat_check(blkdev_t *dev)
         return 0;
     }
 
-    do {
+    char *args[5];
+    args[0] = FSCK_MSDOS_PATH;
+    args[1] = "-p";
+    args[2] = "-f";
+    args[3] = blkdev_get_devpath(dev);
+    args[4] = NULL;
+    rc = logwrap(4, args, 1);
+    free(args[3]);
 
-        char *args[6];
-        args[0] = FSCK_MSDOS_PATH;
-        args[1] = "-v";
-
-        if (rw) {
-            args[2] = "-w";
-            args[3] = "-p";
-            args[4] = blkdev_get_devpath(dev);
-            args[5] = NULL;
-            rc = logwrap(5, args, 1);
-            free(args[4]);
-        } else {
-            args[2] = "-n";
-            args[3] = blkdev_get_devpath(dev);
-            args[4] = NULL;
-            rc = logwrap(4, args, 1);
-            free(args[3]);
-        }
-
-        if (rc == 0) {
-            LOG_VOL("Filesystem check completed OK");
-            return 0;
-        } else if (rc == 1) {
-            LOG_VOL("Filesystem check failed (general failure)");
-            return -EINVAL;
-        } else if (rc == 2) {
-            LOG_VOL("Filesystem check failed (invalid usage)");
-            return -EIO;
-        } else if (rc == 4) {
-            LOG_VOL("Filesystem check completed (errors fixed)");
-        } else if (rc == 6) {
-            LOG_VOL("Filesystem read-only - retrying check RO");
-            rw = false;
-            continue;
-        } else if (rc == 8) {
-            LOG_VOL("Filesystem check failed (not a FAT filesystem)");
-            return -ENODATA;
-        } else {
-            LOG_VOL("Filesystem check failed (unknown exit code %d)", rc);
-            return -EIO;
-        }
-    } while (0);
-
+    if (rc == 0) {
+        LOG_VOL("Filesystem check completed OK");
+        return 0;
+    } else if (rc == 2) {
+        LOG_VOL("Filesystem check failed (not a FAT filesystem)");
+        return -ENODATA;
+    } else {
+        LOG_VOL("Filesystem check failed (unknown exit code %d)", rc);
+        return -EIO;
+    }
     return 0;
 }
 
