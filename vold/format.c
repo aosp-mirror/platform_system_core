@@ -39,12 +39,13 @@ int format_partition(blkdev_t *part, char *type)
     if (!strcmp(type, FORMAT_TYPE_FAT32)) {
         char *args[6];
         args[0] = MKDOSFS_PATH;
-        args[1] = "-c 32";
-        args[2] = "-n 2";
-        args[3] = "-O android";
-        args[4] = devpath;
-        args[5] = NULL;
-        rc = logwrap(5, args, 1);
+        args[1] = "-F 32";
+        args[2] = "-c 32";
+        args[3] = "-n 2";
+        args[4] = "-O android";
+        args[5] = devpath;
+        args[6] = NULL;
+        rc = logwrap(6, args, 1);
     } else {
         char *args[7];
         args[0] = MKE2FS_PATH;
