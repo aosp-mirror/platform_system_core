@@ -6,8 +6,7 @@ include $(CLEAR_VARS)
 copy_from := \
 	etc/dbus.conf \
 	etc/init.goldfish.sh \
-	etc/ppp/peers/common \
-	etc/racoon/racoon.conf \
+	etc/ppp/ip-up-vpn \
 	etc/hosts
 
 copy_to := $(addprefix $(TARGET_OUT)/,$(copy_from))
