@@ -1854,6 +1854,11 @@ class Compiler : public ErrorSink {
         Vector<Mark> mLevelStack;
     };
 
+    struct Value {
+        Type* pType;
+        bool mLValue; // This is the L-value (true means the lvalue)
+    };
+
     int ch; // Current input character, or EOF
     tokenid_t tok;      // token
     intptr_t tokc;    // token extra info
@@ -1875,9 +1880,13 @@ class Compiler : public ErrorSink {
     SymbolStack mGlobals;
     SymbolStack mLocals;
 
+    // Prebuilt types, makes things slightly faster.
     Type* mkpInt;
     Type* mkpChar;
     Type* mkpVoid;
+
+    // Track what's on the expression stack
+    Vector<Value> mValueStack;
 
     InputStream* file;
 
@@ -1995,10 +2004,18 @@ class Compiler : public ErrorSink {
         }
     }
 
+    bool isSymbol(tokenid_t t) {
+        return t >= TOK_SYMBOL &&
+            ((size_t) (t-TOK_SYMBOL)) < mTokenTable.size();
+    }
+
+    bool isSymbolOrKeyword(tokenid_t t) {
+        return t >= TOK_KEYWORD &&
+            ((size_t) (t-TOK_SYMBOL)) < mTokenTable.size();
+    }
+
     VariableInfo* VI(tokenid_t t) {
-        if ( t < TOK_SYMBOL || ((size_t) (t-TOK_SYMBOL)) >= mTokenTable.size()) {
-            internalError();
-        }
+        assert(isSymbol(t));
         VariableInfo* pV = mTokenTable[t].mpVariableInfo;
         if (pV && pV->tok != t) {
             internalError();
@@ -2010,7 +2027,8 @@ class Compiler : public ErrorSink {
         return t >= TOK_SYMBOL && VI(t) != 0;
     }
 
-    inline const char* nameof(tokenid_t t) {
+    const char* nameof(tokenid_t t) {
+        assert(isSymbolOrKeyword(t));
         return mTokenTable[t].pText;
     }
 
@@ -2324,37 +2342,48 @@ class Compiler : public ErrorSink {
         return false;
     }
 
-    /* l is one if '=' parsing wanted (quick hack) */
-    void unary(intptr_t l) {
-        intptr_t n, t, a;
-        int c;
-        String tString;
-        t = 0;
-        n = 1; /* type of expression 0 = forward, 1 = value, other = lvalue */
-        if (tok == '\"') {
+    bool acceptStringLiteral() {
+        if (tok == '"') {
             pGen->li((int) glo);
-            while (ch != '\"' && ch != EOF) {
-                *allocGlobalSpace(1) = getq();
+            // This while loop merges multiple adjacent string constants.
+            while (tok == '"') {
+                while (ch != '"' && ch != EOF) {
+                    *allocGlobalSpace(1) = getq();
+                }
+                if (ch != '"') {
+                    error("Unterminated string constant.");
+                }
+                inp();
+                next();
             }
-            if (ch != '\"') {
-                error("Unterminated string constant.");
-            }
+            /* Null terminate */
             *glo = 0;
             /* align heap */
             allocGlobalSpace((char*) (((intptr_t) glo + 4) & -4) - glo);
-            inp();
-            next();
+
+            return true;
+        }
+        return false;
+    }
+    /* Parse and evaluate a unary expression.
+     * allowAssignment is true if '=' parsing wanted (quick hack)
+     */
+    void unary(bool allowAssignment) {
+        intptr_t n, t, a;
+        t = 0;
+        n = 1; /* type of expression 0 = forward, 1 = value, other = lvalue */
+        if (acceptStringLiteral()) {
+            // Nothing else to do.
         } else {
-            c = tokl;
+            int c = tokl;
             a = tokc;
             t = tok;
-            tString = mTokenString;
             next();
             if (t == TOK_NUM) {
                 pGen->li(a);
             } else if (c == 2) {
                 /* -, +, !, ~ */
-                unary(0);
+                unary(false);
                 pGen->clearR1();
                 if (t == '!')
                     pGen->gcmp(a);
@@ -2378,7 +2407,7 @@ class Compiler : public ErrorSink {
                     t = 0;
                 }
                 skip(')');
-                unary(0);
+                unary(false);
                 if (tok == '=') {
                     next();
                     pGen->pushR0();
@@ -2393,7 +2422,7 @@ class Compiler : public ErrorSink {
                 next();
             } else if (t == EOF ) {
                 error("Unexpected EOF.");
-            } else if (!checkSymbol(t, &tString)) {
+            } else if (!checkSymbol(t)) {
                 // Don't have to do anything special here, the error
                 // message was printed by checkSymbol() above.
             } else {
@@ -2405,11 +2434,10 @@ class Compiler : public ErrorSink {
                 n = (intptr_t) VI(t)->pAddress;
                 /* forward reference: try dlsym */
                 if (!n) {
-                    n = (intptr_t) dlsym(RTLD_DEFAULT,
-                                         tString.getUnwrapped());
+                    n = (intptr_t) dlsym(RTLD_DEFAULT, nameof(t));
                     VI(t)->pAddress = (void*) n;
                 }
-                if ((tok == '=') & l) {
+                if ((tok == '=') & allowAssignment) {
                     /* assignment */
                     next();
                     expr();
@@ -2417,7 +2445,7 @@ class Compiler : public ErrorSink {
                 } else if (tok != '(') {
                     /* variable */
                     if (!n) {
-                        error("Undefined variable %s", tString.getUnwrapped());
+                        error("Undefined variable %s", nameof(t));
                     }
                     pGen->loadR0(n, tokl == 11, tokc);
                     if (tokl == 11) {
@@ -2435,7 +2463,7 @@ class Compiler : public ErrorSink {
             /* push args and invert order */
             a = pGen->beginFunctionCallArguments();
             next();
-            l = 0;
+            int l = 0;
             while (tok != ')' && tok != EOF) {
                 expr();
                 pGen->storeR0ToArg(l);
@@ -2458,28 +2486,30 @@ class Compiler : public ErrorSink {
         }
     }
 
-    void sum(int l) {
+    /* Recursive descent parser for binary operations.
+     */
+    void binaryOp(int level) {
         intptr_t t, n, a;
         t = 0;
-        if (l-- == 1)
-            unary(1);
+        if (level-- == 1)
+            unary(true);
         else {
-            sum(l);
+            binaryOp(level);
             a = 0;
-            while (l == tokl) {
+            while (level == tokl) {
                 n = tok;
                 t = tokc;
                 next();
 
-                if (l > 8) {
+                if (level > 8) {
                     a = pGen->gtst(t == OP_LOGICAL_OR, a); /* && and || output code generation */
-                    sum(l);
+                    binaryOp(level);
                 } else {
                     pGen->pushR0();
-                    sum(l);
+                    binaryOp(level);
                     pGen->popR1();
 
-                    if ((l == 4) | (l == 5)) {
+                    if ((level == 4) | (level == 5)) {
                         pGen->gcmp(t);
                     } else {
                         pGen->genOp(t);
@@ -2487,7 +2517,7 @@ class Compiler : public ErrorSink {
                 }
             }
             /* && and || output code generation */
-            if (a && l > 8) {
+            if (a && level > 8) {
                 a = pGen->gtst(t == OP_LOGICAL_OR, a);
                 pGen->li(t != OP_LOGICAL_OR);
                 pGen->gjmp(5); /* jmp $ + 5 (sizeof li, FIXME for ARM) */
@@ -2498,7 +2528,7 @@ class Compiler : public ErrorSink {
     }
 
     void expr() {
-        sum(11);
+        binaryOp(11);
     }
 
     int test_expr() {
@@ -2809,7 +2839,7 @@ class Compiler : public ErrorSink {
     }
 
     bool checkSymbol() {
-        return checkSymbol(tok, &mTokenString);
+        return checkSymbol(tok);
     }
 
     void decodeToken(String& buffer, tokenid_t token) {
@@ -2830,7 +2860,7 @@ class Compiler : public ErrorSink {
         }
     }
 
-    bool checkSymbol(tokenid_t token, String* pText) {
+    bool checkSymbol(tokenid_t token) {
         bool result = token >= TOK_SYMBOL;
         if (!result) {
             String temp;

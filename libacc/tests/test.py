@@ -58,8 +58,15 @@ def compileArm(args):
 
 def compare(a, b):
     if a != b:
-        firstDiff = firstDifference(a,b)
-        print "Strings differ at character", firstDiff, a[firstDiff], b[firstDiff]
+        firstDiff = firstDifference(a, b)
+        print "Strings differ at character %d '%s' != '%s'" % (
+            firstDiff, safeAccess(a, firstDiff), safeAccess(b, firstDiff))
+
+def safeAccess(s, i):
+    if 0 <= i < len(s):
+        return s[i]
+    else:
+        return '?'
 
 def firstDifference(a, b):
     commonLen = min(len(a), len(b))
@@ -89,6 +96,11 @@ class TestACC(unittest.TestCase):
     def testRunReturnVal(self):
         self.compileCheck(["-R", "data/returnval-ansi.c"],
 		"Executing compiled code:\nresult: 42\n")
+
+    def testStingLiteralConcatenation(self):
+        self.compileCheck(["-R", "data/testStringConcat.c"],
+		"Executing compiled code:\nresult: 13\n", "Hello, world\n")
+
     def testRunOTCCANSI(self):
         self.compileCheck(["-R", "data/otcc-ansi.c", "data/returnval.c"], 
             "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\natcc-ansi.c: result: 42\nresult: 42\n")
