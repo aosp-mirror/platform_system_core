@@ -289,13 +289,17 @@ service installd /system/bin/installd
 service flash_recovery /system/bin/flash_image recovery /system/recovery.img
     oneshot
 
-service racoon /system/bin/racoon -F -f /etc/racoon/racoon.conf
+service racoon /system/bin/racoon
     socket racoon stream 600 system system
+    # racoon will setuid to vpn after getting necessary resources.
+    group net_admin keystore
     disabled
     oneshot
 
 service mtpd /system/bin/mtpd
     socket mtpd stream 600 system system
+    user vpn
+    group vpn net_admin net_raw
     disabled
     oneshot
 
