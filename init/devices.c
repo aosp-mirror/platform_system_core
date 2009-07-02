@@ -118,6 +118,9 @@ static struct perms_ devperms[] = {
     { "/dev/msm_camera/",   0660,   AID_SYSTEM,     AID_SYSTEM,     1 },
     { "/dev/akm8976_daemon",0640,   AID_COMPASS,    AID_SYSTEM,     0 },
     { "/dev/akm8976_aot",   0640,   AID_COMPASS,    AID_SYSTEM,     0 },
+    { "/dev/akm8973_daemon",0640,   AID_COMPASS,    AID_SYSTEM,     0 },
+    { "/dev/akm8973_aot",   0640,   AID_COMPASS,    AID_SYSTEM,     0 },
+    { "/dev/bma150",        0640,   AID_COMPASS,    AID_SYSTEM,     0 },
     { "/dev/akm8976_pffd",  0640,   AID_COMPASS,    AID_SYSTEM,     0 },
     { "/dev/msm_pcm_out",   0660,   AID_SYSTEM,     AID_AUDIO,      1 },
     { "/dev/msm_pcm_in",    0660,   AID_SYSTEM,     AID_AUDIO,      1 },
@@ -137,7 +140,8 @@ static struct perms_ devperms[] = {
     { "/dev/qmi2",          0640,   AID_RADIO,      AID_RADIO,      0 },
         /* CDMA radio interface MUX */
     { "/dev/ts0710mux",     0640,   AID_RADIO,      AID_RADIO,      1 },
-    { "/dev/tun",           0640,   AID_VPN  ,      AID_VPN,        0 },
+    { "/dev/ppp",           0660,   AID_RADIO,      AID_VPN,        0 },
+    { "/dev/tun",           0640,   AID_VPN,        AID_VPN,        0 },
     { NULL, 0, 0, 0, 0 },
 };
 

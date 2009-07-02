@@ -49,7 +49,7 @@ static int write_file(const char *path, const char *value)
     fd = open(path, O_WRONLY|O_CREAT, 0622);
 
     if (fd < 0)
-        return -1;
+        return -errno;
 
     len = strlen(value);
 
@@ -59,7 +59,7 @@ static int write_file(const char *path, const char *value)
 
     close(fd);
     if (ret < 0) {
-        return -1;
+        return -errno;
     } else {
         return 0;
     }

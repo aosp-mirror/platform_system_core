@@ -226,7 +226,7 @@ int mount_main(int argc, char *argv[])
 {
 	char *type = NULL;
 	int c;
-	int loop;
+	int loop = 0;
 
 	progname = argv[0];
 	rwflag = MS_VERBOSE;
