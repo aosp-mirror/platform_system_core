@@ -1884,6 +1884,9 @@ class Compiler : public ErrorSink {
     Type* mkpInt;
     Type* mkpChar;
     Type* mkpVoid;
+    Type* mkpIntPtr;
+    Type* mkpCharPtr;
+    Type* mkpPtrIntFn;
 
     // Track what's on the expression stack
     Vector<Value> mValueStack;
@@ -2393,18 +2396,25 @@ class Compiler : public ErrorSink {
                 expr();
                 skip(')');
             } else if (t == '*') {
-                /* parse cast */
+                /* This is a pointer dereference, but we currently only
+                 * support a pointer dereference if it's immediately
+                 * in front of a cast. So parse the cast right here.
+                 */
                 skip('(');
-                t = tok; /* get type */
-                next(); /* skip int/char/void */
-                next(); /* skip '*' or '(' */
-                if (tok == '*') {
-                    /* function type */
-                    skip('*');
-                    skip(')');
-                    skip('(');
-                    skip(')');
+                Type* pCast = expectCastTypeDeclaration(mLocalArena);
+                // We currently only handle 3 types of cast:
+                // (int*), (char*) , (int (*)())
+                if(typeEqual(pCast, mkpIntPtr)) {
+                    t = TOK_INT;
+                } else if (typeEqual(pCast, mkpCharPtr)) {
+                    t = TOK_CHAR;
+                } else if (typeEqual(pCast, mkpPtrIntFn)){
                     t = 0;
+                } else {
+                    String buffer;
+                    decodeType(buffer, pCast);
+                    error("Unsupported cast type %s", buffer.getUnwrapped());
+                    decodeType(buffer, mkpPtrIntFn);
                 }
                 skip(')');
                 unary(false);
@@ -2417,6 +2427,8 @@ class Compiler : public ErrorSink {
                 } else if (t) {
                     pGen->loadR0FromR0(t == TOK_INT);
                 }
+                // Else we fall through to the function call below, with
+                // t == 0 to trigger an indirect function call. Hack!
             } else if (t == '&') {
                 pGen->leaR0((int) VI(tok)->pAddress);
                 next();
@@ -2622,6 +2634,26 @@ class Compiler : public ErrorSink {
         Type* pTail;
     };
 
+    bool typeEqual(Type* a, Type* b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == NULL || b == NULL) {
+            return false;
+        }
+        TypeTag at = a->tag;
+        if (at != b->tag) {
+            return false;
+        }
+        if (at == TY_POINTER) {
+            return typeEqual(a->pHead, b->pHead);
+        } else if (at == TY_FUNC || at == TY_PARAM) {
+            return typeEqual(a->pHead, b->pHead)
+                && typeEqual(a->pTail, b->pTail);
+        }
+        return true;
+    }
+
     Type* createType(TypeTag tag, Type* pHead, Type* pTail, Arena& arena) {
         assert(tag >= TY_INT && tag <= TY_PARAM);
         Type* pType = (Type*) arena.alloc(sizeof(Type));
@@ -2632,43 +2664,73 @@ class Compiler : public ErrorSink {
         return pType;
     }
 
+    Type* createPtrType(Type* pType, Arena& arena) {
+        return createType(TY_POINTER, pType, NULL, arena);
+    }
+
+    /**
+     * Try to print a type in declaration order
+     */
     void decodeType(String& buffer, Type* pType) {
+        buffer.clear();
         if (pType == NULL) {
             buffer.appendCStr("null");
             return;
         }
-        buffer.append('(');
+        decodeTypeImp(buffer, pType);
+    }
+
+    void decodeTypeImp(String& buffer, Type* pType) {
+        decodeTypeImpPrefix(buffer, pType);
+
         String temp;
         if (pType->id != 0) {
             decodeToken(temp, pType->id);
             buffer.append(temp);
+        }
+
+        decodeTypeImpPostfix(buffer, pType);
+    }
+
+    void decodeTypeImpPrefix(String& buffer, Type* pType) {
+        TypeTag tag = pType->tag;
+
+        if (tag >= TY_INT && tag <= TY_VOID) {
+            switch (tag) {
+                case TY_INT:
+                    buffer.appendCStr("int");
+                    break;
+                case TY_CHAR:
+                    buffer.appendCStr("char");
+                    break;
+                case TY_VOID:
+                    buffer.appendCStr("void");
+                    break;
+                default:
+                    break;
+            }
             buffer.append(' ');
         }
-        bool printHead = false;
-        bool printTail = false;
-        switch (pType->tag) {
+
+        switch (tag) {
             case TY_INT:
-                buffer.appendCStr("int");
                 break;
             case TY_CHAR:
-                buffer.appendCStr("char");
                 break;
             case TY_VOID:
-                buffer.appendCStr("void");
-                break;
+                 break;
             case TY_POINTER:
-                buffer.appendCStr("*");
-                printHead = true;
+                decodeTypeImpPrefix(buffer, pType->pHead);
+                if(pType->pHead && pType->pHead->tag == TY_FUNC) {
+                    buffer.append('(');
+                }
+                buffer.append('*');
                 break;
             case TY_FUNC:
-                buffer.appendCStr("func");
-                printHead = true;
-                printTail = true;
+                decodeTypeImp(buffer, pType->pHead);
                 break;
             case TY_PARAM:
-                buffer.appendCStr("param");
-                printHead = true;
-                printTail = true;
+                decodeTypeImp(buffer, pType->pHead);
                 break;
             default:
                 String temp;
@@ -2676,15 +2738,31 @@ class Compiler : public ErrorSink {
                 buffer.append(temp);
                 break;
         }
-        if (printHead) {
-            buffer.append(' ');
-            decodeType(buffer, pType->pHead);
+    }
+
+    void decodeTypeImpPostfix(String& buffer, Type* pType) {
+        TypeTag tag = pType->tag;
+
+        switch(tag) {
+            case TY_POINTER:
+                if(pType->pHead && pType->pHead->tag == TY_FUNC) {
+                    buffer.append(')');
+                }
+                decodeTypeImpPostfix(buffer, pType->pHead);
+                break;
+            case TY_FUNC:
+                buffer.append('(');
+                for(Type* pArg = pType->pTail; pArg; pArg = pArg->pTail) {
+                    decodeTypeImp(buffer, pArg);
+                    if (pArg->pTail) {
+                        buffer.appendCStr(", ");
+                    }
+                }
+                buffer.append(')');
+                break;
+            default:
+                break;
         }
-        if (printTail) {
-            buffer.append(' ');
-            decodeType(buffer, pType->pTail);
-        }
-        buffer.append(')');
     }
 
     void printType(Type* pType) {
@@ -2708,60 +2786,108 @@ class Compiler : public ErrorSink {
         return pType;
     }
 
-    Type* acceptDeclaration(const Type* pBaseType, Arena& arena) {
-        Type* pType = createType(pBaseType->tag, pBaseType->pHead,
-                                 pBaseType->pTail, arena);
-        tokenid_t declName;
-        if (pType) {
-            pType = acceptDecl2(pType, declName, arena);
+    Type* acceptDeclaration(Type* pType, bool nameAllowed, bool nameRequired,
+                            Arena& arena) {
+        tokenid_t declName = 0;
+        pType = acceptDecl2(pType, declName, nameAllowed,
+                                  nameRequired, arena);
+        if (declName) {
+            // Clone the parent type so we can set a unique ID
+            pType = createType(pType->tag, pType->pHead,
+                                      pType->pTail, arena);
+
             pType->id = declName;
-            // fprintf(stderr, "Parsed a declaration:       ");
-            // printType(pType);
         }
+        // fprintf(stderr, "Parsed a declaration:       ");
+        // printType(pType);
         return pType;
     }
 
-    Type* expectDeclaration(const Type* pBaseType, Arena& arena) {
-        Type* pType = acceptDeclaration(pBaseType, arena);
+    Type* expectDeclaration(Type* pBaseType, Arena& arena) {
+        Type* pType = acceptDeclaration(pBaseType, true, true, arena);
         if (! pType) {
             error("Expected a declaration");
         }
         return pType;
     }
 
-    Type* acceptDecl2(Type* pType, tokenid_t& declName, Arena& arena) {
-        while (tok == '*') {
-            pType = createType(TY_POINTER, pType, NULL, arena);
-            next();
+    /* Used for accepting types that appear in casts */
+    Type* acceptCastTypeDeclaration(Arena& arena) {
+        Type* pType = acceptPrimitiveType(arena);
+        if (pType) {
+            pType = acceptDeclaration(pType, false, false, arena);
         }
-        pType = acceptDecl3(pType, declName, arena);
         return pType;
     }
 
-    Type* acceptDecl3(Type* pType, tokenid_t& declName, Arena& arena) {
-        if (accept('(')) {
-            pType = acceptDecl2(pType, declName, arena);
-            skip(')');
-        } else {
-            declName = acceptSymbol();
+    Type* expectCastTypeDeclaration(Arena& arena) {
+        Type* pType = acceptCastTypeDeclaration(arena);
+        if (! pType) {
+            error("Expected a declaration");
         }
-        while (tok == '(') {
+        return pType;
+    }
+
+    Type* acceptDecl2(Type* pType, tokenid_t& declName,
+                      bool nameAllowed, bool nameRequired, Arena& arena) {
+        int ptrCounter = 0;
+        while (accept('*')) {
+            ptrCounter++;
+        }
+        pType = acceptDecl3(pType, declName, nameAllowed, nameRequired, arena);
+        while (ptrCounter-- > 0) {
+            pType = createType(TY_POINTER, pType, NULL, arena);
+        }
+        return pType;
+    }
+
+    Type* acceptDecl3(Type* pType, tokenid_t& declName,
+                      bool nameAllowed, bool nameRequired, Arena& arena) {
+        // direct-dcl :
+        //   name
+        //  (dcl)
+        //   direct-dcl()
+        //   direct-dcl[]
+        Type* pNewHead = NULL;
+        if (accept('(')) {
+            pNewHead = acceptDecl2(pNewHead, declName, nameAllowed,
+                                nameRequired, arena);
+            skip(')');
+        } else if ((declName = acceptSymbol()) != 0) {
+            if (nameAllowed == false && declName) {
+                error("Symbol %s not allowed here", nameof(declName));
+            } else if (nameRequired && ! declName) {
+                String temp;
+                decodeToken(temp, tok);
+                error("Expected symbol. Got %s", temp.getUnwrapped());
+            }
+        }
+        while (accept('(')) {
             // Function declaration
-            skip('(');
-            Type* pTail = acceptArgs(arena);
+            Type* pTail = acceptArgs(nameAllowed, arena);
             pType = createType(TY_FUNC, pType, pTail, arena);
             skip(')');
         }
+
+        if (pNewHead) {
+            Type* pA = pNewHead;
+            while (pA->pHead) {
+                pA = pA->pHead;
+            }
+            pA->pHead = pType;
+            pType = pNewHead;
+        }
         return pType;
     }
 
-    Type* acceptArgs(Arena& arena) {
+    Type* acceptArgs(bool nameAllowed, Arena& arena) {
         Type* pHead = NULL;
         Type* pTail = NULL;
         for(;;) {
             Type* pBaseArg = acceptPrimitiveType(arena);
             if (pBaseArg) {
-                Type* pArg = acceptDeclaration(pBaseArg, arena);
+                Type* pArg = acceptDeclaration(pBaseArg, nameAllowed, false,
+                                               arena);
                 if (pArg) {
                     Type* pParam = createType(TY_PARAM, pArg, NULL, arena);
                     if (!pHead) {
@@ -2875,10 +3001,6 @@ class Compiler : public ErrorSink {
         if (tok >= TOK_SYMBOL) {
             result = tok;
             next();
-        } else {
-            String temp;
-            decodeToken(temp, tok);
-            error("Expected symbol. Got %s", temp.getUnwrapped());
         }
         return result;
     }
@@ -3094,6 +3216,11 @@ public:
         mkpInt = createType(TY_INT, NULL, NULL, mGlobalArena);
         mkpChar = createType(TY_CHAR, NULL, NULL, mGlobalArena);
         mkpVoid = createType(TY_VOID, NULL, NULL, mGlobalArena);
+        mkpIntPtr = createPtrType(mkpInt, mGlobalArena);
+        mkpCharPtr = createPtrType(mkpChar, mGlobalArena);
+        mkpPtrIntFn = createPtrType(
+                  createType(TY_FUNC, mkpInt, NULL, mGlobalArena),
+                  mGlobalArena);
     }
 
     void checkForUndefinedForwardReferences() {
