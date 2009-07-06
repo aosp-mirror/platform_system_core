@@ -1854,11 +1854,6 @@ class Compiler : public ErrorSink {
         Vector<Mark> mLevelStack;
     };
 
-    struct Value {
-        Type* pType;
-        bool mLValue; // This is the L-value (true means the lvalue)
-    };
-
     int ch; // Current input character, or EOF
     tokenid_t tok;      // token
     intptr_t tokc;    // token extra info
@@ -1884,12 +1879,11 @@ class Compiler : public ErrorSink {
     Type* mkpInt;
     Type* mkpChar;
     Type* mkpVoid;
+    Type* mkpFloat;
+    Type* mkpDouble;
     Type* mkpIntPtr;
     Type* mkpCharPtr;
     Type* mkpPtrIntFn;
-
-    // Track what's on the expression stack
-    Vector<Value> mValueStack;
 
     InputStream* file;
 
@@ -2014,7 +2008,7 @@ class Compiler : public ErrorSink {
 
     bool isSymbolOrKeyword(tokenid_t t) {
         return t >= TOK_KEYWORD &&
-            ((size_t) (t-TOK_SYMBOL)) < mTokenTable.size();
+            ((size_t) (t-TOK_KEYWORD)) < mTokenTable.size();
     }
 
     VariableInfo* VI(tokenid_t t) {
@@ -2418,8 +2412,7 @@ class Compiler : public ErrorSink {
                 }
                 skip(')');
                 unary(false);
-                if (tok == '=') {
-                    next();
+                if (accept('=')) {
                     pGen->pushR0();
                     expr();
                     pGen->popR1();
@@ -2479,9 +2472,12 @@ class Compiler : public ErrorSink {
             while (tok != ')' && tok != EOF) {
                 expr();
                 pGen->storeR0ToArg(l);
-                if (tok == ',')
-                    next();
                 l = l + 4;
+                if (accept(',')) {
+                    // fine
+                } else if ( tok != ')') {
+                    error("Expected ',' or ')'");
+                }
             }
             pGen->endFunctionCallArguments(a, l);
             skip(')');
@@ -2551,9 +2547,10 @@ class Compiler : public ErrorSink {
     void block(intptr_t l, bool outermostFunctionBlock) {
         intptr_t a, n, t;
 
-        if (tok == TOK_INT || tok == TOK_CHAR) {
+        Type* pBaseType;
+        if ((pBaseType = acceptPrimitiveType(mLocalArena))) {
             /* declarations */
-            localDeclarations();
+            localDeclarations(pBaseType);
         } else if (tok == TOK_IF) {
             next();
             skip('(');
@@ -2609,13 +2606,11 @@ class Compiler : public ErrorSink {
                 mLocals.popLevel();
             }
         } else {
-            if (tok == TOK_RETURN) {
-                next();
+            if (accept(TOK_RETURN)) {
                 if (tok != ';')
                     expr();
                 rsym = pGen->gjmp(rsym); /* jmp */
-            } else if (tok == TOK_BREAK) {
-                next();
+            } else if (accept(TOK_BREAK)) {
                 *(int *) l = pGen->gjmp(*(int *) l);
             } else if (tok != ';')
                 expr();
@@ -2624,7 +2619,8 @@ class Compiler : public ErrorSink {
     }
 
     enum TypeTag {
-        TY_INT, TY_CHAR, TY_VOID, TY_POINTER, TY_FUNC, TY_PARAM
+        TY_INT, TY_CHAR, TY_VOID, TY_FLOAT, TY_DOUBLE,
+        TY_POINTER, TY_FUNC, TY_PARAM
     };
 
     struct Type {
@@ -2706,6 +2702,12 @@ class Compiler : public ErrorSink {
                 case TY_VOID:
                     buffer.appendCStr("void");
                     break;
+                case TY_FLOAT:
+                    buffer.appendCStr("float");
+                    break;
+                case TY_DOUBLE:
+                    buffer.appendCStr("double");
+                    break;
                 default:
                     break;
             }
@@ -2719,6 +2721,10 @@ class Compiler : public ErrorSink {
                 break;
             case TY_VOID:
                  break;
+            case TY_FLOAT:
+                 break;
+            case TY_DOUBLE:
+                break;
             case TY_POINTER:
                 decodeTypeImpPrefix(buffer, pType->pHead);
                 if(pType->pHead && pType->pHead->tag == TY_FUNC) {
@@ -2779,6 +2785,10 @@ class Compiler : public ErrorSink {
             pType = mkpChar;
         } else if (tok == TOK_VOID) {
             pType = mkpVoid;
+        } else if (tok == TOK_FLOAT) {
+            pType = mkpFloat;
+        } else if (tok == TOK_DOUBLE) {
+            pType = mkpDouble;
         } else {
             return NULL;
         }
@@ -2937,11 +2947,10 @@ class Compiler : public ErrorSink {
         mLocals.add(pDecl);
     }
 
-    void localDeclarations() {
+    void localDeclarations(Type* pBaseType) {
         intptr_t a;
-        Type* pBaseType;
 
-        while ((pBaseType = acceptPrimitiveType(mLocalArena)) != NULL) {
+        while (pBaseType) {
             while (tok != ';' && tok != EOF) {
                 Type* pDecl = expectDeclaration(pBaseType, mLocalArena);
                 if (!pDecl) {
@@ -2961,6 +2970,7 @@ class Compiler : public ErrorSink {
                     next();
             }
             skip(';');
+            pBaseType = acceptPrimitiveType(mLocalArena);
         }
     }
 
@@ -3053,31 +3063,35 @@ class Compiler : public ErrorSink {
                 skip(';');
             } else {
                 // Function declaration
-                if (name) {
-                    /* patch forward references (XXX: does not work for function
-                     pointers) */
-                    pGen->gsym((int) name->pForward);
-                    /* put function address */
-                    name->pAddress = (void*) codeBuf.getPC();
+                if (accept(';')) {
+                    // forward declaration.
+                } else {
+                    if (name) {
+                        /* patch forward references (XXX: does not work for function
+                         pointers) */
+                        pGen->gsym((int) name->pForward);
+                        /* put function address */
+                        name->pAddress = (void*) codeBuf.getPC();
+                    }
+                    // Calculate stack offsets for parameters
+                    mLocals.pushLevel();
+                    intptr_t a = 8;
+                    int argCount = 0;
+                    for (Type* pP = pDecl->pTail; pP; pP = pP->pTail) {
+                        Type* pArg = pP->pHead;
+                        addLocalSymbol(pArg);
+                        /* read param name and compute offset */
+                        VI(pArg->id)->pAddress = (void*) a;
+                        a = a + 4;
+                        argCount++;
+                    }
+                    rsym = loc = 0;
+                    a = pGen->functionEntry(argCount);
+                    block(0, true);
+                    pGen->gsym(rsym);
+                    pGen->functionExit(argCount, a, loc);
+                    mLocals.popLevel();
                 }
-                // Calculate stack offsets for parameters
-                mLocals.pushLevel();
-                intptr_t a = 8;
-                int argCount = 0;
-                for (Type* pP = pDecl->pTail; pP; pP = pP->pTail) {
-                    Type* pArg = pP->pHead;
-                    addLocalSymbol(pArg);
-                    /* read param name and compute offset */
-                    VI(pArg->id)->pAddress = (void*) a;
-                    a = a + 4;
-                    argCount++;
-                }
-                rsym = loc = 0;
-                a = pGen->functionEntry(argCount);
-                block(0, true);
-                pGen->gsym(rsym);
-                pGen->functionExit(argCount, a, loc);
-                mLocals.popLevel();
             }
         }
     }
@@ -3216,6 +3230,8 @@ public:
         mkpInt = createType(TY_INT, NULL, NULL, mGlobalArena);
         mkpChar = createType(TY_CHAR, NULL, NULL, mGlobalArena);
         mkpVoid = createType(TY_VOID, NULL, NULL, mGlobalArena);
+        mkpFloat = createType(TY_FLOAT, NULL, NULL, mGlobalArena);
+        mkpDouble = createType(TY_DOUBLE, NULL, NULL, mGlobalArena);
         mkpIntPtr = createPtrType(mkpInt, mGlobalArena);
         mkpCharPtr = createPtrType(mkpChar, mGlobalArena);
         mkpPtrIntFn = createPtrType(
