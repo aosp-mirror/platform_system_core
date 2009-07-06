@@ -42,7 +42,7 @@ TOOLS := \
 	smd \
 	chmod \
     chown \
-	mkdosfs \
+	newfs_msdos \
 	netstat \
 	ioctl \
 	mv \
