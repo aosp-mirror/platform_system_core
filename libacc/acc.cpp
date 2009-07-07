@@ -68,6 +68,8 @@ public:
 };
 
 class Compiler : public ErrorSink {
+    struct Type;
+
     class CodeBuf {
         char* ind; // Output code pointer
         char* pProgramBase;
@@ -157,8 +159,7 @@ class Compiler : public ErrorSink {
      * architecture.
      *
      * The code generator implements the following abstract machine:
-     * R0 - the main accumulator.
-     * R1 - the secondary accumulator.
+     * R0 - the accumulator.
      * FP - a frame pointer for accessing function arguments and local
      *      variables.
      * SP - a stack pointer for storing intermediate results while evaluating
@@ -168,7 +169,7 @@ class Compiler : public ErrorSink {
      * stack such that the first argument has the lowest address.
      * After the call, the result is in R0. The caller is responsible for
      * removing the arguments from the stack.
-     * The R0 and R1 registers are not saved across function calls. The
+     * The R0 register is not saved across function calls. The
      * FP and SP registers are saved.
      */
 
@@ -232,41 +233,42 @@ class Compiler : public ErrorSink {
          */
         virtual int gtst(bool l, int t) = 0;
 
-        /* Compare R1 against R0, and store the boolean result in R0.
+        /* Compare TOS against R0, and store the boolean result in R0.
+         * Pops TOS.
          * op specifies the comparison.
          */
         virtual void gcmp(int op) = 0;
 
-        /* Perform the arithmetic op specified by op. R1 is the
+        /* Perform the arithmetic op specified by op. TOS is the
          * left argument, R0 is the right argument.
+         * Pops TOS.
          */
         virtual void genOp(int op) = 0;
 
-        /* Set R1 to 0.
+        /* Compare 0 against R0, and store the boolean result in R0.
+         * op specifies the comparison.
          */
-        virtual void clearR1() = 0;
+        virtual void gUnaryCmp(int op) = 0;
+
+        /* Perform the arithmetic op specified by op. 0 is the
+         * left argument, R0 is the right argument.
+         */
+        virtual void genUnaryOp(int op) = 0;
 
         /* Push R0 onto the stack.
          */
         virtual void pushR0() = 0;
 
-        /* Pop R1 off of the stack.
+        /* Store R0 to the address stored in TOS.
+         * The TOS is popped.
+         * pPointerType is the type of the pointer (of the input R0).
          */
-        virtual void popR1() = 0;
-
-        /* Store R0 to the address stored in R1.
-         * isInt is true if a whole 4-byte integer value
-         * should be stored, otherwise a 1-byte character
-         * value should be stored.
-         */
-        virtual void storeR0ToR1(bool isInt) = 0;
+        virtual void storeR0ToTOS(Type* pPointerType) = 0;
 
         /* Load R0 from the address stored in R0.
-         * isInt is true if a whole 4-byte integer value
-         * should be loaded, otherwise a 1-byte character
-         * value should be loaded.
+         * pPointerType is the type of the pointer (of the input R0).
          */
-        virtual void loadR0FromR0(bool isInt) = 0;
+        virtual void loadR0FromR0(Type* pPointerType) = 0;
 
         /* Load the absolute address of a variable to R0.
          * If ea <= LOCAL, then this is a local variable, or an
@@ -362,6 +364,16 @@ class Compiler : public ErrorSink {
          */
         virtual int jumpOffset() = 0;
 
+        /**
+         * Stack alignment (in bytes) for this type of data
+         */
+        virtual size_t stackAlignment(Type* type) = 0;
+
+        /**
+         * Array element alignment (in bytes) for this type of data.
+         */
+        virtual size_t sizeOf(Type* type) = 0;
+
     protected:
         /*
          * Output a byte. Handles all values, 0..ff.
@@ -391,6 +403,12 @@ class Compiler : public ErrorSink {
             va_start(ap, fmt);
             mErrorSink->verror(fmt, ap);
             va_end(ap);
+        }
+
+        void assert(bool test) {
+            if (!test) {
+                error("code generator assertion failed.");
+            }
         }
     private:
         CodeBuf* pCodeBuf;
@@ -489,6 +507,8 @@ class Compiler : public ErrorSink {
 
         virtual void gcmp(int op) {
             LOG_API("gcmp(%d);\n", op);
+            o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+            mStackUse -= 4;
             o4(0xE1510000); // cmp r1, r1
             switch(op) {
             case OP_EQUALS:
@@ -523,6 +543,8 @@ class Compiler : public ErrorSink {
 
         virtual void genOp(int op) {
             LOG_API("genOp(%d);\n", op);
+            o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+            mStackUse -= 4;
             switch(op) {
             case OP_MUL:
                 o4(0x0E0000091); // mul     r0,r1,r0
@@ -563,9 +585,38 @@ class Compiler : public ErrorSink {
             }
         }
 
-        virtual void clearR1() {
-            LOG_API("clearR1();\n");
+        virtual void gUnaryCmp(int op) {
+            LOG_API("gcmp(%d);\n", op);
             o4(0xE3A01000);  // mov    r1, #0
+            o4(0xE1510000); // cmp r1, r1
+            switch(op) {
+            case OP_NOT_EQUALS:
+                o4(0x03A00000); // moveq r0,#0
+                o4(0x13A00001); // movne r0,#1
+                break;
+             default:
+                error("Unknown unary comparison op %d", op);
+                break;
+            }
+        }
+
+        virtual void genUnaryOp(int op) {
+            LOG_API("genOp(%d);\n", op);
+            switch(op) {
+            case OP_PLUS:
+                // Do nothing
+                break;
+            case OP_MINUS:
+                o4(0xE3A01000);  // mov    r1, #0
+                o4(0xE0410000);  // sub     r0,r1,r0
+                break;
+            case OP_BIT_NOT:
+                o4(0xE1E00000);  // mvn     r0, r0
+                break;
+            default:
+                error("Unknown unary op %d\n", op);
+                break;
+            }
         }
 
         virtual void pushR0() {
@@ -575,28 +626,38 @@ class Compiler : public ErrorSink {
             LOG_STACK("pushR0: %d\n", mStackUse);
         }
 
-        virtual void popR1() {
-            LOG_API("popR1();\n");
+        virtual void storeR0ToTOS(Type* pPointerType) {
+            LOG_API("storeR0ToTOS(%d);\n", isInt);
+            assert(pPointerType->tag == TY_POINTER);
             o4(0xE8BD0002);  // ldmfd   sp!,{r1}
             mStackUse -= 4;
-            LOG_STACK("popR1: %d\n", mStackUse);
-        }
-
-        virtual void storeR0ToR1(bool isInt) {
-            LOG_API("storeR0ToR1(%d);\n", isInt);
-            if (isInt) {
-                o4(0xE5810000); // str r0, [r1]
-            } else {
-                o4(0xE5C10000); // strb r0, [r1]
+            switch (pPointerType->pHead->tag) {
+                case TY_INT:
+                    o4(0xE5810000); // str r0, [r1]
+                    break;
+                case TY_CHAR:
+                    o4(0xE5C10000); // strb r0, [r1]
+                    break;
+                default:
+                    assert(false);
+                    break;
             }
         }
 
-        virtual void loadR0FromR0(bool isInt) {
-            LOG_API("loadR0FromR0(%d);\n", isInt);
-            if (isInt)
-                o4(0xE5900000); // ldr r0, [r0]
-            else
-                o4(0xE5D00000); // ldrb r0, [r0]
+        virtual void loadR0FromR0(Type* pPointerType) {
+            LOG_API("loadR0FromR0(%d);\n", pPointerType);
+            assert(pPointerType->tag == TY_POINTER);
+            switch (pPointerType->pHead->tag) {
+                case TY_INT:
+                    o4(0xE5900000); // ldr r0, [r0]
+                    break;
+                case TY_CHAR:
+                    o4(0xE5D00000); // ldrb r0, [r0]
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
         }
 
         virtual void leaR0(int ea) {
@@ -834,6 +895,37 @@ class Compiler : public ErrorSink {
             return 0;
         }
 
+        /**
+         * Stack alignment (in bytes) for this type of data
+         */
+        virtual size_t stackAlignment(Type* pType){
+            switch(pType->tag) {
+                case TY_DOUBLE:
+                    return 8;
+                default:
+                    return 4;
+            }
+        }
+
+        /**
+         * Array element alignment (in bytes) for this type of data.
+         */
+        virtual size_t sizeOf(Type* pType){
+            switch(pType->tag) {
+                case TY_INT:
+                    return 4;
+                case TY_CHAR:
+                    return 1;
+                default:
+                    return 0;
+                case TY_FLOAT:
+                    return 4;
+                case TY_DOUBLE:
+                    return 8;
+                case TY_POINTER:
+                    return 4;
+            }
+        }
     private:
         static FILE* disasmOut;
 
@@ -937,6 +1029,7 @@ class Compiler : public ErrorSink {
 
         virtual void gcmp(int op) {
             int t = decodeOp(op);
+            o(0x59); /* pop %ecx */
             o(0xc139); /* cmp %eax,%ecx */
             li(0);
             o(0x0f); /* setxx %al */
@@ -945,32 +1038,60 @@ class Compiler : public ErrorSink {
         }
 
         virtual void genOp(int op) {
+            o(0x59); /* pop %ecx */
             o(decodeOp(op));
             if (op == OP_MOD)
                 o(0x92); /* xchg %edx, %eax */
         }
 
-        virtual void clearR1() {
+        virtual void gUnaryCmp(int op) {
             oad(0xb9, 0); /* movl $0, %ecx */
+            int t = decodeOp(op);
+            o(0xc139); /* cmp %eax,%ecx */
+            li(0);
+            o(0x0f); /* setxx %al */
+            o(t + 0x90);
+            o(0xc0);
+        }
+
+        virtual void genUnaryOp(int op) {
+            oad(0xb9, 0); /* movl $0, %ecx */
+            o(decodeOp(op));
         }
 
         virtual void pushR0() {
             o(0x50); /* push %eax */
         }
 
-        virtual void popR1() {
+        virtual void storeR0ToTOS(Type* pPointerType) {
+            assert(pPointerType->tag == TY_POINTER);
             o(0x59); /* pop %ecx */
+            switch (pPointerType->pHead->tag) {
+                case TY_INT:
+                    o(0x0189); /* movl %eax/%al, (%ecx) */
+                    break;
+                case TY_CHAR:
+                    o(0x0188); /* movl %eax/%al, (%ecx) */
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
         }
 
-        virtual void storeR0ToR1(bool isInt) {
-            o(0x0188 + isInt); /* movl %eax/%al, (%ecx) */
-        }
-
-        virtual void loadR0FromR0(bool isInt) {
-            if (isInt)
-                o(0x8b); /* mov (%eax), %eax */
-            else
-                o(0xbe0f); /* movsbl (%eax), %eax */
+        virtual void loadR0FromR0(Type* pPointerType) {
+            assert(pPointerType->tag == TY_POINTER);
+            switch (pPointerType->pHead->tag) {
+                case TY_INT:
+                    o(0x8b); /* mov (%eax), %eax */
+                    break;
+                case TY_CHAR:
+                    o(0xbe0f); /* movsbl (%eax), %eax */
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
             ob(0); /* add zero in code */
         }
 
@@ -1053,6 +1174,38 @@ class Compiler : public ErrorSink {
                error("mprotect() failed: %d", errno);
             }
             return err;
+        }
+
+        /**
+         * Stack alignment (in bytes) for this type of data
+         */
+        virtual size_t stackAlignment(Type* pType){
+            switch(pType->tag) {
+                case TY_DOUBLE:
+                    return 8;
+                default:
+                    return 4;
+            }
+        }
+
+        /**
+         * Array element alignment (in bytes) for this type of data.
+         */
+        virtual size_t sizeOf(Type* pType){
+            switch(pType->tag) {
+                case TY_INT:
+                    return 4;
+                case TY_CHAR:
+                    return 1;
+                default:
+                    return 0;
+                case TY_FLOAT:
+                    return 4;
+                case TY_DOUBLE:
+                    return 8;
+                case TY_POINTER:
+                    return 4;
+            }
         }
 
     private:
@@ -1166,9 +1319,15 @@ class Compiler : public ErrorSink {
             mpBase->genOp(op);
         }
 
-        virtual void clearR1() {
-            fprintf(stderr, "clearR1()\n");
-            mpBase->clearR1();
+
+        virtual void gUnaryCmp(int op) {
+            fprintf(stderr, "gUnaryCmp(%d)\n", op);
+            mpBase->gUnaryCmp(op);
+        }
+
+        virtual void genUnaryOp(int op) {
+            fprintf(stderr, "genUnaryOp(%d)\n", op);
+            mpBase->genUnaryOp(op);
         }
 
         virtual void pushR0() {
@@ -1176,19 +1335,14 @@ class Compiler : public ErrorSink {
             mpBase->pushR0();
         }
 
-        virtual void popR1() {
-            fprintf(stderr, "popR1()\n");
-            mpBase->popR1();
+        virtual void storeR0ToTOS(Type* pPointerType) {
+            fprintf(stderr, "storeR0ToTOS(%d)\n", pPointerType);
+            mpBase->storeR0ToTOS(pPointerType);
         }
 
-        virtual void storeR0ToR1(bool isInt) {
-            fprintf(stderr, "storeR0ToR1(%d)\n", isInt);
-            mpBase->storeR0ToR1(isInt);
-        }
-
-        virtual void loadR0FromR0(bool isInt) {
-            fprintf(stderr, "loadR0FromR0(%d)\n", isInt);
-            mpBase->loadR0FromR0(isInt);
+        virtual void loadR0FromR0(Type* pPointerType) {
+            fprintf(stderr, "loadR0FromR0(%d)\n", pPointerType);
+            mpBase->loadR0FromR0(pPointerType);
         }
 
         virtual void leaR0(int ea) {
@@ -1261,6 +1415,20 @@ class Compiler : public ErrorSink {
             int result = mpBase->finishCompile();
             fprintf(stderr, "finishCompile() = %d\n", result);
             return result;
+        }
+
+        /**
+         * Stack alignment (in bytes) for this type of data
+         */
+        virtual size_t stackAlignment(Type* pType){
+            return mpBase->stackAlignment(pType);
+        }
+
+        /**
+         * Array element alignment (in bytes) for this type of data.
+         */
+        virtual size_t sizeOf(Type* pType){
+            return mpBase->sizeOf(pType);
         }
     };
 
@@ -1760,8 +1928,6 @@ class Compiler : public ErrorSink {
         int oldCh;
     };
 
-    struct Type;
-
     struct VariableInfo {
         void* pAddress;
         void* pForward; // For a forward direction, linked list of data to fix up
@@ -1876,9 +2042,9 @@ class Compiler : public ErrorSink {
     SymbolStack mLocals;
 
     // Prebuilt types, makes things slightly faster.
-    Type* mkpInt;
-    Type* mkpChar;
-    Type* mkpVoid;
+    Type* mkpInt;        // int
+    Type* mkpChar;       // char
+    Type* mkpVoid;       // void
     Type* mkpFloat;
     Type* mkpDouble;
     Type* mkpIntPtr;
@@ -2381,11 +2547,10 @@ class Compiler : public ErrorSink {
             } else if (c == 2) {
                 /* -, +, !, ~ */
                 unary(false);
-                pGen->clearR1();
                 if (t == '!')
-                    pGen->gcmp(a);
+                    pGen->gUnaryCmp(a);
                 else
-                    pGen->genOp(a);
+                    pGen->genUnaryOp(a);
             } else if (t == '(') {
                 expr();
                 skip(')');
@@ -2415,10 +2580,9 @@ class Compiler : public ErrorSink {
                 if (accept('=')) {
                     pGen->pushR0();
                     expr();
-                    pGen->popR1();
-                    pGen->storeR0ToR1(t == TOK_INT);
+                    pGen->storeR0ToTOS(pCast);
                 } else if (t) {
-                    pGen->loadR0FromR0(t == TOK_INT);
+                    pGen->loadR0FromR0(pCast);
                 }
                 // Else we fall through to the function call below, with
                 // t == 0 to trigger an indirect function call. Hack!
@@ -2515,7 +2679,6 @@ class Compiler : public ErrorSink {
                 } else {
                     pGen->pushR0();
                     binaryOp(level);
-                    pGen->popR1();
 
                     if ((level == 4) | (level == 5)) {
                         pGen->gcmp(t);
@@ -2958,6 +3121,7 @@ class Compiler : public ErrorSink {
                 }
                 int variableAddress = 0;
                 addLocalSymbol(pDecl);
+                loc = loc + pGen->sizeOf(pDecl);
                 loc = loc + 4;
                 variableAddress = -loc;
                 VI(pDecl->id)->pAddress = (void*) variableAddress;
