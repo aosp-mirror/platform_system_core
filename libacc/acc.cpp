@@ -219,7 +219,13 @@ class Compiler : public ErrorSink {
                                   int localVariableSize) = 0;
 
         /* load immediate value to R0 */
-        virtual void li(int t) = 0;
+        virtual void li(int i) = 0;
+
+        /* load floating point immediate value to R0 */
+        virtual void lif(float f) = 0;
+
+        /* load double-precision floating point immediate value to R0 */
+        virtual void lid(double d) = 0;
 
         /* Jump to a target, and return the address of the word that
          * holds the target data, in case it needs to be fixed up later.
@@ -490,6 +496,18 @@ class Compiler : public ErrorSink {
                   o4(t);          // .L3:   .word 0
                                   // .L99:
             }
+        }
+
+        virtual void lif(float f) {
+            union { float f; int i; } converter;
+            converter.f = f;
+            li(converter.i);
+        }
+
+        virtual void lid(double d) {
+            union { double d; int i[2]; } converter;
+            converter.d = d;
+            assert(false);
         }
 
         virtual int gjmp(int t) {
@@ -1013,8 +1031,20 @@ class Compiler : public ErrorSink {
         }
 
         /* load immediate value */
-        virtual void li(int t) {
-            oad(0xb8, t); /* mov $xx, %eax */
+        virtual void li(int i) {
+            oad(0xb8, i); /* mov $xx, %eax */
+        }
+
+        virtual void lif(float f) {
+            union { float f; int i; } converter;
+            converter.f = f;
+            assert(false);
+        }
+
+        virtual void lid(double d) {
+            union { double d; int i[2]; } converter;
+            converter.d = d;
+            assert(false);
         }
 
         virtual int gjmp(int t) {
@@ -1296,6 +1326,16 @@ class Compiler : public ErrorSink {
             mpBase->li(t);
         }
 
+        virtual void lif(float f) {
+            fprintf(stderr, "lif(%g)\n", f);
+            mpBase->lif(f);
+        }
+
+        virtual void lid(double d) {
+            fprintf(stderr, "lid(%g)\n", d);
+            mpBase->lid(d);
+        }
+
         virtual int gjmp(int t) {
             int result = mpBase->gjmp(t);
             fprintf(stderr, "gjmp(%d) = %d\n", t, result);
@@ -1336,12 +1376,12 @@ class Compiler : public ErrorSink {
         }
 
         virtual void storeR0ToTOS(Type* pPointerType) {
-            fprintf(stderr, "storeR0ToTOS(%d)\n", pPointerType);
+            fprintf(stderr, "storeR0ToTOS(%d)\n", pPointerType->pHead->tag);
             mpBase->storeR0ToTOS(pPointerType);
         }
 
         virtual void loadR0FromR0(Type* pPointerType) {
-            fprintf(stderr, "loadR0FromR0(%d)\n", pPointerType);
+            fprintf(stderr, "loadR0FromR0(%d)\n", pPointerType->pHead->tag);
             mpBase->loadR0FromR0(pPointerType);
         }
 
@@ -2023,6 +2063,7 @@ class Compiler : public ErrorSink {
     int ch; // Current input character, or EOF
     tokenid_t tok;      // token
     intptr_t tokc;    // token extra info
+    double tokd;     // floating point constant value
     int tokl;         // token operator level
     intptr_t rsym; // return symbol
     intptr_t loc; // local variable index
@@ -2065,6 +2106,8 @@ class Compiler : public ErrorSink {
 
     static const int TOK_DUMMY = 1;
     static const int TOK_NUM = 2;
+    static const int TOK_NUM_FLOAT = 3;
+    static const int TOK_NUM_DOUBLE = 4;
 
     // 3..255 are character and/or operators
 
@@ -2305,6 +2348,56 @@ class Compiler : public ErrorSink {
         return ch >= '0' && ch <= '7';
     }
 
+    bool acceptCh(int c) {
+        bool result = c == ch;
+        if (result) {
+            pdef(ch);
+            inp();
+        }
+        return result;
+    }
+
+    bool acceptDigitsCh() {
+        bool result = false;
+        while (isdigit(ch)) {
+            result = true;
+            pdef(ch);
+            inp();
+        }
+        return result;
+    }
+
+    void parseFloat() {
+        tok = TOK_NUM_DOUBLE;
+        // mTokenString already has the integral part of the number.
+        acceptCh('.');
+        acceptDigitsCh();
+        bool doExp = true;
+        if (acceptCh('e') || acceptCh('E')) {
+            // Don't need to do any extra work
+        } else if (ch == 'f' || ch == 'F') {
+            pdef('e'); // So it can be parsed by strtof.
+            inp();
+            tok = TOK_NUM_FLOAT;
+        } else {
+            doExp = false;
+        }
+        if (doExp) {
+            bool digitsRequired = acceptCh('-');
+            bool digitsFound = acceptDigitsCh();
+            if (digitsRequired && ! digitsFound) {
+                error("malformed exponent");
+            }
+        }
+        char* pText = mTokenString.getUnwrapped();
+        if (tok == TOK_NUM_FLOAT) {
+            tokd = strtof(pText, 0);
+        } else {
+            tokd = strtod(pText, 0);
+        }
+        //fprintf(stderr, "float constant: %s (%d) %g\n", pText, tok, tokd);
+    }
+
     void next() {
         int l, a;
 
@@ -2333,8 +2426,16 @@ class Compiler : public ErrorSink {
                 inp();
             }
             if (isdigit(tok)) {
-                tokc = strtol(mTokenString.getUnwrapped(), 0, 0);
-                tok = TOK_NUM;
+                // Start of a numeric constant. Could be integer, float, or
+                // double, won't know until we look further.
+                if (ch == '.' || ch == 'e' || ch == 'e'
+                    || ch == 'f' || ch == 'F')  {
+                    parseFloat();
+                } else {
+                    // It's an integer constant
+                    tokc = strtol(mTokenString.getUnwrapped(), 0, 0);
+                    tok = TOK_NUM;
+                }
             } else {
                 tok = mTokenTable.intern(mTokenString.getUnwrapped(),
                                          mTokenString.len());
@@ -2540,10 +2641,15 @@ class Compiler : public ErrorSink {
         } else {
             int c = tokl;
             a = tokc;
+            double ad = tokd;
             t = tok;
             next();
             if (t == TOK_NUM) {
                 pGen->li(a);
+            } else if (t == TOK_NUM_FLOAT) {
+                pGen->lif(ad);
+            } else if (t == TOK_NUM_DOUBLE) {
+                pGen->lid(ad);
             } else if (c == 2) {
                 /* -, +, !, ~ */
                 unary(false);
