@@ -55,6 +55,70 @@
 
 namespace acc {
 
+// Subset of STL vector.
+template<class E> class Vector {
+    public:
+    Vector() {
+        mpBase = 0;
+        mUsed = 0;
+        mSize = 0;
+    }
+
+    ~Vector() {
+        if (mpBase) {
+            for(size_t i = 0; i < mUsed; i++)  {
+                mpBase[mUsed].~E();
+            }
+            free(mpBase);
+        }
+    }
+
+    inline E& operator[](size_t i) {
+        return mpBase[i];
+    }
+
+    inline E& front() {
+        return mpBase[0];
+    }
+
+    inline E& back() {
+        return mpBase[mUsed - 1];
+    }
+
+    void pop_back() {
+        mUsed -= 1;
+        mpBase[mUsed].~E();
+    }
+
+    void push_back(const E& item) {
+        * ensure(1) = item;
+    }
+
+    size_t size() {
+        return mUsed;
+    }
+
+private:
+    E* ensure(int n) {
+        size_t newUsed = mUsed + n;
+        if (newUsed > mSize) {
+            size_t newSize = mSize * 2 + 10;
+            if (newSize < newUsed) {
+                newSize = newUsed;
+            }
+            mpBase = (E*) realloc(mpBase, sizeof(E) * newSize);
+            mSize = newSize;
+        }
+        E* result = mpBase + mUsed;
+        mUsed = newUsed;
+        return result;
+    }
+
+    E* mpBase;
+    size_t mUsed;
+    size_t mSize;
+};
+
 class ErrorSink {
 public:
     void error(const char *fmt, ...) {
@@ -68,7 +132,18 @@ public:
 };
 
 class Compiler : public ErrorSink {
-    struct Type;
+    typedef int tokenid_t;
+    enum TypeTag {
+        TY_INT, TY_CHAR, TY_VOID, TY_FLOAT, TY_DOUBLE,
+        TY_POINTER, TY_FUNC, TY_PARAM
+    };
+
+    struct Type {
+        TypeTag tag;
+        tokenid_t id; // For function arguments
+        Type* pHead;
+        Type* pTail;
+    };
 
     class CodeBuf {
         char* ind; // Output code pointer
@@ -178,6 +253,7 @@ class Compiler : public ErrorSink {
         CodeGenerator() {
             mErrorSink = 0;
             pCodeBuf = 0;
+            pushType();
         }
         virtual ~CodeGenerator() {}
 
@@ -219,13 +295,13 @@ class Compiler : public ErrorSink {
                                   int localVariableSize) = 0;
 
         /* load immediate value to R0 */
-        virtual void li(int i) = 0;
+        virtual void li(int i, Type* pType) = 0;
 
         /* load floating point immediate value to R0 */
-        virtual void lif(float f) = 0;
+        virtual void lif(float f, Type* pType) = 0;
 
         /* load double-precision floating point immediate value to R0 */
-        virtual void lid(double d) = 0;
+        virtual void lid(double d, Type* pType) = 0;
 
         /* Jump to a target, and return the address of the word that
          * holds the target data, in case it needs to be fixed up later.
@@ -281,7 +357,7 @@ class Compiler : public ErrorSink {
          * argument, addressed relative to FP.
          * else it is an absolute global address.
          */
-        virtual void leaR0(int ea) = 0;
+        virtual void leaR0(int ea, Type* pPointerType) = 0;
 
         /* Store R0 to a variable.
          * If ea <= LOCAL, then this is a local variable, or an
@@ -298,7 +374,12 @@ class Compiler : public ErrorSink {
          * should be post-incremented or post-decremented, based
          * on the value of op.
          */
-        virtual void loadR0(int ea, bool isIncDec, int op) = 0;
+        virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) = 0;
+
+        /**
+         * Convert R0 to the given type.
+         */
+        virtual void convertR0(Type* pType) = 0;
 
         /* Emit code to adjust the stack for a function call. Return the
          * label for the address of the instruction that adjusts the
@@ -326,19 +407,19 @@ class Compiler : public ErrorSink {
          * a chain. The address will be patched later.
          * Return the address of the word that has to be patched.
          */
-        virtual int callForward(int symbol) = 0;
+        virtual int callForward(int symbol, Type* pFunc) = 0;
 
         /* Call a function using PC-relative addressing. t is the PC-relative
          * address of the function. It has already been adjusted for the
          * architectural jump offset, so just store it as-is.
          */
-        virtual void callRelative(int t) = 0;
+        virtual void callRelative(int t, Type* pFunc) = 0;
 
         /* Call a function pointer. L is the number of bytes the arguments
          * take on the stack. The address of the function is stored at
          * location SP + l.
          */
-        virtual void callIndirect(int l) = 0;
+        virtual void callIndirect(int l, Type* pFunc) = 0;
 
         /* Adjust SP after returning from a function call. l is the
          * number of bytes of arguments stored on the stack. isIndirect
@@ -416,7 +497,40 @@ class Compiler : public ErrorSink {
                 error("code generator assertion failed.");
             }
         }
+
+        void setR0Type(Type* pType) {
+            mExpressionStack.back() = pType;
+        }
+
+        Type* getR0Type() {
+            return mExpressionStack.back();
+        }
+
+        Type* getTOSType() {
+            return mExpressionStack[mExpressionStack.size()-2];
+        }
+
+        void pushType() {
+            mExpressionStack.push_back(NULL);
+        }
+
+        void popType() {
+            mExpressionStack.pop_back();
+        }
+
+        bool bitsSame(Type* pA, Type* pB) {
+            return collapseType(pA->tag) == collapseType(pB->tag);
+        }
+
+        TypeTag collapseType(TypeTag tag) {
+            static const TypeTag collapsedTag[] = {
+                    TY_INT, TY_INT, TY_VOID, TY_FLOAT, TY_DOUBLE, TY_INT,
+                    TY_VOID, TY_VOID};
+            return collapsedTag[tag];
+        }
+
     private:
+        Vector<Type*> mExpressionStack;
         CodeBuf* pCodeBuf;
         ErrorSink* mErrorSink;
     };
@@ -483,7 +597,7 @@ class Compiler : public ErrorSink {
         }
 
         /* load immediate value */
-        virtual void li(int t) {
+        virtual void li(int t, Type* pType) {
             LOG_API("li(%d);\n", t);
             if (t >= 0 && t < 255) {
                  o4(0xE3A00000 + t); // mov    r0, #0
@@ -496,18 +610,20 @@ class Compiler : public ErrorSink {
                   o4(t);          // .L3:   .word 0
                                   // .L99:
             }
+            setR0Type(pType);
         }
 
-        virtual void lif(float f) {
+        virtual void lif(float f, Type* pType) {
             union { float f; int i; } converter;
             converter.f = f;
-            li(converter.i);
+            li(converter.i, pType);
         }
 
-        virtual void lid(double d) {
+        virtual void lid(double d, Type* pType) {
             union { double d; int i[2]; } converter;
             converter.d = d;
-            assert(false);
+            error("lid: unimplemented");
+            setR0Type(pType);
         }
 
         virtual int gjmp(int t) {
@@ -557,6 +673,7 @@ class Compiler : public ErrorSink {
                 error("Unknown comparison op %d", op);
                 break;
             }
+            popType();
         }
 
         virtual void genOp(int op) {
@@ -601,6 +718,7 @@ class Compiler : public ErrorSink {
                 error("Unimplemented op %d\n", op);
                 break;
             }
+            popType();
         }
 
         virtual void gUnaryCmp(int op) {
@@ -641,6 +759,7 @@ class Compiler : public ErrorSink {
             LOG_API("pushR0();\n");
             o4(0xE92D0001);  // stmfd   sp!,{r0}
             mStackUse += 4;
+            pushType();
             LOG_STACK("pushR0: %d\n", mStackUse);
         }
 
@@ -657,9 +776,10 @@ class Compiler : public ErrorSink {
                     o4(0xE5C10000); // strb r0, [r1]
                     break;
                 default:
-                    assert(false);
+                    error("storeR0ToTOS: unimplemented type");
                     break;
             }
+            popType();
         }
 
         virtual void loadR0FromR0(Type* pPointerType) {
@@ -673,12 +793,13 @@ class Compiler : public ErrorSink {
                     o4(0xE5D00000); // ldrb r0, [r0]
                     break;
                 default:
-                    assert(false);
+                    error("loadR0FromR0: unimplemented type");
                     break;
             }
+            setR0Type(pPointerType->pHead);
         }
 
-        virtual void leaR0(int ea) {
+        virtual void leaR0(int ea, Type* pPointerType) {
             LOG_API("leaR0(%d);\n", ea);
             if (ea < LOCAL) {
                 // Local, fp relative
@@ -697,6 +818,7 @@ class Compiler : public ErrorSink {
                 o4(ea);         // .L1:   .word 0
                                 // .L99:
             }
+            setR0Type(pPointerType);
         }
 
         virtual void storeR0(int ea) {
@@ -720,7 +842,7 @@ class Compiler : public ErrorSink {
             }
         }
 
-        virtual void loadR0(int ea, bool isIncDec, int op) {
+        virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
             LOG_API("loadR0(%d, %d, %d);\n", ea, isIncDec, op);
             if (ea < LOCAL) {
                 // Local, fp relative
@@ -765,6 +887,14 @@ class Compiler : public ErrorSink {
                     o4(0xE5821000); // str r1, [r2]
                }
             }
+            setR0Type(pType);
+        }
+
+        virtual void convertR0(Type* pType){
+            if (bitsSame(pType, getR0Type())) {
+                return;
+            }
+            error("Incompatible types");
         }
 
         virtual int beginFunctionCallArguments() {
@@ -809,14 +939,16 @@ class Compiler : public ErrorSink {
                       mStackUse, mStackAlignmentAdjustment);
         }
 
-        virtual int callForward(int symbol) {
+        virtual int callForward(int symbol, Type* pFunc) {
             LOG_API("callForward(%d);\n", symbol);
+            setR0Type(pFunc->pHead);
             // Forward calls are always short (local)
             return o4(0xEB000000 | encodeAddress(symbol));
         }
 
-        virtual void callRelative(int t) {
+        virtual void callRelative(int t, Type* pFunc) {
             LOG_API("callRelative(%d);\n", t);
+            setR0Type(pFunc->pHead);
             int abs = t + getPC() + jumpOffset();
             LOG_API("abs=%d (0x%08x)\n", abs, abs);
             if (t >= - (1 << 25) && t < (1 << 25)) {
@@ -831,8 +963,9 @@ class Compiler : public ErrorSink {
            }
         }
 
-        virtual void callIndirect(int l) {
+        virtual void callIndirect(int l, Type* pFunc) {
             LOG_API("callIndirect(%d);\n", l);
+            setR0Type(pFunc->pHead);
             int argCount = l >> 2;
             int poppedArgs = argCount > 4 ? 4 : argCount;
             int adjustedL = l - (poppedArgs << 2) + mStackAlignmentAdjustment;
@@ -1031,20 +1164,23 @@ class Compiler : public ErrorSink {
         }
 
         /* load immediate value */
-        virtual void li(int i) {
+        virtual void li(int i, Type* pType) {
             oad(0xb8, i); /* mov $xx, %eax */
+            setR0Type(pType);
         }
 
-        virtual void lif(float f) {
+        virtual void lif(float f, Type* pType) {
             union { float f; int i; } converter;
             converter.f = f;
-            assert(false);
+            setR0Type(pType);
+            error("unimplemented: lif");
         }
 
-        virtual void lid(double d) {
+        virtual void lid(double d, Type* pType) {
             union { double d; int i[2]; } converter;
             converter.d = d;
-            assert(false);
+            setR0Type(pType);
+            error("unimplemented: lid");
         }
 
         virtual int gjmp(int t) {
@@ -1061,10 +1197,11 @@ class Compiler : public ErrorSink {
             int t = decodeOp(op);
             o(0x59); /* pop %ecx */
             o(0xc139); /* cmp %eax,%ecx */
-            li(0);
+            li(0, NULL);
             o(0x0f); /* setxx %al */
             o(t + 0x90);
             o(0xc0);
+            popType();
         }
 
         virtual void genOp(int op) {
@@ -1072,13 +1209,14 @@ class Compiler : public ErrorSink {
             o(decodeOp(op));
             if (op == OP_MOD)
                 o(0x92); /* xchg %edx, %eax */
+            popType();
         }
 
         virtual void gUnaryCmp(int op) {
             oad(0xb9, 0); /* movl $0, %ecx */
             int t = decodeOp(op);
             o(0xc139); /* cmp %eax,%ecx */
-            li(0);
+            li(0, NULL);
             o(0x0f); /* setxx %al */
             o(t + 0x90);
             o(0xc0);
@@ -1091,11 +1229,13 @@ class Compiler : public ErrorSink {
 
         virtual void pushR0() {
             o(0x50); /* push %eax */
+            pushType();
         }
 
         virtual void storeR0ToTOS(Type* pPointerType) {
             assert(pPointerType->tag == TY_POINTER);
             o(0x59); /* pop %ecx */
+            popType();
             switch (pPointerType->pHead->tag) {
                 case TY_INT:
                     o(0x0189); /* movl %eax/%al, (%ecx) */
@@ -1104,7 +1244,7 @@ class Compiler : public ErrorSink {
                     o(0x0188); /* movl %eax/%al, (%ecx) */
                     break;
                 default:
-                    assert(false);
+                    error("storeR0ToTOS: unsupported type");
                     break;
             }
         }
@@ -1119,21 +1259,23 @@ class Compiler : public ErrorSink {
                     o(0xbe0f); /* movsbl (%eax), %eax */
                     break;
                 default:
-                    assert(false);
+                    error("loadR0FromR0: unsupported type");
                     break;
             }
             ob(0); /* add zero in code */
+            setR0Type(pPointerType->pHead);
         }
 
-        virtual void leaR0(int ea) {
+        virtual void leaR0(int ea, Type* pPointerType) {
             gmov(10, ea); /* leal EA, %eax */
+            setR0Type(pPointerType);
         }
 
         virtual void storeR0(int ea) {
             gmov(6, ea); /* mov %eax, EA */
         }
 
-        virtual void loadR0(int ea, bool isIncDec, int op) {
+        virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
             gmov(8, ea); /* mov EA, %eax */
             if (isIncDec) {
                 /* Implement post-increment or post decrement.
@@ -1141,6 +1283,15 @@ class Compiler : public ErrorSink {
                 gmov(0, ea); /* 83 ADD */
                 o(decodeOp(op));
             }
+            setR0Type(pType);
+        }
+
+        virtual void convertR0(Type* pType){
+            if (bitsSame(pType, getR0Type())) {
+                return;
+            }
+            error("convertR0: unsupported conversion %d <- %d", pType->tag,
+                  getR0Type()->tag);
         }
 
         virtual int beginFunctionCallArguments() {
@@ -1155,15 +1306,18 @@ class Compiler : public ErrorSink {
             * (int*) a = l;
         }
 
-        virtual int callForward(int symbol) {
+        virtual int callForward(int symbol, Type* pFunc) {
+            setR0Type(pFunc->pHead);
             return psym(0xe8, symbol); /* call xxx */
         }
 
-        virtual void callRelative(int t) {
+        virtual void callRelative(int t, Type* pFunc) {
+            setR0Type(pFunc->pHead);
             psym(0xe8, t); /* call xxx */
         }
 
-        virtual void callIndirect(int l) {
+        virtual void callIndirect(int l, Type* pFunc) {
+            setR0Type(pFunc->pHead);
             oad(0x2494ff, l); /* call *xxx(%esp) */
         }
 
@@ -1321,19 +1475,19 @@ class Compiler : public ErrorSink {
         }
 
         /* load immediate value */
-        virtual void li(int t) {
+        virtual void li(int t, Type* pType) {
             fprintf(stderr, "li(%d)\n", t);
-            mpBase->li(t);
+            mpBase->li(t, pType);
         }
 
-        virtual void lif(float f) {
+        virtual void lif(float f, Type* pType) {
             fprintf(stderr, "lif(%g)\n", f);
-            mpBase->lif(f);
+            mpBase->lif(f, pType);
         }
 
-        virtual void lid(double d) {
+        virtual void lid(double d, Type* pType) {
             fprintf(stderr, "lid(%g)\n", d);
-            mpBase->lid(d);
+            mpBase->lid(d, pType);
         }
 
         virtual int gjmp(int t) {
@@ -1385,9 +1539,9 @@ class Compiler : public ErrorSink {
             mpBase->loadR0FromR0(pPointerType);
         }
 
-        virtual void leaR0(int ea) {
+        virtual void leaR0(int ea, Type* pPointerType) {
             fprintf(stderr, "leaR0(%d)\n", ea);
-            mpBase->leaR0(ea);
+            mpBase->leaR0(ea, pPointerType);
         }
 
         virtual void storeR0(int ea) {
@@ -1395,9 +1549,14 @@ class Compiler : public ErrorSink {
             mpBase->storeR0(ea);
         }
 
-        virtual void loadR0(int ea, bool isIncDec, int op) {
+        virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
             fprintf(stderr, "loadR0(%d, %d, %d)\n", ea, isIncDec, op);
-            mpBase->loadR0(ea, isIncDec, op);
+            mpBase->loadR0(ea, isIncDec, op, pType);
+        }
+
+        virtual void convertR0(Type* pType){
+            fprintf(stderr, "convertR0(pType)\n");
+            mpBase->convertR0(pType);
         }
 
         virtual int beginFunctionCallArguments() {
@@ -1416,20 +1575,20 @@ class Compiler : public ErrorSink {
             mpBase->endFunctionCallArguments(a, l);
         }
 
-        virtual int callForward(int symbol) {
-            int result = mpBase->callForward(symbol);
+        virtual int callForward(int symbol, Type* pFunc) {
+            int result = mpBase->callForward(symbol, pFunc);
             fprintf(stderr, "callForward(%d) = %d\n", symbol, result);
             return result;
         }
 
-        virtual void callRelative(int t) {
+        virtual void callRelative(int t, Type* pFunc) {
             fprintf(stderr, "callRelative(%d)\n", t);
-            mpBase->callRelative(t);
+            mpBase->callRelative(t, pFunc);
         }
 
-        virtual void callIndirect(int l) {
+        virtual void callIndirect(int l, Type* pFunc) {
             fprintf(stderr, "callIndirect(%d)\n", l);
-            mpBase->callIndirect(l);
+            mpBase->callIndirect(l, pFunc);
         }
 
         virtual void adjustStackAfterCall(int l, bool isIndirect) {
@@ -1473,71 +1632,6 @@ class Compiler : public ErrorSink {
     };
 
 #endif // PROVIDE_TRACE_CODEGEN
-
-
-    // Subset of STL vector.
-    template<class E> class Vector {
-        public:
-        Vector() {
-            mpBase = 0;
-            mUsed = 0;
-            mSize = 0;
-        }
-
-        ~Vector() {
-            if (mpBase) {
-                for(size_t i = 0; i < mUsed; i++)  {
-                    mpBase[mUsed].~E();
-                }
-                free(mpBase);
-            }
-        }
-
-        inline E& operator[](size_t i) {
-            return mpBase[i];
-        }
-
-        inline E& front() {
-            return mpBase[0];
-        }
-
-        inline E& back() {
-            return mpBase[mUsed - 1];
-        }
-
-        void pop_back() {
-            mUsed -= 1;
-            mpBase[mUsed].~E();
-        }
-
-        void push_back(const E& item) {
-            * ensure(1) = item;
-        }
-
-        size_t size() {
-            return mUsed;
-        }
-
-    private:
-        E* ensure(int n) {
-            size_t newUsed = mUsed + n;
-            if (newUsed > mSize) {
-                size_t newSize = mSize * 2 + 10;
-                if (newSize < newUsed) {
-                    newSize = newUsed;
-                }
-                mpBase = (E*) realloc(mpBase, sizeof(E) * newSize);
-                mSize = newSize;
-            }
-            E* result = mpBase + mUsed;
-            mUsed = newUsed;
-            return result;
-        }
-
-        E* mpBase;
-        size_t mUsed;
-        size_t mSize;
-    };
 
     class Arena {
     public:
@@ -1658,7 +1752,6 @@ class Compiler : public ErrorSink {
         Vector<Chunk> mData;
     };
 
-    typedef int tokenid_t;
     struct VariableInfo;
 
     struct Token {
@@ -2066,6 +2159,7 @@ class Compiler : public ErrorSink {
     double tokd;     // floating point constant value
     int tokl;         // token operator level
     intptr_t rsym; // return symbol
+    Type* pReturnType; // type of the current function's return.
     intptr_t loc; // local variable index
     char* glo;  // global variable index
     String mTokenString;
@@ -2088,6 +2182,7 @@ class Compiler : public ErrorSink {
     Type* mkpVoid;       // void
     Type* mkpFloat;
     Type* mkpDouble;
+    Type* mkpIntFn;
     Type* mkpIntPtr;
     Type* mkpCharPtr;
     Type* mkpPtrIntFn;
@@ -2608,7 +2703,7 @@ class Compiler : public ErrorSink {
 
     bool acceptStringLiteral() {
         if (tok == '"') {
-            pGen->li((int) glo);
+            pGen->li((int) glo, mkpCharPtr);
             // This while loop merges multiple adjacent string constants.
             while (tok == '"') {
                 while (ch != '"' && ch != EOF) {
@@ -2645,11 +2740,11 @@ class Compiler : public ErrorSink {
             t = tok;
             next();
             if (t == TOK_NUM) {
-                pGen->li(a);
+                pGen->li(a, mkpInt);
             } else if (t == TOK_NUM_FLOAT) {
-                pGen->lif(ad);
+                pGen->lif(ad, mkpFloat);
             } else if (t == TOK_NUM_DOUBLE) {
-                pGen->lid(ad);
+                pGen->lid(ad, mkpDouble);
             } else if (c == 2) {
                 /* -, +, !, ~ */
                 unary(false);
@@ -2693,7 +2788,9 @@ class Compiler : public ErrorSink {
                 // Else we fall through to the function call below, with
                 // t == 0 to trigger an indirect function call. Hack!
             } else if (t == '&') {
-                pGen->leaR0((int) VI(tok)->pAddress);
+                VariableInfo* pVI = VI(tok);
+                pGen->leaR0((int) pVI->pAddress,
+                            createPtrType(pVI->pType, mLocalArena));
                 next();
             } else if (t == EOF ) {
                 error("Unexpected EOF.");
@@ -2705,12 +2802,13 @@ class Compiler : public ErrorSink {
                     mGlobals.add(t);
                     // printf("Adding new global function %s\n", nameof(t));
                 }
-
-                n = (intptr_t) VI(t)->pAddress;
+                VariableInfo* pVI = VI(t);
+                n = (intptr_t) pVI->pAddress;
                 /* forward reference: try dlsym */
                 if (!n) {
                     n = (intptr_t) dlsym(RTLD_DEFAULT, nameof(t));
-                    VI(t)->pAddress = (void*) n;
+                    pVI->pType = mkpIntFn;
+                    pVI->pAddress = (void*) n;
                 }
                 if ((tok == '=') & allowAssignment) {
                     /* assignment */
@@ -2722,7 +2820,7 @@ class Compiler : public ErrorSink {
                     if (!n) {
                         error("Undefined variable %s", nameof(t));
                     }
-                    pGen->loadR0(n, tokl == 11, tokc);
+                    pGen->loadR0(n, tokl == 11, tokc, pVI->pType);
                     if (tokl == 11) {
                         next();
                     }
@@ -2731,13 +2829,12 @@ class Compiler : public ErrorSink {
         }
 
         /* function call */
-        if (tok == '(') {
+        if (accept('(')) {
             if (n == 1)
                 pGen->pushR0();
 
             /* push args and invert order */
             a = pGen->beginFunctionCallArguments();
-            next();
             int l = 0;
             while (tok != ')' && tok != EOF) {
                 expr();
@@ -2754,11 +2851,13 @@ class Compiler : public ErrorSink {
             if (!n) {
                 /* forward reference */
                 VariableInfo* pVI = VI(t);
-                pVI->pForward = (void*) pGen->callForward((int) pVI->pForward);
+                pVI->pForward = (void*) pGen->callForward((int) pVI->pForward,
+                                                          pVI->pType);
             } else if (n == 1) {
-                pGen->callIndirect(l);
+                pGen->callIndirect(l, mkpPtrIntFn->pHead);
             } else {
-                pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset());
+                pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset(),
+                                   VI(t)->pType);
             }
             pGen->adjustStackAfterCall(l, n == 1);
         }
@@ -2796,10 +2895,10 @@ class Compiler : public ErrorSink {
             /* && and || output code generation */
             if (a && level > 8) {
                 a = pGen->gtst(t == OP_LOGICAL_OR, a);
-                pGen->li(t != OP_LOGICAL_OR);
+                pGen->li(t != OP_LOGICAL_OR, mkpInt);
                 pGen->gjmp(5); /* jmp $ + 5 (sizeof li, FIXME for ARM) */
                 pGen->gsym(a);
-                pGen->li(t == OP_LOGICAL_OR);
+                pGen->li(t == OP_LOGICAL_OR, mkpInt);
             }
         }
     }
@@ -2876,8 +2975,10 @@ class Compiler : public ErrorSink {
             }
         } else {
             if (accept(TOK_RETURN)) {
-                if (tok != ';')
+                if (tok != ';') {
                     expr();
+                    pGen->convertR0(pReturnType);
+                }
                 rsym = pGen->gjmp(rsym); /* jmp */
             } else if (accept(TOK_BREAK)) {
                 *(int *) l = pGen->gjmp(*(int *) l);
@@ -2886,18 +2987,6 @@ class Compiler : public ErrorSink {
             skip(';');
         }
     }
-
-    enum TypeTag {
-        TY_INT, TY_CHAR, TY_VOID, TY_FLOAT, TY_DOUBLE,
-        TY_POINTER, TY_FUNC, TY_PARAM
-    };
-
-    struct Type {
-        TypeTag tag;
-        tokenid_t id; // For function arguments
-        Type* pHead;
-        Type* pTail;
-    };
 
     bool typeEqual(Type* a, Type* b) {
         if (a == b) {
@@ -3356,6 +3445,7 @@ class Compiler : public ErrorSink {
                         argCount++;
                     }
                     rsym = loc = 0;
+                    pReturnType = pDecl->pHead;
                     a = pGen->functionEntry(argCount);
                     block(0, true);
                     pGen->gsym(rsym);
@@ -3502,11 +3592,10 @@ public:
         mkpVoid = createType(TY_VOID, NULL, NULL, mGlobalArena);
         mkpFloat = createType(TY_FLOAT, NULL, NULL, mGlobalArena);
         mkpDouble = createType(TY_DOUBLE, NULL, NULL, mGlobalArena);
+        mkpIntFn =  createType(TY_FUNC, mkpInt, NULL, mGlobalArena);
         mkpIntPtr = createPtrType(mkpInt, mGlobalArena);
         mkpCharPtr = createPtrType(mkpChar, mGlobalArena);
-        mkpPtrIntFn = createPtrType(
-                  createType(TY_FUNC, mkpInt, NULL, mGlobalArena),
-                  mGlobalArena);
+        mkpPtrIntFn = createPtrType(mkpIntFn, mGlobalArena);
     }
 
     void checkForUndefinedForwardReferences() {
