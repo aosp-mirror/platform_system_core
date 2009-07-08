@@ -360,7 +360,7 @@ class Compiler : public ErrorSink {
          * argument, addressed relative to FP.
          * else it is an absolute global address.
          */
-        virtual void storeR0(int ea) = 0;
+        virtual void storeR0(int ea, Type* pType) = 0;
 
         /* load R0 from a variable.
          * If ea <= LOCAL, then this is a local variable, or an
@@ -449,14 +449,19 @@ class Compiler : public ErrorSink {
         virtual int jumpOffset() = 0;
 
         /**
-         * Stack alignment (in bytes) for this type of data
+         * Memory alignment (in bytes) for this type of data
          */
-        virtual size_t stackAlignment(Type* type) = 0;
+        virtual size_t alignment(Type* type) = 0;
 
         /**
          * Array element alignment (in bytes) for this type of data.
          */
         virtual size_t sizeOf(Type* type) = 0;
+
+        /**
+         * Stack argument size of this data type.
+         */
+        virtual size_t stackSizeOf(Type* pType) = 0;
 
         virtual Type* getR0Type() {
             return mExpressionStack.back();
@@ -823,7 +828,7 @@ class Compiler : public ErrorSink {
             setR0Type(pPointerType);
         }
 
-        virtual void storeR0(int ea) {
+        virtual void storeR0(int ea, Type* pType) {
             LOG_API("storeR0(%d);\n", ea);
             if (ea < LOCAL) {
                 // Local, fp relative
@@ -1056,9 +1061,9 @@ class Compiler : public ErrorSink {
         }
 
         /**
-         * Stack alignment (in bytes) for this type of data
+         * alignment (in bytes) for this type of data
          */
-        virtual size_t stackAlignment(Type* pType){
+        virtual size_t alignment(Type* pType){
             switch(pType->tag) {
                 case TY_DOUBLE:
                     return 8;
@@ -1086,6 +1091,16 @@ class Compiler : public ErrorSink {
                     return 4;
             }
         }
+
+        virtual size_t stackSizeOf(Type* pType) {
+            switch(pType->tag) {
+                case TY_DOUBLE:
+                    return 8;
+                default:
+                    return 4;
+            }
+        }
+
     private:
         static FILE* disasmOut;
 
@@ -1238,7 +1253,25 @@ class Compiler : public ErrorSink {
         }
 
         virtual void pushR0() {
-            o(0x50); /* push %eax */
+            Type* pR0Type = getR0Type();
+            TypeTag r0ct = collapseType(pR0Type->tag);
+            switch(r0ct) {
+                case TY_INT:
+                    o(0x50); /* push %eax */
+                    break;
+                case TY_FLOAT:
+                    o(0x50); /* push %eax */
+                    o(0x241cd9); // fstps 0(%esp)
+                    break;
+                case TY_DOUBLE:
+                    o(0x50); /* push %eax */
+                    o(0x50); /* push %eax */
+                    o(0x241cdd); // fstpl 0(%esp)
+                    break;
+                default:
+                    error("pushR0 %d", r0ct);
+                    break;
+            }
             pushType();
         }
 
@@ -1252,6 +1285,12 @@ class Compiler : public ErrorSink {
                     break;
                 case TY_CHAR:
                     o(0x0188); /* movl %eax/%al, (%ecx) */
+                    break;
+                case TY_FLOAT:
+                    o(0x19d9); /* fstps (%ecx) */
+                    break;
+                case TY_DOUBLE:
+                    o(0x19dd); /* fstpl (%ecx) */
                     break;
                 default:
                     error("storeR0ToTOS: unsupported type");
@@ -1281,8 +1320,30 @@ class Compiler : public ErrorSink {
             setR0Type(pPointerType);
         }
 
-        virtual void storeR0(int ea) {
-            gmov(6, ea); /* mov %eax, EA */
+        virtual void storeR0(int ea, Type* pType) {
+            TypeTag tag = pType->tag;
+            switch (tag) {
+                case TY_INT:
+                    gmov(6, ea); /* mov %eax, EA */
+                    break;
+                case TY_FLOAT:
+                    if (ea < -LOCAL || ea > LOCAL) {
+                        oad(0x1dd9, ea); // fstps ea
+                    } else {
+                        oad(0x9dd9, ea); // fstps ea(%ebp)
+                    }
+                    break;
+                case TY_DOUBLE:
+                    if (ea < -LOCAL || ea > LOCAL) {
+                        oad(0x1ddd, ea); // fstpl ea
+                    } else {
+                        oad(0x9ddd, ea); // fstpl ea(%ebp)
+                    }
+                    break;
+                default:
+                    error("Unable to store to type %d", tag);
+                    break;
+            }
         }
 
         virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
@@ -1448,9 +1509,9 @@ class Compiler : public ErrorSink {
         }
 
         /**
-         * Stack alignment (in bytes) for this type of data
+         * Alignment (in bytes) for this type of data
          */
-        virtual size_t stackAlignment(Type* pType){
+        virtual size_t alignment(Type* pType){
             switch(pType->tag) {
                 case TY_DOUBLE:
                     return 8;
@@ -1475,6 +1536,15 @@ class Compiler : public ErrorSink {
                 case TY_DOUBLE:
                     return 8;
                 case TY_POINTER:
+                    return 4;
+            }
+        }
+
+        virtual size_t stackSizeOf(Type* pType) {
+            switch(pType->tag) {
+                case TY_DOUBLE:
+                    return 8;
+                default:
                     return 4;
             }
         }
@@ -1626,9 +1696,9 @@ class Compiler : public ErrorSink {
             mpBase->leaR0(ea, pPointerType);
         }
 
-        virtual void storeR0(int ea) {
-            fprintf(stderr, "storeR0(%d)\n", ea);
-            mpBase->storeR0(ea);
+        virtual void storeR0(int ea, Type* pType) {
+            fprintf(stderr, "storeR0(%d, pType)\n", ea);
+            mpBase->storeR0(ea, pType);
         }
 
         virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
@@ -1699,10 +1769,10 @@ class Compiler : public ErrorSink {
         }
 
         /**
-         * Stack alignment (in bytes) for this type of data
+         * Alignment (in bytes) for this type of data
          */
-        virtual size_t stackAlignment(Type* pType){
-            return mpBase->stackAlignment(pType);
+        virtual size_t alignment(Type* pType){
+            return mpBase->alignment(pType);
         }
 
         /**
@@ -1711,6 +1781,12 @@ class Compiler : public ErrorSink {
         virtual size_t sizeOf(Type* pType){
             return mpBase->sizeOf(pType);
         }
+
+
+        virtual size_t stackSizeOf(Type* pType) {
+            return mpBase->stackSizeOf(pType);
+        }
+
 
         virtual Type* getR0Type() {
             return mpBase->getR0Type();
@@ -2795,7 +2871,7 @@ class Compiler : public ErrorSink {
             // This while loop merges multiple adjacent string constants.
             while (tok == '"') {
                 while (ch != '"' && ch != EOF) {
-                    *allocGlobalSpace(1) = getq();
+                    *allocGlobalSpace(1,1) = getq();
                 }
                 if (ch != '"') {
                     error("Unterminated string constant.");
@@ -2806,7 +2882,7 @@ class Compiler : public ErrorSink {
             /* Null terminate */
             *glo = 0;
             /* align heap */
-            allocGlobalSpace((char*) (((intptr_t) glo + 4) & -4) - glo);
+            allocGlobalSpace(1,(char*) (((intptr_t) glo + 4) & -4) - glo);
 
             return true;
         }
@@ -2864,6 +2940,10 @@ class Compiler : public ErrorSink {
                     t = TOK_INT;
                 } else if (typeEqual(pCast, mkpCharPtr)) {
                     t = TOK_CHAR;
+                } else if (typeEqual(pCast, mkpFloatPtr)) {
+                    t = TOK_FLOAT;
+                } else if (typeEqual(pCast, mkpDoublePtr)) {
+                    t = TOK_DOUBLE;
                 } else if (typeEqual(pCast, mkpPtrIntFn)){
                     t = 0;
                 } else {
@@ -2914,7 +2994,7 @@ class Compiler : public ErrorSink {
                     /* assignment */
                     next();
                     expr();
-                    pGen->storeR0(n);
+                    pGen->storeR0(n, pVI->pType);
                 } else if (tok != '(') {
                     /* variable */
                     if (!n) {
@@ -3445,7 +3525,7 @@ class Compiler : public ErrorSink {
                 if (accept('=')) {
                     /* assignment */
                     expr();
-                    pGen->storeR0(variableAddress);
+                    pGen->storeR0(variableAddress, pDecl);
                 }
                 if (tok == ',')
                     next();
@@ -3517,7 +3597,9 @@ class Compiler : public ErrorSink {
                 // it's a variable declaration
                 for(;;) {
                     if (name && !name->pAddress) {
-                        name->pAddress = (int*) allocGlobalSpace(4);
+                        name->pAddress = (int*) allocGlobalSpace(
+                                                   pGen->alignment(name->pType),
+                                                   pGen->sizeOf(name->pType));
                     }
                     if (accept('=')) {
                         if (tok == TOK_NUM) {
@@ -3563,7 +3645,7 @@ class Compiler : public ErrorSink {
                         addLocalSymbol(pArg);
                         /* read param name and compute offset */
                         VI(pArg->id)->pAddress = (void*) a;
-                        a = a + 4;
+                        a = a + pGen->stackSizeOf(pArg);
                         argCount++;
                     }
                     rsym = loc = 0;
@@ -3578,13 +3660,15 @@ class Compiler : public ErrorSink {
         }
     }
 
-    char* allocGlobalSpace(int bytes) {
-        if (glo - pGlobalBase + bytes > ALLOC_SIZE) {
+    char* allocGlobalSpace(size_t alignment, size_t bytes) {
+        size_t base = (((size_t) glo) + alignment - 1) & ~(alignment-1);
+        size_t end = base + bytes;
+        if ((end - (size_t) pGlobalBase) > ALLOC_SIZE) {
             error("Global space exhausted");
             return NULL;
         }
-        char* result = glo;
-        glo += bytes;
+        char* result = (char*) base;
+        glo = (char*) end;
         return result;
     }
 
