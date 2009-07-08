@@ -269,26 +269,46 @@ static int find_usb_device(const char *base,
                     if (device->iSerialNumber) {
                         struct usbdevfs_ctrltransfer  ctrl;
                         __u16 buffer[128];
-                        int result;
+                        __u16 languages[128];
+                        int i, result;
+                        int languageCount = 0;
 
-                        memset(buffer, 0, sizeof(buffer));
+                        memset(languages, 0, sizeof(languages));
                         memset(&ctrl, 0, sizeof(ctrl));
 
+                            // read list of supported languages
                         ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
                         ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
-                        ctrl.wValue = (USB_DT_STRING << 8) | device->iSerialNumber;
+                        ctrl.wValue = (USB_DT_STRING << 8) | 0;
                         ctrl.wIndex = 0;
-                        ctrl.wLength = sizeof(buffer);
-                        ctrl.data = buffer;
+                        ctrl.wLength = sizeof(languages);
+                        ctrl.data = languages;
 
                         result = ioctl(fd, USBDEVFS_CONTROL, &ctrl);
-                        if (result > 0) {
-                            int i;
-                                // skip first word, and copy the rest to the serial string, changing shorts to bytes.
-                            result /= 2;
-                            for (i = 1; i < result; i++)
-                                serial[i - 1] = buffer[i];
-                            serial[i - 1] = 0;
+                        if (result > 0)
+                            languageCount = (result - 2) / 2;
+
+                        for (i = 1; i <= languageCount; i++) {
+                            memset(buffer, 0, sizeof(buffer));
+                            memset(&ctrl, 0, sizeof(ctrl));
+
+                            ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
+                            ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
+                            ctrl.wValue = (USB_DT_STRING << 8) | device->iSerialNumber;
+                            ctrl.wIndex = languages[i];
+                            ctrl.wLength = sizeof(buffer);
+                            ctrl.data = buffer;
+
+                            result = ioctl(fd, USBDEVFS_CONTROL, &ctrl);
+                            if (result > 0) {
+                                int i;
+                                    // skip first word, and copy the rest to the serial string, changing shorts to bytes.
+                                result /= 2;
+                                for (i = 1; i < result; i++)
+                                    serial[i - 1] = buffer[i];
+                                serial[i - 1] = 0;
+                                break;
+                            }
                         }
                     }
 
