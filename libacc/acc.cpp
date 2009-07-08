@@ -37,7 +37,6 @@
 #define PROVIDE_X64_CODEGEN
 #endif
 
-
 #ifdef PROVIDE_ARM_CODEGEN
 #include "disassem.h"
 #endif
@@ -297,11 +296,8 @@ class Compiler : public ErrorSink {
         /* load immediate value to R0 */
         virtual void li(int i, Type* pType) = 0;
 
-        /* load floating point immediate value to R0 */
-        virtual void lif(float f, Type* pType) = 0;
-
-        /* load double-precision floating point immediate value to R0 */
-        virtual void lid(double d, Type* pType) = 0;
+        /* Load floating point value from global address. */
+        virtual void loadFloat(int address, Type* pType) = 0;
 
         /* Jump to a target, and return the address of the word that
          * holds the target data, in case it needs to be fixed up later.
@@ -389,8 +385,9 @@ class Compiler : public ErrorSink {
         virtual int beginFunctionCallArguments() = 0;
 
         /* Emit code to store R0 to the stack at byte offset l.
+         * Returns stack size of object (typically 4 or 8 bytes)
          */
-        virtual void storeR0ToArg(int l) = 0;
+        virtual size_t storeR0ToArg(int l) = 0;
 
         /* Patch the function call preamble.
          * a is the address returned from beginFunctionCallArguments
@@ -461,6 +458,10 @@ class Compiler : public ErrorSink {
          */
         virtual size_t sizeOf(Type* type) = 0;
 
+        virtual Type* getR0Type() {
+            return mExpressionStack.back();
+        }
+
     protected:
         /*
          * Output a byte. Handles all values, 0..ff.
@@ -494,16 +495,13 @@ class Compiler : public ErrorSink {
 
         void assert(bool test) {
             if (!test) {
+                * (char*) 0 = 0;
                 error("code generator assertion failed.");
             }
         }
 
         void setR0Type(Type* pType) {
             mExpressionStack.back() = pType;
-        }
-
-        Type* getR0Type() {
-            return mExpressionStack.back();
         }
 
         Type* getTOSType() {
@@ -527,6 +525,15 @@ class Compiler : public ErrorSink {
                     TY_INT, TY_INT, TY_VOID, TY_FLOAT, TY_DOUBLE, TY_INT,
                     TY_VOID, TY_VOID};
             return collapsedTag[tag];
+        }
+
+        TypeTag collapseTypeR0() {
+            return collapseType(getR0Type()->tag);
+        }
+
+        bool isFloatType(Type* pType) {
+            TypeTag tag = pType->tag;
+            return tag == TY_FLOAT || tag == TY_DOUBLE;
         }
 
     private:
@@ -613,16 +620,8 @@ class Compiler : public ErrorSink {
             setR0Type(pType);
         }
 
-        virtual void lif(float f, Type* pType) {
-            union { float f; int i; } converter;
-            converter.f = f;
-            li(converter.i, pType);
-        }
-
-        virtual void lid(double d, Type* pType) {
-            union { double d; int i[2]; } converter;
-            converter.d = d;
-            error("lid: unimplemented");
+        virtual void loadFloat(int address, Type* pType) {
+            error("Unimplemented.\n");
             setR0Type(pType);
         }
 
@@ -843,7 +842,7 @@ class Compiler : public ErrorSink {
         }
 
         virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
-            LOG_API("loadR0(%d, %d, %d);\n", ea, isIncDec, op);
+            LOG_API("loadR0(%d, %d, %d, %d);\n", ea, isIncDec, op, pType);
             if (ea < LOCAL) {
                 // Local, fp relative
                 if (ea < -4095 || ea > 4095) {
@@ -891,10 +890,16 @@ class Compiler : public ErrorSink {
         }
 
         virtual void convertR0(Type* pType){
-            if (bitsSame(pType, getR0Type())) {
-                return;
+            Type* pR0Type = getR0Type();
+            if (bitsSame(pType, pR0Type)) {
+                // do nothing special
+            } else if (isFloatType(pType) && isFloatType(pR0Type)) {
+                // do nothing special, both held in same register on x87.
+            } else {
+                error("Incompatible types old: %d new: %d",
+                      pR0Type->tag, pType->tag);
             }
-            error("Incompatible types");
+            setR0Type(pType);
         }
 
         virtual int beginFunctionCallArguments() {
@@ -902,12 +907,13 @@ class Compiler : public ErrorSink {
             return o4(0xE24DDF00); // Placeholder
         }
 
-        virtual void storeR0ToArg(int l) {
+        virtual size_t storeR0ToArg(int l) {
             LOG_API("storeR0ToArg(%d);\n", l);
             if (l < 0 || l > 4096-4) {
                 error("l out of range for stack offset: 0x%08x", l);
             }
             o4(0xE58D0000 + l); // str r0, [sp, #4]
+            return 4;
         }
 
         virtual void endFunctionCallArguments(int a, int l) {
@@ -1169,18 +1175,19 @@ class Compiler : public ErrorSink {
             setR0Type(pType);
         }
 
-        virtual void lif(float f, Type* pType) {
-            union { float f; int i; } converter;
-            converter.f = f;
+        virtual void loadFloat(int address, Type* pType) {
             setR0Type(pType);
-            error("unimplemented: lif");
-        }
-
-        virtual void lid(double d, Type* pType) {
-            union { double d; int i[2]; } converter;
-            converter.d = d;
-            setR0Type(pType);
-            error("unimplemented: lid");
+            switch (pType->tag) {
+            case TY_FLOAT:
+                oad(0x05D9, address);      // flds
+                break;
+            case TY_DOUBLE:
+                oad(0x05DD, address);      // fldl
+                break;
+            default:
+                assert(false);
+                break;
+            }
         }
 
         virtual int gjmp(int t) {
@@ -1287,19 +1294,44 @@ class Compiler : public ErrorSink {
         }
 
         virtual void convertR0(Type* pType){
-            if (bitsSame(pType, getR0Type())) {
+            Type* pR0Type = getR0Type();
+            if (pR0Type == NULL) {
+                error("don't know R0Type");
+                setR0Type(pType);
                 return;
             }
-            error("convertR0: unsupported conversion %d <- %d", pType->tag,
-                  getR0Type()->tag);
+            if (bitsSame(pType, pR0Type)) {
+                // do nothing special
+            } else if (isFloatType(pType) && isFloatType(pR0Type)) {
+                // do nothing special, both held in same register on x87.
+            } else {
+                error("Incompatible types old: %d new: %d",
+                      pR0Type->tag, pType->tag);
+            }
+            setR0Type(pType);
         }
 
         virtual int beginFunctionCallArguments() {
             return oad(0xec81, 0); /* sub $xxx, %esp */
         }
 
-        virtual void storeR0ToArg(int l) {
-            oad(0x248489, l); /* movl %eax, xxx(%esp) */
+        virtual size_t storeR0ToArg(int l) {
+            Type* pR0Type = getR0Type();
+            TypeTag r0ct = collapseType(pR0Type->tag);
+            switch(r0ct) {
+                case TY_INT:
+                    oad(0x248489, l); /* movl %eax, xxx(%esp) */
+                    return 4;
+                case TY_FLOAT:
+                    oad(0x249CD9, l); /* fstps   xxx(%esp) */
+                    return 4;
+                case TY_DOUBLE:
+                    oad(0x249CDD, l); /* fstpl   xxx(%esp) */
+                    return 8;
+                default:
+                    assert(false);
+                    return 0;
+            }
         }
 
         virtual void endFunctionCallArguments(int a, int l) {
@@ -1480,14 +1512,9 @@ class Compiler : public ErrorSink {
             mpBase->li(t, pType);
         }
 
-        virtual void lif(float f, Type* pType) {
-            fprintf(stderr, "lif(%g)\n", f);
-            mpBase->lif(f, pType);
-        }
-
-        virtual void lid(double d, Type* pType) {
-            fprintf(stderr, "lid(%g)\n", d);
-            mpBase->lid(d, pType);
+        virtual void loadFloat(int address, Type* pType) {
+            fprintf(stderr, "loadFloat(%d, type)\n", address);
+            mpBase->loadFloat(address, pType);
         }
 
         virtual int gjmp(int t) {
@@ -1550,7 +1577,7 @@ class Compiler : public ErrorSink {
         }
 
         virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
-            fprintf(stderr, "loadR0(%d, %d, %d)\n", ea, isIncDec, op);
+            fprintf(stderr, "loadR0(%d, %d, %d, pType)\n", ea, isIncDec, op);
             mpBase->loadR0(ea, isIncDec, op, pType);
         }
 
@@ -1565,9 +1592,9 @@ class Compiler : public ErrorSink {
             return result;
         }
 
-        virtual void storeR0ToArg(int l) {
+        virtual size_t storeR0ToArg(int l) {
             fprintf(stderr, "storeR0ToArg(%d)\n", l);
-            mpBase->storeR0ToArg(l);
+            return mpBase->storeR0ToArg(l);
         }
 
         virtual void endFunctionCallArguments(int a, int l) {
@@ -1628,6 +1655,10 @@ class Compiler : public ErrorSink {
          */
         virtual size_t sizeOf(Type* pType){
             return mpBase->sizeOf(pType);
+        }
+
+        virtual Type* getR0Type() {
+            return mpBase->getR0Type();
         }
     };
 
@@ -2185,6 +2216,8 @@ class Compiler : public ErrorSink {
     Type* mkpIntFn;
     Type* mkpIntPtr;
     Type* mkpCharPtr;
+    Type* mkpFloatPtr;
+    Type* mkpDoublePtr;
     Type* mkpPtrIntFn;
 
     InputStream* file;
@@ -2742,9 +2775,17 @@ class Compiler : public ErrorSink {
             if (t == TOK_NUM) {
                 pGen->li(a, mkpInt);
             } else if (t == TOK_NUM_FLOAT) {
-                pGen->lif(ad, mkpFloat);
+                // Align to 4-byte boundary
+                glo = (char*) (((intptr_t) glo + 3) & -4);
+                * (float*) glo = (float) ad;
+                pGen->loadFloat((int) glo, mkpFloat);
+                glo += 4;
             } else if (t == TOK_NUM_DOUBLE) {
-                pGen->lid(ad, mkpDouble);
+                // Align to 8-byte boundary
+                glo = (char*) (((intptr_t) glo + 7) & -8);
+                * (double*) glo = ad;
+                pGen->loadFloat((int) glo, mkpDouble);
+                glo += 8;
             } else if (c == 2) {
                 /* -, +, !, ~ */
                 unary(false);
@@ -2807,7 +2848,11 @@ class Compiler : public ErrorSink {
                 /* forward reference: try dlsym */
                 if (!n) {
                     n = (intptr_t) dlsym(RTLD_DEFAULT, nameof(t));
-                    pVI->pType = mkpIntFn;
+                    if (tok == '(') {
+                        pVI->pType = mkpIntFn;
+                    } else {
+                        pVI->pType = mkpInt;
+                    }
                     pVI->pAddress = (void*) n;
                 }
                 if ((tok == '=') & allowAssignment) {
@@ -2830,27 +2875,49 @@ class Compiler : public ErrorSink {
 
         /* function call */
         if (accept('(')) {
-            if (n == 1)
+            Type* pArgList = NULL;
+            VariableInfo* pVI = NULL;
+            if (n == 1) { // Indirect function call, push address of fn.
+                pArgList = pGen->getR0Type()->pTail;
                 pGen->pushR0();
-
+            } else {
+                pVI = VI(t);
+                pArgList = pVI->pType->pTail;
+            }
+            bool varArgs = pArgList == NULL;
             /* push args and invert order */
             a = pGen->beginFunctionCallArguments();
             int l = 0;
             while (tok != ')' && tok != EOF) {
+                if (! varArgs && !pArgList) {
+                    error ("Unexpected argument.");
+                }
                 expr();
-                pGen->storeR0ToArg(l);
-                l = l + 4;
+                Type* pTargetType;
+                if (pArgList) {
+                    pTargetType = pArgList->pHead;
+                    pArgList = pArgList->pTail;
+                } else {
+                    pTargetType = pGen->getR0Type();
+                    if (pTargetType->tag == TY_FLOAT) {
+                        pTargetType = mkpDouble;
+                    }
+                }
+                pGen->convertR0(pTargetType);
+                l += pGen->storeR0ToArg(l);
                 if (accept(',')) {
                     // fine
                 } else if ( tok != ')') {
                     error("Expected ',' or ')'");
                 }
             }
+            if (! varArgs && pArgList) {
+                error ("Expected more argument(s).");
+            }
             pGen->endFunctionCallArguments(a, l);
             skip(')');
             if (!n) {
                 /* forward reference */
-                VariableInfo* pVI = VI(t);
                 pVI->pForward = (void*) pGen->callForward((int) pVI->pForward,
                                                           pVI->pType);
             } else if (n == 1) {
@@ -3595,6 +3662,8 @@ public:
         mkpIntFn =  createType(TY_FUNC, mkpInt, NULL, mGlobalArena);
         mkpIntPtr = createPtrType(mkpInt, mGlobalArena);
         mkpCharPtr = createPtrType(mkpChar, mGlobalArena);
+        mkpFloatPtr = createPtrType(mkpFloat, mGlobalArena);
+        mkpDoublePtr = createPtrType(mkpDouble, mGlobalArena);
         mkpPtrIntFn = createPtrType(mkpIntFn, mGlobalArena);
     }
 
