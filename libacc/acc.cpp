@@ -532,7 +532,10 @@ class Compiler : public ErrorSink {
         }
 
         bool isFloatType(Type* pType) {
-            TypeTag tag = pType->tag;
+            return isFloatTag(pType->tag);
+        }
+
+        bool isFloatTag(TypeTag tag) {
             return tag == TY_FLOAT || tag == TY_DOUBLE;
         }
 
@@ -1283,12 +1286,40 @@ class Compiler : public ErrorSink {
         }
 
         virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
-            gmov(8, ea); /* mov EA, %eax */
-            if (isIncDec) {
-                /* Implement post-increment or post decrement.
-                 */
-                gmov(0, ea); /* 83 ADD */
-                o(decodeOp(op));
+            TypeTag tag = collapseType(pType->tag);
+            switch (tag) {
+                case TY_INT:
+                    gmov(8, ea); /* mov EA, %eax */
+                    if (isIncDec) {
+                        /* Implement post-increment or post decrement.
+                         */
+                        gmov(0, ea); /* 83 ADD */
+                        o(decodeOp(op));
+                    }
+                    break;
+                case TY_FLOAT:
+                    if (ea < -LOCAL || ea > LOCAL) {
+                        oad(0x05d9, ea); // flds ea
+                    } else {
+                        oad(0x85d9, ea); // flds ea(%ebp)
+                    }
+                    if (isIncDec) {
+                        error("inc/dec not implemented for float.");
+                    }
+                    break;
+                case TY_DOUBLE:
+                    if (ea < -LOCAL || ea > LOCAL) {
+                        oad(0x05dd, ea); // fldl ea
+                    } else {
+                        oad(0x85dd, ea); // fldl ea(%ebp)
+                    }
+                    if (isIncDec) {
+                        error("inc/dec not implemented for double.");
+                    }
+                    break;
+                default:
+                    error("Unable to load type %d", tag);
+                    break;
             }
             setR0Type(pType);
         }
@@ -1296,7 +1327,7 @@ class Compiler : public ErrorSink {
         virtual void convertR0(Type* pType){
             Type* pR0Type = getR0Type();
             if (pR0Type == NULL) {
-                error("don't know R0Type");
+                assert(false);
                 setR0Type(pType);
                 return;
             }
@@ -1305,8 +1336,32 @@ class Compiler : public ErrorSink {
             } else if (isFloatType(pType) && isFloatType(pR0Type)) {
                 // do nothing special, both held in same register on x87.
             } else {
-                error("Incompatible types old: %d new: %d",
-                      pR0Type->tag, pType->tag);
+                TypeTag r0Tag = collapseType(pR0Type->tag);
+                TypeTag destTag = collapseType(pType->tag);
+                if (r0Tag == TY_INT && isFloatTag(destTag)) {
+                    // Convert R0 from int to float
+                    o(0x50);      // push %eax
+                    o(0x2404DB);  // fildl 0(%esp)
+                    o(0x58);      // pop %eax
+                } else if (isFloatTag(r0Tag) && destTag == TY_INT) {
+                    // Convert R0 from float to int. Complicated because
+                    // need to save and restore the rounding mode.
+                    o(0x50);       // push %eax
+                    o(0x50);       // push %eax
+                    o(0x02247cD9); // fnstcw 2(%esp)
+                    o(0x2444b70f); // movzwl 2(%esp), %eax
+                    o(0x02);
+                    o(0x0cb4);     // movb $12, %ah
+                    o(0x24048966); // movw %ax, 0(%esp)
+                    o(0x242cd9);   // fldcw 0(%esp)
+                    o(0x04245cdb); // fistpl 4(%esp)
+                    o(0x02246cd9); // fldcw  2(%esp)
+                    o(0x58); // pop %eax
+                    o(0x58); // pop %eax
+                } else {
+                    error("Incompatible types old: %d new: %d",
+                          pR0Type->tag, pType->tag);
+                }
             }
             setR0Type(pType);
         }
