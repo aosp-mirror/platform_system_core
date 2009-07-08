@@ -152,7 +152,7 @@ void help()
         "\n"
         "networking:\n"
         "  adb ppp <tty> [parameters]   - Run PPP over USB.\n"
-        " Note: you should not automatically start a PDP connection.\n"
+        " Note: you should not automatically start a PPP connection.\n"
         " <tty> refers to the tty for PPP stream. Eg. dev:/dev/omap_csmi_tty1\n"
         " [parameters] - Eg. defaultroute debug dump local notty usepeerdns\n"
         "\n"
