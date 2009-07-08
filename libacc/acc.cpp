@@ -127,6 +127,7 @@ public:
         va_end(ap);
     }
 
+    virtual ~ErrorSink() {}
     virtual void verror(const char* fmt, va_list ap) = 0;
 };
 
@@ -2003,6 +2004,7 @@ class Compiler : public ErrorSink {
 
     class InputStream {
     public:
+        virtual ~InputStream() {}
         int getChar() {
             if (bumpLine) {
                 line++;
