@@ -316,7 +316,7 @@ class Compiler : public ErrorSink {
          * Pops TOS.
          * op specifies the comparison.
          */
-        virtual void gcmp(int op) = 0;
+        virtual void gcmp(int op, Type* pResultType) = 0;
 
         /* Perform the arithmetic op specified by op. TOS is the
          * left argument, R0 is the right argument.
@@ -327,7 +327,7 @@ class Compiler : public ErrorSink {
         /* Compare 0 against R0, and store the boolean result in R0.
          * op specifies the comparison.
          */
-        virtual void gUnaryCmp(int op) = 0;
+        virtual void gUnaryCmp(int op, Type* pResultType) = 0;
 
         /* Perform the arithmetic op specified by op. 0 is the
          * left argument, R0 is the right argument.
@@ -647,7 +647,7 @@ class Compiler : public ErrorSink {
             return o4(branch | encodeAddress(t));
         }
 
-        virtual void gcmp(int op) {
+        virtual void gcmp(int op, Type* pResultType) {
             LOG_API("gcmp(%d);\n", op);
             o4(0xE8BD0002);  // ldmfd   sp!,{r1}
             mStackUse -= 4;
@@ -729,12 +729,12 @@ class Compiler : public ErrorSink {
             popType();
         }
 
-        virtual void gUnaryCmp(int op) {
-            LOG_API("gcmp(%d);\n", op);
+        virtual void gUnaryCmp(int op, Type* pResultType) {
+            LOG_API("gUnaryCmp(%d);\n", op);
             o4(0xE3A01000);  // mov    r1, #0
             o4(0xE1510000); // cmp r1, r1
             switch(op) {
-            case OP_NOT_EQUALS:
+            case OP_LOGICAL_NOT:
                 o4(0x03A00000); // moveq r0,#0
                 o4(0x13A00001); // movne r0,#1
                 break;
@@ -742,14 +742,12 @@ class Compiler : public ErrorSink {
                 error("Unknown unary comparison op %d", op);
                 break;
             }
+            setR0Type(pResultType);
         }
 
         virtual void genUnaryOp(int op) {
             LOG_API("genOp(%d);\n", op);
             switch(op) {
-            case OP_PLUS:
-                // Do nothing
-                break;
             case OP_MINUS:
                 o4(0xE3A01000);  // mov    r1, #0
                 o4(0xE0410000);  // sub     r0,r1,r0
@@ -1219,38 +1217,181 @@ class Compiler : public ErrorSink {
             return psym(0x84 + l, t);
         }
 
-        virtual void gcmp(int op) {
-            int t = decodeOp(op);
-            o(0x59); /* pop %ecx */
-            o(0xc139); /* cmp %eax,%ecx */
-            li(0, NULL);
-            o(0x0f); /* setxx %al */
-            o(t + 0x90);
-            o(0xc0);
-            popType();
+        virtual void gcmp(int op, Type* pResultType) {
+            Type* pR0Type = getR0Type();
+            Type* pTOSType = getTOSType();
+            TypeTag tagR0 = pR0Type->tag;
+            TypeTag tagTOS = pTOSType->tag;
+            bool isFloatR0 = isFloatTag(tagR0);
+            bool isFloatTOS = isFloatTag(tagTOS);
+            if (!isFloatR0 && !isFloatTOS) {
+                int t = decodeOp(op);
+                o(0x59); /* pop %ecx */
+                o(0xc139); /* cmp %eax,%ecx */
+                li(0, NULL);
+                o(0x0f); /* setxx %al */
+                o(t + 0x90);
+                o(0xc0);
+                popType();
+            } else {
+                setupFloatOperands();
+                switch (op) {
+                    case OP_EQUALS:
+                        o(0xe9da);   // fucompp
+                        o(0xe0df);   // fnstsw %ax
+                        o(0x9e);     // sahf
+                        o(0xc0940f); // sete %al
+                        o(0xc29b0f); // setnp %dl
+                        o(0xd021);   // andl %edx, %eax
+                        break;
+                    case OP_NOT_EQUALS:
+                        o(0xe9da);   // fucompp
+                        o(0xe0df);   // fnstsw %ax
+                        o(0x9e);     // sahf
+                        o(0xc0950f); // setne %al
+                        o(0xc29a0f); // setp %dl
+                        o(0xd009);   // orl %edx, %eax
+                        break;
+                    case OP_GREATER_EQUAL:
+                        o(0xe9da);   // fucompp
+                        o(0xe0df);   // fnstsw %ax
+                        o(0x05c4f6); // testb $5, %ah
+                        o(0xc0940f); // sete %al
+                        break;
+                    case OP_LESS:
+                        o(0xc9d9);   // fxch %st(1)
+                        o(0xe9da);   // fucompp
+                        o(0xe0df);   // fnstsw %ax
+                        o(0x9e);     // sahf
+                        o(0xc0970f); // seta %al
+                        break;
+                    case OP_LESS_EQUAL:
+                        o(0xc9d9);   // fxch %st(1)
+                        o(0xe9da);   // fucompp
+                        o(0xe0df);   // fnstsw %ax
+                        o(0x9e);     // sahf
+                        o(0xc0930f); // setea %al
+                        break;
+                    case OP_GREATER:
+                        o(0xe9da);   // fucompp
+                        o(0xe0df);   // fnstsw %ax
+                        o(0x45c4f6); // testb $69, %ah
+                        o(0xc0940f); // sete %al
+                        break;
+                    default:
+                        error("Unknown comparison op");
+                }
+                o(0xc0b60f); // movzbl %al, %eax
+            }
+            setR0Type(pResultType);
         }
 
         virtual void genOp(int op) {
-            o(0x59); /* pop %ecx */
-            o(decodeOp(op));
-            if (op == OP_MOD)
-                o(0x92); /* xchg %edx, %eax */
-            popType();
+            Type* pR0Type = getR0Type();
+            Type* pTOSType = getTOSType();
+            TypeTag tagR0 = pR0Type->tag;
+            TypeTag tagTOS = pTOSType->tag;
+            bool isFloatR0 = isFloatTag(tagR0);
+            bool isFloatTOS = isFloatTag(tagTOS);
+            if (!isFloatR0 && !isFloatTOS) {
+                // TODO: Deal with pointer arithmetic
+                o(0x59); /* pop %ecx */
+                o(decodeOp(op));
+                if (op == OP_MOD)
+                    o(0x92); /* xchg %edx, %eax */
+                popType();
+            } else {
+                Type* pResultType = tagR0 > tagTOS ? pR0Type : pTOSType;
+                setupFloatOperands();
+                // Both float. x87 R0 == left hand, x87 R1 == right hand
+                switch (op) {
+                    case OP_MUL:
+                        o(0xc9de); // fmulp
+                        break;
+                    case OP_DIV:
+                        o(0xf1de); // fdivp
+                        break;
+                    case OP_PLUS:
+                        o(0xc1de); // faddp
+                        break;
+                    case OP_MINUS:
+                        o(0xe1de); // fsubp
+                        break;
+                    default:
+                        error("Unsupported binary floating operation.");
+                        break;
+                }
+                popType();
+                setR0Type(pResultType);
+                printf("genop: result type %d\n", pResultType->tag);
+            }
         }
 
-        virtual void gUnaryCmp(int op) {
-            oad(0xb9, 0); /* movl $0, %ecx */
-            int t = decodeOp(op);
-            o(0xc139); /* cmp %eax,%ecx */
-            li(0, NULL);
-            o(0x0f); /* setxx %al */
-            o(t + 0x90);
-            o(0xc0);
+
+
+        virtual void gUnaryCmp(int op, Type* pResultType) {
+            if (op != OP_LOGICAL_NOT) {
+                error("Unknown unary cmp %d", op);
+            } else {
+                Type* pR0Type = getR0Type();
+                TypeTag tag = collapseType(pR0Type->tag);
+                switch(tag) {
+                    case TY_INT: {
+                            oad(0xb9, 0); /* movl $0, %ecx */
+                            int t = decodeOp(op);
+                            o(0xc139); /* cmp %eax,%ecx */
+                            li(0, NULL);
+                            o(0x0f); /* setxx %al */
+                            o(t + 0x90);
+                            o(0xc0);
+                        }
+                        break;
+                    case TY_FLOAT:
+                    case TY_DOUBLE:
+                        o(0xeed9);   // fldz
+                        o(0xe9da);   // fucompp
+                        o(0xe0df);   // fnstsw %ax
+                        o(0x9e);     // sahf
+                        o(0xc0950f); // setne %al
+                        o(0xc29a0f); // setp %dl
+                        o(0xd009);   // orl %edx, %eax
+                        o(0xc0b60f); // movzbl %al, %eax
+                        o(0x01f083); // xorl $1,  %eax
+                        break;
+                    default:
+                        error("genUnaryCmp unsupported type");
+                        break;
+                }
+            }
+            setR0Type(pResultType);
         }
 
         virtual void genUnaryOp(int op) {
-            oad(0xb9, 0); /* movl $0, %ecx */
-            o(decodeOp(op));
+            Type* pR0Type = getR0Type();
+            TypeTag tag = collapseType(pR0Type->tag);
+            switch(tag) {
+                case TY_INT:
+                    oad(0xb9, 0); /* movl $0, %ecx */
+                    o(decodeOp(op));
+                    break;
+                case TY_FLOAT:
+                case TY_DOUBLE:
+                    switch (op) {
+                        case OP_MINUS:
+                            o(0xe0d9);  // fchs
+                            break;
+                        case OP_BIT_NOT:
+                            error("Can't apply '~' operator to a float or double.");
+                            break;
+                        default:
+                            error("Unknown unary op %d\n", op);
+                            break;
+                        }
+                    break;
+                default:
+                    error("genUnaryOp unsupported type");
+                    break;
+            }
         }
 
         virtual void pushR0() {
@@ -1592,6 +1733,34 @@ class Compiler : public ErrorSink {
             o(l + 0x83);
             oad((t > -LOCAL && t < LOCAL) << 7 | 5, t);
         }
+
+        void setupFloatOperands() {
+            Type* pR0Type = getR0Type();
+            Type* pTOSType = getTOSType();
+            TypeTag tagR0 = pR0Type->tag;
+            TypeTag tagTOS = pTOSType->tag;
+            bool isFloatR0 = isFloatTag(tagR0);
+            bool isFloatTOS = isFloatTag(tagTOS);
+            if (! isFloatR0) {
+                // Convert R0 from int to float
+                o(0x50);      // push %eax
+                o(0x2404DB);  // fildl 0(%esp)
+                o(0x58);      // pop %eax
+            }
+            if (! isFloatTOS){
+                o(0x2404DB);  // fildl 0(%esp);
+                o(0x58);      // pop %eax
+            } else {
+                if (tagTOS == TY_FLOAT) {
+                    o(0x2404d9);  // flds (%esp)
+                    o(0x58);      // pop %eax
+                } else {
+                    o(0x2404dd);  // fldl (%esp)
+                    o(0x58);      // pop %eax
+                    o(0x58);      // pop %eax
+                }
+            }
+        }
     };
 
 #endif // PROVIDE_X86_CODEGEN
@@ -1656,9 +1825,9 @@ class Compiler : public ErrorSink {
             return result;
         }
 
-        virtual void gcmp(int op) {
-            fprintf(stderr, "gcmp(%d)\n", op);
-            mpBase->gcmp(op);
+        virtual void gcmp(int op, Type* pResultType) {
+            fprintf(stderr, "gcmp(%d, pResultType)\n", op);
+            mpBase->gcmp(op, pResultType);
         }
 
         virtual void genOp(int op) {
@@ -1667,9 +1836,9 @@ class Compiler : public ErrorSink {
         }
 
 
-        virtual void gUnaryCmp(int op) {
-            fprintf(stderr, "gUnaryCmp(%d)\n", op);
-            mpBase->gUnaryCmp(op);
+        virtual void gUnaryCmp(int op, Type* pResultType) {
+            fprintf(stderr, "gUnaryCmp(%d, pResultType)\n", op);
+            mpBase->gUnaryCmp(op, pResultType);
         }
 
         virtual void genUnaryOp(int op) {
@@ -2923,9 +3092,12 @@ class Compiler : public ErrorSink {
                 /* -, +, !, ~ */
                 unary(false);
                 if (t == '!')
-                    pGen->gUnaryCmp(a);
-                else
+                    pGen->gUnaryCmp(a, mkpInt);
+                else if (t == '+') {
+                    // ignore unary plus.
+                } else {
                     pGen->genUnaryOp(a);
+                }
             } else if (t == '(') {
                 expr();
                 skip(')');
@@ -3090,7 +3262,7 @@ class Compiler : public ErrorSink {
                     binaryOp(level);
 
                     if ((level == 4) | (level == 5)) {
-                        pGen->gcmp(t);
+                        pGen->gcmp(t, mkpInt);
                     } else {
                         pGen->genOp(t);
                     }
@@ -3665,7 +3837,7 @@ class Compiler : public ErrorSink {
     char* allocGlobalSpace(size_t alignment, size_t bytes) {
         size_t base = (((size_t) glo) + alignment - 1) & ~(alignment-1);
         size_t end = base + bytes;
-        if ((end - (size_t) pGlobalBase) > ALLOC_SIZE) {
+        if ((end - (size_t) pGlobalBase) > (size_t) ALLOC_SIZE) {
             error("Global space exhausted");
             return NULL;
         }
