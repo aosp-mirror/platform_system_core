@@ -32,9 +32,13 @@ void testVars(float arg0, float arg1, double arg2, double arg3) {
     printf("args: %g %g %g %g\n", arg0, arg1, arg2, arg3);
     printf("locals: %g %g %g %g\n", local0, local1, local2, local3);
 
+
+    printf("cast rval: %g %g\n", * (float*) & f1, * (double*) & d1);
+
     * (float*) & f0 = 1.1f;
     * (double*) & d0 = 3.3;
-    printf("pointer tests: %g %g %g %g\n", f0, f1, d0, d1);
+    printf("cast lval: %g %g %g %g\n", f0, f1, d0, d1);
+
 }
 
 int main() {
