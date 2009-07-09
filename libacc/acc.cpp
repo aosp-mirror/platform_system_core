@@ -1213,7 +1213,19 @@ class Compiler : public ErrorSink {
 
         /* l = 0: je, l == 1: jne */
         virtual int gtst(bool l, int t) {
-            o(0x0fc085); /* test %eax, %eax, je/jne xxx */
+            Type* pR0Type = getR0Type();
+            TypeTag tagR0 = pR0Type->tag;
+            bool isFloatR0 = isFloatTag(tagR0);
+            if (isFloatR0) {
+                o(0xeed9); // fldz
+                o(0xe9da); // fucompp
+                o(0xe0df); // fnstsw %ax
+                o(0x9e);   // sahf
+            } else {
+                o(0xc085); // test %eax, %eax
+            }
+            // Use two output statements to generate one instruction.
+            o(0x0f);   // je/jne xxx
             return psym(0x84 + l, t);
         }
 
@@ -1327,8 +1339,6 @@ class Compiler : public ErrorSink {
             }
         }
 
-
-
         virtual void gUnaryCmp(int op, Type* pResultType) {
             if (op != OP_LOGICAL_NOT) {
                 error("Unknown unary cmp %d", op);
@@ -1411,7 +1421,7 @@ class Compiler : public ErrorSink {
                     o(0x241cdd); // fstpl 0(%esp)
                     break;
                 default:
-                    error("pushR0 %d", r0ct);
+                    error("pushR0 unsupported type %d", r0ct);
                     break;
             }
             pushType();
@@ -1444,16 +1454,22 @@ class Compiler : public ErrorSink {
             assert(pPointerType->tag == TY_POINTER);
             switch (pPointerType->pHead->tag) {
                 case TY_INT:
-                    o(0x8b); /* mov (%eax), %eax */
+                    o2(0x008b); /* mov (%eax), %eax */
                     break;
                 case TY_CHAR:
                     o(0xbe0f); /* movsbl (%eax), %eax */
+                    ob(0); /* add zero in code */
+                    break;
+                case TY_FLOAT:
+                    o2(0x00d9); // flds (%eax)
+                    break;
+                case TY_DOUBLE:
+                    o2(0x00dd); // fldl (%eax)
                     break;
                 default:
                     error("loadR0FromR0: unsupported type");
                     break;
             }
-            ob(0); /* add zero in code */
             setR0Type(pPointerType->pHead);
         }
 
@@ -1702,6 +1718,13 @@ class Compiler : public ErrorSink {
                 ob(n & 0xff);
                 n = n >> 8;
             }
+        }
+
+        /* Output exactly 2 bytes
+         */
+        void o2(int n) {
+            ob(n & 0xff);
+            ob(0xff & (n >> 8));
         }
 
         /* psym is used to put an instruction with a data field which is a
@@ -3197,6 +3220,7 @@ class Compiler : public ErrorSink {
             /* push args and invert order */
             a = pGen->beginFunctionCallArguments();
             int l = 0;
+            int argCount = 0;
             while (tok != ')' && tok != EOF) {
                 if (! varArgs && !pArgList) {
                     error ("Unexpected argument.");
@@ -3212,16 +3236,22 @@ class Compiler : public ErrorSink {
                         pTargetType = mkpDouble;
                     }
                 }
-                pGen->convertR0(pTargetType);
-                l += pGen->storeR0ToArg(l);
+                if (pTargetType->tag == TY_VOID) {
+                    error("Can't pass void value for argument %d",
+                          argCount + 1);
+                } else {
+                    pGen->convertR0(pTargetType);
+                    l += pGen->storeR0ToArg(l);
+                }
                 if (accept(',')) {
                     // fine
                 } else if ( tok != ')') {
                     error("Expected ',' or ')'");
                 }
+                argCount += 1;
             }
             if (! varArgs && pArgList) {
-                error ("Expected more argument(s).");
+                error ("Expected more argument(s). Saw %d", argCount);
             }
             pGen->endFunctionCallArguments(a, l);
             skip(')');
@@ -3353,7 +3383,15 @@ class Compiler : public ErrorSink {
             if (accept(TOK_RETURN)) {
                 if (tok != ';') {
                     expr();
-                    pGen->convertR0(pReturnType);
+                    if (pReturnType->tag == TY_VOID) {
+                        error("Must not return a value from a void function");
+                    } else {
+                        pGen->convertR0(pReturnType);
+                    }
+                } else {
+                    if (pReturnType->tag != TY_VOID) {
+                        error("Must specify a value here");
+                    }
                 }
                 rsym = pGen->gjmp(rsym); /* jmp */
             } else if (accept(TOK_BREAK)) {

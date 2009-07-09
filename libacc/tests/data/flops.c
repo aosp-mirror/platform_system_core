@@ -106,10 +106,21 @@ void comparisonOps() {
     comparisonOpsdi();
 }
 
+int branch(double d) {
+    if (d) {
+        return 1;
+    }
+    return 0;
+}
+
+void testBranching() {
+    printf("branching: %d %d %d\n", branch(-1.0), branch(0.0), branch(1.0));
+}
 
 int main() {
     unaryOps();
     binaryOps();
     comparisonOps();
+    testBranching();
     return 0;
 }
