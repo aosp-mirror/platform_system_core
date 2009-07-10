@@ -270,7 +270,7 @@ class Compiler : public ErrorSink {
         }
 
         /* Emit a function prolog.
-         * argCount is the number of arguments.
+         * pDecl is the function declaration, which gives the arguments.
          * Save the old value of the FP.
          * Set the new value of the FP.
          * Convert from the native platform calling convention to
@@ -282,7 +282,7 @@ class Compiler : public ErrorSink {
          * functionExit().
          * returns address to patch with local variable size.
         */
-        virtual int functionEntry(int argCount) = 0;
+        virtual int functionEntry(Type* pDecl) = 0;
 
         /* Emit a function epilog.
          * Restore the old SP and FP register values.
@@ -291,7 +291,7 @@ class Compiler : public ErrorSink {
          * localVariableAddress - returned from functionEntry()
          * localVariableSize - the size in bytes of the local variables.
          */
-        virtual void functionExit(int argCount, int localVariableAddress,
+        virtual void functionExit(Type* pDecl, int localVariableAddress,
                                   int localVariableSize) = 0;
 
         /* load immediate value to R0 */
@@ -398,7 +398,7 @@ class Compiler : public ErrorSink {
          * On ARM for example you would pop the first 5 arguments into
          * R0..R4
          */
-        virtual void endFunctionCallArguments(int a, int l) = 0;
+        virtual void endFunctionCallArguments(Type* pDecl, int a, int l) = 0;
 
         /* Emit a call to an unknown function. The argument "symbol" needs to
          * be stored in the location where the address should go. It forms
@@ -424,7 +424,7 @@ class Compiler : public ErrorSink {
          * is true if this was an indirect call. (In which case the
          * address of the function is stored at location SP + l.)
          */
-        virtual void adjustStackAfterCall(int l, bool isIndirect) = 0;
+        virtual void adjustStackAfterCall(Type* pDecl, int l, bool isIndirect) = 0;
 
         /* Print a disassembly of the assembled code to out. Return
          * non-zero if there is an error.
@@ -452,7 +452,7 @@ class Compiler : public ErrorSink {
         /**
          * Memory alignment (in bytes) for this type of data
          */
-        virtual size_t alignment(Type* type) = 0;
+        virtual size_t alignmentOf(Type* type) = 0;
 
         /**
          * Array element alignment (in bytes) for this type of data.
@@ -561,15 +561,15 @@ class Compiler : public ErrorSink {
 
         /* returns address to patch with local variable size
         */
-        virtual int functionEntry(int argCount) {
-            LOG_API("functionEntry(%d);\n", argCount);
+        virtual int functionEntry(Type* pDecl) {
+            LOG_API("functionEntry(%d);\n", pDecl);
             mStackUse = 0;
             // sp -> arg4 arg5 ...
             // Push our register-based arguments back on the stack
-            if (argCount > 0) {
-                int regArgCount = argCount <= 4 ? argCount : 4;
-                o4(0xE92D0000 | ((1 << argCount) - 1)); // stmfd    sp!, {}
+            int regArgCount = calcRegArgCount(pDecl);
+            if (regArgCount > 0) {
                 mStackUse += regArgCount * 4;
+                o4(0xE92D0000 | ((1 << regArgCount) - 1)); // stmfd    sp!, {}
             }
             // sp -> arg0 arg1 ...
             o4(0xE92D4800); // stmfd sp!, {fp, lr}
@@ -583,7 +583,7 @@ class Compiler : public ErrorSink {
             // STACK_ALIGNMENT, so it won't affect the stack alignment.
         }
 
-        virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) {
+        virtual void functionExit(Type* pDecl, int localVariableAddress, int localVariableSize) {
             LOG_API("functionExit(%d, %d, %d);\n", argCount, localVariableAddress, localVariableSize);
             // Round local variable size up to a multiple of stack alignment
             localVariableSize = ((localVariableSize + STACK_ALIGNMENT - 1) /
@@ -601,12 +601,13 @@ class Compiler : public ErrorSink {
             // sp -> retadr, arg0, ...
             o4(0xE8BD4000); // ldmfd    sp!, {lr}
             // sp -> arg0 ....
-            if (argCount > 0) {
-                // We store the PC into the lr so we can adjust the sp before
-                // returning. We need to pull off the registers we pushed
-                // earlier. We don't need to actually store them anywhere,
-                // just adjust the stack.
-                int regArgCount = argCount <= 4 ? argCount : 4;
+
+            // We store the PC into the lr so we can adjust the sp before
+            // returning. We need to pull off the registers we pushed
+            // earlier. We don't need to actually store them anywhere,
+            // just adjust the stack.
+            int regArgCount = calcRegArgCount(pDecl);
+            if (regArgCount) {
                 o4(0xE28DD000 | (regArgCount << 2)); // add sp, sp, #argCount << 2
             }
             o4(0xE12FFF1E); // bx lr
@@ -630,8 +631,24 @@ class Compiler : public ErrorSink {
         }
 
         virtual void loadFloat(int address, Type* pType) {
-            error("Unimplemented.\n");
             setR0Type(pType);
+            // Global, absolute address
+            o4(0xE59F0000); //        ldr r0, .L1
+            o4(0xEA000000); //        b .L99
+            o4(address);         // .L1:   .word ea
+                                 // .L99:
+
+            switch (pType->tag) {
+            case TY_FLOAT:
+                o4(0xE5900000);      // ldr r0, [r0]
+                break;
+            case TY_DOUBLE:
+                o4(0xE1C000D0);      // ldrd r0, [r0]
+                break;
+            default:
+                assert(false);
+                break;
+            }
         }
 
         virtual int gjmp(int t) {
@@ -642,6 +659,18 @@ class Compiler : public ErrorSink {
         /* l = 0: je, l == 1: jne */
         virtual int gtst(bool l, int t) {
             LOG_API("gtst(%d, %d);\n", l, t);
+            Type* pR0Type = getR0Type();
+            TypeTag tagR0 = pR0Type->tag;
+            switch(tagR0) {
+                case TY_FLOAT:
+                    callRuntime((void*) runtime_is_non_zero_f);
+                    break;
+                case TY_DOUBLE:
+                    callRuntime((void*) runtime_is_non_zero_d);
+                    break;
+                default:
+                    break;
+            }
             o4(0xE3500000); // cmp r0,#0
             int branch = l ? 0x1A000000 : 0x0A000000; // bne : beq
             return o4(branch | encodeAddress(t));
@@ -649,122 +678,273 @@ class Compiler : public ErrorSink {
 
         virtual void gcmp(int op, Type* pResultType) {
             LOG_API("gcmp(%d);\n", op);
-            o4(0xE8BD0002);  // ldmfd   sp!,{r1}
-            mStackUse -= 4;
-            o4(0xE1510000); // cmp r1, r1
-            switch(op) {
-            case OP_EQUALS:
-                o4(0x03A00001); // moveq r0,#1
-                o4(0x13A00000); // movne r0,#0
-                break;
-            case OP_NOT_EQUALS:
-                o4(0x03A00000); // moveq r0,#0
-                o4(0x13A00001); // movne r0,#1
-                break;
-            case OP_LESS_EQUAL:
-                o4(0xD3A00001); // movle r0,#1
-                o4(0xC3A00000); // movgt r0,#0
-                break;
-            case OP_GREATER:
-                o4(0xD3A00000); // movle r0,#0
-                o4(0xC3A00001); // movgt r0,#1
-                break;
-            case OP_GREATER_EQUAL:
-                o4(0xA3A00001); // movge r0,#1
-                o4(0xB3A00000); // movlt r0,#0
-                break;
-            case OP_LESS:
-                o4(0xA3A00000); // movge r0,#0
-                o4(0xB3A00001); // movlt r0,#1
-                break;
-            default:
-                error("Unknown comparison op %d", op);
-                break;
+            Type* pR0Type = getR0Type();
+            Type* pTOSType = getTOSType();
+            TypeTag tagR0 = collapseType(pR0Type->tag);
+            TypeTag tagTOS = collapseType(pTOSType->tag);
+            if (tagR0 == TY_INT && tagTOS == TY_INT) {
+                o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+                mStackUse -= 4;
+                o4(0xE1510000); // cmp r1, r1
+                switch(op) {
+                case OP_EQUALS:
+                    o4(0x03A00001); // moveq r0,#1
+                    o4(0x13A00000); // movne r0,#0
+                    break;
+                case OP_NOT_EQUALS:
+                    o4(0x03A00000); // moveq r0,#0
+                    o4(0x13A00001); // movne r0,#1
+                    break;
+                case OP_LESS_EQUAL:
+                    o4(0xD3A00001); // movle r0,#1
+                    o4(0xC3A00000); // movgt r0,#0
+                    break;
+                case OP_GREATER:
+                    o4(0xD3A00000); // movle r0,#0
+                    o4(0xC3A00001); // movgt r0,#1
+                    break;
+                case OP_GREATER_EQUAL:
+                    o4(0xA3A00001); // movge r0,#1
+                    o4(0xB3A00000); // movlt r0,#0
+                    break;
+                case OP_LESS:
+                    o4(0xA3A00000); // movge r0,#0
+                    o4(0xB3A00001); // movlt r0,#1
+                    break;
+                default:
+                    error("Unknown comparison op %d", op);
+                    break;
+                }
+                popType();
+            } else if (tagR0 == TY_DOUBLE || tagTOS == TY_DOUBLE) {
+                setupDoubleArgs();
+                switch(op) {
+                    case OP_EQUALS:
+                        callRuntime((void*) runtime_cmp_eq_dd);
+                        break;
+                    case OP_NOT_EQUALS:
+                        callRuntime((void*) runtime_cmp_ne_dd);
+                        break;
+                    case OP_LESS_EQUAL:
+                        callRuntime((void*) runtime_cmp_le_dd);
+                        break;
+                    case OP_GREATER:
+                        callRuntime((void*) runtime_cmp_gt_dd);
+                        break;
+                    case OP_GREATER_EQUAL:
+                        callRuntime((void*) runtime_cmp_ge_dd);
+                        break;
+                    case OP_LESS:
+                        callRuntime((void*) runtime_cmp_lt_dd);
+                        break;
+                    default:
+                        error("Unknown comparison op %d", op);
+                        break;
+                }
+            } else {
+                setupFloatArgs();
+                switch(op) {
+                    case OP_EQUALS:
+                        callRuntime((void*) runtime_cmp_eq_ff);
+                        break;
+                    case OP_NOT_EQUALS:
+                        callRuntime((void*) runtime_cmp_ne_ff);
+                        break;
+                    case OP_LESS_EQUAL:
+                        callRuntime((void*) runtime_cmp_le_ff);
+                        break;
+                    case OP_GREATER:
+                        callRuntime((void*) runtime_cmp_gt_ff);
+                        break;
+                    case OP_GREATER_EQUAL:
+                        callRuntime((void*) runtime_cmp_ge_ff);
+                        break;
+                    case OP_LESS:
+                        callRuntime((void*) runtime_cmp_lt_ff);
+                        break;
+                    default:
+                        error("Unknown comparison op %d", op);
+                        break;
+                }
             }
-            popType();
+            setR0Type(pResultType);
         }
 
         virtual void genOp(int op) {
             LOG_API("genOp(%d);\n", op);
-            o4(0xE8BD0002);  // ldmfd   sp!,{r1}
-            mStackUse -= 4;
-            switch(op) {
-            case OP_MUL:
-                o4(0x0E0000091); // mul     r0,r1,r0
-                break;
-            case OP_DIV:
-                callRuntime(runtime_DIV);
-                break;
-            case OP_MOD:
-                callRuntime(runtime_MOD);
-                break;
-            case OP_PLUS:
-                o4(0xE0810000);  // add     r0,r1,r0
-                break;
-            case OP_MINUS:
-                o4(0xE0410000);  // sub     r0,r1,r0
-                break;
-            case OP_SHIFT_LEFT:
-                o4(0xE1A00011);  // lsl     r0,r1,r0
-                break;
-            case OP_SHIFT_RIGHT:
-                o4(0xE1A00051);  // asr     r0,r1,r0
-                break;
-            case OP_BIT_AND:
-                o4(0xE0010000);  // and     r0,r1,r0
-                break;
-            case OP_BIT_XOR:
-                o4(0xE0210000);  // eor     r0,r1,r0
-                break;
-            case OP_BIT_OR:
-                o4(0xE1810000);  // orr     r0,r1,r0
-                break;
-            case OP_BIT_NOT:
-                o4(0xE1E00000);  // mvn     r0, r0
-                break;
-            default:
-                error("Unimplemented op %d\n", op);
-                break;
+            Type* pR0Type = getR0Type();
+            Type* pTOSType = getTOSType();
+            TypeTag tagR0 = collapseType(pR0Type->tag);
+            TypeTag tagTOS = collapseType(pTOSType->tag);
+            if (tagR0 == TY_INT && tagTOS == TY_INT) {
+                o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+                mStackUse -= 4;
+                switch(op) {
+                case OP_MUL:
+                    o4(0x0E0000091); // mul     r0,r1,r0
+                    break;
+                case OP_DIV:
+                    callRuntime((void*) runtime_DIV);
+                    break;
+                case OP_MOD:
+                    callRuntime((void*) runtime_MOD);
+                    break;
+                case OP_PLUS:
+                    o4(0xE0810000);  // add     r0,r1,r0
+                    break;
+                case OP_MINUS:
+                    o4(0xE0410000);  // sub     r0,r1,r0
+                    break;
+                case OP_SHIFT_LEFT:
+                    o4(0xE1A00011);  // lsl     r0,r1,r0
+                    break;
+                case OP_SHIFT_RIGHT:
+                    o4(0xE1A00051);  // asr     r0,r1,r0
+                    break;
+                case OP_BIT_AND:
+                    o4(0xE0010000);  // and     r0,r1,r0
+                    break;
+                case OP_BIT_XOR:
+                    o4(0xE0210000);  // eor     r0,r1,r0
+                    break;
+                case OP_BIT_OR:
+                    o4(0xE1810000);  // orr     r0,r1,r0
+                    break;
+                case OP_BIT_NOT:
+                    o4(0xE1E00000);  // mvn     r0, r0
+                    break;
+                default:
+                    error("Unimplemented op %d\n", op);
+                    break;
+                }
+                popType();
+            } else {
+                Type* pResultType = tagR0 > tagTOS ? pR0Type : pTOSType;
+                if (pResultType->tag == TY_DOUBLE) {
+                    setupDoubleArgs();
+                    switch(op) {
+                    case OP_MUL:
+                        callRuntime((void*) runtime_op_mul_dd);
+                        break;
+                    case OP_DIV:
+                        callRuntime((void*) runtime_op_div_dd);
+                        break;
+                    case OP_PLUS:
+                        callRuntime((void*) runtime_op_add_dd);
+                        break;
+                    case OP_MINUS:
+                        callRuntime((void*) runtime_op_sub_dd);
+                        break;
+                    default:
+                        error("Unsupported binary floating operation %d\n", op);
+                        break;
+                    }
+                } else {
+                    setupFloatArgs();
+                    switch(op) {
+                    case OP_MUL:
+                        callRuntime((void*) runtime_op_mul_ff);
+                        break;
+                    case OP_DIV:
+                        callRuntime((void*) runtime_op_div_ff);
+                        break;
+                    case OP_PLUS:
+                        callRuntime((void*) runtime_op_add_ff);
+                        break;
+                    case OP_MINUS:
+                        callRuntime((void*) runtime_op_sub_ff);
+                        break;
+                    default:
+                        error("Unsupported binary floating operation %d\n", op);
+                        break;
+                    }
+                }
+                setR0Type(pResultType);
             }
-            popType();
         }
 
         virtual void gUnaryCmp(int op, Type* pResultType) {
             LOG_API("gUnaryCmp(%d);\n", op);
-            o4(0xE3A01000);  // mov    r1, #0
-            o4(0xE1510000); // cmp r1, r1
-            switch(op) {
-            case OP_LOGICAL_NOT:
-                o4(0x03A00000); // moveq r0,#0
-                o4(0x13A00001); // movne r0,#1
-                break;
-             default:
-                error("Unknown unary comparison op %d", op);
-                break;
+            if (op != OP_LOGICAL_NOT) {
+                error("Unknown unary cmp %d", op);
+            } else {
+                Type* pR0Type = getR0Type();
+                TypeTag tag = collapseType(pR0Type->tag);
+                switch(tag) {
+                    case TY_INT:
+                        o4(0xE3A01000); // mov    r1, #0
+                        o4(0xE1510000); // cmp r1, r1
+                        o4(0x03A00000); // moveq r0,#0
+                        o4(0x13A00001); // movne r0,#1
+                        break;
+                    case TY_FLOAT:
+                        callRuntime((void*) runtime_is_zero_f);
+                        break;
+                    case TY_DOUBLE:
+                        callRuntime((void*) runtime_is_zero_d);
+                        break;
+                    default:
+                        error("gUnaryCmp unsupported type");
+                        break;
+                }
             }
             setR0Type(pResultType);
         }
 
         virtual void genUnaryOp(int op) {
             LOG_API("genOp(%d);\n", op);
-            switch(op) {
-            case OP_MINUS:
-                o4(0xE3A01000);  // mov    r1, #0
-                o4(0xE0410000);  // sub     r0,r1,r0
-                break;
-            case OP_BIT_NOT:
-                o4(0xE1E00000);  // mvn     r0, r0
-                break;
-            default:
-                error("Unknown unary op %d\n", op);
-                break;
+            Type* pR0Type = getR0Type();
+            TypeTag tag = collapseType(pR0Type->tag);
+            switch(tag) {
+                case TY_INT:
+                    switch(op) {
+                    case OP_MINUS:
+                        o4(0xE3A01000);  // mov    r1, #0
+                        o4(0xE0410000);  // sub     r0,r1,r0
+                        break;
+                    case OP_BIT_NOT:
+                        o4(0xE1E00000);  // mvn     r0, r0
+                        break;
+                    default:
+                        error("Unknown unary op %d\n", op);
+                        break;
+                    }
+                    break;
+                case TY_FLOAT:
+                case TY_DOUBLE:
+                    switch (op) {
+                        case OP_MINUS:
+                            if (tag == TY_FLOAT) {
+                                callRuntime((void*) runtime_op_neg_f);
+                            } else {
+                                callRuntime((void*) runtime_op_neg_d);
+                            }
+                            break;
+                        case OP_BIT_NOT:
+                            error("Can't apply '~' operator to a float or double.");
+                            break;
+                        default:
+                            error("Unknown unary op %d\n", op);
+                            break;
+                        }
+                    break;
+                default:
+                    error("genUnaryOp unsupported type");
+                    break;
             }
         }
 
         virtual void pushR0() {
             LOG_API("pushR0();\n");
-            o4(0xE92D0001);  // stmfd   sp!,{r0}
-            mStackUse += 4;
+            Type* pR0Type = getR0Type();
+            TypeTag r0ct = collapseType(pR0Type->tag);
+            if (r0ct != TY_DOUBLE) {
+                    o4(0xE92D0001);  // stmfd   sp!,{r0}
+                    mStackUse += 4;
+            } else {
+                    o4(0xE92D0003);  // stmfd   sp!,{r0,r1}
+                    mStackUse += 8;
+            }
             pushType();
             LOG_STACK("pushR0: %d\n", mStackUse);
         }
@@ -772,20 +952,24 @@ class Compiler : public ErrorSink {
         virtual void storeR0ToTOS(Type* pPointerType) {
             LOG_API("storeR0ToTOS(%d);\n", isInt);
             assert(pPointerType->tag == TY_POINTER);
-            o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+            o4(0xE8BD0004);  // ldmfd   sp!,{r2}
+            popType();
             mStackUse -= 4;
             switch (pPointerType->pHead->tag) {
                 case TY_INT:
-                    o4(0xE5810000); // str r0, [r1]
+                case TY_FLOAT:
+                    o4(0xE5820000); // str r0, [r2]
                     break;
                 case TY_CHAR:
-                    o4(0xE5C10000); // strb r0, [r1]
+                    o4(0xE5C20000); // strb r0, [r2]
+                    break;
+                case TY_DOUBLE:
+                    o4(0xE1C200F0); // strd r0, [r2]
                     break;
                 default:
                     error("storeR0ToTOS: unimplemented type");
                     break;
             }
-            popType();
         }
 
         virtual void loadR0FromR0(Type* pPointerType) {
@@ -793,10 +977,14 @@ class Compiler : public ErrorSink {
             assert(pPointerType->tag == TY_POINTER);
             switch (pPointerType->pHead->tag) {
                 case TY_INT:
+                case TY_FLOAT:
                     o4(0xE5900000); // ldr r0, [r0]
                     break;
                 case TY_CHAR:
                     o4(0xE5D00000); // ldrb r0, [r0]
+                    break;
+                case TY_DOUBLE:
+                    o4(0xE1C000D0); // ldrd r0, [r0]
                     break;
                 default:
                     error("loadR0FromR0: unimplemented type");
@@ -807,7 +995,7 @@ class Compiler : public ErrorSink {
 
         virtual void leaR0(int ea, Type* pPointerType) {
             LOG_API("leaR0(%d);\n", ea);
-            if (ea < LOCAL) {
+            if (ea > -LOCAL && ea < LOCAL) {
                 // Local, fp relative
                 if (ea < -1023 || ea > 1023 || ((ea & 3) != 0)) {
                     error("Offset out of range: %08x", ea);
@@ -829,69 +1017,147 @@ class Compiler : public ErrorSink {
 
         virtual void storeR0(int ea, Type* pType) {
             LOG_API("storeR0(%d);\n", ea);
-            if (ea < LOCAL) {
-                // Local, fp relative
-                if (ea < -4095 || ea > 4095) {
-                    error("Offset out of range: %08x", ea);
-                }
-                if (ea < 0) {
-                    o4(0xE50B0000 | (0xfff & (-ea))); // str r0, [fp,#-ea]
-                } else {
-                    o4(0xE58B0000 | (0xfff & ea)); // str r0, [fp,#ea]
-                }
-            } else{
-                // Global, absolute
-                o4(0xE59F1000); //         ldr r1, .L1
-                o4(0xEA000000); //         b .L99
-                o4(ea);         // .L1:    .word 0
-                o4(0xE5810000); // .L99:   str r0, [r1]
+            TypeTag tag = pType->tag;
+            switch (tag) {
+                case TY_INT:
+                case TY_FLOAT:
+                    if (ea > -LOCAL && ea < LOCAL) {
+                        // Local, fp relative
+                        if (ea < -4095 || ea > 4095) {
+                            error("Offset out of range: %08x", ea);
+                        }
+                        if (ea < 0) {
+                            o4(0xE50B0000 | (0xfff & (-ea))); // str r0, [fp,#-ea]
+                        } else {
+                            o4(0xE58B0000 | (0xfff & ea)); // str r0, [fp,#ea]
+                        }
+                    } else{
+                        // Global, absolute
+                        o4(0xE59F1000); //         ldr r1, .L1
+                        o4(0xEA000000); //         b .L99
+                        o4(ea);         // .L1:    .word 0
+                        o4(0xE5810000); // .L99:   str r0, [r1]
+                    }
+                    break;
+                case TY_DOUBLE:
+                    if ((ea & 0x7) != 0) {
+                        error("double address is not aligned: %d", ea);
+                    }
+                    if (ea > -LOCAL && ea < LOCAL) {
+                        // Local, fp relative
+                        if (ea < -4095 || ea > 4095) {
+                            error("Offset out of range: %08x", ea);
+                        }
+                        if (ea < 0) {
+                            o4(0xE50B0000 | (0xfff & (-ea))); // str r0, [fp,#-ea]
+                            o4(0xE50B1000 | (0xfff & (-ea + 4))); // str r1, [fp,#-ea+4]
+#if 0
+                            // strd doesn't seem to work. Is encoding wrong?
+                        } else if (ea < 0) {
+                            o4(0xE1CB000F | ((0xff & (-ea)) << 4)); // strd r0, [fp,#-ea]
+                        } else if (ea < 256) {
+                            o4(0xE14B000F | ((0xff & ea) << 4)); // strd r0, [fp,#ea]
+#endif
+                        } else {
+                            o4(0xE58B0000 | (0xfff & ea)); // str r0, [fp,#ea]
+                            o4(0xE58B1000 | (0xfff & (ea + 4))); // str r1, [fp,#ea+4]
+                        }
+                    } else{
+                        // Global, absolute
+                        o4(0xE59F2000); //         ldr r2, .L1
+                        o4(0xEA000000); //         b .L99
+                        o4(ea);         // .L1:    .word 0
+                        o4(0xE1C200F0); // .L99:   strd r0, [r2]
+                    }
+                    break;
+                default:
+                    error("Unable to store to type %d", tag);
+                    break;
             }
         }
 
         virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
             LOG_API("loadR0(%d, %d, %d, %d);\n", ea, isIncDec, op, pType);
-            if (ea < LOCAL) {
-                // Local, fp relative
-                if (ea < -4095 || ea > 4095) {
-                    error("Offset out of range: %08x", ea);
-                }
-                if (ea < 0) {
-                    o4(0xE51B0000 | (0xfff & (-ea))); // ldr r0, [fp,#-ea]
-                } else {
-                    o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
-                }
-            } else {
-                // Global, absolute
-                o4(0xE59F2000); //        ldr r2, .L1
-                o4(0xEA000000); //        b .L99
-                o4(ea);         // .L1:   .word ea
-                o4(0xE5920000); // .L99:  ldr r0, [r2]
-            }
+            TypeTag tag = collapseType(pType->tag);
+            switch (tag) {
+                case TY_INT:
+                case TY_FLOAT:
+                    if (ea < LOCAL) {
+                        // Local, fp relative
+                        if (ea < -4095 || ea > 4095) {
+                            error("Offset out of range: %08x", ea);
+                        }
+                        if (ea < 0) {
+                            o4(0xE51B0000 | (0xfff & (-ea))); // ldr r0, [fp,#-ea]
+                        } else {
+                            o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
+                        }
+                    } else {
+                        // Global, absolute
+                        o4(0xE59F2000); //        ldr r2, .L1
+                        o4(0xEA000000); //        b .L99
+                        o4(ea);         // .L1:   .word ea
+                        o4(0xE5920000); // .L99:  ldr r0, [r2]
+                    }
 
-            if (isIncDec) {
-                switch (op) {
-                case OP_INCREMENT:
-                    o4(0xE2801001); // add r1, r0, #1
+                    if (isIncDec) {
+                        if (tag == TY_INT) {
+                            switch (op) {
+                            case OP_INCREMENT:
+                                o4(0xE2801001); // add r1, r0, #1
+                                break;
+                            case OP_DECREMENT:
+                                o4(0xE2401001); // sub r1, r0, #1
+                                break;
+                            default:
+                                error("unknown opcode: %d", op);
+                            }
+                            if (ea < LOCAL) {
+                                // Local, fp relative
+                                // Don't need range check, was already checked above
+                                if (ea < 0) {
+                                    o4(0xE50B1000 | (0xfff & (-ea))); // str r1, [fp,#-ea]
+                                } else {
+                                    o4(0xE58B1000 | (0xfff & ea));    // str r1, [fp,#ea]
+                                }
+                            } else{
+                                // Global, absolute
+                                // r2 is already set up from before.
+                                o4(0xE5821000); // str r1, [r2]
+                           }
+                        }
+                        else {
+                            error("inc/dec not implemented for float.");
+                        }
+                    }
                     break;
-                case OP_DECREMENT:
-                    o4(0xE2401001); // sub r1, r0, #1
+                case TY_DOUBLE:
+                    if ((ea & 0x7) != 0) {
+                        error("double address is not aligned: %d", ea);
+                    }
+                    if (ea < LOCAL) {
+                        // Local, fp relative
+                        if (ea < -4095 || ea > 4095) {
+                            error("Offset out of range: %08x", ea);
+                        }
+                        if (ea < 0) {
+                            o4(0xE51B0000 | (0xfff & (-ea))); // ldr r0, [fp,#-ea]
+                            o4(0xE51B1000 | (0xfff & (-ea+4))); // ldr r1, [fp,#-ea+4]
+                        } else {
+                            o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
+                            o4(0xE59B1000 | (0xfff & (ea+4)));    // ldr r0, [fp,#ea+4]
+                        }
+                    } else {
+                        // Global, absolute
+                        o4(0xE59F2000); //        ldr r2, .L1
+                        o4(0xEA000000); //        b .L99
+                        o4(ea);         // .L1:   .word ea
+                        o4(0xE1C200D0); // .L99:  ldrd r0, [r2]
+                    }
                     break;
                 default:
-                    error("unknown opcode: %d", op);
-                }
-                if (ea < LOCAL) {
-                    // Local, fp relative
-                    // Don't need range check, was already checked above
-                    if (ea < 0) {
-                        o4(0xE50B1000 | (0xfff & (-ea))); // str r1, [fp,#-ea]
-                    } else {
-                        o4(0xE58B1000 | (0xfff & ea));    // str r1, [fp,#ea]
-                    }
-                } else{
-                    // Global, absolute
-                    // r2 is already set up from before.
-                    o4(0xE5821000); // str r1, [r2]
-               }
+                    error("Unable to load type %d", tag);
+                    break;
             }
             setR0Type(pType);
         }
@@ -900,11 +1166,32 @@ class Compiler : public ErrorSink {
             Type* pR0Type = getR0Type();
             if (bitsSame(pType, pR0Type)) {
                 // do nothing special
-            } else if (isFloatType(pType) && isFloatType(pR0Type)) {
-                // do nothing special, both held in same register on x87.
             } else {
-                error("Incompatible types old: %d new: %d",
-                      pR0Type->tag, pType->tag);
+                TypeTag r0Tag = collapseType(pR0Type->tag);
+                TypeTag destTag = collapseType(pType->tag);
+                if (r0Tag == TY_INT) {
+                    if (destTag == TY_FLOAT) {
+                        callRuntime((void*) runtime_int_to_float);
+                    } else {
+                        assert(destTag == TY_DOUBLE);
+                        callRuntime((void*) runtime_int_to_double);
+                    }
+                } else if (r0Tag == TY_FLOAT) {
+                    if (destTag == TY_INT) {
+                        callRuntime((void*) runtime_float_to_int);
+                    } else {
+                        assert(destTag == TY_DOUBLE);
+                        callRuntime((void*) runtime_float_to_double);
+                    }
+                } else {
+                    assert (r0Tag == TY_DOUBLE);
+                    if (destTag == TY_INT) {
+                        callRuntime((void*) runtime_double_to_int);
+                    } else {
+                        assert(destTag == TY_FLOAT);
+                        callRuntime((void*) runtime_double_to_float);
+                    }
+                }
             }
             setR0Type(pType);
         }
@@ -916,19 +1203,42 @@ class Compiler : public ErrorSink {
 
         virtual size_t storeR0ToArg(int l) {
             LOG_API("storeR0ToArg(%d);\n", l);
-            if (l < 0 || l > 4096-4) {
-                error("l out of range for stack offset: 0x%08x", l);
+            Type* pR0Type = getR0Type();
+            TypeTag r0ct = collapseType(pR0Type->tag);
+            switch(r0ct) {
+                case TY_INT:
+                case TY_FLOAT:
+                    if (l < 0 || l > 4096-4) {
+                        error("l out of range for stack offset: 0x%08x", l);
+                    }
+                    o4(0xE58D0000 + l); // str r0, [sp, #l]
+                    return 4;
+                case TY_DOUBLE: {
+                    // Align to 8 byte boundary
+                    int l2 = (l + 7) & ~7;
+                    if (l2 < 0 || l2 > 4096-8) {
+                        error("l out of range for stack offset: 0x%08x", l);
+                    }
+                    o4(0xE58D0000 + l2); // str r0, [sp, #l]
+                    o4(0xE58D1000 + l2 + 4); // str r1, [sp, #l+4]
+                    return (l2 - l) + 8;
+                }
+                default:
+                    assert(false);
+                    return 0;
             }
-            o4(0xE58D0000 + l); // str r0, [sp, #4]
-            return 4;
         }
 
-        virtual void endFunctionCallArguments(int a, int l) {
+        virtual void endFunctionCallArguments(Type* pDecl, int a, int l) {
             LOG_API("endFunctionCallArguments(0x%08x, %d);\n", a, l);
-            int argCount = l >> 2;
             int argumentStackUse = l;
-            if (argCount > 0) {
-                int regArgCount = argCount > 4 ? 4 : argCount;
+            // Have to calculate register arg count from actual stack size,
+            // in order to properly handle ... functions.
+            int regArgCount = l >> 2;
+            if (regArgCount > 4) {
+                regArgCount = 4;
+            }
+            if (regArgCount > 0) {
                 argumentStackUse -= regArgCount * 4;
                 o4(0xE8BD0000 | ((1 << regArgCount) - 1)); // ldmfd   sp!,{}
             }
@@ -989,10 +1299,16 @@ class Compiler : public ErrorSink {
             o4(0xE12FFF3C); // blx r12
         }
 
-        virtual void adjustStackAfterCall(int l, bool isIndirect) {
+        virtual void adjustStackAfterCall(Type* pDecl, int l, bool isIndirect) {
             LOG_API("adjustStackAfterCall(%d, %d);\n", l, isIndirect);
             int argCount = l >> 2;
-            int stackArgs = argCount > 4 ? argCount - 4 : 0;
+            // Have to calculate register arg count from actual stack size,
+            // in order to properly handle ... functions.
+            int regArgCount = l >> 2;
+            if (regArgCount > 4) {
+                regArgCount = 4;
+            }
+            int stackArgs = argCount - regArgCount;
             int stackUse =  stackArgs + (isIndirect ? 1 : 0)
                 + (mStackAlignmentAdjustment >> 2);
             if (stackUse) {
@@ -1062,7 +1378,7 @@ class Compiler : public ErrorSink {
         /**
          * alignment (in bytes) for this type of data
          */
-        virtual size_t alignment(Type* pType){
+        virtual size_t alignmentOf(Type* pType){
             switch(pType->tag) {
                 case TY_DOUBLE:
                     return 8;
@@ -1141,20 +1457,251 @@ class Compiler : public ErrorSink {
             return BRANCH_REL_ADDRESS_MASK & (value >> 2);
         }
 
-        typedef int (*int2FnPtr)(int a, int b);
-        void callRuntime(int2FnPtr fn) {
-            o4(0xE59F2000); // ldr    r2, .L1
+        int calcRegArgCount(Type* pDecl) {
+            int reg = 0;
+            Type* pArgs = pDecl->pTail;
+            while (pArgs && reg < 4) {
+                Type* pArg = pArgs->pHead;
+                if ( pArg->tag == TY_DOUBLE) {
+                    int evenReg = (reg + 1) & ~1;
+                    if (evenReg >= 4) {
+                        break;
+                    }
+                    reg = evenReg + 2;
+                } else {
+                    reg++;
+                }
+                pArgs = pArgs->pTail;
+            }
+            return reg;
+        }
+
+        /* Pop TOS to R1
+         * Make sure both R0 and TOS are floats. (Could be ints)
+         * We know that at least one of R0 and TOS is already a float
+         */
+        void setupFloatArgs() {
+            Type* pR0Type = getR0Type();
+            Type* pTOSType = getTOSType();
+            TypeTag tagR0 = collapseType(pR0Type->tag);
+            TypeTag tagTOS = collapseType(pTOSType->tag);
+            if (tagR0 != TY_FLOAT) {
+                assert(tagR0 == TY_INT);
+                callRuntime((void*) runtime_int_to_float);
+            }
+            if (tagTOS != TY_FLOAT) {
+                assert(tagTOS == TY_INT);
+                assert(tagR0 == TY_FLOAT);
+                o4(0xE92D0001);  // stmfd   sp!,{r0}  // push R0
+                o4(0xE59D0004);  // ldr     r0, [sp, #4]
+                callRuntime((void*) runtime_int_to_float);
+                o4(0xE1A01000);  // mov r1, r0
+                o4(0xE8BD0001);  // ldmfd   sp!,{r0}  // pop R0
+                o4(0xE28DD004);  // add sp, sp, #4 // Pop sp
+            } else {
+                // Pop TOS
+                o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+            }
+            mStackUse -= 4;
+            popType();
+        }
+
+        /* Pop TOS into R2..R3
+         * Make sure both R0 and TOS are doubles. Could be floats or ints.
+         * We know that at least one of R0 and TOS are already a double.
+         */
+
+        void setupDoubleArgs() {
+            Type* pR0Type = getR0Type();
+            Type* pTOSType = getTOSType();
+            TypeTag tagR0 = collapseType(pR0Type->tag);
+            TypeTag tagTOS = collapseType(pTOSType->tag);
+            if (tagR0 != TY_DOUBLE) {
+                if (tagR0 == TY_INT) {
+                    callRuntime((void*) runtime_int_to_double);
+                } else {
+                    assert(tagR0 == TY_FLOAT);
+                    callRuntime((void*) runtime_float_to_double);
+                }
+            }
+            if (tagTOS != TY_DOUBLE) {
+                o4(0xE92D0003);  // stmfd   sp!,{r0,r1}  // push r0,r1
+                o4(0xE59D0008);  // ldr     r0, [sp, #8]
+                if (tagTOS == TY_INT) {
+                    callRuntime((void*) runtime_int_to_double);
+                } else {
+                    assert(tagTOS == TY_FLOAT);
+                    callRuntime((void*) runtime_float_to_double);
+                }
+                o4(0xE1A02000);  // mov r2, r0
+                o4(0xE1A03001);  // mov r3, r1
+                o4(0xE8BD0003);  // ldmfd   sp!,{r0, r1}  // Restore R0
+                o4(0xE28DD004);  // add sp, sp, #4 // Pop sp
+                mStackUse -= 4;
+            } else {
+                o4(0xE8BD000C);  // ldmfd   sp!,{r2,r3}
+                mStackUse -= 8;
+            }
+            popType();
+        }
+
+        void callRuntime(void* fn) {
+            o4(0xE59FC000); // ldr    r12, .L1
             o4(0xEA000000); // b      .L99
             o4((int) fn);   //.L1:  .word  fn
-            o4(0xE12FFF32); //.L99: blx    r2
+            o4(0xE12FFF3C); //.L99: blx    r12
         }
 
-        static int runtime_DIV(int a, int b) {
-            return b / a;
+        // Integer math:
+
+        static int runtime_DIV(int b, int a) {
+            return a / b;
         }
 
-        static int runtime_MOD(int a, int b) {
-            return b % a;
+        static int runtime_MOD(int b, int a) {
+            return a % b;
+        }
+
+        // Comparison to zero
+
+        static int runtime_is_non_zero_f(float a) {
+            return a != 0;
+        }
+
+        static int runtime_is_non_zero_d(double a) {
+            return a != 0;
+        }
+
+        // Comparison to zero
+
+        static int runtime_is_zero_f(float a) {
+            return a == 0;
+        }
+
+        static int runtime_is_zero_d(double a) {
+            return a == 0;
+        }
+
+        // Type conversion
+
+        static int runtime_float_to_int(float a) {
+            return (int) a;
+        }
+
+        static double runtime_float_to_double(float a) {
+            return (double) a;
+        }
+
+        static int runtime_double_to_int(double a) {
+            return (int) a;
+        }
+
+        static float runtime_double_to_float(double a) {
+            return (float) a;
+        }
+
+        static float runtime_int_to_float(int a) {
+            return (float) a;
+        }
+
+        static double runtime_int_to_double(int a) {
+            return (double) a;
+        }
+
+        // Comparisons float
+
+        static int runtime_cmp_eq_ff(float b, float a) {
+            return a == b;
+        }
+
+        static int runtime_cmp_ne_ff(float b, float a) {
+            return a != b;
+        }
+
+        static int runtime_cmp_lt_ff(float b, float a) {
+            return a < b;
+        }
+
+        static int runtime_cmp_le_ff(float b, float a) {
+            return a <= b;
+        }
+
+        static int runtime_cmp_ge_ff(float b, float a) {
+            return a >= b;
+        }
+
+        static int runtime_cmp_gt_ff(float b, float a) {
+            return a > b;
+        }
+
+        // Comparisons double
+
+        static int runtime_cmp_eq_dd(double b, double a) {
+            return a == b;
+        }
+
+        static int runtime_cmp_ne_dd(double b, double a) {
+            return a != b;
+        }
+
+        static int runtime_cmp_lt_dd(double b, double a) {
+            return a < b;
+        }
+
+        static int runtime_cmp_le_dd(double b, double a) {
+            return a <= b;
+        }
+
+        static int runtime_cmp_ge_dd(double b, double a) {
+            return a >= b;
+        }
+
+        static int runtime_cmp_gt_dd(double b, double a) {
+            return a > b;
+        }
+
+        // Math float
+
+        static float runtime_op_add_ff(float b, float a) {
+            return a + b;
+        }
+
+        static float runtime_op_sub_ff(float b, float a) {
+            return a - b;
+        }
+
+        static float runtime_op_mul_ff(float b, float a) {
+            return a * b;
+        }
+
+        static float runtime_op_div_ff(float b, float a) {
+            return a / b;
+        }
+
+        static float runtime_op_neg_f(float a) {
+            return -a;
+        }
+
+        // Math double
+
+        static double runtime_op_add_dd(double b, double a) {
+            return a + b;
+        }
+
+        static double runtime_op_sub_dd(double b, double a) {
+            return a - b;
+        }
+
+        static double runtime_op_mul_dd(double b, double a) {
+            return a * b;
+        }
+
+        static double runtime_op_div_dd(double b, double a) {
+            return a / b;
+        }
+
+        static double runtime_op_neg_d(double a) {
+            return -a;
         }
 
         static const int STACK_ALIGNMENT = 8;
@@ -1176,12 +1723,12 @@ class Compiler : public ErrorSink {
 
         /* returns address to patch with local variable size
         */
-        virtual int functionEntry(int argCount) {
+        virtual int functionEntry(Type* pDecl) {
             o(0xe58955); /* push   %ebp, mov %esp, %ebp */
             return oad(0xec81, 0); /* sub $xxx, %esp */
         }
 
-        virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) {
+        virtual void functionExit(Type* pDecl, int localVariableAddress, int localVariableSize) {
             o(0xc3c9); /* leave, ret */
             *(int *) localVariableAddress = localVariableSize; /* save local variables */
         }
@@ -1333,7 +1880,6 @@ class Compiler : public ErrorSink {
                         error("Unsupported binary floating operation.");
                         break;
                 }
-                popType();
                 setR0Type(pResultType);
             }
         }
@@ -1368,7 +1914,7 @@ class Compiler : public ErrorSink {
                         o(0x01f083); // xorl $1,  %eax
                         break;
                     default:
-                        error("genUnaryCmp unsupported type");
+                        error("gUnaryCmp unsupported type");
                         break;
                 }
             }
@@ -1607,7 +2153,7 @@ class Compiler : public ErrorSink {
             }
         }
 
-        virtual void endFunctionCallArguments(int a, int l) {
+        virtual void endFunctionCallArguments(Type* pDecl, int a, int l) {
             * (int*) a = l;
         }
 
@@ -1626,7 +2172,7 @@ class Compiler : public ErrorSink {
             oad(0x2494ff, l); /* call *xxx(%esp) */
         }
 
-        virtual void adjustStackAfterCall(int l, bool isIndirect) {
+        virtual void adjustStackAfterCall(Type* pDecl, int l, bool isIndirect) {
             if (isIndirect) {
                 l += 4;
             }
@@ -1668,13 +2214,8 @@ class Compiler : public ErrorSink {
         /**
          * Alignment (in bytes) for this type of data
          */
-        virtual size_t alignment(Type* pType){
-            switch(pType->tag) {
-                case TY_DOUBLE:
-                    return 8;
-                default:
-                    return 4;
-            }
+        virtual size_t alignmentOf(Type* pType){
+            return 4;
         }
 
         /**
@@ -1782,6 +2323,7 @@ class Compiler : public ErrorSink {
                     o(0x58);      // pop %eax
                 }
             }
+            popType();
         }
     };
 
@@ -1811,16 +2353,16 @@ class Compiler : public ErrorSink {
 
         /* returns address to patch with local variable size
         */
-        virtual int functionEntry(int argCount) {
-            int result = mpBase->functionEntry(argCount);
-            fprintf(stderr, "functionEntry(%d) -> %d\n", argCount, result);
+        virtual int functionEntry(Type* pDecl) {
+            int result = mpBase->functionEntry(pDecl);
+            fprintf(stderr, "functionEntry(pDecl) -> %d\n", result);
             return result;
         }
 
-        virtual void functionExit(int argCount, int localVariableAddress, int localVariableSize) {
-            fprintf(stderr, "functionExit(%d, %d, %d)\n",
-                    argCount, localVariableAddress, localVariableSize);
-            mpBase->functionExit(argCount, localVariableAddress, localVariableSize);
+        virtual void functionExit(Type* pDecl, int localVariableAddress, int localVariableSize) {
+            fprintf(stderr, "functionExit(pDecl, %d, %d)\n",
+                    localVariableAddress, localVariableSize);
+            mpBase->functionExit(pDecl, localVariableAddress, localVariableSize);
         }
 
         /* load immediate value */
@@ -1914,9 +2456,9 @@ class Compiler : public ErrorSink {
             return mpBase->storeR0ToArg(l);
         }
 
-        virtual void endFunctionCallArguments(int a, int l) {
+        virtual void endFunctionCallArguments(Type* pDecl, int a, int l) {
             fprintf(stderr, "endFunctionCallArguments(%d, %d)\n", a, l);
-            mpBase->endFunctionCallArguments(a, l);
+            mpBase->endFunctionCallArguments(pDecl, a, l);
         }
 
         virtual int callForward(int symbol, Type* pFunc) {
@@ -1935,9 +2477,9 @@ class Compiler : public ErrorSink {
             mpBase->callIndirect(l, pFunc);
         }
 
-        virtual void adjustStackAfterCall(int l, bool isIndirect) {
-            fprintf(stderr, "adjustStackAfterCall(%d, %d)\n", l, isIndirect);
-            mpBase->adjustStackAfterCall(l, isIndirect);
+        virtual void adjustStackAfterCall(Type* pDecl, int l, bool isIndirect) {
+            fprintf(stderr, "adjustStackAfterCall(pType, %d, %d)\n", l, isIndirect);
+            mpBase->adjustStackAfterCall(pDecl, l, isIndirect);
         }
 
         virtual int jumpOffset() {
@@ -1963,8 +2505,8 @@ class Compiler : public ErrorSink {
         /**
          * Alignment (in bytes) for this type of data
          */
-        virtual size_t alignment(Type* pType){
-            return mpBase->alignment(pType);
+        virtual size_t alignmentOf(Type* pType){
+            return mpBase->alignmentOf(pType);
         }
 
         /**
@@ -3206,15 +3748,16 @@ class Compiler : public ErrorSink {
 
         /* function call */
         if (accept('(')) {
-            Type* pArgList = NULL;
+            Type* pDecl = NULL;
             VariableInfo* pVI = NULL;
             if (n == 1) { // Indirect function call, push address of fn.
-                pArgList = pGen->getR0Type()->pTail;
+                pDecl = pGen->getR0Type();
                 pGen->pushR0();
             } else {
                 pVI = VI(t);
-                pArgList = pVI->pType->pTail;
+                pDecl = pVI->pType;
             }
+            Type* pArgList = pDecl->pTail;
             bool varArgs = pArgList == NULL;
             /* push args and invert order */
             a = pGen->beginFunctionCallArguments();
@@ -3252,7 +3795,7 @@ class Compiler : public ErrorSink {
             if (! varArgs && pArgList) {
                 error ("Expected more argument(s). Saw %d", argCount);
             }
-            pGen->endFunctionCallArguments(a, l);
+            pGen->endFunctionCallArguments(pDecl, a, l);
             skip(')');
             if (!n) {
                 /* forward reference */
@@ -3264,7 +3807,7 @@ class Compiler : public ErrorSink {
                 pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset(),
                                    VI(t)->pType);
             }
-            pGen->adjustStackAfterCall(l, n == 1);
+            pGen->adjustStackAfterCall(pDecl, l, n == 1);
         }
     }
 
@@ -3729,8 +4272,9 @@ class Compiler : public ErrorSink {
                 }
                 int variableAddress = 0;
                 addLocalSymbol(pDecl);
+                size_t alignment = pGen->alignmentOf(pDecl);
+                loc = (loc + alignment - 1) & ~ (alignment-1);
                 loc = loc + pGen->sizeOf(pDecl);
-                loc = loc + 4;
                 variableAddress = -loc;
                 VI(pDecl->id)->pAddress = (void*) variableAddress;
                 if (accept('=')) {
@@ -3809,7 +4353,7 @@ class Compiler : public ErrorSink {
                 for(;;) {
                     if (name && !name->pAddress) {
                         name->pAddress = (int*) allocGlobalSpace(
-                                                   pGen->alignment(name->pType),
+                                                   pGen->alignmentOf(name->pType),
                                                    pGen->sizeOf(name->pType));
                     }
                     if (accept('=')) {
@@ -3855,16 +4399,18 @@ class Compiler : public ErrorSink {
                         Type* pArg = pP->pHead;
                         addLocalSymbol(pArg);
                         /* read param name and compute offset */
+                        size_t alignment = pGen->alignmentOf(pArg);
+                        a = (a + alignment - 1) & ~ (alignment-1);
                         VI(pArg->id)->pAddress = (void*) a;
                         a = a + pGen->stackSizeOf(pArg);
                         argCount++;
                     }
                     rsym = loc = 0;
                     pReturnType = pDecl->pHead;
-                    a = pGen->functionEntry(argCount);
+                    a = pGen->functionEntry(pDecl);
                     block(0, true);
                     pGen->gsym(rsym);
-                    pGen->functionExit(argCount, a, loc);
+                    pGen->functionExit(pDecl, a, loc);
                     mLocals.popLevel();
                 }
             }
