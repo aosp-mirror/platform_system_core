@@ -1335,7 +1335,6 @@ class Compiler : public ErrorSink {
                 }
                 popType();
                 setR0Type(pResultType);
-                printf("genop: result type %d\n", pResultType->tag);
             }
         }
 

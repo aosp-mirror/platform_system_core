@@ -59,8 +59,8 @@ def compileArm(args):
 def compare(a, b):
     if a != b:
         firstDiff = firstDifference(a, b)
-        print "Strings differ at character %d '%s' != '%s'" % (
-            firstDiff, safeAccess(a, firstDiff), safeAccess(b, firstDiff))
+        print "Strings differ at character %d. Common: %s. Difference '%s' != '%s'" % (
+            firstDiff, a[0:firstDiff], safeAccess(a, firstDiff), safeAccess(b, firstDiff))
 
 def safeAccess(s, i):
     if 0 <= i < len(s):
@@ -97,7 +97,7 @@ class TestACC(unittest.TestCase):
         self.compileCheck(["-R", "data/returnval-ansi.c"],
 		"Executing compiled code:\nresult: 42\n")
 
-    def testStingLiteralConcatenation(self):
+    def testStringLiteralConcatenation(self):
         self.compileCheck(["-R", "data/testStringConcat.c"],
 		"Executing compiled code:\nresult: 13\n", "Hello, world\n")
 
@@ -115,6 +115,64 @@ class TestACC(unittest.TestCase):
             "0 = 0\n010 = 8\n0x10 = 16\n'\\a' = 7\n'\\b' = 8\n'\\f' = 12\n'\\n' = 10\n'\\r' = 13\n'\\t' = 9\n'\\v' = 11\n'\\\\' = 92\n'\\'' = 39\n" +
             "'\\\"' = 34\n'\\?' = 63\n'\\0' = 0\n'\\1' = 1\n'\\12' = 10\n'\\123' = 83\n'\\x0' = 0\n'\\x1' = 1\n'\\x12' = 18\n'\\x123' = 291\n'\\x1f' = 31\n'\\x1F' = 31\n")
 
+    def testRunFloat(self):
+        self.compileCheck(["-R", "data/float.c"],
+            "Executing compiled code:\nresult: 0\n",
+            "int: 1 float: 2.2 double: 3.3\n ftoi(1.4f)=1\n dtoi(2.4f)=2\n itof(3)=3\n itod(4)=4\nglobals: 1 2 3 4\nargs: 1 2 3 4\nlocals: 1 2 3 4\ncast rval: 2 4\ncast lval: 1.1 2 3.3 4\n")
+        
+    def testRunFlops(self):
+        self.compileCheck(["-R", "data/flops.c"],
+            "Executing compiled code:\nresult: 0\n",
+            "-1.1 = -1.1\n" +
+            "!1.2 = 0\n" +
+            "!0 = 1\n" +
+            "double op double:\n" +
+            "1 + 2 = 3\n" +
+            "1 - 2 = -1\n" +
+            "1 * 2 = 2\n" +
+            "1 / 2 = 0.5\n" +
+            "float op float:\n" +
+            "1 + 2 = 3\n" +
+            "1 - 2 = -1\n" +
+            "1 * 2 = 2\n" +
+            "1 / 2 = 0.5\n" +
+            "double op float:\n" +
+            "1 + 2 = 3\n" +
+            "1 - 2 = -1\n" +
+            "1 * 2 = 2\n" +
+            "1 / 2 = 0.5\n" +
+            "double op int:\n" +
+            "1 + 2 = 3\n" +
+            "1 - 2 = -1\n" +
+            "1 * 2 = 2\n" +
+            "1 / 2 = 0.5\n" +
+            "int op double:\n" +
+            "1 + 2 = 3\n" +
+            "1 - 2 = -1\n" +
+            "1 * 2 = 2\n" +
+            "1 / 2 = 0.5\n" +
+            "double op double:\n" +
+            "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
+            "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
+            "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
+            "double op float:\n" +
+            "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
+            "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
+            "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
+            "float op float:\n" +
+            "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
+            "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
+            "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
+            "int op double:\n" +
+            "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
+            "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
+            "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
+            "double op int:\n" +
+            "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
+            "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
+            "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
+            "branching: 1 0 1\n")
+        
     def testArmRunReturnVal(self):
         self.compileCheckArm(["-R", "/system/bin/accdata/data/returnval-ansi.c"],
             "Executing compiled code:\nresult: 42\n")
