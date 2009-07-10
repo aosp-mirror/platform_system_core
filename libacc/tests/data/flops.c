@@ -4,7 +4,7 @@ void unaryOps() {
     // Unary ops
     printf("-%g = %g\n", 1.1, -1.1);
     printf("!%g = %d\n", 1.2, !1.2);
-    printf("!%g = %d\n", 0.0, !0,0);
+    printf("!%g = %d\n", 0.0, !0.0);
 }
 
 void binaryOps() {
@@ -75,6 +75,7 @@ void comparisonOpsff() {
     comparisonTestff(1.0f, 1.0f);
     comparisonTestff(2.0f, 1.0f);
 }
+
 void comparisonTestid(int a, double b) {
     printf("%d op %g: < %d   <= %d   == %d   >= %d   > %d   != %d\n",
            a, b, a < b, a <= b, a == b, a >= b, a > b, a != b);
@@ -82,9 +83,9 @@ void comparisonTestid(int a, double b) {
 
 void comparisonOpsid() {
     printf("int op double:\n");
-    comparisonTestid(1, 2.0f);
-    comparisonTestid(1, 1.0f);
-    comparisonTestid(2, 1.0f);
+    comparisonTestid(1, 2.0);
+    comparisonTestid(1, 1.0);
+    comparisonTestid(2, 1.0);
 }
 void comparisonTestdi(double a, int b) {
     printf("%g op %d: < %d   <= %d   == %d   >= %d   > %d   != %d\n",
@@ -117,10 +118,34 @@ void testBranching() {
     printf("branching: %d %d %d\n", branch(-1.0), branch(0.0), branch(1.0));
 }
 
+void testpassi(int a, int b, int c, int d, int e, int f, int g, int h) {
+    printf("testpassi: %d %d %d %d %d %d %d %d\n", a, b, c, d, e, f, g, h);
+}
+
+void testpassf(float a, float b, float c, float d, float e, float f, float g, float h) {
+    printf("testpassf: %g %g %g %g %g %g %g %g\n", a, b, c, d, e, f, g, h);
+}
+
+void testpassd(double a, double b, double c, double d, double e, double f, double g, double h) {
+    printf("testpassd: %g %g %g %g %g %g %g %g\n", a, b, c, d, e, f, g, h);
+}
+
+void testpassidf(int i, double d, float f) {
+    printf("testpassidf: %d %g %g\n", i, d, f);
+}
+
+void testParameterPassing() {
+    testpassi(1, 2, 3, 4, 5, 6, 7, 8);
+    testpassf(1, 2, 3, 4, 5, 6, 7, 8);
+    testpassd(1, 2, 3, 4, 5, 6, 7, 8);
+    testpassidf(1, 2.0, 3.0f);
+}
+
 int main() {
     unaryOps();
     binaryOps();
     comparisonOps();
     testBranching();
+    testParameterPassing();
     return 0;
 }

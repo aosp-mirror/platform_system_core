@@ -118,7 +118,7 @@ class TestACC(unittest.TestCase):
     def testRunFloat(self):
         self.compileCheck(["-R", "data/float.c"],
             "Executing compiled code:\nresult: 0\n",
-            "int: 1 float: 2.2 double: 3.3\n ftoi(1.4f)=1\n dtoi(2.4f)=2\n itof(3)=3\n itod(4)=4\nglobals: 1 2 3 4\nargs: 1 2 3 4\nlocals: 1 2 3 4\ncast rval: 2 4\ncast lval: 1.1 2 3.3 4\n")
+            "int: 1 float: 2.2 double: 3.3\n ftoi(1.4f)=1\n dtoi(2.4)=2\n itof(3)=3\n itod(4)=4\nglobals: 1 2 3 4\nargs: 1 2 3 4\nlocals: 1 2 3 4\ncast rval: 2 4\ncast lval: 1.1 2 3.3 4\n")
         
     def testRunFlops(self):
         self.compileCheck(["-R", "data/flops.c"],
@@ -171,7 +171,12 @@ class TestACC(unittest.TestCase):
             "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
             "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
             "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
-            "branching: 1 0 1\n")
+            "branching: 1 0 1\n" +
+            "testpassi: 1 2 3 4 5 6 7 8\n" +
+            "testpassf: 1 2 3 4 5 6 7 8\n" +
+            "testpassd: 1 2 3 4 5 6 7 8\n" +
+            "testpassidf: 1 2 3\n"
+            )
         
     def testArmRunReturnVal(self):
         self.compileCheckArm(["-R", "/system/bin/accdata/data/returnval-ansi.c"],

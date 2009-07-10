@@ -38,13 +38,12 @@ void testVars(float arg0, float arg1, double arg2, double arg3) {
     * (float*) & f0 = 1.1f;
     * (double*) & d0 = 3.3;
     printf("cast lval: %g %g %g %g\n", f0, f1, d0, d1);
-
 }
 
 int main() {
     printf("int: %d float: %g double: %g\n", 1, 2.2f, 3.3);
     printf(" ftoi(1.4f)=%d\n", ftoi(1.4f));
-    printf(" dtoi(2.4f)=%d\n", dtoi(2.4f));
+    printf(" dtoi(2.4)=%d\n", dtoi(2.4));
     printf(" itof(3)=%g\n", itof(3));
     printf(" itod(4)=%g\n", itod(4));
     testVars(1.0f, 2.0f, 3.0, 4.0);
