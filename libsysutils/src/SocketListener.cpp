@@ -45,9 +45,26 @@ SocketListener::SocketListener(int socketFd, bool listen) {
     mClients = new SocketClientCollection();
 }
 
+SocketListener::~SocketListener() {
+    if (mSocketName && mSock > -1)
+        close(mSock);
+
+    if (mCtrlPipe[0] != -1) {
+        close(mCtrlPipe[0]);
+        close(mCtrlPipe[1]);
+    }
+    SocketClientCollection::iterator it;
+    for (it = mClients->begin(); it != mClients->end(); ++it) {
+        delete (*it);
+        it = mClients->erase(it);
+    }
+    delete mClients;
+}
+
 int SocketListener::startListener() {
 
     if (!mSocketName && mSock == -1) {
+        LOGE("Failed to start unbound listener");
         errno = EINVAL;
         return -1;
     } else if (mSocketName) {
@@ -64,11 +81,15 @@ int SocketListener::startListener() {
     } else if (!mListen)
         mClients->push_back(new SocketClient(mSock));
 
-    if (pipe(mCtrlPipe))
+    if (pipe(mCtrlPipe)) {
+        LOGE("pipe failed (%s)", strerror(errno));
         return -1;
+    }
 
-    if (pthread_create(&mThread, NULL, SocketListener::threadStart, this))
+    if (pthread_create(&mThread, NULL, SocketListener::threadStart, this)) {
+        LOGE("pthread_create (%s)", strerror(errno));
         return -1;
+    }
 
     return 0;
 }
@@ -88,6 +109,19 @@ int SocketListener::stopListener() {
     }
     close(mCtrlPipe[0]);
     close(mCtrlPipe[1]);
+    mCtrlPipe[0] = -1;
+    mCtrlPipe[1] = -1;
+
+    if (mSocketName && mSock > -1) {
+        close(mSock);
+        mSock = -1;
+    }
+
+    SocketClientCollection::iterator it;
+    for (it = mClients->begin(); it != mClients->end(); ++it) {
+        delete (*it);
+        it = mClients->erase(it);
+    }
     return 0;
 }
 

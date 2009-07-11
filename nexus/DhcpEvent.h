@@ -14,22 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef _DHCP_STATE_H
-#define _DHCP_STATE_H
+#ifndef _DHCP_EVENT_H
+#define _DHCP_EVENT_H
 
-class DhcpState {
+class DhcpEvent {
 public:
-    static const int INIT            = 0;
-    static const int DISCOVERING     = 1;
-    static const int REQUESTING      = 2;
-    static const int BOUND           = 3;
-    static const int RENEWING        = 4;
-    static const int REBINDING       = 5;
-    static const int REBOOT          = 6;
-    static const int RENEW_REQUESTED = 7;
-    static const int INIT_IPV4LL     = 8;
-    static const int PROBING         = 9;
-    static const int ANNOUNCING      = 10;
+    static const int UNKNOWN = 0;
+    static const int STOP    = 1;
+    static const int RENEW   = 2;
+    static const int RELEASE = 3;
+    static const int TIMEOUT = 4;
 
     static char *toString(int val, char *buffer, int max);
 

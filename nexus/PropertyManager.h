@@ -22,36 +22,28 @@
 
 #include <utils/List.h>
 
-#include "IPropertyProvider.h"
-
-class PropertyPair {
-private:
-    char *mName;
-    IPropertyProvider *mPp;
- 
-public:
-    PropertyPair(const char *name, IPropertyProvider *pp);
-    virtual ~PropertyPair();
-
-    const char *getName() { return mName; }
-    IPropertyProvider *getProvider() { return mPp; }
-};
-
-typedef android::List<PropertyPair *> PropertyPairCollection;
+#include "Property.h"
 
 class PropertyManager {
-    PropertyPairCollection *mPropertyPairs;
-    pthread_mutex_t         mLock;
+    PropertyNamespaceCollection *mNamespaces;
+    pthread_mutex_t    mLock;
 
 public:
     PropertyManager();
-    virtual ~PropertyManager();   
-    int registerProperty(const char *name, IPropertyProvider *pp);
-    int unregisterProperty(const char *name);
-    android::List<char *> *createPropertyList();
+    virtual ~PropertyManager();
+    int attachProperty(const char *ns, Property *p);
+    int detachProperty(const char *ns, Property *p);
+
+    android::List<char *> *createPropertyList(const char *prefix);
 
     int set(const char *name, const char *value);
     const char *get(const char *name, char *buffer, size_t max);
+
+private:
+    PropertyNamespace *lookupNamespace_UNLOCKED(const char *ns);
+    Property *lookupProperty_UNLOCKED(PropertyNamespace *ns, const char *name);
+    int doSet(Property *p, int idx, const char *value);
+    int doGet(Property *p, int idx, char *buffer, size_t max);
 };
 
 #endif

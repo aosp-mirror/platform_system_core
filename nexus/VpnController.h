@@ -24,11 +24,63 @@
 class IControllerHandler;
 
 class VpnController : public Controller {
+    class VpnIntegerProperty : public IntegerProperty {
+    protected:
+        VpnController *mVc;
+    public:
+        VpnIntegerProperty(VpnController *c, const char *name, bool ro,
+                            int elements);
+        virtual ~VpnIntegerProperty() {}
+        virtual int set(int idx, int value) = 0;
+        virtual int get(int idx, int *buffer) = 0;
+    };
+    friend class VpnController::VpnIntegerProperty;
+
+    class VpnStringProperty : public StringProperty {
+    protected:
+        VpnController *mVc;
+    public:
+        VpnStringProperty(VpnController *c, const char *name, bool ro,
+                            int elements);
+        virtual ~VpnStringProperty() {}
+        virtual int set(int idx, const char *value) = 0;
+        virtual int get(int idx, char *buffer, size_t max) = 0;
+    };
+    friend class VpnController::VpnStringProperty;
+
+    class VpnIPV4AddressProperty : public IPV4AddressProperty {
+    protected:
+        VpnController *mVc;
+    public:
+        VpnIPV4AddressProperty(VpnController *c, const char *name, bool ro,
+                          int elements);
+        virtual ~VpnIPV4AddressProperty() {}
+        virtual int set(int idx, struct in_addr *value) = 0;
+        virtual int get(int idx, struct in_addr *buffer) = 0;
+    };
+    friend class VpnController::VpnIPV4AddressProperty;
+
+    class VpnEnabledProperty : public VpnIntegerProperty {
+    public:
+        VpnEnabledProperty(VpnController *c);
+        virtual ~VpnEnabledProperty() {};
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
     bool           mEnabled;
     /*
      * Gateway of the VPN server to connect to
      */
-    struct in_addr mVpnGateway;
+    struct in_addr mGateway;
+
+    struct {
+        VpnEnabledProperty *propEnabled;
+    } mStaticProperties;
+
+    struct {
+        IPV4AddressPropertyHelper *propGateway;
+    } mDynamicProperties;
 
 public:
     VpnController(PropertyManager *propmngr, IControllerHandler *handlers);
@@ -37,13 +89,9 @@ public:
     virtual int start();
     virtual int stop();
 
-    virtual int set(const char *name, const char *value);
-    virtual const char *get(const char *name, char *buffer, size_t maxlen);
-
 protected:
     virtual int enable() = 0;
     virtual int disable() = 0;
-
 };
 
 #endif
