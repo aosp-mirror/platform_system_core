@@ -1019,6 +1019,7 @@ class Compiler : public ErrorSink {
             LOG_API("storeR0(%d);\n", ea);
             TypeTag tag = pType->tag;
             switch (tag) {
+                case TY_POINTER:
                 case TY_INT:
                 case TY_FLOAT:
                     if (ea > -LOCAL && ea < LOCAL) {
@@ -2027,6 +2028,7 @@ class Compiler : public ErrorSink {
             TypeTag tag = pType->tag;
             switch (tag) {
                 case TY_INT:
+                case TY_POINTER:
                     gmov(6, ea); /* mov %eax, EA */
                     break;
                 case TY_FLOAT:
@@ -3663,41 +3665,34 @@ class Compiler : public ErrorSink {
                     pGen->genUnaryOp(a);
                 }
             } else if (t == '(') {
-                expr();
-                skip(')');
-            } else if (t == '*') {
-                /* This is a pointer dereference, but we currently only
-                 * support a pointer dereference if it's immediately
-                 * in front of a cast. So parse the cast right here.
-                 */
-                skip('(');
-                Type* pCast = expectCastTypeDeclaration(mLocalArena);
-                // We currently only handle 3 types of cast:
-                // (int*), (char*) , (int (*)())
-                if(typeEqual(pCast, mkpIntPtr)) {
-                    t = TOK_INT;
-                } else if (typeEqual(pCast, mkpCharPtr)) {
-                    t = TOK_CHAR;
-                } else if (typeEqual(pCast, mkpFloatPtr)) {
-                    t = TOK_FLOAT;
-                } else if (typeEqual(pCast, mkpDoublePtr)) {
-                    t = TOK_DOUBLE;
-                } else if (typeEqual(pCast, mkpPtrIntFn)){
-                    t = 0;
+                // It's either a cast or an expression
+                Type* pCast = acceptCastTypeDeclaration(mLocalArena);
+                if (pCast) {
+                    skip(')');
+                    unary(false);
+                    pGen->convertR0(pCast);
                 } else {
-                    String buffer;
-                    decodeType(buffer, pCast);
-                    error("Unsupported cast type %s", buffer.getUnwrapped());
-                    decodeType(buffer, mkpPtrIntFn);
-                }
-                skip(')');
-                unary(false);
-                if (accept('=')) {
-                    pGen->pushR0();
                     expr();
-                    pGen->storeR0ToTOS(pCast);
-                } else if (t) {
-                    pGen->loadR0FromR0(pCast);
+                    skip(')');
+                }
+            } else if (t == '*') {
+                /* This is a pointer dereference.
+                 */
+                unary(false);
+                Type* pR0Type = pGen->getR0Type();
+                if (pR0Type->tag != TY_POINTER) {
+                    error("Expected a pointer type.");
+                } else {
+                    if (pR0Type->pHead->tag == TY_FUNC) {
+                        t = 0;
+                    }
+                    if (accept('=')) {
+                        pGen->pushR0();
+                        expr();
+                        pGen->storeR0ToTOS(pR0Type);
+                    } else if (t) {
+                        pGen->loadR0FromR0(pR0Type);
+                    }
                 }
                 // Else we fall through to the function call below, with
                 // t == 0 to trigger an indirect function call. Hack!
