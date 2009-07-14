@@ -4,6 +4,9 @@
 import unittest
 import subprocess
 import os
+import sets
+
+gArmInitialized = False
 
 def compile(args):
     proc = subprocess.Popen(["acc"] + args, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -28,9 +31,8 @@ def outputCanRun():
 def adb(args):
     return runCmd(["adb"] + args)
 
-gArmInitialized = False
-
 def setupArm():
+    global gArmInitialized
     if gArmInitialized:
         return
     print "Setting up arm"
@@ -48,7 +50,7 @@ def setupArm():
             adb(["push", os.path.join(root, f), os.path.join("/system/bin/accdata", root, f)])
     # Copy over compiler
     adb(["sync"])
-    gArmInitialied = True
+    gArmInitialized = True
 
 def compileArm(args):
     setupArm()
@@ -75,14 +77,63 @@ def firstDifference(a, b):
             return i
     return commonLen
 
+def compareSet(a1,a2,b1,b2):
+    while True:
+        totalLen = len(a1) + len(a2) + len(b1) + len(b2)
+        a1, b1 = matchCommon(a1, b1)
+        a1, b2 = matchCommon(a1, b2)
+        a2, b1 = matchCommon(a2, b1)
+        a2, b2 = matchCommon(a2, b2)
+        newTotalLen = len(a1) + len(a2) + len(b1) + len(b2)
+        if newTotalLen == 0:
+            return True
+        if newTotalLen == totalLen:
+            print "Failed at %d %d %d %d" % (len(a1), len(a2), len(b1), len(b2))
+            print "a1", a1
+            print "a2", a2
+            print "b1", b1
+            print "b2", b2
+            return False
+
+def matchCommon(a, b):
+    while len(a) > 0 and len(b) > 0 and a[0] == b[0]:
+        a = a[1:]
+        b = b[1:]
+    return a, b
+
+def rewritePaths(args):
+    return [rewritePath(x) for x in args]
+
+def rewritePath(p):
+    if p.startswith("data/"):
+        p = "/system/bin/accdata/" + p
+    return p
+
 class TestACC(unittest.TestCase):
  
-    def compileCheck(self, args, stdErrResult, stdOutResult=""):
+    def compileCheckOld(self, args, stdErrResult, stdOutResult=""):
         out, err = compile(args)
         compare(out, stdOutResult)
         compare(err, stdErrResult)
         self.assertEqual(out, stdOutResult)
         self.assertEqual(err, stdErrResult)
+
+    def checkResult(self, out, err, stdErrResult, stdOutResult=""):
+        a1 = out.splitlines()
+        a2 = err.splitlines()
+        b2 = stdErrResult.splitlines()
+        b1 = stdOutResult.splitlines()
+        self.assertEqual(True, compareSet(a1,a2,b1,b2))
+        
+    def compileCheck(self, args, stdErrResult, stdOutResult="",
+                     targets=['arm', 'x86']):
+        targetSet = sets.ImmutableSet(targets)
+        if 'x86' in targetSet:
+            out, err = compile(args)
+            self.checkResult(out, err, stdErrResult, stdOutResult)
+        if 'arm' in targetSet:
+            out = compileArm(rewritePaths(args))
+            self.checkResult(out, "", stdErrResult, stdOutResult)
 
     def compileCheckArm(self, args, result):
         self.assertEqual(compileArm(args), result)
@@ -90,8 +141,8 @@ class TestACC(unittest.TestCase):
     def testCompileReturnVal(self):
         self.compileCheck(["data/returnval-ansi.c"], "") 
 
-    def testCompileReturnVal(self):
-        self.compileCheck(["data/otcc-ansi.c"], "")
+    def testCompileOTCCANSII(self):
+        self.compileCheck(["data/otcc-ansi.c"], "", "", ['x86'])
 
     def testRunReturnVal(self):
         self.compileCheck(["-R", "data/returnval-ansi.c"],
@@ -103,11 +154,12 @@ class TestACC(unittest.TestCase):
 
     def testRunOTCCANSI(self):
         self.compileCheck(["-R", "data/otcc-ansi.c", "data/returnval.c"], 
-            "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\natcc-ansi.c: result: 42\nresult: 42\n")
+            "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\natcc-ansi.c: result: 42\nresult: 42\n", "",
+             ['x86'])
 
     def testRunOTCCANSI2(self):
         self.compileCheck(["-R", "data/otcc-ansi.c", "data/otcc.c", "data/returnval.c"], 
-            "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\notcc.c: about to execute compiled code.\natcc-ansi.c: result: 42\nresult: 42\n")
+            "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\notcc.c: about to execute compiled code.\natcc-ansi.c: result: 42\nresult: 42\n", "",['x86'])
 
     def testRunConstants(self):
         self.compileCheck(["-R", "data/constants.c"],
@@ -178,7 +230,7 @@ class TestACC(unittest.TestCase):
             "testpassidf: 1 2 3\n"
             )
         
-    def testArmRunReturnVal(self):
+    def oldtestArmRunReturnVal(self):
         self.compileCheckArm(["-R", "/system/bin/accdata/data/returnval-ansi.c"],
             "Executing compiled code:\nresult: 42\n")
 
