@@ -3976,7 +3976,7 @@ class Compiler : public ErrorSink {
     /* Recursive descent parser for binary operations.
      */
     void binaryOp(int level) {
-        intptr_t t, n, a;
+        intptr_t t, a;
         t = 0;
         if (level-- == 1)
             unary(true);
@@ -3984,7 +3984,6 @@ class Compiler : public ErrorSink {
             binaryOp(level);
             a = 0;
             while (level == tokl) {
-                n = tok;
                 t = tokc;
                 next();
 
