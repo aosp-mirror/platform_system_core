@@ -269,6 +269,10 @@ class Compiler : public ErrorSink {
             }
         }
 
+        void setTypes(Type* pInt) {
+            mkpInt = pInt;
+        }
+
         /* Emit a function prolog.
          * pDecl is the function declaration, which gives the arguments.
          * Save the old value of the FP.
@@ -545,6 +549,8 @@ class Compiler : public ErrorSink {
             return tag == TY_FLOAT || tag == TY_DOUBLE;
         }
 
+        Type* mkpInt;
+
     private:
         Vector<Type*> mExpressionStack;
         CodeBuf* pCodeBuf;
@@ -615,18 +621,7 @@ class Compiler : public ErrorSink {
 
         /* load immediate value */
         virtual void li(int t, Type* pType) {
-            LOG_API("li(%d);\n", t);
-            if (t >= 0 && t < 255) {
-                 o4(0xE3A00000 + t); // mov    r0, #0
-            } else if (t >= -256 && t < 0) {
-                // mvn means move constant ^ ~0
-                o4(0xE3E00001 - t); // mvn    r0, #0
-            } else {
-                  o4(0xE51F0000); //         ldr    r0, .L3
-                  o4(0xEA000000); //         b .L99
-                  o4(t);          // .L3:   .word 0
-                                  // .L99:
-            }
+            liReg(t, 0);
             setR0Type(pType);
         }
 
@@ -774,50 +769,102 @@ class Compiler : public ErrorSink {
             LOG_API("genOp(%d);\n", op);
             Type* pR0Type = getR0Type();
             Type* pTOSType = getTOSType();
-            TypeTag tagR0 = collapseType(pR0Type->tag);
-            TypeTag tagTOS = collapseType(pTOSType->tag);
-            if (tagR0 == TY_INT && tagTOS == TY_INT) {
-                o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+            TypeTag tagR0 = pR0Type->tag;
+            TypeTag tagTOS = pTOSType->tag;
+            bool isFloatR0 = isFloatTag(tagR0);
+            bool isFloatTOS = isFloatTag(tagTOS);
+            if (!isFloatR0 && !isFloatTOS) {
+                bool isPtrR0 = tagR0 == TY_POINTER;
+                bool isPtrTOS = tagTOS == TY_POINTER;
+                if (isPtrR0 || isPtrTOS) {
+                    if (isPtrR0 && isPtrTOS) {
+                        if (op != OP_MINUS) {
+                            error("Unsupported pointer-pointer operation %d.", op);
+                        }
+                        if (! typeEqual(pR0Type, pTOSType)) {
+                            error("Incompatible pointer types for subtraction.");
+                        }
+                        o4(0xE8BD0002); // ldmfd   sp!,{r1}
+                        o4(0xE0410000); // sub     r0,r1,r0
+                        popType();
+                        setR0Type(mkpInt);
+                        int size = sizeOf(pR0Type->pHead);
+                        if (size != 1) {
+                            pushR0();
+                            li(size, mkpInt);
+                            // TODO: Optimize for power-of-two.
+                            genOp(OP_DIV);
+                        }
+                    } else {
+                        if (! (op == OP_PLUS || (op == OP_MINUS && isPtrR0))) {
+                            error("Unsupported pointer-scalar operation %d", op);
+                        }
+                        Type* pPtrType = isPtrR0 ? pR0Type : pTOSType;
+                        o4(0xE8BD0002); // ldmfd   sp!,{r1}
+                        int size = sizeOf(pPtrType->pHead);
+                        if (size != 1) {
+                            // TODO: Optimize for power-of-two.
+                            liReg(size, 2);
+                            if (isPtrR0) {
+                                o4(0x0E0010192); // mul     r1,r2,r1
+                            } else {
+                                o4(0x0E0000092); // mul     r0,r2,r0
+                            }
+                        }
+                        switch(op) {
+                            case OP_PLUS:
+                            o4(0xE0810000); // add     r0,r1,r0
+                            break;
+                            case OP_MINUS:
+                            o4(0xE0410000); // sub     r0,r1,r0
+                            break;
+                        }
+                        popType();
+                        setR0Type(pPtrType);
+                    }
+                } else {
+                    o4(0xE8BD0002); // ldmfd   sp!,{r1}
                 mStackUse -= 4;
-                switch(op) {
-                case OP_MUL:
-                    o4(0x0E0000091); // mul     r0,r1,r0
-                    break;
-                case OP_DIV:
-                    callRuntime((void*) runtime_DIV);
-                    break;
-                case OP_MOD:
-                    callRuntime((void*) runtime_MOD);
-                    break;
-                case OP_PLUS:
-                    o4(0xE0810000);  // add     r0,r1,r0
-                    break;
-                case OP_MINUS:
-                    o4(0xE0410000);  // sub     r0,r1,r0
-                    break;
-                case OP_SHIFT_LEFT:
-                    o4(0xE1A00011);  // lsl     r0,r1,r0
-                    break;
-                case OP_SHIFT_RIGHT:
-                    o4(0xE1A00051);  // asr     r0,r1,r0
-                    break;
-                case OP_BIT_AND:
-                    o4(0xE0010000);  // and     r0,r1,r0
-                    break;
-                case OP_BIT_XOR:
-                    o4(0xE0210000);  // eor     r0,r1,r0
-                    break;
-                case OP_BIT_OR:
-                    o4(0xE1810000);  // orr     r0,r1,r0
-                    break;
-                case OP_BIT_NOT:
-                    o4(0xE1E00000);  // mvn     r0, r0
-                    break;
-                default:
-                    error("Unimplemented op %d\n", op);
-                    break;
+                    switch(op) {
+                        case OP_MUL:
+                        o4(0x0E0000091); // mul     r0,r1,r0
+                        break;
+                        case OP_DIV:
+                        callRuntime((void*) runtime_DIV);
+                        break;
+                        case OP_MOD:
+                        callRuntime((void*) runtime_MOD);
+                        break;
+                        case OP_PLUS:
+                        o4(0xE0810000); // add     r0,r1,r0
+                        break;
+                        case OP_MINUS:
+                        o4(0xE0410000); // sub     r0,r1,r0
+                        break;
+                        case OP_SHIFT_LEFT:
+                        o4(0xE1A00011); // lsl     r0,r1,r0
+                        break;
+                        case OP_SHIFT_RIGHT:
+                        o4(0xE1A00051); // asr     r0,r1,r0
+                        break;
+                        case OP_BIT_AND:
+                        o4(0xE0010000); // and     r0,r1,r0
+                        break;
+                        case OP_BIT_XOR:
+                        o4(0xE0210000); // eor     r0,r1,r0
+                        break;
+                        case OP_BIT_OR:
+                        o4(0xE1810000); // orr     r0,r1,r0
+                        break;
+                        case OP_BIT_NOT:
+                        o4(0xE1E00000); // mvn     r0, r0
+                        break;
+                        default:
+                        error("Unimplemented op %d\n", op);
+                        break;
+                    }
+                    popType();
                 }
-                popType();
             } else {
                 Type* pResultType = tagR0 > tagTOS ? pR0Type : pTOSType;
                 if (pResultType->tag == TY_DOUBLE) {
@@ -873,9 +920,9 @@ class Compiler : public ErrorSink {
                 switch(tag) {
                     case TY_INT:
                         o4(0xE3A01000); // mov    r1, #0
-                        o4(0xE1510000); // cmp r1, r1
-                        o4(0x03A00000); // moveq r0,#0
-                        o4(0x13A00001); // movne r0,#1
+                        o4(0xE1510000); // cmp r1, r0
+                        o4(0x03A00001); // moveq r0,#1
+                        o4(0x13A00000); // movne r0,#0
                         break;
                     case TY_FLOAT:
                         callRuntime((void*) runtime_is_zero_f);
@@ -1589,6 +1636,22 @@ class Compiler : public ErrorSink {
             popType();
         }
 
+        void liReg(int t, int reg) {
+            assert(reg >= 0 && reg < 16);
+            int rN = (reg & 0xf) << 12;
+            if (t >= 0 && t < 255) {
+                 o4((0xE3A00000 + t) | rN); // mov    rN, #0
+            } else if (t >= -256 && t < 0) {
+                // mvn means move constant ^ ~0
+                o4((0xE3E00001 - t) | rN); // mvn    rN, #0
+            } else {
+                  o4(0xE51F0000 | rN); //         ldr    rN, .L3
+                  o4(0xEA000000); //         b .L99
+                  o4(t);          // .L3:   .word 0
+                                  // .L99:
+            }
+        }
+
         void callRuntime(void* fn) {
             o4(0xE59FC000); // ldr    r12, .L1
             o4(0xEA000000); // b      .L99
@@ -1897,12 +1960,53 @@ class Compiler : public ErrorSink {
             bool isFloatR0 = isFloatTag(tagR0);
             bool isFloatTOS = isFloatTag(tagTOS);
             if (!isFloatR0 && !isFloatTOS) {
-                // TODO: Deal with pointer arithmetic
-                o(0x59); /* pop %ecx */
-                o(decodeOp(op));
-                if (op == OP_MOD)
-                    o(0x92); /* xchg %edx, %eax */
-                popType();
+                bool isPtrR0 = tagR0 == TY_POINTER;
+                bool isPtrTOS = tagTOS == TY_POINTER;
+                if (isPtrR0 || isPtrTOS) {
+                    if (isPtrR0 && isPtrTOS) {
+                        if (op != OP_MINUS) {
+                            error("Unsupported pointer-pointer operation %d.", op);
+                        }
+                        if (! typeEqual(pR0Type, pTOSType)) {
+                            error("Incompatible pointer types for subtraction.");
+                        }
+                        o(0x59); /* pop %ecx */
+                        o(decodeOp(op));
+                        popType();
+                        setR0Type(mkpInt);
+                        int size = sizeOf(pR0Type->pHead);
+                        if (size != 1) {
+                            pushR0();
+                            li(size, mkpInt);
+                            // TODO: Optimize for power-of-two.
+                            genOp(OP_DIV);
+                        }
+                    } else {
+                        if (! (op == OP_PLUS || (op == OP_MINUS && isPtrR0))) {
+                            error("Unsupported pointer-scalar operation %d", op);
+                        }
+                        Type* pPtrType = isPtrR0 ? pR0Type : pTOSType;
+                        o(0x59); /* pop %ecx */
+                        int size = sizeOf(pPtrType->pHead);
+                        if (size != 1) {
+                            // TODO: Optimize for power-of-two.
+                            if (isPtrR0) {
+                                oad(0xC969, size); // imull $size, %ecx
+                            } else {
+                                oad(0xC069, size); // mul $size, %eax
+                            }
+                        }
+                        o(decodeOp(op));
+                        popType();
+                        setR0Type(pPtrType);
+                    }
+                } else {
+                    o(0x59); /* pop %ecx */
+                    o(decodeOp(op));
+                    if (op == OP_MOD)
+                        o(0x92); /* xchg %edx, %eax */
+                    popType();
+                }
             } else {
                 Type* pResultType = tagR0 > tagTOS ? pR0Type : pTOSType;
                 setupFloatOperands();
@@ -2346,7 +2450,6 @@ class Compiler : public ErrorSink {
             o4(t);
             return result;
         }
-
 
         static const int operatorHelper[];
 
@@ -4003,7 +4106,7 @@ class Compiler : public ErrorSink {
         }
     }
 
-    bool typeEqual(Type* a, Type* b) {
+    static bool typeEqual(Type* a, Type* b) {
         if (a == b) {
             return true;
         }
@@ -4550,6 +4653,7 @@ class Compiler : public ErrorSink {
             error("No code generator defined.");
         } else {
             pGen->setErrorSink(this);
+            pGen->setTypes(mkpInt);
         }
     }
 
@@ -4572,6 +4676,7 @@ public:
     int compile(const char* text, size_t textLength) {
         int result;
 
+        createPrimitiveTypes();
         cleanup();
         clear();
         mTokenTable.setArena(&mGlobalArena);
@@ -4581,7 +4686,6 @@ public:
         mLocals.setTokenTable(&mTokenTable);
 
         internKeywords();
-        createPrimitiveTypes();
         codeBuf.init(ALLOC_SIZE);
         setArchitecture(NULL);
         if (!pGen) {
