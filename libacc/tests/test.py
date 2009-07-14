@@ -77,7 +77,14 @@ def firstDifference(a, b):
             return i
     return commonLen
 
-def compareSet(a1,a2,b1,b2):
+# a1 and a2 are the expected stdout and stderr.
+# b1 and b2 are the actual stdout and stderr.
+# Compare the two, sets. Allow any individual line
+# to appear in either stdout or stderr. This is because
+# the way we obtain output on the ARM combines both
+# streams into one sequence.
+
+def compareOuput(a1,a2,b1,b2):
     while True:
         totalLen = len(a1) + len(a2) + len(b1) + len(b2)
         a1, b1 = matchCommon(a1, b1)
@@ -96,6 +103,8 @@ def compareSet(a1,a2,b1,b2):
             return False
 
 def matchCommon(a, b):
+    """Remove common items from the beginning of a and b,
+       return just the tails that are different."""
     while len(a) > 0 and len(b) > 0 and a[0] == b[0]:
         a = a[1:]
         b = b[1:]
@@ -105,25 +114,20 @@ def rewritePaths(args):
     return [rewritePath(x) for x in args]
 
 def rewritePath(p):
+    """Take a path that's correct on the x86 and convert to a path
+       that's correct on ARM."""
     if p.startswith("data/"):
         p = "/system/bin/accdata/" + p
     return p
 
 class TestACC(unittest.TestCase):
- 
-    def compileCheckOld(self, args, stdErrResult, stdOutResult=""):
-        out, err = compile(args)
-        compare(out, stdOutResult)
-        compare(err, stdErrResult)
-        self.assertEqual(out, stdOutResult)
-        self.assertEqual(err, stdErrResult)
 
     def checkResult(self, out, err, stdErrResult, stdOutResult=""):
         a1 = out.splitlines()
         a2 = err.splitlines()
         b2 = stdErrResult.splitlines()
         b1 = stdOutResult.splitlines()
-        self.assertEqual(True, compareSet(a1,a2,b1,b2))
+        self.assertEqual(True, compareOuput(a1,a2,b1,b2))
         
     def compileCheck(self, args, stdErrResult, stdOutResult="",
                      targets=['arm', 'x86']):
@@ -174,65 +178,77 @@ class TestACC(unittest.TestCase):
         
     def testRunFlops(self):
         self.compileCheck(["-R", "data/flops.c"],
-            "Executing compiled code:\nresult: 0\n",
-            "-1.1 = -1.1\n" +
-            "!1.2 = 0\n" +
-            "!0 = 1\n" +
-            "double op double:\n" +
-            "1 + 2 = 3\n" +
-            "1 - 2 = -1\n" +
-            "1 * 2 = 2\n" +
-            "1 / 2 = 0.5\n" +
-            "float op float:\n" +
-            "1 + 2 = 3\n" +
-            "1 - 2 = -1\n" +
-            "1 * 2 = 2\n" +
-            "1 / 2 = 0.5\n" +
-            "double op float:\n" +
-            "1 + 2 = 3\n" +
-            "1 - 2 = -1\n" +
-            "1 * 2 = 2\n" +
-            "1 / 2 = 0.5\n" +
-            "double op int:\n" +
-            "1 + 2 = 3\n" +
-            "1 - 2 = -1\n" +
-            "1 * 2 = 2\n" +
-            "1 / 2 = 0.5\n" +
-            "int op double:\n" +
-            "1 + 2 = 3\n" +
-            "1 - 2 = -1\n" +
-            "1 * 2 = 2\n" +
-            "1 / 2 = 0.5\n" +
-            "double op double:\n" +
-            "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
-            "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
-            "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
-            "double op float:\n" +
-            "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
-            "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
-            "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
-            "float op float:\n" +
-            "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
-            "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
-            "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
-            "int op double:\n" +
-            "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
-            "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
-            "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
-            "double op int:\n" +
-            "1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1\n" +
-            "1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0\n" +
-            "2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1\n" +
-            "branching: 1 0 1\n" +
-            "testpassi: 1 2 3 4 5 6 7 8\n" +
-            "testpassf: 1 2 3 4 5 6 7 8\n" +
-            "testpassd: 1 2 3 4 5 6 7 8\n" +
-            "testpassidf: 1 2 3\n"
-            )
-        
-    def oldtestArmRunReturnVal(self):
-        self.compileCheckArm(["-R", "/system/bin/accdata/data/returnval-ansi.c"],
-            "Executing compiled code:\nresult: 42\n")
+            """Executing compiled code:
+result: 0""",
+"""-1.1 = -1.1
+!1.2 = 0
+!0 = 1
+double op double:
+1 + 2 = 3
+1 - 2 = -1
+1 * 2 = 2
+1 / 2 = 0.5
+float op float:
+1 + 2 = 3
+1 - 2 = -1
+1 * 2 = 2
+1 / 2 = 0.5
+double op float:
+1 + 2 = 3
+1 - 2 = -1
+1 * 2 = 2
+1 / 2 = 0.5
+double op int:
+1 + 2 = 3
+1 - 2 = -1
+1 * 2 = 2
+1 / 2 = 0.5
+int op double:
+1 + 2 = 3
+1 - 2 = -1
+1 * 2 = 2
+1 / 2 = 0.5
+double op double:
+1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1
+1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0
+2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1
+double op float:
+1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1
+1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0
+2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1
+float op float:
+1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1
+1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0
+2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1
+int op double:
+1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1
+1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0
+2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1
+double op int:
+1 op 2: < 1   <= 1   == 0   >= 0   > 0   != 1
+1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0
+2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1
+branching: 1 0 1
+testpassi: 1 2 3 4 5 6 7 8
+testpassf: 1 2 3 4 5 6 7 8
+testpassd: 1 2 3 4 5 6 7 8
+testpassidf: 1 2 3
+""")
+    def testCasts(self):
+        self.compileCheck(["-R", "data/casts.c"],
+            """Executing compiled code:
+result: 0""", """Reading from a pointer: 3 3
+Writing to a pointer: 4
+Testing casts: 3 3 4.5 4
+Testing reading (int*): 4
+Testing writing (int*): 8 9
+Testing reading (char*): 0x78 0x56 0x34 0x12
+Testing writing (char*): 0x87654321
+f(10)
+Function pointer result: 70
+Testing read/write (float*): 8.8 9.9
+Testing read/write (double*): 8.8 9.9
+""")
 
 if __name__ == '__main__':
     if not outputCanRun():
