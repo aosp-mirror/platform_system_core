@@ -1019,6 +1019,25 @@ class Compiler : public ErrorSink {
             LOG_API("storeR0(%d);\n", ea);
             TypeTag tag = pType->tag;
             switch (tag) {
+                case TY_CHAR:
+                    if (ea > -LOCAL && ea < LOCAL) {
+                        // Local, fp relative
+                        if (ea < -4095 || ea > 4095) {
+                            error("Offset out of range: %08x", ea);
+                        }
+                        if (ea < 0) {
+                            o4(0xE54B0000 | (0xfff & (-ea))); // strb r0, [fp,#-ea]
+                        } else {
+                            o4(0xE5CB0000 | (0xfff & ea)); // strb r0, [fp,#ea]
+                        }
+                    } else{
+                        // Global, absolute
+                        o4(0xE59F1000); //         ldr r1, .L1
+                        o4(0xEA000000); //         b .L99
+                        o4(ea);         // .L1:    .word 0
+                        o4(0xE5C10000); // .L99:   strb r0, [r1]
+                    }
+                    break;
                 case TY_POINTER:
                 case TY_INT:
                 case TY_FLOAT:
@@ -1079,8 +1098,32 @@ class Compiler : public ErrorSink {
 
         virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
             LOG_API("loadR0(%d, %d, %d, %d);\n", ea, isIncDec, op, pType);
-            TypeTag tag = collapseType(pType->tag);
+            TypeTag tag = pType->tag;
             switch (tag) {
+                case TY_CHAR:
+                    if (ea < LOCAL) {
+                        // Local, fp relative
+                        if (ea < -4095 || ea > 4095) {
+                            error("Offset out of range: %08x", ea);
+                        }
+                        if (ea < 0) {
+                            o4(0xE55B0000 | (0xfff & (-ea))); // ldrb r0, [fp,#-ea]
+                        } else {
+                            o4(0xE5DB0000 | (0xfff & ea));    // ldrb r0, [fp,#ea]
+                        }
+                    } else {
+                        // Global, absolute
+                        o4(0xE59F2000); //        ldr r2, .L1
+                        o4(0xEA000000); //        b .L99
+                        o4(ea);         // .L1:   .word ea
+                        o4(0xE5D20000); // .L99:  ldrb r0, [r2]
+                    }
+
+                    if (isIncDec) {
+                        error("inc/dec not implemented for char.");
+                    }
+                    break;
+                case TY_POINTER:
                 case TY_INT:
                 case TY_FLOAT:
                     if (ea < LOCAL) {
@@ -2027,6 +2070,13 @@ class Compiler : public ErrorSink {
         virtual void storeR0(int ea, Type* pType) {
             TypeTag tag = pType->tag;
             switch (tag) {
+                case TY_CHAR:
+                    if (ea < -LOCAL || ea > LOCAL) {
+                        oad(0xa2, ea); // movb %al,ea
+                    } else {
+                        oad(0x8588, ea); // movb %al,ea(%ebp)
+                    }
+                    break;
                 case TY_INT:
                 case TY_POINTER:
                     gmov(6, ea); /* mov %eax, EA */
@@ -2052,10 +2102,24 @@ class Compiler : public ErrorSink {
         }
 
         virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
-            TypeTag tag = collapseType(pType->tag);
+            TypeTag tag = pType->tag;
             switch (tag) {
+                case TY_CHAR:
+                    if (ea < -LOCAL || ea > LOCAL) {
+                        oad(0x05BE0F, ea); // movsbl  ea,%eax
+                    } else {
+                        oad(0x85BE0F, ea); // movsbl  ea(%ebp),%eax
+                    }
+                    if (isIncDec) {
+                        error("inc/dec not implemented for char.");
+                    }
+                    break;
                 case TY_INT:
-                    gmov(8, ea); /* mov EA, %eax */
+                case TY_POINTER:
+                    if (tag == TY_CHAR) {
+                    } else {
+                        gmov(8, ea); /* mov EA, %eax */
+                    }
                     if (isIncDec) {
                         /* Implement post-increment or post decrement.
                          */

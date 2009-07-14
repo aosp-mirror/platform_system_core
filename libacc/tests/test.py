@@ -250,6 +250,12 @@ Testing read/write (float*): 8.8 9.9
 Testing read/write (double*): 8.8 9.9
 """)
 
+    def testChar(self):
+        self.compileCheck(["-R", "data/char.c"], """Executing compiled code:
+result: 0""", """a = 99, b = 41
+ga = 100, gb = 44""")
+
+
 if __name__ == '__main__':
     if not outputCanRun():
         print "Many tests are expected to fail, because acc is not a 32-bit x86 Linux executable."
