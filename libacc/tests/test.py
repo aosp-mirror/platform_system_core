@@ -255,6 +255,14 @@ Testing read/write (double*): 8.8 9.9
 result: 0""", """a = 99, b = 41
 ga = 100, gb = 44""")
 
+    def testPointerArithmetic(self):
+        self.compileCheck(["-R", "data/pointers.c"], """Executing compiled code:
+result: 0""", """Pointer difference: 1 4
+Pointer addition: 2
+Pointer comparison to zero: 0 0 1
+Pointer comparison: 1 0 0 0 1
+""")
+
 
 if __name__ == '__main__':
     if not outputCanRun():
