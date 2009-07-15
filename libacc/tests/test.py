@@ -229,9 +229,15 @@ double op int:
 1 op 1: < 0   <= 1   == 1   >= 1   > 0   != 0
 2 op 1: < 0   <= 0   == 0   >= 1   > 1   != 1
 branching: 1 0 1
-testpassi: 1 2 3 4 5 6 7 8
-testpassf: 1 2 3 4 5 6 7 8
-testpassd: 1 2 3 4 5 6 7 8
+testpassi: 1 2 3 4 5 6 7 8 9 10 11 12
+testpassf: 1 2 3 4 5 6 7 8 9 10 11 12
+testpassd: 1 2 3 4 5 6 7 8 9 10 11 12
+testpassi: 1 2 3 4 5 6 7 8 9 10 11 12
+testpassf: 1 2 3 4 5 6 7 8 9 10 11 12
+testpassd: 1 2 3 4 5 6 7 8 9 10 11 12
+testpassi: 1 2 3 4 5 6 7 8 9 10 11 12
+testpassf: 1 2 3 4 5 6 7 8 9 10 11 12
+testpassd: 1 2 3 4 5 6 7 8 9 10 11 12
 testpassidf: 1 2 3
 """)
     def testCasts(self):

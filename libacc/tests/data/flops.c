@@ -118,16 +118,16 @@ void testBranching() {
     printf("branching: %d %d %d\n", branch(-1.0), branch(0.0), branch(1.0));
 }
 
-void testpassi(int a, int b, int c, int d, int e, int f, int g, int h) {
-    printf("testpassi: %d %d %d %d %d %d %d %d\n", a, b, c, d, e, f, g, h);
+void testpassi(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j, int k, int l) {
+    printf("testpassi: %d %d %d %d %d %d %d %d %d %d %d %d\n", a, b, c, d, e, f, g, h, i, j, k, l);
 }
 
-void testpassf(float a, float b, float c, float d, float e, float f, float g, float h) {
-    printf("testpassf: %g %g %g %g %g %g %g %g\n", a, b, c, d, e, f, g, h);
+void testpassf(float a, float b, float c, float d, float e, float f, float g, float h, float i, float j, float k, float l) {
+    printf("testpassf: %g %g %g %g %g %g %g %g %g %g %g %g\n", a, b, c, d, e, f, g, h, i, j, k, l);
 }
 
-void testpassd(double a, double b, double c, double d, double e, double f, double g, double h) {
-    printf("testpassd: %g %g %g %g %g %g %g %g\n", a, b, c, d, e, f, g, h);
+void testpassd(double a, double b, double c, double d, double e, double f, double g, double h, double i, double j, double k, double l) {
+    printf("testpassd: %g %g %g %g %g %g %g %g %g %g %g %g\n", a, b, c, d, e, f, g, h, i, j, k, l);
 }
 
 void testpassidf(int i, double d, float f) {
@@ -135,9 +135,16 @@ void testpassidf(int i, double d, float f) {
 }
 
 void testParameterPassing() {
-    testpassi(1, 2, 3, 4, 5, 6, 7, 8);
-    testpassf(1, 2, 3, 4, 5, 6, 7, 8);
-    testpassd(1, 2, 3, 4, 5, 6, 7, 8);
+    float x;
+    testpassi(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+    testpassf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+    testpassd(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+    testpassi(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f);
+    testpassf(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f);
+    testpassd(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f);
+    testpassi(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0);
+    testpassf(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0);
+    testpassd(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0);
     testpassidf(1, 2.0, 3.0f);
 }
 
