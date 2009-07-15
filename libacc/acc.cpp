@@ -2610,7 +2610,7 @@ class Compiler : public ErrorSink {
         }
 
         virtual void convertR0(Type* pType){
-            fprintf(stderr, "convertR0(pType)\n");
+            fprintf(stderr, "convertR0(pType tag=%d)\n",  pType->tag);
             mpBase->convertR0(pType);
         }
 
@@ -3672,7 +3672,7 @@ class Compiler : public ErrorSink {
 #if 0
         {
             String buf;
-            decodeToken(buf, tok);
+            decodeToken(buf, tok, true);
             fprintf(stderr, "%s\n", buf.getUnwrapped());
         }
 #endif
@@ -3883,10 +3883,12 @@ class Compiler : public ErrorSink {
                 /* forward reference: try dlsym */
                 if (!n) {
                     n = (intptr_t) dlsym(RTLD_DEFAULT, nameof(t));
-                    if (tok == '(') {
-                        pVI->pType = mkpIntFn;
-                    } else {
-                        pVI->pType = mkpInt;
+                    if (pVI->pType == NULL) {
+                        if (tok == '(') {
+                            pVI->pType = mkpIntFn;
+                        } else {
+                            pVI->pType = mkpInt;
+                        }
                     }
                     pVI->pAddress = (void*) n;
                 }
@@ -4156,7 +4158,7 @@ class Compiler : public ErrorSink {
 
         String temp;
         if (pType->id != 0) {
-            decodeToken(temp, pType->id);
+            decodeToken(temp, pType->id, false);
             buffer.append(temp);
         }
 
@@ -4166,7 +4168,7 @@ class Compiler : public ErrorSink {
     void decodeTypeImpPrefix(String& buffer, Type* pType) {
         TypeTag tag = pType->tag;
 
-        if (tag >= TY_INT && tag <= TY_VOID) {
+        if (tag >= TY_INT && tag <= TY_DOUBLE) {
             switch (tag) {
                 case TY_INT:
                     buffer.appendCStr("int");
@@ -4343,7 +4345,7 @@ class Compiler : public ErrorSink {
                 error("Symbol %s not allowed here", nameof(declName));
             } else if (nameRequired && ! declName) {
                 String temp;
-                decodeToken(temp, tok);
+                decodeToken(temp, tok, true);
                 error("Expected symbol. Got %s", temp.getUnwrapped());
             }
         }
@@ -4395,7 +4397,7 @@ class Compiler : public ErrorSink {
         Type* pType = acceptPrimitiveType(arena);
         if (!pType) {
             String buf;
-            decodeToken(buf, tok);
+            decodeToken(buf, tok, true);
             error("Expected a type, got %s", buf.getUnwrapped());
         }
         return pType;
@@ -4455,7 +4457,7 @@ class Compiler : public ErrorSink {
         return checkSymbol(tok);
     }
 
-    void decodeToken(String& buffer, tokenid_t token) {
+    void decodeToken(String& buffer, tokenid_t token, bool quote) {
         if (token == EOF ) {
             buffer.printf("EOF");
         } else if (token == TOK_NUM) {
@@ -4466,10 +4468,16 @@ class Compiler : public ErrorSink {
             } else {
                 buffer.printf("'%c'", token);
             }
-        } else if (token >= TOK_KEYWORD && token < TOK_SYMBOL) {
-            buffer.printf("keyword \"%s\"", nameof(token));
         } else {
-            buffer.printf("symbol \"%s\"", nameof(token));
+            if (quote) {
+                if (token >= TOK_KEYWORD && token < TOK_SYMBOL) {
+                    buffer.printf("keyword \"%s\"", nameof(token));
+                } else {
+                    buffer.printf("symbol \"%s\"", nameof(token));
+                }
+            } else {
+                buffer.printf("%s", nameof(token));
+            }
         }
     }
 
@@ -4477,7 +4485,7 @@ class Compiler : public ErrorSink {
         bool result = token >= TOK_SYMBOL;
         if (!result) {
             String temp;
-            decodeToken(temp, token);
+            decodeToken(temp, token, true);
             error("Expected symbol. Got %s", temp.getUnwrapped());
         }
         return result;

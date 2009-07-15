@@ -262,6 +262,10 @@ Pointer addition: 2
 Pointer comparison to zero: 0 0 1
 Pointer comparison: 1 0 0 0 1
 """)
+    def testRollo3(self):
+        self.compileCheck(["-R", "data/rollo3.c"], """Executing compiled code:
+result: 10""", """""")
+
 
 
 if __name__ == '__main__':
