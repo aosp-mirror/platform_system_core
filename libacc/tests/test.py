@@ -174,7 +174,18 @@ class TestACC(unittest.TestCase):
     def testRunFloat(self):
         self.compileCheck(["-R", "data/float.c"],
             "Executing compiled code:\nresult: 0\n",
-            "int: 1 float: 2.2 double: 3.3\n ftoi(1.4f)=1\n dtoi(2.4)=2\n itof(3)=3\n itod(4)=4\nglobals: 1 2 3 4\nargs: 1 2 3 4\nlocals: 1 2 3 4\ncast rval: 2 4\ncast lval: 1.1 2 3.3 4\n")
+            """Constants: 0 0 0 0.01 0.01 0.1 10 10 0.1
+int: 1 float: 2.2 double: 3.3
+ ftoi(1.4f)=1
+ dtoi(2.4)=2
+ itof(3)=3
+ itod(4)=4
+globals: 1 2 3 4
+args: 1 2 3 4
+locals: 1 2 3 4
+cast rval: 2 4
+cast lval: 1.1 2 3.3 4
+""")
         
     def testRunFlops(self):
         self.compileCheck(["-R", "data/flops.c"],

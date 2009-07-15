@@ -17,6 +17,11 @@ double itod(int i) {
 float f0, f1;
 double d0, d1;
 
+void testParseConsts() {
+    printf("Constants: %g %g %g %g %g %g %g %g %g\n", 0e1, 0E1, 0.f, .01f,
+          .01e0f, 1.0e-1, 1.0e1, 1.0e+1,
+          .1f);
+}
 void testVars(float arg0, float arg1, double arg2, double arg3) {
     float local0, local1;
     double local2, local3;
@@ -41,6 +46,7 @@ void testVars(float arg0, float arg1, double arg2, double arg3) {
 }
 
 int main() {
+    testParseConsts();
     printf("int: %d float: %g double: %g\n", 1, 2.2f, 3.3);
     printf(" ftoi(1.4f)=%d\n", ftoi(1.4f));
     printf(" dtoi(2.4)=%d\n", dtoi(2.4));
