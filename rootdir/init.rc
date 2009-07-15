@@ -287,6 +287,12 @@ service hsag /system/bin/sdptool add --channel=11 HSAG
     disabled
     oneshot
 
+service opush /system/bin/sdptool add --channel=12 OPUSH
+    user bluetooth
+    group bluetooth net_bt_admin
+    disabled
+    oneshot
+
 service installd /system/bin/installd
     socket installd stream 600 system system
 
