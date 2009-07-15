@@ -48,6 +48,11 @@ ACCscript* accCreateScript();
 
 void accDeleteScript(ACCscript* script);
 
+typedef ACCvoid* (*ACCSymbolLookupFn)(ACCvoid* pContext, const ACCchar * name);
+
+void accRegisterSymbolCallback(ACCscript* script, ACCSymbolLookupFn pFn,
+                               ACCvoid* pContext);
+
 ACCenum accGetError( ACCscript* script );
 
 void accScriptSource(ACCscript* script,

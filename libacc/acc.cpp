@@ -3232,6 +3232,8 @@ class Compiler : public ErrorSink {
     char* dptr; // Macro state: Points to macro text during macro playback.
     int dch;    // Macro state: Saves old value of ch during a macro playback.
     char* pGlobalBase;
+    ACCSymbolLookupFn mpSymbolLookupFn;
+    void* mpSymbolLookupContext;
 
     // Arena for the duration of the compile
     Arena mGlobalArena;
@@ -3792,6 +3794,7 @@ class Compiler : public ErrorSink {
         }
         return false;
     }
+
     /* Parse and evaluate a unary expression.
      * allowAssignment is true if '=' parsing wanted (quick hack)
      */
@@ -3880,9 +3883,12 @@ class Compiler : public ErrorSink {
                 }
                 VariableInfo* pVI = VI(t);
                 n = (intptr_t) pVI->pAddress;
-                /* forward reference: try dlsym */
+                /* forward reference: try our lookup function */
                 if (!n) {
-                    n = (intptr_t) dlsym(RTLD_DEFAULT, nameof(t));
+                    if (mpSymbolLookupFn) {
+                        n = (intptr_t) mpSymbolLookupFn(
+                            mpSymbolLookupContext, nameof(t));
+                    }
                     if (pVI->pType == NULL) {
                         if (tok == '(') {
                             pVI->pType = mkpIntFn;
@@ -4613,6 +4619,12 @@ class Compiler : public ErrorSink {
         }
     }
 
+    // One-time initialization, when class is constructed.
+    void init() {
+        mpSymbolLookupFn = 0;
+        mpSymbolLookupContext = 0;
+    }
+
     void clear() {
         tok = 0;
         tokc = 0;
@@ -4673,11 +4685,17 @@ public:
     };
 
     Compiler() {
+        init();
         clear();
     }
 
     ~Compiler() {
         cleanup();
+    }
+
+    void registerSymbolCallback(ACCSymbolLookupFn pFn, ACCvoid* pContext) {
+        mpSymbolLookupFn = pFn;
+        mpSymbolLookupContext = pContext;
     }
 
     int compile(const char* text, size_t textLength) {
@@ -4848,6 +4866,10 @@ struct ACCscript {
         delete text;
     }
 
+    void registerSymbolCallback(ACCSymbolLookupFn pFn, ACCvoid* pContext) {
+        compiler.registerSymbolCallback(pFn, pContext);
+    }
+
     void setError(ACCenum error) {
         if (accError == ACC_NO_ERROR && error != ACC_NO_ERROR) {
             accError = error;
@@ -4880,6 +4902,12 @@ ACCenum accGetError( ACCscript* script ) {
 extern "C"
 void accDeleteScript(ACCscript* script) {
     delete script;
+}
+
+extern "C"
+void accRegisterSymbolCallback(ACCscript* script, ACCSymbolLookupFn pFn,
+                               ACCvoid* pContext) {
+    script->registerSymbolCallback(pFn, pContext);
 }
 
 extern "C"

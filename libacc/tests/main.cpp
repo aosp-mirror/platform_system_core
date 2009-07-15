@@ -34,6 +34,10 @@ int run(MainPtr mainFunc, int argc, char** argv) {
 extern "C"
 void accDisassemble(ACCscript* script);
 
+ACCvoid* symbolLookup(ACCvoid* pContext, const ACCchar* name) {
+    return (ACCvoid*) dlsym(RTLD_DEFAULT, name);
+}
+
 int main(int argc, char** argv) {
     const char* inFile = NULL;
     bool printListing;
@@ -90,6 +94,8 @@ int main(int argc, char** argv) {
     const ACCchar* scriptSource[] = {text};
     accScriptSource(script, 1, scriptSource, NULL);
     delete[] text;
+
+    accRegisterSymbolCallback(script, symbolLookup, NULL);
 
     accCompileScript(script);
     int result = accGetError(script);
