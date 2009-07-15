@@ -3425,6 +3425,17 @@ class Compiler : public ErrorSink {
         return isalnum(ch) | (ch == '_');
     }
 
+    int decodeHex(int c) {
+        if (isdigit(c)) {
+            c -= '0';
+        } else if (c <= 'F') {
+            c = c - 'A' + 10;
+        } else {
+            c =c - 'a' + 10;
+        }
+        return c;
+    }
+
     /* read a character constant, advances ch to after end of constant */
     int getq() {
         int val = ch;
@@ -3448,15 +3459,7 @@ class Compiler : public ErrorSink {
                 } else {
                     val = 0;
                     while (isxdigit(ch)) {
-                        int d = ch;
-                        if (isdigit(d)) {
-                            d -= '0';
-                        } else if (d <= 'F') {
-                            d = d - 'A' + 10;
-                        } else {
-                            d = d - 'a' + 10;
-                        }
-                        val = (val << 4) + d;
+                        val = (val << 4) + decodeHex(ch);
                         inp();
                     }
                 }
@@ -3535,32 +3538,35 @@ class Compiler : public ErrorSink {
     void parseFloat() {
         tok = TOK_NUM_DOUBLE;
         // mTokenString already has the integral part of the number.
+        if(mTokenString.len() == 0) {
+            mTokenString.append('0');
+        }
         acceptCh('.');
         acceptDigitsCh();
-        bool doExp = true;
         if (acceptCh('e') || acceptCh('E')) {
-            // Don't need to do any extra work
-        } else if (ch == 'f' || ch == 'F') {
-            pdef('e'); // So it can be parsed by strtof.
-            inp();
-            tok = TOK_NUM_FLOAT;
-        } else {
-            doExp = false;
+            acceptCh('-') || acceptCh('+');
+            acceptDigitsCh();
         }
-        if (doExp) {
-            bool digitsRequired = acceptCh('-');
-            bool digitsFound = acceptDigitsCh();
-            if (digitsRequired && ! digitsFound) {
-                error("malformed exponent");
-            }
+        if (ch == 'f' || ch == 'F') {
+            tok = TOK_NUM_FLOAT;
+            inp();
+        } else if (ch == 'l' || ch == 'L') {
+            inp();
+            error("Long floating point constants not supported.");
         }
         char* pText = mTokenString.getUnwrapped();
+        char* pEnd = pText + strlen(pText);
+        char* pEndPtr = 0;
+        errno = 0;
         if (tok == TOK_NUM_FLOAT) {
-            tokd = strtof(pText, 0);
+            tokd = strtof(pText, &pEndPtr);
         } else {
-            tokd = strtod(pText, 0);
+            tokd = strtod(pText, &pEndPtr);
         }
-        //fprintf(stderr, "float constant: %s (%d) %g\n", pText, tok, tokd);
+        if (errno || pEndPtr != pEnd) {
+            error("Can't parse constant: %s", pText);
+        }
+        // fprintf(stderr, "float constant: %s (%d) %g\n", pText, tok, tokd);
     }
 
     void next() {
@@ -3584,35 +3590,66 @@ class Compiler : public ErrorSink {
         tokl = 0;
         tok = ch;
         /* encode identifiers & numbers */
-        if (isid()) {
+        if (isdigit(ch) || ch == '.') {
+            // Start of a numeric constant. Could be integer, float, or
+            // double, won't know until we look further.
+            mTokenString.clear();
+            pdef(ch);
+            inp();
+            int base = 10;
+            if (tok == '0') {
+                if (ch == 'x' || ch == 'X') {
+                    base = 16;
+                    tok = TOK_NUM;
+                    tokc = 0;
+                    inp();
+                    while ( isxdigit(ch) ) {
+                        tokc = (tokc << 4) + decodeHex(ch);
+                        inp();
+                    }
+                } else if (isoctal(ch)){
+                    base = 8;
+                    tok = TOK_NUM;
+                    tokc = 0;
+                    while ( isoctal(ch) ) {
+                        tokc = (tokc << 3) + (ch - '0');
+                        inp();
+                    }
+                }
+            } else if (isdigit(tok)){
+                acceptDigitsCh();
+            }
+            if (base == 10) {
+                if (tok == '.' || ch == '.' || ch == 'e' || ch == 'E') {
+                    parseFloat();
+                } else {
+                    // It's an integer constant
+                    char* pText = mTokenString.getUnwrapped();
+                    char* pEnd = pText + strlen(pText);
+                    char* pEndPtr = 0;
+                    errno = 0;
+                    tokc = strtol(pText, &pEndPtr, base);
+                    if (errno || pEndPtr != pEnd) {
+                        error("Can't parse constant: %s %d %d", pText, base, errno);
+                    }
+                    tok = TOK_NUM;
+                }
+            }
+        } else if (isid()) {
             mTokenString.clear();
             while (isid()) {
                 pdef(ch);
                 inp();
             }
-            if (isdigit(tok)) {
-                // Start of a numeric constant. Could be integer, float, or
-                // double, won't know until we look further.
-                if (ch == '.' || ch == 'e' || ch == 'e'
-                    || ch == 'f' || ch == 'F')  {
-                    parseFloat();
-                } else {
-                    // It's an integer constant
-                    tokc = strtol(mTokenString.getUnwrapped(), 0, 0);
-                    tok = TOK_NUM;
-                }
-            } else {
-                tok = mTokenTable.intern(mTokenString.getUnwrapped(),
-                                         mTokenString.len());
-                // Is this a macro?
-                char* pMacroDefinition = mTokenTable[tok].mpMacroDefinition;
-                if(pMacroDefinition) {
-                    // Yes, it is a macro
-                    dptr = pMacroDefinition;
-                    dch = ch;
-                    inp();
-                    next();
-                }
+            tok = mTokenTable.intern(mTokenString.getUnwrapped(), mTokenString.len());
+            // Is this a macro?
+            char* pMacroDefinition = mTokenTable[tok].mpMacroDefinition;
+            if (pMacroDefinition) {
+                // Yes, it is a macro
+                dptr = pMacroDefinition;
+                dch = ch;
+                inp();
+                next();
             }
         } else {
             inp();
