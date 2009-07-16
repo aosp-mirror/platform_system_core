@@ -9,7 +9,6 @@
  */
 
 #include <ctype.h>
-#include <dlfcn.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -3266,6 +3265,7 @@ class Compiler : public ErrorSink {
 
     String mPragmas;
     int mPragmaStringCount;
+    int mCompileResult;
 
     static const int ALLOC_SIZE = 99999;
 
@@ -3974,7 +3974,7 @@ class Compiler : public ErrorSink {
             int argCount = 0;
             while (tok != ')' && tok != EOF) {
                 if (! varArgs && !pArgList) {
-                    error ("Unexpected argument.");
+                    error("Unexpected argument.");
                 }
                 expr();
                 Type* pTargetType;
@@ -4002,7 +4002,7 @@ class Compiler : public ErrorSink {
                 argCount += 1;
             }
             if (! varArgs && pArgList) {
-                error ("Expected more argument(s). Saw %d", argCount);
+                error("Expected more argument(s). Saw %d", argCount);
             }
             pGen->endFunctionCallArguments(pDecl, a, l);
             skip(')');
@@ -4685,6 +4685,7 @@ class Compiler : public ErrorSink {
         pGlobalBase = 0;
         pGen = 0;
         mPragmaStringCount = 0;
+        mCompileResult = 0;
     }
 
     void setArchitecture(const char* architecture) {
@@ -4780,6 +4781,7 @@ public:
                 result = -2;
             }
         }
+        mCompileResult = result;
         return result;
     }
 
@@ -4827,10 +4829,12 @@ public:
      * If found, return its value.
      */
     void* lookup(const char* name) {
-        tokenid_t tok = mTokenTable.intern(name, strlen(name));
-        VariableInfo* pVariableInfo = VI(tok);
-        if (pVariableInfo) {
-            return pVariableInfo->pAddress;
+        if (mCompileResult == 0) {
+            tokenid_t tok = mTokenTable.intern(name, strlen(name));
+            VariableInfo* pVariableInfo = VI(tok);
+            if (pVariableInfo) {
+                return pVariableInfo->pAddress;
+            }
         }
         return NULL;
     }
