@@ -523,8 +523,7 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
 
     if (vol->state == volstate_unknown ||
         vol->state == volstate_mounted ||
-        vol->state == volstate_mounted_ro ||
-        vol->state == volstate_damaged) {
+        vol->state == volstate_mounted_ro) {
         LOGE("Cannot consider volume '%s' because it is in state '%d", 
              vol->mount_point, vol->state);
         return -EADDRINUSE;
