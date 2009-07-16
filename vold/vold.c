@@ -53,6 +53,8 @@ static int ver_minor = 0;
 static pthread_mutex_t write_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int fw_sock = -1;
 
+int bootstrap = 0;
+
 int main(int argc, char **argv)
 {
     int door_sock = -1;
@@ -108,6 +110,7 @@ int main(int argc, char **argv)
      * Bootstrap 
      */
 
+    bootstrap = 1;
     // Volume Manager
     volmgr_bootstrap();
 
@@ -120,6 +123,7 @@ int main(int argc, char **argv)
     // Switch
     switch_bootstrap();
 
+    bootstrap = 0;
     /*
      * Main loop
      */

@@ -583,7 +583,7 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
             LOG_VOL("_volmgr_start(%s, %d:%d) rc = %d",
                     vol->mount_point, part->major, part->minor, rc);
 #endif
-            if (!rc) 
+            if (!rc || rc == -EBUSY) 
                 break;
         }
 
@@ -1064,6 +1064,13 @@ static int volmgr_start_fs(struct volmgr_fstable_entry *fs, volume_t *vol, blkde
     }
 
     vol->dev = dev; 
+
+    if (bootstrap) {
+        LOGI("Aborting start of %s (bootstrap = %d)\n", vol->mount_point,
+             bootstrap);
+        vol->state = volstate_unmounted;
+        return -EBUSY;
+    }
 
     vol->worker_args.start_args.fs = fs;
     vol->worker_args.start_args.dev = dev;
