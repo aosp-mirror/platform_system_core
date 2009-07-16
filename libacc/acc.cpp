@@ -3910,6 +3910,8 @@ class Compiler : public ErrorSink {
                 next();
             } else if (t == EOF ) {
                 error("Unexpected EOF.");
+            } else if (t == ';') {
+                error("Unexpected ';'");
             } else if (!checkSymbol(t)) {
                 // Don't have to do anything special here, the error
                 // message was printed by checkSymbol() above.
@@ -4038,7 +4040,12 @@ class Compiler : public ErrorSink {
                 } else {
                     pGen->pushR0();
                     binaryOp(level);
-
+                    // Check for syntax error.
+                    if (pGen->getR0Type() == NULL) {
+                        // We failed to parse a right-hand argument.
+                        // Push a dummy value so we don't fail
+                        pGen->li(0, mkpInt);
+                    }
                     if ((level == 4) | (level == 5)) {
                         pGen->gcmp(t, mkpInt);
                     } else {
@@ -4595,6 +4602,8 @@ class Compiler : public ErrorSink {
                 // Function declaration
                 if (accept(';')) {
                     // forward declaration.
+                } else if (tok != '{') {
+                    error("expected '{'");
                 } else {
                     if (name) {
                         /* patch forward references (XXX: does not work for function
