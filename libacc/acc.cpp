@@ -2906,36 +2906,7 @@ class Compiler : public ErrorSink {
     class InputStream {
     public:
         virtual ~InputStream() {}
-        int getChar() {
-            if (bumpLine) {
-                line++;
-                bumpLine = false;
-            }
-            int ch = get();
-            if (ch == '\n') {
-                bumpLine = true;
-            }
-            return ch;
-        }
-        int getLine() {
-            return line;
-        }
-    protected:
-        InputStream() :
-            line(1), bumpLine(false) {
-        }
-    private:
-        virtual int get() = 0;
-        int line;
-        bool bumpLine;
-    };
-
-    class FileInputStream : public InputStream {
-    public:
-        FileInputStream(FILE* in) : f(in) {}
-    private:
-        virtual int get() { return fgetc(f); }
-        FILE* f;
+        virtual int getChar() = 0;
     };
 
     class TextInputStream : public InputStream {
@@ -2944,11 +2915,11 @@ class Compiler : public ErrorSink {
             : pText(text), mTextLength(textLength), mPosition(0) {
         }
 
-    private:
-        virtual int get() {
+        virtual int getChar() {
             return mPosition < mTextLength ? pText[mPosition++] : EOF;
         }
 
+    private:
         const char* pText;
         size_t mTextLength;
         size_t mPosition;
@@ -3084,8 +3055,6 @@ class Compiler : public ErrorSink {
             "break",
             "return",
             "for",
-            "pragma",
-            "define",
             "auto",
             "case",
             "const",
@@ -3114,6 +3083,11 @@ class Compiler : public ErrorSink {
             "_Imaginary",
             "inline",
             "restrict",
+
+            // predefined tokens that can also be symbols start here:
+            "pragma",
+            "define",
+            "line",
             0};
 
         for(int i = 0; keywords[i]; i++) {
@@ -3257,6 +3231,8 @@ class Compiler : public ErrorSink {
     Type* mkpPtrIntFn;
 
     InputStream* file;
+    int mLineNumber;
+    bool mbBumpLine;
 
     CodeBuf codeBuf;
     CodeGenerator* pGen;
@@ -3289,8 +3265,6 @@ class Compiler : public ErrorSink {
         TOK_BREAK,
         TOK_RETURN,
         TOK_FOR,
-        TOK_PRAGMA,
-        TOK_DEFINE,
         TOK_AUTO,
         TOK_CASE,
         TOK_CONST,
@@ -3319,8 +3293,13 @@ class Compiler : public ErrorSink {
         TOK__IMAGINARY,
         TOK_INLINE,
         TOK_RESTRICT,
-        // Symbols start after tokens
-        TOK_SYMBOL
+
+        // Symbols start after keywords
+
+        TOK_SYMBOL,
+        TOK_PRAGMA = TOK_SYMBOL,
+        TOK_DEFINE,
+        TOK_LINE
     };
 
     static const int LOCAL = 0x200;
@@ -3414,8 +3393,16 @@ class Compiler : public ErrorSink {
                 dptr = 0;
                 ch = dch;
             }
-        } else
+        } else {
+            if (mbBumpLine) {
+                mLineNumber++;
+                mbBumpLine = false;
+            }
             ch = file->getChar();
+            if (ch == '\n') {
+                mbBumpLine = true;
+            }
+        }
 #if 0
         printf("ch='%c' 0x%x\n", ch, ch);
 #endif
@@ -3580,6 +3567,8 @@ class Compiler : public ErrorSink {
                     doDefine();
                 } else if (tok == TOK_PRAGMA) {
                     doPragma();
+                } else if (tok == TOK_LINE) {
+                    doLine();
                 } else {
                     error("Unsupported preprocessor directive \"%s\"",
                           mTokenString.getUnwrapped());
@@ -3787,8 +3776,21 @@ class Compiler : public ErrorSink {
         mPragmaStringCount += 2;
     }
 
+    void doLine() {
+        // # line number { "filename "}
+        next();
+        if (tok != TOK_NUM) {
+            error("Expected a line-number");
+        } else {
+            mLineNumber = tokc-1; // The end-of-line will increment it.
+        }
+        while(ch != EOF && ch != '\n') {
+            inp();
+        }
+    }
+
     virtual void verror(const char* fmt, va_list ap) {
-        mErrorBuf.printf("%ld: ", file->getLine());
+        mErrorBuf.printf("%ld: ", mLineNumber);
         mErrorBuf.vprintf(fmt, ap);
         mErrorBuf.printf("\n");
     }
@@ -4700,6 +4702,8 @@ class Compiler : public ErrorSink {
         pGen = 0;
         mPragmaStringCount = 0;
         mCompileResult = 0;
+        mLineNumber = 1;
+        mbBumpLine = false;
     }
 
     void setArchitecture(const char* architecture) {
