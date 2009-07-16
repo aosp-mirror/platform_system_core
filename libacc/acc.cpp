@@ -3832,11 +3832,28 @@ class Compiler : public ErrorSink {
         return false;
     }
 
+    void linkGlobal(tokenid_t t, bool isFunction) {
+        VariableInfo* pVI = VI(t);
+        void* n = NULL;
+        if (mpSymbolLookupFn) {
+            n = mpSymbolLookupFn(mpSymbolLookupContext, nameof(t));
+        }
+        if (pVI->pType == NULL) {
+            if (isFunction) {
+                pVI->pType = mkpIntFn;
+            } else {
+                pVI->pType = mkpInt;
+            }
+        }
+        pVI->pAddress = n;
+    }
+
     /* Parse and evaluate a unary expression.
      * allowAssignment is true if '=' parsing wanted (quick hack)
      */
     void unary(bool allowAssignment) {
-        intptr_t n, t, a;
+        tokenid_t t;
+        intptr_t n, a;
         t = 0;
         n = 1; /* type of expression 0 = forward, 1 = value, other = lvalue */
         if (acceptStringLiteral()) {
@@ -3924,18 +3941,11 @@ class Compiler : public ErrorSink {
                 n = (intptr_t) pVI->pAddress;
                 /* forward reference: try our lookup function */
                 if (!n) {
-                    if (mpSymbolLookupFn) {
-                        n = (intptr_t) mpSymbolLookupFn(
-                            mpSymbolLookupContext, nameof(t));
+                    linkGlobal(t, tok == '(');
+                    n = (intptr_t) pVI->pAddress;
+                    if (!n && tok != '(') {
+                        error("Undeclared variable %s\n", nameof(t));
                     }
-                    if (pVI->pType == NULL) {
-                        if (tok == '(') {
-                            pVI->pType = mkpIntFn;
-                        } else {
-                            pVI->pType = mkpInt;
-                        }
-                    }
-                    pVI->pAddress = (void*) n;
                 }
                 if ((tok == '=') & allowAssignment) {
                     /* assignment */
@@ -3945,7 +3955,11 @@ class Compiler : public ErrorSink {
                 } else if (tok != '(') {
                     /* variable */
                     if (!n) {
-                        error("Undefined variable %s", nameof(t));
+                        linkGlobal(t, false);
+                        n = (intptr_t) pVI->pAddress;
+                        if (!n) {
+                            error("Undeclared variable %s\n", nameof(t));
+                        }
                     }
                     pGen->loadR0(n, tokl == 11, tokc, pVI->pType);
                     if (tokl == 11) {
