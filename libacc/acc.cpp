@@ -144,6 +144,20 @@ class Compiler : public ErrorSink {
         Type* pTail;
     };
 
+    enum ExpressionType {
+        ET_RVALUE,
+        ET_LVALUE
+    };
+
+    struct ExpressionValue {
+        ExpressionValue() {
+            et = ET_RVALUE;
+            pType = NULL;
+        }
+        ExpressionType et;
+        Type* pType;
+    };
+
     class CodeBuf {
         char* ind; // Output code pointer
         char* pProgramBase;
@@ -468,7 +482,7 @@ class Compiler : public ErrorSink {
         virtual size_t stackSizeOf(Type* pType) = 0;
 
         virtual Type* getR0Type() {
-            return mExpressionStack.back();
+            return mExpressionStack.back().pType;
         }
 
     protected:
@@ -510,15 +524,20 @@ class Compiler : public ErrorSink {
         }
 
         void setR0Type(Type* pType) {
-            mExpressionStack.back() = pType;
+            mExpressionStack.back().pType = pType;
         }
 
         Type* getTOSType() {
-            return mExpressionStack[mExpressionStack.size()-2];
+            return mExpressionStack[mExpressionStack.size()-2].pType;
         }
 
         void pushType() {
-            mExpressionStack.push_back(NULL);
+            if (mExpressionStack.size()) {
+                mExpressionStack.push_back(mExpressionStack.back());
+            } else {
+                mExpressionStack.push_back(ExpressionValue());
+            }
+
         }
 
         void popType() {
@@ -551,7 +570,7 @@ class Compiler : public ErrorSink {
         Type* mkpInt;
 
     private:
-        Vector<Type*> mExpressionStack;
+        Vector<ExpressionValue> mExpressionStack;
         CodeBuf* pCodeBuf;
         ErrorSink* mErrorSink;
     };
