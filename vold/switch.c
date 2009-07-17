@@ -35,7 +35,8 @@ int switch_bootstrap()
     struct dirent *de;
 
     if (!(d = opendir(SYSFS_CLASS_SWITCH_PATH))) {
-        LOG_ERROR("Unable to open '%s' (%m)", SYSFS_CLASS_SWITCH_PATH);
+        LOG_ERROR("Unable to open '%s' (%s)", SYSFS_CLASS_SWITCH_PATH,
+                   strerror(errno));
         return -errno;
     }
 
@@ -46,8 +47,10 @@ int switch_bootstrap()
             continue;
 
         sprintf(tmp, "%s/%s", SYSFS_CLASS_SWITCH_PATH, de->d_name);
-        if (mmc_bootstrap_switch(tmp))
-            LOG_ERROR("Error bootstrapping switch '%s' (%m)", tmp);
+        if (mmc_bootstrap_switch(tmp)) {
+            LOG_ERROR("Error bootstrapping switch '%s' (%s)", tmp,
+                      strerror(errno));
+        }
     }
 
     closedir(d);

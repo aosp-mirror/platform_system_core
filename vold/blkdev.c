@@ -73,7 +73,7 @@ int blkdev_refresh(blkdev_t *blk)
     }
 
     if (ioctl(fd, BLKGETSIZE, &blk->nr_sec)) {
-        LOGE("Unable to get device size (%m)");
+        LOGE("Unable to get device size (%s)", strerror(errno));
         return -errno;
     }
     close(fd);

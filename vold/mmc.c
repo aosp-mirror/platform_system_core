@@ -43,7 +43,8 @@ int mmc_bootstrap()
     struct dirent *de;
 
     if (!(d = opendir(SYSFS_CLASS_MMC_PATH))) {
-        LOG_ERROR("Unable to open '%s' (%m)", SYSFS_CLASS_MMC_PATH);
+        LOG_ERROR("Unable to open '%s' (%s)", SYSFS_CLASS_MMC_PATH,
+                  strerror(errno));
         return -errno;
     }
 
@@ -54,8 +55,10 @@ int mmc_bootstrap()
             continue;
 
         sprintf(tmp, "%s/%s", SYSFS_CLASS_MMC_PATH, de->d_name);
-        if (mmc_bootstrap_controller(tmp))
-            LOG_ERROR("Error bootstrapping controller '%s' (%m)", tmp);
+        if (mmc_bootstrap_controller(tmp)) {
+            LOG_ERROR("Error bootstrapping controller '%s' (%s)", tmp,
+                      strerror(errno));
+        }
     }
 
     closedir(d);
@@ -72,7 +75,7 @@ static int mmc_bootstrap_controller(char *sysfs_path)
     LOG_VOL("bootstrap_controller(%s):", sysfs_path);
 #endif
     if (!(d = opendir(sysfs_path))) {
-        LOG_ERROR("Unable to open '%s' (%m)", sysfs_path);
+        LOG_ERROR("Unable to open '%s' (%s)", sysfs_path, strerror(errno));
         return -errno;
     }
 
@@ -92,7 +95,7 @@ static int mmc_bootstrap_controller(char *sysfs_path)
         sprintf(tmp, "%s/%s", sysfs_path, de->d_name);
 
         if (mmc_bootstrap_card(tmp) < 0)
-            LOG_ERROR("Error bootstrapping card '%s' (%m)", tmp);
+            LOG_ERROR("Error bootstrapping card '%s' (%s)", tmp, strerror(errno));
     } // while
 
     closedir(d);
@@ -123,7 +126,7 @@ static int mmc_bootstrap_card(char *sysfs_path)
     }
     
     if (chdir(sysfs_path) < 0) {
-        LOGE("Unable to chdir to %s (%m)", sysfs_path);
+        LOGE("Unable to chdir to %s (%s)", sysfs_path, strerror(errno));
         return -errno;
     }
 
@@ -162,7 +165,7 @@ static int mmc_bootstrap_card(char *sysfs_path)
     uevent_params[3] = (char *) NULL;
 
     if (simulate_uevent("mmc", devpath, "add", uevent_params) < 0) {
-        LOGE("Error simulating uevent (%m)");
+        LOGE("Error simulating uevent (%s)", strerror(errno));
         return -errno;
     }
 
@@ -264,7 +267,7 @@ static int mmc_bootstrap_mmcblk_partition(char *devpath)
 
     sprintf(filename, "/sys%s/uevent", devpath);
     if (!(fp = fopen(filename, "r"))) {
-        LOGE("Unable to open '%s' (%m)", filename);
+        LOGE("Unable to open '%s' (%s)", filename, strerror(errno));
         return -errno;
     }
 
@@ -286,7 +289,7 @@ static int mmc_bootstrap_mmcblk_partition(char *devpath)
     uevent_params[4] = '\0';
     
     if (simulate_uevent("block", devpath, "add", uevent_params) < 0) {
-        LOGE("Error simulating uevent (%m)");
+        LOGE("Error simulating uevent (%s)", strerror(errno));
         return -errno;
     }
     return 0;
