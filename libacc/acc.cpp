@@ -4348,8 +4348,9 @@ class Compiler : public ErrorSink {
     Type* acceptDeclaration(Type* pType, bool nameAllowed, bool nameRequired,
                             Arena& arena) {
         tokenid_t declName = 0;
+        bool reportFailure = false;
         pType = acceptDecl2(pType, declName, nameAllowed,
-                                  nameRequired, arena);
+                                  nameRequired, arena, reportFailure);
         if (declName) {
             // Clone the parent type so we can set a unique ID
             pType = createType(pType->tag, pType->pHead,
@@ -4359,6 +4360,9 @@ class Compiler : public ErrorSink {
         }
         // fprintf(stderr, "Parsed a declaration:       ");
         // printType(pType);
+        if (reportFailure) {
+            return NULL;
+        }
         return pType;
     }
 
@@ -4388,12 +4392,14 @@ class Compiler : public ErrorSink {
     }
 
     Type* acceptDecl2(Type* pType, tokenid_t& declName,
-                      bool nameAllowed, bool nameRequired, Arena& arena) {
+                      bool nameAllowed, bool nameRequired, Arena& arena,
+                      bool& reportFailure) {
         int ptrCounter = 0;
         while (accept('*')) {
             ptrCounter++;
         }
-        pType = acceptDecl3(pType, declName, nameAllowed, nameRequired, arena);
+        pType = acceptDecl3(pType, declName, nameAllowed, nameRequired, arena,
+                            reportFailure);
         while (ptrCounter-- > 0) {
             pType = createType(TY_POINTER, pType, NULL, arena);
         }
@@ -4401,7 +4407,8 @@ class Compiler : public ErrorSink {
     }
 
     Type* acceptDecl3(Type* pType, tokenid_t& declName,
-                      bool nameAllowed, bool nameRequired, Arena& arena) {
+                      bool nameAllowed, bool nameRequired, Arena& arena,
+                      bool& reportFailure) {
         // direct-dcl :
         //   name
         //  (dcl)
@@ -4410,16 +4417,18 @@ class Compiler : public ErrorSink {
         Type* pNewHead = NULL;
         if (accept('(')) {
             pNewHead = acceptDecl2(pNewHead, declName, nameAllowed,
-                                nameRequired, arena);
+                                nameRequired, arena, reportFailure);
             skip(')');
         } else if ((declName = acceptSymbol()) != 0) {
             if (nameAllowed == false && declName) {
                 error("Symbol %s not allowed here", nameof(declName));
-            } else if (nameRequired && ! declName) {
-                String temp;
-                decodeToken(temp, tok, true);
-                error("Expected symbol. Got %s", temp.getUnwrapped());
+                reportFailure = true;
             }
+        } else if (nameRequired && ! declName) {
+            String temp;
+            decodeToken(temp, tok, true);
+            error("Expected name. Got %s", temp.getUnwrapped());
+            reportFailure = true;
         }
         while (accept('(')) {
             // Function declaration
