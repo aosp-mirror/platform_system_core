@@ -282,6 +282,11 @@ class Compiler : public ErrorSink {
             }
         }
 
+        /* Give the code generator some utility types so it can
+         * use its own types as needed for the results of some
+         * operations like gcmp.
+         */
+
         void setTypes(Type* pInt) {
             mkpInt = pInt;
         }
@@ -312,7 +317,7 @@ class Compiler : public ErrorSink {
                                   int localVariableSize) = 0;
 
         /* load immediate value to R0 */
-        virtual void li(int i, Type* pType) = 0;
+        virtual void li(int i) = 0;
 
         /* Load floating point value from global address. */
         virtual void loadFloat(int address, Type* pType) = 0;
@@ -333,7 +338,7 @@ class Compiler : public ErrorSink {
          * Pops TOS.
          * op specifies the comparison.
          */
-        virtual void gcmp(int op, Type* pResultType) = 0;
+        virtual void gcmp(int op) = 0;
 
         /* Perform the arithmetic op specified by op. TOS is the
          * left argument, R0 is the right argument.
@@ -344,7 +349,7 @@ class Compiler : public ErrorSink {
         /* Compare 0 against R0, and store the boolean result in R0.
          * op specifies the comparison.
          */
-        virtual void gUnaryCmp(int op, Type* pResultType) = 0;
+        virtual void gUnaryCmp(int op) = 0;
 
         /* Perform the arithmetic op specified by op. 0 is the
          * left argument, R0 is the right argument.
@@ -355,16 +360,18 @@ class Compiler : public ErrorSink {
          */
         virtual void pushR0() = 0;
 
+        /* Pop R0 from the stack.
+         */
+        virtual void popR0() = 0;
+
         /* Store R0 to the address stored in TOS.
          * The TOS is popped.
-         * pPointerType is the type of the pointer (of the input R0).
          */
-        virtual void storeR0ToTOS(Type* pPointerType) = 0;
+        virtual void storeR0ToTOS() = 0;
 
         /* Load R0 from the address stored in R0.
-         * pPointerType is the type of the pointer (of the input R0).
          */
-        virtual void loadR0FromR0(Type* pPointerType) = 0;
+        virtual void loadR0FromR0() = 0;
 
         /* Load the absolute address of a variable to R0.
          * If ea <= LOCAL, then this is a local variable, or an
@@ -384,11 +391,8 @@ class Compiler : public ErrorSink {
          * If ea <= LOCAL, then this is a local variable, or an
          * argument, addressed relative to FP.
          * else it is an absolute global address.
-         * If isIncDec is true, then the stored variable's value
-         * should be post-incremented or post-decremented, based
-         * on the value of op.
          */
-        virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) = 0;
+        virtual void loadR0(int ea, Type* pType) = 0;
 
         /**
          * Convert R0 to the given type.
@@ -636,9 +640,9 @@ class Compiler : public ErrorSink {
         }
 
         /* load immediate value */
-        virtual void li(int t, Type* pType) {
+        virtual void li(int t) {
             liReg(t, 0);
-            setR0Type(pType);
+            setR0Type(mkpInt);
         }
 
         virtual void loadFloat(int address, Type* pType) {
@@ -685,14 +689,13 @@ class Compiler : public ErrorSink {
             return o4(branch | encodeAddress(t));
         }
 
-        virtual void gcmp(int op, Type* pResultType) {
+        virtual void gcmp(int op) {
             Type* pR0Type = getR0Type();
             Type* pTOSType = getTOSType();
             TypeTag tagR0 = collapseType(pR0Type->tag);
             TypeTag tagTOS = collapseType(pTOSType->tag);
             if (tagR0 == TY_INT && tagTOS == TY_INT) {
-                o4(0xE8BD0002);  // ldmfd   sp!,{r1}
-                mStackUse -= 4;
+                setupIntPtrArgs();
                 o4(0xE1510000); // cmp r1, r1
                 switch(op) {
                 case OP_EQUALS:
@@ -723,7 +726,6 @@ class Compiler : public ErrorSink {
                     error("Unknown comparison op %d", op);
                     break;
                 }
-                popType();
             } else if (tagR0 == TY_DOUBLE || tagTOS == TY_DOUBLE) {
                 setupDoubleArgs();
                 switch(op) {
@@ -775,7 +777,7 @@ class Compiler : public ErrorSink {
                         break;
                 }
             }
-            setR0Type(pResultType);
+            setR0Type(mkpInt);
         }
 
         virtual void genOp(int op) {
@@ -786,6 +788,7 @@ class Compiler : public ErrorSink {
             bool isFloatR0 = isFloatTag(tagR0);
             bool isFloatTOS = isFloatTag(tagTOS);
             if (!isFloatR0 && !isFloatTOS) {
+                setupIntPtrArgs();
                 bool isPtrR0 = tagR0 == TY_POINTER;
                 bool isPtrTOS = tagTOS == TY_POINTER;
                 if (isPtrR0 || isPtrTOS) {
@@ -796,14 +799,12 @@ class Compiler : public ErrorSink {
                         if (! typeEqual(pR0Type, pTOSType)) {
                             error("Incompatible pointer types for subtraction.");
                         }
-                        o4(0xE8BD0002); // ldmfd   sp!,{r1}
                         o4(0xE0410000); // sub     r0,r1,r0
-                        popType();
                         setR0Type(mkpInt);
                         int size = sizeOf(pR0Type->pHead);
                         if (size != 1) {
                             pushR0();
-                            li(size, mkpInt);
+                            li(size);
                             // TODO: Optimize for power-of-two.
                             genOp(OP_DIV);
                         }
@@ -812,7 +813,6 @@ class Compiler : public ErrorSink {
                             error("Unsupported pointer-scalar operation %d", op);
                         }
                         Type* pPtrType = isPtrR0 ? pR0Type : pTOSType;
-                        o4(0xE8BD0002); // ldmfd   sp!,{r1}
                         int size = sizeOf(pPtrType->pHead);
                         if (size != 1) {
                             // TODO: Optimize for power-of-two.
@@ -831,12 +831,9 @@ class Compiler : public ErrorSink {
                             o4(0xE0410000); // sub     r0,r1,r0
                             break;
                         }
-                        popType();
                         setR0Type(pPtrType);
                     }
                 } else {
-                    o4(0xE8BD0002); // ldmfd   sp!,{r1}
-                mStackUse -= 4;
                     switch(op) {
                         case OP_MUL:
                         o4(0x0E0000091); // mul     r0,r1,r0
@@ -875,7 +872,6 @@ class Compiler : public ErrorSink {
                         error("Unimplemented op %d\n", op);
                         break;
                     }
-                    popType();
                 }
             } else {
                 Type* pResultType = tagR0 > tagTOS ? pR0Type : pTOSType;
@@ -922,7 +918,7 @@ class Compiler : public ErrorSink {
             }
         }
 
-        virtual void gUnaryCmp(int op, Type* pResultType) {
+        virtual void gUnaryCmp(int op) {
             if (op != OP_LOGICAL_NOT) {
                 error("Unknown unary cmp %d", op);
             } else {
@@ -946,7 +942,7 @@ class Compiler : public ErrorSink {
                         break;
                 }
             }
-            setR0Type(pResultType);
+            setR0Type(mkpInt);
         }
 
         virtual void genUnaryOp(int op) {
@@ -1005,7 +1001,28 @@ class Compiler : public ErrorSink {
             LOG_STACK("pushR0: %d\n", mStackUse);
         }
 
-        virtual void storeR0ToTOS(Type* pPointerType) {
+        virtual void popR0() {
+            Type* pTOSType = getTOSType();
+            switch (collapseType(pTOSType->tag)){
+                case TY_INT:
+                case TY_FLOAT:
+                    o4(0xE8BD0001);  // ldmfd   sp!,{r0}
+                    mStackUse -= 4;
+                    break;
+                case TY_DOUBLE:
+                    o4(0xE8BD0003);  // ldmfd   sp!,{r0, r1}  // Restore R0
+                        mStackUse -= 8;
+                    break;
+                default:
+                    error("Can't pop this type.");
+                    break;
+            }
+            popType();
+            LOG_STACK("popR0: %d\n", mStackUse);
+        }
+
+        virtual void storeR0ToTOS() {
+            Type* pPointerType = getTOSType();
             assert(pPointerType->tag == TY_POINTER);
             o4(0xE8BD0004);  // ldmfd   sp!,{r2}
             popType();
@@ -1027,7 +1044,8 @@ class Compiler : public ErrorSink {
             }
         }
 
-        virtual void loadR0FromR0(Type* pPointerType) {
+        virtual void loadR0FromR0() {
+            Type* pPointerType = getR0Type();
             assert(pPointerType->tag == TY_POINTER);
             switch (pPointerType->pHead->tag) {
                 case TY_INT:
@@ -1149,7 +1167,7 @@ class Compiler : public ErrorSink {
             }
         }
 
-        virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
+        virtual void loadR0(int ea, Type* pType) {
             TypeTag tag = pType->tag;
             switch (tag) {
                 case TY_CHAR:
@@ -1169,10 +1187,6 @@ class Compiler : public ErrorSink {
                         o4(0xEA000000); //        b .L99
                         o4(ea);         // .L1:   .word ea
                         o4(0xE5D20000); // .L99:  ldrb r0, [r2]
-                    }
-
-                    if (isIncDec) {
-                        error("inc/dec not implemented for char.");
                     }
                     break;
                 case TY_POINTER:
@@ -1194,37 +1208,6 @@ class Compiler : public ErrorSink {
                         o4(0xEA000000); //        b .L99
                         o4(ea);         // .L1:   .word ea
                         o4(0xE5920000); // .L99:  ldr r0, [r2]
-                    }
-
-                    if (isIncDec) {
-                        if (tag == TY_INT) {
-                            switch (op) {
-                            case OP_INCREMENT:
-                                o4(0xE2801001); // add r1, r0, #1
-                                break;
-                            case OP_DECREMENT:
-                                o4(0xE2401001); // sub r1, r0, #1
-                                break;
-                            default:
-                                error("unknown opcode: %d", op);
-                            }
-                            if (ea < LOCAL) {
-                                // Local, fp relative
-                                // Don't need range check, was already checked above
-                                if (ea < 0) {
-                                    o4(0xE50B1000 | (0xfff & (-ea))); // str r1, [fp,#-ea]
-                                } else {
-                                    o4(0xE58B1000 | (0xfff & ea));    // str r1, [fp,#ea]
-                                }
-                            } else{
-                                // Global, absolute
-                                // r2 is already set up from before.
-                                o4(0xE5821000); // str r1, [r2]
-                           }
-                        }
-                        else {
-                            error("inc/dec not implemented for float.");
-                        }
                     }
                     break;
                 case TY_DOUBLE:
@@ -1563,6 +1546,12 @@ class Compiler : public ErrorSink {
             return reg;
         }
 
+        void setupIntPtrArgs() {
+            o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+            mStackUse -= 4;
+            popType();
+        }
+
         /* Pop TOS to R1
          * Make sure both R0 and TOS are floats. (Could be ints)
          * We know that at least one of R0 and TOS is already a float
@@ -1837,9 +1826,9 @@ class Compiler : public ErrorSink {
         }
 
         /* load immediate value */
-        virtual void li(int i, Type* pType) {
+        virtual void li(int i) {
             oad(0xb8, i); /* mov $xx, %eax */
-            setR0Type(pType);
+            setR0Type(mkpInt);
         }
 
         virtual void loadFloat(int address, Type* pType) {
@@ -1879,7 +1868,7 @@ class Compiler : public ErrorSink {
             return psym(0x84 + l, t);
         }
 
-        virtual void gcmp(int op, Type* pResultType) {
+        virtual void gcmp(int op) {
             Type* pR0Type = getR0Type();
             Type* pTOSType = getTOSType();
             TypeTag tagR0 = pR0Type->tag;
@@ -1890,7 +1879,7 @@ class Compiler : public ErrorSink {
                 int t = decodeOp(op);
                 o(0x59); /* pop %ecx */
                 o(0xc139); /* cmp %eax,%ecx */
-                li(0, NULL);
+                li(0);
                 o(0x0f); /* setxx %al */
                 o(t + 0x90);
                 o(0xc0);
@@ -1945,7 +1934,7 @@ class Compiler : public ErrorSink {
                 }
                 o(0xc0b60f); // movzbl %al, %eax
             }
-            setR0Type(pResultType);
+            setR0Type(mkpInt);
         }
 
         virtual void genOp(int op) {
@@ -1973,7 +1962,7 @@ class Compiler : public ErrorSink {
                         int size = sizeOf(pR0Type->pHead);
                         if (size != 1) {
                             pushR0();
-                            li(size, mkpInt);
+                            li(size);
                             // TODO: Optimize for power-of-two.
                             genOp(OP_DIV);
                         }
@@ -2028,7 +2017,7 @@ class Compiler : public ErrorSink {
             }
         }
 
-        virtual void gUnaryCmp(int op, Type* pResultType) {
+        virtual void gUnaryCmp(int op) {
             if (op != OP_LOGICAL_NOT) {
                 error("Unknown unary cmp %d", op);
             } else {
@@ -2039,7 +2028,7 @@ class Compiler : public ErrorSink {
                             oad(0xb9, 0); /* movl $0, %ecx */
                             int t = decodeOp(op);
                             o(0xc139); /* cmp %eax,%ecx */
-                            li(0, NULL);
+                            li(0);
                             o(0x0f); /* setxx %al */
                             o(t + 0x90);
                             o(0xc0);
@@ -2062,7 +2051,7 @@ class Compiler : public ErrorSink {
                         break;
                 }
             }
-            setR0Type(pResultType);
+            setR0Type(mkpInt);
         }
 
         virtual void genUnaryOp(int op) {
@@ -2116,7 +2105,31 @@ class Compiler : public ErrorSink {
             pushType();
         }
 
-        virtual void storeR0ToTOS(Type* pPointerType) {
+        virtual void popR0() {
+            Type* pR0Type = getR0Type();
+            TypeTag r0ct = collapseType(pR0Type->tag);
+            switch(r0ct) {
+                case TY_INT:
+                    o(0x58); /* popl %eax */
+                    break;
+                case TY_FLOAT:
+                    o(0x2404d9); // flds (%esp)
+                    o(0x58); /* popl %eax */
+                    break;
+                case TY_DOUBLE:
+                    o(0x2404dd); // fldl (%esp)
+                    o(0x58); /* popl %eax */
+                    o(0x58); /* popl %eax */
+                    break;
+                default:
+                    error("pushR0 unsupported type %d", r0ct);
+                    break;
+            }
+            popType();
+        }
+
+        virtual void storeR0ToTOS() {
+            Type* pPointerType = getTOSType();
             assert(pPointerType->tag == TY_POINTER);
             Type* pTargetType = pPointerType->pHead;
             convertR0(pTargetType);
@@ -2141,7 +2154,8 @@ class Compiler : public ErrorSink {
             }
         }
 
-        virtual void loadR0FromR0(Type* pPointerType) {
+        virtual void loadR0FromR0() {
+            Type* pPointerType = getR0Type();
             assert(pPointerType->tag == TY_POINTER);
             switch (pPointerType->pHead->tag) {
                 case TY_INT:
@@ -2204,7 +2218,7 @@ class Compiler : public ErrorSink {
             }
         }
 
-        virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
+        virtual void loadR0(int ea, Type* pType) {
             TypeTag tag = pType->tag;
             switch (tag) {
                 case TY_CHAR:
@@ -2213,22 +2227,10 @@ class Compiler : public ErrorSink {
                     } else {
                         oad(0x85BE0F, ea); // movsbl  ea(%ebp),%eax
                     }
-                    if (isIncDec) {
-                        error("inc/dec not implemented for char.");
-                    }
                     break;
                 case TY_INT:
                 case TY_POINTER:
-                    if (tag == TY_CHAR) {
-                    } else {
-                        gmov(8, ea); /* mov EA, %eax */
-                    }
-                    if (isIncDec) {
-                        /* Implement post-increment or post decrement.
-                         */
-                        gmov(0, ea); /* 83 ADD */
-                        o(decodeOp(op));
-                    }
+                    gmov(8, ea); /* mov EA, %eax */
                     break;
                 case TY_FLOAT:
                     if (ea < -LOCAL || ea > LOCAL) {
@@ -2236,18 +2238,12 @@ class Compiler : public ErrorSink {
                     } else {
                         oad(0x85d9, ea); // flds ea(%ebp)
                     }
-                    if (isIncDec) {
-                        error("inc/dec not implemented for float.");
-                    }
                     break;
                 case TY_DOUBLE:
                     if (ea < -LOCAL || ea > LOCAL) {
                         oad(0x05dd, ea); // fldl ea
                     } else {
                         oad(0x85dd, ea); // fldl ea(%ebp)
-                    }
-                    if (isIncDec) {
-                        error("inc/dec not implemented for double.");
                     }
                     break;
                 default:
@@ -2535,9 +2531,9 @@ class Compiler : public ErrorSink {
         }
 
         /* load immediate value */
-        virtual void li(int t, Type* pType) {
+        virtual void li(int t) {
             fprintf(stderr, "li(%d)\n", t);
-            mpBase->li(t, pType);
+            mpBase->li(t);
         }
 
         virtual void loadFloat(int address, Type* pType) {
@@ -2558,9 +2554,9 @@ class Compiler : public ErrorSink {
             return result;
         }
 
-        virtual void gcmp(int op, Type* pResultType) {
-            fprintf(stderr, "gcmp(%d, pResultType)\n", op);
-            mpBase->gcmp(op, pResultType);
+        virtual void gcmp(int op) {
+            fprintf(stderr, "gcmp(%d)\n", op);
+            mpBase->gcmp(op);
         }
 
         virtual void genOp(int op) {
@@ -2569,9 +2565,9 @@ class Compiler : public ErrorSink {
         }
 
 
-        virtual void gUnaryCmp(int op, Type* pResultType) {
-            fprintf(stderr, "gUnaryCmp(%d, pResultType)\n", op);
-            mpBase->gUnaryCmp(op, pResultType);
+        virtual void gUnaryCmp(int op) {
+            fprintf(stderr, "gUnaryCmp(%d)\n", op);
+            mpBase->gUnaryCmp(op);
         }
 
         virtual void genUnaryOp(int op) {
@@ -2584,14 +2580,19 @@ class Compiler : public ErrorSink {
             mpBase->pushR0();
         }
 
-        virtual void storeR0ToTOS(Type* pPointerType) {
-            fprintf(stderr, "storeR0ToTOS(%d)\n", pPointerType->pHead->tag);
-            mpBase->storeR0ToTOS(pPointerType);
+        virtual void popR0() {
+            fprintf(stderr, "popR0()\n");
+            mpBase->popR0();
         }
 
-        virtual void loadR0FromR0(Type* pPointerType) {
-            fprintf(stderr, "loadR0FromR0(%d)\n", pPointerType->pHead->tag);
-            mpBase->loadR0FromR0(pPointerType);
+        virtual void storeR0ToTOS() {
+            fprintf(stderr, "storeR0ToTOS()\n");
+            mpBase->storeR0ToTOS();
+        }
+
+        virtual void loadR0FromR0() {
+            fprintf(stderr, "loadR0FromR0()\n");
+            mpBase->loadR0FromR0();
         }
 
         virtual void leaR0(int ea, Type* pPointerType) {
@@ -2604,9 +2605,9 @@ class Compiler : public ErrorSink {
             mpBase->storeR0(ea, pType);
         }
 
-        virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
-            fprintf(stderr, "loadR0(%d, %d, %d, pType)\n", ea, isIncDec, op);
-            mpBase->loadR0(ea, isIncDec, op, pType);
+        virtual void loadR0(int ea, Type* pType) {
+            fprintf(stderr, "loadR0(%d, pType)\n", ea);
+            mpBase->loadR0(ea, pType);
         }
 
         virtual void convertR0(Type* pType){
@@ -3814,7 +3815,7 @@ class Compiler : public ErrorSink {
 
     bool acceptStringLiteral() {
         if (tok == '"') {
-            pGen->li((int) glo, mkpCharPtr);
+            pGen->leaR0((int) glo, mkpCharPtr);
             // This while loop merges multiple adjacent string constants.
             while (tok == '"') {
                 while (ch != '"' && ch != EOF) {
@@ -3869,7 +3870,7 @@ class Compiler : public ErrorSink {
             t = tok;
             next();
             if (t == TOK_NUM) {
-                pGen->li(a, mkpInt);
+                pGen->li(a);
             } else if (t == TOK_NUM_FLOAT) {
                 // Align to 4-byte boundary
                 glo = (char*) (((intptr_t) glo + 3) & -4);
@@ -3886,7 +3887,7 @@ class Compiler : public ErrorSink {
                 /* -, +, !, ~ */
                 unary(false);
                 if (t == '!')
-                    pGen->gUnaryCmp(a, mkpInt);
+                    pGen->gUnaryCmp(a);
                 else if (t == '+') {
                     // ignore unary plus.
                 } else {
@@ -3917,9 +3918,9 @@ class Compiler : public ErrorSink {
                     if (accept('=')) {
                         pGen->pushR0();
                         expr();
-                        pGen->storeR0ToTOS(pR0Type);
+                        pGen->storeR0ToTOS();
                     } else if (t) {
-                        pGen->loadR0FromR0(pR0Type);
+                        pGen->loadR0FromR0();
                     }
                 }
                 // Else we fall through to the function call below, with
@@ -3965,8 +3966,14 @@ class Compiler : public ErrorSink {
                             error("Undeclared variable %s\n", nameof(t));
                         }
                     }
-                    pGen->loadR0(n, tokl == 11, tokc, pVI->pType);
+                    // load a variable
+                    pGen->loadR0(n, pVI->pType);
                     if (tokl == 11) {
+                        // post inc / post dec
+                        pGen->pushR0();
+                        impInc(tokc);
+                        pGen->storeR0(n, pVI->pType);
+                        pGen->popR0();
                         next();
                     }
                 }
@@ -4037,6 +4044,28 @@ class Compiler : public ErrorSink {
         }
     }
 
+    /* Increment / decrement R0 */
+
+    void impInc(int op) {
+        Type* pType = pGen->getR0Type();
+        int lit = 1;
+        if (op == OP_DECREMENT) {
+            lit = -1;
+        }
+        switch (pType->tag) {
+            case TY_INT:
+            case TY_CHAR:
+            case TY_POINTER:
+                pGen->pushR0();
+                pGen->li(lit);
+                pGen->genOp(OP_PLUS);
+                break;
+            default:
+                error("++/-- illegal for this type.");
+                break;
+        }
+    }
+
     /* Recursive descent parser for binary operations.
      */
     void binaryOp(int level) {
@@ -4061,10 +4090,10 @@ class Compiler : public ErrorSink {
                     if (pGen->getR0Type() == NULL) {
                         // We failed to parse a right-hand argument.
                         // Push a dummy value so we don't fail
-                        pGen->li(0, mkpInt);
+                        pGen->li(0);
                     }
                     if ((level == 4) | (level == 5)) {
-                        pGen->gcmp(t, mkpInt);
+                        pGen->gcmp(t);
                     } else {
                         pGen->genOp(t);
                     }
@@ -4073,10 +4102,10 @@ class Compiler : public ErrorSink {
             /* && and || output code generation */
             if (a && level > 8) {
                 a = pGen->gtst(t == OP_LOGICAL_OR, a);
-                pGen->li(t != OP_LOGICAL_OR, mkpInt);
+                pGen->li(t != OP_LOGICAL_OR);
                 pGen->gjmp(5); /* jmp $ + 5 (sizeof li, FIXME for ARM) */
                 pGen->gsym(a);
-                pGen->li(t == OP_LOGICAL_OR, mkpInt);
+                pGen->li(t == OP_LOGICAL_OR);
             }
         }
     }
