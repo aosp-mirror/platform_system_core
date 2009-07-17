@@ -586,7 +586,6 @@ class Compiler : public ErrorSink {
         /* returns address to patch with local variable size
         */
         virtual int functionEntry(Type* pDecl) {
-            LOG_API("functionEntry(%d);\n", pDecl);
             mStackUse = 0;
             // sp -> arg4 arg5 ...
             // Push our register-based arguments back on the stack
@@ -608,7 +607,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void functionExit(Type* pDecl, int localVariableAddress, int localVariableSize) {
-            LOG_API("functionExit(%d, %d, %d);\n", argCount, localVariableAddress, localVariableSize);
             // Round local variable size up to a multiple of stack alignment
             localVariableSize = ((localVariableSize + STACK_ALIGNMENT - 1) /
                 STACK_ALIGNMENT) * STACK_ALIGNMENT;
@@ -665,13 +663,11 @@ class Compiler : public ErrorSink {
         }
 
         virtual int gjmp(int t) {
-            LOG_API("gjmp(%d);\n", t);
             return o4(0xEA000000 | encodeAddress(t)); // b .L33
         }
 
         /* l = 0: je, l == 1: jne */
         virtual int gtst(bool l, int t) {
-            LOG_API("gtst(%d, %d);\n", l, t);
             Type* pR0Type = getR0Type();
             TypeTag tagR0 = pR0Type->tag;
             switch(tagR0) {
@@ -690,7 +686,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void gcmp(int op, Type* pResultType) {
-            LOG_API("gcmp(%d);\n", op);
             Type* pR0Type = getR0Type();
             Type* pTOSType = getTOSType();
             TypeTag tagR0 = collapseType(pR0Type->tag);
@@ -784,7 +779,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void genOp(int op) {
-            LOG_API("genOp(%d);\n", op);
             Type* pR0Type = getR0Type();
             Type* pTOSType = getTOSType();
             TypeTag tagR0 = pR0Type->tag;
@@ -929,7 +923,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void gUnaryCmp(int op, Type* pResultType) {
-            LOG_API("gUnaryCmp(%d);\n", op);
             if (op != OP_LOGICAL_NOT) {
                 error("Unknown unary cmp %d", op);
             } else {
@@ -957,7 +950,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void genUnaryOp(int op) {
-            LOG_API("genOp(%d);\n", op);
             Type* pR0Type = getR0Type();
             TypeTag tag = collapseType(pR0Type->tag);
             switch(tag) {
@@ -1000,7 +992,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void pushR0() {
-            LOG_API("pushR0();\n");
             Type* pR0Type = getR0Type();
             TypeTag r0ct = collapseType(pR0Type->tag);
             if (r0ct != TY_DOUBLE) {
@@ -1015,7 +1006,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void storeR0ToTOS(Type* pPointerType) {
-            LOG_API("storeR0ToTOS(%d);\n", isInt);
             assert(pPointerType->tag == TY_POINTER);
             o4(0xE8BD0004);  // ldmfd   sp!,{r2}
             popType();
@@ -1038,7 +1028,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void loadR0FromR0(Type* pPointerType) {
-            LOG_API("loadR0FromR0(%d);\n", pPointerType);
             assert(pPointerType->tag == TY_POINTER);
             switch (pPointerType->pHead->tag) {
                 case TY_INT:
@@ -1059,7 +1048,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void leaR0(int ea, Type* pPointerType) {
-            LOG_API("leaR0(%d);\n", ea);
             if (ea > -LOCAL && ea < LOCAL) {
                 // Local, fp relative
                 if (ea < -1023 || ea > 1023 || ((ea & 3) != 0)) {
@@ -1081,7 +1069,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void storeR0(int ea, Type* pType) {
-            LOG_API("storeR0(%d);\n", ea);
             convertR0(pType);
             TypeTag tag = pType->tag;
             switch (tag) {
@@ -1163,7 +1150,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void loadR0(int ea, bool isIncDec, int op, Type* pType) {
-            LOG_API("loadR0(%d, %d, %d, %d);\n", ea, isIncDec, op, pType);
             TypeTag tag = pType->tag;
             switch (tag) {
                 case TY_CHAR:
@@ -1307,12 +1293,10 @@ class Compiler : public ErrorSink {
         }
 
         virtual int beginFunctionCallArguments() {
-            LOG_API("beginFunctionCallArguments();\n");
             return o4(0xE24DDF00); // Placeholder
         }
 
         virtual size_t storeR0ToArg(int l, Type* pArgType) {
-            LOG_API("storeR0ToArg(%d);\n", l);
             convertR0(pArgType);
             Type* pR0Type = getR0Type();
             TypeTag r0ct = collapseType(pR0Type->tag);
@@ -1341,7 +1325,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void endFunctionCallArguments(Type* pDecl, int a, int l) {
-            LOG_API("endFunctionCallArguments(0x%08x, %d);\n", a, l);
             int argumentStackUse = l;
             // Have to calculate register arg count from actual stack size,
             // in order to properly handle ... functions.
@@ -1374,17 +1357,14 @@ class Compiler : public ErrorSink {
         }
 
         virtual int callForward(int symbol, Type* pFunc) {
-            LOG_API("callForward(%d);\n", symbol);
             setR0Type(pFunc->pHead);
             // Forward calls are always short (local)
             return o4(0xEB000000 | encodeAddress(symbol));
         }
 
         virtual void callRelative(int t, Type* pFunc) {
-            LOG_API("callRelative(%d);\n", t);
             setR0Type(pFunc->pHead);
             int abs = t + getPC() + jumpOffset();
-            LOG_API("abs=%d (0x%08x)\n", abs, abs);
             if (t >= - (1 << 25) && t < (1 << 25)) {
                 o4(0xEB000000 | encodeAddress(t));
             } else {
@@ -1398,7 +1378,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void callIndirect(int l, Type* pFunc) {
-            LOG_API("callIndirect(%d);\n", l);
             setR0Type(pFunc->pHead);
             int argCount = l >> 2;
             int poppedArgs = argCount > 4 ? 4 : argCount;
@@ -1411,7 +1390,6 @@ class Compiler : public ErrorSink {
         }
 
         virtual void adjustStackAfterCall(Type* pDecl, int l, bool isIndirect) {
-            LOG_API("adjustStackAfterCall(%d, %d);\n", l, isIndirect);
             int argCount = l >> 2;
             // Have to calculate register arg count from actual stack size,
             // in order to properly handle ... functions.
@@ -1438,11 +1416,9 @@ class Compiler : public ErrorSink {
 
         /* output a symbol and patch all calls to it */
         virtual void gsym(int t) {
-            LOG_API("gsym(0x%x)\n", t);
             int n;
             int base = getBase();
             int pc = getPC();
-            LOG_API("pc = 0x%x\n", pc);
             while (t) {
                 int data = * (int*) t;
                 int decodedOffset = ((BRANCH_REL_ADDRESS_MASK & data) << 2);
