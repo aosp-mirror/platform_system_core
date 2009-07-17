@@ -391,7 +391,7 @@ class Compiler : public ErrorSink {
         /* Emit code to store R0 to the stack at byte offset l.
          * Returns stack size of object (typically 4 or 8 bytes)
          */
-        virtual size_t storeR0ToArg(int l) = 0;
+        virtual size_t storeR0ToArg(int l, Type* pArgType) = 0;
 
         /* Patch the function call preamble.
          * a is the address returned from beginFunctionCallArguments
@@ -1063,6 +1063,7 @@ class Compiler : public ErrorSink {
 
         virtual void storeR0(int ea, Type* pType) {
             LOG_API("storeR0(%d);\n", ea);
+            convertR0(pType);
             TypeTag tag = pType->tag;
             switch (tag) {
                 case TY_CHAR:
@@ -1115,8 +1116,8 @@ class Compiler : public ErrorSink {
                             error("Offset out of range: %08x", ea);
                         }
                         if (ea < 0) {
-                            o4(0xE50B0000 | (0xfff & (-ea))); // str r0, [fp,#-ea]
-                            o4(0xE50B1000 | (0xfff & (-ea + 4))); // str r1, [fp,#-ea+4]
+                            o4(0xE50B0000 | (0xfff & (4-ea))); // str r0, [fp,#-ea]
+                            o4(0xE50B1000 | (0xfff & (-ea))); // str r1, [fp,#-ea+4]
 #if 0
                             // strd doesn't seem to work. Is encoding wrong?
                         } else if (ea < 0) {
@@ -1231,8 +1232,8 @@ class Compiler : public ErrorSink {
                             error("Offset out of range: %08x", ea);
                         }
                         if (ea < 0) {
-                            o4(0xE51B0000 | (0xfff & (-ea))); // ldr r0, [fp,#-ea]
-                            o4(0xE51B1000 | (0xfff & (-ea+4))); // ldr r1, [fp,#-ea+4]
+                            o4(0xE51B0000 | (0xfff & (4-ea))); // ldr r0, [fp,#-ea]
+                            o4(0xE51B1000 | (0xfff & (-ea))); // ldr r1, [fp,#-ea+4]
                         } else {
                             o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
                             o4(0xE59B1000 | (0xfff & (ea+4)));    // ldr r0, [fp,#ea+4]
@@ -1291,8 +1292,9 @@ class Compiler : public ErrorSink {
             return o4(0xE24DDF00); // Placeholder
         }
 
-        virtual size_t storeR0ToArg(int l) {
+        virtual size_t storeR0ToArg(int l, Type* pArgType) {
             LOG_API("storeR0ToArg(%d);\n", l);
+            convertR0(pArgType);
             Type* pR0Type = getR0Type();
             TypeTag r0ct = collapseType(pR0Type->tag);
             switch(r0ct) {
@@ -2121,9 +2123,11 @@ class Compiler : public ErrorSink {
 
         virtual void storeR0ToTOS(Type* pPointerType) {
             assert(pPointerType->tag == TY_POINTER);
+            Type* pTargetType = pPointerType->pHead;
+            convertR0(pTargetType);
             o(0x59); /* pop %ecx */
             popType();
-            switch (pPointerType->pHead->tag) {
+            switch (pTargetType->tag) {
                 case TY_INT:
                     o(0x0189); /* movl %eax/%al, (%ecx) */
                     break;
@@ -2172,6 +2176,7 @@ class Compiler : public ErrorSink {
 
         virtual void storeR0(int ea, Type* pType) {
             TypeTag tag = pType->tag;
+            convertR0(pType);
             switch (tag) {
                 case TY_CHAR:
                     if (ea < -LOCAL || ea > LOCAL) {
@@ -2303,7 +2308,8 @@ class Compiler : public ErrorSink {
             return oad(0xec81, 0); /* sub $xxx, %esp */
         }
 
-        virtual size_t storeR0ToArg(int l) {
+        virtual size_t storeR0ToArg(int l, Type* pArgType) {
+            convertR0(pArgType);
             Type* pR0Type = getR0Type();
             TypeTag r0ct = collapseType(pR0Type->tag);
             switch(r0ct) {
@@ -2540,7 +2546,7 @@ class Compiler : public ErrorSink {
         }
 
         virtual void loadFloat(int address, Type* pType) {
-            fprintf(stderr, "loadFloat(%d, type)\n", address);
+            fprintf(stderr, "loadFloat(%d, type=%d)\n", address, pType->tag);
             mpBase->loadFloat(address, pType);
         }
 
@@ -2599,7 +2605,7 @@ class Compiler : public ErrorSink {
         }
 
         virtual void storeR0(int ea, Type* pType) {
-            fprintf(stderr, "storeR0(%d, pType)\n", ea);
+            fprintf(stderr, "storeR0(%d, pType=%d)\n", ea, pType->tag);
             mpBase->storeR0(ea, pType);
         }
 
@@ -2619,9 +2625,10 @@ class Compiler : public ErrorSink {
             return result;
         }
 
-        virtual size_t storeR0ToArg(int l) {
-            fprintf(stderr, "storeR0ToArg(%d)\n", l);
-            return mpBase->storeR0ToArg(l);
+        virtual size_t storeR0ToArg(int l, Type* pArgType) {
+            fprintf(stderr, "storeR0ToArg(%d, pArgType=%d)\n", l,
+                    pArgType->tag);
+            return mpBase->storeR0ToArg(l, pArgType);
         }
 
         virtual void endFunctionCallArguments(Type* pDecl, int a, int l) {
@@ -4007,8 +4014,7 @@ class Compiler : public ErrorSink {
                     error("Can't pass void value for argument %d",
                           argCount + 1);
                 } else {
-                    pGen->convertR0(pTargetType);
-                    l += pGen->storeR0ToArg(l);
+                    l += pGen->storeR0ToArg(l, pTargetType);
                 }
                 if (accept(',')) {
                     // fine

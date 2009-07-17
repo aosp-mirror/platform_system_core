@@ -283,6 +283,9 @@ Pointer comparison: 1 0 0 0 1
         self.compileCheck(["-R", "data/rollo3.c"], """Executing compiled code:
 result: 10""", """""")
 
+    def testFloatDouble(self):
+        self.compileCheck(["-R", "data/floatdouble.c"], """Executing compiled code:
+result: 0""", """0.002 0.1 10""")
 
 
 if __name__ == '__main__':
