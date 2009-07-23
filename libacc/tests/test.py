@@ -128,7 +128,7 @@ class TestACC(unittest.TestCase):
         b2 = stdErrResult.splitlines()
         b1 = stdOutResult.splitlines()
         self.assertEqual(True, compareOuput(a1,a2,b1,b2))
-        
+
     def compileCheck(self, args, stdErrResult, stdOutResult="",
                      targets=['arm', 'x86']):
         targetSet = sets.ImmutableSet(targets)
@@ -143,26 +143,26 @@ class TestACC(unittest.TestCase):
         self.assertEqual(compileArm(args), result)
 
     def testCompileReturnVal(self):
-        self.compileCheck(["data/returnval-ansi.c"], "") 
+        self.compileCheck(["data/returnval-ansi.c"], "")
 
     def testCompileOTCCANSII(self):
         self.compileCheck(["data/otcc-ansi.c"], "", "", ['x86'])
 
     def testRunReturnVal(self):
         self.compileCheck(["-R", "data/returnval-ansi.c"],
-		"Executing compiled code:\nresult: 42\n")
+        "Executing compiled code:\nresult: 42\n")
 
     def testStringLiteralConcatenation(self):
         self.compileCheck(["-R", "data/testStringConcat.c"],
-		"Executing compiled code:\nresult: 13\n", "Hello, world\n")
+        "Executing compiled code:\nresult: 13\n", "Hello, world\n")
 
     def testRunOTCCANSI(self):
-        self.compileCheck(["-R", "data/otcc-ansi.c", "data/returnval.c"], 
+        self.compileCheck(["-R", "data/otcc-ansi.c", "data/returnval.c"],
             "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\natcc-ansi.c: result: 42\nresult: 42\n", "",
              ['x86'])
 
     def testRunOTCCANSI2(self):
-        self.compileCheck(["-R", "data/otcc-ansi.c", "data/otcc.c", "data/returnval.c"], 
+        self.compileCheck(["-R", "data/otcc-ansi.c", "data/otcc.c", "data/returnval.c"],
             "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\notcc.c: about to execute compiled code.\natcc-ansi.c: result: 42\nresult: 42\n", "",['x86'])
 
     def testRunConstants(self):
@@ -186,7 +186,7 @@ locals: 1 2 3 4
 cast rval: 2 4
 cast lval: 1.1 2 3.3 4
 """)
-        
+
     def testRunFlops(self):
         self.compileCheck(["-R", "data/flops.c"],
             """Executing compiled code:
@@ -287,6 +287,33 @@ result: 10""", """""")
         self.compileCheck(["-R", "data/floatdouble.c"], """Executing compiled code:
 result: 0""", """0.002 0.1 10""")
 
+    def testIops(self):
+        self.compileCheck(["-R", "data/iops.c"], """Executing compiled code:
+result: 0""", """Literals: 1 -1
+++
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+--
+10
+9
+8
+7
+6
+5
+4
+3
+2
+1
+0
+""")
 
 if __name__ == '__main__':
     if not outputCanRun():

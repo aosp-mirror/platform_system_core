@@ -1628,7 +1628,7 @@ class Compiler : public ErrorSink {
                  o4((0xE3A00000 + t) | rN); // mov    rN, #0
             } else if (t >= -256 && t < 0) {
                 // mvn means move constant ^ ~0
-                o4((0xE3E00001 - t) | rN); // mvn    rN, #0
+                o4((0xE3E00000 - (t+1)) | rN); // mvn    rN, #0
             } else {
                   o4(0xE51F0000 | rN); //         ldr    rN, .L3
                   o4(0xEA000000); //         b .L99
