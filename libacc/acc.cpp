@@ -3216,6 +3216,8 @@ class Compiler : public ErrorSink {
     // Arena for data that's only needed when compiling a single function
     Arena mLocalArena;
 
+    Arena* mpCurrentArena;
+
     TokenTable mTokenTable;
     SymbolStack mGlobals;
     SymbolStack mLocals;
@@ -3895,7 +3897,7 @@ class Compiler : public ErrorSink {
                 }
             } else if (t == '(') {
                 // It's either a cast or an expression
-                Type* pCast = acceptCastTypeDeclaration(mLocalArena);
+                Type* pCast = acceptCastTypeDeclaration();
                 if (pCast) {
                     skip(')');
                     unary(false);
@@ -3927,8 +3929,7 @@ class Compiler : public ErrorSink {
                 // t == 0 to trigger an indirect function call. Hack!
             } else if (t == '&') {
                 VariableInfo* pVI = VI(tok);
-                pGen->leaR0((int) pVI->pAddress,
-                            createPtrType(pVI->pType, mLocalArena));
+                pGen->leaR0((int) pVI->pAddress, createPtrType(pVI->pType));
                 next();
             } else if (t == EOF ) {
                 error("Unexpected EOF.");
@@ -4123,7 +4124,7 @@ class Compiler : public ErrorSink {
         intptr_t a, n, t;
 
         Type* pBaseType;
-        if ((pBaseType = acceptPrimitiveType(mLocalArena))) {
+        if ((pBaseType = acceptPrimitiveType())) {
             /* declarations */
             localDeclarations(pBaseType);
         } else if (tok == TOK_IF) {
@@ -4223,9 +4224,9 @@ class Compiler : public ErrorSink {
         return true;
     }
 
-    Type* createType(TypeTag tag, Type* pHead, Type* pTail, Arena& arena) {
+    Type* createType(TypeTag tag, Type* pHead, Type* pTail) {
         assert(tag >= TY_INT && tag <= TY_PARAM);
-        Type* pType = (Type*) arena.alloc(sizeof(Type));
+        Type* pType = (Type*) mpCurrentArena->alloc(sizeof(Type));
         memset(pType, 0, sizeof(*pType));
         pType->tag = tag;
         pType->pHead = pHead;
@@ -4233,8 +4234,8 @@ class Compiler : public ErrorSink {
         return pType;
     }
 
-    Type* createPtrType(Type* pType, Arena& arena) {
-        return createType(TY_POINTER, pType, NULL, arena);
+    Type* createPtrType(Type* pType) {
+        return createType(TY_POINTER, pType, NULL);
     }
 
     /**
@@ -4350,7 +4351,7 @@ class Compiler : public ErrorSink {
         fprintf(stderr, "%s\n", buffer.getUnwrapped());
     }
 
-    Type* acceptPrimitiveType(Arena& arena) {
+    Type* acceptPrimitiveType() {
         Type* pType;
         if (tok == TOK_INT) {
             pType = mkpInt;
@@ -4369,16 +4370,14 @@ class Compiler : public ErrorSink {
         return pType;
     }
 
-    Type* acceptDeclaration(Type* pType, bool nameAllowed, bool nameRequired,
-                            Arena& arena) {
+    Type* acceptDeclaration(Type* pType, bool nameAllowed, bool nameRequired) {
         tokenid_t declName = 0;
         bool reportFailure = false;
         pType = acceptDecl2(pType, declName, nameAllowed,
-                                  nameRequired, arena, reportFailure);
+                                  nameRequired, reportFailure);
         if (declName) {
             // Clone the parent type so we can set a unique ID
-            pType = createType(pType->tag, pType->pHead,
-                                      pType->pTail, arena);
+            pType = createType(pType->tag, pType->pHead, pType->pTail);
 
             pType->id = declName;
         }
@@ -4390,8 +4389,8 @@ class Compiler : public ErrorSink {
         return pType;
     }
 
-    Type* expectDeclaration(Type* pBaseType, Arena& arena) {
-        Type* pType = acceptDeclaration(pBaseType, true, true, arena);
+    Type* expectDeclaration(Type* pBaseType) {
+        Type* pType = acceptDeclaration(pBaseType, true, true);
         if (! pType) {
             error("Expected a declaration");
         }
@@ -4399,16 +4398,16 @@ class Compiler : public ErrorSink {
     }
 
     /* Used for accepting types that appear in casts */
-    Type* acceptCastTypeDeclaration(Arena& arena) {
-        Type* pType = acceptPrimitiveType(arena);
+    Type* acceptCastTypeDeclaration() {
+        Type* pType = acceptPrimitiveType();
         if (pType) {
-            pType = acceptDeclaration(pType, false, false, arena);
+            pType = acceptDeclaration(pType, false, false);
         }
         return pType;
     }
 
-    Type* expectCastTypeDeclaration(Arena& arena) {
-        Type* pType = acceptCastTypeDeclaration(arena);
+    Type* expectCastTypeDeclaration() {
+        Type* pType = acceptCastTypeDeclaration();
         if (! pType) {
             error("Expected a declaration");
         }
@@ -4416,22 +4415,22 @@ class Compiler : public ErrorSink {
     }
 
     Type* acceptDecl2(Type* pType, tokenid_t& declName,
-                      bool nameAllowed, bool nameRequired, Arena& arena,
+                      bool nameAllowed, bool nameRequired,
                       bool& reportFailure) {
         int ptrCounter = 0;
         while (accept('*')) {
             ptrCounter++;
         }
-        pType = acceptDecl3(pType, declName, nameAllowed, nameRequired, arena,
+        pType = acceptDecl3(pType, declName, nameAllowed, nameRequired,
                             reportFailure);
         while (ptrCounter-- > 0) {
-            pType = createType(TY_POINTER, pType, NULL, arena);
+            pType = createType(TY_POINTER, pType, NULL);
         }
         return pType;
     }
 
     Type* acceptDecl3(Type* pType, tokenid_t& declName,
-                      bool nameAllowed, bool nameRequired, Arena& arena,
+                      bool nameAllowed, bool nameRequired,
                       bool& reportFailure) {
         // direct-dcl :
         //   name
@@ -4441,7 +4440,7 @@ class Compiler : public ErrorSink {
         Type* pNewHead = NULL;
         if (accept('(')) {
             pNewHead = acceptDecl2(pNewHead, declName, nameAllowed,
-                                nameRequired, arena, reportFailure);
+                                nameRequired, reportFailure);
             skip(')');
         } else if ((declName = acceptSymbol()) != 0) {
             if (nameAllowed == false && declName) {
@@ -4456,8 +4455,8 @@ class Compiler : public ErrorSink {
         }
         while (accept('(')) {
             // Function declaration
-            Type* pTail = acceptArgs(nameAllowed, arena);
-            pType = createType(TY_FUNC, pType, pTail, arena);
+            Type* pTail = acceptArgs(nameAllowed);
+            pType = createType(TY_FUNC, pType, pTail);
             skip(')');
         }
 
@@ -4472,16 +4471,15 @@ class Compiler : public ErrorSink {
         return pType;
     }
 
-    Type* acceptArgs(bool nameAllowed, Arena& arena) {
+    Type* acceptArgs(bool nameAllowed) {
         Type* pHead = NULL;
         Type* pTail = NULL;
         for(;;) {
-            Type* pBaseArg = acceptPrimitiveType(arena);
+            Type* pBaseArg = acceptPrimitiveType();
             if (pBaseArg) {
-                Type* pArg = acceptDeclaration(pBaseArg, nameAllowed, false,
-                                               arena);
+                Type* pArg = acceptDeclaration(pBaseArg, nameAllowed, false);
                 if (pArg) {
-                    Type* pParam = createType(TY_PARAM, pArg, NULL, arena);
+                    Type* pParam = createType(TY_PARAM, pArg, NULL);
                     if (!pHead) {
                         pHead = pParam;
                         pTail = pParam;
@@ -4498,8 +4496,8 @@ class Compiler : public ErrorSink {
         return pHead;
     }
 
-    Type* expectPrimitiveType(Arena& arena) {
-        Type* pType = acceptPrimitiveType(arena);
+    Type* expectPrimitiveType() {
+        Type* pType = acceptPrimitiveType();
         if (!pType) {
             String buf;
             decodeToken(buf, tok, true);
@@ -4534,7 +4532,7 @@ class Compiler : public ErrorSink {
 
         while (pBaseType) {
             while (tok != ';' && tok != EOF) {
-                Type* pDecl = expectDeclaration(pBaseType, mLocalArena);
+                Type* pDecl = expectDeclaration(pBaseType);
                 if (!pDecl) {
                     break;
                 }
@@ -4554,7 +4552,7 @@ class Compiler : public ErrorSink {
                     next();
             }
             skip(';');
-            pBaseType = acceptPrimitiveType(mLocalArena);
+            pBaseType = acceptPrimitiveType();
         }
     }
 
@@ -4607,11 +4605,11 @@ class Compiler : public ErrorSink {
 
     void globalDeclarations() {
         while (tok != EOF) {
-            Type* pBaseType = expectPrimitiveType(mGlobalArena);
+            Type* pBaseType = expectPrimitiveType();
             if (!pBaseType) {
                 break;
             }
-            Type* pDecl = expectDeclaration(pBaseType, mGlobalArena);
+            Type* pDecl = expectDeclaration(pBaseType);
             if (!pDecl) {
                 break;
             }
@@ -4643,7 +4641,7 @@ class Compiler : public ErrorSink {
                     if (!accept(',')) {
                         break;
                     }
-                    pDecl = expectDeclaration(pBaseType, mGlobalArena);
+                    pDecl = expectDeclaration(pBaseType);
                     if (!pDecl) {
                         break;
                     }
@@ -4660,6 +4658,7 @@ class Compiler : public ErrorSink {
                 } else if (tok != '{') {
                     error("expected '{'");
                 } else {
+                    mpCurrentArena = &mLocalArena;
                     if (name) {
                         /* patch forward references (XXX: does not work for function
                          pointers) */
@@ -4688,6 +4687,7 @@ class Compiler : public ErrorSink {
                     pGen->gsym(rsym);
                     pGen->functionExit(pDecl, a, loc);
                     mLocals.popLevel();
+                    mpCurrentArena = &mGlobalArena;
                 }
             }
         }
@@ -4805,6 +4805,7 @@ public:
     int compile(const char* text, size_t textLength) {
         int result;
 
+        mpCurrentArena = &mGlobalArena;
         createPrimitiveTypes();
         cleanup();
         clear();
@@ -4843,17 +4844,17 @@ public:
     }
 
     void createPrimitiveTypes() {
-        mkpInt = createType(TY_INT, NULL, NULL, mGlobalArena);
-        mkpChar = createType(TY_CHAR, NULL, NULL, mGlobalArena);
-        mkpVoid = createType(TY_VOID, NULL, NULL, mGlobalArena);
-        mkpFloat = createType(TY_FLOAT, NULL, NULL, mGlobalArena);
-        mkpDouble = createType(TY_DOUBLE, NULL, NULL, mGlobalArena);
-        mkpIntFn =  createType(TY_FUNC, mkpInt, NULL, mGlobalArena);
-        mkpIntPtr = createPtrType(mkpInt, mGlobalArena);
-        mkpCharPtr = createPtrType(mkpChar, mGlobalArena);
-        mkpFloatPtr = createPtrType(mkpFloat, mGlobalArena);
-        mkpDoublePtr = createPtrType(mkpDouble, mGlobalArena);
-        mkpPtrIntFn = createPtrType(mkpIntFn, mGlobalArena);
+        mkpInt = createType(TY_INT, NULL, NULL);
+        mkpChar = createType(TY_CHAR, NULL, NULL);
+        mkpVoid = createType(TY_VOID, NULL, NULL);
+        mkpFloat = createType(TY_FLOAT, NULL, NULL);
+        mkpDouble = createType(TY_DOUBLE, NULL, NULL);
+        mkpIntFn =  createType(TY_FUNC, mkpInt, NULL);
+        mkpIntPtr = createPtrType(mkpInt);
+        mkpCharPtr = createPtrType(mkpChar);
+        mkpFloatPtr = createPtrType(mkpFloat);
+        mkpDoublePtr = createPtrType(mkpDouble);
+        mkpPtrIntFn = createPtrType(mkpIntFn);
     }
 
     void checkForUndefinedForwardReferences() {
