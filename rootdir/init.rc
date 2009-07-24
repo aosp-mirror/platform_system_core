@@ -296,7 +296,7 @@ service opush /system/bin/sdptool add --channel=12 OPUSH
 service installd /system/bin/installd
     socket installd stream 600 system system
 
-service flash_recovery /system/bin/flash_image recovery /system/recovery.img
+service flash_recovery /system/etc/install-recovery.sh
     oneshot
 
 service racoon /system/bin/racoon
