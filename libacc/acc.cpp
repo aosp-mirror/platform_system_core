@@ -481,12 +481,25 @@ class Compiler : public ErrorSink {
         virtual size_t sizeOf(Type* type) = 0;
 
         /**
-         * Stack argument size of this data type.
+         * Stack alignment of this type of data
+         */
+        virtual size_t stackAlignmentOf(Type* pType) = 0;
+
+        /**
+         * Argument stack argument size of this data type.
          */
         virtual size_t stackSizeOf(Type* pType) = 0;
 
-        virtual Type* getR0Type() {
+        Type* getR0Type() {
             return mExpressionStack.back().pType;
+        }
+
+        ExpressionType getR0ExpressionType() {
+            return mExpressionStack.back().et;
+        }
+
+        void setR0ExpressionType(ExpressionType et) {
+            mExpressionStack.back().et = et;
         }
 
     protected:
@@ -1450,6 +1463,8 @@ class Compiler : public ErrorSink {
          */
         virtual size_t alignmentOf(Type* pType){
             switch(pType->tag) {
+                case TY_CHAR:
+                    return 1;
                 case TY_DOUBLE:
                     return 8;
                 default:
@@ -1473,6 +1488,15 @@ class Compiler : public ErrorSink {
                 case TY_DOUBLE:
                     return 8;
                 case TY_POINTER:
+                    return 4;
+            }
+        }
+
+        virtual size_t stackAlignmentOf(Type* pType) {
+            switch(pType->tag) {
+                case TY_DOUBLE:
+                    return 8;
+                default:
                     return 4;
             }
         }
@@ -2381,7 +2405,12 @@ class Compiler : public ErrorSink {
          * Alignment (in bytes) for this type of data
          */
         virtual size_t alignmentOf(Type* pType){
-            return 4;
+            switch (pType->tag) {
+            case TY_CHAR:
+                return 1;
+            default:
+                return 4;
+            }
         }
 
         /**
@@ -2402,6 +2431,10 @@ class Compiler : public ErrorSink {
                 case TY_POINTER:
                     return 4;
             }
+        }
+
+        virtual size_t stackAlignmentOf(Type* pType){
+            return 4;
         }
 
         virtual size_t stackSizeOf(Type* pType) {
@@ -4538,9 +4571,12 @@ class Compiler : public ErrorSink {
                 }
                 int variableAddress = 0;
                 addLocalSymbol(pDecl);
-                size_t alignment = pGen->alignmentOf(pDecl);
-                loc = (loc + alignment - 1) & ~ (alignment-1);
-                loc = loc + pGen->sizeOf(pDecl);
+                size_t alignment = pGen->stackAlignmentOf(pDecl);
+                size_t alignmentMask = ~ (alignment - 1);
+                size_t sizeOf = pGen->sizeOf(pDecl);
+                loc = (loc + alignment - 1) & alignmentMask;
+                size_t alignedSize = (sizeOf + alignment - 1) & alignmentMask;
+                loc = loc + alignedSize;
                 variableAddress = -loc;
                 VI(pDecl->id)->pAddress = (void*) variableAddress;
                 if (accept('=')) {
@@ -4674,7 +4710,7 @@ class Compiler : public ErrorSink {
                         Type* pArg = pP->pHead;
                         addLocalSymbol(pArg);
                         /* read param name and compute offset */
-                        size_t alignment = pGen->alignmentOf(pArg);
+                        size_t alignment = pGen->stackAlignmentOf(pArg);
                         a = (a + alignment - 1) & ~ (alignment-1);
                         VI(pArg->id)->pAddress = (void*) a;
                         a = a + pGen->stackSizeOf(pArg);
