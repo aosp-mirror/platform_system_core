@@ -293,6 +293,12 @@ service opush /system/bin/sdptool add --channel=12 OPUSH
     disabled
     oneshot
 
+service pbap /system/bin/sdptool add --channel=19 PBAP
+    user bluetooth
+    group bluetooth net_bt_admin
+    disabled
+    oneshot
+
 service installd /system/bin/installd
     socket installd stream 600 system system
 
