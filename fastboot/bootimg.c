@@ -40,7 +40,7 @@ void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline)
 boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size,
                         void *ramdisk, unsigned ramdisk_size,
                         void *second, unsigned second_size,
-                        unsigned page_size,
+                        unsigned page_size, unsigned base,
                         unsigned *bootimg_size)
 {
     unsigned kernel_actual;
@@ -65,15 +65,14 @@ boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size,
 
     memcpy(hdr->magic, BOOT_MAGIC, BOOT_MAGIC_SIZE);
     
-    hdr->kernel_size = kernel_size;
-    hdr->kernel_addr = 0x10008000;
+    hdr->kernel_size =  kernel_size;
     hdr->ramdisk_size = ramdisk_size;
-    hdr->ramdisk_addr = 0x11000000;
-    hdr->second_size = second_size;
-    hdr->second_addr = 0x10F00000;
-    
-    hdr->tags_addr = 0x10000100;
-    hdr->page_size = page_size;
+    hdr->second_size =  second_size;
+    hdr->kernel_addr =  base + 0x00008000;
+    hdr->ramdisk_addr = base + 0x01000000;
+    hdr->second_addr =  base + 0x00F00000;
+    hdr->tags_addr =    base + 0x00000100;
+    hdr->page_size =    page_size;
 
     memcpy(hdr->magic + page_size, 
            kernel, kernel_size);

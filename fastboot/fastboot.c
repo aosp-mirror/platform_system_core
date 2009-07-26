@@ -42,12 +42,22 @@
 
 #include "fastboot.h"
 
+void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline);
+
+boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size,
+                        void *ramdisk, unsigned ramdisk_size,
+                        void *second, unsigned second_size,
+                        unsigned page_size, unsigned base,
+                        unsigned *bootimg_size);
+
 static usb_handle *usb = 0;
 static const char *serial = 0;
 static const char *product = 0;
 static const char *cmdline = 0;
 static int wipe_data = 0;
 static unsigned short vendor_id = 0;
+
+static unsigned base_addr = 0x10000000;
 
 void die(const char *fmt, ...)
 {
@@ -212,6 +222,7 @@ void usage(void)
             "  -p <product>                             specify product name\n"
             "  -c <cmdline>                             override kernel commandline\n"
             "  -i <vendor id>                           specify a custom USB vendor id\n"
+            "  -b <base_addr>                           specify a custom kernel base address\n"
         );
     exit(1);
 }
@@ -257,7 +268,7 @@ void *load_bootable_image(const char *kernel, const char *ramdisk,
     }
 
     fprintf(stderr,"creating boot image...\n");
-    bdata = mkbootimg(kdata, ksize, rdata, rsize, 0, 0, 2048, &bsize);
+    bdata = mkbootimg(kdata, ksize, rdata, rsize, 0, 0, 2048, base_addr, &bsize);
     if(bdata == 0) {
         fprintf(stderr,"failed to create boot.img\n");
         return 0;
@@ -545,6 +556,10 @@ int main(int argc, char **argv)
         if(!strcmp(*argv, "-w")) {
             wants_wipe = 1;
             skip(1);
+        } else if(!strcmp(*argv, "-b")) {
+            require(2);
+            base_addr = strtoul(argv[1], 0, 16);
+            skip(2);
         } else if(!strcmp(*argv, "-s")) {
             require(2);
             serial = argv[1];

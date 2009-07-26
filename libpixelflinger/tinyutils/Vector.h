@@ -15,6 +15,7 @@
 
 #include <cutils/log.h>
 
+#include "tinyutils/Errors.h"
 #include "tinyutils/VectorImpl.h"
 #include "tinyutils/TypeHelpers.h"
 
@@ -300,16 +301,6 @@ ssize_t Vector<TYPE>::replaceAt(size_t index) {
 template<class TYPE> inline
 ssize_t Vector<TYPE>::removeItemsAt(size_t index, size_t count) {
     return VectorImpl::removeItemsAt(index, count);
-}
-
-template<class TYPE> inline
-status_t Vector<TYPE>::sort(Vector<TYPE>::compar_t cmp) {
-    return VectorImpl::sort((VectorImpl::compar_t)cmp);
-}
-
-template<class TYPE> inline
-status_t Vector<TYPE>::sort(Vector<TYPE>::compar_r_t cmp, void* state) {
-    return VectorImpl::sort((VectorImpl::compar_r_t)cmp, state);
 }
 
 // ---------------------------------------------------------------------------

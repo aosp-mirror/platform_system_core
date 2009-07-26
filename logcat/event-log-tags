@@ -323,6 +323,12 @@
 # PDP drop caused by network
 50109 pdp_network_drop (cid|1|5), (network_type|1|5)
 
+# CDMA data network setup failure
+50110 cdma_data_setup_failed (cause|1|5), (cid|1|5), (network_type|1|5)
+
+# CDMA data network drop
+50111 cdma_data_drop (cid|1|5), (network_type|1|5)
+
 # Do not change these names without updating tag in:
 #//device/dalvik/libcore/luni/src/main/native/org_apache_harmony_luni_platform_OSNetworkSystem.c
 51000 socket_stats (send|1|2),(recv|1|2),(ip|1|5),(port|1|5),(close|1|5)
@@ -344,3 +350,6 @@
 # browser stats for diary study
 70101 browser_zoom_level_change (start level|1|5),(end level|1|5),(time|2|3)
 70102 browser_double_tap_duration (duration|1|3),(time|2|3)
+
+# NOTE - the range 1000000-2000000 is reserved for partners and others who
+# want to define their own log tags without conflicting with the core platform.

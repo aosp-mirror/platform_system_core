@@ -272,8 +272,7 @@ static int handle_switch_event(struct uevent *event)
         else
             door_open = false;
         volmgr_safe_mode(low_batt || door_open);
-    } else
-        LOG_VOL("handle_switch_event(): Ignoring switch '%s'", name);
+    }
 
     return 0;
 }

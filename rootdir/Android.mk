@@ -6,13 +6,8 @@ include $(CLEAR_VARS)
 copy_from := \
 	etc/dbus.conf \
 	etc/init.goldfish.sh \
+	etc/ppp/ip-up-vpn \
 	etc/hosts
-
-dont_copy := \
-	etc/init.gprs-pppd \
-	etc/ppp/chap-secrets \
-	etc/ppp/ip-down \
-	etc/ppp/ip-up
 
 copy_to := $(addprefix $(TARGET_OUT)/,$(copy_from))
 copy_from := $(addprefix $(LOCAL_PATH)/,$(copy_from))

@@ -60,8 +60,6 @@ void DUMP(void)
 #endif       
 }
 
-#define MAXARGS 64
-
 #define T_EOF 0
 #define T_TEXT 1
 #define T_NEWLINE 2
@@ -357,7 +355,7 @@ void parse_new_section(struct parse_state *state, int kw,
 static void parse_config(const char *fn, char *s)
 {
     struct parse_state state;
-    char *args[MAXARGS];
+    char *args[SVC_MAXARGS];
     int nargs;
 
     nargs = 0;
@@ -384,7 +382,7 @@ static void parse_config(const char *fn, char *s)
             }
             break;
         case T_TEXT:
-            if (nargs < MAXARGS) {
+            if (nargs < SVC_MAXARGS) {
                 args[nargs++] = state.text;
             }
             break;
@@ -536,7 +534,7 @@ void queue_all_property_triggers()
             const char* name = act->name + strlen("property:");
             const char* equals = strchr(name, '=');
             if (equals) {
-                char* prop_name[PROP_NAME_MAX + 1];
+                char prop_name[PROP_NAME_MAX + 1];
                 const char* value;
                 int length = equals - name;
                 if (length > PROP_NAME_MAX) {
@@ -546,7 +544,7 @@ void queue_all_property_triggers()
                     prop_name[length] = 0;
                     
                     /* does the property exist, and match the trigger value? */
-                    value = property_get((const char *)&prop_name[0]);
+                    value = property_get(prop_name);
                     if (value && !strcmp(equals + 1, value)) {
                         action_add_queue_tail(act);
                     }

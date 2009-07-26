@@ -244,6 +244,18 @@ static int create_subprocess(const char *cmd, const char *arg0, const char *arg1
                 cmd, strerror(errno), errno);
         exit(-1);
     } else {
+#if !ADB_HOST
+        // set child's OOM adjustment to zero
+        char text[64];
+        snprintf(text, sizeof text, "/proc/%d/oom_adj", pid);
+        int fd = adb_open(text, O_WRONLY);
+        if (fd >= 0) {
+            adb_write(fd, "0", 1);
+            adb_close(fd);
+        } else {
+           D("adb: unable to open %s\n", text);
+        }
+#endif
         return ptm;
     }
 #endif /* !HAVE_WIN32_PROC */

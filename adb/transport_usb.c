@@ -23,6 +23,10 @@
 #define  TRACE_TAG  TRACE_TRANSPORT
 #include "adb.h"
 
+#if ADB_HOST
+#include "usb_vendors.h"
+#endif
+
 /* XXX better define? */
 #ifdef __ppc__
 #define H4(x)	(((x) & 0xFF000000) >> 24) | (((x) & 0x00FF0000) >> 8) | (((x) & 0x0000FF00) << 8) | (((x) & 0x000000FF) << 24)
@@ -125,23 +129,21 @@ void init_usb_transport(atransport *t, usb_handle *h)
 #endif
 }
 
+#if ADB_HOST
 int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_protocol)
 {
-    if (vid == VENDOR_ID_GOOGLE) {
-            /* might support adb */
-    } else if (vid == VENDOR_ID_HTC) {
-            /* might support adb */
-    } else {
-            /* not supported */
-        return 0;
-    }
+    unsigned i;
+    for (i = 0; i < vendorIdCount; i++) {
+        if (vid == vendorIds[i]) {
+            if (usb_class == ADB_CLASS && usb_subclass == ADB_SUBCLASS &&
+                    usb_protocol == ADB_PROTOCOL) {
+                return 1;
+            }
 
-        /* class:vendor (0xff) subclass:android (0x42) proto:adb (0x01) */
-    if(usb_class == 0xff) {
-        if((usb_subclass == 0x42) && (usb_protocol == 0x01)) {
-            return 1;
+            return 0;
         }
     }
 
     return 0;
 }
+#endif

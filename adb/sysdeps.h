@@ -67,16 +67,16 @@ typedef  void (*win_thread_func_t)(void*  arg);
 
 static __inline__ int  adb_thread_create( adb_thread_t  *thread, adb_thread_func_t  func, void*  arg)
 {
-	thread->tid = _beginthread( (win_thread_func_t)func, 0, arg );
-	if (thread->tid == (unsigned)-1L) {
-		return -1;
-	}
-	return 0;
+    thread->tid = _beginthread( (win_thread_func_t)func, 0, arg );
+    if (thread->tid == (unsigned)-1L) {
+        return -1;
+    }
+    return 0;
 }
 
 static __inline__ void  close_on_exec(int  fd)
 {
-	/* nothing really */
+    /* nothing really */
 }
 
 extern void  disable_tcp_nagle(int  fd);
@@ -138,7 +138,7 @@ static __inline__  int  unix_write(int  fd, const void*  buf, size_t  len)
 
 static __inline__ int  adb_open_mode(const char* path, int options, int mode)
 {
-	return adb_open(path, options);
+    return adb_open(path, options);
 }
 
 static __inline__ int  unix_open(const char*  path, int options,...)
@@ -169,7 +169,7 @@ extern int socket_network_client(const char *host, int port, int type);
 extern int socket_loopback_server(int port, int type);
 extern int socket_inaddr_any_server(int port, int type);
 
-/* normally provided by <cutils/fdevent.h> */
+/* normally provided by "fdevent.h" */
 
 #define FDE_READ              0x0001
 #define FDE_WRITE             0x0002
@@ -203,7 +203,7 @@ struct fdevent {
 
 static __inline__ void  adb_sleep_ms( int  mseconds )
 {
-	Sleep( mseconds );
+    Sleep( mseconds );
 }
 
 extern int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen);
@@ -252,7 +252,7 @@ static __inline__  int  adb_is_absolute_host_path( const char*  path )
 
 #else /* !_WIN32 a.k.a. Unix */
 
-#include <cutils/fdevent.h>
+#include "fdevent.h"
 #include <cutils/sockets.h>
 #include <cutils/properties.h>
 #include <cutils/misc.h>
@@ -290,7 +290,7 @@ typedef  pthread_mutex_t          adb_mutex_t;
 
 static __inline__ void  close_on_exec(int  fd)
 {
-	fcntl( fd, F_SETFD, FD_CLOEXEC );
+    fcntl( fd, F_SETFD, FD_CLOEXEC );
 }
 
 static __inline__ int  unix_open(const char*  path, int options,...)
@@ -312,7 +312,7 @@ static __inline__ int  unix_open(const char*  path, int options,...)
 
 static __inline__ int  adb_open_mode( const char*  pathname, int  options, int  mode )
 {
-	return open( pathname, options, mode );
+    return open( pathname, options, mode );
 }
 
 
@@ -368,11 +368,11 @@ static __inline__  int  adb_creat(const char*  path, int  mode)
 {
     int  fd = creat(path, mode);
 
-	if ( fd < 0 )
-		return -1;
+    if ( fd < 0 )
+        return -1;
 
     close_on_exec(fd);
-	return fd;
+    return fd;
 }
 #undef   creat
 #define  creat  ___xxx_creat
@@ -439,12 +439,12 @@ static __inline__ int  adb_socketpair( int  sv[2] )
 
 static __inline__ void  adb_sleep_ms( int  mseconds )
 {
-	usleep( mseconds*1000 );
+    usleep( mseconds*1000 );
 }
 
 static __inline__ int  adb_mkdir(const char*  path, int mode)
 {
-	return mkdir(path, mode);
+    return mkdir(path, mode);
 }
 #undef   mkdir
 #define  mkdir  ___xxx_mkdir

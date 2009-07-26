@@ -345,11 +345,6 @@ typedef enum {
 #endif
 
 
-/* set this to log to /data/adb/adb_<time>.txt on the device.
- * has no effect if the /data/adb/ directory does not exist.
- */
-#define ADB_DEVICE_LOG 0
-
 #if !TRACE_PACKETS
 #define print_packet(tag,p) do {} while (0)
 #endif
@@ -357,18 +352,10 @@ typedef enum {
 #define ADB_PORT 5037
 #define ADB_LOCAL_TRANSPORT_PORT 5555
 
-// Google's USB Vendor ID
-#define VENDOR_ID_GOOGLE        0x18d1
-// HTC's USB Vendor ID
-#define VENDOR_ID_HTC           0x0bb4
+#define ADB_CLASS              0xff
+#define ADB_SUBCLASS           0x42
+#define ADB_PROTOCOL           0x1
 
-// products for VENDOR_ID_GOOGLE
-#define PRODUCT_ID_SOONER       0xd00d  // Sooner bootloader
-#define PRODUCT_ID_SOONER_COMP  0xdeed  // Sooner composite device
-
-// products for VENDOR_ID_HTC
-#define PRODUCT_ID_DREAM        0x0c01  // Dream bootloader
-#define PRODUCT_ID_DREAM_COMP   0x0c02  // Dream composite device
 
 void local_init();
 int  local_connect(int  port);
@@ -382,7 +369,9 @@ int usb_close(usb_handle *h);
 void usb_kick(usb_handle *h);
 
 /* used for USB device detection */
+#if ADB_HOST
 int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_protocol);
+#endif
 
 unsigned host_to_le32(unsigned n);
 int adb_commandline(int argc, char **argv);

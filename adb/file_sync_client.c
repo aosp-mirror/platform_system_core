@@ -165,7 +165,7 @@ static int sync_start_readtime(int fd, const char *path)
 }
 
 static int sync_finish_readtime(int fd, unsigned int *timestamp,
-				unsigned int *mode, unsigned int *size)
+                                unsigned int *mode, unsigned int *size)
 {
     syncmsg msg;
 
@@ -908,12 +908,12 @@ static int copy_remote_dir_local(int fd, const char *rpath, const char *lpath,
             unsigned int timestamp, mode, size;
             if (sync_finish_readtime(fd, &timestamp, &mode, &size))
                 return 1;
-	    if (size == ci->size) {
+            if (size == ci->size) {
                 /* for links, we cannot update the atime/mtime */
                 if ((S_ISREG(ci->mode & mode) && timestamp == ci->time) ||
-		   (S_ISLNK(ci->mode & mode) && timestamp >= ci->time))
+                    (S_ISLNK(ci->mode & mode) && timestamp >= ci->time))
                     ci->flag = 1;
-	    }
+            }
         }
     }
 #endif

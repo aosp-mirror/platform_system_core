@@ -23,12 +23,15 @@
 #include <errno.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 
 #include "sysdeps.h"
 #include "adb.h"
 
 #if !ADB_HOST
 #include <private/android_filesystem_config.h>
+#else
+#include "usb_vendors.h"
 #endif
 
 
@@ -655,10 +658,25 @@ void start_logging(void)
 void start_device_log(void)
 {
     int fd;
-    char    path[100];
+    char    path[PATH_MAX];
+    struct tm now;
+    time_t t;
+    char value[PROPERTY_VALUE_MAX];
 
-    snprintf(path, sizeof path, "/data/adb_%ld.txt", (long)time(NULL));
-    fd = unix_open(path, O_WRONLY | O_CREAT | O_APPEND, 0640);
+    // read the trace mask from persistent property persist.adb.trace_mask
+    // give up if the property is not set or cannot be parsed
+    property_get("persist.adb.trace_mask", value, "");
+    if (sscanf(value, "%x", &adb_trace_mask) != 1)
+        return;
+
+    adb_mkdir("/data/adb", 0775);
+    tzset();
+    time(&t);
+    localtime_r(&t, &now);
+    strftime(path, sizeof(path),
+                "/data/adb/adb-%Y-%m-%d-%H-%M-%S.txt",
+                &now);
+    fd = unix_open(path, O_WRONLY | O_CREAT | O_TRUNC, 0640);
     if (fd < 0)
         return;
 
@@ -669,11 +687,6 @@ void start_device_log(void)
 
     fd = unix_open("/dev/null", O_RDONLY);
     dup2(fd, 0);
-
-    // log everything
-    adb_trace_mask = ~0;
-    // except TRACE_RWX is a bit too verbose
-    adb_trace_mask &= ~TRACE_RWX;
 }
 #endif
 
@@ -818,19 +831,6 @@ int adb_main(int is_daemon)
 #if !ADB_HOST
     int secure = 0;
     char value[PROPERTY_VALUE_MAX];
-
-    // prevent the OOM killer from killing us
-    char text[64];
-    snprintf(text, sizeof text, "/proc/%d/oom_adj", (int)getpid());
-    int fd = adb_open(text, O_WRONLY);
-    if (fd >= 0) {
-        // -17 should make us immune to OOM
-        snprintf(text, sizeof text, "%d", -17);
-        adb_write(fd, text, strlen(text));
-        adb_close(fd);
-    } else {
-       D("adb: unable to open %s\n", text);
-    }
 #endif
 
     atexit(adb_cleanup);
@@ -846,6 +846,7 @@ int adb_main(int is_daemon)
 
 #if ADB_HOST
     HOST = 1;
+    usb_vendors_init();
     usb_init();
     local_init();
 
@@ -885,9 +886,10 @@ int adb_main(int is_daemon)
         ** AID_INET to diagnose network issues (netcfg, ping)
         ** AID_GRAPHICS to access the frame buffer
         ** AID_NET_BT and AID_NET_BT_ADMIN to diagnose bluetooth (hcidump)
+        ** AID_SDCARD_RW to allow writing to the SD card
         */
         gid_t groups[] = { AID_ADB, AID_LOG, AID_INPUT, AID_INET, AID_GRAPHICS,
-                           AID_NET_BT, AID_NET_BT_ADMIN };
+                           AID_NET_BT, AID_NET_BT_ADMIN, AID_SDCARD_RW };
         setgroups(sizeof(groups)/sizeof(groups[0]), groups);
 
         /* then switch user and group to "shell" */
@@ -1088,9 +1090,8 @@ int main(int argc, char **argv)
         adb_device_banner = "recovery";
         recovery_mode = 1;
     }
-#if ADB_DEVICE_LOG
+
     start_device_log();
-#endif
     return adb_main(0);
 #endif
 }

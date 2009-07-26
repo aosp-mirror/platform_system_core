@@ -115,6 +115,7 @@ static struct perms_ devperms[] = {
     { "/dev/oncrpc/",       0660,   AID_ROOT,       AID_SYSTEM,     1 },
     { "/dev/adsp/",         0660,   AID_SYSTEM,     AID_AUDIO,      1 },
     { "/dev/mt9t013",       0660,   AID_SYSTEM,     AID_SYSTEM,     0 },
+    { "/dev/msm_camera/",   0660,   AID_SYSTEM,     AID_SYSTEM,     1 },
     { "/dev/akm8976_daemon",0640,   AID_COMPASS,    AID_SYSTEM,     0 },
     { "/dev/akm8976_aot",   0640,   AID_COMPASS,    AID_SYSTEM,     0 },
     { "/dev/akm8976_pffd",  0640,   AID_COMPASS,    AID_SYSTEM,     0 },
@@ -126,10 +127,13 @@ static struct perms_ devperms[] = {
     { "/dev/msm_audpre",    0660,   AID_SYSTEM,     AID_AUDIO,      0 },
     { "/dev/htc-acoustic",  0660,   AID_SYSTEM,     AID_AUDIO,      0 },
     { "/dev/smd0",          0640,   AID_RADIO,      AID_RADIO,      0 },
+    { "/dev/qemu_trace",    0666,   AID_SYSTEM,     AID_SYSTEM,     0 },
     { "/dev/qmi",           0640,   AID_RADIO,      AID_RADIO,      0 },
     { "/dev/qmi0",          0640,   AID_RADIO,      AID_RADIO,      0 },
     { "/dev/qmi1",          0640,   AID_RADIO,      AID_RADIO,      0 },
     { "/dev/qmi2",          0640,   AID_RADIO,      AID_RADIO,      0 },
+    { "/dev/ppp",           0660,   AID_RADIO,      AID_VPN,        0 },
+    { "/dev/tun",           0640,   AID_VPN,        AID_VPN,        0 },
     { NULL, 0, 0, 0, 0 },
 };
 
@@ -380,7 +384,10 @@ static void handle_device_event(struct uevent *uevent)
         } else if (!strncmp(uevent->subsystem, "adsp", 4)) {
             base = "/dev/adsp/";
             mkdir(base, 0755);
-      } else if(!strncmp(uevent->subsystem, "input", 5)) {
+        } else if (!strncmp(uevent->subsystem, "msm_camera", 10)) {
+            base = "/dev/msm_camera/";
+            mkdir(base, 0755);
+        } else if(!strncmp(uevent->subsystem, "input", 5)) {
             base = "/dev/input/";
             mkdir(base, 0755);
         } else if(!strncmp(uevent->subsystem, "mtd", 3)) {

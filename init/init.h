@@ -29,7 +29,8 @@ void *read_file(const char *fn, unsigned *_sz);
 void log_init(void);
 void log_set_level(int level);
 void log_close(void);
-void log_write(int level, const char *fmt, ...);
+void log_write(int level, const char *fmt, ...)
+    __attribute__ ((format(printf, 2, 3)));
 
 #define ERROR(x...)   log_write(3, "<3>init: " x)
 #define NOTICE(x...)  log_write(5, "<5>init: " x)
@@ -115,6 +116,8 @@ struct svcenvinfo {
 
 #define NR_SVC_SUPP_GIDS 6    /* six supplementary groups */
 
+#define SVC_MAXARGS 64
+
 struct service {
         /* list of all services */
     struct listnode slist;
@@ -136,15 +139,17 @@ struct service {
     struct socketinfo *sockets;
     struct svcenvinfo *envvars;
 
-    int nargs;
-    char *args[1];
     struct action onrestart;  /* Actions to execute on restart. */
     
     /* keycodes for triggering this service via /dev/keychord */
     int *keycodes;
     int nkeycodes;
     int keychord_id;
-};
+
+    int nargs;
+    /* "MUST BE AT THE END OF THE STRUCT" */
+    char *args[1];
+}; /*     ^-------'args' MUST be at the end of this struct! */
 
 int parse_config_file(const char *fn);
 
@@ -157,7 +162,7 @@ void service_for_each_class(const char *classname,
 void service_for_each_flags(unsigned matchflags,
                             void (*func)(struct service *svc));
 void service_stop(struct service *svc);
-void service_start(struct service *svc);
+void service_start(struct service *svc, const char *dynamic_args);
 void property_changed(const char *name, const char *value);
 
 struct action *action_remove_queue_head(void);

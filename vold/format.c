@@ -26,7 +26,7 @@
 #include "diskmbr.h"
 #include "logwrapper.h"
 
-static char MKDOSFS_PATH[] = "/system/bin/mkdosfs";
+static char MKDOSFS_PATH[] = "/system/bin/newfs_msdos";
 static char MKE2FS_PATH[] = "/system/bin/mke2fs";
 
 int format_partition(blkdev_t *part, char *type)
@@ -37,14 +37,17 @@ int format_partition(blkdev_t *part, char *type)
     devpath = blkdev_get_devpath(part);
 
     if (!strcmp(type, FORMAT_TYPE_FAT32)) {
-        char *args[6];
+        char *args[9];
         args[0] = MKDOSFS_PATH;
-        args[1] = "-c 32";
-        args[2] = "-n 2";
-        args[3] = "-O android";
-        args[4] = devpath;
-        args[5] = NULL;
-        rc = logwrap(5, args);
+        args[1] = "-F";
+        args[2] = "32";
+        args[3] = "-c";
+        args[4] = "16";
+        args[5] = "-O";
+        args[6] = "android";
+        args[7] = devpath;
+        args[8] = NULL;
+        rc = logwrap(8, args, 1);
     } else {
         char *args[7];
         args[0] = MKE2FS_PATH;
@@ -54,7 +57,7 @@ int format_partition(blkdev_t *part, char *type)
         args[4] = "-v";
         args[5] = devpath;
         args[6] = NULL;
-        rc = logwrap(6, args);
+        rc = logwrap(6, args, 1);
     }
  
     free(devpath);

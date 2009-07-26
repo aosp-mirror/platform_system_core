@@ -27,6 +27,7 @@ void localtime_tz(const time_t * const timep, struct tm * tmp, const char* tz);
 struct strftime_locale {
     const char *mon[12];    /* short names */
     const char *month[12];  /* long names */
+    const char *standalone_month[12];  /* long standalone names */
     const char *wday[7];    /* short names */
     const char *weekday[7]; /* long names */
     const char *X_fmt;

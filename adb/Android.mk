@@ -7,7 +7,6 @@ LOCAL_PATH:= $(call my-dir)
 
 # adb host tool
 # =========================================================
-ifneq ($(TARGET_SIMULATOR),true) # not 64 bit clean (also unused with the sim)
 include $(CLEAR_VARS)
 
 # Default to a virtual (sockets) usb interface
@@ -54,10 +53,13 @@ LOCAL_SRC_FILES := \
 	$(USB_SRCS) \
 	shlist.c \
 	utils.c \
+	usb_vendors.c \
 
 
 ifneq ($(USE_SYSDEPS_WIN32),)
   LOCAL_SRC_FILES += sysdeps_win32.c
+else
+  LOCAL_SRC_FILES += fdevent.c
 endif
 
 LOCAL_CFLAGS += -O2 -g -DADB_HOST=1  -Wall -Wno-unused-parameter
@@ -77,7 +79,6 @@ ifeq ($(HOST_OS),windows)
 $(LOCAL_INSTALLED_MODULE): $(HOST_OUT_EXECUTABLES)/AdbWinApi.dll
 endif
 
-endif
 
 # adbd device daemon
 # =========================================================
@@ -100,6 +101,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	adb.c \
+	fdevent.c \
 	transport.c \
 	transport_local.c \
 	transport_usb.c \

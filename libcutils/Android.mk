@@ -21,6 +21,7 @@ commonSources := \
 	array.c \
 	hashmap.c \
 	atomic.c \
+        native_handle.c \
 	buffer.c \
 	socket_inaddr_any_server.c \
 	socket_local_client.c \
@@ -59,7 +60,6 @@ else
     commonSources += \
         mspace.c \
         selector.c \
-        fdevent.c \
         tztime.c \
         tzstrftime.c \
         adb_networking.c \

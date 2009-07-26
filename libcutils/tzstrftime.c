@@ -172,10 +172,17 @@ label:
 					pt, ptlim, modifier);
 				continue;
 			case 'B':
-				pt = _add((t->tm_mon < 0 ||
-					t->tm_mon >= MONSPERYEAR) ?
-					"?" : Locale->month[t->tm_mon],
-					pt, ptlim, modifier);
+				if (modifier == '-') {
+					pt = _add((t->tm_mon < 0 ||
+						t->tm_mon >= MONSPERYEAR) ?
+						"?" : Locale->standalone_month[t->tm_mon],
+						pt, ptlim, modifier);
+				} else {
+					pt = _add((t->tm_mon < 0 ||
+						t->tm_mon >= MONSPERYEAR) ?
+						"?" : Locale->month[t->tm_mon],
+						pt, ptlim, modifier);
+				}
 				continue;
 			case 'b':
 			case 'h':

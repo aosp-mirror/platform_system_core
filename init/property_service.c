@@ -67,6 +67,8 @@ struct {
     { "wlan.",		AID_SYSTEM },
     { "dhcp.",		AID_SYSTEM },
     { "dhcp.",		AID_DHCP },
+    { "vpn.",		AID_SYSTEM },
+    { "vpn.",		AID_VPN },
     { "debug.",		AID_SHELL },
     { "log.",		AID_SHELL },
     { "service.adb.root",	AID_SHELL },
@@ -296,7 +298,7 @@ int property_set(const char *name, const char *value)
         __futex_wake(&pa->serial, INT32_MAX);
     }
     /* If name starts with "net." treat as a DNS property. */
-    if (strncmp("net.", name, sizeof("net.") - 1) == 0)  {
+    if (strncmp("net.", name, strlen("net.")) == 0)  {
         if (strcmp("net.change", name) == 0) {
             return 0;
         }
@@ -307,7 +309,7 @@ int property_set(const char *name, const char *value)
         */
         property_set("net.change", name);
     } else if (persistent_properties_loaded &&
-            strncmp("persist.", name, sizeof("persist.") - 1) == 0) {
+            strncmp("persist.", name, strlen("persist.")) == 0) {
         /* 
          * Don't write properties to disk until after we have read all default properties
          * to prevent them from being overwritten by default values.
@@ -446,8 +448,7 @@ static void load_persistent_properties()
 
     if (dir) {
         while ((entry = readdir(dir)) != NULL) {
-            if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..") ||
-                    strncmp("persist.", entry->d_name, sizeof("persist.") - 1))
+            if (strncmp("persist.", entry->d_name, strlen("persist.")))
                 continue;
 #if HAVE_DIRENT_D_TYPE
             if (entry->d_type != DT_REG)

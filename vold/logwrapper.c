@@ -42,7 +42,8 @@ int parent(const char *tag, int parent_read) {
                 buffer[b] = '\0';
             } else if (buffer[b] == '\n') {
                 buffer[b] = '\0';
-                LOG(LOG_INFO, tag, &buffer[a]);
+
+                LOG(LOG_INFO, tag, "%s", &buffer[a]);
                 a = b + 1;
             }
         }
@@ -100,7 +101,7 @@ void child(int argc, char* argv[]) {
     }
 }
 
-int logwrap(int argc, char* argv[], pid_t *childPid)
+int logwrap(int argc, char* argv[], pid_t *childPid, int background)
 {
     pid_t pid;
 
@@ -137,6 +138,25 @@ int logwrap(int argc, char* argv[], pid_t *childPid)
         dup2(child_ptty, 1);
         dup2(child_ptty, 2);
         close(child_ptty);
+
+        if (background) {
+            int fd = open("/dev/cpuctl/bg_non_interactive/tasks", O_WRONLY);
+      
+            if (fd >=0 ) {
+                char text[64];
+
+                sprintf(text, "%d", getpid());
+                if (write(fd, text, strlen(text)) < 0) {
+                    LOG(LOG_WARN, "logwrapper",
+                        "Unable to background process (%s)", strerror(errno));
+                    close(fd);
+                }
+                close(fd);
+            } else {
+                LOG(LOG_WARN, "logwrapper",
+                    "Unable to background process (%s)", strerror(errno));
+            }
+        }
 
         child(argc, argv);
     } else {

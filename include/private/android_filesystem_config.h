@@ -48,6 +48,9 @@
 #define AID_INSTALL       1012  /* group for installing packages */
 #define AID_MEDIA         1013  /* mediaserver process */
 #define AID_DHCP          1014  /* dhcp client */
+#define AID_SDCARD_RW     1015  /* external storage write access */
+#define AID_VPN           1016  /* vpn system */
+#define AID_KEYSTORE      1017  /* keystore subsystem */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -59,6 +62,7 @@
 #define AID_NET_BT        3002  /* bluetooth: create sco, rfcomm or l2cap sockets */
 #define AID_INET          3003  /* can create AF_INET and AF_INET6 sockets */
 #define AID_NET_RAW       3004  /* can create raw INET sockets */
+#define AID_NET_ADMIN     3005  /* can configure interfaces and routing tables. */
 
 #define AID_MISC          9998  /* access to misc storage */
 #define AID_NOBODY        9999
@@ -93,8 +97,12 @@ static struct android_id_info android_ids[] = {
     { "diag",      AID_DIAG, },
     { "net_bt_admin", AID_NET_BT_ADMIN, },
     { "net_bt",    AID_NET_BT, },
-    { "inet",      AID_INET, }, 
+    { "sdcard_rw", AID_SDCARD_RW, },
+    { "vpn",       AID_VPN, },
+    { "keystore",  AID_KEYSTORE, },
+    { "inet",      AID_INET, },
     { "net_raw",   AID_NET_RAW, },
+    { "net_admin", AID_NET_ADMIN, },
     { "misc",      AID_MISC, },
     { "nobody",    AID_NOBODY, },
 };
@@ -129,7 +137,7 @@ static struct fs_path_config android_dirs[] = {
     { 00750, AID_ROOT,   AID_SHELL,  "sbin" },
     { 00755, AID_ROOT,   AID_SHELL,  "system/bin" },
     { 00755, AID_ROOT,   AID_SHELL,  "system/xbin" },
-    { 00777, AID_ROOT,   AID_ROOT,   "system/etc/ppp" }, /* REMOVE */
+    { 00755, AID_ROOT,   AID_ROOT,   "system/etc/ppp" },
     { 00777, AID_ROOT,   AID_ROOT,   "sdcard" },
     { 00755, AID_ROOT,   AID_ROOT,   0 },
 };
@@ -141,20 +149,18 @@ static struct fs_path_config android_dirs[] = {
 ** and will allow partial matches.
 */
 static struct fs_path_config android_files[] = {
-    { 00555, AID_ROOT,      AID_ROOT,      "system/etc/ppp/ip-up" },
-    { 00555, AID_ROOT,      AID_ROOT,      "system/etc/ppp/ip-down" },
     { 00440, AID_ROOT,      AID_SHELL,     "system/etc/init.goldfish.rc" },
     { 00550, AID_ROOT,      AID_SHELL,     "system/etc/init.goldfish.sh" },
     { 00440, AID_ROOT,      AID_SHELL,     "system/etc/init.trout.rc" },
     { 00550, AID_ROOT,      AID_SHELL,     "system/etc/init.ril" },
     { 00550, AID_ROOT,      AID_SHELL,     "system/etc/init.testmenu" },
-    { 00550, AID_ROOT,      AID_SHELL,     "system/etc/init.gprs-pppd" },
     { 00550, AID_DHCP,      AID_SHELL,     "system/etc/dhcpcd/dhcpcd-run-hooks" },
     { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/dbus.conf" },
     { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluez/hcid.conf" },
     { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluez/input.conf" },
     { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluez/audio.conf" },
-    { 00440, AID_RADIO,     AID_AUDIO,     "/system/etc/AudioPara4.csv" },
+    { 00440, AID_RADIO,     AID_AUDIO,     "system/etc/AudioPara4.csv" },
+    { 00555, AID_ROOT,      AID_ROOT,      "system/etc/ppp/*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    "data/app/*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    "data/app-private/*" },
     { 00644, AID_APP,       AID_APP,       "data/data/*" },
@@ -168,6 +174,7 @@ static struct fs_path_config android_files[] = {
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/librank" },
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/procrank" },
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/procmem" },
+    { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/tcpdump" },
     { 00755, AID_ROOT,      AID_SHELL,     "system/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     "system/xbin/*" },
     { 00750, AID_ROOT,      AID_SHELL,     "sbin/*" },

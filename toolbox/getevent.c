@@ -28,6 +28,7 @@ static int print_possible_events(int fd)
 {
     uint8_t *bits = NULL;
     ssize_t bits_size = 0;
+    const char* label;
     int i, j, k;
     int res, res2;
     
@@ -45,21 +46,48 @@ static int print_possible_events(int fd)
                 return 1;
             }
         }
+        res2 = 0;
         switch(i) {
+            case EV_SYN:
+                label = "SYN";
+                break;
             case EV_KEY:
                 res2 = ioctl(fd, EVIOCGKEY(res), bits + bits_size);
+                label = "KEY";
+                break;
+            case EV_REL:
+                label = "REL";
+                break;
+            case EV_ABS:
+                label = "ABS";
+                break;
+            case EV_MSC:
+                label = "MSC";
                 break;
             case EV_LED:
                 res2 = ioctl(fd, EVIOCGLED(res), bits + bits_size);
+                label = "LED";
                 break;
             case EV_SND:
                 res2 = ioctl(fd, EVIOCGSND(res), bits + bits_size);
+                label = "SND";
                 break;
             case EV_SW:
                 res2 = ioctl(fd, EVIOCGSW(bits_size), bits + bits_size);
+                label = "SW ";
+                break;
+            case EV_REP:
+                label = "REP";
+                break;
+            case EV_FF:
+                label = "FF ";
+                break;
+            case EV_PWR:
+                label = "PWR";
                 break;
             default:
                 res2 = 0;
+                label = "???";
         }
         for(j = 0; j < res; j++) {
             for(k = 0; k < 8; k++)
@@ -70,9 +98,9 @@ static int print_possible_events(int fd)
                     else
                         down = ' ';
                     if(count == 0)
-                        printf("    type %04x:", i);
+                        printf("    %s (%04x):", label, i);
                     else if((count & 0x7) == 0 || i == EV_ABS)
-                        printf("\n              ");
+                        printf("\n               ");
                     printf(" %04x%c", j * 8 + k, down);
                     if(i == EV_ABS) {
                         struct input_absinfo abs;
@@ -264,7 +292,16 @@ static int scan_dir(const char *dirname, int print_flags)
 
 static void usage(int argc, char *argv[])
 {
-    fprintf(stderr, "Usage: %s [-t] [-n] [-s switchmask] [-S] [-v [mask]] [-q] [-c count] [-r] [device]\n", argv[0]);
+    fprintf(stderr, "Usage: %s [-t] [-n] [-s switchmask] [-S] [-v [mask]] [-p] [-q] [-c count] [-r] [device]\n", argv[0]);
+    fprintf(stderr, "    -t: show time stamps\n");
+    fprintf(stderr, "    -n: don't print newlines\n");
+    fprintf(stderr, "    -s: print switch states for given bits\n");
+    fprintf(stderr, "    -S: print all switch states\n");
+    fprintf(stderr, "    -v: verbosity mask (errs=1, dev=2, name=4, info=8, vers=16, pos. events=32)\n");
+    fprintf(stderr, "    -p: show possible events (errs, dev, name, pos. events)\n");
+    fprintf(stderr, "    -q: quiet (clear verbosity mask)\n");
+    fprintf(stderr, "    -c: print given number of events then exit\n");
+    fprintf(stderr, "    -r: print rate events are received\n");
 }
 
 int getevent_main(int argc, char *argv[])
@@ -290,7 +327,7 @@ int getevent_main(int argc, char *argv[])
 
     opterr = 0;
     do {
-        c = getopt(argc, argv, "tns:Sv::qc:rh");
+        c = getopt(argc, argv, "tns:Sv::pqc:rh");
         if (c == EOF)
             break;
         switch (c) {
@@ -316,6 +353,12 @@ int getevent_main(int argc, char *argv[])
             else
                 print_flags |= PRINT_DEVICE | PRINT_DEVICE_NAME | PRINT_DEVICE_INFO | PRINT_VERSION;
             print_flags_set = 1;
+            break;
+        case 'p':
+            print_flags = PRINT_DEVICE_ERRORS | PRINT_DEVICE | PRINT_DEVICE_NAME | PRINT_POSSIBLE_EVENTS;
+            print_flags_set = 1;
+            if(dont_block == -1)
+                dont_block = 1;
             break;
         case 'q':
             print_flags = 0;

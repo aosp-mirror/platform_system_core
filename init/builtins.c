@@ -127,7 +127,7 @@ done:
 static void service_start_if_not_disabled(struct service *svc)
 {
     if (!(svc->flags & SVC_DISABLED)) {
-        service_start(svc);
+        service_start(svc, NULL);
     }
 }
 
@@ -372,7 +372,7 @@ int do_start(int nargs, char **args)
     struct service *svc;
     svc = service_find_by_name(args[1]);
     if (svc) {
-        service_start(svc);
+        service_start(svc, NULL);
     }
     return 0;
 }
@@ -393,7 +393,7 @@ int do_restart(int nargs, char **args)
     svc = service_find_by_name(args[1]);
     if (svc) {
         service_stop(svc);
-        service_start(svc);
+        service_start(svc, NULL);
     }
     return 0;
 }

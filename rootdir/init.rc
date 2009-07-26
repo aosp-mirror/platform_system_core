@@ -33,10 +33,29 @@ loglevel 3
     write /proc/cpu/alignment 4
     write /proc/sys/kernel/sched_latency_ns 10000000
     write /proc/sys/kernel/sched_wakeup_granularity_ns 2000000
+    write /proc/sys/kernel/sched_compat_yield 1
+
+# Create cgroup mount points for process groups
+    mkdir /dev/cpuctl
+    mount cgroup none /dev/cpuctl cpu
+    chown sytem system /dev/cpuctl
+    chown system system /dev/cpuctl/tasks
+    chmod 0777 /dev/cpuctl/tasks
+    write /dev/cpuctl/cpu.shares 1024
+
+    mkdir /dev/cpuctl/fg_boost
+    chown system system /dev/cpuctl/fg_boost/tasks
+    chmod 0777 /dev/cpuctl/fg_boost/tasks
+    write /dev/cpuctl/fg_boost/cpu.shares 1024
+
+    mkdir /dev/cpuctl/bg_non_interactive
+    chown system system /dev/cpuctl/bg_non_interactive/tasks
+    chmod 0777 /dev/cpuctl/bg_non_interactive/tasks
+    write /dev/cpuctl/bg_non_interactive/cpu.shares 16
 
 # mount mtd partitions
     # Mount /system rw first to give the filesystem a chance to save a checkpoint
-    mount yaffs2 mtd@system /system 
+    mount yaffs2 mtd@system /system
     mount yaffs2 mtd@system /system ro remount
 
     # We chown/chmod /data again so because mount is run as root + defaults
@@ -56,6 +75,14 @@ loglevel 3
 # create basic filesystem structure
     mkdir /data/misc 01771 system misc
     mkdir /data/misc/hcid 0770 bluetooth bluetooth
+    mkdir /data/misc/keystore 0770 keystore keystore
+    mkdir /data/misc/vpn 0770 system system
+    mkdir /data/misc/vpn/profiles 0770 system system
+    mkdir /data/misc/wifi 0770 wifi system
+    chown wifi system /data/misc/wifi
+    touch /data/misc/wifi/wpa_supplicant.conf
+    chmod 0660 /data/misc/wifi/wpa_supplicant.conf
+    chown wifi system /data/misc/wifi/wpa_supplicant.conf
     mkdir /data/local 0771 shell shell
     mkdir /data/local/tmp 0771 shell shell
     mkdir /data/data 0771 system system
@@ -87,14 +114,12 @@ on boot
 # set RLIMIT_NICE to allow priorities from 19 to -20
     setrlimit 13 40 40
 
-# Set timeout value for rmnet stats.
-    write /sys/devices/virtual/net/rmnet0/timeout_suspend 5000000
-
 # Define the oom_adj values for the classes of processes that can be
 # killed by the kernel.  These are used in ActivityManagerService.
     setprop ro.FOREGROUND_APP_ADJ 0
     setprop ro.VISIBLE_APP_ADJ 1
     setprop ro.SECONDARY_SERVER_ADJ 2
+    setprop ro.BACKUP_APP_ADJ 2
     setprop ro.HOME_APP_ADJ 4
     setprop ro.HIDDEN_APP_MIN_ADJ 7
     setprop ro.CONTENT_PROVIDER_ADJ 14
@@ -105,6 +130,7 @@ on boot
     setprop ro.FOREGROUND_APP_MEM 1536
     setprop ro.VISIBLE_APP_MEM 2048
     setprop ro.SECONDARY_SERVER_MEM 4096
+    setprop ro.BACKUP_APP_MEM 4096
     setprop ro.HOME_APP_MEM 4096
     setprop ro.HIDDEN_APP_MEM 5120
     setprop ro.CONTENT_PROVIDER_MEM 5632
@@ -199,6 +225,10 @@ service servicemanager /system/bin/servicemanager
 service vold /system/bin/vold
     socket vold stream 0660 root mount
 
+service nexus /system/bin/nexus
+    socket nexus stream 0660 root system
+    disabled
+
 #service mountd /system/bin/mountd
 #    socket mountd stream 0660 root mount
 
@@ -222,6 +252,12 @@ service media /system/bin/mediaserver
 service bootsound /system/bin/playmp3
     user media
     group audio
+    oneshot
+
+service bootanim /system/bin/bootanimation
+    user graphics
+    group graphics
+    disabled
     oneshot
 
 service dbus /system/bin/dbus-daemon --system --nofork
@@ -254,3 +290,23 @@ service installd /system/bin/installd
 
 service flash_recovery /system/bin/flash_image recovery /system/recovery.img
     oneshot
+
+service racoon /system/bin/racoon
+    socket racoon stream 600 system system
+    # racoon will setuid to vpn after getting necessary resources.
+    group net_admin keystore
+    disabled
+    oneshot
+
+service mtpd /system/bin/mtpd
+    socket mtpd stream 600 system system
+    user vpn
+    group vpn net_admin net_raw
+    disabled
+    oneshot
+
+service keystore /system/bin/keystore
+    user keystore
+    group keystore
+    socket keystore stream 666
+
