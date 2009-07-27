@@ -108,6 +108,19 @@
 2810 watchdog_vmstat (runtime|2|3),(pgfree|1|1),(pgactivate|1|1),(pgdeactivate|1|1),(pgfault|1|1),(pgmajfault|1|1)
 2811 watchdog_requested_reboot (NoWait|1|1),(ScheduleInterval|1|3),(RecheckInterval|1|3),(StartTime|1|3),(Window|1|3),(MinScreenOff|1|3),(MinNextAlarm|1|3)
 
+2820 backup_data_changed (Package|3)
+2821 backup_start (Transport|3)
+2822 backup_transport_failure (Package|3)
+2823 backup_agent_failure (Package|3),(Message|3)
+2824 backup_package (Package|3),(Size|1|2)
+2825 backup_success (Packages|1|1),(Time|1|3)
+
+2830 restore_start (Transport|3)
+2831 restore_transport_failure
+2832 restore_agent_failure (Package|3),(Message|3)
+2833 restore_package (Package|3),(Size|1|2)
+2834 restore_success (Packages|1|1),(Time|1|3)
+
 # Device boot timings.  We include monotonic clock values because the
 # intrinsic event log times are wall-clock.
 #
@@ -154,6 +167,47 @@
 # interval is in seconds; network type can be 0 (mobile) or 1 (wifi); ip is the host ip addr.
 4001 gtalk_heartbeat_reset (interval_and_nt|1),(ip|3)
 
+# dvm_gc_info: LIST (LONG, LONG, LONG)
+#
+# First LONG:
+#
+#    [63]    1
+#    [62-24] ASCII process identifier
+#    [23-12] GC time in ms
+#    [11- 0] Bytes freed
+#
+# Second LONG (aggregated heap info):
+#
+#    [63-62] 10
+#    [61-60] Reserved; must be zero
+#    [59-48] Objects freed
+#    [47-36] Actual size (current footprint)
+#    [35-24] Allowed size (current hard max)
+#    [23-12] Objects allocated
+#    [11- 0] Bytes allocated
+#
+# Third LONG (zygote heap info):
+#
+#    [63-62] 11
+#    [61-60] Reserved; must be zero
+#    [59-48] Soft limit
+#    [47-36] Actual size (current footprint)
+#    [35-24] Allowed size (current hard max)
+#    [23-12] Objects allocated
+#    [11- 0] Bytes allocated
+#
+# Fourth LONG:
+#
+#    [63-48] Reserved; must be zero
+#    [47-36] dlmallocFootprint
+#    [35-24] mallinfo: total allocated space
+#    [23-12] External byte limit
+#    [11- 0] External bytes allocated
+#
+# See HeapDebug.c
+#
+20001 dvm_gc_info (custom|2),(custom|2),(custom|2),(custom|2)
+20002 dvm_gc_madvise_info (total|1|2),(zygote|1|2)
 
 # Do not change these names without updating the checkin_events setting in
 # google3/googledata/wireless/android/provisioning/gservices.config !!
@@ -227,48 +281,6 @@
 
 # Re-connecting to input method service because we haven't received its interface
 32000 imf_force_reconnect_ime (IME|4),(Time Since Connect|2|3),(Showing|1|1)
-
-# dvm_gc_info: LIST (LONG, LONG, LONG)
-#
-# First LONG:
-#
-#    [63]    1
-#    [62-24] ASCII process identifier
-#    [23-12] GC time in ms
-#    [11- 0] Bytes freed
-#
-# Second LONG (aggregated heap info):
-#
-#    [63-62] 10
-#    [61-60] Reserved; must be zero
-#    [59-48] Objects freed
-#    [47-36] Actual size (current footprint)
-#    [35-24] Allowed size (current hard max)
-#    [23-12] Objects allocated
-#    [11- 0] Bytes allocated
-#
-# Third LONG (zygote heap info):
-#
-#    [63-62] 11
-#    [61-60] Reserved; must be zero
-#    [59-48] Soft limit
-#    [47-36] Actual size (current footprint)
-#    [35-24] Allowed size (current hard max)
-#    [23-12] Objects allocated
-#    [11- 0] Bytes allocated
-#
-# Fourth LONG:
-#
-#    [63-48] Reserved; must be zero
-#    [47-36] dlmallocFootprint
-#    [35-24] mallinfo: total allocated space
-#    [23-12] External byte limit
-#    [11- 0] External bytes allocated
-#
-# See HeapDebug.c
-#
-20001 dvm_gc_info (custom|2),(custom|2),(custom|2),(custom|2)
-20002 dvm_gc_madvise_info (total|1|2),(zygote|1|2)
 
 75000 sqlite_mem_alarm_current (current|1|2)
 75001 sqlite_mem_alarm_max (max|1|2)
