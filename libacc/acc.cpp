@@ -391,13 +391,6 @@ class Compiler : public ErrorSink {
          */
         virtual void storeR0(int ea, Type* pType) = 0;
 
-        /* load R0 from a variable.
-         * If ea <= LOCAL, then this is a local variable, or an
-         * argument, addressed relative to FP.
-         * else it is an absolute global address.
-         */
-        virtual void loadR0(int ea, Type* pType) = 0;
-
         /**
          * Convert R0 to the given type.
          */
@@ -1097,6 +1090,7 @@ class Compiler : public ErrorSink {
             Type* pPointerType = getR0Type();
             assert(pPointerType->tag == TY_POINTER);
             switch (pPointerType->pHead->tag) {
+                case TY_POINTER:
                 case TY_INT:
                 case TY_FLOAT:
                     o4(0xE5900000); // ldr r0, [r0]
@@ -1105,7 +1099,7 @@ class Compiler : public ErrorSink {
                     o4(0xE5D00000); // ldrb r0, [r0]
                     break;
                 case TY_DOUBLE:
-                    o4(0xE1C000D0); // ldrd r0, [r0]
+                    o4(0xE1C000D0); // ldrd   r0, [r0]
                     break;
                 default:
                     error("loadR0FromR0: unimplemented type");
@@ -1185,23 +1179,11 @@ class Compiler : public ErrorSink {
                     }
                     if (ea > -LOCAL && ea < LOCAL) {
                         // Local, fp relative
-                        if (ea < -4095 || ea > 4095) {
-                            error("Offset out of range: %08x", ea);
-                        }
-                        if (ea < 0) {
-                            o4(0xE50B0000 | (0xfff & (4-ea))); // str r0, [fp,#-ea]
-                            o4(0xE50B1000 | (0xfff & (-ea))); // str r1, [fp,#-ea+4]
-#if 0
-                            // strd doesn't seem to work. Is encoding wrong?
-                        } else if (ea < 0) {
-                            o4(0xE1CB000F | ((0xff & (-ea)) << 4)); // strd r0, [fp,#-ea]
-                        } else if (ea < 256) {
-                            o4(0xE14B000F | ((0xff & ea) << 4)); // strd r0, [fp,#ea]
-#endif
-                        } else {
-                            o4(0xE58B0000 | (0xfff & ea)); // str r0, [fp,#ea]
-                            o4(0xE58B1000 | (0xfff & (ea + 4))); // str r1, [fp,#ea+4]
-                        }
+                        // Global, absolute
+                        o4(0xE59F2000); //         ldr r2, .L1
+                        o4(0xEA000000); //         b .L99
+                        o4(ea);         // .L1:    .word 0
+                        o4(0xE18B00F2); // .L99:   strd r0, [fp,r2]
                     } else{
                         // Global, absolute
                         o4(0xE59F2000); //         ldr r2, .L1
@@ -1214,80 +1196,6 @@ class Compiler : public ErrorSink {
                     error("Unable to store to type %d", tag);
                     break;
             }
-        }
-
-        virtual void loadR0(int ea, Type* pType) {
-            TypeTag tag = pType->tag;
-            switch (tag) {
-                case TY_CHAR:
-                    if (ea < LOCAL) {
-                        // Local, fp relative
-                        if (ea < -4095 || ea > 4095) {
-                            error("Offset out of range: %08x", ea);
-                        }
-                        if (ea < 0) {
-                            o4(0xE55B0000 | (0xfff & (-ea))); // ldrb r0, [fp,#-ea]
-                        } else {
-                            o4(0xE5DB0000 | (0xfff & ea));    // ldrb r0, [fp,#ea]
-                        }
-                    } else {
-                        // Global, absolute
-                        o4(0xE59F2000); //        ldr r2, .L1
-                        o4(0xEA000000); //        b .L99
-                        o4(ea);         // .L1:   .word ea
-                        o4(0xE5D20000); // .L99:  ldrb r0, [r2]
-                    }
-                    break;
-                case TY_POINTER:
-                case TY_INT:
-                case TY_FLOAT:
-                    if (ea < LOCAL) {
-                        // Local, fp relative
-                        if (ea < -4095 || ea > 4095) {
-                            error("Offset out of range: %08x", ea);
-                        }
-                        if (ea < 0) {
-                            o4(0xE51B0000 | (0xfff & (-ea))); // ldr r0, [fp,#-ea]
-                        } else {
-                            o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
-                        }
-                    } else {
-                        // Global, absolute
-                        o4(0xE59F2000); //        ldr r2, .L1
-                        o4(0xEA000000); //        b .L99
-                        o4(ea);         // .L1:   .word ea
-                        o4(0xE5920000); // .L99:  ldr r0, [r2]
-                    }
-                    break;
-                case TY_DOUBLE:
-                    if ((ea & 0x7) != 0) {
-                        error("double address is not aligned: %d", ea);
-                    }
-                    if (ea < LOCAL) {
-                        // Local, fp relative
-                        if (ea < -4095 || ea > 4095) {
-                            error("Offset out of range: %08x", ea);
-                        }
-                        if (ea < 0) {
-                            o4(0xE51B0000 | (0xfff & (4-ea))); // ldr r0, [fp,#-ea]
-                            o4(0xE51B1000 | (0xfff & (-ea))); // ldr r1, [fp,#-ea+4]
-                        } else {
-                            o4(0xE59B0000 | (0xfff & ea));    // ldr r0, [fp,#ea]
-                            o4(0xE59B1000 | (0xfff & (ea+4)));    // ldr r0, [fp,#ea+4]
-                        }
-                    } else {
-                        // Global, absolute
-                        o4(0xE59F2000); //        ldr r2, .L1
-                        o4(0xEA000000); //        b .L99
-                        o4(ea);         // .L1:   .word ea
-                        o4(0xE1C200D0); // .L99:  ldrd r0, [r2]
-                    }
-                    break;
-                default:
-                    error("Unable to load type %d", tag);
-                    break;
-            }
-            setR0Type(pType);
         }
 
         virtual void convertR0(Type* pType){
@@ -2236,6 +2144,7 @@ class Compiler : public ErrorSink {
             Type* pPointerType = getR0Type();
             assert(pPointerType->tag == TY_POINTER);
             switch (pPointerType->pHead->tag) {
+                case TY_POINTER:
                 case TY_INT:
                     o2(0x008b); /* mov (%eax), %eax */
                     break;
@@ -2294,41 +2203,6 @@ class Compiler : public ErrorSink {
                     error("Unable to store to type %d", tag);
                     break;
             }
-        }
-
-        virtual void loadR0(int ea, Type* pType) {
-            TypeTag tag = pType->tag;
-            switch (tag) {
-                case TY_CHAR:
-                    if (ea < -LOCAL || ea > LOCAL) {
-                        oad(0x05BE0F, ea); // movsbl  ea,%eax
-                    } else {
-                        oad(0x85BE0F, ea); // movsbl  ea(%ebp),%eax
-                    }
-                    break;
-                case TY_INT:
-                case TY_POINTER:
-                    gmov(8, ea); /* mov EA, %eax */
-                    break;
-                case TY_FLOAT:
-                    if (ea < -LOCAL || ea > LOCAL) {
-                        oad(0x05d9, ea); // flds ea
-                    } else {
-                        oad(0x85d9, ea); // flds ea(%ebp)
-                    }
-                    break;
-                case TY_DOUBLE:
-                    if (ea < -LOCAL || ea > LOCAL) {
-                        oad(0x05dd, ea); // fldl ea
-                    } else {
-                        oad(0x85dd, ea); // fldl ea(%ebp)
-                    }
-                    break;
-                default:
-                    error("Unable to load type %d", tag);
-                    break;
-            }
-            setR0Type(pType);
         }
 
         virtual void convertR0(Type* pType){
@@ -2695,11 +2569,6 @@ class Compiler : public ErrorSink {
         virtual void storeR0(int ea, Type* pType) {
             fprintf(stderr, "storeR0(%d, pType=%d)\n", ea, pType->tag);
             mpBase->storeR0(ea, pType);
-        }
-
-        virtual void loadR0(int ea, Type* pType) {
-            fprintf(stderr, "loadR0(%d, pType)\n", ea);
-            mpBase->loadR0(ea, pType);
         }
 
         virtual void convertR0(Type* pType){
@@ -4104,7 +3973,8 @@ class Compiler : public ErrorSink {
                         pGen->popR0();
                         next();
                     } else {
-                        pGen->loadR0(n, pVI->pType);
+                        pGen->leaR0(n, createPtrType(pVI->pType));
+                        pGen->loadR0FromR0();
                     }
                 }
             }
