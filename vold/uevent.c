@@ -333,7 +333,7 @@ static int handle_block_event(struct uevent *event)
                                      min,
                                      media,
                                      get_uevent_param(event, "DEVTYPE")))) {
-            LOGE("Unable to allocate new blkdev (%m)");
+            LOGE("Unable to allocate new blkdev (%s)", strerror(errno));
             return -1;
         }
 
@@ -354,8 +354,12 @@ static int handle_block_event(struct uevent *event)
 
         if (blkdev_get_num_pending_partitions(blkdev->disk) == 0) {
             if ((rc = volmgr_consider_disk(blkdev->disk)) < 0) {
-                LOGE("Volmgr failed to handle device (%d)", rc);
-                return rc;
+                if (rc == -EBUSY) {
+                    LOGI("Volmgr not ready to handle device");
+                } else {
+                    LOGE("Volmgr failed to handle device (%d)", rc);
+                    return rc;
+                }
             }
         }
     } else if (event->action == action_remove) {
@@ -414,7 +418,7 @@ static int handle_mmc_event(struct uevent *event)
                                    get_uevent_param(event, "MMC_NAME"),
                                    serial,
                                    media_mmc))) {
-            LOGE("Unable to allocate new media (%m)");
+            LOGE("Unable to allocate new media (%s)", strerror(errno));
             return -1;
         }
         LOGI("New MMC card '%s' (serial %u) added @ %s", media->name,

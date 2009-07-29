@@ -97,4 +97,5 @@ boolean ums_hostconnected_get(void);
 
 int send_msg(char *msg);
 int send_msg_with_data(char *msg, char *data);
+extern int bootstrap;
 #endif

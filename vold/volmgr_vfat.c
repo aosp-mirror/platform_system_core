@@ -51,28 +51,40 @@ int vfat_check(blkdev_t *dev)
         return 0;
     }
 
-    char *args[5];
-    args[0] = FSCK_MSDOS_PATH;
-    args[1] = "-p";
-    args[2] = "-f";
-    args[3] = blkdev_get_devpath(dev);
-    args[4] = NULL;
-    rc = logwrap(4, args, 1);
-    free(args[3]);
+    int pass = 1;
+    do {
+        char *args[5];
+        args[0] = FSCK_MSDOS_PATH;
+        args[1] = "-p";
+        args[2] = "-f";
+        args[3] = blkdev_get_devpath(dev);
+        args[4] = NULL;
+        rc = logwrap(4, args, 1);
+        free(args[3]);
 
-    if (rc == 0) {
-        LOG_VOL("Filesystem check completed OK");
-        return 0;
-    } else if (rc == 2) {
-        LOG_VOL("Filesystem check failed (not a FAT filesystem)");
-        return -ENODATA;
-    } else if (rc == -11) {
-        LOG_VOL("Filesystem check crashed");
-        return -EIO;
-    } else {
-        LOG_VOL("Filesystem check failed (unknown exit code %d)", rc);
-        return -EIO;
-    }
+        if (rc == 0) {
+            LOG_VOL("Filesystem check completed OK");
+            return 0;
+        } else if (rc == 2) {
+            LOG_VOL("Filesystem check failed (not a FAT filesystem)");
+            return -ENODATA;
+        } else if (rc == 4) {
+            if (pass++ <= 3) {
+                LOG_VOL("Filesystem modified - rechecking (pass %d)",
+                        pass);
+                continue;
+            } else {
+                LOG_VOL("Failing check after too many rechecks");
+                return -EIO;
+            }
+        } else if (rc == -11) {
+            LOG_VOL("Filesystem check crashed");
+            return -EIO;
+        } else {
+            LOG_VOL("Filesystem check failed (unknown exit code %d)", rc);
+            return -EIO;
+        }
+    } while (0);
     return 0;
 }
 
@@ -111,6 +123,21 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
         flags |= MS_RDONLY;
         rc = mount(devpath, vol->mount_point, "vfat", flags,
                    "utf8,uid=1000,gid=1015,fmask=702,dmask=702,shortname=mixed");
+    }
+
+    if (rc == 0) {
+        char *lost_path;
+        asprintf(&lost_path, "%s/LOST.DIR", vol->mount_point);
+        if (access(lost_path, F_OK)) {
+            /*
+             * Create a LOST.DIR in the root so we have somewhere to put
+             * lost cluster chains (fsck_msdos doesn't currently do this)
+             */
+            if (mkdir(lost_path, 0755)) {
+                LOGE("Unable to create LOST.DIR (%s)", strerror(errno));
+            }
+        }
+        free(lost_path);
     }
 
 #if VFAT_DEBUG
