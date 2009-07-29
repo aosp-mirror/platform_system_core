@@ -287,6 +287,15 @@ result: 10""", """""")
         self.compileCheck(["-R", "data/floatdouble.c"], """Executing compiled code:
 result: 0""", """0.002 0.1 10""")
 
+    def testIncDec(self):
+        self.compileCheck(["-R", "data/inc.c"], """Executing compiled code:
+0
+1
+2
+1
+result: 0
+""","""""")
+
     def testIops(self):
         self.compileCheck(["-R", "data/iops.c"], """Executing compiled code:
 result: 0""", """Literals: 1 -1

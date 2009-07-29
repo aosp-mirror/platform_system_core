@@ -356,11 +356,15 @@ class Compiler : public ErrorSink {
          */
         virtual void genUnaryOp(int op) = 0;
 
-        /* Push R0 onto the stack.
+        /* Push R0 onto the stack. (Also known as "dup" for duplicate.)
          */
         virtual void pushR0() = 0;
 
-        /* Pop R0 from the stack.
+        /* Turn R0, TOS into R0 TOS R0 */
+
+        virtual void over() = 0;
+
+        /* Pop R0 from the stack. (Also known as "drop")
          */
         virtual void popR0() = 0;
 
@@ -490,16 +494,20 @@ class Compiler : public ErrorSink {
          */
         virtual size_t stackSizeOf(Type* pType) = 0;
 
-        Type* getR0Type() {
+        virtual Type* getR0Type() {
             return mExpressionStack.back().pType;
         }
 
-        ExpressionType getR0ExpressionType() {
+        virtual ExpressionType getR0ExpressionType() {
             return mExpressionStack.back().et;
         }
 
-        void setR0ExpressionType(ExpressionType et) {
+        virtual void setR0ExpressionType(ExpressionType et) {
             mExpressionStack.back().et = et;
+        }
+
+        virtual size_t getExpressionStackDepth() {
+            return mExpressionStack.size();
         }
 
     protected:
@@ -541,6 +549,7 @@ class Compiler : public ErrorSink {
         }
 
         void setR0Type(Type* pType) {
+            assert(pType != NULL);
             mExpressionStack.back().pType = pType;
         }
 
@@ -555,6 +564,15 @@ class Compiler : public ErrorSink {
                 mExpressionStack.push_back(ExpressionValue());
             }
 
+        }
+
+        void overType() {
+            size_t size = mExpressionStack.size();
+            if (size >= 2) {
+                mExpressionStack.push_back(mExpressionStack.back());
+                mExpressionStack[size-1] = mExpressionStack[size-2];
+                mExpressionStack[size-2] = mExpressionStack[size];
+            }
         }
 
         void popType() {
@@ -1012,6 +1030,24 @@ class Compiler : public ErrorSink {
             }
             pushType();
             LOG_STACK("pushR0: %d\n", mStackUse);
+        }
+
+        virtual void over() {
+            // We know it's only used for int-ptr ops (++/--)
+
+            Type* pR0Type = getR0Type();
+            TypeTag r0ct = collapseType(pR0Type->tag);
+
+            Type* pTOSType = getTOSType();
+            TypeTag tosct = collapseType(pTOSType->tag);
+
+            assert (r0ct == TY_INT  && tosct == TY_INT);
+
+            o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+            o4(0xE92D0001);  // stmfd   sp!,{r0}
+            o4(0xE92D0002);  // stmfd   sp!,{r1}
+            overType();
+            mStackUse += 4;
         }
 
         virtual void popR0() {
@@ -2129,6 +2165,24 @@ class Compiler : public ErrorSink {
             pushType();
         }
 
+        virtual void over() {
+            // We know it's only used for int-ptr ops (++/--)
+
+            Type* pR0Type = getR0Type();
+            TypeTag r0ct = collapseType(pR0Type->tag);
+
+            Type* pTOSType = getTOSType();
+            TypeTag tosct = collapseType(pTOSType->tag);
+
+            assert (r0ct == TY_INT && tosct == TY_INT);
+
+            o(0x59); /* pop %ecx */
+            o(0x50); /* push %eax */
+            o(0x51); /* push %ecx */
+
+            overType();
+        }
+
         virtual void popR0() {
             Type* pR0Type = getR0Type();
             TypeTag r0ct = collapseType(pR0Type->tag);
@@ -2146,7 +2200,7 @@ class Compiler : public ErrorSink {
                     o(0x58); /* popl %eax */
                     break;
                 default:
-                    error("pushR0 unsupported type %d", r0ct);
+                    error("popR0 unsupported type %d", r0ct);
                     break;
             }
             popType();
@@ -2613,6 +2667,11 @@ class Compiler : public ErrorSink {
             mpBase->pushR0();
         }
 
+        virtual void over() {
+            fprintf(stderr, "over()\n");
+            mpBase->over();
+        }
+
         virtual void popR0() {
             fprintf(stderr, "popR0()\n");
             mpBase->popR0();
@@ -2721,13 +2780,29 @@ class Compiler : public ErrorSink {
         }
 
 
+        virtual size_t stackAlignmentOf(Type* pType) {
+            return mpBase->stackAlignmentOf(pType);
+        }
+
+
         virtual size_t stackSizeOf(Type* pType) {
             return mpBase->stackSizeOf(pType);
         }
 
-
         virtual Type* getR0Type() {
             return mpBase->getR0Type();
+        }
+
+        virtual ExpressionType getR0ExpressionType() {
+            return mpBase->getR0ExpressionType();
+        }
+
+        virtual void setR0ExpressionType(ExpressionType et) {
+            mpBase->setR0ExpressionType(et);
+        }
+
+        virtual size_t getExpressionStackDepth() {
+            return mpBase->getExpressionStackDepth();
         }
     };
 
@@ -4001,14 +4076,35 @@ class Compiler : public ErrorSink {
                         }
                     }
                     // load a variable
-                    pGen->loadR0(n, pVI->pType);
                     if (tokl == 11) {
                         // post inc / post dec
+                        pGen->leaR0(n, createPtrType(pVI->pType));
+
                         pGen->pushR0();
-                        impInc(tokc);
-                        pGen->storeR0(n, pVI->pType);
+                        pGen->loadR0FromR0();
+                        pGen->over();
+                        int lit = 1;
+                        if (tokc == OP_DECREMENT) {
+                            lit = -1;
+                        }
+                        switch (pVI->pType->tag) {
+                            case TY_INT:
+                            case TY_CHAR:
+                            case TY_POINTER:
+                                pGen->pushR0();
+                                pGen->li(lit);
+                                pGen->genOp(OP_PLUS);
+                                break;
+                            default:
+                                error("++/-- illegal for this type.");
+                                break;
+                        }
+
+                        pGen->storeR0ToTOS();
                         pGen->popR0();
                         next();
+                    } else {
+                        pGen->loadR0(n, pVI->pType);
                     }
                 }
             }
@@ -4075,28 +4171,6 @@ class Compiler : public ErrorSink {
                                    VI(t)->pType);
             }
             pGen->adjustStackAfterCall(pDecl, l, n == 1);
-        }
-    }
-
-    /* Increment / decrement R0 */
-
-    void impInc(int op) {
-        Type* pType = pGen->getR0Type();
-        int lit = 1;
-        if (op == OP_DECREMENT) {
-            lit = -1;
-        }
-        switch (pType->tag) {
-            case TY_INT:
-            case TY_CHAR:
-            case TY_POINTER:
-                pGen->pushR0();
-                pGen->li(lit);
-                pGen->genOp(OP_PLUS);
-                break;
-            default:
-                error("++/-- illegal for this type.");
-                break;
         }
     }
 
