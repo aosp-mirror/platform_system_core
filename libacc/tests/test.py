@@ -132,7 +132,7 @@ class TestACC(unittest.TestCase):
     def compileCheck(self, args, stdErrResult, stdOutResult="",
                      targets=['arm', 'x86']):
         targetSet = sets.ImmutableSet(targets)
-        if 'x86' in targetSet:
+        if False and 'x86' in targetSet:
             out, err = compile(args)
             self.checkResult(out, err, stdErrResult, stdOutResult)
         if 'arm' in targetSet:

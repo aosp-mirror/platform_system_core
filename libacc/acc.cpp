@@ -48,7 +48,7 @@
 #define LOG_STACK(...) do {} while(0)
 // #define LOG_STACK(...) fprintf (stderr, __VA_ARGS__)
 
-// #define ENABLE_ARM_DISASSEMBLY
+#define ENABLE_ARM_DISASSEMBLY
 // #define PROVIDE_TRACE_CODEGEN
 
 namespace acc {
@@ -381,8 +381,15 @@ class Compiler : public ErrorSink {
          * If ea <= LOCAL, then this is a local variable, or an
          * argument, addressed relative to FP.
          * else it is an absolute global address.
+         *
          */
         virtual void leaR0(int ea, Type* pPointerType) = 0;
+
+        /* Load the pc-relative address of a forward-referenced variable to R0.
+         * Return the address of the 4-byte constant so that it can be filled
+         * in later.
+         */
+        virtual int leaForward(int ea, Type* pPointerType) = 0;
 
         /* Store R0 to a variable.
          * If ea <= LOCAL, then this is a local variable, or an
@@ -425,12 +432,6 @@ class Compiler : public ErrorSink {
          */
         virtual int callForward(int symbol, Type* pFunc) = 0;
 
-        /* Call a function using PC-relative addressing. t is the PC-relative
-         * address of the function. It has already been adjusted for the
-         * architectural jump offset, so just store it as-is.
-         */
-        virtual void callRelative(int t, Type* pFunc) = 0;
-
         /* Call a function pointer. L is the number of bytes the arguments
          * take on the stack. The address of the function is stored at
          * location SP + l.
@@ -453,6 +454,13 @@ class Compiler : public ErrorSink {
          * linked list of addresses to patch.
          */
         virtual void gsym(int t) = 0;
+
+        /* Resolve a forward reference function at the current PC.
+         * t is the head of a
+         * linked list of addresses to patch.
+         * (Like gsym, but using absolute address, not PC relative address.)
+         */
+        virtual void resolveForward(int t) = 0;
 
         /*
          * Do any cleanup work required at the end of a compile.
@@ -1129,6 +1137,29 @@ class Compiler : public ErrorSink {
             setR0Type(pPointerType);
         }
 
+        virtual int leaForward(int ea, Type* pPointerType) {
+            setR0Type(pPointerType);
+            int result = ea;
+            int pc = getPC();
+            int offset = 0;
+            if (ea) {
+                offset = (pc - ea - 8) >> 2;
+                if ((offset & 0xffff) != offset) {
+                    error("function forward reference out of bounds");
+                }
+            } else {
+                offset = 0;
+            }
+            o4(0xE59F0000 | offset); //        ldr    r0, .L1
+
+            if (ea == 0) {
+                o4(0xEA000000); //        b .L99
+                result = o4(ea);         // .L1:   .word 0
+                            // .L99:
+            }
+            return result;
+        }
+
         virtual void storeR0(int ea, Type* pType) {
             convertR0(pType);
             TypeTag tag = pType->tag;
@@ -1302,22 +1333,9 @@ class Compiler : public ErrorSink {
             return o4(0xEB000000 | encodeAddress(symbol));
         }
 
-        virtual void callRelative(int t, Type* pFunc) {
-            setR0Type(pFunc->pHead);
-            int abs = t + getPC() + jumpOffset();
-            if (t >= - (1 << 25) && t < (1 << 25)) {
-                o4(0xEB000000 | encodeAddress(t));
-            } else {
-                // Long call.
-                o4(0xE59FC000); //         ldr    r12, .L1
-                o4(0xEA000000); //         b .L99
-                o4(t - 12);     // .L1:    .word 0
-                o4(0xE08CC00F); // .L99:   add r12,pc
-                o4(0xE12FFF3C); //         blx r12
-           }
-        }
-
         virtual void callIndirect(int l, Type* pFunc) {
+            assert(pFunc->tag == TY_FUNC);
+            popType(); // Get rid of indirect fn pointer type
             setR0Type(pFunc->pHead);
             int argCount = l >> 2;
             int poppedArgs = argCount > 4 ? 4 : argCount;
@@ -1370,6 +1388,14 @@ class Compiler : public ErrorSink {
                 *(int *) t = (data & ~BRANCH_REL_ADDRESS_MASK)
                     | encodeRelAddress(pc - t - 8);
                 t = n;
+            }
+        }
+
+        /* output a symbol and patch all calls to it */
+        virtual void resolveForward(int t) {
+            if (t) {
+                int pc = getPC();
+                *(int *) t = pc;
             }
         }
 
@@ -2170,6 +2196,12 @@ class Compiler : public ErrorSink {
             setR0Type(pPointerType);
         }
 
+        virtual int leaForward(int ea, Type* pPointerType) {
+            oad(0xb8, ea); /* mov $xx, %eax */
+            setR0Type(pPointerType);
+            return getPC() - 4;
+        }
+
         virtual void storeR0(int ea, Type* pType) {
             TypeTag tag = pType->tag;
             convertR0(pType);
@@ -2276,21 +2308,19 @@ class Compiler : public ErrorSink {
         }
 
         virtual int callForward(int symbol, Type* pFunc) {
+            assert(pFunc->tag == TY_FUNC);
             setR0Type(pFunc->pHead);
             return psym(0xe8, symbol); /* call xxx */
         }
 
-        virtual void callRelative(int t, Type* pFunc) {
-            setR0Type(pFunc->pHead);
-            psym(0xe8, t); /* call xxx */
-        }
-
         virtual void callIndirect(int l, Type* pFunc) {
+            assert(pFunc->tag == TY_FUNC);
             setR0Type(pFunc->pHead);
             oad(0x2494ff, l); /* call *xxx(%esp) */
         }
 
         virtual void adjustStackAfterCall(Type* pDecl, int l, bool isIndirect) {
+            assert(pDecl->tag == TY_FUNC);
             if (isIndirect) {
                 l += 4;
             }
@@ -2314,6 +2344,17 @@ class Compiler : public ErrorSink {
             while (t) {
                 n = *(int *) t; /* next value */
                 *(int *) t = pc - t - 4;
+                t = n;
+            }
+        }
+
+        /* output a symbol and patch all calls to it, using absolute address */
+        virtual void resolveForward(int t) {
+            int n;
+            int pc = getPC();
+            while (t) {
+                n = *(int *) t; /* next value */
+                *(int *) t = pc;
                 t = n;
             }
         }
@@ -2566,6 +2607,11 @@ class Compiler : public ErrorSink {
             mpBase->leaR0(ea, pPointerType);
         }
 
+        virtual int leaForward(int ea, Type* pPointerType) {
+            fprintf(stderr, "leaForward(%d)\n", ea);
+            return mpBase->leaForward(ea, pPointerType);
+        }
+
         virtual void storeR0(int ea, Type* pType) {
             fprintf(stderr, "storeR0(%d, pType=%d)\n", ea, pType->tag);
             mpBase->storeR0(ea, pType);
@@ -2599,13 +2645,9 @@ class Compiler : public ErrorSink {
             return result;
         }
 
-        virtual void callRelative(int t, Type* pFunc) {
-            fprintf(stderr, "callRelative(%d)\n", t);
-            mpBase->callRelative(t, pFunc);
-        }
-
         virtual void callIndirect(int l, Type* pFunc) {
-            fprintf(stderr, "callIndirect(%d)\n", l);
+            fprintf(stderr, "callIndirect(%d returntype = %d)\n", l,
+                    pFunc->pHead->tag);
             mpBase->callIndirect(l, pFunc);
         }
 
@@ -2626,6 +2668,10 @@ class Compiler : public ErrorSink {
         virtual void gsym(int t) {
             fprintf(stderr, "gsym(%d)\n", t);
             mpBase->gsym(t);
+        }
+
+        virtual void resolveForward(int t) {
+            mpBase->resolveForward(t);
         }
 
         virtual int finishCompile() {
@@ -3985,11 +4031,22 @@ class Compiler : public ErrorSink {
             Type* pDecl = NULL;
             VariableInfo* pVI = NULL;
             if (n == 1) { // Indirect function call, push address of fn.
-                pDecl = pGen->getR0Type();
+                Type* pFn = pGen->getR0Type();
+                assert(pFn->tag == TY_POINTER);
+                assert(pFn->pHead->tag == TY_FUNC);
+                pDecl = pFn->pHead;
                 pGen->pushR0();
             } else {
                 pVI = VI(t);
                 pDecl = pVI->pType;
+                Type* pFn = createPtrType(pDecl);
+                if (n == 0) {
+                    pVI->pForward = (void*) pGen->leaForward(
+                            (int) pVI->pForward, pFn);
+                } else {
+                    pGen->leaR0(n, pFn);
+                }
+                pGen->pushR0();
             }
             Type* pArgList = pDecl->pTail;
             bool varArgs = pArgList == NULL;
@@ -4007,6 +4064,8 @@ class Compiler : public ErrorSink {
                     pTargetType = pArgList->pHead;
                     pArgList = pArgList->pTail;
                 } else {
+                    // This is a ... function, just pass arguments in their
+                    // natural type.
                     pTargetType = pGen->getR0Type();
                     if (pTargetType->tag == TY_FLOAT) {
                         pTargetType = mkpDouble;
@@ -4030,17 +4089,8 @@ class Compiler : public ErrorSink {
             }
             pGen->endFunctionCallArguments(pDecl, a, l);
             skip(')');
-            if (!n) {
-                /* forward reference */
-                pVI->pForward = (void*) pGen->callForward((int) pVI->pForward,
-                                                          pVI->pType);
-            } else if (n == 1) {
-                pGen->callIndirect(l, mkpPtrIntFn->pHead);
-            } else {
-                pGen->callRelative(n - codeBuf.getPC() - pGen->jumpOffset(),
-                                   VI(t)->pType);
-            }
-            pGen->adjustStackAfterCall(pDecl, l, n == 1);
+            pGen->callIndirect(l, pDecl);
+            pGen->adjustStackAfterCall(pDecl, l, true);
         }
     }
 
@@ -4640,9 +4690,8 @@ class Compiler : public ErrorSink {
                 } else {
                     mpCurrentArena = &mLocalArena;
                     if (name) {
-                        /* patch forward references (XXX: does not work for function
-                         pointers) */
-                        pGen->gsym((int) name->pForward);
+                        /* patch forward references */
+                        pGen->resolveForward((int) name->pForward);
                         /* put function address */
                         name->pAddress = (void*) codeBuf.getPC();
                     }
