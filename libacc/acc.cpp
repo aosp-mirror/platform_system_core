@@ -391,13 +391,6 @@ class Compiler : public ErrorSink {
          */
         virtual int leaForward(int ea, Type* pPointerType) = 0;
 
-        /* Store R0 to a variable.
-         * If ea <= LOCAL, then this is a local variable, or an
-         * argument, addressed relative to FP.
-         * else it is an absolute global address.
-         */
-        virtual void storeR0(int ea, Type* pType) = 0;
-
         /**
          * Convert R0 to the given type.
          */
@@ -1074,10 +1067,13 @@ class Compiler : public ErrorSink {
         virtual void storeR0ToTOS() {
             Type* pPointerType = getTOSType();
             assert(pPointerType->tag == TY_POINTER);
+            Type* pDestType = pPointerType->pHead;
+            convertR0(pDestType);
             o4(0xE8BD0004);  // ldmfd   sp!,{r2}
             popType();
             mStackUse -= 4;
-            switch (pPointerType->pHead->tag) {
+            switch (pDestType->tag) {
+                case TY_POINTER:
                 case TY_INT:
                 case TY_FLOAT:
                     o4(0xE5820000); // str r0, [r2]
@@ -1158,75 +1154,6 @@ class Compiler : public ErrorSink {
                             // .L99:
             }
             return result;
-        }
-
-        virtual void storeR0(int ea, Type* pType) {
-            convertR0(pType);
-            TypeTag tag = pType->tag;
-            switch (tag) {
-                case TY_CHAR:
-                    if (ea > -LOCAL && ea < LOCAL) {
-                        // Local, fp relative
-                        if (ea < -4095 || ea > 4095) {
-                            error("Offset out of range: %08x", ea);
-                        }
-                        if (ea < 0) {
-                            o4(0xE54B0000 | (0xfff & (-ea))); // strb r0, [fp,#-ea]
-                        } else {
-                            o4(0xE5CB0000 | (0xfff & ea)); // strb r0, [fp,#ea]
-                        }
-                    } else{
-                        // Global, absolute
-                        o4(0xE59F1000); //         ldr r1, .L1
-                        o4(0xEA000000); //         b .L99
-                        o4(ea);         // .L1:    .word 0
-                        o4(0xE5C10000); // .L99:   strb r0, [r1]
-                    }
-                    break;
-                case TY_POINTER:
-                case TY_INT:
-                case TY_FLOAT:
-                    if (ea > -LOCAL && ea < LOCAL) {
-                        // Local, fp relative
-                        if (ea < -4095 || ea > 4095) {
-                            error("Offset out of range: %08x", ea);
-                        }
-                        if (ea < 0) {
-                            o4(0xE50B0000 | (0xfff & (-ea))); // str r0, [fp,#-ea]
-                        } else {
-                            o4(0xE58B0000 | (0xfff & ea)); // str r0, [fp,#ea]
-                        }
-                    } else{
-                        // Global, absolute
-                        o4(0xE59F1000); //         ldr r1, .L1
-                        o4(0xEA000000); //         b .L99
-                        o4(ea);         // .L1:    .word 0
-                        o4(0xE5810000); // .L99:   str r0, [r1]
-                    }
-                    break;
-                case TY_DOUBLE:
-                    if ((ea & 0x7) != 0) {
-                        error("double address is not aligned: %d", ea);
-                    }
-                    if (ea > -LOCAL && ea < LOCAL) {
-                        // Local, fp relative
-                        // Global, absolute
-                        o4(0xE59F2000); //         ldr r2, .L1
-                        o4(0xEA000000); //         b .L99
-                        o4(ea);         // .L1:    .word 0
-                        o4(0xE18B00F2); // .L99:   strd r0, [fp,r2]
-                    } else{
-                        // Global, absolute
-                        o4(0xE59F2000); //         ldr r2, .L1
-                        o4(0xEA000000); //         b .L99
-                        o4(ea);         // .L1:    .word 0
-                        o4(0xE1C200F0); // .L99:   strd r0, [r2]
-                    }
-                    break;
-                default:
-                    error("Unable to store to type %d", tag);
-                    break;
-            }
         }
 
         virtual void convertR0(Type* pType){
@@ -2148,6 +2075,7 @@ class Compiler : public ErrorSink {
             o(0x59); /* pop %ecx */
             popType();
             switch (pTargetType->tag) {
+                case TY_POINTER:
                 case TY_INT:
                     o(0x0189); /* movl %eax/%al, (%ecx) */
                     break;
@@ -2200,41 +2128,6 @@ class Compiler : public ErrorSink {
             oad(0xb8, ea); /* mov $xx, %eax */
             setR0Type(pPointerType);
             return getPC() - 4;
-        }
-
-        virtual void storeR0(int ea, Type* pType) {
-            TypeTag tag = pType->tag;
-            convertR0(pType);
-            switch (tag) {
-                case TY_CHAR:
-                    if (ea < -LOCAL || ea > LOCAL) {
-                        oad(0xa2, ea); // movb %al,ea
-                    } else {
-                        oad(0x8588, ea); // movb %al,ea(%ebp)
-                    }
-                    break;
-                case TY_INT:
-                case TY_POINTER:
-                    gmov(6, ea); /* mov %eax, EA */
-                    break;
-                case TY_FLOAT:
-                    if (ea < -LOCAL || ea > LOCAL) {
-                        oad(0x1dd9, ea); // fstps ea
-                    } else {
-                        oad(0x9dd9, ea); // fstps ea(%ebp)
-                    }
-                    break;
-                case TY_DOUBLE:
-                    if (ea < -LOCAL || ea > LOCAL) {
-                        oad(0x1ddd, ea); // fstpl ea
-                    } else {
-                        oad(0x9ddd, ea); // fstpl ea(%ebp)
-                    }
-                    break;
-                default:
-                    error("Unable to store to type %d", tag);
-                    break;
-            }
         }
 
         virtual void convertR0(Type* pType){
@@ -2610,11 +2503,6 @@ class Compiler : public ErrorSink {
         virtual int leaForward(int ea, Type* pPointerType) {
             fprintf(stderr, "leaForward(%d)\n", ea);
             return mpBase->leaForward(ea, pPointerType);
-        }
-
-        virtual void storeR0(int ea, Type* pType) {
-            fprintf(stderr, "storeR0(%d, pType=%d)\n", ea, pType->tag);
-            mpBase->storeR0(ea, pType);
         }
 
         virtual void convertR0(Type* pType){
@@ -3979,8 +3867,10 @@ class Compiler : public ErrorSink {
                 if ((tok == '=') & allowAssignment) {
                     /* assignment */
                     next();
+                    pGen->leaR0(n, createPtrType(pVI->pType));
+                    pGen->pushR0();
                     expr();
-                    pGen->storeR0(n, pVI->pType);
+                    pGen->storeR0ToTOS();
                 } else if (tok != '(') {
                     /* variable */
                     if (!n) {
@@ -4576,8 +4466,10 @@ class Compiler : public ErrorSink {
                 VI(pDecl->id)->pAddress = (void*) variableAddress;
                 if (accept('=')) {
                     /* assignment */
+                    pGen->leaR0(variableAddress, createPtrType(pDecl));
+                    pGen->pushR0();
                     expr();
-                    pGen->storeR0(variableAddress, pDecl);
+                    pGen->storeR0ToTOS();
                 }
                 if (tok == ',')
                     next();
