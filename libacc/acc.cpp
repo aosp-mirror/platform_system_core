@@ -4131,9 +4131,10 @@ class Compiler : public ErrorSink {
             if (a && level > 8) {
                 a = pGen->gtst(t == OP_LOGICAL_OR, a);
                 pGen->li(t != OP_LOGICAL_OR);
-                pGen->gjmp(5); /* jmp $ + 5 (sizeof li, FIXME for ARM) */
+                int b = pGen->gjmp(0);
                 pGen->gsym(a);
                 pGen->li(t == OP_LOGICAL_OR);
+                pGen->gsym(b);
             }
         }
     }

@@ -324,6 +324,11 @@ result: 0""", """Literals: 1 -1
 0
 """)
 
+    def testFilm    (self):
+        self.compileCheck(["-R", "data/film.c"], """Executing compiled code:
+result: 0""", """testing...
+Total bad: 0
+""")
 if __name__ == '__main__':
     if not outputCanRun():
         print "Many tests are expected to fail, because acc is not a 32-bit x86 Linux executable."
