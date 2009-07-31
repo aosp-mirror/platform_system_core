@@ -3789,10 +3789,20 @@ class Compiler : public ErrorSink {
         pVI->pAddress = n;
     }
 
+    void unaryOrAssignment() {
+        unary();
+        if (accept('=')) {
+            checkLVal();
+            pGen->pushR0();
+            expr();
+            pGen->forceR0RVal();
+            pGen->storeR0ToTOS();
+        }
+    }
+
     /* Parse and evaluate a unary expression.
-     * allowAssignment is true if '=' parsing wanted (quick hack)
      */
-    void unary(bool allowAssignment) {
+    void unary() {
         tokenid_t t;
         intptr_t n, a;
         t = 0;
@@ -3821,7 +3831,7 @@ class Compiler : public ErrorSink {
                 glo += 8;
             } else if (c == 2) {
                 /* -, +, !, ~ */
-                unary(false);
+                unary();
                 pGen->forceR0RVal();
                 if (t == '!')
                     pGen->gUnaryCmp(a);
@@ -3835,7 +3845,7 @@ class Compiler : public ErrorSink {
                 Type* pCast = acceptCastTypeDeclaration();
                 if (pCast) {
                     skip(')');
-                    unary(false);
+                    unary();
                     pGen->forceR0RVal();
                     pGen->convertR0(pCast);
                 } else {
@@ -3845,7 +3855,7 @@ class Compiler : public ErrorSink {
             } else if (t == '*') {
                 /* This is a pointer dereference.
                  */
-                unary(false);
+                unary();
                 pGen->forceR0RVal();
                 Type* pR0Type = pGen->getR0Type();
                 if (pR0Type->tag != TY_POINTER) {
@@ -3854,13 +3864,8 @@ class Compiler : public ErrorSink {
                     if (pR0Type->pHead->tag == TY_FUNC) {
                         t = 0;
                     }
-                    if (accept('=')) {
-                        pGen->pushR0();
-                        expr();
-                        pGen->forceR0RVal();
-                        pGen->storeR0ToTOS();
-                    } else if (t) {
-                        pGen->loadR0FromR0();
+                    if (t) {
+                        pGen->setR0ExpressionType(ET_LVALUE);
                     }
                 }
                 // Else we fall through to the function call below, with
@@ -3892,16 +3897,7 @@ class Compiler : public ErrorSink {
                         error("Undeclared variable %s\n", nameof(t));
                     }
                 }
-                if ((tok == '=') & allowAssignment) {
-                    /* assignment */
-                    next();
-                    pGen->leaR0(n, createPtrType(pVI->pType), ET_LVALUE);
-                    checkLVal();
-                    pGen->pushR0();
-                    expr();
-                    pGen->forceR0RVal();
-                    pGen->storeR0ToTOS();
-                } else if (tok != '(') {
+                if (tok != '(') {
                     /* variable */
                     if (!n) {
                         linkGlobal(t, false);
@@ -4020,7 +4016,7 @@ class Compiler : public ErrorSink {
         intptr_t t, a;
         t = 0;
         if (level-- == 1)
-            unary(true);
+            unaryOrAssignment();
         else {
             binaryOp(level);
             a = 0;
