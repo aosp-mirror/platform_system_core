@@ -3823,9 +3823,8 @@ class Compiler : public ErrorSink {
      */
     void unary() {
         tokenid_t t;
-        intptr_t n, a;
+        intptr_t a;
         t = 0;
-        n = 1; /* type of expression 0 = forward, 1 = value, other = lvalue */
         if (acceptStringLiteral()) {
             // Nothing else to do.
         } else {
@@ -3892,8 +3891,6 @@ class Compiler : public ErrorSink {
                         pGen->setR0ExpressionType(ET_LVALUE);
                     }
                 }
-                // Else we fall through to the function call below, with
-                // t == 0 to trigger an indirect function call. Hack!
             } else if (t == '&') {
                 VariableInfo* pVI = VI(tok);
                 pGen->leaR0((int) pVI->pAddress, createPtrType(pVI->pType),
@@ -3912,7 +3909,7 @@ class Compiler : public ErrorSink {
                     // printf("Adding new global function %s\n", nameof(t));
                 }
                 VariableInfo* pVI = VI(t);
-                n = (intptr_t) pVI->pAddress;
+                int n = (intptr_t) pVI->pAddress;
                 /* forward reference: try our lookup function */
                 if (!n) {
                     linkGlobal(t, tok == '(');
@@ -3922,7 +3919,7 @@ class Compiler : public ErrorSink {
                     }
                 }
                 if (tok != '(') {
-                    /* variable */
+                    /* variable or function name */
                     if (!n) {
                         linkGlobal(t, false);
                         n = (intptr_t) pVI->pAddress;
@@ -3930,83 +3927,84 @@ class Compiler : public ErrorSink {
                             error("Undeclared variable %s\n", nameof(t));
                         }
                     }
-                    // load a variable
-                    pGen->leaR0(n, createPtrType(pVI->pType), ET_LVALUE);
-                    if (tokl == 11) {
-                        // post inc / post dec
-                        doIncDec(tokc == OP_INCREMENT, true);
-                        next();
+                }
+                // load a variable
+                Type* pVal = createPtrType(pVI->pType);
+                if (n) {
+                    ExpressionType et = ET_LVALUE;
+                    if (pVal->pHead->tag == TY_FUNC) {
+                        et = ET_RVALUE;
                     }
+                    pGen->leaR0(n, pVal, et);
+                } else {
+                    pVI->pForward = (void*) pGen->leaForward(
+                            (int) pVI->pForward, pVal);
                 }
             }
         }
 
-        /* function call */
-        if (accept('(')) {
-            Type* pDecl = NULL;
-            VariableInfo* pVI = NULL;
-            if (n == 1) { // Indirect function call, push address of fn.
+        /* Now handle postfix operators */
+        for(;;) {
+            if (tokl == 11) {
+                // post inc / post dec
+                doIncDec(tokc == OP_INCREMENT, true);
+                next();
+            } else  if (accept('(')) {
+                /* function call */
+                Type* pDecl = NULL;
+                VariableInfo* pVI = NULL;
                 Type* pFn = pGen->getR0Type();
                 assert(pFn->tag == TY_POINTER);
                 assert(pFn->pHead->tag == TY_FUNC);
                 pDecl = pFn->pHead;
                 pGen->pushR0();
-            } else {
-                pVI = VI(t);
-                pDecl = pVI->pType;
-                Type* pFn = createPtrType(pDecl);
-                if (n == 0) {
-                    pVI->pForward = (void*) pGen->leaForward(
-                            (int) pVI->pForward, pFn);
-                } else {
-                    pGen->leaR0(n, pFn, ET_RVALUE);
-                }
-                pGen->pushR0();
-            }
-            Type* pArgList = pDecl->pTail;
-            bool varArgs = pArgList == NULL;
-            /* push args and invert order */
-            a = pGen->beginFunctionCallArguments();
-            int l = 0;
-            int argCount = 0;
-            while (tok != ')' && tok != EOF) {
-                if (! varArgs && !pArgList) {
-                    error("Unexpected argument.");
-                }
-                expr();
-                pGen->forceR0RVal();
-                Type* pTargetType;
-                if (pArgList) {
-                    pTargetType = pArgList->pHead;
-                    pArgList = pArgList->pTail;
-                } else {
-                    // This is a ... function, just pass arguments in their
-                    // natural type.
-                    pTargetType = pGen->getR0Type();
-                    if (pTargetType->tag == TY_FLOAT) {
-                        pTargetType = mkpDouble;
+                Type* pArgList = pDecl->pTail;
+                bool varArgs = pArgList == NULL;
+                /* push args and invert order */
+                a = pGen->beginFunctionCallArguments();
+                int l = 0;
+                int argCount = 0;
+                while (tok != ')' && tok != EOF) {
+                    if (! varArgs && !pArgList) {
+                        error("Unexpected argument.");
                     }
+                    expr();
+                    pGen->forceR0RVal();
+                    Type* pTargetType;
+                    if (pArgList) {
+                        pTargetType = pArgList->pHead;
+                        pArgList = pArgList->pTail;
+                    } else {
+                        // This is a ... function, just pass arguments in their
+                        // natural type.
+                        pTargetType = pGen->getR0Type();
+                        if (pTargetType->tag == TY_FLOAT) {
+                            pTargetType = mkpDouble;
+                        }
+                    }
+                    if (pTargetType->tag == TY_VOID) {
+                        error("Can't pass void value for argument %d",
+                              argCount + 1);
+                    } else {
+                        l += pGen->storeR0ToArg(l, pTargetType);
+                    }
+                    if (accept(',')) {
+                        // fine
+                    } else if ( tok != ')') {
+                        error("Expected ',' or ')'");
+                    }
+                    argCount += 1;
                 }
-                if (pTargetType->tag == TY_VOID) {
-                    error("Can't pass void value for argument %d",
-                          argCount + 1);
-                } else {
-                    l += pGen->storeR0ToArg(l, pTargetType);
+                if (! varArgs && pArgList) {
+                    error("Expected more argument(s). Saw %d", argCount);
                 }
-                if (accept(',')) {
-                    // fine
-                } else if ( tok != ')') {
-                    error("Expected ',' or ')'");
-                }
-                argCount += 1;
+                pGen->endFunctionCallArguments(pDecl, a, l);
+                skip(')');
+                pGen->callIndirect(l, pDecl);
+                pGen->adjustStackAfterCall(pDecl, l, true);
+            } else {
+                break;
             }
-            if (! varArgs && pArgList) {
-                error("Expected more argument(s). Saw %d", argCount);
-            }
-            pGen->endFunctionCallArguments(pDecl, a, l);
-            skip(')');
-            pGen->callIndirect(l, pDecl);
-            pGen->adjustStackAfterCall(pDecl, l, true);
         }
     }
 
