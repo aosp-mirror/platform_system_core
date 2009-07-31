@@ -354,6 +354,16 @@ result: 0""", """2 *= 5  10
 16|= 1  17
 """)
 
+    def testcomma(self):
+        self.compileCheck(["-R", "data/comma.c"], """Executing compiled code:
+result: 0""", """statement: 10
+if: a = 0
+while: b = 11
+for: b = 22
+return: 30
+arg: 12
+""")
+
 if __name__ == '__main__':
     if not outputCanRun():
         print "Many tests are expected to fail, because acc is not a 32-bit x86 Linux executable."

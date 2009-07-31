@@ -3868,7 +3868,7 @@ class Compiler : public ErrorSink {
                     pGen->forceR0RVal();
                     pGen->convertR0(pCast);
                 } else {
-                    expr();
+                    commaExpr();
                     skip(')');
                 }
             } else if (t == '*') {
@@ -4076,12 +4076,21 @@ class Compiler : public ErrorSink {
         }
     }
 
+    void commaExpr() {
+        for(;;) {
+            expr();
+            if (!accept(',')) {
+                break;
+            }
+        }
+    }
+
     void expr() {
         binaryOp(11);
     }
 
     int test_expr() {
-        expr();
+        commaExpr();
         pGen->forceR0RVal();
         return pGen->gtst(0, 0);
     }
@@ -4117,7 +4126,7 @@ class Compiler : public ErrorSink {
                 a = test_expr();
             } else {
                 if (tok != ';')
-                    expr();
+                    commaExpr();
                 skip(';');
                 n = codeBuf.getPC();
                 a = 0;
@@ -4126,7 +4135,7 @@ class Compiler : public ErrorSink {
                 skip(';');
                 if (tok != ')') {
                     t = pGen->gjmp(0);
-                    expr();
+                    commaExpr();
                     pGen->gjmp(n - codeBuf.getPC() - pGen->jumpOffset());
                     pGen->gsym(t);
                     n = t + 4;
@@ -4150,7 +4159,7 @@ class Compiler : public ErrorSink {
         } else {
             if (accept(TOK_RETURN)) {
                 if (tok != ';') {
-                    expr();
+                    commaExpr();
                     pGen->forceR0RVal();
                     if (pReturnType->tag == TY_VOID) {
                         error("Must not return a value from a void function");
@@ -4166,7 +4175,7 @@ class Compiler : public ErrorSink {
             } else if (accept(TOK_BREAK)) {
                 *(int *) l = pGen->gjmp(*(int *) l);
             } else if (tok != ';')
-                expr();
+                commaExpr();
             skip(';');
         }
     }
