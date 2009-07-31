@@ -3859,7 +3859,12 @@ class Compiler : public ErrorSink {
                 } else {
                     pGen->genUnaryOp(a);
                 }
-            } else if (t == '(') {
+            } else if (c == 11) {
+                // pre increment / pre decrement
+                unary();
+                doIncDec(a == OP_INCREMENT, 0);
+            }
+            else if (t == '(') {
                 // It's either a cast or an expression
                 Type* pCast = acceptCastTypeDeclaration();
                 if (pCast) {
@@ -3926,35 +3931,11 @@ class Compiler : public ErrorSink {
                         }
                     }
                     // load a variable
+                    pGen->leaR0(n, createPtrType(pVI->pType), ET_LVALUE);
                     if (tokl == 11) {
                         // post inc / post dec
-                        pGen->leaR0(n, createPtrType(pVI->pType), ET_LVALUE);
-
-                        pGen->pushR0();
-                        pGen->loadR0FromR0();
-                        pGen->over();
-                        int lit = 1;
-                        if (tokc == OP_DECREMENT) {
-                            lit = -1;
-                        }
-                        switch (pVI->pType->tag) {
-                            case TY_INT:
-                            case TY_CHAR:
-                            case TY_POINTER:
-                                pGen->pushR0();
-                                pGen->li(lit);
-                                pGen->genOp(OP_PLUS);
-                                break;
-                            default:
-                                error("++/-- illegal for this type.");
-                                break;
-                        }
-
-                        pGen->storeR0ToTOS();
-                        pGen->popR0();
+                        doIncDec(tokc == OP_INCREMENT, true);
                         next();
-                    } else {
-                        pGen->leaR0(n, createPtrType(pVI->pType), ET_LVALUE);
                     }
                 }
             }
@@ -4026,6 +4007,33 @@ class Compiler : public ErrorSink {
             skip(')');
             pGen->callIndirect(l, pDecl);
             pGen->adjustStackAfterCall(pDecl, l, true);
+        }
+    }
+
+    void doIncDec(int isInc, int isPost) {
+        // R0 already has the lval
+        checkLVal();
+        int lit = isInc ? 1 : -1;
+        pGen->pushR0();
+        pGen->loadR0FromR0();
+        int tag = pGen->getR0Type()->tag;
+        if (!(tag == TY_INT || tag == TY_CHAR || tag == TY_POINTER)) {
+            error("++/-- illegal for this type. %d", tag);
+        }
+        if (isPost) {
+            pGen->over();
+            pGen->pushR0();
+            pGen->li(lit);
+            pGen->genOp(OP_PLUS);
+            pGen->storeR0ToTOS();
+            pGen->popR0();
+        } else {
+            pGen->pushR0();
+            pGen->li(lit);
+            pGen->genOp(OP_PLUS);
+            pGen->over();
+            pGen->storeR0ToTOS();
+            pGen->popR0();
         }
     }
 
