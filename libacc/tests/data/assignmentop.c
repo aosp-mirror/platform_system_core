@@ -33,7 +33,6 @@ void testAssignment() {
     printf("16|= 1  %d\n", a);
 }
 
-/* Can't use because int* f() is not parsed as a function decl.
 int a;
 
 int* f() {
@@ -43,24 +42,21 @@ int* f() {
 
 void testEval() {
     a = 0;
-    printf("*f() = *f() + 10;");
+    printf("*f() = *f() + 10;\n");
     *f() = *f() + 10;
     printf("a = %d\n", a);
 }
 
 void testOpEval() {
     a = 0;
-    printf("*f() += 10;");
+    printf("*f() += 10;\n");
     *f() += 10;
     printf("a = %d\n", a);
 }
 
-*/
 int main() {
     testAssignment();
-    /*
     testEval();
     testOpEval();
-    */
     return 0;
 }

@@ -4409,15 +4409,11 @@ class Compiler : public ErrorSink {
     Type* acceptDecl2(Type* pType, tokenid_t& declName,
                       bool nameAllowed, bool nameRequired,
                       bool& reportFailure) {
-        int ptrCounter = 0;
         while (accept('*')) {
-            ptrCounter++;
+            pType = createType(TY_POINTER, pType, NULL);
         }
         pType = acceptDecl3(pType, declName, nameAllowed, nameRequired,
                             reportFailure);
-        while (ptrCounter-- > 0) {
-            pType = createType(TY_POINTER, pType, NULL);
-        }
         return pType;
     }
 
