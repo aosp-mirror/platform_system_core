@@ -368,6 +368,13 @@ return: 30
 arg: 12
 """)
 
+    def testBrackets(self):
+        self.compileCheck(["-R", "data/brackets.c"], """Executing compiled code:
+Errors: 0
+2D Errors: 0
+result: 0
+""","""""")
+
 if __name__ == '__main__':
     if not outputCanRun():
         print "Many tests are expected to fail, because acc is not a 32-bit x86 Linux executable."

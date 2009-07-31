@@ -3630,7 +3630,7 @@ class Compiler : public ErrorSink {
                         /* check for op=, valid for * / % + - << >> & ^ | */
                         if (ch == '=' &&
                                 ((tokl >= 1 && tokl <= 3)
-                                        || tokl >=6 && tokl <= 8) ) {
+                                        || (tokl >=6 && tokl <= 8)) ) {
                             inp();
                             tok = TOK_OP_ASSIGNMENT;
                         }
@@ -3879,18 +3879,7 @@ class Compiler : public ErrorSink {
                 /* This is a pointer dereference.
                  */
                 unary();
-                pGen->forceR0RVal();
-                Type* pR0Type = pGen->getR0Type();
-                if (pR0Type->tag != TY_POINTER) {
-                    error("Expected a pointer type.");
-                } else {
-                    if (pR0Type->pHead->tag == TY_FUNC) {
-                        t = 0;
-                    }
-                    if (t) {
-                        pGen->setR0ExpressionType(ET_LVALUE);
-                    }
-                }
+                doPointer();
             } else if (t == '&') {
                 VariableInfo* pVI = VI(tok);
                 pGen->leaR0((int) pVI->pAddress, createPtrType(pVI->pType),
@@ -3949,6 +3938,15 @@ class Compiler : public ErrorSink {
                 // post inc / post dec
                 doIncDec(tokc == OP_INCREMENT, true);
                 next();
+            } else if (accept('[')) {
+                // Array reference
+                pGen->forceR0RVal();
+                pGen->pushR0();
+                commaExpr();
+                pGen->forceR0RVal();
+                pGen->genOp(OP_PLUS);
+                doPointer();
+                skip(']');
             } else  if (accept('(')) {
                 /* function call */
                 Type* pDecl = NULL;
@@ -4032,6 +4030,18 @@ class Compiler : public ErrorSink {
             pGen->over();
             pGen->storeR0ToTOS();
             pGen->popR0();
+        }
+    }
+
+    void doPointer() {
+        pGen->forceR0RVal();
+        Type* pR0Type = pGen->getR0Type();
+        if (pR0Type->tag != TY_POINTER) {
+            error("Expected a pointer type.");
+        } else {
+            if (pR0Type->pHead->tag != TY_FUNC) {
+                pGen->setR0ExpressionType(ET_LVALUE);
+            }
         }
     }
 
