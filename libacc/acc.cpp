@@ -3188,6 +3188,7 @@ class Compiler : public ErrorSink {
     static const int TOK_NUM = 2;
     static const int TOK_NUM_FLOAT = 3;
     static const int TOK_NUM_DOUBLE = 4;
+    static const int TOK_OP_ASSIGNMENT = 5;
 
     // 3..255 are character and/or operators
 
@@ -3626,6 +3627,13 @@ class Compiler : public ErrorSink {
                             inp();
                             tok = TOK_DUMMY; /* dummy token for double tokens */
                         }
+                        /* check for op=, valid for * / % + - << >> & ^ | */
+                        if (ch == '=' &&
+                                ((tokl >= 1 && tokl <= 3)
+                                        || tokl >=6 && tokl <= 8) ) {
+                            inp();
+                            tok = TOK_OP_ASSIGNMENT;
+                        }
                         break;
                     }
                     opIndex++;
@@ -3796,6 +3804,17 @@ class Compiler : public ErrorSink {
             pGen->pushR0();
             expr();
             pGen->forceR0RVal();
+            pGen->storeR0ToTOS();
+        } else if (tok == TOK_OP_ASSIGNMENT) {
+            int t = tokc;
+            next();
+            checkLVal();
+            pGen->pushR0();
+            pGen->forceR0RVal();
+            pGen->pushR0();
+            expr();
+            pGen->forceR0RVal();
+            pGen->genOp(t);
             pGen->storeR0ToTOS();
         }
     }

@@ -340,6 +340,20 @@ a = 0, *pa = 0 **ppa = 0
 a = 2, *pa = 2 **ppa = 2
 """)
 
+    def testassignmentop(self):
+        self.compileCheck(["-R", "data/assignmentop.c"], """Executing compiled code:
+result: 0""", """2 *= 5  10
+20 /= 5  4
+17 %= 5  2
+17 += 5  22
+17 -= 5  12
+17<<= 1  34
+17>>= 1  8
+17&= 1  1
+17^= 1  16
+16|= 1  17
+""")
+
 if __name__ == '__main__':
     if not outputCanRun():
         print "Many tests are expected to fail, because acc is not a 32-bit x86 Linux executable."
