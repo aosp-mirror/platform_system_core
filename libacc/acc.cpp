@@ -382,8 +382,10 @@ class Compiler : public ErrorSink {
          * argument, addressed relative to FP.
          * else it is an absolute global address.
          *
+         * et is ET_RVALUE for things like string constants, ET_LVALUE for
+         * variables.
          */
-        virtual void leaR0(int ea, Type* pPointerType) = 0;
+        virtual void leaR0(int ea, Type* pPointerType, ExpressionType et) = 0;
 
         /* Load the pc-relative address of a forward-referenced variable to R0.
          * Return the address of the 4-byte constant so that it can be filled
@@ -504,6 +506,12 @@ class Compiler : public ErrorSink {
             return mExpressionStack.size();
         }
 
+        virtual void forceR0RVal() {
+            if (getR0ExpressionType() == ET_LVALUE) {
+                loadR0FromR0();
+            }
+        }
+
     protected:
         /*
          * Output a byte. Handles all values, 0..ff.
@@ -545,6 +553,13 @@ class Compiler : public ErrorSink {
         void setR0Type(Type* pType) {
             assert(pType != NULL);
             mExpressionStack.back().pType = pType;
+            mExpressionStack.back().et = ET_RVALUE;
+        }
+
+        void setR0Type(Type* pType, ExpressionType et) {
+            assert(pType != NULL);
+            mExpressionStack.back().pType = pType;
+            mExpressionStack.back().et = et;
         }
 
         Type* getTOSType() {
@@ -1085,7 +1100,8 @@ class Compiler : public ErrorSink {
                     o4(0xE1C200F0); // strd r0, [r2]
                     break;
                 default:
-                    error("storeR0ToTOS: unimplemented type");
+                    error("storeR0ToTOS: unimplemented type %d",
+                            pDestType->tag);
                     break;
             }
         }
@@ -1112,7 +1128,7 @@ class Compiler : public ErrorSink {
             setR0Type(pPointerType->pHead);
         }
 
-        virtual void leaR0(int ea, Type* pPointerType) {
+        virtual void leaR0(int ea, Type* pPointerType, ExpressionType et) {
             if (ea > -LOCAL && ea < LOCAL) {
                 // Local, fp relative
                 if (ea < -1023 || ea > 1023 || ((ea & 3) != 0)) {
@@ -1130,7 +1146,7 @@ class Compiler : public ErrorSink {
                 o4(ea);         // .L1:   .word 0
                                 // .L99:
             }
-            setR0Type(pPointerType);
+            setR0Type(pPointerType, et);
         }
 
         virtual int leaForward(int ea, Type* pPointerType) {
@@ -2089,7 +2105,8 @@ class Compiler : public ErrorSink {
                     o(0x19dd); /* fstpl (%ecx) */
                     break;
                 default:
-                    error("storeR0ToTOS: unsupported type");
+                    error("storeR0ToTOS: unsupported type %d",
+                            pTargetType->tag);
                     break;
             }
         }
@@ -2119,9 +2136,9 @@ class Compiler : public ErrorSink {
             setR0Type(pPointerType->pHead);
         }
 
-        virtual void leaR0(int ea, Type* pPointerType) {
+        virtual void leaR0(int ea, Type* pPointerType, ExpressionType et) {
             gmov(10, ea); /* leal EA, %eax */
-            setR0Type(pPointerType);
+            setR0Type(pPointerType, et);
         }
 
         virtual int leaForward(int ea, Type* pPointerType) {
@@ -2208,6 +2225,7 @@ class Compiler : public ErrorSink {
 
         virtual void callIndirect(int l, Type* pFunc) {
             assert(pFunc->tag == TY_FUNC);
+            popType(); // Get rid of indirect fn pointer type
             setR0Type(pFunc->pHead);
             oad(0x2494ff, l); /* call *xxx(%esp) */
         }
@@ -2495,9 +2513,10 @@ class Compiler : public ErrorSink {
             mpBase->loadR0FromR0();
         }
 
-        virtual void leaR0(int ea, Type* pPointerType) {
-            fprintf(stderr, "leaR0(%d)\n", ea);
-            mpBase->leaR0(ea, pPointerType);
+        virtual void leaR0(int ea, Type* pPointerType, ExpressionType et) {
+            fprintf(stderr, "leaR0(%d, %d, %d)\n", ea,
+                    pPointerType->pHead->tag, et);
+            mpBase->leaR0(ea, pPointerType, et);
         }
 
         virtual int leaForward(int ea, Type* pPointerType) {
@@ -2606,6 +2625,10 @@ class Compiler : public ErrorSink {
 
         virtual size_t getExpressionStackDepth() {
             return mpBase->getExpressionStackDepth();
+        }
+
+        virtual void forceR0RVal() {
+            return mpBase->forceR0RVal();
         }
     };
 
@@ -3728,7 +3751,7 @@ class Compiler : public ErrorSink {
 
     bool acceptStringLiteral() {
         if (tok == '"') {
-            pGen->leaR0((int) glo, mkpCharPtr);
+            pGen->leaR0((int) glo, mkpCharPtr, ET_RVALUE);
             // This while loop merges multiple adjacent string constants.
             while (tok == '"') {
                 while (ch != '"' && ch != EOF) {
@@ -3799,6 +3822,7 @@ class Compiler : public ErrorSink {
             } else if (c == 2) {
                 /* -, +, !, ~ */
                 unary(false);
+                pGen->forceR0RVal();
                 if (t == '!')
                     pGen->gUnaryCmp(a);
                 else if (t == '+') {
@@ -3812,6 +3836,7 @@ class Compiler : public ErrorSink {
                 if (pCast) {
                     skip(')');
                     unary(false);
+                    pGen->forceR0RVal();
                     pGen->convertR0(pCast);
                 } else {
                     expr();
@@ -3821,6 +3846,7 @@ class Compiler : public ErrorSink {
                 /* This is a pointer dereference.
                  */
                 unary(false);
+                pGen->forceR0RVal();
                 Type* pR0Type = pGen->getR0Type();
                 if (pR0Type->tag != TY_POINTER) {
                     error("Expected a pointer type.");
@@ -3831,6 +3857,7 @@ class Compiler : public ErrorSink {
                     if (accept('=')) {
                         pGen->pushR0();
                         expr();
+                        pGen->forceR0RVal();
                         pGen->storeR0ToTOS();
                     } else if (t) {
                         pGen->loadR0FromR0();
@@ -3840,7 +3867,8 @@ class Compiler : public ErrorSink {
                 // t == 0 to trigger an indirect function call. Hack!
             } else if (t == '&') {
                 VariableInfo* pVI = VI(tok);
-                pGen->leaR0((int) pVI->pAddress, createPtrType(pVI->pType));
+                pGen->leaR0((int) pVI->pAddress, createPtrType(pVI->pType),
+                        ET_RVALUE);
                 next();
             } else if (t == EOF ) {
                 error("Unexpected EOF.");
@@ -3867,9 +3895,11 @@ class Compiler : public ErrorSink {
                 if ((tok == '=') & allowAssignment) {
                     /* assignment */
                     next();
-                    pGen->leaR0(n, createPtrType(pVI->pType));
+                    pGen->leaR0(n, createPtrType(pVI->pType), ET_LVALUE);
+                    checkLVal();
                     pGen->pushR0();
                     expr();
+                    pGen->forceR0RVal();
                     pGen->storeR0ToTOS();
                 } else if (tok != '(') {
                     /* variable */
@@ -3883,7 +3913,7 @@ class Compiler : public ErrorSink {
                     // load a variable
                     if (tokl == 11) {
                         // post inc / post dec
-                        pGen->leaR0(n, createPtrType(pVI->pType));
+                        pGen->leaR0(n, createPtrType(pVI->pType), ET_LVALUE);
 
                         pGen->pushR0();
                         pGen->loadR0FromR0();
@@ -3909,8 +3939,7 @@ class Compiler : public ErrorSink {
                         pGen->popR0();
                         next();
                     } else {
-                        pGen->leaR0(n, createPtrType(pVI->pType));
-                        pGen->loadR0FromR0();
+                        pGen->leaR0(n, createPtrType(pVI->pType), ET_LVALUE);
                     }
                 }
             }
@@ -3934,7 +3963,7 @@ class Compiler : public ErrorSink {
                     pVI->pForward = (void*) pGen->leaForward(
                             (int) pVI->pForward, pFn);
                 } else {
-                    pGen->leaR0(n, pFn);
+                    pGen->leaR0(n, pFn, ET_RVALUE);
                 }
                 pGen->pushR0();
             }
@@ -3949,6 +3978,7 @@ class Compiler : public ErrorSink {
                     error("Unexpected argument.");
                 }
                 expr();
+                pGen->forceR0RVal();
                 Type* pTargetType;
                 if (pArgList) {
                     pTargetType = pArgList->pHead;
@@ -3997,7 +4027,7 @@ class Compiler : public ErrorSink {
             while (level == tokl) {
                 t = tokc;
                 next();
-
+                pGen->forceR0RVal();
                 if (level > 8) {
                     a = pGen->gtst(t == OP_LOGICAL_OR, a); /* && and || output code generation */
                     binaryOp(level);
@@ -4010,6 +4040,7 @@ class Compiler : public ErrorSink {
                         // Push a dummy value so we don't fail
                         pGen->li(0);
                     }
+                    pGen->forceR0RVal();
                     if ((level == 4) | (level == 5)) {
                         pGen->gcmp(t);
                     } else {
@@ -4019,6 +4050,7 @@ class Compiler : public ErrorSink {
             }
             /* && and || output code generation */
             if (a && level > 8) {
+                pGen->forceR0RVal();
                 a = pGen->gtst(t == OP_LOGICAL_OR, a);
                 pGen->li(t != OP_LOGICAL_OR);
                 int b = pGen->gjmp(0);
@@ -4035,6 +4067,7 @@ class Compiler : public ErrorSink {
 
     int test_expr() {
         expr();
+        pGen->forceR0RVal();
         return pGen->gtst(0, 0);
     }
 
@@ -4103,6 +4136,7 @@ class Compiler : public ErrorSink {
             if (accept(TOK_RETURN)) {
                 if (tok != ';') {
                     expr();
+                    pGen->forceR0RVal();
                     if (pReturnType->tag == TY_VOID) {
                         error("Must not return a value from a void function");
                     } else {
@@ -4424,6 +4458,12 @@ class Compiler : public ErrorSink {
         return pType;
     }
 
+    void checkLVal() {
+        if (pGen->getR0ExpressionType() != ET_LVALUE) {
+            error("Expected an lval");
+        }
+    }
+
     void addGlobalSymbol(Type* pDecl) {
         tokenid_t t = pDecl->id;
         VariableInfo* pVI = VI(t);
@@ -4466,9 +4506,10 @@ class Compiler : public ErrorSink {
                 VI(pDecl->id)->pAddress = (void*) variableAddress;
                 if (accept('=')) {
                     /* assignment */
-                    pGen->leaR0(variableAddress, createPtrType(pDecl));
+                    pGen->leaR0(variableAddress, createPtrType(pDecl), ET_LVALUE);
                     pGen->pushR0();
                     expr();
+                    pGen->forceR0RVal();
                     pGen->storeR0ToTOS();
                 }
                 if (tok == ',')
