@@ -30,6 +30,8 @@ void run(ScriptPtr scriptFn) {
 extern "C"
 void accDisassemble(ACCscript* script);
 
+int globalVar;
+
 void op_int(int a) {
     printf("op_int(%d)\n", a);
 }
@@ -46,6 +48,7 @@ const char* text = "void op_int(int a);\n"
     "           float e, float f, float g, float h,\n"
     "           float i, float j, float k, float l);\n"
     "void script() {\n"
+    "  globalVar += 3;\n"
     "  op_int(123);\n"
     "  op_float12(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0);\n"
     "}\n";
@@ -56,6 +59,9 @@ ACCvoid* symbolLookup(ACCvoid* pContext, const ACCchar* name) {
     }
     if (strcmp("op_float12", name) == 0) {
         return (ACCvoid*) op_float12;
+    }
+    if (strcmp("globalVar", name) == 0) {
+        return (ACCvoid*) &globalVar;
     }
     return (ACCvoid*) dlsym(RTLD_DEFAULT, name);
 }
@@ -98,7 +104,9 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Could not find script: %d\n", result);
     } else {
         fprintf(stderr, "Executing script:\n");
+        globalVar = 17;
         run(scriptPointer);
+        fprintf(stderr, "After script globalVar = %d\n", globalVar);
     }
 
 

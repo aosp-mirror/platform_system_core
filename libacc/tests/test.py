@@ -382,6 +382,11 @@ Errors: 0
 result: 0
 ""","""""")
 
+    def testShort(self):
+        self.compileCheck(["-R", "data/short.c"], """Executing compiled code:
+result: -2
+""","""""")
+
 if __name__ == '__main__':
     if not outputCanRun():
         print "Many tests are expected to fail, because acc is not a 32-bit x86 Linux executable."

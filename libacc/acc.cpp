@@ -133,13 +133,22 @@ public:
 class Compiler : public ErrorSink {
     typedef int tokenid_t;
     enum TypeTag {
-        TY_INT, TY_CHAR, TY_VOID, TY_FLOAT, TY_DOUBLE,
-        TY_POINTER, TY_FUNC, TY_PARAM
+        TY_INT,       // 0
+        TY_CHAR,      // 1
+        TY_SHORT,     // 2
+        TY_VOID,      // 3
+        TY_FLOAT,     // 4
+        TY_DOUBLE,    // 5
+        TY_POINTER, // 6
+        TY_ARRAY,   // 7
+        TY_STRUCT,  // 8
+        TY_FUNC,    // 9
+        TY_PARAM    // 10
     };
 
     struct Type {
         TypeTag tag;
-        tokenid_t id; // For function arguments
+        tokenid_t id; // For function arguments (stores length for array)
         Type* pHead;
         Type* pTail;
     };
@@ -594,8 +603,18 @@ class Compiler : public ErrorSink {
 
         TypeTag collapseType(TypeTag tag) {
             static const TypeTag collapsedTag[] = {
-                    TY_INT, TY_INT, TY_VOID, TY_FLOAT, TY_DOUBLE, TY_INT,
-                    TY_VOID, TY_VOID};
+                    TY_INT,
+                    TY_INT,
+                    TY_INT,
+                    TY_VOID,
+                    TY_FLOAT,
+                    TY_DOUBLE,
+                    TY_INT,
+                    TY_INT,
+                    TY_VOID,
+                    TY_VOID,
+                    TY_VOID
+                };
             return collapsedTag[tag];
         }
 
@@ -1093,6 +1112,9 @@ class Compiler : public ErrorSink {
                 case TY_FLOAT:
                     o4(0xE5820000); // str r0, [r2]
                     break;
+                case TY_SHORT:
+                    o4(0xE1C200B0); // strh r0, [r2]
+                    break;
                 case TY_CHAR:
                     o4(0xE5C20000); // strb r0, [r2]
                     break;
@@ -1114,6 +1136,9 @@ class Compiler : public ErrorSink {
                 case TY_INT:
                 case TY_FLOAT:
                     o4(0xE5900000); // ldr r0, [r0]
+                    break;
+                case TY_SHORT:
+                    o4(0xE1D000F0); // ldrsh r0, [r0]
                     break;
                 case TY_CHAR:
                     o4(0xE5D00000); // ldrb r0, [r0]
@@ -1378,6 +1403,8 @@ class Compiler : public ErrorSink {
             switch(pType->tag) {
                 case TY_CHAR:
                     return 1;
+                case TY_SHORT:
+                    return 1;
                 case TY_DOUBLE:
                     return 8;
                 default:
@@ -1392,6 +1419,8 @@ class Compiler : public ErrorSink {
             switch(pType->tag) {
                 case TY_INT:
                     return 4;
+                case TY_SHORT:
+                    return 2;
                 case TY_CHAR:
                     return 1;
                 default:
@@ -2095,6 +2124,9 @@ class Compiler : public ErrorSink {
                 case TY_INT:
                     o(0x0189); /* movl %eax/%al, (%ecx) */
                     break;
+                case TY_SHORT:
+                    o(0x018966); /* movw %ax, (%ecx) */
+                    break;
                 case TY_CHAR:
                     o(0x0188); /* movl %eax/%al, (%ecx) */
                     break;
@@ -2118,6 +2150,10 @@ class Compiler : public ErrorSink {
                 case TY_POINTER:
                 case TY_INT:
                     o2(0x008b); /* mov (%eax), %eax */
+                    break;
+                case TY_SHORT:
+                    o(0xbf0f); /* movswl (%eax), %eax */
+                    ob(0);
                     break;
                 case TY_CHAR:
                     o(0xbe0f); /* movsbl (%eax), %eax */
@@ -2288,6 +2324,8 @@ class Compiler : public ErrorSink {
             switch (pType->tag) {
             case TY_CHAR:
                 return 1;
+            case TY_SHORT:
+                return 2;
             default:
                 return 4;
             }
@@ -2300,6 +2338,8 @@ class Compiler : public ErrorSink {
             switch(pType->tag) {
                 case TY_INT:
                     return 4;
+                case TY_SHORT:
+                    return 2;
                 case TY_CHAR:
                     return 1;
                 default:
@@ -3158,6 +3198,7 @@ class Compiler : public ErrorSink {
 
     // Prebuilt types, makes things slightly faster.
     Type* mkpInt;        // int
+    Type* mkpShort;      // short
     Type* mkpChar;       // char
     Type* mkpVoid;       // void
     Type* mkpFloat;
@@ -4013,7 +4054,8 @@ class Compiler : public ErrorSink {
         pGen->pushR0();
         pGen->loadR0FromR0();
         int tag = pGen->getR0Type()->tag;
-        if (!(tag == TY_INT || tag == TY_CHAR || tag == TY_POINTER)) {
+        if (!(tag == TY_INT || tag == TY_SHORT || tag == TY_CHAR ||
+                tag == TY_POINTER)) {
             error("++/-- illegal for this type. %d", tag);
         }
         if (isPost) {
@@ -4262,6 +4304,9 @@ class Compiler : public ErrorSink {
                 case TY_INT:
                     buffer.appendCStr("int");
                     break;
+                case TY_SHORT:
+                    buffer.appendCStr("short");
+                    break;
                 case TY_CHAR:
                     buffer.appendCStr("char");
                     break;
@@ -4282,6 +4327,8 @@ class Compiler : public ErrorSink {
 
         switch (tag) {
             case TY_INT:
+                break;
+            case TY_SHORT:
                 break;
             case TY_CHAR:
                 break;
@@ -4347,6 +4394,8 @@ class Compiler : public ErrorSink {
         Type* pType;
         if (tok == TOK_INT) {
             pType = mkpInt;
+        } else if (tok == TOK_SHORT) {
+            pType = mkpShort;
         } else if (tok == TOK_CHAR) {
             pType = mkpChar;
         } else if (tok == TOK_VOID) {
@@ -4844,6 +4893,7 @@ public:
 
     void createPrimitiveTypes() {
         mkpInt = createType(TY_INT, NULL, NULL);
+        mkpShort = createType(TY_SHORT, NULL, NULL);
         mkpChar = createType(TY_CHAR, NULL, NULL);
         mkpVoid = createType(TY_VOID, NULL, NULL);
         mkpFloat = createType(TY_FLOAT, NULL, NULL);
