@@ -387,6 +387,16 @@ result: 0
 result: -2
 ""","""""")
 
+    def testArray(self):
+        self.compileCheck(["-R", "data/array.c"], """Executing compiled code:
+localInt: 3
+localDouble: 3 3
+globalChar: 3
+globalDouble: 3
+testArgs: 0 2 4
+result: 0
+""","""""")
+
 if __name__ == '__main__':
     if not outputCanRun():
         print "Many tests are expected to fail, because acc is not a 32-bit x86 Linux executable."
