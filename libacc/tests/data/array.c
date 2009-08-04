@@ -66,6 +66,34 @@ void testArgs() {
     printf("\n");
 }
 
+void testDecay() {
+    char c[4];
+    c[0] = 'H';
+    c[1] = 'i';
+    c[2] = '!';
+    c[3] = 0;
+    printf("testDecay: %s\n", c);
+}
+
+void test2D() {
+    char c[10][20];
+    int x;
+    int y;
+    printf("test2D:\n");
+    for(y = 0; y < 10; y++) {
+        for(x = 0; x < 20; x++) {
+            c[y][x] = 'a' + (15 & (y * 19 + x));
+        }
+    }
+    for(y = 0; y < 10; y++) {
+        for(x = 0; x < 20; x++) {
+            printf("%c", c[y][x]);
+        }
+        printf("\n");
+    }
+
+}
+
 int main()
 {
     testLocalInt();
@@ -73,5 +101,7 @@ int main()
     testGlobalChar();
     testGlobalDouble();
     testArgs();
+    testDecay();
+    test2D();
     return 0;
 }

@@ -394,6 +394,18 @@ localDouble: 3 3
 globalChar: 3
 globalDouble: 3
 testArgs: 0 2 4
+testDecay: Hi!
+test2D:
+abcdefghijdefghijklm
+defghijklmghijklmnop
+ghijklmnopjklmnopabc
+jklmnopabcmnopabcdef
+mnopabcdefpabcdefghi
+pabcdefghicdefghijkl
+cdefghijklfghijklmno
+fghijklmnoijklmnopab
+ijklmnopablmnopabcde
+lmnopabcdefghijklmno
 result: 0
 ""","""""")
 
