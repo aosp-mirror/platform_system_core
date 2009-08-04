@@ -139,16 +139,17 @@ class Compiler : public ErrorSink {
         TY_VOID,      // 3
         TY_FLOAT,     // 4
         TY_DOUBLE,    // 5
-        TY_POINTER, // 6
-        TY_ARRAY,   // 7
-        TY_STRUCT,  // 8
-        TY_FUNC,    // 9
-        TY_PARAM    // 10
+        TY_POINTER,   // 6
+        TY_ARRAY,     // 7
+        TY_STRUCT,    // 8
+        TY_FUNC,      // 9
+        TY_PARAM      // 10
     };
 
     struct Type {
         TypeTag tag;
-        tokenid_t id; // For function arguments (stores length for array)
+        tokenid_t id; // For function arguments, local vars
+        int length; // length of array
         Type* pHead;
         Type* pTail;
     };
@@ -405,7 +406,16 @@ class Compiler : public ErrorSink {
         /**
          * Convert R0 to the given type.
          */
-        virtual void convertR0(Type* pType) = 0;
+
+        void convertR0(Type* pType) {
+            convertR0Imp(pType, false);
+        }
+
+        void castR0(Type* pType) {
+            convertR0Imp(pType, true);
+        }
+
+        virtual void convertR0Imp(Type* pType, bool isCast) = 0;
 
         /* Emit code to adjust the stack for a function call. Return the
          * label for the address of the instruction that adjusts the
@@ -622,12 +632,38 @@ class Compiler : public ErrorSink {
             return collapseType(getR0Type()->tag);
         }
 
-        bool isFloatType(Type* pType) {
+        static bool isFloatType(Type* pType) {
             return isFloatTag(pType->tag);
         }
 
-        bool isFloatTag(TypeTag tag) {
+        static bool isFloatTag(TypeTag tag) {
             return tag == TY_FLOAT || tag == TY_DOUBLE;
+        }
+
+        static bool isPointerType(Type* pType) {
+            return isPointerTag(pType->tag);
+        }
+
+        static bool isPointerTag(TypeTag tag) {
+            return tag == TY_POINTER || tag == TY_ARRAY;
+        }
+
+        Type* getPointerArithmeticResultType(Type* a, Type* b) {
+            TypeTag aTag = a->tag;
+            TypeTag bTag = b->tag;
+            if (aTag == TY_POINTER) {
+                return a;
+            }
+            if (bTag == TY_POINTER) {
+                return b;
+            }
+            if (aTag == TY_ARRAY) {
+                return a->pTail;
+            }
+            if (bTag == TY_ARRAY) {
+                return b->pTail;
+            }
+            return NULL;
         }
 
         Type* mkpInt;
@@ -848,8 +884,8 @@ class Compiler : public ErrorSink {
             bool isFloatTOS = isFloatTag(tagTOS);
             if (!isFloatR0 && !isFloatTOS) {
                 setupIntPtrArgs();
-                bool isPtrR0 = tagR0 == TY_POINTER;
-                bool isPtrTOS = tagTOS == TY_POINTER;
+                bool isPtrR0 = isPointerTag(tagR0);
+                bool isPtrTOS = isPointerTag(tagTOS);
                 if (isPtrR0 || isPtrTOS) {
                     if (isPtrR0 && isPtrTOS) {
                         if (op != OP_MINUS) {
@@ -871,7 +907,8 @@ class Compiler : public ErrorSink {
                         if (! (op == OP_PLUS || (op == OP_MINUS && isPtrR0))) {
                             error("Unsupported pointer-scalar operation %d", op);
                         }
-                        Type* pPtrType = isPtrR0 ? pR0Type : pTOSType;
+                        Type* pPtrType = getPointerArithmeticResultType(
+                                pR0Type, pTOSType);
                         int size = sizeOf(pPtrType->pHead);
                         if (size != 1) {
                             // TODO: Optimize for power-of-two.
@@ -1131,7 +1168,8 @@ class Compiler : public ErrorSink {
         virtual void loadR0FromR0() {
             Type* pPointerType = getR0Type();
             assert(pPointerType->tag == TY_POINTER);
-            switch (pPointerType->pHead->tag) {
+            TypeTag tag = pPointerType->pHead->tag;
+            switch (tag) {
                 case TY_POINTER:
                 case TY_INT:
                 case TY_FLOAT:
@@ -1147,7 +1185,7 @@ class Compiler : public ErrorSink {
                     o4(0xE1C000D0); // ldrd   r0, [r0]
                     break;
                 default:
-                    error("loadR0FromR0: unimplemented type");
+                    error("loadR0FromR0: unimplemented type %d", tag);
                     break;
             }
             setR0Type(pPointerType->pHead);
@@ -1197,9 +1235,27 @@ class Compiler : public ErrorSink {
             return result;
         }
 
-        virtual void convertR0(Type* pType){
+        virtual void convertR0Imp(Type* pType, bool isCast){
             Type* pR0Type = getR0Type();
-            if (bitsSame(pType, pR0Type)) {
+            if (isPointerType(pType) && isPointerType(pR0Type)) {
+                Type* pA = pR0Type;
+                Type* pB = pType;
+                // Array decays to pointer
+                if (pA->tag == TY_ARRAY && pB->tag == TY_POINTER) {
+                    pA = pA->pTail;
+                }
+                if (typeEqual(pA, pB)) {
+                    return; // OK
+                }
+                if (pB->pHead->tag == TY_VOID) {
+                    return; // convert to void* is OK.
+                }
+                if (pA->tag == TY_POINTER && pB->tag == TY_POINTER
+                        && isCast) {
+                    return; // OK
+                }
+                error("Incompatible pointer or array types");
+            } else if (bitsSame(pType, pR0Type)) {
                 // do nothing special
             } else {
                 TypeTag r0Tag = collapseType(pR0Type->tag);
@@ -1423,14 +1479,17 @@ class Compiler : public ErrorSink {
                     return 2;
                 case TY_CHAR:
                     return 1;
-                default:
-                    return 0;
                 case TY_FLOAT:
                     return 4;
                 case TY_DOUBLE:
                     return 8;
                 case TY_POINTER:
                     return 4;
+                case TY_ARRAY:
+                    return pType->length * sizeOf(pType->pHead);
+                default:
+                    error("Unsupported type %d", pType->tag);
+                    return 0;
             }
         }
 
@@ -1438,6 +1497,8 @@ class Compiler : public ErrorSink {
             switch(pType->tag) {
                 case TY_DOUBLE:
                     return 8;
+                case TY_ARRAY:
+                    return stackAlignmentOf(pType->pHead);
                 default:
                     return 4;
             }
@@ -1447,6 +1508,11 @@ class Compiler : public ErrorSink {
             switch(pType->tag) {
                 case TY_DOUBLE:
                     return 8;
+                case TY_ARRAY:
+                    return sizeOf(pType);
+                case TY_FUNC:
+                    error("stackSizeOf func not supported");
+                    return 4;
                 default:
                     return 4;
             }
@@ -1911,8 +1977,8 @@ class Compiler : public ErrorSink {
             bool isFloatR0 = isFloatTag(tagR0);
             bool isFloatTOS = isFloatTag(tagTOS);
             if (!isFloatR0 && !isFloatTOS) {
-                bool isPtrR0 = tagR0 == TY_POINTER;
-                bool isPtrTOS = tagTOS == TY_POINTER;
+                bool isPtrR0 = isPointerTag(tagR0);
+                bool isPtrTOS = isPointerTag(tagTOS);
                 if (isPtrR0 || isPtrTOS) {
                     if (isPtrR0 && isPtrTOS) {
                         if (op != OP_MINUS) {
@@ -1936,7 +2002,8 @@ class Compiler : public ErrorSink {
                         if (! (op == OP_PLUS || (op == OP_MINUS && isPtrR0))) {
                             error("Unsupported pointer-scalar operation %d", op);
                         }
-                        Type* pPtrType = isPtrR0 ? pR0Type : pTOSType;
+                        Type* pPtrType = getPointerArithmeticResultType(
+                                pR0Type, pTOSType);
                         o(0x59); /* pop %ecx */
                         int size = sizeOf(pPtrType->pHead);
                         if (size != 1) {
@@ -2146,7 +2213,8 @@ class Compiler : public ErrorSink {
         virtual void loadR0FromR0() {
             Type* pPointerType = getR0Type();
             assert(pPointerType->tag == TY_POINTER);
-            switch (pPointerType->pHead->tag) {
+            TypeTag tag = pPointerType->pHead->tag;
+            switch (tag) {
                 case TY_POINTER:
                 case TY_INT:
                     o2(0x008b); /* mov (%eax), %eax */
@@ -2166,7 +2234,7 @@ class Compiler : public ErrorSink {
                     o2(0x00dd); // fldl (%eax)
                     break;
                 default:
-                    error("loadR0FromR0: unsupported type");
+                    error("loadR0FromR0: unsupported type %d", tag);
                     break;
             }
             setR0Type(pPointerType->pHead);
@@ -2183,14 +2251,32 @@ class Compiler : public ErrorSink {
             return getPC() - 4;
         }
 
-        virtual void convertR0(Type* pType){
+        virtual void convertR0Imp(Type* pType, bool isCast){
             Type* pR0Type = getR0Type();
             if (pR0Type == NULL) {
                 assert(false);
                 setR0Type(pType);
                 return;
             }
-            if (bitsSame(pType, pR0Type)) {
+            if (isPointerType(pType) && isPointerType(pR0Type)) {
+                Type* pA = pR0Type;
+                Type* pB = pType;
+                // Array decays to pointer
+                if (pA->tag == TY_ARRAY && pB->tag == TY_POINTER) {
+                    pA = pA->pTail;
+                }
+                if (typeEqual(pA, pB)) {
+                    return; // OK
+                }
+                if (pB->pHead->tag == TY_VOID) {
+                    return; // convert to void* is OK.
+                }
+                if (pA->tag == TY_POINTER && pB->tag == TY_POINTER
+                        && isCast) {
+                    return; // OK
+                }
+                error("Incompatible pointer or array types");
+            } else if (bitsSame(pType, pR0Type)) {
                 // do nothing special
             } else if (isFloatType(pType) && isFloatType(pR0Type)) {
                 // do nothing special, both held in same register on x87.
@@ -2326,6 +2412,11 @@ class Compiler : public ErrorSink {
                 return 1;
             case TY_SHORT:
                 return 2;
+            case TY_ARRAY:
+                return alignmentOf(pType->pHead);
+            case TY_FUNC:
+                error("alignment of func not supported");
+                return 1;
             default:
                 return 4;
             }
@@ -2342,14 +2433,17 @@ class Compiler : public ErrorSink {
                     return 2;
                 case TY_CHAR:
                     return 1;
-                default:
-                    return 0;
                 case TY_FLOAT:
                     return 4;
                 case TY_DOUBLE:
                     return 8;
                 case TY_POINTER:
                     return 4;
+                case TY_ARRAY:
+                    return pType->length * sizeOf(pType->pHead);
+                default:
+                    error("Unsupported type %d", pType->tag);
+                    return 0;
             }
         }
 
@@ -2361,6 +2455,11 @@ class Compiler : public ErrorSink {
             switch(pType->tag) {
                 case TY_DOUBLE:
                     return 8;
+                case TY_ARRAY:
+                    return sizeOf(pType);
+                case TY_FUNC:
+                    error("stackSizeOf func not supported");
+                    return 4;
                 default:
                     return 4;
             }
@@ -3911,7 +4010,7 @@ class Compiler : public ErrorSink {
                     skip(')');
                     unary();
                     pGen->forceR0RVal();
-                    pGen->convertR0(pCast);
+                    pGen->castR0(pCast);
                 } else {
                     commaExpr();
                     skip(')');
@@ -3959,10 +4058,18 @@ class Compiler : public ErrorSink {
                     }
                 }
                 // load a variable
-                Type* pVal = createPtrType(pVI->pType);
+                Type* pVal;
+                ExpressionType et;
+                if (pVI->pType->tag == TY_ARRAY) {
+                    pVal = pVI->pType;
+                    et = ET_RVALUE;
+                } else {
+                    pVal = createPtrType(pVI->pType);
+                    et = ET_LVALUE;
+                }
                 if (n) {
-                    ExpressionType et = ET_LVALUE;
-                    if (pVal->pHead->tag == TY_FUNC) {
+                    int tag = pVal->pHead->tag;
+                    if (tag == TY_FUNC) {
                         et = ET_RVALUE;
                     }
                     pGen->leaR0(n, pVal, et);
@@ -4251,6 +4358,8 @@ class Compiler : public ErrorSink {
         }
         if (at == TY_POINTER) {
             return typeEqual(a->pHead, b->pHead);
+        } else if (at == TY_ARRAY) {
+            return a->length == b->length && typeEqual(a->pHead, b->pHead);
         } else if (at == TY_FUNC || at == TY_PARAM) {
             return typeEqual(a->pHead, b->pHead)
                 && typeEqual(a->pTail, b->pTail);
@@ -4345,6 +4454,9 @@ class Compiler : public ErrorSink {
                 }
                 buffer.append('*');
                 break;
+            case TY_ARRAY:
+                decodeTypeImpPrefix(buffer, pType->pHead);
+                break;
             case TY_FUNC:
                 decodeTypeImp(buffer, pType->pHead);
                 break;
@@ -4368,6 +4480,13 @@ class Compiler : public ErrorSink {
                     buffer.append(')');
                 }
                 decodeTypeImpPostfix(buffer, pType->pHead);
+                break;
+            case TY_ARRAY:
+                {
+                    String temp;
+                    temp.printf("[%d]", pType->length);
+                    buffer.append(temp);
+                }
                 break;
             case TY_FUNC:
                 buffer.append('(');
@@ -4418,9 +4537,13 @@ class Compiler : public ErrorSink {
                                   nameRequired, reportFailure);
         if (declName) {
             // Clone the parent type so we can set a unique ID
+            Type* pOldType = pType;
             pType = createType(pType->tag, pType->pHead, pType->pTail);
 
             pType->id = declName;
+            pType->length = pOldType->length;
+        } else if (nameRequired) {
+            error("Expected a variable name");
         }
         // fprintf(stderr, "Parsed a declaration:       ");
         // printType(pType);
@@ -4490,11 +4613,27 @@ class Compiler : public ErrorSink {
             error("Expected name. Got %s", temp.getUnwrapped());
             reportFailure = true;
         }
-        while (accept('(')) {
-            // Function declaration
-            Type* pTail = acceptArgs(nameAllowed);
-            pType = createType(TY_FUNC, pType, pTail);
-            skip(')');
+        for(;;) {
+            if (accept('(')) {
+                // Function declaration
+                Type* pTail = acceptArgs(nameAllowed);
+                pType = createType(TY_FUNC, pType, pTail);
+                skip(')');
+            } if (accept('[')) {
+                if (tok != ']') {
+                    if (tok != TOK_NUM || tokc <= 0) {
+                        error("Expected positive integer constant");
+                    } else {
+                        Type* pDecayType = createPtrType(pType);
+                        pType = createType(TY_ARRAY, pType, pDecayType);
+                        pType->length = tokc;
+                    }
+                    next();
+                }
+                skip(']');
+            } else {
+                break;
+            }
         }
 
         if (pNewHead) {
