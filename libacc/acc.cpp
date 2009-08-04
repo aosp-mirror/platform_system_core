@@ -1168,7 +1168,8 @@ class Compiler : public ErrorSink {
         virtual void loadR0FromR0() {
             Type* pPointerType = getR0Type();
             assert(pPointerType->tag == TY_POINTER);
-            TypeTag tag = pPointerType->pHead->tag;
+            Type* pNewType = pPointerType->pHead;
+            TypeTag tag = pNewType->tag;
             switch (tag) {
                 case TY_POINTER:
                 case TY_INT:
@@ -1184,11 +1185,14 @@ class Compiler : public ErrorSink {
                 case TY_DOUBLE:
                     o4(0xE1C000D0); // ldrd   r0, [r0]
                     break;
+                case TY_ARRAY:
+                    pNewType = pNewType->pTail;
+                    break;
                 default:
                     error("loadR0FromR0: unimplemented type %d", tag);
                     break;
             }
-            setR0Type(pPointerType->pHead);
+            setR0Type(pNewType);
         }
 
         virtual void leaR0(int ea, Type* pPointerType, ExpressionType et) {
@@ -2213,7 +2217,8 @@ class Compiler : public ErrorSink {
         virtual void loadR0FromR0() {
             Type* pPointerType = getR0Type();
             assert(pPointerType->tag == TY_POINTER);
-            TypeTag tag = pPointerType->pHead->tag;
+            Type* pNewType = pPointerType->pHead;
+            TypeTag tag = pNewType->tag;
             switch (tag) {
                 case TY_POINTER:
                 case TY_INT:
@@ -2233,11 +2238,14 @@ class Compiler : public ErrorSink {
                 case TY_DOUBLE:
                     o2(0x00dd); // fldl (%eax)
                     break;
+                case TY_ARRAY:
+                    pNewType = pNewType->pTail;
+                    break;
                 default:
                     error("loadR0FromR0: unsupported type %d", tag);
                     break;
             }
-            setR0Type(pPointerType->pHead);
+            setR0Type(pNewType);
         }
 
         virtual void leaR0(int ea, Type* pPointerType, ExpressionType et) {
@@ -4126,6 +4134,9 @@ class Compiler : public ErrorSink {
                         pTargetType = pGen->getR0Type();
                         if (pTargetType->tag == TY_FLOAT) {
                             pTargetType = mkpDouble;
+                        } else if (pTargetType->tag == TY_ARRAY) {
+                            // Pass arrays by pointer.
+                            pTargetType = pTargetType->pTail;
                         }
                     }
                     if (pTargetType->tag == TY_VOID) {
