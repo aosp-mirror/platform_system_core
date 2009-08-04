@@ -95,6 +95,9 @@ static struct perms_ devperms[] = {
 	    /* logger should be world writable (for logging) but not readable */
     { "/dev/log/",          0662,   AID_ROOT,       AID_LOG,        1 },
 
+    /* the msm hw3d client device node is world writable/readable. */
+    { "/dev/msm_hw3dc",     0666,   AID_ROOT,       AID_ROOT,       0 },
+
         /* these should not be world writable */
     { "/dev/diag",          0660,   AID_ROOT,       AID_ROOT,        0 },
     { "/dev/diag_arm9",     0660,   AID_ROOT,       AID_ROOT,        0 },
@@ -106,7 +109,7 @@ static struct perms_ devperms[] = {
     { "/dev/alarm",         0664,   AID_SYSTEM,     AID_RADIO,      0 },
     { "/dev/tty0",          0660,   AID_ROOT,       AID_SYSTEM,     0 },
     { "/dev/graphics/",     0660,   AID_ROOT,       AID_GRAPHICS,   1 },
-    { "/dev/hw3d",          0660,   AID_SYSTEM,     AID_GRAPHICS,   0 },
+    { "/dev/msm_hw3dm",     0660,   AID_SYSTEM,     AID_GRAPHICS,   0 },
     { "/dev/input/",        0660,   AID_ROOT,       AID_INPUT,      1 },
     { "/dev/eac",           0660,   AID_ROOT,       AID_AUDIO,      0 },
     { "/dev/cam",           0660,   AID_ROOT,       AID_CAMERA,     0 },
