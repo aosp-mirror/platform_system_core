@@ -33,6 +33,7 @@
 #  endif
 #else
 #include <sys/poll.h>
+#include <sys/reboot.h>
 #endif
 
 typedef struct stinfo stinfo;
@@ -131,6 +132,20 @@ void restart_root_service(int fd, void *cookie)
         sleep(1);
         exit(1);
     }
+}
+
+void reboot_service(int fd, char *arg)
+{
+    char buf[100];
+    int ret;
+
+    sync();
+    ret = __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2, LINUX_REBOOT_CMD_RESTART2, arg);
+    if (ret < 0) {
+        snprintf(buf, sizeof(buf), "reboot failed: %s\n", strerror(errno));
+        writex(fd, buf, strlen(buf));
+    }
+    adb_close(fd);
 }
 
 #endif
@@ -399,6 +414,11 @@ int service_to_fd(const char *name)
         ret = create_service_thread(file_sync_service, NULL);
     } else if(!strncmp(name, "remount:", 8)) {
         ret = create_service_thread(remount_service, NULL);
+    } else if(!strncmp(name, "reboot:", 7)) {
+        char* arg = name + 7;
+        if (*name == 0)
+            arg = NULL;
+        ret = create_service_thread(reboot_service, arg);
     } else if(!strncmp(name, "root:", 5)) {
         ret = create_service_thread(restart_root_service, NULL);
 #endif
