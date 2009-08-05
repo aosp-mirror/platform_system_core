@@ -148,6 +148,7 @@ void help()
         "  adb get-serialno             - prints: <serial-number>\n"
         "  adb status-window            - continuously print device status for a specified device\n"
         "  adb remount                  - remounts the /system partition on the device read-write\n"
+        "  adb reboot [bootloader|recovery] - reboots the device, optionally into the bootloader or recovery program\n"
         "  adb root                     - restarts adb with root permissions\n"
         "\n"
         "networking:\n"
@@ -909,6 +910,22 @@ top:
 
     if(!strcmp(argv[0], "remount")) {
         int fd = adb_connect("remount:");
+        if(fd >= 0) {
+            read_and_dump(fd);
+            adb_close(fd);
+            return 0;
+        }
+        fprintf(stderr,"error: %s\n", adb_error());
+        return 1;
+    }
+
+    if(!strcmp(argv[0], "reboot")) {
+        int fd;
+        if (argc > 1)
+            snprintf(buf, sizeof(buf), "reboot:%s", argv[1]);
+        else
+            snprintf(buf, sizeof(buf), "reboot:");
+        fd = adb_connect(buf);
         if(fd >= 0) {
             read_and_dump(fd);
             adb_close(fd);

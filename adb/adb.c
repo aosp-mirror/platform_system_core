@@ -30,6 +30,8 @@
 
 #if !ADB_HOST
 #include <private/android_filesystem_config.h>
+#include <linux/capability.h>
+#include <linux/prctl.h>
 #else
 #include "usb_vendors.h"
 #endif
@@ -879,6 +881,11 @@ int adb_main(int is_daemon)
     /* don't listen on port 5037 if we are running in secure mode */
     /* don't run as root if we are running in secure mode */
     if (secure) {
+        struct __user_cap_header_struct header;
+        struct __user_cap_data_struct cap;
+
+        prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0);
+
         /* add extra groups:
         ** AID_ADB to access the USB driver
         ** AID_LOG to read system logs (adb logcat)
@@ -895,6 +902,13 @@ int adb_main(int is_daemon)
         /* then switch user and group to "shell" */
         setgid(AID_SHELL);
         setuid(AID_SHELL);
+
+        /* set CAP_SYS_BOOT capability, so "adb reboot" will succeed */
+        header.version = _LINUX_CAPABILITY_VERSION;
+        header.pid = 0;
+        cap.effective = cap.permitted = (1 << CAP_SYS_BOOT);
+        cap.inheritable = 0;
+        capset(&header, &cap);
 
         D("Local port 5037 disabled\n");
     } else {
