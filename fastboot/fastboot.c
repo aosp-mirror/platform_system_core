@@ -147,9 +147,11 @@ oops:
 int match_fastboot(usb_ifc_info *info)
 {
     if(!(vendor_id && (info->dev_vendor == vendor_id)) &&
-       (info->dev_vendor != 0x18d1) &&
+       (info->dev_vendor != 0x18d1) &&  // Google
        (info->dev_vendor != 0x0451) &&
-       (info->dev_vendor != 0x0bb4)) return -1;
+       (info->dev_vendor != 0x22b8) &&  // Motorola
+       (info->dev_vendor != 0x0bb4))    // HTC
+            return -1;
     if(info->ifc_class != 0xff) return -1;
     if(info->ifc_subclass != 0x42) return -1;
     if(info->ifc_protocol != 0x03) return -1;
