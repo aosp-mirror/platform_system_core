@@ -15,9 +15,7 @@
  */
 
 /*
- * Android config -- "Darwin".  Used for PPC Mac OS X.
- *
- * TODO: split this into "x86" and "ppc" versions
+ * Android config -- "Darwin".  Used for X86 Mac OS X.
  */
 #ifndef _ANDROID_CONFIG_H
 #define _ANDROID_CONFIG_H
@@ -256,5 +254,15 @@
  * Define if writev() exists
  */
 #define HAVE_WRITEV 1
+
+/*
+ * Define if <stdint.h> exists.
+ */
+#define HAVE_STDINT_H 1
+
+/*
+ * Define if <stdbool.h> exists.
+ */
+#define HAVE_STDBOOL_H 1
 
 #endif /*_ANDROID_CONFIG_H*/

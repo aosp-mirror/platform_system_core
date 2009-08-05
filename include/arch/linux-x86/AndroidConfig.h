@@ -283,4 +283,14 @@
  */
 #define HAVE_WRITEV 1
 
+/*
+ * Define if <stdint.h> exists.
+ */
+#define HAVE_STDINT_H 1
+
+/*
+ * Define if <stdbool.h> exists.
+ */
+#define HAVE_STDBOOL_H 1
+
 #endif /*_ANDROID_CONFIG_H*/
