@@ -99,8 +99,8 @@ static struct perms_ devperms[] = {
     { "/dev/msm_hw3dc",     0666,   AID_ROOT,       AID_ROOT,       0 },
 
         /* these should not be world writable */
-    { "/dev/diag",          0660,   AID_ROOT,       AID_ROOT,        0 },
-    { "/dev/diag_arm9",     0660,   AID_ROOT,       AID_ROOT,        0 },
+    { "/dev/diag",          0660,   AID_RADIO,      AID_RADIO,        0 },
+    { "/dev/diag_arm9",     0660,   AID_RADIO,      AID_RADIO,        0 },
     { "/dev/android_adb",   0660,   AID_ADB,        AID_ADB,        0 },
     { "/dev/android_adb_enable",   0660,   AID_ADB,        AID_ADB,        0 },
     { "/dev/ttyMSM0",       0600,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
