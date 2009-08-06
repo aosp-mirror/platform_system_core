@@ -51,7 +51,8 @@ loglevel 3
     mkdir /dev/cpuctl/bg_non_interactive
     chown system system /dev/cpuctl/bg_non_interactive/tasks
     chmod 0777 /dev/cpuctl/bg_non_interactive/tasks
-    write /dev/cpuctl/bg_non_interactive/cpu.shares 16
+    # 5.0 %
+    write /dev/cpuctl/bg_non_interactive/cpu.shares 52
 
 # mount mtd partitions
     # Mount /system rw first to give the filesystem a chance to save a checkpoint
