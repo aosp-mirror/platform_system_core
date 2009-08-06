@@ -91,9 +91,9 @@ endif
 
 # build adbd for the Linux simulator build
 # so we can use it to test the adb USB gadget driver on x86
-ifeq ($(HOST_OS),linux)
-    BUILD_ADBD := true
-endif
+#ifeq ($(HOST_OS),linux)
+#    BUILD_ADBD := true
+#endif
 
 
 ifeq ($(BUILD_ADBD),true)
