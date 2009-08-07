@@ -221,17 +221,7 @@ void GGLAssembler::build_blending(
                 build_blend_factor(dst_factor, fd,
                         component, pixel, fragment, fb, scratches);
                 mul_factor_add(temp, fb, dst_factor, component_t(fragment));
-                if (fd==GGL_ONE_MINUS_SRC_ALPHA) {
-                    // XXX: in theory this is not correct, we should
-                    // saturate here. However, this mode is often
-                    // used for displaying alpha-premultiplied graphics,
-                    // in which case, saturation is not necessary.
-                    // unfortunatelly, we have no way to know.
-                    // This is a case, where we sacrifice correctness for
-                    // performance. we should probably have some heuristics.
-                } else {
-                    component_sat(temp);
-                }
+                component_sat(temp);
             }
         } else {
             // compute fs
