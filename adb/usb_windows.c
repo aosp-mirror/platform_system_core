@@ -488,7 +488,7 @@ void find_devices() {
                                 true)) {
             // Lets make sure that we don't duplicate this device
             if (register_new_device(handle)) {
-              register_usb_transport(handle, serial_number);
+              register_usb_transport(handle, serial_number, 1);
             } else {
               D("register_new_device failed for %s\n", interf_name);
               usb_cleanup_handle(handle);
