@@ -33,7 +33,7 @@
 #define ADB_VERSION_MAJOR 1         // Used for help/version information
 #define ADB_VERSION_MINOR 0         // Used for help/version information
 
-#define ADB_SERVER_VERSION    22    // Increment this when we want to force users to start a new adb server
+#define ADB_SERVER_VERSION    23    // Increment this when we want to force users to start a new adb server
 
 typedef struct amessage amessage;
 typedef struct apacket apacket;
@@ -263,14 +263,17 @@ void   kick_transport( atransport*  t );
 
 /* initialize a transport object's func pointers and state */
 int  init_socket_transport(atransport *t, int s, int port);
-void init_usb_transport(atransport *t, usb_handle *usb);
+void init_usb_transport(atransport *t, usb_handle *usb, int state);
 
 /* for MacOS X cleanup */
 void close_usb_devices();
 
 /* cause new transports to be init'd and added to the list */
 void register_socket_transport(int s, const char *serial, int  port);
-void register_usb_transport(usb_handle *h, const char *serial);
+void register_usb_transport(usb_handle *h, const char *serial, unsigned writeable);
+
+/* this should only be used for transports with connection_state == CS_NOPERM */
+void unregister_usb_transport(usb_handle *usb);
 
 int service_to_fd(const char *name);
 #if ADB_HOST
@@ -384,7 +387,7 @@ int connection_state(atransport *t);
 #define CS_DEVICE     2
 #define CS_HOST       3
 #define CS_RECOVERY   4
-#define CS_ERROR      5
+#define CS_NOPERM     5 /* Insufficient permissions to communicate with the device */
 
 extern int HOST;
 
