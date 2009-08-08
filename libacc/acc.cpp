@@ -8,6 +8,9 @@
  *
  */
 
+#define LOG_TAG "acc"
+#include <cutils/log.h>
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -50,6 +53,8 @@
 
 #define ENABLE_ARM_DISASSEMBLY
 // #define PROVIDE_TRACE_CODEGEN
+
+#define assert(b) assertImpl(b, __LINE__)
 
 namespace acc {
 
@@ -562,10 +567,11 @@ class Compiler : public ErrorSink {
             va_end(ap);
         }
 
-        void assert(bool test) {
+        void assertImpl(bool test, int line) {
             if (!test) {
+                error("code generator assertion failed at line %s:%d.", __FILE__, line);
+                LOGD("code generator assertion failed at line %s:%d.", __FILE__, line);
                 * (char*) 0 = 0;
-                error("code generator assertion failed.");
             }
         }
 
@@ -3436,8 +3442,9 @@ class Compiler : public ErrorSink {
         * (char*) 0 = 0;
     }
 
-    void assert(bool isTrue) {
+    void assertImpl(bool isTrue, int line) {
         if (!isTrue) {
+            LOGD("assertion failed at line %s:%d.", __FILE__, line);
             internalError();
         }
     }
