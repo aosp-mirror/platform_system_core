@@ -256,7 +256,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         }
 
         DBG("AndroidDeviceAdded calling register_usb_transport\n");
-        register_usb_transport(handle, (serial[0] ? serial : NULL));
+        register_usb_transport(handle, (serial[0] ? serial : NULL), 1);
 
         // Register for an interest notification of this device being removed.
         // Pass the reference to our private data as the refCon for the
