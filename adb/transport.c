@@ -720,7 +720,11 @@ retry:
 
     adb_mutex_lock(&transport_lock);
     for (t = transport_list.next; t != &transport_list; t = t->next) {
-        if (t->connection_state == CS_NOPERM) continue;
+        if (t->connection_state == CS_NOPERM) {
+        if (error_out)
+            *error_out = "insufficient permissions for device";
+            continue;
+        }
 
         /* check for matching serial number */
         if (serial) {
@@ -768,12 +772,6 @@ retry:
                 *error_out = "device offline";
             result = NULL;
         }
-        if (result && result->connection_state == CS_NOPERM) {
-            if (error_out)
-                *error_out = "no permissions for device";
-            result = NULL;
-        }
-
          /* check for required connection state */
         if (result && state != CS_ANY && result->connection_state != state) {
             if (error_out)
