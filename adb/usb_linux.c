@@ -269,11 +269,7 @@ static void find_usb_device(const char *base,
                     break;
                 } else {
                     // seek next interface descriptor
-                    if (i < interfaces - 1) {
-                        while (bufptr[1] != USB_DT_INTERFACE) {
-                            bufptr += bufptr[0];
-                        }
-                    }
+                    bufptr += (USB_DT_ENDPOINT_SIZE * interface->bNumEndpoints);
                  }
             } // end of for
 
