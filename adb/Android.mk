@@ -53,7 +53,7 @@ LOCAL_SRC_FILES := \
 	$(USB_SRCS) \
 	shlist.c \
 	utils.c \
-	usb_vendors.c \
+	usb_vendors.c
 
 
 ifneq ($(USE_SYSDEPS_WIN32),)
@@ -76,7 +76,9 @@ include $(BUILD_HOST_EXECUTABLE)
 $(call dist-for-goals,droid,$(LOCAL_BUILT_MODULE))
 
 ifeq ($(HOST_OS),windows)
-$(LOCAL_INSTALLED_MODULE): $(HOST_OUT_EXECUTABLES)/AdbWinApi.dll
+$(LOCAL_INSTALLED_MODULE): \
+    $(HOST_OUT_EXECUTABLES)/AdbWinApi.dll \
+    $(HOST_OUT_EXECUTABLES)/AdbWinUsbApi.dll
 endif
 
 
@@ -113,7 +115,7 @@ LOCAL_SRC_FILES := \
 	remount_service.c \
 	usb_linux_client.c \
 	log_service.c \
-	utils.c \
+	utils.c
 
 LOCAL_CFLAGS := -O2 -g -DADB_HOST=0 -Wall -Wno-unused-parameter
 LOCAL_CFLAGS += -D_XOPEN_SOURCE -D_GNU_SOURCE
