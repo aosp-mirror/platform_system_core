@@ -4,9 +4,28 @@
 import unittest
 import subprocess
 import os
-import sets
+import sys
 
 gArmInitialized = False
+gUseArm = True
+gUseX86 = True
+gRunOTCCOutput = True
+
+
+def parseArgv():
+    global gUseArm
+    global gRunOTCCOutput
+    for arg in sys.argv[1:]:
+        if arg == "--noarm":
+            print "--noarm detected, not testing on ARM"
+            gUseArm = False
+        elif arg == "--norunotcc":
+            print "--norunotcc detected, not running OTCC output"
+            gRunOTCCOutput = False
+        else:
+            print "Unknown parameter: ", arg
+            raise "Unknown parameter"
+    sys.argv = sys.argv[0:1]
 
 def compile(args):
     proc = subprocess.Popen(["acc"] + args, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -131,11 +150,13 @@ class TestACC(unittest.TestCase):
 
     def compileCheck(self, args, stdErrResult, stdOutResult="",
                      targets=['arm', 'x86']):
-        targetSet = sets.ImmutableSet(targets)
-        if False and 'x86' in targetSet:
+        global gUseArm
+        global gUseX86
+        targetSet = frozenset(targets)
+        if gUseX86 and 'x86' in targetSet:
             out, err = compile(args)
             self.checkResult(out, err, stdErrResult, stdOutResult)
-        if 'arm' in targetSet:
+        if gUseArm and 'arm' in targetSet:
             out = compileArm(rewritePaths(args))
             self.checkResult(out, "", stdErrResult, stdOutResult)
 
@@ -157,13 +178,17 @@ class TestACC(unittest.TestCase):
         "Executing compiled code:\nresult: 13\n", "Hello, world\n")
 
     def testRunOTCCANSI(self):
-        self.compileCheck(["-R", "data/otcc-ansi.c", "data/returnval.c"],
-            "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\natcc-ansi.c: result: 42\nresult: 42\n", "",
-             ['x86'])
+        global gRunOTCCOutput
+        if gRunOTCCOutput:
+            self.compileCheck(["-R", "data/otcc-ansi.c", "data/returnval.c"],
+                "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\natcc-ansi.c: result: 42\nresult: 42\n", "",
+                 ['x86'])
 
     def testRunOTCCANSI2(self):
-        self.compileCheck(["-R", "data/otcc-ansi.c", "data/otcc.c", "data/returnval.c"],
-            "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\notcc.c: about to execute compiled code.\natcc-ansi.c: result: 42\nresult: 42\n", "",['x86'])
+        global gRunOTCCOutput
+        if gRunOTCCOutput:
+            self.compileCheck(["-R", "data/otcc-ansi.c", "data/otcc.c", "data/returnval.c"],
+                "Executing compiled code:\notcc-ansi.c: About to execute compiled code:\notcc.c: about to execute compiled code.\natcc-ansi.c: result: 42\nresult: 42\n", "",['x86'])
 
     def testRunConstants(self):
         self.compileCheck(["-R", "data/constants.c"],
@@ -409,8 +434,17 @@ lmnopabcdefghijklmno
 result: 0
 ""","""""")
 
-if __name__ == '__main__':
+    def testDefines(self):
+        self.compileCheck(["-R", "data/defines.c"], """Executing compiled code:
+result: 3
+""","""""")
+
+def main():
+    parseArgv()
     if not outputCanRun():
-        print "Many tests are expected to fail, because acc is not a 32-bit x86 Linux executable."
+        print "Can't run output of acc compiler."
     unittest.main()
+
+if __name__ == '__main__':
+    main()
 
