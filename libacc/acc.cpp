@@ -4891,11 +4891,15 @@ class Compiler : public ErrorSink {
                     int argCount = 0;
                     for (Type* pP = pDecl->pTail; pP; pP = pP->pTail) {
                         Type* pArg = pP->pHead;
-                        addLocalSymbol(pArg);
+                        if (pArg->id) {
+                            addLocalSymbol(pArg);
+                        }
                         /* read param name and compute offset */
                         size_t alignment = pGen->stackAlignmentOf(pArg);
                         a = (a + alignment - 1) & ~ (alignment-1);
-                        VI(pArg->id)->pAddress = (void*) a;
+                        if (pArg->id) {
+                            VI(pArg->id)->pAddress = (void*) a;
+                        }
                         a = a + pGen->stackSizeOf(pArg);
                         argCount++;
                     }
