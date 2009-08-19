@@ -14,11 +14,15 @@ gRunOTCCOutput = True
 
 def parseArgv():
     global gUseArm
+    global gUseX86
     global gRunOTCCOutput
     for arg in sys.argv[1:]:
         if arg == "--noarm":
-            print "--noarm detected, not testing on ARM"
+            print "--noarm: not testing ARM"
             gUseArm = False
+        elif arg == "--nox86":
+            print "--nox86: not testing x86"
+            gUseX86 = False
         elif arg == "--norunotcc":
             print "--norunotcc detected, not running OTCC output"
             gRunOTCCOutput = False
