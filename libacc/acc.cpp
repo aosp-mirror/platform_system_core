@@ -3821,8 +3821,20 @@ class Compiler : public ErrorSink {
             inp();
         }
         String value;
+        bool appendToValue = true;
         while (ch != '\n' && ch != EOF) {
-            value.append(ch);
+            // Check for '//' comments.
+            if (appendToValue && ch == '/') {
+                inp();
+                if (ch == '/') {
+                    appendToValue = false;
+                } else {
+                    value.append('/');
+                }
+            }
+            if (appendToValue && ch != EOF) {
+                value.append(ch);
+            }
             inp();
         }
         char* pDefn = (char*)mGlobalArena.alloc(value.len() + 1);
