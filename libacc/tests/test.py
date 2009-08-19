@@ -439,6 +439,11 @@ result: 0
 result: 3
 ""","""""")
 
+    def testFuncArgs(self):
+        self.compileCheck(["-R", "data/funcargs.c"], """Executing compiled code:
+result: 4
+""","""""")
+
 def main():
     parseArgv()
     if not outputCanRun():
