@@ -3292,6 +3292,7 @@ class Compiler : public ErrorSink {
     intptr_t loc; // local variable index
     char* glo;  // global variable index
     String mTokenString;
+    bool mbSuppressMacroExpansion;
     char* dptr; // Macro state: Points to macro text during macro playback.
     int dch;    // Macro state: Saves old value of ch during a macro playback.
     char* pGlobalBase;
@@ -3726,14 +3727,16 @@ class Compiler : public ErrorSink {
                 inp();
             }
             tok = mTokenTable.intern(mTokenString.getUnwrapped(), mTokenString.len());
-            // Is this a macro?
-            char* pMacroDefinition = mTokenTable[tok].mpMacroDefinition;
-            if (pMacroDefinition) {
-                // Yes, it is a macro
-                dptr = pMacroDefinition;
-                dch = ch;
-                inp();
-                next();
+            if (! mbSuppressMacroExpansion) {
+                // Is this a macro?
+                char* pMacroDefinition = mTokenTable[tok].mpMacroDefinition;
+                if (pMacroDefinition) {
+                    // Yes, it is a macro
+                    dptr = pMacroDefinition;
+                    dch = ch;
+                    inp();
+                    next();
+                }
             }
         } else {
             inp();
@@ -3809,7 +3812,9 @@ class Compiler : public ErrorSink {
     }
 
     void doDefine() {
+        mbSuppressMacroExpansion = true;
         next();
+        mbSuppressMacroExpansion = false;
         tokenid_t name = tok;
         String* pName = new String();
         if (ch == '(') {
@@ -4957,6 +4962,7 @@ class Compiler : public ErrorSink {
         mCompileResult = 0;
         mLineNumber = 1;
         mbBumpLine = false;
+        mbSuppressMacroExpansion = false;
     }
 
     void setArchitecture(const char* architecture) {
