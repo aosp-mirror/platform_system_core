@@ -3812,9 +3812,6 @@ class Compiler : public ErrorSink {
         next();
         tokenid_t name = tok;
         String* pName = new String();
-        while (isspace(ch)) {
-            inp();
-        }
         if (ch == '(') {
             delete pName;
             error("Defines with arguments not supported");
