@@ -43,6 +43,10 @@
 #include "disassem.h"
 #endif
 
+#if (defined(__VFP_FP__) && !defined(__SOFTFP__))
+#define ARM_USE_VFP
+#endif
+
 #include <acc/acc.h>
 
 #define LOG_API(...) do {} while(0)
@@ -684,7 +688,13 @@ class Compiler : public ErrorSink {
 
     class ARMCodeGenerator : public CodeGenerator {
     public:
-        ARMCodeGenerator() {}
+        ARMCodeGenerator() {
+#ifdef ARM_USE_VFP
+        	LOGD("Using ARM VFP hardware floating point.");
+#else
+        	LOGD("Using ARM soft floating point.");
+#endif
+        }
 
         virtual ~ARMCodeGenerator() {}
 
@@ -721,6 +731,22 @@ class Compiler : public ErrorSink {
             }
             *(char*) (localVariableAddress) = localVariableSize;
 
+#ifdef ARM_USE_VFP
+            {
+            	Type* pReturnType = pDecl->pHead;
+            	switch(pReturnType->tag) {
+            	case TY_FLOAT:
+            		o4(0xEE170A90); // fmrs	r0, s15
+            		break;
+            	case TY_DOUBLE:
+            		o4(0xEC510B17); // fmrrd r0, r1, d7
+            		break;
+            	default:
+            		break;
+            	}
+            }
+#endif
+
             // sp -> locals .... fp -> oldfp, retadr, arg0, arg1, ...
             o4(0xE1A0E00B); // mov lr, fp
             o4(0xE59BB000); // ldr fp, [fp]
@@ -756,10 +782,18 @@ class Compiler : public ErrorSink {
 
             switch (pType->tag) {
             case TY_FLOAT:
+#ifdef ARM_USE_VFP
+                o4(0xEDD07A00);      // flds	s15, [r0]
+#else
                 o4(0xE5900000);      // ldr r0, [r0]
+#endif
                 break;
             case TY_DOUBLE:
+#ifdef ARM_USE_VFP
+                o4(0xED907B00);      // fldd	d7, [r0]
+#else
                 o4(0xE1C000D0);      // ldrd r0, [r0]
+#endif
                 break;
             default:
                 assert(false);
@@ -777,15 +811,27 @@ class Compiler : public ErrorSink {
             TypeTag tagR0 = pR0Type->tag;
             switch(tagR0) {
                 case TY_FLOAT:
+#ifdef ARM_USE_VFP
+                	o4(0xEEF57A40); // fcmpzs	s15
+                	o4(0xEEF1FA10); // fmstat
+#else
                     callRuntime((void*) runtime_is_non_zero_f);
+                    o4(0xE3500000); // cmp r0,#0
+#endif
                     break;
                 case TY_DOUBLE:
+#ifdef ARM_USE_VFP
+                	o4(0xEEB57B40); // fcmpzd	d7
+                	o4(0xEEF1FA10); // fmstat
+#else
                     callRuntime((void*) runtime_is_non_zero_d);
+                    o4(0xE3500000); // cmp r0,#0
+#endif
                     break;
                 default:
+                    o4(0xE3500000); // cmp r0,#0
                     break;
             }
-            o4(0xE3500000); // cmp r0,#0
             int branch = l ? 0x1A000000 : 0x0A000000; // bne : beq
             return o4(branch | encodeAddress(t));
         }
@@ -829,6 +875,39 @@ class Compiler : public ErrorSink {
                 }
             } else if (tagR0 == TY_DOUBLE || tagTOS == TY_DOUBLE) {
                 setupDoubleArgs();
+#ifdef ARM_USE_VFP
+                o4(0xEEB46BC7); // 		fcmped	d6, d7
+           	    o4(0xEEF1FA10); // fmstat
+                switch(op) {
+                case OP_EQUALS:
+                    o4(0x03A00001); // moveq r0,#1
+                    o4(0x13A00000); // movne r0,#0
+                    break;
+                case OP_NOT_EQUALS:
+                    o4(0x03A00000); // moveq r0,#0
+                    o4(0x13A00001); // movne r0,#1
+                    break;
+                case OP_LESS_EQUAL:
+                    o4(0xD3A00001); // movle r0,#1
+                    o4(0xC3A00000); // movgt r0,#0
+                    break;
+                case OP_GREATER:
+                    o4(0xD3A00000); // movle r0,#0
+                    o4(0xC3A00001); // movgt r0,#1
+                    break;
+                case OP_GREATER_EQUAL:
+                    o4(0xA3A00001); // movge r0,#1
+                    o4(0xB3A00000); // movlt r0,#0
+                    break;
+                case OP_LESS:
+                    o4(0xA3A00000); // movge r0,#0
+                    o4(0xB3A00001); // movlt r0,#1
+                    break;
+                default:
+                    error("Unknown comparison op %d", op);
+                    break;
+                }
+#else
                 switch(op) {
                     case OP_EQUALS:
                         callRuntime((void*) runtime_cmp_eq_dd);
@@ -852,8 +931,42 @@ class Compiler : public ErrorSink {
                         error("Unknown comparison op %d", op);
                         break;
                 }
+#endif
             } else {
                 setupFloatArgs();
+#ifdef ARM_USE_VFP
+                o4(0xEEB47AE7); // fcmpes s14, s15
+           	    o4(0xEEF1FA10); // fmstat
+                switch(op) {
+                case OP_EQUALS:
+                    o4(0x03A00001); // moveq r0,#1
+                    o4(0x13A00000); // movne r0,#0
+                    break;
+                case OP_NOT_EQUALS:
+                    o4(0x03A00000); // moveq r0,#0
+                    o4(0x13A00001); // movne r0,#1
+                    break;
+                case OP_LESS_EQUAL:
+                    o4(0xD3A00001); // movle r0,#1
+                    o4(0xC3A00000); // movgt r0,#0
+                    break;
+                case OP_GREATER:
+                    o4(0xD3A00000); // movle r0,#0
+                    o4(0xC3A00001); // movgt r0,#1
+                    break;
+                case OP_GREATER_EQUAL:
+                    o4(0xA3A00001); // movge r0,#1
+                    o4(0xB3A00000); // movlt r0,#0
+                    break;
+                case OP_LESS:
+                    o4(0xA3A00000); // movge r0,#0
+                    o4(0xB3A00001); // movlt r0,#1
+                    break;
+                default:
+                    error("Unknown comparison op %d", op);
+                    break;
+                }
+#else
                 switch(op) {
                     case OP_EQUALS:
                         callRuntime((void*) runtime_cmp_eq_ff);
@@ -877,6 +990,7 @@ class Compiler : public ErrorSink {
                         error("Unknown comparison op %d", op);
                         break;
                 }
+#endif
             }
             setR0Type(mkpInt);
         }
@@ -979,18 +1093,35 @@ class Compiler : public ErrorSink {
                 Type* pResultType = tagR0 > tagTOS ? pR0Type : pTOSType;
                 if (pResultType->tag == TY_DOUBLE) {
                     setupDoubleArgs();
+
                     switch(op) {
                     case OP_MUL:
-                        callRuntime((void*) runtime_op_mul_dd);
+#ifdef ARM_USE_VFP
+                    	o4(0xEE267B07); // fmuld d7, d6, d7
+#else
+                    	callRuntime((void*) runtime_op_mul_dd);
+#endif
                         break;
                     case OP_DIV:
+#ifdef ARM_USE_VFP
+                    	o4(0xEE867B07); // fdivd d7, d6, d7
+#else
                         callRuntime((void*) runtime_op_div_dd);
+#endif
                         break;
                     case OP_PLUS:
+#ifdef ARM_USE_VFP
+                    	o4(0xEE367B07); // faddd d7, d6, d7
+#else
                         callRuntime((void*) runtime_op_add_dd);
+#endif
                         break;
                     case OP_MINUS:
+#ifdef ARM_USE_VFP
+                    	o4(0xEE367B47); // fsubd d7, d6, d7
+#else
                         callRuntime((void*) runtime_op_sub_dd);
+#endif
                         break;
                     default:
                         error("Unsupported binary floating operation %d\n", op);
@@ -1000,16 +1131,32 @@ class Compiler : public ErrorSink {
                     setupFloatArgs();
                     switch(op) {
                     case OP_MUL:
+#ifdef ARM_USE_VFP
+                    	o4(0xEE677A27); // fmuls s15, s14, s15
+#else
                         callRuntime((void*) runtime_op_mul_ff);
+#endif
                         break;
                     case OP_DIV:
+#ifdef ARM_USE_VFP
+                    	o4(0xEEC77A27); // fdivs s15, s14, s15
+#else
                         callRuntime((void*) runtime_op_div_ff);
+#endif
                         break;
                     case OP_PLUS:
+#ifdef ARM_USE_VFP
+                    	o4(0xEE777A27); // fadds s15, s14, s15
+#else
                         callRuntime((void*) runtime_op_add_ff);
+#endif
                         break;
                     case OP_MINUS:
+#ifdef ARM_USE_VFP
+                    	o4(0xEE777A67); // fsubs s15, s14, s15
+#else
                         callRuntime((void*) runtime_op_sub_ff);
+#endif
                         break;
                     default:
                         error("Unsupported binary floating operation %d\n", op);
@@ -1034,10 +1181,24 @@ class Compiler : public ErrorSink {
                         o4(0x13A00000); // movne r0,#0
                         break;
                     case TY_FLOAT:
-                        callRuntime((void*) runtime_is_zero_f);
+#ifdef ARM_USE_VFP
+                        o4(0xEEF57A40); // fcmpzs s15
+                        o4(0xEEF1FA10); // fmstat
+                        o4(0x03A00001); // moveq r0,#1
+                        o4(0x13A00000); // movne r0,#0
+#else
+						callRuntime((void*) runtime_is_zero_f);
+#endif
                         break;
                     case TY_DOUBLE:
-                        callRuntime((void*) runtime_is_zero_d);
+#ifdef ARM_USE_VFP
+                        o4(0xEEB57B40); // fcmpzd d7
+                        o4(0xEEF1FA10); // fmstat
+                        o4(0x03A00001); // moveq r0,#1
+                        o4(0x13A00000); // movne r0,#0
+#else
+                    	callRuntime((void*) runtime_is_zero_d);
+#endif
                         break;
                     default:
                         error("gUnaryCmp unsupported type");
@@ -1070,9 +1231,17 @@ class Compiler : public ErrorSink {
                     switch (op) {
                         case OP_MINUS:
                             if (tag == TY_FLOAT) {
+#ifdef ARM_USE_VFP
+                            	o4(0xEEF17A67); // fnegs	s15, s15
+#else
                                 callRuntime((void*) runtime_op_neg_f);
+#endif
                             } else {
+#ifdef ARM_USE_VFP
+                            	o4(0xEEB17B47); // fnegd	d7, d7
+#else
                                 callRuntime((void*) runtime_op_neg_d);
+#endif
                             }
                             break;
                         case OP_BIT_NOT:
@@ -1092,6 +1261,23 @@ class Compiler : public ErrorSink {
         virtual void pushR0() {
             Type* pR0Type = getR0Type();
             TypeTag r0ct = collapseType(pR0Type->tag);
+
+#ifdef ARM_USE_VFP
+            switch (r0ct ) {
+            case TY_FLOAT:
+            	o4(0xED6D7A01); // fstmfds   sp!,{s15}
+                mStackUse += 4;
+            	break;
+            case TY_DOUBLE:
+            	o4(0xED2D7B02); // fstmfdd   sp!,{d7}
+                mStackUse += 8;
+            	break;
+            default:
+                o4(0xE92D0001);  // stmfd   sp!,{r0}
+                mStackUse += 4;
+            }
+#else
+
             if (r0ct != TY_DOUBLE) {
                     o4(0xE92D0001);  // stmfd   sp!,{r0}
                     mStackUse += 4;
@@ -1099,6 +1285,7 @@ class Compiler : public ErrorSink {
                     o4(0xE92D0003);  // stmfd   sp!,{r0,r1}
                     mStackUse += 8;
             }
+#endif
             pushType();
             LOG_STACK("pushR0: %d\n", mStackUse);
         }
@@ -1123,7 +1310,13 @@ class Compiler : public ErrorSink {
 
         virtual void popR0() {
             Type* pTOSType = getTOSType();
-            switch (collapseType(pTOSType->tag)){
+            TypeTag tosct = collapseType(pTOSType->tag);
+#ifdef ARM_USE_VFP
+            if (tosct == TY_FLOAT || tosct == TY_DOUBLE) {
+            	error("Unsupported popR0 float/double");
+            }
+#endif
+            switch (tosct){
                 case TY_INT:
                 case TY_FLOAT:
                     o4(0xE8BD0001);  // ldmfd   sp!,{r0}
@@ -1152,8 +1345,14 @@ class Compiler : public ErrorSink {
             switch (pDestType->tag) {
                 case TY_POINTER:
                 case TY_INT:
-                case TY_FLOAT:
                     o4(0xE5820000); // str r0, [r2]
+                    break;
+                case TY_FLOAT:
+#ifdef ARM_USE_VFP
+                	o4(0xEDC27A00); // fsts	s15, [r2, #0]
+#else
+                    o4(0xE5820000); // str r0, [r2]
+#endif
                     break;
                 case TY_SHORT:
                     o4(0xE1C200B0); // strh r0, [r2]
@@ -1162,7 +1361,11 @@ class Compiler : public ErrorSink {
                     o4(0xE5C20000); // strb r0, [r2]
                     break;
                 case TY_DOUBLE:
+#ifdef ARM_USE_VFP
+                	o4(0xED827B00); // fstd	d7, [r2, #0]
+#else
                     o4(0xE1C200F0); // strd r0, [r2]
+#endif
                     break;
                 default:
                     error("storeR0ToTOS: unimplemented type %d",
@@ -1179,8 +1382,14 @@ class Compiler : public ErrorSink {
             switch (tag) {
                 case TY_POINTER:
                 case TY_INT:
-                case TY_FLOAT:
                     o4(0xE5900000); // ldr r0, [r0]
+                    break;
+                case TY_FLOAT:
+#ifdef ARM_USE_VFP
+                    o4(0xEDD07A00); // flds	s15, [r0, #0]
+#else
+                    o4(0xE5900000); // ldr r0, [r0]
+#endif
                     break;
                 case TY_SHORT:
                     o4(0xE1D000F0); // ldrsh r0, [r0]
@@ -1189,7 +1398,11 @@ class Compiler : public ErrorSink {
                     o4(0xE5D00000); // ldrb r0, [r0]
                     break;
                 case TY_DOUBLE:
+#ifdef ARM_USE_VFP
+                    o4(0xED907B00); // fldd	d7, [r0, #0]
+#else
                     o4(0xE1C000D0); // ldrd   r0, [r0]
+#endif
                     break;
                 case TY_ARRAY:
                     pNewType = pNewType->pTail;
@@ -1272,25 +1485,55 @@ class Compiler : public ErrorSink {
                 TypeTag destTag = collapseType(pType->tag);
                 if (r0Tag == TY_INT) {
                     if (destTag == TY_FLOAT) {
+#ifdef ARM_USE_VFP
+                    	o4(0xEE070A90); // fmsr	s15, r0
+                    	o4(0xEEF87AE7); // fsitos s15, s15
+
+#else
                         callRuntime((void*) runtime_int_to_float);
+#endif
                     } else {
                         assert(destTag == TY_DOUBLE);
+#ifdef ARM_USE_VFP
+                    	o4(0xEE070A90); // fmsr s15, r0
+                    	o4(0xEEB87BE7); // fsitod d7, s15
+
+#else
                         callRuntime((void*) runtime_int_to_double);
+#endif
                     }
                 } else if (r0Tag == TY_FLOAT) {
                     if (destTag == TY_INT) {
+#ifdef ARM_USE_VFP
+                    	o4(0xEEFD7AE7); // ftosizs s15, s15
+                    	o4(0xEE170A90); // fmrs r0, s15
+#else
                         callRuntime((void*) runtime_float_to_int);
+#endif
                     } else {
                         assert(destTag == TY_DOUBLE);
+#ifdef ARM_USE_VFP
+                    	o4(0xEEB77AE7); // fcvtds	d7, s15
+#else
                         callRuntime((void*) runtime_float_to_double);
+#endif
                     }
                 } else {
                     assert (r0Tag == TY_DOUBLE);
                     if (destTag == TY_INT) {
+#ifdef ARM_USE_VFP
+                    	o4(0xEEFD7BC7); // ftosizd s15, d7
+                    	o4(0xEE170A90); // fmrs r0, s15
+#else
                         callRuntime((void*) runtime_double_to_int);
+#endif
                     } else {
                         assert(destTag == TY_FLOAT);
+#ifdef ARM_USE_VFP
+                        o4(0xEEF77BC7); // fcvtsd s15, d7
+#else
                         callRuntime((void*) runtime_double_to_float);
+#endif
                     }
                 }
             }
@@ -1305,9 +1548,37 @@ class Compiler : public ErrorSink {
             convertR0(pArgType);
             Type* pR0Type = getR0Type();
             TypeTag r0ct = collapseType(pR0Type->tag);
+#ifdef ARM_USE_VFP
             switch(r0ct) {
                 case TY_INT:
-                case TY_FLOAT:
+                    if (l < 0 || l > 4096-4) {
+                        error("l out of range for stack offset: 0x%08x", l);
+                    }
+                    o4(0xE58D0000 | l); // str r0, [sp, #l]
+                    return 4;
+				case TY_FLOAT:
+                    if (l < 0 || l > 1020 || (l & 3)) {
+                        error("l out of range for stack offset: 0x%08x", l);
+                    }
+                    o4(0xEDCD7A00 | (l >> 2)); // fsts	s15, [sp, #l]
+                    return 4;
+                case TY_DOUBLE: {
+                    // Align to 8 byte boundary
+                    int l2 = (l + 7) & ~7;
+                    if (l2 < 0 || l2 > 1020 || (l2 & 3)) {
+                        error("l out of range for stack offset: 0x%08x", l);
+                    }
+                    o4(0xED8D7B00 | (l2 >> 2)); // fstd	d7, [sp, #l2]
+                    return (l2 - l) + 8;
+                }
+                default:
+                    assert(false);
+                    return 0;
+            }
+#else
+            switch(r0ct) {
+                case TY_INT:
+				case TY_FLOAT:
                     if (l < 0 || l > 4096-4) {
                         error("l out of range for stack offset: 0x%08x", l);
                     }
@@ -1327,6 +1598,7 @@ class Compiler : public ErrorSink {
                     assert(false);
                     return 0;
             }
+#endif
         }
 
         virtual void endFunctionCallArguments(Type* pDecl, int a, int l) {
@@ -1370,7 +1642,6 @@ class Compiler : public ErrorSink {
         virtual void callIndirect(int l, Type* pFunc) {
             assert(pFunc->tag == TY_FUNC);
             popType(); // Get rid of indirect fn pointer type
-            setR0Type(pFunc->pHead);
             int argCount = l >> 2;
             int poppedArgs = argCount > 4 ? 4 : argCount;
             int adjustedL = l - (poppedArgs << 2) + mStackAlignmentAdjustment;
@@ -1379,6 +1650,20 @@ class Compiler : public ErrorSink {
             }
             o4(0xE59DC000 | (0xfff & adjustedL)); // ldr    r12, [sp,#adjustedL]
             o4(0xE12FFF3C); // blx r12
+            Type* pReturnType = pFunc->pHead;
+            setR0Type(pReturnType);
+#ifdef ARM_USE_VFP
+            switch(pReturnType->tag) {
+            case TY_FLOAT:
+            	o4(0xEE070A90); // fmsr s15, r0
+            	break;
+            case TY_DOUBLE:
+            	o4(0xEC410B17); // fmdrr d7, r0, r1
+            	break;
+            default:
+            	break;
+            }
+#endif
         }
 
         virtual void adjustStackAfterCall(Type* pDecl, int l, bool isIndirect) {
@@ -1594,7 +1879,7 @@ class Compiler : public ErrorSink {
             popType();
         }
 
-        /* Pop TOS to R1
+        /* Pop TOS to R1 (use s14 if VFP)
          * Make sure both R0 and TOS are floats. (Could be ints)
          * We know that at least one of R0 and TOS is already a float
          */
@@ -1605,26 +1890,41 @@ class Compiler : public ErrorSink {
             TypeTag tagTOS = collapseType(pTOSType->tag);
             if (tagR0 != TY_FLOAT) {
                 assert(tagR0 == TY_INT);
+#ifdef ARM_USE_VFP
+            	o4(0xEE070A90); // fmsr	s15, r0
+            	o4(0xEEF87AE7); // fsitos s15, s15
+#else
                 callRuntime((void*) runtime_int_to_float);
+#endif
             }
             if (tagTOS != TY_FLOAT) {
                 assert(tagTOS == TY_INT);
                 assert(tagR0 == TY_FLOAT);
+#ifdef ARM_USE_VFP
+                o4(0xECBD7A01); // fldmfds sp!, {s14}
+            	o4(0xEEB87AC7); // fsitos s14, s14
+#else
                 o4(0xE92D0001);  // stmfd   sp!,{r0}  // push R0
                 o4(0xE59D0004);  // ldr     r0, [sp, #4]
                 callRuntime((void*) runtime_int_to_float);
                 o4(0xE1A01000);  // mov r1, r0
                 o4(0xE8BD0001);  // ldmfd   sp!,{r0}  // pop R0
                 o4(0xE28DD004);  // add sp, sp, #4 // Pop sp
+#endif
             } else {
                 // Pop TOS
+#ifdef ARM_USE_VFP
+                o4(0xECBD7A01); // fldmfds sp!, {s14}
+
+#else
                 o4(0xE8BD0002);  // ldmfd   sp!,{r1}
+#endif
             }
             mStackUse -= 4;
             popType();
         }
 
-        /* Pop TOS into R2..R3
+        /* Pop TOS into R2..R3 (use D6 if VFP)
          * Make sure both R0 and TOS are doubles. Could be floats or ints.
          * We know that at least one of R0 and TOS are already a double.
          */
@@ -1636,13 +1936,33 @@ class Compiler : public ErrorSink {
             TypeTag tagTOS = collapseType(pTOSType->tag);
             if (tagR0 != TY_DOUBLE) {
                 if (tagR0 == TY_INT) {
+#ifdef ARM_USE_VFP
+					o4(0xEE070A90); // fmsr s15, r0
+					o4(0xEEB87BE7); // fsitod d7, s15
+
+#else
                     callRuntime((void*) runtime_int_to_double);
+#endif
                 } else {
                     assert(tagR0 == TY_FLOAT);
+#ifdef ARM_USE_VFP
+                    o4(0xEEB77AE7); // fcvtds	d7, s15
+#else
                     callRuntime((void*) runtime_float_to_double);
+#endif
                 }
             }
             if (tagTOS != TY_DOUBLE) {
+#ifdef ARM_USE_VFP
+                if (tagTOS == TY_INT) {
+                    o4(0xECFD6A01);  // fldmfds sp!,{s13}
+					o4(0xEEB86BE6);  // fsitod  d6, s13
+                } else {
+                    assert(tagTOS == TY_FLOAT);
+                    o4(0xECFD6A01);  // fldmfds sp!,{s13}
+                    o4(0xEEB76AE6);  // fcvtds	d6, s13
+                }
+#else
                 o4(0xE92D0003);  // stmfd   sp!,{r0,r1}  // push r0,r1
                 o4(0xE59D0008);  // ldr     r0, [sp, #8]
                 if (tagTOS == TY_INT) {
@@ -1655,9 +1975,14 @@ class Compiler : public ErrorSink {
                 o4(0xE1A03001);  // mov r3, r1
                 o4(0xE8BD0003);  // ldmfd   sp!,{r0, r1}  // Restore R0
                 o4(0xE28DD004);  // add sp, sp, #4 // Pop sp
+#endif
                 mStackUse -= 4;
             } else {
+#ifdef ARM_USE_VFP
+            	o4(0xECBD6B02);  // fldmfdd	sp!, {d6}
+#else
                 o4(0xE8BD000C);  // ldmfd   sp!,{r2,r3}
+#endif
                 mStackUse -= 8;
             }
             popType();
@@ -1695,6 +2020,8 @@ class Compiler : public ErrorSink {
         static int runtime_MOD(int b, int a) {
             return a % b;
         }
+
+#ifndef ARM_USE_VFP
 
         // Comparison to zero
 
@@ -1837,6 +2164,8 @@ class Compiler : public ErrorSink {
         static double runtime_op_neg_d(double a) {
             return -a;
         }
+
+#endif
 
         static const int STACK_ALIGNMENT = 8;
         int mStackUse;
@@ -2677,9 +3006,9 @@ class Compiler : public ErrorSink {
             return mpBase->leaForward(ea, pPointerType);
         }
 
-        virtual void convertR0(Type* pType){
-            fprintf(stderr, "convertR0(pType tag=%d)\n",  pType->tag);
-            mpBase->convertR0(pType);
+        virtual void convertR0Imp(Type* pType, bool isCast){
+            fprintf(stderr, "convertR0(pType tag=%d, %d)\n",  pType->tag, isCast);
+            mpBase->convertR0Imp(pType, isCast);
         }
 
         virtual int beginFunctionCallArguments() {
