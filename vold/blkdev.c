@@ -112,7 +112,7 @@ int blkdev_refresh(blkdev_t *blk)
             goto out;
         }
 
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < NDOSPART; i++) {
             struct dos_partition part;
 
             dos_partition_dec(block + DOSPARTOFF + i * sizeof(struct dos_partition), &part);
@@ -134,7 +134,7 @@ int blkdev_refresh(blkdev_t *blk)
         struct dos_partition part;
         int part_no = blk->minor -1;
 
-        if (part_no < 4) {
+        if (part_no < NDOSPART) {
             dos_partition_dec(block + DOSPARTOFF + part_no * sizeof(struct dos_partition), &part);
             blk->part_type = part.dp_typ;
         } else {
