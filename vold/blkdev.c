@@ -219,7 +219,7 @@ static blkdev_t *_blkdev_create(blkdev_t *disk, char *devpath, int major,
 
     /* Create device nodes */
     char nodepath[255];
-    mode_t mode = 0666 | S_IFBLK;
+    mode_t mode = 0660 | S_IFBLK;
     dev_t dev = (major << 8) | minor;
 
     sprintf(nodepath, "%s/vold/%d:%d", DEVPATH, major, minor);
