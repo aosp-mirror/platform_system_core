@@ -158,6 +158,10 @@ static int mmc_bootstrap_card(char *sysfs_path)
 
     sprintf(filename, "/sys%s/name", devpath);
     p = read_file(filename, &sz);
+    if (!p) {
+        LOGE("Unable to read MMC name: %s", filename);
+        return -errno;
+    }
     p[strlen(p) - 1] = '\0';
     sprintf(tmp, "MMC_NAME=%s", p);
     free(p);
