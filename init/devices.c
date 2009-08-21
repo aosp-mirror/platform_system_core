@@ -131,6 +131,7 @@ static struct perms_ devperms[] = {
     { "/dev/bma150",        0640,   AID_COMPASS,    AID_SYSTEM,     0 },
     { "/dev/cm3602",        0640,   AID_COMPASS,    AID_SYSTEM,     0 },
     { "/dev/akm8976_pffd",  0640,   AID_COMPASS,    AID_SYSTEM,     0 },
+    { "/dev/lightsensor",   0640,   AID_SYSTEM,     AID_SYSTEM,     0 },
     { "/dev/msm_pcm_out",   0660,   AID_SYSTEM,     AID_AUDIO,      1 },
     { "/dev/msm_pcm_in",    0660,   AID_SYSTEM,     AID_AUDIO,      1 },
     { "/dev/msm_pcm_ctl",   0660,   AID_SYSTEM,     AID_AUDIO,      1 },
