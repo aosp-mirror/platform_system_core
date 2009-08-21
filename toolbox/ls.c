@@ -19,6 +19,7 @@
 #define LIST_ALL            (1 << 1)
 #define LIST_RECURSIVE      (1 << 2)
 #define LIST_DIRECTORIES    (1 << 3)
+#define LIST_SIZE           (1 << 4)
 
 // fwd
 static int listpath(const char *name, int flags);
@@ -85,7 +86,19 @@ static void group2str(unsigned gid, char *out)
     }
 }
 
-static int listfile(const char *path, int flags)
+static int listfile_size(const char *path, int flags)
+{
+    struct stat s;
+
+    if (lstat(path, &s) < 0)
+        return -1;
+
+    /* blocks are 512 bytes, we want output to be KB */
+    printf("%lld %s\n", s.st_blocks / 2, path);
+    return 0;
+}
+
+static int listfile_long(const char *path, int flags)
 {
     struct stat s;
     char date[32];
@@ -156,6 +169,30 @@ static int listfile(const char *path, int flags)
     return 0;
 }
 
+static int listfile(const char *dirname, const char *filename, int flags)
+{
+    if ((flags & (LIST_LONG | LIST_SIZE)) == 0) {
+        printf("%s\n", filename);
+        return 0;
+    }
+
+    char tmp[4096];
+    const char* pathname = filename;
+
+    if (dirname != NULL) {
+        snprintf(tmp, sizeof(tmp), "%s/%s", dirname, filename);
+        pathname = tmp;
+    } else {
+        pathname = filename;
+    }
+
+    if ((flags & LIST_LONG) != 0) {
+        return listfile_long(pathname, flags);
+    } else /*((flags & LIST_SIZE) != 0)*/ {
+        return listfile_size(pathname, flags);
+    }
+}
+
 static int listdir(const char *name, int flags)
 {
     char tmp[4096];
@@ -171,12 +208,8 @@ static int listdir(const char *name, int flags)
     while((de = readdir(d)) != 0){
         if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
         if(de->d_name[0] == '.' && (flags & LIST_ALL) == 0) continue;
-        if ((flags & LIST_LONG) != 0) {
-            sprintf(tmp, "%s/%s", name, de->d_name);
-            listfile(tmp, flags);
-        } else {
-            printf("%s\n", de->d_name);
-        }
+
+        listfile(name, de->d_name, flags);
     }
 
     if (flags & LIST_RECURSIVE) {
@@ -191,8 +224,10 @@ static int listdir(const char *name, int flags)
             if (de->d_name[0] == '.' && (flags & LIST_ALL) == 0)
                 continue;
 
-            if (!strcmp(name, "/")) sprintf(tmp, "/%s", de->d_name);
-            else sprintf(tmp, "%s/%s", name, de->d_name);
+            if (!strcmp(name, "/"))
+                snprintf(tmp, sizeof(tmp), "/%s", de->d_name);
+            else
+                snprintf(tmp, sizeof(tmp), "%s/%s", name, de->d_name);
 
             /*
              * If the name ends in a '/', use stat() so we treat it like a
@@ -244,13 +279,8 @@ static int listpath(const char *name, int flags)
             printf("\n%s:\n", name);
         return listdir(name, flags);
     } else {
-        if ((flags & LIST_LONG) != 0) {
-            /* yeah this calls stat() again*/
-            return listfile(name, flags);
-        } else {
-            printf("%s\n", name);
-            return 0;
-        }
+        /* yeah this calls stat() again*/
+        return listfile(NULL, name, flags);
     }
 }
 
@@ -264,8 +294,10 @@ int ls_main(int argc, char **argv)
         int err = 0;
 
         for (i = 1; i < argc; i++) {
-            if(!strcmp(argv[i], "-l")) {
+            if (!strcmp(argv[i], "-l")) {
                 flags |= LIST_LONG;
+            } else if (!strcmp(argv[i], "-s")) {
+                flags |= LIST_SIZE;
             } else if (!strcmp(argv[i], "-a")) {
                 flags |= LIST_ALL;
             } else if (!strcmp(argv[i], "-R")) {
