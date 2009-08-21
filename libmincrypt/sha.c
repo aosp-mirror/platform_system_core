@@ -25,13 +25,15 @@
 ** ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <byteswap.h>
-#include <endian.h>
-#include <memory.h>
-
 #include "mincrypt/sha.h"
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+// Some machines lack byteswap.h and endian.h.  These have to use the
+// slower code, even if they're little-endian.
+
+#if defined(HAVE_ENDIAN_H) && defined(HAVE_LITTLE_ENDIAN)
+
+#include <byteswap.h>
+#include <memory.h>
 
 // This version is about 28% faster than the generic version below,
 // but assumes little-endianness.
@@ -186,7 +188,7 @@ const uint8_t* SHA_final(SHA_CTX* ctx) {
     return ctx->buf.b;
 }
 
-#else   // __BYTE_ORDER == BIG_ENDIAN
+#else   // #if defined(HAVE_ENDIAN_H) && defined(HAVE_LITTLE_ENDIAN)
 
 #define rol(bits, value) (((value) << (bits)) | ((value) >> (32 - (bits))))
 

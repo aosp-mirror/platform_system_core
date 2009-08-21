@@ -29,7 +29,6 @@
 #define _EMBEDDED_SHA_H_
 
 #include <inttypes.h>
-#include <endian.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,7 +37,7 @@ extern "C" {
 typedef struct SHA_CTX {
     uint64_t count;
     uint32_t state[5];
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if defined(HAVE_ENDIAN_H) && defined(HAVE_LITTLE_ENDIAN)
     union {
         uint8_t b[64];
         uint32_t w[16];
