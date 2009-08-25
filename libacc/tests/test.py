@@ -458,6 +458,12 @@ result: 3
 result: 4
 ""","""""")
 
+    def testB2071670(self):
+        self.compileCheck(["-R", "data/b2071670.c"], """Executing compiled code:
+result: 1092616192
+""","""""")
+
+
 def main():
     checkEnvironment()
     parseArgv()
