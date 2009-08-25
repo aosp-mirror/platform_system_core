@@ -120,6 +120,7 @@ void restart_root_service(int fd, void *cookie)
         if (strcmp(value, "1") != 0) {
             snprintf(buf, sizeof(buf), "adbd cannot run as root in production builds\n");
             writex(fd, buf, strlen(buf));
+            adb_close(fd);
             return;
         }
 
@@ -134,13 +135,52 @@ void restart_root_service(int fd, void *cookie)
     }
 }
 
-void reboot_service(int fd, char *arg)
+void restart_tcp_service(int fd, void *cookie)
+{
+    char buf[100];
+    char value[PROPERTY_VALUE_MAX];
+    int port = (int)cookie;
+
+    if (port <= 0) {
+        snprintf(buf, sizeof(buf), "invalid port\n");
+        writex(fd, buf, strlen(buf));
+        adb_close(fd);
+        return;
+    }
+
+    snprintf(value, sizeof(value), "%d", port);
+    property_set("service.adb.tcp.port", value);
+    snprintf(buf, sizeof(buf), "restarting in TCP mode port: %d\n", port);
+    writex(fd, buf, strlen(buf));
+    adb_close(fd);
+
+    // quit, and init will restart us in TCP mode
+    sleep(1);
+    exit(1);
+}
+
+void restart_usb_service(int fd, void *cookie)
+{
+    char buf[100];
+
+    property_set("service.adb.tcp.port", "0");
+    snprintf(buf, sizeof(buf), "restarting in USB mode\n");
+    writex(fd, buf, strlen(buf));
+    adb_close(fd);
+
+    // quit, and init will restart us in USB mode
+    sleep(1);
+    exit(1);
+}
+
+void reboot_service(int fd, void *arg)
 {
     char buf[100];
     int ret;
 
     sync();
-    ret = __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2, LINUX_REBOOT_CMD_RESTART2, arg);
+    ret = __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
+                    LINUX_REBOOT_CMD_RESTART2, (char *)arg);
     if (ret < 0) {
         snprintf(buf, sizeof(buf), "reboot failed: %s\n", strerror(errno));
         writex(fd, buf, strlen(buf));
@@ -415,12 +455,20 @@ int service_to_fd(const char *name)
     } else if(!strncmp(name, "remount:", 8)) {
         ret = create_service_thread(remount_service, NULL);
     } else if(!strncmp(name, "reboot:", 7)) {
-        char* arg = name + 7;
+        const char* arg = name + 7;
         if (*name == 0)
             arg = NULL;
-        ret = create_service_thread(reboot_service, arg);
+        ret = create_service_thread(reboot_service, (void *)arg);
     } else if(!strncmp(name, "root:", 5)) {
         ret = create_service_thread(restart_root_service, NULL);
+    } else if(!strncmp(name, "tcpip:", 6)) {
+        int port;
+        if (sscanf(name + 6, "%d", &port) == 0) {
+            port = 0;
+        }
+        ret = create_service_thread(restart_tcp_service, (void *)port);
+    } else if(!strncmp(name, "usb:", 4)) {
+        ret = create_service_thread(restart_usb_service, NULL);
 #endif
 #if 0
     } else if(!strncmp(name, "echo:", 5)){
