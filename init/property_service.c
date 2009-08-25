@@ -55,6 +55,7 @@ struct {
 } property_perms[] = {
     { "net.rmnet0.",    AID_RADIO },
     { "net.gprs.",      AID_RADIO },
+    { "net.ppp",        AID_RADIO },
     { "ril.",           AID_RADIO },
     { "gsm.",           AID_RADIO },
     { "net.dns",        AID_RADIO },
