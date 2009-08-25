@@ -41,6 +41,12 @@ def runCmd(args):
     result = proc.communicate()
     return result[0].strip()
 
+def uname():
+    return runCmd(["uname"])
+
+def unameM():
+    return runCmd(["uname", "-m"])
+
 def which(item):
     return runCmd(["which", item])
 
@@ -50,6 +56,10 @@ def fileType(item):
 def outputCanRun():
     ft = fileType(which("acc"))
     return ft.find("ELF 32-bit LSB executable, Intel 80386") >= 0
+
+def checkEnvironment():
+    global gRunOTCCOutput
+    gRunOTCCOutput = uname() == "Linux" and unameM() != "x86_64" and outputCanRun()
 
 def adb(args):
     return runCmd(["adb"] + args)
@@ -449,9 +459,8 @@ result: 4
 ""","""""")
 
 def main():
+    checkEnvironment()
     parseArgv()
-    if not outputCanRun():
-        print "Can't run output of acc compiler."
     unittest.main()
 
 if __name__ == '__main__':
