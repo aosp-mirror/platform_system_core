@@ -122,7 +122,7 @@ int  local_connect(int  port)
         close_on_exec(fd);
         disable_tcp_nagle(fd);
         snprintf(buf, sizeof buf, "%s%d", LOCAL_CLIENT_PREFIX, port - 1);
-        register_socket_transport(fd, buf, port);
+        register_socket_transport(fd, buf, port, 1);
         return 0;
     }
     return -1;
@@ -147,17 +147,18 @@ static void *client_socket_thread(void *x)
     return 0;
 }
 
-static void *server_socket_thread(void *x)
+static void *server_socket_thread(void * arg)
 {
     int serverfd, fd;
     struct sockaddr addr;
     socklen_t alen;
+    int port = (int)arg;
 
     D("transport: server_socket_thread() starting\n");
     serverfd = -1;
     for(;;) {
         if(serverfd == -1) {
-            serverfd = socket_inaddr_any_server(ADB_LOCAL_TRANSPORT_PORT, SOCK_STREAM);
+            serverfd = socket_inaddr_any_server(port, SOCK_STREAM);
             if(serverfd < 0) {
                 D("server: cannot bind socket yet\n");
                 adb_sleep_ms(1000);
@@ -167,20 +168,20 @@ static void *server_socket_thread(void *x)
         }
 
         alen = sizeof(addr);
-        D("server: trying to get new connection from %d\n", ADB_LOCAL_TRANSPORT_PORT);
+        D("server: trying to get new connection from %d\n", port);
         fd = adb_socket_accept(serverfd, &addr, &alen);
         if(fd >= 0) {
             D("server: new connection on fd %d\n", fd);
             close_on_exec(fd);
             disable_tcp_nagle(fd);
-            register_socket_transport(fd,"host",ADB_LOCAL_TRANSPORT_PORT);
+            register_socket_transport(fd, "host", port, 1);
         }
     }
     D("transport: server_socket_thread() exiting\n");
     return 0;
 }
 
-void local_init(void)
+void local_init(int port)
 {
     adb_thread_t thr;
     void* (*func)(void *);
@@ -193,7 +194,7 @@ void local_init(void)
 
     D("transport: local %s init\n", HOST ? "client" : "server");
 
-    if(adb_thread_create(&thr, func, 0)) {
+    if(adb_thread_create(&thr, func, (void *)port)) {
         fatal_errno("cannot create local socket %s thread",
                     HOST ? "client" : "server");
     }
@@ -225,7 +226,7 @@ static void remote_close(atransport *t)
     adb_close(t->fd);
 }
 
-int init_socket_transport(atransport *t, int s, int  port)
+int init_socket_transport(atransport *t, int s, int port, int local)
 {
     int  fail = 0;
 
@@ -239,7 +240,7 @@ int init_socket_transport(atransport *t, int s, int  port)
     t->type = kTransportLocal;
 
 #if ADB_HOST
-    if (HOST) {
+    if (HOST && local) {
         adb_mutex_lock( &local_transports_lock );
         {
             int  index = (port - ADB_LOCAL_TRANSPORT_PORT)/2;

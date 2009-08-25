@@ -849,11 +849,11 @@ void close_usb_devices()
 }
 #endif // ADB_HOST
 
-void register_socket_transport(int s, const char *serial, int  port)
+void register_socket_transport(int s, const char *serial, int port, int local)
 {
     atransport *t = calloc(1, sizeof(atransport));
     D("transport: %p init'ing for socket %d, on port %d\n", t, s, port);
-    if ( init_socket_transport(t, s, port) < 0 ) {
+    if ( init_socket_transport(t, s, port, local) < 0 ) {
         adb_close(s);
         free(t);
         return;
