@@ -690,9 +690,9 @@ class Compiler : public ErrorSink {
     public:
         ARMCodeGenerator() {
 #ifdef ARM_USE_VFP
-        	LOGD("Using ARM VFP hardware floating point.");
+            LOGD("Using ARM VFP hardware floating point.");
 #else
-        	LOGD("Using ARM soft floating point.");
+            LOGD("Using ARM soft floating point.");
 #endif
         }
 
@@ -733,17 +733,17 @@ class Compiler : public ErrorSink {
 
 #ifdef ARM_USE_VFP
             {
-            	Type* pReturnType = pDecl->pHead;
-            	switch(pReturnType->tag) {
-            	case TY_FLOAT:
-            		o4(0xEE170A90); // fmrs	r0, s15
-            		break;
-            	case TY_DOUBLE:
-            		o4(0xEC510B17); // fmrrd r0, r1, d7
-            		break;
-            	default:
-            		break;
-            	}
+                Type* pReturnType = pDecl->pHead;
+                switch(pReturnType->tag) {
+                case TY_FLOAT:
+                    o4(0xEE170A90); // fmrs    r0, s15
+                    break;
+                case TY_DOUBLE:
+                    o4(0xEC510B17); // fmrrd r0, r1, d7
+                    break;
+                default:
+                    break;
+                }
             }
 #endif
 
@@ -783,14 +783,14 @@ class Compiler : public ErrorSink {
             switch (pType->tag) {
             case TY_FLOAT:
 #ifdef ARM_USE_VFP
-                o4(0xEDD07A00);      // flds	s15, [r0]
+                o4(0xEDD07A00);      // flds    s15, [r0]
 #else
                 o4(0xE5900000);      // ldr r0, [r0]
 #endif
                 break;
             case TY_DOUBLE:
 #ifdef ARM_USE_VFP
-                o4(0xED907B00);      // fldd	d7, [r0]
+                o4(0xED907B00);      // fldd    d7, [r0]
 #else
                 o4(0xE1C000D0);      // ldrd r0, [r0]
 #endif
@@ -812,8 +812,8 @@ class Compiler : public ErrorSink {
             switch(tagR0) {
                 case TY_FLOAT:
 #ifdef ARM_USE_VFP
-                	o4(0xEEF57A40); // fcmpzs	s15
-                	o4(0xEEF1FA10); // fmstat
+                    o4(0xEEF57A40); // fcmpzs    s15
+                    o4(0xEEF1FA10); // fmstat
 #else
                     callRuntime((void*) runtime_is_non_zero_f);
                     o4(0xE3500000); // cmp r0,#0
@@ -821,8 +821,8 @@ class Compiler : public ErrorSink {
                     break;
                 case TY_DOUBLE:
 #ifdef ARM_USE_VFP
-                	o4(0xEEB57B40); // fcmpzd	d7
-                	o4(0xEEF1FA10); // fmstat
+                    o4(0xEEB57B40); // fcmpzd    d7
+                    o4(0xEEF1FA10); // fmstat
 #else
                     callRuntime((void*) runtime_is_non_zero_d);
                     o4(0xE3500000); // cmp r0,#0
@@ -876,8 +876,8 @@ class Compiler : public ErrorSink {
             } else if (tagR0 == TY_DOUBLE || tagTOS == TY_DOUBLE) {
                 setupDoubleArgs();
 #ifdef ARM_USE_VFP
-                o4(0xEEB46BC7); // 		fcmped	d6, d7
-           	    o4(0xEEF1FA10); // fmstat
+                o4(0xEEB46BC7); //         fcmped    d6, d7
+                   o4(0xEEF1FA10); // fmstat
                 switch(op) {
                 case OP_EQUALS:
                     o4(0x03A00001); // moveq r0,#1
@@ -936,7 +936,7 @@ class Compiler : public ErrorSink {
                 setupFloatArgs();
 #ifdef ARM_USE_VFP
                 o4(0xEEB47AE7); // fcmpes s14, s15
-           	    o4(0xEEF1FA10); // fmstat
+                   o4(0xEEF1FA10); // fmstat
                 switch(op) {
                 case OP_EQUALS:
                     o4(0x03A00001); // moveq r0,#1
@@ -1097,28 +1097,28 @@ class Compiler : public ErrorSink {
                     switch(op) {
                     case OP_MUL:
 #ifdef ARM_USE_VFP
-                    	o4(0xEE267B07); // fmuld d7, d6, d7
+                        o4(0xEE267B07); // fmuld d7, d6, d7
 #else
-                    	callRuntime((void*) runtime_op_mul_dd);
+                        callRuntime((void*) runtime_op_mul_dd);
 #endif
                         break;
                     case OP_DIV:
 #ifdef ARM_USE_VFP
-                    	o4(0xEE867B07); // fdivd d7, d6, d7
+                        o4(0xEE867B07); // fdivd d7, d6, d7
 #else
                         callRuntime((void*) runtime_op_div_dd);
 #endif
                         break;
                     case OP_PLUS:
 #ifdef ARM_USE_VFP
-                    	o4(0xEE367B07); // faddd d7, d6, d7
+                        o4(0xEE367B07); // faddd d7, d6, d7
 #else
                         callRuntime((void*) runtime_op_add_dd);
 #endif
                         break;
                     case OP_MINUS:
 #ifdef ARM_USE_VFP
-                    	o4(0xEE367B47); // fsubd d7, d6, d7
+                        o4(0xEE367B47); // fsubd d7, d6, d7
 #else
                         callRuntime((void*) runtime_op_sub_dd);
 #endif
@@ -1132,28 +1132,28 @@ class Compiler : public ErrorSink {
                     switch(op) {
                     case OP_MUL:
 #ifdef ARM_USE_VFP
-                    	o4(0xEE677A27); // fmuls s15, s14, s15
+                        o4(0xEE677A27); // fmuls s15, s14, s15
 #else
                         callRuntime((void*) runtime_op_mul_ff);
 #endif
                         break;
                     case OP_DIV:
 #ifdef ARM_USE_VFP
-                    	o4(0xEEC77A27); // fdivs s15, s14, s15
+                        o4(0xEEC77A27); // fdivs s15, s14, s15
 #else
                         callRuntime((void*) runtime_op_div_ff);
 #endif
                         break;
                     case OP_PLUS:
 #ifdef ARM_USE_VFP
-                    	o4(0xEE777A27); // fadds s15, s14, s15
+                        o4(0xEE777A27); // fadds s15, s14, s15
 #else
                         callRuntime((void*) runtime_op_add_ff);
 #endif
                         break;
                     case OP_MINUS:
 #ifdef ARM_USE_VFP
-                    	o4(0xEE777A67); // fsubs s15, s14, s15
+                        o4(0xEE777A67); // fsubs s15, s14, s15
 #else
                         callRuntime((void*) runtime_op_sub_ff);
 #endif
@@ -1187,7 +1187,7 @@ class Compiler : public ErrorSink {
                         o4(0x03A00001); // moveq r0,#1
                         o4(0x13A00000); // movne r0,#0
 #else
-						callRuntime((void*) runtime_is_zero_f);
+                        callRuntime((void*) runtime_is_zero_f);
 #endif
                         break;
                     case TY_DOUBLE:
@@ -1197,7 +1197,7 @@ class Compiler : public ErrorSink {
                         o4(0x03A00001); // moveq r0,#1
                         o4(0x13A00000); // movne r0,#0
 #else
-                    	callRuntime((void*) runtime_is_zero_d);
+                        callRuntime((void*) runtime_is_zero_d);
 #endif
                         break;
                     default:
@@ -1232,13 +1232,13 @@ class Compiler : public ErrorSink {
                         case OP_MINUS:
                             if (tag == TY_FLOAT) {
 #ifdef ARM_USE_VFP
-                            	o4(0xEEF17A67); // fnegs	s15, s15
+                                o4(0xEEF17A67); // fnegs    s15, s15
 #else
                                 callRuntime((void*) runtime_op_neg_f);
 #endif
                             } else {
 #ifdef ARM_USE_VFP
-                            	o4(0xEEB17B47); // fnegd	d7, d7
+                                o4(0xEEB17B47); // fnegd    d7, d7
 #else
                                 callRuntime((void*) runtime_op_neg_d);
 #endif
@@ -1265,13 +1265,13 @@ class Compiler : public ErrorSink {
 #ifdef ARM_USE_VFP
             switch (r0ct ) {
             case TY_FLOAT:
-            	o4(0xED6D7A01); // fstmfds   sp!,{s15}
+                o4(0xED6D7A01); // fstmfds   sp!,{s15}
                 mStackUse += 4;
-            	break;
+                break;
             case TY_DOUBLE:
-            	o4(0xED2D7B02); // fstmfdd   sp!,{d7}
+                o4(0xED2D7B02); // fstmfdd   sp!,{d7}
                 mStackUse += 8;
-            	break;
+                break;
             default:
                 o4(0xE92D0001);  // stmfd   sp!,{r0}
                 mStackUse += 4;
@@ -1313,7 +1313,7 @@ class Compiler : public ErrorSink {
             TypeTag tosct = collapseType(pTOSType->tag);
 #ifdef ARM_USE_VFP
             if (tosct == TY_FLOAT || tosct == TY_DOUBLE) {
-            	error("Unsupported popR0 float/double");
+                error("Unsupported popR0 float/double");
             }
 #endif
             switch (tosct){
@@ -1349,7 +1349,7 @@ class Compiler : public ErrorSink {
                     break;
                 case TY_FLOAT:
 #ifdef ARM_USE_VFP
-                	o4(0xEDC27A00); // fsts	s15, [r2, #0]
+                    o4(0xEDC27A00); // fsts    s15, [r2, #0]
 #else
                     o4(0xE5820000); // str r0, [r2]
 #endif
@@ -1362,7 +1362,7 @@ class Compiler : public ErrorSink {
                     break;
                 case TY_DOUBLE:
 #ifdef ARM_USE_VFP
-                	o4(0xED827B00); // fstd	d7, [r2, #0]
+                    o4(0xED827B00); // fstd    d7, [r2, #0]
 #else
                     o4(0xE1C200F0); // strd r0, [r2]
 #endif
@@ -1386,7 +1386,7 @@ class Compiler : public ErrorSink {
                     break;
                 case TY_FLOAT:
 #ifdef ARM_USE_VFP
-                    o4(0xEDD07A00); // flds	s15, [r0, #0]
+                    o4(0xEDD07A00); // flds    s15, [r0, #0]
 #else
                     o4(0xE5900000); // ldr r0, [r0]
 #endif
@@ -1399,7 +1399,7 @@ class Compiler : public ErrorSink {
                     break;
                 case TY_DOUBLE:
 #ifdef ARM_USE_VFP
-                    o4(0xED907B00); // fldd	d7, [r0, #0]
+                    o4(0xED907B00); // fldd    d7, [r0, #0]
 #else
                     o4(0xE1C000D0); // ldrd   r0, [r0]
 #endif
@@ -1467,17 +1467,12 @@ class Compiler : public ErrorSink {
                 if (pA->tag == TY_ARRAY && pB->tag == TY_POINTER) {
                     pA = pA->pTail;
                 }
-                if (typeEqual(pA, pB)) {
-                    return; // OK
+                if (! (typeEqual(pA, pB)
+                        || pB->pHead->tag == TY_VOID
+                        || (pA->tag == TY_POINTER && pB->tag == TY_POINTER && isCast)
+                    )) {
+                    error("Incompatible pointer or array types");
                 }
-                if (pB->pHead->tag == TY_VOID) {
-                    return; // convert to void* is OK.
-                }
-                if (pA->tag == TY_POINTER && pB->tag == TY_POINTER
-                        && isCast) {
-                    return; // OK
-                }
-                error("Incompatible pointer or array types");
             } else if (bitsSame(pType, pR0Type)) {
                 // do nothing special
             } else {
@@ -1486,8 +1481,8 @@ class Compiler : public ErrorSink {
                 if (r0Tag == TY_INT) {
                     if (destTag == TY_FLOAT) {
 #ifdef ARM_USE_VFP
-                    	o4(0xEE070A90); // fmsr	s15, r0
-                    	o4(0xEEF87AE7); // fsitos s15, s15
+                        o4(0xEE070A90); // fmsr    s15, r0
+                        o4(0xEEF87AE7); // fsitos s15, s15
 
 #else
                         callRuntime((void*) runtime_int_to_float);
@@ -1495,8 +1490,8 @@ class Compiler : public ErrorSink {
                     } else {
                         assert(destTag == TY_DOUBLE);
 #ifdef ARM_USE_VFP
-                    	o4(0xEE070A90); // fmsr s15, r0
-                    	o4(0xEEB87BE7); // fsitod d7, s15
+                        o4(0xEE070A90); // fmsr s15, r0
+                        o4(0xEEB87BE7); // fsitod d7, s15
 
 #else
                         callRuntime((void*) runtime_int_to_double);
@@ -1505,15 +1500,15 @@ class Compiler : public ErrorSink {
                 } else if (r0Tag == TY_FLOAT) {
                     if (destTag == TY_INT) {
 #ifdef ARM_USE_VFP
-                    	o4(0xEEFD7AE7); // ftosizs s15, s15
-                    	o4(0xEE170A90); // fmrs r0, s15
+                        o4(0xEEFD7AE7); // ftosizs s15, s15
+                        o4(0xEE170A90); // fmrs r0, s15
 #else
                         callRuntime((void*) runtime_float_to_int);
 #endif
                     } else {
                         assert(destTag == TY_DOUBLE);
 #ifdef ARM_USE_VFP
-                    	o4(0xEEB77AE7); // fcvtds	d7, s15
+                        o4(0xEEB77AE7); // fcvtds    d7, s15
 #else
                         callRuntime((void*) runtime_float_to_double);
 #endif
@@ -1522,8 +1517,8 @@ class Compiler : public ErrorSink {
                     assert (r0Tag == TY_DOUBLE);
                     if (destTag == TY_INT) {
 #ifdef ARM_USE_VFP
-                    	o4(0xEEFD7BC7); // ftosizd s15, d7
-                    	o4(0xEE170A90); // fmrs r0, s15
+                        o4(0xEEFD7BC7); // ftosizd s15, d7
+                        o4(0xEE170A90); // fmrs r0, s15
 #else
                         callRuntime((void*) runtime_double_to_int);
 #endif
@@ -1556,11 +1551,11 @@ class Compiler : public ErrorSink {
                     }
                     o4(0xE58D0000 | l); // str r0, [sp, #l]
                     return 4;
-				case TY_FLOAT:
+                case TY_FLOAT:
                     if (l < 0 || l > 1020 || (l & 3)) {
                         error("l out of range for stack offset: 0x%08x", l);
                     }
-                    o4(0xEDCD7A00 | (l >> 2)); // fsts	s15, [sp, #l]
+                    o4(0xEDCD7A00 | (l >> 2)); // fsts    s15, [sp, #l]
                     return 4;
                 case TY_DOUBLE: {
                     // Align to 8 byte boundary
@@ -1568,7 +1563,7 @@ class Compiler : public ErrorSink {
                     if (l2 < 0 || l2 > 1020 || (l2 & 3)) {
                         error("l out of range for stack offset: 0x%08x", l);
                     }
-                    o4(0xED8D7B00 | (l2 >> 2)); // fstd	d7, [sp, #l2]
+                    o4(0xED8D7B00 | (l2 >> 2)); // fstd    d7, [sp, #l2]
                     return (l2 - l) + 8;
                 }
                 default:
@@ -1578,7 +1573,7 @@ class Compiler : public ErrorSink {
 #else
             switch(r0ct) {
                 case TY_INT:
-				case TY_FLOAT:
+                case TY_FLOAT:
                     if (l < 0 || l > 4096-4) {
                         error("l out of range for stack offset: 0x%08x", l);
                     }
@@ -1655,13 +1650,13 @@ class Compiler : public ErrorSink {
 #ifdef ARM_USE_VFP
             switch(pReturnType->tag) {
             case TY_FLOAT:
-            	o4(0xEE070A90); // fmsr s15, r0
-            	break;
+                o4(0xEE070A90); // fmsr s15, r0
+                break;
             case TY_DOUBLE:
-            	o4(0xEC410B17); // fmdrr d7, r0, r1
-            	break;
+                o4(0xEC410B17); // fmdrr d7, r0, r1
+                break;
             default:
-            	break;
+                break;
             }
 #endif
         }
@@ -1891,8 +1886,8 @@ class Compiler : public ErrorSink {
             if (tagR0 != TY_FLOAT) {
                 assert(tagR0 == TY_INT);
 #ifdef ARM_USE_VFP
-            	o4(0xEE070A90); // fmsr	s15, r0
-            	o4(0xEEF87AE7); // fsitos s15, s15
+                o4(0xEE070A90); // fmsr    s15, r0
+                o4(0xEEF87AE7); // fsitos s15, s15
 #else
                 callRuntime((void*) runtime_int_to_float);
 #endif
@@ -1902,7 +1897,7 @@ class Compiler : public ErrorSink {
                 assert(tagR0 == TY_FLOAT);
 #ifdef ARM_USE_VFP
                 o4(0xECBD7A01); // fldmfds sp!, {s14}
-            	o4(0xEEB87AC7); // fsitos s14, s14
+                o4(0xEEB87AC7); // fsitos s14, s14
 #else
                 o4(0xE92D0001);  // stmfd   sp!,{r0}  // push R0
                 o4(0xE59D0004);  // ldr     r0, [sp, #4]
@@ -1937,8 +1932,8 @@ class Compiler : public ErrorSink {
             if (tagR0 != TY_DOUBLE) {
                 if (tagR0 == TY_INT) {
 #ifdef ARM_USE_VFP
-					o4(0xEE070A90); // fmsr s15, r0
-					o4(0xEEB87BE7); // fsitod d7, s15
+                    o4(0xEE070A90); // fmsr s15, r0
+                    o4(0xEEB87BE7); // fsitod d7, s15
 
 #else
                     callRuntime((void*) runtime_int_to_double);
@@ -1946,7 +1941,7 @@ class Compiler : public ErrorSink {
                 } else {
                     assert(tagR0 == TY_FLOAT);
 #ifdef ARM_USE_VFP
-                    o4(0xEEB77AE7); // fcvtds	d7, s15
+                    o4(0xEEB77AE7); // fcvtds    d7, s15
 #else
                     callRuntime((void*) runtime_float_to_double);
 #endif
@@ -1956,11 +1951,11 @@ class Compiler : public ErrorSink {
 #ifdef ARM_USE_VFP
                 if (tagTOS == TY_INT) {
                     o4(0xECFD6A01);  // fldmfds sp!,{s13}
-					o4(0xEEB86BE6);  // fsitod  d6, s13
+                    o4(0xEEB86BE6);  // fsitod  d6, s13
                 } else {
                     assert(tagTOS == TY_FLOAT);
                     o4(0xECFD6A01);  // fldmfds sp!,{s13}
-                    o4(0xEEB76AE6);  // fcvtds	d6, s13
+                    o4(0xEEB76AE6);  // fcvtds    d6, s13
                 }
 #else
                 o4(0xE92D0003);  // stmfd   sp!,{r0,r1}  // push r0,r1
@@ -1979,7 +1974,7 @@ class Compiler : public ErrorSink {
                 mStackUse -= 4;
             } else {
 #ifdef ARM_USE_VFP
-            	o4(0xECBD6B02);  // fldmfdd	sp!, {d6}
+                o4(0xECBD6B02);  // fldmfdd    sp!, {d6}
 #else
                 o4(0xE8BD000C);  // ldmfd   sp!,{r2,r3}
 #endif
@@ -2608,17 +2603,12 @@ class Compiler : public ErrorSink {
                 if (pA->tag == TY_ARRAY && pB->tag == TY_POINTER) {
                     pA = pA->pTail;
                 }
-                if (typeEqual(pA, pB)) {
-                    return; // OK
+                if (! (typeEqual(pA, pB)
+                        || pB->pHead->tag == TY_VOID
+                        || (pA->tag == TY_POINTER && pB->tag == TY_POINTER && isCast)
+                    )) {
+                    error("Incompatible pointer or array types");
                 }
-                if (pB->pHead->tag == TY_VOID) {
-                    return; // convert to void* is OK.
-                }
-                if (pA->tag == TY_POINTER && pB->tag == TY_POINTER
-                        && isCast) {
-                    return; // OK
-                }
-                error("Incompatible pointer or array types");
             } else if (bitsSame(pType, pR0Type)) {
                 // do nothing special
             } else if (isFloatType(pType) && isFloatType(pR0Type)) {
