@@ -929,7 +929,7 @@ top:
 
     if(!strcmp(argv[0], "remount") || !strcmp(argv[0], "reboot")
             || !strcmp(argv[0], "tcpip") || !strcmp(argv[0], "usb")
-            || !strcmp(argv[0], "reboot")) {
+            || !strcmp(argv[0], "root")) {
         char command[100];
         if (argc > 1)
             snprintf(command, sizeof(command), "%s:%s", argv[0], argv[1]);
