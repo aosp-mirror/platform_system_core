@@ -463,6 +463,13 @@ result: 4
 result: 1092616192
 ""","""""")
 
+    def testStructs(self):
+        self.compileCheck(["-R", "data/structs.c"], """Executing compiled code:
+testCopying: 37 == 37
+testUnion: 1 == 0x3f800000
+testArgs: (6, 8, 10, 12)
+result: 6
+""","""""")
 
 def main():
     checkEnvironment()

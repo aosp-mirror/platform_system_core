@@ -157,9 +157,11 @@ class Compiler : public ErrorSink {
 
     struct Type {
         TypeTag tag;
-        tokenid_t id; // For function arguments, local vars
-        int length; // length of array
-        Type* pHead;
+        tokenid_t id; // For function arguments, global vars, local vars, struct elements
+        tokenid_t structTag; // For structs the name of the struct
+        int length; // length of array, offset of struct element. -1 means struct is forward defined
+        int alignment; // for structs only
+        Type* pHead; // For a struct this is the prototype struct.
         Type* pTail;
     };
 
@@ -341,6 +343,9 @@ class Compiler : public ErrorSink {
         /* Load floating point value from global address. */
         virtual void loadFloat(int address, Type* pType) = 0;
 
+        /* Add the struct offset in bytes to R0, change the type to pType */
+        virtual void addStructOffsetR0(int offset, Type* pType) = 0;
+
         /* Jump to a target, and return the address of the word that
          * holds the target data, in case it needs to be fixed up later.
          */
@@ -508,16 +513,6 @@ class Compiler : public ErrorSink {
          */
         virtual size_t sizeOf(Type* type) = 0;
 
-        /**
-         * Stack alignment of this type of data
-         */
-        virtual size_t stackAlignmentOf(Type* pType) = 0;
-
-        /**
-         * Argument stack argument size of this data type.
-         */
-        virtual size_t stackSizeOf(Type* pType) = 0;
-
         virtual Type* getR0Type() {
             return mExpressionStack.back().pType;
         }
@@ -675,7 +670,6 @@ class Compiler : public ErrorSink {
             }
             return NULL;
         }
-
         Type* mkpInt;
 
     private:
@@ -799,6 +793,19 @@ class Compiler : public ErrorSink {
                 assert(false);
                 break;
             }
+        }
+
+
+        virtual void addStructOffsetR0(int offset, Type* pType) {
+            if (offset) {
+                size_t immediate = 0;
+                if (encode12BitImmediate(offset, &immediate)) {
+                    o4(0xE2800000 | immediate); // add    r0, r0, #offset
+                } else {
+                    error("structure offset out of range: %d", offset);
+                }
+            }
+            setR0Type(pType, ET_LVALUE);
         }
 
         virtual int gjmp(int t) {
@@ -1367,6 +1374,15 @@ class Compiler : public ErrorSink {
                     o4(0xE1C200F0); // strd r0, [r2]
 #endif
                     break;
+                case TY_STRUCT:
+                {
+                    int size = sizeOf(pDestType);
+                    if (size > 0) {
+                        liReg(size, 1);
+                        callRuntime((void*) runtime_structCopy);
+                    }
+                }
+                    break;
                 default:
                     error("storeR0ToTOS: unimplemented type %d",
                             pDestType->tag);
@@ -1407,6 +1423,8 @@ class Compiler : public ErrorSink {
                 case TY_ARRAY:
                     pNewType = pNewType->pTail;
                     break;
+                case TY_STRUCT:
+                    break;
                 default:
                     error("loadR0FromR0: unimplemented type %d", tag);
                     break;
@@ -1417,13 +1435,18 @@ class Compiler : public ErrorSink {
         virtual void leaR0(int ea, Type* pPointerType, ExpressionType et) {
             if (ea > -LOCAL && ea < LOCAL) {
                 // Local, fp relative
-                if (ea < -1023 || ea > 1023 || ((ea & 3) != 0)) {
-                    error("Offset out of range: %08x", ea);
-                }
+
+                size_t immediate = 0;
+                bool inRange = false;
                 if (ea < 0) {
-                    o4(0xE24B0F00 | (0xff & ((-ea) >> 2))); // sub    r0, fp, #ea
+                    inRange = encode12BitImmediate(-ea, &immediate);
+                    o4(0xE24B0000 | immediate); // sub    r0, fp, #ea
                 } else {
-                    o4(0xE28B0F00 | (0xff & (ea >> 2))); // add    r0, fp, #ea
+                    inRange = encode12BitImmediate(ea, &immediate);
+                    o4(0xE28B0000 | immediate); // add    r0, fp, #ea
+                }
+                if (! inRange) {
+                    error("Offset out of range: %08x", ea);
                 }
             } else {
                 // Global, absolute.
@@ -1750,9 +1773,16 @@ class Compiler : public ErrorSink {
                 case TY_CHAR:
                     return 1;
                 case TY_SHORT:
-                    return 1;
+                    return 2;
                 case TY_DOUBLE:
                     return 8;
+                case TY_ARRAY:
+                    return alignmentOf(pType->pHead);
+                case TY_STRUCT:
+                    return pType->pHead->alignment & 0x7fffffff;
+                case TY_FUNC:
+                    error("alignment of func not supported");
+                    return 1;
                 default:
                     return 4;
             }
@@ -1777,34 +1807,11 @@ class Compiler : public ErrorSink {
                     return 4;
                 case TY_ARRAY:
                     return pType->length * sizeOf(pType->pHead);
+                case TY_STRUCT:
+                    return pType->pHead->length;
                 default:
                     error("Unsupported type %d", pType->tag);
                     return 0;
-            }
-        }
-
-        virtual size_t stackAlignmentOf(Type* pType) {
-            switch(pType->tag) {
-                case TY_DOUBLE:
-                    return 8;
-                case TY_ARRAY:
-                    return stackAlignmentOf(pType->pHead);
-                default:
-                    return 4;
-            }
-        }
-
-        virtual size_t stackSizeOf(Type* pType) {
-            switch(pType->tag) {
-                case TY_DOUBLE:
-                    return 8;
-                case TY_ARRAY:
-                    return sizeOf(pType);
-                case TY_FUNC:
-                    error("stackSizeOf func not supported");
-                    return 4;
-                default:
-                    return 4;
             }
         }
 
@@ -1986,17 +1993,40 @@ class Compiler : public ErrorSink {
         void liReg(int t, int reg) {
             assert(reg >= 0 && reg < 16);
             int rN = (reg & 0xf) << 12;
-            if (t >= 0 && t < 255) {
-                 o4((0xE3A00000 + t) | rN); // mov    rN, #0
-            } else if (t >= -256 && t < 0) {
+            size_t encodedImmediate;
+            if (encode12BitImmediate(t, &encodedImmediate)) {
+                 o4(0xE3A00000 | encodedImmediate | rN); // mov    rN, #0
+            } else if (encode12BitImmediate(-(t+1), &encodedImmediate)) {
                 // mvn means move constant ^ ~0
-                o4((0xE3E00000 - (t+1)) | rN); // mvn    rN, #0
+                o4(0xE3E00000 | encodedImmediate | rN); // mvn    rN, #0
             } else {
-                  o4(0xE51F0000 | rN); //         ldr    rN, .L3
-                  o4(0xEA000000); //         b .L99
-                  o4(t);          // .L3:   .word 0
+                o4(0xE51F0000 | rN); //         ldr    rN, .L3
+                o4(0xEA000000); //         b .L99
+                o4(t);          // .L3:   .word 0
                                   // .L99:
             }
+        }
+
+        bool encode12BitImmediate(size_t immediate, size_t* pResult) {
+            for(size_t i = 0; i < 16; i++) {
+                size_t rotate = i * 2;
+                size_t mask = rotateRight(0xff, rotate);
+                if ((immediate | mask) == mask) {
+                    size_t bits8 = rotateLeft(immediate, rotate);
+                    assert(bits8 <= 0xff);
+                    *pResult = (i << 8) | bits8;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        size_t rotateRight(size_t n, size_t rotate) {
+            return (n >> rotate) | (n << (32 - rotate));
+        }
+
+        size_t rotateLeft(size_t n, size_t rotate) {
+            return (n << rotate) | (n >> (32 - rotate));
         }
 
         void callRuntime(void* fn) {
@@ -2014,6 +2044,10 @@ class Compiler : public ErrorSink {
 
         static int runtime_MOD(int b, int a) {
             return a % b;
+        }
+
+        static void runtime_structCopy(void* src, size_t size, void* dest) {
+            memcpy(dest, src, size);
         }
 
 #ifndef ARM_USE_VFP
@@ -2210,6 +2244,13 @@ class Compiler : public ErrorSink {
                 assert(false);
                 break;
             }
+        }
+
+        virtual void addStructOffsetR0(int offset, Type* pType) {
+            if (offset) {
+                oad(0x05, offset); // addl offset, %eax
+            }
+            setR0Type(pType, ET_LVALUE);
         }
 
         virtual int gjmp(int t) {
@@ -2537,6 +2578,26 @@ class Compiler : public ErrorSink {
                 case TY_DOUBLE:
                     o(0x19dd); /* fstpl (%ecx) */
                     break;
+                case TY_STRUCT:
+                {
+                    // TODO: use alignment information to use movsw/movsl instead of movsb
+                    int size = sizeOf(pTargetType);
+                    if (size > 0) {
+                        o(0x9c);         // pushf
+                        o(0x57);         // pushl %edi
+                        o(0x56);         // pushl %esi
+                        o(0xcf89);       // movl %ecx, %edi
+                        o(0xc689);       // movl %eax, %esi
+                        oad(0xb9, size);  // mov #size, %ecx
+                        o(0xfc);         // cld
+                        o(0xf3);         // rep
+                        o(0xa4);         // movsb
+                        o(0x5e);         // popl %esi
+                        o(0x5f);         // popl %edi
+                        o(0x9d);         // popf
+                    }
+                }
+                    break;
                 default:
                     error("storeR0ToTOS: unsupported type %d",
                             pTargetType->tag);
@@ -2570,6 +2631,8 @@ class Compiler : public ErrorSink {
                     break;
                 case TY_ARRAY:
                     pNewType = pNewType->pTail;
+                    break;
+                case TY_STRUCT:
                     break;
                 default:
                     error("loadR0FromR0: unsupported type %d", tag);
@@ -2747,6 +2810,8 @@ class Compiler : public ErrorSink {
                 return 2;
             case TY_ARRAY:
                 return alignmentOf(pType->pHead);
+            case TY_STRUCT:
+                return pType->pHead->alignment & 0x7fffffff;
             case TY_FUNC:
                 error("alignment of func not supported");
                 return 1;
@@ -2774,27 +2839,11 @@ class Compiler : public ErrorSink {
                     return 4;
                 case TY_ARRAY:
                     return pType->length * sizeOf(pType->pHead);
+                case TY_STRUCT:
+                    return pType->pHead->length;
                 default:
                     error("Unsupported type %d", pType->tag);
                     return 0;
-            }
-        }
-
-        virtual size_t stackAlignmentOf(Type* pType){
-            return 4;
-        }
-
-        virtual size_t stackSizeOf(Type* pType) {
-            switch(pType->tag) {
-                case TY_DOUBLE:
-                    return 8;
-                case TY_ARRAY:
-                    return sizeOf(pType);
-                case TY_FUNC:
-                    error("stackSizeOf func not supported");
-                    return 4;
-                default:
-                    return 4;
             }
         }
 
@@ -2924,6 +2973,11 @@ class Compiler : public ErrorSink {
         virtual void loadFloat(int address, Type* pType) {
             fprintf(stderr, "loadFloat(%d, type=%d)\n", address, pType->tag);
             mpBase->loadFloat(address, pType);
+        }
+
+        virtual void addStructOffsetR0(int offset, Type* pType) {
+            fprintf(stderr, "addStructOffsetR0(%d, type=%d)\n", offset, pType->tag);
+            mpBase->addStructOffsetR0(offset, pType);
         }
 
         virtual int gjmp(int t) {
@@ -3071,16 +3125,6 @@ class Compiler : public ErrorSink {
          */
         virtual size_t sizeOf(Type* pType){
             return mpBase->sizeOf(pType);
-        }
-
-
-        virtual size_t stackAlignmentOf(Type* pType) {
-            return mpBase->stackAlignmentOf(pType);
-        }
-
-
-        virtual size_t stackSizeOf(Type* pType) {
-            return mpBase->stackSizeOf(pType);
         }
 
         virtual Type* getR0Type() {
@@ -3236,6 +3280,7 @@ class Compiler : public ErrorSink {
         // Current values for the token
         char* mpMacroDefinition;
         VariableInfo* mpVariableInfo;
+        VariableInfo* mpStructInfo;
     };
 
     class TokenTable {
@@ -3516,6 +3561,7 @@ class Compiler : public ErrorSink {
         size_t level;
         VariableInfo* pOldDefinition;
         Type* pType;
+        bool isStructTag;
     };
 
     class SymbolStack {
@@ -3547,13 +3593,22 @@ class Compiler : public ErrorSink {
             while (mStack.size() > mark.mSymbolHead) {
                 VariableInfo* pV = mStack.back();
                 mStack.pop_back();
-                (*mpTokenTable)[pV->tok].mpVariableInfo = pV->pOldDefinition;
+                if (pV->isStructTag) {
+                    (*mpTokenTable)[pV->tok].mpStructInfo = pV->pOldDefinition;
+                } else {
+                    (*mpTokenTable)[pV->tok].mpVariableInfo = pV->pOldDefinition;
+                }
             }
             mpArena->freeToMark(mark.mArenaMark);
         }
 
         bool isDefinedAtCurrentLevel(tokenid_t tok) {
             VariableInfo* pV = (*mpTokenTable)[tok].mpVariableInfo;
+            return pV && pV->level == level();
+        }
+
+        bool isStructTagDefinedAtCurrentLevel(tokenid_t tok) {
+            VariableInfo* pV = (*mpTokenTable)[tok].mpStructInfo;
             return pV && pV->level == level();
         }
 
@@ -3569,6 +3624,21 @@ class Compiler : public ErrorSink {
             token.mpVariableInfo = pNewV;
             mStack.push_back(pNewV);
             return pNewV;
+        }
+
+        VariableInfo* addStructTag(tokenid_t tok) {
+            Token& token = (*mpTokenTable)[tok];
+            VariableInfo* pOldS = token.mpStructInfo;
+            VariableInfo* pNewS =
+                (VariableInfo*) mpArena->alloc(sizeof(VariableInfo));
+            memset(pNewS, 0, sizeof(VariableInfo));
+            pNewS->tok = tok;
+            pNewS->level = level();
+            pNewS->isStructTag = true;
+            pNewS->pOldDefinition = pOldS;
+            token.mpStructInfo = pNewS;
+            mStack.push_back(pNewS);
+            return pNewS;
         }
 
         VariableInfo* add(Type* pType) {
@@ -3629,6 +3699,8 @@ class Compiler : public ErrorSink {
     SymbolStack mGlobals;
     SymbolStack mLocals;
 
+    SymbolStack* mpCurrentSymbolStack;
+
     // Prebuilt types, makes things slightly faster.
     Type* mkpInt;        // int
     Type* mkpShort;      // short
@@ -3663,6 +3735,7 @@ class Compiler : public ErrorSink {
     static const int TOK_NUM_FLOAT = 3;
     static const int TOK_NUM_DOUBLE = 4;
     static const int TOK_OP_ASSIGNMENT = 5;
+    static const int TOK_OP_ARROW = 6;
 
     // 3..255 are character and/or operators
 
@@ -4000,6 +4073,9 @@ class Compiler : public ErrorSink {
             mTokenString.clear();
             pdef(ch);
             inp();
+            if (tok == '.' && !isdigit(ch)) {
+                goto done;
+            }
             int base = 10;
             if (tok == '0') {
                 if (ch == 'x' || ch == 'X') {
@@ -4088,6 +4164,9 @@ class Compiler : public ErrorSink {
                 }
                 inp();
                 next();
+            } else if ((tok == '-') & (ch == '>')) {
+                inp();
+                tok = TOK_OP_ARROW;
             } else {
                 const char* t = operatorChars;
                 int opIndex = 0;
@@ -4121,6 +4200,8 @@ class Compiler : public ErrorSink {
                 }
             }
         }
+
+    done: ;
 #if 0
         {
             String buf;
@@ -4443,6 +4524,24 @@ class Compiler : public ErrorSink {
                 pGen->genOp(OP_PLUS);
                 doPointer();
                 skip(']');
+            } else if (accept('.')) {
+                // struct element
+                pGen->forceR0RVal();
+                Type* pStruct = pGen->getR0Type();
+                if (pStruct->tag == TY_STRUCT) {
+                    doStructMember(pStruct);
+                } else {
+                    error("expected a struct value to the left of '.'");
+                }
+            } else if (accept(TOK_OP_ARROW)) {
+                pGen->forceR0RVal();
+                Type* pPtr = pGen->getR0Type();
+                if (pPtr->tag == TY_POINTER && pPtr->pHead->tag == TY_STRUCT) {
+                    pGen->loadR0FromR0();
+                    doStructMember(pPtr->pHead);
+                } else {
+                    error("Expected a pointer to a struct to the left of '->'");
+                }
             } else  if (accept('(')) {
                 /* function call */
                 Type* pDecl = NULL;
@@ -4502,6 +4601,18 @@ class Compiler : public ErrorSink {
             } else {
                 break;
             }
+        }
+    }
+
+    void doStructMember(Type* pStruct) {
+        Type* pStructElement = lookupStructMember(pStruct, tok);
+        if (pStructElement) {
+            next();
+            pGen->addStructOffsetR0(pStructElement->length, createPtrType(pStructElement->pHead));
+        } else {
+            String buf;
+            decodeToken(buf, tok, true);
+            error("Expected a struct member to the right of '.', got %s", buf.getUnwrapped());
         }
     }
 
@@ -4714,6 +4825,8 @@ class Compiler : public ErrorSink {
         } else if (at == TY_FUNC || at == TY_PARAM) {
             return typeEqual(a->pHead, b->pHead)
                 && typeEqual(a->pTail, b->pTail);
+        } else if (at == TY_STRUCT) {
+            return a->pHead == b->pHead;
         }
         return true;
     }
@@ -4746,20 +4859,22 @@ class Compiler : public ErrorSink {
 
     void decodeTypeImp(String& buffer, Type* pType) {
         decodeTypeImpPrefix(buffer, pType);
+        decodeId(buffer, pType->id);
+        decodeTypeImpPostfix(buffer, pType);
+    }
 
-        String temp;
-        if (pType->id != 0) {
-            decodeToken(temp, pType->id, false);
+    void decodeId(String& buffer, tokenid_t id) {
+        if (id) {
+            String temp;
+            decodeToken(temp, id, false);
             buffer.append(temp);
         }
-
-        decodeTypeImpPostfix(buffer, pType);
     }
 
     void decodeTypeImpPrefix(String& buffer, Type* pType) {
         TypeTag tag = pType->tag;
 
-        if (tag >= TY_INT && tag <= TY_DOUBLE) {
+        if ((tag >= TY_INT && tag <= TY_DOUBLE) || tag == TY_STRUCT) {
             switch (tag) {
                 case TY_INT:
                     buffer.appendCStr("int");
@@ -4778,6 +4893,16 @@ class Compiler : public ErrorSink {
                     break;
                 case TY_DOUBLE:
                     buffer.appendCStr("double");
+                    break;
+                case TY_STRUCT:
+                {
+                    bool isStruct = (pType->pHead->alignment & 0x80000000) != 0;
+                    buffer.appendCStr(isStruct ? "struct" : "union");
+                    if (pType->pHead && pType->pHead->structTag) {
+                        buffer.append(' ');
+                        decodeId(buffer, pType->pHead->structTag);
+                    }
+                }
                     break;
                 default:
                     break;
@@ -4808,6 +4933,8 @@ class Compiler : public ErrorSink {
             case TY_ARRAY:
                 decodeTypeImpPrefix(buffer, pType->pHead);
                 break;
+            case TY_STRUCT:
+                break;
             case TY_FUNC:
                 decodeTypeImp(buffer, pType->pHead);
                 break;
@@ -4837,6 +4964,16 @@ class Compiler : public ErrorSink {
                     String temp;
                     temp.printf("[%d]", pType->length);
                     buffer.append(temp);
+                }
+                break;
+            case TY_STRUCT:
+                if (pType->pHead->length >= 0) {
+                    buffer.appendCStr(" {");
+                    for(Type* pArg = pType->pTail; pArg; pArg = pArg->pTail) {
+                        decodeTypeImp(buffer, pArg->pHead);
+                        buffer.appendCStr(";");
+                    }
+                    buffer.append('}');
                 }
                 break;
             case TY_FUNC:
@@ -4874,11 +5011,130 @@ class Compiler : public ErrorSink {
             pType = mkpFloat;
         } else if (tok == TOK_DOUBLE) {
             pType = mkpDouble;
+        } else if (tok == TOK_STRUCT || tok == TOK_UNION) {
+            return acceptStruct();
         } else {
             return NULL;
         }
         next();
         return pType;
+    }
+
+    Type* acceptStruct() {
+        assert(tok == TOK_STRUCT || tok == TOK_UNION);
+        bool isStruct = tok == TOK_STRUCT;
+        next();
+        tokenid_t structTag = acceptSymbol();
+        bool isDeclaration = accept('{');
+        bool fail = false;
+
+        Type* pStructType = createType(TY_STRUCT, NULL, NULL);
+        if (structTag) {
+            Token* pToken = &mTokenTable[structTag];
+            VariableInfo* pStructInfo = pToken->mpStructInfo;
+            bool needToDeclare = !pStructInfo;
+            if (pStructInfo) {
+                if (isDeclaration) {
+                    if (mpCurrentSymbolStack->isStructTagDefinedAtCurrentLevel(structTag)) {
+                        if (pStructInfo->pType->pHead->length == -1) {
+                            // we're filling in a forward declaration.
+                            needToDeclare = false;
+                        } else {
+                            error("A struct with the same name is already defined at this level.");
+                            fail = true;
+                        }
+                    } else {
+                        needToDeclare = true;
+                    }
+                }
+                if (!fail) {
+                     assert(pStructInfo->isStructTag);
+                     pStructType->pHead = pStructInfo->pType;
+                     pStructType->pTail = pStructType->pHead->pTail;
+                }
+            }
+
+            if (needToDeclare) {
+                // This is a new struct name
+                pToken->mpStructInfo = mpCurrentSymbolStack->addStructTag(structTag);
+                pStructType = createType(TY_STRUCT, NULL, NULL);
+                pStructType->structTag = structTag;
+                pStructType->pHead = pStructType;
+                if (! isDeclaration) {
+                    // A forward declaration
+                    pStructType->length = -1;
+                }
+                pToken->mpStructInfo->pType = pStructType;
+            }
+        } else {
+            // An anonymous struct
+            pStructType->pHead = pStructType;
+        }
+
+        if (isDeclaration) {
+            size_t offset = 0;
+            size_t structSize = 0;
+            size_t structAlignment = 0;
+            Type** pParamHolder = & pStructType->pHead->pTail;
+            while (tok != '}' && tok != EOF) {
+                Type* pPrimitiveType = expectPrimitiveType();
+                if (pPrimitiveType) {
+                    while (tok != ';' && tok != EOF) {
+                        Type* pItem = acceptDeclaration(pPrimitiveType, true, false);
+                        if (!pItem) {
+                            break;
+                        }
+                        if (lookupStructMember(pStructType, pItem->id)) {
+                            String buf;
+                            decodeToken(buf, pItem->id, false);
+                            error("Duplicate struct member %s", buf.getUnwrapped());
+                        }
+                        Type* pStructElement = createType(TY_PARAM, pItem, NULL);
+                        size_t alignment = pGen->alignmentOf(pItem);
+                        if (alignment > structAlignment) {
+                            structAlignment = alignment;
+                        }
+                        size_t alignmentMask = alignment - 1;
+                        offset = (offset + alignmentMask) & ~alignmentMask;
+                        pStructElement->length = offset;
+                        size_t size = pGen->sizeOf(pItem);
+                        if (isStruct) {
+                            offset += size;
+                            structSize = offset;
+                        } else {
+                            if (size >= structSize) {
+                                structSize = size;
+                            }
+                        }
+                        *pParamHolder = pStructElement;
+                        pParamHolder = &pStructElement->pTail;
+                        accept(',');
+                    }
+                    skip(';');
+                } else {
+                    // Some sort of syntax error, skip token and keep trying
+                    next();
+                }
+            }
+            if (!fail) {
+                pStructType->pHead->length = structSize;
+                pStructType->pHead->alignment = structAlignment | (isStruct << 31);
+            }
+            skip('}');
+        }
+        if (fail) {
+            pStructType = NULL;
+        }
+        return pStructType;
+    }
+
+    Type* lookupStructMember(Type* pStruct, tokenid_t memberId) {
+        for(Type* pStructElement = pStruct->pHead->pTail; pStructElement; pStructElement = pStructElement->pTail) {
+            if (pStructElement->pHead->id == memberId) {
+                return pStructElement;
+            }
+        }
+        return NULL;
     }
 
     Type* acceptDeclaration(Type* pType, bool nameAllowed, bool nameRequired) {
@@ -4890,14 +5146,15 @@ class Compiler : public ErrorSink {
             // Clone the parent type so we can set a unique ID
             Type* pOldType = pType;
             pType = createType(pType->tag, pType->pHead, pType->pTail);
-
+            *pType = *pOldType;
             pType->id = declName;
-            pType->length = pOldType->length;
         } else if (nameRequired) {
             error("Expected a variable name");
         }
-        // fprintf(stderr, "Parsed a declaration:       ");
-        // printType(pType);
+#if 0
+        fprintf(stderr, "Parsed a declaration:       ");
+        printType(pType);
+#endif
         if (reportFailure) {
             return NULL;
         }
@@ -4905,7 +5162,8 @@ class Compiler : public ErrorSink {
     }
 
     Type* expectDeclaration(Type* pBaseType) {
-        Type* pType = acceptDeclaration(pBaseType, true, true);
+        bool nameRequired = pBaseType->tag != TY_STRUCT;
+        Type* pType = acceptDeclaration(pBaseType, true, nameRequired);
         if (! pType) {
             error("Expected a declaration");
         }
@@ -4962,6 +5220,7 @@ class Compiler : public ErrorSink {
             String temp;
             decodeToken(temp, tok, true);
             error("Expected name. Got %s", temp.getUnwrapped());
+            assert(false);
             reportFailure = true;
         }
         for(;;) {
@@ -5069,11 +5328,16 @@ class Compiler : public ErrorSink {
                 if (!pDecl) {
                     break;
                 }
+                if (!pDecl->id) {
+                    break;
+                }
                 int variableAddress = 0;
                 addLocalSymbol(pDecl);
-                size_t alignment = pGen->stackAlignmentOf(pDecl);
+                size_t alignment = pGen->alignmentOf(pDecl);
+                assert(alignment > 0);
                 size_t alignmentMask = ~ (alignment - 1);
                 size_t sizeOf = pGen->sizeOf(pDecl);
+                assert(sizeOf > 0);
                 loc = (loc + alignment - 1) & alignmentMask;
                 size_t alignedSize = (sizeOf + alignment - 1) & alignmentMask;
                 loc = loc + alignedSize;
@@ -5123,6 +5387,12 @@ class Compiler : public ErrorSink {
         }
     }
 
+    void printToken(tokenid_t token) {
+        String buffer;
+        decodeToken(buffer, token, true);
+        fprintf(stderr, "%s\n", buffer.getUnwrapped());
+    }
+
     bool checkSymbol(tokenid_t token) {
         bool result = token >= TOK_SYMBOL;
         if (!result) {
@@ -5143,6 +5413,7 @@ class Compiler : public ErrorSink {
     }
 
     void globalDeclarations() {
+        mpCurrentSymbolStack = &mGlobals;
         while (tok != EOF) {
             Type* pBaseType = expectPrimitiveType();
             if (!pBaseType) {
@@ -5152,6 +5423,11 @@ class Compiler : public ErrorSink {
             if (!pDecl) {
                 break;
             }
+            if (!pDecl->id) {
+                skip(';');
+                continue;
+            }
+
             if (! isDefined(pDecl->id)) {
                 addGlobalSymbol(pDecl);
             }
@@ -5198,6 +5474,7 @@ class Compiler : public ErrorSink {
                     error("expected '{'");
                 } else {
                     mpCurrentArena = &mLocalArena;
+                    mpCurrentSymbolStack = &mLocals;
                     if (name) {
                         /* patch forward references */
                         pGen->resolveForward((int) name->pForward);
@@ -5214,12 +5491,13 @@ class Compiler : public ErrorSink {
                             addLocalSymbol(pArg);
                         }
                         /* read param name and compute offset */
-                        size_t alignment = pGen->stackAlignmentOf(pArg);
+                        Type* pPassingType = passingType(pArg);
+                        size_t alignment = pGen->alignmentOf(pPassingType);
                         a = (a + alignment - 1) & ~ (alignment-1);
                         if (pArg->id) {
                             VI(pArg->id)->pAddress = (void*) a;
                         }
-                        a = a + pGen->stackSizeOf(pArg);
+                        a = a + pGen->sizeOf(pPassingType);
                         argCount++;
                     }
                     rsym = loc = 0;
@@ -5230,8 +5508,19 @@ class Compiler : public ErrorSink {
                     pGen->functionExit(pDecl, a, loc);
                     mLocals.popLevel();
                     mpCurrentArena = &mGlobalArena;
+                    mpCurrentSymbolStack = &mGlobals;
                 }
             }
+        }
+    }
+
+    Type* passingType(Type* pType) {
+        switch (pType->tag) {
+        case TY_CHAR:
+        case TY_SHORT:
+            return mkpInt;
+        default:
+            return pType;
         }
     }
 
@@ -5240,6 +5529,7 @@ class Compiler : public ErrorSink {
         size_t end = base + bytes;
         if ((end - (size_t) pGlobalBase) > (size_t) ALLOC_SIZE) {
             error("Global space exhausted");
+            assert(false);
             return NULL;
         }
         char* result = (char*) base;
