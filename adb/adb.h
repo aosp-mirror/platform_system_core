@@ -33,7 +33,7 @@
 #define ADB_VERSION_MAJOR 1         // Used for help/version information
 #define ADB_VERSION_MINOR 0         // Used for help/version information
 
-#define ADB_SERVER_VERSION    24    // Increment this when we want to force users to start a new adb server
+#define ADB_SERVER_VERSION    25    // Increment this when we want to force users to start a new adb server
 
 typedef struct amessage amessage;
 typedef struct apacket apacket;
@@ -360,7 +360,7 @@ typedef enum {
 #define ADB_PROTOCOL           0x1
 
 
-void local_init();
+void local_init(int port);
 int  local_connect(int  port);
 
 /* usb host/client interface */
