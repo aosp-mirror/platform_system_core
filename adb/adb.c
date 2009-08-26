@@ -851,7 +851,7 @@ int adb_main(int is_daemon)
     HOST = 1;
     usb_vendors_init();
     usb_init();
-    local_init();
+    local_init(ADB_LOCAL_TRANSPORT_PORT);
 
     if(install_listener("tcp:5037", "*smartsocket*", NULL)) {
         exit(1);
@@ -923,13 +923,15 @@ int adb_main(int is_daemon)
         ** is not set, otherwise start the network transport.
         */
     property_get("service.adb.tcp.port", value, "0");
-    if (sscanf(value, "%d", &port) == 0) {
-        port = 0;
-    }
-    if (port == 0 && access("/dev/android_adb", F_OK) == 0) {
+    if (sscanf(value, "%d", &port) == 1 && port > 0) {
+        // listen on TCP port specified by service.adb.tcp.port property
+        local_init(port);
+    } else if (access("/dev/android_adb", F_OK) == 0) {
+        // listen on USB
         usb_init();
     } else {
-        local_init(port);
+        // listen on default port
+        local_init(ADB_LOCAL_TRANSPORT_PORT);
     }
     init_jdwp();
 #endif
