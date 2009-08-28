@@ -3837,7 +3837,7 @@ class Compiler : public ErrorSink {
 
     void assertImpl(bool isTrue, int line) {
         if (!isTrue) {
-            LOGD("assertion failed at line %s:%d.", __FILE__, line);
+            LOGD("%d: assertion failed at line %s:%d.", mLineNumber, __FILE__, line);
             internalError();
         }
     }
@@ -5220,7 +5220,6 @@ class Compiler : public ErrorSink {
             String temp;
             decodeToken(temp, tok, true);
             error("Expected name. Got %s", temp.getUnwrapped());
-            assert(false);
             reportFailure = true;
         }
         for(;;) {
