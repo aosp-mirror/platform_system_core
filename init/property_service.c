@@ -53,28 +53,29 @@ struct {
     const char *prefix;
     unsigned int uid;
 } property_perms[] = {
-    { "net.rmnet0.",    AID_RADIO },
-    { "net.gprs.",      AID_RADIO },
-    { "net.ppp",        AID_RADIO },
-    { "ril.",           AID_RADIO },
-    { "gsm.",           AID_RADIO },
-    { "net.dns",        AID_RADIO },
-    { "net.",           AID_SYSTEM },
-    { "dev.",           AID_SYSTEM },
-    { "runtime.",       AID_SYSTEM },
-    { "hw.",            AID_SYSTEM },
-    { "sys.",		AID_SYSTEM },
-    { "service.",	AID_SYSTEM },
-    { "wlan.",		AID_SYSTEM },
-    { "dhcp.",		AID_SYSTEM },
-    { "dhcp.",		AID_DHCP },
-    { "vpn.",		AID_SYSTEM },
-    { "vpn.",		AID_VPN },
-    { "debug.",		AID_SHELL },
-    { "log.",		AID_SHELL },
-    { "service.adb.root",	AID_SHELL },
-    { "persist.sys.",	AID_SYSTEM },
-    { "persist.service.",   AID_SYSTEM },
+    { "net.rmnet0.",      AID_RADIO },
+    { "net.gprs.",        AID_RADIO },
+    { "net.ppp",          AID_RADIO },
+    { "ril.",             AID_RADIO },
+    { "gsm.",             AID_RADIO },
+    { "persist.radio",    AID_RADIO },
+    { "net.dns",          AID_RADIO },
+    { "net.",             AID_SYSTEM },
+    { "dev.",             AID_SYSTEM },
+    { "runtime.",         AID_SYSTEM },
+    { "hw.",              AID_SYSTEM },
+    { "sys.",             AID_SYSTEM },
+    { "service.",         AID_SYSTEM },
+    { "wlan.",            AID_SYSTEM },
+    { "dhcp.",            AID_SYSTEM },
+    { "dhcp.",            AID_DHCP },
+    { "vpn.",             AID_SYSTEM },
+    { "vpn.",             AID_VPN },
+    { "debug.",           AID_SHELL },
+    { "log.",             AID_SHELL },
+    { "service.adb.root", AID_SHELL },
+    { "persist.sys.",     AID_SYSTEM },
+    { "persist.service.", AID_SYSTEM },
     { NULL, 0 }
 };
 
@@ -238,7 +239,7 @@ const char* property_get(const char *name)
     }
 }
 
-static void write_peristent_property(const char *name, const char *value)
+static void write_persistent_property(const char *name, const char *value)
 {
     const char *tempPath = PERSISTENT_PROPERTY_DIR "/.temp";
     char path[PATH_MAX];
@@ -249,7 +250,7 @@ static void write_peristent_property(const char *name, const char *value)
     fd = open(tempPath, O_WRONLY|O_CREAT|O_TRUNC, 0600);
     if (fd < 0) {
         ERROR("Unable to write persistent property to temp file %s errno: %d\n", tempPath, errno);
-        return;   
+        return;
     }
     write(fd, value, strlen(value));
     close(fd);
@@ -303,7 +304,7 @@ int property_set(const char *name, const char *value)
         if (strcmp("net.change", name) == 0) {
             return 0;
         }
-       /* 
+       /*
         * The 'net.change' property is a special property used track when any
         * 'net.*' property name is updated. It is _ONLY_ updated here. Its value
         * contains the last updated 'net.*' property.
@@ -311,11 +312,11 @@ int property_set(const char *name, const char *value)
         property_set("net.change", name);
     } else if (persistent_properties_loaded &&
             strncmp("persist.", name, strlen("persist.")) == 0) {
-        /* 
+        /*
          * Don't write properties to disk until after we have read all default properties
          * to prevent them from being overwritten by default values.
          */
-        write_peristent_property(name, value);
+        write_persistent_property(name, value);
     }
     property_changed(name, value);
     return 0;
@@ -475,7 +476,7 @@ static void load_persistent_properties()
     } else {
         ERROR("Unable to open persistent property directory %s errno: %d\n", PERSISTENT_PROPERTY_DIR, errno);
     }
-    
+
     persistent_properties_loaded = 1;
 }
 
