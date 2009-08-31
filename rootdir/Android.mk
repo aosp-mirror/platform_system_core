@@ -8,6 +8,10 @@ copy_from := \
 	etc/init.goldfish.sh \
 	etc/hosts
 
+ifeq ($(TARGET_PRODUCT),generic)
+copy_from := etc/vold.conf
+endif
+
 copy_to := $(addprefix $(TARGET_OUT)/,$(copy_from))
 copy_from := $(addprefix $(LOCAL_PATH)/,$(copy_from))
 
