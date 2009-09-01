@@ -65,8 +65,6 @@ static struct input_keychord *keychords = 0;
 static int keychords_count = 0;
 static int keychords_length = 0;
 
-static void drain_action_queue(void);
-
 static void notify_service_state(const char *name, const char *state)
 {
     char pname[PROP_NAME_MAX];
@@ -391,12 +389,13 @@ static int wait_for_one_process(int block)
         }
     }
 
+    svc->flags |= SVC_RESTARTING;
+
     /* Execute all onrestart commands for this service. */
     list_for_each(node, &svc->onrestart.commands) {
         cmd = node_to_item(node, struct command, clist);
         cmd->func(cmd->nargs, cmd->args);
     }
-    svc->flags |= SVC_RESTARTING;
     notify_service_state(svc->name, "restarting");
     return 0;
 }
@@ -667,7 +666,7 @@ static void get_hardware_name(void)
     }
 }
 
-static void drain_action_queue(void)
+void drain_action_queue(void)
 {
     struct listnode *node;
     struct command *cmd;
