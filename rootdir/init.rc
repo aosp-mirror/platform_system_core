@@ -39,7 +39,7 @@ loglevel 3
 # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
     mount cgroup none /dev/cpuctl cpu
-    chown sytem system /dev/cpuctl
+    chown system system /dev/cpuctl
     chown system system /dev/cpuctl/tasks
     chmod 0777 /dev/cpuctl/tasks
     write /dev/cpuctl/cpu.shares 1024

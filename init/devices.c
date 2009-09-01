@@ -307,7 +307,7 @@ static void make_device(const char *path, int block, int major, int minor)
     chown(path, uid, gid);
 }
 
-#ifdef LOG_UEVENTS
+#if LOG_UEVENTS
 
 static inline suseconds_t get_usecs(void)
 {
