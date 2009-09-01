@@ -65,6 +65,24 @@ loglevel 3
     chown system system /data
     chmod 0771 /data
 
+    # Create dump dir and collect dumps.
+    # Do this before we mount cache so eventually we can use cache for
+    # storing dumps on platforms which do not have a dedicated dump partition.
+   
+    mkdir /data/dontpanic
+    chmod 0770 /data/dontpanic
+
+    # Collect apanic data, free resources and re-arm trigger
+    copy /proc/apanic_console /data/dontpanic/apanic_console
+    chown root system /data/dontpanic/apanic_console
+    copy /proc/apanic_threads /data/dontpanic/apanic_threads
+    chown root system /data/dontpanic/apanic_threads
+    write /proc/apanic_console 1
+
+    # Collect ramconsole data
+    copy /proc/last_kmsg /data/dontpanic/last_kmsg
+    chown root system /data/dontpanic/last_kmsg
+
     # Same reason as /data above
     mount yaffs2 mtd@cache /cache nosuid nodev
     chown system cache /cache
@@ -91,16 +109,6 @@ loglevel 3
     mkdir /data/app 0771 system system
     mkdir /data/property 0700 root root
 
-    # Collect kernel crash-dump info
-    copy /proc/last_console /data/last_console
-    chown root system /data/last_console
-    copy /proc/last_threads /data/last_threads
-    chown root system /data/last_threads
-    copy /proc/last_kmsg /data/last_kmsg
-    chown root system /data/last_kmsg
-
-    # Free crash resources and re-arm
-    write /proc/last_kmsg 1
 
     # create dalvik-cache and double-check the perms
     mkdir /data/dalvik-cache 0771 system system
