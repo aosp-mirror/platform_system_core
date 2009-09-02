@@ -325,7 +325,10 @@ static int handle_block_event(struct uevent *event)
          * If there isn't a disk already its because *we*
          * are the disk
          */
-        disk = blkdev_lookup_by_devno(maj, 0);
+        if (media->media_type == media_mmc)
+            disk = blkdev_lookup_by_devno(maj, ALIGN_MMC_MINOR(min));
+        else
+            disk = blkdev_lookup_by_devno(maj, 0);
 
         if (!(blkdev = blkdev_create(disk,
                                      event->path,

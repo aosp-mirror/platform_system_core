@@ -32,6 +32,7 @@
 #include "vold.h"
 #include "blkdev.h"
 #include "diskmbr.h"
+#include "media.h"
 
 #define DEBUG_BLKDEV 0
 
@@ -132,7 +133,12 @@ int blkdev_refresh(blkdev_t *blk)
         }
     } else if (blk->type == blkdev_partition) {
         struct dos_partition part;
-        int part_no = blk->minor -1;
+	int part_no;
+
+        if (blk->media->media_type == media_mmc)
+            part_no = blk->minor % MMC_PARTS_PER_CARD -1;
+        else
+            part_no = blk->minor -1;
 
         if (part_no < 4) {
             dos_partition_dec(block + DOSPARTOFF + part_no * sizeof(struct dos_partition), &part);
