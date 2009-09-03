@@ -929,7 +929,7 @@ top:
 
     if(!strcmp(argv[0], "remount") || !strcmp(argv[0], "reboot")
             || !strcmp(argv[0], "tcpip") || !strcmp(argv[0], "usb")
-            || !strcmp(argv[0], "root") || !strcmp(argv[0], "bugreport")) {
+            || !strcmp(argv[0], "root")) {
         char command[100];
         if (argc > 1)
             snprintf(command, sizeof(command), "%s:%s", argv[0], argv[1]);
@@ -943,6 +943,14 @@ top:
         }
         fprintf(stderr,"error: %s\n", adb_error());
         return 1;
+    }
+
+    if(!strcmp(argv[0], "bugreport")) {
+        if (argc != 1) {
+            return 1;
+        }
+        do_cmd(ttype, serial, "shell", "dumpstate", "-", 0);
+        return 0;
     }
 
     /* adb_command() wrapper commands */
