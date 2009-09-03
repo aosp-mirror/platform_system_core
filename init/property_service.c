@@ -52,31 +52,32 @@ static int persistent_properties_loaded = 0;
 struct {
     const char *prefix;
     unsigned int uid;
+    unsigned int gid;
 } property_perms[] = {
-    { "net.rmnet0.",      AID_RADIO },
-    { "net.gprs.",        AID_RADIO },
-    { "net.ppp",          AID_RADIO },
-    { "ril.",             AID_RADIO },
-    { "gsm.",             AID_RADIO },
-    { "persist.radio",    AID_RADIO },
-    { "net.dns",          AID_RADIO },
-    { "net.",             AID_SYSTEM },
-    { "dev.",             AID_SYSTEM },
-    { "runtime.",         AID_SYSTEM },
-    { "hw.",              AID_SYSTEM },
-    { "sys.",             AID_SYSTEM },
-    { "service.",         AID_SYSTEM },
-    { "wlan.",            AID_SYSTEM },
-    { "dhcp.",            AID_SYSTEM },
-    { "dhcp.",            AID_DHCP },
-    { "vpn.",             AID_SYSTEM },
-    { "vpn.",             AID_VPN },
-    { "debug.",           AID_SHELL },
-    { "log.",             AID_SHELL },
-    { "service.adb.root", AID_SHELL },
-    { "persist.sys.",     AID_SYSTEM },
-    { "persist.service.", AID_SYSTEM },
-    { NULL, 0 }
+    { "net.rmnet0.",      AID_RADIO,    0 },
+    { "net.gprs.",        AID_RADIO,    0 },
+    { "net.ppp",          AID_RADIO,    0 },
+    { "ril.",             AID_RADIO,    0 },
+    { "gsm.",             AID_RADIO,    0 },
+    { "persist.radio",    AID_RADIO,    0 },
+    { "net.dns",          AID_RADIO,    0 },
+    { "net.",             AID_SYSTEM,   0 },
+    { "dev.",             AID_SYSTEM,   0 },
+    { "runtime.",         AID_SYSTEM,   0 },
+    { "hw.",              AID_SYSTEM,   0 },
+    { "sys.",             AID_SYSTEM,   0 },
+    { "service.",         AID_SYSTEM,   0 },
+    { "wlan.",            AID_SYSTEM,   0 },
+    { "dhcp.",            AID_SYSTEM,   0 },
+    { "dhcp.",            AID_DHCP,     0 },
+    { "vpn.",             AID_SYSTEM,   0 },
+    { "vpn.",             AID_VPN,      0 },
+    { "debug.",           AID_SHELL,    0 },
+    { "log.",             AID_SHELL,    0 },
+    { "service.adb.root", AID_SHELL,    0 },
+    { "persist.sys.",     AID_SYSTEM,   0 },
+    { "persist.service.", AID_SYSTEM,   0 },
+    { NULL, 0, 0 }
 };
 
 /*
@@ -86,8 +87,10 @@ struct {
 struct {
     const char *service;
     unsigned int uid;
+    unsigned int gid;
 } control_perms[] = {
-     {NULL, 0 }
+    { "dumpstate",AID_SHELL, AID_LOG },
+     {NULL, 0, 0 }
 };
 
 typedef struct {
@@ -183,7 +186,7 @@ static int property_write(prop_info *pi, const char *value)
  *
  * Returns 1 if uid allowed, 0 otherwise.
  */
-static int check_control_perms(const char *name, int uid) {
+static int check_control_perms(const char *name, int uid, int gid) {
     int i;
     if (uid == AID_SYSTEM || uid == AID_ROOT)
         return 1;
@@ -191,8 +194,10 @@ static int check_control_perms(const char *name, int uid) {
     /* Search the ACL */
     for (i = 0; control_perms[i].service; i++) {
         if (strcmp(control_perms[i].service, name) == 0) {
-            if (control_perms[i].uid == uid)
+            if ((uid && control_perms[i].uid == uid) ||
+                (gid && control_perms[i].gid == gid)) {
                 return 1;
+            }
         }
     }
     return 0;
@@ -202,7 +207,7 @@ static int check_control_perms(const char *name, int uid) {
  * Checks permissions for setting system properties.
  * Returns 1 if uid allowed, 0 otherwise.
  */
-static int check_perms(const char *name, unsigned int uid)
+static int check_perms(const char *name, unsigned int uid, int gid)
 {
     int i;
     if (uid == 0)
@@ -215,7 +220,8 @@ static int check_perms(const char *name, unsigned int uid)
         int tmp;
         if (strncmp(property_perms[i].prefix, name,
                     strlen(property_perms[i].prefix)) == 0) {
-            if (property_perms[i].uid == uid) {
+            if ((uid && property_perms[i].uid == uid) ||
+                (gid && property_perms[i].gid == gid)) {
                 return 1;
             }
         }
@@ -373,14 +379,14 @@ void handle_property_set_fd(int fd)
         msg.value[PROP_VALUE_MAX-1] = 0;
 
         if(memcmp(msg.name,"ctl.",4) == 0) {
-            if (check_control_perms(msg.value, cr.uid)) {
+            if (check_control_perms(msg.value, cr.uid, cr.gid)) {
                 handle_control_message((char*) msg.name + 4, (char*) msg.value);
             } else {
                 ERROR("sys_prop: Unable to %s service ctl [%s] uid: %d pid:%d\n",
                         msg.name + 4, msg.value, cr.uid, cr.pid);
             }
         } else {
-            if (check_perms(msg.name, cr.uid)) {
+            if (check_perms(msg.name, cr.uid, cr.gid)) {
                 property_set((char*) msg.name, (char*) msg.value);
             } else {
                 ERROR("sys_prop: permission denied uid:%d  name:%s\n",
