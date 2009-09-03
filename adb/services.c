@@ -188,6 +188,43 @@ void reboot_service(int fd, void *arg)
     adb_close(fd);
 }
 
+void bugreport_service(int fd, void *cookie)
+{
+    char    buffer[MAX_PAYLOAD];
+    int i, s;
+
+    /* start the dumpstate service */
+    property_set("ctl.start", "dumpstate");
+
+    /* socket will not be available until service starts */
+    for (i = 0; i < 10; i++) {
+        s = socket_local_client("dumpstate",
+                             ANDROID_SOCKET_NAMESPACE_RESERVED,
+                             SOCK_STREAM);
+        if (s >= 0)
+            break;
+        /* try again in 1 second */
+        sleep(1);
+    }
+
+    if (s < 0) {
+        const char* failed = "Failed to connect to dumpstate service\n";
+        writex(fd, failed, strlen(failed));
+        adb_close(fd);
+        return;
+    }
+
+    while (1) {
+        int length = adb_read(s, buffer, sizeof(buffer));
+        if (length <= 0)
+            break;
+        if (adb_write(fd, buffer, length) <= 0)
+            break;
+    }
+    adb_close(s);
+    adb_close(fd);
+}
+
 #endif
 
 #if 0
@@ -469,6 +506,8 @@ int service_to_fd(const char *name)
         ret = create_service_thread(restart_tcp_service, (void *)port);
     } else if(!strncmp(name, "usb:", 4)) {
         ret = create_service_thread(restart_usb_service, NULL);
+    } else if(!strncmp(name, "bugreport:", 10)) {
+        ret = create_service_thread(bugreport_service, NULL);
 #endif
 #if 0
     } else if(!strncmp(name, "echo:", 5)){

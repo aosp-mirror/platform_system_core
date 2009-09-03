@@ -352,3 +352,7 @@ service keystore /system/bin/keystore
     group keystore
     socket keystore stream 666
 
+service dumpstate /system/bin/dumpstate -s
+    socket dumpstate stream 0660 shell log
+    disabled
+    oneshot
