@@ -471,6 +471,13 @@ testArgs: (6, 8, 10, 12)
 result: 6
 ""","""""")
 
+    def testAddressOf(self):
+        self.compileCheck(["-R", "data/addressOf.c"], """Executing compiled code:
+testStruct: 10 10 10
+testArray: 1 1 1
+result: 0
+""","""""")
+
 def main():
     checkEnvironment()
     parseArgv()
