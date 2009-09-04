@@ -4450,10 +4450,8 @@ class Compiler : public ErrorSink {
                 unary();
                 doPointer();
             } else if (t == '&') {
-                VariableInfo* pVI = VI(tok);
-                pGen->leaR0((int) pVI->pAddress, createPtrType(pVI->pType),
-                        ET_RVALUE);
-                next();
+                unary();
+                doAddressOf();
             } else if (t == EOF ) {
                 error("Unexpected EOF.");
             } else if (t == ';') {
@@ -4654,6 +4652,16 @@ class Compiler : public ErrorSink {
                 pGen->setR0ExpressionType(ET_LVALUE);
             }
         }
+    }
+
+    void doAddressOf() {
+        Type* pR0 = pGen->getR0Type();
+        bool isFuncPtr = pR0->tag == TY_POINTER && pR0->pHead->tag == TY_FUNC;
+        if ((! isFuncPtr) && pGen->getR0ExpressionType() != ET_LVALUE) {
+            error("Expected an lvalue");
+        }
+        Type* pR0Type = pGen->getR0Type();
+        pGen->setR0ExpressionType(ET_RVALUE);
     }
 
     /* Recursive descent parser for binary operations.
@@ -5293,7 +5301,7 @@ class Compiler : public ErrorSink {
 
     void checkLVal() {
         if (pGen->getR0ExpressionType() != ET_LVALUE) {
-            error("Expected an lval");
+            error("Expected an lvalue");
         }
     }
 
