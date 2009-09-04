@@ -55,23 +55,8 @@
  */
  
 android_atomic_write:
-    stmdb   sp!, {r4, lr}
-    mov     r2, r1
-    mov     r1, r0
-1: @ android_atomic_write
-    ldr     r0, [r2]
-    mov     r3, #kernel_atomic_base
-#ifdef __ARM_HAVE_PC_INTERWORK
-    add     lr, pc, #4
-    add     pc, r3, #(kernel_cmpxchg - kernel_atomic_base)
-#else
-    add     r3, r3, #(kernel_cmpxchg - kernel_atomic_base)
-    mov     lr, pc
-    bx      r3
-#endif
-    bcc     1b
-    ldmia   sp!, {r4, lr}
-    bx      lr
+    str     r0, [r1]
+    bx      lr;
 
 /*
  * ----------------------------------------------------------------------------
