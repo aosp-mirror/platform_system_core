@@ -4527,7 +4527,7 @@ class Compiler : public ErrorSink {
                 pGen->forceR0RVal();
                 Type* pStruct = pGen->getR0Type();
                 if (pStruct->tag == TY_STRUCT) {
-                    doStructMember(pStruct);
+                    doStructMember(pStruct, true);
                 } else {
                     error("expected a struct value to the left of '.'");
                 }
@@ -4536,7 +4536,7 @@ class Compiler : public ErrorSink {
                 Type* pPtr = pGen->getR0Type();
                 if (pPtr->tag == TY_POINTER && pPtr->pHead->tag == TY_STRUCT) {
                     pGen->loadR0FromR0();
-                    doStructMember(pPtr->pHead);
+                    doStructMember(pPtr->pHead, false);
                 } else {
                     error("Expected a pointer to a struct to the left of '->'");
                 }
@@ -4602,7 +4602,7 @@ class Compiler : public ErrorSink {
         }
     }
 
-    void doStructMember(Type* pStruct) {
+    void doStructMember(Type* pStruct, bool isDot) {
         Type* pStructElement = lookupStructMember(pStruct, tok);
         if (pStructElement) {
             next();
@@ -4610,7 +4610,8 @@ class Compiler : public ErrorSink {
         } else {
             String buf;
             decodeToken(buf, tok, true);
-            error("Expected a struct member to the right of '.', got %s", buf.getUnwrapped());
+            error("Expected a struct member to the right of '%s', got %s",
+                    isDot ? "." : "->", buf.getUnwrapped());
         }
     }
 
