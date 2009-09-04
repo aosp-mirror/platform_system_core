@@ -82,6 +82,10 @@
 # disk space free on the /data partition in bytes
 2746 free_storage_left (data|2|2)
 
+# contacts aggregation: time and number of contacts.
+# count is negative for query phase, positive for merge phase
+2747 contacts_aggregation (aggregation time|2|3), (count|1|1)
+
 # when a NotificationManager.notify is called
 2750 notification_enqueue (pkg|3),(id|1|5),(notification|3)
 # when someone tries to cancel a notification, the notification manager sometimes
