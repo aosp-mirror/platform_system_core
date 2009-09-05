@@ -70,7 +70,8 @@ loglevel 3
     # storing dumps on platforms which do not have a dedicated dump partition.
    
     mkdir /data/dontpanic
-    chmod 0770 /data/dontpanic
+    # STOPSHIP!
+    chmod 0777 /data/dontpanic
 
     # Collect apanic data, free resources and re-arm trigger
     copy /proc/apanic_console /data/dontpanic/apanic_console
