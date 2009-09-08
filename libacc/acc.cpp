@@ -13,20 +13,20 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
 #include <cutils/hashmap.h>
 
 #if defined(__i386__)
 #include <sys/mman.h>
 #endif
 
-#if defined(__arm__)
-#include <unistd.h>
-#endif
 
 #if defined(__arm__)
 #define DEFAULT_ARM_CODEGEN
@@ -57,6 +57,15 @@
 
 #define ENABLE_ARM_DISASSEMBLY
 // #define PROVIDE_TRACE_CODEGEN
+
+// Uncomment to save input to a text file in DEBUG_DUMP_PATTERN
+// #define DEBUG_SAVE_INPUT_TO_FILE
+
+#ifdef ARM_USE_VFP
+#define DEBUG_DUMP_PATTERN "/sdcard/acc_dump/%d.c"
+#else
+#define DEBUG_DUMP_PATTERN "/tmp/acc_dump/%d.c"
+#endif
 
 #define assert(b) assertImpl(b, __LINE__)
 
@@ -5327,6 +5336,16 @@ class Compiler : public ErrorSink {
         mLocals.add(pDecl);
     }
 
+    bool checkUndeclaredStruct(Type* pBaseType) {
+        if (pBaseType->tag == TY_STRUCT && pBaseType->length < 0) {
+            String temp;
+            decodeToken(temp, pBaseType->structTag, false);
+            error("Undeclared struct %s", temp.getUnwrapped());
+            return true;
+        }
+        return false;
+    }
+
     void localDeclarations(Type* pBaseType) {
         intptr_t a;
 
@@ -5337,6 +5356,9 @@ class Compiler : public ErrorSink {
                     break;
                 }
                 if (!pDecl->id) {
+                    break;
+                }
+                if (checkUndeclaredStruct(pDecl)) {
                     break;
                 }
                 int variableAddress = 0;
@@ -5432,6 +5454,11 @@ class Compiler : public ErrorSink {
                 break;
             }
             if (!pDecl->id) {
+                skip(';');
+                continue;
+            }
+
+            if (checkUndeclaredStruct(pDecl)) {
                 skip(';');
                 continue;
             }
@@ -5895,6 +5922,24 @@ void accScriptSource(ACCscript* script,
         dest += len;
     }
     text[totalLength] = '\0';
+
+#ifdef DEBUG_SAVE_INPUT_TO_FILE
+    int counter;
+    char path[PATH_MAX];
+    for (counter = 0; counter < 4096; counter++) {
+        sprintf(path, DEBUG_DUMP_PATTERN, counter);
+        if(access(path, F_OK) != 0) {
+            break;
+        }
+    }
+    if (counter < 4096) {
+        FILE* fd = fopen(path, "w");
+        if (fd) {
+            fwrite(text, totalLength, 1, fd);
+            fclose(fd);
+        }
+    }
+#endif
 }
 
 extern "C"
