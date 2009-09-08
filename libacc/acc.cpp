@@ -1548,21 +1548,27 @@ class Compiler : public ErrorSink {
 #endif
                     }
                 } else {
-                    assert (r0Tag == TY_DOUBLE);
-                    if (destTag == TY_INT) {
+                    if (r0Tag == TY_DOUBLE) {
+                        if (destTag == TY_INT) {
 #ifdef ARM_USE_VFP
-                        o4(0xEEFD7BC7); // ftosizd s15, d7
-                        o4(0xEE170A90); // fmrs r0, s15
+                            o4(0xEEFD7BC7); // ftosizd s15, d7
+                            o4(0xEE170A90); // fmrs r0, s15
 #else
-                        callRuntime((void*) runtime_double_to_int);
+                            callRuntime((void*) runtime_double_to_int);
 #endif
+                        } else {
+                            if(destTag == TY_FLOAT) {
+#ifdef ARM_USE_VFP
+                                o4(0xEEF77BC7); // fcvtsd s15, d7
+#else
+                                callRuntime((void*) runtime_double_to_float);
+#endif
+                            } else {
+                                incompatibleTypes(pR0Type, pType);
+                            }
+                        }
                     } else {
-                        assert(destTag == TY_FLOAT);
-#ifdef ARM_USE_VFP
-                        o4(0xEEF77BC7); // fcvtsd s15, d7
-#else
-                        callRuntime((void*) runtime_double_to_float);
-#endif
+                        incompatibleTypes(pR0Type, pType);
                     }
                 }
             }
@@ -2030,6 +2036,10 @@ class Compiler : public ErrorSink {
                 }
             }
             return false;
+        }
+
+        void incompatibleTypes(Type* pR0Type, Type* pType) {
+            error("Incompatible types old: %d new: %d", pR0Type->tag, pType->tag);
         }
 
         size_t rotateRight(size_t n, size_t rotate) {
