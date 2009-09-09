@@ -39,10 +39,6 @@
 #define PROVIDE_X64_CODEGEN
 #endif
 
-#ifdef PROVIDE_ARM_CODEGEN
-#include "disassem.h"
-#endif
-
 #if (defined(__VFP_FP__) && !defined(__SOFTFP__))
 #define ARM_USE_VFP
 #endif
@@ -55,7 +51,6 @@
 #define LOG_STACK(...) do {} while(0)
 // #define LOG_STACK(...) fprintf (stderr, __VA_ARGS__)
 
-#define ENABLE_ARM_DISASSEMBLY
 // #define PROVIDE_TRACE_CODEGEN
 
 // Uncomment to save input to a text file in DEBUG_DUMP_PATTERN
@@ -484,11 +479,6 @@ class Compiler : public ErrorSink {
          */
         virtual void adjustStackAfterCall(Type* pDecl, int l, bool isIndirect) = 0;
 
-        /* Print a disassembly of the assembled code to out. Return
-         * non-zero if there is an error.
-         */
-        virtual int disassemble(FILE* out) = 0;
-
         /* Generate a symbol at the current PC. t is the head of a
          * linked list of addresses to patch.
          */
@@ -695,9 +685,9 @@ class Compiler : public ErrorSink {
     public:
         ARMCodeGenerator() {
 #ifdef ARM_USE_VFP
-            LOGD("Using ARM VFP hardware floating point.");
+            // LOGD("Using ARM VFP hardware floating point.");
 #else
-            LOGD("Using ARM soft floating point.");
+            // LOGD("Using ARM soft floating point.");
 #endif
         }
 
@@ -1764,24 +1754,6 @@ class Compiler : public ErrorSink {
 #endif
         }
 
-        virtual int disassemble(FILE* out) {
-#ifdef ENABLE_ARM_DISASSEMBLY
-            disasmOut = out;
-            disasm_interface_t  di;
-            di.di_readword = disassemble_readword;
-            di.di_printaddr = disassemble_printaddr;
-            di.di_printf = disassemble_printf;
-
-            int base = getBase();
-            int pc = getPC();
-            for(int i = base; i < pc; i += 4) {
-                fprintf(out, "%08x: %08x  ", i, *(int*) i);
-                ::disasm(&di, i, 0);
-            }
-#endif
-            return 0;
-        }
-
         /**
          * alignment (in bytes) for this type of data
          */
@@ -1833,27 +1805,6 @@ class Compiler : public ErrorSink {
         }
 
     private:
-        static FILE* disasmOut;
-
-        static u_int
-        disassemble_readword(u_int address)
-        {
-            return(*((u_int *)address));
-        }
-
-        static void
-        disassemble_printaddr(u_int address)
-        {
-            fprintf(disasmOut, "0x%08x", address);
-        }
-
-        static void
-        disassemble_printf(const char *fmt, ...) {
-            va_list ap;
-            va_start(ap, fmt);
-            vfprintf(disasmOut, fmt, ap);
-            va_end(ap);
-        }
 
         static const int BRANCH_REL_ADDRESS_MASK = 0x00ffffff;
 
@@ -2783,10 +2734,6 @@ class Compiler : public ErrorSink {
             return 5;
         }
 
-        virtual int disassemble(FILE* out) {
-            return 0;
-        }
-
         /* output a symbol and patch all calls to it */
         virtual void gsym(int t) {
             int n;
@@ -3112,10 +3059,6 @@ class Compiler : public ErrorSink {
 
         virtual int jumpOffset() {
             return mpBase->jumpOffset();
-        }
-
-        virtual int disassemble(FILE* out) {
-            return mpBase->disassemble(out);
         }
 
         /* output a symbol and patch all calls to it */
@@ -5755,15 +5698,6 @@ public:
         return true;
     }
 
-    int dump(FILE* out) {
-        fwrite(codeBuf.getBase(), 1, codeBuf.getSize(), out);
-        return 0;
-    }
-
-    int disassemble(FILE* out) {
-        return pGen->disassemble(out);
-    }
-
     /* Look through the symbol table to find a symbol.
      * If found, return its value.
      */
@@ -5796,10 +5730,14 @@ public:
         }
     }
 
+    void getProgramBinary(ACCvoid** base, ACCsizei* length) {
+        *base = codeBuf.getBase();
+        *length = (ACCsizei) codeBuf.getSize();
+    }
+
     char* getErrorMessage() {
         return mErrorBuf.getUnwrapped();
     }
-
 };
 
 const char* Compiler::operatorChars =
@@ -5812,10 +5750,6 @@ const char Compiler::operatorLevel[] =
             6, 7, 8, /* & ^ | */
             2, 2 /* ~ ! */
             };
-
-#ifdef PROVIDE_ARM_CODEGEN
-FILE* Compiler::ARMCodeGenerator::disasmOut;
-#endif
 
 #ifdef PROVIDE_X86_CODEGEN
 const int Compiler::X86CodeGenerator::operatorHelper[] = {
@@ -6014,8 +5948,9 @@ void accGetPragmas(ACCscript* script, ACCsizei* actualStringCount,
 }
 
 extern "C"
-void accDisassemble(ACCscript* script) {
-    script->compiler.disassemble(stderr);
+void accGetProgramBinary(ACCscript* script,
+    ACCvoid** base, ACCsizei* length) {
+    script->compiler.getProgramBinary(base, length);
 }
 
 
