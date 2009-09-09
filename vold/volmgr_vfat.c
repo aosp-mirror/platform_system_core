@@ -18,6 +18,7 @@
 #include <errno.h>
 
 #include <sys/mount.h>
+#include <cutils/properties.h>
 
 #include "vold.h"
 #include "volmgr.h"
@@ -108,14 +109,29 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
     }
 
     /*
-     * The mount masks restrict access so that:
-     * 1. The 'system' user cannot access the SD card at all - 
-     *    (protects system_server from grabbing file references)
-     * 2. Group users can RWX
-     * 3. Others can only RX
+     * Note: This is a temporary hack. If the sampling profiler is enabled,
+     * we make the SD card world-writable so any process can write snapshots.
+     *
+     * TODO: Remove this code once we have a drop box in system_server.
      */
-    rc = mount(devpath, vol->mount_point, "vfat", flags,
-               "utf8,uid=1000,gid=1015,fmask=702,dmask=702,shortname=mixed");
+    char value[PROPERTY_VALUE_MAX];
+    property_get("persist.sampling_profiler", value, "");
+    if (value[0] == '1') {
+        LOGW("The SD card is world-writable because the"
+            " 'persist.sampling_profiler' system property is set to '1'.");
+        rc = mount(devpath, vol->mount_point, "vfat", flags,
+                "utf8,uid=1000,gid=1015,fmask=000,dmask=000,shortname=mixed");
+    } else {
+        /*
+         * The mount masks restrict access so that:
+         * 1. The 'system' user cannot access the SD card at all -
+         *    (protects system_server from grabbing file references)
+         * 2. Group users can RWX
+         * 3. Others can only RX
+         */
+        rc = mount(devpath, vol->mount_point, "vfat", flags,
+                "utf8,uid=1000,gid=1015,fmask=702,dmask=702,shortname=mixed");
+    }
 
     if (rc && errno == EROFS) {
         LOGE("vfat_mount(%d:%d, %s): Read only filesystem - retrying mount RO",
