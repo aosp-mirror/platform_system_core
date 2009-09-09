@@ -70,27 +70,24 @@ loglevel 3
     # storing dumps on platforms which do not have a dedicated dump partition.
    
     mkdir /data/dontpanic
-    # STOPSHIP!
-    chmod 0777 /data/dontpanic
+    chown root system /data/dontpanic
+    chmod 0750 /data/dontpanic
 
     # Collect apanic data, free resources and re-arm trigger
     copy /proc/apanic_console /data/dontpanic/apanic_console
     chown root system /data/dontpanic/apanic_console
-    # STOPSHIP!
-    chmod 0664 /data/dontpanic/apanic_console
+    chmod 0640 /data/dontpanic/apanic_console
 
     copy /proc/apanic_threads /data/dontpanic/apanic_threads
     chown root system /data/dontpanic/apanic_threads
-    # STOPSHIP!
-    chmod 0664 /data/dontpanic/apanic_threads
+    chmod 0640 /data/dontpanic/apanic_threads
 
     write /proc/apanic_console 1
 
     # Collect ramconsole data
     copy /proc/last_kmsg /data/dontpanic/last_kmsg
     chown root system /data/dontpanic/last_kmsg
-    # STOPSHIP!
-    chmod 0664 /data/dontpanic/last_kmsg
+    chmod 0640 /data/dontpanic/last_kmsg
 
     # Same reason as /data above
     mount yaffs2 mtd@cache /cache nosuid nodev
