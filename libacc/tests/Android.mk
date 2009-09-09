@@ -21,7 +21,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE:= acc
 
 LOCAL_SRC_FILES:= \
-	main.cpp
+	main.cpp \
+    disassem.cpp
 
 LOCAL_SHARED_LIBRARIES := \
     libacc

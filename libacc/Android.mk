@@ -7,10 +7,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE:= libacc
 LOCAL_SRC_FILES := acc.cpp
 
-ifeq ($(TARGET_ARCH),arm)
-LOCAL_SRC_FILES += disassem.cpp
-endif
-
 LOCAL_SHARED_LIBRARIES := libdl libcutils
 
 include $(BUILD_SHARED_LIBRARY)
@@ -23,10 +19,6 @@ LOCAL_MODULE:= libacc
 LOCAL_SRC_FILES := acc.cpp
 
 LOCAL_CFLAGS := -O0 -g
-
-ifeq ($(TARGET_ARCH),arm)
-LOCAL_SRC_FILES += disassem.cpp
-endif
 
 LOCAL_STATIC_LIBRARIES := libcutils
 LOCAL_LDLIBS := -ldl

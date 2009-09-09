@@ -20,6 +20,14 @@
 #include <unistd.h>
 #endif
 
+#if defined(__arm__)
+#define PROVIDE_ARM_DISASSEMBLY
+#endif
+
+#ifdef PROVIDE_ARM_DISASSEMBLY
+#include "disassem.h"
+#endif
+
 #include <acc/acc.h>
 
 
@@ -29,14 +37,56 @@ int run(MainPtr mainFunc, int argc, char** argv) {
     return mainFunc(argc, argv);
 }
 
-// Private API for development:
-
-extern "C"
-void accDisassemble(ACCscript* script);
-
 ACCvoid* symbolLookup(ACCvoid* pContext, const ACCchar* name) {
     return (ACCvoid*) dlsym(RTLD_DEFAULT, name);
 }
+
+#ifdef PROVIDE_ARM_DISASSEMBLY
+
+static FILE* disasmOut;
+
+static u_int
+disassemble_readword(u_int address)
+{
+    return(*((u_int *)address));
+}
+
+static void
+disassemble_printaddr(u_int address)
+{
+    fprintf(disasmOut, "0x%08x", address);
+}
+
+static void
+disassemble_printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(disasmOut, fmt, ap);
+    va_end(ap);
+}
+
+static int disassemble(ACCscript* script, FILE* out) {
+    disasmOut = out;
+    disasm_interface_t  di;
+    di.di_readword = disassemble_readword;
+    di.di_printaddr = disassemble_printaddr;
+    di.di_printf = disassemble_printf;
+
+    ACCvoid* base;
+    ACCsizei length;
+
+    accGetProgramBinary(script, &base, &length);
+    unsigned long* pBase = (unsigned long*) base;
+    unsigned long* pEnd = (unsigned long*) (((unsigned char*) base) + length);
+
+    for(unsigned long* pInstruction = pBase; pInstruction < pEnd; pInstruction++) {
+        fprintf(out, "%08x: %08x  ", (int) pInstruction, *pInstruction);
+        ::disasm(&di, (uint) pInstruction, 0);
+    }
+    return 0;
+}
+
+#endif // PROVIDE_ARM_DISASSEMBLY
 
 int main(int argc, char** argv) {
     const char* inFile = NULL;
@@ -121,7 +171,9 @@ int main(int argc, char** argv) {
     }
 
     if (printListing) {
-        accDisassemble(script);
+#ifdef PROVIDE_ARM_DISASSEMBLY
+        disassemble(script, stderr);
+#endif
     }
 
     if (runResults) {
