@@ -77,6 +77,12 @@ void accGetScriptLabel(ACCscript* script, const ACCchar * name,
 void accGetPragmas(ACCscript* script, ACCsizei* actualStringCount,
                    ACCsizei maxStringCount, ACCchar** strings);
 
+/* Used to implement disassembly */
+
+void accGetProgramBinary(ACCscript* script,
+    ACCvoid** base,
+    ACCsizei* length);
+
 #ifdef __cplusplus
 };
 #endif
