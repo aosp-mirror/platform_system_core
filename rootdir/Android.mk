@@ -5,11 +5,15 @@ include $(CLEAR_VARS)
 
 copy_from := \
 	etc/dbus.conf \
-	etc/init.goldfish.sh \
 	etc/hosts
 
 ifeq ($(TARGET_PRODUCT),generic)
-copy_from := etc/vold.conf
+copy_from += etc/vold.conf
+endif
+
+# for non -user build, also copy emulator-support script into /system/etc
+ifneq ($(TARGET_BUILD_VARIANT),user)
+copy_from += etc/init.goldfish.sh
 endif
 
 copy_to := $(addprefix $(TARGET_OUT)/,$(copy_from))
@@ -32,11 +36,13 @@ $(file) : $(LOCAL_PATH)/init.rc | $(ACP)
 ALL_PREBUILT += $(file)
 endif
 
+# for non -user build, also copy emulator-specific init script into /
+ifneq ($(TARGET_BUILD_VARIANT),user)
 file := $(TARGET_ROOT_OUT)/init.goldfish.rc
 $(file) : $(LOCAL_PATH)/etc/init.goldfish.rc | $(ACP)
 	$(transform-prebuilt-to-target)
 ALL_PREBUILT += $(file)
-	
+endif
 
 # create some directories (some are mount points)
 DIRS := $(addprefix $(TARGET_ROOT_OUT)/, \
