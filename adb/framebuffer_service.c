@@ -28,18 +28,17 @@
 #include <sys/mman.h>
 
 /* TODO:
-** - grab the current buffer, not the first buffer
 ** - sync with vsync to avoid tearing
 */
 
 void framebuffer_service(int fd, void *cookie)
 {
     struct fb_var_screeninfo vinfo;
-    int fb;
-    void *ptr = MAP_FAILED;
-    char x;
+    int fb, offset;
+    char x[256];
 
     unsigned fbinfo[4];
+    unsigned i, bytespp;
 
     fb = open("/dev/graphics/fb0", O_RDONLY);
     if(fb < 0) goto done;
@@ -47,24 +46,34 @@ void framebuffer_service(int fd, void *cookie)
     if(ioctl(fb, FBIOGET_VSCREENINFO, &vinfo) < 0) goto done;
     fcntl(fb, F_SETFD, FD_CLOEXEC);
 
-    fbinfo[0] = 16;
-    fbinfo[1] = vinfo.xres * vinfo.yres * 2;
+    bytespp = vinfo.bits_per_pixel / 8;
+
+    fbinfo[0] = vinfo.bits_per_pixel;
+    fbinfo[1] = vinfo.xres * vinfo.yres * bytespp;
     fbinfo[2] = vinfo.xres;
     fbinfo[3] = vinfo.yres;
 
-    ptr = mmap(0, fbinfo[1], PROT_READ, MAP_SHARED, fb, 0);
-    if(ptr == MAP_FAILED) goto done;
+    /* HACK: for several of our 3d cores a specific alignment
+     * is required so the start of the fb may not be an integer number of lines
+     * from the base.  As a result we are storing the additional offset in
+     * xoffset. This is not the correct usage for xoffset, it should be added
+     * to each line, not just once at the beginning */
+    offset = vinfo.xoffset * bytespp;
 
-    if(writex(fd, fbinfo, sizeof(unsigned) * 4)) goto done;
+    offset += vinfo.xres * vinfo.yoffset * bytespp;
 
-    for(;;) {
-        if(readx(fd, &x, 1)) goto done;
-        if(writex(fd, ptr, fbinfo[1])) goto done;
+    if(writex(fd, fbinfo, sizeof(fbinfo))) goto done;
+
+    lseek(fb, offset, SEEK_SET);
+    for(i = 0; i < fbinfo[1]; i += 256) {
+      if(readx(fb, &x, 256)) goto done;
+      if(writex(fd, &x, 256)) goto done;
     }
 
+    if(readx(fb, &x, fbinfo[1] % 256)) goto done;
+    if(writex(fd, &x, fbinfo[1] % 256)) goto done;
+
 done:
-    if(ptr != MAP_FAILED) munmap(ptr, fbinfo[1]);
     if(fb >= 0) close(fb);
     close(fd);
 }
-
