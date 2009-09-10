@@ -53,6 +53,9 @@
 
 // #define PROVIDE_TRACE_CODEGEN
 
+// Uncomment to disable ARM peephole optimizations
+// #define DISABLE_ARM_PEEPHOLE
+
 // Uncomment to save input to a text file in DEBUG_DUMP_PATTERN
 // #define DEBUG_SAVE_INPUT_TO_FILE
 
@@ -185,7 +188,21 @@ class Compiler : public ErrorSink {
         Type* pType;
     };
 
-    class CodeBuf {
+    class ICodeBuf {
+    public:
+        virtual ~ICodeBuf() {}
+        virtual void init(int size) = 0;
+        virtual void setErrorSink(ErrorSink* pErrorSink) = 0;
+        virtual void o4(int n) = 0;
+        virtual void ob(int n) = 0;
+        virtual void* getBase() = 0;
+        virtual intptr_t getSize() = 0;
+        virtual intptr_t getPC() = 0;
+        // Call this before trying to modify code in the buffer.
+        virtual void flush() = 0;
+    };
+
+    class CodeBuf : public ICodeBuf {
         char* ind; // Output code pointer
         char* pProgramBase;
         ErrorSink* mErrorSink;
@@ -220,52 +237,52 @@ class Compiler : public ErrorSink {
             mOverflowed = false;
         }
 
-        ~CodeBuf() {
+        virtual ~CodeBuf() {
             release();
         }
 
-        void init(int size) {
+        virtual void init(int size) {
             release();
             mSize = size;
             pProgramBase = (char*) calloc(1, size);
             ind = pProgramBase;
         }
 
-        void setErrorSink(ErrorSink* pErrorSink) {
+        virtual void setErrorSink(ErrorSink* pErrorSink) {
             mErrorSink = pErrorSink;
         }
 
-        int o4(int n) {
+        virtual void o4(int n) {
             if(check(4)) {
-                return 0;
+                return;
             }
-            intptr_t result = (intptr_t) ind;
             * (int*) ind = n;
             ind += 4;
-            return result;
         }
 
         /*
          * Output a byte. Handles all values, 0..ff.
          */
-        void ob(int n) {
+        virtual void ob(int n) {
             if(check(1)) {
                 return;
             }
             *ind++ = n;
         }
 
-        inline void* getBase() {
+        virtual void* getBase() {
             return (void*) pProgramBase;
         }
 
-        intptr_t getSize() {
+        virtual intptr_t getSize() {
             return ind - pProgramBase;
         }
 
-        intptr_t getPC() {
+        virtual intptr_t getPC() {
             return (intptr_t) ind;
         }
+
+        virtual void flush() {}
     };
 
     /**
@@ -297,7 +314,7 @@ class Compiler : public ErrorSink {
         }
         virtual ~CodeGenerator() {}
 
-        virtual void init(CodeBuf* pCodeBuf) {
+        virtual void init(ICodeBuf* pCodeBuf) {
             this->pCodeBuf = pCodeBuf;
             pCodeBuf->setErrorSink(mErrorSink);
         }
@@ -544,8 +561,8 @@ class Compiler : public ErrorSink {
             pCodeBuf->ob(n);
         }
 
-        intptr_t o4(int data) {
-            return pCodeBuf->o4(data);
+        void o4(int data) {
+            pCodeBuf->o4(data);
         }
 
         intptr_t getBase() {
@@ -558,6 +575,10 @@ class Compiler : public ErrorSink {
 
         intptr_t getSize() {
             return pCodeBuf->getSize();
+        }
+
+        void flush() {
+            pCodeBuf->flush();
         }
 
         void error(const char* fmt,...) {
@@ -675,11 +696,224 @@ class Compiler : public ErrorSink {
 
     private:
         Vector<ExpressionValue> mExpressionStack;
-        CodeBuf* pCodeBuf;
+        ICodeBuf* pCodeBuf;
         ErrorSink* mErrorSink;
     };
 
 #ifdef PROVIDE_ARM_CODEGEN
+
+    static size_t rotateRight(size_t n, size_t rotate) {
+        return (n >> rotate) | (n << (32 - rotate));
+    }
+
+    static size_t rotateLeft(size_t n, size_t rotate) {
+        return (n << rotate) | (n >> (32 - rotate));
+    }
+
+    static bool encode12BitImmediate(size_t immediate, size_t* pResult) {
+        for(size_t i = 0; i < 16; i++) {
+            size_t rotate = i * 2;
+            size_t mask = rotateRight(0xff, rotate);
+            if ((immediate | mask) == mask) {
+                size_t bits8 = rotateLeft(immediate, rotate);
+                // assert(bits8 <= 0xff);
+                *pResult = (i << 8) | bits8;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static size_t decode12BitImmediate(size_t immediate) {
+        size_t data = immediate & 0xff;
+        size_t rotate = 2 * ((immediate >> 8) & 0xf);
+        return rotateRight(data, rotate);
+    }
+
+    class ARMCodeBuf : public ICodeBuf {
+        ICodeBuf* mpBase;
+        ErrorSink* mErrorSink;
+
+        class CircularQueue {
+            static const int SIZE = 16; // Must be power of 2
+            static const int MASK = SIZE-1;
+            unsigned int mBuf[SIZE];
+            int mHead;
+            int mCount;
+
+        public:
+            CircularQueue() {
+                mHead = 0;
+                mCount = 0;
+            }
+
+            void pushBack(unsigned int data) {
+                mBuf[(mHead + mCount) & MASK] = data;
+                mCount += 1;
+            }
+
+            unsigned int popFront() {
+                unsigned int result = mBuf[mHead];
+                mHead = (mHead + 1) & MASK;
+                mCount -= 1;
+                return result;
+            }
+
+            void popBack(int n) {
+                mCount -= n;
+            }
+
+            inline int count() {
+                return mCount;
+            }
+
+            bool empty() {
+                return mCount == 0;
+            }
+
+            bool full() {
+                return mCount == SIZE;
+            }
+
+            // The valid indexes are 1 - count() to 0
+            unsigned int operator[](int i) {
+                return mBuf[(mHead + mCount + i) & MASK];
+            }
+        };
+
+        CircularQueue mQ;
+
+        void error(const char* fmt,...) {
+            va_list ap;
+            va_start(ap, fmt);
+            mErrorSink->verror(fmt, ap);
+            va_end(ap);
+        }
+
+        void flush() {
+            while (!mQ.empty()) {
+                mpBase->o4(mQ.popFront());
+            }
+            mpBase->flush();
+        }
+
+    public:
+        ARMCodeBuf(ICodeBuf* pBase) {
+            mpBase = pBase;
+        }
+
+        virtual ~ARMCodeBuf() {
+            delete mpBase;
+        }
+
+        void init(int size) {
+            mpBase->init(size);
+        }
+
+        void setErrorSink(ErrorSink* pErrorSink) {
+            mErrorSink = pErrorSink;
+            mpBase->setErrorSink(pErrorSink);
+        }
+
+        void o4(int n) {
+            if (mQ.full()) {
+                mpBase->o4(mQ.popFront());
+            }
+            mQ.pushBack(n);
+
+#ifndef DISABLE_ARM_PEEPHOLE
+            // Peephole check
+            bool didPeep;
+            do {
+                const unsigned int opMask = 0x01e00000;
+                const unsigned int immediateMask = 0x00000fff;
+                didPeep = false;
+                if (mQ.count() >= 4) {
+
+                    // Operand by a small constant
+                    // push;mov #imm;pop;op ==> op #imm
+
+                    if (mQ[-4] == 0xe92d0001  && // stmfd	r13!, {r0}
+                        (mQ[-3] & ~immediateMask) == 0xe3a00000  && // mov	r0, #X
+                        mQ[-2] == 0xe8bd0002  && // ldmea	r13!, {r1}
+                        (mQ[-1] & ~opMask) == (0xe0810000 & ~opMask)) {  // OP	r0, r1, r0
+                        unsigned int movConst = mQ[-3];
+                        unsigned int op = mQ[-1];
+                        unsigned int combined = 0xe2000000 | (op & opMask) | (movConst & immediateMask);
+                        // fprintf(stderr, "op %x movConst %x combined %x\n", op, movConst, combined);
+                        if (! (combined == 0xe2800000 || combined == 0xe2400000)) { // add/sub #0
+                            mQ.popBack(4);
+                            mQ.pushBack(combined);
+                            didPeep = true;
+                        } else {
+                            mQ.popBack(4);
+                            didPeep = true;
+                        }
+                    }
+                }
+
+                // Load local variable
+                // sub r0,r11,#imm;ldr r0,[r0]  ==> ldr r0, [r11,#-imm]
+                if (mQ.count() >= 2) {
+                    if ((mQ[-2] & ~immediateMask) == 0xe24b0000 && // sub r0,r11,#imm
+                        mQ[-1] == 0xe5900000) { // ldr r0, [r0]
+                        unsigned int op = mQ[-2];
+                        unsigned int ld = mQ[-1];
+                        unsigned int combined = (op & immediateMask) | 0xE51B0000; // ldr r0, [r11, #-0]
+                        mQ.popBack(2);
+                        mQ.pushBack(combined);
+                        didPeep = true;
+                    }
+                }
+
+                // Constant array lookup
+
+                if (mQ.count() >= 6 &&
+                    mQ[-6] == 0xe92d0001 && // stmfd r13!, {r0}
+                    (mQ[-5] & ~immediateMask)== 0xe3a00000 && // mov r0, #0x00000001
+                    mQ[-4] == 0xe8bd0002 && // ldmea r13!, {r1}
+                    (mQ[-3] & ~immediateMask)== 0xe3a02000 && // mov r2, #0x00000004
+                    mQ[-2] == 0xe0000092 && // mul r0, r2, r0
+                    mQ[-1] == 0xe0810000) { // add r0, r1, r0
+                    unsigned int mov1 = mQ[-5];
+                    unsigned int mov2 = mQ[-3];
+                    unsigned int const1 = decode12BitImmediate(mov1);
+                    unsigned int const2 = decode12BitImmediate(mov2);
+                    unsigned int comboConst = const1 * const2;
+                    size_t immediate = 0;
+                    if (encode12BitImmediate(comboConst, &immediate)) {
+                        mQ.popBack(6);
+                        unsigned int add = immediate | 0xE2800000; // add r0, r0, #n
+                        if (comboConst) {
+                            mQ.pushBack(add);
+                        }
+                        didPeep = true;
+                    }
+                }
+
+            } while (didPeep);
+#endif
+        }
+
+        void ob(int n) {
+            error("ob() not supported.");
+        }
+
+        void* getBase() {
+            flush();
+            return mpBase->getBase();
+        }
+
+        intptr_t getSize() {
+            flush();
+            return mpBase->getSize();
+        }
+
+        intptr_t getPC() {
+            flush();
+            return mpBase->getPC();
+        }
+    };
 
     class ARMCodeGenerator : public CodeGenerator {
     public:
@@ -710,10 +944,12 @@ class Compiler : public ErrorSink {
             // sp, fp -> oldfp, retadr, arg0 arg1 ....
             o4(0xE1A0B00D); // mov    fp, sp
             LOG_STACK("functionEntry: %d\n", mStackUse);
-            return o4(0xE24DD000); // sub    sp, sp, # <local variables>
+            int pc = getPC();
+            o4(0xE24DD000); // sub    sp, sp, # <local variables>
             // We don't know how many local variables we are going to use,
             // but we will round the allocation up to a multiple of
             // STACK_ALIGNMENT, so it won't affect the stack alignment.
+            return pc;
         }
 
         virtual void functionExit(Type* pDecl, int localVariableAddress, int localVariableSize) {
@@ -810,7 +1046,9 @@ class Compiler : public ErrorSink {
         }
 
         virtual int gjmp(int t) {
-            return o4(0xEA000000 | encodeAddress(t)); // b .L33
+            int pc = getPC();
+            o4(0xEA000000 | encodeAddress(t)); // b .L33
+            return pc;
         }
 
         /* l = 0: je, l == 1: jne */
@@ -841,7 +1079,9 @@ class Compiler : public ErrorSink {
                     break;
             }
             int branch = l ? 0x1A000000 : 0x0A000000; // bne : beq
-            return o4(branch | encodeAddress(t));
+            int pc = getPC();
+            o4(branch | encodeAddress(t));
+            return pc;
         }
 
         virtual void gcmp(int op) {
@@ -1476,7 +1716,8 @@ class Compiler : public ErrorSink {
 
             if (ea == 0) {
                 o4(0xEA000000); //        b .L99
-                result = o4(ea);         // .L1:   .word 0
+                result = getPC();
+                o4(ea);         // .L1:   .word 0
                             // .L99:
             }
             return result;
@@ -1566,7 +1807,9 @@ class Compiler : public ErrorSink {
         }
 
         virtual int beginFunctionCallArguments() {
-            return o4(0xE24DDF00); // Placeholder
+            int pc = getPC();
+            o4(0xE24DDF00); // Placeholder sub  sp, sp, #0
+            return pc;
         }
 
         virtual size_t storeR0ToArg(int l, Type* pArgType) {
@@ -1652,6 +1895,7 @@ class Compiler : public ErrorSink {
             if (l < 0 || l > 0x3FC) {
                 error("L out of range for stack adjustment: 0x%08x", l);
             }
+            flush();
             * (int*) a = 0xE24DDF00 | (l >> 2); // sub    sp, sp, #0 << 2
             mStackUse += mStackAlignmentAdjustment;
             LOG_STACK("endFunctionCallArguments mStackUse: %d, mStackAlignmentAdjustment %d\n",
@@ -1661,7 +1905,9 @@ class Compiler : public ErrorSink {
         virtual int callForward(int symbol, Type* pFunc) {
             setR0Type(pFunc->pHead);
             // Forward calls are always short (local)
-            return o4(0xEB000000 | encodeAddress(symbol));
+            int pc = getPC();
+            o4(0xEB000000 | encodeAddress(symbol));
+            return pc;
         }
 
         virtual void callIndirect(int l, Type* pFunc) {
@@ -1975,30 +2221,8 @@ class Compiler : public ErrorSink {
             }
         }
 
-        bool encode12BitImmediate(size_t immediate, size_t* pResult) {
-            for(size_t i = 0; i < 16; i++) {
-                size_t rotate = i * 2;
-                size_t mask = rotateRight(0xff, rotate);
-                if ((immediate | mask) == mask) {
-                    size_t bits8 = rotateLeft(immediate, rotate);
-                    assert(bits8 <= 0xff);
-                    *pResult = (i << 8) | bits8;
-                    return true;
-                }
-            }
-            return false;
-        }
-
         void incompatibleTypes(Type* pR0Type, Type* pType) {
             error("Incompatible types old: %d new: %d", pR0Type->tag, pType->tag);
-        }
-
-        size_t rotateRight(size_t n, size_t rotate) {
-            return (n >> rotate) | (n << (32 - rotate));
-        }
-
-        size_t rotateLeft(size_t n, size_t rotate) {
-            return (n << rotate) | (n >> (32 - rotate));
         }
 
         void callRuntime(void* fn) {
@@ -2910,7 +3134,7 @@ class Compiler : public ErrorSink {
             delete mpBase;
         }
 
-        virtual void init(CodeBuf* pCodeBuf) {
+        virtual void init(ICodeBuf* pCodeBuf) {
             mpBase->init(pCodeBuf);
         }
 
@@ -3683,7 +3907,7 @@ class Compiler : public ErrorSink {
     int mLineNumber;
     bool mbBumpLine;
 
-    CodeBuf codeBuf;
+    ICodeBuf* pCodeBuf;
     CodeGenerator* pGen;
 
     String mErrorBuf;
@@ -4722,13 +4946,13 @@ class Compiler : public ErrorSink {
             next();
             skip('(');
             if (t == TOK_WHILE) {
-                n = codeBuf.getPC(); // top of loop, target of "next" iteration
+                n = pCodeBuf->getPC(); // top of loop, target of "next" iteration
                 a = test_expr();
             } else {
                 if (tok != ';')
                     commaExpr();
                 skip(';');
-                n = codeBuf.getPC();
+                n = pCodeBuf->getPC();
                 a = 0;
                 if (tok != ';')
                     a = test_expr();
@@ -4736,14 +4960,14 @@ class Compiler : public ErrorSink {
                 if (tok != ')') {
                     t = pGen->gjmp(0);
                     commaExpr();
-                    pGen->gjmp(n - codeBuf.getPC() - pGen->jumpOffset());
+                    pGen->gjmp(n - pCodeBuf->getPC() - pGen->jumpOffset());
                     pGen->gsym(t);
                     n = t + 4;
                 }
             }
             skip(')');
             block((intptr_t) &a, false);
-            pGen->gjmp(n - codeBuf.getPC() - pGen->jumpOffset()); /* jmp */
+            pGen->gjmp(n - pCodeBuf->getPC() - pGen->jumpOffset()); /* jmp */
             pGen->gsym(a);
         } else if (tok == '{') {
             if (! outermostFunctionBlock) {
@@ -5469,7 +5693,7 @@ class Compiler : public ErrorSink {
                         /* patch forward references */
                         pGen->resolveForward((int) name->pForward);
                         /* put function address */
-                        name->pAddress = (void*) codeBuf.getPC();
+                        name->pAddress = (void*) pCodeBuf->getPC();
                     }
                     // Calculate stack offsets for parameters
                     mLocals.pushLevel();
@@ -5536,6 +5760,10 @@ class Compiler : public ErrorSink {
             delete pGen;
             pGen = 0;
         }
+        if (pCodeBuf) {
+            delete pCodeBuf;
+            pCodeBuf = 0;
+        }
         if (file) {
             delete file;
             file = 0;
@@ -5560,6 +5788,7 @@ class Compiler : public ErrorSink {
         dch = 0;
         file = 0;
         pGlobalBase = 0;
+        pCodeBuf = 0;
         pGen = 0;
         mPragmaStringCount = 0;
         mCompileResult = 0;
@@ -5572,10 +5801,14 @@ class Compiler : public ErrorSink {
         delete pGen;
         pGen = 0;
 
+        delete pCodeBuf;
+        pCodeBuf = new CodeBuf();
+
         if (architecture != NULL) {
 #ifdef PROVIDE_ARM_CODEGEN
             if (! pGen && strcmp(architecture, "arm") == 0) {
                 pGen = new ARMCodeGenerator();
+                pCodeBuf = new ARMCodeBuf(pCodeBuf);
             }
 #endif
 #ifdef PROVIDE_X86_CODEGEN
@@ -5591,6 +5824,7 @@ class Compiler : public ErrorSink {
         if (pGen == NULL) {
 #if defined(DEFAULT_ARM_CODEGEN)
             pGen = new ARMCodeGenerator();
+            pCodeBuf = new ARMCodeBuf(pCodeBuf);
 #elif defined(DEFAULT_X86_CODEGEN)
             pGen = new X86CodeGenerator();
 #endif
@@ -5639,7 +5873,6 @@ public:
         mLocals.setTokenTable(&mTokenTable);
 
         internKeywords();
-        codeBuf.init(ALLOC_SIZE);
         setArchitecture(NULL);
         if (!pGen) {
             return -1;
@@ -5647,8 +5880,12 @@ public:
 #ifdef PROVIDE_TRACE_CODEGEN
             pGen = new TraceCodeGenerator(pGen);
 #endif
-            pGen->setErrorSink(this);
-        pGen->init(&codeBuf);
+        pGen->setErrorSink(this);
+
+        if (pCodeBuf) {
+            pCodeBuf->init(ALLOC_SIZE);
+        }
+        pGen->init(pCodeBuf);
         file = new TextInputStream(text, textLength);
         pGlobalBase = (char*) calloc(1, ALLOC_SIZE);
         glo = pGlobalBase;
@@ -5731,8 +5968,8 @@ public:
     }
 
     void getProgramBinary(ACCvoid** base, ACCsizei* length) {
-        *base = codeBuf.getBase();
-        *length = (ACCsizei) codeBuf.getSize();
+        *base = pCodeBuf->getBase();
+        *length = (ACCsizei) pCodeBuf->getSize();
     }
 
     char* getErrorMessage() {
