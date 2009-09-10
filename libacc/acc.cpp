@@ -730,6 +730,18 @@ class Compiler : public ErrorSink {
         return rotateRight(data, rotate);
     }
 
+    static bool isPowerOfTwo(size_t n) {
+        return (n != 0) & ((n & (n-1)) == 0);
+    }
+
+    static size_t log2(size_t n) {
+        int result = 0;
+        while (n >>= 1) {
+            result++;
+        }
+        return result;
+    }
+
     class ARMCodeBuf : public ICodeBuf {
         ICodeBuf* mpBase;
         ErrorSink* mErrorSink;
@@ -825,8 +837,9 @@ class Compiler : public ErrorSink {
             // Peephole check
             bool didPeep;
             do {
-                const unsigned int opMask = 0x01e00000;
-                const unsigned int immediateMask = 0x00000fff;
+                static const unsigned int opMask = 0x01e00000;
+                static const unsigned int immediateMask = 0x00000fff;
+                static const unsigned int BMask = 0x00400000;
                 didPeep = false;
                 if (mQ.count() >= 4) {
 
@@ -853,16 +866,25 @@ class Compiler : public ErrorSink {
                 }
 
                 // Load local variable
-                // sub r0,r11,#imm;ldr r0,[r0]  ==> ldr r0, [r11,#-imm]
+                // sub r0,r11,#imm;ldr/ldrb r0,[r0]  ==> ldr/ldrb r0, [r11,#-imm]
                 if (mQ.count() >= 2) {
-                    if ((mQ[-2] & ~immediateMask) == 0xe24b0000 && // sub r0,r11,#imm
-                        mQ[-1] == 0xe5900000) { // ldr r0, [r0]
-                        unsigned int op = mQ[-2];
-                        unsigned int ld = mQ[-1];
-                        unsigned int combined = (op & immediateMask) | 0xE51B0000; // ldr r0, [r11, #-0]
-                        mQ.popBack(2);
-                        mQ.pushBack(combined);
-                        didPeep = true;
+                    if ((mQ[-2] & ~immediateMask) == 0xe24b0000) { // sub r0,r11,#imm
+                        const unsigned int encodedImmediate = mQ[-2] & immediateMask;
+                        const unsigned int ld = mQ[-1];
+                        if ((ld & ~BMask) == 0xe5900000) { // ldr{b} r0, [r0]
+                            unsigned int combined = encodedImmediate | (0xE51B0000 | (ld & BMask)); // ldr r0, [r11, #-0]
+                            mQ.popBack(2);
+                            mQ.pushBack(combined);
+                            didPeep = true;
+                        } else if (ld == 0xedd07a00) {  // ldcl	p10, c7, [r0, #0x000]
+                            unsigned int decodedImmediate = decode12BitImmediate(encodedImmediate);
+                            if (decodedImmediate <= 1020 && ((decodedImmediate & 3) == 0)) {
+                                unsigned int combined = (decodedImmediate >> 2) | 0xed5b7a00; // ldcl	p10, c7, [r11, #-0]
+                                mQ.popBack(2);
+                                mQ.pushBack(combined);
+                                didPeep = true;
+                            }
+                        }
                     }
                 }
 
@@ -887,6 +909,21 @@ class Compiler : public ErrorSink {
                         if (comboConst) {
                             mQ.pushBack(add);
                         }
+                        didPeep = true;
+                    }
+                }
+
+                // Pointer arithmetic with a stride that is a power of two
+
+                if (mQ.count() >= 3 &&
+                    (mQ[-3] & ~ immediateMask) == 0xe3a02000 &&  // mov	r2, #stride
+                     mQ[-2] == 0xe0000092 && // mul	r0, r2, r0
+                     mQ[-1] == 0xe0810000) {  // add r0, r1, r0
+                    int stride = decode12BitImmediate(mQ[-3]);
+                    if (isPowerOfTwo(stride)) {
+                        mQ.popBack(3);
+                        unsigned int add = 0xe0810000 | (log2(stride) << 7); // add r0, r1, r0, LSL #log2(stride)
+                        mQ.pushBack(add);
                         didPeep = true;
                     }
                 }
