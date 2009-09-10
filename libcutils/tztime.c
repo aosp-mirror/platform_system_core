@@ -53,6 +53,31 @@ static char	elsieid[] = "@(#)localtime.c	8.3";
 #define OPEN_MODE	O_RDONLY
 #endif /* !defined O_BINARY */
 
+/* Complex computations to determine the min/max of time_t depending
+ * on TYPE_BIT / TYPE_SIGNED / TYPE_INTEGRAL.
+ * These macros cannot be used in pre-processor directives, so we
+ * let the C compiler do the work, which makes things a bit funky.
+ */
+static const time_t TIME_T_MAX =
+    TYPE_INTEGRAL(time_t) ?
+        ( TYPE_SIGNED(time_t) ?
+            ~((time_t)1 << (TYPE_BIT(time_t)-1))
+        :
+            ~(time_t)0
+        )
+    : /* if time_t is a floating point number */
+        ( sizeof(time_t) > sizeof(float) ? (time_t)DBL_MAX : (time_t)FLT_MAX );
+
+static const time_t TIME_T_MIN =
+    TYPE_INTEGRAL(time_t) ?
+        ( TYPE_SIGNED(time_t) ?
+            ((time_t)1 << (TYPE_BIT(time_t)-1))
+        :
+            0
+        )
+    :
+        ( sizeof(time_t) > sizeof(float) ? (time_t)DBL_MIN : (time_t)FLT_MIN );
+
 #ifndef WILDABBR
 /*
 ** Someone might make incorrect use of a time zone abbreviation:
@@ -158,7 +183,7 @@ static void		gmtload P((struct state * sp));
 static struct tm *	gmtsub P((const time_t * timep, long offset,
 				struct tm * tmp));
 static struct tm *	localsub P((const time_t * timep, long offset,
-				struct tm * tmp, struct state *sp));
+				struct tm * tmp, const struct state *sp));
 static int		increment_overflow P((int * number, int delta));
 static int		leaps_thru_end_of P((int y));
 static int		long_increment_overflow P((long * number, int delta));
@@ -1157,7 +1182,7 @@ localsub(timep, offset, tmp, sp)
 const time_t * const	timep;
 const long		offset;
 struct tm * const	tmp;
-struct state *		sp;
+const struct state *		sp;
 {
 	register const struct ttinfo *	ttisp;
 	register int			i;
@@ -1553,26 +1578,36 @@ char *			buf;
 
 static int
 increment_overflow(number, delta)
-int *	number;
-int	delta;
+int *   number;
+int delta;
 {
-	int	number0;
+    unsigned  number0 = (unsigned)*number;
+    unsigned  number1 = (unsigned)(number0 + delta);
 
-	number0 = *number;
-	*number += delta;
-	return (*number < number0) != (delta < 0);
+    *number = (int)number1;
+
+    if (delta >= 0) {
+        return ((int)number1 < (int)number0);
+    } else {
+        return ((int)number1 > (int)number0);
+    }
 }
 
 static int
 long_increment_overflow(number, delta)
-long *	number;
-int	delta;
+long *  number;
+int delta;
 {
-	long	number0;
+    unsigned long  number0 = (unsigned long)*number;
+    unsigned long  number1 = (unsigned long)(number0 + delta);
 
-	number0 = *number;
-	*number += delta;
-	return (*number < number0) != (delta < 0);
+    *number = (long)number1;
+
+    if (delta >= 0) {
+        return ((long)number1 < (long)number0);
+    } else {
+        return ((long)number1 > (long)number0);
+    }
 }
 
 static int
@@ -1741,14 +1776,14 @@ const struct state *	sp;
 		} else	dir = tmcomp(&mytm, &yourtm);
 		if (dir != 0) {
 			if (t == lo) {
+			        if (t == TIME_T_MAX)
+			             return WRONG;
 				++t;
-				if (t <= lo)
-					return WRONG;
 				++lo;
 			} else if (t == hi) {
+			        if (t == TIME_T_MIN)
+			             return WRONG;
 				--t;
-				if (t >= hi)
-					return WRONG;
 				--hi;
 			}
 			if (lo > hi)
