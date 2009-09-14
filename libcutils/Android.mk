@@ -36,7 +36,8 @@ commonSources := \
 	record_stream.c \
 	process_name.c \
 	properties.c \
-	threads.c
+	threads.c \
+	sched_policy.c
 
 commonHostSources := \
         ashmem-host.c
