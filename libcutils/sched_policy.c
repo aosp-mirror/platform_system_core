@@ -22,9 +22,16 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
-#include <linux/sched.h>
 
 #include <cutils/sched_policy.h>
+
+#ifndef SCHED_NORMAL
+  #define SCHED_NORMAL 0
+#endif
+
+#ifndef SCHED_BATCH
+  #define SCHED_BATCH 3
+#endif
 
 static int add_tid_to_cgroup(int tid, const char *grp_name)
 {
