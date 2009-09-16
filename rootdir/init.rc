@@ -37,24 +37,24 @@ loglevel 3
     write /proc/sys/kernel/sched_compat_yield 1
     write /proc/sys/kernel/sched_child_runs_first 0
 
-# Create cgroup mount points for process groups
-    mkdir /dev/cpuctl
-    mount cgroup none /dev/cpuctl cpu
-    chown sytem system /dev/cpuctl
-    chown system system /dev/cpuctl/tasks
-    chmod 0777 /dev/cpuctl/tasks
-    write /dev/cpuctl/cpu.shares 1024
-
-    mkdir /dev/cpuctl/fg_boost
-    chown system system /dev/cpuctl/fg_boost/tasks
-    chmod 0777 /dev/cpuctl/fg_boost/tasks
-    write /dev/cpuctl/fg_boost/cpu.shares 1024
-
-    mkdir /dev/cpuctl/bg_non_interactive
-    chown system system /dev/cpuctl/bg_non_interactive/tasks
-    chmod 0777 /dev/cpuctl/bg_non_interactive/tasks
-    # 5.0 %
-    write /dev/cpuctl/bg_non_interactive/cpu.shares 52
+## Create cgroup mount points for process groups
+#    mkdir /dev/cpuctl
+#    mount cgroup none /dev/cpuctl cpu
+#    chown sytem system /dev/cpuctl
+#    chown system system /dev/cpuctl/tasks
+#    chmod 0777 /dev/cpuctl/tasks
+#    write /dev/cpuctl/cpu.shares 1024
+#
+#    mkdir /dev/cpuctl/fg_boost
+#    chown system system /dev/cpuctl/fg_boost/tasks
+#    chmod 0777 /dev/cpuctl/fg_boost/tasks
+#    write /dev/cpuctl/fg_boost/cpu.shares 1024
+#
+#    mkdir /dev/cpuctl/bg_non_interactive
+#    chown system system /dev/cpuctl/bg_non_interactive/tasks
+#    chmod 0777 /dev/cpuctl/bg_non_interactive/tasks
+#    # 5.0 %
+#    write /dev/cpuctl/bg_non_interactive/cpu.shares 52
 
 # mount mtd partitions
     # Mount /system rw first to give the filesystem a chance to save a checkpoint
