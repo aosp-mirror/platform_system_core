@@ -30,6 +30,24 @@
 /* TODO:
 ** - sync with vsync to avoid tearing
 */
+/* This version number defines the format of the fbinfo struct.
+   It must match versioning in ddms where this data is consumed. */
+#define DDMS_RAWIMAGE_VERSION 1
+struct fbinfo {
+    unsigned int version;
+    unsigned int bpp;
+    unsigned int size;
+    unsigned int width;
+    unsigned int height;
+    unsigned int red_offset;
+    unsigned int red_length;
+    unsigned int blue_offset;
+    unsigned int blue_length;
+    unsigned int green_offset;
+    unsigned int green_length;
+    unsigned int alpha_offset;
+    unsigned int alpha_length;
+} __attribute__((packed));
 
 void framebuffer_service(int fd, void *cookie)
 {
@@ -37,7 +55,7 @@ void framebuffer_service(int fd, void *cookie)
     int fb, offset;
     char x[256];
 
-    unsigned fbinfo[4];
+    struct fbinfo fbinfo;
     unsigned i, bytespp;
 
     fb = open("/dev/graphics/fb0", O_RDONLY);
@@ -48,10 +66,19 @@ void framebuffer_service(int fd, void *cookie)
 
     bytespp = vinfo.bits_per_pixel / 8;
 
-    fbinfo[0] = vinfo.bits_per_pixel;
-    fbinfo[1] = vinfo.xres * vinfo.yres * bytespp;
-    fbinfo[2] = vinfo.xres;
-    fbinfo[3] = vinfo.yres;
+    fbinfo.version = DDMS_RAWIMAGE_VERSION;
+    fbinfo.bpp = vinfo.bits_per_pixel;
+    fbinfo.size = vinfo.xres * vinfo.yres * bytespp;
+    fbinfo.width = vinfo.xres;
+    fbinfo.height = vinfo.yres;
+    fbinfo.red_offset = vinfo.red.offset;
+    fbinfo.red_length = vinfo.red.length;
+    fbinfo.green_offset = vinfo.green.offset;
+    fbinfo.green_length = vinfo.green.length;
+    fbinfo.blue_offset = vinfo.blue.offset;
+    fbinfo.blue_length = vinfo.blue.length;
+    fbinfo.alpha_offset = vinfo.transp.offset;
+    fbinfo.alpha_length = vinfo.transp.length;
 
     /* HACK: for several of our 3d cores a specific alignment
      * is required so the start of the fb may not be an integer number of lines
@@ -62,16 +89,16 @@ void framebuffer_service(int fd, void *cookie)
 
     offset += vinfo.xres * vinfo.yoffset * bytespp;
 
-    if(writex(fd, fbinfo, sizeof(fbinfo))) goto done;
+    if(writex(fd, &fbinfo, sizeof(fbinfo))) goto done;
 
     lseek(fb, offset, SEEK_SET);
-    for(i = 0; i < fbinfo[1]; i += 256) {
+    for(i = 0; i < fbinfo.size; i += 256) {
       if(readx(fb, &x, 256)) goto done;
       if(writex(fd, &x, 256)) goto done;
     }
 
-    if(readx(fb, &x, fbinfo[1] % 256)) goto done;
-    if(writex(fd, &x, fbinfo[1] % 256)) goto done;
+    if(readx(fb, &x, fbinfo.size % 256)) goto done;
+    if(writex(fd, &x, fbinfo.size % 256)) goto done;
 
 done:
     if(fb >= 0) close(fb);
