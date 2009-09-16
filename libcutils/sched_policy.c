@@ -1,3 +1,4 @@
+
 /* libs/cutils/sched_policy.c
 **
 ** Copyright 2007, The Android Open Source Project
@@ -21,6 +22,9 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+
+#ifdef HAVE_SCHED_H
+
 #include <sched.h>
 
 #include <cutils/sched_policy.h>
@@ -89,3 +93,5 @@ int set_sched_policy(int tid, SchedPolicy policy)
 
     return 0;
 }
+
+#endif /* HAVE_SCHED_H */
