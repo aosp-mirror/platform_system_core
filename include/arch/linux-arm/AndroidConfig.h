@@ -312,4 +312,9 @@
  */
 #define HAVE_STDBOOL_H 1
 
+/*
+ * Define if <sched.h> exists.
+ */
+#define HAVE_SCHED_H 1
+
 #endif /* _ANDROID_CONFIG_H */
