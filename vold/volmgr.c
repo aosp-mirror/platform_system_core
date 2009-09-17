@@ -460,7 +460,7 @@ int volmgr_enable_ums(boolean enable)
                 pthread_mutex_lock(&v->lock);
                 if (v->state == volstate_mounted)
                     volmgr_send_eject_request(v);
-                else if (v->state == volstate_ums) {
+                else if (v->state == volstate_ums || v->state == volstate_nomedia) {
                     pthread_mutex_unlock(&v->lock);
                     goto next_vol;
                 }
