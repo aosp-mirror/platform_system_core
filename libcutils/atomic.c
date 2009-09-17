@@ -245,6 +245,10 @@ int64_t android_quasiatomic_read_64(volatile int64_t* addr) {
     return result;
 }    
 
+/*****************************************************************************/
+#elif __sh__
+// implementation for SuperH is in atomic-android-sh.c.
+
 #else
 
 #error "Unsupported atomic operations for this platform"
