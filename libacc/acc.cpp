@@ -846,10 +846,10 @@ class Compiler : public ErrorSink {
                     // Operand by a small constant
                     // push;mov #imm;pop;op ==> op #imm
 
-                    if (mQ[-4] == 0xe92d0001  && // stmfd	r13!, {r0}
-                        (mQ[-3] & ~immediateMask) == 0xe3a00000  && // mov	r0, #X
-                        mQ[-2] == 0xe8bd0002  && // ldmea	r13!, {r1}
-                        (mQ[-1] & ~opMask) == (0xe0810000 & ~opMask)) {  // OP	r0, r1, r0
+                    if (mQ[-4] == 0xe92d0001  && // stmfd    r13!, {r0}
+                        (mQ[-3] & ~immediateMask) == 0xe3a00000  && // mov    r0, #X
+                        mQ[-2] == 0xe8bd0002  && // ldmea    r13!, {r1}
+                        (mQ[-1] & ~opMask) == (0xe0810000 & ~opMask)) {  // OP    r0, r1, r0
                         unsigned int movConst = mQ[-3];
                         unsigned int op = mQ[-1];
                         unsigned int combined = 0xe2000000 | (op & opMask) | (movConst & immediateMask);
@@ -876,10 +876,10 @@ class Compiler : public ErrorSink {
                             mQ.popBack(2);
                             mQ.pushBack(combined);
                             didPeep = true;
-                        } else if (ld == 0xedd07a00) {  // ldcl	p10, c7, [r0, #0x000]
+                        } else if (ld == 0xedd07a00) {  // ldcl    p10, c7, [r0, #0x000]
                             unsigned int decodedImmediate = decode12BitImmediate(encodedImmediate);
                             if (decodedImmediate <= 1020 && ((decodedImmediate & 3) == 0)) {
-                                unsigned int combined = (decodedImmediate >> 2) | 0xed5b7a00; // ldcl	p10, c7, [r11, #-0]
+                                unsigned int combined = (decodedImmediate >> 2) | 0xed5b7a00; // ldcl    p10, c7, [r11, #-0]
                                 mQ.popBack(2);
                                 mQ.pushBack(combined);
                                 didPeep = true;
@@ -916,8 +916,8 @@ class Compiler : public ErrorSink {
                 // Pointer arithmetic with a stride that is a power of two
 
                 if (mQ.count() >= 3 &&
-                    (mQ[-3] & ~ immediateMask) == 0xe3a02000 &&  // mov	r2, #stride
-                     mQ[-2] == 0xe0000092 && // mul	r0, r2, r0
+                    (mQ[-3] & ~ immediateMask) == 0xe3a02000 &&  // mov    r2, #stride
+                     mQ[-2] == 0xe0000092 && // mul    r0, r2, r0
                      mQ[-1] == 0xe0810000) {  // add r0, r1, r0
                     int stride = decode12BitImmediate(mQ[-3]);
                     if (isPowerOfTwo(stride)) {
@@ -4696,7 +4696,7 @@ class Compiler : public ErrorSink {
                     linkGlobal(t, tok == '(');
                     n = (intptr_t) pVI->pAddress;
                     if (!n && tok != '(') {
-                        error("Undeclared variable %s\n", nameof(t));
+                        error("Undeclared variable %s", nameof(t));
                     }
                 }
                 if (tok != '(') {
@@ -4705,7 +4705,7 @@ class Compiler : public ErrorSink {
                         linkGlobal(t, false);
                         n = (intptr_t) pVI->pAddress;
                         if (!n) {
-                            error("Undeclared variable %s\n", nameof(t));
+                            error("Undeclared variable %s", nameof(t));
                         }
                     }
                 }
@@ -5577,25 +5577,33 @@ class Compiler : public ErrorSink {
                 if (checkUndeclaredStruct(pDecl)) {
                     break;
                 }
-                int variableAddress = 0;
                 addLocalSymbol(pDecl);
-                size_t alignment = pGen->alignmentOf(pDecl);
-                assert(alignment > 0);
-                size_t alignmentMask = ~ (alignment - 1);
-                size_t sizeOf = pGen->sizeOf(pDecl);
-                assert(sizeOf > 0);
-                loc = (loc + alignment - 1) & alignmentMask;
-                size_t alignedSize = (sizeOf + alignment - 1) & alignmentMask;
-                loc = loc + alignedSize;
-                variableAddress = -loc;
-                VI(pDecl->id)->pAddress = (void*) variableAddress;
-                if (accept('=')) {
-                    /* assignment */
-                    pGen->leaR0(variableAddress, createPtrType(pDecl), ET_LVALUE);
-                    pGen->pushR0();
-                    expr();
-                    pGen->forceR0RVal();
-                    pGen->storeR0ToTOS();
+                if (pDecl->tag == TY_FUNC) {
+                    if (tok == '{') {
+                        error("Nested functions are not allowed. Did you forget a '}' ?");
+                        break;
+                    }
+                    // Else it's a forward declaration of a function.
+                } else {
+                    int variableAddress = 0;
+                    size_t alignment = pGen->alignmentOf(pDecl);
+                    assert(alignment > 0);
+                    size_t alignmentMask = ~ (alignment - 1);
+                    size_t sizeOf = pGen->sizeOf(pDecl);
+                    assert(sizeOf > 0);
+                    loc = (loc + alignment - 1) & alignmentMask;
+                    size_t alignedSize = (sizeOf + alignment - 1) & alignmentMask;
+                    loc = loc + alignedSize;
+                    variableAddress = -loc;
+                    VI(pDecl->id)->pAddress = (void*) variableAddress;
+                    if (accept('=')) {
+                        /* assignment */
+                        pGen->leaR0(variableAddress, createPtrType(pDecl), ET_LVALUE);
+                        pGen->pushR0();
+                        expr();
+                        pGen->forceR0RVal();
+                        pGen->storeR0ToTOS();
+                    }
                 }
                 if (tok == ',')
                     next();

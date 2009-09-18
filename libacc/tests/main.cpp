@@ -80,7 +80,7 @@ static int disassemble(ACCscript* script, FILE* out) {
     unsigned long* pEnd = (unsigned long*) (((unsigned char*) base) + length);
 
     for(unsigned long* pInstruction = pBase; pInstruction < pEnd; pInstruction++) {
-        fprintf(out, "%08x: %08x  ", (int) pInstruction, *pInstruction);
+        fprintf(out, "%08x: %08x  ", (int) pInstruction, (int) *pInstruction);
         ::disasm(&di, (uint) pInstruction, 0);
     }
     return 0;
@@ -151,9 +151,16 @@ int main(int argc, char** argv) {
     int result = accGetError(script);
     MainPtr mainPointer = 0;
     if (result != 0) {
-        char buf[1024];
-        accGetScriptInfoLog(script, sizeof(buf), NULL, buf);
-        fprintf(stderr, "%s", buf);
+        ACCsizei bufferLength;
+        accGetScriptInfoLog(script, 0, &bufferLength, NULL);
+        char* buf = (char*) malloc(bufferLength + 1);
+        if (buf != NULL) {
+            accGetScriptInfoLog(script, bufferLength + 1, NULL, buf);
+            fprintf(stderr, "%s", buf);
+            free(buf);
+        } else {
+            fprintf(stderr, "Out of memory.\n");
+        }
         goto exit;
     }
 
