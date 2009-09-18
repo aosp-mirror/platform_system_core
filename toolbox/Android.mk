@@ -50,7 +50,8 @@ TOOLS := \
 	top \
 	iftop \
 	id \
-	vmstat
+	vmstat \
+	nandread
 
 LOCAL_SRC_FILES:= \
 	toolbox.c \
