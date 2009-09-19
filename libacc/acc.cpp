@@ -4537,10 +4537,9 @@ class Compiler : public ErrorSink {
     }
 
     void skip(intptr_t c) {
-        if (tok != c) {
+        if (!accept(c)) {
             error("'%c' expected", c);
         }
-        next();
     }
 
     bool accept(intptr_t c) {
