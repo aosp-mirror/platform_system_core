@@ -63,6 +63,7 @@ static void dns_service(int fd, void *cookie)
 
     adb_mutex_lock(&dns_lock);
     hp = gethostbyname(hostname);
+    free(cookie);
     if(hp == 0) {
         writex(fd, &zero, 4);
     } else {
@@ -184,6 +185,7 @@ void reboot_service(int fd, void *arg)
         snprintf(buf, sizeof(buf), "reboot failed: %s\n", strerror(errno));
         writex(fd, buf, strlen(buf));
     }
+    free(arg);
     adb_close(fd);
 }
 
@@ -386,10 +388,9 @@ int service_to_fd(const char *name)
     } else if(!strncmp(name, "remount:", 8)) {
         ret = create_service_thread(remount_service, NULL);
     } else if(!strncmp(name, "reboot:", 7)) {
-        const char* arg = name + 7;
-        if (*name == 0)
-            arg = NULL;
-        ret = create_service_thread(reboot_service, (void *)arg);
+        void* arg = strdup(name + 7);
+        if(arg == 0) return -1;
+        ret = create_service_thread(reboot_service, arg);
     } else if(!strncmp(name, "root:", 5)) {
         ret = create_service_thread(restart_root_service, NULL);
     } else if(!strncmp(name, "tcpip:", 6)) {
