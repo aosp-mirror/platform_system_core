@@ -290,14 +290,12 @@ service bootanim /system/bin/bootanimation
     disabled
     oneshot
 
-#STOPSHIP: Remove logwrapper before production
-service dbus /system/bin/logwrapper /system/bin/dbus-daemon --system --nofork
+service dbus /system/bin/dbus-daemon --system --nofork
     socket dbus stream 660 bluetooth bluetooth
     user bluetooth
     group bluetooth net_bt_admin
 
-#STOPSHIP: Remove logwrapper and -d option before production
-service bluetoothd /system/bin/logwrapper /system/bin/bluetoothd -d -n
+service bluetoothd /system/bin/bluetoothd -n
     socket bluetooth stream 660 bluetooth bluetooth
     socket dbus_bluetooth stream 660 bluetooth bluetooth
     # init.rc does not yet support applying capabilities, so run as root and
