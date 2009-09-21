@@ -103,7 +103,7 @@ loglevel 3
 # create basic filesystem structure
     mkdir /data/misc 01771 system misc
     mkdir /data/misc/bluetoothd 0770 bluetooth bluetooth
-    mkdir /data/misc/keystore 0770 keystore keystore
+    mkdir /data/misc/keystore 0700 keystore keystore
     mkdir /data/misc/vpn 0770 system system
     mkdir /data/misc/vpn/profiles 0770 system system
     # give system access to wpa_supplicant.conf for backup and restore
@@ -336,7 +336,7 @@ service flash_recovery /system/etc/install-recovery.sh
 service racoon /system/bin/racoon
     socket racoon stream 600 system system
     # racoon will setuid to vpn after getting necessary resources.
-    group net_admin keystore
+    group net_admin
     disabled
     oneshot
 
@@ -347,7 +347,7 @@ service mtpd /system/bin/mtpd
     disabled
     oneshot
 
-service keystore /system/bin/keystore
+service keystore /system/bin/keystore /data/misc/keystore
     user keystore
     group keystore
     socket keystore stream 666
