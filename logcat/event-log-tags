@@ -119,6 +119,7 @@
 2823 backup_agent_failure (Package|3),(Message|3)
 2824 backup_package (Package|3),(Size|1|2)
 2825 backup_success (Packages|1|1),(Time|1|3)
+2826 backup_reset (Transport|3)
 
 2830 restore_start (Transport|3)
 2831 restore_transport_failure
