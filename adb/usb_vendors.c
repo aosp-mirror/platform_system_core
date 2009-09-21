@@ -47,6 +47,8 @@
 #define VENDOR_ID_LGE           0x1004
 // Huawei's USB Vendor ID
 #define VENDOR_ID_HUAWEI        0x12D1
+// Acer's USB Vendor ID
+#define VENDOR_ID_ACER          0x0502
 
 /** built-in vendor list */
 int builtInVendorIds[] = {
@@ -56,6 +58,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_MOTOROLA,
     VENDOR_ID_LGE,
     VENDOR_ID_HUAWEI,
+    VENDOR_ID_ACER,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
