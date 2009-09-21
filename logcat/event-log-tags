@@ -40,7 +40,8 @@
 2718  e
 
 2719 configuration_changed (config mask|1|5)
-2720 sync (id|3),(event|1|5),(source|1|5)
+# "account" is the java hash of the account name
+2720 sync (id|3),(event|1|5),(source|1|5),(account|1|5)
 2721 cpu (total|1|6),(user|1|6),(system|1|6),(iowait|1|6),(irq|1|6),(softirq|1|6)
 2722 battery_level (level|1|6),(voltage|1|1),(temperature|1|1)
 2723 battery_status (status|1|5),(health|1|5),(present|1|5),(plugged|1|5),(technology|3)
