@@ -221,8 +221,8 @@ static void read_and_dump(int fd)
             if(errno == EINTR) continue;
             break;
         }
-        /* we want to output to stdout, so no adb_write here !! */
-        unix_write(1, buf, len);
+        fwrite(buf, 1, len, stdout);
+        fflush(stdout);
     }
 }
 
