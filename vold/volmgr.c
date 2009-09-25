@@ -536,9 +536,16 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
          * Since we only support creating 1 partition (right now),
          * we can just lookup the target by devno
          */
-        blkdev_t *part = blkdev_lookup_by_devno(dev->major, 1);
+        blkdev_t *part;
+        if (vol->media_type == media_mmc)
+            part = blkdev_lookup_by_devno(dev->major, ALIGN_MMC_MINOR(dev->minor) + 1);
+        else
+            part = blkdev_lookup_by_devno(dev->major, 1);
         if (!part) {
-            part = blkdev_lookup_by_devno(dev->major, 0);
+            if (vol->media_type == media_mmc)
+                part = blkdev_lookup_by_devno(dev->major, ALIGN_MMC_MINOR(dev->minor));
+            else
+                part = blkdev_lookup_by_devno(dev->major, 0);
             if (!part) {
                 LOGE("Unable to find device to format");
                 return -ENODEV;
@@ -573,9 +580,14 @@ static int _volmgr_consider_disk_and_vol(volume_t *vol, blkdev_t *dev)
         rc = -ENODEV;
         int i;
         for (i = 0; i < dev->nr_parts; i++) {
-            blkdev_t *part = blkdev_lookup_by_devno(dev->major, (i+1));
+            blkdev_t *part;
+            if (vol->media_type == media_mmc)
+                part = blkdev_lookup_by_devno(dev->major, ALIGN_MMC_MINOR(dev->minor) + (i+1));
+            else
+                part = blkdev_lookup_by_devno(dev->major, (i+1));
             if (!part) {
-                LOGE("Error - unable to lookup partition for blkdev %d:%d", dev->major, (i+1));
+                LOGE("Error - unable to lookup partition for blkdev %d:%d",
+                    dev->major, dev->minor);
                 continue;
             }
             rc = _volmgr_start(vol, part);
