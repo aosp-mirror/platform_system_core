@@ -86,15 +86,50 @@ static void group2str(unsigned gid, char *out)
     }
 }
 
-static int listfile_size(const char *path, int flags)
+static int show_total_size(const char *dirname, DIR *d, int flags)
+{
+    struct dirent *de;
+    char tmp[1024];
+    struct stat s;
+    int sum = 0;
+
+    /* run through the directory and sum up the file block sizes */
+    while ((de = readdir(d)) != 0) {
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0)
+            continue;
+        if (de->d_name[0] == '.' && (flags & LIST_ALL) == 0)
+            continue;
+
+        if (strcmp(dirname, "/") == 0)
+            snprintf(tmp, sizeof(tmp), "/%s", de->d_name);
+        else
+            snprintf(tmp, sizeof(tmp), "%s/%s", dirname, de->d_name);
+
+        if (lstat(tmp, &s) < 0) {
+            fprintf(stderr, "stat failed on %s: %s\n", tmp, strerror(errno));
+            rewinddir(d);
+            return -1;
+        }
+
+        sum += s.st_blocks / 2;
+    }
+
+    printf("total %d\n", sum);
+    rewinddir(d);
+    return 0;
+}
+
+static int listfile_size(const char *path, const char *filename, int flags)
 {
     struct stat s;
 
-    if (lstat(path, &s) < 0)
+    if (lstat(path, &s) < 0) {
+        fprintf(stderr, "lstat '%s' failed: %s\n", path, strerror(errno));
         return -1;
+    }
 
     /* blocks are 512 bytes, we want output to be KB */
-    printf("%lld %s\n", s.st_blocks / 2, path);
+    printf("%lld %s\n", s.st_blocks / 2, filename);
     return 0;
 }
 
@@ -189,7 +224,7 @@ static int listfile(const char *dirname, const char *filename, int flags)
     if ((flags & LIST_LONG) != 0) {
         return listfile_long(pathname, flags);
     } else /*((flags & LIST_SIZE) != 0)*/ {
-        return listfile_size(pathname, flags);
+        return listfile_size(pathname, filename, flags);
     }
 }
 
@@ -198,11 +233,15 @@ static int listdir(const char *name, int flags)
     char tmp[4096];
     DIR *d;
     struct dirent *de;
-    
+
     d = opendir(name);
     if(d == 0) {
         fprintf(stderr, "opendir failed, %s\n", strerror(errno));
         return -1;
+    }
+
+    if ((flags & LIST_SIZE) != 0) {
+        show_total_size(name, d, flags);
     }
 
     while((de = readdir(d)) != 0){
