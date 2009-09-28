@@ -2,16 +2,16 @@
 **
 ** Copyright 2006, The Android Open Source Project
 **
-** Licensed under the Apache License, Version 2.0 (the "License"); 
-** you may not use this file except in compliance with the License. 
-** You may obtain a copy of the License at 
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
 **
-**     http://www.apache.org/licenses/LICENSE-2.0 
+**     http://www.apache.org/licenses/LICENSE-2.0
 **
-** Unless required by applicable law or agreed to in writing, software 
-** distributed under the License is distributed on an "AS IS" BASIS, 
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-** See the License for the specific language governing permissions and 
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
 ** limitations under the License.
 */
 
@@ -48,8 +48,6 @@ extern int unwind_backtrace_with_ptrace(int tfd, pid_t pid, mapinfo *map,
                                         int *frame0_pc_sane,
                                         bool at_fault);
 
-static char **process_name_ptr;
-
 static int logsocket = -1;
 
 #define ANDROID_LOG_INFO 4
@@ -58,7 +56,7 @@ static int logsocket = -1;
 void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...)
 {
     char buf[128];
-    
+
     va_list ap;
     va_start(ap, fmt);
 
@@ -91,16 +89,16 @@ mapinfo *parse_maps_line(char *line)
 
     if(len < 1) return 0;
     line[--len] = 0;
-    
+
     if(len < 50) return 0;
     if(line[20] != 'x') return 0;
 
     mi = malloc(sizeof(mapinfo) + (len - 47));
     if(mi == 0) return 0;
-    
+
     mi->start = strtoul(line, 0, 16);
     mi->end = strtoul(line + 9, 0, 16);
-    /* To be filled in parse_exidx_info if the mapped section starts with 
+    /* To be filled in parse_exidx_info if the mapped section starts with
      * elf_header
      */
     mi->exidx_start = mi->exidx_end = 0;
@@ -120,7 +118,7 @@ void dump_build_info(int tfd)
 }
 
 
-void dump_stack_and_code(int tfd, int pid, mapinfo *map, 
+void dump_stack_and_code(int tfd, int pid, mapinfo *map,
                          int unwind_depth, unsigned int sp_list[],
                          int frame0_pc_sane, bool at_fault)
 {
@@ -128,6 +126,7 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
     struct pt_regs r;
     int sp_depth;
     bool only_in_tombstone = !at_fault;
+    char code_buffer[80];
 
     if(ptrace(PTRACE_GETREGS, pid, 0, &r)) return;
     sp = r.ARM_sp;
@@ -140,26 +139,53 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
         pc = r.ARM_lr;
     }
 
-    _LOG(tfd, true, "code%s:\n", frame0_pc_sane ? "" : " (around frame #01)");
+    _LOG(tfd, only_in_tombstone,
+         "\ncode around %s:\n", frame0_pc_sane ? "pc" : "lr");
 
     end = p = pc & ~3;
     p -= 16;
+    end += 16;
 
-    /* Dump the code as:
-     *  PC         contents
+    /* Dump the code around PC as:
+     *  addr       contents
      *  00008d34   fffffcd0 4c0eb530 b0934a0e 1c05447c
      *  00008d44   f7ff18a0 490ced94 68035860 d0012b00
      */
     while (p <= end) {
         int i;
 
-        _LOG(tfd, true, " %08x  ", p);
+        sprintf(code_buffer, "%08x ", p);
         for (i = 0; i < 4; i++) {
             data = ptrace(PTRACE_PEEKTEXT, pid, (void*)p, NULL);
-            _LOG(tfd, true, " %08x", data);
+            sprintf(code_buffer + strlen(code_buffer), "%08x ", data);
             p += 4;
         }
-        _LOG(tfd, true, "\n", p);
+        _LOG(tfd, only_in_tombstone, "%s\n", code_buffer);
+    }
+
+    if (frame0_pc_sane) {
+        _LOG(tfd, only_in_tombstone, "\ncode around lr:\n");
+
+        end = p = r.ARM_lr & ~3;
+        p -= 16;
+        end += 16;
+
+        /* Dump the code around LR as:
+         *  addr       contents
+         *  00008d34   fffffcd0 4c0eb530 b0934a0e 1c05447c
+         *  00008d44   f7ff18a0 490ced94 68035860 d0012b00
+         */
+        while (p <= end) {
+            int i;
+
+            sprintf(code_buffer, "%08x ", p);
+            for (i = 0; i < 4; i++) {
+                data = ptrace(PTRACE_PEEKTEXT, pid, (void*)p, NULL);
+                sprintf(code_buffer + strlen(code_buffer), "%08x ", data);
+                p += 4;
+            }
+            _LOG(tfd, only_in_tombstone, "%s\n", code_buffer);
+        }
     }
 
     p = sp - 64;
@@ -177,7 +203,7 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
         end += 0xff;
     }
 
-    _LOG(tfd, only_in_tombstone, "stack:\n");
+    _LOG(tfd, only_in_tombstone, "\nstack:\n");
 
     /* If the crash is due to PC == 0, there will be two frames that
      * have identical SP value.
@@ -190,7 +216,7 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
     }
 
     while (p <= end) {
-         char *prompt; 
+         char *prompt;
          char level[16];
          data = ptrace(PTRACE_PEEKTEXT, pid, (void*)p, NULL);
          if (p == sp_list[sp_depth]) {
@@ -200,12 +226,12 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
          else {
              prompt = "   ";
          }
-         
+
          /* Print the stack content in the log for the first 3 frames. For the
           * rest only print them in the tombstone file.
           */
-         _LOG(tfd, (sp_depth > 2) || only_in_tombstone, 
-              "%s %08x  %08x  %s\n", prompt, p, data, 
+         _LOG(tfd, (sp_depth > 2) || only_in_tombstone,
+              "%s %08x  %08x  %s\n", prompt, p, data,
               map_to_name(map, data, ""));
          p += 4;
     }
@@ -214,14 +240,14 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
     end = p+64;
     while (p <= end) {
          data = ptrace(PTRACE_PEEKTEXT, pid, (void*)p, NULL);
-         _LOG(tfd, (sp_depth > 2) || only_in_tombstone, 
-              "    %08x  %08x  %s\n", p, data, 
+         _LOG(tfd, (sp_depth > 2) || only_in_tombstone,
+              "    %08x  %08x  %s\n", p, data,
               map_to_name(map, data, ""));
          p += 4;
     }
 }
 
-void dump_pc_and_lr(int tfd, int pid, mapinfo *map, int unwound_level, 
+void dump_pc_and_lr(int tfd, int pid, mapinfo *map, int unwound_level,
                     bool at_fault)
 {
     struct pt_regs r;
@@ -239,26 +265,26 @@ void dump_pc_and_lr(int tfd, int pid, mapinfo *map, int unwound_level,
             map_to_name(map, r.ARM_lr, "<unknown>"));
 }
 
-void dump_registers(int tfd, int pid, bool at_fault) 
+void dump_registers(int tfd, int pid, bool at_fault)
 {
     struct pt_regs r;
     bool only_in_tombstone = !at_fault;
 
     if(ptrace(PTRACE_GETREGS, pid, 0, &r)) {
-        _LOG(tfd, only_in_tombstone, 
+        _LOG(tfd, only_in_tombstone,
              "cannot get registers: %s\n", strerror(errno));
         return;
     }
-    
+
     _LOG(tfd, only_in_tombstone, " r0 %08x  r1 %08x  r2 %08x  r3 %08x\n",
          r.ARM_r0, r.ARM_r1, r.ARM_r2, r.ARM_r3);
     _LOG(tfd, only_in_tombstone, " r4 %08x  r5 %08x  r6 %08x  r7 %08x\n",
          r.ARM_r4, r.ARM_r5, r.ARM_r6, r.ARM_r7);
     _LOG(tfd, only_in_tombstone, " r8 %08x  r9 %08x  10 %08x  fp %08x\n",
          r.ARM_r8, r.ARM_r9, r.ARM_r10, r.ARM_fp);
-    _LOG(tfd, only_in_tombstone, 
+    _LOG(tfd, only_in_tombstone,
          " ip %08x  sp %08x  lr %08x  pc %08x  cpsr %08x\n",
-         r.ARM_ip, r.ARM_sp, r.ARM_lr, r.ARM_pc, r.ARM_cpsr);  
+         r.ARM_ip, r.ARM_sp, r.ARM_lr, r.ARM_pc, r.ARM_cpsr);
 }
 
 const char *get_signame(int sig)
@@ -277,7 +303,7 @@ const char *get_signame(int sig)
 void dump_fault_addr(int tfd, int pid, int sig)
 {
     siginfo_t si;
-    
+
     memset(&si, 0, sizeof(si));
     if(ptrace(PTRACE_GETSIGINFO, pid, 0, &si)){
         _LOG(tfd, false, "cannot get siginfo: %s\n", strerror(errno));
@@ -292,20 +318,20 @@ void dump_crash_banner(int tfd, unsigned pid, unsigned tid, int sig)
     char data[1024];
     char *x = 0;
     FILE *fp;
-    
+
     sprintf(data, "/proc/%d/cmdline", pid);
     fp = fopen(data, "r");
     if(fp) {
         x = fgets(data, 1024, fp);
         fclose(fp);
     }
-    
+
     _LOG(tfd, false,
          "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
     dump_build_info(tfd);
     _LOG(tfd, false, "pid: %d, tid: %d  >>> %s <<<\n",
          pid, tid, x ? x : "UNKNOWN");
-    
+
     if(sig) dump_fault_addr(tfd, tid, sig);
 }
 
@@ -316,10 +342,10 @@ static void parse_exidx_info(mapinfo *milist, pid_t pid)
         Elf32_Ehdr ehdr;
 
         memset(&ehdr, 0, sizeof(Elf32_Ehdr));
-        /* Read in sizeof(Elf32_Ehdr) worth of data from the beginning of 
+        /* Read in sizeof(Elf32_Ehdr) worth of data from the beginning of
          * mapped section.
          */
-        get_remote_struct(pid, (void *) (mi->start), &ehdr, 
+        get_remote_struct(pid, (void *) (mi->start), &ehdr,
                           sizeof(Elf32_Ehdr));
         /* Check if it has the matching magic words */
         if (IS_ELF(ehdr)) {
@@ -330,7 +356,7 @@ static void parse_exidx_info(mapinfo *milist, pid_t pid)
             ptr = (Elf32_Phdr *) (mi->start + ehdr.e_phoff);
             for (i = 0; i < ehdr.e_phnum; i++) {
                 /* Parse the program header */
-                get_remote_struct(pid, (void *) ptr+i, &phdr, 
+                get_remote_struct(pid, (char *) ptr+i, &phdr,
                                   sizeof(Elf32_Phdr));
                 /* Found a EXIDX segment? */
                 if (phdr.p_type == PT_ARM_EXIDX) {
@@ -351,7 +377,7 @@ void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
     unsigned int sp_list[STACK_CONTENT_DEPTH];
     int stack_depth;
     int frame0_pc_sane = 1;
-    
+
     if (!at_fault) {
         _LOG(tfd, true,
          "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
@@ -359,7 +385,7 @@ void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
     }
 
     dump_registers(tfd, tid, at_fault);
-    
+
     /* Clear stack pointer records */
     memset(sp_list, 0, sizeof(sp_list));
 
@@ -400,40 +426,6 @@ void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
         milist = next;
     }
 }
-
-/* FIXME: unused: use it or lose it*/
-#if 0
-static
-void start_gdbserver_vs(int pid, int port)
-{
-    pid_t p;
-    char *args[5];
-    char commspec[16];
-    char pidspec[16];
-    
-    p = fork();
-    if(p < 0) {
-        LOG("could not fork()\n");
-        return;
-    }
-
-    if(p == 0) {
-        sprintf(commspec, ":%d", port);
-        sprintf(pidspec, "%d", pid);
-        args[0] = "/system/bin/gdbserver";
-        args[1] = commspec;
-        args[2] = "--attach";
-        args[3] = pidspec;
-        args[4] = 0;
-        exit(execv(args[0], args));
-    } else {
-        LOG("gdbserver pid=%d port=%d targetpid=%d\n",
-            p, port, pid);
-
-        sleep(5);
-    }
-}
-#endif
 
 #define MAX_TOMBSTONES	10
 
@@ -514,7 +506,7 @@ static bool dump_sibling_thread_report(int tfd, unsigned pid, unsigned tid)
     while ((de = readdir(d)) != NULL) {
         unsigned new_tid;
         /* Ignore "." and ".." */
-        if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) 
+        if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
             continue;
         new_tid = atoi(de->d_name);
         /* The main thread at fault has been handled individually */
@@ -533,7 +525,7 @@ static bool dump_sibling_thread_report(int tfd, unsigned pid, unsigned tid)
 }
 
 /* Return true if some thread is not detached cleanly */
-static bool engrave_tombstone(unsigned pid, unsigned tid, int debug_uid, 
+static bool engrave_tombstone(unsigned pid, unsigned tid, int debug_uid,
                               int signal)
 {
     int fd;
@@ -548,7 +540,7 @@ static bool engrave_tombstone(unsigned pid, unsigned tid, int debug_uid,
 
     dump_crash_banner(fd, pid, tid, signal);
     dump_crash_report(fd, pid, tid, true);
-    /* 
+    /*
      * If the user has requested to attach gdb, don't collect the per-thread
      * information as it increases the chance to lose track of the process.
      */
@@ -619,7 +611,7 @@ static void wait_for_user_action(unsigned tid, struct ucred* cr)
             "*     adb shell gdbserver :port --attach %d &           \n"
             "*                                                       \n"
             "* and press the HOME key.                               \n"
-            "********************************************************\n",                
+            "********************************************************\n",
             cr->pid, cr->pid);
 
     /* wait for HOME key */
@@ -653,13 +645,13 @@ static void wait_for_user_action(unsigned tid, struct ucred* cr)
                     disable_debug_led();
                 }
             }
-        } while (!home); 
+        } while (!home);
         uninit_getevent();
     }
 
     /* don't forget to turn debug led off */
     disable_debug_led();
-    
+
     /* close filedescriptor */
     LOG("debuggerd resuming process %d", cr->pid);
  }
@@ -670,7 +662,7 @@ static void handle_crashing_process(int fd)
     struct stat s;
     unsigned tid;
     struct ucred cr;
-    int n, len, status; 
+    int n, len, status;
     int tid_attach_status = -1;
     unsigned retry = 30;
     bool need_cleanup = false;
@@ -678,9 +670,9 @@ static void handle_crashing_process(int fd)
     char value[PROPERTY_VALUE_MAX];
     property_get("debug.db.uid", value, "-1");
     int debug_uid = atoi(value);
-    
+
     XLOG("handle_crashing_process(%d)\n", fd);
-    
+
     len = sizeof(cr);
     n = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cr, &len);
     if(n != 0) {
@@ -688,7 +680,7 @@ static void handle_crashing_process(int fd)
         goto done;
     }
 
-    XLOG("reading tid\n");    
+    XLOG("reading tid\n");
     fcntl(fd, F_SETFL, O_NONBLOCK);
     while((n = read(fd, &tid, sizeof(unsigned))) != sizeof(unsigned)) {
         if(errno == EINTR) continue;
@@ -711,7 +703,7 @@ static void handle_crashing_process(int fd)
         close(fd);
         return;
     }
-    
+
     XLOG("BOOM: pid=%d uid=%d gid=%d tid=%d\n", cr.pid, cr.uid, cr.gid, tid);
 
     tid_attach_status = ptrace(PTRACE_ATTACH, tid, 0, 0);
@@ -725,7 +717,7 @@ static void handle_crashing_process(int fd)
 
     for(;;) {
         n = waitpid(tid, &status, __WALL);
-        
+
         if(n < 0) {
             if(errno == EAGAIN) continue;
             LOG("waitpid failed: %s\n", strerror(errno));
@@ -745,7 +737,7 @@ static void handle_crashing_process(int fd)
                     goto done;
                 }
                 continue;
-                
+
             case SIGILL:
             case SIGABRT:
             case SIGBUS:
@@ -767,17 +759,17 @@ static void handle_crashing_process(int fd)
             goto done;
         }
     }
-    
+
 done:
     XLOG("detaching\n");
-    
+
     /* stop the process so we can debug */
     kill(cr.pid, SIGSTOP);
 
-    /* 
-     * If a thread has been attached by ptrace, make sure it is detached 
+    /*
+     * If a thread has been attached by ptrace, make sure it is detached
      * successfully otherwise we will get a zombie.
-     */ 
+     */
     if (tid_attach_status == 0) {
         int detach_status;
         /* detach so we can attach gdbserver */
@@ -807,14 +799,12 @@ done:
     if(fd != -1) close(fd);
 }
 
-int main(int argc, char **argv)
+int main()
 {
     int s;
     struct sigaction act;
-    
-    process_name_ptr = argv;
-    
-    logsocket = socket_local_client("logd", 
+
+    logsocket = socket_local_client("logd",
             ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_DGRAM);
     if(logsocket < 0) {
         logsocket = -1;
@@ -827,23 +817,23 @@ int main(int argc, char **argv)
     sigaddset(&act.sa_mask,SIGCHLD);
     act.sa_flags = SA_NOCLDWAIT;
     sigaction(SIGCHLD, &act, 0);
-    
-    s = socket_local_server("android:debuggerd", 
+
+    s = socket_local_server("android:debuggerd",
             ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
     if(s < 0) return -1;
     fcntl(s, F_SETFD, FD_CLOEXEC);
 
     LOG("debuggerd: " __DATE__ " " __TIME__ "\n");
-    
+
     for(;;) {
         struct sockaddr addr;
         socklen_t alen;
         int fd;
-        
+
         alen = sizeof(addr);
         fd = accept(s, &addr, &alen);
         if(fd < 0) continue;
-        
+
         fcntl(fd, F_SETFD, FD_CLOEXEC);
 
         handle_crashing_process(fd);
