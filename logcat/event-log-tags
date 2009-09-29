@@ -292,6 +292,7 @@
 75001 sqlite_mem_alarm_max (max|1|2)
 75002 sqlite_mem_alarm_alloc_attempt (attempts|1|4)
 75003 sqlite_mem_released (Memory released|1|2)
+75004 sqlite_db_corrupt (Database file corrupt|3)
 
 40000 checkin (Check in time|2|3)
 
