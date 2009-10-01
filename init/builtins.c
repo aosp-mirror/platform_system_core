@@ -459,7 +459,7 @@ int do_copy(int nargs, char **args)
     if ((fd1 = open(args[1], O_RDONLY)) < 0) 
         goto out_err;
 
-    if ((fd2 = open(args[2], O_WRONLY|O_CREAT, 0660)) < 0)
+    if ((fd2 = open(args[2], O_WRONLY|O_CREAT|O_TRUNC, 0660)) < 0)
         goto out_err;
 
     if (!(buffer = malloc(info.st_size)))
