@@ -25,7 +25,8 @@ LOCAL_SRC_FILES:= \
     disassem.cpp
 
 LOCAL_SHARED_LIBRARIES := \
-    libacc
+    libacc \
+    libdl
 
 LOCAL_CFLAGS := -O0 -g 
 
@@ -57,7 +58,8 @@ LOCAL_SRC_FILES:= \
 	runtimeTest.cpp
 
 LOCAL_SHARED_LIBRARIES := \
-    libacc
+    libacc \
+    libdl
 
 LOCAL_CFLAGS := -O0 -g 
 
