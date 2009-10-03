@@ -65,7 +65,6 @@ else
         mspace.c \
         selector.c \
         tztime.c \
-        adb_networking.c \
         zygote.c
 
     commonHostSources += \
