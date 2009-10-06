@@ -145,11 +145,17 @@ import <filename>
 hostname <name>
    Set the host name.
 
+chdir <directory>
+   Change working directory.
+
 chmod <octal-mode> <path>
    Change file access permissions.
 
 chown <owner> <group> <path>
    Change file owner and group.
+
+chroot <directory>
+  Change process root directory.
 
 class_start <serviceclass>
    Start all services of the specified class if they are

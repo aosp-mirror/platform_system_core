@@ -1,5 +1,7 @@
 
 #ifndef KEYWORD
+int do_chroot(int nargs, char **args);
+int do_chdir(int nargs, char **args);
 int do_class_start(int nargs, char **args);
 int do_class_stop(int nargs, char **args);
 int do_domainname(int nargs, char **args);
@@ -32,6 +34,8 @@ enum {
     K_UNKNOWN,
 #endif
     KEYWORD(capability,  OPTION,  0, 0)
+    KEYWORD(chdir,       COMMAND, 1, do_chdir)
+    KEYWORD(chroot,      COMMAND, 1, do_chroot)
     KEYWORD(class,       OPTION,  0, 0)
     KEYWORD(class_start, COMMAND, 1, do_class_start)
     KEYWORD(class_stop,  COMMAND, 1, do_class_stop)

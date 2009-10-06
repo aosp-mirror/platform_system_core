@@ -131,6 +131,18 @@ static void service_start_if_not_disabled(struct service *svc)
     }
 }
 
+int do_chdir(int nargs, char **args)
+{
+    chdir(args[1]);
+    return 0;
+}
+
+int do_chroot(int nargs, char **args)
+{
+    chroot(args[1]);
+    return 0;
+}
+
 int do_class_start(int nargs, char **args)
 {
         /* Starting a class does not start services
@@ -206,7 +218,7 @@ int do_insmod(int nargs, char **args)
 
 int do_import(int nargs, char **args)
 {
-    return -1;
+    return parse_config_file(args[1]);
 }
 
 int do_mkdir(int nargs, char **args)
@@ -400,6 +412,8 @@ int do_restart(int nargs, char **args)
 
 int do_trigger(int nargs, char **args)
 {
+    action_for_each_trigger(args[1], action_add_queue_tail);
+    drain_action_queue();
     return 0;
 }
 
