@@ -351,6 +351,7 @@ static int try_device(io_service_t device, usb_handle *handle) {
         // device has no serial number
         handle->info.serial_number[0] = 0;
     }
+    handle->info.writable = 1;
 
     if (try_interfaces(dev, handle)) {
         goto error;
@@ -415,8 +416,6 @@ static int init_usb(ifc_match_func callback, usb_handle **handle) {
         if (device == 0) {
             break;
         }
-
-        usb_ifc_info info;
 
         if (try_device(device, &h) != 0) {
             IOObjectRelease(device);

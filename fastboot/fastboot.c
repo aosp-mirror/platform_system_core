@@ -165,6 +165,9 @@ int list_devices_callback(usb_ifc_info *info)
 {
     if (match_fastboot(info) == 0) {
         char* serial = info->serial_number;
+        if (!info->writable) {
+            serial = "no permissions"; // like "adb devices"
+        }
         if (!serial[0]) {
             serial = "????????????";
         }

@@ -301,6 +301,7 @@ int recognized_device(usb_handle* handle, ifc_match_func callback) {
     info.ifc_class = interf_desc.bInterfaceClass;
     info.ifc_subclass = interf_desc.bInterfaceSubClass;
     info.ifc_protocol = interf_desc.bInterfaceProtocol;
+    info.writable = 1;
     
     // read serial number (if there is one)
     unsigned long serial_number_len = sizeof(info.serial_number);

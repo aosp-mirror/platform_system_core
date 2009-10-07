@@ -89,7 +89,8 @@ static int check(void *_desc, int len, unsigned type, int size)
     return 0;
 }
 
-static int filter_usb_device(int fd, char *ptr, int len, ifc_match_func callback,
+static int filter_usb_device(int fd, char *ptr, int len, int writable,
+                             ifc_match_func callback,
                              int *ept_in_id, int *ept_out_id, int *ifc_id)
 {
     struct usb_device_descriptor *dev;
@@ -119,7 +120,8 @@ static int filter_usb_device(int fd, char *ptr, int len, ifc_match_func callback
     info.dev_class = dev->bDeviceClass;
     info.dev_subclass = dev->bDeviceSubClass;
     info.dev_protocol = dev->bDeviceProtocol;
-
+    info.writable = writable;
+    
     // read device serial number (if there is one)
     info.serial_number[0] = 0;
     if (dev->iSerialNumber) {
@@ -201,6 +203,7 @@ static usb_handle *find_usb_device(const char *base, ifc_match_func callback)
     DIR *busdir, *devdir;
     struct dirent *de;
     int fd;
+    int writable = 1;
     
     busdir = opendir(base);
     if(busdir == 0) return 0;
@@ -220,12 +223,18 @@ static usb_handle *find_usb_device(const char *base, ifc_match_func callback)
 
 //            DBG("[ scanning %s ]\n", devname);
             if((fd = open(devname, O_RDWR)) < 0) {
-                continue;
+                // Check if we have read-only access, so we can give a helpful
+                // diagnostic like "adb devices" does.
+                writable = 0;
+                if((fd = open(devname, O_RDONLY)) < 0) {
+                    continue;
+                }
             }
 
             n = read(fd, desc, sizeof(desc));
             
-            if(filter_usb_device(fd, desc, n, callback, &in, &out, &ifc) == 0){
+            if(filter_usb_device(fd, desc, n, writable, callback,
+                                 &in, &out, &ifc) == 0) {
                 usb = calloc(1, sizeof(usb_handle));
                 strcpy(usb->fname, devname);
                 usb->ep_in = in;
@@ -375,5 +384,3 @@ usb_handle *usb_open(ifc_match_func callback)
 {
     return find_usb_device("/dev/bus/usb", callback);
 }
-
-

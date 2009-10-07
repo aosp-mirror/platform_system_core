@@ -50,6 +50,8 @@ struct usb_ifc_info
     unsigned char has_bulk_in;
     unsigned char has_bulk_out;
     
+    unsigned char writable;
+
     char serial_number[256];
 };
   
