@@ -21,7 +21,7 @@
 # 2: long
 # 3: string
 # 4: list
-# 
+#
 # The data unit is a number taken from the following list:
 # 1: Number of objects
 # 2: Number of bytes
@@ -58,11 +58,11 @@
 # This is logged when the partial wake lock (keeping the device awake
 # regardless of whether the screen is off) is acquired or released.
 2729 power_partial_wake_state (releasedorAcquired|1|5),(tag|3)
-# This is logged when battery goes from discharging to charging. 
+# This is logged when battery goes from discharging to charging.
 # It lets us count the total amount of time between charges and the discharge level
 2730 battery_discharge (duration|2|3),(minLevel|1|6),(maxLevel|1|6)
 #
-# Leave IDs through 2739 for more power logs 
+# Leave IDs through 2739 for more power logs
 #
 
 # This event is logged when the location service uploads location data.
@@ -79,8 +79,8 @@
 2744 free_storage_changed (data|2|2)
 # Device low memory notification and disk space free on the /data partition, in bytes at that time
 2745 low_storage (data|2|2)
-# disk space free on the /data partition in bytes
-2746 free_storage_left (data|2|2)
+# disk space free on the /data, /system, and /cache partitions in bytes
+2746 free_storage_left (data|2|2),(system|2|2),(cache|2|2)
 
 # when a NotificationManager.notify is called
 2750 notification_enqueue (pkg|3),(id|1|5),(notification|3)
@@ -160,9 +160,9 @@
 30010 am_proc_bound (PID|1|5),(Process Name|3)
 # Application process died
 30011 am_proc_died (PID|1|5),(Process Name|3)
-# The Activity Manager failed to pause the given activity. 
+# The Activity Manager failed to pause the given activity.
 30012 am_failed_to_pause (Token|1|5),(Wanting to pause|3),(Currently pausing|3)
-# Attempting to pause the current activity 
+# Attempting to pause the current activity
 30013 am_pause_activity (Token|1|5),(Component Name|3)
 # Application process has been started
 30014 am_proc_start (PID|1|5),(UID|1|5),(Process Name|3),(Type|3),(Component|3)
@@ -262,28 +262,28 @@
 # Connectivity state changed:
 # [31-13] Reserved for future use
 # [12- 9] Network subtype (for mobile network, as defined by TelephonyManager)
-# [ 8- 3] Detailed state ordinal (as defined by NetworkInfo.DetailedState)   
+# [ 8- 3] Detailed state ordinal (as defined by NetworkInfo.DetailedState)
 # [ 2- 0] Network type (as defined by ConnectivityManager)
 50020 connectivity_state_changed (custom|1|5)
 
 # Wi-Fi network state changed:
 # [31- 6] Reserved for future use
-# [ 5- 0] Detailed state ordinal (as defined by NetworkInfo.DetailedState)   
+# [ 5- 0] Detailed state ordinal (as defined by NetworkInfo.DetailedState)
 50021 wifi_network_state_changed (network_state|1|5)
 
 # Wi-Fi supplicant state changed:
 # [31- 6] Reserved for future use
-# [ 5- 0] Supplicant state ordinal (as defined by SupplicantState)   
+# [ 5- 0] Supplicant state ordinal (as defined by SupplicantState)
 50022 wifi_supplicant_state_changed (supplicant_state|1|5)
 
 # Wi-Fi driver state changed:
 # [31- 1] Reserved for future use
-# [ 0- 0] Driver start (1) or stopped (0)   
+# [ 0- 0] Driver start (1) or stopped (0)
 50023 wifi_driver_state_changed (driver_state|1|5)
 
 # Wi-Fi interface configuration state changed:
 # [31- 1] Reserved for future use
-# [ 0- 0] Interface configuration succeeded (1) or failed (0)   
+# [ 0- 0] Interface configuration succeeded (1) or failed (0)
 50024 wifi_interface_configuration_state_changed (IP_configuration|1|5)
 
 # Wi-Fi supplicant connection state changed:
@@ -333,7 +333,7 @@
 #//device/dalvik/libcore/luni/src/main/native/org_apache_harmony_luni_platform_OSNetworkSystem.c
 51000 socket_stats (send|1|2),(recv|1|2),(ip|1|5),(port|1|5),(close|1|5)
 
-# db stats.  0 is query, 1 is write (may become more fine grained in the 
+# db stats.  0 is query, 1 is write (may become more fine grained in the
 # future)
 52000 db_operation (name|3),(op_type|1|5),(time|2|3)
 
