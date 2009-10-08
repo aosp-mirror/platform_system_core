@@ -97,7 +97,7 @@ void help()
         "                                 returns an error if more than one emulator is running.\n"
         " -s <serial number>            - directs command to the USB device or emulator with\n"
         "                                 the given serial number. Overrides ANDROID_SERIAL\n"
-        "                                 envivornment variable.\n"
+        "                                 environment variable.\n"
         " -p <product name or path>     - simple product name like 'sooner', or\n"
         "                                 a relative/absolute path to a product\n"
         "                                 out directory like 'out/target/product/sooner'.\n"

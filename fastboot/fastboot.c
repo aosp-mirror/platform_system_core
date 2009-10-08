@@ -557,6 +557,8 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    serial = getenv("ANDROID_SERIAL");
+
     while (argc > 0) {
         if(!strcmp(*argv, "-w")) {
             wants_wipe = 1;
