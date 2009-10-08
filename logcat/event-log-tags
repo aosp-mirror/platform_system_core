@@ -80,8 +80,8 @@
 2744 free_storage_changed (data|2|2)
 # Device low memory notification and disk space free on the /data partition, in bytes at that time
 2745 low_storage (data|2|2)
-# disk space free on the /data partition in bytes
-2746 free_storage_left (data|2|2)
+# disk space free on the /data, /system, and /cache partitions in bytes
+2746 free_storage_left (data|2|2),(system|2|2),(cache|2|2)
 
 # contacts aggregation: time and number of contacts.
 # count is negative for query phase, positive for merge phase
