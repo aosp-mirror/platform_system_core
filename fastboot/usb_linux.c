@@ -203,7 +203,7 @@ static usb_handle *find_usb_device(const char *base, ifc_match_func callback)
     DIR *busdir, *devdir;
     struct dirent *de;
     int fd;
-    int writable = 1;
+    int writable;
     
     busdir = opendir(base);
     if(busdir == 0) return 0;
@@ -222,6 +222,7 @@ static usb_handle *find_usb_device(const char *base, ifc_match_func callback)
             sprintf(devname, "%s/%s", busname, de->d_name);
 
 //            DBG("[ scanning %s ]\n", devname);
+            writable = 1;
             if((fd = open(devname, O_RDWR)) < 0) {
                 // Check if we have read-only access, so we can give a helpful
                 // diagnostic like "adb devices" does.
