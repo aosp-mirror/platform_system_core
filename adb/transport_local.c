@@ -204,6 +204,7 @@ static void remote_kick(atransport *t)
 {
     int fd = t->sfd;
     t->sfd = -1;
+    adb_shutdown(fd);
     adb_close(fd);
 
 #if ADB_HOST
