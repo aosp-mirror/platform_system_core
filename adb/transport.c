@@ -864,6 +864,38 @@ void register_socket_transport(int s, const char *serial, int port, int local)
     register_transport(t);
 }
 
+#if ADB_HOST
+atransport *find_transport(const char *serial)
+{
+    atransport *t;
+
+    adb_mutex_lock(&transport_lock);
+    for(t = transport_list.next; t != &transport_list; t = t->next) {
+        if (t->serial && !strcmp(serial, t->serial)) {
+            break;
+        }
+     }
+    adb_mutex_unlock(&transport_lock);
+
+    if (t != &transport_list)
+        return t;
+    else
+        return 0;
+}
+
+void unregister_transport(atransport *t)
+{
+    adb_mutex_lock(&transport_lock);
+    t->next->prev = t->prev;
+    t->prev->next = t->next;
+    adb_mutex_unlock(&transport_lock);
+
+    kick_transport(t);
+    transport_unref(t);
+}
+
+#endif
+
 void register_usb_transport(usb_handle *usb, const char *serial, unsigned writeable)
 {
     atransport *t = calloc(1, sizeof(atransport));
