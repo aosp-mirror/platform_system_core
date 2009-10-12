@@ -270,10 +270,16 @@ void close_usb_devices();
 
 /* cause new transports to be init'd and added to the list */
 void register_socket_transport(int s, const char *serial, int port, int local);
+
+/* this should only be used for the "adb disconnect" command */
+void unregister_transport(atransport *t);
+
 void register_usb_transport(usb_handle *h, const char *serial, unsigned writeable);
 
 /* this should only be used for transports with connection_state == CS_NOPERM */
 void unregister_usb_transport(usb_handle *usb);
+
+atransport *find_transport(const char *serial);
 
 int service_to_fd(const char *name);
 #if ADB_HOST
