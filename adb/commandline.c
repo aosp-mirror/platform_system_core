@@ -106,6 +106,7 @@ void help()
         "                                 be an absolute path.\n"
         " devices                       - list all connected devices\n"
         " connect <host>:<port>         - connect to a device via TCP/IP"
+        " disconnect <host>:<port>      - disconnect from a TCP/IP device"
         "\n"
         "device commands:\n"
         "  adb push <local> <remote>    - copy file/dir to device\n"
@@ -853,10 +854,10 @@ top:
         }
     }
 
-    if(!strcmp(argv[0], "connect")) {
+    if(!strcmp(argv[0], "connect") || !strcmp(argv[0], "disconnect")) {
         char *tmp;
         if (argc != 2) {
-            fprintf(stderr, "Usage: adb connect <host>:<port>\n");
+            fprintf(stderr, "Usage: adb %s <host>:<port>\n", argv[0]);
             return 1;
         }
         snprintf(buf, sizeof buf, "host:%s:%s", argv[0], argv[1]);
