@@ -164,8 +164,6 @@ on boot
     setprop ro.CONTENT_PROVIDER_MEM 5632
     setprop ro.EMPTY_APP_MEM 6144
 
-    mount debugfs /sys/kernel/debug /sys/kernel/debug
-
 # Write value must be consistent with the above properties.
 # Note that the driver only supports 6 slots, so we have HOME_APP at the
 # same memory level as services.
