@@ -164,7 +164,7 @@ jdwp_process_free( JdwpProcess*  proc )
         proc->next->prev = proc->prev;
 
         if (proc->socket >= 0) {
-            shutdown(proc->socket, SHUT_RDWR);
+            adb_shutdown(proc->socket);
             adb_close(proc->socket);
             proc->socket = -1;
         }

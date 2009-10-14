@@ -1020,19 +1020,24 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         char* portstr = strchr(host, ':');
 
         if (!portstr) {
-            snprintf(buffer, sizeof(buffer), "unable to parse %s as <host>:<port>\n", host);
+            snprintf(buffer, sizeof(buffer), "unable to parse %s as <host>:<port>", host);
             goto done;
         }
+        if (find_transport(host)) {
+            snprintf(buffer, sizeof(buffer), "Already connected to %s", host);
+            goto done;
+        }
+
         // zero terminate host by overwriting the ':'
         *portstr++ = 0;
         if (sscanf(portstr, "%d", &port) == 0) {
-            snprintf(buffer, sizeof(buffer), "bad port number %s\n", portstr);
+            snprintf(buffer, sizeof(buffer), "bad port number %s", portstr);
             goto done;
         }
 
         fd = socket_network_client(host, port, SOCK_STREAM);
         if (fd < 0) {
-            snprintf(buffer, sizeof(buffer), "unable to connect to %s:%d\n", host, port);
+            snprintf(buffer, sizeof(buffer), "unable to connect to %s:%d", host, port);
             goto done;
         }
 
@@ -1041,10 +1046,28 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         disable_tcp_nagle(fd);
         snprintf(buf, sizeof buf, "%s:%d", host, port);
         register_socket_transport(fd, buf, port, 0);
-        snprintf(buffer, sizeof(buffer), "connected to %s:%d\n", host, port);
+        snprintf(buffer, sizeof(buffer), "connected to %s:%d", host, port);
 
 done:
-        snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer),buffer);
+        snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer), buffer);
+        writex(reply_fd, buf, strlen(buf));
+        return 0;
+    }
+
+    // remove TCP transport
+    if (!strncmp(service, "disconnect:", 11)) {
+        char buffer[4096];
+        memset(buffer, 0, sizeof(buffer));
+        char* serial = service + 11;
+        atransport *t = find_transport(serial);
+
+        if (t) {
+            unregister_transport(t);
+        } else {
+            snprintf(buffer, sizeof(buffer), "No such device %s", serial);
+        }
+
+        snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer), buffer);
         writex(reply_fd, buf, strlen(buf));
         return 0;
     }

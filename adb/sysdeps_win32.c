@@ -435,6 +435,20 @@ int  adb_lseek(int  fd, int  pos, int  where)
 }
 
 
+int  adb_shutdown(int  fd)
+{
+    FH   f = _fh_from_int(fd);
+
+    if (!f) {
+        return -1;
+    }
+
+    D( "adb_shutdown: %s\n", f->name);
+    shutdown( f->fh_socket, SD_BOTH );
+    return 0;
+}
+
+
 int  adb_close(int  fd)
 {
     FH   f = _fh_from_int(fd);
