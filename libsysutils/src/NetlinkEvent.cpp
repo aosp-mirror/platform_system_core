@@ -28,6 +28,9 @@ const int NetlinkEvent::NlActionChange = 3;
 
 NetlinkEvent::NetlinkEvent() {
     mAction = NlActionUnknown;
+    memset(mParams, 0, sizeof(mParams));
+    mPath = NULL;
+    mSubsystem = NULL;
 }
 
 NetlinkEvent::~NetlinkEvent() {

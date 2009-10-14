@@ -32,8 +32,6 @@ NetlinkListener::NetlinkListener(int socket) :
 bool NetlinkListener::onDataAvailable(SocketClient *cli)
 {
     int socket = cli->getSocket();
-    LOGD("NetlinkListener::onDataAvailable()");
-
     int count;
 
     if ((count = recv(socket, mBuffer, sizeof(mBuffer), 0)) < 0) {
@@ -47,8 +45,7 @@ bool NetlinkListener::onDataAvailable(SocketClient *cli)
         goto out;
     }
 
-    LOGD("Ignoring '%s' netlink event", evt->getSubsystem());
-
+    onEvent(evt);
 out:
     delete evt;
     return true;
