@@ -180,6 +180,10 @@ on boot
     # Set init its forked children's oom_adj.
     write /proc/1/oom_adj -16
 
+    # Tweak background writeout
+    write /proc/sys/vm/dirty_expire_centisecs 200
+    write /proc/sys/vm/dirty_background_ratio  5
+
     # Permissions for System Server and daemons.
     chown radio system /sys/android_power/state
     chown radio system /sys/android_power/request_state
