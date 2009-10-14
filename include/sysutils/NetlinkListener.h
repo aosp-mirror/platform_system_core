@@ -26,7 +26,9 @@ class NetlinkListener : public SocketListener {
 public:
     NetlinkListener(int socket);
     virtual ~NetlinkListener() {}
+
 protected:
     virtual bool onDataAvailable(SocketClient *cli);
+    virtual void onEvent(NetlinkEvent *evt) = 0;
 };
 #endif
