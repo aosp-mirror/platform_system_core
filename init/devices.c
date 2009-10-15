@@ -101,10 +101,6 @@ static struct perms_ devperms[] = {
     /* gpu driver for adreno200 is globally accessible */
     { "/dev/kgsl",          0666,   AID_ROOT,       AID_ROOT,       0 },
 
-    /* STOPSHIP: temporarily make this be writable by all. We need to
-     * remove this entirely before we ship. */
-    { "/dev/pmem_gpu",      0666,   AID_ROOT,       AID_ROOT,       1 },
-
         /* these should not be world writable */
     { "/dev/diag",          0660,   AID_RADIO,      AID_RADIO,        0 },
     { "/dev/diag_arm9",     0660,   AID_RADIO,      AID_RADIO,        0 },
