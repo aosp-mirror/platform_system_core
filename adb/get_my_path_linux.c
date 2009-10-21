@@ -19,15 +19,15 @@
 #include <limits.h>
 #include <stdio.h>
 
-void get_my_path(char exe[PATH_MAX])
+void get_my_path(char *exe, size_t maxLen)
 {
     char proc[64];
     snprintf(proc, sizeof proc, "/proc/%d/exe", getpid());
-    int err = readlink(proc, exe, PATH_MAX - 1);
+    int err = readlink(proc, exe, maxLen - 1);
     if(err > 0) {
-        exe[err] = 0;
+        exe[err] = '\0';
     } else {
-        exe[0] = 0;
+        exe[0] = '\0';
     }
 }
 
