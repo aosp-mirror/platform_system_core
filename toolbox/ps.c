@@ -11,6 +11,8 @@
 
 #include <pwd.h>
 
+#include <cutils/sched_policy.h>
+
 
 static char *nexttoksep(char **strp, char *sep)
 {
@@ -24,6 +26,7 @@ static char *nexttok(char **strp)
 
 #define SHOW_PRIO 1
 #define SHOW_TIME 2
+#define SHOW_POLICY 4
 
 static int display_flags = 0;
 
@@ -138,12 +141,26 @@ static int ps_line(int pid, int tid, char *namefilter)
     }
     
     if(!namefilter || !strncmp(name, namefilter, strlen(namefilter))) {
-        printf("%-8s %-5d %-5d %-5d %-5d", user, pid, ppid, vss / 1024, rss * 4);
+        printf("%-9s %-5d %-5d %-6d %-5d", user, pid, ppid, vss / 1024, rss * 4);
         if(display_flags&SHOW_PRIO)
             printf(" %-5d %-5d %-5d %-5d", prio, nice, rtprio, sched);
+        if (display_flags & SHOW_POLICY) {
+            SchedPolicy p;
+            if (get_sched_policy(pid, &p) < 0)
+                printf(" un ");
+            else {
+                if (p == SP_BACKGROUND)
+                    printf(" bg ");
+                else if (p == SP_FOREGROUND)
+                    printf(" fg ");
+                else
+                    printf(" er ");
+            }
+        }
         printf(" %08x %08x %s %s", wchan, eip, state, cmdline[0] ? cmdline : name);
         if(display_flags&SHOW_TIME)
             printf(" (u:%d, s:%d)", utime, stime);
+
         printf("\n");
     }
     return 0;
@@ -186,6 +203,8 @@ int ps_main(int argc, char **argv)
             threads = 1;
         } else if(!strcmp(argv[1],"-x")) {
             display_flags |= SHOW_TIME;
+        } else if(!strcmp(argv[1],"-P")) {
+            display_flags |= SHOW_POLICY;
         } else if(!strcmp(argv[1],"-p")) {
             display_flags |= SHOW_PRIO;
         }  else if(isdigit(argv[1][0])){
@@ -197,8 +216,9 @@ int ps_main(int argc, char **argv)
         argv++;
     }
 
-    printf("USER     PID   PPID  VSIZE RSS   %sWCHAN    PC         NAME\n", 
-           (display_flags&SHOW_PRIO)?"PRIO  NICE  RTPRI SCHED ":"");
+    printf("USER     PID   PPID  VSIZE  RSS   %s %s WCHAN    PC         NAME\n", 
+           (display_flags&SHOW_PRIO)?"PRIO  NICE  RTPRI SCHED ":"",
+           (display_flags&SHOW_POLICY)?"PCY " : "");
     while((de = readdir(d)) != 0){
         if(isdigit(de->d_name[0])){
             int pid = atoi(de->d_name);
