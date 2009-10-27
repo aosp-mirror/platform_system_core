@@ -37,6 +37,8 @@
   #define SCHED_BATCH 3
 #endif
 
+static int __sys_supports_schedgroups = -1;
+
 static int add_tid_to_cgroup(int tid, const char *grp_name)
 {
     int fd;
@@ -58,10 +60,8 @@ static int add_tid_to_cgroup(int tid, const char *grp_name)
     return 0;
 }
 
-int set_sched_policy(int tid, SchedPolicy policy)
+static inline void initialize()
 {
-    static int __sys_supports_schedgroups = -1;
-
     if (__sys_supports_schedgroups < 0) {
         if (!access("/dev/cpuctl/tasks", F_OK)) {
             __sys_supports_schedgroups = 1;
@@ -69,6 +69,91 @@ int set_sched_policy(int tid, SchedPolicy policy)
             __sys_supports_schedgroups = 0;
         }
     }
+}
+
+/*
+ * Try to get the scheduler group.
+ *
+ * The data from /proc/<pid>/cgroup looks like:
+ *  2:cpu:/bg_non_interactive
+ *
+ * We return the part after the "/", which will be an empty string for
+ * the default cgroup.  If the string is longer than "bufLen", the string
+ * will be truncated.
+ */
+static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
+{
+#ifdef HAVE_ANDROID_OS
+    char pathBuf[32];
+    char readBuf[256];
+    ssize_t count;
+    int fd;
+
+    snprintf(pathBuf, sizeof(pathBuf), "/proc/%d/cgroup", tid);
+    if ((fd = open(pathBuf, O_RDONLY)) < 0) {
+        return -1;
+    }
+
+    count = read(fd, readBuf, sizeof(readBuf));
+    if (count <= 0) {
+        close(fd);
+        errno = ENODATA;
+        return -1;
+    }
+    close(fd);
+
+    readBuf[--count] = '\0';    /* remove the '\n', now count==strlen */
+
+    char* cp = strchr(readBuf, '/');
+    if (cp == NULL) {
+        readBuf[sizeof(readBuf)-1] = '\0';
+        errno = ENODATA;
+        return -1;
+    }
+
+    memcpy(buf, cp+1, count);   /* count-1 for cp+1, count+1 for NUL */
+    return 0;
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+}
+
+int get_sched_policy(int tid, SchedPolicy *policy)
+{
+    initialize();
+
+    if (__sys_supports_schedgroups) {
+        char grpBuf[32];
+        if (getSchedulerGroup(tid, grpBuf, sizeof(grpBuf)) < 0)
+            return -1;
+        if (grpBuf[0] == '\0') {
+            *policy = SP_FOREGROUND;
+        } else if (!strcmp(grpBuf, "bg_non_interactive")) {
+            *policy = SP_BACKGROUND;
+        } else {
+            errno = ERANGE;
+            return -1;
+        }
+    } else {
+        int rc = sched_getscheduler(tid);
+        if (rc < 0)
+            return -1;
+        else if (rc == SCHED_NORMAL)
+            *policy = SP_FOREGROUND;
+        else if (rc == SCHED_BATCH)
+            *policy = SP_BACKGROUND;
+        else {
+            errno = ERANGE;
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int set_sched_policy(int tid, SchedPolicy policy)
+{
+    initialize();
 
     if (__sys_supports_schedgroups) {
         const char *grp = NULL;
