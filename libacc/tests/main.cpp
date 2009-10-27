@@ -38,7 +38,14 @@ int run(MainPtr mainFunc, int argc, char** argv) {
 }
 
 ACCvoid* symbolLookup(ACCvoid* pContext, const ACCchar* name) {
-    return (ACCvoid*) dlsym(RTLD_DEFAULT, name);
+    // Call dlerror once to clear out any preexisting error condition.
+    (void) dlerror();
+    ACCvoid* result = (ACCvoid*) dlsym(RTLD_DEFAULT, name);
+    const char* error = dlerror();
+    if (error) {
+        fprintf(stderr, "%s\"%s\"\n", error, name);
+    }
+    return result;
 }
 
 #ifdef PROVIDE_ARM_DISASSEMBLY
