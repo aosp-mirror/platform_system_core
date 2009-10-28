@@ -27,6 +27,7 @@ typedef enum {
 } SchedPolicy;
 
 extern int set_sched_policy(int tid, SchedPolicy policy);
+extern int get_sched_policy(int tid, SchedPolicy *policy);
 
 #ifdef __cplusplus
 }
