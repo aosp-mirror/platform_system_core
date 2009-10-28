@@ -22,6 +22,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#if defined(HAVE_PRCTL)
+#include <sys/prctl.h>
+#endif
+
 #define PROCESS_NAME_DEVICE "/sys/qemu_trace/process_name"
 
 static const char* process_name = "unknown";
@@ -35,9 +39,18 @@ void set_process_name(const char* new_name) {
     }
 
     // We never free the old name. Someone else could be using it.
-    char* copy = (char*) malloc(strlen(new_name) + 1);
+    int len = strlen(new_name);
+    char* copy = (char*) malloc(len + 1);
     strcpy(copy, new_name);
     process_name = (const char*) copy;
+
+#if defined(HAVE_PRCTL)
+    if (len < 16) {
+        prctl(PR_SET_NAME, (unsigned long) new_name, 0, 0, 0);
+    } else {
+        prctl(PR_SET_NAME, (unsigned long) new_name + len - 15, 0, 0, 0);
+    }
+#endif
 
     // If we know we are not running in the emulator, then return.
     if (running_in_emulator == 0) {
