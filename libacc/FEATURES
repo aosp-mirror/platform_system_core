@@ -21,7 +21,7 @@ Supported C language subset:
 
         * Pointer indirection ('*') is supported.
 
-        * Square brackets can be used for pointer arithmetic.
+        * Square brackets are supported.
 
         * '=' and <op>= are supported.
 
@@ -37,11 +37,12 @@ Supported C language subset:
         + variables can be initialized in declarations.
         + Only ANSI-style function declarations are supported.
            - "..." is not supported.
-        - short is not supported
+        - short is supported
         - const is not supported
-        - arrays are not supported
+        - signed and unsigned are not supported.
+        - arrays are supported
         - long doubles are not supported
-        - structs are not supported
+        - structs and unions are supported
 
     - Unknown functions and variables are bound at compile time by calling
       back to the caller. For the 'acc' command-line tool unknown functions
@@ -66,9 +67,12 @@ Supported C language subset:
 
     - Float and double constants are supported.
 
-    - '#define' is supported without function like arguments. No macro
-      recursion is tolerated. Other preprocessor directives are
-      ignored.
+    - '#define' is supported without function like arguments.
+    - Macro recursion is allowed.
+    - Self-referential macros are handled as in gcc.
+    - '#pragma' is supported. The pragma text is passed to a callback function,
+       and is used to implement meta-information.
+    - Other preprocessor directives are ignored.
 
     - C Strings and C character constants are supported. All ANSI C
       character escapes are supported.
