@@ -373,6 +373,12 @@ result: 0""", """testing...
 Total bad: 0
 """)
 
+    def testMacros(self):
+        self.compileCheck(["-R", "data/macros.c"], """Executing compiled code:
+result: 0""", """A = 6
+A = 10
+""")
+
     def testpointers2(self):
         self.compileCheck(["-R", "data/pointers2.c"], """Executing compiled code:
 result: 0""", """a = 0, *pa = 0

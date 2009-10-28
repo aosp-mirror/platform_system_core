@@ -3896,6 +3896,16 @@ class Compiler : public ErrorSink {
         Vector<Mark> mLevelStack;
     };
 
+    struct MacroState {
+        tokenid_t name; // Name of the current macro we are expanding
+        char* dptr; // point to macro text during macro playback
+        int dch; // Saves old value of ch during a macro playback
+    };
+
+#define MACRO_NESTING_MAX 32
+    MacroState macroState[MACRO_NESTING_MAX];
+    int macroLevel; // -1 means not playing any macro.
+
     int ch; // Current input character, or EOF
     tokenid_t tok;      // token
     intptr_t tokc;    // token extra info
@@ -3907,8 +3917,6 @@ class Compiler : public ErrorSink {
     char* glo;  // global variable index
     String mTokenString;
     bool mbSuppressMacroExpansion;
-    char* dptr; // Macro state: Points to macro text during macro playback.
-    int dch;    // Macro state: Saves old value of ch during a macro playback.
     char* pGlobalBase;
     ACCSymbolLookupFn mpSymbolLookupFn;
     void* mpSymbolLookupContext;
@@ -4016,9 +4024,6 @@ class Compiler : public ErrorSink {
 
     static const int LOCAL = 0x200;
 
-    static const int SYM_FORWARD = 0;
-    static const int SYM_DEFINE = 1;
-
     /* tokens in string heap */
     static const int TAG_TOK = ' ';
 
@@ -4100,11 +4105,17 @@ class Compiler : public ErrorSink {
     }
 
     void inp() {
-        if (dptr) {
-            ch = *dptr++;
+        // Close any totally empty macros. We leave them on the stack until now
+        // so that we know which macros are being expanded when checking if the
+        // last token in the macro is a macro that's already being expanded.
+        while (macroLevel >= 0 && macroState[macroLevel].dptr == NULL) {
+            macroLevel--;
+        }
+        if (macroLevel >= 0) {
+            ch = *macroState[macroLevel].dptr++;
             if (ch == 0) {
-                dptr = 0;
-                ch = dch;
+                ch = macroState[macroLevel].dch;
+                macroState[macroLevel].dptr = NULL; // This macro's done
             }
         } else {
             if (mbBumpLine) {
@@ -4269,6 +4280,15 @@ class Compiler : public ErrorSink {
         // fprintf(stderr, "float constant: %s (%d) %g\n", pText, tok, tokd);
     }
 
+    bool currentlyBeingExpanded(tokenid_t id) {
+        for (int i = 0; i <= macroLevel; i++) {
+            if (macroState[macroLevel].name == id) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void next() {
         int l, a;
 
@@ -4350,12 +4370,22 @@ class Compiler : public ErrorSink {
             if (! mbSuppressMacroExpansion) {
                 // Is this a macro?
                 char* pMacroDefinition = mTokenTable[tok].mpMacroDefinition;
-                if (pMacroDefinition) {
+                if (pMacroDefinition && !currentlyBeingExpanded(tok)) {
                     // Yes, it is a macro
-                    dptr = pMacroDefinition;
-                    dch = ch;
-                    inp();
-                    next();
+#if 0
+                    printf("Expanding macro %s -> %s",
+                            mTokenString.getUnwrapped(), pMacroDefinition);
+#endif
+                    if (macroLevel >= MACRO_NESTING_MAX-1) {
+                        error("Too many levels of macro recursion.");
+                    } else {
+                        macroLevel++;
+                        macroState[macroLevel].name = tok;
+                        macroState[macroLevel].dptr = pMacroDefinition;
+                        macroState[macroLevel].dch = ch;
+                        inp();
+                        next();
+                    }
                 }
             }
         } else {
@@ -4441,9 +4471,7 @@ class Compiler : public ErrorSink {
         next();
         mbSuppressMacroExpansion = false;
         tokenid_t name = tok;
-        String* pName = new String();
         if (ch == '(') {
-            delete pName;
             error("Defines with arguments not supported");
             return;
         }
@@ -4471,6 +4499,13 @@ class Compiler : public ErrorSink {
         memcpy(pDefn, value.getUnwrapped(), value.len());
         pDefn[value.len()] = 0;
         mTokenTable[name].mpMacroDefinition = pDefn;
+#if 0
+        {
+            String buf;
+            decodeToken(buf, name, true);
+            fprintf(stderr, "define %s = \"%s\"\n", buf.getUnwrapped(), pDefn);
+        }
+#endif
     }
 
     void doPragma() {
@@ -4769,57 +4804,59 @@ class Compiler : public ErrorSink {
                 Type* pDecl = NULL;
                 VariableInfo* pVI = NULL;
                 Type* pFn = pGen->getR0Type();
-                assert(pFn->tag == TY_POINTER);
-                assert(pFn->pHead->tag == TY_FUNC);
-                pDecl = pFn->pHead;
-                pGen->pushR0();
-                Type* pArgList = pDecl->pTail;
-                bool varArgs = pArgList == NULL;
-                /* push args and invert order */
-                a = pGen->beginFunctionCallArguments();
-                int l = 0;
-                int argCount = 0;
-                while (tok != ')' && tok != EOF) {
-                    if (! varArgs && !pArgList) {
-                        error("Unexpected argument.");
-                    }
-                    expr();
-                    pGen->forceR0RVal();
-                    Type* pTargetType;
-                    if (pArgList) {
-                        pTargetType = pArgList->pHead;
-                        pArgList = pArgList->pTail;
-                    } else {
-                        // This is a ... function, just pass arguments in their
-                        // natural type.
-                        pTargetType = pGen->getR0Type();
-                        if (pTargetType->tag == TY_FLOAT) {
-                            pTargetType = mkpDouble;
-                        } else if (pTargetType->tag == TY_ARRAY) {
-                            // Pass arrays by pointer.
-                            pTargetType = pTargetType->pTail;
+                if (pFn->tag == TY_POINTER && pFn->pHead->tag == TY_FUNC) {
+                    pDecl = pFn->pHead;
+                    pGen->pushR0();
+                    Type* pArgList = pDecl->pTail;
+                    bool varArgs = pArgList == NULL;
+                    /* push args and invert order */
+                    a = pGen->beginFunctionCallArguments();
+                    int l = 0;
+                    int argCount = 0;
+                    while (tok != ')' && tok != EOF) {
+                        if (! varArgs && !pArgList) {
+                            error("Unexpected argument.");
                         }
+                        expr();
+                        pGen->forceR0RVal();
+                        Type* pTargetType;
+                        if (pArgList) {
+                            pTargetType = pArgList->pHead;
+                            pArgList = pArgList->pTail;
+                        } else {
+                            // This is a ... function, just pass arguments in their
+                            // natural type.
+                            pTargetType = pGen->getR0Type();
+                            if (pTargetType->tag == TY_FLOAT) {
+                                pTargetType = mkpDouble;
+                            } else if (pTargetType->tag == TY_ARRAY) {
+                                // Pass arrays by pointer.
+                                pTargetType = pTargetType->pTail;
+                            }
+                        }
+                        if (pTargetType->tag == TY_VOID) {
+                            error("Can't pass void value for argument %d",
+                                  argCount + 1);
+                        } else {
+                            l += pGen->storeR0ToArg(l, pTargetType);
+                        }
+                        if (accept(',')) {
+                            // fine
+                        } else if ( tok != ')') {
+                            error("Expected ',' or ')'");
+                        }
+                        argCount += 1;
                     }
-                    if (pTargetType->tag == TY_VOID) {
-                        error("Can't pass void value for argument %d",
-                              argCount + 1);
-                    } else {
-                        l += pGen->storeR0ToArg(l, pTargetType);
+                    if (! varArgs && pArgList) {
+                        error("Expected more argument(s). Saw %d", argCount);
                     }
-                    if (accept(',')) {
-                        // fine
-                    } else if ( tok != ')') {
-                        error("Expected ',' or ')'");
-                    }
-                    argCount += 1;
+                    pGen->endFunctionCallArguments(pDecl, a, l);
+                    skip(')');
+                    pGen->callIndirect(l, pDecl);
+                    pGen->adjustStackAfterCall(pDecl, l, true);
+                } else {
+                    error("Expected a function value to left of '('.");
                 }
-                if (! varArgs && pArgList) {
-                    error("Expected more argument(s). Saw %d", argCount);
-                }
-                pGen->endFunctionCallArguments(pDecl, a, l);
-                skip(')');
-                pGen->callIndirect(l, pDecl);
-                pGen->adjustStackAfterCall(pDecl, l, true);
             } else {
                 break;
             }
@@ -5620,8 +5657,12 @@ class Compiler : public ErrorSink {
         if (token == EOF ) {
             buffer.printf("EOF");
         } else if (token == TOK_NUM) {
-            buffer.printf("numeric constant");
-        } else if (token >= 0 && token < 256) {
+            buffer.printf("numeric constant %d(0x%x)", tokc, tokc);
+        } else if (token == TOK_NUM_FLOAT) {
+            buffer.printf("numeric constant float %g", tokd);
+        } else if (token == TOK_NUM_DOUBLE) {
+            buffer.printf("numeric constant double %g", tokd);
+        }  else if (token >= 0 && token < 256) {
             if (token < 32) {
                 buffer.printf("'\\x%02x'", token);
             } else {
@@ -5828,8 +5869,7 @@ class Compiler : public ErrorSink {
         rsym = 0;
         loc = 0;
         glo = 0;
-        dptr = 0;
-        dch = 0;
+        macroLevel = -1;
         file = 0;
         pGlobalBase = 0;
         pCodeBuf = 0;
