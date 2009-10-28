@@ -311,6 +311,12 @@ Testing read/write (double*): 8.8 9.9
 result: 0""", """a = 99, b = 41
 ga = 100, gb = 44""")
 
+    def testTypedef(self):
+        self.compileCheck(["-R", "data/typedef.c"], """Executing compiled code:
+result: 0""", """x = 3
+(4, 6) = (1, 2) + (3, 4)
+""")
+
     def testPointerArithmetic(self):
         self.compileCheck(["-R", "data/pointers.c"], """Executing compiled code:
 result: 0""", """Pointer difference: 1 4

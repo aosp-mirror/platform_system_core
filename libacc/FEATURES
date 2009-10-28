@@ -43,6 +43,8 @@ Supported C language subset:
         - arrays are supported
         - long doubles are not supported
         - structs and unions are supported
+        - typedef is supported
+        - explicit storage class specifiers are not supported: register, auto, static, extern
 
     - Unknown functions and variables are bound at compile time by calling
       back to the caller. For the 'acc' command-line tool unknown functions
