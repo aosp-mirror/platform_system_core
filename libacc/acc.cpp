@@ -5003,7 +5003,7 @@ class Compiler : public ErrorSink {
         return pGen->gtst(0, 0);
     }
 
-    void block(intptr_t l, bool outermostFunctionBlock) {
+    void block(int* breakLabel, int continueAddress, bool outermostFunctionBlock) {
         intptr_t a, n, t;
 
         Type* pBaseType;
@@ -5015,12 +5015,12 @@ class Compiler : public ErrorSink {
             skip('(');
             a = test_expr();
             skip(')');
-            block(l, false);
+            block(breakLabel, continueAddress, false);
             if (tok == TOK_ELSE) {
                 next();
                 n = pGen->gjmp(0); /* jmp */
                 pGen->gsym(a);
-                block(l, false);
+                block(breakLabel, continueAddress, false);
                 pGen->gsym(n); /* patch else jmp */
             } else {
                 pGen->gsym(a); /* patch if test */
@@ -5050,7 +5050,7 @@ class Compiler : public ErrorSink {
                 }
             }
             skip(')');
-            block((intptr_t) &a, false);
+            block(&a, n, false);
             pGen->gjmp(n - pCodeBuf->getPC() - pGen->jumpOffset()); /* jmp */
             pGen->gsym(a);
         } else if (tok == '{') {
@@ -5059,7 +5059,7 @@ class Compiler : public ErrorSink {
             }
             next();
             while (tok != '}' && tok != EOF)
-                block(l, false);
+                block(breakLabel, continueAddress, false);
             skip('}');
             if (! outermostFunctionBlock) {
                 mLocals.popLevel();
@@ -5081,7 +5081,17 @@ class Compiler : public ErrorSink {
                 }
                 rsym = pGen->gjmp(rsym); /* jmp */
             } else if (accept(TOK_BREAK)) {
-                *(int *) l = pGen->gjmp(*(int *) l);
+                if (breakLabel) {
+                    *breakLabel = pGen->gjmp(*breakLabel);
+                } else {
+                    error("break statement must be within a for, do, while, or switch statement");
+                }
+            } else if (accept(TOK_CONTINUE)) {
+                if (continueAddress) {
+                    pGen->gjmp(continueAddress - pCodeBuf->getPC() - pGen->jumpOffset());
+                } else {
+                    error("continue statement must be within a for, do, or while statement");
+                }
             } else if (tok != ';')
                 commaExpr();
             skip(';');
@@ -5907,7 +5917,7 @@ class Compiler : public ErrorSink {
                     rsym = loc = 0;
                     pReturnType = pDecl->pHead;
                     a = pGen->functionEntry(pDecl);
-                    block(0, true);
+                    block(0, 0, true);
                     pGen->gsym(rsym);
                     pGen->functionExit(pDecl, a, loc);
                     mLocals.popLevel();

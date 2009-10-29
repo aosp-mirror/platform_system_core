@@ -187,6 +187,10 @@ class TestACC(unittest.TestCase):
         self.compileCheck(["-R", "data/returnval-ansi.c"],
         "Executing compiled code:\nresult: 42\n")
 
+    def testContinue(self):
+        self.compileCheck(["-R", "data/continue.c"],
+        "Executing compiled code:\nresult: 400\n")
+
     def testStringLiteralConcatenation(self):
         self.compileCheck(["-R", "data/testStringConcat.c"],
         "Executing compiled code:\nresult: 13\n", "Hello, world\n")
