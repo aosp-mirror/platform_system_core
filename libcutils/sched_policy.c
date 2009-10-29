@@ -40,7 +40,7 @@
   #define SCHED_BATCH 3
 #endif
 
-#define POLICY_DEBUG 1
+#define POLICY_DEBUG 0
 
 static int __sys_supports_schedgroups = -1;
 
@@ -52,8 +52,10 @@ static int add_tid_to_cgroup(int tid, const char *grp_name)
 
     sprintf(path, "/dev/cpuctl/%s/tasks", grp_name);
 
-    if ((fd = open(path, O_WRONLY)) < 0)
+    if ((fd = open(path, O_WRONLY)) < 0) {
+        LOGE("add_tid_to_cgroup failed to open '%s' (%s)\n", path, strerror(errno));
         return -1;
+    }
 
     sprintf(text, "%d", tid);
     if (write(fd, text, strlen(text)) < 0) {
@@ -193,7 +195,7 @@ int set_sched_policy(int tid, SchedPolicy policy)
 #endif
 
     if (__sys_supports_schedgroups) {
-        const char *grp = NULL;
+        const char *grp = "";
 
         if (policy == SP_BACKGROUND) {
             grp = "bg_non_interactive";
