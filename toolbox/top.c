@@ -39,6 +39,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cutils/sched_policy.h>
+
 struct cpu_info {
     long unsigned utime, ntime, stime, itime;
     long unsigned iowtime, irqtime, sirqtime;
@@ -64,6 +66,7 @@ struct proc_info {
     long vss;
     long rss;
     int num_threads;
+    char policy[32];
 };
 
 struct proc_list {
@@ -88,6 +91,7 @@ static struct proc_info *alloc_proc(void);
 static void free_proc(struct proc_info *proc);
 static void read_procs(void);
 static int read_stat(char *filename, struct proc_info *proc);
+static void read_policy(int pid, struct proc_info *proc);
 static void add_proc(int proc_num, struct proc_info *proc);
 static int read_cmdline(char *filename, struct proc_info *proc);
 static int read_status(char *filename, struct proc_info *proc);
@@ -260,6 +264,8 @@ static void read_procs(void) {
             sprintf(filename, "/proc/%d/status", pid);
             read_status(filename, proc);
 
+            read_policy(pid, proc);
+
             proc->num_threads = 0;
         } else {
             sprintf(filename, "/proc/%d/cmdline", pid);
@@ -288,6 +294,8 @@ static void read_procs(void) {
 
                 sprintf(filename, "/proc/%d/task/%d/stat", pid, tid);
                 read_stat(filename, proc);
+
+                read_policy(tid, proc);
 
                 strcpy(proc->name, cur_proc.name);
                 proc->uid = cur_proc.uid;
@@ -368,6 +376,20 @@ static int read_cmdline(char *filename, struct proc_info *proc) {
     return 0;
 }
 
+static void read_policy(int pid, struct proc_info *proc) {
+    SchedPolicy p;
+    if (get_sched_policy(pid, &p) < 0)
+        strcpy(proc->policy, "unk");
+    else {
+        if (p == SP_BACKGROUND)
+            strcpy(proc->policy, "bg");
+        else if (p == SP_FOREGROUND)
+            strcpy(proc->policy, "fg");
+        else
+            strcpy(proc->policy, "er");
+    }
+}
+
 static int read_status(char *filename, struct proc_info *proc) {
     FILE *file;
     char line[MAX_LINE];
@@ -432,9 +454,9 @@ static void print_procs(void) {
             total_delta_time);
     printf("\n");
     if (!threads) 
-        printf("%5s %4s %1s %5s %7s %7s %-8s %s\n", "PID", "CPU%", "S", "#THR", "VSS", "RSS", "UID", "Name");
+        printf("%5s %4s %1s %5s %7s %7s %3s %-8s %s\n", "PID", "CPU%", "S", "#THR", "VSS", "RSS", "PCY", "UID", "Name");
     else
-        printf("%5s %5s %4s %1s %7s %7s %-8s %-15s %s\n", "PID", "TID", "CPU%", "S", "VSS", "RSS", "UID", "Thread", "Proc");
+        printf("%5s %5s %4s %1s %7s %7s %3s %-8s %-15s %s\n", "PID", "TID", "CPU%", "S", "VSS", "RSS", "PCY", "UID", "Thread", "Proc");
 
     for (i = 0; i < num_new_procs; i++) {
         proc = new_procs[i];
@@ -456,11 +478,11 @@ static void print_procs(void) {
             group_str = group_buf;
         }
         if (!threads) 
-            printf("%5d %3ld%% %c %5d %6ldK %6ldK %-8.8s %s\n", proc->pid, proc->delta_time * 100 / total_delta_time, proc->state, proc->num_threads,
-                proc->vss / 1024, proc->rss * getpagesize() / 1024, user_str, proc->name[0] != 0 ? proc->name : proc->tname);
+            printf("%5d %3ld%% %c %5d %6ldK %6ldK %3s %-8.8s %s\n", proc->pid, proc->delta_time * 100 / total_delta_time, proc->state, proc->num_threads,
+                proc->vss / 1024, proc->rss * getpagesize() / 1024, proc->policy, user_str, proc->name[0] != 0 ? proc->name : proc->tname);
         else
-            printf("%5d %5d %3ld%% %c %6ldK %6ldK %-8.8s %-15s %s\n", proc->pid, proc->tid, proc->delta_time * 100 / total_delta_time, proc->state,
-                proc->vss / 1024, proc->rss * getpagesize() / 1024, user_str, proc->tname, proc->name);
+            printf("%5d %5d %3ld%% %c %6ldK %6ldK %3s %-8.8s %-15s %s\n", proc->pid, proc->tid, proc->delta_time * 100 / total_delta_time, proc->state,
+                proc->vss / 1024, proc->rss * getpagesize() / 1024, proc->policy, user_str, proc->tname, proc->name);
     }
 }
 
