@@ -5003,7 +5003,7 @@ class Compiler : public ErrorSink {
         return pGen->gtst(0, 0);
     }
 
-    void block(int* breakLabel, int continueAddress, bool outermostFunctionBlock) {
+    void block(intptr_t* breakLabel, intptr_t continueAddress, bool outermostFunctionBlock) {
         intptr_t a, n, t;
 
         Type* pBaseType;
