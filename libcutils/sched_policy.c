@@ -23,6 +23,9 @@
 #include <errno.h>
 #include <fcntl.h>
 
+#define LOG_TAG "SchedPolicy"
+#include "cutils/log.h"
+
 #ifdef HAVE_SCHED_H
 
 #include <sched.h>
@@ -36,6 +39,8 @@
 #ifndef SCHED_BATCH
   #define SCHED_BATCH 3
 #endif
+
+#define POLICY_DEBUG 1
 
 static int __sys_supports_schedgroups = -1;
 
@@ -154,6 +159,38 @@ int get_sched_policy(int tid, SchedPolicy *policy)
 int set_sched_policy(int tid, SchedPolicy policy)
 {
     initialize();
+
+#if POLICY_DEBUG
+    char statfile[64];
+    char statline[1024];
+    char thread_name[255];
+    int fd;
+
+    sprintf(statfile, "/proc/%d/stat", tid);
+    memset(thread_name, 0, sizeof(thread_name));
+
+    fd = open(statfile, O_RDONLY);
+    if (fd >= 0) {
+        int rc = read(fd, statline, 1023);
+        close(fd);
+        statline[rc] = 0;
+        char *p = statline;
+        char *q;
+
+        for (p = statline; *p != '('; p++);
+        p++;
+        for (q = p; *q != ')'; q++);
+
+        strncpy(thread_name, p, (q-p));
+    }
+    if (policy == SP_BACKGROUND) {
+        LOGD("vvv tid %d (%s)", tid, thread_name);
+    } else if (policy == SP_FOREGROUND) {
+        LOGD("^^^ tid %d (%s)", tid, thread_name);
+    } else {
+        LOGD("??? tid %d (%s)", tid, thread_name);
+    }
+#endif
 
     if (__sys_supports_schedgroups) {
         const char *grp = NULL;
