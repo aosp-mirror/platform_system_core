@@ -91,6 +91,11 @@
 /* #define  HAVE_TERMIO_H */
 
 /*
+ * Define this if you have <sys/sendfile.h>
+ */
+/* #define  HAVE_SYS_SENDFILE_H 1 */
+
+/*
  * Define this if you build against MSVCRT.DLL
  */
 /* #define HAVE_MS_C_RUNTIME */
