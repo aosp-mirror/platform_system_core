@@ -78,6 +78,11 @@
 #define  HAVE_TERMIO_H 1
 
 /*
+ * Define this if you have <sys/sendfile.h>
+ */
+#define  HAVE_SYS_SENDFILE_H 1
+
+/*
  * Define this if you build against have Microsoft C runtime (MSVCRT.DLL)
  */
 /* #define HAVE_MS_C_RUNTIME */
