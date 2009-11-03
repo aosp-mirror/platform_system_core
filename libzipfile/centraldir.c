@@ -235,7 +235,7 @@ read_central_dir(Zipfile *file)
     len = (buf+bufsize)-p;
     for (i=0; i < file->totalEntryCount; i++) {
         Zipentry* entry = malloc(sizeof(Zipentry));
-        memset(entry, sizeof(Zipentry), 0);
+        memset(entry, 0, sizeof(Zipentry));
 
         err = read_central_directory_entry(file, entry, &p, &len);
         if (err != 0) {
