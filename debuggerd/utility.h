@@ -21,6 +21,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#include "symbol_table.h"
+
 #ifndef PT_ARM_EXIDX
 #define PT_ARM_EXIDX    0x70000001      /* .ARM.exidx segment */
 #endif
@@ -33,6 +35,7 @@ typedef struct mapinfo {
     unsigned end;
     unsigned exidx_start;
     unsigned exidx_end;
+    struct symbol_table *symbols;
     char name[];
 } mapinfo;
 
