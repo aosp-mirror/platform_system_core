@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2009 bsdroid project
+ *               Alexey Tarasov <tarasov@dodologics.com>
+ *
  * Copyright (C) 2007 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,15 +22,15 @@
 #include <limits.h>
 #include <stdio.h>
 
-void get_my_path(char *exe, size_t maxLen)
+void
+get_my_path(char *exe, size_t maxLen)
 {
     char proc[64];
-    snprintf(proc, sizeof proc, "/proc/%d/exe", getpid());
+
+    snprintf(proc, sizeof(proc), "/proc/%d/file", getpid());
+
     int err = readlink(proc, exe, maxLen - 1);
-    if(err > 0) {
-        exe[err] = '\0';
-    } else {
-        exe[0] = '\0';
-    }
+
+    exe[err > 0 ? err : 0] = '\0';
 }
 

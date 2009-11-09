@@ -17,7 +17,7 @@
 #import <Carbon/Carbon.h>
 #include <unistd.h>
 
-void get_my_path(char s[PATH_MAX])
+void get_my_path(char *s, size_t maxLen)
 {
     ProcessSerialNumber psn;
     GetCurrentProcess(&psn);
@@ -25,6 +25,6 @@ void get_my_path(char s[PATH_MAX])
     dict = ProcessInformationCopyDictionary(&psn, 0xffffffff);
     CFStringRef value = (CFStringRef)CFDictionaryGetValue(dict,
                 CFSTR("CFBundleExecutable"));
-    CFStringGetCString(value, s, PATH_MAX - 1, kCFStringEncodingUTF8);
+    CFStringGetCString(value, s, maxLen, kCFStringEncodingUTF8);
 }
 

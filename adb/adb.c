@@ -783,7 +783,7 @@ int launch_server()
         fprintf(stderr, "pipe failed in launch_server, errno: %d\n", errno);
         return -1;
     }
-    get_my_path(path);
+    get_my_path(path, PATH_MAX);
     pid_t pid = fork();
     if(pid < 0) return -1;
 

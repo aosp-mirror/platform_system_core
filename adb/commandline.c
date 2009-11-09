@@ -50,7 +50,7 @@ enum {
 
 static int do_cmd(transport_type ttype, char* serial, char *cmd, ...);
 
-void get_my_path(char s[PATH_MAX]);
+void get_my_path(char *s, size_t maxLen);
 int find_sync_dirs(const char *srcarg,
         char **android_srcdir_out, char **data_srcdir_out);
 int install_app(transport_type transport, char* serial, int argc, char** argv);
@@ -673,7 +673,7 @@ static char *find_top(char path_buf[PATH_MAX])
         /* If the CWD isn't under a good-looking top, see if the
          * executable is.
          */
-        get_my_path(dir);
+        get_my_path(dir, PATH_MAX);
         top = find_top_from(dir, path_buf);
     }
     return top;
