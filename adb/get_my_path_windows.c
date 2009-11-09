@@ -18,14 +18,17 @@
 #include <assert.h>
 #include <windows.h>
 
-void get_my_path(char exe[PATH_MAX])
+void get_my_path(char *exe, size_t maxLen)
 {
-    char*  r;
+    char  *r;
 
-    GetModuleFileName( NULL, exe, PATH_MAX-1 );
-    exe[PATH_MAX-1] = 0;
-    r = strrchr( exe, '\\' );
-    if (r)
-        *r = 0;
+    /* XXX: should be GetModuleFileNameA */
+    if (GetModuleFileName(NULL, exe, maxLen) > 0) {
+        r = strrchr(exe, '\\');
+        if (r != NULL)
+            *r = '\0';
+    } else {
+        exe[0] = '\0';
+    }
 }
 
