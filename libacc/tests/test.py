@@ -442,6 +442,11 @@ result: 0
 result: -2
 ""","""""")
 
+    def testAssignment(self):
+        self.compileCheck(["-R", "data/assignment.c"], """Executing compiled code:
+result: 7
+""","""""")
+
     def testArray(self):
         self.compileCheck(["-R", "data/array.c"], """Executing compiled code:
 localInt: 3

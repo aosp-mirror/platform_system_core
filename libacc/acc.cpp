@@ -1677,6 +1677,7 @@ class Compiler : public ErrorSink {
                             pDestType->tag);
                     break;
             }
+            setR0Type(pDestType);
         }
 
         virtual void loadR0FromR0() {
@@ -2847,6 +2848,7 @@ class Compiler : public ErrorSink {
                             pTargetType->tag);
                     break;
             }
+            setR0Type(pTargetType);
         }
 
         virtual void loadR0FromR0() {
