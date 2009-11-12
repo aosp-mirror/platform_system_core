@@ -12,6 +12,9 @@ LOCAL_STATIC_LIBRARIES := \
     libacc \
     libcutils
 
+LOCAL_LDLIBS := -ldl
+
+    
 LOCAL_MODULE_TAGS := tests
 
 include $(BUILD_HOST_EXECUTABLE)
@@ -46,6 +49,8 @@ LOCAL_SRC_FILES:= \
 LOCAL_STATIC_LIBRARIES := \
     libacc \
     libcutils
+
+LOCAL_LDLIBS := -ldl
 
 LOCAL_MODULE_TAGS := tests
 
