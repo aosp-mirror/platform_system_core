@@ -43,8 +43,9 @@ LOCAL_MODULE:= accRuntimeTest
 LOCAL_SRC_FILES:= \
 	runtimeTest.cpp
 
-LOCAL_SHARED_LIBRARIES := \
-    libacc
+LOCAL_STATIC_LIBRARIES := \
+    libacc \
+    libcutils
 
 LOCAL_MODULE_TAGS := tests
 
