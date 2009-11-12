@@ -8,8 +8,9 @@ LOCAL_MODULE:= acc
 LOCAL_SRC_FILES:= \
 	main.cpp
 
-LOCAL_SHARED_LIBRARIES := \
-    libacc
+LOCAL_STATIC_LIBRARIES := \
+    libacc \
+    libcutils
 
 LOCAL_MODULE_TAGS := tests
 

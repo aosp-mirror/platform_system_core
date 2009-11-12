@@ -11,7 +11,7 @@ LOCAL_SHARED_LIBRARIES := libdl libcutils
 
 include $(BUILD_SHARED_LIBRARY)
 
-# Shared library for host
+# Static library for host
 # ========================================================
 
 include $(CLEAR_VARS)
@@ -23,7 +23,7 @@ LOCAL_CFLAGS := -O0 -g
 LOCAL_STATIC_LIBRARIES := libcutils
 LOCAL_LDLIBS := -ldl
 
-include $(BUILD_HOST_SHARED_LIBRARY)
+include $(BUILD_HOST_STATIC_LIBRARY)
 
 # Build children
 # ========================================================
