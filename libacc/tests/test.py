@@ -10,6 +10,7 @@ gArmInitialized = False
 gUseArm = True
 gUseX86 = True
 gRunOTCCOutput = True
+gCompileOTCCANSI = True
 
 
 def parseArgv():
@@ -59,7 +60,12 @@ def outputCanRun():
 
 def checkEnvironment():
     global gRunOTCCOutput
-    gRunOTCCOutput = uname() == "Linux" and unameM() != "x86_64" and outputCanRun()
+    global gCompileOTCCANSI
+    osName = uname()
+    gRunOTCCOutput = osName == "Linux" and unameM() != "x86_64" and outputCanRun()
+    # OSX doesn't have stdin/stdout/stderr accessible through dll load symbols, so
+    # we can't compile the ANSI version of the OTCC compiler on OS X.
+    gCompileOTCCANSI = osName == "Linux"
 
 def adb(args):
     return runCmd(["adb"] + args)
@@ -180,8 +186,10 @@ class TestACC(unittest.TestCase):
     def testCompileReturnVal(self):
         self.compileCheck(["data/returnval-ansi.c"], "")
 
-    def testCompileOTCCANSII(self):
-        self.compileCheck(["data/otcc-ansi.c"], "", "", ['x86'])
+    def testCompileOTCCANSI(self):
+        global gCompileOTCCANSI
+        if gCompileOTCCANSI:
+            self.compileCheck(["data/otcc-ansi.c"], "", "", ['x86'])
 
     def testRunReturnVal(self):
         self.compileCheck(["-R", "data/returnval-ansi.c"],
