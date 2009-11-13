@@ -32,8 +32,7 @@
 #    include <netdb.h>
 #  endif
 #else
-#include <sys/poll.h>
-#include <sys/reboot.h>
+#  include <sys/reboot.h>
 #endif
 
 typedef struct stinfo stinfo;
@@ -64,6 +63,7 @@ static void dns_service(int fd, void *cookie)
 
     adb_mutex_lock(&dns_lock);
     hp = gethostbyname(hostname);
+    free(cookie);
     if(hp == 0) {
         writex(fd, &zero, 4);
     } else {
@@ -120,6 +120,7 @@ void restart_root_service(int fd, void *cookie)
         if (strcmp(value, "1") != 0) {
             snprintf(buf, sizeof(buf), "adbd cannot run as root in production builds\n");
             writex(fd, buf, strlen(buf));
+            adb_close(fd);
             return;
         }
 
@@ -134,17 +135,57 @@ void restart_root_service(int fd, void *cookie)
     }
 }
 
-void reboot_service(int fd, char *arg)
+void restart_tcp_service(int fd, void *cookie)
+{
+    char buf[100];
+    char value[PROPERTY_VALUE_MAX];
+    int port = (int)cookie;
+
+    if (port <= 0) {
+        snprintf(buf, sizeof(buf), "invalid port\n");
+        writex(fd, buf, strlen(buf));
+        adb_close(fd);
+        return;
+    }
+
+    snprintf(value, sizeof(value), "%d", port);
+    property_set("service.adb.tcp.port", value);
+    snprintf(buf, sizeof(buf), "restarting in TCP mode port: %d\n", port);
+    writex(fd, buf, strlen(buf));
+    adb_close(fd);
+
+    // quit, and init will restart us in TCP mode
+    sleep(1);
+    exit(1);
+}
+
+void restart_usb_service(int fd, void *cookie)
+{
+    char buf[100];
+
+    property_set("service.adb.tcp.port", "0");
+    snprintf(buf, sizeof(buf), "restarting in USB mode\n");
+    writex(fd, buf, strlen(buf));
+    adb_close(fd);
+
+    // quit, and init will restart us in USB mode
+    sleep(1);
+    exit(1);
+}
+
+void reboot_service(int fd, void *arg)
 {
     char buf[100];
     int ret;
 
     sync();
-    ret = __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2, LINUX_REBOOT_CMD_RESTART2, arg);
+    ret = __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
+                    LINUX_REBOOT_CMD_RESTART2, (char *)arg);
     if (ret < 0) {
         snprintf(buf, sizeof(buf), "reboot failed: %s\n", strerror(errno));
         writex(fd, buf, strlen(buf));
     }
+    free(arg);
     adb_close(fd);
 }
 
@@ -213,9 +254,12 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
     return s[0];
 }
 
-#if !ADB_HOST
 static int create_subprocess(const char *cmd, const char *arg0, const char *arg1)
 {
+#ifdef HAVE_WIN32_PROC
+	fprintf(stderr, "error: create_subprocess not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
+	return -1;
+#else /* !HAVE_WIN32_PROC */
     char *devname;
     int ptm;
     pid_t pid;
@@ -258,6 +302,7 @@ static int create_subprocess(const char *cmd, const char *arg0, const char *arg1
                 cmd, strerror(errno), errno);
         exit(-1);
     } else {
+#if !ADB_HOST
         // set child's OOM adjustment to zero
         char text[64];
         snprintf(text, sizeof text, "/proc/%d/oom_adj", pid);
@@ -268,87 +313,17 @@ static int create_subprocess(const char *cmd, const char *arg0, const char *arg1
         } else {
            D("adb: unable to open %s\n", text);
         }
-
+#endif
         return ptm;
     }
+#endif /* !HAVE_WIN32_PROC */
 }
-#endif /* !ADB_HOST */
 
 #if ADB_HOST
 #define SHELL_COMMAND "/bin/sh"
 #else
 #define SHELL_COMMAND "/system/bin/sh"
 #endif
-
-#if !ADB_HOST
-static void shell_service(int s, void *command)
-{
-    char    buffer[MAX_PAYLOAD];
-    char    buffer2[MAX_PAYLOAD];
-    struct pollfd ufds[2];
-    int     fd, ret = 0;
-    unsigned count = 0;
-    char** args = (char **)command;
-    fd = create_subprocess(SHELL_COMMAND, args[0], args[1]);
-
-    while (1) {
-        while (count < sizeof(buffer)) {
-            ufds[0].fd = fd;
-            ufds[0].events = POLLIN | POLLHUP;
-            ufds[0].revents = 0;
-            ufds[1].fd = s;
-            ufds[1].events = POLLIN | POLLHUP;
-            ufds[1].revents = 0;
-            // use a 100ms timeout so we don't block indefinitely with our
-            // buffer partially filled.
-            ret = poll(ufds, 2, 100);
-            if (ret <= 0) {
-                D("poll returned %d\n", ret);
-                // file has closed or we timed out
-                // set ret to 1 so we don't exit the outer loop
-                ret = 1;
-                break;
-            }
-
-            if (ufds[0].revents & POLLIN) {
-                ret = adb_read(fd, buffer + count, sizeof(buffer) - count);
-                D("read fd ret: %d, count: %d\n", ret, count);
-                if (ret > 0)
-                    count += ret;
-                else
-                    break;
-            }
-            if (ufds[1].revents & POLLIN) {
-                ret = adb_read(s, buffer2, sizeof(buffer2));
-                D("read s ret: %d\n", ret);
-                if (ret > 0)
-                    adb_write(fd, buffer2, ret);
-                else
-                    break;
-            }
-
-            if ((ufds[0].revents & POLLHUP) || (ufds[1].revents & POLLHUP)) {
-                // set flag to exit after flushing the buffer
-                ret = -1;
-                break;
-            }
-        }
-
-        D("writing: %d\n", count);
-        if (count > 0) {
-            adb_write(s, buffer, count);
-            count = 0;
-        }
-        if (ret <= 0)
-            break;
-    }
-
-    D("shell_service done\n");
-
-    adb_close(fd);
-    adb_close(s);
-}
-#endif // !ADB_HOST
 
 int service_to_fd(const char *name)
 {
@@ -400,27 +375,32 @@ int service_to_fd(const char *name)
         ret = create_jdwp_connection_fd(atoi(name+5));
     } else if (!strncmp(name, "log:", 4)) {
         ret = create_service_thread(log_service, get_log_file_path(name + 4));
+#endif
     } else if(!HOST && !strncmp(name, "shell:", 6)) {
-        const char* args[2];
         if(name[6]) {
-            args[0] = "-c";
-            args[1] = name + 6;
+            ret = create_subprocess(SHELL_COMMAND, "-c", name + 6);
         } else {
-            args[0] = "-";
-            args[1] = 0;
+            ret = create_subprocess(SHELL_COMMAND, "-", 0);
         }
-        ret = create_service_thread(shell_service, (void *)args);
+#if !ADB_HOST
     } else if(!strncmp(name, "sync:", 5)) {
         ret = create_service_thread(file_sync_service, NULL);
     } else if(!strncmp(name, "remount:", 8)) {
         ret = create_service_thread(remount_service, NULL);
     } else if(!strncmp(name, "reboot:", 7)) {
-        char* arg = name + 7;
-        if (*name == 0)
-            arg = NULL;
+        void* arg = strdup(name + 7);
+        if(arg == 0) return -1;
         ret = create_service_thread(reboot_service, arg);
     } else if(!strncmp(name, "root:", 5)) {
         ret = create_service_thread(restart_root_service, NULL);
+    } else if(!strncmp(name, "tcpip:", 6)) {
+        int port;
+        if (sscanf(name + 6, "%d", &port) == 0) {
+            port = 0;
+        }
+        ret = create_service_thread(restart_tcp_service, (void *)port);
+    } else if(!strncmp(name, "usb:", 4)) {
+        ret = create_service_thread(restart_usb_service, NULL);
 #endif
 #if 0
     } else if(!strncmp(name, "echo:", 5)){

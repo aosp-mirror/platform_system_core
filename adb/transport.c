@@ -584,17 +584,36 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
         return;
     }
 
+    /* don't create transport threads for inaccessible devices */
+    if (t->connection_state != CS_NOPERM) {
         /* initial references are the two threads */
-    t->ref_count = 2;
+        t->ref_count = 2;
 
-    if(adb_socketpair(s)) {
-        fatal_errno("cannot open transport socketpair");
+        if(adb_socketpair(s)) {
+            fatal_errno("cannot open transport socketpair");
+        }
+
+        D("transport: %p (%d,%d) starting\n", t, s[0], s[1]);
+
+        t->transport_socket = s[0];
+        t->fd = s[1];
+
+        D("transport: %p install %d\n", t, t->transport_socket );
+        fdevent_install(&(t->transport_fde),
+                        t->transport_socket,
+                        transport_socket_events,
+                        t);
+
+        fdevent_set(&(t->transport_fde), FDE_READ);
+
+        if(adb_thread_create(&input_thread_ptr, input_thread, t)){
+            fatal_errno("cannot create input thread");
+        }
+
+        if(adb_thread_create(&output_thread_ptr, output_thread, t)){
+            fatal_errno("cannot create output thread");
+        }
     }
-
-    D("transport: %p (%d,%d) starting\n", t, s[0], s[1]);
-
-    t->transport_socket = s[0];
-    t->fd = s[1];
 
         /* put us on the master device list */
     adb_mutex_lock(&transport_lock);
@@ -603,22 +622,6 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
     t->next->prev = t;
     t->prev->next = t;
     adb_mutex_unlock(&transport_lock);
-
-    D("transport: %p install %d\n", t, t->transport_socket );
-    fdevent_install(&(t->transport_fde),
-                    t->transport_socket,
-                    transport_socket_events,
-                    t);
-
-    fdevent_set(&(t->transport_fde), FDE_READ);
-
-    if(adb_thread_create(&input_thread_ptr, input_thread, t)){
-        fatal_errno("cannot create input thread");
-    }
-
-    if(adb_thread_create(&output_thread_ptr, output_thread, t)){
-        fatal_errno("cannot create output thread");
-    }
 
     t->disconnects.next = t->disconnects.prev = &t->disconnects;
 
@@ -717,6 +720,12 @@ retry:
 
     adb_mutex_lock(&transport_lock);
     for (t = transport_list.next; t != &transport_list; t = t->next) {
+        if (t->connection_state == CS_NOPERM) {
+        if (error_out)
+            *error_out = "insufficient permissions for device";
+            continue;
+        }
+
         /* check for matching serial number */
         if (serial) {
             if (t->serial && !strcmp(serial, t->serial)) {
@@ -763,7 +772,6 @@ retry:
                 *error_out = "device offline";
             result = NULL;
         }
-
          /* check for required connection state */
         if (result && state != CS_ANY && result->connection_state != state) {
             if (error_out)
@@ -793,6 +801,7 @@ static const char *statename(atransport *t)
     case CS_DEVICE: return "device";
     case CS_HOST: return "host";
     case CS_RECOVERY: return "recovery";
+    case CS_NOPERM: return "no permissions";
     default: return "unknown";
     }
 }
@@ -807,9 +816,10 @@ int list_transports(char *buf, size_t  bufsize)
         /* XXX OVERRUN PROBLEMS XXX */
     adb_mutex_lock(&transport_lock);
     for(t = transport_list.next; t != &transport_list; t = t->next) {
-        len = snprintf(p, end - p, "%s\t%s\n",
-                t->serial ? t->serial : "",
-                statename(t));
+        const char* serial = t->serial;
+        if (!serial || !serial[0])
+            serial = "????????????";
+        len = snprintf(p, end - p, "%s\t%s\n", serial, statename(t));
 
         if (p + len >= end) {
             /* discard last line if buffer is too short */
@@ -839,11 +849,11 @@ void close_usb_devices()
 }
 #endif // ADB_HOST
 
-void register_socket_transport(int s, const char *serial, int  port)
+void register_socket_transport(int s, const char *serial, int port, int local)
 {
     atransport *t = calloc(1, sizeof(atransport));
     D("transport: %p init'ing for socket %d, on port %d\n", t, s, port);
-    if ( init_socket_transport(t, s, port) < 0 ) {
+    if ( init_socket_transport(t, s, port, local) < 0 ) {
         adb_close(s);
         free(t);
         return;
@@ -854,18 +864,64 @@ void register_socket_transport(int s, const char *serial, int  port)
     register_transport(t);
 }
 
-void register_usb_transport(usb_handle *usb, const char *serial)
+#if ADB_HOST
+atransport *find_transport(const char *serial)
+{
+    atransport *t;
+
+    adb_mutex_lock(&transport_lock);
+    for(t = transport_list.next; t != &transport_list; t = t->next) {
+        if (t->serial && !strcmp(serial, t->serial)) {
+            break;
+        }
+     }
+    adb_mutex_unlock(&transport_lock);
+
+    if (t != &transport_list)
+        return t;
+    else
+        return 0;
+}
+
+void unregister_transport(atransport *t)
+{
+    adb_mutex_lock(&transport_lock);
+    t->next->prev = t->prev;
+    t->prev->next = t->next;
+    adb_mutex_unlock(&transport_lock);
+
+    kick_transport(t);
+    transport_unref(t);
+}
+
+#endif
+
+void register_usb_transport(usb_handle *usb, const char *serial, unsigned writeable)
 {
     atransport *t = calloc(1, sizeof(atransport));
     D("transport: %p init'ing for usb_handle %p (sn='%s')\n", t, usb,
       serial ? serial : "");
-    init_usb_transport(t, usb);
+    init_usb_transport(t, usb, (writeable ? CS_OFFLINE : CS_NOPERM));
     if(serial) {
         t->serial = strdup(serial);
     }
     register_transport(t);
 }
 
+/* this should only be used for transports with connection_state == CS_NOPERM */
+void unregister_usb_transport(usb_handle *usb)
+{
+    atransport *t;
+    adb_mutex_lock(&transport_lock);
+    for(t = transport_list.next; t != &transport_list; t = t->next) {
+        if (t->usb == usb && t->connection_state == CS_NOPERM) {
+            t->next->prev = t->prev;
+            t->prev->next = t->next;
+            break;
+        }
+     }
+    adb_mutex_unlock(&transport_lock);
+}
 
 #undef TRACE_TAG
 #define TRACE_TAG  TRACE_RWX

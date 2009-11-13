@@ -22,53 +22,58 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include "IPropertyProvider.h"
-
+#include "Property.h"
 class PropertyManager;
 
-class InterfaceConfig : public IPropertyProvider {
-public:
-    static const char *PropertyNames[];
+class InterfaceConfig {
+    class InterfaceDnsProperty;
+    friend class InterfaceConfig::InterfaceDnsProperty;
 
-private:
-    char *mPropPrefix;
-    bool mUseDhcp;
+    struct {
+        IPV4AddressPropertyHelper *propIp;
+        IPV4AddressPropertyHelper *propNetmask;
+        IPV4AddressPropertyHelper *propGateway;
+        IPV4AddressPropertyHelper *propBroadcast;
+        InterfaceDnsProperty      *propDns;
+    } mStaticProperties;
+
     struct in_addr mIp;
     struct in_addr mNetmask;
     struct in_addr mGateway;
-    struct in_addr mDns1;
-    struct in_addr mDns2;
-    struct in_addr mDns3;
+    struct in_addr mBroadcast;
+    struct in_addr mDns[2];
 
 public:
-    InterfaceConfig(const char *prop_prefix);
-    InterfaceConfig(const char *prop_prefix,
-                    const char *ip, const char *nm,
-                    const char *gw, const char *dns1, const char *dns2,
-                    const char *dns3);
-
-    InterfaceConfig(const char *prop_prefix,
-                    const struct in_addr *ip,
-                    const struct in_addr *nm, const struct in_addr *gw,
-                    const struct in_addr *dns1, const struct in_addr *dns2,
-                    const struct in_addr *dns3);
-
+    InterfaceConfig(bool propertiesReadOnly);
     virtual ~InterfaceConfig();
     
     int set(const char *name, const char *value);
     const char *get(const char *name, char *buffer, size_t maxsize);
 
-    bool            getUseDhcp() const { return mUseDhcp; }
     const struct in_addr &getIp() const { return mIp; }
     const struct in_addr &getNetmask() const { return mNetmask; }
     const struct in_addr &getGateway() const { return mGateway; }
-    const struct in_addr &getDns1() const { return mDns1; }
-    const struct in_addr &getDns2() const { return mDns2; }
-    const struct in_addr &getDns3() const { return mDns3; }
+    const struct in_addr &getBroadcast() const { return mBroadcast; }
+    const struct in_addr &getDns(int idx) const { return mDns[idx]; }
+
+    void setIp(struct in_addr *addr);
+    void setNetmask(struct in_addr *addr);
+    void setGateway(struct in_addr *addr);
+    void setBroadcast(struct in_addr *addr);
+    void setDns(int idx, struct in_addr *addr);
+
+    int attachProperties(PropertyManager *pm, const char *nsName);
+    int detachProperties(PropertyManager *pm, const char *nsName);
 
 private:
-    int registerProperties();
-    int unregisterProperties();
+
+    class InterfaceDnsProperty : public IPV4AddressProperty {
+        InterfaceConfig *mCfg;
+    public:
+        InterfaceDnsProperty(InterfaceConfig *cfg, bool ro);
+        int set(int idx, struct in_addr *value);
+        int get(int idx, struct in_addr *buffer);
+    };
 };
 
 

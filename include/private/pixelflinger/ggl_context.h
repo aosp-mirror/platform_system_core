@@ -21,8 +21,8 @@
 #include <stddef.h>
 #include <string.h>
 #include <sys/types.h>
+#include <endian.h>
 
-#include <utils/Endian.h>
 #include <pixelflinger/pixelflinger.h>
 #include <private/pixelflinger/ggl_fixed.h>
 

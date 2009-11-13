@@ -31,7 +31,7 @@
 #include "NetworkManager.h"
 #include "WifiController.h"
 #include "VpnController.h"
-#include "ErrorCode.h"
+#include "ResponseCode.h"
 
 CommandListener::CommandListener() :
                  FrameworkListener("nexus") {
@@ -60,11 +60,11 @@ int CommandListener::WifiCreateNetworkCmd::runCommand(SocketClient *cli,
     WifiNetwork *wn;
 
     if (!(wn = wc->createNetwork()))
-        cli->sendMsg(ErrorCode::OperationFailed, "Failed to create network", true);
+        cli->sendMsg(ResponseCode::OperationFailed, "Failed to create network", true);
     else {
         char tmp[128];
         sprintf(tmp, "Created network id %d.", wn->getNetworkId());
-        cli->sendMsg(ErrorCode::CommandOkay, tmp, false);
+        cli->sendMsg(ResponseCode::CommandOkay, tmp, false);
     }
     return 0;
 }
@@ -79,9 +79,9 @@ int CommandListener::WifiRemoveNetworkCmd::runCommand(SocketClient *cli,
     WifiController *wc = (WifiController *) nm->findController("WIFI");
 
     if (wc->removeNetwork(atoi(argv[1])))
-        cli->sendMsg(ErrorCode::OperationFailed, "Failed to remove network", true);
+        cli->sendMsg(ResponseCode::OperationFailed, "Failed to remove network", true);
     else {
-        cli->sendMsg(ErrorCode::CommandOkay, "Network removed.", false);
+        cli->sendMsg(ResponseCode::CommandOkay, "Network removed.", false);
     }
     return 0;
 }
@@ -100,16 +100,16 @@ int CommandListener::WifiScanResultsCmd::runCommand(SocketClient *cli,
     char buffer[256];
 
     for(it = src->begin(); it != src->end(); ++it) {
-        sprintf(buffer, "%s:%u:%d:%s:%s",
+        sprintf(buffer, "%s %u %d %s %s",
                 (*it)->getBssid(), (*it)->getFreq(), (*it)->getLevel(),
                 (*it)->getFlags(), (*it)->getSsid());
-        cli->sendMsg(ErrorCode::WifiScanResult, buffer, false);
+        cli->sendMsg(ResponseCode::WifiScanResult, buffer, false);
         delete (*it);
         it = src->erase(it);
     }
 
     delete src;
-    cli->sendMsg(ErrorCode::CommandOkay, "Scan results complete.", false);
+    cli->sendMsg(ResponseCode::CommandOkay, "Scan results complete.", false);
     return 0;
 }
 
@@ -128,12 +128,12 @@ int CommandListener::WifiListNetworksCmd::runCommand(SocketClient *cli,
 
     for(it = src->begin(); it != src->end(); ++it) {
         sprintf(buffer, "%d:%s", (*it)->getNetworkId(), (*it)->getSsid());
-        cli->sendMsg(ErrorCode::WifiNetworkList, buffer, false);
+        cli->sendMsg(ResponseCode::WifiNetworkList, buffer, false);
         delete (*it);
     }
 
     delete src;
-    cli->sendMsg(ErrorCode::CommandOkay, "Network listing complete.", false);
+    cli->sendMsg(ResponseCode::CommandOkay, "Network listing complete.", false);
     return 0;
 }
 
@@ -159,14 +159,14 @@ int CommandListener::GetCmd::runCommand(SocketClient *cli, int argc, char **argv
 
     char *tmp;
     asprintf(&tmp, "%s %s", argv[1], val);
-    cli->sendMsg(ErrorCode::PropertyRead, tmp, false);
+    cli->sendMsg(ResponseCode::PropertyRead, tmp, false);
     free(tmp);
 
-    cli->sendMsg(ErrorCode::CommandOkay, "Property read.", false);
+    cli->sendMsg(ResponseCode::CommandOkay, "Property read.", false);
     return 0;
 out_inval:
     errno = EINVAL;
-    cli->sendMsg(ErrorCode::CommandParameterError, "Failed to read property.", true);
+    cli->sendMsg(ResponseCode::CommandParameterError, "Failed to read property.", true);
     return 0;
 }
 
@@ -179,12 +179,12 @@ int CommandListener::SetCmd::runCommand(SocketClient *cli, int argc,
     if (NetworkManager::Instance()->getPropMngr()->set(argv[1], argv[2]))
         goto out_inval;
 
-    cli->sendMsg(ErrorCode::CommandOkay, "Property set.", false);
+    cli->sendMsg(ResponseCode::CommandOkay, "Property set.", false);
     return 0;
 
 out_inval:
     errno = EINVAL;
-    cli->sendMsg(ErrorCode::CommandParameterError, "Failed to set property.", true);
+    cli->sendMsg(ResponseCode::CommandParameterError, "Failed to set property.", true);
     return 0;
 }
 
@@ -194,10 +194,14 @@ CommandListener::ListCmd::ListCmd() :
 
 int CommandListener::ListCmd::runCommand(SocketClient *cli, int argc, char **argv) {
     android::List<char *> *pc;
+    char *prefix = NULL;
 
-    if (!(pc = NetworkManager::Instance()->getPropMngr()->createPropertyList())) {
+    if (argc > 1)
+        prefix = argv[1];
+
+    if (!(pc = NetworkManager::Instance()->getPropMngr()->createPropertyList(prefix))) {
         errno = ENODATA;
-        cli->sendMsg(ErrorCode::CommandParameterError, "Failed to list properties.", true);
+        cli->sendMsg(ResponseCode::CommandParameterError, "Failed to list properties.", true);
         return 0;
     }
 
@@ -218,7 +222,7 @@ int CommandListener::ListCmd::runCommand(SocketClient *cli, int argc, char **arg
             free((*it));
             continue;
         }
-        cli->sendMsg(ErrorCode::PropertyList, buf, false);
+        cli->sendMsg(ResponseCode::PropertyList, buf, false);
         free(buf);
 
         free((*it));
@@ -226,6 +230,6 @@ int CommandListener::ListCmd::runCommand(SocketClient *cli, int argc, char **arg
 
     delete pc;
 
-    cli->sendMsg(ErrorCode::CommandOkay, "Properties list complete.", false);
+    cli->sendMsg(ResponseCode::CommandOkay, "Properties list complete.", false);
     return 0;
 }

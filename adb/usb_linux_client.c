@@ -72,7 +72,7 @@ static void *usb_open_thread(void *x)
         usb->fd = fd;
 
         D("[ usb_thread - registering device ]\n");
-        register_usb_transport(usb, 0);
+        register_usb_transport(usb, 0, 1);
     }
 
     // never gets here

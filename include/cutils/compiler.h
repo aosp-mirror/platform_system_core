@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2009 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef _IPROPERTY_PROVIDER_H
-#define _IPROPERTY_PROVIDER_H
+#ifndef ANDROID_CUTILS_COMPILER_H
+#define ANDROID_CUTILS_COMPILER_H
 
-#include <unistd.h>
-#include <sys/types.h>
+/*
+ * helps the compiler's optimizer predicting branches
+ */
 
-#include <utils/List.h>
-
-class IPropertyProvider {
-public:
-    virtual int set(const char *name, const char *value) = 0;
-    virtual const char *get(const char *name, char *buffer, size_t max) = 0;
-};
-
-typedef android::List<IPropertyProvider *> IPropertyProviderCollection;
-
+#ifdef __cplusplus
+#   define CC_LIKELY( exp )    (__builtin_expect( !!(exp), true ))
+#   define CC_UNLIKELY( exp )  (__builtin_expect( !!(exp), false ))
+#else
+#   define CC_LIKELY( exp )    (__builtin_expect( !!(exp), 1 ))
+#   define CC_UNLIKELY( exp )  (__builtin_expect( !!(exp), 0 ))
 #endif
+
+#endif // ANDROID_CUTILS_COMPILER_H

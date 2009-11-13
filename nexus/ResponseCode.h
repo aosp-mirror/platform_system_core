@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef _ERRORCODE_H
-#define _ERRORCODE_H
+#ifndef _RESPONSECODE_H
+#define _RESPONSECODE_H
 
-class ErrorCode {
+class ResponseCode {
 public:
     // 100 series - Requestion action was initiated; expect another reply
     // before proceeding with a new command.
@@ -44,5 +44,10 @@ public:
 
     // 600 series - Unsolicited broadcasts
     static const int UnsolicitedInformational = 600;
+    static const int DhcpStateChange = 605;
+    static const int SupplicantStateChange = 610;
+    static const int ScanResultsReady = 615;
+    static const int LinkSpeedChange = 620;
+    static const int RssiChange = 625;
 };
 #endif

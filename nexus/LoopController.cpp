@@ -21,14 +21,5 @@
 
 LoopController::LoopController(PropertyManager *propmngr,
                                IControllerHandler *handlers) :
-                Controller("LOOP", propmngr, handlers) {
+                Controller("loop", propmngr, handlers) {
 }
-
-int LoopController::set(const char *name, const char *value) {
-    return Controller::set(name, value);
-}
-
-const char *LoopController::get(const char *name, char *buffer, size_t maxsize) {
-    return Controller::get(name, buffer, maxsize);
-}
-

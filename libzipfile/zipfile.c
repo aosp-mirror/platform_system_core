@@ -82,13 +82,13 @@ uninflate(unsigned char* out, int unlen, const unsigned char* in, int clen)
     unsigned long crc;
     int err = 0;
     int zerr;
-    
+
     memset(&zstream, 0, sizeof(zstream));
     zstream.zalloc = Z_NULL;
     zstream.zfree = Z_NULL;
     zstream.opaque = Z_NULL;
     zstream.next_in = (void*)in;
-    zstream.avail_in = unlen;
+    zstream.avail_in = clen;
     zstream.next_out = (Bytef*) out;
     zstream.avail_out = unlen;
     zstream.data_type = Z_UNKNOWN;
@@ -99,7 +99,7 @@ uninflate(unsigned char* out, int unlen, const unsigned char* in, int clen)
     if (zerr != Z_OK) {
         return -1;
     }
-    
+
     // uncompress the data
     zerr = inflate(&zstream, Z_FINISH);
     if (zerr != Z_STREAM_END) {
@@ -107,7 +107,7 @@ uninflate(unsigned char* out, int unlen, const unsigned char* in, int clen)
                     zstream.total_out);
         err = -1;
     }
-    
+
      inflateEnd(&zstream);
     return err;
 }

@@ -57,6 +57,7 @@ struct usb_handle
     unsigned char ep_out;
 
     unsigned zero_mask;
+    unsigned writeable;
 
     struct usbdevfs_urb urb_in;
     struct usbdevfs_urb urb_out;
@@ -115,7 +116,7 @@ static void kick_disconnected_devices()
 }
 
 static void register_device(const char *dev_name, unsigned char ep_in, unsigned char ep_out,
-                            int ifc, const char *serial, unsigned zero_mask);
+                            int ifc, int serial_index, unsigned zero_mask);
 
 static inline int badname(const char *name)
 {
@@ -125,19 +126,18 @@ static inline int badname(const char *name)
     return 0;
 }
 
-static int find_usb_device(const char *base,
-                           void (*register_device_callback) (const char *, unsigned char, unsigned char, int, const char *, unsigned))
+static void find_usb_device(const char *base,
+        void (*register_device_callback)
+                (const char *, unsigned char, unsigned char, int, int, unsigned))
 {
     char busname[32], devname[32];
     unsigned char local_ep_in, local_ep_out;
     DIR *busdir , *devdir ;
     struct dirent *de;
     int fd ;
-    int found_device = 0;
-    char serial[256];
 
     busdir = opendir(base);
-    if(busdir == 0) return 0;
+    if(busdir == 0) return;
 
     while((de = readdir(busdir)) != 0) {
         if(badname(de->d_name)) continue;
@@ -168,7 +168,7 @@ static int find_usb_device(const char *base,
             }
 
 //            DBGX("[ scanning %s ]\n", devname);
-            if((fd = unix_open(devname, O_RDWR)) < 0) {
+            if((fd = unix_open(devname, O_RDONLY)) < 0) {
                 continue;
             }
 
@@ -263,67 +263,13 @@ static int find_usb_device(const char *base,
                         local_ep_out = ep1->bEndpointAddress;
                     }
 
-                        // read the device's serial number
-                    serial[0] = 0;
-                    memset(serial, 0, sizeof(serial));
-                    if (device->iSerialNumber) {
-                        struct usbdevfs_ctrltransfer  ctrl;
-                        __u16 buffer[128];
-                        __u16 languages[128];
-                        int i, result;
-                        int languageCount = 0;
-
-                        memset(languages, 0, sizeof(languages));
-                        memset(&ctrl, 0, sizeof(ctrl));
-
-                            // read list of supported languages
-                        ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
-                        ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
-                        ctrl.wValue = (USB_DT_STRING << 8) | 0;
-                        ctrl.wIndex = 0;
-                        ctrl.wLength = sizeof(languages);
-                        ctrl.data = languages;
-
-                        result = ioctl(fd, USBDEVFS_CONTROL, &ctrl);
-                        if (result > 0)
-                            languageCount = (result - 2) / 2;
-
-                        for (i = 1; i <= languageCount; i++) {
-                            memset(buffer, 0, sizeof(buffer));
-                            memset(&ctrl, 0, sizeof(ctrl));
-
-                            ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
-                            ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
-                            ctrl.wValue = (USB_DT_STRING << 8) | device->iSerialNumber;
-                            ctrl.wIndex = languages[i];
-                            ctrl.wLength = sizeof(buffer);
-                            ctrl.data = buffer;
-
-                            result = ioctl(fd, USBDEVFS_CONTROL, &ctrl);
-                            if (result > 0) {
-                                int i;
-                                    // skip first word, and copy the rest to the serial string, changing shorts to bytes.
-                                result /= 2;
-                                for (i = 1; i < result; i++)
-                                    serial[i - 1] = buffer[i];
-                                serial[i - 1] = 0;
-                                break;
-                            }
-                        }
-                    }
-
                     register_device_callback(devname, local_ep_in, local_ep_out,
-                            interface->bInterfaceNumber, serial, zero_mask);
+                            interface->bInterfaceNumber, device->iSerialNumber, zero_mask);
 
-                    found_device = 1;
                     break;
                 } else {
                     // seek next interface descriptor
-                    if (i < interfaces - 1) {
-                        while (bufptr[1] != USB_DT_INTERFACE) {
-                            bufptr += bufptr[0];
-                        }
-                    }
+                    bufptr += (USB_DT_ENDPOINT_SIZE * interface->bNumEndpoints);
                  }
             } // end of for
 
@@ -332,8 +278,6 @@ static int find_usb_device(const char *base,
         closedir(devdir);
     } //end of busdir while
     closedir(busdir);
-
-    return found_device;
 }
 
 void usb_cleanup()
@@ -537,26 +481,30 @@ void usb_kick(usb_handle *h)
     if(h->dead == 0) {
         h->dead = 1;
 
-        /* HACK ALERT!
-        ** Sometimes we get stuck in ioctl(USBDEVFS_REAPURB).
-        ** This is a workaround for that problem.
-        */
-        if (h->reaper_thread) {
-            pthread_kill(h->reaper_thread, SIGALRM);
-        }
+        if (h->writeable) {
+            /* HACK ALERT!
+            ** Sometimes we get stuck in ioctl(USBDEVFS_REAPURB).
+            ** This is a workaround for that problem.
+            */
+            if (h->reaper_thread) {
+                pthread_kill(h->reaper_thread, SIGALRM);
+            }
 
-        /* cancel any pending transactions
-        ** these will quietly fail if the txns are not active,
-        ** but this ensures that a reader blocked on REAPURB
-        ** will get unblocked
-        */
-        ioctl(h->desc, USBDEVFS_DISCARDURB, &h->urb_in);
-        ioctl(h->desc, USBDEVFS_DISCARDURB, &h->urb_out);
-        h->urb_in.status = -ENODEV;
-        h->urb_out.status = -ENODEV;
-        h->urb_in_busy = 0;
-        h->urb_out_busy = 0;
-        adb_cond_broadcast(&h->notify);
+            /* cancel any pending transactions
+            ** these will quietly fail if the txns are not active,
+            ** but this ensures that a reader blocked on REAPURB
+            ** will get unblocked
+            */
+            ioctl(h->desc, USBDEVFS_DISCARDURB, &h->urb_in);
+            ioctl(h->desc, USBDEVFS_DISCARDURB, &h->urb_out);
+            h->urb_in.status = -ENODEV;
+            h->urb_out.status = -ENODEV;
+            h->urb_in_busy = 0;
+            h->urb_out_busy = 0;
+            adb_cond_broadcast(&h->notify);
+        } else {
+            unregister_usb_transport(h);
+        }
     }
     adb_mutex_unlock(&h->lock);
 }
@@ -580,11 +528,11 @@ int usb_close(usb_handle *h)
 
 static void register_device(const char *dev_name,
                             unsigned char ep_in, unsigned char ep_out,
-                            int interface,
-                            const char *serial, unsigned zero_mask)
+                            int interface, int serial_index, unsigned zero_mask)
 {
     usb_handle* usb = 0;
     int n = 0;
+    char serial[256];
 
         /* Since Linux will not reassign the device ID (and dev_name)
         ** as long as the device is open, we can add to the list here
@@ -610,6 +558,7 @@ static void register_device(const char *dev_name,
     usb->ep_in = ep_in;
     usb->ep_out = ep_out;
     usb->zero_mask = zero_mask;
+    usb->writeable = 1;
 
     adb_cond_init(&usb->notify, 0);
     adb_mutex_init(&usb->lock, 0);
@@ -618,10 +567,66 @@ static void register_device(const char *dev_name,
     usb->reaper_thread = 0;
 
     usb->desc = unix_open(usb->fname, O_RDWR);
-    if(usb->desc < 0) goto fail;
-    D("[ usb open %s fd = %d]\n", usb->fname, usb->desc);
-    n = ioctl(usb->desc, USBDEVFS_CLAIMINTERFACE, &interface);
-    if(n != 0) goto fail;
+    if(usb->desc < 0) {
+        /* if we fail, see if have read-only access */
+        usb->desc = unix_open(usb->fname, O_RDONLY);
+        if(usb->desc < 0) goto fail;
+        usb->writeable = 0;
+        D("[ usb open read-only %s fd = %d]\n", usb->fname, usb->desc);
+    } else {
+        D("[ usb open %s fd = %d]\n", usb->fname, usb->desc);
+        n = ioctl(usb->desc, USBDEVFS_CLAIMINTERFACE, &interface);
+        if(n != 0) goto fail;
+    }
+
+        /* read the device's serial number */
+    serial[0] = 0;
+    memset(serial, 0, sizeof(serial));
+    if (serial_index) {
+        struct usbdevfs_ctrltransfer  ctrl;
+        __u16 buffer[128];
+        __u16 languages[128];
+        int i, result;
+        int languageCount = 0;
+
+        memset(languages, 0, sizeof(languages));
+        memset(&ctrl, 0, sizeof(ctrl));
+
+            // read list of supported languages
+        ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
+        ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
+        ctrl.wValue = (USB_DT_STRING << 8) | 0;
+        ctrl.wIndex = 0;
+        ctrl.wLength = sizeof(languages);
+        ctrl.data = languages;
+
+        result = ioctl(usb->desc, USBDEVFS_CONTROL, &ctrl);
+        if (result > 0)
+            languageCount = (result - 2) / 2;
+
+        for (i = 1; i <= languageCount; i++) {
+            memset(buffer, 0, sizeof(buffer));
+            memset(&ctrl, 0, sizeof(ctrl));
+
+            ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
+            ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
+            ctrl.wValue = (USB_DT_STRING << 8) | serial_index;
+            ctrl.wIndex = languages[i];
+            ctrl.wLength = sizeof(buffer);
+            ctrl.data = buffer;
+
+            result = ioctl(usb->desc, USBDEVFS_CONTROL, &ctrl);
+            if (result > 0) {
+                int i;
+                // skip first word, and copy the rest to the serial string, changing shorts to bytes.
+                result /= 2;
+                for (i = 1; i < result; i++)
+                    serial[i - 1] = buffer[i];
+                serial[i - 1] = 0;
+                break;
+            }
+        }
+    }
 
         /* add to the end of the active handles */
     adb_mutex_lock(&usb_lock);
@@ -631,7 +636,7 @@ static void register_device(const char *dev_name,
     usb->next->prev = usb;
     adb_mutex_unlock(&usb_lock);
 
-    register_usb_transport(usb, serial);
+    register_usb_transport(usb, serial, usb->writeable);
     return;
 
 fail:

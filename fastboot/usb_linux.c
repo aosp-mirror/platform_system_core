@@ -51,7 +51,9 @@
 
 #include "usb.h"
 
-#if TRACE_USB
+#define MAX_RETRIES 5
+
+#ifdef TRACE_USB
 #define DBG1(x...) fprintf(stderr, x)
 #define DBG(x...) fprintf(stderr, x)
 #else
@@ -303,7 +305,7 @@ int usb_read(usb_handle *h, void *_data, int len)
     unsigned char *data = (unsigned char*) _data;
     unsigned count = 0;
     struct usbdevfs_bulktransfer bulk;
-    int n;
+    int n, retry;
 
     if(h->ep_in == 0) {
         return -1;
@@ -316,16 +318,20 @@ int usb_read(usb_handle *h, void *_data, int len)
         bulk.len = xfer;
         bulk.data = data;
         bulk.timeout = 0;
-        
-        DBG("[ usb read %d fd = %d], fname=%s\n", xfer, h->desc, h->fname);
-        n = ioctl(h->desc, USBDEVFS_BULK, &bulk);
-        DBG("[ usb read %d ] = %d, fname=%s\n", xfer, n, h->fname);
+        retry = 0;
 
-        if(n < 0) {
-            DBG1("ERROR: n = %d, errno = %d (%s)\n",
-                n, errno, strerror(errno));
-            return -1;
+        do{
+           DBG("[ usb read %d fd = %d], fname=%s\n", xfer, h->desc, h->fname);
+           n = ioctl(h->desc, USBDEVFS_BULK, &bulk);
+           DBG("[ usb read %d ] = %d, fname=%s, Retry %d \n", xfer, n, h->fname, retry);
+
+           if( n < 0 ) {
+            DBG1("ERROR: n = %d, errno = %d (%s)\n",n, errno, strerror(errno));
+            if ( ++retry > MAX_RETRIES ) return -1;
+            sleep( 1 );
+           }
         }
+        while( n < 0 );
 
         count += n;
         len -= n;

@@ -95,21 +95,28 @@ static struct perms_ devperms[] = {
 	    /* logger should be world writable (for logging) but not readable */
     { "/dev/log/",          0662,   AID_ROOT,       AID_LOG,        1 },
 
+    /* the msm hw3d client device node is world writable/readable. */
+    { "/dev/msm_hw3dc",     0666,   AID_ROOT,       AID_ROOT,       0 },
+
+    /* gpu driver for adreno200 is globally accessible */
+    { "/dev/kgsl",          0666,   AID_ROOT,       AID_ROOT,       0 },
+
         /* these should not be world writable */
+    { "/dev/diag",          0660,   AID_RADIO,      AID_RADIO,        0 },
+    { "/dev/diag_arm9",     0660,   AID_RADIO,      AID_RADIO,        0 },
     { "/dev/android_adb",   0660,   AID_ADB,        AID_ADB,        0 },
     { "/dev/android_adb_enable",   0660,   AID_ADB,        AID_ADB,        0 },
     { "/dev/ttyMSM0",       0600,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
     { "/dev/ttyHS0",        0600,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
-    { "/dev/uinput",        0600,   AID_BLUETOOTH,  AID_BLUETOOTH,  0 },
+    { "/dev/uinput",        0660,   AID_SYSTEM,     AID_BLUETOOTH,  0 },
     { "/dev/alarm",         0664,   AID_SYSTEM,     AID_RADIO,      0 },
     { "/dev/tty0",          0660,   AID_ROOT,       AID_SYSTEM,     0 },
     { "/dev/graphics/",     0660,   AID_ROOT,       AID_GRAPHICS,   1 },
-    { "/dev/hw3d",          0660,   AID_SYSTEM,     AID_GRAPHICS,   0 },
+    { "/dev/msm_hw3dm",     0660,   AID_SYSTEM,     AID_GRAPHICS,   0 },
     { "/dev/input/",        0660,   AID_ROOT,       AID_INPUT,      1 },
     { "/dev/eac",           0660,   AID_ROOT,       AID_AUDIO,      0 },
     { "/dev/cam",           0660,   AID_ROOT,       AID_CAMERA,     0 },
     { "/dev/pmem",          0660,   AID_SYSTEM,     AID_GRAPHICS,   0 },
-    { "/dev/pmem_gpu",      0660,   AID_SYSTEM,     AID_GRAPHICS,   1 },
     { "/dev/pmem_adsp",     0660,   AID_SYSTEM,     AID_AUDIO,      1 },
     { "/dev/pmem_camera",   0660,   AID_SYSTEM,     AID_CAMERA,     1 },
     { "/dev/oncrpc/",       0660,   AID_ROOT,       AID_SYSTEM,     1 },
@@ -118,20 +125,34 @@ static struct perms_ devperms[] = {
     { "/dev/msm_camera/",   0660,   AID_SYSTEM,     AID_SYSTEM,     1 },
     { "/dev/akm8976_daemon",0640,   AID_COMPASS,    AID_SYSTEM,     0 },
     { "/dev/akm8976_aot",   0640,   AID_COMPASS,    AID_SYSTEM,     0 },
+    { "/dev/akm8973_daemon",0640,   AID_COMPASS,    AID_SYSTEM,     0 },
+    { "/dev/akm8973_aot",   0640,   AID_COMPASS,    AID_SYSTEM,     0 },
+    { "/dev/bma150",        0640,   AID_COMPASS,    AID_SYSTEM,     0 },
+    { "/dev/cm3602",        0640,   AID_COMPASS,    AID_SYSTEM,     0 },
     { "/dev/akm8976_pffd",  0640,   AID_COMPASS,    AID_SYSTEM,     0 },
+    { "/dev/lightsensor",   0640,   AID_SYSTEM,     AID_SYSTEM,     0 },
     { "/dev/msm_pcm_out",   0660,   AID_SYSTEM,     AID_AUDIO,      1 },
     { "/dev/msm_pcm_in",    0660,   AID_SYSTEM,     AID_AUDIO,      1 },
     { "/dev/msm_pcm_ctl",   0660,   AID_SYSTEM,     AID_AUDIO,      1 },
     { "/dev/msm_snd",       0660,   AID_SYSTEM,     AID_AUDIO,      1 },
     { "/dev/msm_mp3",       0660,   AID_SYSTEM,     AID_AUDIO,      1 },
+    { "/dev/audience_a1026", 0660,   AID_SYSTEM,     AID_AUDIO,      1 },
     { "/dev/msm_audpre",    0660,   AID_SYSTEM,     AID_AUDIO,      0 },
+    { "/dev/msm_audio_ctl", 0660,   AID_SYSTEM,     AID_AUDIO,      0 },
     { "/dev/htc-acoustic",  0660,   AID_SYSTEM,     AID_AUDIO,      0 },
+    { "/dev/vdec",          0660,   AID_SYSTEM,     AID_AUDIO,      0 },
+    { "/dev/q6venc",        0660,   AID_SYSTEM,     AID_AUDIO,      0 },
+    { "/dev/snd/dsp",       0660,   AID_SYSTEM,     AID_AUDIO,      0 },
+    { "/dev/snd/dsp1",      0660,   AID_SYSTEM,     AID_AUDIO,      0 },
+    { "/dev/snd/mixer",     0660,   AID_SYSTEM,     AID_AUDIO,      0 },
     { "/dev/smd0",          0640,   AID_RADIO,      AID_RADIO,      0 },
     { "/dev/qemu_trace",    0666,   AID_SYSTEM,     AID_SYSTEM,     0 },
     { "/dev/qmi",           0640,   AID_RADIO,      AID_RADIO,      0 },
     { "/dev/qmi0",          0640,   AID_RADIO,      AID_RADIO,      0 },
     { "/dev/qmi1",          0640,   AID_RADIO,      AID_RADIO,      0 },
     { "/dev/qmi2",          0640,   AID_RADIO,      AID_RADIO,      0 },
+        /* CDMA radio interface MUX */
+    { "/dev/ts0710mux",     0640,   AID_RADIO,      AID_RADIO,      1 },
     { "/dev/ppp",           0660,   AID_RADIO,      AID_VPN,        0 },
     { "/dev/tun",           0640,   AID_VPN,        AID_VPN,        0 },
     { NULL, 0, 0, 0, 0 },
@@ -392,6 +413,9 @@ static void handle_device_event(struct uevent *uevent)
             mkdir(base, 0755);
         } else if(!strncmp(uevent->subsystem, "mtd", 3)) {
             base = "/dev/mtd/";
+            mkdir(base, 0755);
+        } else if(!strncmp(uevent->subsystem, "sound", 5)) {
+            base = "/dev/snd/";
             mkdir(base, 0755);
         } else if(!strncmp(uevent->subsystem, "misc", 4) &&
                     !strncmp(name, "log_", 4)) {

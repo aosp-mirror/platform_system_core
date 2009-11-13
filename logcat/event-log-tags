@@ -21,7 +21,7 @@
 # 2: long
 # 3: string
 # 4: list
-# 
+#
 # The data unit is a number taken from the following list:
 # 1: Number of objects
 # 2: Number of bytes
@@ -40,7 +40,8 @@
 2718  e
 
 2719 configuration_changed (config mask|1|5)
-2720 sync (id|3),(event|1|5),(source|1|5)
+# "account" is the java hash of the account name
+2720 sync (id|3),(event|1|5),(source|1|5),(account|1|5)
 2721 cpu (total|1|6),(user|1|6),(system|1|6),(iowait|1|6),(irq|1|6),(softirq|1|6)
 2722 battery_level (level|1|6),(voltage|1|1),(temperature|1|1)
 2723 battery_status (status|1|5),(health|1|5),(present|1|5),(plugged|1|5),(technology|3)
@@ -58,11 +59,11 @@
 # This is logged when the partial wake lock (keeping the device awake
 # regardless of whether the screen is off) is acquired or released.
 2729 power_partial_wake_state (releasedorAcquired|1|5),(tag|3)
-# This is logged when battery goes from discharging to charging. 
+# This is logged when battery goes from discharging to charging.
 # It lets us count the total amount of time between charges and the discharge level
 2730 battery_discharge (duration|2|3),(minLevel|1|6),(maxLevel|1|6)
 #
-# Leave IDs through 2739 for more power logs 
+# Leave IDs through 2739 for more power logs
 #
 
 # This event is logged when the location service uploads location data.
@@ -79,8 +80,12 @@
 2744 free_storage_changed (data|2|2)
 # Device low memory notification and disk space free on the /data partition, in bytes at that time
 2745 low_storage (data|2|2)
-# disk space free on the /data partition in bytes
-2746 free_storage_left (data|2|2)
+# disk space free on the /data, /system, and /cache partitions in bytes
+2746 free_storage_left (data|2|2),(system|2|2),(cache|2|2)
+
+# contacts aggregation: time and number of contacts.
+# count is negative for query phase, positive for merge phase
+2747 contacts_aggregation (aggregation time|2|3), (count|1|1)
 
 # when a NotificationManager.notify is called
 2750 notification_enqueue (pkg|3),(id|1|5),(notification|3)
@@ -94,7 +99,7 @@
 2800 gtalkservice (eventType|1)
 # This event is logged for GTalk connection state changes. The status field is an int, but
 # it really contains 4 separate values, each taking up a byte
-# (eventType, connection state, connection error, network state)
+#     (eventType << 24) + (connection state << 16) + (connection error << 8) + network state
 2801 gtalk_connection (status|1)
 
 2802 watchdog (Service|3)
@@ -107,6 +112,21 @@
 2809 watchdog_meminfo (MemFree|1|2),(Buffers|1|2),(Cached|1|2),(Active|1|2),(Inactive|1|2),(AnonPages|1|2),(Mapped|1|2),(Slab|1|2),(SReclaimable|1|2),(SUnreclaim|1|2),(PageTables|1|2)
 2810 watchdog_vmstat (runtime|2|3),(pgfree|1|1),(pgactivate|1|1),(pgdeactivate|1|1),(pgfault|1|1),(pgmajfault|1|1)
 2811 watchdog_requested_reboot (NoWait|1|1),(ScheduleInterval|1|3),(RecheckInterval|1|3),(StartTime|1|3),(Window|1|3),(MinScreenOff|1|3),(MinNextAlarm|1|3)
+
+2820 backup_data_changed (Package|3)
+2821 backup_start (Transport|3)
+2822 backup_transport_failure (Package|3)
+2823 backup_agent_failure (Package|3),(Message|3)
+2824 backup_package (Package|3),(Size|1|2)
+2825 backup_success (Packages|1|1),(Time|1|3)
+2826 backup_reset (Transport|3)
+2827 backup_initialize
+
+2830 restore_start (Transport|3),(Source|2|5)
+2831 restore_transport_failure
+2832 restore_agent_failure (Package|3),(Message|3)
+2833 restore_package (Package|3),(Size|1|2)
+2834 restore_success (Packages|1|1),(Time|1|3)
 
 # Device boot timings.  We include monotonic clock values because the
 # intrinsic event log times are wall-clock.
@@ -135,6 +155,67 @@
 3100 boot_progress_pms_ready (time|2|3)
 # + check activity_launch_time for Home app
 
+# This event is logged when GTalk connection is closed.
+# The status field is an int, but contains 2 different values, it's represented as
+#
+#     (networkType << 8) + connection error
+#
+# the possible error values are
+#
+# no_error=0, no_network=1, connection_failed=2, unknown_host=3, auth_failed=4,
+# auth_expired=5, heart_beat_timeout=6, server_error=7, server_reject_rate_limiting=8, unknown=10
+#
+# duration is the connection duration.
+4000 gtalk_conn_close (status|1),(duration|1)
+
+# This event is logged for GTalk heartbeat resets
+# interval_and_nt contains both the heartbeat interval and the network type, It's represented as
+#     (networkType << 16) + interval
+# interval is in seconds; network type can be 0 (mobile) or 1 (wifi); ip is the host ip addr.
+4001 gtalk_heartbeat_reset (interval_and_nt|1),(ip|3)
+
+# dvm_gc_info: LIST (LONG, LONG, LONG)
+#
+# First LONG:
+#
+#    [63]    1
+#    [62-24] ASCII process identifier
+#    [23-12] GC time in ms
+#    [11- 0] Bytes freed
+#
+# Second LONG (aggregated heap info):
+#
+#    [63-62] 10
+#    [61-60] Reserved; must be zero
+#    [59-48] Objects freed
+#    [47-36] Actual size (current footprint)
+#    [35-24] Allowed size (current hard max)
+#    [23-12] Objects allocated
+#    [11- 0] Bytes allocated
+#
+# Third LONG (zygote heap info):
+#
+#    [63-62] 11
+#    [61-60] Reserved; must be zero
+#    [59-48] Soft limit
+#    [47-36] Actual size (current footprint)
+#    [35-24] Allowed size (current hard max)
+#    [23-12] Objects allocated
+#    [11- 0] Bytes allocated
+#
+# Fourth LONG:
+#
+#    [63-48] Reserved; must be zero
+#    [47-36] dlmallocFootprint
+#    [35-24] mallinfo: total allocated space
+#    [23-12] External byte limit
+#    [11- 0] External bytes allocated
+#
+# See HeapDebug.c
+#
+20001 dvm_gc_info (custom|2),(custom|2),(custom|2),(custom|2)
+20002 dvm_gc_madvise_info (total|1|2),(zygote|1|2)
+
 # Do not change these names without updating the checkin_events setting in
 # google3/googledata/wireless/android/provisioning/gservices.config !!
 #
@@ -160,9 +241,9 @@
 30010 am_proc_bound (PID|1|5),(Process Name|3)
 # Application process died
 30011 am_proc_died (PID|1|5),(Process Name|3)
-# The Activity Manager failed to pause the given activity. 
+# The Activity Manager failed to pause the given activity.
 30012 am_failed_to_pause (Token|1|5),(Wanting to pause|3),(Currently pausing|3)
-# Attempting to pause the current activity 
+# Attempting to pause the current activity
 30013 am_pause_activity (Token|1|5),(Component Name|3)
 # Application process has been started
 30014 am_proc_start (PID|1|5),(UID|1|5),(Process Name|3),(Type|3),(Component|3)
@@ -208,52 +289,11 @@
 # Re-connecting to input method service because we haven't received its interface
 32000 imf_force_reconnect_ime (IME|4),(Time Since Connect|2|3),(Showing|1|1)
 
-# dvm_gc_info: LIST (LONG, LONG, LONG)
-#
-# First LONG:
-#
-#    [63]    1
-#    [62-24] ASCII process identifier
-#    [23-12] GC time in ms
-#    [11- 0] Bytes freed
-#
-# Second LONG (aggregated heap info):
-#
-#    [63-62] 10
-#    [61-60] Reserved; must be zero
-#    [59-48] Objects freed
-#    [47-36] Actual size (current footprint)
-#    [35-24] Allowed size (current hard max)
-#    [23-12] Objects allocated
-#    [11- 0] Bytes allocated
-#
-# Third LONG (zygote heap info):
-#
-#    [63-62] 11
-#    [61-60] Reserved; must be zero
-#    [59-48] Soft limit
-#    [47-36] Actual size (current footprint)
-#    [35-24] Allowed size (current hard max)
-#    [23-12] Objects allocated
-#    [11- 0] Bytes allocated
-#
-# Fourth LONG:
-#
-#    [63-48] Reserved; must be zero
-#    [47-36] dlmallocFootprint
-#    [35-24] mallinfo: total allocated space
-#    [23-12] External byte limit
-#    [11- 0] External bytes allocated
-#
-# See HeapDebug.c
-#
-20001 dvm_gc_info (custom|2),(custom|2),(custom|2),(custom|2)
-20002 dvm_gc_madvise_info (total|1|2),(zygote|1|2)
-
 75000 sqlite_mem_alarm_current (current|1|2)
 75001 sqlite_mem_alarm_max (max|1|2)
 75002 sqlite_mem_alarm_alloc_attempt (attempts|1|4)
 75003 sqlite_mem_released (Memory released|1|2)
+75004 sqlite_db_corrupt (Database file corrupt|3)
 
 40000 checkin (Check in time|2|3)
 
@@ -262,28 +302,28 @@
 # Connectivity state changed:
 # [31-13] Reserved for future use
 # [12- 9] Network subtype (for mobile network, as defined by TelephonyManager)
-# [ 8- 3] Detailed state ordinal (as defined by NetworkInfo.DetailedState)   
+# [ 8- 3] Detailed state ordinal (as defined by NetworkInfo.DetailedState)
 # [ 2- 0] Network type (as defined by ConnectivityManager)
 50020 connectivity_state_changed (custom|1|5)
 
 # Wi-Fi network state changed:
 # [31- 6] Reserved for future use
-# [ 5- 0] Detailed state ordinal (as defined by NetworkInfo.DetailedState)   
+# [ 5- 0] Detailed state ordinal (as defined by NetworkInfo.DetailedState)
 50021 wifi_network_state_changed (network_state|1|5)
 
 # Wi-Fi supplicant state changed:
 # [31- 6] Reserved for future use
-# [ 5- 0] Supplicant state ordinal (as defined by SupplicantState)   
+# [ 5- 0] Supplicant state ordinal (as defined by SupplicantState)
 50022 wifi_supplicant_state_changed (supplicant_state|1|5)
 
 # Wi-Fi driver state changed:
 # [31- 1] Reserved for future use
-# [ 0- 0] Driver start (1) or stopped (0)   
+# [ 0- 0] Driver start (1) or stopped (0)
 50023 wifi_driver_state_changed (driver_state|1|5)
 
 # Wi-Fi interface configuration state changed:
 # [31- 1] Reserved for future use
-# [ 0- 0] Interface configuration succeeded (1) or failed (0)   
+# [ 0- 0] Interface configuration succeeded (1) or failed (0)
 50024 wifi_interface_configuration_state_changed (IP_configuration|1|5)
 
 # Wi-Fi supplicant connection state changed:
@@ -333,7 +373,7 @@
 #//device/dalvik/libcore/luni/src/main/native/org_apache_harmony_luni_platform_OSNetworkSystem.c
 51000 socket_stats (send|1|2),(recv|1|2),(ip|1|5),(port|1|5),(close|1|5)
 
-# db stats.  0 is query, 1 is write (may become more fine grained in the 
+# db stats.  0 is query, 1 is write (may become more fine grained in the
 # future)
 52000 db_operation (name|3),(op_type|1|5),(time|2|3)
 
@@ -350,6 +390,10 @@
 # browser stats for diary study
 70101 browser_zoom_level_change (start level|1|5),(end level|1|5),(time|2|3)
 70102 browser_double_tap_duration (duration|1|3),(time|2|3)
+
+# aggregation service
+70200 aggregation (aggregation time|2|3)
+70201 aggregation_test (field1|1|2),(field2|1|2),(field3|1|2),(field4|1|2),(field5|1|2)
 
 # NOTE - the range 1000000-2000000 is reserved for partners and others who
 # want to define their own log tags without conflicting with the core platform.

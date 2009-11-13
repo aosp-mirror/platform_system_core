@@ -23,25 +23,25 @@
 
 char *SupplicantState::toString(int val, char *buffer, int max) {
     if (val == SupplicantState::UNKNOWN)
-        strncpy(buffer, "Unknown", max);
+        strncpy(buffer, "UNKNOWN", max);
     else if (val == SupplicantState::DISCONNECTED)
-        strncpy(buffer, "Disconnected", max);
+        strncpy(buffer, "DISCONNECTED", max);
     else if (val == SupplicantState::INACTIVE)
-        strncpy(buffer, "Inactive", max);
+        strncpy(buffer, "INACTIVE", max);
     else if (val == SupplicantState::SCANNING)
-        strncpy(buffer, "Scanning", max);
+        strncpy(buffer, "SCANNING", max);
     else if (val == SupplicantState::ASSOCIATING)
-        strncpy(buffer, "Associating", max);
+        strncpy(buffer, "ASSOCIATING", max);
     else if (val == SupplicantState::ASSOCIATED)
-        strncpy(buffer, "Associated", max);
+        strncpy(buffer, "ASSOCIATED", max);
     else if (val == SupplicantState::FOURWAY_HANDSHAKE)
-        strncpy(buffer, "Fourway Handshake", max);
+        strncpy(buffer, "FOURWAY_HANDSHAKE", max);
     else if (val == SupplicantState::GROUP_HANDSHAKE)
-        strncpy(buffer, "Group Handshake", max);
+        strncpy(buffer, "GROUP_HANDSHAKE", max);
     else if (val == SupplicantState::COMPLETED)
-        strncpy(buffer, "Completed", max);
+        strncpy(buffer, "COMPLETED", max);
     else if (val == SupplicantState::IDLE)
-        strncpy(buffer, "Idle", max);
+        strncpy(buffer, "IDLE", max);
     else
         strncpy(buffer, "(internal error)", max);
 

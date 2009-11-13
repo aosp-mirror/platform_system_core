@@ -26,9 +26,8 @@ class PropertyManager;
 class IControllerHandler;
 
 #include "PropertyManager.h"
-#include "IPropertyProvider.h"
 
-class Controller : public IPropertyProvider {
+class Controller {
     /*
      * Name of this controller - WIFI/VPN/USBNET/BTNET/BTDUN/LOOP/etc
      */
@@ -54,11 +53,7 @@ public:
 
     const char *getName() { return mName; }
     const char *getBoundInterface() { return mBoundInterface; }
-
-    /* IPropertyProvider methods */
-    virtual int set(const char *name, const char *value);
-    virtual const char *get(const char *name, char *buffer, size_t maxsize);
-
+    
 protected:
     int loadKernelModule(char *modpath, const char *args);
     bool isKernelModuleLoaded(const char *modtag);

@@ -27,6 +27,7 @@ class SupplicantDisconnectedEvent;
 
 class ISupplicantEventHandler {
 public:
+    virtual ~ISupplicantEventHandler(){}
     virtual void onAssociatingEvent(SupplicantAssociatingEvent *evt) = 0;
     virtual void onAssociatedEvent(SupplicantAssociatedEvent *evt) = 0;
     virtual void onConnectedEvent(SupplicantConnectedEvent *evt) = 0;

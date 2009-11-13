@@ -832,6 +832,7 @@ int adb_main(int is_daemon)
 {
 #if !ADB_HOST
     int secure = 0;
+    int port;
     char value[PROPERTY_VALUE_MAX];
 #endif
 
@@ -850,7 +851,7 @@ int adb_main(int is_daemon)
     HOST = 1;
     usb_vendors_init();
     usb_init();
-    local_init();
+    local_init(ADB_LOCAL_TRANSPORT_PORT);
 
     if(install_listener("tcp:5037", "*smartsocket*", NULL)) {
         exit(1);
@@ -918,14 +919,19 @@ int adb_main(int is_daemon)
     }
 
         /* for the device, start the usb transport if the
-        ** android usb device exists, otherwise start the
-        ** network transport.
+        ** android usb device exists and "service.adb.tcp"
+        ** is not set, otherwise start the network transport.
         */
-    if(access("/dev/android_adb", F_OK) == 0 ||
-       access("/dev/android", F_OK) == 0) {
+    property_get("service.adb.tcp.port", value, "0");
+    if (sscanf(value, "%d", &port) == 1 && port > 0) {
+        // listen on TCP port specified by service.adb.tcp.port property
+        local_init(port);
+    } else if (access("/dev/android_adb", F_OK) == 0) {
+        // listen on USB
         usb_init();
     } else {
-        local_init();
+        // listen on default port
+        local_init(ADB_LOCAL_TRANSPORT_PORT);
     }
     init_jdwp();
 #endif
@@ -1002,6 +1008,66 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         list_transports(buffer, sizeof(buffer));
         snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer),buffer);
         D("Wrote device list \n");
+        writex(reply_fd, buf, strlen(buf));
+        return 0;
+    }
+
+    // add a new TCP transport
+    if (!strncmp(service, "connect:", 8)) {
+        char buffer[4096];
+        int port, fd;
+        char* host = service + 8;
+        char* portstr = strchr(host, ':');
+
+        if (!portstr) {
+            snprintf(buffer, sizeof(buffer), "unable to parse %s as <host>:<port>", host);
+            goto done;
+        }
+        if (find_transport(host)) {
+            snprintf(buffer, sizeof(buffer), "Already connected to %s", host);
+            goto done;
+        }
+
+        // zero terminate host by overwriting the ':'
+        *portstr++ = 0;
+        if (sscanf(portstr, "%d", &port) == 0) {
+            snprintf(buffer, sizeof(buffer), "bad port number %s", portstr);
+            goto done;
+        }
+
+        fd = socket_network_client(host, port, SOCK_STREAM);
+        if (fd < 0) {
+            snprintf(buffer, sizeof(buffer), "unable to connect to %s:%d", host, port);
+            goto done;
+        }
+
+        D("client: connected on remote on fd %d\n", fd);
+        close_on_exec(fd);
+        disable_tcp_nagle(fd);
+        snprintf(buf, sizeof buf, "%s:%d", host, port);
+        register_socket_transport(fd, buf, port, 0);
+        snprintf(buffer, sizeof(buffer), "connected to %s:%d", host, port);
+
+done:
+        snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer), buffer);
+        writex(reply_fd, buf, strlen(buf));
+        return 0;
+    }
+
+    // remove TCP transport
+    if (!strncmp(service, "disconnect:", 11)) {
+        char buffer[4096];
+        memset(buffer, 0, sizeof(buffer));
+        char* serial = service + 11;
+        atransport *t = find_transport(serial);
+
+        if (t) {
+            unregister_transport(t);
+        } else {
+            snprintf(buffer, sizeof(buffer), "No such device %s", serial);
+        }
+
+        snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer), buffer);
         writex(reply_fd, buf, strlen(buf));
         return 0;
     }

@@ -23,41 +23,207 @@
 #include "ScanResult.h"
 #include "WifiNetwork.h"
 #include "ISupplicantEventHandler.h"
+#include "IWifiStatusPollerHandler.h"
 
 class NetInterface;
 class Supplicant;
-class WifiScanner;
 class SupplicantAssociatingEvent;
 class SupplicantAssociatedEvent;
 class SupplicantConnectedEvent;
 class SupplicantScanResultsEvent;
 class SupplicantStateChangeEvent;
 class SupplicantDisconnectedEvent;
+class WifiStatusPoller;
 
-class WifiController : public Controller, public ISupplicantEventHandler {
-public:
-    static const uint32_t SCAN_ENABLE_MASK       = 0x01;
-    static const uint32_t SCAN_ACTIVE_MASK       = 0x02;
-    static const uint32_t SCAN_REPEAT_MASK       = 0x04;
+class WifiController : public Controller,
+                       public ISupplicantEventHandler,
+                       public IWifiStatusPollerHandler {
 
-    static const uint32_t SCANMODE_NONE               = 0;
-    static const uint32_t SCANMODE_PASSIVE_ONESHOT    = SCAN_ENABLE_MASK;
-    static const uint32_t SCANMODE_PASSIVE_CONTINUOUS = SCAN_ENABLE_MASK | SCAN_REPEAT_MASK;
-    static const uint32_t SCANMODE_ACTIVE_ONESHOT     = SCAN_ENABLE_MASK | SCAN_ACTIVE_MASK;
-    static const uint32_t SCANMODE_ACTIVE_CONTINUOUS  = SCAN_ENABLE_MASK | SCAN_ACTIVE_MASK | SCAN_REPEAT_MASK;
+    class WifiIntegerProperty : public IntegerProperty {
+    protected:
+        WifiController *mWc;
+    public:
+        WifiIntegerProperty(WifiController *c, const char *name, bool ro, 
+                            int elements);
+        virtual ~WifiIntegerProperty() {}
+        virtual int set(int idx, int value) = 0;
+        virtual int get(int idx, int *buffer) = 0;
+    };
+    friend class WifiController::WifiIntegerProperty;
 
-private:
+    class WifiStringProperty : public StringProperty {
+    protected:
+        WifiController *mWc;
+    public:
+        WifiStringProperty(WifiController *c, const char *name, bool ro, 
+                            int elements);
+        virtual ~WifiStringProperty() {}
+        virtual int set(int idx, const char *value) = 0;
+        virtual int get(int idx, char *buffer, size_t max) = 0;
+    };
+    friend class WifiController::WifiStringProperty;
+
+    class WifiEnabledProperty : public WifiIntegerProperty {
+    public:
+        WifiEnabledProperty(WifiController *c);
+        virtual ~WifiEnabledProperty() {}
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiScanOnlyProperty : public WifiIntegerProperty {
+    public:
+        WifiScanOnlyProperty(WifiController *c);
+        virtual ~WifiScanOnlyProperty() {}
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiAllowedChannelsProperty : public WifiIntegerProperty {
+    public:
+        WifiAllowedChannelsProperty(WifiController *c);
+        virtual ~WifiAllowedChannelsProperty() {}
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiActiveScanProperty : public WifiIntegerProperty {
+    public:
+        WifiActiveScanProperty(WifiController *c);
+        virtual ~WifiActiveScanProperty() {}
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiSearchingProperty : public WifiIntegerProperty {
+    public:
+        WifiSearchingProperty(WifiController *c);
+        virtual ~WifiSearchingProperty() {}
+        int set(int idx, int value) { return -1; }
+        int get(int idx, int *buffer);
+    };
+
+    class WifiPacketFilterProperty : public WifiIntegerProperty {
+    public:
+        WifiPacketFilterProperty(WifiController *c);
+        virtual ~WifiPacketFilterProperty() {}
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiBluetoothCoexScanProperty : public WifiIntegerProperty {
+    public:
+        WifiBluetoothCoexScanProperty(WifiController *c);
+        virtual ~WifiBluetoothCoexScanProperty() {}
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiBluetoothCoexModeProperty : public WifiIntegerProperty {
+    public:
+        WifiBluetoothCoexModeProperty(WifiController *c);
+        virtual ~WifiBluetoothCoexModeProperty() {}
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiCurrentNetworkProperty : public WifiIntegerProperty {
+    public:
+        WifiCurrentNetworkProperty(WifiController *c);
+        virtual ~WifiCurrentNetworkProperty() {}
+        int set(int idx, int value) { return -1; }
+        int get(int idx, int *buffer);
+    };
+
+    class WifiSuspendedProperty : public WifiIntegerProperty {
+    public:
+        WifiSuspendedProperty(WifiController *c);
+        virtual ~WifiSuspendedProperty() {}
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiNetCountProperty : public WifiIntegerProperty {
+    public:
+        WifiNetCountProperty(WifiController *c);
+        virtual ~WifiNetCountProperty() {}
+        int set(int idx, int value) { return -1; }
+        int get(int idx, int *buffer);
+    };
+
+    class WifiTriggerScanProperty : public WifiIntegerProperty {
+    public:
+        WifiTriggerScanProperty(WifiController *c);
+        virtual ~WifiTriggerScanProperty() {}
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiSupplicantStateProperty : public WifiStringProperty {
+    public:
+        WifiSupplicantStateProperty(WifiController *c);
+        virtual ~WifiSupplicantStateProperty() {}
+        int set(int idx, const char *value) { return -1; }
+        int get(int idx, char *buffer, size_t max);
+    };
+
+    class WifiInterfaceProperty : public WifiStringProperty {
+    public:
+        WifiInterfaceProperty(WifiController *c);
+        virtual ~WifiInterfaceProperty() {}
+        int set(int idx, const char *value) { return -1; }
+        int get(int idx, char *buffer, size_t max);
+    };
+
     Supplicant *mSupplicant;
     char        mModulePath[255];
     char        mModuleName[64];
     char        mModuleArgs[255];
 
-    uint32_t    mCurrentScanMode;
-    WifiScanner *mScanner;
     int         mSupplicantState;
+    bool        mActiveScan;
+    bool        mScanOnly;
+    bool        mPacketFilter;
+    bool        mBluetoothCoexScan;
+    int         mBluetoothCoexMode;
+    int         mCurrentlyConnectedNetworkId;
+    bool        mSuspended;
+    int         mLastRssi;
+    int         mRssiEventThreshold;
+    int         mLastLinkSpeed;
+    int         mNumAllowedChannels;
 
     ScanResultCollection *mLatestScanResults;
     pthread_mutex_t      mLatestScanResultsLock;
+    pthread_mutex_t      mLock;
+    WifiStatusPoller     *mStatusPoller;
+
+    struct {
+        WifiEnabledProperty         *propEnabled;
+        WifiScanOnlyProperty        *propScanOnly;
+        WifiAllowedChannelsProperty *propAllowedChannels;
+        IntegerPropertyHelper       *propRssiEventThreshold;
+    } mStaticProperties;
+
+    struct {
+        WifiActiveScanProperty        *propActiveScan;
+        WifiSearchingProperty         *propSearching;
+        WifiPacketFilterProperty      *propPacketFilter;
+        WifiBluetoothCoexScanProperty *propBluetoothCoexScan;
+        WifiBluetoothCoexModeProperty *propBluetoothCoexMode;
+        WifiCurrentNetworkProperty    *propCurrentNetwork;
+        IntegerPropertyHelper         *propRssi;
+        IntegerPropertyHelper         *propLinkSpeed;
+        WifiSuspendedProperty         *propSuspended;
+        WifiNetCountProperty          *propNetCount;
+        WifiSupplicantStateProperty   *propSupplicantState;
+        WifiInterfaceProperty         *propInterface;
+        WifiTriggerScanProperty       *propTriggerScan;
+    } mDynamicProperties;
+
+    // True if supplicant is currently searching for a network
+    bool mIsSupplicantSearching;
+    int  mNumScanResultsSinceLastStateChange;
 
     bool        mEnabled;
 
@@ -71,9 +237,6 @@ public:
     WifiNetwork *createNetwork();
     int removeNetwork(int networkId);
     WifiNetworkCollection *createNetworkList();
-
-    virtual int set(const char *name, const char *value);
-    virtual const char *get(const char *name, char *buffer, size_t maxlen);
 
     ScanResultCollection *createScanResults();
 
@@ -94,18 +257,25 @@ protected:
 
 private:
     void sendStatusBroadcast(const char *msg);
-    int setScanMode(uint32_t mode);
+    int setActiveScan(bool active);
+    int triggerScan();
     int enable();
     int disable();
+    int setSuspend(bool suspend);
+    bool getSuspended();
+    int setBluetoothCoexistenceScan(bool enable);
+    int setBluetoothCoexistenceMode(int mode);
+    int setPacketFilter(bool enable);
+    int setScanOnly(bool scanOnly);
 
     // ISupplicantEventHandler methods
-    virtual void onAssociatingEvent(SupplicantAssociatingEvent *evt);
-    virtual void onAssociatedEvent(SupplicantAssociatedEvent *evt);
-    virtual void onConnectedEvent(SupplicantConnectedEvent *evt);
-    virtual void onScanResultsEvent(SupplicantScanResultsEvent *evt);
-    virtual void onStateChangeEvent(SupplicantStateChangeEvent *evt);
-    virtual void onConnectionTimeoutEvent(SupplicantConnectionTimeoutEvent *evt);
-    virtual void onDisconnectedEvent(SupplicantDisconnectedEvent *evt);
+    void onAssociatingEvent(SupplicantAssociatingEvent *evt);
+    void onAssociatedEvent(SupplicantAssociatedEvent *evt);
+    void onConnectedEvent(SupplicantConnectedEvent *evt);
+    void onScanResultsEvent(SupplicantScanResultsEvent *evt);
+    void onStateChangeEvent(SupplicantStateChangeEvent *evt);
+    void onConnectionTimeoutEvent(SupplicantConnectionTimeoutEvent *evt);
+    void onDisconnectedEvent(SupplicantDisconnectedEvent *evt);
 #if 0
     virtual void onTerminatingEvent(SupplicantEvent *evt);
     virtual void onPasswordChangedEvent(SupplicantEvent *evt);
@@ -118,6 +288,9 @@ private:
     virtual void onDriverStateEvent(SupplicantEvent *evt);
 #endif
 
+    void onStatusPollInterval();
+
+    int verifyNotSuspended();
 };
 
 #endif

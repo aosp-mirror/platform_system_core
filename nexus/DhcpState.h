@@ -14,14 +14,26 @@
  * limitations under the License.
  */
 
-#ifndef _DhcpState_H
-#define _DhcpState_H
+#ifndef _DHCP_STATE_H
+#define _DHCP_STATE_H
 
 class DhcpState {
 public:
-    static const int UNKNOWN = 0;
-    static const int STOPPED = 1;
-    static const int STARTED = 2;
+    static const int INIT            = 0;
+    static const int DISCOVERING     = 1;
+    static const int REQUESTING      = 2;
+    static const int BOUND           = 3;
+    static const int RENEWING        = 4;
+    static const int REBINDING       = 5;
+    static const int REBOOT          = 6;
+    static const int RENEW_REQUESTED = 7;
+    static const int INIT_IPV4LL     = 8;
+    static const int PROBING         = 9;
+    static const int ANNOUNCING      = 10;
+
+    static char *toString(int val, char *buffer, int max);
+
+    static int parseString(const char *buffer);
 };
 
 #endif

@@ -30,6 +30,7 @@
 #include <cutils/log.h>
 
 #include "Controller.h"
+#include "InterfaceConfig.h"
 
 extern "C" int init_module(void *, unsigned int, const char *);
 extern "C" int delete_module(const char *, unsigned int);
@@ -55,16 +56,6 @@ int Controller::start() {
 
 int Controller::stop() {
     return 0;
-}
-
-int Controller::set(const char *name, const char *value) {
-    errno = ENOENT;
-    return -1;
-}
-
-const char *Controller::get(const char *name, char *buffer, size_t maxsize) {
-    errno = ENOENT;
-    return NULL;
 }
 
 int Controller::loadKernelModule(char *modpath, const char *args) {
@@ -164,13 +155,11 @@ bail:
 
 int Controller::bindInterface(const char *ifname) {
     mBoundInterface = strdup(ifname);
-    LOGD("Controller %s bound to %s", mName, ifname);
     return 0;
 }
 
 int Controller::unbindInterface(const char *ifname) {
     free(mBoundInterface);
     mBoundInterface = NULL;
-    LOGD("Controller %s unbound from %s", mName, ifname);
     return 0;
 }

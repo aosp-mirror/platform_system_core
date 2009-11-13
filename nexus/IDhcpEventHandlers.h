@@ -20,6 +20,14 @@
 
 class IDhcpEventHandlers {
 public:
+    virtual ~IDhcpEventHandlers() {}
+    virtual void onDhcpStateChanged(Controller *c, int state) = 0;
+    virtual void onDhcpEvent(Controller *c, int event) = 0;
+    virtual void onDhcpLeaseUpdated(Controller *c,
+                                    struct in_addr *addr, struct in_addr *net,
+                                    struct in_addr *brd,
+                                    struct in_addr *gw, struct in_addr *dns1,
+                                    struct in_addr *dns2) = 0;
 };
 
 #endif

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <utils/executablepath.h>
 #import <Carbon/Carbon.h>
 #include <unistd.h>
 

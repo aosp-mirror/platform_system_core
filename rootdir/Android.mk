@@ -5,8 +5,19 @@ include $(CLEAR_VARS)
 
 copy_from := \
 	etc/dbus.conf \
-	etc/init.goldfish.sh \
 	etc/hosts
+
+ifeq ($(TARGET_PRODUCT),generic)
+copy_from += etc/vold.conf
+endif
+
+# the /system/etc/init.goldfish.sh is needed to enable emulator support
+# in the system image. In theory, we don't need these for -user builds
+# which are device-specific. However, these builds require at the moment
+# to run the dex pre-optimization *in* the emulator. So keep the file until
+# we are capable of running dex preopt on the host.
+#
+copy_from += etc/init.goldfish.sh
 
 copy_to := $(addprefix $(TARGET_OUT)/,$(copy_from))
 copy_from := $(addprefix $(LOCAL_PATH)/,$(copy_from))
@@ -28,11 +39,13 @@ $(file) : $(LOCAL_PATH)/init.rc | $(ACP)
 ALL_PREBUILT += $(file)
 endif
 
+# Just like /system/etc/init.goldfish.sh, the /init.godlfish.rc is here
+# to allow -user builds to properly run the dex pre-optimization pass in
+# the emulator.
 file := $(TARGET_ROOT_OUT)/init.goldfish.rc
 $(file) : $(LOCAL_PATH)/etc/init.goldfish.rc | $(ACP)
 	$(transform-prebuilt-to-target)
 ALL_PREBUILT += $(file)
-	
 
 # create some directories (some are mount points)
 DIRS := $(addprefix $(TARGET_ROOT_OUT)/, \

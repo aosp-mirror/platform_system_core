@@ -113,6 +113,7 @@ extern int  adb_creat(const char*  path, int  mode);
 extern int  adb_read(int  fd, void* buf, int len);
 extern int  adb_write(int  fd, const void*  buf, int  len);
 extern int  adb_lseek(int  fd, int  pos, int  where);
+extern int  adb_shutdown(int  fd);
 extern int  adb_close(int  fd);
 
 static __inline__ int  unix_close(int fd)
@@ -326,6 +327,13 @@ static __inline__ int  adb_open( const char*  pathname, int  options )
 }
 #undef   open
 #define  open    ___xxx_open
+
+static __inline__ int  adb_shutdown(int fd)
+{
+    return shutdown(fd, SHUT_RDWR);
+}
+#undef   shutdown
+#define  shutdown   ____xxx_shutdown
 
 static __inline__ int  adb_close(int fd)
 {
