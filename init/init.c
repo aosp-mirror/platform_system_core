@@ -253,10 +253,11 @@ void service_start(struct service *svc, const char *dynamic_args)
             setuid(svc->uid);
         }
 
-        if (!dynamic_args)
-            if (execve(svc->args[0], (char**) svc->args, (char**) ENV) < 0)
+        if (!dynamic_args) {
+            if (execve(svc->args[0], (char**) svc->args, (char**) ENV) < 0) {
                 ERROR("cannot execve('%s'): %s\n", svc->args[0], strerror(errno));
-        else {
+            }
+        } else {
             char *arg_ptrs[SVC_MAXARGS+1];
             int arg_idx = svc->nargs;
             char *tmp = strdup(dynamic_args);
@@ -272,8 +273,7 @@ void service_start(struct service *svc, const char *dynamic_args)
                     break;
             }
             arg_ptrs[arg_idx] = '\0';
-            if (execve(svc->args[0], (char**) arg_ptrs, (char**) ENV) < 0)
-                ERROR("cannot execve('%s'): %s\n", svc->args[0], strerror(errno));
+            execve(svc->args[0], (char**) arg_ptrs, (char**) ENV);
         }
         _exit(127);
     }

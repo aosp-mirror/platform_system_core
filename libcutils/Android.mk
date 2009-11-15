@@ -17,11 +17,10 @@ LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
 commonSources := \
-	abort_socket.c \
 	array.c \
 	hashmap.c \
 	atomic.c \
-        native_handle.c \
+	native_handle.c \
 	buffer.c \
 	socket_inaddr_any_server.c \
 	socket_local_client.c \
@@ -37,40 +36,47 @@ commonSources := \
 	record_stream.c \
 	process_name.c \
 	properties.c \
-	threads.c
+	threads.c \
+	sched_policy.c
+
+commonHostSources := \
+        ashmem-host.c
 
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
 # which are also hard or even impossible to port to native Win32
-WITH_MINGW :=
+WINDOWS_HOST_ONLY :=
 ifeq ($(HOST_OS),windows)
     ifeq ($(strip $(USE_CYGWIN)),)
-        WITH_MINGW := 1
+        WINDOWS_HOST_ONLY := 1
     endif
 endif
 # USE_MINGW is defined when we build against Mingw on Linux
 ifneq ($(strip $(USE_MINGW)),)
-    WITH_MINGW := 1
+    WINDOWS_HOST_ONLY := 1
 endif
 
-ifeq ($(WITH_MINGW),1)
+ifeq ($(WINDOWS_HOST_ONLY),1)
     commonSources += \
         uio.c
 else
     commonSources += \
+        abort_socket.c \
         mspace.c \
         selector.c \
         tztime.c \
-        tzstrftime.c \
         adb_networking.c \
-	zygote.c
+        zygote.c
+
+    commonHostSources += \
+        tzstrftime.c
 endif
 
 
 # Static library for host
 # ========================================================
 LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) ashmem-host.c
+LOCAL_SRC_FILES := $(commonSources) $(commonHostSources)
 LOCAL_LDLIBS := -lpthread
 LOCAL_STATIC_LIBRARIES := liblog
 include $(BUILD_HOST_STATIC_LIBRARY)
@@ -82,7 +88,7 @@ ifeq ($(TARGET_SIMULATOR),true)
 # ========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) memory.c dlmalloc_stubs.c ashmem-host.c
+LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) memory.c dlmalloc_stubs.c
 LOCAL_LDLIBS := -lpthread
 LOCAL_SHARED_LIBRARIES := liblog
 include $(BUILD_SHARED_LIBRARY)

@@ -20,13 +20,15 @@
 #include <sysutils/SocketListener.h>
 
 class IDhcpEventHandlers;
+class Controller;
 
 class DhcpListener : public SocketListener {
     IDhcpEventHandlers *mHandlers;
+    Controller         *mController;
 
 public:
 
-    DhcpListener(IDhcpEventHandlers *handlers);
+    DhcpListener(Controller *c, int socket, IDhcpEventHandlers *handlers);
     virtual ~DhcpListener();
 
 private:

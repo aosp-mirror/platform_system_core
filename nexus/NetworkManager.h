@@ -17,6 +17,7 @@
 #ifndef _NETWORKMANAGER_H
 #define _NETWORKMANAGER_H
 
+#include <utils/List.h>
 #include <sysutils/SocketListener.h>
 
 #include "Controller.h"
@@ -28,14 +29,33 @@ class InterfaceConfig;
 class DhcpClient;
 
 class NetworkManager : public IControllerHandler, public IDhcpEventHandlers {
-private:
     static NetworkManager *sInstance;
 
+    class ControllerBinding {
+        Controller      *mController;
+        InterfaceConfig *mCurrentCfg;
+        InterfaceConfig *mBoundCfg;
+
+    public:
+        ControllerBinding(Controller *c);
+        virtual ~ControllerBinding() {}
+
+        InterfaceConfig *getCurrentCfg() { return mCurrentCfg; }
+        InterfaceConfig *getBoundCfg() { return mCurrentCfg; }
+        Controller *getController() { return mController; }
+
+        void setCurrentCfg(InterfaceConfig *cfg);
+        void setBoundCfg(InterfaceConfig *cfg);
+    };
+
+    typedef android::List<ControllerBinding *> ControllerBindingCollection;
+
 private:
-    ControllerCollection *mControllers;
-    SocketListener       *mBroadcaster;
-    PropertyManager      *mPropMngr;
-    DhcpClient           *mDhcp;
+    ControllerBindingCollection *mControllerBindings;
+    SocketListener              *mBroadcaster;
+    PropertyManager             *mPropMngr;
+    DhcpClient                  *mDhcp;
+    int                         mLastDhcpState;
 
 public:
     virtual ~NetworkManager();
@@ -57,8 +77,19 @@ private:
     int stopControllers();
 
     NetworkManager(PropertyManager *propMngr);
+    ControllerBinding *lookupBinding(Controller *c);
 
-    void onInterfaceConnected(Controller *c, const InterfaceConfig *cfg);
-    void onInterfaceDisconnected(Controller *c, const char *name);
+    void onInterfaceConnected(Controller *c);
+    void onInterfaceDisconnected(Controller *c);
+    void onControllerSuspending(Controller *c);
+    void onControllerResumed(Controller *c);
+
+    void onDhcpStateChanged(Controller *c, int state);
+    void onDhcpEvent(Controller *c, int event);
+    void onDhcpLeaseUpdated(Controller *c,
+                            struct in_addr *addr, struct in_addr *net,
+                            struct in_addr *brd,
+                            struct in_addr *gw, struct in_addr *dns1,
+                            struct in_addr *dns2);
 };
 #endif

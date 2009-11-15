@@ -30,7 +30,6 @@ class SupplicantStatus;
 #include "ISupplicantEventHandler.h"
 
 class Supplicant {
-private:
     struct wpa_ctrl      *mCtrl;
     struct wpa_ctrl      *mMonitor;
     SupplicantListener   *mListener;
@@ -50,7 +49,8 @@ public:
     int stop();
     bool isStarted();
 
-    int triggerScan(bool active);
+    int setScanMode(bool active);
+    int triggerScan();
 
     WifiNetwork *createNetwork();
     WifiNetwork *lookupNetwork(int networkId);
@@ -62,6 +62,21 @@ public:
     const char *getNetworkVar(int networkid, const char *var, char *buffer,
                               size_t max);
     int enableNetwork(int networkId, bool enabled);
+
+    int disconnect();
+    int reconnect();
+    int reassociate();
+    int setApScanMode(int mode);
+    int enablePacketFilter();
+    int disablePacketFilter();
+    int setBluetoothCoexistenceMode(int mode);
+    int enableBluetoothCoexistenceScan();
+    int disableBluetoothCoexistenceScan();
+    int stopDriver();
+    int startDriver();
+    int getRssi(int *buffer);
+    int getLinkSpeed();
+    int getNetworkCount();
 
     SupplicantStatus *getStatus();
 

@@ -224,6 +224,16 @@ int ifc_add_host_route(const char *name, in_addr_t addr)
     return result;
 }
 
+int ifc_enable(const char *ifname)
+{
+    int result;
+
+    ifc_init();
+    result = ifc_up(ifname);
+    ifc_close();
+    return result;
+}
+
 int ifc_disable(const char *ifname)
 {
     int result;

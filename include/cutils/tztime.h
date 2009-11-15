@@ -17,12 +17,17 @@
 #ifndef _CUTILS_TZTIME_H
 #define _CUTILS_TZTIME_H
 
+#include <time.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 time_t mktime_tz(struct tm * const tmp, char const * tz);
 void localtime_tz(const time_t * const timep, struct tm * tmp, const char* tz);
+
+#ifndef HAVE_ANDROID_OS
+/* the following is defined in <time.h> in Bionic */
 
 struct strftime_locale {
     const char *mon[12];    /* short names */
@@ -39,6 +44,8 @@ struct strftime_locale {
 };
 
 size_t strftime_tz(char *s, size_t max, const char *format, const struct tm *tm, const struct strftime_locale *locale);
+
+#endif /* !HAVE_ANDROID_OS */
 
 #ifdef __cplusplus
 }

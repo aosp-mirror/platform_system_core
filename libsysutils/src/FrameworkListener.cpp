@@ -56,24 +56,73 @@ void FrameworkListener::registerCmd(FrameworkCommand *cmd) {
 }
 
 void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
-    int argc;
+    FrameworkCommandCollection::iterator i;
+    int argc = 0;
     char *argv[FrameworkListener::CMD_ARGS_MAX];
+    char tmp[255];
+    char *p = data;
+    char *q = tmp;
+    bool esc = false;
+    bool quote = false;
+    int k;
 
-    if (!index(data, '"')) {
-        char *next = data;
-        char *field;
-        int i;
+    memset(argv, 0, sizeof(argv));
+    memset(tmp, 0, sizeof(tmp));
+    while(*p) {
+        if (*p == '\\') {
+            if (esc) {
+                *q++ = '\\';
+                esc = false;
+            } else
+                esc = true;
+            p++;
+            continue;
+        } else if (esc) {
+            if (*p == '"')
+                *q++ = '"';
+            else if (*p == '\\')
+                *q++ = '\\';
+            else {
+                cli->sendMsg(500, "Unsupported escape sequence", false);
+                goto out;
+            }
+            p++;
+            esc = false;
+            continue;
+        }
 
-        for (i = 0; (i < FrameworkListener::CMD_ARGS_MAX) &&
-                    (argv[i] = strsep(&next, " ")); i++);
-        argc = i+1;
-    } else {
-        LOGD("blehhh not supported");
-        return;
+        if (*p == '"') {
+            if (quote)
+                quote = false;
+            else
+                quote = true;
+            p++;
+            continue;
+        }
+
+        *q = *p++;
+        if (!quote && *q == ' ') {
+            *q = '\0';
+            argv[argc++] = strdup(tmp);
+            memset(tmp, 0, sizeof(tmp));
+            q = tmp;
+            continue;
+        }
+        q++;
     }
 
-    FrameworkCommandCollection::iterator i;
+    argv[argc++] = strdup(tmp);
+#if 0
+    for (k = 0; k < argc; k++) {
+        LOGD("arg[%d] = '%s'", k, argv[k]);
+    }
+#endif
 
+    if (quote) {
+        cli->sendMsg(500, "Unclosed quotes error", false);
+        goto out;
+    }
+    
     for (i = mCommands->begin(); i != mCommands->end(); ++i) {
         FrameworkCommand *c = *i;
 
@@ -81,10 +130,14 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
             if (c->runCommand(cli, argc, argv)) {
                 LOGW("Handler '%s' error (%s)", c->getCommand(), strerror(errno));
             }
-            return;
+            goto out;
         }
     }
 
     cli->sendMsg(500, "Command not recognized", false);
+out:
+    int j;
+    for (j = 0; j < argc; j++)
+        free(argv[j]);
     return;
 }

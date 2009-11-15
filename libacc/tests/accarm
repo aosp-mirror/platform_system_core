@@ -1,0 +1,69 @@
+#!/usr/bin/python
+#
+# Run a test on the ARM version of acc.
+
+import unittest
+import subprocess
+import os
+import sys
+
+def compile(args):
+    proc = subprocess.Popen(["acc"] + args, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    result = proc.communicate()
+    return result
+
+def runCmd(args):
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = proc.communicate()
+    return result[0].strip()
+
+def uname():
+    return runCmd(["uname"])
+
+def unameM():
+    return runCmd(["uname", "-m"])
+
+def which(item):
+    return runCmd(["which", item])
+
+def adb(args):
+    return runCmd(["adb"] + args)
+
+def setupArm(file):
+    print "Setting up arm"
+    adb(["remount"])
+    adb(["shell", "rm", "/system/bin/acc"])
+    adb(["shell", "mkdir", "/system/bin/accdata"])
+    adb(["shell", "mkdir", "/system/bin/accdata/data"])
+
+    remoteFileName = os.path.join("/system/bin/accdata", file)
+    adb(["push", file, remoteFileName])
+
+    # Copy over compiler
+    adb(["sync"])
+    return remoteFileName
+
+def compileArm(args):
+    remoteArgs = []
+    fileName = ""
+    for arg in sys.argv[1:]:
+        if arg.startswith('-'):
+            remoteArgs.append(arg)
+        else:
+            fileName = arg
+
+    remoteFileName = setupArm(fileName)
+    remoteArgs.append(remoteFileName)
+    remoteCmdLine = ["adb", "shell", "/system/bin/acc"] + remoteArgs
+    proc = subprocess.Popen(remoteCmdLine, stdout=subprocess.PIPE)
+    result = proc.communicate()
+    return result[0].replace("\r","")
+
+
+def main():
+    print compileArm(sys.argv[1:])
+
+if __name__ == '__main__':
+    main()
+
+

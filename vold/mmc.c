@@ -258,7 +258,7 @@ static int mmc_bootstrap_mmcblk_partition(char *devpath)
     char filename[255];
     char *uevent_buffer;
     ssize_t sz;
-    char *uevent_params[4];
+    char *uevent_params[5];
     char tmp[255];
     FILE *fp;
     char line[255];

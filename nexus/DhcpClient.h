@@ -18,23 +18,36 @@
 #ifndef _DhcpClient_H
 #define _DhcpClient_H
 
+#include <pthread.h>
+
 class IDhcpEventHandlers;
 class ServiceManager;
 class DhcpListener;
+class Controller;
 
 class DhcpClient {
+public:
+    static const int STATUS_MONITOR_PORT = 6666;
+
+private:
     int                mState;
     IDhcpEventHandlers *mHandlers;
     ServiceManager     *mServiceManager;
     DhcpListener       *mListener;
+    int                mListenerSocket;
+    pthread_mutex_t    mLock;
+    Controller         *mController;
+    bool               mDoArpProbe;
 
 public:
     DhcpClient(IDhcpEventHandlers *handlers);
     virtual ~DhcpClient();
 
     int getState() { return mState; }
+    bool getDoArpProbe() { return mDoArpProbe; }
+    void setDoArpProbe(bool probe);
 
-    int start(const char *interface);
+    int start(Controller *c);
     int stop();
 };
 

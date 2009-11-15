@@ -21,6 +21,10 @@
 
 #include <utils/List.h>
 
+#include "Property.h"
+
+class PropertyManager;
+
 class KeyManagementMask {
 public:
     static const uint32_t UNKNOWN   = 0;
@@ -60,19 +64,140 @@ public:
 };
 
 class Supplicant;
-class InterfaceConfig;
 class Controller;
 class WifiController;
 
-#include "IPropertyProvider.h"
+class WifiNetwork {
+    class WifiNetworkIntegerProperty : public IntegerProperty {
+    protected:
+        WifiNetwork *mWn;
+    public:
+        WifiNetworkIntegerProperty(WifiNetwork *wn, const char *name, bool ro,
+                                   int elements);
+        virtual ~WifiNetworkIntegerProperty() {}
+        virtual int set(int idx, int value) = 0;
+        virtual int get(int idx, int *buffer) = 0;
+    };
+    friend class WifiNetwork::WifiNetworkIntegerProperty;
 
-class WifiNetwork : public IPropertyProvider{
-public:
-    static const char *PropertyNames[];
+    class WifiNetworkStringProperty : public StringProperty {
+    protected:
+        WifiNetwork *mWn;
+    public:
+        WifiNetworkStringProperty(WifiNetwork *wn, const char *name, bool ro,
+                                 int elements);
+        virtual ~WifiNetworkStringProperty() {}
+        virtual int set(int idx, const char *value) = 0;
+        virtual int get(int idx, char *buffer, size_t max) = 0;
+    };
+    friend class WifiNetwork::WifiNetworkStringProperty;
+
+    class WifiNetworkEnabledProperty : public WifiNetworkIntegerProperty {
+    public:
+        WifiNetworkEnabledProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkEnabledProperty() {};
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiNetworkPriorityProperty : public WifiNetworkIntegerProperty {
+    public:
+        WifiNetworkPriorityProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkPriorityProperty() {};
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiNetworkDefaultKeyIndexProperty : public WifiNetworkIntegerProperty {
+    public:
+        WifiNetworkDefaultKeyIndexProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkDefaultKeyIndexProperty() {};
+        int set(int idx, int value);
+        int get(int idx, int *buffer);
+    };
+
+    class WifiNetworkSsidProperty : public WifiNetworkStringProperty {
+    public:
+        WifiNetworkSsidProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkSsidProperty() {};
+        int set(int idx, const char *value);
+        int get(int idx, char *buffer, size_t max);
+    };
+
+    class WifiNetworkBssidProperty : public WifiNetworkStringProperty {
+    public:
+        WifiNetworkBssidProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkBssidProperty() {};
+        int set(int idx, const char *value);
+        int get(int idx, char *buffer, size_t max);
+    };
+
+    class WifiNetworkPskProperty : public WifiNetworkStringProperty {
+    public:
+        WifiNetworkPskProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkPskProperty() {};
+        int set(int idx, const char *value);
+        int get(int idx, char *buffer, size_t max);
+    };
+
+    class WifiNetworkKeyManagementProperty : public WifiNetworkStringProperty {
+    public:
+        WifiNetworkKeyManagementProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkKeyManagementProperty() {};
+        int set(int idx, const char *value);
+        int get(int idx, char *buffer, size_t max);
+    };
+
+    class WifiNetworkAuthAlgorithmsProperty : public WifiNetworkStringProperty {
+    public:
+        WifiNetworkAuthAlgorithmsProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkAuthAlgorithmsProperty() {};
+        int set(int idx, const char *value);
+        int get(int idx, char *buffer, size_t max);
+    };
+
+    class WifiNetworkProtocolsProperty : public WifiNetworkStringProperty {
+    public:
+        WifiNetworkProtocolsProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkProtocolsProperty() {};
+        int set(int idx, const char *value);
+        int get(int idx, char *buffer, size_t max);
+    };
+
+    class WifiNetworkWepKeyProperty : public WifiNetworkStringProperty {
+    public:
+        WifiNetworkWepKeyProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkWepKeyProperty() {};
+        int set(int idx, const char *value);
+        int get(int idx, char *buffer, size_t max);
+    };
+
+    class WifiNetworkPairwiseCiphersProperty : public WifiNetworkStringProperty {
+    public:
+        WifiNetworkPairwiseCiphersProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkPairwiseCiphersProperty() {};
+        int set(int idx, const char *value);
+        int get(int idx, char *buffer, size_t max);
+    };
+
+    class WifiNetworkGroupCiphersProperty : public WifiNetworkStringProperty {
+    public:
+        WifiNetworkGroupCiphersProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkGroupCiphersProperty() {};
+        int set(int idx, const char *value);
+        int get(int idx, char *buffer, size_t max);
+    };
+
+    class WifiNetworkHiddenSsidProperty : public WifiNetworkStringProperty {
+    public:
+        WifiNetworkHiddenSsidProperty(WifiNetwork *wn);
+        virtual ~WifiNetworkHiddenSsidProperty() {};
+        int set(int idx, const char *value);
+        int get(int idx, char *buffer, size_t max);
+    };
 
 private:
     Supplicant *mSuppl;
-    InterfaceConfig *mIfaceCfg;
     WifiController *mController;
 
     /*
@@ -128,33 +253,49 @@ private:
     /*
      * The set of key management protocols supported by this configuration.
      */
-    uint32_t mAllowedKeyManagement;
+    uint32_t mKeyManagement;
 
     /*
      * The set of security protocols supported by this configuration.
      */
-    uint32_t mAllowedProtocols;
+    uint32_t mProtocols;
 
     /*
      * The set of authentication protocols supported by this configuration.
      */
-    uint32_t mAllowedAuthAlgorithms;
+    uint32_t mAuthAlgorithms;
 
     /*
      * The set of pairwise ciphers for WPA supported by this configuration.
      */
-    uint32_t mAllowedPairwiseCiphers;
+    uint32_t mPairwiseCiphers;
 
     /*
      * The set of group ciphers for WPA supported by this configuration.
      */
-    uint32_t mAllowedGroupCiphers;
+    uint32_t mGroupCiphers;
 
     /*
      * Set if this Network is enabled
      */
     bool mEnabled;
 
+    char *mPropNamespace;
+    struct {
+        WifiNetworkEnabledProperty               *propEnabled;
+        WifiNetworkSsidProperty                  *propSsid;
+        WifiNetworkBssidProperty                 *propBssid;
+        WifiNetworkPskProperty                   *propPsk;
+        WifiNetworkWepKeyProperty                *propWepKey;
+        WifiNetworkDefaultKeyIndexProperty       *propDefKeyIdx;
+        WifiNetworkPriorityProperty              *propPriority;
+        WifiNetworkKeyManagementProperty  *propKeyManagement;
+        WifiNetworkProtocolsProperty      *propProtocols;
+        WifiNetworkAuthAlgorithmsProperty *propAuthAlgorithms;
+        WifiNetworkPairwiseCiphersProperty       *propPairwiseCiphers;
+        WifiNetworkGroupCiphersProperty          *propGroupCiphers;
+        WifiNetworkHiddenSsidProperty            *propHiddenSsid;
+    } mStaticProperties;
 private:
     WifiNetwork();
 
@@ -165,8 +306,8 @@ public:
     virtual ~WifiNetwork();
 
     WifiNetwork *clone();
-    int registerProperties();
-    int unregisterProperties();
+    int attachProperties(PropertyManager *pm, const char *nsName);
+    int detachProperties(PropertyManager *pm, const char *nsName);
 
     int getNetworkId() { return mNetid; }
     const char *getSsid() { return mSsid; }
@@ -176,18 +317,13 @@ public:
     int getDefaultKeyIndex() { return mDefaultKeyIndex; }
     int getPriority() { return mPriority; }
     const char *getHiddenSsid() { return mHiddenSsid; }
-    uint32_t getAllowedKeyManagement() { return mAllowedKeyManagement; }
-    uint32_t getAllowedProtocols() { return mAllowedProtocols; }
-    uint32_t getAllowedAuthAlgorithms() { return mAllowedAuthAlgorithms; }
-    uint32_t getAllowedPairwiseCiphers() { return mAllowedPairwiseCiphers; }
-    uint32_t getAllowedGroupCiphers() { return mAllowedGroupCiphers; }
+    uint32_t getKeyManagement() { return mKeyManagement; }
+    uint32_t getProtocols() { return mProtocols; }
+    uint32_t getAuthAlgorithms() { return mAuthAlgorithms; }
+    uint32_t getPairwiseCiphers() { return mPairwiseCiphers; }
+    uint32_t getGroupCiphers() { return mGroupCiphers; }
     bool getEnabled() { return mEnabled; }
     Controller *getController() { return (Controller *) mController; }
-
-    int set(const char *name, const char *value);
-    const char *get(const char *name, char *buffer, size_t maxsize);
-
-    InterfaceConfig *getIfaceCfg() { return mIfaceCfg; }
 
     int setEnabled(bool enabled);
     int setSsid(const char *ssid);
@@ -197,14 +333,22 @@ public:
     int setDefaultKeyIndex(int idx);
     int setPriority(int pri);
     int setHiddenSsid(const char *ssid);
-    int setAllowedKeyManagement(uint32_t mask);
-    int setAllowedProtocols(uint32_t mask);
-    int setAllowedAuthAlgorithms(uint32_t mask);
-    int setAllowedPairwiseCiphers(uint32_t mask);
-    int setAllowedGroupCiphers(uint32_t mask);
+    int setKeyManagement(uint32_t mask);
+    int setProtocols(uint32_t mask);
+    int setAuthAlgorithms(uint32_t mask);
+    int setPairwiseCiphers(uint32_t mask);
+    int setGroupCiphers(uint32_t mask);
 
     // XXX:Should this really be exposed?.. meh
     int refresh();
+
+private:
+    int parseKeyManagementMask(const char *buffer, uint32_t *mask);
+    int parseProtocolsMask(const char *buffer, uint32_t *mask);
+    int parseAuthAlgorithmsMask(const char *buffer, uint32_t *mask);
+    int parsePairwiseCiphersMask(const char *buffer, uint32_t *mask);
+    int parseGroupCiphersMask(const char *buffer, uint32_t *mask);
+    void createProperties();
 };
 
 typedef android::List<WifiNetwork *> WifiNetworkCollection;

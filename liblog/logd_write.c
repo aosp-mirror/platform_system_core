@@ -142,11 +142,7 @@ int __android_log_write(int prio, const char *tag, const char *msg)
 
     /* XXX: This needs to go! */
     if (!strcmp(tag, "HTC_RIL") ||
-        !strcmp(tag, "RILJ") ||
-        !strcmp(tag, "RILB") ||
-        !strcmp(tag, "RILC") ||
-        !strcmp(tag, "RILD") ||
-        !strcmp(tag, "RIL") ||
+        !strncmp(tag, "RIL", 3) || /* Any log tag with "RIL" as the prefix */
         !strcmp(tag, "AT") ||
         !strcmp(tag, "GSM") ||
         !strcmp(tag, "STK") ||
