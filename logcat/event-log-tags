@@ -282,6 +282,8 @@
 30035 am_schedule_service_restart (Component Name|3),(Time|2|3)
 # A client was waiting for a content provider, but its process was lost
 30036 am_provider_lost_process (Package Name|3),(UID|1|5),(Name|3)
+# The activity manager gave up on a new process taking too long to start
+30037 am_process_start_timeout (PID|1|5),(UID|1|5),(Process Name|3)
 
 # Out of memory for surfaces.
 31000 wm_no_surface_memory (Window|3),(PID|1|5),(Operation|3)
