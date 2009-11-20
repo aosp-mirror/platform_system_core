@@ -97,7 +97,7 @@ loglevel 3
     chmod 0770 /cache
 
     # This may have been created by the recovery system with odd permissions
-    chown system system /cache/recovery
+    chown system cache /cache/recovery
     chmod 0770 /cache/recovery
 
     #change permissions on vmallocinfo so we can grab it from bugreports
