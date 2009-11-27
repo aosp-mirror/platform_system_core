@@ -82,9 +82,7 @@ template<class E> class Vector {
 
     ~Vector() {
         if (mpBase) {
-            for(size_t i = 0; i < mUsed; i++)  {
-                mpBase[mUsed].~E();
-            }
+            clear();
             free(mpBase);
         }
     }
@@ -110,9 +108,19 @@ template<class E> class Vector {
         * ensure(1) = item;
     }
 
-    size_t size() {
+    inline size_t size() {
         return mUsed;
     }
+
+    void clear() {
+         if (mpBase) {
+             size_t used = mUsed;
+             for(size_t i = 0; i < used; i++) {
+                 mpBase[i].~E();
+             }
+         }
+         mUsed = 0;
+     }
 
 private:
     E* ensure(int n) {
