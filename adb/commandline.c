@@ -990,9 +990,13 @@ top:
     if(!strcmp(argv[0], "forward")) {
         if(argc != 3) return usage();
         if (serial) {
-            snprintf(buf, sizeof buf, "host-serial:%s:forward:%s;%s",serial,argv[1],argv[2]);
+            snprintf(buf, sizeof buf, "host-serial:%s:forward:%s;%s",serial, argv[1], argv[2]);
+        } else if (ttype == kTransportUsb) {
+            snprintf(buf, sizeof buf, "host-usb:forward:%s;%s", argv[1], argv[2]);
+        } else if (ttype == kTransportLocal) {
+            snprintf(buf, sizeof buf, "host-local:forward:%s;%s", argv[1], argv[2]);
         } else {
-            snprintf(buf, sizeof buf, "host:forward:%s;%s",argv[1],argv[2]);
+            snprintf(buf, sizeof buf, "host:forward:%s;%s", argv[1], argv[2]);
         }
         if(adb_command(buf)) {
             fprintf(stderr,"error: %s\n", adb_error());
