@@ -606,15 +606,16 @@ static void wait_for_user_action(unsigned tid, struct ucred* cr)
     (void)tid;
     /* First log a helpful message */
     LOG(    "********************************************************\n"
-            "* process %d crashed. debuggerd waiting for gdbserver   \n"
-            "*                                                       \n"
-            "*     adb shell gdbserver :port --attach %d &           \n"
-            "*                                                       \n"
-            "* and press the HOME key.                               \n"
+            "* Process %d has been suspended while crashing.  To\n"
+            "* attach gdbserver for a gdb connection on port 5039:\n"
+            "*\n"
+            "*     adb shell gdbserver :5039 --attach %d &\n"
+            "*\n"
+            "* Press HOME key to let the process continue crashing.\n"
             "********************************************************\n",
             cr->pid, cr->pid);
 
-    /* wait for HOME key */
+    /* wait for HOME key (TODO: something useful for devices w/o HOME key) */
     if (init_getevent() == 0) {
         int ms = 1200 / 10;
         int dit = 1;
@@ -698,7 +699,7 @@ static void handle_crashing_process(int fd)
 
     sprintf(buf,"/proc/%d/task/%d", cr.pid, tid);
     if(stat(buf, &s)) {
-        LOG("tid %d does not exist in pid %d. ignorning debug request\n",
+        LOG("tid %d does not exist in pid %d. ignoring debug request\n",
             tid, cr.pid);
         close(fd);
         return;
