@@ -36,7 +36,8 @@ commonSources := \
 	record_stream.c \
 	process_name.c \
 	properties.c \
-	threads.c
+	threads.c \
+	sched_policy.c
 
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
