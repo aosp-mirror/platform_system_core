@@ -53,13 +53,22 @@ static int add_tid_to_cgroup(int tid, const char *grp_name)
     sprintf(path, "/dev/cpuctl/%s/tasks", grp_name);
 
     if ((fd = open(path, O_WRONLY)) < 0) {
-        LOGE("add_tid_to_cgroup failed to open '%s' (%s)\n", path, strerror(errno));
+        LOGE("add_tid_to_cgroup failed to open '%s' (%s)\n", path,
+             strerror(errno));
         return -1;
     }
 
     sprintf(text, "%d", tid);
     if (write(fd, text, strlen(text)) < 0) {
         close(fd);
+	/*
+	 * If the thread is in the process of exiting,
+	 * don't flag an error
+	 */
+	if (errno == ESRCH)
+		return 0;
+        LOGW("add_tid_to_cgroup failed to write '%s' (%s)\n", path,
+             strerror(errno));
         return -1;
     }
 
