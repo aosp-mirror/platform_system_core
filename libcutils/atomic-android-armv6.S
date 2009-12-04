@@ -19,17 +19,25 @@
     .align
     
     .global android_atomic_write
+    .type android_atomic_write, %function
     
     .global android_atomic_inc
+    .type android_atomic_inc, %function
     .global android_atomic_dec
+    .type android_atomic_dec, %function
     
     .global android_atomic_add
+    .type android_atomic_add, %function
     .global android_atomic_and
+    .type android_atomic_and, %function
     .global android_atomic_or
+    .type android_atomic_or, %function
     
     .global android_atomic_swap
+    .type android_atomic_swap, %function
     
     .global android_atomic_cmpxchg
+    .type android_atomic_cmpxchg, %function
     
 
 

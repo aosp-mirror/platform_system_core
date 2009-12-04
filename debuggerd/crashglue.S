@@ -1,5 +1,7 @@
 .globl crash1
+.type crash1, %function
 .globl crashnostack
+.type crashnostack, %function
 		
 crash1:
 	ldr r0, =0xa5a50000
