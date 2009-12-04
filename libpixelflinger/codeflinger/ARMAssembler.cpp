@@ -433,6 +433,16 @@ void ARMAssembler::UXTB16(int cc, int Rd, int Rm, int rotate)
 {
     *mPC++ = (cc<<28) | 0x6CF0070 | (Rd<<12) | ((rotate >> 3) << 10) | Rm;
 }
+#if 0
+#pragma mark -
+#pragma mark Bit manipulation (ARMv7+ only)...
+#endif
+
+// Bit manipulation (ARMv7+ only)...
+void ARMAssembler::UBFX(int cc, int Rd, int Rn, int lsb, int width)
+{
+    *mPC++ = (cc<<28) | 0x7E00000 | ((width-1)<<16) | (Rd<<12) | (lsb<<7) | 0x50 | Rn;
+}
 
 }; // namespace android
 
