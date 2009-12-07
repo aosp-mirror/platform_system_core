@@ -114,6 +114,8 @@ public:
     virtual void SMLAW(int cc, int y,
                 int Rd, int Rm, int Rs, int Rn);
 
+    virtual void UXTB16(int cc, int Rd, int Rm, int rotate);
+
 private:
     ARMAssemblerInterface*  mTarget;
 };
