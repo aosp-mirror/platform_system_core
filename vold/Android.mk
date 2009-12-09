@@ -1,3 +1,6 @@
+BUILD_VOLD := true
+ifeq ($(BUILD_VOLD),true)
+
 LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
@@ -30,3 +33,5 @@ LOCAL_CFLAGS :=
 LOCAL_SHARED_LIBRARIES := libcutils
 
 include $(BUILD_EXECUTABLE)
+
+endif # ifeq ($(BUILD_VOLD),true)
