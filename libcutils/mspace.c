@@ -179,7 +179,8 @@ mspace create_contiguous_mspace_with_name(size_t starting_capacity,
 
   /* Create the mspace, pointing to the memory we just reserved.
    */
-  m = create_mspace_with_base(base + sizeof(*cs), starting_capacity, locked);
+  m = create_mspace_with_base((char *)base + sizeof(*cs), starting_capacity,
+                              locked);
   if (m == (mspace)0)
     goto error;
 
