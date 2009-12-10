@@ -21,7 +21,8 @@ LOCAL_SRC_FILES:= \
 	bitmap.cpp
 
 LOCAL_SHARED_LIBRARIES := \
-    libandroid_runtime
+    libandroid_runtime \
+    libskia
 
 LOCAL_C_INCLUDES += \
 	external/skia/include/core \
