@@ -151,8 +151,9 @@ void help()
         "  adb status-window            - continuously print device status for a specified device\n"
         "  adb remount                  - remounts the /system partition on the device read-write\n"
         "  adb reboot [bootloader|recovery] - reboots the device, optionally into the bootloader or recovery program\n"
+        "  adb reboot-bootloader        - reboots the device into the bootloader\n"
         "  adb root                     - restarts the adbd daemon with root permissions\n"
-        "  adb usb                      - restarts the adbd daemon listening on USB"
+        "  adb usb                      - restarts the adbd daemon listening on USB\n"
         "  adb tcpip <port>             - restarts the adbd daemon listening on TCP on the specified port"
         "\n"
         "networking:\n"
@@ -929,10 +930,13 @@ top:
     }
 
     if(!strcmp(argv[0], "remount") || !strcmp(argv[0], "reboot")
+            || !strcmp(argv[0], "reboot-bootloader")
             || !strcmp(argv[0], "tcpip") || !strcmp(argv[0], "usb")
             || !strcmp(argv[0], "root")) {
         char command[100];
-        if (argc > 1)
+        if (!strcmp(argv[0], "reboot-bootloader"))
+            snprintf(command, sizeof(command), "reboot:bootloader");
+        else if (argc > 1)
             snprintf(command, sizeof(command), "%s:%s", argv[0], argv[1]);
         else
             snprintf(command, sizeof(command), "%s:", argv[0]);
