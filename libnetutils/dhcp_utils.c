@@ -24,8 +24,9 @@
 
 #include <cutils/properties.h>
 
-static const char DAEMON_NAME[]       = "dhcpcd";
-static const char DAEMON_PROP_NAME[]  = "init.svc.dhcpcd";
+static const char DAEMON_NAME[]        = "dhcpcd";
+static const char DAEMON_PROP_NAME[]   = "init.svc.dhcpcd";
+static const char HOSTNAME_PROP_NAME[] = "net.hostname";
 static const char DHCP_PROP_NAME_PREFIX[]  = "dhcp";
 static const int  NAP_TIME = 1;   /* wait for 1 second at a time */
                                   /* when polling for property values */
@@ -129,6 +130,7 @@ int dhcp_do_request(const char *interface,
 {
     char result_prop_name[PROPERTY_KEY_MAX];
     char prop_value[PROPERTY_VALUE_MAX] = {'\0'};
+    char daemon_cmd[PROPERTY_VALUE_MAX * 2];
     const char *ctrl_prop = "ctl.start";
     const char *desired_status = "running";
 
@@ -139,7 +141,13 @@ int dhcp_do_request(const char *interface,
     property_set(result_prop_name, "");
 
     /* Start the daemon and wait until it's ready */
-    property_set(ctrl_prop, DAEMON_NAME);
+    if (property_get(HOSTNAME_PROP_NAME, prop_value, NULL) && (prop_value[0] != '\0'))
+        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s:-h %s %s", DAEMON_NAME,
+                 prop_value, interface);
+    else
+        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s:%s", DAEMON_NAME, interface);
+    memset(prop_value, '\0', PROPERTY_VALUE_MAX);
+    property_set(ctrl_prop, daemon_cmd);
     if (wait_for_property(DAEMON_PROP_NAME, desired_status, 10) < 0) {
         snprintf(errmsg, sizeof(errmsg), "%s", "Timed out waiting for dhcpcd to start");
         return -1;
