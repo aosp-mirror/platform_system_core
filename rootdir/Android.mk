@@ -8,7 +8,7 @@ copy_from := \
 	etc/hosts
 
 ifeq ($(TARGET_PRODUCT),generic)
-copy_from += etc/vold.conf
+copy_from += etc/vold.fstab
 endif
 
 # the /system/etc/init.goldfish.sh is needed to enable emulator support
