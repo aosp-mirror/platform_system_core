@@ -285,6 +285,24 @@ void dump_registers(int tfd, int pid, bool at_fault)
     _LOG(tfd, only_in_tombstone,
          " ip %08x  sp %08x  lr %08x  pc %08x  cpsr %08x\n",
          r.ARM_ip, r.ARM_sp, r.ARM_lr, r.ARM_pc, r.ARM_cpsr);
+
+#if __VFP_FP__
+    struct user_vfp vfp_regs;
+    int i;
+
+    if(ptrace(PTRACE_GETVFPREGS, pid, 0, &vfp_regs)) {
+        _LOG(tfd, only_in_tombstone,
+             "cannot get registers: %s\n", strerror(errno));
+        return;
+    }
+
+    for (i = 0; i < 32; i += 2) {
+        _LOG(tfd, only_in_tombstone,
+             " d%-2d %016llx  d%-2d %016llx\n",
+              i, vfp_regs.fpregs[i], i+1, vfp_regs.fpregs[i+1]);
+    }
+    _LOG(tfd, only_in_tombstone, " scr %08lx\n\n", vfp_regs.fpscr);
+#endif
 }
 
 const char *get_signame(int sig)
