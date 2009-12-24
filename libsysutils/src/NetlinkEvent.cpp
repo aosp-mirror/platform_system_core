@@ -46,6 +46,16 @@ NetlinkEvent::~NetlinkEvent() {
     }
 }
 
+void NetlinkEvent::dump() {
+    int i;
+
+    for (i = 0; i < NL_PARAMS_MAX; i++) {
+        if (!mParams[i])
+            break;
+        LOGD("NL param '%s'\n", mParams[i]);
+    }
+}
+
 bool NetlinkEvent::decode(char *buffer, int size) {
     char *s = buffer;
     char *end;

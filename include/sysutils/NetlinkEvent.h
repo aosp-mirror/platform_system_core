@@ -39,6 +39,8 @@ public:
 
     const char *getSubsystem() { return mSubsystem; }
     int getAction() { return mAction; }
+
+    void dump();
 };
 
 #endif
