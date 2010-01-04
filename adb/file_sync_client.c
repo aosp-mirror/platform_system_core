@@ -959,7 +959,7 @@ int do_sync_pull(const char *rpath, const char *lpath)
         return 1;
     }
 
-    if(S_ISREG(mode) || S_ISCHR(mode) || S_ISBLK(mode)) {
+    if(S_ISREG(mode) || S_ISLNK(mode) || S_ISCHR(mode) || S_ISBLK(mode)) {
         if(stat(lpath, &st) == 0) {
             if(S_ISDIR(st.st_mode)) {
                     /* if we're copying a remote file to a local directory,
