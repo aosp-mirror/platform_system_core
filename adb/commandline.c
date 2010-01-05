@@ -110,7 +110,7 @@ void help()
         "\n"
         "device commands:\n"
         "  adb push <local> <remote>    - copy file/dir to device\n"
-        "  adb pull <remote> <local>    - copy file/dir from device\n"
+        "  adb pull <remote> [<local>]  - copy file/dir from device\n"
         "  adb sync [ <directory> ]     - copy host->device only if changed\n"
         "                                 (see 'adb help all')\n"
         "  adb shell                    - run remote shell interactively\n"
@@ -1022,8 +1022,13 @@ top:
     }
 
     if(!strcmp(argv[0], "pull")) {
-        if(argc != 3) return usage();
-        return do_sync_pull(argv[1], argv[2]);
+        if (argc == 2) {
+            return do_sync_pull(argv[1], ".");
+        } else if (argc == 3) {
+            return do_sync_pull(argv[1], argv[2]);
+        } else {
+            return usage();
+        }
     }
 
     if(!strcmp(argv[0], "install")) {
