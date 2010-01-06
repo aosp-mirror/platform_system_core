@@ -134,10 +134,73 @@ assert(nb >= 0);  //xxx deal with the trim case
   return oldbrk;
 }
 
-mspace create_contiguous_mspace_with_name(size_t starting_capacity,
-    size_t max_capacity, int locked, char const * name) {
-  int fd, ret;
+mspace create_contiguous_mspace_with_base(size_t starting_capacity,
+    size_t max_capacity, int locked, void *base) {
   struct mspace_contig_state *cs;
+  unsigned int pagesize;
+  mstate m;
+
+  init_mparams();
+  pagesize = PAGESIZE;
+  assert(starting_capacity <= max_capacity);
+  assert(((uintptr_t)base & (pagesize-1)) == 0);
+  assert(((uintptr_t)max_capacity & (pagesize-1)) == 0);
+  starting_capacity = (size_t)ALIGN_UP(starting_capacity, pagesize);
+
+  /* Make the first page read/write. dlmalloc needs to use that page.
+   */
+  if (mprotect(base, starting_capacity, PROT_READ | PROT_WRITE) < 0) {
+    goto error;
+  }
+
+  /* Create the mspace, pointing to the memory given.
+   */
+  m = create_mspace_with_base((char *)base + sizeof(*cs), starting_capacity,
+                              locked);
+  if (m == (mspace)0) {
+    goto error;
+  }
+  /* Make sure that m is in the same page as base.
+   */
+  assert(((uintptr_t)m & (uintptr_t)~(pagesize-1)) == (uintptr_t)base);
+  /* Use some space for the information that our MORECORE needs.
+   */
+  cs = (struct mspace_contig_state *)base;
+
+  /* Find out exactly how much of the memory the mspace
+   * is using.
+   */
+  cs->brk = m->seg.base + m->seg.size;
+  cs->top = (char *)base + max_capacity;
+
+  assert((char *)base <= cs->brk);
+  assert(cs->brk <= cs->top);
+  /* Prevent access to the memory we haven't handed out yet.
+   */
+  if (cs->brk != cs->top) {
+    /* mprotect() requires page-aligned arguments, but it's possible
+     * for cs->brk not to be page-aligned at this point.
+     */
+    char *prot_brk = (char *)ALIGN_UP(cs->brk, pagesize);
+    if ((mprotect(base, prot_brk - (char *)base, PROT_READ | PROT_WRITE) < 0) ||
+        (mprotect(prot_brk, cs->top - prot_brk, PROT_NONE) < 0)) {
+      goto error;
+    }
+  }
+
+  cs->m = m;
+  cs->magic = CONTIG_STATE_MAGIC;
+
+  return (mspace)m;
+
+error:
+  return (mspace)0;
+}
+
+
+mspace create_contiguous_mspace_with_name(size_t starting_capacity,
+    size_t max_capacity, int locked, char const *name) {
+  int fd, ret;
   char buf[ASHMEM_NAME_LEN] = "mspace";
   void *base;
   unsigned int pagesize;
@@ -173,48 +236,12 @@ mspace create_contiguous_mspace_with_name(size_t starting_capacity,
    */
   assert(((uintptr_t)base & (pagesize-1)) == 0);
 
-  /* Reserve some space for the information that our MORECORE needs.
-   */
-  cs = base;
-
-  /* Create the mspace, pointing to the memory we just reserved.
-   */
-  m = create_mspace_with_base((char *)base + sizeof(*cs), starting_capacity,
-                              locked);
-  if (m == (mspace)0)
-    goto error;
-
-  /* Make sure that m is in the same page as cs.
-   */
-  assert(((uintptr_t)m & (uintptr_t)~(pagesize-1)) == (uintptr_t)base);
-
-  /* Find out exactly how much of the memory the mspace
-   * is using.
-   */
-  cs->brk = m->seg.base + m->seg.size;
-  cs->top = (char *)base + max_capacity;
-  assert((char *)base <= cs->brk);
-  assert(cs->brk <= cs->top);
-
-  /* Prevent access to the memory we haven't handed out yet.
-   */
-  if (cs->brk != cs->top) {
-    /* mprotect() requires page-aligned arguments, but it's possible
-     * for cs->brk not to be page-aligned at this point.
-     */
-    char *prot_brk = (char *)ALIGN_UP(cs->brk, pagesize);
-    if (mprotect(prot_brk, cs->top - prot_brk, PROT_NONE) < 0)
-      goto error;
+  m = create_contiguous_mspace_with_base(starting_capacity, max_capacity,
+                                         locked, base);
+  if (m == 0) {
+    munmap(base, max_capacity);
   }
-
-  cs->m = m;
-  cs->magic = CONTIG_STATE_MAGIC;
-
-  return (mspace)m;
-
-error:
-  munmap(base, max_capacity);
-  return (mspace)0;
+  return m;
 }
 
 mspace create_contiguous_mspace(size_t starting_capacity,

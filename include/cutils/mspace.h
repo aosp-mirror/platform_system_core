@@ -80,6 +80,12 @@ mspace create_contiguous_mspace(size_t starting_capacity, size_t max_capacity,
 mspace create_contiguous_mspace_with_name(size_t starting_capacity,
     size_t max_capacity, int locked, const char *name);
 
+/*
+   Identical to create_contiguous_mspace, but uses previously mapped memory.
+*/
+mspace create_contiguous_mspace_with_base(size_t starting_capacity,
+    size_t max_capacity, int locked, void *base);
+
 size_t destroy_contiguous_mspace(mspace msp);
 #endif
 
