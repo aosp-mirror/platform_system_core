@@ -29,8 +29,8 @@ loglevel 3
     mount tmpfs tmpfs /sqlite_stmt_journals size=4m
 
 # create Android Secure External Cache mount tree
-    mkdir /asec  0500 system system
-    mount tmpfs tmpfs /asec mode=0700
+    mkdir /asec  0700 system system
+    mount tmpfs tmpfs /asec mode=0755
 
     mount rootfs rootfs / ro remount
 
