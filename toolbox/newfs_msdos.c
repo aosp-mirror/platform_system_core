@@ -745,8 +745,10 @@ newfs_msdos_main(int argc, char *argv[])
 	    }
 	    if ((n = write(fd, img, bpb.bps)) == -1)
 		err(1, "%s", fname);
-	    if ((unsigned)n != bpb.bps)
+	    if ((unsigned)n != bpb.bps) {
 		errx(1, "%s: can't write sector %u", fname, lsn);
+                exit(1);
+            }
 	}
     }
     return 0;
@@ -825,6 +827,16 @@ getdiskinfo(int fd, const char *fname, const char *dtype, __unused int oflag,
     if (ioctl(fd, HDIO_GETGEO, &geom)) {
         fprintf(stderr, "Error getting gemoetry (%s) - trying sane values\n", strerror(errno));
         geom.heads = 64;
+        geom.sectors = 63;
+    }
+
+    if (!geom.heads) {
+        printf("Bogus heads from kernel - setting sane value\n");
+        geom.heads = 64;
+    }
+
+    if (!geom.sectors) {
+        printf("Bogus sectors from kernel - setting sane value\n");
         geom.sectors = 63;
     }
 
