@@ -86,11 +86,6 @@ loglevel 3
 
     write /proc/apanic_console 1
 
-    # Collect ramconsole data
-    copy /proc/last_kmsg /data/dontpanic/last_kmsg
-    chown root log /data/dontpanic/last_kmsg
-    chmod 0640 /data/dontpanic/last_kmsg
-
     # Same reason as /data above
     mount yaffs2 mtd@cache /cache nosuid nodev
     chown system cache /cache
