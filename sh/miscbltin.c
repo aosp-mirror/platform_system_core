@@ -277,8 +277,6 @@ umaskcmd(int argc, char **argv)
 	return 0;
 }
 
-typedef unsigned long rlim_t;
-
 #if 1
 /*
  * ulimit builtin
