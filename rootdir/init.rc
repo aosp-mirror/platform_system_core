@@ -267,6 +267,9 @@ service servicemanager /system/bin/servicemanager
 service vold /system/bin/vold
     socket vold stream 0660 root mount
 
+service netd /system/bin/netd
+    socket netd stream 0660 root system
+
 service nexus /system/bin/nexus
     socket nexus stream 0660 root system
     disabled
