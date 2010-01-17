@@ -150,13 +150,13 @@ static void find_usb_device(const char *base,
         while((de = readdir(devdir))) {
             unsigned char devdesc[256];
             unsigned char* bufptr = devdesc;
+            unsigned char* bufend;
             struct usb_device_descriptor* device;
             struct usb_config_descriptor* config;
             struct usb_interface_descriptor* interface;
             struct usb_endpoint_descriptor *ep1, *ep2;
             unsigned zero_mask = 0;
             unsigned vid, pid;
-            int i, interfaces;
             size_t desclength;
 
             if(badname(de->d_name)) continue;
@@ -173,6 +173,7 @@ static void find_usb_device(const char *base,
             }
 
             desclength = adb_read(fd, devdesc, sizeof(devdesc));
+            bufend = bufptr + desclength;
 
                 // should have device and configuration descriptors, and atleast two endpoints
             if (desclength < USB_DT_DEVICE_SIZE + USB_DT_CONFIG_SIZE) {
@@ -203,75 +204,73 @@ static void find_usb_device(const char *base,
                 continue;
             }
 
-                // loop through all the interfaces and look for the ADB interface
-            interfaces = config->bNumInterfaces;
-            for (i = 0; i < interfaces; i++) {
-                if (bufptr + USB_DT_ENDPOINT_SIZE > devdesc + desclength)
-                    break;
+                // loop through all the descriptors and look for the ADB interface
+            while (bufptr < bufend) {
+                unsigned char length = bufptr[0];
+                unsigned char type = bufptr[1];
 
-                interface = (struct usb_interface_descriptor *)bufptr;
-                bufptr += USB_DT_INTERFACE_SIZE;
-                if (interface->bLength != USB_DT_INTERFACE_SIZE ||
-                    interface->bDescriptorType != USB_DT_INTERFACE) {
-                    D("usb_interface_descriptor not found\n");
-                    break;
-                }
+                if (type == USB_DT_INTERFACE) {
+                    interface = (struct usb_interface_descriptor *)bufptr;
+                    bufptr += length;
 
-                DBGX("bInterfaceClass: %d,  bInterfaceSubClass: %d,"
-                     "bInterfaceProtocol: %d, bNumEndpoints: %d\n",
-                     interface->bInterfaceClass, interface->bInterfaceSubClass,
-                     interface->bInterfaceProtocol, interface->bNumEndpoints);
-
-                if (interface->bNumEndpoints == 2 &&
-                        is_adb_interface(vid, pid, interface->bInterfaceClass,
-                        interface->bInterfaceSubClass, interface->bInterfaceProtocol))  {
-
-                    DBGX("looking for bulk endpoints\n");
-                        // looks like ADB...
-                    ep1 = (struct usb_endpoint_descriptor *)bufptr;
-                    bufptr += USB_DT_ENDPOINT_SIZE;
-                    ep2 = (struct usb_endpoint_descriptor *)bufptr;
-                    bufptr += USB_DT_ENDPOINT_SIZE;
-
-                    if (bufptr > devdesc + desclength ||
-                        ep1->bLength != USB_DT_ENDPOINT_SIZE ||
-                        ep1->bDescriptorType != USB_DT_ENDPOINT ||
-                        ep2->bLength != USB_DT_ENDPOINT_SIZE ||
-                        ep2->bDescriptorType != USB_DT_ENDPOINT) {
-                        D("endpoints not found\n");
+                    if (length != USB_DT_INTERFACE_SIZE) {
+                        D("interface descriptor has wrong size\n");
                         break;
                     }
 
-                        // both endpoints should be bulk
-                    if (ep1->bmAttributes != USB_ENDPOINT_XFER_BULK ||
-                        ep2->bmAttributes != USB_ENDPOINT_XFER_BULK) {
-                        D("bulk endpoints not found\n");
-                        continue;
+                    DBGX("bInterfaceClass: %d,  bInterfaceSubClass: %d,"
+                         "bInterfaceProtocol: %d, bNumEndpoints: %d\n",
+                         interface->bInterfaceClass, interface->bInterfaceSubClass,
+                         interface->bInterfaceProtocol, interface->bNumEndpoints);
+
+                    if (interface->bNumEndpoints == 2 &&
+                            is_adb_interface(vid, pid, interface->bInterfaceClass,
+                            interface->bInterfaceSubClass, interface->bInterfaceProtocol))  {
+
+                        DBGX("looking for bulk endpoints\n");
+                            // looks like ADB...
+                        ep1 = (struct usb_endpoint_descriptor *)bufptr;
+                        bufptr += USB_DT_ENDPOINT_SIZE;
+                        ep2 = (struct usb_endpoint_descriptor *)bufptr;
+                        bufptr += USB_DT_ENDPOINT_SIZE;
+
+                        if (bufptr > devdesc + desclength ||
+                            ep1->bLength != USB_DT_ENDPOINT_SIZE ||
+                            ep1->bDescriptorType != USB_DT_ENDPOINT ||
+                            ep2->bLength != USB_DT_ENDPOINT_SIZE ||
+                            ep2->bDescriptorType != USB_DT_ENDPOINT) {
+                            D("endpoints not found\n");
+                            break;
+                        }
+
+                            // both endpoints should be bulk
+                        if (ep1->bmAttributes != USB_ENDPOINT_XFER_BULK ||
+                            ep2->bmAttributes != USB_ENDPOINT_XFER_BULK) {
+                            D("bulk endpoints not found\n");
+                            continue;
+                        }
+                            /* aproto 01 needs 0 termination */
+                        if(interface->bInterfaceProtocol == 0x01) {
+                            zero_mask = ep1->wMaxPacketSize - 1;
+                        }
+
+                            // we have a match.  now we just need to figure out which is in and which is out.
+                        if (ep1->bEndpointAddress & USB_ENDPOINT_DIR_MASK) {
+                            local_ep_in = ep1->bEndpointAddress;
+                            local_ep_out = ep2->bEndpointAddress;
+                        } else {
+                            local_ep_in = ep2->bEndpointAddress;
+                            local_ep_out = ep1->bEndpointAddress;
+                        }
+
+                        register_device_callback(devname, local_ep_in, local_ep_out,
+                                interface->bInterfaceNumber, device->iSerialNumber, zero_mask);
+                        break;
                     }
-
-                        /* aproto 01 needs 0 termination */
-                    if(interface->bInterfaceProtocol == 0x01) {
-                        zero_mask = ep1->wMaxPacketSize - 1;
-                    }
-
-                        // we have a match.  now we just need to figure out which is in and which is out.
-                    if (ep1->bEndpointAddress & USB_ENDPOINT_DIR_MASK) {
-                        local_ep_in = ep1->bEndpointAddress;
-                        local_ep_out = ep2->bEndpointAddress;
-                    } else {
-                        local_ep_in = ep2->bEndpointAddress;
-                        local_ep_out = ep1->bEndpointAddress;
-                    }
-
-                    register_device_callback(devname, local_ep_in, local_ep_out,
-                            interface->bInterfaceNumber, device->iSerialNumber, zero_mask);
-
-                    break;
                 } else {
-                    // seek next interface descriptor
-                    bufptr += (USB_DT_ENDPOINT_SIZE * interface->bNumEndpoints);
-                 }
-            } // end of for
+                    bufptr += length;
+                }
+            } // end of while
 
             adb_close(fd);
         } // end of devdir while
