@@ -80,14 +80,24 @@ int route_main(int argc, char *argv[])
 
         /* route add -net 192.168.1.2 netmask 255.255.255.0 gw 192.168.1.1 */
         if (argc > 7 && !strcmp(argv[2], "-net") &&
-            !strcmp(argv[4], "netmask") && !strcmp(argv[6], "gw")) {
-            rt.rt_flags = RTF_UP | RTF_GATEWAY;
-            if (set_address(argv[3], &rt.rt_dst) &&
-                set_address(argv[5], &rt.rt_genmask) &&
-                set_address(argv[7], &rt.rt_gateway)) {
-                errno = 0;
+                !strcmp(argv[4], "netmask")) {
+            if (!strcmp(argv[6], "gw")) {
+                rt.rt_flags = RTF_UP | RTF_GATEWAY;
+                if (set_address(argv[3], &rt.rt_dst) &&
+                    set_address(argv[5], &rt.rt_genmask) &&
+                    set_address(argv[7], &rt.rt_gateway)) {
+                    errno = 0;
+                }
+                goto apply;
+            } else if (!strcmp(argv[6], "dev")) {
+                rt.rt_flags = RTF_UP;
+                rt.rt_dev = argv[7];
+                if (set_address(argv[3], &rt.rt_dst) &&
+                    set_address(argv[5], &rt.rt_genmask)) {
+                    errno = 0;
+                }
+                goto apply;
             }
-            goto apply;
         }
     }
 
