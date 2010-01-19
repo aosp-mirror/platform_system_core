@@ -235,35 +235,6 @@ static void setstr(u_int8_t *, const char *, size_t);
 static void usage(void);
 
 #ifdef ANDROID
-static void err(int val, const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    char *fmt2;
-    asprintf(&fmt2, "%s\n", fmt);
-    vfprintf(stderr, fmt2, ap);
-    free(fmt2);
-    va_end(ap);
-}
-
-static void errx(int val, const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    char *fmt2;
-    asprintf(&fmt2, "%s\n", fmt);
-    vfprintf(stderr, fmt2, ap);
-    free(fmt2);
-    va_end(ap);
-}
-
-static void warnx(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    char *fmt2;
-    asprintf(&fmt2, "%s\n", fmt);
-    vfprintf(stderr, fmt2, ap);
-    free(fmt2);
-    va_end(ap);
-}
 #define powerof2(x)     ((((x) - 1) & (x)) == 0)
 #define howmany(x, y)   (((x) + ((y) - 1)) / (y))
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
