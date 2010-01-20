@@ -951,10 +951,8 @@ top:
     }
 
     if(!strcmp(argv[0], "bugreport")) {
-        if (argc != 1) {
-            return 1;
-        }
-        do_cmd(ttype, serial, "shell", "dumpstate", "-", 0);
+        if (argc != 1) return usage();
+        do_cmd(ttype, serial, "shell", "bugreport", 0);
         return 0;
     }
 
