@@ -208,6 +208,9 @@
 # CDMA data network drop
 50111 cdma_data_drop (cid|1|5), (network_type|1|5)
 
+# GSM radio access technology switched
+50112 gsm_rat_switched (cid|1|5), (network_from|1|5), (network_to|1|5)
+
 # Do not change these names without updating tag in:
 #//device/dalvik/libcore/luni/src/main/native/org_apache_harmony_luni_platform_OSNetworkSystem.c
 51000 socket_stats (send|1|2),(recv|1|2),(ip|1|5),(port|1|5),(close|1|5)
