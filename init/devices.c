@@ -306,8 +306,15 @@ static void make_device(const char *path, int block, int major, int minor)
 
     mode = get_device_perm(path, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
     dev = (major << 8) | minor;
+    /* Temporarily change egid to avoid race condition setting the gid of the
+     * device node. Unforunately changing the euid would prevent creation of
+     * some device nodes, so the uid has to be set with chown() and is still
+     * racy. Fixing the gid race at least fixed the issue with system_server
+     * opening dynamic input devices under the AID_INPUT gid. */
+    setegid(gid);
     mknod(path, mode, dev);
-    chown(path, uid, gid);
+    chown(path, uid, -1);
+    setegid(AID_ROOT);
 }
 
 #if LOG_UEVENTS
