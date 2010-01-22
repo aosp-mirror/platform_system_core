@@ -151,6 +151,7 @@ int match_fastboot(usb_ifc_info *info)
        (info->dev_vendor != 0x0451) &&
        (info->dev_vendor != 0x22b8) &&  // Motorola
        (info->dev_vendor != 0x0502) &&
+       (info->dev_vendor != 0x413c) &&  // DELL
        (info->dev_vendor != 0x0bb4))    // HTC
             return -1;
     if(info->ifc_class != 0xff) return -1;
