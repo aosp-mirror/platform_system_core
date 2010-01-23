@@ -272,6 +272,16 @@
 /* #define HAVE_STRLCPY 1 */
 
 /*
+ * Define if the open_memstream() function exists on the system.
+ */
+/* #define HAVE_OPEN_MEMSTREAM 1 */
+
+/*
+ * Define if the BSD funopen() function exists on the system.
+ */
+/* #define HAVE_FUNOPEN 1 */
+
+/*
  * Define if <winsock2.h> exists.
  * Only MinGW has it.
  */
