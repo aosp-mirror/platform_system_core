@@ -46,6 +46,8 @@
  */
 #include <cutils/open_memstream.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
