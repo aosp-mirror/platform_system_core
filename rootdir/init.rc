@@ -19,14 +19,12 @@ loglevel 3
     symlink /system/etc /etc
     symlink /sys/kernel/debug /d
 
-# create mountpoints and mount tmpfs on sqlite_stmt_journals
+# create mountpoints
     mkdir /sdcard 0000 system system
     mkdir /system
     mkdir /data 0771 system system
     mkdir /cache 0770 system cache
     mkdir /config 0500 root root
-    mkdir /sqlite_stmt_journals 01777 root root
-    mount tmpfs tmpfs /sqlite_stmt_journals size=4m
 
 # create Android Secure External Cache mount tree
     mkdir /asec  0700 system system
