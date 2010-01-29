@@ -120,7 +120,7 @@ void dump_build_info(int tfd)
 
 void dump_stack_and_code(int tfd, int pid, mapinfo *map,
                          int unwind_depth, unsigned int sp_list[],
-                         int frame0_pc_sane, bool at_fault)
+                         bool at_fault)
 {
     unsigned int sp, pc, p, end, data;
     struct pt_regs r;
@@ -132,19 +132,11 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
     sp = r.ARM_sp;
     pc = r.ARM_pc;
 
-    /* Died because calling the weeds - dump
-     * the code around the PC in the next frame instead.
-     */
-    if (frame0_pc_sane == 0) {
-        pc = r.ARM_lr;
-    }
-
-    _LOG(tfd, only_in_tombstone,
-         "\ncode around %s:\n", frame0_pc_sane ? "pc" : "lr");
+    _LOG(tfd, only_in_tombstone, "\ncode around pc:\n");
 
     end = p = pc & ~3;
-    p -= 16;
-    end += 16;
+    p -= 32;
+    end += 32;
 
     /* Dump the code around PC as:
      *  addr       contents
@@ -163,12 +155,12 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
         _LOG(tfd, only_in_tombstone, "%s\n", code_buffer);
     }
 
-    if (frame0_pc_sane) {
+    if ((unsigned) r.ARM_lr != pc) {
         _LOG(tfd, only_in_tombstone, "\ncode around lr:\n");
 
         end = p = r.ARM_lr & ~3;
-        p -= 16;
-        end += 16;
+        p -= 32;
+        end += 32;
 
         /* Dump the code around LR as:
          *  addr       contents
@@ -286,7 +278,7 @@ void dump_registers(int tfd, int pid, bool at_fault)
          " ip %08x  sp %08x  lr %08x  pc %08x  cpsr %08x\n",
          r.ARM_ip, r.ARM_sp, r.ARM_lr, r.ARM_pc, r.ARM_cpsr);
 
-#if __VFP_FP__
+#if __ARM_NEON__
     struct user_vfp vfp_regs;
     int i;
 
@@ -435,8 +427,7 @@ void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
         dump_pc_and_lr(tfd, tid, milist, stack_depth, at_fault);
     }
 
-    dump_stack_and_code(tfd, tid, milist, stack_depth, sp_list, frame0_pc_sane,
-                        at_fault);
+    dump_stack_and_code(tfd, tid, milist, stack_depth, sp_list, at_fault);
 
     while(milist) {
         mapinfo *next = milist->next;
