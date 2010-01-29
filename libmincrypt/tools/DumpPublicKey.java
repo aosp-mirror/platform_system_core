@@ -77,7 +77,7 @@ class DumpPublicKey {
         // Write out modulus as little endian array of integers.
         result.append(",{");
         for (int i = 0; i < nwords; ++i) {
-            int n = N.mod(B).intValue();
+            long n = N.mod(B).longValue();
             result.append(n);
 
             if (i != nwords - 1) {
@@ -91,7 +91,7 @@ class DumpPublicKey {
         // Write R^2 as little endian array of integers.
         result.append(",{");
         for (int i = 0; i < nwords; ++i) {
-            int rr = RR.mod(B).intValue();
+            long rr = RR.mod(B).longValue();
             result.append(rr);
 
             if (i != nwords - 1) {
