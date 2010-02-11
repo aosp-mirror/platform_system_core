@@ -753,6 +753,16 @@ char *android_log_formatLogLine (
             suffixLen = 1;
             break;
     }
+    /* snprintf has a weird return value.   It returns what would have been
+     * written given a large enough buffer.  In the case that the prefix is
+     * longer then our buffer(128), it messes up the calculations below
+     * possibly causing heap corruption.  To avoid this we double check and
+     * set the length at the maximum (size minus null byte)
+     */
+    if(prefixLen >= sizeof(prefixBuf))
+        prefixLen = sizeof(prefixBuf) - 1;
+    if(suffixLen >= sizeof(suffixBuf))
+        suffixLen = sizeof(suffixBuf) - 1;
 
     /* the following code is tragically unreadable */
 
