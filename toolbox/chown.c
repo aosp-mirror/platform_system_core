@@ -35,19 +35,29 @@ int chown_main(int argc, char **argv)
     gid_t gid = -1; // passing -1 to chown preserves current group
 
     pw = getpwnam(user);
-    if (pw == NULL) {
-        fprintf(stderr, "No such user '%s'\n", user);
-        return 10;
+    if (pw != NULL) {
+        uid = pw->pw_uid;
+    } else {
+        char* endptr;
+        uid = (int) strtoul(user, &endptr, 0);
+        if (endptr == user) {  // no conversion
+          fprintf(stderr, "No such user '%s'\n", user);
+          return 10;
+        }
     }
-    uid = pw->pw_uid;
 
     if (group != NULL) {
         grp = getgrnam(group);
-        if (grp == NULL) {
-            fprintf(stderr, "No such group '%s'\n", group);
-            return 10;
+        if (grp != NULL) {
+            gid = grp->gr_gid;
+        } else {
+            char* endptr;
+            gid = (int) strtoul(group, &endptr, 0);
+            if (endptr == group) {  // no conversion
+                fprintf(stderr, "No such group '%s'\n", group);
+                return 10;
+            }
         }
-        gid = grp->gr_gid; 
     }
 
     for (i = 2; i < argc; i++) {
@@ -59,4 +69,3 @@ int chown_main(int argc, char **argv)
 
     return 0;
 }
-
