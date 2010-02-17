@@ -39,13 +39,15 @@ enum GGLPixelFormat {
     GGL_PIXEL_FORMAT_LA_88       = 0xA,  // 16-bit LA
     GGL_PIXEL_FORMAT_RGB_332     = 0xB,  // 8-bit RGB (non paletted)
 
-    // YCbCr formats (SP=semi-planar, P=planar)
-    GGL_PIXEL_FORMAT_YCbCr_422_SP= 0x10,
-    GGL_PIXEL_FORMAT_YCbCr_420_SP= 0x11,
-    GGL_PIXEL_FORMAT_YCbCr_422_P = 0x12,
-    GGL_PIXEL_FORMAT_YCbCr_420_P = 0x13,
-    GGL_PIXEL_FORMAT_YCbCr_422_I = 0x14,
-    GGL_PIXEL_FORMAT_YCbCr_420_I = 0x15,
+    // reserved range. don't use.
+    GGL_PIXEL_FORMAT_RESERVED_10 = 0x10,
+    GGL_PIXEL_FORMAT_RESERVED_11 = 0x11,
+    GGL_PIXEL_FORMAT_RESERVED_12 = 0x12,
+    GGL_PIXEL_FORMAT_RESERVED_13 = 0x13,
+    GGL_PIXEL_FORMAT_RESERVED_14 = 0x14,
+    GGL_PIXEL_FORMAT_RESERVED_15 = 0x15,
+    GGL_PIXEL_FORMAT_RESERVED_16 = 0x16,
+    GGL_PIXEL_FORMAT_RESERVED_17 = 0x17,
 
     // reserved/special formats
     GGL_PIXEL_FORMAT_Z_16       =  0x18,
@@ -53,9 +55,9 @@ enum GGLPixelFormat {
     GGL_PIXEL_FORMAT_SZ_24      =  0x1A,
     GGL_PIXEL_FORMAT_SZ_8       =  0x1B,
 
-    // other variations of YCbCr/YCrCb
-    GGL_PIXEL_FORMAT_YCbCr_420_SP_TILED = 0x20,
-    GGL_PIXEL_FORMAT_YCrCb_420_SP       = 0x21,
+    // reserved range. don't use.
+    GGL_PIXEL_FORMAT_RESERVED_20 = 0x20,
+    GGL_PIXEL_FORMAT_RESERVED_21 = 0x21,
 };
 
 enum GGLFormatComponents {
@@ -66,10 +68,6 @@ enum GGLFormatComponents {
 	GGL_RGBA				= 0x1908,
 	GGL_LUMINANCE			= 0x1909,
 	GGL_LUMINANCE_ALPHA		= 0x190A,
-    GGL_Y_CB_CR_SP          = 0x8000,
-    GGL_Y_CB_CR             = GGL_Y_CB_CR_SP,
-    GGL_Y_CB_CR_P           = 0x8001,
-    GGL_Y_CB_CR_I           = 0x8002,
 };
 
 enum GGLFormatComponentIndex {
