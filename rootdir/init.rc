@@ -283,13 +283,6 @@ service vold /system/bin/vold
 service netd /system/bin/netd
     socket netd stream 0660 root system
 
-service nexus /system/bin/nexus
-    socket nexus stream 0660 root system
-    disabled
-
-#service mountd /system/bin/mountd
-#    socket mountd stream 0660 root mount
-
 service debuggerd /system/bin/debuggerd
 
 service ril-daemon /system/bin/rild
@@ -307,11 +300,6 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
 service media /system/bin/mediaserver
     user media
     group system audio camera graphics inet net_bt net_bt_admin
-
-service bootsound /system/bin/playmp3
-    user media
-    group audio
-    oneshot
 
 service bootanim /system/bin/bootanimation
     user graphics
