@@ -126,9 +126,10 @@ void help()
         "                                   dev:<character device name>\n"
         "                                   jdwp:<process pid> (remote only)\n"
         "  adb jdwp                     - list PIDs of processes hosting a JDWP transport\n"
-        "  adb install [-l] [-r] <file> - push this package file to the device and install it\n"
+        "  adb install [-l] [-r] [-s] <file> - push this package file to the device and install it\n"
         "                                 ('-l' means forward-lock the app)\n"
         "                                 ('-r' means reinstall the app, keeping its data)\n"
+        "                                 ('-s' means install on SD card instead of internal storage)\n"
         "  adb uninstall [-k] <package> - remove this app package from the device\n"
         "                                 ('-k' means keep the data and cache directories)\n"
         "  adb bugreport                - return all information from the device\n"
@@ -1255,17 +1256,25 @@ int install_app(transport_type transport, char* serial, int argc, char** argv)
 {
     struct stat st;
     int err;
-    const char *const WHERE = "/data/local/tmp/%s";
+    const char *const DATA_DEST = "/data/local/tmp/%s";
+    const char *const SD_DEST = "/sdcard/tmp/%s";
+    const char* where = DATA_DEST;
     char to[PATH_MAX];
     char* filename = argv[argc - 1];
     const char* p;
+    int i;
+
+    for (i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "-s"))
+            where = SD_DEST;
+    }
 
     p = adb_dirstop(filename);
     if (p) {
         p++;
-        snprintf(to, sizeof to, WHERE, p);
+        snprintf(to, sizeof to, where, p);
     } else {
-        snprintf(to, sizeof to, WHERE, filename);
+        snprintf(to, sizeof to, where, filename);
     }
     if (p[0] == '\0') {
     }
