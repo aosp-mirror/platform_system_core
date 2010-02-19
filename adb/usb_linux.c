@@ -21,6 +21,7 @@
 
 #include <sys/ioctl.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -287,6 +288,8 @@ static int usb_bulk_write(usb_handle *h, const void *data, int len)
 {
     struct usbdevfs_urb *urb = &h->urb_out;
     int res;
+    struct timeval tv;
+    struct timespec ts;
 
     memset(urb, 0, sizeof(*urb));
     urb->type = USBDEVFS_URB_TYPE_BULK;
@@ -313,8 +316,12 @@ static int usb_bulk_write(usb_handle *h, const void *data, int len)
     res = -1;
     h->urb_out_busy = 1;
     for(;;) {
-        adb_cond_wait(&h->notify, &h->lock);
-        if(h->dead) {
+        /* time out after five seconds */
+        gettimeofday(&tv, NULL);
+        ts.tv_sec = tv.tv_sec + 5;
+        ts.tv_nsec = tv.tv_usec * 1000L;
+        res = pthread_cond_timedwait(&h->notify, &h->lock, &ts);
+        if(res < 0 || h->dead) {
             break;
         }
         if(h->urb_out_busy == 0) {
