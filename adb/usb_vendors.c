@@ -61,6 +61,8 @@
 #define VENDOR_ID_GARMIN_ASUS   0x091E
 // Sharp's USB Vendor ID
 #define VENDOR_ID_SHARP         0x04dd
+// ZTE's USB Vendor ID
+#define VENDOR_ID_ZTE           0x19D2
 
 /** built-in vendor list */
 int builtInVendorIds[] = {
@@ -77,6 +79,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_NVIDIA,
     VENDOR_ID_GARMIN_ASUS,
     VENDOR_ID_SHARP,
+    VENDOR_ID_ZTE,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
