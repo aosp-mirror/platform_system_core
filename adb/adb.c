@@ -895,9 +895,10 @@ int adb_main(int is_daemon)
         ** AID_GRAPHICS to access the frame buffer
         ** AID_NET_BT and AID_NET_BT_ADMIN to diagnose bluetooth (hcidump)
         ** AID_SDCARD_RW to allow writing to the SD card
+        ** AID_MOUNT to allow unmounting the SD card before rebooting
         */
         gid_t groups[] = { AID_ADB, AID_LOG, AID_INPUT, AID_INET, AID_GRAPHICS,
-                           AID_NET_BT, AID_NET_BT_ADMIN, AID_SDCARD_RW };
+                           AID_NET_BT, AID_NET_BT_ADMIN, AID_SDCARD_RW, AID_MOUNT };
         setgroups(sizeof(groups)/sizeof(groups[0]), groups);
 
         /* then switch user and group to "shell" */
