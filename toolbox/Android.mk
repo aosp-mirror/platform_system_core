@@ -51,7 +51,8 @@ TOOLS := \
 	iftop \
 	id \
 	vmstat \
-	nandread
+	nandread \
+        ionice
 
 LOCAL_SRC_FILES:= \
 	toolbox.c \
