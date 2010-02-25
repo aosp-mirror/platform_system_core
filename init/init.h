@@ -146,6 +146,9 @@ struct service {
     int nkeycodes;
     int keychord_id;
 
+    int ioprio_class;
+    int ioprio_pri;
+
     int nargs;
     /* "MUST BE AT THE END OF THE STRUCT" */
     char *args[1];

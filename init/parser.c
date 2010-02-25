@@ -10,6 +10,8 @@
 #include "init.h"
 #include "property_service.h"
 
+#include <cutils/iosched_policy.h>
+
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
@@ -155,6 +157,7 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "ostname")) return K_hostname;
         break;
     case 'i':
+        if (!strcmp(s, "oprio")) return K_ioprio;
         if (!strcmp(s, "fup")) return K_ifup;
         if (!strcmp(s, "nsmod")) return K_insmod;
         if (!strcmp(s, "mport")) return K_import;
@@ -619,6 +622,8 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
         return;
     }
     
+    svc->ioprio_class = IoSchedClass_NONE;
+
     kw = lookup_keyword(args[0]);
     switch (kw) {
     case K_capability:
@@ -635,6 +640,28 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
         break;
     case K_disabled:
         svc->flags |= SVC_DISABLED;
+        break;
+    case K_ioprio:
+        if (nargs != 3) {
+            parse_error(state, "ioprio optin usage: ioprio <rt|be|idle> <ioprio 0-7>\n");
+        } else {
+            svc->ioprio_pri = strtoul(args[2], 0, 8);
+
+            if (svc->ioprio_pri < 0 || svc->ioprio_pri > 7) {
+                parse_error(state, "priority value must be range 0 - 7\n");
+                break;
+            }
+
+            if (!strcmp(args[1], "rt")) {
+                svc->ioprio_class = IoSchedClass_RT;
+            } else if (!strcmp(args[1], "be")) {
+                svc->ioprio_class = IoSchedClass_BE;
+            } else if (!strcmp(args[1], "idle")) {
+                svc->ioprio_class = IoSchedClass_IDLE;
+            } else {
+                parse_error(state, "ioprio option usage: ioprio <rt|be|idle> <0-7>\n");
+            }
+        }
         break;
     case K_group:
         if (nargs < 2) {
