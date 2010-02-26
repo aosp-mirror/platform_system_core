@@ -22,7 +22,6 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <linux/unistd.h>
 
 #ifdef HAVE_SCHED_H
 
