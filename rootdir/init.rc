@@ -281,6 +281,7 @@ service servicemanager /system/bin/servicemanager
 
 service vold /system/bin/vold
     socket vold stream 0660 root mount
+    ioprio be 2
 
 service netd /system/bin/netd
     socket netd stream 0660 root system
@@ -302,6 +303,7 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
 service media /system/bin/mediaserver
     user media
     group system audio camera graphics inet net_bt net_bt_admin
+    ioprio rt 4
 
 service bootanim /system/bin/bootanimation
     user graphics
