@@ -27,6 +27,7 @@
 
 #include <cutils/logger.h>
 #include <cutils/logd.h>
+#include <cutils/log.h>
 
 #define LOG_BUF_SIZE	1024
 
@@ -41,21 +42,13 @@
 #define log_close(filedes) close(filedes)
 #endif
 
-typedef enum {
-    LOG_ID_MAIN = 0,
-    LOG_ID_RADIO,
-    LOG_ID_EVENTS,
-    LOG_ID_MAX
-} log_id_t;
-
 static int __write_to_log_init(log_id_t, struct iovec *vec, size_t nr);
-static int (*write_to_log)(log_id_t, struct iovec *vec, size_t nr) =
-    __write_to_log_init;
+static int (*write_to_log)(log_id_t, struct iovec *vec, size_t nr) = __write_to_log_init;
 #ifdef HAVE_PTHREADS
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
-static int log_fds[(int)LOG_ID_MAX] = { -1, -1, -1 };
+static int log_fds[(int)LOG_ID_MAX] = { -1, -1, -1, -1 };
 
 /*
  * This is used by the C++ code to decide if it should write logs through
@@ -110,6 +103,7 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
         log_fds[LOG_ID_MAIN] = log_open("/dev/"LOGGER_LOG_MAIN, O_WRONLY);
         log_fds[LOG_ID_RADIO] = log_open("/dev/"LOGGER_LOG_RADIO, O_WRONLY);
         log_fds[LOG_ID_EVENTS] = log_open("/dev/"LOGGER_LOG_EVENTS, O_WRONLY);
+        log_fds[LOG_ID_SYSTEM] = log_open("/dev/"LOGGER_LOG_SYSTEM, O_WRONLY);
 
         write_to_log = __write_to_log_kernel;
 
@@ -122,6 +116,12 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
             log_fds[LOG_ID_RADIO] = -1;
             log_fds[LOG_ID_EVENTS] = -1;
             write_to_log = __write_to_log_null;
+        }
+
+        printf("LOG_ID_SYSTEM=%d\n", log_fds[LOG_ID_SYSTEM]);
+        printf("LOG_ID_MAIN=%d\n", log_fds[LOG_ID_MAIN]);
+        if (log_fds[LOG_ID_SYSTEM] < 0) {
+            log_fds[LOG_ID_SYSTEM] = log_fds[LOG_ID_MAIN];
         }
     }
 
@@ -161,6 +161,34 @@ int __android_log_write(int prio, const char *tag, const char *msg)
     return write_to_log(log_id, vec, 3);
 }
 
+int __android_log_buf_write(int bufID, int prio, const char *tag, const char *msg)
+{
+    struct iovec vec[3];
+
+    if (!tag)
+        tag = "";
+
+    /* XXX: This needs to go! */
+    if (!strcmp(tag, "HTC_RIL") ||
+        !strncmp(tag, "RIL", 3) || /* Any log tag with "RIL" as the prefix */
+        !strcmp(tag, "AT") ||
+        !strcmp(tag, "GSM") ||
+        !strcmp(tag, "STK") ||
+        !strcmp(tag, "CDMA") ||
+        !strcmp(tag, "PHONE") ||
+        !strcmp(tag, "SMS"))
+            bufID = LOG_ID_RADIO;
+
+    vec[0].iov_base   = (unsigned char *) &prio;
+    vec[0].iov_len    = 1;
+    vec[1].iov_base   = (void *) tag;
+    vec[1].iov_len    = strlen(tag) + 1;
+    vec[2].iov_base   = (void *) msg;
+    vec[2].iov_len    = strlen(msg) + 1;
+
+    return write_to_log(bufID, vec, 3);
+}
+
 int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap)
 {
     char buf[LOG_BUF_SIZE];    
@@ -173,13 +201,25 @@ int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap)
 int __android_log_print(int prio, const char *tag, const char *fmt, ...)
 {
     va_list ap;
-    char buf[LOG_BUF_SIZE];    
+    char buf[LOG_BUF_SIZE];
 
     va_start(ap, fmt);
     vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
     va_end(ap);
 
     return __android_log_write(prio, tag, buf);
+}
+
+int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fmt, ...)
+{
+    va_list ap;
+    char buf[LOG_BUF_SIZE];
+
+    va_start(ap, fmt);
+    vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
+    va_end(ap);
+
+    return __android_log_buf_write(bufID, prio, tag, buf);
 }
 
 void __android_log_assert(const char *cond, const char *tag,

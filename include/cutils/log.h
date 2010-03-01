@@ -196,6 +196,91 @@ extern "C" {
 #define IF_LOGE() IF_LOG(LOG_ERROR, LOG_TAG)
 #endif
 
+
+// ---------------------------------------------------------------------
+
+/*
+ * Simplified macro to send a verbose system log message using the current LOG_TAG.
+ */
+#ifndef SLOGV
+#if LOG_NDEBUG
+#define SLOGV(...)   ((void)0)
+#else
+#define SLOGV(...) ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
+#endif
+#endif
+
+#define CONDITION(cond)     (__builtin_expect((cond)!=0, 0))
+
+#ifndef SLOGV_IF
+#if LOG_NDEBUG
+#define SLOGV_IF(cond, ...)   ((void)0)
+#else
+#define SLOGV_IF(cond, ...) \
+    ( (CONDITION(cond)) \
+    ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
+    : (void)0 )
+#endif
+#endif
+
+/*
+ * Simplified macro to send a debug system log message using the current LOG_TAG.
+ */
+#ifndef SLOGD
+#define SLOGD(...) ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__))
+#endif
+
+#ifndef SLOGD_IF
+#define SLOGD_IF(cond, ...) \
+    ( (CONDITION(cond)) \
+    ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
+    : (void)0 )
+#endif
+
+/*
+ * Simplified macro to send an info system log message using the current LOG_TAG.
+ */
+#ifndef SLOGI
+#define SLOGI(...) ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__))
+#endif
+
+#ifndef SLOGI_IF
+#define SLOGI_IF(cond, ...) \
+    ( (CONDITION(cond)) \
+    ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)) \
+    : (void)0 )
+#endif
+
+/*
+ * Simplified macro to send a warning system log message using the current LOG_TAG.
+ */
+#ifndef SLOGW
+#define SLOGW(...) ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__))
+#endif
+
+#ifndef SLOGW_IF
+#define SLOGW_IF(cond, ...) \
+    ( (CONDITION(cond)) \
+    ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)) \
+    : (void)0 )
+#endif
+
+/*
+ * Simplified macro to send an error system log message using the current LOG_TAG.
+ */
+#ifndef SLOGE
+#define SLOGE(...) ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__))
+#endif
+
+#ifndef SLOGE_IF
+#define SLOGE_IF(cond, ...) \
+    ( (CONDITION(cond)) \
+    ? ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
+    : (void)0 )
+#endif
+
+    
+
 // ---------------------------------------------------------------------
 
 /*
@@ -337,6 +422,21 @@ typedef enum {
 //#define android_logToCallback(func) do{}while(0)
 #define android_logToFile(tag, file) (0)
 #define android_logToFd(tag, fd) (0)
+
+typedef enum {
+    LOG_ID_MAIN = 0,
+    LOG_ID_RADIO = 1,
+    LOG_ID_EVENTS = 2,
+    LOG_ID_SYSTEM = 3,
+
+    LOG_ID_MAX
+} log_id_t;
+
+/*
+ * Send a simple string to the log.
+ */
+int __android_log_buf_write(int bufID, int prio, const char *tag, const char *text);
+int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fmt, ...);
 
 
 #ifdef __cplusplus

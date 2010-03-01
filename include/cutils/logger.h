@@ -25,6 +25,7 @@ struct logger_entry {
 #define LOGGER_LOG_MAIN		"log/main"
 #define LOGGER_LOG_RADIO	"log/radio"
 #define LOGGER_LOG_EVENTS	"log/events"
+#define LOGGER_LOG_SYSTEM	"log/system"
 
 #define LOGGER_ENTRY_MAX_LEN		(4*1024)
 #define LOGGER_ENTRY_MAX_PAYLOAD	\

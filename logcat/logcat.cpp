@@ -24,6 +24,7 @@
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
 static AndroidLogFormat * g_logformat;
+static bool g_nonblock = false;
 
 /* logd prefixes records with a length field */
 #define RECORD_LENGTH_FIELD_SIZE_BYTES sizeof(uint32_t)
@@ -174,16 +175,6 @@ static void processBuffer(log_device_t* dev, struct logger_entry *buf)
         }
     }
 
-    if (g_devCount > 1) {
-        binaryMsgBuf[0] = dev->label;
-        binaryMsgBuf[1] = ' ';
-        bytesWritten = write(g_outFD, binaryMsgBuf, 2);
-        if (bytesWritten < 0) {
-            perror("output error");
-            exit(-1);
-        }
-    }
-
     if (dev->binary) {
         err = android_log_processBinaryLogBuffer(buf, &entry, g_eventTagMap,
                 binaryMsgBuf, sizeof(binaryMsgBuf));
@@ -192,15 +183,27 @@ static void processBuffer(log_device_t* dev, struct logger_entry *buf)
     } else {
         err = android_log_processLogBuffer(buf, &entry);
     }
-    if (err < 0)
+    if (err < 0) {
         goto error;
+    }
 
-    bytesWritten = android_log_filterAndPrintLogLine(
-                        g_logformat, g_outFD, &entry);
+    if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority)) {
+        if (false && g_devCount > 1) {
+            binaryMsgBuf[0] = dev->label;
+            binaryMsgBuf[1] = ' ';
+            bytesWritten = write(g_outFD, binaryMsgBuf, 2);
+            if (bytesWritten < 0) {
+                perror("output error");
+                exit(-1);
+            }
+        }
 
-    if (bytesWritten < 0) {
-        perror("output error");
-        exit(-1);
+        bytesWritten = android_log_printLogLine(g_logformat, g_outFD, &entry);
+
+        if (bytesWritten < 0) {
+            perror("output error");
+            exit(-1);
+        }
     }
 
     g_outByteCount += bytesWritten;
@@ -317,6 +320,10 @@ static void readLogLines(log_device_t* devices)
                         break;
                     }
                     eatEntry(dev, entry);
+                }
+                // They requested to just dump the log
+                if (g_nonblock) {
+                    exit(0);
                 }
             } else {
                 // print all that aren't the last in their list
@@ -483,7 +490,7 @@ int main(int argc, char **argv)
             break;
 
             case 'd':
-                mode |= O_NONBLOCK;
+                g_nonblock = true;
             break;
 
             case 'g':
@@ -638,8 +645,16 @@ int main(int argc, char **argv)
     }
 
     if (!devices) {
-        devices = new log_device_t(strdup("/dev/"LOGGER_LOG_MAIN), false, LOGGER_LOG_MAIN[0]);
+        devices = new log_device_t(strdup("/dev/"LOGGER_LOG_MAIN), false, 'm');
         android::g_devCount = 1;
+        int accessmode =
+                  (mode & O_RDONLY) ? R_OK : 0
+                | (mode & O_WRONLY) ? W_OK : 0;
+        // only add this if it's available
+        if (0 == access("/dev/"LOGGER_LOG_SYSTEM, accessmode)) {
+            devices->next = new log_device_t(strdup("/dev/"LOGGER_LOG_SYSTEM), false, 's');
+            android::g_devCount++;
+        }
     }
 
     if (android::g_logRotateSizeKBytes != 0 
@@ -714,7 +729,6 @@ int main(int argc, char **argv)
                 perror("ioctl");
                 exit(EXIT_FAILURE);
             }
-            return 0;
         }
 
         if (getLogSize) {
@@ -742,6 +756,9 @@ int main(int argc, char **argv)
     }
 
     if (getLogSize) {
+        return 0;
+    }
+    if (clearLog) {
         return 0;
     }
 

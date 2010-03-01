@@ -142,7 +142,7 @@ char *android_log_formatLogLine (
  * Assumes single threaded execution
  *
  */
-int android_log_filterAndPrintLogLine(
+int android_log_printLogLine(
     AndroidLogFormat *p_format,
     int fd,
     const AndroidLogEntry *entry);
