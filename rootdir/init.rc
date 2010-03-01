@@ -24,6 +24,11 @@ loglevel 3
     mkdir /mnt 0775 root system
     mkdir /mnt/sdcard 0000 system system
 
+# Create cgroup mount point for cpu accounting
+    mkdir /acct
+    mount cgroup none /acct cpuacct
+    mkdir /acct/uid
+
 # Backwards Compat - XXX: Going away in G*
     symlink /mnt/sdcard /sdcard
 
