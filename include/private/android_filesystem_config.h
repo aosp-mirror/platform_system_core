@@ -169,7 +169,7 @@ static struct fs_path_config android_files[] = {
          * Do not change. */
     { 02755, AID_ROOT,      AID_NET_RAW,   "system/bin/ping" },
     { 02750, AID_ROOT,      AID_INET,      "system/bin/netcfg" },
-    	/* the following four files are INTENTIONALLY set-uid, but they
+    	/* the following five files are INTENTIONALLY set-uid, but they
 	 * are NOT included on user builds. */
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/su" },
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/librank" },
@@ -177,6 +177,9 @@ static struct fs_path_config android_files[] = {
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/procmem" },
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/tcpdump" },
     { 04770, AID_ROOT,      AID_RADIO,     "system/bin/pppd-ril" },
+		/* the following file is INTENTIONALLY set-uid, and IS included
+		 * in user builds. */
+    { 06750, AID_ROOT,      AID_SHELL,     "system/bin/run-as" },
     { 00755, AID_ROOT,      AID_SHELL,     "system/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     "system/xbin/*" },
     { 00750, AID_ROOT,      AID_SHELL,     "sbin/*" },
