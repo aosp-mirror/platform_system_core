@@ -118,8 +118,6 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
             write_to_log = __write_to_log_null;
         }
 
-        printf("LOG_ID_SYSTEM=%d\n", log_fds[LOG_ID_SYSTEM]);
-        printf("LOG_ID_MAIN=%d\n", log_fds[LOG_ID_MAIN]);
         if (log_fds[LOG_ID_SYSTEM] < 0) {
             log_fds[LOG_ID_SYSTEM] = log_fds[LOG_ID_MAIN];
         }
