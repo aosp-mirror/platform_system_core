@@ -90,8 +90,9 @@ static inline void initialize()
 /*
  * Try to get the scheduler group.
  *
- * The data from /proc/<pid>/cgroup looks like:
+ * The data from /proc/<pid>/cgroup looks (something) like:
  *  2:cpu:/bg_non_interactive
+ *  1:cpuacct:/
  *
  * We return the part after the "/", which will be an empty string for
  * the default cgroup.  If the string is longer than "bufLen", the string
@@ -101,34 +102,57 @@ static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
 {
 #ifdef HAVE_ANDROID_OS
     char pathBuf[32];
-    char readBuf[256];
-    ssize_t count;
-    int fd;
+    char lineBuf[256];
+    FILE *fp;
 
     snprintf(pathBuf, sizeof(pathBuf), "/proc/%d/cgroup", tid);
-    if ((fd = open(pathBuf, O_RDONLY)) < 0) {
+    if (!(fp = fopen(pathBuf, "r"))) {
         return -1;
     }
 
-    count = read(fd, readBuf, sizeof(readBuf));
-    if (count <= 0) {
-        close(fd);
-        errno = ENODATA;
-        return -1;
+    while(fgets(lineBuf, sizeof(lineBuf) -1, fp)) {
+        char *next = lineBuf;
+        char *subsys;
+        char *grp;
+        size_t len;
+
+        /* Junk the first field */
+        if (!strsep(&next, ":")) {
+            goto out_bad_data;
+        }
+
+        if (!(subsys = strsep(&next, ":"))) {
+            goto out_bad_data;
+        }
+
+        if (strcmp(subsys, "cpu")) {
+            /* Not the subsys we're looking for */
+            continue;
+        }
+
+        if (!(grp = strsep(&next, ":"))) {
+            goto out_bad_data;
+        }
+        grp++; /* Drop the leading '/' */
+        len = strlen(grp);
+        grp[len-1] = '\0'; /* Drop the trailing '\n' */
+
+        if (bufLen <= len) {
+            len = bufLen - 1;
+        }
+        strncpy(buf, grp, len);
+        buf[len] = '\0';
+        fclose(fp);
+        return 0;
     }
-    close(fd);
 
-    readBuf[--count] = '\0';    /* remove the '\n', now count==strlen */
-
-    char* cp = strchr(readBuf, '/');
-    if (cp == NULL) {
-        readBuf[sizeof(readBuf)-1] = '\0';
-        errno = ENODATA;
-        return -1;
-    }
-
-    memcpy(buf, cp+1, count);   /* count-1 for cp+1, count+1 for NUL */
-    return 0;
+    LOGE("Failed to find cpu subsys");
+    fclose(fp);
+    return -1;
+ out_bad_data:
+    LOGE("Bad cgroup data {%s}", lineBuf);
+    fclose(fp);
+    return -1;
 #else
     errno = ENOSYS;
     return -1;
