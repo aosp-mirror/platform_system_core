@@ -9,6 +9,13 @@ LOCAL_SRC_FILES:= debuggerd.c getevent.c unwind-arm.c pr-support.c utility.c
 LOCAL_CFLAGS := -Wall
 LOCAL_MODULE := debuggerd
 
+ifeq ($(ARCH_ARM_HAVE_VFP),true)
+LOCAL_CFLAGS += -DWITH_VFP
+endif # ARCH_ARM_HAVE_VFP
+ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
+LOCAL_CFLAGS += -DWITH_VFP_D32
+endif # ARCH_ARM_HAVE_VFP_D32
+
 LOCAL_STATIC_LIBRARIES := libcutils libc
 
 include $(BUILD_EXECUTABLE)
@@ -23,14 +30,20 @@ LOCAL_MODULE_TAGS := eng
 LOCAL_SHARED_LIBRARIES := libcutils libc
 include $(BUILD_EXECUTABLE)
 
-ifeq ($(TARGET_ARCH_VARIANT),armv7-a)
+ifeq ($(ARCH_ARM_HAVE_VFP),true)
 include $(CLEAR_VARS)
+
+LOCAL_CFLAGS += -DWITH_VFP
+ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
+LOCAL_CFLAGS += -DWITH_VFP_D32
+endif # ARCH_ARM_HAVE_VFP_D32
+
 LOCAL_SRC_FILES := vfp-crasher.c vfp.S
 LOCAL_MODULE := vfp-crasher
 LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
 LOCAL_MODULE_TAGS := eng
 LOCAL_SHARED_LIBRARIES := libcutils libc
 include $(BUILD_EXECUTABLE)
-endif # TARGET_ARCH_VARIANT == armv7-a
+endif # ARCH_ARM_HAVE_VFP == true
 
 endif # TARGET_ARCH == arm

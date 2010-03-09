@@ -19,6 +19,7 @@ crash:
     fconstd   d13, #13
     fconstd   d14, #14
     fconstd   d15, #15
+#ifdef WITH_VFP_D32
     fconstd   d16, #16
     fconstd   d17, #17
     fconstd   d18, #18
@@ -35,6 +36,7 @@ crash:
     fconstd   d29, #29
     fconstd   d30, #30
     fconstd   d31, #31
+#endif
     mov       r0, #0
     str       r0, [r0]
     bx        lr
