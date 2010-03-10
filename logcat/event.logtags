@@ -111,8 +111,6 @@
 75003 sqlite_mem_released (Memory released|1|2)
 75004 sqlite_db_corrupt (Database file corrupt|3)
 
-40000 checkin (Check in time|2|3)
-
 50000 menu_item_selected (Menu type where 0 is options and 1 is context|1|5),(Menu item title|3)
 50001 menu_opened (Menu type where 0 is options and 1 is context|1|5)
 
