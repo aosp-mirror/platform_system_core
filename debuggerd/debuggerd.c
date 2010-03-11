@@ -42,6 +42,14 @@
 
 #include "utility.h"
 
+#ifdef WITH_VFP
+#ifdef WITH_VFP_D32
+#define NUM_VFP_REGS 32
+#else
+#define NUM_VFP_REGS 16
+#endif
+#endif
+
 /* Main entry point to get the backtrace from the crashing process */
 extern int unwind_backtrace_with_ptrace(int tfd, pid_t pid, mapinfo *map,
                                         unsigned int sp_list[],
@@ -278,7 +286,7 @@ void dump_registers(int tfd, int pid, bool at_fault)
          " ip %08x  sp %08x  lr %08x  pc %08x  cpsr %08x\n",
          r.ARM_ip, r.ARM_sp, r.ARM_lr, r.ARM_pc, r.ARM_cpsr);
 
-#if __ARM_NEON__
+#ifdef WITH_VFP
     struct user_vfp vfp_regs;
     int i;
 
@@ -288,7 +296,7 @@ void dump_registers(int tfd, int pid, bool at_fault)
         return;
     }
 
-    for (i = 0; i < 32; i += 2) {
+    for (i = 0; i < NUM_VFP_REGS; i += 2) {
         _LOG(tfd, only_in_tombstone,
              " d%-2d %016llx  d%-2d %016llx\n",
               i, vfp_regs.fpregs[i], i+1, vfp_regs.fpregs[i+1]);
