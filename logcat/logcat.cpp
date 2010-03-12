@@ -25,6 +25,7 @@
 
 static AndroidLogFormat * g_logformat;
 static bool g_nonblock = false;
+static int g_tail_lines = 0;
 
 /* logd prefixes records with a length field */
 #define RECORD_LENGTH_FIELD_SIZE_BYTES sizeof(uint32_t)
@@ -162,19 +163,6 @@ static void processBuffer(log_device_t* dev, struct logger_entry *buf)
     AndroidLogEntry entry;
     char binaryMsgBuf[1024];
 
-    if (!dev->printed) {
-        dev->printed = true;
-        if (g_devCount > 1) {
-            snprintf(binaryMsgBuf, sizeof(binaryMsgBuf), "--------- beginning of %s\n",
-                    dev->device);
-            bytesWritten = write(g_outFD, binaryMsgBuf, strlen(binaryMsgBuf));
-            if (bytesWritten < 0) {
-                perror("output error");
-                exit(-1);
-            }
-        }
-    }
-
     if (dev->binary) {
         err = android_log_processBinaryLogBuffer(buf, &entry, g_eventTagMap,
                 binaryMsgBuf, sizeof(binaryMsgBuf));
@@ -219,47 +207,51 @@ error:
     return;
 }
 
-static void chooseFirst(log_device_t* dev, log_device_t** firstdev, queued_entry_t** firstentry) {
-    *firstdev = NULL;
-    *firstentry = NULL;
-    int i=0;
-    for (; dev; dev=dev->next) {
-        i++;
-        if (dev->queue) {
-            if ((*firstentry) == NULL || cmp(dev->queue, *firstentry) < 0) {
-                (*firstentry) = dev->queue;
-                *firstdev = dev;
+static void chooseFirst(log_device_t* dev, log_device_t** firstdev) {
+    for (*firstdev = NULL; dev != NULL; dev = dev->next) {
+        if (dev->queue != NULL && (*firstdev == NULL || cmp(dev->queue, (*firstdev)->queue) < 0)) {
+            *firstdev = dev;
+        }
+    }
+}
+
+static void maybePrintStart(log_device_t* dev) {
+    if (!dev->printed) {
+        dev->printed = true;
+        if (g_devCount > 1 && !g_printBinary) {
+            char buf[1024];
+            snprintf(buf, sizeof(buf), "--------- beginning of %s\n", dev->device);
+            if (write(g_outFD, buf, strlen(buf)) < 0) {
+                perror("output error");
+                exit(-1);
             }
         }
     }
 }
 
-static void printEntry(log_device_t* dev, queued_entry_t* entry) {
-    if (g_printBinary) {
-        printBinary(&entry->entry);
-    } else {
-        processBuffer(dev, &entry->entry);
-    }
-}
-
-static void eatEntry(log_device_t* dev, queued_entry_t* entry) {
-    if (dev->queue != entry) {
-        perror("assertion failed: entry isn't first in queue");
-        exit(1);
-    }
-    printEntry(dev, entry);
+static void skipNextEntry(log_device_t* dev) {
+    maybePrintStart(dev);
+    queued_entry_t* entry = dev->queue;
     dev->queue = entry->next;
     delete entry;
+}
+
+static void printNextEntry(log_device_t* dev) {
+    maybePrintStart(dev);
+    if (g_printBinary) {
+        printBinary(&dev->queue->entry);
+    } else {
+        processBuffer(dev, &dev->queue->entry);
+    }
+    skipNextEntry(dev);
 }
 
 static void readLogLines(log_device_t* devices)
 {
     log_device_t* dev;
     int max = 0;
-    queued_entry_t* entry;
-    queued_entry_t* old;
     int ret;
-    bool somethingForEveryone;
+    int queued_lines = 0;
     bool sleep = true;
 
     int result;
@@ -284,7 +276,7 @@ static void readLogLines(log_device_t* devices)
         if (result >= 0) {
             for (dev=devices; dev; dev = dev->next) {
                 if (FD_ISSET(dev->fd, &readset)) {
-                    entry = new queued_entry_t;
+                    queued_entry_t* entry = new queued_entry_t;
                     /* NOTE: driver guarantees we read exactly one full entry */
                     ret = read(dev->fd, entry->buf, LOGGER_ENTRY_MAX_LEN);
                     if (ret < 0) {
@@ -307,36 +299,45 @@ static void readLogLines(log_device_t* devices)
                     entry->entry.msg[entry->entry.len] = '\0';
 
                     dev->enqueue(entry);
+                    ++queued_lines;
                 }
             }
 
             if (result == 0) {
                 // we did our short timeout trick and there's nothing new
-                // print all that aren't the last in their list
+                // print everything we have and wait for more data
                 sleep = true;
                 while (true) {
-                    chooseFirst(devices, &dev, &entry);
-                    if (!entry) {
+                    chooseFirst(devices, &dev);
+                    if (dev == NULL) {
                         break;
                     }
-                    eatEntry(dev, entry);
+                    if (g_tail_lines == 0 || queued_lines <= g_tail_lines) {
+                        printNextEntry(dev);
+                    } else {
+                        skipNextEntry(dev);
+                    }
+                    --queued_lines;
                 }
-                // They requested to just dump the log
+
+                // the caller requested to just dump the log and exit
                 if (g_nonblock) {
                     exit(0);
                 }
             } else {
                 // print all that aren't the last in their list
-                while (true) {
-                    chooseFirst(devices, &dev, &entry);
-                    if (!entry) {
-                        sleep = false;
-                        break;
-                    } else if (entry->next == NULL) {
-                        sleep = false;
+                sleep = false;
+                while (g_tail_lines == 0 || queued_lines > g_tail_lines) {
+                    chooseFirst(devices, &dev);
+                    if (dev == NULL || dev->queue->next == NULL) {
                         break;
                     }
-                    eatEntry(dev, entry);
+                    if (g_tail_lines == 0) {
+                        printNextEntry(dev);
+                    } else {
+                        skipNextEntry(dev);
+                    }
+                    --queued_lines;
                 }
             }
         }
@@ -398,6 +399,7 @@ static void show_help(const char *cmd)
                     "                  brief process tag thread raw time threadtime long\n\n"
                     "  -c              clear (flush) the entire log and exit\n"
                     "  -d              dump the log and then exit (don't block)\n"
+                    "  -t <count>      print only the most recent <count> lines (implies -d)\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
                     "  -b <buffer>     request alternate ring buffer\n"
                     "                  ('main' (default), 'radio', 'events')\n"
@@ -472,7 +474,7 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, "cdgsQf:r::n:v:b:B");
+        ret = getopt(argc, argv, "cdt:gsQf:r::n:v:b:B");
 
         if (ret < 0) {
             break;
@@ -491,6 +493,11 @@ int main(int argc, char **argv)
 
             case 'd':
                 g_nonblock = true;
+            break;
+
+            case 't':
+                g_nonblock = true;
+                g_tail_lines = atoi(optarg);
             break;
 
             case 'g':
