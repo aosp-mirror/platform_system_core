@@ -66,6 +66,7 @@ struct log_device_t {
         device = d;
         binary = b;
         label = l;
+        queue = NULL;
         next = NULL;
         printed = false;
     }
@@ -158,7 +159,7 @@ void printBinary(struct logger_entry *buf)
 
 static void processBuffer(log_device_t* dev, struct logger_entry *buf)
 {
-    int bytesWritten;
+    int bytesWritten = 0;
     int err;
     AndroidLogEntry entry;
     char binaryMsgBuf[1024];
@@ -276,7 +277,7 @@ static void readLogLines(log_device_t* devices)
         if (result >= 0) {
             for (dev=devices; dev; dev = dev->next) {
                 if (FD_ISSET(dev->fd, &readset)) {
-                    queued_entry_t* entry = new queued_entry_t;
+                    queued_entry_t* entry = new queued_entry_t();
                     /* NOTE: driver guarantees we read exactly one full entry */
                     ret = read(dev->fd, entry->buf, LOGGER_ENTRY_MAX_LEN);
                     if (ret < 0) {
