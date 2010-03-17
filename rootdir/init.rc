@@ -141,13 +141,6 @@ loglevel 3
     mkdir /data/app 0771 system system
     mkdir /data/property 0700 root root
 
-    # STOPSHIP: Temporary Encrypted File Systems workaround
-    mkdir /data/secure 0771 system system
-    mkdir /data/secure/data 0771 system system
-    mkdir /data/secure/misc 01771 system misc
-    mkdir /data/securemisc/vpn 0770 system system
-    mkdir /data/secure/misc/vpn/profiles 0770 system system
-
     # create dalvik-cache and double-check the perms
     mkdir /data/dalvik-cache 0771 system system
     chown system system /data/dalvik-cache
