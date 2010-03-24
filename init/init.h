@@ -114,7 +114,7 @@ struct svcenvinfo {
 #define SVC_CONSOLE     0x10  /* requires console */
 #define SVC_CRITICAL    0x20  /* will reboot into recovery if keeps crashing */
 
-#define NR_SVC_SUPP_GIDS 6    /* six supplementary groups */
+#define NR_SVC_SUPP_GIDS 12    /* twelve supplementary groups */
 
 #define SVC_MAXARGS 64
 
