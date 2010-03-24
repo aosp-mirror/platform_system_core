@@ -300,7 +300,7 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
 
 service media /system/bin/mediaserver
     user media
-    group system audio camera graphics inet net_bt net_bt_admin
+    group system audio camera graphics inet net_bt net_bt_admin net_raw
     ioprio rt 4
 
 service bootanim /system/bin/bootanimation
