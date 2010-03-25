@@ -1053,7 +1053,7 @@ static int _volmgr_start(volume_t *vol, blkdev_t *dev)
             break;
     }
 
-    if (!fs) {
+    if (!fs->name) {
         LOGE("No supported filesystems on %d:%d", dev->major, dev->minor);
         volume_setstate(vol, volstate_nofs);
         return -ENODATA;
