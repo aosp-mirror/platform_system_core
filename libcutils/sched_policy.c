@@ -53,7 +53,7 @@ static int add_tid_to_cgroup(int tid, const char *grp_name)
     sprintf(path, "/dev/cpuctl/%s/tasks", grp_name);
 
     if ((fd = open(path, O_WRONLY)) < 0) {
-        LOGE("add_tid_to_cgroup failed to open '%s' (%s)\n", path,
+        SLOGE("add_tid_to_cgroup failed to open '%s' (%s)\n", path,
              strerror(errno));
         return -1;
     }
@@ -67,7 +67,7 @@ static int add_tid_to_cgroup(int tid, const char *grp_name)
 	 */
 	if (errno == ESRCH)
 		return 0;
-        LOGW("add_tid_to_cgroup failed to write '%s' (%s)\n", path,
+        SLOGW("add_tid_to_cgroup failed to write '%s' (%s)\n", path,
              strerror(errno));
         return -1;
     }
@@ -146,11 +146,11 @@ static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
         return 0;
     }
 
-    LOGE("Failed to find cpu subsys");
+    SLOGE("Failed to find cpu subsys");
     fclose(fp);
     return -1;
  out_bad_data:
-    LOGE("Bad cgroup data {%s}", lineBuf);
+    SLOGE("Bad cgroup data {%s}", lineBuf);
     fclose(fp);
     return -1;
 #else
@@ -219,11 +219,11 @@ int set_sched_policy(int tid, SchedPolicy policy)
         strncpy(thread_name, p, (q-p));
     }
     if (policy == SP_BACKGROUND) {
-        LOGD("vvv tid %d (%s)", tid, thread_name);
+        SLOGD("vvv tid %d (%s)", tid, thread_name);
     } else if (policy == SP_FOREGROUND) {
-        LOGD("^^^ tid %d (%s)", tid, thread_name);
+        SLOGD("^^^ tid %d (%s)", tid, thread_name);
     } else {
-        LOGD("??? tid %d (%s)", tid, thread_name);
+        SLOGD("??? tid %d (%s)", tid, thread_name);
     }
 #endif
 

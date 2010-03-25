@@ -35,13 +35,13 @@ bool NetlinkListener::onDataAvailable(SocketClient *cli)
     int count;
 
     if ((count = recv(socket, mBuffer, sizeof(mBuffer), 0)) < 0) {
-        LOGE("recv failed (%s)", strerror(errno));
+        SLOGE("recv failed (%s)", strerror(errno));
         return false;
     }
 
     NetlinkEvent *evt = new NetlinkEvent();
     if (!evt->decode(mBuffer, count)) {
-        LOGE("Error decoding NetlinkEvent");
+        SLOGE("Error decoding NetlinkEvent");
         goto out;
     }
 

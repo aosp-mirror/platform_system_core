@@ -64,30 +64,30 @@ SocketListener::~SocketListener() {
 int SocketListener::startListener() {
 
     if (!mSocketName && mSock == -1) {
-        LOGE("Failed to start unbound listener");
+        SLOGE("Failed to start unbound listener");
         errno = EINVAL;
         return -1;
     } else if (mSocketName) {
         if ((mSock = android_get_control_socket(mSocketName)) < 0) {
-            LOGE("Obtaining file descriptor socket '%s' failed: %s",
+            SLOGE("Obtaining file descriptor socket '%s' failed: %s",
                  mSocketName, strerror(errno));
             return -1;
         }
     }
 
     if (mListen && listen(mSock, 4) < 0) {
-        LOGE("Unable to listen on socket (%s)", strerror(errno));
+        SLOGE("Unable to listen on socket (%s)", strerror(errno));
         return -1;
     } else if (!mListen)
         mClients->push_back(new SocketClient(mSock));
 
     if (pipe(mCtrlPipe)) {
-        LOGE("pipe failed (%s)", strerror(errno));
+        SLOGE("pipe failed (%s)", strerror(errno));
         return -1;
     }
 
     if (pthread_create(&mThread, NULL, SocketListener::threadStart, this)) {
-        LOGE("pthread_create (%s)", strerror(errno));
+        SLOGE("pthread_create (%s)", strerror(errno));
         return -1;
     }
 
@@ -98,13 +98,13 @@ int SocketListener::stopListener() {
     char c = 0;
 
     if (write(mCtrlPipe[1], &c, 1) != 1) {
-        LOGE("Error writing to control pipe (%s)", strerror(errno));
+        SLOGE("Error writing to control pipe (%s)", strerror(errno));
         return -1;
     }
 
     void *ret;
     if (pthread_join(mThread, &ret)) {
-        LOGE("Error joining to listener thread (%s)", strerror(errno));
+        SLOGE("Error joining to listener thread (%s)", strerror(errno));
         return -1;
     }
     close(mCtrlPipe[0]);
@@ -161,7 +161,7 @@ void SocketListener::runListener() {
         pthread_mutex_unlock(&mClientsLock);
 
         if ((rc = select(max + 1, &read_fds, NULL, NULL, NULL)) < 0) {
-            LOGE("select failed (%s)", strerror(errno));
+            SLOGE("select failed (%s)", strerror(errno));
             sleep(1);
             continue;
         } else if (!rc)
@@ -175,7 +175,7 @@ void SocketListener::runListener() {
             int c;
 
             if ((c = accept(mSock, &addr, &alen)) < 0) {
-                LOGE("accept failed (%s)", strerror(errno));
+                SLOGE("accept failed (%s)", strerror(errno));
                 sleep(1);
                 continue;
             }
@@ -212,7 +212,7 @@ void SocketListener::sendBroadcast(int code, const char *msg, bool addErrno) {
 
     for (i = mClients->begin(); i != mClients->end(); ++i) {
         if ((*i)->sendMsg(code, msg, addErrno)) {
-            LOGW("Error sending broadcast (%s)", strerror(errno));
+            SLOGW("Error sending broadcast (%s)", strerror(errno));
         }
     }
     pthread_mutex_unlock(&mClientsLock);
@@ -224,7 +224,7 @@ void SocketListener::sendBroadcast(const char *msg) {
 
     for (i = mClients->begin(); i != mClients->end(); ++i) {
         if ((*i)->sendMsg(msg)) {
-            LOGW("Error sending broadcast (%s)", strerror(errno));
+            SLOGW("Error sending broadcast (%s)", strerror(errno));
         }
     }
     pthread_mutex_unlock(&mClientsLock);

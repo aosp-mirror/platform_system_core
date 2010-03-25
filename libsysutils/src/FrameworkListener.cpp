@@ -34,7 +34,7 @@ bool FrameworkListener::onDataAvailable(SocketClient *c) {
     int len;
 
     if ((len = read(c->getSocket(), buffer, sizeof(buffer) -1)) < 0) {
-        LOGE("read() failed (%s)", strerror(errno));
+        SLOGE("read() failed (%s)", strerror(errno));
         return errno;
     } else if (!len)
         return false;
@@ -114,7 +114,7 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
     argv[argc++] = strdup(tmp);
 #if 0
     for (k = 0; k < argc; k++) {
-        LOGD("arg[%d] = '%s'", k, argv[k]);
+        SLOGD("arg[%d] = '%s'", k, argv[k]);
     }
 #endif
 
@@ -128,7 +128,7 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
 
         if (!strcmp(argv[0], c->getCommand())) {
             if (c->runCommand(cli, argc, argv)) {
-                LOGW("Handler '%s' error (%s)", c->getCommand(), strerror(errno));
+                SLOGW("Handler '%s' error (%s)", c->getCommand(), strerror(errno));
             }
             goto out;
         }

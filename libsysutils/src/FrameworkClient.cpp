@@ -21,7 +21,7 @@ int FrameworkClient::sendMsg(const char *msg) {
 
     pthread_mutex_lock(&mWriteMutex);
     if (write(mSocket, msg, strlen(msg) +1) < 0) {
-        LOGW("Unable to send msg '%s' (%s)", msg, strerror(errno));
+        SLOGW("Unable to send msg '%s' (%s)", msg, strerror(errno));
     }
     pthread_mutex_unlock(&mWriteMutex);
     return 0;
