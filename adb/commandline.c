@@ -761,6 +761,7 @@ int adb_commandline(int argc, char **argv)
     int quote;
     transport_type ttype = kTransportAny;
     char* serial = NULL;
+    char* server_port_str = NULL;
 
         /* If defined, this should be an absolute path to
          * the directory containing all of the various system images
@@ -776,7 +777,20 @@ int adb_commandline(int argc, char **argv)
 
     serial = getenv("ANDROID_SERIAL");
 
-        /* modifiers and flags */
+    /* Validate and assign the server port */
+    server_port_str = getenv("ANDROID_ADB_SERVER_PORT");
+    int server_port = DEFAULT_ADB_PORT;
+    if (server_port_str && strlen(server_port_str) > 0) {
+        server_port = (int) strtol(server_port_str, NULL, 0);
+        if (server_port <= 0) {
+            fprintf(stderr,
+                    "adb: Env var ANDROID_ADB_SERVER_PORT must be a positive number. Got \"%s\"\n",
+                    server_port_str);
+            return usage();
+        }
+    }
+
+    /* modifiers and flags */
     while(argc > 0) {
         if(!strcmp(argv[0],"nodaemon")) {
             no_daemon = 1;
@@ -805,7 +819,7 @@ int adb_commandline(int argc, char **argv)
             if (isdigit(argv[0][2])) {
                 serial = argv[0] + 2;
             } else {
-                if(argc < 2) return usage();
+                if(argc < 2 || argv[0][2] != '\0') return usage();
                 serial = argv[1];
                 argc--;
                 argv++;
@@ -823,12 +837,13 @@ int adb_commandline(int argc, char **argv)
     }
 
     adb_set_transport(ttype, serial);
+    adb_set_tcp_specifics(server_port);
 
     if ((argc > 0) && (!strcmp(argv[0],"server"))) {
         if (no_daemon || is_daemon) {
-            r = adb_main(is_daemon);
+            r = adb_main(is_daemon, server_port);
         } else {
-            r = launch_server();
+            r = launch_server(server_port);
         }
         if(r) {
             fprintf(stderr,"* could not start server *\n");
@@ -893,10 +908,10 @@ top:
             /* quote empty strings and strings with spaces */
             quote = (**argv == 0 || strchr(*argv, ' '));
             if (quote)
-            	strcat(buf, "\"");
+                strcat(buf, "\"");
             strcat(buf, *argv++);
             if (quote)
-            	strcat(buf, "\"");
+                strcat(buf, "\"");
         }
 
         for(;;) {
