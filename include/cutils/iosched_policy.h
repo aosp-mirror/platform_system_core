@@ -1,6 +1,5 @@
-
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2007 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +14,25 @@
  * limitations under the License.
  */
 
-#ifndef _UMS_H
-#define _UMS_H
+#ifndef __CUTILS_IOSCHED_POLICY_H
+#define __CUTILS_IOSCHED_POLICY_H
 
-// these must match the corresponding strings in java/android/android/os/UsbListener.java
-#define VOLD_EVT_UMS_ENABLED              "ums_enabled"
-#define VOLD_EVT_UMS_DISABLED             "ums_disabled"
-#define VOLD_EVT_UMS_CONNECTED            "ums_connected"
-#define VOLD_EVT_UMS_DISCONNECTED         "ums_disconnected"
-
-
-int ums_send_status(void);
-int ums_enable(char *device_file, char *lun_syspath);
-int ums_disable(char *lun_syspath);
+#ifdef __cplusplus
+extern "C" {
 #endif
+
+typedef enum {
+    IoSchedClass_NONE,
+    IoSchedClass_RT,
+    IoSchedClass_BE,
+    IoSchedClass_IDLE,
+} IoSchedClass;
+
+extern int android_set_ioprio(int pid, IoSchedClass clazz, int ioprio);
+extern int android_get_ioprio(int pid, IoSchedClass *clazz, int *ioprio);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __CUTILS_IOSCHED_POLICY_H */ 

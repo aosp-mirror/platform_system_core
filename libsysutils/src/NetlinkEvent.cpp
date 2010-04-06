@@ -52,7 +52,7 @@ void NetlinkEvent::dump() {
     for (i = 0; i < NL_PARAMS_MAX; i++) {
         if (!mParams[i])
             break;
-        LOGD("NL param '%s'\n", mParams[i]);
+        SLOGD("NL param '%s'\n", mParams[i]);
     }
 }
 
@@ -102,6 +102,6 @@ const char *NetlinkEvent::findParam(const char *paramName) {
             return &mParams[i][strlen(paramName) + 1];
     }
 
-    LOGE("NetlinkEvent::FindParam(): Parameter '%s' not found", paramName);
+    SLOGE("NetlinkEvent::FindParam(): Parameter '%s' not found", paramName);
     return NULL;
 }

@@ -114,7 +114,7 @@ struct svcenvinfo {
 #define SVC_CONSOLE     0x10  /* requires console */
 #define SVC_CRITICAL    0x20  /* will reboot into recovery if keeps crashing */
 
-#define NR_SVC_SUPP_GIDS 6    /* six supplementary groups */
+#define NR_SVC_SUPP_GIDS 12    /* twelve supplementary groups */
 
 #define SVC_MAXARGS 64
 
@@ -145,6 +145,9 @@ struct service {
     int *keycodes;
     int nkeycodes;
     int keychord_id;
+
+    int ioprio_class;
+    int ioprio_pri;
 
     int nargs;
     /* "MUST BE AT THE END OF THE STRUCT" */

@@ -285,8 +285,7 @@ struct clear_state_t {
 };
 
 struct fog_state_t {
-    uint8_t     color[3];
-    uint8_t     reserved;
+    uint8_t     color[4];
 };
 
 struct logic_op_state_t {

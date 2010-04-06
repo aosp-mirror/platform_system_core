@@ -35,6 +35,7 @@
 #include <sys/reboot.h>
 
 #include <cutils/sockets.h>
+#include <cutils/iosched_policy.h>
 #include <termios.h>
 #include <linux/kd.h>
 #include <linux/keychord.h>
@@ -221,6 +222,13 @@ void service_start(struct service *svc, const char *dynamic_args)
                                   si->perm, si->uid, si->gid);
             if (s >= 0) {
                 publish_socket(si->name, s);
+            }
+        }
+
+        if (svc->ioprio_class != IoSchedClass_NONE) {
+            if (android_set_ioprio(getpid(), svc->ioprio_class, svc->ioprio_pri)) {
+                ERROR("Failed to set pid %d ioprio = %d,%d: %s\n",
+                      getpid(), svc->ioprio_class, svc->ioprio_pri, strerror(errno));
             }
         }
 

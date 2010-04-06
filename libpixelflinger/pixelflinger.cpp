@@ -281,6 +281,7 @@ static void ggl_fogColor3xv(void* con, const GGLclampx* color)
     const int32_t r = gglClampx(color[0]);
     const int32_t g = gglClampx(color[1]);
     const int32_t b = gglClampx(color[2]);
+    c->state.fog.color[GGLFormat::ALPHA]= 0xFF; // unused
 	c->state.fog.color[GGLFormat::RED]  = (r - (r>>8))>>8;
 	c->state.fog.color[GGLFormat::GREEN]= (g - (g>>8))>>8;
 	c->state.fog.color[GGLFormat::BLUE] = (b - (b>>8))>>8;

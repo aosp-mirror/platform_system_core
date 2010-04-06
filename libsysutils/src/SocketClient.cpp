@@ -41,11 +41,11 @@ int SocketClient::sendMsg(const char *msg) {
     pthread_mutex_lock(&mWriteMutex);
     while(brtw) {
         if ((rc = write(mSocket,p, brtw)) < 0) {
-            LOGW("Unable to send msg '%s' (%s)", msg, strerror(errno));
+            SLOGW("Unable to send msg '%s' (%s)", msg, strerror(errno));
             pthread_mutex_unlock(&mWriteMutex);
             return -1;
         } else if (!rc) {
-            LOGW("0 length write :(");
+            SLOGW("0 length write :(");
             errno = EIO;
             pthread_mutex_unlock(&mWriteMutex);
             return -1;

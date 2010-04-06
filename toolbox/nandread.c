@@ -8,7 +8,7 @@
 #include <mtd/mtd-user.h>
 #include <sys/ioctl.h>
 
-int test_empty(const char *buf, size_t size)
+static int test_empty(const char *buf, size_t size)
 {
     while(size--) {
         if (*buf++ != 0xff)
@@ -29,12 +29,14 @@ int nandread_main(int argc, char **argv)
     int ret;
     int verbose = 0;
     void *buffer;
-    loff_t pos, opos;
+    loff_t pos, opos, end, bpos;
+    loff_t start = 0, len = 0;
     int c;
     int i;
     int empty_pages = 0;
     int page_count = 0;
     int bad_block;
+    int rawmode = 0;
     uint32_t *oob_data;
     uint8_t *oob_fixed;
     size_t spare_size = 64;
@@ -44,7 +46,7 @@ int nandread_main(int argc, char **argv)
     struct nand_ecclayout ecclayout;
 
     do {
-        c = getopt(argc, argv, "d:f:s:hv");
+        c = getopt(argc, argv, "d:f:s:S:L:Rhv");
         if (c == EOF)
             break;
         switch (c) {
@@ -57,6 +59,15 @@ int nandread_main(int argc, char **argv)
         case 's':
             spare_size = atoi(optarg);
             break;
+        case 'S':
+            start = strtoll(optarg, NULL, 0);
+            break;
+        case 'L':
+            len = strtoll(optarg, NULL, 0);
+            break;
+        case 'R':
+            rawmode = 1;
+            break;
         case 'v':
             verbose++;
             break;
@@ -65,6 +76,9 @@ int nandread_main(int argc, char **argv)
                     "  -d <dev>   Read from <dev>\n"
                     "  -f <file>  Write to <file>\n"
                     "  -s <size>  Number of spare bytes in file (default 64)\n"
+                    "  -R         Raw mode\n"
+                    "  -S <start> Start offset (default 0)\n"
+                    "  -L <len>   Length (default 0)\n"
                     "  -v         Print info\n"
                     "  -h         Print help\n", argv[0]);
             return -1;
@@ -129,7 +143,7 @@ int nandread_main(int argc, char **argv)
 
     oobbuf.length = mtdinfo.oobsize;
     oob_data = (uint32_t *)((uint8_t *)buffer + mtdinfo.writesize);
-    memset(oob_data, 0xff, spare_size);
+    memset(oob_data, 0xff, mtdinfo.oobsize + spare_size);
     oobbuf.ptr = (uint8_t *)oob_data + spare_size;
 
     ret = ioctl(fd, ECCGETLAYOUT, &ecclayout);
@@ -160,21 +174,34 @@ int nandread_main(int argc, char **argv)
         printf("initial ecc bbtblocks: %u\n", initial_ecc.bbtblocks);
     }
 
-    for (pos = 0, opos = 0; pos < mtdinfo.size; pos += mtdinfo.writesize) {
+    if (rawmode) {
+        rawmode = mtdinfo.oobsize;
+        ret = ioctl(fd, MTDFILEMODE, MTD_MODE_RAW);
+        if (ret) {
+            fprintf(stderr, "failed set raw mode for %s, %s\n",
+                    devname, strerror(errno));
+            return 1;
+        }
+    }
+
+    end = len ? (start + len) : mtdinfo.size;
+    for (pos = start, opos = 0; pos < end; pos += mtdinfo.writesize) {
         bad_block = 0;
         if (verbose > 3)
             printf("reading at %llx\n", pos);
         lseek64(fd, pos, SEEK_SET);
-        ret = read(fd, buffer, mtdinfo.writesize);
+        ret = read(fd, buffer, mtdinfo.writesize + rawmode);
         if (ret < (int)mtdinfo.writesize) {
             fprintf(stderr, "short read at %llx, %d\n", pos, ret);
             bad_block = 2;
         }
-        oobbuf.start = pos;
-        ret = ioctl(fd, MEMREADOOB, &oobbuf);
-        if (ret) {
-            fprintf(stderr, "failed to read oob data at %llx, %d\n", pos, ret);
-            bad_block = 2;
+        if (!rawmode) {
+            oobbuf.start = pos;
+            ret = ioctl(fd, MEMREADOOB, &oobbuf);
+            if (ret) {
+                fprintf(stderr, "failed to read oob data at %llx, %d\n", pos, ret);
+                bad_block = 2;
+            }
         }
         ret = ioctl(fd, ECCGETSTATS, &ecc);
         if (ret) {
@@ -182,7 +209,8 @@ int nandread_main(int argc, char **argv)
                     devname, strerror(errno));
             return 1;
         }
-        ret = ioctl(fd, MEMGETBADBLOCK, &pos);
+        bpos = pos / mtdinfo.erasesize * mtdinfo.erasesize;
+        ret = ioctl(fd, MEMGETBADBLOCK, &bpos);
         if (ret && errno != EOPNOTSUPP) {
             printf("badblock at %llx\n", pos);
             bad_block = 1;
@@ -196,14 +224,16 @@ int nandread_main(int argc, char **argv)
         if (ecc.bbtblocks != last_ecc.bbtblocks)
             printf("ecc bbtblocks, %u, at %llx\n", ecc.bbtblocks - last_ecc.bbtblocks, pos);
 
-        oob_fixed = (uint8_t *)oob_data;
-        for (i = 0; i < MTD_MAX_OOBFREE_ENTRIES; i++) {
-            int len = ecclayout.oobfree[i].length;
-            if (oob_fixed + len > oobbuf.ptr)
-                len = oobbuf.ptr - oob_fixed;
-            if (len) {
-                memcpy(oob_fixed, oobbuf.ptr + ecclayout.oobfree[i].offset, len);
-                oob_fixed += len;
+        if (!rawmode) {
+            oob_fixed = (uint8_t *)oob_data;
+            for (i = 0; i < MTD_MAX_OOBFREE_ENTRIES; i++) {
+                int len = ecclayout.oobfree[i].length;
+                if (oob_fixed + len > oobbuf.ptr)
+                    len = oobbuf.ptr - oob_fixed;
+                if (len) {
+                    memcpy(oob_fixed, oobbuf.ptr + ecclayout.oobfree[i].offset, len);
+                    oob_fixed += len;
+                }
             }
         }
 

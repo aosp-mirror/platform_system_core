@@ -105,8 +105,8 @@ void help()
         "                                 environment variable is used, which must\n"
         "                                 be an absolute path.\n"
         " devices                       - list all connected devices\n"
-        " connect <host>:<port>         - connect to a device via TCP/IP"
-        " disconnect <host>:<port>      - disconnect from a TCP/IP device"
+        " connect <host>:<port>         - connect to a device via TCP/IP\n"
+        " disconnect <host>:<port>      - disconnect from a TCP/IP device\n"
         "\n"
         "device commands:\n"
         "  adb push <local> <remote>    - copy file/dir to device\n"
@@ -126,9 +126,10 @@ void help()
         "                                   dev:<character device name>\n"
         "                                   jdwp:<process pid> (remote only)\n"
         "  adb jdwp                     - list PIDs of processes hosting a JDWP transport\n"
-        "  adb install [-l] [-r] <file> - push this package file to the device and install it\n"
+        "  adb install [-l] [-r] [-s] <file> - push this package file to the device and install it\n"
         "                                 ('-l' means forward-lock the app)\n"
         "                                 ('-r' means reinstall the app, keeping its data)\n"
+        "                                 ('-s' means install on SD card instead of internal storage)\n"
         "  adb uninstall [-k] <package> - remove this app package from the device\n"
         "                                 ('-k' means keep the data and cache directories)\n"
         "  adb bugreport                - return all information from the device\n"
@@ -220,8 +221,8 @@ static void read_and_dump(int fd)
             if(errno == EINTR) continue;
             break;
         }
-        /* we want to output to stdout, so no adb_write here !! */
-        unix_write(1, buf, len);
+        fwrite(buf, 1, len, stdout);
+        fflush(stdout);
     }
 }
 
@@ -1255,17 +1256,25 @@ int install_app(transport_type transport, char* serial, int argc, char** argv)
 {
     struct stat st;
     int err;
-    const char *const WHERE = "/data/local/tmp/%s";
+    const char *const DATA_DEST = "/data/local/tmp/%s";
+    const char *const SD_DEST = "/sdcard/tmp/%s";
+    const char* where = DATA_DEST;
     char to[PATH_MAX];
     char* filename = argv[argc - 1];
     const char* p;
+    int i;
+
+    for (i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "-s"))
+            where = SD_DEST;
+    }
 
     p = adb_dirstop(filename);
     if (p) {
         p++;
-        snprintf(to, sizeof to, WHERE, p);
+        snprintf(to, sizeof to, where, p);
     } else {
-        snprintf(to, sizeof to, WHERE, filename);
+        snprintf(to, sizeof to, where, filename);
     }
     if (p[0] == '\0') {
     }

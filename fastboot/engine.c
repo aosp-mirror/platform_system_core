@@ -30,8 +30,16 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "fastboot.h"
+
+double now()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
+}
 
 char *mkmsg(const char *fmt, ...)
 {
@@ -66,6 +74,8 @@ struct Action
 
     const char *msg;
     int (*func)(Action *a, int status, char *resp);
+
+    double start;
 };
 
 static Action *action_list = 0;
@@ -76,7 +86,9 @@ static int cb_default(Action *a, int status, char *resp)
     if (status) {
         fprintf(stderr,"FAILED (%s)\n", resp);
     } else {
-        fprintf(stderr,"OKAY\n");
+        double split = now();
+        fprintf(stderr,"OKAY [%7.3fs]\n", (split - a->start));
+        a->start = split;
     }
     return status;
 }
@@ -101,6 +113,9 @@ static Action *queue_action(unsigned op, const char *fmt, ...)
     action_last = a;
     a->op = op;
     a->func = cb_default;
+
+    a->start = -1;
+
     return a;
 }
 
@@ -166,7 +181,9 @@ static int cb_check(Action *a, int status, char *resp, int invert)
     if (invert) yes = !yes;
 
     if (yes) {
-        fprintf(stderr,"OKAY\n");
+        double split = now();
+        fprintf(stderr,"OKAY [%7.3fs]\n", (split - a->start));
+        a->start = split;
         return 0;
     }
 
@@ -263,9 +280,12 @@ void fb_execute_queue(usb_handle *usb)
     a = action_list;
     resp[FB_RESPONSE_SZ] = 0;
 
+    double start = -1;
     for (a = action_list; a; a = a->next) {
+        a->start = now();
+        if (start < 0) start = a->start;
         if (a->msg) {
-            fprintf(stderr,"%s... ",a->msg);
+            fprintf(stderr,"%30s... ",a->msg);
         }
         if (a->op == OP_DOWNLOAD) {
             status = fb_download_data(usb, a->data, a->size);
@@ -285,5 +305,7 @@ void fb_execute_queue(usb_handle *usb)
             die("bogus action");
         }
     }
+
+    fprintf(stderr,"finished. total time: %.3fs\n", (now() - start));
 }
 

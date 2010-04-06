@@ -156,9 +156,11 @@ static struct fs_path_config android_files[] = {
     { 00550, AID_ROOT,      AID_SHELL,     "system/etc/init.testmenu" },
     { 00550, AID_DHCP,      AID_SHELL,     "system/etc/dhcpcd/dhcpcd-run-hooks" },
     { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/dbus.conf" },
-    { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluez/main.conf" },
-    { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluez/input.conf" },
-    { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluez/audio.conf" },
+    { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluetooth/main.conf" },
+    { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluetooth/input.conf" },
+    { 00440, AID_BLUETOOTH, AID_BLUETOOTH, "system/etc/bluetooth/audio.conf" },
+    { 00444, AID_NET_BT,    AID_NET_BT,    "system/etc/bluetooth/blacklist.conf" },
+    { 00640, AID_SYSTEM,    AID_SYSTEM,    "system/etc/bluetooth/auto_pairing.conf" },
     { 00444, AID_RADIO,     AID_AUDIO,     "system/etc/AudioPara4.csv" },
     { 00555, AID_ROOT,      AID_ROOT,      "system/etc/ppp/*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    "data/app/*" },
@@ -167,14 +169,18 @@ static struct fs_path_config android_files[] = {
         /* the following two files are INTENTIONALLY set-gid and not set-uid.
          * Do not change. */
     { 02755, AID_ROOT,      AID_NET_RAW,   "system/bin/ping" },
-    { 02755, AID_ROOT,      AID_INET,      "system/bin/netcfg" },
-    	/* the following four files are INTENTIONALLY set-uid, but they
+    { 02750, AID_ROOT,      AID_INET,      "system/bin/netcfg" },
+    	/* the following five files are INTENTIONALLY set-uid, but they
 	 * are NOT included on user builds. */
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/su" },
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/librank" },
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/procrank" },
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/procmem" },
     { 06755, AID_ROOT,      AID_ROOT,      "system/xbin/tcpdump" },
+    { 04770, AID_ROOT,      AID_RADIO,     "system/bin/pppd-ril" },
+		/* the following file is INTENTIONALLY set-uid, and IS included
+		 * in user builds. */
+    { 06750, AID_ROOT,      AID_SHELL,     "system/bin/run-as" },
     { 00755, AID_ROOT,      AID_SHELL,     "system/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     "system/xbin/*" },
     { 00750, AID_ROOT,      AID_SHELL,     "sbin/*" },

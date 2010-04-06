@@ -24,12 +24,66 @@
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
 static AndroidLogFormat * g_logformat;
+static bool g_nonblock = false;
+static int g_tail_lines = 0;
 
 /* logd prefixes records with a length field */
 #define RECORD_LENGTH_FIELD_SIZE_BYTES sizeof(uint32_t)
 
 #define LOG_FILE_DIR    "/dev/log/"
 
+struct queued_entry_t {
+    union {
+        unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1] __attribute__((aligned(4)));
+        struct logger_entry entry __attribute__((aligned(4)));
+    };
+    queued_entry_t* next;
+
+    queued_entry_t() {
+        next = NULL;
+    }
+};
+
+static int cmp(queued_entry_t* a, queued_entry_t* b) {
+    int n = a->entry.sec - b->entry.sec;
+    if (n != 0) {
+        return n;
+    }
+    return a->entry.nsec - b->entry.nsec;
+}
+
+struct log_device_t {
+    char* device;
+    bool binary;
+    int fd;
+    bool printed;
+    char label;
+
+    queued_entry_t* queue;
+    log_device_t* next;
+
+    log_device_t(char* d, bool b, char l) {
+        device = d;
+        binary = b;
+        label = l;
+        queue = NULL;
+        next = NULL;
+        printed = false;
+    }
+
+    void enqueue(queued_entry_t* entry) {
+        if (this->queue == NULL) {
+            this->queue = entry;
+        } else {
+            queued_entry_t** e = &this->queue;
+            while (*e && cmp(entry, *e) >= 0) {
+                e = &((*e)->next);
+            }
+            entry->next = *e;
+            *e = entry;
+        }
+    }
+};
 
 namespace android {
 
@@ -40,8 +94,8 @@ static int g_logRotateSizeKBytes = 0;                   // 0 means "no log rotat
 static int g_maxRotatedLogs = DEFAULT_MAX_ROTATED_LOGS; // 0 means "unbounded"
 static int g_outFD = -1;
 static off_t g_outByteCount = 0;
-static int g_isBinary = 0;
 static int g_printBinary = 0;
+static int g_devCount = 0;
 
 static EventTagMap* g_eventTagMap = NULL;
 
@@ -103,14 +157,14 @@ void printBinary(struct logger_entry *buf)
     } while (ret < 0 && errno == EINTR);
 }
 
-static void processBuffer(struct logger_entry *buf)
+static void processBuffer(log_device_t* dev, struct logger_entry *buf)
 {
-    int bytesWritten;
+    int bytesWritten = 0;
     int err;
     AndroidLogEntry entry;
     char binaryMsgBuf[1024];
 
-    if (g_isBinary) {
+    if (dev->binary) {
         err = android_log_processBinaryLogBuffer(buf, &entry, g_eventTagMap,
                 binaryMsgBuf, sizeof(binaryMsgBuf));
         //printf(">>> pri=%d len=%d msg='%s'\n",
@@ -118,15 +172,27 @@ static void processBuffer(struct logger_entry *buf)
     } else {
         err = android_log_processLogBuffer(buf, &entry);
     }
-    if (err < 0)
+    if (err < 0) {
         goto error;
+    }
 
-    bytesWritten = android_log_filterAndPrintLogLine(
-                        g_logformat, g_outFD, &entry);
+    if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority)) {
+        if (false && g_devCount > 1) {
+            binaryMsgBuf[0] = dev->label;
+            binaryMsgBuf[1] = ' ';
+            bytesWritten = write(g_outFD, binaryMsgBuf, 2);
+            if (bytesWritten < 0) {
+                perror("output error");
+                exit(-1);
+            }
+        }
 
-    if (bytesWritten < 0) {
-        perror("output error");
-        exit(-1);
+        bytesWritten = android_log_printLogLine(g_logformat, g_outFD, &entry);
+
+        if (bytesWritten < 0) {
+            perror("output error");
+            exit(-1);
+        }
     }
 
     g_outByteCount += bytesWritten;
@@ -142,36 +208,142 @@ error:
     return;
 }
 
-static void readLogLines(int logfd)
+static void chooseFirst(log_device_t* dev, log_device_t** firstdev) {
+    for (*firstdev = NULL; dev != NULL; dev = dev->next) {
+        if (dev->queue != NULL && (*firstdev == NULL || cmp(dev->queue, (*firstdev)->queue) < 0)) {
+            *firstdev = dev;
+        }
+    }
+}
+
+static void maybePrintStart(log_device_t* dev) {
+    if (!dev->printed) {
+        dev->printed = true;
+        if (g_devCount > 1 && !g_printBinary) {
+            char buf[1024];
+            snprintf(buf, sizeof(buf), "--------- beginning of %s\n", dev->device);
+            if (write(g_outFD, buf, strlen(buf)) < 0) {
+                perror("output error");
+                exit(-1);
+            }
+        }
+    }
+}
+
+static void skipNextEntry(log_device_t* dev) {
+    maybePrintStart(dev);
+    queued_entry_t* entry = dev->queue;
+    dev->queue = entry->next;
+    delete entry;
+}
+
+static void printNextEntry(log_device_t* dev) {
+    maybePrintStart(dev);
+    if (g_printBinary) {
+        printBinary(&dev->queue->entry);
+    } else {
+        processBuffer(dev, &dev->queue->entry);
+    }
+    skipNextEntry(dev);
+}
+
+static void readLogLines(log_device_t* devices)
 {
+    log_device_t* dev;
+    int max = 0;
+    int ret;
+    int queued_lines = 0;
+    bool sleep = true;
+
+    int result;
+    fd_set readset;
+
+    for (dev=devices; dev; dev = dev->next) {
+        if (dev->fd > max) {
+            max = dev->fd;
+        }
+    }
+
     while (1) {
-        unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1] __attribute__((aligned(4)));
-        struct logger_entry *entry = (struct logger_entry *) buf;
-        int ret;
+        do {
+            timeval timeout = { 0, 5000 /* 5ms */ }; // If we oversleep it's ok, i.e. ignore EINTR.
+            FD_ZERO(&readset);
+            for (dev=devices; dev; dev = dev->next) {
+                FD_SET(dev->fd, &readset);
+            }
+            result = select(max + 1, &readset, NULL, NULL, sleep ? NULL : &timeout);
+        } while (result == -1 && errno == EINTR);
 
-        ret = read(logfd, entry, LOGGER_ENTRY_MAX_LEN);
-        if (ret < 0) {
-            if (errno == EINTR)
-                continue;
-            if (errno == EAGAIN)
-                break;
-            perror("logcat read");
-            exit(EXIT_FAILURE);
+        if (result >= 0) {
+            for (dev=devices; dev; dev = dev->next) {
+                if (FD_ISSET(dev->fd, &readset)) {
+                    queued_entry_t* entry = new queued_entry_t();
+                    /* NOTE: driver guarantees we read exactly one full entry */
+                    ret = read(dev->fd, entry->buf, LOGGER_ENTRY_MAX_LEN);
+                    if (ret < 0) {
+                        if (errno == EINTR) {
+                            delete entry;
+                            goto next;
+                        }
+                        if (errno == EAGAIN) {
+                            delete entry;
+                            break;
+                        }
+                        perror("logcat read");
+                        exit(EXIT_FAILURE);
+                    }
+                    else if (!ret) {
+                        fprintf(stderr, "read: Unexpected EOF!\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    entry->entry.msg[entry->entry.len] = '\0';
+
+                    dev->enqueue(entry);
+                    ++queued_lines;
+                }
+            }
+
+            if (result == 0) {
+                // we did our short timeout trick and there's nothing new
+                // print everything we have and wait for more data
+                sleep = true;
+                while (true) {
+                    chooseFirst(devices, &dev);
+                    if (dev == NULL) {
+                        break;
+                    }
+                    if (g_tail_lines == 0 || queued_lines <= g_tail_lines) {
+                        printNextEntry(dev);
+                    } else {
+                        skipNextEntry(dev);
+                    }
+                    --queued_lines;
+                }
+
+                // the caller requested to just dump the log and exit
+                if (g_nonblock) {
+                    exit(0);
+                }
+            } else {
+                // print all that aren't the last in their list
+                sleep = false;
+                while (g_tail_lines == 0 || queued_lines > g_tail_lines) {
+                    chooseFirst(devices, &dev);
+                    if (dev == NULL || dev->queue->next == NULL) {
+                        break;
+                    }
+                    if (g_tail_lines == 0) {
+                        printNextEntry(dev);
+                    } else {
+                        skipNextEntry(dev);
+                    }
+                    --queued_lines;
+                }
+            }
         }
-        else if (!ret) {
-            fprintf(stderr, "read: Unexpected EOF!\n");
-            exit(EXIT_FAILURE);
-        }
-
-        /* NOTE: driver guarantees we read exactly one full entry */
-
-        entry->msg[entry->len] = '\0';
-
-        if (g_printBinary) {
-            printBinary(entry);
-        } else {
-            (void) processBuffer(entry);
-        }
+next:
+        ;
     }
 }
 
@@ -228,6 +400,7 @@ static void show_help(const char *cmd)
                     "                  brief process tag thread raw time threadtime long\n\n"
                     "  -c              clear (flush) the entire log and exit\n"
                     "  -d              dump the log and then exit (don't block)\n"
+                    "  -t <count>      print only the most recent <count> lines (implies -d)\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
                     "  -b <buffer>     request alternate ring buffer\n"
                     "                  ('main' (default), 'radio', 'events')\n"
@@ -275,16 +448,17 @@ static int setLogFormat(const char * formatString)
 
 extern "C" void logprint_run_tests(void);
 
-int main (int argc, char **argv)
+int main(int argc, char **argv)
 {
-    int logfd;
     int err;
     int hasSetLogFormat = 0;
     int clearLog = 0;
     int getLogSize = 0;
     int mode = O_RDONLY;
-    char *log_device = strdup("/dev/"LOGGER_LOG_MAIN);
     const char *forceFilters = NULL;
+    log_device_t* devices = NULL;
+    log_device_t* dev;
+    bool needBinary = false;
 
     g_logformat = android_log_format_new();
 
@@ -301,7 +475,7 @@ int main (int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, "cdgsQf:r::n:v:b:B");
+        ret = getopt(argc, argv, "cdt:gsQf:r::n:v:b:B");
 
         if (ret < 0) {
             break;
@@ -319,21 +493,39 @@ int main (int argc, char **argv)
             break;
 
             case 'd':
-                mode |= O_NONBLOCK;
+                g_nonblock = true;
+            break;
+
+            case 't':
+                g_nonblock = true;
+                g_tail_lines = atoi(optarg);
             break;
 
             case 'g':
                 getLogSize = 1;
             break;
 
-            case 'b':
-                free(log_device);
-                log_device =
-                    (char*) malloc(strlen(LOG_FILE_DIR) + strlen(optarg) + 1);
-                strcpy(log_device, LOG_FILE_DIR);
-                strcat(log_device, optarg);
+            case 'b': {
+                char* buf = (char*) malloc(strlen(LOG_FILE_DIR) + strlen(optarg) + 1);
+                strcpy(buf, LOG_FILE_DIR);
+                strcat(buf, optarg);
 
-                android::g_isBinary = (strcmp(optarg, "events") == 0);
+                bool binary = strcmp(optarg, "events") == 0;
+                if (binary) {
+                    needBinary = true;
+                }
+
+                if (devices) {
+                    dev = devices;
+                    while (dev->next) {
+                        dev = dev->next;
+                    }
+                    dev->next = new log_device_t(buf, binary, optarg[0]);
+                } else {
+                    devices = new log_device_t(buf, binary, optarg[0]);
+                }
+                android::g_devCount++;
+            }
             break;
 
             case 'B':
@@ -460,6 +652,19 @@ int main (int argc, char **argv)
         }
     }
 
+    if (!devices) {
+        devices = new log_device_t(strdup("/dev/"LOGGER_LOG_MAIN), false, 'm');
+        android::g_devCount = 1;
+        int accessmode =
+                  (mode & O_RDONLY) ? R_OK : 0
+                | (mode & O_WRONLY) ? W_OK : 0;
+        // only add this if it's available
+        if (0 == access("/dev/"LOGGER_LOG_SYSTEM, accessmode)) {
+            devices->next = new log_device_t(strdup("/dev/"LOGGER_LOG_SYSTEM), false, 's');
+            android::g_devCount++;
+        }
+    }
+
     if (android::g_logRotateSizeKBytes != 0 
         && android::g_outputFileName == NULL
     ) {
@@ -516,42 +721,52 @@ int main (int argc, char **argv)
         }
     }
 
-    logfd = open(log_device, mode);
-    if (logfd < 0) {
-        fprintf(stderr, "Unable to open log device '%s': %s\n",
-            log_device, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    if (clearLog) {
-        int ret;
-        ret = android::clearLog(logfd);
-        if (ret) {
-            perror("ioctl");
+    dev = devices;
+    while (dev) {
+        dev->fd = open(dev->device, mode);
+        if (dev->fd < 0) {
+            fprintf(stderr, "Unable to open log device '%s': %s\n",
+                dev->device, strerror(errno));
             exit(EXIT_FAILURE);
         }
-        return 0;
+
+        if (clearLog) {
+            int ret;
+            ret = android::clearLog(dev->fd);
+            if (ret) {
+                perror("ioctl");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        if (getLogSize) {
+            int size, readable;
+
+            size = android::getLogSize(dev->fd);
+            if (size < 0) {
+                perror("ioctl");
+                exit(EXIT_FAILURE);
+            }
+
+            readable = android::getLogReadableSize(dev->fd);
+            if (readable < 0) {
+                perror("ioctl");
+                exit(EXIT_FAILURE);
+            }
+
+            printf("%s: ring buffer is %dKb (%dKb consumed), "
+                   "max entry is %db, max payload is %db\n", dev->device,
+                   size / 1024, readable / 1024,
+                   (int) LOGGER_ENTRY_MAX_LEN, (int) LOGGER_ENTRY_MAX_PAYLOAD);
+        }
+
+        dev = dev->next;
     }
 
     if (getLogSize) {
-        int size, readable;
-
-        size = android::getLogSize(logfd);
-        if (size < 0) {
-            perror("ioctl");
-            exit(EXIT_FAILURE);
-        }
-
-        readable = android::getLogReadableSize(logfd);
-        if (readable < 0) {
-            perror("ioctl");
-            exit(EXIT_FAILURE);
-        }
-
-        printf("ring buffer is %dKb (%dKb consumed), "
-               "max entry is %db, max payload is %db\n",
-               size / 1024, readable / 1024,
-               (int) LOGGER_ENTRY_MAX_LEN, (int) LOGGER_ENTRY_MAX_PAYLOAD);
+        return 0;
+    }
+    if (clearLog) {
         return 0;
     }
 
@@ -559,10 +774,10 @@ int main (int argc, char **argv)
     //LOG_EVENT_LONG(11, 0x1122334455667788LL);
     //LOG_EVENT_STRING(0, "whassup, doc?");
 
-    if (android::g_isBinary)
+    if (needBinary)
         android::g_eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
 
-    android::readLogLines(logfd);
+    android::readLogLines(devices);
 
     return 0;
 }

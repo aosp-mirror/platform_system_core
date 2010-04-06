@@ -414,11 +414,14 @@ newfs_msdos_main(int argc, char *argv[])
     if (!(opt_f || (opt_h && opt_u && opt_S && opt_s && oflag))) {
 	off_t delta;
 	getdiskinfo(fd, fname, dtype, oflag, &bpb);
+        if (opt_s) {
+            bpb.bsec = opt_s;
+        }
 	bpb.bsec -= (opt_ofs / bpb.bps);
 	delta = bpb.bsec % bpb.spt;
 	if (delta != 0) {
-	    warnx("trim %d sectors to adjust to a multiple of %d",
-		(int)delta, bpb.spt);
+	    warnx("trim %d sectors from %d to adjust to a multiple of %d",
+		(int)delta, bpb.bsec, bpb.spt);
 	    bpb.bsec -= delta;
 	}
 	if (bpb.spc == 0) {	/* set defaults */
