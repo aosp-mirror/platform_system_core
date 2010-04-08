@@ -299,3 +299,81 @@ time_t gettime(void)
 
     return ts.tv_sec;
 }
+
+int mkdir_recursive(const char *pathname, mode_t mode)
+{
+    char buf[128];
+    const char *slash;
+    const char *p = pathname;
+    int width;
+    int ret;
+    struct stat info;
+
+    while ((slash = strchr(p, '/')) != NULL) {
+        width = slash - pathname;
+        p = slash + 1;
+        if (width < 0)
+            break;
+        if (width == 0)
+            continue;
+        if ((unsigned int)width > sizeof(buf) - 1) {
+            ERROR("path too long for mkdir_recursive\n");
+            return -1;
+        }
+        memcpy(buf, pathname, width);
+        buf[width] = 0;
+        if (stat(buf, &info) != 0) {
+            ret = mkdir(buf, mode);
+            if (ret && errno != EEXIST)
+                return ret;
+        }
+    }
+    ret = mkdir(pathname, mode);
+    if (ret && errno != EEXIST)
+        return ret;
+    return 0;
+}
+
+void sanitize(char *s)
+{
+    if (!s)
+        return;
+    while (isalnum(*s))
+        s++;
+    *s = 0;
+}
+void make_link(const char *oldpath, const char *newpath)
+{
+    int ret;
+    char buf[256];
+    char *slash;
+    int width;
+
+    slash = strrchr(newpath, '/');
+    if (!slash)
+        return;
+    width = slash - newpath;
+    if (width <= 0 || width > (int)sizeof(buf) - 1)
+        return;
+    memcpy(buf, newpath, width);
+    buf[width] = 0;
+    ret = mkdir_recursive(buf, 0755);
+    if (ret)
+        ERROR("Failed to create directory %s: %s (%d)\n", buf, strerror(errno), errno);
+
+    ret = symlink(oldpath, newpath);
+    if (ret && errno != EEXIST)
+        ERROR("Failed to symlink %s to %s: %s (%d)\n", oldpath, newpath, strerror(errno), errno);
+}
+
+void remove_link(const char *oldpath, const char *newpath)
+{
+    char path[256];
+    ssize_t ret;
+    ret = readlink(newpath, path, sizeof(path) - 1);
+    if (ret <= 0)
+        return;
+    path[ret] = 0;
+    if (!strcmp(path, oldpath))
+        unlink(newpath);
+}

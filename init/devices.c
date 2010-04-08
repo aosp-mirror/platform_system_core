@@ -34,6 +34,7 @@
 
 #include "init.h"
 #include "devices.h"
+#include "util.h"
 
 #define CMDLINE_PREFIX  "/dev"
 #define SYSFS_PREFIX    "/sys"
@@ -47,6 +48,8 @@ struct uevent {
     const char *path;
     const char *subsystem;
     const char *firmware;
+    const char *partition_name;
+    int partition_num;
     int major;
     int minor;
 };
@@ -346,6 +349,8 @@ static void parse_event(const char *msg, struct uevent *uevent)
     uevent->firmware = "";
     uevent->major = -1;
     uevent->minor = -1;
+    uevent->partition_name = NULL;
+    uevent->partition_num = -1;
 
         /* currently ignoring SEQNUM */
     while(*msg) {
@@ -367,6 +372,12 @@ static void parse_event(const char *msg, struct uevent *uevent)
         } else if(!strncmp(msg, "MINOR=", 6)) {
             msg += 6;
             uevent->minor = atoi(msg);
+        } else if(!strncmp(msg, "PARTN=", 6)) {
+            msg += 6;
+            uevent->partition_num = atoi(msg);
+        } else if(!strncmp(msg, "PARTNAME=", 9)) {
+            msg += 9;
+            uevent->partition_name = msg;
         }
 
             /* advance to after the next \0 */
@@ -379,11 +390,76 @@ static void parse_event(const char *msg, struct uevent *uevent)
                     uevent->firmware, uevent->major, uevent->minor);
 }
 
+static char **parse_platform_block_device(struct uevent *uevent)
+{
+    const char *driver;
+    const char *path;
+    char *slash;
+    int width;
+    char buf[256];
+    char link_path[256];
+    int fd;
+    int link_num = 0;
+    int ret;
+    char *p;
+    unsigned int size;
+    struct stat info;
+
+    char **links = malloc(sizeof(char *) * 4);
+    if (!links)
+        return NULL;
+    memset(links, 0, sizeof(char *) * 4);
+
+    /* Drop "/devices/platform/" */
+    path = uevent->path;
+    driver = path + 18;
+    slash = strchr(driver, '/');
+    if (!slash)
+        goto err;
+    width = slash - driver;
+    if (width <= 0)
+        goto err;
+
+    snprintf(link_path, sizeof(link_path), "/dev/block/platform/%.*s",
+             width, driver);
+
+    if (uevent->partition_name) {
+        p = strdup(uevent->partition_name);
+        sanitize(p);
+        if (asprintf(&links[link_num], "%s/by-name/%s", link_path, p) > 0)
+            link_num++;
+        else
+            links[link_num] = NULL;
+        free(p);
+    }
+
+    if (uevent->partition_num >= 0) {
+        if (asprintf(&links[link_num], "%s/by-num/p%d", link_path, uevent->partition_num) > 0)
+            link_num++;
+        else
+            links[link_num] = NULL;
+    }
+
+    slash = strrchr(path, '/');
+    if (asprintf(&links[link_num], "%s/%s", link_path, slash + 1) > 0)
+        link_num++;
+    else
+        links[link_num] = NULL;
+
+    return links;
+
+err:
+    free(links);
+    return NULL;
+}
+
 static void handle_device_event(struct uevent *uevent)
 {
     char devpath[96];
     char *base, *name;
+    char **links = NULL;
     int block;
+    int i;
 
         /* if it's not a /dev device, nothing to do */
     if((uevent->major < 0) || (uevent->minor < 0))
@@ -404,6 +480,8 @@ static void handle_device_event(struct uevent *uevent)
         block = 1;
         base = "/dev/block/";
         mkdir(base, 0755);
+        if (!strncmp(uevent->path, "/devices/platform/", 18))
+            links = parse_platform_block_device(uevent);
     } else {
         block = 0;
             /* this should probably be configurable somehow */
@@ -441,12 +519,24 @@ static void handle_device_event(struct uevent *uevent)
 
     if(!strcmp(uevent->action, "add")) {
         make_device(devpath, block, uevent->major, uevent->minor);
-        return;
+        if (links) {
+            for (i = 0; links[i]; i++)
+                make_link(devpath, links[i]);
+        }
     }
 
     if(!strcmp(uevent->action, "remove")) {
+        if (links) {
+            for (i = 0; links[i]; i++)
+                remove_link(devpath, links[i]);
+        }
         unlink(devpath);
-        return;
+    }
+
+    if (links) {
+        for (i = 0; links[i]; i++)
+            free(links[i]);
+        free(links);
     }
 }
 

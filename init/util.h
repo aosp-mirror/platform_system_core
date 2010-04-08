@@ -24,4 +24,8 @@ void *read_file(const char *fn, unsigned *_sz);
 time_t gettime(void);
 unsigned int decode_uid(const char *s);
 
+int mkdir_recursive(const char *pathname, mode_t mode);
+void sanitize(char *p);
+void make_link(const char *oldpath, const char *newpath);
+void remove_link(const char *oldpath, const char *newpath);
 #endif
