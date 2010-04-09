@@ -929,6 +929,9 @@ int main(int argc, char **argv)
 
         /* execute all the boot actions to get us started */
     action_for_each_trigger("init", action_add_queue_tail);
+    action_for_each_trigger("early-fs", action_add_queue_tail);
+    action_for_each_trigger("fs", action_add_queue_tail);
+    action_for_each_trigger("post-fs", action_add_queue_tail);
     drain_action_queue();
 
         /* read any property files on system or data and
