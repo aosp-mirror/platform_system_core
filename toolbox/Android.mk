@@ -50,6 +50,7 @@ TOOLS := \
 	top \
 	iftop \
 	id \
+	uptime \
 	vmstat \
 	nandread \
 	uptime \
