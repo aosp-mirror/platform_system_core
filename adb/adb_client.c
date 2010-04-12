@@ -16,17 +16,10 @@
 static transport_type __adb_transport = kTransportAny;
 static const char* __adb_serial = NULL;
 
-static int __adb_server_port = DEFAULT_ADB_PORT;
-
 void adb_set_transport(transport_type type, const char* serial)
 {
     __adb_transport = type;
     __adb_serial = serial;
-}
-
-void adb_set_tcp_specifics(int server_port)
-{
-    __adb_server_port = server_port;
 }
 
 int  adb_get_emulator_console_port(void)
@@ -181,7 +174,7 @@ int _adb_connect(const char *service)
     }
     snprintf(tmp, sizeof tmp, "%04x", len);
 
-    fd = socket_loopback_client(__adb_server_port, SOCK_STREAM);
+    fd = socket_loopback_client(ADB_PORT, SOCK_STREAM);
     if(fd < 0) {
         strcpy(__adb_error, "cannot connect to daemon");
         return -2;
@@ -211,10 +204,9 @@ int adb_connect(const char *service)
     int fd = _adb_connect("host:version");
 
     if(fd == -2) {
-        fprintf(stdout,"* daemon not running. starting it now on port %d *\n",
-                __adb_server_port);
+        fprintf(stdout,"* daemon not running. starting it now *\n");
     start_server:
-        if(launch_server(__adb_server_port)) {
+        if(launch_server(0)) {
             fprintf(stderr,"* failed to start daemon *\n");
             return -1;
         } else {
@@ -322,3 +314,5 @@ oops:
     adb_close(fd);
     return 0;
 }
+
+

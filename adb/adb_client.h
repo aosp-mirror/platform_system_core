@@ -25,10 +25,6 @@ char *adb_query(const char *service);
 */
 void adb_set_transport(transport_type type, const char* serial);
 
-/* Set TCP specifics of the transport to use
-*/
-void adb_set_tcp_specifics(int server_port);
-
 /* Return the console port of the currently connected emulator (if any)
  * of -1 if there is no emulator, and -2 if there is more than one.
  * assumes adb_set_transport() was alled previously...
