@@ -693,7 +693,7 @@ void start_device_log(void)
 #endif
 
 #if ADB_HOST
-int launch_server()
+int launch_server(int server_port)
 {
 #ifdef HAVE_WIN32_PROC
     /* we need to start the server in the background                    */
@@ -828,7 +828,17 @@ int launch_server()
 }
 #endif
 
-int adb_main(int is_daemon)
+/* Constructs a local name of form tcp:port.
+ * target_str points to the target string, it's content will be overwritten.
+ * target_size is the capacity of the target string.
+ * server_port is the port number to use for the local name.
+ */
+void build_local_name(char* target_str, size_t target_size, int server_port)
+{
+  snprintf(target_str, target_size, "tcp:%d", server_port);
+}
+
+int adb_main(int is_daemon, int server_port)
 {
 #if !ADB_HOST
     int secure = 0;
@@ -851,9 +861,11 @@ int adb_main(int is_daemon)
     HOST = 1;
     usb_vendors_init();
     usb_init();
-    local_init(ADB_LOCAL_TRANSPORT_PORT);
+    local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
 
-    if(install_listener("tcp:5037", "*smartsocket*", NULL)) {
+    char local_name[30];
+    build_local_name(local_name, sizeof(local_name), server_port);
+    if(install_listener(local_name, "*smartsocket*", NULL)) {
         exit(1);
     }
 #else
@@ -879,7 +891,7 @@ int adb_main(int is_daemon)
         }
     }
 
-    /* don't listen on port 5037 if we are running in secure mode */
+    /* don't listen on a port (default 5037) if running in secure mode */
     /* don't run as root if we are running in secure mode */
     if (secure) {
         struct __user_cap_header_struct header;
@@ -912,9 +924,11 @@ int adb_main(int is_daemon)
         cap.inheritable = 0;
         capset(&header, &cap);
 
-        D("Local port 5037 disabled\n");
+        D("Local port disabled\n");
     } else {
-        if(install_listener("tcp:5037", "*smartsocket*", NULL)) {
+        char[30] local_name;
+        build_local_name(local_name, sizeof(local_name), server_port);
+        if(install_listener(&local_name, "*smartsocket*", NULL)) {
             exit(1);
         }
     }
