@@ -639,8 +639,6 @@ void open_devnull_stdio(void)
 
 int main(int argc, char **argv)
 {
-    int device_fd = -1;
-    int property_set_fd = -1;
     int signal_recv_fd = -1;
     int fd_count;
     int s[2];
@@ -772,7 +770,7 @@ int main(int argc, char **argv)
          * after the ro.foo properties are set above so
          * that /data/local.prop cannot interfere with them.
          */
-    property_set_fd = start_property_service();
+    start_property_service();
 
     /* create a signalling mechanism for the sigchld handler */
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, s) == 0) {
@@ -786,7 +784,7 @@ int main(int argc, char **argv)
 
     /* make sure we actually have all the pieces we need */
     if ((get_device_fd() < 0) ||
-        (property_set_fd < 0) ||
+        (get_property_set_fd() < 0) ||
         (signal_recv_fd < 0)) {
         ERROR("init startup failure\n");
         return 1;
@@ -806,7 +804,7 @@ int main(int argc, char **argv)
 
     ufds[0].fd = get_device_fd();
     ufds[0].events = POLLIN;
-    ufds[1].fd = property_set_fd;
+    ufds[1].fd = get_property_set_fd();
     ufds[1].events = POLLIN;
     ufds[2].fd = signal_recv_fd;
     ufds[2].events = POLLIN;
@@ -873,7 +871,7 @@ int main(int argc, char **argv)
             handle_device_fd();
 
         if (ufds[1].revents == POLLIN)
-            handle_property_set_fd(property_set_fd);
+            handle_property_set_fd();
         if (ufds[3].revents == POLLIN)
             handle_keychord();
     }
