@@ -37,6 +37,7 @@ file := $(TARGET_ROOT_OUT)/init.rc
 $(file) : $(LOCAL_PATH)/init.rc | $(ACP)
 	$(transform-prebuilt-to-target)
 ALL_PREBUILT += $(file)
+$(INSTALLED_RAMDISK_TARGET): $(file)
 endif
 
 # Just like /system/etc/init.goldfish.sh, the /init.godlfish.rc is here
