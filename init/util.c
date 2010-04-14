@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <errno.h>
+#include <time.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -279,4 +280,22 @@ int mtd_name_to_number(const char *name)
         }
     }
     return -1;
+}
+
+/*
+ * gettime() - returns the time in seconds of the system's monotonic clock or
+ * zero on error.
+ */
+time_t gettime(void)
+{
+    struct timespec ts;
+    int ret;
+
+    ret = clock_gettime(CLOCK_MONOTONIC, &ts);
+    if (ret < 0) {
+        ERROR("clock_gettime(CLOCK_MONOTONIC) failed: %s\n", strerror(errno));
+        return 0;
+    }
+
+    return ts.tv_sec;
 }

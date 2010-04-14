@@ -25,7 +25,6 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/poll.h>
-#include <time.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <mtd/mtd-user.h>
@@ -117,24 +116,6 @@ static void open_console()
     dup2(fd, 1);
     dup2(fd, 2);
     close(fd);
-}
-
-/*
- * gettime() - returns the time in seconds of the system's monotonic clock or
- * zero on error.
- */
-static time_t gettime(void)
-{
-    struct timespec ts;
-    int ret;
-
-    ret = clock_gettime(CLOCK_MONOTONIC, &ts);
-    if (ret < 0) {
-        ERROR("clock_gettime(CLOCK_MONOTONIC) failed: %s\n", strerror(errno));
-        return 0;
-    }
-
-    return ts.tv_sec;
 }
 
 static void publish_socket(const char *name, int fd)

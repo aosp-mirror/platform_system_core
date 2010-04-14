@@ -25,6 +25,7 @@ int create_socket(const char *name, int type, mode_t perm,
                   uid_t uid, gid_t gid);
 
 void *read_file(const char *fn, unsigned *_sz);
+time_t gettime(void);
 
 void log_init(void);
 void log_set_level(int level);
