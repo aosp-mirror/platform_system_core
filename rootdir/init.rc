@@ -80,13 +80,16 @@ loglevel 3
     # 5.0 %
     write /dev/cpuctl/bg_non_interactive/cpu.shares 52
 
+on fs
 # mount mtd partitions
     # Mount /system rw first to give the filesystem a chance to save a checkpoint
     mount yaffs2 mtd@system /system
     mount yaffs2 mtd@system /system ro remount
-
-    # We chown/chmod /data again so because mount is run as root + defaults
     mount yaffs2 mtd@userdata /data nosuid nodev
+    mount yaffs2 mtd@cache /cache nosuid nodev
+
+on post-fs
+    # We chown/chmod /data again so because mount is run as root + defaults
     chown system system /data
     chmod 0771 /data
 
@@ -110,7 +113,6 @@ loglevel 3
     write /proc/apanic_console 1
 
     # Same reason as /data above
-    mount yaffs2 mtd@cache /cache nosuid nodev
     chown system cache /cache
     chmod 0770 /cache
 
