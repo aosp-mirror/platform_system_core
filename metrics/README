@@ -1,0 +1,8 @@
+This packages contains all scripts and programs assoicated with metrics
+collection for both Chrome's User Metrics Server and automated performance
+metrics collection via Autotest. 
+
+The package includes the metrics daemon for Chrome OS.  This program
+runs as a daemon and collects events by polling and listening for
+d-bus signals. It then adds timing (if needed) and sends the events
+to Chrome for transport to the UMA server at Google.
