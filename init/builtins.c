@@ -415,7 +415,6 @@ int do_restart(int nargs, char **args)
 int do_trigger(int nargs, char **args)
 {
     action_for_each_trigger(args[1], action_add_queue_tail);
-    drain_action_queue();
     return 0;
 }
 

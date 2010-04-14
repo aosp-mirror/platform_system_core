@@ -63,6 +63,10 @@ static char hardware[32];
 static unsigned revision = 0;
 static char qemu[32];
 
+static struct action *cur_action = NULL;
+static struct command *cur_command = NULL;
+static struct listnode *command_queue = NULL;
+
 void notify_service_state(const char *name, const char *state)
 {
     char pname[PROP_NAME_MAX];
@@ -301,10 +305,8 @@ void service_stop(struct service *svc)
 
 void property_changed(const char *name, const char *value)
 {
-    if (property_triggers_enabled) {
+    if (property_triggers_enabled)
         queue_property_triggers(name, value);
-        drain_action_queue();
-    }
 }
 
 static void restart_service_if_needed(struct service *svc)
@@ -494,21 +496,52 @@ static void get_hardware_name(void)
     }
 }
 
-void drain_action_queue(void)
+static struct command *get_first_command(struct action *act)
 {
     struct listnode *node;
-    struct command *cmd;
-    struct action *act;
+    node = list_head(&act->commands);
+    if (!node)
+        return NULL;
+
+    return node_to_item(node, struct command, clist);
+}
+
+static struct command *get_next_command(struct action *act, struct command *cmd)
+{
+    struct listnode *node;
+    node = cmd->clist.next;
+    if (!node)
+        return NULL;
+    if (node == &act->commands)
+        return NULL;
+
+    return node_to_item(node, struct command, clist);
+}
+
+static int is_last_command(struct action *act, struct command *cmd)
+{
+    return (list_tail(&act->commands) == &cmd->clist);
+}
+
+void execute_one_command(void)
+{
     int ret;
 
-    while ((act = action_remove_queue_head())) {
-        INFO("processing action %p (%s)\n", act, act->name);
-        list_for_each(node, &act->commands) {
-            cmd = node_to_item(node, struct command, clist);
-            ret = cmd->func(cmd->nargs, cmd->args);
-            INFO("command '%s' r=%d\n", cmd->args[0], ret);
-        }
+    if (!cur_action || !cur_command || is_last_command(cur_action, cur_command)) {
+        cur_action = action_remove_queue_head();
+        if (!cur_action)
+            return;
+        INFO("processing action %p (%s)\n", cur_action, cur_action->name);
+        cur_command = get_first_command(cur_action);
+    } else {
+        cur_command = get_next_command(cur_action, cur_command);
     }
+
+    if (!cur_command)
+        return;
+
+    ret = cur_command->func(cur_command->nargs, cur_command->args);
+    INFO("command '%s' r=%d\n", cur_command->args[0], ret);
 }
 
 void open_devnull_stdio(void)
@@ -532,16 +565,155 @@ void open_devnull_stdio(void)
     exit(1);
 }
 
+static int device_init_action(int nargs, char **args)
+{
+    INFO("device init\n");
+    device_init();
+    return 0;
+}
+
+static int property_init_action(int nargs, char **args)
+{
+    INFO("property init\n");
+    property_init();
+    return 0;
+}
+
+static int keychord_init_action(int nargs, char **args)
+{
+    keychord_init();
+    return 0;
+}
+
+static int console_init_action(int nargs, char **args)
+{
+    int fd;
+    char tmp[PROP_VALUE_MAX];
+
+    if (console[0]) {
+        snprintf(tmp, sizeof(tmp), "/dev/%s", console);
+        console_name = strdup(tmp);
+    }
+
+    fd = open(console_name, O_RDWR);
+    if (fd >= 0)
+        have_console = 1;
+    close(fd);
+
+    if( load_565rle_image(INIT_IMAGE_FILE) ) {
+        fd = open("/dev/tty0", O_WRONLY);
+        if (fd >= 0) {
+            const char *msg;
+                msg = "\n"
+            "\n"
+            "\n"
+            "\n"
+            "\n"
+            "\n"
+            "\n"  // console is 40 cols x 30 lines
+            "\n"
+            "\n"
+            "\n"
+            "\n"
+            "\n"
+            "\n"
+            "\n"
+            "             A N D R O I D ";
+            write(fd, msg, strlen(msg));
+            close(fd);
+        }
+    }
+    return 0;
+}
+
+static int set_init_properties_action(int nargs, char **args)
+{
+    char tmp[PROP_VALUE_MAX];
+
+    if (qemu[0])
+        import_kernel_cmdline(1);
+
+    if (!strcmp(bootmode,"factory"))
+        property_set("ro.factorytest", "1");
+    else if (!strcmp(bootmode,"factory2"))
+        property_set("ro.factorytest", "2");
+    else
+        property_set("ro.factorytest", "0");
+
+    property_set("ro.serialno", serialno[0] ? serialno : "");
+    property_set("ro.bootmode", bootmode[0] ? bootmode : "unknown");
+    property_set("ro.baseband", baseband[0] ? baseband : "unknown");
+    property_set("ro.carrier", carrier[0] ? carrier : "unknown");
+    property_set("ro.bootloader", bootloader[0] ? bootloader : "unknown");
+
+    property_set("ro.hardware", hardware);
+    snprintf(tmp, PROP_VALUE_MAX, "%d", revision);
+    property_set("ro.revision", tmp);
+    return 0;
+}
+
+static int property_service_init_action(int nargs, char **args)
+{
+    /* read any property files on system or data and
+     * fire up the property service.  This must happen
+     * after the ro.foo properties are set above so
+     * that /data/local.prop cannot interfere with them.
+     */
+    start_property_service();
+    return 0;
+}
+
+static int signal_init_action(int nargs, char **args)
+{
+    signal_init();
+    return 0;
+}
+
+static int check_startup_action(int nargs, char **args)
+{
+    /* make sure we actually have all the pieces we need */
+    if ((get_device_fd() < 0) ||
+        (get_property_set_fd() < 0) ||
+        (get_signal_fd() < 0)) {
+        ERROR("init startup failure\n");
+        exit(1);
+    }
+    return 0;
+}
+
+static int queue_property_triggers_action(int nargs, char **args)
+{
+    queue_all_property_triggers();
+    /* enable property triggers */
+    property_triggers_enabled = 1;
+    return 0;
+}
+
+#if BOOTCHART
+static int bootchart_init_action(int nargs, char **args)
+{
+    bootchart_count = bootchart_init();
+    if (bootchart_count < 0) {
+        ERROR("bootcharting init failure\n");
+    } else if (bootchart_count > 0) {
+        NOTICE("bootcharting started (period=%d ms)\n", bootchart_count*BOOTCHART_POLLING_MS);
+    } else {
+        NOTICE("bootcharting ignored\n");
+    }
+}
+#endif
+
 int main(int argc, char **argv)
 {
-    int fd_count;
-    int s[2];
-    int fd;
-    struct sigaction act;
-    char tmp[PROP_VALUE_MAX];
+    int fd_count = 0;
     struct pollfd ufds[4];
     char *tmpdev;
     char* debuggable;
+    char tmp[32];
+    int device_fd_init = 0;
+    int property_set_fd_init = 0;
+    int signal_fd_init = 0;
+    int keychord_fd_init = 0;
 
     /* clear the umask */
     umask(0);
@@ -582,148 +754,78 @@ int main(int argc, char **argv)
     parse_config_file(tmp);
 
     action_for_each_trigger("early-init", action_add_queue_tail);
-    drain_action_queue();
 
-    INFO("device init\n");
-    device_init();
-
-    property_init();
-    
-    // only listen for keychords if ro.debuggable is true
-    keychord_init();
-
-    if (console[0]) {
-        snprintf(tmp, sizeof(tmp), "/dev/%s", console);
-        console_name = strdup(tmp);
-    }
-
-    fd = open(console_name, O_RDWR);
-    if (fd >= 0)
-        have_console = 1;
-    close(fd);
-
-    if( load_565rle_image(INIT_IMAGE_FILE) ) {
-    fd = open("/dev/tty0", O_WRONLY);
-    if (fd >= 0) {
-        const char *msg;
-            msg = "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"  // console is 40 cols x 30 lines
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "\n"
-        "             A N D R O I D ";
-        write(fd, msg, strlen(msg));
-        close(fd);
-    }
-    }
-
-    if (qemu[0])
-        import_kernel_cmdline(1); 
-
-    if (!strcmp(bootmode,"factory"))
-        property_set("ro.factorytest", "1");
-    else if (!strcmp(bootmode,"factory2"))
-        property_set("ro.factorytest", "2");
-    else
-        property_set("ro.factorytest", "0");
-
-    property_set("ro.serialno", serialno[0] ? serialno : "");
-    property_set("ro.bootmode", bootmode[0] ? bootmode : "unknown");
-    property_set("ro.baseband", baseband[0] ? baseband : "unknown");
-    property_set("ro.carrier", carrier[0] ? carrier : "unknown");
-    property_set("ro.bootloader", bootloader[0] ? bootloader : "unknown");
-
-    property_set("ro.hardware", hardware);
-    snprintf(tmp, PROP_VALUE_MAX, "%d", revision);
-    property_set("ro.revision", tmp);
+    queue_builtin_action(device_init_action, "device_init");
+    queue_builtin_action(property_init_action, "property_init");
+    queue_builtin_action(keychord_init_action, "keychord_init");
+    queue_builtin_action(console_init_action, "console_init");
+    queue_builtin_action(set_init_properties_action, "set_init_properties");
 
         /* execute all the boot actions to get us started */
     action_for_each_trigger("init", action_add_queue_tail);
     action_for_each_trigger("early-fs", action_add_queue_tail);
     action_for_each_trigger("fs", action_add_queue_tail);
     action_for_each_trigger("post-fs", action_add_queue_tail);
-    drain_action_queue();
 
-        /* read any property files on system or data and
-         * fire up the property service.  This must happen
-         * after the ro.foo properties are set above so
-         * that /data/local.prop cannot interfere with them.
-         */
-    start_property_service();
-
-    signal_init();
-
-    /* make sure we actually have all the pieces we need */
-    if ((get_device_fd() < 0) ||
-        (get_property_set_fd() < 0) ||
-        (get_signal_fd() < 0)) {
-        ERROR("init startup failure\n");
-        return 1;
-    }
+    queue_builtin_action(property_service_init_action, "property_service_init");
+    queue_builtin_action(signal_init_action, "signal_init");
+    queue_builtin_action(check_startup_action, "check_startup");
 
     /* execute all the boot actions to get us started */
     action_for_each_trigger("early-boot", action_add_queue_tail);
     action_for_each_trigger("boot", action_add_queue_tail);
-    drain_action_queue();
 
         /* run all property triggers based on current state of the properties */
-    queue_all_property_triggers();
-    drain_action_queue();
+    queue_builtin_action(queue_property_triggers_action, "queue_propety_triggers");
 
-        /* enable property triggers */   
-    property_triggers_enabled = 1;     
-
-    ufds[0].fd = get_device_fd();
-    ufds[0].events = POLLIN;
-    ufds[1].fd = get_property_set_fd();
-    ufds[1].events = POLLIN;
-    ufds[2].fd = get_signal_fd();
-    ufds[2].events = POLLIN;
-    fd_count = 3;
-
-    if (get_keychord_fd() > 0) {
-        ufds[3].fd = get_keychord_fd();
-        ufds[3].events = POLLIN;
-        fd_count++;
-    } else {
-        ufds[3].events = 0;
-        ufds[3].revents = 0;
-    }
 
 #if BOOTCHART
-    bootchart_count = bootchart_init();
-    if (bootchart_count < 0) {
-        ERROR("bootcharting init failure\n");
-    } else if (bootchart_count > 0) {
-        NOTICE("bootcharting started (period=%d ms)\n", bootchart_count*BOOTCHART_POLLING_MS);
-    } else {
-        NOTICE("bootcharting ignored\n");
-    }
+    queue_builtin_action(bootchart_init_action, "bootchart_init");
 #endif
 
     for(;;) {
         int nr, i, timeout = -1;
 
-        for (i = 0; i < fd_count; i++)
-            ufds[i].revents = 0;
-
-        drain_action_queue();
+        execute_one_command();
         restart_processes();
+
+        if (!device_fd_init && get_device_fd() > 0) {
+            ufds[fd_count].fd = get_device_fd();
+            ufds[fd_count].events = POLLIN;
+            ufds[fd_count].revents = 0;
+            fd_count++;
+            device_fd_init = 1;
+        }
+        if (!property_set_fd_init && get_property_set_fd() > 0) {
+            ufds[fd_count].fd = get_property_set_fd();
+            ufds[fd_count].events = POLLIN;
+            ufds[fd_count].revents = 0;
+            fd_count++;
+            property_set_fd_init = 1;
+        }
+        if (!signal_fd_init && get_signal_fd() > 0) {
+            ufds[fd_count].fd = get_signal_fd();
+            ufds[fd_count].events = POLLIN;
+            ufds[fd_count].revents = 0;
+            fd_count++;
+            signal_fd_init = 1;
+        }
+        if (!keychord_fd_init && get_keychord_fd() > 0) {
+            ufds[fd_count].fd = get_keychord_fd();
+            ufds[fd_count].events = POLLIN;
+            ufds[fd_count].revents = 0;
+            fd_count++;
+            keychord_fd_init = 1;
+        }
 
         if (process_needs_restart) {
             timeout = (process_needs_restart - gettime()) * 1000;
             if (timeout < 0)
                 timeout = 0;
         }
+
+        if (!action_queue_empty() || cur_command)
+            timeout = 0;
 
 #if BOOTCHART
         if (bootchart_count > 0) {
@@ -735,22 +837,23 @@ int main(int argc, char **argv)
             }
         }
 #endif
+
         nr = poll(ufds, fd_count, timeout);
         if (nr <= 0)
             continue;
 
-        if (ufds[2].revents == POLLIN) {
-            handle_signal();
-            continue;
+        for (i = 0; i < fd_count; i++) {
+            if (ufds[i].revents == POLLIN) {
+                if (ufds[i].fd == get_device_fd())
+                    handle_device_fd();
+                else if (ufds[i].fd == get_property_set_fd())
+                    handle_property_set_fd();
+                else if (ufds[i].fd == get_keychord_fd())
+                    handle_keychord();
+                else if (ufds[i].fd == get_signal_fd())
+                    handle_signal();
+            }
         }
-
-        if (ufds[0].revents == POLLIN)
-            handle_device_fd();
-
-        if (ufds[1].revents == POLLIN)
-            handle_property_set_fd();
-        if (ufds[3].revents == POLLIN)
-            handle_keychord();
     }
 
     return 0;

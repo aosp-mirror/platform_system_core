@@ -19,7 +19,6 @@
 
 struct action;
 
-void drain_action_queue(void);
 struct action *action_remove_queue_head(void);
 void action_add_queue_tail(struct action *act);
 void action_for_each_trigger(const char *trigger,
@@ -27,5 +26,6 @@ void action_for_each_trigger(const char *trigger,
 int action_queue_empty(void);
 void queue_property_triggers(const char *name, const char *value);
 void queue_all_property_triggers();
+void queue_builtin_action(int (*func)(int nargs, char **args), char *name);
 
 #endif /* PARSER_H_ */

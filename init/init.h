@@ -109,6 +109,8 @@ struct svcenvinfo {
 
 #define SVC_MAXARGS 64
 
+#define COMMAND_RETRY_TIMEOUT 5
+
 struct service {
         /* list of all services */
     struct listnode slist;

@@ -562,6 +562,24 @@ void queue_all_property_triggers()
     }
 }
 
+void queue_builtin_action(int (*func)(int nargs, char **args), char *name)
+{
+    struct action *act;
+    struct command *cmd;
+
+    act = calloc(1, sizeof(*act));
+    act->name = name;
+    list_init(&act->commands);
+
+    cmd = calloc(1, sizeof(*cmd));
+    cmd->func = func;
+    cmd->args[0] = name;
+    list_add_tail(&act->commands, &cmd->clist);
+
+    list_add_tail(&action_list, &act->alist);
+    action_add_queue_tail(act);
+}
+
 void action_add_queue_tail(struct action *act)
 {
     list_add_tail(&action_queue, &act->qlist);
@@ -577,6 +595,11 @@ struct action *action_remove_queue_head(void)
         list_remove(node);
         return act;
     }
+}
+
+int action_queue_empty()
+{
+    return list_empty(&action_queue);
 }
 
 static void *parse_service(struct parse_state *state, int nargs, char **args)
