@@ -37,8 +37,6 @@
 #include <cutils/sockets.h>
 #include <cutils/iosched_policy.h>
 #include <termios.h>
-#include <linux/kd.h>
-#include <linux/keychord.h>
 
 #include <sys/system_properties.h>
 
@@ -46,6 +44,7 @@
 #include "init.h"
 #include "property_service.h"
 #include "bootchart.h"
+#include "keychords.h"
 
 static int property_triggers_enabled = 0;
 
@@ -62,9 +61,6 @@ static char bootloader[32];
 static char hardware[32];
 static unsigned revision = 0;
 static char qemu[32];
-static struct input_keychord *keychords = 0;
-static int keychords_count = 0;
-static int keychords_length = 0;
 
 static void notify_service_state(const char *name, const char *state)
 {
@@ -640,103 +636,11 @@ void open_devnull_stdio(void)
     exit(1);
 }
 
-void add_service_keycodes(struct service *svc)
-{
-    struct input_keychord *keychord;
-    int i, size;
-
-    if (svc->keycodes) {
-        /* add a new keychord to the list */
-        size = sizeof(*keychord) + svc->nkeycodes * sizeof(keychord->keycodes[0]);
-        keychords = realloc(keychords, keychords_length + size);
-        if (!keychords) {
-            ERROR("could not allocate keychords\n");
-            keychords_length = 0;
-            keychords_count = 0;
-            return;
-        }
-
-        keychord = (struct input_keychord *)((char *)keychords + keychords_length);
-        keychord->version = KEYCHORD_VERSION;
-        keychord->id = keychords_count + 1;
-        keychord->count = svc->nkeycodes;
-        svc->keychord_id = keychord->id;
-
-        for (i = 0; i < svc->nkeycodes; i++) {
-            keychord->keycodes[i] = svc->keycodes[i];
-        }
-        keychords_count++;
-        keychords_length += size;
-    }
-}
-
-int open_keychord()
-{
-    int fd, ret;
-
-    service_for_each(add_service_keycodes);
-    
-    /* nothing to do if no services require keychords */
-    if (!keychords)
-        return -1;
-
-    fd = open("/dev/keychord", O_RDWR);
-    if (fd < 0) {
-        ERROR("could not open /dev/keychord\n");
-        return fd;
-    }
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
-
-    ret = write(fd, keychords, keychords_length);
-    if (ret != keychords_length) {
-        ERROR("could not configure /dev/keychord %d (%d)\n", ret, errno);
-        close(fd);
-        fd = -1;
-    }
-
-    free(keychords);
-    keychords = 0;
-
-    return fd;
-}
-
-void handle_keychord(int fd)
-{
-    struct service *svc;
-    char* debuggable;
-    char* adb_enabled;
-    int ret;
-    __u16 id;
-
-    // only handle keychords if ro.debuggable is set or adb is enabled.
-    // the logic here is that bugreports should be enabled in userdebug or eng builds
-    // and on user builds for users that are developers.
-    debuggable = property_get("ro.debuggable");
-    adb_enabled = property_get("init.svc.adbd");
-    if ((debuggable && !strcmp(debuggable, "1")) ||
-        (adb_enabled && !strcmp(adb_enabled, "running"))) {
-        ret = read(fd, &id, sizeof(id));
-        if (ret != sizeof(id)) {
-            ERROR("could not read keychord id\n");
-            return;
-        }
-
-        svc = service_find_by_keychord(id);
-        if (svc) {
-            INFO("starting service %s from keychord\n", svc->name);
-            service_start(svc, NULL);
-        } else {
-            ERROR("service for keychord %d not found\n", id);
-        }
-    }
-}
-
 int main(int argc, char **argv)
 {
     int device_fd = -1;
     int property_set_fd = -1;
     int signal_recv_fd = -1;
-    int keychord_fd = -1;
     int fd_count;
     int s[2];
     int fd;
@@ -799,7 +703,7 @@ int main(int argc, char **argv)
     property_init();
     
     // only listen for keychords if ro.debuggable is true
-    keychord_fd = open_keychord();
+    keychord_init();
 
     if (console[0]) {
         snprintf(tmp, sizeof(tmp), "/dev/%s", console);
@@ -907,8 +811,8 @@ int main(int argc, char **argv)
     ufds[2].events = POLLIN;
     fd_count = 3;
 
-    if (keychord_fd > 0) {
-        ufds[3].fd = keychord_fd;
+    if (get_keychord_fd() > 0) {
+        ufds[3].fd = get_keychord_fd();
         ufds[3].events = POLLIN;
         fd_count++;
     } else {
@@ -970,7 +874,7 @@ int main(int argc, char **argv)
         if (ufds[1].revents == POLLIN)
             handle_property_set_fd(property_set_fd);
         if (ufds[3].revents == POLLIN)
-            handle_keychord(keychord_fd);
+            handle_keychord();
     }
 
     return 0;
