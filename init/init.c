@@ -45,6 +45,7 @@
 #include "property_service.h"
 #include "bootchart.h"
 #include "keychords.h"
+#include "parser.h"
 
 static int property_triggers_enabled = 0;
 

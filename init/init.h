@@ -168,14 +168,6 @@ void service_stop(struct service *svc);
 void service_start(struct service *svc, const char *dynamic_args);
 void property_changed(const char *name, const char *value);
 
-void drain_action_queue(void);
-struct action *action_remove_queue_head(void);
-void action_add_queue_tail(struct action *act);
-void action_for_each_trigger(const char *trigger,
-                             void (*func)(struct action *act));
-void queue_property_triggers(const char *name, const char *value);
-void queue_all_property_triggers();
-
 #define INIT_IMAGE_FILE	"/initlogo.rle"
 
 int load_565rle_image( char *file_name );
