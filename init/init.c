@@ -31,7 +31,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <sys/reboot.h>
 
 #include <cutils/sockets.h>
 #include <cutils/iosched_policy.h>
@@ -43,6 +42,7 @@
 #include "init.h"
 #include "property_service.h"
 #include "bootchart.h"
+#include "signal_handler.h"
 #include "keychords.h"
 #include "parser.h"
 
@@ -62,7 +62,7 @@ static char hardware[32];
 static unsigned revision = 0;
 static char qemu[32];
 
-static void notify_service_state(const char *name, const char *state)
+void notify_service_state(const char *name, const char *state)
 {
     char pname[PROP_NAME_MAX];
     int len = strlen(name);
@@ -306,86 +306,6 @@ void property_changed(const char *name, const char *value)
     }
 }
 
-#define CRITICAL_CRASH_THRESHOLD    4       /* if we crash >4 times ... */
-#define CRITICAL_CRASH_WINDOW       (4*60)  /* ... in 4 minutes, goto recovery*/
-
-static int wait_for_one_process(int block)
-{
-    pid_t pid;
-    int status;
-    struct service *svc;
-    struct socketinfo *si;
-    time_t now;
-    struct listnode *node;
-    struct command *cmd;
-
-    while ( (pid = waitpid(-1, &status, block ? 0 : WNOHANG)) == -1 && errno == EINTR );
-    if (pid <= 0) return -1;
-    INFO("waitpid returned pid %d, status = %08x\n", pid, status);
-
-    svc = service_find_by_pid(pid);
-    if (!svc) {
-        ERROR("untracked pid %d exited\n", pid);
-        return 0;
-    }
-
-    NOTICE("process '%s', pid %d exited\n", svc->name, pid);
-
-    if (!(svc->flags & SVC_ONESHOT)) {
-        kill(-pid, SIGKILL);
-        NOTICE("process '%s' killing any children in process group\n", svc->name);
-    }
-
-    /* remove any sockets we may have created */
-    for (si = svc->sockets; si; si = si->next) {
-        char tmp[128];
-        snprintf(tmp, sizeof(tmp), ANDROID_SOCKET_DIR"/%s", si->name);
-        unlink(tmp);
-    }
-
-    svc->pid = 0;
-    svc->flags &= (~SVC_RUNNING);
-
-        /* oneshot processes go into the disabled state on exit */
-    if (svc->flags & SVC_ONESHOT) {
-        svc->flags |= SVC_DISABLED;
-    }
-
-        /* disabled processes do not get restarted automatically */
-    if (svc->flags & SVC_DISABLED) {
-        notify_service_state(svc->name, "stopped");
-        return 0;
-    }
-
-    now = gettime();
-    if (svc->flags & SVC_CRITICAL) {
-        if (svc->time_crashed + CRITICAL_CRASH_WINDOW >= now) {
-            if (++svc->nr_crashed > CRITICAL_CRASH_THRESHOLD) {
-                ERROR("critical process '%s' exited %d times in %d minutes; "
-                      "rebooting into recovery mode\n", svc->name,
-                      CRITICAL_CRASH_THRESHOLD, CRITICAL_CRASH_WINDOW / 60);
-                sync();
-                __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
-                         LINUX_REBOOT_CMD_RESTART2, "recovery");
-                return 0;
-            }
-        } else {
-            svc->time_crashed = now;
-            svc->nr_crashed = 1;
-        }
-    }
-
-    svc->flags |= SVC_RESTARTING;
-
-    /* Execute all onrestart commands for this service. */
-    list_for_each(node, &svc->onrestart.commands) {
-        cmd = node_to_item(node, struct command, clist);
-        cmd->func(cmd->nargs, cmd->args);
-    }
-    notify_service_state(svc->name, "restarting");
-    return 0;
-}
-
 static void restart_service_if_needed(struct service *svc)
 {
     time_t next_start_time = svc->time_started + 5;
@@ -407,13 +327,6 @@ static void restart_processes()
     process_needs_restart = 0;
     service_for_each_flags(SVC_RESTARTING,
                            restart_service_if_needed);
-}
-
-static int signal_fd = -1;
-
-static void sigchld_handler(int s)
-{
-    write(signal_fd, &s, 1);
 }
 
 static void msg_start(const char *name)
@@ -620,7 +533,6 @@ void open_devnull_stdio(void)
 
 int main(int argc, char **argv)
 {
-    int signal_recv_fd = -1;
     int fd_count;
     int s[2];
     int fd;
@@ -629,12 +541,6 @@ int main(int argc, char **argv)
     struct pollfd ufds[4];
     char *tmpdev;
     char* debuggable;
-
-    act.sa_handler = sigchld_handler;
-    act.sa_flags = SA_NOCLDSTOP;
-    act.sa_mask = 0;
-    act.sa_restorer = NULL;
-    sigaction(SIGCHLD, &act, 0);
 
     /* clear the umask */
     umask(0);
@@ -753,20 +659,12 @@ int main(int argc, char **argv)
          */
     start_property_service();
 
-    /* create a signalling mechanism for the sigchld handler */
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, s) == 0) {
-        signal_fd = s[0];
-        signal_recv_fd = s[1];
-        fcntl(s[0], F_SETFD, FD_CLOEXEC);
-        fcntl(s[0], F_SETFL, O_NONBLOCK);
-        fcntl(s[1], F_SETFD, FD_CLOEXEC);
-        fcntl(s[1], F_SETFL, O_NONBLOCK);
-    }
+    signal_init();
 
     /* make sure we actually have all the pieces we need */
     if ((get_device_fd() < 0) ||
         (get_property_set_fd() < 0) ||
-        (signal_recv_fd < 0)) {
+        (get_signal_fd() < 0)) {
         ERROR("init startup failure\n");
         return 1;
     }
@@ -787,7 +685,7 @@ int main(int argc, char **argv)
     ufds[0].events = POLLIN;
     ufds[1].fd = get_property_set_fd();
     ufds[1].events = POLLIN;
-    ufds[2].fd = signal_recv_fd;
+    ufds[2].fd = get_signal_fd();
     ufds[2].events = POLLIN;
     fd_count = 3;
 
@@ -841,10 +739,7 @@ int main(int argc, char **argv)
             continue;
 
         if (ufds[2].revents == POLLIN) {
-            /* we got a SIGCHLD - reap and restart as needed */
-            read(signal_recv_fd, tmp, sizeof(tmp));
-            while (!wait_for_one_process(0))
-                ;
+            handle_signal();
             continue;
         }
 

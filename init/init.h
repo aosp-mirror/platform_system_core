@@ -157,6 +157,8 @@ struct service {
 
 int parse_config_file(const char *fn);
 
+void notify_service_state(const char *name, const char *state);
+
 struct service *service_find_by_name(const char *name);
 struct service *service_find_by_pid(pid_t pid);
 struct service *service_find_by_keychord(int keychord_id);

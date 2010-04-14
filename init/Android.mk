@@ -11,7 +11,8 @@ LOCAL_SRC_FILES:= \
 	util.c \
 	parser.c \
 	logo.c \
-	keychords.c
+	keychords.c \
+	signal_handler.c
 
 ifeq ($(strip $(INIT_BOOTCHART)),true)
 LOCAL_SRC_FILES += bootchart.c
