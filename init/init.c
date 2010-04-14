@@ -698,7 +698,7 @@ int main(int argc, char **argv)
     drain_action_queue();
 
     INFO("device init\n");
-    device_fd = device_init();
+    device_init();
 
     property_init();
     
@@ -784,7 +784,7 @@ int main(int argc, char **argv)
     }
 
     /* make sure we actually have all the pieces we need */
-    if ((device_fd < 0) ||
+    if ((get_device_fd() < 0) ||
         (property_set_fd < 0) ||
         (signal_recv_fd < 0)) {
         ERROR("init startup failure\n");
@@ -803,7 +803,7 @@ int main(int argc, char **argv)
         /* enable property triggers */   
     property_triggers_enabled = 1;     
 
-    ufds[0].fd = device_fd;
+    ufds[0].fd = get_device_fd();
     ufds[0].events = POLLIN;
     ufds[1].fd = property_set_fd;
     ufds[1].events = POLLIN;
@@ -869,7 +869,7 @@ int main(int argc, char **argv)
         }
 
         if (ufds[0].revents == POLLIN)
-            handle_device_fd(device_fd);
+            handle_device_fd();
 
         if (ufds[1].revents == POLLIN)
             handle_property_set_fd(property_set_fd);
