@@ -43,6 +43,7 @@
 
 #include "property_service.h"
 #include "init.h"
+#include "util.h"
 
 #define PERSISTENT_PROPERTY_DIR  "/data/property"
 

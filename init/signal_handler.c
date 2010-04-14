@@ -26,6 +26,7 @@
 #include <sys/reboot.h>
 
 #include "init.h"
+#include "util.h"
 
 static int signal_fd = -1;
 static int signal_recv_fd = -1;

@@ -17,15 +17,7 @@
 #ifndef _INIT_INIT_H
 #define _INIT_INIT_H
 
-int mtd_name_to_number(const char *name);
-
 void handle_control_message(const char *msg, const char *arg);
-
-int create_socket(const char *name, int type, mode_t perm,
-                  uid_t uid, gid_t gid);
-
-void *read_file(const char *fn, unsigned *_sz);
-time_t gettime(void);
 
 void log_init(void);
 void log_set_level(int level);
@@ -39,8 +31,6 @@ void log_write(int level, const char *fmt, ...)
 
 #define LOG_DEFAULT_LEVEL  3  /* messages <= this level are logged */
 #define LOG_UEVENTS        0  /* log uevent messages if 1. verbose */
-
-unsigned int decode_uid(const char *s);
 
 struct listnode
 {

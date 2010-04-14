@@ -10,6 +10,7 @@
 #include "init.h"
 #include "property_service.h"
 #include "parser.h"
+#include "util.h"
 
 #include <cutils/iosched_policy.h>
 

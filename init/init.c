@@ -45,6 +45,7 @@
 #include "signal_handler.h"
 #include "keychords.h"
 #include "parser.h"
+#include "util.h"
 
 static int property_triggers_enabled = 0;
 
