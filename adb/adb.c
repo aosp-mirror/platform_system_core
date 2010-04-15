@@ -144,9 +144,6 @@ void put_apacket(apacket *p)
 void handle_online(void)
 {
     D("adb: online\n");
-#if !ADB_HOST
-    property_set("adb.connected","1");
-#endif
 }
 
 void handle_offline(atransport *t)
@@ -154,9 +151,6 @@ void handle_offline(atransport *t)
     D("adb: offline\n");
     //Close the associated usb
     run_transport_disconnects(t);
-#if !ADB_HOST
-    property_set("adb.connected","");
-#endif
 }
 
 #if TRACE_PACKETS
