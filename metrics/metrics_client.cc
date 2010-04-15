@@ -2,22 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <errno.h>
-#include <sys/file.h>
-#include <string.h>
-#include <stdio.h>
-
+#include <cstdio>
 #include <cstdlib>
-#include <iostream>
 
 #include "metrics_library.h"
-
-using namespace std;
 
 // Usage:  metrics_client [-ab] metric_name metric_value
 int main(int argc, char** argv) {
   bool send_to_autotest = false;
   bool send_to_chrome = true;
+  bool secs_to_msecs = false;
   int metric_name_index = 1;
   int metric_value_index = 2;
   bool print_usage = false;
@@ -25,7 +19,7 @@ int main(int argc, char** argv) {
   if (argc >= 3) {
     // Parse arguments
     int flag;
-    while ((flag = getopt(argc, argv, "ab")) != -1) {
+    while ((flag = getopt(argc, argv, "abt")) != -1) {
       switch (flag) {
         case 'a':
           send_to_autotest = true;
@@ -34,6 +28,9 @@ int main(int argc, char** argv) {
         case 'b':
           send_to_chrome = true;
           send_to_autotest = true;
+          break;
+        case 't':
+          secs_to_msecs = true;
           break;
         default:
           print_usage = true;
@@ -52,22 +49,31 @@ int main(int argc, char** argv) {
   }
 
   if (print_usage) {
-    cerr << "Usage:  metrics_client [-ab] name value" << endl;
-    cerr << endl;
-    cerr << "  default: send metric to chrome only" << endl;
-    cerr << "  -a: send metric to autotest only" << endl;
-    cerr << "  -b: send metric to both chrome and autotest" << endl;
+    fprintf(stderr,
+            "Usage:  metrics_client [-abt] name value\n"
+            "\n"
+            "  default: send metric with integer value to chrome only\n"
+            "  -a: send metric to autotest only\n"
+            "  -b: send metric to both chrome and autotest\n"
+            "  -t: convert value from float seconds to int milliseconds\n");
     return 1;
+  }
+
+  const char* name = argv[metric_name_index];
+  int value;
+  if (secs_to_msecs) {
+    float secs = strtof(argv[metric_value_index], NULL);
+    value = static_cast<int>(secs * 1000.0f);
+  } else {
+    value = atoi(argv[metric_value_index]);
   }
 
   // Send metrics
   if (send_to_autotest) {
-    MetricsLibrary::SendToAutotest(argv[metric_name_index],
-                                   argv[metric_value_index]);
+    MetricsLibrary::SendToAutotest(name, value);
   }
   if (send_to_chrome) {
-    MetricsLibrary::SendToChrome(argv[metric_name_index],
-                                 argv[metric_value_index]);
+    MetricsLibrary::SendToChrome(name, value);
   }
   return 0;
 }

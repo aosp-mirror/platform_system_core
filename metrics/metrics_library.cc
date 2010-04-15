@@ -13,21 +13,23 @@
 
 #include <errno.h>
 #include <sys/file.h>
-#include <string.h>
-#include <stdio.h>
+
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
 
 #define READ_WRITE_ALL_FILE_FLAGS \
   (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
 static const char kAutotestPath[] = "/tmp/.chromeos-metrics-autotest";
 static const char kChromePath[] = "/tmp/.chromeos-metrics";
-static const int kBufferSize = 4096;
+static const int32_t kBufferSize = 1024;
 
 using namespace std;
 
 // TODO(sosa@chromium.org) - use Chromium logger instead of stderr
-void MetricsLibrary::PrintError(const char *message, const char *file,
-                               int code) {
+static void PrintError(const char *message, const char *file,
+                       int code) {
   const char *kProgramName = "metrics_library";
   if (code == 0) {
     fprintf(stderr, "%s: %s\n", kProgramName, message);
@@ -40,61 +42,105 @@ void MetricsLibrary::PrintError(const char *message, const char *file,
   }
 }
 
-void MetricsLibrary::SendToAutotest(string name, string value) {
-  FILE *autotest_file = fopen(kAutotestPath, "a+");
-  if (autotest_file == NULL) {
-    PrintError("fopen", kAutotestPath, errno);
-    return;
-  }
-
-  fprintf(autotest_file, "%s=%s\n", name.c_str(), value.c_str());
-  fclose(autotest_file);
-}
-
-void MetricsLibrary::SendToChrome(string name, string value) {
+// Sends message of size length to Chrome and returns true on success.
+static bool SendMessageToChrome(int32_t length, const char *message) {
   int chrome_fd = open(kChromePath,
                        O_WRONLY | O_APPEND | O_CREAT,
                        READ_WRITE_ALL_FILE_FLAGS);
-  // If we failed to open it, return
+  // If we failed to open it, return.
   if (chrome_fd < 0) {
     PrintError("open", kChromePath, errno);
-    return;
+    return false;
   }
 
-  // Need to chmod because open flags are anded with umask.
-  if (fchmod(chrome_fd, READ_WRITE_ALL_FILE_FLAGS) < 0) {
-    PrintError("fchmod", kChromePath, errno);
-    close(chrome_fd);
-    return;
-  }
+  // Need to chmod because open flags are anded with umask. Ignore the
+  // exit code -- a chronos process may fail chmoding because the file
+  // has been created by a root process but that should be OK.
+  fchmod(chrome_fd, READ_WRITE_ALL_FILE_FLAGS);
 
-  // Grab an exclusive lock to protect Chrome from truncating underneath us
+  // Grab an exclusive lock to protect Chrome from truncating
+  // underneath us. Keep the file locked as briefly as possible.
   if (flock(chrome_fd, LOCK_EX) < 0) {
     PrintError("flock", kChromePath, errno);
     close(chrome_fd);
-    return;
+    return false;
   }
 
-  // Message format is: LENGTH (binary), NAME, VALUE
-  char message[kBufferSize];
-  char *curr_ptr = message;
-  int32_t message_length =
-      name.length() + value.length() + 2 + sizeof(message_length);
-  if (message_length > static_cast<int32_t>(sizeof(message)))
-    PrintError("name/value too long", NULL, 0);
-
-  // Make sure buffer is blanked
-  memset(message, 0, sizeof(message));
-  memcpy(curr_ptr, &message_length, sizeof(message_length));
-  curr_ptr += sizeof(message_length);
-  strncpy(curr_ptr, name.c_str(), name.length());
-  curr_ptr += name.length() + 1;
-  strncpy(curr_ptr, value.c_str(), value.length());
-  if (write(chrome_fd, message, message_length) != message_length)
+  bool success = true;
+  if (write(chrome_fd, message, length) != length) {
     PrintError("write", kChromePath, errno);
+    success = false;
+  }
 
-  // Release the file lock and close file
-  if (flock(chrome_fd, LOCK_UN) < 0)
+  // Release the file lock and close file.
+  if (flock(chrome_fd, LOCK_UN) < 0) {
     PrintError("unlock", kChromePath, errno);
+    success = false;
+  }
   close(chrome_fd);
+  return success;
+}
+
+// Formats a name/value message for Chrome in buffer and returns the
+// length of the message or a negative value on error.
+//
+// Message format is: | LENGTH(binary) | NAME | \0 | VALUE | \0 |
+//
+// The arbitrary format argument covers the non-LENGTH portion of the
+// message. The caller is responsible to store the \0 character
+// between NAME and VALUE (e.g. "%s%c%d", name, '\0', value).
+static int32_t FormatChromeMessage(int32_t buffer_size, char *buffer,
+                                   const char *format, ...) {
+  int32_t message_length;
+  size_t len_size = sizeof(message_length);
+
+  // Format the non-LENGTH contents in the buffer by leaving space for
+  // LENGTH at the start of the buffer.
+  va_list args;
+  va_start(args, format);
+  message_length = vsnprintf(&buffer[len_size], buffer_size - len_size,
+                             format, args);
+  va_end(args);
+
+  if (message_length < 0) {
+    PrintError("chrome message format error", NULL, 0);
+    return -1;
+  }
+
+  // +1 to account for the trailing \0.
+  message_length += len_size + 1;
+  if (message_length > buffer_size) {
+    PrintError("chrome message too long", NULL, 0);
+    return -1;
+  }
+
+  // Prepend LENGTH to the message.
+  memcpy(buffer, &message_length, len_size);
+  return message_length;
+}
+
+bool MetricsLibrary::SendToAutotest(string name, int value) {
+  FILE *autotest_file = fopen(kAutotestPath, "a+");
+  if (autotest_file == NULL) {
+    PrintError("fopen", kAutotestPath, errno);
+    return false;
+  }
+
+  fprintf(autotest_file, "%s=%d\n", name.c_str(), value);
+  fclose(autotest_file);
+  return true;
+}
+
+bool MetricsLibrary::SendToChrome(string name, int value) {
+  // Format the message.
+  char message[kBufferSize];
+  int32_t message_length =
+      FormatChromeMessage(kBufferSize, message,
+                          "%s%c%d", name.c_str(), '\0', value);
+
+  if (message_length < 0)
+    return false;
+
+  // Send the message.
+  return SendMessageToChrome(message_length, message);
 }

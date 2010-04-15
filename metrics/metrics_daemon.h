@@ -64,10 +64,10 @@ class MetricsDaemon {
   NetworkStateId GetNetworkStateId(const char* state_name);
 
   // Sends a stat to Chrome for transport to UMA.
-  void ChromePublishMetric(const char* name, const char* value);
+  void ChromePublishMetric(const char* name, int value);
 
   // Prints a stat for testing.
-  void TestPublishMetric(const char* name, const char* value);
+  void TestPublishMetric(const char* name, int value);
 
 #if 0
   // Fetches a name-value hash table from DBus.

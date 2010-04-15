@@ -12,7 +12,6 @@
 #ifndef METRICS_LIBRARY_H_
 #define METRICS_LIBRARY_H_
 
-#include <stdio.h>
 #include <string>
 
 // TODO(sosa@chromium.org): Add testing for send methods
@@ -20,14 +19,10 @@
 // Library used to send metrics both Autotest and Chrome
 class MetricsLibrary {
  public:
-  // Sends histogram data to Chrome.
-  static void SendToChrome(std::string name, std::string value);
-  // Sends to Autotest.
-  static void SendToAutotest(std::string name, std::string value);
-
- private:
-  // Prints message to stderr
-  static void PrintError(const char *message, const char *file, int code);
+  // Sends histogram data to Chrome and returns true on success.
+  static bool SendToChrome(std::string name, int value);
+  // Sends to Autotest and returns true on success.
+  static bool SendToAutotest(std::string name, int value);
 };
 
 #endif /* METRICS_LIBRARY_H_ */
