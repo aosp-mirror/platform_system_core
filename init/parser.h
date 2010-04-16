@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_PROPERTY_H
-#define _INIT_PROPERTY_H
+#ifndef PARSER_H_
+#define PARSER_H_
 
-extern void handle_property_set_fd(void);
-extern void property_init(void);
-extern void start_property_service(void);
-void get_property_workspace(int *fd, int *sz);
-extern const char* property_get(const char *name);
-extern int property_set(const char *name, const char *value);
-int get_property_set_fd(void);
+struct action;
 
-#endif	/* _INIT_PROPERTY_H */
+void drain_action_queue(void);
+struct action *action_remove_queue_head(void);
+void action_add_queue_tail(struct action *act);
+void action_for_each_trigger(const char *trigger,
+                             void (*func)(struct action *act));
+int action_queue_empty(void);
+void queue_property_triggers(const char *name, const char *value);
+void queue_all_property_triggers();
+
+#endif /* PARSER_H_ */

@@ -40,6 +40,8 @@
 #define FIRMWARE_DIR    "/etc/firmware"
 #define MAX_QEMU_PERM 6
 
+static int device_fd = -1;
+
 struct uevent {
     const char *action;
     const char *path;
@@ -569,12 +571,12 @@ static void handle_firmware_event(struct uevent *uevent)
 }
 
 #define UEVENT_MSG_LEN  1024
-void handle_device_fd(int fd)
+void handle_device_fd()
 {
     char msg[UEVENT_MSG_LEN+2];
     int n;
 
-    while((n = recv(fd, msg, UEVENT_MSG_LEN, 0)) > 0) {
+    while((n = recv(device_fd, msg, UEVENT_MSG_LEN, 0)) > 0) {
         struct uevent uevent;
 
         if(n == UEVENT_MSG_LEN)   /* overflow -- discard */
@@ -599,7 +601,7 @@ void handle_device_fd(int fd)
 ** socket's buffer.  
 */
 
-static void do_coldboot(int event_fd, DIR *d)
+static void do_coldboot(DIR *d)
 {
     struct dirent *de;
     int dfd, fd;
@@ -610,7 +612,7 @@ static void do_coldboot(int event_fd, DIR *d)
     if(fd >= 0) {
         write(fd, "add\n", 4);
         close(fd);
-        handle_device_fd(event_fd);
+        handle_device_fd();
     }
 
     while((de = readdir(d))) {
@@ -627,40 +629,42 @@ static void do_coldboot(int event_fd, DIR *d)
         if(d2 == 0)
             close(fd);
         else {
-            do_coldboot(event_fd, d2);
+            do_coldboot(d2);
             closedir(d2);
         }
     }
 }
 
-static void coldboot(int event_fd, const char *path)
+static void coldboot(const char *path)
 {
     DIR *d = opendir(path);
     if(d) {
-        do_coldboot(event_fd, d);
+        do_coldboot(d);
         closedir(d);
     }
 }
 
-int device_init(void)
+void device_init(void)
 {
     suseconds_t t0, t1;
-    int fd;
 
-    fd = open_uevent_socket();
-    if(fd < 0)
-        return -1;
+    device_fd = open_uevent_socket();
+    if(device_fd < 0)
+        return;
 
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
-    fcntl(fd, F_SETFL, O_NONBLOCK);
+    fcntl(device_fd, F_SETFD, FD_CLOEXEC);
+    fcntl(device_fd, F_SETFL, O_NONBLOCK);
 
     t0 = get_usecs();
-    coldboot(fd, "/sys/class");
-    coldboot(fd, "/sys/block");
-    coldboot(fd, "/sys/devices");
+    coldboot("/sys/class");
+    coldboot("/sys/block");
+    coldboot("/sys/devices");
     t1 = get_usecs();
 
     log_event_print("coldboot %ld uS\n", ((long) (t1 - t0)));
+}
 
-    return fd;
+int get_device_fd()
+{
+    return device_fd;
 }

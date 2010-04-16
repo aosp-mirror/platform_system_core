@@ -25,20 +25,16 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/poll.h>
-#include <time.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <mtd/mtd-user.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <sys/reboot.h>
 
 #include <cutils/sockets.h>
 #include <cutils/iosched_policy.h>
 #include <termios.h>
-#include <linux/kd.h>
-#include <linux/keychord.h>
 
 #include <sys/system_properties.h>
 
@@ -46,6 +42,10 @@
 #include "init.h"
 #include "property_service.h"
 #include "bootchart.h"
+#include "signal_handler.h"
+#include "keychords.h"
+#include "parser.h"
+#include "util.h"
 
 static int property_triggers_enabled = 0;
 
@@ -62,11 +62,8 @@ static char bootloader[32];
 static char hardware[32];
 static unsigned revision = 0;
 static char qemu[32];
-static struct input_keychord *keychords = 0;
-static int keychords_count = 0;
-static int keychords_length = 0;
 
-static void notify_service_state(const char *name, const char *state)
+void notify_service_state(const char *name, const char *state)
 {
     char pname[PROP_NAME_MAX];
     int len = strlen(name);
@@ -120,24 +117,6 @@ static void open_console()
     dup2(fd, 1);
     dup2(fd, 2);
     close(fd);
-}
-
-/*
- * gettime() - returns the time in seconds of the system's monotonic clock or
- * zero on error.
- */
-static time_t gettime(void)
-{
-    struct timespec ts;
-    int ret;
-
-    ret = clock_gettime(CLOCK_MONOTONIC, &ts);
-    if (ret < 0) {
-        ERROR("clock_gettime(CLOCK_MONOTONIC) failed: %s\n", strerror(errno));
-        return 0;
-    }
-
-    return ts.tv_sec;
 }
 
 static void publish_socket(const char *name, int fd)
@@ -328,86 +307,6 @@ void property_changed(const char *name, const char *value)
     }
 }
 
-#define CRITICAL_CRASH_THRESHOLD    4       /* if we crash >4 times ... */
-#define CRITICAL_CRASH_WINDOW       (4*60)  /* ... in 4 minutes, goto recovery*/
-
-static int wait_for_one_process(int block)
-{
-    pid_t pid;
-    int status;
-    struct service *svc;
-    struct socketinfo *si;
-    time_t now;
-    struct listnode *node;
-    struct command *cmd;
-
-    while ( (pid = waitpid(-1, &status, block ? 0 : WNOHANG)) == -1 && errno == EINTR );
-    if (pid <= 0) return -1;
-    INFO("waitpid returned pid %d, status = %08x\n", pid, status);
-
-    svc = service_find_by_pid(pid);
-    if (!svc) {
-        ERROR("untracked pid %d exited\n", pid);
-        return 0;
-    }
-
-    NOTICE("process '%s', pid %d exited\n", svc->name, pid);
-
-    if (!(svc->flags & SVC_ONESHOT)) {
-        kill(-pid, SIGKILL);
-        NOTICE("process '%s' killing any children in process group\n", svc->name);
-    }
-
-    /* remove any sockets we may have created */
-    for (si = svc->sockets; si; si = si->next) {
-        char tmp[128];
-        snprintf(tmp, sizeof(tmp), ANDROID_SOCKET_DIR"/%s", si->name);
-        unlink(tmp);
-    }
-
-    svc->pid = 0;
-    svc->flags &= (~SVC_RUNNING);
-
-        /* oneshot processes go into the disabled state on exit */
-    if (svc->flags & SVC_ONESHOT) {
-        svc->flags |= SVC_DISABLED;
-    }
-
-        /* disabled processes do not get restarted automatically */
-    if (svc->flags & SVC_DISABLED) {
-        notify_service_state(svc->name, "stopped");
-        return 0;
-    }
-
-    now = gettime();
-    if (svc->flags & SVC_CRITICAL) {
-        if (svc->time_crashed + CRITICAL_CRASH_WINDOW >= now) {
-            if (++svc->nr_crashed > CRITICAL_CRASH_THRESHOLD) {
-                ERROR("critical process '%s' exited %d times in %d minutes; "
-                      "rebooting into recovery mode\n", svc->name,
-                      CRITICAL_CRASH_THRESHOLD, CRITICAL_CRASH_WINDOW / 60);
-                sync();
-                __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
-                         LINUX_REBOOT_CMD_RESTART2, "recovery");
-                return 0;
-            }
-        } else {
-            svc->time_crashed = now;
-            svc->nr_crashed = 1;
-        }
-    }
-
-    svc->flags |= SVC_RESTARTING;
-
-    /* Execute all onrestart commands for this service. */
-    list_for_each(node, &svc->onrestart.commands) {
-        cmd = node_to_item(node, struct command, clist);
-        cmd->func(cmd->nargs, cmd->args);
-    }
-    notify_service_state(svc->name, "restarting");
-    return 0;
-}
-
 static void restart_service_if_needed(struct service *svc)
 {
     time_t next_start_time = svc->time_started + 5;
@@ -429,13 +328,6 @@ static void restart_processes()
     process_needs_restart = 0;
     service_for_each_flags(SVC_RESTARTING,
                            restart_service_if_needed);
-}
-
-static int signal_fd = -1;
-
-static void sigchld_handler(int s)
-{
-    write(signal_fd, &s, 1);
 }
 
 static void msg_start(const char *name)
@@ -484,78 +376,6 @@ void handle_control_message(const char *msg, const char *arg)
     } else {
         ERROR("unknown control msg '%s'\n", msg);
     }
-}
-
-#define MAX_MTD_PARTITIONS 16
-
-static struct {
-    char name[16];
-    int number;
-} mtd_part_map[MAX_MTD_PARTITIONS];
-
-static int mtd_part_count = -1;
-
-static void find_mtd_partitions(void)
-{
-    int fd;
-    char buf[1024];
-    char *pmtdbufp;
-    ssize_t pmtdsize;
-    int r;
-
-    fd = open("/proc/mtd", O_RDONLY);
-    if (fd < 0)
-        return;
-
-    buf[sizeof(buf) - 1] = '\0';
-    pmtdsize = read(fd, buf, sizeof(buf) - 1);
-    pmtdbufp = buf;
-    while (pmtdsize > 0) {
-        int mtdnum, mtdsize, mtderasesize;
-        char mtdname[16];
-        mtdname[0] = '\0';
-        mtdnum = -1;
-        r = sscanf(pmtdbufp, "mtd%d: %x %x %15s",
-                   &mtdnum, &mtdsize, &mtderasesize, mtdname);
-        if ((r == 4) && (mtdname[0] == '"')) {
-            char *x = strchr(mtdname + 1, '"');
-            if (x) {
-                *x = 0;
-            }
-            INFO("mtd partition %d, %s\n", mtdnum, mtdname + 1);
-            if (mtd_part_count < MAX_MTD_PARTITIONS) {
-                strcpy(mtd_part_map[mtd_part_count].name, mtdname + 1);
-                mtd_part_map[mtd_part_count].number = mtdnum;
-                mtd_part_count++;
-            } else {
-                ERROR("too many mtd partitions\n");
-            }
-        }
-        while (pmtdsize > 0 && *pmtdbufp != '\n') {
-            pmtdbufp++;
-            pmtdsize--;
-        }
-        if (pmtdsize > 0) {
-            pmtdbufp++;
-            pmtdsize--;
-        }
-    }
-    close(fd);
-}
-
-int mtd_name_to_number(const char *name) 
-{
-    int n;
-    if (mtd_part_count < 0) {
-        mtd_part_count = 0;
-        find_mtd_partitions();
-    }
-    for (n = 0; n < mtd_part_count; n++) {
-        if (!strcmp(name, mtd_part_map[n].name)) {
-            return mtd_part_map[n].number;
-        }
-    }
-    return -1;
 }
 
 static void import_kernel_nv(char *name, int in_qemu)
@@ -712,103 +532,8 @@ void open_devnull_stdio(void)
     exit(1);
 }
 
-void add_service_keycodes(struct service *svc)
-{
-    struct input_keychord *keychord;
-    int i, size;
-
-    if (svc->keycodes) {
-        /* add a new keychord to the list */
-        size = sizeof(*keychord) + svc->nkeycodes * sizeof(keychord->keycodes[0]);
-        keychords = realloc(keychords, keychords_length + size);
-        if (!keychords) {
-            ERROR("could not allocate keychords\n");
-            keychords_length = 0;
-            keychords_count = 0;
-            return;
-        }
-
-        keychord = (struct input_keychord *)((char *)keychords + keychords_length);
-        keychord->version = KEYCHORD_VERSION;
-        keychord->id = keychords_count + 1;
-        keychord->count = svc->nkeycodes;
-        svc->keychord_id = keychord->id;
-
-        for (i = 0; i < svc->nkeycodes; i++) {
-            keychord->keycodes[i] = svc->keycodes[i];
-        }
-        keychords_count++;
-        keychords_length += size;
-    }
-}
-
-int open_keychord()
-{
-    int fd, ret;
-
-    service_for_each(add_service_keycodes);
-    
-    /* nothing to do if no services require keychords */
-    if (!keychords)
-        return -1;
-
-    fd = open("/dev/keychord", O_RDWR);
-    if (fd < 0) {
-        ERROR("could not open /dev/keychord\n");
-        return fd;
-    }
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
-
-    ret = write(fd, keychords, keychords_length);
-    if (ret != keychords_length) {
-        ERROR("could not configure /dev/keychord %d (%d)\n", ret, errno);
-        close(fd);
-        fd = -1;
-    }
-
-    free(keychords);
-    keychords = 0;
-
-    return fd;
-}
-
-void handle_keychord(int fd)
-{
-    struct service *svc;
-    char* debuggable;
-    char* adb_enabled;
-    int ret;
-    __u16 id;
-
-    // only handle keychords if ro.debuggable is set or adb is enabled.
-    // the logic here is that bugreports should be enabled in userdebug or eng builds
-    // and on user builds for users that are developers.
-    debuggable = property_get("ro.debuggable");
-    adb_enabled = property_get("init.svc.adbd");
-    if ((debuggable && !strcmp(debuggable, "1")) ||
-        (adb_enabled && !strcmp(adb_enabled, "running"))) {
-        ret = read(fd, &id, sizeof(id));
-        if (ret != sizeof(id)) {
-            ERROR("could not read keychord id\n");
-            return;
-        }
-
-        svc = service_find_by_keychord(id);
-        if (svc) {
-            INFO("starting service %s from keychord\n", svc->name);
-            service_start(svc, NULL);
-        } else {
-            ERROR("service for keychord %d not found\n", id);
-        }
-    }
-}
-
 int main(int argc, char **argv)
 {
-    int device_fd = -1;
-    int property_set_fd = -1;
-    int signal_recv_fd = -1;
-    int keychord_fd = -1;
     int fd_count;
     int s[2];
     int fd;
@@ -817,12 +542,6 @@ int main(int argc, char **argv)
     struct pollfd ufds[4];
     char *tmpdev;
     char* debuggable;
-
-    act.sa_handler = sigchld_handler;
-    act.sa_flags = SA_NOCLDSTOP;
-    act.sa_mask = 0;
-    act.sa_restorer = NULL;
-    sigaction(SIGCHLD, &act, 0);
 
     /* clear the umask */
     umask(0);
@@ -866,12 +585,12 @@ int main(int argc, char **argv)
     drain_action_queue();
 
     INFO("device init\n");
-    device_fd = device_init();
+    device_init();
 
     property_init();
     
     // only listen for keychords if ro.debuggable is true
-    keychord_fd = open_keychord();
+    keychord_init();
 
     if (console[0]) {
         snprintf(tmp, sizeof(tmp), "/dev/%s", console);
@@ -939,22 +658,14 @@ int main(int argc, char **argv)
          * after the ro.foo properties are set above so
          * that /data/local.prop cannot interfere with them.
          */
-    property_set_fd = start_property_service();
+    start_property_service();
 
-    /* create a signalling mechanism for the sigchld handler */
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, s) == 0) {
-        signal_fd = s[0];
-        signal_recv_fd = s[1];
-        fcntl(s[0], F_SETFD, FD_CLOEXEC);
-        fcntl(s[0], F_SETFL, O_NONBLOCK);
-        fcntl(s[1], F_SETFD, FD_CLOEXEC);
-        fcntl(s[1], F_SETFL, O_NONBLOCK);
-    }
+    signal_init();
 
     /* make sure we actually have all the pieces we need */
-    if ((device_fd < 0) ||
-        (property_set_fd < 0) ||
-        (signal_recv_fd < 0)) {
+    if ((get_device_fd() < 0) ||
+        (get_property_set_fd() < 0) ||
+        (get_signal_fd() < 0)) {
         ERROR("init startup failure\n");
         return 1;
     }
@@ -971,16 +682,16 @@ int main(int argc, char **argv)
         /* enable property triggers */   
     property_triggers_enabled = 1;     
 
-    ufds[0].fd = device_fd;
+    ufds[0].fd = get_device_fd();
     ufds[0].events = POLLIN;
-    ufds[1].fd = property_set_fd;
+    ufds[1].fd = get_property_set_fd();
     ufds[1].events = POLLIN;
-    ufds[2].fd = signal_recv_fd;
+    ufds[2].fd = get_signal_fd();
     ufds[2].events = POLLIN;
     fd_count = 3;
 
-    if (keychord_fd > 0) {
-        ufds[3].fd = keychord_fd;
+    if (get_keychord_fd() > 0) {
+        ufds[3].fd = get_keychord_fd();
         ufds[3].events = POLLIN;
         fd_count++;
     } else {
@@ -1029,20 +740,17 @@ int main(int argc, char **argv)
             continue;
 
         if (ufds[2].revents == POLLIN) {
-            /* we got a SIGCHLD - reap and restart as needed */
-            read(signal_recv_fd, tmp, sizeof(tmp));
-            while (!wait_for_one_process(0))
-                ;
+            handle_signal();
             continue;
         }
 
         if (ufds[0].revents == POLLIN)
-            handle_device_fd(device_fd);
+            handle_device_fd();
 
         if (ufds[1].revents == POLLIN)
-            handle_property_set_fd(property_set_fd);
+            handle_property_set_fd();
         if (ufds[3].revents == POLLIN)
-            handle_keychord(keychord_fd);
+            handle_keychord();
     }
 
     return 0;
