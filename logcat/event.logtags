@@ -150,7 +150,7 @@
 # time: cpu time millis (not wall time), including lock acquisition
 # blocking_package: if this is on a main thread, the package name, otherwise ""
 # sample_percent: the percent likelihood this query was logged
-52000 db_operation (db|3),(sql|3),(time|1|3),(blocking_package|3),(sample_percent|1|6)
+52000 db_sample (db|3),(sql|3),(time|1|3),(blocking_package|3),(sample_percent|1|6)
 
 # http request/response stats
 52001 http_stats (useragent|3),(response|2|3),(processing|2|3),(tx|1|2),(rx|1|2)
