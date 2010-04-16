@@ -35,6 +35,8 @@
 #include "keywords.h"
 #include "property_service.h"
 #include "devices.h"
+#include "parser.h"
+#include "util.h"
 
 #include <private/android_filesystem_config.h>
 

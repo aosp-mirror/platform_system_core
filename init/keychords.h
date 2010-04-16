@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_PROPERTY_H
-#define _INIT_PROPERTY_H
+#ifndef _INIT_KEYCHORDS_H_
+#define _INIT_KEYCHORDS_H_
 
-extern void handle_property_set_fd(void);
-extern void property_init(void);
-extern void start_property_service(void);
-void get_property_workspace(int *fd, int *sz);
-extern const char* property_get(const char *name);
-extern int property_set(const char *name, const char *value);
-int get_property_set_fd(void);
+struct service;
 
-#endif	/* _INIT_PROPERTY_H */
+void add_service_keycodes(struct service *svc);
+void keychord_init(void);
+void handle_keychord(void);
+int get_keychord_fd(void);
+
+#endif

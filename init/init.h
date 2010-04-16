@@ -17,14 +17,7 @@
 #ifndef _INIT_INIT_H
 #define _INIT_INIT_H
 
-int mtd_name_to_number(const char *name);
-
 void handle_control_message(const char *msg, const char *arg);
-
-int create_socket(const char *name, int type, mode_t perm,
-                  uid_t uid, gid_t gid);
-
-void *read_file(const char *fn, unsigned *_sz);
 
 void log_init(void);
 void log_set_level(int level);
@@ -38,8 +31,6 @@ void log_write(int level, const char *fmt, ...)
 
 #define LOG_DEFAULT_LEVEL  3  /* messages <= this level are logged */
 #define LOG_UEVENTS        0  /* log uevent messages if 1. verbose */
-
-unsigned int decode_uid(const char *s);
 
 struct listnode
 {
@@ -156,6 +147,8 @@ struct service {
 
 int parse_config_file(const char *fn);
 
+void notify_service_state(const char *name, const char *state);
+
 struct service *service_find_by_name(const char *name);
 struct service *service_find_by_pid(pid_t pid);
 struct service *service_find_by_keychord(int keychord_id);
@@ -167,14 +160,6 @@ void service_for_each_flags(unsigned matchflags,
 void service_stop(struct service *svc);
 void service_start(struct service *svc, const char *dynamic_args);
 void property_changed(const char *name, const char *value);
-
-void drain_action_queue(void);
-struct action *action_remove_queue_head(void);
-void action_add_queue_tail(struct action *act);
-void action_for_each_trigger(const char *trigger,
-                             void (*func)(struct action *act));
-void queue_property_triggers(const char *name, const char *value);
-void queue_all_property_triggers();
 
 #define INIT_IMAGE_FILE	"/initlogo.rle"
 
