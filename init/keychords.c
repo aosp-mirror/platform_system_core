@@ -22,6 +22,7 @@
 #include <linux/keychord.h>
 
 #include "init.h"
+#include "log.h"
 #include "property_service.h"
 
 static struct input_keychord *keychords = 0;

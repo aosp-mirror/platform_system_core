@@ -37,6 +37,7 @@
 #include "devices.h"
 #include "parser.h"
 #include "util.h"
+#include "log.h"
 
 #include <private/android_filesystem_config.h>
 

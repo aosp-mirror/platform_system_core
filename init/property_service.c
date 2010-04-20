@@ -44,6 +44,7 @@
 #include "property_service.h"
 #include "init.h"
 #include "util.h"
+#include "log.h"
 
 #define PERSISTENT_PROPERTY_DIR  "/data/property"
 

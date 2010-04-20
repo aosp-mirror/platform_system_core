@@ -32,9 +32,10 @@
 #include <sys/time.h>
 #include <asm/page.h>
 
-#include "init.h"
 #include "devices.h"
 #include "util.h"
+#include "log.h"
+#include "list.h"
 
 #define CMDLINE_PREFIX  "/dev"
 #define SYSFS_PREFIX    "/sys"

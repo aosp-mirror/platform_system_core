@@ -33,7 +33,8 @@
 
 #include <private/android_filesystem_config.h>
 
-#include "init.h"
+#include "log.h"
+#include "list.h"
 
 static int log_fd = -1;
 /* Inital log level before init.rc is parsed and this this is reset. */

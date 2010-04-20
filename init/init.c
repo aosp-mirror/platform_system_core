@@ -40,6 +40,8 @@
 
 #include "devices.h"
 #include "init.h"
+#include "list.h"
+#include "log.h"
 #include "property_service.h"
 #include "bootchart.h"
 #include "signal_handler.h"

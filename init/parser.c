@@ -11,6 +11,8 @@
 #include "property_service.h"
 #include "parser.h"
 #include "util.h"
+#include "list.h"
+#include "log.h"
 
 #include <cutils/iosched_policy.h>
 
