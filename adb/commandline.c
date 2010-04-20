@@ -112,6 +112,7 @@ void help()
         "  adb push <local> <remote>    - copy file/dir to device\n"
         "  adb pull <remote> [<local>]  - copy file/dir from device\n"
         "  adb sync [ <directory> ]     - copy host->device only if changed\n"
+        "                                 (-l means list but don't copy)\n"
         "                                 (see 'adb help all')\n"
         "  adb shell                    - run remote shell interactively\n"
         "  adb shell <command>          - run remote shell command\n"
@@ -1042,10 +1043,19 @@ top:
 
     if(!strcmp(argv[0], "sync")) {
         char *srcarg, *android_srcpath, *data_srcpath;
+        int listonly = 0;
+
         int ret;
         if(argc < 2) {
             /* No local path was specified. */
             srcarg = NULL;
+        } else if (argc >= 2 && strcmp(argv[1], "-l") == 0) {
+            listonly = 1;
+            if (argc == 3) {
+                srcarg = argv[2];
+            } else {
+                srcarg = NULL;
+            }
         } else if(argc == 2) {
             /* A local path or "android"/"data" arg was specified. */
             srcarg = argv[1];
@@ -1056,9 +1066,9 @@ top:
         if(ret != 0) return usage();
 
         if(android_srcpath != NULL)
-            ret = do_sync_sync(android_srcpath, "/system");
+            ret = do_sync_sync(android_srcpath, "/system", listonly);
         if(ret == 0 && data_srcpath != NULL)
-            ret = do_sync_sync(data_srcpath, "/data");
+            ret = do_sync_sync(data_srcpath, "/data", listonly);
 
         free(android_srcpath);
         free(data_srcpath);
