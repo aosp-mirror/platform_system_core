@@ -919,10 +919,13 @@ int adb_main(int is_daemon)
     }
 
         /* for the device, start the usb transport if the
-        ** android usb device exists and "service.adb.tcp"
-        ** is not set, otherwise start the network transport.
+        ** android usb device exists and the "service.adb.tcp.port" and
+        ** "persist.adb.tcp.port" properties are not set.
+        ** Otherwise start the network transport.
         */
-    property_get("service.adb.tcp.port", value, "0");
+    property_get("service.adb.tcp.port", value, "");
+    if (!value[0])
+        property_get("persist.adb.tcp.port", value, "");
     if (sscanf(value, "%d", &port) == 1 && port > 0) {
         // listen on TCP port specified by service.adb.tcp.port property
         local_init(port);
