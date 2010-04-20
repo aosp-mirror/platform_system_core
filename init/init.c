@@ -193,9 +193,11 @@ void service_start(struct service *svc, const char *dynamic_args)
         char tmp[32];
         int fd, sz;
 
-        get_property_workspace(&fd, &sz);
-        sprintf(tmp, "%d,%d", dup(fd), sz);
-        add_environment("ANDROID_PROPERTY_WORKSPACE", tmp);
+        if (properties_inited()) {
+            get_property_workspace(&fd, &sz);
+            sprintf(tmp, "%d,%d", dup(fd), sz);
+            add_environment("ANDROID_PROPERTY_WORKSPACE", tmp);
+        }
 
         for (ei = svc->envvars; ei; ei = ei->next)
             add_environment(ei->name, ei->value);
@@ -281,7 +283,8 @@ void service_start(struct service *svc, const char *dynamic_args)
     svc->pid = pid;
     svc->flags |= SVC_RUNNING;
 
-    notify_service_state(svc->name, "running");
+    if (properties_inited())
+        notify_service_state(svc->name, "running");
 }
 
 void service_stop(struct service *svc)
