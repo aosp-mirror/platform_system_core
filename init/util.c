@@ -378,3 +378,15 @@ void remove_link(const char *oldpath, const char *newpath)
     if (!strcmp(path, oldpath))
         unlink(newpath);
 }
+
+int wait_for_file(const char *filename, int timeout)
+{
+    struct stat info;
+    time_t timeout_time = gettime() + timeout;
+    int ret = -1;
+
+    while (gettime() < timeout_time && ((ret = stat(filename, &info)) < 0))
+        usleep(10000);
+
+    return ret;
+}

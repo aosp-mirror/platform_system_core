@@ -204,6 +204,7 @@ int lookup_keyword(const char *s)
         break;
     case 'w':
         if (!strcmp(s, "rite")) return K_write;
+        if (!strcmp(s, "ait")) return K_wait;
         break;
     }
     return K_UNKNOWN;

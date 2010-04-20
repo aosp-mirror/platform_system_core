@@ -277,6 +277,7 @@ int do_mount(int nargs, char **args)
     char *options = NULL;
     unsigned flags = 0;
     int n, i;
+    int wait = 0;
 
     for (n = 4; n < nargs; n++) {
         for (i = 0; mount_flags[i].name; i++) {
@@ -286,9 +287,13 @@ int do_mount(int nargs, char **args)
             }
         }
 
-        /* if our last argument isn't a flag, wolf it up as an option string */
-        if (n + 1 == nargs && !mount_flags[i].name)
-            options = args[n];
+        if (!mount_flags[i].name) {
+            if (!strcmp(args[n], "wait"))
+                wait = 1;
+            /* if our last argument isn't a flag, wolf it up as an option string */
+            else if (n + 1 == nargs)
+                options = args[n];
+        }
     }
 
     system = args[1];
@@ -303,6 +308,8 @@ int do_mount(int nargs, char **args)
 
         sprintf(tmp, "/dev/block/mtdblock%d", n);
 
+        if (wait)
+            wait_for_file(tmp, COMMAND_RETRY_TIMEOUT);
         if (mount(tmp, target, system, flags, options) < 0) {
             return -1;
         }
@@ -349,6 +356,8 @@ int do_mount(int nargs, char **args)
         ERROR("out of loopback devices");
         return -1;
     } else {
+        if (wait)
+            wait_for_file(source, COMMAND_RETRY_TIMEOUT);
         if (mount(source, target, system, flags, options) < 0) {
             return -1;
         }
@@ -573,4 +582,12 @@ int do_device(int nargs, char **args) {
     add_devperms_partners(source, get_mode(args[2]), decode_uid(args[3]),
                           decode_uid(args[4]), prefix);
     return 0;
+}
+
+int do_wait(int nargs, char **args)
+{
+    if (nargs == 2) {
+        return wait_for_file(args[1], COMMAND_RETRY_TIMEOUT);
+    }
+    return -1;
 }
