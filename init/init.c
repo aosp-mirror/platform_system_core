@@ -46,7 +46,7 @@
 #include "bootchart.h"
 #include "signal_handler.h"
 #include "keychords.h"
-#include "parser.h"
+#include "init_parser.h"
 #include "util.h"
 
 static int property_triggers_enabled = 0;
@@ -253,7 +253,7 @@ void service_start(struct service *svc, const char *dynamic_args)
                 ERROR("cannot execve('%s'): %s\n", svc->args[0], strerror(errno));
             }
         } else {
-            char *arg_ptrs[SVC_MAXARGS+1];
+            char *arg_ptrs[INIT_PARSER_MAXARGS+1];
             int arg_idx = svc->nargs;
             char *tmp = strdup(dynamic_args);
             char *next = tmp;
@@ -264,7 +264,7 @@ void service_start(struct service *svc, const char *dynamic_args)
 
             while((bword = strsep(&next, " "))) {
                 arg_ptrs[arg_idx++] = bword;
-                if (arg_idx == SVC_MAXARGS)
+                if (arg_idx == INIT_PARSER_MAXARGS)
                     break;
             }
             arg_ptrs[arg_idx] = '\0';
@@ -748,7 +748,7 @@ int main(int argc, char **argv)
     log_init();
     
     INFO("reading config file\n");
-    parse_config_file("/init.rc");
+    init_parse_config_file("/init.rc");
 
     /* pull the kernel commandline and ramdisk properties file in */
     qemu_init();
@@ -756,7 +756,7 @@ int main(int argc, char **argv)
 
     get_hardware_name();
     snprintf(tmp, sizeof(tmp), "/init.%s.rc", hardware);
-    parse_config_file(tmp);
+    init_parse_config_file(tmp);
 
     action_for_each_trigger("early-init", action_add_queue_tail);
 

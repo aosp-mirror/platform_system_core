@@ -35,7 +35,7 @@
 #include "keywords.h"
 #include "property_service.h"
 #include "devices.h"
-#include "parser.h"
+#include "init_parser.h"
 #include "util.h"
 #include "log.h"
 
@@ -221,7 +221,7 @@ int do_insmod(int nargs, char **args)
 
 int do_import(int nargs, char **args)
 {
-    return parse_config_file(args[1]);
+    return init_parse_config_file(args[1]);
 }
 
 int do_mkdir(int nargs, char **args)

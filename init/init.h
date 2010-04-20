@@ -19,6 +19,8 @@
 
 #include "list.h"
 
+#include <sys/stat.h>
+
 void handle_control_message(const char *msg, const char *arg);
 
 struct command
@@ -70,8 +72,6 @@ struct svcenvinfo {
 
 #define NR_SVC_SUPP_GIDS 12    /* twelve supplementary groups */
 
-#define SVC_MAXARGS 64
-
 #define COMMAND_RETRY_TIMEOUT 5
 
 struct service {
@@ -109,8 +109,6 @@ struct service {
     /* "MUST BE AT THE END OF THE STRUCT" */
     char *args[1];
 }; /*     ^-------'args' MUST be at the end of this struct! */
-
-int parse_config_file(const char *fn);
 
 void notify_service_state(const char *name, const char *state);
 
