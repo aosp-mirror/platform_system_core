@@ -20,6 +20,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+
 static const char *coldboot_done = "/dev/.coldboot_done";
 
 int mtd_name_to_number(const char *name);
