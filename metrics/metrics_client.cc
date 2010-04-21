@@ -10,6 +10,7 @@
 int main(int argc, char** argv) {
   bool send_to_autotest = false;
   bool send_to_chrome = true;
+  bool send_enum = false;
   bool secs_to_msecs = false;
   int name_index = 1;
   bool print_usage = false;
@@ -17,7 +18,7 @@ int main(int argc, char** argv) {
   if (argc >= 3) {
     // Parse arguments
     int flag;
-    while ((flag = getopt(argc, argv, "abt")) != -1) {
+    while ((flag = getopt(argc, argv, "abet")) != -1) {
       switch (flag) {
         case 'a':
           send_to_autotest = true;
@@ -26,6 +27,9 @@ int main(int argc, char** argv) {
         case 'b':
           send_to_chrome = true;
           send_to_autotest = true;
+          break;
+        case 'e':
+          send_enum = true;
           break;
         case 't':
           secs_to_msecs = true;
@@ -40,17 +44,22 @@ int main(int argc, char** argv) {
     print_usage = true;
   }
 
-  if ((name_index + 5) != argc) {
+  int num_args = send_enum ? 3 : 5;
+  if ((name_index + num_args) != argc ||
+      (send_enum && secs_to_msecs)) {
     print_usage = true;
   }
 
   if (print_usage) {
     fprintf(stderr,
-            "Usage:  metrics_client [-abt] name sample min max nbuckets\n"
+            "Usage:  metrics_client [-ab] [-t] name sample min max nbuckets\n"
+            "        metrics_client [-ab] -e   name sample max\n"
             "\n"
             "  default: send metric with integer values to Chrome only\n"
-            "  -a: send metric to autotest only (min/max/nbuckets ignored)\n"
-            "  -b: send metric to both chrome and autotest\n"
+            "           |min| > 0, |min| <= sample < |max|\n"
+            "  -a: send metric (name/sample) to Autotest only\n"
+            "  -b: send metric to both Chrome and Autotest\n"
+            "  -e: send linear/enumeration histogram data\n"
             "  -t: convert sample from double seconds to int milliseconds\n");
     return 1;
   }
@@ -62,16 +71,22 @@ int main(int argc, char** argv) {
   } else {
     sample = atoi(argv[name_index + 1]);
   }
-  int min = atoi(argv[name_index + 2]);
-  int max = atoi(argv[name_index + 3]);
-  int nbuckets = atoi(argv[name_index + 4]);
 
   // Send metrics
   if (send_to_autotest) {
     MetricsLibrary::SendToAutotest(name, sample);
   }
+
   if (send_to_chrome) {
-    MetricsLibrary::SendToChrome(name, sample, min, max, nbuckets);
+    if (send_enum) {
+      int max = atoi(argv[name_index + 2]);
+      MetricsLibrary::SendEnumToChrome(name, sample, max);
+    } else {
+      int min = atoi(argv[name_index + 2]);
+      int max = atoi(argv[name_index + 3]);
+      int nbuckets = atoi(argv[name_index + 4]);
+      MetricsLibrary::SendToChrome(name, sample, min, max, nbuckets);
+    }
   }
   return 0;
 }

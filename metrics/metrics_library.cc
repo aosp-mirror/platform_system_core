@@ -150,3 +150,20 @@ bool MetricsLibrary::SendToChrome(const string& name, int sample,
   // Send the message.
   return SendMessageToChrome(message_length, message);
 }
+
+//static
+bool MetricsLibrary::SendEnumToChrome(const std::string& name, int sample,
+                                      int max) {
+  // Format the message.
+  char message[kBufferSize];
+  int32_t message_length =
+      FormatChromeMessage(kBufferSize, message,
+                          "linearhistogram%c%s %d %d", '\0',
+                          name.c_str(), sample, max);
+
+  if (message_length < 0)
+    return false;
+
+  // Send the message.
+  return SendMessageToChrome(message_length, message);
+}

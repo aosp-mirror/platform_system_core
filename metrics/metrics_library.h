@@ -33,6 +33,17 @@ class MetricsLibrary {
   static bool SendToChrome(const std::string& name, int sample,
                            int min, int max, int nbuckets);
 
+  // Sends linear histogram data to Chrome for transport to UMA and
+  // returns true on success. This method results in the equivalent of
+  // an asynchronous non-blocking RPC to UMA_HISTOGRAM_ENUMERATION
+  // inside Chrome (see base/histogram.h).
+  //
+  // |sample| is the sample value to be recorded (1 <= |sample| < |max|).
+  // |max| is the maximum value of the histogram samples.
+  // 0 is the implicit underflow bucket.
+  // [|max|,infinity) is the implicit overflow bucket.
+  static bool SendEnumToChrome(const std::string& name, int sample, int max);
+
   // Sends to Autotest and returns true on success.
   static bool SendToAutotest(const std::string& name, int value);
 };
