@@ -738,6 +738,8 @@ static void coldboot(const char *path)
 void device_init(void)
 {
     suseconds_t t0, t1;
+    struct stat info;
+    int fd;
 
     device_fd = open_uevent_socket();
     if(device_fd < 0)
@@ -746,13 +748,18 @@ void device_init(void)
     fcntl(device_fd, F_SETFD, FD_CLOEXEC);
     fcntl(device_fd, F_SETFL, O_NONBLOCK);
 
-    t0 = get_usecs();
-    coldboot("/sys/class");
-    coldboot("/sys/block");
-    coldboot("/sys/devices");
-    t1 = get_usecs();
-
-    log_event_print("coldboot %ld uS\n", ((long) (t1 - t0)));
+    if (stat(coldboot_done, &info) < 0) {
+        t0 = get_usecs();
+        coldboot("/sys/class");
+        coldboot("/sys/block");
+        coldboot("/sys/devices");
+        t1 = get_usecs();
+        fd = open(coldboot_done, O_WRONLY|O_CREAT, 0000);
+        close(fd);
+        log_event_print("coldboot %ld uS\n", ((long) (t1 - t0)));
+    } else {
+        log_event_print("skipping coldboot, already done\n");
+    }
 }
 
 int get_device_fd()

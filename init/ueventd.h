@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_DEVICES_H
-#define _INIT_DEVICES_H
+#ifndef _INIT_UEVENTD_H_
+#define _INIT_UEVENTD_H_
 
-#include <sys/stat.h>
+int ueventd_main(int argc, char **argv);
 
-extern void handle_device_fd();
-extern void device_init(void);
-extern int add_dev_perms(const char *name, mode_t perm, unsigned int uid,
-                         unsigned int gid, unsigned short prefix);
-int get_device_fd();
-#endif	/* _INIT_DEVICES_H */
+#endif

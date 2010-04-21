@@ -17,6 +17,11 @@
 #ifndef _INIT_UTIL_H_
 #define _INIT_UTIL_H_
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
+static const char *coldboot_done = "/dev/.coldboot_done";
+
 int mtd_name_to_number(const char *name);
 int create_socket(const char *name, int type, mode_t perm,
                   uid_t uid, gid_t gid);
@@ -29,4 +34,6 @@ void sanitize(char *p);
 void make_link(const char *oldpath, const char *newpath);
 void remove_link(const char *oldpath, const char *newpath);
 int wait_for_file(const char *filename, int timeout);
+void open_devnull_stdio(void);
+void get_hardware_name(char *hardware, unsigned int *revision);
 #endif

@@ -557,33 +557,6 @@ int do_loglevel(int nargs, char **args) {
     return -1;
 }
 
-int do_device(int nargs, char **args) {
-    int len;
-    char tmp[64];
-    char *source = args[1];
-    int prefix = 0;
-
-    if (nargs != 5)
-        return -1;
-    /* Check for wildcard '*' at the end which indicates a prefix. */
-    len = strlen(args[1]) - 1;
-    if (args[1][len] == '*') {
-        args[1][len] = '\0';
-        prefix = 1;
-    }
-    /* If path starts with mtd@ lookup the mount number. */
-    if (!strncmp(source, "mtd@", 4)) {
-        int n = mtd_name_to_number(source + 4);
-        if (n >= 0) {
-            snprintf(tmp, sizeof(tmp), "/dev/mtd/mtd%d", n);
-            source = tmp;
-        }
-    }
-    add_devperms_partners(source, get_mode(args[2]), decode_uid(args[3]),
-                          decode_uid(args[4]), prefix);
-    return 0;
-}
-
 int do_wait(int nargs, char **args)
 {
     if (nargs == 2) {

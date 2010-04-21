@@ -31,9 +31,11 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <libgen.h>
 
 #include <cutils/sockets.h>
 #include <cutils/iosched_policy.h>
+#include <private/android_filesystem_config.h>
 #include <termios.h>
 
 #include <sys/system_properties.h>
@@ -48,6 +50,7 @@
 #include "keychords.h"
 #include "init_parser.h"
 #include "util.h"
+#include "ueventd.h"
 
 static int property_triggers_enabled = 0;
 
@@ -412,8 +415,6 @@ static void import_kernel_nv(char *name, int in_qemu)
             strlcpy(bootloader, value, sizeof(bootloader));
         } else if (!strcmp(name,"androidboot.hardware")) {
             strlcpy(hardware, value, sizeof(hardware));
-        } else {
-            qemu_cmdline(name, value);
         }
     } else {
         /* in the emulator, export any kernel option with the
@@ -456,49 +457,6 @@ static void import_kernel_cmdline(int in_qemu)
 
         /* don't expose the raw commandline to nonpriv processes */
     chmod("/proc/cmdline", 0440);
-}
-
-static void get_hardware_name(void)
-{
-    char data[1024];
-    int fd, n;
-    char *x, *hw, *rev;
-
-    /* Hardware string was provided on kernel command line */
-    if (hardware[0])
-        return;
-
-    fd = open("/proc/cpuinfo", O_RDONLY);
-    if (fd < 0) return;
-
-    n = read(fd, data, 1023);
-    close(fd);
-    if (n < 0) return;
-
-    data[n] = 0;
-    hw = strstr(data, "\nHardware");
-    rev = strstr(data, "\nRevision");
-
-    if (hw) {
-        x = strstr(hw, ": ");
-        if (x) {
-            x += 2;
-            n = 0;
-            while (*x && !isspace(*x)) {
-                hardware[n++] = tolower(*x);
-                x++;
-                if (n == 31) break;
-            }
-            hardware[n] = 0;
-        }
-    }
-
-    if (rev) {
-        x = strstr(rev, ": ");
-        if (x) {
-            revision = strtoul(x + 2, 0, 16);
-        }
-    }
 }
 
 static struct command *get_first_command(struct action *act)
@@ -549,32 +507,14 @@ void execute_one_command(void)
     INFO("command '%s' r=%d\n", cur_command->args[0], ret);
 }
 
-void open_devnull_stdio(void)
+static int wait_for_coldboot_done_action(int nargs, char **args)
 {
-    int fd;
-    static const char *name = "/dev/__null__";
-    if (mknod(name, S_IFCHR | 0600, (1 << 8) | 3) == 0) {
-        fd = open(name, O_RDWR);
-        unlink(name);
-        if (fd >= 0) {
-            dup2(fd, 0);
-            dup2(fd, 1);
-            dup2(fd, 2);
-            if (fd > 2) {
-                close(fd);
-            }
-            return;
-        }
-    }
-
-    exit(1);
-}
-
-static int device_init_action(int nargs, char **args)
-{
-    INFO("device init\n");
-    device_init();
-    return 0;
+    int ret;
+    INFO("wait for %s\n", coldboot_done);
+    ret = wait_for_file(coldboot_done, COMMAND_RETRY_TIMEOUT);
+    if (ret)
+        ERROR("Timed out waiting for %s\n", coldboot_done);
+    return ret;
 }
 
 static int property_init_action(int nargs, char **args)
@@ -677,8 +617,7 @@ static int signal_init_action(int nargs, char **args)
 static int check_startup_action(int nargs, char **args)
 {
     /* make sure we actually have all the pieces we need */
-    if ((get_device_fd() < 0) ||
-        (get_property_set_fd() < 0) ||
+    if ((get_property_set_fd() < 0) ||
         (get_signal_fd() < 0)) {
         ERROR("init startup failure\n");
         exit(1);
@@ -715,10 +654,12 @@ int main(int argc, char **argv)
     char *tmpdev;
     char* debuggable;
     char tmp[32];
-    int device_fd_init = 0;
     int property_set_fd_init = 0;
     int signal_fd_init = 0;
     int keychord_fd_init = 0;
+
+    if (!strcmp(basename(argv[0]), "ueventd"))
+        return ueventd_main(argc, argv);
 
     /* clear the umask */
     umask(0);
@@ -751,16 +692,15 @@ int main(int argc, char **argv)
     init_parse_config_file("/init.rc");
 
     /* pull the kernel commandline and ramdisk properties file in */
-    qemu_init();
     import_kernel_cmdline(0);
 
-    get_hardware_name();
+    get_hardware_name(hardware, &revision);
     snprintf(tmp, sizeof(tmp), "/init.%s.rc", hardware);
     init_parse_config_file(tmp);
 
     action_for_each_trigger("early-init", action_add_queue_tail);
 
-    queue_builtin_action(device_init_action, "device_init");
+    queue_builtin_action(wait_for_coldboot_done_action, "wait_for_coldboot_done");
     queue_builtin_action(property_init_action, "property_init");
     queue_builtin_action(keychord_init_action, "keychord_init");
     queue_builtin_action(console_init_action, "console_init");
@@ -794,13 +734,6 @@ int main(int argc, char **argv)
         execute_one_command();
         restart_processes();
 
-        if (!device_fd_init && get_device_fd() > 0) {
-            ufds[fd_count].fd = get_device_fd();
-            ufds[fd_count].events = POLLIN;
-            ufds[fd_count].revents = 0;
-            fd_count++;
-            device_fd_init = 1;
-        }
         if (!property_set_fd_init && get_property_set_fd() > 0) {
             ufds[fd_count].fd = get_property_set_fd();
             ufds[fd_count].events = POLLIN;
@@ -849,9 +782,7 @@ int main(int argc, char **argv)
 
         for (i = 0; i < fd_count; i++) {
             if (ufds[i].revents == POLLIN) {
-                if (ufds[i].fd == get_device_fd())
-                    handle_device_fd();
-                else if (ufds[i].fd == get_property_set_fd())
+                if (ufds[i].fd == get_property_set_fd())
                     handle_property_set_fd();
                 else if (ufds[i].fd == get_keychord_fd())
                     handle_keychord();

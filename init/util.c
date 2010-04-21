@@ -35,6 +35,7 @@
 
 #include "log.h"
 #include "list.h"
+#include "util.h"
 
 static int log_fd = -1;
 /* Inital log level before init.rc is parsed and this this is reset. */
@@ -389,4 +390,68 @@ int wait_for_file(const char *filename, int timeout)
         usleep(10000);
 
     return ret;
+}
+
+void open_devnull_stdio(void)
+{
+    int fd;
+    static const char *name = "/dev/__null__";
+    if (mknod(name, S_IFCHR | 0600, (1 << 8) | 3) == 0) {
+        fd = open(name, O_RDWR);
+        unlink(name);
+        if (fd >= 0) {
+            dup2(fd, 0);
+            dup2(fd, 1);
+            dup2(fd, 2);
+            if (fd > 2) {
+                close(fd);
+            }
+            return;
+        }
+    }
+
+    exit(1);
+}
+
+void get_hardware_name(char *hardware, unsigned int *revision)
+{
+    char data[1024];
+    int fd, n;
+    char *x, *hw, *rev;
+
+    /* Hardware string was provided on kernel command line */
+    if (hardware[0])
+        return;
+
+    fd = open("/proc/cpuinfo", O_RDONLY);
+    if (fd < 0) return;
+
+    n = read(fd, data, 1023);
+    close(fd);
+    if (n < 0) return;
+
+    data[n] = 0;
+    hw = strstr(data, "\nHardware");
+    rev = strstr(data, "\nRevision");
+
+    if (hw) {
+        x = strstr(hw, ": ");
+        if (x) {
+            x += 2;
+            n = 0;
+            while (*x && !isspace(*x)) {
+                hardware[n++] = tolower(*x);
+                x++;
+                if (n == 31) break;
+            }
+            hardware[n] = 0;
+        }
+    }
+
+    if (rev) {
+        x = strstr(rev, ": ");
+        if (x) {
+            *revision = strtoul(x + 2, 0, 16);
+        }
+    }
 }
