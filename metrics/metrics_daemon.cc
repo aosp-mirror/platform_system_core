@@ -17,7 +17,7 @@ extern "C" {
 
 MetricsDaemon::NetworkState
 MetricsDaemon::network_states_[MetricsDaemon::kNumberNetworkStates] = {
-#define STATE(name, capname) { #name, "Connman" # capname },
+#define STATE(name, capname) { #name, "Network.Connman" # capname },
 #include "network_states.h"
 };
 
@@ -113,11 +113,11 @@ void MetricsDaemon::LogNetworkStateChange(const char* newstate) {
     if (diff.tv_sec >= INT_MAX / 1000) {
       diff_ms = INT_MAX;
     }
-    if (testing_) {
-      TestPublishMetric(network_states_[old_id].stat_name, diff_ms);
-    } else {
-      ChromePublishMetric(network_states_[old_id].stat_name, diff_ms);
-    }
+    PublishMetric(network_states_[old_id].stat_name,
+                  diff_ms,
+                  1,
+                  8 * 60 * 60 * 1000,  // 8 hours in milliseconds
+                  100);
   }
   network_state_id_ = new_id;
   network_state_start_ = now;
@@ -133,10 +133,12 @@ MetricsDaemon::GetNetworkStateId(const char* state_name) {
   return static_cast<NetworkStateId>(-1);
 }
 
-void MetricsDaemon::ChromePublishMetric(const char* name, int value) {
-  MetricsLibrary::SendToChrome(name, value);
-}
-
-void MetricsDaemon::TestPublishMetric(const char* name, int value) {
-  LOG(INFO) << "received metric: " << name << " " << value;
+void MetricsDaemon::PublishMetric(const char* name, int sample,
+                                  int min, int max, int nbuckets) {
+  if (testing_) {
+    LOG(INFO) << "received metric: " << name << " " << sample <<
+        " " << min << " " << max << " " << nbuckets;
+  } else {
+    MetricsLibrary::SendToChrome(name, sample, min, max, nbuckets);
+  }
 }

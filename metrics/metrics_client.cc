@@ -7,13 +7,11 @@
 
 #include "metrics_library.h"
 
-// Usage:  metrics_client [-ab] metric_name metric_value
 int main(int argc, char** argv) {
   bool send_to_autotest = false;
   bool send_to_chrome = true;
   bool secs_to_msecs = false;
-  int metric_name_index = 1;
-  int metric_value_index = 2;
+  int name_index = 1;
   bool print_usage = false;
 
   if (argc >= 3) {
@@ -37,43 +35,43 @@ int main(int argc, char** argv) {
           break;
       }
     }
-    metric_name_index = optind;
-    metric_value_index = optind + 1;
+    name_index = optind;
   } else {
     print_usage = true;
   }
 
-  // Metrics value should be the last argument passed
-  if ((metric_value_index + 1) != argc) {
+  if ((name_index + 5) != argc) {
     print_usage = true;
   }
 
   if (print_usage) {
     fprintf(stderr,
-            "Usage:  metrics_client [-abt] name value\n"
+            "Usage:  metrics_client [-abt] name sample min max nbuckets\n"
             "\n"
-            "  default: send metric with integer value to chrome only\n"
-            "  -a: send metric to autotest only\n"
+            "  default: send metric with integer values to Chrome only\n"
+            "  -a: send metric to autotest only (min/max/nbuckets ignored)\n"
             "  -b: send metric to both chrome and autotest\n"
-            "  -t: convert value from float seconds to int milliseconds\n");
+            "  -t: convert sample from double seconds to int milliseconds\n");
     return 1;
   }
 
-  const char* name = argv[metric_name_index];
-  int value;
+  const char* name = argv[name_index];
+  int sample;
   if (secs_to_msecs) {
-    float secs = strtof(argv[metric_value_index], NULL);
-    value = static_cast<int>(secs * 1000.0f);
+    sample = static_cast<int>(atof(argv[name_index + 1]) * 1000.0);
   } else {
-    value = atoi(argv[metric_value_index]);
+    sample = atoi(argv[name_index + 1]);
   }
+  int min = atoi(argv[name_index + 2]);
+  int max = atoi(argv[name_index + 3]);
+  int nbuckets = atoi(argv[name_index + 4]);
 
   // Send metrics
   if (send_to_autotest) {
-    MetricsLibrary::SendToAutotest(name, value);
+    MetricsLibrary::SendToAutotest(name, sample);
   }
   if (send_to_chrome) {
-    MetricsLibrary::SendToChrome(name, value);
+    MetricsLibrary::SendToChrome(name, sample, min, max, nbuckets);
   }
   return 0;
 }

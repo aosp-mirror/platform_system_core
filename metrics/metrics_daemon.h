@@ -63,11 +63,11 @@ class MetricsDaemon {
   // Given a string with the name of a state, returns the id for the state.
   NetworkStateId GetNetworkStateId(const char* state_name);
 
-  // Sends a stat to Chrome for transport to UMA.
-  void ChromePublishMetric(const char* name, int value);
-
-  // Prints a stat for testing.
-  void TestPublishMetric(const char* name, int value);
+  // Sends a stat to Chrome for transport to UMA (or prints it for
+  // testing). See MetricsLibrary::SendToChrome in metrics_library.h
+  // for a description of the arguments.
+  void PublishMetric(const char* name, int sample,
+                     int min, int max, int nbuckets);
 
 #if 0
   // Fetches a name-value hash table from DBus.

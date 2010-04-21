@@ -21,8 +21,10 @@
 #define READ_WRITE_ALL_FILE_FLAGS \
   (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
-static const char kAutotestPath[] = "/tmp/.chromeos-metrics-autotest";
-static const char kChromePath[] = "/tmp/.chromeos-metrics";
+static const char kAutotestPath[] =
+    "/var/log/metrics/autotest-events";
+static const char kChromePath[] =
+    "/var/log/metrics/uma-events";
 static const int32_t kBufferSize = 1024;
 
 using namespace std;
@@ -42,7 +44,7 @@ static void PrintError(const char *message, const char *file,
   }
 }
 
-// Sends message of size length to Chrome and returns true on success.
+// Sends message of size |length| to Chrome and returns true on success.
 static bool SendMessageToChrome(int32_t length, const char *message) {
   int chrome_fd = open(kChromePath,
                        O_WRONLY | O_APPEND | O_CREAT,
@@ -81,12 +83,12 @@ static bool SendMessageToChrome(int32_t length, const char *message) {
   return success;
 }
 
-// Formats a name/value message for Chrome in buffer and returns the
+// Formats a name/value message for Chrome in |buffer| and returns the
 // length of the message or a negative value on error.
 //
 // Message format is: | LENGTH(binary) | NAME | \0 | VALUE | \0 |
 //
-// The arbitrary format argument covers the non-LENGTH portion of the
+// The arbitrary |format| argument covers the non-LENGTH portion of the
 // message. The caller is responsible to store the \0 character
 // between NAME and VALUE (e.g. "%s%c%d", name, '\0', value).
 static int32_t FormatChromeMessage(int32_t buffer_size, char *buffer,
@@ -119,7 +121,8 @@ static int32_t FormatChromeMessage(int32_t buffer_size, char *buffer,
   return message_length;
 }
 
-bool MetricsLibrary::SendToAutotest(string name, int value) {
+// static
+bool MetricsLibrary::SendToAutotest(const string& name, int value) {
   FILE *autotest_file = fopen(kAutotestPath, "a+");
   if (autotest_file == NULL) {
     PrintError("fopen", kAutotestPath, errno);
@@ -131,12 +134,15 @@ bool MetricsLibrary::SendToAutotest(string name, int value) {
   return true;
 }
 
-bool MetricsLibrary::SendToChrome(string name, int value) {
+// static
+bool MetricsLibrary::SendToChrome(const string& name, int sample,
+                                  int min, int max, int nbuckets) {
   // Format the message.
   char message[kBufferSize];
   int32_t message_length =
       FormatChromeMessage(kBufferSize, message,
-                          "%s%c%d", name.c_str(), '\0', value);
+                          "histogram%c%s %d %d %d %d", '\0',
+                          name.c_str(), sample, min, max, nbuckets);
 
   if (message_length < 0)
     return false;
