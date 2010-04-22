@@ -17,6 +17,13 @@
 #ifndef _INIT_UTIL_H_
 #define _INIT_UTIL_H_
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+
+static const char *coldboot_done = "/dev/.coldboot_done";
+
 int mtd_name_to_number(const char *name);
 int create_socket(const char *name, int type, mode_t perm,
                   uid_t uid, gid_t gid);
@@ -24,4 +31,11 @@ void *read_file(const char *fn, unsigned *_sz);
 time_t gettime(void);
 unsigned int decode_uid(const char *s);
 
+int mkdir_recursive(const char *pathname, mode_t mode);
+void sanitize(char *p);
+void make_link(const char *oldpath, const char *newpath);
+void remove_link(const char *oldpath, const char *newpath);
+int wait_for_file(const char *filename, int timeout);
+void open_devnull_stdio(void);
+void get_hardware_name(char *hardware, unsigned int *revision);
 #endif

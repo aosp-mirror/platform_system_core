@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_PROPERTY_H
-#define _INIT_PROPERTY_H
+#ifndef _INIT_LOG_H_
+#define _INIT_LOG_H_
 
-extern void handle_property_set_fd(void);
-extern void property_init(void);
-extern void start_property_service(void);
-void get_property_workspace(int *fd, int *sz);
-extern const char* property_get(const char *name);
-extern int property_set(const char *name, const char *value);
-extern int properties_inited();
-int get_property_set_fd(void);
+void log_init(void);
+void log_set_level(int level);
+void log_close(void);
+void log_write(int level, const char *fmt, ...)
+    __attribute__ ((format(printf, 2, 3)));
 
-#endif	/* _INIT_PROPERTY_H */
+#define ERROR(x...)   log_write(3, "<3>init: " x)
+#define NOTICE(x...)  log_write(5, "<5>init: " x)
+#define INFO(x...)    log_write(6, "<6>init: " x)
+
+#define LOG_DEFAULT_LEVEL  3  /* messages <= this level are logged */
+#define LOG_UEVENTS        0  /* log uevent messages if 1. verbose */
+
+#endif

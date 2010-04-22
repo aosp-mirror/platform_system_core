@@ -44,10 +44,12 @@
 #include "property_service.h"
 #include "init.h"
 #include "util.h"
+#include "log.h"
 
 #define PERSISTENT_PROPERTY_DIR  "/data/property"
 
 static int persistent_properties_loaded = 0;
+static int property_area_inited = 0;
 
 static int property_set_fd = -1;
 
@@ -163,7 +165,7 @@ static int init_property_area(void)
 
         /* plug into the lib property services */
     __system_property_area__ = pa;
-
+    property_area_inited = 1;
     return 0;
 }
 
@@ -494,6 +496,11 @@ void property_init(void)
 {
     init_property_area();
     load_properties_from_file(PROP_PATH_RAMDISK_DEFAULT);
+}
+
+int properties_inited(void)
+{
+    return property_area_inited;
 }
 
 void start_property_service(void)

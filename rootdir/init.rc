@@ -1,3 +1,5 @@
+on early-init
+    start ueventd
 
 on init
 
@@ -258,6 +260,9 @@ on boot
 ##
 service console /system/bin/sh
     console
+
+service ueventd /sbin/ueventd
+    critical
 
 # adbd is controlled by the persist.service.adb.enable system property
 service adbd /sbin/adbd
