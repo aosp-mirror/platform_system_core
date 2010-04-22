@@ -492,6 +492,7 @@ void execute_one_command(void)
 
     if (!cur_action || !cur_command || is_last_command(cur_action, cur_command)) {
         cur_action = action_remove_queue_head();
+        cur_command = NULL;
         if (!cur_action)
             return;
         INFO("processing action %p (%s)\n", cur_action, cur_action->name);
@@ -762,7 +763,7 @@ int main(int argc, char **argv)
                 timeout = 0;
         }
 
-        if (!action_queue_empty() || cur_command)
+        if (!action_queue_empty() || cur_action)
             timeout = 0;
 
 #if BOOTCHART
