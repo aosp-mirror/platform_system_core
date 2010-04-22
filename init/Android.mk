@@ -36,10 +36,10 @@ include $(BUILD_EXECUTABLE)
 SYMLINKS := $(TARGET_ROOT_OUT)/sbin/ueventd
 $(SYMLINKS): INIT_BINARY := $(LOCAL_MODULE)
 $(SYMLINKS): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk
-	@echo "Symlink: $@ -> /$(INIT_BINARY)"
+	@echo "Symlink: $@ -> ../$(INIT_BINARY)"
 	@mkdir -p $(dir $@)
 	@rm -rf $@
-	$(hide) ln -sf /$(INIT_BINARY) $@
+	$(hide) ln -sf ../$(INIT_BINARY) $@
 
 ALL_DEFAULT_INSTALLED_MODULES += $(SYMLINKS)
 
