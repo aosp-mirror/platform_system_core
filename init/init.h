@@ -17,46 +17,11 @@
 #ifndef _INIT_INIT_H
 #define _INIT_INIT_H
 
+#include "list.h"
+
+#include <sys/stat.h>
+
 void handle_control_message(const char *msg, const char *arg);
-
-void log_init(void);
-void log_set_level(int level);
-void log_close(void);
-void log_write(int level, const char *fmt, ...)
-    __attribute__ ((format(printf, 2, 3)));
-
-#define ERROR(x...)   log_write(3, "<3>init: " x)
-#define NOTICE(x...)  log_write(5, "<5>init: " x)
-#define INFO(x...)    log_write(6, "<6>init: " x)
-
-#define LOG_DEFAULT_LEVEL  3  /* messages <= this level are logged */
-#define LOG_UEVENTS        0  /* log uevent messages if 1. verbose */
-
-struct listnode
-{
-    struct listnode *next;
-    struct listnode *prev;
-};
-
-#define node_to_item(node, container, member) \
-    (container *) (((char*) (node)) - offsetof(container, member))
-
-#define list_declare(name) \
-    struct listnode name = { \
-        .next = &name, \
-        .prev = &name, \
-    }
-
-#define list_for_each(node, list) \
-    for (node = (list)->next; node != (list); node = node->next)
-
-void list_init(struct listnode *list);
-void list_add_tail(struct listnode *list, struct listnode *item);
-void list_remove(struct listnode *item);
-
-#define list_empty(list) ((list) == (list)->next)
-#define list_head(list) ((list)->next)
-#define list_tail(list) ((list)->prev)
 
 struct command
 {
@@ -107,7 +72,7 @@ struct svcenvinfo {
 
 #define NR_SVC_SUPP_GIDS 12    /* twelve supplementary groups */
 
-#define SVC_MAXARGS 64
+#define COMMAND_RETRY_TIMEOUT 5
 
 struct service {
         /* list of all services */
@@ -144,8 +109,6 @@ struct service {
     /* "MUST BE AT THE END OF THE STRUCT" */
     char *args[1];
 }; /*     ^-------'args' MUST be at the end of this struct! */
-
-int parse_config_file(const char *fn);
 
 void notify_service_state(const char *name, const char *state);
 

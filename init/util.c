@@ -33,7 +33,9 @@
 
 #include <private/android_filesystem_config.h>
 
-#include "init.h"
+#include "log.h"
+#include "list.h"
+#include "util.h"
 
 static int log_fd = -1;
 /* Inital log level before init.rc is parsed and this this is reset. */
@@ -298,4 +300,158 @@ time_t gettime(void)
     }
 
     return ts.tv_sec;
+}
+
+int mkdir_recursive(const char *pathname, mode_t mode)
+{
+    char buf[128];
+    const char *slash;
+    const char *p = pathname;
+    int width;
+    int ret;
+    struct stat info;
+
+    while ((slash = strchr(p, '/')) != NULL) {
+        width = slash - pathname;
+        p = slash + 1;
+        if (width < 0)
+            break;
+        if (width == 0)
+            continue;
+        if ((unsigned int)width > sizeof(buf) - 1) {
+            ERROR("path too long for mkdir_recursive\n");
+            return -1;
+        }
+        memcpy(buf, pathname, width);
+        buf[width] = 0;
+        if (stat(buf, &info) != 0) {
+            ret = mkdir(buf, mode);
+            if (ret && errno != EEXIST)
+                return ret;
+        }
+    }
+    ret = mkdir(pathname, mode);
+    if (ret && errno != EEXIST)
+        return ret;
+    return 0;
+}
+
+void sanitize(char *s)
+{
+    if (!s)
+        return;
+    while (isalnum(*s))
+        s++;
+    *s = 0;
+}
+void make_link(const char *oldpath, const char *newpath)
+{
+    int ret;
+    char buf[256];
+    char *slash;
+    int width;
+
+    slash = strrchr(newpath, '/');
+    if (!slash)
+        return;
+    width = slash - newpath;
+    if (width <= 0 || width > (int)sizeof(buf) - 1)
+        return;
+    memcpy(buf, newpath, width);
+    buf[width] = 0;
+    ret = mkdir_recursive(buf, 0755);
+    if (ret)
+        ERROR("Failed to create directory %s: %s (%d)\n", buf, strerror(errno), errno);
+
+    ret = symlink(oldpath, newpath);
+    if (ret && errno != EEXIST)
+        ERROR("Failed to symlink %s to %s: %s (%d)\n", oldpath, newpath, strerror(errno), errno);
+}
+
+void remove_link(const char *oldpath, const char *newpath)
+{
+    char path[256];
+    ssize_t ret;
+    ret = readlink(newpath, path, sizeof(path) - 1);
+    if (ret <= 0)
+        return;
+    path[ret] = 0;
+    if (!strcmp(path, oldpath))
+        unlink(newpath);
+}
+
+int wait_for_file(const char *filename, int timeout)
+{
+    struct stat info;
+    time_t timeout_time = gettime() + timeout;
+    int ret = -1;
+
+    while (gettime() < timeout_time && ((ret = stat(filename, &info)) < 0))
+        usleep(10000);
+
+    return ret;
+}
+
+void open_devnull_stdio(void)
+{
+    int fd;
+    static const char *name = "/dev/__null__";
+    if (mknod(name, S_IFCHR | 0600, (1 << 8) | 3) == 0) {
+        fd = open(name, O_RDWR);
+        unlink(name);
+        if (fd >= 0) {
+            dup2(fd, 0);
+            dup2(fd, 1);
+            dup2(fd, 2);
+            if (fd > 2) {
+                close(fd);
+            }
+            return;
+        }
+    }
+
+    exit(1);
+}
+
+void get_hardware_name(char *hardware, unsigned int *revision)
+{
+    char data[1024];
+    int fd, n;
+    char *x, *hw, *rev;
+
+    /* Hardware string was provided on kernel command line */
+    if (hardware[0])
+        return;
+
+    fd = open("/proc/cpuinfo", O_RDONLY);
+    if (fd < 0) return;
+
+    n = read(fd, data, 1023);
+    close(fd);
+    if (n < 0) return;
+
+    data[n] = 0;
+    hw = strstr(data, "\nHardware");
+    rev = strstr(data, "\nRevision");
+
+    if (hw) {
+        x = strstr(hw, ": ");
+        if (x) {
+            x += 2;
+            n = 0;
+            while (*x && !isspace(*x)) {
+                hardware[n++] = tolower(*x);
+                x++;
+                if (n == 31) break;
+            }
+            hardware[n] = 0;
+        }
+    }
+
+    if (rev) {
+        x = strstr(rev, ": ");
+        if (x) {
+            *revision = strtoul(x + 2, 0, 16);
+        }
+    }
 }

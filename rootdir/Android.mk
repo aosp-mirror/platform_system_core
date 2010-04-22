@@ -40,6 +40,12 @@ ALL_PREBUILT += $(file)
 $(INSTALLED_RAMDISK_TARGET): $(file)
 endif
 
+file := $(TARGET_ROOT_OUT)/ueventd.rc
+$(file) : $(LOCAL_PATH)/ueventd.rc | $(ACP)
+	$(transform-prebuilt-to-target)
+ALL_PREBUILT += $(file)
+$(INSTALLED_RAMDISK_TARGET): $(file)
+
 # Just like /system/etc/init.goldfish.sh, the /init.godlfish.rc is here
 # to allow -user builds to properly run the dex pre-optimization pass in
 # the emulator.
@@ -47,6 +53,13 @@ file := $(TARGET_ROOT_OUT)/init.goldfish.rc
 $(file) : $(LOCAL_PATH)/etc/init.goldfish.rc | $(ACP)
 	$(transform-prebuilt-to-target)
 ALL_PREBUILT += $(file)
+$(INSTALLED_RAMDISK_TARGET): $(file)
+
+file := $(TARGET_ROOT_OUT)/ueventd.goldfish.rc
+$(file) : $(LOCAL_PATH)/etc/ueventd.goldfish.rc | $(ACP)
+	$(transform-prebuilt-to-target)
+ALL_PREBUILT += $(file)
+$(INSTALLED_RAMDISK_TARGET): $(file)
 
 # create some directories (some are mount points)
 DIRS := $(addprefix $(TARGET_ROOT_OUT)/, \

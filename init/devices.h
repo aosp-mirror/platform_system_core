@@ -17,11 +17,11 @@
 #ifndef _INIT_DEVICES_H
 #define _INIT_DEVICES_H
 
+#include <sys/stat.h>
+
 extern void handle_device_fd();
 extern void device_init(void);
-extern void qemu_init(void);
-extern void qemu_cmdline(const char* name, const char *value);
-extern int add_devperms_partners(const char *name, mode_t perm, unsigned int uid,
-                                 unsigned int gid, unsigned short prefix);
+extern int add_dev_perms(const char *name, mode_t perm, unsigned int uid,
+                         unsigned int gid, unsigned short prefix);
 int get_device_fd();
 #endif	/* _INIT_DEVICES_H */
