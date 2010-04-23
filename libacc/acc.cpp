@@ -23,10 +23,7 @@
 
 #include <cutils/hashmap.h>
 
-#if defined(__i386__)
 #include <sys/mman.h>
-#endif
-
 
 #if defined(__arm__)
 #define DEFAULT_ARM_CODEGEN
@@ -230,7 +227,7 @@ class Compiler : public ErrorSink {
 
         void release() {
             if (pProgramBase != 0) {
-                free(pProgramBase);
+                munmap(pProgramBase, mSize);
                 pProgramBase = 0;
             }
         }
@@ -263,7 +260,9 @@ class Compiler : public ErrorSink {
         virtual void init(int size) {
             release();
             mSize = size;
-            pProgramBase = (char*) calloc(1, size);
+            pProgramBase = (char*) mmap(NULL, size, 
+                PROT_EXEC | PROT_READ | PROT_WRITE, 
+                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
             ind = pProgramBase;
         }
 
