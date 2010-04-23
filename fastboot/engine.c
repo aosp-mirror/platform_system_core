@@ -271,11 +271,11 @@ void fb_queue_notice(const char *notice)
     a->data = (void*) notice;
 }
 
-void fb_execute_queue(usb_handle *usb)
+int fb_execute_queue(usb_handle *usb)
 {
     Action *a;
     char resp[FB_RESPONSE_SZ+1];
-    int status;
+    int status = 0;
 
     a = action_list;
     resp[FB_RESPONSE_SZ] = 0;
@@ -307,5 +307,5 @@ void fb_execute_queue(usb_handle *usb)
     }
 
     fprintf(stderr,"finished. total time: %.3fs\n", (now() - start));
+    return status;
 }
-

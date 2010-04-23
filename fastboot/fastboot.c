@@ -550,11 +550,12 @@ int main(int argc, char **argv)
     void *data;
     unsigned sz;
     unsigned page_size = 2048;
+    int status;
 
     skip(1);
     if (argc == 0) {
         usage();
-        return 0;
+        return 1;
     }
 
     if (!strcmp(*argv, "devices")) {
@@ -686,6 +687,7 @@ int main(int argc, char **argv)
             argc = do_oem_command(argc, argv);
         } else {
             usage();
+	    return 1;
         }
     }
 
@@ -701,6 +703,6 @@ int main(int argc, char **argv)
 
     usb = open_device();
 
-    fb_execute_queue(usb);
-    return 0;
+    status = fb_execute_queue(usb);
+    return (status) ? 1 : 0;
 }
