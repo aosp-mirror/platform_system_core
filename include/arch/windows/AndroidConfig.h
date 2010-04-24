@@ -296,7 +296,6 @@
  */
 #ifdef USE_MINGW
 #define S_IRGRP 0
-#define sleep _sleep
 #endif
 
 /*
