@@ -41,9 +41,9 @@ static inline void fix_endians(apacket *p)
 #endif
 
 #if ADB_HOST
-/* we keep a list of opened transports, transport 0 is bound to 5555,
- * transport 1 to 5557, .. transport n to 5555 + n*2. the list is used
- * to detect when we're trying to connect twice to a given local transport
+/* we keep a list of opened transports. The atransport struct knows to which
+ * local transport it is connected. The list is used to detect when we're
+ * trying to connect twice to a given local transport.
  */
 #define  ADB_LOCAL_TRANSPORT_MAX  16
 
@@ -102,7 +102,11 @@ static int remote_write(apacket *p, atransport *t)
 }
 
 
-int  local_connect(int  port)
+int local_connect(int port) {
+    return local_connect_arbitrary_ports(port-1, port);
+}
+
+int local_connect_arbitrary_ports(int console_port, int adb_port)
 {
     char buf[64];
     int  fd = -1;
@@ -110,19 +114,19 @@ int  local_connect(int  port)
 #if ADB_HOST
     const char *host = getenv("ADBHOST");
     if (host) {
-        fd = socket_network_client(host, port, SOCK_STREAM);
+        fd = socket_network_client(host, adb_port, SOCK_STREAM);
     }
 #endif
     if (fd < 0) {
-        fd = socket_loopback_client(port, SOCK_STREAM);
+        fd = socket_loopback_client(adb_port, SOCK_STREAM);
     }
 
     if (fd >= 0) {
         D("client: connected on remote on fd %d\n", fd);
         close_on_exec(fd);
         disable_tcp_nagle(fd);
-        snprintf(buf, sizeof buf, "%s%d", LOCAL_CLIENT_PREFIX, port - 1);
-        register_socket_transport(fd, buf, port, 1);
+        snprintf(buf, sizeof buf, "%s%d", LOCAL_CLIENT_PREFIX, console_port);
+        register_socket_transport(fd, buf, adb_port, 1);
         return 0;
     }
     return -1;
@@ -227,7 +231,50 @@ static void remote_close(atransport *t)
     adb_close(t->fd);
 }
 
-int init_socket_transport(atransport *t, int s, int port, int local)
+
+#if ADB_HOST
+/* Only call this function if you already hold local_transports_lock. */
+atransport* find_emulator_transport_by_adb_port_locked(int adb_port)
+{
+    int i;
+    for (i = 0; i < ADB_LOCAL_TRANSPORT_MAX; i++) {
+        if (local_transports[i] && local_transports[i]->adb_port == adb_port) {
+            return local_transports[i];
+        }
+    }
+    return NULL;
+}
+
+atransport* find_emulator_transport_by_adb_port(int adb_port)
+{
+    adb_mutex_lock( &local_transports_lock );
+    atransport* result = find_emulator_transport_by_adb_port_locked(adb_port);
+    adb_mutex_unlock( &local_transports_lock );
+    return result;
+}
+
+/* Only call this function if you already hold local_transports_lock. */
+int get_available_local_transport_index_locked()
+{
+    int i;
+    for (i = 0; i < ADB_LOCAL_TRANSPORT_MAX; i++) {
+        if (local_transports[i] == NULL) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int get_available_local_transport_index()
+{
+    adb_mutex_lock( &local_transports_lock );
+    int result = get_available_local_transport_index_locked();
+    adb_mutex_unlock( &local_transports_lock );
+    return result;
+}
+#endif
+
+int init_socket_transport(atransport *t, int s, int adb_port, int local)
 {
     int  fail = 0;
 
@@ -239,26 +286,30 @@ int init_socket_transport(atransport *t, int s, int port, int local)
     t->sync_token = 1;
     t->connection_state = CS_OFFLINE;
     t->type = kTransportLocal;
+    t->adb_port = 0;
 
 #if ADB_HOST
     if (HOST && local) {
         adb_mutex_lock( &local_transports_lock );
         {
-            int  index = (port - DEFAULT_ADB_LOCAL_TRANSPORT_PORT)/2;
-
-            if (!(port & 1) || index < 0 || index >= ADB_LOCAL_TRANSPORT_MAX) {
-                D("bad local transport port number: %d\n", port);
-                fail = -1;
-            }
-            else if (local_transports[index] != NULL) {
+            t->adb_port = adb_port;
+            atransport* existing_transport =
+                    find_emulator_transport_by_adb_port_locked(adb_port);
+            int index = get_available_local_transport_index_locked();
+            if (existing_transport != NULL) {
                 D("local transport for port %d already registered (%p)?\n",
-                port, local_transports[index]);
+                adb_port, existing_transport);
                 fail = -1;
-            }
-            else
+            } else if (index < 0) {
+                // Too many emulators.
+                D("cannot register more emulators. Maximum is %d\n",
+                        ADB_LOCAL_TRANSPORT_MAX);
+                fail = -1;
+            } else {
                 local_transports[index] = t;
-        }
-        adb_mutex_unlock( &local_transports_lock );
+            }
+       }
+       adb_mutex_unlock( &local_transports_lock );
     }
 #endif
     return fail;
