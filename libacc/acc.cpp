@@ -25,6 +25,10 @@
 
 #include <sys/mman.h>
 
+#if defined(MAP_ANON) && !defined(MAP_ANONYMOUS)
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+
 #if defined(__arm__)
 #define DEFAULT_ARM_CODEGEN
 #define PROVIDE_ARM_CODEGEN
