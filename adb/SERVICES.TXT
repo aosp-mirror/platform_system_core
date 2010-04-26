@@ -74,7 +74,7 @@ host-usb:<request>
 
 host-local:<request>
     A variant of host-serial used to target the single emulator instance
-    running on the host. This will fail if therre is none or more than one.
+    running on the host. This will fail if there is none or more than one.
 
 host:<request>
     When asking for information related to a device, 'host:' can also be
@@ -146,7 +146,7 @@ remount:
 dev:<path>
     Opens a device file and connects the client directly to it for
     read/write purposes. Useful for debugging, but may require special
-    priviledges and thus may not run on all devices. <path> is a full
+    privileges and thus may not run on all devices. <path> is a full
     path from the root of the filesystem.
 
 tcp:<port>
@@ -173,7 +173,7 @@ log:<name>
 
 framebuffer:
     This service is used to send snapshots of the framebuffer to a client.
-    It requires sufficient priviledges but works as follow:
+    It requires sufficient privileges but works as follow:
 
       After the OKAY, the service sends 16-byte binary structure
       containing the following fields (little-endian format):
@@ -190,14 +190,14 @@ framebuffer:
       one byte through the channel, which will trigger the service
       to send it 'size' bytes of framebuffer data.
 
-      If the adbd daemon doesn't have sufficient priviledges to open
+      If the adbd daemon doesn't have sufficient privileges to open
       the framebuffer device, the connection is simply closed immediately.
 
 dns:<server-name>
     This service is an exception because it only runs within the ADB server.
     It is used to implement USB networking, i.e. to provide a network connection
     to the device through the host machine (note: this is the exact opposite of
-    network thetering).
+    network tethering).
 
     It is used to perform a gethostbyname(<address>) on the host and return
     the corresponding IP address as a 4-byte string.
@@ -209,7 +209,7 @@ recover:<size>
 
        - creating a file named /tmp/update
        - reading 'size' bytes from the client and writing them to /tmp/update
-       - when everything is read succesfully, create a file named /tmp/update.start
+       - when everything is read successfully, create a file named /tmp/update.start
 
     This service can only work when the device is in recovery mode. Otherwise,
     the /tmp directory doesn't exist and the connection will be closed immediately.

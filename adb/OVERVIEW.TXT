@@ -35,7 +35,7 @@ As a whole, everything works through the following components:
     (through USB for devices, through TCP for emulators) and provide a
     few services for clients that run on the host.
 
-    The ADB server considers that a device is ONLINE when it has succesfully
+    The ADB server considers that a device is ONLINE when it has successfully
     connected to the adbd program within it. Otherwise, the device is OFFLINE,
     meaning that the ADB server detected a new device/emulator, but could not
     connect to the adbd daemon.
