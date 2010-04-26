@@ -183,6 +183,7 @@ struct atransport
         /* used to identify transports for clients */
     char *serial;
     char *product;
+    int adb_port; // Use for emulators (local transport)
 
         /* a list of adisconnect callbacks called when the transport is kicked */
     int          kicked;
@@ -262,6 +263,9 @@ void   run_transport_disconnects( atransport*  t );
 void   kick_transport( atransport*  t );
 
 /* initialize a transport object's func pointers and state */
+#if ADB_HOST
+int get_available_local_transport_index();
+#endif
 int  init_socket_transport(atransport *t, int s, int port, int local);
 void init_usb_transport(atransport *t, usb_handle *usb, int state);
 
@@ -280,6 +284,9 @@ void register_usb_transport(usb_handle *h, const char *serial, unsigned writeabl
 void unregister_usb_transport(usb_handle *usb);
 
 atransport *find_transport(const char *serial);
+#if ADB_HOST
+atransport* find_emulator_transport_by_adb_port(int adb_port);
+#endif
 
 int service_to_fd(const char *name);
 #if ADB_HOST
@@ -368,6 +375,7 @@ typedef enum {
 
 void local_init(int port);
 int  local_connect(int  port);
+int  local_connect_arbitrary_ports(int console_port, int adb_port);
 
 /* usb host/client interface */
 void usb_init();
