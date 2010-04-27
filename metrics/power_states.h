@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// A table of network states, to be included when building tabular things.
+// A table of power states, to be included when building tabular things.
 //
 // This file is used to construct two things: an enumerated type in
 // metrics_daemon.h, and a table of structures with state names in
@@ -22,7 +22,7 @@
 #define STATE(name, capname)
 #endif
 
-STATE(offline, Offline)
-STATE(online, Online)
+STATE(on, On)
+STATE(mem, Mem)
 
 #undef STATE

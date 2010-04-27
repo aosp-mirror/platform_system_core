@@ -5,20 +5,41 @@
 #include "metrics_daemon.h"
 #include "metrics_library.h"
 
-#include <glib-object.h>
-
-extern "C" {
-#include "marshal_void__string_boxed.h"
-}
+#include <dbus/dbus-glib-lowlevel.h>
 
 #include <base/logging.h>
 
-#define SAFE_MESSAGE(e) ((e && e->message) ? e->message : "unknown error")
+#define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
+#define DBUS_IFACE_CONNMAN_MANAGER "org.moblin.connman.Manager"
+#define DBUS_IFACE_POWER_MANAGER "org.chromium.Power.Manager"
 
-MetricsDaemon::NetworkState
+// static
+const char*
+MetricsDaemon::dbus_matches_[] = {
+  "type='signal',"
+  "sender='org.moblin.connman',"
+  "interface='" DBUS_IFACE_CONNMAN_MANAGER "',"
+  "path='/',"
+  "member='StateChanged'",
+
+  "type='signal',"
+  "interface='" DBUS_IFACE_POWER_MANAGER "',"
+  "path='/',"
+  "member='PowerStateChanged'",
+};
+
+// static
+const char *
 MetricsDaemon::network_states_[MetricsDaemon::kNumberNetworkStates] = {
-#define STATE(name, capname) { #name, "Network.Connman" # capname },
+#define STATE(name, capname) #name,
 #include "network_states.h"
+};
+
+// static
+const char *
+MetricsDaemon::power_states_[MetricsDaemon::kNumberPowerStates] = {
+#define STATE(name, capname) #name,
+#include "power_states.h"
 };
 
 void MetricsDaemon::Run(bool run_as_daemon, bool testing) {
@@ -30,115 +51,139 @@ void MetricsDaemon::Run(bool run_as_daemon, bool testing) {
 
 void MetricsDaemon::Init(bool testing) {
   testing_ = testing;
-  network_state_id_ = kUnknownNetworkStateId;
+  network_state_ = kUnknownNetworkState;
+  network_state_changed_ = 0;
+  power_state_ = kUnknownPowerState;
 
-  ::g_thread_init(NULL);
-  ::g_type_init();
-  ::dbus_g_thread_init();
+  g_thread_init(NULL);
+  g_type_init();
+  dbus_g_thread_init();
 
-  ::GError* error = NULL;
-  ::DBusGConnection* dbc = ::dbus_g_bus_get(DBUS_BUS_SYSTEM, &error);
-  // Note that LOG(FATAL) terminates the process; otherwise we'd have to worry
-  // about leaking |error|.
-  LOG_IF(FATAL, dbc == NULL) <<
-    "cannot connect to dbus: " << SAFE_MESSAGE(error);
+  DBusError error;
+  dbus_error_init(&error);
 
-  ::DBusGProxy* net_proxy = ::dbus_g_proxy_new_for_name(
-      dbc, "org.moblin.connman", "/", "org.moblin.connman.Metrics");
-  LOG_IF(FATAL, net_proxy == NULL) << "no dbus proxy for network";
+  DBusConnection *connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
+  LOG_IF(FATAL, dbus_error_is_set(&error)) <<
+      "No D-Bus connection: " << SAFE_MESSAGE(error);
 
-#if 0
-  // Unclear how soon one can call dbus_g_type_get_map().  Doing it before the
-  // call to dbus_g_bus_get() results in a (non-fatal) assertion failure.
-  // GetProperties returns a hash table.
-  hashtable_gtype = ::dbus_g_type_get_map("GHashTable", G_TYPE_STRING,
-                                          G_TYPE_VALUE);
-#endif
+  dbus_connection_setup_with_g_main(connection, NULL);
 
-  dbus_g_object_register_marshaller(marshal_VOID__STRING_BOXED,
-                                    G_TYPE_NONE,
-                                    G_TYPE_STRING,
-                                    G_TYPE_VALUE,
-                                    G_TYPE_INVALID);
-  ::dbus_g_proxy_add_signal(net_proxy, "ConnectionStateChanged",
-                            G_TYPE_STRING, G_TYPE_VALUE, G_TYPE_INVALID);
-  ::dbus_g_proxy_connect_signal(net_proxy, "ConnectionStateChanged",
-                                G_CALLBACK(&StaticNetSignalHandler),
-                                this, NULL);
+  // Registers D-Bus matches for the signals we would like to catch.
+  for (unsigned int m = 0; m < sizeof(dbus_matches_) / sizeof(char *); m++) {
+    const char* match = dbus_matches_[m];
+    LOG(INFO) << "adding dbus match: " << match;
+    dbus_bus_add_match(connection, match, &error);
+    LOG_IF(FATAL, dbus_error_is_set(&error)) <<
+        "unable to add a match: " << SAFE_MESSAGE(error);
+  }
+
+  // Adds the D-Bus filter routine to be called back whenever one of
+  // the registered D-Bus matches is successful. The daemon is not
+  // activated for D-Bus messages that don't match.
+  CHECK(dbus_connection_add_filter(connection, MessageFilter, this, NULL));
 }
 
 void MetricsDaemon::Loop() {
-  ::GMainLoop* loop = ::g_main_loop_new(NULL, false);
-  ::g_main_loop_run(loop);
+  GMainLoop* loop = g_main_loop_new(NULL, false);
+  g_main_loop_run(loop);
 }
 
-void MetricsDaemon::StaticNetSignalHandler(::DBusGProxy* proxy,
-                                           const char* property,
-                                           const ::GValue* value,
-                                           void *data) {
-  (static_cast<MetricsDaemon*>(data))->NetSignalHandler(proxy, property, value);
+// static
+DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
+                                               DBusMessage* message,
+                                               void* user_data) {
+  LOG(INFO) << "message filter";
+
+  int message_type = dbus_message_get_type(message);
+  if (message_type != DBUS_MESSAGE_TYPE_SIGNAL) {
+    LOG(WARNING) << "unexpected message type " << message_type;
+    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+  }
+
+  // Signal messages always have interfaces.
+  const char* interface = dbus_message_get_interface(message);
+  CHECK(interface != NULL);
+
+  MetricsDaemon* daemon = static_cast<MetricsDaemon*>(user_data);
+
+  DBusMessageIter iter;
+  dbus_message_iter_init(message, &iter);
+  if (strcmp(interface, DBUS_IFACE_CONNMAN_MANAGER) == 0) {
+    CHECK(strcmp(dbus_message_get_member(message), "StateChanged") == 0);
+
+    char *state_name;
+    dbus_message_iter_get_basic(&iter, &state_name);
+    daemon->NetStateChanged(state_name);
+  } else if (strcmp(interface, DBUS_IFACE_POWER_MANAGER) == 0) {
+    CHECK(strcmp(dbus_message_get_member(message), "PowerStateChanged") == 0);
+
+    char *state_name;
+    dbus_message_iter_get_basic(&iter, &state_name);
+    daemon->PowerStateChanged(state_name);
+  } else {
+    LOG(WARNING) << "unexpected interface: " << interface;
+    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+  }
+
+  return DBUS_HANDLER_RESULT_HANDLED;
 }
 
-void MetricsDaemon::NetSignalHandler(::DBusGProxy* proxy,
-                                     const char* property,
-                                     const ::GValue* value) {
-  if (strcmp("ConnectionState", property) != 0) {
-    return;
+void MetricsDaemon::NetStateChanged(const char* state_name) {
+  LOG(INFO) << "network state: " << state_name;
+
+  time_t now = time(NULL);
+  NetworkState state = LookupNetworkState(state_name);
+
+  // Logs the time in seconds between the network going online to
+  // going offline in order to measure the mean time to network
+  // dropping. Going offline as part of suspend-to-RAM is not logged
+  // as network drop -- the assumption is that the message for
+  // suspend-to-RAM comes before the network offline message which
+  // seems to and should be the case.
+  if (state == kNetworkStateOffline &&
+      network_state_ == kNetworkStateOnline &&
+      power_state_ != kPowerStateMem) {
+    int online_time = static_cast<int>(now - network_state_changed_);
+    PublishMetric("Network.TimeToDrop", online_time,
+                  1, 8 /* hours */ * 60 * 60, 50);
   }
 
-  const char* newstate = static_cast<const char*>(g_value_get_string(value));
-  LogNetworkStateChange(newstate);
+  network_state_ = state;
+  network_state_changed_ = now;
 }
 
-void MetricsDaemon::LogNetworkStateChange(const char* newstate) {
-  NetworkStateId new_id = GetNetworkStateId(newstate);
-  if (new_id == kUnknownNetworkStateId) {
-    LOG(WARNING) << "unknown network connection state " << newstate;
-    return;
-  }
-  NetworkStateId old_id = network_state_id_;
-  if (new_id == old_id) {  // valid new state and no change
-    return;
-  }
-  struct timeval now;
-  if (gettimeofday(&now, NULL) != 0) {
-    PLOG(WARNING) << "gettimeofday";
-  }
-  if (old_id != kUnknownNetworkStateId) {
-    struct timeval diff;
-    timersub(&now, &network_state_start_, &diff);
-    int diff_ms = diff.tv_usec / 1000 + diff.tv_sec * 1000;
-    // Saturates rather than overflowing.  We expect this to be statistically
-    // insignificant, since INT_MAX milliseconds is 24.8 days.
-    if (diff.tv_sec >= INT_MAX / 1000) {
-      diff_ms = INT_MAX;
-    }
-    PublishMetric(network_states_[old_id].stat_name,
-                  diff_ms,
-                  1,
-                  8 * 60 * 60 * 1000,  // 8 hours in milliseconds
-                  100);
-  }
-  network_state_id_ = new_id;
-  network_state_start_ = now;
-}
-
-MetricsDaemon::NetworkStateId
-MetricsDaemon::GetNetworkStateId(const char* state_name) {
+MetricsDaemon::NetworkState
+MetricsDaemon::LookupNetworkState(const char* state_name) {
   for (int i = 0; i < kNumberNetworkStates; i++) {
-    if (strcmp(state_name, network_states_[i].name) == 0) {
-      return static_cast<NetworkStateId>(i);
+    if (strcmp(state_name, network_states_[i]) == 0) {
+      return static_cast<NetworkState>(i);
     }
   }
-  return static_cast<NetworkStateId>(-1);
+  LOG(WARNING) << "unknown network connection state: " << state_name;
+  return kUnknownNetworkState;
+}
+
+void MetricsDaemon::PowerStateChanged(const char* state_name) {
+  LOG(INFO) << "power state: " << state_name;
+  power_state_ = LookupPowerState(state_name);
+}
+
+MetricsDaemon::PowerState
+MetricsDaemon::LookupPowerState(const char* state_name) {
+  for (int i = 0; i < kNumberPowerStates; i++) {
+    if (strcmp(state_name, power_states_[i]) == 0) {
+      return static_cast<PowerState>(i);
+    }
+  }
+  LOG(WARNING) << "unknown power state: " << state_name;
+  return kUnknownPowerState;
 }
 
 void MetricsDaemon::PublishMetric(const char* name, int sample,
                                   int min, int max, int nbuckets) {
-  if (testing_) {
-    LOG(INFO) << "received metric: " << name << " " << sample <<
-        " " << min << " " << max << " " << nbuckets;
-  } else {
+  LOG(INFO) << "received metric: " << name << " " << sample <<
+      " " << min << " " << max << " " << nbuckets;
+  if (!testing_) {
     MetricsLibrary::SendToChrome(name, sample, min, max, nbuckets);
   }
 }

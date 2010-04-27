@@ -5,40 +5,40 @@
 #ifndef METRICS_DAEMON_H_
 #define METRICS_DAEMON_H_
 
-#include <dbus/dbus-glib.h>
-#include <sys/time.h>
+#include <dbus/dbus.h>
 #include <time.h>
 
 class MetricsDaemon {
 
  public:
   MetricsDaemon()
-      : network_state_id_(kUnknownNetworkStateId) {
-  }
+      : testing_(false),
+        network_state_(kUnknownNetworkState),
+        network_state_changed_(0),
+        power_state_(kUnknownPowerState) {}
   ~MetricsDaemon() {}
 
-  // Does all the work.  If |run_as_daemon| is true, daemonize by forking.  If
-  // |testing| is true, log the stats instead of sending them to Chrome.
+  // Does all the work. If |run_as_daemon| is true, daemonizes by
+  // forking. If |testing| is true, logs the stats instead of sending
+  // them to Chrome.
   void Run(bool run_as_daemon, bool testing);
 
  private:
-  // Shared with Chrome for transport.
-  static const char* kMetricsFilePath;
-  static const int kMetricsMessageMaxLength = 4096;
-
-  // The network states.  See network_states.h.
-  typedef enum {
-    // Initial/unknown network state id.
-    kUnknownNetworkStateId = -1,
+  // The network states (see network_states.h).
+  enum NetworkState {
+    kUnknownNetworkState = -1, // Initial/unknown network state.
 #define STATE(name, capname) kNetworkState ## capname,
 #include "network_states.h"
     kNumberNetworkStates
-  } NetworkStateId;
+  };
 
-  typedef struct {
-    const char* name;
-    const char* stat_name;
-  } NetworkState;
+  // The power states (see power_states.h).
+  enum PowerState {
+    kUnknownPowerState = -1, // Initial/unknown power state.
+#define STATE(name, capname) kPowerState ## capname,
+#include "power_states.h"
+    kNumberPowerStates
+  };
 
   // Initializes.
   void Init(bool testing);
@@ -46,22 +46,22 @@ class MetricsDaemon {
   // Creates the event loop and enters it.
   void Loop();
 
-  // Static callback for network events on DBus.
-  static void StaticNetSignalHandler(::DBusGProxy* proxy, const char* property,
-                                     const ::GValue* value, void* data);
+  // D-Bus filter callback.
+  static DBusHandlerResult MessageFilter(DBusConnection* connection,
+                                         DBusMessage* message,
+                                         void* user_data);
 
-  // Callback for network events on DBus.
-  void NetSignalHandler(::DBusGProxy* proxy, const char* property,
-                        const ::GValue* value);
+  // Processes network state change.
+  void NetStateChanged(const char* state_name);
 
-  // This is called at each network state change.  The new state is identified
-  // by the string @newstate.  As a side effect, this method ships to Chrome
-  // (or prints to stdout when testing) the name and duration of the state
-  // that has ended.
-  void LogNetworkStateChange(const char* newstate);
+  // Given the state name, returns the state id.
+  NetworkState LookupNetworkState(const char* state_name);
 
-  // Given a string with the name of a state, returns the id for the state.
-  NetworkStateId GetNetworkStateId(const char* state_name);
+  // Processes power state change.
+  void PowerStateChanged(const char* state_name);
+
+  // Given the state name, returns the state id.
+  PowerState LookupPowerState(const char* state_name);
 
   // Sends a stat to Chrome for transport to UMA (or prints it for
   // testing). See MetricsLibrary::SendToChrome in metrics_library.h
@@ -69,20 +69,19 @@ class MetricsDaemon {
   void PublishMetric(const char* name, int sample,
                      int min, int max, int nbuckets);
 
-#if 0
-  // Fetches a name-value hash table from DBus.
-  bool GetProperties(::DBusGProxy* proxy, ::GHashTable** table);
+  // D-Bus message match strings.
+  static const char* dbus_matches_[];
 
-  // The type descriptor for a glib hash table.
-  GType hashtable_gtype;
-#endif
+  // Array of network states.
+  static const char* network_states_[kNumberNetworkStates];
 
-  // Array of network states of interest.
-  static NetworkState network_states_[kNumberNetworkStates];
+  // Array of power states.
+  static const char* power_states_[kNumberPowerStates];
 
-  bool testing_;                           // just testing
-  NetworkStateId network_state_id_;        // id of current state
-  struct timeval network_state_start_;     // when current state was entered
+  bool testing_;                  // just testing
+  NetworkState network_state_;    // current network state
+  time_t network_state_changed_;  // timestamp last net state change
+  PowerState power_state_;        // current power state
 };
 
 #endif  // METRICS_DAEMON_H_

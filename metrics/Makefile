@@ -8,7 +8,7 @@
 CCONFIG = $(shell $(PKG_CONFIG) --cflags dbus-1 glib-2.0 dbus-glib-1)
 LDCONFIG = $(shell $(PKG_CONFIG) --libs dbus-1 glib-2.0 gthread-2.0 dbus-glib-1)
 
-CFLAGS = -Wall -Werror -I/usr/include -fpic -O2 $(CCONFIG)
+CFLAGS = -Wall -Werror -I/usr/include -fPIC -O2 $(CCONFIG)
 CXXFLAGS = $(CFLAGS) -fno-exceptions
 
 CLIENT = metrics_client
@@ -22,11 +22,9 @@ CLIENT_OBJS = \
 LIB_OBJS = \
 	metrics_library.o
 DAEMON_OBJS = \
-	marshal_void__string_boxed.o \
 	metrics_daemon.o \
 	metrics_daemon_main.o
 TESTDAEMON_OBJS = \
-	marshal_void__string_boxed.o \
 	metrics_daemon.o \
 	metrics_daemon_unittest.o
 
@@ -56,26 +54,16 @@ $(SHAREDLIB): $(LIB_OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.c: %.list
-	glib-genmarshal --body --prefix=marshal $< > $@
-
-%.h: %.list
-	glib-genmarshal --header --prefix=marshal $< > $@
-
 # dependencies in addition to those defined by the rules
 
 metrics_daemon.o: \
-	marshal_void__string_boxed.h \
 	metrics_daemon.h \
-	network_states.h
+	network_states.h \
+	power_states.h
 metrics_daemon_unittest.o: \
-	marshal_void__string_boxed.h \
 	metrics_daemon.h \
-	network_states.h
-marshal_void__string_boxed.o: \
-	marshal_void__string_boxed.h
-
-.PRECIOUS: marshal_void__string_boxed.c  # keep around for debugging
+	network_states.h \
+	power_states.h
 
 install:
 	install $(CLIENT) $(DESTDIR)/usr/bin
@@ -87,5 +75,4 @@ install:
 	install omaha_tracker.sh $(DESTDIR)/usr/sbin
 
 clean:
-	rm -f $(CLIENT) $(DAEMON) $(LIB) $(SHAREDLIB) $(TESTDAEMON)
-	rm -f *.o marshal_void__string_boxed.[ch]
+	rm -f $(CLIENT) $(DAEMON) $(LIB) $(SHAREDLIB) $(TESTDAEMON) *.o
