@@ -132,7 +132,7 @@ int  local_connect(int  port)
 static void *client_socket_thread(void *x)
 {
 #if ADB_HOST
-    int  port  = ADB_LOCAL_TRANSPORT_PORT;
+    int  port  = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
     int  count = ADB_LOCAL_TRANSPORT_MAX;
 
     D("transport: client_socket_thread() starting\n");
@@ -244,7 +244,7 @@ int init_socket_transport(atransport *t, int s, int port, int local)
     if (HOST && local) {
         adb_mutex_lock( &local_transports_lock );
         {
-            int  index = (port - ADB_LOCAL_TRANSPORT_PORT)/2;
+            int  index = (port - DEFAULT_ADB_LOCAL_TRANSPORT_PORT)/2;
 
             if (!(port & 1) || index < 0 || index >= ADB_LOCAL_TRANSPORT_MAX) {
                 D("bad local transport port number: %d\n", port);
