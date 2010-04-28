@@ -237,8 +237,8 @@ void handle_packet(apacket *p, atransport *t);
 void send_packet(apacket *p, atransport *t);
 
 void get_my_path(char *s, size_t maxLen);
-int launch_server();
-int adb_main(int is_daemon);
+int launch_server(int server_port);
+int adb_main(int is_daemon, int server_port);
 
 
 /* transports are ref-counted
@@ -358,8 +358,8 @@ typedef enum {
 #define print_packet(tag,p) do {} while (0)
 #endif
 
-#define ADB_PORT 5037
-#define ADB_LOCAL_TRANSPORT_PORT 5555
+#define DEFAULT_ADB_PORT 5037
+#define DEFAULT_ADB_LOCAL_TRANSPORT_PORT 5555
 
 #define ADB_CLASS              0xff
 #define ADB_SUBCLASS           0x42
