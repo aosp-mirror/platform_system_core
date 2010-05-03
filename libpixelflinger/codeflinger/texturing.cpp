@@ -25,7 +25,9 @@
 
 #include "codeflinger/GGLAssembler.h"
 
+#ifdef __arm__
 #include <machine/cpu-features.h>
+#endif
 
 namespace android {
 
