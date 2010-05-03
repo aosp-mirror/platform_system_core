@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// A table of power states, to be included when building tabular things.
+// A table of screen-saver states, to be included when building tabular things.
 //
 // See network_states.h for details.
 
@@ -11,7 +11,7 @@
 #define STATE(name, capname)
 #endif
 
-STATE(on, On)
-STATE(mem, Mem)
+STATE(locked, Locked)
+STATE(unlocked, Unlocked)
 
 #undef STATE

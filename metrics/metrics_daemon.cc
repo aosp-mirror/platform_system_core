@@ -6,16 +6,39 @@
 #include "metrics_library.h"
 
 #include <dbus/dbus-glib-lowlevel.h>
+#include <sys/file.h>
 
+#include <base/eintr_wrapper.h>
 #include <base/logging.h>
 
 #define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
 #define DBUS_IFACE_CONNMAN_MANAGER "org.moblin.connman.Manager"
 #define DBUS_IFACE_POWER_MANAGER "org.chromium.Power.Manager"
+#define DBUS_IFACE_SCREENSAVER_MANAGER "org.chromium.ScreenSaver.Manager"
+#define DBUS_IFACE_SESSION_MANAGER "org.chromium.SessionManagerInterface"
+
+// File to aggregate daily usage before sending to UMA.
+// TODO(petkov): This file should probably live in a user-specific stateful
+// location, e.g., /home/chronos/user.
+static const char kDailyUseRecordFile[] = "/var/log/metrics/daily-usage";
+
+static const int kSecondsPerMinute = 60;
+static const int kMinutesPerHour = 60;
+static const int kHoursPerDay = 24;
+static const int kMinutesPerDay = kHoursPerDay * kMinutesPerHour;
+static const int kSecondsPerDay = kMinutesPerDay * kSecondsPerMinute;
+
+// The daily use monitor is scheduled to a 1-minute interval after
+// initial user activity and then it's exponentially backed off to
+// 10-minute intervals. Although not required, the back off is
+// implemented because the histogram buckets are spaced exponentially
+// anyway and to avoid too frequent metrics daemon process wake-ups
+// and file I/O.
+static const int kUseMonitorIntervalInit = 1 * kSecondsPerMinute;
+static const int kUseMonitorIntervalMax = 10 * kSecondsPerMinute;
 
 // static
-const char*
-MetricsDaemon::dbus_matches_[] = {
+const char* MetricsDaemon::kDBusMatches_[] = {
   "type='signal',"
   "sender='org.moblin.connman',"
   "interface='" DBUS_IFACE_CONNMAN_MANAGER "',"
@@ -26,20 +49,41 @@ MetricsDaemon::dbus_matches_[] = {
   "interface='" DBUS_IFACE_POWER_MANAGER "',"
   "path='/',"
   "member='PowerStateChanged'",
+
+  "type='signal',"
+  "interface='" DBUS_IFACE_SCREENSAVER_MANAGER "',"
+  "path='/',"
+  "member='LockStateChanged'",
+
+  "type='signal',"
+  "sender='org.chromium.SessionManager',"
+  "interface='" DBUS_IFACE_SESSION_MANAGER "',"
+  "path='/org/chromium/SessionManager',"
+  "member='SessionStateChanged'",
 };
 
 // static
-const char *
-MetricsDaemon::network_states_[MetricsDaemon::kNumberNetworkStates] = {
+const char* MetricsDaemon::kNetworkStates_[] = {
 #define STATE(name, capname) #name,
 #include "network_states.h"
 };
 
 // static
-const char *
-MetricsDaemon::power_states_[MetricsDaemon::kNumberPowerStates] = {
+const char* MetricsDaemon::kPowerStates_[] = {
 #define STATE(name, capname) #name,
 #include "power_states.h"
+};
+
+// static
+const char* MetricsDaemon::kScreenSaverStates_[] = {
+#define STATE(name, capname) #name,
+#include "screensaver_states.h"
+};
+
+// static
+const char* MetricsDaemon::kSessionStates_[] = {
+#define STATE(name, capname) #name,
+#include "session_states.h"
 };
 
 void MetricsDaemon::Run(bool run_as_daemon, bool testing) {
@@ -51,9 +95,6 @@ void MetricsDaemon::Run(bool run_as_daemon, bool testing) {
 
 void MetricsDaemon::Init(bool testing) {
   testing_ = testing;
-  network_state_ = kUnknownNetworkState;
-  network_state_changed_ = 0;
-  power_state_ = kUnknownPowerState;
 
   g_thread_init(NULL);
   g_type_init();
@@ -69,9 +110,9 @@ void MetricsDaemon::Init(bool testing) {
   dbus_connection_setup_with_g_main(connection, NULL);
 
   // Registers D-Bus matches for the signals we would like to catch.
-  for (unsigned int m = 0; m < sizeof(dbus_matches_) / sizeof(char *); m++) {
-    const char* match = dbus_matches_[m];
-    LOG(INFO) << "adding dbus match: " << match;
+  for (unsigned int m = 0; m < sizeof(kDBusMatches_) / sizeof(char *); m++) {
+    const char* match = kDBusMatches_[m];
+    DLOG(INFO) << "adding dbus match: " << match;
     dbus_bus_add_match(connection, match, &error);
     LOG_IF(FATAL, dbus_error_is_set(&error)) <<
         "unable to add a match: " << SAFE_MESSAGE(error);
@@ -92,11 +133,12 @@ void MetricsDaemon::Loop() {
 DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
                                                DBusMessage* message,
                                                void* user_data) {
-  LOG(INFO) << "message filter";
+  time_t now = time(NULL);
+  DLOG(INFO) << "message intercepted @ " << now;
 
   int message_type = dbus_message_get_type(message);
   if (message_type != DBUS_MESSAGE_TYPE_SIGNAL) {
-    LOG(WARNING) << "unexpected message type " << message_type;
+    DLOG(WARNING) << "unexpected message type " << message_type;
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
   }
 
@@ -109,29 +151,44 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
   DBusMessageIter iter;
   dbus_message_iter_init(message, &iter);
   if (strcmp(interface, DBUS_IFACE_CONNMAN_MANAGER) == 0) {
-    CHECK(strcmp(dbus_message_get_member(message), "StateChanged") == 0);
+    CHECK(strcmp(dbus_message_get_member(message),
+                 "StateChanged") == 0);
 
     char *state_name;
     dbus_message_iter_get_basic(&iter, &state_name);
-    daemon->NetStateChanged(state_name);
+    daemon->NetStateChanged(state_name, now);
   } else if (strcmp(interface, DBUS_IFACE_POWER_MANAGER) == 0) {
-    CHECK(strcmp(dbus_message_get_member(message), "PowerStateChanged") == 0);
+    CHECK(strcmp(dbus_message_get_member(message),
+                 "PowerStateChanged") == 0);
 
     char *state_name;
     dbus_message_iter_get_basic(&iter, &state_name);
-    daemon->PowerStateChanged(state_name);
+    daemon->PowerStateChanged(state_name, now);
+  } else if (strcmp(interface, DBUS_IFACE_SCREENSAVER_MANAGER) == 0) {
+    CHECK(strcmp(dbus_message_get_member(message),
+                 "LockStateChanged") == 0);
+
+    char *state_name;
+    dbus_message_iter_get_basic(&iter, &state_name);
+    daemon->ScreenSaverStateChanged(state_name, now);
+  } else if (strcmp(interface, DBUS_IFACE_SESSION_MANAGER) == 0) {
+    CHECK(strcmp(dbus_message_get_member(message),
+                 "SessionStateChanged") == 0);
+
+    char *state_name;
+    dbus_message_iter_get_basic(&iter, &state_name);
+    daemon->SessionStateChanged(state_name, now);
   } else {
-    LOG(WARNING) << "unexpected interface: " << interface;
+    DLOG(WARNING) << "unexpected interface: " << interface;
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
   }
 
   return DBUS_HANDLER_RESULT_HANDLED;
 }
 
-void MetricsDaemon::NetStateChanged(const char* state_name) {
-  LOG(INFO) << "network state: " << state_name;
+void MetricsDaemon::NetStateChanged(const char* state_name, time_t now) {
+  DLOG(INFO) << "network state: " << state_name;
 
-  time_t now = time(NULL);
   NetworkState state = LookupNetworkState(state_name);
 
   // Logs the time in seconds between the network going online to
@@ -143,46 +200,225 @@ void MetricsDaemon::NetStateChanged(const char* state_name) {
   if (state == kNetworkStateOffline &&
       network_state_ == kNetworkStateOnline &&
       power_state_ != kPowerStateMem) {
-    int online_time = static_cast<int>(now - network_state_changed_);
+    int online_time = static_cast<int>(now - network_state_last_);
     PublishMetric("Network.TimeToDrop", online_time,
                   1, 8 /* hours */ * 60 * 60, 50);
   }
 
   network_state_ = state;
-  network_state_changed_ = now;
+  network_state_last_ = now;
 }
 
 MetricsDaemon::NetworkState
 MetricsDaemon::LookupNetworkState(const char* state_name) {
   for (int i = 0; i < kNumberNetworkStates; i++) {
-    if (strcmp(state_name, network_states_[i]) == 0) {
+    if (strcmp(state_name, kNetworkStates_[i]) == 0) {
       return static_cast<NetworkState>(i);
     }
   }
-  LOG(WARNING) << "unknown network connection state: " << state_name;
+  DLOG(WARNING) << "unknown network connection state: " << state_name;
   return kUnknownNetworkState;
 }
 
-void MetricsDaemon::PowerStateChanged(const char* state_name) {
-  LOG(INFO) << "power state: " << state_name;
+void MetricsDaemon::PowerStateChanged(const char* state_name, time_t now) {
+  DLOG(INFO) << "power state: " << state_name;
   power_state_ = LookupPowerState(state_name);
+
+  if (power_state_ != kPowerStateOn)
+    SetUserActiveState(false, now);
 }
 
 MetricsDaemon::PowerState
 MetricsDaemon::LookupPowerState(const char* state_name) {
   for (int i = 0; i < kNumberPowerStates; i++) {
-    if (strcmp(state_name, power_states_[i]) == 0) {
+    if (strcmp(state_name, kPowerStates_[i]) == 0) {
       return static_cast<PowerState>(i);
     }
   }
-  LOG(WARNING) << "unknown power state: " << state_name;
+  DLOG(WARNING) << "unknown power state: " << state_name;
   return kUnknownPowerState;
+}
+
+void MetricsDaemon::ScreenSaverStateChanged(const char* state_name,
+                                            time_t now) {
+  DLOG(INFO) << "screen-saver state: " << state_name;
+  screensaver_state_ = LookupScreenSaverState(state_name);
+  SetUserActiveState(screensaver_state_ == kScreenSaverStateUnlocked, now);
+}
+
+MetricsDaemon::ScreenSaverState
+MetricsDaemon::LookupScreenSaverState(const char* state_name) {
+  for (int i = 0; i < kNumberScreenSaverStates; i++) {
+    if (strcmp(state_name, kScreenSaverStates_[i]) == 0) {
+      return static_cast<ScreenSaverState>(i);
+    }
+  }
+  DLOG(WARNING) << "unknown screen-saver state: " << state_name;
+  return kUnknownScreenSaverState;
+}
+
+void MetricsDaemon::SessionStateChanged(const char* state_name,
+                                        time_t now) {
+  DLOG(INFO) << "user session state: " << state_name;
+  session_state_ = LookupSessionState(state_name);
+  SetUserActiveState(session_state_ == kSessionStateStarted, now);
+}
+
+MetricsDaemon::SessionState
+MetricsDaemon::LookupSessionState(const char* state_name) {
+  for (int i = 0; i < kNumberSessionStates; i++) {
+    if (strcmp(state_name, kSessionStates_[i]) == 0) {
+      return static_cast<SessionState>(i);
+    }
+  }
+  DLOG(WARNING) << "unknown user session state: " << state_name;
+  return kUnknownSessionState;
+}
+
+void MetricsDaemon::SetUserActiveState(bool active, time_t now) {
+  DLOG(INFO) << "user: " << (active ? "active" : "inactive");
+
+  // Calculates the seconds of active use since the last update and
+  // the day since Epoch, and logs the usage data.
+  int seconds = user_active_ ? (now - user_active_last_) : 0;
+  int day = now / kSecondsPerDay;
+  LogDailyUseRecord(day, seconds);
+
+  // Schedules a use monitor on inactive->active transitions and
+  // unschedules it on active->inactive transitions.
+  if (!user_active_ && active)
+    ScheduleUseMonitor(kUseMonitorIntervalInit, /* backoff */ false);
+  else if (user_active_ && !active)
+    UnscheduleUseMonitor();
+
+  // Remembers the current active state and the time of the last
+  // activity update.
+  user_active_ = active;
+  user_active_last_ = now;
+}
+
+void MetricsDaemon::LogDailyUseRecord(int day, int seconds) {
+  // If there's no new active use today and the last record in the
+  // usage aggregation file is today, there's nothing to do.
+  if (seconds == 0 && day == daily_use_day_last_)
+    return;
+
+  DLOG(INFO) << "day: " << day << " usage: " << seconds << " seconds";
+  int fd = HANDLE_EINTR(open(kDailyUseRecordFile,
+                             O_RDWR | O_CREAT,
+                             S_IRUSR | S_IWUSR));
+  if (fd < 0) {
+    DLOG(WARNING) << "Unable to open the daily use file.";
+    return;
+  }
+
+  bool same_day = false;
+  UseRecord record;
+  if (HANDLE_EINTR(read(fd, &record, sizeof(record))) == sizeof(record)) {
+    if (record.day_ == day) {
+      // If there's an existing record for today, aggregates the usage
+      // time.
+      same_day = true;
+      record.seconds_ += seconds;
+    } else {
+      // If there's an existing record for a day in the past, rounds
+      // the usage to the nearest minute and sends it to UMA.
+      int minutes =
+          (record.seconds_ + kSecondsPerMinute / 2) / kSecondsPerMinute;
+      PublishMetric("Logging.DailyUseTime",
+                    minutes, 1, kMinutesPerDay, 50);
+
+      // Truncates the usage file to ensure that no duplicate usage is
+      // sent to UMA.
+      LOG_IF(WARNING, HANDLE_EINTR(ftruncate(fd, 0)) != 0);
+    }
+  }
+
+  // Updates the use record in the daily usage file if there's new
+  // usage today.
+  if (seconds > 0) {
+    if (!same_day) {
+      record.day_ = day;
+      record.seconds_ = seconds;
+    }
+    // else an already existing record for the same day will be
+    // overwritten with updated usage below.
+
+    LOG_IF(WARNING, HANDLE_EINTR(lseek(fd, 0, SEEK_SET)) != 0);
+    LOG_IF(WARNING,
+           HANDLE_EINTR(write(fd, &record, sizeof(record))) != sizeof(record));
+  }
+
+  HANDLE_EINTR(close(fd));
+
+  // Remembers the day of the use record in the usage aggregation file
+  // to reduce file I/O. This is not really useful now but potentially
+  // allows frequent LogDailyUseRecord calls with no unnecessary I/O
+  // overhead.
+  daily_use_day_last_ = day;
+}
+
+// static
+gboolean MetricsDaemon::UseMonitorStatic(gpointer data) {
+  return static_cast<MetricsDaemon*>(data)->UseMonitor() ? TRUE : FALSE;
+}
+
+bool MetricsDaemon::UseMonitor() {
+  SetUserActiveState(user_active_, time(NULL));
+
+  // If a new monitor source/instance is scheduled, returns false to
+  // tell GLib to destroy this monitor source/instance. Returns true
+  // otherwise to keep calling back this monitor.
+  return !ScheduleUseMonitor(usemon_interval_ * 2, /* backoff */ true);
+}
+
+bool MetricsDaemon::ScheduleUseMonitor(int interval, bool backoff)
+{
+  // Caps the interval -- the bigger the interval, the more active use
+  // time will be potentially dropped on system shutdown.
+  if (interval > kUseMonitorIntervalMax)
+    interval = kUseMonitorIntervalMax;
+
+  if (backoff) {
+    // Back-off mode is used by the use monitor to reschedule itself
+    // with exponential back-off in time. This mode doesn't create a
+    // new timeout source if the new interval is the same as the old
+    // one. Also, if a new timeout source is created, the old one is
+    // not destroyed explicitly here -- it will be destroyed by GLib
+    // when the monitor returns FALSE (see UseMonitor and
+    // UseMonitorStatic).
+    if (interval == usemon_interval_)
+      return false;
+  } else {
+    UnscheduleUseMonitor();
+  }
+
+  // Schedules a new use monitor for |interval| seconds from now.
+  DLOG(INFO) << "scheduling use monitor in " << interval << " seconds";
+  usemon_source_ = g_timeout_source_new_seconds(interval);
+  g_source_set_callback(usemon_source_, UseMonitorStatic, this,
+                        NULL); // No destroy notification.
+  g_source_attach(usemon_source_,
+                  NULL); // Default context.
+  usemon_interval_ = interval;
+  return true;
+}
+
+void MetricsDaemon::UnscheduleUseMonitor() {
+  // If there's a use monitor scheduled already, destroys it.
+  if (usemon_source_ == NULL)
+    return;
+
+  DLOG(INFO) << "destroying use monitor";
+  g_source_destroy(usemon_source_);
+  usemon_source_ = NULL;
+  usemon_interval_ = 0;
 }
 
 void MetricsDaemon::PublishMetric(const char* name, int sample,
                                   int min, int max, int nbuckets) {
-  LOG(INFO) << "received metric: " << name << " " << sample <<
-      " " << min << " " << max << " " << nbuckets;
+  DLOG(INFO) << "received metric: " << name << " " << sample << " "
+             << min << " " << max << " " << nbuckets;
   if (!testing_) {
     MetricsLibrary::SendToChrome(name, sample, min, max, nbuckets);
   }

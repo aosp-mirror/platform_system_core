@@ -8,8 +8,7 @@
 CCONFIG = $(shell $(PKG_CONFIG) --cflags dbus-1 glib-2.0 dbus-glib-1)
 LDCONFIG = $(shell $(PKG_CONFIG) --libs dbus-1 glib-2.0 gthread-2.0 dbus-glib-1)
 
-CFLAGS = -Wall -Werror -I/usr/include -fPIC -O2 $(CCONFIG)
-CXXFLAGS = $(CFLAGS) -fno-exceptions
+CXXFLAGS += -Wall -Werror -fPIC -fno-exceptions $(CCONFIG)
 
 CLIENT = metrics_client
 DAEMON = metrics_daemon
@@ -50,9 +49,6 @@ $(SHAREDLIB): $(LIB_OBJS)
 
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
 
 # dependencies in addition to those defined by the rules
 
