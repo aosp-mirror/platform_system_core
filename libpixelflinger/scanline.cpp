@@ -80,6 +80,7 @@ static void scanline_perspective(context_t* c);
 static void scanline_perspective_single(context_t* c);
 static void scanline_t32cb16blend(context_t* c);
 static void scanline_t32cb16(context_t* c);
+static void scanline_col32cb16blend(context_t* c);
 static void scanline_memcpy(context_t* c);
 static void scanline_memset8(context_t* c);
 static void scanline_memset16(context_t* c);
@@ -93,6 +94,8 @@ static void rect_memcpy(context_t* c, size_t yc);
 
 extern "C" void scanline_t32cb16blend_arm(uint16_t*, uint32_t*, size_t);
 extern "C" void scanline_t32cb16_arm(uint16_t *dst, uint32_t *src, size_t ct);
+extern "C" void scanline_col32cb16blend_neon(uint16_t *dst, uint32_t *col, size_t ct);
+extern "C" void scanline_col32cb16blend_arm(uint16_t *dst, uint32_t col, size_t ct);
 
 // ----------------------------------------------------------------------------
 
@@ -111,6 +114,9 @@ static shortcut_t shortcuts[] = {
     { { { 0x03010104, 0x00000077, { 0x00000A01, 0x00000000 } },
         { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
         "565 fb, 8888 tx", scanline_t32cb16, init_y_noop  },  
+    { { { 0x03515104, 0x00000077, { 0x00000000, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0xFFFFFFFF } } },
+        "565 fb, 8888 fixed color", scanline_col32cb16blend, init_y_packed  },  
     { { { 0x00000000, 0x00000000, { 0x00000000, 0x00000000 } },
         { 0x00000000, 0x00000007, { 0x00000000, 0x00000000 } } },
         "(nop) alpha test", scanline_noop, init_y_noop },
@@ -943,6 +949,8 @@ void init_y_packed(context_t* c, int32_t y0)
     uint8_t f = c->state.buffers.color.format;
     c->packed = ggl_pack_color(c, f,
             c->shade.r0, c->shade.g0, c->shade.b0, c->shade.a0);
+    c->packed8888 = ggl_pack_color(c, GGL_PIXEL_FORMAT_RGBA_8888,
+            c->shade.r0, c->shade.g0, c->shade.b0, c->shade.a0);
     c->iterators.y = y0;
     c->step_y = step_y__nop;
     // choose the rectangle blitter
@@ -1252,6 +1260,45 @@ finish:
 }
 
 // ----------------------------------------------------------------------------
+
+void scanline_col32cb16blend(context_t* c)
+{
+    int32_t x = c->iterators.xl;
+    size_t ct = c->iterators.xr - x;
+    int32_t y = c->iterators.y;
+    surface_t* cb = &(c->state.buffers.color);
+    union {
+        uint16_t* dst;
+        uint32_t* dst32;
+    };
+    dst = reinterpret_cast<uint16_t*>(cb->data) + (x+(cb->stride*y));
+
+#if ((ANDROID_CODEGEN >= ANDROID_CODEGEN_ASM) && defined(__arm__))
+#if defined(__ARM_HAVE_NEON) && BYTE_ORDER == LITTLE_ENDIAN
+    scanline_col32cb16blend_neon(dst, &(c->packed8888), ct);
+#else  // defined(__ARM_HAVE_NEON) && BYTE_ORDER == LITTLE_ENDIAN
+    scanline_col32cb16blend_arm(dst, GGL_RGBA_TO_HOST(c->packed8888), ct);
+#endif // defined(__ARM_HAVE_NEON) && BYTE_ORDER == LITTLE_ENDIAN
+#else
+    uint32_t s = GGL_RGBA_TO_HOST(c->packed8888);
+    int sA = (s>>24);
+    int f = 0x100 - (sA + (sA>>7));
+    while (ct--) {
+        uint16_t d = *dst;
+        int dR = (d>>11)&0x1f;
+        int dG = (d>>5)&0x3f;
+        int dB = (d)&0x1f;
+        int sR = (s >> (   3))&0x1F;
+        int sG = (s >> ( 8+2))&0x3F;
+        int sB = (s >> (16+3))&0x1F;
+        sR += (f*dR)>>8;
+        sG += (f*dG)>>8;
+        sB += (f*dB)>>8;
+        *dst++ = uint16_t((sR<<11)|(sG<<5)|sB);
+    }
+#endif
+
+}
 
 void scanline_t32cb16(context_t* c)
 {
