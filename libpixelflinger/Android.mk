@@ -40,7 +40,13 @@ PIXELFLINGER_SRC_FILES:= \
 	buffer.cpp
 
 ifeq ($(TARGET_ARCH),arm)
+ifeq ($(TARGET_ARCH_VERSION),armv7-a)
+PIXELFLINGER_SRC_FILES += col32cb16blend_neon.S
+PIXELFLINGER_SRC_FILES += col32cb16blend.S
+else
 PIXELFLINGER_SRC_FILES += t32cb16blend.S
+PIXELFLINGER_SRC_FILES += col32cb16blend.S
+endif
 endif
 
 ifeq ($(TARGET_ARCH),arm)

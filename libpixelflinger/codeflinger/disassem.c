@@ -80,6 +80,7 @@
  * f - 1st fp operand (register) (bits 12-14)
  * g - 2nd fp operand (register) (bits 16-18)
  * h - 3rd fp operand (register/immediate) (bits 0-4)
+ * j - xtb rotate literal (bits 10-11)
  * b - branch address
  * t - thumb branch address (bits 24, 0-23)
  * k - breakpoint comment (bits 0-3, 8-19)
@@ -122,6 +123,7 @@ static const struct arm32_insn arm32_i[] = {
     { 0x0fe000f0, 0x00c00090, "smull",	"Sdnms" },
     { 0x0fe000f0, 0x00a00090, "umlal",	"Sdnms" },
     { 0x0fe000f0, 0x00e00090, "smlal",	"Sdnms" },
+    { 0x0fff03f0, 0x06cf0070, "uxtb16", "dmj" },
     { 0x0d700000, 0x04200000, "strt",	"daW" },
     { 0x0d700000, 0x04300000, "ldrt",	"daW" },
     { 0x0d700000, 0x04600000, "strbt",	"daW" },
@@ -276,7 +278,7 @@ static char const insn_fpaconstants[][8] = {
 
 #define insn_condition(x)	arm32_insn_conditions[(x >> 28) & 0x0f]
 #define insn_blktrans(x)	insn_block_transfers[(x >> 23) & 3]
-#define insn_stkblktrans(x)	insn_stack_block_transfers[(x >> 23) & 3]
+#define insn_stkblktrans(x)	insn_stack_block_transfers[(3*((x >> 20)&1))^((x >> 23)&3)]
 #define op2_shift(x)		op_shifts[(x >> 5) & 3]
 #define insn_fparnd(x)		insn_fpa_rounding[(x >> 5) & 0x03]
 #define insn_fpaprec(x)		insn_fpa_precision[(((x >> 18) & 2)|(x >> 7)) & 1]
@@ -405,6 +407,10 @@ disasm(const disasm_interface_t *di, u_int loc, int altfmt)
 				di->di_printf("#%s", insn_fpaimm(insn));
 			else
 				di->di_printf("f%d", insn & 7);
+			break;
+		/* j - xtb rotate literal (bits 10-11) */
+		case 'j':
+			di->di_printf("ror #%d", ((insn >> 10) & 3) << 3);
 			break;
 		/* b - branch address */
 		case 'b':
