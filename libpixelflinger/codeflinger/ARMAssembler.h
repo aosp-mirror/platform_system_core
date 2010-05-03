@@ -123,6 +123,7 @@ public:
                 int RdHi, int RdLo, int Rs, int Rm);
     virtual void SMLAW(int cc, int y,
                 int Rd, int Rm, int Rs, int Rn);
+    virtual void UXTB16(int cc, int Rd, int Rm, int rotate);
 
 private:
                 ARMAssembler(const ARMAssembler& rhs);

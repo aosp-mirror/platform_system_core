@@ -25,6 +25,9 @@
 
 #include "codeflinger/GGLAssembler.h"
 
+#ifdef __arm__
+#include <machine/cpu-features.h>
+#endif
 
 namespace android {
 
@@ -567,7 +570,7 @@ void GGLAssembler::build_textures(  fragment_parts_t& parts,
                     RSB(GE, 0, height, height, imm(0));
                     MUL(AL, 0, height, stride, height);
                 } else {
-                    // u has not been CLAMPed yet
+                    // v has not been CLAMPed yet
                     CMP(AL, height, reg_imm(v, ASR, FRAC_BITS));
                     MOV(LE, 0, v, reg_imm(height, LSL, FRAC_BITS));
                     MOV(LE, 0, height, imm(0));
@@ -868,6 +871,106 @@ void GGLAssembler::filter24(
     load(txPtr, texel, 0);
 }
 
+#if __ARM_ARCH__ >= 6
+// ARMv6 version, using UXTB16, and scheduled for Cortex-A8 pipeline
+void GGLAssembler::filter32(
+        const fragment_parts_t& parts,
+        pixel_t& texel, const texture_unit_t& tmu,
+        int U, int V, pointer_t& txPtr,
+        int FRAC_BITS)
+{
+    const int adjust = FRAC_BITS*2 - 8;
+    const int round  = 0;
+    const int prescale = 16 - adjust;
+
+    Scratch scratches(registerFile());
+    
+    int pixel= scratches.obtain();
+    int dh   = scratches.obtain();
+    int u    = scratches.obtain();
+    int k    = scratches.obtain();
+
+    int temp = scratches.obtain();
+    int dl   = scratches.obtain();
+
+    int offsetrt = scratches.obtain();
+    int offsetlb = scratches.obtain();
+
+    int pixellb = offsetlb;
+
+    // RB -> U * V
+    CONTEXT_LOAD(offsetrt, generated_vars.rt);
+    CONTEXT_LOAD(offsetlb, generated_vars.lb);
+    if(!round) {
+        MOV(AL, 0, U, reg_imm(U, LSL, prescale));
+    }
+    ADD(AL, 0, u, offsetrt, offsetlb);
+
+    LDR(AL, pixel, txPtr.reg, reg_scale_pre(u));
+    if (round) {
+        SMULBB(AL, u, U, V);
+        RSB(AL, 0, U, U, imm(1<<FRAC_BITS));
+    } else {
+        SMULWB(AL, u, U, V);
+        RSB(AL, 0, U, U, imm(1<<(FRAC_BITS+prescale)));
+    }
+    UXTB16(AL, temp, pixel, 0);
+    if (round) {
+        ADD(AL, 0, u, u, imm(1<<(adjust-1)));
+        MOV(AL, 0, u, reg_imm(u, LSR, adjust));
+    }
+    LDR(AL, pixellb, txPtr.reg, reg_scale_pre(offsetlb));
+    MUL(AL, 0, dh, temp, u);
+    UXTB16(AL, temp, pixel, 8);
+    MUL(AL, 0, dl, temp, u);
+    RSB(AL, 0, k, u, imm(0x100));
+
+    // LB -> (1-U) * V
+    if (round) {
+        SMULBB(AL, u, U, V);
+    } else {
+        SMULWB(AL, u, U, V);
+    }
+    UXTB16(AL, temp, pixellb, 0);
+    if (round) {
+        ADD(AL, 0, u, u, imm(1<<(adjust-1)));
+        MOV(AL, 0, u, reg_imm(u, LSR, adjust));
+    }
+    MLA(AL, 0, dh, temp, u, dh);    
+    UXTB16(AL, temp, pixellb, 8);
+    MLA(AL, 0, dl, temp, u, dl);
+    SUB(AL, 0, k, k, u);
+
+    // LT -> (1-U)*(1-V)
+    RSB(AL, 0, V, V, imm(1<<FRAC_BITS));
+    LDR(AL, pixel, txPtr.reg);
+    if (round) {
+        SMULBB(AL, u, U, V);
+    } else {
+        SMULWB(AL, u, U, V);
+    }
+    UXTB16(AL, temp, pixel, 0);
+    if (round) {
+        ADD(AL, 0, u, u, imm(1<<(adjust-1)));
+        MOV(AL, 0, u, reg_imm(u, LSR, adjust));
+    }
+    MLA(AL, 0, dh, temp, u, dh);    
+    UXTB16(AL, temp, pixel, 8);
+    MLA(AL, 0, dl, temp, u, dl);
+
+    // RT -> U*(1-V)            
+    LDR(AL, pixel, txPtr.reg, reg_scale_pre(offsetrt));
+    SUB(AL, 0, u, k, u);
+    UXTB16(AL, temp, pixel, 0);
+    MLA(AL, 0, dh, temp, u, dh);    
+    UXTB16(AL, temp, pixel, 8);
+    MLA(AL, 0, dl, temp, u, dl);
+
+    UXTB16(AL, dh, dh, 8);
+    UXTB16(AL, dl, dl, 8);
+    ORR(AL, 0, texel.reg, dh, reg_imm(dl, LSL, 8));
+}
+#else
 void GGLAssembler::filter32(
         const fragment_parts_t& parts,
         pixel_t& texel, const texture_unit_t& tmu,
@@ -955,6 +1058,7 @@ void GGLAssembler::filter32(
     AND(AL, 0, dl, dl, reg_imm(mask, LSL, 8));
     ORR(AL, 0, texel.reg, dh, dl);
 }
+#endif
 
 void GGLAssembler::build_texture_environment(
         component_t& fragment,
