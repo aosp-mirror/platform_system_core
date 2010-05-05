@@ -25,7 +25,7 @@
 
 #include "codeflinger/GGLAssembler.h"
 
-#ifdef __arm__
+#ifdef __ARM_ARCH__
 #include <machine/cpu-features.h>
 #endif
 
