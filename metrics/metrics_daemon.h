@@ -9,11 +9,14 @@
 #include <glib.h>
 #include <time.h>
 
+#include <gtest/gtest_prod.h>  // for FRIEND_TEST
+
 class MetricsDaemon {
 
  public:
   MetricsDaemon()
-      : network_state_(kUnknownNetworkState),
+      : daily_use_record_file_(NULL),
+        network_state_(kUnknownNetworkState),
         network_state_last_(0),
         power_state_(kUnknownPowerState),
         screensaver_state_(kUnknownScreenSaverState),
@@ -26,11 +29,23 @@ class MetricsDaemon {
   ~MetricsDaemon() {}
 
   // Does all the work. If |run_as_daemon| is true, daemonizes by
-  // forking. If |testing| is true, logs the stats instead of sending
-  // them to Chrome.
-  void Run(bool run_as_daemon, bool testing);
+  // forking.
+  void Run(bool run_as_daemon);
 
  private:
+  friend class MetricsDaemonTest;
+  FRIEND_TEST(MetricsDaemonTest, LogDailyUseRecord);
+  FRIEND_TEST(MetricsDaemonTest, LookupNetworkState);
+  FRIEND_TEST(MetricsDaemonTest, LookupPowerState);
+  FRIEND_TEST(MetricsDaemonTest, LookupScreenSaverState);
+  FRIEND_TEST(MetricsDaemonTest, LookupSessionState);
+  FRIEND_TEST(MetricsDaemonTest, NetStateChanged);
+  FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
+  FRIEND_TEST(MetricsDaemonTest, PublishMetric);
+  FRIEND_TEST(MetricsDaemonTest, ScreenSaverStateChanged);
+  FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
+  FRIEND_TEST(MetricsDaemonTest, SetUserActiveState);
+
   // The network states (see network_states.h).
   enum NetworkState {
     kUnknownNetworkState = -1, // Initial/unknown network state.
@@ -70,6 +85,16 @@ class MetricsDaemon {
     int day_;
     int seconds_;
   };
+
+  // Metric parameters.
+  static const char kMetricDailyUseTimeName[];
+  static const int kMetricDailyUseTimeMin;
+  static const int kMetricDailyUseTimeMax;
+  static const int kMetricDailyUseTimeBuckets;
+  static const char kMetricTimeToNetworkDropName[];
+  static const int kMetricTimeToNetworkDropMin;
+  static const int kMetricTimeToNetworkDropMax;
+  static const int kMetricTimeToNetworkDropBuckets;
 
   // D-Bus message match strings.
   static const char* kDBusMatches_[];
@@ -161,8 +186,10 @@ class MetricsDaemon {
   void PublishMetric(const char* name, int sample,
                      int min, int max, int nbuckets);
 
-  // Testing mode.
+  // Test mode.
   bool testing_;
+
+  const char* daily_use_record_file_;
 
   // Current network state.
   NetworkState network_state_;

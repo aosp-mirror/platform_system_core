@@ -12,5 +12,5 @@ DEFINE_bool(daemon, true, "run as daemon (use -nodaemon for debugging)");
 int main(int argc, char** argv) {
   MetricsDaemon::MetricsDaemon d;
   google::ParseCommandLineFlags(&argc, &argv, true);
-  d.Run(FLAGS_daemon, false);
+  d.Run(FLAGS_daemon);
 }

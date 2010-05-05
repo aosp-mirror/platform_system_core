@@ -37,6 +37,20 @@ static const int kSecondsPerDay = kMinutesPerDay * kSecondsPerMinute;
 static const int kUseMonitorIntervalInit = 1 * kSecondsPerMinute;
 static const int kUseMonitorIntervalMax = 10 * kSecondsPerMinute;
 
+// static metrics parameters.
+const char MetricsDaemon::kMetricDailyUseTimeName[] =
+    "Logging.DailyUseTime";
+const int MetricsDaemon::kMetricDailyUseTimeMin = 1;
+const int MetricsDaemon::kMetricDailyUseTimeMax = kMinutesPerDay;
+const int MetricsDaemon::kMetricDailyUseTimeBuckets = 50;
+
+const char MetricsDaemon::kMetricTimeToNetworkDropName[] =
+    "Network.TimeToDrop";
+const int MetricsDaemon::kMetricTimeToNetworkDropMin = 1;
+const int MetricsDaemon::kMetricTimeToNetworkDropMax =
+    8 /* hours */ * kMinutesPerHour * kSecondsPerMinute;
+const int MetricsDaemon::kMetricTimeToNetworkDropBuckets = 50;
+
 // static
 const char* MetricsDaemon::kDBusMatches_[] = {
   "type='signal',"
@@ -86,8 +100,8 @@ const char* MetricsDaemon::kSessionStates_[] = {
 #include "session_states.h"
 };
 
-void MetricsDaemon::Run(bool run_as_daemon, bool testing) {
-  Init(testing);
+void MetricsDaemon::Run(bool run_as_daemon) {
+  Init(false);
   if (!run_as_daemon || daemon(0, 0) == 0) {
     Loop();
   }
@@ -95,6 +109,11 @@ void MetricsDaemon::Run(bool run_as_daemon, bool testing) {
 
 void MetricsDaemon::Init(bool testing) {
   testing_ = testing;
+  daily_use_record_file_ = kDailyUseRecordFile;
+
+  // Don't setup D-Bus and GLib in test mode.
+  if (testing)
+    return;
 
   g_thread_init(NULL);
   g_type_init();
@@ -192,17 +211,19 @@ void MetricsDaemon::NetStateChanged(const char* state_name, time_t now) {
   NetworkState state = LookupNetworkState(state_name);
 
   // Logs the time in seconds between the network going online to
-  // going offline in order to measure the mean time to network
-  // dropping. Going offline as part of suspend-to-RAM is not logged
-  // as network drop -- the assumption is that the message for
-  // suspend-to-RAM comes before the network offline message which
-  // seems to and should be the case.
-  if (state == kNetworkStateOffline &&
+  // going offline (or, more precisely, going not online) in order to
+  // measure the mean time to network dropping. Going offline as part
+  // of suspend-to-RAM is not logged as network drop -- the assumption
+  // is that the message for suspend-to-RAM comes before the network
+  // offline message which seems to and should be the case.
+  if (state != kNetworkStateOnline &&
       network_state_ == kNetworkStateOnline &&
       power_state_ != kPowerStateMem) {
     int online_time = static_cast<int>(now - network_state_last_);
-    PublishMetric("Network.TimeToDrop", online_time,
-                  1, 8 /* hours */ * 60 * 60, 50);
+    PublishMetric(kMetricTimeToNetworkDropName, online_time,
+                  kMetricTimeToNetworkDropMin,
+                  kMetricTimeToNetworkDropMax,
+                  kMetricTimeToNetworkDropBuckets);
   }
 
   network_state_ = state;
@@ -304,11 +325,11 @@ void MetricsDaemon::LogDailyUseRecord(int day, int seconds) {
     return;
 
   DLOG(INFO) << "day: " << day << " usage: " << seconds << " seconds";
-  int fd = HANDLE_EINTR(open(kDailyUseRecordFile,
+  int fd = HANDLE_EINTR(open(daily_use_record_file_,
                              O_RDWR | O_CREAT,
                              S_IRUSR | S_IWUSR));
   if (fd < 0) {
-    DLOG(WARNING) << "Unable to open the daily use file.";
+    PLOG(WARNING) << "Unable to open the daily use file";
     return;
   }
 
@@ -325,12 +346,14 @@ void MetricsDaemon::LogDailyUseRecord(int day, int seconds) {
       // the usage to the nearest minute and sends it to UMA.
       int minutes =
           (record.seconds_ + kSecondsPerMinute / 2) / kSecondsPerMinute;
-      PublishMetric("Logging.DailyUseTime",
-                    minutes, 1, kMinutesPerDay, 50);
+      PublishMetric(kMetricDailyUseTimeName, minutes,
+                    kMetricDailyUseTimeMin,
+                    kMetricDailyUseTimeMax,
+                    kMetricDailyUseTimeBuckets);
 
       // Truncates the usage file to ensure that no duplicate usage is
       // sent to UMA.
-      LOG_IF(WARNING, HANDLE_EINTR(ftruncate(fd, 0)) != 0);
+      PLOG_IF(WARNING, HANDLE_EINTR(ftruncate(fd, 0)) != 0);
     }
   }
 
@@ -344,9 +367,10 @@ void MetricsDaemon::LogDailyUseRecord(int day, int seconds) {
     // else an already existing record for the same day will be
     // overwritten with updated usage below.
 
-    LOG_IF(WARNING, HANDLE_EINTR(lseek(fd, 0, SEEK_SET)) != 0);
-    LOG_IF(WARNING,
-           HANDLE_EINTR(write(fd, &record, sizeof(record))) != sizeof(record));
+    PLOG_IF(WARNING, HANDLE_EINTR(lseek(fd, 0, SEEK_SET)) != 0);
+    PLOG_IF(WARNING,
+            HANDLE_EINTR(write(fd, &record, sizeof(record))) !=
+            sizeof(record));
   }
 
   HANDLE_EINTR(close(fd));
@@ -374,6 +398,9 @@ bool MetricsDaemon::UseMonitor() {
 
 bool MetricsDaemon::ScheduleUseMonitor(int interval, bool backoff)
 {
+  if (testing_)
+    return false;
+
   // Caps the interval -- the bigger the interval, the more active use
   // time will be potentially dropped on system shutdown.
   if (interval > kUseMonitorIntervalMax)
@@ -417,8 +444,8 @@ void MetricsDaemon::UnscheduleUseMonitor() {
 
 void MetricsDaemon::PublishMetric(const char* name, int sample,
                                   int min, int max, int nbuckets) {
-  DLOG(INFO) << "received metric: " << name << " " << sample << " "
-             << min << " " << max << " " << nbuckets;
+  LOG(INFO) << "received metric: " << name << " " << sample << " "
+            << min << " " << max << " " << nbuckets;
   if (!testing_) {
     MetricsLibrary::SendToChrome(name, sample, min, max, nbuckets);
   }

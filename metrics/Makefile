@@ -12,7 +12,7 @@ CXXFLAGS += -Wall -Werror -fPIC -fno-exceptions $(CCONFIG)
 
 CLIENT = metrics_client
 DAEMON = metrics_daemon
-TESTDAEMON = test_daemon
+DAEMON_TEST = metrics_daemon_test
 LIB = libmetrics.a
 SHAREDLIB = libmetrics.so
 
@@ -25,12 +25,14 @@ DAEMON_OBJS = \
 	metrics_daemon_main.o
 TESTDAEMON_OBJS = \
 	metrics_daemon.o \
-	metrics_daemon_unittest.o
+	metrics_daemon_test.o
 
 DAEMON_LDFLAGS = $(LDCONFIG) -lrt -lbase -lpthread -lgflags
 TESTDAEMON_LIBS = -lgtest
 
-all: $(LIB) $(SHAREDLIB) $(CLIENT) $(DAEMON) $(TESTDAEMON)
+all: $(LIB) $(SHAREDLIB) $(CLIENT) $(DAEMON)
+
+tests: $(DAEMON_TEST)
 
 $(CLIENT): $(CLIENT_OBJS) $(SHAREDLIB)
 	$(CXX) $(LDFLAGS) $^ -o $@
@@ -38,11 +40,11 @@ $(CLIENT): $(CLIENT_OBJS) $(SHAREDLIB)
 $(DAEMON): $(DAEMON_OBJS) $(SHAREDLIB)
 	$(CXX) -o $@ $^ $(DAEMON_LDFLAGS)
 
-$(TESTDAEMON): $(TESTDAEMON_OBJS) $(SHAREDLIB)
+$(DAEMON_TEST): $(TESTDAEMON_OBJS) $(SHAREDLIB)
 	$(CXX) -o $@ $^ $(DAEMON_LDFLAGS) $(TESTDAEMON_LIBS)
 
 $(LIB): $(LIB_OBJS)
-	ar rcs $@ $^
+	$(AR) rcs $@ $^
 
 $(SHAREDLIB): $(LIB_OBJS)
 	$(CXX) $(LDFLAGS) -shared $^ -o $@
@@ -56,7 +58,7 @@ metrics_daemon.o: \
 	metrics_daemon.h \
 	network_states.h \
 	power_states.h
-metrics_daemon_unittest.o: \
+metrics_daemon_test.o: \
 	metrics_daemon.h \
 	network_states.h \
 	power_states.h
