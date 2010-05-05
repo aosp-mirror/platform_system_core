@@ -12,7 +12,7 @@
 #include <base/string_util.h>
 #include <gtest/gtest.h>
 
-static const char kTestDailyUseRecordFile[] = "/tmp/daily-usage-test";
+static const char kTestDailyUseRecordFile[] = "daily-usage-test";
 static const char kDoesNotExistFile[] = "/does/not/exist";
 
 static const int kSecondsPerDay = 24 * 60 * 60;
@@ -123,12 +123,42 @@ class MetricsDaemonTest : public testing::Test {
     return testing::AssertionSuccess();
   }
 
+  // Returns true if the daily use record file does not exist or is
+  // empty, false otherwise.
   bool NoOrEmptyUseRecordFile() {
     FilePath record_file(daemon_.daily_use_record_file_);
     int64 record_file_size;
     return !file_util::PathExists(record_file) ||
         (file_util::GetFileSize(record_file, &record_file_size) &&
          record_file_size == 0);
+  }
+
+  // Creates a new DBus signal message with a single string
+  // argument. The message can be deallocated through
+  // DeleteDBusMessage.
+  //
+  // |path| is the object emitting the signal.
+  // |interface| is the interface the signal is emitted from.
+  // |name| is the name of the signal.
+  // |arg_value| is the value of the string argument.
+  DBusMessage* NewDBusSignalString(const std::string& path,
+                                   const std::string& interface,
+                                   const std::string& name,
+                                   const std::string& arg_value) {
+    DBusMessage* msg = dbus_message_new_signal(path.c_str(),
+                                               interface.c_str(),
+                                               name.c_str());
+    DBusMessageIter iter;
+    dbus_message_iter_init_append(msg, &iter);
+    const char* arg_value_c = arg_value.c_str();
+    dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &arg_value_c);
+    return msg;
+  }
+
+  // Deallocates the DBus message |msg| previously allocated through
+  // dbus_message_new*.
+  void DeleteDBusMessage(DBusMessage* msg) {
+    dbus_message_unref(msg);
   }
 
   // Pointer to the current test fixture.
@@ -230,6 +260,64 @@ TEST_F(MetricsDaemonTest, LookupSessionState) {
             daemon_.LookupSessionState("stopped"));
   EXPECT_EQ(MetricsDaemon::kUnknownSessionState,
             daemon_.LookupSessionState("somestate"));
+}
+
+TEST_F(MetricsDaemonTest, MessageFilter) {
+  DBusMessage* msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_CALL);
+  DBusHandlerResult res =
+      MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
+  EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
+  DeleteDBusMessage(msg);
+
+  msg = NewDBusSignalString("/",
+                            "org.moblin.connman.Manager",
+                            "StateChanged",
+                            "online");
+  EXPECT_EQ(MetricsDaemon::kUnknownNetworkState, daemon_.network_state_);
+  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
+  EXPECT_EQ(MetricsDaemon::kNetworkStateOnline, daemon_.network_state_);
+  EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
+  DeleteDBusMessage(msg);
+
+  msg = NewDBusSignalString("/",
+                            "org.chromium.Power.Manager",
+                            "PowerStateChanged",
+                            "on");
+  EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
+  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
+  EXPECT_EQ(MetricsDaemon::kPowerStateOn, daemon_.power_state_);
+  EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
+  DeleteDBusMessage(msg);
+
+  msg = NewDBusSignalString("/",
+                            "org.chromium.ScreenSaver.Manager",
+                            "LockStateChanged",
+                            "unlocked");
+  EXPECT_EQ(MetricsDaemon::kUnknownScreenSaverState,
+            daemon_.screensaver_state_);
+  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
+  EXPECT_EQ(MetricsDaemon::kScreenSaverStateUnlocked,
+            daemon_.screensaver_state_);
+  EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
+  DeleteDBusMessage(msg);
+
+  msg = NewDBusSignalString("/org/chromium/SessionManager",
+                            "org.chromium.SessionManagerInterface",
+                            "SessionStateChanged",
+                            "started");
+  EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
+  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
+  EXPECT_EQ(MetricsDaemon::kSessionStateStarted, daemon_.session_state_);
+  EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
+  DeleteDBusMessage(msg);
+
+  msg = NewDBusSignalString("/",
+                            "org.chromium.UnknownService.Manager",
+                            "StateChanged",
+                            "randomstate");
+  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
+  EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
+  DeleteDBusMessage(msg);
 }
 
 TEST_F(MetricsDaemonTest, NetStateChanged) {

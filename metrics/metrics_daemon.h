@@ -39,6 +39,7 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, LookupPowerState);
   FRIEND_TEST(MetricsDaemonTest, LookupScreenSaverState);
   FRIEND_TEST(MetricsDaemonTest, LookupSessionState);
+  FRIEND_TEST(MetricsDaemonTest, MessageFilter);
   FRIEND_TEST(MetricsDaemonTest, NetStateChanged);
   FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
   FRIEND_TEST(MetricsDaemonTest, PublishMetric);
