@@ -222,9 +222,50 @@ static int print_mounts()
     return 0;
 }
 
+static int get_mounts_dev_dir(const char *arg, char **dev, char **dir)
+{
+	FILE *f;
+	char mount_dev[256];
+	char mount_dir[256];
+	char mount_type[256];
+	char mount_opts[256];
+	int mount_freq;
+	int mount_passno;
+	int match;
+
+	f = fopen("/proc/mounts", "r");
+	if (!f) {
+		fprintf(stdout, "could not open /proc/mounts\n");
+		return -1;
+	}
+
+	do {
+		match = fscanf(f, "%255s %255s %255s %255s %d %d\n",
+					   mount_dev, mount_dir, mount_type,
+					   mount_opts, &mount_freq, &mount_passno);
+		mount_dev[255] = 0;
+		mount_dir[255] = 0;
+		mount_type[255] = 0;
+		mount_opts[255] = 0;
+		if (match == 6 &&
+			(strcmp(arg, mount_dev) == 0 ||
+			 strcmp(arg, mount_dir) == 0)) {
+			*dev = strdup(mount_dev);
+			*dir = strdup(mount_dir);
+			fclose(f);
+			return 0;
+		}
+	} while (match != EOF);
+
+	fclose(f);
+	return -1;
+}
+
 int mount_main(int argc, char *argv[])
 {
 	char *type = NULL;
+	char *dev = NULL;
+	char *dir = NULL;
 	int c;
 	int loop = 0;
 
@@ -265,12 +306,19 @@ int mount_main(int argc, char *argv[])
 	if (rwflag & MS_TYPE)
 		type = "none";
 
-	if (optind + 2 != argc || type == NULL) {
+	if (optind + 2 == argc) {
+		dev = argv[optind];
+		dir = argv[optind + 1];
+	} else if (optind + 1 == argc && rwflag & MS_REMOUNT) {
+		get_mounts_dev_dir(argv[optind], &dev, &dir);
+	}
+
+	if (dev == NULL || dir == NULL || type == NULL) {
 		fprintf(stderr, "Usage: %s [-r] [-w] [-o options] [-t type] "
 			"device directory\n", progname);
 		exit(1);
 	}
 
-	return do_mount(argv[optind], argv[optind + 1], type, rwflag,
-		        extra.str, loop);
+	return do_mount(dev, dir, type, rwflag, extra.str, loop);
+	/* We leak dev and dir in some cases, but we're about to exit */
 }
