@@ -44,22 +44,27 @@
 
 static int __sys_supports_schedgroups = -1;
 
-static int add_tid_to_cgroup(int tid, const char *grp_name)
+/* Add tid to the group defined by dev_path ("/dev/cpuctl/.../tasks") */
+static int add_tid_to_cgroup(int tid, const char *dev_path)
 {
     int fd;
-    char path[255];
-    char text[64];
-
-    sprintf(path, "/dev/cpuctl/%s/tasks", grp_name);
-
-    if ((fd = open(path, O_WRONLY)) < 0) {
-        SLOGE("add_tid_to_cgroup failed to open '%s' (%s)\n", path,
+    if ((fd = open(dev_path, O_WRONLY)) < 0) {
+        SLOGE("add_tid_to_cgroup failed to open '%s' (%s)\n", dev_path,
              strerror(errno));
         return -1;
     }
 
-    sprintf(text, "%d", tid);
-    if (write(fd, text, strlen(text)) < 0) {
+    // specialized itoa -- works for tid > 0
+    char text[22];
+    char *end = text + sizeof(text) - 1;
+    char *ptr = end;
+    *ptr = '\0';
+    while (tid > 0) {
+        *--ptr = '0' + (tid % 10);
+        tid = tid / 10;
+    }
+
+    if (write(fd, ptr, end - ptr) < 0) {
         close(fd);
 	/*
 	 * If the thread is in the process of exiting,
@@ -67,8 +72,8 @@ static int add_tid_to_cgroup(int tid, const char *grp_name)
 	 */
 	if (errno == ESRCH)
 		return 0;
-        SLOGW("add_tid_to_cgroup failed to write '%s' (%s)\n", path,
-             strerror(errno));
+        SLOGW("add_tid_to_cgroup failed to write '%s' to '%s' (%s)\n",
+             ptr, dev_path, strerror(errno));
         return -1;
     }
 
@@ -228,13 +233,14 @@ int set_sched_policy(int tid, SchedPolicy policy)
 #endif
 
     if (__sys_supports_schedgroups) {
-        const char *grp = "";
-
+        const char *dev_path;
         if (policy == SP_BACKGROUND) {
-            grp = "bg_non_interactive";
+            dev_path = "/dev/cpuctl/bg_non_interactive/tasks";
+        } else {
+            dev_path = "/dev/cpuctl/tasks";
         }
 
-        if (add_tid_to_cgroup(tid, grp)) {
+        if (add_tid_to_cgroup(tid, dev_path)) {
             if (errno != ESRCH && errno != ENOENT)
                 return -errno;
         }
