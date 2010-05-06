@@ -157,6 +157,7 @@ static struct perms_ devperms[] = {
     { "/dev/ts0710mux",     0640,   AID_RADIO,      AID_RADIO,      1 },
     { "/dev/ppp",           0660,   AID_RADIO,      AID_VPN,        0 },
     { "/dev/tun",           0640,   AID_VPN,        AID_VPN,        0 },
+    { "/dev/bus/usb/",      0660,   AID_ROOT,       AID_USB,        1 },
     { NULL, 0, 0, 0, 0 },
 };
 
@@ -373,6 +374,7 @@ static void parse_event(const char *msg, struct uevent *uevent)
 static void handle_device_event(struct uevent *uevent)
 {
     char devpath[96];
+    int devpath_ready = 0;
     char *base, *name;
     int block;
 
@@ -398,7 +400,26 @@ static void handle_device_event(struct uevent *uevent)
     } else {
         block = 0;
             /* this should probably be configurable somehow */
-        if(!strncmp(uevent->subsystem, "graphics", 8)) {
+        if (!strncmp(uevent->subsystem, "usb", 3)) {
+            if (!strcmp(uevent->subsystem, "usb")) {
+                /* This imitates the file system that would be created
+                 * if we were using devfs instead.
+                 * Minors are broken up into groups of 128, starting at "001"
+                 */
+                int bus_id = uevent->minor / 128 + 1;
+                int device_id = uevent->minor % 128 + 1;
+                /* build directories */
+                mkdir("/dev/bus", 0755);
+                mkdir("/dev/bus/usb", 0755);
+                snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d", bus_id);
+                mkdir(devpath, 0755);
+                snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d/%03d", bus_id, device_id);
+                devpath_ready = 1;
+            } else {
+                /* ignore other USB events */
+                return;
+            }
+        } else if (!strncmp(uevent->subsystem, "graphics", 8)) {
             base = "/dev/graphics/";
             mkdir(base, 0755);
         } else if (!strncmp(uevent->subsystem, "oncrpc", 6)) {
@@ -428,7 +449,8 @@ static void handle_device_event(struct uevent *uevent)
             base = "/dev/";
     }
 
-    snprintf(devpath, sizeof(devpath), "%s%s", base, name);
+    if (!devpath_ready)
+        snprintf(devpath, sizeof(devpath), "%s%s", base, name);
 
     if(!strcmp(uevent->action, "add")) {
         make_device(devpath, block, uevent->major, uevent->minor);

@@ -51,6 +51,7 @@
 #define AID_SDCARD_RW     1015  /* external storage write access */
 #define AID_VPN           1016  /* vpn system */
 #define AID_KEYSTORE      1017  /* keystore subsystem */
+#define AID_USB           1018  /* USB devices */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -100,6 +101,7 @@ static struct android_id_info android_ids[] = {
     { "sdcard_rw", AID_SDCARD_RW, },
     { "vpn",       AID_VPN, },
     { "keystore",  AID_KEYSTORE, },
+    { "usb",       AID_USB, },
     { "inet",      AID_INET, },
     { "net_raw",   AID_NET_RAW, },
     { "net_admin", AID_NET_ADMIN, },
