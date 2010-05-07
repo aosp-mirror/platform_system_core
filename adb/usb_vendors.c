@@ -67,6 +67,8 @@
 #define VENDOR_ID_KYOCERA       0x0482
 // Pantech's USB Vendor ID
 #define VENDOR_ID_PANTECH       0x10A9
+// Qualcomm's USB Vendor ID
+#define VENDOR_ID_QUALCOMM      0x05c6
 
 
 /** built-in vendor list */
@@ -87,6 +89,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_ZTE,
     VENDOR_ID_KYOCERA,
     VENDOR_ID_PANTECH,
+    VENDOR_ID_QUALCOMM,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
