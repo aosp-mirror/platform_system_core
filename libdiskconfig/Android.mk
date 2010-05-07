@@ -12,7 +12,6 @@ LOCAL_SRC_FILES := \
 	config_mbr.c
 
 LOCAL_MODULE := libdiskconfig
-LOCAL_PRELINK_MODULE := false
 LOCAL_SYSTEM_SHARED_LIBRARIES := libcutils liblog libc
 
 include $(BUILD_SHARED_LIBRARY)
