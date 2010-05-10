@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <sys/types.h>
+#include <cutils/mspace.h>
 
 #include "tinyutils/KeyedVector.h"
 #include "tinyutils/smartpointer.h"
@@ -67,9 +68,12 @@ public:
     typedef void    weakref_type;
 
 private:
+    static  mspace  getMspace();
+            void    ensureMbaseExecutable();
+
     mutable int32_t     mCount;
             uint32_t*   mBase;
-            ssize_t     mSize;
+            size_t      mSize;
 };
 
 // ----------------------------------------------------------------------------
