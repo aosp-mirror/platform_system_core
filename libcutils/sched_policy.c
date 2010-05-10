@@ -22,14 +22,15 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <pthread.h>
 
 #define LOG_TAG "SchedPolicy"
 #include "cutils/log.h"
 
 #ifdef HAVE_SCHED_H
+#ifdef HAVE_PTHREADS
 
 #include <sched.h>
+#include <pthread.h>
 
 #include <cutils/sched_policy.h>
 
@@ -272,4 +273,5 @@ int set_sched_policy(int tid, SchedPolicy policy)
     return 0;
 }
 
+#endif /* HAVE_PTHREADS */
 #endif /* HAVE_SCHED_H */
