@@ -25,6 +25,7 @@ else
 	      liblog \
 	      libnetutils \
 	      libpixelflinger \
+	      libusbhost \
 	      libzipfile \
 	   ))
 endif
