@@ -2,13 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/*
- * metrics_library.cc
- *
- *  Created on: Dec 1, 2009
- *      Author: sosa
- */
-
 #include "metrics_library.h"
 
 #include <errno.h>
@@ -137,9 +130,8 @@ bool MetricsLibrary::SendToAutotest(const string& name, int value) {
   return true;
 }
 
-// static
-bool MetricsLibrary::SendToChrome(const string& name, int sample,
-                                  int min, int max, int nbuckets) {
+bool MetricsLibrary::SendToUMA(const string& name, int sample,
+                               int min, int max, int nbuckets) {
   // Format the message.
   char message[kBufferSize];
   int32_t message_length =
@@ -154,14 +146,8 @@ bool MetricsLibrary::SendToChrome(const string& name, int sample,
   return SendMessageToChrome(message_length, message);
 }
 
-bool MetricsLibrary::SendToUMA(const string& name, int sample,
-                               int min, int max, int nbuckets) {
-  return SendToChrome(name, sample, min, max, nbuckets);
-}
-
-//static
-bool MetricsLibrary::SendEnumToChrome(const std::string& name, int sample,
-                                      int max) {
+bool MetricsLibrary::SendEnumToUMA(const std::string& name, int sample,
+                                   int max) {
   // Format the message.
   char message[kBufferSize];
   int32_t message_length =
@@ -174,9 +160,4 @@ bool MetricsLibrary::SendEnumToChrome(const std::string& name, int sample,
 
   // Send the message.
   return SendMessageToChrome(message_length, message);
-}
-
-bool MetricsLibrary::SendEnumToUMA(const std::string& name, int sample,
-                                   int max) {
-  return SendEnumToChrome(name, sample, max);
 }

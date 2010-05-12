@@ -78,14 +78,16 @@ int main(int argc, char** argv) {
   }
 
   if (send_to_chrome) {
+    MetricsLibrary metrics_lib;
+    metrics_lib.Init();
     if (send_enum) {
       int max = atoi(argv[name_index + 2]);
-      MetricsLibrary::SendEnumToChrome(name, sample, max);
+      metrics_lib.SendEnumToUMA(name, sample, max);
     } else {
       int min = atoi(argv[name_index + 2]);
       int max = atoi(argv[name_index + 3]);
       int nbuckets = atoi(argv[name_index + 4]);
-      MetricsLibrary::SendToChrome(name, sample, min, max, nbuckets);
+      metrics_lib.SendToUMA(name, sample, min, max, nbuckets);
     }
   }
   return 0;

@@ -2,13 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/*
- * metrics_library.h
- *
- *  Created on: Dec 1, 2009
- *      Author: sosa
- */
-
 #ifndef METRICS_LIBRARY_H_
 #define METRICS_LIBRARY_H_
 
@@ -45,10 +38,6 @@ class MetricsLibrary : public MetricsLibraryInterface {
   bool SendToUMA(const std::string& name, int sample,
                  int min, int max, int nbuckets);
 
-  // Deprecated.
-  static bool SendToChrome(const std::string& name, int sample,
-                           int min, int max, int nbuckets);
-
   // Sends linear histogram data to Chrome for transport to UMA and
   // returns true on success. This method results in the equivalent of
   // an asynchronous non-blocking RPC to UMA_HISTOGRAM_ENUMERATION
@@ -59,9 +48,6 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // 0 is the implicit underflow bucket.
   // [|max|,infinity) is the implicit overflow bucket.
   bool SendEnumToUMA(const std::string& name, int sample, int max);
-
-  // Deprecated.
-  static bool SendEnumToChrome(const std::string& name, int sample, int max);
 
   // Sends to Autotest and returns true on success.
   static bool SendToAutotest(const std::string& name, int value);

@@ -42,14 +42,9 @@ a module, you need to do the following:
                                      int max)
   sends a sample for an enumeration (linear) histogram.
 
-  Currently, the API also includes two deprecated static methods:
-
-  bool MetricsLibrary::SendToChrome(const std::string& name, int sample,
-                                    int min, int max, int nbuckets)
-  bool MetricsLibrary::SendEnumToChrome(const std::string& name, int sample,
-                                        int max)
-
-  See the API documentation in metrics_library.h under
+  Before using these methods, a MetricsLibrary object needs to be
+  constructed and initialized through its Init method. See the
+  complete API documentation in metrics_library.h under
   src/platform/metrics/.
 
 - On the target platform, shortly after the sample is sent it should
