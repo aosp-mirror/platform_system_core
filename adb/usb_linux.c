@@ -20,7 +20,6 @@
 #include <string.h>
 
 #include <usbhost/usbhost.h>
-#include <linux/usbdevice_fs.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
 #include <linux/usb/ch9.h>
