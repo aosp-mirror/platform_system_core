@@ -126,6 +126,9 @@ int usb_endpoint_wait(struct usb_device *device, int *out_ep_num);
 /* Cancels a pending usb_endpoint_queue() operation on an endpoint. */
 int usb_endpoint_cancel(struct usb_endpoint *ep);
 
+/* Returns the usb_device for the given endpoint */
+struct usb_device *usb_endpoint_get_device(struct usb_endpoint *ep);
+
 /* Returns the endpoint address for the given endpoint */
 int usb_endpoint_number(struct usb_endpoint *ep);
 
