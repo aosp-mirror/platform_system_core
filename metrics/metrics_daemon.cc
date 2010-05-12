@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "metrics_daemon.h"
-#include "metrics_library.h"
 
 #include <dbus/dbus-glib-lowlevel.h>
 #include <sys/file.h>
@@ -101,14 +100,18 @@ const char* MetricsDaemon::kSessionStates_[] = {
 };
 
 void MetricsDaemon::Run(bool run_as_daemon) {
-  Init(false);
+  MetricsLibrary metrics_lib;
+  metrics_lib.Init();
+  Init(false, &metrics_lib);
   if (!run_as_daemon || daemon(0, 0) == 0) {
     Loop();
   }
 }
 
-void MetricsDaemon::Init(bool testing) {
+void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
   testing_ = testing;
+  DCHECK(metrics_lib != NULL);
+  metrics_lib_ = metrics_lib;
   daily_use_record_file_ = kDailyUseRecordFile;
 
   // Don't setup D-Bus and GLib in test mode.
@@ -444,9 +447,7 @@ void MetricsDaemon::UnscheduleUseMonitor() {
 
 void MetricsDaemon::PublishMetric(const char* name, int sample,
                                   int min, int max, int nbuckets) {
-  LOG(INFO) << "received metric: " << name << " " << sample << " "
-            << min << " " << max << " " << nbuckets;
-  if (!testing_) {
-    MetricsLibrary::SendToChrome(name, sample, min, max, nbuckets);
-  }
+  DLOG(INFO) << "received metric: " << name << " " << sample << " "
+             << min << " " << max << " " << nbuckets;
+  metrics_lib_->SendToUMA(name, sample, min, max, nbuckets);
 }

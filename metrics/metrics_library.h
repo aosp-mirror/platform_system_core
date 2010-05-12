@@ -16,9 +16,21 @@
 
 // TODO(sosa@chromium.org): Add testing for send methods
 
-// Library used to send metrics both Autotest and Chrome.
-class MetricsLibrary {
+class MetricsLibraryInterface {
  public:
+  virtual void Init() = 0;
+  virtual bool SendToUMA(const std::string& name, int sample,
+                         int min, int max, int nbuckets) = 0;
+  virtual bool SendEnumToUMA(const std::string& name, int sample, int max) = 0;
+  virtual ~MetricsLibraryInterface() {}
+};
+
+// Library used to send metrics to both Autotest and Chrome/UMA.
+class MetricsLibrary : public MetricsLibraryInterface {
+ public:
+  // Initializes the library.
+  void Init();
+
   // Sends histogram data to Chrome for transport to UMA and returns
   // true on success. This method results in the equivalent of an
   // asynchronous non-blocking RPC to UMA_HISTOGRAM_CUSTOM_COUNTS
@@ -30,6 +42,10 @@ class MetricsLibrary {
   // |nbuckets| is the number of histogram buckets.
   // [0,min) is the implicit underflow bucket.
   // [|max|,infinity) is the implicit overflow bucket.
+  bool SendToUMA(const std::string& name, int sample,
+                 int min, int max, int nbuckets);
+
+  // Deprecated.
   static bool SendToChrome(const std::string& name, int sample,
                            int min, int max, int nbuckets);
 
@@ -42,6 +58,9 @@ class MetricsLibrary {
   // |max| is the maximum value of the histogram samples.
   // 0 is the implicit underflow bucket.
   // [|max|,infinity) is the implicit overflow bucket.
+  bool SendEnumToUMA(const std::string& name, int sample, int max);
+
+  // Deprecated.
   static bool SendEnumToChrome(const std::string& name, int sample, int max);
 
   // Sends to Autotest and returns true on success.

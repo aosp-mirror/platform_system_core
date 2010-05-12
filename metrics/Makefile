@@ -28,7 +28,7 @@ TESTDAEMON_OBJS = \
 	metrics_daemon_test.o
 
 DAEMON_LDFLAGS = $(LDCONFIG) -lrt -lbase -lpthread -lgflags
-TESTDAEMON_LIBS = -lgtest
+TESTDAEMON_LIBS = -lgmock -lgtest
 
 all: $(LIB) $(SHAREDLIB) $(CLIENT) $(DAEMON)
 

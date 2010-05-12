@@ -121,6 +121,9 @@ static int32_t FormatChromeMessage(int32_t buffer_size, char *buffer,
   return message_length;
 }
 
+void MetricsLibrary::Init() {
+}
+
 // static
 bool MetricsLibrary::SendToAutotest(const string& name, int value) {
   FILE *autotest_file = fopen(kAutotestPath, "a+");
@@ -151,6 +154,11 @@ bool MetricsLibrary::SendToChrome(const string& name, int sample,
   return SendMessageToChrome(message_length, message);
 }
 
+bool MetricsLibrary::SendToUMA(const string& name, int sample,
+                               int min, int max, int nbuckets) {
+  return SendToChrome(name, sample, min, max, nbuckets);
+}
+
 //static
 bool MetricsLibrary::SendEnumToChrome(const std::string& name, int sample,
                                       int max) {
@@ -166,4 +174,9 @@ bool MetricsLibrary::SendEnumToChrome(const std::string& name, int sample,
 
   // Send the message.
   return SendMessageToChrome(message_length, message);
+}
+
+bool MetricsLibrary::SendEnumToUMA(const std::string& name, int sample,
+                                   int max) {
+  return SendEnumToChrome(name, sample, max);
 }

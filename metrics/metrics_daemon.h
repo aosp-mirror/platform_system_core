@@ -9,6 +9,8 @@
 #include <glib.h>
 #include <time.h>
 
+#include "metrics_library.h"
+
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 class MetricsDaemon {
@@ -34,18 +36,23 @@ class MetricsDaemon {
 
  private:
   friend class MetricsDaemonTest;
-  FRIEND_TEST(MetricsDaemonTest, LogDailyUseRecord);
+  FRIEND_TEST(MetricsDaemonTest, LogDailyUseRecordBadFileLocation);
+  FRIEND_TEST(MetricsDaemonTest, LogDailyUseRecordOnLogin);
+  FRIEND_TEST(MetricsDaemonTest, LogDailyUseRecordRoundDown);
+  FRIEND_TEST(MetricsDaemonTest, LogDailyUseRecordRoundUp);
   FRIEND_TEST(MetricsDaemonTest, LookupNetworkState);
   FRIEND_TEST(MetricsDaemonTest, LookupPowerState);
   FRIEND_TEST(MetricsDaemonTest, LookupScreenSaverState);
   FRIEND_TEST(MetricsDaemonTest, LookupSessionState);
   FRIEND_TEST(MetricsDaemonTest, MessageFilter);
-  FRIEND_TEST(MetricsDaemonTest, NetStateChanged);
+  FRIEND_TEST(MetricsDaemonTest, NetStateChangedSimpleDrop);
+  FRIEND_TEST(MetricsDaemonTest, NetStateChangedSuspend);
   FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
   FRIEND_TEST(MetricsDaemonTest, PublishMetric);
   FRIEND_TEST(MetricsDaemonTest, ScreenSaverStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
-  FRIEND_TEST(MetricsDaemonTest, SetUserActiveState);
+  FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateSendOnLogin);
+  FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateSendOnMonitor);
 
   // The network states (see network_states.h).
   enum NetworkState {
@@ -113,7 +120,7 @@ class MetricsDaemon {
   static const char* kSessionStates_[kNumberSessionStates];
 
   // Initializes.
-  void Init(bool testing);
+  void Init(bool testing, MetricsLibraryInterface* metrics_lib);
 
   // Creates the event loop and enters it.
   void Loop();
@@ -189,6 +196,9 @@ class MetricsDaemon {
 
   // Test mode.
   bool testing_;
+
+  // The metrics library handle.
+  MetricsLibraryInterface* metrics_lib_;
 
   const char* daily_use_record_file_;
 

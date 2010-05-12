@@ -32,20 +32,25 @@ a module, you need to do the following:
   $SYSROOT/usr/include/ when the metrics library is built and
   installed.
 
-- Currently, the API includes two static methods:
+- The API includes two methods:
+
+  bool MetricsLibrary::SendToUMA(const std::string& name, int sample,
+                                 int min, int max, int nbuckets)
+  sends a sample for a regular (exponential) histogram.
+
+  bool MetricsLibrary::SendEnumToUMA(const std::string& name, int sample,
+                                     int max)
+  sends a sample for an enumeration (linear) histogram.
+
+  Currently, the API also includes two deprecated static methods:
 
   bool MetricsLibrary::SendToChrome(const std::string& name, int sample,
                                     int min, int max, int nbuckets)
-  sends a sample for a regular (exponential) histogram.
-
   bool MetricsLibrary::SendEnumToChrome(const std::string& name, int sample,
                                         int max)
-  sends a sample for an enumeration (linear) histogram.
 
-  See API documentation in metrics_library.h under
+  See the API documentation in metrics_library.h under
   src/platform/metrics/.
-
-  TODO: It might be better to convert the API to a dynamic object.
 
 - On the target platform, shortly after the sample is sent it should
   be visible in Chrome through "about:histograms".
