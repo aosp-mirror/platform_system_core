@@ -444,6 +444,11 @@ int usb_endpoint_cancel(struct usb_endpoint *ep)
     return ioctl(ep->dev->fd, USBDEVFS_DISCARDURB, &ep->urb);
 }
 
+struct usb_device *usb_endpoint_get_device(struct usb_endpoint *ep)
+{
+    return ep->dev;
+}
+
 int usb_endpoint_number(struct usb_endpoint *ep)
 {
     return ep->desc.bEndpointAddress;
