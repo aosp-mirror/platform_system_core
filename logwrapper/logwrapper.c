@@ -60,7 +60,7 @@ void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
                 buffer[b] = '\0';
             } else if (buffer[b] == '\n') {
                 buffer[b] = '\0';
-                LOG(LOG_INFO, tag, &buffer[a]);
+                LOG(LOG_INFO, tag, "%s", &buffer[a]);
                 a = b + 1;
             }
         }
@@ -68,7 +68,7 @@ void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
         if (a == 0 && b == sizeof(buffer) - 1) {
             // buffer is full, flush
             buffer[b] = '\0';
-            LOG(LOG_INFO, tag, &buffer[a]);
+            LOG(LOG_INFO, tag, "%s", &buffer[a]);
             b = 0;
         } else if (a != b) {
             // Keep left-overs
@@ -84,7 +84,7 @@ void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
     // Flush remaining data
     if (a != b) {
         buffer[b] = '\0';
-        LOG(LOG_INFO, tag, &buffer[a]);
+	LOG(LOG_INFO, tag, "%s", &buffer[a]);
     }
     status = 0xAAAA;
     if (wait(&status) != -1) {  // Wait for child
