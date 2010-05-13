@@ -27,8 +27,10 @@
 #include "cutils/log.h"
 
 #ifdef HAVE_SCHED_H
+#ifdef HAVE_PTHREADS
 
 #include <sched.h>
+#include <pthread.h>
 
 #include <cutils/sched_policy.h>
 
@@ -42,15 +44,28 @@
 
 #define POLICY_DEBUG 0
 
+static pthread_once_t the_once = PTHREAD_ONCE_INIT;
+
 static int __sys_supports_schedgroups = -1;
 
-/* Add tid to the group defined by dev_path ("/dev/cpuctl/.../tasks") */
-static int add_tid_to_cgroup(int tid, const char *dev_path)
+// File descriptors open to /dev/cpuctl/../tasks, setup by initialize, or -1 on error.
+static int normal_cgroup_fd = -1;
+static int bg_cgroup_fd = -1;
+
+/* Add tid to the scheduling group defined by the policy */
+static int add_tid_to_cgroup(int tid, SchedPolicy policy)
 {
     int fd;
-    if ((fd = open(dev_path, O_WRONLY)) < 0) {
-        SLOGE("add_tid_to_cgroup failed to open '%s' (%s)\n", dev_path,
-             strerror(errno));
+
+    if (policy == SP_BACKGROUND) {
+        fd = bg_cgroup_fd;
+    } else {
+        fd = normal_cgroup_fd;
+    }
+
+    if (fd < 0) {
+        SLOGE("add_tid_to_cgroup failed; background=%d\n",
+              policy == SP_BACKGROUND ? 1 : 0);
         return -1;
     }
 
@@ -65,30 +80,38 @@ static int add_tid_to_cgroup(int tid, const char *dev_path)
     }
 
     if (write(fd, ptr, end - ptr) < 0) {
-        close(fd);
-	/*
-	 * If the thread is in the process of exiting,
-	 * don't flag an error
-	 */
-	if (errno == ESRCH)
-		return 0;
-        SLOGW("add_tid_to_cgroup failed to write '%s' to '%s' (%s)\n",
-             ptr, dev_path, strerror(errno));
+        /*
+         * If the thread is in the process of exiting,
+         * don't flag an error
+         */
+        if (errno == ESRCH)
+                return 0;
+        SLOGW("add_tid_to_cgroup failed to write '%s' (%s); background=%d\n",
+              ptr, strerror(errno), policy == SP_BACKGROUND ? 1 : 0);
         return -1;
     }
 
-    close(fd);
     return 0;
 }
 
-static inline void initialize()
-{
-    if (__sys_supports_schedgroups < 0) {
-        if (!access("/dev/cpuctl/tasks", F_OK)) {
-            __sys_supports_schedgroups = 1;
-        } else {
-            __sys_supports_schedgroups = 0;
+static void __initialize(void) {
+    char* filename;
+    if (!access("/dev/cpuctl/tasks", F_OK)) {
+        __sys_supports_schedgroups = 1;
+
+        filename = "/dev/cpuctl/tasks";
+        normal_cgroup_fd = open(filename, O_WRONLY);
+        if (normal_cgroup_fd < 0) {
+            SLOGE("open of %s failed: %s\n", filename, strerror(errno));
         }
+
+        filename = "/dev/cpuctl/bg_non_interactive/tasks";
+        bg_cgroup_fd = open(filename, O_WRONLY);
+        if (bg_cgroup_fd < 0) {
+            SLOGE("open of %s failed: %s\n", filename, strerror(errno));
+        }
+    } else {
+        __sys_supports_schedgroups = 0;
     }
 }
 
@@ -166,7 +189,7 @@ static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
 
 int get_sched_policy(int tid, SchedPolicy *policy)
 {
-    initialize();
+    pthread_once(&the_once, __initialize);
 
     if (__sys_supports_schedgroups) {
         char grpBuf[32];
@@ -198,7 +221,7 @@ int get_sched_policy(int tid, SchedPolicy *policy)
 
 int set_sched_policy(int tid, SchedPolicy policy)
 {
-    initialize();
+    pthread_once(&the_once, __initialize);
 
 #if POLICY_DEBUG
     char statfile[64];
@@ -233,14 +256,7 @@ int set_sched_policy(int tid, SchedPolicy policy)
 #endif
 
     if (__sys_supports_schedgroups) {
-        const char *dev_path;
-        if (policy == SP_BACKGROUND) {
-            dev_path = "/dev/cpuctl/bg_non_interactive/tasks";
-        } else {
-            dev_path = "/dev/cpuctl/tasks";
-        }
-
-        if (add_tid_to_cgroup(tid, dev_path)) {
+        if (add_tid_to_cgroup(tid, policy)) {
             if (errno != ESRCH && errno != ENOENT)
                 return -errno;
         }
@@ -257,4 +273,5 @@ int set_sched_policy(int tid, SchedPolicy policy)
     return 0;
 }
 
+#endif /* HAVE_PTHREADS */
 #endif /* HAVE_SCHED_H */
