@@ -70,7 +70,7 @@ void printerr(char *fmt, ...)
     vsnprintf(errmsg, sizeof(errmsg), fmt, ap);
     va_end(ap);
 
-    LOGD(errmsg);
+    LOGD("%s", errmsg);
 }
 
 const char *dhcp_lasterror()
