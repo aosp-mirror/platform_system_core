@@ -27,8 +27,8 @@
 #include "cutils/log.h"
 
 void fatal(const char *msg) {
-    fprintf(stderr, msg);
-    LOG(LOG_ERROR, "logwrapper", msg);
+    fprintf(stderr, "%s", msg);
+    LOG(LOG_ERROR, "logwrapper", "%s", msg);
     exit(-1);
 }
 
