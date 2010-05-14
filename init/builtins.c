@@ -255,6 +255,7 @@ static struct {
     const char *name;
     unsigned flag;
 } mount_flags[] = {
+    { "move",       MS_MOVE },
     { "noatime",    MS_NOATIME },
     { "nosuid",     MS_NOSUID },
     { "nodev",      MS_NODEV },
