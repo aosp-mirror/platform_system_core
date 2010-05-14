@@ -63,14 +63,5 @@ metrics_daemon_test.o: \
 	network_states.h \
 	power_states.h
 
-install:
-	install $(CLIENT) $(DESTDIR)/usr/bin
-	install $(DAEMON) $(DESTDIR)/usr/bin
-	install $(LIB) $(DESTDIR)/usr/lib
-	install $(SHAREDLIB) $(DESTDIR)/usr/lib
-	install metrics_library.h $(DESTDIR)/usr/include
-	install syslog_parser.sh $(DESTDIR)/usr/bin
-	install omaha_tracker.sh $(DESTDIR)/usr/sbin
-
 clean:
 	rm -f $(CLIENT) $(DAEMON) $(LIB) $(SHAREDLIB) $(TESTDAEMON) *.o

@@ -28,7 +28,7 @@ a module, you need to do the following:
   preferred.
 
 - To access the metrics library API in the module, include the
-  <metrics_library.h> header file. The file is installed in
+  <metrics/metrics_library.h> header file. The file is installed in
   $SYSROOT/usr/include/ when the metrics library is built and
   installed.
 
