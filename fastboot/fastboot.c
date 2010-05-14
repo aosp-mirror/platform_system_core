@@ -150,6 +150,8 @@ int match_fastboot(usb_ifc_info *info)
        (info->dev_vendor != 0x18d1) &&  // Google
        (info->dev_vendor != 0x0451) &&
        (info->dev_vendor != 0x0502) &&
+       (info->dev_vendor != 0x0fce) &&  // Sony Ericsson
+       (info->dev_vendor != 0x05c6) &&  // Qualcomm
        (info->dev_vendor != 0x22b8) &&  // Motorola
        (info->dev_vendor != 0x0955) &&  // Nvidia
        (info->dev_vendor != 0x413c) &&  // DELL
