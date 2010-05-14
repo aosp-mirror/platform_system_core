@@ -60,20 +60,6 @@ __RCSID("$NetBSD: trap.c,v 1.31 2005/01/11 19:38:57 christos Exp $");
 #include "mystring.h"
 #include "var.h"
 
-static const char *sys_signame[NSIG] = {
-	"Unused",
-	"HUP",      "INT",    "QUIT",    "ILL",
-	"TRAP",     "ABRT",   "BUS",     "FPE",
-	"KILL",     "USR1",   "SEGV",    "USR2",
-	"PIPE",     "ALRM",   "TERM",
-	"Unknown",
-	"CHLD",
-	"CONT",     "STOP",   "TSTP",    "TTIN",
-	"TTOU",     "URG",    "XCPU",    "XFSZ",
-	"VTALRM",   "PROF",   "WINCH",   "IO",
-	"PWR",      "SYS"
-};
-
 /*
  * Sigmode records the current value of the signal handlers for the various
  * modes.  A value of zero means that the current handler is not known.
