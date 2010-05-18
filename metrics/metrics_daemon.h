@@ -30,6 +30,9 @@ class MetricsDaemon {
         usemon_source_(NULL) {}
   ~MetricsDaemon() {}
 
+  // Initializes.
+  void Init(bool testing, MetricsLibraryInterface* metrics_lib);
+
   // Does all the work. If |run_as_daemon| is true, daemonizes by
   // forking.
   void Run(bool run_as_daemon);
@@ -48,8 +51,8 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, NetStateChangedSimpleDrop);
   FRIEND_TEST(MetricsDaemonTest, NetStateChangedSuspend);
   FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
-  FRIEND_TEST(MetricsDaemonTest, PublishMetric);
   FRIEND_TEST(MetricsDaemonTest, ScreenSaverStateChanged);
+  FRIEND_TEST(MetricsDaemonTest, SendMetric);
   FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateSendOnLogin);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateSendOnMonitor);
@@ -119,9 +122,6 @@ class MetricsDaemon {
   // Array of user session states.
   static const char* kSessionStates_[kNumberSessionStates];
 
-  // Initializes.
-  void Init(bool testing, MetricsLibraryInterface* metrics_lib);
-
   // Creates the event loop and enters it.
   void Loop();
 
@@ -188,11 +188,11 @@ class MetricsDaemon {
   // Unschedules a scheduled use monitor, if any.
   void UnscheduleUseMonitor();
 
-  // Sends a stat to Chrome for transport to UMA (or prints it for
-  // testing). See MetricsLibrary::SendToChrome in metrics_library.h
-  // for a description of the arguments.
-  void PublishMetric(const char* name, int sample,
-                     int min, int max, int nbuckets);
+  // Sends a regular (exponential) histogram sample to Chrome for
+  // transport to UMA. See MetricsLibrary::SendToUMA in
+  // metrics_library.h for a description of the arguments.
+  void SendMetric(const std::string& name, int sample,
+                  int min, int max, int nbuckets);
 
   // Test mode.
   bool testing_;

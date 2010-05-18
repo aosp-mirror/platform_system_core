@@ -25,7 +25,9 @@ static const int kSecondsPerDay = 24 * 60 * 60;
 class MetricsDaemonTest : public testing::Test {
  protected:
   virtual void SetUp() {
+    EXPECT_EQ(NULL, daemon_.daily_use_record_file_);
     daemon_.Init(true, &metrics_lib_);
+    EXPECT_TRUE(NULL != daemon_.daily_use_record_file_);
     daemon_.daily_use_record_file_ = kTestDailyUseRecordFile;
 
     // The test fixture object will be used by the log message handler.
@@ -423,12 +425,6 @@ TEST_F(MetricsDaemonTest, PowerStateChanged) {
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 7, /* seconds */ 30);
 }
 
-TEST_F(MetricsDaemonTest, PublishMetric) {
-  ExpectMetric("Dummy.Metric", 3, 1, 100, 50);
-  daemon_.PublishMetric("Dummy.Metric", /* sample */ 3,
-                        /* min */ 1, /* max */ 100, /* buckets */ 50);
-}
-
 TEST_F(MetricsDaemonTest, ScreenSaverStateChanged) {
   EXPECT_EQ(MetricsDaemon::kUnknownScreenSaverState,
             daemon_.screensaver_state_);
@@ -458,6 +454,12 @@ TEST_F(MetricsDaemonTest, ScreenSaverStateChanged) {
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(5 * kSecondsPerDay + 300, daemon_.user_active_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 5, /* seconds */ 200);
+}
+
+TEST_F(MetricsDaemonTest, SendMetric) {
+  ExpectMetric("Dummy.Metric", 3, 1, 100, 50);
+  daemon_.SendMetric("Dummy.Metric", /* sample */ 3,
+                     /* min */ 1, /* max */ 100, /* buckets */ 50);
 }
 
 TEST_F(MetricsDaemonTest, SessionStateChanged) {

@@ -16,16 +16,16 @@
 
 static const char kAutotestPath[] =
     "/var/log/metrics/autotest-events";
-static const char kChromePath[] =
+static const char kUMAEventsPath[] =
     "/var/log/metrics/uma-events";
 static const int32_t kBufferSize = 1024;
 
 using namespace std;
 
 // TODO(sosa@chromium.org) - use Chromium logger instead of stderr
-static void PrintError(const char *message, const char *file,
+static void PrintError(const char* message, const char* file,
                        int code) {
-  const char *kProgramName = "metrics_library";
+  static const char *kProgramName = "libmetrics";
   if (code == 0) {
     fprintf(stderr, "%s: %s\n", kProgramName, message);
   } else if (file == NULL) {
@@ -37,14 +37,16 @@ static void PrintError(const char *message, const char *file,
   }
 }
 
-// Sends message of size |length| to Chrome and returns true on success.
-static bool SendMessageToChrome(int32_t length, const char *message) {
-  int chrome_fd = open(kChromePath,
+MetricsLibrary::MetricsLibrary()
+    : uma_events_file_(NULL) {}
+
+bool MetricsLibrary::SendMessageToChrome(int32_t length, const char* message) {
+  int chrome_fd = open(uma_events_file_,
                        O_WRONLY | O_APPEND | O_CREAT,
                        READ_WRITE_ALL_FILE_FLAGS);
   // If we failed to open it, return.
   if (chrome_fd < 0) {
-    PrintError("open", kChromePath, errno);
+    PrintError("open", uma_events_file_, errno);
     return false;
   }
 
@@ -56,36 +58,28 @@ static bool SendMessageToChrome(int32_t length, const char *message) {
   // Grab an exclusive lock to protect Chrome from truncating
   // underneath us. Keep the file locked as briefly as possible.
   if (flock(chrome_fd, LOCK_EX) < 0) {
-    PrintError("flock", kChromePath, errno);
+    PrintError("flock", uma_events_file_, errno);
     close(chrome_fd);
     return false;
   }
 
   bool success = true;
   if (write(chrome_fd, message, length) != length) {
-    PrintError("write", kChromePath, errno);
+    PrintError("write", uma_events_file_, errno);
     success = false;
   }
 
   // Release the file lock and close file.
   if (flock(chrome_fd, LOCK_UN) < 0) {
-    PrintError("unlock", kChromePath, errno);
+    PrintError("unlock", uma_events_file_, errno);
     success = false;
   }
   close(chrome_fd);
   return success;
 }
 
-// Formats a name/value message for Chrome in |buffer| and returns the
-// length of the message or a negative value on error.
-//
-// Message format is: | LENGTH(binary) | NAME | \0 | VALUE | \0 |
-//
-// The arbitrary |format| argument covers the non-LENGTH portion of the
-// message. The caller is responsible to store the \0 character
-// between NAME and VALUE (e.g. "%s%c%d", name, '\0', value).
-static int32_t FormatChromeMessage(int32_t buffer_size, char *buffer,
-                                   const char *format, ...) {
+int32_t MetricsLibrary::FormatChromeMessage(int32_t buffer_size, char* buffer,
+                                            const char* format, ...) {
   int32_t message_length;
   size_t len_size = sizeof(message_length);
 
@@ -115,9 +109,9 @@ static int32_t FormatChromeMessage(int32_t buffer_size, char *buffer,
 }
 
 void MetricsLibrary::Init() {
+  uma_events_file_ = kUMAEventsPath;
 }
 
-// static
 bool MetricsLibrary::SendToAutotest(const string& name, int value) {
   FILE *autotest_file = fopen(kAutotestPath, "a+");
   if (autotest_file == NULL) {

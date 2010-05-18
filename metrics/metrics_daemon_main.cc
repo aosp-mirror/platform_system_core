@@ -10,7 +10,10 @@
 DEFINE_bool(daemon, true, "run as daemon (use -nodaemon for debugging)");
 
 int main(int argc, char** argv) {
-  MetricsDaemon::MetricsDaemon d;
   google::ParseCommandLineFlags(&argc, &argv, true);
-  d.Run(FLAGS_daemon);
+  MetricsLibrary metrics_lib;
+  metrics_lib.Init();
+  MetricsDaemon daemon;
+  daemon.Init(false, &metrics_lib);
+  daemon.Run(FLAGS_daemon);
 }

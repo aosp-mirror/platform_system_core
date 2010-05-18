@@ -100,9 +100,6 @@ const char* MetricsDaemon::kSessionStates_[] = {
 };
 
 void MetricsDaemon::Run(bool run_as_daemon) {
-  MetricsLibrary metrics_lib;
-  metrics_lib.Init();
-  Init(false, &metrics_lib);
   if (!run_as_daemon || daemon(0, 0) == 0) {
     Loop();
   }
@@ -223,10 +220,10 @@ void MetricsDaemon::NetStateChanged(const char* state_name, time_t now) {
       network_state_ == kNetworkStateOnline &&
       power_state_ != kPowerStateMem) {
     int online_time = static_cast<int>(now - network_state_last_);
-    PublishMetric(kMetricTimeToNetworkDropName, online_time,
-                  kMetricTimeToNetworkDropMin,
-                  kMetricTimeToNetworkDropMax,
-                  kMetricTimeToNetworkDropBuckets);
+    SendMetric(kMetricTimeToNetworkDropName, online_time,
+               kMetricTimeToNetworkDropMin,
+               kMetricTimeToNetworkDropMax,
+               kMetricTimeToNetworkDropBuckets);
   }
 
   network_state_ = state;
@@ -349,10 +346,10 @@ void MetricsDaemon::LogDailyUseRecord(int day, int seconds) {
       // the usage to the nearest minute and sends it to UMA.
       int minutes =
           (record.seconds_ + kSecondsPerMinute / 2) / kSecondsPerMinute;
-      PublishMetric(kMetricDailyUseTimeName, minutes,
-                    kMetricDailyUseTimeMin,
-                    kMetricDailyUseTimeMax,
-                    kMetricDailyUseTimeBuckets);
+      SendMetric(kMetricDailyUseTimeName, minutes,
+                 kMetricDailyUseTimeMin,
+                 kMetricDailyUseTimeMax,
+                 kMetricDailyUseTimeBuckets);
 
       // Truncates the usage file to ensure that no duplicate usage is
       // sent to UMA.
@@ -445,8 +442,8 @@ void MetricsDaemon::UnscheduleUseMonitor() {
   usemon_interval_ = 0;
 }
 
-void MetricsDaemon::PublishMetric(const char* name, int sample,
-                                  int min, int max, int nbuckets) {
+void MetricsDaemon::SendMetric(const std::string& name, int sample,
+                               int min, int max, int nbuckets) {
   DLOG(INFO) << "received metric: " << name << " " << sample << " "
              << min << " " << max << " " << nbuckets;
   metrics_lib_->SendToUMA(name, sample, min, max, nbuckets);
