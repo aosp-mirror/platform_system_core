@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+/* TODO: insert memory barriers on SMP */
+
 #include <machine/cpu-features.h>
 
 /*
@@ -43,6 +45,8 @@
 	
 	.global android_atomic_cmpxchg
 	.type android_atomic_cmpxchg, %function
+	.global android_atomic_acquire_cmpxchg
+	.type android_atomic_acquire_cmpxchg, %function
 
 /*
  * ----------------------------------------------------------------------------
@@ -237,7 +241,7 @@ android_atomic_or:
 
 /* replaced swp instruction with ldrex/strex for ARMv6 & ARMv7 */
 android_atomic_swap:
-#if defined (_ARM_HAVE_LDREX_STREX)
+#if defined (__ARM_HAVE_LDREX_STREX)
 1:  ldrex   r2, [r1]
     strex   r3, r0, [r1]
     teq     r3, #0
@@ -256,6 +260,7 @@ android_atomic_swap:
  * output: r0 = 0 (xchg done) or non-zero (xchg not done)
  */
 
+android_atomic_acquire_cmpxchg:
 android_atomic_cmpxchg:
     .fnstart
     .save {r4, lr}
@@ -282,10 +287,3 @@ android_atomic_cmpxchg:
     bx      lr
     .fnend
 
-/*
- * ----------------------------------------------------------------------------
- * android_atomic_cmpxchg_64
- * input: r0-r1=oldvalue, r2-r3=newvalue, arg4 (on stack)=address
- * output: r0 = 0 (xchg done) or non-zero (xchg not done)
- */
-/* TODO: NEED IMPLEMENTATION FOR THIS ARCHITECTURE */
