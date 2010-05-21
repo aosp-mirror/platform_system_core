@@ -25,10 +25,8 @@ extern "C" {
 #endif
 
 /*
- * NOTE: memory shared between threads is synchronized by all atomic operations
- * below, this means that no explicit memory barrier is required: all reads or 
- * writes issued before android_atomic_* operations are guaranteed to complete
- * before the atomic operation takes place.
+ * Unless otherwise noted, the operations below perform a full fence before
+ * the atomic operation on SMP systems ("release" semantics).
  */
 
 void android_atomic_write(int32_t value, volatile int32_t* addr);
@@ -36,7 +34,6 @@ void android_atomic_write(int32_t value, volatile int32_t* addr);
 /*
  * all these atomic operations return the previous value
  */
-
 
 int32_t android_atomic_inc(volatile int32_t* addr);
 int32_t android_atomic_dec(volatile int32_t* addr);
@@ -48,30 +45,32 @@ int32_t android_atomic_or(int32_t value, volatile int32_t* addr);
 int32_t android_atomic_swap(int32_t value, volatile int32_t* addr);
 
 /*
- * NOTE: Two "quasiatomic" operations on the exact same memory address
- * are guaranteed to operate atomically with respect to each other,
- * but no guarantees are made about quasiatomic operations mixed with
- * non-quasiatomic operations on the same address, nor about
- * quasiatomic operations that are performed on partially-overlapping
- * memory.
+ * cmpxchg returns zero if the new value was successfully written.  This
+ * will only happen when *addr == oldvalue.
+ *
+ * (The return value is inverted from implementations on other platforms, but
+ * matches the ARM ldrex/strex sematics.  Note also this is a compare-and-set
+ * operation, not a compare-and-exchange operation, since we don't return
+ * the original value.)
  */
-
-int64_t android_quasiatomic_swap_64(int64_t value, volatile int64_t* addr);
-int64_t android_quasiatomic_read_64(volatile int64_t* addr);
-    
-/*
- * cmpxchg return a non zero value if the exchange was NOT performed,
- * in other words if oldvalue != *addr
- */
-
 int android_atomic_cmpxchg(int32_t oldvalue, int32_t newvalue,
         volatile int32_t* addr);
 
-int android_quasiatomic_cmpxchg_64(int64_t oldvalue, int64_t newvalue,
-        volatile int64_t* addr);
+/*
+ * Same basic operation as android_atomic_cmpxchg, but with "acquire"
+ * semantics.  The memory barrier, if required, is performed after the
+ * new value is stored.  Useful for acquiring a spin lock.
+ */
+int android_atomic_acquire_cmpxchg(int32_t oldvalue, int32_t newvalue,
+        volatile int32_t* addr);
 
+/*
+ * Perform an atomic store with "release" semantics.  The memory barrier,
+ * if required, is performed before the store instruction.  Useful for
+ * releasing a spin lock.
+ */
+#define android_atomic_release_store android_atomic_write
 
-    
 #ifdef __cplusplus
 } // extern "C"
 #endif

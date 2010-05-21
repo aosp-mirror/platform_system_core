@@ -118,42 +118,8 @@ int android_atomic_cmpxchg(int32_t oldvalue, int32_t newvalue,
     return result;
 }
 
-int64_t android_quasiatomic_swap_64(int64_t value, volatile int64_t* addr) {
-    int64_t oldValue;
-    pthread_mutex_t*  lock = SWAP_LOCK(addr);
-
-    pthread_mutex_lock(lock);
-
-    oldValue = *addr;
-    *addr    = value;
-
-    pthread_mutex_unlock(lock);
-    return oldValue;
+int android_atomic_acquire_cmpxchg(int32_t oldvalue, int32_t newvalue,
+                           volatile int32_t* addr) {
+    return android_atomic_cmpxchg(oldValue, newValue, addr);
 }
 
-int android_quasiatomic_cmpxchg_64(int64_t oldvalue, int64_t newvalue,
-        volatile int64_t* addr) {
-    int result;
-    pthread_mutex_t*  lock = SWAP_LOCK(addr);
-
-    pthread_mutex_lock(lock);
-
-    if (*addr == oldvalue) {
-        *addr  = newvalue;
-        result = 0;
-    } else {
-        result = 1;
-    }
-    pthread_mutex_unlock(lock);
-    return result;
-}
-
-int64_t android_quasiatomic_read_64(volatile int64_t* addr) {
-    int64_t result;
-    pthread_mutex_t*  lock = SWAP_LOCK(addr);
-
-    pthread_mutex_lock(lock);
-    result = *addr;
-    pthread_mutex_unlock(lock);
-    return result;
-}

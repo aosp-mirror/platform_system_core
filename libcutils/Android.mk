@@ -16,6 +16,13 @@
 LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
+ifeq ($(TARGET_CPU_SMP),true)
+    targetSmpFlag := -DANDROID_SMP=1
+else
+    targetSmpFlag := -DANDROID_SMP=0
+endif
+hostSmpFlag := -DANDROID_SMP=0
+
 commonSources := \
 	array.c \
 	hashmap.c \
@@ -80,6 +87,7 @@ LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(commonSources) $(commonHostSources)
 LOCAL_LDLIBS := -lpthread
 LOCAL_STATIC_LIBRARIES := liblog
+LOCAL_CFLAGS += $(hostSmpFlag)
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
@@ -92,6 +100,7 @@ LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) memory.c dlmalloc_stubs.c
 LOCAL_LDLIBS := -lpthread
 LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_CFLAGS += $(targetSmpFlag)
 include $(BUILD_SHARED_LIBRARY)
 
 else #!sim
@@ -114,12 +123,14 @@ endif # !arm
 
 LOCAL_C_INCLUDES := $(KERNEL_HEADERS)
 LOCAL_STATIC_LIBRARIES := liblog
+LOCAL_CFLAGS += $(targetSmpFlag)
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
 LOCAL_WHOLE_STATIC_LIBRARIES := libcutils
 LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_CFLAGS += $(targetSmpFlag)
 include $(BUILD_SHARED_LIBRARY)
 
 endif #!sim
