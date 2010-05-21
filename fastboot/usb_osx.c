@@ -64,7 +64,7 @@ struct usb_handle
 
 /** Try out all the interfaces and see if there's a match. Returns 0 on
  * success, -1 on failure. */
-static int try_interfaces(IOUSBDeviceInterface **dev, usb_handle *handle) {
+static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
     IOReturn kr;
     IOUSBFindInterfaceRequest request;
     io_iterator_t iterator;
@@ -515,8 +515,29 @@ int usb_write(usb_handle *h, const void *data, int len) {
         return -1;
     }
 
+#if 0
     result = (*h->interface)->WritePipe(
             h->interface, h->bulkOut, (void *)data, len);
+#else
+    /* Attempt to work around crashes in the USB driver that may be caused
+     * by trying to write too much data at once.  The kernel IOCopyMapper
+     * panics if a single iovmAlloc needs more than half of its mapper pages.
+     */
+    const int maxLenToSend = 1048576; // 1 MiB
+    int lenRemaining = len;
+    result = 0;
+    while (lenRemaining > 0) {
+        int lenToSend = lenRemaining > maxLenToSend
+            ? maxLenToSend : lenRemaining;
+
+        result = (*h->interface)->WritePipe(
+                h->interface, h->bulkOut, (void *)data, lenToSend);
+        if (result != 0) break;
+
+        lenRemaining -= lenToSend;
+        data = (const char*)data + lenToSend;
+    }
+#endif
 
     #if 0
     if ((result == 0) && (h->zero_mask)) {
