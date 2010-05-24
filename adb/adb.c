@@ -971,25 +971,32 @@ void connect_device(char* host, char* buffer, int buffer_size)
 {
     int port, fd;
     char* portstr = strchr(host, ':');
-    char buf[4096];
+    char hostbuf[100];
+    char serial[100];
 
-    if (!portstr) {
-        snprintf(buffer, buffer_size, "unable to parse %s as <host>:<port>", host);
+    strncpy(hostbuf, host, sizeof(hostbuf) - 1);
+    if (portstr) {
+        if (portstr - host >= sizeof(hostbuf)) {
+            snprintf(buffer, buffer_size, "bad host name %s", host);
+            return;
+        }
+        // zero terminate the host at the point we found the colon
+        hostbuf[portstr - host] = 0;
+        if (sscanf(portstr + 1, "%d", &port) == 0) {
+            snprintf(buffer, buffer_size, "bad port number %s", portstr);
+            return;
+        }
+    } else {
+        port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
+    }
+
+    snprintf(serial, sizeof(serial), "%s:%d", hostbuf, port);
+    if (find_transport(serial)) {
+        snprintf(buffer, buffer_size, "already connected to %s", serial);
         return;
     }
-    if (find_transport(host)) {
-        snprintf(buffer, buffer_size, "already connected to %s", host);
-        return;
-    }
 
-    // zero terminate host by overwriting the ':'
-    *portstr++ = 0;
-    if (sscanf(portstr, "%d", &port) == 0) {
-        snprintf(buffer, buffer_size, "bad port number %s", portstr);
-        return;
-    }
-
-    fd = socket_network_client(host, port, SOCK_STREAM);
+    fd = socket_network_client(hostbuf, port, SOCK_STREAM);
     if (fd < 0) {
         snprintf(buffer, buffer_size, "unable to connect to %s:%d", host, port);
         return;
@@ -998,9 +1005,8 @@ void connect_device(char* host, char* buffer, int buffer_size)
     D("client: connected on remote on fd %d\n", fd);
     close_on_exec(fd);
     disable_tcp_nagle(fd);
-    snprintf(buf, sizeof buf, "%s:%d", host, port);
-    register_socket_transport(fd, buf, port, 0);
-    snprintf(buffer, buffer_size, "connected to %s:%d", host, port);
+    register_socket_transport(fd, serial, port, 0);
+    snprintf(buffer, buffer_size, "connected to %s", serial);
 }
 
 void connect_emulator(char* port_spec, char* buffer, int buffer_size)
@@ -1136,12 +1142,23 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         char buffer[4096];
         memset(buffer, 0, sizeof(buffer));
         char* serial = service + 11;
-        atransport *t = find_transport(serial);
-
-        if (t) {
-            unregister_transport(t);
+        if (serial[0] == 0) {
+            // disconnect from all TCP devices
+            unregister_all_tcp_transports();
         } else {
-            snprintf(buffer, sizeof(buffer), "No such device %s", serial);
+            char hostbuf[100];
+            // assume port 5555 if no port is specified
+            if (!strchr(serial, ':')) {
+                snprintf(hostbuf, sizeof(hostbuf) - 1, "%s:5555", serial);
+                serial = hostbuf;
+            }
+            atransport *t = find_transport(serial);
+
+            if (t) {
+                unregister_transport(t);
+            } else {
+                snprintf(buffer, sizeof(buffer), "No such device %s", serial);
+            }
         }
 
         snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer), buffer);

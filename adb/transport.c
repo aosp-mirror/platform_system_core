@@ -671,21 +671,26 @@ static void remove_transport(atransport *transport)
 }
 
 
+static void transport_unref_locked(atransport *t)
+{
+    t->ref_count--;
+    D("transport: %p R- (ref=%d)\n", t, t->ref_count);
+    if (t->ref_count == 0) {
+        D("transport: %p kicking and closing\n", t);
+        if (!t->kicked) {
+            t->kicked = 1;
+            t->kick(t);
+        }
+        t->close(t);
+        remove_transport(t);
+    }
+}
+
 static void transport_unref(atransport *t)
 {
     if (t) {
         adb_mutex_lock(&transport_lock);
-        t->ref_count--;
-        D("transport: %p R- (ref=%d)\n", t, t->ref_count);
-        if (t->ref_count == 0) {
-            D("transport: %p kicking and closing\n", t);
-            if (!t->kicked) {
-                t->kicked = 1;
-                t->kick(t);
-            }
-            t->close(t);
-            remove_transport(t);
-        }
+        transport_unref_locked(t);
         adb_mutex_unlock(&transport_lock);
     }
 }
@@ -892,6 +897,29 @@ void unregister_transport(atransport *t)
 
     kick_transport(t);
     transport_unref(t);
+}
+
+// unregisters all non-emulator TCP transports
+void unregister_all_tcp_transports()
+{
+    atransport *t, *next;
+    adb_mutex_lock(&transport_lock);
+    for (t = transport_list.next; t != &transport_list; t = next) {
+        next = t->next;
+        if (t->type == kTransportLocal && t->adb_port == 0) {
+            t->next->prev = t->prev;
+            t->prev->next = next;
+            // we cannot call kick_transport when holding transport_lock
+            if (!t->kicked)
+            {
+                t->kicked = 1;
+                t->kick(t);
+            }
+            transport_unref_locked(t);
+        }
+     }
+
+    adb_mutex_unlock(&transport_lock);
 }
 
 #endif

@@ -275,8 +275,9 @@ void close_usb_devices();
 /* cause new transports to be init'd and added to the list */
 void register_socket_transport(int s, const char *serial, int port, int local);
 
-/* this should only be used for the "adb disconnect" command */
+/* these should only be used for the "adb disconnect" command */
 void unregister_transport(atransport *t);
+void unregister_all_tcp_transports();
 
 void register_usb_transport(usb_handle *h, const char *serial, unsigned writeable);
 
