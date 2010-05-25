@@ -65,7 +65,7 @@ __RCSID("$NetBSD: input.c,v 1.39 2003/08/07 09:05:32 agc Exp $");
 #include "myhistedit.h"
 
 #ifdef WITH_LINENOISE
-#include "../liblinenoise/linenoise.h"
+#include "linenoise.h"
 #endif
 
 #define EOF_NLEFT -99		/* value of parsenleft when EOF pushed back */
