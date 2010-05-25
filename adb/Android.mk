@@ -57,7 +57,6 @@ LOCAL_SRC_FILES := \
 	file_sync_client.c \
 	$(EXTRA_SRCS) \
 	$(USB_SRCS) \
-	shlist.c \
 	utils.c \
 	usb_vendors.c
 

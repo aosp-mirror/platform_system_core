@@ -37,11 +37,6 @@
 #include "adb_client.h"
 #include "file_sync_service.h"
 
-#ifdef SH_HISTORY
-#include "shlist.h"
-#include "history.h"
-#endif
-
 enum {
     IGNORE_DATA,
     WIPE_DATA,
@@ -232,23 +227,10 @@ static void read_and_dump(int fd)
     }
 }
 
-#ifdef SH_HISTORY
-int shItemCmp( void *val, void *idata )
-{
-    return( (strcmp( val, idata ) == 0) );
-}
-#endif
-
 static void *stdin_read_thread(void *x)
 {
     int fd, fdi;
     unsigned char buf[1024];
-#ifdef SH_HISTORY
-    unsigned char realbuf[1024], *buf_ptr;
-    SHLIST history;
-    SHLIST *item = &history;
-    int cmdlen = 0, ins_flag = 0;
-#endif
     int r, n;
     int state = 0;
 
@@ -257,9 +239,6 @@ static void *stdin_read_thread(void *x)
     fdi = fds[1];
     free(fds);
 
-#ifdef SH_HISTORY
-    shListInitList( &history );
-#endif
     for(;;) {
         /* fdi is really the client's stdin, so use read, not adb_read here */
         r = unix_read(fdi, buf, 1024);
@@ -268,97 +247,34 @@ static void *stdin_read_thread(void *x)
             if(errno == EINTR) continue;
             break;
         }
-#ifdef SH_HISTORY
-        if( (r == 3) &&                                       /* Arrow processing */
-            (memcmp( (void *)buf, SH_ARROW_ANY, 2 ) == 0) ) {
-            switch( buf[2] ) {
-                case SH_ARROW_UP:
-                    item = shListGetNextItem( &history, item );
-                    break;
-                case SH_ARROW_DOWN:
-                    item = shListGetPrevItem( &history, item );
-                    break;
-                default:
-                    item = NULL;
-                    break;
-            }
-            memset( buf, SH_DEL_CHAR, cmdlen );
-            if( item != NULL ) {
-                n = snprintf( (char *)(&buf[cmdlen]), sizeof buf - cmdlen, "%s", (char *)(item->data) );
-                memcpy( realbuf, item->data, n );
-            }
-            else { /* Clean buffer */
-                item = &history;
-                n = 0;
-            }
-            r = n + cmdlen;
-            cmdlen = n;
-            ins_flag = 0;
-            if( r == 0 )
-                continue;
-        }
-        else {
+        for(n = 0; n < r; n++){
+            switch(buf[n]) {
+            case '\n':
+                state = 1;
+                break;
+            case '\r':
+                state = 1;
+                break;
+            case '~':
+                if(state == 1) state++;
+                break;
+            case '.':
+                if(state == 2) {
+                    fprintf(stderr,"\n* disconnect *\n");
+#ifdef HAVE_TERMIO_H
+                    stdin_raw_restore(fdi);
 #endif
-            for(n = 0; n < r; n++){
-                switch(buf[n]) {
-                case '\n':
-#ifdef SH_HISTORY
-                    if( ins_flag && (SH_BLANK_CHAR <= realbuf[0]) ) {
-                        buf_ptr = malloc(cmdlen + 1);
-                        if( buf_ptr != NULL ) {
-                            memcpy( buf_ptr, realbuf, cmdlen );
-                            buf_ptr[cmdlen] = '\0';
-                            if( (item = shListFindItem( &history, (void *)buf_ptr, shItemCmp )) == NULL ) {
-                                shListInsFirstItem( &history, (void *)buf_ptr );
-                                item = &history;
-                            }
-                        }
-                    }
-                    cmdlen = 0;
-                    ins_flag = 0;
-#endif
-                    state = 1;
-                    break;
-                case '\r':
-                    state = 1;
-                    break;
-                case '~':
-                    if(state == 1) state++;
-                    break;
-                case '.':
-                    if(state == 2) {
-                        fprintf(stderr,"\n* disconnect *\n");
-    #ifdef HAVE_TERMIO_H
-                        stdin_raw_restore(fdi);
-    #endif
-                        exit(0);
-                    }
-                default:
-#ifdef SH_HISTORY
-                    if( buf[n] == SH_DEL_CHAR ) {
-                        if( cmdlen > 0 )
-                            cmdlen--;
-                    }
-                    else {
-                        realbuf[cmdlen] = buf[n];
-                        cmdlen++;
-                    }
-                    ins_flag = 1;
-#endif
-                    state = 0;
+                    exit(0);
                 }
+            default:
+                state = 0;
             }
-#ifdef SH_HISTORY
         }
-#endif
         r = adb_write(fd, buf, r);
         if(r <= 0) {
             break;
         }
     }
-#ifdef SH_HISTORY
-    shListDelAllItems( &history, (shListFree)free );
-#endif
     return 0;
 }
 
