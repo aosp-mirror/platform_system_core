@@ -68,8 +68,6 @@
  *    Effect: moves cursor forward of n chars
  * 
  */
- 
- #ifdef WITH_LINENOISE
 
 #include <termios.h>
 #include <unistd.h>
@@ -435,5 +433,3 @@ int linenoiseHistorySetMaxLen(int len) {
         history_len = history_max_len;
     return 1;
 }
-
-#endif // WITH_LINENOISE

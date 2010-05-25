@@ -13,7 +13,6 @@ LOCAL_SRC_FILES:= \
 	expand.c \
 	input.c \
 	jobs.c \
-	linenoise.c \
 	main.c \
 	memalloc.c \
 	miscbltin.c \
@@ -33,6 +32,8 @@ LOCAL_SRC_FILES:= \
 LOCAL_MODULE:= sh
 
 LOCAL_CFLAGS += -DSHELL -DWITH_LINENOISE
+
+LOCAL_STATIC_LIBRARIES := liblinenoise
 
 make_ash_files: PRIVATE_SRC_FILES := $(SRC_FILES)
 make_ash_files: PRIVATE_CFLAGS := $(LOCAL_CFLAGS)

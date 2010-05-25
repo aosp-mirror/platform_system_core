@@ -34,12 +34,8 @@
 #ifndef __LINENOISE_H
 #define __LINENOISE_H
 
-#ifdef WITH_LINENOISE
-
 char *linenoise(const char *prompt);
 int linenoiseHistoryAdd(const char *line);
 int linenoiseHistorySetMaxLen(int len);
-
-#endif
 
 #endif /* __LINENOISE_H */
