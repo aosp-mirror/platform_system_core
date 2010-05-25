@@ -79,7 +79,7 @@ static int known_device(const char *dev_name)
     return 0;
 }
 
-static void kick_disconnected_device(const char *devname)
+static void kick_disconnected_device(const char *devname, void *client_data)
 {
     usb_handle *usb;
 
@@ -202,7 +202,7 @@ fail:
     free(usb);
 }
 
-static void check_usb_device(const char *devname) {
+static void check_usb_device(const char *devname, void *client_data) {
     struct usb_device *device;
     struct usb_descriptor_iter iter;
     struct usb_descriptor_header* header;
@@ -461,7 +461,7 @@ void usb_init()
 {
     struct sigaction    actions;
 
-    if (usb_host_init(check_usb_device, kick_disconnected_device))
+    if (usb_host_init(check_usb_device, kick_disconnected_device, NULL))
         fatal_errno("usb_host_init failed\n");
 
     memset(&actions, 0, sizeof(actions));
