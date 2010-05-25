@@ -32,17 +32,19 @@ struct usb_descriptor_iter {
 };
 
 /* callback for notification when new USB devices are attached */
-typedef void (* usb_device_added_cb)(const char *dev_name);
+typedef void (* usb_device_added_cb)(const char *dev_name, void *client_data);
 
 /* callback for notification when USB devices are removed */
-typedef void (* usb_device_removed_cb)(const char *dev_name);
+typedef void (* usb_device_removed_cb)(const char *dev_name, void *client_data);
 
 /* Call this to start monitoring the USB bus.
  * added_cb will be called immediately for each existing USB device,
  * and subsequently each time a new device is added.
  * removed_cb is called when USB devices are removed from the bus.
  */
-int usb_host_init(usb_device_added_cb added_cb, usb_device_removed_cb removed_cb);
+int usb_host_init(usb_device_added_cb added_cb,
+                  usb_device_removed_cb removed_cb,
+                  void *client_data);
 
 /* Creates a usb_device object for a USB device */
 struct usb_device *usb_device_open(const char *dev_name);

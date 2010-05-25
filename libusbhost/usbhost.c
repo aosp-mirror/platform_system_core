@@ -48,6 +48,12 @@
 #define D(...)
 #endif
 
+struct usb_host_context {
+    usb_device_added_cb     added_cb;
+    usb_device_removed_cb   removed_cb;
+    void                    *client_data;
+};
+
 struct usb_device {
     char dev_name[64];
     unsigned char desc[256];
@@ -63,9 +69,6 @@ struct usb_endpoint
     struct usbdevfs_urb urb;
 };
 
-static usb_device_added_cb s_added_cb;
-static usb_device_removed_cb s_removed_cb;
-
 static inline int badname(const char *name)
 {
     while(*name) {
@@ -74,7 +77,7 @@ static inline int badname(const char *name)
     return 0;
 }
 
-static void find_existing_devices()
+static void find_existing_devices(struct usb_host_context *context)
 {
     char busname[32], devname[32];
     DIR *busdir , *devdir ;
@@ -94,15 +97,16 @@ static void find_existing_devices()
             if(badname(de->d_name)) continue;
 
             snprintf(devname, sizeof devname, "%s/%s", busname, de->d_name);
-            s_added_cb(devname);
+            context->added_cb(devname, context->client_data);
         } // end of devdir while
         closedir(devdir);
     } //end of busdir while
     closedir(busdir);
 }
 
-static void* device_discovery_thread(void* unused)
+static void* device_discovery_thread(void *client_data)
 {
+    struct usb_host_context *context = (struct usb_host_context *)client_data;
     struct inotify_event* event;
     char event_buf[512];
     char path[100];
@@ -136,8 +140,7 @@ static void* device_discovery_thread(void* unused)
     }
 
     /* check for existing devices first, after we have inotify set up */
-    if (s_added_cb)
-        find_existing_devices();
+    find_existing_devices(context);
 
     while (1) {
         ret = read(fd, event_buf, sizeof(event_buf));
@@ -159,12 +162,10 @@ static void* device_discovery_thread(void* unused)
                         snprintf(path, sizeof(path), "%s/%03d/%s", USB_FS_DIR, i, event->name);
                         if (event->mask == IN_CREATE) {
                             D("new device %s\n", path);
-                            if (s_added_cb)
-                                s_added_cb(path);
+                            context->added_cb(path, context->client_data);
                         } else if (event->mask == IN_DELETE) {
                             D("gone device %s\n", path);
-                            if (s_removed_cb)
-                                s_removed_cb(path);
+                            context->removed_cb(path, context->client_data);
                         }
                     }
                 }
@@ -174,22 +175,23 @@ static void* device_discovery_thread(void* unused)
     return NULL;
 }
 
-int usb_host_init(usb_device_added_cb added_cb, usb_device_removed_cb removed_cb)
+int usb_host_init(usb_device_added_cb added_cb, usb_device_removed_cb removed_cb, void *client_data)
 {
+    struct usb_host_context *context;
     pthread_t tid;
+    pthread_attr_t   attr;
 
-    s_added_cb = added_cb;
-    s_removed_cb = removed_cb;
+    if (!added_cb || !removed_cb)
+        return -EINVAL;
 
-    if (added_cb || removed_cb) {
-        pthread_attr_t   attr;
+    context = calloc(1, sizeof(struct usb_host_context));
+    context->added_cb = added_cb;
+    context->removed_cb = removed_cb;
+    context->client_data = client_data;
 
-        pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-        return pthread_create(&tid, &attr, device_discovery_thread, NULL);
-    }
-    else
-        return 0;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    return pthread_create(&tid, &attr, device_discovery_thread, context);
 }
 
 struct usb_device *usb_device_open(const char *dev_name)
