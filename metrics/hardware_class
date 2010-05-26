@@ -1,0 +1,56 @@
+#!/bin/sh
+
+# Copyright (c) 2010 The Chromium OS Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This script prints the hardware class (e.g., the hardware
+# qualification ID) of this device, or "unknown" if it can't determine
+# the hardware class.
+
+# TODO(petkov): The hardware qualification ID is not available on
+# systems yet, so the script uses alternative ways to identify
+# different system classes (e.g., the WiFi adapter PCI vendor and
+# device IDs). Switch the script to use real hardware qualification ID
+# when that becomes available.
+
+# Appends a new component ID to the hardware class. Separates IDs with
+# dashes.
+append_class() {
+  [ -n "$HARDWARE_CLASS" ] && HARDWARE_CLASS="${HARDWARE_CLASS}-"
+  HARDWARE_CLASS="${HARDWARE_CLASS}$1"
+}
+
+# Adds the CPU family, model and stepping info, if available, to the
+# class.
+cpu() {
+  [ -r /proc/cpuinfo ] || return
+  FAMILY=`grep -m1 '^cpu family' /proc/cpuinfo \
+            | sed 's/cpu family\s\+:\s\+\([0-9]\+\)$/\1/'`
+  MODEL=`grep -m1 '^model' /proc/cpuinfo \
+           | sed 's/model\s\+:\s\+\([0-9]\+\)$/\1/'`
+  STEPPING=`grep -m1 '^stepping' /proc/cpuinfo \
+              | sed 's/stepping\s\+:\s\+\([0-9]\+\)$/\1/'`
+  if [ -n "$FAMILY" ] && [ -n "$MODEL" ] && [ -n "$STEPPING" ]; then
+    append_class "cpu/$FAMILY:$MODEL:$STEPPING"
+  fi
+}
+
+# Adds the wlan0 PCI vendor and device ID, if available, to the class.
+wlan() {
+  WLAN_DEV=/sys/class/net/wlan0/device
+  if [ -r $WLAN_DEV/vendor ] && [ -r $WLAN_DEV/device ]; then
+    WLAN_ID=`paste -d ':' $WLAN_DEV/vendor $WLAN_DEV/device | sed s/0x//g`
+    append_class "wlan0/$WLAN_ID"
+  fi
+}
+
+
+HARDWARE_CLASS=
+
+cpu
+wlan
+
+[ -z "$HARDWARE_CLASS" ] && HARDWARE_CLASS=unknown
+
+echo $HARDWARE_CLASS
