@@ -41,6 +41,7 @@
 #include "usbhost/usbhost.h"
 
 #define USB_FS_DIR "/dev/bus/usb"
+#define USB_FS_ID_SCANNER   "/dev/bus/usb/%d/%d"
 
 #if 0
 #define D printf
@@ -241,6 +242,13 @@ void usb_device_close(struct usb_device *device)
 const char* usb_device_get_name(struct usb_device *device)
 {
     return device->dev_name;
+}
+
+int usb_device_get_unique_id(struct usb_device *device)
+{
+    int bus = 0, dev = 0;
+    sscanf(device->dev_name, USB_FS_ID_SCANNER, &bus, &dev);
+    return bus * 1000 + dev;
 }
 
 uint16_t usb_device_get_vendor_id(struct usb_device *device)

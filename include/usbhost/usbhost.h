@@ -57,6 +57,11 @@ void usb_device_close(struct usb_device *device);
  */
 const char* usb_device_get_name(struct usb_device *device);
 
+/* Returns a unique ID for the device.  Currently this is generated from the
+ * dev_name path.
+ */
+int usb_device_get_unique_id(struct usb_device *device);
+
 /* Returns the USB vendor ID from the device descriptor for the USB device */
 uint16_t usb_device_get_vendor_id(struct usb_device *device);
 
