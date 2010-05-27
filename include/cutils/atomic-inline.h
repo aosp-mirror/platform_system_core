@@ -27,6 +27,12 @@
  *
  * Anything that does include this file must set ANDROID_SMP to either
  * 0 or 1, indicating compilation for UP or SMP, respectively.
+ *
+ * Macros defined in this header:
+ *
+ * void ANDROID_MEMBAR_FULL(void)
+ *   Full memory barrier.  Provides a compiler reordering barrier, and
+ *   on SMP systems emits an appropriate instruction.
  */
 
 #if !defined(ANDROID_SMP)
@@ -55,17 +61,17 @@ extern "C" {
  * This will fail on plain 16-bit Thumb.
  */
 #if defined(__ARM_HAVE_DMB)
-# define __android_membar_full_smp() \
+# define _ANDROID_MEMBAR_FULL_SMP() \
     do { __asm__ __volatile__ ("dmb" ::: "memory"); } while (0)
 #else
-# define __android_membar_full_smp()  ARM_SMP_defined_but_no_DMB()
+# define _ANDROID_MEMBAR_FULL_SMP()  ARM_SMP_defined_but_no_DMB()
 #endif
 
 #elif defined(__i386__) || defined(__x86_64__)
 /*
  * For recent x86, we can use the SSE2 mfence instruction.
  */
-# define __android_membar_full_smp() \
+# define _ANDROID_MEMBAR_FULL_SMP() \
     do { __asm__ __volatile__ ("mfence" ::: "memory"); } while (0)
 
 #else
@@ -73,7 +79,7 @@ extern "C" {
  * Implementation not defined for this platform.  Hopefully we're building
  * in uniprocessor mode.
  */
-# define __android_membar_full_smp()  SMP_barrier_not_defined_for_platform()
+# define _ANDROID_MEMBAR_FULL_SMP()  SMP_barrier_not_defined_for_platform()
 #endif
 
 
@@ -88,9 +94,9 @@ extern "C" {
  * be stale.  Other CPUs may do less, but the end result is equivalent.
  */
 #if ANDROID_SMP != 0
-# define android_membar_full() __android_membar_full_smp()
+# define ANDROID_MEMBAR_FULL() _ANDROID_MEMBAR_FULL_SMP()
 #else
-# define android_membar_full() \
+# define ANDROID_MEMBAR_FULL() \
     do { __asm__ __volatile__ ("" ::: "memory"); } while (0)
 #endif
 
