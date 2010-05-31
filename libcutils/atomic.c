@@ -27,11 +27,25 @@
 
 #include <libkern/OSAtomic.h>
 
-void android_atomic_write(int32_t value, volatile int32_t* addr) {
-    int32_t oldValue;
-    do {
-        oldValue = *addr;
-    } while (OSAtomicCompareAndSwap32Barrier(oldValue, value, (int32_t*)addr) == 0);
+int32_t android_atomic_acquire_load(volatile int32_t* addr) {
+    int32_t value = *addr;
+    OSMemoryBarrier();
+    return value;
+}
+
+int32_t android_atomic_release_load(volatile int32_t* addr) {
+    OSMemoryBarrier();
+    return *addr;
+}
+
+void android_atomic_acquire_store(int32_t value, volatile int32_t* addr) {
+    *addr = value;
+    OSMemoryBarrier();
+}
+
+void android_atomic_release_store(int32_t value, volatile int32_t* addr) {
+    OSMemoryBarrier();
+    *addr = value;
 }
 
 int32_t android_atomic_inc(volatile int32_t* addr) {
@@ -47,74 +61,81 @@ int32_t android_atomic_add(int32_t value, volatile int32_t* addr) {
 }
 
 int32_t android_atomic_and(int32_t value, volatile int32_t* addr) {
-    int32_t oldValue;
-    do {
-        oldValue = *addr;
-    } while (OSAtomicCompareAndSwap32Barrier(oldValue, oldValue&value, (int32_t*)addr) == 0);
-    return oldValue;
+    return OSAtomicAnd32OrigBarrier(value, (int32_t*)addr);
 }
 
 int32_t android_atomic_or(int32_t value, volatile int32_t* addr) {
+    return OSAtomicOr32OrigBarrier(value, (int32_t*)addr);
+}
+
+int32_t android_atomic_acquire_swap(int32_t value, volatile int32_t* addr) {
     int32_t oldValue;
     do {
         oldValue = *addr;
-    } while (OSAtomicCompareAndSwap32Barrier(oldValue, oldValue|value, (int32_t*)addr) == 0);
+    } while (android_atomic_acquire_cas(oldValue, value, addr));
     return oldValue;
 }
 
-int32_t android_atomic_swap(int32_t value, volatile int32_t* addr) {
+int32_t android_atomic_release_swap(int32_t value, volatile int32_t* addr) {
     int32_t oldValue;
     do {
         oldValue = *addr;
-    } while (android_atomic_cmpxchg(oldValue, value, addr));
+    } while (android_atomic_release_cas(oldValue, value, addr));
     return oldValue;
 }
 
-int android_atomic_cmpxchg(int32_t oldvalue, int32_t newvalue, volatile int32_t* addr) {
+int android_atomic_release_cas(int32_t oldvalue, int32_t newvalue, volatile int32_t* addr) {
     /* OS X CAS returns zero on failure; invert to return zero on success */
     return OSAtomicCompareAndSwap32Barrier(oldvalue, newvalue, (int32_t*)addr) == 0;
 }
 
-int android_atomic_acquire_cmpxchg(int32_t oldvalue, int32_t newvalue,
+int android_atomic_acquire_cas(int32_t oldvalue, int32_t newvalue,
         volatile int32_t* addr) {
     int result = (OSAtomicCompareAndSwap32(oldvalue, newvalue, (int32_t*)addr) == 0);
-    if (!result) {
+    if (result == 0) {
         /* success, perform barrier */
         OSMemoryBarrier();
     }
+    return result;
 }
 
 /*****************************************************************************/
 #elif defined(__i386__) || defined(__x86_64__)
 
-void android_atomic_write(int32_t value, volatile int32_t* addr) {
-    int32_t oldValue;
-    do {
-        oldValue = *addr;
-    } while (android_atomic_cmpxchg(oldValue, value, addr));
+int32_t android_atomic_acquire_load(volatile int32_t* addr) {
+    int32_t value = *addr;
+    ANDROID_MEMBAR_FULL();
+    return value;
+}
+
+int32_t android_atomic_release_load(volatile int32_t* addr) {
+    ANDROID_MEMBAR_FULL();
+    return *addr;
+}
+
+void android_atomic_acquire_store(int32_t value, volatile int32_t* addr) {
+    *addr = value;
+    ANDROID_MEMBAR_FULL();
+}
+
+void android_atomic_release_store(int32_t value, volatile int32_t* addr) {
+    ANDROID_MEMBAR_FULL();
+    *addr = value;
 }
 
 int32_t android_atomic_inc(volatile int32_t* addr) {
-    int32_t oldValue;
-    do {
-        oldValue = *addr;
-    } while (android_atomic_cmpxchg(oldValue, oldValue+1, addr));
-    return oldValue;
+    return android_atomic_add(1, addr);
 }
 
 int32_t android_atomic_dec(volatile int32_t* addr) {
-    int32_t oldValue;
-    do {
-        oldValue = *addr;
-    } while (android_atomic_cmpxchg(oldValue, oldValue-1, addr));
-    return oldValue;
+    return android_atomic_add(-1, addr);
 }
 
 int32_t android_atomic_add(int32_t value, volatile int32_t* addr) {
     int32_t oldValue;
     do {
         oldValue = *addr;
-    } while (android_atomic_cmpxchg(oldValue, oldValue+value, addr));
+    } while (android_atomic_release_cas(oldValue, oldValue+value, addr));
     return oldValue;
 }
 
@@ -122,7 +143,7 @@ int32_t android_atomic_and(int32_t value, volatile int32_t* addr) {
     int32_t oldValue;
     do {
         oldValue = *addr;
-    } while (android_atomic_cmpxchg(oldValue, oldValue&value, addr));
+    } while (android_atomic_release_cas(oldValue, oldValue&value, addr));
     return oldValue;
 }
 
@@ -130,20 +151,13 @@ int32_t android_atomic_or(int32_t value, volatile int32_t* addr) {
     int32_t oldValue;
     do {
         oldValue = *addr;
-    } while (android_atomic_cmpxchg(oldValue, oldValue|value, addr));
+    } while (android_atomic_release_cas(oldValue, oldValue|value, addr));
     return oldValue;
 }
 
-int32_t android_atomic_swap(int32_t value, volatile int32_t* addr) {
-    int32_t oldValue;
-    do {
-        oldValue = *addr;
-    } while (android_atomic_cmpxchg(oldValue, value, addr));
-    return oldValue;
-}
-
-int android_atomic_cmpxchg(int32_t oldvalue, int32_t newvalue, volatile int32_t* addr) {
-    android_membar_full();
+/* returns 0 on successful swap */
+static inline int cas(int32_t oldvalue, int32_t newvalue,
+        volatile int32_t* addr) {
     int xchg;
     asm volatile
     (
@@ -156,18 +170,36 @@ int android_atomic_cmpxchg(int32_t oldvalue, int32_t newvalue, volatile int32_t*
     return xchg;
 }
 
-int android_atomic_acquire_cmpxchg(int32_t oldvalue, int32_t newvalue,
+int32_t android_atomic_acquire_swap(int32_t value, volatile int32_t* addr) {
+    int32_t oldValue;
+    do {
+        oldValue = *addr;
+    } while (cas(oldValue, value, addr));
+    ANDROID_MEMBAR_FULL();
+    return oldValue;
+}
+
+int32_t android_atomic_release_swap(int32_t value, volatile int32_t* addr) {
+    ANDROID_MEMBAR_FULL();
+    int32_t oldValue;
+    do {
+        oldValue = *addr;
+    } while (cas(oldValue, value, addr));
+    return oldValue;
+}
+
+int android_atomic_acquire_cas(int32_t oldvalue, int32_t newvalue,
         volatile int32_t* addr) {
-    int xchg;
-    asm volatile
-    (
-    "   lock; cmpxchg %%ecx, (%%edx);"
-    "   setne %%al;"
-    "   andl $1, %%eax"
-    : "=a" (xchg)
-    : "a" (oldvalue), "c" (newvalue), "d" (addr)
-    );
-    android_membar_full();
+    int xchg = cas(oldvalue, newvalue, addr);
+    if (xchg == 0)
+        ANDROID_MEMBAR_FULL();
+    return xchg;
+}
+
+int android_atomic_release_cas(int32_t oldvalue, int32_t newvalue,
+        volatile int32_t* addr) {
+    ANDROID_MEMBAR_FULL();
+    int xchg = cas(oldvalue, newvalue, addr);
     return xchg;
 }
 
