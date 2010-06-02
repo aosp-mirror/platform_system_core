@@ -30,19 +30,19 @@
 
 static int system_ro = 1;
 
-/* Returns the mount number of the requested partition from /proc/mtd */
-static int find_mount(const char *findme)
+/* Returns the device used to mount a directory in /proc/mounts */
+static char *find_mount(const char *dir)
 {
     int fd;
     int res;
     int size;
     char *token = NULL;
     const char delims[] = "\n";
-    char buf[1024];
+    char buf[4096];
 
-    fd = unix_open("/proc/mtd", O_RDONLY);
+    fd = unix_open("/proc/mounts", O_RDONLY);
     if (fd < 0)
-        return -errno;
+        return NULL;
 
     buf[sizeof(buf) - 1] = '\0';
     size = adb_read(fd, buf, sizeof(buf) - 1);
@@ -51,33 +51,41 @@ static int find_mount(const char *findme)
     token = strtok(buf, delims);
 
     while (token) {
-        char mtdname[16];
-        int mtdnum, mtdsize, mtderasesize;
+        char mount_dev[256];
+        char mount_dir[256];
+        int mount_freq;
+        int mount_passno;
 
-        res = sscanf(token, "mtd%d: %x %x %15s",
-                     &mtdnum, &mtdsize, &mtderasesize, mtdname);
-
-        if (res == 4 && !strcmp(mtdname, findme))
-            return mtdnum;
+        res = sscanf(token, "%255s %255s %*s %*s %d %d\n",
+                     mount_dev, mount_dir, &mount_freq, &mount_passno);
+        mount_dev[255] = 0;
+        mount_dir[255] = 0;
+        if (res == 4 && (strcmp(dir, mount_dir) == 0))
+            return strdup(mount_dev);
 
         token = strtok(NULL, delims);
     }
-    return -1;
+    return NULL;
 }
 
 /* Init mounts /system as read only, remount to enable writes. */
 static int remount_system()
 {
-    int num;
-    char source[64];
+    char *dev;
+
     if (system_ro == 0) {
         return 0;
     }
-    if ((num = find_mount("\"system\"")) < 0)
+
+    dev = find_mount("/system");
+
+    if (!dev)
         return -1;
 
-    snprintf(source, sizeof source, "/dev/block/mtdblock%d", num);
-    system_ro = mount(source, "/system", "yaffs2", MS_REMOUNT, NULL);
+    system_ro = mount(dev, "/system", "none", MS_REMOUNT, NULL);
+
+    free(dev);
+
     return system_ro;
 }
 
