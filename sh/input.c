@@ -64,6 +64,10 @@ __RCSID("$NetBSD: input.c,v 1.39 2003/08/07 09:05:32 agc Exp $");
 #include "parser.h"
 #include "myhistedit.h"
 
+#ifdef WITH_LINENOISE
+#include "linenoise.h"
+#endif
+
 #define EOF_NLEFT -99		/* value of parsenleft when EOF pushed back */
 
 MKINIT
@@ -202,6 +206,45 @@ retry:
 		}
 
 	} else
+#endif
+#ifdef WITH_LINENOISE
+    if (parsefile->fd == 0) {
+        static char *rl_start;
+        static const char *rl_cp;
+        static int el_len;
+
+        if (rl_cp == NULL) {
+            rl_cp = rl_start = linenoise(getprompt(""));
+            if (rl_cp != NULL) {
+                el_len = strlen(rl_start);
+                if (el_len != 0) {
+                    /* Add non-blank lines to history. */
+                    linenoiseHistoryAdd(rl_start);
+                }
+                out2str("\r\n");
+                /* Client expects a newline at end of input, doesn't expect null */
+                rl_start[el_len++] = '\n';
+            }
+        }
+        if (rl_cp == NULL)
+            nr = 0;
+        else {
+            nr = el_len;
+            if (nr > BUFSIZ - 8)
+                nr = BUFSIZ - 8;
+            memcpy(buf, rl_cp, nr);
+            if (nr != el_len) {
+                el_len -= nr;
+                rl_cp += nr;
+            } else {
+                rl_cp = 0;
+                if (rl_start != NULL) {
+                    free(rl_start);
+                    rl_start = NULL;
+                }
+            }
+        }
+    } else
 #endif
 		nr = read(parsefile->fd, buf, BUFSIZ - 8);
 
