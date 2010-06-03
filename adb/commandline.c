@@ -100,8 +100,12 @@ void help()
         "                                 environment variable is used, which must\n"
         "                                 be an absolute path.\n"
         " devices                       - list all connected devices\n"
-        " connect <host>:<port>         - connect to a device via TCP/IP\n"
-        " disconnect <host>:<port>      - disconnect from a TCP/IP device\n"
+        " connect <host>[:<port>]       - connect to a device via TCP/IP\n"
+        "                                 Port 5555 is used by default if no port number is specified.\n"
+        " disconnect [<host>[:<port>]]  - disconnect from a TCP/IP device.\n"
+        "                                 Port 5555 is used by default if no port number is specified.\n"
+        "                                 Using this ocmmand with no additional arguments\n"
+        "                                 will disconnect from all connected TCP/IP devices.\n"
         "\n"
         "device commands:\n"
         "  adb push <local> <remote>    - copy file/dir to device\n"
@@ -794,13 +798,33 @@ top:
         }
     }
 
-    if(!strcmp(argv[0], "connect") || !strcmp(argv[0], "disconnect")) {
+    if(!strcmp(argv[0], "connect")) {
         char *tmp;
         if (argc != 2) {
-            fprintf(stderr, "Usage: adb %s <host>:<port>\n", argv[0]);
+            fprintf(stderr, "Usage: adb connect <host>[:<port>]\n");
             return 1;
         }
-        snprintf(buf, sizeof buf, "host:%s:%s", argv[0], argv[1]);
+        snprintf(buf, sizeof buf, "host:connect:%s", argv[1]);
+        tmp = adb_query(buf);
+        if(tmp) {
+            printf("%s\n", tmp);
+            return 0;
+        } else {
+            return 1;
+        }
+    }
+
+    if(!strcmp(argv[0], "disconnect")) {
+        char *tmp;
+        if (argc > 2) {
+            fprintf(stderr, "Usage: adb disconnect [<host>[:<port>]]\n");
+            return 1;
+        }
+        if (argc == 2) {
+            snprintf(buf, sizeof buf, "host:disconnect:%s", argv[1]);
+        } else {
+            snprintf(buf, sizeof buf, "host:disconnect:");
+        }
         tmp = adb_query(buf);
         if(tmp) {
             printf("%s\n", tmp);
