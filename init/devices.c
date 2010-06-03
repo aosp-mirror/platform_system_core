@@ -31,6 +31,7 @@
 #include <private/android_filesystem_config.h>
 #include <sys/time.h>
 #include <asm/page.h>
+#include <sys/wait.h>
 
 #include "devices.h"
 #include "util.h"
@@ -537,6 +538,8 @@ root_free_out:
 static void handle_firmware_event(struct uevent *uevent)
 {
     pid_t pid;
+    int status;
+    int ret;
 
     if(strcmp(uevent->subsystem, "firmware"))
         return;
@@ -549,6 +552,10 @@ static void handle_firmware_event(struct uevent *uevent)
     if (!pid) {
         process_firmware_event(uevent);
         exit(EXIT_SUCCESS);
+    } else {
+        do {
+            ret = waitpid(pid, &status, 0);
+        } while (ret == -1 && errno == EINTR);
     }
 }
 
