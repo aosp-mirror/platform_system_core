@@ -221,7 +221,7 @@ retry:
                     /* Add non-blank lines to history. */
                     linenoiseHistoryAdd(rl_start);
                 }
-                out2str("\r\n");
+                out2str("\n");
                 /* Client expects a newline at end of input, doesn't expect null */
                 rl_start[el_len++] = '\n';
             }
