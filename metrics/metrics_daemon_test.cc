@@ -312,7 +312,7 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   DeleteDBusMessage(msg);
 
   msg = NewDBusSignalString("/",
-                            "org.moblin.connman.Manager",
+                            "org.chromium.flimflam.Manager",
                             "StateChanged",
                             "online");
   EXPECT_EQ(MetricsDaemon::kUnknownNetworkState, daemon_.network_state_);

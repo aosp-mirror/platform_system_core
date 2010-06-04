@@ -15,7 +15,7 @@ using base::TimeDelta;
 using base::TimeTicks;
 
 #define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
-#define DBUS_IFACE_CONNMAN_MANAGER "org.moblin.connman.Manager"
+#define DBUS_IFACE_FLIMFLAM_MANAGER "org.chromium.flimflam.Manager"
 #define DBUS_IFACE_POWER_MANAGER "org.chromium.Power.Manager"
 #define DBUS_IFACE_SCREENSAVER_MANAGER "org.chromium.ScreenSaver.Manager"
 #define DBUS_IFACE_SESSION_MANAGER "org.chromium.SessionManagerInterface"
@@ -56,8 +56,8 @@ const int MetricsDaemon::kMetricTimeToNetworkDropBuckets = 50;
 // static
 const char* MetricsDaemon::kDBusMatches_[] = {
   "type='signal',"
-  "sender='org.moblin.connman',"
-  "interface='" DBUS_IFACE_CONNMAN_MANAGER "',"
+  "sender='org.chromium.flimflam',"
+  "interface='" DBUS_IFACE_FLIMFLAM_MANAGER "',"
   "path='/',"
   "member='StateChanged'",
 
@@ -173,7 +173,7 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
 
   DBusMessageIter iter;
   dbus_message_iter_init(message, &iter);
-  if (strcmp(interface, DBUS_IFACE_CONNMAN_MANAGER) == 0) {
+  if (strcmp(interface, DBUS_IFACE_FLIMFLAM_MANAGER) == 0) {
     CHECK(strcmp(dbus_message_get_member(message),
                  "StateChanged") == 0);
 
