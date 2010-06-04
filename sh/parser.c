@@ -1629,9 +1629,9 @@ setprompt(int which)
 	if (!el)
 #endif
 #ifdef WITH_LINENOISE
-#else
-		out2str(getprompt(NULL));
+        if (! in_interactive_mode() )
 #endif
+		out2str(getprompt(NULL));
 }
 
 /*

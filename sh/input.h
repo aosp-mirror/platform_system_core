@@ -46,6 +46,7 @@ extern int parsenleft;		/* number of characters left in input buffer */
 extern char *parsenextc;	/* next character in input buffer */
 extern int init_editline;	/* 0 == not setup, 1 == OK, -1 == failed */
 
+int in_interactive_mode();
 char *pfgets(char *, int);
 int pgetc(void);
 int preadbuffer(void);
