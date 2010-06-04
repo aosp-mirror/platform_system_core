@@ -75,9 +75,9 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // message. The caller is responsible to store the \0 character
   // between NAME and VALUE (e.g. "%s%c%d", name, '\0', value).
   int32_t FormatChromeMessage(int32_t buffer_size, char* buffer,
-                              const char *format, ...);
+                              const char* format, ...);
 
   const char* uma_events_file_;
 };
 
-#endif /* METRICS_LIBRARY_H_ */
+#endif  // METRICS_LIBRARY_H_

@@ -12,7 +12,7 @@
 # "Sectors" to METRIC_NAME for the two available measurements, uptime
 # and number of sectors read thus far.
 
-# You will need to emit messages similar to the following in order to add a 
+# You will need to emit messages similar to the following in order to add a
 # a metric using this process.  You will need to emit both a start and stop
 # time and the metric reported will be the difference in values
 
@@ -36,25 +36,25 @@ do
   if [ $first -eq 1 ]
   then
     first=0
-    program_name=$m 
+    program_name=$m
   else
     first=1
-    metrics_name=$m       
-         
+    metrics_name=$m
+
     # Example of line from /var/log/messages:
     # Nov 15 08:05:42 localhost connmand[822]: start metric time 12 sectors 56
     # "upstart:" is $5, 1234 is $9, etc.
     program="${program}/$program_name([[0-9]+]:|:) start $metrics_name/\
     {
       metrics_start[\"${metrics_name}Time\"] = \$9;
-      metrics_start[\"${metrics_name}Sectors\"] = \$11;            
+      metrics_start[\"${metrics_name}Sectors\"] = \$11;
     }"
     program="${program}/$program_name([[0-9]+]:|:) stop $metrics_name/\
-    { 
+    {
         metrics_stop[\"${metrics_name}Time\"] = \$9;
         metrics_stop[\"${metrics_name}Sectors\"] = \$11;
     }"
-  fi      
+  fi
 done
 
 # Do all the differencing here

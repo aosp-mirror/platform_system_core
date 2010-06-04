@@ -125,14 +125,14 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
   DBusError error;
   dbus_error_init(&error);
 
-  DBusConnection *connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
+  DBusConnection* connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
   LOG_IF(FATAL, dbus_error_is_set(&error)) <<
       "No D-Bus connection: " << SAFE_MESSAGE(error);
 
   dbus_connection_setup_with_g_main(connection, NULL);
 
   // Registers D-Bus matches for the signals we would like to catch.
-  for (unsigned int m = 0; m < sizeof(kDBusMatches_) / sizeof(char *); m++) {
+  for (unsigned int m = 0; m < sizeof(kDBusMatches_) / sizeof(char*); m++) {
     const char* match = kDBusMatches_[m];
     DLOG(INFO) << "adding dbus match: " << match;
     dbus_bus_add_match(connection, match, &error);
@@ -177,28 +177,28 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
     CHECK(strcmp(dbus_message_get_member(message),
                  "StateChanged") == 0);
 
-    char *state_name;
+    char* state_name;
     dbus_message_iter_get_basic(&iter, &state_name);
     daemon->NetStateChanged(state_name, ticks);
   } else if (strcmp(interface, DBUS_IFACE_POWER_MANAGER) == 0) {
     CHECK(strcmp(dbus_message_get_member(message),
                  "PowerStateChanged") == 0);
 
-    char *state_name;
+    char* state_name;
     dbus_message_iter_get_basic(&iter, &state_name);
     daemon->PowerStateChanged(state_name, now);
   } else if (strcmp(interface, DBUS_IFACE_SCREENSAVER_MANAGER) == 0) {
     CHECK(strcmp(dbus_message_get_member(message),
                  "LockStateChanged") == 0);
 
-    char *state_name;
+    char* state_name;
     dbus_message_iter_get_basic(&iter, &state_name);
     daemon->ScreenSaverStateChanged(state_name, now);
   } else if (strcmp(interface, DBUS_IFACE_SESSION_MANAGER) == 0) {
     CHECK(strcmp(dbus_message_get_member(message),
                  "SessionStateChanged") == 0);
 
-    char *state_name;
+    char* state_name;
     dbus_message_iter_get_basic(&iter, &state_name);
     daemon->SessionStateChanged(state_name, now);
   } else {

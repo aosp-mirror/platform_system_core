@@ -20,12 +20,12 @@ static const char kUMAEventsPath[] =
     "/var/log/metrics/uma-events";
 static const int32_t kBufferSize = 1024;
 
-using namespace std;
+using std::string;
 
 // TODO(sosa@chromium.org) - use Chromium logger instead of stderr
 static void PrintError(const char* message, const char* file,
                        int code) {
-  static const char *kProgramName = "libmetrics";
+  static const char kProgramName[] = "libmetrics";
   if (code == 0) {
     fprintf(stderr, "%s: %s\n", kProgramName, message);
   } else if (file == NULL) {
@@ -113,7 +113,7 @@ void MetricsLibrary::Init() {
 }
 
 bool MetricsLibrary::SendToAutotest(const string& name, int value) {
-  FILE *autotest_file = fopen(kAutotestPath, "a+");
+  FILE* autotest_file = fopen(kAutotestPath, "a+");
   if (autotest_file == NULL) {
     PrintError("fopen", kAutotestPath, errno);
     return false;
