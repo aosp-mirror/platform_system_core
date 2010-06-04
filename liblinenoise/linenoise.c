@@ -138,8 +138,8 @@ static int enableRawMode(int fd) {
      * We want read to return every single byte, without timeout. */
     raw.c_cc[VMIN] = 1; raw.c_cc[VTIME] = 0; /* 1 byte, no timer */
 
-    /* put terminal in raw mode after flushing */
-    if (tcsetattr(fd,TCSAFLUSH,&raw) < 0) goto fatal;
+    /* put terminal in raw mode */
+    if (tcsetattr(fd,TCSADRAIN,&raw) < 0) goto fatal;
     rawmode = 1;
     return 0;
 
@@ -150,7 +150,7 @@ fatal:
 
 static void disableRawMode(int fd) {
     /* Don't even check the return value as it's too late. */
-    if (rawmode && tcsetattr(fd,TCSAFLUSH,&orig_termios) != -1)
+    if (rawmode && tcsetattr(fd,TCSADRAIN,&orig_termios) != -1)
         rawmode = 0;
 }
 
@@ -163,16 +163,30 @@ static void linenoiseAtExit(void) {
 static int getColumns(void) {
     struct winsize ws;
 
-    if (ioctl(1, TIOCGWINSZ, &ws) == -1) return 80;
+    if (ioctl(1, TIOCGWINSZ, &ws) == -1) return 4096;
     if (ws.ws_col == 0) {
-        return 80;
+        return 4096;
     }
     return ws.ws_col;
 }
 
+static int effectiveLen(const char* prompt) {
+    int col = 0;
+    char c;
+    // TODO: Handle escape sequences.
+    while ( (c = *prompt++) != 0 ) {
+        if (c == '\n') {
+            col = 0;
+        } else {
+            col++;
+        }
+    }
+    return col;
+}
+
 static void refreshLine(int fd, const char *prompt, char *buf, size_t len, size_t pos, size_t cols) {
     char seq[64];
-    size_t plen = strlen(prompt);
+    size_t plen = effectiveLen(prompt);
     
     while((plen+pos) >= cols) {
         buf++;
