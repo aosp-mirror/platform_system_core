@@ -175,6 +175,9 @@ pgetc(void)
 	return pgetc_macro();
 }
 
+int in_interactive_mode() {
+    return parsefile != NULL && parsefile->fd == 0;
+}
 
 static int
 preadfd(void)
