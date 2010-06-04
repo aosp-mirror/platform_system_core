@@ -13,6 +13,130 @@
 #include <grp.h>
 
 #include <linux/kdev_t.h>
+#include <limits.h>
+
+// dynamic arrays
+typedef struct {
+    int count;
+    int capacity;
+    void** items;
+} dynarray_t;
+
+#define DYNARRAY_INITIALIZER  { 0, 0, NULL }
+
+static void dynarray_init( dynarray_t *a )
+{
+    a->count = a->capacity = 0;
+    a->items = NULL;
+}
+
+static void dynarray_reserve_more( dynarray_t *a, int count )
+{
+    int old_cap = a->capacity;
+    int new_cap = old_cap;
+    const int max_cap = INT_MAX/sizeof(void*);
+    void** new_items;
+    int new_count = a->count + count;
+
+    if (count <= 0)
+        return;
+
+    if (count > max_cap - a->count)
+        abort();
+
+    new_count = a->count + count;
+
+    while (new_cap < new_count) {
+        old_cap = new_cap;
+        new_cap += (new_cap >> 2) + 4;
+        if (new_cap < old_cap || new_cap > max_cap) {
+            new_cap = max_cap;
+        }
+    }
+    new_items = realloc(a->items, new_cap*sizeof(void*));
+    if (new_items == NULL)
+        abort();
+
+    a->items = new_items;
+    a->capacity = new_cap;
+}
+
+static void dynarray_append( dynarray_t *a, void* item )
+{
+    if (a->count >= a->capacity)
+        dynarray_reserve_more(a, 1);
+
+    a->items[a->count++] = item;
+}
+
+static void dynarray_done( dynarray_t *a )
+{
+    free(a->items);
+    a->items = NULL;
+    a->count = a->capacity = 0;
+}
+
+#define DYNARRAY_FOREACH_TYPE(_array,_item_type,_item,_stmnt) \
+    do { \
+        int _nn_##__LINE__ = 0; \
+        for (;_nn_##__LINE__ < (_array)->count; ++ _nn_##__LINE__) { \
+            _item_type _item = (_item_type)(_array)->items[_nn_##__LINE__]; \
+            _stmnt; \
+        } \
+    } while (0)
+
+#define DYNARRAY_FOREACH(_array,_item,_stmnt) \
+    DYNARRAY_FOREACH_TYPE(_array,void *,_item,_stmnt)
+
+// string arrays
+
+typedef dynarray_t  strlist_t;
+
+#define  STRLIST_INITIALIZER  DYNARRAY_INITIALIZER
+
+#define  STRLIST_FOREACH(_list,_string,_stmnt) \
+    DYNARRAY_FOREACH_TYPE(_list,char *,_string,_stmnt)
+
+static void strlist_init( strlist_t *list )
+{
+    dynarray_init(list);
+}
+
+static void strlist_append_b( strlist_t *list, const void* str, size_t  slen )
+{
+    char *copy = malloc(slen+1);
+    memcpy(copy, str, slen);
+    copy[slen] = '\0';
+    dynarray_append(list, copy);
+}
+
+static void strlist_append_dup( strlist_t *list, const char *str)
+{
+    strlist_append_b(list, str, strlen(str));
+}
+
+static void strlist_done( strlist_t *list )
+{
+    STRLIST_FOREACH(list, string, free(string));
+    dynarray_done(list);
+}
+
+static int strlist_compare_strings(const void* a, const void* b)
+{
+    const char *sa = *(const char **)a;
+    const char *sb = *(const char **)b;
+    return strcmp(sa, sb);
+}
+
+static void strlist_sort( strlist_t *list )
+{
+    if (list->count > 0) {
+        qsort(list->items, 
+              (size_t)list->count,
+              sizeof(void*),
+              strlist_compare_strings);
+    }
+}
 
 // bits for flags argument
 #define LIST_LONG           (1 << 0)
@@ -198,6 +322,7 @@ static int listdir(const char *name, int flags)
     char tmp[4096];
     DIR *d;
     struct dirent *de;
+    strlist_t  files = STRLIST_INITIALIZER;
     
     d = opendir(name);
     if(d == 0) {
@@ -209,10 +334,16 @@ static int listdir(const char *name, int flags)
         if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) continue;
         if(de->d_name[0] == '.' && (flags & LIST_ALL) == 0) continue;
 
-        listfile(name, de->d_name, flags);
+        strlist_append_dup(&files, de->d_name);
     }
 
+    strlist_sort(&files);
+    STRLIST_FOREACH(&files, filename, listfile(name, filename, flags));
+    strlist_done(&files);
+
     if (flags & LIST_RECURSIVE) {
+        strlist_t subdirs = STRLIST_INITIALIZER;
+
         rewinddir(d);
 
         while ((de = readdir(d)) != 0) {
@@ -245,10 +376,15 @@ static int listdir(const char *name, int flags)
             }
 
             if (S_ISDIR(s.st_mode)) {
-                printf("\n%s:\n", tmp);
-                listdir(tmp, flags);
+                strlist_append_dup(&subdirs, tmp);
             }
         }
+        strlist_sort(&subdirs);
+        STRLIST_FOREACH(&subdirs, path, {
+            printf("\n%s:\n", path);
+            listdir(path, flags);
+        });
+        strlist_done(&subdirs);
     }
 
     closedir(d);
@@ -292,27 +428,40 @@ int ls_main(int argc, char **argv)
     if(argc > 1) {
         int i;
         int err = 0;
+        strlist_t  files = STRLIST_INITIALIZER;
 
         for (i = 1; i < argc; i++) {
-            if (!strcmp(argv[i], "-l")) {
-                flags |= LIST_LONG;
-            } else if (!strcmp(argv[i], "-s")) {
-                flags |= LIST_SIZE;
-            } else if (!strcmp(argv[i], "-a")) {
-                flags |= LIST_ALL;
-            } else if (!strcmp(argv[i], "-R")) {
-                flags |= LIST_RECURSIVE;
-            } else if (!strcmp(argv[i], "-d")) {
-                flags |= LIST_DIRECTORIES;
-            } else {
-                listed++;
-                if(listpath(argv[i], flags) != 0) {
-                    err = EXIT_FAILURE;
+            if (argv[i][0] == '-') {
+                /* an option ? */
+                const char *arg = argv[i]+1;
+                while (arg[0]) {
+                    switch (arg[0]) {
+                    case 'l': flags |= LIST_LONG; break;
+                    case 's': flags |= LIST_SIZE; break;
+                    case 'R': flags |= LIST_RECURSIVE; break;
+                    case 'd': flags |= LIST_DIRECTORIES; break;
+                    case 'a': flags |= LIST_ALL; break;
+                    default:
+                        fprintf(stderr, "%s: Unknown option '-%c'. Aborting.\n", "ls", arg[0]);
+                        exit(1);
+                    }
+                    arg++;
                 }
+            } else {
+                /* not an option ? */
+                strlist_append_dup(&files, argv[i]);
             }
         }
 
-        if (listed  > 0) return err;
+        if (files.count > 0) {
+            STRLIST_FOREACH(&files, path, {
+                if (listpath(path, flags) != 0) {
+                    err = EXIT_FAILURE;
+                }
+            });
+            strlist_done(&files);
+            return err;
+        }
     }
     
     // list working directory if no files or directories were specified    
