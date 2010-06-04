@@ -39,69 +39,20 @@
 # error "Must define ANDROID_SMP before including atomic-inline.h"
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/*
- * Define the full memory barrier for an SMP system.  This is
- * platform-specific.
- */
-
-#ifdef __arm__
-#include <machine/cpu-features.h>
-
-/*
- * For ARMv6K we need to issue a specific MCR instead of the DMB, since
- * that wasn't added until v7.  For anything older, SMP isn't relevant.
- * Since we don't have an ARMv6K to test with, we're not going to deal
- * with that now.
- *
- * The DMB instruction is found in the ARM and Thumb2 instruction sets.
- * This will fail on plain 16-bit Thumb.
- */
-#if defined(__ARM_HAVE_DMB)
-# define _ANDROID_MEMBAR_FULL_SMP() \
-    do { __asm__ __volatile__ ("dmb" ::: "memory"); } while (0)
-#else
-# define _ANDROID_MEMBAR_FULL_SMP()  ARM_SMP_defined_but_no_DMB()
-#endif
-
+#if defined(__arm__)
+#include <cutils/atomic-arm.h>
 #elif defined(__i386__) || defined(__x86_64__)
-/*
- * For recent x86, we can use the SSE2 mfence instruction.
- */
-# define _ANDROID_MEMBAR_FULL_SMP() \
-    do { __asm__ __volatile__ ("mfence" ::: "memory"); } while (0)
-
+#include <cutils/atomic-x86.h>
+#elif defined(__sh__)
+/* implementation is in atomic-android-sh.c */
 #else
-/*
- * Implementation not defined for this platform.  Hopefully we're building
- * in uniprocessor mode.
- */
-# define _ANDROID_MEMBAR_FULL_SMP()  SMP_barrier_not_defined_for_platform()
+#error atomic operations are unsupported
 #endif
 
-
-/*
- * Full barrier.  On uniprocessors this is just a compiler reorder barrier,
- * which ensures that the statements appearing above the barrier in the C/C++
- * code will be issued after the statements appearing below the barrier.
- *
- * For SMP this also includes a memory barrier instruction.  On an ARM
- * CPU this means that the current core will flush pending writes, wait
- * for pending reads to complete, and discard any cached reads that could
- * be stale.  Other CPUs may do less, but the end result is equivalent.
- */
-#if ANDROID_SMP != 0
-# define ANDROID_MEMBAR_FULL() _ANDROID_MEMBAR_FULL_SMP()
+#if ANDROID_SMP == 0
+#define ANDROID_MEMBAR_FULL android_compiler_barrier
 #else
-# define ANDROID_MEMBAR_FULL() \
-    do { __asm__ __volatile__ ("" ::: "memory"); } while (0)
+#define ANDROID_MEMBAR_FULL android_memory_barrier
 #endif
 
-#ifdef __cplusplus
-} // extern "C"
-#endif
-
-#endif // ANDROID_CUTILS_ATOMIC_INLINE_H
+#endif /* ANDROID_CUTILS_ATOMIC_INLINE_H */
