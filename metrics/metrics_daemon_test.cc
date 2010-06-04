@@ -13,6 +13,8 @@
 #include <base/string_util.h>
 #include <gtest/gtest.h>
 
+using base::Time;
+using base::TimeTicks;
 using ::testing::Mock;
 using ::testing::Return;
 using ::testing::StrictMock;
@@ -22,13 +24,45 @@ static const char kDoesNotExistFile[] = "/does/not/exist";
 
 static const int kSecondsPerDay = 24 * 60 * 60;
 
+// This class allows a TimeTicks object to be initialized with seconds
+// (rather than microseconds) through the protected TimeTicks(int64)
+// constructor.
+class TestTicks : public TimeTicks {
+ public:
+  TestTicks(int64 seconds)
+      : TimeTicks(seconds * Time::kMicrosecondsPerSecond) {}
+};
+
+// Overloaded for test failure printing purposes.
+static std::ostream& operator<<(std::ostream& o, const TimeTicks& ticks) {
+  o << ticks.ToInternalValue() << "us";
+  return o;
+};
+
+// Overloaded for test failure printing purposes.
+static std::ostream& operator<<(std::ostream& o, const Time& time) {
+  o << time.ToInternalValue() << "us";
+  return o;
+};
+
 class MetricsDaemonTest : public testing::Test {
  protected:
   virtual void SetUp() {
     EXPECT_EQ(NULL, daemon_.daily_use_record_file_);
     daemon_.Init(true, &metrics_lib_);
+
+    // Tests constructor initialization. Switches to a test daily use
+    // record file.
     EXPECT_TRUE(NULL != daemon_.daily_use_record_file_);
     daemon_.daily_use_record_file_ = kTestDailyUseRecordFile;
+    EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
+    EXPECT_EQ(0, daemon_.daily_use_day_last_);
+    EXPECT_FALSE(daemon_.user_active_);
+    EXPECT_TRUE(daemon_.user_active_last_.is_null());
+    EXPECT_EQ(MetricsDaemon::kUnknownNetworkState, daemon_.network_state_);
+    EXPECT_TRUE(daemon_.network_state_last_.is_null());
+    EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
+    EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
 
     // The test fixture object will be used by the log message handler.
     daemon_test_ = this;
@@ -82,6 +116,10 @@ class MetricsDaemonTest : public testing::Test {
                  MetricsDaemon::kMetricTimeToNetworkDropMin,
                  MetricsDaemon::kMetricTimeToNetworkDropMax,
                  MetricsDaemon::kMetricTimeToNetworkDropBuckets);
+  }
+
+  Time TestTime(int64 seconds) {
+    return Time::FromInternalValue(seconds * Time::kMicrosecondsPerSecond);
   }
 
   // Asserts that the daily use record file contains the specified
@@ -186,9 +224,6 @@ TEST_F(MetricsDaemonTest, LogDailyUseRecordBadFileLocation) {
 }
 
 TEST_F(MetricsDaemonTest, LogDailyUseRecordOnLogin) {
-  EXPECT_EQ(0, daemon_.daily_use_day_last_);
-  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
-
   daemon_.LogDailyUseRecord(/* day */ 5, /* seconds */ 120);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 5, /* seconds */ 120);
   EXPECT_EQ(5, daemon_.daily_use_day_last_);
@@ -208,9 +243,6 @@ TEST_F(MetricsDaemonTest, LogDailyUseRecordOnLogin) {
 }
 
 TEST_F(MetricsDaemonTest, LogDailyUseRecordRoundDown) {
-  EXPECT_EQ(0, daemon_.daily_use_day_last_);
-  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
-
   daemon_.LogDailyUseRecord(/* day */ 7, /* seconds */ 89);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 7, /* seconds */ 89);
   EXPECT_EQ(7, daemon_.daily_use_day_last_);
@@ -222,9 +254,6 @@ TEST_F(MetricsDaemonTest, LogDailyUseRecordRoundDown) {
 }
 
 TEST_F(MetricsDaemonTest, LogDailyUseRecordRoundUp) {
-  EXPECT_EQ(0, daemon_.daily_use_day_last_);
-  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
-
   daemon_.LogDailyUseRecord(/* day */ 6, /* seconds */ 0);
   EXPECT_EQ(6, daemon_.daily_use_day_last_);
 
@@ -334,125 +363,103 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
 }
 
 TEST_F(MetricsDaemonTest, NetStateChangedSimpleDrop) {
-  EXPECT_EQ(MetricsDaemon::kUnknownNetworkState, daemon_.network_state_);
-  EXPECT_EQ(0, daemon_.network_state_last_);
-  EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
-
-  daemon_.NetStateChanged("online", /* now */ 10);
+  daemon_.NetStateChanged("online", TestTicks(10));
   EXPECT_EQ(MetricsDaemon::kNetworkStateOnline, daemon_.network_state_);
-  EXPECT_EQ(10, daemon_.network_state_last_);
+  EXPECT_EQ(TestTicks(10), daemon_.network_state_last_);
 
   ExpectTimeToNetworkDropMetric(20);
-  daemon_.NetStateChanged("offline", /* now */ 30);
+  daemon_.NetStateChanged("offline", TestTicks(30));
   EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(30, daemon_.network_state_last_);
+  EXPECT_EQ(TestTicks(30), daemon_.network_state_last_);
 }
 
 TEST_F(MetricsDaemonTest, NetStateChangedSuspend) {
+  daemon_.NetStateChanged("offline", TestTicks(30));
+  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
+  EXPECT_EQ(TestTicks(30), daemon_.network_state_last_);
+
+  daemon_.NetStateChanged("online", TestTicks(60));
+  EXPECT_EQ(MetricsDaemon::kNetworkStateOnline, daemon_.network_state_);
+  EXPECT_EQ(TestTicks(60), daemon_.network_state_last_);
+
+  daemon_.power_state_ = MetricsDaemon::kPowerStateMem;
+  daemon_.NetStateChanged("offline", TestTicks(85));
+  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
+  EXPECT_EQ(TestTicks(85), daemon_.network_state_last_);
+
+  daemon_.NetStateChanged("somestate", TestTicks(90));
   EXPECT_EQ(MetricsDaemon::kUnknownNetworkState, daemon_.network_state_);
-  EXPECT_EQ(0, daemon_.network_state_last_);
-  EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
+  EXPECT_EQ(TestTicks(90), daemon_.network_state_last_);
 
-  daemon_.NetStateChanged("offline", /* now */ 30);
+  daemon_.NetStateChanged("offline", TestTicks(95));
   EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(30, daemon_.network_state_last_);
+  EXPECT_EQ(TestTicks(95), daemon_.network_state_last_);
 
-  daemon_.NetStateChanged("online", /* now */ 60);
+  daemon_.power_state_ = MetricsDaemon::kPowerStateOn;
+  daemon_.NetStateChanged("online", TestTicks(105));
   EXPECT_EQ(MetricsDaemon::kNetworkStateOnline, daemon_.network_state_);
-  EXPECT_EQ(60, daemon_.network_state_last_);
-
-  daemon_.PowerStateChanged("mem", /* now */ 80);
-  EXPECT_EQ(MetricsDaemon::kPowerStateMem, daemon_.power_state_);
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOnline, daemon_.network_state_);
-  EXPECT_EQ(60, daemon_.network_state_last_);
-
-  daemon_.NetStateChanged("offline", /* now */ 85);
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(85, daemon_.network_state_last_);
-
-  daemon_.NetStateChanged("somestate", /* now */ 90);
-  EXPECT_EQ(MetricsDaemon::kUnknownNetworkState, daemon_.network_state_);
-  EXPECT_EQ(90, daemon_.network_state_last_);
-
-  daemon_.NetStateChanged("offline", /* now */ 95);
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(95, daemon_.network_state_last_);
-
-  daemon_.PowerStateChanged("on", /* now */ 100);
-  EXPECT_EQ(MetricsDaemon::kPowerStateOn, daemon_.power_state_);
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(95, daemon_.network_state_last_);
-
-  daemon_.NetStateChanged("online", /* now */ 105);
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOnline, daemon_.network_state_);
-  EXPECT_EQ(105, daemon_.network_state_last_);
+  EXPECT_EQ(TestTicks(105), daemon_.network_state_last_);
 
   ExpectTimeToNetworkDropMetric(3);
-  daemon_.NetStateChanged("offline", /* now */ 108);
+  daemon_.NetStateChanged("offline", TestTicks(108));
   EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(108, daemon_.network_state_last_);
+  EXPECT_EQ(TestTicks(108), daemon_.network_state_last_);
 }
 
 TEST_F(MetricsDaemonTest, PowerStateChanged) {
-  EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(0, daemon_.user_active_last_);
-  EXPECT_EQ(0, daemon_.daily_use_day_last_);
-  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
-
-  daemon_.SetUserActiveState(/* active */ true, 7 * kSecondsPerDay + 15);
+  daemon_.SetUserActiveState(/* active */ true,
+                             TestTime(7 * kSecondsPerDay + 15));
   EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(7 * kSecondsPerDay + 15, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(7 * kSecondsPerDay + 15), daemon_.user_active_last_);
   EXPECT_EQ(7, daemon_.daily_use_day_last_);
   EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
 
-  daemon_.PowerStateChanged("mem", 7 * kSecondsPerDay + 45);
+  daemon_.PowerStateChanged("mem", TestTime(7 * kSecondsPerDay + 45));
   EXPECT_EQ(MetricsDaemon::kPowerStateMem, daemon_.power_state_);
   EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(7 * kSecondsPerDay + 45, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(7 * kSecondsPerDay + 45), daemon_.user_active_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 7, /* seconds */ 30);
 
-  daemon_.PowerStateChanged("on", 7 * kSecondsPerDay + 85);
+  daemon_.PowerStateChanged("on", TestTime(7 * kSecondsPerDay + 85));
   EXPECT_EQ(MetricsDaemon::kPowerStateOn, daemon_.power_state_);
   EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(7 * kSecondsPerDay + 45, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(7 * kSecondsPerDay + 45), daemon_.user_active_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 7, /* seconds */ 30);
 
-  daemon_.PowerStateChanged("otherstate", 7 * kSecondsPerDay + 185);
+  daemon_.PowerStateChanged("otherstate", TestTime(7 * kSecondsPerDay + 185));
   EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
   EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(7 * kSecondsPerDay + 185, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(7 * kSecondsPerDay + 185), daemon_.user_active_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 7, /* seconds */ 30);
 }
 
 TEST_F(MetricsDaemonTest, ScreenSaverStateChanged) {
   EXPECT_EQ(MetricsDaemon::kUnknownScreenSaverState,
             daemon_.screensaver_state_);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(0, daemon_.user_active_last_);
-  EXPECT_EQ(0, daemon_.daily_use_day_last_);
-  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
 
-  daemon_.ScreenSaverStateChanged("locked", 5 * kSecondsPerDay + 10);
+  daemon_.ScreenSaverStateChanged("locked",
+                                  TestTime(5 * kSecondsPerDay + 10));
   EXPECT_EQ(MetricsDaemon::kScreenSaverStateLocked,
             daemon_.screensaver_state_);
   EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(5 * kSecondsPerDay + 10, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(5 * kSecondsPerDay + 10), daemon_.user_active_last_);
   EXPECT_EQ(5, daemon_.daily_use_day_last_);
   EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
 
-  daemon_.ScreenSaverStateChanged("unlocked", 5 * kSecondsPerDay + 100);
+  daemon_.ScreenSaverStateChanged("unlocked",
+                                  TestTime(5 * kSecondsPerDay + 100));
   EXPECT_EQ(MetricsDaemon::kScreenSaverStateUnlocked,
             daemon_.screensaver_state_);
   EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(5 * kSecondsPerDay + 100, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(5 * kSecondsPerDay + 100), daemon_.user_active_last_);
   EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
 
-  daemon_.ScreenSaverStateChanged("otherstate", 5 * kSecondsPerDay + 300);
+  daemon_.ScreenSaverStateChanged("otherstate",
+                                  TestTime(5 * kSecondsPerDay + 300));
   EXPECT_EQ(MetricsDaemon::kUnknownScreenSaverState,
             daemon_.screensaver_state_);
   EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(5 * kSecondsPerDay + 300, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(5 * kSecondsPerDay + 300), daemon_.user_active_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 5, /* seconds */ 200);
 }
 
@@ -463,100 +470,117 @@ TEST_F(MetricsDaemonTest, SendMetric) {
 }
 
 TEST_F(MetricsDaemonTest, SessionStateChanged) {
-  EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(0, daemon_.user_active_last_);
-  EXPECT_EQ(0, daemon_.daily_use_day_last_);
-  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
-
-  daemon_.SessionStateChanged("started", 15 * kSecondsPerDay + 20);
+  daemon_.SessionStateChanged("started", TestTime(15 * kSecondsPerDay + 20));
   EXPECT_EQ(MetricsDaemon::kSessionStateStarted, daemon_.session_state_);
   EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(15 * kSecondsPerDay + 20, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(15 * kSecondsPerDay + 20), daemon_.user_active_last_);
   EXPECT_EQ(15, daemon_.daily_use_day_last_);
   EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
 
-  daemon_.SessionStateChanged("stopped", 15 * kSecondsPerDay + 150);
+  daemon_.SessionStateChanged("stopped", TestTime(15 * kSecondsPerDay + 150));
   EXPECT_EQ(MetricsDaemon::kSessionStateStopped, daemon_.session_state_);
   EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(15 * kSecondsPerDay + 150, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(15 * kSecondsPerDay + 150), daemon_.user_active_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 15, /* seconds */ 130);
 
-  daemon_.SessionStateChanged("otherstate", 15 * kSecondsPerDay + 300);
+  daemon_.SessionStateChanged("otherstate",
+                              TestTime(15 * kSecondsPerDay + 300));
   EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
   EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(15 * kSecondsPerDay + 300, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(15 * kSecondsPerDay + 300), daemon_.user_active_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 15, /* seconds */ 130);
 }
 
 TEST_F(MetricsDaemonTest, SetUserActiveStateSendOnLogin) {
+  daemon_.SetUserActiveState(/* active */ false,
+                             TestTime(5 * kSecondsPerDay + 10));
   EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(0, daemon_.user_active_last_);
-  EXPECT_EQ(0, daemon_.daily_use_day_last_);
-  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
-
-  daemon_.SetUserActiveState(/* active */ false, 5 * kSecondsPerDay + 10);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(5 * kSecondsPerDay + 10, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(5 * kSecondsPerDay + 10), daemon_.user_active_last_);
   EXPECT_EQ(5, daemon_.daily_use_day_last_);
   EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
 
-  daemon_.SetUserActiveState(/* active */ true, 6 * kSecondsPerDay + 20);
+  daemon_.SetUserActiveState(/* active */ true,
+                             TestTime(6 * kSecondsPerDay + 20));
   EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(6 * kSecondsPerDay + 20, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(6 * kSecondsPerDay + 20), daemon_.user_active_last_);
   EXPECT_EQ(6, daemon_.daily_use_day_last_);
   EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
 
-  daemon_.SetUserActiveState(/* active */ true, 6 * kSecondsPerDay + 120);
+  daemon_.SetUserActiveState(/* active */ true,
+                             TestTime(6 * kSecondsPerDay + 120));
   EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(6 * kSecondsPerDay + 120, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(6 * kSecondsPerDay + 120), daemon_.user_active_last_);
   EXPECT_EQ(6, daemon_.daily_use_day_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 6, /* seconds */ 100);
 
-  daemon_.SetUserActiveState(/* active */ false, 6 * kSecondsPerDay + 220);
+  daemon_.SetUserActiveState(/* active */ false,
+                             TestTime(6 * kSecondsPerDay + 220));
   EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(6 * kSecondsPerDay + 220, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(6 * kSecondsPerDay + 220), daemon_.user_active_last_);
   EXPECT_EQ(6, daemon_.daily_use_day_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 6, /* seconds */ 200);
 
   ExpectDailyUseTimeMetric(/* sample */ 3);
-  daemon_.SetUserActiveState(/* active */ true, 8 * kSecondsPerDay - 300);
+  daemon_.SetUserActiveState(/* active */ true,
+                             TestTime(8 * kSecondsPerDay - 300));
   EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(8 * kSecondsPerDay - 300, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(8 * kSecondsPerDay - 300), daemon_.user_active_last_);
   EXPECT_EQ(7, daemon_.daily_use_day_last_);
   EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
 }
 
 TEST_F(MetricsDaemonTest, SetUserActiveStateSendOnMonitor) {
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(0, daemon_.user_active_last_);
-  EXPECT_EQ(0, daemon_.daily_use_day_last_);
-  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
-
-  daemon_.SetUserActiveState(/* active */ true, 8 * kSecondsPerDay - 300);
+  daemon_.SetUserActiveState(/* active */ true,
+                             TestTime(8 * kSecondsPerDay - 300));
   EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(8 * kSecondsPerDay - 300, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(8 * kSecondsPerDay - 300), daemon_.user_active_last_);
   EXPECT_EQ(7, daemon_.daily_use_day_last_);
   EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
 
-  daemon_.SetUserActiveState(/* active */ false, 8 * kSecondsPerDay + 300);
+  daemon_.SetUserActiveState(/* active */ false,
+                             TestTime(8 * kSecondsPerDay + 300));
   EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(8 * kSecondsPerDay + 300, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(8 * kSecondsPerDay + 300), daemon_.user_active_last_);
   EXPECT_EQ(8, daemon_.daily_use_day_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 8, /* seconds */ 600);
 
-  daemon_.SetUserActiveState(/* active */ true, 9 * kSecondsPerDay - 400);
+  daemon_.SetUserActiveState(/* active */ true,
+                             TestTime(9 * kSecondsPerDay - 200));
   EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(9 * kSecondsPerDay - 400, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(9 * kSecondsPerDay - 200), daemon_.user_active_last_);
   EXPECT_EQ(8, daemon_.daily_use_day_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 8, /* seconds */ 600);
 
   ExpectDailyUseTimeMetric(/* sample */ 10);
-  daemon_.SetUserActiveState(/* active */ true, 9 * kSecondsPerDay + 400);
+  daemon_.SetUserActiveState(/* active */ true,
+                             TestTime(9 * kSecondsPerDay + 200));
   EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(9 * kSecondsPerDay + 400, daemon_.user_active_last_);
+  EXPECT_EQ(TestTime(9 * kSecondsPerDay + 200), daemon_.user_active_last_);
   EXPECT_EQ(9, daemon_.daily_use_day_last_);
-  EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 9, /* seconds */ 800);
+  EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 9, /* seconds */ 400);
+}
+
+TEST_F(MetricsDaemonTest, SetUserActiveStateTimeJump) {
+  daemon_.SetUserActiveState(/* active */ true,
+                             TestTime(10 * kSecondsPerDay + 500));
+  EXPECT_TRUE(daemon_.user_active_);
+  EXPECT_EQ(TestTime(10 * kSecondsPerDay + 500), daemon_.user_active_last_);
+  EXPECT_EQ(10, daemon_.daily_use_day_last_);
+  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
+
+  daemon_.SetUserActiveState(/* active */ true,
+                             TestTime(10 * kSecondsPerDay + 300));
+  EXPECT_TRUE(daemon_.user_active_);
+  EXPECT_EQ(TestTime(10 * kSecondsPerDay + 300), daemon_.user_active_last_);
+  EXPECT_EQ(10, daemon_.daily_use_day_last_);
+  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
+
+  daemon_.SetUserActiveState(/* active */ true,
+                             TestTime(10 * kSecondsPerDay + 1000));
+  EXPECT_TRUE(daemon_.user_active_);
+  EXPECT_EQ(TestTime(10 * kSecondsPerDay + 1000), daemon_.user_active_last_);
+  EXPECT_EQ(10, daemon_.daily_use_day_last_);
+  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
 }
 
 int main(int argc, char **argv) {

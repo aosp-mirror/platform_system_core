@@ -7,11 +7,11 @@
 
 #include <dbus/dbus.h>
 #include <glib.h>
-#include <time.h>
 
 #include "metrics_library.h"
 
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
+#include <base/time.h>
 
 class MetricsDaemon {
 
@@ -19,12 +19,10 @@ class MetricsDaemon {
   MetricsDaemon()
       : daily_use_record_file_(NULL),
         network_state_(kUnknownNetworkState),
-        network_state_last_(0),
         power_state_(kUnknownPowerState),
         screensaver_state_(kUnknownScreenSaverState),
         session_state_(kUnknownSessionState),
         user_active_(false),
-        user_active_last_(0),
         daily_use_day_last_(0),
         usemon_interval_(0),
         usemon_source_(NULL) {}
@@ -56,6 +54,7 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateSendOnLogin);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateSendOnMonitor);
+  FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateTimeJump);
 
   // The network states (see network_states.h).
   enum NetworkState {
@@ -131,25 +130,25 @@ class MetricsDaemon {
                                          void* user_data);
 
   // Processes network state change.
-  void NetStateChanged(const char* state_name, time_t now);
+  void NetStateChanged(const char* state_name, base::TimeTicks ticks);
 
   // Given the state name, returns the state id.
   NetworkState LookupNetworkState(const char* state_name);
 
   // Processes power state change.
-  void PowerStateChanged(const char* state_name, time_t now);
+  void PowerStateChanged(const char* state_name, base::Time now);
 
   // Given the state name, returns the state id.
   PowerState LookupPowerState(const char* state_name);
 
   // Processes screen-saver state change.
-  void ScreenSaverStateChanged(const char* state_name, time_t now);
+  void ScreenSaverStateChanged(const char* state_name, base::Time now);
 
   // Given the state name, returns the state id.
   ScreenSaverState LookupScreenSaverState(const char* state_name);
 
   // Processes user session state change.
-  void SessionStateChanged(const char* state_name, time_t now);
+  void SessionStateChanged(const char* state_name, base::Time now);
 
   // Given the state name, returns the state id.
   SessionState LookupSessionState(const char* state_name);
@@ -158,7 +157,10 @@ class MetricsDaemon {
   // since the last update. If the user has just become active,
   // reschedule the daily use monitor for more frequent updates --
   // this is followed by an exponential back-off (see UseMonitor).
-  void SetUserActiveState(bool active, time_t now);
+  // While in active use, this method should be called at intervals no
+  // longer than kUseMonitorIntervalMax otherwise new use time will be
+  // discarded.
+  void SetUserActiveState(bool active, base::Time now);
 
   // Updates the daily usage file, if necessary, by adding |seconds|
   // of active use to the |day| since Epoch. If there's usage data for
@@ -205,8 +207,10 @@ class MetricsDaemon {
   // Current network state.
   NetworkState network_state_;
 
-  // Timestamps last network state update.
-  time_t network_state_last_;
+  // Timestamps last network state update.  This timestamp is used to
+  // sample the time from the network going online to going offline so
+  // TimeTicks ensures a monotonically increasing TimeDelta.
+  base::TimeTicks network_state_last_;
 
   // Current power state.
   PowerState power_state_;
@@ -221,10 +225,12 @@ class MetricsDaemon {
   // started, screen is not locked.
   bool user_active_;
 
-  // Timestamps last user active update.
-  time_t user_active_last_;
+  // Timestamps last user active update.  Active use time is
+  // aggregated each day before sending to UMA so using time since the
+  // epoch as the timestamp.
+  base::Time user_active_last_;
 
-  // Last stored daily use day (since epoch).
+  // Last stored daily use day (since the epoch).
   int daily_use_day_last_;
 
   // Sleep period until the next daily usage aggregation performed by

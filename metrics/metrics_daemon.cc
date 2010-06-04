@@ -10,6 +10,10 @@
 #include <base/eintr_wrapper.h>
 #include <base/logging.h>
 
+using base::Time;
+using base::TimeDelta;
+using base::TimeTicks;
+
 #define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
 #define DBUS_IFACE_CONNMAN_MANAGER "org.moblin.connman.Manager"
 #define DBUS_IFACE_POWER_MANAGER "org.chromium.Power.Manager"
@@ -25,7 +29,6 @@ static const int kSecondsPerMinute = 60;
 static const int kMinutesPerHour = 60;
 static const int kHoursPerDay = 24;
 static const int kMinutesPerDay = kHoursPerDay * kMinutesPerHour;
-static const int kSecondsPerDay = kMinutesPerDay * kSecondsPerMinute;
 
 // The daily use monitor is scheduled to a 1-minute interval after
 // initial user activity and then it's exponentially backed off to
@@ -152,8 +155,9 @@ void MetricsDaemon::Loop() {
 DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
                                                DBusMessage* message,
                                                void* user_data) {
-  time_t now = time(NULL);
-  DLOG(INFO) << "message intercepted @ " << now;
+  Time now = Time::Now();
+  TimeTicks ticks = TimeTicks::Now();
+  DLOG(INFO) << "message intercepted @ " << now.ToInternalValue();
 
   int message_type = dbus_message_get_type(message);
   if (message_type != DBUS_MESSAGE_TYPE_SIGNAL) {
@@ -175,7 +179,7 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
 
     char *state_name;
     dbus_message_iter_get_basic(&iter, &state_name);
-    daemon->NetStateChanged(state_name, now);
+    daemon->NetStateChanged(state_name, ticks);
   } else if (strcmp(interface, DBUS_IFACE_POWER_MANAGER) == 0) {
     CHECK(strcmp(dbus_message_get_member(message),
                  "PowerStateChanged") == 0);
@@ -205,7 +209,7 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
   return DBUS_HANDLER_RESULT_HANDLED;
 }
 
-void MetricsDaemon::NetStateChanged(const char* state_name, time_t now) {
+void MetricsDaemon::NetStateChanged(const char* state_name, TimeTicks ticks) {
   DLOG(INFO) << "network state: " << state_name;
 
   NetworkState state = LookupNetworkState(state_name);
@@ -219,7 +223,8 @@ void MetricsDaemon::NetStateChanged(const char* state_name, time_t now) {
   if (state != kNetworkStateOnline &&
       network_state_ == kNetworkStateOnline &&
       power_state_ != kPowerStateMem) {
-    int online_time = static_cast<int>(now - network_state_last_);
+    TimeDelta since_online = ticks - network_state_last_;
+    int online_time = static_cast<int>(since_online.InSeconds());
     SendMetric(kMetricTimeToNetworkDropName, online_time,
                kMetricTimeToNetworkDropMin,
                kMetricTimeToNetworkDropMax,
@@ -227,7 +232,7 @@ void MetricsDaemon::NetStateChanged(const char* state_name, time_t now) {
   }
 
   network_state_ = state;
-  network_state_last_ = now;
+  network_state_last_ = ticks;
 }
 
 MetricsDaemon::NetworkState
@@ -241,7 +246,7 @@ MetricsDaemon::LookupNetworkState(const char* state_name) {
   return kUnknownNetworkState;
 }
 
-void MetricsDaemon::PowerStateChanged(const char* state_name, time_t now) {
+void MetricsDaemon::PowerStateChanged(const char* state_name, Time now) {
   DLOG(INFO) << "power state: " << state_name;
   power_state_ = LookupPowerState(state_name);
 
@@ -260,8 +265,7 @@ MetricsDaemon::LookupPowerState(const char* state_name) {
   return kUnknownPowerState;
 }
 
-void MetricsDaemon::ScreenSaverStateChanged(const char* state_name,
-                                            time_t now) {
+void MetricsDaemon::ScreenSaverStateChanged(const char* state_name, Time now) {
   DLOG(INFO) << "screen-saver state: " << state_name;
   screensaver_state_ = LookupScreenSaverState(state_name);
   SetUserActiveState(screensaver_state_ == kScreenSaverStateUnlocked, now);
@@ -278,8 +282,7 @@ MetricsDaemon::LookupScreenSaverState(const char* state_name) {
   return kUnknownScreenSaverState;
 }
 
-void MetricsDaemon::SessionStateChanged(const char* state_name,
-                                        time_t now) {
+void MetricsDaemon::SessionStateChanged(const char* state_name, Time now) {
   DLOG(INFO) << "user session state: " << state_name;
   session_state_ = LookupSessionState(state_name);
   SetUserActiveState(session_state_ == kSessionStateStarted, now);
@@ -296,13 +299,23 @@ MetricsDaemon::LookupSessionState(const char* state_name) {
   return kUnknownSessionState;
 }
 
-void MetricsDaemon::SetUserActiveState(bool active, time_t now) {
+void MetricsDaemon::SetUserActiveState(bool active, Time now) {
   DLOG(INFO) << "user: " << (active ? "active" : "inactive");
 
   // Calculates the seconds of active use since the last update and
-  // the day since Epoch, and logs the usage data.
-  int seconds = user_active_ ? (now - user_active_last_) : 0;
-  int day = now / kSecondsPerDay;
+  // the day since Epoch, and logs the usage data.  Guards against the
+  // time jumping back and forth due to the user changing it by
+  // discarding the new use time.
+  int seconds = 0;
+  if (user_active_ && now > user_active_last_) {
+    TimeDelta since_active = now - user_active_last_;
+    if (since_active < TimeDelta::FromSeconds(
+            kUseMonitorIntervalMax + kSecondsPerMinute)) {
+      seconds = static_cast<int>(since_active.InSeconds());
+    }
+  }
+  TimeDelta since_epoch = now - Time();
+  int day = since_epoch.InDays();
   LogDailyUseRecord(day, seconds);
 
   // Schedules a use monitor on inactive->active transitions and
@@ -388,7 +401,7 @@ gboolean MetricsDaemon::UseMonitorStatic(gpointer data) {
 }
 
 bool MetricsDaemon::UseMonitor() {
-  SetUserActiveState(user_active_, time(NULL));
+  SetUserActiveState(user_active_, Time::Now());
 
   // If a new monitor source/instance is scheduled, returns false to
   // tell GLib to destroy this monitor source/instance. Returns true
