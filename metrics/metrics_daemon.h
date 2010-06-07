@@ -20,7 +20,6 @@ class MetricsDaemon {
       : daily_use_record_file_(NULL),
         network_state_(kUnknownNetworkState),
         power_state_(kUnknownPowerState),
-        screensaver_state_(kUnknownScreenSaverState),
         session_state_(kUnknownSessionState),
         user_active_(false),
         daily_use_day_last_(0),
@@ -72,14 +71,6 @@ class MetricsDaemon {
     kNumberPowerStates
   };
 
-  // The screen-saver states (see screensaver_states.h).
-  enum ScreenSaverState {
-    kUnknownScreenSaverState = -1, // Initial/unknown screen-saver state.
-#define STATE(name, capname) kScreenSaverState ## capname,
-#include "screensaver_states.h"
-    kNumberScreenSaverStates
-  };
-
   // The user session states (see session_states.h).
   enum SessionState {
     kUnknownSessionState = -1, // Initial/unknown user session state.
@@ -115,9 +106,6 @@ class MetricsDaemon {
   // Array of power states.
   static const char* kPowerStates_[kNumberPowerStates];
 
-  // Array of screen-saver states.
-  static const char* kScreenSaverStates_[kNumberScreenSaverStates];
-
   // Array of user session states.
   static const char* kSessionStates_[kNumberSessionStates];
 
@@ -140,12 +128,6 @@ class MetricsDaemon {
 
   // Given the state name, returns the state id.
   PowerState LookupPowerState(const char* state_name);
-
-  // Processes screen-saver state change.
-  void ScreenSaverStateChanged(const char* state_name, base::Time now);
-
-  // Given the state name, returns the state id.
-  ScreenSaverState LookupScreenSaverState(const char* state_name);
 
   // Processes user session state change.
   void SessionStateChanged(const char* state_name, base::Time now);
@@ -214,9 +196,6 @@ class MetricsDaemon {
 
   // Current power state.
   PowerState power_state_;
-
-  // Current screen-saver state.
-  ScreenSaverState screensaver_state_;
 
   // Current user session state.
   SessionState session_state_;

@@ -286,15 +286,6 @@ TEST_F(MetricsDaemonTest, LookupPowerState) {
             daemon_.LookupPowerState("somestate"));
 }
 
-TEST_F(MetricsDaemonTest, LookupScreenSaverState) {
-  EXPECT_EQ(MetricsDaemon::kScreenSaverStateLocked,
-            daemon_.LookupScreenSaverState("locked"));
-  EXPECT_EQ(MetricsDaemon::kScreenSaverStateUnlocked,
-            daemon_.LookupScreenSaverState("unlocked"));
-  EXPECT_EQ(MetricsDaemon::kUnknownScreenSaverState,
-            daemon_.LookupScreenSaverState("somestate"));
-}
-
 TEST_F(MetricsDaemonTest, LookupSessionState) {
   EXPECT_EQ(MetricsDaemon::kSessionStateStarted,
             daemon_.LookupSessionState("started"));
@@ -322,7 +313,7 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   DeleteDBusMessage(msg);
 
   msg = NewDBusSignalString("/",
-                            "org.chromium.Power.Manager",
+                            "org.chromium.PowerManager",
                             "PowerStateChanged",
                             "on");
   EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
@@ -332,14 +323,12 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   DeleteDBusMessage(msg);
 
   msg = NewDBusSignalString("/",
-                            "org.chromium.ScreenSaver.Manager",
-                            "LockStateChanged",
-                            "unlocked");
-  EXPECT_EQ(MetricsDaemon::kUnknownScreenSaverState,
-            daemon_.screensaver_state_);
+                            "org.chromium.PowerManager",
+                            "ScreenIsUnlocked",
+                            "");
+  EXPECT_FALSE(daemon_.user_active_);
   res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
-  EXPECT_EQ(MetricsDaemon::kScreenSaverStateUnlocked,
-            daemon_.screensaver_state_);
+  EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
   DeleteDBusMessage(msg);
 
@@ -431,36 +420,6 @@ TEST_F(MetricsDaemonTest, PowerStateChanged) {
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(7 * kSecondsPerDay + 185), daemon_.user_active_last_);
   EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 7, /* seconds */ 30);
-}
-
-TEST_F(MetricsDaemonTest, ScreenSaverStateChanged) {
-  EXPECT_EQ(MetricsDaemon::kUnknownScreenSaverState,
-            daemon_.screensaver_state_);
-
-  daemon_.ScreenSaverStateChanged("locked",
-                                  TestTime(5 * kSecondsPerDay + 10));
-  EXPECT_EQ(MetricsDaemon::kScreenSaverStateLocked,
-            daemon_.screensaver_state_);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(5 * kSecondsPerDay + 10), daemon_.user_active_last_);
-  EXPECT_EQ(5, daemon_.daily_use_day_last_);
-  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
-
-  daemon_.ScreenSaverStateChanged("unlocked",
-                                  TestTime(5 * kSecondsPerDay + 100));
-  EXPECT_EQ(MetricsDaemon::kScreenSaverStateUnlocked,
-            daemon_.screensaver_state_);
-  EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(5 * kSecondsPerDay + 100), daemon_.user_active_last_);
-  EXPECT_TRUE(AssertNoOrEmptyUseRecordFile());
-
-  daemon_.ScreenSaverStateChanged("otherstate",
-                                  TestTime(5 * kSecondsPerDay + 300));
-  EXPECT_EQ(MetricsDaemon::kUnknownScreenSaverState,
-            daemon_.screensaver_state_);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(5 * kSecondsPerDay + 300), daemon_.user_active_last_);
-  EXPECT_PRED_FORMAT2(AssertDailyUseRecord, /* day */ 5, /* seconds */ 200);
 }
 
 TEST_F(MetricsDaemonTest, SendMetric) {

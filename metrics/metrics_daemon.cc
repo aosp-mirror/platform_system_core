@@ -16,8 +16,7 @@ using base::TimeTicks;
 
 #define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
 #define DBUS_IFACE_FLIMFLAM_MANAGER "org.chromium.flimflam.Manager"
-#define DBUS_IFACE_POWER_MANAGER "org.chromium.Power.Manager"
-#define DBUS_IFACE_SCREENSAVER_MANAGER "org.chromium.ScreenSaver.Manager"
+#define DBUS_IFACE_POWER_MANAGER "org.chromium.PowerManager"
 #define DBUS_IFACE_SESSION_MANAGER "org.chromium.SessionManagerInterface"
 
 // File to aggregate daily usage before sending to UMA.
@@ -63,13 +62,7 @@ const char* MetricsDaemon::kDBusMatches_[] = {
 
   "type='signal',"
   "interface='" DBUS_IFACE_POWER_MANAGER "',"
-  "path='/',"
-  "member='PowerStateChanged'",
-
-  "type='signal',"
-  "interface='" DBUS_IFACE_SCREENSAVER_MANAGER "',"
-  "path='/',"
-  "member='LockStateChanged'",
+  "path='/'"
 
   "type='signal',"
   "sender='org.chromium.SessionManager',"
@@ -88,12 +81,6 @@ const char* MetricsDaemon::kNetworkStates_[] = {
 const char* MetricsDaemon::kPowerStates_[] = {
 #define STATE(name, capname) #name,
 #include "power_states.h"
-};
-
-// static
-const char* MetricsDaemon::kScreenSaverStates_[] = {
-#define STATE(name, capname) #name,
-#include "screensaver_states.h"
 };
 
 // static
@@ -181,19 +168,16 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
     dbus_message_iter_get_basic(&iter, &state_name);
     daemon->NetStateChanged(state_name, ticks);
   } else if (strcmp(interface, DBUS_IFACE_POWER_MANAGER) == 0) {
-    CHECK(strcmp(dbus_message_get_member(message),
-                 "PowerStateChanged") == 0);
-
-    char* state_name;
-    dbus_message_iter_get_basic(&iter, &state_name);
-    daemon->PowerStateChanged(state_name, now);
-  } else if (strcmp(interface, DBUS_IFACE_SCREENSAVER_MANAGER) == 0) {
-    CHECK(strcmp(dbus_message_get_member(message),
-                 "LockStateChanged") == 0);
-
-    char* state_name;
-    dbus_message_iter_get_basic(&iter, &state_name);
-    daemon->ScreenSaverStateChanged(state_name, now);
+    const char* member = dbus_message_get_member(message);
+    if (strcmp(member, "ScreenIsLocked") == 0) {
+      daemon->SetUserActiveState(false, now);
+    } else if (strcmp(member, "ScreenIsUnlocked") == 0) {
+      daemon->SetUserActiveState(true, now);
+    } else if (strcmp(member, "PowerStateChanged") == 0) {
+      char* state_name;
+      dbus_message_iter_get_basic(&iter, &state_name);
+      daemon->PowerStateChanged(state_name, now);
+    }
   } else if (strcmp(interface, DBUS_IFACE_SESSION_MANAGER) == 0) {
     CHECK(strcmp(dbus_message_get_member(message),
                  "SessionStateChanged") == 0);
@@ -263,23 +247,6 @@ MetricsDaemon::LookupPowerState(const char* state_name) {
   }
   DLOG(WARNING) << "unknown power state: " << state_name;
   return kUnknownPowerState;
-}
-
-void MetricsDaemon::ScreenSaverStateChanged(const char* state_name, Time now) {
-  DLOG(INFO) << "screen-saver state: " << state_name;
-  screensaver_state_ = LookupScreenSaverState(state_name);
-  SetUserActiveState(screensaver_state_ == kScreenSaverStateUnlocked, now);
-}
-
-MetricsDaemon::ScreenSaverState
-MetricsDaemon::LookupScreenSaverState(const char* state_name) {
-  for (int i = 0; i < kNumberScreenSaverStates; i++) {
-    if (strcmp(state_name, kScreenSaverStates_[i]) == 0) {
-      return static_cast<ScreenSaverState>(i);
-    }
-  }
-  DLOG(WARNING) << "unknown screen-saver state: " << state_name;
-  return kUnknownScreenSaverState;
 }
 
 void MetricsDaemon::SessionStateChanged(const char* state_name, Time now) {
