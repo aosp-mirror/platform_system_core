@@ -62,7 +62,7 @@ const char* MetricsDaemon::kDBusMatches_[] = {
 
   "type='signal',"
   "interface='" DBUS_IFACE_POWER_MANAGER "',"
-  "path='/'"
+  "path='/'",
 
   "type='signal',"
   "sender='org.chromium.SessionManager',"
