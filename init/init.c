@@ -673,7 +673,7 @@ int main(int argc, char **argv)
     mkdir("/proc", 0755);
     mkdir("/sys", 0755);
 
-    mount("tmpfs", "/dev", "tmpfs", 0, "mode=0755");
+    mount("tmpfs", "/dev", "tmpfs", MS_NOEXEC | MS_NOSUID, "mode=0755");
     mkdir("/dev/pts", 0755);
     mkdir("/dev/socket", 0755);
     mount("devpts", "/dev/pts", "devpts", 0, NULL);
