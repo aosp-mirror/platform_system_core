@@ -63,7 +63,7 @@ static int logsocket = -1;
 /* Log information onto the tombstone */
 void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...)
 {
-    char buf[128];
+    char buf[512];
 
     va_list ap;
     va_start(ap, fmt);
@@ -106,10 +106,11 @@ mapinfo *parse_maps_line(char *line)
 
     mi->start = strtoul(line, 0, 16);
     mi->end = strtoul(line + 9, 0, 16);
-    /* To be filled in parse_exidx_info if the mapped section starts with
+    /* To be filled in parse_elf_info if the mapped section starts with
      * elf_header
      */
     mi->exidx_start = mi->exidx_end = 0;
+    mi->symbols = 0;
     mi->next = 0;
     strcpy(mi->name, line + 49);
 
@@ -353,7 +354,7 @@ void dump_crash_banner(int tfd, unsigned pid, unsigned tid, int sig)
     if(sig) dump_fault_addr(tfd, tid, sig);
 }
 
-static void parse_exidx_info(mapinfo *milist, pid_t pid)
+static void parse_elf_info(mapinfo *milist, pid_t pid)
 {
     mapinfo *mi;
     for (mi = milist; mi != NULL; mi = mi->next) {
@@ -383,6 +384,9 @@ static void parse_exidx_info(mapinfo *milist, pid_t pid)
                     break;
                 }
             }
+
+            /* Try to load symbols from this file */
+            mi->symbols = symbol_table_create(mi->name);
         }
     }
 }
@@ -420,7 +424,7 @@ void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
         fclose(fp);
     }
 
-    parse_exidx_info(milist, tid);
+    parse_elf_info(milist, tid);
 
     /* If stack unwinder fails, use the default solution to dump the stack
      * content.
@@ -439,6 +443,7 @@ void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
 
     while(milist) {
         mapinfo *next = milist->next;
+        symbol_table_free(milist->symbols);
         free(milist);
         milist = next;
     }
