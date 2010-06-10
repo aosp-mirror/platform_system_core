@@ -38,4 +38,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libusbhost
 LOCAL_SRC_FILES := usbhost.c
 
+LOCAL_CFLAGS := -g -DUSE_LIBLOG
+
 include $(BUILD_STATIC_LIBRARY)

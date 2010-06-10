@@ -14,6 +14,21 @@
  * limitations under the License.
  */
 
+// #define DEBUG 1
+#if DEBUG
+
+#ifdef USE_LIBLOG
+#define LOG_TAG "usbhost"
+#include "utils/Log.h"
+#define D LOGD
+#else
+#define D printf
+#endif
+
+#else
+#define D(...)
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -43,11 +58,6 @@
 #define USB_FS_DIR "/dev/bus/usb"
 #define USB_FS_ID_SCANNER   "/dev/bus/usb/%d/%d"
 
-#if 0
-#define D printf
-#else
-#define D(...)
-#endif
 
 struct usb_host_context {
     usb_device_added_cb     added_cb;
@@ -208,7 +218,8 @@ retry:
     if (fd < 0) {
         /* if we fail, see if have read-only access */
         fd = open(dev_name, O_RDONLY);
-        if (fd < 0 && errno == EACCES && !did_retry) {
+        D("usb_device_open open returned %d errno %d\n", fd, errno);
+        if (fd < 0 && (errno == EACCES || errno == ENOENT) && !did_retry) {
             /* work around race condition between inotify and permissions management */
             sleep(1);
             did_retry = 1;
@@ -221,6 +232,7 @@ retry:
     }
 
     length = read(fd, device->desc, sizeof(device->desc));
+    D("usb_device_open read returned %d errno %d\n", fd, errno);
     if (length < 0)
         goto fail;
 
