@@ -5,10 +5,10 @@
 #include "metrics_daemon.h"
 
 #include <dbus/dbus-glib-lowlevel.h>
-#include <sys/file.h>
 
-#include <base/eintr_wrapper.h>
 #include <base/logging.h>
+
+#include "counter.h"
 
 using base::Time;
 using base::TimeDelta;
@@ -89,6 +89,16 @@ const char* MetricsDaemon::kSessionStates_[] = {
 #include "session_states.h"
 };
 
+MetricsDaemon::MetricsDaemon()
+    : network_state_(kUnknownNetworkState),
+      power_state_(kUnknownPowerState),
+      session_state_(kUnknownSessionState),
+      user_active_(false),
+      usemon_interval_(0),
+      usemon_source_(NULL) {}
+
+MetricsDaemon::~MetricsDaemon() {}
+
 void MetricsDaemon::Run(bool run_as_daemon) {
   if (!run_as_daemon || daemon(0, 0) == 0) {
     Loop();
@@ -99,7 +109,8 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
   testing_ = testing;
   DCHECK(metrics_lib != NULL);
   metrics_lib_ = metrics_lib;
-  daily_use_record_file_ = kDailyUseRecordFile;
+  daily_use_.reset(new chromeos_metrics::TaggedCounter());
+  daily_use_->Init(kDailyUseRecordFile, &DailyUseReporter, this);
 
   // Don't setup D-Bus and GLib in test mode.
   if (testing)
@@ -283,7 +294,7 @@ void MetricsDaemon::SetUserActiveState(bool active, Time now) {
   }
   TimeDelta since_epoch = now - Time();
   int day = since_epoch.InDays();
-  LogDailyUseRecord(day, seconds);
+  daily_use_->Update(day, seconds);
 
   // Schedules a use monitor on inactive->active transitions and
   // unschedules it on active->inactive transitions.
@@ -296,70 +307,6 @@ void MetricsDaemon::SetUserActiveState(bool active, Time now) {
   // activity update.
   user_active_ = active;
   user_active_last_ = now;
-}
-
-void MetricsDaemon::LogDailyUseRecord(int day, int seconds) {
-  // If there's no new active use today and the last record in the
-  // usage aggregation file is today, there's nothing to do.
-  if (seconds == 0 && day == daily_use_day_last_)
-    return;
-
-  DLOG(INFO) << "day: " << day << " usage: " << seconds << " seconds";
-  int fd = HANDLE_EINTR(open(daily_use_record_file_,
-                             O_RDWR | O_CREAT,
-                             S_IRUSR | S_IWUSR));
-  if (fd < 0) {
-    PLOG(WARNING) << "Unable to open the daily use file";
-    return;
-  }
-
-  bool same_day = false;
-  UseRecord record;
-  if (HANDLE_EINTR(read(fd, &record, sizeof(record))) == sizeof(record)) {
-    if (record.day_ == day) {
-      // If there's an existing record for today, aggregates the usage
-      // time.
-      same_day = true;
-      record.seconds_ += seconds;
-    } else {
-      // If there's an existing record for a day in the past, rounds
-      // the usage to the nearest minute and sends it to UMA.
-      int minutes =
-          (record.seconds_ + kSecondsPerMinute / 2) / kSecondsPerMinute;
-      SendMetric(kMetricDailyUseTimeName, minutes,
-                 kMetricDailyUseTimeMin,
-                 kMetricDailyUseTimeMax,
-                 kMetricDailyUseTimeBuckets);
-
-      // Truncates the usage file to ensure that no duplicate usage is
-      // sent to UMA.
-      PLOG_IF(WARNING, HANDLE_EINTR(ftruncate(fd, 0)) != 0);
-    }
-  }
-
-  // Updates the use record in the daily usage file if there's new
-  // usage today.
-  if (seconds > 0) {
-    if (!same_day) {
-      record.day_ = day;
-      record.seconds_ = seconds;
-    }
-    // else an already existing record for the same day will be
-    // overwritten with updated usage below.
-
-    PLOG_IF(WARNING, HANDLE_EINTR(lseek(fd, 0, SEEK_SET)) != 0);
-    PLOG_IF(WARNING,
-            HANDLE_EINTR(write(fd, &record, sizeof(record))) !=
-            sizeof(record));
-  }
-
-  HANDLE_EINTR(close(fd));
-
-  // Remembers the day of the use record in the usage aggregation file
-  // to reduce file I/O. This is not really useful now but potentially
-  // allows frequent LogDailyUseRecord calls with no unnecessary I/O
-  // overhead.
-  daily_use_day_last_ = day;
 }
 
 // static
@@ -420,6 +367,16 @@ void MetricsDaemon::UnscheduleUseMonitor() {
   g_source_destroy(usemon_source_);
   usemon_source_ = NULL;
   usemon_interval_ = 0;
+}
+
+// static
+void MetricsDaemon::DailyUseReporter(void* handle, int tag, int count) {
+  MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
+  int minutes = (count + kSecondsPerMinute / 2) / kSecondsPerMinute;
+  daemon->SendMetric(kMetricDailyUseTimeName, minutes,
+                     kMetricDailyUseTimeMin,
+                     kMetricDailyUseTimeMax,
+                     kMetricDailyUseTimeBuckets);
 }
 
 void MetricsDaemon::SendMetric(const std::string& name, int sample,

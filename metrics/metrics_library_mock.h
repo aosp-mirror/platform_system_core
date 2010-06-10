@@ -20,4 +20,4 @@ class MetricsLibraryMock : public MetricsLibraryInterface {
                                    int max));
 };
 
-#endif /* METRICS_LIBRARY_MOCK_H_ */
+#endif  // METRICS_LIBRARY_MOCK_H_

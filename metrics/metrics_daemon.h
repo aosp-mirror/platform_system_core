@@ -8,24 +8,19 @@
 #include <dbus/dbus.h>
 #include <glib.h>
 
+#include <base/scoped_ptr.h>
+#include <base/time.h>
+#include <gtest/gtest_prod.h>  // for FRIEND_TEST
+
 #include "metrics_library.h"
 
-#include <gtest/gtest_prod.h>  // for FRIEND_TEST
-#include <base/time.h>
+namespace chromeos_metrics { class TaggedCounterInterface; }
 
 class MetricsDaemon {
 
  public:
-  MetricsDaemon()
-      : daily_use_record_file_(NULL),
-        network_state_(kUnknownNetworkState),
-        power_state_(kUnknownPowerState),
-        session_state_(kUnknownSessionState),
-        user_active_(false),
-        daily_use_day_last_(0),
-        usemon_interval_(0),
-        usemon_source_(NULL) {}
-  ~MetricsDaemon() {}
+  MetricsDaemon();
+  ~MetricsDaemon();
 
   // Initializes.
   void Init(bool testing, MetricsLibraryInterface* metrics_lib);
@@ -36,10 +31,7 @@ class MetricsDaemon {
 
  private:
   friend class MetricsDaemonTest;
-  FRIEND_TEST(MetricsDaemonTest, LogDailyUseRecordBadFileLocation);
-  FRIEND_TEST(MetricsDaemonTest, LogDailyUseRecordOnLogin);
-  FRIEND_TEST(MetricsDaemonTest, LogDailyUseRecordRoundDown);
-  FRIEND_TEST(MetricsDaemonTest, LogDailyUseRecordRoundUp);
+  FRIEND_TEST(MetricsDaemonTest, DailyUseReporter);
   FRIEND_TEST(MetricsDaemonTest, LookupNetworkState);
   FRIEND_TEST(MetricsDaemonTest, LookupPowerState);
   FRIEND_TEST(MetricsDaemonTest, LookupScreenSaverState);
@@ -51,8 +43,7 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, ScreenSaverStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SendMetric);
   FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
-  FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateSendOnLogin);
-  FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateSendOnMonitor);
+  FRIEND_TEST(MetricsDaemonTest, SetUserActiveState);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateTimeJump);
 
   // The network states (see network_states.h).
@@ -178,13 +169,13 @@ class MetricsDaemon {
   void SendMetric(const std::string& name, int sample,
                   int min, int max, int nbuckets);
 
+  static void DailyUseReporter(void* data, int tag, int count);
+
   // Test mode.
   bool testing_;
 
   // The metrics library handle.
   MetricsLibraryInterface* metrics_lib_;
-
-  const char* daily_use_record_file_;
 
   // Current network state.
   NetworkState network_state_;
@@ -209,8 +200,7 @@ class MetricsDaemon {
   // epoch as the timestamp.
   base::Time user_active_last_;
 
-  // Last stored daily use day (since the epoch).
-  int daily_use_day_last_;
+  scoped_ptr<chromeos_metrics::TaggedCounterInterface> daily_use_;
 
   // Sleep period until the next daily usage aggregation performed by
   // the daily use monitor (see ScheduleUseMonitor).

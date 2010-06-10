@@ -16,31 +16,41 @@ DAEMON_TEST = metrics_daemon_test
 LIB = libmetrics.a
 SHAREDLIB = libmetrics.so
 LIB_TEST = metrics_library_test
+COUNTER_TEST = counter_test
 
+TESTCOUNTER_OBJS = \
+	counter.o \
+	counter_test.o
 CLIENT_OBJS = \
 	metrics_client.o
+DAEMON_OBJS = \
+	counter.o \
+	metrics_daemon.o \
+	metrics_daemon_main.o
+TESTDAEMON_OBJS = \
+	counter.o \
+	metrics_daemon.o \
+	metrics_daemon_test.o
 LIB_OBJS = \
 	metrics_library.o
 TESTLIB_OBJS = \
 	metrics_library.o \
 	metrics_library_test.o
-DAEMON_OBJS = \
-	metrics_daemon.o \
-	metrics_daemon_main.o
-TESTDAEMON_OBJS = \
-	metrics_daemon.o \
-	metrics_daemon_test.o
 
+TESTCOUNTER_LIBS = -lgmock -lgtest -lbase -lrt -lpthread
 DAEMON_LDFLAGS = $(LDFLAGS) $(LDCONFIG) -lrt -lbase -lpthread -lgflags
 TESTDAEMON_LIBS = -lgmock -lgtest
 TESTLIB_LIBS = -lgtest -lbase -lrt -lpthread
 
 all: $(LIB) $(SHAREDLIB) $(CLIENT) $(DAEMON)
 
-tests: $(DAEMON_TEST) $(LIB_TEST)
+tests: $(COUNTER_TEST) $(DAEMON_TEST) $(LIB_TEST)
 
 $(CLIENT): $(CLIENT_OBJS) $(SHAREDLIB)
 	$(CXX) $(LDFLAGS) $^ -o $@
+
+$(COUNTER_TEST): $(TESTCOUNTER_OBJS)
+	$(CXX) -o $@ $^ $(TESTCOUNTER_LIBS)
 
 $(DAEMON): $(DAEMON_OBJS) $(SHAREDLIB)
 	$(CXX) -o $@ $^ $(DAEMON_LDFLAGS)
@@ -73,4 +83,4 @@ metrics_daemon_test.o: \
 
 clean:
 	rm -f $(CLIENT) $(DAEMON) $(LIB) $(SHAREDLIB) *.o
-	rm -f $(DAEMON_TEST) $(LIB_TEST)
+	rm -f $(COUNTER_TEST) $(DAEMON_TEST) $(LIB_TEST)
