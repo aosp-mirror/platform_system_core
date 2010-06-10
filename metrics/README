@@ -71,7 +71,9 @@ by an official Chrome build to UMA, assuming the user has opted into
 metrics collection. To make the histogram visible on
 "chromedashboard", the histogram wiki needs to be updated (steps 2 and
 3 after following the "Details on how to add your own histograms" link
-under the Histograms tab).
+under the Histograms tab).  Include the string "Chrome OS" in the
+histogram description so that it's easier to distinguish Chrome OS
+specific metrics from general Chrome histograms.
 
 The UMA server logs and keeps the collected field data even if the
 metric's name is not added to the histogram wiki. However, the
