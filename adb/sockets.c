@@ -762,7 +762,6 @@ asocket *create_smart_socket(void (*action_cb)(asocket *s, const char *act))
     D("Creating smart socket \n");
     asocket *s = calloc(1, sizeof(asocket));
     if (s == NULL) fatal("cannot allocate socket");
-    s->id = 0;
     s->enqueue = smart_socket_enqueue;
     s->ready = smart_socket_ready;
     s->close = smart_socket_close;
