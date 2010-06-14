@@ -81,13 +81,41 @@ static int known_device(const char *dev_name)
 
 static void kick_disconnected_device(const char *devname, void *client_data)
 {
-    usb_handle *usb;
+    usb_handle *h;
 
     adb_mutex_lock(&usb_lock);
     /* kick the device if it is in our list */
-    for (usb = handle_list.next; usb != &handle_list; usb = usb->next) {
-        if (!strcmp(devname, usb_device_get_name(usb->device)))
-            usb_kick(usb);
+    for (h = handle_list.next; h != &handle_list; h = h->next) {
+        if (!strcmp(devname, usb_device_get_name(h->device))) {
+            D("[ kicking %p (fd = %s) ]\n", h, usb_device_get_name(h->device));
+            adb_mutex_lock(&h->lock);
+            if(h->dead == 0) {
+                h->dead = 1;
+
+                if (usb_device_is_writeable(h->device)) {
+                    /* HACK ALERT!
+                    ** Sometimes we get stuck in ioctl(USBDEVFS_REAPURB).
+                    ** This is a workaround for that problem.
+                    */
+                    if (h->reaper_thread) {
+                        pthread_kill(h->reaper_thread, SIGALRM);
+                    }
+
+                    /* cancel any pending transactions
+                    ** these will quietly fail if the txns are not active,
+                    ** but this ensures that a reader blocked on REAPURB
+                    ** will get unblocked
+                    */
+                    usb_endpoint_cancel(h->ep_in);
+                    usb_endpoint_cancel(h->ep_out);
+                    adb_cond_broadcast(&h->notify_in);
+                    adb_cond_broadcast(&h->notify_out);
+                } else {
+                    unregister_usb_transport(h);
+                }
+            }
+            adb_mutex_unlock(&h->lock);
+        }
     }
     adb_mutex_unlock(&usb_lock);
 
@@ -405,34 +433,7 @@ int usb_read(usb_handle *h, void *_data, int len)
 
 void usb_kick(usb_handle *h)
 {
-    D("[ kicking %p (fd = %s) ]\n", h, usb_device_get_name(h->device));
-    adb_mutex_lock(&h->lock);
-    if(h->dead == 0) {
-        h->dead = 1;
-
-        if (usb_device_is_writeable(h->device)) {
-            /* HACK ALERT!
-            ** Sometimes we get stuck in ioctl(USBDEVFS_REAPURB).
-            ** This is a workaround for that problem.
-            */
-            if (h->reaper_thread) {
-                pthread_kill(h->reaper_thread, SIGALRM);
-            }
-
-            /* cancel any pending transactions
-            ** these will quietly fail if the txns are not active,
-            ** but this ensures that a reader blocked on REAPURB
-            ** will get unblocked
-            */
-            usb_endpoint_cancel(h->ep_in);
-            usb_endpoint_cancel(h->ep_out);
-            adb_cond_broadcast(&h->notify_in);
-            adb_cond_broadcast(&h->notify_out);
-        } else {
-            unregister_usb_transport(h);
-        }
-    }
-    adb_mutex_unlock(&h->lock);
+    // do nothing here. we kick in kick_disconnected_devices instead.
 }
 
 int usb_close(usb_handle *h)
