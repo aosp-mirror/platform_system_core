@@ -80,9 +80,6 @@ LOCAL_STATIC_LIBRARIES := libzipfile libunz $(EXTRA_STATIC_LIBS)
 ifeq ($(USE_SYSDEPS_WIN32),)
 	LOCAL_STATIC_LIBRARIES += libcutils
 endif
-ifeq ($(HOST_OS),linux)
-  LOCAL_STATIC_LIBRARIES += libusbhost
-endif
 
 include $(BUILD_HOST_EXECUTABLE)
 
