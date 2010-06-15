@@ -151,7 +151,7 @@ void usb_vendors_init(void)
 /* builds the path to the adb vendor id file. returns 0 if success */
 int build_path(char* buff, size_t len, const char* format, const char* home)
 {
-    if (snprintf(buff, len, format, home, ANDROID_PATH, ANDROID_ADB_INI) >= len) {
+    if (snprintf(buff, len, format, home, ANDROID_PATH, ANDROID_ADB_INI) >= (signed)len) {
         return 1;
     }
 
