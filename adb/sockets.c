@@ -65,8 +65,11 @@ asocket *find_local_socket(unsigned id)
     asocket *result = NULL;
 
     adb_mutex_lock(&socket_list_lock);
-    for(s = local_socket_list.next; s != &local_socket_list && !result; s = s->next) {
-        if(s->id == id) result = s;
+    for (s = local_socket_list.next; s != &local_socket_list; s = s->next) {
+        if (s->id == id) {
+            result = s;
+            break;
+        }
     }
     adb_mutex_unlock(&socket_list_lock);
 
