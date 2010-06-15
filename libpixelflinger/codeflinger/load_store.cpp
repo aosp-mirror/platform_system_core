@@ -20,7 +20,9 @@
 #include <cutils/log.h>
 #include "codeflinger/GGLAssembler.h"
 
+#ifdef __ARM_ARCH__
 #include <machine/cpu-features.h>
+#endif
 
 namespace android {
 
