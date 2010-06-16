@@ -1,6 +1,9 @@
 on early-init
     start ueventd
 
+# create mountpoints
+    mkdir /mnt 0775 root system
+
 on init
 
 sysclktz 0
@@ -14,7 +17,6 @@ loglevel 3
     export ANDROID_ROOT /system
     export ANDROID_ASSETS /system/app
     export ANDROID_DATA /data
-    export EXTERNAL_STORAGE /mnt/sdcard
     export ASEC_MOUNTPOINT /mnt/asec
     export BOOTCLASSPATH /system/framework/core.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/android.policy.jar:/system/framework/services.jar:/system/framework/core-junit.jar
 
@@ -22,17 +24,11 @@ loglevel 3
     symlink /system/etc /etc
     symlink /sys/kernel/debug /d
 
-# create mountpoints
-    mkdir /mnt 0775 root system
-    mkdir /mnt/sdcard 0000 system system
 
 # Create cgroup mount point for cpu accounting
     mkdir /acct
     mount cgroup none /acct cpuacct
     mkdir /acct/uid
-
-# Backwards Compat - XXX: Going away in G*
-    symlink /mnt/sdcard /sdcard
 
     mkdir /system
     mkdir /data 0771 system system
