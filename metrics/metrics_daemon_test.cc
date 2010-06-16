@@ -42,12 +42,19 @@ class MetricsDaemonTest : public testing::Test {
  protected:
   virtual void SetUp() {
     EXPECT_EQ(NULL, daemon_.daily_use_.get());
+    EXPECT_EQ(NULL, daemon_.user_crash_interval_.get());
     daemon_.Init(true, &metrics_lib_);
 
     // Tests constructor initialization. Switches to mock counters.
     EXPECT_TRUE(NULL != daemon_.daily_use_.get());
+    EXPECT_TRUE(NULL != daemon_.user_crash_interval_.get());
+
+    // Allocates mock counter and transfers ownership.
     daily_use_ = new StrictMock<TaggedCounterMock>();
-    daemon_.daily_use_.reset(daily_use_);  // Transfers ownership.
+    daemon_.daily_use_.reset(daily_use_);
+    user_crash_interval_ = new StrictMock<TaggedCounterMock>();
+    daemon_.user_crash_interval_.reset(user_crash_interval_);
+
     EXPECT_FALSE(daemon_.user_active_);
     EXPECT_TRUE(daemon_.user_active_last_.is_null());
     EXPECT_EQ(MetricsDaemon::kUnknownNetworkState, daemon_.network_state_);
@@ -58,10 +65,24 @@ class MetricsDaemonTest : public testing::Test {
 
   virtual void TearDown() {}
 
-  // Adds a daily use aggregation counter expectation that the
+  // Adds active use aggregation counters update expectations that the
   // specified tag/count update will be generated.
-  void ExpectDailyUseUpdate(int tag, int count) {
-    EXPECT_CALL(*daily_use_, Update(tag, count))
+  void ExpectActiveUseUpdate(int daily_tag, int count) {
+    EXPECT_CALL(*daily_use_, Update(daily_tag, count))
+        .Times(1)
+        .RetiresOnSaturation();
+    EXPECT_CALL(*user_crash_interval_, Update(0, count))
+        .Times(1)
+        .RetiresOnSaturation();
+  }
+
+  // Adds active use aggregation counters update expectations that
+  // ignore the update arguments.
+  void IgnoreActiveUseUpdate() {
+    EXPECT_CALL(*daily_use_, Update(_, _))
+        .Times(1)
+        .RetiresOnSaturation();
+    EXPECT_CALL(*user_crash_interval_, Update(_, _))
         .Times(1)
         .RetiresOnSaturation();
   }
@@ -134,11 +155,11 @@ class MetricsDaemonTest : public testing::Test {
   // metric generation calls are marked as failures.
   StrictMock<MetricsLibraryMock> metrics_lib_;
 
-  // Daily use time aggregation counter mock. It's a strict mock so
-  // that all unexpected update calls are marked as failures. It's a
-  // pointer so that it can replace the scoped_ptr allocated by the
-  // daemon.
+  // Counter mocks. They are strict mocks so that all unexpected
+  // update calls are marked as failures. They are pointers so that
+  // they can replace the scoped_ptr's allocated by the daemon.
   StrictMock<TaggedCounterMock>* daily_use_;
+  StrictMock<TaggedCounterMock>* user_crash_interval_;
 };
 
 TEST_F(MetricsDaemonTest, DailyUseReporter) {
@@ -147,6 +168,10 @@ TEST_F(MetricsDaemonTest, DailyUseReporter) {
 
   ExpectDailyUseTimeMetric(/* sample */ 1);
   MetricsDaemon::DailyUseReporter(&daemon_, /* tag */ 23, /* count */ 89);
+
+  // There should be no metrics generated for the calls below.
+  MetricsDaemon::DailyUseReporter(&daemon_, /* tag */ 50, /* count */ 0);
+  MetricsDaemon::DailyUseReporter(&daemon_, /* tag */ 60, /* count */ -5);
 }
 
 TEST_F(MetricsDaemonTest, LookupNetworkState) {
@@ -183,6 +208,18 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
   DeleteDBusMessage(msg);
 
+  IgnoreActiveUseUpdate();
+  EXPECT_CALL(*user_crash_interval_, Flush())
+      .Times(1)
+      .RetiresOnSaturation();
+  msg = NewDBusSignalString("/",
+                            "org.chromium.CrashReporter",
+                            "UserCrash",
+                            "");
+  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
+  EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
+  DeleteDBusMessage(msg);
+
   msg = NewDBusSignalString("/",
                             "org.chromium.flimflam.Manager",
                             "StateChanged",
@@ -203,9 +240,7 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
   DeleteDBusMessage(msg);
 
-  EXPECT_CALL(*daily_use_, Update(_, 0))
-      .Times(1)
-      .RetiresOnSaturation();
+  IgnoreActiveUseUpdate();
   msg = NewDBusSignalString("/",
                             "org.chromium.PowerManager",
                             "ScreenIsUnlocked",
@@ -216,9 +251,7 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
   DeleteDBusMessage(msg);
 
-  EXPECT_CALL(*daily_use_, Update(_, 0))
-      .Times(1)
-      .RetiresOnSaturation();
+  IgnoreActiveUseUpdate();
   msg = NewDBusSignalString("/org/chromium/SessionManager",
                             "org.chromium.SessionManagerInterface",
                             "SessionStateChanged",
@@ -283,13 +316,13 @@ TEST_F(MetricsDaemonTest, NetStateChangedSuspend) {
 }
 
 TEST_F(MetricsDaemonTest, PowerStateChanged) {
-  ExpectDailyUseUpdate(7, 0);
+  ExpectActiveUseUpdate(7, 0);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(7 * kSecondsPerDay + 15));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(7 * kSecondsPerDay + 15), daemon_.user_active_last_);
 
-  ExpectDailyUseUpdate(7, 30);
+  ExpectActiveUseUpdate(7, 30);
   daemon_.PowerStateChanged("mem", TestTime(7 * kSecondsPerDay + 45));
   EXPECT_EQ(MetricsDaemon::kPowerStateMem, daemon_.power_state_);
   EXPECT_FALSE(daemon_.user_active_);
@@ -300,11 +333,19 @@ TEST_F(MetricsDaemonTest, PowerStateChanged) {
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(7 * kSecondsPerDay + 45), daemon_.user_active_last_);
 
-  ExpectDailyUseUpdate(7, 0);
+  ExpectActiveUseUpdate(7, 0);
   daemon_.PowerStateChanged("otherstate", TestTime(7 * kSecondsPerDay + 185));
   EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(7 * kSecondsPerDay + 185), daemon_.user_active_last_);
+}
+
+TEST_F(MetricsDaemonTest, ProcessUserCrash) {
+  IgnoreActiveUseUpdate();
+  EXPECT_CALL(*user_crash_interval_, Flush())
+      .Times(1)
+      .RetiresOnSaturation();
+  daemon_.ProcessUserCrash();
 }
 
 TEST_F(MetricsDaemonTest, SendMetric) {
@@ -314,19 +355,19 @@ TEST_F(MetricsDaemonTest, SendMetric) {
 }
 
 TEST_F(MetricsDaemonTest, SessionStateChanged) {
-  ExpectDailyUseUpdate(15, 0);
+  ExpectActiveUseUpdate(15, 0);
   daemon_.SessionStateChanged("started", TestTime(15 * kSecondsPerDay + 20));
   EXPECT_EQ(MetricsDaemon::kSessionStateStarted, daemon_.session_state_);
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(15 * kSecondsPerDay + 20), daemon_.user_active_last_);
 
-  ExpectDailyUseUpdate(15, 130);
+  ExpectActiveUseUpdate(15, 130);
   daemon_.SessionStateChanged("stopped", TestTime(15 * kSecondsPerDay + 150));
   EXPECT_EQ(MetricsDaemon::kSessionStateStopped, daemon_.session_state_);
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(15 * kSecondsPerDay + 150), daemon_.user_active_last_);
 
-  ExpectDailyUseUpdate(15, 0);
+  ExpectActiveUseUpdate(15, 0);
   daemon_.SessionStateChanged("otherstate",
                               TestTime(15 * kSecondsPerDay + 300));
   EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
@@ -335,31 +376,31 @@ TEST_F(MetricsDaemonTest, SessionStateChanged) {
 }
 
 TEST_F(MetricsDaemonTest, SetUserActiveState) {
-  ExpectDailyUseUpdate(5, 0);
+  ExpectActiveUseUpdate(5, 0);
   daemon_.SetUserActiveState(/* active */ false,
                              TestTime(5 * kSecondsPerDay + 10));
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(5 * kSecondsPerDay + 10), daemon_.user_active_last_);
 
-  ExpectDailyUseUpdate(6, 0);
+  ExpectActiveUseUpdate(6, 0);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(6 * kSecondsPerDay + 20));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(6 * kSecondsPerDay + 20), daemon_.user_active_last_);
 
-  ExpectDailyUseUpdate(6, 100);
+  ExpectActiveUseUpdate(6, 100);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(6 * kSecondsPerDay + 120));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(6 * kSecondsPerDay + 120), daemon_.user_active_last_);
 
-  ExpectDailyUseUpdate(6, 110);
+  ExpectActiveUseUpdate(6, 110);
   daemon_.SetUserActiveState(/* active */ false,
                              TestTime(6 * kSecondsPerDay + 230));
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(6 * kSecondsPerDay + 230), daemon_.user_active_last_);
 
-  ExpectDailyUseUpdate(6, 0);
+  ExpectActiveUseUpdate(6, 0);
   daemon_.SetUserActiveState(/* active */ false,
                              TestTime(6 * kSecondsPerDay + 260));
   EXPECT_FALSE(daemon_.user_active_);
@@ -367,23 +408,31 @@ TEST_F(MetricsDaemonTest, SetUserActiveState) {
 }
 
 TEST_F(MetricsDaemonTest, SetUserActiveStateTimeJump) {
-  ExpectDailyUseUpdate(10, 0);
+  ExpectActiveUseUpdate(10, 0);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(10 * kSecondsPerDay + 500));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(10 * kSecondsPerDay + 500), daemon_.user_active_last_);
 
-  ExpectDailyUseUpdate(10, 0);
+  ExpectActiveUseUpdate(10, 0);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(10 * kSecondsPerDay + 300));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(10 * kSecondsPerDay + 300), daemon_.user_active_last_);
 
-  ExpectDailyUseUpdate(10, 0);
+  ExpectActiveUseUpdate(10, 0);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(10 * kSecondsPerDay + 1000));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(10 * kSecondsPerDay + 1000), daemon_.user_active_last_);
+}
+
+TEST_F(MetricsDaemonTest, UserCrashIntervalReporter) {
+  ExpectMetric(MetricsDaemon::kMetricUserCrashIntervalName, 50,
+               MetricsDaemon::kMetricUserCrashIntervalMin,
+               MetricsDaemon::kMetricUserCrashIntervalMax,
+               MetricsDaemon::kMetricUserCrashIntervalBuckets);
+  MetricsDaemon::UserCrashIntervalReporter(&daemon_, 0, 50);
 }
 
 int main(int argc, char** argv) {

@@ -40,11 +40,13 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, NetStateChangedSimpleDrop);
   FRIEND_TEST(MetricsDaemonTest, NetStateChangedSuspend);
   FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
+  FRIEND_TEST(MetricsDaemonTest, ProcessUserCrash);
   FRIEND_TEST(MetricsDaemonTest, ScreenSaverStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SendMetric);
   FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveState);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateTimeJump);
+  FRIEND_TEST(MetricsDaemonTest, UserCrashIntervalReporter);
 
   // The network states (see network_states.h).
   enum NetworkState {
@@ -87,6 +89,10 @@ class MetricsDaemon {
   static const int kMetricTimeToNetworkDropMin;
   static const int kMetricTimeToNetworkDropMax;
   static const int kMetricTimeToNetworkDropBuckets;
+  static const char kMetricUserCrashIntervalName[];
+  static const int kMetricUserCrashIntervalMin;
+  static const int kMetricUserCrashIntervalMax;
+  static const int kMetricUserCrashIntervalBuckets;
 
   // D-Bus message match strings.
   static const char* kDBusMatches_[];
@@ -142,6 +148,10 @@ class MetricsDaemon {
   // the usage file, the |seconds| are accumulated.
   void LogDailyUseRecord(int day, int seconds);
 
+  // Updates the active use time and logs time between user-space
+  // process crashes.
+  void ProcessUserCrash();
+
   // Callbacks for the daily use monitor. The daily use monitor uses
   // LogDailyUseRecord to aggregate current usage data and send it to
   // UMA, if necessary. It also reschedules itself using an
@@ -169,7 +179,13 @@ class MetricsDaemon {
   void SendMetric(const std::string& name, int sample,
                   int min, int max, int nbuckets);
 
+  // TaggedCounter callback to process aggregated daily usage data and
+  // send to UMA.
   static void DailyUseReporter(void* data, int tag, int count);
+
+  // TaggedCounter callback to process time between user-space process
+  // crashes and send to UMA.
+  static void UserCrashIntervalReporter(void* data, int tag, int count);
 
   // Test mode.
   bool testing_;
@@ -195,12 +211,16 @@ class MetricsDaemon {
   // started, screen is not locked.
   bool user_active_;
 
-  // Timestamps last user active update.  Active use time is
-  // aggregated each day before sending to UMA so using time since the
-  // epoch as the timestamp.
+  // Timestamps last user active update. Active use time is aggregated
+  // each day before sending to UMA so using time since the epoch as
+  // the timestamp.
   base::Time user_active_last_;
 
+  // Daily active use time in seconds.
   scoped_ptr<chromeos_metrics::TaggedCounterInterface> daily_use_;
+
+  // Active use time between user-space process crashes.
+  scoped_ptr<chromeos_metrics::TaggedCounterInterface> user_crash_interval_;
 
   // Sleep period until the next daily usage aggregation performed by
   // the daily use monitor (see ScheduleUseMonitor).

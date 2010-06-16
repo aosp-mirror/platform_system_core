@@ -230,8 +230,8 @@ TEST_F(TaggedCounterTest, InitFromFile) {
   ExpectReporterCall(/* tag */ 31, /* count */ 60);
   counter_.Init(kTestRecordFile, &Reporter, this);
   counter_.Update(/* tag */ 32, /* count */ 0);
-  EXPECT_TRUE(AssertNoOrEmptyRecordFile());
-  EXPECT_EQ(TaggedCounter::kRecordNull, counter_.record_state_);
+  EXPECT_PRED_FORMAT2(AssertRecord, /* day */ 32, /* seconds */ 0);
+  EXPECT_EQ(TaggedCounter::kRecordValid, counter_.record_state_);
 }
 
 TEST_F(TaggedCounterTest, Update) {
@@ -250,8 +250,8 @@ TEST_F(TaggedCounterTest, Update) {
 
   ExpectReporterCall(/* tag */ 21, /* count */ 15);
   counter_.Update(/* tag */ 22, /* count */ 0);
-  EXPECT_TRUE(AssertNoOrEmptyRecordFile());
-  EXPECT_EQ(TaggedCounter::kRecordNull, counter_.record_state_);
+  EXPECT_PRED_FORMAT2(AssertRecord, /* day */ 22, /* seconds */ 0);
+  EXPECT_EQ(TaggedCounter::kRecordValid, counter_.record_state_);
 }
 
 }  // namespace chromeos_metrics

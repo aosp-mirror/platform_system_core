@@ -15,6 +15,7 @@ using base::TimeDelta;
 using base::TimeTicks;
 
 #define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
+#define DBUS_IFACE_CRASH_REPORTER "org.chromium.CrashReporter"
 #define DBUS_IFACE_FLIMFLAM_MANAGER "org.chromium.flimflam.Manager"
 #define DBUS_IFACE_POWER_MANAGER "org.chromium.PowerManager"
 #define DBUS_IFACE_SESSION_MANAGER "org.chromium.SessionManagerInterface"
@@ -23,11 +24,16 @@ using base::TimeTicks;
 // TODO(petkov): This file should probably live in a user-specific stateful
 // location, e.g., /home/chronos/user.
 static const char kDailyUseRecordFile[] = "/var/log/metrics/daily-usage";
+static const char kUserCrashIntervalRecordFile[] =
+    "/var/log/metrics/user-crash-interval";
 
 static const int kSecondsPerMinute = 60;
 static const int kMinutesPerHour = 60;
 static const int kHoursPerDay = 24;
 static const int kMinutesPerDay = kHoursPerDay * kMinutesPerHour;
+static const int kSecondsPerDay = kSecondsPerMinute * kMinutesPerDay;
+static const int kDaysPerWeek = 7;
+static const int kSecondsPerWeek = kSecondsPerDay * kDaysPerWeek;
 
 // The daily use monitor is scheduled to a 1-minute interval after
 // initial user activity and then it's exponentially backed off to
@@ -52,8 +58,19 @@ const int MetricsDaemon::kMetricTimeToNetworkDropMax =
     8 /* hours */ * kMinutesPerHour * kSecondsPerMinute;
 const int MetricsDaemon::kMetricTimeToNetworkDropBuckets = 50;
 
+const char MetricsDaemon::kMetricUserCrashIntervalName[] =
+    "Logging.UserCrashInterval";
+const int MetricsDaemon::kMetricUserCrashIntervalMin = 1;
+const int MetricsDaemon::kMetricUserCrashIntervalMax = 4 * kSecondsPerWeek;
+const int MetricsDaemon::kMetricUserCrashIntervalBuckets = 50;
+
 // static
 const char* MetricsDaemon::kDBusMatches_[] = {
+  "type='signal',"
+  "interface='" DBUS_IFACE_CRASH_REPORTER "',"
+  "path='/',"
+  "member='UserCrash'",
+
   "type='signal',"
   "sender='org.chromium.flimflam',"
   "interface='" DBUS_IFACE_FLIMFLAM_MANAGER "',"
@@ -111,6 +128,9 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
   metrics_lib_ = metrics_lib;
   daily_use_.reset(new chromeos_metrics::TaggedCounter());
   daily_use_->Init(kDailyUseRecordFile, &DailyUseReporter, this);
+  user_crash_interval_.reset(new chromeos_metrics::TaggedCounter());
+  user_crash_interval_->Init(kUserCrashIntervalRecordFile,
+                             &UserCrashIntervalReporter, this);
 
   // Don't setup D-Bus and GLib in test mode.
   if (testing)
@@ -130,7 +150,7 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
   dbus_connection_setup_with_g_main(connection, NULL);
 
   // Registers D-Bus matches for the signals we would like to catch.
-  for (unsigned int m = 0; m < sizeof(kDBusMatches_) / sizeof(char*); m++) {
+  for (unsigned int m = 0; m < arraysize(kDBusMatches_); m++) {
     const char* match = kDBusMatches_[m];
     DLOG(INFO) << "adding dbus match: " << match;
     dbus_bus_add_match(connection, match, &error);
@@ -171,7 +191,11 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
 
   DBusMessageIter iter;
   dbus_message_iter_init(message, &iter);
-  if (strcmp(interface, DBUS_IFACE_FLIMFLAM_MANAGER) == 0) {
+  if (strcmp(interface, DBUS_IFACE_CRASH_REPORTER) == 0) {
+    CHECK(strcmp(dbus_message_get_member(message),
+                 "UserCrash") == 0);
+    daemon->ProcessUserCrash();
+  } else if (strcmp(interface, DBUS_IFACE_FLIMFLAM_MANAGER) == 0) {
     CHECK(strcmp(dbus_message_get_member(message),
                  "StateChanged") == 0);
 
@@ -295,6 +319,7 @@ void MetricsDaemon::SetUserActiveState(bool active, Time now) {
   TimeDelta since_epoch = now - Time();
   int day = since_epoch.InDays();
   daily_use_->Update(day, seconds);
+  user_crash_interval_->Update(0, seconds);
 
   // Schedules a use monitor on inactive->active transitions and
   // unschedules it on active->inactive transitions.
@@ -307,6 +332,14 @@ void MetricsDaemon::SetUserActiveState(bool active, Time now) {
   // activity update.
   user_active_ = active;
   user_active_last_ = now;
+}
+
+void MetricsDaemon::ProcessUserCrash() {
+  // Counts the active use time up to now.
+  SetUserActiveState(user_active_, Time::Now());
+
+  // Reports the active use time since the last crash and resets it.
+  user_crash_interval_->Flush();
 }
 
 // static
@@ -371,12 +404,25 @@ void MetricsDaemon::UnscheduleUseMonitor() {
 
 // static
 void MetricsDaemon::DailyUseReporter(void* handle, int tag, int count) {
+  if (count <= 0)
+    return;
+
   MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
   int minutes = (count + kSecondsPerMinute / 2) / kSecondsPerMinute;
   daemon->SendMetric(kMetricDailyUseTimeName, minutes,
                      kMetricDailyUseTimeMin,
                      kMetricDailyUseTimeMax,
                      kMetricDailyUseTimeBuckets);
+}
+
+// static
+void MetricsDaemon::UserCrashIntervalReporter(void* handle,
+                                              int tag, int count) {
+  MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
+  daemon->SendMetric(kMetricUserCrashIntervalName, count,
+                     kMetricUserCrashIntervalMin,
+                     kMetricUserCrashIntervalMax,
+                     kMetricUserCrashIntervalBuckets);
 }
 
 void MetricsDaemon::SendMetric(const std::string& name, int sample,

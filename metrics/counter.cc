@@ -58,11 +58,16 @@ void TaggedCounter::Flush() {
 }
 
 void TaggedCounter::UpdateInternal(int tag, int count, bool flush) {
-  // If there's no new data and the last record in the aggregation
-  // file is with the same tag, there's nothing to do.
-  if (!flush && count <= 0 &&
-      record_state_ == kRecordValid && record_.tag() == tag)
-    return;
+  if (flush) {
+    // Flushing but record is null, so nothing to do.
+    if (record_state_ == kRecordNull)
+      return;
+  } else {
+    // If there's no new data and the last record in the aggregation
+    // file is with the same tag, there's nothing to do.
+    if (count <= 0 && record_state_ == kRecordValid && record_.tag() == tag)
+      return;
+  }
 
   DLOG(INFO) << "tag: " << tag << " count: " << count << " flush: " << flush;
   DCHECK(filename_);
@@ -78,7 +83,7 @@ void TaggedCounter::UpdateInternal(int tag, int count, bool flush) {
 
   ReadRecord(fd);
   ReportRecord(tag, flush);
-  UpdateRecord(tag, count);
+  UpdateRecord(tag, count, flush);
   WriteRecord(fd);
 
   HANDLE_EINTR(close(fd));
@@ -89,7 +94,7 @@ void TaggedCounter::ReadRecord(int fd) {
     return;
 
   if (HANDLE_EINTR(read(fd, &record_, sizeof(record_))) == sizeof(record_)) {
-    if (record_.count() > 0) {
+    if (record_.count() >= 0) {
       record_state_ = kRecordValid;
       return;
     }
@@ -106,7 +111,7 @@ void TaggedCounter::ReadRecord(int fd) {
 void TaggedCounter::ReportRecord(int tag, bool flush) {
   // If no valid record, there's nothing to report.
   if (record_state_ != kRecordValid) {
-    DCHECK(record_state_ == kRecordNull);
+    DCHECK_EQ(record_state_, kRecordNull);
     return;
   }
 
@@ -121,9 +126,11 @@ void TaggedCounter::ReportRecord(int tag, bool flush) {
   record_state_ = kRecordNullDirty;
 }
 
-void TaggedCounter::UpdateRecord(int tag, int count) {
-  if (count <= 0)
+void TaggedCounter::UpdateRecord(int tag, int count, bool flush) {
+  if (flush) {
+    DCHECK(record_state_ == kRecordNull || record_state_ == kRecordNullDirty);
     return;
+  }
 
   switch (record_state_) {
     case kRecordNull:
@@ -137,8 +144,10 @@ void TaggedCounter::UpdateRecord(int tag, int count) {
       // If there's an existing record for the current tag,
       // accumulates the counts.
       DCHECK_EQ(record_.tag(), tag);
-      record_.Add(count);
-      record_state_ = kRecordValidDirty;
+      if (count > 0) {
+        record_.Add(count);
+        record_state_ = kRecordValidDirty;
+      }
       break;
 
     default:

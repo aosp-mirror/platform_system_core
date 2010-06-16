@@ -22,8 +22,7 @@ class TaggedCounterInterface {
  public:
   // Callback type used for reporting aggregated or flushed data.
   // Once this callback is invoked by the counter, the reported
-  // aggregated data is discarded. Only aggregated data with positive
-  // counts is reported.
+  // aggregated data is discarded.
   //
   // |handle| is the |reporter_handle| pointer passed through Init.
   // |tag| is the tag associated with the aggregated count.
@@ -124,8 +123,9 @@ class TaggedCounter : public TaggedCounterInterface {
 
   // Updates the cached record given the new |tag| and |count|. This
   // method expects either a null cached record, or a valid cached
-  // record with the same tag as |tag|.
-  void UpdateRecord(int tag, int count);
+  // record with the same tag as |tag|. If |flush| is true, the method
+  // asserts that the cached record is null and returns.
+  void UpdateRecord(int tag, int count, bool flush);
 
   // If the cached record state is dirty, updates the persistent
   // storage specified through file descriptor |fd| and switches the
