@@ -56,6 +56,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
   static bool SendToAutotest(const std::string& name, int value);
 
  private:
+  friend class CMetricsLibraryTest;
   friend class MetricsLibraryTest;
   FRIEND_TEST(MetricsLibraryTest, FormatChromeMessage);
   FRIEND_TEST(MetricsLibraryTest, FormatChromeMessageTooLong);

@@ -32,6 +32,7 @@ TESTDAEMON_OBJS = \
 	metrics_daemon.o \
 	metrics_daemon_test.o
 LIB_OBJS = \
+	c_metrics_library.o \
 	metrics_library.o
 TESTLIB_OBJS = \
 	metrics_library.o \

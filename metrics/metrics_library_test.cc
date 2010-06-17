@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics_library.h"
-
 #include <cstring>
 
 #include <base/file_util.h>
 #include <gtest/gtest.h>
+
+#include "c_metrics_library.h"
+#include "metrics_library.h"
 
 static const FilePath kTestUMAEventsFile("test-uma-events");
 
@@ -76,6 +77,48 @@ TEST_F(MetricsLibraryTest, SendToUMA) {
   char buf[100];
   const int kLen = 37;
   EXPECT_TRUE(lib_.SendToUMA("Test.Metric", 2, 1, 100, 50));
+  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+
+  char exp[kLen];
+  sprintf(exp, "%c%c%c%chistogram%cTest.Metric 2 1 100 50", kLen, 0, 0, 0, 0);
+  EXPECT_EQ(0, memcmp(exp, buf, kLen));
+}
+
+class CMetricsLibraryTest : public testing::Test {
+ protected:
+  virtual void SetUp() {
+    lib_ = CMetricsLibraryNew();
+    MetricsLibrary& ml = *reinterpret_cast<MetricsLibrary*>(lib_);
+    EXPECT_EQ(NULL, ml.uma_events_file_);
+    CMetricsLibraryInit(lib_);
+    EXPECT_TRUE(NULL != ml.uma_events_file_);
+    ml.uma_events_file_ = kTestUMAEventsFile.value().c_str();
+  }
+
+  virtual void TearDown() {
+    CMetricsLibraryDelete(lib_);
+    file_util::Delete(kTestUMAEventsFile, false);
+  }
+
+  CMetricsLibrary lib_;
+};
+
+TEST_F(CMetricsLibraryTest, SendEnumToUMA) {
+  char buf[100];
+  const int kLen = 40;
+  EXPECT_TRUE(CMetricsLibrarySendEnumToUMA(lib_, "Test.EnumMetric", 1, 3));
+  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+
+  char exp[kLen];
+  sprintf(exp, "%c%c%c%clinearhistogram%cTest.EnumMetric 1 3",
+          kLen, 0, 0, 0, 0);
+  EXPECT_EQ(0, memcmp(exp, buf, kLen));
+}
+
+TEST_F(CMetricsLibraryTest, SendToUMA) {
+  char buf[100];
+  const int kLen = 37;
+  EXPECT_TRUE(CMetricsLibrarySendToUMA(lib_, "Test.Metric", 2, 1, 100, 50));
   EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
 
   char exp[kLen];
