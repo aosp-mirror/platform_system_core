@@ -77,6 +77,18 @@ static void CountUserCrash() {
   s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
                               CRASH_KIND_USER,
                               CRASH_KIND_MAX);
+
+  // Announce through D-Bus whenever a user crash happens. This is
+  // used by the metrics daemon to log active use time between
+  // crashes.
+  //
+  // This could be done more efficiently by explicit fork/exec or
+  // using a dbus library directly. However, this should run
+  // relatively rarely and longer term we may need to implement a
+  // better way to do this that doesn't rely on D-Bus.
+  int status __attribute__((unused)) =
+      system("/usr/bin/dbus-send --type=signal --system / "
+             "org.chromium.CrashReporter.UserCrash");
 }
 
 int main(int argc, char *argv[]) {
