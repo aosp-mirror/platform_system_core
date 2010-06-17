@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# Copyright (c) 2010 The Chromium OS Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+set -e
+
+# Background the sender so it can trickle out crash dumps.  It will
+# exit early if already running.
+/sbin/crash_sender 2>&1 &

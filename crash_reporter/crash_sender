@@ -1,0 +1,206 @@
+#!/bin/sh
+
+# Copyright (c) 2010 The Chromium OS Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+set -e
+
+# Product ID in crash report
+CHROMEOS_PRODUCT=ChromeOS
+
+# Send up to 8 crashes per day.
+MAX_CRASH_RATE=8
+
+# Minidump uploading tool (provided by Google Breakpad).
+MINIDUMP_UPLOADER=/usr/bin/minidump_upload
+
+# URL to send non-official build crashes to.
+MINIDUMP_UPLOAD_STAGING_URL="http://clients2.google.com/cr/staging_report"
+
+# URL to send official build crashes to.
+MINIDUMP_UPLOAD_PROD_URL="http://clients2.google.com/cr/report"
+
+# File whose existence mocks crash sending.  If empty we pretend the
+# crash sending was successful, otherwise unsuccessful.
+MOCK_CRASH_SENDING="/tmp/mock-crash-sending"
+
+# File whose existence causes crash sending to be delayed (for testing).
+PAUSE_CRASH_SENDING="/tmp/pause-crash-sending"
+
+# File whose existence implies we're running and not to start again.
+RUN_FILE="/var/run/crash_sender.pid"
+
+# Maximum time to sleep between sends.
+SECONDS_SEND_SPREAD=600
+
+# The syslog tag for all logging we emit.
+TAG="$(basename $0)[$$]"
+
+# Directory to store timestamp files indicating the uploads in the past 24
+# hours.
+TIMESTAMPS_DIR="/var/lib/crash_sender"
+
+lecho() {
+  logger -t "${TAG}" "$@"
+}
+
+remove_run_file() {
+  rm -f "${RUN_FILE}"
+}
+
+check_not_already_running() {
+  if [ ! -f "${RUN_FILE}" ]; then
+    return
+  fi
+  local last_pid=$(cat "${RUN_FILE}")
+  if [ ! -f "/proc/${last_pid}/cmdline" ]; then
+    trap remove_run_file EXIT
+    echo $$ > "${RUN_FILE}"
+    return
+  fi
+  # This could just be an unrelated process, but it's ok to be conservative.
+  lecho "Already running.  Exiting now."
+  exit 1
+}
+
+get_version() {
+  grep ^CHROMEOS_RELEASE_VERSION /etc/lsb-release | cut -d = -f 2-
+}
+
+is_official() {
+  grep ^CHROMEOS_RELEASE_DESCRIPTION /etc/lsb-release | cut -d = -f 2- | \
+      grep Official
+}
+
+# Generate a uniform random number in 0..max-1.
+generate_uniform_random() {
+  local max=$1
+  local random="$(od -An -N4 -tu /dev/urandom)"
+  echo $((random % max))
+}
+
+is_feedback_disabled() {
+  # See crosbug.com/3303.
+  return 1
+}
+
+is_on_3g() {
+  # See crosbug.com/3304.
+  return 1
+}
+
+# Check if sending a crash now does not exceed the maximum 24hr rate and
+# commit to doing so, if not.
+check_rate() {
+  mkdir -p ${TIMESTAMPS_DIR}
+  # Only consider minidumps written in the past 24 hours by removing all older.
+  find "${TIMESTAMPS_DIR}" -mindepth 1 -mmin +$((24 * 60)) -exec rm '{}' ';'
+  local sends_in_24hrs=$(echo "${TIMESTAMPS_DIR}"/* | wc -w)
+  lecho "Current send rate: ${sends_in_24hrs}sends/24hrs"
+  if [ ${sends_in_24hrs} -ge ${MAX_CRASH_RATE} ]; then
+    lecho "Cannot send more crashes:"
+    lecho "  current ${sends_in_24hrs}send/24hrs >= " \
+          "max ${MAX_CRASH_RATE}send/24hrs"
+    return 1
+  fi
+  mktemp "${TIMESTAMPS_DIR}"/XXXX > /dev/null
+  return 0
+}
+
+send_crash() {
+  local sleep_time=$(generate_uniform_random $SECONDS_SEND_SPREAD)
+  local url="${MINIDUMP_UPLOAD_STAGING_URL}"
+  if is_official; then
+    url="${MINIDUMP_UPLOAD_PROD_URL}"
+  fi
+  lecho "Sending crash:"
+  lecho "  Scheduled to send in ${sleep_time}s"
+  lecho "  Minidump: ${minidump_path}"
+  lecho "  URL: ${url}"
+  lecho "  Product: ${CHROMEOS_PRODUCT}"
+  lecho "  Version: ${chromeos_version}"
+  if [ -s "${minidump_path}" ]; then
+    # We cannot tell much from the minidump without symbols, but we can tell
+    # at least what modules were loaded at the time of crash
+    local modules="$(/usr/bin/minidump_dump "${minidump_path}" 2>&- | \
+                     grep 'code_file' | sed -e 's/^.* = "//g;s/"//g' | \
+                     tr '\n' ' ')"
+    lecho "  Mapped: ${modules}"
+  fi
+  if [ -f "${MOCK_CRASH_SENDING}" ]; then
+    local mock_in=$(cat "${MOCK_CRASH_SENDING}")
+    if [ "${mock_in}" = "" ]; then
+      lecho "Mocking successful send"
+      return 0
+    else
+      lecho "Mocking unsuccessful send"
+      return 1
+    fi
+  fi
+
+  if ! sleep ${sleep_time}; then
+    lecho "Sleep failed"
+    return 1
+  fi
+
+  "${MINIDUMP_UPLOADER}" -p "${CHROMEOS_PRODUCT}" \
+          -v "${chromeos_version}" "${minidump_path}" "${url}"
+  return $?
+}
+
+# Send all crashes from the given directory.  The directory is currently
+# expected to just contain a bunch of minidumps - but this will change
+# over time to be a directory of directories where the minidump and core
+# file are in the directory as well as other metadata about the context
+# of the crash (executable name for instance).
+send_crashes() {
+  local dir="$1"
+  lecho "Considering crashes in ${dir}"
+  # Cycle through minidumps, most recent first.  That way if we're about
+  # to exceed the daily rate, we send the most recent minidumps.
+  if [ ! -d "${dir}" ]; then
+    return
+  fi
+  for file in $(ls -1t "${dir}"); do
+    local minidump_path="${dir}/${file}"
+    lecho "Considering crash ${minidump_path}"
+    if ! check_rate; then
+      lecho "Sending ${minidump_path} would exceed rate.  Leaving for later."
+      return 0
+   fi
+    local chromeos_version=$(get_version)
+    if is_feedback_disabled; then
+      lecho "Uploading is disabled.  Removing crash."
+      rm "${minidump_path}"
+    elif is_on_3g; then
+      lecho "Not sending crash report while on 3G, saving for later."
+    elif send_crash ${minidump_path}; then
+      # Send was successful, now remove
+      lecho "Successfully sent crash ${minidump_path} and removing"
+      rm "${minidump_path}"
+    else
+      lecho "Problem sending ${minidump_path}, not removing"
+    fi
+  done
+}
+
+main() {
+  lecho "Starting"
+  if [ -e "${PAUSE_CRASH_SENDING}" ]; then
+    lecho "Exiting early due to ${PAUSE_CRASH_SENDING}"
+    exit 1
+  fi
+
+  check_not_already_running
+
+  # Send system-wide crashes
+  send_crashes "/var/spool/crash"
+
+  # Send user-specific crashes
+  send_crashes "/home/chronos/user/crash"
+
+  lecho "Done"
+}
+
+main
