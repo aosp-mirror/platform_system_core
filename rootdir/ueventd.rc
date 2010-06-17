@@ -23,7 +23,6 @@
 /dev/android_adb          0660   adb        adb
 /dev/android_adb_enable   0660   adb        adb
 /dev/ttyMSM0              0600   bluetooth  bluetooth
-/dev/ttyHS0               0600   bluetooth  bluetooth
 /dev/uinput               0660   system     bluetooth
 /dev/alarm                0664   system     radio
 /dev/tty0                 0660   root       system
