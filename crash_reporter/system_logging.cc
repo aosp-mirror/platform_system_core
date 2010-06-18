@@ -5,7 +5,7 @@
 #include <stdarg.h>
 #include <syslog.h>
 
-#include "crash/system_logging.h"
+#include "crash-reporter/system_logging.h"
 
 std::string SystemLoggingImpl::identity_;
 

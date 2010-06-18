@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "crash/system_logging.h"
+#include "crash-reporter/system_logging.h"
 
 class SystemLoggingMock : public SystemLogging {
  public:

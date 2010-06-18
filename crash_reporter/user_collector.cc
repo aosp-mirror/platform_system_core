@@ -7,7 +7,7 @@
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/string_util.h"
-#include "crash/user_collector.h"
+#include "crash-reporter/user_collector.h"
 #include "metrics/metrics_library.h"
 
 // This procfs file is used to cause kernel core file writing to

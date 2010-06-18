@@ -6,8 +6,8 @@
 #include <gtest/gtest.h>
 
 #include "base/file_util.h"
-#include "crash/system_logging_mock.h"
-#include "crash/user_collector.h"
+#include "crash-reporter/system_logging_mock.h"
+#include "crash-reporter/user_collector.h"
 
 int s_crashes = 0;
 bool s_metrics = false;

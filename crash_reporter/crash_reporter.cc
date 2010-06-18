@@ -7,8 +7,8 @@
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/string_util.h"
-#include "crash/system_logging.h"
-#include "crash/user_collector.h"
+#include "crash-reporter/system_logging.h"
+#include "crash-reporter/user_collector.h"
 #include "gflags/gflags.h"
 #include "metrics/metrics_library.h"
 
