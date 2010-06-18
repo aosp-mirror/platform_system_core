@@ -71,6 +71,10 @@
 #define VENDOR_ID_QUALCOMM      0x05c6
 // On-The-Go-Video's USB Vendor ID
 #define VENDOR_ID_OTGV          0x2257
+// NEC's USB Vendor ID
+#define VENDOR_ID_NEC           0x0409
+// Panasonic Mobile Communication's USB Vendor ID
+#define VENDOR_ID_PMC           0x04DA
 
 
 /** built-in vendor list */
@@ -93,6 +97,8 @@ int builtInVendorIds[] = {
     VENDOR_ID_PANTECH,
     VENDOR_ID_QUALCOMM,
     VENDOR_ID_OTGV,
+    VENDOR_ID_NEC,
+    VENDOR_ID_PMC,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
