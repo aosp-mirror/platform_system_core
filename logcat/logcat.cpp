@@ -402,8 +402,9 @@ static void show_help(const char *cmd)
                     "  -d              dump the log and then exit (don't block)\n"
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
-                    "  -b <buffer>     request alternate ring buffer\n"
-                    "                  ('main' (default), 'radio', 'events')\n"
+                    "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio'\n"
+                    "                  or 'events'. Multiple -b parameters are allowed and the\n"
+                    "                  results are interleaved. The default is -b main -b system.\n"
                     "  -B              output the log in binary");
 
 
