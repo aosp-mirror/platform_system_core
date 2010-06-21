@@ -116,3 +116,36 @@ signals to or communicate in some alternative way with the metrics
 daemon. Then the metrics daemon needs to monitor for the relevant
 events and take appropriate action -- for example, aggregate data and
 send the histogram samples.
+
+
+================================================================================
+FAQ
+================================================================================
+
+Q. What should my histogram's |min| and |max| values be set at?
+
+A. You should set the values to a range that covers the vast majority
+   of samples that would appear in the field. Note that samples below
+   the |min| will still be collected in the underflow bucket and
+   samples above the |max| will end up in the overflow bucket. Also,
+   the reported mean of the data will be correct regardless of the
+   range.
+
+Q. How many buckets should I use in my histogram?
+
+A. You should allocate as many buckets as necessary to perform proper
+   analysis on the collected data. Note, however, that the memory
+   allocated in Chrome for each histogram is proportional to the
+   number of buckets. Therefore, it is strongly recommended to keep
+   this number low (e.g., 50 is normal, while 100 is probably high).
+
+Q. When should I use an enumeration (linear) histogram vs. a regular
+   (exponential) histogram?
+
+A. Enumeration histograms should really be used only for sampling
+   enumerated events and, in some cases, percentages. Normally, you
+   should use a regular histogram with exponential bucket layout that
+   provides higher resolution at the low end of the range and lower
+   resolution at the high end. Regular histograms are generally used
+   for collecting performance data (e.g., timing, memory usage, power)
+   as well as aggregated event counts.

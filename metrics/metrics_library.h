@@ -38,6 +38,11 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // |nbuckets| is the number of histogram buckets.
   // [0,min) is the implicit underflow bucket.
   // [|max|,infinity) is the implicit overflow bucket.
+  //
+  // Note that the memory allocated in Chrome for each histogram is
+  // proportional to the number of buckets. Therefore, it is strongly
+  // recommended to keep this number low (e.g., 50 is normal, while
+  // 100 is high).
   bool SendToUMA(const std::string& name, int sample,
                  int min, int max, int nbuckets);
 
@@ -50,6 +55,12 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // |max| is the maximum value of the histogram samples.
   // 0 is the implicit underflow bucket.
   // [|max|,infinity) is the implicit overflow bucket.
+  //
+  // An enumaration histogram requires |max| + 1 number of
+  // buckets. Note that the memory allocated in Chrome for each
+  // histogram is proportional to the number of buckets. Therefore, it
+  // is strongly recommended to keep this number low (e.g., 50 is
+  // normal, while 100 is high).
   bool SendEnumToUMA(const std::string& name, int sample, int max);
 
   // Sends to Autotest and returns true on success.
