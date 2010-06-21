@@ -19,17 +19,13 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <dirent.h>
+#include <netinet/ether.h>
+
+#include <netutils/ifc.h>
+#include <netutils/dhcp.h>
 
 static int verbose = 0;
 
-int ifc_init();
-void ifc_close();
-int ifc_up(char *iname);
-int ifc_down(char *iname);
-int ifc_remove_host_routes(char *iname);
-int ifc_remove_default_route(char *iname);
-int ifc_get_info(const char *name, unsigned *addr, unsigned *mask, unsigned *flags);
-int do_dhcp(char *iname);
 
 void die(const char *reason)
 {
@@ -37,16 +33,12 @@ void die(const char *reason)
     exit(1);
 }
 
-const char *ipaddr(unsigned addr)
+const char *ipaddr(in_addr_t addr)
 {
-    static char buf[32];
-    
-    sprintf(buf,"%d.%d.%d.%d", 
-            addr & 255,
-            ((addr >> 8) & 255),
-            ((addr >> 16) & 255), 
-            (addr >> 24));
-    return buf;
+    struct in_addr in_addr;
+
+    in_addr.s_addr = addr;
+    return inet_ntoa(in_addr);
 }
 
 void usage(void)
@@ -86,6 +78,15 @@ int dump_interfaces(void)
     return 0;
 }
 
+int set_hwaddr(const char *name, const char *asc) {
+    struct ether_addr *addr = ether_aton(asc);
+    if (!addr) {
+        printf("Failed to parse '%s'\n", asc);
+        return -1;
+    }
+    return ifc_set_hwaddr(name, addr->ether_addr_octet);
+}
+
 struct 
 {
     const char *name;
@@ -97,6 +98,7 @@ struct
     { "down",   1, ifc_down },
     { "flhosts",  1, ifc_remove_host_routes },
     { "deldefault", 1, ifc_remove_default_route },
+    { "hwaddr", 2, set_hwaddr },
     { 0, 0, 0 },
 };
 
