@@ -18,8 +18,11 @@
 #include <assert.h>
 #include <stdio.h>
 #include <cutils/log.h>
-
 #include "codeflinger/GGLAssembler.h"
+
+#ifdef __ARM_ARCH__
+#include <machine/cpu-features.h>
+#endif
 
 namespace android {
 
@@ -110,6 +113,20 @@ void GGLAssembler::extract(integer_t& d, int s, int h, int l, int bits)
     assert(maskLen<=8);
     assert(h);
     
+#if __ARM_ARCH__ >= 7
+    const int mask = (1<<maskLen)-1;
+    if ((h == bits) && !l && (s != d.reg)) {
+        MOV(AL, 0, d.reg, s);                   // component = packed;
+    } else if ((h == bits) && l) {
+        MOV(AL, 0, d.reg, reg_imm(s, LSR, l));  // component = packed >> l;
+    } else if (!l && isValidImmediate(mask)) {
+        AND(AL, 0, d.reg, s, imm(mask));        // component = packed & mask;
+    } else if (!l && isValidImmediate(~mask)) {
+        BIC(AL, 0, d.reg, s, imm(~mask));       // component = packed & mask;
+    } else {
+        UBFX(AL, d.reg, s, l, maskLen);         // component = (packed & mask) >> l;
+    }
+#else
     if (h != bits) {
         const int mask = ((1<<maskLen)-1) << l;
         if (isValidImmediate(mask)) {
@@ -132,6 +149,7 @@ void GGLAssembler::extract(integer_t& d, int s, int h, int l, int bits)
     if (s != d.reg) {
         MOV(AL, 0, d.reg, s);
     }
+#endif
 
     d.s = maskLen;
 }

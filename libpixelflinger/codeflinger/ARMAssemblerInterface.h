@@ -206,6 +206,9 @@ public:
     // byte/half word extract...
     virtual void UXTB16(int cc, int Rd, int Rm, int rotate) = 0;
 
+    // bit manipulation...
+    virtual void UBFX(int cc, int Rd, int Rn, int lsb, int width) = 0;
+
     // -----------------------------------------------------------------------
     // convenience...
     // -----------------------------------------------------------------------
