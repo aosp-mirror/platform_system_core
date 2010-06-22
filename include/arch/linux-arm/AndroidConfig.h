@@ -42,11 +42,6 @@
 #define HAVE_PTHREADS
 
 /*
- * Do we have pthread_setname_np()?
- */
-#define HAVE_PTHREAD_SETNAME_NP
-
-/*
  * Do we have the futex syscall?
  */
 
