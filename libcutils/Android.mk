@@ -26,7 +26,7 @@ hostSmpFlag := -DANDROID_SMP=0
 commonSources := \
 	array.c \
 	hashmap.c \
-	atomic.c \
+	atomic.c.arm \
 	native_handle.c \
 	buffer.c \
 	socket_inaddr_any_server.c \
@@ -112,7 +112,7 @@ LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(commonSources) ashmem-dev.c mq.c
 
 ifeq ($(TARGET_ARCH),arm)
-LOCAL_SRC_FILES += memset32.S atomic-android-arm.S
+LOCAL_SRC_FILES += memset32.S
 else  # !arm
 ifeq ($(TARGET_ARCH),sh)
 LOCAL_SRC_FILES += memory.c atomic-android-sh.c

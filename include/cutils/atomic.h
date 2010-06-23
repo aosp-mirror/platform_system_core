@@ -90,12 +90,11 @@ void android_atomic_acquire_store(int32_t value, volatile int32_t* addr);
 void android_atomic_release_store(int32_t value, volatile int32_t* addr);
 
 /*
- * Unconditional swap operation with "acquire" or "release" ordering.
+ * Unconditional swap operation with release ordering.
  *
  * Stores the new value at *addr, and returns the previous value.
  */
-int32_t android_atomic_acquire_swap(int32_t value, volatile int32_t* addr);
-int32_t android_atomic_release_swap(int32_t value, volatile int32_t* addr);
+int32_t android_atomic_swap(int32_t value, volatile int32_t* addr);
 
 /*
  * Compare-and-set operation with "acquire" or "release" ordering.
