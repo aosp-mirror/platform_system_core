@@ -5,7 +5,7 @@
 #include <stdarg.h>
 
 #include "base/string_util.h"
-#include "crash/system_logging_mock.h"
+#include "crash-reporter/system_logging_mock.h"
 
 void SystemLoggingMock::LogInfo(const char *format, ...) {
   va_list vl;

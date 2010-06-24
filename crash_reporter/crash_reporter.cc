@@ -25,6 +25,7 @@ DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
 static const char kUncleanShutdownFile[] =
     "/var/lib/crash_reporter/pending_clean_shutdown";
+static const char kEmpty[] = "";
 
 // Enumeration of kinds of crashes to be used in the CrashCounter histogram.
 enum CrashKinds {
@@ -58,13 +59,19 @@ static void CheckUncleanShutdown() {
     s_system_log.LogError("Failed to delete unclean shutdown file %s",
                           kUncleanShutdownFile);
   }
+
+  // Touch a file to notify the metrics daemon that a kernel crash has
+  // been detected so that it can log the time since the last kernel
+  // crash.
+  static const char kKernelCrashDetectedFile[] = "/tmp/kernel-crash-detected";
+  FilePath crash_detected(kKernelCrashDetectedFile);
+  file_util::WriteFile(crash_detected, kEmpty, 0);
 }
 
 static bool PrepareUncleanShutdownCheck() {
-  static const char empty[] = "";
   FilePath file_path(kUncleanShutdownFile);
   file_util::CreateDirectory(file_path.DirName());
-  return file_util::WriteFile(file_path, empty, 0) == 0;
+  return file_util::WriteFile(file_path, kEmpty, 0) == 0;
 }
 
 static void SignalCleanShutdown() {
