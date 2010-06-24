@@ -6,6 +6,7 @@
 
 #include <dbus/dbus-glib-lowlevel.h>
 
+#include <base/file_util.h>
 #include <base/logging.h>
 
 #include "counter.h"
@@ -13,19 +14,13 @@
 using base::Time;
 using base::TimeDelta;
 using base::TimeTicks;
+using std::string;
 
 #define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
 #define DBUS_IFACE_CRASH_REPORTER "org.chromium.CrashReporter"
 #define DBUS_IFACE_FLIMFLAM_MANAGER "org.chromium.flimflam.Manager"
 #define DBUS_IFACE_POWER_MANAGER "org.chromium.PowerManager"
 #define DBUS_IFACE_SESSION_MANAGER "org.chromium.SessionManagerInterface"
-
-// File to aggregate daily usage before sending to UMA.
-// TODO(petkov): This file should probably live in a user-specific stateful
-// location, e.g., /home/chronos/user.
-static const char kDailyUseRecordFile[] = "/var/log/metrics/daily-usage";
-static const char kUserCrashIntervalRecordFile[] =
-    "/var/log/metrics/user-crash-interval";
 
 static const int kSecondsPerMinute = 60;
 static const int kMinutesPerHour = 60;
@@ -50,6 +45,12 @@ const char MetricsDaemon::kMetricDailyUseTimeName[] =
 const int MetricsDaemon::kMetricDailyUseTimeMin = 1;
 const int MetricsDaemon::kMetricDailyUseTimeMax = kMinutesPerDay;
 const int MetricsDaemon::kMetricDailyUseTimeBuckets = 50;
+
+const char MetricsDaemon::kMetricKernelCrashIntervalName[] =
+    "Logging.KernelCrashInterval";
+const int MetricsDaemon::kMetricKernelCrashIntervalMin = 1;
+const int MetricsDaemon::kMetricKernelCrashIntervalMax = 4 * kSecondsPerWeek;
+const int MetricsDaemon::kMetricKernelCrashIntervalBuckets = 50;
 
 const char MetricsDaemon::kMetricTimeToNetworkDropName[] =
     "Network.TimeToDrop";
@@ -106,6 +107,53 @@ const char* MetricsDaemon::kSessionStates_[] = {
 #include "session_states.h"
 };
 
+// Invokes a remote method over D-Bus that takes no input arguments
+// and returns a string result. The method call is issued with a 2
+// second blocking timeout. Returns an empty string on failure or
+// timeout.
+static string DBusGetString(DBusConnection* connection,
+                            const string& destination,
+                            const string& path,
+                            const string& interface,
+                            const string& method) {
+  DBusMessage* message =
+      dbus_message_new_method_call(destination.c_str(),
+                                   path.c_str(),
+                                   interface.c_str(),
+                                   method.c_str());
+  if (!message) {
+    DLOG(WARNING) << "DBusGetString: unable to allocate a message";
+    return "";
+  }
+
+  DBusError error;
+  dbus_error_init(&error);
+  const int kTimeout = 2000;  // ms
+  DLOG(INFO) << "DBusGetString: dest=" << destination << " path=" << path
+             << " iface=" << interface << " method=" << method;
+  DBusMessage* reply =
+      dbus_connection_send_with_reply_and_block(connection, message, kTimeout,
+                                                &error);
+  dbus_message_unref(message);
+  if (dbus_error_is_set(&error) || !reply) {
+    DLOG(WARNING) << "DBusGetString: call failed";
+    return "";
+  }
+  DBusMessageIter iter;
+  dbus_message_iter_init(reply, &iter);
+  if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
+    NOTREACHED();
+    dbus_message_unref(reply);
+    return "";
+  }
+  const char* c_result = "";
+  dbus_message_iter_get_basic(&iter, &c_result);
+  string result = c_result;
+  DLOG(INFO) << "DBusGetString: result=" << result;
+  dbus_message_unref(reply);
+  return result;
+}
+
 MetricsDaemon::MetricsDaemon()
     : network_state_(kUnknownNetworkState),
       power_state_(kUnknownPowerState),
@@ -117,20 +165,34 @@ MetricsDaemon::MetricsDaemon()
 MetricsDaemon::~MetricsDaemon() {}
 
 void MetricsDaemon::Run(bool run_as_daemon) {
-  if (!run_as_daemon || daemon(0, 0) == 0) {
-    Loop();
-  }
+  if (run_as_daemon && daemon(0, 0) != 0)
+    return;
+
+  static const char kKernelCrashDetectedFile[] = "/tmp/kernel-crash-detected";
+  CheckKernelCrash(kKernelCrashDetectedFile);
+  Loop();
 }
 
 void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
   testing_ = testing;
   DCHECK(metrics_lib != NULL);
   metrics_lib_ = metrics_lib;
+
+  static const char kDailyUseRecordFile[] = "/var/log/metrics/daily-usage";
   daily_use_.reset(new chromeos_metrics::TaggedCounter());
   daily_use_->Init(kDailyUseRecordFile, &DailyUseReporter, this);
+
+  static const char kUserCrashIntervalRecordFile[] =
+      "/var/log/metrics/user-crash-interval";
   user_crash_interval_.reset(new chromeos_metrics::TaggedCounter());
   user_crash_interval_->Init(kUserCrashIntervalRecordFile,
                              &UserCrashIntervalReporter, this);
+
+  static const char kKernelCrashIntervalRecordFile[] =
+      "/var/log/metrics/kernel-crash-interval";
+  kernel_crash_interval_.reset(new chromeos_metrics::TaggedCounter());
+  kernel_crash_interval_->Init(kKernelCrashIntervalRecordFile,
+                               &KernelCrashIntervalReporter, this);
 
   // Don't setup D-Bus and GLib in test mode.
   if (testing)
@@ -162,6 +224,11 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
   // the registered D-Bus matches is successful. The daemon is not
   // activated for D-Bus messages that don't match.
   CHECK(dbus_connection_add_filter(connection, MessageFilter, this, NULL));
+
+  // Initializes the current network state by retrieving it from flimflam.
+  string state_name = DBusGetString(connection, "org.chromium.flimflam", "/",
+                                    DBUS_IFACE_FLIMFLAM_MANAGER, "GetState");
+  NetStateChanged(state_name.c_str(), TimeTicks::Now());
 }
 
 void MetricsDaemon::Loop() {
@@ -320,6 +387,7 @@ void MetricsDaemon::SetUserActiveState(bool active, Time now) {
   int day = since_epoch.InDays();
   daily_use_->Update(day, seconds);
   user_crash_interval_->Update(0, seconds);
+  kernel_crash_interval_->Update(0, seconds);
 
   // Schedules a use monitor on inactive->active transitions and
   // unschedules it on active->inactive transitions.
@@ -340,6 +408,27 @@ void MetricsDaemon::ProcessUserCrash() {
 
   // Reports the active use time since the last crash and resets it.
   user_crash_interval_->Flush();
+}
+
+void MetricsDaemon::ProcessKernelCrash() {
+  // Counts the active use time up to now.
+  SetUserActiveState(user_active_, Time::Now());
+
+  // Reports the active use time since the last crash and resets it.
+  kernel_crash_interval_->Flush();
+}
+
+void MetricsDaemon::CheckKernelCrash(const std::string& crash_file) {
+  FilePath crash_detected(crash_file);
+  if (!file_util::PathExists(crash_detected))
+    return;
+
+  ProcessKernelCrash();
+
+  // Deletes the crash-detected file so that the daemon doesn't report
+  // another kernel crash in case it's restarted.
+  file_util::Delete(crash_detected,
+                    false);  // recursive
 }
 
 // static
@@ -425,7 +514,17 @@ void MetricsDaemon::UserCrashIntervalReporter(void* handle,
                      kMetricUserCrashIntervalBuckets);
 }
 
-void MetricsDaemon::SendMetric(const std::string& name, int sample,
+// static
+void MetricsDaemon::KernelCrashIntervalReporter(void* handle,
+                                                int tag, int count) {
+  MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
+  daemon->SendMetric(kMetricKernelCrashIntervalName, count,
+                     kMetricKernelCrashIntervalMin,
+                     kMetricKernelCrashIntervalMax,
+                     kMetricKernelCrashIntervalBuckets);
+}
+
+void MetricsDaemon::SendMetric(const string& name, int sample,
                                int min, int max, int nbuckets) {
   DLOG(INFO) << "received metric: " << name << " " << sample << " "
              << min << " " << max << " " << nbuckets;

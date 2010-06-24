@@ -31,7 +31,9 @@ class MetricsDaemon {
 
  private:
   friend class MetricsDaemonTest;
+  FRIEND_TEST(MetricsDaemonTest, CheckKernelCrash);
   FRIEND_TEST(MetricsDaemonTest, DailyUseReporter);
+  FRIEND_TEST(MetricsDaemonTest, KernelCrashIntervalReporter);
   FRIEND_TEST(MetricsDaemonTest, LookupNetworkState);
   FRIEND_TEST(MetricsDaemonTest, LookupPowerState);
   FRIEND_TEST(MetricsDaemonTest, LookupScreenSaverState);
@@ -40,6 +42,7 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, NetStateChangedSimpleDrop);
   FRIEND_TEST(MetricsDaemonTest, NetStateChangedSuspend);
   FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
+  FRIEND_TEST(MetricsDaemonTest, ProcessKernelCrash);
   FRIEND_TEST(MetricsDaemonTest, ProcessUserCrash);
   FRIEND_TEST(MetricsDaemonTest, ScreenSaverStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SendMetric);
@@ -85,6 +88,10 @@ class MetricsDaemon {
   static const int kMetricDailyUseTimeMin;
   static const int kMetricDailyUseTimeMax;
   static const int kMetricDailyUseTimeBuckets;
+  static const char kMetricKernelCrashIntervalName[];
+  static const int kMetricKernelCrashIntervalMin;
+  static const int kMetricKernelCrashIntervalMax;
+  static const int kMetricKernelCrashIntervalBuckets;
   static const char kMetricTimeToNetworkDropName[];
   static const int kMetricTimeToNetworkDropMin;
   static const int kMetricTimeToNetworkDropMax;
@@ -152,6 +159,14 @@ class MetricsDaemon {
   // process crashes.
   void ProcessUserCrash();
 
+  // Updates the active use time and logs time between kernel crashes.
+  void ProcessKernelCrash();
+
+  // Checks if a kernel crash has been detected and processes if so.
+  // The method assumes that a kernel crash has happened if
+  // |crash_file| exists.
+  void CheckKernelCrash(const std::string& crash_file);
+
   // Callbacks for the daily use monitor. The daily use monitor uses
   // LogDailyUseRecord to aggregate current usage data and send it to
   // UMA, if necessary. It also reschedules itself using an
@@ -187,6 +202,10 @@ class MetricsDaemon {
   // crashes and send to UMA.
   static void UserCrashIntervalReporter(void* data, int tag, int count);
 
+  // TaggedCounter callback to process time between kernel crashes and
+  // send to UMA.
+  static void KernelCrashIntervalReporter(void* data, int tag, int count);
+
   // Test mode.
   bool testing_;
 
@@ -221,6 +240,9 @@ class MetricsDaemon {
 
   // Active use time between user-space process crashes.
   scoped_ptr<chromeos_metrics::TaggedCounterInterface> user_crash_interval_;
+
+  // Active use time between kernel crashes.
+  scoped_ptr<chromeos_metrics::TaggedCounterInterface> kernel_crash_interval_;
 
   // Sleep period until the next daily usage aggregation performed by
   // the daily use monitor (see ScheduleUseMonitor).

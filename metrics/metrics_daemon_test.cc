@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <base/file_util.h>
 #include <gtest/gtest.h>
 
 #include "counter_mock.h"
@@ -42,16 +43,20 @@ class MetricsDaemonTest : public testing::Test {
  protected:
   virtual void SetUp() {
     EXPECT_EQ(NULL, daemon_.daily_use_.get());
+    EXPECT_EQ(NULL, daemon_.kernel_crash_interval_.get());
     EXPECT_EQ(NULL, daemon_.user_crash_interval_.get());
     daemon_.Init(true, &metrics_lib_);
 
     // Tests constructor initialization. Switches to mock counters.
     EXPECT_TRUE(NULL != daemon_.daily_use_.get());
+    EXPECT_TRUE(NULL != daemon_.kernel_crash_interval_.get());
     EXPECT_TRUE(NULL != daemon_.user_crash_interval_.get());
 
     // Allocates mock counter and transfers ownership.
     daily_use_ = new StrictMock<TaggedCounterMock>();
     daemon_.daily_use_.reset(daily_use_);
+    kernel_crash_interval_ = new StrictMock<TaggedCounterMock>();
+    daemon_.kernel_crash_interval_.reset(kernel_crash_interval_);
     user_crash_interval_ = new StrictMock<TaggedCounterMock>();
     daemon_.user_crash_interval_.reset(user_crash_interval_);
 
@@ -71,6 +76,9 @@ class MetricsDaemonTest : public testing::Test {
     EXPECT_CALL(*daily_use_, Update(daily_tag, count))
         .Times(1)
         .RetiresOnSaturation();
+    EXPECT_CALL(*kernel_crash_interval_, Update(0, count))
+        .Times(1)
+        .RetiresOnSaturation();
     EXPECT_CALL(*user_crash_interval_, Update(0, count))
         .Times(1)
         .RetiresOnSaturation();
@@ -80,6 +88,9 @@ class MetricsDaemonTest : public testing::Test {
   // ignore the update arguments.
   void IgnoreActiveUseUpdate() {
     EXPECT_CALL(*daily_use_, Update(_, _))
+        .Times(1)
+        .RetiresOnSaturation();
+    EXPECT_CALL(*kernel_crash_interval_, Update(_, _))
         .Times(1)
         .RetiresOnSaturation();
     EXPECT_CALL(*user_crash_interval_, Update(_, _))
@@ -159,8 +170,23 @@ class MetricsDaemonTest : public testing::Test {
   // update calls are marked as failures. They are pointers so that
   // they can replace the scoped_ptr's allocated by the daemon.
   StrictMock<TaggedCounterMock>* daily_use_;
+  StrictMock<TaggedCounterMock>* kernel_crash_interval_;
   StrictMock<TaggedCounterMock>* user_crash_interval_;
 };
+
+TEST_F(MetricsDaemonTest, CheckKernelCrash) {
+  static const char kKernelCrashDetected[] = "test-kernel-crash-detected";
+  daemon_.CheckKernelCrash(kKernelCrashDetected);
+
+  FilePath crash_detected(kKernelCrashDetected);
+  file_util::WriteFile(crash_detected, "", 0);
+  IgnoreActiveUseUpdate();
+  EXPECT_CALL(*kernel_crash_interval_, Flush())
+      .Times(1)
+      .RetiresOnSaturation();
+  daemon_.CheckKernelCrash(kKernelCrashDetected);
+  file_util::Delete(crash_detected, false);
+}
 
 TEST_F(MetricsDaemonTest, DailyUseReporter) {
   ExpectDailyUseTimeMetric(/* sample */ 2);
@@ -172,6 +198,14 @@ TEST_F(MetricsDaemonTest, DailyUseReporter) {
   // There should be no metrics generated for the calls below.
   MetricsDaemon::DailyUseReporter(&daemon_, /* tag */ 50, /* count */ 0);
   MetricsDaemon::DailyUseReporter(&daemon_, /* tag */ 60, /* count */ -5);
+}
+
+TEST_F(MetricsDaemonTest, KernelCrashIntervalReporter) {
+  ExpectMetric(MetricsDaemon::kMetricKernelCrashIntervalName, 50,
+               MetricsDaemon::kMetricKernelCrashIntervalMin,
+               MetricsDaemon::kMetricKernelCrashIntervalMax,
+               MetricsDaemon::kMetricKernelCrashIntervalBuckets);
+  MetricsDaemon::KernelCrashIntervalReporter(&daemon_, 0, 50);
 }
 
 TEST_F(MetricsDaemonTest, LookupNetworkState) {
@@ -338,6 +372,14 @@ TEST_F(MetricsDaemonTest, PowerStateChanged) {
   EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(7 * kSecondsPerDay + 185), daemon_.user_active_last_);
+}
+
+TEST_F(MetricsDaemonTest, ProcessKernelCrash) {
+  IgnoreActiveUseUpdate();
+  EXPECT_CALL(*kernel_crash_interval_, Flush())
+      .Times(1)
+      .RetiresOnSaturation();
+  daemon_.ProcessKernelCrash();
 }
 
 TEST_F(MetricsDaemonTest, ProcessUserCrash) {

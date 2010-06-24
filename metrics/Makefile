@@ -35,7 +35,6 @@ LIB_OBJS = \
 	c_metrics_library.o \
 	metrics_library.o
 TESTLIB_OBJS = \
-	metrics_library.o \
 	metrics_library_test.o
 
 TESTCOUNTER_LIBS = -lgmock -lgtest -lbase -lrt -lpthread
@@ -70,17 +69,6 @@ $(LIB_TEST): $(TESTLIB_OBJS) $(SHAREDLIB)
 
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-# dependencies in addition to those defined by the rules
-
-metrics_daemon.o: \
-	metrics_daemon.h \
-	network_states.h \
-	power_states.h
-metrics_daemon_test.o: \
-	metrics_daemon.h \
-	network_states.h \
-	power_states.h
 
 clean:
 	rm -f $(CLIENT) $(DAEMON) $(LIB) $(SHAREDLIB) *.o
