@@ -220,7 +220,7 @@
 /*
  * Define if we have Linux's dbus 
  */
-#define HAVE_DBUS 1
+/* #define HAVE_DBUS 1 */
 
 /*
  * Define if tm struct has tm_gmtoff field
