@@ -62,8 +62,8 @@ class TaggedCounterTest : public testing::Test {
   // Asserts that the record file contains the specified contents.
   testing::AssertionResult AssertRecord(const char* expr_tag,
                                         const char* expr_count,
-                                        int expected_tag,
-                                        int expected_count) {
+                                        int32 expected_tag,
+                                        int32 expected_count) {
     int fd = HANDLE_EINTR(open(kTestRecordFile, O_RDONLY));
     if (fd < 0) {
       testing::Message msg;
@@ -105,7 +105,7 @@ class TaggedCounterTest : public testing::Test {
 
   // Adds a reporter call expectation that the specified tag/count
   // callback will be generated.
-  void ExpectReporterCall(int tag, int count) {
+  void ExpectReporterCall(int32 tag, int32 count) {
     EXPECT_CALL(reporter_, Call(_, tag, count))
         .Times(1)
         .RetiresOnSaturation();
@@ -113,7 +113,7 @@ class TaggedCounterTest : public testing::Test {
 
   // The reporter callback forwards the call to the reporter mock so
   // that we can set call expectations.
-  static void Reporter(void* handle, int tag, int count) {
+  static void Reporter(void* handle, int32 tag, int32 count) {
     TaggedCounterTest* test = static_cast<TaggedCounterTest*>(handle);
     ASSERT_FALSE(NULL == test);
     test->reporter_.Call(handle, tag, count);
@@ -130,7 +130,7 @@ class TaggedCounterTest : public testing::Test {
   }
 
   // Returns true if the counter log contains |pattern|, false otherwise.
-  bool LogContains(const std::string& pattern) {
+  bool LogContains(const std::string& pattern) const {
     return log_.find(pattern) != std::string::npos;
   }
 
@@ -141,7 +141,8 @@ class TaggedCounterTest : public testing::Test {
   std::string log_;
 
   // Reporter mock to set callback expectations on.
-  StrictMock<MockFunction<void(void* handle, int tag, int count)> > reporter_;
+  StrictMock<MockFunction<void(void* handle,
+                               int32 tag, int32 count)> > reporter_;
 
   // Pointer to the current test fixture.
   static TaggedCounterTest* test_;
@@ -173,11 +174,11 @@ TEST_F(RecordTest, Add) {
   record_.Add(/* count */ -2);
   EXPECT_EQ(15, record_.count());
 
-  record_.Add(/* count */ INT_MAX);
-  EXPECT_EQ(INT_MAX, record_.count());
+  record_.Add(/* count */ kint32max);
+  EXPECT_EQ(kint32max, record_.count());
 
   record_.Add(/* count */ 1);
-  EXPECT_EQ(INT_MAX, record_.count());
+  EXPECT_EQ(kint32max, record_.count());
 }
 
 TEST_F(TaggedCounterTest, BadFileLocation) {

@@ -4,7 +4,7 @@
 
 #include "counter.h"
 
-#include <sys/file.h>
+#include <fcntl.h>
 
 #include <base/eintr_wrapper.h>
 #include <base/logging.h>
@@ -12,26 +12,28 @@
 namespace chromeos_metrics {
 
 // TaggedCounter::Record implementation.
-void TaggedCounter::Record::Init(int tag, int count) {
+void TaggedCounter::Record::Init(int32 tag, int32 count) {
   tag_ = tag;
   count_ = (count > 0) ? count : 0;
 }
 
-void TaggedCounter::Record::Add(int count) {
+void TaggedCounter::Record::Add(int32 count) {
   if (count <= 0)
     return;
 
-  count_ += count;
-
-  // Saturates on postive overflow.
-  if (count_ < 0) {
-    count_ = INT_MAX;
-  }
+  // Saturates on positive overflow.
+  int64 new_count = static_cast<int64>(count_) + static_cast<int64>(count);
+  if (new_count > kint32max)
+    count_ = kint32max;
+  else
+    count_ = static_cast<int32>(new_count);
 }
 
 // TaggedCounter implementation.
 TaggedCounter::TaggedCounter()
-    : filename_(NULL), reporter_(NULL), reporter_handle_(NULL),
+    : filename_(NULL),
+      reporter_(NULL),
+      reporter_handle_(NULL),
       record_state_(kRecordInvalid) {}
 
 TaggedCounter::~TaggedCounter() {}
@@ -45,7 +47,7 @@ void TaggedCounter::Init(const char* filename,
   record_state_ = kRecordInvalid;
 }
 
-void TaggedCounter::Update(int tag, int count) {
+void TaggedCounter::Update(int32 tag, int32 count) {
   UpdateInternal(tag,
                  count,
                  false);  // No flush.
@@ -57,7 +59,7 @@ void TaggedCounter::Flush() {
                  true);  // Do flush.
 }
 
-void TaggedCounter::UpdateInternal(int tag, int count, bool flush) {
+void TaggedCounter::UpdateInternal(int32 tag, int32 count, bool flush) {
   if (flush) {
     // Flushing but record is null, so nothing to do.
     if (record_state_ == kRecordNull)
@@ -104,11 +106,10 @@ void TaggedCounter::ReadRecord(int fd) {
     record_state_ = kRecordNullDirty;
     return;
   }
-
   record_state_ = kRecordNull;
 }
 
-void TaggedCounter::ReportRecord(int tag, bool flush) {
+void TaggedCounter::ReportRecord(int32 tag, bool flush) {
   // If no valid record, there's nothing to report.
   if (record_state_ != kRecordValid) {
     DCHECK_EQ(record_state_, kRecordNull);
@@ -126,7 +127,7 @@ void TaggedCounter::ReportRecord(int tag, bool flush) {
   record_state_ = kRecordNullDirty;
 }
 
-void TaggedCounter::UpdateRecord(int tag, int count, bool flush) {
+void TaggedCounter::UpdateRecord(int32 tag, int32 count, bool flush) {
   if (flush) {
     DCHECK(record_state_ == kRecordNull || record_state_ == kRecordNullDirty);
     return;

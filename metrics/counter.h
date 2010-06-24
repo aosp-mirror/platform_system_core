@@ -5,6 +5,7 @@
 #ifndef METRICS_COUNTER_H_
 #define METRICS_COUNTER_H_
 
+#include <base/basictypes.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 namespace chromeos_metrics {
@@ -18,6 +19,11 @@ namespace chromeos_metrics {
 // event counts.  The aggregated count is reported through the
 // callback when the counter is explicitly flushed or when data for a
 // new tag arrives.
+//
+// The primary reason for using an interface is to allow easier unit
+// testing in clients through mocking thus avoiding file access and
+// callbacks. Of course, it also enables alternative implementations
+// of the counter with additional features.
 class TaggedCounterInterface {
  public:
   // Callback type used for reporting aggregated or flushed data.
@@ -27,7 +33,7 @@ class TaggedCounterInterface {
   // |handle| is the |reporter_handle| pointer passed through Init.
   // |tag| is the tag associated with the aggregated count.
   // |count| is aggregated count.
-  typedef void (*Reporter)(void* handle, int tag, int count);
+  typedef void (*Reporter)(void* handle, int32 tag, int32 count);
 
   virtual ~TaggedCounterInterface() {}
 
@@ -44,7 +50,7 @@ class TaggedCounterInterface {
   // Adds |count| of events for the given |tag|. If there's an
   // existing aggregated count for a different tag, it's reported
   // through the reporter callback and discarded.
-  virtual void Update(int tag, int count) = 0;
+  virtual void Update(int32 tag, int32 count) = 0;
 
   // Reports the current aggregated count (if any) through the
   // reporter callback and discards it.
@@ -58,7 +64,7 @@ class TaggedCounter : public TaggedCounterInterface {
 
   // Implementation of interface methods.
   void Init(const char* filename, Reporter reporter, void* reporter_handle);
-  void Update(int tag, int count);
+  void Update(int32 tag, int32 count);
   void Flush();
 
  private:
@@ -89,25 +95,25 @@ class TaggedCounter : public TaggedCounterInterface {
 
     // Initializes with |tag| and |count|. If |count| is negative,
     // |count_| is set to 0.
-    void Init(int tag, int count);
+    void Init(int32 tag, int32 count);
 
     // Adds |count| to the current |count_|. Negative |count| is
     // ignored. In case of positive overflow, |count_| is saturated to
-    // INT_MAX.
-    void Add(int count);
+    // kint32max.
+    void Add(int32 count);
 
-    int tag() const { return tag_; }
-    int count() const { return count_; }
+    int32 tag() const { return tag_; }
+    int32 count() const { return count_; }
 
    private:
-    int tag_;
-    int count_;
+    int32 tag_;
+    int32 count_;
   };
 
   // Implementation of the Update and Flush methods. Goes through the
   // necessary steps to read, report, update, and sync the aggregated
   // record.
-  void UpdateInternal(int tag, int count, bool flush);
+  void UpdateInternal(int32 tag, int32 count, bool flush);
 
   // If the current cached record is invalid, reads it from persistent
   // storage specified through file descriptor |fd| and updates the
@@ -119,13 +125,13 @@ class TaggedCounter : public TaggedCounterInterface {
   // or the new |tag| is different than the old one, reports the
   // aggregated data through the reporter callback and resets the
   // cached record.
-  void ReportRecord(int tag, bool flush);
+  void ReportRecord(int32 tag, bool flush);
 
   // Updates the cached record given the new |tag| and |count|. This
   // method expects either a null cached record, or a valid cached
   // record with the same tag as |tag|. If |flush| is true, the method
   // asserts that the cached record is null and returns.
-  void UpdateRecord(int tag, int count, bool flush);
+  void UpdateRecord(int32 tag, int32 count, bool flush);
 
   // If the cached record state is dirty, updates the persistent
   // storage specified through file descriptor |fd| and switches the

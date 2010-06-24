@@ -24,3 +24,4 @@ class TaggedCounterMock : public TaggedCounterInterface {
 }  // namespace chromeos_metrics
 
 #endif  // METRICS_COUNTER_MOCK_H_
+
