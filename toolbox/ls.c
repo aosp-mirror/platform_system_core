@@ -173,8 +173,8 @@ static int listfile_long(const char *path, int flags)
                date, name);
         break;
     case S_IFREG:
-        printf("%s %-8s %-8s %8d %s %s\n",
-               mode, user, group, (int) s.st_size, date, name);
+        printf("%s %-8s %-8s %8lld %s %s\n",
+               mode, user, group, s.st_size, date, name);
         break;
     case S_IFLNK: {
         char linkto[256];
