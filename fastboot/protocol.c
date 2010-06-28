@@ -62,7 +62,7 @@ static int check_response(usb_handle *usb, unsigned size,
         }
 
         if(!memcmp(status, "INFO", 4)) {
-            fprintf(stderr,"%s\n", status);
+            fprintf(stderr,"(bootloader) %s\n", status + 4);
             continue;
         }
 

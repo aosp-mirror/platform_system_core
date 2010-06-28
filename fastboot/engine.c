@@ -285,7 +285,8 @@ void fb_execute_queue(usb_handle *usb)
         a->start = now();
         if (start < 0) start = a->start;
         if (a->msg) {
-            fprintf(stderr,"%30s... ",a->msg);
+            // fprintf(stderr,"%30s... ",a->msg);
+            fprintf(stderr,"%s...\n",a->msg);
         }
         if (a->op == OP_DOWNLOAD) {
             status = fb_download_data(usb, a->data, a->size);
