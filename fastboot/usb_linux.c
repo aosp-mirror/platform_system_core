@@ -137,6 +137,7 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
         ctrl.wIndex = 0;
         ctrl.wLength = sizeof(buffer);
         ctrl.data = buffer;
+	ctrl.timeout = 50;
 
         result = ioctl(fd, USBDEVFS_CONTROL, &ctrl);
         if (result > 0) {
