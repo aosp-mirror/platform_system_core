@@ -23,6 +23,7 @@ extern "C" {
 
 #include <stdint.h>
 
+struct usb_host_context;
 struct usb_endpoint_descriptor;
 
 struct usb_descriptor_iter {
@@ -31,18 +32,31 @@ struct usb_descriptor_iter {
     unsigned char*  curr_desc;
 };
 
-/* callback for notification when new USB devices are attached */
-typedef void (* usb_device_added_cb)(const char *dev_name, void *client_data);
+/* Callback for notification when new USB devices are attached.
+ * Return true to exit from usb_host_run.
+ */
+typedef int (* usb_device_added_cb)(const char *dev_name, void *client_data);
 
-/* callback for notification when USB devices are removed */
-typedef void (* usb_device_removed_cb)(const char *dev_name, void *client_data);
+/* Callback for notification when USB devices are removed.
+ * Return true to exit from usb_host_run.
+ */
+typedef int (* usb_device_removed_cb)(const char *dev_name, void *client_data);
 
-/* Call this to start monitoring the USB bus.
+/* Call this to initialize the USB host library. */
+struct usb_host_context *usb_host_init(void);
+
+/* Call this to cleanup the USB host library. */
+void usb_host_cleanup(struct usb_host_context *context);
+
+/* Call this to monitor the USB bus for new and removed devices.
+ * This is intended to be called from a dedicated thread,
+ * as it will not return until one of the callbacks returns true.
  * added_cb will be called immediately for each existing USB device,
  * and subsequently each time a new device is added.
  * removed_cb is called when USB devices are removed from the bus.
  */
-int usb_host_init(usb_device_added_cb added_cb,
+void usb_host_run(struct usb_host_context *context,
+                  usb_device_added_cb added_cb,
                   usb_device_removed_cb removed_cb,
                   void *client_data);
 
