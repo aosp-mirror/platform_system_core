@@ -2,29 +2,24 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-CRASH_BIN = crash_reporter
-CRASH_LIB = libcrash.so
+CRASH_REPORTER = crash_reporter
+REPORTER_BINS = $(CRASH_REPORTER)
 CRASH_OBJS = system_logging.o user_collector.o
 TEST_OBJS = $(CRASH_OBJS) system_logging_mock.o
 TEST_BINS = user_collector_test
 
-LIBS = -lbase -lpthread -lgflags -lrt -lmetrics
+COMMON_LIBS = -lbase -lpthread -lgflags -lrt
+REPORTER_LIBS = $(COMMON_LIBS) -lmetrics
 
 TEST_LIBS = $(LIBS) -lgtest -lgmock
 INCLUDE_DIRS = -I.. -I$(SYSROOT)/usr/include/google-breakpad
-LIB_DIRS =
 
-# We need -fPIC for linking objects into shared objects.
-CXXFLAGS += -fPIC -Wall -Werror
+CXXFLAGS += -Wall -Werror
 
-all:
-	echo "Specify either $(CRASH_BIN) or $(CRASH_LIB)"
+all: $(REPORTER_BINS)
 
-$(CRASH_LIB): crash_dumper.o
-	$(CXX) -shared -lbreakpad_client $^ -o $@
-
-$(CRASH_BIN): crash_reporter.o $(CRASH_OBJS)
-	$(CXX) $(CXXFLAGS) $(LIB_DIRS) $^ -lcrash $(LIBS) -o $@
+$(CRASH_REPORTER): crash_reporter.o $(CRASH_OBJS)
+	$(CXX) $(CXXFLAGS) $^ -lcrash $(REPORTER_LIBS) -o $@
 
 tests: $(TEST_BINS)
 
@@ -35,4 +30,4 @@ user_collector_test: user_collector_test.o $(TEST_OBJS)
 	$(CXX) $(CXXFLAGS) $(INCLUDE_DIRS) -c $< -o $@
 
 clean:
-	rm -rf *.o $(CRASH_BIN) $(TEST_BINS) $(CRASH_LIB)
+	rm -rf *.o $(CRASH_BIN) $(TEST_BINS)

@@ -9,11 +9,12 @@ set -e
 # Product ID in crash report
 CHROMEOS_PRODUCT=ChromeOS
 
+# File whose existence implies crash reports may be sent, and whose
+# contents includes our machine's anonymized guid.
+CONSENT_ID="/home/chronos/Consent To Send Stats"
+
 # Send up to 8 crashes per day.
 MAX_CRASH_RATE=8
-
-# Minidump uploading tool (provided by Google Breakpad).
-MINIDUMP_UPLOADER=/usr/bin/minidump_upload
 
 # URL to send non-official build crashes to.
 MINIDUMP_UPLOAD_STAGING_URL="http://clients2.google.com/cr/staging_report"
@@ -32,7 +33,7 @@ PAUSE_CRASH_SENDING="/tmp/pause-crash-sending"
 RUN_FILE="/var/run/crash_sender.pid"
 
 # Maximum time to sleep between sends.
-SECONDS_SEND_SPREAD=600
+SECONDS_SEND_SPREAD=${SECONDS_SEND_SPREAD:-600}
 
 # The syslog tag for all logging we emit.
 TAG="$(basename $0)[$$]"
@@ -45,8 +46,18 @@ lecho() {
   logger -t "${TAG}" "$@"
 }
 
-remove_run_file() {
+log_done() {
+  lecho "Done"
+}
+
+cleanup_tmp_dir() {
+  rm -rf "${TMP_DIR}"
+  log_done
+}
+
+cleanup_run_file_and_tmp_dir() {
   rm -f "${RUN_FILE}"
+  cleanup_tmp_dir
 }
 
 check_not_already_running() {
@@ -55,7 +66,7 @@ check_not_already_running() {
   fi
   local last_pid=$(cat "${RUN_FILE}")
   if [ ! -f "/proc/${last_pid}/cmdline" ]; then
-    trap remove_run_file EXIT
+    trap cleanup_run_file_and_tmp_dir EXIT INT
     echo $$ > "${RUN_FILE}"
     return
   fi
@@ -81,8 +92,8 @@ generate_uniform_random() {
 }
 
 is_feedback_disabled() {
-  # See crosbug.com/3303.
-  return 1
+  [ -r "${CONSENT_ID}" ] && return 1
+  return 0
 }
 
 is_on_3g() {
@@ -144,16 +155,31 @@ send_crash() {
     return 1
   fi
 
-  "${MINIDUMP_UPLOADER}" -p "${CHROMEOS_PRODUCT}" \
-          -v "${chromeos_version}" "${minidump_path}" "${url}"
-  return $?
+  local report_id="${TMP_DIR}/report_id"
+  local curl_stderr="${TMP_DIR}/curl_stderr"
+
+  set +e
+  curl "${url}" \
+    -F "prod=${CHROMEOS_PRODUCT}" \
+    -F "ver=${chromeos_version}" \
+    -F "upload_file_minidump=@${minidump_path}" \
+    -F "guid=<${CONSENT_ID}" -o "${report_id}" 2>"${curl_stderr}"
+  local curl_result=$?
+  set -e
+
+  if [ ${curl_result} -eq 0 ]; then
+    lecho "Crash report receipt ID $(cat ${report_id})"
+  else
+    lecho "Crash sending failed with: $(cat ${curl_stderr})"
+  fi
+
+  rm -f "${report_id}" "${output_file}"
+
+  return ${curl_result}
 }
 
 # Send all crashes from the given directory.  The directory is currently
-# expected to just contain a bunch of minidumps - but this will change
-# over time to be a directory of directories where the minidump and core
-# file are in the directory as well as other metadata about the context
-# of the crash (executable name for instance).
+# expected to just contain a bunch of minidumps.
 send_crashes() {
   local dir="$1"
   lecho "Considering crashes in ${dir}"
@@ -187,6 +213,8 @@ send_crashes() {
 
 main() {
   lecho "Starting"
+  trap log_done EXIT INT
+
   if [ -e "${PAUSE_CRASH_SENDING}" ]; then
     lecho "Exiting early due to ${PAUSE_CRASH_SENDING}"
     exit 1
@@ -194,13 +222,14 @@ main() {
 
   check_not_already_running
 
+  TMP_DIR="$(mktemp -d /tmp/crash_sender.XXXX)"
+  trap cleanup_tmp_dir EXIT INT
+
   # Send system-wide crashes
   send_crashes "/var/spool/crash"
 
   # Send user-specific crashes
   send_crashes "/home/chronos/user/crash"
-
-  lecho "Done"
 }
 
 main
