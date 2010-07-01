@@ -120,7 +120,6 @@ int android_atomic_release_cas(int32_t oldvalue, int32_t newvalue,
  */
 #define android_atomic_write android_atomic_release_store
 #define android_atomic_cmpxchg android_atomic_release_cas
-#define android_atomic_swap android_atomic_release_swap
 
 #ifdef __cplusplus
 } // extern "C"
