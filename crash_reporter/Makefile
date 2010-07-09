@@ -11,7 +11,7 @@ TEST_BINS = user_collector_test
 COMMON_LIBS = -lbase -lpthread -lgflags -lrt
 REPORTER_LIBS = $(COMMON_LIBS) -lmetrics
 
-TEST_LIBS = $(LIBS) -lgtest -lgmock
+TEST_LIBS = $(COMMON_LIBS) -lgtest -lgmock
 INCLUDE_DIRS = -I.. -I$(SYSROOT)/usr/include/google-breakpad
 
 CXXFLAGS += -Wall -Werror
