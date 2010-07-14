@@ -27,7 +27,6 @@
 
 #include <cutils/misc.h>
 #include <cutils/sockets.h>
-#include <cutils/ashmem.h>
 
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
@@ -110,21 +109,31 @@ static int init_workspace(workspace *w, size_t size)
     void *data;
     int fd;
 
-    fd = ashmem_create_region("system_properties", size);
-    if(fd < 0)
+        /* dev is a tmpfs that we can use to carve a shared workspace
+         * out of, so let's do that...
+         */
+    fd = open("/dev/__properties__", O_RDWR | O_CREAT, 0600);
+    if (fd < 0)
         return -1;
+
+    if (ftruncate(fd, size) < 0)
+        goto out;
 
     data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if(data == MAP_FAILED)
         goto out;
 
-    /* allow the wolves we share with to do nothing but read */
-    ashmem_set_prot_region(fd, PROT_READ);
+    close(fd);
+
+    fd = open("/dev/__properties__", O_RDONLY);
+    if (fd < 0)
+        return -1;
+
+    unlink("/dev/__properties__");
 
     w->data = data;
     w->size = size;
     w->fd = fd;
-
     return 0;
 
 out:
