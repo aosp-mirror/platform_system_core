@@ -7,7 +7,7 @@ copy_from := \
 	etc/dbus.conf \
 	etc/hosts
 
-ifeq ($(TARGET_PRODUCT),generic)
+ifeq ($(TARGET_PRODUCT),full)
 copy_from += etc/vold.fstab
 endif
 
