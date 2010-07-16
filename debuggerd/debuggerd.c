@@ -375,7 +375,7 @@ static void parse_elf_info(mapinfo *milist, pid_t pid)
             ptr = (Elf32_Phdr *) (mi->start + ehdr.e_phoff);
             for (i = 0; i < ehdr.e_phnum; i++) {
                 /* Parse the program header */
-                get_remote_struct(pid, (char *) ptr+i, &phdr,
+                get_remote_struct(pid, (char *) (ptr+i), &phdr,
                                   sizeof(Elf32_Phdr));
                 /* Found a EXIDX segment? */
                 if (phdr.p_type == PT_ARM_EXIDX) {
