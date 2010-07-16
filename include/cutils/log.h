@@ -291,11 +291,11 @@ extern "C" {
  */
 #define LOG_ALWAYS_FATAL_IF(cond, ...) \
     ( (CONDITION(cond)) \
-    ? ((void)android_printAssert(#cond, LOG_TAG, __VA_ARGS__)) \
+    ? ((void)android_printAssert(#cond, LOG_TAG, ## __VA_ARGS__)) \
     : (void)0 )
 
 #define LOG_ALWAYS_FATAL(...) \
-    ( ((void)android_printAssert(NULL, LOG_TAG, __VA_ARGS__)) )
+    ( ((void)android_printAssert(NULL, LOG_TAG, ## __VA_ARGS__)) )
 
 /*
  * Versions of LOG_ALWAYS_FATAL_IF and LOG_ALWAYS_FATAL that
@@ -308,7 +308,7 @@ extern "C" {
 
 #else
 
-#define LOG_FATAL_IF(cond, ...) LOG_ALWAYS_FATAL_IF(cond, __VA_ARGS__)
+#define LOG_FATAL_IF(cond, ...) LOG_ALWAYS_FATAL_IF(cond, ## __VA_ARGS__)
 #define LOG_FATAL(...) LOG_ALWAYS_FATAL(__VA_ARGS__)
 
 #endif
@@ -317,7 +317,7 @@ extern "C" {
  * Assertion that generates a log message when the assertion fails.
  * Stripped out of release builds.  Uses the current LOG_TAG.
  */
-#define LOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), __VA_ARGS__)
+#define LOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ## __VA_ARGS__)
 //#define LOG_ASSERT(cond) LOG_FATAL_IF(!(cond), "Assertion failed: " #cond)
 
 // ---------------------------------------------------------------------
@@ -403,8 +403,24 @@ typedef enum {
 #define android_vprintLog(prio, cond, tag, fmt...) \
     __android_log_vprint(prio, tag, fmt)
 
+/* XXX Macros to work around syntax errors in places where format string
+ * arg is not passed to LOG_ASSERT, LOG_ALWAYS_FATAL or LOG_ALWAYS_FATAL_IF
+ * (happens only in debug builds).
+ */
+
+/* Returns 2nd arg.  Used to substitute default value if caller's vararg list
+ * is empty.
+ */
+#define __android_second(dummy, second, ...)     second
+
+/* If passed multiple args, returns ',' followed by all but 1st arg, otherwise
+ * returns nothing.
+ */
+#define __android_rest(first, ...)               , ## __VA_ARGS__
+
 #define android_printAssert(cond, tag, fmt...) \
-    __android_log_assert(cond, tag, fmt)
+    __android_log_assert(cond, tag, \
+        __android_second(0, ## fmt, NULL) __android_rest(fmt))
 
 #define android_writeLog(prio, tag, text) \
     __android_log_write(prio, tag, text)
@@ -413,7 +429,7 @@ typedef enum {
     __android_log_bwrite(tag, payload, len)
 #define android_btWriteLog(tag, type, payload, len) \
     __android_log_btwrite(tag, type, payload, len)
-	
+
 // TODO: remove these prototypes and their users
 #define android_testLog(prio, tag) (1)
 #define android_writevLog(vec,num) do{}while(0)
