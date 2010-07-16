@@ -1,0 +1,10 @@
+# Copyright 2010 Google Inc. All Rights Reserved.
+#Fri Jul 16 10:03:09 PDT 2010
+currentVersion=2.6.32
+version=2.6.32
+isNative=true
+feedurl=http\://kernel.org/pub/linux/kernel/v2.6/
+name=linux
+keywords=linux
+onDevice=true
+homepage=http\://kernel.org
