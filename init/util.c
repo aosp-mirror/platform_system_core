@@ -439,8 +439,9 @@ void get_hardware_name(char *hardware, unsigned int *revision)
         if (x) {
             x += 2;
             n = 0;
-            while (*x && !isspace(*x)) {
-                hardware[n++] = tolower(*x);
+            while (*x && *x != '\n') {
+                if (!isspace(*x))
+                    hardware[n++] = tolower(*x);
                 x++;
                 if (n == 31) break;
             }
