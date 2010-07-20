@@ -162,6 +162,8 @@ void usb_host_run(struct usb_host_context *context,
     wds[0] = inotify_add_watch(context->fd, USB_FS_DIR, IN_CREATE | IN_DELETE);
     if (wds[0] < 0) {
         fprintf(stderr, "inotify_add_watch failed\n");
+        if (discovery_done_cb)
+            discovery_done_cb(client_data);
         return;
     }
 
