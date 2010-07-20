@@ -73,6 +73,8 @@
 #define VENDOR_ID_NEC           0x0409
 // Panasonic Mobile Communication's USB Vendor ID
 #define VENDOR_ID_PMC           0x04DA
+// Toshiba's USB Vendor ID
+#define VENDOR_ID_TOSHIBA       0x0930
 
 
 /** built-in vendor list */
@@ -96,6 +98,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_QUALCOMM,
     VENDOR_ID_NEC,
     VENDOR_ID_PMC,
+    VENDOR_ID_TOSHIBA,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
