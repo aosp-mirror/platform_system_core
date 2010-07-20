@@ -58,6 +58,7 @@ static int open_uevent_socket(void)
 {
     struct sockaddr_nl addr;
     int sz = 64*1024; // XXX larger? udev uses 16MB!
+    int on = 1;
     int s;
 
     memset(&addr, 0, sizeof(addr));
@@ -70,6 +71,7 @@ static int open_uevent_socket(void)
         return -1;
 
     setsockopt(s, SOL_SOCKET, SO_RCVBUFFORCE, &sz, sizeof(sz));
+    setsockopt(s, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on));
 
     if(bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         close(s);
@@ -562,18 +564,42 @@ static void handle_firmware_event(struct uevent *uevent)
 #define UEVENT_MSG_LEN  1024
 void handle_device_fd()
 {
-    char msg[UEVENT_MSG_LEN+2];
-    int n;
+    for(;;) {
+        char msg[UEVENT_MSG_LEN+2];
+        char cred_msg[CMSG_SPACE(sizeof(struct ucred))];
+        struct iovec iov = {msg, sizeof(msg)};
+        struct sockaddr_nl snl;
+        struct msghdr hdr = {&snl, sizeof(snl), &iov, 1, cred_msg, sizeof(cred_msg), 0};
 
-    while((n = recv(device_fd, msg, UEVENT_MSG_LEN, 0)) > 0) {
-        struct uevent uevent;
+        ssize_t n = recvmsg(device_fd, &hdr, 0);
+        if (n <= 0) {
+            break;
+        }
 
-        if(n == UEVENT_MSG_LEN)   /* overflow -- discard */
+        if ((snl.nl_groups != 1) || (snl.nl_pid != 0)) {
+            /* ignoring non-kernel netlink multicast message */
+            continue;
+        }
+
+        struct cmsghdr * cmsg = CMSG_FIRSTHDR(&hdr);
+        if (cmsg == NULL || cmsg->cmsg_type != SCM_CREDENTIALS) {
+            /* no sender credentials received, ignore message */
+            continue;
+        }
+
+        struct ucred * cred = (struct ucred *)CMSG_DATA(cmsg);
+        if (cred->uid != 0) {
+            /* message from non-root user, ignore */
+            continue;
+        }
+
+        if(n >= UEVENT_MSG_LEN)   /* overflow -- discard */
             continue;
 
         msg[n] = '\0';
         msg[n+1] = '\0';
 
+        struct uevent uevent;
         parse_event(msg, &uevent);
 
         handle_device_event(&uevent);
