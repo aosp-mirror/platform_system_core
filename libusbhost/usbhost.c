@@ -144,6 +144,7 @@ void usb_host_cleanup(struct usb_host_context *context)
 void usb_host_run(struct usb_host_context *context,
                   usb_device_added_cb added_cb,
                   usb_device_removed_cb removed_cb,
+                  usb_discovery_done_cb discovery_done_cb,
                   void *client_data)
 {
     struct inotify_event* event;
@@ -174,6 +175,8 @@ void usb_host_run(struct usb_host_context *context,
 
     /* check for existing devices first, after we have inotify set up */
     done = find_existing_devices(added_cb, removed_cb, client_data);
+    if (discovery_done_cb)
+        done |= discovery_done_cb(client_data);
 
     while (!done) {
         ret = read(context->fd, event_buf, sizeof(event_buf));

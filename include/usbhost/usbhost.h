@@ -42,6 +42,11 @@ typedef int (* usb_device_added_cb)(const char *dev_name, void *client_data);
  */
 typedef int (* usb_device_removed_cb)(const char *dev_name, void *client_data);
 
+/* Callback indicating that initial device discovery is done.
+ * Return true to exit from usb_host_run.
+ */
+typedef int (* usb_discovery_done_cb)(void *client_data);
+
 /* Call this to initialize the USB host library. */
 struct usb_host_context *usb_host_init(void);
 
@@ -54,10 +59,13 @@ void usb_host_cleanup(struct usb_host_context *context);
  * added_cb will be called immediately for each existing USB device,
  * and subsequently each time a new device is added.
  * removed_cb is called when USB devices are removed from the bus.
+ * discovery_done_cb is called after the initial discovery of already
+ * connected devices is complete.
  */
 void usb_host_run(struct usb_host_context *context,
                   usb_device_added_cb added_cb,
                   usb_device_removed_cb removed_cb,
+                  usb_discovery_done_cb discovery_done_cb,
                   void *client_data);
 
 /* Creates a usb_device object for a USB device */
