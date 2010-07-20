@@ -302,8 +302,10 @@ void handle_packet(apacket *p, atransport *t)
 {
     asocket *s;
 
-    D("handle_packet() %d\n", p->msg.command);
-
+    D("handle_packet() %c%c%c%c\n", ((char*) (&(p->msg.command)))[0],
+            ((char*) (&(p->msg.command)))[1],
+            ((char*) (&(p->msg.command)))[2],
+            ((char*) (&(p->msg.command)))[3]);
     print_packet("recv", p);
 
     switch(p->msg.command){
