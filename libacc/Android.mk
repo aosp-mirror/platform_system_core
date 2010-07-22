@@ -4,7 +4,8 @@ include $(CLEAR_VARS)
 # Shared library for target
 # ========================================================
 
-LOCAL_MODULE:= libacc
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE := libacc
 LOCAL_SRC_FILES := acc.cpp
 
 LOCAL_SHARED_LIBRARIES := libdl libcutils
