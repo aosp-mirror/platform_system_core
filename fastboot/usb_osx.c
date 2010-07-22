@@ -231,8 +231,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
                 kr = (*interface)->ClearPipeStallBothEnds(interface,
                         handle->bulkIn);
                 if (kr != 0) {
-                    ERR("could not clear input pipe; result %d", kr);
-                    return -1;
+                    ERR("could not clear input pipe; result %x, ignoring...\n", kr);
                 }
             }
 
@@ -240,8 +239,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
                 kr = (*interface)->ClearPipeStallBothEnds(interface,
                         handle->bulkOut);
                 if (kr != 0) {
-                    ERR("could not clear output pipe; result %d", kr);
-                    return -1;
+                    ERR("could not clear output pipe; result %x, ignoring....\n", kr);
                 }
             }
             
