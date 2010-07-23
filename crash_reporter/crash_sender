@@ -46,13 +46,8 @@ lecho() {
   logger -t "${TAG}" "$@"
 }
 
-log_done() {
-  lecho "Done"
-}
-
 cleanup_tmp_dir() {
   rm -rf "${TMP_DIR}"
-  log_done
 }
 
 cleanup_run_file_and_tmp_dir() {
@@ -119,6 +114,12 @@ check_rate() {
   return 0
 }
 
+# Return if $1 is a .core file
+is_core_file() {
+  local filename=$1
+  [ "${filename##*.}" = "core" ]
+}
+
 send_crash() {
   local sleep_time=$(generate_uniform_random $SECONDS_SEND_SPREAD)
   local url="${MINIDUMP_UPLOAD_STAGING_URL}"
@@ -183,6 +184,7 @@ send_crash() {
 send_crashes() {
   local dir="$1"
   lecho "Considering crashes in ${dir}"
+
   # Cycle through minidumps, most recent first.  That way if we're about
   # to exceed the daily rate, we send the most recent minidumps.
   if [ ! -d "${dir}" ]; then
@@ -190,11 +192,15 @@ send_crashes() {
   fi
   for file in $(ls -1t "${dir}"); do
     local minidump_path="${dir}/${file}"
-    lecho "Considering crash ${minidump_path}"
+    lecho "Considering file ${minidump_path}"
+    if is_core_file "${minidump_path}"; then
+      lecho "Ignoring core file."
+      continue
+    fi
     if ! check_rate; then
       lecho "Sending ${minidump_path} would exceed rate.  Leaving for later."
       return 0
-   fi
+    fi
     local chromeos_version=$(get_version)
     if is_feedback_disabled; then
       lecho "Uploading is disabled.  Removing crash."
@@ -212,9 +218,6 @@ send_crashes() {
 }
 
 main() {
-  lecho "Starting"
-  trap log_done EXIT INT
-
   if [ -e "${PAUSE_CRASH_SENDING}" ]; then
     lecho "Exiting early due to ${PAUSE_CRASH_SENDING}"
     exit 1

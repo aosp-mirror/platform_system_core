@@ -16,22 +16,22 @@
 DEFINE_bool(init, false, "Initialize crash logging");
 DEFINE_bool(clean_shutdown, false, "Signal clean shutdown");
 DEFINE_bool(crash_test, false, "Crash test");
-DEFINE_string(exec, "", "Executable name crashed");
 DEFINE_int32(pid, -1, "Crashing PID");
 DEFINE_int32(signal, -1, "Signal causing crash");
 DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
 #pragma GCC diagnostic error "-Wstrict-aliasing"
 
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
+static const char kEmpty[] = "";
 static const char kUncleanShutdownFile[] =
     "/var/lib/crash_reporter/pending_clean_shutdown";
-static const char kEmpty[] = "";
+
 
 // Enumeration of kinds of crashes to be used in the CrashCounter histogram.
 enum CrashKinds {
-  CRASH_KIND_KERNEL = 1,
-  CRASH_KIND_USER   = 2,
-  CRASH_KIND_MAX
+  kCrashKindKernel = 1,
+  kCrashKindUser   = 2,
+  kCrashKindMax
 };
 
 static MetricsLibrary s_metrics_lib;
@@ -52,8 +52,8 @@ static void CheckUncleanShutdown() {
   s_system_log.LogWarning("Last shutdown was not clean");
   if (IsMetricsCollectionAllowed()) {
     s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
-                                CRASH_KIND_KERNEL,
-                                CRASH_KIND_MAX);
+                                kCrashKindKernel,
+                                kCrashKindMax);
   }
   if (!file_util::Delete(unclean_file_path, false)) {
     s_system_log.LogError("Failed to delete unclean shutdown file %s",
@@ -82,8 +82,8 @@ static void SignalCleanShutdown() {
 static void CountUserCrash() {
   CHECK(IsMetricsCollectionAllowed());
   s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
-                              CRASH_KIND_USER,
-                              CRASH_KIND_MAX);
+                              kCrashKindUser,
+                              kCrashKindMax);
 
   // Announce through D-Bus whenever a user crash happens. This is
   // used by the metrics daemon to log active use time between
@@ -108,7 +108,8 @@ int main(int argc, char *argv[]) {
   user_collector.Initialize(CountUserCrash,
                             my_path.value(),
                             IsMetricsCollectionAllowed,
-                            &s_system_log);
+                            &s_system_log,
+                            true);  // generate_diagnostics
 
   if (FLAGS_init) {
     CHECK(!FLAGS_clean_shutdown) << "Incompatible options";
@@ -131,7 +132,6 @@ int main(int argc, char *argv[]) {
   // Handle a specific user space crash.
   CHECK(FLAGS_signal != -1) << "Signal must be set";
   CHECK(FLAGS_pid != -1) << "PID must be set";
-  CHECK(FLAGS_exec != "") << "Executable name must be set";
 
   // Make it possible to test what happens when we crash while
   // handling a crash.
@@ -140,7 +140,10 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  user_collector.HandleCrash(FLAGS_signal, FLAGS_pid, FLAGS_exec);
+  // Handle the crash, get the name of the process from procfs.
+  if (!user_collector.HandleCrash(FLAGS_signal, FLAGS_pid, NULL)) {
+    return 1;
+  }
 
   return 0;
 }

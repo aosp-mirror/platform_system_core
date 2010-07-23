@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CRASH_SYSTEM_LOGGING_MOCK_H_
-#define CRASH_SYSTEM_LOGGING_MOCK_H_
+#ifndef CRASH_REPORTER_SYSTEM_LOGGING_MOCK_H_
+#define CRASH_REPORTER_SYSTEM_LOGGING_MOCK_H_
 
 #include <string>
 
@@ -24,4 +24,4 @@ class SystemLoggingMock : public SystemLogging {
   std::string ident_;
 };
 
-#endif  // CRASH_SYSTEM_LOGGING_H_
+#endif  // CRASH_REPORTER_SYSTEM_LOGGING_H_

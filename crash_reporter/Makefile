@@ -19,7 +19,7 @@ CXXFLAGS += -Wall -Werror
 all: $(REPORTER_BINS)
 
 $(CRASH_REPORTER): crash_reporter.o $(CRASH_OBJS)
-	$(CXX) $(CXXFLAGS) $^ -lcrash $(REPORTER_LIBS) -o $@
+	$(CXX) $(CXXFLAGS) $^ $(REPORTER_LIBS) -o $@
 
 tests: $(TEST_BINS)
 

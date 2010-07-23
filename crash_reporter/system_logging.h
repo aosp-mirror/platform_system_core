@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CRASH_SYSTEM_LOGGING_H_
-#define CRASH_SYSTEM_LOGGING_H_
+#ifndef CRASH_REPORTER_SYSTEM_LOGGING_H_
+#define CRASH_REPORTER_SYSTEM_LOGGING_H_
 
 #include <string>
 
@@ -27,4 +27,4 @@ class SystemLoggingImpl : public SystemLogging {
   static std::string identity_;
 };
 
-#endif  // CRASH_SYSTEM_LOGGING_H_
+#endif  // CRASH_REPORTER_SYSTEM_LOGGING_H_
