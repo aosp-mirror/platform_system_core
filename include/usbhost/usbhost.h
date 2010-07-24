@@ -90,6 +90,15 @@ uint16_t usb_device_get_vendor_id(struct usb_device *device);
 /* Returns the USB product ID from the device descriptor for the USB device */
 uint16_t usb_device_get_product_id(struct usb_device *device);
 
+/* Sends a control message to the specified device on endpoint zero */
+int usb_device_send_control(struct usb_device *device,
+                            int requestType,
+                            int request,
+                            int value,
+                            int index,
+                            int length,
+                            void* buffer);
+
 /* Returns a USB descriptor string for the given string ID.
  * Used to implement usb_device_get_manufacturer_name,
  * usb_device_get_product_name and usb_device_get_serial.
