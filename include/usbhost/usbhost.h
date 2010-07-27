@@ -84,6 +84,8 @@ const char* usb_device_get_name(struct usb_device *device);
  */
 int usb_device_get_unique_id(struct usb_device *device);
 
+int usb_device_get_unique_id_from_name(const char* name);
+
 /* Returns the USB vendor ID from the device descriptor for the USB device */
 uint16_t usb_device_get_vendor_id(struct usb_device *device);
 

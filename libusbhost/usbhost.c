@@ -270,6 +270,13 @@ int usb_device_get_unique_id(struct usb_device *device)
     return bus * 1000 + dev;
 }
 
+int usb_device_get_unique_id_from_name(const char* name)
+{
+    int bus = 0, dev = 0;
+    sscanf(name, USB_FS_ID_SCANNER, &bus, &dev);
+    return bus * 1000 + dev;
+}
+
 uint16_t usb_device_get_vendor_id(struct usb_device *device)
 {
     struct usb_device_descriptor* desc = (struct usb_device_descriptor*)device->desc;
