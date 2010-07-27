@@ -115,31 +115,20 @@
 50000 menu_item_selected (Menu type where 0 is options and 1 is context|1|5),(Menu item title|3)
 50001 menu_opened (Menu type where 0 is options and 1 is context|1|5)
 
-# Wi-Fi network state changed:
-# [31- 6] Reserved for future use
-# [ 5- 0] Detailed state ordinal (as defined by NetworkInfo.DetailedState)
-50021 wifi_network_state_changed (network_state|1|5)
-
-# Wi-Fi supplicant state changed:
-# [31- 6] Reserved for future use
-# [ 5- 0] Supplicant state ordinal (as defined by SupplicantState)
-50022 wifi_supplicant_state_changed (supplicant_state|1|5)
-
-# Wi-Fi driver state changed:
-# [31- 1] Reserved for future use
-# [ 0- 0] Driver start (1) or stopped (0)
-50023 wifi_driver_state_changed (driver_state|1|5)
-
-# Wi-Fi interface configuration state changed:
-# [31- 1] Reserved for future use
-# [ 0- 0] Interface configuration succeeded (1) or failed (0)
-50024 wifi_interface_configuration_state_changed (IP_configuration|1|5)
-
-# Wi-Fi supplicant connection state changed:
-# [31- 2] Reserved for future use
-# [ 1- 0] Connected to supplicant (1) or disconnected from supplicant (0),
-#         or supplicant died (2)
-50025 wifi_supplicant_connection_state_changed (connected|1|5)
+# HSM wifi state change
+# Hierarchical state class name (as defined in WifiStateTracker.java)
+# Logged on every state change in the hierarchical state machine
+50021 wifi_state_changed (wifi_state|3)
+# HSM wifi event
+# [31-16] Reserved for future use
+# [15 - 0] HSM event (as defined in WifiStateTracker.java)
+# Logged when an event is handled in a hierarchical state
+50022 wifi_event_handled (wifi_event|1|5)
+# Supplicant state change
+# [31-13] Reserved for future use
+# [8 - 0] Supplicant state (as defined in SupplicantState.java)
+# Logged when the supplicant switches to a new state
+50023 wifi_supplicant_state_changed (supplicant_state|1|5)
 
 # Do not change these names without updating tag in:
 #//device/dalvik/libcore/luni/src/main/native/org_apache_harmony_luni_platform_OSNetworkSystem.c
