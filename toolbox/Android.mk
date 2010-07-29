@@ -41,7 +41,7 @@ TOOLS := \
 	printenv \
 	smd \
 	chmod \
-    chown \
+	chown \
 	newfs_msdos \
 	netstat \
 	ioctl \
