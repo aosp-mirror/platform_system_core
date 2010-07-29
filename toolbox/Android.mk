@@ -41,7 +41,7 @@ TOOLS := \
 	printenv \
 	smd \
 	chmod \
-    chown \
+	chown \
 	newfs_msdos \
 	netstat \
 	ioctl \
@@ -53,7 +53,7 @@ TOOLS := \
 	uptime \
 	vmstat \
 	nandread \
-        ionice
+	ionice
 
 LOCAL_SRC_FILES:= \
 	toolbox.c \
