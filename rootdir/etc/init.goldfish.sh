@@ -45,3 +45,13 @@ esac
 # this line doesn't really do anything useful. however without it the
 # previous setprop doesn't seem to apply for some really odd reason
 setprop ro.qemu.init.completed 1
+
+# set up the second interface (for inter-emulator connections)
+# if required
+my_ip=`getprop net.shared_net_ip`
+case "$my_ip" in
+    "")
+    ;;
+    *) ifconfig eth1 "$my_ip" netmask 255.255.255.0 up
+    ;;
+esac
