@@ -52,6 +52,7 @@
 /dev/msm_pcm_ctl*         0660   system     audio
 /dev/msm_snd*             0660   system     audio
 /dev/msm_mp3*             0660   system     audio
+/dev/audio*               0660   system     audio
 /dev/audience_a1026*      0660   system     audio
 /dev/tpa2018d1*           0660   system     audio
 /dev/msm_audpre           0660   system     audio
