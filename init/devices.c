@@ -264,6 +264,57 @@ static void parse_event(const char *msg, struct uevent *uevent)
                     uevent->firmware, uevent->major, uevent->minor);
 }
 
+static char **get_character_device_symlinks(struct uevent *uevent)
+{
+    const char *parent;
+    char *slash;
+    char **links;
+    int link_num = 0;
+    int width;
+
+    if (strncmp(uevent->path, "/devices/platform/", 18))
+        return NULL;
+
+    links = malloc(sizeof(char *) * 2);
+    if (!links)
+        return NULL;
+    memset(links, 0, sizeof(char *) * 2);
+
+    /* skip "/devices/platform/<driver>" */
+    parent = strchr(uevent->path + 18, '/');
+    if (!*parent)
+        goto err;
+
+    if (!strncmp(parent, "/usb", 4)) {
+        /* skip root hub name and device. use device interface */
+        while (*++parent && *parent != '/');
+        if (*parent)
+            while (*++parent && *parent != '/');
+        if (!*parent)
+            goto err;
+        slash = strchr(++parent, '/');
+        if (!slash)
+            goto err;
+        width = slash - parent;
+        if (width <= 0)
+            goto err;
+
+        if (asprintf(&links[link_num], "/dev/usb/%s%.*s", uevent->subsystem, width, parent) > 0)
+            link_num++;
+        else
+            links[link_num] = NULL;
+        mkdir("/dev/usb", 0755);
+    }
+    else {
+        goto err;
+    }
+
+    return links;
+err:
+    free(links);
+    return NULL;
+}
+
 static char **parse_platform_block_device(struct uevent *uevent)
 {
     const char *driver;
@@ -407,6 +458,7 @@ static void handle_device_event(struct uevent *uevent)
             name += 4;
         } else
             base = "/dev/";
+        links = get_character_device_symlinks(uevent);
     }
 
     if (!devpath_ready)
