@@ -271,4 +271,16 @@ size_t destroy_contiguous_mspace(mspace msp) {
   }
   return 0;
 }
+
+void *contiguous_mspace_sbrk0(mspace msp) {
+    struct mspace_contig_state *cs;
+    mstate ms;
+    const unsigned int pagesize = PAGESIZE;
+
+    ms = (mstate)msp;
+    cs = (struct mspace_contig_state *)((uintptr_t)ms & ~(pagesize-1));
+    assert(cs->magic == CONTIG_STATE_MAGIC);
+    assert(cs->m == ms);
+    return cs->brk;
+}
 #endif

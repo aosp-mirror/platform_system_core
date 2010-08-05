@@ -87,6 +87,11 @@ mspace create_contiguous_mspace_with_base(size_t starting_capacity,
     size_t max_capacity, int locked, void *base);
 
 size_t destroy_contiguous_mspace(mspace msp);
+
+/*
+   Returns the position of the "break" within the given mspace.
+*/
+void *contiguous_mspace_sbrk0(mspace msp);
 #endif
 
 /*
