@@ -2,17 +2,6 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 #
-# ARMv6 specific objects
-#
-
-ifeq ($(TARGET_ARCH),arm)
-LOCAL_ASFLAGS := -march=armv6
-LOCAL_SRC_FILES := rotate90CW_4x4_16v6.S
-LOCAL_MODULE := libpixelflinger_armv6
-include $(BUILD_STATIC_LIBRARY)
-endif
-
-#
 # C/C++ and ARMv5 objects
 #
 
@@ -77,10 +66,6 @@ ifneq ($(BUILD_TINY_ANDROID),true)
 LOCAL_SHARED_LIBRARIES += libhardware_legacy
 LOCAL_CFLAGS += -DWITH_LIB_HARDWARE
 endif
-
-ifeq ($(TARGET_ARCH),arm)
-LOCAL_WHOLE_STATIC_LIBRARIES := libpixelflinger_armv6
-endif
 include $(BUILD_SHARED_LIBRARY)
 
 #
@@ -91,9 +76,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE:= libpixelflinger_static
 LOCAL_SRC_FILES := $(PIXELFLINGER_SRC_FILES)
 LOCAL_CFLAGS := $(PIXELFLINGER_CFLAGS) 
-ifeq ($(TARGET_ARCH),arm)
-LOCAL_WHOLE_STATIC_LIBRARIES := libpixelflinger_armv6
-endif
 include $(BUILD_STATIC_LIBRARY)
 
 
