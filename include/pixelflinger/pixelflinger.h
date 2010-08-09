@@ -315,7 +315,7 @@ extern "C" {
 ssize_t gglInit(GGLContext** context);
 ssize_t gglUninit(GGLContext* context);
 
-GGLint gglBitBlti(
+GGLint gglBitBlit(
         GGLContext* c,
         int tmu,
         GGLint crop[4],
