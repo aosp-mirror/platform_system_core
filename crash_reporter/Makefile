@@ -8,7 +8,8 @@ CRASH_OBJS = system_logging.o user_collector.o
 TEST_OBJS = $(CRASH_OBJS) system_logging_mock.o
 TEST_BINS = user_collector_test
 
-COMMON_LIBS = -lbase -lpthread -lgflags -lrt
+# -lglib-2.0 is needed by libbase.a now.
+COMMON_LIBS = -lbase -lpthread -lglib-2.0 -lgflags -lrt
 REPORTER_LIBS = $(COMMON_LIBS) -lmetrics
 
 TEST_LIBS = $(COMMON_LIBS) -lgtest -lgmock
