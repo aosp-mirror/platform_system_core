@@ -71,7 +71,7 @@ int usage(void)
 
 
 
-static unsigned char padding[2048] = { 0, };
+static unsigned char padding[4096] = { 0, };
 
 int write_padding(int fd, unsigned pagesize, unsigned itemsize)
 {
@@ -148,6 +148,12 @@ int main(int argc, char **argv)
             hdr.tags_addr =    base + 0x00000100;
         } else if(!strcmp(arg, "--board")) {
             board = val;
+        } else if(!strcmp(arg,"--pagesize")) {
+            pagesize = strtoul(val, 0, 10);
+            if ((pagesize != 2048) && (pagesize != 4096)) {
+                fprintf(stderr,"error: unsupported page size %d\n", pagesize);
+                return -1;
+            }
         } else {
             return usage();
         }
