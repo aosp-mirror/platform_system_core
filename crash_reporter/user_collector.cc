@@ -20,7 +20,7 @@
 static const char kCorePatternFile[] = "/proc/sys/kernel/core_pattern";
 static const char kCoreToMinidumpConverterPath[] = "/usr/bin/core2md";
 static const char kDefaultUserName[] = "chronos";
-static const char kLeaveCoreFile[] = "/etc/leave_core";
+static const char kLeaveCoreFile[] = "/root/.leave_core";
 static const char kSystemCrashPath[] = "/var/spool/crash";
 static const char kUserCrashPath[] = "/home/chronos/user/crash";
 
