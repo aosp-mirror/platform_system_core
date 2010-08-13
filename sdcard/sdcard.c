@@ -25,6 +25,8 @@
 #include <sys/uio.h>
 #include <dirent.h>
 
+#include <private/android_filesystem_config.h>
+
 #include "fuse.h"
 
 /* README
@@ -144,10 +146,20 @@ void attr_from_stat(struct fuse_attr *attr, struct stat *s)
         /* TODO: time */
     attr->mode = s->st_mode;
     attr->nlink = s->st_nlink;
-        /* TODO: uid/gid */
 
-    attr->uid = 1000;
-    attr->gid = 1000;
+        /* force permissions to something reasonable:
+         * world readable
+         * writable by the sdcard group
+         */
+    if (attr->mode & 0100) {
+        attr->mode = (attr->mode & (~0777)) | 0775;
+    } else {
+        attr->mode = (attr->mode & (~0777)) | 0664;
+    }
+
+        /* all files owned by root.sdcard */
+    attr->uid = 0;
+    attr->gid = AID_SDCARD_RW;
 }
 
 int node_get_attr(struct node *node, struct fuse_attr *attr)
