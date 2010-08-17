@@ -1518,26 +1518,3 @@ void rect_memcpy(context_t* c, size_t yc)
 // ----------------------------------------------------------------------------
 }; // namespace android
 
-using namespace android;
-extern "C" void ggl_test_codegen(uint32_t n, uint32_t p, uint32_t t0, uint32_t t1)
-{
-#if ANDROID_ARM_CODEGEN
-    GGLContext* c;
-    gglInit(&c);
-    needs_t needs;
-    needs.n = n;
-    needs.p = p;
-    needs.t[0] = t0;
-    needs.t[1] = t1;
-    sp<ScanlineAssembly> a(new ScanlineAssembly(needs, ASSEMBLY_SCRATCH_SIZE));
-    GGLAssembler assembler( new ARMAssembler(a) );
-    int err = assembler.scanline(needs, (context_t*)c);
-    if (err != 0) {
-        printf("error %08x (%s)\n", err, strerror(-err));
-    }
-    gglUninit(c);
-#else
-    printf("This test runs only on ARM\n");
-#endif
-}
-
