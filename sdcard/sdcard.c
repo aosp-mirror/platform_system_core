@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
 #include <sys/uio.h>
 #include <dirent.h>
 
@@ -41,7 +42,7 @@
  * usage:  sdcard <path> <uid> <gid>
  *
  * It must be run as root, but will change to uid/gid as soon as it
- * mounts a filesystem on /sdcard.  It will refuse to run if uid or
+ * mounts a filesystem on /mnt/sdcard.  It will refuse to run if uid or
  * gid are zero.
  *
  *
@@ -71,6 +72,8 @@
 #define ERROR(x...) fprintf(stderr,x)
 
 #define FUSE_UNKNOWN_INO 0xffffffff
+
+#define MOUNT_POINT "/mnt/sdcard"
 
 struct handle {
     struct node *node;
@@ -143,7 +146,12 @@ void attr_from_stat(struct fuse_attr *attr, struct stat *s)
     attr->ino = s->st_ino;
     attr->size = s->st_size;
     attr->blocks = s->st_blocks;
-        /* TODO: time */
+    attr->atime = s->st_atime;
+    attr->mtime = s->st_mtime;
+    attr->ctime = s->st_ctime;
+    attr->atimensec = s->st_atime_nsec;
+    attr->mtimensec = s->st_mtime_nsec;
+    attr->ctimensec = s->st_ctime_nsec;
     attr->mode = s->st_mode;
     attr->nlink = s->st_nlink;
 
@@ -580,7 +588,30 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         fuse_reply(fuse, hdr->unique, &out, sizeof(out));
         goto oops;
     }
-//    case FUSE_STATFS:
+    case FUSE_STATFS: { /* getattr_in -> attr_out */
+        struct statfs stat;
+        struct fuse_statfs_out out;
+        int res;
+
+        TRACE("STATFS\n");
+
+        if (statfs(fuse->root.name, &stat)) {
+            fuse_status(fuse, hdr->unique, -errno);
+            return;
+        }
+
+        memset(&out, 0, sizeof(out));
+        out.st.blocks = stat.f_blocks;
+        out.st.bfree = stat.f_bfree;
+        out.st.bavail = stat.f_bavail;
+        out.st.files = stat.f_files;
+        out.st.ffree = stat.f_ffree;
+        out.st.bsize = stat.f_bsize;
+        out.st.namelen = stat.f_namelen;
+        out.st.frsize = stat.f_frsize;
+        fuse_reply(fuse, hdr->unique, &out, sizeof(out));
+        return;
+    }
     case FUSE_RELEASE: { /* release_in -> */
         struct fuse_release_in *req = data;
         struct handle *h = id_to_ptr(req->fh);
@@ -729,7 +760,7 @@ int main(int argc, char **argv)
     path = argv[1];
 
         /* cleanup from previous instance, if necessary */
-    umount2("/sdcard", 2);
+    umount2(MOUNT_POINT, 2);
 
     fd = open("/dev/fuse", O_RDWR);
     if (fd < 0){
@@ -740,7 +771,7 @@ int main(int argc, char **argv)
     sprintf(opts, "fd=%i,rootmode=40000,default_permissions,allow_other,"
             "user_id=%d,group_id=%d", fd, uid, gid);
     
-    res = mount("/dev/fuse", "/sdcard", "fuse", MS_NOSUID | MS_NODEV, opts);
+    res = mount("/dev/fuse", MOUNT_POINT, "fuse", MS_NOSUID | MS_NODEV, opts);
     if (res < 0) {
         ERROR("cannot mount fuse filesystem (%d)\n", errno);
         return -1;
