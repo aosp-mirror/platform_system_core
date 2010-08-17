@@ -183,4 +183,32 @@ void TaggedCounter::WriteRecord(int fd) {
   }
 }
 
+FrequencyCounter::FrequencyCounter() : cycle_duration_(1) {
+}
+
+FrequencyCounter::~FrequencyCounter() {
+}
+
+void FrequencyCounter::Init(const char* filename,
+                            TaggedCounterInterface::Reporter reporter,
+                            void* reporter_handle,
+                            time_t cycle_duration) {
+  // Allow tests to inject tagged_counter_ dependency.
+  if (tagged_counter_.get() == NULL) {
+    tagged_counter_.reset(new TaggedCounter());
+  }
+  tagged_counter_->Init(filename, reporter, reporter_handle);
+  DCHECK(cycle_duration > 0);
+  cycle_duration_ = cycle_duration;
+}
+
+void FrequencyCounter::UpdateInternal(int32 count, time_t now) {
+  DCHECK(tagged_counter_.get() != NULL);
+  tagged_counter_->Update(GetCycleNumber(now), count);
+}
+
+int32 FrequencyCounter::GetCycleNumber(time_t now) {
+  return now / cycle_duration_;
+}
+
 }  // namespace chromeos_metrics

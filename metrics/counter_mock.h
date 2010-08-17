@@ -21,7 +21,15 @@ class TaggedCounterMock : public TaggedCounterInterface {
   MOCK_METHOD0(Flush, void());
 };
 
+class FrequencyCounterMock : public FrequencyCounter {
+ public:
+  MOCK_METHOD4(Init, void(const char* filename,
+                          TaggedCounterInterface::Reporter reporter,
+                          void* reporter_handle,
+                          time_t cycle_duration));
+  MOCK_METHOD1(Update, void(int32 count));
+};
+
 }  // namespace chromeos_metrics
 
 #endif  // METRICS_COUNTER_MOCK_H_
-

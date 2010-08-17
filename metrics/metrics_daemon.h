@@ -14,7 +14,10 @@
 
 #include "metrics_library.h"
 
-namespace chromeos_metrics { class TaggedCounterInterface; }
+namespace chromeos_metrics {
+class FrequencyCounter;
+class TaggedCounterInterface;
+}
 
 class MetricsDaemon {
 
@@ -31,9 +34,7 @@ class MetricsDaemon {
 
  private:
   friend class MetricsDaemonTest;
-  FRIEND_TEST(MetricsDaemonTest, CheckKernelCrash);
-  FRIEND_TEST(MetricsDaemonTest, DailyUseReporter);
-  FRIEND_TEST(MetricsDaemonTest, KernelCrashIntervalReporter);
+  FRIEND_TEST(MetricsDaemonTest, CheckSystemCrash);
   FRIEND_TEST(MetricsDaemonTest, LookupNetworkState);
   FRIEND_TEST(MetricsDaemonTest, LookupPowerState);
   FRIEND_TEST(MetricsDaemonTest, LookupScreenSaverState);
@@ -43,13 +44,18 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, NetStateChangedSuspend);
   FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
   FRIEND_TEST(MetricsDaemonTest, ProcessKernelCrash);
+  FRIEND_TEST(MetricsDaemonTest, ProcessUncleanShutdown);
   FRIEND_TEST(MetricsDaemonTest, ProcessUserCrash);
+  FRIEND_TEST(MetricsDaemonTest, ReportCrashesDailyFrequency);
+  FRIEND_TEST(MetricsDaemonTest, ReportDailyUse);
+  FRIEND_TEST(MetricsDaemonTest, ReportKernelCrashInterval);
+  FRIEND_TEST(MetricsDaemonTest, ReportUncleanShutdownInterval);
+  FRIEND_TEST(MetricsDaemonTest, ReportUserCrashInterval);
   FRIEND_TEST(MetricsDaemonTest, ScreenSaverStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SendMetric);
   FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveState);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateTimeJump);
-  FRIEND_TEST(MetricsDaemonTest, UserCrashIntervalReporter);
 
   // The network states (see network_states.h).
   enum NetworkState {
@@ -84,22 +90,27 @@ class MetricsDaemon {
   };
 
   // Metric parameters.
+  static const char kMetricAnyCrashesDailyName[];
+  static const char kMetricCrashesDailyBuckets;
+  static const char kMetricCrashesDailyMax;
+  static const char kMetricCrashesDailyMin;
+  static const int  kMetricCrashIntervalBuckets;
+  static const int  kMetricCrashIntervalMax;
+  static const int  kMetricCrashIntervalMin;
+  static const int  kMetricDailyUseTimeBuckets;
+  static const int  kMetricDailyUseTimeMax;
+  static const int  kMetricDailyUseTimeMin;
   static const char kMetricDailyUseTimeName[];
-  static const int kMetricDailyUseTimeMin;
-  static const int kMetricDailyUseTimeMax;
-  static const int kMetricDailyUseTimeBuckets;
+  static const char kMetricKernelCrashesDailyName[];
   static const char kMetricKernelCrashIntervalName[];
-  static const int kMetricKernelCrashIntervalMin;
-  static const int kMetricKernelCrashIntervalMax;
-  static const int kMetricKernelCrashIntervalBuckets;
+  static const int  kMetricTimeToNetworkDropBuckets;
+  static const int  kMetricTimeToNetworkDropMax;
+  static const int  kMetricTimeToNetworkDropMin;
   static const char kMetricTimeToNetworkDropName[];
-  static const int kMetricTimeToNetworkDropMin;
-  static const int kMetricTimeToNetworkDropMax;
-  static const int kMetricTimeToNetworkDropBuckets;
+  static const char kMetricUncleanShutdownIntervalName[];
+  static const char kMetricUncleanShutdownsDailyName[];
+  static const char kMetricUserCrashesDailyName[];
   static const char kMetricUserCrashIntervalName[];
-  static const int kMetricUserCrashIntervalMin;
-  static const int kMetricUserCrashIntervalMax;
-  static const int kMetricUserCrashIntervalBuckets;
 
   // D-Bus message match strings.
   static const char* kDBusMatches_[];
@@ -162,10 +173,14 @@ class MetricsDaemon {
   // Updates the active use time and logs time between kernel crashes.
   void ProcessKernelCrash();
 
-  // Checks if a kernel crash has been detected and processes if so.
-  // The method assumes that a kernel crash has happened if
-  // |crash_file| exists.
-  void CheckKernelCrash(const std::string& crash_file);
+  // Updates the active use time and logs time between unclean shutdowns.
+  void ProcessUncleanShutdown();
+
+  // Checks if a kernel crash has been detected and returns true if
+  // so.  The method assumes that a kernel crash has happened if
+  // |crash_file| exists.  It removes the file immediately if it
+  // exists, so it must not be called more than once.
+  bool CheckSystemCrash(const std::string& crash_file);
 
   // Callbacks for the daily use monitor. The daily use monitor uses
   // LogDailyUseRecord to aggregate current usage data and send it to
@@ -196,15 +211,39 @@ class MetricsDaemon {
 
   // TaggedCounter callback to process aggregated daily usage data and
   // send to UMA.
-  static void DailyUseReporter(void* data, int tag, int count);
+  static void ReportDailyUse(void* data, int tag, int count);
+
+  // Helper to report a crash interval to UMA.
+  static void ReportCrashInterval(const char* histogram_name,
+                                  void* handle, int count);
 
   // TaggedCounter callback to process time between user-space process
   // crashes and send to UMA.
-  static void UserCrashIntervalReporter(void* data, int tag, int count);
+  static void ReportUserCrashInterval(void* data, int tag, int count);
 
   // TaggedCounter callback to process time between kernel crashes and
   // send to UMA.
-  static void KernelCrashIntervalReporter(void* data, int tag, int count);
+  static void ReportKernelCrashInterval(void* data, int tag, int count);
+
+  // TaggedCounter callback to process time between unclean shutdowns and
+  // send to UMA.
+  static void ReportUncleanShutdownInterval(void* data, int tag, int count);
+
+  // Helper to report a daily crash frequency to UMA.
+  static void ReportCrashesDailyFrequency(const char* histogram_name,
+                                          void* handle, int count);
+
+  // TaggedCounter callback to report daily crash frequency to UMA.
+  static void ReportUserCrashesDaily(void* handle, int tag, int count);
+
+  // TaggedCounter callback to report kernel crash frequency to UMA.
+  static void ReportKernelCrashesDaily(void* handle, int tag, int count);
+
+  // TaggedCounter callback to report unclean shutdown frequency to UMA.
+  static void ReportUncleanShutdownsDaily(void* handle, int tag, int count);
+
+  // TaggedCounter callback to report frequency of any crashes to UMA.
+  static void ReportAnyCrashesDaily(void* handle, int tag, int count);
 
   // Test mode.
   bool testing_;
@@ -243,6 +282,23 @@ class MetricsDaemon {
 
   // Active use time between kernel crashes.
   scoped_ptr<chromeos_metrics::TaggedCounterInterface> kernel_crash_interval_;
+
+  // Active use time between unclean shutdowns crashes.
+  scoped_ptr<chromeos_metrics::TaggedCounterInterface>
+      unclean_shutdown_interval_;
+
+  // Daily count of user-space process crashes.
+  scoped_ptr<chromeos_metrics::FrequencyCounter> user_crashes_daily_;
+
+  // Daily count of kernel crashes.
+  scoped_ptr<chromeos_metrics::FrequencyCounter> kernel_crashes_daily_;
+
+  // Daily count of unclean shutdowns.
+  scoped_ptr<chromeos_metrics::FrequencyCounter> unclean_shutdowns_daily_;
+
+  // Daily count of any crashes (user-space processes, kernel, or
+  // unclean shutdowns).
+  scoped_ptr<chromeos_metrics::FrequencyCounter> any_crashes_daily_;
 
   // Sleep period until the next daily usage aggregation performed by
   // the daily use monitor (see ScheduleUseMonitor).

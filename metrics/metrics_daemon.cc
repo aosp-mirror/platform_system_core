@@ -39,18 +39,16 @@ static const int kSecondsPerWeek = kSecondsPerDay * kDaysPerWeek;
 static const int kUseMonitorIntervalInit = 1 * kSecondsPerMinute;
 static const int kUseMonitorIntervalMax = 10 * kSecondsPerMinute;
 
+const char kKernelCrashDetectedFile[] = "/tmp/kernel-crash-detected";
+static const char kUncleanShutdownDetectedFile[] =
+      "/tmp/unclean-shutdown-detected";
+
 // static metrics parameters.
 const char MetricsDaemon::kMetricDailyUseTimeName[] =
     "Logging.DailyUseTime";
 const int MetricsDaemon::kMetricDailyUseTimeMin = 1;
 const int MetricsDaemon::kMetricDailyUseTimeMax = kMinutesPerDay;
 const int MetricsDaemon::kMetricDailyUseTimeBuckets = 50;
-
-const char MetricsDaemon::kMetricKernelCrashIntervalName[] =
-    "Logging.KernelCrashInterval";
-const int MetricsDaemon::kMetricKernelCrashIntervalMin = 1;
-const int MetricsDaemon::kMetricKernelCrashIntervalMax = 4 * kSecondsPerWeek;
-const int MetricsDaemon::kMetricKernelCrashIntervalBuckets = 50;
 
 const char MetricsDaemon::kMetricTimeToNetworkDropName[] =
     "Network.TimeToDrop";
@@ -59,11 +57,33 @@ const int MetricsDaemon::kMetricTimeToNetworkDropMax =
     8 /* hours */ * kMinutesPerHour * kSecondsPerMinute;
 const int MetricsDaemon::kMetricTimeToNetworkDropBuckets = 50;
 
+// crash interval metrics
+const char MetricsDaemon::kMetricKernelCrashIntervalName[] =
+    "Logging.KernelCrashInterval";
+const char MetricsDaemon::kMetricUncleanShutdownIntervalName[] =
+    "Logging.UncleanShutdownInterval";
 const char MetricsDaemon::kMetricUserCrashIntervalName[] =
     "Logging.UserCrashInterval";
-const int MetricsDaemon::kMetricUserCrashIntervalMin = 1;
-const int MetricsDaemon::kMetricUserCrashIntervalMax = 4 * kSecondsPerWeek;
-const int MetricsDaemon::kMetricUserCrashIntervalBuckets = 50;
+
+const int MetricsDaemon::kMetricCrashIntervalMin = 1;
+const int MetricsDaemon::kMetricCrashIntervalMax =
+    4 * kSecondsPerWeek;
+const int MetricsDaemon::kMetricCrashIntervalBuckets = 50;
+
+// crash frequency metrics
+const char MetricsDaemon::kMetricAnyCrashesDailyName[] =
+    "Logging.AnyCrashesDaily";
+const char MetricsDaemon::kMetricKernelCrashesDailyName[] =
+    "Logging.KernelCrashesDaily";
+const char MetricsDaemon::kMetricUncleanShutdownsDailyName[] =
+    "Logging.UncleanShutdownsDaily";
+const char MetricsDaemon::kMetricUserCrashesDailyName[] =
+    "Logging.UserCrashesDaily";
+const char MetricsDaemon::kMetricCrashesDailyMin = 1;
+const char MetricsDaemon::kMetricCrashesDailyMax = 100;
+const char MetricsDaemon::kMetricCrashesDailyBuckets = 50;
+
+
 
 // static
 const char* MetricsDaemon::kDBusMatches_[] = {
@@ -168,8 +188,14 @@ void MetricsDaemon::Run(bool run_as_daemon) {
   if (run_as_daemon && daemon(0, 0) != 0)
     return;
 
-  static const char kKernelCrashDetectedFile[] = "/tmp/kernel-crash-detected";
-  CheckKernelCrash(kKernelCrashDetectedFile);
+  if (CheckSystemCrash(kKernelCrashDetectedFile)) {
+    ProcessKernelCrash();
+  }
+
+  if (CheckSystemCrash(kUncleanShutdownDetectedFile)) {
+    ProcessUncleanShutdown();
+  }
+
   Loop();
 }
 
@@ -180,19 +206,57 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
 
   static const char kDailyUseRecordFile[] = "/var/log/metrics/daily-usage";
   daily_use_.reset(new chromeos_metrics::TaggedCounter());
-  daily_use_->Init(kDailyUseRecordFile, &DailyUseReporter, this);
+  daily_use_->Init(kDailyUseRecordFile, &ReportDailyUse, this);
 
   static const char kUserCrashIntervalRecordFile[] =
       "/var/log/metrics/user-crash-interval";
   user_crash_interval_.reset(new chromeos_metrics::TaggedCounter());
   user_crash_interval_->Init(kUserCrashIntervalRecordFile,
-                             &UserCrashIntervalReporter, this);
+                             &ReportUserCrashInterval, this);
 
   static const char kKernelCrashIntervalRecordFile[] =
       "/var/log/metrics/kernel-crash-interval";
   kernel_crash_interval_.reset(new chromeos_metrics::TaggedCounter());
   kernel_crash_interval_->Init(kKernelCrashIntervalRecordFile,
-                               &KernelCrashIntervalReporter, this);
+                               &ReportKernelCrashInterval, this);
+
+  static const char kUncleanShutdownDetectedFile[] =
+      "/var/log/metrics/unclean-shutdown-interval";
+  unclean_shutdown_interval_.reset(new chromeos_metrics::TaggedCounter());
+  unclean_shutdown_interval_->Init(kUncleanShutdownDetectedFile,
+                                   &ReportUncleanShutdownInterval, this);
+
+  static const char kUserCrashesDailyRecordFile[] =
+      "/var/log/metrics/user-crashes-daily";
+  user_crashes_daily_.reset(new chromeos_metrics::FrequencyCounter());
+  user_crashes_daily_->Init(kUserCrashesDailyRecordFile,
+                            &ReportUserCrashesDaily,
+                            this,
+                            chromeos_metrics::kSecondsPerDay);
+
+  static const char kKernelCrashesDailyRecordFile[] =
+      "/var/log/metrics/kernel-crashes-daily";
+  kernel_crashes_daily_.reset(new chromeos_metrics::FrequencyCounter());
+  kernel_crashes_daily_->Init(kKernelCrashesDailyRecordFile,
+                              &ReportKernelCrashesDaily,
+                              this,
+                              chromeos_metrics::kSecondsPerDay);
+
+  static const char kUncleanShutdownsDailyRecordFile[] =
+      "/var/log/metrics/unclean-shutdowns-daily";
+  unclean_shutdowns_daily_.reset(new chromeos_metrics::FrequencyCounter());
+  unclean_shutdowns_daily_->Init(kUncleanShutdownsDailyRecordFile,
+                                 &ReportUncleanShutdownsDaily,
+                                 this,
+                                 chromeos_metrics::kSecondsPerDay);
+
+  static const char kAnyCrashesUserCrashDailyRecordFile[] =
+      "/var/log/metrics/any-crashes-daily";
+  any_crashes_daily_.reset(new chromeos_metrics::FrequencyCounter());
+  any_crashes_daily_->Init(kAnyCrashesUserCrashDailyRecordFile,
+                           &ReportAnyCrashesDaily,
+                           this,
+                           chromeos_metrics::kSecondsPerDay);
 
   // Don't setup D-Bus and GLib in test mode.
   if (testing)
@@ -408,6 +472,9 @@ void MetricsDaemon::ProcessUserCrash() {
 
   // Reports the active use time since the last crash and resets it.
   user_crash_interval_->Flush();
+
+  user_crashes_daily_->Update(1);
+  any_crashes_daily_->Update(1);
 }
 
 void MetricsDaemon::ProcessKernelCrash() {
@@ -416,19 +483,32 @@ void MetricsDaemon::ProcessKernelCrash() {
 
   // Reports the active use time since the last crash and resets it.
   kernel_crash_interval_->Flush();
+
+  kernel_crashes_daily_->Update(1);
+  any_crashes_daily_->Update(1);
 }
 
-void MetricsDaemon::CheckKernelCrash(const std::string& crash_file) {
+void MetricsDaemon::ProcessUncleanShutdown() {
+  // Counts the active use time up to now.
+  SetUserActiveState(user_active_, Time::Now());
+
+  // Reports the active use time since the last crash and resets it.
+  unclean_shutdown_interval_->Flush();
+
+  unclean_shutdowns_daily_->Update(1);
+  any_crashes_daily_->Update(1);
+}
+
+bool MetricsDaemon::CheckSystemCrash(const std::string& crash_file) {
   FilePath crash_detected(crash_file);
   if (!file_util::PathExists(crash_detected))
-    return;
-
-  ProcessKernelCrash();
+    return false;
 
   // Deletes the crash-detected file so that the daemon doesn't report
   // another kernel crash in case it's restarted.
   file_util::Delete(crash_detected,
                     false);  // recursive
+  return true;
 }
 
 // static
@@ -492,7 +572,7 @@ void MetricsDaemon::UnscheduleUseMonitor() {
 }
 
 // static
-void MetricsDaemon::DailyUseReporter(void* handle, int tag, int count) {
+void MetricsDaemon::ReportDailyUse(void* handle, int tag, int count) {
   if (count <= 0)
     return;
 
@@ -505,24 +585,67 @@ void MetricsDaemon::DailyUseReporter(void* handle, int tag, int count) {
 }
 
 // static
-void MetricsDaemon::UserCrashIntervalReporter(void* handle,
-                                              int tag, int count) {
+void MetricsDaemon::ReportCrashInterval(const char* histogram_name,
+                                        void* handle, int count) {
   MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
-  daemon->SendMetric(kMetricUserCrashIntervalName, count,
-                     kMetricUserCrashIntervalMin,
-                     kMetricUserCrashIntervalMax,
-                     kMetricUserCrashIntervalBuckets);
+  daemon->SendMetric(histogram_name, count,
+                     kMetricCrashIntervalMin,
+                     kMetricCrashIntervalMax,
+                     kMetricCrashIntervalBuckets);
 }
 
 // static
-void MetricsDaemon::KernelCrashIntervalReporter(void* handle,
-                                                int tag, int count) {
-  MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
-  daemon->SendMetric(kMetricKernelCrashIntervalName, count,
-                     kMetricKernelCrashIntervalMin,
-                     kMetricKernelCrashIntervalMax,
-                     kMetricKernelCrashIntervalBuckets);
+void MetricsDaemon::ReportUserCrashInterval(void* handle,
+                                            int tag, int count) {
+  ReportCrashInterval(kMetricUserCrashIntervalName, handle, count);
 }
+
+// static
+void MetricsDaemon::ReportKernelCrashInterval(void* handle,
+                                                int tag, int count) {
+  ReportCrashInterval(kMetricKernelCrashIntervalName, handle, count);
+}
+
+// static
+void MetricsDaemon::ReportUncleanShutdownInterval(void* handle,
+                                                    int tag, int count) {
+  ReportCrashInterval(kMetricUncleanShutdownIntervalName, handle, count);
+}
+
+// static
+void MetricsDaemon::ReportCrashesDailyFrequency(const char* histogram_name,
+                                                void* handle,
+                                                int count) {
+  MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
+  daemon->SendMetric(histogram_name, count,
+                     kMetricCrashesDailyMin,
+                     kMetricCrashesDailyMax,
+                     kMetricCrashesDailyBuckets);
+}
+
+// static
+void MetricsDaemon::ReportUserCrashesDaily(void* handle,
+                                           int tag, int count) {
+  ReportCrashesDailyFrequency(kMetricUserCrashesDailyName, handle, count);
+}
+
+// static
+void MetricsDaemon::ReportKernelCrashesDaily(void* handle,
+                                             int tag, int count) {
+  ReportCrashesDailyFrequency(kMetricKernelCrashesDailyName, handle, count);
+}
+
+// static
+void MetricsDaemon::ReportUncleanShutdownsDaily(void* handle,
+                                                int tag, int count) {
+  ReportCrashesDailyFrequency(kMetricUncleanShutdownsDailyName, handle, count);
+}
+
+// static
+void MetricsDaemon::ReportAnyCrashesDaily(void* handle, int tag, int count) {
+  ReportCrashesDailyFrequency(kMetricAnyCrashesDailyName, handle, count);
+}
+
 
 void MetricsDaemon::SendMetric(const string& name, int sample,
                                int min, int max, int nbuckets) {

@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "counter.h"
+#include "counter_mock.h"  // For TaggedCounterMock.
 
 using ::testing::_;
 using ::testing::MockFunction;
@@ -253,6 +254,64 @@ TEST_F(TaggedCounterTest, Update) {
   counter_.Update(/* tag */ 22, /* count */ 0);
   EXPECT_PRED_FORMAT2(AssertRecord, /* day */ 22, /* seconds */ 0);
   EXPECT_EQ(TaggedCounter::kRecordValid, counter_.record_state_);
+}
+
+class FrequencyCounterTest : public testing::Test {
+ protected:
+  virtual void SetUp() {
+    tagged_counter_ = new StrictMock<TaggedCounterMock>;
+    frequency_counter_.tagged_counter_.reset(tagged_counter_);
+  }
+
+  static void FakeReporter(void *, int32, int32) {
+  }
+
+  void CheckInit(int32 cycle_duration);
+  void CheckCycleNumber(int32 cycle_duration);
+
+  FrequencyCounter frequency_counter_;
+  StrictMock<TaggedCounterMock>* tagged_counter_;
+
+  TaggedCounter::Reporter reporter_;
+};
+
+void FrequencyCounterTest::CheckInit(int32 cycle_duration) {
+  EXPECT_CALL(*tagged_counter_, Init(kTestRecordFile, FakeReporter, this))
+      .Times(1)
+      .RetiresOnSaturation();
+  frequency_counter_.Init(kTestRecordFile,
+                          FakeReporter,
+                          this,
+                          cycle_duration);
+  EXPECT_EQ(cycle_duration, frequency_counter_.cycle_duration_);
+}
+
+TEST_F(FrequencyCounterTest, Init) {
+  CheckInit(100);
+}
+
+void FrequencyCounterTest::CheckCycleNumber(int32 cycle_duration) {
+  CheckInit(cycle_duration);
+  EXPECT_EQ(150, frequency_counter_.GetCycleNumber(cycle_duration * 150));
+  EXPECT_EQ(150, frequency_counter_.GetCycleNumber(cycle_duration * 150 +
+                                                   cycle_duration - 1));
+  EXPECT_EQ(151, frequency_counter_.GetCycleNumber(cycle_duration * 151 + 1));
+  EXPECT_EQ(0, frequency_counter_.GetCycleNumber(0));
+}
+
+
+TEST_F(FrequencyCounterTest, GetCycleNumberForWeek) {
+  CheckCycleNumber(kSecondsPerWeek);
+}
+
+TEST_F(FrequencyCounterTest, GetCycleNumberForDay) {
+  CheckCycleNumber(kSecondsPerDay);
+}
+
+TEST_F(FrequencyCounterTest, UpdateInternal) {
+  CheckInit(kSecondsPerWeek);
+  EXPECT_CALL(*tagged_counter_, Update(150, 2));
+  frequency_counter_.UpdateInternal(2, kSecondsPerWeek * 150);
 }
 
 }  // namespace chromeos_metrics

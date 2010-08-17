@@ -5,10 +5,17 @@
 #ifndef METRICS_COUNTER_H_
 #define METRICS_COUNTER_H_
 
+#include <time.h>
+
 #include <base/basictypes.h>
+#include <base/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 namespace chromeos_metrics {
+
+// Constants useful for frequency statistics.
+const int kSecondsPerDay = 60 * 60 * 24;
+const int kSecondsPerWeek = kSecondsPerDay * 7;
 
 // TaggedCounter maintains a persistent storage (i.e., a file)
 // aggregation counter for a given tag (e.g., day, hour) that survives
@@ -150,6 +157,45 @@ class TaggedCounter : public TaggedCounterInterface {
 
   // Current cached aggregation record state.
   RecordState record_state_;
+};
+
+// FrequencyCounter uses TaggedCounter to maintain a persistent
+// storage of the number of events that occur in a given cycle
+// duration (in other words, a frequency count).  For example, to
+// count the number of blips per day, initialize |cycle_duration| to
+// chromeos_metrics::kSecondsPerDay, and call Update with the number
+// of blips that happen concurrently (usually 1).  Reporting of the
+// value is done through TaggedCounter's reporter function.
+class FrequencyCounter {
+ public:
+  // Create a new frequency counter.
+  FrequencyCounter();
+  virtual ~FrequencyCounter();
+
+  // Initialize a frequency counter, which is necessary before first use.
+  // |filename|, |reporter|, and |reporter_handle| are used as in
+  // TaggedCounter::Init.  |cycle_duration| is the number of seconds
+  // in a cycle.
+  virtual void Init(const char* filename,
+                    TaggedCounterInterface::Reporter reporter,
+                    void* reporter_handle,
+                    time_t cycle_duration);
+  // Record that an event occurred.  |count| is the number of concurrent
+  // events that have occurred.  The time is implicitly assumed to be the
+  // time of the call.
+  virtual void Update(int32 count) {
+    UpdateInternal(count, time(NULL));
+  }
+
+ private:
+  friend class FrequencyCounterTest;
+  FRIEND_TEST(FrequencyCounterTest, UpdateInternal);
+
+  void UpdateInternal(int32 count, time_t now);
+  int32 GetCycleNumber(time_t now);
+
+  time_t cycle_duration_;
+  scoped_ptr<TaggedCounterInterface> tagged_counter_;
 };
 
 }  // namespace chromeos_metrics

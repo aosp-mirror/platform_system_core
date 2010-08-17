@@ -11,6 +11,7 @@
 
 using base::Time;
 using base::TimeTicks;
+using chromeos_metrics::FrequencyCounterMock;
 using chromeos_metrics::TaggedCounterMock;
 using ::testing::_;
 using ::testing::Return;
@@ -59,6 +60,16 @@ class MetricsDaemonTest : public testing::Test {
     daemon_.kernel_crash_interval_.reset(kernel_crash_interval_);
     user_crash_interval_ = new StrictMock<TaggedCounterMock>();
     daemon_.user_crash_interval_.reset(user_crash_interval_);
+    unclean_shutdown_interval_ = new StrictMock<TaggedCounterMock>();
+    daemon_.unclean_shutdown_interval_.reset(unclean_shutdown_interval_);
+    kernel_crashes_daily_ = new StrictMock<FrequencyCounterMock>();
+    daemon_.kernel_crashes_daily_.reset(kernel_crashes_daily_);
+    user_crashes_daily_ = new StrictMock<FrequencyCounterMock>();
+    daemon_.user_crashes_daily_.reset(user_crashes_daily_);
+    unclean_shutdowns_daily_ = new StrictMock<FrequencyCounterMock>();
+    daemon_.unclean_shutdowns_daily_.reset(unclean_shutdowns_daily_);
+    any_crashes_daily_ = new StrictMock<FrequencyCounterMock>();
+    daemon_.any_crashes_daily_.reset(any_crashes_daily_);
 
     EXPECT_FALSE(daemon_.user_active_);
     EXPECT_TRUE(daemon_.user_active_last_.is_null());
@@ -172,40 +183,54 @@ class MetricsDaemonTest : public testing::Test {
   StrictMock<TaggedCounterMock>* daily_use_;
   StrictMock<TaggedCounterMock>* kernel_crash_interval_;
   StrictMock<TaggedCounterMock>* user_crash_interval_;
+  StrictMock<TaggedCounterMock>* unclean_shutdown_interval_;
+
+  StrictMock<FrequencyCounterMock>* kernel_crashes_daily_;
+  StrictMock<FrequencyCounterMock>* user_crashes_daily_;
+  StrictMock<FrequencyCounterMock>* unclean_shutdowns_daily_;
+  StrictMock<FrequencyCounterMock>* any_crashes_daily_;
 };
 
-TEST_F(MetricsDaemonTest, CheckKernelCrash) {
+TEST_F(MetricsDaemonTest, CheckSystemCrash) {
   static const char kKernelCrashDetected[] = "test-kernel-crash-detected";
-  daemon_.CheckKernelCrash(kKernelCrashDetected);
+  EXPECT_FALSE(daemon_.CheckSystemCrash(kKernelCrashDetected));
 
   FilePath crash_detected(kKernelCrashDetected);
   file_util::WriteFile(crash_detected, "", 0);
-  IgnoreActiveUseUpdate();
-  EXPECT_CALL(*kernel_crash_interval_, Flush())
-      .Times(1)
-      .RetiresOnSaturation();
-  daemon_.CheckKernelCrash(kKernelCrashDetected);
+  EXPECT_TRUE(file_util::PathExists(crash_detected));
+  EXPECT_TRUE(daemon_.CheckSystemCrash(kKernelCrashDetected));
+  EXPECT_FALSE(file_util::PathExists(crash_detected));
+  EXPECT_FALSE(daemon_.CheckSystemCrash(kKernelCrashDetected));
+  EXPECT_FALSE(file_util::PathExists(crash_detected));
   file_util::Delete(crash_detected, false);
 }
 
-TEST_F(MetricsDaemonTest, DailyUseReporter) {
+TEST_F(MetricsDaemonTest, ReportDailyUse) {
   ExpectDailyUseTimeMetric(/* sample */ 2);
-  MetricsDaemon::DailyUseReporter(&daemon_, /* tag */ 20, /* count */ 90);
+  MetricsDaemon::ReportDailyUse(&daemon_, /* tag */ 20, /* count */ 90);
 
   ExpectDailyUseTimeMetric(/* sample */ 1);
-  MetricsDaemon::DailyUseReporter(&daemon_, /* tag */ 23, /* count */ 89);
+  MetricsDaemon::ReportDailyUse(&daemon_, /* tag */ 23, /* count */ 89);
 
   // There should be no metrics generated for the calls below.
-  MetricsDaemon::DailyUseReporter(&daemon_, /* tag */ 50, /* count */ 0);
-  MetricsDaemon::DailyUseReporter(&daemon_, /* tag */ 60, /* count */ -5);
+  MetricsDaemon::ReportDailyUse(&daemon_, /* tag */ 50, /* count */ 0);
+  MetricsDaemon::ReportDailyUse(&daemon_, /* tag */ 60, /* count */ -5);
 }
 
-TEST_F(MetricsDaemonTest, KernelCrashIntervalReporter) {
+TEST_F(MetricsDaemonTest, ReportKernelCrashInterval) {
   ExpectMetric(MetricsDaemon::kMetricKernelCrashIntervalName, 50,
-               MetricsDaemon::kMetricKernelCrashIntervalMin,
-               MetricsDaemon::kMetricKernelCrashIntervalMax,
-               MetricsDaemon::kMetricKernelCrashIntervalBuckets);
-  MetricsDaemon::KernelCrashIntervalReporter(&daemon_, 0, 50);
+               MetricsDaemon::kMetricCrashIntervalMin,
+               MetricsDaemon::kMetricCrashIntervalMax,
+               MetricsDaemon::kMetricCrashIntervalBuckets);
+  MetricsDaemon::ReportKernelCrashInterval(&daemon_, 0, 50);
+}
+
+TEST_F(MetricsDaemonTest, ReportUncleanShutdownInterval) {
+  ExpectMetric(MetricsDaemon::kMetricUncleanShutdownIntervalName, 50,
+               MetricsDaemon::kMetricCrashIntervalMin,
+               MetricsDaemon::kMetricCrashIntervalMax,
+               MetricsDaemon::kMetricCrashIntervalBuckets);
+  MetricsDaemon::ReportUncleanShutdownInterval(&daemon_, 0, 50);
 }
 
 TEST_F(MetricsDaemonTest, LookupNetworkState) {
@@ -244,6 +269,12 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
 
   IgnoreActiveUseUpdate();
   EXPECT_CALL(*user_crash_interval_, Flush())
+      .Times(1)
+      .RetiresOnSaturation();
+  EXPECT_CALL(*user_crashes_daily_, Update(1))
+      .Times(1)
+      .RetiresOnSaturation();
+  EXPECT_CALL(*any_crashes_daily_, Update(1))
       .Times(1)
       .RetiresOnSaturation();
   msg = NewDBusSignalString("/",
@@ -379,7 +410,19 @@ TEST_F(MetricsDaemonTest, ProcessKernelCrash) {
   EXPECT_CALL(*kernel_crash_interval_, Flush())
       .Times(1)
       .RetiresOnSaturation();
+  EXPECT_CALL(*kernel_crashes_daily_, Update(1));
+  EXPECT_CALL(*any_crashes_daily_, Update(1));
   daemon_.ProcessKernelCrash();
+}
+
+TEST_F(MetricsDaemonTest, ProcessUncleanShutdown) {
+  IgnoreActiveUseUpdate();
+  EXPECT_CALL(*unclean_shutdown_interval_, Flush())
+      .Times(1)
+      .RetiresOnSaturation();
+  EXPECT_CALL(*unclean_shutdowns_daily_, Update(1));
+  EXPECT_CALL(*any_crashes_daily_, Update(1));
+  daemon_.ProcessUncleanShutdown();
 }
 
 TEST_F(MetricsDaemonTest, ProcessUserCrash) {
@@ -387,6 +430,8 @@ TEST_F(MetricsDaemonTest, ProcessUserCrash) {
   EXPECT_CALL(*user_crash_interval_, Flush())
       .Times(1)
       .RetiresOnSaturation();
+  EXPECT_CALL(*user_crashes_daily_, Update(1));
+  EXPECT_CALL(*any_crashes_daily_, Update(1));
   daemon_.ProcessUserCrash();
 }
 
@@ -469,12 +514,20 @@ TEST_F(MetricsDaemonTest, SetUserActiveStateTimeJump) {
   EXPECT_EQ(TestTime(10 * kSecondsPerDay + 1000), daemon_.user_active_last_);
 }
 
-TEST_F(MetricsDaemonTest, UserCrashIntervalReporter) {
+TEST_F(MetricsDaemonTest, ReportUserCrashInterval) {
   ExpectMetric(MetricsDaemon::kMetricUserCrashIntervalName, 50,
-               MetricsDaemon::kMetricUserCrashIntervalMin,
-               MetricsDaemon::kMetricUserCrashIntervalMax,
-               MetricsDaemon::kMetricUserCrashIntervalBuckets);
-  MetricsDaemon::UserCrashIntervalReporter(&daemon_, 0, 50);
+               MetricsDaemon::kMetricCrashIntervalMin,
+               MetricsDaemon::kMetricCrashIntervalMax,
+               MetricsDaemon::kMetricCrashIntervalBuckets);
+  MetricsDaemon::ReportUserCrashInterval(&daemon_, 0, 50);
+}
+
+TEST_F(MetricsDaemonTest, ReportCrashesDailyFrequency) {
+  ExpectMetric("foobar", 50,
+               MetricsDaemon::kMetricCrashesDailyMin,
+               MetricsDaemon::kMetricCrashesDailyMax,
+               MetricsDaemon::kMetricCrashesDailyBuckets);
+  MetricsDaemon::ReportCrashesDailyFrequency("foobar", &daemon_, 50);
 }
 
 int main(int argc, char** argv) {
