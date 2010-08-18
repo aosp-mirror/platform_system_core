@@ -27,8 +27,6 @@
 #include <arpa/inet.h>
 
 #include <linux/if.h>
-#include <linux/if_ether.h>
-#include <linux/if_arp.h>
 #include <linux/sockios.h>
 #include <linux/route.h>
 #include <linux/wireless.h>
@@ -47,7 +45,7 @@
 static int ifc_ctl_sock = -1;
 void printerr(char *fmt, ...);
 
-static const char *ipaddr_to_string(in_addr_t addr)
+static const char *ipaddr_to_string(uint32_t addr)
 {
     struct in_addr in_addr;
 
@@ -90,7 +88,7 @@ int ifc_get_hwaddr(const char *name, void *ptr)
     r = ioctl(ifc_ctl_sock, SIOCGIFHWADDR, &ifr);
     if(r < 0) return -1;
 
-    memcpy(ptr, &ifr.ifr_hwaddr.sa_data, ETH_ALEN);
+    memcpy(ptr, &ifr.ifr_hwaddr.sa_data, 6);
     return 0;    
 }
 
@@ -143,17 +141,6 @@ int ifc_set_addr(const char *name, in_addr_t addr)
     init_sockaddr_in(&ifr.ifr_addr, addr);
     
     return ioctl(ifc_ctl_sock, SIOCSIFADDR, &ifr);
-}
-
-int ifc_set_hwaddr(const char *name, const void *ptr)
-{
-    int r;
-    struct ifreq ifr;
-    ifc_init_ifr(name, &ifr);
-
-    ifr.ifr_hwaddr.sa_family = ARPHRD_ETHER;
-    memcpy(&ifr.ifr_hwaddr.sa_data, ptr, ETH_ALEN);
-    return ioctl(ifc_ctl_sock, SIOCSIFHWADDR, &ifr);
 }
 
 int ifc_set_mask(const char *name, in_addr_t mask)
@@ -442,9 +429,9 @@ ifc_configure(const char *ifname,
 
     ifc_close();
 
-    snprintf(dns_prop_name, sizeof(dns_prop_name), "net.%s.dns1", ifname);
+    snprintf(dns_prop_name, sizeof(dns_prop_name), "dhcp.%s.dns1", ifname);
     property_set(dns_prop_name, dns1 ? ipaddr_to_string(dns1) : "");
-    snprintf(dns_prop_name, sizeof(dns_prop_name), "net.%s.dns2", ifname);
+    snprintf(dns_prop_name, sizeof(dns_prop_name), "dhcp.%s.dns2", ifname);
     property_set(dns_prop_name, dns2 ? ipaddr_to_string(dns2) : "");
 
     return 0;
