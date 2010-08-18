@@ -13,6 +13,9 @@ CHROMEOS_PRODUCT=ChromeOS
 # contents includes our machine's anonymized guid.
 CONSENT_ID="/home/chronos/Consent To Send Stats"
 
+# Path to find which is required for computing the crash rate.
+FIND="/usr/bin/find"
+
 # Send up to 8 crashes per day.
 MAX_CRASH_RATE=8
 
@@ -101,7 +104,7 @@ is_on_3g() {
 check_rate() {
   mkdir -p ${TIMESTAMPS_DIR}
   # Only consider minidumps written in the past 24 hours by removing all older.
-  find "${TIMESTAMPS_DIR}" -mindepth 1 -mmin +$((24 * 60)) -exec rm '{}' ';'
+  ${FIND} "${TIMESTAMPS_DIR}" -mindepth 1 -mmin +$((24 * 60)) -exec rm '{}' ';'
   local sends_in_24hrs=$(echo "${TIMESTAMPS_DIR}"/* | wc -w)
   lecho "Current send rate: ${sends_in_24hrs}sends/24hrs"
   if [ ${sends_in_24hrs} -ge ${MAX_CRASH_RATE} ]; then
@@ -224,6 +227,11 @@ main() {
   fi
 
   check_not_already_running
+
+  if [ ! -x "${FIND}" ]; then
+    lecho "Fatal: Crash sending disabled: ${FIND} not found."
+    exit 1
+  fi
 
   TMP_DIR="$(mktemp -d /tmp/crash_sender.XXXX)"
   trap cleanup_tmp_dir EXIT INT
