@@ -10,8 +10,8 @@
 #include "gflags/gflags.h"
 #include "gtest/gtest.h"
 
-int s_crashes = 0;
-bool s_metrics = false;
+static int s_crashes = 0;
+static bool s_metrics = false;
 
 static const char kFilePath[] = "/my/path";
 
@@ -50,14 +50,16 @@ TEST_F(UserCollectorTest, EnableOK) {
                                                    &contents));
   ASSERT_EQ("|/my/path --signal=%s --pid=%p", contents);
   ASSERT_EQ(s_crashes, 0);
-  ASSERT_NE(logging_.log().find("Enabling crash handling"), std::string::npos);
+  ASSERT_NE(logging_.log().find("Enabling user crash handling"),
+            std::string::npos);
 }
 
 TEST_F(UserCollectorTest, EnableNoFileAccess) {
   collector_.set_core_pattern_file("/does_not_exist");
   ASSERT_FALSE(collector_.Enable());
   ASSERT_EQ(s_crashes, 0);
-  ASSERT_NE(logging_.log().find("Enabling crash handling"), std::string::npos);
+  ASSERT_NE(logging_.log().find("Enabling user crash handling"),
+            std::string::npos);
   ASSERT_NE(logging_.log().find("Unable to write /does_not_exist"),
             std::string::npos);
 }
@@ -69,7 +71,7 @@ TEST_F(UserCollectorTest, DisableOK) {
                                           &contents));
   ASSERT_EQ("core", contents);
   ASSERT_EQ(s_crashes, 0);
-  ASSERT_NE(logging_.log().find("Disabling crash handling"),
+  ASSERT_NE(logging_.log().find("Disabling user crash handling"),
             std::string::npos);
 }
 
@@ -77,7 +79,8 @@ TEST_F(UserCollectorTest, DisableNoFileAccess) {
   collector_.set_core_pattern_file("/does_not_exist");
   ASSERT_FALSE(collector_.Disable());
   ASSERT_EQ(s_crashes, 0);
-  ASSERT_NE(logging_.log().find("Disabling crash handling"), std::string::npos);
+  ASSERT_NE(logging_.log().find("Disabling user crash handling"),
+            std::string::npos);
   ASSERT_NE(logging_.log().find("Unable to write /does_not_exist"),
             std::string::npos);
 }
@@ -206,54 +209,6 @@ TEST_F(UserCollectorTest, GetUserInfoFromName) {
   EXPECT_EQ(0, gid);
 }
 
-TEST_F(UserCollectorTest, GetCrashDirectoryInfo) {
-  FilePath path;
-  const int kRootUid = 0;
-  const int kRootGid = 0;
-  const int kNtpUid = 5;
-  const int kChronosUid = 1000;
-  const int kChronosGid = 1001;
-  const mode_t kExpectedSystemMode = 01755;
-  const mode_t kExpectedUserMode = 0755;
-
-  mode_t directory_mode;
-  uid_t directory_owner;
-  gid_t directory_group;
-
-  path = collector_.GetCrashDirectoryInfo(kRootUid,
-                                          kChronosUid,
-                                          kChronosGid,
-                                          &directory_mode,
-                                          &directory_owner,
-                                          &directory_group);
-  EXPECT_EQ("/var/spool/crash", path.value());
-  EXPECT_EQ(kExpectedSystemMode, directory_mode);
-  EXPECT_EQ(kRootUid, directory_owner);
-  EXPECT_EQ(kRootGid, directory_group);
-
-  path = collector_.GetCrashDirectoryInfo(kNtpUid,
-                                          kChronosUid,
-                                          kChronosGid,
-                                          &directory_mode,
-                                          &directory_owner,
-                                          &directory_group);
-  EXPECT_EQ("/var/spool/crash", path.value());
-  EXPECT_EQ(kExpectedSystemMode, directory_mode);
-  EXPECT_EQ(kRootUid, directory_owner);
-  EXPECT_EQ(kRootGid, directory_group);
-
-  path = collector_.GetCrashDirectoryInfo(kChronosUid,
-                                          kChronosUid,
-                                          kChronosGid,
-                                          &directory_mode,
-                                          &directory_owner,
-                                          &directory_group);
-  EXPECT_EQ("/home/chronos/user/crash", path.value());
-  EXPECT_EQ(kExpectedUserMode, directory_mode);
-  EXPECT_EQ(kChronosUid, directory_owner);
-  EXPECT_EQ(kChronosGid, directory_group);
-}
-
 TEST_F(UserCollectorTest, CopyOffProcFilesBadPath) {
   // Try a path that is not writable.
   ASSERT_FALSE(collector_.CopyOffProcFiles(pid_, FilePath("/bad/path")));
@@ -293,20 +248,6 @@ TEST_F(UserCollectorTest, CopyOffProcFilesOK) {
               file_util::PathExists(
                   container_path.Append(expectations[i].name)));
   }
-}
-
-TEST_F(UserCollectorTest, FormatDumpBasename) {
-  struct tm tm = {0};
-  tm.tm_sec = 15;
-  tm.tm_min = 50;
-  tm.tm_hour = 13;
-  tm.tm_mday = 23;
-  tm.tm_mon = 4;
-  tm.tm_year = 110;
-  tm.tm_isdst = -1;
-  std::string basename =
-      collector_.FormatDumpBasename("foo", mktime(&tm), 100);
-  ASSERT_EQ("foo.20100523.135015.100", basename);
 }
 
 int main(int argc, char **argv) {

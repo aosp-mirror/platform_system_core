@@ -4,9 +4,18 @@
 
 CRASH_REPORTER = crash_reporter
 REPORTER_BINS = $(CRASH_REPORTER)
-CRASH_OBJS = system_logging.o user_collector.o
+CRASH_OBJS = \
+	crash_collector.o \
+	kernel_collector.o \
+	system_logging.o \
+	unclean_shutdown_collector.o \
+	user_collector.o
 TEST_OBJS = $(CRASH_OBJS) system_logging_mock.o
-TEST_BINS = user_collector_test
+TEST_BINS = \
+	crash_collector_test \
+	kernel_collector_test \
+	unclean_shutdown_collector_test \
+	user_collector_test
 
 # -lglib-2.0 is needed by libbase.a now.
 COMMON_LIBS = -lbase -lpthread -lglib-2.0 -lgflags -lrt
@@ -24,7 +33,7 @@ $(CRASH_REPORTER): crash_reporter.o $(CRASH_OBJS)
 
 tests: $(TEST_BINS)
 
-user_collector_test: user_collector_test.o $(TEST_OBJS)
+%_test: %_test.o $(TEST_OBJS)
 	$(CXX) $(CXXFLAGS) $(LIB_DIRS) $^ $(TEST_LIBS) -o $@
 
 .cc.o:

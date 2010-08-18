@@ -7,7 +7,9 @@
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/string_util.h"
+#include "crash-reporter/kernel_collector.h"
 #include "crash-reporter/system_logging.h"
+#include "crash-reporter/unclean_shutdown_collector.h"
 #include "crash-reporter/user_collector.h"
 #include "gflags/gflags.h"
 #include "metrics/metrics_library.h"
@@ -22,69 +24,52 @@ DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
 #pragma GCC diagnostic error "-Wstrict-aliasing"
 
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
-static const char kEmpty[] = "";
+static const char kUserCrashSignal[] =
+    "org.chromium.CrashReporter.UserCrash";
 static const char kUncleanShutdownFile[] =
     "/var/lib/crash_reporter/pending_clean_shutdown";
 
 
 // Enumeration of kinds of crashes to be used in the CrashCounter histogram.
 enum CrashKinds {
-  kCrashKindKernel = 1,
-  kCrashKindUser   = 2,
+  kCrashKindUncleanShutdown = 1,
+  kCrashKindUser = 2,
+  kCrashKindKernel = 3,
   kCrashKindMax
 };
 
 static MetricsLibrary s_metrics_lib;
 static SystemLoggingImpl s_system_log;
 
-static bool IsMetricsCollectionAllowed() {
-  // TODO(kmixter): Eventually check system tainted state and
-  // move this down in metrics library where it would be explicitly
-  // checked when asked to send stats.
+static bool IsFeedbackAllowed() {
+  // Once crosbug.com/5814 is fixed, call the is opted in function
+  // here.
   return true;
 }
 
-static void CheckUncleanShutdown() {
-  FilePath unclean_file_path(kUncleanShutdownFile);
-  if (!file_util::PathExists(unclean_file_path)) {
-    return;
-  }
-  s_system_log.LogWarning("Last shutdown was not clean");
-  if (IsMetricsCollectionAllowed()) {
-    s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
-                                kCrashKindKernel,
-                                kCrashKindMax);
-  }
-  if (!file_util::Delete(unclean_file_path, false)) {
-    s_system_log.LogError("Failed to delete unclean shutdown file %s",
-                          kUncleanShutdownFile);
-  }
-
-  // Touch a file to notify the metrics daemon that a kernel crash has
-  // been detected so that it can log the time since the last kernel
-  // crash.
-  static const char kKernelCrashDetectedFile[] = "/tmp/kernel-crash-detected";
-  FilePath crash_detected(kKernelCrashDetectedFile);
-  file_util::WriteFile(crash_detected, kEmpty, 0);
+static bool TouchFile(const FilePath &file_path) {
+  return file_util::WriteFile(file_path, "", 0) == 0;
 }
 
-static bool PrepareUncleanShutdownCheck() {
-  FilePath file_path(kUncleanShutdownFile);
-  file_util::CreateDirectory(file_path.DirName());
-  return file_util::WriteFile(file_path, kEmpty, 0) == 0;
+static void CountKernelCrash() {
+  s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
+                              kCrashKindKernel,
+                              kCrashKindMax);
 }
 
-static void SignalCleanShutdown() {
-  s_system_log.LogInfo("Clean shutdown signalled");
-  file_util::Delete(FilePath(kUncleanShutdownFile), false);
+static void CountUncleanShutdown() {
+  s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
+                              kCrashKindUncleanShutdown,
+                              kCrashKindMax);
 }
 
 static void CountUserCrash() {
-  CHECK(IsMetricsCollectionAllowed());
   s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
                               kCrashKindUser,
                               kCrashKindMax);
-
+  std::string command = StringPrintf(
+      "/usr/bin/dbus-send --type=signal --system / \"%s\"",
+      kUserCrashSignal);
   // Announce through D-Bus whenever a user crash happens. This is
   // used by the metrics daemon to log active use time between
   // crashes.
@@ -93,42 +78,47 @@ static void CountUserCrash() {
   // using a dbus library directly. However, this should run
   // relatively rarely and longer term we may need to implement a
   // better way to do this that doesn't rely on D-Bus.
-  int status __attribute__((unused)) =
-      system("/usr/bin/dbus-send --type=signal --system / "
-             "org.chromium.CrashReporter.UserCrash");
+
+  int status __attribute__((unused)) = system(command.c_str());
 }
 
-int main(int argc, char *argv[]) {
-  google::ParseCommandLineFlags(&argc, &argv, true);
-  FilePath my_path(argv[0]);
-  file_util::AbsolutePath(&my_path);
-  s_metrics_lib.Init();
-  s_system_log.Initialize(my_path.BaseName().value().c_str());
-  UserCollector user_collector;
-  user_collector.Initialize(CountUserCrash,
-                            my_path.value(),
-                            IsMetricsCollectionAllowed,
-                            &s_system_log,
-                            true);  // generate_diagnostics
+static int Initialize(KernelCollector *kernel_collector,
+                      UserCollector *user_collector,
+                      UncleanShutdownCollector *unclean_shutdown_collector) {
+  CHECK(!FLAGS_clean_shutdown) << "Incompatible options";
 
-  if (FLAGS_init) {
-    CHECK(!FLAGS_clean_shutdown) << "Incompatible options";
-    user_collector.Enable();
-    if (FLAGS_unclean_check) {
-      CheckUncleanShutdown();
-      if (!PrepareUncleanShutdownCheck()) {
-        s_system_log.LogError("Unable to create shutdown check file");
-      }
+  bool was_kernel_crash = false;
+  bool was_unclean_shutdown = false;
+  if (kernel_collector->IsEnabled()) {
+    was_kernel_crash = kernel_collector->Collect();
+  }
+
+  if (FLAGS_unclean_check) {
+    was_unclean_shutdown = unclean_shutdown_collector->Collect();
+  }
+
+  // Touch a file to notify the metrics daemon that a kernel
+  // crash has been detected so that it can log the time since
+  // the last kernel crash.
+  if (IsFeedbackAllowed()) {
+    if (was_kernel_crash) {
+      TouchFile(FilePath("/tmp/kernel-crash-detected"));
+    } else if (was_unclean_shutdown) {
+      // We only count an unclean shutdown if it did not come with
+      // an associated kernel crash.
+      TouchFile(FilePath("/tmp/unclean-shutdown-detected"));
     }
-    return 0;
   }
 
-  if (FLAGS_clean_shutdown) {
-    SignalCleanShutdown();
-    user_collector.Disable();
-    return 0;
-  }
+  // Must enable the unclean shutdown collector *after* collecting.
+  kernel_collector->Enable();
+  unclean_shutdown_collector->Enable();
+  user_collector->Enable();
 
+  return 0;
+}
+
+static int HandleUserCrash(UserCollector *user_collector) {
   // Handle a specific user space crash.
   CHECK(FLAGS_signal != -1) << "Signal must be set";
   CHECK(FLAGS_pid != -1) << "PID must be set";
@@ -141,9 +131,45 @@ int main(int argc, char *argv[]) {
   }
 
   // Handle the crash, get the name of the process from procfs.
-  if (!user_collector.HandleCrash(FLAGS_signal, FLAGS_pid, NULL)) {
+  if (!user_collector->HandleCrash(FLAGS_signal, FLAGS_pid, NULL)) {
     return 1;
   }
-
   return 0;
+}
+
+
+int main(int argc, char *argv[]) {
+  google::ParseCommandLineFlags(&argc, &argv, true);
+  FilePath my_path(argv[0]);
+  file_util::AbsolutePath(&my_path);
+  s_metrics_lib.Init();
+  s_system_log.Initialize(my_path.BaseName().value().c_str());
+  KernelCollector kernel_collector;
+  kernel_collector.Initialize(CountKernelCrash,
+                              IsFeedbackAllowed,
+                              &s_system_log);
+  UserCollector user_collector;
+  user_collector.Initialize(CountUserCrash,
+                            my_path.value(),
+                            IsFeedbackAllowed,
+                            &s_system_log,
+                            true);  // generate_diagnostics
+  UncleanShutdownCollector unclean_shutdown_collector;
+  unclean_shutdown_collector.Initialize(CountUncleanShutdown,
+                                        IsFeedbackAllowed,
+                                        &s_system_log);
+
+  if (FLAGS_init) {
+    return Initialize(&kernel_collector,
+                      &user_collector,
+                      &unclean_shutdown_collector);
+  }
+
+  if (FLAGS_clean_shutdown) {
+    unclean_shutdown_collector.Disable();
+    user_collector.Disable();
+    return 0;
+  }
+
+  return HandleUserCrash(&user_collector);
 }

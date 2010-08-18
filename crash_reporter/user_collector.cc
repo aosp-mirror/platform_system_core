@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "crash-reporter/user_collector.h"
+
 #include <grp.h>  // For struct group.
 #include <pwd.h>  // For struct passwd.
 #include <sys/types.h>  // For getpwuid_r and getgrnam_r.
@@ -11,27 +13,14 @@
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/string_util.h"
-#include "crash-reporter/user_collector.h"
-#include "metrics/metrics_library.h"
+#include "crash-reporter/system_logging.h"
 
 // This procfs file is used to cause kernel core file writing to
 // instead pipe the core file into a user space process.  See
 // core(5) man page.
 static const char kCorePatternFile[] = "/proc/sys/kernel/core_pattern";
 static const char kCoreToMinidumpConverterPath[] = "/usr/bin/core2md";
-static const char kDefaultUserName[] = "chronos";
 static const char kLeaveCoreFile[] = "/root/.leave_core";
-static const char kSystemCrashPath[] = "/var/spool/crash";
-static const char kUserCrashPath[] = "/home/chronos/user/crash";
-
-// Directory mode of the user crash spool directory.
-static const mode_t kUserCrashPathMode = 0755;
-
-// Directory mode of the system crash spool directory.
-static const mode_t kSystemCrashPathMode = 01755;
-
-static const uid_t kRootOwner = 0;
-static const uid_t kRootGroup = 0;
 
 const char *UserCollector::kUserId = "Uid:\t";
 const char *UserCollector::kGroupId = "Gid:\t";
@@ -39,10 +28,7 @@ const char *UserCollector::kGroupId = "Gid:\t";
 UserCollector::UserCollector()
     : generate_diagnostics_(false),
       core_pattern_file_(kCorePatternFile),
-      count_crash_function_(NULL),
-      initialized_(false),
-      is_feedback_allowed_function_(NULL),
-      logger_(NULL) {
+      initialized_(false) {
 }
 
 void UserCollector::Initialize(
@@ -51,14 +37,10 @@ void UserCollector::Initialize(
     UserCollector::IsFeedbackAllowedFunction is_feedback_allowed_function,
     SystemLogging *logger,
     bool generate_diagnostics) {
-  CHECK(count_crash_function != NULL);
-  CHECK(is_feedback_allowed_function != NULL);
-  CHECK(logger != NULL);
-
-  count_crash_function_ = count_crash_function;
+  CrashCollector::Initialize(count_crash_function,
+                             is_feedback_allowed_function,
+                             logger);
   our_path_ = our_path;
-  is_feedback_allowed_function_ = is_feedback_allowed_function;
-  logger_ = logger;
   initialized_ = true;
   generate_diagnostics_ = generate_diagnostics;
 }
@@ -76,7 +58,8 @@ std::string UserCollector::GetPattern(bool enabled) const {
 
 bool UserCollector::SetUpInternal(bool enabled) {
   CHECK(initialized_);
-  logger_->LogInfo("%s crash handling", enabled ? "Enabling" : "Disabling");
+  logger_->LogInfo("%s user crash handling",
+                   enabled ? "Enabling" : "Disabling");
   std::string pattern = GetPattern(enabled);
   if (file_util::WriteFile(FilePath(core_pattern_file_),
                            pattern.c_str(),
@@ -161,24 +144,6 @@ bool UserCollector::GetIdFromStatus(const char *prefix,
   return true;
 }
 
-bool UserCollector::GetUserInfoFromName(const std::string &name,
-                                        uid_t *uid,
-                                        gid_t *gid) {
-  char storage[256];
-  struct passwd passwd_storage;
-  struct passwd *passwd_result = NULL;
-
-  if (getpwnam_r(name.c_str(), &passwd_storage, storage, sizeof(storage),
-                 &passwd_result) != 0 || passwd_result == NULL) {
-    logger_->LogError("Cannot find user named %s", name.c_str());
-    return false;
-  }
-
-  *uid = passwd_result->pw_uid;
-  *gid = passwd_result->pw_gid;
-  return true;
-}
-
 bool UserCollector::CopyOffProcFiles(pid_t pid,
                                      const FilePath &container_dir) {
   if (!file_util::CreateDirectory(container_dir)) {
@@ -208,26 +173,6 @@ bool UserCollector::CopyOffProcFiles(pid_t pid,
   return true;
 }
 
-FilePath UserCollector::GetCrashDirectoryInfo(
-    uid_t process_euid,
-    uid_t default_user_id,
-    gid_t default_user_group,
-    mode_t *mode,
-    uid_t *directory_owner,
-    gid_t *directory_group) {
-  if (process_euid == default_user_id) {
-    *mode = kUserCrashPathMode;
-    *directory_owner = default_user_id;
-    *directory_group = default_user_group;
-    return FilePath(kUserCrashPath);
-  } else {
-    *mode = kSystemCrashPathMode;
-    *directory_owner = kRootOwner;
-    *directory_group = kRootGroup;
-    return FilePath(kSystemCrashPath);
-  }
-}
-
 bool UserCollector::GetCreatedCrashDirectory(pid_t pid,
                                              FilePath *crash_file_path) {
   FilePath process_path = GetProcessPath(pid);
@@ -242,64 +187,8 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid,
     logger_->LogError("Could not find euid in status file");
     return false;
   }
-  uid_t default_user_id;
-  gid_t default_user_group;
-  if (!GetUserInfoFromName(kDefaultUserName,
-                           &default_user_id,
-                           &default_user_group)) {
-    logger_->LogError("Could not find default user info");
-    return false;
-  }
-  mode_t directory_mode;
-  uid_t directory_owner;
-  gid_t directory_group;
-  *crash_file_path =
-      GetCrashDirectoryInfo(process_euid,
-                            default_user_id,
-                            default_user_group,
-                            &directory_mode,
-                            &directory_owner,
-                            &directory_group);
-
-
-  if (!file_util::PathExists(*crash_file_path)) {
-    // Create the spool directory with the appropriate mode (regardless of
-    // umask) and ownership.
-    mode_t old_mask = umask(0);
-    if (mkdir(crash_file_path->value().c_str(), directory_mode) < 0 ||
-        chown(crash_file_path->value().c_str(),
-              directory_owner,
-              directory_group) < 0) {
-      logger_->LogError("Unable to create appropriate crash directory");
-      return false;
-    }
-    umask(old_mask);
-  }
-
-  if (!file_util::PathExists(*crash_file_path)) {
-    logger_->LogError("Unable to create crash directory %s",
-                      crash_file_path->value().c_str());
-    return false;
-  }
-
-
-  return true;
-}
-
-std::string UserCollector::FormatDumpBasename(const std::string &exec_name,
-                                              time_t timestamp,
-                                              pid_t pid) {
-  struct tm tm;
-  localtime_r(&timestamp, &tm);
-  return StringPrintf("%s.%04d%02d%02d.%02d%02d%02d.%d",
-                      exec_name.c_str(),
-                      tm.tm_year + 1900,
-                      tm.tm_mon + 1,
-                      tm.tm_mday,
-                      tm.tm_hour,
-                      tm.tm_min,
-                      tm.tm_sec,
-                      pid);
+  return GetCreatedCrashDirectoryByEuid(process_euid,
+                                        crash_file_path);
 }
 
 bool UserCollector::CopyStdinToCoreFile(const FilePath &core_path) {
@@ -360,13 +249,13 @@ bool UserCollector::GenerateDiagnostics(pid_t pid,
     return false;
   }
 
-  FilePath spool_path;
-  if (!GetCreatedCrashDirectory(pid, &spool_path)) {
+  FilePath crash_path;
+  if (!GetCreatedCrashDirectory(pid, &crash_path)) {
     file_util::Delete(container_dir, true);
     return false;
   }
   std::string dump_basename = FormatDumpBasename(exec_name, time(NULL), pid);
-  FilePath core_path = spool_path.Append(
+  FilePath core_path = crash_path.Append(
       StringPrintf("%s.core", dump_basename.c_str()));
 
   if (!CopyStdinToCoreFile(core_path)) {
@@ -374,7 +263,7 @@ bool UserCollector::GenerateDiagnostics(pid_t pid,
     return false;
   }
 
-  FilePath minidump_path = spool_path.Append(
+  FilePath minidump_path = crash_path.Append(
       StringPrintf("%s.dmp", dump_basename.c_str()));
 
   bool conversion_result = true;
@@ -414,10 +303,10 @@ bool UserCollector::HandleCrash(int signal, int pid, const char *force_exec) {
 
   if (is_feedback_allowed_function_()) {
     count_crash_function_();
-  }
 
-  if (generate_diagnostics_) {
-    return GenerateDiagnostics(pid, exec);
+    if (generate_diagnostics_) {
+      return GenerateDiagnostics(pid, exec);
+    }
   }
   return true;
 }

@@ -19,18 +19,19 @@ FIND="/usr/bin/find"
 # Send up to 8 crashes per day.
 MAX_CRASH_RATE=8
 
-# URL to send non-official build crashes to.
-MINIDUMP_UPLOAD_STAGING_URL="http://clients2.google.com/cr/staging_report"
-
-# URL to send official build crashes to.
-MINIDUMP_UPLOAD_PROD_URL="http://clients2.google.com/cr/report"
-
 # File whose existence mocks crash sending.  If empty we pretend the
 # crash sending was successful, otherwise unsuccessful.
 MOCK_CRASH_SENDING="/tmp/mock-crash-sending"
 
 # File whose existence causes crash sending to be delayed (for testing).
-PAUSE_CRASH_SENDING="/tmp/pause-crash-sending"
+# Must be stateful to enable testing kernel crashes.
+PAUSE_CRASH_SENDING="/var/lib/crash_sender_paused"
+
+# URL to send non-official build crash reports to.
+REPORT_UPLOAD_STAGING_URL="http://clients2.google.com/cr/staging_report"
+
+# URL to send official build crash reports to.
+REPORT_UPLOAD_PROD_URL="http://clients2.google.com/cr/report"
 
 # File whose existence implies we're running and not to start again.
 RUN_FILE="/var/run/crash_sender.pid"
@@ -118,31 +119,35 @@ check_rate() {
 }
 
 # Return if $1 is a .core file
-is_core_file() {
-  local filename=$1
-  [ "${filename##*.}" = "core" ]
+get_kind() {
+  local kind="${1##*.}"
+  if [ "${kind}" = "dmp" ]; then
+    kind="minidump"
+  fi
+  echo ${kind}
+}
+
+get_exec_name() {
+  local filename=$(basename "$1")
+  echo "${filename%%.*}"
 }
 
 send_crash() {
+  local report_path="$1"
+  local kind=$(get_kind "${report_path}")
+  local exec_name=$(get_exec_name "${report_path}")
   local sleep_time=$(generate_uniform_random $SECONDS_SEND_SPREAD)
-  local url="${MINIDUMP_UPLOAD_STAGING_URL}"
+  local url="${REPORT_UPLOAD_STAGING_URL}"
   if is_official; then
-    url="${MINIDUMP_UPLOAD_PROD_URL}"
+    url="${REPORT_UPLOAD_PROD_URL}"
   fi
   lecho "Sending crash:"
   lecho "  Scheduled to send in ${sleep_time}s"
-  lecho "  Minidump: ${minidump_path}"
+  lecho "  Report: ${report_path} (${kind})"
   lecho "  URL: ${url}"
   lecho "  Product: ${CHROMEOS_PRODUCT}"
   lecho "  Version: ${chromeos_version}"
-  if [ -s "${minidump_path}" ]; then
-    # We cannot tell much from the minidump without symbols, but we can tell
-    # at least what modules were loaded at the time of crash
-    local modules="$(/usr/bin/minidump_dump "${minidump_path}" 2>&- | \
-                     grep 'code_file' | sed -e 's/^.* = "//g;s/"//g' | \
-                     tr '\n' ' ')"
-    lecho "  Mapped: ${modules}"
-  fi
+  lecho "  Exec name: ${exec_name}"
   if [ -f "${MOCK_CRASH_SENDING}" ]; then
     local mock_in=$(cat "${MOCK_CRASH_SENDING}")
     if [ "${mock_in}" = "" ]; then
@@ -166,9 +171,10 @@ send_crash() {
   curl "${url}" \
     -F "prod=${CHROMEOS_PRODUCT}" \
     -F "ver=${chromeos_version}" \
-    -F "upload_file_minidump=@${minidump_path}" \
+    -F "upload_file_${kind}=@${report_path}" \
+    -F "exec_name=${exec_name}" \
     -F "guid=<${CONSENT_ID}" -o "${report_id}" 2>"${curl_stderr}"
-  local curl_result=$?
+  curl_result=$?
   set -e
 
   if [ ${curl_result} -eq 0 ]; then
@@ -194,28 +200,34 @@ send_crashes() {
     return
   fi
   for file in $(ls -1t "${dir}"); do
-    local minidump_path="${dir}/${file}"
-    lecho "Considering file ${minidump_path}"
-    if is_core_file "${minidump_path}"; then
+    local report_path="${dir}/${file}"
+    lecho "Considering file ${report_path}"
+    local kind=$(get_kind "${report_path}")
+
+    if [ "${kind}" = "core" ]; then
       lecho "Ignoring core file."
+      continue
+    elif [ "${kind}" != "minidump" ] && [ "${kind}" != "kcrash" ]; then
+      lecho "Unknown report kind: ${kind}.  Removing report."
+      rm -f "${report_path}"
       continue
     fi
     if ! check_rate; then
-      lecho "Sending ${minidump_path} would exceed rate.  Leaving for later."
+      lecho "Sending ${report_path} would exceed rate.  Leaving for later."
       return 0
     fi
     local chromeos_version=$(get_version)
     if is_feedback_disabled; then
       lecho "Uploading is disabled.  Removing crash."
-      rm "${minidump_path}"
+      rm "${report_path}"
     elif is_on_3g; then
       lecho "Not sending crash report while on 3G, saving for later."
-    elif send_crash ${minidump_path}; then
+    elif send_crash "${report_path}"; then
       # Send was successful, now remove
-      lecho "Successfully sent crash ${minidump_path} and removing"
-      rm "${minidump_path}"
+      lecho "Successfully sent crash ${report_path} and removing"
+      rm "${report_path}"
     else
-      lecho "Problem sending ${minidump_path}, not removing"
+      lecho "Problem sending ${report_path}, not removing"
     fi
   done
 }

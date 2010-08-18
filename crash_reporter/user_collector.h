@@ -7,17 +7,15 @@
 
 #include <string>
 
-#include "crash-reporter/system_logging.h"
+#include "crash-reporter/crash_collector.h"
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
 class FilePath;
+class SystemLogging;
 
 // User crash collector.
-class UserCollector {
+class UserCollector : public CrashCollector {
  public:
-  typedef void (*CountCrashFunction)();
-  typedef bool (*IsFeedbackAllowedFunction)();
-
   UserCollector();
 
   // Initialize the user crash collector for detection of crashes,
@@ -53,8 +51,6 @@ class UserCollector {
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesBadPath);
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesBadPid);
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesOK);
-  FRIEND_TEST(UserCollectorTest, FormatDumpBasename);
-  FRIEND_TEST(UserCollectorTest, GetCrashDirectoryInfo);
   FRIEND_TEST(UserCollectorTest, GetIdFromStatus);
   FRIEND_TEST(UserCollectorTest, GetProcessPath);
   FRIEND_TEST(UserCollectorTest, GetSymlinkTarget);
@@ -82,25 +78,13 @@ class UserCollector {
                        IdKind kind,
                        const std::string &status_contents,
                        int *id);
-  bool GetUserInfoFromName(const std::string &name,
-                           uid_t *uid,
-                           gid_t *gid);
   bool CopyOffProcFiles(pid_t pid, const FilePath &process_map);
-  FilePath GetCrashDirectoryInfo(uid_t process_euid,
-                                 uid_t default_user_id,
-                                 gid_t default_user_group,
-                                 mode_t *mode,
-                                 uid_t *directory_owner,
-                                 gid_t *directory_group);
   // Determines the crash directory for given pid based on pid's owner,
   // and creates the directory if necessary with appropriate permissions.
   // Returns true whether or not directory needed to be created, false on
   // any failure.
   bool GetCreatedCrashDirectory(pid_t pid,
                                 FilePath *crash_file_path);
-  std::string FormatDumpBasename(const std::string &exec_name,
-                                 time_t timestamp,
-                                 pid_t pid);
   bool CopyStdinToCoreFile(const FilePath &core_path);
   bool ConvertCoreToMinidump(const FilePath &core_path,
                              const FilePath &procfs_directory,
@@ -110,11 +94,8 @@ class UserCollector {
 
   bool generate_diagnostics_;
   std::string core_pattern_file_;
-  CountCrashFunction count_crash_function_;
   std::string our_path_;
   bool initialized_;
-  IsFeedbackAllowedFunction is_feedback_allowed_function_;
-  SystemLogging *logger_;
 
   static const char *kUserId;
   static const char *kGroupId;
