@@ -27,6 +27,7 @@ static char *nexttok(char **strp)
 #define SHOW_PRIO 1
 #define SHOW_TIME 2
 #define SHOW_POLICY 4
+#define SHOW_CPU  8
 
 static int display_flags = 0;
 
@@ -41,7 +42,7 @@ static int ps_line(int pid, int tid, char *namefilter)
     int ppid, tty;
     unsigned wchan, rss, vss, eip;
     unsigned utime, stime;
-    int prio, nice, rtprio, sched;
+    int prio, nice, rtprio, sched, psr;
     struct passwd *pw;
     
     sprintf(statline, "/proc/%d", pid);
@@ -122,7 +123,7 @@ static int ps_line(int pid, int tid, char *namefilter)
     nexttok(&ptr); // nswap
     nexttok(&ptr); // cnswap
     nexttok(&ptr); // exit signal
-    nexttok(&ptr); // processor
+    psr = atoi(nexttok(&ptr)); // processor
     rtprio = atoi(nexttok(&ptr)); // rt_priority
     sched = atoi(nexttok(&ptr)); // scheduling policy
     
@@ -142,7 +143,9 @@ static int ps_line(int pid, int tid, char *namefilter)
     
     if(!namefilter || !strncmp(name, namefilter, strlen(namefilter))) {
         printf("%-9s %-5d %-5d %-6d %-5d", user, pid, ppid, vss / 1024, rss * 4);
-        if(display_flags&SHOW_PRIO)
+        if (display_flags & SHOW_CPU)
+            printf(" %-2d", psr);
+        if (display_flags & SHOW_PRIO)
             printf(" %-5d %-5d %-5d %-5d", prio, nice, rtprio, sched);
         if (display_flags & SHOW_POLICY) {
             SchedPolicy p;
@@ -207,6 +210,8 @@ int ps_main(int argc, char **argv)
             display_flags |= SHOW_POLICY;
         } else if(!strcmp(argv[1],"-p")) {
             display_flags |= SHOW_PRIO;
+        } else if(!strcmp(argv[1],"-c")) {
+            display_flags |= SHOW_CPU;
         }  else if(isdigit(argv[1][0])){
             pidfilter = atoi(argv[1]);
         } else {
@@ -216,7 +221,8 @@ int ps_main(int argc, char **argv)
         argv++;
     }
 
-    printf("USER     PID   PPID  VSIZE  RSS   %s %s WCHAN    PC         NAME\n", 
+    printf("USER     PID   PPID  VSIZE  RSS   %s%s %s WCHAN    PC         NAME\n",
+           (display_flags&SHOW_CPU)?"CPU ":"",
            (display_flags&SHOW_PRIO)?"PRIO  NICE  RTPRI SCHED ":"",
            (display_flags&SHOW_POLICY)?"PCY " : "");
     while((de = readdir(d)) != 0){
