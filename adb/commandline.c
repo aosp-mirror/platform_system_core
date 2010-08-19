@@ -838,12 +838,24 @@ top:
         return adb_send_emulator_command(argc, argv);
     }
 
-    if(!strcmp(argv[0], "shell")) {
+    if(!strcmp(argv[0], "shell") || !strcmp(argv[0], "hell")) {
         int r;
         int fd;
 
+        char h = (argv[0][0] == 'h');
+
+        if (h) {
+            printf("\x1b[41;33m");
+            fflush(stdout);
+        }
+
         if(argc < 2) {
-            return interactive_shell();
+            r = interactive_shell();
+            if (h) {
+                printf("\x1b[0m");
+                fflush(stdout);
+            }
+            return r;
         }
 
         snprintf(buf, sizeof buf, "shell:%s", argv[1]);
@@ -877,6 +889,10 @@ top:
                 adb_sleep_ms(1000);
                 do_cmd(ttype, serial, "wait-for-device", 0);
             } else {
+                if (h) {
+                    printf("\x1b[0m");
+                    fflush(stdout);
+                }
                 return r;
             }
         }
