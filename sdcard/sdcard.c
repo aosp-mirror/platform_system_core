@@ -695,7 +695,7 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         out.major = FUSE_KERNEL_VERSION;
         out.minor = FUSE_KERNEL_MINOR_VERSION;
         out.max_readahead = req->max_readahead;
-        out.flags = 0;
+        out.flags = FUSE_ATOMIC_O_TRUNC;
         out.max_background = 32;
         out.congestion_threshold = 32;
         out.max_write = 256 * 1024;
