@@ -84,7 +84,7 @@ endif
 # Static library for host
 # ========================================================
 LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) $(commonHostSources)
+LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
 LOCAL_LDLIBS := -lpthread
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(hostSmpFlag)
