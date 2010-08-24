@@ -121,8 +121,6 @@ int main(int argc, char **argv)
     hdr.second_addr =  0x10F00000;
     hdr.tags_addr =    0x10000100;
 
-    hdr.page_size = pagesize;
-
     while(argc > 0){
         char *arg = argv[0];
         char *val = argv[1];
@@ -159,6 +157,8 @@ int main(int argc, char **argv)
             return usage();
         }
     }
+    hdr.page_size = pagesize;
+
 
     if(bootimg == 0) {
         fprintf(stderr,"error: no output filename specified\n");
