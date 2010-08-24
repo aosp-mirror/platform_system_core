@@ -64,6 +64,7 @@ int usage(void)
             "       [ --cmdline <kernel-commandline> ]\n"
             "       [ --board <boardname> ]\n"
             "       [ --base <address> ]\n"
+            "       [ --pagesize <pagesize> ]\n"
             "       -o|--output <filename>\n"
             );
     return 1;
