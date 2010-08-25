@@ -40,12 +40,17 @@ extern int ifc_set_addr(const char *name, in_addr_t addr);
 extern int ifc_set_mask(const char *name, in_addr_t mask);
 extern int ifc_set_hwaddr(const char *name, const void *ptr);
 
+/* This function is deprecated. Use ifc_add_route instead. */
 extern int ifc_add_host_route(const char *name, in_addr_t addr);
 extern int ifc_remove_host_routes(const char *name);
 extern int ifc_get_default_route(const char *ifname);
+/* This function is deprecated. Use ifc_add_route instead */
 extern int ifc_set_default_route(const char *ifname, in_addr_t gateway);
+/* This function is deprecated. Use ifc_add_route instead */
 extern int ifc_create_default_route(const char *name, in_addr_t addr);
 extern int ifc_remove_default_route(const char *ifname);
+extern int ifc_add_route(const char *name, const char *addr, int prefix_length,
+                         const char *gw);
 
 extern int ifc_get_info(const char *name, in_addr_t *addr, in_addr_t *mask,
                         in_addr_t *flags);
