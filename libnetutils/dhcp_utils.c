@@ -115,6 +115,14 @@ static void fill_ip_info(const char *interface,
     }
 }
 
+static const char *ipaddr_to_string(in_addr_t addr)
+{
+    struct in_addr in_addr;
+
+    in_addr.s_addr = addr;
+    return inet_ntoa(in_addr);
+}
+
 /*
  * Start the dhcp client daemon, and wait for it to finish
  * configuring the interface.
@@ -165,7 +173,13 @@ int dhcp_do_request(const char *interface,
         return -1;
     }
     if (strcmp(prop_value, "ok") == 0) {
+        char dns_prop_name[PROPERTY_KEY_MAX];
         fill_ip_info(interface, ipaddr, gateway, mask, dns1, dns2, server, lease);
+        /* copy the dhcp.XXX.dns properties to net.XXX.dns */
+        snprintf(dns_prop_name, sizeof(dns_prop_name), "net.%s.dns1", interface);
+        property_set(dns_prop_name, *dns1 ? ipaddr_to_string(*dns1) : "");
+        snprintf(dns_prop_name, sizeof(dns_prop_name), "net.%s.dns2", interface);
+        property_set(dns_prop_name, *dns2 ? ipaddr_to_string(*dns2) : "");
         return 0;
     } else {
         snprintf(errmsg, sizeof(errmsg), "DHCP result was %s", prop_value);
