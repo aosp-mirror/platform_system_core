@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "base/file_util.h"
+#include "base/string_util.h"
 #include "crash-reporter/crash_collector.h"
 #include "crash-reporter/system_logging_mock.h"
 #include "gflags/gflags.h"
@@ -20,15 +21,25 @@ bool IsMetrics() {
 }
 
 class CrashCollectorTest : public ::testing::Test {
+ public:
   void SetUp() {
     collector_.Initialize(CountCrash,
                           IsMetrics,
                           &logging_);
+    test_dir_ = FilePath("test");
+    file_util::CreateDirectory(test_dir_);
   }
+
+  void TearDown() {
+    file_util::Delete(test_dir_, true);
+  }
+
+  bool CheckHasCapacity();
+
  protected:
   SystemLoggingMock logging_;
   CrashCollector collector_;
-  pid_t pid_;
+  FilePath test_dir_;
 };
 
 TEST_F(CrashCollectorTest, Initialize) {
@@ -97,6 +108,49 @@ TEST_F(CrashCollectorTest, FormatDumpBasename) {
   std::string basename =
       collector_.FormatDumpBasename("foo", mktime(&tm), 100);
   ASSERT_EQ("foo.20100523.135015.100", basename);
+}
+
+bool CrashCollectorTest::CheckHasCapacity() {
+  static const char kFullMessage[] = "Crash directory test already full";
+  bool has_capacity = collector_.CheckHasCapacity(test_dir_);
+  bool has_message = (logging_.log().find(kFullMessage) != std::string::npos);
+  EXPECT_EQ(has_message, !has_capacity);
+  return has_capacity;
+}
+
+TEST_F(CrashCollectorTest, CheckHasCapacityOverNonCore) {
+  // Test up to kMaxCrashDirectorySize-1 non-core files can be added.
+  for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 1; ++i) {
+    EXPECT_TRUE(CheckHasCapacity());
+    file_util::WriteFile(test_dir_.Append(StringPrintf("file%d", i)), "", 0);
+  }
+
+  // Test an additional kMaxCrashDirectorySize - 1 core files fit.
+  for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 1; ++i) {
+    EXPECT_TRUE(CheckHasCapacity());
+    file_util::WriteFile(test_dir_.Append(StringPrintf("file%d.core", i)),
+                         "", 0);
+  }
+
+  // Test an additional kMaxCrashDirectorySize non-core files don't fit.
+  for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize; ++i) {
+    file_util::WriteFile(test_dir_.Append(StringPrintf("overage%d", i)), "", 0);
+    EXPECT_FALSE(CheckHasCapacity());
+  }
+}
+
+TEST_F(CrashCollectorTest, CheckHasCapacityOverCore) {
+  // Set up kMaxCrashDirectorySize - 1 core files.
+  for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 1; ++i) {
+    file_util::WriteFile(test_dir_.Append(StringPrintf("file%d.core", i)),
+                         "", 0);
+  }
+
+  EXPECT_TRUE(CheckHasCapacity());
+
+  // Test an additional core file does not fit.
+  file_util::WriteFile(test_dir_.Append("overage.core"), "", 0);
+  EXPECT_FALSE(CheckHasCapacity());
 }
 
 int main(int argc, char **argv) {

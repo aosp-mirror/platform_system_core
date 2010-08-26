@@ -32,9 +32,14 @@ class CrashCollector {
 
  protected:
   friend class CrashCollectorTest;
+  FRIEND_TEST(CrashCollectorTest, CheckHasCapacityOverCore);
+  FRIEND_TEST(CrashCollectorTest, CheckHasCapacityOverNonCore);
   FRIEND_TEST(CrashCollectorTest, GetCrashDirectoryInfo);
   FRIEND_TEST(CrashCollectorTest, FormatDumpBasename);
   FRIEND_TEST(CrashCollectorTest, Initialize);
+
+  // Set maximum enqueued crashes in a crash directory.
+  static const int kMaxCrashDirectorySize;
 
   // For testing, set the directory always returned by
   // GetCreatedCrashDirectoryByEuid.
@@ -54,12 +59,18 @@ class CrashCollector {
   // Determines the crash directory for given eud, and creates the
   // directory if necessary with appropriate permissions.  Returns
   // true whether or not directory needed to be created, false on any
-  // failure.
+  // failure.  If the crash directory is already full, returns false.
   bool GetCreatedCrashDirectoryByEuid(uid_t euid,
                                       FilePath *crash_file_path);
+
+  // Format crash name based on components.
   std::string FormatDumpBasename(const std::string &exec_name,
                                  time_t timestamp,
                                  pid_t pid);
+
+  // Check given crash directory still has remaining capacity for another
+  // crash.
+  bool CheckHasCapacity(const FilePath &crash_directory);
 
   CountCrashFunction count_crash_function_;
   IsFeedbackAllowedFunction is_feedback_allowed_function_;

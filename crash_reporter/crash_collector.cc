@@ -4,6 +4,7 @@
 
 #include "crash-reporter/crash_collector.h"
 
+#include <dirent.h>
 #include <pwd.h>  // For struct passwd.
 #include <sys/types.h>  // for mode_t.
 
@@ -24,6 +25,9 @@ static const mode_t kSystemCrashPathMode = 01755;
 
 static const uid_t kRootOwner = 0;
 static const uid_t kRootGroup = 0;
+
+// Maximum of 8 crash reports per directory.
+const int CrashCollector::kMaxCrashDirectorySize = 8;
 
 CrashCollector::CrashCollector() : forced_crash_directory_(NULL) {
 }
@@ -146,5 +150,46 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
     return false;
   }
 
+  if (!CheckHasCapacity(*crash_directory)) {
+    return false;
+  }
+
   return true;
+}
+
+// Return true if the given crash directory has not already reached
+// maximum capacity.
+bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {
+  DIR* dir = opendir(crash_directory.value().c_str());
+  if (!dir) {
+    return false;
+  }
+  struct dirent ent_buf;
+  struct dirent* ent;
+  int count_non_core = 0;
+  int count_core = 0;
+  bool full = false;
+  while (readdir_r(dir, &ent_buf, &ent) == 0 && ent != NULL) {
+    if ((strcmp(ent->d_name, ".") == 0) ||
+        (strcmp(ent->d_name, "..") == 0))
+      continue;
+
+    if (strcmp(ent->d_name + strlen(ent->d_name) - 5, ".core") == 0) {
+      ++count_core;
+    } else {
+      ++count_non_core;
+    }
+
+    if (count_core >= kMaxCrashDirectorySize ||
+        count_non_core >= kMaxCrashDirectorySize) {
+      logger_->LogWarning(
+          "Crash directory %s already full with %d pending reports",
+          crash_directory.value().c_str(),
+          kMaxCrashDirectorySize);
+      full = true;
+      break;
+    }
+  }
+  closedir(dir);
+  return !full;
 }
