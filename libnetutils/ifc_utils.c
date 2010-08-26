@@ -33,7 +33,6 @@
 #include <linux/route.h>
 #include <linux/ipv6_route.h>
 #include <netdb.h>
-#include <net/if.h>
 #include <linux/wireless.h>
 
 #ifdef ANDROID
