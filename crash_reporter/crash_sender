@@ -9,6 +9,11 @@ set -e
 # Product ID in crash report
 CHROMEOS_PRODUCT=ChromeOS
 
+# Should remove the run file when this process finishes.  We don't want
+# to always remove it since it may be for pre-existing crash_sender
+# process.
+CLEAN_UP_RUN_FILE=0
+
 # File whose existence implies crash reports may be sent, and whose
 # contents includes our machine's anonymized guid.
 CONSENT_ID="/home/chronos/Consent To Send Stats"
@@ -46,26 +51,36 @@ TAG="$(basename $0)[$$]"
 # hours.
 TIMESTAMPS_DIR="/var/lib/crash_sender"
 
+# Temp directory for this process.
+TMP_DIR=""
+
 lecho() {
   logger -t "${TAG}" "$@"
 }
 
-cleanup_tmp_dir() {
-  rm -rf "${TMP_DIR}"
-}
-
-cleanup_run_file_and_tmp_dir() {
-  rm -f "${RUN_FILE}"
-  cleanup_tmp_dir
+cleanup() {
+  if [ -n "${TMP_DIR}" ]; then
+    rm -rf "${TMP_DIR}"
+  fi
+  if [ ${CLEAN_UP_RUN_FILE} -eq 1 ]; then
+    rm -f "${RUN_FILE}"
+  fi
 }
 
 check_not_already_running() {
-  if [ ! -f "${RUN_FILE}" ]; then
+  set -o noclobber
+  if echo $$ 2>/dev/null > "${RUN_FILE}"; then
+    # Able to write RUN_FILE without contention.
+    CLEAN_UP_RUN_FILE=1
+    set +o noclobber
     return
   fi
+  set +o noclobber
   local last_pid=$(cat "${RUN_FILE}")
   if [ ! -f "/proc/${last_pid}/cmdline" ]; then
-    trap cleanup_run_file_and_tmp_dir EXIT INT
+    CLEAN_UP_RUN_FILE=1
+    # Note that this write may be executed by two crash_senders who
+    # simulataneously reap the existing dangling run file
     echo $$ > "${RUN_FILE}"
     return
   fi
@@ -233,6 +248,7 @@ send_crashes() {
 }
 
 main() {
+  trap cleanup EXIT INT TERM
   if [ -e "${PAUSE_CRASH_SENDING}" ]; then
     lecho "Exiting early due to ${PAUSE_CRASH_SENDING}"
     exit 1
@@ -246,7 +262,6 @@ main() {
   fi
 
   TMP_DIR="$(mktemp -d /tmp/crash_sender.XXXX)"
-  trap cleanup_tmp_dir EXIT INT
 
   # Send system-wide crashes
   send_crashes "/var/spool/crash"
