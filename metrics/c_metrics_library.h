@@ -21,13 +21,17 @@ void CMetricsLibraryInit(CMetricsLibrary handle);
 
 // C wrapper for MetricsLibrary::SendToUMA.
 int CMetricsLibrarySendToUMA(CMetricsLibrary handle,
-			     const char* name, int sample,
-			     int min, int max, int nbuckets);
+                             const char* name, int sample,
+                             int min, int max, int nbuckets);
 
 // C wrapper for MetricsLibrary::SendEnumToUMA.
 int CMetricsLibrarySendEnumToUMA(CMetricsLibrary handle,
-				 const char* name, int sample, int max);
+                                 const char* name, int sample, int max);
+
+// C wrapper for MetricsLibrary::AreMetricsEnabled.
+int CMetricsLibraryAreMetricsEnabled(CMetricsLibrary handle);
+
 #if defined(__cplusplus)
 }
 #endif
-#endif	// C_METRICS_LIBRARY_H_
+#endif  // C_METRICS_LIBRARY_H_

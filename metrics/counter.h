@@ -5,11 +5,14 @@
 #ifndef METRICS_COUNTER_H_
 #define METRICS_COUNTER_H_
 
+#include <string>
 #include <time.h>
 
 #include <base/basictypes.h>
 #include <base/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
+
+class MetricsLibraryInterface;
 
 namespace chromeos_metrics {
 
@@ -44,16 +47,6 @@ class TaggedCounterInterface {
 
   virtual ~TaggedCounterInterface() {}
 
-  // Initializes the counter by providing the persistent storage
-  // location |filename| and a |reporter| callback for reporting
-  // aggregated counts. |reporter_handle| is sent to the |reporter|
-  // along with the aggregated counts.
-  //
-  // NOTE: The assumption is that this object is the sole owner of the
-  // persistent storage file so no locking is currently implemented.
-  virtual void Init(const char* filename,
-                    Reporter reporter, void* reporter_handle) = 0;
-
   // Adds |count| of events for the given |tag|. If there's an
   // existing aggregated count for a different tag, it's reported
   // through the reporter callback and discarded.
@@ -67,12 +60,21 @@ class TaggedCounterInterface {
 class TaggedCounter : public TaggedCounterInterface {
  public:
   TaggedCounter();
-  ~TaggedCounter();
+  virtual ~TaggedCounter();
+
+  // Initializes the counter by providing the persistent storage
+  // location |filename| and a |reporter| callback for reporting
+  // aggregated counts. |reporter_handle| is sent to the |reporter|
+  // along with the aggregated counts.
+  //
+  // NOTE: The assumption is that this object is the sole owner of the
+  // persistent storage file so no locking is currently implemented.
+  virtual void Init(const char* filename,
+                    Reporter reporter, void* reporter_handle);
 
   // Implementation of interface methods.
-  void Init(const char* filename, Reporter reporter, void* reporter_handle);
-  void Update(int32 tag, int32 count);
-  void Flush();
+  virtual void Update(int32 tag, int32 count);
+  virtual void Flush();
 
  private:
   friend class RecordTest;
@@ -146,7 +148,7 @@ class TaggedCounter : public TaggedCounterInterface {
   void WriteRecord(int fd);
 
   // Persistent storage file path.
-  const char* filename_;
+  std::string filename_;
 
   // Aggregated data reporter callback and handle to pass-through.
   Reporter reporter_;
@@ -157,6 +159,71 @@ class TaggedCounter : public TaggedCounterInterface {
 
   // Current cached aggregation record state.
   RecordState record_state_;
+};
+
+// TaggedCounterReporter provides a TaggedCounterInterface which both
+// counts tagged events and reports them up through the metrics
+// library to UMA.
+class TaggedCounterReporter : public TaggedCounterInterface {
+ public:
+  TaggedCounterReporter();
+  virtual ~TaggedCounterReporter();
+
+  // Set the metrics library used by all TaggedCounterReporter
+  // instances.  We assume there is only one metrics library
+  // shared amongst all reporters.
+  static void SetMetricsLibraryInterface(MetricsLibraryInterface* metrics_lib) {
+    metrics_lib_ = metrics_lib;
+  }
+
+  // Initializes the counter by providing the persistent storage
+  // location |filename|, a |histogram_name| (a linear histogram) to
+  // report to with |min|, |max|, and |buckets| attributes for the
+  // histogram.
+  virtual void Init(const char* filename,
+                    const char* histogram_name,
+                    int min,
+                    int max,
+                    int buckets);
+
+  // Implementation of interface method.
+  virtual void Update(int32 tag, int32 count) {
+    tagged_counter_->Update(tag, count);
+  }
+  // Implementation of interface method.
+  virtual void Flush() {
+    tagged_counter_->Flush();
+  }
+
+  // Accessor functions.
+  const std::string& histogram_name() const {
+    return histogram_name_;
+  }
+
+  int min() const {
+    return min_;
+  }
+
+  int max() const {
+    return max_;
+  }
+
+  int buckets() const {
+    return buckets_;
+  }
+
+ protected:
+  friend class TaggedCounterReporterTest;
+  FRIEND_TEST(TaggedCounterReporterTest, Report);
+
+  static void Report(void* handle, int32 tag, int32 count);
+
+  static MetricsLibraryInterface* metrics_lib_;
+  scoped_ptr<TaggedCounter> tagged_counter_;
+  std::string histogram_name_;
+  int min_;
+  int max_;
+  int buckets_;
 };
 
 // FrequencyCounter uses TaggedCounter to maintain a persistent
@@ -172,13 +239,11 @@ class FrequencyCounter {
   FrequencyCounter();
   virtual ~FrequencyCounter();
 
-  // Initialize a frequency counter, which is necessary before first use.
-  // |filename|, |reporter|, and |reporter_handle| are used as in
-  // TaggedCounter::Init.  |cycle_duration| is the number of seconds
-  // in a cycle.
-  virtual void Init(const char* filename,
-                    TaggedCounterInterface::Reporter reporter,
-                    void* reporter_handle,
+  // Initialize a frequency counter, which is necessary before first
+  // use.  |tagged_counter| is used to store the counts, its memory
+  // will be managed by this FrequencyCounter.  |cycle_duration| is
+  // the number of seconds in a cycle.
+  virtual void Init(TaggedCounterInterface* tagged_counter,
                     time_t cycle_duration);
   // Record that an event occurred.  |count| is the number of concurrent
   // events that have occurred.  The time is implicitly assumed to be the
@@ -187,9 +252,29 @@ class FrequencyCounter {
     UpdateInternal(count, time(NULL));
   }
 
+  // Update the frequency counter based on the current time.  If a
+  // cycle has finished, this will have the effect of flushing the
+  // cycle's count, without first requiring another update to the
+  // frequency counter.  The more often this is called, the lower the
+  // latency to have a new sample submitted.
+  virtual void FlushFinishedCycles() {
+    Update(0);
+  }
+
+  // Accessor function.
+  const TaggedCounterInterface& tagged_counter() const {
+    return *tagged_counter_;
+  }
+
+  time_t cycle_duration() const {
+    return cycle_duration_;
+  }
+
  private:
   friend class FrequencyCounterTest;
   FRIEND_TEST(FrequencyCounterTest, UpdateInternal);
+  FRIEND_TEST(FrequencyCounterTest, GetCycleNumberForWeek);
+  FRIEND_TEST(FrequencyCounterTest, GetCycleNumberForDay);
 
   void UpdateInternal(int32 count, time_t now);
   int32 GetCycleNumber(time_t now);

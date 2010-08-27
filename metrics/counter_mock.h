@@ -13,11 +13,22 @@
 
 namespace chromeos_metrics {
 
-class TaggedCounterMock : public TaggedCounterInterface {
+class TaggedCounterMock : public TaggedCounter {
  public:
   MOCK_METHOD3(Init, void(const char* filename,
                           Reporter reporter, void* reporter_handle));
   MOCK_METHOD2(Update, void(int tag, int count));
+  MOCK_METHOD0(Flush, void());
+};
+
+class TaggedCounterReporterMock : public TaggedCounterReporter {
+ public:
+  MOCK_METHOD5(Init, void(const char* filename,
+                          const char* histogram_name,
+                          int min,
+                          int max,
+                          int nbuckets));
+  MOCK_METHOD2(Update, void(int32 tag, int32 count));
   MOCK_METHOD0(Flush, void());
 };
 
@@ -28,6 +39,7 @@ class FrequencyCounterMock : public FrequencyCounter {
                           void* reporter_handle,
                           time_t cycle_duration));
   MOCK_METHOD1(Update, void(int32 count));
+  MOCK_METHOD0(FlushFinishedCycles, void());
 };
 
 }  // namespace chromeos_metrics

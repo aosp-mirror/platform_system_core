@@ -26,8 +26,8 @@ extern "C" void CMetricsLibraryInit(CMetricsLibrary handle) {
 }
 
 extern "C" int CMetricsLibrarySendToUMA(CMetricsLibrary handle,
-					const char* name, int sample,
-					int min, int max, int nbuckets) {
+                                        const char* name, int sample,
+                                        int min, int max, int nbuckets) {
   MetricsLibrary* lib = reinterpret_cast<MetricsLibrary*>(handle);
   if (lib == NULL)
     return 0;
@@ -35,10 +35,17 @@ extern "C" int CMetricsLibrarySendToUMA(CMetricsLibrary handle,
 }
 
 extern "C" int CMetricsLibrarySendEnumToUMA(CMetricsLibrary handle,
-					    const char* name, int sample,
-					    int max) {
+                                            const char* name, int sample,
+                                            int max) {
   MetricsLibrary* lib = reinterpret_cast<MetricsLibrary*>(handle);
   if (lib == NULL)
     return 0;
   return lib->SendEnumToUMA(std::string(name), sample, max);
+}
+
+extern "C" int CMetricsLibraryAreMetricsEnabled(CMetricsLibrary handle) {
+  MetricsLibrary* lib = reinterpret_cast<MetricsLibrary*>(handle);
+  if (lib == NULL)
+    return 0;
+  return lib->AreMetricsEnabled();
 }

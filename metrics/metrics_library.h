@@ -27,6 +27,9 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // Initializes the library.
   void Init();
 
+  // Returns whether or not metrics collection is enabled.
+  bool AreMetricsEnabled();
+
   // Sends histogram data to Chrome for transport to UMA and returns
   // true on success. This method results in the equivalent of an
   // asynchronous non-blocking RPC to UMA_HISTOGRAM_CUSTOM_COUNTS
@@ -69,6 +72,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
  private:
   friend class CMetricsLibraryTest;
   friend class MetricsLibraryTest;
+  FRIEND_TEST(MetricsLibraryTest, AreMetricsEnabled);
   FRIEND_TEST(MetricsLibraryTest, FormatChromeMessage);
   FRIEND_TEST(MetricsLibraryTest, FormatChromeMessageTooLong);
   FRIEND_TEST(MetricsLibraryTest, SendMessageToChrome);
@@ -89,7 +93,14 @@ class MetricsLibrary : public MetricsLibraryInterface {
   int32_t FormatChromeMessage(int32_t buffer_size, char* buffer,
                               const char* format, ...);
 
+  // Time at which we last checked if metrics were enabled.
+  static time_t cached_enabled_time_;
+
+  // Cached state of whether or not metrics were enabled.
+  static bool cached_enabled_;
+
   const char* uma_events_file_;
+  const char* consent_file_;
 };
 
 #endif  // METRICS_LIBRARY_H_

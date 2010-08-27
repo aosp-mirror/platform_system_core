@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 
 #include <cstdarg>
 #include <cstdio>
@@ -14,11 +15,13 @@
 #define READ_WRITE_ALL_FILE_FLAGS \
   (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
-static const char kAutotestPath[] =
-    "/var/log/metrics/autotest-events";
-static const char kUMAEventsPath[] =
-    "/var/log/metrics/uma-events";
+static const char kAutotestPath[] = "/var/log/metrics/autotest-events";
+static const char kUMAEventsPath[] = "/var/log/metrics/uma-events";
+static const char kConsentFile[] = "/home/chronos/Consent To Send Stats";
 static const int32_t kBufferSize = 1024;
+
+time_t MetricsLibrary::cached_enabled_time_ = 0;
+bool MetricsLibrary::cached_enabled_ = false;
 
 using std::string;
 
@@ -38,9 +41,24 @@ static void PrintError(const char* message, const char* file,
 }
 
 MetricsLibrary::MetricsLibrary()
-    : uma_events_file_(NULL) {}
+    : uma_events_file_(NULL),
+      consent_file_(kConsentFile) {}
+
+bool MetricsLibrary::AreMetricsEnabled() {
+  static struct stat stat_buffer;
+  time_t this_check_time = time(NULL);
+
+  if (this_check_time != cached_enabled_time_) {
+    cached_enabled_time_ = this_check_time;
+    cached_enabled_ = (stat(consent_file_, &stat_buffer) >= 0);
+  }
+  return cached_enabled_;
+}
 
 bool MetricsLibrary::SendMessageToChrome(int32_t length, const char* message) {
+  if (!AreMetricsEnabled())
+    return true;
+
   int chrome_fd = open(uma_events_file_,
                        O_WRONLY | O_APPEND | O_CREAT,
                        READ_WRITE_ALL_FILE_FLAGS);

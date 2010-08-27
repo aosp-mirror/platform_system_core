@@ -8,6 +8,7 @@
 
 #include <base/eintr_wrapper.h>
 #include <base/logging.h>
+#include "metrics_library.h"
 
 namespace chromeos_metrics {
 
@@ -31,8 +32,7 @@ void TaggedCounter::Record::Add(int32 count) {
 
 // TaggedCounter implementation.
 TaggedCounter::TaggedCounter()
-    : filename_(NULL),
-      reporter_(NULL),
+    : reporter_(NULL),
       reporter_handle_(NULL),
       record_state_(kRecordInvalid) {}
 
@@ -72,12 +72,13 @@ void TaggedCounter::UpdateInternal(int32 tag, int32 count, bool flush) {
   }
 
   DLOG(INFO) << "tag: " << tag << " count: " << count << " flush: " << flush;
-  DCHECK(filename_);
+  DCHECK(!filename_.empty());
 
   // NOTE: The assumption is that this TaggedCounter object is the
   // sole owner of the persistent storage file so no locking is
   // necessary.
-  int fd = HANDLE_EINTR(open(filename_, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+  int fd = HANDLE_EINTR(open(filename_.c_str(),
+                             O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
   if (fd < 0) {
     PLOG(WARNING) << "Unable to open the persistent counter file";
     return;
@@ -183,21 +184,57 @@ void TaggedCounter::WriteRecord(int fd) {
   }
 }
 
+MetricsLibraryInterface* TaggedCounterReporter::metrics_lib_ = NULL;
+
+TaggedCounterReporter::TaggedCounterReporter()
+    : tagged_counter_(new TaggedCounter()),
+      min_(0),
+      max_(0),
+      buckets_(0) {
+}
+
+TaggedCounterReporter::~TaggedCounterReporter() {
+}
+
+void TaggedCounterReporter::Init(const char* filename,
+                                 const char* histogram_name,
+                                 int min,
+                                 int max,
+                                 int buckets) {
+  tagged_counter_->Init(filename, Report, this);
+  histogram_name_ = histogram_name;
+  min_ = min;
+  max_ = max;
+  buckets_ = buckets;
+  CHECK(min_ >= 0);
+  CHECK(max_ > min_);
+  CHECK(buckets_ > 0);
+}
+
+void TaggedCounterReporter::Report(void* handle, int32 tag, int32 count) {
+  TaggedCounterReporter* this_reporter =
+      reinterpret_cast<TaggedCounterReporter*>(handle);
+  DLOG(INFO) << "received metric: " << this_reporter->histogram_name_
+             << " " << count << " " << this_reporter->min_ << " "
+             << this_reporter->max_ << " " << this_reporter->buckets_;
+  CHECK(metrics_lib_ != NULL);
+  CHECK(this_reporter->buckets_ > 0);
+  metrics_lib_->SendToUMA(this_reporter->histogram_name_,
+                          count,
+                          this_reporter->min_,
+                          this_reporter->max_,
+                          this_reporter->buckets_);
+}
+
 FrequencyCounter::FrequencyCounter() : cycle_duration_(1) {
 }
 
 FrequencyCounter::~FrequencyCounter() {
 }
 
-void FrequencyCounter::Init(const char* filename,
-                            TaggedCounterInterface::Reporter reporter,
-                            void* reporter_handle,
+void FrequencyCounter::Init(TaggedCounterInterface* tagged_counter,
                             time_t cycle_duration) {
-  // Allow tests to inject tagged_counter_ dependency.
-  if (tagged_counter_.get() == NULL) {
-    tagged_counter_.reset(new TaggedCounter());
-  }
-  tagged_counter_->Init(filename, reporter, reporter_handle);
+  tagged_counter_.reset(tagged_counter);
   DCHECK(cycle_duration > 0);
   cycle_duration_ = cycle_duration;
 }

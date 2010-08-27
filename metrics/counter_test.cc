@@ -13,6 +13,7 @@
 
 #include "counter.h"
 #include "counter_mock.h"  // For TaggedCounterMock.
+#include "metrics_library_mock.h"
 
 using ::testing::_;
 using ::testing::MockFunction;
@@ -37,7 +38,7 @@ class RecordTest : public testing::Test {
 class TaggedCounterTest : public testing::Test {
  protected:
   virtual void SetUp() {
-    EXPECT_EQ(NULL, counter_.filename_);
+    EXPECT_TRUE(counter_.filename_.empty());
     EXPECT_TRUE(NULL == counter_.reporter_);
     EXPECT_EQ(NULL, counter_.reporter_handle_);
     EXPECT_EQ(TaggedCounter::kRecordInvalid, counter_.record_state_);
@@ -256,14 +257,85 @@ TEST_F(TaggedCounterTest, Update) {
   EXPECT_EQ(TaggedCounter::kRecordValid, counter_.record_state_);
 }
 
+static const char kTestFilename[] = "test_filename";
+static const char kTestHistogram[] = "test_histogram";
+const int kHistogramMin = 15;
+const int kHistogramMax = 1024;
+const int kHistogramBuckets = 23;
+
+class TaggedCounterReporterTest : public testing::Test {
+ protected:
+  virtual void SetUp() {
+    tagged_counter_ = new StrictMock<TaggedCounterMock>();
+    reporter_.tagged_counter_.reset(tagged_counter_);
+    metrics_lib_.reset(new StrictMock<MetricsLibraryMock>);
+    reporter_.SetMetricsLibraryInterface(metrics_lib_.get());
+    ASSERT_TRUE(metrics_lib_.get() == reporter_.metrics_lib_);
+  }
+  virtual void TearDown() {
+    reporter_.SetMetricsLibraryInterface(NULL);
+  }
+
+  void DoInit();
+  StrictMock<TaggedCounterMock>* tagged_counter_;
+  TaggedCounterReporter reporter_;
+  scoped_ptr<MetricsLibraryMock> metrics_lib_;
+};
+
+void TaggedCounterReporterTest::DoInit() {
+  EXPECT_CALL(*tagged_counter_,
+              Init(kTestFilename,
+                   TaggedCounterReporter::Report,
+                   &reporter_))
+      .Times(1)
+      .RetiresOnSaturation();
+  reporter_.Init(kTestFilename,
+                 kTestHistogram,
+                 kHistogramMin,
+                 kHistogramMax,
+                 kHistogramBuckets);
+  EXPECT_EQ(kTestHistogram, reporter_.histogram_name_);
+  EXPECT_EQ(kHistogramBuckets, reporter_.buckets_);
+  EXPECT_EQ(kHistogramMax, reporter_.max_);
+  EXPECT_EQ(kHistogramMin, reporter_.min_);
+}
+
+TEST_F(TaggedCounterReporterTest, Init) {
+  DoInit();
+}
+
+TEST_F(TaggedCounterReporterTest, Update) {
+  DoInit();
+  EXPECT_CALL(*tagged_counter_, Update(1, 2))
+      .Times(1)
+      .RetiresOnSaturation();
+  reporter_.Update(1, 2);
+}
+
+TEST_F(TaggedCounterReporterTest, Flush) {
+  DoInit();
+  EXPECT_CALL(*tagged_counter_, Flush())
+      .Times(1)
+      .RetiresOnSaturation();
+  reporter_.Flush();
+}
+
+TEST_F(TaggedCounterReporterTest, Report) {
+  DoInit();
+  EXPECT_CALL(*metrics_lib_, SendToUMA(kTestHistogram,
+                                       301,
+                                       kHistogramMin,
+                                       kHistogramMax,
+                                       kHistogramBuckets))
+      .Times(1)
+      .RetiresOnSaturation();
+  reporter_.Report(&reporter_, 127, 301);
+}
+
 class FrequencyCounterTest : public testing::Test {
  protected:
   virtual void SetUp() {
-    tagged_counter_ = new StrictMock<TaggedCounterMock>;
-    frequency_counter_.tagged_counter_.reset(tagged_counter_);
-  }
-
-  static void FakeReporter(void *, int32, int32) {
+    tagged_counter_ = NULL;
   }
 
   void CheckInit(int32 cycle_duration);
@@ -276,14 +348,10 @@ class FrequencyCounterTest : public testing::Test {
 };
 
 void FrequencyCounterTest::CheckInit(int32 cycle_duration) {
-  EXPECT_CALL(*tagged_counter_, Init(kTestRecordFile, FakeReporter, this))
-      .Times(1)
-      .RetiresOnSaturation();
-  frequency_counter_.Init(kTestRecordFile,
-                          FakeReporter,
-                          this,
-                          cycle_duration);
+  tagged_counter_ = new StrictMock<TaggedCounterMock>;
+  frequency_counter_.Init(tagged_counter_, cycle_duration);
   EXPECT_EQ(cycle_duration, frequency_counter_.cycle_duration_);
+  EXPECT_EQ(tagged_counter_, frequency_counter_.tagged_counter_.get());
 }
 
 TEST_F(FrequencyCounterTest, Init) {
@@ -292,10 +360,12 @@ TEST_F(FrequencyCounterTest, Init) {
 
 void FrequencyCounterTest::CheckCycleNumber(int32 cycle_duration) {
   CheckInit(cycle_duration);
-  EXPECT_EQ(150, frequency_counter_.GetCycleNumber(cycle_duration * 150));
-  EXPECT_EQ(150, frequency_counter_.GetCycleNumber(cycle_duration * 150 +
-                                                   cycle_duration - 1));
-  EXPECT_EQ(151, frequency_counter_.GetCycleNumber(cycle_duration * 151 + 1));
+  EXPECT_EQ(150, frequency_counter_.GetCycleNumber(
+      cycle_duration * 150));
+  EXPECT_EQ(150, frequency_counter_.GetCycleNumber(
+      cycle_duration * 150 + cycle_duration - 1));
+  EXPECT_EQ(151, frequency_counter_.GetCycleNumber(
+      cycle_duration * 151 + 1));
   EXPECT_EQ(0, frequency_counter_.GetCycleNumber(0));
 }
 
@@ -310,7 +380,9 @@ TEST_F(FrequencyCounterTest, GetCycleNumberForDay) {
 
 TEST_F(FrequencyCounterTest, UpdateInternal) {
   CheckInit(kSecondsPerWeek);
-  EXPECT_CALL(*tagged_counter_, Update(150, 2));
+  EXPECT_CALL(*tagged_counter_, Update(150, 2))
+      .Times(1)
+      .RetiresOnSaturation();
   frequency_counter_.UpdateInternal(2, kSecondsPerWeek * 150);
 }
 
