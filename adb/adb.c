@@ -893,7 +893,9 @@ int adb_main(int is_daemon, int server_port)
         struct __user_cap_header_struct header;
         struct __user_cap_data_struct cap;
 
-        prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0);
+        if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) != 0) {
+            exit(1);
+        }
 
         /* add extra groups:
         ** AID_ADB to access the USB driver
@@ -907,11 +909,17 @@ int adb_main(int is_daemon, int server_port)
         */
         gid_t groups[] = { AID_ADB, AID_LOG, AID_INPUT, AID_INET, AID_GRAPHICS,
                            AID_NET_BT, AID_NET_BT_ADMIN, AID_SDCARD_RW, AID_MOUNT };
-        setgroups(sizeof(groups)/sizeof(groups[0]), groups);
+        if (setgroups(sizeof(groups)/sizeof(groups[0]), groups) != 0) {
+            exit(1);
+        }
 
         /* then switch user and group to "shell" */
-        setgid(AID_SHELL);
-        setuid(AID_SHELL);
+        if (setgid(AID_SHELL) != 0) {
+            exit(1);
+        }
+        if (setuid(AID_SHELL) != 0) {
+            exit(1);
+        }
 
         /* set CAP_SYS_BOOT capability, so "adb reboot" will succeed */
         header.version = _LINUX_CAPABILITY_VERSION;
