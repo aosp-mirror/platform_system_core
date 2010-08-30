@@ -42,13 +42,10 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, ComputeEpochNoLast);
   FRIEND_TEST(MetricsDaemonTest, GetHistogramPath);
   FRIEND_TEST(MetricsDaemonTest, IsNewEpoch);
-  FRIEND_TEST(MetricsDaemonTest, LookupNetworkState);
   FRIEND_TEST(MetricsDaemonTest, LookupPowerState);
   FRIEND_TEST(MetricsDaemonTest, LookupScreenSaverState);
   FRIEND_TEST(MetricsDaemonTest, LookupSessionState);
   FRIEND_TEST(MetricsDaemonTest, MessageFilter);
-  FRIEND_TEST(MetricsDaemonTest, NetStateChangedSimpleDrop);
-  FRIEND_TEST(MetricsDaemonTest, NetStateChangedSuspend);
   FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
   FRIEND_TEST(MetricsDaemonTest, ProcessKernelCrash);
   FRIEND_TEST(MetricsDaemonTest, ProcessUncleanShutdown);
@@ -63,14 +60,6 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveState);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateTimeJump);
-
-  // The network states (see network_states.h).
-  enum NetworkState {
-    kUnknownNetworkState = -1, // Initial/unknown network state.
-#define STATE(name, capname) kNetworkState ## capname,
-#include "network_states.h"
-    kNumberNetworkStates
-  };
 
   // The power states (see power_states.h).
   enum PowerState {
@@ -116,10 +105,6 @@ class MetricsDaemon {
   static const char kMetricKernelCrashesWeeklyName[];
   static const char kMetricKernelCrashIntervalName[];
   static const char kMetricsPath[];
-  static const int  kMetricTimeToNetworkDropBuckets;
-  static const int  kMetricTimeToNetworkDropMax;
-  static const int  kMetricTimeToNetworkDropMin;
-  static const char kMetricTimeToNetworkDropName[];
   static const char kMetricUncleanShutdownIntervalName[];
   static const char kMetricUncleanShutdownsDailyName[];
   static const char kMetricUncleanShutdownsWeeklyName[];
@@ -129,9 +114,6 @@ class MetricsDaemon {
 
   // D-Bus message match strings.
   static const char* kDBusMatches_[];
-
-  // Array of network states.
-  static const char* kNetworkStates_[kNumberNetworkStates];
 
   // Array of power states.
   static const char* kPowerStates_[kNumberPowerStates];
@@ -160,12 +142,6 @@ class MetricsDaemon {
   static DBusHandlerResult MessageFilter(DBusConnection* connection,
                                          DBusMessage* message,
                                          void* user_data);
-
-  // Processes network state change.
-  void NetStateChanged(const char* state_name, base::TimeTicks ticks);
-
-  // Given the state name, returns the state id.
-  NetworkState LookupNetworkState(const char* state_name);
 
   // Processes power state change.
   void PowerStateChanged(const char* state_name, base::Time now);
@@ -246,9 +222,6 @@ class MetricsDaemon {
 
   // The metrics library handle.
   MetricsLibraryInterface* metrics_lib_;
-
-  // Current network state.
-  NetworkState network_state_;
 
   // Timestamps last network state update.  This timestamp is used to
   // sample the time from the network going online to going offline so

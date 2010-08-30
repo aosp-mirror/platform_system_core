@@ -38,12 +38,6 @@ class TestTicks : public TimeTicks {
 };
 
 // Overloaded for test failure printing purposes.
-static std::ostream& operator<<(std::ostream& o, const TimeTicks& ticks) {
-  o << ticks.ToInternalValue() << "us";
-  return o;
-};
-
-// Overloaded for test failure printing purposes.
 static std::ostream& operator<<(std::ostream& o, const Time& time) {
   o << time.ToInternalValue() << "us";
   return o;
@@ -114,8 +108,6 @@ class MetricsDaemonTest : public testing::Test {
 
     EXPECT_FALSE(daemon_.user_active_);
     EXPECT_TRUE(daemon_.user_active_last_.is_null());
-    EXPECT_EQ(MetricsDaemon::kUnknownNetworkState, daemon_.network_state_);
-    EXPECT_TRUE(daemon_.network_state_last_.is_null());
     EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
     EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
 
@@ -188,15 +180,6 @@ class MetricsDaemonTest : public testing::Test {
                  MetricsDaemon::kMetricDailyUseTimeMin,
                  MetricsDaemon::kMetricDailyUseTimeMax,
                  MetricsDaemon::kMetricDailyUseTimeBuckets);
-  }
-
-  // Adds a metrics library mock expectation that the specified time
-  // to network dropping metric will be generated.
-  void ExpectTimeToNetworkDropMetric(int sample) {
-    ExpectMetric(MetricsDaemon::kMetricTimeToNetworkDropName, sample,
-                 MetricsDaemon::kMetricTimeToNetworkDropMin,
-                 MetricsDaemon::kMetricTimeToNetworkDropMax,
-                 MetricsDaemon::kMetricTimeToNetworkDropBuckets);
   }
 
   // Converts from seconds to a Time object.
@@ -280,15 +263,6 @@ TEST_F(MetricsDaemonTest, ReportDailyUse) {
   MetricsDaemon::ReportDailyUse(&daemon_, /* tag */ 60, /* count */ -5);
 }
 
-TEST_F(MetricsDaemonTest, LookupNetworkState) {
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOnline,
-            daemon_.LookupNetworkState("online"));
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline,
-            daemon_.LookupNetworkState("offline"));
-  EXPECT_EQ(MetricsDaemon::kUnknownNetworkState,
-            daemon_.LookupNetworkState("somestate"));
-}
-
 TEST_F(MetricsDaemonTest, LookupPowerState) {
   EXPECT_EQ(MetricsDaemon::kPowerStateOn,
             daemon_.LookupPowerState("on"));
@@ -343,16 +317,6 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   DeleteDBusMessage(msg);
 
   msg = NewDBusSignalString("/",
-                            "org.chromium.flimflam.Manager",
-                            "StateChanged",
-                            "online");
-  EXPECT_EQ(MetricsDaemon::kUnknownNetworkState, daemon_.network_state_);
-  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOnline, daemon_.network_state_);
-  EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
-  DeleteDBusMessage(msg);
-
-  msg = NewDBusSignalString("/",
                             "org.chromium.PowerManager",
                             "PowerStateChanged",
                             "on");
@@ -391,50 +355,6 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
   DeleteDBusMessage(msg);
-}
-
-TEST_F(MetricsDaemonTest, NetStateChangedSimpleDrop) {
-  daemon_.NetStateChanged("online", TestTicks(10));
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOnline, daemon_.network_state_);
-  EXPECT_EQ(TestTicks(10), daemon_.network_state_last_);
-
-  ExpectTimeToNetworkDropMetric(20);
-  daemon_.NetStateChanged("offline", TestTicks(30));
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(TestTicks(30), daemon_.network_state_last_);
-}
-
-TEST_F(MetricsDaemonTest, NetStateChangedSuspend) {
-  daemon_.NetStateChanged("offline", TestTicks(30));
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(TestTicks(30), daemon_.network_state_last_);
-
-  daemon_.NetStateChanged("online", TestTicks(60));
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOnline, daemon_.network_state_);
-  EXPECT_EQ(TestTicks(60), daemon_.network_state_last_);
-
-  daemon_.power_state_ = MetricsDaemon::kPowerStateMem;
-  daemon_.NetStateChanged("offline", TestTicks(85));
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(TestTicks(85), daemon_.network_state_last_);
-
-  daemon_.NetStateChanged("somestate", TestTicks(90));
-  EXPECT_EQ(MetricsDaemon::kUnknownNetworkState, daemon_.network_state_);
-  EXPECT_EQ(TestTicks(90), daemon_.network_state_last_);
-
-  daemon_.NetStateChanged("offline", TestTicks(95));
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(TestTicks(95), daemon_.network_state_last_);
-
-  daemon_.power_state_ = MetricsDaemon::kPowerStateOn;
-  daemon_.NetStateChanged("online", TestTicks(105));
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOnline, daemon_.network_state_);
-  EXPECT_EQ(TestTicks(105), daemon_.network_state_last_);
-
-  ExpectTimeToNetworkDropMetric(3);
-  daemon_.NetStateChanged("offline", TestTicks(108));
-  EXPECT_EQ(MetricsDaemon::kNetworkStateOffline, daemon_.network_state_);
-  EXPECT_EQ(TestTicks(108), daemon_.network_state_last_);
 }
 
 TEST_F(MetricsDaemonTest, PowerStateChanged) {

@@ -19,7 +19,6 @@ using std::string;
 
 #define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
 #define DBUS_IFACE_CRASH_REPORTER "org.chromium.CrashReporter"
-#define DBUS_IFACE_FLIMFLAM_MANAGER "org.chromium.flimflam.Manager"
 #define DBUS_IFACE_POWER_MANAGER "org.chromium.PowerManager"
 #define DBUS_IFACE_SESSION_MANAGER "org.chromium.SessionManagerInterface"
 
@@ -50,13 +49,6 @@ const char MetricsDaemon::kMetricDailyUseTimeName[] =
 const int MetricsDaemon::kMetricDailyUseTimeMin = 1;
 const int MetricsDaemon::kMetricDailyUseTimeMax = kMinutesPerDay;
 const int MetricsDaemon::kMetricDailyUseTimeBuckets = 50;
-
-const char MetricsDaemon::kMetricTimeToNetworkDropName[] =
-    "Network.TimeToDrop";
-const int MetricsDaemon::kMetricTimeToNetworkDropMin = 1;
-const int MetricsDaemon::kMetricTimeToNetworkDropMax =
-    8 /* hours */ * kMinutesPerHour * kSecondsPerMinute;
-const int MetricsDaemon::kMetricTimeToNetworkDropBuckets = 50;
 
 // crash interval metrics
 const char MetricsDaemon::kMetricKernelCrashIntervalName[] =
@@ -104,12 +96,6 @@ const char* MetricsDaemon::kDBusMatches_[] = {
   "member='UserCrash'",
 
   "type='signal',"
-  "sender='org.chromium.flimflam',"
-  "interface='" DBUS_IFACE_FLIMFLAM_MANAGER "',"
-  "path='/',"
-  "member='StateChanged'",
-
-  "type='signal',"
   "interface='" DBUS_IFACE_POWER_MANAGER "',"
   "path='/'",
 
@@ -118,12 +104,6 @@ const char* MetricsDaemon::kDBusMatches_[] = {
   "interface='" DBUS_IFACE_SESSION_MANAGER "',"
   "path='/org/chromium/SessionManager',"
   "member='SessionStateChanged'",
-};
-
-// static
-const char* MetricsDaemon::kNetworkStates_[] = {
-#define STATE(name, capname) #name,
-#include "network_states.h"
 };
 
 // static
@@ -138,56 +118,8 @@ const char* MetricsDaemon::kSessionStates_[] = {
 #include "session_states.h"
 };
 
-// Invokes a remote method over D-Bus that takes no input arguments
-// and returns a string result. The method call is issued with a 2
-// second blocking timeout. Returns an empty string on failure or
-// timeout.
-static string DBusGetString(DBusConnection* connection,
-                            const string& destination,
-                            const string& path,
-                            const string& interface,
-                            const string& method) {
-  DBusMessage* message =
-      dbus_message_new_method_call(destination.c_str(),
-                                   path.c_str(),
-                                   interface.c_str(),
-                                   method.c_str());
-  if (!message) {
-    DLOG(WARNING) << "DBusGetString: unable to allocate a message";
-    return "";
-  }
-
-  DBusError error;
-  dbus_error_init(&error);
-  const int kTimeout = 2000;  // ms
-  DLOG(INFO) << "DBusGetString: dest=" << destination << " path=" << path
-             << " iface=" << interface << " method=" << method;
-  DBusMessage* reply =
-      dbus_connection_send_with_reply_and_block(connection, message, kTimeout,
-                                                &error);
-  dbus_message_unref(message);
-  if (dbus_error_is_set(&error) || !reply) {
-    DLOG(WARNING) << "DBusGetString: call failed";
-    return "";
-  }
-  DBusMessageIter iter;
-  dbus_message_iter_init(reply, &iter);
-  if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
-    NOTREACHED();
-    dbus_message_unref(reply);
-    return "";
-  }
-  const char* c_result = "";
-  dbus_message_iter_get_basic(&iter, &c_result);
-  string result = c_result;
-  DLOG(INFO) << "DBusGetString: result=" << result;
-  dbus_message_unref(reply);
-  return result;
-}
-
 MetricsDaemon::MetricsDaemon()
-    : network_state_(kUnknownNetworkState),
-      power_state_(kUnknownPowerState),
+    : power_state_(kUnknownPowerState),
       session_state_(kUnknownSessionState),
       user_active_(false),
       usemon_interval_(0),
@@ -317,11 +249,6 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
   // the registered D-Bus matches is successful. The daemon is not
   // activated for D-Bus messages that don't match.
   CHECK(dbus_connection_add_filter(connection, MessageFilter, this, NULL));
-
-  // Initializes the current network state by retrieving it from flimflam.
-  string state_name = DBusGetString(connection, "org.chromium.flimflam", "/",
-                                    DBUS_IFACE_FLIMFLAM_MANAGER, "GetState");
-  NetStateChanged(state_name.c_str(), TimeTicks::Now());
 }
 
 void MetricsDaemon::Loop() {
@@ -355,13 +282,6 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
     CHECK(strcmp(dbus_message_get_member(message),
                  "UserCrash") == 0);
     daemon->ProcessUserCrash();
-  } else if (strcmp(interface, DBUS_IFACE_FLIMFLAM_MANAGER) == 0) {
-    CHECK(strcmp(dbus_message_get_member(message),
-                 "StateChanged") == 0);
-
-    char* state_name;
-    dbus_message_iter_get_basic(&iter, &state_name);
-    daemon->NetStateChanged(state_name, ticks);
   } else if (strcmp(interface, DBUS_IFACE_POWER_MANAGER) == 0) {
     const char* member = dbus_message_get_member(message);
     if (strcmp(member, "ScreenIsLocked") == 0) {
@@ -386,43 +306,6 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
   }
 
   return DBUS_HANDLER_RESULT_HANDLED;
-}
-
-void MetricsDaemon::NetStateChanged(const char* state_name, TimeTicks ticks) {
-  DLOG(INFO) << "network state: " << state_name;
-
-  NetworkState state = LookupNetworkState(state_name);
-
-  // Logs the time in seconds between the network going online to
-  // going offline (or, more precisely, going not online) in order to
-  // measure the mean time to network dropping. Going offline as part
-  // of suspend-to-RAM is not logged as network drop -- the assumption
-  // is that the message for suspend-to-RAM comes before the network
-  // offline message which seems to and should be the case.
-  if (state != kNetworkStateOnline &&
-      network_state_ == kNetworkStateOnline &&
-      power_state_ != kPowerStateMem) {
-    TimeDelta since_online = ticks - network_state_last_;
-    int online_time = static_cast<int>(since_online.InSeconds());
-    SendMetric(kMetricTimeToNetworkDropName, online_time,
-               kMetricTimeToNetworkDropMin,
-               kMetricTimeToNetworkDropMax,
-               kMetricTimeToNetworkDropBuckets);
-  }
-
-  network_state_ = state;
-  network_state_last_ = ticks;
-}
-
-MetricsDaemon::NetworkState
-MetricsDaemon::LookupNetworkState(const char* state_name) {
-  for (int i = 0; i < kNumberNetworkStates; i++) {
-    if (strcmp(state_name, kNetworkStates_[i]) == 0) {
-      return static_cast<NetworkState>(i);
-    }
-  }
-  DLOG(WARNING) << "unknown network connection state: " << state_name;
-  return kUnknownNetworkState;
 }
 
 void MetricsDaemon::PowerStateChanged(const char* state_name, Time now) {
