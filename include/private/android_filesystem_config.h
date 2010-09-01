@@ -76,7 +76,7 @@ struct android_id_info {
     unsigned aid;
 };
 
-static struct android_id_info android_ids[] = {
+static const struct android_id_info android_ids[] = {
     { "root",      AID_ROOT, },
     { "system",    AID_SYSTEM, },
     { "radio",     AID_RADIO, },
