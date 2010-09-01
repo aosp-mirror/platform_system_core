@@ -311,7 +311,7 @@
 /*
  * Define if <stdbool.h> exists.
  */
-/* #define HAVE_STDBOOL_H */
+#define HAVE_STDBOOL_H
 
 /*
  * Define if <sched.h> exists.
