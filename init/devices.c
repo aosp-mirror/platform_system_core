@@ -181,11 +181,8 @@ static void make_device(const char *path, int block, int major, int minor)
     mode_t mode;
     dev_t dev;
 
-    if(major > 255 || minor > 255)
-        return;
-
     mode = get_device_perm(path, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
-    dev = (major << 8) | minor;
+    dev = makedev(major, minor);
     /* Temporarily change egid to avoid race condition setting the gid of the
      * device node. Unforunately changing the euid would prevent creation of
      * some device nodes, so the uid has to be set with chown() and is still
