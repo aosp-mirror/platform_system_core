@@ -58,8 +58,6 @@ loglevel 3
     mkdir /mnt/obb 0700 root system
     mount tmpfs tmpfs /mnt/obb mode=0755,gid=1000
 
-    mount rootfs rootfs / ro remount
-
     write /proc/sys/kernel/panic_on_oops 1
     write /proc/sys/kernel/hung_task_timeout_secs 0
     write /proc/cpu/alignment 4
@@ -96,6 +94,9 @@ on fs
     mount yaffs2 mtd@cache /cache nosuid nodev
 
 on post-fs
+    # once everything is setup, no need to modify /
+    mount rootfs rootfs / ro remount
+
     # We chown/chmod /data again so because mount is run as root + defaults
     chown system system /data
     chmod 0771 /data
