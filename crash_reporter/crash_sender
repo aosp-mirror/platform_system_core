@@ -94,8 +94,7 @@ get_version() {
 }
 
 is_official() {
-  grep ^CHROMEOS_RELEASE_DESCRIPTION /etc/lsb-release | cut -d = -f 2- | \
-      grep Official
+  grep ^CHROMEOS_RELEASE_DESCRIPTION /etc/lsb-release | grep -q Official
 }
 
 # Generate a uniform random number in 0..max-1.
