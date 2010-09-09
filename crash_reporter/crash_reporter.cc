@@ -89,6 +89,7 @@ static int Initialize(KernelCollector *kernel_collector,
 
   bool was_kernel_crash = false;
   bool was_unclean_shutdown = false;
+  kernel_collector->Enable();
   if (kernel_collector->IsEnabled()) {
     was_kernel_crash = kernel_collector->Collect();
   }
@@ -111,7 +112,6 @@ static int Initialize(KernelCollector *kernel_collector,
   }
 
   // Must enable the unclean shutdown collector *after* collecting.
-  kernel_collector->Enable();
   unclean_shutdown_collector->Enable();
   user_collector->Enable();
 
