@@ -15,5 +15,8 @@ The manual page can be downloaded as PDF (ISO A4 paper) from
 https://www.mirbsd.org/MirOS/dist/mir/mksh/mksh.pdf or read
 online at https://www.mirbsd.org/man1/mksh (HTML).
 
-There are currently no changes to the code in this
-subdirectory.
+The following changes are done to code in this subdirectory
+at the moment:
+• check.t main.sh: remove the 'stop' alias to 'kill -STOP'
+  since Android has a built in stop command that the alias
+  overrides, causing problems with testing tools
