@@ -5351,7 +5351,6 @@ expected-stdout:
 	nohup='nohup '
 	r='fc -e -'
 	source='PATH=$PATH:. command .'
-	stop='kill -STOP'
 	suspend='kill -STOP $$'
 	type='whence -v'
 ---
@@ -5421,7 +5420,6 @@ expected-stdout:
 	nohup='nohup '
 	r='fc -e -'
 	source='PATH=$PATH:. command .'
-	stop='kill -STOP'
 	suspend='kill -STOP $$'
 	type='whence -v'
 ---
@@ -5446,7 +5444,6 @@ expected-stdout:
 	nohup='nohup '
 	r='fc -e -'
 	source='PATH=$PATH:. command .'
-	stop='kill -STOP'
 	suspend='kill -STOP $$'
 	type='whence -v'
 ---
