@@ -74,7 +74,6 @@ static const char *initcoms[] = {
 	"hash=alias -t",	/* not "alias -t --": hash -r needs to work */
 	"type=whence -v",
 #ifndef MKSH_UNEMPLOYED
-	"stop=kill -STOP",
 	"suspend=kill -STOP $$",
 #endif
 	"autoload=typeset -fu",
