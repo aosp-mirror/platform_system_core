@@ -52,6 +52,8 @@
 #define AID_VPN           1016  /* vpn system */
 #define AID_KEYSTORE      1017  /* keystore subsystem */
 #define AID_USB           1018  /* USB devices */
+#define AID_DRM           1019  /* DRM server */
+#define AID_DRMIO         1020  /* DRM IO server */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -93,6 +95,8 @@ static const struct android_id_info android_ids[] = {
     { "adb",       AID_ADB, },
     { "install",   AID_INSTALL, },
     { "media",     AID_MEDIA, },
+    { "drm",       AID_DRM, },
+    { "drmio",     AID_DRMIO, },
     { "shell",     AID_SHELL, },
     { "cache",     AID_CACHE, },
     { "diag",      AID_DIAG, },
