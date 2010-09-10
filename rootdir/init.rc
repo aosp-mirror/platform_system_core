@@ -168,6 +168,11 @@ on post-fs
     chown root root /cache/lost+found
     chmod 0770 /cache/lost+found
 
+    # create data/drm directory
+    mkdir /data/drm 0774 drm drm
+    chown drm drm /data/drm
+    chmod 0774 /data/drm
+
 on boot
 # basic network init
     ifup lo
@@ -315,6 +320,13 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
     onrestart write /sys/android_power/request_state wake
     onrestart write /sys/power/state on
     onrestart restart media
+
+service drm /system/bin/drmserver
+    user drm
+    group system root inet
+
+service drmio /system/bin/drmioserver
+    user drmio
 
 service media /system/bin/mediaserver
     user media
