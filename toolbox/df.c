@@ -6,6 +6,21 @@
 
 static int ok = EXIT_SUCCESS;
 
+static void printsize(long long n)
+{
+    char unit = 'K';
+    n /= 1024;
+    if (n > 1024) {
+        n /= 1024;
+        unit = 'M';
+    }
+    if (n > 1024) {
+        n /= 1024;
+        unit = 'G';
+    }
+    printf("%4lld%c", n, unit);
+}
+
 static void df(char *s, int always) {
     struct statfs st;
 
@@ -14,18 +29,19 @@ static void df(char *s, int always) {
         ok = EXIT_FAILURE;
     } else {
         if (st.f_blocks == 0 && !always)
-            return;
-
-        printf("%s: %lldK total, %lldK used, %lldK available (block size %d)\n",
-               s,
-               ((long long)st.f_blocks * (long long)st.f_bsize) / 1024,
-               ((long long)(st.f_blocks - (long long)st.f_bfree) * st.f_bsize) / 1024,
-               ((long long)st.f_bfree * (long long)st.f_bsize) / 1024,
-               (int) st.f_bsize);
+            return;        
+        printf("%-20s  ", s);
+        printsize((long long)st.f_blocks * (long long)st.f_bsize);
+        printf("  ");
+        printsize((long long)(st.f_blocks - (long long)st.f_bfree) * st.f_bsize);
+        printf("  ");
+        printsize((long long)st.f_bfree * (long long)st.f_bsize);
+        printf("   %d\n", (int) st.f_bsize);
     }
 }
 
 int df_main(int argc, char *argv[]) {
+    printf("Filesystem             Size   Used   Free   Blksize\n");
     if (argc == 1) {
         char s[2000];
         FILE *f = fopen("/proc/mounts", "r");
