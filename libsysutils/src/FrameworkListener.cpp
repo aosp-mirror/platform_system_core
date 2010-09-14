@@ -35,7 +35,7 @@ bool FrameworkListener::onDataAvailable(SocketClient *c) {
 
     if ((len = read(c->getSocket(), buffer, sizeof(buffer) -1)) < 0) {
         SLOGE("read() failed (%s)", strerror(errno));
-        return errno;
+        return false;
     } else if (!len)
         return false;
 
