@@ -1,5 +1,6 @@
 #include <alloca.h>
 #include <errno.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <pthread.h>
 #include <string.h>
@@ -9,9 +10,24 @@
 
 #include <sysutils/SocketClient.h>
 
-SocketClient::SocketClient(int socket) {
-    mSocket = socket;
+SocketClient::SocketClient(int socket)
+        : mSocket(socket)
+        , mPid(-1)
+        , mUid(-1)
+        , mGid(-1)
+{
     pthread_mutex_init(&mWriteMutex, NULL);
+
+    struct ucred creds;
+    socklen_t szCreds = sizeof(creds);
+    memset(&creds, 0, szCreds);
+
+    int err = getsockopt(socket, SOL_SOCKET, SO_PEERCRED, &creds, &szCreds);
+    if (err == 0) {
+        mPid = creds.pid;
+        mUid = creds.uid;
+        mGid = creds.gid;
+    }
 }
 
 int SocketClient::sendMsg(int code, const char *msg, bool addErrno) {
