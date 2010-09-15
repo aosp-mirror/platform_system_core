@@ -18,8 +18,6 @@ SHAREDLIB = libmetrics.so
 LIB_TEST = metrics_library_test
 COUNTER_TEST = counter_test
 
-LCRASH ?= -lcrash
-
 TESTCOUNTER_OBJS = \
 	counter.o \
 	counter_test.o
@@ -55,7 +53,7 @@ $(COUNTER_TEST): $(TESTCOUNTER_OBJS)
 	$(CXX) -o $@ $^ $(TESTCOUNTER_LIBS)
 
 $(DAEMON): $(DAEMON_OBJS) $(SHAREDLIB)
-	$(CXX) -o $@ $^ $(DAEMON_LDFLAGS) $(LCRASH)
+	$(CXX) -o $@ $^ $(DAEMON_LDFLAGS)
 
 $(DAEMON_TEST): $(TESTDAEMON_OBJS)
 	$(CXX) -o $@ $^ $(DAEMON_LDFLAGS) $(TESTDAEMON_LIBS)
