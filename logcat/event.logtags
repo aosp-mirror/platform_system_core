@@ -104,7 +104,7 @@
 #
 20001 dvm_gc_info (custom|2),(custom|2),(custom|2),(custom|2)
 20002 dvm_gc_madvise_info (total|1|2),(zygote|1|2)
-20003 dvm_lock_sample (process|3),(main|1|5),(thread|3),(time|1|3),(file|3),(line|1|5),(sample_percent|1|6)
+20003 dvm_lock_sample (process|3),(main|1|5),(thread|3),(time|1|3),(file|3),(line|1|5),(ownerfile|3),(ownerline|1|5),(sample_percent|1|6)
 
 75000 sqlite_mem_alarm_current (current|1|2)
 75001 sqlite_mem_alarm_max (max|1|2)
