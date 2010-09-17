@@ -26,8 +26,15 @@ static const mode_t kSystemCrashPathMode = 01755;
 static const uid_t kRootOwner = 0;
 static const uid_t kRootGroup = 0;
 
-// Maximum of 8 crash reports per directory.
-const int CrashCollector::kMaxCrashDirectorySize = 8;
+// Maximum crash reports per crash spool directory.  Note that this is
+// a separate maximum from the maximum rate at which we upload these
+// diagnostics.  The higher this rate is, the more space we allow for
+// core files, minidumps, and kcrash logs, and equivalently the more
+// processor and I/O bandwidth we dedicate to handling these crashes when
+// many occur at once.  Also note that if core files are configured to
+// be left on the file system, we stop adding crashes when either the
+// number of core files or minidumps reaches this number.
+const int CrashCollector::kMaxCrashDirectorySize = 32;
 
 CrashCollector::CrashCollector() : forced_crash_directory_(NULL) {
 }

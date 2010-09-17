@@ -21,8 +21,8 @@ CONSENT_ID="/home/chronos/Consent To Send Stats"
 # Path to find which is required for computing the crash rate.
 FIND="/usr/bin/find"
 
-# Send up to 8 crashes per day.
-MAX_CRASH_RATE=8
+# Maximum crashes to send per day.
+MAX_CRASH_RATE=32
 
 # File whose existence mocks crash sending.  If empty we pretend the
 # crash sending was successful, otherwise unsuccessful.
@@ -197,13 +197,12 @@ send_crash() {
     lecho "Crash sending failed with: $(cat ${curl_stderr})"
   fi
 
-  rm -f "${report_id}" "${output_file}"
+  rm -f "${report_id}"
 
   return ${curl_result}
 }
 
-# Send all crashes from the given directory.  The directory is currently
-# expected to just contain a bunch of minidumps.
+# Send all crashes from the given directory.
 send_crashes() {
   local dir="$1"
   lecho "Considering crashes in ${dir}"
