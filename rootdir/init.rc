@@ -8,8 +8,8 @@ sysclktz 0
 loglevel 3
 
 # setup the global environment
-    export PATH /sbin:/system/sbin:/system/bin:/system/xbin
-    export LD_LIBRARY_PATH /system/lib
+    export PATH /sbin:/vendor/bin:/system/sbin:/system/bin:/system/xbin
+    export LD_LIBRARY_PATH /vendor/lib:/system/lib
     export ANDROID_BOOTLOGO 1
     export ANDROID_ROOT /system
     export ANDROID_ASSETS /system/app
@@ -22,6 +22,10 @@ loglevel 3
 # Backward compatibility
     symlink /system/etc /etc
     symlink /sys/kernel/debug /d
+
+# Right now vendor lives on the same filesystem as system,
+# but someday that may change.
+    symlink /system/vendor /vendor
 
 # create mountpoints
     mkdir /mnt 0775 root system
