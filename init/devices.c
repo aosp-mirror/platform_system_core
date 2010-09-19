@@ -39,7 +39,8 @@
 #include "list.h"
 
 #define SYSFS_PREFIX    "/sys"
-#define FIRMWARE_DIR    "/etc/firmware"
+#define FIRMWARE_DIR1   "/etc/firmware"
+#define FIRMWARE_DIR2   "/vendor/firmware"
 
 static int device_fd = -1;
 
@@ -480,7 +481,7 @@ out:
 
 static void process_firmware_event(struct uevent *uevent)
 {
-    char *root, *loading, *data, *file;
+    char *root, *loading, *data, *file1 = NULL, *file2 = NULL;
     int l, loading_fd, data_fd, fw_fd;
 
     log_event_print("firmware event { '%s', '%s' }\n",
@@ -498,7 +499,11 @@ static void process_firmware_event(struct uevent *uevent)
     if (l == -1)
         goto loading_free_out;
 
-    l = asprintf(&file, FIRMWARE_DIR"/%s", uevent->firmware);
+    l = asprintf(&file1, FIRMWARE_DIR1"/%s", uevent->firmware);
+    if (l == -1)
+        goto data_free_out;
+
+    l = asprintf(&file2, FIRMWARE_DIR2"/%s", uevent->firmware);
     if (l == -1)
         goto data_free_out;
 
@@ -510,14 +515,17 @@ static void process_firmware_event(struct uevent *uevent)
     if(data_fd < 0)
         goto loading_close_out;
 
-    fw_fd = open(file, O_RDONLY);
-    if(fw_fd < 0)
-        goto data_close_out;
+    fw_fd = open(file1, O_RDONLY);
+    if(fw_fd < 0) {
+        fw_fd = open(file2, O_RDONLY);
+        if(fw_fd < 0)
+            goto data_close_out;
+    }
 
     if(!load_firmware(fw_fd, loading_fd, data_fd))
-        log_event_print("firmware copy success { '%s', '%s' }\n", root, file);
+        log_event_print("firmware copy success { '%s', '%s' }\n", root, uevent->firmware);
     else
-        log_event_print("firmware copy failure { '%s', '%s' }\n", root, file);
+        log_event_print("firmware copy failure { '%s', '%s' }\n", root, uevent->firmware);
 
     close(fw_fd);
 data_close_out:
@@ -525,7 +533,8 @@ data_close_out:
 loading_close_out:
     close(loading_fd);
 file_free_out:
-    free(file);
+    free(file1);
+    free(file2);
 data_free_out:
     free(data);
 loading_free_out:
