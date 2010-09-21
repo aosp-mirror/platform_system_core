@@ -328,6 +328,7 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
     onrestart write /sys/android_power/request_state wake
     onrestart write /sys/power/state on
     onrestart restart media
+    onrestart restart netd
 
 service drm /system/bin/drmserver
     user drm
