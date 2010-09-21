@@ -143,10 +143,6 @@ int main(int argc, char *argv[]) {
   FilePath my_path(argv[0]);
   file_util::AbsolutePath(&my_path);
   s_metrics_lib.Init();
-  InitLogging(NULL,
-              LOG_ONLY_TO_SYSTEM_DEBUG_LOG,
-              DONT_LOCK_LOG_FILE,
-              DELETE_OLD_LOG_FILE);
   s_system_log.Initialize(my_path.BaseName().value().c_str());
   KernelCollector kernel_collector;
   kernel_collector.Initialize(CountKernelCrash,
