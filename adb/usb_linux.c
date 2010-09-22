@@ -191,9 +191,8 @@ static void find_usb_device(const char *base,
                 continue;
             }
 
-            vid = __le16_to_cpu(device->idVendor);
-            pid = __le16_to_cpu(device->idProduct);
-            pid = devdesc[10] | (devdesc[11] << 8);
+            vid = device->idVendor;
+            pid = device->idProduct;
             DBGX("[ %s is V:%04x P:%04x ]\n", devname, vid, pid);
 
                 // should have config descriptor next
@@ -617,7 +616,7 @@ static void register_device(const char *dev_name,
             ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
             ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
             ctrl.wValue = (USB_DT_STRING << 8) | serial_index;
-            ctrl.wIndex = languages[i];
+            ctrl.wIndex = __le16_to_cpu(languages[i]);
             ctrl.wLength = sizeof(buffer);
             ctrl.data = buffer;
 
@@ -627,7 +626,7 @@ static void register_device(const char *dev_name,
                 // skip first word, and copy the rest to the serial string, changing shorts to bytes.
                 result /= 2;
                 for (i = 1; i < result; i++)
-                    serial[i - 1] = buffer[i];
+                    serial[i - 1] = __le16_to_cpu(buffer[i]);
                 serial[i - 1] = 0;
                 break;
             }
