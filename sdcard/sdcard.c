@@ -114,6 +114,12 @@ struct fuse {
 
 #define PATH_BUFFER_SIZE 1024
 
+/*
+ * Get the real-life absolute path to a node.
+ *   node: start at this node
+ *   buf: storage for returned string
+ *   name: append this string to path if set
+ */
 char *node_get_path(struct node *node, char *buf, const char *name)
 {
     char *out = buf + PATH_BUFFER_SIZE - 1;
@@ -439,15 +445,27 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
     case FUSE_SETATTR: { /* setattr_in -> attr_out */
         struct fuse_setattr_in *req = data;
         struct fuse_attr_out out;
+        char *path, buffer[PATH_BUFFER_SIZE];
+        int res = 0;
+
         TRACE("SETATTR fh=%llx id=%llx valid=%x\n",
               req->fh, hdr->nodeid, req->valid);
 
-            /* XXX */
+        /* XXX: incomplete implementation -- truncate only.  chmod/chown
+         * should NEVER be implemented. */
+
+        path = node_get_path(node, buffer, 0);
+        if (req->valid & FATTR_SIZE)
+            res = truncate(path, req->size);
 
         memset(&out, 0, sizeof(out));
         node_get_attr(node, &out.attr);
         out.attr_valid = 10;
-        fuse_reply(fuse, hdr->unique, &out, sizeof(out));
+
+        if (res)
+            fuse_status(fuse, hdr->unique, -errno);
+        else
+            fuse_reply(fuse, hdr->unique, &out, sizeof(out));
         return;
     }
 //    case FUSE_READLINK:
