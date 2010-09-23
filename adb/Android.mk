@@ -152,3 +152,43 @@ else
 endif
 
 endif
+
+
+# adb host tool for device-as-host
+# =========================================================
+include $(CLEAR_VARS)
+
+LOCAL_LDLIBS := -lrt -lncurses -lpthread
+
+LOCAL_SRC_FILES := \
+	adb.c \
+	console.c \
+	transport.c \
+	transport_local.c \
+	transport_usb.c \
+	commandline.c \
+	adb_client.c \
+	sockets.c \
+	services.c \
+	file_sync_client.c \
+	get_my_path_linux.c \
+	usb_linux.c \
+	utils.c \
+	usb_vendors.c \
+	fdevent.c
+
+LOCAL_CFLAGS := \
+	-O2 \
+	-g \
+	-DADB_HOST=1 \
+	-DADB_HOST_ON_TARGET=1 \
+	-Wall \
+	-Wno-unused-parameter \
+	-D_XOPEN_SOURCE \
+	-D_GNU_SOURCE
+
+LOCAL_MODULE := adb
+
+LOCAL_STATIC_LIBRARIES := libzipfile libunz libcutils
+
+include $(BUILD_EXECUTABLE)
