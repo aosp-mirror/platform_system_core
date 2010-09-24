@@ -29,10 +29,18 @@ extern inline void android_memory_barrier(void)
 {
     android_compiler_barrier();
 }
+extern inline void android_memory_store_barrier(void)
+{
+    android_compiler_barrier();
+}
 #else
 extern inline void android_memory_barrier(void)
 {
     __asm__ __volatile__ ("mfence" : : : "memory");
+}
+extern inline void android_memory_store_barrier(void)
+{
+    android_compiler_barrier();
 }
 #endif
 
