@@ -28,24 +28,40 @@ extern inline void android_compiler_barrier(void)
 #if ANDROID_SMP == 0
 extern inline void android_memory_barrier(void)
 {
-  android_compiler_barrier();
+    android_compiler_barrier();
+}
+extern inline void android_memory_store_barrier(void)
+{
+    android_compiler_barrier();
 }
 #elif defined(__ARM_HAVE_DMB)
 extern inline void android_memory_barrier(void)
 {
     __asm__ __volatile__ ("dmb" : : : "memory");
 }
+extern inline void android_memory_store_barrier(void)
+{
+    /* TODO: use "dmb st" once the toolchain understands it */
+    __asm__ __volatile__ ("dmb" : : : "memory");
+}
 #elif defined(__ARM_HAVE_LDREX_STREX)
 extern inline void android_memory_barrier(void)
 {
-    __asm__ __volatile__ ("mcr p15, 0, %0, c7, c10, 5"
-                          : : "r" (0) : "memory");
+    __asm__ __volatile__ ("mcr p15, 0, %0, c7, c10, 5" : : "r" (0) : "memory");
+}
+extern inline void android_memory_store_barrier(void)
+{
+    android_memory_barrier();
 }
 #else
 extern inline void android_memory_barrier(void)
 {
     typedef void (kuser_memory_barrier)(void);
     (*(kuser_memory_barrier *)0xffff0fa0)();
+}
+extern inline void android_memory_store_barrier(void)
+{
+    android_memory_barrier();
 }
 #endif
 
