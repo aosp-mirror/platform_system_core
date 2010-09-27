@@ -54,6 +54,7 @@
 #define AID_USB           1018  /* USB devices */
 #define AID_DRM           1019  /* DRM server */
 #define AID_DRMIO         1020  /* DRM IO server */
+#define AID_GPS           1021  /* GPS daemon */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -106,6 +107,7 @@ static const struct android_id_info android_ids[] = {
     { "vpn",       AID_VPN, },
     { "keystore",  AID_KEYSTORE, },
     { "usb",       AID_USB, },
+    { "gps",       AID_GPS, },
     { "inet",      AID_INET, },
     { "net_raw",   AID_NET_RAW, },
     { "net_admin", AID_NET_ADMIN, },
