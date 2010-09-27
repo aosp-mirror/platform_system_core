@@ -51,56 +51,63 @@ struct fbinfo {
 
 void framebuffer_service(int fd, void *cookie)
 {
-    struct fb_var_screeninfo vinfo;
-    int fb, offset;
-    char x[256];
-
     struct fbinfo fbinfo;
-    unsigned i, bytespp;
+    unsigned int i;
+    char buf[640];
+    int fd_screencap;
+    int w, h, f;
+    int fds[2];
 
-    fb = open("/dev/graphics/fb0", O_RDONLY);
-    if(fb < 0) goto done;
+    if (pipe(fds) < 0) goto done;
 
-    if(ioctl(fb, FBIOGET_VSCREENINFO, &vinfo) < 0) goto done;
-    fcntl(fb, F_SETFD, FD_CLOEXEC);
+    pid_t pid = fork();
+    if (pid < 0) goto done;
 
-    bytespp = vinfo.bits_per_pixel / 8;
-
-    fbinfo.version = DDMS_RAWIMAGE_VERSION;
-    fbinfo.bpp = vinfo.bits_per_pixel;
-    fbinfo.size = vinfo.xres * vinfo.yres * bytespp;
-    fbinfo.width = vinfo.xres;
-    fbinfo.height = vinfo.yres;
-    fbinfo.red_offset = vinfo.red.offset;
-    fbinfo.red_length = vinfo.red.length;
-    fbinfo.green_offset = vinfo.green.offset;
-    fbinfo.green_length = vinfo.green.length;
-    fbinfo.blue_offset = vinfo.blue.offset;
-    fbinfo.blue_length = vinfo.blue.length;
-    fbinfo.alpha_offset = vinfo.transp.offset;
-    fbinfo.alpha_length = vinfo.transp.length;
-
-    /* HACK: for several of our 3d cores a specific alignment
-     * is required so the start of the fb may not be an integer number of lines
-     * from the base.  As a result we are storing the additional offset in
-     * xoffset. This is not the correct usage for xoffset, it should be added
-     * to each line, not just once at the beginning */
-    offset = vinfo.xoffset * bytespp;
-
-    offset += vinfo.xres * vinfo.yoffset * bytespp;
-
-    if(writex(fd, &fbinfo, sizeof(fbinfo))) goto done;
-
-    lseek(fb, offset, SEEK_SET);
-    for(i = 0; i < fbinfo.size; i += 256) {
-      if(readx(fb, &x, 256)) goto done;
-      if(writex(fd, &x, 256)) goto done;
+    if (pid == 0) {
+        dup2(fds[1], STDOUT_FILENO);
+        close(fds[0]);
+        close(fds[1]);
+        const char* command = "screencap";
+        const char *args[2] = {command, NULL};
+        execvp(command, (char**)args);
+        exit(1);
     }
 
-    if(readx(fb, &x, fbinfo.size % 256)) goto done;
-    if(writex(fd, &x, fbinfo.size % 256)) goto done;
+    fd_screencap = fds[0];
+
+    /* read w, h & format */
+    if(readx(fd_screencap, &w, 4)) goto done;
+    if(readx(fd_screencap, &h, 4)) goto done;
+    if(readx(fd_screencap, &f, 4)) goto done;
+
+    /* for now always assume RGBX_8888 format */
+    fbinfo.version = DDMS_RAWIMAGE_VERSION;
+    fbinfo.bpp = 32;
+    fbinfo.size = w * h * 4;
+    fbinfo.width = w;
+    fbinfo.height = h;
+    fbinfo.red_offset = 0;
+    fbinfo.red_length = 8;
+    fbinfo.green_offset = 8;
+    fbinfo.green_length = 8;
+    fbinfo.blue_offset = 16;
+    fbinfo.blue_length = 8;
+    fbinfo.alpha_offset = 24;
+    fbinfo.alpha_length = 8;
+
+    /* write header */
+    if(writex(fd, &fbinfo, sizeof(fbinfo))) goto done;
+
+    /* write data */
+    for(i = 0; i < fbinfo.size; i += sizeof(buf)) {
+      if(readx(fd_screencap, buf, sizeof(buf))) goto done;
+      if(writex(fd, buf, sizeof(buf))) goto done;
+    }
+    if(readx(fd_screencap, buf, fbinfo.size % sizeof(buf))) goto done;
+    if(writex(fd, buf, fbinfo.size % sizeof(buf))) goto done;
 
 done:
-    if(fb >= 0) close(fb);
+    close(fds[0]);
+    close(fds[1]);
     close(fd);
 }
