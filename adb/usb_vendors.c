@@ -77,6 +77,10 @@
 #define VENDOR_ID_PMC           0x04DA
 // Toshiba's USB Vendor ID
 #define VENDOR_ID_TOSHIBA       0x0930
+// SK Telesys's USB Vendor ID
+#define VENDOR_ID_SK_TELESYS    0x1F53
+// KT Tech's USB Vendor ID
+#define VENDOR_ID_KT_TECH       0x3403
 
 
 /** built-in vendor list */
@@ -102,6 +106,8 @@ int builtInVendorIds[] = {
     VENDOR_ID_NEC,
     VENDOR_ID_PMC,
     VENDOR_ID_TOSHIBA,
+    VENDOR_ID_SK_TELESYS,
+    VENDOR_ID_KT_TECH,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
