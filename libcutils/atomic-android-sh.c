@@ -49,12 +49,12 @@ static pthread_mutex_t  _swap_locks[SWAP_LOCK_COUNT];
    &_swap_locks[((unsigned)(void*)(addr) >> 3U) % SWAP_LOCK_COUNT]
 
 
-int32_t android_atomic_acquire_load(volatile int32_t* addr)
+int32_t android_atomic_acquire_load(volatile const int32_t* addr)
 {
     return *addr;
 }
 
-int32_t android_atomic_release_load(volatile int32_t* addr)
+int32_t android_atomic_release_load(volatile const int32_t* addr)
 {
     return *addr;
 }

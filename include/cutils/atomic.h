@@ -77,8 +77,8 @@ int32_t android_atomic_or(int32_t value, volatile int32_t* addr);
  * This is only necessary if you need the memory barrier.  A 32-bit read
  * from a 32-bit aligned address is atomic on all supported platforms.
  */
-int32_t android_atomic_acquire_load(volatile int32_t* addr);
-int32_t android_atomic_release_load(volatile int32_t* addr);
+int32_t android_atomic_acquire_load(volatile const int32_t* addr);
+int32_t android_atomic_release_load(volatile const int32_t* addr);
 
 /*
  * Perform an atomic store with "acquire" or "release" ordering.
