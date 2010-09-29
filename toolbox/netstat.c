@@ -9,7 +9,7 @@
  *    notice, this list of conditions and the following disclaimer.
  *  * Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the 
+ *    the documentation and/or other materials provided with the
  *    distribution.
  *  * Neither the name of Google, Inc. nor the names of its contributors
  *    may be used to endorse or promote products derived from this
@@ -22,23 +22,37 @@
  * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
  * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
 
+#include <arpa/inet.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 typedef union iaddr iaddr;
+typedef union iaddr6 iaddr6;
 
 union iaddr {
     unsigned u;
     unsigned char b[4];
 };
-    
+
+union iaddr6 {
+    struct {
+        unsigned a;
+        unsigned b;
+        unsigned c;
+        unsigned d;
+    } u;
+    unsigned char b[16];
+};
+
 static const char *state2str(unsigned state)
 {
     switch(state){
@@ -57,64 +71,84 @@ static const char *state2str(unsigned state)
     }
 }
 
-void addr2str(iaddr addr, unsigned port, char *buf)
+/* addr + : + port + \0 */
+#define ADDR_LEN INET6_ADDRSTRLEN + 1 + 5 + 1
+
+static void addr2str(int af, const void *addr, unsigned port, char *buf)
 {
-    if(port) {
-        snprintf(buf, 64, "%d.%d.%d.%d:%d",
-                 addr.b[0], addr.b[1], addr.b[2], addr.b[3], port);
-    } else {
-        snprintf(buf, 64, "%d.%d.%d.%d:*",
-                 addr.b[0], addr.b[1], addr.b[2], addr.b[3]);
+    if (inet_ntop(af, addr, buf, ADDR_LEN) == NULL) {
+        *buf = '\0';
+        return;
     }
+    size_t len = strlen(buf);
+    if (port) {
+        snprintf(buf+len, ADDR_LEN-len, ":%d", port);
+    } else {
+        strncat(buf+len, ":*", ADDR_LEN-len-1);
+    }
+}
+
+static void ipv4(const char *filename, const char *label) {
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) {
+        return;
+    }
+    char buf[BUFSIZ];
+    fgets(buf, BUFSIZ, fp);
+    while (fgets(buf, BUFSIZ, fp)){
+        char lip[ADDR_LEN];
+        char rip[ADDR_LEN];
+        iaddr laddr, raddr;
+        unsigned lport, rport, state, txq, rxq, num;
+        int n = sscanf(buf, " %d: %x:%x %x:%x %x %x:%x",
+                       &num, &laddr.u, &lport, &raddr.u, &rport,
+                       &state, &txq, &rxq);
+        if (n == 8) {
+            addr2str(AF_INET, &laddr, lport, lip);
+            addr2str(AF_INET, &raddr, rport, rip);
+
+            printf("%4s  %6d %6d %-22s %-22s %s\n",
+                   label, txq, rxq, lip, rip,
+                   state2str(state));
+        }
+    }
+    fclose(fp);
+}
+
+static void ipv6(const char *filename, const char *label) {
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) {
+        return;
+    }
+    char buf[BUFSIZ];
+    fgets(buf, BUFSIZ, fp);
+    while (fgets(buf, BUFSIZ, fp)){
+        char lip[ADDR_LEN];
+        char rip[ADDR_LEN];
+        iaddr6 laddr6, raddr6;
+        unsigned lport, rport, state, txq, rxq, num;
+        int n = sscanf(buf, " %d: %8x%8x%8x%8x:%x %8x%8x%8x%8x:%x %x %x:%x",
+                       &num, &laddr6.u.a, &laddr6.u.b, &laddr6.u.c, &laddr6.u.d, &lport,
+                       &raddr6.u.a, &raddr6.u.b, &raddr6.u.c, &raddr6.u.d, &rport,
+                       &state, &txq, &rxq);
+        if (n == 14) {
+            addr2str(AF_INET6, &laddr6, lport, lip);
+            addr2str(AF_INET6, &raddr6, rport, rip);
+
+            printf("%4s  %6d %6d %-22s %-22s %s\n",
+                   label, txq, rxq, lip, rip,
+                   state2str(state));
+        }
+    }
+    fclose(fp);
 }
 
 int netstat_main(int argc, char *argv[])
 {
-    char buf[512];
-    char lip[64];
-    char rip[64];
-    iaddr laddr, raddr;
-    unsigned lport, rport, state, txq, rxq, num;
-    int n;
-    FILE *fp;
-
     printf("Proto Recv-Q Send-Q Local Address          Foreign Address        State\n");
-
-    fp = fopen("/proc/net/tcp", "r");
-    if(fp != 0) {
-        fgets(buf, 512, fp);
-        while(fgets(buf, 512, fp)){
-            n = sscanf(buf, " %d: %x:%x %x:%x %x %x:%x",
-                       &num, &laddr.u, &lport, &raddr.u, &rport,
-                       &state, &txq, &rxq);
-            if(n == 8) {
-                addr2str(laddr, lport, lip);
-                addr2str(raddr, rport, rip);
-                
-                printf("tcp   %6d %6d %-22s %-22s %s\n", 
-                       txq, rxq, lip, rip,
-                       state2str(state));
-            }
-        }
-        fclose(fp);
-    }
-    fp = fopen("/proc/net/udp", "r");
-    if(fp != 0) {
-        fgets(buf, 512, fp);
-        while(fgets(buf, 512, fp)){
-            n = sscanf(buf, " %d: %x:%x %x:%x %x %x:%x",
-                       &num, &laddr.u, &lport, &raddr.u, &rport,
-                       &state, &txq, &rxq);
-            if(n == 8) {
-                addr2str(laddr, lport, lip);
-                addr2str(raddr, rport, rip);
-                
-                printf("udp   %6d %6d %-22s %-22s\n", 
-                       txq, rxq, lip, rip);
-            }
-        }
-        fclose(fp);
-    }
-
+    ipv4("/proc/net/tcp",  "tcp");
+    ipv4("/proc/net/udp",  "udp");
+    ipv6("/proc/net/tcp6", "tcp6");
+    ipv6("/proc/net/udp6", "udp6");
     return 0;
 }
