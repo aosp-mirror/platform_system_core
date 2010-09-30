@@ -5,8 +5,10 @@
 #ifndef _CRASH_REPORTER_CRASH_COLLECTOR_H_
 #define _CRASH_REPORTER_CRASH_COLLECTOR_H_
 
-#include <string>
 #include <sys/stat.h>
+
+#include <map>
+#include <string>
 
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
@@ -32,14 +34,21 @@ class CrashCollector {
 
  protected:
   friend class CrashCollectorTest;
-  FRIEND_TEST(CrashCollectorTest, CheckHasCapacityOverCore);
-  FRIEND_TEST(CrashCollectorTest, CheckHasCapacityOverNonCore);
+  FRIEND_TEST(CrashCollectorTest, CheckHasCapacityCorrectBasename);
+  FRIEND_TEST(CrashCollectorTest, CheckHasCapacityStrangeNames);
+  FRIEND_TEST(CrashCollectorTest, CheckHasCapacityUsual);
   FRIEND_TEST(CrashCollectorTest, GetCrashDirectoryInfo);
   FRIEND_TEST(CrashCollectorTest, FormatDumpBasename);
   FRIEND_TEST(CrashCollectorTest, Initialize);
+  FRIEND_TEST(CrashCollectorTest, ReadKeyValueFile);
+  FRIEND_TEST(CrashCollectorTest, Sanitize);
 
   // Set maximum enqueued crashes in a crash directory.
   static const int kMaxCrashDirectorySize;
+
+  // Return a filename that has only [a-z0-1_] characters by mapping
+  // all others into '_'.
+  std::string Sanitize(const std::string &name);
 
   // For testing, set the directory always returned by
   // GetCreatedCrashDirectoryByEuid.
@@ -71,6 +80,16 @@ class CrashCollector {
   // Check given crash directory still has remaining capacity for another
   // crash.
   bool CheckHasCapacity(const FilePath &crash_directory);
+
+  // Read the given file of form [<key><separator><value>\n...] and return
+  // a map of its contents.
+  bool ReadKeyValueFile(const FilePath &file,
+                        char separator,
+                        std::map<std::string, std::string> *dictionary);
+
+  // Write a file of metadata about crash.
+  void WriteCrashMetaData(const FilePath &meta_path,
+                          const std::string &exec_name);
 
   CountCrashFunction count_crash_function_;
   IsFeedbackAllowedFunction is_feedback_allowed_function_;

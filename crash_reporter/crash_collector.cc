@@ -8,12 +8,15 @@
 #include <pwd.h>  // For struct passwd.
 #include <sys/types.h>  // for mode_t.
 
+#include <set>
+
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/string_util.h"
 #include "crash-reporter/system_logging.h"
 
 static const char kDefaultUserName[] = "chronos";
+static const char kLsbRelease[] = "/etc/lsb-release";
 static const char kSystemCrashPath[] = "/var/spool/crash";
 static const char kUserCrashPath[] = "/home/chronos/user/crash";
 
@@ -55,13 +58,23 @@ void CrashCollector::Initialize(
   logger_ = logger;
 }
 
+std::string CrashCollector::Sanitize(const std::string &name) {
+  std::string result = name;
+  for (size_t i = 0; i < name.size(); ++i) {
+    if (!isalnum(result[i]) && result[i] != '_')
+      result[i] = '_';
+  }
+  return result;
+}
+
 std::string CrashCollector::FormatDumpBasename(const std::string &exec_name,
                                                time_t timestamp,
                                                pid_t pid) {
   struct tm tm;
   localtime_r(&timestamp, &tm);
+  std::string sanitized_exec_name = Sanitize(exec_name);
   return StringPrintf("%s.%04d%02d%02d.%02d%02d%02d.%d",
-                      exec_name.c_str(),
+                      sanitized_exec_name.c_str(),
                       tm.tm_year + 1900,
                       tm.tm_mon + 1,
                       tm.tm_mday,
@@ -173,22 +186,27 @@ bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {
   }
   struct dirent ent_buf;
   struct dirent* ent;
-  int count_non_core = 0;
-  int count_core = 0;
   bool full = false;
+  std::set<std::string> basenames;
   while (readdir_r(dir, &ent_buf, &ent) == 0 && ent != NULL) {
     if ((strcmp(ent->d_name, ".") == 0) ||
         (strcmp(ent->d_name, "..") == 0))
       continue;
 
-    if (strcmp(ent->d_name + strlen(ent->d_name) - 5, ".core") == 0) {
-      ++count_core;
-    } else {
-      ++count_non_core;
-    }
+    std::string filename(ent->d_name);
+    size_t last_dot = filename.rfind(".");
+    std::string basename;
+    // If there is a valid looking extension, use the base part of the
+    // name.  If the only dot is the first byte (aka a dot file), treat
+    // it as unique to avoid allowing a directory full of dot files
+    // from accumulating.
+    if (last_dot != std::string::npos && last_dot != 0)
+      basename = filename.substr(0, last_dot);
+    else
+      basename = filename;
+    basenames.insert(basename);
 
-    if (count_core >= kMaxCrashDirectorySize ||
-        count_non_core >= kMaxCrashDirectorySize) {
+    if (basenames.size() >= static_cast<size_t>(kMaxCrashDirectorySize)) {
       logger_->LogWarning(
           "Crash directory %s already full with %d pending reports",
           crash_directory.value().c_str(),
@@ -199,4 +217,54 @@ bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {
   }
   closedir(dir);
   return !full;
+}
+
+bool CrashCollector::ReadKeyValueFile(
+    const FilePath &path,
+    const char separator,
+    std::map<std::string, std::string> *dictionary) {
+  std::string contents;
+  if (!file_util::ReadFileToString(path, &contents)) {
+    return false;
+  }
+  typedef std::vector<std::string> StringVector;
+  StringVector lines;
+  SplitString(contents, '\n', &lines);
+  bool any_errors = false;
+  for (StringVector::iterator line = lines.begin(); line != lines.end();
+       ++line) {
+    // Allow empty strings.
+    if (line->empty())
+      continue;
+    StringVector sides;
+    SplitString(*line, separator, &sides);
+    if (sides.size() != 2) {
+      any_errors = true;
+      continue;
+    }
+    dictionary->insert(std::pair<std::string, std::string>(sides[0], sides[1]));
+  }
+  return !any_errors;
+}
+
+void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
+                                        const std::string &exec_name) {
+  std::map<std::string, std::string> contents;
+  if (!ReadKeyValueFile(FilePath(std::string(kLsbRelease)), '=', &contents)) {
+    logger_->LogError("Problem parsing %s", kLsbRelease);
+    // Even though there was some failure, take as much as we could read.
+  }
+  std::string version("unknown");
+  std::map<std::string, std::string>::iterator i;
+  if ((i = contents.find("CHROMEOS_RELEASE_VERSION")) != contents.end()) {
+    version = i->second;
+  }
+  std::string meta_data = StringPrintf("exec_name=%s\n"
+                                       "ver=%s\n"
+                                       "done=1\n",
+                                       exec_name.c_str(),
+                                       version.c_str());
+  if (!file_util::WriteFile(meta_path, meta_data.c_str(), meta_data.size())) {
+    logger_->LogError("Unable to write %s", meta_path.value().c_str());
+  }
 }

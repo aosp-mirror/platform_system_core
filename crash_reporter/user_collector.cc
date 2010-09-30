@@ -275,6 +275,11 @@ bool UserCollector::GenerateDiagnostics(pid_t pid,
     conversion_result = false;
   }
 
+  WriteCrashMetaData(
+      crash_path.Append(
+          StringPrintf("%s.meta", dump_basename.c_str())),
+      exec_name);
+
   if (conversion_result) {
     logger_->LogInfo("Stored minidump to %s", minidump_path.value().c_str());
   }
@@ -298,10 +303,12 @@ bool UserCollector::HandleCrash(int signal, int pid, const char *force_exec) {
     // failing by indicating an unknown name.
     exec = "unknown";
   }
-  logger_->LogWarning("Received crash notification for %s[%d] sig %d",
-                      exec.c_str(), pid, signal);
+  bool feedback = is_feedback_allowed_function_();
+  logger_->LogWarning("Received crash notification for %s[%d] sig %d (%s)",
+                      exec.c_str(), pid, signal,
+                      feedback ? "handling" : "ignoring");
 
-  if (is_feedback_allowed_function_()) {
+  if (feedback) {
     count_crash_function_();
 
     if (generate_diagnostics_) {

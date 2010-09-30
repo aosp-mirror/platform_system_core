@@ -48,6 +48,16 @@ TEST_F(CrashCollectorTest, Initialize) {
   ASSERT_TRUE(&logging_ == collector_.logger_);
 }
 
+TEST_F(CrashCollectorTest, Sanitize) {
+  EXPECT_EQ("chrome", collector_.Sanitize("chrome"));
+  EXPECT_EQ("CHROME", collector_.Sanitize("CHROME"));
+  EXPECT_EQ("1chrome2", collector_.Sanitize("1chrome2"));
+  EXPECT_EQ("chrome__deleted_", collector_.Sanitize("chrome (deleted)"));
+  EXPECT_EQ("foo_bar", collector_.Sanitize("foo.bar"));
+  EXPECT_EQ("", collector_.Sanitize(""));
+  EXPECT_EQ("_", collector_.Sanitize(" "));
+}
+
 TEST_F(CrashCollectorTest, GetCrashDirectoryInfo) {
   FilePath path;
   const int kRootUid = 0;
@@ -118,39 +128,94 @@ bool CrashCollectorTest::CheckHasCapacity() {
   return has_capacity;
 }
 
-TEST_F(CrashCollectorTest, CheckHasCapacityOverNonCore) {
-  // Test up to kMaxCrashDirectorySize-1 non-core files can be added.
+TEST_F(CrashCollectorTest, CheckHasCapacityUsual) {
+  // Test kMaxCrashDirectorySize - 1 non-meta files can be added.
   for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 1; ++i) {
-    EXPECT_TRUE(CheckHasCapacity());
-    file_util::WriteFile(test_dir_.Append(StringPrintf("file%d", i)), "", 0);
-  }
-
-  // Test an additional kMaxCrashDirectorySize - 1 core files fit.
-  for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 1; ++i) {
-    EXPECT_TRUE(CheckHasCapacity());
     file_util::WriteFile(test_dir_.Append(StringPrintf("file%d.core", i)),
                          "", 0);
+    EXPECT_TRUE(CheckHasCapacity());
   }
 
-  // Test an additional kMaxCrashDirectorySize non-core files don't fit.
+  // Test an additional kMaxCrashDirectorySize - 1 meta files fit.
+  for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 1; ++i) {
+    file_util::WriteFile(test_dir_.Append(StringPrintf("file%d.meta", i)),
+                         "", 0);
+    EXPECT_TRUE(CheckHasCapacity());
+  }
+
+  // Test an additional kMaxCrashDirectorySize meta files don't fit.
   for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize; ++i) {
-    file_util::WriteFile(test_dir_.Append(StringPrintf("overage%d", i)), "", 0);
+    file_util::WriteFile(test_dir_.Append(StringPrintf("overage%d.meta", i)),
+                         "", 0);
     EXPECT_FALSE(CheckHasCapacity());
   }
 }
 
-TEST_F(CrashCollectorTest, CheckHasCapacityOverCore) {
-  // Set up kMaxCrashDirectorySize - 1 core files.
+TEST_F(CrashCollectorTest, CheckHasCapacityCorrectBasename) {
+  // Test kMaxCrashDirectorySize - 1 files can be added.
   for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 1; ++i) {
-    file_util::WriteFile(test_dir_.Append(StringPrintf("file%d.core", i)),
+    file_util::WriteFile(test_dir_.Append(StringPrintf("file.%d.core", i)),
                          "", 0);
+    EXPECT_TRUE(CheckHasCapacity());
   }
-
-  EXPECT_TRUE(CheckHasCapacity());
-
-  // Test an additional core file does not fit.
-  file_util::WriteFile(test_dir_.Append("overage.core"), "", 0);
+  file_util::WriteFile(test_dir_.Append("file.last.core"), "", 0);
   EXPECT_FALSE(CheckHasCapacity());
+}
+
+TEST_F(CrashCollectorTest, CheckHasCapacityStrangeNames) {
+  // Test many files with different extensions and same base fit.
+  for (int i = 0; i < 5 * CrashCollector::kMaxCrashDirectorySize; ++i) {
+    file_util::WriteFile(test_dir_.Append(StringPrintf("a.%d", i)), "", 0);
+    EXPECT_TRUE(CheckHasCapacity());
+  }
+  // Test dot files are treated as individual files.
+  for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 2; ++i) {
+    file_util::WriteFile(test_dir_.Append(StringPrintf(".file%d", i)), "", 0);
+    EXPECT_TRUE(CheckHasCapacity());
+  }
+  file_util::WriteFile(test_dir_.Append("normal.meta"), "", 0);
+  EXPECT_FALSE(CheckHasCapacity());
+}
+
+TEST_F(CrashCollectorTest, ReadKeyValueFile) {
+  const char *contents = ("a=b\n"
+                          "\n"
+                          " c=d \n");
+  FilePath path(test_dir_.Append("keyval"));
+  std::map<std::string, std::string> dictionary;
+  std::map<std::string, std::string>::iterator i;
+
+  file_util::WriteFile(path, contents, strlen(contents));
+
+  EXPECT_TRUE(collector_.ReadKeyValueFile(path, '=', &dictionary));
+  i = dictionary.find("a");
+  EXPECT_TRUE(i != dictionary.end() && i->second == "b");
+  i = dictionary.find("c");
+  EXPECT_TRUE(i != dictionary.end() && i->second == "d");
+
+  dictionary.clear();
+
+  contents = ("a=b c d\n"
+              "e\n"
+              " f g = h\n"
+              "i=j\n"
+              "=k\n"
+              "l=\n");
+  file_util::WriteFile(path, contents, strlen(contents));
+
+  EXPECT_FALSE(collector_.ReadKeyValueFile(path, '=', &dictionary));
+  i = dictionary.find("a");
+  EXPECT_TRUE(i != dictionary.end() && i->second == "b c d");
+  i = dictionary.find("e");
+  EXPECT_TRUE(i == dictionary.end());
+  i = dictionary.find("f g");
+  EXPECT_TRUE(i != dictionary.end() && i->second == "h");
+  i = dictionary.find("i");
+  EXPECT_TRUE(i != dictionary.end() && i->second == "j");
+  i = dictionary.find("");
+  EXPECT_TRUE(i != dictionary.end() && i->second == "k");
+  i = dictionary.find("l");
+  EXPECT_TRUE(i != dictionary.end() && i->second == "");
 }
 
 int main(int argc, char **argv) {

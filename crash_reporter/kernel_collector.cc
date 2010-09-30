@@ -66,17 +66,6 @@ bool KernelCollector::ClearPreservedDump() {
   return true;
 }
 
-FilePath KernelCollector::GetKernelCrashPath(
-    const FilePath &root_crash_path,
-    time_t timestamp) {
-  std::string dump_basename =
-      FormatDumpBasename(kKernelExecName,
-                         timestamp,
-                         kKernelPid);
-  return root_crash_path.Append(
-      StringPrintf("%s.kcrash", dump_basename.c_str()));
-}
-
 bool KernelCollector::Collect() {
   std::string kernel_dump;
   FilePath root_crash_directory;
@@ -86,6 +75,8 @@ bool KernelCollector::Collect() {
   if (kernel_dump.empty()) {
     return false;
   }
+  logger_->LogInfo("Received prior crash notification from kernel");
+
   if (is_feedback_allowed_function_()) {
     count_crash_function_();
 
@@ -94,8 +85,13 @@ bool KernelCollector::Collect() {
       return true;
     }
 
-    FilePath kernel_crash_path = GetKernelCrashPath(root_crash_directory,
-                                                    time(NULL));
+    std::string dump_basename =
+        FormatDumpBasename(kKernelExecName,
+                           time(NULL),
+                           kKernelPid);
+    FilePath kernel_crash_path = root_crash_directory.Append(
+        StringPrintf("%s.kcrash", dump_basename.c_str()));
+
     if (file_util::WriteFile(kernel_crash_path,
                              kernel_dump.data(),
                              kernel_dump.length()) !=
@@ -104,6 +100,11 @@ bool KernelCollector::Collect() {
                        kernel_crash_path.value().c_str());
       return true;
     }
+
+    WriteCrashMetaData(
+        root_crash_directory.Append(
+            StringPrintf("%s.meta", dump_basename.c_str())),
+        kKernelExecName);
 
     logger_->LogInfo("Collected kernel crash diagnostics into %s",
                      kernel_crash_path.value().c_str());

@@ -43,9 +43,7 @@ static MetricsLibrary s_metrics_lib;
 static SystemLoggingImpl s_system_log;
 
 static bool IsFeedbackAllowed() {
-  // Once crosbug.com/5814 is fixed, call the is opted in function
-  // here.
-  return true;
+  return s_metrics_lib.AreMetricsEnabled();
 }
 
 static bool TouchFile(const FilePath &file_path) {

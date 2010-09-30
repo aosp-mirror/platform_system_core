@@ -95,21 +95,6 @@ TEST_F(KernelCollectorTest, ClearPreservedDump) {
   ASSERT_EQ(KernelCollector::kClearingSequence, dump);
 }
 
-TEST_F(KernelCollectorTest, GetKernelCrashPath) {
-  FilePath root("/var/spool/crash");
-  struct tm tm = {0};
-  tm.tm_sec = 15;
-  tm.tm_min = 50;
-  tm.tm_hour = 13;
-  tm.tm_mday = 23;
-  tm.tm_mon = 4;
-  tm.tm_year = 110;
-  tm.tm_isdst = -1;
-  FilePath path = collector_.GetKernelCrashPath(root, mktime(&tm));
-  ASSERT_EQ("/var/spool/crash/kernel.20100523.135015.0.kcrash",
-            path.value());
-}
-
 TEST_F(KernelCollectorTest, CollectPreservedFileMissing) {
   ASSERT_FALSE(collector_.Collect());
   ASSERT_NE(logging_.log().find("Unable to read test/kcrash"),

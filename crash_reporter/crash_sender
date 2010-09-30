@@ -21,8 +21,15 @@ CONSENT_ID="/home/chronos/Consent To Send Stats"
 # Path to find which is required for computing the crash rate.
 FIND="/usr/bin/find"
 
+# Set this to 1 in the environment to allow uploading crash reports
+# for unofficial versions.
+FORCE_OFFICIAL=${FORCE_OFFICIAL:-0}
+
+# Path to hardware class description.
+HWCLASS_PATH="/sys/devices/platform/chromeos_acpi/HWID"
+
 # Maximum crashes to send per day.
-MAX_CRASH_RATE=32
+MAX_CRASH_RATE=${MAX_CRASH_RATE:-32}
 
 # File whose existence mocks crash sending.  If empty we pretend the
 # crash sending was successful, otherwise unsuccessful.
@@ -31,9 +38,6 @@ MOCK_CRASH_SENDING="/tmp/mock-crash-sending"
 # File whose existence causes crash sending to be delayed (for testing).
 # Must be stateful to enable testing kernel crashes.
 PAUSE_CRASH_SENDING="/var/lib/crash_sender_paused"
-
-# URL to send non-official build crash reports to.
-REPORT_UPLOAD_STAGING_URL="http://clients2.google.com/cr/staging_report"
 
 # URL to send official build crash reports to.
 REPORT_UPLOAD_PROD_URL="http://clients2.google.com/cr/report"
@@ -89,11 +93,8 @@ check_not_already_running() {
   exit 1
 }
 
-get_version() {
-  grep ^CHROMEOS_RELEASE_VERSION /etc/lsb-release | cut -d = -f 2-
-}
-
 is_official() {
+  [ ${FORCE_OFFICIAL} -ne 0 ] && return 0
   grep ^CHROMEOS_RELEASE_DESCRIPTION /etc/lsb-release | grep -q Official
 }
 
@@ -119,7 +120,8 @@ is_on_3g() {
 check_rate() {
   mkdir -p ${TIMESTAMPS_DIR}
   # Only consider minidumps written in the past 24 hours by removing all older.
-  ${FIND} "${TIMESTAMPS_DIR}" -mindepth 1 -mmin +$((24 * 60)) -exec rm '{}' ';'
+  ${FIND} "${TIMESTAMPS_DIR}" -mindepth 1 -mmin +$((24 * 60)) \
+      -exec rm -- '{}' ';'
   local sends_in_24hrs=$(echo "${TIMESTAMPS_DIR}"/* | wc -w)
   lecho "Current send rate: ${sends_in_24hrs}sends/24hrs"
   if [ ${sends_in_24hrs} -ge ${MAX_CRASH_RATE} ]; then
@@ -132,37 +134,81 @@ check_rate() {
   return 0
 }
 
-# Return if $1 is a .core file
-get_kind() {
-  local kind="${1##*.}"
-  if [ "${kind}" = "dmp" ]; then
-    kind="minidump"
-  fi
-  echo ${kind}
+# Gets the base part of a crash report file, such as
+# name.01234.5678.9012 from name.01234.5678.9012.meta
+get_base() {
+  echo "${1%.*}"
 }
 
-get_exec_name() {
-  local filename=$(basename "$1")
-  echo "${filename%%.*}"
+# Return which kind of report the given metadata file relates to
+get_kind() {
+  # There should never be a report with both a dmp and kcrash file.
+  # If that were to happen we arbitrarily consider this a minidump
+  # report and effectively ignore the kcrash.
+  local base="$(get_base "$1")"
+  if [ -r "${base}.dmp" ]; then
+    echo "minidump"
+    return
+  fi
+  if [ -r "${base}.kcrash" ]; then
+    echo "kcrash"
+    return
+  fi
+}
+
+get_key_value() {
+  if ! grep -q "$2=" "$1"; then
+    echo "undefined"
+    return
+  fi
+  grep "$2=" "$1" | cut -d = -f 2-
+}
+
+# Returns true if mock is enabled.
+is_mock() {
+  [ -f "${MOCK_CRASH_SENDING}" ] && return 0
+  return 1
+}
+
+# Return the board name.
+get_board() {
+  echo $(get_key_value "/etc/lsb-release" "CHROMEOS_RELEASE_BOARD")
+}
+
+# Return the hardware class or "unknown".
+get_hardware_class() {
+  if [ -r "${HWCLASS_PATH}" ]; then
+    cat "${HWCLASS_PATH}"
+  else
+    echo "unknown"
+  fi
 }
 
 send_crash() {
-  local report_path="$1"
-  local kind=$(get_kind "${report_path}")
-  local exec_name=$(get_exec_name "${report_path}")
+  local meta_path="$1"
+  local kind="$(get_kind "${meta_path}")"
+  local exec_name="$(get_key_value "${meta_path}" "exec_name")"
   local sleep_time=$(generate_uniform_random $SECONDS_SEND_SPREAD)
-  local url="${REPORT_UPLOAD_STAGING_URL}"
-  if is_official; then
-    url="${REPORT_UPLOAD_PROD_URL}"
-  fi
+  local url="${REPORT_UPLOAD_PROD_URL}"
+  local chromeos_version="$(get_key_value "${meta_path}" "ver")"
+  local board="$(get_board)"
+  local hwclass="$(get_hardware_class)"
+  local payload_extension="${kind}"
+  [ "${kind}" = "minidump" ] && payload_extension="dmp"
+  local report_payload="$(get_base "${meta_path}").${payload_extension}"
   lecho "Sending crash:"
   lecho "  Scheduled to send in ${sleep_time}s"
-  lecho "  Report: ${report_path} (${kind})"
-  lecho "  URL: ${url}"
-  lecho "  Product: ${CHROMEOS_PRODUCT}"
+  lecho "  Metadata: ${meta_path} (${kind})"
+  lecho "  Payload: ${report_payload}"
   lecho "  Version: ${chromeos_version}"
+  if is_mock; then
+    lecho "  Product: ${CHROMEOS_PRODUCT}"
+    lecho "  URL: ${url}"
+    lecho "  Board: ${board}"
+    lecho "  HWClass: ${hwclass}"
+  fi
   lecho "  Exec name: ${exec_name}"
-  if [ -f "${MOCK_CRASH_SENDING}" ]; then
+  if is_mock; then
     local mock_in=$(cat "${MOCK_CRASH_SENDING}")
     if [ "${mock_in}" = "" ]; then
       lecho "Mocking successful send"
@@ -185,7 +231,9 @@ send_crash() {
   curl "${url}" \
     -F "prod=${CHROMEOS_PRODUCT}" \
     -F "ver=${chromeos_version}" \
-    -F "upload_file_${kind}=@${report_path}" \
+    -F "upload_file_${kind}=@${report_payload}" \
+    -F "board=${board}" \
+    -F "hwclass=${hwclass}" \
     -F "exec_name=${exec_name}" \
     -F "guid=<${CONSENT_ID}" -o "${report_id}" 2>"${curl_stderr}"
   curl_result=$?
@@ -202,53 +250,98 @@ send_crash() {
   return ${curl_result}
 }
 
+# *.meta files always end with done=1 so we can tell if they are complete.
+is_complete_metadata() {
+  grep -q "done=1" "$1"
+}
+
+# Remove the given report path.
+remove_report() {
+  local base="${1%.*}"
+  rm -f -- "${base}".*
+}
+
 # Send all crashes from the given directory.
 send_crashes() {
   local dir="$1"
-  lecho "Considering crashes in ${dir}"
 
   # Cycle through minidumps, most recent first.  That way if we're about
   # to exceed the daily rate, we send the most recent minidumps.
   if [ ! -d "${dir}" ]; then
     return
   fi
-  for file in $(ls -1t "${dir}"); do
-    local report_path="${dir}/${file}"
-    lecho "Considering file ${report_path}"
-    local kind=$(get_kind "${report_path}")
 
-    if [ "${kind}" = "core" ]; then
-      lecho "Ignoring core file."
-      continue
-    elif [ "${kind}" != "minidump" ] && [ "${kind}" != "kcrash" ]; then
-      lecho "Unknown report kind: ${kind}.  Removing report."
-      rm -f "${report_path}"
+  # Consider any old files which still have no corresponding meta file
+  # as orphaned, and remove them.
+  for old_file in $(${FIND} "${dir}" -mindepth 1 \
+                    -mmin +$((24 * 60)) -type f); do
+    if [ ! -e "$(get_base "${old_file}").meta" ]; then
+      lecho "Removing old orphaned file: ${old_file}."
+      rm -f -- "${old_file}"
+    fi
+  done
+
+  # Look through all metadata (*.meta) files, if any exist.
+  for meta_path in $(ls -1t "${dir}"/*.meta 2>/dev/null); do
+    lecho "Considering metadata ${meta_path}."
+    local kind=$(get_kind "${meta_path}")
+
+    if [ "${kind}" != "minidump" ] && [ "${kind}" != "kcrash" ]; then
+      lecho "Unknown report kind.  Removing report."
+      remove_report "${meta_path}"
       continue
     fi
-    if ! check_rate; then
-      lecho "Sending ${report_path} would exceed rate.  Leaving for later."
-      return 0
-    fi
-    local chromeos_version=$(get_version)
+
     if is_feedback_disabled; then
       lecho "Uploading is disabled.  Removing crash."
-      rm "${report_path}"
-    elif is_on_3g; then
-      lecho "Not sending crash report while on 3G, saving for later."
-    elif send_crash "${report_path}"; then
-      # Send was successful, now remove
-      lecho "Successfully sent crash ${report_path} and removing"
-      rm "${report_path}"
-    else
-      lecho "Problem sending ${report_path}, not removing"
+      remove_report "${meta_path}"
+      continue
     fi
+
+    if ! is_mock && ! is_official; then
+      lecho "Not an official OS version.  Removing crash."
+      remove_report "${meta_path}"
+      continue
+    fi
+
+    if is_on_3g; then
+      lecho "Not sending crash reports while on 3G, saving for later."
+      return 0
+    fi
+
+    if ! is_complete_metadata "${meta_path}"; then
+      # This report is incomplete, so if it's old, just remove it.
+      local old_meta=$(${FIND} "${dir}" -mindepth 1 -name \
+        $(basename "${meta_path}") -mmin +$((24 * 60)) -type f)
+      if [ -n "${old_meta}" ]; then
+        lecho "Removing old incomplete metadata."
+        remove_report "${meta_path}"
+      else
+        lecho "Ignoring recent incomplete metadata."
+      fi
+      continue
+    fi
+
+    if ! check_rate; then
+      lecho "Sending ${meta_path} would exceed rate.  Leaving for later."
+      return 0
+    fi
+
+    if ! send_crash "${meta_path}"; then
+      lecho "Problem sending ${meta_path}, not removing."
+      continue
+    fi
+
+    # Send was successful, now remove.
+    lecho "Successfully sent crash ${meta_path} and removing."
+    remove_report "${meta_path}"
   done
 }
 
 main() {
   trap cleanup EXIT INT TERM
   if [ -e "${PAUSE_CRASH_SENDING}" ]; then
-    lecho "Exiting early due to ${PAUSE_CRASH_SENDING}"
+    lecho "Exiting early due to ${PAUSE_CRASH_SENDING}."
     exit 1
   fi
 
