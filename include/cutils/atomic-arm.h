@@ -41,8 +41,7 @@ extern inline void android_memory_barrier(void)
 }
 extern inline void android_memory_store_barrier(void)
 {
-    /* TODO: use "dmb st" once the toolchain understands it */
-    __asm__ __volatile__ ("dmb" : : : "memory");
+    __asm__ __volatile__ ("dmb st" : : : "memory");
 }
 #elif defined(__ARM_HAVE_LDREX_STREX)
 extern inline void android_memory_barrier(void)
