@@ -587,8 +587,9 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
             parse_error(state, "socket option requires name, type, perm arguments\n");
             break;
         }
-        if (strcmp(args[2],"dgram") && strcmp(args[2],"stream")) {
-            parse_error(state, "socket type must be 'dgram' or 'stream'\n");
+        if (strcmp(args[2],"dgram") && strcmp(args[2],"stream")
+                && strcmp(args[2],"seqpacket")) {
+            parse_error(state, "socket type must be 'dgram', 'stream' or 'seqpacket'\n");
             break;
         }
         si = calloc(1, sizeof(*si));

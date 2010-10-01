@@ -72,7 +72,7 @@ setenv <name> <value>
 
 socket <name> <type> <perm> [ <user> [ <group> ] ]
    Create a unix domain socket named /dev/socket/<name> and pass
-   its fd to the launched process.  <type> must be "dgram" or "stream".
+   its fd to the launched process.  <type> must be "dgram", "stream" or "seqpacket".
    User and group default to 0.
 
 user <username>
