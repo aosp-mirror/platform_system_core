@@ -206,9 +206,10 @@ void service_start(struct service *svc, const char *dynamic_args)
             add_environment(ei->name, ei->value);
 
         for (si = svc->sockets; si; si = si->next) {
-            int s = create_socket(si->name,
-                                  !strcmp(si->type, "dgram") ? 
-                                  SOCK_DGRAM : SOCK_STREAM,
+            int socket_type = (
+                    !strcmp(si->type, "stream") ? SOCK_STREAM :
+                        (!strcmp(si->type, "dgram") ? SOCK_DGRAM : SOCK_SEQPACKET));
+            int s = create_socket(si->name, socket_type,
                                   si->perm, si->uid, si->gid);
             if (s >= 0) {
                 publish_socket(si->name, s);
