@@ -11,8 +11,8 @@
 #include "metrics_library.h"
 
 static const FilePath kTestUMAEventsFile("test-uma-events");
-
 static const char kTestConsent[] = "test-consent";
+static const char kTestMounts[] = "test-mounts";
 
 static void SetMetricsEnabled(bool enabled) {
   if (enabled)
@@ -35,6 +35,8 @@ class MetricsLibraryTest : public testing::Test {
   }
 
   virtual void TearDown() {
+    file_util::Delete(FilePath(kTestConsent), false);
+    file_util::Delete(FilePath(kTestMounts), false);
     file_util::Delete(kTestUMAEventsFile, false);
   }
 
@@ -43,6 +45,65 @@ class MetricsLibraryTest : public testing::Test {
 
   MetricsLibrary lib_;
 };
+
+TEST_F(MetricsLibraryTest, IsDeviceMounted) {
+  static const char kTestContents[] =
+      "0123456789abcde 0123456789abcde\nguestfs foo bar\n";
+  char buffer[1024];
+  int block_sizes[] = { 1, 2, 3, 4, 5, 6, 8, 12, 14, 16, 32, 1024 };
+  bool result;
+  EXPECT_FALSE(lib_.IsDeviceMounted("guestfs",
+                                    "nonexistent",
+                                    buffer,
+                                    1,
+                                    &result));
+  ASSERT_TRUE(file_util::WriteFile(FilePath(kTestMounts),
+                                   kTestContents,
+                                   strlen(kTestContents)));
+  EXPECT_FALSE(lib_.IsDeviceMounted("guestfs",
+                                    kTestMounts,
+                                    buffer,
+                                    0,
+                                    &result));
+  for (size_t i = 0; i < arraysize(block_sizes); ++i) {
+    EXPECT_TRUE(lib_.IsDeviceMounted("0123456789abcde",
+                                     kTestMounts,
+                                     buffer,
+                                     block_sizes[i],
+                                     &result));
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(lib_.IsDeviceMounted("guestfs",
+                                     kTestMounts,
+                                     buffer,
+                                     block_sizes[i],
+                                     &result));
+    EXPECT_TRUE(result);
+    EXPECT_TRUE(lib_.IsDeviceMounted("0123456",
+                                     kTestMounts,
+                                     buffer,
+                                     block_sizes[i],
+                                     &result));
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(lib_.IsDeviceMounted("9abcde",
+                                     kTestMounts,
+                                     buffer,
+                                     block_sizes[i],
+                                     &result));
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(lib_.IsDeviceMounted("foo",
+                                     kTestMounts,
+                                     buffer,
+                                     block_sizes[i],
+                                     &result));
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(lib_.IsDeviceMounted("bar",
+                                     kTestMounts,
+                                     buffer,
+                                     block_sizes[i],
+                                     &result));
+    EXPECT_FALSE(result);
+  }
+}
 
 TEST_F(MetricsLibraryTest, AreMetricsEnabledFalse) {
   SetMetricsEnabled(false);

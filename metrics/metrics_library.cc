@@ -44,13 +44,84 @@ MetricsLibrary::MetricsLibrary()
     : uma_events_file_(NULL),
       consent_file_(kConsentFile) {}
 
+// We take buffer and buffer_size as parameters in order to simplify testing
+// of various alignments of the |device_name| with |buffer_size|.
+bool MetricsLibrary::IsDeviceMounted(const char* device_name,
+                                     const char* mounts_file,
+                                     char* buffer,
+                                     int buffer_size,
+                                     bool* result) {
+  if (buffer == NULL || buffer_size < 1)
+    return false;
+  int mounts_fd = open(mounts_file, O_RDONLY);
+  if (mounts_fd < 0)
+    return false;
+  // match_offset describes:
+  //   -1 -- not beginning of line
+  //   0..strlen(device_name)-1 -- this offset in device_name is next to match
+  //   strlen(device_name) -- matched full name, just need a space.
+  int match_offset = 0;
+  bool match = false;
+  while (!match) {
+    int read_size = read(mounts_fd, buffer, buffer_size);
+    if (read_size <= 0) {
+      if (errno == -EINTR)
+        continue;
+      break;
+    }
+    for (int i = 0; i < read_size; ++i) {
+      if (buffer[i] == '\n') {
+        match_offset = 0;
+        continue;
+      }
+      if (match_offset < 0) {
+        continue;
+      }
+      if (device_name[match_offset] == '\0') {
+        if (buffer[i] == ' ') {
+          match = true;
+          break;
+        }
+        match_offset = -1;
+        continue;
+      }
+
+      if (buffer[i] == device_name[match_offset]) {
+        ++match_offset;
+      } else {
+        match_offset = -1;
+      }
+    }
+  }
+  close(mounts_fd);
+  *result = match;
+  return true;
+}
+
+bool MetricsLibrary::IsGuestMode() {
+  char buffer[256];
+  bool result = false;
+  if (!IsDeviceMounted("guestfs",
+                       "/proc/mounts",
+                       buffer,
+                       sizeof(buffer),
+                       &result)) {
+    return false;
+  }
+  return result;
+}
+
 bool MetricsLibrary::AreMetricsEnabled() {
   static struct stat stat_buffer;
   time_t this_check_time = time(NULL);
 
   if (this_check_time != cached_enabled_time_) {
     cached_enabled_time_ = this_check_time;
-    cached_enabled_ = (stat(consent_file_, &stat_buffer) >= 0);
+    if (stat(consent_file_, &stat_buffer) >= 0 &&
+        !IsGuestMode())
+      cached_enabled_ = true;
+    else
+      cached_enabled_ = false;
   }
   return cached_enabled_;
 }

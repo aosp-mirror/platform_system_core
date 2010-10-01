@@ -27,6 +27,9 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // Initializes the library.
   void Init();
 
+  // Returns whether or not the machine is running in guest mode.
+  bool IsGuestMode();
+
   // Returns whether or not metrics collection is enabled.
   bool AreMetricsEnabled();
 
@@ -75,8 +78,17 @@ class MetricsLibrary : public MetricsLibraryInterface {
   FRIEND_TEST(MetricsLibraryTest, AreMetricsEnabled);
   FRIEND_TEST(MetricsLibraryTest, FormatChromeMessage);
   FRIEND_TEST(MetricsLibraryTest, FormatChromeMessageTooLong);
+  FRIEND_TEST(MetricsLibraryTest, IsDeviceMounted);
   FRIEND_TEST(MetricsLibraryTest, SendMessageToChrome);
   FRIEND_TEST(MetricsLibraryTest, SendMessageToChromeUMAEventsBadFileLocation);
+
+  // Sets |*result| to whether or not the |mounts_file| indicates that
+  // the |device_name| is currently mounted.  Uses |buffer| of
+  // |buffer_size| to read the file.  Returns false if any error.
+  bool IsDeviceMounted(const char* device_name,
+                       const char* mounts_file,
+                       char* buffer, int buffer_size,
+                       bool* result);
 
   // Sends message of size |length| to Chrome for transport to UMA and
   // returns true on success.

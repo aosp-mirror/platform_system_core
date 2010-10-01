@@ -210,7 +210,6 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
 
   DeleteFrequencyCounters();
   ConfigureCrashFrequencyReporter(kMetricAnyCrashesDailyName);
-  ConfigureCrashFrequencyReporter(kMetricAnyCrashesDailyName);
   ConfigureCrashFrequencyReporter(kMetricAnyCrashesWeeklyName);
   ConfigureCrashFrequencyReporter(kMetricKernelCrashesDailyName);
   ConfigureCrashFrequencyReporter(kMetricKernelCrashesWeeklyName);
