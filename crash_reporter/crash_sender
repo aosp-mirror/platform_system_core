@@ -31,6 +31,9 @@ HWCLASS_PATH="/sys/devices/platform/chromeos_acpi/HWID"
 # Maximum crashes to send per day.
 MAX_CRASH_RATE=${MAX_CRASH_RATE:-32}
 
+# Path to metrics_client.
+METRICS_CLIENT="/usr/bin/metrics_client"
+
 # File whose existence mocks crash sending.  If empty we pretend the
 # crash sending was successful, otherwise unsuccessful.
 MOCK_CRASH_SENDING="/tmp/mock-crash-sending"
@@ -103,11 +106,6 @@ generate_uniform_random() {
   local max=$1
   local random="$(od -An -N4 -tu /dev/urandom)"
   echo $((random % max))
-}
-
-is_feedback_disabled() {
-  [ -r "${CONSENT_ID}" ] && return 1
-  return 0
 }
 
 is_on_3g() {
@@ -292,7 +290,12 @@ send_crashes() {
       continue
     fi
 
-    if is_feedback_disabled; then
+    if ${METRICS_CLIENT} -g; then
+      lecho "Guest mode has been entered.  Delaying crash sending until exited."
+      return 0
+    fi
+
+    if ! ${METRICS_CLIENT} -c; then
       lecho "Uploading is disabled.  Removing crash."
       remove_report "${meta_path}"
       continue
@@ -347,10 +350,12 @@ main() {
 
   check_not_already_running
 
-  if [ ! -x "${FIND}" ]; then
-    lecho "Fatal: Crash sending disabled: ${FIND} not found."
-    exit 1
-  fi
+  for dependency in "${FIND}" "${METRICS_CLIENT}"; do
+    if [ ! -x "${dependency}" ]; then
+      lecho "Fatal: Crash sending disabled: ${dependency} not found."
+      exit 1
+    fi
+  done
 
   TMP_DIR="$(mktemp -d /tmp/crash_sender.XXXX)"
 
