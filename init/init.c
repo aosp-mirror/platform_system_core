@@ -384,6 +384,9 @@ void handle_control_message(const char *msg, const char *arg)
         msg_start(arg);
     } else if (!strcmp(msg,"stop")) {
         msg_stop(arg);
+    } else if (!strcmp(msg,"restart")) {
+        msg_stop(arg);
+        msg_start(arg);
     } else {
         ERROR("unknown control msg '%s'\n", msg);
     }

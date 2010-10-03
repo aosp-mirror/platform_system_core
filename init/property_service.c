@@ -95,6 +95,7 @@ struct {
     unsigned int gid;
 } control_perms[] = {
     { "dumpstate",AID_SHELL, AID_LOG },
+    { "ril-daemon",AID_RADIO, AID_RADIO },
      {NULL, 0, 0 }
 };
 
@@ -397,8 +398,8 @@ void handle_property_set_fd()
             if (check_control_perms(msg.value, cr.uid, cr.gid)) {
                 handle_control_message((char*) msg.name + 4, (char*) msg.value);
             } else {
-                ERROR("sys_prop: Unable to %s service ctl [%s] uid: %d pid:%d\n",
-                        msg.name + 4, msg.value, cr.uid, cr.pid);
+                ERROR("sys_prop: Unable to %s service ctl [%s] uid:%d gid:%d pid:%d\n",
+                        msg.name + 4, msg.value, cr.uid, cr.gid, cr.pid);
             }
         } else {
             if (check_perms(msg.name, cr.uid, cr.gid)) {
