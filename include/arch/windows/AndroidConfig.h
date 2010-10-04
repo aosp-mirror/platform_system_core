@@ -318,4 +318,9 @@
  */
 /* #define HAVE_SCHED_H */
 
+/*
+ * Define if pread() exists
+ */
+/* #define HAVE_PREAD 1 */
+
 #endif /*_ANDROID_CONFIG_H*/
