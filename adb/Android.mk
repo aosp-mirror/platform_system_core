@@ -157,6 +157,7 @@ endif
 # adb host tool for device-as-host
 # =========================================================
 ifneq ($(TARGET_SIMULATOR),true)
+ifneq ($(SDK_ONLY),true)
 include $(CLEAR_VARS)
 
 LOCAL_LDLIBS := -lrt -lncurses -lpthread
@@ -193,4 +194,5 @@ LOCAL_MODULE := adb
 LOCAL_STATIC_LIBRARIES := libzipfile libunz libcutils
 
 include $(BUILD_EXECUTABLE)
+endif
 endif
