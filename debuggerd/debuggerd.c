@@ -319,6 +319,50 @@ const char *get_signame(int sig)
     }
 }
 
+const char *get_sigcode(int signo, int code)
+{
+    switch (signo) {
+    case SIGILL:
+        switch (code) {
+        case ILL_ILLOPC: return "ILL_ILLOPC";
+        case ILL_ILLOPN: return "ILL_ILLOPN";
+        case ILL_ILLADR: return "ILL_ILLADR";
+        case ILL_ILLTRP: return "ILL_ILLTRP";
+        case ILL_PRVOPC: return "ILL_PRVOPC";
+        case ILL_PRVREG: return "ILL_PRVREG";
+        case ILL_COPROC: return "ILL_COPROC";
+        case ILL_BADSTK: return "ILL_BADSTK";
+        }
+        break;
+    case SIGBUS:
+        switch (code) {
+        case BUS_ADRALN: return "BUS_ADRALN";
+        case BUS_ADRERR: return "BUS_ADRERR";
+        case BUS_OBJERR: return "BUS_OBJERR";
+        }
+        break;
+    case SIGFPE:
+        switch (code) {
+        case FPE_INTDIV: return "FPE_INTDIV";
+        case FPE_INTOVF: return "FPE_INTOVF";
+        case FPE_FLTDIV: return "FPE_FLTDIV";
+        case FPE_FLTOVF: return "FPE_FLTOVF";
+        case FPE_FLTUND: return "FPE_FLTUND";
+        case FPE_FLTRES: return "FPE_FLTRES";
+        case FPE_FLTINV: return "FPE_FLTINV";
+        case FPE_FLTSUB: return "FPE_FLTSUB";
+        }
+        break;
+    case SIGSEGV:
+        switch (code) {
+        case SEGV_MAPERR: return "SEGV_MAPERR";
+        case SEGV_ACCERR: return "SEGV_ACCERR";
+        }
+        break;
+    }
+    return "?";
+}
+
 void dump_fault_addr(int tfd, int pid, int sig)
 {
     siginfo_t si;
@@ -327,8 +371,10 @@ void dump_fault_addr(int tfd, int pid, int sig)
     if(ptrace(PTRACE_GETSIGINFO, pid, 0, &si)){
         _LOG(tfd, false, "cannot get siginfo: %s\n", strerror(errno));
     } else {
-        _LOG(tfd, false, "signal %d (%s), fault addr %08x\n",
-            sig, get_signame(sig), si.si_addr);
+        _LOG(tfd, false, "signal %d (%s), code %d (%s), fault addr %08x\n",
+             sig, get_signame(sig),
+             si.si_code, get_sigcode(sig, si.si_code),
+             si.si_addr);
     }
 }
 
