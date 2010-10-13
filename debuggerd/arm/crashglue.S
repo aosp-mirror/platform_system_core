@@ -2,7 +2,7 @@
 .type crash1, %function
 .globl crashnostack
 .type crashnostack, %function
-		
+
 crash1:
 	ldr r0, =0xa5a50000
 	ldr r1, =0xa5a50001
