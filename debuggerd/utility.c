@@ -69,11 +69,12 @@ const char *map_to_name(mapinfo *mi, unsigned pc, const char* def)
 /* Find the containing map info for the pc */
 const mapinfo *pc_to_mapinfo(mapinfo *mi, unsigned pc, unsigned *rel_pc)
 {
+    *rel_pc = pc;
     while(mi) {
         if((pc >= mi->start) && (pc < mi->end)){
             // Only calculate the relative offset for shared libraries
             if (strstr(mi->name, ".so")) {
-                *rel_pc = pc - mi->start;
+                *rel_pc -= mi->start;
             }
             return mi;
         }

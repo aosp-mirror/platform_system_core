@@ -451,7 +451,6 @@ static _Unwind_Reason_Code log_function(_Unwind_Context *context, pid_t pid,
      * 1MB boundaries, and the library may be larger than 1MB. So for .so 
      * addresses we print the relative offset in back trace.
      */
-    rel_pc = pc;
     mi = pc_to_mapinfo(map, pc, &rel_pc);
 
     /* See if we can determine what symbol this stack frame resides in */
