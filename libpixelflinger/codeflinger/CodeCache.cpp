@@ -94,7 +94,7 @@ void Assembly::ensureMbaseExecutable()
     long pagemask = ~(pagesize - 1);  // assumes pagesize is a power of 2
 
     uint32_t* pageStart = (uint32_t*) (((uintptr_t) mBase) & pagemask);
-    size_t adjustedLength = mBase - pageStart + mSize;
+    size_t adjustedLength = (mBase - pageStart) * sizeof(uint32_t) + mSize;
 
     if (mBase && mprotect(pageStart, adjustedLength, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
         mspace_free(getMspace(), mBase);
