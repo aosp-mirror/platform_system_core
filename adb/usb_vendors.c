@@ -78,7 +78,7 @@
 // SK Telesys's USB Vendor ID
 #define VENDOR_ID_SK_TELESYS    0x1F53
 // KT Tech's USB Vendor ID
-#define VENDOR_ID_KT_TECH       0x3403
+#define VENDOR_ID_KT_TECH       0x2116
 
 
 /** built-in vendor list */
