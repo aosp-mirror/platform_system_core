@@ -55,10 +55,6 @@
  * kernel, you must rollback the refcount to reflect the reference the
  * kernel did not actually acquire
  *
- *
- * Bugs:
- *
- * - need to move/rename node on RENAME
  */
 
 #define FUSE_TRACE 0
@@ -89,15 +85,15 @@ struct node {
     __u64 nid;
     __u64 gen;
 
-    struct node *next;
-    struct node *child;
-    struct node *all;
-    struct node *parent;
+    struct node *next;          /* per-dir sibling list */
+    struct node *child;         /* first contained file by this dir */
+    struct node *all;           /* global node list */
+    struct node *parent;        /* containing directory */
 
     __u32 refcount;
     __u32 namelen;
 
-    char name[1];
+    char *name;
 };
 
 struct fuse {
@@ -195,26 +191,46 @@ int node_get_attr(struct node *node, struct fuse_attr *attr)
     return 0;
 }
 
+static void add_node_to_parent(struct node *node, struct node *parent) {
+    node->parent = parent;
+    node->next = parent->child;
+    parent->child = node;
+}
+
 struct node *node_create(struct node *parent, const char *name, __u64 nid, __u64 gen)
 {
     struct node *node;
     int namelen = strlen(name);
 
-    node = calloc(1, sizeof(struct node) + namelen);
+    node = calloc(1, sizeof(struct node));
     if (node == 0) {
+        return 0;
+    }
+    node->name = malloc(namelen + 1);
+    if (node->name == 0) {
+        free(node);
         return 0;
     }
 
     node->nid = nid;
     node->gen = gen;
-    node->parent = parent;
-    node->next = parent->child;
-    parent->child = node;
+    add_node_to_parent(node, parent);
     memcpy(node->name, name, namelen + 1);
     node->namelen = namelen;
     parent->refcount++;
 
     return node;
+}
+
+static char *rename_node(struct node *node, const char *name)
+{
+    node->namelen = strlen(name);
+    char *newname = realloc(node->name, node->namelen + 1);
+    if (newname == 0)
+        return 0;
+    node->name = newname;
+    memcpy(node->name, name, node->namelen + 1);
+    return node->name;
 }
 
 void fuse_init(struct fuse *fuse, int fd, const char *path)
@@ -233,8 +249,8 @@ void fuse_init(struct fuse *fuse, int fd, const char *path)
     fuse->root.all = 0;
     fuse->root.refcount = 2;
 
-    strcpy(fuse->root.name, path);
-    fuse->root.namelen = strlen(fuse->root.name);
+    fuse->root.name = 0;
+    rename_node(&fuse->root, path);
 }
 
 static inline void *id_to_ptr(__u64 nid)
@@ -273,6 +289,27 @@ struct node *lookup_child_by_inode(struct node *node, __u64 nid)
         if (node->nid == nid) {
             return node;
         }
+    }
+    return 0;
+}
+
+static struct node *remove_child(struct node *parent, __u64 nid)
+{
+    struct node *prev = 0;
+    struct node *node;
+
+    for (node = parent->child; node; node = node->next) {
+        if (node->nid == nid) {
+            if (prev) {
+                prev->next = node->next;
+            } else {
+                parent->child = node->next;
+            }
+            node->next = 0;
+            node->parent = 0;
+            return node;
+        }
+        prev = node;
     }
     return 0;
 }
@@ -332,8 +369,9 @@ void node_release(struct node *node)
         node->next = 0;
 
             /* TODO: remove debugging - poison memory */
-        memset(node, 0xef, sizeof(*node) + strlen(node->name));
-
+        memset(node->name, 0xef, node->namelen);
+        free(node->name);
+        memset(node, 0xef, sizeof(*node));
         free(node);
     }
 }
@@ -433,7 +471,7 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         struct fuse_getattr_in *req = data;
         struct fuse_attr_out out;
 
-        TRACE("GETATTR flags=%x fh=%llx\n",req->getattr_flags, req->fh);
+        TRACE("GETATTR flags=%x fh=%llx\n", req->getattr_flags, req->fh);
 
         memset(&out, 0, sizeof(out));
         node_get_attr(node, &out.attr);
@@ -529,19 +567,40 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         char *newname = oldname + strlen(oldname) + 1;
         char *oldpath, oldbuffer[PATH_BUFFER_SIZE];
         char *newpath, newbuffer[PATH_BUFFER_SIZE];
-        struct node *newnode;
+        struct node *target;
+        struct node *newparent;
         int res;
 
-        newnode = lookup_by_inode(fuse, req->newdir);
-        if (!newnode) {
+        TRACE("RENAME %s->%s @ %llx\n", oldname, newname, hdr->nodeid);
+
+        target = lookup_child_by_name(node, oldname);
+        if (!target) {
             fuse_status(fuse, hdr->unique, -ENOENT);
             return;
         }
-
         oldpath = node_get_path(node, oldbuffer, oldname);
-        newpath = node_get_path(newnode, newbuffer, newname);
+
+        newparent = lookup_by_inode(fuse, req->newdir);
+        if (!newparent) {
+            fuse_status(fuse, hdr->unique, -ENOENT);
+            return;
+        }
+        newpath = node_get_path(newparent, newbuffer, newname);
+
+        if (!remove_child(node, target->nid)) {
+            ERROR("RENAME remove_child not found");
+            fuse_status(fuse, hdr->unique, -ENOENT);
+            return;
+        }
+        if (!rename_node(target, newname)) {
+            fuse_status(fuse, hdr->unique, -ENOMEM);
+            return;
+        }
+        add_node_to_parent(target, newparent);
 
         res = rename(oldpath, newpath);
+        TRACE("RENAME result %d\n", res);
+
         fuse_status(fuse, hdr->unique, res ? -errno : 0);
         return;
     }
