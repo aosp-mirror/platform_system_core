@@ -81,6 +81,8 @@
 #define VENDOR_ID_SK_TELESYS    0x1F53
 // KT Tech's USB Vendor ID
 #define VENDOR_ID_KT_TECH       0x2116
+// Asus's USB Vendor ID
+#define VENDOR_ID_ASUS          0x0b05
 
 
 /** built-in vendor list */
@@ -108,6 +110,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_TOSHIBA,
     VENDOR_ID_SK_TELESYS,
     VENDOR_ID_KT_TECH,
+    VENDOR_ID_ASUS,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
