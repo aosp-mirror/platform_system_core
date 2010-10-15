@@ -53,6 +53,7 @@
 #define AID_KEYSTORE      1017  /* keystore subsystem */
 #define AID_USB           1018  /* USB devices */
 #define AID_GPS           1021  /* GPS daemon */
+#define AID_NFC           1022  /* nfc subsystem */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -94,6 +95,7 @@ static const struct android_id_info android_ids[] = {
     { "adb",       AID_ADB, },
     { "install",   AID_INSTALL, },
     { "media",     AID_MEDIA, },
+    { "nfc",       AID_NFC, },
     { "shell",     AID_SHELL, },
     { "cache",     AID_CACHE, },
     { "diag",      AID_DIAG, },
