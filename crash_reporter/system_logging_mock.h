@@ -18,6 +18,8 @@ class SystemLoggingMock : public SystemLogging {
 
   const std::string &log() { return log_; }
 
+  void clear() { log_.clear(); }
+
  private:
   static std::string identity_;
   std::string log_;

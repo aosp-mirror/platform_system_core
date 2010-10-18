@@ -15,6 +15,12 @@ static bool s_metrics = false;
 
 static const char kFilePath[] = "/my/path";
 
+// This test assumes the following standard binaries are installed.
+static const char kBinBash[] = "/bin/bash";
+static const char kBinCp[] = "/bin/cp";
+static const char kBinEcho[] = "/bin/echo";
+static const char kBinFalse[] = "/bin/false";
+
 void CountCrash() {
   ++s_crashes;
 }
@@ -38,17 +44,22 @@ class UserCollectorTest : public ::testing::Test {
  protected:
   void TestEnableOK(bool generate_diagnostics);
 
+  void ExpectFileEquals(const char *golden,
+                        const char *file_path) {
+    std::string contents;
+    EXPECT_TRUE(file_util::ReadFileToString(FilePath(file_path),
+                                            &contents));
+    EXPECT_EQ(golden, contents);
+  }
+
   SystemLoggingMock logging_;
   UserCollector collector_;
   pid_t pid_;
 };
 
 TEST_F(UserCollectorTest, EnableOK) {
-  std::string contents;
   ASSERT_TRUE(collector_.Enable());
-  ASSERT_TRUE(file_util::ReadFileToString(FilePath("test/core_pattern"),
-                                                   &contents));
-  ASSERT_EQ("|/my/path --signal=%s --pid=%p", contents);
+  ExpectFileEquals("|/my/path --signal=%s --pid=%p", "test/core_pattern");
   ASSERT_EQ(s_crashes, 0);
   ASSERT_NE(logging_.log().find("Enabling user crash handling"),
             std::string::npos);
@@ -65,11 +76,8 @@ TEST_F(UserCollectorTest, EnableNoFileAccess) {
 }
 
 TEST_F(UserCollectorTest, DisableOK) {
-  std::string contents;
   ASSERT_TRUE(collector_.Disable());
-  ASSERT_TRUE(file_util::ReadFileToString(FilePath("test/core_pattern"),
-                                          &contents));
-  ASSERT_EQ("core", contents);
+  ExpectFileEquals("core", "test/core_pattern");
   ASSERT_EQ(s_crashes, 0);
   ASSERT_NE(logging_.log().find("Disabling user crash handling"),
             std::string::npos);
@@ -83,6 +91,69 @@ TEST_F(UserCollectorTest, DisableNoFileAccess) {
             std::string::npos);
   ASSERT_NE(logging_.log().find("Unable to write /does_not_exist"),
             std::string::npos);
+}
+
+TEST_F(UserCollectorTest, ForkExecAndPipe) {
+  std::vector<const char *> args;
+  char output_file[] = "test/fork_out";
+
+  // Test basic call with stdout.
+  args.clear();
+  args.push_back(kBinEcho);
+  args.push_back("hello world");
+  EXPECT_EQ(0, collector_.ForkExecAndPipe(args, output_file));
+  ExpectFileEquals("hello world\n", output_file);
+  EXPECT_EQ("", logging_.log());
+
+  // Test non-zero return value
+  logging_.clear();
+  args.clear();
+  args.push_back(kBinFalse);
+  EXPECT_EQ(1, collector_.ForkExecAndPipe(args, output_file));
+  ExpectFileEquals("", output_file);
+  EXPECT_EQ("", logging_.log());
+
+  // Test bad output_file.
+  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, "/bad/path"));
+
+  // Test bad executable.
+  logging_.clear();
+  args.clear();
+  args.push_back("false");
+  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, output_file));
+
+  // Test stderr captured.
+  std::string contents;
+  logging_.clear();
+  args.clear();
+  args.push_back(kBinCp);
+  EXPECT_EQ(1, collector_.ForkExecAndPipe(args, output_file));
+  EXPECT_TRUE(file_util::ReadFileToString(FilePath(output_file),
+                                                   &contents));
+  EXPECT_NE(std::string::npos, contents.find("missing file operand"));
+  EXPECT_EQ("", logging_.log());
+
+  // NULL parameter.
+  logging_.clear();
+  args.clear();
+  args.push_back(NULL);
+  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args, output_file));
+  EXPECT_NE(std::string::npos,
+            logging_.log().find("Bad parameter"));
+
+  // No parameters.
+  args.clear();
+  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, output_file));
+
+  // Segmentation faulting process.
+  logging_.clear();
+  args.clear();
+  args.push_back(kBinBash);
+  args.push_back("-c");
+  args.push_back("kill -SEGV $$");
+  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args, output_file));
+  EXPECT_NE(std::string::npos,
+            logging_.log().find("Process did not exit normally"));
 }
 
 TEST_F(UserCollectorTest, HandleCrashWithoutMetrics) {

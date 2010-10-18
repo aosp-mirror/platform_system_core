@@ -4,12 +4,17 @@
 
 #include "crash-reporter/user_collector.h"
 
+#include <fcntl.h>  // For creat.
 #include <grp.h>  // For struct group.
 #include <pwd.h>  // For struct passwd.
-#include <sys/types.h>  // For getpwuid_r and getgrnam_r.
+#include <sys/types.h>  // For getpwuid_r, getgrnam_r, WEXITSTATUS.
+#include <sys/wait.h>  // For waitpid.
+#include <unistd.h>  // For execv and fork.
 
 #include <string>
+#include <vector>
 
+#include "base/eintr_wrapper.h"
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/string_util.h"
@@ -204,27 +209,81 @@ bool UserCollector::CopyStdinToCoreFile(const FilePath &core_path) {
   return false;
 }
 
+int UserCollector::ForkExecAndPipe(std::vector<const char *> &arguments,
+                                   const char *output_file) {
+  // Copy off a writeable version of arguments.
+  scoped_array<char*> argv(new char *[arguments.size() + 1]);
+  int total_args_size = 0;
+  for (size_t i = 0; i < arguments.size(); ++i) {
+    if (arguments[i] == NULL) {
+      logger_->LogError("Bad parameter");
+      return -1;
+    }
+    total_args_size += strlen(arguments[i]) + 1;
+  }
+  scoped_array<char> buffer(new char[total_args_size]);
+  char *buffer_pointer = &buffer[0];
+
+  for (size_t i = 0; i < arguments.size(); ++i) {
+    argv[i] = buffer_pointer;
+    strcpy(buffer_pointer, arguments[i]);
+    buffer_pointer += strlen(arguments[i]);
+    *buffer_pointer = '\0';
+    ++buffer_pointer;
+  }
+  argv[arguments.size()] = NULL;
+
+  int pid = fork();
+  if (pid < 0) {
+    logger_->LogError("Fork failed: %d", errno);
+    return -1;
+  }
+
+  if (pid == 0) {
+    int output_handle = creat(output_file, 0700);
+    if (output_handle < 0) {
+      logger_->LogError("Could not create %s: %d", output_file, errno);
+      // Avoid exit() to avoid atexit handlers from parent.
+      _exit(127);
+    }
+    dup2(output_handle, 1);
+    dup2(output_handle, 2);
+    execv(argv[0], &argv[0]);
+    logger_->LogError("Exec failed: %d", errno);
+    _exit(127);
+  }
+
+  int status = 0;
+  if (HANDLE_EINTR(waitpid(pid, &status, 0)) < 0) {
+    logger_->LogError("Problem waiting for pid: %d", errno);
+    return -1;
+  }
+  if (!WIFEXITED(status)) {
+    logger_->LogError("Process did not exit normally: %x", status);
+    return -1;
+  }
+  return WEXITSTATUS(status);
+}
+
 bool UserCollector::ConvertCoreToMinidump(const FilePath &core_path,
                                           const FilePath &procfs_directory,
                                           const FilePath &minidump_path,
                                           const FilePath &temp_directory) {
-  // TODO(kmixter): Rewrite to use process_util once it's included in
-  // libchrome.
   FilePath output_path = temp_directory.Append("output");
-  std::string core2md_command =
-      StringPrintf("\"%s\" \"%s\" \"%s\" \"%s\" > \"%s\" 2>&1",
-                   kCoreToMinidumpConverterPath,
-                   core_path.value().c_str(),
-                   procfs_directory.value().c_str(),
-                   minidump_path.value().c_str(),
-                   output_path.value().c_str());
-  int errorlevel = system(core2md_command.c_str());
+  std::vector<const char *> core2md_arguments;
+  core2md_arguments.push_back(kCoreToMinidumpConverterPath);
+  core2md_arguments.push_back(core_path.value().c_str());
+  core2md_arguments.push_back(procfs_directory.value().c_str());
+  core2md_arguments.push_back(minidump_path.value().c_str());
+
+  int errorlevel = ForkExecAndPipe(core2md_arguments,
+                                   output_path.value().c_str());
 
   std::string output;
   file_util::ReadFileToString(output_path, &output);
   if (errorlevel != 0) {
     logger_->LogInfo("Problem during %s [result=%d]: %s",
-                     core2md_command.c_str(),
+                     kCoreToMinidumpConverterPath,
                      errorlevel,
                      output.c_str());
     return false;

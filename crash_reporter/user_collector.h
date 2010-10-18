@@ -6,6 +6,7 @@
 #define _CRASH_REPORTER_USER_COLLECTOR_H_
 
 #include <string>
+#include <vector>
 
 #include "crash-reporter/crash_collector.h"
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
@@ -51,6 +52,7 @@ class UserCollector : public CrashCollector {
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesBadPath);
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesBadPid);
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesOK);
+  FRIEND_TEST(UserCollectorTest, ForkExecAndPipe);
   FRIEND_TEST(UserCollectorTest, GetIdFromStatus);
   FRIEND_TEST(UserCollectorTest, GetProcessPath);
   FRIEND_TEST(UserCollectorTest, GetSymlinkTarget);
@@ -65,6 +67,8 @@ class UserCollector : public CrashCollector {
     kIdFileSystem = 3,  // fsuid and fsgid
     kIdMax
   };
+
+  static const int kForkProblem = 255;
 
   std::string GetPattern(bool enabled) const;
   bool SetUpInternal(bool enabled);
@@ -86,6 +90,8 @@ class UserCollector : public CrashCollector {
   bool GetCreatedCrashDirectory(pid_t pid,
                                 FilePath *crash_file_path);
   bool CopyStdinToCoreFile(const FilePath &core_path);
+  int ForkExecAndPipe(std::vector<const char *> &arguments,
+                      const char *output_file);
   bool ConvertCoreToMinidump(const FilePath &core_path,
                              const FilePath &procfs_directory,
                              const FilePath &minidump_path,
