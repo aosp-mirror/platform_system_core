@@ -28,6 +28,9 @@ FORCE_OFFICIAL=${FORCE_OFFICIAL:-0}
 # Path to hardware class description.
 HWCLASS_PATH="/sys/devices/platform/chromeos_acpi/HWID"
 
+# Ignore PAUSE_CRASH_SENDING file if set.
+OVERRIDE_PAUSE_SENDING=${OVERRIDE_PAUSE_SENDING:-0}
+
 # Maximum crashes to send per day.
 MAX_CRASH_RATE=${MAX_CRASH_RATE:-32}
 
@@ -343,7 +346,8 @@ send_crashes() {
 
 main() {
   trap cleanup EXIT INT TERM
-  if [ -e "${PAUSE_CRASH_SENDING}" ]; then
+  if [ -e "${PAUSE_CRASH_SENDING}" ] && \
+     [ ${OVERRIDE_PAUSE_SENDING} -eq 0 ]; then
     lecho "Exiting early due to ${PAUSE_CRASH_SENDING}."
     exit 1
   fi
