@@ -89,7 +89,8 @@ class CrashCollector {
 
   // Write a file of metadata about crash.
   void WriteCrashMetaData(const FilePath &meta_path,
-                          const std::string &exec_name);
+                          const std::string &exec_name,
+                          const std::string &payload_path);
 
   CountCrashFunction count_crash_function_;
   IsFeedbackAllowedFunction is_feedback_allowed_function_;

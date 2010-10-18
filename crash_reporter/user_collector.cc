@@ -278,7 +278,8 @@ bool UserCollector::GenerateDiagnostics(pid_t pid,
   WriteCrashMetaData(
       crash_path.Append(
           StringPrintf("%s.meta", dump_basename.c_str())),
-      exec_name);
+      exec_name,
+      minidump_path.value());
 
   if (conversion_result) {
     logger_->LogInfo("Stored minidump to %s", minidump_path.value().c_str());

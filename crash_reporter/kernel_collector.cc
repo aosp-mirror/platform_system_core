@@ -104,7 +104,8 @@ bool KernelCollector::Collect() {
     WriteCrashMetaData(
         root_crash_directory.Append(
             StringPrintf("%s.meta", dump_basename.c_str())),
-        kKernelExecName);
+        kKernelExecName,
+        kernel_crash_path.value());
 
     logger_->LogInfo("Collected kernel crash diagnostics into %s",
                      kernel_crash_path.value().c_str());

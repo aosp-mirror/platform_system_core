@@ -248,7 +248,8 @@ bool CrashCollector::ReadKeyValueFile(
 }
 
 void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
-                                        const std::string &exec_name) {
+                                        const std::string &exec_name,
+                                        const std::string &payload_path) {
   std::map<std::string, std::string> contents;
   if (!ReadKeyValueFile(FilePath(std::string(kLsbRelease)), '=', &contents)) {
     logger_->LogError("Problem parsing %s", kLsbRelease);
@@ -259,11 +260,15 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
   if ((i = contents.find("CHROMEOS_RELEASE_VERSION")) != contents.end()) {
     version = i->second;
   }
+  int64 payload_size = -1;
+  file_util::GetFileSize(FilePath(payload_path), &payload_size);
   std::string meta_data = StringPrintf("exec_name=%s\n"
                                        "ver=%s\n"
+                                       "payload_size=%lld\n"
                                        "done=1\n",
                                        exec_name.c_str(),
-                                       version.c_str());
+                                       version.c_str(),
+                                       payload_size);
   if (!file_util::WriteFile(meta_path, meta_data.c_str(), meta_data.size())) {
     logger_->LogError("Unable to write %s", meta_path.value().c_str());
   }

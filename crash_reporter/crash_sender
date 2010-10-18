@@ -195,8 +195,10 @@ send_crash() {
   local board="$(get_board)"
   local hwclass="$(get_hardware_class)"
   local payload_extension="${kind}"
+  local write_payload_size="$(get_key_value "${meta_path}" "payload_size")"
   [ "${kind}" = "minidump" ] && payload_extension="dmp"
   local report_payload="$(get_base "${meta_path}").${payload_extension}"
+  local send_payload_size="$(stat --printf=%s "${report_payload}")"
   lecho "Sending crash:"
   lecho "  Scheduled to send in ${sleep_time}s"
   lecho "  Metadata: ${meta_path} (${kind})"
@@ -236,6 +238,8 @@ send_crash() {
     -F "board=${board}" \
     -F "hwclass=${hwclass}" \
     -F "exec_name=${exec_name}" \
+    -F "write_payload_size=${write_payload_size}" \
+    -F "send_payload_size=${send_payload_size}" \
     -F "guid=<${CONSENT_ID}" -o "${report_id}" 2>"${curl_stderr}"
   curl_result=$?
   set -e
