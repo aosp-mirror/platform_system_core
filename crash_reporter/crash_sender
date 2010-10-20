@@ -68,12 +68,23 @@ lecho() {
   logger -t "${TAG}" "$@"
 }
 
+# Returns true if mock is enabled.
+is_mock() {
+  [ -f "${MOCK_CRASH_SENDING}" ] && return 0
+  return 1
+}
+
 cleanup() {
   if [ -n "${TMP_DIR}" ]; then
     rm -rf "${TMP_DIR}"
   fi
   if [ ${CLEAN_UP_RUN_FILE} -eq 1 ]; then
     rm -f "${RUN_FILE}"
+  fi
+  if is_mock; then
+    # For testing purposes, emit a message to log so that we
+    # know when the test has received all the messages from this run.
+    lecho "crash_sender done."
   fi
 }
 
@@ -163,12 +174,6 @@ get_key_value() {
     return
   fi
   grep "$2=" "$1" | cut -d = -f 2-
-}
-
-# Returns true if mock is enabled.
-is_mock() {
-  [ -f "${MOCK_CRASH_SENDING}" ] && return 0
-  return 1
 }
 
 # Return the board name.
