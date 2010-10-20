@@ -67,7 +67,7 @@ static void CountUserCrash() {
                               kCrashKindUser,
                               kCrashKindMax);
   std::string command = StringPrintf(
-      "/usr/bin/dbus-send --type=signal --system / \"%s\"",
+      "/usr/bin/dbus-send --type=signal --system / \"%s\" &",
       kUserCrashSignal);
   // Announce through D-Bus whenever a user crash happens. This is
   // used by the metrics daemon to log active use time between
@@ -77,8 +77,18 @@ static void CountUserCrash() {
   // using a dbus library directly. However, this should run
   // relatively rarely and longer term we may need to implement a
   // better way to do this that doesn't rely on D-Bus.
+  //
+  // We run in the background in case dbus daemon itself is crashed
+  // and not responding.  This allows us to not block and potentially
+  // deadlock on a dbus-daemon crash.  If dbus-daemon crashes without
+  // restarting, each crash will fork off a lot of dbus-send
+  // processes.  Such a system is in a unusable state and will need
+  // to be restarted anyway.
 
-  int status __attribute__((unused)) = system(command.c_str());
+  int status = system(command.c_str());
+  if (status != 0) {
+    s_system_log.LogWarning("dbus-send running failed");
+  }
 }
 
 static int Initialize(KernelCollector *kernel_collector,
