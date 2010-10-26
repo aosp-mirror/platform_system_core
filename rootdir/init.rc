@@ -171,10 +171,10 @@ on post-fs
     chown root root /cache/lost+found
     chmod 0770 /cache/lost+found
 
-    # create data/drm directory
+    # create directory for DRM plug-ins
     mkdir /data/drm 0774 drm drm
-    chown drm drm /data/drm
-    chmod 0774 /data/drm
+    mkdir /data/drm/plugins 0774 drm drm
+    mkdir /data/drm/plugins/native 0774 drm drm
 
 on boot
 # basic network init
