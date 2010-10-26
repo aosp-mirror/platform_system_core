@@ -76,6 +76,7 @@ static int get_android_id(const char *id)
 void set_device_permission(int nargs, char **args)
 {
     char *name;
+    char *attr = 0;
     mode_t perm;
     uid_t uid;
     gid_t gid;
@@ -90,12 +91,20 @@ void set_device_permission(int nargs, char **args)
     if (args[0][0] == '#')
         return;
 
+    name = args[0];
+
+    if (!strncmp(name,"/sys/", 5) && (nargs == 5)) {
+        INFO("/sys/ rule %s %s\n",args[0],args[1]);
+        attr = args[1];
+        args++;
+        nargs--;
+    }
+
     if (nargs != 4) {
         ERROR("invalid line ueventd.rc line for '%s'\n", args[0]);
         return;
     }
 
-    name = args[0];
     /* If path starts with mtd@ lookup the mount number. */
     if (!strncmp(name, "mtd@", 4)) {
         int n = mtd_name_to_number(name + 4);
@@ -133,6 +142,6 @@ void set_device_permission(int nargs, char **args)
     }
     gid = ret;
 
-    add_dev_perms(name, perm, uid, gid, prefix);
+    add_dev_perms(name, attr, perm, uid, gid, prefix);
     free(tmp);
 }
