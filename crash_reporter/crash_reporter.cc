@@ -18,6 +18,8 @@
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 DEFINE_bool(init, false, "Initialize crash logging");
 DEFINE_bool(clean_shutdown, false, "Signal clean shutdown");
+DEFINE_string(generate_kernel_signature, "",
+              "Generate signature from given kcrash file");
 DEFINE_bool(crash_test, false, "Crash test");
 DEFINE_int32(pid, -1, "Crashing PID");
 DEFINE_int32(signal, -1, "Signal causing crash");
@@ -146,6 +148,25 @@ static int HandleUserCrash(UserCollector *user_collector) {
   return 0;
 }
 
+// Interactive/diagnostics mode for generating kernel crash signatures.
+static int GenerateKernelSignature(KernelCollector *kernel_collector) {
+  std::string kcrash_contents;
+  std::string signature;
+  if (!file_util::ReadFileToString(FilePath(FLAGS_generate_kernel_signature),
+                                   &kcrash_contents)) {
+    fprintf(stderr, "Could not read file.\n");
+    return 1;
+  }
+  if (!kernel_collector->ComputeKernelStackSignature(
+          kcrash_contents,
+          &signature,
+          true)) {
+    fprintf(stderr, "Signature could not be generated.\n");
+    return 1;
+  }
+  printf("Kernel crash signature is \"%s\".\n", signature.c_str());
+  return 0;
+}
 
 int main(int argc, char *argv[]) {
   google::ParseCommandLineFlags(&argc, &argv, true);
@@ -183,6 +204,10 @@ int main(int argc, char *argv[]) {
     unclean_shutdown_collector.Disable();
     user_collector.Disable();
     return 0;
+  }
+
+  if (!FLAGS_generate_kernel_signature.empty()) {
+    return GenerateKernelSignature(&kernel_collector);
   }
 
   return HandleUserCrash(&user_collector);

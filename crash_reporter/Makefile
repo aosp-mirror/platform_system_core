@@ -17,8 +17,10 @@ TEST_BINS = \
 	unclean_shutdown_collector_test \
 	user_collector_test
 
+LDCONFIG = $(shell $(PKG_CONFIG) --libs libpcrecpp)
+
 # -lglib-2.0 is needed by libbase.a now.
-COMMON_LIBS = -lbase -lpthread -lglib-2.0 -lgflags -lrt
+COMMON_LIBS = -lbase -lpthread -lglib-2.0 -lgflags -lrt $(LDCONFIG)
 REPORTER_LIBS = $(COMMON_LIBS) -lmetrics
 
 TEST_LIBS = $(COMMON_LIBS) -lgtest -lgmock

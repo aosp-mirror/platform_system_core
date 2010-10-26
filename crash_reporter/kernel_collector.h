@@ -5,6 +5,8 @@
 #ifndef _CRASH_REPORTER_KERNEL_COLLECTOR_H_
 #define _CRASH_REPORTER_KERNEL_COLLECTOR_H_
 
+#include <pcrecpp.h>
+
 #include <string>
 
 #include "base/file_path.h"
@@ -34,6 +36,11 @@ class KernelCollector : public CrashCollector {
   // a dump (even if there were problems storing the dump), false otherwise.
   bool Collect();
 
+  // Compute a stack signature string from a kernel dump.
+  bool ComputeKernelStackSignature(const std::string &kernel_dump,
+                                   std::string *kernel_signature,
+                                   bool print_diagnostics);
+
  private:
   friend class KernelCollectorTest;
   FRIEND_TEST(KernelCollectorTest, ClearPreservedDump);
@@ -42,6 +49,18 @@ class KernelCollector : public CrashCollector {
 
   bool LoadPreservedDump(std::string *contents);
   bool ClearPreservedDump();
+
+  void ProcessStackTrace(pcrecpp::StringPiece kernel_dump,
+                         bool print_diagnostics,
+                         unsigned *hash,
+                         float *last_stack_timestamp);
+  bool FindCrashingFunction(pcrecpp::StringPiece kernel_dump,
+                            bool print_diagnostics,
+                            float stack_trace_timestamp,
+                            std::string *crashing_function);
+  bool FindPanicMessage(pcrecpp::StringPiece kernel_dump,
+                        bool print_diagnostics,
+                        std::string *panic_message);
 
   bool is_enabled_;
   FilePath preserved_dump_path_;

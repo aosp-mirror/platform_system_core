@@ -42,8 +42,6 @@ class UserCollectorTest : public ::testing::Test {
     pid_ = getpid();
   }
  protected:
-  void TestEnableOK(bool generate_diagnostics);
-
   void ExpectFileEquals(const char *golden,
                         const char *file_path) {
     std::string contents;

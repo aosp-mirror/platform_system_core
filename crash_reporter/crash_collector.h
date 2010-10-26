@@ -40,6 +40,7 @@ class CrashCollector {
   FRIEND_TEST(CrashCollectorTest, GetCrashDirectoryInfo);
   FRIEND_TEST(CrashCollectorTest, FormatDumpBasename);
   FRIEND_TEST(CrashCollectorTest, Initialize);
+  FRIEND_TEST(CrashCollectorTest, MetaData);
   FRIEND_TEST(CrashCollectorTest, ReadKeyValueFile);
   FRIEND_TEST(CrashCollectorTest, Sanitize);
 
@@ -87,6 +88,11 @@ class CrashCollector {
                         char separator,
                         std::map<std::string, std::string> *dictionary);
 
+  // Add non-standard meta data to the crash metadata file.  Call
+  // before calling WriteCrashMetaData.  Key must not contain "=" or
+  // "\n" characters.  Value must not contain "\n" characters.
+  void AddCrashMetaData(const std::string &key, const std::string &value);
+
   // Write a file of metadata about crash.
   void WriteCrashMetaData(const FilePath &meta_path,
                           const std::string &exec_name,
@@ -95,7 +101,9 @@ class CrashCollector {
   CountCrashFunction count_crash_function_;
   IsFeedbackAllowedFunction is_feedback_allowed_function_;
   SystemLogging *logger_;
+  std::string extra_metadata_;
   const char *forced_crash_directory_;
+  const char *lsb_release_;
 };
 
 #endif  // _CRASH_REPORTER_CRASH_COLLECTOR_H_

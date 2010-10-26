@@ -332,6 +332,8 @@ bool UserCollector::GenerateDiagnostics(pid_t pid,
                              container_dir)) {  // temporary directory
     // Note we leave the container directory for inspection.
     conversion_result = false;
+  } else {
+    file_util::Delete(container_dir, true);
   }
 
   WriteCrashMetaData(

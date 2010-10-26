@@ -218,6 +218,30 @@ TEST_F(CrashCollectorTest, ReadKeyValueFile) {
   EXPECT_TRUE(i != dictionary.end() && i->second == "");
 }
 
+TEST_F(CrashCollectorTest, MetaData) {
+  FilePath meta_file = test_dir_.Append("generated.meta");
+  FilePath lsb_release = test_dir_.Append("lsb-release");
+  FilePath payload_file = test_dir_.Append("payload-file");
+  std::string contents;
+  collector_.lsb_release_ = lsb_release.value().c_str();
+  const char kLsbContents[] = "CHROMEOS_RELEASE_VERSION=version\n";
+  ASSERT_TRUE(
+      file_util::WriteFile(lsb_release,
+                           kLsbContents, strlen(kLsbContents)));
+  const char kPayload[] = "foo";
+  ASSERT_TRUE(
+      file_util::WriteFile(payload_file,
+                           kPayload, strlen(kPayload)));
+  collector_.AddCrashMetaData("foo", "bar");
+  collector_.WriteCrashMetaData(meta_file, "kernel", payload_file.value());
+  EXPECT_TRUE(file_util::ReadFileToString(meta_file, &contents));
+  EXPECT_EQ("foo=bar\n"
+            "exec_name=kernel\n"
+            "ver=version\n"
+            "payload_size=3\n"
+            "done=1\n", contents);
+}
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
