@@ -84,6 +84,7 @@ static int open_uevent_socket(void)
 
 struct perms_ {
     char *name;
+    char *attr;
     mode_t perm;
     unsigned int uid;
     unsigned int gid;
@@ -94,56 +95,69 @@ struct perm_node {
     struct perms_ dp;
     struct listnode plist;
 };
+
+static list_declare(sys_perms);
 static list_declare(dev_perms);
 
-/*
- * Permission override when in emulator mode, must be parsed before
- * system properties is initalized.
- */
-int add_dev_perms(const char *name, mode_t perm, unsigned int uid,
-                  unsigned int gid, unsigned short prefix) {
-    int size;
-    char *tmp = 0;
-    struct perm_node *node = malloc(sizeof (struct perm_node));
+int add_dev_perms(const char *name, const char *attr,
+                  mode_t perm, unsigned int uid, unsigned int gid,
+                  unsigned short prefix) {
+    struct perm_node *node = calloc(1, sizeof(*node));
     if (!node)
         return -ENOMEM;
 
-    size = strlen(name) + 1;
-    if ((node->dp.name = malloc(size)) == NULL)
+    node->dp.name = strdup(name);
+    if (!node->dp.name)
         return -ENOMEM;
 
-    memcpy(node->dp.name, name, size);
+    if (attr) {
+        node->dp.attr = strdup(attr);
+        if (!node->dp.attr)
+            return -ENOMEM;
+    }
+
     node->dp.perm = perm;
     node->dp.uid = uid;
     node->dp.gid = gid;
     node->dp.prefix = prefix;
 
-    list_add_tail(&dev_perms, &node->plist);
+    if (attr)
+        list_add_tail(&sys_perms, &node->plist);
+    else
+        list_add_tail(&dev_perms, &node->plist);
+
     return 0;
 }
 
-static int get_device_perm_inner(struct perms_ *perms, const char *path,
-                                    unsigned *uid, unsigned *gid, mode_t *perm)
+void fixup_sys_perms(const char *upath)
 {
-    int i;
-    for(i = 0; perms[i].name; i++) {
+    char buf[512];
+    struct listnode *node;
+    struct perms_ *dp;
 
-        if(perms[i].prefix) {
-            if(strncmp(path, perms[i].name, strlen(perms[i].name)))
+        /* upaths omit the "/sys" that paths in this list
+         * contain, so we add 4 when comparing...
+         */
+    list_for_each(node, &sys_perms) {
+        dp = &(node_to_item(node, struct perm_node, plist))->dp;
+        if (dp->prefix) {
+            if (strncmp(upath, dp->name + 4, strlen(dp->name + 4)))
                 continue;
         } else {
-            if(strcmp(path, perms[i].name))
+            if (strcmp(upath, dp->name + 4))
                 continue;
         }
-        *uid = perms[i].uid;
-        *gid = perms[i].gid;
-        *perm = perms[i].perm;
-        return 0;
+
+        if ((strlen(upath) + strlen(dp->attr) + 6) > sizeof(buf))
+            return;
+
+        sprintf(buf,"/sys%s/%s", upath, dp->attr);
+        INFO("fixup %s %d %d 0%o\n", buf, dp->uid, dp->gid, dp->perm);
+        chown(buf, dp->uid, dp->gid);
+        chmod(buf, dp->perm);
     }
-    return -1;
 }
 
-/* First checks for emulator specific permissions specified in /proc/cmdline. */
 static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
 {
     mode_t perm;
@@ -175,7 +189,9 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
     return 0600;
 }
 
-static void make_device(const char *path, int block, int major, int minor)
+static void make_device(const char *path,
+                        const char *upath,
+                        int block, int major, int minor)
 {
     unsigned uid;
     unsigned gid;
@@ -385,7 +401,10 @@ static void handle_device_event(struct uevent *uevent)
     int block;
     int i;
 
-        /* if it's not a /dev device, nothing to do */
+    if (!strcmp(uevent->action,"add"))
+        fixup_sys_perms(uevent->path);
+
+        /* if it's not a /dev device, nothing else to do */
     if((uevent->major < 0) || (uevent->minor < 0))
         return;
 
@@ -463,7 +482,7 @@ static void handle_device_event(struct uevent *uevent)
         snprintf(devpath, sizeof(devpath), "%s%s", base, name);
 
     if(!strcmp(uevent->action, "add")) {
-        make_device(devpath, block, uevent->major, uevent->minor);
+        make_device(devpath, uevent->path, block, uevent->major, uevent->minor);
         if (links) {
             for (i = 0; links[i]; i++)
                 make_link(devpath, links[i]);
