@@ -259,13 +259,14 @@ bool KernelCollector::Collect() {
   logger_->LogInfo("Received prior crash notification from "
                    "kernel (signature %s) (%s)",
                    signature.c_str(),
-                   feedback ? "handling" : "ignoring");
+                   feedback ? "handling" : "ignoring - no consent");
 
   if (feedback) {
     count_crash_function_();
 
     if (!GetCreatedCrashDirectoryByEuid(kRootUid,
-                                        &root_crash_directory)) {
+                                        &root_crash_directory,
+                                        NULL)) {
       return true;
     }
 

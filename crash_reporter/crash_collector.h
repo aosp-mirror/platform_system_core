@@ -10,9 +10,9 @@
 #include <map>
 #include <string>
 
+#include "base/file_path.h"
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
-class FilePath;
 class SystemLogging;
 
 // User crash collector.
@@ -38,6 +38,7 @@ class CrashCollector {
   FRIEND_TEST(CrashCollectorTest, CheckHasCapacityStrangeNames);
   FRIEND_TEST(CrashCollectorTest, CheckHasCapacityUsual);
   FRIEND_TEST(CrashCollectorTest, GetCrashDirectoryInfo);
+  FRIEND_TEST(CrashCollectorTest, GetCrashPath);
   FRIEND_TEST(CrashCollectorTest, FormatDumpBasename);
   FRIEND_TEST(CrashCollectorTest, Initialize);
   FRIEND_TEST(CrashCollectorTest, MetaData);
@@ -67,16 +68,25 @@ class CrashCollector {
                            uid_t *uid,
                            gid_t *gid);
   // Determines the crash directory for given eud, and creates the
-  // directory if necessary with appropriate permissions.  Returns
+  // directory if necessary with appropriate permissions.  If
+  // |out_of_capacity| is not NULL, it is set to indicate if the call
+  // failed due to not having capacity in the crash directory. Returns
   // true whether or not directory needed to be created, false on any
-  // failure.  If the crash directory is already full, returns false.
+  // failure.  If the crash directory is at capacity, returns false.
   bool GetCreatedCrashDirectoryByEuid(uid_t euid,
-                                      FilePath *crash_file_path);
+                                      FilePath *crash_file_path,
+                                      bool *out_of_capacity);
 
   // Format crash name based on components.
   std::string FormatDumpBasename(const std::string &exec_name,
                                  time_t timestamp,
                                  pid_t pid);
+
+  // Create a file path to a file in |crash_directory| with the given
+  // |basename| and |extension|.
+  FilePath GetCrashPath(const FilePath &crash_directory,
+                        const std::string &basename,
+                        const std::string &extension);
 
   // Check given crash directory still has remaining capacity for another
   // crash.

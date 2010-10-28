@@ -19,7 +19,13 @@
 #include "base/logging.h"
 #include "base/string_util.h"
 #include "crash-reporter/system_logging.h"
+#include "gflags/gflags.h"
 
+DEFINE_bool(core2md_failure_test, false, "Core2md failure test");
+DEFINE_bool(directory_failure_test, false, "Spool directory failure test");
+
+static const char kCollectionErrorSignature[] =
+    "crash_reporter-user-collection";
 // This procfs file is used to cause kernel core file writing to
 // instead pipe the core file into a user space process.  See
 // core(5) man page.
@@ -149,16 +155,41 @@ bool UserCollector::GetIdFromStatus(const char *prefix,
   return true;
 }
 
+void UserCollector::LogCollectionError(const std::string &error_message) {
+  error_log_.append(error_message.c_str());
+  error_log_.append("\n");
+  logger_->LogError(error_message.c_str());
+}
+
+void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
+                                              const std::string &exec) {
+  FilePath crash_path;
+  logger_->LogInfo("Writing conversion problems as separate crash report.");
+  if (!GetCreatedCrashDirectoryByEuid(0, &crash_path, NULL)) {
+    logger_->LogError("Could not even get log directory; out of space?");
+    return;
+  }
+  std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
+  FilePath log_path = GetCrashPath(crash_path, dump_basename, "log");
+  FilePath meta_path = GetCrashPath(crash_path, dump_basename, "meta");
+  file_util::WriteFile(log_path,
+                       error_log_.data(),
+                       error_log_.length());
+  AddCrashMetaData("sig", kCollectionErrorSignature);
+  WriteCrashMetaData(meta_path, exec, log_path.value());
+}
+
 bool UserCollector::CopyOffProcFiles(pid_t pid,
                                      const FilePath &container_dir) {
   if (!file_util::CreateDirectory(container_dir)) {
-    logger_->LogInfo("Could not create %s", container_dir.value().c_str());
+    LogCollectionError(StringPrintf("Could not create %s",
+                                    container_dir.value().c_str()));
     return false;
   }
   FilePath process_path = GetProcessPath(pid);
   if (!file_util::PathExists(process_path)) {
-    logger_->LogWarning("Path %s does not exist",
-                        process_path.value().c_str());
+    LogCollectionError(StringPrintf("Path %s does not exist",
+                                    process_path.value().c_str()));
     return false;
   }
   static const char *proc_files[] = {
@@ -171,7 +202,8 @@ bool UserCollector::CopyOffProcFiles(pid_t pid,
   for (unsigned i = 0; i < arraysize(proc_files); ++i) {
     if (!file_util::CopyFile(process_path.Append(proc_files[i]),
                              container_dir.Append(proc_files[i]))) {
-      logger_->LogWarning("Could not copy %s file", proc_files[i]);
+      LogCollectionError(StringPrintf("Could not copy %s file",
+                                      proc_files[i]));
       return false;
     }
   }
@@ -179,21 +211,31 @@ bool UserCollector::CopyOffProcFiles(pid_t pid,
 }
 
 bool UserCollector::GetCreatedCrashDirectory(pid_t pid,
-                                             FilePath *crash_file_path) {
+                                             FilePath *crash_file_path,
+                                             bool *out_of_capacity) {
   FilePath process_path = GetProcessPath(pid);
   std::string status;
+  if (FLAGS_directory_failure_test) {
+    LogCollectionError("Purposefully failing to create spool directory");
+    return false;
+  }
   if (!file_util::ReadFileToString(process_path.Append("status"),
                                    &status)) {
-    logger_->LogError("Could not read status file");
+    LogCollectionError("Could not read status file");
     return false;
   }
   int process_euid;
   if (!GetIdFromStatus(kUserId, kIdEffective, status, &process_euid)) {
-    logger_->LogError("Could not find euid in status file");
+    LogCollectionError("Could not find euid in status file");
     return false;
   }
-  return GetCreatedCrashDirectoryByEuid(process_euid,
-                                        crash_file_path);
+  if (!GetCreatedCrashDirectoryByEuid(process_euid,
+                                      crash_file_path,
+                                      out_of_capacity)) {
+    LogCollectionError("Could not create crash directory");
+    return false;
+  }
+  return true;
 }
 
 bool UserCollector::CopyStdinToCoreFile(const FilePath &core_path) {
@@ -203,7 +245,7 @@ bool UserCollector::CopyStdinToCoreFile(const FilePath &core_path) {
     return true;
   }
 
-  logger_->LogError("Could not write core file");
+  LogCollectionError("Could not write core file");
   // If the file system was full, make sure we remove any remnants.
   file_util::Delete(core_path, false);
   return false;
@@ -259,16 +301,16 @@ int UserCollector::ForkExecAndPipe(std::vector<const char *> &arguments,
     return -1;
   }
   if (!WIFEXITED(status)) {
-    logger_->LogError("Process did not exit normally: %x", status);
+    logger_->LogError("Process did not exit normally: %d", status);
     return -1;
   }
   return WEXITSTATUS(status);
 }
 
-bool UserCollector::ConvertCoreToMinidump(const FilePath &core_path,
-                                          const FilePath &procfs_directory,
-                                          const FilePath &minidump_path,
-                                          const FilePath &temp_directory) {
+bool UserCollector::RunCoreToMinidump(const FilePath &core_path,
+                                      const FilePath &procfs_directory,
+                                      const FilePath &minidump_path,
+                                      const FilePath &temp_directory) {
   FilePath output_path = temp_directory.Append("output");
   std::vector<const char *> core2md_arguments;
   core2md_arguments.push_back(kCoreToMinidumpConverterPath);
@@ -276,83 +318,99 @@ bool UserCollector::ConvertCoreToMinidump(const FilePath &core_path,
   core2md_arguments.push_back(procfs_directory.value().c_str());
   core2md_arguments.push_back(minidump_path.value().c_str());
 
+  if (FLAGS_core2md_failure_test) {
+    // To test how core2md errors are propagaged, cause an error
+    // by forgetting a required argument.
+    core2md_arguments.pop_back();
+  }
+
   int errorlevel = ForkExecAndPipe(core2md_arguments,
                                    output_path.value().c_str());
 
   std::string output;
   file_util::ReadFileToString(output_path, &output);
   if (errorlevel != 0) {
-    logger_->LogInfo("Problem during %s [result=%d]: %s",
-                     kCoreToMinidumpConverterPath,
-                     errorlevel,
-                     output.c_str());
+    LogCollectionError(StringPrintf("Problem during %s [result=%d]: %s",
+                                    kCoreToMinidumpConverterPath,
+                                    errorlevel,
+                                    output.c_str()));
     return false;
   }
 
   if (!file_util::PathExists(minidump_path)) {
-    logger_->LogError("Minidump file %s was not created",
-                      minidump_path.value().c_str());
+    LogCollectionError(StringPrintf("Minidump file %s was not created",
+                                    minidump_path.value().c_str()));
     return false;
   }
   return true;
 }
 
-bool UserCollector::GenerateDiagnostics(pid_t pid,
-                                        const std::string &exec_name) {
-  FilePath container_dir("/tmp");
-  container_dir = container_dir.Append(
-      StringPrintf("crash_reporter.%d", pid));
-
+bool UserCollector::ConvertCoreToMinidump(pid_t pid,
+                                          const FilePath &container_dir,
+                                          const FilePath &core_path,
+                                          const FilePath &minidump_path) {
   if (!CopyOffProcFiles(pid, container_dir)) {
-    file_util::Delete(container_dir, true);
     return false;
   }
-
-  FilePath crash_path;
-  if (!GetCreatedCrashDirectory(pid, &crash_path)) {
-    file_util::Delete(container_dir, true);
-    return false;
-  }
-  std::string dump_basename = FormatDumpBasename(exec_name, time(NULL), pid);
-  FilePath core_path = crash_path.Append(
-      StringPrintf("%s.core", dump_basename.c_str()));
 
   if (!CopyStdinToCoreFile(core_path)) {
-    file_util::Delete(container_dir, true);
     return false;
   }
 
-  FilePath minidump_path = crash_path.Append(
-      StringPrintf("%s.dmp", dump_basename.c_str()));
-
-  bool conversion_result = true;
-  if (!ConvertCoreToMinidump(core_path,
-                             container_dir,  // procfs directory
-                             minidump_path,
-                             container_dir)) {  // temporary directory
-    // Note we leave the container directory for inspection.
-    conversion_result = false;
-  } else {
-    file_util::Delete(container_dir, true);
-  }
-
-  WriteCrashMetaData(
-      crash_path.Append(
-          StringPrintf("%s.meta", dump_basename.c_str())),
-      exec_name,
-      minidump_path.value());
+  bool conversion_result = RunCoreToMinidump(
+      core_path,
+      container_dir,  // procfs directory
+      minidump_path,
+      container_dir);  // temporary directory
 
   if (conversion_result) {
     logger_->LogInfo("Stored minidump to %s", minidump_path.value().c_str());
   }
 
+  return conversion_result;
+}
+
+bool UserCollector::ConvertAndEnqueueCrash(int pid,
+                                           const std::string &exec,
+                                           bool *out_of_capacity) {
+  FilePath crash_path;
+  if (!GetCreatedCrashDirectory(pid, &crash_path, out_of_capacity)) {
+    LogCollectionError("Unable to find/create process-specific crash path");
+    return false;
+  }
+
+  // Directory like /tmp/crash_reporter.1234 which contains the
+  // procfs entries and other temporary files used during conversion.
+  FilePath container_dir = FilePath("/tmp").Append(
+      StringPrintf("crash_reporter.%d", pid));
+  std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
+  FilePath core_path = GetCrashPath(crash_path, dump_basename, "core");
+  FilePath meta_path = GetCrashPath(crash_path, dump_basename, "meta");
+  FilePath minidump_path = GetCrashPath(crash_path, dump_basename, "dmp");
+
+  if (!ConvertCoreToMinidump(pid, container_dir, core_path,
+                            minidump_path)) {
+    logger_->LogInfo("Leaving core file at %s due to conversion error",
+                     core_path.value().c_str());
+    return false;
+  }
+
+  // Here we commit to sending this file.  We must not return false
+  // after this point or we will generate a log report as well as a
+  // crash report.
+  WriteCrashMetaData(meta_path,
+                     exec,
+                     minidump_path.value());
+
   if (!file_util::PathExists(FilePath(kLeaveCoreFile))) {
     file_util::Delete(core_path, false);
   } else {
-    logger_->LogInfo("Leaving core file at %s", core_path.value().c_str());
+    logger_->LogInfo("Leaving core file at %s due to developer image",
+                     core_path.value().c_str());
   }
 
-  return conversion_result;
+  file_util::Delete(container_dir, true);
+  return true;
 }
 
 bool UserCollector::HandleCrash(int signal, int pid, const char *force_exec) {
@@ -368,14 +426,20 @@ bool UserCollector::HandleCrash(int signal, int pid, const char *force_exec) {
   bool feedback = is_feedback_allowed_function_();
   logger_->LogWarning("Received crash notification for %s[%d] sig %d (%s)",
                       exec.c_str(), pid, signal,
-                      feedback ? "handling" : "ignoring");
+                      feedback ? "handling" : "ignoring - no consent");
 
   if (feedback) {
     count_crash_function_();
 
     if (generate_diagnostics_) {
-      return GenerateDiagnostics(pid, exec);
+      bool out_of_capacity = false;
+      if (!ConvertAndEnqueueCrash(pid, exec, &out_of_capacity)) {
+        if (!out_of_capacity)
+          EnqueueCollectionErrorLog(pid, exec);
+        return false;
+      }
     }
   }
+
   return true;
 }

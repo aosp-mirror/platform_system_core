@@ -152,20 +152,24 @@ get_base() {
   echo "${1%.*}"
 }
 
+get_extension() {
+  echo "${1##*.}"
+}
+
 # Return which kind of report the given metadata file relates to
 get_kind() {
-  # There should never be a report with both a dmp and kcrash file.
-  # If that were to happen we arbitrarily consider this a minidump
-  # report and effectively ignore the kcrash.
-  local base="$(get_base "$1")"
-  if [ -r "${base}.dmp" ]; then
+  local payload="$(get_key_value "$1" "payload")"
+  if [ ! -r "${payload}" ]; then
+    lecho "Missing payload: ${payload}"
+    echo "unknown"
+    return
+  fi
+  local kind="$(get_extension "${payload}")"
+  if [ "${kind}" = "dmp" ]; then
     echo "minidump"
     return
   fi
-  if [ -r "${base}.kcrash" ]; then
-    echo "kcrash"
-    return
-  fi
+  echo "${kind}"
 }
 
 get_key_value() {
@@ -192,6 +196,7 @@ get_hardware_class() {
 
 send_crash() {
   local meta_path="$1"
+  local report_payload="$(get_key_value "${meta_path}" "payload")"
   local kind="$(get_kind "${meta_path}")"
   local exec_name="$(get_key_value "${meta_path}" "exec_name")"
   local sleep_time=$(generate_uniform_random $SECONDS_SEND_SPREAD)
@@ -199,12 +204,9 @@ send_crash() {
   local chromeos_version="$(get_key_value "${meta_path}" "ver")"
   local board="$(get_board)"
   local hwclass="$(get_hardware_class)"
-  local payload_extension="${kind}"
   local write_payload_size="$(get_key_value "${meta_path}" "payload_size")"
   local sig="$(get_key_value "${meta_path}" "sig")"
-  [ "${kind}" = "minidump" ] && payload_extension="dmp"
-  local report_payload="$(get_base "${meta_path}").${payload_extension}"
-  local send_payload_size="$(stat --printf=%s "${report_payload}")"
+  local send_payload_size="$(stat --printf=%s "${report_payload}" 2>/dev/null)"
   lecho "Sending crash:"
   lecho "  Scheduled to send in ${sleep_time}s"
   lecho "  Metadata: ${meta_path} (${kind})"
@@ -241,7 +243,7 @@ send_crash() {
   local extra_value1="${write_payload_size}"
   local extra_key2="send_payload_size"
   local extra_value2="${send_payload_size}"
-  if [ "${kind}" = "kcrash" ]; then
+  if [ "${sig}" != "unknown" ]; then
     extra_key1="sig"
     extra_value1="${sig}"
     extra_key2="sig2"
@@ -309,8 +311,10 @@ send_crashes() {
     lecho "Considering metadata ${meta_path}."
     local kind=$(get_kind "${meta_path}")
 
-    if [ "${kind}" != "minidump" ] && [ "${kind}" != "kcrash" ]; then
-      lecho "Unknown report kind.  Removing report."
+    if [ "${kind}" != "minidump" ] && \
+       [ "${kind}" != "kcrash" ] && \
+       [ "${kind}" != "log" ]; then
+      lecho "Unknown report kind ${kind}.  Removing report."
       remove_report "${meta_path}"
       continue
     fi

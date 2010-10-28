@@ -135,7 +135,7 @@ TEST_F(KernelCollectorTest, CollectOptedOut) {
   SetUpSuccessfulCollect();
   s_metrics = false;
   ASSERT_TRUE(collector_.Collect());
-  ASSERT_NE(std::string::npos, logging_.log().find("(ignoring)"));
+  ASSERT_NE(std::string::npos, logging_.log().find("(ignoring - no consent)"));
   ASSERT_EQ(0, s_crashes);
 
   CheckPreservedDumpClear();

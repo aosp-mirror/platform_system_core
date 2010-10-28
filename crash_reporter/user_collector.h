@@ -82,26 +82,39 @@ class UserCollector : public CrashCollector {
                        IdKind kind,
                        const std::string &status_contents,
                        int *id);
+
+  void LogCollectionError(const std::string &error_message);
+  void EnqueueCollectionErrorLog(pid_t pid, const std::string &exec_name);
+
   bool CopyOffProcFiles(pid_t pid, const FilePath &process_map);
   // Determines the crash directory for given pid based on pid's owner,
   // and creates the directory if necessary with appropriate permissions.
   // Returns true whether or not directory needed to be created, false on
   // any failure.
   bool GetCreatedCrashDirectory(pid_t pid,
-                                FilePath *crash_file_path);
+                                FilePath *crash_file_path,
+                                bool *out_of_capacity);
   bool CopyStdinToCoreFile(const FilePath &core_path);
   int ForkExecAndPipe(std::vector<const char *> &arguments,
                       const char *output_file);
-  bool ConvertCoreToMinidump(const FilePath &core_path,
-                             const FilePath &procfs_directory,
-                             const FilePath &minidump_path,
-                             const FilePath &temp_directory);
-  bool GenerateDiagnostics(pid_t pid, const std::string &exec_name);
+  bool RunCoreToMinidump(const FilePath &core_path,
+                         const FilePath &procfs_directory,
+                         const FilePath &minidump_path,
+                         const FilePath &temp_directory);
+  bool ConvertCoreToMinidump(pid_t pid,
+                             const FilePath &container_dir,
+                             const FilePath &core_path,
+                             const FilePath &minidump_path);
+  bool ConvertAndEnqueueCrash(int pid, const std::string &exec_name,
+                              bool *out_of_capacity);
 
   bool generate_diagnostics_;
   std::string core_pattern_file_;
   std::string our_path_;
   bool initialized_;
+
+  // String containing the current log of crash handling errors.
+  std::string error_log_;
 
   static const char *kUserId;
   static const char *kGroupId;

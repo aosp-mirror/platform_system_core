@@ -86,6 +86,14 @@ std::string CrashCollector::FormatDumpBasename(const std::string &exec_name,
                       pid);
 }
 
+FilePath CrashCollector::GetCrashPath(const FilePath &crash_directory,
+                                      const std::string &basename,
+                                      const std::string &extension) {
+  return crash_directory.Append(StringPrintf("%s.%s",
+                                             basename.c_str(),
+                                             extension.c_str()));
+}
+
 FilePath CrashCollector::GetCrashDirectoryInfo(
     uid_t process_euid,
     uid_t default_user_id,
@@ -125,9 +133,12 @@ bool CrashCollector::GetUserInfoFromName(const std::string &name,
 }
 
 bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
-                                                    FilePath *crash_directory) {
+                                                    FilePath *crash_directory,
+                                                    bool *out_of_capacity) {
   uid_t default_user_id;
   gid_t default_user_group;
+
+  if (out_of_capacity != NULL) *out_of_capacity = false;
 
   // For testing.
   if (forced_crash_directory_ != NULL) {
@@ -173,6 +184,7 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
   }
 
   if (!CheckHasCapacity(*crash_directory)) {
+    if (out_of_capacity != NULL) *out_of_capacity = true;
     return false;
   }
 
@@ -271,11 +283,13 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
   file_util::GetFileSize(FilePath(payload_path), &payload_size);
   std::string meta_data = StringPrintf("%sexec_name=%s\n"
                                        "ver=%s\n"
+                                       "payload=%s\n"
                                        "payload_size=%lld\n"
                                        "done=1\n",
                                        extra_metadata_.c_str(),
                                        exec_name.c_str(),
                                        version.c_str(),
+                                       payload_path.c_str(),
                                        payload_size);
   if (!file_util::WriteFile(meta_path, meta_data.c_str(), meta_data.size())) {
     logger_->LogError("Unable to write %s", meta_path.value().c_str());

@@ -120,6 +120,18 @@ TEST_F(CrashCollectorTest, FormatDumpBasename) {
   ASSERT_EQ("foo.20100523.135015.100", basename);
 }
 
+TEST_F(CrashCollectorTest, GetCrashPath) {
+  EXPECT_EQ("/var/spool/crash/myprog.20100101.1200.1234.core",
+            collector_.GetCrashPath(FilePath("/var/spool/crash"),
+                                    "myprog.20100101.1200.1234",
+                                    "core").value());
+  EXPECT_EQ("/home/chronos/user/crash/chrome.20100101.1200.1234.dmp",
+            collector_.GetCrashPath(FilePath("/home/chronos/user/crash"),
+                                    "chrome.20100101.1200.1234",
+                                    "dmp").value());
+}
+
+
 bool CrashCollectorTest::CheckHasCapacity() {
   static const char kFullMessage[] = "Crash directory test already full";
   bool has_capacity = collector_.CheckHasCapacity(test_dir_);
@@ -238,6 +250,7 @@ TEST_F(CrashCollectorTest, MetaData) {
   EXPECT_EQ("foo=bar\n"
             "exec_name=kernel\n"
             "ver=version\n"
+            "payload=test/payload-file\n"
             "payload_size=3\n"
             "done=1\n", contents);
 }
