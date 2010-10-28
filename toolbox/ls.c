@@ -144,6 +144,7 @@ static void strlist_sort( strlist_t *list )
 #define LIST_RECURSIVE      (1 << 2)
 #define LIST_DIRECTORIES    (1 << 3)
 #define LIST_SIZE           (1 << 4)
+#define LIST_LONG_NUMERIC   (1 << 5)
 
 // fwd
 static int listpath(const char *name, int flags);
@@ -279,8 +280,13 @@ static int listfile_long(const char *path, int flags)
     }
 
     mode2str(s.st_mode, mode);
-    user2str(s.st_uid, user);
-    group2str(s.st_gid, group);
+    if (flags & LIST_LONG_NUMERIC) {
+        sprintf(user, "%ld", s.st_uid);
+        sprintf(group, "%ld", s.st_gid);
+    } else {
+        user2str(s.st_uid, user);
+        group2str(s.st_gid, group);
+    }
 
     strftime(date, 32, "%Y-%m-%d %H:%M", localtime((const time_t*)&s.st_mtime));
     date[31] = 0;
@@ -476,6 +482,7 @@ int ls_main(int argc, char **argv)
                 while (arg[0]) {
                     switch (arg[0]) {
                     case 'l': flags |= LIST_LONG; break;
+                    case 'n': flags |= LIST_LONG | LIST_LONG_NUMERIC; break;
                     case 's': flags |= LIST_SIZE; break;
                     case 'R': flags |= LIST_RECURSIVE; break;
                     case 'd': flags |= LIST_DIRECTORIES; break;
