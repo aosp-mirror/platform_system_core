@@ -56,6 +56,7 @@
 #define AID_DRMIO         1020  /* DRM IO server */
 #define AID_GPS           1021  /* GPS daemon */
 #define AID_NFC           1022  /* nfc subsystem */
+#define AID_MEDIA_RW      1023  /* internal media storage write access */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -106,6 +107,7 @@ static const struct android_id_info android_ids[] = {
     { "net_bt_admin", AID_NET_BT_ADMIN, },
     { "net_bt",    AID_NET_BT, },
     { "sdcard_rw", AID_SDCARD_RW, },
+    { "media_rw",  AID_MEDIA_RW, },
     { "vpn",       AID_VPN, },
     { "keystore",  AID_KEYSTORE, },
     { "usb",       AID_USB, },
