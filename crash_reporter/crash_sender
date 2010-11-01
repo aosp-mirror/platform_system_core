@@ -161,7 +161,7 @@ get_kind() {
   local payload="$(get_key_value "$1" "payload")"
   if [ ! -r "${payload}" ]; then
     lecho "Missing payload: ${payload}"
-    echo "unknown"
+    echo "undefined"
     return
   fi
   local kind="$(get_extension "${payload}")"
@@ -185,12 +185,12 @@ get_board() {
   echo $(get_key_value "/etc/lsb-release" "CHROMEOS_RELEASE_BOARD")
 }
 
-# Return the hardware class or "unknown".
+# Return the hardware class or "undefined".
 get_hardware_class() {
   if [ -r "${HWCLASS_PATH}" ]; then
     cat "${HWCLASS_PATH}"
   else
-    echo "unknown"
+    echo "undefined"
   fi
 }
 
@@ -207,6 +207,18 @@ send_crash() {
   local write_payload_size="$(get_key_value "${meta_path}" "payload_size")"
   local sig="$(get_key_value "${meta_path}" "sig")"
   local send_payload_size="$(stat --printf=%s "${report_payload}" 2>/dev/null)"
+
+  local extra_key1="write_payload_size"
+  local extra_value1="${write_payload_size}"
+  local extra_key2="send_payload_size"
+  local extra_value2="${send_payload_size}"
+  if [ "${sig}" != "undefined" ]; then
+    extra_key1="sig"
+    extra_value1="${sig}"
+    extra_key2="sig2"
+    extra_value2="${sig}"
+  fi
+
   lecho "Sending crash:"
   lecho "  Scheduled to send in ${sleep_time}s"
   lecho "  Metadata: ${meta_path} (${kind})"
@@ -217,7 +229,8 @@ send_crash() {
     lecho "  URL: ${url}"
     lecho "  Board: ${board}"
     lecho "  HWClass: ${hwclass}"
-    [ "${sig}" != "undefined" ] && lecho "  Sig: ${sig}"
+    lecho "  ${extra_key1}: ${extra_value1}"
+    lecho "  ${extra_key2}: ${extra_value2}"
   fi
   lecho "  Exec name: ${exec_name}"
   if is_mock; then
@@ -238,17 +251,6 @@ send_crash() {
 
   local report_id="${TMP_DIR}/report_id"
   local curl_stderr="${TMP_DIR}/curl_stderr"
-
-  local extra_key1="write_payload_size"
-  local extra_value1="${write_payload_size}"
-  local extra_key2="send_payload_size"
-  local extra_value2="${send_payload_size}"
-  if [ "${sig}" != "unknown" ]; then
-    extra_key1="sig"
-    extra_value1="${sig}"
-    extra_key2="sig2"
-    extra_value2="${sig}"
-  fi
 
   set +e
   curl "${url}" \
