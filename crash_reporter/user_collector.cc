@@ -21,8 +21,12 @@
 #include "crash-reporter/system_logging.h"
 #include "gflags/gflags.h"
 
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 DEFINE_bool(core2md_failure_test, false, "Core2md failure test");
 DEFINE_bool(directory_failure_test, false, "Spool directory failure test");
+DEFINE_string(filter_in, "",
+              "Ignore all crashes but this for testing");
+#pragma GCC diagnostic error "-Wstrict-aliasing"
 
 static const char kCollectionErrorSignature[] =
     "crash_reporter-user-collection";
@@ -423,6 +427,19 @@ bool UserCollector::HandleCrash(int signal, int pid, const char *force_exec) {
     // failing by indicating an unknown name.
     exec = "unknown";
   }
+
+  // Allow us to test the crash reporting mechanism successfully even if
+  // other parts of the system crash.
+  if (!FLAGS_filter_in.empty() &&
+      (FLAGS_filter_in == "none" ||
+       FLAGS_filter_in != exec)) {
+    // We use a different format message to make it more obvious in tests
+    // which crashes are test generated and which are real.
+    logger_->LogWarning("Ignoring crash from %s[%d] while filter_in=%s",
+                        exec.c_str(), pid, FLAGS_filter_in.c_str());
+    return true;
+  }
+
   bool feedback = is_feedback_allowed_function_();
   logger_->LogWarning("Received crash notification for %s[%d] sig %d (%s)",
                       exec.c_str(), pid, signal,
