@@ -62,6 +62,10 @@ int SocketClient::sendData(const void* data, int len) {
     const char *p = (const char*) data;
     int brtw = len;
 
+    if (len == 0) {
+        return 0;
+    }
+
     pthread_mutex_lock(&mWriteMutex);
     while (brtw > 0) {
         if ((rc = write(mSocket, p, brtw)) < 0) {
