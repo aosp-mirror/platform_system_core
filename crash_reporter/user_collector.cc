@@ -4,17 +4,13 @@
 
 #include "crash-reporter/user_collector.h"
 
-#include <fcntl.h>  // For creat.
 #include <grp.h>  // For struct group.
 #include <pwd.h>  // For struct passwd.
 #include <sys/types.h>  // For getpwuid_r, getgrnam_r, WEXITSTATUS.
-#include <sys/wait.h>  // For waitpid.
-#include <unistd.h>  // For execv and fork.
 
 #include <string>
 #include <vector>
 
-#include "base/eintr_wrapper.h"
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/string_util.h"
@@ -176,9 +172,10 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
   std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
   FilePath log_path = GetCrashPath(crash_path, dump_basename, "log");
   FilePath meta_path = GetCrashPath(crash_path, dump_basename, "meta");
-  file_util::WriteFile(log_path,
-                       error_log_.data(),
-                       error_log_.length());
+  // We must use WriteNewFile instead of file_util::WriteFile as we do
+  // not want to write with root access to a symlink that an attacker
+  // might have created.
+  WriteNewFile(log_path, error_log_.data(), error_log_.length());
   AddCrashMetaData("sig", kCollectionErrorSignature);
   WriteCrashMetaData(meta_path, exec, log_path.value());
 }
@@ -253,62 +250,6 @@ bool UserCollector::CopyStdinToCoreFile(const FilePath &core_path) {
   // If the file system was full, make sure we remove any remnants.
   file_util::Delete(core_path, false);
   return false;
-}
-
-int UserCollector::ForkExecAndPipe(std::vector<const char *> &arguments,
-                                   const char *output_file) {
-  // Copy off a writeable version of arguments.
-  scoped_array<char*> argv(new char *[arguments.size() + 1]);
-  int total_args_size = 0;
-  for (size_t i = 0; i < arguments.size(); ++i) {
-    if (arguments[i] == NULL) {
-      logger_->LogError("Bad parameter");
-      return -1;
-    }
-    total_args_size += strlen(arguments[i]) + 1;
-  }
-  scoped_array<char> buffer(new char[total_args_size]);
-  char *buffer_pointer = &buffer[0];
-
-  for (size_t i = 0; i < arguments.size(); ++i) {
-    argv[i] = buffer_pointer;
-    strcpy(buffer_pointer, arguments[i]);
-    buffer_pointer += strlen(arguments[i]);
-    *buffer_pointer = '\0';
-    ++buffer_pointer;
-  }
-  argv[arguments.size()] = NULL;
-
-  int pid = fork();
-  if (pid < 0) {
-    logger_->LogError("Fork failed: %d", errno);
-    return -1;
-  }
-
-  if (pid == 0) {
-    int output_handle = creat(output_file, 0700);
-    if (output_handle < 0) {
-      logger_->LogError("Could not create %s: %d", output_file, errno);
-      // Avoid exit() to avoid atexit handlers from parent.
-      _exit(127);
-    }
-    dup2(output_handle, 1);
-    dup2(output_handle, 2);
-    execv(argv[0], &argv[0]);
-    logger_->LogError("Exec failed: %d", errno);
-    _exit(127);
-  }
-
-  int status = 0;
-  if (HANDLE_EINTR(waitpid(pid, &status, 0)) < 0) {
-    logger_->LogError("Problem waiting for pid: %d", errno);
-    return -1;
-  }
-  if (!WIFEXITED(status)) {
-    logger_->LogError("Process did not exit normally: %d", status);
-    return -1;
-  }
-  return WEXITSTATUS(status);
 }
 
 bool UserCollector::RunCoreToMinidump(const FilePath &core_path,

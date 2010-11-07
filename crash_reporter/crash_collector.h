@@ -39,14 +39,24 @@ class CrashCollector {
   FRIEND_TEST(CrashCollectorTest, CheckHasCapacityUsual);
   FRIEND_TEST(CrashCollectorTest, GetCrashDirectoryInfo);
   FRIEND_TEST(CrashCollectorTest, GetCrashPath);
+  FRIEND_TEST(CrashCollectorTest, ForkExecAndPipe);
   FRIEND_TEST(CrashCollectorTest, FormatDumpBasename);
   FRIEND_TEST(CrashCollectorTest, Initialize);
   FRIEND_TEST(CrashCollectorTest, MetaData);
   FRIEND_TEST(CrashCollectorTest, ReadKeyValueFile);
   FRIEND_TEST(CrashCollectorTest, Sanitize);
+  FRIEND_TEST(CrashCollectorTest, WriteNewFile);
 
   // Set maximum enqueued crashes in a crash directory.
   static const int kMaxCrashDirectorySize;
+
+  // Writes |data| of |size| to |filename|, which must be a new file.
+  // If the file already exists or writing fails, return a negative value.
+  // Otherwise returns the number of bytes written.
+  int WriteNewFile(const FilePath &filename, const char *data, int size);
+
+  int ForkExecAndPipe(std::vector<const char *> &arguments,
+                      const char *output_file);
 
   // Return a filename that has only [a-z0-1_] characters by mapping
   // all others into '_'.

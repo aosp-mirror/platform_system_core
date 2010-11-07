@@ -8,8 +8,15 @@
 #include "base/string_util.h"
 #include "crash-reporter/crash_collector.h"
 #include "crash-reporter/system_logging_mock.h"
+#include "crash-reporter/test_helpers.h"
 #include "gflags/gflags.h"
 #include "gtest/gtest.h"
+
+// This test assumes the following standard binaries are installed.
+static const char kBinBash[] = "/bin/bash";
+static const char kBinCp[] = "/bin/cp";
+static const char kBinEcho[] = "/bin/echo";
+static const char kBinFalse[] = "/bin/false";
 
 void CountCrash() {
   ADD_FAILURE();
@@ -46,6 +53,81 @@ TEST_F(CrashCollectorTest, Initialize) {
   ASSERT_TRUE(CountCrash == collector_.count_crash_function_);
   ASSERT_TRUE(IsMetrics == collector_.is_feedback_allowed_function_);
   ASSERT_TRUE(&logging_ == collector_.logger_);
+}
+
+TEST_F(CrashCollectorTest, WriteNewFile) {
+  FilePath test_file = test_dir_.Append("test_new");
+  const char kBuffer[] = "buffer";
+  EXPECT_EQ(strlen(kBuffer),
+            collector_.WriteNewFile(test_file,
+                                    kBuffer,
+                                    strlen(kBuffer)));
+  EXPECT_LT(collector_.WriteNewFile(test_file,
+                                    kBuffer,
+                                    strlen(kBuffer)), 0);
+}
+
+TEST_F(CrashCollectorTest, ForkExecAndPipe) {
+  std::vector<const char *> args;
+  char output_file[] = "test/fork_out";
+
+  // Test basic call with stdout.
+  args.clear();
+  args.push_back(kBinEcho);
+  args.push_back("hello world");
+  EXPECT_EQ(0, collector_.ForkExecAndPipe(args, output_file));
+  ExpectFileEquals("hello world\n", output_file);
+  EXPECT_EQ("", logging_.log());
+
+  // Test non-zero return value
+  logging_.clear();
+  args.clear();
+  args.push_back(kBinFalse);
+  EXPECT_EQ(1, collector_.ForkExecAndPipe(args, output_file));
+  ExpectFileEquals("", output_file);
+  EXPECT_EQ("", logging_.log());
+
+  // Test bad output_file.
+  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, "/bad/path"));
+
+  // Test bad executable.
+  logging_.clear();
+  args.clear();
+  args.push_back("false");
+  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, output_file));
+
+  // Test stderr captured.
+  std::string contents;
+  logging_.clear();
+  args.clear();
+  args.push_back(kBinCp);
+  EXPECT_EQ(1, collector_.ForkExecAndPipe(args, output_file));
+  EXPECT_TRUE(file_util::ReadFileToString(FilePath(output_file),
+                                                   &contents));
+  EXPECT_NE(std::string::npos, contents.find("missing file operand"));
+  EXPECT_EQ("", logging_.log());
+
+  // NULL parameter.
+  logging_.clear();
+  args.clear();
+  args.push_back(NULL);
+  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args, output_file));
+  EXPECT_NE(std::string::npos,
+            logging_.log().find("Bad parameter"));
+
+  // No parameters.
+  args.clear();
+  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, output_file));
+
+  // Segmentation faulting process.
+  logging_.clear();
+  args.clear();
+  args.push_back(kBinBash);
+  args.push_back("-c");
+  args.push_back("kill -SEGV $$");
+  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args, output_file));
+  EXPECT_NE(std::string::npos,
+            logging_.log().find("Process did not exit normally"));
 }
 
 TEST_F(CrashCollectorTest, Sanitize) {
@@ -231,7 +313,8 @@ TEST_F(CrashCollectorTest, ReadKeyValueFile) {
 }
 
 TEST_F(CrashCollectorTest, MetaData) {
-  FilePath meta_file = test_dir_.Append("generated.meta");
+  const char kMetaFileBasename[] = "generated.meta";
+  FilePath meta_file = test_dir_.Append(kMetaFileBasename);
   FilePath lsb_release = test_dir_.Append("lsb-release");
   FilePath payload_file = test_dir_.Append("payload-file");
   std::string contents;
@@ -247,12 +330,43 @@ TEST_F(CrashCollectorTest, MetaData) {
   collector_.AddCrashMetaData("foo", "bar");
   collector_.WriteCrashMetaData(meta_file, "kernel", payload_file.value());
   EXPECT_TRUE(file_util::ReadFileToString(meta_file, &contents));
-  EXPECT_EQ("foo=bar\n"
-            "exec_name=kernel\n"
-            "ver=version\n"
-            "payload=test/payload-file\n"
-            "payload_size=3\n"
-            "done=1\n", contents);
+  const char kExpectedMeta[] =
+      "foo=bar\n"
+      "exec_name=kernel\n"
+      "ver=version\n"
+      "payload=test/payload-file\n"
+      "payload_size=3\n"
+      "done=1\n";
+  EXPECT_EQ(kExpectedMeta, contents);
+
+  // Test target of symlink is not overwritten.
+  payload_file = test_dir_.Append("payload2-file");
+  ASSERT_TRUE(
+      file_util::WriteFile(payload_file,
+                           kPayload, strlen(kPayload)));
+  FilePath meta_symlink_path = test_dir_.Append("symlink.meta");
+  ASSERT_EQ(0,
+            symlink(kMetaFileBasename,
+                    meta_symlink_path.value().c_str()));
+  ASSERT_TRUE(file_util::PathExists(meta_symlink_path));
+  logging_.clear();
+  collector_.WriteCrashMetaData(meta_symlink_path,
+                                "kernel",
+                                payload_file.value());
+  // Target metadata contents sould have stayed the same.
+  contents.clear();
+  EXPECT_TRUE(file_util::ReadFileToString(meta_file, &contents));
+  EXPECT_EQ(kExpectedMeta, contents);
+  EXPECT_NE(std::string::npos, logging_.log().find("Unable to write"));
+
+  // Test target of dangling symlink is not created.
+  file_util::Delete(meta_file, false);
+  ASSERT_FALSE(file_util::PathExists(meta_file));
+  logging_.clear();
+  collector_.WriteCrashMetaData(meta_symlink_path, "kernel",
+                                payload_file.value());
+  EXPECT_FALSE(file_util::PathExists(meta_file));
+  EXPECT_NE(std::string::npos, logging_.log().find("Unable to write"));
 }
 
 int main(int argc, char **argv) {

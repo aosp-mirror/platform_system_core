@@ -277,9 +277,12 @@ bool KernelCollector::Collect() {
     FilePath kernel_crash_path = root_crash_directory.Append(
         StringPrintf("%s.kcrash", dump_basename.c_str()));
 
-    if (file_util::WriteFile(kernel_crash_path,
-                             kernel_dump.data(),
-                             kernel_dump.length()) !=
+    // We must use WriteNewFile instead of file_util::WriteFile as we
+    // do not want to write with root access to a symlink that an attacker
+    // might have created.
+    if (WriteNewFile(kernel_crash_path,
+                     kernel_dump.data(),
+                     kernel_dump.length()) !=
         static_cast<int>(kernel_dump.length())) {
       logger_->LogInfo("Failed to write kernel dump to %s",
                        kernel_crash_path.value().c_str());

@@ -52,7 +52,6 @@ class UserCollector : public CrashCollector {
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesBadPath);
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesBadPid);
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesOK);
-  FRIEND_TEST(UserCollectorTest, ForkExecAndPipe);
   FRIEND_TEST(UserCollectorTest, GetIdFromStatus);
   FRIEND_TEST(UserCollectorTest, GetProcessPath);
   FRIEND_TEST(UserCollectorTest, GetSymlinkTarget);
@@ -95,8 +94,6 @@ class UserCollector : public CrashCollector {
                                 FilePath *crash_file_path,
                                 bool *out_of_capacity);
   bool CopyStdinToCoreFile(const FilePath &core_path);
-  int ForkExecAndPipe(std::vector<const char *> &arguments,
-                      const char *output_file);
   bool RunCoreToMinidump(const FilePath &core_path,
                          const FilePath &procfs_directory,
                          const FilePath &minidump_path,

@@ -7,6 +7,7 @@
 #include "base/file_util.h"
 #include "crash-reporter/system_logging_mock.h"
 #include "crash-reporter/user_collector.h"
+#include "crash-reporter/test_helpers.h"
 #include "gflags/gflags.h"
 #include "gtest/gtest.h"
 
@@ -14,12 +15,6 @@ static int s_crashes = 0;
 static bool s_metrics = false;
 
 static const char kFilePath[] = "/my/path";
-
-// This test assumes the following standard binaries are installed.
-static const char kBinBash[] = "/bin/bash";
-static const char kBinCp[] = "/bin/cp";
-static const char kBinEcho[] = "/bin/echo";
-static const char kBinFalse[] = "/bin/false";
 
 void CountCrash() {
   ++s_crashes;
@@ -89,69 +84,6 @@ TEST_F(UserCollectorTest, DisableNoFileAccess) {
             std::string::npos);
   ASSERT_NE(logging_.log().find("Unable to write /does_not_exist"),
             std::string::npos);
-}
-
-TEST_F(UserCollectorTest, ForkExecAndPipe) {
-  std::vector<const char *> args;
-  char output_file[] = "test/fork_out";
-
-  // Test basic call with stdout.
-  args.clear();
-  args.push_back(kBinEcho);
-  args.push_back("hello world");
-  EXPECT_EQ(0, collector_.ForkExecAndPipe(args, output_file));
-  ExpectFileEquals("hello world\n", output_file);
-  EXPECT_EQ("", logging_.log());
-
-  // Test non-zero return value
-  logging_.clear();
-  args.clear();
-  args.push_back(kBinFalse);
-  EXPECT_EQ(1, collector_.ForkExecAndPipe(args, output_file));
-  ExpectFileEquals("", output_file);
-  EXPECT_EQ("", logging_.log());
-
-  // Test bad output_file.
-  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, "/bad/path"));
-
-  // Test bad executable.
-  logging_.clear();
-  args.clear();
-  args.push_back("false");
-  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, output_file));
-
-  // Test stderr captured.
-  std::string contents;
-  logging_.clear();
-  args.clear();
-  args.push_back(kBinCp);
-  EXPECT_EQ(1, collector_.ForkExecAndPipe(args, output_file));
-  EXPECT_TRUE(file_util::ReadFileToString(FilePath(output_file),
-                                                   &contents));
-  EXPECT_NE(std::string::npos, contents.find("missing file operand"));
-  EXPECT_EQ("", logging_.log());
-
-  // NULL parameter.
-  logging_.clear();
-  args.clear();
-  args.push_back(NULL);
-  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args, output_file));
-  EXPECT_NE(std::string::npos,
-            logging_.log().find("Bad parameter"));
-
-  // No parameters.
-  args.clear();
-  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, output_file));
-
-  // Segmentation faulting process.
-  logging_.clear();
-  args.clear();
-  args.push_back(kBinBash);
-  args.push_back("-c");
-  args.push_back("kill -SEGV $$");
-  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args, output_file));
-  EXPECT_NE(std::string::npos,
-            logging_.log().find("Process did not exit normally"));
 }
 
 TEST_F(UserCollectorTest, HandleCrashWithoutMetrics) {
