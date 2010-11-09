@@ -800,6 +800,7 @@ static void parse_line_action(struct parse_state* state, int nargs, char **args)
     struct action *act = state->context;
     int (*func)(int nargs, char **args);
     int kw, n;
+    int alloc_size = 0;
 
     if (nargs == 0) {
         return;
@@ -817,7 +818,14 @@ static void parse_line_action(struct parse_state* state, int nargs, char **args)
             n > 2 ? "arguments" : "argument");
         return;
     }
-    cmd = malloc(sizeof(*cmd) + sizeof(char*) * nargs);
+    alloc_size = sizeof(*cmd) + sizeof(char*) * (nargs + 1);
+    cmd = malloc(alloc_size);
+    if (!cmd) {
+        parse_error(state, "malloc failed\n");
+        return;
+    }
+
+    memset((char *)cmd, 0, alloc_size);
     cmd->func = kw_func(kw);
     cmd->nargs = nargs;
     memcpy(cmd->args, args, sizeof(char*) * nargs);
