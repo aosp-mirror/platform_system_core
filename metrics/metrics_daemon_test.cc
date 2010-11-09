@@ -4,6 +4,9 @@
 
 #include <utime.h>
 
+#include <string>
+#include <vector>
+
 #include <base/file_util.h>
 #include <gtest/gtest.h>
 
@@ -18,6 +21,8 @@ using chromeos_metrics::FrequencyCounterMock;
 using chromeos_metrics::TaggedCounterMock;
 using chromeos_metrics::TaggedCounterReporter;
 using chromeos_metrics::TaggedCounterReporterMock;
+using std::string;
+using std::vector;
 using ::testing::_;
 using ::testing::Return;
 using ::testing::StrictMock;
@@ -165,7 +170,7 @@ class MetricsDaemonTest : public testing::Test {
 
   // Adds a metrics library mock expectation that the specified metric
   // will be generated.
-  void ExpectMetric(const std::string& name, int sample,
+  void ExpectMetric(const string& name, int sample,
                     int min, int max, int buckets) {
     EXPECT_CALL(metrics_lib_, SendToUMA(name, sample, min, max, buckets))
         .Times(1)
@@ -187,25 +192,27 @@ class MetricsDaemonTest : public testing::Test {
     return Time::FromInternalValue(seconds * Time::kMicrosecondsPerSecond);
   }
 
-  // Creates a new DBus signal message with a single string
-  // argument. The message can be deallocated through
-  // DeleteDBusMessage.
+  // Creates a new DBus signal message with zero or more string arguments.
+  // The message can be deallocated through DeleteDBusMessage.
   //
   // |path| is the object emitting the signal.
   // |interface| is the interface the signal is emitted from.
   // |name| is the name of the signal.
-  // |arg_value| is the value of the string argument.
-  DBusMessage* NewDBusSignalString(const std::string& path,
-                                   const std::string& interface,
-                                   const std::string& name,
-                                   const std::string& arg_value) {
+  // |arg_values| contains the values of the string arguments.
+  DBusMessage* NewDBusSignalString(const string& path,
+                                   const string& interface,
+                                   const string& name,
+                                   const vector<string>& arg_values) {
     DBusMessage* msg = dbus_message_new_signal(path.c_str(),
                                                interface.c_str(),
                                                name.c_str());
     DBusMessageIter iter;
     dbus_message_iter_init_append(msg, &iter);
-    const char* arg_value_c = arg_value.c_str();
-    dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &arg_value_c);
+    for (vector<string>::const_iterator it = arg_values.begin();
+         it != arg_values.end(); ++it) {
+      const char* str_value = it->c_str();
+      dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &str_value);
+    }
     return msg;
   }
 
@@ -308,29 +315,33 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   EXPECT_CALL(*user_crash_interval_, Flush())
       .Times(1)
       .RetiresOnSaturation();
+  vector<string> signal_args;
   msg = NewDBusSignalString("/",
                             "org.chromium.CrashReporter",
                             "UserCrash",
-                            "");
+                            signal_args);
   res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
   DeleteDBusMessage(msg);
 
+  signal_args.clear();
+  signal_args.push_back("on");
   msg = NewDBusSignalString("/",
                             "org.chromium.PowerManager",
                             "PowerStateChanged",
-                            "on");
+                            signal_args);
   EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
   res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
   EXPECT_EQ(MetricsDaemon::kPowerStateOn, daemon_.power_state_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
   DeleteDBusMessage(msg);
 
+  signal_args.clear();
   IgnoreActiveUseUpdate();
   msg = NewDBusSignalString("/",
                             "org.chromium.PowerManager",
                             "ScreenIsUnlocked",
-                            "");
+                            signal_args);
   EXPECT_FALSE(daemon_.user_active_);
   res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
   EXPECT_TRUE(daemon_.user_active_);
@@ -338,20 +349,26 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   DeleteDBusMessage(msg);
 
   IgnoreActiveUseUpdate();
+  signal_args.clear();
+  signal_args.push_back("started");
+  signal_args.push_back("bob");  // arbitrary username
   msg = NewDBusSignalString("/org/chromium/SessionManager",
                             "org.chromium.SessionManagerInterface",
                             "SessionStateChanged",
-                            "started");
+                            signal_args);
   EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
   res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
   EXPECT_EQ(MetricsDaemon::kSessionStateStarted, daemon_.session_state_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
   DeleteDBusMessage(msg);
 
+  signal_args.clear();
+  signal_args.push_back("randomstate");
+  signal_args.push_back("bob");  // arbitrary username
   msg = NewDBusSignalString("/",
                             "org.chromium.UnknownService.Manager",
                             "StateChanged",
-                            "randomstate");
+                            signal_args);
   res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
   DeleteDBusMessage(msg);
