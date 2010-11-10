@@ -589,8 +589,10 @@ static void process_firmware_event(struct uevent *uevent)
     fw_fd = open(file1, O_RDONLY);
     if(fw_fd < 0) {
         fw_fd = open(file2, O_RDONLY);
-        if(fw_fd < 0)
+        if (fw_fd < 0) {
+            write(loading_fd, "-1", 2);
             goto data_close_out;
+        }
     }
 
     if(!load_firmware(fw_fd, loading_fd, data_fd))
