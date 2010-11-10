@@ -89,19 +89,30 @@ TEST_F(UserCollectorTest, DisableNoFileAccess) {
 TEST_F(UserCollectorTest, HandleCrashWithoutMetrics) {
   s_metrics = false;
   collector_.HandleCrash(10, 20, "foobar");
-  ASSERT_NE(logging_.log().find(
-      "Received crash notification for foobar[20] sig 10"),
-      std::string::npos);
+  ASSERT_NE(std::string::npos,
+            logging_.log().find(
+                "Received crash notification for foobar[20] sig 10"));
   ASSERT_EQ(s_crashes, 0);
 }
 
-TEST_F(UserCollectorTest, HandleCrashWithMetrics) {
+TEST_F(UserCollectorTest, HandleNonChromeCrashWithMetrics) {
+  s_metrics = true;
+  collector_.HandleCrash(2, 5, "chromeos-wm");
+  ASSERT_NE(std::string::npos,
+            logging_.log().find(
+                "Received crash notification for chromeos-wm[5] sig 2"));
+  ASSERT_EQ(s_crashes, 1);
+}
+
+TEST_F(UserCollectorTest, HandleChromeCrashWithMetrics) {
   s_metrics = true;
   collector_.HandleCrash(2, 5, "chrome");
-  ASSERT_NE(logging_.log().find(
-      "Received crash notification for chrome[5] sig 2"),
-      std::string::npos);
-  ASSERT_EQ(s_crashes, 1);
+  ASSERT_NE(std::string::npos,
+            logging_.log().find(
+                "Received crash notification for chrome[5] sig 2"));
+  ASSERT_NE(std::string::npos,
+            logging_.log().find("(ignoring - chrome crash)"));
+  ASSERT_EQ(s_crashes, 0);
 }
 
 TEST_F(UserCollectorTest, GetProcessPath) {

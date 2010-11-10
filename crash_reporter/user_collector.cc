@@ -382,9 +382,21 @@ bool UserCollector::HandleCrash(int signal, int pid, const char *force_exec) {
   }
 
   bool feedback = is_feedback_allowed_function_();
+  const char *handling_string = "handling";
+  if (!feedback) {
+    handling_string = "ignoring - no consent";
+  }
+
+  // Treat Chrome crashes as if the user opted-out.  We stop counting Chrome
+  // crashes towards user crashes, so user crashes really mean non-Chrome
+  // user-space crashes.
+  if (exec == "chrome") {
+    feedback = false;
+    handling_string = "ignoring - chrome crash";
+  }
+
   logger_->LogWarning("Received crash notification for %s[%d] sig %d (%s)",
-                      exec.c_str(), pid, signal,
-                      feedback ? "handling" : "ignoring - no consent");
+                      exec.c_str(), pid, signal, handling_string);
 
   if (feedback) {
     count_crash_function_();
