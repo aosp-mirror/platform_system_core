@@ -17,6 +17,8 @@
 #ifndef _INIT_LIST_H_
 #define _INIT_LIST_H_
 
+#include <stddef.h>
+
 struct listnode
 {
     struct listnode *next;

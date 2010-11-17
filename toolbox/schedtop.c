@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <unistd.h>
 
+#include <stdint.h>
 #include <string.h>
 
 #include <sys/stat.h>
@@ -332,4 +334,3 @@ int schedtop_main(int argc, char **argv)
     closedir(d);
     return 0;
 }
-

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/inotify.h>
 #include <errno.h>

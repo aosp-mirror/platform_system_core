@@ -15,6 +15,7 @@
  */
 #include <errno.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define LOG_TAG "FrameworkListener"
 

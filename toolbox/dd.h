@@ -35,6 +35,8 @@
  *	@(#)dd.h	8.3 (Berkeley) 4/2/94
  */
 
+#include <stdint.h>
+
 /* Input/output stream state. */
 typedef struct {
 	u_char		*db;		/* buffer address */
