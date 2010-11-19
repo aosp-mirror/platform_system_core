@@ -286,7 +286,7 @@ service console /system/bin/sh
     user shell
     group log
 
-on property:ro.secure=0
+on property:ro.debuggable=1
     start console
 
 # adbd is controlled by the persist.service.adb.enable system property
