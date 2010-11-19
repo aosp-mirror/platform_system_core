@@ -243,13 +243,22 @@ void service_start(struct service *svc, const char *dynamic_args)
 
     /* as requested, set our gid, supplemental gids, and uid */
         if (svc->gid) {
-            setgid(svc->gid);
+            if (setgid(svc->gid) != 0) {
+                ERROR("setgid failed: %s\n", strerror(errno));
+                _exit(127);
+            }
         }
         if (svc->nr_supp_gids) {
-            setgroups(svc->nr_supp_gids, svc->supp_gids);
+            if (setgroups(svc->nr_supp_gids, svc->supp_gids) != 0) {
+                ERROR("setgroups failed: %s\n", strerror(errno));
+                _exit(127);
+            }
         }
         if (svc->uid) {
-            setuid(svc->uid);
+            if (setuid(svc->uid) != 0) {
+                ERROR("setuid failed: %s\n", strerror(errno));
+                _exit(127);
+            }
         }
 
         if (!dynamic_args) {
