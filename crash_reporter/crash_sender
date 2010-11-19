@@ -46,7 +46,7 @@ MOCK_CRASH_SENDING="/tmp/mock-crash-sending"
 PAUSE_CRASH_SENDING="/var/lib/crash_sender_paused"
 
 # URL to send official build crash reports to.
-REPORT_UPLOAD_PROD_URL="http://clients2.google.com/cr/report"
+REPORT_UPLOAD_PROD_URL="https://clients2.google.com/cr/report"
 
 # File whose existence implies we're running and not to start again.
 RUN_FILE="/var/run/crash_sender.pid"
@@ -60,6 +60,10 @@ TAG="$(basename $0)[$$]"
 # Directory to store timestamp files indicating the uploads in the past 24
 # hours.
 TIMESTAMPS_DIR="/var/lib/crash_sender"
+
+# Path to a directory of restricted certificates which includes
+# a certificate for ${REPORT_UPLOAD_PROD_URL}.
+RESTRICTED_CERTIFICATES_PATH="/usr/share/chromeos-ca-certificates"
 
 # Temp directory for this process.
 TMP_DIR=""
@@ -254,6 +258,7 @@ send_crash() {
 
   set +e
   curl "${url}" \
+    --capath "${RESTRICTED_CERTIFICATES_PATH}" --ciphers HIGH \
     -F "prod=${CHROMEOS_PRODUCT}" \
     -F "ver=${chromeos_version}" \
     -F "upload_file_${kind}=@${report_payload}" \
@@ -382,7 +387,8 @@ main() {
 
   check_not_already_running
 
-  for dependency in "${FIND}" "${METRICS_CLIENT}"; do
+  for dependency in "${FIND}" "${METRICS_CLIENT}" \
+                    "${RESTRICTED_CERTIFICATES_PATH}"; do
     if [ ! -x "${dependency}" ]; then
       lecho "Fatal: Crash sending disabled: ${dependency} not found."
       exit 1
