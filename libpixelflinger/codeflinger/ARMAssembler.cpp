@@ -334,7 +334,7 @@ void ARMAssembler::LDM(int cc, int dir,
 
 void ARMAssembler::STM(int cc, int dir,
         int Rn, int W, uint32_t reg_list)
-{   //                    FA EA FD ED      IB IA DB DA
+{   //                    ED FD EA FA      IB IA DB DA
     const uint8_t P[8] = { 0, 1, 0, 1,      1, 0, 1, 0 };
     const uint8_t U[8] = { 0, 0, 1, 1,      1, 1, 0, 0 };
     *mPC++ = (cc<<28) | (4<<25) | (uint32_t(P[dir])<<24) |
