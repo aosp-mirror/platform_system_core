@@ -17,9 +17,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <linux/keychord.h>
+#include <unistd.h>
 
 #include "init.h"
 #include "log.h"

@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #include <mtd/mtd-user.h>
 #include <sys/ioctl.h>
@@ -283,4 +284,3 @@ int nandread_main(int argc, char **argv)
 
     return 0;
 }
-

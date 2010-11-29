@@ -1,11 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <string.h>
 #include <linux/kd.h>
 #include <linux/vt.h>
 #include <errno.h>
 #include <pthread.h>
+#include <sys/ioctl.h>
 
 int ioctl_main(int argc, char *argv[])
 {

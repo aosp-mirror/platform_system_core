@@ -6,6 +6,8 @@
 #include <linux/vt.h>
 #include <errno.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
 
 static int activate_thread_switch_vc;
 static void *activate_thread(void *arg)
