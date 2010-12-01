@@ -12,8 +12,10 @@
 #include "gtest/gtest.h"
 
 static int s_crashes = 0;
-static bool s_metrics = false;
+static bool s_metrics = true;
 
+static const char kTestLowBattery[] = "test/low_battery";
+static const char kTestSuspended[] = "test/suspended";
 static const char kTestUnclean[] = "test/unclean";
 
 void CountCrash() {
@@ -34,6 +36,9 @@ class UncleanShutdownCollectorTest : public ::testing::Test {
     test_unclean_ = FilePath(kTestUnclean);
     collector_.unclean_shutdown_file_ = kTestUnclean;
     file_util::Delete(test_unclean_, true);
+    // Set up alternate power manager tracing files as well
+    collector_.powerd_suspended_file_ = FilePath(kTestSuspended);
+    collector_.powerd_low_battery_file_ = FilePath(kTestLowBattery);
   }
  protected:
   void WriteStringToFile(const FilePath &file_path,
@@ -70,12 +75,39 @@ TEST_F(UncleanShutdownCollectorTest, CollectTrue) {
   ASSERT_TRUE(file_util::PathExists(test_unclean_));
   ASSERT_TRUE(collector_.Collect());
   ASSERT_FALSE(file_util::PathExists(test_unclean_));
+  ASSERT_EQ(1, s_crashes);
   ASSERT_NE(std::string::npos,
             logging_.log().find("Last shutdown was not clean"));
 }
 
 TEST_F(UncleanShutdownCollectorTest, CollectFalse) {
   ASSERT_FALSE(collector_.Collect());
+  ASSERT_EQ(0, s_crashes);
+}
+
+TEST_F(UncleanShutdownCollectorTest, CollectDeadBatteryRunningLow) {
+  ASSERT_TRUE(collector_.Enable());
+  ASSERT_TRUE(file_util::PathExists(test_unclean_));
+  file_util::WriteFile(collector_.powerd_low_battery_file_, "", 0);
+  ASSERT_FALSE(collector_.Collect());
+  ASSERT_FALSE(file_util::PathExists(test_unclean_));
+  ASSERT_FALSE(file_util::PathExists(collector_.powerd_low_battery_file_));
+  ASSERT_EQ(0, s_crashes);
+  ASSERT_NE(std::string::npos,
+            logging_.log().find("Unclean shutdown occurred while running with "
+                                "battery critically low."));
+}
+
+TEST_F(UncleanShutdownCollectorTest, CollectDeadBatterySuspended) {
+  ASSERT_TRUE(collector_.Enable());
+  ASSERT_TRUE(file_util::PathExists(test_unclean_));
+  file_util::WriteFile(collector_.powerd_suspended_file_, "", 0);
+  ASSERT_FALSE(collector_.Collect());
+  ASSERT_FALSE(file_util::PathExists(test_unclean_));
+  ASSERT_FALSE(file_util::PathExists(collector_.powerd_suspended_file_));
+  ASSERT_EQ(0, s_crashes);
+  ASSERT_NE(std::string::npos,
+            logging_.log().find("Unclean shutdown occurred while suspended."));
 }
 
 TEST_F(UncleanShutdownCollectorTest, Disable) {

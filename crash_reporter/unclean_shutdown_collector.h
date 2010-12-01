@@ -30,10 +30,19 @@ class UncleanShutdownCollector : public CrashCollector {
  private:
   friend class UncleanShutdownCollectorTest;
   FRIEND_TEST(UncleanShutdownCollectorTest, EnableCannotWrite);
+  FRIEND_TEST(UncleanShutdownCollectorTest, CollectDeadBatteryRunningLow);
+  FRIEND_TEST(UncleanShutdownCollectorTest, CollectDeadBatterySuspended);
 
-  bool DeleteUncleanShutdownFile();
+  bool DeleteUncleanShutdownFiles();
+
+  // Check for unclean shutdown due to battery running out by analyzing powerd
+  // trace files.
+  bool DeadBatteryCausedUncleanShutdown();
 
   const char *unclean_shutdown_file_;
+  FilePath powerd_trace_path_;
+  FilePath powerd_suspended_file_;
+  FilePath powerd_low_battery_file_;
 };
 
 #endif  // _CRASH_REPORTER_UNCLEAN_SHUTDOWN_COLLECTOR_H_
