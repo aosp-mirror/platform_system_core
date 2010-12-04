@@ -69,6 +69,8 @@ struct svcenvinfo {
 #define SVC_RESTARTING  0x08  /* waiting to restart */
 #define SVC_CONSOLE     0x10  /* requires console */
 #define SVC_CRITICAL    0x20  /* will reboot into recovery if keeps crashing */
+#define SVC_RESET       0x40  /* Use when stopping a process, but not disabling
+                                 so it can be restarted with its class */
 
 #define NR_SVC_SUPP_GIDS 12    /* twelve supplementary groups */
 
@@ -121,6 +123,7 @@ void service_for_each_class(const char *classname,
 void service_for_each_flags(unsigned matchflags,
                             void (*func)(struct service *svc));
 void service_stop(struct service *svc);
+void service_reset(struct service *svc);
 void service_start(struct service *svc, const char *dynamic_args);
 void property_changed(const char *name, const char *value);
 

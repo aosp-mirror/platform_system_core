@@ -83,8 +83,8 @@ static int wait_for_one_process(int block)
         svc->flags |= SVC_DISABLED;
     }
 
-        /* disabled processes do not get restarted automatically */
-    if (svc->flags & SVC_DISABLED) {
+        /* disabled and reset processes do not get restarted automatically */
+    if (svc->flags & (SVC_DISABLED | SVC_RESET) )  {
         notify_service_state(svc->name, "stopped");
         return 0;
     }

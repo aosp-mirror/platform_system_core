@@ -82,6 +82,7 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "lass")) return K_class;
         if (!strcmp(s, "lass_start")) return K_class_start;
         if (!strcmp(s, "lass_stop")) return K_class_stop;
+        if (!strcmp(s, "lass_reset")) return K_class_reset;
         if (!strcmp(s, "onsole")) return K_console;
         if (!strcmp(s, "hown")) return K_chown;
         if (!strcmp(s, "hmod")) return K_chmod;

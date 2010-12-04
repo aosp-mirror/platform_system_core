@@ -150,11 +150,11 @@ void service_start(struct service *svc, const char *dynamic_args)
     int needs_console;
     int n;
 
-        /* starting a service removes it from the disabled
+        /* starting a service removes it from the disabled or reset
          * state and immediately takes it out of the restarting
          * state if it was in there
          */
-    svc->flags &= (~(SVC_DISABLED|SVC_RESTARTING));
+    svc->flags &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET));
     svc->time_started = 0;
     
         /* running processes require no additional work -- if
@@ -300,25 +300,40 @@ void service_start(struct service *svc, const char *dynamic_args)
         notify_service_state(svc->name, "running");
 }
 
-void service_stop(struct service *svc)
+/* The how field should be either SVC_DISABLED or SVC_RESET */
+static void service_stop_or_reset(struct service *svc, int how)
 {
         /* we are no longer running, nor should we
          * attempt to restart
          */
     svc->flags &= (~(SVC_RUNNING|SVC_RESTARTING));
 
+    if ((how != SVC_DISABLED) && (how != SVC_RESET)) {
+        /* Hrm, an illegal flag.  Default to SVC_DISABLED */
+        how = SVC_DISABLED;
+    }
         /* if the service has not yet started, prevent
          * it from auto-starting with its class
          */
-    svc->flags |= SVC_DISABLED;
+    svc->flags |= how;
 
     if (svc->pid) {
         NOTICE("service '%s' is being killed\n", svc->name);
-        kill(-svc->pid, SIGTERM);
+        kill(-svc->pid, SIGKILL);
         notify_service_state(svc->name, "stopping");
     } else {
         notify_service_state(svc->name, "stopped");
     }
+}
+
+void service_reset(struct service *svc)
+{
+    service_stop_or_reset(svc, SVC_RESET);
+}
+
+void service_stop(struct service *svc)
+{
+    service_stop_or_reset(svc, SVC_DISABLED);
 }
 
 void property_changed(const char *name, const char *value)
@@ -725,6 +740,7 @@ int main(int argc, char **argv)
     action_for_each_trigger("early-fs", action_add_queue_tail);
     action_for_each_trigger("fs", action_add_queue_tail);
     action_for_each_trigger("post-fs", action_add_queue_tail);
+    action_for_each_trigger("post-fs-data", action_add_queue_tail);
 
     queue_builtin_action(property_service_init_action, "property_service_init");
     queue_builtin_action(signal_init_action, "signal_init");
