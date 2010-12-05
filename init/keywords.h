@@ -62,6 +62,7 @@ enum {
     KEYWORD(setkey,      COMMAND, 0, do_setkey)
     KEYWORD(setprop,     COMMAND, 2, do_setprop)
     KEYWORD(setrlimit,   COMMAND, 3, do_setrlimit)
+    KEYWORD(slow_start,  OPTION,  0, 0)
     KEYWORD(socket,      OPTION,  0, 0)
     KEYWORD(start,       COMMAND, 1, do_start)
     KEYWORD(stop,        COMMAND, 1, do_stop)

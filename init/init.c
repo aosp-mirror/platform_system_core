@@ -196,6 +196,10 @@ void service_start(struct service *svc, const char *dynamic_args)
         char tmp[32];
         int fd, sz;
 
+        if (svc->flags & SVC_SLOW_START) {
+            sleep(5);
+        }
+
         if (properties_inited()) {
             get_property_workspace(&fd, &sz);
             sprintf(tmp, "%d,%d", dup(fd), sz);
