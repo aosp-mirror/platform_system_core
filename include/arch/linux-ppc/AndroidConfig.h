@@ -164,6 +164,11 @@
 #define _LARGEFILE_SOURCE 1
 
 /*
+ * Define if off_t is always 64-bit
+ */
+#define HAVE_OFF64_T
+
+/*
  * Defined if we have the backtrace() call for retrieving a stack trace.
  * Needed for CallStack to operate; if not defined, CallStack is
  * non-functional.
