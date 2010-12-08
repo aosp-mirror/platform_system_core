@@ -131,7 +131,6 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "etkey")) return K_setkey;
         if (!strcmp(s, "etprop")) return K_setprop;
         if (!strcmp(s, "etrlimit")) return K_setrlimit;
-        if (!strcmp(s, "low_start")) return K_slow_start;
         if (!strcmp(s, "ocket")) return K_socket;
         if (!strcmp(s, "tart")) return K_start;
         if (!strcmp(s, "top")) return K_stop;
@@ -564,9 +563,6 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
         break;
     case K_critical:
         svc->flags |= SVC_CRITICAL;
-        break;
-    case K_slow_start:
-        svc->flags |= SVC_SLOW_START;
         break;
     case K_setenv: { /* name value */
         struct svcenvinfo *ei;
