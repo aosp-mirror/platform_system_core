@@ -177,9 +177,9 @@
 #define _LARGEFILE_SOURCE 1
 
 /*
- * Define if off_t is always 64-bit
+ * Define if platform has off64_t (and lseek64 and other xxx64 functions)
  */
-/* #define HAVE_OFF64_T */
+#define HAVE_OFF64_T
 
 /*
  * Defined if we have the backtrace() call for retrieving a stack trace.
