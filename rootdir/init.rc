@@ -343,8 +343,6 @@ service media /system/bin/mediaserver
     user media
     group system audio camera graphics inet net_bt net_bt_admin net_raw
     ioprio rt 4
-    # STOPSHIP fix audio driver for real rather than use slow_start b/3249002
-    slow_start
 
 service bootanim /system/bin/bootanimation
     user graphics

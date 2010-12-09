@@ -69,7 +69,6 @@ struct svcenvinfo {
 #define SVC_RESTARTING  0x08  /* waiting to restart */
 #define SVC_CONSOLE     0x10  /* requires console */
 #define SVC_CRITICAL    0x20  /* will reboot into recovery if keeps crashing */
-#define SVC_SLOW_START  0x40  /* wait a few seconds before starting */
 
 #define NR_SVC_SUPP_GIDS 12    /* twelve supplementary groups */
 
