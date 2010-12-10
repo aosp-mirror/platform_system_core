@@ -23,6 +23,13 @@ extern "C" {
 
 #include <stdint.h>
 
+#include <linux/version.h>
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
+#include <linux/usb/ch9.h>
+#else
+#include <linux/usb_ch9.h>
+#endif
+
 struct usb_host_context;
 struct usb_endpoint_descriptor;
 
