@@ -214,11 +214,7 @@ void usb_host_run(struct usb_host_context *context,
 
 struct usb_device *usb_device_open(const char *dev_name)
 {
-    struct usb_device *device = calloc(1, sizeof(struct usb_device));
-    int fd, length, did_retry = 0;
-
-    strcpy(device->dev_name, dev_name);
-    device->writeable = 1;
+    int fd, did_retry = 0, writeable = 1;
 
 retry:
     fd = open(dev_name, O_RDWR);
@@ -233,29 +229,69 @@ retry:
             goto retry;
         }
 
-        if (fd < 0) goto fail;
-        device->writeable = 0;
+        if (fd < 0)
+            return NULL;
+        writeable = 0;
         D("[ usb open read-only %s fd = %d]\n", dev_name, fd);
     }
 
-    length = read(fd, device->desc, sizeof(device->desc));
-    D("usb_device_open read returned %d errno %d\n", fd, errno);
-    if (length < 0)
-        goto fail;
-
-    device->fd = fd;
-    device->desc_length = length;
-    return device;
-fail:
-    close(fd);
-    free(device);
-    return NULL;
+    struct usb_device* result = usb_device_new(dev_name, fd);
+    if (result)
+        result->writeable = writeable;
+    return result;
 }
 
 void usb_device_close(struct usb_device *device)
 {
     close(device->fd);
     free(device);
+}
+
+struct usb_device *usb_device_new(const char *dev_name, int fd)
+{
+    struct usb_device *device = calloc(1, sizeof(struct usb_device));
+    int length;
+
+    if (lseek(fd, 0, SEEK_SET) != 0)
+        goto failed;
+    length = read(fd, device->desc, sizeof(device->desc));
+    D("usb_device_new read returned %d errno %d\n", fd, errno);
+    if (length < 0)
+        goto failed;
+
+    device->fd = fd;
+    device->desc_length = length;
+    // assume we are writeable, since usb_device_get_fd will only return writeable fds
+    device->writeable = 1;
+    return device;
+
+failed:
+    close(fd);
+    free(device);
+    return NULL;
+}
+
+static int usb_device_reopen_writeable(struct usb_device *device)
+{
+    if (device->writeable)
+        return 1;
+
+    int fd = open(device->dev_name, O_RDWR);
+    if (fd >= 0) {
+        close(device->fd);
+        device->fd = fd;
+        device->writeable = 1;
+        return 1;
+    }
+    D("usb_device_reopen_writeable failed errno %d\n", errno);
+    return 0;
+}
+
+int usb_device_get_fd(struct usb_device *device)
+{
+    if (!usb_device_reopen_writeable(device))
+        return -1;
+    return device->fd;
 }
 
 const char* usb_device_get_name(struct usb_device *device)
@@ -300,16 +336,8 @@ int usb_device_send_control(struct usb_device *device,
     struct usbdevfs_ctrltransfer  ctrl;
 
     // this usually requires read/write permission
-    if (!device->writeable) {
-        int fd = open(device->dev_name, O_RDWR);
-        if (fd > 0) {
-            close(device->fd);
-            device->fd = fd;
-            device->writeable = 1;
-        } else {
-            return -1;
-        }
-    }
+    if (!usb_device_reopen_writeable(device))
+        return -1;
 
     memset(&ctrl, 0, sizeof(ctrl));
     ctrl.bRequestType = requestType;
