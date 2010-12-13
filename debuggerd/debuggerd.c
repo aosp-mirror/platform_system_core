@@ -355,6 +355,13 @@ void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
 
     dump_randomization_base(tfd, at_fault);
     dump_stack_and_code(tfd, tid, milist, stack_depth, sp_list, at_fault);
+#elif __i386__
+    /* If stack unwinder fails, use the default solution to dump the stack
+    * content.
+    */
+    stack_depth = unwind_backtrace_with_ptrace_x86(tfd, tid, milist,at_fault);
+#else
+#error "Unsupported architecture"
 #endif
 
     while(milist) {
