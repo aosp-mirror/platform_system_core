@@ -1,6 +1,6 @@
 # Copyright 2005 The Android Open Source Project
 
-ifeq ($(TARGET_ARCH),arm)
+ifneq ($(filter arm x86,$(TARGET_ARCH)),)
 
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
@@ -50,4 +50,4 @@ LOCAL_SHARED_LIBRARIES := libcutils libc
 include $(BUILD_EXECUTABLE)
 endif # ARCH_ARM_HAVE_VFP == true
 
-endif # TARGET_ARCH == arm
+endif # arm or x86 in TARGET_ARCH

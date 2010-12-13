@@ -37,4 +37,3 @@ void dump_pc_and_lr(int tfd, int pid, mapinfo *map, int unwound_level, bool at_f
 void dump_stack_and_code(int tfd, int pid, mapinfo *map,
                          int unwind_depth, unsigned int sp_list[],
                          bool at_fault);
-
