@@ -5,6 +5,7 @@
 #include <sys/mman.h>
 
 #include "symbol_table.h"
+#include "utility.h"
 
 #include <linux/elf.h>
 
@@ -49,6 +50,7 @@ struct symbol_table *symbol_table_create(const char *filename)
     int length;
     char *base;
 
+    XLOG("Creating symbol table for %s\n", filename);
     int fd = open(filename, O_RDONLY);
 
     if(fd < 0) {
@@ -69,40 +71,70 @@ struct symbol_table *symbol_table_create(const char *filename)
     Elf32_Shdr *shdr = (Elf32_Shdr*)(base + hdr->e_shoff);
 
     // Search for the dynamic symbols section
+    int sym_idx = -1;
     int dynsym_idx = -1;
     int i;
 
     for(i = 0; i < hdr->e_shnum; i++) {
+        if(shdr[i].sh_type == SHT_SYMTAB ) {
+            sym_idx = i;
+        }
         if(shdr[i].sh_type == SHT_DYNSYM ) {
             dynsym_idx = i;
         }
     }
-
-    if(dynsym_idx == -1) {
+    if ((dynsym_idx == -1) && (sym_idx == -1)) {
         goto out_unmap;
     }
-
-    Elf32_Sym *dynsyms = (Elf32_Sym*)(base + shdr[dynsym_idx].sh_offset);
-    int numsyms = shdr[dynsym_idx].sh_size / shdr[dynsym_idx].sh_entsize;
 
     table = malloc(sizeof(struct symbol_table));
     if(!table) {
         goto out_unmap;
     }
+    table->name = strdup(filename);
     table->num_symbols = 0;
 
-    // Iterate through the dynamic symbol table, and count how many symbols
-    // are actually defined
-    for(i = 0; i < numsyms; i++) {
-        if(dynsyms[i].st_shndx != SHN_UNDEF) {
-            table->num_symbols++;
-        }
-    }
+    Elf32_Sym *dynsyms = (Elf32_Sym*)(base + shdr[dynsym_idx].sh_offset);
+    Elf32_Sym *syms = (Elf32_Sym*)(base + shdr[sym_idx].sh_offset);
+
+    int dynnumsyms = shdr[dynsym_idx].sh_size / shdr[dynsym_idx].sh_entsize;
+    int numsyms = shdr[sym_idx].sh_size / shdr[sym_idx].sh_entsize;
 
     int dynstr_idx = shdr[dynsym_idx].sh_link;
+    int str_idx = shdr[sym_idx].sh_link;
+
     char *dynstr = base + shdr[dynstr_idx].sh_offset;
+    char *str = base + shdr[str_idx].sh_offset;
+
+    int symbol_count = 0;
+    int dynsymbol_count = 0;
+
+    if (dynsym_idx != -1) {
+        // Iterate through the dynamic symbol table, and count how many symbols
+        // are actually defined
+        for(i = 0; i < dynnumsyms; i++) {
+            if(dynsyms[i].st_shndx != SHN_UNDEF) {
+                dynsymbol_count++;
+            }
+        }
+        XLOG("Dynamic Symbol count: %d\n", dynsymbol_count);
+    }
+
+    if (sym_idx != -1) {
+        // Iterate through the symbol table, and count how many symbols
+        // are actually defined
+        for(i = 0; i < numsyms; i++) {
+            if((syms[i].st_shndx != SHN_UNDEF) &&
+                (strlen(str+syms[i].st_name)) &&
+                (syms[i].st_value != 0) && (syms[i].st_size != 0)) {
+                symbol_count++;
+            }
+        }
+        XLOG("Symbol count: %d\n", symbol_count);
+    }
 
     // Now, create an entry in our symbol table structure for each symbol...
+    table->num_symbols += symbol_count + dynsymbol_count;;
     table->symbols = malloc(table->num_symbols * sizeof(struct symbol));
     if(!table->symbols) {
         free(table);
@@ -110,14 +142,35 @@ struct symbol_table *symbol_table_create(const char *filename)
         goto out_unmap;
     }
 
-    // ...and populate them
+
     int j = 0;
-    for(i = 0; i < numsyms; i++) {
-        if(dynsyms[i].st_shndx != SHN_UNDEF) {
-            table->symbols[j].name = strdup(dynstr + dynsyms[i].st_name);
-            table->symbols[j].addr = dynsyms[i].st_value;
-            table->symbols[j].size = dynsyms[i].st_size;
-            j++;
+    if (dynsym_idx != -1) {
+        // ...and populate them
+        for(i = 0; i < dynnumsyms; i++) {
+            if(dynsyms[i].st_shndx != SHN_UNDEF) {
+                table->symbols[j].name = strdup(dynstr + dynsyms[i].st_name);
+                table->symbols[j].addr = dynsyms[i].st_value;
+                table->symbols[j].size = dynsyms[i].st_size;
+                XLOG("name: %s, addr: %x, size: %x\n",
+                    table->symbols[j].name, table->symbols[j].addr, table->symbols[j].size);
+                j++;
+            }
+        }
+    }
+
+    if (sym_idx != -1) {
+        // ...and populate them
+        for(i = 0; i < numsyms; i++) {
+            if((syms[i].st_shndx != SHN_UNDEF) &&
+                (strlen(str+syms[i].st_name)) &&
+                (syms[i].st_value != 0) && (syms[i].st_size != 0)) {
+                table->symbols[j].name = strdup(str + syms[i].st_name);
+                table->symbols[j].addr = syms[i].st_value;
+                table->symbols[j].size = syms[i].st_size;
+                XLOG("name: %s, addr: %x, size: %x\n",
+                    table->symbols[j].name, table->symbols[j].addr, table->symbols[j].size);
+                j++;
+            }
         }
     }
 
