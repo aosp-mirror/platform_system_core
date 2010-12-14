@@ -81,6 +81,16 @@ struct usb_device *usb_device_open(const char *dev_name);
 /* Releases all resources associated with the USB device */
 void usb_device_close(struct usb_device *device);
 
+/* Creates a usb_device object for already open USB device.
+ * This is intended to facilitate sharing USB devices across address spaces.
+ */
+struct usb_device *usb_device_new(const char *dev_name, int fd);
+
+/* Returns the file descriptor for the usb_device.  Used in conjunction with
+ * usb_device_new() for sharing USB devices across address spaces.
+ */
+int usb_device_get_fd(struct usb_device *device);
+
 /* Returns the name for the USB device, which is the same as
  * the dev_name passed to usb_device_open()
  */
