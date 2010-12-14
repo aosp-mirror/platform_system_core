@@ -325,6 +325,11 @@ uint16_t usb_device_get_product_id(struct usb_device *device)
     return __le16_to_cpu(desc->idProduct);
 }
 
+const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_device *device)
+{
+    return (struct usb_device_descriptor*)device->desc;
+}
+
 int usb_device_send_control(struct usb_device *device,
                             int requestType,
                             int request,
