@@ -67,7 +67,11 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
 
     end = p = pc & ~3;
     p -= 32;
+    if (p > end)
+        p = 0;
     end += 32;
+    if (end < p)
+        end = ~0;
 
     /* Dump the code around PC as:
      *  addr       contents
@@ -91,7 +95,11 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
 
         end = p = r.ARM_lr & ~3;
         p -= 32;
+        if (p > end)
+            p = 0;
         end += 32;
+        if (end < p)
+            end = ~0;
 
         /* Dump the code around LR as:
          *  addr       contents
@@ -112,6 +120,8 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
     }
 
     p = sp - 64;
+    if (p > sp)
+        p = 0;
     p &= ~3;
     if (unwind_depth != 0) {
         if (unwind_depth < STACK_CONTENT_DEPTH) {
@@ -124,6 +134,8 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
     else {
         end = sp | 0x000000ff;
         end += 0xff;
+        if (end < sp)
+            end = ~0;
     }
 
     _LOG(tfd, only_in_tombstone, "\nstack:\n");
@@ -161,6 +173,9 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
     /* print another 64-byte of stack data after the last frame */
 
     end = p+64;
+    if (end < p)
+        end = ~0;
+
     while (p <= end) {
          data = ptrace(PTRACE_PEEKTEXT, pid, (void*)p, NULL);
          _LOG(tfd, (sp_depth > 2) || only_in_tombstone,
