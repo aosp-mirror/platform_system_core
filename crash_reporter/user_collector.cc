@@ -30,8 +30,14 @@ static const char kCollectionErrorSignature[] =
 // instead pipe the core file into a user space process.  See
 // core(5) man page.
 static const char kCorePatternFile[] = "/proc/sys/kernel/core_pattern";
+static const char kCorePipeLimitFile[] = "/proc/sys/kernel/core_pipe_limit";
+// Set core_pipe_limit to 4 so that we can catch a few unrelated concurrent
+// crashes, but finite to avoid infinitely recursing on crash handling.
+static const char kCorePipeLimit[] = "4";
 static const char kCoreToMinidumpConverterPath[] = "/usr/bin/core2md";
 static const char kLeaveCoreFile[] = "/root/.leave_core";
+
+static const char kDefaultLogConfig[] = "/etc/crash_reporter_logs.conf";
 
 const char *UserCollector::kUserId = "Uid:\t";
 const char *UserCollector::kGroupId = "Gid:\t";
@@ -39,6 +45,7 @@ const char *UserCollector::kGroupId = "Gid:\t";
 UserCollector::UserCollector()
     : generate_diagnostics_(false),
       core_pattern_file_(kCorePatternFile),
+      core_pipe_limit_file_(kCorePipeLimitFile),
       initialized_(false) {
 }
 
@@ -71,6 +78,13 @@ bool UserCollector::SetUpInternal(bool enabled) {
   CHECK(initialized_);
   logger_->LogInfo("%s user crash handling",
                    enabled ? "Enabling" : "Disabling");
+  if (file_util::WriteFile(FilePath(core_pipe_limit_file_),
+                           kCorePipeLimit,
+                           strlen(kCorePipeLimit)) !=
+      static_cast<int>(strlen(kCorePipeLimit))) {
+    logger_->LogError("Unable to write %s", core_pipe_limit_file_.c_str());
+    return false;
+  }
   std::string pattern = GetPattern(enabled);
   if (file_util::WriteFile(FilePath(core_pattern_file_),
                            pattern.c_str(),
@@ -332,6 +346,10 @@ bool UserCollector::ConvertAndEnqueueCrash(int pid,
   FilePath core_path = GetCrashPath(crash_path, dump_basename, "core");
   FilePath meta_path = GetCrashPath(crash_path, dump_basename, "meta");
   FilePath minidump_path = GetCrashPath(crash_path, dump_basename, "dmp");
+  FilePath log_path = GetCrashPath(crash_path, dump_basename, "log");
+
+  if (GetLogContents(FilePath(kDefaultLogConfig), exec, log_path))
+    AddCrashMetaData("log", log_path.value());
 
   if (!ConvertCoreToMinidump(pid, container_dir, core_path,
                             minidump_path)) {

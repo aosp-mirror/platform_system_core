@@ -271,6 +271,15 @@ TEST_F(CrashCollectorTest, CheckHasCapacityStrangeNames) {
   EXPECT_FALSE(CheckHasCapacity());
 }
 
+TEST_F(CrashCollectorTest, IsCommentLine) {
+  EXPECT_FALSE(CrashCollector::IsCommentLine(""));
+  EXPECT_TRUE(CrashCollector::IsCommentLine("#"));
+  EXPECT_TRUE(CrashCollector::IsCommentLine("#real comment"));
+  EXPECT_TRUE(CrashCollector::IsCommentLine(" # real comment"));
+  EXPECT_FALSE(CrashCollector::IsCommentLine("not comment"));
+  EXPECT_FALSE(CrashCollector::IsCommentLine(" not comment"));
+}
+
 TEST_F(CrashCollectorTest, ReadKeyValueFile) {
   const char *contents = ("a=b\n"
                           "\n"
@@ -294,10 +303,13 @@ TEST_F(CrashCollectorTest, ReadKeyValueFile) {
               " f g = h\n"
               "i=j\n"
               "=k\n"
+              "#comment=0\n"
               "l=\n");
   file_util::WriteFile(path, contents, strlen(contents));
 
   EXPECT_FALSE(collector_.ReadKeyValueFile(path, '=', &dictionary));
+  EXPECT_EQ(5, dictionary.size());
+
   i = dictionary.find("a");
   EXPECT_TRUE(i != dictionary.end() && i->second == "b c d");
   i = dictionary.find("e");
@@ -367,6 +379,27 @@ TEST_F(CrashCollectorTest, MetaData) {
                                 payload_file.value());
   EXPECT_FALSE(file_util::PathExists(meta_file));
   EXPECT_NE(std::string::npos, logging_.log().find("Unable to write"));
+}
+
+TEST_F(CrashCollectorTest, GetLogContents) {
+  FilePath config_file = test_dir_.Append("crash_config");
+  FilePath output_file = test_dir_.Append("crash_log");
+  const char kConfigContents[] =
+      "foobar:echo hello there | sed -e \"s/there/world/\"";
+  ASSERT_TRUE(
+      file_util::WriteFile(config_file,
+                           kConfigContents, strlen(kConfigContents)));
+  EXPECT_FALSE(collector_.GetLogContents(config_file,
+                                         "barfoo",
+                                         output_file));
+  EXPECT_FALSE(file_util::PathExists(output_file));
+  EXPECT_TRUE(collector_.GetLogContents(config_file,
+                                        "foobar",
+                                        output_file));
+  ASSERT_TRUE(file_util::PathExists(output_file));
+  std::string contents;
+  EXPECT_TRUE(file_util::ReadFileToString(output_file, &contents));
+  EXPECT_EQ("hello world\n", contents);
 }
 
 int main(int argc, char **argv) {

@@ -47,6 +47,11 @@ class UserCollector : public CrashCollector {
     core_pattern_file_ = pattern;
   }
 
+  // Set (override the default) core pipe limit file.
+  void set_core_pipe_limit_file(const std::string &path) {
+    core_pipe_limit_file_ = path;
+  }
+
  private:
   friend class UserCollectorTest;
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesBadPath);
@@ -107,6 +112,7 @@ class UserCollector : public CrashCollector {
 
   bool generate_diagnostics_;
   std::string core_pattern_file_;
+  std::string core_pipe_limit_file_;
   std::string our_path_;
   bool initialized_;
 

@@ -39,9 +39,11 @@ class CrashCollector {
   FRIEND_TEST(CrashCollectorTest, CheckHasCapacityUsual);
   FRIEND_TEST(CrashCollectorTest, GetCrashDirectoryInfo);
   FRIEND_TEST(CrashCollectorTest, GetCrashPath);
+  FRIEND_TEST(CrashCollectorTest, GetLogContents);
   FRIEND_TEST(CrashCollectorTest, ForkExecAndPipe);
   FRIEND_TEST(CrashCollectorTest, FormatDumpBasename);
   FRIEND_TEST(CrashCollectorTest, Initialize);
+  FRIEND_TEST(CrashCollectorTest, IsCommentLine);
   FRIEND_TEST(CrashCollectorTest, MetaData);
   FRIEND_TEST(CrashCollectorTest, ReadKeyValueFile);
   FRIEND_TEST(CrashCollectorTest, Sanitize);
@@ -102,11 +104,20 @@ class CrashCollector {
   // crash.
   bool CheckHasCapacity(const FilePath &crash_directory);
 
+  // Checks if the line starts with '#' after optional whitespace.
+  static bool IsCommentLine(const std::string &line);
+
   // Read the given file of form [<key><separator><value>\n...] and return
   // a map of its contents.
   bool ReadKeyValueFile(const FilePath &file,
                         char separator,
                         std::map<std::string, std::string> *dictionary);
+
+  // Write a log applicable to |exec_name| to |output_file| based on the
+  // log configuration file at |config_path|.
+  bool GetLogContents(const FilePath &config_path,
+                      const std::string &exec_name,
+                      const FilePath &output_file);
 
   // Add non-standard meta data to the crash metadata file.  Call
   // before calling WriteCrashMetaData.  Key must not contain "=" or

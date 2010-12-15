@@ -209,6 +209,7 @@ send_crash() {
   local board="$(get_board)"
   local hwclass="$(get_hardware_class)"
   local write_payload_size="$(get_key_value "${meta_path}" "payload_size")"
+  local log="$(get_key_value "${meta_path}" "log")"
   local sig="$(get_key_value "${meta_path}" "sig")"
   local send_payload_size="$(stat --printf=%s "${report_payload}" 2>/dev/null)"
 
@@ -221,6 +222,10 @@ send_crash() {
     extra_value1="${sig}"
     extra_key2="sig2"
     extra_value2="${sig}"
+  elif [ "${log}" != "undefined" ]; then
+    # Upload a log file if it was specified.
+    extra_key1="log"
+    extra_value1="@${log}"
   fi
 
   lecho "Sending crash:"

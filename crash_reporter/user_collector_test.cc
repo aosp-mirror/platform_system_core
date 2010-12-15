@@ -32,8 +32,10 @@ class UserCollectorTest : public ::testing::Test {
                           IsMetrics,
                           &logging_,
                           false);
+    file_util::Delete(FilePath("test"), true);
     mkdir("test", 0777);
     collector_.set_core_pattern_file("test/core_pattern");
+    collector_.set_core_pipe_limit_file("test/core_pipe_limit");
     pid_ = getpid();
   }
  protected:
@@ -53,15 +55,29 @@ class UserCollectorTest : public ::testing::Test {
 TEST_F(UserCollectorTest, EnableOK) {
   ASSERT_TRUE(collector_.Enable());
   ExpectFileEquals("|/my/path --signal=%s --pid=%p", "test/core_pattern");
+  ExpectFileEquals("4", "test/core_pipe_limit");
   ASSERT_EQ(s_crashes, 0);
   ASSERT_NE(logging_.log().find("Enabling user crash handling"),
             std::string::npos);
 }
 
-TEST_F(UserCollectorTest, EnableNoFileAccess) {
+TEST_F(UserCollectorTest, EnableNoPatternFileAccess) {
   collector_.set_core_pattern_file("/does_not_exist");
   ASSERT_FALSE(collector_.Enable());
   ASSERT_EQ(s_crashes, 0);
+  ASSERT_NE(logging_.log().find("Enabling user crash handling"),
+            std::string::npos);
+  ASSERT_NE(logging_.log().find("Unable to write /does_not_exist"),
+            std::string::npos);
+}
+
+TEST_F(UserCollectorTest, EnableNoPipeLimitFileAccess) {
+  collector_.set_core_pipe_limit_file("/does_not_exist");
+  ASSERT_FALSE(collector_.Enable());
+  ASSERT_EQ(s_crashes, 0);
+  // Core pattern should not be written if we cannot access the pipe limit
+  // or otherwise we may set a pattern that results in infinite recursion.
+  ASSERT_FALSE(file_util::PathExists(FilePath("test/core_pattern")));
   ASSERT_NE(logging_.log().find("Enabling user crash handling"),
             std::string::npos);
   ASSERT_NE(logging_.log().find("Unable to write /does_not_exist"),

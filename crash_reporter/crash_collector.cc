@@ -21,6 +21,7 @@
 
 static const char kDefaultUserName[] = "chronos";
 static const char kLsbRelease[] = "/etc/lsb-release";
+static const char kShellPath[] = "/bin/sh";
 static const char kSystemCrashPath[] = "/var/spool/crash";
 static const char kUserCrashPath[] = "/home/chronos/user/crash";
 
@@ -109,7 +110,7 @@ int CrashCollector::ForkExecAndPipe(std::vector<const char *> &arguments,
   }
 
   if (pid == 0) {
-    int output_handle = HANDLE_EINTR(creat(output_file, 0700));
+    int output_handle = HANDLE_EINTR(creat(output_file, 0600));
     if (output_handle < 0) {
       logger_->LogError("Could not create %s: %d", output_file, errno);
       // Avoid exit() to avoid atexit handlers from parent.
@@ -307,6 +308,11 @@ bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {
   return !full;
 }
 
+bool CrashCollector::IsCommentLine(const std::string &line) {
+  size_t found = line.find_first_not_of(" ");
+  return found != std::string::npos && line[found] == '#';
+}
+
 bool CrashCollector::ReadKeyValueFile(
     const FilePath &path,
     const char separator,
@@ -324,6 +330,9 @@ bool CrashCollector::ReadKeyValueFile(
     // Allow empty strings.
     if (line->empty())
       continue;
+    // Allow comment lines.
+    if (IsCommentLine(*line))
+      continue;
     StringVector sides;
     SplitString(*line, separator, &sides);
     if (sides.size() != 2) {
@@ -333,6 +342,34 @@ bool CrashCollector::ReadKeyValueFile(
     dictionary->insert(std::pair<std::string, std::string>(sides[0], sides[1]));
   }
   return !any_errors;
+}
+
+bool CrashCollector::GetLogContents(const FilePath &config_path,
+                                    const std::string &exec_name,
+                                    const FilePath &output_file) {
+  std::map<std::string, std::string> log_commands;
+  if (!ReadKeyValueFile(config_path, ':', &log_commands)) {
+    logger_->LogInfo("Unable to read log configuration file %s",
+                     config_path.value().c_str());
+    return false;
+  }
+
+  if (log_commands.find(exec_name) == log_commands.end())
+    return false;
+
+  std::vector<const char *> command;
+  command.push_back(kShellPath);
+  command.push_back("-c");
+  std::string shell_command = log_commands[exec_name];
+  command.push_back(shell_command.c_str());
+
+  int fork_result = ForkExecAndPipe(command, output_file.value().c_str());
+  if (fork_result != 0) {
+    logger_->LogInfo("Running shell command %s failed with: %d",
+                     shell_command.c_str(), fork_result);
+    return false;
+  }
+  return true;
 }
 
 void CrashCollector::AddCrashMetaData(const std::string &key,
