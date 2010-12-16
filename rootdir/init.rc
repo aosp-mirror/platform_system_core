@@ -305,6 +305,7 @@ on property:persist.service.adb.enable=0
 
 service servicemanager /system/bin/servicemanager
     user system
+    group system
     critical
     onrestart restart zygote
     onrestart restart media
@@ -338,6 +339,7 @@ service drm /system/bin/drmserver
 
 service drmio /system/bin/drmioserver
     user drmio
+    group drmio
 
 service media /system/bin/mediaserver
     user media

@@ -259,6 +259,7 @@ struct usb_device *usb_device_new(const char *dev_name, int fd)
     if (length < 0)
         goto failed;
 
+    strncpy(device->dev_name, dev_name, sizeof(device->dev_name) - 1);
     device->fd = fd;
     device->desc_length = length;
     // assume we are writeable, since usb_device_get_fd will only return writeable fds
