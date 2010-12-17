@@ -224,6 +224,11 @@ in_addr_t get_ipv4_netmask(int prefix_length)
 {
     in_addr_t mask = 0;
 
+    // C99 (6.5.7): shifts of 32 bits have undefined results
+    if (prefix_length == 0) {
+        return 0;
+    }
+
     mask = ~mask << (32 - prefix_length);
     mask = htonl(mask);
 
