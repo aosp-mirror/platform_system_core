@@ -162,6 +162,12 @@ int do_class_stop(int nargs, char **args)
     return 0;
 }
 
+int do_class_reset(int nargs, char **args)
+{
+    service_for_each_class(args[1], service_reset);
+    return 0;
+}
+
 int do_domainname(int nargs, char **args)
 {
     return write_file("/proc/sys/kernel/domainname", args[1]);
@@ -269,6 +275,8 @@ static struct {
     { 0,            0 },
 };
 
+#define DATA_MNT_POINT "/data"
+
 /* mount <type> <device> <path> <flags ...> <options> */
 int do_mount(int nargs, char **args)
 {
@@ -359,9 +367,51 @@ int do_mount(int nargs, char **args)
         if (wait)
             wait_for_file(source, COMMAND_RETRY_TIMEOUT);
         if (mount(source, target, system, flags, options) < 0) {
-            return -1;
+            /* If this fails, it may be an encrypted filesystem.
+             * We only support encrypting /data.  Check
+             * if we're trying to mount it, and if so,
+             * assume it's encrypted, mount a tmpfs instead.
+             * Then save the orig mount parms in properties
+             * for vold to query when it mounts the real
+             * encrypted /data.
+             */
+            if (!strcmp(target, DATA_MNT_POINT)) {
+                const char *tmpfs_options;
+
+                tmpfs_options = property_get("ro.crypto.tmpfs_options");
+
+                if (mount("tmpfs", target, "tmpfs", MS_NOATIME | MS_NOSUID | MS_NODEV,
+                    tmpfs_options) < 0) {
+                    return -1;
+                }
+
+                /* Set the property that triggers the framework to do a minimal
+                 * startup and ask the user for a password
+                 */
+                property_set("vold.decrypt", "1");
+            } else {
+                return -1;
+            }
+        } else {
+            if (!strcmp(target, DATA_MNT_POINT)) {
+                /* We succeeded in mounting /data, so it's not encrypted */
+                action_for_each_trigger("nonencrypted", action_add_queue_tail);
+            }
         }
 
+        if (!strcmp(target, DATA_MNT_POINT)) {
+            char fs_flags[32];
+
+            /* Save the original mount options */
+            property_set("ro.crypto.fs_type", system);
+            property_set("ro.crypto.fs_real_blkdev", source);
+            property_set("ro.crypto.fs_mnt_point", target);
+            if (options) {
+                property_set("ro.crypto.fs_options", options);
+            }
+            snprintf(fs_flags, sizeof(fs_flags), "0x%8.8x", flags);
+            property_set("ro.crypto.fs_flags", fs_flags);
+        }
         return 0;
     }
 }

@@ -4,6 +4,7 @@ int do_chroot(int nargs, char **args);
 int do_chdir(int nargs, char **args);
 int do_class_start(int nargs, char **args);
 int do_class_stop(int nargs, char **args);
+int do_class_reset(int nargs, char **args);
 int do_domainname(int nargs, char **args);
 int do_exec(int nargs, char **args);
 int do_export(int nargs, char **args);
@@ -39,6 +40,7 @@ enum {
     KEYWORD(class,       OPTION,  0, 0)
     KEYWORD(class_start, COMMAND, 1, do_class_start)
     KEYWORD(class_stop,  COMMAND, 1, do_class_stop)
+    KEYWORD(class_reset, COMMAND, 1, do_class_reset)
     KEYWORD(console,     OPTION,  0, 0)
     KEYWORD(critical,    OPTION,  0, 0)
     KEYWORD(disabled,    OPTION,  0, 0)

@@ -96,6 +96,32 @@ on post-fs
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
 
+    # We chown/chmod /cache again so because mount is run as root + defaults
+    chown system cache /cache
+    chmod 0770 /cache
+
+    # This may have been created by the recovery system with odd permissions
+    chown system cache /cache/recovery
+    chmod 0770 /cache/recovery
+
+    #change permissions on vmallocinfo so we can grab it from bugreports
+    chown root log /proc/vmallocinfo
+    chmod 0440 /proc/vmallocinfo
+
+    #change permissions on kmsg & sysrq-trigger so bugreports can grab kthread stacks
+    chown root system /proc/kmsg
+    chmod 0440 /proc/kmsg
+    chown root system /proc/sysrq-trigger
+    chmod 0220 /proc/sysrq-trigger
+
+    # create the lost+found directories, so as to enforce our permissions
+    mkdir /cache/lost+found 0770
+
+    # double check the perms, in case lost+found already exists, and set owner
+    chown root root /cache/lost+found
+    chmod 0770 /cache/lost+found
+
+on post-fs-data
     # We chown/chmod /data again so because mount is run as root + defaults
     chown system system /data
     chmod 0771 /data
@@ -119,25 +145,7 @@ on post-fs
 
     write /proc/apanic_console 1
 
-    # Same reason as /data above
-    chown system cache /cache
-    chmod 0770 /cache
-
-    # This may have been created by the recovery system with odd permissions
-    chown system cache /cache/recovery
-    chmod 0770 /cache/recovery
-
-    #change permissions on vmallocinfo so we can grab it from bugreports
-    chown root log /proc/vmallocinfo
-    chmod 0440 /proc/vmallocinfo
-
-    #change permissions on kmsg & sysrq-trigger so bugreports can grab kthread stacks
-    chown root system /proc/kmsg
-    chmod 0440 /proc/kmsg
-    chown root system /proc/sysrq-trigger
-    chmod 0220 /proc/sysrq-trigger
-
-# create basic filesystem structure
+    # create basic filesystem structure
     mkdir /data/misc 01771 system misc
     mkdir /data/misc/bluetoothd 0770 bluetooth bluetooth
     mkdir /data/misc/bluetooth 0770 system system
@@ -163,18 +171,21 @@ on post-fs
 
     # create the lost+found directories, so as to enforce our permissions
     mkdir /data/lost+found 0770
-    mkdir /cache/lost+found 0770
 
     # double check the perms, in case lost+found already exists, and set owner
     chown root root /data/lost+found
     chmod 0770 /data/lost+found
-    chown root root /cache/lost+found
-    chmod 0770 /cache/lost+found
 
     # create directory for DRM plug-ins
     mkdir /data/drm 0774 drm drm
     mkdir /data/drm/plugins 0774 drm drm
     mkdir /data/drm/plugins/native 0774 drm drm
+
+    # If there is no fs-post-data action in the init.<device>.rc file, you
+    # must uncomment this line, otherwise encrypted filesystems
+    # won't work.
+    # Set indication (checked by vold) that we have finished this action
+    #setprop vold.post_fs_data_done 1
 
 on boot
 # basic network init
@@ -273,14 +284,34 @@ on boot
     setprop net.tcp.buffersize.edge    4093,26280,35040,4096,16384,35040
     setprop net.tcp.buffersize.gprs    4092,8760,11680,4096,8760,11680
 
-    class_start default
+    class_start core
+    class_start main
+
+on nonencrypted
+    class_start late_start
+
+on property:vold.decrypt=trigger_reset_main
+    class_reset main
+
+on property:vold.decrypt=trigger_post_fs_data
+    trigger post-fs-data
+
+on property:vold.decrypt=trigger_restart_framework
+    class_start main
+    class_start late_start
+
+on property:vold.decrypt=trigger_shutdown_framework
+    class_reset late_start
+    class_reset main
 
 ## Daemon processes to be run by init.
 ##
 service ueventd /sbin/ueventd
+    class core
     critical
 
 service console /system/bin/sh
+    class core
     console
     disabled
     user shell
@@ -291,6 +322,7 @@ on property:ro.debuggable=1
 
 # adbd is controlled by the persist.service.adb.enable system property
 service adbd /sbin/adbd
+    class core
     disabled
 
 # adbd on at boot in emulator
@@ -304,6 +336,7 @@ on property:persist.service.adb.enable=0
     stop adbd
 
 service servicemanager /system/bin/servicemanager
+    class core
     user system
     group system
     critical
@@ -311,22 +344,27 @@ service servicemanager /system/bin/servicemanager
     onrestart restart media
 
 service vold /system/bin/vold
+    class core
     socket vold stream 0660 root mount
     ioprio be 2
 
 service netd /system/bin/netd
+    class main
     socket netd stream 0660 root system
     socket dnsproxyd stream 0660 root inet
 
 service debuggerd /system/bin/debuggerd
+    class main
 
 service ril-daemon /system/bin/rild
+    class main
     socket rild stream 660 root radio
     socket rild-debug stream 660 radio system
     user root
     group radio cache inet misc audio sdcard_rw
 
 service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
+    class main
     socket zygote stream 666
     onrestart write /sys/android_power/request_state wake
     onrestart write /sys/power/state on
@@ -334,30 +372,36 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
     onrestart restart netd
 
 service drm /system/bin/drmserver
+    class main
     user drm
     group system root inet
 
 service drmio /system/bin/drmioserver
+    class main
     user drmio
     group drmio
 
 service media /system/bin/mediaserver
+    class main
     user media
     group system audio camera graphics inet net_bt net_bt_admin net_raw
     ioprio rt 4
 
 service bootanim /system/bin/bootanimation
+    class main
     user graphics
     group graphics
     disabled
     oneshot
 
 service dbus /system/bin/dbus-daemon --system --nofork
+    class main
     socket dbus stream 660 bluetooth bluetooth
     user bluetooth
     group bluetooth net_bt_admin
 
 service bluetoothd /system/bin/bluetoothd -n
+    class main
     socket bluetooth stream 660 bluetooth bluetooth
     socket dbus_bluetooth stream 660 bluetooth bluetooth
     # init.rc does not yet support applying capabilities, so run as root and
@@ -366,12 +410,15 @@ service bluetoothd /system/bin/bluetoothd -n
     disabled
 
 service installd /system/bin/installd
+    class main
     socket installd stream 600 system system
 
 service flash_recovery /system/etc/install-recovery.sh
+    class main
     oneshot
 
 service racoon /system/bin/racoon
+    class main
     socket racoon stream 600 system system
     # racoon will setuid to vpn after getting necessary resources.
     group net_admin
@@ -379,6 +426,7 @@ service racoon /system/bin/racoon
     oneshot
 
 service mtpd /system/bin/mtpd
+    class main
     socket mtpd stream 600 system system
     user vpn
     group vpn net_admin net_raw
@@ -386,11 +434,13 @@ service mtpd /system/bin/mtpd
     oneshot
 
 service keystore /system/bin/keystore /data/misc/keystore
+    class main
     user keystore
     group keystore
     socket keystore stream 666
 
 service dumpstate /system/bin/dumpstate -s
+    class main
     socket dumpstate stream 0660 shell log
     disabled
     oneshot
