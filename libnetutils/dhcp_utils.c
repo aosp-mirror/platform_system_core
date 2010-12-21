@@ -29,7 +29,7 @@ static const char DAEMON_NAME[]        = "dhcpcd";
 static const char DAEMON_PROP_NAME[]   = "init.svc.dhcpcd";
 static const char HOSTNAME_PROP_NAME[] = "net.hostname";
 static const char DHCP_PROP_NAME_PREFIX[]  = "dhcp";
-static const int  NAP_TIME = 1;   /* wait for 1 second at a time */
+static const int NAP_TIME = 200;   /* wait for 200ms at a time */
                                   /* when polling for property values */
 static char errmsg[100];
 
@@ -42,14 +42,14 @@ static char errmsg[100];
 static int wait_for_property(const char *name, const char *desired_value, int maxwait)
 {
     char value[PROPERTY_VALUE_MAX] = {'\0'};
-    int maxnaps = maxwait / NAP_TIME;
+    int maxnaps = (maxwait * 1000) / NAP_TIME;
 
     if (maxnaps < 1) {
         maxnaps = 1;
     }
 
     while (maxnaps-- > 0) {
-        usleep(1000000);
+        usleep(NAP_TIME * 1000);
         if (property_get(name, value, NULL)) {
             if (desired_value == NULL || 
                     strcmp(value, desired_value) == 0) {
