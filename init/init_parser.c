@@ -188,7 +188,7 @@ static void parse_config(const char *fn, char *s)
 
     nargs = 0;
     state.filename = fn;
-    state.line = 1;
+    state.line = 0;
     state.ptr = s;
     state.nexttoken = 0;
     state.parse_line = parse_line_no_op;
@@ -198,6 +198,7 @@ static void parse_config(const char *fn, char *s)
             state.parse_line(&state, 0, 0);
             return;
         case T_NEWLINE:
+            state.line++;
             if (nargs) {
                 int kw = lookup_keyword(args[0]);
                 if (kw_is(kw, SECTION)) {
