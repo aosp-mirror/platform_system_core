@@ -22,9 +22,13 @@ class NetlinkEvent;
 
 class NetlinkListener : public SocketListener {
     char mBuffer[64 * 1024];
+    int mFormat;
 
 public:
-    NetlinkListener(int socket);
+    static const int NETLINK_FORMAT_ASCII = 0;
+    static const int NETLINK_FORMAT_BINARY = 1;
+
+    NetlinkListener(int socket, int format);
     virtual ~NetlinkListener() {}
 
 protected:
