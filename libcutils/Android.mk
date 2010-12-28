@@ -112,12 +112,17 @@ LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(commonSources) ashmem-dev.c mq.c
 
 ifeq ($(TARGET_ARCH),arm)
-LOCAL_SRC_FILES += memset32.S
+LOCAL_SRC_FILES += arch-arm/memset32.S
 else  # !arm
 ifeq ($(TARGET_ARCH),sh)
 LOCAL_SRC_FILES += memory.c atomic-android-sh.c
 else  # !sh
+ifeq ($(TARGET_ARCH_VARIANT),x86-atom)
+LOCAL_CFLAGS += -DHAVE_MEMSET16 -DHAVE_MEMSET32
+LOCAL_SRC_FILES += arch-x86/android_memset16.S arch-x86/android_memset32.S memory.c
+else # !x86-atom
 LOCAL_SRC_FILES += memory.c
+endif # !x86-atom
 endif # !sh
 endif # !arm
 
