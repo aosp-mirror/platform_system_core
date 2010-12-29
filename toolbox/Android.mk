@@ -60,10 +60,7 @@ LOCAL_SRC_FILES:= \
 	toolbox.c \
 	$(patsubst %,%.c,$(TOOLS))
 
-LOCAL_SHARED_LIBRARIES := libcutils libc
-
-# Needed for lsusb.  Should optimize out in linker if lsusb is not included
-LOCAL_STATIC_LIBRARIES := libusbhost
+LOCAL_SHARED_LIBRARIES := libcutils libc libusbhost
 
 LOCAL_MODULE:= toolbox
 

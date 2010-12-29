@@ -30,7 +30,7 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 
 endif
 
-# Static library for target
+# Shared library for target
 # ========================================================
 
 include $(CLEAR_VARS)
@@ -40,4 +40,4 @@ LOCAL_SRC_FILES := usbhost.c
 
 LOCAL_CFLAGS := -g -DUSE_LIBLOG
 
-include $(BUILD_STATIC_LIBRARY)
+include $(BUILD_SHARED_LIBRARY)
