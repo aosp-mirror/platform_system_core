@@ -223,6 +223,7 @@ void usage(void)
             "  boot <kernel> [ <ramdisk> ]              download and boot kernel\n"
             "  flash:raw boot <kernel> [ <ramdisk> ]    create bootimage and flash it\n"
             "  devices                                  list all connected devices\n"
+            "  continue                                 continue with autoboot\n"
             "  reboot                                   reboot device normally\n"
             "  reboot-bootloader                        reboot device into bootloader\n"
             "\n"
