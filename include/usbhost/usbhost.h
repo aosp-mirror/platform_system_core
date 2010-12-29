@@ -96,12 +96,19 @@ int usb_device_get_fd(struct usb_device *device);
  */
 const char* usb_device_get_name(struct usb_device *device);
 
-/* Returns a unique ID for the device.  Currently this is generated from the
- * dev_name path.
+/* Returns a unique ID for the device.
+ *Currently this is generated from the dev_name path.
  */
 int usb_device_get_unique_id(struct usb_device *device);
 
+/* Returns a unique ID for the device name.
+ * Currently this is generated from the device path.
+ */
 int usb_device_get_unique_id_from_name(const char* name);
+
+/* Returns the device name for the unique ID.
+ * Call free() to deallocate the returned string */
+char* usb_device_get_name_from_unique_id(int id);
 
 /* Returns the USB vendor ID from the device descriptor for the USB device */
 uint16_t usb_device_get_vendor_id(struct usb_device *device);

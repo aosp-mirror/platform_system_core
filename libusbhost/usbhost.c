@@ -57,6 +57,7 @@
 
 #define USB_FS_DIR "/dev/bus/usb"
 #define USB_FS_ID_SCANNER   "/dev/bus/usb/%d/%d"
+#define USB_FS_ID_FORMAT    "/dev/bus/usb/%03d/%03d"
 
 
 struct usb_host_context {
@@ -312,6 +313,15 @@ int usb_device_get_unique_id_from_name(const char* name)
     int bus = 0, dev = 0;
     sscanf(name, USB_FS_ID_SCANNER, &bus, &dev);
     return bus * 1000 + dev;
+}
+
+char* usb_device_get_name_from_unique_id(int id)
+{
+    int bus = id / 1000;
+    int dev = id % 1000;
+    char* result = (char *)calloc(1, strlen(USB_FS_ID_FORMAT));
+    snprintf(result, strlen(USB_FS_ID_FORMAT) - 1, USB_FS_ID_FORMAT, bus, dev);
+    return result;
 }
 
 uint16_t usb_device_get_vendor_id(struct usb_device *device)
