@@ -105,14 +105,14 @@ void handle_keychord()
     // and on user builds for users that are developers.
     debuggable = property_get("ro.debuggable");
     adb_enabled = property_get("init.svc.adbd");
+    ret = read(keychord_fd, &id, sizeof(id));
+    if (ret != sizeof(id)) {
+        ERROR("could not read keychord id\n");
+        return;
+    }
+
     if ((debuggable && !strcmp(debuggable, "1")) ||
         (adb_enabled && !strcmp(adb_enabled, "running"))) {
-        ret = read(keychord_fd, &id, sizeof(id));
-        if (ret != sizeof(id)) {
-            ERROR("could not read keychord id\n");
-            return;
-        }
-
         svc = service_find_by_keychord(id);
         if (svc) {
             INFO("starting service %s from keychord\n", svc->name);
