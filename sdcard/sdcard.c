@@ -195,6 +195,7 @@ static void add_node_to_parent(struct node *node, struct node *parent) {
     node->parent = parent;
     node->next = parent->child;
     parent->child = node;
+    parent->refcount++;
 }
 
 struct node *node_create(struct node *parent, const char *name, __u64 nid, __u64 gen)
@@ -217,7 +218,6 @@ struct node *node_create(struct node *parent, const char *name, __u64 nid, __u64
     add_node_to_parent(node, parent);
     memcpy(node->name, name, namelen + 1);
     node->namelen = namelen;
-    parent->refcount++;
 
     return node;
 }
@@ -293,6 +293,15 @@ struct node *lookup_child_by_inode(struct node *node, __u64 nid)
     return 0;
 }
 
+static void dec_refcount(struct node *node) {
+    if (node->refcount > 0) {
+        node->refcount--;
+        TRACE("dec_refcount %p(%s) -> %d\n", node, node->name, node->refcount);
+    } else {
+        ERROR("Zero refcnt %p\n", node);
+    }
+ }
+
 static struct node *remove_child(struct node *parent, __u64 nid)
 {
     struct node *prev = 0;
@@ -307,6 +316,7 @@ static struct node *remove_child(struct node *parent, __u64 nid)
             }
             node->next = 0;
             node->parent = 0;
+            dec_refcount(parent);
             return node;
         }
         prev = node;
@@ -348,7 +358,7 @@ struct node *node_lookup(struct fuse *fuse, struct node *parent, const char *nam
 void node_release(struct node *node)
 {
     TRACE("RELEASE %p (%s) rc=%d\n", node, node->name, node->refcount);
-    node->refcount--;
+    dec_refcount(node);
     if (node->refcount == 0) {
         if (node->parent->child == node) {
             node->parent->child = node->parent->child->next;
@@ -371,7 +381,7 @@ void node_release(struct node *node)
             /* TODO: remove debugging - poison memory */
         memset(node->name, 0xef, node->namelen);
         free(node->name);
-        memset(node, 0xef, sizeof(*node));
+        memset(node, 0xfc, sizeof(*node));
         free(node);
     }
 }
