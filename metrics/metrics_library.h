@@ -16,6 +16,7 @@ class MetricsLibraryInterface {
   virtual bool SendToUMA(const std::string& name, int sample,
                          int min, int max, int nbuckets) = 0;
   virtual bool SendEnumToUMA(const std::string& name, int sample, int max) = 0;
+  virtual bool SendUserActionToUMA(const std::string& action) = 0;
   virtual ~MetricsLibraryInterface() {}
 };
 
