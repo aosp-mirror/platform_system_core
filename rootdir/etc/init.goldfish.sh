@@ -18,7 +18,7 @@ case "$qemud" in
     ;;
 esac
 
-num_dns=`getprop ro.kernel.android.ndns`
+num_dns=`getprop ro.kernel.ndns`
 case "$num_dns" in
     2) setprop net.eth0.dns2 10.0.2.4
     ;;
@@ -44,7 +44,7 @@ esac
 
 # this line doesn't really do anything useful. however without it the
 # previous setprop doesn't seem to apply for some really odd reason
-setprop ro.qemu.init.completed 1
+#setprop ro.qemu.init.completed 1
 
 # set up the second interface (for inter-emulator connections)
 # if required
