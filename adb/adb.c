@@ -875,7 +875,7 @@ int adb_main(int is_daemon, int server_port)
             // don't run as root if ro.secure is set...
             secure = 1;
 
-            // ... except we allow running as root in userdebug builds if the 
+            // ... except we allow running as root in userdebug builds if the
             // service.adb.root property has been set by the "adb root" command
             property_get("ro.debuggable", value, "");
             if (strcmp(value, "1") == 0) {
@@ -1266,8 +1266,8 @@ int recovery_mode = 0;
 
 int main(int argc, char **argv)
 {
-    adb_trace_init();
 #if ADB_HOST
+    adb_trace_init();
     adb_sysdeps_init();
     return adb_commandline(argc - 1, argv + 1);
 #else
