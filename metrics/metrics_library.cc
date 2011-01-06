@@ -221,7 +221,6 @@ bool MetricsLibrary::SendToUMA(const string& name, int sample,
       FormatChromeMessage(kBufferSize, message,
                           "histogram%c%s %d %d %d %d", '\0',
                           name.c_str(), sample, min, max, nbuckets);
-
   if (message_length < 0)
     return false;
 
@@ -237,7 +236,19 @@ bool MetricsLibrary::SendEnumToUMA(const std::string& name, int sample,
       FormatChromeMessage(kBufferSize, message,
                           "linearhistogram%c%s %d %d", '\0',
                           name.c_str(), sample, max);
+  if (message_length < 0)
+    return false;
 
+  // Send the message.
+  return SendMessageToChrome(message_length, message);
+}
+
+bool MetricsLibrary::SendUserActionToUMA(const std::string& action) {
+  // Format the message.
+  char message[kBufferSize];
+  int32_t message_length =
+      FormatChromeMessage(kBufferSize, message,
+                          "useraction%c%s", '\0', action.c_str());
   if (message_length < 0)
     return false;
 

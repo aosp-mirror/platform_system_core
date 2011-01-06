@@ -29,19 +29,9 @@ UMA. In order to use the library in a module, you need to do the following:
   <metrics/metrics_library.h> header file. The file is installed in
   $SYSROOT/usr/include/ when the metrics library is built and installed.
 
-- The API includes two methods:
-
-  bool MetricsLibrary::SendToUMA(const std::string& name, int sample,
-                                 int min, int max, int nbuckets)
-  sends a sample for a regular (exponential) histogram.
-
-  bool MetricsLibrary::SendEnumToUMA(const std::string& name, int sample,
-                                     int max)
-  sends a sample for an enumeration (linear) histogram.
-
-  Before using these methods, a MetricsLibrary object needs to be constructed
-  and initialized through its Init method. See the complete API documentation in
-  metrics_library.h under src/platform/metrics/.
+- The API is documented in metrics_library.h under src/platform/metrics/. Before
+  using the API methods, a MetricsLibrary object needs to be constructed and
+  initialized through its Init method.
 
   For more information on the C API see c_metrics_library.h.
 
@@ -88,9 +78,9 @@ The Metrics Client: metrics_client
 ================================================================================
 
 metrics_client is a simple shell command-line utility for sending histogram
-samples. It's installed under /usr/bin on the target platform and uses
-libmetrics to send the data to Chrome. The utility is useful for generating
-metrics from shell scripts.
+samples and user actions. It's installed under /usr/bin on the target platform
+and uses libmetrics to send the data to Chrome. The utility is useful for
+generating metrics from shell scripts.
 
 For usage information and command-line options, run "metrics_client" on the
 target platform or look for "Usage:" in metrics_client.cc.

@@ -11,6 +11,7 @@ void ShowUsage() {
   fprintf(stderr,
           "Usage:  metrics_client [-ab] [-t] name sample min max nbuckets\n"
           "        metrics_client [-ab] -e   name sample max\n"
+          "        metrics_client -u action\n"
           "        metrics_client [-cg]\n"
           "\n"
           "  default: send metric with integer values to Chrome only\n"
@@ -20,7 +21,8 @@ void ShowUsage() {
           "  -c: return exit status 0 if user consents to stats, 1 otherwise\n"
           "  -e: send linear/enumeration histogram data\n"
           "  -g: return exit status 0 if machine in guest mode, 1 otherwise\n"
-          "  -t: convert sample from double seconds to int milliseconds\n");
+          "  -t: convert sample from double seconds to int milliseconds\n"
+          "  -u: send a user action to Chrome\n");
   exit(1);
 }
 
@@ -59,6 +61,14 @@ static int SendStats(char* argv[],
   return 0;
 }
 
+static int SendUserAction(char* argv[], int action_index) {
+  const char* action = argv[action_index];
+  MetricsLibrary metrics_lib;
+  metrics_lib.Init();
+  metrics_lib.SendUserActionToUMA(action);
+  return 0;
+}
+
 static int HasConsent() {
   MetricsLibrary metrics_lib;
   metrics_lib.Init();
@@ -74,6 +84,7 @@ static int IsGuestMode() {
 int main(int argc, char** argv) {
   enum Mode {
     kModeSendStats,
+    kModeSendUserAction,
     kModeHasConsent,
     kModeIsGuestMode
   } mode = kModeSendStats;
@@ -85,7 +96,7 @@ int main(int argc, char** argv) {
 
   // Parse arguments
   int flag;
-  while ((flag = getopt(argc, argv, "abcegt")) != -1) {
+  while ((flag = getopt(argc, argv, "abcegtu")) != -1) {
     switch (flag) {
       case 'a':
         mode = kModeSendStats;
@@ -109,18 +120,23 @@ int main(int argc, char** argv) {
       case 't':
         secs_to_msecs = true;
         break;
+      case 'u':
+        mode = kModeSendUserAction;
+        break;
       default:
         print_usage = true;
         break;
     }
   }
-  int name_index = optind;
+  int arg_index = optind;
 
   int expected_args = 0;
   if (mode == kModeSendStats)
     expected_args = send_enum ? 3 : 5;
+  else if (mode == kModeSendUserAction)
+    expected_args = 1;
 
-  if ((name_index + expected_args) != argc) {
+  if ((arg_index + expected_args) != argc) {
     ShowUsage();
   }
 
@@ -130,11 +146,13 @@ int main(int argc, char** argv) {
         ShowUsage();
       }
       return SendStats(argv,
-                       name_index,
+                       arg_index,
                        send_enum,
                        secs_to_msecs,
                        send_to_autotest,
                        send_to_chrome);
+    case kModeSendUserAction:
+      return SendUserAction(argv, arg_index);
     case kModeHasConsent:
       return HasConsent();
     case kModeIsGuestMode:

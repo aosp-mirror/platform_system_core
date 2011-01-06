@@ -69,6 +69,15 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // normal, while 100 is high).
   bool SendEnumToUMA(const std::string& name, int sample, int max);
 
+  // Sends a user action to Chrome for transport to UMA and returns true on
+  // success. This method results in the equivalent of an asynchronous
+  // non-blocking RPC to UserMetrics::RecordAction (see the comments in
+  // chrome/browser/chromeos/external_metrics.cc and
+  // chrome/browser/metrics/user_metrics.h on how to register new user actions).
+  //
+  // |action| is the user-generated event (e.g., "MuteKeyPressed").
+  bool SendUserActionToUMA(const std::string& action);
+
   // Sends to Autotest and returns true on success.
   static bool SendToAutotest(const std::string& name, int value);
 

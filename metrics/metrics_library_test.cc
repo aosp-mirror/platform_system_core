@@ -214,6 +214,23 @@ TEST_F(MetricsLibraryTest, SendToUMANotEnabled) {
   EXPECT_FALSE(file_util::PathExists(kTestUMAEventsFile));
 }
 
+TEST_F(MetricsLibraryTest, SendUserActionToUMA) {
+  char buf[100];
+  const int kLen = 30;
+  EXPECT_TRUE(lib_.SendUserActionToUMA("SomeKeyPressed"));
+  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+
+  char exp[kLen];
+  sprintf(exp, "%c%c%c%cuseraction%cSomeKeyPressed", kLen, 0, 0, 0, 0);
+  EXPECT_EQ(0, memcmp(exp, buf, kLen));
+}
+
+TEST_F(MetricsLibraryTest, SendUserActionToUMANotEnabled) {
+  SetMetricsEnabled(false);
+  EXPECT_TRUE(lib_.SendUserActionToUMA("SomeOtherKeyPressed"));
+  EXPECT_FALSE(file_util::PathExists(kTestUMAEventsFile));
+}
+
 class CMetricsLibraryTest : public testing::Test {
  protected:
   virtual void SetUp() {
@@ -265,6 +282,17 @@ TEST_F(CMetricsLibraryTest, SendToUMA) {
 
   char exp[kLen];
   sprintf(exp, "%c%c%c%chistogram%cTest.Metric 2 1 100 50", kLen, 0, 0, 0, 0);
+  EXPECT_EQ(0, memcmp(exp, buf, kLen));
+}
+
+TEST_F(CMetricsLibraryTest, SendUserActionToUMA) {
+  char buf[100];
+  const int kLen = 30;
+  EXPECT_TRUE(CMetricsLibrarySendUserActionToUMA(lib_, "SomeKeyPressed"));
+  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+
+  char exp[kLen];
+  sprintf(exp, "%c%c%c%cuseraction%cSomeKeyPressed", kLen, 0, 0, 0, 0);
   EXPECT_EQ(0, memcmp(exp, buf, kLen));
 }
 
