@@ -22,6 +22,11 @@ on boot
     stop dund
     stop akmd
 
+# start essential services
+    start qemud
+    start goldfish-logcat
+    start goldfish-setup
+
     setprop ro.setupwizard.mode EMULATOR
 
 # enable Google-specific location features,
@@ -42,6 +47,8 @@ on boot
 # something else.
 
 service goldfish-setup /system/etc/init.goldfish.sh
+    user root
+    group root
     oneshot
 
 service qemud /system/bin/qemud
@@ -52,7 +59,7 @@ service qemud /system/bin/qemud
 # program to check wether it runs on the emulator
 # if it does, it redirects its output to the device
 # named by the androidboot.console kernel option
-# if not, is simply exit immediately
+# if not, is simply exits immediately
 
 service goldfish-logcat /system/bin/logcat -Q
     oneshot
