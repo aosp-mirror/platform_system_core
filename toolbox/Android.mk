@@ -57,6 +57,7 @@ TOOLS := \
 	lsof
 
 LOCAL_SRC_FILES:= \
+	dynarray.c \
 	toolbox.c \
 	$(patsubst %,%.c,$(TOOLS))
 
