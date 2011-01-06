@@ -63,7 +63,6 @@
 /dev/snd/dsp1             0660   system     audio
 /dev/snd/mixer            0660   system     audio
 /dev/smd0                 0640   radio      radio
-/dev/qemu_trace           0666   system     system
 /dev/qmi                  0640   radio      radio
 /dev/qmi0                 0640   radio      radio
 /dev/qmi1                 0640   radio      radio
