@@ -35,6 +35,7 @@
 #include <linux/android_alarm.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <time.h>
 
 
 static void format_time(int time, char* buffer) {
@@ -75,18 +76,25 @@ int uptime_main(int argc, char *argv[])
     float up_time, idle_time;
     char up_string[100], idle_string[100], sleep_string[100];
     int elapsed;
+    struct timespec up_timespec;
 
     FILE* file = fopen("/proc/uptime", "r");
     if (!file) {
         fprintf(stderr, "Could not open /proc/uptime\n");
         return -1;
     }
-    if (fscanf(file, "%f %f", &up_time, &idle_time) != 2) {
+    if (fscanf(file, "%*f %f", &idle_time) != 1) {
         fprintf(stderr, "Could not parse /proc/uptime\n");
         fclose(file);
         return -1;
     }
     fclose(file);
+
+    if (clock_gettime(CLOCK_MONOTONIC, &up_timespec) < 0) {
+        fprintf(stderr, "Could not get monotonic time\n");
+	return -1;
+    }
+    up_time = up_timespec.tv_sec + up_timespec.tv_nsec / 1e9;
 
     elapsed = elapsedRealtime();
     if (elapsed < 0) {
