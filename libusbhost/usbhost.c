@@ -45,12 +45,6 @@
 #include <pthread.h>
 
 #include <linux/usbdevice_fs.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
-#include <linux/usb/ch9.h>
-#else
-#include <linux/usb_ch9.h>
-#endif
 #include <asm/byteorder.h>
 
 #include "usbhost/usbhost.h"
@@ -70,13 +64,6 @@ struct usb_device {
     int desc_length;
     int fd;
     int writeable;
-};
-
-struct usb_endpoint
-{
-    struct usb_device *dev;
-    struct usb_endpoint_descriptor  desc;
-    struct usbdevfs_urb urb;
 };
 
 static inline int badname(const char *name)
@@ -465,83 +452,89 @@ int usb_device_release_interface(struct usb_device *device, unsigned int interfa
     return ioctl(device->fd, USBDEVFS_RELEASEINTERFACE, &interface);
 }
 
-struct usb_endpoint *usb_endpoint_open(struct usb_device *dev,
-        const struct usb_endpoint_descriptor *desc)
+struct usb_request *usb_request_new(struct usb_device *dev,
+        const struct usb_endpoint_descriptor *ep_desc)
 {
-    struct usb_endpoint *ep = calloc(1, sizeof(struct usb_endpoint));
-    memcpy(&ep->desc, desc, sizeof(ep->desc));
-    ep->dev = dev;
-    return ep;
+    struct usbdevfs_urb *urb = calloc(1, sizeof(struct usbdevfs_urb));
+    if (!urb)
+        return NULL;
+
+    if ((ep_desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_BULK)
+        urb->type = USBDEVFS_URB_TYPE_BULK;
+    else if ((ep_desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) == USB_ENDPOINT_XFER_INT)
+        urb->type = USBDEVFS_URB_TYPE_INTERRUPT;
+    else {
+        D("Unsupported endpoint type %d", ep_desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK);
+        free(urb);
+        return NULL;
+    }
+    urb->endpoint = ep_desc->bEndpointAddress;
+
+    struct usb_request *req = calloc(1, sizeof(struct usb_request));
+    if (!req) {
+        free(urb);
+        return NULL;
+    }
+
+    req->dev = dev;
+    req->max_packet_size = __le16_to_cpu(ep_desc->wMaxPacketSize);
+    req->private_data = urb;
+    urb->usercontext = req;
+
+    return req;
 }
 
-void usb_endpoint_close(struct usb_endpoint *ep)
+void usb_request_free(struct usb_request *req)
 {
-    // cancel IO here?
-    free(ep);
+    free(req->private_data);
+    free(req);
 }
 
-int usb_endpoint_queue(struct usb_endpoint *ep, void *data, int len)
+int usb_request_queue(struct usb_request *req)
 {
-    struct usbdevfs_urb *urb = &ep->urb;
+    struct usbdevfs_urb *urb = (struct usbdevfs_urb*)req->private_data;
     int res;
 
-    D("usb_endpoint_queue\n");
-    memset(urb, 0, sizeof(*urb));
-    urb->type = USBDEVFS_URB_TYPE_BULK;
-    urb->endpoint = ep->desc.bEndpointAddress;
     urb->status = -1;
-    urb->buffer = data;
-    urb->buffer_length = len;
+    urb->buffer = req->buffer;
+    urb->buffer_length = req->buffer_length;
 
     do {
-        res = ioctl(ep->dev->fd, USBDEVFS_SUBMITURB, urb);
+        res = ioctl(req->dev->fd, USBDEVFS_SUBMITURB, urb);
     } while((res < 0) && (errno == EINTR));
 
     return res;
 }
 
-int usb_endpoint_wait(struct usb_device *dev, int *out_ep_num)
+struct usb_request *usb_request_wait(struct usb_device *dev)
 {
-    struct usbdevfs_urb *out = NULL;
+    struct usbdevfs_urb *urb = NULL;
+    struct usb_request *req = NULL;
     int res;
 
     while (1) {
-        res = ioctl(dev->fd, USBDEVFS_REAPURB, &out);
+        int res = ioctl(dev->fd, USBDEVFS_REAPURB, &urb);
         D("USBDEVFS_REAPURB returned %d\n", res);
         if (res < 0) {
             if(errno == EINTR) {
                 continue;
             }
             D("[ reap urb - error ]\n");
-            *out_ep_num = -1;
+            return NULL;
         } else {
             D("[ urb @%p status = %d, actual = %d ]\n",
-                out, out->status, out->actual_length);
-            res = out->actual_length;
-            *out_ep_num = out->endpoint;
+                urb, urb->status, urb->actual_length);
+            req = (struct usb_request*)urb->usercontext;
+            req->actual_length = urb->actual_length;
         }
         break;
     }
-    return res;
+    return req;
 }
 
-int usb_endpoint_cancel(struct usb_endpoint *ep)
+int usb_request_cancel(struct usb_request *req)
 {
-    return ioctl(ep->dev->fd, USBDEVFS_DISCARDURB, &ep->urb);
-}
-
-struct usb_device *usb_endpoint_get_device(struct usb_endpoint *ep)
-{
-    return ep->dev;
-}
-
-int usb_endpoint_number(struct usb_endpoint *ep)
-{
-    return ep->desc.bEndpointAddress;
-}
-
-int usb_endpoint_max_packet(struct usb_endpoint *ep)
-{
-    return __le16_to_cpu(ep->desc.wMaxPacketSize);
+    struct usbdevfs_urb *urb = ((struct usbdevfs_urb*)req->private_data);
+    return ioctl(req->dev->fd, USBDEVFS_DISCARDURB, &urb);
 }
 

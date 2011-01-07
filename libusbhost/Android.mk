@@ -40,4 +40,7 @@ LOCAL_SRC_FILES := usbhost.c
 
 LOCAL_CFLAGS := -g -DUSE_LIBLOG
 
+# needed for logcat
+LOCAL_SHARED_LIBRARIES := libcutils
+
 include $(BUILD_SHARED_LIBRARY)

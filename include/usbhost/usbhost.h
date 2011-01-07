@@ -39,6 +39,17 @@ struct usb_descriptor_iter {
     unsigned char*  curr_desc;
 };
 
+struct usb_request
+{
+    struct usb_device *dev;
+    void* buffer;
+    int buffer_length;
+    int actual_length;
+    int max_packet_size;
+    void *private_data; /* struct usbdevfs_urb* */
+    void *client_data;  /* free for use by client */
+};
+
 /* Callback for notification when new USB devices are attached.
  * Return true to exit from usb_host_run.
  */
@@ -170,38 +181,23 @@ int usb_device_claim_interface(struct usb_device *device, unsigned int interface
 /* Releases the specified interface of a USB device */
 int usb_device_release_interface(struct usb_device *device, unsigned int interface);
 
+/* Creates a new usb_request. */
+struct usb_request *usb_request_new(struct usb_device *dev,
+        const struct usb_endpoint_descriptor *ep_desc);
 
-/* Creates a new usb_endpoint for the specified endpoint of a USB device.
- * This can be used to read or write data across the endpoint.
- */
-struct usb_endpoint *usb_endpoint_open(struct usb_device *dev,
-                const struct usb_endpoint_descriptor *desc);
+/* Releases all resources associated with the request */
+void usb_request_free(struct usb_request *req);
 
-/* Releases all resources associated with the endpoint */
-void usb_endpoint_close(struct usb_endpoint *ep);
+/* Submits a read or write request on the specified device */
+int usb_request_queue(struct usb_request *req);
 
-/* Begins a read or write operation on the specified endpoint */
-int usb_endpoint_queue(struct usb_endpoint *ep, void *data, int len);
-
- /* Waits for the results of a previous usb_endpoint_queue operation on the
-  * specified endpoint.  Returns number of bytes transferred, or a negative
-  * value for error.
+ /* Waits for the results of a previous usb_request_queue operation.
+  * Returns a usb_request, or NULL for error.
   */
-int usb_endpoint_wait(struct usb_device *device, int *out_ep_num);
+struct usb_request *usb_request_wait(struct usb_device *dev);
 
-/* Cancels a pending usb_endpoint_queue() operation on an endpoint. */
-int usb_endpoint_cancel(struct usb_endpoint *ep);
-
-/* Returns the usb_device for the given endpoint */
-struct usb_device *usb_endpoint_get_device(struct usb_endpoint *ep);
-
-/* Returns the endpoint address for the given endpoint */
-int usb_endpoint_number(struct usb_endpoint *ep);
-
-/* Returns the maximum packet size for the given endpoint.
- * For bulk endpoints this should be 512 for highspeed or 64 for fullspeed.
- */
-int usb_endpoint_max_packet(struct usb_endpoint *ep);
+/* Cancels a pending usb_request_queue() operation. */
+int usb_request_cancel(struct usb_request *req);
 
 #ifdef __cplusplus
 }
