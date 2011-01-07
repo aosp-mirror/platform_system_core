@@ -374,7 +374,7 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
 service drm /system/bin/drmserver
     class main
     user drm
-    group system root inet
+    group inet
 
 service drmio /system/bin/drmioserver
     class main
