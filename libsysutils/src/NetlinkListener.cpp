@@ -25,9 +25,8 @@
 #include <sysutils/NetlinkListener.h>
 #include <sysutils/NetlinkEvent.h>
 
-NetlinkListener::NetlinkListener(int socket, int format) :
+NetlinkListener::NetlinkListener(int socket) :
                             SocketListener(socket, false) {
-    mFormat = format;
 }
 
 bool NetlinkListener::onDataAvailable(SocketClient *cli)
@@ -41,14 +40,13 @@ bool NetlinkListener::onDataAvailable(SocketClient *cli)
     }
 
     NetlinkEvent *evt = new NetlinkEvent();
-    int err = evt->decode(mBuffer, count, mFormat);
-
-    if (!err) {
+    if (!evt->decode(mBuffer, count)) {
         SLOGE("Error decoding NetlinkEvent");
-    } else {
-        onEvent(evt);
+        goto out;
     }
 
+    onEvent(evt);
+out:
     delete evt;
     return true;
 }
