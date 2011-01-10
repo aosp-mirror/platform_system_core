@@ -15,128 +15,7 @@
 #include <linux/kdev_t.h>
 #include <limits.h>
 
-// dynamic arrays
-typedef struct {
-    int count;
-    int capacity;
-    void** items;
-} dynarray_t;
-
-#define DYNARRAY_INITIALIZER  { 0, 0, NULL }
-
-static void dynarray_init( dynarray_t *a )
-{
-    a->count = a->capacity = 0;
-    a->items = NULL;
-}
-
-static void dynarray_reserve_more( dynarray_t *a, int count )
-{
-    int old_cap = a->capacity;
-    int new_cap = old_cap;
-    const int max_cap = INT_MAX/sizeof(void*);
-    void** new_items;
-    int new_count = a->count + count;
-
-    if (count <= 0)
-        return;
-
-    if (count > max_cap - a->count)
-        abort();
-
-    new_count = a->count + count;
-
-    while (new_cap < new_count) {
-        old_cap = new_cap;
-        new_cap += (new_cap >> 2) + 4;
-        if (new_cap < old_cap || new_cap > max_cap) {
-            new_cap = max_cap;
-        }
-    }
-    new_items = realloc(a->items, new_cap*sizeof(void*));
-    if (new_items == NULL)
-        abort();
-
-    a->items = new_items;
-    a->capacity = new_cap;
-}
-
-static void dynarray_append( dynarray_t *a, void* item )
-{
-    if (a->count >= a->capacity)
-        dynarray_reserve_more(a, 1);
-
-    a->items[a->count++] = item;
-}
-
-static void dynarray_done( dynarray_t *a )
-{
-    free(a->items);
-    a->items = NULL;
-    a->count = a->capacity = 0;
-}
-
-#define DYNARRAY_FOREACH_TYPE(_array,_item_type,_item,_stmnt) \
-    do { \
-        int _nn_##__LINE__ = 0; \
-        for (;_nn_##__LINE__ < (_array)->count; ++ _nn_##__LINE__) { \
-            _item_type _item = (_item_type)(_array)->items[_nn_##__LINE__]; \
-            _stmnt; \
-        } \
-    } while (0)
-
-#define DYNARRAY_FOREACH(_array,_item,_stmnt) \
-    DYNARRAY_FOREACH_TYPE(_array,void *,_item,_stmnt)
-
-// string arrays
-
-typedef dynarray_t  strlist_t;
-
-#define  STRLIST_INITIALIZER  DYNARRAY_INITIALIZER
-
-#define  STRLIST_FOREACH(_list,_string,_stmnt) \
-    DYNARRAY_FOREACH_TYPE(_list,char *,_string,_stmnt)
-
-static void strlist_init( strlist_t *list )
-{
-    dynarray_init(list);
-}
-
-static void strlist_append_b( strlist_t *list, const void* str, size_t  slen )
-{
-    char *copy = malloc(slen+1);
-    memcpy(copy, str, slen);
-    copy[slen] = '\0';
-    dynarray_append(list, copy);
-}
-
-static void strlist_append_dup( strlist_t *list, const char *str)
-{
-    strlist_append_b(list, str, strlen(str));
-}
-
-static void strlist_done( strlist_t *list )
-{
-    STRLIST_FOREACH(list, string, free(string));
-    dynarray_done(list);
-}
-
-static int strlist_compare_strings(const void* a, const void* b)
-{
-    const char *sa = *(const char **)a;
-    const char *sb = *(const char **)b;
-    return strcmp(sa, sb);
-}
-
-static void strlist_sort( strlist_t *list )
-{
-    if (list->count > 0) {
-        qsort(list->items, 
-              (size_t)list->count,
-              sizeof(void*),
-              strlist_compare_strings);
-    }
-}
+#include "dynarray.h"
 
 // bits for flags argument
 #define LIST_LONG           (1 << 0)
@@ -166,7 +45,7 @@ static char mode2kind(unsigned mode)
 static void mode2str(unsigned mode, char *out)
 {
     *out++ = mode2kind(mode);
-    
+
     *out++ = (mode & 0400) ? 'r' : '-';
     *out++ = (mode & 0200) ? 'w' : '-';
     if(mode & 04000) {
@@ -290,7 +169,7 @@ static int listfile_long(const char *path, int flags)
 
     strftime(date, 32, "%Y-%m-%d %H:%M", localtime((const time_t*)&s.st_mtime));
     date[31] = 0;
-    
+
 // 12345678901234567890123456789012345678901234567890123456789012345678901234567890
 // MMMMMMMM UUUUUUUU GGGGGGGGG XXXXXXXX YYYY-MM-DD HH:MM NAME (->LINK)
 
@@ -298,7 +177,7 @@ static int listfile_long(const char *path, int flags)
     case S_IFBLK:
     case S_IFCHR:
         printf("%s %-8s %-8s %3d, %3d %s %s\n",
-               mode, user, group, 
+               mode, user, group,
                (int) MAJOR(s.st_rdev), (int) MINOR(s.st_rdev),
                date, name);
         break;
@@ -312,7 +191,7 @@ static int listfile_long(const char *path, int flags)
 
         len = readlink(path, linkto, 256);
         if(len < 0) return -1;
-        
+
         if(len > 255) {
             linkto[252] = '.';
             linkto[253] = '.';
@@ -321,7 +200,7 @@ static int listfile_long(const char *path, int flags)
         } else {
             linkto[len] = 0;
         }
-        
+
         printf("%s %-8s %-8s          %s %s -> %s\n",
                mode, user, group, date, name, linkto);
         break;
@@ -364,7 +243,7 @@ static int listdir(const char *name, int flags)
     DIR *d;
     struct dirent *de;
     strlist_t  files = STRLIST_INITIALIZER;
-    
+
     d = opendir(name);
     if(d == 0) {
         fprintf(stderr, "opendir failed, %s\n", strerror(errno));
@@ -469,7 +348,7 @@ int ls_main(int argc, char **argv)
 {
     int flags = 0;
     int listed = 0;
-    
+
     if(argc > 1) {
         int i;
         int err = 0;
@@ -509,7 +388,7 @@ int ls_main(int argc, char **argv)
             return err;
         }
     }
-    
-    // list working directory if no files or directories were specified    
+
+    // list working directory if no files or directories were specified
     return listpath(".", flags);
 }
