@@ -68,7 +68,7 @@
 /dev/qmi1                 0640   radio      radio
 /dev/qmi2                 0640   radio      radio
 /dev/bus/usb/*            0660   root       usb
-/dev/mtp_usb              0660   root       usb
+/dev/mtp_usb              0660   root       mtp
 
 # CDMA radio interface MUX
 /dev/ts0710mux*           0640   radio      radio
