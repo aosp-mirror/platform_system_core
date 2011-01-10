@@ -83,7 +83,6 @@ int next_token(struct parse_state *state)
             state->ptr = x;
             return T_EOF;
         case '\n':
-            state->line++;
             x++;
             state->ptr = x;
             return T_NEWLINE;
@@ -94,9 +93,13 @@ int next_token(struct parse_state *state)
             continue;
         case '#':
             while (*x && (*x != '\n')) x++;
-            state->line++;
-            state->ptr = x;
-            return T_NEWLINE;
+            if (*x == '\n') {
+                state->ptr = x+1;
+                return T_NEWLINE;
+            } else {
+                state->ptr = x;
+                return T_EOF;
+            }
         default:
             goto text;
         }
