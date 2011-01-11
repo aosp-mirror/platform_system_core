@@ -176,10 +176,11 @@ on post-fs-data
     chown root root /data/lost+found
     chmod 0770 /data/lost+found
 
+    # temporarily disable the drm server
     # create directory for DRM plug-ins
-    mkdir /data/drm 0774 drm drm
-    mkdir /data/drm/plugins 0774 drm drm
-    mkdir /data/drm/plugins/native 0774 drm drm
+    #mkdir /data/drm 0774 drm drm
+    #mkdir /data/drm/plugins 0774 drm drm
+    #mkdir /data/drm/plugins/native 0774 drm drm
 
     # If there is no fs-post-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
@@ -371,15 +372,16 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
     onrestart restart media
     onrestart restart netd
 
-service drm /system/bin/drmserver
-    class main
-    user drm
-    group system root inet
+# temporarily disable the drm server
+#service drm /system/bin/drmserver
+    #class main
+    #user drm
+    #group system root inet
 
-service drmio /system/bin/drmioserver
-    class main
-    user drmio
-    group drmio
+#service drmio /system/bin/drmioserver
+    #class main
+    #user drmio
+    #group drmio
 
 service media /system/bin/mediaserver
     class main
