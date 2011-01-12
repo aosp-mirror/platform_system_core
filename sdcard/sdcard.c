@@ -108,6 +108,9 @@ struct fuse {
     char rootpath[1024];
 };
 
+/* true if file names should be squashed to lower case */
+static int force_lower_case = 0;
+
 #define PATH_BUFFER_SIZE 1024
 
 /*
@@ -442,11 +445,79 @@ void lookup_entry(struct fuse *fuse, struct node *node,
     fuse_reply(fuse, unique, &out, sizeof(out));
 }
 
+static int name_needs_normalizing(const char* name) {
+    char ch;
+    while ((ch = *name++) != 0) {
+        if (ch != tolower(ch))
+            return 1;
+    }
+    return 0;
+}
+
 static void normalize_name(char *name)
 {
-    char ch;
-    while ((ch = *name) != 0)
-        *name++ = tolower(ch);
+    if (force_lower_case) {
+        char ch;
+        while ((ch = *name) != 0)
+            *name++ = tolower(ch);
+    }
+}
+
+static void fix_files_lower_case(const char* path) {
+    DIR* dir;
+    struct dirent* entry;
+    char pathbuf[PATH_MAX];
+    char oldpath[PATH_MAX];
+    int pathLength = strlen(path);
+    int pathRemaining;
+    char* fileSpot;
+
+    if (pathLength >= sizeof(pathbuf) - 1) {
+        ERROR("path too long: %s\n", path);
+        return;
+    }
+    strcpy(pathbuf, path);
+    if (pathbuf[pathLength - 1] != '/') {
+        pathbuf[pathLength++] = '/';
+    }
+    fileSpot = pathbuf + pathLength;
+    pathRemaining = sizeof(pathbuf) - pathLength - 1;
+
+    dir = opendir(path);
+    if (!dir) {
+        ERROR("opendir %s failed: %s", path, strerror(errno));
+        return;
+    }
+
+    while ((entry = readdir(dir))) {
+        const char* name = entry->d_name;
+        int nameLength;
+
+        // ignore "." and ".."
+        if (name[0] == '.' && (name[1] == 0 || (name[1] == '.' && name[2] == 0))) {
+            continue;
+        }
+
+       nameLength = strlen(name);
+       if (nameLength > pathRemaining) {
+            ERROR("path %s/%s too long\n", path, name);
+            continue;
+        }
+        strcpy(fileSpot, name);
+
+        if (name_needs_normalizing(name)) {
+            /* rename file to lower case file name */
+            strlcpy(oldpath, pathbuf, sizeof(oldpath));
+            normalize_name(pathbuf);
+            rename(oldpath, pathbuf);
+        }
+
+        if (entry->d_type == DT_DIR) {
+            /* recurse to subdirectories */
+            fix_files_lower_case(pathbuf);
+        }
+    }
+    closedir(dir);
 }
 
 void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *data, unsigned len)
@@ -843,29 +914,58 @@ void handle_fuse_requests(struct fuse *fuse)
     }
 }
 
+static int usage()
+{
+    ERROR("usage: sdcard [-l -f] <path> <uid> <gid>\n\n\t-l force file names to lower case when creating new files\n\t-f fix up any existing file names at are not lower case\n");
+    return -1;
+}
+
 int main(int argc, char **argv)
 {
     struct fuse fuse;
     char opts[256];
     int fd;
     int res;
-    unsigned uid;
-    unsigned gid;
-    const char *path;
+    unsigned uid = -1;
+    unsigned gid = -1;
+    const char *path = NULL;
+    int check_files = 0;
+    int i;
 
-    if (argc != 4) {
-        ERROR("usage: sdcard <path> <uid> <gid>\n");
-        return -1;
+    for (i = 1; i < argc; i++) {
+        char* arg = argv[i];
+        if (arg[0] == '-') {
+            if (!strcmp(arg, "-l")) {
+                force_lower_case = 1;
+                ERROR("force_lower_case\n");
+            } else if (!strcmp(arg, "-f")) {
+                check_files = 1;
+                ERROR("check_files\n");
+            } else {
+                return usage();
+            }
+        } else {
+            if (!path)
+                path = arg;
+            else if (uid == -1)
+                uid = strtoul(arg, 0, 10);
+            else if (gid == -1)
+                gid = strtoul(arg, 0, 10);
+            else {
+                ERROR("too many arguments\n");
+                return usage();
+            }
+        }
     }
 
-    uid = strtoul(argv[2], 0, 10);
-    gid = strtoul(argv[3], 0, 10);
-    if (!uid || !gid) {
+    if (!path) {
+        ERROR("no path specified\n");
+        return usage();
+    }
+    if (uid <= 0 || gid <= 0) {
         ERROR("uid and gid must be nonzero\n");
-        return -1;
+        return usage();
     }
-
-    path = argv[1];
 
         /* cleanup from previous instance, if necessary */
     umount2(MOUNT_POINT, 2);
@@ -893,6 +993,9 @@ int main(int argc, char **argv)
         ERROR("cannot setuid!\n");
         return -1;
     }
+
+    if (check_files)
+        fix_files_lower_case(path);
 
     fuse_init(&fuse, fd, path);
 
