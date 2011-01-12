@@ -652,7 +652,7 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
             fuse_status(fuse, hdr->unique, -EINVAL);
             return;
         }
-        res = pread(h->fd, buffer, req->size, req->offset);
+        res = pread64(h->fd, buffer, req->size, req->offset);
         if (res < 0) {
             fuse_status(fuse, hdr->unique, errno);
             return;
@@ -666,7 +666,7 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         struct handle *h = id_to_ptr(req->fh);
         int res;
         TRACE("WRITE %p(%d) %u@%llu\n", h, h->fd, req->size, req->offset);
-        res = pwrite(h->fd, ((char*) data) + sizeof(*req), req->size, req->offset);
+        res = pwrite64(h->fd, ((char*) data) + sizeof(*req), req->size, req->offset);
         if (res < 0) {
             fuse_status(fuse, hdr->unique, errno);
             return;
