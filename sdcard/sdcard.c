@@ -25,6 +25,7 @@
 #include <sys/statfs.h>
 #include <sys/uio.h>
 #include <dirent.h>
+#include <ctype.h>
 
 #include <private/android_filesystem_config.h>
 
@@ -110,6 +111,8 @@ struct fuse {
 
 /* true if file names should be squashed to lower case */
 static int force_lower_case = 0;
+static unsigned uid = -1;
+static unsigned gid = -1;
 
 #define PATH_BUFFER_SIZE 1024
 
@@ -463,7 +466,7 @@ static void normalize_name(char *name)
     }
 }
 
-static void fix_files_lower_case(const char* path) {
+static void recursive_fix_files(const char* path) {
     DIR* dir;
     struct dirent* entry;
     char pathbuf[PATH_MAX];
@@ -505,6 +508,9 @@ static void fix_files_lower_case(const char* path) {
         }
         strcpy(fileSpot, name);
 
+        // make sure owner and group are correct
+        chown(pathbuf, uid, gid);
+
         if (name_needs_normalizing(name)) {
             /* rename file to lower case file name */
             strlcpy(oldpath, pathbuf, sizeof(oldpath));
@@ -514,7 +520,7 @@ static void fix_files_lower_case(const char* path) {
 
         if (entry->d_type == DT_DIR) {
             /* recurse to subdirectories */
-            fix_files_lower_case(pathbuf);
+            recursive_fix_files(pathbuf);
         }
     }
     closedir(dir);
@@ -916,7 +922,7 @@ void handle_fuse_requests(struct fuse *fuse)
 
 static int usage()
 {
-    ERROR("usage: sdcard [-l -f] <path> <uid> <gid>\n\n\t-l force file names to lower case when creating new files\n\t-f fix up any existing file names at are not lower case\n");
+    ERROR("usage: sdcard [-l -f] <path> <uid> <gid>\n\n\t-l force file names to lower case when creating new files\n\t-f fix up file system before starting (repairs bad file name case and group ownership)\n");
     return -1;
 }
 
@@ -926,10 +932,8 @@ int main(int argc, char **argv)
     char opts[256];
     int fd;
     int res;
-    unsigned uid = -1;
-    unsigned gid = -1;
     const char *path = NULL;
-    int check_files = 0;
+    int fix_files = 0;
     int i;
 
     for (i = 1; i < argc; i++) {
@@ -937,10 +941,8 @@ int main(int argc, char **argv)
         if (arg[0] == '-') {
             if (!strcmp(arg, "-l")) {
                 force_lower_case = 1;
-                ERROR("force_lower_case\n");
             } else if (!strcmp(arg, "-f")) {
-                check_files = 1;
-                ERROR("check_files\n");
+                fix_files = 1;
             } else {
                 return usage();
             }
@@ -985,6 +987,9 @@ int main(int argc, char **argv)
         return -1;
     }
 
+    if (fix_files)
+        recursive_fix_files(path);
+
     if (setgid(gid) < 0) {
         ERROR("cannot setgid!\n");
         return -1;
@@ -993,9 +998,6 @@ int main(int argc, char **argv)
         ERROR("cannot setuid!\n");
         return -1;
     }
-
-    if (check_files)
-        fix_files_lower_case(path);
 
     fuse_init(&fuse, fd, path);
 
