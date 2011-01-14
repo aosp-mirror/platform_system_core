@@ -388,6 +388,7 @@ int do_mount(int nargs, char **args)
                 /* Set the property that triggers the framework to do a minimal
                  * startup and ask the user for a password
                  */
+                property_set("ro.crypto.state", "encrypted");
                 property_set("vold.decrypt", "1");
             } else {
                 return -1;
@@ -395,6 +396,7 @@ int do_mount(int nargs, char **args)
         } else {
             if (!strcmp(target, DATA_MNT_POINT)) {
                 /* We succeeded in mounting /data, so it's not encrypted */
+                property_set("ro.crypto.state", "unencrypted");
                 action_for_each_trigger("nonencrypted", action_add_queue_tail);
             }
         }
