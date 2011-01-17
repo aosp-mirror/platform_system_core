@@ -32,14 +32,24 @@ SocketClient::SocketClient(int socket)
 
 int SocketClient::sendMsg(int code, const char *msg, bool addErrno) {
     char *buf;
+    const char* arg;
+    const char* fmt;
+    char tmp[1];
+    int  len;
 
     if (addErrno) {
-        buf = (char *) alloca(strlen(msg) + strlen(strerror(errno)) + 8);
-        sprintf(buf, "%.3d %s (%s)", code, msg, strerror(errno));
+        fmt = "%.3d %s (%s)";
+        arg = strerror(errno);
     } else {
-        buf = (char *) alloca(strlen(msg) + strlen("XXX "));
-        sprintf(buf, "%.3d %s", code, msg);
+        fmt = "%.3d %s";
+        arg = NULL;
     }
+    /* Measure length of required buffer */
+    len = snprintf(tmp, sizeof tmp, fmt, code, msg, arg);
+    /* Allocate in the stack, then write to it */
+    buf = (char*)alloca(len+1);
+    snprintf(buf, len+1, fmt, code, msg, arg);
+    /* Send the zero-terminated message */
     return sendMsg(buf);
 }
 
@@ -68,18 +78,24 @@ int SocketClient::sendData(const void* data, int len) {
 
     pthread_mutex_lock(&mWriteMutex);
     while (brtw > 0) {
-        if ((rc = write(mSocket, p, brtw)) < 0) {
-            SLOGW("write error (%s)", strerror(errno));
-            pthread_mutex_unlock(&mWriteMutex);
-            return -1;
-        } else if (!rc) {
+        rc = write(mSocket, p, brtw);
+        if (rc > 0) {
+            p += rc;
+            brtw -= rc;
+            continue;
+        }
+
+        if (rc < 0 && errno == EINTR)
+            continue;
+
+        pthread_mutex_unlock(&mWriteMutex);
+        if (rc == 0) {
             SLOGW("0 length write :(");
             errno = EIO;
-            pthread_mutex_unlock(&mWriteMutex);
-            return -1;
+        } else {
+            SLOGW("write error (%s)", strerror(errno));
         }
-        p += rc;
-        brtw -= rc;
+        return -1;
     }
     pthread_mutex_unlock(&mWriteMutex);
     return 0;
