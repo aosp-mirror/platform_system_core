@@ -116,6 +116,15 @@ static unsigned gid = -1;
 
 #define PATH_BUFFER_SIZE 1024
 
+static void normalize_name(char *name)
+{
+    if (force_lower_case) {
+        char ch;
+        while ((ch = *name) != 0)
+            *name++ = tolower(ch);
+    }
+}
+
 /*
  * Get the real-life absolute path to a node.
  *   node: start at this node
@@ -146,6 +155,7 @@ char *node_get_path(struct node *node, char *buf, const char *name)
         out[0] = '/';
     }
 
+    normalize_name(out);
     return out;
 }
 
@@ -457,15 +467,6 @@ static int name_needs_normalizing(const char* name) {
     return 0;
 }
 
-static void normalize_name(char *name)
-{
-    if (force_lower_case) {
-        char ch;
-        while ((ch = *name) != 0)
-            *name++ = tolower(ch);
-    }
-}
-
 static void recursive_fix_files(const char* path) {
     DIR* dir;
     struct dirent* entry;
@@ -549,7 +550,6 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
 
     switch (hdr->opcode) {
     case FUSE_LOOKUP: { /* bytez[] -> entry_out */
-        normalize_name((char*) data);
         TRACE("LOOKUP %llx %s\n", hdr->nodeid, (char*) data);
         lookup_entry(fuse, node, (char*) data, hdr->unique);
         return;
@@ -609,8 +609,6 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         char *name = ((char*) data) + sizeof(*req);
         int res;
 
-        normalize_name(name);
-
         TRACE("MKNOD %s @ %llx\n", name, hdr->nodeid);
         path = node_get_path(node, buffer, name);
 
@@ -630,8 +628,6 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         char *name = ((char*) data) + sizeof(*req);
         int res;
 
-        normalize_name(name);
-
         TRACE("MKDIR %s @ %llx 0%o\n", name, hdr->nodeid, req->mode);
         path = node_get_path(node, buffer, name);
 
@@ -647,7 +643,6 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
     case FUSE_UNLINK: { /* bytez[] -> */
         char *path, buffer[PATH_BUFFER_SIZE];
         int res;
-        normalize_name((char*) data);
         TRACE("UNLINK %s @ %llx\n", (char*) data, hdr->nodeid);
         path = node_get_path(node, buffer, (char*) data);
         res = unlink(path);
@@ -657,7 +652,6 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
     case FUSE_RMDIR: { /* bytez[] -> */
         char *path, buffer[PATH_BUFFER_SIZE];
         int res;
-        normalize_name((char*) data);
         TRACE("RMDIR %s @ %llx\n", (char*) data, hdr->nodeid);
         path = node_get_path(node, buffer, (char*) data);
         res = rmdir(path);
@@ -673,9 +667,6 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         struct node *target;
         struct node *newparent;
         int res;
-
-        normalize_name(oldname);
-        normalize_name(newname);
 
         TRACE("RENAME %s->%s @ %llx\n", oldname, newname, hdr->nodeid);
 
@@ -723,7 +714,6 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
             return;
         }
 
-        normalize_name(buffer);
         path = node_get_path(node, buffer, 0);
         TRACE("OPEN %llx '%s' 0%o fh=%p\n", hdr->nodeid, path, req->flags, h);
         h->fd = open(path, req->flags);
@@ -825,7 +815,6 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
             return;
         }
 
-        normalize_name(buffer);
         path = node_get_path(node, buffer, 0);
         TRACE("OPENDIR %llx '%s'\n", hdr->nodeid, path);
         h->d = opendir(path);
