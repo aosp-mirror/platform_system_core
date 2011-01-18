@@ -6,6 +6,7 @@ on early-init
 
 on boot
     setprop ARGH ARGH
+    setprop net.eth0.gw 10.0.2.2
     setprop net.eth0.dns1 10.0.2.3
     setprop net.gprs.local-ip 10.0.2.15
     setprop ro.radio.use-ppp no
