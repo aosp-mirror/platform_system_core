@@ -485,6 +485,16 @@ int do_symlink(int nargs, char **args)
     return symlink(args[1], args[2]);
 }
 
+int do_rm(int nargs, char **args)
+{
+    return unlink(args[1]);
+}
+
+int do_rmdir(int nargs, char **args)
+{
+    return rmdir(args[1]);
+}
+
 int do_sysclktz(int nargs, char **args)
 {
     struct timezone tz;
