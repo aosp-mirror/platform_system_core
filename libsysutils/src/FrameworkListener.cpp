@@ -34,7 +34,8 @@ bool FrameworkListener::onDataAvailable(SocketClient *c) {
     char buffer[255];
     int len;
 
-    if ((len = read(c->getSocket(), buffer, sizeof(buffer) -1)) < 0) {
+    len = TEMP_FAILURE_RETRY(read(c->getSocket(), buffer, sizeof(buffer)));
+    if (len < 0) {
         SLOGE("read() failed (%s)", strerror(errno));
         return false;
     } else if (!len)
@@ -45,6 +46,7 @@ bool FrameworkListener::onDataAvailable(SocketClient *c) {
 
     for (i = 0; i < len; i++) {
         if (buffer[i] == '\0') {
+            /* IMPORTANT: dispatchCommand() expects a zero-terminated string */
             dispatchCommand(c, buffer + offset);
             offset = i + 1;
         }
@@ -63,6 +65,7 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
     char tmp[255];
     char *p = data;
     char *q = tmp;
+    char *qlimit = tmp + sizeof(tmp) - 1;
     bool esc = false;
     bool quote = false;
     int k;
@@ -72,6 +75,8 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
     while(*p) {
         if (*p == '\\') {
             if (esc) {
+                if (q >= qlimit)
+                    goto overflow;
                 *q++ = '\\';
                 esc = false;
             } else
@@ -79,11 +84,15 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
             p++;
             continue;
         } else if (esc) {
-            if (*p == '"')
+            if (*p == '"') {
+                if (q >= qlimit)
+                    goto overflow;
                 *q++ = '"';
-            else if (*p == '\\')
+            } else if (*p == '\\') {
+                if (q >= qlimit)
+                    goto overflow;
                 *q++ = '\\';
-            else {
+            } else {
                 cli->sendMsg(500, "Unsupported escape sequence", false);
                 goto out;
             }
@@ -101,9 +110,13 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
             continue;
         }
 
+        if (q >= qlimit)
+            goto overflow;
         *q = *p++;
         if (!quote && *q == ' ') {
             *q = '\0';
+            if (argc >= CMD_ARGS_MAX)
+                goto overflow;
             argv[argc++] = strdup(tmp);
             memset(tmp, 0, sizeof(tmp));
             q = tmp;
@@ -112,6 +125,9 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
         q++;
     }
 
+    *q = '\0';
+    if (argc >= CMD_ARGS_MAX)
+        goto overflow;
     argv[argc++] = strdup(tmp);
 #if 0
     for (k = 0; k < argc; k++) {
@@ -123,7 +139,7 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
         cli->sendMsg(500, "Unclosed quotes error", false);
         goto out;
     }
-    
+
     for (i = mCommands->begin(); i != mCommands->end(); ++i) {
         FrameworkCommand *c = *i;
 
@@ -141,4 +157,8 @@ out:
     for (j = 0; j < argc; j++)
         free(argv[j]);
     return;
+
+overflow:
+    cli->sendMsg(500, "Command too long", false);
+    goto out;
 }
