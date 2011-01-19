@@ -15,6 +15,8 @@ int do_import(int nargs, char **args);
 int do_mkdir(int nargs, char **args);
 int do_mount(int nargs, char **args);
 int do_restart(int nargs, char **args);
+int do_rm(int nargs, char **args);
+int do_rmdir(int nargs, char **args);
 int do_setkey(int nargs, char **args);
 int do_setprop(int nargs, char **args);
 int do_setrlimit(int nargs, char **args);
@@ -59,6 +61,8 @@ enum {
     KEYWORD(oneshot,     OPTION,  0, 0)
     KEYWORD(onrestart,   OPTION,  0, 0)
     KEYWORD(restart,     COMMAND, 1, do_restart)
+    KEYWORD(rm,          COMMAND, 1, do_rm)
+    KEYWORD(rmdir,       COMMAND, 1, do_rmdir)
     KEYWORD(service,     SECTION, 0, 0)
     KEYWORD(setenv,      OPTION,  2, 0)
     KEYWORD(setkey,      COMMAND, 0, do_setkey)
