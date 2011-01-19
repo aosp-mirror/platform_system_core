@@ -34,7 +34,8 @@ bool NetlinkListener::onDataAvailable(SocketClient *cli)
     int socket = cli->getSocket();
     int count;
 
-    if ((count = recv(socket, mBuffer, sizeof(mBuffer), 0)) < 0) {
+    count = TEMP_FAILURE_RETRY(recv(socket, mBuffer, sizeof(mBuffer), 0));
+    if (count < 0) {
         SLOGE("recv failed (%s)", strerror(errno));
         return false;
     }
