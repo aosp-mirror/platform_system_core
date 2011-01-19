@@ -56,45 +56,76 @@ void NetlinkEvent::dump() {
     }
 }
 
+/* If the string between 'str' and 'end' begins with 'prefixlen' characters
+ * from the 'prefix' array, then return 'str + prefixlen', otherwise return
+ * NULL.
+ */
+static const char*
+has_prefix(const char* str, const char* end, const char* prefix, size_t prefixlen)
+{
+    if ((end-str) >= (ptrdiff_t)prefixlen && !memcmp(str, prefix, prefixlen))
+        return str + prefixlen;
+    else
+        return NULL;
+}
+
+/* Same as strlen(x) for constant string literals ONLY */
+#define CONST_STRLEN(x)  (sizeof(x)-1)
+
+/* Convenience macro to call has_prefix with a constant string literal  */
+#define HAS_CONST_PREFIX(str,end,prefix)  has_prefix((str),(end),prefix,CONST_STRLEN(prefix))
+
+
 bool NetlinkEvent::decode(char *buffer, int size) {
-    char *s = buffer;
-    char *end;
+    const char *s = buffer;
+    const char *end;
     int param_idx = 0;
     int i;
     int first = 1;
 
+    if (size == 0)
+        return false;
+
+    /* Ensure the buffer is zero-terminated, the code below depends on this */
+    buffer[size-1] = '\0';
+
     end = s + size;
     while (s < end) {
         if (first) {
-            char *p;
-            for (p = s; *p != '@'; p++);
-            p++;
-            mPath = strdup(p);
+            const char *p;
+            /* buffer is 0-terminated, no need to check p < end */
+            for (p = s; *p != '@'; p++) {
+                if (!*p) { /* no '@', should not happen */
+                    return false;
+                }
+            }
+            mPath = strdup(p+1);
             first = 0;
         } else {
-            if (!strncmp(s, "ACTION=", strlen("ACTION="))) {
-                char *a = s + strlen("ACTION=");
+            const char* a;
+            if ((a = HAS_CONST_PREFIX(s, end, "ACTION=")) != NULL) {
                 if (!strcmp(a, "add"))
                     mAction = NlActionAdd;
                 else if (!strcmp(a, "remove"))
                     mAction = NlActionRemove;
                 else if (!strcmp(a, "change"))
                     mAction = NlActionChange;
-            } else if (!strncmp(s, "SEQNUM=", strlen("SEQNUM=")))
-                mSeq = atoi(s + strlen("SEQNUM="));
-            else if (!strncmp(s, "SUBSYSTEM=", strlen("SUBSYSTEM=")))
-                mSubsystem = strdup(s + strlen("SUBSYSTEM="));
-            else
+            } else if ((a = HAS_CONST_PREFIX(s, end, "SEQNUM=")) != NULL) {
+                mSeq = atoi(a);
+            } else if ((a = HAS_CONST_PREFIX(s, end, "SUBSYSTEM=")) != NULL) {
+                mSubsystem = strdup(a);
+            } else if (param_idx < NL_PARAMS_MAX) {
                 mParams[param_idx++] = strdup(s);
+            }
         }
-        s+= strlen(s) + 1;
+        s += strlen(s) + 1;
     }
     return true;
 }
 
 const char *NetlinkEvent::findParam(const char *paramName) {
     size_t len = strlen(paramName);
-    for (int i = 0; mParams[i] && i < NL_PARAMS_MAX; ++i) {
+    for (int i = 0; i < NL_PARAMS_MAX && mParams[i] != NULL; ++i) {
         const char *ptr = mParams[i] + len;
         if (!strncmp(mParams[i], paramName, len) && *ptr == '=')
             return ++ptr;
