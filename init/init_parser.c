@@ -125,6 +125,8 @@ int lookup_keyword(const char *s)
         break;
     case 'r':
         if (!strcmp(s, "estart")) return K_restart;
+        if (!strcmp(s, "mdir")) return K_rmdir;
+        if (!strcmp(s, "m")) return K_rm;
         break;
     case 's':
         if (!strcmp(s, "ervice")) return K_service;
