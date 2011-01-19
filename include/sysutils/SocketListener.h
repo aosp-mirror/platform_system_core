@@ -30,7 +30,7 @@ class SocketListener {
     pthread_t               mThread;
 
 public:
-    SocketListener(const char *socketNames, bool listen);
+    SocketListener(const char *socketName, bool listen);
     SocketListener(int socketFd, bool listen);
 
     virtual ~SocketListener();
