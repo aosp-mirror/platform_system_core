@@ -361,7 +361,7 @@ service debuggerd /system/bin/debuggerd
     class main
 
 service ril-daemon /system/bin/rild
-    class core
+    class late_start
     socket rild stream 660 root radio
     socket rild-debug stream 660 radio system
     user root
