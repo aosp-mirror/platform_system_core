@@ -63,47 +63,7 @@
 # ZygoteInit class preloading ends:
 3030 boot_progress_preload_end (time|2|3)
 
-# dvm_gc_info: LIST (LONG, LONG, LONG)
-#
-# First LONG:
-#
-#    [63]    1
-#    [62-24] ASCII process identifier
-#    [23-12] GC time in ms
-#    [11- 0] Bytes freed
-#
-# Second LONG (aggregated heap info):
-#
-#    [63-62] 10
-#    [61-60] Reserved; must be zero
-#    [59-48] Objects freed
-#    [47-36] Actual size (current footprint)
-#    [35-24] Allowed size (current hard max)
-#    [23-12] Objects allocated
-#    [11- 0] Bytes allocated
-#
-# Third LONG (zygote heap info):
-#
-#    [63-62] 11
-#    [61-60] Reserved; must be zero
-#    [59-48] Soft limit
-#    [47-36] Actual size (current footprint)
-#    [35-24] Allowed size (current hard max)
-#    [23-12] Objects allocated
-#    [11- 0] Bytes allocated
-#
-# Fourth LONG:
-#
-#    [63-48] Reserved; must be zero
-#    [47-36] dlmallocFootprint
-#    [35-24] mallinfo: total allocated space
-#    [23-12] External byte limit
-#    [11- 0] External bytes allocated
-#
-# See HeapDebug.c
-#
-20001 dvm_gc_info (custom|2),(custom|2),(custom|2),(custom|2)
-20002 dvm_gc_madvise_info (total|1|2),(zygote|1|2)
+# Dalvik VM
 20003 dvm_lock_sample (process|3),(main|1|5),(thread|3),(time|1|3),(file|3),(line|1|5),(ownerfile|3),(ownerline|1|5),(sample_percent|1|6)
 
 75000 sqlite_mem_alarm_current (current|1|2)
