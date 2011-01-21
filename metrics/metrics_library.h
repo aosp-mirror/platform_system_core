@@ -72,9 +72,12 @@ class MetricsLibrary : public MetricsLibraryInterface {
 
   // Sends a user action to Chrome for transport to UMA and returns true on
   // success. This method results in the equivalent of an asynchronous
-  // non-blocking RPC to UserMetrics::RecordAction (see the comments in
-  // chrome/browser/chromeos/external_metrics.cc and
-  // chrome/browser/metrics/user_metrics.h on how to register new user actions).
+  // non-blocking RPC to UserMetrics::RecordAction.  The new metric must be
+  // added to chrome/tools/extract_actions.py in the Chromium repository, which
+  // should then be run to generate a hash for the new action.
+  //
+  // Until http://crosbug.com/11125 is fixed, the metric must also be added to
+  // chrome/browser/chromeos/external_metrics.cc.
   //
   // |action| is the user-generated event (e.g., "MuteKeyPressed").
   bool SendUserActionToUMA(const std::string& action);
