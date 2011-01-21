@@ -225,6 +225,7 @@ void SocketListener::runListener() {
                 }
                 pthread_mutex_unlock(&mClientsLock);
                 /* Destroy the client */
+                close(c->getSocket());
                 delete c;
             }
         }
