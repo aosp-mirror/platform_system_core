@@ -642,7 +642,7 @@ static void handle_crashing_process(int fd)
         goto done;
     }
 
-    sprintf(buf,"/proc/%d/task/%d", cr.pid, tid);
+    snprintf(buf, sizeof buf, "/proc/%d/task/%d", cr.pid, tid);
     if(stat(buf, &s)) {
         LOG("tid %d does not exist in pid %d. ignoring debug request\n",
             tid, cr.pid);
@@ -652,7 +652,19 @@ static void handle_crashing_process(int fd)
 
     XLOG("BOOM: pid=%d uid=%d gid=%d tid=%d\n", cr.pid, cr.uid, cr.gid, tid);
 
+    /* Note that at this point, the target thread's signal handler
+     * is blocked in a read() call. This gives us the time to PTRACE_ATTACH
+     * to it before it has a chance to really fault.
+     *
+     * After the attach, the thread is stopped, and we write to the file
+     * descriptor to ensure that it will run as soon as we call PTRACE_CONT
+     * below. See details in bionic/libc/linker/debugger.c, in function
+     * debugger_signal_handler().
+     */
     tid_attach_status = ptrace(PTRACE_ATTACH, tid, 0, 0);
+
+    TEMP_FAILURE_RETRY(write(fd, &tid, 1));
+
     if(tid_attach_status < 0) {
         LOG("ptrace attach failed: %s\n", strerror(errno));
         goto done;
