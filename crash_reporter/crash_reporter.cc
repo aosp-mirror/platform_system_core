@@ -53,21 +53,30 @@ static bool TouchFile(const FilePath &file_path) {
 }
 
 static void CountKernelCrash() {
+  // TODO(kmixter): We can remove this histogram as part of
+  // crosbug.com/11163.
   s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
                               kCrashKindKernel,
                               kCrashKindMax);
+  s_metrics_lib.SendCrashToUMA("kernel");
 }
 
 static void CountUncleanShutdown() {
+  // TODO(kmixter): We can remove this histogram as part of
+  // crosbug.com/11163.
   s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
                               kCrashKindUncleanShutdown,
                               kCrashKindMax);
+  s_metrics_lib.SendCrashToUMA("uncleanshutdown");
 }
 
 static void CountUserCrash() {
+  // TODO(kmixter): We can remove this histogram as part of
+  // crosbug.com/11163.
   s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
                               kCrashKindUser,
                               kCrashKindMax);
+  s_metrics_lib.SendCrashToUMA("user");
   std::string command = StringPrintf(
       "/usr/bin/dbus-send --type=signal --system / \"%s\" &",
       kUserCrashSignal);
