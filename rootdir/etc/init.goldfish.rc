@@ -28,6 +28,12 @@ on boot
     start goldfish-logcat
     start goldfish-setup
 
+    # This is a workaround for another bug in init and init.rc
+    # where the late_start class of services is never started
+    # properly when running an unencrypted /data partition.
+    #
+    start ril-daemon
+
     setprop ro.setupwizard.mode EMULATOR
 
 # enable Google-specific location features,
