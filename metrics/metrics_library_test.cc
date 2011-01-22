@@ -231,6 +231,23 @@ TEST_F(MetricsLibraryTest, SendUserActionToUMANotEnabled) {
   EXPECT_FALSE(file_util::PathExists(kTestUMAEventsFile));
 }
 
+TEST_F(MetricsLibraryTest, SendCrashToUMAEnabled) {
+  EXPECT_TRUE(lib_.SendCrashToUMA("kernel"));
+  char exp[100];
+  int len = sprintf(exp, "%c%c%c%ccrash%ckernel",
+                    0, 0, 0, 0, 0) + 1;
+  exp[0] = len;
+  char buf[100];
+  EXPECT_EQ(len, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+  EXPECT_EQ(0, memcmp(exp, buf, len));
+}
+
+TEST_F(MetricsLibraryTest, SendCrashToUMANotEnabled) {
+  SetMetricsEnabled(false);
+  EXPECT_TRUE(lib_.SendCrashToUMA("kernel"));
+  EXPECT_FALSE(file_util::PathExists(kTestUMAEventsFile));
+}
+
 class CMetricsLibraryTest : public testing::Test {
  protected:
   virtual void SetUp() {
@@ -294,6 +311,17 @@ TEST_F(CMetricsLibraryTest, SendUserActionToUMA) {
   char exp[kLen];
   sprintf(exp, "%c%c%c%cuseraction%cSomeKeyPressed", kLen, 0, 0, 0, 0);
   EXPECT_EQ(0, memcmp(exp, buf, kLen));
+}
+
+TEST_F(CMetricsLibraryTest, SendCrashToUMA) {
+  char buf[100];
+  char exp[100];
+  int len = sprintf(exp, "%c%c%c%ccrash%cuser", 0, 0, 0, 0, 0) + 1;
+  exp[0] = len;
+  EXPECT_TRUE(CMetricsLibrarySendCrashToUMA(lib_, "user"));
+  EXPECT_EQ(len, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+
+  EXPECT_EQ(0, memcmp(exp, buf, len));
 }
 
 int main(int argc, char** argv) {

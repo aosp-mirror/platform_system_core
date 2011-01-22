@@ -51,6 +51,14 @@ extern "C" int CMetricsLibrarySendUserActionToUMA(CMetricsLibrary handle,
   return lib->SendUserActionToUMA(std::string(action));
 }
 
+extern "C" int CMetricsLibrarySendCrashToUMA(CMetricsLibrary handle,
+                                            const char* crash_kind) {
+  MetricsLibrary* lib = reinterpret_cast<MetricsLibrary*>(handle);
+  if (lib == NULL)
+    return 0;
+  return lib->SendCrashToUMA(crash_kind);
+}
+
 extern "C" int CMetricsLibraryAreMetricsEnabled(CMetricsLibrary handle) {
   MetricsLibrary* lib = reinterpret_cast<MetricsLibrary*>(handle);
   if (lib == NULL)

@@ -82,6 +82,10 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // |action| is the user-generated event (e.g., "MuteKeyPressed").
   bool SendUserActionToUMA(const std::string& action);
 
+  // Sends a signal to UMA that a crash of the given |crash_kind|
+  // has occurred.  Used by UMA to generate stability statistics.
+  bool SendCrashToUMA(const char *crash_kind);
+
   // Sends to Autotest and returns true on success.
   static bool SendToAutotest(const std::string& name, int value);
 
