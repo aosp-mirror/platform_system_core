@@ -60,7 +60,7 @@ struct usb_host_context {
 
 struct usb_device {
     char dev_name[64];
-    unsigned char desc[256];
+    unsigned char desc[4096];
     int desc_length;
     int fd;
     int writeable;
@@ -204,6 +204,8 @@ struct usb_device *usb_device_open(const char *dev_name)
 {
     int fd, did_retry = 0, writeable = 1;
 
+    D("usb_device_open %s\n", dev_name);
+
 retry:
     fd = open(dev_name, O_RDWR);
     if (fd < 0) {
@@ -240,10 +242,12 @@ struct usb_device *usb_device_new(const char *dev_name, int fd)
     struct usb_device *device = calloc(1, sizeof(struct usb_device));
     int length;
 
+    D("usb_device_new %s fd: %d\n", dev_name, fd);
+
     if (lseek(fd, 0, SEEK_SET) != 0)
         goto failed;
     length = read(fd, device->desc, sizeof(device->desc));
-    D("usb_device_new read returned %d errno %d\n", fd, errno);
+    D("usb_device_new read returned %d errno %d\n", length, errno);
     if (length < 0)
         goto failed;
 
@@ -450,6 +454,17 @@ int usb_device_claim_interface(struct usb_device *device, unsigned int interface
 int usb_device_release_interface(struct usb_device *device, unsigned int interface)
 {
     return ioctl(device->fd, USBDEVFS_RELEASEINTERFACE, &interface);
+}
+
+int usb_device_connect_kernel_driver(struct usb_device *device,
+        unsigned int interface, int connect)
+{
+    struct usbdevfs_ioctl ctl;
+
+    ctl.ifno = interface;
+    ctl.ioctl_code = (connect ? USBDEVFS_CONNECT : USBDEVFS_DISCONNECT);
+    ctl.data = NULL;
+    return ioctl(device->fd, USBDEVFS_IOCTL, &ctl);
 }
 
 struct usb_request *usb_request_new(struct usb_device *dev,

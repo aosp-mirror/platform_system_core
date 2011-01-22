@@ -177,6 +177,13 @@ int usb_device_claim_interface(struct usb_device *device, unsigned int interface
 /* Releases the specified interface of a USB device */
 int usb_device_release_interface(struct usb_device *device, unsigned int interface);
 
+/* Requests the kernel to connect or disconnect its driver for the specified interface.
+ * This can be used to ask the kernel to disconnect its driver for a device
+ * so usb_device_claim_interface can claim it instead.
+ */
+int usb_device_connect_kernel_driver(struct usb_device *device,
+        unsigned int interface, int connect);
+
 /* Creates a new usb_request. */
 struct usb_request *usb_request_new(struct usb_device *dev,
         const struct usb_endpoint_descriptor *ep_desc);
