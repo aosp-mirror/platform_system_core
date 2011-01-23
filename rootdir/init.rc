@@ -379,11 +379,6 @@ service drm /system/bin/drmserver
     user drm
     group inet
 
-service drmio /system/bin/drmioserver
-    class main
-    user drmio
-    group drmio
-
 service media /system/bin/mediaserver
     class main
     user media
