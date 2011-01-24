@@ -1,3 +1,4 @@
+ifneq ($(BUILD_TINY_ANDROID),true)
 BUILD_LIBSYSUTILS := false
 ifneq ($(TARGET_SIMULATOR),true)
     BUILD_LIBSYSUTILS := true
@@ -32,4 +33,5 @@ endif
 
 include $(BUILD_SHARED_LIBRARY)
 
+endif
 endif
