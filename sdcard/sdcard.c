@@ -95,6 +95,12 @@ struct node {
     __u32 namelen;
 
     char *name;
+    /* If non-null, this is the real name of the file in the underlying storage.
+     * This may differ from the field "name" only by case.
+     * strlen(actual_name) will always equal strlen(name), so it is safe to use
+     * namelen for both fields.
+     */
+    char *actual_name;
 };
 
 struct fuse {
@@ -109,21 +115,13 @@ struct fuse {
     char rootpath[1024];
 };
 
-/* true if file names should be squashed to lower case */
-static int force_lower_case = 0;
 static unsigned uid = -1;
 static unsigned gid = -1;
 
 #define PATH_BUFFER_SIZE 1024
 
-static void normalize_name(char *name)
-{
-    if (force_lower_case) {
-        char ch;
-        while ((ch = *name) != 0)
-            *name++ = tolower(ch);
-    }
-}
+#define NO_CASE_SENSITIVE_MATCH 0
+#define CASE_SENSITIVE_MATCH 1
 
 /*
  * Get the real-life absolute path to a node.
@@ -131,8 +129,10 @@ static void normalize_name(char *name)
  *   buf: storage for returned string
  *   name: append this string to path if set
  */
-char *node_get_path(struct node *node, char *buf, const char *name)
+char *do_node_get_path(struct node *node, char *buf, const char *name, int match_case_insensitive)
 {
+    struct node *in_node = node;
+    const char *in_name = name;
     char *out = buf + PATH_BUFFER_SIZE - 1;
     int len;
     out[0] = 0;
@@ -143,7 +143,7 @@ char *node_get_path(struct node *node, char *buf, const char *name)
     }
 
     while (node) {
-        name = node->name;
+        name = (node->actual_name ? node->actual_name : node->name);
         len = node->namelen;
         node = node->parent;
     start:
@@ -151,12 +151,45 @@ char *node_get_path(struct node *node, char *buf, const char *name)
             return 0;
         out -= len;
         memcpy(out, name, len);
-        out --;
-        out[0] = '/';
+        /* avoid double slash at beginning of path */
+        if (out[0] != '/') {
+            out --;
+            out[0] = '/';
+        }
     }
 
-    normalize_name(out);
-    return out;
+    /* If we are searching for a file within node (rather than computing node's path)
+     * and fail, then we need to look for a case insensitive match.
+     */
+    if (in_name && match_case_insensitive && access(out, F_OK) != 0) {
+        char *path, buffer[PATH_BUFFER_SIZE];
+        DIR* dir;
+        struct dirent* entry;
+        path = do_node_get_path(in_node, buffer, NULL, NO_CASE_SENSITIVE_MATCH);
+        dir = opendir(path);
+        if (!dir) {
+            ERROR("opendir %s failed: %s", path, strerror(errno));
+            return out;
+        }
+
+        while ((entry = readdir(dir))) {
+            if (!strcasecmp(entry->d_name, in_name)) {
+                /* we have a match - replace the name */
+                len = strlen(in_name);
+                memcpy(buf + PATH_BUFFER_SIZE - len - 1, entry->d_name, len);
+                break;
+            }
+        }
+        closedir(dir);
+    }
+
+   return out;
+}
+
+char *node_get_path(struct node *node, char *buf, const char *name)
+{
+    /* We look for case insensitive matches by default */
+    return do_node_get_path(node, buf, name, CASE_SENSITIVE_MATCH);
 }
 
 void attr_from_stat(struct fuse_attr *attr, struct stat *s)
@@ -214,6 +247,41 @@ static void add_node_to_parent(struct node *node, struct node *parent) {
     parent->refcount++;
 }
 
+/* Check to see if our parent directory already has a file with a name
+ * that differs only by case.  If we find one, store it in the actual_name
+ * field so node_get_path will map it to this file in the underlying storage.
+ */
+static void node_find_actual_name(struct node *node)
+{
+    char *path, buffer[PATH_BUFFER_SIZE];
+    const char *node_name = node->name;
+    DIR* dir;
+    struct dirent* entry;
+
+    if (!node->parent) return;
+
+    path = node_get_path(node->parent, buffer, 0);
+    dir = opendir(path);
+    if (!dir) {
+        ERROR("opendir %s failed: %s", path, strerror(errno));
+        return;
+    }
+
+    while ((entry = readdir(dir))) {
+        const char *test_name = entry->d_name;
+        if (strcmp(test_name, node_name) && !strcasecmp(test_name, node_name)) {
+            /* we have a match - differs but only by case */
+            node->actual_name = strdup(test_name);
+            if (!node->actual_name) {
+                ERROR("strdup failed - out of memory\n");
+                exit(1);
+            }
+            break;
+        }
+    }
+    closedir(dir);
+}
+
 struct node *node_create(struct node *parent, const char *name, __u64 nid, __u64 gen)
 {
     struct node *node;
@@ -234,7 +302,7 @@ struct node *node_create(struct node *parent, const char *name, __u64 nid, __u64
     add_node_to_parent(node, parent);
     memcpy(node->name, name, namelen + 1);
     node->namelen = namelen;
-
+    node_find_actual_name(node);
     return node;
 }
 
@@ -246,6 +314,7 @@ static char *rename_node(struct node *node, const char *name)
         return 0;
     node->name = newname;
     memcpy(node->name, name, node->namelen + 1);
+    node_find_actual_name(node);
     return node->name;
 }
 
@@ -397,6 +466,7 @@ void node_release(struct node *node)
             /* TODO: remove debugging - poison memory */
         memset(node->name, 0xef, node->namelen);
         free(node->name);
+        free(node->actual_name);
         memset(node, 0xfc, sizeof(*node));
         free(node);
     }
@@ -456,75 +526,6 @@ void lookup_entry(struct fuse *fuse, struct node *node,
     out.attr_valid = 10;
     
     fuse_reply(fuse, unique, &out, sizeof(out));
-}
-
-static int name_needs_normalizing(const char* name) {
-    char ch;
-    while ((ch = *name++) != 0) {
-        if (ch != tolower(ch))
-            return 1;
-    }
-    return 0;
-}
-
-static void recursive_fix_files(const char* path) {
-    DIR* dir;
-    struct dirent* entry;
-    char pathbuf[PATH_MAX];
-    char oldpath[PATH_MAX];
-    int pathLength = strlen(path);
-    int pathRemaining;
-    char* fileSpot;
-
-    if (pathLength >= sizeof(pathbuf) - 1) {
-        ERROR("path too long: %s\n", path);
-        return;
-    }
-    strcpy(pathbuf, path);
-    if (pathbuf[pathLength - 1] != '/') {
-        pathbuf[pathLength++] = '/';
-    }
-    fileSpot = pathbuf + pathLength;
-    pathRemaining = sizeof(pathbuf) - pathLength - 1;
-
-    dir = opendir(path);
-    if (!dir) {
-        ERROR("opendir %s failed: %s", path, strerror(errno));
-        return;
-    }
-
-    while ((entry = readdir(dir))) {
-        const char* name = entry->d_name;
-        int nameLength;
-
-        // ignore "." and ".."
-        if (name[0] == '.' && (name[1] == 0 || (name[1] == '.' && name[2] == 0))) {
-            continue;
-        }
-
-       nameLength = strlen(name);
-       if (nameLength > pathRemaining) {
-            ERROR("path %s/%s too long\n", path, name);
-            continue;
-        }
-        strcpy(fileSpot, name);
-
-        // make sure owner and group are correct
-        chown(pathbuf, uid, gid);
-
-        if (name_needs_normalizing(name)) {
-            /* rename file to lower case file name */
-            strlcpy(oldpath, pathbuf, sizeof(oldpath));
-            normalize_name(pathbuf);
-            rename(oldpath, pathbuf);
-        }
-
-        if (entry->d_type == DT_DIR) {
-            /* recurse to subdirectories */
-            recursive_fix_files(pathbuf);
-        }
-    }
-    closedir(dir);
 }
 
 void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *data, unsigned len)
@@ -682,7 +683,16 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
             fuse_status(fuse, hdr->unique, -ENOENT);
             return;
         }
-        newpath = node_get_path(newparent, newbuffer, newname);
+        if (newparent == node) {
+            /* Special case for renaming a file where destination
+             * is same path differing only by case.
+             * In this case we don't want to look for a case insensitive match.
+             * This allows commands like "mv foo FOO" to work as expected.
+             */
+            newpath = do_node_get_path(newparent, newbuffer, newname, NO_CASE_SENSITIVE_MATCH);
+        } else {
+            newpath = node_get_path(newparent, newbuffer, newname);
+        }
 
         if (!remove_child(node, target->nid)) {
             ERROR("RENAME remove_child not found");
@@ -922,30 +932,19 @@ int main(int argc, char **argv)
     int fd;
     int res;
     const char *path = NULL;
-    int fix_files = 0;
     int i;
 
     for (i = 1; i < argc; i++) {
         char* arg = argv[i];
-        if (arg[0] == '-') {
-            if (!strcmp(arg, "-l")) {
-                force_lower_case = 1;
-            } else if (!strcmp(arg, "-f")) {
-                fix_files = 1;
-            } else {
-                return usage();
-            }
-        } else {
-            if (!path)
-                path = arg;
-            else if (uid == -1)
-                uid = strtoul(arg, 0, 10);
-            else if (gid == -1)
-                gid = strtoul(arg, 0, 10);
-            else {
-                ERROR("too many arguments\n");
-                return usage();
-            }
+        if (!path)
+            path = arg;
+        else if (uid == -1)
+            uid = strtoul(arg, 0, 10);
+        else if (gid == -1)
+            gid = strtoul(arg, 0, 10);
+        else {
+            ERROR("too many arguments\n");
+            return usage();
         }
     }
 
@@ -975,9 +974,6 @@ int main(int argc, char **argv)
         ERROR("cannot mount fuse filesystem (%d)\n", errno);
         return -1;
     }
-
-    if (fix_files)
-        recursive_fix_files(path);
 
     if (setgid(gid) < 0) {
         ERROR("cannot setgid!\n");
