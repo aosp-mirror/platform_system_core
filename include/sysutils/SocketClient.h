@@ -28,8 +28,12 @@ public:
     uid_t getUid() const { return mUid; }
     gid_t getGid() const { return mGid; }
 
+    // Send null-terminated C strings:
     int sendMsg(int code, const char *msg, bool addErrno);
     int sendMsg(const char *msg);
+
+    // Sending binary data:
+    int sendData(const void *data, int len);
 };
 
 typedef android::List<SocketClient *> SocketClientCollection;
