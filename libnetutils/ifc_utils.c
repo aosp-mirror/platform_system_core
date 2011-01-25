@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <net/if.h>
 
 #include <linux/if.h>
 #include <linux/if_ether.h>
@@ -126,7 +127,7 @@ int ifc_get_ifindex(const char *name, int *if_indexp)
     if(r < 0) return -1;
 
     *if_indexp = ifr.ifr_ifindex;
-    return 0;    
+    return 0;
 }
 
 static int ifc_set_flags(const char *name, unsigned set, unsigned clr)
@@ -163,7 +164,7 @@ int ifc_set_addr(const char *name, in_addr_t addr)
 
     ifc_init_ifr(name, &ifr);
     init_sockaddr_in(&ifr.ifr_addr, addr);
-    
+
     return ioctl(ifc_ctl_sock, SIOCSIFADDR, &ifr);
 }
 
@@ -184,7 +185,7 @@ int ifc_set_mask(const char *name, in_addr_t mask)
 
     ifc_init_ifr(name, &ifr);
     init_sockaddr_in(&ifr.ifr_addr, mask);
-    
+
     return ioctl(ifc_ctl_sock, SIOCSIFNETMASK, &ifr);
 }
 
@@ -200,7 +201,7 @@ int ifc_get_info(const char *name, in_addr_t *addr, in_addr_t *mask, unsigned *f
             *addr = ((struct sockaddr_in*) &ifr.ifr_addr)->sin_addr.s_addr;
         }
     }
-    
+
     if (mask != NULL) {
         if(ioctl(ifc_ctl_sock, SIOCGIFNETMASK, &ifr) < 0) {
             *mask = 0;
@@ -333,7 +334,7 @@ int ifc_reset_connections(const char *ifname)
     init_sockaddr_in(&ifr.ifr_addr, myaddr);
     result = ioctl(ifc_ctl_sock, SIOCKILLADDR,  &ifr);
     ifc_close();
-    
+
     return result;
 #else
     return 0;
