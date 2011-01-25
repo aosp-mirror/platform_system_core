@@ -113,18 +113,6 @@ int32_t android_atomic_or(int32_t value, volatile int32_t* addr) {
     return oldValue;
 }
 
-int32_t android_atomic_acquire_swap(int32_t value, volatile int32_t* addr) {
-    return android_atomic_release_swap(value, addr);
-}
-
-int32_t android_atomic_release_swap(int32_t value, volatile int32_t* addr) {
-    int32_t oldValue;
-    do {
-        oldValue = *addr;
-    } while (android_atomic_cmpxchg(oldValue, value, addr));
-    return oldValue;
-}
-
 int android_atomic_acquire_cmpxchg(int32_t oldvalue, int32_t newvalue,
                            volatile int32_t* addr) {
     return android_atomic_release_cmpxchg(oldValue, newValue, addr);
