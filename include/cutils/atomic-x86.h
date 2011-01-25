@@ -98,17 +98,6 @@ extern inline int android_atomic_release_cas(int32_t old_value,
     return android_atomic_cas(old_value, new_value, ptr);
 }
 
-extern inline int32_t android_atomic_swap(int32_t new_value,
-                                          volatile int32_t *ptr)
-{
-    __asm__ __volatile__ ("xchgl %1, %0"
-                          : "=r" (new_value)
-                          : "m" (*ptr), "0" (new_value)
-                          : "memory");
-    /* new_value now holds the old value of *ptr */
-    return new_value;
-}
-
 extern inline int32_t android_atomic_add(int32_t increment,
                                          volatile int32_t *ptr)
 {
