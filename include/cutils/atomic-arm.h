@@ -146,38 +146,6 @@ extern inline int android_atomic_release_cas(int32_t old_value,
 
 
 #if defined(__thumb__)
-extern int32_t android_atomic_swap(int32_t new_value,
-                                   volatile int32_t *ptr);
-#elif defined(__ARM_HAVE_LDREX_STREX)
-extern inline int32_t android_atomic_swap(int32_t new_value,
-                                          volatile int32_t *ptr)
-{
-    int32_t prev, status;
-    do {
-        __asm__ __volatile__ ("ldrex %0, [%3]\n"
-                              "strex %1, %4, [%3]"
-                              : "=&r" (prev), "=&r" (status), "+m" (*ptr)
-                              : "r" (ptr), "r" (new_value)
-                              : "cc");
-    } while (__builtin_expect(status != 0, 0));
-    android_memory_barrier();
-    return prev;
-}
-#else
-extern inline int32_t android_atomic_swap(int32_t new_value,
-                                          volatile int32_t *ptr)
-{
-    int32_t prev;
-    __asm__ __volatile__ ("swp %0, %2, [%3]"
-                          : "=&r" (prev), "+m" (*ptr)
-                          : "r" (new_value), "r" (ptr)
-                          : "cc");
-    android_memory_barrier();
-    return prev;
-}
-#endif
-
-#if defined(__thumb__)
 extern int32_t android_atomic_add(int32_t increment,
                                   volatile int32_t *ptr);
 #elif defined(__ARM_HAVE_LDREX_STREX)
