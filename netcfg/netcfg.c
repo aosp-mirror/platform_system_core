@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <netinet/ether.h>
+#include <netinet/if_ether.h>
 
 #include <netutils/ifc.h>
 #include <netutils/dhcp.h>
@@ -44,13 +45,14 @@ const char *ipaddr(in_addr_t addr)
 void usage(void)
 {
     fprintf(stderr,"usage: netcfg [<interface> {dhcp|up|down}]\n");
-    exit(1);    
+    exit(1);
 }
 
 int dump_interface(const char *name)
 {
     unsigned addr, mask, flags;
-    
+    unsigned char hwbuf[ETH_ALEN];
+
     if(ifc_get_info(name, &addr, &mask, &flags)) {
         return 0;
     }
@@ -58,7 +60,15 @@ int dump_interface(const char *name)
     printf("%-8s %s  ", name, flags & 1 ? "UP  " : "DOWN");
     printf("%-16s", ipaddr(addr));
     printf("%-16s", ipaddr(mask));
-    printf("0x%08x\n", flags);
+    printf("0x%08x ", flags);
+    if (!ifc_get_hwaddr(name, hwbuf)) {
+        int i;
+        for(i=0; i < (ETH_ALEN-1); i++)
+            printf("%02x:", hwbuf[i]);
+        printf("%02x\n", hwbuf[i]);
+    } else {
+        printf("\n");
+    }
     return 0;
 }
 
@@ -66,10 +76,10 @@ int dump_interfaces(void)
 {
     DIR *d;
     struct dirent *de;
-    
+
     d = opendir("/sys/class/net");
     if(d == 0) return -1;
-    
+
     while((de = readdir(d))) {
         if(de->d_name[0] == '.') continue;
         dump_interface(de->d_name);
