@@ -5,6 +5,8 @@
 #include "crash-reporter/user_collector.h"
 
 #include <grp.h>  // For struct group.
+#include <pcrecpp.h>
+#include <pcrecpp.h>
 #include <pwd.h>  // For struct passwd.
 #include <sys/types.h>  // For getpwuid_r, getgrnam_r, WEXITSTATUS.
 
@@ -18,8 +20,8 @@
 #include "gflags/gflags.h"
 
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
-DEFINE_bool(core2md_failure_test, false, "Core2md failure test");
-DEFINE_bool(directory_failure_test, false, "Spool directory failure test");
+DEFINE_bool(core2md_failure, false, "Core2md failure test");
+DEFINE_bool(directory_failure, false, "Spool directory failure test");
 DEFINE_string(filter_in, "",
               "Ignore all crashes but this for testing");
 #pragma GCC diagnostic error "-Wstrict-aliasing"
@@ -68,7 +70,11 @@ UserCollector::~UserCollector() {
 
 std::string UserCollector::GetPattern(bool enabled) const {
   if (enabled) {
-    return StringPrintf("|%s --signal=%%s --pid=%%p", our_path_.c_str());
+    // Combine the three crash attributes into one parameter to try to reduce
+    // the size of the invocation line for crash_reporter since the kernel
+    // has a fixed-sized (128B) buffer that it will truncate into.  Note that
+    // the kernel does not support quoted arguments in core_pattern.
+    return StringPrintf("|%s --user=%%p:%%s:%%e", our_path_.c_str());
   } else {
     return "core";
   }
@@ -169,12 +175,6 @@ bool UserCollector::GetIdFromStatus(const char *prefix,
   return true;
 }
 
-void UserCollector::LogCollectionError(const std::string &error_message) {
-  error_log_.append(error_message.c_str());
-  error_log_.append("\n");
-  logger_->LogError(error_message.c_str());
-}
-
 void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
                                               const std::string &exec) {
   FilePath crash_path;
@@ -184,12 +184,24 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
     return;
   }
   std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
+  std::string error_log = logger_->get_accumulator();
+  FilePath diag_log_path = GetCrashPath(crash_path, dump_basename, "diaglog");
+  if (GetLogContents(FilePath(kDefaultLogConfig), kCollectionErrorSignature,
+                     diag_log_path)) {
+    // We load the contents of diag_log into memory and append it to
+    // the error log.  We cannot just append to files because we need
+    // to always create new files to prevent attack.
+    std::string diag_log_contents;
+    file_util::ReadFileToString(diag_log_path, &diag_log_contents);
+    error_log.append(diag_log_contents);
+    file_util::Delete(diag_log_path, false);
+  }
   FilePath log_path = GetCrashPath(crash_path, dump_basename, "log");
   FilePath meta_path = GetCrashPath(crash_path, dump_basename, "meta");
   // We must use WriteNewFile instead of file_util::WriteFile as we do
   // not want to write with root access to a symlink that an attacker
   // might have created.
-  WriteNewFile(log_path, error_log_.data(), error_log_.length());
+  WriteNewFile(log_path, error_log.data(), error_log.length());
   AddCrashMetaData("sig", kCollectionErrorSignature);
   WriteCrashMetaData(meta_path, exec, log_path.value());
 }
@@ -197,14 +209,13 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
 bool UserCollector::CopyOffProcFiles(pid_t pid,
                                      const FilePath &container_dir) {
   if (!file_util::CreateDirectory(container_dir)) {
-    LogCollectionError(StringPrintf("Could not create %s",
-                                    container_dir.value().c_str()));
+    logger_->LogError("Could not create %s",
+                      container_dir.value().c_str());
     return false;
   }
   FilePath process_path = GetProcessPath(pid);
   if (!file_util::PathExists(process_path)) {
-    LogCollectionError(StringPrintf("Path %s does not exist",
-                                    process_path.value().c_str()));
+    logger_->LogError("Path %s does not exist", process_path.value().c_str());
     return false;
   }
   static const char *proc_files[] = {
@@ -217,8 +228,7 @@ bool UserCollector::CopyOffProcFiles(pid_t pid,
   for (unsigned i = 0; i < arraysize(proc_files); ++i) {
     if (!file_util::CopyFile(process_path.Append(proc_files[i]),
                              container_dir.Append(proc_files[i]))) {
-      LogCollectionError(StringPrintf("Could not copy %s file",
-                                      proc_files[i]));
+      logger_->LogError("Could not copy %s file", proc_files[i]);
       return false;
     }
   }
@@ -230,24 +240,27 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid,
                                              bool *out_of_capacity) {
   FilePath process_path = GetProcessPath(pid);
   std::string status;
-  if (FLAGS_directory_failure_test) {
-    LogCollectionError("Purposefully failing to create spool directory");
+  if (FLAGS_directory_failure) {
+    logger_->LogError("Purposefully failing to create spool directory");
     return false;
   }
   if (!file_util::ReadFileToString(process_path.Append("status"),
                                    &status)) {
-    LogCollectionError("Could not read status file");
+    logger_->LogError("Could not read status file");
+    logger_->LogInfo("Path %s FileExists: %d",
+                     process_path.value().c_str(),
+                     file_util::DirectoryExists(process_path));
     return false;
   }
   int process_euid;
   if (!GetIdFromStatus(kUserId, kIdEffective, status, &process_euid)) {
-    LogCollectionError("Could not find euid in status file");
+    logger_->LogError("Could not find euid in status file");
     return false;
   }
   if (!GetCreatedCrashDirectoryByEuid(process_euid,
                                       crash_file_path,
                                       out_of_capacity)) {
-    LogCollectionError("Could not create crash directory");
+    logger_->LogError("Could not create crash directory");
     return false;
   }
   return true;
@@ -260,7 +273,7 @@ bool UserCollector::CopyStdinToCoreFile(const FilePath &core_path) {
     return true;
   }
 
-  LogCollectionError("Could not write core file");
+  logger_->LogError("Could not write core file");
   // If the file system was full, make sure we remove any remnants.
   file_util::Delete(core_path, false);
   return false;
@@ -277,7 +290,7 @@ bool UserCollector::RunCoreToMinidump(const FilePath &core_path,
   core2md_arguments.push_back(procfs_directory.value().c_str());
   core2md_arguments.push_back(minidump_path.value().c_str());
 
-  if (FLAGS_core2md_failure_test) {
+  if (FLAGS_core2md_failure) {
     // To test how core2md errors are propagaged, cause an error
     // by forgetting a required argument.
     core2md_arguments.pop_back();
@@ -289,16 +302,16 @@ bool UserCollector::RunCoreToMinidump(const FilePath &core_path,
   std::string output;
   file_util::ReadFileToString(output_path, &output);
   if (errorlevel != 0) {
-    LogCollectionError(StringPrintf("Problem during %s [result=%d]: %s",
-                                    kCoreToMinidumpConverterPath,
-                                    errorlevel,
-                                    output.c_str()));
+    logger_->LogError("Problem during %s [result=%d]: %s",
+                      kCoreToMinidumpConverterPath,
+                      errorlevel,
+                      output.c_str());
     return false;
   }
 
   if (!file_util::PathExists(minidump_path)) {
-    LogCollectionError(StringPrintf("Minidump file %s was not created",
-                                    minidump_path.value().c_str()));
+    logger_->LogError("Minidump file %s was not created",
+                      minidump_path.value().c_str());
     return false;
   }
   return true;
@@ -334,7 +347,7 @@ bool UserCollector::ConvertAndEnqueueCrash(int pid,
                                            bool *out_of_capacity) {
   FilePath crash_path;
   if (!GetCreatedCrashDirectory(pid, &crash_path, out_of_capacity)) {
-    LogCollectionError("Unable to find/create process-specific crash path");
+    logger_->LogError("Unable to find/create process-specific crash path");
     return false;
   }
 
@@ -342,6 +355,10 @@ bool UserCollector::ConvertAndEnqueueCrash(int pid,
   // procfs entries and other temporary files used during conversion.
   FilePath container_dir = FilePath("/tmp").Append(
       StringPrintf("crash_reporter.%d", pid));
+  // Delete a pre-existing directory from crash reporter that may have
+  // been left around for diagnostics from a failed conversion attempt.
+  // If we don't, existing files can cause forking to fail.
+  file_util::Delete(container_dir, true);
   std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
   FilePath core_path = GetCrashPath(crash_path, dump_basename, "core");
   FilePath meta_path = GetCrashPath(crash_path, dump_basename, "meta");
@@ -376,15 +393,34 @@ bool UserCollector::ConvertAndEnqueueCrash(int pid,
   return true;
 }
 
-bool UserCollector::HandleCrash(int signal, int pid, const char *force_exec) {
+bool UserCollector::ParseCrashAttributes(const std::string &crash_attributes,
+                                         pid_t *pid, int *signal,
+                                         std::string *kernel_supplied_name) {
+  pcrecpp::RE re("(\\d+):(\\d+):(.*)");
+  return re.FullMatch(crash_attributes, pid, signal, kernel_supplied_name);
+}
+
+bool UserCollector::HandleCrash(const std::string &crash_attributes,
+                                const char *force_exec) {
   CHECK(initialized_);
+  int pid = 0;
+  int signal = 0;
+  std::string kernel_supplied_name;
+
+  if (!ParseCrashAttributes(crash_attributes, &pid, &signal,
+                            &kernel_supplied_name)) {
+    logger_->LogError("Invalid parameter: --user=%s", crash_attributes.c_str());
+    return false;
+  }
+
   std::string exec;
   if (force_exec) {
     exec.assign(force_exec);
   } else if (!GetExecutableBaseNameFromPid(pid, &exec)) {
-    // If for some reason we don't have the base name, avoid completely
-    // failing by indicating an unknown name.
-    exec = "unknown";
+    // If we cannot find the exec name, use the kernel supplied name.
+    // We don't always use the kernel's since it truncates the name to
+    // 16 characters.
+    exec = StringPrintf("supplied_%s", kernel_supplied_name.c_str());
   }
 
   // Allow us to test the crash reporting mechanism successfully even if
@@ -394,7 +430,7 @@ bool UserCollector::HandleCrash(int signal, int pid, const char *force_exec) {
        FLAGS_filter_in != exec)) {
     // We use a different format message to make it more obvious in tests
     // which crashes are test generated and which are real.
-    logger_->LogWarning("Ignoring crash from %s[%d] while filter_in=%s",
+    logger_->LogWarning("Ignoring crash from %s[%d] while filter_in=%s.",
                         exec.c_str(), pid, FLAGS_filter_in.c_str());
     return true;
   }
@@ -421,7 +457,11 @@ bool UserCollector::HandleCrash(int signal, int pid, const char *force_exec) {
 
     if (generate_diagnostics_) {
       bool out_of_capacity = false;
-      if (!ConvertAndEnqueueCrash(pid, exec, &out_of_capacity)) {
+      logger_->set_accumulating(true);
+      bool convert_and_enqueue_result =
+          ConvertAndEnqueueCrash(pid, exec, &out_of_capacity);
+      logger_->set_accumulating(false);
+      if (!convert_and_enqueue_result) {
         if (!out_of_capacity)
           EnqueueCollectionErrorLog(pid, exec);
         return false;

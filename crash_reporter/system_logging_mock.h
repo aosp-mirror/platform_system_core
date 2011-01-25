@@ -15,6 +15,8 @@ class SystemLoggingMock : public SystemLogging {
   virtual void LogInfo(const char *format, ...);
   virtual void LogWarning(const char *format, ...);
   virtual void LogError(const char *format, ...);
+  virtual void set_accumulating(bool value);
+  virtual std::string get_accumulator();
 
   const std::string &log() { return log_; }
 

@@ -54,7 +54,7 @@ class UserCollectorTest : public ::testing::Test {
 
 TEST_F(UserCollectorTest, EnableOK) {
   ASSERT_TRUE(collector_.Enable());
-  ExpectFileEquals("|/my/path --signal=%s --pid=%p", "test/core_pattern");
+  ExpectFileEquals("|/my/path --user=%p:%s:%e", "test/core_pattern");
   ExpectFileEquals("4", "test/core_pipe_limit");
   ASSERT_EQ(s_crashes, 0);
   ASSERT_NE(logging_.log().find("Enabling user crash handling"),
@@ -102,9 +102,36 @@ TEST_F(UserCollectorTest, DisableNoFileAccess) {
             std::string::npos);
 }
 
+TEST_F(UserCollectorTest, ParseCrashAttributes) {
+  pid_t pid;
+  int signal;
+  std::string exec_name;
+  EXPECT_TRUE(collector_.ParseCrashAttributes("123456:11:foobar",
+                                              &pid, &signal, &exec_name));
+  EXPECT_EQ(123456, pid);
+  EXPECT_EQ(11, signal);
+  EXPECT_EQ("foobar", exec_name);
+
+  EXPECT_FALSE(collector_.ParseCrashAttributes("123456:11",
+                                               &pid, &signal, &exec_name));
+
+  EXPECT_TRUE(collector_.ParseCrashAttributes("123456:11:exec:extra",
+                                              &pid, &signal, &exec_name));
+  EXPECT_EQ("exec:extra", exec_name);
+
+  EXPECT_FALSE(collector_.ParseCrashAttributes("12345p:11:foobar",
+                                              &pid, &signal, &exec_name));
+
+  EXPECT_FALSE(collector_.ParseCrashAttributes("123456:1 :foobar",
+                                              &pid, &signal, &exec_name));
+
+  EXPECT_FALSE(collector_.ParseCrashAttributes("123456::foobar",
+                                              &pid, &signal, &exec_name));
+}
+
 TEST_F(UserCollectorTest, HandleCrashWithoutMetrics) {
   s_metrics = false;
-  collector_.HandleCrash(10, 20, "foobar");
+  collector_.HandleCrash("20:10:ignored", "foobar");
   ASSERT_NE(std::string::npos,
             logging_.log().find(
                 "Received crash notification for foobar[20] sig 10"));
@@ -113,7 +140,7 @@ TEST_F(UserCollectorTest, HandleCrashWithoutMetrics) {
 
 TEST_F(UserCollectorTest, HandleNonChromeCrashWithMetrics) {
   s_metrics = true;
-  collector_.HandleCrash(2, 5, "chromeos-wm");
+  collector_.HandleCrash("5:2:ignored", "chromeos-wm");
   ASSERT_NE(std::string::npos,
             logging_.log().find(
                 "Received crash notification for chromeos-wm[5] sig 2"));
@@ -122,7 +149,7 @@ TEST_F(UserCollectorTest, HandleNonChromeCrashWithMetrics) {
 
 TEST_F(UserCollectorTest, HandleChromeCrashWithMetrics) {
   s_metrics = true;
-  collector_.HandleCrash(2, 5, "chrome");
+  collector_.HandleCrash("5:2:ignored", "chrome");
   ASSERT_NE(std::string::npos,
             logging_.log().find(
                 "Received crash notification for chrome[5] sig 2"));

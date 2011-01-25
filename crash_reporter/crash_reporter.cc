@@ -21,8 +21,7 @@ DEFINE_bool(clean_shutdown, false, "Signal clean shutdown");
 DEFINE_string(generate_kernel_signature, "",
               "Generate signature from given kcrash file");
 DEFINE_bool(crash_test, false, "Crash test");
-DEFINE_int32(pid, -1, "Crashing PID");
-DEFINE_int32(signal, -1, "Signal causing crash");
+DEFINE_string(user, "", "User crash info (pid:signal:exec_name)");
 DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
 #pragma GCC diagnostic error "-Wstrict-aliasing"
 
@@ -140,8 +139,7 @@ static int Initialize(KernelCollector *kernel_collector,
 
 static int HandleUserCrash(UserCollector *user_collector) {
   // Handle a specific user space crash.
-  CHECK(FLAGS_signal != -1) << "Signal must be set";
-  CHECK(FLAGS_pid != -1) << "PID must be set";
+  CHECK(!FLAGS_user.empty()) << "--user= must be set";
 
   // Make it possible to test what happens when we crash while
   // handling a crash.
@@ -151,7 +149,7 @@ static int HandleUserCrash(UserCollector *user_collector) {
   }
 
   // Handle the crash, get the name of the process from procfs.
-  if (!user_collector->HandleCrash(FLAGS_signal, FLAGS_pid, NULL)) {
+  if (!user_collector->HandleCrash(FLAGS_user, NULL)) {
     return 1;
   }
   return 0;

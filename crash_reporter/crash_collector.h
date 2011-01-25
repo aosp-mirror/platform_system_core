@@ -48,6 +48,15 @@ class CrashCollector {
   FRIEND_TEST(CrashCollectorTest, ReadKeyValueFile);
   FRIEND_TEST(CrashCollectorTest, Sanitize);
   FRIEND_TEST(CrashCollectorTest, WriteNewFile);
+  FRIEND_TEST(ForkExecAndPipeTest, Basic);
+  FRIEND_TEST(ForkExecAndPipeTest, NonZeroReturnValue);
+  FRIEND_TEST(ForkExecAndPipeTest, BadOutputFile);
+  FRIEND_TEST(ForkExecAndPipeTest, ExistingOutputFile);
+  FRIEND_TEST(ForkExecAndPipeTest, BadExecutable);
+  FRIEND_TEST(ForkExecAndPipeTest, StderrCaptured);
+  FRIEND_TEST(ForkExecAndPipeTest, NULLParam);
+  FRIEND_TEST(ForkExecAndPipeTest, NoParams);
+  FRIEND_TEST(ForkExecAndPipeTest, SegFaultHandling);
 
   // Set maximum enqueued crashes in a crash directory.
   static const int kMaxCrashDirectorySize;

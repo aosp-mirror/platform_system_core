@@ -110,7 +110,8 @@ int CrashCollector::ForkExecAndPipe(std::vector<const char *> &arguments,
   }
 
   if (pid == 0) {
-    int output_handle = HANDLE_EINTR(creat(output_file, 0600));
+    int output_handle = HANDLE_EINTR(
+        open(output_file, O_CREAT | O_WRONLY | O_TRUNC | O_EXCL, 0666));
     if (output_handle < 0) {
       logger_->LogError("Could not create %s: %d", output_file, errno);
       // Avoid exit() to avoid atexit handlers from parent.

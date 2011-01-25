@@ -67,69 +67,6 @@ TEST_F(CrashCollectorTest, WriteNewFile) {
                                     strlen(kBuffer)), 0);
 }
 
-TEST_F(CrashCollectorTest, ForkExecAndPipe) {
-  std::vector<const char *> args;
-  char output_file[] = "test/fork_out";
-
-  // Test basic call with stdout.
-  args.clear();
-  args.push_back(kBinEcho);
-  args.push_back("hello world");
-  EXPECT_EQ(0, collector_.ForkExecAndPipe(args, output_file));
-  ExpectFileEquals("hello world\n", output_file);
-  EXPECT_EQ("", logging_.log());
-
-  // Test non-zero return value
-  logging_.clear();
-  args.clear();
-  args.push_back(kBinFalse);
-  EXPECT_EQ(1, collector_.ForkExecAndPipe(args, output_file));
-  ExpectFileEquals("", output_file);
-  EXPECT_EQ("", logging_.log());
-
-  // Test bad output_file.
-  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, "/bad/path"));
-
-  // Test bad executable.
-  logging_.clear();
-  args.clear();
-  args.push_back("false");
-  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, output_file));
-
-  // Test stderr captured.
-  std::string contents;
-  logging_.clear();
-  args.clear();
-  args.push_back(kBinCp);
-  EXPECT_EQ(1, collector_.ForkExecAndPipe(args, output_file));
-  EXPECT_TRUE(file_util::ReadFileToString(FilePath(output_file),
-                                                   &contents));
-  EXPECT_NE(std::string::npos, contents.find("missing file operand"));
-  EXPECT_EQ("", logging_.log());
-
-  // NULL parameter.
-  logging_.clear();
-  args.clear();
-  args.push_back(NULL);
-  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args, output_file));
-  EXPECT_NE(std::string::npos,
-            logging_.log().find("Bad parameter"));
-
-  // No parameters.
-  args.clear();
-  EXPECT_EQ(127, collector_.ForkExecAndPipe(args, output_file));
-
-  // Segmentation faulting process.
-  logging_.clear();
-  args.clear();
-  args.push_back(kBinBash);
-  args.push_back("-c");
-  args.push_back("kill -SEGV $$");
-  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args, output_file));
-  EXPECT_NE(std::string::npos,
-            logging_.log().find("Process did not exit normally"));
-}
-
 TEST_F(CrashCollectorTest, Sanitize) {
   EXPECT_EQ("chrome", collector_.Sanitize("chrome"));
   EXPECT_EQ("CHROME", collector_.Sanitize("CHROME"));
@@ -389,10 +326,12 @@ TEST_F(CrashCollectorTest, GetLogContents) {
   ASSERT_TRUE(
       file_util::WriteFile(config_file,
                            kConfigContents, strlen(kConfigContents)));
+  file_util::Delete(FilePath(output_file), false);
   EXPECT_FALSE(collector_.GetLogContents(config_file,
                                          "barfoo",
                                          output_file));
   EXPECT_FALSE(file_util::PathExists(output_file));
+  file_util::Delete(FilePath(output_file), false);
   EXPECT_TRUE(collector_.GetLogContents(config_file,
                                         "foobar",
                                         output_file));
@@ -400,6 +339,86 @@ TEST_F(CrashCollectorTest, GetLogContents) {
   std::string contents;
   EXPECT_TRUE(file_util::ReadFileToString(output_file, &contents));
   EXPECT_EQ("hello world\n", contents);
+}
+
+class ForkExecAndPipeTest : public CrashCollectorTest {
+ public:
+  void SetUp() {
+    CrashCollectorTest::SetUp();
+    output_file_ = "test/fork_out";
+    file_util::Delete(FilePath(output_file_), false);
+  }
+
+  void TearDown() {
+    CrashCollectorTest::TearDown();
+  }
+
+ protected:
+  std::vector<const char *> args_;
+  const char *output_file_;
+};
+
+TEST_F(ForkExecAndPipeTest, Basic) {
+  args_.push_back(kBinEcho);
+  args_.push_back("hello world");
+  EXPECT_EQ(0, collector_.ForkExecAndPipe(args_, output_file_));
+  ExpectFileEquals("hello world\n", output_file_);
+  EXPECT_EQ("", logging_.log());
+}
+
+TEST_F(ForkExecAndPipeTest, NonZeroReturnValue) {
+  args_.push_back(kBinFalse);
+  EXPECT_EQ(1, collector_.ForkExecAndPipe(args_, output_file_));
+  ExpectFileEquals("", output_file_);
+  EXPECT_EQ("", logging_.log());
+}
+
+TEST_F(ForkExecAndPipeTest, BadOutputFile) {
+  EXPECT_EQ(127, collector_.ForkExecAndPipe(args_, "/bad/path"));
+}
+
+TEST_F(ForkExecAndPipeTest, ExistingOutputFile) {
+  args_.push_back(kBinEcho);
+  args_.push_back("hello world");
+  EXPECT_FALSE(file_util::PathExists(FilePath(output_file_)));
+  EXPECT_EQ(0, collector_.ForkExecAndPipe(args_, output_file_));
+  EXPECT_TRUE(file_util::PathExists(FilePath(output_file_)));
+  EXPECT_EQ(127, collector_.ForkExecAndPipe(args_, output_file_));
+}
+
+TEST_F(ForkExecAndPipeTest, BadExecutable) {
+  args_.push_back("false");
+  EXPECT_EQ(127, collector_.ForkExecAndPipe(args_, output_file_));
+}
+
+TEST_F(ForkExecAndPipeTest, StderrCaptured) {
+  std::string contents;
+  args_.push_back(kBinCp);
+  EXPECT_EQ(1, collector_.ForkExecAndPipe(args_, output_file_));
+  EXPECT_TRUE(file_util::ReadFileToString(FilePath(output_file_),
+                                                   &contents));
+  EXPECT_NE(std::string::npos, contents.find("missing file operand"));
+  EXPECT_EQ("", logging_.log());
+}
+
+TEST_F(ForkExecAndPipeTest, NULLParam) {
+  args_.push_back(NULL);
+  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args_, output_file_));
+  EXPECT_NE(std::string::npos,
+            logging_.log().find("Bad parameter"));
+}
+
+TEST_F(ForkExecAndPipeTest, NoParams) {
+  EXPECT_EQ(127, collector_.ForkExecAndPipe(args_, output_file_));
+}
+
+TEST_F(ForkExecAndPipeTest, SegFaultHandling) {
+  args_.push_back(kBinBash);
+  args_.push_back("-c");
+  args_.push_back("kill -SEGV $$");
+  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args_, output_file_));
+  EXPECT_NE(std::string::npos,
+            logging_.log().find("Process did not exit normally"));
 }
 
 int main(int argc, char **argv) {

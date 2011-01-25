@@ -33,3 +33,10 @@ void SystemLoggingMock::LogError(const char *format, ...) {
   log_ += "\n";
   va_end(vl);
 }
+
+void SystemLoggingMock::set_accumulating(bool value) {
+}
+
+std::string SystemLoggingMock::get_accumulator() {
+  return "";
+}

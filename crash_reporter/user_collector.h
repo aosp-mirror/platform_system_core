@@ -40,7 +40,8 @@ class UserCollector : public CrashCollector {
   bool Disable() { return SetUpInternal(false); }
 
   // Handle a specific user crash.  Returns true on success.
-  bool HandleCrash(int signal, int pid, const char *force_exec);
+  bool HandleCrash(const std::string &crash_attributes,
+                   const char *force_exec);
 
   // Set (override the default) core file pattern.
   void set_core_pattern_file(const std::string &pattern) {
@@ -61,6 +62,7 @@ class UserCollector : public CrashCollector {
   FRIEND_TEST(UserCollectorTest, GetProcessPath);
   FRIEND_TEST(UserCollectorTest, GetSymlinkTarget);
   FRIEND_TEST(UserCollectorTest, GetUserInfoFromName);
+  FRIEND_TEST(UserCollectorTest, ParseCrashAttributes);
 
   // Enumeration to pass to GetIdFromStatus.  Must match the order
   // that the kernel lists IDs in the status file.
@@ -109,15 +111,15 @@ class UserCollector : public CrashCollector {
                              const FilePath &minidump_path);
   bool ConvertAndEnqueueCrash(int pid, const std::string &exec_name,
                               bool *out_of_capacity);
+  bool ParseCrashAttributes(const std::string &crash_attributes,
+                            pid_t *pid, int *signal,
+                            std::string *kernel_supplied_name);
 
   bool generate_diagnostics_;
   std::string core_pattern_file_;
   std::string core_pipe_limit_file_;
   std::string our_path_;
   bool initialized_;
-
-  // String containing the current log of crash handling errors.
-  std::string error_log_;
 
   static const char *kUserId;
   static const char *kGroupId;
