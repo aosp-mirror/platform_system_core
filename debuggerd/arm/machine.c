@@ -32,6 +32,7 @@
 #include <cutils/properties.h>
 
 #include <linux/input.h>
+#include <linux/user.h>
 
 #include "utility.h"
 
