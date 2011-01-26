@@ -845,13 +845,19 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         struct dirent *de;
         struct dirhandle *h = id_to_ptr(req->fh);
         TRACE("READDIR %p\n", h);
+        if (req->offset == 0) {
+            /* rewinddir() might have been called above us, so rewind here too */
+            TRACE("calling rewinddir()\n");
+            rewinddir(h->d);
+        }
         de = readdir(h->d);
         if (!de) {
             fuse_status(fuse, hdr->unique, 0);
             return;
         }
         fde->ino = FUSE_UNKNOWN_INO;
-        fde->off = 0;
+        /* increment the offset so we can detect when rewinddir() seeks back to the beginning */
+        fde->off = req->offset + 1;
         fde->type = de->d_type;
         fde->namelen = strlen(de->d_name);
         memcpy(fde->name, de->d_name, fde->namelen + 1);
