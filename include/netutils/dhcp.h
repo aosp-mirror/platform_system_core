@@ -24,12 +24,12 @@ __BEGIN_DECLS
 
 extern int do_dhcp(char *iname);
 extern int dhcp_do_request(const char *ifname,
-                          in_addr_t *ipaddr,
-                          in_addr_t *gateway,
-                          in_addr_t *mask,
-                          in_addr_t *dns1,
-                          in_addr_t *dns2,
-                          in_addr_t *server,
+                          char *ipaddr,
+                          char *gateway,
+                          uint32_t *prefixLength,
+                          char *dns1,
+                          char *dns2,
+                          char *server,
                           uint32_t  *lease);
 extern int dhcp_stop(const char *ifname);
 extern int dhcp_release_lease(const char *ifname);

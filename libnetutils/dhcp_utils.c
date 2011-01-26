@@ -60,60 +60,60 @@ static int wait_for_property(const char *name, const char *desired_value, int ma
     return -1; /* failure */
 }
 
-static void fill_ip_info(const char *interface,
-                     in_addr_t *ipaddr,
-                     in_addr_t *gateway,
-                     in_addr_t *mask,
-                     in_addr_t *dns1,
-                     in_addr_t *dns2,
-                     in_addr_t *server,
+static int fill_ip_info(const char *interface,
+                     char *ipaddr,
+                     char *gateway,
+                     uint32_t *prefixLength,
+                     char *dns1,
+                     char *dns2,
+                     char *server,
                      uint32_t  *lease)
 {
     char prop_name[PROPERTY_KEY_MAX];
     char prop_value[PROPERTY_VALUE_MAX];
-    struct in_addr addr;
-    in_addr_t iaddr;
 
     snprintf(prop_name, sizeof(prop_name), "%s.%s.ipaddress", DHCP_PROP_NAME_PREFIX, interface);
-    if (property_get(prop_name, prop_value, NULL) && inet_aton(prop_value, &addr)) {
-        *ipaddr = addr.s_addr;
-    } else {
-        *ipaddr = 0;
-    }
+    property_get(prop_name, ipaddr, NULL);
+
     snprintf(prop_name, sizeof(prop_name), "%s.%s.gateway", DHCP_PROP_NAME_PREFIX, interface);
-    if (property_get(prop_name, prop_value, NULL) && inet_aton(prop_value, &addr)) {
-        *gateway = addr.s_addr;
-    } else {
-        *gateway = 0;
-    }
+    property_get(prop_name, gateway, NULL);
+
     snprintf(prop_name, sizeof(prop_name), "%s.%s.mask", DHCP_PROP_NAME_PREFIX, interface);
-    if (property_get(prop_name, prop_value, NULL) && inet_aton(prop_value, &addr)) {
-        *mask = addr.s_addr;
-    } else {
-        *mask = 0;
+    if (property_get(prop_name, prop_value, NULL)) {
+        int p;
+        // this conversion is v4 only, but this dhcp client is v4 only anyway
+        in_addr_t mask = ntohl(inet_addr(prop_value));
+        // Check netmask is a valid IP address.  ntohl gives NONE response (all 1's) for
+        // non 255.255.255.255 inputs.  if we get that value check if it is legit..
+        if (mask == INADDR_NONE && strcmp(prop_value, "255.255.255.255") != 0) {
+            snprintf(errmsg, sizeof(errmsg), "DHCP gave invalid net mask %s", prop_value);
+            return -1;
+        }
+        for (p = 0; p < 32; p++) {
+            if (mask == 0) break;
+            // check for non-contiguous netmask, e.g., 255.254.255.0
+            if ((mask & 0x80000000) == 0) {
+                snprintf(errmsg, sizeof(errmsg), "DHCP gave invalid net mask %s", prop_value);
+                return -1;
+            }
+            mask = mask << 1;
+        }
+        *prefixLength = p;
     }
     snprintf(prop_name, sizeof(prop_name), "%s.%s.dns1", DHCP_PROP_NAME_PREFIX, interface);
-    if (property_get(prop_name, prop_value, NULL) && inet_aton(prop_value, &addr)) {
-        *dns1 = addr.s_addr;
-    } else {
-        *dns1 = 0;
-    }
+    property_get(prop_name, dns1, NULL);
+
     snprintf(prop_name, sizeof(prop_name), "%s.%s.dns2", DHCP_PROP_NAME_PREFIX, interface);
-    if (property_get(prop_name, prop_value, NULL) && inet_aton(prop_value, &addr)) {
-        *dns2 = addr.s_addr;
-    } else {
-        *dns2 = 0;
-    }
+    property_get(prop_name, dns2, NULL);
+
     snprintf(prop_name, sizeof(prop_name), "%s.%s.server", DHCP_PROP_NAME_PREFIX, interface);
-    if (property_get(prop_name, prop_value, NULL) && inet_aton(prop_value, &addr)) {
-        *server = addr.s_addr;
-    } else {
-        *server = 0;
-    }
+    property_get(prop_name, server, NULL);
+
     snprintf(prop_name, sizeof(prop_name), "%s.%s.leasetime", DHCP_PROP_NAME_PREFIX, interface);
     if (property_get(prop_name, prop_value, NULL)) {
         *lease = atol(prop_value);
     }
+    return 0;
 }
 
 static const char *ipaddr_to_string(in_addr_t addr)
@@ -129,12 +129,12 @@ static const char *ipaddr_to_string(in_addr_t addr)
  * configuring the interface.
  */
 int dhcp_do_request(const char *interface,
-                    in_addr_t *ipaddr,
-                    in_addr_t *gateway,
-                    in_addr_t *mask,
-                    in_addr_t *dns1,
-                    in_addr_t *dns2,
-                    in_addr_t *server,
+                    char *ipaddr,
+                    char *gateway,
+                    uint32_t *prefixLength,
+                    char *dns1,
+                    char *dns2,
+                    char *server,
                     uint32_t  *lease)
 {
     char result_prop_name[PROPERTY_KEY_MAX];
@@ -175,8 +175,13 @@ int dhcp_do_request(const char *interface,
     }
     if (strcmp(prop_value, "ok") == 0) {
         char dns_prop_name[PROPERTY_KEY_MAX];
-        fill_ip_info(interface, ipaddr, gateway, mask, dns1, dns2, server, lease);
-        /* copy the dhcp.XXX.dns properties to net.XXX.dns */
+        if (fill_ip_info(interface, ipaddr, gateway, prefixLength, dns1, dns2, server, lease)
+                == -1) {
+            return -1;
+        }
+
+        /* copy dns data to system properties - TODO - remove this after we have async
+         * notification of renewal's */
         snprintf(dns_prop_name, sizeof(dns_prop_name), "net.%s.dns1", interface);
         property_set(dns_prop_name, *dns1 ? ipaddr_to_string(*dns1) : "");
         snprintf(dns_prop_name, sizeof(dns_prop_name), "net.%s.dns2", interface);
