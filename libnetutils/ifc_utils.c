@@ -189,6 +189,23 @@ int ifc_set_mask(const char *name, in_addr_t mask)
     return ioctl(ifc_ctl_sock, SIOCSIFNETMASK, &ifr);
 }
 
+int ifc_get_addr(const char *name, in_addr_t *addr)
+{
+    struct ifreq ifr;
+    int ret = 0;
+
+    ifc_init_ifr(name, &ifr);
+    if (addr != NULL) {
+        ret = ioctl(ifc_ctl_sock, SIOCGIFADDR, &ifr);
+        if (ret < 0) {
+            *addr = 0;
+        } else {
+            *addr = ((struct sockaddr_in*) &ifr.ifr_addr)->sin_addr.s_addr;
+        }
+    }
+    return ret;
+}
+
 int ifc_get_info(const char *name, in_addr_t *addr, in_addr_t *mask, unsigned *flags)
 {
     struct ifreq ifr;
@@ -312,11 +329,20 @@ int ifc_enable(const char *ifname)
 
 int ifc_disable(const char *ifname)
 {
+    unsigned addr, count;
     int result;
 
     ifc_init();
     result = ifc_down(ifname);
+
     ifc_set_addr(ifname, 0);
+    for (count=0, addr=1;((addr != 0) && (count < 255)); count++) {
+       if (ifc_get_addr(ifname, &addr) < 0)
+            break;
+       if (addr)
+          ifc_set_addr(ifname, 0);
+    }
+
     ifc_close();
     return result;
 }
