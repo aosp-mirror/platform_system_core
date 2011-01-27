@@ -332,30 +332,6 @@ const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_
     return (struct usb_device_descriptor*)device->desc;
 }
 
-int usb_device_send_control(struct usb_device *device,
-                            int requestType,
-                            int request,
-                            int value,
-                            int index,
-                            int length,
-                            void* buffer)
-{
-    struct usbdevfs_ctrltransfer  ctrl;
-
-    // this usually requires read/write permission
-    if (!usb_device_reopen_writeable(device))
-        return -1;
-
-    memset(&ctrl, 0, sizeof(ctrl));
-    ctrl.bRequestType = requestType;
-    ctrl.bRequest = request;
-    ctrl.wValue = value;
-    ctrl.wIndex = index;
-    ctrl.wLength = length;
-    ctrl.data = buffer;
-    return ioctl(device->fd, USBDEVFS_CONTROL, &ctrl);
-}
-
 char* usb_device_get_string(struct usb_device *device, int id)
 {
     char string[256];
@@ -368,18 +344,18 @@ char* usb_device_get_string(struct usb_device *device, int id)
     memset(languages, 0, sizeof(languages));
 
     // read list of supported languages
-    result = usb_device_send_control(device,
+    result = usb_device_control_transfer(device,
             USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE, USB_REQ_GET_DESCRIPTOR,
-            (USB_DT_STRING << 8) | 0, 0, sizeof(languages), languages);
+            (USB_DT_STRING << 8) | 0, 0, languages, sizeof(languages), 0);
     if (result > 0)
         languageCount = (result - 2) / 2;
 
     for (i = 1; i <= languageCount; i++) {
         memset(buffer, 0, sizeof(buffer));
 
-        result = usb_device_send_control(device,
+        result = usb_device_control_transfer(device,
                 USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE, USB_REQ_GET_DESCRIPTOR,
-                (USB_DT_STRING << 8) | id, languages[i], sizeof(buffer), buffer);
+                (USB_DT_STRING << 8) | id, languages[i], buffer, sizeof(buffer), 0);
         if (result > 0) {
             int i;
             // skip first word, and copy the rest to the string, changing shorts to bytes.
@@ -465,6 +441,48 @@ int usb_device_connect_kernel_driver(struct usb_device *device,
     ctl.ioctl_code = (connect ? USBDEVFS_CONNECT : USBDEVFS_DISCONNECT);
     ctl.data = NULL;
     return ioctl(device->fd, USBDEVFS_IOCTL, &ctl);
+}
+
+int usb_device_control_transfer(struct usb_device *device,
+                            int requestType,
+                            int request,
+                            int value,
+                            int index,
+                            void* buffer,
+                            int length,
+                            unsigned int timeout)
+{
+    struct usbdevfs_ctrltransfer  ctrl;
+
+    // this usually requires read/write permission
+    if (!usb_device_reopen_writeable(device))
+        return -1;
+
+    memset(&ctrl, 0, sizeof(ctrl));
+    ctrl.bRequestType = requestType;
+    ctrl.bRequest = request;
+    ctrl.wValue = value;
+    ctrl.wIndex = index;
+    ctrl.wLength = length;
+    ctrl.data = buffer;
+    ctrl.timeout = timeout;
+    return ioctl(device->fd, USBDEVFS_CONTROL, &ctrl);
+}
+
+int usb_device_bulk_transfer(struct usb_device *device,
+                            int endpoint,
+                            void* buffer,
+                            int length,
+                            unsigned int timeout)
+{
+    struct usbdevfs_bulktransfer  ctrl;
+
+    memset(&ctrl, 0, sizeof(ctrl));
+    ctrl.ep = endpoint;
+    ctrl.len = length;
+    ctrl.data = buffer;
+    ctrl.timeout = timeout;
+    return ioctl(device->fd, USBDEVFS_BULK, &ctrl);
 }
 
 struct usb_request *usb_request_new(struct usb_device *dev,
