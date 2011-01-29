@@ -210,15 +210,28 @@ on boot
 
 # Define the memory thresholds at which the above process classes will
 # be killed.  These numbers are in pages (4k).
-    setprop ro.FOREGROUND_APP_MEM 2048
-    setprop ro.VISIBLE_APP_MEM 3072
-    setprop ro.PERCEPTIBLE_APP_MEM 4096
-    setprop ro.HEAVY_WEIGHT_APP_MEM 4096
-    setprop ro.SECONDARY_SERVER_MEM 6144
-    setprop ro.BACKUP_APP_MEM 6144
-    setprop ro.HOME_APP_MEM 6144
-    setprop ro.HIDDEN_APP_MEM 7168
-    setprop ro.EMPTY_APP_MEM 8192
+    # These are currently tuned for tablets with approx 1GB RAM.
+    setprop ro.FOREGROUND_APP_MEM 8192
+    setprop ro.VISIBLE_APP_MEM 10240
+    setprop ro.PERCEPTIBLE_APP_MEM 12288
+    setprop ro.HEAVY_WEIGHT_APP_MEM 12288
+    setprop ro.SECONDARY_SERVER_MEM 14336
+    setprop ro.BACKUP_APP_MEM 14336
+    setprop ro.HOME_APP_MEM 14336
+    setprop ro.HIDDEN_APP_MEM 16384
+    setprop ro.EMPTY_APP_MEM 20480
+
+    # Old values for phones.  Should probably be adjusted up for the next
+    # phone version.
+    #setprop ro.FOREGROUND_APP_MEM 2048
+    #setprop ro.VISIBLE_APP_MEM 3072
+    #setprop ro.PERCEPTIBLE_APP_MEM 4096
+    #setprop ro.HEAVY_WEIGHT_APP_MEM 4096
+    #setprop ro.SECONDARY_SERVER_MEM 6144
+    #setprop ro.BACKUP_APP_MEM 6144
+    #setprop ro.HOME_APP_MEM 6144
+    #setprop ro.HIDDEN_APP_MEM 7168
+    #setprop ro.EMPTY_APP_MEM 8192
 
 # Write value must be consistent with the above properties.
 # Note that the driver only supports 6 slots, so we have combined some of
