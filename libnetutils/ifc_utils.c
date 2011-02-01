@@ -51,6 +51,33 @@ static int ifc_ctl_sock = -1;
 static int ifc_ctl_sock6 = -1;
 void printerr(char *fmt, ...);
 
+in_addr_t prefixLengthToIpv4Netmask(int prefix_length)
+{
+    in_addr_t mask = 0;
+
+    // C99 (6.5.7): shifts of 32 bits have undefined results
+    if (prefix_length <= 0 || prefix_length > 32) {
+        return 0;
+    }
+
+    mask = ~mask << (32 - prefix_length);
+    mask = htonl(mask);
+
+    return mask;
+}
+
+int ipv4NetmaskToPrefixLength(in_addr_t mask)
+{
+    mask = ntohl(mask);
+    int prefixLength = 0;
+    uint32_t m = (uint32_t)mask;
+    while (m & 0x80000000) {
+        prefixLength++;
+        m = m << 1;
+    }
+    return prefixLength;
+}
+
 static const char *ipaddr_to_string(in_addr_t addr)
 {
     struct in_addr in_addr;
@@ -179,10 +206,13 @@ int ifc_set_hwaddr(const char *name, const void *ptr)
     return ioctl(ifc_ctl_sock, SIOCSIFHWADDR, &ifr);
 }
 
-int ifc_set_mask(const char *name, in_addr_t mask)
+int ifc_set_prefixLength(const char *name, int prefixLength)
 {
     struct ifreq ifr;
+    // TODO - support ipv6
+    if (prefixLength > 32 || prefixLength < 0) return -1;
 
+    in_addr_t mask = prefixLengthToIpv4Netmask(prefixLength);
     ifc_init_ifr(name, &ifr);
     init_sockaddr_in(&ifr.ifr_addr, mask);
 
@@ -206,7 +236,7 @@ int ifc_get_addr(const char *name, in_addr_t *addr)
     return ret;
 }
 
-int ifc_get_info(const char *name, in_addr_t *addr, in_addr_t *mask, unsigned *flags)
+int ifc_get_info(const char *name, in_addr_t *addr, int *prefixLength, unsigned *flags)
 {
     struct ifreq ifr;
     ifc_init_ifr(name, &ifr);
@@ -219,11 +249,12 @@ int ifc_get_info(const char *name, in_addr_t *addr, in_addr_t *mask, unsigned *f
         }
     }
 
-    if (mask != NULL) {
+    if (prefixLength != NULL) {
         if(ioctl(ifc_ctl_sock, SIOCGIFNETMASK, &ifr) < 0) {
-            *mask = 0;
+            *prefixLength = 0;
         } else {
-            *mask = ((struct sockaddr_in*) &ifr.ifr_addr)->sin_addr.s_addr;
+            *prefixLength = ipv4NetmaskToPrefixLength((int)
+                    ((struct sockaddr_in*) &ifr.ifr_addr)->sin_addr.s_addr);
         }
     }
 
@@ -238,21 +269,6 @@ int ifc_get_info(const char *name, in_addr_t *addr, in_addr_t *mask, unsigned *f
     return 0;
 }
 
-in_addr_t get_ipv4_netmask(int prefix_length)
-{
-    in_addr_t mask = 0;
-
-    // C99 (6.5.7): shifts of 32 bits have undefined results
-    if (prefix_length == 0) {
-        return 0;
-    }
-
-    mask = ~mask << (32 - prefix_length);
-    mask = htonl(mask);
-
-    return mask;
-}
-
 int ifc_add_ipv4_route(const char *ifname, struct in_addr dst, int prefix_length,
       struct in_addr gw)
 {
@@ -265,7 +281,7 @@ int ifc_add_ipv4_route(const char *ifname, struct in_addr dst, int prefix_length
     rt.rt_dst.sa_family = AF_INET;
     rt.rt_dev = (void*) ifname;
 
-    netmask = get_ipv4_netmask(prefix_length);
+    netmask = prefixLengthToIpv4Netmask(prefix_length);
     init_sockaddr_in(&rt.rt_genmask, netmask);
     init_sockaddr_in(&rt.rt_dst, dst.s_addr);
     rt.rt_flags = RTF_UP;
@@ -499,7 +515,7 @@ int ifc_remove_default_route(const char *ifname)
 int
 ifc_configure(const char *ifname,
         in_addr_t address,
-        in_addr_t netmask,
+        uint32_t prefixLength,
         in_addr_t gateway,
         in_addr_t dns1,
         in_addr_t dns2) {
@@ -518,8 +534,8 @@ ifc_configure(const char *ifname,
         ifc_close();
         return -1;
     }
-    if (ifc_set_mask(ifname, netmask)) {
-        printerr("failed to set netmask %s: %s\n", ipaddr_to_string(netmask), strerror(errno));
+    if (ifc_set_prefixLength(ifname, prefixLength)) {
+        printerr("failed to set prefixLength %d: %s\n", prefixLength, strerror(errno));
         ifc_close();
         return -1;
     }
