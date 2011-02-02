@@ -682,9 +682,11 @@ void start_device_log(void)
     dup2(fd, 1);
     dup2(fd, 2);
     fprintf(stderr,"--- adb starting (pid %d) ---\n", getpid());
+    adb_close(fd);
 
     fd = unix_open("/dev/null", O_RDONLY);
     dup2(fd, 0);
+    adb_close(fd);
 }
 #endif
 
