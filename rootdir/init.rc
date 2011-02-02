@@ -178,8 +178,6 @@ on post-fs-data
 
     # create directory for DRM plug-ins
     mkdir /data/drm 0774 drm drm
-    mkdir /data/drm/plugins 0774 drm drm
-    mkdir /data/drm/plugins/native 0774 drm drm
 
     # If there is no fs-post-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
