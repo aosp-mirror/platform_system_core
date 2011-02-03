@@ -309,6 +309,7 @@ static int create_subprocess(const char *cmd, const char *arg0, const char *arg1
         dup2(pts, 1);
         dup2(pts, 2);
 
+        adb_close(pts);
         adb_close(ptm);
 
         execl(cmd, cmd, arg0, arg1, NULL);
