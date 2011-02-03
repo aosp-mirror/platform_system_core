@@ -38,7 +38,8 @@ extern int ifc_reset_connections(const char *ifname);
 
 extern int ifc_get_addr(const char *name, in_addr_t *addr);
 extern int ifc_set_addr(const char *name, in_addr_t addr);
-extern int ifc_set_mask(const char *name, in_addr_t mask);
+extern int ifc_get_prefixLength(const char *name, uint32_t *prefixLength);
+extern int ifc_set_prefixLength(const char *name, uint32_t prefixLength);
 extern int ifc_set_hwaddr(const char *name, const void *ptr);
 
 /* This function is deprecated. Use ifc_add_route instead. */
@@ -57,7 +58,7 @@ extern int ifc_get_info(const char *name, in_addr_t *addr, in_addr_t *mask,
                         in_addr_t *flags);
 
 extern int ifc_configure(const char *ifname, in_addr_t address,
-                         in_addr_t netmask, in_addr_t gateway,
+                         uint32_t prefixLength, in_addr_t gateway,
                          in_addr_t dns1, in_addr_t dns2);
 
 __END_DECLS

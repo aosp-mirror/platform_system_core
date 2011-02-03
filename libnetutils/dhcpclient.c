@@ -93,6 +93,8 @@ const char *ipaddr(in_addr_t addr)
     return inet_ntoa(in_addr);
 }
 
+extern int ipv4NetmaskToPrefixLength(in_addr_t mask);
+
 typedef struct dhcp_info dhcp_info;
 
 struct dhcp_info {
@@ -100,7 +102,7 @@ struct dhcp_info {
 
     uint32_t ipaddr;
     uint32_t gateway;
-    uint32_t netmask;
+    uint32_t prefixLength;
 
     uint32_t dns1;
     uint32_t dns2;
@@ -111,13 +113,13 @@ struct dhcp_info {
 
 dhcp_info last_good_info;
 
-void get_dhcp_info(uint32_t *ipaddr, uint32_t *gateway, uint32_t *mask,
+void get_dhcp_info(uint32_t *ipaddr, uint32_t *gateway, uint32_t *prefixLength,
                    uint32_t *dns1, uint32_t *dns2, uint32_t *server,
                    uint32_t *lease)
 {
     *ipaddr = last_good_info.ipaddr;
     *gateway = last_good_info.gateway;
-    *mask = last_good_info.netmask;
+    *prefixLength = last_good_info.prefixLength;
     *dns1 = last_good_info.dns1;
     *dns2 = last_good_info.dns2;
     *server = last_good_info.serveraddr;
@@ -127,7 +129,7 @@ void get_dhcp_info(uint32_t *ipaddr, uint32_t *gateway, uint32_t *mask,
 static int dhcp_configure(const char *ifname, dhcp_info *info)
 {
     last_good_info = *info;
-    return ifc_configure(ifname, info->ipaddr, info->netmask, info->gateway,
+    return ifc_configure(ifname, info->ipaddr, info->prefixLength, info->gateway,
                          info->dns1, info->dns2);
 }
 
@@ -153,8 +155,7 @@ void dump_dhcp_info(dhcp_info *info)
             dhcp_type_to_name(info->type), info->type);
     strcpy(addr, ipaddr(info->ipaddr));
     strcpy(gway, ipaddr(info->gateway));
-    strcpy(mask, ipaddr(info->netmask));
-    LOGD("ip %s gw %s mask %s", addr, gway, mask);
+    LOGD("ip %s gw %s prefixLength %d", addr, gway, info->prefixLength);
     if (info->dns1) LOGD("dns1: %s", ipaddr(info->dns1));
     if (info->dns2) LOGD("dns2: %s", ipaddr(info->dns2));
     LOGD("server %s, lease %d seconds",
@@ -196,7 +197,7 @@ int decode_dhcp_msg(dhcp_msg *msg, int len, dhcp_info *info)
         }
         switch(opt) {
         case OPT_SUBNET_MASK:
-            if (optlen >= 4) memcpy(&info->netmask, x, 4);
+            if (optlen >= 4) info->prefixLength = ipv4NetmaskToPrefixLength((int)x);
             break;
         case OPT_GATEWAY:
             if (optlen >= 4) memcpy(&info->gateway, x, 4);
