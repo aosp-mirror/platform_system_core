@@ -499,6 +499,7 @@ jdwp_control_init( JdwpControl*  control,
 
     /* only wait for incoming connections */
     fdevent_add(control->fde, FDE_READ);
+    close_on_exec(s);
 
     D("jdwp control socket started (%d)\n", control->listen_socket);
     return 0;

@@ -683,6 +683,7 @@ int adb_commandline(int argc, char **argv)
     char buf[4096];
     int no_daemon = 0;
     int is_daemon = 0;
+    int is_server = 0;
     int persist = 0;
     int r;
     int quote;
@@ -719,7 +720,9 @@ int adb_commandline(int argc, char **argv)
 
     /* modifiers and flags */
     while(argc > 0) {
-        if(!strcmp(argv[0],"nodaemon")) {
+        if(!strcmp(argv[0],"server")) {
+            is_server = 1;
+        } else if(!strcmp(argv[0],"nodaemon")) {
             no_daemon = 1;
         } else if (!strcmp(argv[0], "fork-server")) {
             /* this is a special flag used only when the ADB client launches the ADB Server */
@@ -766,7 +769,7 @@ int adb_commandline(int argc, char **argv)
     adb_set_transport(ttype, serial);
     adb_set_tcp_specifics(server_port);
 
-    if ((argc > 0) && (!strcmp(argv[0],"server"))) {
+    if (is_server) {
         if (no_daemon || is_daemon) {
             r = adb_main(is_daemon, server_port);
         } else {
@@ -838,12 +841,24 @@ top:
         return adb_send_emulator_command(argc, argv);
     }
 
-    if(!strcmp(argv[0], "shell")) {
+    if(!strcmp(argv[0], "shell") || !strcmp(argv[0], "hell")) {
         int r;
         int fd;
 
+        char h = (argv[0][0] == 'h');
+
+        if (h) {
+            printf("\x1b[41;33m");
+            fflush(stdout);
+        }
+
         if(argc < 2) {
-            return interactive_shell();
+            r = interactive_shell();
+            if (h) {
+                printf("\x1b[0m");
+                fflush(stdout);
+            }
+            return r;
         }
 
         snprintf(buf, sizeof buf, "shell:%s", argv[1]);
@@ -877,6 +892,10 @@ top:
                 adb_sleep_ms(1000);
                 do_cmd(ttype, serial, "wait-for-device", 0);
             } else {
+                if (h) {
+                    printf("\x1b[0m");
+                    fflush(stdout);
+                }
                 return r;
             }
         }
