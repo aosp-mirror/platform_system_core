@@ -50,7 +50,7 @@ struct symbol_table *symbol_table_create(const char *filename)
     int length;
     char *base;
 
-    XLOG("Creating symbol table for %s\n", filename);
+    XLOG2("Creating symbol table for %s\n", filename);
     int fd = open(filename, O_RDONLY);
 
     if(fd < 0) {
@@ -126,7 +126,7 @@ struct symbol_table *symbol_table_create(const char *filename)
                 dynsymbol_count++;
             }
         }
-        XLOG("Dynamic Symbol count: %d\n", dynsymbol_count);
+        XLOG2("Dynamic Symbol count: %d\n", dynsymbol_count);
     }
 
     if (sym_idx != -1) {
@@ -139,7 +139,7 @@ struct symbol_table *symbol_table_create(const char *filename)
                 symbol_count++;
             }
         }
-        XLOG("Symbol count: %d\n", symbol_count);
+        XLOG2("Symbol count: %d\n", symbol_count);
     }
 
     // Now, create an entry in our symbol table structure for each symbol...
@@ -160,7 +160,7 @@ struct symbol_table *symbol_table_create(const char *filename)
                 table->symbols[j].name = strdup(dynstr + dynsyms[i].st_name);
                 table->symbols[j].addr = dynsyms[i].st_value;
                 table->symbols[j].size = dynsyms[i].st_size;
-                XLOG("name: %s, addr: %x, size: %x\n",
+                XLOG2("name: %s, addr: %x, size: %x\n",
                     table->symbols[j].name, table->symbols[j].addr, table->symbols[j].size);
                 j++;
             }
@@ -176,7 +176,7 @@ struct symbol_table *symbol_table_create(const char *filename)
                 table->symbols[j].name = strdup(str + syms[i].st_name);
                 table->symbols[j].addr = syms[i].st_value;
                 table->symbols[j].size = syms[i].st_size;
-                XLOG("name: %s, addr: %x, size: %x\n",
+                XLOG2("name: %s, addr: %x, size: %x\n",
                     table->symbols[j].name, table->symbols[j].addr, table->symbols[j].size);
                 j++;
             }
