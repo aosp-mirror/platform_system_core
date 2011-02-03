@@ -387,7 +387,13 @@ static __inline__  int  adb_creat(const char*  path, int  mode)
 
 static __inline__ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrlen)
 {
-    return  accept( serverfd, addr, addrlen );
+    int fd;
+
+    fd = accept(serverfd, addr, addrlen);
+    if (fd >= 0)
+        close_on_exec(fd);
+
+    return fd;
 }
 
 #undef   accept

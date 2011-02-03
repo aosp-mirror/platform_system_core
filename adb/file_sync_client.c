@@ -57,9 +57,9 @@ static void END()
     if (t == 0)  /* prevent division by 0 :-) */
         t = 1000000;
 
-    fprintf(stderr,"%lld KB/s (%d bytes in %lld.%03llds)\n",
+    fprintf(stderr,"%lld KB/s (%lld bytes in %lld.%03llds)\n",
             ((((long long) total_bytes) * 1000000LL) / t) / 1024LL,
-            total_bytes, (t / 1000000LL), (t % 1000000LL) / 1000LL);
+            (long long) total_bytes, (t / 1000000LL), (t % 1000000LL) / 1000LL);
 }
 
 void sync_quit(int fd)

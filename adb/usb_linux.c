@@ -149,7 +149,7 @@ static void find_usb_device(const char *base,
 
 //        DBGX("[ scanning %s ]\n", busname);
         while((de = readdir(devdir))) {
-            unsigned char devdesc[256];
+            unsigned char devdesc[4096];
             unsigned char* bufptr = devdesc;
             unsigned char* bufend;
             struct usb_device_descriptor* device;
