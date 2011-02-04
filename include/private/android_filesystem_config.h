@@ -147,6 +147,8 @@ static struct fs_path_config android_dirs[] = {
     { 00771, AID_SHELL,  AID_SHELL,  "data/local" },
     { 01771, AID_SYSTEM, AID_MISC,   "data/misc" },
     { 00770, AID_DHCP,   AID_DHCP,   "data/misc/dhcp" },
+    { 00775, AID_MEDIA_RW, AID_MEDIA_RW, "data/media" },
+    { 00775, AID_MEDIA_RW, AID_MEDIA_RW, "data/media/Music" },
     { 00771, AID_SYSTEM, AID_SYSTEM, "data" },
     { 00750, AID_ROOT,   AID_SHELL,  "sbin" },
     { 00755, AID_ROOT,   AID_SHELL,  "system/bin" },
@@ -181,6 +183,7 @@ static struct fs_path_config android_files[] = {
     { 00555, AID_ROOT,      AID_ROOT,      "system/etc/ppp/*" },
     { 00555, AID_ROOT,      AID_ROOT,      "system/etc/rc.*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    "data/app/*" },
+    { 00644, AID_MEDIA_RW,  AID_MEDIA_RW,  "data/media/*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    "data/app-private/*" },
     { 00644, AID_APP,       AID_APP,       "data/data/*" },
         /* the following two files are INTENTIONALLY set-gid and not set-uid.
