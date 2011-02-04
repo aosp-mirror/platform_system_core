@@ -207,6 +207,11 @@ trigger <event>
    Trigger an event.  Used to queue an action from another
    action.
 
+wait <path> [ <timeout> ]
+  Poll for the existence of the given file and return when found,
+  or the timeout has been reached. If timeout is not specified it
+  currently defaults to five seconds.
+
 write <path> <string> [ <string> ]*
    Open the file at <path> and write one or more strings
    to it with write(2)
