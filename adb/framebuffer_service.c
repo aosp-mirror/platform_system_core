@@ -80,20 +80,82 @@ void framebuffer_service(int fd, void *cookie)
     if(readx(fd_screencap, &h, 4)) goto done;
     if(readx(fd_screencap, &f, 4)) goto done;
 
-    /* for now always assume RGBX_8888 format */
     fbinfo.version = DDMS_RAWIMAGE_VERSION;
-    fbinfo.bpp = 32;
-    fbinfo.size = w * h * 4;
-    fbinfo.width = w;
-    fbinfo.height = h;
-    fbinfo.red_offset = 0;
-    fbinfo.red_length = 8;
-    fbinfo.green_offset = 8;
-    fbinfo.green_length = 8;
-    fbinfo.blue_offset = 16;
-    fbinfo.blue_length = 8;
-    fbinfo.alpha_offset = 24;
-    fbinfo.alpha_length = 8;
+    /* see hardware/hardware.h */
+    switch (f) {
+        case 1: /* RGBA_8888 */
+            fbinfo.bpp = 32;
+            fbinfo.size = w * h * 4;
+            fbinfo.width = w;
+            fbinfo.height = h;
+            fbinfo.red_offset = 0;
+            fbinfo.red_length = 8;
+            fbinfo.green_offset = 8;
+            fbinfo.green_length = 8;
+            fbinfo.blue_offset = 16;
+            fbinfo.blue_length = 8;
+            fbinfo.alpha_offset = 24;
+            fbinfo.alpha_length = 8;
+            break;
+        case 2: /* RGBX_8888 */
+            fbinfo.bpp = 32;
+            fbinfo.size = w * h * 4;
+            fbinfo.width = w;
+            fbinfo.height = h;
+            fbinfo.red_offset = 0;
+            fbinfo.red_length = 8;
+            fbinfo.green_offset = 8;
+            fbinfo.green_length = 8;
+            fbinfo.blue_offset = 16;
+            fbinfo.blue_length = 8;
+            fbinfo.alpha_offset = 24;
+            fbinfo.alpha_length = 0;
+            break;
+        case 3: /* RGB_888 */
+            fbinfo.bpp = 24;
+            fbinfo.size = w * h * 3;
+            fbinfo.width = w;
+            fbinfo.height = h;
+            fbinfo.red_offset = 0;
+            fbinfo.red_length = 8;
+            fbinfo.green_offset = 8;
+            fbinfo.green_length = 8;
+            fbinfo.blue_offset = 16;
+            fbinfo.blue_length = 8;
+            fbinfo.alpha_offset = 24;
+            fbinfo.alpha_length = 0;
+            break;
+        case 4: /* RGB_565 */
+            fbinfo.bpp = 16;
+            fbinfo.size = w * h * 2;
+            fbinfo.width = w;
+            fbinfo.height = h;
+            fbinfo.red_offset = 11;
+            fbinfo.red_length = 5;
+            fbinfo.green_offset = 5;
+            fbinfo.green_length = 6;
+            fbinfo.blue_offset = 0;
+            fbinfo.blue_length = 5;
+            fbinfo.alpha_offset = 0;
+            fbinfo.alpha_length = 0;
+            break;
+        case 5: /* BGRA_8888 */
+            fbinfo.bpp = 32;
+            fbinfo.size = w * h * 4;
+            fbinfo.width = w;
+            fbinfo.height = h;
+            fbinfo.red_offset = 16;
+            fbinfo.red_length = 8;
+            fbinfo.green_offset = 8;
+            fbinfo.green_length = 8;
+            fbinfo.blue_offset = 0;
+            fbinfo.blue_length = 8;
+            fbinfo.alpha_offset = 24;
+            fbinfo.alpha_length = 8;
+           break;
+        default:
+            goto done;
+    }
 
     /* write header */
     if(writex(fd, &fbinfo, sizeof(fbinfo))) goto done;
