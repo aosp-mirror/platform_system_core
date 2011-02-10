@@ -69,6 +69,7 @@
 /dev/qmi2                 0640   radio      radio
 /dev/bus/usb/*            0660   root       usb
 /dev/mtp_usb              0660   root       mtp
+/dev/usb_accessory        0660   root       usb
 
 # CDMA radio interface MUX
 /dev/ts0710mux*           0640   radio      radio
@@ -78,4 +79,4 @@
 # sysfs properties
 /sys/devices/virtual/input/input*   enable      0660  root   input
 /sys/devices/virtual/input/input*   poll_delay  0660  root   input
-
+/sys/devices/virtual/usb_composite/*   enable      0664  root   system
