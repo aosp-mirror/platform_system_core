@@ -148,10 +148,13 @@ static int HandleUserCrash(UserCollector *user_collector) {
     return 0;
   }
 
+  // Accumulate logs to help in diagnosing failures during user collection.
+  s_system_log.set_accumulating(true);
   // Handle the crash, get the name of the process from procfs.
-  if (!user_collector->HandleCrash(FLAGS_user, NULL)) {
+  bool handled = user_collector->HandleCrash(FLAGS_user, NULL);
+  s_system_log.set_accumulating(false);
+  if (!handled)
     return 1;
-  }
   return 0;
 }
 

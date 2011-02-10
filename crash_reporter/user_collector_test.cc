@@ -158,6 +158,17 @@ TEST_F(UserCollectorTest, HandleChromeCrashWithMetrics) {
   ASSERT_EQ(s_crashes, 0);
 }
 
+TEST_F(UserCollectorTest, HandleSuppliedChromeCrashWithMetrics) {
+  s_metrics = true;
+  collector_.HandleCrash("0:2:chrome", NULL);
+  ASSERT_NE(std::string::npos,
+            logging_.log().find(
+                "Received crash notification for supplied_chrome[0] sig 2"));
+  ASSERT_NE(std::string::npos,
+            logging_.log().find("(ignoring - chrome crash)"));
+  ASSERT_EQ(s_crashes, 0);
+}
+
 TEST_F(UserCollectorTest, GetProcessPath) {
   FilePath path = collector_.GetProcessPath(100);
   ASSERT_EQ("/proc/100", path.value());
@@ -167,7 +178,9 @@ TEST_F(UserCollectorTest, GetSymlinkTarget) {
   FilePath result;
   ASSERT_FALSE(collector_.GetSymlinkTarget(FilePath("/does_not_exist"),
                                            &result));
-
+  ASSERT_NE(std::string::npos,
+            logging_.log().find(
+                "Readlink failed on /does_not_exist with 2"));
   std::string long_link;
   for (int i = 0; i < 50; ++i)
     long_link += "0123456789";
@@ -183,6 +196,29 @@ TEST_F(UserCollectorTest, GetSymlinkTarget) {
     ASSERT_TRUE(collector_.GetSymlinkTarget(FilePath(kLink), &result));
     ASSERT_EQ(this_link, result.value());
   }
+}
+
+TEST_F(UserCollectorTest, GetExecutableBaseNameFromPid) {
+  std::string base_name;
+  EXPECT_FALSE(collector_.GetExecutableBaseNameFromPid(0, &base_name));
+  EXPECT_NE(std::string::npos,
+            logging_.log().find(
+                "Readlink failed on /proc/0/exe with 2"));
+  EXPECT_NE(std::string::npos,
+            logging_.log().find(
+                "GetSymlinkTarget failed - Path "
+                "/proc/0 DirectoryExists: 0"));
+  EXPECT_NE(std::string::npos,
+            logging_.log().find(
+                "stat /proc/0/exe failed: -1 2"));
+
+  logging_.clear();
+  pid_t my_pid = getpid();
+  EXPECT_TRUE(collector_.GetExecutableBaseNameFromPid(my_pid, &base_name));
+  EXPECT_EQ(std::string::npos,
+            logging_.log().find(
+                "Readlink failed"));
+  EXPECT_EQ("user_collector_test", base_name);
 }
 
 TEST_F(UserCollectorTest, GetIdFromStatus) {

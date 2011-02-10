@@ -114,6 +114,9 @@ bool UserCollector::GetSymlinkTarget(const FilePath &symlink,
     buffer.reset(new char[max_size + 1]);
     ssize_t size = readlink(symlink.value().c_str(), buffer.get(), max_size);
     if (size < 0) {
+      int saved_errno = errno;
+      logger_->LogError("Readlink failed on %s with %d",
+                        symlink.value().c_str(), saved_errno);
       return false;
     }
     buffer[size] = 0;
@@ -136,8 +139,25 @@ bool UserCollector::GetSymlinkTarget(const FilePath &symlink,
 bool UserCollector::GetExecutableBaseNameFromPid(uid_t pid,
                                                  std::string *base_name) {
   FilePath target;
-  if (!GetSymlinkTarget(GetProcessPath(pid).Append("exe"), &target))
+  FilePath process_path = GetProcessPath(pid);
+  FilePath exe_path = process_path.Append("exe");
+  if (!GetSymlinkTarget(exe_path, &target)) {
+    logger_->LogInfo("GetSymlinkTarget failed - Path %s DirectoryExists: %d",
+                     process_path.value().c_str(),
+                     file_util::DirectoryExists(process_path));
+    // Try to further diagnose exe readlink failure cause.
+    struct stat buf;
+    int stat_result = stat(exe_path.value().c_str(), &buf);
+    int saved_errno = errno;
+    if (stat_result < 0) {
+      logger_->LogInfo("stat %s failed: %d %d", exe_path.value().c_str(),
+                       stat_result, saved_errno);
+    } else {
+      logger_->LogInfo("stat %s succeeded: st_mode=%d",
+                       exe_path.value().c_str(), buf.st_mode);
+    }
     return false;
+  }
   *base_name = target.BaseName().value();
   return true;
 }
@@ -247,7 +267,7 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid,
   if (!file_util::ReadFileToString(process_path.Append("status"),
                                    &status)) {
     logger_->LogError("Could not read status file");
-    logger_->LogInfo("Path %s FileExists: %d",
+    logger_->LogInfo("Path %s DirectoryExists: %d",
                      process_path.value().c_str(),
                      file_util::DirectoryExists(process_path));
     return false;
@@ -444,7 +464,7 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
   // Treat Chrome crashes as if the user opted-out.  We stop counting Chrome
   // crashes towards user crashes, so user crashes really mean non-Chrome
   // user-space crashes.
-  if (exec == "chrome") {
+  if (exec == "chrome" || exec == "supplied_chrome") {
     feedback = false;
     handling_string = "ignoring - chrome crash";
   }
@@ -457,10 +477,8 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
 
     if (generate_diagnostics_) {
       bool out_of_capacity = false;
-      logger_->set_accumulating(true);
       bool convert_and_enqueue_result =
           ConvertAndEnqueueCrash(pid, exec, &out_of_capacity);
-      logger_->set_accumulating(false);
       if (!convert_and_enqueue_result) {
         if (!out_of_capacity)
           EnqueueCollectionErrorLog(pid, exec);
