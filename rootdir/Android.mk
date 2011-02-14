@@ -11,6 +11,10 @@ ifeq ($(TARGET_PRODUCT),generic)
 copy_from += etc/vold.fstab
 endif
 
+ifeq ($(TARGET_PRODUCT),full_x86)
+copy_from += etc/vold.fstab
+endif
+
 # the /system/etc/init.goldfish.sh is needed to enable emulator support
 # in the system image. In theory, we don't need these for -user builds
 # which are device-specific. However, these builds require at the moment
