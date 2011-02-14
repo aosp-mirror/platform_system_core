@@ -47,6 +47,7 @@ struct usb_request
     int actual_length;
     int max_packet_size;
     void *private_data; /* struct usbdevfs_urb* */
+    int endpoint;
     void *client_data;  /* free for use by client */
 };
 
@@ -185,7 +186,9 @@ int usb_device_control_transfer(struct usb_device *device,
                             int length,
                             unsigned int timeout);
 
-/* Reads or writes on a bulk endpoint */
+/* Reads or writes on a bulk endpoint.
+ * Returns number of bytes transferred, or negative value for error.
+ */
 int usb_device_bulk_transfer(struct usb_device *device,
                             int endpoint,
                             void* buffer,

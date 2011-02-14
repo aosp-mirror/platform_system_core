@@ -512,6 +512,7 @@ struct usb_request *usb_request_new(struct usb_device *dev,
     req->dev = dev;
     req->max_packet_size = __le16_to_cpu(ep_desc->wMaxPacketSize);
     req->private_data = urb;
+    req->endpoint = urb->endpoint;
     urb->usercontext = req;
 
     return req;
