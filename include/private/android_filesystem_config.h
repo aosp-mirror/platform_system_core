@@ -53,7 +53,7 @@
 #define AID_KEYSTORE      1017  /* keystore subsystem */
 #define AID_USB           1018  /* USB devices */
 #define AID_DRM           1019  /* DRM server */
-#define AID_AVAILABLE     1020  /* available for use */
+#define AID_KEYCHAIN      1020  /* keychain service */
 #define AID_GPS           1021  /* GPS daemon */
 #define AID_UNUSED1       1022  /* deprecated, DO NOT USE */
 #define AID_MEDIA_RW      1023  /* internal media storage write access */
@@ -101,7 +101,7 @@ static const struct android_id_info android_ids[] = {
     { "install",   AID_INSTALL, },
     { "media",     AID_MEDIA, },
     { "drm",       AID_DRM, },
-    { "available", AID_AVAILABLE, },
+    { "keychain",  AID_KEYCHAIN, },
     { "nfc",       AID_NFC, },
     { "shell",     AID_SHELL, },
     { "cache",     AID_CACHE, },
