@@ -50,16 +50,16 @@ void usage(void)
 
 int dump_interface(const char *name)
 {
-    unsigned addr, mask, flags;
+    unsigned addr, prefixLength, flags;
     unsigned char hwbuf[ETH_ALEN];
 
-    if(ifc_get_info(name, &addr, &mask, &flags)) {
+    if(ifc_get_info(name, &addr, &prefixLength, &flags)) {
         return 0;
     }
 
     printf("%-8s %s  ", name, flags & 1 ? "UP  " : "DOWN");
-    printf("%-16s", ipaddr(addr));
-    printf("%-16s", ipaddr(mask));
+    printf("%40s", ipaddr(addr));
+    printf("/%-4d", prefixLength);
     printf("0x%08x ", flags);
     if (!ifc_get_hwaddr(name, hwbuf)) {
         int i;
