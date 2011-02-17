@@ -196,28 +196,37 @@ void lsof_dumpinfo(pid_t pid)
 
 int lsof_main(int argc, char *argv[])
 {
-    DIR *dir = opendir("/proc");
-    if (dir == NULL) {
-        fprintf(stderr, "Couldn't open /proc\n");
-        return -1;
+    long int pid = 0;
+    char* endptr;
+    if (argc == 2) {
+        pid = strtol(argv[1], &endptr, 10);
     }
 
     print_header();
 
-    struct dirent* de;
-    while ((de = readdir(dir))) {
-        if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
-            continue;
-
-        // Only inspect directories that are PID numbers
-        char* endptr;
-        long int pid = strtol(de->d_name, &endptr, 10);
-        if (*endptr != '\0')
-            continue;
-
+    if (pid) {
         lsof_dumpinfo(pid);
+    } else {
+        DIR *dir = opendir("/proc");
+        if (dir == NULL) {
+            fprintf(stderr, "Couldn't open /proc\n");
+            return -1;
+        }
+
+        struct dirent* de;
+        while ((de = readdir(dir))) {
+            if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
+                continue;
+
+            // Only inspect directories that are PID numbers
+                pid = strtol(de->d_name, &endptr, 10);
+            if (*endptr != '\0')
+                continue;
+
+            lsof_dumpinfo(pid);
+        }
+        closedir(dir);
     }
-    closedir(dir);
 
     return 0;
 }
