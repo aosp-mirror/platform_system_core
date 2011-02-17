@@ -29,7 +29,8 @@ class MetricsDaemon {
   ~MetricsDaemon();
 
   // Initializes.
-  void Init(bool testing, MetricsLibraryInterface* metrics_lib);
+  void Init(bool testing, MetricsLibraryInterface* metrics_lib,
+            const char* diskstats_path);
 
   // Does all the work. If |run_as_daemon| is true, daemonizes by
   // forking.
@@ -52,6 +53,7 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, ProcessUserCrash);
   FRIEND_TEST(MetricsDaemonTest, ReportCrashesDailyFrequency);
   FRIEND_TEST(MetricsDaemonTest, ReportDailyUse);
+  FRIEND_TEST(MetricsDaemonTest, ReportDiskStats);
   FRIEND_TEST(MetricsDaemonTest, ReportKernelCrashInterval);
   FRIEND_TEST(MetricsDaemonTest, ReportUncleanShutdownInterval);
   FRIEND_TEST(MetricsDaemonTest, ReportUserCrashInterval);
@@ -75,6 +77,12 @@ class MetricsDaemon {
 #define STATE(name, capname) kSessionState ## capname,
 #include "session_states.h"
     kNumberSessionStates
+  };
+
+  // State for disk stats collector callback.
+  enum DiskStatsState {
+    kDiskStatsShort,    // short wait before short interval collection
+    kDiskStatsLong,     // final wait before new collection
   };
 
   // Data record for aggregating daily usage.
@@ -111,6 +119,15 @@ class MetricsDaemon {
   static const char kMetricUserCrashesDailyName[];
   static const char kMetricUserCrashesWeeklyName[];
   static const char kMetricUserCrashIntervalName[];
+  static const char kMetricReadSectorsLongName[];
+  static const char kMetricReadSectorsShortName[];
+  static const char kMetricWriteSectorsLongName[];
+  static const char kMetricWriteSectorsShortName[];
+  static const int kMetricDiskStatsShortInterval;
+  static const int kMetricDiskStatsLongInterval;
+  static const int kMetricSectorsIOMax;
+  static const int kMetricSectorsBuckets;
+  static const char kMetricsDiskStatsPath[];
 
   // D-Bus message match strings.
   static const char* kDBusMatches_[];
@@ -217,6 +234,22 @@ class MetricsDaemon {
   void SendMetric(const std::string& name, int sample,
                   int min, int max, int nbuckets);
 
+  // Initializes disk stats reporting.
+  void DiskStatsReporterInit();
+
+  // Schedules a callback for the next disk stats collection.
+  void ScheduleDiskStatsCallback(int wait);
+
+  // Reads cumulative disk statistics from sysfs.
+  void DiskStatsReadStats(long int* read_sectors, long int* write_sectors);
+
+  // Reports disk statistics (static version for glib).  Arguments are a glib
+  // artifact.
+  static gboolean DiskStatsCallbackStatic(void* handle);
+
+  // Reports disk statistics.
+  void DiskStatsCallback();
+
   // Test mode.
   bool testing_;
 
@@ -265,6 +298,13 @@ class MetricsDaemon {
 
   // Scheduled daily use monitor source (see ScheduleUseMonitor).
   GSource* usemon_source_;
+
+  // Contains the most recent disk stats.
+  long int read_sectors_;
+  long int write_sectors_;
+
+  DiskStatsState diskstats_state_;
+  const char* diskstats_path_;
 };
 
 #endif  // METRICS_DAEMON_H_

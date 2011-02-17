@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <base/file_util.h>
+#include <base/stringprintf.h>
 #include <gtest/gtest.h>
 
 #include "counter_mock.h"
@@ -32,6 +33,14 @@ static const int kSecondsPerDay = 24 * 60 * 60;
 static const char kTestDir[] = "test";
 static const char kLastFile[] = "test/last";
 static const char kCurrentFile[] = "test/current";
+static const char kFakeDiskStatsPath[] = "fake-disk-stats";
+static const char kFakeDiskStatsFormat[] =
+    "    1793     1788    %d   105580    "
+    "    196      175     %d    30290    "
+    "    0    44060   135850\n";
+static string kFakeDiskStats[2];
+static const int kFakeReadSectors[] = {80000, 100000};
+static const int kFakeWriteSectors[] = {3000, 4000};
 
 // This class allows a TimeTicks object to be initialized with seconds
 // (rather than microseconds) through the protected TimeTicks(int64)
@@ -54,7 +63,12 @@ class MetricsDaemonTest : public testing::Test {
     EXPECT_EQ(NULL, daemon_.daily_use_.get());
     EXPECT_EQ(NULL, daemon_.kernel_crash_interval_.get());
     EXPECT_EQ(NULL, daemon_.user_crash_interval_.get());
-    daemon_.Init(true, &metrics_lib_);
+    kFakeDiskStats[0] = StringPrintf(kFakeDiskStatsFormat,
+                                     kFakeReadSectors[0], kFakeWriteSectors[0]);
+    kFakeDiskStats[1] = StringPrintf(kFakeDiskStatsFormat,
+                                     kFakeReadSectors[1], kFakeWriteSectors[1]);
+    CreateFakeDiskStatsFile(kFakeDiskStats[0].c_str());
+    daemon_.Init(true, &metrics_lib_, kFakeDiskStatsPath);
 
     // Check configuration of a few histograms.
     FrequencyCounter* frequency_counter =
@@ -120,7 +134,9 @@ class MetricsDaemonTest : public testing::Test {
     file_util::CreateDirectory(FilePath(kTestDir));
   }
 
-  virtual void TearDown() {}
+  virtual void TearDown() {
+    EXPECT_EQ(unlink(kFakeDiskStatsPath), 0);
+  }
 
   const TaggedCounterReporter*
   GetReporter(FrequencyCounter* frequency_counter) const {
@@ -222,10 +238,20 @@ class MetricsDaemonTest : public testing::Test {
     dbus_message_unref(msg);
   }
 
-  // Get the frequency counter for the given name.
+  // Gets the frequency counter for the given name.
   FrequencyCounterMock& GetFrequencyMock(const char* histogram_name) {
     return *static_cast<FrequencyCounterMock*>(
         daemon_.frequency_counters_[histogram_name]);
+  }
+
+  // Creates or overwrites an input file containing fake disk stats.
+  void CreateFakeDiskStatsFile(const char* fake_stats) {
+    if (unlink(kFakeDiskStatsPath) < 0) {
+      EXPECT_EQ(errno, ENOENT);
+    }
+    FILE* f = fopen(kFakeDiskStatsPath, "w");
+    EXPECT_EQ(1, fwrite(fake_stats, strlen(fake_stats), 1, f));
+    EXPECT_EQ(0, fclose(f));
   }
 
   // The MetricsDaemon under test.
@@ -531,6 +557,25 @@ TEST_F(MetricsDaemonTest, GetHistogramPath) {
   EXPECT_EQ("/var/log/metrics/Logging.AnyCrashesDaily",
             daemon_.GetHistogramPath(
                 MetricsDaemon::kMetricAnyCrashesDailyName).value());
+}
+
+TEST_F(MetricsDaemonTest, ReportDiskStats) {
+  long int read_sectors_now, write_sectors_now;
+
+  CreateFakeDiskStatsFile(kFakeDiskStats[1].c_str());
+  daemon_.DiskStatsReadStats(&read_sectors_now, &write_sectors_now);
+  EXPECT_EQ(read_sectors_now, kFakeReadSectors[1]);
+  EXPECT_EQ(write_sectors_now, kFakeWriteSectors[1]);
+
+  MetricsDaemon::DiskStatsState ds_state = daemon_.diskstats_state_;
+  EXPECT_CALL(metrics_lib_,
+              SendToUMA(_, (kFakeReadSectors[1] - kFakeReadSectors[0]) / 30,
+                        _, _, _));
+  EXPECT_CALL(metrics_lib_,
+              SendToUMA(_, (kFakeWriteSectors[1] - kFakeWriteSectors[0]) / 30,
+                        _, _, _));
+  daemon_.DiskStatsCallback();
+  EXPECT_TRUE(ds_state != daemon_.diskstats_state_);
 }
 
 int main(int argc, char** argv) {

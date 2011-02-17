@@ -4,6 +4,7 @@
 
 #include "metrics_daemon.h"
 
+#include <fcntl.h>
 #include <string.h>
 
 #include <base/file_util.h>
@@ -84,6 +85,28 @@ const char MetricsDaemon::kMetricCrashFrequencyMin = 1;
 const char MetricsDaemon::kMetricCrashFrequencyMax = 100;
 const char MetricsDaemon::kMetricCrashFrequencyBuckets = 50;
 
+// disk stats metrics
+
+// The {Read,Write}Sectors numbers are in sectors/second.
+// A sector is usually 512 bytes.
+
+const char MetricsDaemon::kMetricReadSectorsLongName[] =
+    "Platform.ReadSectorsLong";
+const char MetricsDaemon::kMetricWriteSectorsLongName[] =
+    "Platform.WriteSectorsLong";
+const char MetricsDaemon::kMetricReadSectorsShortName[] =
+    "Platform.ReadSectorsShort";
+const char MetricsDaemon::kMetricWriteSectorsShortName[] =
+    "Platform.WriteSectorsShort";
+
+const int MetricsDaemon::kMetricDiskStatsShortInterval = 1;  // seconds
+const int MetricsDaemon::kMetricDiskStatsLongInterval = 30;  // seconds
+
+// Assume a max rate of 250Mb/s for reads (worse for writes) and 512 byte
+// sectors.
+const int MetricsDaemon::kMetricSectorsIOMax = 500000;  // sectors/second
+const int MetricsDaemon::kMetricSectorsBuckets = 50;    // buckets
+
 // persistent metrics path
 const char MetricsDaemon::kMetricsPath[] = "/var/log/metrics";
 
@@ -123,7 +146,8 @@ MetricsDaemon::MetricsDaemon()
       session_state_(kUnknownSessionState),
       user_active_(false),
       usemon_interval_(0),
-      usemon_source_(NULL) {}
+      usemon_source_(NULL),
+      diskstats_path_(NULL) {}
 
 MetricsDaemon::~MetricsDaemon() {
   DeleteFrequencyCounters();
@@ -190,7 +214,8 @@ void MetricsDaemon::ConfigureCrashFrequencyReporter(
   frequency_counters_[histogram_name] = new_counter.release();
 }
 
-void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
+void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
+                         const char* diskstats_path) {
   testing_ = testing;
   DCHECK(metrics_lib != NULL);
   metrics_lib_ = metrics_lib;
@@ -217,6 +242,9 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib) {
   ConfigureCrashFrequencyReporter(kMetricUncleanShutdownsWeeklyName);
   ConfigureCrashFrequencyReporter(kMetricUserCrashesDailyName);
   ConfigureCrashFrequencyReporter(kMetricUserCrashesWeeklyName);
+
+  diskstats_path_ = diskstats_path;
+  DiskStatsReporterInit();
 
   // Don't setup D-Bus and GLib in test mode.
   if (testing)
@@ -492,6 +520,99 @@ void MetricsDaemon::UnscheduleUseMonitor() {
   g_source_destroy(usemon_source_);
   usemon_source_ = NULL;
   usemon_interval_ = 0;
+}
+
+void MetricsDaemon::DiskStatsReporterInit() {
+  DiskStatsReadStats(&read_sectors_, &write_sectors_);
+  // The first time around just run the long stat, so we don't delay boot.
+  diskstats_state_ = kDiskStatsLong;
+  ScheduleDiskStatsCallback(kMetricDiskStatsLongInterval);
+}
+
+void MetricsDaemon::ScheduleDiskStatsCallback(int wait) {
+  if (testing_) {
+    return;
+  }
+  g_timeout_add_seconds(wait, DiskStatsCallbackStatic, this);
+}
+
+void MetricsDaemon::DiskStatsReadStats(long int* read_sectors,
+                                       long int* write_sectors) {
+  int nchars;
+  int nitems;
+  char line[200];
+  int file = HANDLE_EINTR(open(diskstats_path_, O_RDONLY));
+  if (file < 0) {
+    PLOG(WARNING) << "cannot open " << diskstats_path_;
+    return;
+  }
+  nchars = HANDLE_EINTR(read(file, line, sizeof(line)));
+  if (nchars < 0) {
+    PLOG(WARNING) << "cannot read from " << diskstats_path_;
+  } else {
+    LOG_IF(WARNING, nchars == sizeof(line)) << "line too long in "
+                                            << diskstats_path_;
+    line[nchars] = '\0';
+    nitems = sscanf(line, "%*d %*d %ld %*d %*d %*d %ld",
+                    read_sectors, write_sectors);
+    LOG_IF(WARNING, nitems != 2) << "found " << nitems << " items in "
+                                 << diskstats_path_ << ", expected 2";
+  }
+  HANDLE_EINTR(close(file));
+}
+
+// static
+gboolean MetricsDaemon::DiskStatsCallbackStatic(void* handle) {
+  (static_cast<MetricsDaemon*>(handle))->DiskStatsCallback();
+  return false;  // one-time callback
+}
+
+void MetricsDaemon::DiskStatsCallback() {
+  long int read_sectors_now, write_sectors_now;
+  DiskStatsReadStats(&read_sectors_now, &write_sectors_now);
+
+  switch (diskstats_state_) {
+    case kDiskStatsShort:
+      SendMetric(kMetricReadSectorsShortName,
+                 (int) (read_sectors_now - read_sectors_) /
+                 kMetricDiskStatsShortInterval,
+                 1,
+                 kMetricSectorsIOMax,
+                 kMetricSectorsBuckets);
+      SendMetric(kMetricWriteSectorsShortName,
+                 (int) (write_sectors_now - write_sectors_) /
+                 kMetricDiskStatsShortInterval,
+                 1,
+                 kMetricSectorsIOMax,
+                 kMetricSectorsBuckets);
+      // Schedule long callback.
+      diskstats_state_ = kDiskStatsLong;
+      ScheduleDiskStatsCallback(kMetricDiskStatsLongInterval -
+                                kMetricDiskStatsShortInterval);
+      break;
+    case kDiskStatsLong:
+      SendMetric(kMetricReadSectorsLongName,
+                 (int) (read_sectors_now - read_sectors_) /
+                 kMetricDiskStatsLongInterval,
+                 1,
+                 kMetricSectorsIOMax,
+                 kMetricSectorsBuckets);
+      SendMetric(kMetricWriteSectorsLongName,
+                 (int) (write_sectors_now - write_sectors_) /
+                 kMetricDiskStatsLongInterval,
+                 1,
+                 kMetricSectorsIOMax,
+                 kMetricSectorsBuckets);
+      // Reset sector counters
+      read_sectors_ = read_sectors_now;
+      write_sectors_ = write_sectors_now;
+      // Schedule short callback.
+      diskstats_state_ = kDiskStatsShort;
+      ScheduleDiskStatsCallback(kMetricDiskStatsShortInterval);
+      break;
+    default:
+      LOG(FATAL) << "Invalid disk stats state";
+  }
 }
 
 // static

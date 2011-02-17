@@ -9,11 +9,14 @@
 
 DEFINE_bool(daemon, true, "run as daemon (use -nodaemon for debugging)");
 
+// Path to disk stats.  This may be system dependent.
+const char kMetricsMainDiskStatsPath[] = "/sys/class/block/sda/stat";
+
 int main(int argc, char** argv) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   MetricsLibrary metrics_lib;
   metrics_lib.Init();
   MetricsDaemon daemon;
-  daemon.Init(false, &metrics_lib);
+  daemon.Init(false, &metrics_lib, kMetricsMainDiskStatsPath);
   daemon.Run(FLAGS_daemon);
 }
