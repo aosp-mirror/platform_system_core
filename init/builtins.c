@@ -286,6 +286,7 @@ int do_mount(int nargs, char **args)
     unsigned flags = 0;
     int n, i;
     int wait = 0;
+    char *prop;
 
     for (n = 4; n < nargs; n++) {
         for (i = 0; mount_flags[i].name; i++) {
@@ -322,7 +323,7 @@ int do_mount(int nargs, char **args)
             return -1;
         }
 
-        return 0;
+        goto exit_success;
     } else if (!strncmp(source, "loop@", 5)) {
         int mode, loop, fd;
         struct loop_info info;
@@ -353,7 +354,7 @@ int do_mount(int nargs, char **args)
                     }
 
                     close(loop);
-                    return 0;
+                    goto exit_success;
                 }
             }
 
@@ -393,12 +394,6 @@ int do_mount(int nargs, char **args)
             } else {
                 return -1;
             }
-        } else {
-            if (!strcmp(target, DATA_MNT_POINT)) {
-                /* We succeeded in mounting /data, so it's not encrypted */
-                property_set("ro.crypto.state", "unencrypted");
-                action_for_each_trigger("nonencrypted", action_add_queue_tail);
-            }
         }
 
         if (!strcmp(target, DATA_MNT_POINT)) {
@@ -414,8 +409,25 @@ int do_mount(int nargs, char **args)
             snprintf(fs_flags, sizeof(fs_flags), "0x%8.8x", flags);
             property_set("ro.crypto.fs_flags", fs_flags);
         }
-        return 0;
     }
+
+exit_success:
+    /* If not running encrypted, then set the property saying we are
+     * unencrypted, and also trigger the action for a nonencrypted system.
+     */
+    if (!strcmp(target, DATA_MNT_POINT)) {
+        prop = property_get("ro.crypto.state");
+        if (! prop) {
+            prop = "notset";
+        }
+        if (strcmp(prop, "encrypted")) {
+            property_set("ro.crypto.state", "unencrypted");
+            action_for_each_trigger("nonencrypted", action_add_queue_tail);
+        }
+    }
+
+    return 0;
+
 }
 
 int do_setkey(int nargs, char **args)
