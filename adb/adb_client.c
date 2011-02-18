@@ -202,6 +202,7 @@ int _adb_connect(const char *service)
         return -1;
     }
 
+    D("_adb_connect: return fd %d\n", fd);
     return fd;
 }
 
@@ -210,6 +211,7 @@ int adb_connect(const char *service)
     // first query the adb server's version
     int fd = _adb_connect("host:version");
 
+    D("adb_connect: service %s\n", service);
     if(fd == -2) {
         fprintf(stdout,"* daemon not running. starting it now on port %d *\n",
                 __adb_server_port);
@@ -266,6 +268,7 @@ int adb_connect(const char *service)
     if(fd == -2) {
         fprintf(stderr,"** daemon still not running");
     }
+    D("adb_connect: return fd %d\n", fd);
 
     return fd;
 error:
