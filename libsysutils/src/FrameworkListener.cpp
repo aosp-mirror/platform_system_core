@@ -25,6 +25,8 @@
 #include <sysutils/FrameworkCommand.h>
 #include <sysutils/SocketClient.h>
 
+static const int CMD_BUF_SIZE = 1024;
+
 FrameworkListener::FrameworkListener(const char *socketName, bool withSeq) :
                             SocketListener(socketName, true, withSeq) {
     init(socketName, withSeq);
@@ -43,7 +45,7 @@ void FrameworkListener::init(const char *socketName, bool withSeq) {
 }
 
 bool FrameworkListener::onDataAvailable(SocketClient *c) {
-    char buffer[255];
+    char buffer[CMD_BUF_SIZE];
     int len;
 
     len = TEMP_FAILURE_RETRY(read(c->getSocket(), buffer, sizeof(buffer)));
@@ -52,6 +54,8 @@ bool FrameworkListener::onDataAvailable(SocketClient *c) {
         return false;
     } else if (!len)
         return false;
+   if(buffer[len-1] != '\0')
+        SLOGW("String is not zero-terminated");
 
     int offset = 0;
     int i;
@@ -63,6 +67,7 @@ bool FrameworkListener::onDataAvailable(SocketClient *c) {
             offset = i + 1;
         }
     }
+
     return true;
 }
 
@@ -74,7 +79,7 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
     FrameworkCommandCollection::iterator i;
     int argc = 0;
     char *argv[FrameworkListener::CMD_ARGS_MAX];
-    char tmp[255];
+    char tmp[CMD_BUF_SIZE];
     char *p = data;
     char *q = tmp;
     char *qlimit = tmp + sizeof(tmp) - 1;
@@ -180,7 +185,6 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
             goto out;
         }
     }
-
     cli->sendMsg(500, "Command not recognized", false);
 out:
     int j;
