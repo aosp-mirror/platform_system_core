@@ -36,6 +36,9 @@
 #include "usb_vendors.h"
 #endif
 
+#if ADB_TRACE
+ADB_MUTEX_DEFINE( D_lock );
+#endif
 
 int HOST = 0;
 
@@ -591,14 +594,6 @@ nomem:
     return 0;
 }
 
-#ifdef HAVE_FORKEXEC
-static void sigchld_handler(int n)
-{
-    int status;
-    while(waitpid(-1, &status, WNOHANG) > 0) ;
-}
-#endif
-
 #ifdef HAVE_WIN32_PROC
 static BOOL WINAPI ctrlc_handler(DWORD type)
 {
@@ -641,6 +636,7 @@ void start_logging(void)
 
     fd = unix_open("/dev/null", O_RDONLY);
     dup2(fd, 0);
+    adb_close(fd);
 
     fd = unix_open("/tmp/adb.log", O_WRONLY | O_CREAT | O_APPEND, 0640);
     if(fd < 0) {
@@ -648,6 +644,8 @@ void start_logging(void)
     }
     dup2(fd, 1);
     dup2(fd, 2);
+    adb_close(fd);
+
     fprintf(stderr,"--- adb starting (pid %d) ---\n", getpid());
 #endif
 }
@@ -792,6 +790,7 @@ int launch_server(int server_port)
         // we use stderr instead of stdout due to stdout's buffering behavior.
         adb_close(fd[0]);
         dup2(fd[1], STDERR_FILENO);
+        dup2(fd[1], STDOUT_FILENO);
         adb_close(fd[1]);
 
         // child process
@@ -848,7 +847,7 @@ int adb_main(int is_daemon, int server_port)
 #ifdef HAVE_WIN32_PROC
     SetConsoleCtrlHandler( ctrlc_handler, TRUE );
 #elif defined(HAVE_FORKEXEC)
-    signal(SIGCHLD, sigchld_handler);
+    // Let the service subproc creator handle its children.
     signal(SIGPIPE, SIG_IGN);
 #endif
 
@@ -957,7 +956,9 @@ int adb_main(int is_daemon, int server_port)
         // listen on default port
         local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
     }
+    D("adb_main(): pre init_jdwp()\n");
     init_jdwp();
+    D("adb_main(): post init_jdwp()\n");
 #endif
 
     if (is_daemon)
@@ -971,6 +972,7 @@ int adb_main(int is_daemon, int server_port)
 #endif
         start_logging();
     }
+    D("Event loop starting\n");
 
     fdevent_loop();
 
@@ -1271,6 +1273,7 @@ int main(int argc, char **argv)
 #if ADB_HOST
     adb_trace_init();
     adb_sysdeps_init();
+    D("Handling commandline()\n");
     return adb_commandline(argc - 1, argv + 1);
 #else
     if((argc > 1) && (!strcmp(argv[1],"recovery"))) {
@@ -1279,6 +1282,7 @@ int main(int argc, char **argv)
     }
 
     start_device_log();
+    D("Handling main()\n");
     return adb_main(0, DEFAULT_ADB_PORT);
 #endif
 }

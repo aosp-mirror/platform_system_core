@@ -243,12 +243,15 @@ static void local_socket_close_locked(asocket *s)
     s->closing = 1;
     fdevent_del(&s->fde, FDE_READ);
     remove_socket(s);
+    D("LS(%d): put on socket_closing_list fd=%d\n", s->id, s->fd);
     insert_local_socket(s, &local_socket_closing_list);
 }
 
 static void local_socket_event_func(int fd, unsigned ev, void *_s)
 {
     asocket *s = _s;
+
+    D("LS(%d): event_func(fd=%d, ev=%04x)\n", s->id, s->fd, ev);
 
     /* put the FDE_WRITE processing before the FDE_READ
     ** in order to simplify the code.
@@ -308,6 +311,7 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
 
         while(avail > 0) {
             r = adb_read(fd, x, avail);
+            D("LS(%d): post adb_read(fd=%d,...) r=%d (errno=%d) avail=%d\n", s->id, s->fd, r, r<0?errno:0, avail);
             if(r > 0) {
                 avail -= r;
                 x += r;
@@ -322,6 +326,7 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
             is_eof = 1;
             break;
         }
+        D("LS(%d): fd=%d post avail loop. r=%d is_eof=%d\n", s->id, s->fd, r, is_eof);
 
         if((avail == MAX_PAYLOAD) || (s->peer == 0)) {
             put_apacket(p);
@@ -362,6 +367,8 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
             ** bytes of readable data.
             */
 //        s->close(s);
+        D("LS(%d): FDE_ERROR (fd=%d)\n", s->id, s->fd);
+
         return;
     }
 }
@@ -370,11 +377,11 @@ asocket *create_local_socket(int fd)
 {
     asocket *s = calloc(1, sizeof(asocket));
     if (s == NULL) fatal("cannot allocate socket");
-    install_local_socket(s);
     s->fd = fd;
     s->enqueue = local_socket_enqueue;
     s->ready = local_socket_ready;
     s->close = local_socket_close;
+    install_local_socket(s);
 
     fdevent_install(&s->fde, fd, local_socket_event_func, s);
 /*    fdevent_add(&s->fde, FDE_ERROR); */
@@ -400,7 +407,7 @@ asocket *create_local_service_socket(const char *name)
     if(fd < 0) return 0;
 
     s = create_local_socket(fd);
-    D("LS(%d): bound to '%s'\n", s->id, name);
+    D("LS(%d): bound to '%s' via %d\n", s->id, name, fd);
     return s;
 }
 
