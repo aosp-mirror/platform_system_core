@@ -2,16 +2,16 @@
 **
 ** Copyright 2006, Brian Swetland <swetland@frotz.net>
 **
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
+** Licensed under the Apache License, Version 2.0 (the "License"); 
+** you may not use this file except in compliance with the License. 
+** You may obtain a copy of the License at 
 **
-**     http://www.apache.org/licenses/LICENSE-2.0
+**     http://www.apache.org/licenses/LICENSE-2.0 
 **
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
+** Unless required by applicable law or agreed to in writing, software 
+** distributed under the License is distributed on an "AS IS" BASIS, 
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+** See the License for the specific language governing permissions and 
 ** limitations under the License.
 */
 
@@ -28,12 +28,9 @@
 
 #include "fdevent.h"
 
+#define TRACE(x...) fprintf(stderr,x)
 
-/* !!! Do not enable DEBUG for the adb that will run as the server:
-** both stdout and stderr are used to communicate between the client
-** and server. Any extra output will cause failures.
-*/
-#define DEBUG 0   /* non-0 will break adb server */
+#define DEBUG 0
 
 static void fatal(const char *fn, const char *fmt, ...)
 {
@@ -48,11 +45,6 @@ static void fatal(const char *fn, const char *fmt, ...)
 #define FATAL(x...) fatal(__FUNCTION__, x)
 
 #if DEBUG
-#define D(...) \
-    do { \
-        fprintf(stderr, "%s::%s():", __FILE__, __FUNCTION__);  \
-        fprintf(stderr, __VA_ARGS__);                          \
-    } while(0)
 static void dump_fde(fdevent *fde, const char *info)
 {
     fprintf(stderr,"FDE #%03d %c%c%c %s\n", fde->fd,
@@ -62,7 +54,6 @@ static void dump_fde(fdevent *fde, const char *info)
             info);
 }
 #else
-#define D(...) ((void)0)
 #define dump_fde(fde, info) do { } while(0)
 #endif
 
@@ -279,68 +270,7 @@ static void fdevent_update(fdevent *fde, unsigned events)
         FD_CLR(fde->fd, &error_fds);
     }
 
-    fde->state = (fde->state & FDE_STATEMASK) | events;
-}
-
-#if DEBUG
-static void dump_all_fds(const char *extra_msg)
-{
-int i;
-    fdevent *fde;
-    // per fd: 4 digits (but really: log10(FD_SETSIZE)), 1 staus, 1 blank
-    char msg_buff[FD_SETSIZE*6 + 1], *pb=msg_buff;
-    size_t max_chars = FD_SETSIZE * 6 + 1;
-    int printed_out;
-#define SAFE_SPRINTF(...)                                                    \
-    do {                                                                     \
-        printed_out = snprintf(pb, max_chars, __VA_ARGS__);                  \
-        if (printed_out <= 0) {                                              \
-            D("... snprintf failed.\n");                                     \
-            return;                                                          \
-        }                                                                    \
-        if (max_chars < (unsigned int)printed_out) {                         \
-            D("... snprintf out of space.\n");                               \
-            return;                                                          \
-        }                                                                    \
-        pb += printed_out;                                                   \
-        max_chars -= printed_out;                                            \
-    } while(0)
-
-    for(i = 0; i < select_n; i++) {
-        fde = fd_table[i];
-        SAFE_SPRINTF("%d", i);
-        if(fde == 0) {
-            SAFE_SPRINTF("? ");
-            continue;
-        }
-        if(fcntl(i, F_GETFL, NULL) < 0) {
-            SAFE_SPRINTF("b");
-        }
-        SAFE_SPRINTF(" ");
-    }
-    D("%s fd_table[]->fd = {%s}\n", extra_msg, msg_buff);
-}
-#endif
-
-/* Looks at fd_table[] for bad FDs and sets bit in fds.
-** Returns the number of bad FDs.
-*/
-static int fdevent_fd_check(fd_set *fds)
-{
-    int i, n = 0;
-    fdevent *fde;
-
-    for(i = 0; i < select_n; i++) {
-        fde = fd_table[i];
-        if(fde == 0) continue;
-        if(fcntl(i, F_GETFL, NULL) < 0) {
-            FD_SET(i, fds);
-            n++;
-            fde->state |= FDE_DONT_CLOSE;
-
-        }
-    }
-    return n;
+    fde->state = (fde->state & FDE_STATEMASK) | events;    
 }
 
 static void fdevent_process()
@@ -349,54 +279,33 @@ static void fdevent_process()
     fdevent *fde;
     unsigned events;
     fd_set rfd, wfd, efd;
-    struct timeval tv = { /*tv_sec=*/5, /*tv_usec=*/0 };
 
     memcpy(&rfd, &read_fds, sizeof(fd_set));
     memcpy(&wfd, &write_fds, sizeof(fd_set));
     memcpy(&efd, &error_fds, sizeof(fd_set));
 
-    n = select(select_n, &rfd, &wfd, &efd, &tv);
-
-    D("select() returned n=%d, errno=%d\n", n, n<0?errno:0);
-
-#if DEBUG
-    dump_all_fds("post select()");
-#endif
+    n = select(select_n, &rfd, &wfd, &efd, 0);
 
     if(n < 0) {
-        switch(errno) {
-        case EINTR: return;
-        case EBADF:
-            // Can't trust the FD sets after an error.
-            FD_ZERO(&wfd);
-            FD_ZERO(&efd);
-            FD_ZERO(&rfd);
-            break;
-        default:
-            D("Unexpected select() error=%d\n", errno);
-            return;
-        }
-    }
-    if(n <= 0) {
-        // We fake a read, as the rest of the code assumes
-        // that errors will be detected at that point.
-        n = fdevent_fd_check(&rfd);
+        if(errno == EINTR) return;
+        perror("select");
+        return;
     }
 
     for(i = 0; (i < select_n) && (n > 0); i++) {
         events = 0;
-        if(FD_ISSET(i, &rfd)) { events |= FDE_READ; n--; }
-        if(FD_ISSET(i, &wfd)) { events |= FDE_WRITE; n--; }
-        if(FD_ISSET(i, &efd)) { events |= FDE_ERROR; n--; }
+        if(FD_ISSET(i, &rfd)) events |= FDE_READ;
+        if(FD_ISSET(i, &wfd)) events |= FDE_WRITE;
+        if(FD_ISSET(i, &efd)) events |= FDE_ERROR;
 
         if(events) {
+            n--;
+
             fde = fd_table[i];
             if(fde == 0) FATAL("missing fde for fd %d\n", i);
 
             fde->events |= events;
 
-            D("got events fde->fd=%d events=%04x, state=%04x\n",
-                fde->fd, fde->events, fde->state);
             if(fde->state & FDE_PENDING) continue;
             fde->state |= FDE_PENDING;
             fdevent_plist_enqueue(fde);
@@ -441,7 +350,7 @@ static void fdevent_unregister(fdevent *fde)
     }
 
     if(fd_table[fde->fd] != fde) {
-        FATAL("fd_table out of sync [%d]\n", fde->fd);
+        FATAL("fd_table out of sync");
     }
 
     fd_table[fde->fd] = 0;
@@ -503,7 +412,7 @@ void fdevent_destroy(fdevent *fde)
     fdevent_remove(fde);
 }
 
-void fdevent_install(fdevent *fde, int fd, fd_func func, void *arg)
+void fdevent_install(fdevent *fde, int fd, fd_func func, void *arg) 
 {
     memset(fde, 0, sizeof(fdevent));
     fde->state = FDE_ACTIVE;
@@ -528,7 +437,7 @@ void fdevent_remove(fdevent *fde)
 
     if(fde->state & FDE_ACTIVE) {
         fdevent_disconnect(fde);
-        dump_fde(fde, "disconnect");
+        dump_fde(fde, "disconnect");    
         fdevent_unregister(fde);
     }
 
@@ -580,8 +489,9 @@ void fdevent_loop()
     fdevent *fde;
 
     for(;;) {
-        D("--- ---- waiting for events\n");
-
+#if DEBUG
+        fprintf(stderr,"--- ---- waiting for events\n");
+#endif
         fdevent_process();
 
         while((fde = fdevent_plist_dequeue())) {
@@ -593,3 +503,4 @@ void fdevent_loop()
         }
     }
 }
+

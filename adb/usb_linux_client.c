@@ -83,14 +83,14 @@ int usb_write(usb_handle *h, const void *data, int len)
 {
     int n;
 
-    D("about to write (fd=%d, len=%d)\n", h->fd, len);
+    D("[ write %d ]\n", len);
     n = adb_write(h->fd, data, len);
     if(n != len) {
-        D("ERROR: fd = %d, n = %d, errno = %d (%s)\n",
-            h->fd, n, errno, strerror(errno));
+        D("ERROR: n = %d, errno = %d (%s)\n",
+            n, errno, strerror(errno));
         return -1;
     }
-    D("[ done fd=%d ]\n", h->fd);
+    D("[ done ]\n");
     return 0;
 }
 
@@ -98,14 +98,13 @@ int usb_read(usb_handle *h, void *data, int len)
 {
     int n;
 
-    D("about to read (fd=%d, len=%d)\n", h->fd, len);
+    D("[ read %d ]\n", len);
     n = adb_read(h->fd, data, len);
     if(n != len) {
-        D("ERROR: fd = %d, n = %d, errno = %d (%s)\n",
-            h->fd, n, errno, strerror(errno));
+        D("ERROR: n = %d, errno = %d (%s)\n",
+            n, errno, strerror(errno));
         return -1;
     }
-    D("[ done fd=%d ]\n", h->fd);
     return 0;
 }
 

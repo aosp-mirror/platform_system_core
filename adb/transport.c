@@ -35,30 +35,24 @@ static atransport transport_list = {
 ADB_MUTEX_DEFINE( transport_lock );
 
 #if ADB_TRACE
-#define MAX_DUMP_HEX_LEN 16
 static void  dump_hex( const unsigned char*  ptr, size_t  len )
 {
     int  nn, len2 = len;
-    // Build a string instead of logging each character.
-    // MAX chars in 2 digit hex, one space, MAX chars, one '\0'.
-    char buffer[MAX_DUMP_HEX_LEN *2 + 1 + MAX_DUMP_HEX_LEN + 1 ], *pb = buffer;
 
-    if (len2 > MAX_DUMP_HEX_LEN) len2 = MAX_DUMP_HEX_LEN;
+    if (len2 > 16) len2 = 16;
 
-    for (nn = 0; nn < len2; nn++) {
-        sprintf(pb, "%02x", ptr[nn]);
-        pb += 2;
-    }
-    sprintf(pb++, " ");
+    for (nn = 0; nn < len2; nn++)
+        D("%02x", ptr[nn]);
+    D("  ");
 
     for (nn = 0; nn < len2; nn++) {
         int  c = ptr[nn];
         if (c < 32 || c > 127)
             c = '.';
-        *pb++ =  c;
+        D("%c", c);
     }
-    *pb++ = '\0';
-    DR("%s\n", buffer);
+    D("\n");
+    fflush(stdout);
 }
 #endif
 
@@ -198,7 +192,6 @@ write_packet(int  fd, const char* name, apacket** ppacket)
 static void transport_socket_events(int fd, unsigned events, void *_t)
 {
     atransport *t = _t;
-    D("transport_socket_events(fd=%d, events=%04x,...)\n", fd, events);
     if(events & FDE_READ){
         apacket *p = 0;
         if(read_packet(fd, t->serial, &p)){
@@ -228,8 +221,8 @@ void send_packet(apacket *p, atransport *t)
     print_packet("send", p);
 
     if (t == NULL) {
-        D("Transport is null \n");
         fatal_errno("Transport is null");
+        D("Transport is null \n");
     }
 
     if(write_packet(t->transport_socket, t->serial, &p)){
@@ -1076,3 +1069,4 @@ int check_data(apacket *p)
         return 0;
     }
 }
+
