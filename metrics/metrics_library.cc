@@ -12,6 +12,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include <base/eintr_wrapper.h>
+
 #define READ_WRITE_ALL_FILE_FLAGS \
   (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -130,9 +132,9 @@ bool MetricsLibrary::SendMessageToChrome(int32_t length, const char* message) {
   if (!AreMetricsEnabled())
     return true;
 
-  int chrome_fd = open(uma_events_file_,
-                       O_WRONLY | O_APPEND | O_CREAT,
-                       READ_WRITE_ALL_FILE_FLAGS);
+  int chrome_fd = HANDLE_EINTR(open(uma_events_file_,
+                                    O_WRONLY | O_APPEND | O_CREAT,
+                                    READ_WRITE_ALL_FILE_FLAGS));
   // If we failed to open it, return.
   if (chrome_fd < 0) {
     PrintError("open", uma_events_file_, errno);
@@ -146,24 +148,20 @@ bool MetricsLibrary::SendMessageToChrome(int32_t length, const char* message) {
 
   // Grab an exclusive lock to protect Chrome from truncating
   // underneath us. Keep the file locked as briefly as possible.
-  if (flock(chrome_fd, LOCK_EX) < 0) {
+  if (HANDLE_EINTR(flock(chrome_fd, LOCK_EX)) < 0) {
     PrintError("flock", uma_events_file_, errno);
-    close(chrome_fd);
+    HANDLE_EINTR(close(chrome_fd));
     return false;
   }
 
   bool success = true;
-  if (write(chrome_fd, message, length) != length) {
+  if (HANDLE_EINTR(write(chrome_fd, message, length)) != length) {
     PrintError("write", uma_events_file_, errno);
     success = false;
   }
 
-  // Release the file lock and close file.
-  if (flock(chrome_fd, LOCK_UN) < 0) {
-    PrintError("unlock", uma_events_file_, errno);
-    success = false;
-  }
-  close(chrome_fd);
+  // Close the file and release the lock.
+  HANDLE_EINTR(close(chrome_fd));
   return success;
 }
 
