@@ -123,7 +123,7 @@ struct asocket {
         /* socket-type-specific extradata */
     void *extra;
 
-        /* A socket is bound to atransport */
+    	/* A socket is bound to atransport */
     atransport *transport;
 };
 
@@ -344,50 +344,20 @@ typedef enum {
 
 #if ADB_TRACE
 
-// TODO(jpa): remove this after fixing fprintf() multithreading issue {
-// Can't include sysdeps.h, because framebuffer_service.c wants a different
-// close() than what sysdeps overrides when linking adbd.
+  int     adb_trace_mask;
 
-// Assume Linux.
-#ifndef _ADB_SYSDEPS_H
-#include <pthread.h>
-typedef  pthread_mutex_t          adb_mutex_t;
-#define  ADB_MUTEX(x)   extern adb_mutex_t  x;
-#include "mutex_list.h"
-#endif
-
-// }
-
-  extern int     adb_trace_mask;
-  extern unsigned char    adb_trace_output_count;
   void    adb_trace_init(void);
 
 #  define ADB_TRACING  ((adb_trace_mask & (1 << TRACE_TAG)) != 0)
 
   /* you must define TRACE_TAG before using this macro */
-#  define  D(...)                                      \
+  #define  D(...)                                      \
         do {                                           \
-            if (ADB_TRACING) {                         \
-                adb_mutex_lock(&D_lock);               \
-                fprintf(stderr, "%s::%s():",           \
-                    __FILE__, __FUNCTION__);           \
+            if (ADB_TRACING)                           \
                 fprintf(stderr, __VA_ARGS__ );         \
-                fflush(stderr);                        \
-                adb_mutex_unlock(&D_lock);             \
-           }                                           \
-        } while (0)
-#  define  DR(...)                                     \
-        do {                                           \
-            if (ADB_TRACING) {                         \
-                adb_mutex_lock(&D_lock);               \
-                fprintf(stderr, __VA_ARGS__ );         \
-                fflush(stderr);                        \
-                adb_mutex_unlock(&D_lock);             \
-           }                                           \
         } while (0)
 #else
 #  define  D(...)          ((void)0)
-#  define  DR(...)         ((void)0)
 #  define  ADB_TRACING     0
 #endif
 

@@ -45,7 +45,7 @@
 /* usb scan debugging is waaaay too verbose */
 #define DBGX(x...)
 
-ADB_MUTEX_DEFINE( usb_lock );
+static adb_mutex_t usb_lock = ADB_MUTEX_INITIALIZER;
 
 struct usb_handle
 {

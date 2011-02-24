@@ -218,9 +218,7 @@ static void read_and_dump(int fd)
     int len;
 
     while(fd >= 0) {
-        D("read_and_dump(): pre adb_read(fd=%d)\n", fd);
         len = adb_read(fd, buf, 4096);
-        D("read_and_dump(): post adb_read(fd=%d): len=%d\n", fd, len);
         if(len == 0) {
             break;
         }
@@ -248,9 +246,7 @@ static void *stdin_read_thread(void *x)
 
     for(;;) {
         /* fdi is really the client's stdin, so use read, not adb_read here */
-        D("stdin_read_thread(): pre unix_read(fdi=%d,...)\n", fdi);
         r = unix_read(fdi, buf, 1024);
-        D("stdin_read_thread(): post unix_read(fdi=%d,...)\n", fdi);
         if(r == 0) break;
         if(r < 0) {
             if(errno == EINTR) continue;
@@ -857,7 +853,6 @@ top:
         }
 
         if(argc < 2) {
-            D("starting interactive shell\n");
             r = interactive_shell();
             if (h) {
                 printf("\x1b[0m");
@@ -882,12 +877,9 @@ top:
         }
 
         for(;;) {
-            D("interactive shell loop. buff=%s\n", buf);
             fd = adb_connect(buf);
             if(fd >= 0) {
-                D("about to read_and_dump(fd=%d)\n", fd);
                 read_and_dump(fd);
-                D("read_and_dump() done.\n");
                 adb_close(fd);
                 r = 0;
             } else {
@@ -904,7 +896,6 @@ top:
                     printf("\x1b[0m");
                     fflush(stdout);
                 }
-                D("interactive shell loop. return r=%d\n", r);
                 return r;
             }
         }
