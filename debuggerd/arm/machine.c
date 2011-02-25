@@ -54,7 +54,7 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
                          int unwind_depth, unsigned int sp_list[],
                          bool at_fault)
 {
-    unsigned int sp, pc, p, end, data;
+    unsigned int sp, pc, lr, p, end, data;
     struct pt_regs r;
     int sp_depth;
     bool only_in_tombstone = !at_fault;
@@ -63,23 +63,25 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
     if(ptrace(PTRACE_GETREGS, pid, 0, &r)) return;
     sp = r.ARM_sp;
     pc = r.ARM_pc;
+    lr = r.ARM_lr;
 
     _LOG(tfd, only_in_tombstone, "\ncode around pc:\n");
 
-    end = p = pc & ~3;
+    p = pc & ~3;
     p -= 32;
-    if (p > end)
+    if (p > pc)
         p = 0;
-    end += 32;
-    if (end < p)
-        end = ~0;
+    end = p + 80;
+    /* 'end - p' has to be multiples of 16 */
+    while (end < p)
+        end -= 16;
 
     /* Dump the code around PC as:
      *  addr       contents
      *  00008d34   fffffcd0 4c0eb530 b0934a0e 1c05447c
      *  00008d44   f7ff18a0 490ced94 68035860 d0012b00
      */
-    while (p <= end) {
+    while (p <  end) {
         int i;
 
         sprintf(code_buffer, "%08x ", p);
@@ -91,23 +93,24 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
         _LOG(tfd, only_in_tombstone, "%s\n", code_buffer);
     }
 
-    if ((unsigned) r.ARM_lr != pc) {
+    if (lr != pc) {
         _LOG(tfd, only_in_tombstone, "\ncode around lr:\n");
 
-        end = p = r.ARM_lr & ~3;
+        p = lr & ~3;
         p -= 32;
-        if (p > end)
+        if (p > lr)
             p = 0;
-        end += 32;
-        if (end < p)
-            end = ~0;
+        end = p + 80;
+        /* 'end - p' has to be multiples of 16 */
+        while (end < p)
+            end -= 16;
 
         /* Dump the code around LR as:
          *  addr       contents
          *  00008d34   fffffcd0 4c0eb530 b0934a0e 1c05447c
          *  00008d44   f7ff18a0 490ced94 68035860 d0012b00
          */
-        while (p <= end) {
+        while (p < end) {
             int i;
 
             sprintf(code_buffer, "%08x ", p);
@@ -133,10 +136,10 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
         }
     }
     else {
-        end = sp | 0x000000ff;
-        end += 0xff;
-        if (end < sp)
-            end = ~0;
+        end = p + 256;
+        /* 'end - p' has to be multiples of 4 */
+        if (end < p)
+            end = ~7;
     }
 
     _LOG(tfd, only_in_tombstone, "\nstack:\n");
@@ -174,8 +177,9 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
     /* print another 64-byte of stack data after the last frame */
 
     end = p+64;
+    /* 'end - p' has to be multiples of 4 */
     if (end < p)
-        end = ~0;
+        end = ~7;
 
     while (p <= end) {
          data = ptrace(PTRACE_PEEKTEXT, pid, (void*)p, NULL);
