@@ -12,7 +12,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include <base/eintr_wrapper.h>
+#include "base/eintr_wrapper.h"  // HANDLE_EINTR macro, no libbase required.
 
 #define READ_WRITE_ALL_FILE_FLAGS \
   (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
@@ -40,6 +40,22 @@ static void PrintError(const char* message, const char* file,
     fprintf(stderr, "%s: %s: ", kProgramName, file);
     perror(message);
   }
+}
+
+// Copied from libbase to avoid pulling in all of libbase just for libmetrics.
+static int WriteFileDescriptor(const int fd, const char* data, int size) {
+  // Allow for partial writes.
+  ssize_t bytes_written_total = 0;
+  for (ssize_t bytes_written_partial = 0; bytes_written_total < size;
+       bytes_written_total += bytes_written_partial) {
+    bytes_written_partial =
+        HANDLE_EINTR(write(fd, data + bytes_written_total,
+                           size - bytes_written_total));
+    if (bytes_written_partial < 0)
+      return -1;
+  }
+
+  return bytes_written_total;
 }
 
 MetricsLibrary::MetricsLibrary()
@@ -155,7 +171,7 @@ bool MetricsLibrary::SendMessageToChrome(int32_t length, const char* message) {
   }
 
   bool success = true;
-  if (HANDLE_EINTR(write(chrome_fd, message, length)) != length) {
+  if (WriteFileDescriptor(chrome_fd, message, length) != length) {
     PrintError("write", uma_events_file_, errno);
     success = false;
   }
