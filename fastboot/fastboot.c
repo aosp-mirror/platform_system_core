@@ -9,7 +9,7 @@
  *    notice, this list of conditions and the following disclaimer.
  *  * Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the 
+ *    the documentation and/or other materials provided with the
  *    distribution.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
@@ -19,7 +19,7 @@
  * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
  * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
@@ -68,7 +68,7 @@ void die(const char *fmt, ...)
     fprintf(stderr,"\n");
     va_end(ap);
     exit(1);
-}    
+}
 
 void get_my_path(char *path);
 
@@ -99,13 +99,13 @@ char *find_item(const char *item, const char *product)
                 "../../../target/product/%s/%s", product, fn);
         return strdup(path);
     }
-        
+
     dir = getenv("ANDROID_PRODUCT_OUT");
     if((dir == 0) || (dir[0] == 0)) {
         die("neither -p product specified nor ANDROID_PRODUCT_OUT set");
         return 0;
     }
-    
+
     sprintf(path, "%s/%s", dir, fn);
     return strdup(path);
 }
@@ -189,12 +189,12 @@ usb_handle *open_device(void)
     int announce = 1;
 
     if(usb) return usb;
-    
+
     for(;;) {
         usb = usb_open(match_fastboot);
         if(usb) return usb;
         if(announce) {
-            announce = 0;    
+            announce = 0;
             fprintf(stderr,"< waiting for device >\n");
         }
         sleep(1);
@@ -226,6 +226,7 @@ void usage(void)
             "  continue                                 continue with autoboot\n"
             "  reboot                                   reboot device normally\n"
             "  reboot-bootloader                        reboot device into bootloader\n"
+            "  help                                     show this help message\n"
             "\n"
             "options:\n"
             "  -w                                       erase userdata and cache\n"
@@ -236,7 +237,6 @@ void usage(void)
             "  -b <base_addr>                           specify a custom kernel base address\n"
             "  -n <page size>                           specify the nand page size. default: 2048\n"
         );
-    exit(1);
 }
 
 void *load_bootable_image(unsigned page_size, const char *kernel, const char *ramdisk,
@@ -257,16 +257,16 @@ void *load_bootable_image(unsigned page_size, const char *kernel, const char *ra
         fprintf(stderr, "cannot load '%s'\n", kernel);
         return 0;
     }
-    
+
         /* is this actually a boot image? */
     if(!memcmp(kdata, BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
         if(cmdline) bootimg_set_cmdline((boot_img_hdr*) kdata, cmdline);
-        
+
         if(ramdisk) {
             fprintf(stderr, "cannot boot a boot.img *and* ramdisk\n");
             return 0;
         }
-        
+
         *sz = ksize;
         return kdata;
     }
@@ -288,7 +288,7 @@ void *load_bootable_image(unsigned page_size, const char *kernel, const char *ra
     if(cmdline) bootimg_set_cmdline((boot_img_hdr*) bdata, cmdline);
     fprintf(stderr,"creating boot image - %d bytes\n", bsize);
     *sz = bsize;
-    
+
     return bdata;
 }
 
@@ -297,7 +297,7 @@ void *unzip_file(zipfile_t zip, const char *name, unsigned *sz)
     void *data;
     zipentry_t entry;
     unsigned datasz;
-    
+
     entry = lookup_zipentry(zip, name);
     if (entry == NULL) {
         fprintf(stderr, "archive does not contain '%s'\n", name);
@@ -343,7 +343,7 @@ static int setup_requirement_line(char *name)
     unsigned n, count;
     char *x;
     int invert = 0;
-    
+
     if (!strncmp(name, "reject ", 7)) {
         name += 7;
         invert = 1;
@@ -363,10 +363,10 @@ static int setup_requirement_line(char *name)
         *x = 0;
         val[count] = x + 1;
     }
-    
+
     name = strip(name);
     for(n = 0; n < count; n++) val[n] = strip(val[n]);
-    
+
     name = strip(name);
     if (name == 0) return -1;
 
@@ -477,11 +477,11 @@ void do_send_signature(char *fn)
     void *data;
     unsigned sz;
     char *xtn;
-	
+
     xtn = strrchr(fn, '.');
     if (!xtn) return;
     if (strcmp(xtn, ".img")) return;
-	
+
     strcpy(xtn,".sig");
     data = load_file(fn, &sz);
     strcpy(xtn,".img");
@@ -521,18 +521,18 @@ void do_flashall(void)
     data = load_file(fname, &sz);
     if (data == 0) die("could not load system.img");
     do_send_signature(fname);
-    fb_queue_flash("system", data, sz);   
+    fb_queue_flash("system", data, sz);
 }
 
 #define skip(n) do { argc -= (n); argv += (n); } while (0)
-#define require(n) do { if (argc < (n)) usage(); } while (0)
+#define require(n) do { if (argc < (n)) usage(); exit(1);} while (0)
 
 int do_oem_command(int argc, char **argv)
 {
     int i;
     char command[256];
     if (argc <= 1) return 0;
-    
+
     command[0] = 0;
     while(1) {
         strcat(command,*argv);
@@ -541,7 +541,7 @@ int do_oem_command(int argc, char **argv)
         strcat(command," ");
     }
 
-    fb_queue_command(command,"");    
+    fb_queue_command(command,"");
     return 0;
 }
 
@@ -565,6 +565,12 @@ int main(int argc, char **argv)
         list_devices();
         return 0;
     }
+
+    if (!strcmp(*argv, "help")) {
+        usage();
+        return 0;
+    }
+
 
     serial = getenv("ANDROID_SERIAL");
 
@@ -690,7 +696,7 @@ int main(int argc, char **argv)
             argc = do_oem_command(argc, argv);
         } else {
             usage();
-	    return 1;
+            return 1;
         }
     }
 
