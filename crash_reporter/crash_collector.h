@@ -138,9 +138,6 @@ class CrashCollector {
                           const std::string &exec_name,
                           const std::string &payload_path);
 
-  // Returns true if the a crash test is currently running.
-  bool IsCrashTestInProgress();
-
   CountCrashFunction count_crash_function_;
   IsFeedbackAllowedFunction is_feedback_allowed_function_;
   SystemLogging *logger_;
