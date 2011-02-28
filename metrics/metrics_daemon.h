@@ -30,7 +30,7 @@ class MetricsDaemon {
 
   // Initializes.
   void Init(bool testing, MetricsLibraryInterface* metrics_lib,
-            const char* diskstats_path);
+            std::string diskstats_path);
 
   // Does all the work. If |run_as_daemon| is true, daemonizes by
   // forking.
@@ -304,7 +304,7 @@ class MetricsDaemon {
   long int write_sectors_;
 
   DiskStatsState diskstats_state_;
-  const char* diskstats_path_;
+  std::string diskstats_path_;
 };
 
 #endif  // METRICS_DAEMON_H_

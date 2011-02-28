@@ -38,7 +38,8 @@ TESTLIB_OBJS = \
 	metrics_library_test.o
 
 TESTCOUNTER_LIBS = -lgmock -lgtest -lbase -lrt -lpthread -lglib-2.0
-DAEMON_LDFLAGS = $(LDFLAGS) $(LDCONFIG) -lrt -lbase -lpthread -lgflags -lglib-2.0
+DAEMON_LDFLAGS = $(LDFLAGS) $(LDCONFIG) -lrt -lbase -lpthread -lgflags \
+		 -lglib-2.0 -lrootdev
 TESTDAEMON_LIBS = -lgmock -lgtest
 TESTLIB_LIBS = -lgtest -lbase -lrt -lpthread -lglib-2.0
 

@@ -146,8 +146,7 @@ MetricsDaemon::MetricsDaemon()
       session_state_(kUnknownSessionState),
       user_active_(false),
       usemon_interval_(0),
-      usemon_source_(NULL),
-      diskstats_path_(NULL) {}
+      usemon_source_(NULL) {}
 
 MetricsDaemon::~MetricsDaemon() {
   DeleteFrequencyCounters();
@@ -215,7 +214,7 @@ void MetricsDaemon::ConfigureCrashFrequencyReporter(
 }
 
 void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
-                         const char* diskstats_path) {
+                         string diskstats_path) {
   testing_ = testing;
   DCHECK(metrics_lib != NULL);
   metrics_lib_ = metrics_lib;
@@ -243,8 +242,11 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
   ConfigureCrashFrequencyReporter(kMetricUserCrashesDailyName);
   ConfigureCrashFrequencyReporter(kMetricUserCrashesWeeklyName);
 
-  diskstats_path_ = diskstats_path;
-  DiskStatsReporterInit();
+  // Don't attempt to collect disk stats if there is no disk stats file.
+  if (!diskstats_path.empty()) {
+    diskstats_path_ = diskstats_path;
+    DiskStatsReporterInit();
+  }
 
   // Don't setup D-Bus and GLib in test mode.
   if (testing)
@@ -541,7 +543,7 @@ void MetricsDaemon::DiskStatsReadStats(long int* read_sectors,
   int nchars;
   int nitems;
   char line[200];
-  int file = HANDLE_EINTR(open(diskstats_path_, O_RDONLY));
+  int file = HANDLE_EINTR(open(diskstats_path_.c_str(), O_RDONLY));
   if (file < 0) {
     PLOG(WARNING) << "cannot open " << diskstats_path_;
     return;
