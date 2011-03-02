@@ -338,4 +338,10 @@
  */
 /* #define HAVE_PRINTF_ZD 1 */
 
+/*
+ * We need to open binary files using O_BINARY on Windows.
+ * We don't define it on Windows since it is part of the io headers.
+ */
+/* #define O_BINARY 0 */
+
 #endif /*_ANDROID_CONFIG_H*/
