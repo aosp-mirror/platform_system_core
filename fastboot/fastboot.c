@@ -525,7 +525,7 @@ void do_flashall(void)
 }
 
 #define skip(n) do { argc -= (n); argv += (n); } while (0)
-#define require(n) do { if (argc < (n)) usage(); exit(1);} while (0)
+#define require(n) do { if (argc < (n)) {usage(); exit(1);}} while (0)
 
 int do_oem_command(int argc, char **argv)
 {
