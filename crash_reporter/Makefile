@@ -7,10 +7,9 @@ REPORTER_BINS = $(CRASH_REPORTER)
 CRASH_OBJS = \
 	crash_collector.o \
 	kernel_collector.o \
-	system_logging.o \
 	unclean_shutdown_collector.o \
 	user_collector.o
-TEST_OBJS = $(CRASH_OBJS) system_logging_mock.o
+TEST_OBJS = $(CRASH_OBJS)
 TEST_BINS = \
 	crash_collector_test \
 	kernel_collector_test \
@@ -20,7 +19,7 @@ TEST_BINS = \
 LDCONFIG = $(shell $(PKG_CONFIG) --libs libpcrecpp)
 
 # -lglib-2.0 is needed by libbase.a now.
-COMMON_LIBS = -lbase -lpthread -lglib-2.0 -lgflags -lrt $(LDCONFIG)
+COMMON_LIBS = -lchromeos -lbase -lpthread -lglib-2.0 -lgflags -lrt $(LDCONFIG)
 REPORTER_LIBS = $(COMMON_LIBS) -lmetrics
 
 TEST_LIBS = $(COMMON_LIBS) -lgtest -lgmock

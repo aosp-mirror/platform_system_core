@@ -7,7 +7,6 @@
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/string_util.h"
-#include "crash-reporter/system_logging.h"
 
 const char KernelCollector::kClearingSequence[] = " ";
 static const char kDefaultKernelStackSignature[] =
@@ -41,8 +40,7 @@ bool KernelCollector::LoadPreservedDump(std::string *contents) {
   // clear contents since ReadFileToString actually appends to the string.
   contents->clear();
   if (!file_util::ReadFileToString(preserved_dump_path_, contents)) {
-    logger_->LogError("Unable to read %s",
-                      preserved_dump_path_.value().c_str());
+    LOG(ERROR) << "Unable to read " << preserved_dump_path_.value();
     return false;
   }
   return true;
@@ -50,13 +48,13 @@ bool KernelCollector::LoadPreservedDump(std::string *contents) {
 
 bool KernelCollector::Enable() {
   if (!file_util::PathExists(preserved_dump_path_)) {
-    logger_->LogWarning("Kernel does not support crash dumping");
+    LOG(WARNING) << "Kernel does not support crash dumping";
     return false;
   }
 
   // To enable crashes, we will eventually need to set
   // the chnv bit in BIOS, but it does not yet work.
-  logger_->LogInfo("Enabling kernel crash handling");
+  LOG(INFO) << "Enabling kernel crash handling";
   is_enabled_ = true;
   return true;
 }
@@ -68,10 +66,10 @@ bool KernelCollector::ClearPreservedDump() {
           preserved_dump_path_,
           kClearingSequence,
           strlen(kClearingSequence)) != strlen(kClearingSequence)) {
-    logger_->LogError("Failed to clear kernel crash dump");
+    LOG(ERROR) << "Failed to clear kernel crash dump";
     return false;
   }
-  logger_->LogInfo("Cleared kernel crash diagnostics");
+  LOG(INFO) << "Cleared kernel crash diagnostics";
   return true;
 }
 
@@ -256,10 +254,9 @@ bool KernelCollector::Collect() {
 
   bool feedback = is_feedback_allowed_function_();
 
-  logger_->LogInfo("Received prior crash notification from "
-                   "kernel (signature %s) (%s)",
-                   signature.c_str(),
-                   feedback ? "handling" : "ignoring - no consent");
+  LOG(INFO) << "Received prior crash notification from "
+            << "kernel (signature " << signature << ") ("
+            << (feedback ? "handling" : "ignoring - no consent") << ")";
 
   if (feedback) {
     count_crash_function_();
@@ -284,8 +281,8 @@ bool KernelCollector::Collect() {
                      kernel_dump.data(),
                      kernel_dump.length()) !=
         static_cast<int>(kernel_dump.length())) {
-      logger_->LogInfo("Failed to write kernel dump to %s",
-                       kernel_crash_path.value().c_str());
+      LOG(INFO) << "Failed to write kernel dump to "
+                << kernel_crash_path.value().c_str();
       return true;
     }
 
@@ -296,8 +293,7 @@ bool KernelCollector::Collect() {
         kKernelExecName,
         kernel_crash_path.value());
 
-    logger_->LogInfo("Stored kcrash to %s",
-                     kernel_crash_path.value().c_str());
+    LOG(INFO) << "Stored kcrash to " << kernel_crash_path.value();
   }
   if (!ClearPreservedDump()) {
     return false;

@@ -13,8 +13,6 @@
 #include "base/file_path.h"
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
-class SystemLogging;
-
 // User crash collector.
 class CrashCollector {
  public:
@@ -26,11 +24,9 @@ class CrashCollector {
   virtual ~CrashCollector();
 
   // Initialize the crash collector for detection of crashes, given a
-  // crash counting function, metrics collection enabled oracle, and
-  // system logger facility.
+  // crash counting function, and metrics collection enabled oracle.
   void Initialize(CountCrashFunction count_crash,
-                  IsFeedbackAllowedFunction is_metrics_allowed,
-                  SystemLogging *logger);
+                  IsFeedbackAllowedFunction is_metrics_allowed);
 
  protected:
   friend class CrashCollectorTest;
@@ -65,9 +61,6 @@ class CrashCollector {
   // If the file already exists or writing fails, return a negative value.
   // Otherwise returns the number of bytes written.
   int WriteNewFile(const FilePath &filename, const char *data, int size);
-
-  int ForkExecAndPipe(std::vector<const char *> &arguments,
-                      const char *output_file);
 
   // Return a filename that has only [a-z0-1_] characters by mapping
   // all others into '_'.
@@ -140,7 +133,6 @@ class CrashCollector {
 
   CountCrashFunction count_crash_function_;
   IsFeedbackAllowedFunction is_feedback_allowed_function_;
-  SystemLogging *logger_;
   std::string extra_metadata_;
   const char *forced_crash_directory_;
   const char *lsb_release_;

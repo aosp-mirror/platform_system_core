@@ -6,7 +6,6 @@
 
 #include "base/file_util.h"
 #include "base/logging.h"
-#include "crash-reporter/system_logging.h"
 
 static const char kUncleanShutdownFile[] =
     "/var/lib/crash_reporter/pending_clean_shutdown";
@@ -32,7 +31,7 @@ bool UncleanShutdownCollector::Enable() {
   FilePath file_path(unclean_shutdown_file_);
   file_util::CreateDirectory(file_path.DirName());
   if (file_util::WriteFile(file_path, "", 0) != 0) {
-    logger_->LogError("Unable to create shutdown check file");
+    LOG(ERROR) << "Unable to create shutdown check file";
     return false;
   }
   return true;
@@ -40,8 +39,8 @@ bool UncleanShutdownCollector::Enable() {
 
 bool UncleanShutdownCollector::DeleteUncleanShutdownFiles() {
   if (!file_util::Delete(FilePath(unclean_shutdown_file_), false)) {
-    logger_->LogError("Failed to delete unclean shutdown file %s",
-                      unclean_shutdown_file_);
+    LOG(ERROR) << "Failed to delete unclean shutdown file "
+               << unclean_shutdown_file_;
     return false;
   }
   // Delete power manager trace files if they exist.
@@ -55,7 +54,7 @@ bool UncleanShutdownCollector::Collect() {
   if (!file_util::PathExists(unclean_file_path)) {
     return false;
   }
-  logger_->LogWarning("Last shutdown was not clean");
+  LOG(WARNING) << "Last shutdown was not clean";
   if (DeadBatteryCausedUncleanShutdown()) {
     DeleteUncleanShutdownFiles();
     return false;
@@ -69,7 +68,7 @@ bool UncleanShutdownCollector::Collect() {
 }
 
 bool UncleanShutdownCollector::Disable() {
-  logger_->LogInfo("Clean shutdown signalled");
+  LOG(INFO) << "Clean shutdown signalled";
   return DeleteUncleanShutdownFiles();
 }
 
@@ -77,16 +76,16 @@ bool UncleanShutdownCollector::DeadBatteryCausedUncleanShutdown()
 {
   // Check for case of battery running out while suspended.
   if (file_util::PathExists(powerd_suspended_file_)) {
-    logger_->LogInfo("Unclean shutdown occurred while suspended. Not counting "
-                     "toward unclean shutdown statistic.");
+    LOG(INFO) << "Unclean shutdown occurred while suspended. Not counting "
+              << "toward unclean shutdown statistic.";
     return true;
   }
   // Check for case of battery running out after resuming from a low-battery
   // suspend.
   if (file_util::PathExists(powerd_low_battery_file_)) {
-    logger_->LogInfo("Unclean shutdown occurred while running with battery "
-                     "critically low.  Not counting toward unclean shutdown "
-                     "statistic.");
+    LOG(INFO) << "Unclean shutdown occurred while running with battery "
+              << "critically low.  Not counting toward unclean shutdown "
+              << "statistic.";
     return true;
   }
   return false;

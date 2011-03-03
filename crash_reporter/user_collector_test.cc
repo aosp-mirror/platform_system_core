@@ -5,9 +5,9 @@
 #include <unistd.h>
 
 #include "base/file_util.h"
-#include "crash-reporter/system_logging_mock.h"
+#include "chromeos/syslog_logging.h"
+#include "chromeos/test_helpers.h"
 #include "crash-reporter/user_collector.h"
-#include "crash-reporter/test_helpers.h"
 #include "gflags/gflags.h"
 #include "gtest/gtest.h"
 
@@ -15,6 +15,8 @@ static int s_crashes = 0;
 static bool s_metrics = false;
 
 static const char kFilePath[] = "/my/path";
+
+using chromeos::FindLog;
 
 void CountCrash() {
   ++s_crashes;
@@ -30,13 +32,13 @@ class UserCollectorTest : public ::testing::Test {
     collector_.Initialize(CountCrash,
                           kFilePath,
                           IsMetrics,
-                          &logging_,
                           false);
     file_util::Delete(FilePath("test"), true);
     mkdir("test", 0777);
     collector_.set_core_pattern_file("test/core_pattern");
     collector_.set_core_pipe_limit_file("test/core_pipe_limit");
     pid_ = getpid();
+    chromeos::ClearLog();
   }
  protected:
   void ExpectFileEquals(const char *golden,
@@ -47,7 +49,6 @@ class UserCollectorTest : public ::testing::Test {
     EXPECT_EQ(golden, contents);
   }
 
-  SystemLoggingMock logging_;
   UserCollector collector_;
   pid_t pid_;
 };
@@ -57,18 +58,15 @@ TEST_F(UserCollectorTest, EnableOK) {
   ExpectFileEquals("|/my/path --user=%p:%s:%e", "test/core_pattern");
   ExpectFileEquals("4", "test/core_pipe_limit");
   ASSERT_EQ(s_crashes, 0);
-  ASSERT_NE(logging_.log().find("Enabling user crash handling"),
-            std::string::npos);
+  EXPECT_TRUE(FindLog("Enabling user crash handling"));
 }
 
 TEST_F(UserCollectorTest, EnableNoPatternFileAccess) {
   collector_.set_core_pattern_file("/does_not_exist");
   ASSERT_FALSE(collector_.Enable());
   ASSERT_EQ(s_crashes, 0);
-  ASSERT_NE(logging_.log().find("Enabling user crash handling"),
-            std::string::npos);
-  ASSERT_NE(logging_.log().find("Unable to write /does_not_exist"),
-            std::string::npos);
+  EXPECT_TRUE(FindLog("Enabling user crash handling"));
+  EXPECT_TRUE(FindLog("Unable to write /does_not_exist"));
 }
 
 TEST_F(UserCollectorTest, EnableNoPipeLimitFileAccess) {
@@ -78,28 +76,23 @@ TEST_F(UserCollectorTest, EnableNoPipeLimitFileAccess) {
   // Core pattern should not be written if we cannot access the pipe limit
   // or otherwise we may set a pattern that results in infinite recursion.
   ASSERT_FALSE(file_util::PathExists(FilePath("test/core_pattern")));
-  ASSERT_NE(logging_.log().find("Enabling user crash handling"),
-            std::string::npos);
-  ASSERT_NE(logging_.log().find("Unable to write /does_not_exist"),
-            std::string::npos);
+  EXPECT_TRUE(FindLog("Enabling user crash handling"));
+  EXPECT_TRUE(FindLog("Unable to write /does_not_exist"));
 }
 
 TEST_F(UserCollectorTest, DisableOK) {
   ASSERT_TRUE(collector_.Disable());
   ExpectFileEquals("core", "test/core_pattern");
   ASSERT_EQ(s_crashes, 0);
-  ASSERT_NE(logging_.log().find("Disabling user crash handling"),
-            std::string::npos);
+  EXPECT_TRUE(FindLog("Disabling user crash handling"));
 }
 
 TEST_F(UserCollectorTest, DisableNoFileAccess) {
   collector_.set_core_pattern_file("/does_not_exist");
   ASSERT_FALSE(collector_.Disable());
   ASSERT_EQ(s_crashes, 0);
-  ASSERT_NE(logging_.log().find("Disabling user crash handling"),
-            std::string::npos);
-  ASSERT_NE(logging_.log().find("Unable to write /does_not_exist"),
-            std::string::npos);
+  EXPECT_TRUE(FindLog("Disabling user crash handling"));
+  EXPECT_TRUE(FindLog("Unable to write /does_not_exist"));
 }
 
 TEST_F(UserCollectorTest, ParseCrashAttributes) {
@@ -132,40 +125,34 @@ TEST_F(UserCollectorTest, ParseCrashAttributes) {
 TEST_F(UserCollectorTest, HandleCrashWithoutMetrics) {
   s_metrics = false;
   collector_.HandleCrash("20:10:ignored", "foobar");
-  ASSERT_NE(std::string::npos,
-            logging_.log().find(
-                "Received crash notification for foobar[20] sig 10"));
+  EXPECT_TRUE(FindLog(
+      "Received crash notification for foobar[20] sig 10"));
   ASSERT_EQ(s_crashes, 0);
 }
 
 TEST_F(UserCollectorTest, HandleNonChromeCrashWithMetrics) {
   s_metrics = true;
   collector_.HandleCrash("5:2:ignored", "chromeos-wm");
-  ASSERT_NE(std::string::npos,
-            logging_.log().find(
-                "Received crash notification for chromeos-wm[5] sig 2"));
+  EXPECT_TRUE(FindLog(
+      "Received crash notification for chromeos-wm[5] sig 2"));
   ASSERT_EQ(s_crashes, 1);
 }
 
 TEST_F(UserCollectorTest, HandleChromeCrashWithMetrics) {
   s_metrics = true;
   collector_.HandleCrash("5:2:ignored", "chrome");
-  ASSERT_NE(std::string::npos,
-            logging_.log().find(
-                "Received crash notification for chrome[5] sig 2"));
-  ASSERT_NE(std::string::npos,
-            logging_.log().find("(ignoring - chrome crash)"));
+  EXPECT_TRUE(FindLog(
+      "Received crash notification for chrome[5] sig 2"));
+  EXPECT_TRUE(FindLog("(ignoring - chrome crash)"));
   ASSERT_EQ(s_crashes, 0);
 }
 
 TEST_F(UserCollectorTest, HandleSuppliedChromeCrashWithMetrics) {
   s_metrics = true;
   collector_.HandleCrash("0:2:chrome", NULL);
-  ASSERT_NE(std::string::npos,
-            logging_.log().find(
-                "Received crash notification for supplied_chrome[0] sig 2"));
-  ASSERT_NE(std::string::npos,
-            logging_.log().find("(ignoring - chrome crash)"));
+  EXPECT_TRUE(FindLog(
+      "Received crash notification for supplied_chrome[0] sig 2"));
+  EXPECT_TRUE(FindLog("(ignoring - chrome crash)"));
   ASSERT_EQ(s_crashes, 0);
 }
 
@@ -178,9 +165,8 @@ TEST_F(UserCollectorTest, GetSymlinkTarget) {
   FilePath result;
   ASSERT_FALSE(collector_.GetSymlinkTarget(FilePath("/does_not_exist"),
                                            &result));
-  ASSERT_NE(std::string::npos,
-            logging_.log().find(
-                "Readlink failed on /does_not_exist with 2"));
+  ASSERT_TRUE(FindLog(
+      "Readlink failed on /does_not_exist with 2"));
   std::string long_link;
   for (int i = 0; i < 50; ++i)
     long_link += "0123456789";
@@ -201,23 +187,16 @@ TEST_F(UserCollectorTest, GetSymlinkTarget) {
 TEST_F(UserCollectorTest, GetExecutableBaseNameFromPid) {
   std::string base_name;
   EXPECT_FALSE(collector_.GetExecutableBaseNameFromPid(0, &base_name));
-  EXPECT_NE(std::string::npos,
-            logging_.log().find(
-                "Readlink failed on /proc/0/exe with 2"));
-  EXPECT_NE(std::string::npos,
-            logging_.log().find(
-                "GetSymlinkTarget failed - Path "
-                "/proc/0 DirectoryExists: 0"));
-  EXPECT_NE(std::string::npos,
-            logging_.log().find(
-                "stat /proc/0/exe failed: -1 2"));
+  EXPECT_TRUE(FindLog(
+      "Readlink failed on /proc/0/exe with 2"));
+  EXPECT_TRUE(FindLog(
+      "GetSymlinkTarget failed - Path /proc/0 DirectoryExists: 0"));
+  EXPECT_TRUE(FindLog("stat /proc/0/exe failed: -1 2"));
 
-  logging_.clear();
+  chromeos::ClearLog();
   pid_t my_pid = getpid();
   EXPECT_TRUE(collector_.GetExecutableBaseNameFromPid(my_pid, &base_name));
-  EXPECT_EQ(std::string::npos,
-            logging_.log().find(
-                "Readlink failed"));
+  EXPECT_FALSE(FindLog("Readlink failed"));
   EXPECT_EQ("user_collector_test", base_name);
 }
 
@@ -303,24 +282,19 @@ TEST_F(UserCollectorTest, GetUserInfoFromName) {
 TEST_F(UserCollectorTest, CopyOffProcFilesBadPath) {
   // Try a path that is not writable.
   ASSERT_FALSE(collector_.CopyOffProcFiles(pid_, FilePath("/bad/path")));
-  ASSERT_NE(logging_.log().find(
-      "Could not create /bad/path"),
-            std::string::npos);
+  EXPECT_TRUE(FindLog("Could not create /bad/path"));
 }
 
 TEST_F(UserCollectorTest, CopyOffProcFilesBadPid) {
   FilePath container_path("test/container");
   ASSERT_FALSE(collector_.CopyOffProcFiles(0, container_path));
-  ASSERT_NE(logging_.log().find(
-      "Path /proc/0 does not exist"),
-            std::string::npos);
+  EXPECT_TRUE(FindLog("Path /proc/0 does not exist"));
 }
 
 TEST_F(UserCollectorTest, CopyOffProcFilesOK) {
   FilePath container_path("test/container");
   ASSERT_TRUE(collector_.CopyOffProcFiles(pid_, container_path));
-  ASSERT_EQ(logging_.log().find(
-      "Could not copy"), std::string::npos);
+  EXPECT_FALSE(FindLog("Could not copy"));
   static struct {
     const char *name;
     bool exists;
@@ -342,6 +316,6 @@ TEST_F(UserCollectorTest, CopyOffProcFilesOK) {
 }
 
 int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
+  SetUpTests(&argc, argv, false);
   return RUN_ALL_TESTS();
 }

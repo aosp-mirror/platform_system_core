@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <fcntl.h>  // for open
+
 #include <string>
 
 #include "base/file_util.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/string_util.h"
+#include "chromeos/syslog_logging.h"
 #include "crash-reporter/kernel_collector.h"
-#include "crash-reporter/system_logging.h"
 #include "crash-reporter/unclean_shutdown_collector.h"
 #include "crash-reporter/user_collector.h"
 #include "gflags/gflags.h"
@@ -41,7 +43,6 @@ enum CrashKinds {
 };
 
 static MetricsLibrary s_metrics_lib;
-static SystemLoggingImpl s_system_log;
 
 static bool IsFeedbackAllowed() {
   return s_metrics_lib.AreMetricsEnabled();
@@ -96,9 +97,7 @@ static void CountUserCrash() {
   // to be restarted anyway.
 
   int status = system(command.c_str());
-  if (status != 0) {
-    s_system_log.LogWarning("dbus-send running failed");
-  }
+  LOG_IF(WARNING, status != 0) << "dbus-send running failed";
 }
 
 static int Initialize(KernelCollector *kernel_collector,
@@ -149,10 +148,10 @@ static int HandleUserCrash(UserCollector *user_collector) {
   }
 
   // Accumulate logs to help in diagnosing failures during user collection.
-  s_system_log.set_accumulating(true);
+  chromeos::LogToString(true);
   // Handle the crash, get the name of the process from procfs.
   bool handled = user_collector->HandleCrash(FLAGS_user, NULL);
-  s_system_log.set_accumulating(false);
+  chromeos::LogToString(false);
   if (!handled)
     return 1;
   return 0;
@@ -178,31 +177,45 @@ static int GenerateKernelSignature(KernelCollector *kernel_collector) {
   return 0;
 }
 
+// Ensure stdout, stdin, and stderr are open file descriptors.  If
+// they are not, any code which writes to stderr/stdout may write out
+// to files opened during execution.  In particular, when
+// crash_reporter is run by the kernel coredump pipe handler (via
+// kthread_create/kernel_execve), it will not have file table entries
+// 1 and 2 (stdout and stderr) populated.  We populate them here.
+static void OpenStandardFileDescriptors() {
+  int new_fd = -1;
+  // We open /dev/null to fill in any of the standard [0, 2] file
+  // descriptors.  We leave these open for the duration of the
+  // process.  This works because open returns the lowest numbered
+  // invalid fd.
+  do {
+    new_fd = open("/dev/null", 0);
+    CHECK(new_fd >= 0) << "Unable to open /dev/null";
+  } while (new_fd >= 0 && new_fd <= 2);
+  close(new_fd);
+}
+
 int main(int argc, char *argv[]) {
+  OpenStandardFileDescriptors();
   google::ParseCommandLineFlags(&argc, &argv, true);
   FilePath my_path(argv[0]);
   file_util::AbsolutePath(&my_path);
   s_metrics_lib.Init();
   CommandLine::Init(argc, argv);
-  logging::InitLogging(NULL,
-                       logging::LOG_ONLY_TO_SYSTEM_DEBUG_LOG,
-                       logging::DONT_LOCK_LOG_FILE,
-                       logging::DELETE_OLD_LOG_FILE);
-  s_system_log.Initialize(my_path.BaseName().value().c_str());
+  chromeos::OpenLog(my_path.BaseName().value().c_str(), true);
+  chromeos::InitLog(chromeos::kLogToSyslog);
   KernelCollector kernel_collector;
   kernel_collector.Initialize(CountKernelCrash,
-                              IsFeedbackAllowed,
-                              &s_system_log);
+                              IsFeedbackAllowed);
   UserCollector user_collector;
   user_collector.Initialize(CountUserCrash,
                             my_path.value(),
                             IsFeedbackAllowed,
-                            &s_system_log,
                             true);  // generate_diagnostics
   UncleanShutdownCollector unclean_shutdown_collector;
   unclean_shutdown_collector.Initialize(CountUncleanShutdown,
-                                        IsFeedbackAllowed,
-                                        &s_system_log);
+                                        IsFeedbackAllowed);
 
   if (FLAGS_init) {
     return Initialize(&kernel_collector,

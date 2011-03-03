@@ -6,9 +6,9 @@
 
 #include "base/file_util.h"
 #include "base/string_util.h"
+#include "chromeos/syslog_logging.h"
+#include "chromeos/test_helpers.h"
 #include "crash-reporter/crash_collector.h"
-#include "crash-reporter/system_logging_mock.h"
-#include "crash-reporter/test_helpers.h"
 #include "gflags/gflags.h"
 #include "gtest/gtest.h"
 
@@ -17,6 +17,8 @@ static const char kBinBash[] = "/bin/bash";
 static const char kBinCp[] = "/bin/cp";
 static const char kBinEcho[] = "/bin/echo";
 static const char kBinFalse[] = "/bin/false";
+
+using chromeos::FindLog;
 
 void CountCrash() {
   ADD_FAILURE();
@@ -31,10 +33,10 @@ class CrashCollectorTest : public ::testing::Test {
  public:
   void SetUp() {
     collector_.Initialize(CountCrash,
-                          IsMetrics,
-                          &logging_);
+                          IsMetrics);
     test_dir_ = FilePath("test");
     file_util::CreateDirectory(test_dir_);
+    chromeos::ClearLog();
   }
 
   void TearDown() {
@@ -44,7 +46,6 @@ class CrashCollectorTest : public ::testing::Test {
   bool CheckHasCapacity();
 
  protected:
-  SystemLoggingMock logging_;
   CrashCollector collector_;
   FilePath test_dir_;
 };
@@ -52,7 +53,6 @@ class CrashCollectorTest : public ::testing::Test {
 TEST_F(CrashCollectorTest, Initialize) {
   ASSERT_TRUE(CountCrash == collector_.count_crash_function_);
   ASSERT_TRUE(IsMetrics == collector_.is_feedback_allowed_function_);
-  ASSERT_TRUE(&logging_ == collector_.logger_);
 }
 
 TEST_F(CrashCollectorTest, WriteNewFile) {
@@ -154,7 +154,7 @@ TEST_F(CrashCollectorTest, GetCrashPath) {
 bool CrashCollectorTest::CheckHasCapacity() {
   static const char kFullMessage[] = "Crash directory test already full";
   bool has_capacity = collector_.CheckHasCapacity(test_dir_);
-  bool has_message = (logging_.log().find(kFullMessage) != std::string::npos);
+  bool has_message = FindLog(kFullMessage);
   EXPECT_EQ(has_message, !has_capacity);
   return has_capacity;
 }
@@ -298,24 +298,24 @@ TEST_F(CrashCollectorTest, MetaData) {
             symlink(kMetaFileBasename,
                     meta_symlink_path.value().c_str()));
   ASSERT_TRUE(file_util::PathExists(meta_symlink_path));
-  logging_.clear();
+  chromeos::ClearLog();
   collector_.WriteCrashMetaData(meta_symlink_path,
                                 "kernel",
                                 payload_file.value());
-  // Target metadata contents sould have stayed the same.
+  // Target metadata contents should have stayed the same.
   contents.clear();
   EXPECT_TRUE(file_util::ReadFileToString(meta_file, &contents));
   EXPECT_EQ(kExpectedMeta, contents);
-  EXPECT_NE(std::string::npos, logging_.log().find("Unable to write"));
+  EXPECT_TRUE(FindLog("Unable to write"));
 
   // Test target of dangling symlink is not created.
   file_util::Delete(meta_file, false);
   ASSERT_FALSE(file_util::PathExists(meta_file));
-  logging_.clear();
+  chromeos::ClearLog();
   collector_.WriteCrashMetaData(meta_symlink_path, "kernel",
                                 payload_file.value());
   EXPECT_FALSE(file_util::PathExists(meta_file));
-  EXPECT_NE(std::string::npos, logging_.log().find("Unable to write"));
+  EXPECT_TRUE(FindLog("Unable to write"));
 }
 
 TEST_F(CrashCollectorTest, GetLogContents) {
@@ -341,87 +341,7 @@ TEST_F(CrashCollectorTest, GetLogContents) {
   EXPECT_EQ("hello world\n", contents);
 }
 
-class ForkExecAndPipeTest : public CrashCollectorTest {
- public:
-  void SetUp() {
-    CrashCollectorTest::SetUp();
-    output_file_ = "test/fork_out";
-    file_util::Delete(FilePath(output_file_), false);
-  }
-
-  void TearDown() {
-    CrashCollectorTest::TearDown();
-  }
-
- protected:
-  std::vector<const char *> args_;
-  const char *output_file_;
-};
-
-TEST_F(ForkExecAndPipeTest, Basic) {
-  args_.push_back(kBinEcho);
-  args_.push_back("hello world");
-  EXPECT_EQ(0, collector_.ForkExecAndPipe(args_, output_file_));
-  ExpectFileEquals("hello world\n", output_file_);
-  EXPECT_EQ("", logging_.log());
-}
-
-TEST_F(ForkExecAndPipeTest, NonZeroReturnValue) {
-  args_.push_back(kBinFalse);
-  EXPECT_EQ(1, collector_.ForkExecAndPipe(args_, output_file_));
-  ExpectFileEquals("", output_file_);
-  EXPECT_EQ("", logging_.log());
-}
-
-TEST_F(ForkExecAndPipeTest, BadOutputFile) {
-  EXPECT_EQ(127, collector_.ForkExecAndPipe(args_, "/bad/path"));
-}
-
-TEST_F(ForkExecAndPipeTest, ExistingOutputFile) {
-  args_.push_back(kBinEcho);
-  args_.push_back("hello world");
-  EXPECT_FALSE(file_util::PathExists(FilePath(output_file_)));
-  EXPECT_EQ(0, collector_.ForkExecAndPipe(args_, output_file_));
-  EXPECT_TRUE(file_util::PathExists(FilePath(output_file_)));
-  EXPECT_EQ(127, collector_.ForkExecAndPipe(args_, output_file_));
-}
-
-TEST_F(ForkExecAndPipeTest, BadExecutable) {
-  args_.push_back("false");
-  EXPECT_EQ(127, collector_.ForkExecAndPipe(args_, output_file_));
-}
-
-TEST_F(ForkExecAndPipeTest, StderrCaptured) {
-  std::string contents;
-  args_.push_back(kBinCp);
-  EXPECT_EQ(1, collector_.ForkExecAndPipe(args_, output_file_));
-  EXPECT_TRUE(file_util::ReadFileToString(FilePath(output_file_),
-                                                   &contents));
-  EXPECT_NE(std::string::npos, contents.find("missing file operand"));
-  EXPECT_EQ("", logging_.log());
-}
-
-TEST_F(ForkExecAndPipeTest, NULLParam) {
-  args_.push_back(NULL);
-  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args_, output_file_));
-  EXPECT_NE(std::string::npos,
-            logging_.log().find("Bad parameter"));
-}
-
-TEST_F(ForkExecAndPipeTest, NoParams) {
-  EXPECT_EQ(127, collector_.ForkExecAndPipe(args_, output_file_));
-}
-
-TEST_F(ForkExecAndPipeTest, SegFaultHandling) {
-  args_.push_back(kBinBash);
-  args_.push_back("-c");
-  args_.push_back("kill -SEGV $$");
-  EXPECT_EQ(-1, collector_.ForkExecAndPipe(args_, output_file_));
-  EXPECT_NE(std::string::npos,
-            logging_.log().find("Process did not exit normally"));
-}
-
 int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
+  SetUpTests(&argc, argv, false);
   return RUN_ALL_TESTS();
 }

@@ -17,7 +17,7 @@
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/string_util.h"
-#include "crash-reporter/system_logging.h"
+#include "chromeos/process.h"
 
 static const char kDefaultUserName[] = "chronos";
 static const char kLsbRelease[] = "/etc/lsb-release";
@@ -54,15 +54,12 @@ CrashCollector::~CrashCollector() {
 
 void CrashCollector::Initialize(
     CrashCollector::CountCrashFunction count_crash_function,
-    CrashCollector::IsFeedbackAllowedFunction is_feedback_allowed_function,
-    SystemLogging *logger) {
+    CrashCollector::IsFeedbackAllowedFunction is_feedback_allowed_function) {
   CHECK(count_crash_function != NULL);
   CHECK(is_feedback_allowed_function != NULL);
-  CHECK(logger != NULL);
 
   count_crash_function_ = count_crash_function;
   is_feedback_allowed_function_ = is_feedback_allowed_function;
-  logger_ = logger;
 }
 
 int CrashCollector::WriteNewFile(const FilePath &filename,
@@ -77,63 +74,6 @@ int CrashCollector::WriteNewFile(const FilePath &filename,
   int rv = file_util::WriteFileDescriptor(fd, data, size);
   HANDLE_EINTR(close(fd));
   return rv;
-}
-
-int CrashCollector::ForkExecAndPipe(std::vector<const char *> &arguments,
-                                    const char *output_file) {
-  // Copy off a writeable version of arguments.
-  scoped_array<char*> argv(new char *[arguments.size() + 1]);
-  int total_args_size = 0;
-  for (size_t i = 0; i < arguments.size(); ++i) {
-    if (arguments[i] == NULL) {
-      logger_->LogError("Bad parameter");
-      return -1;
-    }
-    total_args_size += strlen(arguments[i]) + 1;
-  }
-  scoped_array<char> buffer(new char[total_args_size]);
-  char *buffer_pointer = &buffer[0];
-
-  for (size_t i = 0; i < arguments.size(); ++i) {
-    argv[i] = buffer_pointer;
-    strcpy(buffer_pointer, arguments[i]);
-    buffer_pointer += strlen(arguments[i]);
-    *buffer_pointer = '\0';
-    ++buffer_pointer;
-  }
-  argv[arguments.size()] = NULL;
-
-  int pid = fork();
-  if (pid < 0) {
-    logger_->LogError("Fork failed: %d", errno);
-    return -1;
-  }
-
-  if (pid == 0) {
-    int output_handle = HANDLE_EINTR(
-        open(output_file, O_CREAT | O_WRONLY | O_TRUNC | O_EXCL, 0666));
-    if (output_handle < 0) {
-      logger_->LogError("Could not create %s: %d", output_file, errno);
-      // Avoid exit() to avoid atexit handlers from parent.
-      _exit(127);
-    }
-    dup2(output_handle, 1);
-    dup2(output_handle, 2);
-    execv(argv[0], &argv[0]);
-    logger_->LogError("Exec failed: %d", errno);
-    _exit(127);
-  }
-
-  int status = 0;
-  if (HANDLE_EINTR(waitpid(pid, &status, 0)) < 0) {
-    logger_->LogError("Problem waiting for pid: %d", errno);
-    return -1;
-  }
-  if (!WIFEXITED(status)) {
-    logger_->LogError("Process did not exit normally: %d", status);
-    return -1;
-  }
-  return WEXITSTATUS(status);
 }
 
 std::string CrashCollector::Sanitize(const std::string &name) {
@@ -199,7 +139,7 @@ bool CrashCollector::GetUserInfoFromName(const std::string &name,
 
   if (getpwnam_r(name.c_str(), &passwd_storage, storage, sizeof(storage),
                  &passwd_result) != 0 || passwd_result == NULL) {
-    logger_->LogError("Cannot find user named %s", name.c_str());
+    LOG(ERROR) << "Cannot find user named " << name;
     return false;
   }
 
@@ -225,7 +165,7 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
   if (!GetUserInfoFromName(kDefaultUserName,
                            &default_user_id,
                            &default_user_group)) {
-    logger_->LogError("Could not find default user info");
+    LOG(ERROR) << "Could not find default user info";
     return false;
   }
   mode_t directory_mode;
@@ -247,15 +187,15 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
         chown(crash_directory->value().c_str(),
               directory_owner,
               directory_group) < 0) {
-      logger_->LogError("Unable to create appropriate crash directory");
+      LOG(ERROR) << "Unable to create appropriate crash directory";
       return false;
     }
     umask(old_mask);
   }
 
   if (!file_util::PathExists(*crash_directory)) {
-    logger_->LogError("Unable to create crash directory %s",
-                      crash_directory->value().c_str());
+    LOG(ERROR) << "Unable to create crash directory "
+               << crash_directory->value().c_str();
     return false;
   }
 
@@ -297,10 +237,9 @@ bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {
     basenames.insert(basename);
 
     if (basenames.size() >= static_cast<size_t>(kMaxCrashDirectorySize)) {
-      logger_->LogWarning(
-          "Crash directory %s already full with %d pending reports",
-          crash_directory.value().c_str(),
-          kMaxCrashDirectorySize);
+      LOG(WARNING) << "Crash directory " << crash_directory.value()
+                   << " already full with " << kMaxCrashDirectorySize
+                   << " pending reports";
       full = true;
       break;
     }
@@ -350,24 +289,24 @@ bool CrashCollector::GetLogContents(const FilePath &config_path,
                                     const FilePath &output_file) {
   std::map<std::string, std::string> log_commands;
   if (!ReadKeyValueFile(config_path, ':', &log_commands)) {
-    logger_->LogInfo("Unable to read log configuration file %s",
-                     config_path.value().c_str());
+    LOG(INFO) << "Unable to read log configuration file "
+              << config_path.value();
     return false;
   }
 
   if (log_commands.find(exec_name) == log_commands.end())
     return false;
 
-  std::vector<const char *> command;
-  command.push_back(kShellPath);
-  command.push_back("-c");
+  chromeos::ProcessImpl diag_process;
+  diag_process.AddArg(kShellPath);
   std::string shell_command = log_commands[exec_name];
-  command.push_back(shell_command.c_str());
+  diag_process.AddStringOption("-c", shell_command);
+  diag_process.RedirectOutput(output_file.value());
 
-  int fork_result = ForkExecAndPipe(command, output_file.value().c_str());
-  if (fork_result != 0) {
-    logger_->LogInfo("Running shell command %s failed with: %d",
-                     shell_command.c_str(), fork_result);
+  int result = diag_process.Run();
+  if (result != 0) {
+    LOG(INFO) << "Running shell command " << shell_command << "failed with: "
+              << result;
     return false;
   }
   return true;
@@ -383,7 +322,7 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
                                         const std::string &payload_path) {
   std::map<std::string, std::string> contents;
   if (!ReadKeyValueFile(FilePath(std::string(lsb_release_)), '=', &contents)) {
-    logger_->LogError("Problem parsing %s", lsb_release_);
+    LOG(ERROR) << "Problem parsing " << lsb_release_;
     // Even though there was some failure, take as much as we could read.
   }
   std::string version("unknown");
@@ -407,6 +346,6 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
   // do not want to write with root access to a symlink that an attacker
   // might have created.
   if (WriteNewFile(meta_path, meta_data.c_str(), meta_data.size()) < 0) {
-    logger_->LogError("Unable to write %s", meta_path.value().c_str());
+    LOG(ERROR) << "Unable to write " << meta_path.value();
   }
 }

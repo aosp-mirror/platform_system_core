@@ -6,8 +6,9 @@
 
 #include "base/file_util.h"
 #include "base/string_util.h"
+#include "chromeos/syslog_logging.h"
+#include "chromeos/test_helpers.h"
 #include "crash-reporter/unclean_shutdown_collector.h"
-#include "crash-reporter/system_logging_mock.h"
 #include "gflags/gflags.h"
 #include "gtest/gtest.h"
 
@@ -17,6 +18,8 @@ static bool s_metrics = true;
 static const char kTestLowBattery[] = "test/low_battery";
 static const char kTestSuspended[] = "test/suspended";
 static const char kTestUnclean[] = "test/unclean";
+
+using ::chromeos::FindLog;
 
 void CountCrash() {
   ++s_crashes;
@@ -30,8 +33,7 @@ class UncleanShutdownCollectorTest : public ::testing::Test {
   void SetUp() {
     s_crashes = 0;
     collector_.Initialize(CountCrash,
-                          IsMetrics,
-                          &logging_);
+                          IsMetrics);
     rmdir("test");
     test_unclean_ = FilePath(kTestUnclean);
     collector_.unclean_shutdown_file_ = kTestUnclean;
@@ -39,6 +41,7 @@ class UncleanShutdownCollectorTest : public ::testing::Test {
     // Set up alternate power manager tracing files as well
     collector_.powerd_suspended_file_ = FilePath(kTestSuspended);
     collector_.powerd_low_battery_file_ = FilePath(kTestLowBattery);
+    chromeos::ClearLog();
   }
  protected:
   void WriteStringToFile(const FilePath &file_path,
@@ -47,7 +50,6 @@ class UncleanShutdownCollectorTest : public ::testing::Test {
               file_util::WriteFile(file_path, data, strlen(data)));
   }
 
-  SystemLoggingMock logging_;
   UncleanShutdownCollector collector_;
   FilePath test_unclean_;
 };
@@ -66,8 +68,7 @@ TEST_F(UncleanShutdownCollectorTest, EnableWithParent) {
 TEST_F(UncleanShutdownCollectorTest, EnableCannotWrite) {
   collector_.unclean_shutdown_file_ = "/bad/path";
   ASSERT_FALSE(collector_.Enable());
-  ASSERT_NE(std::string::npos,
-            logging_.log().find("Unable to create shutdown check file"));
+  ASSERT_TRUE(FindLog("Unable to create shutdown check file"));
 }
 
 TEST_F(UncleanShutdownCollectorTest, CollectTrue) {
@@ -76,8 +77,7 @@ TEST_F(UncleanShutdownCollectorTest, CollectTrue) {
   ASSERT_TRUE(collector_.Collect());
   ASSERT_FALSE(file_util::PathExists(test_unclean_));
   ASSERT_EQ(1, s_crashes);
-  ASSERT_NE(std::string::npos,
-            logging_.log().find("Last shutdown was not clean"));
+  ASSERT_TRUE(FindLog("Last shutdown was not clean"));
 }
 
 TEST_F(UncleanShutdownCollectorTest, CollectFalse) {
@@ -93,9 +93,8 @@ TEST_F(UncleanShutdownCollectorTest, CollectDeadBatteryRunningLow) {
   ASSERT_FALSE(file_util::PathExists(test_unclean_));
   ASSERT_FALSE(file_util::PathExists(collector_.powerd_low_battery_file_));
   ASSERT_EQ(0, s_crashes);
-  ASSERT_NE(std::string::npos,
-            logging_.log().find("Unclean shutdown occurred while running with "
-                                "battery critically low."));
+  ASSERT_TRUE(FindLog(
+      "Unclean shutdown occurred while running with battery critically low."));
 }
 
 TEST_F(UncleanShutdownCollectorTest, CollectDeadBatterySuspended) {
@@ -106,8 +105,7 @@ TEST_F(UncleanShutdownCollectorTest, CollectDeadBatterySuspended) {
   ASSERT_FALSE(file_util::PathExists(test_unclean_));
   ASSERT_FALSE(file_util::PathExists(collector_.powerd_suspended_file_));
   ASSERT_EQ(0, s_crashes);
-  ASSERT_NE(std::string::npos,
-            logging_.log().find("Unclean shutdown occurred while suspended."));
+  ASSERT_TRUE(FindLog("Unclean shutdown occurred while suspended."));
 }
 
 TEST_F(UncleanShutdownCollectorTest, Disable) {
@@ -130,6 +128,6 @@ TEST_F(UncleanShutdownCollectorTest, CantDisable) {
 }
 
 int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
+  SetUpTests(&argc, argv, false);
   return RUN_ALL_TESTS();
 }

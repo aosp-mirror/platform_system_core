@@ -28,7 +28,6 @@ class UserCollector : public CrashCollector {
   void Initialize(CountCrashFunction count_crash,
                   const std::string &our_path,
                   IsFeedbackAllowedFunction is_metrics_allowed,
-                  SystemLogging *logger,
                   bool generate_diagnostics);
 
   virtual ~UserCollector();
