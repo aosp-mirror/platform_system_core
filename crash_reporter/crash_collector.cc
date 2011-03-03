@@ -24,6 +24,7 @@ static const char kLsbRelease[] = "/etc/lsb-release";
 static const char kShellPath[] = "/bin/sh";
 static const char kSystemCrashPath[] = "/var/spool/crash";
 static const char kUserCrashPath[] = "/home/chronos/user/crash";
+static const char kCrashTestInProgressPath[] = "/tmp/crash-test-in-progress";
 
 // Directory mode of the user crash spool directory.
 static const mode_t kUserCrashPathMode = 0755;
@@ -348,4 +349,8 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
   if (WriteNewFile(meta_path, meta_data.c_str(), meta_data.size()) < 0) {
     LOG(ERROR) << "Unable to write " << meta_path.value();
   }
+}
+
+bool CrashCollector::IsCrashTestInProgress() {
+  return file_util::PathExists(FilePath(kCrashTestInProgressPath));
 }

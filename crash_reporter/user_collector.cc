@@ -467,6 +467,13 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
   LOG(WARNING) << "Received crash notification for " << exec << "[" << pid
                << "] sig " << signal << " (" << handling_string << ")";
 
+  // For developer builds, we always want to keep the crash reports unless
+  // we're testing the crash facilities themselves.
+  if (file_util::PathExists(FilePath(kLeaveCoreFile)) &&
+      !IsCrashTestInProgress()) {
+    feedback = true;
+  }
+
   if (feedback) {
     count_crash_function_();
 
