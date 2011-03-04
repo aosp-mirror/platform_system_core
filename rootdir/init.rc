@@ -295,6 +295,9 @@ on boot
     setprop net.tcp.buffersize.edge    4093,26280,35040,4096,16384,35040
     setprop net.tcp.buffersize.gprs    4092,8760,11680,4096,8760,11680
 
+# Set this property so surfaceflinger is not started by system_init
+    setprop system_init.startsurfaceflinger 0
+
     class_start core
     class_start main
 
@@ -377,11 +380,18 @@ service ril-daemon /system/bin/rild
     user root
     group radio cache inet misc audio sdcard_rw
 
+service surfaceflinger /system/bin/surfaceflinger
+    class main
+    user system
+    group graphics
+    onrestart restart zygote
+
 service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
     class main
     socket zygote stream 666
     onrestart write /sys/android_power/request_state wake
     onrestart write /sys/power/state on
+    onrestart restart surfaceflinger
     onrestart restart media
     onrestart restart netd
 
