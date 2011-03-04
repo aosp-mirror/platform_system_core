@@ -305,12 +305,4 @@
  */
 #define HAVE_PRINTF_ZD 1
 
-/*
- * We need to open binary files using O_BINARY on Windows.
- * Most systems lack (and actually don't need) this flag.
- */
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
-
 #endif /*_ANDROID_CONFIG_H*/
