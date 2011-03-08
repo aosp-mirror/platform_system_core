@@ -5,7 +5,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/types.h>
-#include <sys/reboot.h>
+#include <cutils/android_reboot.h>
 #include <sys/stat.h>
 
 #ifndef PATH_MAX
@@ -63,7 +63,7 @@ int wipe_main (int argc, char *argv[])
 		wipe ("/system");
         wipe ("/data");
 		fprintf(stdout, "Device nuked! Rebooting...\n");
-		ret = reboot(RB_AUTOBOOT);
+		ret = android_reboot(ANDROID_RB_RESTART, 0, 0);
 	    if (ret < 0) {
 	        fprintf(stderr, "Reboot failed, %s\n", strerror(errno));
 	        return 1;
