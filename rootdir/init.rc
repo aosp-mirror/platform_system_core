@@ -304,6 +304,9 @@ on nonencrypted
 on property:vold.decrypt=trigger_reset_main
     class_reset main
 
+on property:vold.decrypt=trigger_load_persist_props
+    load_persist_props
+
 on property:vold.decrypt=trigger_post_fs_data
     trigger post-fs-data
 

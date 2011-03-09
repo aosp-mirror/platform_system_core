@@ -286,7 +286,6 @@ int do_mount(int nargs, char **args)
     unsigned flags = 0;
     int n, i;
     int wait = 0;
-    char *prop;
 
     for (n = 4; n < nargs; n++) {
         for (i = 0; mount_flags[i].name; i++) {
@@ -416,6 +415,8 @@ exit_success:
      * unencrypted, and also trigger the action for a nonencrypted system.
      */
     if (!strcmp(target, DATA_MNT_POINT)) {
+        const char *prop;
+
         prop = property_get("ro.crypto.state");
         if (! prop) {
             prop = "notset";
@@ -626,6 +627,14 @@ int do_chmod(int nargs, char **args) {
 int do_loglevel(int nargs, char **args) {
     if (nargs == 2) {
         log_set_level(atoi(args[1]));
+        return 0;
+    }
+    return -1;
+}
+
+int do_load_persist_props(int nargs, char **args) {
+    if (nargs == 1) {
+        load_persist_props();
         return 0;
     }
     return -1;
