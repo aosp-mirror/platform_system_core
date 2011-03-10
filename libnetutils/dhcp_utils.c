@@ -28,6 +28,9 @@ static const char DAEMON_NAME[]        = "dhcpcd";
 static const char DAEMON_PROP_NAME[]   = "init.svc.dhcpcd";
 static const char HOSTNAME_PROP_NAME[] = "net.hostname";
 static const char DHCP_PROP_NAME_PREFIX[]  = "dhcp";
+static const char DAEMON_NAME_RENEW[]  = "dhcpcd_renew";
+static const char DAEMON_PROP_NAME_RENEW[]  = "init.svc.dhcpcd_renew";
+static const char DHCP_PROP_NAME_RENEW_PREFIX[]  = "dhcp_renew";
 static const int  NAP_TIME = 1;   /* wait for 1 second at a time */
                                   /* when polling for property values */
 static char errmsg[100];
@@ -137,6 +140,7 @@ int dhcp_do_request(const char *interface,
                     uint32_t  *lease)
 {
     char result_prop_name[PROPERTY_KEY_MAX];
+    char daemon_prop_name[PROPERTY_KEY_MAX];
     char prop_value[PROPERTY_VALUE_MAX] = {'\0'};
     char daemon_cmd[PROPERTY_VALUE_MAX * 2];
     const char *ctrl_prop = "ctl.start";
@@ -145,18 +149,23 @@ int dhcp_do_request(const char *interface,
     snprintf(result_prop_name, sizeof(result_prop_name), "%s.%s.result",
             DHCP_PROP_NAME_PREFIX,
             interface);
+
+    snprintf(daemon_prop_name, sizeof(daemon_prop_name), "%s_%s",
+            DAEMON_PROP_NAME,
+            interface);
+
     /* Erase any previous setting of the dhcp result property */
     property_set(result_prop_name, "");
 
     /* Start the daemon and wait until it's ready */
     if (property_get(HOSTNAME_PROP_NAME, prop_value, NULL) && (prop_value[0] != '\0'))
-        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s:-h %s %s", DAEMON_NAME,
+        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:-h %s %s", DAEMON_NAME, interface,
                  prop_value, interface);
     else
-        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s:%s", DAEMON_NAME, interface);
+        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:%s", DAEMON_NAME, interface, interface);
     memset(prop_value, '\0', PROPERTY_VALUE_MAX);
     property_set(ctrl_prop, daemon_cmd);
-    if (wait_for_property(DAEMON_PROP_NAME, desired_status, 10) < 0) {
+    if (wait_for_property(daemon_prop_name, desired_status, 10) < 0) {
         snprintf(errmsg, sizeof(errmsg), "%s", "Timed out waiting for dhcpcd to start");
         return -1;
     }
@@ -193,15 +202,24 @@ int dhcp_do_request(const char *interface,
 int dhcp_stop(const char *interface)
 {
     char result_prop_name[PROPERTY_KEY_MAX];
+    char daemon_prop_name[PROPERTY_KEY_MAX];
+    char daemon_cmd[PROPERTY_VALUE_MAX * 2];
     const char *ctrl_prop = "ctl.stop";
     const char *desired_status = "stopped";
 
     snprintf(result_prop_name, sizeof(result_prop_name), "%s.%s.result",
             DHCP_PROP_NAME_PREFIX,
             interface);
+
+    snprintf(daemon_prop_name, sizeof(daemon_prop_name), "%s_%s",
+            DAEMON_PROP_NAME,
+            interface);
+
+    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME, interface);
+
     /* Stop the daemon and wait until it's reported to be stopped */
-    property_set(ctrl_prop, DAEMON_NAME);
-    if (wait_for_property(DAEMON_PROP_NAME, desired_status, 5) < 0) {
+    property_set(ctrl_prop, daemon_cmd);
+    if (wait_for_property(daemon_prop_name, desired_status, 5) < 0) {
         return -1;
     }
     property_set(result_prop_name, "failed");
@@ -213,12 +231,20 @@ int dhcp_stop(const char *interface)
  */
 int dhcp_release_lease(const char *interface)
 {
+    char daemon_prop_name[PROPERTY_KEY_MAX];
+    char daemon_cmd[PROPERTY_VALUE_MAX * 2];
     const char *ctrl_prop = "ctl.stop";
     const char *desired_status = "stopped";
 
+    snprintf(daemon_prop_name, sizeof(daemon_prop_name), "%s_%s",
+            DAEMON_PROP_NAME,
+            interface);
+
+    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME, interface);
+
     /* Stop the daemon and wait until it's reported to be stopped */
-    property_set(ctrl_prop, DAEMON_NAME);
-    if (wait_for_property(DAEMON_PROP_NAME, desired_status, 5) < 0) {
+    property_set(ctrl_prop, daemon_cmd);
+    if (wait_for_property(daemon_prop_name, desired_status, 5) < 0) {
         return -1;
     }
     return 0;
@@ -226,4 +252,64 @@ int dhcp_release_lease(const char *interface)
 
 char *dhcp_get_errmsg() {
     return errmsg;
+}
+
+/**
+ * Run WiMAX dhcp renew service.
+ * "wimax_renew" service shoud be included in init.rc.
+ */
+int dhcp_do_request_renew(const char *interface,
+                    in_addr_t *ipaddr,
+                    in_addr_t *gateway,
+                    in_addr_t *mask,
+                    in_addr_t *dns1,
+                    in_addr_t *dns2,
+                    in_addr_t *server,
+                    uint32_t  *lease)
+{
+    char result_prop_name[PROPERTY_KEY_MAX];
+    char daemon_prop_name[PROPERTY_KEY_MAX];
+    char prop_value[PROPERTY_VALUE_MAX] = {'\0'};
+    char daemon_cmd[PROPERTY_VALUE_MAX * 2];
+    const char *ctrl_prop = "ctl.start";
+    const char *desired_status = "running";
+
+    snprintf(result_prop_name, sizeof(result_prop_name), "%s.%s.result",
+            DHCP_PROP_NAME_RENEW_PREFIX,
+            interface);
+
+    snprintf(daemon_prop_name, sizeof(daemon_prop_name), "%s_%s",
+            DAEMON_PROP_NAME_RENEW,
+            interface);
+
+    /* Erase any previous setting of the dhcp result property */
+    property_set(result_prop_name, "");
+
+    /* Start the renew daemon and wait until it's ready */
+    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:%s", DAEMON_NAME_RENEW, interface, interface);
+    memset(prop_value, '\0', PROPERTY_VALUE_MAX);
+    property_set(ctrl_prop, daemon_cmd);
+    if (wait_for_property(daemon_prop_name, desired_status, 10) < 0) {
+        snprintf(errmsg, sizeof(errmsg), "%s", "Timed out waiting for dhcpcd Renew to start");
+        return -1;
+    }
+
+    /* Wait for the daemon to return a result */
+    if (wait_for_property(result_prop_name, NULL, 30) < 0) {
+        snprintf(errmsg, sizeof(errmsg), "%s", "Timed out waiting for DHCP Renew to finish");
+        return -1;
+    }
+
+    if (!property_get(result_prop_name, prop_value, NULL)) {
+        /* shouldn't ever happen, given the success of wait_for_property() */
+        snprintf(errmsg, sizeof(errmsg), "%s", "DHCP Renew result property was not set");
+        return -1;
+    }
+    if (strcmp(prop_value, "ok") == 0) {
+        fill_ip_info(interface, ipaddr, gateway, mask, dns1, dns2, server, lease);
+        return 0;
+    } else {
+        snprintf(errmsg, sizeof(errmsg), "DHCP Renew result was %s", prop_value);
+        return -1;
+    }
 }
