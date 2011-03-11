@@ -515,6 +515,18 @@ int properties_inited(void)
     return property_area_inited;
 }
 
+/* When booting an encrypted system, /data is not mounted when the
+ * property service is started, so any properties stored there are
+ * not loaded.  Vold triggers init to load these properties once it
+ * has mounted /data.
+ */
+void load_persist_props(void)
+{
+    load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE);
+    /* Read persistent properties after all default values have been loaded. */
+    load_persistent_properties();
+}
+
 void start_property_service(void)
 {
     int fd;
