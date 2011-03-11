@@ -401,7 +401,7 @@ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-sys
 service drm /system/bin/drmserver
     class main
     user drm
-    group inet
+    group inet system
 
 service media /system/bin/mediaserver
     class main
