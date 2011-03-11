@@ -1,7 +1,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/reboot.h>
+#include <cutils/android_reboot.h>
 #include <unistd.h>
 
 int reboot_main(int argc, char *argv[])
@@ -9,6 +9,7 @@ int reboot_main(int argc, char *argv[])
     int ret;
     int nosync = 0;
     int poweroff = 0;
+    int flags = 0;
 
     opterr = 0;
     do {
@@ -38,15 +39,16 @@ int reboot_main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    if(!nosync)
-        sync();
+    if(nosync)
+        /* also set NO_REMOUNT_RO as remount ro includes an implicit sync */
+        flags = ANDROID_RB_FLAG_NO_SYNC | ANDROID_RB_FLAG_NO_REMOUNT_RO;
 
     if(poweroff)
-        ret = __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2, LINUX_REBOOT_CMD_POWER_OFF, NULL);
+        ret = android_reboot(ANDROID_RB_POWEROFF, flags, 0);
     else if(argc > optind)
-        ret = __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2, LINUX_REBOOT_CMD_RESTART2, argv[optind]);
+        ret = android_reboot(ANDROID_RB_RESTART2, flags, argv[optind]);
     else
-        ret = reboot(RB_AUTOBOOT);
+        ret = android_reboot(ANDROID_RB_RESTART, flags, 0);
     if(ret < 0) {
         perror("reboot");
         exit(EXIT_FAILURE);

@@ -23,7 +23,7 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <cutils/sockets.h>
-#include <sys/reboot.h>
+#include <cutils/android_reboot.h>
 
 #include "init.h"
 #include "list.h"
@@ -96,9 +96,7 @@ static int wait_for_one_process(int block)
                 ERROR("critical process '%s' exited %d times in %d minutes; "
                       "rebooting into recovery mode\n", svc->name,
                       CRITICAL_CRASH_THRESHOLD, CRITICAL_CRASH_WINDOW / 60);
-                sync();
-                __reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
-                         LINUX_REBOOT_CMD_RESTART2, "recovery");
+                android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
                 return 0;
             }
         } else {
