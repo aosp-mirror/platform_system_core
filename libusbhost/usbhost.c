@@ -53,6 +53,9 @@
 #define USB_FS_ID_SCANNER   "/dev/bus/usb/%d/%d"
 #define USB_FS_ID_FORMAT    "/dev/bus/usb/%03d/%03d"
 
+// From drivers/usb/core/devio.c
+// I don't know why this isn't in a kernel header
+#define MAX_USBFS_BUFFER_SIZE   16384
 
 struct usb_host_context {
     int fd;
@@ -477,6 +480,10 @@ int usb_device_bulk_transfer(struct usb_device *device,
 {
     struct usbdevfs_bulktransfer  ctrl;
 
+    // need to limit request size to avoid EINVAL
+    if (length > MAX_USBFS_BUFFER_SIZE)
+        length = MAX_USBFS_BUFFER_SIZE;
+
     memset(&ctrl, 0, sizeof(ctrl));
     ctrl.ep = endpoint;
     ctrl.len = length;
@@ -531,7 +538,11 @@ int usb_request_queue(struct usb_request *req)
 
     urb->status = -1;
     urb->buffer = req->buffer;
-    urb->buffer_length = req->buffer_length;
+    // need to limit request size to avoid EINVAL
+    if (req->buffer_length > MAX_USBFS_BUFFER_SIZE)
+        urb->buffer_length = MAX_USBFS_BUFFER_SIZE;
+    else
+        urb->buffer_length = req->buffer_length;
 
     do {
         res = ioctl(req->dev->fd, USBDEVFS_SUBMITURB, urb);
