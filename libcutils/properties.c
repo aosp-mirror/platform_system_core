@@ -31,47 +31,9 @@
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
-static int send_prop_msg(prop_msg *msg)
-{
-    int s;
-    int r;
-    
-    s = socket_local_client(PROP_SERVICE_NAME, 
-                            ANDROID_SOCKET_NAMESPACE_RESERVED,
-                            SOCK_STREAM);
-    if(s < 0) return -1;
-    
-    while((r = send(s, msg, sizeof(prop_msg), 0)) < 0) {
-        if((errno == EINTR) || (errno == EAGAIN)) continue;
-        break;
-    }
-
-    if(r == sizeof(prop_msg)) {
-        r = 0;
-    } else {
-        r = -1;
-    }
-
-    close(s);
-    return r;
-}
-
 int property_set(const char *key, const char *value)
 {
-    prop_msg msg;
-    unsigned resp;
-
-    if(key == 0) return -1;
-    if(value == 0) value = "";
-    
-    if(strlen(key) >= PROP_NAME_MAX) return -1;
-    if(strlen(value) >= PROP_VALUE_MAX) return -1;
-    
-    msg.cmd = PROP_MSG_SETPROP;
-    strcpy((char*) msg.name, key);
-    strcpy((char*) msg.value, value);
-
-    return send_prop_msg(&msg);
+    return __system_property_set(key, value);
 }
 
 int property_get(const char *key, char *value, const char *default_value)
