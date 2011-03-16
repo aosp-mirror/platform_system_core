@@ -326,15 +326,9 @@ void fuse_init(struct fuse *fuse, int fd, const char *path)
 
     fuse->all = &fuse->root;
 
+    memset(&fuse->root, 0, sizeof(fuse->root));
     fuse->root.nid = FUSE_ROOT_ID; /* 1 */
-    fuse->root.next = 0;
-    fuse->root.child = 0;
-    fuse->root.parent = 0;
-
-    fuse->root.all = 0;
     fuse->root.refcount = 2;
-
-    fuse->root.name = 0;
     rename_node(&fuse->root, path);
 }
 
