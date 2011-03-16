@@ -246,10 +246,10 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
   }
 
   // Something went wrong.
-  errno = GetLastError();
+  int saved_errno = GetLastError();
   usb_cleanup_handle(ret);
   free(ret);
-  SetLastError(errno);
+  SetLastError(saved_errno);
 
   return NULL;
 }
@@ -267,7 +267,7 @@ int usb_write(usb_handle* handle, const void* data, int len) {
                                (unsigned long)len,
                                &written,
                                time_out);
-    errno = GetLastError();
+    int saved_errno = GetLastError();
 
     if (ret) {
       // Make sure that we've written what we were asked to write
@@ -285,9 +285,10 @@ int usb_write(usb_handle* handle, const void* data, int len) {
       }
     } else {
       // assume ERROR_INVALID_HANDLE indicates we are disconnected
-      if (errno == ERROR_INVALID_HANDLE)
+      if (saved_errno == ERROR_INVALID_HANDLE)
         usb_kick(handle);
     }
+    errno = saved_errno;
   } else {
     D("usb_write NULL handle\n");
     SetLastError(ERROR_INVALID_HANDLE);
@@ -313,20 +314,21 @@ int usb_read(usb_handle *handle, void* data, int len) {
                                   (unsigned long)xfer,
                                   &read,
                                   time_out);
-      errno = GetLastError();
-      D("usb_write got: %ld, expected: %d, errno: %d\n", read, xfer, errno);
+      int saved_errno = GetLastError();
+      D("usb_write got: %ld, expected: %d, errno: %d\n", read, xfer, saved_errno);
       if (ret) {
         data += read;
         len -= read;
 
         if (len == 0)
           return 0;
-      } else if (errno != ERROR_SEM_TIMEOUT) {
+      } else if (saved_errno != ERROR_SEM_TIMEOUT) {
         // assume ERROR_INVALID_HANDLE indicates we are disconnected
-        if (errno == ERROR_INVALID_HANDLE)
+        if (saved_errno == ERROR_INVALID_HANDLE)
           usb_kick(handle);
         break;
       }
+      errno = saved_errno;
     }
   } else {
     D("usb_read NULL handle\n");

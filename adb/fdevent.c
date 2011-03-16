@@ -15,6 +15,8 @@
 ** limitations under the License.
 */
 
+#include <sys/ioctl.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -27,10 +29,20 @@
 #include <stddef.h>
 
 #include "fdevent.h"
+#include "transport.h"
+#include "sysdeps.h"
 
-#define TRACE(x...) fprintf(stderr,x)
 
-#define DEBUG 0
+/* !!! Do not enable DEBUG for the adb that will run as the server:
+** both stdout and stderr are used to communicate between the client
+** and server. Any extra output will cause failures.
+*/
+#define DEBUG 0   /* non-0 will break adb server */
+
+// This socket is used when a subproc shell service exists.
+// It wakes up the fdevent_loop() and cause the correct handling
+// of the shell's pseudo-tty master. I.e. force close it.
+int SHELL_EXIT_NOTIFY_FD = -1;
 
 static void fatal(const char *fn, const char *fmt, ...)
 {
@@ -45,15 +57,28 @@ static void fatal(const char *fn, const char *fmt, ...)
 #define FATAL(x...) fatal(__FUNCTION__, x)
 
 #if DEBUG
+#define D(...) \
+    do { \
+        adb_mutex_lock(&D_lock);               \
+        int save_errno = errno;                \
+        fprintf(stderr, "%s::%s():", __FILE__, __FUNCTION__);  \
+        errno = save_errno;                    \
+        fprintf(stderr, __VA_ARGS__);          \
+        adb_mutex_unlock(&D_lock);             \
+        errno = save_errno;                    \
+    } while(0)
 static void dump_fde(fdevent *fde, const char *info)
 {
+    adb_mutex_lock(&D_lock);
     fprintf(stderr,"FDE #%03d %c%c%c %s\n", fde->fd,
             fde->state & FDE_READ ? 'R' : ' ',
             fde->state & FDE_WRITE ? 'W' : ' ',
             fde->state & FDE_ERROR ? 'E' : ' ',
             info);
+    adb_mutex_unlock(&D_lock);
 }
 #else
+#define D(...) ((void)0)
 #define dump_fde(fde, info) do { } while(0)
 #endif
 
@@ -67,6 +92,7 @@ static void dump_fde(fdevent *fde, const char *info)
 static void fdevent_plist_enqueue(fdevent *node);
 static void fdevent_plist_remove(fdevent *node);
 static fdevent *fdevent_plist_dequeue(void);
+static void fdevent_subproc_event_func(int fd, unsigned events, void *userdata);
 
 static fdevent list_pending = {
     .next = &list_pending,
@@ -270,8 +296,71 @@ static void fdevent_update(fdevent *fde, unsigned events)
         FD_CLR(fde->fd, &error_fds);
     }
 
-    fde->state = (fde->state & FDE_STATEMASK) | events;    
+    fde->state = (fde->state & FDE_STATEMASK) | events;
 }
+
+/* Looks at fd_table[] for bad FDs and sets bit in fds.
+** Returns the number of bad FDs.
+*/
+static int fdevent_fd_check(fd_set *fds)
+{
+    int i, n = 0;
+    fdevent *fde;
+
+    for(i = 0; i < select_n; i++) {
+        fde = fd_table[i];
+        if(fde == 0) continue;
+        if(fcntl(i, F_GETFL, NULL) < 0) {
+            FD_SET(i, fds);
+            n++;
+            // fde->state |= FDE_DONT_CLOSE;
+
+        }
+    }
+    return n;
+}
+
+#if !DEBUG
+static inline void dump_all_fds(const char *extra_msg) {}
+#else
+static void dump_all_fds(const char *extra_msg)
+{
+int i;
+    fdevent *fde;
+    // per fd: 4 digits (but really: log10(FD_SETSIZE)), 1 staus, 1 blank
+    char msg_buff[FD_SETSIZE*6 + 1], *pb=msg_buff;
+    size_t max_chars = FD_SETSIZE * 6 + 1;
+    int printed_out;
+#define SAFE_SPRINTF(...)                                                    \
+    do {                                                                     \
+        printed_out = snprintf(pb, max_chars, __VA_ARGS__);                  \
+        if (printed_out <= 0) {                                              \
+            D("... snprintf failed.\n");                                     \
+            return;                                                          \
+        }                                                                    \
+        if (max_chars < (unsigned int)printed_out) {                         \
+            D("... snprintf out of space.\n");                               \
+            return;                                                          \
+        }                                                                    \
+        pb += printed_out;                                                   \
+        max_chars -= printed_out;                                            \
+    } while(0)
+
+    for(i = 0; i < select_n; i++) {
+        fde = fd_table[i];
+        SAFE_SPRINTF("%d", i);
+        if(fde == 0) {
+            SAFE_SPRINTF("? ");
+            continue;
+        }
+        if(fcntl(i, F_GETFL, NULL) < 0) {
+            SAFE_SPRINTF("b");
+        }
+        SAFE_SPRINTF(" ");
+    }
+    D("%s fd_table[]->fd = {%s}\n", extra_msg, msg_buff);
+}
+#endif
 
 static void fdevent_process()
 {
@@ -284,28 +373,49 @@ static void fdevent_process()
     memcpy(&wfd, &write_fds, sizeof(fd_set));
     memcpy(&efd, &error_fds, sizeof(fd_set));
 
-    n = select(select_n, &rfd, &wfd, &efd, 0);
+    dump_all_fds("pre select()");
+
+    n = select(select_n, &rfd, &wfd, &efd, NULL);
+    int saved_errno = errno;
+    D("select() returned n=%d, errno=%d\n", n, n<0?saved_errno:0);
+
+    dump_all_fds("post select()");
 
     if(n < 0) {
-        if(errno == EINTR) return;
-        perror("select");
-        return;
+        switch(saved_errno) {
+        case EINTR: return;
+        case EBADF:
+            // Can't trust the FD sets after an error.
+            FD_ZERO(&wfd);
+            FD_ZERO(&efd);
+            FD_ZERO(&rfd);
+            break;
+        default:
+            D("Unexpected select() error=%d\n", saved_errno);
+            return;
+        }
+    }
+    if(n <= 0) {
+        // We fake a read, as the rest of the code assumes
+        // that errors will be detected at that point.
+        n = fdevent_fd_check(&rfd);
     }
 
     for(i = 0; (i < select_n) && (n > 0); i++) {
         events = 0;
-        if(FD_ISSET(i, &rfd)) events |= FDE_READ;
-        if(FD_ISSET(i, &wfd)) events |= FDE_WRITE;
-        if(FD_ISSET(i, &efd)) events |= FDE_ERROR;
+        if(FD_ISSET(i, &rfd)) { events |= FDE_READ; n--; }
+        if(FD_ISSET(i, &wfd)) { events |= FDE_WRITE; n--; }
+        if(FD_ISSET(i, &efd)) { events |= FDE_ERROR; n--; }
 
         if(events) {
-            n--;
-
             fde = fd_table[i];
-            if(fde == 0) FATAL("missing fde for fd %d\n", i);
+            if(fde == 0)
+              FATAL("missing fde for fd %d\n", i);
 
             fde->events |= events;
 
+            D("got events fde->fd=%d events=%04x, state=%04x\n",
+                fde->fd, fde->events, fde->state);
             if(fde->state & FDE_PENDING) continue;
             fde->state |= FDE_PENDING;
             fdevent_plist_enqueue(fde);
@@ -350,14 +460,14 @@ static void fdevent_unregister(fdevent *fde)
     }
 
     if(fd_table[fde->fd] != fde) {
-        FATAL("fd_table out of sync");
+        FATAL("fd_table out of sync [%d]\n", fde->fd);
     }
 
     fd_table[fde->fd] = 0;
 
     if(!(fde->state & FDE_DONT_CLOSE)) {
         dump_fde(fde, "close");
-        close(fde->fd);
+        adb_close(fde->fd);
     }
 }
 
@@ -394,6 +504,74 @@ static fdevent *fdevent_plist_dequeue(void)
     return node;
 }
 
+static void fdevent_call_fdfunc(fdevent* fde)
+{
+    unsigned events = fde->events;
+    fde->events = 0;
+    if(!(fde->state & FDE_PENDING)) return;
+    fde->state &= (~FDE_PENDING);
+    dump_fde(fde, "callback");
+    fde->func(fde->fd, events, fde->arg);
+}
+
+static void fdevent_subproc_event_func(int fd, unsigned ev, void *userdata)
+{
+
+    D("subproc handling on fd=%d ev=%04x\n", fd, ev);
+
+    // Hook oneself back into the fde's suitable for select() on read.
+    if((fd < 0) || (fd >= fd_table_max)) {
+        FATAL("fd %d out of range for fd_table \n", fd);
+    }
+    fdevent *fde = fd_table[fd];
+    fdevent_add(fde, FDE_READ);
+
+    if(ev & FDE_READ){
+      int subproc_fd;
+
+      if(readx(fd, &subproc_fd, sizeof(subproc_fd))) {
+          FATAL("Failed to read the subproc's fd from fd=%d\n", fd);
+      }
+      if((subproc_fd < 0) || (subproc_fd >= fd_table_max)) {
+          D("subproc_fd %d out of range 0, fd_table_max=%d\n",
+            subproc_fd, fd_table_max);
+          return;
+      }
+      fdevent *subproc_fde = fd_table[subproc_fd];
+      if(!subproc_fde) {
+          D("subproc_fd %d cleared from fd_table\n", subproc_fd);
+          return;
+      }
+      if(subproc_fde->fd != subproc_fd) {
+          // Already reallocated?
+          D("subproc_fd %d != fd_table[].fd %d\n", subproc_fd, subproc_fde->fd);
+          return;
+      }
+
+      subproc_fde->force_eof = 1;
+
+      int rcount = 0;
+      ioctl(subproc_fd, TIOCINQ, &rcount);
+      D("subproc with fd=%d  has rcount=%d err=%d\n",
+        subproc_fd, rcount, errno);
+
+      if(rcount) {
+        // If there is data left, it will show up in the select().
+        // This works because there is no other thread reading that
+        // data when in this fd_func().
+        return;
+      }
+
+      D("subproc_fde.state=%04x\n", subproc_fde->state);
+      subproc_fde->events |= FDE_READ;
+      if(subproc_fde->state & FDE_PENDING) {
+        return;
+      }
+      subproc_fde->state |= FDE_PENDING;
+      fdevent_call_fdfunc(subproc_fde);
+    }
+}
+
 fdevent *fdevent_create(int fd, fd_func func, void *arg)
 {
     fdevent *fde = (fdevent*) malloc(sizeof(fdevent));
@@ -412,11 +590,12 @@ void fdevent_destroy(fdevent *fde)
     fdevent_remove(fde);
 }
 
-void fdevent_install(fdevent *fde, int fd, fd_func func, void *arg) 
+void fdevent_install(fdevent *fde, int fd, fd_func func, void *arg)
 {
     memset(fde, 0, sizeof(fdevent));
     fde->state = FDE_ACTIVE;
     fde->fd = fd;
+    fde->force_eof = 0;
     fde->func = func;
     fde->arg = arg;
 
@@ -437,7 +616,7 @@ void fdevent_remove(fdevent *fde)
 
     if(fde->state & FDE_ACTIVE) {
         fdevent_disconnect(fde);
-        dump_fde(fde, "disconnect");    
+        dump_fde(fde, "disconnect");
         fdevent_unregister(fde);
     }
 
@@ -484,23 +663,33 @@ void fdevent_del(fdevent *fde, unsigned events)
         fde, (fde->state & FDE_EVENTMASK) & (~(events & FDE_EVENTMASK)));
 }
 
+void fdevent_subproc_setup()
+{
+    int s[2];
+
+    if(adb_socketpair(s)) {
+        FATAL("cannot create shell-exit socket-pair\n");
+    }
+    SHELL_EXIT_NOTIFY_FD = s[0];
+    fdevent *fde;
+    fde = fdevent_create(s[1], fdevent_subproc_event_func, NULL);
+    if(!fde)
+      FATAL("cannot create fdevent for shell-exit handler\n");
+    fdevent_add(fde, FDE_READ);
+}
+
 void fdevent_loop()
 {
     fdevent *fde;
+    fdevent_subproc_setup();
 
     for(;;) {
-#if DEBUG
-        fprintf(stderr,"--- ---- waiting for events\n");
-#endif
+        D("--- ---- waiting for events\n");
+
         fdevent_process();
 
         while((fde = fdevent_plist_dequeue())) {
-            unsigned events = fde->events;
-            fde->events = 0;
-            fde->state &= (~FDE_PENDING);
-            dump_fde(fde, "callback");
-            fde->func(fde->fd, events, fde->arg);
+            fdevent_call_fdfunc(fde);
         }
     }
 }
-
