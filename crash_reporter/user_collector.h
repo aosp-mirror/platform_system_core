@@ -63,6 +63,9 @@ class UserCollector : public CrashCollector {
   FRIEND_TEST(UserCollectorTest, GetSymlinkTarget);
   FRIEND_TEST(UserCollectorTest, GetUserInfoFromName);
   FRIEND_TEST(UserCollectorTest, ParseCrashAttributes);
+  FRIEND_TEST(UserCollectorTest, ShouldDumpChromeOverridesDeveloperImage);
+  FRIEND_TEST(UserCollectorTest, ShouldDumpDeveloperImageOverridesConsent);
+  FRIEND_TEST(UserCollectorTest, ShouldDumpUseConsentProductionImage);
 
   // Enumeration to pass to GetIdFromStatus.  Must match the order
   // that the kernel lists IDs in the status file.
@@ -114,6 +117,11 @@ class UserCollector : public CrashCollector {
   bool ParseCrashAttributes(const std::string &crash_attributes,
                             pid_t *pid, int *signal,
                             std::string *kernel_supplied_name);
+  bool ShouldDump(bool has_owner_consent,
+                  bool is_developer,
+                  bool is_crash_test_in_progress,
+                  const std::string &exec,
+                  std::string *reason);
 
   bool generate_diagnostics_;
   std::string core_pattern_file_;

@@ -122,7 +122,37 @@ TEST_F(UserCollectorTest, ParseCrashAttributes) {
                                               &pid, &signal, &exec_name));
 }
 
-TEST_F(UserCollectorTest, HandleCrashWithoutMetrics) {
+TEST_F(UserCollectorTest, ShouldDumpDeveloperImageOverridesConsent) {
+  std::string reason;
+  EXPECT_TRUE(collector_.ShouldDump(false, true, false,
+                                    "chrome-wm", &reason));
+  EXPECT_EQ("developer build - not testing - always dumping", reason);
+
+  // When running a crash test, behave as normal.
+  EXPECT_FALSE(collector_.ShouldDump(false, true, true,
+                                    "chrome-wm", &reason));
+  EXPECT_EQ("ignoring - no consent", reason);
+}
+
+TEST_F(UserCollectorTest, ShouldDumpChromeOverridesDeveloperImage) {
+  std::string reason;
+  EXPECT_FALSE(collector_.ShouldDump(false, true, false,
+                                     "chrome", &reason));
+  EXPECT_EQ("ignoring - chrome crash", reason);
+}
+
+TEST_F(UserCollectorTest, ShouldDumpUseConsentProductionImage) {
+  std::string result;
+  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
+                                     "chrome-wm", &result));
+  EXPECT_EQ("ignoring - no consent", result);
+
+  EXPECT_TRUE(collector_.ShouldDump(true, false, false,
+                                    "chrome-wm", &result));
+  EXPECT_EQ("handling", result);
+}
+
+TEST_F(UserCollectorTest, HandleCrashWithoutConsent) {
   s_metrics = false;
   collector_.HandleCrash("20:10:ignored", "foobar");
   EXPECT_TRUE(FindLog(
@@ -130,7 +160,7 @@ TEST_F(UserCollectorTest, HandleCrashWithoutMetrics) {
   ASSERT_EQ(s_crashes, 0);
 }
 
-TEST_F(UserCollectorTest, HandleNonChromeCrashWithMetrics) {
+TEST_F(UserCollectorTest, HandleNonChromeCrashWithConsent) {
   s_metrics = true;
   collector_.HandleCrash("5:2:ignored", "chromeos-wm");
   EXPECT_TRUE(FindLog(
@@ -138,7 +168,7 @@ TEST_F(UserCollectorTest, HandleNonChromeCrashWithMetrics) {
   ASSERT_EQ(s_crashes, 1);
 }
 
-TEST_F(UserCollectorTest, HandleChromeCrashWithMetrics) {
+TEST_F(UserCollectorTest, HandleChromeCrashWithConsent) {
   s_metrics = true;
   collector_.HandleCrash("5:2:ignored", "chrome");
   EXPECT_TRUE(FindLog(
@@ -147,7 +177,7 @@ TEST_F(UserCollectorTest, HandleChromeCrashWithMetrics) {
   ASSERT_EQ(s_crashes, 0);
 }
 
-TEST_F(UserCollectorTest, HandleSuppliedChromeCrashWithMetrics) {
+TEST_F(UserCollectorTest, HandleSuppliedChromeCrashWithConsent) {
   s_metrics = true;
   collector_.HandleCrash("0:2:chrome", NULL);
   EXPECT_TRUE(FindLog(

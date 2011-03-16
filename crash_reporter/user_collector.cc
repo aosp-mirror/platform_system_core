@@ -415,6 +415,38 @@ bool UserCollector::ParseCrashAttributes(const std::string &crash_attributes,
   return re.FullMatch(crash_attributes, pid, signal, kernel_supplied_name);
 }
 
+bool UserCollector::ShouldDump(bool has_owner_consent,
+                               bool is_developer,
+                               bool is_crash_test_in_progress,
+                               const std::string &exec,
+                               std::string *reason) {
+  reason->clear();
+
+  // Treat Chrome crashes as if the user opted-out.  We stop counting Chrome
+  // crashes towards user crashes, so user crashes really mean non-Chrome
+  // user-space crashes.
+  if (exec == "chrome" || exec == "supplied_chrome") {
+    *reason = "ignoring - chrome crash";
+    return false;
+  }
+
+  // For developer builds, we always want to keep the crash reports unless
+  // we're testing the crash facilities themselves.  This overrides
+  // feedback.  Crash sending still obeys consent.
+  if (is_developer && !is_crash_test_in_progress) {
+    *reason = "developer build - not testing - always dumping";
+    return true;
+  }
+
+  if (!has_owner_consent) {
+    *reason = "ignoring - no consent";
+    return false;
+  }
+
+  *reason = "handling";
+  return true;
+}
+
 bool UserCollector::HandleCrash(const std::string &crash_attributes,
                                 const char *force_exec) {
   CHECK(initialized_);
@@ -450,31 +482,17 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
     return true;
   }
 
-  bool feedback = is_feedback_allowed_function_();
-  const char *handling_string = "handling";
-  if (!feedback) {
-    handling_string = "ignoring - no consent";
-  }
-
-  // Treat Chrome crashes as if the user opted-out.  We stop counting Chrome
-  // crashes towards user crashes, so user crashes really mean non-Chrome
-  // user-space crashes.
-  if (exec == "chrome" || exec == "supplied_chrome") {
-    feedback = false;
-    handling_string = "ignoring - chrome crash";
-  }
+  std::string reason;
+  bool dump = ShouldDump(is_feedback_allowed_function_(),
+                         file_util::PathExists(FilePath(kLeaveCoreFile)),
+                         IsCrashTestInProgress(),
+                         exec,
+                         &reason);
 
   LOG(WARNING) << "Received crash notification for " << exec << "[" << pid
-               << "] sig " << signal << " (" << handling_string << ")";
+               << "] sig " << signal << " (" << reason << ")";
 
-  // For developer builds, we always want to keep the crash reports unless
-  // we're testing the crash facilities themselves.
-  if (file_util::PathExists(FilePath(kLeaveCoreFile)) &&
-      !IsCrashTestInProgress()) {
-    feedback = true;
-  }
-
-  if (feedback) {
+  if (dump) {
     count_crash_function_();
 
     if (generate_diagnostics_) {
