@@ -55,7 +55,7 @@ SocketListener::~SocketListener() {
     }
     SocketClientCollection::iterator it;
     for (it = mClients->begin(); it != mClients->end();) {
-        delete (*it);
+        (*it)->decRef();
         it = mClients->erase(it);
     }
     delete mClients;
@@ -226,7 +226,7 @@ void SocketListener::runListener() {
                 pthread_mutex_unlock(&mClientsLock);
                 /* Destroy the client */
                 close(c->getSocket());
-                delete c;
+                c->decRef();
             }
         }
     }
