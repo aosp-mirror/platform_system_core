@@ -366,16 +366,33 @@ int ifc_disable(const char *ifname)
 int ifc_reset_connections(const char *ifname)
 {
 #ifdef HAVE_ANDROID_OS
-    int result;
+    int result, success;
     in_addr_t myaddr;
     struct ifreq ifr;
+    struct in6_ifreq ifr6;
 
+    /* IPv4. Clear connections on the IP address. */
     ifc_init();
     ifc_get_info(ifname, &myaddr, NULL, NULL);
     ifc_init_ifr(ifname, &ifr);
     init_sockaddr_in(&ifr.ifr_addr, myaddr);
     result = ioctl(ifc_ctl_sock, SIOCKILLADDR,  &ifr);
     ifc_close();
+
+    /*
+     * IPv6. On Linux, when an interface goes down it loses all its IPv6
+     * addresses, so we don't know which connections belonged to that interface
+     * So we clear all unused IPv6 connections on the device by specifying an
+     * empty IPv6 address.
+     */
+    ifc_init6();
+    // This implicitly specifies an address of ::, i.e., kill all IPv6 sockets.
+    memset(&ifr6, 0, sizeof(ifr6));
+    success = ioctl(ifc_ctl_sock6, SIOCKILLADDR,  &ifr6);
+    if (result == 0) {
+        result = success;
+    }
+    ifc_close6();
 
     return result;
 #else
