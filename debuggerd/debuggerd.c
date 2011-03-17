@@ -37,7 +37,6 @@
 
 #include <private/android_filesystem_config.h>
 
-#include <byteswap.h>
 #include "debuggerd.h"
 #include "utility.h"
 
@@ -196,73 +195,6 @@ void dump_crash_banner(int tfd, unsigned pid, unsigned tid, int sig)
     if(sig) dump_fault_addr(tfd, tid, sig);
 }
 
-/* After randomization (ASLR), stack contents that point to randomized
- * code become uninterpretable (e.g. can't be resolved to line numbers).
- * Here, we bundle enough information so that stack analysis on the
- * server side can still be performed. This means we are leaking some
- * information about the device (its randomization base). We have to make
- * sure an attacker has no way of intercepting the tombstone.
- */
-
-typedef struct {
-    int32_t mmap_addr;
-    char tag[4]; /* 'P', 'R', 'E', ' ' */
-} prelink_info_t __attribute__((packed));
-
-static inline void set_prelink(long *prelink_addr,
-                               prelink_info_t *info)
-{
-    // We will assume the binary is little-endian, and test the
-    // host endianness here.
-    unsigned long test_endianness = 0xFF;
-
-    if (sizeof(prelink_info_t) == 8 && prelink_addr) {
-        if (*(unsigned char *)&test_endianness)
-            *prelink_addr = info->mmap_addr;
-        else
-            *prelink_addr = bswap_32(info->mmap_addr);
-    }
-}
-
-static int check_prelinked(const char *fname,
-                           long *prelink_addr)
-{
-    *prelink_addr = 0;
-    if (sizeof(prelink_info_t) != 8) return 0;
-
-    int fd = open(fname, O_RDONLY);
-    if (fd < 0) return 0;
-    off_t end = lseek(fd, 0, SEEK_END);
-    int nr = sizeof(prelink_info_t);
-
-    off_t sz = lseek(fd, -nr, SEEK_CUR);
-    if ((long)(end - sz) != (long)nr) return 0;
-    if (sz == (off_t)-1) return 0;
-
-    prelink_info_t info;
-    int num_read = read(fd, &info, nr);
-    if (num_read < 0) return 0;
-    if (num_read != sizeof(info)) return 0;
-
-    int prelinked = 0;
-    if (!strncmp(info.tag, "PRE ", 4)) {
-        set_prelink(prelink_addr, &info);
-        prelinked = 1;
-    }
-    if (close(fd) < 0) return 0;
-    return prelinked;
-}
-
-void dump_randomization_base(int tfd, bool at_fault) {
-    bool only_in_tombstone = !at_fault;
-    long prelink_addr;
-    check_prelinked("/system/lib/libc.so", &prelink_addr);
-    _LOG(tfd, only_in_tombstone,
-         "\nlibc base address: %08x\n", prelink_addr);
-}
-
-/* End of ASLR-related logic. */
-
 static void parse_elf_info(mapinfo *milist, pid_t pid)
 {
     mapinfo *mi;
@@ -353,7 +285,6 @@ void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
         dump_pc_and_lr(tfd, tid, milist, stack_depth, at_fault);
     }
 
-    dump_randomization_base(tfd, at_fault);
     dump_stack_and_code(tfd, tid, milist, stack_depth, sp_list, at_fault);
 #elif __i386__
     /* If stack unwinder fails, use the default solution to dump the stack
