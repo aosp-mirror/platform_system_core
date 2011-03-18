@@ -44,7 +44,7 @@ public:
     // SocketListener creates a SocketClient (at refcount 1) and calls
     // decRef() when it's done with the client.
     void incRef();
-    void decRef();
+    bool decRef(); // returns true at 0 (but note: SocketClient already deleted)
 };
 
 typedef android::List<SocketClient *> SocketClientCollection;
