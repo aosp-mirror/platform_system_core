@@ -104,20 +104,23 @@ int SocketClient::sendData(const void* data, int len) {
 }
 
 void SocketClient::incRef() {
-  pthread_mutex_lock(&mRefCountMutex);
-  mRefCount++;
-  pthread_mutex_unlock(&mRefCountMutex);
+    pthread_mutex_lock(&mRefCountMutex);
+    mRefCount++;
+    pthread_mutex_unlock(&mRefCountMutex);
 }
 
-void SocketClient::decRef() {
-  bool deleteSelf = false;
-  pthread_mutex_lock(&mRefCountMutex);
-  mRefCount--;
-  if (mRefCount == 0) {
-      deleteSelf = true;
-  }
-  pthread_mutex_unlock(&mRefCountMutex);
-  if (deleteSelf) {
-      delete this;
-  }
+bool SocketClient::decRef() {
+    bool deleteSelf = false;
+    pthread_mutex_lock(&mRefCountMutex);
+    mRefCount--;
+    if (mRefCount == 0) {
+        deleteSelf = true;
+    } else if (mRefCount < 0) {
+        SLOGE("SocketClient refcount went negative!");
+    }
+    pthread_mutex_unlock(&mRefCountMutex);
+    if (deleteSelf) {
+        delete this;
+    }
+    return deleteSelf;
 }
