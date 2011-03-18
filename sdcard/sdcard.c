@@ -581,17 +581,50 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         struct fuse_attr_out out;
         char *path, buffer[PATH_BUFFER_SIZE];
         int res = 0;
+        struct timespec times[2];
 
         TRACE("SETATTR fh=%llx id=%llx valid=%x\n",
               req->fh, hdr->nodeid, req->valid);
 
-        /* XXX: incomplete implementation -- truncate only.  chmod/chown
-         * should NEVER be implemented. */
+        /* XXX: incomplete implementation on purpose.   chmod/chown
+         * should NEVER be implemented.*/
 
         path = node_get_path(node, buffer, 0);
         if (req->valid & FATTR_SIZE)
             res = truncate(path, req->size);
+        if (res)
+            goto getout;
 
+        /* Handle changing atime and mtime.  If FATTR_ATIME_and FATTR_ATIME_NOW
+         * are both set, then set it to the current time.  Else, set it to the
+         * time specified in the request.  Same goes for mtime.  Use utimensat(2)
+         * as it allows ATIME and MTIME to be changed independently, and has
+         * nanosecond resolution which fuse also has.
+         */
+        if (req->valid & (FATTR_ATIME | FATTR_MTIME)) {
+            times[0].tv_nsec = UTIME_OMIT;
+            times[1].tv_nsec = UTIME_OMIT;
+            if (req->valid & FATTR_ATIME) {
+                if (req->valid & FATTR_ATIME_NOW) {
+                  times[0].tv_nsec = UTIME_NOW;
+                } else {
+                  times[0].tv_sec = req->atime;
+                  times[0].tv_nsec = req->atimensec;
+                }
+            }
+            if (req->valid & FATTR_MTIME) {
+                if (req->valid & FATTR_MTIME_NOW) {
+                  times[1].tv_nsec = UTIME_NOW;
+                } else {
+                  times[1].tv_sec = req->mtime;
+                  times[1].tv_nsec = req->mtimensec;
+                }
+            }
+            TRACE("Calling utimensat on %s with atime %ld, mtime=%ld\n", path, times[0].tv_sec, times[1].tv_sec);
+            res = utimensat(-1, path, times, 0);
+        }
+
+        getout:
         memset(&out, 0, sizeof(out));
         node_get_attr(node, &out.attr);
         out.attr_valid = 10;
