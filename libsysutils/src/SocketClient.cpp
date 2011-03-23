@@ -15,8 +15,10 @@ SocketClient::SocketClient(int socket)
         , mPid(-1)
         , mUid(-1)
         , mGid(-1)
+        , mRefCount(1)
 {
     pthread_mutex_init(&mWriteMutex, NULL);
+    pthread_mutex_init(&mRefCountMutex, NULL);
 
     struct ucred creds;
     socklen_t szCreds = sizeof(creds);
@@ -99,4 +101,26 @@ int SocketClient::sendData(const void* data, int len) {
     }
     pthread_mutex_unlock(&mWriteMutex);
     return 0;
+}
+
+void SocketClient::incRef() {
+    pthread_mutex_lock(&mRefCountMutex);
+    mRefCount++;
+    pthread_mutex_unlock(&mRefCountMutex);
+}
+
+bool SocketClient::decRef() {
+    bool deleteSelf = false;
+    pthread_mutex_lock(&mRefCountMutex);
+    mRefCount--;
+    if (mRefCount == 0) {
+        deleteSelf = true;
+    } else if (mRefCount < 0) {
+        SLOGE("SocketClient refcount went negative!");
+    }
+    pthread_mutex_unlock(&mRefCountMutex);
+    if (deleteSelf) {
+        delete this;
+    }
+    return deleteSelf;
 }
