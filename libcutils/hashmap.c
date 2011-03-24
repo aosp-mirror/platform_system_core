@@ -310,10 +310,11 @@ void hashmapForEach(Hashmap* map,
     for (i = 0; i < map->bucketCount; i++) {
         Entry* entry = map->buckets[i];
         while (entry != NULL) {
+            Entry *next = entry->next;
             if (!callback(entry->key, entry->value, context)) {
                 return;
             }
-            entry = entry->next;
+            entry = next;
         }
     }
 }
