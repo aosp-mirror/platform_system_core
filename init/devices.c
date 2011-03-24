@@ -551,13 +551,19 @@ out:
     return ret;
 }
 
+static int is_booting(void)
+{
+    return access("/dev/.booting", F_OK) == 0;
+}
+
 static void process_firmware_event(struct uevent *uevent)
 {
     char *root, *loading, *data, *file1 = NULL, *file2 = NULL;
     int l, loading_fd, data_fd, fw_fd;
+    int booting = is_booting();
 
-    log_event_print("firmware event { '%s', '%s' }\n",
-                    uevent->path, uevent->firmware);
+    INFO("firmware: loading '%s' for '%s'\n",
+         uevent->firmware, uevent->path);
 
     l = asprintf(&root, SYSFS_PREFIX"%s/", uevent->path);
     if (l == -1)
@@ -587,19 +593,29 @@ static void process_firmware_event(struct uevent *uevent)
     if(data_fd < 0)
         goto loading_close_out;
 
+try_loading_again:
     fw_fd = open(file1, O_RDONLY);
     if(fw_fd < 0) {
         fw_fd = open(file2, O_RDONLY);
         if (fw_fd < 0) {
+            if (booting) {
+                    /* If we're not fully booted, we may be missing
+                     * filesystems needed for firmware, wait and retry.
+                     */
+                usleep(100000);
+                booting = is_booting();
+                goto try_loading_again;
+            }
+            INFO("firmware: could not open '%s' %d\n", uevent->firmware, errno);
             write(loading_fd, "-1", 2);
             goto data_close_out;
         }
     }
 
     if(!load_firmware(fw_fd, loading_fd, data_fd))
-        log_event_print("firmware copy success { '%s', '%s' }\n", root, uevent->firmware);
+        INFO("firmware: copy success { '%s', '%s' }\n", root, uevent->firmware);
     else
-        log_event_print("firmware copy failure { '%s', '%s' }\n", root, uevent->firmware);
+        INFO("firmware: copy failure { '%s', '%s' }\n", root, uevent->firmware);
 
     close(fw_fd);
 data_close_out:
@@ -620,7 +636,6 @@ root_free_out:
 static void handle_firmware_event(struct uevent *uevent)
 {
     pid_t pid;
-    int status;
     int ret;
 
     if(strcmp(uevent->subsystem, "firmware"))
@@ -634,10 +649,6 @@ static void handle_firmware_event(struct uevent *uevent)
     if (!pid) {
         process_firmware_event(uevent);
         exit(EXIT_SUCCESS);
-    } else {
-        do {
-            ret = waitpid(pid, &status, 0);
-        } while (ret == -1 && errno == EINTR);
     }
 }
 
