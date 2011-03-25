@@ -651,6 +651,10 @@ static int check_startup_action(int nargs, char **args)
         ERROR("init startup failure\n");
         exit(1);
     }
+
+        /* signal that we hit this point */
+    unlink("/dev/.booting");
+
     return 0;
 }
 
@@ -707,6 +711,9 @@ int main(int argc, char **argv)
     mount("devpts", "/dev/pts", "devpts", 0, NULL);
     mount("proc", "/proc", "proc", 0, NULL);
     mount("sysfs", "/sys", "sysfs", 0, NULL);
+
+        /* indicate that booting is in progress to background fw loaders, etc */
+    close(open("/dev/.booting", O_WRONLY | O_CREAT, 0000));
 
         /* We must have some place other than / to create the
          * device nodes for kmsg and null, otherwise we won't

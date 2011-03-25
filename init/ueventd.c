@@ -20,6 +20,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <signal.h>
+
 #include <private/android_filesystem_config.h>
 
 #include "ueventd.h"
@@ -36,6 +38,13 @@ int ueventd_main(int argc, char **argv)
     struct pollfd ufd;
     int nr;
     char tmp[32];
+
+        /* Prevent fire-and-forget children from becoming zombies.
+         * If we should need to wait() for some children in the future
+         * (as opposed to none right now), double-forking here instead
+         * of ignoring SIGCHLD may be the better solution.
+         */
+    signal(SIGCHLD, SIG_IGN);
 
     open_devnull_stdio();
     log_init();
