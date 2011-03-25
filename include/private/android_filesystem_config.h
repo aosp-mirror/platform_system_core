@@ -55,7 +55,8 @@
 #define AID_DRM           1019  /* DRM server */
 #define AID_DRMIO         1020  /* DRM IO server */
 #define AID_GPS           1021  /* GPS daemon */
-#define AID_NFC           1022  /* nfc subsystem */
+#define AID_UNUSED1       1022  /* deprecated, DO NOT USE */
+#define AID_NFC           1023  /* nfc subsystem */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
