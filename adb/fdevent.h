@@ -70,6 +70,8 @@ struct fdevent
     fdevent *prev;
 
     int fd;
+    int force_eof;
+
     unsigned short state;
     unsigned short events;
 

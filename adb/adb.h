@@ -19,6 +19,8 @@
 
 #include <limits.h>
 
+#include "transport.h"  /* readx(), writex() */
+
 #define MAX_PAYLOAD 4096
 
 #define A_SYNC 0x434e5953
@@ -315,13 +317,6 @@ void put_apacket(apacket *p);
 int check_header(apacket *p);
 int check_data(apacket *p);
 
-/* convenience wrappers around read/write that will retry on
-** EINTR and/or short read/write.  Returns 0 on success, -1
-** on error or EOF.
-*/
-int readx(int fd, void *ptr, size_t len);
-int writex(int fd, const void *ptr, size_t len);
-
 /* define ADB_TRACE to 1 to enable tracing support, or 0 to disable it */
 
 #define  ADB_TRACE    1
@@ -331,33 +326,56 @@ int writex(int fd, const void *ptr, size_t len);
  * the adb_trace_init() function implemented in adb.c
  */
 typedef enum {
-    TRACE_ADB = 0,
+    TRACE_ADB = 0,   /* 0x001 */
     TRACE_SOCKETS,
     TRACE_PACKETS,
     TRACE_TRANSPORT,
-    TRACE_RWX,
+    TRACE_RWX,       /* 0x010 */
     TRACE_USB,
     TRACE_SYNC,
     TRACE_SYSDEPS,
-    TRACE_JDWP,
+    TRACE_JDWP,      /* 0x100 */
+    TRACE_SERVICES,
 } AdbTrace;
 
 #if ADB_TRACE
 
-  int     adb_trace_mask;
-
+  extern int     adb_trace_mask;
+  extern unsigned char    adb_trace_output_count;
   void    adb_trace_init(void);
 
 #  define ADB_TRACING  ((adb_trace_mask & (1 << TRACE_TAG)) != 0)
 
   /* you must define TRACE_TAG before using this macro */
-  #define  D(...)                                      \
+#  define  D(...)                                      \
         do {                                           \
-            if (ADB_TRACING)                           \
+            if (ADB_TRACING) {                         \
+                int save_errno = errno;                \
+                adb_mutex_lock(&D_lock);               \
+                fprintf(stderr, "%s::%s():",           \
+                        __FILE__, __FUNCTION__);       \
+                errno = save_errno;                    \
                 fprintf(stderr, __VA_ARGS__ );         \
+                fflush(stderr);                        \
+                adb_mutex_unlock(&D_lock);             \
+                errno = save_errno;                    \
+           }                                           \
+        } while (0)
+#  define  DR(...)                                     \
+        do {                                           \
+            if (ADB_TRACING) {                         \
+                int save_errno = errno;                \
+                adb_mutex_lock(&D_lock);               \
+                errno = save_errno;                    \
+                fprintf(stderr, __VA_ARGS__ );         \
+                fflush(stderr);                        \
+                adb_mutex_unlock(&D_lock);             \
+                errno = save_errno;                    \
+           }                                           \
         } while (0)
 #else
 #  define  D(...)          ((void)0)
+#  define  DR(...)         ((void)0)
 #  define  ADB_TRACING     0
 #endif
 
@@ -413,6 +431,7 @@ int connection_state(atransport *t);
 #define CS_NOPERM     5 /* Insufficient permissions to communicate with the device */
 
 extern int HOST;
+extern int SHELL_EXIT_NOTIFY_FD;
 
 #define CHUNK_SIZE (64*1024)
 

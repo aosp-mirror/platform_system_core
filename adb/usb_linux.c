@@ -45,7 +45,7 @@
 /* usb scan debugging is waaaay too verbose */
 #define DBGX(x...)
 
-static adb_mutex_t usb_lock = ADB_MUTEX_INITIALIZER;
+ADB_MUTEX_DEFINE( usb_lock );
 
 struct usb_handle
 {
@@ -369,6 +369,7 @@ static int usb_bulk_read(usb_handle *h, void *data, int len)
         h->reaper_thread = pthread_self();
         adb_mutex_unlock(&h->lock);
         res = ioctl(h->desc, USBDEVFS_REAPURB, &out);
+        int saved_errno = errno;
         adb_mutex_lock(&h->lock);
         h->reaper_thread = 0;
         if(h->dead) {
@@ -376,7 +377,7 @@ static int usb_bulk_read(usb_handle *h, void *data, int len)
             break;
         }
         if(res < 0) {
-            if(errno == EINTR) {
+            if(saved_errno == EINTR) {
                 continue;
             }
             D("[ reap urb - error ]\n");
@@ -685,4 +686,3 @@ void usb_init()
         fatal_errno("cannot create input thread");
     }
 }
-

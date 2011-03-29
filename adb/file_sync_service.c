@@ -193,9 +193,11 @@ static int handle_send_file(int s, char *path, mode_t mode, char *buffer)
         if(fd < 0)
             continue;
         if(writex(fd, buffer, len)) {
+            int saved_errno = errno;
             adb_close(fd);
             adb_unlink(path);
             fd = -1;
+            errno = saved_errno;
             if(fail_errno(s)) return -1;
         }
     }
