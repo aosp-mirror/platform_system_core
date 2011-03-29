@@ -19,6 +19,10 @@ class SocketClient {
     /* Peer group ID */
     gid_t mGid;
 
+    /* Reference count (starts at 1) */
+    pthread_mutex_t mRefCountMutex;
+    int mRefCount;
+
 public:
     SocketClient(int sock);
     virtual ~SocketClient() {}
@@ -34,6 +38,13 @@ public:
 
     // Sending binary data:
     int sendData(const void *data, int len);
+
+    // Optional reference counting.  Reference count starts at 1.  If
+    // it's decremented to 0, it deletes itself.
+    // SocketListener creates a SocketClient (at refcount 1) and calls
+    // decRef() when it's done with the client.
+    void incRef();
+    bool decRef(); // returns true at 0 (but note: SocketClient already deleted)
 };
 
 typedef android::List<SocketClient *> SocketClientCollection;
