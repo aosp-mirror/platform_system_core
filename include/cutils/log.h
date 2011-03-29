@@ -289,13 +289,17 @@ extern "C" {
  * It is NOT stripped from release builds.  Note that the condition test
  * is -inverted- from the normal assert() semantics.
  */
+#ifndef LOG_ALWAYS_FATAL_IF
 #define LOG_ALWAYS_FATAL_IF(cond, ...) \
     ( (CONDITION(cond)) \
     ? ((void)android_printAssert(#cond, LOG_TAG, ## __VA_ARGS__)) \
     : (void)0 )
+#endif
 
+#ifndef LOG_ALWAYS_FATAL
 #define LOG_ALWAYS_FATAL(...) \
     ( ((void)android_printAssert(NULL, LOG_TAG, ## __VA_ARGS__)) )
+#endif
 
 /*
  * Versions of LOG_ALWAYS_FATAL_IF and LOG_ALWAYS_FATAL that
@@ -303,13 +307,21 @@ extern "C" {
  */
 #if LOG_NDEBUG
 
+#ifndef LOG_FATAL_IF
 #define LOG_FATAL_IF(cond, ...) ((void)0)
+#endif
+#ifndef LOG_FATAL
 #define LOG_FATAL(...) ((void)0)
+#endif
 
 #else
 
+#ifndef LOG_FATAL_IF
 #define LOG_FATAL_IF(cond, ...) LOG_ALWAYS_FATAL_IF(cond, ## __VA_ARGS__)
+#endif
+#ifndef LOG_FATAL
 #define LOG_FATAL(...) LOG_ALWAYS_FATAL(__VA_ARGS__)
+#endif
 
 #endif
 
@@ -317,8 +329,10 @@ extern "C" {
  * Assertion that generates a log message when the assertion fails.
  * Stripped out of release builds.  Uses the current LOG_TAG.
  */
+#ifndef LOG_ASSERT
 #define LOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ## __VA_ARGS__)
 //#define LOG_ASSERT(cond) LOG_FATAL_IF(!(cond), "Assertion failed: " #cond)
+#endif
 
 // ---------------------------------------------------------------------
 
@@ -377,18 +391,24 @@ typedef enum {
 } AndroidEventLogType;
 
 
+#ifndef LOG_EVENT_INT
 #define LOG_EVENT_INT(_tag, _value) {                                       \
         int intBuf = _value;                                                \
         (void) android_btWriteLog(_tag, EVENT_TYPE_INT, &intBuf,            \
             sizeof(intBuf));                                                \
     }
+#endif
+#ifndef LOG_EVENT_LONG
 #define LOG_EVENT_LONG(_tag, _value) {                                      \
         long long longBuf = _value;                                         \
         (void) android_btWriteLog(_tag, EVENT_TYPE_LONG, &longBuf,          \
             sizeof(longBuf));                                               \
     }
+#endif
+#ifndef LOG_EVENT_STRING
 #define LOG_EVENT_STRING(_tag, _value)                                      \
     ((void) 0)  /* not implemented -- must combine len with string */
+#endif
 /* TODO: something for LIST */
 
 /*
