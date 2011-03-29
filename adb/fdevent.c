@@ -551,7 +551,7 @@ static void fdevent_subproc_event_func(int fd, unsigned ev, void *userdata)
       subproc_fde->force_eof = 1;
 
       int rcount = 0;
-      ioctl(subproc_fd, TIOCINQ, &rcount);
+      ioctl(subproc_fd, FIONREAD, &rcount);
       D("subproc with fd=%d  has rcount=%d err=%d\n",
         subproc_fd, rcount, errno);
 
