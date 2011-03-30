@@ -189,15 +189,6 @@ static void update_prop_info(prop_info *pi, const char *value, unsigned len)
     __futex_wake(&pi->serial, INT32_MAX);
 }
 
-static int property_write(prop_info *pi, const char *value)
-{
-    int valuelen = strlen(value);
-    if(valuelen >= PROP_VALUE_MAX) return -1;
-    update_prop_info(pi, value, valuelen);
-    return 0;
-}
-
-
 /*
  * Checks permissions for starting/stoping system services.
  * AID_SYSTEM and AID_ROOT are always allowed.
@@ -384,8 +375,8 @@ void handle_property_set_fd()
     }
 
     r = recv(s, &msg, sizeof(msg), 0);
-    close(s);
     if(r != sizeof(prop_msg)) {
+        close(s);
         ERROR("sys_prop: mis-match msg size recieved: %d expected: %d\n",
               r, sizeof(prop_msg));
         return;
@@ -416,6 +407,11 @@ void handle_property_set_fd()
     default:
         break;
     }
+
+    // Note: bionic's property client code assumes that the property
+    // server will not close the socket until *AFTER* the property is
+    // written to memory.
+    close(s);
 }
 
 void get_property_workspace(int *fd, int *sz)
