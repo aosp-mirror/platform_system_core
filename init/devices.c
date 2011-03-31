@@ -393,104 +393,20 @@ err:
     return NULL;
 }
 
-static void handle_device_event(struct uevent *uevent)
+static void handle_device(const char *action, const char *devpath,
+        const char *path, int block, int major, int minor, char **links)
 {
-    char devpath[96];
-    int devpath_ready = 0;
-    char *base, *name;
-    char **links = NULL;
-    int block;
     int i;
 
-    if (!strcmp(uevent->action,"add"))
-        fixup_sys_perms(uevent->path);
-
-        /* if it's not a /dev device, nothing else to do */
-    if((uevent->major < 0) || (uevent->minor < 0))
-        return;
-
-        /* do we have a name? */
-    name = strrchr(uevent->path, '/');
-    if(!name)
-        return;
-    name++;
-
-        /* too-long names would overrun our buffer */
-    if(strlen(name) > 64)
-        return;
-
-        /* are we block or char? where should we live? */
-    if(!strncmp(uevent->subsystem, "block", 5)) {
-        block = 1;
-        base = "/dev/block/";
-        mkdir(base, 0755);
-        if (!strncmp(uevent->path, "/devices/platform/", 18))
-            links = parse_platform_block_device(uevent);
-    } else {
-        block = 0;
-            /* this should probably be configurable somehow */
-        if (!strncmp(uevent->subsystem, "usb", 3)) {
-            if (!strcmp(uevent->subsystem, "usb")) {
-                /* This imitates the file system that would be created
-                 * if we were using devfs instead.
-                 * Minors are broken up into groups of 128, starting at "001"
-                 */
-                int bus_id = uevent->minor / 128 + 1;
-                int device_id = uevent->minor % 128 + 1;
-                /* build directories */
-                mkdir("/dev/bus", 0755);
-                mkdir("/dev/bus/usb", 0755);
-                snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d", bus_id);
-                mkdir(devpath, 0755);
-                snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d/%03d", bus_id, device_id);
-                devpath_ready = 1;
-            } else {
-                /* ignore other USB events */
-                return;
-            }
-        } else if (!strncmp(uevent->subsystem, "graphics", 8)) {
-            base = "/dev/graphics/";
-            mkdir(base, 0755);
-        } else if (!strncmp(uevent->subsystem, "oncrpc", 6)) {
-            base = "/dev/oncrpc/";
-            mkdir(base, 0755);
-        } else if (!strncmp(uevent->subsystem, "adsp", 4)) {
-            base = "/dev/adsp/";
-            mkdir(base, 0755);
-        } else if (!strncmp(uevent->subsystem, "msm_camera", 10)) {
-            base = "/dev/msm_camera/";
-            mkdir(base, 0755);
-        } else if(!strncmp(uevent->subsystem, "input", 5)) {
-            base = "/dev/input/";
-            mkdir(base, 0755);
-        } else if(!strncmp(uevent->subsystem, "mtd", 3)) {
-            base = "/dev/mtd/";
-            mkdir(base, 0755);
-        } else if(!strncmp(uevent->subsystem, "sound", 5)) {
-            base = "/dev/snd/";
-            mkdir(base, 0755);
-        } else if(!strncmp(uevent->subsystem, "misc", 4) &&
-                    !strncmp(name, "log_", 4)) {
-            base = "/dev/log/";
-            mkdir(base, 0755);
-            name += 4;
-        } else
-            base = "/dev/";
-        links = get_character_device_symlinks(uevent);
-    }
-
-    if (!devpath_ready)
-        snprintf(devpath, sizeof(devpath), "%s%s", base, name);
-
-    if(!strcmp(uevent->action, "add")) {
-        make_device(devpath, uevent->path, block, uevent->major, uevent->minor);
+    if(!strcmp(action, "add")) {
+        make_device(devpath, path, block, major, minor);
         if (links) {
             for (i = 0; links[i]; i++)
                 make_link(devpath, links[i]);
         }
     }
 
-    if(!strcmp(uevent->action, "remove")) {
+    if(!strcmp(action, "remove")) {
         if (links) {
             for (i = 0; links[i]; i++)
                 remove_link(devpath, links[i]);
@@ -502,6 +418,127 @@ static void handle_device_event(struct uevent *uevent)
         for (i = 0; links[i]; i++)
             free(links[i]);
         free(links);
+    }
+}
+
+static const char *parse_device_name(struct uevent *uevent, unsigned int len)
+{
+    const char *name;
+
+    /* if it's not a /dev device, nothing else to do */
+    if((uevent->major < 0) || (uevent->minor < 0))
+        return NULL;
+
+    /* do we have a name? */
+    name = strrchr(uevent->path, '/');
+    if(!name)
+        return NULL;
+    name++;
+
+    /* too-long names would overrun our buffer */
+    if(strlen(name) > len)
+        return NULL;
+
+    return name;
+}
+
+static void handle_block_device_event(struct uevent *uevent)
+{
+    const char *base = "/dev/block/";
+    const char *name;
+    char devpath[96];
+    char **links = NULL;
+
+    name = parse_device_name(uevent, 64);
+    if (!name)
+        return;
+
+    snprintf(devpath, sizeof(devpath), "%s%s", base, name);
+    mkdir(base, 0755);
+
+    if (!strncmp(uevent->path, "/devices/platform/", 18))
+        links = parse_platform_block_device(uevent);
+
+    handle_device(uevent->action, devpath, uevent->path, 1,
+            uevent->major, uevent->minor, links);
+
+}
+
+static void handle_generic_device_event(struct uevent *uevent)
+{
+    char *base;
+    const char *name;
+    char devpath[96] = {0};
+    char **links = NULL;
+
+    name = parse_device_name(uevent, 64);
+    if (!name)
+        return;
+
+    if (!strncmp(uevent->subsystem, "usb", 3)) {
+         if (!strcmp(uevent->subsystem, "usb")) {
+             /* This imitates the file system that would be created
+              * if we were using devfs instead.
+              * Minors are broken up into groups of 128, starting at "001"
+              */
+             int bus_id = uevent->minor / 128 + 1;
+             int device_id = uevent->minor % 128 + 1;
+             /* build directories */
+             mkdir("/dev/bus", 0755);
+             mkdir("/dev/bus/usb", 0755);
+             snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d", bus_id);
+             mkdir(devpath, 0755);
+             snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d/%03d", bus_id, device_id);
+         } else {
+             /* ignore other USB events */
+             return;
+         }
+     } else if (!strncmp(uevent->subsystem, "graphics", 8)) {
+         base = "/dev/graphics/";
+         mkdir(base, 0755);
+     } else if (!strncmp(uevent->subsystem, "oncrpc", 6)) {
+         base = "/dev/oncrpc/";
+         mkdir(base, 0755);
+     } else if (!strncmp(uevent->subsystem, "adsp", 4)) {
+         base = "/dev/adsp/";
+         mkdir(base, 0755);
+     } else if (!strncmp(uevent->subsystem, "msm_camera", 10)) {
+         base = "/dev/msm_camera/";
+         mkdir(base, 0755);
+     } else if(!strncmp(uevent->subsystem, "input", 5)) {
+         base = "/dev/input/";
+         mkdir(base, 0755);
+     } else if(!strncmp(uevent->subsystem, "mtd", 3)) {
+         base = "/dev/mtd/";
+         mkdir(base, 0755);
+     } else if(!strncmp(uevent->subsystem, "sound", 5)) {
+         base = "/dev/snd/";
+         mkdir(base, 0755);
+     } else if(!strncmp(uevent->subsystem, "misc", 4) &&
+                 !strncmp(name, "log_", 4)) {
+         base = "/dev/log/";
+         mkdir(base, 0755);
+         name += 4;
+     } else
+         base = "/dev/";
+     links = get_character_device_symlinks(uevent);
+
+     if (!devpath[0])
+         snprintf(devpath, sizeof(devpath), "%s%s", base, name);
+
+     handle_device(uevent->action, devpath, uevent->path, 0,
+             uevent->major, uevent->minor, links);
+}
+
+static void handle_device_event(struct uevent *uevent)
+{
+    if (!strcmp(uevent->action,"add"))
+        fixup_sys_perms(uevent->path);
+
+    if (!strncmp(uevent->subsystem, "block", 5)) {
+        handle_block_device_event(uevent);
+    } else {
+        handle_generic_device_event(uevent);
     }
 }
 
