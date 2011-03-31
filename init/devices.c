@@ -97,8 +97,15 @@ struct perm_node {
     struct listnode plist;
 };
 
+struct platform_node {
+    char *name;
+    int name_len;
+    struct listnode list;
+};
+
 static list_declare(sys_perms);
 static list_declare(dev_perms);
+static list_declare(platform_names);
 
 int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
@@ -210,6 +217,68 @@ static void make_device(const char *path,
     mknod(path, mode, dev);
     chown(path, uid, -1);
     setegid(AID_ROOT);
+}
+
+static void add_platform_device(const char *name)
+{
+    int name_len = strlen(name);
+    struct listnode *node;
+    struct platform_node *bus;
+
+    list_for_each_reverse(node, &platform_names) {
+        bus = node_to_item(node, struct platform_node, list);
+        if ((bus->name_len < name_len) &&
+                (name[bus->name_len] == '/') &&
+                !strncmp(name, bus->name, bus->name_len))
+            /* subdevice of an existing platform, ignore it */
+            return;
+    }
+
+    INFO("adding platform device %s\n", name);
+
+    bus = calloc(1, sizeof(struct platform_node));
+    bus->name = strdup(name);
+    bus->name_len = name_len;
+    list_add_tail(&platform_names, &bus->list);
+}
+
+/*
+ * given a name that may start with a platform device, find the length of the
+ * platform device prefix.  If it doesn't start with a platform device, return
+ * 0.
+ */
+static const char *find_platform_device(const char *name)
+{
+    int name_len = strlen(name);
+    struct listnode *node;
+    struct platform_node *bus;
+
+    list_for_each_reverse(node, &platform_names) {
+        bus = node_to_item(node, struct platform_node, list);
+        if ((bus->name_len < name_len) &&
+                (name[bus->name_len] == '/') &&
+                !strncmp(name, bus->name, bus->name_len))
+            return bus->name;
+    }
+
+    return NULL;
+}
+
+static void remove_platform_device(const char *name)
+{
+    struct listnode *node;
+    struct platform_node *bus;
+
+    list_for_each_reverse(node, &platform_names) {
+        bus = node_to_item(node, struct platform_node, list);
+        if (!strcmp(name, bus->name)) {
+            INFO("removing platform device %s\n", name);
+            free(bus->name);
+            list_remove(node);
+            free(bus);
+            return;
+        }
+    }
 }
 
 #if LOG_UEVENTS
@@ -332,7 +401,7 @@ err:
 
 static char **parse_platform_block_device(struct uevent *uevent)
 {
-    const char *driver;
+    const char *device;
     const char *path;
     char *slash;
     int width;
@@ -352,16 +421,14 @@ static char **parse_platform_block_device(struct uevent *uevent)
 
     /* Drop "/devices/platform/" */
     path = uevent->path;
-    driver = path + 18;
-    slash = strchr(driver, '/');
-    if (!slash)
-        goto err;
-    width = slash - driver;
-    if (width <= 0)
+    device = path + 18;
+    device = find_platform_device(device);
+    if (!device)
         goto err;
 
-    snprintf(link_path, sizeof(link_path), "/dev/block/platform/%.*s",
-             width, driver);
+    INFO("found platform device %s\n", device);
+
+    snprintf(link_path, sizeof(link_path), "/dev/block/platform/%s", device);
 
     if (uevent->partition_name) {
         p = strdup(uevent->partition_name);
@@ -421,6 +488,16 @@ static void handle_device(const char *action, const char *devpath,
     }
 }
 
+static void handle_platform_device_event(struct uevent *uevent)
+{
+    const char *name = uevent->path + 18; /* length of /devices/platform/ */
+
+    if (!strcmp(uevent->action, "add"))
+        add_platform_device(name);
+    else if (!strcmp(uevent->action, "remove"))
+        remove_platform_device(name);
+}
+
 static const char *parse_device_name(struct uevent *uevent, unsigned int len)
 {
     const char *name;
@@ -461,7 +538,6 @@ static void handle_block_device_event(struct uevent *uevent)
 
     handle_device(uevent->action, devpath, uevent->path, 1,
             uevent->major, uevent->minor, links);
-
 }
 
 static void handle_generic_device_event(struct uevent *uevent)
@@ -537,6 +613,8 @@ static void handle_device_event(struct uevent *uevent)
 
     if (!strncmp(uevent->subsystem, "block", 5)) {
         handle_block_device_event(uevent);
+    } else if (!strncmp(uevent->subsystem, "platform", 8)) {
+        handle_platform_device_event(uevent);
     } else {
         handle_generic_device_event(uevent);
     }
