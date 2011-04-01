@@ -54,7 +54,9 @@
 #define AID_USB           1018  /* USB devices */
 #define AID_GPS           1021  /* GPS daemon */
 #define AID_UNUSED1       1022  /* deprecated, DO NOT USE */
-#define AID_NFC           1023  /* nfc subsystem */
+#define AID_RFU1          1023  /* RFU */
+#define AID_RFU2          1024  /* RFU */
+#define AID_NFC           1025  /* nfc subsystem */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
