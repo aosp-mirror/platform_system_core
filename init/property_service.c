@@ -388,6 +388,9 @@ void handle_property_set_fd()
         msg.value[PROP_VALUE_MAX-1] = 0;
 
         if(memcmp(msg.name,"ctl.",4) == 0) {
+            // Keep the old close-socket-early behavior when handling
+            // ctl.* properties.
+            close(s);
             if (check_control_perms(msg.value, cr.uid, cr.gid)) {
                 handle_control_message((char*) msg.name + 4, (char*) msg.value);
             } else {
@@ -401,17 +404,18 @@ void handle_property_set_fd()
                 ERROR("sys_prop: permission denied uid:%d  name:%s\n",
                       cr.uid, msg.name);
             }
+
+            // Note: bionic's property client code assumes that the
+            // property server will not close the socket until *AFTER*
+            // the property is written to memory.
+            close(s);
         }
         break;
 
     default:
+        close(s);
         break;
     }
-
-    // Note: bionic's property client code assumes that the property
-    // server will not close the socket until *AFTER* the property is
-    // written to memory.
-    close(s);
 }
 
 void get_property_workspace(int *fd, int *sz)
