@@ -69,6 +69,7 @@ struct Action
     Action *next;
 
     char cmd[64];    
+    const char *prod;
     void *data;
     unsigned size;
 
@@ -183,6 +184,16 @@ static int cb_check(Action *a, int status, char *resp, int invert)
         return status;
     }
 
+    if (a->prod) {
+        if (strcmp(a->prod, cur_product) != 0) {
+            double split = now();
+            fprintf(stderr,"IGNORE, product is %s required only for %s [%7.3fs]\n",
+                    cur_product, a->prod, (split - a->start));
+            a->start = split;
+            return 0;
+        }
+    }
+
     yes = match(resp, value, count);
     if (invert) yes = !yes;
 
@@ -214,10 +225,12 @@ static int cb_reject(Action *a, int status, char *resp)
     return cb_check(a, status, resp, 1);
 }
 
-void fb_queue_require(const char *var, int invert, unsigned nvalues, const char **value)
+void fb_queue_require(const char *prod, const char *var,
+		int invert, unsigned nvalues, const char **value)
 {
     Action *a;
     a = queue_action(OP_QUERY, "getvar:%s", var);
+    a->prod = prod;
     a->data = value;
     a->size = nvalues;
     a->msg = mkmsg("checking %s", var);
@@ -242,6 +255,25 @@ void fb_queue_display(const char *var, const char *prettyname)
     a->data = strdup(prettyname);
     if (a->data == 0) die("out of memory");
     a->func = cb_display;
+}
+
+static int cb_save(Action *a, int status, char *resp)
+{
+    if (status) {
+        fprintf(stderr, "%s FAILED (%s)\n", a->cmd, resp);
+        return status;
+    }
+    strncpy(a->data, resp, a->size);
+    return 0;
+}
+
+void fb_queue_query_save(const char *var, char *dest, unsigned dest_size)
+{
+    Action *a;
+    a = queue_action(OP_QUERY, "getvar:%s", var);
+    a->data = (void *)dest;
+    a->size = dest_size;
+    a->func = cb_save;
 }
 
 static int cb_do_nothing(Action *a, int status, char *resp)
