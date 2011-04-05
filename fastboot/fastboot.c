@@ -42,6 +42,8 @@
 
 #include "fastboot.h"
 
+char cur_product[FB_RESPONSE_SZ + 1];
+
 void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline);
 
 boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size,
@@ -340,6 +342,7 @@ static int setup_requirement_line(char *name)
 {
     char *val[MAX_OPTIONS];
     const char **out;
+    char *prod = NULL;
     unsigned n, count;
     char *x;
     int invert = 0;
@@ -349,6 +352,14 @@ static int setup_requirement_line(char *name)
         invert = 1;
     } else if (!strncmp(name, "require ", 8)) {
         name += 8;
+        invert = 0;
+    } else if (!strncmp(name, "require-for-product:", 20)) {
+        // Get the product and point name past it
+        prod = name + 20;
+        name = strchr(name, ' ');
+        if (!name) return -1;
+        *name = 0;
+        name += 1;
         invert = 0;
     }
 
@@ -381,7 +392,7 @@ static int setup_requirement_line(char *name)
         if (out[n] == 0) return -1;
     }
 
-    fb_queue_require(name, invert, n, out);
+    fb_queue_require(prod, name, invert, n, out);
     return 0;
 }
 
@@ -431,6 +442,8 @@ void do_update(char *fn)
     zipfile_t zip;
 
     queue_info_dump();
+
+    fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
     zdata = load_file(fn, &zsize);
     if (zdata == 0) die("failed to load '%s'", fn);
@@ -497,6 +510,8 @@ void do_flashall(void)
     unsigned sz;
 
     queue_info_dump();
+
+    fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
     fname = find_item("info", product);
     if (fname == 0) die("cannot find android-info.txt");
