@@ -54,6 +54,7 @@ TOOLS := \
 	vmstat \
 	nandread \
 	ionice \
+	touch \
 	lsof
 
 LOCAL_SRC_FILES:= \
