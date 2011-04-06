@@ -50,10 +50,16 @@ class KernelCollectorTest : public ::testing::Test {
 
   void SetUpSuccessfulCollect();
   void CheckPreservedDumpClear();
+  void ComputeKernelStackSignatureCommon();
 
   KernelCollector collector_;
   FilePath test_kcrash_;
 };
+
+TEST_F(KernelCollectorTest, ComputeKernelStackSignatureBase) {
+  // Make sure the normal build architecture is detected
+  EXPECT_TRUE(collector_.GetArch() != KernelCollector::archUnknown);
+}
 
 TEST_F(KernelCollectorTest, LoadPreservedDump) {
   ASSERT_FALSE(file_util::PathExists(test_kcrash_));
@@ -162,7 +168,92 @@ TEST_F(KernelCollectorTest, CollectOK) {
   CheckPreservedDumpClear();
 }
 
-TEST_F(KernelCollectorTest, ComputeKernelStackSignature) {
+// Perform tests which are common across architectures
+void KernelCollectorTest::ComputeKernelStackSignatureCommon() {
+  std::string signature;
+
+  const char kStackButNoPC[] =
+      "<4>[ 6066.829029]  [<790340af>] __do_softirq+0xa6/0x143\n";
+  EXPECT_TRUE(
+      collector_.ComputeKernelStackSignature(kStackButNoPC, &signature, false));
+  EXPECT_EQ("kernel--83615F0A", signature);
+
+  const char kMissingEverything[] =
+      "<4>[ 6066.829029]  [<790340af>] ? __do_softirq+0xa6/0x143\n";
+  EXPECT_FALSE(
+      collector_.ComputeKernelStackSignature(kMissingEverything,
+                                             &signature,
+                                             false));
+
+  // Long message.
+  const char kTruncatedMessage[] =
+      "<0>[   87.485611] Kernel panic - not syncing: 01234567890123456789"
+          "01234567890123456789X\n";
+  EXPECT_TRUE(
+      collector_.ComputeKernelStackSignature(kTruncatedMessage,
+                                             &signature,
+                                             false));
+  EXPECT_EQ("kernel-0123456789012345678901234567890123456789-00000000",
+            signature);
+}
+
+TEST_F(KernelCollectorTest, ComputeKernelStackSignatureARM) {
+  const char kBugToPanic[] =
+      "<5>[  123.412524] Modules linked in:\n"
+      "<5>[  123.412534] CPU: 0    Tainted: G        W    "
+          "(2.6.37-01030-g51cee64 #153)\n"
+      "<5>[  123.412552] PC is at write_breakme+0xd0/0x1b4\n"
+      "<5>[  123.412560] LR is at write_breakme+0xc8/0x1b4\n"
+      "<5>[  123.412569] pc : [<c0058220>]    lr : [<c005821c>]    "
+          "psr: 60000013\n"
+      "<5>[  123.412574] sp : f4e0ded8  ip : c04d104c  fp : 000e45e0\n"
+      "<5>[  123.412581] r10: 400ff000  r9 : f4e0c000  r8 : 00000004\n"
+      "<5>[  123.412589] r7 : f4e0df80  r6 : f4820c80  r5 : 00000004  "
+          "r4 : f4e0dee8\n"
+      "<5>[  123.412598] r3 : 00000000  r2 : f4e0decc  r1 : c05f88a9  "
+          "r0 : 00000039\n"
+      "<5>[  123.412608] Flags: nZCv  IRQs on  FIQs on  Mode SVC_32  ISA "
+          "ARM  Segment user\n"
+      "<5>[  123.412617] Control: 10c53c7d  Table: 34dcc04a  DAC: 00000015\n"
+      "<0>[  123.412626] Process bash (pid: 1014, stack limit = 0xf4e0c2f8)\n"
+      "<0>[  123.412634] Stack: (0xf4e0ded8 to 0xf4e0e000)\n"
+      "<0>[  123.412641] dec0:                                              "
+          "         f4e0dee8 c0183678\n"
+      "<0>[  123.412654] dee0: 00000000 00000000 00677562 0000081f c06a6a78 "
+          "400ff000 f4e0dfb0 00000000\n"
+      "<0>[  123.412666] df00: bec7ab44 000b1719 bec7ab0c c004f498 bec7a314 "
+          "c024acc8 00000001 c018359c\n"
+      "<0>[  123.412679] df20: f4e0df34 c04d10fc f5803c80 271beb39 000e45e0 "
+          "f5803c80 c018359c c017bfe0\n"
+      "<0>[  123.412691] df40: 00000004 f4820c80 400ff000 f4e0df80 00000004 "
+          "f4e0c000 00000000 c01383e4\n"
+      "<0>[  123.412703] df60: f4820c80 400ff000 f4820c80 400ff000 00000000 "
+          "00000000 00000004 c0138578\n"
+      "<0>[  123.412715] df80: 00000000 00000000 00000004 00000000 00000004 "
+          "402f95d0 00000004 00000004\n"
+      "<0>[  123.412727] dfa0: c0054984 c00547c0 00000004 402f95d0 00000001 "
+          "400ff000 00000004 00000000\n"
+      "<0>[  123.412739] dfc0: 00000004 402f95d0 00000004 00000004 400ff000 "
+          "000c194c bec7ab58 000e45e0\n"
+      "<0>[  123.412751] dfe0: 00000000 bec7aad8 40232520 40284e9c 60000010 "
+          "00000001 00000000 00000000\n"
+      "<5>[   39.496577] Backtrace:\n"
+      "<5>[  123.412782] [<c0058220>] (__bug+0x20/0x2c) from [<c0183678>] "
+          "(write_breakme+0xdc/0x1bc)\n"
+      "<5>[  123.412798] [<c0183678>] (write_breakme+0xdc/0x1bc) from "
+          "[<c017bfe0>] (proc_reg_write+0x88/0x9c)\n";
+  std::string signature;
+
+  collector_.SetArch(KernelCollector::archArm);
+  EXPECT_TRUE(
+      collector_.ComputeKernelStackSignature(kBugToPanic, &signature, false));
+  EXPECT_EQ("kernel-write_breakme-97D3E92F", signature);
+
+  ComputeKernelStackSignatureCommon();
+}
+
+
+TEST_F(KernelCollectorTest, ComputeKernelStackSignatureX86) {
   const char kBugToPanic[] =
       "<4>[ 6066.829029]  [<79039d16>] ? run_timer_softirq+0x165/0x1e6\n"
       "<4>[ 6066.829029]  [<790340af>] ignore_old_stack+0xa6/0x143\n"
@@ -178,6 +269,8 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignature) {
       "<4>[ 6066.949971]  [<7937c5c5>] oops_end+0x73/0x81\n"
       "<4>[ 6066.950208]  [<7901b260>] no_context+0x10d/0x117\n";
   std::string signature;
+
+  collector_.SetArch(KernelCollector::archX86);
   EXPECT_TRUE(
       collector_.ComputeKernelStackSignature(kBugToPanic, &signature, false));
   EXPECT_EQ("kernel-ieee80211_stop_tx_ba_session-DE253569", signature);
@@ -187,19 +280,6 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignature) {
   EXPECT_TRUE(
       collector_.ComputeKernelStackSignature(kPCButNoStack, &signature, false));
   EXPECT_EQ("kernel-ieee80211_stop_tx_ba_session-00000000", signature);
-
-  const char kStackButNoPC[] =
-      "<4>[ 6066.829029]  [<790340af>] __do_softirq+0xa6/0x143\n";
-  EXPECT_TRUE(
-      collector_.ComputeKernelStackSignature(kStackButNoPC, &signature, false));
-  EXPECT_EQ("kernel--83615F0A", signature);
-
-  const char kMissingEverything[] =
-      "<4>[ 6066.829029]  [<790340af>] ? __do_softirq+0xa6/0x143\n";
-  EXPECT_FALSE(
-      collector_.ComputeKernelStackSignature(kMissingEverything,
-                                             &signature,
-                                             false));
 
   const char kBreakmeBug[] =
       "<4>[  180.492137]  [<790970c6>] ? handle_mm_fault+0x67f/0x96d\n"
@@ -255,18 +335,7 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignature) {
                                              &signature,
                                              false));
   EXPECT_EQ("kernel-Testing panic-E0FC3552", signature);
-
-  // Long message.
-  const char kTruncatedMessage[] =
-      "<0>[   87.485611] Kernel panic - not syncing: 01234567890123456789"
-          "01234567890123456789X\n";
-  EXPECT_TRUE(
-      collector_.ComputeKernelStackSignature(kTruncatedMessage,
-                                             &signature,
-                                             false));
-  EXPECT_EQ("kernel-0123456789012345678901234567890123456789-00000000",
-            signature);
-
+  ComputeKernelStackSignatureCommon();
 }
 
 int main(int argc, char **argv) {

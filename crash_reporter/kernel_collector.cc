@@ -24,9 +24,31 @@ static const int kSignatureTimestampWindow = 2;
 // Kernel log timestamp regular expression.
 static const std::string kTimestampRegex("^<.*>\\[\\s*(\\d+\\.\\d+)\\]");
 
+/*
+ * These regular expressions enable to us capture the PC in a backtrace.
+ * The backtrace is obtained through dmesg or the kernel's preserved/kcrashmem
+ * feature.
+ *
+ * For ARM we see:
+ *   "<5>[   39.458982] PC is at write_breakme+0xd0/0x1b4"
+ * For x86:
+ *   "<0>[   37.474699] EIP: [<790ed488>] write_breakme+0x80/0x108 \
+ *    SS:ESP 0068:e9dd3efc
+ */
+static const char *s_pc_regex[] = {
+  0,
+  " PC is at ([^\\+ ]+).*",
+  " EIP: \\[<.*>\\] ([^\\+ ]+).*",  // X86 uses EIP for the program counter
+};
+
+COMPILE_ASSERT(arraysize(s_pc_regex) == KernelCollector::archCount,
+               missing_arch_pc_regexp);
+
 KernelCollector::KernelCollector()
     : is_enabled_(false),
       preserved_dump_path_(kPreservedDumpPath) {
+  // We expect crash dumps in the format of the architecture we are built for.
+  arch_ = GetCompilerArch();
 }
 
 KernelCollector::~KernelCollector() {
@@ -47,7 +69,12 @@ bool KernelCollector::LoadPreservedDump(std::string *contents) {
 }
 
 bool KernelCollector::Enable() {
-  if (!file_util::PathExists(preserved_dump_path_)) {
+  if (arch_ == archUnknown || arch_ >= archCount ||
+      s_pc_regex[arch_] == NULL) {
+    LOG(WARNING) << "KernelCollector does not understand this architecture";
+    return false;
+  }
+  else if (!file_util::PathExists(preserved_dump_path_)) {
     LOG(WARNING) << "Kernel does not support crash dumping";
     return false;
   }
@@ -90,11 +117,21 @@ void KernelCollector::ProcessStackTrace(
     unsigned *hash,
     float *last_stack_timestamp) {
   pcrecpp::RE line_re("(.+)", pcrecpp::MULTILINE());
-  pcrecpp::RE stack_trace_start_re(kTimestampRegex + " Call Trace:$");
+  pcrecpp::RE stack_trace_start_re(kTimestampRegex +
+        " (Call Trace|Backtrace):$");
+
+  // For ARM:
+  // <4>[ 3498.731164] [<c0057220>] (__bug+0x20/0x2c) from [<c018062c>]
+  // (write_breakme+0xdc/0x1bc)
+  //
+  // For X86:
   // Match lines such as the following and grab out "error_code".
-  // <4>[ 6066.849504]  [<7937bcee>] error_code+0x66/0x6c
+  // <4>[ 6066.849504]  [<7937bcee>] ? error_code+0x66/0x6c
+  // The ? may or may not be present
   pcrecpp::RE stack_entry_re(kTimestampRegex +
-                             "  \\[<.*>\\]([\\s\\?]+)([^\\+ ]+)");
+    "\\s+\\[<[[:xdigit:]]+>\\]"      // Matches "  [<7937bcee>]"
+    "([\\s\\?(]+)"                   // Matches " ? (" (ARM) or " ? " (X86)
+    "([^\\+ )]+)");                  // Matches until delimiter reached
   std::string line;
   std::string hashable;
 
@@ -137,14 +174,33 @@ void KernelCollector::ProcessStackTrace(
   }
 }
 
+enum KernelCollector::ArchKind KernelCollector::GetCompilerArch(void)
+{
+#if defined(COMPILER_GCC) && defined(ARCH_CPU_ARM_FAMILY)
+  return archArm;
+#elif defined(COMPILER_GCC) && defined(ARCH_CPU_X86_FAMILY)
+  return archX86;
+#else
+  return archUnknown;
+#endif
+}
+
+void KernelCollector::SetArch(enum ArchKind arch)
+{
+  arch_ = arch;
+}
+
 bool KernelCollector::FindCrashingFunction(
-    pcrecpp::StringPiece kernel_dump,
-    bool print_diagnostics,
-    float stack_trace_timestamp,
-    std::string *crashing_function) {
-  pcrecpp::RE eip_re(kTimestampRegex + " EIP: \\[<.*>\\] ([^\\+ ]+).*",
-                     pcrecpp::MULTILINE());
+  pcrecpp::StringPiece kernel_dump,
+  bool print_diagnostics,
+  float stack_trace_timestamp,
+  std::string *crashing_function) {
   float timestamp = 0;
+
+  // Use the correct regex for this architecture.
+  pcrecpp::RE eip_re(kTimestampRegex + s_pc_regex[arch_],
+                     pcrecpp::MULTILINE());
+
   while (eip_re.FindAndConsume(&kernel_dump, &timestamp, crashing_function)) {
     if (print_diagnostics) {
       printf("@%f: found crashing function %s\n",

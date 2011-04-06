@@ -18,6 +18,15 @@ class FilePath;
 // Kernel crash collector.
 class KernelCollector : public CrashCollector {
  public:
+  // Enumeration to specify architecture type.
+  enum ArchKind {
+    archUnknown,
+    archArm,
+    archX86,
+
+    archCount  // Number of architectures.
+  };
+
   KernelCollector();
 
   virtual ~KernelCollector();
@@ -41,6 +50,10 @@ class KernelCollector : public CrashCollector {
                                    std::string *kernel_signature,
                                    bool print_diagnostics);
 
+  // Set the architecture of the crash dumps we are looking at.
+  void SetArch(enum ArchKind arch);
+  enum ArchKind GetArch() { return arch_; }
+
  private:
   friend class KernelCollectorTest;
   FRIEND_TEST(KernelCollectorTest, ClearPreservedDump);
@@ -62,9 +75,15 @@ class KernelCollector : public CrashCollector {
                         bool print_diagnostics,
                         std::string *panic_message);
 
+  // Returns the architecture kind for which we are built - enum ArchKind.
+  enum ArchKind GetCompilerArch(void);
+
   bool is_enabled_;
   FilePath preserved_dump_path_;
   static const char kClearingSequence[];
+
+  // The architecture of kernel dump strings we are working with.
+  enum ArchKind arch_;
 };
 
 #endif  // _CRASH_REPORTER_KERNEL_COLLECTOR_H_
