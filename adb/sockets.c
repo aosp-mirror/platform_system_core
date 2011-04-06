@@ -569,6 +569,32 @@ unsigned unhex(unsigned char *s, int len)
     return n;
 }
 
+/* skip_host_serial return the position in a string
+   skipping over the 'serial' parameter in the ADB protocol,
+   where parameter string may be a host:port string containing
+   the protocol delimiter (colon). */
+char *skip_host_serial(char *service) {
+    char *first_colon, *serial_end;
+
+    first_colon = strchr(service, ':');
+    if (!first_colon) {
+        /* No colon in service string. */
+        return NULL;
+    }
+    serial_end = first_colon;
+    if (isdigit(serial_end[1])) {
+        serial_end++;
+        while ((*serial_end) && isdigit(*serial_end)) {
+            serial_end++;
+        }
+        if ((*serial_end) != ':') {
+            // Something other than numbers was found, reset the end.
+            serial_end = first_colon;
+        }
+    }
+    return serial_end;
+}
+
 static int smart_socket_enqueue(asocket *s, apacket *p)
 {
     unsigned len;
@@ -624,8 +650,8 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
         char* serial_end;
         service += strlen("host-serial:");
 
-        // serial number should follow "host:"
-        serial_end = strchr(service, ':');
+        // serial number should follow "host:" and could be a host:port string.
+        serial_end = skip_host_serial(service);
         if (serial_end) {
             *serial_end = 0; // terminate string
             serial = service;
