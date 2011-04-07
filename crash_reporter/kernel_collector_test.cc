@@ -100,6 +100,123 @@ TEST_F(KernelCollectorTest, ClearPreservedDump) {
   ASSERT_EQ(KernelCollector::kClearingSequence, dump);
 }
 
+TEST_F(KernelCollectorTest, StripSensitiveDataBasic) {
+  // Basic tests of StripSensitiveData...
+
+  // Make sure we work OK with a string w/ no MAC addresses.
+  const std::string kCrashWithNoMacsOrig =
+      "<7>[111566.131728] PM: Entering mem sleep\n";
+  std::string crash_with_no_macs(kCrashWithNoMacsOrig);
+  collector_.StripSensitiveData(&crash_with_no_macs);
+  EXPECT_EQ(kCrashWithNoMacsOrig, crash_with_no_macs);
+
+  // Make sure that we handle the case where there's nothing before/after the
+  // MAC address.
+  const std::string kJustAMacOrig =
+      "11:22:33:44:55:66";
+  const std::string kJustAMacStripped =
+      "00:00:00:00:00:01";
+  std::string just_a_mac(kJustAMacOrig);
+  collector_.StripSensitiveData(&just_a_mac);
+  EXPECT_EQ(kJustAMacStripped, just_a_mac);
+
+  // Test MAC addresses crammed together to make sure it gets both of them.
+  //
+  // I'm not sure that the code does ideal on these two test cases (they don't
+  // look like two MAC addresses to me), but since we don't see them I think
+  // it's OK to behave as shown here.
+  const std::string kCrammedMacs1Orig =
+      "11:22:33:44:55:66:11:22:33:44:55:66";
+  const std::string kCrammedMacs1Stripped =
+      "00:00:00:00:00:01:00:00:00:00:00:01";
+  std::string crammed_macs_1(kCrammedMacs1Orig);
+  collector_.StripSensitiveData(&crammed_macs_1);
+  EXPECT_EQ(kCrammedMacs1Stripped, crammed_macs_1);
+
+  const std::string kCrammedMacs2Orig =
+      "11:22:33:44:55:6611:22:33:44:55:66";
+  const std::string kCrammedMacs2Stripped =
+      "00:00:00:00:00:0100:00:00:00:00:01";
+  std::string crammed_macs_2(kCrammedMacs2Orig);
+  collector_.StripSensitiveData(&crammed_macs_2);
+  EXPECT_EQ(kCrammedMacs2Stripped, crammed_macs_2);
+
+  // Test case-sensitiveness (we shouldn't be case-senstive).
+  const std::string kCapsMacOrig =
+      "AA:BB:CC:DD:EE:FF";
+  const std::string kCapsMacStripped =
+      "00:00:00:00:00:01";
+  std::string caps_mac(kCapsMacOrig);
+  collector_.StripSensitiveData(&caps_mac);
+  EXPECT_EQ(kCapsMacStripped, caps_mac);
+
+  const std::string kLowerMacOrig =
+      "aa:bb:cc:dd:ee:ff";
+  const std::string kLowerMacStripped =
+      "00:00:00:00:00:01";
+  std::string lower_mac(kLowerMacOrig);
+  collector_.StripSensitiveData(&lower_mac);
+  EXPECT_EQ(kLowerMacStripped, lower_mac);
+}
+
+TEST_F(KernelCollectorTest, StripSensitiveDataBulk) {
+  // Test calling StripSensitiveData w/ lots of MAC addresses in the "log".
+
+  // Test that stripping code handles more than 256 unique MAC addresses, since
+  // that overflows past the last byte...
+  // We'll write up some code that generates 258 unique MAC addresses.  Sorta
+  // cheating since the code is very similar to the current code in
+  // StripSensitiveData(), but would catch if someone changed that later.
+  std::string lotsa_macs_orig;
+  std::string lotsa_macs_stripped;
+  int i;
+  for (i = 0; i < 258; i++) {
+    lotsa_macs_orig += StringPrintf(" 11:11:11:11:%02X:%02x",
+                                  (i & 0xff00) >> 8, i & 0x00ff);
+    lotsa_macs_stripped += StringPrintf(" 00:00:00:00:%02X:%02x",
+                                     ((i+1) & 0xff00) >> 8, (i+1) & 0x00ff);
+  }
+  std::string lotsa_macs(lotsa_macs_orig);
+  collector_.StripSensitiveData(&lotsa_macs);
+  EXPECT_EQ(lotsa_macs_stripped, lotsa_macs);
+}
+
+TEST_F(KernelCollectorTest, StripSensitiveDataSample) {
+  // Test calling StripSensitiveData w/ some actual lines from a real crash;
+  // included two MAC addresses (though replaced them with some bogusness).
+  const std::string kCrashWithMacsOrig =
+      "<6>[111567.195339] ata1.00: ACPI cmd ef/10:03:00:00:00:a0 (SET FEATURES)"
+        " filtered out\n"
+      "<7>[108539.540144] wlan0: authenticate with 11:22:33:44:55:66 (try 1)\n"
+      "<7>[108539.554973] wlan0: associate with 11:22:33:44:55:66 (try 1)\n"
+      "<6>[110136.587583] usb0: register 'QCUSBNet2k' at usb-0000:00:1d.7-2,"
+        " QCUSBNet Ethernet Device, 99:88:77:66:55:44\n"
+      "<7>[110964.314648] wlan0: deauthenticated from 11:22:33:44:55:66"
+        " (Reason: 6)\n"
+      "<7>[110964.325057] phy0: Removed STA 11:22:33:44:55:66\n"
+      "<7>[110964.325115] phy0: Destroyed STA 11:22:33:44:55:66\n"
+      "<6>[110969.219172] usb0: register 'QCUSBNet2k' at usb-0000:00:1d.7-2,"
+        " QCUSBNet Ethernet Device, 99:88:77:66:55:44\n"
+      "<7>[111566.131728] PM: Entering mem sleep\n";
+  const std::string kCrashWithMacsStripped =
+      "<6>[111567.195339] ata1.00: ACPI cmd ef/10:03:00:00:00:a0 (SET FEATURES)"
+        " filtered out\n"
+      "<7>[108539.540144] wlan0: authenticate with 00:00:00:00:00:01 (try 1)\n"
+      "<7>[108539.554973] wlan0: associate with 00:00:00:00:00:01 (try 1)\n"
+      "<6>[110136.587583] usb0: register 'QCUSBNet2k' at usb-0000:00:1d.7-2,"
+        " QCUSBNet Ethernet Device, 00:00:00:00:00:02\n"
+      "<7>[110964.314648] wlan0: deauthenticated from 00:00:00:00:00:01"
+        " (Reason: 6)\n"
+      "<7>[110964.325057] phy0: Removed STA 00:00:00:00:00:01\n"
+      "<7>[110964.325115] phy0: Destroyed STA 00:00:00:00:00:01\n"
+      "<6>[110969.219172] usb0: register 'QCUSBNet2k' at usb-0000:00:1d.7-2,"
+        " QCUSBNet Ethernet Device, 00:00:00:00:00:02\n"
+      "<7>[111566.131728] PM: Entering mem sleep\n";
+  std::string crash_with_macs(kCrashWithMacsOrig);
+  collector_.StripSensitiveData(&crash_with_macs);
+  EXPECT_EQ(kCrashWithMacsStripped, crash_with_macs);
+}
+
 TEST_F(KernelCollectorTest, CollectPreservedFileMissing) {
   ASSERT_FALSE(collector_.Collect());
   ASSERT_TRUE(FindLog("Unable to read test/kcrash"));

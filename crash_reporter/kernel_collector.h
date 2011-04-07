@@ -58,10 +58,14 @@ class KernelCollector : public CrashCollector {
   friend class KernelCollectorTest;
   FRIEND_TEST(KernelCollectorTest, ClearPreservedDump);
   FRIEND_TEST(KernelCollectorTest, LoadPreservedDump);
+  FRIEND_TEST(KernelCollectorTest, StripSensitiveDataBasic);
+  FRIEND_TEST(KernelCollectorTest, StripSensitiveDataBulk);
+  FRIEND_TEST(KernelCollectorTest, StripSensitiveDataSample);
   FRIEND_TEST(KernelCollectorTest, CollectOK);
 
   bool LoadPreservedDump(std::string *contents);
   bool ClearPreservedDump();
+  void StripSensitiveData(std::string *kernel_dump);
 
   void ProcessStackTrace(pcrecpp::StringPiece kernel_dump,
                          bool print_diagnostics,
