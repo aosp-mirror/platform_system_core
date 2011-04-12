@@ -206,6 +206,16 @@ int ifc_set_hwaddr(const char *name, const void *ptr)
     return ioctl(ifc_ctl_sock, SIOCSIFHWADDR, &ifr);
 }
 
+int ifc_set_mask(const char *name, in_addr_t mask)
+{
+    struct ifreq ifr;
+
+    ifc_init_ifr(name, &ifr);
+    init_sockaddr_in(&ifr.ifr_addr, mask);
+
+    return ioctl(ifc_ctl_sock, SIOCSIFNETMASK, &ifr);
+}
+
 int ifc_set_prefixLength(const char *name, int prefixLength)
 {
     struct ifreq ifr;
