@@ -27,6 +27,7 @@ using std::vector;
 using ::testing::_;
 using ::testing::Return;
 using ::testing::StrictMock;
+using ::testing::AtLeast;
 
 static const int kSecondsPerDay = 24 * 60 * 60;
 
@@ -576,6 +577,66 @@ TEST_F(MetricsDaemonTest, ReportDiskStats) {
                         _, _, _));
   daemon_.DiskStatsCallback();
   EXPECT_TRUE(ds_state != daemon_.diskstats_state_);
+}
+
+TEST_F(MetricsDaemonTest, ProcessMeminfo) {
+  const char* meminfo = "\
+MemTotal:        2000000 kB\n\
+MemFree:         1000000 kB\n\
+Buffers:           10492 kB\n\
+Cached:           213652 kB\n\
+SwapCached:            0 kB\n\
+Active:           133400 kB\n\
+Inactive:         183396 kB\n\
+Active(anon):      92984 kB\n\
+Inactive(anon):    58860 kB\n\
+Active(file):      40416 kB\n\
+Inactive(file):   124536 kB\n\
+Unevictable:           0 kB\n\
+Mlocked:               0 kB\n\
+SwapTotal:             0 kB\n\
+SwapFree:              0 kB\n\
+Dirty:                40 kB\n\
+Writeback:             0 kB\n\
+AnonPages:         92652 kB\n\
+Mapped:            59716 kB\n\
+Shmem:             59196 kB\n\
+Slab:              16656 kB\n\
+SReclaimable:       6132 kB\n\
+SUnreclaim:        10524 kB\n\
+KernelStack:        1648 kB\n\
+PageTables:         2780 kB\n\
+NFS_Unstable:          0 kB\n\
+Bounce:                0 kB\n\
+WritebackTmp:          0 kB\n\
+CommitLimit:      970656 kB\n\
+Committed_AS:    1260528 kB\n\
+VmallocTotal:     122880 kB\n\
+VmallocUsed:       12144 kB\n\
+VmallocChunk:     103824 kB\n\
+DirectMap4k:        9636 kB\n\
+DirectMap2M:     1955840 kB\n\
+";
+  EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, _, 100))
+      .Times(AtLeast(1));
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _))
+      .Times(AtLeast(1));
+  EXPECT_CALL(metrics_lib_, SendToUMA("NFS_Unstable", _, _, _, _))
+      .Times(0);
+  EXPECT_CALL(metrics_lib_, SendEnumToUMA("NFS_Unstable", _, _))
+      .Times(0);
+  EXPECT_TRUE(daemon_.ProcessMeminfo(meminfo));
+}
+
+TEST_F(MetricsDaemonTest, ProcessMeminfo2) {
+  const char* meminfo = "\
+MemTotal:        2000000 kB\n\
+MemFree:         1000000 kB\n\
+";
+  /* Not enough fields */
+  EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, 50, 100))
+      .Times(1);
+  EXPECT_FALSE(daemon_.ProcessMeminfo(meminfo));
 }
 
 int main(int argc, char** argv) {

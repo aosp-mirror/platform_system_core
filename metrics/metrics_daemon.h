@@ -49,6 +49,8 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, MessageFilter);
   FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
   FRIEND_TEST(MetricsDaemonTest, ProcessKernelCrash);
+  FRIEND_TEST(MetricsDaemonTest, ProcessMeminfo);
+  FRIEND_TEST(MetricsDaemonTest, ProcessMeminfo2);
   FRIEND_TEST(MetricsDaemonTest, ProcessUncleanShutdown);
   FRIEND_TEST(MetricsDaemonTest, ProcessUserCrash);
   FRIEND_TEST(MetricsDaemonTest, ReportCrashesDailyFrequency);
@@ -125,6 +127,7 @@ class MetricsDaemon {
   static const char kMetricWriteSectorsShortName[];
   static const int kMetricDiskStatsShortInterval;
   static const int kMetricDiskStatsLongInterval;
+  static const int kMetricMeminfoInterval;
   static const int kMetricSectorsIOMax;
   static const int kMetricSectorsBuckets;
   static const char kMetricsDiskStatsPath[];
@@ -234,6 +237,12 @@ class MetricsDaemon {
   void SendMetric(const std::string& name, int sample,
                   int min, int max, int nbuckets);
 
+  // Sends a linear histogram sample to Chrome for transport to UMA. See
+  // MetricsLibrary::SendToUMA in metrics_library.h for a description of the
+  // arguments.
+  void SendLinearMetric(const std::string& name, int sample,
+                        int max, int nbuckets);
+
   // Initializes disk stats reporting.
   void DiskStatsReporterInit();
 
@@ -249,6 +258,20 @@ class MetricsDaemon {
 
   // Reports disk statistics.
   void DiskStatsCallback();
+
+  // Schedules meminfo collection callback.
+  void ScheduleMeminfoCallback(int wait);
+
+  // Reports memory statistics (static version for glib).  Argument is a glib
+  // artifact.
+  static gboolean MeminfoCallbackStatic(void* handle);
+
+  // Reports memory statistics.  Returns false on failure.
+  gboolean MeminfoCallback();
+
+  // Parses content of /proc/meminfo and sends fields of interest to UMA.
+  // Returns false on errors.
+  gboolean ProcessMeminfo(std::string meminfo);
 
   // Test mode.
   bool testing_;

@@ -9,6 +9,7 @@
 
 #include <base/file_util.h>
 #include <base/logging.h>
+#include <base/string_util.h>
 #include <dbus/dbus-glib-lowlevel.h>
 
 #include "counter.h"
@@ -101,6 +102,8 @@ const char MetricsDaemon::kMetricWriteSectorsShortName[] =
 
 const int MetricsDaemon::kMetricDiskStatsShortInterval = 1;  // seconds
 const int MetricsDaemon::kMetricDiskStatsLongInterval = 30;  // seconds
+
+const int MetricsDaemon::kMetricMeminfoInterval = 30;        // seconds
 
 // Assume a max rate of 250Mb/s for reads (worse for writes) and 512 byte
 // sectors.
@@ -247,6 +250,9 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
     diskstats_path_ = diskstats_path;
     DiskStatsReporterInit();
   }
+
+  // Start collecting meminfo stats.
+  ScheduleMeminfoCallback(kMetricMeminfoInterval);
 
   // Don't setup D-Bus and GLib in test mode.
   if (testing)
@@ -617,6 +623,124 @@ void MetricsDaemon::DiskStatsCallback() {
   }
 }
 
+void MetricsDaemon::ScheduleMeminfoCallback(int wait) {
+  if (testing_) {
+    return;
+  }
+  g_timeout_add_seconds(wait, MeminfoCallbackStatic, this);
+}
+
+// static
+gboolean MetricsDaemon::MeminfoCallbackStatic(void* handle) {
+  return (static_cast<MetricsDaemon*>(handle))->MeminfoCallback();
+}
+
+gboolean MetricsDaemon::MeminfoCallback() {
+  std::string meminfo;
+  const FilePath meminfo_path("/proc/meminfo");
+  if (!file_util::ReadFileToString(meminfo_path, &meminfo)) {
+    LOG(WARNING) << "cannot read " << meminfo_path.value().c_str();
+    return false;
+  }
+  return ProcessMeminfo(meminfo);
+}
+
+gboolean MetricsDaemon::ProcessMeminfo(std::string meminfo) {
+  // This array has one element for every item of /proc/meminfo that we want to
+  // report to UMA.  They must be listed in the same order in which
+  // /proc/meminfo prints them.
+  struct {
+    const char* name;   // print name
+    const char* match;  // string to match in output of /proc/meminfo
+    int log_scale;      // report with log scale instead of linear percent
+  } fields[] = {
+    { "MemTotal", "MemTotal" },  // SPECIAL CASE: total system memory
+    { "MemFree", "MemFree" },
+    { "Buffers", "Buffers" },
+    { "Cached", "Cached" },
+    // { "SwapCached", "SwapCached" },
+    { "Active", "Active" },
+    { "Inactive", "Inactive" },
+    { "ActiveAnon", "Active(anon)" },
+    { "InactiveAnon", "Inactive(anon)" },
+    { "ActiveFile" , "Active(file)" },
+    { "InactiveFile", "Inactive(file)" },
+    { "Unevictable", "Unevictable", 1 },
+    // { "Mlocked", "Mlocked" },
+    // { "SwapTotal", "SwapTotal" },
+    // { "SwapFree", "SwapFree" },
+    // { "Dirty", "Dirty" },
+    // { "Writeback", "Writeback" },
+    { "AnonPages", "AnonPages" },
+    { "Mapped", "Mapped" },
+    { "Shmem", "Shmem", 1 },
+    { "Slab", "Slab", 1 },
+    // { "SReclaimable", "SReclaimable" },
+    // { "SUnreclaim", "SUnreclaim" },
+  };
+  // arraysize doesn't work here, probably can't handle anonymous structs
+  const int nfields = sizeof(fields) / sizeof(fields[0]);
+  int total_memory = 0;
+  std::vector<std::string> lines;
+  int nlines = Tokenize(meminfo, "\n", &lines);
+
+  // Scan meminfo output and collect field values.  Each field name has to
+  // match a meminfo entry (case insensitive) after removing non-alpha
+  // characters from the entry.
+  int i = 0;
+  int iline = 0;
+  for (;;) {
+    if (i == nfields) {
+      // all fields are matched
+      return true;
+    }
+    if (iline == nlines) {
+      // end of input reached while scanning
+      LOG(WARNING) << "cannot find field " << fields[i].match
+                   << " and following";
+      return false;
+    }
+
+    std::vector<std::string> tokens;
+    Tokenize(lines[iline], ": ", &tokens);
+
+    if (strcmp(fields[i].match, tokens[0].c_str()) == 0) {
+      // name matches: parse value and report
+      int meminfo_value;
+      char metrics_name[128];
+      char* rest;
+      meminfo_value = static_cast<int>(strtol(tokens[1].c_str(), &rest, 10));
+      if (*rest != '\0') {
+        LOG(WARNING) << "missing meminfo value";
+        return false;
+      }
+      if (i == 0) {
+        // special case: total memory
+        total_memory = meminfo_value;
+      } else {
+        snprintf(metrics_name, sizeof(metrics_name),
+                 "Platform.Meminfo%s", fields[i].name);
+        if (fields[i].log_scale) {
+          // report value in kbytes, log scale, 4Gb max
+          SendMetric(metrics_name, meminfo_value, 1, 4 * 1000 * 1000, 100);
+        } else {
+          // report value as percent of total memory
+          if (total_memory == 0) {
+            // this "cannot happen"
+            LOG(WARNING) << "borked meminfo parser";
+            return false;
+          }
+          int percent = meminfo_value * 100 / total_memory;
+          SendLinearMetric(metrics_name, percent, 100, 101);
+        }
+      }
+      // start looking for next field
+      i++;
+    }
+    iline++;
+  }
+}
+
 // static
 void MetricsDaemon::ReportDailyUse(void* handle, int tag, int count) {
   if (count <= 0)
@@ -635,4 +759,14 @@ void MetricsDaemon::SendMetric(const string& name, int sample,
   DLOG(INFO) << "received metric: " << name << " " << sample << " "
              << min << " " << max << " " << nbuckets;
   metrics_lib_->SendToUMA(name, sample, min, max, nbuckets);
+}
+
+void MetricsDaemon::SendLinearMetric(const string& name, int sample,
+                                     int max, int nbuckets) {
+  DLOG(INFO) << "received linear metric: " << name << " " << sample << " "
+             << max << " " << nbuckets;
+  // TODO(semenzato): add a proper linear histogram to the Chrome external
+  // metrics API.
+  LOG_IF(FATAL, nbuckets != max + 1) << "unsupported histogram scale";
+  metrics_lib_->SendEnumToUMA(name, sample, max);
 }
