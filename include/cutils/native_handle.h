@@ -21,17 +21,13 @@
 extern "C" {
 #endif
 
-typedef struct
+typedef struct native_handle
 {
     int version;        /* sizeof(native_handle_t) */
     int numFds;         /* number of file-descriptors at &data[0] */
     int numInts;        /* number of ints at &data[numFds] */
     int data[0];        /* numFds + numInts ints */
 } native_handle_t;
-
-
-/* keep the old definition for backward source-compatibility */
-typedef native_handle_t native_handle;
 
 /*
  * native_handle_close
