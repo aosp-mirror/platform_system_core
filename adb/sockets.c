@@ -360,8 +360,8 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
                 fdevent_del(&s->fde, FDE_READ);
             }
         }
-
-        if(s->fde.force_eof || is_eof) {
+        /* Don't allow a forced eof if data is still there */
+        if((s->fde.force_eof && !r) || is_eof) {
             s->close(s);
         }
     }
