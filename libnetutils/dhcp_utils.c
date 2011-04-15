@@ -79,6 +79,15 @@ static int fill_ip_info(const char *interface,
     snprintf(prop_name, sizeof(prop_name), "%s.%s.gateway", DHCP_PROP_NAME_PREFIX, interface);
     property_get(prop_name, gateway, NULL);
 
+    snprintf(prop_name, sizeof(prop_name), "%s.%s.server", DHCP_PROP_NAME_PREFIX, interface);
+    property_get(prop_name, server, NULL);
+
+    //TODO: Handle IPv6 when we change system property usage
+    if (strcmp(gateway, "0.0.0.0") == 0) {
+        //DHCP server is our best bet as gateway
+        strncpy(gateway, server, PROPERTY_VALUE_MAX);
+    }
+
     snprintf(prop_name, sizeof(prop_name), "%s.%s.mask", DHCP_PROP_NAME_PREFIX, interface);
     if (property_get(prop_name, prop_value, NULL)) {
         int p;
@@ -106,9 +115,6 @@ static int fill_ip_info(const char *interface,
 
     snprintf(prop_name, sizeof(prop_name), "%s.%s.dns2", DHCP_PROP_NAME_PREFIX, interface);
     property_get(prop_name, dns2, NULL);
-
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.server", DHCP_PROP_NAME_PREFIX, interface);
-    property_get(prop_name, server, NULL);
 
     snprintf(prop_name, sizeof(prop_name), "%s.%s.leasetime", DHCP_PROP_NAME_PREFIX, interface);
     if (property_get(prop_name, prop_value, NULL)) {
