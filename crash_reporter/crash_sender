@@ -68,6 +68,9 @@ RESTRICTED_CERTIFICATES_PATH="/usr/share/chromeos-ca-certificates"
 # Temp directory for this process.
 TMP_DIR=""
 
+# Path to list_proxies.
+LIST_PROXIES="/usr/bin/list_proxies"
+
 lecho() {
   logger -t "${TAG}" "$@"
 }
@@ -258,11 +261,18 @@ send_crash() {
     return 1
   fi
 
+  # Read in the first proxy, if any, for a given URL.  NOTE: The
+  # double-quotes are necessary due to a bug in dash with the "local"
+  # builtin command and values that have spaces in them (see
+  # "https://bugs.launchpad.net/ubuntu/+source/dash/+bug/139097").
+  local proxy="`${LIST_PROXIES} -quiet "${url}" | head -1`"
+  # if a direct connection should be used, unset the proxy variable.
+  [ "${proxy}" = "direct://" ] && proxy=
   local report_id="${TMP_DIR}/report_id"
   local curl_stderr="${TMP_DIR}/curl_stderr"
 
   set +e
-  curl "${url}" \
+  curl "${url}" ${proxy:+--proxy "$proxy"} \
     --capath "${RESTRICTED_CERTIFICATES_PATH}" --ciphers HIGH \
     -F "prod=${CHROMEOS_PRODUCT}" \
     -F "ver=${chromeos_version}" \
