@@ -129,6 +129,19 @@ void help()
         "  adb bugreport                - return all information from the device\n"
         "                                 that should be included in a bug report.\n"
         "\n"
+        "  adb backup [-f <file>] [-apk|-noapk] [-shared|-noshared] [-all] [<packages...>]\n"
+        "                               - Write a tarfile backup of the device's data to <file>.\n"
+        "                                 The -f option must come first; if not specified then the data\n"
+        "                                 is written to \"backup.tar\" in the current directory.\n"
+        "                                 (-apk|-noapk enable/disable backup of the .apks themselves\n"
+        "                                    in the tarfile; the default is noapk.)\n"
+        "                                 (-shared|-noshared enable/disable backup of the device's\n"
+        "                                    shared storage / SD card contents; the default is noshared.)\n"
+        "                                 (-all means to back up all installed applications)\n"
+        "                                 (<packages...> is the list of applications to be backed up.  If\n"
+        "                                    the -all or -shared flags are passed, then the package\n"
+        "                                    list is optional.)\n"
+        "\n"
         "  adb help                     - show this help message\n"
         "  adb version                  - show version num\n"
         "\n"
@@ -220,6 +233,25 @@ static void read_and_dump(int fd)
         }
         fwrite(buf, 1, len, stdout);
         fflush(stdout);
+    }
+}
+
+static void copy_to_file(int inFd, int outFd) {
+    char buf[4096];
+    int len;
+
+    D("copy_to_file(%d -> %d)\n", inFd, outFd);
+    for (;;) {
+        len = adb_read(inFd, buf, sizeof(buf));
+        if (len == 0) {
+            break;
+        }
+        if (len < 0) {
+            if (errno == EINTR) continue;
+            D("copy_to_file() : error %d\n", errno);
+            break;
+        }
+        adb_write(outFd, buf, len);
     }
 }
 
@@ -527,6 +559,45 @@ static int logcat(transport_type transport, char* serial, int argc, char **argv)
     }
 
     send_shellcommand(transport, serial, buf);
+    return 0;
+}
+
+static int backup(int argc, char** argv) {
+    char buf[4096];
+    const char* filename = "./backup.tar";
+    int fd, outFd;
+
+    if (!strcmp("-f", argv[1])) {
+        if (argc < 3) return usage();
+        filename = argv[2];
+        argc -= 2;
+        argv += 2;
+    }
+
+    outFd = adb_open_mode(filename, O_WRONLY | O_CREAT | O_TRUNC, 0640);
+    if (outFd < 0) {
+        fprintf(stderr, "adb: unable to open file %s\n", filename);
+        return -1;
+    }
+
+    snprintf(buf, sizeof(buf), "backup");
+    for (argc--, argv++; argc; argc--, argv++) {
+        strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
+        strncat(buf, argv[0], sizeof(buf) - strlen(buf) - 1);
+    }
+
+    D("backup. filename=%s buf=%s\n", filename, buf);
+    fd = adb_connect(buf);
+    if (fd < 0) {
+        fprintf(stderr, "adb: unable to connect for backup\n");
+        adb_close(outFd);
+        return -1;
+    }
+
+    copy_to_file(fd, outFd);
+
+    adb_close(fd);
+    adb_close(outFd);
     return 0;
 }
 
@@ -1087,6 +1158,10 @@ top:
 
     if (!strcmp(argv[0], "start-server")) {
         return adb_connect("host:start-server");
+    }
+
+    if (!strcmp(argv[0], "backup")) {
+        return backup(argc, argv);
     }
 
     if (!strcmp(argv[0], "jdwp")) {

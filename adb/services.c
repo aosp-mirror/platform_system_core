@@ -479,6 +479,10 @@ int service_to_fd(const char *name)
         ret = create_service_thread(reboot_service, arg);
     } else if(!strncmp(name, "root:", 5)) {
         ret = create_service_thread(restart_root_service, NULL);
+    } else if(!strncmp(name, "backup:", 7)) {
+        char* arg = strdup(name+7);
+        if (arg == NULL) return -1;
+        ret = backup_service(arg);
     } else if(!strncmp(name, "tcpip:", 6)) {
         int port;
         if (sscanf(name + 6, "%d", &port) == 0) {
