@@ -1,6 +1,6 @@
 /* libs/pixelflinger/scanline.cpp
 **
-** Copyright 2006, The Android Open Source Project
+** Copyright 2006-2011, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License"); 
 ** you may not use this file except in compliance with the License. 
@@ -57,6 +57,11 @@
 
 #define DEBUG__CODEGEN_ONLY     0
 
+/* Set to 1 to dump to the log the states that need a new
+ * code-generated scanline callback, i.e. those that don't
+ * have a corresponding shortcut function.
+ */
+#define DEBUG_NEEDS  0
 
 #define ASSEMBLY_SCRATCH_SIZE   2048
 
@@ -79,8 +84,21 @@ static void scanline(context_t* c);
 static void scanline_perspective(context_t* c);
 static void scanline_perspective_single(context_t* c);
 static void scanline_t32cb16blend(context_t* c);
+static void scanline_t32cb16blend_dither(context_t* c);
+static void scanline_t32cb16blend_srca(context_t* c);
+static void scanline_t32cb16blend_clamp(context_t* c);
+static void scanline_t32cb16blend_clamp_dither(context_t* c);
+static void scanline_t32cb16blend_clamp_mod(context_t* c);
+static void scanline_x32cb16blend_clamp_mod(context_t* c);
+static void scanline_t32cb16blend_clamp_mod_dither(context_t* c);
+static void scanline_x32cb16blend_clamp_mod_dither(context_t* c);
 static void scanline_t32cb16(context_t* c);
+static void scanline_t32cb16_dither(context_t* c);
+static void scanline_t32cb16_clamp(context_t* c);
+static void scanline_t32cb16_clamp_dither(context_t* c);
 static void scanline_col32cb16blend(context_t* c);
+static void scanline_t16cb16_clamp(context_t* c);
+static void scanline_t16cb16blend_clamp_mod(context_t* c);
 static void scanline_memcpy(context_t* c);
 static void scanline_memset8(context_t* c);
 static void scanline_memset16(context_t* c);
@@ -99,6 +117,13 @@ extern "C" void scanline_col32cb16blend_arm(uint16_t *dst, uint32_t col, size_t 
 
 // ----------------------------------------------------------------------------
 
+static inline uint16_t  convertAbgr8888ToRgb565(uint32_t  pix)
+{
+    return uint16_t( ((pix << 8) & 0xf800) |
+                      ((pix >> 5) & 0x07e0) |
+                      ((pix >> 19) & 0x001f) );
+}
+
 struct shortcut_t {
     needs_filter_t  filter;
     const char*     desc;
@@ -107,13 +132,95 @@ struct shortcut_t {
 };
 
 // Keep in sync with needs
+
+/* To understand the values here, have a look at:
+ *     system/core/include/private/pixelflinger/ggl_context.h
+ *
+ * Especially the lines defining and using GGL_RESERVE_NEEDS
+ *
+ * Quick reminders:
+ *   - the last nibble of the first value is the destination buffer format.
+ *   - the last nibble of the third value is the source texture format
+ *   - formats: 4=rgb565 1=abgr8888 2=xbgr8888
+ *
+ * In the descriptions below:
+ *
+ *   SRC      means we copy the source pixels to the destination
+ *
+ *   SRC_OVER means we blend the source pixels to the destination
+ *            with dstFactor = 1-srcA, srcFactor=1  (premultiplied source).
+ *            This mode is otherwise called 'blend'.
+ *
+ *   SRCA_OVER means we blend the source pixels to the destination
+ *             with dstFactor=srcA*(1-srcA) srcFactor=srcA (non-premul source).
+ *             This mode is otherwise called 'blend_srca'
+ *
+ *   clamp    means we fetch source pixels from a texture with u/v clamping
+ *
+ *   mod      means the source pixels are modulated (multiplied) by the
+ *            a/r/g/b of the current context's color. Typically used for
+ *            fade-in / fade-out.
+ *
+ *   dither   means we dither 32 bit values to 16 bits
+ */
 static shortcut_t shortcuts[] = {
     { { { 0x03515104, 0x00000077, { 0x00000A01, 0x00000000 } },
         { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
-        "565 fb, 8888 tx, blend", scanline_t32cb16blend, init_y_noop },
+        "565 fb, 8888 tx, blend SRC_OVER", scanline_t32cb16blend, init_y_noop },
     { { { 0x03010104, 0x00000077, { 0x00000A01, 0x00000000 } },
         { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
-        "565 fb, 8888 tx", scanline_t32cb16, init_y_noop  },  
+        "565 fb, 8888 tx, SRC", scanline_t32cb16, init_y_noop  },
+    /* same as first entry, but with dithering */
+    { { { 0x03515104, 0x00000177, { 0x00000A01, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 8888 tx, blend SRC_OVER dither", scanline_t32cb16blend_dither, init_y_noop },
+    /* same as second entry, but with dithering */
+    { { { 0x03010104, 0x00000177, { 0x00000A01, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 8888 tx, SRC dither", scanline_t32cb16_dither, init_y_noop  },
+    /* this is used during the boot animation - CHEAT: ignore dithering */
+    { { { 0x03545404, 0x00000077, { 0x00000A01, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFEFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 8888 tx, blend dst:ONE_MINUS_SRCA src:SRCA", scanline_t32cb16blend_srca, init_y_noop },
+    /* special case for arbitrary texture coordinates (think scaling) */
+    { { { 0x03515104, 0x00000077, { 0x00000001, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 8888 tx, SRC_OVER clamp", scanline_t32cb16blend_clamp, init_y },
+    { { { 0x03515104, 0x00000177, { 0x00000001, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 8888 tx, SRC_OVER clamp dither", scanline_t32cb16blend_clamp_dither, init_y },
+    /* another case used during emulation */
+    { { { 0x03515104, 0x00000077, { 0x00001001, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 8888 tx, SRC_OVER clamp modulate", scanline_t32cb16blend_clamp_mod, init_y },
+    /* and this */
+    { { { 0x03515104, 0x00000077, { 0x00001002, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, x888 tx, SRC_OVER clamp modulate", scanline_x32cb16blend_clamp_mod, init_y },
+    { { { 0x03515104, 0x00000177, { 0x00001001, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 8888 tx, SRC_OVER clamp modulate dither", scanline_t32cb16blend_clamp_mod_dither, init_y },
+    { { { 0x03515104, 0x00000177, { 0x00001002, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, x888 tx, SRC_OVER clamp modulate dither", scanline_x32cb16blend_clamp_mod_dither, init_y },
+    { { { 0x03010104, 0x00000077, { 0x00000001, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 8888 tx, SRC clamp", scanline_t32cb16_clamp, init_y  },
+    { { { 0x03010104, 0x00000077, { 0x00000002, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, x888 tx, SRC clamp", scanline_t32cb16_clamp, init_y  },
+    { { { 0x03010104, 0x00000177, { 0x00000001, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 8888 tx, SRC clamp dither", scanline_t32cb16_clamp_dither, init_y  },
+    { { { 0x03010104, 0x00000177, { 0x00000002, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, x888 tx, SRC clamp dither", scanline_t32cb16_clamp_dither, init_y  },
+    { { { 0x03010104, 0x00000077, { 0x00000004, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 565 tx, SRC clamp", scanline_t16cb16_clamp, init_y  },
+    { { { 0x03515104, 0x00000077, { 0x00001004, 0x00000000 } },
+        { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0x0000003F } } },
+        "565 fb, 565 tx, SRC_OVER clamp", scanline_t16cb16blend_clamp_mod, init_y  },
     { { { 0x03515104, 0x00000077, { 0x00000000, 0x00000000 } },
         { 0xFFFFFFFF, 0xFFFFFFFF, { 0xFFFFFFFF, 0xFFFFFFFF } } },
         "565 fb, 8888 fixed color", scanline_col32cb16blend, init_y_packed  },  
@@ -242,6 +349,12 @@ static void pick_scanline(context_t* c)
             return;
         }
     }
+
+#ifdef DEBUG_NEEDS
+    LOGI("Needs: n=0x%08x p=0x%08x t0=0x%08x t1=0x%08x",
+         c->state.needs.n, c->state.needs.p,
+         c->state.needs.t[0], c->state.needs.t[1]);
+#endif
 
 #endif // DEBUG__CODEGEN_ONLY
 
@@ -797,6 +910,678 @@ discard:
 #pragma mark Scanline
 #endif
 
+/* Used to parse a 32-bit source texture linearly. Usage is:
+ *
+ * horz_iterator32  hi(context);
+ * while (...) {
+ *    uint32_t  src_pixel = hi.get_pixel32();
+ *    ...
+ * }
+ *
+ * Use only for one-to-one texture mapping.
+ */
+struct horz_iterator32 {
+    horz_iterator32(context_t* c) {
+        const int x = c->iterators.xl;
+        const int y = c->iterators.y;
+        texture_t& tx = c->state.texture[0];
+        const int32_t u = (tx.shade.is0>>16) + x;
+        const int32_t v = (tx.shade.it0>>16) + y;
+        m_src = reinterpret_cast<uint32_t*>(tx.surface.data)+(u+(tx.surface.stride*v));
+    }
+    uint32_t  get_pixel32() {
+        return *m_src++;
+    }
+protected:
+    uint32_t* m_src;
+};
+
+/* A variant for 16-bit source textures. */
+struct horz_iterator16 {
+    horz_iterator16(context_t* c) {
+        const int x = c->iterators.xl;
+        const int y = c->iterators.y;
+        texture_t& tx = c->state.texture[0];
+        const int32_t u = (tx.shade.is0>>16) + x;
+        const int32_t v = (tx.shade.it0>>16) + y;
+        m_src = reinterpret_cast<uint16_t*>(tx.surface.data)+(u+(tx.surface.stride*v));
+    }
+    uint16_t  get_pixel16() {
+        return *m_src++;
+    }
+protected:
+    uint16_t* m_src;
+};
+
+/* A clamp iterator is used to iterate inside a texture with GGL_CLAMP.
+ * After initialization, call get_src16() or get_src32() to get the current
+ * texture pixel value.
+ */
+struct clamp_iterator {
+    clamp_iterator(context_t* c) {
+        const int xs = c->iterators.xl;
+        texture_t& tx = c->state.texture[0];
+        texture_iterators_t& ti = tx.iterators;
+        m_s = (xs * ti.dsdx) + ti.ydsdy;
+        m_t = (xs * ti.dtdx) + ti.ydtdy;
+        m_ds = ti.dsdx;
+        m_dt = ti.dtdx;
+        m_width_m1 = tx.surface.width - 1;
+        m_height_m1 = tx.surface.height - 1;
+        m_data = tx.surface.data;
+        m_stride = tx.surface.stride;
+    }
+    uint16_t get_pixel16() {
+        int  u, v;
+        get_uv(u, v);
+        uint16_t* src = reinterpret_cast<uint16_t*>(m_data) + (u + (m_stride*v));
+        return src[0];
+    }
+    uint32_t get_pixel32() {
+        int  u, v;
+        get_uv(u, v);
+        uint32_t* src = reinterpret_cast<uint32_t*>(m_data) + (u + (m_stride*v));
+        return src[0];
+    }
+private:
+    void   get_uv(int& u, int& v) {
+        int  uu = m_s >> 16;
+        int  vv = m_t >> 16;
+        if (uu < 0)
+            uu = 0;
+        if (uu > m_width_m1)
+            uu = m_width_m1;
+        if (vv < 0)
+            vv = 0;
+        if (vv > m_height_m1)
+            vv = m_height_m1;
+        u = uu;
+        v = vv;
+        m_s += m_ds;
+        m_t += m_dt;
+    }
+
+    GGLfixed  m_s, m_t;
+    GGLfixed  m_ds, m_dt;
+    int       m_width_m1, m_height_m1;
+    uint8_t*  m_data;
+    int       m_stride;
+};
+
+/*
+ * The 'horizontal clamp iterator' variant corresponds to the case where
+ * the 'v' coordinate doesn't change. This is useful to avoid one mult and
+ * extra adds / checks per pixels, if the blending/processing operation after
+ * this is very fast.
+ */
+static int is_context_horizontal(const context_t* c) {
+    return (c->state.texture[0].iterators.dtdx == 0);
+}
+
+struct horz_clamp_iterator {
+    uint16_t  get_pixel16() {
+        int  u = m_s >> 16;
+        m_s += m_ds;
+        if (u < 0)
+            u = 0;
+        if (u > m_width_m1)
+            u = m_width_m1;
+        const uint16_t* src = reinterpret_cast<const uint16_t*>(m_data);
+        return src[u];
+    }
+    uint32_t  get_pixel32() {
+        int  u = m_s >> 16;
+        m_s += m_ds;
+        if (u < 0)
+            u = 0;
+        if (u > m_width_m1)
+            u = m_width_m1;
+        const uint32_t* src = reinterpret_cast<const uint32_t*>(m_data);
+        return src[u];
+    }
+protected:
+    void init(const context_t* c, int shift);
+    GGLfixed       m_s;
+    GGLfixed       m_ds;
+    int            m_width_m1;
+    const uint8_t* m_data;
+};
+
+void horz_clamp_iterator::init(const context_t* c, int shift)
+{
+    const int xs = c->iterators.xl;
+    const texture_t& tx = c->state.texture[0];
+    const texture_iterators_t& ti = tx.iterators;
+    m_s = (xs * ti.dsdx) + ti.ydsdy;
+    m_ds = ti.dsdx;
+    m_width_m1 = tx.surface.width-1;
+    m_data = tx.surface.data;
+
+    GGLfixed t = (xs * ti.dtdx) + ti.ydtdy;
+    int      v = t >> 16;
+    if (v < 0)
+        v = 0;
+    else if (v >= (int)tx.surface.height)
+        v = (int)tx.surface.height-1;
+
+    m_data += (tx.surface.stride*v) << shift;
+}
+
+struct horz_clamp_iterator16 : horz_clamp_iterator {
+    horz_clamp_iterator16(const context_t* c) {
+        init(c,1);
+    };
+};
+
+struct horz_clamp_iterator32 : horz_clamp_iterator {
+    horz_clamp_iterator32(context_t* c) {
+        init(c,2);
+    };
+};
+
+/* This is used to perform dithering operations.
+ */
+struct ditherer {
+    ditherer(const context_t* c) {
+        const int x = c->iterators.xl;
+        const int y = c->iterators.y;
+        m_line = &c->ditherMatrix[ ((y & GGL_DITHER_MASK)<<GGL_DITHER_ORDER_SHIFT) ];
+        m_index = x & GGL_DITHER_MASK;
+    }
+    void step(void) {
+        m_index++;
+    }
+    int  get_value(void) {
+        int ret = m_line[m_index & GGL_DITHER_MASK];
+        m_index++;
+        return ret;
+    }
+    uint16_t abgr8888ToRgb565(uint32_t s) {
+        uint32_t r = s & 0xff;
+        uint32_t g = (s >> 8) & 0xff;
+        uint32_t b = (s >> 16) & 0xff;
+        return rgb888ToRgb565(r,g,b);
+    }
+    /* The following assumes that r/g/b are in the 0..255 range each */
+    uint16_t rgb888ToRgb565(uint32_t& r, uint32_t& g, uint32_t &b) {
+        int threshold = get_value();
+        /* dither in on GGL_DITHER_BITS, and each of r, g, b is on 8 bits */
+        r += (threshold >> (GGL_DITHER_BITS-8 +5));
+        g += (threshold >> (GGL_DITHER_BITS-8 +6));
+        b += (threshold >> (GGL_DITHER_BITS-8 +5));
+        if (r > 0xff)
+            r = 0xff;
+        if (g > 0xff)
+            g = 0xff;
+        if (b > 0xff)
+            b = 0xff;
+        return uint16_t(((r & 0xf8) << 8) | ((g & 0xfc) << 3) | (b >> 3));
+    }
+protected:
+    const uint8_t* m_line;
+    int            m_index;
+};
+
+/* This structure is used to blend (SRC_OVER) 32-bit source pixels
+ * onto 16-bit destination ones. Usage is simply:
+ *
+ *   blender.blend(<32-bit-src-pixel-value>,<ptr-to-16-bit-dest-pixel>)
+ */
+struct blender_32to16 {
+    blender_32to16(context_t* c) { }
+    void write(uint32_t s, uint16_t* dst) {
+        if (s == 0)
+            return;
+        s = GGL_RGBA_TO_HOST(s);
+        int sA = (s>>24);
+        if (sA == 0xff) {
+            *dst = convertAbgr8888ToRgb565(s);
+        } else {
+            int f = 0x100 - (sA + (sA>>7));
+            int sR = (s >> (   3))&0x1F;
+            int sG = (s >> ( 8+2))&0x3F;
+            int sB = (s >> (16+3))&0x1F;
+            uint16_t d = *dst;
+            int dR = (d>>11)&0x1f;
+            int dG = (d>>5)&0x3f;
+            int dB = (d)&0x1f;
+            sR += (f*dR)>>8;
+            sG += (f*dG)>>8;
+            sB += (f*dB)>>8;
+            *dst = uint16_t((sR<<11)|(sG<<5)|sB);
+        }
+    }
+    void write(uint32_t s, uint16_t* dst, ditherer& di) {
+        if (s == 0) {
+            di.step();
+            return;
+        }
+        s = GGL_RGBA_TO_HOST(s);
+        int sA = (s>>24);
+        if (sA == 0xff) {
+            *dst = di.abgr8888ToRgb565(s);
+        } else {
+            int threshold = di.get_value() << (8 - GGL_DITHER_BITS);
+            int f = 0x100 - (sA + (sA>>7));
+            int sR = (s >> (   3))&0x1F;
+            int sG = (s >> ( 8+2))&0x3F;
+            int sB = (s >> (16+3))&0x1F;
+            uint16_t d = *dst;
+            int dR = (d>>11)&0x1f;
+            int dG = (d>>5)&0x3f;
+            int dB = (d)&0x1f;
+            sR = ((sR << 8) + f*dR + threshold)>>8;
+            sG = ((sG << 8) + f*dG + threshold)>>8;
+            sB = ((sB << 8) + f*dB + threshold)>>8;
+            if (sR > 0x1f) sR = 0x1f;
+            if (sG > 0x3f) sG = 0x3f;
+            if (sB > 0x1f) sB = 0x1f;
+            *dst = uint16_t((sR<<11)|(sG<<5)|sB);
+        }
+    }
+};
+
+/* This blender does the same for the 'blend_srca' operation.
+ * where dstFactor=srcA*(1-srcA) srcFactor=srcA
+ */
+struct blender_32to16_srcA {
+    blender_32to16_srcA(const context_t* c) { }
+    void write(uint32_t s, uint16_t* dst) {
+        if (!s) {
+            return;
+        }
+        uint16_t d = *dst;
+        s = GGL_RGBA_TO_HOST(s);
+        int sR = (s >> (   3))&0x1F;
+        int sG = (s >> ( 8+2))&0x3F;
+        int sB = (s >> (16+3))&0x1F;
+        int sA = (s>>24);
+        int f1 = (sA + (sA>>7));
+        int f2 = 0x100-f1;
+        int dR = (d>>11)&0x1f;
+        int dG = (d>>5)&0x3f;
+        int dB = (d)&0x1f;
+        sR = (f1*sR + f2*dR)>>8;
+        sG = (f1*sG + f2*dG)>>8;
+        sB = (f1*sB + f2*dB)>>8;
+        *dst = uint16_t((sR<<11)|(sG<<5)|sB);
+    }
+};
+
+/* Common init code the modulating blenders */
+struct blender_modulate {
+    void init(const context_t* c) {
+        const int r = c->iterators.ydrdy >> (GGL_COLOR_BITS-8);
+        const int g = c->iterators.ydgdy >> (GGL_COLOR_BITS-8);
+        const int b = c->iterators.ydbdy >> (GGL_COLOR_BITS-8);
+        const int a = c->iterators.ydady >> (GGL_COLOR_BITS-8);
+        m_r = r + (r >> 7);
+        m_g = g + (g >> 7);
+        m_b = b + (b >> 7);
+        m_a = a + (a >> 7);
+    }
+protected:
+    int m_r, m_g, m_b, m_a;
+};
+
+/* This blender does a normal blend after modulation.
+ */
+struct blender_32to16_modulate : blender_modulate {
+    blender_32to16_modulate(const context_t* c) {
+        init(c);
+    }
+    void write(uint32_t s, uint16_t* dst) {
+        // blend source and destination
+        if (!s) {
+            return;
+        }
+        s = GGL_RGBA_TO_HOST(s);
+
+        /* We need to modulate s */
+        uint32_t  sA = (s >> 24);
+        uint32_t  sB = (s >> 16) & 0xff;
+        uint32_t  sG = (s >> 8) & 0xff;
+        uint32_t  sR = s & 0xff;
+
+        sA = (sA*m_a) >> 8;
+        /* Keep R/G/B scaled to 5.8 or 6.8 fixed float format */
+        sR = (sR*m_r) >> (8 - 5);
+        sG = (sG*m_g) >> (8 - 6);
+        sB = (sB*m_b) >> (8 - 5);
+
+        /* Now do a normal blend */
+        int f = 0x100 - (sA + (sA>>7));
+        uint16_t d = *dst;
+        int dR = (d>>11)&0x1f;
+        int dG = (d>>5)&0x3f;
+        int dB = (d)&0x1f;
+        sR = (sR + f*dR)>>8;
+        sG = (sG + f*dG)>>8;
+        sB = (sB + f*dB)>>8;
+        *dst = uint16_t((sR<<11)|(sG<<5)|sB);
+    }
+    void write(uint32_t s, uint16_t* dst, ditherer& di) {
+        // blend source and destination
+        if (!s) {
+            di.step();
+            return;
+        }
+        s = GGL_RGBA_TO_HOST(s);
+
+        /* We need to modulate s */
+        uint32_t  sA = (s >> 24);
+        uint32_t  sB = (s >> 16) & 0xff;
+        uint32_t  sG = (s >> 8) & 0xff;
+        uint32_t  sR = s & 0xff;
+
+        sA = (sA*m_a) >> 8;
+        /* keep R/G/B scaled to 5.8 or 6.8 fixed float format */
+        sR = (sR*m_r) >> (8 - 5);
+        sG = (sG*m_g) >> (8 - 6);
+        sB = (sB*m_b) >> (8 - 5);
+
+        /* Scale threshold to 0.8 fixed float format */
+        int threshold = di.get_value() << (8 - GGL_DITHER_BITS);
+        int f = 0x100 - (sA + (sA>>7));
+        uint16_t d = *dst;
+        int dR = (d>>11)&0x1f;
+        int dG = (d>>5)&0x3f;
+        int dB = (d)&0x1f;
+        sR = (sR + f*dR + threshold)>>8;
+        sG = (sG + f*dG + threshold)>>8;
+        sB = (sB + f*dB + threshold)>>8;
+        if (sR > 0x1f) sR = 0x1f;
+        if (sG > 0x3f) sG = 0x3f;
+        if (sB > 0x1f) sB = 0x1f;
+        *dst = uint16_t((sR<<11)|(sG<<5)|sB);
+    }
+};
+
+/* same as 32to16_modulate, except that the input is xRGB, instead of ARGB */
+struct blender_x32to16_modulate : blender_modulate {
+    blender_x32to16_modulate(const context_t* c) {
+        init(c);
+    }
+    void write(uint32_t s, uint16_t* dst) {
+        s = GGL_RGBA_TO_HOST(s);
+
+        uint32_t  sB = (s >> 16) & 0xff;
+        uint32_t  sG = (s >> 8) & 0xff;
+        uint32_t  sR = s & 0xff;
+
+        /* Keep R/G/B in 5.8 or 6.8 format */
+        sR = (sR*m_r) >> (8 - 5);
+        sG = (sG*m_g) >> (8 - 6);
+        sB = (sB*m_b) >> (8 - 5);
+
+        int f = 0x100 - m_a;
+        uint16_t d = *dst;
+        int dR = (d>>11)&0x1f;
+        int dG = (d>>5)&0x3f;
+        int dB = (d)&0x1f;
+        sR = (sR + f*dR)>>8;
+        sG = (sG + f*dG)>>8;
+        sB = (sB + f*dB)>>8;
+        *dst = uint16_t((sR<<11)|(sG<<5)|sB);
+    }
+    void write(uint32_t s, uint16_t* dst, ditherer& di) {
+        s = GGL_RGBA_TO_HOST(s);
+
+        uint32_t  sB = (s >> 16) & 0xff;
+        uint32_t  sG = (s >> 8) & 0xff;
+        uint32_t  sR = s & 0xff;
+
+        sR = (sR*m_r) >> (8 - 5);
+        sG = (sG*m_g) >> (8 - 6);
+        sB = (sB*m_b) >> (8 - 5);
+
+        /* Now do a normal blend */
+        int threshold = di.get_value() << (8 - GGL_DITHER_BITS);
+        int f = 0x100 - m_a;
+        uint16_t d = *dst;
+        int dR = (d>>11)&0x1f;
+        int dG = (d>>5)&0x3f;
+        int dB = (d)&0x1f;
+        sR = (sR + f*dR + threshold)>>8;
+        sG = (sG + f*dG + threshold)>>8;
+        sB = (sB + f*dB + threshold)>>8;
+        if (sR > 0x1f) sR = 0x1f;
+        if (sG > 0x3f) sG = 0x3f;
+        if (sB > 0x1f) sB = 0x1f;
+        *dst = uint16_t((sR<<11)|(sG<<5)|sB);
+    }
+};
+
+/* Same as above, but source is 16bit rgb565 */
+struct blender_16to16_modulate : blender_modulate {
+    blender_16to16_modulate(const context_t* c) {
+        init(c);
+    }
+    void write(uint16_t s16, uint16_t* dst) {
+        uint32_t  s = s16;
+
+        uint32_t  sR = s >> 11;
+        uint32_t  sG = (s >> 5) & 0x3f;
+        uint32_t  sB = s & 0x1f;
+
+        sR = (sR*m_r);
+        sG = (sG*m_g);
+        sB = (sB*m_b);
+
+        int f = 0x100 - m_a;
+        uint16_t d = *dst;
+        int dR = (d>>11)&0x1f;
+        int dG = (d>>5)&0x3f;
+        int dB = (d)&0x1f;
+        sR = (sR + f*dR)>>8;
+        sG = (sG + f*dG)>>8;
+        sB = (sB + f*dB)>>8;
+        *dst = uint16_t((sR<<11)|(sG<<5)|sB);
+    }
+};
+
+/* This is used to iterate over a 16-bit destination color buffer.
+ * Usage is:
+ *
+ *   dst_iterator16  di(context);
+ *   while (di.count--) {
+ *       <do stuff with dest pixel at di.dst>
+ *       di.dst++;
+ *   }
+ */
+struct dst_iterator16 {
+    dst_iterator16(const context_t* c) {
+        const int x = c->iterators.xl;
+        const int width = c->iterators.xr - x;
+        const int32_t y = c->iterators.y;
+        const surface_t* cb = &(c->state.buffers.color);
+        count = width;
+        dst = reinterpret_cast<uint16_t*>(cb->data) + (x+(cb->stride*y));
+    }
+    int        count;
+    uint16_t*  dst;
+};
+
+
+static void scanline_t32cb16_clamp(context_t* c)
+{
+    dst_iterator16  di(c);
+
+    if (is_context_horizontal(c)) {
+        /* Special case for simple horizontal scaling */
+        horz_clamp_iterator32 ci(c);
+        while (di.count--) {
+            uint32_t s = ci.get_pixel32();
+            *di.dst++ = convertAbgr8888ToRgb565(s);
+        }
+    } else {
+        /* General case */
+        clamp_iterator ci(c);
+        while (di.count--) {
+            uint32_t s = ci.get_pixel32();
+            *di.dst++ = convertAbgr8888ToRgb565(s);
+        }
+    }
+}
+
+static void scanline_t32cb16_dither(context_t* c)
+{
+    horz_iterator32 si(c);
+    dst_iterator16  di(c);
+    ditherer        dither(c);
+
+    while (di.count--) {
+        uint32_t s = si.get_pixel32();
+        *di.dst++ = dither.abgr8888ToRgb565(s);
+    }
+}
+
+static void scanline_t32cb16_clamp_dither(context_t* c)
+{
+    dst_iterator16  di(c);
+    ditherer        dither(c);
+
+    if (is_context_horizontal(c)) {
+        /* Special case for simple horizontal scaling */
+        horz_clamp_iterator32 ci(c);
+        while (di.count--) {
+            uint32_t s = ci.get_pixel32();
+            *di.dst++ = dither.abgr8888ToRgb565(s);
+        }
+    } else {
+        /* General case */
+        clamp_iterator ci(c);
+        while (di.count--) {
+            uint32_t s = ci.get_pixel32();
+            *di.dst++ = dither.abgr8888ToRgb565(s);
+        }
+    }
+}
+
+static void scanline_t32cb16blend_dither(context_t* c)
+{
+    dst_iterator16 di(c);
+    ditherer       dither(c);
+    blender_32to16 bl(c);
+    horz_iterator32  hi(c);
+    while (di.count--) {
+        uint32_t s = hi.get_pixel32();
+        bl.write(s, di.dst, dither);
+        di.dst++;
+    }
+}
+
+static void scanline_t32cb16blend_clamp(context_t* c)
+{
+    dst_iterator16  di(c);
+    blender_32to16  bl(c);
+
+    if (is_context_horizontal(c)) {
+        horz_clamp_iterator32 ci(c);
+        while (di.count--) {
+            uint32_t s = ci.get_pixel32();
+            bl.write(s, di.dst);
+            di.dst++;
+        }
+    } else {
+        clamp_iterator ci(c);
+        while (di.count--) {
+            uint32_t s = ci.get_pixel32();
+            bl.write(s, di.dst);
+            di.dst++;
+        }
+    }
+}
+
+static void scanline_t32cb16blend_clamp_dither(context_t* c)
+{
+    dst_iterator16 di(c);
+    ditherer       dither(c);
+    blender_32to16 bl(c);
+
+    clamp_iterator ci(c);
+    while (di.count--) {
+        uint32_t s = ci.get_pixel32();
+        bl.write(s, di.dst, dither);
+        di.dst++;
+    }
+}
+
+void scanline_t32cb16blend_clamp_mod(context_t* c)
+{
+    dst_iterator16 di(c);
+    blender_32to16_modulate bl(c);
+
+    clamp_iterator ci(c);
+    while (di.count--) {
+        uint32_t s = ci.get_pixel32();
+        bl.write(s, di.dst);
+        di.dst++;
+    }
+}
+
+void scanline_t32cb16blend_clamp_mod_dither(context_t* c)
+{
+    dst_iterator16 di(c);
+    blender_32to16_modulate bl(c);
+    ditherer dither(c);
+
+    clamp_iterator ci(c);
+    while (di.count--) {
+        uint32_t s = ci.get_pixel32();
+        bl.write(s, di.dst, dither);
+        di.dst++;
+    }
+}
+
+/* Variant of scanline_t32cb16blend_clamp_mod with a xRGB texture */
+void scanline_x32cb16blend_clamp_mod(context_t* c)
+{
+    dst_iterator16 di(c);
+    blender_x32to16_modulate  bl(c);
+
+    clamp_iterator ci(c);
+    while (di.count--) {
+        uint32_t s = ci.get_pixel32();
+        bl.write(s, di.dst);
+        di.dst++;
+    }
+}
+
+void scanline_x32cb16blend_clamp_mod_dither(context_t* c)
+{
+    dst_iterator16 di(c);
+    blender_x32to16_modulate  bl(c);
+    ditherer dither(c);
+
+    clamp_iterator ci(c);
+    while (di.count--) {
+        uint32_t s = ci.get_pixel32();
+        bl.write(s, di.dst, dither);
+        di.dst++;
+    }
+}
+
+void scanline_t16cb16_clamp(context_t* c)
+{
+    dst_iterator16  di(c);
+
+    /* Special case for simple horizontal scaling */
+    if (is_context_horizontal(c)) {
+        horz_clamp_iterator16 ci(c);
+        while (di.count--) {
+            *di.dst++ = ci.get_pixel16();
+        }
+    } else {
+        clamp_iterator ci(c);
+        while (di.count--) {
+            *di.dst++ = ci.get_pixel16();
+        }
+    }
+}
+
+
+
 template <typename T, typename U>
 static inline __attribute__((const))
 T interpolate(int y, T v0, U dvdx, U dvdy) {
@@ -1322,30 +2107,24 @@ void scanline_t32cb16(context_t* c)
     if (ct==1 || uint32_t(dst)&2) {
 last_one:
         s = GGL_RGBA_TO_HOST( *src++ );
-        sR = (s >> (   3))&0x1F;
-        sG = (s >> ( 8+2))&0x3F;
-        sB = (s >> (16+3))&0x1F;
-        *dst++ = uint16_t((sR<<11)|(sG<<5)|sB);
+        *dst++ = convertAbgr8888ToRgb565(s);
         ct--;
     }
 
     while (ct >= 2) {
-        s = GGL_RGBA_TO_HOST( *src++ );
-        sR = (s >> (   3))&0x1F;
-        sG = (s >> ( 8+2))&0x3F;
-        sB = (s >> (16+3))&0x1F;
-        d = (sR<<11)|(sG<<5)|sB;
-        
-        s = GGL_RGBA_TO_HOST( *src++ );
-        sR = (s >> (   3))&0x1F;
-        sG = (s >> ( 8+2))&0x3F;
-        sB = (s >> (16+3))&0x1F;        
-        d |= ((sR<<11)|(sG<<5)|sB)<<16;
-
 #if BYTE_ORDER == BIG_ENDIAN
-        d = (d>>16) | (d<<16);
-#endif
+        s = GGL_RGBA_TO_HOST( *src++ );
+        d = convertAbgr8888ToRgb565_hi16(s);
 
+        s = GGL_RGBA_TO_HOST( *src++ );
+        d |= convertAbgr8888ToRgb565(s);
+#else
+        s = GGL_RGBA_TO_HOST( *src++ );
+        d = convertAbgr8888ToRgb565(s);
+
+        s = GGL_RGBA_TO_HOST( *src++ );
+        d |= convertAbgr8888ToRgb565(s) << 16;
+#endif
         *dst32++ = d;
         ct -= 2;
     }
@@ -1357,6 +2136,7 @@ last_one:
 
 void scanline_t32cb16blend(context_t* c)
 {
+#if ((ANDROID_CODEGEN >= ANDROID_CODEGEN_ASM) && defined(__arm__))
     int32_t x = c->iterators.xl;
     size_t ct = c->iterators.xr - x;
     int32_t y = c->iterators.y;
@@ -1368,31 +2148,53 @@ void scanline_t32cb16blend(context_t* c)
     const int32_t v = (c->state.texture[0].shade.it0>>16) + y;
     uint32_t *src = reinterpret_cast<uint32_t*>(tex->data)+(u+(tex->stride*v));
 
-#if ((ANDROID_CODEGEN >= ANDROID_CODEGEN_ASM) && defined(__arm__))
     scanline_t32cb16blend_arm(dst, src, ct);
 #else
-    while (ct--) {
-        uint32_t s = *src++;
-        if (!s) {
-            dst++;
-            continue;
-        }
-        uint16_t d = *dst;
-        s = GGL_RGBA_TO_HOST(s);
-        int sR = (s >> (   3))&0x1F;
-        int sG = (s >> ( 8+2))&0x3F;
-        int sB = (s >> (16+3))&0x1F;
-        int sA = (s>>24);
-        int f = 0x100 - (sA + (sA>>7));
-        int dR = (d>>11)&0x1f;
-        int dG = (d>>5)&0x3f;
-        int dB = (d)&0x1f;
-        sR += (f*dR)>>8;
-        sG += (f*dG)>>8;
-        sB += (f*dB)>>8;
-        *dst++ = uint16_t((sR<<11)|(sG<<5)|sB);
+    dst_iterator16  di(c);
+    horz_iterator32  hi(c);
+    blender_32to16  bl(c);
+    while (di.count--) {
+        uint32_t s = hi.get_pixel32();
+        bl.write(s, di.dst);
+        di.dst++;
     }
 #endif
+}
+
+void scanline_t32cb16blend_srca(context_t* c)
+{
+    dst_iterator16  di(c);
+    horz_iterator32  hi(c);
+    blender_32to16_srcA  blender(c);
+
+    while (di.count--) {
+        uint32_t s = hi.get_pixel32();
+        blender.write(s,di.dst);
+        di.dst++;
+    }
+}
+
+void scanline_t16cb16blend_clamp_mod(context_t* c)
+{
+    const int a = c->iterators.ydady >> (GGL_COLOR_BITS-8);
+    if (a == 0) {
+        return;
+    }
+
+    if (a == 255) {
+        scanline_t16cb16_clamp(c);
+        return;
+    }
+
+    dst_iterator16  di(c);
+    blender_16to16_modulate  blender(c);
+    clamp_iterator  ci(c);
+
+    while (di.count--) {
+        uint16_t s = ci.get_pixel16();
+        blender.write(s, di.dst);
+        di.dst++;
+    }
 }
 
 void scanline_memcpy(context_t* c)
