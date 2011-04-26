@@ -104,7 +104,7 @@ void help()
         "                                 Port 5555 is used by default if no port number is specified.\n"
         " disconnect [<host>[:<port>]]  - disconnect from a TCP/IP device.\n"
         "                                 Port 5555 is used by default if no port number is specified.\n"
-        "                                 Using this ocmmand with no additional arguments\n"
+        "                                 Using this command with no additional arguments\n"
         "                                 will disconnect from all connected TCP/IP devices.\n"
         "\n"
         "device commands:\n"
