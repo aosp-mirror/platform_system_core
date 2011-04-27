@@ -34,6 +34,8 @@
 #include <asm/page.h>
 #include <sys/wait.h>
 
+#include <cutils/uevent.h>
+
 #include "devices.h"
 #include "util.h"
 #include "log.h"
@@ -770,35 +772,9 @@ static void handle_firmware_event(struct uevent *uevent)
 #define UEVENT_MSG_LEN  1024
 void handle_device_fd()
 {
-    for(;;) {
-        char msg[UEVENT_MSG_LEN+2];
-        char cred_msg[CMSG_SPACE(sizeof(struct ucred))];
-        struct iovec iov = {msg, sizeof(msg)};
-        struct sockaddr_nl snl;
-        struct msghdr hdr = {&snl, sizeof(snl), &iov, 1, cred_msg, sizeof(cred_msg), 0};
-
-        ssize_t n = recvmsg(device_fd, &hdr, 0);
-        if (n <= 0) {
-            break;
-        }
-
-        if ((snl.nl_groups != 1) || (snl.nl_pid != 0)) {
-            /* ignoring non-kernel netlink multicast message */
-            continue;
-        }
-
-        struct cmsghdr * cmsg = CMSG_FIRSTHDR(&hdr);
-        if (cmsg == NULL || cmsg->cmsg_type != SCM_CREDENTIALS) {
-            /* no sender credentials received, ignore message */
-            continue;
-        }
-
-        struct ucred * cred = (struct ucred *)CMSG_DATA(cmsg);
-        if (cred->uid != 0) {
-            /* message from non-root user, ignore */
-            continue;
-        }
-
+    char msg[UEVENT_MSG_LEN+2];
+    int n;
+    while ((n = uevent_checked_recv(device_fd, msg, UEVENT_MSG_LEN)) > 0) {
         if(n >= UEVENT_MSG_LEN)   /* overflow -- discard */
             continue;
 
