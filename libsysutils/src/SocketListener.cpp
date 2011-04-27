@@ -213,8 +213,9 @@ void SocketListener::runListener() {
             it = pendingList->begin();
             SocketClient* c = *it;
             pendingList->erase(it);
-            /* Process it, if false is returned, remove and destroy it */
-            if (!onDataAvailable(c)) {
+            /* Process it, if false is returned and our sockets are
+             * connection-based, remove and destroy it */
+            if (!onDataAvailable(c) && mListen) {
                 /* Remove the client from our array */
                 pthread_mutex_lock(&mClientsLock);
                 for (it = mClients->begin(); it != mClients->end(); ++it) {
