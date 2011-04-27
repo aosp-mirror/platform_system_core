@@ -61,6 +61,11 @@
 #define DBG1(x...)
 #endif
 
+/* The max bulk size for linux is 16384 which is defined
+ * in drivers/usb/core/devio.c.
+ */
+#define MAX_USBFS_BULK_SIZE (16 * 1024)
+
 struct usb_handle 
 {
     char fname[64];
@@ -289,7 +294,7 @@ int usb_write(usb_handle *h, const void *_data, int len)
     
     while(len > 0) {
         int xfer;
-        xfer = (len > 4096) ? 4096 : len;
+        xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
         
         bulk.ep = h->ep_out;
         bulk.len = xfer;
@@ -323,7 +328,7 @@ int usb_read(usb_handle *h, void *_data, int len)
     }
     
     while(len > 0) {
-        int xfer = (len > 4096) ? 4096 : len;
+        int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
         
         bulk.ep = h->ep_in;
         bulk.len = xfer;

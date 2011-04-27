@@ -42,6 +42,7 @@
 #define DBG(x...)
 #endif
 
+#define MAX_USBFS_BULK_SIZE (1024 * 1024)
 
 /** Structure usb_handle describes our connection to the usb device via
   AdbWinApi.dll. This structure is returned from usb_open() routine and
@@ -160,7 +161,7 @@ int usb_write(usb_handle* handle, const void* data, int len) {
     if (NULL != handle) {
         // Perform write
         while(len > 0) {
-            int xfer = (len > 4096) ? 4096 : len;
+            int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
             ret = AdbWriteEndpointSync(handle->adb_write_pipe,
                                    (void*)data,
                                    (unsigned long)xfer,
@@ -200,7 +201,7 @@ int usb_read(usb_handle *handle, void* data, int len) {
     DBG("usb_read %d\n", len);
     if (NULL != handle) {
         while (1) {
-            int xfer = (len > 4096) ? 4096 : len;
+            int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
 
 	        ret = AdbReadEndpointSync(handle->adb_read_pipe,
 	                              (void*)data,
