@@ -74,7 +74,6 @@ else
         mspace.c \
         selector.c \
         tztime.c \
-        uevent.c \
         zygote.c
 
     commonHostSources += \
