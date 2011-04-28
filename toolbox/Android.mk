@@ -57,6 +57,10 @@ TOOLS := \
 	touch \
 	lsof
 
+ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
+TOOLS += r
+endif
+
 LOCAL_SRC_FILES:= \
 	dynarray.c \
 	toolbox.c \
