@@ -1,0 +1,2 @@
+/dev/qemu_trace           0666   system     system
+/dev/qemu_pipe            0666   system     system
