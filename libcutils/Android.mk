@@ -46,7 +46,8 @@ commonSources := \
 	properties.c \
 	threads.c \
 	sched_policy.c \
-	iosched_policy.c
+	iosched_policy.c \
+	str_parms.c
 
 commonHostSources := \
         ashmem-host.c
@@ -137,5 +138,13 @@ LOCAL_WHOLE_STATIC_LIBRARIES := libcutils
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_CFLAGS += $(targetSmpFlag)
 include $(BUILD_SHARED_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := tst_str_parms
+LOCAL_CFLAGS += -DTEST_STR_PARMS
+LOCAL_SRC_FILES := str_parms.c hashmap.c memory.c
+LOCAL_STATIC_LIBRARIES := liblog
+LOCAL_MODULE_TAGS := optional
+include $(BUILD_HOST_EXECUTABLE)
 
 endif #!sim
