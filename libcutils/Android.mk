@@ -143,8 +143,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := tst_str_parms
 LOCAL_CFLAGS += -DTEST_STR_PARMS
 LOCAL_SRC_FILES := str_parms.c hashmap.c memory.c
-LOCAL_STATIC_LIBRARIES := liblog
+LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_MODULE_TAGS := optional
-include $(BUILD_HOST_EXECUTABLE)
+include $(BUILD_EXECUTABLE)
 
 endif #!sim
