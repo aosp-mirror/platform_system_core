@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #ifdef HAVE_WINSOCK
 #include <winsock2.h>
@@ -92,7 +93,18 @@ extern int socket_local_client_connect(int fd,
         const char *name, int namespaceId, int type);
 extern int socket_local_client(const char *name, int namespaceId, int type);
 extern int socket_inaddr_any_server(int port, int type);
-    
+
+/*
+ * socket_peer_is_trusted - Takes a socket which is presumed to be a
+ * connected local socket (e.g. AF_LOCAL) and returns whether the peer
+ * (the userid that owns the process on the other end of that socket)
+ * is one of the two trusted userids, root or shell.
+ *
+ * Note: This only works as advertised on the Android OS and always
+ * just returns true when called on other operating systems.
+ */
+extern bool socket_peer_is_trusted(int fd);
+
 #ifdef __cplusplus
 }
 #endif

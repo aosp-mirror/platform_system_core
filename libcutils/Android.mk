@@ -35,6 +35,7 @@ commonSources := \
 	socket_loopback_client.c \
 	socket_loopback_server.c \
 	socket_network_client.c \
+	sockets.c \
 	config_utils.c \
 	cpu_info.c \
 	load_file.c \
