@@ -1,4 +1,4 @@
-// Copyright (c) 2010 The Chromium OS Authors. All rights reserved.
+// Copyright (c) 2011 The Chromium OS Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,7 +92,6 @@ int main(int argc, char** argv) {
   bool send_to_chrome = true;
   bool send_enum = false;
   bool secs_to_msecs = false;
-  bool print_usage = false;
 
   // Parse arguments
   int flag;
@@ -124,7 +123,7 @@ int main(int argc, char** argv) {
         mode = kModeSendUserAction;
         break;
       default:
-        print_usage = true;
+        ShowUsage();
         break;
     }
   }
