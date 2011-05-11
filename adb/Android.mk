@@ -113,6 +113,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	adb.c \
+	backup_service.c \
 	fdevent.c \
 	transport.c \
 	transport_local.c \
@@ -164,6 +165,7 @@ LOCAL_LDLIBS := -lrt -lncurses -lpthread
 
 LOCAL_SRC_FILES := \
 	adb.c \
+	backup_service.c \
 	console.c \
 	transport.c \
 	transport_local.c \

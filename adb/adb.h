@@ -35,7 +35,7 @@
 #define ADB_VERSION_MAJOR 1         // Used for help/version information
 #define ADB_VERSION_MINOR 0         // Used for help/version information
 
-#define ADB_SERVER_VERSION    26    // Increment this when we want to force users to start a new adb server
+#define ADB_SERVER_VERSION    27    // Increment this when we want to force users to start a new adb server
 
 typedef struct amessage amessage;
 typedef struct apacket apacket;
@@ -304,6 +304,7 @@ int       create_jdwp_connection_fd(int  jdwp_pid);
 #endif
 
 #if !ADB_HOST
+int backup_service(char* args);
 void framebuffer_service(int fd, void *cookie);
 void log_service(int fd, void *cookie);
 void remount_service(int fd, void *cookie);
