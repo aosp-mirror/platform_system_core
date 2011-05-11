@@ -23,7 +23,7 @@
 extern "C" {
 #endif
 
-ssize_t uevent_checked_recv(int socket, void *buffer, size_t length);
+ssize_t uevent_kernel_multicast_recv(int socket, void *buffer, size_t length);
 
 #ifdef __cplusplus
 }
