@@ -123,7 +123,11 @@ class TaggedCounterTest : public testing::Test {
 
   // Collects log messages in the |log_| member string so that they
   // can be analyzed for errors and expected behavior.
-  static bool HandleLogMessages(int severity, const std::string& str) {
+  static bool HandleLogMessages(int severity,
+                                const char* file,
+                                int line,
+                                size_t message_start,
+                                const std::string& str) {
     test_->log_.append(str);
     test_->log_.append("\n");
 

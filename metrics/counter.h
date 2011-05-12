@@ -9,7 +9,7 @@
 #include <time.h>
 
 #include <base/basictypes.h>
-#include <base/scoped_ptr.h>
+#include <base/memory/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 class MetricsLibraryInterface;
