@@ -15,6 +15,7 @@
 
 #include "base/file_util.h"
 #include "base/logging.h"
+#include "base/string_string.h"
 #include "base/string_util.h"
 #include "chromeos/process.h"
 #include "chromeos/syslog_logging.h"
@@ -168,7 +169,7 @@ bool UserCollector::GetIdFromStatus(const char *prefix,
   // From fs/proc/array.c:task_state(), this file contains:
   // \nUid:\t<uid>\t<euid>\t<suid>\t<fsuid>\n
   std::vector<std::string> status_lines;
-  SplitString(status_contents, '\n', &status_lines);
+  base::SplitString(status_contents, '\n', &status_lines);
   std::vector<std::string>::iterator line_iterator;
   for (line_iterator = status_lines.begin();
        line_iterator != status_lines.end();
@@ -182,7 +183,7 @@ bool UserCollector::GetIdFromStatus(const char *prefix,
   std::string id_substring = line_iterator->substr(strlen(prefix),
                                                    std::string::npos);
   std::vector<std::string> ids;
-  SplitString(id_substring, '\t', &ids);
+  base::SplitString(id_substring, '\t', &ids);
   if (ids.size() != kIdMax || kind < 0 || kind >= kIdMax) {
     return false;
   }

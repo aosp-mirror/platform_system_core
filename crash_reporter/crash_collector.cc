@@ -16,6 +16,7 @@
 #include "base/eintr_wrapper.h"
 #include "base/file_util.h"
 #include "base/logging.h"
+#include "base/string_string.h"
 #include "base/string_util.h"
 #include "chromeos/process.h"
 
@@ -264,7 +265,7 @@ bool CrashCollector::ReadKeyValueFile(
   }
   typedef std::vector<std::string> StringVector;
   StringVector lines;
-  SplitString(contents, '\n', &lines);
+  base::SplitString(contents, '\n', &lines);
   bool any_errors = false;
   for (StringVector::iterator line = lines.begin(); line != lines.end();
        ++line) {
@@ -275,7 +276,7 @@ bool CrashCollector::ReadKeyValueFile(
     if (IsCommentLine(*line))
       continue;
     StringVector sides;
-    SplitString(*line, separator, &sides);
+    base::SplitString(*line, separator, &sides);
     if (sides.size() != 2) {
       any_errors = true;
       continue;
