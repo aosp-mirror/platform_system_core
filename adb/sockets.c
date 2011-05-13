@@ -221,10 +221,12 @@ static void local_socket_close_locked(asocket *s)
     if(s->peer) {
         s->peer->peer = 0;
         // tweak to avoid deadlock
-        if (s->peer->close == local_socket_close)
+        if (s->peer->close == local_socket_close) {
             local_socket_close_locked(s->peer);
-        else
+        } else {
             s->peer->close(s->peer);
+        }
+        s->peer = 0;
     }
 
         /* If we are already closing, or if there are no
@@ -756,6 +758,7 @@ static void smart_socket_close(asocket *s)
     if(s->peer) {
         s->peer->peer = 0;
         s->peer->close(s->peer);
+        s->peer = 0;
     }
     free(s);
 }
