@@ -15,7 +15,7 @@
 
 #include "base/file_util.h"
 #include "base/logging.h"
-#include "base/string_string.h"
+#include "base/string_split.h"
 #include "base/string_util.h"
 #include "chromeos/process.h"
 #include "chromeos/syslog_logging.h"
