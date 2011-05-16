@@ -605,6 +605,7 @@ static void register_device(const char *dev_name,
         ctrl.wIndex = 0;
         ctrl.wLength = sizeof(languages);
         ctrl.data = languages;
+        ctrl.timeout = 1000;
 
         result = ioctl(usb->desc, USBDEVFS_CONTROL, &ctrl);
         if (result > 0)
@@ -620,6 +621,7 @@ static void register_device(const char *dev_name,
             ctrl.wIndex = __le16_to_cpu(languages[i]);
             ctrl.wLength = sizeof(buffer);
             ctrl.data = buffer;
+            ctrl.timeout = 1000;
 
             result = ioctl(usb->desc, USBDEVFS_CONTROL, &ctrl);
             if (result > 0) {
