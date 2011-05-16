@@ -55,7 +55,7 @@ int backup_service(char* args) {
         char** backup_args;
 
         // child -- actually run the backup here
-        argc = 1; // room for the basic 'bu' argv[0]
+        argc = 2; // room for the basic 'bu' argv[0] and 'backup' argv[1]
         for (p = (char*)args; p && *p; ) {
             argc++;
             while (*p && *p != ':') p++;
@@ -64,7 +64,8 @@ int backup_service(char* args) {
 
         backup_args = (char**) alloca(argc*sizeof(char*) + 1);
         backup_args[0] = "bu";
-        argc = 1;   // run through again to build the argv array
+        backup_args[1] = "backup";
+        argc = 2;   // run through again to build the argv array
         for (p = (char*)args; *p; ) {
             backup_args[argc++] = p;
             while (*p && *p != ':') p++;
