@@ -165,7 +165,6 @@ LOCAL_LDLIBS := -lrt -lncurses -lpthread
 
 LOCAL_SRC_FILES := \
 	adb.c \
-	backup_service.c \
 	console.c \
 	transport.c \
 	transport_local.c \

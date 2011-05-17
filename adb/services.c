@@ -482,7 +482,9 @@ int service_to_fd(const char *name)
     } else if(!strncmp(name, "backup:", 7)) {
         char* arg = strdup(name+7);
         if (arg == NULL) return -1;
-        ret = backup_service(arg);
+        ret = backup_service(BACKUP, arg);
+    } else if(!strncmp(name, "restore:", 8)) {
+        ret = backup_service(RESTORE, NULL);
     } else if(!strncmp(name, "tcpip:", 6)) {
         int port;
         if (sscanf(name + 6, "%d", &port) == 0) {

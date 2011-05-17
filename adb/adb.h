@@ -304,7 +304,11 @@ int       create_jdwp_connection_fd(int  jdwp_pid);
 #endif
 
 #if !ADB_HOST
-int backup_service(char* args);
+typedef enum {
+    BACKUP,
+    RESTORE
+} BackupOperation;
+int backup_service(BackupOperation operation, char* args);
 void framebuffer_service(int fd, void *cookie);
 void log_service(int fd, void *cookie);
 void remount_service(int fd, void *cookie);
