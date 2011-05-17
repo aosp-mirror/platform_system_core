@@ -5,7 +5,9 @@
 #include "metrics_daemon.h"
 
 #include <fcntl.h>
+#include <math.h>
 #include <string.h>
+#include <time.h>
 
 #include <base/file_util.h>
 #include <base/logging.h>
@@ -17,7 +19,10 @@
 using base::Time;
 using base::TimeDelta;
 using base::TimeTicks;
+using std::map;
 using std::string;
+using std::vector;
+
 
 #define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
 #define DBUS_IFACE_CRASH_REPORTER "org.chromium.CrashReporter"
@@ -144,15 +149,44 @@ const char* MetricsDaemon::kSessionStates_[] = {
 #include "session_states.h"
 };
 
+// Memory use stats collection intervals.  We collect some memory use interval
+// at these intervals after boot, and we stop collecting after the last one,
+// with the assumption that in most cases the memory use won't change much
+// after that.
+static const int kMemuseIntervals[] = {
+  1 * kSecondsPerMinute,    // 1 minute mark
+  4 * kSecondsPerMinute,    // 5 minute mark
+  25 * kSecondsPerMinute,   // 0.5 hour mark
+  120 * kSecondsPerMinute,  // 2.5 hour mark
+  600 * kSecondsPerMinute,  // 12.5 hour mark
+};
+
 MetricsDaemon::MetricsDaemon()
     : power_state_(kUnknownPowerState),
       session_state_(kUnknownSessionState),
       user_active_(false),
       usemon_interval_(0),
-      usemon_source_(NULL) {}
+      usemon_source_(NULL),
+      memuse_initial_time_(0),
+      memuse_interval_index_(0),
+      read_sectors_(0),
+      write_sectors_(0),
+      diskstats_state_(kDiskStatsShort),
+      diskstats_initial_time_(0) {}
 
 MetricsDaemon::~MetricsDaemon() {
   DeleteFrequencyCounters();
+}
+
+double MetricsDaemon::GetActiveTime() {
+  struct timespec ts;
+  int r = clock_gettime(CLOCK_MONOTONIC, &ts);
+  if (r < 0) {
+    PLOG(WARNING) << "clock_gettime(CLOCK_MONOTONIC) failed";
+    return 0;
+  } else {
+    return ts.tv_sec + ((double) ts.tv_nsec) / (1000 * 1000 * 1000);
+  }
 }
 
 void MetricsDaemon::DeleteFrequencyCounters() {
@@ -217,7 +251,7 @@ void MetricsDaemon::ConfigureCrashFrequencyReporter(
 }
 
 void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
-                         string diskstats_path) {
+                         const string& diskstats_path) {
   testing_ = testing;
   DCHECK(metrics_lib != NULL);
   metrics_lib_ = metrics_lib;
@@ -253,6 +287,7 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
 
   // Start collecting meminfo stats.
   ScheduleMeminfoCallback(kMetricMeminfoInterval);
+  ScheduleMemuseCallback(true, 0);
 
   // Don't setup D-Bus and GLib in test mode.
   if (testing)
@@ -457,7 +492,7 @@ void MetricsDaemon::ProcessUncleanShutdown() {
   frequency_counters_[kMetricAnyCrashesWeeklyName]->Update(1);
 }
 
-bool MetricsDaemon::CheckSystemCrash(const std::string& crash_file) {
+bool MetricsDaemon::CheckSystemCrash(const string& crash_file) {
   FilePath crash_detected(crash_file);
   if (!file_util::PathExists(crash_detected))
     return false;
@@ -533,7 +568,12 @@ void MetricsDaemon::DiskStatsReporterInit() {
   DiskStatsReadStats(&read_sectors_, &write_sectors_);
   // The first time around just run the long stat, so we don't delay boot.
   diskstats_state_ = kDiskStatsLong;
-  ScheduleDiskStatsCallback(kMetricDiskStatsLongInterval);
+  diskstats_initial_time_ = GetActiveTime();
+  if (diskstats_initial_time_ < 0) {
+    LOG(WARNING) << "not collecting disk stats";
+  } else {
+    ScheduleDiskStatsCallback(kMetricDiskStatsLongInterval);
+  }
 }
 
 void MetricsDaemon::ScheduleDiskStatsCallback(int wait) {
@@ -574,21 +614,32 @@ gboolean MetricsDaemon::DiskStatsCallbackStatic(void* handle) {
   return false;  // one-time callback
 }
 
+// Collects disk stats alternating over a short and a long interval.
+
 void MetricsDaemon::DiskStatsCallback() {
   long int read_sectors_now, write_sectors_now;
+  double time_now = GetActiveTime();
+  double delta_time = time_now - diskstats_initial_time_;
+  if (testing_) {
+    // Fake the time when testing.
+    delta_time = diskstats_state_ == kDiskStatsShort ?
+        kMetricDiskStatsShortInterval : kMetricDiskStatsLongInterval;
+  }
   DiskStatsReadStats(&read_sectors_now, &write_sectors_now);
+  int delta_read = read_sectors_now - read_sectors_;
+  int delta_write = write_sectors_now - write_sectors_;
+  int read_sectors_per_second = delta_read / delta_time;
+  int write_sectors_per_second = delta_write / delta_time;
 
   switch (diskstats_state_) {
     case kDiskStatsShort:
       SendMetric(kMetricReadSectorsShortName,
-                 (int) (read_sectors_now - read_sectors_) /
-                 kMetricDiskStatsShortInterval,
+                 read_sectors_per_second,
                  1,
                  kMetricSectorsIOMax,
                  kMetricSectorsBuckets);
       SendMetric(kMetricWriteSectorsShortName,
-                 (int) (write_sectors_now - write_sectors_) /
-                 kMetricDiskStatsShortInterval,
+                 write_sectors_per_second,
                  1,
                  kMetricSectorsIOMax,
                  kMetricSectorsBuckets);
@@ -599,20 +650,20 @@ void MetricsDaemon::DiskStatsCallback() {
       break;
     case kDiskStatsLong:
       SendMetric(kMetricReadSectorsLongName,
-                 (int) (read_sectors_now - read_sectors_) /
-                 kMetricDiskStatsLongInterval,
+                 read_sectors_per_second,
                  1,
                  kMetricSectorsIOMax,
                  kMetricSectorsBuckets);
       SendMetric(kMetricWriteSectorsLongName,
-                 (int) (write_sectors_now - write_sectors_) /
-                 kMetricDiskStatsLongInterval,
+                 write_sectors_per_second,
                  1,
                  kMetricSectorsIOMax,
                  kMetricSectorsBuckets);
-      // Reset sector counters
+      // Reset sector counters.
       read_sectors_ = read_sectors_now;
       write_sectors_ = write_sectors_now;
+      // Set start time for new cycle.
+      diskstats_initial_time_ = time_now;
       // Schedule short callback.
       diskstats_state_ = kDiskStatsShort;
       ScheduleDiskStatsCallback(kMetricDiskStatsShortInterval);
@@ -635,24 +686,17 @@ gboolean MetricsDaemon::MeminfoCallbackStatic(void* handle) {
 }
 
 gboolean MetricsDaemon::MeminfoCallback() {
-  std::string meminfo;
+  string meminfo_raw;
   const FilePath meminfo_path("/proc/meminfo");
-  if (!file_util::ReadFileToString(meminfo_path, &meminfo)) {
+  if (!file_util::ReadFileToString(meminfo_path, &meminfo_raw)) {
     LOG(WARNING) << "cannot read " << meminfo_path.value().c_str();
     return false;
   }
-  return ProcessMeminfo(meminfo);
+  return ProcessMeminfo(meminfo_raw);
 }
 
-gboolean MetricsDaemon::ProcessMeminfo(std::string meminfo) {
-  // This array has one element for every item of /proc/meminfo that we want to
-  // report to UMA.  They must be listed in the same order in which
-  // /proc/meminfo prints them.
-  struct {
-    const char* name;   // print name
-    const char* match;  // string to match in output of /proc/meminfo
-    int log_scale;      // report with log scale instead of linear percent
-  } fields[] = {
+gboolean MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
+  static const MeminfoRecord fields_array[] = {
     { "MemTotal", "MemTotal" },  // SPECIAL CASE: total system memory
     { "MemFree", "MemFree" },
     { "Buffers", "Buffers" },
@@ -677,67 +721,144 @@ gboolean MetricsDaemon::ProcessMeminfo(std::string meminfo) {
     // { "SReclaimable", "SReclaimable" },
     // { "SUnreclaim", "SUnreclaim" },
   };
-  // arraysize doesn't work here, probably can't handle anonymous structs
-  const int nfields = sizeof(fields) / sizeof(fields[0]);
-  int total_memory = 0;
-  std::vector<std::string> lines;
-  int nlines = Tokenize(meminfo, "\n", &lines);
+  vector<MeminfoRecord> fields(fields_array,
+                               fields_array + arraysize(fields_array));
+  if (!FillMeminfo(meminfo_raw, &fields)) {
+    return false;
+  }
+  int total_memory = fields[0].value;
+  if (total_memory == 0) {
+    // this "cannot happen"
+    LOG(WARNING) << "borked meminfo parser";
+    return false;
+  }
+  // Send all fields retrieved, except total memory.
+  for (unsigned int i = 1; i < fields.size(); i++) {
+    string metrics_name = StringPrintf("Platform.Meminfo%s", fields[i].name);
+    if (fields[i].log_scale) {
+      // report value in kbytes, log scale, 4Gb max
+      SendMetric(metrics_name, fields[i].value, 1, 4 * 1000 * 1000, 100);
+    } else {
+      // report value as percent of total memory
+      int percent = fields[i].value * 100 / total_memory;
+      SendLinearMetric(metrics_name, percent, 100, 101);
+    }
+  }
+  return true;
+}
+
+gboolean MetricsDaemon::FillMeminfo(const string& meminfo_raw,
+                                    vector<MeminfoRecord>* fields) {
+  vector<string> lines;
+  unsigned int nlines = Tokenize(meminfo_raw, "\n", &lines);
 
   // Scan meminfo output and collect field values.  Each field name has to
   // match a meminfo entry (case insensitive) after removing non-alpha
   // characters from the entry.
-  int i = 0;
-  int iline = 0;
-  for (;;) {
-    if (i == nfields) {
-      // all fields are matched
-      return true;
-    }
-    if (iline == nlines) {
-      // end of input reached while scanning
-      LOG(WARNING) << "cannot find field " << fields[i].match
-                   << " and following";
-      return false;
-    }
-
-    std::vector<std::string> tokens;
+  unsigned int ifield = 0;
+  for (unsigned int iline = 0;
+       iline < nlines && ifield < fields->size();
+       iline++) {
+    vector<string> tokens;
     Tokenize(lines[iline], ": ", &tokens);
-
-    if (strcmp(fields[i].match, tokens[0].c_str()) == 0) {
-      // name matches: parse value and report
-      int meminfo_value;
-      char metrics_name[128];
+    if (strcmp((*fields)[ifield].match, tokens[0].c_str()) == 0) {
+      // Name matches. Parse value and save.
       char* rest;
-      meminfo_value = static_cast<int>(strtol(tokens[1].c_str(), &rest, 10));
+      (*fields)[ifield].value =
+          static_cast<int>(strtol(tokens[1].c_str(), &rest, 10));
       if (*rest != '\0') {
         LOG(WARNING) << "missing meminfo value";
         return false;
       }
-      if (i == 0) {
-        // special case: total memory
-        total_memory = meminfo_value;
-      } else {
-        snprintf(metrics_name, sizeof(metrics_name),
-                 "Platform.Meminfo%s", fields[i].name);
-        if (fields[i].log_scale) {
-          // report value in kbytes, log scale, 4Gb max
-          SendMetric(metrics_name, meminfo_value, 1, 4 * 1000 * 1000, 100);
-        } else {
-          // report value as percent of total memory
-          if (total_memory == 0) {
-            // this "cannot happen"
-            LOG(WARNING) << "borked meminfo parser";
-            return false;
-          }
-          int percent = meminfo_value * 100 / total_memory;
-          SendLinearMetric(metrics_name, percent, 100, 101);
-        }
-      }
-      // start looking for next field
-      i++;
+      ifield++;
     }
-    iline++;
   }
+  if (ifield < fields->size()) {
+    // End of input reached while scanning.
+    LOG(WARNING) << "cannot find field " << (*fields)[ifield].match
+                 << " and following";
+    return false;
+  }
+  return true;
+}
+
+void MetricsDaemon::ScheduleMemuseCallback(gboolean new_callback,
+                                           double time_elapsed) {
+  if (testing_) {
+    return;
+  }
+  int interval = kMemuseIntervals[memuse_interval_index_];
+  int wait;
+  if (new_callback) {
+    memuse_initial_time_ = GetActiveTime();
+    wait = interval;
+  } else {
+    wait = ceil(interval - time_elapsed);  // round up
+  }
+  g_timeout_add_seconds(wait, MemuseCallbackStatic, this);
+}
+
+// static
+gboolean MetricsDaemon::MemuseCallbackStatic(void* handle) {
+  MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
+  daemon->MemuseCallback();
+  return false;
+}
+
+void MetricsDaemon::MemuseCallback() {
+  // Since we only care about active time (i.e. uptime minus sleep time) but
+  // the callbacks are driven by real time (uptime), we check if we should
+  // reschedule this callback due to intervening sleep periods.
+  double now = GetActiveTime();
+  double active_time = now - memuse_initial_time_;
+  if (active_time < kMemuseIntervals[memuse_interval_index_]) {
+    // Not enough active time has passed.  Reschedule the callback.
+    ScheduleMemuseCallback(false, active_time);
+  } else {
+    // Enough active time has passed.  Do the work, and (if we succeed) see if
+    // we need to do more.
+    if (MemuseCallbackWork() &&
+        memuse_interval_index_ < arraysize(kMemuseIntervals)) {
+      memuse_interval_index_++;
+      ScheduleMemuseCallback(true, 0);
+    }
+  }
+}
+
+gboolean MetricsDaemon::MemuseCallbackWork() {
+  string meminfo_raw;
+  const FilePath meminfo_path("/proc/meminfo");
+  if (!file_util::ReadFileToString(meminfo_path, &meminfo_raw)) {
+    LOG(WARNING) << "cannot read " << meminfo_path.value().c_str();
+    return false;
+  }
+  return ProcessMemuse(meminfo_raw);
+}
+
+gboolean MetricsDaemon::ProcessMemuse(const string& meminfo_raw) {
+  static const MeminfoRecord fields_array[] = {
+    { "MemTotal", "MemTotal" },  // SPECIAL CASE: total system memory
+    { "ActiveAnon", "Active(anon)" },
+    { "InactiveAnon", "Inactive(anon)" },
+  };
+  vector<MeminfoRecord> fields(fields_array,
+                               fields_array + arraysize(fields_array));
+  if (!FillMeminfo(meminfo_raw, &fields)) {
+    return false;
+  }
+  int total = fields[0].value;
+  int active_anon = fields[1].value;
+  int inactive_anon = fields[2].value;
+  if (total == 0) {
+    // this "cannot happen"
+    LOG(WARNING) << "borked meminfo parser";
+    return false;
+  }
+  string metrics_name = StringPrintf("Platform.MemuseAnon%d",
+                                     memuse_interval_index_);
+  SendLinearMetric(metrics_name, (active_anon + inactive_anon) * 100 / total,
+                   100, 101);
+  return true;
 }
 
 // static

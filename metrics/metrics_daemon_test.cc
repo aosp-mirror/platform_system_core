@@ -580,10 +580,10 @@ TEST_F(MetricsDaemonTest, ReportDiskStats) {
 }
 
 TEST_F(MetricsDaemonTest, ProcessMeminfo) {
-  const char* meminfo = "\
+  string meminfo = "\
 MemTotal:        2000000 kB\n\
-MemFree:         1000000 kB\n\
-Buffers:           10492 kB\n\
+MemFree:          500000 kB\n\
+Buffers:         1000000 kB\n\
 Cached:           213652 kB\n\
 SwapCached:            0 kB\n\
 Active:           133400 kB\n\
@@ -617,25 +617,29 @@ VmallocChunk:     103824 kB\n\
 DirectMap4k:        9636 kB\n\
 DirectMap2M:     1955840 kB\n\
 ";
+  // All enum calls must report percents.
   EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, _, 100))
       .Times(AtLeast(1));
+  // Check that MemFree is correctly computed at 25%.
+  EXPECT_CALL(metrics_lib_, SendEnumToUMA("Platform.MeminfoMemFree", 25, 100))
+      .Times(AtLeast(1));
+  // Check that we call SendToUma at least once (log histogram).
   EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _))
       .Times(AtLeast(1));
-  EXPECT_CALL(metrics_lib_, SendToUMA("NFS_Unstable", _, _, _, _))
+  // Make sure we don't report fields not in the list.
+  EXPECT_CALL(metrics_lib_, SendToUMA("Platform.MeminfoMlocked", _, _, _, _))
       .Times(0);
-  EXPECT_CALL(metrics_lib_, SendEnumToUMA("NFS_Unstable", _, _))
+  EXPECT_CALL(metrics_lib_, SendEnumToUMA("Platform.MeminfoMlocked", _, _))
       .Times(0);
   EXPECT_TRUE(daemon_.ProcessMeminfo(meminfo));
 }
 
 TEST_F(MetricsDaemonTest, ProcessMeminfo2) {
-  const char* meminfo = "\
+  string meminfo = "\
 MemTotal:        2000000 kB\n\
 MemFree:         1000000 kB\n\
 ";
   /* Not enough fields */
-  EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, 50, 100))
-      .Times(1);
   EXPECT_FALSE(daemon_.ProcessMeminfo(meminfo));
 }
 

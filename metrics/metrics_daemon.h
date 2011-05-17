@@ -30,7 +30,7 @@ class MetricsDaemon {
 
   // Initializes.
   void Init(bool testing, MetricsLibraryInterface* metrics_lib,
-            std::string diskstats_path);
+            const std::string& diskstats_path);
 
   // Does all the work. If |run_as_daemon| is true, daemonizes by
   // forking.
@@ -95,6 +95,14 @@ class MetricsDaemon {
     int seconds_;
   };
 
+  // Record for retrieving and reporting values from /proc/meminfo.
+  struct MeminfoRecord {
+    const char* name;      // print name
+    const char* match;     // string to match in output of /proc/meminfo
+    int log_scale;         // report with log scale instead of linear percent
+    int value;             // value from /proc/meminfo
+  };
+
   typedef std::map<std::string, chromeos_metrics::FrequencyCounter*>
     FrequencyCounters;
 
@@ -140,6 +148,9 @@ class MetricsDaemon {
 
   // Array of user session states.
   static const char* kSessionStates_[kNumberSessionStates];
+
+  // Returns the active time since boot (uptime minus sleep time) in seconds.
+  double GetActiveTime();
 
   // Clears and deletes the data contained in frequency_counters_.
   void DeleteFrequencyCounters();
@@ -270,8 +281,37 @@ class MetricsDaemon {
   gboolean MeminfoCallback();
 
   // Parses content of /proc/meminfo and sends fields of interest to UMA.
-  // Returns false on errors.
-  gboolean ProcessMeminfo(std::string meminfo);
+  // Returns false on errors.  |meminfo_raw| contains the content of
+  // /proc/meminfo.
+  gboolean ProcessMeminfo(const std::string& meminfo_raw);
+
+  // Parses meminfo data from |meminfo_raw|.  |fields| is a vector containing
+  // the fields of interest.  The order of the fields must be the same in which
+  // /proc/meminfo prints them.  The result of parsing fields[i] is placed in
+  // fields[i].value.
+  gboolean FillMeminfo(const std::string& meminfo_raw,
+                       std::vector<MeminfoRecord>* fields);
+
+  // Schedule a memory use callback.  |new_callback| is true when this callback
+  // is scheduled for the first time.  When |new_callback| is false,
+  // |time_elapsed| is the active (non-sleep) time that has passed between now
+  // and the original callback scheduling time.  We use it to reschedule a
+  // callback that fired too early because we slept.
+  void ScheduleMemuseCallback(gboolean new_callback, double time_elapsed);
+
+  // Static wrapper for MemuseCallback.  Always returns false.
+  static gboolean MemuseCallbackStatic(void* handle);
+
+  // Calls MemuseCallbackWork, and possibly schedules next callback, if enough
+  // active time has passed.  Otherwise reschedules itself to simulate active
+  // time callbacks (i.e. wall clock time minus sleep time).
+  void MemuseCallback();
+
+  // Reads /proc/meminfo and sends total anonymous memory usage to UMA.
+  gboolean MemuseCallbackWork();
+
+  // Parse meminfo data and send to UMA.
+  gboolean ProcessMemuse(const std::string& meminfo_raw);
 
   // Test mode.
   bool testing_;
@@ -322,12 +362,19 @@ class MetricsDaemon {
   // Scheduled daily use monitor source (see ScheduleUseMonitor).
   GSource* usemon_source_;
 
+  // Time of initial scheduling of memuse callback
+  double memuse_initial_time_;
+
+  // Selects the wait time for the next memory use callback.
+  unsigned int memuse_interval_index_;
+
   // Contains the most recent disk stats.
   long int read_sectors_;
   long int write_sectors_;
 
   DiskStatsState diskstats_state_;
   std::string diskstats_path_;
+  double diskstats_initial_time_;
 };
 
 #endif  // METRICS_DAEMON_H_
