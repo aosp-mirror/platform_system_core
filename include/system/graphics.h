@@ -48,12 +48,11 @@ enum {
     /*
      * Android YUV format:
      *
-     * This format is exposed outside of the HAL to software
-     * decoders and applications.
-     * EGLImageKHR must support it in conjunction with the
+     * This format is exposed outside of the HAL to software decoders and
+     * applications.  EGLImageKHR must support it in conjunction with the
      * OES_EGL_image_external extension.
      *
-     * YV12 is 4:2:0 YCrCb planar format comprised of a WxH Y plane followed
+     * YV12 is a 4:2:0 YCrCb planar format comprised of a WxH Y plane followed
      * by (W/2) x (H/2) Cr and Cb planes.
      *
      * This format assumes
