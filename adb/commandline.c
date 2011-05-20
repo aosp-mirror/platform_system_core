@@ -142,6 +142,8 @@ void help()
         "                                    the -all or -shared flags are passed, then the package\n"
         "                                    list is optional.)\n"
         "\n"
+        "  adb restore <file>           - restore device contents from the <file> backup tarfile\n"
+        "\n"
         "  adb help                     - show this help message\n"
         "  adb version                  - show version num\n"
         "\n"
@@ -598,6 +600,33 @@ static int backup(int argc, char** argv) {
 
     adb_close(fd);
     adb_close(outFd);
+    return 0;
+}
+
+static int restore(int argc, char** argv) {
+    const char* filename;
+    int fd, tarFd;
+
+    if (argc != 2) return usage();
+
+    filename = argv[1];
+    tarFd = adb_open(filename, O_RDONLY);
+    if (tarFd < 0) {
+        fprintf(stderr, "adb: unable to open file %s\n", filename);
+        return -1;
+    }
+
+    fd = adb_connect("restore:");
+    if (fd < 0) {
+        fprintf(stderr, "adb: unable to connect for backup\n");
+        adb_close(tarFd);
+        return -1;
+    }
+
+    copy_to_file(tarFd, fd);
+
+    adb_close(fd);
+    adb_close(tarFd);
     return 0;
 }
 
@@ -1162,6 +1191,10 @@ top:
 
     if (!strcmp(argv[0], "backup")) {
         return backup(argc, argv);
+    }
+
+    if (!strcmp(argv[0], "restore")) {
+        return restore(argc, argv);
     }
 
     if (!strcmp(argv[0], "jdwp")) {
