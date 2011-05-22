@@ -89,6 +89,8 @@
 #define VENDOR_ID_TI            0x0451
 // Funai's USB Vendor ID
 #define VENDOR_ID_FUNAI         0x0F1C
+// Gigabyte's USB Vendor ID
+#define VENDOR_ID_GIGABYTE      0x0414
 
 
 /** built-in vendor list */
@@ -120,6 +122,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_PHILIPS,
     VENDOR_ID_TI,
     VENDOR_ID_FUNAI,
+    VENDOR_ID_GIGABYTE,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
