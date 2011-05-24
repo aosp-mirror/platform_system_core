@@ -1,0 +1,35 @@
+Netlink Protocol Format (RFC3549)
++-----------------+-+-------------------+-+
+|Netlink Message  |P| Generic Netlink   |P|
+|    Header       |A|  Message Header   |A|
+|(struct nlmsghdr)|D|(struct genlmsghdr)|D|
++-----------------+-+-------------------+-+
++-----------------+-+-----------------+-+-----------------+-+-----------------+-+---+
+|Netlink Attribute|P|Netlink Attribute|P|Netlink Attribute|P|Netlink Attribute|P|...|
+|    #0 Header    |A|   #0 Payload    |A|   #1 Header     |A|   #1 Payload    |A|   |
+| (struct nlattr) |D|     (void)      |D| (struct nlattr) |D|     (void)      |D|   |
++-----------------+-+-----------------+-+-----------------+-+-----------------+-+---+
+
+* Each netlink message consists of a bitstream with a netlink header.
+* After this header a second header *can* be used specific to the netlink
+  family in use. This library was tested using the generic netlink
+  protocol defined by struct genlmsghdr to support nl80211.
+* After the header(s) netlink attributes can be appended to the message
+  which hold can hold basic types such as unsigned integers and strings.
+* All data structures in this implementation are byte-aligned (Currently 4 bytes).
+* Acknowledgements (ACKs) are sent as NLMSG_ERROR netlink message types (0x2) and
+  have an error value of 0.
+
+KNOWN BUGS
+* NOT THREAD SAFE!!!
+* nla_parse - does not use nla_policy argument
+* nl_recvmsgs - does not support nl_cb_overwrite_recv()
+* nl_recv - sets/unsets async. flag
+* genl_ctrl_alloc_cache - netlink send/recv funcs should be used
+
+REFERENCES
+* nl80211.h
+* netlink_types.h
+* $LINUX_KERNEL/net/wireless/nl80211.c
+* http://www.infradead.org/~tgr/libnl/doc-3.0/index.html
+* http://www.netfilter.org/projects/libmnl/doxygen/index.html
