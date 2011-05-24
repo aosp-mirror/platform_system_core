@@ -454,4 +454,4 @@ static inline int native_window_set_buffers_timestamp(
 
 __END_DECLS
 
-#endif SYSTEM_CORE_INCLUDE_ANDROID_WINDOW_H
+#endif /* SYSTEM_CORE_INCLUDE_ANDROID_WINDOW_H */
