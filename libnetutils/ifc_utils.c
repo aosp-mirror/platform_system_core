@@ -51,6 +51,8 @@ static int ifc_ctl_sock = -1;
 static int ifc_ctl_sock6 = -1;
 void printerr(char *fmt, ...);
 
+#define DBG 0
+
 in_addr_t prefixLengthToIpv4Netmask(int prefix_length)
 {
     in_addr_t mask = 0;
@@ -88,13 +90,17 @@ static const char *ipaddr_to_string(in_addr_t addr)
 
 int ifc_init(void)
 {
+    int ret;
     if (ifc_ctl_sock == -1) {
-        ifc_ctl_sock = socket(AF_INET, SOCK_DGRAM, 0);    
+        ifc_ctl_sock = socket(AF_INET, SOCK_DGRAM, 0);
         if (ifc_ctl_sock < 0) {
             printerr("socket() failed: %s\n", strerror(errno));
         }
     }
-    return ifc_ctl_sock < 0 ? -1 : 0;
+
+    ret = ifc_ctl_sock < 0 ? -1 : 0;
+    if (DBG) printerr("ifc_init_returning %d", ret);
+    return ret;
 }
 
 int ifc_init6(void)
@@ -110,6 +116,7 @@ int ifc_init6(void)
 
 void ifc_close(void)
 {
+    if (DBG) printerr("ifc_close");
     if (ifc_ctl_sock != -1) {
         (void)close(ifc_ctl_sock);
         ifc_ctl_sock = -1;
@@ -141,7 +148,7 @@ int ifc_get_hwaddr(const char *name, void *ptr)
     if(r < 0) return -1;
 
     memcpy(ptr, &ifr.ifr_hwaddr.sa_data, ETH_ALEN);
-    return 0;    
+    return 0;
 }
 
 int ifc_get_ifindex(const char *name, int *if_indexp)
@@ -169,12 +176,16 @@ static int ifc_set_flags(const char *name, unsigned set, unsigned clr)
 
 int ifc_up(const char *name)
 {
-    return ifc_set_flags(name, IFF_UP, 0);
+    int ret = ifc_set_flags(name, IFF_UP, 0);
+    if (DBG) printerr("ifc_up(%s) = %d", name, ret);
+    return ret;
 }
 
 int ifc_down(const char *name)
 {
-    return ifc_set_flags(name, 0, IFF_UP);
+    int ret = ifc_set_flags(name, 0, IFF_UP);
+    if (DBG) printerr("ifc_down(%s) = %d", name, ret);
+    return ret;
 }
 
 static void init_sockaddr_in(struct sockaddr *sa, in_addr_t addr)
@@ -188,11 +199,14 @@ static void init_sockaddr_in(struct sockaddr *sa, in_addr_t addr)
 int ifc_set_addr(const char *name, in_addr_t addr)
 {
     struct ifreq ifr;
+    int ret;
 
     ifc_init_ifr(name, &ifr);
     init_sockaddr_in(&ifr.ifr_addr, addr);
 
-    return ioctl(ifc_ctl_sock, SIOCSIFADDR, &ifr);
+    ret = ioctl(ifc_ctl_sock, SIOCSIFADDR, &ifr);
+    if (DBG) printerr("ifc_set_addr(%s, xx) = %d", name, ret);
+    return ret;
 }
 
 int ifc_set_hwaddr(const char *name, const void *ptr)
@@ -209,11 +223,14 @@ int ifc_set_hwaddr(const char *name, const void *ptr)
 int ifc_set_mask(const char *name, in_addr_t mask)
 {
     struct ifreq ifr;
+    int ret;
 
     ifc_init_ifr(name, &ifr);
     init_sockaddr_in(&ifr.ifr_addr, mask);
 
-    return ioctl(ifc_ctl_sock, SIOCSIFNETMASK, &ifr);
+    ret = ioctl(ifc_ctl_sock, SIOCSIFNETMASK, &ifr);
+    if (DBG) printerr("ifc_set_mask(%s, xx) = %d", name, ret);
+    return ret;
 }
 
 int ifc_set_prefixLength(const char *name, int prefixLength)
@@ -323,6 +340,7 @@ int ifc_act_on_ipv4_route(int action, const char *ifname, struct in_addr dst, in
     return result;
 }
 
+/* deprecated - v4 only */
 int ifc_create_default_route(const char *name, in_addr_t gw)
 {
     struct in_addr in_dst, in_gw;
@@ -330,7 +348,20 @@ int ifc_create_default_route(const char *name, in_addr_t gw)
     in_dst.s_addr = 0;
     in_gw.s_addr = gw;
 
-    return ifc_act_on_route(SIOCADDRT, name, in_dst, 0, in_gw);
+    int ret = ifc_act_on_ipv4_route(SIOCADDRT, name, in_dst, 0, in_gw);
+    if (DBG) printerr("ifc_create_default_route(%s, %d) = %d", name, gw, ret);
+    return ret;
+}
+
+/* deprecated v4-only */
+int ifc_add_host_route(const char *name, in_addr_t dst)
+{
+    struct in_addr in_dst, in_gw;
+
+    in_dst.s_addr = dst;
+    in_gw.s_addr = 0;
+
+    return ifc_act_on_ipv4_route(SIOCADDRT, name, in_dst, 32, in_gw);
 }
 
 int ifc_enable(const char *ifname)
@@ -446,6 +477,70 @@ int ifc_remove_host_routes(const char *name)
     fclose(fp);
     ifc_close();
     return 0;
+}
+
+/*
+ * Return the address of the default gateway
+ *
+ * TODO: factor out common code from this and remove_host_routes()
+ * so that we only scan /proc/net/route in one place.
+ *
+ * DEPRECATED
+ */
+int ifc_get_default_route(const char *ifname)
+{
+    char name[64];
+    in_addr_t dest, gway, mask;
+    int flags, refcnt, use, metric, mtu, win, irtt;
+    int result;
+    FILE *fp;
+
+    fp = fopen("/proc/net/route", "r");
+    if (fp == NULL)
+        return 0;
+    /* Skip the header line */
+    if (fscanf(fp, "%*[^\n]\n") < 0) {
+        fclose(fp);
+        return 0;
+    }
+    ifc_init();
+    result = 0;
+    for (;;) {
+        int nread = fscanf(fp, "%63s%X%X%X%d%d%d%X%d%d%d\n",
+                           name, &dest, &gway, &flags, &refcnt, &use, &metric, &mask,
+                           &mtu, &win, &irtt);
+        if (nread != 11) {
+            break;
+        }
+        if ((flags & (RTF_UP|RTF_GATEWAY)) == (RTF_UP|RTF_GATEWAY)
+                && dest == 0
+                && strcmp(ifname, name) == 0) {
+            result = gway;
+            break;
+        }
+    }
+    fclose(fp);
+    ifc_close();
+    return result;
+}
+
+/*
+ * Sets the specified gateway as the default route for the named interface.
+ * DEPRECATED
+ */
+int ifc_set_default_route(const char *ifname, in_addr_t gateway)
+{
+    struct in_addr addr;
+    int result;
+
+    ifc_init();
+    addr.s_addr = gateway;
+    if ((result = ifc_create_default_route(ifname, gateway)) < 0) {
+        LOGD("failed to add %s as default route for %s: %s",
+             inet_ntoa(addr), ifname, strerror(errno));
+    }
+    ifc_close();
+    return result;
 }
 
 /*
@@ -627,9 +722,31 @@ int ifc_act_on_route(int action, const char *ifname, const char *dst, int prefix
     return ret;
 }
 
+/*
+ * DEPRECATED
+ */
+int ifc_add_ipv4_route(const char *ifname, struct in_addr dst, int prefix_length,
+      struct in_addr gw)
+{
+    int i =ifc_act_on_ipv4_route(SIOCADDRT, ifname, dst, prefix_length, gw);
+    printerr("ifc_add_ipv4_route(%s, xx, %d, xx) = %d", ifname, prefix_length, i);
+    return i;
+}
+
+/*
+ * DEPRECATED
+ */
+int ifc_add_ipv6_route(const char *ifname, struct in6_addr dst, int prefix_length,
+      struct in6_addr gw)
+{
+    return ifc_act_on_ipv6_route(SIOCADDRT, ifname, dst, prefix_length, gw);
+}
+
 int ifc_add_route(const char *ifname, const char *dst, int prefix_length, const char *gw)
 {
-    return ifc_act_on_route(SIOCADDRT, ifname, dst, prefix_length, gw);
+    int i = ifc_act_on_route(SIOCADDRT, ifname, dst, prefix_length, gw);
+    printerr("ifc_add_route(%s, %s, %d, %s) = %d", ifname, dst, prefix_length, gw, i);
+    return i;
 }
 
 int ifc_remove_route(const char *ifname, const char*dst, int prefix_length, const char *gw)
