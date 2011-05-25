@@ -126,7 +126,7 @@ bool MetricsLibrary::IsGuestMode() {
                        &result)) {
     return false;
   }
-  return result;
+  return result && access("/var/run/state/logged-in", F_OK) == 0;
 }
 
 bool MetricsLibrary::AreMetricsEnabled() {
