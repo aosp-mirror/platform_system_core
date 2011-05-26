@@ -24,7 +24,7 @@
 /**
  * Like recv(), but checks that messages actually originate from the kernel.
  */
-ssize_t uevent_checked_recv(int socket, void *buffer, size_t length) {
+ssize_t uevent_kernel_multicast_recv(int socket, void *buffer, size_t length) {
     struct iovec iov = { buffer, length };
     struct sockaddr_nl addr;
     char control[CMSG_SPACE(sizeof(struct ucred))];

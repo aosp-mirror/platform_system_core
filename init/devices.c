@@ -774,7 +774,7 @@ void handle_device_fd()
 {
     char msg[UEVENT_MSG_LEN+2];
     int n;
-    while ((n = uevent_checked_recv(device_fd, msg, UEVENT_MSG_LEN)) > 0) {
+    while ((n = uevent_kernel_multicast_recv(device_fd, msg, UEVENT_MSG_LEN)) > 0) {
         if(n >= UEVENT_MSG_LEN)   /* overflow -- discard */
             continue;
 
