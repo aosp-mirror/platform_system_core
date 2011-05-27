@@ -30,6 +30,7 @@
 #include <sys/mount.h>
 #include <sys/resource.h>
 #include <linux/loop.h>
+#include <cutils/partition_utils.h>
 
 #include "init.h"
 #include "keywords.h"
@@ -367,7 +368,9 @@ int do_mount(int nargs, char **args)
         if (wait)
             wait_for_file(source, COMMAND_RETRY_TIMEOUT);
         if (mount(source, target, system, flags, options) < 0) {
-            /* If this fails, it may be an encrypted filesystem.
+            /* If this fails, it may be an encrypted filesystem
+             * or it could just be wiped.  If wiped, that will be
+             * handled later in the boot process.
              * We only support encrypting /data.  Check
              * if we're trying to mount it, and if so,
              * assume it's encrypted, mount a tmpfs instead.
@@ -375,7 +378,7 @@ int do_mount(int nargs, char **args)
              * for vold to query when it mounts the real
              * encrypted /data.
              */
-            if (!strcmp(target, DATA_MNT_POINT)) {
+            if (!strcmp(target, DATA_MNT_POINT) && !partition_wiped(source)) {
                 const char *tmpfs_options;
 
                 tmpfs_options = property_get("ro.crypto.tmpfs_options");
