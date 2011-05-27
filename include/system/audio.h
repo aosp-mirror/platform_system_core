@@ -88,8 +88,10 @@ typedef enum {
 
 /* PCM sub formats */
 typedef enum {
-    AUDIO_FORMAT_PCM_SUB_16_BIT          = 0x1, /* DO NOT CHANGE */
-    AUDIO_FORMAT_PCM_SUB_8_BIT           = 0x2, /* DO NOT CHANGE */
+    AUDIO_FORMAT_PCM_SUB_16_BIT          = 0x1, /* DO NOT CHANGE - PCM signed 16 bits */
+    AUDIO_FORMAT_PCM_SUB_8_BIT           = 0x2, /* DO NOT CHANGE - PCM unsigned 8 bits */
+    AUDIO_FORMAT_PCM_SUB_32_BIT          = 0x3, /* PCM signed .31 fixed point */
+    AUDIO_FORMAT_PCM_SUB_8_24_BIT        = 0x4, /* PCM signed 7.24 fixed point */
 } audio_format_pcm_sub_fmt_t;
 
 /* MP3 sub format field definition : can use 11 LSBs in the same way as MP3
@@ -144,6 +146,10 @@ typedef enum {
                                         AUDIO_FORMAT_PCM_SUB_16_BIT),
     AUDIO_FORMAT_PCM_8_BIT           = (AUDIO_FORMAT_PCM |
                                         AUDIO_FORMAT_PCM_SUB_8_BIT),
+    AUDIO_FORMAT_PCM_32_BIT          = (AUDIO_FORMAT_PCM |
+                                        AUDIO_FORMAT_PCM_SUB_32_BIT),
+    AUDIO_FORMAT_PCM_8_24_BIT        = (AUDIO_FORMAT_PCM |
+                                        AUDIO_FORMAT_PCM_SUB_8_24_BIT),
 } audio_format_t;
 
 /* Channel mask definitions must be kept in sync with JAVA values in
