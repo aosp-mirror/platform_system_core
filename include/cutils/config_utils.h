@@ -54,6 +54,9 @@ const char* config_str(cnode *root, const char *name, const char *_default);
 /* add a named child to a config node (or modify it if it already exists) */
 void config_set(cnode *root, const char *name, const char *value);
 
+/* free a config node tree */
+void config_free(cnode *root);
+
 #ifdef __cplusplus
 }
 #endif

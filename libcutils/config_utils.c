@@ -315,3 +315,15 @@ void config_load_file(cnode *root, const char *fn)
     data = load_file(fn, 0);
     config_load(root, data);
 }
+
+void config_free(cnode *root)
+{
+    cnode *cur = root->first_child;
+
+    while (cur) {
+        cnode *prev = cur;
+        config_free(cur);
+        cur = cur->next;
+        free(prev);
+    }
+}
