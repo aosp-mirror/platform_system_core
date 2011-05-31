@@ -38,14 +38,14 @@ void get_remote_struct(int pid, void *src, void *dst, size_t size)
     unsigned int i;
 
     for (i = 0; i+4 <= size; i+=4) {
-        *(int *)(dst+i) = ptrace(PTRACE_PEEKTEXT, pid, src+i, NULL);
+        *(int *)((char *)dst+i) = ptrace(PTRACE_PEEKTEXT, pid, (char *)src+i, NULL);
     }
 
     if (i < size) {
         int val;
 
         assert((size - i) < 4);
-        val = ptrace(PTRACE_PEEKTEXT, pid, src+i, NULL);
+        val = ptrace(PTRACE_PEEKTEXT, pid, (char *)src+i, NULL);
         while (i < size) {
             ((unsigned char *)dst)[i] = val & 0xff;
             i++;
