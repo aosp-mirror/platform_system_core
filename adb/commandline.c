@@ -131,8 +131,8 @@ void help()
         "\n"
         "  adb backup [-f <file>] [-apk|-noapk] [-shared|-noshared] [-all] [<packages...>]\n"
         "                               - Write a tarfile backup of the device's data to <file>.\n"
-        "                                 The -f option must come first; if not specified then the data\n"
-        "                                 is written to \"backup.tar\" in the current directory.\n"
+        "                                 If a -f option is not supplied then the data is\n"
+        "                                 written to \"backup.tar\" in the current directory.\n"
         "                                 (-apk|-noapk enable/disable backup of the .apks themselves\n"
         "                                    in the tarfile; the default is noapk.)\n"
         "                                 (-shared|-noshared enable/disable backup of the device's\n"
@@ -241,6 +241,7 @@ static void read_and_dump(int fd)
 static void copy_to_file(int inFd, int outFd) {
     char buf[4096];
     int len;
+    long total = 0;
 
     D("copy_to_file(%d -> %d)\n", inFd, outFd);
     for (;;) {
@@ -254,7 +255,9 @@ static void copy_to_file(int inFd, int outFd) {
             break;
         }
         adb_write(outFd, buf, len);
+        total += len;
     }
+    D("copy_to_file() finished after %lu bytes\n", total);
 }
 
 static void *stdin_read_thread(void *x)
@@ -568,12 +571,25 @@ static int backup(int argc, char** argv) {
     char buf[4096];
     const char* filename = "./backup.tar";
     int fd, outFd;
+    int i, j;
 
-    if (!strcmp("-f", argv[1])) {
-        if (argc < 3) return usage();
-        filename = argv[2];
-        argc -= 2;
-        argv += 2;
+    /* bare "adb backup" is not a valid command */
+    if (argc < 2) return usage();
+
+    /* find, extract, and use any -f argument */
+    for (i = 1; i < argc; i++) {
+        if (!strcmp("-f", argv[i])) {
+            if (i == argc-1) {
+                fprintf(stderr, "adb: -f passed with no filename\n");
+                return usage();
+            }
+            filename = argv[i+1];
+            for (j = i+2; j <= argc; ) {
+                argv[i++] = argv[j++];
+            }
+            argc -= 2;
+            argv[argc] = NULL;
+        }
     }
 
     outFd = adb_open_mode(filename, O_WRONLY | O_CREAT | O_TRUNC, 0640);
