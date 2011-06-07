@@ -24,7 +24,6 @@ int unwind_backtrace_with_ptrace_x86(int tfd, pid_t pid, mapinfo *map,
 
 //ebp==0, it indicates that the stack is poped to the bottom or there is no stack at all.
     while (ebp) {
-        _LOG(tfd, !at_fault, "#0%d ",stack_level);
         mi = pc_to_mapinfo(map, eip, &rel_pc);
 
         /* See if we can determine what symbol this stack frame resides in */
@@ -32,9 +31,11 @@ int unwind_backtrace_with_ptrace_x86(int tfd, pid_t pid, mapinfo *map,
             sym = symbol_table_lookup(mi->symbols, rel_pc);
         }
         if (sym) {
-            _LOG(tfd, !at_fault, "    eip: %08x  %s (%s)\n", eip, mi ? mi->name : "", sym->name);
+            _LOG(tfd, !at_fault, "    #%02d  eip: %08x  %s (%s)\n",
+                 stack_level, eip, mi ? mi->name : "", sym->name);
         } else {
-            _LOG(tfd, !at_fault, "    eip: %08x  %s\n", eip, mi ? mi->name : "");
+            _LOG(tfd, !at_fault, "    #%02d  eip: %08x  %s\n",
+                 stack_level, eip, mi ? mi->name : "");
         }
 
         stack_level++;
@@ -49,7 +50,6 @@ int unwind_backtrace_with_ptrace_x86(int tfd, pid_t pid, mapinfo *map,
     if (ebp)
         _LOG(tfd, !at_fault, "stack: \n");
     while (ebp) {
-        _LOG(tfd, !at_fault, "#0%d \n",stack_level);
         stack_ptr = cur_sp;
         while((int)(ebp - stack_ptr) >= 0) {
             stack_content = ptrace(PTRACE_PEEKTEXT, pid, (void*)stack_ptr, NULL);
@@ -60,10 +60,11 @@ int unwind_backtrace_with_ptrace_x86(int tfd, pid_t pid, mapinfo *map,
                 sym = symbol_table_lookup(mi->symbols, rel_pc);
             }
             if (sym) {
-                _LOG(tfd, !at_fault, "    %08x  %08x  %s (%s)\n",
-                    stack_ptr, stack_content, mi ? mi->name : "", sym->name);
+                _LOG(tfd, !at_fault, "    #%02d  %08x  %08x  %s (%s)\n",
+                     stack_level, stack_ptr, stack_content, mi ? mi->name : "", sym->name);
             } else {
-                _LOG(tfd, !at_fault, "    %08x  %08x  %s\n", stack_ptr, stack_content, mi ? mi->name : "");
+                _LOG(tfd, !at_fault, "    #%02d  %08x  %08x  %s\n",
+                     stack_level, stack_ptr, stack_content, mi ? mi->name : "");
             }
 
             stack_ptr = stack_ptr + 4;
