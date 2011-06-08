@@ -527,7 +527,23 @@ int do_sysclktz(int nargs, char **args)
 
 int do_write(int nargs, char **args)
 {
-    return write_file(args[1], args[2]);
+    char *path = args[1];
+    char *value = args[2];
+    if (value[0] == '$') {
+        /* Write the value of a system property if value starts with '$' */
+        value++;
+        if (value[0] != '$') {
+            value = property_get(value);
+            if (!value) {
+                ERROR("property %s has no value for writing to %s\n", value, path);
+                return -EINVAL;
+            }
+        } /* else fall through to support double '$' prefix for writing
+           * string literals that start with '$'
+           */
+    }
+
+    return write_file(path, value);
 }
 
 int do_copy(int nargs, char **args)
