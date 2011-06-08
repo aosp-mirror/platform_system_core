@@ -226,11 +226,6 @@ int do_insmod(int nargs, char **args)
     return do_insmod_inner(nargs, args, size);
 }
 
-int do_import(int nargs, char **args)
-{
-    return init_parse_config_file(args[1]);
-}
-
 int do_mkdir(int nargs, char **args)
 {
     mode_t mode = 0755;

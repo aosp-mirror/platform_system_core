@@ -179,6 +179,14 @@ void parse_new_section(struct parse_state *state, int kw,
             return;
         }
         break;
+    case K_import:
+        if (nargs != 2) {
+            ERROR("single argument needed for import\n");
+        } else {
+            int ret = init_parse_config_file(args[1]);
+            if (ret)
+                ERROR("could not import file %s\n", args[1]);
+        }
     }
     state->parse_line = parse_line_no_op;
 }
