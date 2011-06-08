@@ -347,7 +347,8 @@ void queue_property_triggers(const char *name, const char *value)
 
             if (!strncmp(name, test, name_length) &&
                     test[name_length] == '=' &&
-                    !strcmp(test + name_length + 1, value)) {
+                    (!strcmp(test + name_length + 1, value) ||
+                     !strcmp(test + name_length + 1, "*"))) {
                 action_add_queue_tail(act);
             }
         }
@@ -377,7 +378,8 @@ void queue_all_property_triggers()
 
                     /* does the property exist, and match the trigger value? */
                     value = property_get(prop_name);
-                    if (value && !strcmp(equals + 1, value)) {
+                    if (value && (!strcmp(equals + 1, value) ||
+                                  !strcmp(equals + 1, "*"))) {
                         action_add_queue_tail(act);
                     }
                 }
