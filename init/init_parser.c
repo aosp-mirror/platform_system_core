@@ -179,6 +179,14 @@ void parse_new_section(struct parse_state *state, int kw,
             return;
         }
         break;
+    case K_import:
+        if (nargs != 2) {
+            ERROR("single argument needed for import\n");
+        } else {
+            int ret = init_parse_config_file(args[1]);
+            if (ret)
+                ERROR("could not import file %s\n", args[1]);
+        }
     }
     state->parse_line = parse_line_no_op;
 }
@@ -347,7 +355,8 @@ void queue_property_triggers(const char *name, const char *value)
 
             if (!strncmp(name, test, name_length) &&
                     test[name_length] == '=' &&
-                    !strcmp(test + name_length + 1, value)) {
+                    (!strcmp(test + name_length + 1, value) ||
+                     !strcmp(test + name_length + 1, "*"))) {
                 action_add_queue_tail(act);
             }
         }
@@ -377,7 +386,8 @@ void queue_all_property_triggers()
 
                     /* does the property exist, and match the trigger value? */
                     value = property_get(prop_name);
-                    if (value && !strcmp(equals + 1, value)) {
+                    if (value && (!strcmp(equals + 1, value) ||
+                                  !strcmp(equals + 1, "*"))) {
                         action_add_queue_tail(act);
                     }
                 }
