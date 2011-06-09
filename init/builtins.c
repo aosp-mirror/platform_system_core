@@ -440,7 +440,24 @@ int do_setkey(int nargs, char **args)
 
 int do_setprop(int nargs, char **args)
 {
-    property_set(args[1], args[2]);
+    const char *name = args[1];
+    const char *value = args[2];
+
+    if (value[0] == '$') {
+        /* Use the value of a system property if value starts with '$' */
+        value++;
+        if (value[0] != '$') {
+            value = property_get(value);
+            if (!value) {
+                ERROR("property %s has no value for assigning to %s\n", value, name);
+                return -EINVAL;
+            }
+        } /* else fall through to support double '$' prefix for setting properties
+           * to string literals that start with '$'
+           */
+    }
+
+    property_set(name, value);
     return 0;
 }
 
@@ -522,8 +539,8 @@ int do_sysclktz(int nargs, char **args)
 
 int do_write(int nargs, char **args)
 {
-    char *path = args[1];
-    char *value = args[2];
+    const char *path = args[1];
+    const char *value = args[2];
     if (value[0] == '$') {
         /* Write the value of a system property if value starts with '$' */
         value++;
