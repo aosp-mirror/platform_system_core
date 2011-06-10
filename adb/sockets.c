@@ -288,6 +288,7 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
                     if(errno == EAGAIN) return;
                     if(errno == EINTR) continue;
                 }
+                D(" closing after write because r=%d and errno is %d\n", r, errno);
                 s->close(s);
                 return;
             }
@@ -303,6 +304,7 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
             ** we can now destroy it.
             */
         if (s->closing) {
+            D(" closing because 'closing' is set after write\n");
             s->close(s);
             return;
         }
@@ -372,6 +374,7 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
         }
         /* Don't allow a forced eof if data is still there */
         if((s->fde.force_eof && !r) || is_eof) {
+            D(" closing because is_eof=%d r=%d s->fde.force_eof=%d\n", is_eof, r, s->fde.force_eof);
             s->close(s);
         }
     }

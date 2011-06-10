@@ -239,18 +239,23 @@ static void read_and_dump(int fd)
 }
 
 static void copy_to_file(int inFd, int outFd) {
-    char buf[4096];
+    const size_t BUFSIZE = 32 * 1024;
+    char* buf = (char*) malloc(BUFSIZE);
     int len;
     long total = 0;
 
     D("copy_to_file(%d -> %d)\n", inFd, outFd);
     for (;;) {
-        len = adb_read(inFd, buf, sizeof(buf));
+        len = adb_read(inFd, buf, BUFSIZE);
         if (len == 0) {
+            D("copy_to_file() : read 0 bytes; exiting\n");
             break;
         }
         if (len < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR) {
+                D("copy_to_file() : EINTR, retrying\n");
+                continue;
+            }
             D("copy_to_file() : error %d\n", errno);
             break;
         }
@@ -258,6 +263,7 @@ static void copy_to_file(int inFd, int outFd) {
         total += len;
     }
     D("copy_to_file() finished after %lu bytes\n", total);
+    free(buf);
 }
 
 static void *stdin_read_thread(void *x)

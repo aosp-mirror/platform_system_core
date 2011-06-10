@@ -22,6 +22,23 @@
 #define TRACE_TAG  TRACE_ADB
 #include "adb.h"
 
+// socketpair but do *not* mark as close_on_exec
+static int backup_socketpair(int sv[2]) {
+    int rc = unix_socketpair( AF_UNIX, SOCK_STREAM, 0, sv );
+    if (rc < 0)
+        return -1;
+
+    return 0;
+}
+
+static void* backup_child_waiter(void* pid_cookie) {
+    int status;
+
+    waitpid((pid_t) pid_cookie, &status, 0);
+    D("harvested backup/restore child, status=%d\n", status);
+    return NULL;
+}
+
 /* returns the data socket passing the backup data here for forwarding */
 int backup_service(BackupOperation op, char* args) {
     pid_t pid;
@@ -42,11 +59,14 @@ int backup_service(BackupOperation op, char* args) {
 
     // set up the pipe from the subprocess to here
     // parent will read s[0]; child will write s[1]
-    if (adb_socketpair(s)) {
+    if (backup_socketpair(s)) {
         D("can't create backup/restore socketpair\n");
         fprintf(stderr, "unable to create backup/restore socketpair\n");
         return -1;
     }
+
+    D("Backup/restore socket pair: (send=%d, receive=%d)\n", s[1], s[0]);
+    close_on_exec(s[0]);    // only the side we hold on to
 
     // spin off the child process to run the backup command
     pid = fork();
@@ -61,12 +81,14 @@ int backup_service(BackupOperation op, char* args) {
 
     // Great, we're off and running.
     if (pid == 0) {
+        // child -- actually run the backup here
         char* p;
         int argc;
+        char portnum[16];
         char** bu_args;
 
-        // child -- actually run the backup here
-        argc = 2; // room for the basic 'bu' argv[0] and '[operation]' argv[1]
+        // fixed args:  [0] is 'bu', [1] is the port number, [2] is the 'operation' string
+        argc = 3;
         for (p = (char*)args; p && *p; ) {
             argc++;
             while (*p && *p != ':') p++;
@@ -74,9 +96,13 @@ int backup_service(BackupOperation op, char* args) {
         }
 
         bu_args = (char**) alloca(argc*sizeof(char*) + 1);
-        bu_args[0] = "bu";
-        bu_args[1] = operation;
-        argc = 2;   // run through again to build the argv array
+
+        // run through again to build the argv array
+        argc = 0;
+        bu_args[argc++] = "bu";
+        snprintf(portnum, sizeof(portnum), "%d", s[1]);
+        bu_args[argc++] = portnum;
+        bu_args[argc++] = operation;
         for (p = (char*)args; p && *p; ) {
             bu_args[argc++] = p;
             while (*p && *p != ':') p++;
@@ -90,7 +116,6 @@ int backup_service(BackupOperation op, char* args) {
         // Close the half of the socket that we don't care about, route 'bu's console
         // to the output socket, and off we go
         adb_close(s[0]);
-        dup2(s[1], socketnum);
 
         // off we go
         execvp("/system/bin/bu", (char * const *)bu_args);
@@ -98,8 +123,18 @@ int backup_service(BackupOperation op, char* args) {
         fprintf(stderr, "Unable to exec 'bu', bailing\n");
         exit(-1);
     } else {
+        adb_thread_t t;
+
         // parent, i.e. adbd -- close the sending half of the socket
+        D("fork() returned pid %d\n", pid);
         adb_close(s[1]);
+
+        // spin a thread to harvest the child process
+        if (adb_thread_create(&t, backup_child_waiter, (void*)pid)) {
+            adb_close(s[0]);
+            D("Unable to create child harvester\n");
+            return -1;
+        }
     }
 
     // we'll be reading from s[0] as the data is sent by the child process
