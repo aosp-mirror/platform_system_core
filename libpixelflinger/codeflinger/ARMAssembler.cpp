@@ -334,7 +334,7 @@ void ARMAssembler::LDM(int cc, int dir,
 
 void ARMAssembler::STM(int cc, int dir,
         int Rn, int W, uint32_t reg_list)
-{   //                    FA EA FD ED      IB IA DB DA
+{   //                    ED FD EA FA      IB IA DB DA
     const uint8_t P[8] = { 0, 1, 0, 1,      1, 0, 1, 0 };
     const uint8_t U[8] = { 0, 0, 1, 1,      1, 1, 0, 0 };
     *mPC++ = (cc<<28) | (4<<25) | (uint32_t(P[dir])<<24) |
@@ -432,6 +432,16 @@ void ARMAssembler::SMLAW(int cc, int y,
 void ARMAssembler::UXTB16(int cc, int Rd, int Rm, int rotate)
 {
     *mPC++ = (cc<<28) | 0x6CF0070 | (Rd<<12) | ((rotate >> 3) << 10) | Rm;
+}
+#if 0
+#pragma mark -
+#pragma mark Bit manipulation (ARMv7+ only)...
+#endif
+
+// Bit manipulation (ARMv7+ only)...
+void ARMAssembler::UBFX(int cc, int Rd, int Rn, int lsb, int width)
+{
+    *mPC++ = (cc<<28) | 0x7E00000 | ((width-1)<<16) | (Rd<<12) | (lsb<<7) | 0x50 | Rn;
 }
 
 }; // namespace android
