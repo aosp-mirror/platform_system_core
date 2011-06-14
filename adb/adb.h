@@ -86,6 +86,12 @@ struct asocket {
         */
     int    closing;
 
+        /* flag: kick the transport when the socket is closed.
+        ** This is needed to handle commands that cause the
+        ** remote daemon to terminate, like "adb root"
+        */
+    int    kick_on_close;
+
         /* the asocket we are connected to
         */
 
