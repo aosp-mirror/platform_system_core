@@ -195,7 +195,7 @@ static void local_socket_close(asocket *s)
     if (s->kick_on_close && s->transport) {
         kick_transport(s->transport);
         /* delay to work around a race condition */
-        sleep(1);
+        adb_sleep_ms(1000);
     }
 #endif
     adb_mutex_lock(&socket_list_lock);
