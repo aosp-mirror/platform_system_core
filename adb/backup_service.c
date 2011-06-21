@@ -22,6 +22,11 @@
 #define TRACE_TAG  TRACE_ADB
 #include "adb.h"
 
+typedef struct {
+    pid_t pid;
+    int fd;
+} backup_harvest_params;
+
 // socketpair but do *not* mark as close_on_exec
 static int backup_socketpair(int sv[2]) {
     int rc = unix_socketpair( AF_UNIX, SOCK_STREAM, 0, sv );
@@ -31,11 +36,14 @@ static int backup_socketpair(int sv[2]) {
     return 0;
 }
 
-static void* backup_child_waiter(void* pid_cookie) {
+// harvest the child process then close the read end of the socketpair
+static void* backup_child_waiter(void* args) {
     int status;
+    backup_harvest_params* params = (backup_harvest_params*) args;
 
-    waitpid((pid_t) pid_cookie, &status, 0);
-    D("harvested backup/restore child, status=%d\n", status);
+    waitpid(params->pid, &status, 0);
+    adb_close(params->fd);
+    free(params);
     return NULL;
 }
 
@@ -124,14 +132,19 @@ int backup_service(BackupOperation op, char* args) {
         exit(-1);
     } else {
         adb_thread_t t;
+        backup_harvest_params* params;
 
         // parent, i.e. adbd -- close the sending half of the socket
         D("fork() returned pid %d\n", pid);
         adb_close(s[1]);
 
         // spin a thread to harvest the child process
-        if (adb_thread_create(&t, backup_child_waiter, (void*)pid)) {
+        params = (backup_harvest_params*) malloc(sizeof(backup_harvest_params));
+        params->pid = pid;
+        params->fd = s[0];
+        if (adb_thread_create(&t, backup_child_waiter, params)) {
             adb_close(s[0]);
+            free(params);
             D("Unable to create child harvester\n");
             return -1;
         }
