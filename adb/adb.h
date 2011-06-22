@@ -35,7 +35,7 @@
 #define ADB_VERSION_MAJOR 1         // Used for help/version information
 #define ADB_VERSION_MINOR 0         // Used for help/version information
 
-#define ADB_SERVER_VERSION    28    // Increment this when we want to force users to start a new adb server
+#define ADB_SERVER_VERSION    29    // Increment this when we want to force users to start a new adb server
 
 typedef struct amessage amessage;
 typedef struct apacket apacket;
@@ -85,12 +85,6 @@ struct asocket {
         ** but packets are still queued for delivery
         */
     int    closing;
-
-        /* flag: kick the transport when the socket is closed.
-        ** This is needed to handle commands that cause the
-        ** remote daemon to terminate, like "adb root"
-        */
-    int    kick_on_close;
 
         /* the asocket we are connected to
         */

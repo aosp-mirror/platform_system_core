@@ -190,14 +190,6 @@ static void local_socket_ready(asocket *s)
 
 static void local_socket_close(asocket *s)
 {
-#if ADB_HOST
-    /* to special case commands that cause the remote daemon to terminate */
-    if (s->kick_on_close && s->transport) {
-        kick_transport(s->transport);
-        /* delay to work around a race condition */
-        adb_sleep_ms(1000);
-    }
-#endif
     adb_mutex_lock(&socket_list_lock);
     local_socket_close_locked(s);
     adb_mutex_unlock(&socket_list_lock);
@@ -534,14 +526,6 @@ void connect_to_remote(asocket *s, const char *destination)
     D("Connect_to_remote call RS(%d) fd=%d\n", s->id, s->fd);
     apacket *p = get_apacket();
     int len = strlen(destination) + 1;
-
-#if ADB_HOST
-    /* special case commands that cause the remote daemon to terminate */
-    if (!strcmp(destination, "root:")) {
-        D("connect_to_remote setting kick_on_close for %s\n", destination);
-        s->kick_on_close = 1;
-    }
-#endif
 
     if(len > (MAX_PAYLOAD-1)) {
         fatal("destination oversized");
