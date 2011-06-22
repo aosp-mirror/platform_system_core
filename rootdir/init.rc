@@ -375,6 +375,18 @@ service adbd /sbin/adbd
 on property:ro.kernel.qemu=1
     start adbd
 
+# This property trigger has added to imitiate the previous behavior of "adb root".
+# The adb gadget driver used to reset the USB bus when the adbd daemon exited,
+# and the host side adb relied on this behavior to force it to reconnect with the
+# new adbd instance after init relaunches it. So now we force the USB bus to reset
+# here when adbd sets the service.adb.root property to 1.  We also restart adbd here
+# rather than waiting for init to notice its death and restarting it so the timing
+# of USB resetting and adb restarting more closely matches the previous behavior.
+on property:service.adb.root=1
+    write /sys/class/android_usb/android0/enable 0
+    restart adbd
+    write /sys/class/android_usb/android0/enable 1
+
 service servicemanager /system/bin/servicemanager
     class core
     user system
