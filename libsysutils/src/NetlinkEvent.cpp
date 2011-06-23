@@ -19,7 +19,6 @@
 #define LOG_TAG "NetlinkEvent"
 #include <cutils/log.h>
 
-#include <sysutils/NetlinkListener.h>
 #include <sysutils/NetlinkEvent.h>
 
 #include <sys/types.h>
@@ -69,7 +68,7 @@ void NetlinkEvent::dump() {
  */
 bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
     size_t sz = size;
-    struct nlmsghdr *nh = (struct nlmsghdr *) buffer;
+    const struct nlmsghdr *nh = (struct nlmsghdr *) buffer;
 
     while (NLMSG_OK(nh, sz) && (nh->nlmsg_type != NLMSG_DONE)) {
         if (nh->nlmsg_type == RTM_NEWLINK) {
@@ -134,8 +133,8 @@ has_prefix(const char* str, const char* end, const char* prefix, size_t prefixle
  * netlink socket.
  */
 bool NetlinkEvent::parseAsciiNetlinkMessage(char *buffer, int size) {
-    char *s = buffer;
-    char *end;
+    const char *s = buffer;
+    const char *end;
     int param_idx = 0;
     int i;
     int first = 1;
@@ -181,11 +180,11 @@ bool NetlinkEvent::parseAsciiNetlinkMessage(char *buffer, int size) {
 }
 
 bool NetlinkEvent::decode(char *buffer, int size, int format) {
-  if (format == NetlinkListener::NETLINK_FORMAT_BINARY) {
-    return parseBinaryNetlinkMessage(buffer, size);
-  } else {
-    return parseAsciiNetlinkMessage(buffer, size);
-  }
+    if (format == NetlinkListener::NETLINK_FORMAT_BINARY) {
+        return parseBinaryNetlinkMessage(buffer, size);
+    } else {
+        return parseAsciiNetlinkMessage(buffer, size);
+    }
 }
 
 const char *NetlinkEvent::findParam(const char *paramName) {

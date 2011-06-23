@@ -28,11 +28,12 @@ public:
     static const int NETLINK_FORMAT_ASCII = 0;
     static const int NETLINK_FORMAT_BINARY = 1;
 
-    NetlinkListener(int socket, int format);
+    NetlinkListener(int socket, int format = NETLINK_FORMAT_ASCII);
     virtual ~NetlinkListener() {}
 
 protected:
     virtual bool onDataAvailable(SocketClient *cli);
     virtual void onEvent(NetlinkEvent *evt) = 0;
 };
+
 #endif

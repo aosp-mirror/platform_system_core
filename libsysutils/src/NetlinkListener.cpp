@@ -24,12 +24,10 @@
 #include <cutils/log.h>
 #include <cutils/uevent.h>
 
-#include <sysutils/NetlinkListener.h>
 #include <sysutils/NetlinkEvent.h>
 
 NetlinkListener::NetlinkListener(int socket, int format) :
-                            SocketListener(socket, false) {
-    mFormat = format;
+                            SocketListener(socket, false), mFormat(format) {
 }
 
 bool NetlinkListener::onDataAvailable(SocketClient *cli)
@@ -44,9 +42,7 @@ bool NetlinkListener::onDataAvailable(SocketClient *cli)
     }
 
     NetlinkEvent *evt = new NetlinkEvent();
-    int err = evt->decode(mBuffer, count, mFormat);
-
-    if (!err) {
+    if (!evt->decode(mBuffer, count, mFormat)) {
         SLOGE("Error decoding NetlinkEvent");
     } else {
         onEvent(evt);
