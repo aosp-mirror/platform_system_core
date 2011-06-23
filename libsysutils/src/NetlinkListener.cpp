@@ -26,6 +26,17 @@
 
 #include <sysutils/NetlinkEvent.h>
 
+#if 1
+/* temporary version until we can get Motorola to update their
+ * ril.so.  Their prebuilt ril.so is using this private class
+ * so changing the NetlinkListener() constructor breaks their ril.
+ */
+NetlinkListener::NetlinkListener(int socket) :
+                            SocketListener(socket, false) {
+    mFormat = NETLINK_FORMAT_ASCII;
+}
+#endif
+
 NetlinkListener::NetlinkListener(int socket, int format) :
                             SocketListener(socket, false), mFormat(format) {
 }
