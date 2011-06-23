@@ -369,6 +369,10 @@ static inline bool audio_is_valid_format(uint32_t format)
 {
     switch (format & AUDIO_FORMAT_MAIN_MASK) {
     case AUDIO_FORMAT_PCM:
+        if (format != AUDIO_FORMAT_PCM_16_BIT &&
+                format != AUDIO_FORMAT_PCM_8_BIT) {
+            return false;
+        }
     case AUDIO_FORMAT_MP3:
     case AUDIO_FORMAT_AMR_NB:
     case AUDIO_FORMAT_AMR_WB:
@@ -384,15 +388,29 @@ static inline bool audio_is_valid_format(uint32_t format)
 
 static inline bool audio_is_linear_pcm(uint32_t format)
 {
-    switch (format) {
-    case AUDIO_FORMAT_PCM_16_BIT:
-    case AUDIO_FORMAT_PCM_8_BIT:
-        return true;
-    default:
-        return false;
-    }
+    return ((format & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_PCM);
 }
 
+static inline size_t audio_bytes_per_sample(uint32_t format)
+{
+    size_t size = 0;
+
+    switch (format) {
+        case AUDIO_FORMAT_PCM_32_BIT:
+        case AUDIO_FORMAT_PCM_8_24_BIT:
+            size = sizeof(int32_t);
+            break;
+        case AUDIO_FORMAT_PCM_16_BIT:
+            size = sizeof(int16_t);
+            break;
+        case AUDIO_FORMAT_PCM_8_BIT:
+            size = sizeof(uint8_t);
+            break;
+        default:
+            break;
+    }
+    return size;
+}
 
 __END_DECLS
 
