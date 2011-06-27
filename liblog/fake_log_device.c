@@ -20,7 +20,6 @@
  * simulator, messages are printed to stderr.
  */
 #include "cutils/logd.h"
-#include "fake_log_device.h"
 
 #include <stdlib.h>
 #include <string.h>

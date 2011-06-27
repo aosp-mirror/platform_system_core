@@ -29,10 +29,6 @@
 #include <cutils/logd.h>
 #include <cutils/log.h>
 
-#if FAKE_LOG_DEVICE
-#include "fake_log_device.h"
-#endif
-
 #define LOG_BUF_SIZE	1024
 
 #if FAKE_LOG_DEVICE
