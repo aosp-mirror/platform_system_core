@@ -16,6 +16,8 @@
 #ifndef _NETLINKEVENT_H
 #define _NETLINKEVENT_H
 
+#include <sysutils/NetlinkListener.h>
+
 #define NL_PARAMS_MAX 32
 
 class NetlinkEvent {
@@ -30,17 +32,23 @@ public:
     const static int NlActionAdd;
     const static int NlActionRemove;
     const static int NlActionChange;
+    const static int NlActionLinkDown;
+    const static int NlActionLinkUp;
 
     NetlinkEvent();
     virtual ~NetlinkEvent();
 
-    bool decode(char *buffer, int size);
+    bool decode(char *buffer, int size, int format = NetlinkListener::NETLINK_FORMAT_ASCII);
     const char *findParam(const char *paramName);
 
     const char *getSubsystem() { return mSubsystem; }
     int getAction() { return mAction; }
 
     void dump();
+
+ protected:
+    bool parseBinaryNetlinkMessage(char *buffer, int size);
+    bool parseAsciiNetlinkMessage(char *buffer, int size);
 };
 
 #endif
