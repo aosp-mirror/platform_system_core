@@ -82,7 +82,7 @@ static int print_possible_events(int fd, int print_flags)
     const char *bit_label;
 
     printf("  events:\n");
-    for(i = 0; i <= EV_MAX; i++) {
+    for(i = EV_KEY; i <= EV_MAX; i++) { // skip EV_SYN since we cannot query its available codes
         int count = 0;
         while(1) {
             res = ioctl(fd, EVIOCGBIT(i, bits_size), bits);
@@ -97,10 +97,6 @@ static int print_possible_events(int fd, int print_flags)
         }
         res2 = 0;
         switch(i) {
-            case EV_SYN:
-                label = "SYN";
-                bit_labels = syn_labels;
-                break;
             case EV_KEY:
                 res2 = ioctl(fd, EVIOCGKEY(res), bits + bits_size);
                 label = "KEY";
@@ -252,7 +248,7 @@ static void print_event(int type, int code, int value, int print_flags)
         if (value_label)
             printf(" %-20.20s", value_label);
         else
-            printf(" %08x            ", code);
+            printf(" %08x            ", value);
     } else {
         printf("%04x %04x %08x", type, code, value);
     }
