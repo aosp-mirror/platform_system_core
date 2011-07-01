@@ -441,8 +441,10 @@ static inline int native_window_set_buffers_transform(
  * All buffers queued after this call will be associated with the timestamp
  * parameter specified. If the timestamp is set to NATIVE_WINDOW_TIMESTAMP_AUTO
  * (the default), timestamps will be generated automatically when queueBuffer is
- * called. The timestamp is measured in nanoseconds, and must be monotonically
- * increasing.
+ * called. The timestamp is measured in nanoseconds, and is normally monotonically
+ * increasing. The timestamp should be unaffected by time-of-day adjustments,
+ * and for a camera should be strictly monotonic but for a media player may be
+ * reset when the position is set.
  */
 static inline int native_window_set_buffers_timestamp(
         struct ANativeWindow* window,
