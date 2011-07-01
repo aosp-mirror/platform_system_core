@@ -374,11 +374,11 @@ void handle_property_set_fd()
         return;
     }
 
-    r = recv(s, &msg, sizeof(msg), 0);
+    r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), 0));
     if(r != sizeof(prop_msg)) {
+        ERROR("sys_prop: mis-match msg size recieved: %d expected: %d errno: %d\n",
+              r, sizeof(prop_msg), errno);
         close(s);
-        ERROR("sys_prop: mis-match msg size recieved: %d expected: %d\n",
-              r, sizeof(prop_msg));
         return;
     }
 
