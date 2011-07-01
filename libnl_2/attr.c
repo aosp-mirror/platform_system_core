@@ -154,10 +154,12 @@ int nla_put(struct nl_msg *msg, int attrtype, int datalen, const void *data)
 
 	/* Reserve space and init nla header */
 	nla = nla_reserve(msg, attrtype, datalen);
-	if (nla)
+	if (nla) {
 		memcpy(nla_data(nla), data, datalen);
+		return 0;
+	}
 
-	return -errno;
+	return -EINVAL;
 
 }
 
