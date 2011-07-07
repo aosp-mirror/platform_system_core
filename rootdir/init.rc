@@ -188,6 +188,8 @@ on post-fs-data
 
     chown system system /sys/class/android_usb/android0/f_mass_storage/lun/file
     chmod 0660 /sys/class/android_usb/android0/f_mass_storage/lun/file
+    chown system system /sys/class/android_usb/android0/f_rndis/ethaddr
+    chmod 0660 /sys/class/android_usb/android0/f_rndis/ethaddr
 
 on boot
 # basic network init
