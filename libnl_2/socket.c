@@ -33,12 +33,14 @@ int nl_socket_add_membership(struct nl_sock *sk, int group)
 /* Allocate new netlink socket. */
 struct nl_sock *nl_socket_alloc(void)
 {
-	struct nl_sock *sk = (struct nl_sock *) malloc(sizeof(struct nl_sock));
+	struct nl_sock *sk;
 	struct timeval tv;
 	struct nl_cb *cb;
 
+	sk = (struct nl_sock *) malloc(sizeof(struct nl_sock));
 	if (!sk)
 		goto fail;
+	memset(sk, 0, sizeof(*sk));
 
 	/* Get current time */
 
@@ -49,7 +51,7 @@ struct nl_sock *nl_socket_alloc(void)
 
 	/* Create local socket */
 	sk->s_local.nl_family = AF_NETLINK;
-	sk->s_local.nl_pid = getpid();
+	sk->s_local.nl_pid = 0; /* Kernel fills in pid */
 	sk->s_local.nl_groups = 0; /* No groups */
 
 	/* Create peer socket */
@@ -76,14 +78,13 @@ struct nl_sock *nl_socket_alloc_cb(struct nl_cb *cb)
 {
 	struct nl_sock *sk = nl_socket_alloc();
 	if (!sk)
-		goto fail;
+		return NULL;
 
 	sk->s_cb = cb;
 	nl_cb_get(cb);
 
 	return sk;
-fail:
-	return NULL;
+
 }
 
 /* Free a netlink socket. */
