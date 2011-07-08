@@ -34,7 +34,7 @@ extern int ifc_down(const char *name);
 extern int ifc_enable(const char *ifname);
 extern int ifc_disable(const char *ifname);
 
-extern int ifc_reset_connections(const char *ifname);
+extern int ifc_reset_connections(const char *ifname, const int reset_mask);
 
 extern int ifc_get_addr(const char *name, in_addr_t *addr);
 extern int ifc_set_addr(const char *name, in_addr_t addr);
