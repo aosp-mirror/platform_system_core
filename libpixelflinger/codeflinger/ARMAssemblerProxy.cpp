@@ -199,5 +199,9 @@ void ARMAssemblerProxy::UXTB16(int cc, int Rd, int Rm, int rotate) {
     mTarget->UXTB16(cc, Rd, Rm, rotate);
 }
 
+void ARMAssemblerProxy::UBFX(int cc, int Rd, int Rn, int lsb, int width) {
+    mTarget->UBFX(cc, Rd, Rn, lsb, width);
+}
+
 }; // namespace android
 

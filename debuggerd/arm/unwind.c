@@ -37,6 +37,8 @@
 #include <unwind.h>
 #include "utility.h"
 
+#include "symbol_table.h"
+
 typedef struct _ZSt9type_info type_info; /* This names C++ type_info type */
 
 void __attribute__((weak)) __cxa_call_unexpected(_Unwind_Control_Block *ucbp);
@@ -393,6 +395,7 @@ static _Unwind_Reason_Code log_function(_Unwind_Context *context, pid_t pid,
     phase2_vrs *vrs = (phase2_vrs*) context;
     const mapinfo *mi;
     bool only_in_tombstone = !at_fault;
+    const struct symbol* sym = 0;
 
     if (stack_level < STACK_CONTENT_DEPTH) {
         sp_list[stack_level] = vrs->core.r[R_SP];
@@ -427,7 +430,7 @@ static _Unwind_Reason_Code log_function(_Unwind_Context *context, pid_t pid,
         if (pc & 1) {
             _uw prev_word;
             pc = (pc & ~1);
-            prev_word = get_remote_word(pid, (void *) pc-4);
+            prev_word = get_remote_word(pid, (char *) pc-4);
             // Long offset 
             if ((prev_word & 0xf0000000) == 0xf0000000 && 
                 (prev_word & 0x0000e000) == 0x0000e000) {
@@ -448,12 +451,22 @@ static _Unwind_Reason_Code log_function(_Unwind_Context *context, pid_t pid,
      * 1MB boundaries, and the library may be larger than 1MB. So for .so 
      * addresses we print the relative offset in back trace.
      */
-    rel_pc = pc;
     mi = pc_to_mapinfo(map, pc, &rel_pc);
 
-    _LOG(tfd, only_in_tombstone, 
-         "         #%02d  pc %08x  %s\n", stack_level, rel_pc, 
-         mi ? mi->name : "");
+    /* See if we can determine what symbol this stack frame resides in */
+    if (mi != 0 && mi->symbols != 0) {
+        sym = symbol_table_lookup(mi->symbols, rel_pc);
+    }
+
+    if (sym) {
+        _LOG(tfd, only_in_tombstone,
+            "         #%02d  pc %08x  %s (%s)\n", stack_level, rel_pc,
+            mi ? mi->name : "", sym->name);
+    } else {
+        _LOG(tfd, only_in_tombstone,
+            "         #%02d  pc %08x  %s\n", stack_level, rel_pc,
+            mi ? mi->name : "");
+    }
 
     return _URC_NO_REASON;
 }

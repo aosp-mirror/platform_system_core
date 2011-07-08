@@ -21,6 +21,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#include "symbol_table.h"
+
 #ifndef PT_ARM_EXIDX
 #define PT_ARM_EXIDX    0x70000001      /* .ARM.exidx segment */
 #endif
@@ -33,6 +35,7 @@ typedef struct mapinfo {
     unsigned end;
     unsigned exidx_start;
     unsigned exidx_end;
+    struct symbol_table *symbols;
     char name[];
 } mapinfo;
 
@@ -52,5 +55,12 @@ const char *map_to_name(mapinfo *mi, unsigned pc, const char* def);
 
 /* Log information onto the tombstone */
 extern void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...);
+
+#define LOG(fmt...) _LOG(-1, 0, fmt)
+#if 0
+#define XLOG(fmt...) _LOG(-1, 0, fmt)
+#else
+#define XLOG(fmt...) do {} while(0)
+#endif
 
 #endif

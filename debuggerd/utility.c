@@ -38,14 +38,14 @@ void get_remote_struct(int pid, void *src, void *dst, size_t size)
     unsigned int i;
 
     for (i = 0; i+4 <= size; i+=4) {
-        *(int *)(dst+i) = ptrace(PTRACE_PEEKTEXT, pid, src+i, NULL);
+        *(int *)((char *)dst+i) = ptrace(PTRACE_PEEKTEXT, pid, (char *)src+i, NULL);
     }
 
     if (i < size) {
         int val;
 
         assert((size - i) < 4);
-        val = ptrace(PTRACE_PEEKTEXT, pid, src+i, NULL);
+        val = ptrace(PTRACE_PEEKTEXT, pid, (char *)src+i, NULL);
         while (i < size) {
             ((unsigned char *)dst)[i] = val & 0xff;
             i++;
@@ -69,11 +69,12 @@ const char *map_to_name(mapinfo *mi, unsigned pc, const char* def)
 /* Find the containing map info for the pc */
 const mapinfo *pc_to_mapinfo(mapinfo *mi, unsigned pc, unsigned *rel_pc)
 {
+    *rel_pc = pc;
     while(mi) {
         if((pc >= mi->start) && (pc < mi->end)){
             // Only calculate the relative offset for shared libraries
             if (strstr(mi->name, ".so")) {
-                *rel_pc = pc - mi->start;
+                *rel_pc -= mi->start;
             }
             return mi;
         }
