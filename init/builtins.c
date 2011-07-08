@@ -229,6 +229,7 @@ int do_insmod(int nargs, char **args)
 int do_mkdir(int nargs, char **args)
 {
     mode_t mode = 0755;
+    int ret;
 
     /* mkdir <path> [mode] [owner] [group] */
 
@@ -236,7 +237,12 @@ int do_mkdir(int nargs, char **args)
         mode = strtoul(args[2], 0, 8);
     }
 
-    if (mkdir(args[1], mode)) {
+    ret = mkdir(args[1], mode);
+    /* chmod in case the directory already exists */
+    if (ret == -1 && errno == EEXIST) {
+        ret = chmod(args[1], mode);
+    }
+    if (ret == -1) {
         return -errno;
     }
 
