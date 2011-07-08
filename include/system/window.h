@@ -165,6 +165,8 @@ enum {
     NATIVE_WINDOW_SET_BUFFERS_GEOMETRY,
     NATIVE_WINDOW_SET_BUFFERS_TRANSFORM,
     NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP,
+    NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS,
+    NATIVE_WINDOW_SET_BUFFERS_FORMAT,
 };
 
 /* parameter for NATIVE_WINDOW_[DIS]CONNECT */
@@ -306,6 +308,8 @@ struct ANativeWindow
      *     NATIVE_WINDOW_SET_BUFFERS_GEOMETRY
      *     NATIVE_WINDOW_SET_BUFFERS_TRANSFORM
      *     NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP
+     *     NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS
+     *     NATIVE_WINDOW_SET_BUFFERS_FORMAT
      *
      */
 
@@ -404,16 +408,12 @@ static inline int native_window_set_buffer_count(
 
 /*
  * native_window_set_buffers_geometry(..., int w, int h, int format)
- * All buffers dequeued after this call will have the geometry specified.
- * In particular, all buffers will have a fixed-size, independent form the
- * native-window size. They will be appropriately scaled to the window-size
- * upon composition.
+ * All buffers dequeued after this call will have the dimensions and format
+ * specified.  A successful call to this function has the same effect as calling
+ * native_window_set_buffers_size and native_window_set_buffers_format.
  *
- * If all parameters are 0, the normal behavior is restored. That is,
- * dequeued buffers following this call will be sized to the window's size.
- *
- * Calling this function will reset the window crop to a NULL value, which
- * disables cropping of the buffers.
+ * XXX: This function is deprecated.  The native_window_set_buffers_dimensions
+ * and native_window_set_buffers_format functions should be used instead.
  */
 static inline int native_window_set_buffers_geometry(
         struct ANativeWindow* window,
@@ -421,6 +421,40 @@ static inline int native_window_set_buffers_geometry(
 {
     return window->perform(window, NATIVE_WINDOW_SET_BUFFERS_GEOMETRY,
             w, h, format);
+}
+
+/*
+ * native_window_set_buffers_dimensions(..., int w, int h)
+ * All buffers dequeued after this call will have the dimensions specified.
+ * In particular, all buffers will have a fixed-size, independent form the
+ * native-window size. They will be appropriately scaled to the window-size
+ * upon window composition.
+ *
+ * If w and h are 0, the normal behavior is restored. That is, dequeued buffers
+ * following this call will be sized to match the window's size.
+ *
+ * Calling this function will reset the window crop to a NULL value, which
+ * disables cropping of the buffers.
+ */
+static inline int native_window_set_buffers_dimensions(
+        struct ANativeWindow* window,
+        int w, int h)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS,
+            w, h);
+}
+
+/*
+ * native_window_set_buffers_format(..., int format)
+ * All buffers dequeued after this call will have the format specified.
+ *
+ * If the specified format is 0, the default buffer format will be used.
+ */
+static inline int native_window_set_buffers_format(
+        struct ANativeWindow* window,
+        int format)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_BUFFERS_FORMAT, format);
 }
 
 /*
