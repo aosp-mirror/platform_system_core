@@ -48,7 +48,8 @@ commonSources := \
 	threads.c \
 	sched_policy.c \
 	iosched_policy.c \
-	str_parms.c
+	str_parms.c \
+	qtaguid.c
 
 commonHostSources := \
         ashmem-host.c
