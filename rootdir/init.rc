@@ -115,11 +115,7 @@ on post-fs
     chmod 0220 /proc/sysrq-trigger
 
     # create the lost+found directories, so as to enforce our permissions
-    mkdir /cache/lost+found 0770
-
-    # double check the perms, in case lost+found already exists, and set owner
-    chown root root /cache/lost+found
-    chmod 0770 /cache/lost+found
+    mkdir /cache/lost+found 0770 root root
 
 on post-fs-data
     # We chown/chmod /data again so because mount is run as root + defaults
@@ -129,10 +125,7 @@ on post-fs-data
     # Create dump dir and collect dumps.
     # Do this before we mount cache so eventually we can use cache for
     # storing dumps on platforms which do not have a dedicated dump partition.
-   
-    mkdir /data/dontpanic
-    chown root log /data/dontpanic
-    chmod 0750 /data/dontpanic
+    mkdir /data/dontpanic 0750 root log
 
     # Collect apanic data, free resources and re-arm trigger
     copy /proc/apanic_console /data/dontpanic/apanic_console
@@ -156,7 +149,6 @@ on post-fs-data
     mkdir /data/misc/vpn/profiles 0770 system system
     # give system access to wpa_supplicant.conf for backup and restore
     mkdir /data/misc/wifi 0770 wifi wifi
-    chmod 0770 /data/misc/wifi
     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
     mkdir /data/local 0771 shell shell
     mkdir /data/local/tmp 0771 shell shell
@@ -165,17 +157,11 @@ on post-fs-data
     mkdir /data/app 0771 system system
     mkdir /data/property 0700 root root
 
-    # create dalvik-cache and double-check the perms
+    # create dalvik-cache, so as to enforce our permissions
     mkdir /data/dalvik-cache 0771 system system
-    chown system system /data/dalvik-cache
-    chmod 0771 /data/dalvik-cache
 
     # create the lost+found directories, so as to enforce our permissions
-    mkdir /data/lost+found 0770
-
-    # double check the perms, in case lost+found already exists, and set owner
-    chown root root /data/lost+found
-    chmod 0770 /data/lost+found
+    mkdir /data/lost+found 0770 root root
 
     # create directory for DRM plug-ins
     mkdir /data/drm 0774 drm drm
