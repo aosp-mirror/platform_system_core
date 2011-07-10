@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #ifdef __cplusplus
 extern "C" {
