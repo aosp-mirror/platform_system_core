@@ -144,9 +144,8 @@ on post-fs-data
     mkdir /data/misc/bluetooth 0770 system system
     mkdir /data/misc/keystore 0700 keystore keystore
     mkdir /data/misc/keychain 0771 system system
-    mkdir /data/misc/vpn 0770 system system
+    mkdir /data/misc/vpn 0770 system vpn
     mkdir /data/misc/systemkeys 0700 system system
-    mkdir /data/misc/vpn/profiles 0770 system system
     # give system access to wpa_supplicant.conf for backup and restore
     mkdir /data/misc/wifi 0770 wifi wifi
     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
@@ -462,8 +461,8 @@ service flash_recovery /system/etc/install-recovery.sh
 service racoon /system/bin/racoon
     class main
     socket racoon stream 600 system system
-    # racoon will setuid to vpn after getting necessary resources.
-    group net_admin
+    # IKE uses UDP port 500. Racoon will setuid to vpn after binding the port.
+    group vpn net_admin
     disabled
     oneshot
 

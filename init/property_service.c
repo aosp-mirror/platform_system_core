@@ -75,8 +75,6 @@ struct {
     { "wlan.",            AID_SYSTEM,   0 },
     { "dhcp.",            AID_SYSTEM,   0 },
     { "dhcp.",            AID_DHCP,     0 },
-    { "vpn.",             AID_SYSTEM,   0 },
-    { "vpn.",             AID_VPN,      0 },
     { "debug.",           AID_SHELL,    0 },
     { "log.",             AID_SHELL,    0 },
     { "service.adb.root", AID_SHELL,    0 },
