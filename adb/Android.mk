@@ -95,11 +95,7 @@ endif
 # adbd device daemon
 # =========================================================
 
-# build adbd in all non-simulator builds
-BUILD_ADBD := false
-ifneq ($(TARGET_SIMULATOR),true)
-    BUILD_ADBD := true
-endif
+BUILD_ADBD := true
 
 # build adbd for the Linux simulator build
 # so we can use it to test the adb USB gadget driver on x86
@@ -143,21 +139,14 @@ LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 
-ifeq ($(TARGET_SIMULATOR),true)
-  LOCAL_STATIC_LIBRARIES := libcutils
-  LOCAL_LDLIBS += -lpthread
-  include $(BUILD_HOST_EXECUTABLE)
-else
-  LOCAL_STATIC_LIBRARIES := libcutils libc
-  include $(BUILD_EXECUTABLE)
-endif
+LOCAL_STATIC_LIBRARIES := libcutils libc
+include $(BUILD_EXECUTABLE)
 
 endif
 
 
 # adb host tool for device-as-host
 # =========================================================
-ifneq ($(TARGET_SIMULATOR),true)
 ifneq ($(SDK_ONLY),true)
 include $(CLEAR_VARS)
 
@@ -195,5 +184,4 @@ LOCAL_MODULE := adb
 LOCAL_STATIC_LIBRARIES := libzipfile libunz libcutils
 
 include $(BUILD_EXECUTABLE)
-endif
 endif

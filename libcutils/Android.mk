@@ -93,20 +93,6 @@ LOCAL_CFLAGS += $(hostSmpFlag)
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
-ifeq ($(TARGET_SIMULATOR),true)
-
-# Shared library for simulator
-# ========================================================
-include $(CLEAR_VARS)
-LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) memory.c dlmalloc_stubs.c
-LOCAL_LDLIBS := -lpthread
-LOCAL_SHARED_LIBRARIES := liblog
-LOCAL_CFLAGS += $(targetSmpFlag)
-include $(BUILD_SHARED_LIBRARY)
-
-else #!sim
-
 # Shared and static library for target
 # ========================================================
 include $(CLEAR_VARS)
@@ -147,5 +133,3 @@ LOCAL_SRC_FILES := str_parms.c hashmap.c memory.c
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_MODULE_TAGS := optional
 include $(BUILD_EXECUTABLE)
-
-endif #!sim

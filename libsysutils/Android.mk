@@ -1,10 +1,4 @@
 ifneq ($(BUILD_TINY_ANDROID),true)
-BUILD_LIBSYSUTILS := false
-ifneq ($(TARGET_SIMULATOR),true)
-    BUILD_LIBSYSUTILS := true
-endif
-
-ifeq ($(BUILD_LIBSYSUTILS),true)
 
 LOCAL_PATH:= $(call my-dir)
 
@@ -27,11 +21,6 @@ LOCAL_CFLAGS :=
 
 LOCAL_SHARED_LIBRARIES := libcutils
 
-ifeq ($(TARGET_SIMULATOR),true)
-  LOCAL_LDLIBS += -lpthread
-endif
-
 include $(BUILD_SHARED_LIBRARY)
 
-endif
 endif

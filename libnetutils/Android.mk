@@ -11,13 +11,6 @@ LOCAL_SRC_FILES:= \
 LOCAL_SHARED_LIBRARIES := \
 	libcutils
 
-# need "-lrt" on Linux simulator to pick up clock_gettime
-ifeq ($(TARGET_SIMULATOR),true)
-	ifeq ($(HOST_OS),linux)
-		LOCAL_LDLIBS += -lrt -lpthread
-	endif
-endif
-
 LOCAL_MODULE:= libnetutils
 
 include $(BUILD_SHARED_LIBRARY)
