@@ -91,6 +91,12 @@
 #define VENDOR_ID_FUNAI         0x0F1C
 // Gigabyte's USB Vendor ID
 #define VENDOR_ID_GIGABYTE      0x0414
+// IRiver's USB Vendor ID
+#define VENDOR_ID_IRIVER        0x2420
+// Compal's USB Vendor ID
+#define VENDOR_ID_COMPAL        0x1219
+// T & A Mobile Phones' USB Vendor ID
+#define VENDOR_ID_T_AND_A       0x1BBB
 
 
 /** built-in vendor list */
@@ -123,6 +129,9 @@ int builtInVendorIds[] = {
     VENDOR_ID_TI,
     VENDOR_ID_FUNAI,
     VENDOR_ID_GIGABYTE,
+    VENDOR_ID_IRIVER,
+    VENDOR_ID_COMPAL,
+    VENDOR_ID_T_AND_A,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
