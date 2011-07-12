@@ -171,7 +171,23 @@ enum {
 
 /* parameter for NATIVE_WINDOW_[DIS]CONNECT */
 enum {
-    NATIVE_WINDOW_API_EGL = 1
+    /* Buffers will be queued by EGL via eglSwapBuffers after being filled using
+     * OpenGL ES.
+     */
+    NATIVE_WINDOW_API_EGL = 1,
+
+    /* Buffers will be queued after being filled using the CPU
+     */
+    NATIVE_WINDOW_API_CPU = 2,
+
+    /* Buffers will be queued by Stagefright after being filled by a video
+     * decoder.  The video decoder can either be a software or hardware decoder.
+     */
+    NATIVE_WINDOW_API_MEDIA = 3,
+
+    /* Buffers will be queued by the the camera HAL.
+     */
+    NATIVE_WINDOW_API_CAMERA = 4,
 };
 
 /* parameter for NATIVE_WINDOW_SET_BUFFERS_TRANSFORM */
