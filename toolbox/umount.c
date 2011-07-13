@@ -7,10 +7,24 @@
 #include <unistd.h>
 #include <linux/loop.h>
 
-// FIXME - only one loop mount is supported at a time
-#define LOOP_DEVICE "/dev/block/loop0"
+#define LOOPDEV_MAXLEN 64
+#define LOOP_MAJOR 7
 
-static int is_loop_mount(const char* path)
+static int is_loop(char *dev)
+{
+    struct stat st;
+    int ret = 0;
+
+    if (stat(dev, &st) == 0) {
+        if (S_ISBLK(st.st_mode) && (major(st.st_rdev) == LOOP_MAJOR)) {
+            ret = 1;
+        }
+    }
+
+    return ret;
+}
+
+static int is_loop_mount(const char* path, char *loopdev)
 {
     FILE* f;
     int count;
@@ -29,7 +43,8 @@ static int is_loop_mount(const char* path)
     do {
         count = fscanf(f, "%255s %255s %255s\n", device, mount_path, rest);
         if (count == 3) {
-            if (strcmp(LOOP_DEVICE, device) == 0 && strcmp(path, mount_path) == 0) {
+            if (is_loop(device) && strcmp(path, mount_path) == 0) {
+                strlcpy(loopdev, device, LOOPDEV_MAXLEN);
                 result = 1;
                 break;
             }
@@ -43,13 +58,14 @@ static int is_loop_mount(const char* path)
 int umount_main(int argc, char *argv[])
 {
     int loop, loop_fd;
-    
+    char loopdev[LOOPDEV_MAXLEN];
+
     if(argc != 2) {
         fprintf(stderr,"umount <path>\n");
         return 1;
     }
 
-    loop = is_loop_mount(argv[1]);
+    loop = is_loop_mount(argv[1], loopdev);
     if(umount(argv[1])){
         fprintf(stderr,"failed.\n");
         return 1;
@@ -57,8 +73,8 @@ int umount_main(int argc, char *argv[])
 
     if (loop) {
         // free the loop device
-        loop_fd = open(LOOP_DEVICE, O_RDONLY);
-        if (loop_fd < -1) {
+        loop_fd = open(loopdev, O_RDONLY);
+        if (loop_fd < 0) {
             perror("open loop device failed");
             return 1;
         }
