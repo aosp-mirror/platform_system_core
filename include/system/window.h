@@ -108,8 +108,8 @@ typedef ANativeWindowBuffer_t android_native_buffer_t;
 /* attributes queriable with query() */
 enum {
     NATIVE_WINDOW_WIDTH     = 0,
-    NATIVE_WINDOW_HEIGHT,
-    NATIVE_WINDOW_FORMAT,
+    NATIVE_WINDOW_HEIGHT    = 1,
+    NATIVE_WINDOW_FORMAT    = 2,
 
     /* The minimum number of buffers that must remain un-dequeued after a buffer
      * has been queued.  This value applies only if set_buffer_count was used to
@@ -129,7 +129,7 @@ enum {
      * 4. Cancel M buffers
      * 5. Queue, dequeue, queue, dequeue, ad infinitum
      */
-    NATIVE_WINDOW_MIN_UNDEQUEUED_BUFFERS,
+    NATIVE_WINDOW_MIN_UNDEQUEUED_BUFFERS = 3,
 
     /* Check whether queueBuffer operations on the ANativeWindow send the buffer
      * to the window compositor.  The query sets the returned 'value' argument
@@ -144,7 +144,7 @@ enum {
      * mechanism (e.g. the GRALLOC_USAGE_PROTECTED flag) should be used in
      * conjunction with this query.
      */
-    NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER,
+    NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER = 4,
 
     /* Get the concrete type of a ANativeWindow.  See below for the list of
      * possible return values.
@@ -152,21 +152,22 @@ enum {
      * This query should not be used outside the Android framework and will
      * likely be removed in the near future.
      */
-    NATIVE_WINDOW_CONCRETE_TYPE,
+    NATIVE_WINDOW_CONCRETE_TYPE = 5,
 };
 
 /* valid operations for the (*perform)() hook */
 enum {
-    NATIVE_WINDOW_SET_USAGE  = 0,
-    NATIVE_WINDOW_CONNECT,
-    NATIVE_WINDOW_DISCONNECT,
-    NATIVE_WINDOW_SET_CROP,
-    NATIVE_WINDOW_SET_BUFFER_COUNT,
-    NATIVE_WINDOW_SET_BUFFERS_GEOMETRY,
-    NATIVE_WINDOW_SET_BUFFERS_TRANSFORM,
-    NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP,
-    NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS,
-    NATIVE_WINDOW_SET_BUFFERS_FORMAT,
+    NATIVE_WINDOW_SET_USAGE                 =  0,
+    NATIVE_WINDOW_CONNECT                   =  1,
+    NATIVE_WINDOW_DISCONNECT                =  2,
+    NATIVE_WINDOW_SET_CROP                  =  3,
+    NATIVE_WINDOW_SET_BUFFER_COUNT          =  4,
+    NATIVE_WINDOW_SET_BUFFERS_GEOMETRY      =  5,   /* deprecated */
+    NATIVE_WINDOW_SET_BUFFERS_TRANSFORM     =  6,
+    NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP     =  7,
+    NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS    =  8,
+    NATIVE_WINDOW_SET_BUFFERS_FORMAT        =  9,
+    NATIVE_WINDOW_SET_SCALING_MODE          = 10
 };
 
 /* parameter for NATIVE_WINDOW_[DIS]CONNECT */
@@ -204,11 +205,21 @@ enum {
     NATIVE_WINDOW_TRANSFORM_ROT_270 = HAL_TRANSFORM_ROT_270,
 };
 
+/* parameter for NATIVE_WINDOW_SET_SCALING_MODE */
+enum {
+    /* the window content is not updated (frozen) until a buffer of
+     * the window size is received (enqueued)
+     */
+    NATIVE_WINDOW_SCALING_MODE_FREEZE           = 0,
+    /* the buffer is scaled in both dimensions to match the window size */
+    NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW  = 1,
+};
+
 /* values returned by the NATIVE_WINDOW_CONCRETE_TYPE query */
 enum {
-    NATIVE_WINDOW_FRAMEBUFFER,                  // FramebufferNativeWindow
-    NATIVE_WINDOW_SURFACE,                      // Surface
-    NATIVE_WINDOW_SURFACE_TEXTURE_CLIENT,       // SurfaceTextureClient
+    NATIVE_WINDOW_FRAMEBUFFER               = 0, /* FramebufferNativeWindow */
+    NATIVE_WINDOW_SURFACE                   = 1, /* Surface */
+    NATIVE_WINDOW_SURFACE_TEXTURE_CLIENT    = 2, /* SurfaceTextureClient */
 };
 
 /* parameter for NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP
@@ -230,8 +241,8 @@ struct ANativeWindow
         memset(common.reserved, 0, sizeof(common.reserved));
     }
 
-    // Implement the methods that sp<ANativeWindow> expects so that it
-    // can be used to automatically refcount ANativeWindow's.
+    /* Implement the methods that sp<ANativeWindow> expects so that it
+       can be used to automatically refcount ANativeWindow's. */
     void incStrong(const void* id) const {
         common.incRef(const_cast<android_native_base_t*>(&common));
     }
@@ -321,11 +332,12 @@ struct ANativeWindow
      *     NATIVE_WINDOW_DISCONNECT
      *     NATIVE_WINDOW_SET_CROP
      *     NATIVE_WINDOW_SET_BUFFER_COUNT
-     *     NATIVE_WINDOW_SET_BUFFERS_GEOMETRY
+     *     NATIVE_WINDOW_SET_BUFFERS_GEOMETRY  (deprecated)
      *     NATIVE_WINDOW_SET_BUFFERS_TRANSFORM
      *     NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP
      *     NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS
      *     NATIVE_WINDOW_SET_BUFFERS_FORMAT
+     *     NATIVE_WINDOW_SET_SCALING_MODE
      *
      */
 
@@ -443,8 +455,8 @@ static inline int native_window_set_buffers_geometry(
  * native_window_set_buffers_dimensions(..., int w, int h)
  * All buffers dequeued after this call will have the dimensions specified.
  * In particular, all buffers will have a fixed-size, independent form the
- * native-window size. They will be appropriately scaled to the window-size
- * upon window composition.
+ * native-window size. They will be scaled according to the scaling mode
+ * (see native_window_set_scaling_mode) upon window composition.
  *
  * If w and h are 0, the normal behavior is restored. That is, dequeued buffers
  * following this call will be sized to match the window's size.
@@ -502,6 +514,19 @@ static inline int native_window_set_buffers_timestamp(
 {
     return window->perform(window, NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP,
             timestamp);
+}
+
+/*
+ * native_window_set_scaling_mode(..., int mode)
+ * All buffers queued after this call will be associated with the scaling mode
+ * specified.
+ */
+static inline int native_window_set_scaling_mode(
+        struct ANativeWindow* window,
+        int mode)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_SCALING_MODE,
+            mode);
 }
 
 __END_DECLS
