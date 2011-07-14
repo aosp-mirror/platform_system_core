@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <linux/loop.h>
+#include <errno.h>
 
 #define LOOPDEV_MAXLEN 64
 #define LOOP_MAJOR 7
@@ -36,7 +37,7 @@ static int is_loop_mount(const char* path, char *loopdev)
     
     f = fopen("/proc/mounts", "r");
     if (!f) {
-        fprintf(stdout, "could not open /proc/mounts\n");
+        fprintf(stdout, "could not open /proc/mounts: %s\n", strerror(errno));
         return -1;
     }
 
@@ -66,8 +67,8 @@ int umount_main(int argc, char *argv[])
     }
 
     loop = is_loop_mount(argv[1], loopdev);
-    if(umount(argv[1])){
-        fprintf(stderr,"failed.\n");
+    if (umount(argv[1])) {
+        fprintf(stderr, "failed: %s\n", strerror(errno));
         return 1;
     }
 
@@ -75,11 +76,11 @@ int umount_main(int argc, char *argv[])
         // free the loop device
         loop_fd = open(loopdev, O_RDONLY);
         if (loop_fd < 0) {
-            perror("open loop device failed");
+            fprintf(stderr, "open loop device failed: %s\n", strerror(errno));
             return 1;
         }
         if (ioctl(loop_fd, LOOP_CLR_FD, 0) < 0) {
-            perror("ioctl LOOP_CLR_FD failed");
+            fprintf(stderr, "ioctl LOOP_CLR_FD failed: %s\n", strerror(errno));
             return 1;
         }
 
