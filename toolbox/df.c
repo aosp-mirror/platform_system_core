@@ -9,16 +9,22 @@ static int ok = EXIT_SUCCESS;
 static void printsize(long long n)
 {
     char unit = 'K';
-    n /= 1024;
-    if (n > 1024) {
+    long long t;
+
+    n *= 10;
+
+    if (n > 1024*1024*10) {
         n /= 1024;
         unit = 'M';
     }
-    if (n > 1024) {
+
+    if (n > 1024*1024*10) {
         n /= 1024;
         unit = 'G';
     }
-    printf("%4lld%c", n, unit);
+
+    t = (n + 512) / 1024;
+    printf("%4lld.%1lld%c", t/10, t%10, unit);
 }
 
 static void df(char *s, int always) {
@@ -41,7 +47,7 @@ static void df(char *s, int always) {
 }
 
 int df_main(int argc, char *argv[]) {
-    printf("Filesystem             Size   Used   Free   Blksize\n");
+    printf("Filesystem               Size     Used     Free   Blksize\n");
     if (argc == 1) {
         char s[2000];
         FILE *f = fopen("/proc/mounts", "r");
