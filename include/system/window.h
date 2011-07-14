@@ -167,7 +167,9 @@ enum {
     NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP     =  7,
     NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS    =  8,
     NATIVE_WINDOW_SET_BUFFERS_FORMAT        =  9,
-    NATIVE_WINDOW_SET_SCALING_MODE          = 10
+    NATIVE_WINDOW_SET_SCALING_MODE          = 10,
+    NATIVE_WINDOW_LOCK                      = 11,   /* private */
+    NATIVE_WINDOW_UNLOCK_AND_POST           = 12,   /* private */
 };
 
 /* parameter for NATIVE_WINDOW_[DIS]CONNECT */
@@ -338,6 +340,8 @@ struct ANativeWindow
      *     NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS
      *     NATIVE_WINDOW_SET_BUFFERS_FORMAT
      *     NATIVE_WINDOW_SET_SCALING_MODE
+     *     NATIVE_WINDOW_LOCK                   (private)
+     *     NATIVE_WINDOW_UNLOCK_AND_POST        (private)
      *
      */
 
