@@ -24,6 +24,7 @@
 #define LIST_DIRECTORIES    (1 << 3)
 #define LIST_SIZE           (1 << 4)
 #define LIST_LONG_NUMERIC   (1 << 5)
+#define LIST_CLASSIFY       (1 << 6)
 
 // fwd
 static int listpath(const char *name, int flags);
@@ -133,7 +134,27 @@ static int listfile_size(const char *path, const char *filename, int flags)
     }
 
     /* blocks are 512 bytes, we want output to be KB */
-    printf("%lld %s\n", s.st_blocks / 2, filename);
+    if ((flags & LIST_SIZE) != 0) {
+        printf("%lld ", s.st_blocks / 2);
+    }
+
+    if ((flags & LIST_CLASSIFY) != 0) {
+        char filetype = mode2kind(s.st_mode);
+        if (filetype != 'l') {
+            printf("%c ", filetype);
+        } else {
+            struct stat link_dest;
+            if (!stat(path, &link_dest)) {
+                printf("l%c ", mode2kind(link_dest.st_mode));
+            } else {
+                fprintf(stderr, "stat '%s' failed: %s\n", path, strerror(errno));
+                printf("l? ");
+            }
+        }
+    }
+
+    printf("%s\n", filename);
+
     return 0;
 }
 
@@ -215,7 +236,7 @@ static int listfile_long(const char *path, int flags)
 
 static int listfile(const char *dirname, const char *filename, int flags)
 {
-    if ((flags & (LIST_LONG | LIST_SIZE)) == 0) {
+    if ((flags & (LIST_LONG | LIST_SIZE | LIST_CLASSIFY)) == 0) {
         printf("%s\n", filename);
         return 0;
     }
@@ -366,6 +387,7 @@ int ls_main(int argc, char **argv)
                     case 'R': flags |= LIST_RECURSIVE; break;
                     case 'd': flags |= LIST_DIRECTORIES; break;
                     case 'a': flags |= LIST_ALL; break;
+                    case 'F': flags |= LIST_CLASSIFY; break;
                     default:
                         fprintf(stderr, "%s: Unknown option '-%c'. Aborting.\n", "ls", arg[0]);
                         exit(1);
