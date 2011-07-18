@@ -97,6 +97,8 @@
 #define VENDOR_ID_COMPAL        0x1219
 // T & A Mobile Phones' USB Vendor ID
 #define VENDOR_ID_T_AND_A       0x1BBB
+// Lenovo's USB Vendor ID
+#define VENDOR_ID_LENOVO        0x2006
 
 
 /** built-in vendor list */
@@ -132,6 +134,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_IRIVER,
     VENDOR_ID_COMPAL,
     VENDOR_ID_T_AND_A,
+    VENDOR_ID_LENOVO,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
