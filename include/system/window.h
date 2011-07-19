@@ -153,6 +153,64 @@ enum {
      * likely be removed in the near future.
      */
     NATIVE_WINDOW_CONCRETE_TYPE = 5,
+
+
+    /*
+     * Default width and height of the ANativeWindow, these are the dimensions
+     * of the window irrespective of the NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS
+     * call.
+     */
+    NATIVE_WINDOW_DEFAULT_WIDTH = 6,
+    NATIVE_WINDOW_DEFAULT_HEIGHT = 7,
+
+    /*
+     * transformation that will most-likely be applied to buffers. This is only
+     * a hint, the actual transformation applied might be different.
+     *
+     * INTENDED USE:
+     *
+     * The transform hint can be used by a producer, for instance the GLES
+     * driver, to pre-rotate the rendering such that the final transformation
+     * in the composer is identity. This can be very useful when used in
+     * conjunction with the h/w composer HAL, in situations where it
+     * cannot handle arbitrary rotations.
+     *
+     * 1. Before dequeuing a buffer, the GL driver (or any other ANW client)
+     *    queries the ANW for NATIVE_WINDOW_TRANSFORM_HINT.
+     *
+     * 2. The GL driver overrides the width and height of the ANW to
+     *    account for NATIVE_WINDOW_TRANSFORM_HINT. This is done by querying
+     *    NATIVE_WINDOW_DEFAULT_{WIDTH | HEIGHT}, swapping the dimensions
+     *    according to NATIVE_WINDOW_TRANSFORM_HINT and calling
+     *    native_window_set_buffers_dimensions().
+     *
+     * 3. The GL driver dequeues a buffer of the new pre-rotated size.
+     *
+     * 4. The GL driver renders to the buffer such that the image is
+     *    already transformed, that is applying NATIVE_WINDOW_TRANSFORM_HINT
+     *    to the rendering.
+     *
+     * 5. The GL driver calls native_window_set_transform to apply
+     *    inverse transformation to the buffer it just rendered.
+     *    In order to do this, the GL driver needs
+     *    to calculate the inverse of NATIVE_WINDOW_TRANSFORM_HINT, this is
+     *    done easily:
+     *
+     *        int hintTransform, inverseTransform;
+     *        query(..., NATIVE_WINDOW_TRANSFORM_HINT, &hintTransform);
+     *        inverseTransform = hintTransform;
+     *        if (hintTransform & HAL_TRANSFORM_ROT_90)
+     *            inverseTransform ^= HAL_TRANSFORM_ROT_180;
+     *
+     *
+     * 6. The GL driver queues the pre-transformed buffer.
+     *
+     * 7. The composer combines the buffer transform with the display
+     *    transform.  If the buffer transform happens to cancel out the
+     *    display transform then no rotation is needed.
+     *
+     */
+    NATIVE_WINDOW_TRANSFORM_HINT = 8,
 };
 
 /* valid operations for the (*perform)() hook */
