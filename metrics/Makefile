@@ -39,16 +39,17 @@ TESTLIB_OBJS = \
 
 TESTCOUNTER_LIBS = -lgmock -lgtest -lbase -lrt -lpthread -lglib-2.0
 DAEMON_LDFLAGS = $(LDFLAGS) $(LDCONFIG) -lrt -lbase -lpthread -lgflags \
-		 -lglib-2.0 -lrootdev
+		 -lglib-2.0 -lrootdev -lpolicy
 TESTDAEMON_LIBS = -lgmock -lgtest
-TESTLIB_LIBS = -lgtest -lbase -lrt -lpthread -lglib-2.0
+TESTLIB_LIBS = -lgtest -lgmock -lbase -lrt -lpthread -lglib-2.0
+POLICY_LIBS = -lpolicy
 
 all: $(LIB) $(SHAREDLIB) $(CLIENT) $(DAEMON)
 
 tests: $(COUNTER_TEST) $(DAEMON_TEST) $(LIB_TEST)
 
 $(CLIENT): $(CLIENT_OBJS) $(SHAREDLIB)
-	$(CXX) $(LDFLAGS) $^ -o $@
+	$(CXX) $(LDFLAGS) $(POLICY_LIBS) -lrt $^ -o $@
 
 $(COUNTER_TEST): $(TESTCOUNTER_OBJS)
 	$(CXX) -o $@ $^ $(TESTCOUNTER_LIBS)
@@ -63,10 +64,10 @@ $(LIB): $(LIB_OBJS)
 	$(AR) rcs $@ $^
 
 $(SHAREDLIB): $(LIB_OBJS)
-	$(CXX) $(LDFLAGS) -shared $^ -o $@
+	$(CXX) $(LDFLAGS) $(POLICY_LIBS) -shared $^ -o $@
 
 $(LIB_TEST): $(TESTLIB_OBJS) $(SHAREDLIB)
-	$(CXX) -o $@ $^ $(LDFLAGS) $(TESTLIB_LIBS)
+	$(CXX) -o $@ $^ $(LDFLAGS) $(POLICY_LIBS) $(TESTLIB_LIBS)
 
 %.o: %.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
