@@ -13,7 +13,6 @@
 #include <cstring>
 
 #include "base/eintr_wrapper.h"  // HANDLE_EINTR macro, no libbase required.
-#include "policy/device_policy.h"
 
 #define READ_WRITE_ALL_FILE_FLAGS \
   (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
@@ -61,8 +60,7 @@ static int WriteFileDescriptor(const int fd, const char* data, int size) {
 
 MetricsLibrary::MetricsLibrary()
     : uma_events_file_(NULL),
-      consent_file_(kConsentFile),
-      policy_provider_(NULL) {}
+      consent_file_(kConsentFile) {}
 
 // We take buffer and buffer_size as parameters in order to simplify testing
 // of various alignments of the |device_name| with |buffer_size|.
@@ -132,21 +130,13 @@ bool MetricsLibrary::IsGuestMode() {
 }
 
 bool MetricsLibrary::AreMetricsEnabled() {
+  static struct stat stat_buffer;
   time_t this_check_time = time(NULL);
-  if (!policy_provider_.get())
-    policy_provider_.reset(new policy::PolicyProvider());
-  else
-    policy_provider_->Reload();
-
-  // We initialize with the default value which is false and will be preserved
-  // if the policy is not set.
-  bool enabled = false;
-  if (policy_provider_->device_policy_is_loaded())
-    policy_provider_->GetDevicePolicy().GetMetricsEnabled(&enabled);
 
   if (this_check_time != cached_enabled_time_) {
     cached_enabled_time_ = this_check_time;
-    if (enabled && !IsGuestMode())
+    if (stat(consent_file_, &stat_buffer) >= 0 &&
+        !IsGuestMode())
       cached_enabled_ = true;
     else
       cached_enabled_ = false;
@@ -292,8 +282,4 @@ bool MetricsLibrary::SendCrashToUMA(const char *crash_kind) {
 
   // Send the message.
   return SendMessageToChrome(message_length, message);
-}
-
-void MetricsLibrary::SetPolicyProvider(policy::PolicyProvider* provider) {
-  policy_provider_.reset(provider);
 }
