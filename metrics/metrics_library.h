@@ -8,7 +8,10 @@
 #include <sys/types.h>
 #include <string>
 
+#include <base/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
+
+#include "policy/libpolicy.h"
 
 class MetricsLibraryInterface {
  public:
@@ -122,6 +125,9 @@ class MetricsLibrary : public MetricsLibraryInterface {
   int32_t FormatChromeMessage(int32_t buffer_size, char* buffer,
                               const char* format, ...);
 
+  // This function is used by tests only to mock the device policies.
+  void SetPolicyProvider(policy::PolicyProvider* provider);
+
   // Time at which we last checked if metrics were enabled.
   static time_t cached_enabled_time_;
 
@@ -130,6 +136,8 @@ class MetricsLibrary : public MetricsLibraryInterface {
 
   const char* uma_events_file_;
   const char* consent_file_;
+
+  scoped_ptr<policy::PolicyProvider> policy_provider_;
 };
 
 #endif  // METRICS_LIBRARY_H_
