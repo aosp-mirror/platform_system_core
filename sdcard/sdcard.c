@@ -756,7 +756,7 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         h->fd = open(path, req->flags);
         if (h->fd < 0) {
             ERROR("ERROR\n");
-            fuse_status(fuse, hdr->unique, errno);
+            fuse_status(fuse, hdr->unique, -errno);
             free(h);
             return;
         }
@@ -778,7 +778,7 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         }
         res = pread64(h->fd, buffer, req->size, req->offset);
         if (res < 0) {
-            fuse_status(fuse, hdr->unique, errno);
+            fuse_status(fuse, hdr->unique, -errno);
             return;
         }
         fuse_reply(fuse, hdr->unique, buffer, res);
@@ -792,7 +792,7 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         TRACE("WRITE %p(%d) %u@%llu\n", h, h->fd, req->size, req->offset);
         res = pwrite64(h->fd, ((char*) data) + sizeof(*req), req->size, req->offset);
         if (res < 0) {
-            fuse_status(fuse, hdr->unique, errno);
+            fuse_status(fuse, hdr->unique, -errno);
             return;
         }
         out.size = res;
