@@ -165,6 +165,15 @@ typedef enum {
     AUDIO_CHANNEL_OUT_FRONT_LEFT_OF_CENTER  = 0x100,
     AUDIO_CHANNEL_OUT_FRONT_RIGHT_OF_CENTER = 0x200,
     AUDIO_CHANNEL_OUT_BACK_CENTER           = 0x400,
+    AUDIO_CHANNEL_OUT_SIDE_LEFT             = 0x800,
+    AUDIO_CHANNEL_OUT_SIDE_RIGHT            = 0x1000,
+    AUDIO_CHANNEL_OUT_TOP_CENTER            = 0x2000,
+    AUDIO_CHANNEL_OUT_TOP_FRONT_LEFT        = 0x4000,
+    AUDIO_CHANNEL_OUT_TOP_FRONT_CENTER      = 0x8000,
+    AUDIO_CHANNEL_OUT_TOP_FRONT_RIGHT       = 0x10000,
+    AUDIO_CHANNEL_OUT_TOP_BACK_LEFT         = 0x20000,
+    AUDIO_CHANNEL_OUT_TOP_BACK_CENTER       = 0x40000,
+    AUDIO_CHANNEL_OUT_TOP_BACK_RIGHT        = 0x80000,
 
     AUDIO_CHANNEL_OUT_MONO     = AUDIO_CHANNEL_OUT_FRONT_LEFT,
     AUDIO_CHANNEL_OUT_STEREO   = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
@@ -183,14 +192,15 @@ typedef enum {
                                   AUDIO_CHANNEL_OUT_LOW_FREQUENCY |
                                   AUDIO_CHANNEL_OUT_BACK_LEFT |
                                   AUDIO_CHANNEL_OUT_BACK_RIGHT),
+    // matches the correct AudioFormat.CHANNEL_OUT_7POINT1_SURROUND definition for 7.1
     AUDIO_CHANNEL_OUT_7POINT1  = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
                                   AUDIO_CHANNEL_OUT_FRONT_RIGHT |
                                   AUDIO_CHANNEL_OUT_FRONT_CENTER |
                                   AUDIO_CHANNEL_OUT_LOW_FREQUENCY |
                                   AUDIO_CHANNEL_OUT_BACK_LEFT |
                                   AUDIO_CHANNEL_OUT_BACK_RIGHT |
-                                  AUDIO_CHANNEL_OUT_FRONT_LEFT_OF_CENTER |
-                                  AUDIO_CHANNEL_OUT_FRONT_RIGHT_OF_CENTER),
+                                  AUDIO_CHANNEL_OUT_SIDE_LEFT |
+                                  AUDIO_CHANNEL_OUT_SIDE_RIGHT),
     AUDIO_CHANNEL_OUT_ALL      = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
                                   AUDIO_CHANNEL_OUT_FRONT_RIGHT |
                                   AUDIO_CHANNEL_OUT_FRONT_CENTER |
@@ -199,7 +209,16 @@ typedef enum {
                                   AUDIO_CHANNEL_OUT_BACK_RIGHT |
                                   AUDIO_CHANNEL_OUT_FRONT_LEFT_OF_CENTER |
                                   AUDIO_CHANNEL_OUT_FRONT_RIGHT_OF_CENTER |
-                                  AUDIO_CHANNEL_OUT_BACK_CENTER),
+                                  AUDIO_CHANNEL_OUT_BACK_CENTER|
+                                  AUDIO_CHANNEL_OUT_SIDE_LEFT|
+                                  AUDIO_CHANNEL_OUT_SIDE_RIGHT|
+                                  AUDIO_CHANNEL_OUT_TOP_CENTER|
+                                  AUDIO_CHANNEL_OUT_TOP_FRONT_LEFT|
+                                  AUDIO_CHANNEL_OUT_TOP_FRONT_CENTER|
+                                  AUDIO_CHANNEL_OUT_TOP_FRONT_RIGHT|
+                                  AUDIO_CHANNEL_OUT_TOP_BACK_LEFT|
+                                  AUDIO_CHANNEL_OUT_TOP_BACK_CENTER|
+                                  AUDIO_CHANNEL_OUT_TOP_BACK_RIGHT),
 
     /* input channels */
     AUDIO_CHANNEL_IN_LEFT            = 0x4,
