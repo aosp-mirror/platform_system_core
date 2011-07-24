@@ -25,8 +25,9 @@ enum {
     PRINT_VERSION           = 1U << 4,
     PRINT_POSSIBLE_EVENTS   = 1U << 5,
     PRINT_INPUT_PROPS       = 1U << 6,
+    PRINT_HID_DESCRIPTOR    = 1U << 7,
 
-    PRINT_ALL_INFO          = (1U << 7) - 1,
+    PRINT_ALL_INFO          = (1U << 8) - 1,
 
     PRINT_LABELS            = 1U << 16,
 };
@@ -254,6 +255,40 @@ static void print_event(int type, int code, int value, int print_flags)
     }
 }
 
+static void print_hid_descriptor(int bus, int vendor, int product)
+{
+    const char *dirname = "/sys/kernel/debug/hid";
+    char prefix[16];
+    DIR *dir;
+    struct dirent *de;
+    char filename[PATH_MAX];
+    FILE *file;
+    char line[2048];
+
+    snprintf(prefix, sizeof(prefix), "%04X:%04X:%04X.", bus, vendor, product);
+
+    dir = opendir(dirname);
+    if(dir == NULL)
+        return;
+    while((de = readdir(dir))) {
+        if (strstr(de->d_name, prefix) == de->d_name) {
+            snprintf(filename, sizeof(filename), "%s/%s/rdesc", dirname, de->d_name);
+
+            file = fopen(filename, "r");
+            if (file) {
+                printf("  HID descriptor: %s\n\n", de->d_name);
+                while (fgets(line, sizeof(line), file)) {
+                    fputs("    ", stdout);
+                    fputs(line, stdout);
+                }
+                fclose(file);
+                puts("");
+            }
+        }
+    }
+    closedir(dir);
+}
+
 static int open_device(const char *device, int print_flags)
 {
     int version;
@@ -334,6 +369,9 @@ static int open_device(const char *device, int print_flags)
 
     if(print_flags & PRINT_INPUT_PROPS) {
         print_input_props(fd);
+    }
+    if(print_flags & PRINT_HID_DESCRIPTOR) {
+        print_hid_descriptor(id.bustype, id.vendor, id.product);
     }
 
     ufds[nfds].fd = fd;
@@ -432,12 +470,13 @@ static int scan_dir(const char *dirname, int print_flags)
 
 static void usage(int argc, char *argv[])
 {
-    fprintf(stderr, "Usage: %s [-t] [-n] [-s switchmask] [-S] [-v [mask]] [-p] [-i] [-l] [-q] [-c count] [-r] [device]\n", argv[0]);
+    fprintf(stderr, "Usage: %s [-t] [-n] [-s switchmask] [-S] [-v [mask]] [-d] [-p] [-i] [-l] [-q] [-c count] [-r] [device]\n", argv[0]);
     fprintf(stderr, "    -t: show time stamps\n");
     fprintf(stderr, "    -n: don't print newlines\n");
     fprintf(stderr, "    -s: print switch states for given bits\n");
     fprintf(stderr, "    -S: print all switch states\n");
     fprintf(stderr, "    -v: verbosity mask (errs=1, dev=2, name=4, info=8, vers=16, pos. events=32, props=64)\n");
+    fprintf(stderr, "    -d: show HID descriptor, if available\n");
     fprintf(stderr, "    -p: show possible events (errs, dev, name, pos. events)\n");
     fprintf(stderr, "    -i: show all device info and possible events\n");
     fprintf(stderr, "    -l: label event types and names in plain text\n");
@@ -469,7 +508,7 @@ int getevent_main(int argc, char *argv[])
 
     opterr = 0;
     do {
-        c = getopt(argc, argv, "tns:Sv::pilqc:rh");
+        c = getopt(argc, argv, "tns:Sv::dpilqc:rh");
         if (c == EOF)
             break;
         switch (c) {
@@ -496,8 +535,12 @@ int getevent_main(int argc, char *argv[])
                 print_flags |= PRINT_DEVICE | PRINT_DEVICE_NAME | PRINT_DEVICE_INFO | PRINT_VERSION;
             print_flags_set = 1;
             break;
+        case 'd':
+            print_flags |= PRINT_HID_DESCRIPTOR;
+            break;
         case 'p':
-            print_flags |= PRINT_DEVICE_ERRORS | PRINT_DEVICE | PRINT_DEVICE_NAME | PRINT_POSSIBLE_EVENTS;
+            print_flags |= PRINT_DEVICE_ERRORS | PRINT_DEVICE
+                    | PRINT_DEVICE_NAME | PRINT_POSSIBLE_EVENTS | PRINT_INPUT_PROPS;
             print_flags_set = 1;
             if(dont_block == -1)
                 dont_block = 1;
