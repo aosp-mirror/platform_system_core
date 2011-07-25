@@ -23,8 +23,14 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <linux/rtnetlink.h>
 #include <linux/if.h>
+#include <linux/netfilter/nfnetlink.h>
+#include <linux/netfilter_ipv4/ipt_ULOG.h>
+/* From kernel's net/netfilter/xt_quota2.c */
+const int QLOG_NL_EVENT  = 112;
+
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 
 const int NetlinkEvent::NlActionUnknown = 0;
 const int NetlinkEvent::NlActionAdd = 1;
@@ -71,37 +77,60 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
     const struct nlmsghdr *nh = (struct nlmsghdr *) buffer;
 
     while (NLMSG_OK(nh, sz) && (nh->nlmsg_type != NLMSG_DONE)) {
+
         if (nh->nlmsg_type == RTM_NEWLINK) {
             int len = nh->nlmsg_len - sizeof(*nh);
             struct ifinfomsg *ifi;
 
-            if (sizeof(*ifi) <= (size_t) len) {
-                ifi = (ifinfomsg *)NLMSG_DATA(nh);
-
-                if ((ifi->ifi_flags & IFF_LOOPBACK) == 0) {
-                    struct rtattr *rta = (struct rtattr *)
-                      ((char *) ifi + NLMSG_ALIGN(sizeof(*ifi)));
-                    len = NLMSG_PAYLOAD(nh, sizeof(*ifi));
-
-                    while(RTA_OK(rta, len)) {
-                        switch(rta->rta_type) {
-                        case IFLA_IFNAME:
-                            char buffer[16 + IFNAMSIZ];
-                            snprintf(buffer, sizeof(buffer), "INTERFACE=%s",
-                                     (char *) RTA_DATA(rta));
-                            mParams[0] = strdup(buffer);
-                            mAction = (ifi->ifi_flags & IFF_LOWER_UP) ?
-                              NlActionLinkUp : NlActionLinkDown;
-                            mSubsystem = strdup("net");
-                            break;
-                        }
-
-                        rta = RTA_NEXT(rta, len);
-                    }
-                }
+            if (sizeof(*ifi) > (size_t) len) {
+                SLOGE("Got a short RTM_NEWLINK message\n");
+                continue;
             }
-        }
 
+            ifi = (ifinfomsg *)NLMSG_DATA(nh);
+            if ((ifi->ifi_flags & IFF_LOOPBACK) != 0) {
+                continue;
+            }
+
+            struct rtattr *rta = (struct rtattr *)
+              ((char *) ifi + NLMSG_ALIGN(sizeof(*ifi)));
+            len = NLMSG_PAYLOAD(nh, sizeof(*ifi));
+
+            while(RTA_OK(rta, len)) {
+                switch(rta->rta_type) {
+                case IFLA_IFNAME:
+                    char buffer[16 + IFNAMSIZ];
+                    snprintf(buffer, sizeof(buffer), "INTERFACE=%s",
+                             (char *) RTA_DATA(rta));
+                    mParams[0] = strdup(buffer);
+                    mAction = (ifi->ifi_flags & IFF_LOWER_UP) ?
+                      NlActionLinkUp : NlActionLinkDown;
+                    mSubsystem = strdup("net");
+                    break;
+                }
+
+                rta = RTA_NEXT(rta, len);
+            }
+
+        } else if (nh->nlmsg_type == QLOG_NL_EVENT) {
+            char *devname;
+            ulog_packet_msg_t *pm;
+            size_t len = nh->nlmsg_len - sizeof(*nh);
+            if (sizeof(*pm) > len) {
+                SLOGE("Got a short QLOG message\n");
+                continue;
+            }
+            pm = (ulog_packet_msg_t *)NLMSG_DATA(nh);
+            devname = pm->indev_name[0] ? pm->indev_name : pm->outdev_name;
+            SLOGD("QLOG prefix=%s dev=%s\n", pm->prefix, devname);
+            asprintf(&mParams[0], "ALERT_NAME=%s", pm->prefix);
+            asprintf(&mParams[1], "INTERFACE=%s", devname);
+            mSubsystem = strdup("qlog");
+            mAction = NlActionChange;
+
+        } else {
+                SLOGD("Unexpected netlink message. type=0x%x\n", nh->nlmsg_type);
+        }
         nh = NLMSG_NEXT(nh, size);
     }
 
