@@ -673,6 +673,8 @@ static int bootchart_init_action(int nargs, char **args)
     } else {
         NOTICE("bootcharting ignored\n");
     }
+
+    return 0;
 }
 #endif
 
