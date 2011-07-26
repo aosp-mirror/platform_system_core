@@ -593,19 +593,39 @@ static void handle_crashing_process(int fd)
      * debugger_signal_handler().
      */
     tid_attach_status = ptrace(PTRACE_ATTACH, tid, 0, 0);
+    int ptrace_error = errno;
 
-    TEMP_FAILURE_RETRY(write(fd, &tid, 1));
+    if (TEMP_FAILURE_RETRY(write(fd, &tid, 1)) != 1) {
+        XLOG("failed responding to client: %s\n",
+            strerror(errno));
+        goto done;
+    }
 
     if(tid_attach_status < 0) {
-        LOG("ptrace attach failed: %s\n", strerror(errno));
+        LOG("ptrace attach failed: %s\n", strerror(ptrace_error));
         goto done;
     }
 
     close(fd);
     fd = -1;
 
+    const int sleep_time_usec = 200000;         /* 0.2 seconds */
+    const int max_total_sleep_usec = 3000000;   /* 3 seconds */
+    int loop_limit = max_total_sleep_usec / sleep_time_usec;
     for(;;) {
-        n = waitpid(tid, &status, __WALL);
+        if (loop_limit-- == 0) {
+            LOG("timed out waiting for pid=%d tid=%d uid=%d to die\n",
+                cr.pid, tid, cr.uid);
+            goto done;
+        }
+        n = waitpid(tid, &status, __WALL | WNOHANG);
+
+        if (n == 0) {
+            /* not ready yet */
+            XLOG("not ready yet\n");
+            usleep(sleep_time_usec);
+            continue;
+        }
 
         if(n < 0) {
             if(errno == EAGAIN) continue;
@@ -734,8 +754,12 @@ int main()
         int fd;
 
         alen = sizeof(addr);
+        XLOG("waiting for connection\n");
         fd = accept(s, &addr, &alen);
-        if(fd < 0) continue;
+        if(fd < 0) {
+            XLOG("accept failed: %s\n", strerror(errno));
+            continue;
+        }
 
         fcntl(fd, F_SETFD, FD_CLOEXEC);
 
