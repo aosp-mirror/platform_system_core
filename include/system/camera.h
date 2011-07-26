@@ -80,6 +80,7 @@ enum {
     CAMERA_MSG_RAW_IMAGE = 0x0080,
     CAMERA_MSG_COMPRESSED_IMAGE = 0x0100,
     CAMERA_MSG_RAW_IMAGE_NOTIFY = 0x0200,
+    CAMERA_MSG_FACE = 0x0400,
     CAMERA_MSG_ALL_MSGS = 0xFFFF
 };
 
@@ -87,7 +88,9 @@ enum {
 enum {
     CAMERA_CMD_START_SMOOTH_ZOOM = 1,
     CAMERA_CMD_STOP_SMOOTH_ZOOM = 2,
-    /** Set the clockwise rotation of preview display (setPreviewDisplay) in
+
+    /**
+     * Set the clockwise rotation of preview display (setPreviewDisplay) in
      * degrees. This affects the preview frames and the picture displayed after
      * snapshot. This method is useful for portrait mode applications. Note
      * that preview display of front-facing cameras is flipped horizontally
@@ -103,13 +106,38 @@ enum {
      */
     CAMERA_CMD_SET_DISPLAY_ORIENTATION = 3,
 
-    /** cmdType to disable/enable shutter sound. In sendCommand passing arg1 =
+    /**
+     * cmdType to disable/enable shutter sound. In sendCommand passing arg1 =
      * 0 will disable, while passing arg1 = 1 will enable the shutter sound.
      */
     CAMERA_CMD_ENABLE_SHUTTER_SOUND = 4,
 
     /* cmdType to play recording sound */
     CAMERA_CMD_PLAY_RECORDING_SOUND = 5,
+
+    /**
+     * Start the face detection. This should be called after preview is started.
+     * The camera will notify the listener of CAMERA_MSG_FACE and the detected
+     * faces in the preview frame. The detected faces may be the same as the
+     * previous ones. Apps should call CAMERA_CMD_STOP_FACE_DETECTION to stop
+     * the face detection. This method is supported if CameraParameters
+     * KEY_MAX_NUM_HW_DETECTED_FACES or KEY_MAX_NUM_SW_DETECTED_FACES is
+     * bigger than 0. Hardware and software face detection should not be running
+     * at the same time. If the face detection has started, apps should not send
+     * this again.
+     *
+     * In hardware face detection mode, CameraParameters KEY_WHITE_BALANCE,
+     * KEY_FOCUS_AREAS and KEY_METERING_AREAS have no effect.
+     *
+     * arg1 is the face detection type. It can be CAMERA_FACE_DETECTION_HW or
+     * CAMERA_FACE_DETECTION_SW.
+     */
+    CAMERA_CMD_START_FACE_DETECTION = 6,
+
+    /**
+     * Stop the face detection.
+     */
+    CAMERA_CMD_STOP_FACE_DETECTION = 7,
 };
 
 /** camera fatal errors */
@@ -119,10 +147,20 @@ enum {
 };
 
 enum {
-    CAMERA_FACING_BACK = 0, /** The facing of the camera is opposite to that of
-                 * the screen. */
-    CAMERA_FACING_FRONT = 1 /** The facing of the camera is the same as that of
-                 * the screen. */
+    /** The facing of the camera is opposite to that of the screen. */
+    CAMERA_FACING_BACK = 0,
+    /** The facing of the camera is the same as that of the screen. */
+    CAMERA_FACING_FRONT = 1
+};
+
+enum {
+    /** Hardware face detection. It does not use much CPU. */
+    CAMERA_FACE_DETECTION_HW = 0,
+    /**
+     * Software face detection. It uses some CPU. Applications must use
+     * Camera.setPreviewTexture for preview in this mode.
+     */
+    CAMERA_FACE_DETECTION_SW = 1
 };
 
 __END_DECLS
