@@ -429,8 +429,7 @@ service drm /system/bin/drmserver
 service media /system/bin/mediaserver
     class main
     user media
-    # STOPSHIP: remove system from mediaserver groups
-    group audio camera inet net_bt net_bt_admin system
+    group audio camera inet net_bt net_bt_admin
     ioprio rt 4
 
 service bootanim /system/bin/bootanimation
