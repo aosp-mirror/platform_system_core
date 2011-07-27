@@ -70,17 +70,20 @@ enum {
 
 /** msgType in notifyCallback and dataCallback functions */
 enum {
-    CAMERA_MSG_ERROR = 0x0001,
-    CAMERA_MSG_SHUTTER = 0x0002,
-    CAMERA_MSG_FOCUS = 0x0004,
-    CAMERA_MSG_ZOOM = 0x0008,
-    CAMERA_MSG_PREVIEW_FRAME = 0x0010,
-    CAMERA_MSG_VIDEO_FRAME = 0x0020,
-    CAMERA_MSG_POSTVIEW_FRAME = 0x0040,
-    CAMERA_MSG_RAW_IMAGE = 0x0080,
-    CAMERA_MSG_COMPRESSED_IMAGE = 0x0100,
-    CAMERA_MSG_RAW_IMAGE_NOTIFY = 0x0200,
-    CAMERA_MSG_FACE = 0x0400,
+    CAMERA_MSG_ERROR = 0x0001,            // notifyCallback
+    CAMERA_MSG_SHUTTER = 0x0002,          // notifyCallback
+    CAMERA_MSG_FOCUS = 0x0004,            // notifyCallback
+    CAMERA_MSG_ZOOM = 0x0008,             // notifyCallback
+    CAMERA_MSG_PREVIEW_FRAME = 0x0010,    // dataCallback
+    CAMERA_MSG_VIDEO_FRAME = 0x0020,      // data_timestamp_callback
+    CAMERA_MSG_POSTVIEW_FRAME = 0x0040,   // dataCallback
+    CAMERA_MSG_RAW_IMAGE = 0x0080,        // dataCallback
+    CAMERA_MSG_COMPRESSED_IMAGE = 0x0100, // dataCallback
+    CAMERA_MSG_RAW_IMAGE_NOTIFY = 0x0200, // dataCallback
+    // Face metadata. This can be combined with CAMERA_MSG_PREVIEW_FRAME in
+    // dataCallback. For example, the apps can request PREVIEW_FRAME and FACE.
+    // Or the apps can request only PREVIEW_FRAME or only FACE.
+    CAMERA_MSG_METADATA_FACE = 0x0400,    // dataCallback
     CAMERA_MSG_ALL_MSGS = 0xFFFF
 };
 
@@ -162,6 +165,72 @@ enum {
      */
     CAMERA_FACE_DETECTION_SW = 1
 };
+
+/**
+ * The information of a face from camera face detection.
+ */
+typedef struct camera_face {
+    /**
+     * Bounds of the face [left, top, right, bottom]. (-1000, -1000) represents
+     * the top-left of the camera field of view, and (1000, 1000) represents the
+     * bottom-right of the field of view. The width and height cannot be 0 or
+     * negative. This is supported by both hardware and software face detection.
+     *
+     * The direction is relative to the sensor orientation, that is, what the
+     * sensor sees. The direction is not affected by the rotation or mirroring
+     * of CAMERA_CMD_SET_DISPLAY_ORIENTATION.
+     */
+    int rect[4];
+
+    /**
+     * The confidence level of the face. The range is 1 to 100. 100 is the
+     * highest confidence. This is supported by both hardware and software
+     * face detection.
+     */
+    int score;
+
+    /**
+     * An unique id per face while the face is visible to the tracker. If
+     * the face leaves the field-of-view and comes back, it will get a new
+     * id. If the value is 0, id is not supported.
+     */
+    int id;
+
+    /**
+     * The coordinates of the center of the left eye. The range is -1000 to
+     * 1000. -2000, -2000 if this is not supported.
+     */
+    int left_eye[2];
+
+    /**
+     * The coordinates of the center of the right eye. The range is -1000 to
+     * 1000. -2000, -2000 if this is not supported.
+     */
+    int right_eye[2];
+
+    /**
+     * The coordinates of the center of the mouth. The range is -1000 to 1000.
+     * -2000, -2000 if this is not supported.
+     */
+    int mouth[2];
+
+} camera_face_t;
+
+/**
+ * The metadata of the frame data.
+ */
+typedef struct camera_frame_metadata {
+    /**
+     * The number of detected faces in the frame.
+     */
+    int number_of_faces;
+
+    /**
+     * An array of the detected faces. The length is number_of_faces. The list
+     * is sorted by the score. The highest score is the first element.
+     */
+    camera_face_t *faces;
+} camera_frame_metadata_t;
 
 __END_DECLS
 
