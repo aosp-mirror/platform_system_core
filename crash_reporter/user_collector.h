@@ -117,9 +117,15 @@ class UserCollector : public CrashCollector {
   bool ParseCrashAttributes(const std::string &crash_attributes,
                             pid_t *pid, int *signal,
                             std::string *kernel_supplied_name);
+
+  // Returns true if we should consider ourselves to be running on a
+  // developer image.
+  bool IsDeveloperImage();
+  // Returns true if chrome crashes should be ignored.
+  bool ShouldIgnoreChromeCrashes();
   bool ShouldDump(bool has_owner_consent,
                   bool is_developer,
-                  bool is_crash_test_in_progress,
+                  bool ignore_chrome_crashes,
                   const std::string &exec,
                   std::string *reason);
 

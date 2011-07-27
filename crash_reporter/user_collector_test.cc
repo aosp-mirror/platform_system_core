@@ -124,30 +124,37 @@ TEST_F(UserCollectorTest, ParseCrashAttributes) {
 
 TEST_F(UserCollectorTest, ShouldDumpDeveloperImageOverridesConsent) {
   std::string reason;
-  EXPECT_TRUE(collector_.ShouldDump(false, true, false,
+  EXPECT_TRUE(collector_.ShouldDump(false, true, true,
                                     "chrome-wm", &reason));
   EXPECT_EQ("developer build - not testing - always dumping", reason);
 
   // When running a crash test, behave as normal.
-  EXPECT_FALSE(collector_.ShouldDump(false, true, true,
+  EXPECT_FALSE(collector_.ShouldDump(false, false, true,
                                     "chrome-wm", &reason));
   EXPECT_EQ("ignoring - no consent", reason);
 }
 
 TEST_F(UserCollectorTest, ShouldDumpChromeOverridesDeveloperImage) {
   std::string reason;
-  EXPECT_FALSE(collector_.ShouldDump(false, true, false,
+  // When running a crash test, behave as normal.
+  EXPECT_FALSE(collector_.ShouldDump(false, false, true,
                                      "chrome", &reason));
   EXPECT_EQ("ignoring - chrome crash", reason);
+
+  // When in developer mode, test that chrome crashes are not ignored.
+  EXPECT_TRUE(collector_.ShouldDump(false, true, false,
+                                    "chrome", &reason));
+  EXPECT_EQ("developer build - not testing - always dumping",
+            reason);
 }
 
 TEST_F(UserCollectorTest, ShouldDumpUseConsentProductionImage) {
   std::string result;
-  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
+  EXPECT_FALSE(collector_.ShouldDump(false, false, true,
                                      "chrome-wm", &result));
   EXPECT_EQ("ignoring - no consent", result);
 
-  EXPECT_TRUE(collector_.ShouldDump(true, false, false,
+  EXPECT_TRUE(collector_.ShouldDump(true, false, true,
                                     "chrome-wm", &result));
   EXPECT_EQ("handling", result);
 }

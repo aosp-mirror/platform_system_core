@@ -40,6 +40,8 @@ static const char kCorePipeLimitFile[] = "/proc/sys/kernel/core_pipe_limit";
 static const char kCorePipeLimit[] = "4";
 static const char kCoreToMinidumpConverterPath[] = "/usr/bin/core2md";
 static const char kLeaveCoreFile[] = "/root/.leave_core";
+static const char kCollectChromeFile[] =
+    "/mnt/stateful_partition/etc/collect_chrome_crashes";
 
 static const char kDefaultLogConfig[] = "/etc/crash_reporter_logs.conf";
 
@@ -398,7 +400,7 @@ bool UserCollector::ConvertAndEnqueueCrash(int pid,
                      exec,
                      minidump_path.value());
 
-  if (!file_util::PathExists(FilePath(kLeaveCoreFile))) {
+  if (!IsDeveloperImage()) {
     file_util::Delete(core_path, false);
   } else {
     LOG(INFO) << "Leaving core file at " << core_path.value()
@@ -416,9 +418,32 @@ bool UserCollector::ParseCrashAttributes(const std::string &crash_attributes,
   return re.FullMatch(crash_attributes, pid, signal, kernel_supplied_name);
 }
 
+bool UserCollector::IsDeveloperImage() {
+  // If we're testing crash reporter itself, we don't want to special-case
+  // for developer images.
+  if (IsCrashTestInProgress())
+    return false;
+  return file_util::PathExists(FilePath(kLeaveCoreFile));
+}
+
+bool UserCollector::ShouldIgnoreChromeCrashes() {
+  // If we're testing crash reporter itself, we don't want to allow an
+  // override for chrome crashes.  And, let's be conservative and only
+  // allow an override for developer images.
+  if (!IsCrashTestInProgress() && IsDeveloperImage()) {
+    // Check if there's an override to indicate we should indeed collect
+    // chrome crashes.  This allows the crashes to still be tracked when
+    // they occur in autotests.  See "crosbug.com/17987".
+    if (file_util::PathExists(FilePath(kCollectChromeFile)))
+      return false;
+  }
+  // We default to ignoring chrome crashes.
+  return true;
+}
+
 bool UserCollector::ShouldDump(bool has_owner_consent,
                                bool is_developer,
-                               bool is_crash_test_in_progress,
+                               bool ignore_chrome_crashes,
                                const std::string &exec,
                                std::string *reason) {
   reason->clear();
@@ -426,7 +451,8 @@ bool UserCollector::ShouldDump(bool has_owner_consent,
   // Treat Chrome crashes as if the user opted-out.  We stop counting Chrome
   // crashes towards user crashes, so user crashes really mean non-Chrome
   // user-space crashes.
-  if (exec == "chrome" || exec == "supplied_chrome") {
+  if ((exec == "chrome" || exec == "supplied_chrome") &&
+      ignore_chrome_crashes) {
     *reason = "ignoring - chrome crash";
     return false;
   }
@@ -434,7 +460,7 @@ bool UserCollector::ShouldDump(bool has_owner_consent,
   // For developer builds, we always want to keep the crash reports unless
   // we're testing the crash facilities themselves.  This overrides
   // feedback.  Crash sending still obeys consent.
-  if (is_developer && !is_crash_test_in_progress) {
+  if (is_developer) {
     *reason = "developer build - not testing - always dumping";
     return true;
   }
@@ -485,8 +511,8 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
 
   std::string reason;
   bool dump = ShouldDump(is_feedback_allowed_function_(),
-                         file_util::PathExists(FilePath(kLeaveCoreFile)),
-                         IsCrashTestInProgress(),
+                         IsDeveloperImage(),
+                         ShouldIgnoreChromeCrashes(),
                          exec,
                          &reason);
 
