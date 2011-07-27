@@ -1108,7 +1108,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
             type = kTransportAny;
         } else if (!strncmp(service, "transport:", strlen("transport:"))) {
             service += strlen("transport:");
-            serial = strdup(service);
+            serial = service;
         }
 
         transport = acquire_one_transport(CS_ANY, type, serial, &error_string);
