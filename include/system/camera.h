@@ -180,39 +180,39 @@ typedef struct camera_face {
      * sensor sees. The direction is not affected by the rotation or mirroring
      * of CAMERA_CMD_SET_DISPLAY_ORIENTATION.
      */
-    int rect[4];
+    int32_t rect[4];
 
     /**
      * The confidence level of the face. The range is 1 to 100. 100 is the
      * highest confidence. This is supported by both hardware and software
      * face detection.
      */
-    int score;
+    int32_t score;
 
     /**
      * An unique id per face while the face is visible to the tracker. If
      * the face leaves the field-of-view and comes back, it will get a new
      * id. If the value is 0, id is not supported.
      */
-    int id;
+    int32_t id;
 
     /**
      * The coordinates of the center of the left eye. The range is -1000 to
      * 1000. -2000, -2000 if this is not supported.
      */
-    int left_eye[2];
+    int32_t left_eye[2];
 
     /**
      * The coordinates of the center of the right eye. The range is -1000 to
      * 1000. -2000, -2000 if this is not supported.
      */
-    int right_eye[2];
+    int32_t right_eye[2];
 
     /**
      * The coordinates of the center of the mouth. The range is -1000 to 1000.
      * -2000, -2000 if this is not supported.
      */
-    int mouth[2];
+    int32_t mouth[2];
 
 } camera_face_t;
 
@@ -223,7 +223,7 @@ typedef struct camera_frame_metadata {
     /**
      * The number of detected faces in the frame.
      */
-    int number_of_faces;
+    int32_t number_of_faces;
 
     /**
      * An array of the detected faces. The length is number_of_faces. The list
