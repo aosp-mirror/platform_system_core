@@ -695,6 +695,18 @@ int main()
     struct sigaction act;
     int logsocket = -1;
 
+    /*
+     * debuggerd crashes can't be reported to debuggerd.  Reset all of the
+     * crash handlers.
+     */
+    signal(SIGILL, SIG_DFL);
+    signal(SIGABRT, SIG_DFL);
+    signal(SIGBUS, SIG_DFL);
+    signal(SIGFPE, SIG_DFL);
+    signal(SIGSEGV, SIG_DFL);
+    signal(SIGSTKFLT, SIG_DFL);
+    signal(SIGPIPE, SIG_DFL);
+
     logsocket = socket_local_client("logd",
             ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_DGRAM);
     if(logsocket < 0) {
