@@ -216,8 +216,8 @@ enum {
 /* valid operations for the (*perform)() hook */
 enum {
     NATIVE_WINDOW_SET_USAGE                 =  0,
-    NATIVE_WINDOW_CONNECT                   =  1,
-    NATIVE_WINDOW_DISCONNECT                =  2,
+    NATIVE_WINDOW_CONNECT                   =  1,   /* deprecated */
+    NATIVE_WINDOW_DISCONNECT                =  2,   /* deprecated */
     NATIVE_WINDOW_SET_CROP                  =  3,
     NATIVE_WINDOW_SET_BUFFER_COUNT          =  4,
     NATIVE_WINDOW_SET_BUFFERS_GEOMETRY      =  5,   /* deprecated */
@@ -228,9 +228,11 @@ enum {
     NATIVE_WINDOW_SET_SCALING_MODE          = 10,
     NATIVE_WINDOW_LOCK                      = 11,   /* private */
     NATIVE_WINDOW_UNLOCK_AND_POST           = 12,   /* private */
+    NATIVE_WINDOW_API_CONNECT               = 13,   /* private */
+    NATIVE_WINDOW_API_DISCONNECT            = 14,   /* private */
 };
 
-/* parameter for NATIVE_WINDOW_[DIS]CONNECT */
+/* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
 enum {
     /* Buffers will be queued by EGL via eglSwapBuffers after being filled using
      * OpenGL ES.
@@ -388,8 +390,8 @@ struct ANativeWindow
      *
      * The valid operations are:
      *     NATIVE_WINDOW_SET_USAGE
-     *     NATIVE_WINDOW_CONNECT
-     *     NATIVE_WINDOW_DISCONNECT
+     *     NATIVE_WINDOW_CONNECT               (deprecated)
+     *     NATIVE_WINDOW_DISCONNECT            (deprecated)
      *     NATIVE_WINDOW_SET_CROP
      *     NATIVE_WINDOW_SET_BUFFER_COUNT
      *     NATIVE_WINDOW_SET_BUFFERS_GEOMETRY  (deprecated)
@@ -400,6 +402,8 @@ struct ANativeWindow
      *     NATIVE_WINDOW_SET_SCALING_MODE
      *     NATIVE_WINDOW_LOCK                   (private)
      *     NATIVE_WINDOW_UNLOCK_AND_POST        (private)
+     *     NATIVE_WINDOW_API_CONNECT            (private)
+     *     NATIVE_WINDOW_API_DISCONNECT         (private)
      *
      */
 
@@ -442,27 +446,15 @@ static inline int native_window_set_usage(
     return window->perform(window, NATIVE_WINDOW_SET_USAGE, usage);
 }
 
-/*
- * native_window_connect(..., NATIVE_WINDOW_API_EGL)
- * Must be called by EGL when the window is made current.
- * Returns -EINVAL if for some reason the window cannot be connected, which
- * can happen if it's connected to some other API.
- */
+/* deprecated. Always returns 0. Don't call. */
 static inline int native_window_connect(
-        struct ANativeWindow* window, int api)
-{
+        struct ANativeWindow* window, int api) {
     return window->perform(window, NATIVE_WINDOW_CONNECT, api);
 }
 
-/*
- * native_window_disconnect(..., NATIVE_WINDOW_API_EGL)
- * Must be called by EGL when the window is made not current.
- * An error is returned if for instance the window wasn't connected in the
- * first place.
- */
+/* deprecated. Always returns 0. Don't call. */
 static inline int native_window_disconnect(
-        struct ANativeWindow* window, int api)
-{
+        struct ANativeWindow* window, int api) {
     return window->perform(window, NATIVE_WINDOW_DISCONNECT, api);
 }
 
@@ -590,6 +582,32 @@ static inline int native_window_set_scaling_mode(
     return window->perform(window, NATIVE_WINDOW_SET_SCALING_MODE,
             mode);
 }
+
+
+/*
+ * native_window_api_connect(..., int api)
+ * connects an API to this window. only one API can be connected at a time.
+ * Returns -EINVAL if for some reason the window cannot be connected, which
+ * can happen if it's connected to some other API.
+ */
+static inline int native_window_api_connect(
+        struct ANativeWindow* window, int api)
+{
+    return window->perform(window, NATIVE_WINDOW_CONNECT, api);
+}
+
+/*
+ * native_window_api_disconnect(..., int api)
+ * disconnect the API from this window.
+ * An error is returned if for instance the window wasn't connected in the
+ * first place.
+ */
+static inline int native_window_api_disconnect(
+        struct ANativeWindow* window, int api)
+{
+    return window->perform(window, NATIVE_WINDOW_DISCONNECT, api);
+}
+
 
 __END_DECLS
 
