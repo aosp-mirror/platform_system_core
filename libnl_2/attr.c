@@ -87,8 +87,17 @@ struct nlattr *nla_nest_start(struct nl_msg *msg, int attrtype)
 /* Finalize nesting of attributes. */
 int nla_nest_end(struct nl_msg *msg, struct nlattr *start)
 {
+	struct nlattr *container;
+
+	/* Adjust nested attribute container size */
+	container = (unsigned char *) start - sizeof(struct nlattr);
+	container->nla_len = (unsigned char *) \
+		nlmsg_tail(nlmsg_hdr(msg)) - (unsigned char *)container;
+
+	/* Fix attribute size */
 	start->nla_len = (unsigned char *) \
 		nlmsg_tail(nlmsg_hdr(msg)) - (unsigned char *)start;
+
 	return 0;
 }
 
