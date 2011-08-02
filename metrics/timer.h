@@ -1,0 +1,140 @@
+// Copyright (c) 2011 The Chromium OS Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Timer - class that provides timer tracking.
+
+#ifndef METRICS_TIMER_H_
+#define METRICS_TIMER_H_
+
+#include <string>
+
+#include <base/memory/scoped_ptr.h>
+#include <base/time.h>
+#include <gtest/gtest_prod.h>  // for FRIEND_TEST
+
+class MetricsLibraryInterface;
+
+namespace chromeos_metrics {
+
+class TimerInterface {
+ public:
+  virtual ~TimerInterface() {}
+
+  virtual bool Start() = 0;
+  virtual bool Stop() = 0;
+  virtual bool Reset() = 0;
+  virtual bool HasStarted() const = 0;
+};
+
+// Wrapper for calls to the system clock.
+class ClockWrapper {
+ public:
+  ClockWrapper() {}
+  virtual ~ClockWrapper() {}
+
+  // Returns the current time from the system.
+  virtual base::TimeTicks GetCurrentTime() const;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ClockWrapper);
+};
+
+// Implements a Timer.
+class Timer : public TimerInterface {
+ public:
+  Timer();
+  virtual ~Timer() {}
+
+  // Starts the timer. If a timer is already running, also resets current
+  // timer. Always returns true.
+  virtual bool Start();
+
+  // Stops the timer and calculates the total time elapsed between now and when
+  // Start() was called. Note that this method needs a prior call to Start().
+  // Otherwise, it fails (returns false).
+  virtual bool Stop();
+
+  // Resets the timer, erasing the current duration being tracked. Always
+  // returns true.
+  virtual bool Reset();
+
+  // Returns whether the timer has started or not.
+  virtual bool HasStarted() const;
+
+  // Stores the current elapsed time in |elapsed_time|. If timer is stopped,
+  // stores the elapsed time from when Stop() was last called. Otherwise,
+  // calculates and stores the elapsed time since the last Start().
+  // Returns false if the timer was never Start()'ed or if called with a null
+  // pointer argument.
+  virtual bool GetElapsedTime(base::TimeDelta* elapsed_time) const;
+
+ private:
+  friend class TimerTest;
+  friend class TimerReporterTest;
+  FRIEND_TEST(TimerTest, StartStop);
+  FRIEND_TEST(TimerTest, ReStart);
+  FRIEND_TEST(TimerTest, Reset);
+  FRIEND_TEST(TimerTest, SeparatedTimers);
+  FRIEND_TEST(TimerTest, InvalidStop);
+  FRIEND_TEST(TimerTest, InvalidElapsedTime);
+  FRIEND_TEST(TimerReporterTest, StartStopReport);
+
+  // Elapsed time of the last use of the timer.
+  base::TimeDelta elapsed_time_;
+
+  // Starting time value.
+  base::TimeTicks start_time_;
+
+  // Whether the timer has started or not.
+  bool is_started_;
+
+  // Wrapper for the calls to the system clock.
+  scoped_ptr<ClockWrapper> clock_wrapper_;
+
+  DISALLOW_COPY_AND_ASSIGN(Timer);
+};
+
+// Extends the Timer class to report the elapsed time in milliseconds through
+// the UMA metrics library.
+class TimerReporter : public Timer {
+ public:
+  // Initializes the timer by providing a |histogram_name| to report to with
+  // |min|, |max| and |num_buckets| attributes for the histogram.
+  TimerReporter(const std::string& histogram_name, int min, int max,
+                int num_buckets);
+  virtual ~TimerReporter() {}
+
+  // Sets the metrics library used by all instances of this class.
+  static void set_metrics_lib(MetricsLibraryInterface* metrics_lib) {
+    metrics_lib_ = metrics_lib;
+  }
+
+  // Reports the current duration to UMA, in milliseconds. Returns false if
+  // there is nothing to report, i.e. the timer was not started or a metrics
+  // library is not set.
+  virtual bool ReportMilliseconds() const;
+
+  // Accessor methods.
+  const std::string& histogram_name() const { return histogram_name_; }
+  int min() const { return min_; }
+  int max() const { return max_; }
+  int num_buckets() const { return num_buckets_; }
+
+ private:
+  friend class TimerReporterTest;
+  FRIEND_TEST(TimerReporterTest, StartStopReport);
+  FRIEND_TEST(TimerReporterTest, InvalidReport);
+
+  static MetricsLibraryInterface* metrics_lib_;
+  std::string histogram_name_;
+  int min_;
+  int max_;
+  int num_buckets_;
+
+  DISALLOW_COPY_AND_ASSIGN(TimerReporter);
+};
+
+}  // namespace chromeos_metrics
+
+#endif  // METRICS_TIMER_H_
