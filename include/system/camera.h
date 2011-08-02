@@ -80,10 +80,11 @@ enum {
     CAMERA_MSG_RAW_IMAGE = 0x0080,        // dataCallback
     CAMERA_MSG_COMPRESSED_IMAGE = 0x0100, // dataCallback
     CAMERA_MSG_RAW_IMAGE_NOTIFY = 0x0200, // dataCallback
-    // Face metadata. This can be combined with CAMERA_MSG_PREVIEW_FRAME in
-    // dataCallback. For example, the apps can request PREVIEW_FRAME and FACE.
-    // Or the apps can request only PREVIEW_FRAME or only FACE.
-    CAMERA_MSG_METADATA_FACE = 0x0400,    // dataCallback
+    // Preview frame metadata. This can be combined with
+    // CAMERA_MSG_PREVIEW_FRAME in dataCallback. For example, the apps can
+    // request FRAME and METADATA. Or the apps can request only FRAME or only
+    // METADATA.
+    CAMERA_MSG_PREVIEW_METADATA = 0x0400, // dataCallback
     CAMERA_MSG_ALL_MSGS = 0xFFFF
 };
 
