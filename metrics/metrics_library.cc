@@ -132,20 +132,30 @@ bool MetricsLibrary::IsGuestMode() {
 }
 
 bool MetricsLibrary::AreMetricsEnabled() {
+  static struct stat stat_buffer;
   time_t this_check_time = time(NULL);
-  if (!policy_provider_.get())
-    policy_provider_.reset(new policy::PolicyProvider());
-  else
-    policy_provider_->Reload();
-
-  // We initialize with the default value which is false and will be preserved
-  // if the policy is not set.
-  bool enabled = false;
-  if (policy_provider_->device_policy_is_loaded())
-    policy_provider_->GetDevicePolicy().GetMetricsEnabled(&enabled);
-
   if (this_check_time != cached_enabled_time_) {
     cached_enabled_time_ = this_check_time;
+
+    if (!policy_provider_.get())
+      policy_provider_.reset(new policy::PolicyProvider());
+    else
+      policy_provider_->Reload();
+    // We initialize with the default value which is false and will be preserved
+    // if the policy is not set.
+    bool enabled = false;
+    bool has_policy = false;
+    if (policy_provider_->device_policy_is_loaded()) {
+      has_policy =
+          policy_provider_->GetDevicePolicy().GetMetricsEnabled(&enabled);
+    }
+    // If policy couldn't be loaded or the metrics policy is not set we should
+    // still respect the consent file if it is present for migration purposes.
+    // TODO(pastarmovj)
+    if (!has_policy) {
+      enabled = stat(consent_file_, &stat_buffer) >= 0;
+    }
+
     if (enabled && !IsGuestMode())
       cached_enabled_ = true;
     else
