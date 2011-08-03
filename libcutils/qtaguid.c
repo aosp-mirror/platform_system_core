@@ -19,26 +19,49 @@
 
 #include <cutils/qtaguid.h>
 #include <cutils/log.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
-extern int set_qtaguid(int sockfd, int tag, uid_t uid) {
+extern int qtaguid_tagSocket(int sockfd, int tag, uid_t uid) {
     char lineBuf[128];
-    int fd, cnt = 0;
+    int fd, cnt = 0, res = 0;
     uint64_t kTag = (uint64_t)tag << 32;
     snprintf(lineBuf, sizeof(lineBuf), "t %d %llu %d", sockfd, kTag, uid);
 
-    LOGV("Tagging Socket with command %s\n", lineBuf);
-    /* TODO: Enable after the kernel module is fixed.
-       fd = open("/proc/net/xt_qtaguid/ctrl", O_WRONLY);
-       if (fd < 0) {
-           return -1;
-       }
+    LOGI("Tagging socket %d with tag %llx(%d) for uid %d", sockfd, kTag, tag, uid);
+    fd = open("/proc/net/xt_qtaguid/ctrl", O_WRONLY);
+    if (fd < 0) {
+        return -errno;
+    }
 
-       cnt = write(fd, lineBuf, strlen(lineBuf));
-       close(fd);
-    */
-    return (cnt>0?0:-1);
+    cnt = write(fd, lineBuf, strlen(lineBuf));
+    if (cnt < 0) {
+        res = -errno;
+    }
+
+    close(fd);
+    return res;
+}
+
+extern int qtaguid_untagSocket(int sockfd) {
+    char lineBuf[128];
+    int fd, cnt = 0, res = 0;
+    snprintf(lineBuf, sizeof(lineBuf), "u %d", sockfd);
+
+    LOGI("Untagging socket %d", sockfd);
+    fd = open("/proc/net/xt_qtaguid/ctrl", O_WRONLY);
+    if (fd < 0) {
+        return -errno;
+    }
+
+    cnt = write(fd, lineBuf, strlen(lineBuf));
+    if (cnt < 0) {
+        res = -errno;
+    }
+
+    close(fd);
+    return res;
 }
