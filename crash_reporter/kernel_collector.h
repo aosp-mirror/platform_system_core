@@ -54,9 +54,11 @@ class KernelCollector : public CrashCollector {
   void SetArch(enum ArchKind arch);
   enum ArchKind GetArch() { return arch_; }
 
+  // Set the parameters for reading the crash dump.
+  void SetParameters(size_t record_size, size_t mem_start, size_t mem_size);
+
  private:
   friend class KernelCollectorTest;
-  FRIEND_TEST(KernelCollectorTest, ClearPreservedDump);
   FRIEND_TEST(KernelCollectorTest, LoadPreservedDump);
   FRIEND_TEST(KernelCollectorTest, StripSensitiveDataBasic);
   FRIEND_TEST(KernelCollectorTest, StripSensitiveDataBulk);
@@ -64,8 +66,21 @@ class KernelCollector : public CrashCollector {
   FRIEND_TEST(KernelCollectorTest, CollectOK);
 
   bool LoadPreservedDump(std::string *contents);
-  bool ClearPreservedDump();
   void StripSensitiveData(std::string *kernel_dump);
+
+  virtual bool LoadParameters();
+  bool HasMoreRecords();
+
+  // Read a record to string, modified from file_utils since that didn't
+  // provide a way to restrict the read length.
+  // Return value indicates (only) error state:
+  //  * false when we get an error (can't read from dump location).
+  //  * true if no error occured.
+  // Not finding a valid record is not an error state and is signaled by the
+  // record_found output parameter.
+  bool ReadRecordToString(std::string *contents,
+                          unsigned int current_record,
+                          bool *record_found);
 
   void ProcessStackTrace(pcrecpp::StringPiece kernel_dump,
                          bool print_diagnostics,
@@ -83,8 +98,13 @@ class KernelCollector : public CrashCollector {
   enum ArchKind GetCompilerArch(void);
 
   bool is_enabled_;
-  FilePath preserved_dump_path_;
-  static const char kClearingSequence[];
+  size_t mem_start_;
+  size_t mem_size_;
+  FilePath ramoops_dump_path_;
+  FilePath ramoops_record_size_path_;
+  FilePath ramoops_dump_start_path_;
+  FilePath ramoops_dump_size_path_;
+  size_t record_size_;
 
   // The architecture of kernel dump strings we are working with.
   enum ArchKind arch_;

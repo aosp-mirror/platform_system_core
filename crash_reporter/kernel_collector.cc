@@ -8,15 +8,19 @@
 #include "base/logging.h"
 #include "base/string_util.h"
 
-const char KernelCollector::kClearingSequence[] = " ";
 static const char kDefaultKernelStackSignature[] =
     "kernel-UnspecifiedStackSignature";
+static const char kDumpMemSize[] = "/sys/module/ramoops/parameters/mem_size";
+static const char kDumpMemStart[] =
+    "/sys/module/ramoops/parameters/mem_address";
+static const char kDumpPath[] = "/dev/mem";
+static const char kDumpRecordSize[] =
+    "/sys/module/ramoops/parameters/record_size";
 static const char kKernelExecName[] = "kernel";
 const pid_t kKernelPid = 0;
 static const char kKernelSignatureKey[] = "sig";
 // Byte length of maximum human readable portion of a kernel crash signature.
 static const int kMaxHumanStringLength = 40;
-static const char kPreservedDumpPath[] = "/sys/kernel/debug/preserved/kcrash";
 const uid_t kRootUid = 0;
 // Time in seconds from the final kernel log message for a call stack
 // to count towards the signature of the kcrash.
@@ -46,7 +50,10 @@ COMPILE_ASSERT(arraysize(s_pc_regex) == KernelCollector::archCount,
 
 KernelCollector::KernelCollector()
     : is_enabled_(false),
-      preserved_dump_path_(kPreservedDumpPath) {
+      ramoops_dump_path_(kDumpPath),
+      ramoops_record_size_path_(kDumpRecordSize),
+      ramoops_dump_start_path_(kDumpMemStart),
+      ramoops_dump_size_path_(kDumpMemSize) {
   // We expect crash dumps in the format of the architecture we are built for.
   arch_ = GetCompilerArch();
 }
@@ -55,16 +62,130 @@ KernelCollector::~KernelCollector() {
 }
 
 void KernelCollector::OverridePreservedDumpPath(const FilePath &file_path) {
-  preserved_dump_path_ = file_path;
+  ramoops_dump_path_ = file_path;
+}
+
+bool KernelCollector::ReadRecordToString(std::string *contents,
+                                         unsigned int current_record,
+                                         bool *record_found) {
+  FILE *file = fopen(ramoops_dump_path_.value().c_str(), "rb");
+
+  // A record is a ramoops dump. It has an associated size of "record_size".
+  std::string record;
+  std::string captured;
+  static const unsigned int s_total_size_to_read = 4096;
+  size_t len = s_total_size_to_read;
+
+  // Ramoops appends a header to a crash which contains ==== followed by a
+  // timestamp. Ignore the header.
+  pcrecpp::RE record_re("====\\d+\\.\\d+\n(.*)",
+                  pcrecpp::RE_Options().set_multiline(true).set_dotall(true));
+
+  if (!file) {
+    LOG(ERROR) << "Unable to open " << kDumpPath;
+    return false;
+  }
+  // We're reading from /dev/mem, so we have to fseek to the desired area.
+  fseek(file, mem_start_ + current_record * record_size_, SEEK_SET);
+  size_t size_to_read = record_size_;
+
+  while (size_to_read > 0 && !feof(file) && len == s_total_size_to_read) {
+    char buf[s_total_size_to_read + 1];
+    len = fread(buf, 1, s_total_size_to_read, file);
+    // In the rare case that we read less than the minimum size null terminate
+    // the string properly
+    if (len < s_total_size_to_read) {
+       buf[len] = 0;
+    } else {
+       buf[s_total_size_to_read] = 0;
+    }
+    // Add the data.. if the string is null terminated and smaller then the
+    // buffer than add just that part. Otherwise add the whole buffer.
+    record.append(buf);
+    size_to_read -= len;
+  }
+
+  fclose(file);
+
+  if (record_re.FullMatch(record, &captured)){
+    // Found a match, append it to the content.
+    contents->append(captured);
+    *record_found = true;
+  } else {
+    *record_found = false;
+  }
+
+  return true;
+}
+
+bool LoadValue(FilePath path, unsigned int *element){
+  std::string buf;
+  char *end;
+  if (!file_util::ReadFileToString(path, &buf)) {
+    LOG(ERROR) << "Unable to read " << path.value();
+    return false;
+  }
+  *element = strtol(buf.c_str(), &end, 10);
+  if (end != NULL && *end =='\0') {
+    LOG(ERROR) << "Invalid number in " << path.value();
+    return false;
+  }
+
+  return true;
+}
+
+bool KernelCollector::LoadParameters() {
+  // Read the parameters from the /sys/module/ramoops/parameters/* files
+  // and convert them to numbers.
+
+  if (!LoadValue(ramoops_record_size_path_, &record_size_))
+    return false;
+  if (record_size_ <= 0){
+    LOG(ERROR) << "Record size is <= 0" ;
+  }
+  if (!LoadValue(ramoops_dump_start_path_, &mem_start_))
+    return false;
+  if (!LoadValue(ramoops_dump_size_path_, &mem_size_))
+    return false;
+  if (mem_size_ <= 0){
+    LOG(ERROR) << "Memory size is <= 0" ;
+  }
+
+  return true;
+}
+
+void KernelCollector::SetParameters(size_t record_size, size_t mem_start,
+                                    size_t mem_size) {
+  // Used for unit testing.
+  record_size_ = record_size;
+  mem_start_ = mem_start;
+  mem_size_ = mem_size;
 }
 
 bool KernelCollector::LoadPreservedDump(std::string *contents) {
+  // Load dumps from the preserved memory and save them in contents.
+  // Since the system is set to restart on oops we won't actually ever have
+  // multiple records (only 0 or 1), but check in case we don't restart on
+  // oops in the future.
+  bool any_records_found = false;
+  bool record_found = false;
   // clear contents since ReadFileToString actually appends to the string.
   contents->clear();
-  if (!file_util::ReadFileToString(preserved_dump_path_, contents)) {
-    LOG(ERROR) << "Unable to read " << preserved_dump_path_.value();
+
+  for (size_t i = 0; i < mem_size_ / record_size_; ++i) {
+    if (!ReadRecordToString(contents, i, &record_found)) {
+      break;
+    }
+    if (record_found) {
+      any_records_found = true;
+    }
+  }
+
+  if (!any_records_found) {
+    LOG(ERROR) << "No valid records found in " << ramoops_dump_path_.value();
     return false;
   }
+
   return true;
 }
 
@@ -149,7 +270,7 @@ bool KernelCollector::Enable() {
     LOG(WARNING) << "KernelCollector does not understand this architecture";
     return false;
   }
-  else if (!file_util::PathExists(preserved_dump_path_)) {
+  else if (!file_util::PathExists(ramoops_dump_path_)) {
     LOG(WARNING) << "Kernel does not support crash dumping";
     return false;
   }
@@ -158,20 +279,6 @@ bool KernelCollector::Enable() {
   // the chnv bit in BIOS, but it does not yet work.
   LOG(INFO) << "Enabling kernel crash handling";
   is_enabled_ = true;
-  return true;
-}
-
-bool KernelCollector::ClearPreservedDump() {
-  // It is necessary to write at least one byte to the kcrash file for
-  // the log to actually be cleared.
-  if (file_util::WriteFile(
-          preserved_dump_path_,
-          kClearingSequence,
-          strlen(kClearingSequence)) != strlen(kClearingSequence)) {
-    LOG(ERROR) << "Failed to clear kernel crash dump";
-    return false;
-  }
-  LOG(INFO) << "Cleared kernel crash diagnostics";
   return true;
 }
 
@@ -372,6 +479,10 @@ bool KernelCollector::ComputeKernelStackSignature(
 bool KernelCollector::Collect() {
   std::string kernel_dump;
   FilePath root_crash_directory;
+
+  if (!LoadParameters()) {
+    return false;
+  }
   if (!LoadPreservedDump(&kernel_dump)) {
     return false;
   }
@@ -426,9 +537,6 @@ bool KernelCollector::Collect() {
         kernel_crash_path.value());
 
     LOG(INFO) << "Stored kcrash to " << kernel_crash_path.value();
-  }
-  if (!ClearPreservedDump()) {
-    return false;
   }
 
   return true;

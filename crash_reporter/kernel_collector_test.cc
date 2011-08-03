@@ -28,6 +28,14 @@ bool IsMetrics() {
   return s_metrics;
 }
 
+class TKernelCollector : public KernelCollector {
+  bool LoadParameters() {
+    // Since we don't have /sys/module/ramoops/parameters on our system just
+    // return true instead of getting the parameters from the files.
+    return true;
+  }
+};
+
 class KernelCollectorTest : public ::testing::Test {
   void SetUp() {
     s_crashes = 0;
@@ -49,26 +57,28 @@ class KernelCollectorTest : public ::testing::Test {
   }
 
   void SetUpSuccessfulCollect();
-  void CheckPreservedDumpClear();
   void ComputeKernelStackSignatureCommon();
 
-  KernelCollector collector_;
+  TKernelCollector collector_;
   FilePath test_kcrash_;
 };
 
 TEST_F(KernelCollectorTest, ComputeKernelStackSignatureBase) {
   // Make sure the normal build architecture is detected
-  EXPECT_TRUE(collector_.GetArch() != KernelCollector::archUnknown);
+  EXPECT_TRUE(collector_.GetArch() != TKernelCollector::archUnknown);
 }
 
 TEST_F(KernelCollectorTest, LoadPreservedDump) {
   ASSERT_FALSE(file_util::PathExists(test_kcrash_));
   std::string dump;
+  dump.clear();
+
+  collector_.SetParameters(9, 0, 9);
+  WriteStringToFile(test_kcrash_, "emptydata");
   ASSERT_FALSE(collector_.LoadPreservedDump(&dump));
-  WriteStringToFile(test_kcrash_, "");
-  ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
   ASSERT_EQ("", dump);
-  WriteStringToFile(test_kcrash_, "something");
+  collector_.SetParameters(17, 0, 17);
+  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
   ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
   ASSERT_EQ("something", dump);
 }
@@ -87,17 +97,6 @@ TEST_F(KernelCollectorTest, EnableOK) {
   ASSERT_TRUE(collector_.IsEnabled());
   ASSERT_TRUE(FindLog("Enabling kernel crash handling"));
   ASSERT_EQ(s_crashes, 0);
-}
-
-TEST_F(KernelCollectorTest, ClearPreservedDump) {
-  std::string dump;
-  ASSERT_FALSE(file_util::PathExists(test_kcrash_));
-  WriteStringToFile(test_kcrash_, "something");
-  ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
-  ASSERT_EQ("something", dump);
-  ASSERT_TRUE(collector_.ClearPreservedDump());
-  ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
-  ASSERT_EQ(KernelCollector::kClearingSequence, dump);
 }
 
 TEST_F(KernelCollectorTest, StripSensitiveDataBasic) {
@@ -219,7 +218,8 @@ TEST_F(KernelCollectorTest, StripSensitiveDataSample) {
 
 TEST_F(KernelCollectorTest, CollectPreservedFileMissing) {
   ASSERT_FALSE(collector_.Collect());
-  ASSERT_TRUE(FindLog("Unable to read test/kcrash"));
+  ASSERT_TRUE(FindLog("Unable to open"));
+  ASSERT_TRUE(FindLog("No valid records found"));
   ASSERT_EQ(0, s_crashes);
 }
 
@@ -231,25 +231,20 @@ TEST_F(KernelCollectorTest, CollectNoCrash) {
 }
 
 // Disabled for crosbug.com/18622
-// TEST_F(KernelCollectorTest, CollectBadDirectory) {
-//   WriteStringToFile(test_kcrash_, "something");
+//TEST_F(KernelCollectorTest, CollectBadDirectory) {
+//  collector_.SetParameters(17, 0, 17);
+//  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
 //  ASSERT_TRUE(collector_.Collect());
 //  ASSERT_TRUE(FindLog(
 //      "Unable to create appropriate crash directory"));
 //  ASSERT_EQ(1, s_crashes);
-// }
+//}
 
 void KernelCollectorTest::SetUpSuccessfulCollect() {
   collector_.ForceCrashDirectory(kTestCrashDirectory);
-  WriteStringToFile(test_kcrash_, "something");
+  collector_.SetParameters(17, 0, 17);
+  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
   ASSERT_EQ(0, s_crashes);
-}
-
-void KernelCollectorTest::CheckPreservedDumpClear() {
-  // Make sure the preserved dump is now clear.
-  std::string dump;
-  ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
-  ASSERT_EQ(KernelCollector::kClearingSequence, dump);
 }
 
 TEST_F(KernelCollectorTest, CollectOptedOut) {
@@ -258,8 +253,6 @@ TEST_F(KernelCollectorTest, CollectOptedOut) {
   ASSERT_TRUE(collector_.Collect());
   ASSERT_TRUE(FindLog("(ignoring - no consent)"));
   ASSERT_EQ(0, s_crashes);
-
-  CheckPreservedDumpClear();
 }
 
 TEST_F(KernelCollectorTest, CollectOK) {
@@ -283,7 +276,6 @@ TEST_F(KernelCollectorTest, CollectOK) {
   ASSERT_TRUE(file_util::ReadFileToString(FilePath(filename), &contents));
   ASSERT_EQ("something", contents);
 
-  CheckPreservedDumpClear();
 }
 
 // Perform tests which are common across architectures
@@ -362,7 +354,7 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignatureARM) {
           "[<c017bfe0>] (proc_reg_write+0x88/0x9c)\n";
   std::string signature;
 
-  collector_.SetArch(KernelCollector::archArm);
+  collector_.SetArch(TKernelCollector::archArm);
   EXPECT_TRUE(
       collector_.ComputeKernelStackSignature(kBugToPanic, &signature, false));
   EXPECT_EQ("kernel-write_breakme-97D3E92F", signature);
