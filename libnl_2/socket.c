@@ -91,6 +91,7 @@ struct nl_sock *nl_socket_alloc_cb(struct nl_cb *cb)
 void nl_socket_free(struct nl_sock *sk)
 {
 	nl_cb_put(sk->s_cb);
+	close(sk->s_fd);
 	free(sk);
 }
 
