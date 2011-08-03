@@ -449,13 +449,13 @@ static inline int native_window_set_usage(
 /* deprecated. Always returns 0. Don't call. */
 static inline int native_window_connect(
         struct ANativeWindow* window, int api) {
-    return window->perform(window, NATIVE_WINDOW_CONNECT, api);
+    return 0;
 }
 
 /* deprecated. Always returns 0. Don't call. */
 static inline int native_window_disconnect(
         struct ANativeWindow* window, int api) {
-    return window->perform(window, NATIVE_WINDOW_DISCONNECT, api);
+    return 0;
 }
 
 /*
@@ -593,7 +593,7 @@ static inline int native_window_set_scaling_mode(
 static inline int native_window_api_connect(
         struct ANativeWindow* window, int api)
 {
-    return window->perform(window, NATIVE_WINDOW_CONNECT, api);
+    return window->perform(window, NATIVE_WINDOW_API_CONNECT, api);
 }
 
 /*
@@ -605,7 +605,7 @@ static inline int native_window_api_connect(
 static inline int native_window_api_disconnect(
         struct ANativeWindow* window, int api)
 {
-    return window->perform(window, NATIVE_WINDOW_DISCONNECT, api);
+    return window->perform(window, NATIVE_WINDOW_API_DISCONNECT, api);
 }
 
 
