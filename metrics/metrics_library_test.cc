@@ -135,8 +135,8 @@ void MetricsLibraryTest::VerifyEnabledCacheHit(bool to_value) {
     EXPECT_CALL(*device_policy_, GetMetricsEnabled(_))
         .WillOnce(SetMetricsPolicy(!to_value));
     ASSERT_EQ(!to_value, lib_.AreMetricsEnabled());
-    EXPECT_CALL(*device_policy_, GetMetricsEnabled(_))
-        .WillOnce(SetMetricsPolicy(to_value));
+    ON_CALL(*device_policy_, GetMetricsEnabled(_))
+        .WillByDefault(SetMetricsPolicy(to_value));
     if (lib_.AreMetricsEnabled() == !to_value)
       return;
   }
