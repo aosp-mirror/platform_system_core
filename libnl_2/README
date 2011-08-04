@@ -1,4 +1,12 @@
+Netlink Protocol Library
+
+This library is a clean room re-implementation of libnl 2.0 and
+re-licensed under Apache 2.0. It was developed primarily to support
+wpa_supplicant. However, with additional development can be extended
+to support other netlink applications.
+
 Netlink Protocol Format (RFC3549)
+
 +-----------------+-+-------------------+-+
 |Netlink Message  |P| Generic Netlink   |P|
 |    Header       |A|  Message Header   |A|
@@ -10,24 +18,65 @@ Netlink Protocol Format (RFC3549)
 | (struct nlattr) |D|     (void)      |D| (struct nlattr) |D|     (void)      |D|   |
 +-----------------+-+-----------------+-+-----------------+-+-----------------+-+---+
 
+NETLINK OVERVIEW
+
 * Each netlink message consists of a bitstream with a netlink header.
 * After this header a second header *can* be used specific to the netlink
   family in use. This library was tested using the generic netlink
   protocol defined by struct genlmsghdr to support nl80211.
 * After the header(s) netlink attributes can be appended to the message
   which hold can hold basic types such as unsigned integers and strings.
+* Attributes can also be nested. This is accomplished by calling "nla_nest_start"
+  which creates an empty attribute with nest attributes as its payload. Then to
+  close the nest, "nla_nest_end" is called.
 * All data structures in this implementation are byte-aligned (Currently 4 bytes).
 * Acknowledgements (ACKs) are sent as NLMSG_ERROR netlink message types (0x2) and
   have an error value of 0.
 
-KNOWN BUGS
-* NOT THREAD SAFE!!!
-* nla_parse - does not use nla_policy argument
-* nl_recvmsgs - does not support nl_cb_overwrite_recv()
-* nl_recv - sets/unsets async. flag
-* genl_ctrl_alloc_cache - netlink send/recv funcs should be used
+KNOWN ISSUES
+
+  GENERAL
+  * Not tested for thread safety
+
+  Android.mk
+  * No static library because of netlink cache not implemented and
+    not tested for thread safety
+
+  attr.c
+  * nla_parse - does not use nla_policy argument
+
+  cache.c
+  * netlink cache not implemented and only supports one netlink family id
+    which is stored in the nl_cache pointer instead of an actual cache
+
+  netlink.c
+  * nl_recvmsgs - does not support nl_cb_overwrite_recv()
+  * nl_recv - sets/unsets asynchronous socket flag
+
+SOURCE FILES
+
+* Android.mk - Android makefile
+* README - This file
+* attr.c - Netlink attributes
+* cache.c - Netlink cache
+* genl/family.c - Generic netlink family id
+* genl/genl.c - Generic netlink
+* handlers.c - Netlink callbacks
+* msg.c - Netlink messages construction
+* netlink.c - Netlink socket communication
+* object.c - libnl object wrapper
+* socket.c - Netlink kernel socket utils
+
+IMPORTANT HEADER FILES - NOTE: These are based on the the origin GPL libnl headers
+
+* netlink-types.h - Contains many important structs for libnl
+  to represent netlink objects
+* netlink/netlink-kernel.h - Netlink kernel headers and field constants.
+* netlink/msg.h - macros for iterating over netlink messages
+* netlink/attr.h - netlink attribute constants, iteration macros and setters
 
 REFERENCES
+
 * nl80211.h
 * netlink_types.h
 * $LINUX_KERNEL/net/wireless/nl80211.c
