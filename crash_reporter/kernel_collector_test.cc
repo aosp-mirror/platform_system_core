@@ -20,6 +20,7 @@ static const char kTestKCrash[] = "test/kcrash";
 static const char kTestCrashDirectory[] = "test/crash_directory";
 
 using chromeos::FindLog;
+using chromeos::GetLog;
 
 void CountCrash() {
   ++s_crashes;
@@ -230,14 +231,14 @@ TEST_F(KernelCollectorTest, CollectNoCrash) {
   ASSERT_EQ(0, s_crashes);
 }
 
-// Disabled for crosbug.com/18622
-//TEST_F(KernelCollectorTest, CollectBadDirectory) {
-//  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
-//  ASSERT_TRUE(collector_.Collect());
-//  ASSERT_TRUE(FindLog(
-//      "Unable to create appropriate crash directory"));
-//  ASSERT_EQ(1, s_crashes);
-//}
+TEST_F(KernelCollectorTest, CollectBadDirectory) {
+  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
+  ASSERT_TRUE(collector_.Collect());
+  ASSERT_TRUE(FindLog("Unable to create appropriate crash directory"))
+      << "Did not find expected error string in log: {\n"
+      << GetLog() << "}";
+  ASSERT_EQ(1, s_crashes);
+}
 
 void KernelCollectorTest::SetUpSuccessfulCollect() {
   collector_.ForceCrashDirectory(kTestCrashDirectory);
