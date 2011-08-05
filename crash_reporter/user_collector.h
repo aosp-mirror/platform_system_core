@@ -118,14 +118,9 @@ class UserCollector : public CrashCollector {
                             pid_t *pid, int *signal,
                             std::string *kernel_supplied_name);
 
-  // Returns true if we should consider ourselves to be running on a
-  // developer image.
-  bool IsDeveloperImage();
-  // Returns true if chrome crashes should be ignored.
-  bool ShouldIgnoreChromeCrashes();
   bool ShouldDump(bool has_owner_consent,
                   bool is_developer,
-                  bool ignore_chrome_crashes,
+                  bool handle_chrome_crashes,
                   const std::string &exec,
                   std::string *reason);
 

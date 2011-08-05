@@ -124,12 +124,12 @@ TEST_F(UserCollectorTest, ParseCrashAttributes) {
 
 TEST_F(UserCollectorTest, ShouldDumpDeveloperImageOverridesConsent) {
   std::string reason;
-  EXPECT_TRUE(collector_.ShouldDump(false, true, true,
+  EXPECT_TRUE(collector_.ShouldDump(false, true, false,
                                     "chrome-wm", &reason));
   EXPECT_EQ("developer build - not testing - always dumping", reason);
 
   // When running a crash test, behave as normal.
-  EXPECT_FALSE(collector_.ShouldDump(false, false, true,
+  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                     "chrome-wm", &reason));
   EXPECT_EQ("ignoring - no consent", reason);
 }
@@ -137,12 +137,13 @@ TEST_F(UserCollectorTest, ShouldDumpDeveloperImageOverridesConsent) {
 TEST_F(UserCollectorTest, ShouldDumpChromeOverridesDeveloperImage) {
   std::string reason;
   // When running a crash test, behave as normal.
-  EXPECT_FALSE(collector_.ShouldDump(false, false, true,
+  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                      "chrome", &reason));
   EXPECT_EQ("ignoring - chrome crash", reason);
 
-  // When in developer mode, test that chrome crashes are not ignored.
-  EXPECT_TRUE(collector_.ShouldDump(false, true, false,
+  // When running a developer image, test that chrome crashes are handled
+  // when the "handle_chrome_crashes" flag is set.
+  EXPECT_TRUE(collector_.ShouldDump(false, true, true,
                                     "chrome", &reason));
   EXPECT_EQ("developer build - not testing - always dumping",
             reason);
@@ -150,11 +151,11 @@ TEST_F(UserCollectorTest, ShouldDumpChromeOverridesDeveloperImage) {
 
 TEST_F(UserCollectorTest, ShouldDumpUseConsentProductionImage) {
   std::string result;
-  EXPECT_FALSE(collector_.ShouldDump(false, false, true,
+  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                      "chrome-wm", &result));
   EXPECT_EQ("ignoring - no consent", result);
 
-  EXPECT_TRUE(collector_.ShouldDump(true, false, true,
+  EXPECT_TRUE(collector_.ShouldDump(true, false, false,
                                     "chrome-wm", &result));
   EXPECT_EQ("handling", result);
 }

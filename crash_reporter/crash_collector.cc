@@ -20,12 +20,15 @@
 #include "base/string_util.h"
 #include "chromeos/process.h"
 
+static const char kCollectChromeFile[] =
+    "/mnt/stateful_partition/etc/collect_chrome_crashes";
+static const char kCrashTestInProgressPath[] = "/tmp/crash-test-in-progress";
 static const char kDefaultUserName[] = "chronos";
+static const char kLeaveCoreFile[] = "/root/.leave_core";
 static const char kLsbRelease[] = "/etc/lsb-release";
 static const char kShellPath[] = "/bin/sh";
 static const char kSystemCrashPath[] = "/var/spool/crash";
 static const char kUserCrashPath[] = "/home/chronos/user/crash";
-static const char kCrashTestInProgressPath[] = "/tmp/crash-test-in-progress";
 
 // Directory mode of the user crash spool directory.
 static const mode_t kUserCrashPathMode = 0755;
@@ -119,7 +122,13 @@ FilePath CrashCollector::GetCrashDirectoryInfo(
     mode_t *mode,
     uid_t *directory_owner,
     gid_t *directory_group) {
-  if (process_euid == default_user_id) {
+  // TODO(mkrebs): This can go away once Chrome crashes are handled
+  // normally (see crosbug.com/5872).
+  // Check if the user crash directory should be used.  If we are
+  // collecting chrome crashes during autotesting, we want to put them in
+  // the system crash directory so they are outside the cryptohome -- in
+  // case we are being run during logout (see crosbug.com/18637).
+  if (process_euid == default_user_id && IsUserSpecificDirectoryEnabled()) {
     *mode = kUserCrashPathMode;
     *directory_owner = default_user_id;
     *directory_group = default_user_group;
@@ -354,4 +363,31 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
 
 bool CrashCollector::IsCrashTestInProgress() {
   return file_util::PathExists(FilePath(kCrashTestInProgressPath));
+}
+
+bool CrashCollector::IsDeveloperImage() {
+  // If we're testing crash reporter itself, we don't want to special-case
+  // for developer images.
+  if (IsCrashTestInProgress())
+    return false;
+  return file_util::PathExists(FilePath(kLeaveCoreFile));
+}
+
+bool CrashCollector::ShouldHandleChromeCrashes() {
+  // If we're testing crash reporter itself, we don't want to allow an
+  // override for chrome crashes.  And, let's be conservative and only
+  // allow an override for developer images.
+  if (!IsCrashTestInProgress() && IsDeveloperImage()) {
+    // Check if there's an override to indicate we should indeed collect
+    // chrome crashes.  This allows the crashes to still be tracked when
+    // they occur in autotests.  See "crosbug.com/17987".
+    if (file_util::PathExists(FilePath(kCollectChromeFile)))
+      return true;
+  }
+  // We default to ignoring chrome crashes.
+  return false;
+}
+
+bool CrashCollector::IsUserSpecificDirectoryEnabled() {
+  return !ShouldHandleChromeCrashes();
 }

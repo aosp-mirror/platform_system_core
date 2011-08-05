@@ -133,6 +133,13 @@ class CrashCollector {
 
   // Returns true if the a crash test is currently running.
   bool IsCrashTestInProgress();
+  // Returns true if we should consider ourselves to be running on a
+  // developer image.
+  bool IsDeveloperImage();
+  // Returns true if chrome crashes should be handled.
+  bool ShouldHandleChromeCrashes();
+  // Returns true if user crash directory may be used.
+  bool IsUserSpecificDirectoryEnabled();
 
   CountCrashFunction count_crash_function_;
   IsFeedbackAllowedFunction is_feedback_allowed_function_;
