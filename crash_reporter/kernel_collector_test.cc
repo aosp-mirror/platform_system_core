@@ -230,15 +230,14 @@ TEST_F(KernelCollectorTest, CollectNoCrash) {
   ASSERT_EQ(0, s_crashes);
 }
 
-// Disabled for crosbug.com/18622
-//TEST_F(KernelCollectorTest, CollectBadDirectory) {
-//  collector_.SetParameters(17, 0, 17);
-//  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
-//  ASSERT_TRUE(collector_.Collect());
-//  ASSERT_TRUE(FindLog(
-//      "Unable to create appropriate crash directory"));
-//  ASSERT_EQ(1, s_crashes);
-//}
+TEST_F(KernelCollectorTest, CollectBadDirectory) {
+  collector_.SetParameters(17, 0, 17);
+  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
+  ASSERT_TRUE(collector_.Collect());
+  ASSERT_TRUE(FindLog(
+      "Unable to create appropriate crash directory"));
+  ASSERT_EQ(1, s_crashes);
+}
 
 void KernelCollectorTest::SetUpSuccessfulCollect() {
   collector_.ForceCrashDirectory(kTestCrashDirectory);
