@@ -871,7 +871,7 @@ int adb_main(int is_daemon, int server_port)
     */
     property_get("ro.kernel.qemu", value, "");
     if (strcmp(value, "1") != 0) {
-        property_get("ro.secure", value, "");
+        property_get("ro.secure", value, "1");
         if (strcmp(value, "1") == 0) {
             // don't run as root if ro.secure is set...
             secure = 1;
