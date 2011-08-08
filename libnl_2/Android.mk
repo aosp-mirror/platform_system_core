@@ -14,7 +14,7 @@ LOCAL_SRC_FILES := \
         socket.c
 
 LOCAL_C_INCLUDES += \
-        $(LOCAL_PATH)/include
+        external/libnl-headers
 
 # Static Library
 LOCAL_MODULE := libnl_2
