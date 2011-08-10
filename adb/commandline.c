@@ -130,11 +130,11 @@ void help()
         "                                 that should be included in a bug report.\n"
         "\n"
         "  adb backup [-f <file>] [-apk|-noapk] [-shared|-noshared] [-all] [<packages...>]\n"
-        "                               - Write a tarfile backup of the device's data to <file>.\n"
+        "                               - Write an archive of the device's data to <file>.\n"
         "                                 If a -f option is not supplied then the data is\n"
-        "                                 written to \"backup.tar\" in the current directory.\n"
+        "                                 written to \"backup.ab\" in the current directory.\n"
         "                                 (-apk|-noapk enable/disable backup of the .apks themselves\n"
-        "                                    in the tarfile; the default is noapk.)\n"
+        "                                    in the archive; the default is noapk.)\n"
         "                                 (-shared|-noshared enable/disable backup of the device's\n"
         "                                    shared storage / SD card contents; the default is noshared.)\n"
         "                                 (-all means to back up all installed applications)\n"
@@ -142,7 +142,7 @@ void help()
         "                                    the -all or -shared flags are passed, then the package\n"
         "                                    list is optional.)\n"
         "\n"
-        "  adb restore <file>           - restore device contents from the <file> backup tarfile\n"
+        "  adb restore <file>           - restore device contents from the <file> backup archive\n"
         "\n"
         "  adb help                     - show this help message\n"
         "  adb version                  - show version num\n"
@@ -575,7 +575,7 @@ static int logcat(transport_type transport, char* serial, int argc, char **argv)
 
 static int backup(int argc, char** argv) {
     char buf[4096];
-    const char* filename = "./backup.tar";
+    const char* filename = "./backup.ab";
     int fd, outFd;
     int i, j;
 
