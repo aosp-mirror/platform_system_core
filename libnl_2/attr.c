@@ -66,38 +66,30 @@ int nla_len(const struct nlattr *nla)
 	return nla->nla_len - NLA_HDRLEN;
 }
 
+int nla_padlen(int payload)
+{
+	return NLA_ALIGN(payload) - payload;
+}
+
 /* Start a new level of nested attributes. */
 struct nlattr *nla_nest_start(struct nl_msg *msg, int attrtype)
 {
-	if (!nla_put(msg, attrtype, 0, NULL)) {
-		/* Get ref to last (nested start) attr	*/
-		int padding;
-		struct nlattr *nla;
+	struct nlattr *start = (struct nlattr *)nlmsg_tail(msg->nm_nlh);
+	int rc;
 
-		padding = nlmsg_padlen(nlmsg_datalen(nlmsg_hdr(msg)));
-		nla = (struct nlattr *) \
-			((char *) nlmsg_tail(msg->nm_nlh) - padding);
-		return nla;
-
-	} else
+	rc = nla_put(msg, attrtype, 0, NULL);
+	if (rc < 0)
 		return NULL;
 
+	return start;
 }
 
 /* Finalize nesting of attributes. */
 int nla_nest_end(struct nl_msg *msg, struct nlattr *start)
 {
-	struct nlattr *container;
-
-	/* Adjust nested attribute container size */
-	container = (unsigned char *) start - sizeof(struct nlattr);
-	container->nla_len = (unsigned char *) \
-		nlmsg_tail(nlmsg_hdr(msg)) - (unsigned char *)container;
-
-	/* Fix attribute size */
-	start->nla_len = (unsigned char *) \
-		nlmsg_tail(nlmsg_hdr(msg)) - (unsigned char *)start;
-
+	/* Set attribute size */
+	start->nla_len = (unsigned char *)nlmsg_tail(nlmsg_hdr(msg)) -
+				(unsigned char *)start;
 	return 0;
 }
 
@@ -134,14 +126,13 @@ int nla_parse(struct nlattr *tb[], int maxtype, struct nlattr *head,
 	int rem;
 
 	/* First clear table */
-	memset(tb, 0, (maxtype+1) * sizeof(struct nlattr *));
+	memset(tb, 0, (maxtype + 1) * sizeof(struct nlattr *));
 
 	nla_for_each_attr(pos, head, len, rem) {
-		const int type = nla_type(pos);
+		int type = nla_type(pos);
 
-		if (type <= maxtype)
+		if ((type <= maxtype) && (type != 0))
 			tb[type] = pos;
-
 	}
 
 	return 0;
@@ -179,15 +170,10 @@ int nla_put(struct nl_msg *msg, int attrtype, int datalen, const void *data)
  * nested message may not have a family specific header */
 int nla_put_nested(struct nl_msg *msg, int attrtype, struct nl_msg *nested)
 {
-	int rc = -1;
-	const int NO_HEADER = 0;
+	int rc;
 
-	rc = nla_put(
-		msg,
-		attrtype,
-		nlmsg_attrlen(nlmsg_hdr(nested), NO_HEADER),
-		(const void *) nlmsg_attrdata(nlmsg_hdr(nested), NO_HEADER)
-		);
+	rc = nla_put(msg, attrtype, nlmsg_attrlen(nlmsg_hdr(nested), 0),
+			nlmsg_attrdata(nlmsg_hdr(nested), 0));
 	return rc;
 
 }
@@ -195,43 +181,37 @@ int nla_put_nested(struct nl_msg *msg, int attrtype, struct nl_msg *nested)
 /* Return type of the attribute. */
 int nla_type(const struct nlattr *nla)
 {
-	return (int) nla->nla_type;
+	return (int)nla->nla_type & NLA_TYPE_MASK;
 }
 
 /* Reserves room for an attribute in specified netlink message and fills
  * in the attribute header (type,length). Return NULL if insufficient space */
-struct nlattr *nla_reserve(struct nl_msg * msg, int attrtype, int data_len)
+struct nlattr *nla_reserve(struct nl_msg *msg, int attrtype, int data_len)
 {
 
 	struct nlattr *nla;
-	const unsigned int NEW_SIZE = \
-		msg->nm_nlh->nlmsg_len + NLA_ALIGN(NLA_HDRLEN + data_len);
+	const unsigned int NEW_SIZE = NLMSG_ALIGN(msg->nm_nlh->nlmsg_len) +
+					NLA_ALIGN(NLA_HDRLEN + data_len);
 
 	/* Check enough space for attribute */
-	if (NEW_SIZE <= msg->nm_size) {
-		const int fam_hdrlen = msg->nm_nlh->nlmsg_len - NLMSG_HDRLEN;
-		msg->nm_nlh->nlmsg_len = NEW_SIZE;
-		nla = nlmsg_attrdata(msg->nm_nlh, fam_hdrlen);
-		nla->nla_type = attrtype;
-		nla->nla_len = NLA_HDRLEN + data_len;
-	} else
-		goto fail;
+	if (NEW_SIZE > msg->nm_size)
+		return NULL;
 
+	nla = (struct nlattr *)nlmsg_tail(msg->nm_nlh);
+	nla->nla_type = attrtype;
+	nla->nla_len = NLA_HDRLEN + data_len;
+	memset((unsigned char *)nla + nla->nla_len, 0, nla_padlen(data_len));
+	msg->nm_nlh->nlmsg_len = NEW_SIZE;
 	return nla;
-fail:
-	return NULL;
-
 }
 
 /* Copy attribute payload to another memory area. */
 int nla_memcpy(void *dest, struct nlattr *src, int count)
 {
-	int rc;
-	void *ret_dest = memcpy(dest, nla_data(src), count);
-	if (!ret_dest)
-		return count;
-	else
+	if (!src || !dest)
 		return 0;
+	if (count > nla_len(src))
+		count = nla_len(src);
+	memcpy(dest, nla_data(src), count);
+	return count;
 }
-
-

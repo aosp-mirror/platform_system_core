@@ -11,7 +11,8 @@ LOCAL_SRC_FILES := \
         msg.c \
         netlink.c \
         object.c \
-        socket.c
+        socket.c \
+        dbg.c
 
 LOCAL_C_INCLUDES += \
         external/libnl-headers
