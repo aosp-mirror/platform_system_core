@@ -91,39 +91,41 @@ struct nlmsghdr *nlmsg_hdr(struct nl_msg *n)
 struct nlattr *nlmsg_attrdata(const struct nlmsghdr *nlh, int hdrlen)
 {
 	unsigned char *data = nlmsg_data(nlh);
-	return (struct nlattr *) (data + NLMSG_ALIGN(hdrlen));
+	return (struct nlattr *)(data + NLMSG_ALIGN(hdrlen));
 }
 
 /* Returns pointer to end of netlink message */
 void *nlmsg_tail(const struct nlmsghdr *nlh)
 {
-	return (void *)((char *) nlh + nlh->nlmsg_len);
+	return (void *)((char *)nlh + NLMSG_ALIGN(nlh->nlmsg_len));
 }
 
 /* Next netlink message in message stream */
 struct nlmsghdr *nlmsg_next(struct nlmsghdr *nlh, int *remaining)
 {
 	struct nlmsghdr *next_nlh = NULL;
-	if (*remaining > 0 &&
-		nlmsg_len(nlh) <= *remaining &&
-		nlmsg_len(nlh) >= (int) sizeof(struct nlmsghdr)) {
-		next_nlh = (struct nlmsghdr *) \
-			((char *) nlh + nlmsg_len(nlh));
+	int len = nlmsg_len(nlh);
 
-		if (next_nlh && nlmsg_len(nlh) <= *remaining) {
-			*remaining -= nlmsg_len(nlh);
-			next_nlh = (struct nlmsghdr *) \
-				((char *) nlh + nlmsg_len(nlh));
-		}
+	len = NLMSG_ALIGN(len);
+	if (*remaining > 0 &&
+	    len <= *remaining &&
+	    len >= (int) sizeof(struct nlmsghdr)) {
+		next_nlh = (struct nlmsghdr *)((char *)nlh + len);
+		*remaining -= len;
 	}
 
 	return next_nlh;
 }
 
+int nlmsg_datalen(const struct nlmsghdr *nlh)
+{
+	return nlh->nlmsg_len - NLMSG_HDRLEN;
+}
+
 /* Length of attributes data */
 int nlmsg_attrlen(const struct nlmsghdr *nlh, int hdrlen)
 {
-	return nlmsg_len(nlh) - NLMSG_HDRLEN - hdrlen;
+	return nlmsg_datalen(nlh) - NLMSG_ALIGN(hdrlen);
 }
 
 /* Length of netlink message */
@@ -145,9 +147,3 @@ int nlmsg_padlen(int payload)
 {
 	return NLMSG_ALIGN(payload) - payload;
 }
-
-int nlmsg_datalen(const struct nlmsghdr *nlh)
-{
-	return nlh->nlmsg_len - NLMSG_HDRLEN;
-}
-
