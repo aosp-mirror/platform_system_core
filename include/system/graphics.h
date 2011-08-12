@@ -17,7 +17,7 @@
 #ifndef SYSTEM_CORE_INCLUDE_ANDROID_GRAPHICS_H
 #define SYSTEM_CORE_INCLUDE_ANDROID_GRAPHICS_H
 
-#include <cdefs.h>
+#include <sys/cdefs.h>
 
 __BEGIN_DECLS
 
