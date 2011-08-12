@@ -17,9 +17,9 @@
 #ifndef SYSTEM_CORE_INCLUDE_ANDROID_GRAPHICS_H
 #define SYSTEM_CORE_INCLUDE_ANDROID_GRAPHICS_H
 
-#include <sys/cdefs.h>
-
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * If the HAL needs to create service threads to handle graphics related
@@ -116,6 +116,8 @@ enum {
     HAL_TRANSFORM_ROT_270   = 0x07,
 };
 
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SYSTEM_CORE_INCLUDE_ANDROID_GRAPHICS_H */
