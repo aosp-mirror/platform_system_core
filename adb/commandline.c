@@ -1370,50 +1370,112 @@ static int delete_file(transport_type transport, char* serial, char* filename)
     return 0;
 }
 
-int install_app(transport_type transport, char* serial, int argc, char** argv)
+static const char* get_basename(const char* filename)
+{
+    const char* basename = adb_dirstop(filename);
+    if (basename) {
+        basename++;
+        return basename;
+    } else {
+        return filename;
+    }
+}
+
+static int check_file(const char* filename)
 {
     struct stat st;
-    int err;
-    const char *const DATA_DEST = "/data/local/tmp/%s";
-    const char *const SD_DEST = "/sdcard/tmp/%s";
-    const char* where = DATA_DEST;
-    char to[PATH_MAX];
-    char* filename = argv[argc - 1];
-    const char* p;
-    int i;
 
-    for (i = 0; i < argc; i++) {
-        if (!strcmp(argv[i], "-s"))
-            where = SD_DEST;
+    if (filename == NULL) {
+        return 0;
     }
 
-    p = adb_dirstop(filename);
-    if (p) {
-        p++;
-        snprintf(to, sizeof to, where, p);
-    } else {
-        snprintf(to, sizeof to, where, filename);
-    }
-    if (p[0] == '\0') {
-    }
-
-    err = stat(filename, &st);
-    if (err != 0) {
+    if (stat(filename, &st) != 0) {
         fprintf(stderr, "can't find '%s' to install\n", filename);
         return 1;
     }
+
     if (!S_ISREG(st.st_mode)) {
-        fprintf(stderr, "can't install '%s' because it's not a file\n",
-                filename);
+        fprintf(stderr, "can't install '%s' because it's not a file\n", filename);
         return 1;
     }
 
-    if (!(err = do_sync_push(filename, to, 1 /* verify APK */))) {
-        /* file in place; tell the Package Manager to install it */
-        argv[argc - 1] = to;       /* destination name, not source location */
-        pm_command(transport, serial, argc, argv);
-        delete_file(transport, serial, to);
+    return 0;
+}
+
+int install_app(transport_type transport, char* serial, int argc, char** argv)
+{
+    static const char *const DATA_DEST = "/data/local/tmp/%s";
+    static const char *const SD_DEST = "/sdcard/tmp/%s";
+    const char* where = DATA_DEST;
+    char apk_dest[PATH_MAX];
+    char verification_dest[PATH_MAX];
+    char* apk_file;
+    char* verification_file = NULL;
+    int file_arg = -1;
+    int err;
+    int i;
+
+    for (i = 1; i < argc; i++) {
+        if (*argv[i] != '-') {
+            file_arg = i;
+            break;
+        } else if (!strcmp(argv[i], "-s")) {
+            where = SD_DEST;
+        }
     }
+
+    if (file_arg < 0) {
+        fprintf(stderr, "can't find filename in arguments");
+        return 1;
+    } else if (file_arg + 2 < argc) {
+        fprintf(stderr, "too many files specified; only takes APK file and verifier file");
+        return 1;
+    }
+
+    apk_file = argv[file_arg];
+
+    if (file_arg != argc - 1) {
+        verification_file = argv[file_arg + 1];
+    }
+
+    if (check_file(apk_file) || check_file(verification_file)) {
+        return 1;
+    }
+
+    snprintf(apk_dest, sizeof apk_dest, where, get_basename(apk_file));
+    if (verification_file != NULL) {
+        snprintf(verification_dest, sizeof(verification_dest), where, get_basename(verification_file));
+
+        if (!strcmp(apk_dest, verification_dest)) {
+            fprintf(stderr, "APK and verification file can't have the same name\n");
+            return 1;
+        }
+    }
+
+    err = do_sync_push(apk_file, apk_dest, 1 /* verify APK */);
+    if (err) {
+        return err;
+    } else {
+        argv[file_arg] = apk_dest; /* destination name, not source location */
+    }
+
+    if (verification_file != NULL) {
+        err = do_sync_push(verification_file, verification_dest, 0 /* no verify APK */);
+        if (err) {
+            goto cleanup_apk;
+        } else {
+            argv[file_arg + 1] = verification_dest; /* destination name, not source location */
+        }
+    }
+
+    pm_command(transport, serial, argc, argv);
+
+    if (verification_file != NULL) {
+        delete_file(transport, serial, verification_dest);
+    }
+
+cleanup_apk:
+    delete_file(transport, serial, apk_dest);
 
     return err;
 }
