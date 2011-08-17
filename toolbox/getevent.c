@@ -175,7 +175,9 @@ static int print_possible_events(int fd, int print_flags)
                     if(i == EV_ABS) {
                         struct input_absinfo abs;
                         if(ioctl(fd, EVIOCGABS(j * 8 + k), &abs) == 0) {
-                            printf(" : value %d, min %d, max %d, fuzz %d flat %d", abs.value, abs.minimum, abs.maximum, abs.fuzz, abs.flat);
+                            printf(" : value %d, min %d, max %d, fuzz %d, flat %d, resolution %d",
+                                abs.value, abs.minimum, abs.maximum, abs.fuzz, abs.flat,
+                                abs.resolution);
                         }
                     }
                     count++;
