@@ -27,12 +27,17 @@ class TimerMock : public Timer {
 
 class TimerReporterMock : public TimerReporter {
  public:
+  TimerReporterMock() : TimerReporter("",0,0,0) {}
   MOCK_METHOD0(Start, bool());
   MOCK_METHOD0(Stop, bool());
   MOCK_METHOD0(Reset, bool());
   MOCK_CONST_METHOD0(HasStarted, bool());
-  MOCK_CONST_METHOD0(GetElapsedTime, base::TimeDelta());
+  MOCK_CONST_METHOD1(GetElapsedTime, bool(base::TimeDelta* elapsed_time));
   MOCK_CONST_METHOD0(ReportMilliseconds, bool());
+  MOCK_CONST_METHOD0(histogram_name, std::string&());
+  MOCK_CONST_METHOD0(min, int());
+  MOCK_CONST_METHOD0(max, int());
+  MOCK_CONST_METHOD0(num_buckets, int());
 };
 
 class ClockWrapperMock : public ClockWrapper {
