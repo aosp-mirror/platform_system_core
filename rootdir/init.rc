@@ -413,7 +413,7 @@ service drm /system/bin/drmserver
 service media /system/bin/mediaserver
     class main
     user media
-    group audio camera inet net_bt net_bt_admin
+    group audio camera inet net_bt net_bt_admin net_bw_acct
     ioprio rt 4
 
 service bootanim /system/bin/bootanimation
