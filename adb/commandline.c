@@ -579,9 +579,6 @@ static int backup(int argc, char** argv) {
     int fd, outFd;
     int i, j;
 
-    /* bare "adb backup" is not a valid command */
-    if (argc < 2) return usage();
-
     /* find, extract, and use any -f argument */
     for (i = 1; i < argc; i++) {
         if (!strcmp("-f", argv[i])) {
@@ -597,6 +594,9 @@ static int backup(int argc, char** argv) {
             argv[argc] = NULL;
         }
     }
+
+    /* bare "adb backup" or "adb backup -f filename" are not valid invocations */
+    if (argc < 2) return usage();
 
     outFd = adb_open_mode(filename, O_WRONLY | O_CREAT | O_TRUNC, 0640);
     if (outFd < 0) {
