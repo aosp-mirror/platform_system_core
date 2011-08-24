@@ -744,20 +744,27 @@ int main(int argc, char **argv)
     queue_builtin_action(console_init_action, "console_init");
     queue_builtin_action(set_init_properties_action, "set_init_properties");
 
-        /* execute all the boot actions to get us started */
+    /* execute all the boot actions to get us started */
     action_for_each_trigger("init", action_add_queue_tail);
-    action_for_each_trigger("early-fs", action_add_queue_tail);
-    action_for_each_trigger("fs", action_add_queue_tail);
-    action_for_each_trigger("post-fs", action_add_queue_tail);
-    action_for_each_trigger("post-fs-data", action_add_queue_tail);
+
+    /* skip mounting filesystems in charger mode */
+    if (strcmp(bootmode, "charger") != 0) {
+        action_for_each_trigger("early-fs", action_add_queue_tail);
+        action_for_each_trigger("fs", action_add_queue_tail);
+        action_for_each_trigger("post-fs", action_add_queue_tail);
+        action_for_each_trigger("post-fs-data", action_add_queue_tail);
+    }
 
     queue_builtin_action(property_service_init_action, "property_service_init");
     queue_builtin_action(signal_init_action, "signal_init");
     queue_builtin_action(check_startup_action, "check_startup");
 
-    /* execute all the boot actions to get us started */
-    action_for_each_trigger("early-boot", action_add_queue_tail);
-    action_for_each_trigger("boot", action_add_queue_tail);
+    if (!strcmp(bootmode, "charger")) {
+        action_for_each_trigger("charger", action_add_queue_tail);
+    } else {
+        action_for_each_trigger("early-boot", action_add_queue_tail);
+        action_for_each_trigger("boot", action_add_queue_tail);
+    }
 
         /* run all property triggers based on current state of the properties */
     queue_builtin_action(queue_property_triggers_action, "queue_propety_triggers");
