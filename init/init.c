@@ -491,7 +491,7 @@ static struct command *get_first_command(struct action *act)
 {
     struct listnode *node;
     node = list_head(&act->commands);
-    if (!node)
+    if (!node || list_empty(&act->commands))
         return NULL;
 
     return node_to_item(node, struct command, clist);
