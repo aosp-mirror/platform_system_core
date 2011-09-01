@@ -25,6 +25,8 @@ int rmmod_main(int argc, char **argv)
 	modname = strrchr(argv[1], '/');
 	if (!modname)
 		modname = argv[1];
+	else modname++;
+
 	dot = strchr(argv[1], '.');
 	if (dot)
 		*dot = '\0';
