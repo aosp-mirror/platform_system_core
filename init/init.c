@@ -724,7 +724,7 @@ int main(int argc, char **argv)
          * talk to the outside world.
          */
     open_devnull_stdio();
-    log_init();
+    klog_init();
     
     INFO("reading config file\n");
     init_parse_config_file("/init.rc");

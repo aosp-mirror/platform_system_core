@@ -47,7 +47,7 @@ int ueventd_main(int argc, char **argv)
     signal(SIGCHLD, SIG_IGN);
 
     open_devnull_stdio();
-    log_init();
+    klog_init();
 
     INFO("starting ueventd\n");
 

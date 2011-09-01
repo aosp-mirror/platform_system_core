@@ -663,7 +663,7 @@ int do_chmod(int nargs, char **args) {
 
 int do_loglevel(int nargs, char **args) {
     if (nargs == 2) {
-        log_set_level(atoi(args[1]));
+        klog_set_level(atoi(args[1]));
         return 0;
     }
     return -1;

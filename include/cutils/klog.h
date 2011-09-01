@@ -14,15 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_LOG_H_
-#define _INIT_LOG_H_
+#ifndef _CUTILS_KLOG_H_
+#define _CUTILS_KLOG_H_
 
-#include <cutils/klog.h>
+void klog_init(void);
+void klog_set_level(int level);
+void klog_close(void);
+void klog_write(int level, const char *fmt, ...)
+    __attribute__ ((format(printf, 2, 3)));
 
-#define ERROR(x...)   KLOG_ERROR("init", x)
-#define NOTICE(x...)  KLOG_NOTICE("init", x)
-#define INFO(x...)    KLOG_INFO("init", x)
+#define KLOG_ERROR(tag,x...)   klog_write(3, "<3>" tag ": " x)
+#define KLOG_WARNING(tag,x...) klog_write(4, "<4>" tag ": " x)
+#define KLOG_NOTICE(tag,x...)  klog_write(5, "<5>" tag ": " x)
+#define KLOG_INFO(tag,x...)    klog_write(6, "<6>" tag ": " x)
+#define KLOG_DEBUG(tag,x...)   klog_write(7, "<7>" tag ": " x)
 
-#define LOG_UEVENTS        0  /* log uevent messages if 1. verbose */
+#define KLOG_DEFAULT_LEVEL  3  /* messages <= this level are logged */
 
 #endif
