@@ -17,12 +17,14 @@
 #ifndef __CUTILS_UEVENT_H
 #define __CUTILS_UEVENT_H
 
+#include <stdbool.h>
 #include <sys/socket.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+int uevent_open_socket(int buf_sz, bool passcred);
 ssize_t uevent_kernel_multicast_recv(int socket, void *buffer, size_t length);
 
 #ifdef __cplusplus

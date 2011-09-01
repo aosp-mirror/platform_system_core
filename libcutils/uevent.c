@@ -17,7 +17,12 @@
 #include <cutils/uevent.h>
 
 #include <errno.h>
+#include <stdbool.h>
+#include <string.h>
 #include <strings.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #include <linux/netlink.h>
 
@@ -67,4 +72,30 @@ out:
     bzero(buffer, length);
     errno = EIO;
     return -1;
+}
+
+int uevent_open_socket(int buf_sz, bool passcred)
+{
+    struct sockaddr_nl addr;
+    int on = passcred;
+    int s;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.nl_family = AF_NETLINK;
+    addr.nl_pid = getpid();
+    addr.nl_groups = 0xffffffff;
+
+    s = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT);
+    if(s < 0)
+        return -1;
+
+    setsockopt(s, SOL_SOCKET, SO_RCVBUFFORCE, &buf_sz, sizeof(buf_sz));
+    setsockopt(s, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on));
+
+    if(bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+        close(s);
+        return -1;
+    }
+
+    return s;
 }

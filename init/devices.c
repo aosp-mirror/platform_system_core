@@ -58,33 +58,6 @@ struct uevent {
     int minor;
 };
 
-static int open_uevent_socket(void)
-{
-    struct sockaddr_nl addr;
-    int sz = 64*1024; // XXX larger? udev uses 16MB!
-    int on = 1;
-    int s;
-
-    memset(&addr, 0, sizeof(addr));
-    addr.nl_family = AF_NETLINK;
-    addr.nl_pid = getpid();
-    addr.nl_groups = 0xffffffff;
-
-    s = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT);
-    if(s < 0)
-        return -1;
-
-    setsockopt(s, SOL_SOCKET, SO_RCVBUFFORCE, &sz, sizeof(sz));
-    setsockopt(s, SOL_SOCKET, SO_PASSCRED, &on, sizeof(on));
-
-    if(bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        close(s);
-        return -1;
-    }
-
-    return s;
-}
-
 struct perms_ {
     char *name;
     char *attr;
@@ -847,7 +820,8 @@ void device_init(void)
     struct stat info;
     int fd;
 
-    device_fd = open_uevent_socket();
+    /* is 64K enough? udev uses 16MB! */
+    device_fd = uevent_open_socket(64*1024, true);
     if(device_fd < 0)
         return;
 
