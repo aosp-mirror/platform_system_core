@@ -33,6 +33,7 @@
 #include <sys/un.h>
 #include <libgen.h>
 
+#include <cutils/list.h>
 #include <cutils/sockets.h>
 #include <cutils/iosched_policy.h>
 #include <private/android_filesystem_config.h>
@@ -42,7 +43,6 @@
 
 #include "devices.h"
 #include "init.h"
-#include "list.h"
 #include "log.h"
 #include "property_service.h"
 #include "bootchart.h"

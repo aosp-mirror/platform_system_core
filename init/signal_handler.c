@@ -24,9 +24,9 @@
 #include <sys/wait.h>
 #include <cutils/sockets.h>
 #include <cutils/android_reboot.h>
+#include <cutils/list.h>
 
 #include "init.h"
-#include "list.h"
 #include "util.h"
 #include "log.h"
 

@@ -3,7 +3,6 @@
 #include <string.h>
 
 #include "parser.h"
-#include "list.h"
 #include "log.h"
 
 #define RAW(x...) log_write(6, x)

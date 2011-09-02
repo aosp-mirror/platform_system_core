@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef _INIT_LIST_H_
-#define _INIT_LIST_H_
+#ifndef _CUTILS_LIST_H_
+#define _CUTILS_LIST_H_
 
 #include <stddef.h>
 

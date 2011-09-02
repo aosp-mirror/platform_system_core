@@ -17,7 +17,7 @@
 #ifndef _INIT_INIT_H
 #define _INIT_INIT_H
 
-#include "list.h"
+#include <cutils/list.h>
 
 #include <sys/stat.h>
 

@@ -34,12 +34,12 @@
 #include <asm/page.h>
 #include <sys/wait.h>
 
+#include <cutils/list.h>
 #include <cutils/uevent.h>
 
 #include "devices.h"
 #include "util.h"
 #include "log.h"
-#include "list.h"
 
 #define SYSFS_PREFIX    "/sys"
 #define FIRMWARE_DIR1   "/etc/firmware"

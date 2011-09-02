@@ -34,7 +34,6 @@
 #include <private/android_filesystem_config.h>
 
 #include "log.h"
-#include "list.h"
 #include "util.h"
 
 /*
@@ -154,26 +153,6 @@ oops:
     close(fd);
     if(data != 0) free(data);
     return 0;
-}
-
-void list_init(struct listnode *node)
-{
-    node->next = node;
-    node->prev = node;
-}
-
-void list_add_tail(struct listnode *head, struct listnode *item)
-{
-    item->next = head;
-    item->prev = head->prev;
-    head->prev->next = item;
-    head->prev = item;
-}
-
-void list_remove(struct listnode *item)
-{
-    item->next->prev = item->prev;
-    item->prev->next = item->next;
 }
 
 #define MAX_MTD_PARTITIONS 16

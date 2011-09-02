@@ -22,7 +22,6 @@
 #include "ueventd_parser.h"
 #include "parser.h"
 #include "log.h"
-#include "list.h"
 #include "util.h"
 
 static void parse_line_device(struct parse_state *state, int nargs, char **args);
