@@ -39,7 +39,6 @@ commonSources := \
 	config_utils.c \
 	cpu_info.c \
 	load_file.c \
-	klog.c \
 	list.c \
 	open_memstream.c \
 	strdup16to8.c \
@@ -99,7 +98,7 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 # ========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
-LOCAL_SRC_FILES := $(commonSources) ashmem-dev.c mq.c android_reboot.c partition_utils.c uevent.c qtaguid.c
+LOCAL_SRC_FILES := $(commonSources) ashmem-dev.c mq.c android_reboot.c partition_utils.c uevent.c qtaguid.c klog.c
 
 ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += arch-arm/memset32.S
