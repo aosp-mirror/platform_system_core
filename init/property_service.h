@@ -17,8 +17,10 @@
 #ifndef _INIT_PROPERTY_H
 #define _INIT_PROPERTY_H
 
+#include <stdbool.h>
+
 extern void handle_property_set_fd(void);
-extern void property_init(void);
+extern void property_init(bool load_defaults);
 extern void load_persist_props(void);
 extern void start_property_service(void);
 void get_property_workspace(int *fd, int *sz);

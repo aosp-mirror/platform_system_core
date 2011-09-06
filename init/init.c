@@ -548,8 +548,12 @@ static int wait_for_coldboot_done_action(int nargs, char **args)
 
 static int property_init_action(int nargs, char **args)
 {
+    bool load_defaults = true;
+
     INFO("property init\n");
-    property_init();
+    if (!strcmp(bootmode, "charger"))
+        load_defaults = false;
+    property_init(load_defaults);
     return 0;
 }
 
