@@ -59,12 +59,12 @@ static int   bootchart_count;
 #endif
 
 static char console[32];
-static char serialno[32];
-static char bootmode[32];
-static char baseband[32];
-static char carrier[32];
-static char bootloader[32];
-static char hardware[32];
+static char serialno[PROP_VALUE_MAX];
+static char bootmode[PROP_VALUE_MAX];
+static char baseband[PROP_VALUE_MAX];
+static char carrier[PROP_VALUE_MAX];
+static char bootloader[PROP_VALUE_MAX];
+static char hardware[PROP_VALUE_MAX];
 static unsigned revision = 0;
 static char qemu[32];
 
