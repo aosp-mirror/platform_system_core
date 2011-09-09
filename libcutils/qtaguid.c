@@ -24,44 +24,154 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 
-extern int qtaguid_tagSocket(int sockfd, int tag, uid_t uid) {
-    char lineBuf[128];
-    int fd, cnt = 0, res = 0;
-    uint64_t kTag = (uint64_t)tag << 32;
-    snprintf(lineBuf, sizeof(lineBuf), "t %d %llu %d", sockfd, kTag, uid);
+static const char* CTRL_PROCPATH = "/proc/net/xt_qtaguid/ctrl";
+static const int CTRL_MAX_INPUT_LEN = 128;
+static const char *GLOBAL_PACIFIER_PARAM = "/sys/module/xt_qtaguid/parameters/passive";
+static const char *TAG_PACIFIER_PARAM = "/sys/module/xt_qtaguid/parameters/tag_tracking_passive";
 
-    LOGI("Tagging socket %d with tag %llx(%d) for uid %d", sockfd, kTag, tag, uid);
-    fd = open("/proc/net/xt_qtaguid/ctrl", O_WRONLY);
+/*
+ * One per proccess.
+ * Once the device is open, this process will have its socket tags tracked.
+ * And on exit or untimely death, all socket tags will be removed.
+ * A process can only open /dev/xt_qtaguid once.
+ * It should not close it unless it is really done with all the socket tags.
+ * Failure to open it will be visible when socket tagging will be attempted.
+ */
+static int resTrackFd = -1;
+pthread_once_t resTrackInitDone = PTHREAD_ONCE_INIT;
+
+/* Only call once per process. */
+void qtaguid_resTrack(void) {
+    resTrackFd = TEMP_FAILURE_RETRY(open("/dev/xt_qtaguid", O_RDONLY));
+    if (resTrackFd >=0) {
+        TEMP_FAILURE_RETRY(fcntl(resTrackFd, F_SETFD, FD_CLOEXEC));
+    }
+}
+
+/*
+ * Returns:
+ *   0 on success.
+ *   -errno on failure.
+ */
+static int write_ctrl(const char *cmd) {
+    int fd, res, savedErrno;
+
+    LOGI("write_ctrl(%s)", cmd);
+
+    fd = TEMP_FAILURE_RETRY(open(CTRL_PROCPATH, O_WRONLY));
     if (fd < 0) {
         return -errno;
     }
 
-    cnt = write(fd, lineBuf, strlen(lineBuf));
-    if (cnt < 0) {
-        res = -errno;
+    res = TEMP_FAILURE_RETRY(write(fd, cmd, strlen(cmd)));
+    if (res < 0) {
+        savedErrno = errno;
+    } else {
+        savedErrno = 0;
+    }
+    if (res < 0) {
+        LOGI("Failed write_ctrl(%s) res=%d errno=%d", cmd, res, savedErrno);
+    }
+    close(fd);
+    return -savedErrno;
+}
+
+static int write_param(const char *param_path, const char *value) {
+    int param_fd;
+    int res;
+
+    param_fd = TEMP_FAILURE_RETRY(open(param_path, O_WRONLY));
+    if (param_fd < 0) {
+        return -errno;
+    }
+    res = TEMP_FAILURE_RETRY(write(param_fd, value, strlen(value)));
+    if (res < 0) {
+        return -errno;
+    }
+    close(param_fd);
+    return 0;
+}
+
+int qtaguid_tagSocket(int sockfd, int tag, uid_t uid) {
+    char lineBuf[CTRL_MAX_INPUT_LEN];
+    int res;
+    /* Doing java-land a favor, enforcing "long" */
+    uint64_t kTag = ((uint64_t)tag << 32) & ~(1LLU<<63);
+
+
+    pthread_once(&resTrackInitDone, qtaguid_resTrack);
+
+    snprintf(lineBuf, sizeof(lineBuf), "t %d %llu %d", sockfd, kTag, uid);
+
+    LOGI("Tagging socket %d with tag %llx{%u,0} for uid %d", sockfd, kTag, tag, uid);
+
+    res = write_ctrl(lineBuf);
+    if (res < 0) {
+        LOGI("Tagging socket %d with tag %llx(%d) for uid %d failed errno=%d",
+             sockfd, kTag, tag, uid, res);
     }
 
-    close(fd);
     return res;
 }
 
-extern int qtaguid_untagSocket(int sockfd) {
-    char lineBuf[128];
-    int fd, cnt = 0, res = 0;
-    snprintf(lineBuf, sizeof(lineBuf), "u %d", sockfd);
+int qtaguid_untagSocket(int sockfd) {
+    char lineBuf[CTRL_MAX_INPUT_LEN];
+    int res;
 
     LOGI("Untagging socket %d", sockfd);
-    fd = open("/proc/net/xt_qtaguid/ctrl", O_WRONLY);
-    if (fd < 0) {
+
+    snprintf(lineBuf, sizeof(lineBuf), "u %d", sockfd);
+    res = write_ctrl(lineBuf);
+    if (res < 0) {
+        LOGI("Untagging socket %d failed errno=%d", sockfd, res);
+    }
+
+    return res;
+}
+
+int qtaguid_setCounterSet(int counterSetNum, uid_t uid) {
+    char lineBuf[CTRL_MAX_INPUT_LEN];
+    int res;
+
+    LOGI("Setting counters to set %d for uid %d", counterSetNum, uid);
+
+    snprintf(lineBuf, sizeof(lineBuf), "s %d %d", counterSetNum, uid);
+    res = write_ctrl(lineBuf);
+    return res;
+}
+
+int qtaguid_deleteTagData(int tag, uid_t uid) {
+    char lineBuf[CTRL_MAX_INPUT_LEN];
+    int fd, cnt = 0, res = 0;
+    uint64_t kTag = (uint64_t)tag << 32;
+
+    LOGI("Deleting tag data with tag %llx{%d,0} for uid %d", kTag, tag, uid);
+
+    pthread_once(&resTrackInitDone, qtaguid_resTrack);
+
+    snprintf(lineBuf, sizeof(lineBuf), "d %llu %d", kTag, uid);
+    res = write_ctrl(lineBuf);
+    if (res < 0) {
+        LOGI("Deleteing tag data with tag %llx/%d for uid %d failed with cnt=%d errno=%d",
+             kTag, tag, uid, cnt, errno);
+    }
+
+    return res;
+}
+
+int qtaguid_setPacifier(int on) {
+    int param_fd;
+    int res;
+    const char *value;
+
+    value = on ? "Y" : "N";
+    if (write_param(GLOBAL_PACIFIER_PARAM, value) < 0) {
         return -errno;
     }
-
-    cnt = write(fd, lineBuf, strlen(lineBuf));
-    if (cnt < 0) {
-        res = -errno;
+    if (write_param(TAG_PACIFIER_PARAM, value) < 0) {
+        return -errno;
     }
-
-    close(fd);
-    return res;
+    return 0;
 }
