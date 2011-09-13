@@ -103,6 +103,12 @@
 #define VENDOR_ID_LENOVO        0x17EF
 // Vizio's USB Vendor ID
 #define VENDOR_ID_VIZIO         0xE040
+// K-Touch's USB Vendor ID
+#define VENDOR_ID_K_TOUCH       0x24E3
+// Pegatron's USB Vendor ID
+#define VENDOR_ID_PEGATRON      0x1D4D
+// Archos's USB Vendor ID
+#define VENDOR_ID_ARCHOS        0x0E79
 
 
 /** built-in vendor list */
@@ -141,6 +147,9 @@ int builtInVendorIds[] = {
     VENDOR_ID_LENOVOMOBILE,
     VENDOR_ID_LENOVO,
     VENDOR_ID_VIZIO,
+    VENDOR_ID_K_TOUCH,
+    VENDOR_ID_PEGATRON,
+    VENDOR_ID_ARCHOS,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
