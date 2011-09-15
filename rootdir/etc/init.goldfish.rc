@@ -52,6 +52,18 @@ service goldfish-setup /system/etc/init.goldfish.sh
     group root
     oneshot
 
+# The qemu-props program is used to set various system
+# properties on boot. It must be run early during the boot
+# process to avoid race conditions with other daemons that
+# might read them (e.g. surface flinger), so define it in
+# class 'core'
+#
+service qemu-props /system/bin/qemu-props
+    class core
+    user root
+    group root
+    oneshot
+
 service qemud /system/bin/qemud
     socket qemud    stream 666
     oneshot
