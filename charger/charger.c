@@ -53,7 +53,7 @@
 #define NSEC_PER_MSEC           (1000000LL)
 
 #define SCREEN_ON_TIME          (5 * MSEC_PER_SEC)
-#define POWER_ON_KEY_TIME       (5 * MSEC_PER_SEC)
+#define POWER_ON_KEY_TIME       (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
 #define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
