@@ -98,7 +98,7 @@
 // T & A Mobile Phones' USB Vendor ID
 #define VENDOR_ID_T_AND_A       0x1BBB
 // LenovoMobile's USB Vendor ID
-#define VENDOR_ID_LENOVOMOBILE        0x2006
+#define VENDOR_ID_LENOVOMOBILE  0x2006
 // Lenovo's USB Vendor ID
 #define VENDOR_ID_LENOVO        0x17EF
 // Vizio's USB Vendor ID
@@ -109,6 +109,8 @@
 #define VENDOR_ID_PEGATRON      0x1D4D
 // Archos's USB Vendor ID
 #define VENDOR_ID_ARCHOS        0x0E79
+// Positivo's USB Vendor ID
+#define VENDOR_ID_POSITIVO      0x1662
 
 
 /** built-in vendor list */
@@ -150,6 +152,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_K_TOUCH,
     VENDOR_ID_PEGATRON,
     VENDOR_ID_ARCHOS,
+    VENDOR_ID_POSITIVO,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
