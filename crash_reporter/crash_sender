@@ -196,6 +196,8 @@ get_board() {
 get_hardware_class() {
   if [ -r "${HWCLASS_PATH}" ]; then
     cat "${HWCLASS_PATH}"
+  elif crossystem hwid > /dev/null 2>&1; then
+    echo "$(crossystem hwid)"
   else
     echo "undefined"
   fi
