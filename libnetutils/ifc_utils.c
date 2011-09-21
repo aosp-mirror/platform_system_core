@@ -739,7 +739,7 @@ int ifc_add_ipv4_route(const char *ifname, struct in_addr dst, int prefix_length
       struct in_addr gw)
 {
     int i =ifc_act_on_ipv4_route(SIOCADDRT, ifname, dst, prefix_length, gw);
-    printerr("ifc_add_ipv4_route(%s, xx, %d, xx) = %d", ifname, prefix_length, i);
+    if (DBG) printerr("ifc_add_ipv4_route(%s, xx, %d, xx) = %d", ifname, prefix_length, i);
     return i;
 }
 
@@ -755,7 +755,7 @@ int ifc_add_ipv6_route(const char *ifname, struct in6_addr dst, int prefix_lengt
 int ifc_add_route(const char *ifname, const char *dst, int prefix_length, const char *gw)
 {
     int i = ifc_act_on_route(SIOCADDRT, ifname, dst, prefix_length, gw);
-    printerr("ifc_add_route(%s, %s, %d, %s) = %d", ifname, dst, prefix_length, gw, i);
+    if (DBG) printerr("ifc_add_route(%s, %s, %d, %s) = %d", ifname, dst, prefix_length, gw, i);
     return i;
 }
 
