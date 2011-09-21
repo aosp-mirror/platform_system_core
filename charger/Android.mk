@@ -1,5 +1,7 @@
 # Copyright 2011 The Android Open Source Project
 
+ifneq ($(BUILD_TINY_ANDROID),true)
+
 LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -18,3 +20,5 @@ LOCAL_STATIC_LIBRARIES := libminui libpixelflinger_static libpng
 LOCAL_STATIC_LIBRARIES += libz libstdc++ libcutils libc
 
 include $(BUILD_EXECUTABLE)
+
+endif
