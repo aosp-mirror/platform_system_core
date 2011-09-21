@@ -118,7 +118,7 @@ bool KernelCollector::ReadRecordToString(std::string *contents,
   return true;
 }
 
-bool LoadValue(FilePath path, unsigned int *element){
+bool LoadValue(FilePath path, size_t *element){
   std::string buf;
   char *end;
   if (!file_util::ReadFileToString(path, &buf)) {

@@ -10,6 +10,8 @@
 #include <sys/types.h>  // for mode_t.
 #include <sys/wait.h>  // For waitpid.
 #include <unistd.h>  // For execv and fork.
+#define __STDC_FORMAT_MACROS // PRId64
+#include <inttypes.h>
 
 #include <set>
 
@@ -346,7 +348,7 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
   std::string meta_data = StringPrintf("%sexec_name=%s\n"
                                        "ver=%s\n"
                                        "payload=%s\n"
-                                       "payload_size=%lld\n"
+                                       "payload_size=%"PRId64"\n"
                                        "done=1\n",
                                        extra_metadata_.c_str(),
                                        exec_name.c_str(),
