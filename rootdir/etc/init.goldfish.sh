@@ -57,10 +57,6 @@ case "$boot_anim" in
     ;;
 esac
 
-# call 'qemu-props' to set system properties from the emulator.
-#
-/system/bin/qemu-props
-
 # set up the second interface (for inter-emulator connections)
 # if required
 my_ip=`getprop net.shared_net_ip`
