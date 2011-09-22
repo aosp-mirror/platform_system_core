@@ -70,14 +70,17 @@ mapinfo *parse_maps_line(char *line)
     mapinfo *mi;
     int len = strlen(line);
 
-    if(len < 1) return 0;
+    if (len < 1) return 0;      /* not expected */
     line[--len] = 0;
 
-    if(len < 50) return 0;
-    if(line[20] != 'x') return 0;
+    if (len < 50) {
+        mi = malloc(sizeof(mapinfo) + 1);
+    } else {
+        mi = malloc(sizeof(mapinfo) + (len - 47));
+    }
+    if (mi == 0) return 0;
 
-    mi = malloc(sizeof(mapinfo) + (len - 47));
-    if(mi == 0) return 0;
+    mi->isExecutable = (line[20] == 'x');
 
     mi->start = strtoul(line, 0, 16);
     mi->end = strtoul(line + 9, 0, 16);
@@ -87,7 +90,11 @@ mapinfo *parse_maps_line(char *line)
     mi->exidx_start = mi->exidx_end = 0;
     mi->symbols = 0;
     mi->next = 0;
-    strcpy(mi->name, line + 49);
+    if (len < 50) {
+        mi->name[0] = '\0';
+    } else {
+        strcpy(mi->name, line + 49);
+    }
 
     return mi;
 }
@@ -165,11 +172,14 @@ void dump_fault_addr(int tfd, int pid, int sig)
     memset(&si, 0, sizeof(si));
     if(ptrace(PTRACE_GETSIGINFO, pid, 0, &si)){
         _LOG(tfd, false, "cannot get siginfo: %s\n", strerror(errno));
-    } else {
+    } else if (signal_has_address(sig)) {
         _LOG(tfd, false, "signal %d (%s), code %d (%s), fault addr %08x\n",
              sig, get_signame(sig),
              si.si_code, get_sigcode(sig, si.si_code),
              si.si_addr);
+    } else {
+        _LOG(tfd, false, "signal %d (%s), code %d (%s), fault addr --------\n",
+             sig, get_signame(sig), si.si_code, get_sigcode(sig, si.si_code));
     }
 }
 
@@ -199,6 +209,9 @@ static void parse_elf_info(mapinfo *milist, pid_t pid)
 {
     mapinfo *mi;
     for (mi = milist; mi != NULL; mi = mi->next) {
+        if (!mi->isExecutable)
+            continue;
+
         Elf32_Ehdr ehdr;
 
         memset(&ehdr, 0, sizeof(Elf32_Ehdr));
