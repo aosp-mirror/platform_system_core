@@ -1419,16 +1419,19 @@ int install_app(transport_type transport, char* serial, int argc, char** argv)
         if (*argv[i] != '-') {
             file_arg = i;
             break;
+        } else if (!strcmp(argv[i], "-i")) {
+            // Skip the installer package name.
+            i++;
         } else if (!strcmp(argv[i], "-s")) {
             where = SD_DEST;
         }
     }
 
     if (file_arg < 0) {
-        fprintf(stderr, "can't find filename in arguments");
+        fprintf(stderr, "can't find filename in arguments\n");
         return 1;
     } else if (file_arg + 2 < argc) {
-        fprintf(stderr, "too many files specified; only takes APK file and verifier file");
+        fprintf(stderr, "too many files specified; only takes APK file and verifier file\n");
         return 1;
     }
 
