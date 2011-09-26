@@ -26,15 +26,18 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <netdb.h>
 
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
-#include <linux/sockios.h>
+#include <linux/netlink.h>
 #include <linux/route.h>
 #include <linux/ipv6_route.h>
-#include <netdb.h>
-#include <linux/wireless.h>
+#include <linux/rtnetlink.h>
+#include <linux/sockios.h>
+
+#include "netutils/ifc.h"
 
 #ifdef ANDROID
 #define LOG_TAG "NetUtils"
@@ -52,6 +55,8 @@ static int ifc_ctl_sock6 = -1;
 void printerr(char *fmt, ...);
 
 #define DBG 0
+#define INET_ADDRLEN 4
+#define INET6_ADDRLEN 16
 
 in_addr_t prefixLengthToIpv4Netmask(int prefix_length)
 {
@@ -86,6 +91,28 @@ static const char *ipaddr_to_string(in_addr_t addr)
 
     in_addr.s_addr = addr;
     return inet_ntoa(in_addr);
+}
+
+int string_to_ip(const char *string, struct sockaddr_storage *ss) {
+    struct addrinfo hints, *ai;
+    int ret;
+
+    if (ss == NULL) {
+        return -EFAULT;
+    }
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_flags = AI_NUMERICHOST;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    ret = getaddrinfo(string, NULL, &hints, &ai);
+    if (ret == 0) {
+        memcpy(ss, ai->ai_addr, ai->ai_addrlen);
+        freeaddrinfo(ai);
+    }
+
+    return ret;
 }
 
 int ifc_init(void)
@@ -207,6 +234,185 @@ int ifc_set_addr(const char *name, in_addr_t addr)
     ret = ioctl(ifc_ctl_sock, SIOCSIFADDR, &ifr);
     if (DBG) printerr("ifc_set_addr(%s, xx) = %d", name, ret);
     return ret;
+}
+
+/*
+ * Adds or deletes an IP address on an interface.
+ *
+ * Action is one of:
+ * - RTM_NEWADDR (to add a new address)
+ * - RTM_DELADDR (to delete an existing address)
+ *
+ * Returns zero on success and negative errno on failure.
+ */
+int ifc_act_on_address(int action, const char *name, const char *address,
+                       int prefixlen) {
+    int ifindex, s, len, ret;
+    struct sockaddr_storage ss;
+    void *addr;
+    size_t addrlen;
+    struct {
+        struct nlmsghdr n;
+        struct ifaddrmsg r;
+        // Allow for IPv6 address, headers, and padding.
+        char attrbuf[NLMSG_ALIGN(sizeof(struct nlmsghdr)) +
+                     NLMSG_ALIGN(sizeof(struct rtattr)) +
+                     NLMSG_ALIGN(INET6_ADDRLEN)];
+    } req;
+    struct rtattr *rta;
+    struct nlmsghdr *nh;
+    struct nlmsgerr *err;
+    char buf[NLMSG_ALIGN(sizeof(struct nlmsghdr)) +
+             NLMSG_ALIGN(sizeof(struct nlmsgerr)) +
+             NLMSG_ALIGN(sizeof(struct nlmsghdr))];
+
+    // Get interface ID.
+    ifindex = if_nametoindex(name);
+    if (ifindex == 0) {
+        return -errno;
+    }
+
+    // Convert string representation to sockaddr_storage.
+    ret = string_to_ip(address, &ss);
+    if (ret) {
+        return ret;
+    }
+
+    // Determine address type and length.
+    if (ss.ss_family == AF_INET) {
+        struct sockaddr_in *sin = (struct sockaddr_in *) &ss;
+        addr = &sin->sin_addr;
+        addrlen = INET_ADDRLEN;
+    } else if (ss.ss_family == AF_INET6) {
+        struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *) &ss;
+        addr = &sin6->sin6_addr;
+        addrlen = INET6_ADDRLEN;
+    } else {
+        return -EAFNOSUPPORT;
+    }
+
+    // Fill in netlink structures.
+    memset(&req, 0, sizeof(req));
+
+    // Netlink message header.
+    req.n.nlmsg_len = NLMSG_LENGTH(sizeof(req.r));
+    req.n.nlmsg_type = action;
+    req.n.nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK;
+    req.n.nlmsg_pid = getpid();
+
+    // Interface address message header.
+    req.r.ifa_family = ss.ss_family;
+    req.r.ifa_prefixlen = prefixlen;
+    req.r.ifa_index = ifindex;
+
+    // Routing attribute. Contains the actual IP address.
+    rta = (struct rtattr *) (((char *) &req) + NLMSG_ALIGN(req.n.nlmsg_len));
+    rta->rta_type = IFA_LOCAL;
+    rta->rta_len = RTA_LENGTH(addrlen);
+    req.n.nlmsg_len = NLMSG_ALIGN(req.n.nlmsg_len) + RTA_LENGTH(addrlen);
+    memcpy(RTA_DATA(rta), addr, addrlen);
+
+    s = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    if (send(s, &req, req.n.nlmsg_len, 0) < 0) {
+        close(s);
+        return -errno;
+    }
+
+    len = recv(s, buf, sizeof(buf), 0);
+    close(s);
+    if (len < 0) {
+        return -errno;
+    }
+
+    // Parse the acknowledgement to find the return code.
+    nh = (struct nlmsghdr *) buf;
+    if (!NLMSG_OK(nh, (unsigned) len) || nh->nlmsg_type != NLMSG_ERROR) {
+        return -EINVAL;
+    }
+    err = NLMSG_DATA(nh);
+
+    // Return code is negative errno.
+    return err->error;
+}
+
+int ifc_add_address(const char *name, const char *address, int prefixlen) {
+    return ifc_act_on_address(RTM_NEWADDR, name, address, prefixlen);
+}
+
+int ifc_del_address(const char *name, const char * address, int prefixlen) {
+    return ifc_act_on_address(RTM_DELADDR, name, address, prefixlen);
+}
+
+/*
+ * Clears IPv6 addresses on the specified interface.
+ */
+int ifc_clear_ipv6_addresses(const char *name) {
+    char rawaddrstr[INET6_ADDRSTRLEN], addrstr[INET6_ADDRSTRLEN];
+    unsigned int prefixlen;
+    int lasterror = 0, i, j, ret;
+    char ifname[64];  // Currently, IFNAMSIZ = 16.
+    FILE *f = fopen("/proc/net/if_inet6", "r");
+    if (!f) {
+        return -errno;
+    }
+
+    // Format:
+    // 20010db8000a0001fc446aa4b5b347ed 03 40 00 01    wlan0
+    while (fscanf(f, "%32s %*02x %02x %*02x %*02x %63s\n",
+                  rawaddrstr, &prefixlen, ifname) == 3) {
+        // Is this the interface we're looking for?
+        if (strcmp(name, ifname)) {
+            continue;
+        }
+
+        // Put the colons back into the address.
+        for (i = 0, j = 0; i < 32; i++, j++) {
+            addrstr[j] = rawaddrstr[i];
+            if (i % 4 == 3) {
+                addrstr[++j] = ':';
+            }
+        }
+        addrstr[j - 1] = '\0';
+
+        // Don't delete the link-local address as well, or it will disable IPv6
+        // on the interface.
+        if (strncmp(addrstr, "fe80:", 5) == 0) {
+            continue;
+        }
+
+        ret = ifc_del_address(ifname, addrstr, prefixlen);
+        if (ret) {
+            LOGE("Deleting address %s/%d on %s: %s", addrstr, prefixlen, ifname,
+                 strerror(-ret));
+            lasterror = ret;
+        }
+    }
+
+    fclose(f);
+    return lasterror;
+}
+
+/*
+ * Clears IPv4 addresses on the specified interface.
+ */
+void ifc_clear_ipv4_addresses(const char *name) {
+    unsigned count, addr;
+    ifc_init();
+    for (count=0, addr=1;((addr != 0) && (count < 255)); count++) {
+        if (ifc_get_addr(name, &addr) < 0)
+            break;
+        if (addr)
+            ifc_set_addr(name, 0);
+    }
+    ifc_close();
+}
+
+/*
+ * Clears all IP addresses on the specified interface.
+ */
+int ifc_clear_addresses(const char *name) {
+    ifc_clear_ipv4_addresses(name);
+    return ifc_clear_ipv6_addresses(name);
 }
 
 int ifc_set_hwaddr(const char *name, const void *ptr)

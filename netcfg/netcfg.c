@@ -50,8 +50,9 @@ void usage(void)
 
 int dump_interface(const char *name)
 {
-    unsigned addr, prefixLength, flags;
+    unsigned addr, flags;
     unsigned char hwbuf[ETH_ALEN];
+    int prefixLength;
 
     if(ifc_get_info(name, &addr, &prefixLength, &flags)) {
         return 0;
