@@ -749,6 +749,7 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
     if (charger->num_supplies_online == 0) {
         if (charger->next_pwr_check == -1) {
             charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
+            kick_animation(charger->batt_anim);
             LOGI("[%lld] device unplugged: shutting down in %lld (@ %lld)\n",
                  now, UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
         } else if (now >= charger->next_pwr_check) {
