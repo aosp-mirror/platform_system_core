@@ -58,6 +58,8 @@
 #define POWER_ON_KEY_TIME       (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
+#define BATTERY_FULL_THRESH     95
+
 #define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
 #define LOGI(x...) do { KLOG_INFO("charger", x); } while (0)
 #define LOGV(x...) do { KLOG_DEBUG("charger", x); } while (0)
@@ -152,6 +154,11 @@ static struct frame batt_anim_frames[] = {
         .disp_time = 750,
         .min_capacity = 80,
     },
+    {
+        .name = "charger/battery_5",
+        .disp_time = 750,
+        .min_capacity = BATTERY_FULL_THRESH,
+    },
 };
 
 static struct animation battery_animation = {
@@ -229,6 +236,22 @@ static int read_file_int(const char *path, int *val)
 
 err:
     return -1;
+}
+
+static int get_battery_capacity(struct charger *charger)
+{
+    int ret;
+    int batt_cap = -1;
+
+    if (!charger->battery)
+        return -1;
+
+    ret = read_file_int(charger->battery->cap_path, &batt_cap);
+    if (ret < 0 || batt_cap > 100) {
+        batt_cap = -1;
+    }
+
+    return batt_cap;
 }
 
 static struct power_supply *find_supply(struct charger *charger,
@@ -619,10 +642,8 @@ static void update_screen_state(struct charger *charger, int64_t now)
         int ret;
 
         LOGV("[%lld] animation starting\n", now);
-        ret = read_file_int(charger->battery->cap_path, &batt_cap);
-        if (ret < 0 || batt_cap > 100) {
-            batt_cap = -1;
-        } else if (batt_anim->num_frames != 0) {
+        batt_cap = get_battery_capacity(charger);
+        if (batt_cap >= 0 && batt_anim->num_frames != 0) {
             int i;
 
             /* find first frame given current capacity */
