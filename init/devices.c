@@ -624,6 +624,9 @@ static void handle_generic_device_event(struct uevent *uevent)
      } else if (!strncmp(uevent->subsystem, "graphics", 8)) {
          base = "/dev/graphics/";
          make_dir(base, 0755);
+     } else if (!strncmp(uevent->subsystem, "drm", 3)) {
+         base = "/dev/dri/";
+         make_dir(base, 0755);
      } else if (!strncmp(uevent->subsystem, "oncrpc", 6)) {
          base = "/dev/oncrpc/";
          make_dir(base, 0755);
