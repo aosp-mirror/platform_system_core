@@ -33,6 +33,20 @@
 static char hardware[32];
 static unsigned revision = 0;
 
+static void import_kernel_nv(char *name, int in_qemu)
+{
+    if (*name != '\0') {
+        char *value = strchr(name, '=');
+        if (value != NULL) {
+            *value++ = 0;
+            if (!strcmp(name,"androidboot.hardware"))
+            {
+                strlcpy(hardware, value, sizeof(hardware));
+            }
+        }
+    }
+}
+
 int ueventd_main(int argc, char **argv)
 {
     struct pollfd ufd;
@@ -50,6 +64,11 @@ int ueventd_main(int argc, char **argv)
     klog_init();
 
     INFO("starting ueventd\n");
+
+    /* Respect hardware passed in through the kernel cmd line. Here we will look
+     * for androidboot.hardware param in kernel cmdline, and save its value in
+     * hardware[]. */
+    import_kernel_cmdline(0, import_kernel_nv);
 
     get_hardware_name(hardware, &revision);
 

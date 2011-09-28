@@ -92,7 +92,7 @@ static const char *ENV[32];
 int add_environment(const char *key, const char *val)
 {
     int n;
- 
+
     for (n = 0; n < 31; n++) {
         if (!ENV[n]) {
             size_t len = strlen(key) + strlen(val) + 2;
@@ -156,7 +156,7 @@ void service_start(struct service *svc, const char *dynamic_args)
          */
     svc->flags &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET));
     svc->time_started = 0;
-    
+
         /* running processes require no additional work -- if
          * they're in the process of exiting, we've ensured
          * that they will immediately restart on exit, unless
@@ -381,7 +381,7 @@ static void msg_start(const char *name)
 
         svc = service_find_by_name(tmp);
     }
-    
+
     if (svc) {
         service_start(svc, args);
     } else {
@@ -453,38 +453,6 @@ static void import_kernel_nv(char *name, int in_qemu)
             property_set( buff, value );
         }
     }
-}
-
-static void import_kernel_cmdline(int in_qemu)
-{
-    char cmdline[1024];
-    char *ptr;
-    int fd;
-
-    fd = open("/proc/cmdline", O_RDONLY);
-    if (fd >= 0) {
-        int n = read(fd, cmdline, 1023);
-        if (n < 0) n = 0;
-
-        /* get rid of trailing newline, it happens */
-        if (n > 0 && cmdline[n-1] == '\n') n--;
-
-        cmdline[n] = 0;
-        close(fd);
-    } else {
-        cmdline[0] = 0;
-    }
-
-    ptr = cmdline;
-    while (ptr && *ptr) {
-        char *x = strchr(ptr, ' ');
-        if (x != 0) *x++ = 0;
-        import_kernel_nv(ptr, in_qemu);
-        ptr = x;
-    }
-
-        /* don't expose the raw commandline to nonpriv processes */
-    chmod("/proc/cmdline", 0440);
 }
 
 static struct command *get_first_command(struct action *act)
@@ -609,7 +577,7 @@ static int set_init_properties_action(int nargs, char **args)
     char tmp[PROP_VALUE_MAX];
 
     if (qemu[0])
-        import_kernel_cmdline(1);
+        import_kernel_cmdline(1, import_kernel_nv);
 
     if (!strcmp(bootmode,"factory"))
         property_set("ro.factorytest", "1");
@@ -729,13 +697,14 @@ int main(int argc, char **argv)
          */
     open_devnull_stdio();
     klog_init();
-    
+
     INFO("reading config file\n");
     init_parse_config_file("/init.rc");
 
     /* pull the kernel commandline and ramdisk properties file in */
-    import_kernel_cmdline(0);
-
+    import_kernel_cmdline(0, import_kernel_nv);
+    /* don't expose the raw commandline to nonpriv processes */
+    chmod("/proc/cmdline", 0440);
     get_hardware_name(hardware, &revision);
     snprintf(tmp, sizeof(tmp), "/init.%s.rc", hardware);
     init_parse_config_file(tmp);
