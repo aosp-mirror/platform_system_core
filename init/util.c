@@ -399,3 +399,33 @@ void get_hardware_name(char *hardware, unsigned int *revision)
         }
     }
 }
+
+void import_kernel_cmdline(int in_qemu,
+                           void (*import_kernel_nv)(char *name, int in_qemu))
+{
+    char cmdline[1024];
+    char *ptr;
+    int fd;
+
+    fd = open("/proc/cmdline", O_RDONLY);
+    if (fd >= 0) {
+        int n = read(fd, cmdline, 1023);
+        if (n < 0) n = 0;
+
+        /* get rid of trailing newline, it happens */
+        if (n > 0 && cmdline[n-1] == '\n') n--;
+
+        cmdline[n] = 0;
+        close(fd);
+    } else {
+        cmdline[0] = 0;
+    }
+
+    ptr = cmdline;
+    while (ptr && *ptr) {
+        char *x = strchr(ptr, ' ');
+        if (x != 0) *x++ = 0;
+        import_kernel_nv(ptr, in_qemu);
+        ptr = x;
+    }
+}
