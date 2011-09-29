@@ -8,6 +8,7 @@
 
 class SocketClient {
     int             mSocket;
+    bool            mSocketOwned;
     pthread_mutex_t mWriteMutex;
 
     /* Peer process ID */
@@ -24,8 +25,8 @@ class SocketClient {
     int mRefCount;
 
 public:
-    SocketClient(int sock);
-    virtual ~SocketClient() {}
+    SocketClient(int sock, bool owned);
+    virtual ~SocketClient();
 
     int getSocket() { return mSocket; }
     pid_t getPid() const { return mPid; }

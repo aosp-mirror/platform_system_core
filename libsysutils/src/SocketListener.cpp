@@ -79,7 +79,7 @@ int SocketListener::startListener() {
         SLOGE("Unable to listen on socket (%s)", strerror(errno));
         return -1;
     } else if (!mListen)
-        mClients->push_back(new SocketClient(mSock));
+        mClients->push_back(new SocketClient(mSock, false));
 
     if (pipe(mCtrlPipe)) {
         SLOGE("pipe failed (%s)", strerror(errno));
@@ -191,7 +191,7 @@ void SocketListener::runListener() {
                 continue;
             }
             pthread_mutex_lock(&mClientsLock);
-            mClients->push_back(new SocketClient(c));
+            mClients->push_back(new SocketClient(c, true));
             pthread_mutex_unlock(&mClientsLock);
         }
 
@@ -225,12 +225,8 @@ void SocketListener::runListener() {
                     }
                 }
                 pthread_mutex_unlock(&mClientsLock);
-                /* Destroy the client */
-                int socket = c->getSocket();
-                if (c->decRef()) {
-                    // Note: 'c' is deleted memory at this point.
-                    close(socket);
-                }
+                /* Remove our reference to the client */
+                c->decRef();
             }
         }
     }
