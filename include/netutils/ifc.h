@@ -38,9 +38,13 @@ extern int ifc_reset_connections(const char *ifname, const int reset_mask);
 
 extern int ifc_get_addr(const char *name, in_addr_t *addr);
 extern int ifc_set_addr(const char *name, in_addr_t addr);
-extern int ifc_get_prefixLength(const char *name, uint32_t *prefixLength);
-extern int ifc_set_prefixLength(const char *name, uint32_t prefixLength);
+extern int ifc_add_address(const char *name, const char *address,
+                           int prefixlen);
+extern int ifc_del_address(const char *name, const char *address,
+                           int prefixlen);
+extern int ifc_set_prefixLength(const char *name, int prefixLength);
 extern int ifc_set_hwaddr(const char *name, const void *ptr);
+extern int ifc_clear_addresses(const char *name);
 
 /* This function is deprecated. Use ifc_add_route instead. */
 extern int ifc_add_host_route(const char *name, in_addr_t addr);
@@ -53,9 +57,10 @@ extern int ifc_create_default_route(const char *name, in_addr_t addr);
 extern int ifc_remove_default_route(const char *ifname);
 extern int ifc_add_route(const char *name, const char *addr, int prefix_length,
                          const char *gw);
-
-extern int ifc_get_info(const char *name, in_addr_t *addr, in_addr_t *mask,
-                        in_addr_t *flags);
+extern int ifc_remove_route(const char *ifname, const char *dst,
+                            int prefix_length, const char *gw);
+extern int ifc_get_info(const char *name, in_addr_t *addr, int *prefixLength,
+                        unsigned *flags);
 
 extern int ifc_configure(const char *ifname, in_addr_t address,
                          uint32_t prefixLength, in_addr_t gateway,
