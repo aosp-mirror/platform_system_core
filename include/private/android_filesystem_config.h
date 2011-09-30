@@ -59,6 +59,7 @@
 #define AID_MEDIA_RW      1023  /* internal media storage write access */
 #define AID_MTP           1024  /* MTP USB driver access */
 #define AID_NFC           1025  /* nfc subsystem */
+#define AID_DRMRPC        1026  /* group for drm rpc */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -105,6 +106,7 @@ static const struct android_id_info android_ids[] = {
     { "drm",       AID_DRM, },
     { "available", AID_AVAILABLE, },
     { "nfc",       AID_NFC, },
+    { "drmrpc",    AID_DRMRPC, },
     { "shell",     AID_SHELL, },
     { "cache",     AID_CACHE, },
     { "diag",      AID_DIAG, },
