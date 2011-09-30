@@ -37,6 +37,7 @@
 #include <cutils/android_reboot.h>
 #include <cutils/klog.h>
 #include <cutils/list.h>
+#include <cutils/misc.h>
 #include <cutils/uevent.h>
 
 #include "minui/minui.h"
@@ -59,6 +60,9 @@
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
 #define BATTERY_FULL_THRESH     95
+
+#define LAST_KMSG_PATH          "/proc/last_kmsg"
+#define LAST_KMSG_MAX_SZ        (32 * 1024)
 
 #define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
 #define LOGI(x...) do { KLOG_INFO("charger", x); } while (0)
@@ -187,6 +191,53 @@ static void clear_screen(void)
     gr_color(0, 0, 0, 255);
     gr_fill(0, 0, gr_fb_width(), gr_fb_height());
 };
+
+#define MAX_KLOG_WRITE_BUF_SZ 256
+
+static void dump_last_kmsg(void)
+{
+    char *buf;
+    char *ptr;
+    unsigned sz = 0;
+    int len;
+
+    LOGI("\n");
+    LOGI("*************** LAST KMSG ***************\n");
+    LOGI("\n");
+    buf = load_file(LAST_KMSG_PATH, &sz);
+    if (!buf || !sz) {
+        LOGI("last_kmsg not found. Cold reset?\n");
+        goto out;
+    }
+
+    len = min(sz, LAST_KMSG_MAX_SZ);
+    ptr = buf + (sz - len);
+
+    while (len > 0) {
+        int cnt = min(len, MAX_KLOG_WRITE_BUF_SZ);
+        char yoink;
+        char *nl;
+
+        nl = memrchr(ptr, '\n', cnt - 1);
+        if (nl)
+            cnt = nl - ptr + 1;
+
+        yoink = ptr[cnt];
+        ptr[cnt] = '\0';
+        KLOG_INFO("", "%s", ptr);
+        ptr[cnt] = yoink;
+
+        len -= cnt;
+        ptr += cnt;
+    }
+
+    free(buf);
+
+out:
+    LOGI("\n");
+    LOGI("************* END LAST KMSG *************\n");
+    LOGI("\n");
+}
 
 static int read_file(const char *path, char *buf, size_t sz)
 {
@@ -862,6 +913,10 @@ int main(int argc, char **argv)
 
     klog_init();
     klog_set_level(CHARGER_KLOG_LEVEL);
+
+    dump_last_kmsg();
+
+    LOGI("--------------- STARTING CHARGER MODE ---------------\n");
 
     gr_init();
     gr_font_size(&char_width, &char_height);
