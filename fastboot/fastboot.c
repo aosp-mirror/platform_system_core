@@ -88,6 +88,8 @@ char *find_item(const char *item, const char *product)
         fn = "system.img";
     } else if(!strcmp(item,"userdata")) {
         fn = "userdata.img";
+    } else if(!strcmp(item,"cache")) {
+        fn = "cache.img";
     } else if(!strcmp(item,"info")) {
         fn = "android-info.txt";
     } else {
