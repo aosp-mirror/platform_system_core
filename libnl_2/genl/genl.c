@@ -112,6 +112,7 @@ int genl_ctrl_alloc_cache(struct nl_sock *sock, struct nl_cache **result)
 	nlmhdr.nlmsg_pid = sock->s_local.nl_pid;
 
 	/* Generic netlink header */
+	memset(&gmhhdr, 0, sizeof(gmhhdr));
 	gmhhdr.cmd = CTRL_CMD_GETFAMILY;
 	gmhhdr.version = CTRL_ATTR_FAMILY_ID;
 
@@ -221,9 +222,11 @@ int genl_ctrl_alloc_cache(struct nl_sock *sock, struct nl_cache **result)
 
 				/* Save the family id */
 				else if (nl80211_flag &&
-					nla->nla_type == CTRL_ATTR_FAMILY_ID)
-					nl80211_genl_id = \
+					nla->nla_type == CTRL_ATTR_FAMILY_ID) {
+					nl80211_genl_id =
 						*((int *)nla_data(nla));
+					nl80211_flag = 0;
+				}
 
 			}
 
