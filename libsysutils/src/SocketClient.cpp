@@ -10,8 +10,9 @@
 
 #include <sysutils/SocketClient.h>
 
-SocketClient::SocketClient(int socket)
+SocketClient::SocketClient(int socket, bool owned)
         : mSocket(socket)
+        , mSocketOwned(owned)
         , mPid(-1)
         , mUid(-1)
         , mGid(-1)
@@ -29,6 +30,13 @@ SocketClient::SocketClient(int socket)
         mPid = creds.pid;
         mUid = creds.uid;
         mGid = creds.gid;
+    }
+}
+
+SocketClient::~SocketClient()
+{
+    if (mSocketOwned) {
+        close(mSocket);
     }
 }
 
