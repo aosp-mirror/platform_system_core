@@ -323,7 +323,7 @@ static void readLogLines(log_device_t* devices)
 
                 // the caller requested to just dump the log and exit
                 if (g_nonblock) {
-                    exit(0);
+                    return;
                 }
             } else {
                 // print all that aren't the last in their list
@@ -765,10 +765,10 @@ int main(int argc, char **argv)
     }
 
     if (getLogSize) {
-        return 0;
+        exit(0);
     }
     if (clearLog) {
-        return 0;
+        exit(0);
     }
 
     //LOG_EVENT_INT(10, 12345);

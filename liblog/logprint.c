@@ -350,16 +350,28 @@ static inline char * strip_end(char *str)
 int android_log_processLogBuffer(struct logger_entry *buf,
                                  AndroidLogEntry *entry)
 {
-    size_t tag_len;
-
     entry->tv_sec = buf->sec;
     entry->tv_nsec = buf->nsec;
     entry->priority = buf->msg[0];
     entry->pid = buf->pid;
     entry->tid = buf->tid;
+
+    /*
+     * format: <priority:1><tag:N>\0<message:N>\0
+     *
+     * tag str
+     *   starts at msg+1
+     * msg
+     *   starts at msg+1+len(tag)+1
+     */
     entry->tag = buf->msg + 1;
-    tag_len = strlen(entry->tag);
-    entry->messageLen = buf->len - tag_len - 3;
+    const size_t tag_len = strlen(entry->tag);
+    const size_t preambleAndNullLen = tag_len + 3;
+    if (buf->len <= preambleAndNullLen) {
+        fprintf(stderr, "+++ LOG: entry corrupt or truncated\n");
+        return -1;
+    }
+    entry->messageLen = buf->len - preambleAndNullLen;
     entry->message = entry->tag + tag_len + 1;
 
     return 0;
