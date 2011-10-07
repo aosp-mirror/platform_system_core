@@ -105,8 +105,8 @@ enum {
      * This does not affect the order of byte array of
      * CAMERA_MSG_PREVIEW_FRAME, CAMERA_MSG_VIDEO_FRAME,
      * CAMERA_MSG_POSTVIEW_FRAME, CAMERA_MSG_RAW_IMAGE, or
-     * CAMERA_MSG_COMPRESSED_IMAGE. This is not allowed to be set during
-     * preview
+     * CAMERA_MSG_COMPRESSED_IMAGE. This is allowed to be set during preview
+     * since API level 14.
      */
     CAMERA_CMD_SET_DISPLAY_ORIENTATION = 3,
 
