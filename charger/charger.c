@@ -745,30 +745,40 @@ static void update_screen_state(struct charger *charger, int64_t now)
     }
 }
 
-static void update_input_state(struct charger *charger,
-                               struct input_event *ev,
-                               int64_t now)
+static int set_key_callback(int code, int value, void *data)
 {
-    int down = !!ev->value;
+    struct charger *charger = data;
+    int64_t now = curr_time_ms();
+    int down = !!value;
 
-    if (ev->type != EV_KEY || ev->code > KEY_MAX)
-        return;
+    if (code > KEY_MAX)
+        return -1;
 
     /* only record the down even timestamp, as the amount
      * of time the key spent not being pressed is not useful */
     if (down)
-        charger->keys[ev->code].timestamp = now;
-    charger->keys[ev->code].down = down;
-    charger->keys[ev->code].pending = true;
+        charger->keys[code].timestamp = now;
+    charger->keys[code].down = down;
+    charger->keys[code].pending = true;
     if (down) {
-        LOGV("[%lld] key[%d] down\n", now, ev->code);
+        LOGV("[%lld] key[%d] down\n", now, code);
     } else {
-        int64_t duration = now - charger->keys[ev->code].timestamp;
+        int64_t duration = now - charger->keys[code].timestamp;
         int64_t secs = duration / 1000;
         int64_t msecs = duration - secs * 1000;
         LOGV("[%lld] key[%d] up (was down for %lld.%lldsec)\n", now,
-            ev->code, secs, msecs);
+            code, secs, msecs);
     }
+
+    return 0;
+}
+
+static void update_input_state(struct charger *charger,
+                               struct input_event *ev)
+{
+    if (ev->type != EV_KEY)
+        return;
+    set_key_callback(ev->code, ev->value, charger);
 }
 
 static void set_next_key_check(struct charger *charger,
@@ -876,7 +886,7 @@ static int input_callback(int fd, short revents, void *data)
     ret = ev_get_input(fd, revents, &ev);
     if (ret)
         return -1;
-    update_input_state(charger, &ev, curr_time_ms());
+    update_input_state(charger, &ev);
     return 0;
 }
 
@@ -948,6 +958,8 @@ int main(int argc, char **argv)
             break;
         }
     }
+
+    ev_sync_key_state(set_key_callback, charger);
 
     gr_fb_blank(true);
 
