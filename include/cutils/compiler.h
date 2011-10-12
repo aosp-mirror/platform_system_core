@@ -29,4 +29,16 @@
 #   define CC_UNLIKELY( exp )  (__builtin_expect( !!(exp), 0 ))
 #endif
 
+/**
+ * exports marked symbols
+ *
+ * if used on a C++ class declaration, this macro must be inserted
+ * after the "class" keyword. For instance:
+ *
+ * template <typename TYPE>
+ * class ANDROID_API Singleton { }
+ */
+
+#define ANDROID_API __attribute__((visibility("default")))
+
 #endif // ANDROID_CUTILS_COMPILER_H
