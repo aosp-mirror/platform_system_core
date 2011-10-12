@@ -224,7 +224,7 @@ static void dump_last_kmsg(void)
 
         yoink = ptr[cnt];
         ptr[cnt] = '\0';
-        KLOG_INFO("", "%s", ptr);
+        klog_write(6, "<6>%s", ptr);
         ptr[cnt] = yoink;
 
         len -= cnt;
