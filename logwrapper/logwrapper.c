@@ -28,7 +28,7 @@
 
 void fatal(const char *msg) {
     fprintf(stderr, "%s", msg);
-    LOG(LOG_ERROR, "logwrapper", "%s", msg);
+    ALOG(LOG_ERROR, "logwrapper", "%s", msg);
     exit(-1);
 }
 
@@ -60,7 +60,7 @@ void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
                 buffer[b] = '\0';
             } else if (buffer[b] == '\n') {
                 buffer[b] = '\0';
-                LOG(LOG_INFO, tag, "%s", &buffer[a]);
+                ALOG(LOG_INFO, tag, "%s", &buffer[a]);
                 a = b + 1;
             }
         }
@@ -68,7 +68,7 @@ void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
         if (a == 0 && b == sizeof(buffer) - 1) {
             // buffer is full, flush
             buffer[b] = '\0';
-            LOG(LOG_INFO, tag, "%s", &buffer[a]);
+            ALOG(LOG_INFO, tag, "%s", &buffer[a]);
             b = 0;
         } else if (a != b) {
             // Keep left-overs
@@ -84,21 +84,21 @@ void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
     // Flush remaining data
     if (a != b) {
         buffer[b] = '\0';
-	LOG(LOG_INFO, tag, "%s", &buffer[a]);
+        ALOG(LOG_INFO, tag, "%s", &buffer[a]);
     }
     status = 0xAAAA;
     if (wait(&status) != -1) {  // Wait for child
         if (WIFEXITED(status))
-            LOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", tag,
+            ALOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", tag,
                     WEXITSTATUS(status));
         else if (WIFSIGNALED(status))
-            LOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", tag,
+            ALOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", tag,
                     WTERMSIG(status));
         else if (WIFSTOPPED(status))
-            LOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", tag,
+            ALOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", tag,
                     WSTOPSIG(status));
     } else
-        LOG(LOG_INFO, "logwrapper", "%s wait() failed: %s (%d)", tag,
+        ALOG(LOG_INFO, "logwrapper", "%s wait() failed: %s (%d)", tag,
                 strerror(errno), errno);
     if (seg_fault_on_exit)
         *(int *)status = 0;  // causes SIGSEGV with fault_address = status
@@ -111,7 +111,7 @@ void child(int argc, char* argv[]) {
     argv_child[argc] = NULL;
 
     if (execvp(argv_child[0], argv_child)) {
-        LOG(LOG_ERROR, "logwrapper",
+        ALOG(LOG_ERROR, "logwrapper",
             "executing %s failed: %s\n", argv_child[0], strerror(errno));
         exit(-1);
     }
