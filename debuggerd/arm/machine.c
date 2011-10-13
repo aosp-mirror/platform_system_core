@@ -50,6 +50,74 @@ extern int unwind_backtrace_with_ptrace(int tfd, pid_t pid, mapinfo *map,
                                         int *frame0_pc_sane,
                                         bool at_fault);
 
+/*
+ * If this isn't clearly a null pointer dereference, dump the
+ * /proc/maps entries near the fault address.
+ */
+static void show_nearby_maps(int tfd, int pid, mapinfo *map)
+{
+    siginfo_t si;
+
+    memset(&si, 0, sizeof(si));
+    if (ptrace(PTRACE_GETSIGINFO, pid, 0, &si)) {
+        _LOG(tfd, false, "cannot get siginfo: %s\n", strerror(errno));
+        return;
+    }
+    if (!signal_has_address(si.si_signo))
+        return;
+
+    uintptr_t addr = (uintptr_t) si.si_addr;
+    addr &= ~0xfff;     /* round to 4K page boundary */
+    if (addr == 0)      /* null-pointer deref */
+        return;
+
+    _LOG(tfd, false, "\nmemory map around addr %08x:\n", si.si_addr);
+
+    /*
+     * Search for a match, or for a hole where the match would be.  The list
+     * is backward from the file content, so it starts at high addresses.
+     */
+    bool found = false;
+    mapinfo *next = NULL;
+    mapinfo *prev = NULL;
+    while (map != NULL) {
+        if (addr >= map->start && addr < map->end) {
+            found = true;
+            next = map->next;
+            break;
+        } else if (addr >= map->end) {
+            /* map would be between "prev" and this entry */
+            next = map;
+            map = NULL;
+            break;
+        }
+
+        prev = map;
+        map = map->next;
+    }
+
+    /*
+     * Show "next" then "match" then "prev" so that the addresses appear in
+     * ascending order (like /proc/pid/maps).
+     */
+    if (next != NULL) {
+        _LOG(tfd, false, "%08x-%08x %s\n", next->start, next->end, next->name);
+    } else {
+        _LOG(tfd, false, "(no map below)\n");
+    }
+    if (map != NULL) {
+        _LOG(tfd, false, "%08x-%08x %s\n", map->start, map->end, map->name);
+    } else {
+        _LOG(tfd, false, "(no map for address)\n");
+    }
+    if (prev != NULL) {
+        _LOG(tfd, false, "%08x-%08x %s\n", prev->start, prev->end, prev->name);
+    } else {
+        _LOG(tfd, false, "(no map above)\n");
+    }
+}
+
+
 void dump_stack_and_code(int tfd, int pid, mapinfo *map,
                          int unwind_depth, unsigned int sp_list[],
                          bool at_fault)
@@ -122,6 +190,8 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
             _LOG(tfd, only_in_tombstone, "%s\n", code_buffer);
         }
     }
+
+    show_nearby_maps(tfd, pid, map);
 
     p = sp - 64;
     if (p > sp)
