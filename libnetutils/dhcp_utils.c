@@ -293,7 +293,7 @@ char *dhcp_get_errmsg() {
 int dhcp_do_request_renew(const char *interface,
                     in_addr_t *ipaddr,
                     in_addr_t *gateway,
-                    in_addr_t *mask,
+                    uint32_t *prefixLength,
                     in_addr_t *dns1,
                     in_addr_t *dns2,
                     in_addr_t *server,
@@ -333,7 +333,7 @@ int dhcp_do_request_renew(const char *interface,
         return -1;
     }
     if (strcmp(prop_value, "ok") == 0) {
-        fill_ip_info(interface, ipaddr, gateway, mask, dns1, dns2, server, lease);
+        fill_ip_info(interface, ipaddr, gateway, prefixLength, dns1, dns2, server, lease);
         return 0;
     } else {
         snprintf(errmsg, sizeof(errmsg), "DHCP Renew result was %s", prop_value);
