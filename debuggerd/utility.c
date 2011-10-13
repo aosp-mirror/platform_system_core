@@ -17,6 +17,7 @@
 
 #include <sys/ptrace.h>
 #include <sys/exec_elf.h>
+#include <signal.h>
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
@@ -81,4 +82,21 @@ const mapinfo *pc_to_mapinfo(mapinfo *mi, unsigned pc, unsigned *rel_pc)
         mi = mi->next;
     }
     return NULL;
+}
+
+/*
+ * Returns true if the specified signal has an associated address (i.e. it
+ * sets siginfo_t.si_addr).
+ */
+bool signal_has_address(int sig)
+{
+    switch (sig) {
+        case SIGILL:
+        case SIGFPE:
+        case SIGSEGV:
+        case SIGBUS:
+            return true;
+        default:
+            return false;
+    }
 }
