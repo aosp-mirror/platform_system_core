@@ -756,7 +756,7 @@ static int set_key_callback(int code, int value, void *data)
 
     /* ignore events that don't modify our state */
     if (charger->keys[code].down == down)
-        return -1;
+        return 0;
 
     /* only record the down even timestamp, as the amount
      * of time the key spent not being pressed is not useful */
