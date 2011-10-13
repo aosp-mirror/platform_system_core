@@ -227,8 +227,7 @@ typedef struct camera_frame_metadata {
     int32_t number_of_faces;
 
     /**
-     * An array of the detected faces. The length is number_of_faces. The list
-     * is sorted by the score. The highest score is the first element.
+     * An array of the detected faces. The length is number_of_faces.
      */
     camera_face_t *faces;
 } camera_frame_metadata_t;
