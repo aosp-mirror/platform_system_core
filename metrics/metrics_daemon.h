@@ -30,7 +30,8 @@ class MetricsDaemon {
 
   // Initializes.
   void Init(bool testing, MetricsLibraryInterface* metrics_lib,
-            const std::string& diskstats_path);
+            const std::string& diskstats_path,
+            const std::string& vmstats_path);
 
   // Does all the work. If |run_as_daemon| is true, daemonizes by
   // forking.
@@ -47,6 +48,7 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, LookupScreenSaverState);
   FRIEND_TEST(MetricsDaemonTest, LookupSessionState);
   FRIEND_TEST(MetricsDaemonTest, MessageFilter);
+  FRIEND_TEST(MetricsDaemonTest, ParseVmStats);
   FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
   FRIEND_TEST(MetricsDaemonTest, ProcessKernelCrash);
   FRIEND_TEST(MetricsDaemonTest, ProcessMeminfo);
@@ -82,9 +84,9 @@ class MetricsDaemon {
   };
 
   // State for disk stats collector callback.
-  enum DiskStatsState {
-    kDiskStatsShort,    // short wait before short interval collection
-    kDiskStatsLong,     // final wait before new collection
+  enum StatsState {
+    kStatsShort,    // short wait before short interval collection
+    kStatsLong,     // final wait before new collection
   };
 
   // Data record for aggregating daily usage.
@@ -133,12 +135,17 @@ class MetricsDaemon {
   static const char kMetricReadSectorsShortName[];
   static const char kMetricWriteSectorsLongName[];
   static const char kMetricWriteSectorsShortName[];
-  static const int kMetricDiskStatsShortInterval;
-  static const int kMetricDiskStatsLongInterval;
+  static const char kMetricPageFaultsShortName[];
+  static const char kMetricPageFaultsLongName[];
+  static const int kMetricStatsShortInterval;
+  static const int kMetricStatsLongInterval;
   static const int kMetricMeminfoInterval;
   static const int kMetricSectorsIOMax;
   static const int kMetricSectorsBuckets;
+  static const int kMetricPageFaultsMax;
+  static const int kMetricPageFaultsBuckets;
   static const char kMetricsDiskStatsPath[];
+  static const char kMetricsVmStatsPath[];
 
   // D-Bus message match strings.
   static const char* kDBusMatches_[];
@@ -254,21 +261,27 @@ class MetricsDaemon {
   void SendLinearMetric(const std::string& name, int sample,
                         int max, int nbuckets);
 
-  // Initializes disk stats reporting.
-  void DiskStatsReporterInit();
+  // Initializes vm and disk stats reporting.
+  void StatsReporterInit();
 
-  // Schedules a callback for the next disk stats collection.
-  void ScheduleDiskStatsCallback(int wait);
+  // Schedules a callback for the next vm and disk stats collection.
+  void ScheduleStatsCallback(int wait);
 
-  // Reads cumulative disk statistics from sysfs.
-  void DiskStatsReadStats(long int* read_sectors, long int* write_sectors);
+  // Reads cumulative disk statistics from sysfs.  Returns true for success.
+  bool DiskStatsReadStats(long int* read_sectors, long int* write_sectors);
 
-  // Reports disk statistics (static version for glib).  Arguments are a glib
-  // artifact.
-  static gboolean DiskStatsCallbackStatic(void* handle);
+  // Reads cumulative vm statistics from procfs.  Returns true for success.
+  bool VmStatsReadStats(long int* page_faults);
 
-  // Reports disk statistics.
-  void DiskStatsCallback();
+  // Parse cumulative vm statistics from a C string.  Returns true for success.
+  bool VmStatsParseStats(char* stats, long int* page_faults);
+
+  // Reports disk and vm statistics (static version for glib).  Arguments are a
+  // glib artifact.
+  static gboolean StatsCallbackStatic(void* handle);
+
+  // Reports disk and vm statistics.
+  void StatsCallback();
 
   // Schedules meminfo collection callback.
   void ScheduleMeminfoCallback(int wait);
@@ -278,26 +291,26 @@ class MetricsDaemon {
   static gboolean MeminfoCallbackStatic(void* handle);
 
   // Reports memory statistics.  Returns false on failure.
-  gboolean MeminfoCallback();
+  bool MeminfoCallback();
 
   // Parses content of /proc/meminfo and sends fields of interest to UMA.
   // Returns false on errors.  |meminfo_raw| contains the content of
   // /proc/meminfo.
-  gboolean ProcessMeminfo(const std::string& meminfo_raw);
+  bool ProcessMeminfo(const std::string& meminfo_raw);
 
   // Parses meminfo data from |meminfo_raw|.  |fields| is a vector containing
   // the fields of interest.  The order of the fields must be the same in which
   // /proc/meminfo prints them.  The result of parsing fields[i] is placed in
   // fields[i].value.
-  gboolean FillMeminfo(const std::string& meminfo_raw,
-                       std::vector<MeminfoRecord>* fields);
+  bool FillMeminfo(const std::string& meminfo_raw,
+                   std::vector<MeminfoRecord>* fields);
 
   // Schedule a memory use callback.  |new_callback| is true when this callback
   // is scheduled for the first time.  When |new_callback| is false,
   // |time_elapsed| is the active (non-sleep) time that has passed between now
   // and the original callback scheduling time.  We use it to reschedule a
   // callback that fired too early because we slept.
-  void ScheduleMemuseCallback(gboolean new_callback, double time_elapsed);
+  void ScheduleMemuseCallback(bool new_callback, double time_elapsed);
 
   // Static wrapper for MemuseCallback.  Always returns false.
   static gboolean MemuseCallbackStatic(void* handle);
@@ -308,10 +321,10 @@ class MetricsDaemon {
   void MemuseCallback();
 
   // Reads /proc/meminfo and sends total anonymous memory usage to UMA.
-  gboolean MemuseCallbackWork();
+  bool MemuseCallbackWork();
 
   // Parse meminfo data and send to UMA.
-  gboolean ProcessMemuse(const std::string& meminfo_raw);
+  bool ProcessMemuse(const std::string& meminfo_raw);
 
   // Test mode.
   bool testing_;
@@ -368,13 +381,16 @@ class MetricsDaemon {
   // Selects the wait time for the next memory use callback.
   unsigned int memuse_interval_index_;
 
-  // Contains the most recent disk stats.
+  // Contain the most recent disk and vm cumulative stats.
   long int read_sectors_;
   long int write_sectors_;
+  long int page_faults_;
 
-  DiskStatsState diskstats_state_;
+  StatsState stats_state_;
+  double stats_initial_time_;
+
   std::string diskstats_path_;
-  double diskstats_initial_time_;
+  std::string vmstats_path_;
 };
 
 #endif  // METRICS_DAEMON_H_

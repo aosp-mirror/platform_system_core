@@ -43,6 +43,8 @@ static string kFakeDiskStats[2];
 static const int kFakeReadSectors[] = {80000, 100000};
 static const int kFakeWriteSectors[] = {3000, 4000};
 
+static const char kFakeVmStatsPath[] = "fake-vm-stats";
+
 // This class allows a TimeTicks object to be initialized with seconds
 // (rather than microseconds) through the protected TimeTicks(int64)
 // constructor.
@@ -69,7 +71,7 @@ class MetricsDaemonTest : public testing::Test {
     kFakeDiskStats[1] = StringPrintf(kFakeDiskStatsFormat,
                                      kFakeReadSectors[1], kFakeWriteSectors[1]);
     CreateFakeDiskStatsFile(kFakeDiskStats[0].c_str());
-    daemon_.Init(true, &metrics_lib_, kFakeDiskStatsPath);
+    daemon_.Init(true, &metrics_lib_, kFakeDiskStatsPath, kFakeVmStatsPath);
 
     // Check configuration of a few histograms.
     FrequencyCounter* frequency_counter =
@@ -568,15 +570,15 @@ TEST_F(MetricsDaemonTest, ReportDiskStats) {
   EXPECT_EQ(read_sectors_now, kFakeReadSectors[1]);
   EXPECT_EQ(write_sectors_now, kFakeWriteSectors[1]);
 
-  MetricsDaemon::DiskStatsState ds_state = daemon_.diskstats_state_;
+  MetricsDaemon::StatsState s_state = daemon_.stats_state_;
   EXPECT_CALL(metrics_lib_,
               SendToUMA(_, (kFakeReadSectors[1] - kFakeReadSectors[0]) / 30,
                         _, _, _));
   EXPECT_CALL(metrics_lib_,
               SendToUMA(_, (kFakeWriteSectors[1] - kFakeWriteSectors[0]) / 30,
                         _, _, _));
-  daemon_.DiskStatsCallback();
-  EXPECT_TRUE(ds_state != daemon_.diskstats_state_);
+  daemon_.StatsCallback();
+  EXPECT_TRUE(s_state != daemon_.stats_state_);
 }
 
 TEST_F(MetricsDaemonTest, ProcessMeminfo) {
@@ -641,6 +643,13 @@ MemFree:         1000000 kB\n\
 ";
   /* Not enough fields */
   EXPECT_FALSE(daemon_.ProcessMeminfo(meminfo));
+}
+
+TEST_F(MetricsDaemonTest, ParseVmStats) {
+  static char kVmStats[] = "foo 100\nbar 200\npgmajfault 42\netcetc 300\n";
+  long int page_faults = 0;
+  EXPECT_TRUE(daemon_.VmStatsParseStats(kVmStats, &page_faults));
+  EXPECT_EQ(page_faults, 42);
 }
 
 int main(int argc, char** argv) {

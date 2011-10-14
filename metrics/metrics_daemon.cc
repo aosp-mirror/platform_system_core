@@ -105,8 +105,8 @@ const char MetricsDaemon::kMetricReadSectorsShortName[] =
 const char MetricsDaemon::kMetricWriteSectorsShortName[] =
     "Platform.WriteSectorsShort";
 
-const int MetricsDaemon::kMetricDiskStatsShortInterval = 1;  // seconds
-const int MetricsDaemon::kMetricDiskStatsLongInterval = 30;  // seconds
+const int MetricsDaemon::kMetricStatsShortInterval = 1;  // seconds
+const int MetricsDaemon::kMetricStatsLongInterval = 30;  // seconds
 
 const int MetricsDaemon::kMetricMeminfoInterval = 30;        // seconds
 
@@ -114,6 +114,17 @@ const int MetricsDaemon::kMetricMeminfoInterval = 30;        // seconds
 // sectors.
 const int MetricsDaemon::kMetricSectorsIOMax = 500000;  // sectors/second
 const int MetricsDaemon::kMetricSectorsBuckets = 50;    // buckets
+// Page size is 4k, sector size is 0.5k.  We're not interested in page fault
+// rates that the disk cannot sustain.
+const int MetricsDaemon::kMetricPageFaultsMax = kMetricSectorsIOMax / 8;
+const int MetricsDaemon::kMetricPageFaultsBuckets = 50;
+
+// Major page faults, i.e. the ones that require data to be read from disk.
+
+const char MetricsDaemon::kMetricPageFaultsLongName[] =
+    "Platform.PageFaultsLong";
+const char MetricsDaemon::kMetricPageFaultsShortName[] =
+    "Platform.PageFaultsShort";
 
 // persistent metrics path
 const char MetricsDaemon::kMetricsPath[] = "/var/log/metrics";
@@ -171,8 +182,9 @@ MetricsDaemon::MetricsDaemon()
       memuse_interval_index_(0),
       read_sectors_(0),
       write_sectors_(0),
-      diskstats_state_(kDiskStatsShort),
-      diskstats_initial_time_(0) {}
+      page_faults_(0),
+      stats_state_(kStatsShort),
+      stats_initial_time_(0) {}
 
 MetricsDaemon::~MetricsDaemon() {
   DeleteFrequencyCounters();
@@ -251,7 +263,8 @@ void MetricsDaemon::ConfigureCrashFrequencyReporter(
 }
 
 void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
-                         const string& diskstats_path) {
+                         const string& diskstats_path,
+                         const string& vmstats_path) {
   testing_ = testing;
   DCHECK(metrics_lib != NULL);
   metrics_lib_ = metrics_lib;
@@ -279,11 +292,9 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
   ConfigureCrashFrequencyReporter(kMetricUserCrashesDailyName);
   ConfigureCrashFrequencyReporter(kMetricUserCrashesWeeklyName);
 
-  // Don't attempt to collect disk stats if there is no disk stats file.
-  if (!diskstats_path.empty()) {
-    diskstats_path_ = diskstats_path;
-    DiskStatsReporterInit();
-  }
+  diskstats_path_ = diskstats_path;
+  vmstats_path_ = vmstats_path;
+  StatsReporterInit();
 
   // Start collecting meminfo stats.
   ScheduleMeminfoCallback(kMetricMeminfoInterval);
@@ -564,112 +575,198 @@ void MetricsDaemon::UnscheduleUseMonitor() {
   usemon_interval_ = 0;
 }
 
-void MetricsDaemon::DiskStatsReporterInit() {
+void MetricsDaemon::StatsReporterInit() {
   DiskStatsReadStats(&read_sectors_, &write_sectors_);
+  VmStatsReadStats(&page_faults_);
   // The first time around just run the long stat, so we don't delay boot.
-  diskstats_state_ = kDiskStatsLong;
-  diskstats_initial_time_ = GetActiveTime();
-  if (diskstats_initial_time_ < 0) {
+  stats_state_ = kStatsLong;
+  stats_initial_time_ = GetActiveTime();
+  if (stats_initial_time_ < 0) {
     LOG(WARNING) << "not collecting disk stats";
   } else {
-    ScheduleDiskStatsCallback(kMetricDiskStatsLongInterval);
+    ScheduleStatsCallback(kMetricStatsLongInterval);
   }
 }
 
-void MetricsDaemon::ScheduleDiskStatsCallback(int wait) {
+void MetricsDaemon::ScheduleStatsCallback(int wait) {
   if (testing_) {
     return;
   }
-  g_timeout_add_seconds(wait, DiskStatsCallbackStatic, this);
+  g_timeout_add_seconds(wait, StatsCallbackStatic, this);
 }
 
-void MetricsDaemon::DiskStatsReadStats(long int* read_sectors,
+bool MetricsDaemon::DiskStatsReadStats(long int* read_sectors,
                                        long int* write_sectors) {
   int nchars;
   int nitems;
+  bool success = false;
   char line[200];
+  if (diskstats_path_.empty()) {
+    return false;
+  }
   int file = HANDLE_EINTR(open(diskstats_path_.c_str(), O_RDONLY));
   if (file < 0) {
     PLOG(WARNING) << "cannot open " << diskstats_path_;
-    return;
+    return false;
   }
   nchars = HANDLE_EINTR(read(file, line, sizeof(line)));
   if (nchars < 0) {
     PLOG(WARNING) << "cannot read from " << diskstats_path_;
+    return false;
   } else {
-    LOG_IF(WARNING, nchars == sizeof(line)) << "line too long in "
-                                            << diskstats_path_;
+    LOG_IF(WARNING, nchars == sizeof(line))
+        << "line too long in " << diskstats_path_;
     line[nchars] = '\0';
     nitems = sscanf(line, "%*d %*d %ld %*d %*d %*d %ld",
                     read_sectors, write_sectors);
-    LOG_IF(WARNING, nitems != 2) << "found " << nitems << " items in "
-                                 << diskstats_path_ << ", expected 2";
+    if (nitems == 2) {
+      success = true;
+    } else {
+      LOG(WARNING) << "found " << nitems << " items in "
+                   << diskstats_path_ << ", expected 2";
+    }
   }
   HANDLE_EINTR(close(file));
+  return success;
+}
+
+bool MetricsDaemon::VmStatsParseStats(char* stats, long int* page_faults) {
+  static const char kPageFaultSearchString[] = "\npgmajfault ";
+  bool success = false;
+  /* Each line in the file has the form
+   * <ID> <VALUE>
+   * for instance:
+   * nr_free_pages 213427
+   */
+  char* s = strstr(stats, kPageFaultSearchString);
+  if (s == NULL) {
+    LOG(WARNING) << "cannot find page fault entry in vmstats";
+  } else {
+    char* endp;
+    /* Skip <ID> and space.  Don't count the terminating null. */
+    s += sizeof(kPageFaultSearchString) - 1;
+    *page_faults = strtol(s, &endp, 10);
+    if (*endp == '\n') {
+      success = true;
+    } else {
+      LOG(WARNING) << "error parsing vmstats";
+    }
+  }
+  return success;
+}
+
+bool MetricsDaemon::VmStatsReadStats(long int* page_faults) {
+  char buffer[4000];
+  int nchars;
+  int success = false;
+  if (testing_) {
+    return false;
+  }
+  int file = HANDLE_EINTR(open(vmstats_path_.c_str(), O_RDONLY));
+  if (file < 0) {
+    PLOG(WARNING) << "cannot open " << vmstats_path_;
+    return false;
+  }
+  nchars = HANDLE_EINTR(read(file, buffer, sizeof(buffer) - 1));
+  LOG_IF(WARNING, nchars == sizeof(buffer) - 1)
+      << "file too large in " << vmstats_path_;
+  if (nchars < 0) {
+    PLOG(WARNING) << "cannot read from " << vmstats_path_;
+  } else if (nchars == 0) {
+    LOG(WARNING) << vmstats_path_ << " is empty";
+  } else {
+    buffer[nchars] = '\0';
+    success = VmStatsParseStats(buffer, page_faults);
+  }
+  HANDLE_EINTR(close(file));
+  return success;
 }
 
 // static
-gboolean MetricsDaemon::DiskStatsCallbackStatic(void* handle) {
-  (static_cast<MetricsDaemon*>(handle))->DiskStatsCallback();
+gboolean MetricsDaemon::StatsCallbackStatic(void* handle) {
+  (static_cast<MetricsDaemon*>(handle))->StatsCallback();
   return false;  // one-time callback
 }
 
-// Collects disk stats alternating over a short and a long interval.
+// Collects disk and vm stats alternating over a short and a long interval.
 
-void MetricsDaemon::DiskStatsCallback() {
-  long int read_sectors_now, write_sectors_now;
+void MetricsDaemon::StatsCallback() {
+  long int read_sectors_now, write_sectors_now, page_faults_now;
   double time_now = GetActiveTime();
-  double delta_time = time_now - diskstats_initial_time_;
+  double delta_time = time_now - stats_initial_time_;
   if (testing_) {
     // Fake the time when testing.
-    delta_time = diskstats_state_ == kDiskStatsShort ?
-        kMetricDiskStatsShortInterval : kMetricDiskStatsLongInterval;
+    delta_time = stats_state_ == kStatsShort ?
+        kMetricStatsShortInterval : kMetricStatsLongInterval;
   }
-  DiskStatsReadStats(&read_sectors_now, &write_sectors_now);
+  bool diskstats_success = DiskStatsReadStats(&read_sectors_now,
+                                              &write_sectors_now);
   int delta_read = read_sectors_now - read_sectors_;
   int delta_write = write_sectors_now - write_sectors_;
   int read_sectors_per_second = delta_read / delta_time;
   int write_sectors_per_second = delta_write / delta_time;
+  bool vmstats_success = VmStatsReadStats(&page_faults_now);
+  int delta_faults = page_faults_now - page_faults_;
+  int page_faults_per_second = delta_faults / delta_time;
 
-  switch (diskstats_state_) {
-    case kDiskStatsShort:
-      SendMetric(kMetricReadSectorsShortName,
-                 read_sectors_per_second,
-                 1,
-                 kMetricSectorsIOMax,
-                 kMetricSectorsBuckets);
-      SendMetric(kMetricWriteSectorsShortName,
-                 write_sectors_per_second,
-                 1,
-                 kMetricSectorsIOMax,
-                 kMetricSectorsBuckets);
+  switch (stats_state_) {
+    case kStatsShort:
+      if (diskstats_success) {
+        SendMetric(kMetricReadSectorsShortName,
+                   read_sectors_per_second,
+                   1,
+                   kMetricSectorsIOMax,
+                   kMetricSectorsBuckets);
+        SendMetric(kMetricWriteSectorsShortName,
+                   write_sectors_per_second,
+                   1,
+                   kMetricSectorsIOMax,
+                   kMetricSectorsBuckets);
+      }
+      if (vmstats_success) {
+        SendMetric(kMetricPageFaultsShortName,
+                   page_faults_per_second,
+                   1,
+                   kMetricPageFaultsMax,
+                   kMetricPageFaultsBuckets);
+      }
       // Schedule long callback.
-      diskstats_state_ = kDiskStatsLong;
-      ScheduleDiskStatsCallback(kMetricDiskStatsLongInterval -
-                                kMetricDiskStatsShortInterval);
+      stats_state_ = kStatsLong;
+      ScheduleStatsCallback(kMetricStatsLongInterval -
+                            kMetricStatsShortInterval);
       break;
-    case kDiskStatsLong:
-      SendMetric(kMetricReadSectorsLongName,
-                 read_sectors_per_second,
-                 1,
-                 kMetricSectorsIOMax,
-                 kMetricSectorsBuckets);
-      SendMetric(kMetricWriteSectorsLongName,
-                 write_sectors_per_second,
-                 1,
-                 kMetricSectorsIOMax,
-                 kMetricSectorsBuckets);
-      // Reset sector counters.
-      read_sectors_ = read_sectors_now;
-      write_sectors_ = write_sectors_now;
+    case kStatsLong:
+      if (diskstats_success) {
+        SendMetric(kMetricReadSectorsLongName,
+                   read_sectors_per_second,
+                   1,
+                   kMetricSectorsIOMax,
+                   kMetricSectorsBuckets);
+        SendMetric(kMetricWriteSectorsLongName,
+                   write_sectors_per_second,
+                   1,
+                   kMetricSectorsIOMax,
+                   kMetricSectorsBuckets);
+        // Reset sector counters.
+        read_sectors_ = read_sectors_now;
+        write_sectors_ = write_sectors_now;
+      }
+      if (vmstats_success) {
+        SendMetric(kMetricPageFaultsLongName,
+                   page_faults_per_second,
+                   1,
+                   kMetricPageFaultsMax,
+                   kMetricPageFaultsBuckets);
+        page_faults_ = page_faults_now;
+      }
       // Set start time for new cycle.
-      diskstats_initial_time_ = time_now;
+      stats_initial_time_ = time_now;
       // Schedule short callback.
-      diskstats_state_ = kDiskStatsShort;
-      ScheduleDiskStatsCallback(kMetricDiskStatsShortInterval);
+      stats_state_ = kStatsShort;
+      ScheduleStatsCallback(kMetricStatsShortInterval);
       break;
     default:
-      LOG(FATAL) << "Invalid disk stats state";
+      LOG(FATAL) << "Invalid stats state";
   }
 }
 
@@ -685,7 +782,7 @@ gboolean MetricsDaemon::MeminfoCallbackStatic(void* handle) {
   return (static_cast<MetricsDaemon*>(handle))->MeminfoCallback();
 }
 
-gboolean MetricsDaemon::MeminfoCallback() {
+bool MetricsDaemon::MeminfoCallback() {
   string meminfo_raw;
   const FilePath meminfo_path("/proc/meminfo");
   if (!file_util::ReadFileToString(meminfo_path, &meminfo_raw)) {
@@ -695,7 +792,7 @@ gboolean MetricsDaemon::MeminfoCallback() {
   return ProcessMeminfo(meminfo_raw);
 }
 
-gboolean MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
+bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
   static const MeminfoRecord fields_array[] = {
     { "MemTotal", "MemTotal" },  // SPECIAL CASE: total system memory
     { "MemFree", "MemFree" },
@@ -747,8 +844,8 @@ gboolean MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
   return true;
 }
 
-gboolean MetricsDaemon::FillMeminfo(const string& meminfo_raw,
-                                    vector<MeminfoRecord>* fields) {
+bool MetricsDaemon::FillMeminfo(const string& meminfo_raw,
+                                vector<MeminfoRecord>* fields) {
   vector<string> lines;
   unsigned int nlines = Tokenize(meminfo_raw, "\n", &lines);
 
@@ -782,7 +879,7 @@ gboolean MetricsDaemon::FillMeminfo(const string& meminfo_raw,
   return true;
 }
 
-void MetricsDaemon::ScheduleMemuseCallback(gboolean new_callback,
+void MetricsDaemon::ScheduleMemuseCallback(bool new_callback,
                                            double time_elapsed) {
   if (testing_) {
     return;
@@ -825,7 +922,7 @@ void MetricsDaemon::MemuseCallback() {
   }
 }
 
-gboolean MetricsDaemon::MemuseCallbackWork() {
+bool MetricsDaemon::MemuseCallbackWork() {
   string meminfo_raw;
   const FilePath meminfo_path("/proc/meminfo");
   if (!file_util::ReadFileToString(meminfo_path, &meminfo_raw)) {
@@ -835,7 +932,7 @@ gboolean MetricsDaemon::MemuseCallbackWork() {
   return ProcessMemuse(meminfo_raw);
 }
 
-gboolean MetricsDaemon::ProcessMemuse(const string& meminfo_raw) {
+bool MetricsDaemon::ProcessMemuse(const string& meminfo_raw) {
   static const MeminfoRecord fields_array[] = {
     { "MemTotal", "MemTotal" },  // SPECIAL CASE: total system memory
     { "ActiveAnon", "Active(anon)" },

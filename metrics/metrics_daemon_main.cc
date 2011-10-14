@@ -12,7 +12,8 @@
 
 DEFINE_bool(daemon, true, "run as daemon (use -nodaemon for debugging)");
 
-// Return the path to the disk stats in the sysfs.
+// Returns the path to the disk stats in the sysfs.  Returns the null string if
+// it cannot find the disk stats file.
 static
 const std::string MetricsMainDiskStatsPath() {
   char dev_path_cstr[PATH_MAX];
@@ -41,6 +42,6 @@ int main(int argc, char** argv) {
   MetricsLibrary metrics_lib;
   metrics_lib.Init();
   MetricsDaemon daemon;
-  daemon.Init(false, &metrics_lib, MetricsMainDiskStatsPath());
+  daemon.Init(false, &metrics_lib, MetricsMainDiskStatsPath(), "/proc/vmstat");
   daemon.Run(FLAGS_daemon);
 }
