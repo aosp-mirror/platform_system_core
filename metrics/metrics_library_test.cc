@@ -190,13 +190,6 @@ TEST_F(MetricsLibraryTest, SendEnumToUMA) {
   EXPECT_EQ(0, memcmp(exp, buf, kLen));
 }
 
-TEST_F(MetricsLibraryTest, SendEnumToUMANotEnabled) {
-  EXPECT_CALL(*device_policy_, GetMetricsEnabled(_))
-      .WillOnce(SetMetricsPolicy(false));
-  EXPECT_TRUE(lib_.SendEnumToUMA("Test.EnumMetric", 1, 3));
-  EXPECT_FALSE(file_util::PathExists(kTestUMAEventsFile));
-}
-
 TEST_F(MetricsLibraryTest, SendMessageToChrome) {
   EXPECT_TRUE(lib_.SendMessageToChrome(4, "test"));
   EXPECT_TRUE(lib_.SendMessageToChrome(7, "content"));
@@ -226,13 +219,6 @@ TEST_F(MetricsLibraryTest, SendToUMA) {
   EXPECT_EQ(0, memcmp(exp, buf, kLen));
 }
 
-TEST_F(MetricsLibraryTest, SendToUMANotEnabled) {
-  EXPECT_CALL(*device_policy_, GetMetricsEnabled(_))
-      .WillOnce(SetMetricsPolicy(false));
-  EXPECT_TRUE(lib_.SendToUMA("Test.Metric", 2, 1, 100, 50));
-  EXPECT_FALSE(file_util::PathExists(kTestUMAEventsFile));
-}
-
 TEST_F(MetricsLibraryTest, SendUserActionToUMA) {
   char buf[100];
   const int kLen = 30;
@@ -244,14 +230,7 @@ TEST_F(MetricsLibraryTest, SendUserActionToUMA) {
   EXPECT_EQ(0, memcmp(exp, buf, kLen));
 }
 
-TEST_F(MetricsLibraryTest, SendUserActionToUMANotEnabled) {
-  EXPECT_CALL(*device_policy_, GetMetricsEnabled(_))
-      .WillOnce(SetMetricsPolicy(false));
-  EXPECT_TRUE(lib_.SendUserActionToUMA("SomeOtherKeyPressed"));
-  EXPECT_FALSE(file_util::PathExists(kTestUMAEventsFile));
-}
-
-TEST_F(MetricsLibraryTest, SendCrashToUMAEnabled) {
+TEST_F(MetricsLibraryTest, SendCrashToUMA) {
   EXPECT_TRUE(lib_.SendCrashToUMA("kernel"));
   char exp[100];
   int len = sprintf(exp, "%c%c%c%ccrash%ckernel",
@@ -260,13 +239,6 @@ TEST_F(MetricsLibraryTest, SendCrashToUMAEnabled) {
   char buf[100];
   EXPECT_EQ(len, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
   EXPECT_EQ(0, memcmp(exp, buf, len));
-}
-
-TEST_F(MetricsLibraryTest, SendCrashToUMANotEnabled) {
-  EXPECT_CALL(*device_policy_, GetMetricsEnabled(_))
-      .WillOnce(SetMetricsPolicy(false));
-  EXPECT_TRUE(lib_.SendCrashToUMA("kernel"));
-  EXPECT_FALSE(file_util::PathExists(kTestUMAEventsFile));
 }
 
 class CMetricsLibraryTest : public testing::Test {

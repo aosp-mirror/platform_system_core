@@ -165,8 +165,6 @@ bool MetricsLibrary::AreMetricsEnabled() {
 }
 
 bool MetricsLibrary::SendMessageToChrome(int32_t length, const char* message) {
-  if (!AreMetricsEnabled())
-    return true;
 
   int chrome_fd = HANDLE_EINTR(open(uma_events_file_,
                                     O_WRONLY | O_APPEND | O_CREAT,
