@@ -374,6 +374,13 @@ int android_log_processLogBuffer(struct logger_entry *buf,
     entry->messageLen = buf->len - preambleAndNullLen;
     entry->message = entry->tag + tag_len + 1;
 
+    if (entry->messageLen != strlen(entry->message)) {
+        fprintf(stderr,
+                "+++ LOG: Message length inconsistent. Expected %d, got %d\n",
+                entry->messageLen, strlen(entry->message));
+        return -1;
+    }
+
     return 0;
 }
 
@@ -830,7 +837,6 @@ char *android_log_formatLogLine (
         while(pm < (entry->message + entry->messageLen)) {
             const char *lineStart;
             size_t lineLen;
-
             lineStart = pm;
 
             // Find the next end-of-line in message
