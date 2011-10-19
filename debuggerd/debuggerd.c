@@ -43,6 +43,9 @@
 
 #define ANDROID_LOG_INFO 4
 
+void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...)
+    __attribute__ ((format(printf, 3, 4)));
+
 /* Log information onto the tombstone */
 void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...)
 {
@@ -60,6 +63,7 @@ void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...)
 
     if (!in_tombstone_only)
         __android_log_vprint(ANDROID_LOG_INFO, "DEBUG", fmt, ap);
+    va_end(ap);
 }
 
 // 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /system/lib/libcomposer.so
@@ -177,7 +181,7 @@ void dump_fault_addr(int tfd, int pid, int sig)
         _LOG(tfd, false, "signal %d (%s), code %d (%s), fault addr %08x\n",
              sig, get_signame(sig),
              si.si_code, get_sigcode(sig, si.si_code),
-             si.si_addr);
+             (uintptr_t) si.si_addr);
     } else {
         _LOG(tfd, false, "signal %d (%s), code %d (%s), fault addr --------\n",
              sig, get_signame(sig), si.si_code, get_sigcode(sig, si.si_code));
@@ -408,24 +412,40 @@ static bool dump_sibling_thread_report(int tfd, unsigned pid, unsigned tid)
             continue;
 
         dump_crash_report(tfd, pid, new_tid, false);
-        need_cleanup |= ptrace(PTRACE_DETACH, new_tid, 0, 0);
+
+        if (ptrace(PTRACE_DETACH, new_tid, 0, 0) != 0) {
+            XLOG("detach of tid %d failed: %s\n", new_tid, strerror(errno));
+            need_cleanup = 1;
+        }
     }
     closedir(d);
+
     return need_cleanup != 0;
 }
 
 /*
  * Reads the contents of the specified log device, filters out the entries
  * that don't match the specified pid, and writes them to the tombstone file.
+ *
+ * If "tailOnly" is set, we only print the last few lines.
  */
-static void dump_log_file(int tfd, unsigned pid, const char* filename)
+static void dump_log_file(int tfd, unsigned pid, const char* filename,
+    bool tailOnly)
 {
+    bool first = true;
+
+    /* circular buffer, for "tailOnly" mode */
+    const int kShortLogMaxLines = 5;
+    const int kShortLogLineLen = 256;
+    char shortLog[kShortLogMaxLines][kShortLogLineLen];
+    int shortLogCount = 0;
+    int shortLogNext = 0;
+
     int logfd = open(filename, O_RDONLY | O_NONBLOCK);
     if (logfd < 0) {
         XLOG("Unable to open %s: %s\n", filename, strerror(errno));
         return;
     }
-    _LOG(tfd, true, "--------- log %s\n", filename);
 
     union {
         unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
@@ -466,6 +486,12 @@ static void dump_log_file(int tfd, unsigned pid, const char* filename)
             continue;
         }
 
+        if (first) {
+            _LOG(tfd, true, "--------- %slog %s\n",
+                tailOnly ? "tail end of " : "", filename);
+            first = false;
+        }
+
         /*
          * Msg format is: <priority:1><tag:N>\0<message:N>\0
          *
@@ -477,10 +503,16 @@ static void dump_log_file(int tfd, unsigned pid, const char* filename)
          */
         static const char* kPrioChars = "!.VDIWEFS";
         unsigned char prio = entry->msg[0];
-        const char* tag = entry->msg + 1;
-        const char* msg = tag + strlen(tag) + 1;
+        char* tag = entry->msg + 1;
+        char* msg = tag + strlen(tag) + 1;
 
-        log_entry.entry.msg[entry->len] = '\0';
+        /* consume any trailing newlines */
+        char* eatnl = msg + strlen(msg) - 1;
+        while (eatnl >= msg && *eatnl == '\n') {
+            *eatnl-- = '\0';
+        }
+
+        char prioChar = (prio < strlen(kPrioChars) ? kPrioChars[prio] : '?');
 
         char timeBuf[32];
         time_t sec = (time_t) entry->sec;
@@ -489,11 +521,37 @@ static void dump_log_file(int tfd, unsigned pid, const char* filename)
         ptm = localtime_r(&sec, &tmBuf);
         strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", ptm);
 
-        _LOG(tfd, true, "%s.%03ld %5d %5d %c %-8s: %s\n",
-            timeBuf, entry->nsec / 1000000,
-            entry->pid, entry->tid,
-            (prio < strlen(kPrioChars) ? kPrioChars[prio] : '?'),
-            tag, msg);
+        if (tailOnly) {
+            snprintf(shortLog[shortLogNext], kShortLogLineLen,
+                "%s.%03d %5d %5d %c %-8s: %s",
+                timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
+                prioChar, tag, msg);
+            shortLogNext = (shortLogNext + 1) % kShortLogMaxLines;
+            shortLogCount++;
+        } else {
+            _LOG(tfd, true, "%s.%03d %5d %5d %c %-8s: %s\n",
+                timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
+                prioChar, tag, msg);
+        }
+    }
+
+    if (tailOnly) {
+        int i;
+
+        /*
+         * If we filled the buffer, we want to start at "next", which has
+         * the oldest entry.  If we didn't, we want to start at zero.
+         */
+        if (shortLogCount < kShortLogMaxLines) {
+            shortLogNext = 0;
+        } else {
+            shortLogCount = kShortLogMaxLines;  /* cap at window size */
+        }
+
+        for (i = 0; i < shortLogCount; i++) {
+            _LOG(tfd, true, "%s\n", shortLog[shortLogNext]);
+            shortLogNext = (shortLogNext + 1) % kShortLogMaxLines;
+        }
     }
 
     close(logfd);
@@ -503,10 +561,10 @@ static void dump_log_file(int tfd, unsigned pid, const char* filename)
  * Dumps the logs generated by the specified pid to the tombstone, from both
  * "system" and "main" log devices.  Ideally we'd interleave the output.
  */
-static void dump_logs(int tfd, unsigned pid)
+static void dump_logs(int tfd, unsigned pid, bool tailOnly)
 {
-    dump_log_file(tfd, pid, "/dev/log/system");
-    dump_log_file(tfd, pid, "/dev/log/main");
+    dump_log_file(tfd, pid, "/dev/log/system", tailOnly);
+    dump_log_file(tfd, pid, "/dev/log/main", tailOnly);
 }
 
 /* Return true if some thread is not detached cleanly */
@@ -515,6 +573,11 @@ static bool engrave_tombstone(unsigned pid, unsigned tid, int debug_uid,
 {
     int fd;
     bool need_cleanup = false;
+
+    /* don't copy log messages to tombstone unless this is a dev device */
+    char value[PROPERTY_VALUE_MAX];
+    property_get("ro.debuggable", value, "0");
+    bool wantLogs = (value[0] == '1');
 
     mkdir(TOMBSTONE_DIR, 0755);
     chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM);
@@ -525,6 +588,11 @@ static bool engrave_tombstone(unsigned pid, unsigned tid, int debug_uid,
 
     dump_crash_banner(fd, pid, tid, signal);
     dump_crash_report(fd, pid, tid, true);
+
+    if (wantLogs) {
+        dump_logs(fd, pid, true);
+    }
+
     /*
      * If the user has requested to attach gdb, don't collect the per-thread
      * information as it increases the chance to lose track of the process.
@@ -533,11 +601,8 @@ static bool engrave_tombstone(unsigned pid, unsigned tid, int debug_uid,
         need_cleanup = dump_sibling_thread_report(fd, pid, tid);
     }
 
-    /* don't copy log to tombstone unless this is a dev device */
-    char value[PROPERTY_VALUE_MAX];
-    property_get("ro.debuggable", value, "0");
-    if (value[0] == '1') {
-        dump_logs(fd, pid);
+    if (wantLogs) {
+        dump_logs(fd, pid, false);
     }
 
     close(fd);
@@ -703,9 +768,11 @@ static void handle_crashing_process(int fd)
      * is blocked in a read() call. This gives us the time to PTRACE_ATTACH
      * to it before it has a chance to really fault.
      *
-     * After the attach, the thread is stopped, and we write to the file
-     * descriptor to ensure that it will run as soon as we call PTRACE_CONT
-     * below. See details in bionic/libc/linker/debugger.c, in function
+     * The PTRACE_ATTACH sends a SIGSTOP to the target process, but it
+     * won't necessarily have stopped by the time ptrace() returns.  (We
+     * currently assume it does.)  We write to the file descriptor to
+     * ensure that it can run as soon as we call PTRACE_CONT below.
+     * See details in bionic/libc/linker/debugger.c, in function
      * debugger_signal_handler().
      */
     tid_attach_status = ptrace(PTRACE_ATTACH, tid, 0, 0);
@@ -813,7 +880,12 @@ done:
         wait_for_user_action(tid, &cr);
     }
 
-    /* resume stopped process (so it can crash in peace) */
+    /*
+     * Resume stopped process (so it can crash in peace).  If we didn't
+     * successfully detach, we're still the parent, and the actual parent
+     * won't receive a death notification via wait(2).  At this point
+     * there's not much we can do about that.
+     */
     kill(cr.pid, SIGCONT);
 
     if (need_cleanup) {

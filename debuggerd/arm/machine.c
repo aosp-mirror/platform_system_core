@@ -56,6 +56,8 @@ extern int unwind_backtrace_with_ptrace(int tfd, pid_t pid, mapinfo *map,
 /*
  * If this isn't clearly a null pointer dereference, dump the
  * /proc/maps entries near the fault address.
+ *
+ * This only makes sense to do on the thread that crashed.
  */
 static void show_nearby_maps(int tfd, int pid, mapinfo *map)
 {
@@ -63,7 +65,8 @@ static void show_nearby_maps(int tfd, int pid, mapinfo *map)
 
     memset(&si, 0, sizeof(si));
     if (ptrace(PTRACE_GETSIGINFO, pid, 0, &si)) {
-        _LOG(tfd, false, "cannot get siginfo: %s\n", strerror(errno));
+        _LOG(tfd, false, "cannot get siginfo for %d: %s\n",
+            pid, strerror(errno));
         return;
     }
     if (!signal_has_address(si.si_signo))
@@ -237,7 +240,9 @@ void dump_stack_and_code(int tfd, int pid, mapinfo *map,
         }
     }
 
-    show_nearby_maps(tfd, pid, map);
+    if (at_fault) {
+        show_nearby_maps(tfd, pid, map);
+    }
 
     unsigned int p, end;
     unsigned int sp = r.ARM_sp;
