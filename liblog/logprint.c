@@ -352,7 +352,6 @@ int android_log_processLogBuffer(struct logger_entry *buf,
 {
     entry->tv_sec = buf->sec;
     entry->tv_nsec = buf->nsec;
-    entry->priority = buf->msg[0];
     entry->pid = buf->pid;
     entry->tid = buf->tid;
 
@@ -360,26 +359,32 @@ int android_log_processLogBuffer(struct logger_entry *buf,
      * format: <priority:1><tag:N>\0<message:N>\0
      *
      * tag str
-     *   starts at msg+1
+     *   starts at buf->msg+1
      * msg
-     *   starts at msg+1+len(tag)+1
+     *   starts at buf->msg+1+len(tag)+1
      */
-    entry->tag = buf->msg + 1;
-    const size_t tag_len = strlen(entry->tag);
-    const size_t preambleAndNullLen = tag_len + 3;
-    if (buf->len <= preambleAndNullLen) {
-        fprintf(stderr, "+++ LOG: entry corrupt or truncated\n");
+    if (buf->len < 3) {
+        // An well-formed entry must consist of at least a priority
+        // and two null characters
+        fprintf(stderr, "+++ LOG: entry too small\n");
         return -1;
     }
-    entry->messageLen = buf->len - preambleAndNullLen;
-    entry->message = entry->tag + tag_len + 1;
 
-    if (entry->messageLen != strlen(entry->message)) {
-        fprintf(stderr,
-                "+++ LOG: Message length inconsistent. Expected %d, got %d\n",
-                entry->messageLen, strlen(entry->message));
+    int nullsFound = 0;
+    int i;
+    for (i = 1; i < buf->len; i++) {
+        if (buf->msg[i] == '\0') {
+            nullsFound++;
+        }
+    }
+    if (nullsFound != 2) {
+        fprintf(stderr, "+++ LOG: malformed log entry\n");
         return -1;
     }
+    entry->priority = buf->msg[0];
+    entry->tag = buf->msg + 1;
+    entry->message = entry->tag + strlen(entry->tag) + 1;
+    entry->messageLen = strlen(entry->message);
 
     return 0;
 }
