@@ -103,7 +103,7 @@ struct str_parms *str_parms_create_str(const char *_string)
     if (!str)
         goto err_strdup;
 
-    LOGV("%s: source string == '%s'\n", __func__, _string);
+    ALOGV("%s: source string == '%s'\n", __func__, _string);
 
     kvpair = strtok_r(str, ";", &tmpstr);
     while (kvpair && *kvpair) {
@@ -137,7 +137,7 @@ next_pair:
     }
 
     if (!items)
-        LOGV("%s: no items found in string\n", __func__);
+        ALOGV("%s: no items found in string\n", __func__);
 
     free(str);
 

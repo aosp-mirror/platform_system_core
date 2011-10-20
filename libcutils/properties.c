@@ -130,7 +130,7 @@ static void init(void)
     if (gPropFd < 0) {
         //LOGW("not connected to system property server\n");
     } else {
-        //LOGV("Connected to system property server\n");
+        //ALOGV("Connected to system property server\n");
     }
 }
 
@@ -140,7 +140,7 @@ int property_get(const char *key, char *value, const char *default_value)
     char recvBuf[1+PROPERTY_VALUE_MAX];
     int len = -1;
 
-    //LOGV("PROPERTY GET [%s]\n", key);
+    //ALOGV("PROPERTY GET [%s]\n", key);
 
     pthread_once(&gInitOnce, init);
     if (gPropFd < 0) {
@@ -194,7 +194,7 @@ int property_get(const char *key, char *value, const char *default_value)
         assert(0);
         return -1;
     }
-    //LOGV("PROP [found=%d def='%s'] (%d) [%s]: [%s]\n",
+    //ALOGV("PROP [found=%d def='%s'] (%d) [%s]: [%s]\n",
     //    recvBuf[0], default_value, len, key, value);
 
     return len;
@@ -207,7 +207,7 @@ int property_set(const char *key, const char *value)
     char recvBuf[1];
     int result = -1;
 
-    //LOGV("PROPERTY SET [%s]: [%s]\n", key, value);
+    //ALOGV("PROPERTY SET [%s]: [%s]\n", key, value);
 
     pthread_once(&gInitOnce, init);
     if (gPropFd < 0)
@@ -241,7 +241,7 @@ int property_set(const char *key, const char *value)
 int property_list(void (*propfn)(const char *key, const char *value, void *cookie), 
                   void *cookie)
 {
-    //LOGV("PROPERTY LIST\n");
+    //ALOGV("PROPERTY LIST\n");
     pthread_once(&gInitOnce, init);
     if (gPropFd < 0)
         return -1;

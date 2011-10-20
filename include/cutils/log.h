@@ -47,7 +47,7 @@ extern "C" {
 // ---------------------------------------------------------------------
 
 /*
- * Normally we strip LOGV (VERBOSE messages) from release builds.
+ * Normally we strip ALOGV (VERBOSE messages) from release builds.
  * You can modify this (for example with "#define LOG_NDEBUG 0"
  * at the top of your source file) to change that behavior.
  */
@@ -73,27 +73,33 @@ extern "C" {
 /*
  * Simplified macro to send a verbose log message using the current LOG_TAG.
  */
-#ifndef LOGV
+#ifndef ALOGV
 #if LOG_NDEBUG
-#define LOGV(...)   ((void)0)
+#define ALOGV(...)   ((void)0)
 #else
-#define LOGV(...) ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
+#define ALOGV(...) ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #endif
-#define ALOGV LOGV
+// Temporary measure for code still using old LOG macros.
+#ifndef LOGV
+#define LOGV ALOGV
+#endif
 #endif
 
 #define CONDITION(cond)     (__builtin_expect((cond)!=0, 0))
 
-#ifndef LOGV_IF
+#ifndef ALOGV_IF
 #if LOG_NDEBUG
-#define LOGV_IF(cond, ...)   ((void)0)
+#define ALOGV_IF(cond, ...)   ((void)0)
 #else
-#define LOGV_IF(cond, ...) \
+#define ALOGV_IF(cond, ...) \
     ( (CONDITION(cond)) \
     ? ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
-#define ALOGV_IF LOGV_IF
+// Temporary measure for code still using old LOG macros.
+#ifndef LOGV_IF
+#define LOGV_IF ALOGV_IF
+#endif
 #endif
 
 /*
@@ -166,13 +172,16 @@ extern "C" {
  * Conditional based on whether the current LOG_TAG is enabled at
  * verbose priority.
  */
-#ifndef IF_LOGV
+#ifndef IF_ALOGV
 #if LOG_NDEBUG
-#define IF_LOGV() if (false)
+#define IF_ALOGV() if (false)
 #else
-#define IF_LOGV() IF_ALOG(LOG_VERBOSE, LOG_TAG)
+#define IF_ALOGV() IF_ALOG(LOG_VERBOSE, LOG_TAG)
 #endif
-#define IF_ALOGV IF_LOGV
+// Temporary measure for code still using old LOG macros.
+#ifndef IF_LOGV
+#define IF_LOGV IF_ALOGV
+#endif
 #endif
 
 /*

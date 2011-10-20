@@ -336,7 +336,7 @@ validate(struct disk_info *dinfo)
     }
 
 #if 1
-    LOGV("Device/file %s: size=%llu bytes, num_lba=%u, sect_size=%d",
+    ALOGV("Device/file %s: size=%llu bytes, num_lba=%u, sect_size=%d",
          dinfo->device, disk_size, dinfo->num_lba, dinfo->sect_size);
 #endif
 
