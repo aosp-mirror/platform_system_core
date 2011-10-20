@@ -36,7 +36,7 @@ static const uint32_t ELF_MAGIC = 0x464C457f; // "ELF\0177"
 
 bool try_get_word(pid_t tid, uintptr_t ptr, uint32_t* out_value) {
     if (ptr & 3) {
-        LOGV("try_get_word: invalid pointer 0x%08x", ptr);
+        ALOGV("try_get_word: invalid pointer 0x%08x", ptr);
         *out_value = 0;
         return false;
     }
@@ -46,7 +46,7 @@ bool try_get_word(pid_t tid, uintptr_t ptr, uint32_t* out_value) {
         unsigned char vec[1];
         while (mincore((void*)(ptr & PAGE_MASK), sizeof(uint32_t), vec)) {
             if (errno != EAGAIN && errno != EINTR) {
-                LOGV("try_get_word: invalid pointer 0x%08x, mincore() errno=%d", ptr, errno);
+                ALOGV("try_get_word: invalid pointer 0x%08x, mincore() errno=%d", ptr, errno);
                 *out_value = 0;
                 return false;
             }
@@ -60,7 +60,7 @@ bool try_get_word(pid_t tid, uintptr_t ptr, uint32_t* out_value) {
         errno = 0;
         *out_value = ptrace(PTRACE_PEEKTEXT, tid, (void*)ptr, NULL);
         if (*out_value == 0xffffffffL && errno) {
-            LOGV("try_get_word: invalid pointer 0x%08x, ptrace() errno=%d", ptr, errno);
+            ALOGV("try_get_word: invalid pointer 0x%08x, ptrace() errno=%d", ptr, errno);
             *out_value = 0;
             return false;
         }

@@ -191,7 +191,7 @@ static uintptr_t get_exception_handler(
             break;
         }
     }
-    LOGV("get_exception_handler: pc=0x%08x, module='%s', module_start=0x%08x, "
+    ALOGV("get_exception_handler: pc=0x%08x, module='%s', module_start=0x%08x, "
             "exidx_start=0x%08x, exidx_size=%d, handler=0x%08x",
             pc, mi ? mi->name : "<unknown>", mi ? mi->start : 0,
             exidx_start, exidx_size, handler);
@@ -227,13 +227,13 @@ static bool try_next_byte(pid_t tid, byte_stream_t* stream, uint8_t* out_value) 
         break;
     }
 
-    LOGV("next_byte: ptr=0x%08x, value=0x%02x", stream->ptr, *out_value);
+    ALOGV("next_byte: ptr=0x%08x, value=0x%02x", stream->ptr, *out_value);
     stream->ptr += 1;
     return true;
 }
 
 static void set_reg(unwind_state_t* state, uint32_t reg, uint32_t value) {
-    LOGV("set_reg: reg=%d, value=0x%08x", reg, value);
+    ALOGV("set_reg: reg=%d, value=0x%08x", reg, value);
     state->gregs[reg] = value;
 }
 

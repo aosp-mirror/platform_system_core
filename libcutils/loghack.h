@@ -25,13 +25,13 @@
 #include <cutils/log.h>
 #else
 #include <stdio.h>
-#define LOG(level, ...) \
+#define ALOG(level, ...) \
         ((void)printf("cutils:" level "/" LOG_TAG ": " __VA_ARGS__))
-#define LOGV(...)   LOG("V", __VA_ARGS__)
-#define LOGD(...)   LOG("D", __VA_ARGS__)
-#define LOGI(...)   LOG("I", __VA_ARGS__)
-#define LOGW(...)   LOG("W", __VA_ARGS__)
-#define LOGE(...)   LOG("E", __VA_ARGS__)
+#define ALOGV(...)   ALOG("V", __VA_ARGS__)
+#define LOGD(...)   ALOG("D", __VA_ARGS__)
+#define LOGI(...)   ALOG("I", __VA_ARGS__)
+#define LOGW(...)   ALOG("W", __VA_ARGS__)
+#define LOGE(...)   ALOG("E", __VA_ARGS__)
 #define LOG_ALWAYS_FATAL(...)   do { LOGE(__VA_ARGS__); exit(1); } while (0)
 #endif
 
