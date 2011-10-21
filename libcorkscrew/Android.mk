@@ -31,6 +31,12 @@ LOCAL_SRC_FILES += \
 LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH -DCORKSCREW_HAVE_LIBIBERTY
 LOCAL_LDFLAGS += -liberty
 endif
+ifeq ($(TARGET_ARCH),x86)
+LOCAL_SRC_FILES += \
+	arch-x86/backtrace-x86.c \
+	arch-x86/ptrace-x86.c
+LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH
+endif
 
 LOCAL_SHARED_LIBRARIES += libdl libcutils
 
