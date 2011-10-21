@@ -34,77 +34,19 @@
 #include <cutils/logger.h>
 #include <cutils/properties.h>
 
+#include <corkscrew/backtrace.h>
+
 #include <linux/input.h>
 
 #include <private/android_filesystem_config.h>
 
-#include "debuggerd.h"
+#include "getevent.h"
+#include "machine.h"
 #include "utility.h"
 
 #define ANDROID_LOG_INFO 4
 
-void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...)
-    __attribute__ ((format(printf, 3, 4)));
-
-/* Log information onto the tombstone */
-void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...)
-{
-    char buf[512];
-
-    va_list ap;
-    va_start(ap, fmt);
-
-    if (tfd >= 0) {
-        int len;
-        vsnprintf(buf, sizeof(buf), fmt, ap);
-        len = strlen(buf);
-        if(tfd >= 0) write(tfd, buf, len);
-    }
-
-    if (!in_tombstone_only)
-        __android_log_vprint(ANDROID_LOG_INFO, "DEBUG", fmt, ap);
-    va_end(ap);
-}
-
-// 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /system/lib/libcomposer.so
-// 012345678901234567890123456789012345678901234567890123456789
-// 0         1         2         3         4         5
-
-mapinfo *parse_maps_line(char *line)
-{
-    mapinfo *mi;
-    int len = strlen(line);
-
-    if (len < 1) return 0;      /* not expected */
-    line[--len] = 0;
-
-    if (len < 50) {
-        mi = malloc(sizeof(mapinfo) + 1);
-    } else {
-        mi = malloc(sizeof(mapinfo) + (len - 47));
-    }
-    if (mi == 0) return 0;
-
-    mi->isExecutable = (line[20] == 'x');
-
-    mi->start = strtoul(line, 0, 16);
-    mi->end = strtoul(line + 9, 0, 16);
-    /* To be filled in parse_elf_info if the mapped section starts with
-     * elf_header
-     */
-    mi->exidx_start = mi->exidx_end = 0;
-    mi->symbols = 0;
-    mi->next = 0;
-    if (len < 50) {
-        mi->name[0] = '\0';
-    } else {
-        strcpy(mi->name, line + 49);
-    }
-
-    return mi;
-}
-
-void dump_build_info(int tfd)
+static void dump_build_info(int tfd)
 {
     char fingerprint[PROPERTY_VALUE_MAX];
 
@@ -113,7 +55,7 @@ void dump_build_info(int tfd)
     _LOG(tfd, false, "Build fingerprint: '%s'\n", fingerprint);
 }
 
-const char *get_signame(int sig)
+static const char *get_signame(int sig)
 {
     switch(sig) {
     case SIGILL:     return "SIGILL";
@@ -126,7 +68,7 @@ const char *get_signame(int sig)
     }
 }
 
-const char *get_sigcode(int signo, int code)
+static const char *get_sigcode(int signo, int code)
 {
     switch (signo) {
     case SIGILL:
@@ -170,7 +112,7 @@ const char *get_sigcode(int signo, int code)
     return "?";
 }
 
-void dump_fault_addr(int tfd, int pid, int sig)
+static void dump_fault_addr(int tfd, pid_t pid, int sig)
 {
     siginfo_t si;
 
@@ -188,7 +130,7 @@ void dump_fault_addr(int tfd, int pid, int sig)
     }
 }
 
-void dump_crash_banner(int tfd, unsigned pid, unsigned tid, int sig)
+static void dump_crash_banner(int tfd, pid_t pid, pid_t tid, int sig)
 {
     char data[1024];
     char *x = 0;
@@ -202,187 +144,19 @@ void dump_crash_banner(int tfd, unsigned pid, unsigned tid, int sig)
     }
 
     _LOG(tfd, false,
-         "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
+            "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
     dump_build_info(tfd);
     _LOG(tfd, false, "pid: %d, tid: %d  >>> %s <<<\n",
          pid, tid, x ? x : "UNKNOWN");
 
-    if(sig) dump_fault_addr(tfd, tid, sig);
-}
-
-static void parse_elf_info(mapinfo *milist, pid_t pid)
-{
-    mapinfo *mi;
-    for (mi = milist; mi != NULL; mi = mi->next) {
-        if (!mi->isExecutable)
-            continue;
-
-        Elf32_Ehdr ehdr;
-
-        memset(&ehdr, 0, sizeof(Elf32_Ehdr));
-        /* Read in sizeof(Elf32_Ehdr) worth of data from the beginning of
-         * mapped section.
-         */
-        get_remote_struct(pid, (void *) (mi->start), &ehdr,
-                          sizeof(Elf32_Ehdr));
-        /* Check if it has the matching magic words */
-        if (IS_ELF(ehdr)) {
-            Elf32_Phdr phdr;
-            Elf32_Phdr *ptr;
-            int i;
-
-            ptr = (Elf32_Phdr *) (mi->start + ehdr.e_phoff);
-            for (i = 0; i < ehdr.e_phnum; i++) {
-                /* Parse the program header */
-                get_remote_struct(pid, (char *) (ptr+i), &phdr,
-                                  sizeof(Elf32_Phdr));
-#ifdef __arm__
-                /* Found a EXIDX segment? */
-                if (phdr.p_type == PT_ARM_EXIDX) {
-                    mi->exidx_start = mi->start + phdr.p_offset;
-                    mi->exidx_end = mi->exidx_start + phdr.p_filesz;
-                    break;
-                }
-#endif
-            }
-
-            /* Try to load symbols from this file */
-            mi->symbols = symbol_table_create(mi->name);
-        }
+    if(sig) {
+        dump_fault_addr(tfd, tid, sig);
     }
-}
-
-void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
-{
-    char data[1024];
-    FILE *fp;
-    mapinfo *milist = 0;
-    unsigned int sp_list[STACK_CONTENT_DEPTH];
-    int stack_depth;
-#ifdef __arm__
-    int frame0_pc_sane = 1;
-#endif
-
-    if (!at_fault) {
-        _LOG(tfd, true,
-         "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
-        _LOG(tfd, true, "pid: %d, tid: %d\n", pid, tid);
-    }
-
-    dump_registers(tfd, tid, at_fault);
-
-    /* Clear stack pointer records */
-    memset(sp_list, 0, sizeof(sp_list));
-
-    sprintf(data, "/proc/%d/maps", pid);
-    fp = fopen(data, "r");
-    if(fp) {
-        while(fgets(data, 1024, fp)) {
-            mapinfo *mi = parse_maps_line(data);
-            if(mi) {
-                mi->next = milist;
-                milist = mi;
-            }
-        }
-        fclose(fp);
-    }
-
-    parse_elf_info(milist, tid);
-
-#if __arm__
-    /* If stack unwinder fails, use the default solution to dump the stack
-     * content.
-     */
-    stack_depth = unwind_backtrace_with_ptrace(tfd, tid, milist, sp_list,
-                                               &frame0_pc_sane, at_fault);
-
-    /* The stack unwinder should at least unwind two levels of stack. If less
-     * level is seen we make sure at lease pc and lr are dumped.
-     */
-    if (stack_depth < 2) {
-        dump_pc_and_lr(tfd, tid, milist, stack_depth, at_fault);
-    }
-
-    dump_stack_and_code(tfd, tid, milist, stack_depth, sp_list, at_fault);
-#elif __i386__
-    /* If stack unwinder fails, use the default solution to dump the stack
-    * content.
-    */
-    stack_depth = unwind_backtrace_with_ptrace_x86(tfd, tid, milist,at_fault);
-#else
-#error "Unsupported architecture"
-#endif
-
-    while(milist) {
-        mapinfo *next = milist->next;
-        symbol_table_free(milist->symbols);
-        free(milist);
-        milist = next;
-    }
-}
-
-#define MAX_TOMBSTONES	10
-
-#define typecheck(x,y) {    \
-    typeof(x) __dummy1;     \
-    typeof(y) __dummy2;     \
-    (void)(&__dummy1 == &__dummy2); }
-
-#define TOMBSTONE_DIR	"/data/tombstones"
-
-/*
- * find_and_open_tombstone - find an available tombstone slot, if any, of the
- * form tombstone_XX where XX is 00 to MAX_TOMBSTONES-1, inclusive. If no
- * file is available, we reuse the least-recently-modified file.
- */
-static int find_and_open_tombstone(void)
-{
-    unsigned long mtime = ULONG_MAX;
-    struct stat sb;
-    char path[128];
-    int fd, i, oldest = 0;
-
-    /*
-     * XXX: Our stat.st_mtime isn't time_t. If it changes, as it probably ought
-     * to, our logic breaks. This check will generate a warning if that happens.
-     */
-    typecheck(mtime, sb.st_mtime);
-
-    /*
-     * In a single wolf-like pass, find an available slot and, in case none
-     * exist, find and record the least-recently-modified file.
-     */
-    for (i = 0; i < MAX_TOMBSTONES; i++) {
-        snprintf(path, sizeof(path), TOMBSTONE_DIR"/tombstone_%02d", i);
-
-        if (!stat(path, &sb)) {
-            if (sb.st_mtime < mtime) {
-                oldest = i;
-                mtime = sb.st_mtime;
-            }
-            continue;
-        }
-        if (errno != ENOENT)
-            continue;
-
-        fd = open(path, O_CREAT | O_EXCL | O_WRONLY, 0600);
-        if (fd < 0)
-            continue;	/* raced ? */
-
-        fchown(fd, AID_SYSTEM, AID_SYSTEM);
-        return fd;
-    }
-
-    /* we didn't find an available file, so we clobber the oldest one */
-    snprintf(path, sizeof(path), TOMBSTONE_DIR"/tombstone_%02d", oldest);
-    fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
-    fchown(fd, AID_SYSTEM, AID_SYSTEM);
-
-    return fd;
 }
 
 /* Return true if some thread is not detached cleanly */
-static bool dump_sibling_thread_report(int tfd, unsigned pid, unsigned tid)
+static bool dump_sibling_thread_report(ptrace_context_t* context,
+        int tfd, pid_t pid, pid_t tid)
 {
     char task_path[1024];
 
@@ -398,7 +172,7 @@ static bool dump_sibling_thread_report(int tfd, unsigned pid, unsigned tid)
         return false;
     }
     while ((de = readdir(d)) != NULL) {
-        unsigned new_tid;
+        pid_t new_tid;
         /* Ignore "." and ".." */
         if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, ".."))
             continue;
@@ -411,7 +185,11 @@ static bool dump_sibling_thread_report(int tfd, unsigned pid, unsigned tid)
         if (ptrace(PTRACE_ATTACH, new_tid, 0, 0) < 0)
             continue;
 
-        dump_crash_report(tfd, pid, new_tid, false);
+        _LOG(tfd, true,
+                "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
+        _LOG(tfd, true, "pid: %d, tid: %d\n", pid, new_tid);
+
+        dump_thread(context, tfd, new_tid, false);
 
         if (ptrace(PTRACE_DETACH, new_tid, 0, 0) != 0) {
             XLOG("detach of tid %d failed: %s\n", new_tid, strerror(errno));
@@ -429,7 +207,7 @@ static bool dump_sibling_thread_report(int tfd, unsigned pid, unsigned tid)
  *
  * If "tailOnly" is set, we only print the last few lines.
  */
-static void dump_log_file(int tfd, unsigned pid, const char* filename,
+static void dump_log_file(int tfd, pid_t pid, const char* filename,
     bool tailOnly)
 {
     bool first = true;
@@ -561,23 +339,112 @@ static void dump_log_file(int tfd, unsigned pid, const char* filename,
  * Dumps the logs generated by the specified pid to the tombstone, from both
  * "system" and "main" log devices.  Ideally we'd interleave the output.
  */
-static void dump_logs(int tfd, unsigned pid, bool tailOnly)
+static void dump_logs(int tfd, pid_t pid, bool tailOnly)
 {
     dump_log_file(tfd, pid, "/dev/log/system", tailOnly);
     dump_log_file(tfd, pid, "/dev/log/main", tailOnly);
 }
 
-/* Return true if some thread is not detached cleanly */
-static bool engrave_tombstone(unsigned pid, unsigned tid, int debug_uid,
-                              int signal)
+/*
+ * Dumps all information about the specified pid to the tombstone.
+ */
+static bool dump_crash(int tfd, pid_t pid, pid_t tid, int signal,
+        bool dump_sibling_threads)
 {
-    int fd;
-    bool need_cleanup = false;
-
     /* don't copy log messages to tombstone unless this is a dev device */
     char value[PROPERTY_VALUE_MAX];
     property_get("ro.debuggable", value, "0");
     bool wantLogs = (value[0] == '1');
+    bool need_cleanup = false;
+
+    dump_crash_banner(tfd, pid, tid, signal);
+
+    ptrace_context_t* context = load_ptrace_context(pid);
+
+    dump_thread(context, tfd, tid, true);
+
+    if (wantLogs) {
+        dump_logs(tfd, pid, true);
+    }
+
+    if (dump_sibling_threads) {
+        need_cleanup = dump_sibling_thread_report(context, tfd, pid, tid);
+    }
+
+    free_ptrace_context(context);
+
+    if (wantLogs) {
+        dump_logs(tfd, pid, false);
+    }
+    return need_cleanup;
+}
+
+#define MAX_TOMBSTONES	10
+
+#define typecheck(x,y) {    \
+    typeof(x) __dummy1;     \
+    typeof(y) __dummy2;     \
+    (void)(&__dummy1 == &__dummy2); }
+
+#define TOMBSTONE_DIR	"/data/tombstones"
+
+/*
+ * find_and_open_tombstone - find an available tombstone slot, if any, of the
+ * form tombstone_XX where XX is 00 to MAX_TOMBSTONES-1, inclusive. If no
+ * file is available, we reuse the least-recently-modified file.
+ */
+static int find_and_open_tombstone(void)
+{
+    unsigned long mtime = ULONG_MAX;
+    struct stat sb;
+    char path[128];
+    int fd, i, oldest = 0;
+
+    /*
+     * XXX: Our stat.st_mtime isn't time_t. If it changes, as it probably ought
+     * to, our logic breaks. This check will generate a warning if that happens.
+     */
+    typecheck(mtime, sb.st_mtime);
+
+    /*
+     * In a single wolf-like pass, find an available slot and, in case none
+     * exist, find and record the least-recently-modified file.
+     */
+    for (i = 0; i < MAX_TOMBSTONES; i++) {
+        snprintf(path, sizeof(path), TOMBSTONE_DIR"/tombstone_%02d", i);
+
+        if (!stat(path, &sb)) {
+            if (sb.st_mtime < mtime) {
+                oldest = i;
+                mtime = sb.st_mtime;
+            }
+            continue;
+        }
+        if (errno != ENOENT)
+            continue;
+
+        fd = open(path, O_CREAT | O_EXCL | O_WRONLY, 0600);
+        if (fd < 0)
+            continue;	/* raced ? */
+
+        fchown(fd, AID_SYSTEM, AID_SYSTEM);
+        return fd;
+    }
+
+    /* we didn't find an available file, so we clobber the oldest one */
+    snprintf(path, sizeof(path), TOMBSTONE_DIR"/tombstone_%02d", oldest);
+    fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
+    fchown(fd, AID_SYSTEM, AID_SYSTEM);
+
+    return fd;
+}
+
+/* Return true if some thread is not detached cleanly */
+static bool engrave_tombstone(pid_t pid, pid_t tid, int signal,
+        bool dump_sibling_threads)
+{
+    int fd;
+    bool need_cleanup = false;
 
     mkdir(TOMBSTONE_DIR, 0755);
     chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM);
@@ -586,24 +453,7 @@ static bool engrave_tombstone(unsigned pid, unsigned tid, int debug_uid,
     if (fd < 0)
         return need_cleanup;
 
-    dump_crash_banner(fd, pid, tid, signal);
-    dump_crash_report(fd, pid, tid, true);
-
-    if (wantLogs) {
-        dump_logs(fd, pid, true);
-    }
-
-    /*
-     * If the user has requested to attach gdb, don't collect the per-thread
-     * information as it increases the chance to lose track of the process.
-     */
-    if ((signed)pid > debug_uid) {
-        need_cleanup = dump_sibling_thread_report(fd, pid, tid);
-    }
-
-    if (wantLogs) {
-        dump_logs(fd, pid, false);
-    }
+    need_cleanup = dump_crash(fd, pid, tid, signal, dump_sibling_threads);
 
     close(fd);
     return need_cleanup;
@@ -654,11 +504,7 @@ void disable_debug_led(void)
     write_string("/sys/class/leds/left/cadence", "0,0");
 }
 
-extern int init_getevent();
-extern void uninit_getevent();
-extern int get_event(struct input_event* event, int timeout);
-
-static void wait_for_user_action(unsigned tid, struct ucred* cr)
+static void wait_for_user_action(pid_t tid, struct ucred* cr)
 {
     (void)tid;
     /* First log a helpful message */
@@ -718,18 +564,18 @@ static void handle_crashing_process(int fd)
 {
     char buf[64];
     struct stat s;
-    unsigned tid;
+    pid_t tid;
     struct ucred cr;
     int n, len, status;
     int tid_attach_status = -1;
     unsigned retry = 30;
     bool need_cleanup = false;
 
+    XLOG("handle_crashing_process(%d)\n", fd);
+
     char value[PROPERTY_VALUE_MAX];
     property_get("debug.db.uid", value, "-1");
     int debug_uid = atoi(value);
-
-    XLOG("handle_crashing_process(%d)\n", fd);
 
     len = sizeof(cr);
     n = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cr, &len);
@@ -740,7 +586,7 @@ static void handle_crashing_process(int fd)
 
     XLOG("reading tid\n");
     fcntl(fd, F_SETFL, O_NONBLOCK);
-    while((n = read(fd, &tid, sizeof(unsigned))) != sizeof(unsigned)) {
+    while((n = read(fd, &tid, sizeof(pid_t))) != sizeof(pid_t)) {
         if(errno == EINTR) continue;
         if(errno == EWOULDBLOCK) {
             if(retry-- > 0) {
@@ -763,6 +609,12 @@ static void handle_crashing_process(int fd)
     }
 
     XLOG("BOOM: pid=%d uid=%d gid=%d tid=%d\n", cr.pid, cr.uid, cr.gid, tid);
+
+    /*
+     * If the user has requested to attach gdb, don't collect the per-thread
+     * information as it increases the chance to lose track of the process.
+     */
+    bool dump_sibling_threads = (signed)cr.pid > debug_uid;
 
     /* Note that at this point, the target thread's signal handler
      * is blocked in a read() call. This gives us the time to PTRACE_ATTACH
@@ -837,7 +689,8 @@ static void handle_crashing_process(int fd)
             case SIGSEGV:
             case SIGSTKFLT: {
                 XLOG("stopped -- fatal signal\n");
-                need_cleanup = engrave_tombstone(cr.pid, tid, debug_uid, n);
+                need_cleanup = engrave_tombstone(cr.pid, tid, n,
+                        dump_sibling_threads);
                 kill(tid, SIGSTOP);
                 goto done;
             }

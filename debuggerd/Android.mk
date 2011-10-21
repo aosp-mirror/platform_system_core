@@ -5,12 +5,9 @@ ifneq ($(filter arm x86,$(TARGET_ARCH)),)
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:= debuggerd.c utility.c getevent.c $(TARGET_ARCH)/machine.c $(TARGET_ARCH)/unwind.c symbol_table.c
-ifeq ($(TARGET_ARCH),arm)
-LOCAL_SRC_FILES += $(TARGET_ARCH)/pr-support.c
-endif
+LOCAL_SRC_FILES:= debuggerd.c utility.c getevent.c $(TARGET_ARCH)/machine.c
 
-LOCAL_CFLAGS := -Wall
+LOCAL_CFLAGS := -Wall -Werror -std=gnu99
 LOCAL_MODULE := debuggerd
 
 ifeq ($(ARCH_ARM_HAVE_VFP),true)
@@ -20,7 +17,7 @@ ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
 LOCAL_CFLAGS += -DWITH_VFP_D32
 endif # ARCH_ARM_HAVE_VFP_D32
 
-LOCAL_STATIC_LIBRARIES := libcutils libc
+LOCAL_SHARED_LIBRARIES := libcutils libc libcorkscrew
 
 include $(BUILD_EXECUTABLE)
 

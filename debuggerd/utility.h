@@ -15,50 +15,17 @@
 ** limitations under the License.
 */
 
-#ifndef __utility_h
-#define __utility_h
+#ifndef _DEBUGGERD_UTILITY_H
+#define _DEBUGGERD_UTILITY_H
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <sys/types.h>
+#include <corkscrew/backtrace.h>
 
-#include "symbol_table.h"
-
-#ifndef PT_ARM_EXIDX
-#define PT_ARM_EXIDX    0x70000001      /* .ARM.exidx segment */
-#endif
-
-#define STACK_CONTENT_DEPTH 32
-
-typedef struct mapinfo {
-    struct mapinfo *next;
-    unsigned start;
-    unsigned end;
-    unsigned exidx_start;
-    unsigned exidx_end;
-    struct symbol_table *symbols;
-    bool isExecutable;
-    char name[];
-} mapinfo;
-
-/* Get a word from pid using ptrace. The result is the return value. */
-extern int get_remote_word(int pid, void *src);
-
-/* Handy routine to read aggregated data from pid using ptrace. The read 
- * values are written to the dest locations directly. 
- */
-extern void get_remote_struct(int pid, void *src, void *dst, size_t size);
-
-/* Find the containing map for the pc */
-const mapinfo *pc_to_mapinfo (mapinfo *mi, unsigned pc, unsigned *rel_pc);
-
-/* Map a pc address to the name of the containing ELF file */
-const char *map_to_name(mapinfo *mi, unsigned pc, const char* def);
-
-/* Log information onto the tombstone */
-extern void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...);
-
-/* Determine whether si_addr is valid for this signal */
-bool signal_has_address(int sig);
+/* Log information onto the tombstone. */
+void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...)
+        __attribute__ ((format(printf, 3, 4)));
 
 #define LOG(fmt...) _LOG(-1, 0, fmt)
 
@@ -76,4 +43,30 @@ bool signal_has_address(int sig);
 #define XLOG2(fmt...) do {} while(0)
 #endif
 
-#endif
+/*
+ * Returns true if the specified signal has an associated address.
+ * (i.e. it sets siginfo_t.si_addr).
+ */
+bool signal_has_address(int sig);
+
+/*
+ * Dumps the backtrace and contents of the stack.
+ */
+void dump_backtrace_and_stack(ptrace_context_t* context, int tfd, pid_t pid, bool at_fault);
+
+/*
+ * Dumps a few bytes of memory, starting a bit before and ending a bit
+ * after the specified address.
+ */
+void dump_memory(int tfd, pid_t tid, uintptr_t addr, bool at_fault);
+
+/*
+ * If this isn't clearly a null pointer dereference, dump the
+ * /proc/maps entries near the fault address.
+ *
+ * This only makes sense to do on the thread that crashed.
+ */
+void dump_nearby_maps(ptrace_context_t* context, int tfd, pid_t tid);
+
+
+#endif // _DEBUGGERD_UTILITY_H
