@@ -1,4 +1,4 @@
-// Copyright (c) 2010 The Chromium OS Authors. All rights reserved.
+// Copyright (c) 2011 The Chromium OS Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -448,11 +448,18 @@ bool KernelCollector::Collect() {
     signature = kDefaultKernelStackSignature;
   }
 
-  bool feedback = is_feedback_allowed_function_();
+  std::string reason = "handling";
+  bool feedback = true;
+  if (IsDeveloperImage()) {
+    reason = "developer build - always dumping";
+    feedback = true;
+  } else if (!is_feedback_allowed_function_()) {
+    reason = "ignoring - no consent";
+    feedback = false;
+  }
 
   LOG(INFO) << "Received prior crash notification from "
-            << "kernel (signature " << signature << ") ("
-            << (feedback ? "handling" : "ignoring - no consent") << ")";
+            << "kernel (signature " << signature << ") (" << reason << ")";
 
   if (feedback) {
     count_crash_function_();
