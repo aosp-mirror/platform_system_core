@@ -121,7 +121,7 @@ void dump_registers(ptrace_context_t* context __attribute((unused)),
         _LOG(tfd, only_in_tombstone, "    d%-2d %016llx  d%-2d %016llx\n",
                 i, vfp_regs.fpregs[i], i+1, vfp_regs.fpregs[i+1]);
     }
-    _LOG(tfd, only_in_tombstone, "    scr %08lx\n\n", vfp_regs.fpscr);
+    _LOG(tfd, only_in_tombstone, "    scr %08lx\n", vfp_regs.fpscr);
 #endif
 }
 
