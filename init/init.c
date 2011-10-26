@@ -315,7 +315,11 @@ static void service_stop_or_reset(struct service *svc, int how)
         /* if the service has not yet started, prevent
          * it from auto-starting with its class
          */
-    svc->flags |= how;
+    if (how == SVC_RESET) {
+        svc->flags |= (svc->flags & SVC_RC_DISABLED) ? SVC_DISABLED : SVC_RESET;
+    } else {
+        svc->flags |= how;
+    }
 
     if (svc->pid) {
         NOTICE("service '%s' is being killed\n", svc->name);

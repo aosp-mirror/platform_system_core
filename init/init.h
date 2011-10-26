@@ -71,6 +71,7 @@ struct svcenvinfo {
 #define SVC_CRITICAL    0x20  /* will reboot into recovery if keeps crashing */
 #define SVC_RESET       0x40  /* Use when stopping a process, but not disabling
                                  so it can be restarted with its class */
+#define SVC_RC_DISABLED 0x80  /* Remember if the disabled flag was set in the rc script */
 
 #define NR_SVC_SUPP_GIDS 12    /* twelve supplementary groups */
 
