@@ -25,23 +25,13 @@
  * the exception handling table of each function, sorted by program
  * counter address.
  *
- * When the executable is statically linked, the EXIDX section can be
- * accessed by querying the values of the __exidx_start and __exidx_end
- * symbols.  That said, this library is currently only compiled as
- * a dynamic library, so we will not trouble ourselves with statically
- * linked executables any further.
- *
- * When the Bionic dynamic linker is used, it exports a function called
- * dl_unwind_find_exidx that obtains the EXIDX section for a given
- * absolute program counter address.
- *
  * This implementation also supports unwinding other processes via ptrace().
  * In that case, the EXIDX section is found by reading the ELF section table
  * structures using ptrace().
  *
  * Because the tables are used for exception handling, it can happen that
  * a given function will not have an exception handling table.  In particular,
- * exceptions are assumes to only ever be thrown at call sites.  Therefore,
+ * exceptions are assumed to only ever be thrown at call sites.  Therefore,
  * by definition leaf functions will not have exception handling tables.
  * This may make unwinding impossible in some cases although we can still get
  * some idea of the call stack by examining the PC and LR registers.
@@ -100,9 +90,29 @@ static const int R_PC = 15;
 /* Special EXIDX value that indicates that a frame cannot be unwound. */
 static const uint32_t EXIDX_CANTUNWIND = 1;
 
-/* The function exported by the Bionic linker to find the EXIDX
- * table for a given program counter address. */
-extern uintptr_t dl_unwind_find_exidx(uintptr_t pc, size_t* out_exidx_size);
+/* Get the EXIDX section start and size for the module that contains a
+ * given program counter address.
+ *
+ * When the executable is statically linked, the EXIDX section can be
+ * accessed by querying the values of the __exidx_start and __exidx_end
+ * symbols.
+ *
+ * When the executable is dynamically linked, the linker exports a function
+ * called dl_unwind_find_exidx that obtains the EXIDX section for a given
+ * absolute program counter address.
+ *
+ * Bionic exports a helpful function called __gnu_Unwind_Find_exidx that
+ * handles both cases, so we use that here.
+ */
+typedef long unsigned int* _Unwind_Ptr;
+extern _Unwind_Ptr __gnu_Unwind_Find_exidx(_Unwind_Ptr pc, int *pcount);
+
+static uintptr_t find_exidx(uintptr_t pc, size_t* out_exidx_size) {
+    int count;
+    uintptr_t start = (uintptr_t)__gnu_Unwind_Find_exidx((_Unwind_Ptr)pc, &count);
+    *out_exidx_size = count;
+    return start;
+}
 
 /* Transforms a 31-bit place-relative offset to an absolute address.
  * We assume the most significant bit is clear. */
@@ -115,7 +125,7 @@ static uintptr_t get_exception_handler(
     uintptr_t exidx_start;
     size_t exidx_size;
     if (tid < 0) {
-        exidx_start = dl_unwind_find_exidx(pc, &exidx_size);
+        exidx_start = find_exidx(pc, &exidx_size);
     } else {
         const map_info_t* mi = find_map_info(context->map_info_list, pc);
         if (mi && mi->data) {
