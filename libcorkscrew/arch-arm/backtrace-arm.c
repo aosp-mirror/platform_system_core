@@ -124,14 +124,16 @@ static uintptr_t get_exception_handler(
         const ptrace_context_t* context, pid_t tid, uintptr_t pc) {
     uintptr_t exidx_start;
     size_t exidx_size;
+    const map_info_t* mi;
     if (tid < 0) {
+        mi = NULL;
         exidx_start = find_exidx(pc, &exidx_size);
     } else {
-        const map_info_t* mi = find_map_info(context->map_info_list, pc);
+        mi = find_map_info(context->map_info_list, pc);
         if (mi && mi->data) {
             const map_info_data_t* data = (const map_info_data_t*)mi->data;
             exidx_start = data->exidx_start;
-            exidx_size = data->exidx_size;
+            exidx_size = data->exidx_size / 8;
         } else {
             exidx_start = 0;
             exidx_size = 0;
@@ -147,7 +149,7 @@ static uintptr_t get_exception_handler(
         pc -= 2;
     }
 
-    uint32_t handler = 0;
+    uintptr_t handler = 0;
     if (exidx_start) {
         uint32_t low = 0;
         uint32_t high = exidx_size;
@@ -189,8 +191,10 @@ static uintptr_t get_exception_handler(
             break;
         }
     }
-    LOGV("get handler: pc=0x%08x, exidx_start=0x%08x, exidx_size=%d, handler=0x%08x",
-            pc, exidx_start, exidx_size, handler);
+    LOGV("get_exception_handler: pc=0x%08x, module='%s', module_start=0x%08x, "
+            "exidx_start=0x%08x, exidx_size=%d, handler=0x%08x",
+            pc, mi ? mi->name : "<unknown>", mi ? mi->start : 0,
+            exidx_start, exidx_size, handler);
     return handler;
 }
 
@@ -455,7 +459,7 @@ static ssize_t unwind_backtrace_common(pid_t tid, const ptrace_context_t* contex
                 // Don't return the SP for this second frame because we don't
                 // know how big the first one is so we don't know where this
                 // one starts.
-                frame = add_backtrace_entry(state->gregs[R_LR], backtrace,
+                add_backtrace_entry(state->gregs[R_LR], backtrace,
                         ignore_depth, max_depth, &ignored_frames, &returned_frames);
             }
             return returned_frames;
