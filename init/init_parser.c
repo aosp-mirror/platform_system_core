@@ -499,6 +499,7 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
         break;
     case K_disabled:
         svc->flags |= SVC_DISABLED;
+        svc->flags |= SVC_RC_DISABLED;
         break;
     case K_ioprio:
         if (nargs != 3) {
