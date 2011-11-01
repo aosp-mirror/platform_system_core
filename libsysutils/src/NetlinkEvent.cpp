@@ -122,7 +122,6 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
             }
             pm = (ulog_packet_msg_t *)NLMSG_DATA(nh);
             devname = pm->indev_name[0] ? pm->indev_name : pm->outdev_name;
-            SLOGD("QLOG prefix=%s dev=%s\n", pm->prefix, devname);
             asprintf(&mParams[0], "ALERT_NAME=%s", pm->prefix);
             asprintf(&mParams[1], "INTERFACE=%s", devname);
             mSubsystem = strdup("qlog");
