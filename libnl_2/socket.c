@@ -31,7 +31,7 @@ int nl_socket_add_membership(struct nl_sock *sk, int group)
 }
 
 /* Allocate new netlink socket. */
-struct nl_sock *nl_socket_alloc(void)
+static struct nl_sock *_nl_socket_alloc(void)
 {
 	struct nl_sock *sk;
 	struct timeval tv;
@@ -39,13 +39,13 @@ struct nl_sock *nl_socket_alloc(void)
 
 	sk = (struct nl_sock *) malloc(sizeof(struct nl_sock));
 	if (!sk)
-		goto fail;
+		return NULL;
 	memset(sk, 0, sizeof(*sk));
 
 	/* Get current time */
 
 	if (gettimeofday(&tv, NULL))
-		return NULL;
+		goto fail;
 	else
 		sk->s_seq_next = (int) tv.tv_sec;
 
@@ -59,24 +59,36 @@ struct nl_sock *nl_socket_alloc(void)
 	sk->s_peer.nl_pid = 0; /* Kernel */
 	sk->s_peer.nl_groups = 0; /* No groups */
 
-	cb = (struct nl_cb *) malloc(sizeof(struct nl_cb));
+	return sk;
+fail:
+	free(sk);
+	return NULL;
+}
+
+/* Allocate new netlink socket. */
+struct nl_sock *nl_socket_alloc(void)
+{
+	struct nl_sock *sk = _nl_socket_alloc();
+	struct nl_cb *cb;
+
+	if (!sk)
+		return NULL;
+
+	cb = nl_cb_alloc(NL_CB_DEFAULT);
 	if (!cb)
 		goto cb_fail;
-	memset(cb, 0, sizeof(*cb));
-	sk->s_cb = nl_cb_alloc(NL_CB_DEFAULT);
-
-
+	sk->s_cb = cb;
 	return sk;
 cb_fail:
 	free(sk);
-fail:
 	return NULL;
 }
 
 /* Allocate new socket with custom callbacks. */
 struct nl_sock *nl_socket_alloc_cb(struct nl_cb *cb)
 {
-	struct nl_sock *sk = nl_socket_alloc();
+	struct nl_sock *sk = _nl_socket_alloc();
+
 	if (!sk)
 		return NULL;
 
@@ -84,7 +96,6 @@ struct nl_sock *nl_socket_alloc_cb(struct nl_cb *cb)
 	nl_cb_get(cb);
 
 	return sk;
-
 }
 
 /* Free a netlink socket. */
@@ -116,5 +127,3 @@ int nl_socket_get_fd(struct nl_sock *sk)
 {
 	return sk->s_fd;
 }
-
-
