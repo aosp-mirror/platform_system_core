@@ -59,14 +59,15 @@ int nl_recv(struct nl_sock *sk, struct sockaddr_nl *nla, \
 {
 	int rc = -1;
 	int sk_flags;
-	int RECV_BUF_SIZE = getpagesize();
+	int RECV_BUF_SIZE;
 	int errsv;
 	struct iovec recvmsg_iov;
 	struct msghdr msg;
 
 	/* Allocate buffer */
+	RECV_BUF_SIZE = getpagesize();
 	*buf = (unsigned char *) malloc(RECV_BUF_SIZE);
-	if (!(*buf)) {
+	if (!buf) {
 		rc = -ENOMEM;
 		goto fail;
 	}
@@ -90,11 +91,8 @@ int nl_recv(struct nl_sock *sk, struct sockaddr_nl *nla, \
 	errsv = errno;
 	fcntl(sk->s_fd, F_SETFL, sk_flags);
 
-	if (rc < 0) {
+	if (rc < 0)
 		rc = -errsv;
-		free(*buf);
-		*buf = NULL;
-	}
 
 fail:
 	return rc;
@@ -110,6 +108,7 @@ int nl_recvmsgs(struct nl_sock *sk, struct nl_cb *cb)
 	int rc, cb_rc = NL_OK, done = 0;
 
 	do {
+
 		unsigned char *buf;
 		int i, rem, flags;
 		struct nlmsghdr *nlh;
@@ -128,7 +127,7 @@ int nl_recvmsgs(struct nl_sock *sk, struct nl_cb *cb)
 
 			/* Check for callbacks */
 
-			msg = (struct nl_msg *) malloc(sizeof(struct nl_msg));
+			msg = (struct nl_msg *)malloc(sizeof(struct nl_msg));
 			memset(msg, 0, sizeof(*msg));
 			msg->nm_nlh = nlh;
 
@@ -188,6 +187,7 @@ int nl_recvmsgs(struct nl_sock *sk, struct nl_cb *cb)
 			if (done)
 				break;
 		}
+
 		free(buf);
 		buf = NULL;
 
@@ -197,7 +197,7 @@ int nl_recvmsgs(struct nl_sock *sk, struct nl_cb *cb)
 
 success:
 fail:
-	return rc;
+	return	rc;
 }
 
 /* Send raw data over netlink socket */
