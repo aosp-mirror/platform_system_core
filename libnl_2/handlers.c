@@ -39,16 +39,14 @@ fail:
 struct nl_cb *nl_cb_clone(struct nl_cb *orig)
 {
 	struct nl_cb *new_cb;
-	int new_refcnt;
 
 	new_cb = nl_cb_alloc(NL_CB_DEFAULT);
 	if (new_cb == NULL)
 		goto fail;
 
-	/* Preserve reference count and copy original */
-	new_refcnt = new_cb->cb_refcnt;
+	/* Copy original and set refcount to 1 */
 	memcpy(new_cb, orig, sizeof(*orig));
-	new_cb->cb_refcnt = new_refcnt;
+	new_cb->cb_refcnt = 1;
 
 	return new_cb;
 fail:
@@ -84,9 +82,9 @@ struct nl_cb *nl_cb_get(struct nl_cb *cb)
 
 void nl_cb_put(struct nl_cb *cb)
 {
+	if (!cb)
+		return;
 	cb->cb_refcnt--;
 	if (cb->cb_refcnt <= 0)
 		free(cb);
-
 }
-
