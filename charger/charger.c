@@ -87,7 +87,6 @@ struct frame {
     const char *name;
     int disp_time;
     int min_capacity;
-    bool level_only;
 
     gr_surface surface;
 };
@@ -158,7 +157,6 @@ static struct frame batt_anim_frames[] = {
         .name = "charger/battery_4",
         .disp_time = 750,
         .min_capacity = 80,
-        .level_only = true,
     },
     {
         .name = "charger/battery_5",
@@ -737,14 +735,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
      * if necessary, advance cycle cntr, and reset frame cntr
      */
     batt_anim->cur_frame++;
-
-    /* if the frame is used for level-only, that is only show it when it's
-     * the current level, skip it during the animation.
-     */
-    while (batt_anim->cur_frame < batt_anim->num_frames &&
-           batt_anim->frames[batt_anim->cur_frame].level_only)
-        batt_anim->cur_frame++;
-    if (batt_anim->cur_frame >= batt_anim->num_frames) {
+    if (batt_anim->cur_frame == batt_anim->num_frames) {
         batt_anim->cur_cycle++;
         batt_anim->cur_frame = 0;
 
