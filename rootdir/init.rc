@@ -1,4 +1,7 @@
 on early-init
+    # Set init and its forked children's oom_adj.
+    write /proc/1/oom_adj -16
+
     start ueventd
 
 # create mountpoints
@@ -203,9 +206,6 @@ on boot
     chmod 0664 /sys/module/lowmemorykiller/parameters/adj
     chown root system /sys/module/lowmemorykiller/parameters/minfree
     chmod 0664 /sys/module/lowmemorykiller/parameters/minfree
-
-    # Set init and its forked children's oom_adj.
-    write /proc/1/oom_adj -16
 
     # Tweak background writeout
     write /proc/sys/vm/dirty_expire_centisecs 200
