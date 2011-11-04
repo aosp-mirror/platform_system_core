@@ -20,6 +20,6 @@
 #include <corkscrew/backtrace.h>
 #include <sys/types.h>
 
-void dump_thread(ptrace_context_t* context, int tfd, pid_t tid, bool at_fault);
+void dump_thread(const ptrace_context_t* context, int tfd, pid_t tid, bool at_fault);
 
 #endif // _DEBUGGERD_MACHINE_H

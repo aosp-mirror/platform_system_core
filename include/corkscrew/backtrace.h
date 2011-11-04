@@ -43,8 +43,8 @@ typedef struct {
 typedef struct {
     uintptr_t relative_pc;       /* relative PC offset from the start of the library,
                                     or the absolute PC if the library is unknown */
-    const map_info_t* map_info;  /* memory map of the library, or NULL if unknown */
-    const char* name;            /* symbol name, or NULL if unknown */
+    char* map_name;              /* executable or library name, or NULL if unknown */
+    char* name;                  /* symbol name, or NULL if unknown */
     char* demangled_name;        /* demangled symbol name, or NULL if unknown */
 } backtrace_symbol_t;
 

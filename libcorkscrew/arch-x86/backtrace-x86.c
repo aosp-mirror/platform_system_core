@@ -73,14 +73,21 @@ typedef struct {
     uint32_t esp;
 } unwind_state_t;
 
-static ssize_t unwind_backtrace_common(pid_t tid, const ptrace_context_t* context,
+uintptr_t rewind_pc_arch(const memory_t* memory, uintptr_t pc) {
+    // TODO: Implement for x86.
+    return pc;
+}
+
+static ssize_t unwind_backtrace_common(const memory_t* memory,
+        const map_info_t* map_info_list,
         unwind_state_t* state, backtrace_frame_t* backtrace,
         size_t ignore_depth, size_t max_depth) {
     size_t ignored_frames = 0;
     size_t returned_frames = 0;
 
-    while (state->ebp && returned_frames < max_depth) {
-        backtrace_frame_t* frame = add_backtrace_entry(state->eip,
+    for (size_t index = 0; state->ebp && returned_frames < max_depth; index++) {
+        backtrace_frame_t* frame = add_backtrace_entry(
+                index ? rewind_pc_arch(memory, state->eip) : state->eip,
                 backtrace, ignore_depth, max_depth,
                 &ignored_frames, &returned_frames);
         uint32_t next_esp = state->ebp + 8;
@@ -91,8 +98,8 @@ static ssize_t unwind_backtrace_common(pid_t tid, const ptrace_context_t* contex
             }
         }
         state->esp = next_esp;
-        if (!try_get_word(tid, state->ebp + 4, &state->eip)
-                || !try_get_word(tid, state->ebp, &state->ebp)
+        if (!try_get_word(memory, state->ebp + 4, &state->eip)
+                || !try_get_word(memory, state->ebp, &state->ebp)
                 || !state->eip) {
             break;
         }
@@ -102,6 +109,7 @@ static ssize_t unwind_backtrace_common(pid_t tid, const ptrace_context_t* contex
 }
 
 ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo, void* sigcontext,
+        const map_info_t* map_info_list,
         backtrace_frame_t* backtrace, size_t ignore_depth, size_t max_depth) {
     const ucontext_t* uc = (const ucontext_t*)sigcontext;
 
@@ -110,7 +118,10 @@ ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo, void* sigcontext,
     state.eip = uc->uc_mcontext.eip;
     state.esp = uc->uc_mcontext.esp;
 
-    return unwind_backtrace_common(-1, NULL, &state, backtrace, ignore_depth, max_depth);
+    memory_t memory;
+    init_memory(&memory, map_info_list);
+    return unwind_backtrace_common(&memory, map_info_list,
+            &state, backtrace, ignore_depth, max_depth);
 }
 
 ssize_t unwind_backtrace_ptrace_arch(pid_t tid, const ptrace_context_t* context,
@@ -125,5 +136,8 @@ ssize_t unwind_backtrace_ptrace_arch(pid_t tid, const ptrace_context_t* context,
     state.eip = regs.eip;
     state.esp = regs.esp;
 
-    return unwind_backtrace_common(tid, context, &state, backtrace, ignore_depth, max_depth);
+    memory_t memory;
+    init_memory_ptrace(&memory, tid);
+    return unwind_backtrace_common(&memory, context->map_info_list,
+            &state, backtrace, ignore_depth, max_depth);
 }

@@ -29,26 +29,31 @@
 static void load_exidx_header(pid_t pid, map_info_t* mi,
         uintptr_t* out_exidx_start, size_t* out_exidx_size) {
     uint32_t elf_phoff;
-    uint32_t elf_phnum;
-    if (try_get_word(pid, mi->start + offsetof(Elf32_Ehdr, e_phoff), &elf_phoff)
-            && try_get_word(pid, mi->start + offsetof(Elf32_Ehdr, e_phnum), &elf_phnum)) {
+    uint32_t elf_phentsize_phnum;
+    if (try_get_word_ptrace(pid, mi->start + offsetof(Elf32_Ehdr, e_phoff), &elf_phoff)
+            && try_get_word_ptrace(pid, mi->start + offsetof(Elf32_Ehdr, e_phnum),
+                    &elf_phentsize_phnum)) {
+        uint32_t elf_phentsize = elf_phentsize_phnum >> 16;
+        uint32_t elf_phnum = elf_phentsize_phnum & 0xffff;
         for (uint32_t i = 0; i < elf_phnum; i++) {
-            uintptr_t elf_phdr = mi->start + elf_phoff + i * sizeof(Elf32_Phdr);
+            uintptr_t elf_phdr = mi->start + elf_phoff + i * elf_phentsize;
             uint32_t elf_phdr_type;
-            if (!try_get_word(pid, elf_phdr + offsetof(Elf32_Phdr, p_type), &elf_phdr_type)) {
+            if (!try_get_word_ptrace(pid, elf_phdr + offsetof(Elf32_Phdr, p_type), &elf_phdr_type)) {
                 break;
             }
             if (elf_phdr_type == PT_ARM_EXIDX) {
                 uint32_t elf_phdr_offset;
                 uint32_t elf_phdr_filesz;
-                if (!try_get_word(pid, elf_phdr + offsetof(Elf32_Phdr, p_offset),
+                if (!try_get_word_ptrace(pid, elf_phdr + offsetof(Elf32_Phdr, p_offset),
                         &elf_phdr_offset)
-                        || !try_get_word(pid, elf_phdr + offsetof(Elf32_Phdr, p_filesz),
+                        || !try_get_word_ptrace(pid, elf_phdr + offsetof(Elf32_Phdr, p_filesz),
                                 &elf_phdr_filesz)) {
                     break;
                 }
                 *out_exidx_start = mi->start + elf_phdr_offset;
-                *out_exidx_size = elf_phdr_filesz;
+                *out_exidx_size = elf_phdr_filesz / 8;
+                ALOGV("Parsed EXIDX header info for %s: start=0x%08x, size=%d", mi->name,
+                        *out_exidx_start, *out_exidx_size);
                 return;
             }
         }

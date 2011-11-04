@@ -114,12 +114,12 @@ static const char *get_sigcode(int signo, int code)
     return "?";
 }
 
-static void dump_fault_addr(int tfd, pid_t pid, int sig)
+static void dump_fault_addr(int tfd, pid_t tid, int sig)
 {
     siginfo_t si;
 
     memset(&si, 0, sizeof(si));
-    if(ptrace(PTRACE_GETSIGINFO, pid, 0, &si)){
+    if(ptrace(PTRACE_GETSIGINFO, tid, 0, &si)){
         _LOG(tfd, false, "cannot get siginfo: %s\n", strerror(errno));
     } else if (signal_has_address(sig)) {
         _LOG(tfd, false, "signal %d (%s), code %d (%s), fault addr %08x\n",
@@ -157,7 +157,7 @@ static void dump_crash_banner(int tfd, pid_t pid, pid_t tid, int sig)
 }
 
 /* Return true if some thread is not detached cleanly */
-static bool dump_sibling_thread_report(ptrace_context_t* context,
+static bool dump_sibling_thread_report(const ptrace_context_t* context,
         int tfd, pid_t pid, pid_t tid) {
     char task_path[64];
     snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
@@ -361,7 +361,7 @@ static bool dump_crash(int tfd, pid_t pid, pid_t tid, int signal,
 
     dump_crash_banner(tfd, pid, tid, signal);
 
-    ptrace_context_t* context = load_ptrace_context(pid);
+    ptrace_context_t* context = load_ptrace_context(tid);
 
     dump_thread(context, tfd, tid, true);
 

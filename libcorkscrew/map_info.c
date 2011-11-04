@@ -26,6 +26,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <cutils/log.h>
+#include <sys/time.h>
 
 // 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /system/lib/libcomposer.so\n
 // 012345678901234567890123456789012345678901234567890123456789
@@ -54,10 +55,14 @@ static map_info_t* parse_maps_line(const char* line)
     if (mi) {
         mi->start = start;
         mi->end = end;
+        mi->is_readable = strlen(permissions) == 4 && permissions[0] == 'r';
         mi->is_executable = strlen(permissions) == 4 && permissions[2] == 'x';
         mi->data = NULL;
         memcpy(mi->name, name, name_len);
         mi->name[name_len] = '\0';
+        ALOGV("Parsed map: start=0x%08x, end=0x%08x, "
+                "is_readable=%d, is_executable=%d, name=%s",
+                mi->start, mi->end, mi->is_readable, mi->is_executable, mi->name);
     }
     return mi;
 }
@@ -99,14 +104,87 @@ const map_info_t* find_map_info(const map_info_t* milist, uintptr_t addr) {
     return mi;
 }
 
-static pthread_once_t g_my_milist_once = PTHREAD_ONCE_INIT;
-static map_info_t* g_my_milist = NULL;
-
-static void init_my_milist_once() {
-    g_my_milist = load_map_info_list(getpid());
+bool is_readable_map(const map_info_t* milist, uintptr_t addr) {
+    const map_info_t* mi = find_map_info(milist, addr);
+    return mi && mi->is_readable;
 }
 
-const map_info_t* my_map_info_list() {
-    pthread_once(&g_my_milist_once, init_my_milist_once);
-    return g_my_milist;
+bool is_executable_map(const map_info_t* milist, uintptr_t addr) {
+    const map_info_t* mi = find_map_info(milist, addr);
+    return mi && mi->is_executable;
+}
+
+static pthread_mutex_t g_my_map_info_list_mutex = PTHREAD_MUTEX_INITIALIZER;
+static map_info_t* g_my_map_info_list = NULL;
+
+static const int64_t MAX_CACHE_AGE = 5 * 1000 * 1000000LL;
+
+typedef struct {
+    uint32_t refs;
+    int64_t timestamp;
+} my_map_info_data_t;
+
+static int64_t now() {
+    struct timespec t;
+    t.tv_sec = t.tv_nsec = 0;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1000000000LL + t.tv_nsec;
+}
+
+static void dec_ref(map_info_t* milist, my_map_info_data_t* data) {
+    if (!--data->refs) {
+        ALOGV("Freed my_map_info_list %p.", milist);
+        free(data);
+        free_map_info_list(milist);
+    }
+}
+
+map_info_t* acquire_my_map_info_list() {
+    pthread_mutex_lock(&g_my_map_info_list_mutex);
+
+    int64_t time = now();
+    if (g_my_map_info_list) {
+        my_map_info_data_t* data = (my_map_info_data_t*)g_my_map_info_list->data;
+        int64_t age = time - data->timestamp;
+        if (age >= MAX_CACHE_AGE) {
+            ALOGV("Invalidated my_map_info_list %p, age=%lld.", g_my_map_info_list, age);
+            dec_ref(g_my_map_info_list, data);
+            g_my_map_info_list = NULL;
+        } else {
+            ALOGV("Reusing my_map_info_list %p, age=%lld.", g_my_map_info_list, age);
+        }
+    }
+
+    if (!g_my_map_info_list) {
+        my_map_info_data_t* data = (my_map_info_data_t*)malloc(sizeof(my_map_info_data_t));
+        g_my_map_info_list = load_map_info_list(getpid());
+        if (g_my_map_info_list) {
+            ALOGV("Loaded my_map_info_list %p.", g_my_map_info_list);
+            g_my_map_info_list->data = data;
+            data->refs = 1;
+            data->timestamp = time;
+        } else {
+            free(data);
+        }
+    }
+
+    map_info_t* milist = g_my_map_info_list;
+    if (milist) {
+        my_map_info_data_t* data = (my_map_info_data_t*)g_my_map_info_list->data;
+        data->refs += 1;
+    }
+
+    pthread_mutex_unlock(&g_my_map_info_list_mutex);
+    return milist;
+}
+
+void release_my_map_info_list(map_info_t* milist) {
+    if (milist) {
+        pthread_mutex_lock(&g_my_map_info_list_mutex);
+
+        my_map_info_data_t* data = (my_map_info_data_t*)milist->data;
+        dec_ref(milist, data);
+
+        pthread_mutex_unlock(&g_my_map_info_list_mutex);
+    }
 }

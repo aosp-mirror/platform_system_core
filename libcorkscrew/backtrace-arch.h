@@ -28,7 +28,11 @@
 extern "C" {
 #endif
 
+/* Rewind the program counter by one instruction. */
+uintptr_t rewind_pc_arch(const memory_t* memory, uintptr_t pc);
+
 ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo, void* sigcontext,
+        const map_info_t* map_info_list,
         backtrace_frame_t* backtrace, size_t ignore_depth, size_t max_depth);
 
 ssize_t unwind_backtrace_ptrace_arch(pid_t tid, const ptrace_context_t* context,

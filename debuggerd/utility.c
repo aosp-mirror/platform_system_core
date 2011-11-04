@@ -57,8 +57,8 @@ bool signal_has_address(int sig) {
     }
 }
 
-static void dump_backtrace(ptrace_context_t* context __attribute((unused)),
-        int tfd, int pid __attribute((unused)), bool at_fault,
+static void dump_backtrace(const ptrace_context_t* context __attribute((unused)),
+        int tfd, pid_t tid __attribute((unused)), bool at_fault,
         const backtrace_frame_t* backtrace, size_t frames) {
     _LOG(tfd, !at_fault, "\nbacktrace:\n");
 
@@ -66,7 +66,7 @@ static void dump_backtrace(ptrace_context_t* context __attribute((unused)),
     get_backtrace_symbols_ptrace(context, backtrace, frames, backtrace_symbols);
     for (size_t i = 0; i < frames; i++) {
         const backtrace_symbol_t* symbol = &backtrace_symbols[i];
-        const char* map_name = symbol->map_info ? symbol->map_info->name : "<unknown>";
+        const char* map_name = symbol->map_name ? symbol->map_name : "<unknown>";
         const char* symbol_name = symbol->demangled_name ? symbol->demangled_name : symbol->name;
         if (symbol_name) {
             _LOG(tfd, !at_fault, "    #%02d  pc %08x  %s (%s)\n",
@@ -79,11 +79,11 @@ static void dump_backtrace(ptrace_context_t* context __attribute((unused)),
     free_backtrace_symbols(backtrace_symbols, frames);
 }
 
-static void dump_stack_segment(ptrace_context_t* context, int tfd, int pid,
+static void dump_stack_segment(const ptrace_context_t* context, int tfd, pid_t tid,
         bool only_in_tombstone, uintptr_t* sp, size_t words, int label) {
     for (size_t i = 0; i < words; i++) {
         uint32_t stack_content;
-        if (!try_get_word(pid, *sp, &stack_content)) {
+        if (!try_get_word_ptrace(tid, *sp, &stack_content)) {
             break;
         }
 
@@ -116,7 +116,7 @@ static void dump_stack_segment(ptrace_context_t* context, int tfd, int pid,
     }
 }
 
-static void dump_stack(ptrace_context_t* context, int tfd, int pid, bool at_fault,
+static void dump_stack(const ptrace_context_t* context, int tfd, pid_t tid, bool at_fault,
         const backtrace_frame_t* backtrace, size_t frames) {
     bool have_first = false;
     size_t first, last;
@@ -138,7 +138,7 @@ static void dump_stack(ptrace_context_t* context, int tfd, int pid, bool at_faul
     // Dump a few words before the first frame.
     bool only_in_tombstone = !at_fault;
     uintptr_t sp = backtrace[first].stack_top - STACK_WORDS * sizeof(uint32_t);
-    dump_stack_segment(context, tfd, pid, only_in_tombstone, &sp, STACK_WORDS, -1);
+    dump_stack_segment(context, tfd, tid, only_in_tombstone, &sp, STACK_WORDS, -1);
 
     // Dump a few words from all successive frames.
     // Only log the first 3 frames, put the rest in the tombstone.
@@ -152,7 +152,7 @@ static void dump_stack(ptrace_context_t* context, int tfd, int pid, bool at_faul
             only_in_tombstone = true;
         }
         if (i == last) {
-            dump_stack_segment(context, tfd, pid, only_in_tombstone, &sp, STACK_WORDS, i);
+            dump_stack_segment(context, tfd, tid, only_in_tombstone, &sp, STACK_WORDS, i);
             if (sp < frame->stack_top + frame->stack_size) {
                 _LOG(tfd, only_in_tombstone, "         ........  ........\n");
             }
@@ -163,12 +163,13 @@ static void dump_stack(ptrace_context_t* context, int tfd, int pid, bool at_faul
             } else if (words > STACK_WORDS) {
                 words = STACK_WORDS;
             }
-            dump_stack_segment(context, tfd, pid, only_in_tombstone, &sp, words, i);
+            dump_stack_segment(context, tfd, tid, only_in_tombstone, &sp, words, i);
         }
     }
 }
 
-void dump_backtrace_and_stack(ptrace_context_t* context, int tfd, pid_t tid, bool at_fault) {
+void dump_backtrace_and_stack(const ptrace_context_t* context, int tfd, pid_t tid,
+        bool at_fault) {
     backtrace_frame_t backtrace[STACK_DEPTH];
     ssize_t frames = unwind_backtrace_ptrace(tid, context, backtrace, 0, STACK_DEPTH);
     if (frames > 0) {
@@ -237,7 +238,7 @@ void dump_memory(int tfd, pid_t tid, uintptr_t addr, bool at_fault) {
     }
 }
 
-void dump_nearby_maps(ptrace_context_t* context, int tfd, pid_t tid) {
+void dump_nearby_maps(const ptrace_context_t* context, int tfd, pid_t tid) {
     siginfo_t si;
     memset(&si, 0, sizeof(si));
     if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si)) {

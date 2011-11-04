@@ -87,7 +87,7 @@ static void dump_memory_and_code(int tfd, pid_t tid, bool at_fault) {
     }
 }
 
-void dump_registers(ptrace_context_t* context __attribute((unused)),
+void dump_registers(const ptrace_context_t* context __attribute((unused)),
         int tfd, pid_t tid, bool at_fault)
 {
     struct pt_regs r;
@@ -125,7 +125,7 @@ void dump_registers(ptrace_context_t* context __attribute((unused)),
 #endif
 }
 
-void dump_thread(ptrace_context_t* context, int tfd, pid_t tid, bool at_fault) {
+void dump_thread(const ptrace_context_t* context, int tfd, pid_t tid, bool at_fault) {
     dump_registers(context, tfd, tid, at_fault);
 
     dump_backtrace_and_stack(context, tfd, tid, at_fault);
