@@ -43,9 +43,11 @@ class KernelCollectorTest : public ::testing::Test {
     collector_.Initialize(CountCrash,
                           IsMetrics);
     mkdir("test", 0777);
+    mkdir(kTestKCrash, 0777);
     test_kcrash_ = FilePath(kTestKCrash);
     collector_.OverridePreservedDumpPath(test_kcrash_);
-    unlink(kTestKCrash);
+    test_kcrash_ = test_kcrash_.Append("dmesg-ramoops-0");
+    unlink(test_kcrash_.value().c_str());
     mkdir(kTestCrashDirectory, 0777);
     chromeos::ClearLog();
   }
@@ -73,11 +75,10 @@ TEST_F(KernelCollectorTest, LoadPreservedDump) {
   std::string dump;
   dump.clear();
 
-  collector_.SetParameters(9, 0, 9);
   WriteStringToFile(test_kcrash_, "emptydata");
   ASSERT_FALSE(collector_.LoadPreservedDump(&dump));
   ASSERT_EQ("", dump);
-  collector_.SetParameters(17, 0, 17);
+
   WriteStringToFile(test_kcrash_, "====1.1\nsomething");
   ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
   ASSERT_EQ("something", dump);
@@ -232,7 +233,6 @@ TEST_F(KernelCollectorTest, CollectNoCrash) {
 
 // Disabled for crosbug.com/18622
 //TEST_F(KernelCollectorTest, CollectBadDirectory) {
-//  collector_.SetParameters(17, 0, 17);
 //  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
 //  ASSERT_TRUE(collector_.Collect());
 //  ASSERT_TRUE(FindLog(
@@ -242,7 +242,6 @@ TEST_F(KernelCollectorTest, CollectNoCrash) {
 
 void KernelCollectorTest::SetUpSuccessfulCollect() {
   collector_.ForceCrashDirectory(kTestCrashDirectory);
-  collector_.SetParameters(17, 0, 17);
   WriteStringToFile(test_kcrash_, "====1.1\nsomething");
   ASSERT_EQ(0, s_crashes);
 }

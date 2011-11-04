@@ -10,13 +10,11 @@
 
 static const char kDefaultKernelStackSignature[] =
     "kernel-UnspecifiedStackSignature";
-static const char kDumpMemSize[] = "/sys/module/ramoops/parameters/mem_size";
-static const char kDumpMemStart[] =
-    "/sys/module/ramoops/parameters/mem_address";
-static const char kDumpPath[] = "/dev/mem";
-static const char kDumpRecordSize[] =
-    "/sys/module/ramoops/parameters/record_size";
+static const char kDumpPath[] = "/dev/pstore";
+static const char kDumpFormat[] = "dmesg-ramoops-%d";
 static const char kKernelExecName[] = "kernel";
+// Maximum number of records to examine in the kDumpPath.
+static const size_t kMaxDumpRecords = 100;
 const pid_t kKernelPid = 0;
 static const char kKernelSignatureKey[] = "sig";
 // Byte length of maximum human readable portion of a kernel crash signature.
@@ -50,10 +48,7 @@ COMPILE_ASSERT(arraysize(s_pc_regex) == KernelCollector::archCount,
 
 KernelCollector::KernelCollector()
     : is_enabled_(false),
-      ramoops_dump_path_(kDumpPath),
-      ramoops_record_size_path_(kDumpRecordSize),
-      ramoops_dump_start_path_(kDumpMemStart),
-      ramoops_dump_size_path_(kDumpMemSize) {
+      ramoops_dump_path_(kDumpPath) {
   // We expect crash dumps in the format of the architecture we are built for.
   arch_ = GetCompilerArch();
 }
@@ -66,46 +61,23 @@ void KernelCollector::OverridePreservedDumpPath(const FilePath &file_path) {
 }
 
 bool KernelCollector::ReadRecordToString(std::string *contents,
-                                         unsigned int current_record,
+                                         size_t current_record,
                                          bool *record_found) {
-  FILE *file = fopen(ramoops_dump_path_.value().c_str(), "rb");
-
   // A record is a ramoops dump. It has an associated size of "record_size".
   std::string record;
   std::string captured;
-  static const unsigned int s_total_size_to_read = 4096;
-  size_t len = s_total_size_to_read;
 
   // Ramoops appends a header to a crash which contains ==== followed by a
   // timestamp. Ignore the header.
   pcrecpp::RE record_re("====\\d+\\.\\d+\n(.*)",
                   pcrecpp::RE_Options().set_multiline(true).set_dotall(true));
 
-  if (!file) {
-    LOG(ERROR) << "Unable to open " << kDumpPath;
+  FilePath ramoops_record;
+  GetRamoopsRecordPath(&ramoops_record, current_record);
+  if (!file_util::ReadFileToString(ramoops_record, &record)) {
+    LOG(ERROR) << "Unable to open " << ramoops_record.value();
     return false;
   }
-  // We're reading from /dev/mem, so we have to fseek to the desired area.
-  fseek(file, mem_start_ + current_record * record_size_, SEEK_SET);
-  size_t size_to_read = record_size_;
-
-  while (size_to_read > 0 && !feof(file) && len == s_total_size_to_read) {
-    char buf[s_total_size_to_read + 1];
-    len = fread(buf, 1, s_total_size_to_read, file);
-    // In the rare case that we read less than the minimum size null terminate
-    // the string properly
-    if (len < s_total_size_to_read) {
-       buf[len] = 0;
-    } else {
-       buf[s_total_size_to_read] = 0;
-    }
-    // Add the data.. if the string is null terminated and smaller then the
-    // buffer than add just that part. Otherwise add the whole buffer.
-    record.append(buf);
-    size_to_read -= len;
-  }
-
-  fclose(file);
 
   if (record_re.FullMatch(record, &captured)){
     // Found a match, append it to the content.
@@ -118,48 +90,25 @@ bool KernelCollector::ReadRecordToString(std::string *contents,
   return true;
 }
 
-bool LoadValue(FilePath path, size_t *element){
-  std::string buf;
-  char *end;
-  if (!file_util::ReadFileToString(path, &buf)) {
-    LOG(ERROR) << "Unable to read " << path.value();
-    return false;
-  }
-  *element = strtol(buf.c_str(), &end, 10);
-  if (end != NULL && *end =='\0') {
-    LOG(ERROR) << "Invalid number in " << path.value();
-    return false;
-  }
-
-  return true;
+void KernelCollector::GetRamoopsRecordPath(FilePath *path,
+                                           size_t record) {
+  *path = ramoops_dump_path_.Append(StringPrintf(kDumpFormat, record));
 }
 
 bool KernelCollector::LoadParameters() {
-  // Read the parameters from the /sys/module/ramoops/parameters/* files
-  // and convert them to numbers.
+  // Discover how many ramoops records are being exported by the driver.
+  size_t count;
 
-  if (!LoadValue(ramoops_record_size_path_, &record_size_))
-    return false;
-  if (record_size_ <= 0){
-    LOG(ERROR) << "Record size is <= 0" ;
-  }
-  if (!LoadValue(ramoops_dump_start_path_, &mem_start_))
-    return false;
-  if (!LoadValue(ramoops_dump_size_path_, &mem_size_))
-    return false;
-  if (mem_size_ <= 0){
-    LOG(ERROR) << "Memory size is <= 0" ;
+  for (count = 0; count < kMaxDumpRecords; ++count) {
+    FilePath ramoops_record;
+    GetRamoopsRecordPath(&ramoops_record, count);
+
+    if (!file_util::PathExists(ramoops_record))
+      break;
   }
 
-  return true;
-}
-
-void KernelCollector::SetParameters(size_t record_size, size_t mem_start,
-                                    size_t mem_size) {
-  // Used for unit testing.
-  record_size_ = record_size;
-  mem_start_ = mem_start;
-  mem_size_ = mem_size;
+  records_ = count;
+  return (records_ > 0);
 }
 
 bool KernelCollector::LoadPreservedDump(std::string *contents) {
@@ -172,7 +121,7 @@ bool KernelCollector::LoadPreservedDump(std::string *contents) {
   // clear contents since ReadFileToString actually appends to the string.
   contents->clear();
 
-  for (size_t i = 0; i < mem_size_ / record_size_; ++i) {
+  for (size_t i = 0; i < records_; ++i) {
     if (!ReadRecordToString(contents, i, &record_found)) {
       break;
     }
@@ -270,9 +219,13 @@ bool KernelCollector::Enable() {
     LOG(WARNING) << "KernelCollector does not understand this architecture";
     return false;
   }
-  else if (!file_util::PathExists(ramoops_dump_path_)) {
-    LOG(WARNING) << "Kernel does not support crash dumping";
-    return false;
+  else {
+    FilePath ramoops_record;
+    GetRamoopsRecordPath(&ramoops_record, 0);
+    if (!file_util::PathExists(ramoops_record)) {
+      LOG(WARNING) << "Kernel does not support crash dumping";
+      return false;
+    }
   }
 
   // To enable crashes, we will eventually need to set

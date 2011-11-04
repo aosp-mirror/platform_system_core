@@ -54,9 +54,6 @@ class KernelCollector : public CrashCollector {
   void SetArch(enum ArchKind arch);
   enum ArchKind GetArch() { return arch_; }
 
-  // Set the parameters for reading the crash dump.
-  void SetParameters(size_t record_size, size_t mem_start, size_t mem_size);
-
  private:
   friend class KernelCollectorTest;
   FRIEND_TEST(KernelCollectorTest, LoadPreservedDump);
@@ -68,6 +65,7 @@ class KernelCollector : public CrashCollector {
   bool LoadPreservedDump(std::string *contents);
   void StripSensitiveData(std::string *kernel_dump);
 
+  void GetRamoopsRecordPath(FilePath *path, size_t record);
   virtual bool LoadParameters();
   bool HasMoreRecords();
 
@@ -79,7 +77,7 @@ class KernelCollector : public CrashCollector {
   // Not finding a valid record is not an error state and is signaled by the
   // record_found output parameter.
   bool ReadRecordToString(std::string *contents,
-                          unsigned int current_record,
+                          size_t current_record,
                           bool *record_found);
 
   void ProcessStackTrace(pcrecpp::StringPiece kernel_dump,
@@ -98,13 +96,8 @@ class KernelCollector : public CrashCollector {
   enum ArchKind GetCompilerArch(void);
 
   bool is_enabled_;
-  size_t mem_start_;
-  size_t mem_size_;
   FilePath ramoops_dump_path_;
-  FilePath ramoops_record_size_path_;
-  FilePath ramoops_dump_start_path_;
-  FilePath ramoops_dump_size_path_;
-  size_t record_size_;
+  size_t records_;
 
   // The architecture of kernel dump strings we are working with.
   enum ArchKind arch_;
