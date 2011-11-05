@@ -39,12 +39,12 @@
 #include "../machine.h"
 #include "../utility.h"
 
-static void dump_registers(ptrace_context_t* context __attribute((unused)),
-        int tfd, pid_t pid, bool at_fault) {
+static void dump_registers(const ptrace_context_t* context __attribute((unused)),
+        int tfd, pid_t tid, bool at_fault) {
     struct pt_regs_x86 r;
     bool only_in_tombstone = !at_fault;
 
-    if(ptrace(PTRACE_GETREGS, pid, 0, &r)) {
+    if(ptrace(PTRACE_GETREGS, tid, 0, &r)) {
         _LOG(tfd, only_in_tombstone, "cannot get registers: %s\n", strerror(errno));
         return;
     }
@@ -61,7 +61,7 @@ static void dump_registers(ptrace_context_t* context __attribute((unused)),
          r.eip, r.ebp, r.esp, r.eflags);
 }
 
-void dump_thread(ptrace_context_t* context, int tfd, pid_t tid, bool at_fault) {
+void dump_thread(const ptrace_context_t* context, int tfd, pid_t tid, bool at_fault) {
     dump_registers(context, tfd, tid, at_fault);
 
     dump_backtrace_and_stack(context, tfd, tid, at_fault);

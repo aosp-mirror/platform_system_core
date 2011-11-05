@@ -34,44 +34,55 @@ static const uint32_t ELF_MAGIC = 0x464C457f; // "ELF\0177"
 #define PAGE_MASK (~(PAGE_SIZE - 1))
 #endif
 
-bool try_get_word(pid_t tid, uintptr_t ptr, uint32_t* out_value) {
+void init_memory(memory_t* memory, const map_info_t* map_info_list) {
+    memory->tid = -1;
+    memory->map_info_list = map_info_list;
+}
+
+void init_memory_ptrace(memory_t* memory, pid_t tid) {
+    memory->tid = tid;
+    memory->map_info_list = NULL;
+}
+
+bool try_get_word(const memory_t* memory, uintptr_t ptr, uint32_t* out_value) {
+    ALOGV("try_get_word: reading word at 0x%08x", ptr);
     if (ptr & 3) {
         ALOGV("try_get_word: invalid pointer 0x%08x", ptr);
-        *out_value = 0;
+        *out_value = 0xffffffffL;
         return false;
     }
-    if (tid < 0) {
-#if 0 /*unreliable, unclear whether this is safe from a signal handler context*/
-        // Determine whether the pointer is likely to be valid before dereferencing it.
-        unsigned char vec[1];
-        while (mincore((void*)(ptr & PAGE_MASK), sizeof(uint32_t), vec)) {
-            if (errno != EAGAIN && errno != EINTR) {
-                ALOGV("try_get_word: invalid pointer 0x%08x, mincore() errno=%d", ptr, errno);
-                *out_value = 0;
-                return false;
-            }
+    if (memory->tid < 0) {
+        if (!is_readable_map(memory->map_info_list, ptr)) {
+            ALOGV("try_get_word: pointer 0x%08x not in a readable map", ptr);
+            *out_value = 0xffffffffL;
+            return false;
         }
-#endif
         *out_value = *(uint32_t*)ptr;
         return true;
     } else {
         // ptrace() returns -1 and sets errno when the operation fails.
         // To disambiguate -1 from a valid result, we clear errno beforehand.
         errno = 0;
-        *out_value = ptrace(PTRACE_PEEKTEXT, tid, (void*)ptr, NULL);
+        *out_value = ptrace(PTRACE_PEEKTEXT, memory->tid, (void*)ptr, NULL);
         if (*out_value == 0xffffffffL && errno) {
-            ALOGV("try_get_word: invalid pointer 0x%08x, ptrace() errno=%d", ptr, errno);
-            *out_value = 0;
+            ALOGV("try_get_word: invalid pointer 0x%08x reading from tid %d, "
+                    "ptrace() errno=%d", ptr, memory->tid, errno);
             return false;
         }
         return true;
     }
 }
 
+bool try_get_word_ptrace(pid_t tid, uintptr_t ptr, uint32_t* out_value) {
+    memory_t memory;
+    init_memory_ptrace(&memory, tid);
+    return try_get_word(&memory, ptr, out_value);
+}
+
 static void load_ptrace_map_info_data(pid_t pid, map_info_t* mi) {
-    if (mi->is_executable) {
+    if (mi->is_executable && mi->is_readable) {
         uint32_t elf_magic;
-        if (try_get_word(pid, mi->start, &elf_magic) && elf_magic == ELF_MAGIC) {
+        if (try_get_word_ptrace(pid, mi->start, &elf_magic) && elf_magic == ELF_MAGIC) {
             map_info_data_t* data = (map_info_data_t*)calloc(1, sizeof(map_info_data_t));
             if (data) {
                 mi->data = data;

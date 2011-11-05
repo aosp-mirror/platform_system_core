@@ -52,7 +52,7 @@ bool signal_has_address(int sig);
 /*
  * Dumps the backtrace and contents of the stack.
  */
-void dump_backtrace_and_stack(ptrace_context_t* context, int tfd, pid_t pid, bool at_fault);
+void dump_backtrace_and_stack(const ptrace_context_t* context, int tfd, pid_t tid, bool at_fault);
 
 /*
  * Dumps a few bytes of memory, starting a bit before and ending a bit
@@ -66,7 +66,7 @@ void dump_memory(int tfd, pid_t tid, uintptr_t addr, bool at_fault);
  *
  * This only makes sense to do on the thread that crashed.
  */
-void dump_nearby_maps(ptrace_context_t* context, int tfd, pid_t tid);
+void dump_nearby_maps(const ptrace_context_t* context, int tfd, pid_t tid);
 
 
 #endif // _DEBUGGERD_UTILITY_H

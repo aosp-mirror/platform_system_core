@@ -35,6 +35,12 @@ typedef struct {
     map_info_t* map_info_list;
 } ptrace_context_t;
 
+/* Describes how to access memory from a process. */
+typedef struct {
+    pid_t tid;
+    const map_info_t* map_info_list;
+} memory_t;
+
 #if __i386__
 /* ptrace() register context. */
 typedef struct pt_regs_x86 {
@@ -59,11 +65,28 @@ typedef struct pt_regs_x86 {
 #endif
 
 /*
- * Reads a word of memory safely.
- * Uses ptrace() if tid >= 0, local memory otherwise.
- * Returns false if the word could not be read.
+ * Initializes a memory structure for accessing memory from this process.
  */
-bool try_get_word(pid_t tid, uintptr_t ptr, uint32_t* out_value);
+void init_memory(memory_t* memory, const map_info_t* map_info_list);
+
+/*
+ * Initializes a memory structure for accessing memory from another process
+ * using ptrace().
+ */
+void init_memory_ptrace(memory_t* memory, pid_t tid);
+
+/*
+ * Reads a word of memory safely.
+ * If the memory is local, ensures that the address is readable before dereferencing it.
+ * Returns false and a value of 0xffffffff if the word could not be read.
+ */
+bool try_get_word(const memory_t* memory, uintptr_t ptr, uint32_t* out_value);
+
+/*
+ * Reads a word of memory safely using ptrace().
+ * Returns false and a value of 0xffffffff if the word could not be read.
+ */
+bool try_get_word_ptrace(pid_t tid, uintptr_t ptr, uint32_t* out_value);
 
 /*
  * Loads information needed for examining a remote process using ptrace().
