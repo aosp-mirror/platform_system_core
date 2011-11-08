@@ -69,6 +69,7 @@ loglevel 3
     write /proc/sys/kernel/sched_child_runs_first 0
     write /proc/sys/kernel/randomize_va_space 2
     write /proc/sys/kernel/kptr_restrict 2
+    write /proc/sys/kernel/dmesg_restrict 1
 
 # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
