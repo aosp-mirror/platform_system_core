@@ -28,8 +28,7 @@ ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += \
 	arch-arm/backtrace-arm.c \
 	arch-arm/ptrace-arm.c
-LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH -DCORKSCREW_HAVE_LIBIBERTY
-LOCAL_LDFLAGS += -liberty
+LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH
 endif
 ifeq ($(TARGET_ARCH),x86)
 LOCAL_SRC_FILES += \
@@ -38,7 +37,7 @@ LOCAL_SRC_FILES += \
 LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH
 endif
 
-LOCAL_SHARED_LIBRARIES += libdl libcutils
+LOCAL_SHARED_LIBRARIES += libdl libcutils libgccdemangle
 
 LOCAL_CFLAGS += -std=gnu99 -Werror
 LOCAL_MODULE := libcorkscrew
