@@ -145,6 +145,11 @@ void get_daemon_suffix(const char *interface, char *daemon_suffix) {
 /*
  * Start the dhcp client daemon, and wait for it to finish
  * configuring the interface.
+ *
+ * The device init.rc file needs a corresponding entry for this work.
+ *
+ * Example:
+ * service dhcpcd_<interface> /system/bin/dhcpcd -ABKL
  */
 int dhcp_do_request(const char *interface,
                     char *ipaddr,
@@ -287,8 +292,11 @@ char *dhcp_get_errmsg() {
 }
 
 /**
- * Run WiMAX dhcp renew service.
- * "wimax_renew" service shoud be included in init.rc.
+ * The device init.rc file needs a corresponding entry.
+ *
+ * Example:
+ * service iprenew_<interface> /system/bin/dhcpcd -n
+ *
  */
 int dhcp_do_request_renew(const char *interface,
                     in_addr_t *ipaddr,
