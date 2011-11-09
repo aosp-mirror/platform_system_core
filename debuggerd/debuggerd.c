@@ -395,13 +395,13 @@ static bool dump_crash(int tfd, pid_t pid, pid_t tid, int signal,
  * find_and_open_tombstone - find an available tombstone slot, if any, of the
  * form tombstone_XX where XX is 00 to MAX_TOMBSTONES-1, inclusive. If no
  * file is available, we reuse the least-recently-modified file.
+ *
+ * Returns the path of the tombstone file, allocated using malloc().  Caller must free() it.
  */
-static int find_and_open_tombstone(void)
+static char* find_and_open_tombstone(int* fd)
 {
     unsigned long mtime = ULONG_MAX;
     struct stat sb;
-    char path[128];
-    int fd, i, oldest = 0;
 
     /*
      * XXX: Our stat.st_mtime isn't time_t. If it changes, as it probably ought
@@ -413,7 +413,9 @@ static int find_and_open_tombstone(void)
      * In a single wolf-like pass, find an available slot and, in case none
      * exist, find and record the least-recently-modified file.
      */
-    for (i = 0; i < MAX_TOMBSTONES; i++) {
+    char path[128];
+    int oldest = 0;
+    for (int i = 0; i < MAX_TOMBSTONES; i++) {
         snprintf(path, sizeof(path), TOMBSTONE_DIR"/tombstone_%02d", i);
 
         if (!stat(path, &sb)) {
@@ -426,38 +428,43 @@ static int find_and_open_tombstone(void)
         if (errno != ENOENT)
             continue;
 
-        fd = open(path, O_CREAT | O_EXCL | O_WRONLY, 0600);
-        if (fd < 0)
+        *fd = open(path, O_CREAT | O_EXCL | O_WRONLY, 0600);
+        if (*fd < 0)
             continue;	/* raced ? */
 
-        fchown(fd, AID_SYSTEM, AID_SYSTEM);
-        return fd;
+        fchown(*fd, AID_SYSTEM, AID_SYSTEM);
+        return strdup(path);
     }
 
     /* we didn't find an available file, so we clobber the oldest one */
     snprintf(path, sizeof(path), TOMBSTONE_DIR"/tombstone_%02d", oldest);
-    fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
-    fchown(fd, AID_SYSTEM, AID_SYSTEM);
-
-    return fd;
+    *fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
+    if (*fd < 0) {
+        LOG("failed to open tombstone file '%s': %s\n", path, strerror(errno));
+        return NULL;
+    }
+    fchown(*fd, AID_SYSTEM, AID_SYSTEM);
+    return strdup(path);
 }
 
 /* Return true if some thread is not detached cleanly */
-static bool engrave_tombstone(pid_t pid, pid_t tid, int signal,
-        bool dump_sibling_threads)
+static char* engrave_tombstone(pid_t pid, pid_t tid, int signal, bool dump_sibling_threads,
+        bool* detach_failed)
 {
     mkdir(TOMBSTONE_DIR, 0755);
     chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM);
 
-    int fd = find_and_open_tombstone();
-    if (fd < 0) {
-        return false;
+    int fd;
+    char* path = find_and_open_tombstone(&fd);
+    if (!path) {
+        *detach_failed = false;
+        return NULL;
     }
 
-    bool detach_failed = dump_crash(fd, pid, tid, signal, dump_sibling_threads);
+    *detach_failed = dump_crash(fd, pid, tid, signal, dump_sibling_threads);
 
     close(fd);
-    return detach_failed;
+    return path;
 }
 
 static int
@@ -734,8 +741,12 @@ static void handle_request(int fd) {
             if (TEMP_FAILURE_RETRY(write(fd, &response, 1)) != 1) {
                 LOG("failed responding to client: %s\n", strerror(errno));
             } else {
-                close(fd);
-                fd = -1;
+                char* tombstone_path = NULL;
+
+                if (request.type != REQUEST_TYPE_DUMP) {
+                    close(fd);
+                    fd = -1;
+                }
 
                 int total_sleep_time_usec = 0;
                 for (;;) {
@@ -748,8 +759,8 @@ static void handle_request(int fd) {
                     case SIGSTOP:
                         if (request.type == REQUEST_TYPE_DUMP) {
                             XLOG("stopped -- dumping\n");
-                            detach_failed = engrave_tombstone(request.pid, request.tid,
-                                    signal, true);
+                            tombstone_path = engrave_tombstone(request.pid, request.tid,
+                                    signal, true, &detach_failed);
                         } else {
                             XLOG("stopped -- continuing\n");
                             status = ptrace(PTRACE_CONT, request.tid, 0, 0);
@@ -769,8 +780,8 @@ static void handle_request(int fd) {
                         XLOG("stopped -- fatal signal\n");
                         /* don't dump sibling threads when attaching to GDB because it
                          * makes the process less reliable, apparently... */
-                        detach_failed = engrave_tombstone(request.pid, request.tid,
-                                signal, !attach_gdb);
+                        tombstone_path = engrave_tombstone(request.pid, request.tid,
+                                signal, !attach_gdb, &detach_failed);
                         break;
                     }
 
@@ -781,6 +792,15 @@ static void handle_request(int fd) {
                     }
                     break;
                 }
+
+                if (request.type == REQUEST_TYPE_DUMP) {
+                    if (tombstone_path) {
+                        write(fd, tombstone_path, strlen(tombstone_path));
+                    }
+                    close(fd);
+                    fd = -1;
+                }
+                free(tombstone_path);
             }
 
             XLOG("detaching\n");
@@ -900,7 +920,17 @@ static int do_explicit_dump(pid_t tid) {
     if (read(fd, &request, 1) != 1) {
         /* did not get expected reply, debuggerd must have closed the socket */
         fputs("Error sending request.  Did not receive reply from debuggerd.\n", stderr);
+    } else {
+        char tombstone_path[PATH_MAX];
+        ssize_t n = read(fd, &tombstone_path, sizeof(tombstone_path) - 1);
+        if (n <= 0) {
+            fputs("Error dumping process.  Check log for details.\n", stderr);
+        } else {
+            tombstone_path[n] = '\0';
+            fprintf(stderr, "Tombstone written to: %s\n", tombstone_path);
+        }
     }
+
     close(fd);
     return 0;
 }
