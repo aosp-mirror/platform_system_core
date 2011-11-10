@@ -21,15 +21,10 @@
 
 #include <cutils/log.h>
 
-#ifdef CORKSCREW_HAVE_LIBIBERTY
-// Defined in libiberty.a
-extern char *cplus_demangle(const char *mangled, int options);
-#endif
+extern char *__cxa_demangle (const char *mangled, char *buf, size_t *len,
+                             int *status);
 
 char* demangle_symbol_name(const char* name) {
-#ifdef CORKSCREW_HAVE_LIBIBERTY
-    return name ? cplus_demangle(name, 0) : NULL;
-#else
-    return NULL;
-#endif
+    // __cxa_demangle handles NULL by returning NULL
+    return __cxa_demangle(name, 0, 0, 0);
 }
