@@ -79,7 +79,6 @@ extern "C" {
 #else
 #define ALOGV(...) ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #endif
-#define ALOGV LOGV
 #endif
 
 #define CONDITION(cond)     (__builtin_expect((cond)!=0, 0))
@@ -93,7 +92,6 @@ extern "C" {
     ? ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
-#define ALOGV_IF LOGV_IF
 #endif
 
 /*
@@ -164,7 +162,6 @@ extern "C" {
 #else
 #define IF_ALOGV() IF_ALOG(LOG_VERBOSE, LOG_TAG)
 #endif
-#define IF_ALOGV IF_LOGV
 #endif
 
 /*
