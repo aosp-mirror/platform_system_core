@@ -37,7 +37,7 @@
 #include "utility.h"
 
 /* enable to dump memory pointed to by every register */
-#define DUMP_MEM_FOR_ALL_REGS 1
+#define DUMP_MEM_FOR_ALL_REGS 0
 
 #ifdef WITH_VFP
 #ifdef WITH_VFP_D32
