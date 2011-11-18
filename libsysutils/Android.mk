@@ -12,6 +12,7 @@ LOCAL_SRC_FILES:=                             \
                   src/FrameworkCommand.cpp    \
                   src/SocketClient.cpp        \
                   src/ServiceManager.cpp      \
+                  EventLogTags.logtags
 
 LOCAL_MODULE:= libsysutils
 
