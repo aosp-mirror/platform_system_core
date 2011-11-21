@@ -338,21 +338,6 @@ int property_set(const char *name, const char *value)
     return 0;
 }
 
-static int property_list(void (*propfn)(const char *key, const char *value, void *cookie),
-                  void *cookie)
-{
-    char name[PROP_NAME_MAX];
-    char value[PROP_VALUE_MAX];
-    const prop_info *pi;
-    unsigned n;
-
-    for(n = 0; (pi = __system_property_find_nth(n)); n++) {
-        __system_property_read(pi, name, value);
-        propfn(name, value, cookie);
-    }
-    return 0;
-}
-
 void handle_property_set_fd()
 {
     prop_msg msg;
