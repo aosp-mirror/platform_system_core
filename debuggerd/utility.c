@@ -65,16 +65,10 @@ static void dump_backtrace(const ptrace_context_t* context __attribute((unused))
     backtrace_symbol_t backtrace_symbols[STACK_DEPTH];
     get_backtrace_symbols_ptrace(context, backtrace, frames, backtrace_symbols);
     for (size_t i = 0; i < frames; i++) {
-        const backtrace_symbol_t* symbol = &backtrace_symbols[i];
-        const char* map_name = symbol->map_name ? symbol->map_name : "<unknown>";
-        const char* symbol_name = symbol->demangled_name ? symbol->demangled_name : symbol->name;
-        if (symbol_name) {
-            _LOG(tfd, !at_fault, "    #%02d  pc %08x  %s (%s)\n",
-                    (int)i, symbol->relative_pc, map_name, symbol_name);
-        } else {
-            _LOG(tfd, !at_fault, "    #%02d  pc %08x  %s\n",
-                    (int)i, symbol->relative_pc, map_name);
-        }
+        char line[MAX_BACKTRACE_LINE_LENGTH];
+        format_backtrace_line(i, &backtrace[i], &backtrace_symbols[i],
+                line, MAX_BACKTRACE_LINE_LENGTH);
+        _LOG(tfd, !at_fault, "    %s\n", line);
     }
     free_backtrace_symbols(backtrace_symbols, frames);
 }
@@ -94,12 +88,23 @@ static void dump_stack_segment(const ptrace_context_t* context, int tfd, pid_t t
         if (symbol) {
             char* demangled_name = demangle_symbol_name(symbol->name);
             const char* symbol_name = demangled_name ? demangled_name : symbol->name;
+            uint32_t offset = stack_content - (mi->start + symbol->start);
             if (!i && label >= 0) {
-                _LOG(tfd, only_in_tombstone, "    #%02d  %08x  %08x  %s (%s)\n",
-                        label, *sp, stack_content, mi ? mi->name : "", symbol_name);
+                if (offset) {
+                    _LOG(tfd, only_in_tombstone, "    #%02d  %08x  %08x  %s (%s+%u)\n",
+                            label, *sp, stack_content, mi ? mi->name : "", symbol_name, offset);
+                } else {
+                    _LOG(tfd, only_in_tombstone, "    #%02d  %08x  %08x  %s (%s)\n",
+                            label, *sp, stack_content, mi ? mi->name : "", symbol_name);
+                }
             } else {
-                _LOG(tfd, only_in_tombstone, "         %08x  %08x  %s (%s)\n",
-                        *sp, stack_content, mi ? mi->name : "", symbol_name);
+                if (offset) {
+                    _LOG(tfd, only_in_tombstone, "         %08x  %08x  %s (%s+%u)\n",
+                            *sp, stack_content, mi ? mi->name : "", symbol_name, offset);
+                } else {
+                    _LOG(tfd, only_in_tombstone, "         %08x  %08x  %s (%s)\n",
+                            *sp, stack_content, mi ? mi->name : "", symbol_name);
+                }
             }
             free(demangled_name);
         } else {

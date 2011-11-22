@@ -146,6 +146,7 @@ static uintptr_t get_exception_handler(const memory_t* memory,
     }
 
     uintptr_t handler = 0;
+    int32_t handler_index = -1;
     if (exidx_start) {
         uint32_t low = 0;
         uint32_t high = exidx_size;
@@ -153,10 +154,12 @@ static uintptr_t get_exception_handler(const memory_t* memory,
             uint32_t index = (low + high) / 2;
             uintptr_t entry = exidx_start + index * 8;
             uint32_t entry_prel_pc;
+            ALOGV("XXX low=%u, high=%u, index=%u", low, high, index);
             if (!try_get_word(memory, entry, &entry_prel_pc)) {
                 break;
             }
             uintptr_t entry_pc = prel_to_absolute(entry, entry_prel_pc);
+            ALOGV("XXX entry_pc=0x%08x", entry_pc);
             if (pc < entry_pc) {
                 high = index;
                 continue;
@@ -168,6 +171,7 @@ static uintptr_t get_exception_handler(const memory_t* memory,
                     break;
                 }
                 uintptr_t next_entry_pc = prel_to_absolute(next_entry, next_entry_prel_pc);
+                ALOGV("XXX next_entry_pc=0x%08x", next_entry_pc);
                 if (pc >= next_entry_pc) {
                     low = index + 1;
                     continue;
@@ -184,17 +188,18 @@ static uintptr_t get_exception_handler(const memory_t* memory,
             } else if (entry_handler != EXIDX_CANTUNWIND) {
                 handler = prel_to_absolute(entry_handler_ptr, entry_handler);
             }
+            handler_index = index;
             break;
         }
     }
     if (mi) {
         ALOGV("get_exception_handler: pc=0x%08x, module='%s', module_start=0x%08x, "
-                "exidx_start=0x%08x, exidx_size=%d, handler=0x%08x",
-                pc, mi->name, mi->start, exidx_start, exidx_size, handler);
+                "exidx_start=0x%08x, exidx_size=%d, handler=0x%08x, handler_index=%d",
+                pc, mi->name, mi->start, exidx_start, exidx_size, handler, handler_index);
     } else {
         ALOGV("get_exception_handler: pc=0x%08x, "
-                "exidx_start=0x%08x, exidx_size=%d, handler=0x%08x",
-                pc, exidx_start, exidx_size, handler);
+                "exidx_start=0x%08x, exidx_size=%d, handler=0x%08x, handler_index=%d",
+                pc, exidx_start, exidx_size, handler, handler_index);
     }
     return handler;
 }
@@ -464,11 +469,10 @@ uintptr_t rewind_pc_arch(const memory_t* memory, uintptr_t pc) {
          * 18896:       4798            blx     r3
          * 18898:       b001            add     sp, #4
          */
-        pc &= ~1;
         uint16_t prev1, prev2;
-        if (try_get_half_word(memory, pc - 4, &prev1)
+        if (try_get_half_word(memory, pc - 5, &prev1)
             && ((prev1 & 0xf000) == 0xf000)
-            && try_get_half_word(memory, pc - 2, &prev2)
+            && try_get_half_word(memory, pc - 3, &prev2)
             && ((prev2 & 0xe000) == 0xe000)) {
             pc -= 4; // long offset
         } else {

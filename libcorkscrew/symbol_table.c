@@ -47,6 +47,7 @@ static int bcompar(const void *key, const void *element) {
 
 symbol_table_t* load_symbol_table(const char *filename) {
     symbol_table_t* table = NULL;
+    ALOGV("Loading symbol table from '%s'.", filename);
 
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
@@ -154,6 +155,9 @@ symbol_table_t* load_symbol_table(const char *filename) {
                 table->symbols[symbol_index].name = strdup(dynstr + dynsyms[i].st_name);
                 table->symbols[symbol_index].start = dynsyms[i].st_value;
                 table->symbols[symbol_index].end = dynsyms[i].st_value + dynsyms[i].st_size;
+                ALOGV("  [%d] '%s' 0x%08x-0x%08x (DYNAMIC)",
+                        symbol_index, table->symbols[symbol_index].name,
+                        table->symbols[symbol_index].start, table->symbols[symbol_index].end);
                 symbol_index += 1;
             }
         }
@@ -169,6 +173,9 @@ symbol_table_t* load_symbol_table(const char *filename) {
                 table->symbols[symbol_index].name = strdup(str + syms[i].st_name);
                 table->symbols[symbol_index].start = syms[i].st_value;
                 table->symbols[symbol_index].end = syms[i].st_value + syms[i].st_size;
+                ALOGV("  [%d] '%s' 0x%08x-0x%08x",
+                        symbol_index, table->symbols[symbol_index].name,
+                        table->symbols[symbol_index].start, table->symbols[symbol_index].end);
                 symbol_index += 1;
             }
         }
