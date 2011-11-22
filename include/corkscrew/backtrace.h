@@ -41,10 +41,12 @@ typedef struct {
  * Describes the symbols associated with a backtrace frame.
  */
 typedef struct {
-    uintptr_t relative_pc;       /* relative PC offset from the start of the library,
+    uintptr_t relative_pc;       /* relative frame PC offset from the start of the library,
                                     or the absolute PC if the library is unknown */
+    uintptr_t relative_symbol_addr; /* relative offset of the symbol from the start of the
+                                    library or 0 if the library is unknown */
     char* map_name;              /* executable or library name, or NULL if unknown */
-    char* name;                  /* symbol name, or NULL if unknown */
+    char* symbol_name;           /* symbol name, or NULL if unknown */
     char* demangled_name;        /* demangled symbol name, or NULL if unknown */
 } backtrace_symbol_t;
 
@@ -94,6 +96,17 @@ void get_backtrace_symbols_ptrace(const ptrace_context_t* context,
  * Frees the storage associated with backtrace symbols.
  */
 void free_backtrace_symbols(backtrace_symbol_t* backtrace_symbols, size_t frames);
+
+enum {
+    // A hint for how big to make the line buffer for format_backtrace_line
+    MAX_BACKTRACE_LINE_LENGTH = 800,
+};
+
+/**
+ * Formats a line from a backtrace as a zero-terminated string into the specified buffer.
+ */
+void format_backtrace_line(unsigned frameNumber, const backtrace_frame_t* frame,
+        const backtrace_symbol_t* symbol, char* buffer, size_t bufferSize);
 
 #ifdef __cplusplus
 }

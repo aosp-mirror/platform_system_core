@@ -213,8 +213,9 @@ ssize_t unwind_backtrace_ptrace(pid_t tid, const ptrace_context_t* context,
 
 static void init_backtrace_symbol(backtrace_symbol_t* symbol, uintptr_t pc) {
     symbol->relative_pc = pc;
+    symbol->relative_symbol_addr = 0;
     symbol->map_name = NULL;
-    symbol->name = NULL;
+    symbol->symbol_name = NULL;
     symbol->demangled_name = NULL;
 }
 
@@ -235,8 +236,10 @@ void get_backtrace_symbols(const backtrace_frame_t* backtrace, size_t frames,
 #if HAVE_DLADDR
             Dl_info info;
             if (dladdr((const void*)frame->absolute_pc, &info) && info.dli_sname) {
-                symbol->name = strdup(info.dli_sname);
-                symbol->demangled_name = demangle_symbol_name(symbol->name);
+                symbol->relative_symbol_addr = (uintptr_t)info.dli_saddr
+                        - (uintptr_t)info.dli_fbase;
+                symbol->symbol_name = strdup(info.dli_sname);
+                symbol->demangled_name = demangle_symbol_name(symbol->symbol_name);
             }
 #endif
         }
@@ -262,8 +265,9 @@ void get_backtrace_symbols_ptrace(const ptrace_context_t* context,
             }
         }
         if (s) {
-            symbol->name = strdup(s->name);
-            symbol->demangled_name = demangle_symbol_name(symbol->name);
+            symbol->relative_symbol_addr = s->start;
+            symbol->symbol_name = strdup(s->name);
+            symbol->demangled_name = demangle_symbol_name(symbol->symbol_name);
         }
     }
 }
@@ -272,8 +276,30 @@ void free_backtrace_symbols(backtrace_symbol_t* backtrace_symbols, size_t frames
     for (size_t i = 0; i < frames; i++) {
         backtrace_symbol_t* symbol = &backtrace_symbols[i];
         free(symbol->map_name);
-        free(symbol->name);
+        free(symbol->symbol_name);
         free(symbol->demangled_name);
         init_backtrace_symbol(symbol, 0);
+    }
+}
+
+void format_backtrace_line(unsigned frameNumber, const backtrace_frame_t* frame,
+        const backtrace_symbol_t* symbol, char* buffer, size_t bufferSize) {
+    const char* mapName = symbol->map_name ? symbol->map_name : "<unknown>";
+    const char* symbolName = symbol->demangled_name ? symbol->demangled_name : symbol->symbol_name;
+    size_t fieldWidth = (bufferSize - 80) / 2;
+    if (symbolName) {
+        uint32_t pc_offset = symbol->relative_pc - symbol->relative_symbol_addr;
+        if (pc_offset) {
+            snprintf(buffer, bufferSize, "#%02d  pc %08x  %.*s (%.*s+%u)",
+                    frameNumber, symbol->relative_pc, fieldWidth, mapName,
+                    fieldWidth, symbolName, pc_offset);
+        } else {
+            snprintf(buffer, bufferSize, "#%02d  pc %08x  %.*s (%.*s)",
+                    frameNumber, symbol->relative_pc, fieldWidth, mapName,
+                    fieldWidth, symbolName);
+        }
+    } else {
+        snprintf(buffer, bufferSize, "#%02d  pc %08x  %.*s",
+                frameNumber, symbol->relative_pc, fieldWidth, mapName);
     }
 }
