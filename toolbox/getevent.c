@@ -643,7 +643,7 @@ int getevent_main(int argc, char *argv[])
                         return 1;
                     }
                     if(get_time) {
-                        printf("%ld-%ld: ", event.time.tv_sec, event.time.tv_usec);
+                        printf("[%8ld.%06ld] ", event.time.tv_sec, event.time.tv_usec);
                     }
                     if(print_device)
                         printf("%s: ", device_names[i]);
