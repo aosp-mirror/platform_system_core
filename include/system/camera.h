@@ -85,6 +85,9 @@ enum {
     // request FRAME and METADATA. Or the apps can request only FRAME or only
     // METADATA.
     CAMERA_MSG_PREVIEW_METADATA = 0x0400, // dataCallback
+    // Notify on autofocus start and stop. This is useful in continuous
+    // autofocus - FOCUS_MODE_CONTINUOUS_VIDEO and FOCUS_MODE_CONTINUOUS_PICTURE.
+    CAMERA_MSG_FOCUS_MOVE = 0x0800,       // notifyCallback
     CAMERA_MSG_ALL_MSGS = 0xFFFF
 };
 
@@ -142,6 +145,12 @@ enum {
      * Stop the face detection.
      */
     CAMERA_CMD_STOP_FACE_DETECTION = 7,
+
+    /**
+     * Enable/disable focus move callback (CAMERA_MSG_FOCUS_MOVE). Passing
+     * arg1 = 0 will disable, while passing arg1 = 1 will enable the callback.
+     */
+    CAMERA_CMD_ENABLE_FOCUS_MOVE_MSG = 8,
 };
 
 /** camera fatal errors */
