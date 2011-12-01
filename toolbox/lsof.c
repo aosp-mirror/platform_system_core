@@ -178,8 +178,7 @@ void lsof_dumpinfo(pid_t pid)
     if (!stat(info.path, &pidstat)) {
         pw = getpwuid(pidstat.st_uid);
         if (pw) {
-            strncpy(info.user, pw->pw_name, USER_DISPLAY_MAX - 1);
-            info.user[USER_DISPLAY_MAX - 1] = '\0';
+            strlcpy(info.user, pw->pw_name, sizeof(info.user));
         } else {
             snprintf(info.user, USER_DISPLAY_MAX, "%d", (int)pidstat.st_uid);
         }
@@ -194,18 +193,20 @@ void lsof_dumpinfo(pid_t pid)
         fprintf(stderr, "Couldn't read %s\n", info.path);
         return;
     }
+
     char cmdline[PATH_MAX];
-    if (read(fd, cmdline, sizeof(cmdline)) < 0) {
+    int numRead = read(fd, cmdline, sizeof(cmdline) - 1);
+    close(fd);
+
+    if (numRead < 0) {
         fprintf(stderr, "Error reading cmdline: %s: %s\n", info.path, strerror(errno));
-        close(fd);
         return;
     }
-    close(fd);
-    info.path[info.parent_length] = '\0';
+
+    cmdline[numRead] = '\0';
 
     // We only want the basename of the cmdline
-    strncpy(info.cmdline, basename(cmdline), sizeof(info.cmdline));
-    info.cmdline[sizeof(info.cmdline)-1] = '\0';
+    strlcpy(info.cmdline, basename(cmdline), sizeof(info.cmdline));
 
     // Read each of these symlinks
     print_type("cwd", &info);
