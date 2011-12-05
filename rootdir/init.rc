@@ -70,6 +70,7 @@ loglevel 3
     write /proc/sys/kernel/randomize_va_space 2
     write /proc/sys/kernel/kptr_restrict 2
     write /proc/sys/kernel/dmesg_restrict 1
+    write /proc/sys/vm/mmap_min_addr 32768
 
 # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
