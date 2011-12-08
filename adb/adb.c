@@ -940,24 +940,29 @@ int adb_main(int is_daemon, int server_port)
         }
     }
 
-        /* for the device, start the usb transport if the
-        ** android usb device exists and the "service.adb.tcp.port" and
-        ** "persist.adb.tcp.port" properties are not set.
-        ** Otherwise start the network transport.
-        */
-    property_get("service.adb.tcp.port", value, "");
-    if (!value[0])
-        property_get("persist.adb.tcp.port", value, "");
-    if (sscanf(value, "%d", &port) == 1 && port > 0) {
-        // listen on TCP port specified by service.adb.tcp.port property
-        local_init(port);
-    } else if (access("/dev/android_adb", F_OK) == 0) {
+    int usb = 0;
+    if (access("/dev/android_adb", F_OK) == 0) {
         // listen on USB
         usb_init();
-    } else {
+        usb = 1;
+    }
+
+    // If one of these properties is set, also listen on that port
+    // If one of the properties isn't set and we couldn't listen on usb,
+    // listen on the default port.
+    property_get("service.adb.tcp.port", value, "");
+    if (!value[0]) {
+        property_get("persist.adb.tcp.port", value, "");
+    }
+    if (sscanf(value, "%d", &port) == 1 && port > 0) {
+        printf("using port=%d\n", port);
+        // listen on TCP port specified by service.adb.tcp.port property
+        local_init(port);
+    } else if (!usb) {
         // listen on default port
         local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
     }
+
     D("adb_main(): pre init_jdwp()\n");
     init_jdwp();
     D("adb_main(): post init_jdwp()\n");
