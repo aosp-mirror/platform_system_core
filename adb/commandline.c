@@ -577,9 +577,29 @@ static int logcat(transport_type transport, char* serial, int argc, char **argv)
     return 0;
 }
 
+static int mkdirs(char *path)
+{
+    int ret;
+    char *x = path + 1;
+
+    for(;;) {
+        x = adb_dirstart(x);
+        if(x == 0) return 0;
+        *x = 0;
+        ret = adb_mkdir(path, 0775);
+        *x = OS_PATH_SEPARATOR;
+        if((ret < 0) && (errno != EEXIST)) {
+            return ret;
+        }
+        x++;
+    }
+    return 0;
+}
+
 static int backup(int argc, char** argv) {
     char buf[4096];
-    const char* filename = "./backup.ab";
+    char default_name[32];
+    const char* filename = strcpy(default_name, "./backup.ab");
     int fd, outFd;
     int i, j;
 
@@ -602,7 +622,9 @@ static int backup(int argc, char** argv) {
     /* bare "adb backup" or "adb backup -f filename" are not valid invocations */
     if (argc < 2) return usage();
 
-    outFd = adb_open_mode(filename, O_WRONLY | O_CREAT | O_TRUNC, 0640);
+    adb_unlink(filename);
+    mkdirs((char *)filename);
+    outFd = adb_creat(filename, 0640);
     if (outFd < 0) {
         fprintf(stderr, "adb: unable to open file %s\n", filename);
         return -1;
