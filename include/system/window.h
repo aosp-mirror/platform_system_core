@@ -340,9 +340,15 @@ struct ANativeWindow
                 int interval);
 
     /*
-     * hook called by EGL to acquire a buffer. After this call, the buffer
-     * is not locked, so its content cannot be modified.
-     * this call may block if no buffers are available.
+     * Hook called by EGL to acquire a buffer. After this call, the buffer
+     * is not locked, so its content cannot be modified. This call may block if
+     * no buffers are available.
+     *
+     * The window holds a reference to the buffer between dequeueBuffer and
+     * either queueBuffer or cancelBuffer, so clients only need their own
+     * reference if they might use the buffer after queueing or canceling it.
+     * Holding a reference to a buffer after queueing or canceling it is only
+     * allowed if a specific buffer count has been set.
      *
      * Returns 0 on success or -errno on error.
      */
@@ -358,14 +364,20 @@ struct ANativeWindow
      */
     int     (*lockBuffer)(struct ANativeWindow* window,
                 struct ANativeWindowBuffer* buffer);
-   /*
-    * hook called by EGL when modifications to the render buffer are done.
-    * This unlocks and post the buffer.
-    *
-    * Buffers MUST be queued in the same order than they were dequeued.
-    *
-    * Returns 0 on success or -errno on error.
-    */
+    /*
+     * Hook called by EGL when modifications to the render buffer are done.
+     * This unlocks and post the buffer.
+     *
+     * The window holds a reference to the buffer between dequeueBuffer and
+     * either queueBuffer or cancelBuffer, so clients only need their own
+     * reference if they might use the buffer after queueing or canceling it.
+     * Holding a reference to a buffer after queueing or canceling it is only
+     * allowed if a specific buffer count has been set.
+     *
+     * Buffers MUST be queued in the same order than they were dequeued.
+     *
+     * Returns 0 on success or -errno on error.
+     */
     int     (*queueBuffer)(struct ANativeWindow* window,
                 struct ANativeWindowBuffer* buffer);
 
@@ -411,10 +423,16 @@ struct ANativeWindow
                 int operation, ... );
 
     /*
-     * hook used to cancel a buffer that has been dequeued.
+     * Hook used to cancel a buffer that has been dequeued.
      * No synchronization is performed between dequeue() and cancel(), so
      * either external synchronization is needed, or these functions must be
      * called from the same thread.
+     *
+     * The window holds a reference to the buffer between dequeueBuffer and
+     * either queueBuffer or cancelBuffer, so clients only need their own
+     * reference if they might use the buffer after queueing or canceling it.
+     * Holding a reference to a buffer after queueing or canceling it is only
+     * allowed if a specific buffer count has been set.
      */
     int     (*cancelBuffer)(struct ANativeWindow* window,
                 struct ANativeWindowBuffer* buffer);
