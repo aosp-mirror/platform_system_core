@@ -35,7 +35,7 @@ struct logger_entry {
 /*
  * The userspace structure for version 2 of the logger_entry ABI.
  * This structure is returned to userspace if ioctl(LOGGER_SET_VERSION)
- * is called with version==2
+ * is called with version==2; or used with the user space log daemon.
  */
 struct logger_entry_v2 {
     uint16_t    len;       /* length of the payload */
@@ -45,6 +45,17 @@ struct logger_entry_v2 {
     int32_t     sec;       /* seconds since Epoch */
     int32_t     nsec;      /* nanoseconds */
     uint32_t    euid;      /* effective UID of logger */
+    char        msg[0];    /* the entry's payload */
+};
+
+struct logger_entry_v3 {
+    uint16_t    len;       /* length of the payload */
+    uint16_t    hdr_size;  /* sizeof(struct logger_entry_v2) */
+    int32_t     pid;       /* generating process's pid */
+    int32_t     tid;       /* generating process's tid */
+    int32_t     sec;       /* seconds since Epoch */
+    int32_t     nsec;      /* nanoseconds */
+    uint32_t    lid;       /* log id of the payload */
     char        msg[0];    /* the entry's payload */
 };
 
@@ -69,6 +80,7 @@ struct log_msg {
     union {
         unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
         struct logger_entry_v2 entry;
+        struct logger_entry_v3 entry_v3;
         struct logger_entry_v2 entry_v2;
         struct logger_entry    entry_v1;
         struct {
@@ -106,21 +118,21 @@ struct log_msg {
     {
         return !(*this > T);
     }
-    uint64_t nsec(void) const
+    uint64_t nsec() const
     {
         return static_cast<uint64_t>(entry.sec) * NS_PER_SEC + entry.nsec;
     }
 
     /* packet methods */
-    log_id_t id(void)
+    log_id_t id()
     {
         return extra.id;
     }
-    char *msg(void)
+    char *msg()
     {
         return entry.hdr_size ? (char *) buf + entry.hdr_size : entry_v1.msg;
     }
-    unsigned int len(void)
+    unsigned int len()
     {
         return (entry.hdr_size ? entry.hdr_size : sizeof(entry_v1)) + entry.len;
     }
