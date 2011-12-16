@@ -26,13 +26,29 @@
  * SUCH DAMAGE.
  */
 
+#include "fastboot.h"
+#include "make_ext4fs.h"
+#include "ext4_utils.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-#include "fastboot.h"
+#ifdef USE_MINGW
+#include <fcntl.h>
+#else
+#include <sys/mman.h>
+#endif
+
+extern struct fs_info info;
+
+#define ARRAY_SIZE(x)           (sizeof(x)/sizeof(x[0]))
 
 double now()
 {
@@ -60,15 +76,18 @@ char *mkmsg(const char *fmt, ...)
 #define OP_COMMAND    2
 #define OP_QUERY      3
 #define OP_NOTICE     4
+#define OP_FORMAT     5
 
 typedef struct Action Action;
+
+#define CMD_SIZE 64
 
 struct Action 
 {
     unsigned op;
     Action *next;
 
-    char cmd[64];    
+    char cmd[CMD_SIZE];
     const char *prod;
     void *data;
     unsigned size;
@@ -81,6 +100,35 @@ struct Action
 
 static Action *action_list = 0;
 static Action *action_last = 0;
+
+
+struct image_data {
+    long long partition_size;
+    long long image_size; // real size of image file
+    void *buffer;
+};
+
+void generate_ext4_image(struct image_data *image);
+void cleanup_image(struct image_data *image);
+
+struct generator {
+    char *fs_type;
+
+    /* generate image and return it as image->buffer.
+     * size of the buffer returned as image->image_size.
+     *
+     * image->partition_size specifies what is the size of the
+     * file partition we generate image for.
+     */
+    void (*generate)(struct image_data *image);
+
+    /* it cleans the buffer allocated during image creation.
+     * this function probably does free() or munmap().
+     */
+    void (*cleanup)(struct image_data *image);
+} generators[] = {
+    { "ext4", generate_ext4_image, cleanup_image }
+};
 
 static int cb_default(Action *a, int status, char *resp)
 {
@@ -131,6 +179,162 @@ void fb_queue_erase(const char *ptn)
     Action *a;
     a = queue_action(OP_COMMAND, "erase:%s", ptn);
     a->msg = mkmsg("erasing '%s'", ptn);
+}
+
+/* Loads file content into buffer. Returns NULL on error. */
+static void *load_buffer(int fd, off_t size)
+{
+    void *buffer;
+
+#ifdef USE_MINGW
+    ssize_t count = 0;
+
+    // mmap is more efficient but mingw does not support it.
+    // In this case we read whole image into memory buffer.
+    buffer = malloc(size);
+    if (!buffer) {
+        perror("malloc");
+        return NULL;
+    }
+
+    lseek(fd, 0, SEEK_SET);
+    while(count < size) {
+        ssize_t actually_read = read(fd, (char*)buffer+count, size-count);
+
+        if (actually_read == 0) {
+            break;
+        }
+        if (actually_read < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            perror("read");
+            free(buffer);
+            return NULL;
+        }
+
+        count += actually_read;
+    }
+#else
+    buffer = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (buffer == MAP_FAILED) {
+        perror("mmap");
+        return NULL;
+    }
+#endif
+
+    return buffer;
+}
+
+void cleanup_image(struct image_data *image)
+{
+#ifdef USE_MINGW
+    free(image->buffer);
+#else
+    munmap(image->buffer, image->image_size);
+#endif
+}
+
+void generate_ext4_image(struct image_data *image)
+{
+    int fd;
+    struct stat st;
+
+#ifdef USE_MINGW
+    /* Ideally we should use tmpfile() here, the same as with unix version.
+     * But unfortunately it is not portable as it is not clear whether this
+     * function opens file in TEXT or BINARY mode.
+     *
+     * There are also some reports it is buggy:
+     *    http://pdplab.it.uom.gr/teaching/gcc_manuals/gnulib.html#tmpfile
+     *    http://www.mega-nerd.com/erikd/Blog/Windiots/tmpfile.html
+     */
+    char *filename = tempnam(getenv("TEMP"), "fastboot-format.img");
+    fd = open(filename, O_RDWR | O_CREAT | O_TRUNC | O_BINARY, 0644);
+    unlink(filename);
+#else
+    fd = fileno(tmpfile());
+#endif
+    reset_ext4fs_info();
+    info.len = image->partition_size;
+    make_ext4fs_internal(fd, NULL, NULL, 0, 0, 1, 0, 0, 0);
+
+    fstat(fd, &st);
+    image->image_size = st.st_size;
+    image->buffer = load_buffer(fd, st.st_size);
+
+    close(fd);
+}
+
+int fb_format(Action *a, usb_handle *usb)
+{
+    const char *partition = a->cmd;
+    char response[FB_RESPONSE_SZ+1];
+    int status = 0;
+    struct image_data image;
+    struct generator *generator = NULL;
+    int fd;
+    unsigned i;
+    char cmd[CMD_SIZE];
+
+    response[FB_RESPONSE_SZ] = '\0';
+    snprintf(cmd, sizeof(cmd), "getvar:partition-type:%s", partition);
+    status = fb_command_response(usb, cmd, response);
+    if (status) {
+        fprintf(stderr,"FAILED (%s)\n", fb_get_error());
+        return status;
+    }
+
+    for (i = 0; i < ARRAY_SIZE(generators); i++) {
+        if (!strncmp(generators[i].fs_type, response, FB_RESPONSE_SZ)) {
+            generator = &generators[i];
+            break;
+        }
+    }
+    if (!generator) {
+        fprintf(stderr,"Formatting is not supported for filesystem with type '%s'.\n",
+                response);
+        return -1;
+    }
+
+    response[FB_RESPONSE_SZ] = '\0';
+    snprintf(cmd, sizeof(cmd), "getvar:partition-size:%s", partition);
+    status = fb_command_response(usb, cmd, response);
+    if (status) {
+        fprintf(stderr,"FAILED (%s)\n", fb_get_error());
+        return status;
+    }
+    image.partition_size = strtoll(response, (char **)NULL, 16);
+
+    generator->generate(&image);
+    if (!image.buffer) {
+        fprintf(stderr,"Cannot generate image.\n");
+        return -1;
+    }
+
+    // Following piece of code is similar to fb_queue_flash() but executes
+    // actions directly without queuing
+    fprintf(stderr, "sending '%s' (%lli KB)...\n", partition, image.image_size/1024);
+    status = fb_download_data(usb, image.buffer, image.image_size);
+    if (status) goto cleanup;
+
+    fprintf(stderr, "writing '%s'...\n", partition);
+    snprintf(cmd, sizeof(cmd), "flash:%s", partition);
+    status = fb_command(usb, cmd);
+    if (status) goto cleanup;
+
+cleanup:
+    generator->cleanup(&image);
+
+    return status;
+}
+
+void fb_queue_format(const char *partition)
+{
+    Action *a;
+
+    a = queue_action(OP_FORMAT, partition);
+    a->msg = mkmsg("formatting '%s' partition", partition);
 }
 
 void fb_queue_flash(const char *ptn, void *data, unsigned sz)
@@ -340,6 +544,10 @@ int fb_execute_queue(usb_handle *usb)
             if (status) break;
         } else if (a->op == OP_NOTICE) {
             fprintf(stderr,"%s\n",(char*)a->data);
+        } else if (a->op == OP_FORMAT) {
+            status = fb_format(a, usb);
+            status = a->func(a, status, status ? fb_get_error() : "");
+            if (status) break;
         } else {
             die("bogus action");
         }
