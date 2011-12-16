@@ -159,6 +159,124 @@ void parse_line_no_op(struct parse_state *state, int nargs, char **args)
 {
 }
 
+static int push_chars(char **dst, int *len, const char *chars, int cnt)
+{
+    if (cnt > *len)
+        return -1;
+
+    memcpy(*dst, chars, cnt);
+    *dst += cnt;
+    *len -= cnt;
+
+    return 0;
+}
+
+static int expand_props(char *dst, const char *src, int dst_size)
+{
+    int cnt = 0;
+    char *dst_ptr = dst;
+    const char *src_ptr = src;
+    int src_len;
+    int idx = 0;
+    int ret = 0;
+    int left = dst_size - 1;
+
+    if (!src || !dst || dst_size == 0)
+        return -1;
+
+    src_len = strlen(src);
+
+    /* - variables can either be $x.y or ${x.y}, in case they are only part
+     *   of the string.
+     * - will accept $$ as a literal $.
+     * - no nested property expansion, i.e. ${foo.${bar}} is not supported,
+     *   bad things will happen
+     */
+    while (*src_ptr && left > 0) {
+        char *c;
+        char prop[PROP_NAME_MAX + 1];
+        const char *prop_val;
+        int prop_len = 0;
+
+        c = strchr(src_ptr, '$');
+        if (!c) {
+            while (left-- > 0 && *src_ptr)
+                *(dst_ptr++) = *(src_ptr++);
+            break;
+        }
+
+        memset(prop, 0, sizeof(prop));
+
+        ret = push_chars(&dst_ptr, &left, src_ptr, c - src_ptr);
+        if (ret < 0)
+            goto err_nospace;
+        c++;
+
+        if (*c == '$') {
+            *(dst_ptr++) = *(c++);
+            src_ptr = c;
+            left--;
+            continue;
+        } else if (*c == '\0') {
+            break;
+        }
+
+        if (*c == '{') {
+            c++;
+            while (*c && *c != '}' && prop_len < PROP_NAME_MAX)
+                prop[prop_len++] = *(c++);
+            if (*c != '}') {
+                /* failed to find closing brace, abort. */
+                if (prop_len == PROP_NAME_MAX)
+                    ERROR("prop name too long during expansion of '%s'\n",
+                          src);
+                else if (*c == '\0')
+                    ERROR("unexpected end of string in '%s', looking for }\n",
+                          src);
+                goto err;
+            }
+            prop[prop_len] = '\0';
+            c++;
+        } else if (*c) {
+            while (*c && prop_len < PROP_NAME_MAX)
+                prop[prop_len++] = *(c++);
+            if (prop_len == PROP_NAME_MAX && *c != '\0') {
+                ERROR("prop name too long in '%s'\n", src);
+                goto err;
+            }
+            prop[prop_len] = '\0';
+            ERROR("using deprecated syntax for specifying property '%s', use ${name} instead\n",
+                  prop);
+        }
+
+        if (prop_len == 0) {
+            ERROR("invalid zero-length prop name in '%s'\n", src);
+            goto err;
+        }
+
+        prop_val = property_get(prop);
+        if (!prop_val) {
+            ERROR("property '%s' doesn't exist while expanding '%s'\n",
+                  prop, src);
+            goto err;
+        }
+
+        ret = push_chars(&dst_ptr, &left, prop_val, strlen(prop_val));
+        if (ret < 0)
+            goto err_nospace;
+        src_ptr = c;
+        continue;
+    }
+
+    *dst_ptr = '\0';
+    return 0;
+
+err_nospace:
+    ERROR("destination buffer overflow while expanding '%s'\n", src);
+err:
+    return -1;
+}
+
 void parse_new_section(struct parse_state *state, int kw,
                        int nargs, char **args)
 {
@@ -180,13 +298,26 @@ void parse_new_section(struct parse_state *state, int kw,
         }
         break;
     case K_import:
-        if (nargs != 2) {
-            ERROR("single argument needed for import\n");
-        } else {
-            int ret = init_parse_config_file(args[1]);
+        {
+            char conf_file[PATH_MAX];
+            int ret;
+
+            if (nargs != 2) {
+                ERROR("single argument needed for import\n");
+                break;
+            }
+
+            ret = expand_props(conf_file, args[1], sizeof(conf_file));
+            if (ret) {
+                ERROR("error while handling import on line '%d' in '%s'\n",
+                      state->line, state->filename);
+                break;
+            }
+            ret = init_parse_config_file(conf_file);
             if (ret)
-                ERROR("could not import file %s\n", args[1]);
+                ERROR("could not import file '%s'\n", conf_file);
         }
+        break;
     }
     state->parse_line = parse_line_no_op;
 }
