@@ -518,17 +518,6 @@ static int wait_for_coldboot_done_action(int nargs, char **args)
     return ret;
 }
 
-static int property_init_action(int nargs, char **args)
-{
-    bool load_defaults = true;
-
-    INFO("property init\n");
-    if (!strcmp(bootmode, "charger"))
-        load_defaults = false;
-    property_init(load_defaults);
-    return 0;
-}
-
 static int keychord_init_action(int nargs, char **args)
 {
     keychord_init();
@@ -576,7 +565,7 @@ static int console_init_action(int nargs, char **args)
     return 0;
 }
 
-static int set_init_properties_action(int nargs, char **args)
+static int set_init_properties(void)
 {
     char tmp[PROP_VALUE_MAX];
 
@@ -668,6 +657,7 @@ int main(int argc, char **argv)
     int property_set_fd_init = 0;
     int signal_fd_init = 0;
     int keychord_fd_init = 0;
+    bool is_charger = false;
 
     if (!strcmp(basename(argv[0]), "ueventd"))
         return ueventd_main(argc, argv);
@@ -702,30 +692,34 @@ int main(int argc, char **argv)
     open_devnull_stdio();
     klog_init();
 
-    INFO("reading config file\n");
-    init_parse_config_file("/init.rc");
-
-    /* pull the kernel commandline and ramdisk properties file in */
-    import_kernel_cmdline(0, import_kernel_nv);
     /* don't expose the raw commandline to nonpriv processes */
     chmod("/proc/cmdline", 0440);
+    /* pull the kernel commandline and ramdisk properties file in */
+    import_kernel_cmdline(0, import_kernel_nv);
     get_hardware_name(hardware, &revision);
+
+    is_charger = !strcmp(bootmode, "charger");
+
+    INFO("property init\n");
+    property_init(!is_charger);
+    set_init_properties();
+
+    INFO("reading config file\n");
+    init_parse_config_file("/init.rc");
     snprintf(tmp, sizeof(tmp), "/init.%s.rc", hardware);
     init_parse_config_file(tmp);
 
     action_for_each_trigger("early-init", action_add_queue_tail);
 
     queue_builtin_action(wait_for_coldboot_done_action, "wait_for_coldboot_done");
-    queue_builtin_action(property_init_action, "property_init");
     queue_builtin_action(keychord_init_action, "keychord_init");
     queue_builtin_action(console_init_action, "console_init");
-    queue_builtin_action(set_init_properties_action, "set_init_properties");
 
     /* execute all the boot actions to get us started */
     action_for_each_trigger("init", action_add_queue_tail);
 
     /* skip mounting filesystems in charger mode */
-    if (strcmp(bootmode, "charger") != 0) {
+    if (!is_charger) {
         action_for_each_trigger("early-fs", action_add_queue_tail);
         action_for_each_trigger("fs", action_add_queue_tail);
         action_for_each_trigger("post-fs", action_add_queue_tail);
@@ -736,7 +730,7 @@ int main(int argc, char **argv)
     queue_builtin_action(signal_init_action, "signal_init");
     queue_builtin_action(check_startup_action, "check_startup");
 
-    if (!strcmp(bootmode, "charger")) {
+    if (is_charger) {
         action_for_each_trigger("charger", action_add_queue_tail);
     } else {
         action_for_each_trigger("early-boot", action_add_queue_tail);
