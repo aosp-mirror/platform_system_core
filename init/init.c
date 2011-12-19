@@ -59,11 +59,7 @@ static int   bootchart_count;
 #endif
 
 static char console[32];
-static char serialno[32];
 static char bootmode[32];
-static char baseband[32];
-static char carrier[32];
-static char bootloader[32];
 static char hardware[32];
 static unsigned revision = 0;
 static char qemu[32];
@@ -420,45 +416,6 @@ void handle_control_message(const char *msg, const char *arg)
     }
 }
 
-static void import_kernel_nv(char *name, int in_qemu)
-{
-    char *value = strchr(name, '=');
-
-    if (value == 0) return;
-    *value++ = 0;
-    if (*name == 0) return;
-
-    if (!in_qemu)
-    {
-        /* on a real device, white-list the kernel options */
-        if (!strcmp(name,"qemu")) {
-            strlcpy(qemu, value, sizeof(qemu));
-        } else if (!strcmp(name,"androidboot.console")) {
-            strlcpy(console, value, sizeof(console));
-        } else if (!strcmp(name,"androidboot.mode")) {
-            strlcpy(bootmode, value, sizeof(bootmode));
-        } else if (!strcmp(name,"androidboot.serialno")) {
-            strlcpy(serialno, value, sizeof(serialno));
-        } else if (!strcmp(name,"androidboot.baseband")) {
-            strlcpy(baseband, value, sizeof(baseband));
-        } else if (!strcmp(name,"androidboot.carrier")) {
-            strlcpy(carrier, value, sizeof(carrier));
-        } else if (!strcmp(name,"androidboot.bootloader")) {
-            strlcpy(bootloader, value, sizeof(bootloader));
-        } else if (!strcmp(name,"androidboot.hardware")) {
-            strlcpy(hardware, value, sizeof(hardware));
-        }
-    } else {
-        /* in the emulator, export any kernel option with the
-         * ro.kernel. prefix */
-        char  buff[32];
-        int   len = snprintf( buff, sizeof(buff), "ro.kernel.%s", name );
-        if (len < (int)sizeof(buff)) {
-            property_set( buff, value );
-        }
-    }
-}
-
 static struct command *get_first_command(struct action *act)
 {
     struct listnode *node;
@@ -565,30 +522,104 @@ static int console_init_action(int nargs, char **args)
     return 0;
 }
 
-static int set_init_properties(void)
+static void import_kernel_nv(char *name, int for_emulator)
+{
+    char *value = strchr(name, '=');
+    int name_len = strlen(name);
+
+    if (value == 0) return;
+    *value++ = 0;
+    if (name_len == 0) return;
+
+    if (for_emulator) {
+        /* in the emulator, export any kernel option with the
+         * ro.kernel. prefix */
+        char buff[PROP_NAME_MAX];
+        int len = snprintf( buff, sizeof(buff), "ro.kernel.%s", name );
+
+        if (len < (int)sizeof(buff))
+            property_set( buff, value );
+        return;
+    }
+
+    if (!strcmp(name,"qemu")) {
+        strlcpy(qemu, value, sizeof(qemu));
+    } else if (!strncmp(name, "androidboot.", 12) && name_len > 12) {
+        const char *boot_prop_name = name + 12;
+        char prop[PROP_NAME_MAX];
+        int cnt;
+
+        cnt = snprintf(prop, sizeof(prop), "ro.boot.%s", boot_prop_name);
+        if (cnt < PROP_NAME_MAX)
+            property_set(prop, value);
+    }
+}
+
+static void export_kernel_boot_props(void)
 {
     char tmp[PROP_VALUE_MAX];
+    const char *pval;
+    unsigned i;
+    struct {
+        const char *src_prop;
+        const char *dest_prop;
+        const char *def_val;
+    } prop_map[] = {
+        { "ro.boot.serialno", "ro.serialno", "", },
+        { "ro.boot.mode", "ro.bootmode", "unknown", },
+        { "ro.boot.baseband", "ro.baseband", "unknown", },
+        { "ro.boot.carrier", "ro.carrier", "unknown", },
+        { "ro.boot.bootloader", "ro.bootloader", "unknown", },
+    };
 
-    if (qemu[0])
-        import_kernel_cmdline(1, import_kernel_nv);
+    for (i = 0; i < ARRAY_SIZE(prop_map); i++) {
+        pval = property_get(prop_map[i].src_prop);
+        property_set(prop_map[i].dest_prop, pval ?: prop_map[i].def_val);
+    }
 
+    pval = property_get("ro.boot.console");
+    if (pval)
+        strlcpy(console, pval, sizeof(console));
+
+    /* save a copy for init's usage during boot */
+    strlcpy(bootmode, property_get("ro.bootmode"), sizeof(bootmode));
+
+    /* if this was given on kernel command line, override what we read
+     * before (e.g. from /proc/cpuinfo), if anything */
+    pval = property_get("ro.boot.hardware");
+    if (pval)
+        strlcpy(hardware, pval, sizeof(hardware));
+    property_set("ro.hardware", hardware);
+
+    snprintf(tmp, PROP_VALUE_MAX, "%d", revision);
+    property_set("ro.revision", tmp);
+
+    /* TODO: these are obsolete. We should delete them */
     if (!strcmp(bootmode,"factory"))
         property_set("ro.factorytest", "1");
     else if (!strcmp(bootmode,"factory2"))
         property_set("ro.factorytest", "2");
     else
         property_set("ro.factorytest", "0");
+}
 
-    property_set("ro.serialno", serialno[0] ? serialno : "");
-    property_set("ro.bootmode", bootmode[0] ? bootmode : "unknown");
-    property_set("ro.baseband", baseband[0] ? baseband : "unknown");
-    property_set("ro.carrier", carrier[0] ? carrier : "unknown");
-    property_set("ro.bootloader", bootloader[0] ? bootloader : "unknown");
+static void process_kernel_cmdline(void)
+{
+    /* don't expose the raw commandline to nonpriv processes */
+    chmod("/proc/cmdline", 0440);
 
-    property_set("ro.hardware", hardware);
-    snprintf(tmp, PROP_VALUE_MAX, "%d", revision);
-    property_set("ro.revision", tmp);
-    return 0;
+    /* first pass does the common stuff, and finds if we are in qemu.
+     * second pass is only necessary for qemu to export all kernel params
+     * as props.
+     */
+    import_kernel_cmdline(0, import_kernel_nv);
+    if (qemu[0])
+        import_kernel_cmdline(1, import_kernel_nv);
+
+    /* now propogate the info given on command line to internal variables
+     * used by init as well as the current required properties
+     */
+    export_kernel_boot_props();
 }
 
 static int property_service_init_action(int nargs, char **args)
@@ -691,18 +722,17 @@ int main(int argc, char **argv)
          */
     open_devnull_stdio();
     klog_init();
+    property_init();
 
-    /* don't expose the raw commandline to nonpriv processes */
-    chmod("/proc/cmdline", 0440);
-    /* pull the kernel commandline and ramdisk properties file in */
-    import_kernel_cmdline(0, import_kernel_nv);
     get_hardware_name(hardware, &revision);
+
+    process_kernel_cmdline();
 
     is_charger = !strcmp(bootmode, "charger");
 
     INFO("property init\n");
-    property_init(!is_charger);
-    set_init_properties();
+    if (!is_charger)
+        property_load_boot_defaults();
 
     INFO("reading config file\n");
     init_parse_config_file("/init.rc");
