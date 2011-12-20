@@ -46,7 +46,7 @@
 #else
 #include <stdio.h>
 #include <string.h>
-#define LOGD printf
+#define ALOGD printf
 #define LOGW printf
 #endif
 
@@ -686,7 +686,7 @@ int ifc_remove_host_routes(const char *name)
         init_sockaddr_in(&rt.rt_genmask, mask);
         addr.s_addr = dest;
         if (ioctl(ifc_ctl_sock, SIOCDELRT, &rt) < 0) {
-            LOGD("failed to remove route for %s to %s: %s",
+            ALOGD("failed to remove route for %s to %s: %s",
                  ifname, inet_ntoa(addr), strerror(errno));
         }
     }
@@ -752,7 +752,7 @@ int ifc_set_default_route(const char *ifname, in_addr_t gateway)
     ifc_init();
     addr.s_addr = gateway;
     if ((result = ifc_create_default_route(ifname, gateway)) < 0) {
-        LOGD("failed to add %s as default route for %s: %s",
+        ALOGD("failed to add %s as default route for %s: %s",
              inet_ntoa(addr), ifname, strerror(errno));
     }
     ifc_close();
@@ -773,7 +773,7 @@ int ifc_remove_default_route(const char *ifname)
     rt.rt_flags = RTF_UP|RTF_GATEWAY;
     init_sockaddr_in(&rt.rt_dst, 0);
     if ((result = ioctl(ifc_ctl_sock, SIOCDELRT, &rt)) < 0) {
-        LOGD("failed to remove default route for %s: %s", ifname, strerror(errno));
+        ALOGD("failed to remove default route for %s: %s", ifname, strerror(errno));
     }
     ifc_close();
     return result;

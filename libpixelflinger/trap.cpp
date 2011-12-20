@@ -94,15 +94,15 @@ static inline void swap(T& a, T& b) {
 static void
 triangle_dump_points( const GGLcoord*  v0,
                       const GGLcoord*  v1,
-				 	  const GGLcoord*  v2 )
+                      const GGLcoord*  v2 )
 {
     float tri = 1.0f / TRI_ONE;
-  LOGD(     "  P0=(%.3f, %.3f)  [%08x, %08x]\n"
-            "  P1=(%.3f, %.3f)  [%08x, %08x]\n"
-            "  P2=(%.3f, %.3f)  [%08x, %08x]\n",
-		v0[0]*tri, v0[1]*tri, v0[0], v0[1],
-		v1[0]*tri, v1[1]*tri, v1[0], v1[1],
-		v2[0]*tri, v2[1]*tri, v2[0], v2[1] );
+    ALOGD("  P0=(%.3f, %.3f)  [%08x, %08x]\n"
+          "  P1=(%.3f, %.3f)  [%08x, %08x]\n"
+          "  P2=(%.3f, %.3f)  [%08x, %08x]\n",
+          v0[0]*tri, v0[1]*tri, v0[0], v0[1],
+          v1[0]*tri, v1[1]*tri, v1[0], v1[1],
+          v2[0]*tri, v2[1]*tri, v2[0], v2[1] );
 }
 
 // ----------------------------------------------------------------------------
@@ -835,7 +835,7 @@ void AAEdge::dump()
     float tri  = 1.0f / TRI_ONE;
     float iter = 1.0f / (1<<TRI_ITERATORS_BITS);
     float fix  = 1.0f / FIXED_ONE;
-    LOGD(   "x=%08x (%.3f), "
+    ALOGD(   "x=%08x (%.3f), "
             "x_incr=%08x (%.3f), y_incr=%08x (%.3f), "
             "y_top=%08x (%.3f), y_bot=%08x (%.3f) ",
         x, x*fix,

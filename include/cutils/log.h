@@ -97,12 +97,12 @@ extern "C" {
 /*
  * Simplified macro to send a debug log message using the current LOG_TAG.
  */
-#ifndef LOGD
-#define LOGD(...) ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__))
+#ifndef ALOGD
+#define ALOGD(...) ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__))
 #endif
 
-#ifndef LOGD_IF
-#define LOGD_IF(cond, ...) \
+#ifndef ALOGD_IF
+#define ALOGD_IF(cond, ...) \
     ( (CONDITION(cond)) \
     ? ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
@@ -168,8 +168,8 @@ extern "C" {
  * Conditional based on whether the current LOG_TAG is enabled at
  * debug priority.
  */
-#ifndef IF_LOGD
-#define IF_LOGD() IF_ALOG(LOG_DEBUG, LOG_TAG)
+#ifndef IF_ALOGD
+#define IF_ALOGD() IF_ALOG(LOG_DEBUG, LOG_TAG)
 #endif
 
 /*

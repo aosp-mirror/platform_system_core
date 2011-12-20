@@ -204,26 +204,26 @@ int WifiController::setSuspend(bool suspend) {
         mHandlers->onControllerSuspending(this);
 
         char tmp[80];
-        LOGD("Suspending from supplicant state %s",
+        ALOGD("Suspending from supplicant state %s",
              SupplicantState::toString(mSupplicantState,
                                        tmp,
                                        sizeof(tmp)));
 
         if (mSupplicantState != SupplicantState::IDLE) {
-            LOGD("Forcing Supplicant disconnect");
+            ALOGD("Forcing Supplicant disconnect");
             if (mSupplicant->disconnect()) {
                 LOGW("Error disconnecting (%s)", strerror(errno));
             }
         }
 
-        LOGD("Stopping Supplicant driver");
+        ALOGD("Stopping Supplicant driver");
         if (mSupplicant->stopDriver()) {
             LOGE("Error stopping driver (%s)", strerror(errno));
             pthread_mutex_unlock(&mLock);
             return -1;
         }
     } else {
-        LOGD("Resuming");
+        ALOGD("Resuming");
 
         if (mSupplicant->startDriver()) {
             LOGE("Error resuming driver (%s)", strerror(errno));
@@ -241,7 +241,7 @@ int WifiController::setSuspend(bool suspend) {
 
     mSuspended = suspend;
     pthread_mutex_unlock(&mLock);
-    LOGD("Suspend / Resume completed");
+    ALOGD("Suspend / Resume completed");
     return 0;
 }
 
@@ -426,18 +426,18 @@ int WifiController::setBluetoothCoexistenceMode(int mode) {
 }
 
 void WifiController::onAssociatingEvent(SupplicantAssociatingEvent *evt) {
-    LOGD("onAssociatingEvent(%s, %s, %d)",
+    ALOGD("onAssociatingEvent(%s, %s, %d)",
          (evt->getBssid() ? evt->getBssid() : "n/a"),
          (evt->getSsid() ? evt->getSsid() : "n/a"),
          evt->getFreq());
 }
 
 void WifiController::onAssociatedEvent(SupplicantAssociatedEvent *evt) {
-    LOGD("onAssociatedEvent(%s)", evt->getBssid());
+    ALOGD("onAssociatedEvent(%s)", evt->getBssid());
 }
 
 void WifiController::onConnectedEvent(SupplicantConnectedEvent *evt) {
-    LOGD("onConnectedEvent(%s, %d)", evt->getBssid(), evt->getReassociated());
+    ALOGD("onConnectedEvent(%s, %d)", evt->getBssid(), evt->getReassociated());
     SupplicantStatus *ss = mSupplicant->getStatus();
     WifiNetwork *wn;
 
@@ -530,7 +530,7 @@ void WifiController::onStateChangeEvent(SupplicantStateChangeEvent *evt) {
     if (evt->getState() == mSupplicantState)
         return;
 
-    LOGD("onStateChangeEvent(%s -> %s)", 
+    ALOGD("onStateChangeEvent(%s -> %s)",
          SupplicantState::toString(mSupplicantState, tmp, sizeof(tmp)),
          SupplicantState::toString(evt->getState(), tmp2, sizeof(tmp2)));
 
@@ -559,7 +559,7 @@ void WifiController::onStateChangeEvent(SupplicantStateChangeEvent *evt) {
 }
 
 void WifiController::onConnectionTimeoutEvent(SupplicantConnectionTimeoutEvent *evt) {
-    LOGD("onConnectionTimeoutEvent(%s)", evt->getBssid());
+    ALOGD("onConnectionTimeoutEvent(%s)", evt->getBssid());
 }
 
 void WifiController::onDisconnectedEvent(SupplicantDisconnectedEvent *evt) {
@@ -569,39 +569,39 @@ void WifiController::onDisconnectedEvent(SupplicantDisconnectedEvent *evt) {
 
 #if 0
 void WifiController::onTerminatingEvent(SupplicantEvent *evt) {
-    LOGD("onTerminatingEvent(%s)", evt->getEvent());
+    ALOGD("onTerminatingEvent(%s)", evt->getEvent());
 }
 
 void WifiController::onPasswordChangedEvent(SupplicantEvent *evt) {
-    LOGD("onPasswordChangedEvent(%s)", evt->getEvent());
+    ALOGD("onPasswordChangedEvent(%s)", evt->getEvent());
 }
 
 void WifiController::onEapNotificationEvent(SupplicantEvent *evt) {
-    LOGD("onEapNotificationEvent(%s)", evt->getEvent());
+    ALOGD("onEapNotificationEvent(%s)", evt->getEvent());
 }
 
 void WifiController::onEapStartedEvent(SupplicantEvent *evt) {
-    LOGD("onEapStartedEvent(%s)", evt->getEvent());
+    ALOGD("onEapStartedEvent(%s)", evt->getEvent());
 }
 
 void WifiController::onEapMethodEvent(SupplicantEvent *evt) {
-    LOGD("onEapMethodEvent(%s)", evt->getEvent());
+    ALOGD("onEapMethodEvent(%s)", evt->getEvent());
 }
 
 void WifiController::onEapSuccessEvent(SupplicantEvent *evt) {
-    LOGD("onEapSuccessEvent(%s)", evt->getEvent());
+    ALOGD("onEapSuccessEvent(%s)", evt->getEvent());
 }
 
 void WifiController::onEapFailureEvent(SupplicantEvent *evt) {
-    LOGD("onEapFailureEvent(%s)", evt->getEvent());
+    ALOGD("onEapFailureEvent(%s)", evt->getEvent());
 }
 
 void WifiController::onLinkSpeedEvent(SupplicantEvent *evt) {
-    LOGD("onLinkSpeedEvent(%s)", evt->getEvent());
+    ALOGD("onLinkSpeedEvent(%s)", evt->getEvent());
 }
 
 void WifiController::onDriverStateEvent(SupplicantEvent *evt) {
-    LOGD("onDriverStateEvent(%s)", evt->getEvent());
+    ALOGD("onDriverStateEvent(%s)", evt->getEvent());
 }
 #endif
 

@@ -54,7 +54,7 @@ bool SupplicantListener::onDataAvailable(SocketClient *cli) {
 
     buf[nread] = '\0';
     if (!rc && !nread) {
-        LOGD("Received EOF on supplicant socket\n");
+        ALOGD("Received EOF on supplicant socket\n");
         strncpy(buf, WPA_EVENT_TERMINATING " - signal 0 received", buflen-1);
         buf[buflen-1] = '\0';
         return false;

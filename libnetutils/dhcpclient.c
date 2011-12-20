@@ -70,7 +70,7 @@ void printerr(char *fmt, ...)
     vsnprintf(errmsg, sizeof(errmsg), fmt, ap);
     va_end(ap);
 
-    LOGD("%s", errmsg);
+    ALOGD("%s", errmsg);
 }
 
 const char *dhcp_lasterror()
@@ -151,14 +151,14 @@ static const char *dhcp_type_to_name(uint32_t type)
 void dump_dhcp_info(dhcp_info *info)
 {
     char addr[20], gway[20], mask[20];
-    LOGD("--- dhcp %s (%d) ---",
+    ALOGD("--- dhcp %s (%d) ---",
             dhcp_type_to_name(info->type), info->type);
     strcpy(addr, ipaddr(info->ipaddr));
     strcpy(gway, ipaddr(info->gateway));
-    LOGD("ip %s gw %s prefixLength %d", addr, gway, info->prefixLength);
-    if (info->dns1) LOGD("dns1: %s", ipaddr(info->dns1));
-    if (info->dns2) LOGD("dns2: %s", ipaddr(info->dns2));
-    LOGD("server %s, lease %d seconds",
+    ALOGD("ip %s gw %s prefixLength %d", addr, gway, info->prefixLength);
+    if (info->dns1) ALOGD("dns1: %s", ipaddr(info->dns1));
+    if (info->dns2) ALOGD("dns2: %s", ipaddr(info->dns2));
+    ALOGD("server %s, lease %d seconds",
             ipaddr(info->serveraddr), info->lease);
 }
 
@@ -250,9 +250,9 @@ void dump_dhcp_msg(dhcp_msg *msg, int len)
     const char *name;
     char buf[2048];
 
-    LOGD("===== DHCP message:");
+    ALOGD("===== DHCP message:");
     if (len < DHCP_MSG_FIXED_SIZE) {
-        LOGD("Invalid length %d, should be %d", len, DHCP_MSG_FIXED_SIZE);
+        ALOGD("Invalid length %d, should be %d", len, DHCP_MSG_FIXED_SIZE);
         return;
     }
 
@@ -264,18 +264,18 @@ void dump_dhcp_msg(dhcp_msg *msg, int len)
         name = "BOOTREPLY";
     else
         name = "????";
-    LOGD("op = %s (%d), htype = %d, hlen = %d, hops = %d",
+    ALOGD("op = %s (%d), htype = %d, hlen = %d, hops = %d",
            name, msg->op, msg->htype, msg->hlen, msg->hops);
-    LOGD("xid = 0x%08x secs = %d, flags = 0x%04x optlen = %d",
+    ALOGD("xid = 0x%08x secs = %d, flags = 0x%04x optlen = %d",
            ntohl(msg->xid), ntohs(msg->secs), ntohs(msg->flags), len);
-    LOGD("ciaddr = %s", ipaddr(msg->ciaddr));
-    LOGD("yiaddr = %s", ipaddr(msg->yiaddr));
-    LOGD("siaddr = %s", ipaddr(msg->siaddr));
-    LOGD("giaddr = %s", ipaddr(msg->giaddr));
+    ALOGD("ciaddr = %s", ipaddr(msg->ciaddr));
+    ALOGD("yiaddr = %s", ipaddr(msg->yiaddr));
+    ALOGD("siaddr = %s", ipaddr(msg->siaddr));
+    ALOGD("giaddr = %s", ipaddr(msg->giaddr));
 
     c = msg->hlen > 16 ? 16 : msg->hlen;
     hex2str(buf, msg->chaddr, c);
-    LOGD("chaddr = {%s}", buf);
+    ALOGD("chaddr = {%s}", buf);
 
     for (n = 0; n < 64; n++) {
         if ((msg->sname[n] < ' ') || (msg->sname[n] > 127)) {
@@ -293,8 +293,8 @@ void dump_dhcp_msg(dhcp_msg *msg, int len)
     }
     msg->file[127] = 0;
 
-    LOGD("sname = '%s'", msg->sname);
-    LOGD("file = '%s'", msg->file);
+    ALOGD("sname = '%s'", msg->sname);
+    ALOGD("file = '%s'", msg->file);
 
     if (len < 4) return;
     len -= 4;
@@ -327,7 +327,7 @@ void dump_dhcp_msg(dhcp_msg *msg, int len)
             name = dhcp_type_to_name(x[2]);
         else
             name = NULL;
-        LOGD("op %d len %d {%s} %s", x[0], optsz, buf, name == NULL ? "" : name);
+        ALOGD("op %d len %d {%s} %s", x[0], optsz, buf, name == NULL ? "" : name);
         len -= optsz;
         x = x + optsz + 2;
     }
@@ -347,28 +347,28 @@ static int send_message(int sock, int if_index, dhcp_msg  *msg, int size)
 static int is_valid_reply(dhcp_msg *msg, dhcp_msg *reply, int sz)
 {
     if (sz < DHCP_MSG_FIXED_SIZE) {
-        if (verbose) LOGD("netcfg: Wrong size %d != %d\n", sz, DHCP_MSG_FIXED_SIZE);
+        if (verbose) ALOGD("netcfg: Wrong size %d != %d\n", sz, DHCP_MSG_FIXED_SIZE);
         return 0;
     }
     if (reply->op != OP_BOOTREPLY) {
-        if (verbose) LOGD("netcfg: Wrong Op %d != %d\n", reply->op, OP_BOOTREPLY);
+        if (verbose) ALOGD("netcfg: Wrong Op %d != %d\n", reply->op, OP_BOOTREPLY);
         return 0;
     }
     if (reply->xid != msg->xid) {
-        if (verbose) LOGD("netcfg: Wrong Xid 0x%x != 0x%x\n", ntohl(reply->xid),
+        if (verbose) ALOGD("netcfg: Wrong Xid 0x%x != 0x%x\n", ntohl(reply->xid),
                           ntohl(msg->xid));
         return 0;
     }
     if (reply->htype != msg->htype) {
-        if (verbose) LOGD("netcfg: Wrong Htype %d != %d\n", reply->htype, msg->htype);
+        if (verbose) ALOGD("netcfg: Wrong Htype %d != %d\n", reply->htype, msg->htype);
         return 0;
     }
     if (reply->hlen != msg->hlen) {
-        if (verbose) LOGD("netcfg: Wrong Hlen %d != %d\n", reply->hlen, msg->hlen);
+        if (verbose) ALOGD("netcfg: Wrong Hlen %d != %d\n", reply->hlen, msg->hlen);
         return 0;
     }
     if (memcmp(msg->chaddr, reply->chaddr, msg->hlen)) {
-        if (verbose) LOGD("netcfg: Wrong chaddr %x != %x\n", *(reply->chaddr),*(msg->chaddr));
+        if (verbose) ALOGD("netcfg: Wrong chaddr %x != %x\n", *(reply->chaddr),*(msg->chaddr));
         return 0;
     }
     return 1;
@@ -469,7 +469,7 @@ int dhcp_init_ifc(const char *ifname)
         r = receive_packet(s, &reply);
         if (r < 0) {
             if (errno != 0) {
-                LOGD("receive_packet failed (%d): %s", r, strerror(errno));
+                ALOGD("receive_packet failed (%d): %s", r, strerror(errno));
                 if (errno == ENETDOWN || errno == ENXIO) {
                     return -1;
                 }

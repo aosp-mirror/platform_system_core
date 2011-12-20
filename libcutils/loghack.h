@@ -28,7 +28,7 @@
 #define ALOG(level, ...) \
         ((void)printf("cutils:" level "/" LOG_TAG ": " __VA_ARGS__))
 #define ALOGV(...)   ALOG("V", __VA_ARGS__)
-#define LOGD(...)   ALOG("D", __VA_ARGS__)
+#define ALOGD(...)   ALOG("D", __VA_ARGS__)
 #define LOGI(...)   ALOG("I", __VA_ARGS__)
 #define LOGW(...)   ALOG("W", __VA_ARGS__)
 #define LOGE(...)   ALOG("E", __VA_ARGS__)

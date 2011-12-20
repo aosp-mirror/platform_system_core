@@ -74,7 +74,7 @@ int WifiScanner::stop() {
 }
 
 void WifiScanner::run() {
-    LOGD("Starting wifi scanner (active = %d)", mActive);
+    ALOGD("Starting wifi scanner (active = %d)", mActive);
 
     while(1) {
         fd_set read_fds;
@@ -99,5 +99,5 @@ void WifiScanner::run() {
         } else if (FD_ISSET(mCtrlPipe[0], &read_fds))
             break;
     } // while
-    LOGD("Stopping wifi scanner");
+    ALOGD("Stopping wifi scanner");
 }

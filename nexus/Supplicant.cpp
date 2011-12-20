@@ -120,7 +120,7 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len) {
         return -1;
     }
 
-//    LOGD("sendCommand(): -> '%s'", cmd);
+//    ALOGD("sendCommand(): -> '%s'", cmd);
 
     int rc;
     memset(reply, 0, *reply_len);
@@ -133,7 +133,7 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len) {
         return -1;
     }
 
- //   LOGD("sendCommand(): <- '%s'", reply);
+ //   ALOGD("sendCommand(): <- '%s'", reply);
     return 0;
 }
 SupplicantStatus *Supplicant::getStatus() {
@@ -233,7 +233,7 @@ int Supplicant::refreshNetworkList() {
     }
 
 
-    LOGD("Networks added %d, refreshed %d, removed %d\n", 
+    ALOGD("Networks added %d, refreshed %d, removed %d\n",
          num_added, num_refreshed, num_removed);
     pthread_mutex_unlock(&mNetworksLock);
 
@@ -350,7 +350,7 @@ int Supplicant::stopDriver() {
     char reply[64];
     size_t len = sizeof(reply);
 
-    LOGD("stopDriver()");
+    ALOGD("stopDriver()");
 
     if (sendCommand("DRIVER STOP", reply, &len)) {
         LOGW("Failed to stop driver (%s)", strerror(errno));
@@ -363,7 +363,7 @@ int Supplicant::startDriver() {
     char reply[64];
     size_t len = sizeof(reply);
 
-    LOGD("startDriver()");
+    ALOGD("startDriver()");
     if (sendCommand("DRIVER START", reply, &len)) {
         LOGW("Failed to start driver (%s)", strerror(errno));
         return -1;
@@ -496,7 +496,7 @@ int Supplicant::setNetworkVar(int networkId, const char *var, const char *val) {
     char reply[255];
     size_t len = sizeof(reply) -1;
 
-    LOGD("netid %d, var '%s' = '%s'", networkId, var, val);
+    ALOGD("netid %d, var '%s' = '%s'", networkId, var, val);
     char *tmp;
     asprintf(&tmp, "SET_NETWORK %d %s %s", networkId, var, val);
     if (sendCommand(tmp, reply, &len)) {
@@ -621,7 +621,7 @@ int Supplicant::setBluetoothCoexistenceMode(int mode) {
 int Supplicant::setApScanMode(int mode) {
     char req[64];
 
-//    LOGD("setApScanMode(%d)", mode);
+//    ALOGD("setApScanMode(%d)", mode);
     sprintf(req, "AP_SCAN %d", mode);
 
     char reply[16];

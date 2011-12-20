@@ -104,9 +104,9 @@ ssize_t bufferWrite(Buffer* buffer, int fd) {
     if (bytesWritten >= 0) {
         buffer->remaining -= bytesWritten;
 
-        LOGD("Buffer bytes written: %d", (int) bytesWritten);
-        LOGD("Buffer size: %d", (int) buffer->size);
-        LOGD("Buffer remaining: %d", (int) buffer->remaining);        
+        ALOGD("Buffer bytes written: %d", (int) bytesWritten);
+        ALOGD("Buffer size: %d", (int) buffer->size);
+        ALOGD("Buffer remaining: %d", (int) buffer->remaining);
 
         return buffer->remaining;
     }

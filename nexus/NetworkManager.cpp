@@ -107,7 +107,7 @@ Controller *NetworkManager::findController(const char *name) {
 }
 
 void NetworkManager::onInterfaceConnected(Controller *c) {
-    LOGD("Controller %s interface %s connected", c->getName(), c->getBoundInterface());
+    ALOGD("Controller %s interface %s connected", c->getName(), c->getBoundInterface());
 
     if (mDhcp->start(c)) {
         LOGE("Failed to start DHCP (%s)", strerror(errno));
@@ -116,20 +116,20 @@ void NetworkManager::onInterfaceConnected(Controller *c) {
 }
 
 void NetworkManager::onInterfaceDisconnected(Controller *c) {
-    LOGD("Controller %s interface %s disconnected", c->getName(),
+    ALOGD("Controller %s interface %s disconnected", c->getName(),
          c->getBoundInterface());
 
     mDhcp->stop();
 }
 
 void NetworkManager::onControllerSuspending(Controller *c) {
-    LOGD("Controller %s interface %s suspending", c->getName(),
+    ALOGD("Controller %s interface %s suspending", c->getName(),
          c->getBoundInterface());
     mDhcp->stop();
 }
 
 void NetworkManager::onControllerResumed(Controller *c) {
-    LOGD("Controller %s interface %s resumed", c->getName(),
+    ALOGD("Controller %s interface %s resumed", c->getName(),
          c->getBoundInterface());
 }
 
@@ -137,7 +137,7 @@ void NetworkManager::onDhcpStateChanged(Controller *c, int state) {
     char tmp[255];
     char tmp2[255];
 
-    LOGD("onDhcpStateChanged(%s -> %s)",
+    ALOGD("onDhcpStateChanged(%s -> %s)",
          DhcpState::toString(mLastDhcpState, tmp, sizeof(tmp)),
          DhcpState::toString(state, tmp2, sizeof(tmp2)));
 
@@ -169,7 +169,7 @@ void NetworkManager::onDhcpStateChanged(Controller *c, int state) {
 
 void NetworkManager::onDhcpEvent(Controller *c, int evt) {
     char tmp[64];
-    LOGD("onDhcpEvent(%s)", DhcpEvent::toString(evt, tmp, sizeof(tmp)));
+    ALOGD("onDhcpEvent(%s)", DhcpEvent::toString(evt, tmp, sizeof(tmp)));
 }
 
 void NetworkManager::onDhcpLeaseUpdated(Controller *c, struct in_addr *addr,

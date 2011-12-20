@@ -263,7 +263,7 @@ static void peerUnlock(Peer* peer) {
 
 /** Frees a simple, i.e. header-only, outgoing packet. */
 static void outgoingPacketFree(OutgoingPacket* packet) {
-    LOGD("Freeing outgoing packet.");
+    ALOGD("Freeing outgoing packet.");
 	free(packet);
 }
 
@@ -435,7 +435,7 @@ static void peerProxyHandleError(PeerProxy* peerProxy, char* functionName) {
         // Log interruptions but otherwise ignore them.
         LOGW("%s() interrupted.", functionName);
     } else if (errno == EAGAIN) {
-    	LOGD("EWOULDBLOCK");
+        ALOGD("EWOULDBLOCK");
         // Ignore.
     } else {
         LOGW("Error returned by %s().", functionName);
@@ -461,7 +461,7 @@ static bool peerProxyWriteFromBuffer(PeerProxy* peerProxy, Buffer* outgoing) {
 static void peerProxyWriteBytes(PeerProxy* peerProxy) {	
 	Buffer* buffer = peerProxy->currentPacket->bytes;
 	if (peerProxyWriteFromBuffer(peerProxy, buffer)) {
-        LOGD("Bytes written.");
+        ALOGD("Bytes written.");
         peerProxyNextPacket(peerProxy);
     }    
 }
@@ -527,10 +527,10 @@ static void peerProxyWrite(SelectableFd* fd) {
     Buffer* outgoingHeader = &peerProxy->outgoingHeader;
     bool headerWritten = bufferWriteComplete(outgoingHeader);
     if (!headerWritten) {
-        LOGD("Writing header...");
+        ALOGD("Writing header...");
         headerWritten = peerProxyWriteFromBuffer(peerProxy, outgoingHeader);
         if (headerWritten) {
-            LOGD("Header written.");
+            ALOGD("Header written.");
         }
     }    
 
@@ -559,7 +559,7 @@ static void peerProxyWrite(SelectableFd* fd) {
  * Sets up a peer proxy's fd before we try to select() it.
  */
 static void peerProxyBeforeSelect(SelectableFd* fd) {
-    LOGD("Before select...");
+    ALOGD("Before select...");
 
     PeerProxy* peerProxy = (PeerProxy*) fd->data;
   
@@ -568,7 +568,7 @@ static void peerProxyBeforeSelect(SelectableFd* fd) {
     peerUnlock(peerProxy->peer);
     
     if (hasPackets) {
-        LOGD("Packets found. Setting onWritable().");
+        ALOGD("Packets found. Setting onWritable().");
             
         fd->onWritable = &peerProxyWrite;
     } else {
@@ -579,9 +579,9 @@ static void peerProxyBeforeSelect(SelectableFd* fd) {
 
 /** Prepare to read bytes from the peer. */
 static void peerProxyExpectBytes(PeerProxy* peerProxy, Header* header) {
-	LOGD("Expecting %d bytes.", header->size);
-	
-	peerProxy->inputState = READING_BYTES;
+    ALOGD("Expecting %d bytes.", header->size);
+
+    peerProxy->inputState = READING_BYTES;
     if (bufferPrepareForRead(peerProxy->inputBuffer, header->size) == -1) {
         LOGW("Couldn't allocate memory for incoming data. Size: %u",
                 (unsigned int) header->size);    
@@ -963,23 +963,23 @@ static bool peerProxyBufferInput(PeerProxy* peerProxy) {
  * Reads input from a peer process.
  */
 static void peerProxyRead(SelectableFd* fd) {
-    LOGD("Reading...");
+    ALOGD("Reading...");
     PeerProxy* peerProxy = (PeerProxy*) fd->data;
     int state = peerProxy->inputState;
     Buffer* in = peerProxy->inputBuffer;
     switch (state) {
         case READING_HEADER:
             if (peerProxyBufferInput(peerProxy)) {
-                LOGD("Header read.");
+                ALOGD("Header read.");
                 // We've read the complete header.
                 Header* header = (Header*) in->data;
                 peerProxyHandleHeader(peerProxy, header);
             }
             break;
         case READING_BYTES:
-            LOGD("Reading bytes...");
+            ALOGD("Reading bytes...");
             if (peerProxyBufferInput(peerProxy)) {
-                LOGD("Bytes read.");
+                ALOGD("Bytes read.");
                 // We have the complete packet. Notify bytes listener.
                 peerProxy->peer->onBytes(peerProxy->credentials,
                     in->data, in->size);
@@ -1030,7 +1030,7 @@ static void masterAcceptConnection(SelectableFd* listenerFd) {
         return;
     }
     
-    LOGD("Accepted connection as fd %d.", socket);
+    ALOGD("Accepted connection as fd %d.", socket);
     
     // Get credentials.
     Credentials credentials;
@@ -1118,7 +1118,7 @@ static Peer* localPeer;
 
 /** Frees a packet of bytes. */
 static void outgoingPacketFreeBytes(OutgoingPacket* packet) {
-    LOGD("Freeing outgoing packet.");
+    ALOGD("Freeing outgoing packet.");
     bufferFree(packet->bytes);
     free(packet);
 }
@@ -1270,7 +1270,7 @@ void masterPeerInitialize(BytesListener* bytesListener,
         LOG_ALWAYS_FATAL("bind() error: %s", strerror(errno));
     }
 
-    LOGD("Listener socket: %d",  listenerSocket);   
+    ALOGD("Listener socket: %d",  listenerSocket);
     
     // Queue up to 16 connections.
     result = listen(listenerSocket, 16);
