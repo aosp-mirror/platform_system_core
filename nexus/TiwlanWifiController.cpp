@@ -75,7 +75,7 @@ int TiwlanWifiController::loadFirmware() {
     while (count-- > 0) {
         if (property_get(DRIVER_PROP_NAME, driver_status, NULL)) {
             if (!strcmp(driver_status, "ok")) {
-                LOGD("Firmware loaded OK");
+                ALOGD("Firmware loaded OK");
 
                 if (startDriverEventListener()) {
                     LOGW("Failed to start driver event listener (%s)",

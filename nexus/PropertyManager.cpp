@@ -66,10 +66,10 @@ Property *PropertyManager::lookupProperty_UNLOCKED(PropertyNamespace *ns, const 
 int PropertyManager::attachProperty(const char *ns_name, Property *p) {
     PropertyNamespace *ns;
 
-    LOGD("Attaching property %s to namespace %s", p->getName(), ns_name);
+    ALOGD("Attaching property %s to namespace %s", p->getName(), ns_name);
     pthread_mutex_lock(&mLock);
     if (!(ns = lookupNamespace_UNLOCKED(ns_name))) {
-        LOGD("Creating namespace %s", ns_name);
+        ALOGD("Creating namespace %s", ns_name);
         ns = new PropertyNamespace(ns_name);
         mNamespaces->push_back(ns);
     }
@@ -90,7 +90,7 @@ int PropertyManager::attachProperty(const char *ns_name, Property *p) {
 int PropertyManager::detachProperty(const char *ns_name, Property *p) {
     PropertyNamespace *ns;
 
-    LOGD("Detaching property %s from namespace %s", p->getName(), ns_name);
+    ALOGD("Detaching property %s from namespace %s", p->getName(), ns_name);
     pthread_mutex_lock(&mLock);
     if (!(ns = lookupNamespace_UNLOCKED(ns_name))) {
         pthread_mutex_unlock(&mLock);
@@ -193,7 +193,7 @@ int PropertyManager::doGet(Property *p, int idx, char *buffer, size_t max) {
 
 int PropertyManager::set(const char *name, const char *value) {
 
-    LOGD("set %s = '%s'", name, value);
+    ALOGD("set %s = '%s'", name, value);
     pthread_mutex_lock(&mLock);
     PropertyNamespaceCollection::iterator ns_it;
     for (ns_it = mNamespaces->begin(); ns_it != mNamespaces->end(); ++ns_it) {

@@ -31,7 +31,7 @@
 #else
 #include <stdio.h>
 #include <string.h>
-#define LOGD printf
+#define ALOGD printf
 #define LOGW printf
 #endif
 
@@ -179,23 +179,23 @@ int receive_packet(int s, struct dhcp_msg *msg)
     is_valid = 0;
     if (nread < (int)(sizeof(struct iphdr) + sizeof(struct udphdr))) {
 #if VERBOSE
-        LOGD("Packet is too small (%d) to be a UDP datagram", nread);
+        ALOGD("Packet is too small (%d) to be a UDP datagram", nread);
 #endif
     } else if (packet.ip.version != IPVERSION || packet.ip.ihl != (sizeof(packet.ip) >> 2)) {
 #if VERBOSE
-        LOGD("Not a valid IP packet");
+        ALOGD("Not a valid IP packet");
 #endif
     } else if (nread < ntohs(packet.ip.tot_len)) {
 #if VERBOSE
-        LOGD("Packet was truncated (read %d, needed %d)", nread, ntohs(packet.ip.tot_len));
+        ALOGD("Packet was truncated (read %d, needed %d)", nread, ntohs(packet.ip.tot_len));
 #endif
     } else if (packet.ip.protocol != IPPROTO_UDP) {
 #if VERBOSE
-        LOGD("IP protocol (%d) is not UDP", packet.ip.protocol);
+        ALOGD("IP protocol (%d) is not UDP", packet.ip.protocol);
 #endif
     } else if (packet.udp.dest != htons(PORT_BOOTP_CLIENT)) {
 #if VERBOSE
-        LOGD("UDP dest port (%d) is not DHCP client", ntohs(packet.udp.dest));
+        ALOGD("UDP dest port (%d) is not DHCP client", ntohs(packet.udp.dest));
 #endif
     } else {
         is_valid = 1;

@@ -53,7 +53,7 @@ DhcpClient::~DhcpClient() {
 }
 
 int DhcpClient::start(Controller *c) {
-    LOGD("Starting DHCP service (arp probe = %d)", mDoArpProbe);
+    ALOGD("Starting DHCP service (arp probe = %d)", mDoArpProbe);
     char svc[PROPERTY_VALUE_MAX];
     snprintf(svc,
              sizeof(svc),

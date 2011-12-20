@@ -105,17 +105,23 @@ extern "C" {
 /*
  * Simplified macro to send a debug log message using the current LOG_TAG.
  */
+#ifndef ALOGD
+#define ALOGD(...) ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__))
+// Temporary measure for code still using old LOG macros.
 #ifndef LOGD
-#define LOGD(...) ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__))
-#define ALOGD LOGD
+#define LOGD ALOGD
+#endif
 #endif
 
-#ifndef LOGD_IF
-#define LOGD_IF(cond, ...) \
+#ifndef ALOGD_IF
+#define ALOGD_IF(cond, ...) \
     ( (CONDITION(cond)) \
     ? ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
-#define ALOGD_IF LOGD_IF
+// Temporary measure for code still using old LOG macros.
+#ifndef LOGD_IF
+#define LOGD_IF ALOGD_IF
+#endif
 #endif
 
 /*
@@ -188,9 +194,12 @@ extern "C" {
  * Conditional based on whether the current LOG_TAG is enabled at
  * debug priority.
  */
+#ifndef IF_ALOGD
+#define IF_ALOGD() IF_ALOG(LOG_DEBUG, LOG_TAG)
+// Temporary measure for code still using old LOG macros.
 #ifndef IF_LOGD
-#define IF_LOGD() IF_ALOG(LOG_DEBUG, LOG_TAG)
-#define IF_ALOGD IF_LOGD
+#define IF_LOGD IF_ALOGD
+#endif
 #endif
 
 /*

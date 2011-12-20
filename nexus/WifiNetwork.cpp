@@ -51,7 +51,7 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, const char *data)
     if (!(flags = strsep(&next, "\t")))
         LOGE("Failed to extract flags");
 
-   // LOGD("id '%s', ssid '%s', bssid '%s', flags '%s'", id, ssid, bssid,
+   // ALOGD("id '%s', ssid '%s', bssid '%s', flags '%s'", id, ssid, bssid,
    //      flags ? flags :"null");
 
     if (id)
@@ -511,7 +511,7 @@ int WifiNetwork::parseKeyManagementMask(const char *buffer, uint32_t *mask) {
     char *v_next = v_tmp;
     char *v_token;
 
-//    LOGD("parseKeyManagementMask(%s)", buffer);
+//    ALOGD("parseKeyManagementMask(%s)", buffer);
     *mask = 0;
 
     while((v_token = strsep(&v_next, " "))) {
@@ -548,7 +548,7 @@ int WifiNetwork::parseProtocolsMask(const char *buffer, uint32_t *mask) {
     char *v_next = v_tmp;
     char *v_token;
 
-//    LOGD("parseProtocolsMask(%s)", buffer);
+//    ALOGD("parseProtocolsMask(%s)", buffer);
     *mask = 0;
     while((v_token = strsep(&v_next, " "))) {
         if (!strcasecmp(v_token, "WPA"))
@@ -573,7 +573,7 @@ int WifiNetwork::parseAuthAlgorithmsMask(const char *buffer, uint32_t *mask) {
     char *v_next = v_tmp;
     char *v_token;
 
-//    LOGD("parseAuthAlgorithmsMask(%s)", buffer);
+//    ALOGD("parseAuthAlgorithmsMask(%s)", buffer);
 
     *mask = 0;
     if (buffer[0] == '\0')
@@ -603,7 +603,7 @@ int WifiNetwork::parsePairwiseCiphersMask(const char *buffer, uint32_t *mask) {
     char *v_next = v_tmp;
     char *v_token;
 
-//    LOGD("parsePairwiseCiphersMask(%s)", buffer);
+//    ALOGD("parsePairwiseCiphersMask(%s)", buffer);
 
     *mask = 0;
     while((v_token = strsep(&v_next, " "))) {
@@ -638,7 +638,7 @@ int WifiNetwork::parseGroupCiphersMask(const char *buffer, uint32_t *mask) {
     char *v_next = v_tmp;
     char *v_token;
 
-//    LOGD("parseGroupCiphersMask(%s)", buffer);
+//    ALOGD("parseGroupCiphersMask(%s)", buffer);
 
     *mask = 0;
     while((v_token = strsep(&v_next, " "))) {

@@ -68,10 +68,10 @@ void *WifiStatusPoller::threadStart(void *obj) {
     WifiStatusPoller *me = reinterpret_cast<WifiStatusPoller *>(obj);
 
     me->mStarted = true;
-    LOGD("Starting");
+    ALOGD("Starting");
     me->run();
     me->mStarted = false;
-    LOGD("Stopping");
+    ALOGD("Stopping");
     pthread_exit(NULL);
     return NULL;
 }
