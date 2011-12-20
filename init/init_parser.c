@@ -40,6 +40,11 @@ static list_declare(service_list);
 static list_declare(action_list);
 static list_declare(action_queue);
 
+struct import {
+    struct listnode list;
+    const char *filename;
+};
+
 static void *parse_service(struct parse_state *state, int nargs, char **args);
 static void parse_line_service(struct parse_state *state, int nargs, char **args);
 
@@ -277,6 +282,31 @@ err:
     return -1;
 }
 
+void parse_import(struct parse_state *state, int nargs, char **args)
+{
+    struct listnode *import_list = state->priv;
+    struct import *import;
+    char conf_file[PATH_MAX];
+    int ret;
+
+    if (nargs != 2) {
+        ERROR("single argument needed for import\n");
+        return;
+    }
+
+    ret = expand_props(conf_file, args[1], sizeof(conf_file));
+    if (ret) {
+        ERROR("error while handling import on line '%d' in '%s'\n",
+              state->line, state->filename);
+        return;
+    }
+
+    import = calloc(1, sizeof(struct import));
+    import->filename = strdup(conf_file);
+    list_add_tail(import_list, &import->list);
+    INFO("found import '%s', adding to import list", import->filename);
+}
+
 void parse_new_section(struct parse_state *state, int kw,
                        int nargs, char **args)
 {
@@ -298,25 +328,7 @@ void parse_new_section(struct parse_state *state, int kw,
         }
         break;
     case K_import:
-        {
-            char conf_file[PATH_MAX];
-            int ret;
-
-            if (nargs != 2) {
-                ERROR("single argument needed for import\n");
-                break;
-            }
-
-            ret = expand_props(conf_file, args[1], sizeof(conf_file));
-            if (ret) {
-                ERROR("error while handling import on line '%d' in '%s'\n",
-                      state->line, state->filename);
-                break;
-            }
-            ret = init_parse_config_file(conf_file);
-            if (ret)
-                ERROR("could not import file '%s'\n", conf_file);
-        }
+        parse_import(state, nargs, args);
         break;
     }
     state->parse_line = parse_line_no_op;
@@ -325,6 +337,8 @@ void parse_new_section(struct parse_state *state, int kw,
 static void parse_config(const char *fn, char *s)
 {
     struct parse_state state;
+    struct listnode import_list;
+    struct listnode *node;
     char *args[INIT_PARSER_MAXARGS];
     int nargs;
 
@@ -334,11 +348,15 @@ static void parse_config(const char *fn, char *s)
     state.ptr = s;
     state.nexttoken = 0;
     state.parse_line = parse_line_no_op;
+
+    list_init(&import_list);
+    state.priv = &import_list;
+
     for (;;) {
         switch (next_token(&state)) {
         case T_EOF:
             state.parse_line(&state, 0, 0);
-            return;
+            goto parser_done;
         case T_NEWLINE:
             state.line++;
             if (nargs) {
@@ -358,6 +376,18 @@ static void parse_config(const char *fn, char *s)
             }
             break;
         }
+    }
+
+parser_done:
+    list_for_each(node, &import_list) {
+         struct import *import = node_to_item(node, struct import, list);
+         int ret;
+
+         INFO("importing '%s'", import->filename);
+         ret = init_parse_config_file(import->filename);
+         if (ret)
+             ERROR("could not import file '%s' from '%s'\n",
+                   import->filename, fn);
     }
 }
 
