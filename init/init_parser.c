@@ -176,7 +176,7 @@ static int push_chars(char **dst, int *len, const char *chars, int cnt)
     return 0;
 }
 
-static int expand_props(char *dst, const char *src, int dst_size)
+int expand_props(char *dst, const char *src, int dst_size)
 {
     int cnt = 0;
     char *dst_ptr = dst;

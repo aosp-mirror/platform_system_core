@@ -31,5 +31,6 @@ void queue_all_property_triggers();
 void queue_builtin_action(int (*func)(int nargs, char **args), char *name);
 
 int init_parse_config_file(const char *fn);
+int expand_props(char *dst, const char *src, int len);
 
 #endif
