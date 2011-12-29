@@ -83,7 +83,8 @@ class KernelCollector : public CrashCollector {
   void ProcessStackTrace(pcrecpp::StringPiece kernel_dump,
                          bool print_diagnostics,
                          unsigned *hash,
-                         float *last_stack_timestamp);
+                         float *last_stack_timestamp,
+                         bool *is_watchdog_crash);
   bool FindCrashingFunction(pcrecpp::StringPiece kernel_dump,
                             bool print_diagnostics,
                             float stack_trace_timestamp,

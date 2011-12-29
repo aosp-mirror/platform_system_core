@@ -250,37 +250,47 @@ void KernelCollector::ProcessStackTrace(
     pcrecpp::StringPiece kernel_dump,
     bool print_diagnostics,
     unsigned *hash,
-    float *last_stack_timestamp) {
+    float *last_stack_timestamp,
+    bool *is_watchdog_crash) {
   pcrecpp::RE line_re("(.+)", pcrecpp::MULTILINE());
   pcrecpp::RE stack_trace_start_re(kTimestampRegex +
         " (Call Trace|Backtrace):$");
 
+  // Match lines such as the following and grab out "function_name".
+  // The ? may or may not be present.
+  //
   // For ARM:
-  // <4>[ 3498.731164] [<c0057220>] (__bug+0x20/0x2c) from [<c018062c>]
-  // (write_breakme+0xdc/0x1bc)
+  // <4>[ 3498.731164] [<c0057220>] ? (function_name+0x20/0x2c) from
+  // [<c018062c>] (foo_bar+0xdc/0x1bc)
   //
   // For X86:
-  // Match lines such as the following and grab out "error_code".
-  // <4>[ 6066.849504]  [<7937bcee>] ? error_code+0x66/0x6c
-  // The ? may or may not be present
+  // <4>[ 6066.849504]  [<7937bcee>] ? function_name+0x66/0x6c
+  //
   pcrecpp::RE stack_entry_re(kTimestampRegex +
     "\\s+\\[<[[:xdigit:]]+>\\]"      // Matches "  [<7937bcee>]"
     "([\\s\\?(]+)"                   // Matches " ? (" (ARM) or " ? " (X86)
     "([^\\+ )]+)");                  // Matches until delimiter reached
   std::string line;
   std::string hashable;
+  std::string previous_hashable;
+  bool is_watchdog = false;
 
   *hash = 0;
   *last_stack_timestamp = 0;
 
+  // Find the last and second-to-last stack traces.  The latter is used when
+  // the panic is from a watchdog timeout.
   while (line_re.FindAndConsume(&kernel_dump, &line)) {
     std::string certainty;
     std::string function_name;
     if (stack_trace_start_re.PartialMatch(line, last_stack_timestamp)) {
       if (print_diagnostics) {
-        printf("Stack trace starting. Clearing any prior traces.\n");
+        printf("Stack trace starting.%s\n",
+               hashable.empty() ? "" : "  Saving prior trace.");
       }
+      previous_hashable = hashable;
       hashable.clear();
+      is_watchdog = false;
     } else if (stack_entry_re.PartialMatch(line,
                                            last_stack_timestamp,
                                            &certainty,
@@ -297,11 +307,28 @@ void KernelCollector::ProcessStackTrace(
         continue;
       if (!hashable.empty())
         hashable.append("|");
+      if (function_name == "watchdog_timer_fn" ||
+          function_name == "watchdog") {
+        is_watchdog = true;
+      }
       hashable.append(function_name);
     }
   }
 
+  // If the last stack trace contains a watchdog function we assume the panic
+  // is from the watchdog timer, and we hash the previous stack trace rather
+  // than the last one, assuming that the previous stack is that of the hung
+  // thread.
+  //
+  // In addition, if the hashable is empty (meaning all frames are uncertain,
+  // for whatever reason) also use the previous frame, as it cannot be any
+  // worse.
+  if (is_watchdog || hashable.empty()) {
+    hashable = previous_hashable;
+  }
+
   *hash = HashString(hashable);
+  *is_watchdog_crash = is_watchdog;
 
   if (print_diagnostics) {
     printf("Hash based on stack trace: \"%s\" at %f.\n",
@@ -396,11 +423,13 @@ bool KernelCollector::ComputeKernelStackSignature(
   unsigned stack_hash = 0;
   float last_stack_timestamp = 0;
   std::string human_string;
+  bool is_watchdog_crash;
 
   ProcessStackTrace(kernel_dump,
                     print_diagnostics,
                     &stack_hash,
-                    &last_stack_timestamp);
+                    &last_stack_timestamp,
+                    &is_watchdog_crash);
 
   if (!FindCrashingFunction(kernel_dump,
                             print_diagnostics,
@@ -422,8 +451,9 @@ bool KernelCollector::ComputeKernelStackSignature(
   }
 
   human_string = human_string.substr(0, kMaxHumanStringLength);
-  *kernel_signature = StringPrintf("%s-%s-%08X",
+  *kernel_signature = StringPrintf("%s-%s%s-%08X",
                                    kKernelExecName,
+                                   (is_watchdog_crash ? "(HANG)-" : ""),
                                    human_string.c_str(),
                                    stack_hash);
   return true;
