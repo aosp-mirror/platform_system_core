@@ -351,7 +351,7 @@ static void pick_scanline(context_t* c)
     }
 
 #if DEBUG_NEEDS
-    LOGI("Needs: n=0x%08x p=0x%08x t0=0x%08x t1=0x%08x",
+    ALOGI("Needs: n=0x%08x p=0x%08x t0=0x%08x t1=0x%08x",
          c->state.needs.n, c->state.needs.p,
          c->state.needs.t[0], c->state.needs.t[1]);
 #endif
@@ -395,7 +395,7 @@ static void pick_scanline(context_t* c)
         c->scanline_as->decStrong(c);
     }
 
-    //LOGI("using generated pixel-pipeline");
+    //ALOGI("using generated pixel-pipeline");
     c->scanline_as = assembly.get();
     c->scanline_as->incStrong(c); //  hold on to assembly
     c->scanline = (void(*)(context_t* c))assembly->base();

@@ -639,7 +639,7 @@ struct Edge
 static void
 edge_dump( Edge*  edge )
 {
-  LOGI( "  top=%d (%.3f)  bot=%d (%.3f)  x=%d (%.3f)  ix=%d (%.3f)",
+  ALOGI( "  top=%d (%.3f)  bot=%d (%.3f)  x=%d (%.3f)  ix=%d (%.3f)",
         edge->y_top, edge->y_top/float(TRI_ONE),
 		edge->y_bot, edge->y_bot/float(TRI_ONE),
 		edge->x, edge->x/float(FIXED_ONE),
@@ -650,7 +650,7 @@ static void
 triangle_dump_edges( Edge*  edges,
                      int            count )
 { 
-    LOGI( "%d edge%s:\n", count, count == 1 ? "" : "s" );
+    ALOGI( "%d edge%s:\n", count, count == 1 ? "" : "s" );
 	for ( ; count > 0; count--, edges++ )
 	  edge_dump( edges );
 }

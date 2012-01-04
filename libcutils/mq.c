@@ -374,10 +374,10 @@ static bool peerProxyRemoveConnection(void* key, void* value, void* context) {
  */
 static void peerProxyKill(PeerProxy* peerProxy, bool errnoIsSet) {
     if (errnoIsSet) {
-        LOGI("Peer %d died. errno: %s", peerProxy->credentials.pid, 
+        ALOGI("Peer %d died. errno: %s", peerProxy->credentials.pid, 
                 strerror(errno));
     } else {
-        LOGI("Peer %d died.", peerProxy->credentials.pid);
+        ALOGI("Peer %d died.", peerProxy->credentials.pid);
     }
     
     // If we lost the master, we're up a creek. We can't let this happen.
@@ -902,7 +902,7 @@ static void masterProxyHandleConnectionError(PeerProxy* masterProxy,
     peerUnlock(peer);
 
     if (peerProxy != NULL) {
-        LOGI("Couldn't connect to %d.", pid);
+        ALOGI("Couldn't connect to %d.", pid);
         peerProxyKill(peerProxy, false);
     } else {
         LOGW("Peer proxy for %d not found. This shouldn't happen.", pid);
@@ -947,7 +947,7 @@ static bool peerProxyBufferInput(PeerProxy* peerProxy) {
         return false;
     } else if (size == 0) {
         // EOF.
-    	LOGI("EOF");
+    	ALOGI("EOF");
         peerProxyKill(peerProxy, false);
         return false;
     } else if (bufferReadComplete(in)) {
@@ -1050,7 +1050,7 @@ static void masterAcceptConnection(SelectableFd* listenerFd) {
     credentials.uid = ucredentials.uid;
     credentials.gid = ucredentials.gid;
     
-    LOGI("Accepted connection from process %d.", credentials.pid);
+    ALOGI("Accepted connection from process %d.", credentials.pid);
    
     Peer* masterPeer = (Peer*) listenerFd->data;
     

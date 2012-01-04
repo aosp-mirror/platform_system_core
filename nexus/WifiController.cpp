@@ -108,7 +108,7 @@ int WifiController::stop() {
 int WifiController::enable() {
 
     if (!isPoweredUp()) {
-        LOGI("Powering up");
+        ALOGI("Powering up");
         sendStatusBroadcast("Powering up WiFi hardware");
         if (powerUp()) {
             LOGE("Powerup failed (%s)", strerror(errno));
@@ -117,7 +117,7 @@ int WifiController::enable() {
     }
 
     if (mModuleName[0] != '\0' && !isKernelModuleLoaded(mModuleName)) {
-        LOGI("Loading driver");
+        ALOGI("Loading driver");
         sendStatusBroadcast("Loading WiFi driver");
         if (loadKernelModule(mModulePath, mModuleArgs)) {
             LOGE("Kernel module load failed (%s)", strerror(errno));
@@ -126,7 +126,7 @@ int WifiController::enable() {
     }
 
     if (!isFirmwareLoaded()) {
-        LOGI("Loading firmware");
+        ALOGI("Loading firmware");
         sendStatusBroadcast("Loading WiFI firmware");
         if (loadFirmware()) {
             LOGE("Firmware load failed (%s)", strerror(errno));
@@ -135,7 +135,7 @@ int WifiController::enable() {
     }
 
     if (!mSupplicant->isStarted()) {
-        LOGI("Starting WPA Supplicant");
+        ALOGI("Starting WPA Supplicant");
         sendStatusBroadcast("Starting WPA Supplicant");
         if (mSupplicant->start()) {
             LOGE("Supplicant start failed (%s)", strerror(errno));
@@ -167,7 +167,7 @@ int WifiController::enable() {
     mPropMngr->attachProperty("wifi", mDynamicProperties.propNetCount);
     mPropMngr->attachProperty("wifi", mDynamicProperties.propTriggerScan);
 
-    LOGI("Enabled successfully");
+    ALOGI("Enabled successfully");
     return 0;
 
 out_unloadmodule:

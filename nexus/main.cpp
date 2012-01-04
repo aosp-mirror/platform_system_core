@@ -28,7 +28,7 @@
 #include "TiwlanWifiController.h"
 
 int main() {
-    LOGI("Nexus version 0.1 firing up");
+    ALOGI("Nexus version 0.1 firing up");
 
     CommandListener *cl = new CommandListener();
 
@@ -62,6 +62,6 @@ int main() {
         sleep(1000);
     }
 
-    LOGI("Nexus exiting");
+    ALOGI("Nexus exiting");
     exit(0);
 }

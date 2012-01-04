@@ -177,7 +177,7 @@ int ARMAssembler::generate(const char* name)
     // the instruction cache is flushed by CodeCache
     const int64_t duration = ggl_system_time() - mDuration;
     const char * const format = "generated %s (%d ins) at [%p:%p] in %lld ns\n";
-    LOGI(format, name, int(pc()-base()), base(), pc(), duration);
+    ALOGI(format, name, int(pc()-base()), base(), pc(), duration);
 
 #if defined(WITH_LIB_HARDWARE)
     if (__builtin_expect(mQemuTracing, 0)) {
