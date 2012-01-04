@@ -82,7 +82,7 @@ wlist_commit(int fd, struct write_list *lst, int test)
                 goto fail;
             }
         } else
-            LOGI("Would write %d bytes @ offset %lld.", lst->len, lst->offset);
+            ALOGI("Would write %d bytes @ offset %lld.", lst->len, lst->offset);
     }
 
     return 0;

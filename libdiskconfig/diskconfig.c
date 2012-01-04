@@ -319,7 +319,7 @@ validate(struct disk_info *dinfo)
         } else
             disk_size = (uint64_t)dinfo->num_lba * (uint64_t)dinfo->sect_size;
     } else if (S_ISREG(stat.st_mode)) {
-        LOGI("Requesting operation on a regular file, not block device.");
+        ALOGI("Requesting operation on a regular file, not block device.");
         if (!dinfo->sect_size) {
             LOGE("Sector size for regular file images cannot be zero");
             goto fail;

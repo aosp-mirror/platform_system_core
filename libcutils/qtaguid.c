@@ -74,7 +74,7 @@ static int write_ctrl(const char *cmd) {
         savedErrno = 0;
     }
     if (res < 0) {
-        LOGI("Failed write_ctrl(%s) res=%d errno=%d", cmd, res, savedErrno);
+        ALOGI("Failed write_ctrl(%s) res=%d errno=%d", cmd, res, savedErrno);
     }
     close(fd);
     return -savedErrno;
@@ -111,7 +111,7 @@ int qtaguid_tagSocket(int sockfd, int tag, uid_t uid) {
 
     res = write_ctrl(lineBuf);
     if (res < 0) {
-        LOGI("Tagging socket %d with tag %llx(%d) for uid %d failed errno=%d",
+        ALOGI("Tagging socket %d with tag %llx(%d) for uid %d failed errno=%d",
              sockfd, kTag, tag, uid, res);
     }
 
@@ -127,7 +127,7 @@ int qtaguid_untagSocket(int sockfd) {
     snprintf(lineBuf, sizeof(lineBuf), "u %d", sockfd);
     res = write_ctrl(lineBuf);
     if (res < 0) {
-        LOGI("Untagging socket %d failed errno=%d", sockfd, res);
+        ALOGI("Untagging socket %d failed errno=%d", sockfd, res);
     }
 
     return res;
@@ -156,7 +156,7 @@ int qtaguid_deleteTagData(int tag, uid_t uid) {
     snprintf(lineBuf, sizeof(lineBuf), "d %llu %d", kTag, uid);
     res = write_ctrl(lineBuf);
     if (res < 0) {
-        LOGI("Deleteing tag data with tag %llx/%d for uid %d failed with cnt=%d errno=%d",
+        ALOGI("Deleteing tag data with tag %llx/%d for uid %d failed with cnt=%d errno=%d",
              kTag, tag, uid, cnt, errno);
     }
 

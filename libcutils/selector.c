@@ -48,7 +48,7 @@ static void eatWakeupData(SelectableFd* wakeupFd) {
     static char garbage[64];
     if (read(wakeupFd->fd, garbage, sizeof(garbage)) < 0) {
         if (errno == EINTR) {
-            LOGI("read() interrupted.");    
+            ALOGI("read() interrupted.");    
         } else {
             LOG_ALWAYS_FATAL("This should never happen: %s", strerror(errno));
         }
@@ -77,7 +77,7 @@ void selectorWakeUp(Selector* selector) {
     static char garbage[1];
     if (write(selector->wakeupPipe[1], garbage, sizeof(garbage)) < 0) {
         if (errno == EINTR) {
-            LOGI("read() interrupted.");    
+            ALOGI("read() interrupted.");    
         } else {
             LOG_ALWAYS_FATAL("This should never happen: %s", strerror(errno));
         }
@@ -251,7 +251,7 @@ void selectorLoop(Selector* selector) {
         if (result == -1) {
             // Abort on everything except EINTR.
             if (errno == EINTR) {
-                LOGI("select() interrupted.");    
+                ALOGI("select() interrupted.");    
             } else {
                 LOG_ALWAYS_FATAL("select() error: %s", 
                         strerror(errno));

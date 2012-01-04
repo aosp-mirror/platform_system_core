@@ -127,17 +127,23 @@ extern "C" {
 /*
  * Simplified macro to send an info log message using the current LOG_TAG.
  */
+#ifndef ALOGI
+#define ALOGI(...) ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__))
+// Temporary measure for code still using old LOG macros.
 #ifndef LOGI
-#define LOGI(...) ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__))
-#define ALOGI LOGI
+#define LOGI ALOGI
+#endif
 #endif
 
-#ifndef LOGI_IF
-#define LOGI_IF(cond, ...) \
+#ifndef ALOGI_IF
+#define ALOGI_IF(cond, ...) \
     ( (CONDITION(cond)) \
     ? ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
-#define ALOGI_IF LOGI_IF
+// Temporary measure for code still using old LOG macros.
+#ifndef LOGI_IF
+#define LOGI_IF ALOGI_IF
+#endif
 #endif
 
 /*
@@ -206,9 +212,12 @@ extern "C" {
  * Conditional based on whether the current LOG_TAG is enabled at
  * info priority.
  */
+#ifndef IF_ALOGI
+#define IF_ALOGI() IF_ALOG(LOG_INFO, LOG_TAG)
+// Temporary measure for code still using old LOG macros.
 #ifndef IF_LOGI
-#define IF_LOGI() IF_ALOG(LOG_INFO, LOG_TAG)
-#define IF_ALOGI IF_LOGI
+#define IF_LOGI IF_ALOGI
+#endif
 #endif
 
 /*

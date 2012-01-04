@@ -40,7 +40,7 @@ write_raw_image(const char *dst, const char *src, loff_t offset, int test)
     int done = 0;
     uint64_t total = 0;
 
-    LOGI("Writing RAW image '%s' to '%s' (offset=%llu)", src, dst, offset);
+    ALOGI("Writing RAW image '%s' to '%s' (offset=%llu)", src, dst, offset);
     if ((src_fd = open(src, O_RDONLY)) < 0) {
         LOGE("Could not open %s for reading (errno=%d).", src, errno);
         goto fail;
@@ -101,7 +101,7 @@ write_raw_image(const char *dst, const char *src, loff_t offset, int test)
     if (dst_fd >= 0)
         fsync(dst_fd);
 
-    LOGI("Wrote %llu bytes to %s @ %lld", total, dst, offset);
+    ALOGI("Wrote %llu bytes to %s @ %lld", total, dst, offset);
 
     close(src_fd);
     if (dst_fd >= 0)

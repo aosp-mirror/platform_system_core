@@ -47,7 +47,7 @@ cfg_pentry(struct pc_partition *pentry, uint8_t status, uint8_t type,
     pentry->start_lba = start;
     pentry->len_lba = len;
 
-    LOGI("Configuring pentry. status=0x%x type=0x%x start_lba=%u len_lba=%u",
+    ALOGI("Configuring pentry. status=0x%x type=0x%x start_lba=%u len_lba=%u",
          pentry->status, pentry->type, pentry->start_lba, pentry->len_lba);
 }
 
