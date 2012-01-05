@@ -74,7 +74,7 @@ int DhcpState::parseString(const char *buffer) {
     else if (!strcasecmp(buffer, "ANNOUNCING"))
         return DhcpState::ANNOUNCING;
     else {
-        LOGW("Bad state '%s'", buffer);
+        ALOGW("Bad state '%s'", buffer);
         return -1;
     }
 }

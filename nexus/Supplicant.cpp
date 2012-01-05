@@ -64,7 +64,7 @@ Supplicant::~Supplicant() {
 int Supplicant::start() {
 
     if (setupConfig()) {
-        LOGW("Unable to setup supplicant.conf");
+        ALOGW("Unable to setup supplicant.conf");
     }
 
     if (mServiceManager->start(SUPPLICANT_SERVICE_NAME)) {
@@ -89,12 +89,12 @@ int Supplicant::start() {
 int Supplicant::stop() {
 
     if (mListener->stopListener()) {
-        LOGW("Unable to stop supplicant listener (%s)", strerror(errno));
+        ALOGW("Unable to stop supplicant listener (%s)", strerror(errno));
         return -1;
     }
 
     if (mServiceManager->stop(SUPPLICANT_SERVICE_NAME)) {
-        LOGW("Error stopping supplicant (%s)", strerror(errno));
+        ALOGW("Error stopping supplicant (%s)", strerror(errno));
     }
 
     if (mCtrl) {
@@ -178,7 +178,7 @@ int Supplicant::refreshNetworkList() {
     char *linep_next = NULL;
 
     if (!strtok_r(reply, "\n", &linep_next)) {
-        LOGW("Malformatted network list\n");
+        ALOGW("Malformatted network list\n");
         free(reply);
         errno = EIO;
         return -1;
@@ -199,7 +199,7 @@ int Supplicant::refreshNetworkList() {
         if ((merge_wn = this->lookupNetwork_UNLOCKED(new_wn->getNetworkId()))) {
             num_refreshed++;
             if (merge_wn->refresh()) {
-                LOGW("Error refreshing network %d (%s)",
+                ALOGW("Error refreshing network %d (%s)",
                      merge_wn->getNetworkId(), strerror(errno));
                 }
             delete new_wn;
@@ -210,7 +210,7 @@ int Supplicant::refreshNetworkList() {
             new_wn->attachProperties(pm, new_ns);
             mNetworks->push_back(new_wn);
             if (new_wn->refresh()) {
-                LOGW("Unable to refresh network id %d (%s)",
+                ALOGW("Unable to refresh network id %d (%s)",
                     new_wn->getNetworkId(), strerror(errno));
             }
         }
@@ -243,7 +243,7 @@ int Supplicant::refreshNetworkList() {
 
 int Supplicant::connectToSupplicant() {
     if (!isStarted())
-        LOGW("Supplicant service not running");
+        ALOGW("Supplicant service not running");
 
     mCtrl = wpa_ctrl_open("tiwlan0"); // XXX:
     if (mCtrl == NULL) {
@@ -280,7 +280,7 @@ int Supplicant::setScanMode(bool active) {
 
     if (sendCommand((active ? "DRIVER SCAN-ACTIVE" : "DRIVER SCAN-PASSIVE"),
                      reply, &len)) {
-        LOGW("triggerScan(%d): Error setting scan mode (%s)", active,
+        ALOGW("triggerScan(%d): Error setting scan mode (%s)", active,
              strerror(errno));
         return -1;
     }
@@ -292,7 +292,7 @@ int Supplicant::triggerScan() {
     size_t len = sizeof(reply);
 
     if (sendCommand("SCAN", reply, &len)) {
-        LOGW("triggerScan(): Error initiating scan");
+        ALOGW("triggerScan(): Error initiating scan");
         return -1;
     }
     return 0;
@@ -303,7 +303,7 @@ int Supplicant::getRssi(int *buffer) {
     size_t len = sizeof(reply);
 
     if (sendCommand("DRIVER RSSI", reply, &len)) {
-        LOGW("Failed to get RSSI (%s)", strerror(errno));
+        ALOGW("Failed to get RSSI (%s)", strerror(errno));
         return -1;
     }
 
@@ -325,7 +325,7 @@ int Supplicant::getLinkSpeed() {
     size_t len = sizeof(reply);
 
     if (sendCommand("DRIVER LINKSPEED", reply, &len)) {
-        LOGW("Failed to get LINKSPEED (%s)", strerror(errno));
+        ALOGW("Failed to get LINKSPEED (%s)", strerror(errno));
         return -1;
     }
 
@@ -353,7 +353,7 @@ int Supplicant::stopDriver() {
     ALOGD("stopDriver()");
 
     if (sendCommand("DRIVER STOP", reply, &len)) {
-        LOGW("Failed to stop driver (%s)", strerror(errno));
+        ALOGW("Failed to stop driver (%s)", strerror(errno));
         return -1;
     }
     return 0;
@@ -365,7 +365,7 @@ int Supplicant::startDriver() {
 
     ALOGD("startDriver()");
     if (sendCommand("DRIVER START", reply, &len)) {
-        LOGW("Failed to start driver (%s)", strerror(errno));
+        ALOGW("Failed to start driver (%s)", strerror(errno));
         return -1;
     }
     return 0;

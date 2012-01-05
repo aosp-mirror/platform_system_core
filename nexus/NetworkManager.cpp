@@ -49,7 +49,7 @@ NetworkManager::~NetworkManager() {
 
 int NetworkManager::run() {
     if (startControllers()) {
-        LOGW("Unable to start all controllers (%s)", strerror(errno));
+        ALOGW("Unable to start all controllers (%s)", strerror(errno));
     }
     return 0;
 }

@@ -125,12 +125,12 @@ extern "C" {
 /*
  * Simplified macro to send a warning log message using the current LOG_TAG.
  */
-#ifndef LOGW
-#define LOGW(...) ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__))
+#ifndef ALOGW
+#define ALOGW(...) ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__))
 #endif
 
-#ifndef LOGW_IF
-#define LOGW_IF(cond, ...) \
+#ifndef ALOGW_IF
+#define ALOGW_IF(cond, ...) \
     ( (CONDITION(cond)) \
     ? ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
@@ -184,8 +184,8 @@ extern "C" {
  * Conditional based on whether the current LOG_TAG is enabled at
  * warn priority.
  */
-#ifndef IF_LOGW
-#define IF_LOGW() IF_ALOG(LOG_WARN, LOG_TAG)
+#ifndef IF_ALOGW
+#define IF_ALOGW() IF_ALOG(LOG_WARN, LOG_TAG)
 #endif
 
 /*

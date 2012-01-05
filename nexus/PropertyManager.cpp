@@ -157,7 +157,7 @@ int PropertyManager::doGet(Property *p, int idx, char *buffer, size_t max) {
 
     if (p->getType() == Property::Type_STRING) {
         if (p->get(idx, buffer, max)) {
-            LOGW("String property %s get failed (%s)", p->getName(),
+            ALOGW("String property %s get failed (%s)", p->getName(),
                  strerror(errno));
             return -1;
         }
@@ -165,7 +165,7 @@ int PropertyManager::doGet(Property *p, int idx, char *buffer, size_t max) {
     else if (p->getType() == Property::Type_INTEGER) {
         int tmp;
         if (p->get(idx, &tmp)) {
-            LOGW("Integer property %s get failed (%s)", p->getName(),
+            ALOGW("Integer property %s get failed (%s)", p->getName(),
                  strerror(errno));
             return -1;
         }
@@ -173,7 +173,7 @@ int PropertyManager::doGet(Property *p, int idx, char *buffer, size_t max) {
     } else if (p->getType() == Property::Type_IPV4) {
         struct in_addr tmp;
         if (p->get(idx, &tmp)) {
-            LOGW("IPV4 property %s get failed (%s)", p->getName(),
+            ALOGW("IPV4 property %s get failed (%s)", p->getName(),
                  strerror(errno));
             return -1;
         }

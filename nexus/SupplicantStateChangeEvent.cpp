@@ -28,7 +28,7 @@ SupplicantStateChangeEvent::SupplicantStateChangeEvent(int level, char *event,
     // XXX: move this stuff into a static creation method
     char *p = index(event, ' ');
     if (!p) {
-        LOGW("Bad event '%s'\n", event);
+        ALOGW("Bad event '%s'\n", event);
         return;
     }
 

@@ -50,7 +50,7 @@ int DhcpEvent::parseString(const char *buffer) {
     else if (!strcasecmp(buffer, "TIMEOUT"))
         return DhcpEvent::TIMEOUT;
     else {
-        LOGW("Bad event '%s'", buffer);
+        ALOGW("Bad event '%s'", buffer);
         return -1;
     }
 }

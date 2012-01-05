@@ -126,7 +126,7 @@ int DhcpClient::stop() {
     close(mListenerSocket);
 
     if (mServiceManager->stop("dhcpcd")) {
-        LOGW("Failed to stop DHCP service (%s)", strerror(errno));
+        ALOGW("Failed to stop DHCP service (%s)", strerror(errno));
         // XXX: Kill it the hard way.. but its gotta go!
     }
 

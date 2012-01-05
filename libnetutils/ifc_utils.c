@@ -47,7 +47,7 @@
 #include <stdio.h>
 #include <string.h>
 #define ALOGD printf
-#define LOGW printf
+#define ALOGW printf
 #endif
 
 static int ifc_ctl_sock = -1;

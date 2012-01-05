@@ -88,7 +88,7 @@ void WifiScanner::run() {
         FD_SET(mCtrlPipe[0], &read_fds);
 
         if (mSuppl->triggerScan(mActive)) {
-            LOGW("Error triggering scan (%s)", strerror(errno));
+            ALOGW("Error triggering scan (%s)", strerror(errno));
         }
 
         if ((rc = select(mCtrlPipe[0] + 1, &read_fds, NULL, NULL, &to)) < 0) {

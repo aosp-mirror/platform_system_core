@@ -77,7 +77,7 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, const char *data)
         if (!strcmp(flags, "[DISABLED]"))
             mEnabled = false;
         else
-            LOGW("Unsupported flags '%s'", flags);
+            ALOGW("Unsupported flags '%s'", flags);
     }
 
     free(tmp);
@@ -526,13 +526,13 @@ int WifiNetwork::parseKeyManagementMask(const char *buffer, uint32_t *mask) {
             else if (!strcasecmp(v_token, "IEEE8021X"))
                 *mask |= KeyManagementMask::IEEE8021X;
             else {
-                LOGW("Invalid KeyManagementMask value '%s'", v_token);
+                ALOGW("Invalid KeyManagementMask value '%s'", v_token);
                 errno = EINVAL;
                 free(v_tmp);
                 return -1;
             }
         } else {
-            LOGW("KeyManagementMask value '%s' when NONE", v_token);
+            ALOGW("KeyManagementMask value '%s' when NONE", v_token);
             errno = EINVAL;
             free(v_tmp);
             return -1;
@@ -556,7 +556,7 @@ int WifiNetwork::parseProtocolsMask(const char *buffer, uint32_t *mask) {
         else if (!strcasecmp(v_token, "RSN"))
             *mask |= SecurityProtocolMask::RSN;
         else {
-            LOGW("Invalid ProtocolsMask value '%s'", v_token);
+            ALOGW("Invalid ProtocolsMask value '%s'", v_token);
             errno = EINVAL;
             free(v_tmp);
             return -1;
@@ -587,7 +587,7 @@ int WifiNetwork::parseAuthAlgorithmsMask(const char *buffer, uint32_t *mask) {
         else if (!strcasecmp(v_token, "LEAP"))
             *mask |= AuthenticationAlgorithmMask::LEAP;
         else {
-            LOGW("Invalid AuthAlgorithmsMask value '%s'", v_token);
+            ALOGW("Invalid AuthAlgorithmsMask value '%s'", v_token);
             errno = EINVAL;
             free(v_tmp);
             return -1;
@@ -616,13 +616,13 @@ int WifiNetwork::parsePairwiseCiphersMask(const char *buffer, uint32_t *mask) {
             else if (!strcasecmp(v_token, "CCMP"))
                 *mask |= PairwiseCiphersMask::CCMP;
         else {
-                LOGW("PairwiseCiphersMask value '%s' when NONE", v_token);
+                ALOGW("PairwiseCiphersMask value '%s' when NONE", v_token);
                 errno = EINVAL;
                 free(v_tmp);
                 return -1;
             }
         } else {
-            LOGW("Invalid PairwiseCiphersMask value '%s'", v_token);
+            ALOGW("Invalid PairwiseCiphersMask value '%s'", v_token);
             errno = EINVAL;
             free(v_tmp);
             return -1;
@@ -651,7 +651,7 @@ int WifiNetwork::parseGroupCiphersMask(const char *buffer, uint32_t *mask) {
         else if (!strcasecmp(v_token, "CCMP"))
             *mask |= GroupCiphersMask::CCMP;
         else {
-            LOGW("Invalid GroupCiphersMask value '%s'", v_token);
+            ALOGW("Invalid GroupCiphersMask value '%s'", v_token);
             errno = EINVAL;
             free(v_tmp);
             return -1;

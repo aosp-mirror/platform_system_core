@@ -30,7 +30,7 @@ Property::Property(const char *name, bool readOnly,
           mName(name), mReadOnly(readOnly), mType(type),
           mNumElements(numElements) {
     if (index(name, '.')) {
-        LOGW("Property name %s violates namespace rules", name);
+        ALOGW("Property name %s violates namespace rules", name);
     }
 }
 
@@ -67,7 +67,7 @@ StringPropertyHelper::StringPropertyHelper(const char *name, bool ro,
 
 int StringPropertyHelper::set(int idx, const char *value) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on StringPropertyHelper::set");
+        ALOGW("Attempt to use array index on StringPropertyHelper::set");
         errno = EINVAL;
         return -1;
     }
@@ -77,7 +77,7 @@ int StringPropertyHelper::set(int idx, const char *value) {
 
 int StringPropertyHelper::get(int idx, char *buffer, size_t max) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on StringPropertyHelper::get");
+        ALOGW("Attempt to use array index on StringPropertyHelper::get");
         errno = EINVAL;
         return -1;
     }
@@ -118,7 +118,7 @@ IntegerPropertyHelper::IntegerPropertyHelper(const char *name, bool ro,
 
 int IntegerPropertyHelper::set(int idx, int value) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on IntegerPropertyHelper::set");
+        ALOGW("Attempt to use array index on IntegerPropertyHelper::set");
         errno = EINVAL;
         return -1;
     }
@@ -128,7 +128,7 @@ int IntegerPropertyHelper::set(int idx, int value) {
 
 int IntegerPropertyHelper::get(int idx, int *buffer) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on IntegerPropertyHelper::get");
+        ALOGW("Attempt to use array index on IntegerPropertyHelper::get");
         errno = EINVAL;
         return -1;
     }
@@ -169,7 +169,7 @@ IPV4AddressPropertyHelper::IPV4AddressPropertyHelper(const char *name, bool ro,
 
 int IPV4AddressPropertyHelper::set(int idx, struct in_addr *value) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on IPV4AddressPropertyHelper::set");
+        ALOGW("Attempt to use array index on IPV4AddressPropertyHelper::set");
         errno = EINVAL;
         return -1;
     }
@@ -179,7 +179,7 @@ int IPV4AddressPropertyHelper::set(int idx, struct in_addr *value) {
 
 int IPV4AddressPropertyHelper::get(int idx, struct in_addr *buffer) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on IPV4AddressPropertyHelper::get");
+        ALOGW("Attempt to use array index on IPV4AddressPropertyHelper::get");
         errno = EINVAL;
         return -1;
     }
