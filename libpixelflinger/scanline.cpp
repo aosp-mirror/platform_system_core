@@ -400,7 +400,7 @@ static void pick_scanline(context_t* c)
     c->scanline_as->incStrong(c); //  hold on to assembly
     c->scanline = (void(*)(context_t* c))assembly->base();
 #else
-//    LOGW("using generic (slow) pixel-pipeline");
+//    ALOGW("using generic (slow) pixel-pipeline");
     c->scanline = scanline;
 #endif
 }

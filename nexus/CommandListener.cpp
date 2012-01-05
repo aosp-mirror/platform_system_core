@@ -213,7 +213,7 @@ int CommandListener::ListCmd::runCommand(SocketClient *cli, int argc, char **arg
         if (!NetworkManager::Instance()->getPropMngr()->get((*it),
                                                             p_v,
                                                             sizeof(p_v))) {
-            LOGW("Failed to get %s (%s)", (*it), strerror(errno));
+            ALOGW("Failed to get %s (%s)", (*it), strerror(errno));
         }
 
         char *buf;

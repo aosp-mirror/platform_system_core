@@ -63,7 +63,7 @@ bool SupplicantListener::onDataAvailable(SocketClient *cli) {
     SupplicantEvent *evt = mFactory->createEvent(buf, nread);
 
     if (!evt) {
-        LOGW("Dropping unknown supplicant event '%s'", buf);
+        ALOGW("Dropping unknown supplicant event '%s'", buf);
         return true;
     }
 
@@ -83,7 +83,7 @@ bool SupplicantListener::onDataAvailable(SocketClient *cli) {
     else if (evt->getType() == SupplicantEvent::EVENT_DISCONNECTED)
         mHandlers->onDisconnectedEvent((SupplicantDisconnectedEvent *) evt);
     else
-        LOGW("Whoops - no handler available for event '%s'\n", buf);
+        ALOGW("Whoops - no handler available for event '%s'\n", buf);
 #if 0
     else if (evt->getType() == SupplicantEvent::EVENT_TERMINATING)
         mHandlers->onTerminatingEvent(evt);

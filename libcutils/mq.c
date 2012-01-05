@@ -222,7 +222,7 @@ static void setNonBlocking(int fd) {
 static void closeWithWarning(int fd) {
     int result = close(fd);
     if (result == -1) {
-        LOGW("close() error: %s", strerror(errno));
+        ALOGW("close() error: %s", strerror(errno));
     }
 }
 
@@ -433,12 +433,12 @@ static void peerProxyKill(PeerProxy* peerProxy, bool errnoIsSet) {
 static void peerProxyHandleError(PeerProxy* peerProxy, char* functionName) {
     if (errno == EINTR) {
         // Log interruptions but otherwise ignore them.
-        LOGW("%s() interrupted.", functionName);
+        ALOGW("%s() interrupted.", functionName);
     } else if (errno == EAGAIN) {
         ALOGD("EWOULDBLOCK");
         // Ignore.
     } else {
-        LOGW("Error returned by %s().", functionName);
+        ALOGW("Error returned by %s().", functionName);
         peerProxyKill(peerProxy, true);
     }
 }
@@ -583,7 +583,7 @@ static void peerProxyExpectBytes(PeerProxy* peerProxy, Header* header) {
 
     peerProxy->inputState = READING_BYTES;
     if (bufferPrepareForRead(peerProxy->inputBuffer, header->size) == -1) {
-        LOGW("Couldn't allocate memory for incoming data. Size: %u",
+        ALOGW("Couldn't allocate memory for incoming data. Size: %u",
                 (unsigned int) header->size);    
         
         // TODO: Ignore the packet and log a warning?
@@ -670,7 +670,7 @@ static void masterProxyExpectConnection(PeerProxy* masterProxy,
     // TODO: Restructure things so we don't need this check.
     // Verify that this really is the master.
     if (!masterProxy->master) {
-        LOGW("Non-master process %d tried to send us a connection.", 
+        ALOGW("Non-master process %d tried to send us a connection.", 
             masterProxy->credentials.pid);
         // Kill off the evil peer.
         peerProxyKill(masterProxy, false);
@@ -686,7 +686,7 @@ static void masterProxyExpectConnection(PeerProxy* masterProxy,
     peerLock(localPeer);
     PeerProxy* peerProxy = peerProxyGetOrCreate(localPeer, pid, false);
     if (peerProxy == NULL) {
-        LOGW("Peer proxy creation failed: %s", strerror(errno));
+        ALOGW("Peer proxy creation failed: %s", strerror(errno));
     } else {
         // Fill in full credentials.
         peerProxy->credentials = header->credentials;
@@ -746,7 +746,7 @@ static void masterProxyAcceptConnection(PeerProxy* masterProxy) {
     if (size < 0) {
         if (errno == EINTR) {
             // Log interruptions but otherwise ignore them.
-            LOGW("recvmsg() interrupted.");
+            ALOGW("recvmsg() interrupted.");
             return;
         } else if (errno == EAGAIN) {
             // Keep waiting for the connection.
@@ -777,14 +777,14 @@ static void masterProxyAcceptConnection(PeerProxy* masterProxy) {
     // The peer proxy this connection is for.
     PeerProxy* peerProxy = masterProxy->connecting;
     if (peerProxy == NULL) {
-        LOGW("Received connection for unknown peer.");
+        ALOGW("Received connection for unknown peer.");
         closeWithWarning(incomingFd);
     } else {
         Peer* peer = masterProxy->peer;
         
         SelectableFd* selectableFd = selectorAdd(peer->selector, incomingFd);
         if (selectableFd == NULL) {
-            LOGW("Error adding fd to selector for %d.",
+            ALOGW("Error adding fd to selector for %d.",
                     peerProxy->credentials.pid);
             closeWithWarning(incomingFd);
             peerProxyKill(peerProxy, false);
@@ -811,7 +811,7 @@ static void masterConnectPeers(PeerProxy* peerA, PeerProxy* peerB) {
     int sockets[2];
     int result = socketpair(AF_LOCAL, SOCK_STREAM, 0, sockets);
     if (result == -1) {
-        LOGW("socketpair() error: %s", strerror(errno));
+        ALOGW("socketpair() error: %s", strerror(errno));
         // TODO: Send CONNECTION_FAILED packets to peers.
         return;
     }
@@ -821,7 +821,7 @@ static void masterConnectPeers(PeerProxy* peerA, PeerProxy* peerB) {
     if (packetA == NULL || packetB == NULL) {
         free(packetA);
         free(packetB);
-        LOGW("malloc() error. Failed to tell process %d that process %d is"
+        ALOGW("malloc() error. Failed to tell process %d that process %d is"
                 " dead.", peerA->credentials.pid, peerB->credentials.pid);
         return;
     }
@@ -852,7 +852,7 @@ static void masterReportConnectionError(PeerProxy* peerProxy,
         Credentials credentials) {
     OutgoingPacket* packet = calloc(1, sizeof(OutgoingPacket));
     if (packet == NULL) {
-        LOGW("malloc() error. Failed to tell process %d that process %d is"
+        ALOGW("malloc() error. Failed to tell process %d that process %d is"
                 " dead.", peerProxy->credentials.pid, credentials.pid);
         return;
     }
@@ -905,7 +905,7 @@ static void masterProxyHandleConnectionError(PeerProxy* masterProxy,
         ALOGI("Couldn't connect to %d.", pid);
         peerProxyKill(peerProxy, false);
     } else {
-        LOGW("Peer proxy for %d not found. This shouldn't happen.", pid);
+        ALOGW("Peer proxy for %d not found. This shouldn't happen.", pid);
     }
     
     peerProxyExpectHeader(masterProxy);
@@ -929,7 +929,7 @@ static void peerProxyHandleHeader(PeerProxy* peerProxy, Header* header) {
             peerProxyExpectBytes(peerProxy, header);
             break;
         default:
-            LOGW("Invalid packet type from %d: %d", peerProxy->credentials.pid, 
+            ALOGW("Invalid packet type from %d: %d", peerProxy->credentials.pid, 
                     header->type);
             peerProxyKill(peerProxy, false);
     }
@@ -1026,7 +1026,7 @@ static void masterAcceptConnection(SelectableFd* listenerFd) {
     // Accept connection.
     int socket = accept(listenerFd->fd, NULL, NULL);
     if (socket == -1) {
-        LOGW("accept() error: %s", strerror(errno));
+        ALOGW("accept() error: %s", strerror(errno));
         return;
     }
     
@@ -1040,7 +1040,7 @@ static void masterAcceptConnection(SelectableFd* listenerFd) {
                 &ucredentials, &credentialsSize);
     // We might want to verify credentialsSize.
     if (result == -1) {
-        LOGW("getsockopt() error: %s", strerror(errno));
+        ALOGW("getsockopt() error: %s", strerror(errno));
         closeWithWarning(socket);
         return;
     }
@@ -1061,7 +1061,7 @@ static void masterAcceptConnection(SelectableFd* listenerFd) {
         = hashmapGet(masterPeer->peerProxies, &credentials.pid);
     if (peerProxy != NULL) {
         peerUnlock(masterPeer);
-        LOGW("Alread connected to process %d.", credentials.pid);
+        ALOGW("Alread connected to process %d.", credentials.pid);
         closeWithWarning(socket);
         return;
     }
@@ -1070,7 +1070,7 @@ static void masterAcceptConnection(SelectableFd* listenerFd) {
     SelectableFd* socketFd = selectorAdd(masterPeer->selector, socket);
     if (socketFd == NULL) {
         peerUnlock(masterPeer);
-        LOGW("malloc() failed.");
+        ALOGW("malloc() failed.");
         closeWithWarning(socket);
         return;
     }
@@ -1079,7 +1079,7 @@ static void masterAcceptConnection(SelectableFd* listenerFd) {
     peerProxy = peerProxyCreate(masterPeer, credentials);
     peerUnlock(masterPeer);
     if (peerProxy == NULL) {
-        LOGW("malloc() failed.");
+        ALOGW("malloc() failed.");
         socketFd->remove = true;
         closeWithWarning(socket);
     }

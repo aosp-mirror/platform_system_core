@@ -99,7 +99,7 @@ static int connectToServer(const char* fileName)
     
     sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock < 0) {
-        LOGW("UNIX domain socket create failed (errno=%d)\n", errno);
+        ALOGW("UNIX domain socket create failed (errno=%d)\n", errno);
         return -1;
     }
 
@@ -110,7 +110,7 @@ static int connectToServer(const char* fileName)
     if (cc < 0) {
         // ENOENT means socket file doesn't exist
         // ECONNREFUSED means socket exists but nobody is listening
-        //LOGW("AF_UNIX connect failed for '%s': %s\n",
+        //ALOGW("AF_UNIX connect failed for '%s': %s\n",
         //    fileName, strerror(errno));
         close(sock);
         return -1;
@@ -128,7 +128,7 @@ static void init(void)
 
     gPropFd = connectToServer(SYSTEM_PROPERTY_PIPE_NAME);
     if (gPropFd < 0) {
-        //LOGW("not connected to system property server\n");
+        //ALOGW("not connected to system property server\n");
     } else {
         //ALOGV("Connected to system property server\n");
     }

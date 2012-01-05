@@ -149,9 +149,9 @@ int WifiController::enable() {
     }
 
     if (mSupplicant->refreshNetworkList())
-        LOGW("Error getting list of networks (%s)", strerror(errno));
+        ALOGW("Error getting list of networks (%s)", strerror(errno));
 
-    LOGW("TODO: Set # of allowed regulatory channels!");
+    ALOGW("TODO: Set # of allowed regulatory channels!");
 
     mPropMngr->attachProperty("wifi", mDynamicProperties.propSupplicantState);
     mPropMngr->attachProperty("wifi", mDynamicProperties.propActiveScan);
@@ -195,7 +195,7 @@ int WifiController::setSuspend(bool suspend) {
 
     pthread_mutex_lock(&mLock);
     if (suspend == mSuspended) {
-        LOGW("Suspended state already = %d", suspend);
+        ALOGW("Suspended state already = %d", suspend);
         pthread_mutex_unlock(&mLock);
         return 0;
     }
@@ -212,7 +212,7 @@ int WifiController::setSuspend(bool suspend) {
         if (mSupplicantState != SupplicantState::IDLE) {
             ALOGD("Forcing Supplicant disconnect");
             if (mSupplicant->disconnect()) {
-                LOGW("Error disconnecting (%s)", strerror(errno));
+                ALOGW("Error disconnecting (%s)", strerror(errno));
             }
         }
 
@@ -273,7 +273,7 @@ int WifiController::disable() {
             return -1;
         }
     } else
-        LOGW("disable(): Supplicant not running?");
+        ALOGW("disable(): Supplicant not running?");
 
     if (mModuleName[0] != '\0' && isKernelModuleLoaded(mModuleName)) {
         sendStatusBroadcast("Unloading WiFi driver");
@@ -444,20 +444,20 @@ void WifiController::onConnectedEvent(SupplicantConnectedEvent *evt) {
     if (ss->getWpaState() != SupplicantState::COMPLETED) {
         char tmp[32];
 
-        LOGW("onConnected() with SupplicantState = %s!",
+        ALOGW("onConnected() with SupplicantState = %s!",
              SupplicantState::toString(ss->getWpaState(), tmp,
              sizeof(tmp)));
         return;
     }
 
     if (ss->getId() == -1) {
-        LOGW("onConnected() with id = -1!");
+        ALOGW("onConnected() with id = -1!");
         return;
     }
     
     mCurrentlyConnectedNetworkId = ss->getId();
     if (!(wn = mSupplicant->lookupNetwork(ss->getId()))) {
-        LOGW("Error looking up connected network id %d (%s)",
+        ALOGW("Error looking up connected network id %d (%s)",
              ss->getId(), strerror(errno));
         return;
     }
@@ -481,7 +481,7 @@ void WifiController::onScanResultsEvent(SupplicantScanResultsEvent *evt) {
     size_t len = 4096;
 
     if (mSupplicant->sendCommand("SCAN_RESULTS", reply, &len)) {
-        LOGW("onScanResultsEvent: Error getting scan results (%s)",
+        ALOGW("onScanResultsEvent: Error getting scan results (%s)",
              strerror(errno));
         free(reply);
         return;

@@ -149,17 +149,23 @@ extern "C" {
 /*
  * Simplified macro to send a warning log message using the current LOG_TAG.
  */
+#ifndef ALOGW
+#define ALOGW(...) ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__))
+// Temporary measure for code still using old LOG macros.
 #ifndef LOGW
-#define LOGW(...) ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__))
-#define ALOGW LOGW
+#define LOGW ALOGW
+#endif
 #endif
 
-#ifndef LOGW_IF
-#define LOGW_IF(cond, ...) \
+#ifndef ALOGW_IF
+#define ALOGW_IF(cond, ...) \
     ( (CONDITION(cond)) \
     ? ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
-#define ALOGW_IF LOGW_IF
+// Temporary measure for code still using old LOG macros.
+#ifndef LOGW_IF
+#define LOGW_IF ALOGW_IF
+#endif
 #endif
 
 /*
@@ -224,9 +230,12 @@ extern "C" {
  * Conditional based on whether the current LOG_TAG is enabled at
  * warn priority.
  */
+#ifndef IF_ALOGW
+#define IF_ALOGW() IF_ALOG(LOG_WARN, LOG_TAG)
+// Temporary measure for code still using old LOG macros.
 #ifndef IF_LOGW
-#define IF_LOGW() IF_ALOG(LOG_WARN, LOG_TAG)
-#define IF_ALOGW IF_LOGW
+#define IF_LOGW IF_ALOGW
+#endif
 #endif
 
 /*

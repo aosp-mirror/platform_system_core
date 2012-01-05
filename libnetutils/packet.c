@@ -32,7 +32,7 @@
 #include <stdio.h>
 #include <string.h>
 #define ALOGD printf
-#define LOGW printf
+#define ALOGW printf
 #endif
 
 #include "dhcpmsg.h"
@@ -209,7 +209,7 @@ int receive_packet(int s, struct dhcp_msg *msg)
     /* validate IP header checksum */
     sum = finish_sum(checksum(&packet.ip, sizeof(packet.ip), 0));
     if (sum != 0) {
-        LOGW("IP header checksum failure (0x%x)", packet.ip.check);
+        ALOGW("IP header checksum failure (0x%x)", packet.ip.check);
         return -1;
     }
     /*
@@ -231,7 +231,7 @@ int receive_packet(int s, struct dhcp_msg *msg)
     sum = finish_sum(checksum(&packet, nread, 0));
     packet.udp.check = temp;
     if (temp != sum) {
-        LOGW("UDP header checksum failure (0x%x should be 0x%x)", sum, temp);
+        ALOGW("UDP header checksum failure (0x%x should be 0x%x)", sum, temp);
         return -1;
     }
     memcpy(msg, &packet.dhcp, dhcp_size);

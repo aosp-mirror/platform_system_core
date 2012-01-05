@@ -47,9 +47,9 @@ bool TiwlanEventListener::onDataAvailable(SocketClient *cli) {
         *spd /= 2;
 //        ALOGD("Link speed = %u MB/s", *spd);
     } else if (data->event_type == IPC_EVENT_LOW_SNR) {
-        LOGW("Low signal/noise ratio");
+        ALOGW("Low signal/noise ratio");
     } else if (data->event_type == IPC_EVENT_LOW_RSSI) {
-        LOGW("Low RSSI");
+        ALOGW("Low RSSI");
     } else {
 //        ALOGD("Dropping unhandled driver event %d", data->event_type);
     }
