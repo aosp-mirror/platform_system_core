@@ -366,10 +366,9 @@ bool UserCollector::ConvertAndEnqueueCrash(int pid,
     return false;
   }
 
-  // Directory like /tmp/crash_reporter.1234 which contains the
+  // Directory like /tmp/crash_reporter/1234 which contains the
   // procfs entries and other temporary files used during conversion.
-  FilePath container_dir = FilePath("/tmp").Append(
-      StringPrintf("crash_reporter.%d", pid));
+  FilePath container_dir(StringPrintf("/tmp/crash_reporter/%d", pid));
   // Delete a pre-existing directory from crash reporter that may have
   // been left around for diagnostics from a failed conversion attempt.
   // If we don't, existing files can cause forking to fail.
