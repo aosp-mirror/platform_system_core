@@ -536,7 +536,7 @@ void GGLAssembler::mul_factor(  component_t& d,
         }
     }
 
-    LOGE_IF(ms>=32, "mul_factor overflow vs=%d, fs=%d", vs, fs);
+    ALOGE_IF(ms>=32, "mul_factor overflow vs=%d, fs=%d", vs, fs);
 
     int vreg = v.reg;
     int freg = f.reg;
@@ -574,7 +574,7 @@ void GGLAssembler::mul_factor_add(  component_t& d,
     int as = a.h;
     int ms = vs+fs;
 
-    LOGE_IF(ms>=32, "mul_factor_add overflow vs=%d, fs=%d, as=%d", vs, fs, as);
+    ALOGE_IF(ms>=32, "mul_factor_add overflow vs=%d, fs=%d, as=%d", vs, fs, as);
 
     integer_t add(a.reg, a.h, a.flags);
 

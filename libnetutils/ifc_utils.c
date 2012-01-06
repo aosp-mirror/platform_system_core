@@ -382,7 +382,7 @@ int ifc_clear_ipv6_addresses(const char *name) {
 
         ret = ifc_del_address(ifname, addrstr, prefixlen);
         if (ret) {
-            LOGE("Deleting address %s/%d on %s: %s", addrstr, prefixlen, ifname,
+            ALOGE("Deleting address %s/%d on %s: %s", addrstr, prefixlen, ifname,
                  strerror(-ret));
             lasterror = ret;
         }

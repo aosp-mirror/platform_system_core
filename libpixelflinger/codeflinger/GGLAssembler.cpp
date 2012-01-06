@@ -82,7 +82,7 @@ int GGLAssembler::scanline(const needs_t& needs, context_t const* c)
             needs.p, needs.n, needs.t[0], needs.t[1], per_fragment_ops);
 
     if (err) {
-        LOGE("Error while generating ""%s""\n", name);
+        ALOGE("Error while generating ""%s""\n", name);
         disassemble(name);
         return -1;
     }
@@ -1095,7 +1095,7 @@ int RegisterAllocator::RegisterFile::obtain()
     }
     // this is not an error anymore because, we'll try again with
     // a lower optimization level.
-    //LOGE_IF(i >= nbreg, "pixelflinger ran out of registers\n");
+    //ALOGE_IF(i >= nbreg, "pixelflinger ran out of registers\n");
     if (i >= nbreg) {
         mStatus |= OUT_OF_REGISTERS;
         // we return SP so we can more easily debug things

@@ -189,7 +189,7 @@ int property_get(const char *key, char *value, const char *default_value)
         strcpy(value, recvBuf+1);
         len = strlen(value);
     } else {
-        LOGE("Got strange response to property_get request (%d)\n",
+        ALOGE("Got strange response to property_get request (%d)\n",
             recvBuf[0]);
         assert(0);
         return -1;

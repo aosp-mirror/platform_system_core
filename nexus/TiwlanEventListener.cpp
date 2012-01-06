@@ -33,12 +33,12 @@ bool TiwlanEventListener::onDataAvailable(SocketClient *cli) {
     struct ipc_ev_data *data;
 
     if (!(data = (struct ipc_ev_data *) malloc(sizeof(struct ipc_ev_data)))) {
-        LOGE("Failed to allocate packet (out of memory)");
+        ALOGE("Failed to allocate packet (out of memory)");
         return true;
     }
 
     if (recv(cli->getSocket(), data, sizeof(struct ipc_ev_data), 0) < 0) {
-       LOGE("recv failed (%s)", strerror(errno));
+       ALOGE("recv failed (%s)", strerror(errno));
        goto out;
     }
 

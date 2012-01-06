@@ -48,7 +48,7 @@ bool SupplicantListener::onDataAvailable(SocketClient *cli) {
     size_t nread = buflen - 1;
 
     if ((rc = wpa_ctrl_recv(mMonitor, buf, &nread))) {
-        LOGE("wpa_ctrl_recv failed (%s)", strerror(errno));
+        ALOGE("wpa_ctrl_recv failed (%s)", strerror(errno));
         return false;
     }
 

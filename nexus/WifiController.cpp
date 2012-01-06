@@ -111,7 +111,7 @@ int WifiController::enable() {
         ALOGI("Powering up");
         sendStatusBroadcast("Powering up WiFi hardware");
         if (powerUp()) {
-            LOGE("Powerup failed (%s)", strerror(errno));
+            ALOGE("Powerup failed (%s)", strerror(errno));
             return -1;
         }
     }
@@ -120,7 +120,7 @@ int WifiController::enable() {
         ALOGI("Loading driver");
         sendStatusBroadcast("Loading WiFi driver");
         if (loadKernelModule(mModulePath, mModuleArgs)) {
-            LOGE("Kernel module load failed (%s)", strerror(errno));
+            ALOGE("Kernel module load failed (%s)", strerror(errno));
             goto out_powerdown;
         }
     }
@@ -129,7 +129,7 @@ int WifiController::enable() {
         ALOGI("Loading firmware");
         sendStatusBroadcast("Loading WiFI firmware");
         if (loadFirmware()) {
-            LOGE("Firmware load failed (%s)", strerror(errno));
+            ALOGE("Firmware load failed (%s)", strerror(errno));
             goto out_powerdown;
         }
     }
@@ -138,13 +138,13 @@ int WifiController::enable() {
         ALOGI("Starting WPA Supplicant");
         sendStatusBroadcast("Starting WPA Supplicant");
         if (mSupplicant->start()) {
-            LOGE("Supplicant start failed (%s)", strerror(errno));
+            ALOGE("Supplicant start failed (%s)", strerror(errno));
             goto out_unloadmodule;
         }
     }
 
     if (Controller::bindInterface(mSupplicant->getInterfaceName())) {
-        LOGE("Error binding interface (%s)", strerror(errno));
+        ALOGE("Error binding interface (%s)", strerror(errno));
         goto out_unloadmodule;
     }
 
@@ -173,13 +173,13 @@ int WifiController::enable() {
 out_unloadmodule:
     if (mModuleName[0] != '\0' && !isKernelModuleLoaded(mModuleName)) {
         if (unloadKernelModule(mModuleName)) {
-            LOGE("Unable to unload module after failure!");
+            ALOGE("Unable to unload module after failure!");
         }
     }
 
 out_powerdown:
     if (powerDown()) {
-        LOGE("Unable to powerdown after failure!");
+        ALOGE("Unable to powerdown after failure!");
     }
     return -1;
 }
@@ -218,7 +218,7 @@ int WifiController::setSuspend(bool suspend) {
 
         ALOGD("Stopping Supplicant driver");
         if (mSupplicant->stopDriver()) {
-            LOGE("Error stopping driver (%s)", strerror(errno));
+            ALOGE("Error stopping driver (%s)", strerror(errno));
             pthread_mutex_unlock(&mLock);
             return -1;
         }
@@ -226,7 +226,7 @@ int WifiController::setSuspend(bool suspend) {
         ALOGD("Resuming");
 
         if (mSupplicant->startDriver()) {
-            LOGE("Error resuming driver (%s)", strerror(errno));
+            ALOGE("Error resuming driver (%s)", strerror(errno));
             pthread_mutex_unlock(&mLock);
             return -1;
         }
@@ -269,7 +269,7 @@ int WifiController::disable() {
     if (mSupplicant->isStarted()) {
         sendStatusBroadcast("Stopping WPA Supplicant");
         if (mSupplicant->stop()) {
-            LOGE("Supplicant stop failed (%s)", strerror(errno));
+            ALOGE("Supplicant stop failed (%s)", strerror(errno));
             return -1;
         }
     } else
@@ -278,7 +278,7 @@ int WifiController::disable() {
     if (mModuleName[0] != '\0' && isKernelModuleLoaded(mModuleName)) {
         sendStatusBroadcast("Unloading WiFi driver");
         if (unloadKernelModule(mModuleName)) {
-            LOGE("Unable to unload module (%s)", strerror(errno));
+            ALOGE("Unable to unload module (%s)", strerror(errno));
             return -1;
         }
     }
@@ -286,7 +286,7 @@ int WifiController::disable() {
     if (isPoweredUp()) {
         sendStatusBroadcast("Powering down WiFi hardware");
         if (powerDown()) {
-            LOGE("Powerdown failed (%s)", strerror(errno));
+            ALOGE("Powerdown failed (%s)", strerror(errno));
             return -1;
         }
     }
@@ -470,7 +470,7 @@ void WifiController::onScanResultsEvent(SupplicantScanResultsEvent *evt) {
     char *reply;
 
     if (!(reply = (char *) malloc(4096))) {
-        LOGE("Out of memory");
+        ALOGE("Out of memory");
         return;
     }
 
@@ -609,7 +609,7 @@ void WifiController::onStatusPollInterval() {
     pthread_mutex_lock(&mLock);
     int rssi;
     if (mSupplicant->getRssi(&rssi)) {
-        LOGE("Failed to get rssi (%s)", strerror(errno));
+        ALOGE("Failed to get rssi (%s)", strerror(errno));
         pthread_mutex_unlock(&mLock);
         return;
     }

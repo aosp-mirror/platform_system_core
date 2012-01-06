@@ -96,7 +96,7 @@ bool Controller::isKernelModuleLoaded(const char *modtag) {
     FILE *fp = fopen("/proc/modules", "r");
 
     if (!fp) {
-        LOGE("Unable to open /proc/modules (%s)", strerror(errno));
+        ALOGE("Unable to open /proc/modules (%s)", strerror(errno));
         return false;
     }
 

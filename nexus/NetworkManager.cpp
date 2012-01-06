@@ -110,7 +110,7 @@ void NetworkManager::onInterfaceConnected(Controller *c) {
     ALOGD("Controller %s interface %s connected", c->getName(), c->getBoundInterface());
 
     if (mDhcp->start(c)) {
-        LOGE("Failed to start DHCP (%s)", strerror(errno));
+        ALOGE("Failed to start DHCP (%s)", strerror(errno));
         return;
     }
 }
