@@ -5,6 +5,8 @@
 #include <unistd.h>
 
 #include "base/file_util.h"
+#include "base/string_split.h"
+#include "base/memory/scoped_temp_dir.h"
 #include "chromeos/syslog_logging.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/user_collector.h"
@@ -40,6 +42,7 @@ class UserCollectorTest : public ::testing::Test {
     pid_ = getpid();
     chromeos::ClearLog();
   }
+
  protected:
   void ExpectFileEquals(const char *golden,
                         const char *file_path) {
@@ -47,6 +50,12 @@ class UserCollectorTest : public ::testing::Test {
     EXPECT_TRUE(file_util::ReadFileToString(FilePath(file_path),
                                             &contents));
     EXPECT_EQ(golden, contents);
+  }
+
+  std::vector<std::string> SplitLines(const std::string &lines) const {
+    std::vector<std::string> result;
+    base::SplitString(lines, '\n', &result);
+    return result;
   }
 
   UserCollector collector_;
@@ -238,20 +247,54 @@ TEST_F(UserCollectorTest, GetExecutableBaseNameFromPid) {
   EXPECT_EQ("user_collector_test", base_name);
 }
 
+TEST_F(UserCollectorTest, GetFirstLineWithPrefix) {
+  std::vector<std::string> lines;
+  std::string line;
+
+  EXPECT_FALSE(collector_.GetFirstLineWithPrefix(lines, "Name:", &line));
+  EXPECT_EQ("", line);
+
+  lines.push_back("Name:\tls");
+  lines.push_back("State:\tR (running)");
+  lines.push_back(" Foo:\t1000");
+
+  line.clear();
+  EXPECT_TRUE(collector_.GetFirstLineWithPrefix(lines, "Name:", &line));
+  EXPECT_EQ(lines[0], line);
+
+  line.clear();
+  EXPECT_TRUE(collector_.GetFirstLineWithPrefix(lines, "State:", &line));
+  EXPECT_EQ(lines[1], line);
+
+  line.clear();
+  EXPECT_FALSE(collector_.GetFirstLineWithPrefix(lines, "Foo:", &line));
+  EXPECT_EQ("", line);
+
+  line.clear();
+  EXPECT_TRUE(collector_.GetFirstLineWithPrefix(lines, " Foo:", &line));
+  EXPECT_EQ(lines[2], line);
+
+  line.clear();
+  EXPECT_FALSE(collector_.GetFirstLineWithPrefix(lines, "Bar:", &line));
+  EXPECT_EQ("", line);
+}
+
 TEST_F(UserCollectorTest, GetIdFromStatus) {
   int id = 1;
   EXPECT_FALSE(collector_.GetIdFromStatus(UserCollector::kUserId,
                                           UserCollector::kIdEffective,
-                                          "nothing here",
+                                          SplitLines("nothing here"),
                                           &id));
   EXPECT_EQ(id, 1);
 
   // Not enough parameters.
   EXPECT_FALSE(collector_.GetIdFromStatus(UserCollector::kUserId,
                                           UserCollector::kIdReal,
-                                          "line 1\nUid:\t1\n", &id));
+                                          SplitLines("line 1\nUid:\t1\n"),
+                                          &id));
 
-  const char valid_contents[] = "\nUid:\t1\t2\t3\t4\nGid:\t5\t6\t7\t8\n";
+  const std::vector<std::string> valid_contents =
+      SplitLines("\nUid:\t1\t2\t3\t4\nGid:\t5\t6\t7\t8\n");
   EXPECT_TRUE(collector_.GetIdFromStatus(UserCollector::kUserId,
                                          UserCollector::kIdReal,
                                          valid_contents,
@@ -294,19 +337,34 @@ TEST_F(UserCollectorTest, GetIdFromStatus) {
   // Fail if junk after number
   EXPECT_FALSE(collector_.GetIdFromStatus(UserCollector::kUserId,
                                           UserCollector::kIdReal,
-                                          "Uid:\t1f\t2\t3\t4\n",
+                                          SplitLines("Uid:\t1f\t2\t3\t4\n"),
                                           &id));
   EXPECT_TRUE(collector_.GetIdFromStatus(UserCollector::kUserId,
                                          UserCollector::kIdReal,
-                                         "Uid:\t1\t2\t3\t4\n",
+                                         SplitLines("Uid:\t1\t2\t3\t4\n"),
                                          &id));
   EXPECT_EQ(1, id);
 
   // Fail if more than 4 numbers.
   EXPECT_FALSE(collector_.GetIdFromStatus(UserCollector::kUserId,
                                           UserCollector::kIdReal,
-                                          "Uid:\t1\t2\t3\t4\t5\n",
+                                          SplitLines("Uid:\t1\t2\t3\t4\t5\n"),
                                           &id));
+}
+
+TEST_F(UserCollectorTest, GetStateFromStatus) {
+  std::string state;
+  EXPECT_FALSE(collector_.GetStateFromStatus(SplitLines("nothing here"),
+                                             &state));
+  EXPECT_EQ("", state);
+
+  EXPECT_TRUE(collector_.GetStateFromStatus(SplitLines("State:\tR (running)"),
+                                            &state));
+  EXPECT_EQ("R (running)", state);
+
+  EXPECT_TRUE(collector_.GetStateFromStatus(
+      SplitLines("Name:\tls\nState:\tZ (zombie)\n"), &state));
+  EXPECT_EQ("Z (zombie)", state);
 }
 
 TEST_F(UserCollectorTest, GetUserInfoFromName) {
@@ -351,6 +409,27 @@ TEST_F(UserCollectorTest, CopyOffProcFilesOK) {
               file_util::PathExists(
                   container_path.Append(expectations[i].name)));
   }
+}
+
+TEST_F(UserCollectorTest, ValidateProcFiles) {
+  ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  FilePath container_dir = temp_dir.path();
+
+  // maps file not exists (i.e. GetFileSize fails)
+  EXPECT_FALSE(collector_.ValidateProcFiles(container_dir));
+
+  // maps file is empty
+  FilePath maps_file = container_dir.Append("maps");
+  ASSERT_EQ(0, file_util::WriteFile(maps_file, NULL, 0));
+  ASSERT_TRUE(file_util::PathExists(maps_file));
+  EXPECT_FALSE(collector_.ValidateProcFiles(container_dir));
+
+  // maps file is not empty
+  const char data[] = "test data";
+  ASSERT_EQ(sizeof(data), file_util::WriteFile(maps_file, data, sizeof(data)));
+  ASSERT_TRUE(file_util::PathExists(maps_file));
+  EXPECT_TRUE(collector_.ValidateProcFiles(container_dir));
 }
 
 int main(int argc, char **argv) {

@@ -6,7 +6,6 @@
 
 #include <grp.h>  // For struct group.
 #include <pcrecpp.h>
-#include <pcrecpp.h>
 #include <pwd.h>  // For struct passwd.
 #include <sys/types.h>  // For getpwuid_r, getgrnam_r, WEXITSTATUS.
 
@@ -41,6 +40,7 @@ static const char kCorePipeLimit[] = "4";
 static const char kCoreToMinidumpConverterPath[] = "/usr/bin/core2md";
 
 static const char kDefaultLogConfig[] = "/etc/crash_reporter_logs.conf";
+static const char kStatePrefix[] = "State:\t";
 
 const char *UserCollector::kUserId = "Uid:\t";
 const char *UserCollector::kGroupId = "Gid:\t";
@@ -161,26 +161,30 @@ bool UserCollector::GetExecutableBaseNameFromPid(uid_t pid,
   return true;
 }
 
-bool UserCollector::GetIdFromStatus(const char *prefix,
-                                    IdKind kind,
-                                    const std::string &status_contents,
-                                    int *id) {
+bool UserCollector::GetFirstLineWithPrefix(
+    const std::vector<std::string> &lines,
+    const char *prefix, std::string *line) {
+  std::vector<std::string>::const_iterator line_iterator;
+  for (line_iterator = lines.begin(); line_iterator != lines.end();
+       ++line_iterator) {
+    if (line_iterator->find(prefix) == 0) {
+      *line = *line_iterator;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool UserCollector::GetIdFromStatus(
+    const char *prefix, IdKind kind,
+    const std::vector<std::string> &status_lines, int *id) {
   // From fs/proc/array.c:task_state(), this file contains:
   // \nUid:\t<uid>\t<euid>\t<suid>\t<fsuid>\n
-  std::vector<std::string> status_lines;
-  base::SplitString(status_contents, '\n', &status_lines);
-  std::vector<std::string>::iterator line_iterator;
-  for (line_iterator = status_lines.begin();
-       line_iterator != status_lines.end();
-       ++line_iterator) {
-    if (line_iterator->find(prefix) == 0)
-      break;
-  }
-  if (line_iterator == status_lines.end()) {
+  std::string id_line;
+  if (!GetFirstLineWithPrefix(status_lines, prefix, &id_line)) {
     return false;
   }
-  std::string id_substring = line_iterator->substr(strlen(prefix),
-                                                   std::string::npos);
+  std::string id_substring = id_line.substr(strlen(prefix), std::string::npos);
   std::vector<std::string> ids;
   base::SplitString(id_substring, '\t', &ids);
   if (ids.size() != kIdMax || kind < 0 || kind >= kIdMax) {
@@ -189,8 +193,19 @@ bool UserCollector::GetIdFromStatus(const char *prefix,
   const char *number = ids[kind].c_str();
   char *end_number = NULL;
   *id = strtol(number, &end_number, 10);
-  if (*end_number != '\0')
+  if (*end_number != '\0') {
     return false;
+  }
+  return true;
+}
+
+bool UserCollector::GetStateFromStatus(
+    const std::vector<std::string> &status_lines, std::string *state) {
+  std::string state_line;
+  if (!GetFirstLineWithPrefix(status_lines, kStatePrefix, &state_line)) {
+    return false;
+  }
+  *state = state_line.substr(strlen(kStatePrefix), std::string::npos);
   return true;
 }
 
@@ -250,6 +265,21 @@ bool UserCollector::CopyOffProcFiles(pid_t pid,
       return false;
     }
   }
+  return ValidateProcFiles(container_dir);
+}
+
+bool UserCollector::ValidateProcFiles(const FilePath &container_dir) {
+  // Check if the maps file is empty, which could be due to the crashed
+  // process being reaped by the kernel before finishing a core dump.
+  int64 file_size = 0;
+  if (!file_util::GetFileSize(container_dir.Append("maps"), &file_size)) {
+    LOG(ERROR) << "Could not get the size of maps file";
+    return false;
+  }
+  if (file_size == 0) {
+    LOG(ERROR) << "maps file is empty";
+    return false;
+  }
   return true;
 }
 
@@ -269,8 +299,19 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid,
               << file_util::DirectoryExists(process_path);
     return false;
   }
+
+  std::vector<std::string> status_lines;
+  base::SplitString(status, '\n', &status_lines);
+
+  std::string process_state;
+  if (!GetStateFromStatus(status_lines, &process_state)) {
+    LOG(ERROR) << "Could not find process state in status file";
+    return false;
+  }
+  LOG(INFO) << "State of crashed process [" << pid << "]: " << process_state;
+
   int process_euid;
-  if (!GetIdFromStatus(kUserId, kIdEffective, status, &process_euid)) {
+  if (!GetIdFromStatus(kUserId, kIdEffective, status_lines, &process_euid)) {
     LOG(ERROR) << "Could not find euid in status file";
     return false;
   }

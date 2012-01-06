@@ -58,7 +58,9 @@ class UserCollector : public CrashCollector {
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesBadPid);
   FRIEND_TEST(UserCollectorTest, CopyOffProcFilesOK);
   FRIEND_TEST(UserCollectorTest, GetExecutableBaseNameFromPid);
+  FRIEND_TEST(UserCollectorTest, GetFirstLineWithPrefix);
   FRIEND_TEST(UserCollectorTest, GetIdFromStatus);
+  FRIEND_TEST(UserCollectorTest, GetStateFromStatus);
   FRIEND_TEST(UserCollectorTest, GetProcessPath);
   FRIEND_TEST(UserCollectorTest, GetSymlinkTarget);
   FRIEND_TEST(UserCollectorTest, GetUserInfoFromName);
@@ -66,6 +68,7 @@ class UserCollector : public CrashCollector {
   FRIEND_TEST(UserCollectorTest, ShouldDumpChromeOverridesDeveloperImage);
   FRIEND_TEST(UserCollectorTest, ShouldDumpDeveloperImageOverridesConsent);
   FRIEND_TEST(UserCollectorTest, ShouldDumpUseConsentProductionImage);
+  FRIEND_TEST(UserCollectorTest, ValidateProcFiles);
 
   // Enumeration to pass to GetIdFromStatus.  Must match the order
   // that the kernel lists IDs in the status file.
@@ -87,15 +90,37 @@ class UserCollector : public CrashCollector {
                         FilePath *target);
   bool GetExecutableBaseNameFromPid(uid_t pid,
                                     std::string *base_name);
+  // Returns, via |line|, the first line in |lines| that starts with |prefix|.
+  // Returns true if a line is found, or false otherwise.
+  bool GetFirstLineWithPrefix(const std::vector<std::string> &lines,
+                              const char *prefix, std::string *line);
+
+  // Returns the identifier of |kind|, via |id|, found in |status_lines| on
+  // the line starting with |prefix|. |status_lines| contains the lines in
+  // the status file. Returns true if the identifier can be determined.
   bool GetIdFromStatus(const char *prefix,
                        IdKind kind,
-                       const std::string &status_contents,
+                       const std::vector<std::string> &status_lines,
                        int *id);
+
+  // Returns the process state, via |state|, found in |status_lines|, which
+  // contains the lines in the status file. Returns true if the process state
+  // can be determined.
+  bool GetStateFromStatus(const std::vector<std::string> &status_lines,
+                          std::string *state);
 
   void LogCollectionError(const std::string &error_message);
   void EnqueueCollectionErrorLog(pid_t pid, const std::string &exec_name);
 
-  bool CopyOffProcFiles(pid_t pid, const FilePath &process_map);
+  bool CopyOffProcFiles(pid_t pid, const FilePath &container_dir);
+
+  // Validates the proc files at |container_dir| and returns true if they
+  // are usable for the core-to-minidump conversion later. For instance, if
+  // a process is reaped by the kernel before the copying of its proc files
+  // takes place, some proc files like /proc/<pid>/maps may contain nothing
+  // and thus become unusable.
+  bool ValidateProcFiles(const FilePath &container_dir);
+
   // Determines the crash directory for given pid based on pid's owner,
   // and creates the directory if necessary with appropriate permissions.
   // Returns true whether or not directory needed to be created, false on
