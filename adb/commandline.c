@@ -648,6 +648,7 @@ static int backup(int argc, char** argv) {
         return -1;
     }
 
+    printf("Now unlock your device and confirm the backup operation.\n");
     copy_to_file(fd, outFd);
 
     adb_close(fd);
@@ -675,6 +676,7 @@ static int restore(int argc, char** argv) {
         return -1;
     }
 
+    printf("Now unlock your device and confirm the restore operation.\n");
     copy_to_file(tarFd, fd);
 
     adb_close(fd);
