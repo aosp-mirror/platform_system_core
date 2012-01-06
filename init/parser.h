@@ -30,6 +30,7 @@ struct parse_state
     void *context;
     void (*parse_line)(struct parse_state *state, int nargs, char **args);
     const char *filename;
+    void *priv;
 };
 
 int lookup_keyword(const char *s);
