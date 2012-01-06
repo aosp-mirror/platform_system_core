@@ -46,7 +46,7 @@ SupplicantAssociatingEvent::SupplicantAssociatingEvent(int level, char *event,
         //                           p
         char *q = index(p, '\'');
         if (!q) {
-            LOGE("Unable to decode SSID (p = {%s})\n", p);
+            ALOGE("Unable to decode SSID (p = {%s})\n", p);
             return;
         }
         mSsid = (char *) malloc((q - p) +1);
@@ -59,7 +59,7 @@ SupplicantAssociatingEvent::SupplicantAssociatingEvent(int level, char *event,
         //                                         ^
         //                                         p
         if (!(q = index(p, ' '))) {
-            LOGE("Unable to decode frequency\n");
+            ALOGE("Unable to decode frequency\n");
             return;
         }
         *q = '\0';
@@ -73,7 +73,7 @@ SupplicantAssociatingEvent::SupplicantAssociatingEvent(int level, char *event,
 
         char *q = index(p, '\'');
         if (!q) {
-            LOGE("Unable to decode SSID (p = {%s})\n", p);
+            ALOGE("Unable to decode SSID (p = {%s})\n", p);
             return;
         }
         mSsid = (char *) malloc((q - p) +1);

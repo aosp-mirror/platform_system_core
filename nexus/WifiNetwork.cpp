@@ -43,13 +43,13 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, const char *data)
     char *flags;
 
     if (!(id = strsep(&next, "\t")))
-        LOGE("Failed to extract network id");
+        ALOGE("Failed to extract network id");
     if (!(ssid = strsep(&next, "\t")))
-        LOGE("Failed to extract ssid");
+        ALOGE("Failed to extract ssid");
     if (!(bssid = strsep(&next, "\t")))
-        LOGE("Failed to extract bssid");
+        ALOGE("Failed to extract bssid");
     if (!(flags = strsep(&next, "\t")))
-        LOGE("Failed to extract flags");
+        ALOGE("Failed to extract flags");
 
    // ALOGD("id '%s', ssid '%s', bssid '%s', flags '%s'", id, ssid, bssid,
    //      flags ? flags :"null");
@@ -215,7 +215,7 @@ int WifiNetwork::refresh() {
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "key_mgmt", buffer, len)) {
         if (WifiNetwork::parseKeyManagementMask(buffer, &mask)) {
-            LOGE("Error parsing key_mgmt (%s)", strerror(errno));
+            ALOGE("Error parsing key_mgmt (%s)", strerror(errno));
         } else {
            mKeyManagement = mask;
         }
@@ -224,7 +224,7 @@ int WifiNetwork::refresh() {
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "proto", buffer, len)) {
         if (WifiNetwork::parseProtocolsMask(buffer, &mask)) {
-            LOGE("Error parsing proto (%s)", strerror(errno));
+            ALOGE("Error parsing proto (%s)", strerror(errno));
         } else {
            mProtocols = mask;
         }
@@ -233,7 +233,7 @@ int WifiNetwork::refresh() {
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "auth_alg", buffer, len)) {
         if (WifiNetwork::parseAuthAlgorithmsMask(buffer, &mask)) {
-            LOGE("Error parsing auth_alg (%s)", strerror(errno));
+            ALOGE("Error parsing auth_alg (%s)", strerror(errno));
         } else {
            mAuthAlgorithms = mask;
         }
@@ -242,7 +242,7 @@ int WifiNetwork::refresh() {
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "pairwise", buffer, len)) {
         if (WifiNetwork::parsePairwiseCiphersMask(buffer, &mask)) {
-            LOGE("Error parsing pairwise (%s)", strerror(errno));
+            ALOGE("Error parsing pairwise (%s)", strerror(errno));
         } else {
            mPairwiseCiphers = mask;
         }
@@ -251,7 +251,7 @@ int WifiNetwork::refresh() {
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "group", buffer, len)) {
         if (WifiNetwork::parseGroupCiphersMask(buffer, &mask)) {
-            LOGE("Error parsing group (%s)", strerror(errno));
+            ALOGE("Error parsing group (%s)", strerror(errno));
         } else {
            mGroupCiphers = mask;
         }
@@ -259,7 +259,7 @@ int WifiNetwork::refresh() {
 
     return 0;
 out_err:
-    LOGE("Refresh failed (%s)",strerror(errno));
+    ALOGE("Refresh failed (%s)",strerror(errno));
     return -1;
 }
 
@@ -453,12 +453,12 @@ int WifiNetwork::setEnabled(bool enabled) {
 
     if (enabled) {
         if (getPriority() == -1) {
-            LOGE("Cannot enable network when priority is not set");
+            ALOGE("Cannot enable network when priority is not set");
             errno = EAGAIN;
             return -1;
         }
         if (getKeyManagement() == KeyManagementMask::UNKNOWN) {
-            LOGE("Cannot enable network when KeyManagement is not set");
+            ALOGE("Cannot enable network when KeyManagement is not set");
             errno = EAGAIN;
             return -1;
         }

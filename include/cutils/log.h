@@ -171,17 +171,23 @@ extern "C" {
 /*
  * Simplified macro to send an error log message using the current LOG_TAG.
  */
+#ifndef ALOGE
+#define ALOGE(...) ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__))
+// Temporary measure for code still using old LOG macros.
 #ifndef LOGE
-#define LOGE(...) ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__))
-#define ALOGE LOGE
+#define LOGE ALOGE
+#endif
 #endif
 
-#ifndef LOGE_IF
-#define LOGE_IF(cond, ...) \
+#ifndef ALOGE_IF
+#define ALOGE_IF(cond, ...) \
     ( (CONDITION(cond)) \
     ? ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
-#define ALOGE_IF LOGE_IF
+// Temporary measure for code still using old LOG macros.
+#ifndef LOGE_IF
+#define LOGE_IF ALOGE_IF
+#endif
 #endif
 
 // ---------------------------------------------------------------------
@@ -242,9 +248,12 @@ extern "C" {
  * Conditional based on whether the current LOG_TAG is enabled at
  * error priority.
  */
+#ifndef IF_ALOGE
+#define IF_ALOGE() IF_ALOG(LOG_ERROR, LOG_TAG)
+// Temporary measure for code still using old LOG macros.
 #ifndef IF_LOGE
-#define IF_LOGE() IF_ALOG(LOG_ERROR, LOG_TAG)
-#define IF_ALOGE IF_LOGE
+#define IF_LOGE IF_ALOGE
+#endif
 #endif
 
 

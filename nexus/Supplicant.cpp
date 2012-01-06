@@ -68,18 +68,18 @@ int Supplicant::start() {
     }
 
     if (mServiceManager->start(SUPPLICANT_SERVICE_NAME)) {
-        LOGE("Error starting supplicant (%s)", strerror(errno));
+        ALOGE("Error starting supplicant (%s)", strerror(errno));
         return -1;
     }
 
     wpa_ctrl_cleanup();
     if (connectToSupplicant()) {
-        LOGE("Error connecting to supplicant (%s)\n", strerror(errno));
+        ALOGE("Error connecting to supplicant (%s)\n", strerror(errno));
         return -1;
     }
     
     if (retrieveInterfaceName()) {
-        LOGE("Error retrieving interface name (%s)\n", strerror(errno));
+        ALOGE("Error retrieving interface name (%s)\n", strerror(errno));
         return -1;
     }
 
@@ -247,7 +247,7 @@ int Supplicant::connectToSupplicant() {
 
     mCtrl = wpa_ctrl_open("tiwlan0"); // XXX:
     if (mCtrl == NULL) {
-        LOGE("Unable to open connection to supplicant on \"%s\": %s",
+        ALOGE("Unable to open connection to supplicant on \"%s\": %s",
              "tiwlan0", strerror(errno));
         return -1;
     }
@@ -267,7 +267,7 @@ int Supplicant::connectToSupplicant() {
     mListener = new SupplicantListener(mHandlers, mMonitor);
 
     if (mListener->startListener()) {
-        LOGE("Error - unable to start supplicant listener");
+        ALOGE("Error - unable to start supplicant listener");
         stop();
         return -1;
     }
@@ -311,7 +311,7 @@ int Supplicant::getRssi(int *buffer) {
     char *s;
     for (int i = 0; i < 3; i++) {
         if (!(s = strsep(&next, " "))) {
-            LOGE("Error parsing RSSI");
+            ALOGE("Error parsing RSSI");
             errno = EIO;
             return -1;
         }
@@ -333,13 +333,13 @@ int Supplicant::getLinkSpeed() {
     char *s;
 
     if (!(s = strsep(&next, " "))) {
-        LOGE("Error parsing LINKSPEED");
+        ALOGE("Error parsing LINKSPEED");
         errno = EIO;
         return -1;
     }
 
     if (!(s = strsep(&next, " "))) {
-        LOGE("Error parsing LINKSPEED");
+        ALOGE("Error parsing LINKSPEED");
         errno = EIO;
         return -1;
     }
@@ -452,26 +452,26 @@ int Supplicant::setupConfig() {
     if (access(SUPP_CONFIG_FILE, R_OK|W_OK) == 0) {
         return 0;
     } else if (errno != ENOENT) {
-        LOGE("Cannot access \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
+        ALOGE("Cannot access \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
         return -1;
     }
 
     srcfd = open(SUPP_CONFIG_TEMPLATE, O_RDONLY);
     if (srcfd < 0) {
-        LOGE("Cannot open \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
+        ALOGE("Cannot open \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
         return -1;
     }
 
     destfd = open(SUPP_CONFIG_FILE, O_CREAT|O_WRONLY, 0660);
     if (destfd < 0) {
         close(srcfd);
-        LOGE("Cannot create \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
+        ALOGE("Cannot create \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
         return -1;
     }
 
     while ((nread = read(srcfd, buf, sizeof(buf))) != 0) {
         if (nread < 0) {
-            LOGE("Error reading \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
+            ALOGE("Error reading \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
             close(srcfd);
             close(destfd);
             unlink(SUPP_CONFIG_FILE);
@@ -484,7 +484,7 @@ int Supplicant::setupConfig() {
     close(srcfd);
 
     if (chown(SUPP_CONFIG_FILE, AID_SYSTEM, AID_WIFI) < 0) {
-        LOGE("Error changing group ownership of %s to %d: %s",
+        ALOGE("Error changing group ownership of %s to %d: %s",
              SUPP_CONFIG_FILE, AID_WIFI, strerror(errno));
         unlink(SUPP_CONFIG_FILE);
         return -1;
@@ -507,7 +507,7 @@ int Supplicant::setNetworkVar(int networkId, const char *var, const char *val) {
 
     len = sizeof(reply) -1;
     if (sendCommand("SAVE_CONFIG", reply, &len)) {
-        LOGE("Error saving config after %s = %s", var, val);
+        ALOGE("Error saving config after %s = %s", var, val);
         return -1;
     }
     return 0;

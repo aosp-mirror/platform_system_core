@@ -42,18 +42,18 @@ write_raw_image(const char *dst, const char *src, loff_t offset, int test)
 
     ALOGI("Writing RAW image '%s' to '%s' (offset=%llu)", src, dst, offset);
     if ((src_fd = open(src, O_RDONLY)) < 0) {
-        LOGE("Could not open %s for reading (errno=%d).", src, errno);
+        ALOGE("Could not open %s for reading (errno=%d).", src, errno);
         goto fail;
     }
 
     if (!test) {
         if ((dst_fd = open(dst, O_RDWR)) < 0) {
-            LOGE("Could not open '%s' for read/write (errno=%d).", dst, errno);
+            ALOGE("Could not open '%s' for read/write (errno=%d).", dst, errno);
             goto fail;
         }
 
         if (lseek64(dst_fd, offset, SEEK_SET) != offset) {
-            LOGE("Could not seek to offset %lld in %s.", offset, dst);
+            ALOGE("Could not seek to offset %lld in %s.", offset, dst);
             goto fail;
         }
     }
@@ -63,7 +63,7 @@ write_raw_image(const char *dst, const char *src, loff_t offset, int test)
             /* XXX: Should we not even bother with EINTR? */
             if (errno == EINTR)
                 continue;
-            LOGE("Error (%d) while reading from '%s'", errno, src);
+            ALOGE("Error (%d) while reading from '%s'", errno, src);
             goto fail;
         }
 
@@ -84,7 +84,7 @@ write_raw_image(const char *dst, const char *src, loff_t offset, int test)
                 /* XXX: Should we not even bother with EINTR? */
                 if (errno == EINTR)
                     continue;
-                LOGE("Error (%d) while writing to '%s'", errno, dst);
+                ALOGE("Error (%d) while writing to '%s'", errno, dst);
                 goto fail;
             }
             if (!tmp)
@@ -94,7 +94,7 @@ write_raw_image(const char *dst, const char *src, loff_t offset, int test)
     }
 
     if (!done) {
-        LOGE("Exited read/write loop without setting flag! WTF?!");
+        ALOGE("Exited read/write loop without setting flag! WTF?!");
         goto fail;
     }
 

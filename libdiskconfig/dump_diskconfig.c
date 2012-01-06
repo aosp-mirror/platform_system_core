@@ -28,7 +28,7 @@ main(int argc, char *argv[])
     struct disk_info *dinfo;
 
     if (argc < 2) {
-        LOGE("usage: %s <conf file>", argv[0]);
+        ALOGE("usage: %s <conf file>", argv[0]);
         return 1;
     }
 

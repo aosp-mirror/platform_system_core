@@ -381,7 +381,7 @@ static void pick_scanline(context_t* c)
             err = gCodeCache.cache(a->key(), a);
         }
         if (ggl_unlikely(err)) {
-            LOGE("error generating or caching assembly. Reverting to NOP.");
+            ALOGE("error generating or caching assembly. Reverting to NOP.");
             c->scanline = scanline_noop;
             c->init_y = init_y_noop;
             c->step_y = step_y__nop;
@@ -1761,7 +1761,7 @@ void init_y_error(context_t* c, int32_t y0)
     // woooops, shoud never happen,
     // fail gracefully (don't display anything)
     init_y_noop(c, y0);
-    LOGE("color-buffer has an invalid format!");
+    ALOGE("color-buffer has an invalid format!");
 }
 
 // ----------------------------------------------------------------------------

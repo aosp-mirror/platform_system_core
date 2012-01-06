@@ -218,7 +218,7 @@ int CommandListener::ListCmd::runCommand(SocketClient *cli, int argc, char **arg
 
         char *buf;
         if (asprintf(&buf, "%s %s", (*it), p_v) < 0) {
-            LOGE("Failed to allocate memory");
+            ALOGE("Failed to allocate memory");
             free((*it));
             continue;
         }
