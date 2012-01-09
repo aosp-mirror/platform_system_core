@@ -57,7 +57,7 @@ VectorImpl::VectorImpl(const VectorImpl& rhs)
 
 VectorImpl::~VectorImpl()
 {
-    LOG_ASSERT(!mCount,
+    ALOG_ASSERT(!mCount,
         "[%p] "
         "subclasses of VectorImpl must call finish_vector()"
         " in their destructor. Leaking %d bytes.",
@@ -67,7 +67,7 @@ VectorImpl::~VectorImpl()
 
 VectorImpl& VectorImpl::operator = (const VectorImpl& rhs)
 {
-    LOG_ASSERT(mItemSize == rhs.mItemSize,
+    ALOG_ASSERT(mItemSize == rhs.mItemSize,
         "Vector<> have different types (this=%p, rhs=%p)", this, &rhs);
     if (this != &rhs) {
         release_storage();
@@ -176,7 +176,7 @@ ssize_t VectorImpl::replaceAt(size_t index)
 
 ssize_t VectorImpl::replaceAt(const void* prototype, size_t index)
 {
-    LOG_ASSERT(index<size(),
+    ALOG_ASSERT(index<size(),
         "[%p] replace: index=%d, size=%d", this, (int)index, (int)size());
 
     void* item = editItemLocation(index);
@@ -193,7 +193,7 @@ ssize_t VectorImpl::replaceAt(const void* prototype, size_t index)
 
 ssize_t VectorImpl::removeItemsAt(size_t index, size_t count)
 {
-    LOG_ASSERT((index+count)<=size(),
+    ALOG_ASSERT((index+count)<=size(),
         "[%p] remove: index=%d, count=%d, size=%d",
                this, (int)index, (int)count, (int)size());
 
@@ -217,7 +217,7 @@ void VectorImpl::clear()
 
 void* VectorImpl::editItemLocation(size_t index)
 {
-    LOG_ASSERT(index<capacity(),
+    ALOG_ASSERT(index<capacity(),
         "[%p] itemLocation: index=%d, capacity=%d, count=%d",
         this, (int)index, (int)capacity(), (int)mCount);
             
@@ -229,7 +229,7 @@ void* VectorImpl::editItemLocation(size_t index)
 
 const void* VectorImpl::itemLocation(size_t index) const
 {
-    LOG_ASSERT(index<capacity(),
+    ALOG_ASSERT(index<capacity(),
         "[%p] editItemLocation: index=%d, capacity=%d, count=%d",
         this, (int)index, (int)capacity(), (int)mCount);
 
