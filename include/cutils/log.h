@@ -329,10 +329,9 @@ extern "C" {
  * Assertion that generates a log message when the assertion fails.
  * Stripped out of release builds.  Uses the current LOG_TAG.
  */
-#ifndef LOG_ASSERT
-#define LOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ## __VA_ARGS__)
-//#define LOG_ASSERT(cond) LOG_FATAL_IF(!(cond), "Assertion failed: " #cond)
-#define ALOG_ASSERT LOG_ASSERT
+#ifndef ALOG_ASSERT
+#define ALOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ## __VA_ARGS__)
+//#define ALOG_ASSERT(cond) LOG_FATAL_IF(!(cond), "Assertion failed: " #cond)
 #endif
 
 // ---------------------------------------------------------------------
@@ -425,7 +424,7 @@ typedef enum {
     __android_log_vprint(prio, tag, fmt)
 
 /* XXX Macros to work around syntax errors in places where format string
- * arg is not passed to LOG_ASSERT, LOG_ALWAYS_FATAL or LOG_ALWAYS_FATAL_IF
+ * arg is not passed to ALOG_ASSERT, LOG_ALWAYS_FATAL or LOG_ALWAYS_FATAL_IF
  * (happens only in debug builds).
  */
 
