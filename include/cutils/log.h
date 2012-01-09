@@ -347,6 +347,7 @@ extern "C" {
 #ifndef LOG_ASSERT
 #define LOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ## __VA_ARGS__)
 //#define LOG_ASSERT(cond) LOG_FATAL_IF(!(cond), "Assertion failed: " #cond)
+#define ALOG_ASSERT LOG_ASSERT
 #endif
 
 // ---------------------------------------------------------------------
