@@ -831,6 +831,7 @@ static const char *statename(atransport *t)
     case CS_DEVICE: return "device";
     case CS_HOST: return "host";
     case CS_RECOVERY: return "recovery";
+    case CS_SIDELOAD: return "sideload";
     case CS_NOPERM: return "no permissions";
     default: return "unknown";
     }
