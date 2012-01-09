@@ -265,7 +265,7 @@ bool UserCollector::CopyOffProcFiles(pid_t pid,
       return false;
     }
   }
-  return ValidateProcFiles(container_dir);
+  return true;
 }
 
 bool UserCollector::ValidateProcFiles(const FilePath &container_dir) {
@@ -377,11 +377,19 @@ bool UserCollector::ConvertCoreToMinidump(pid_t pid,
                                           const FilePath &container_dir,
                                           const FilePath &core_path,
                                           const FilePath &minidump_path) {
-  if (!CopyOffProcFiles(pid, container_dir)) {
+  // If proc files are unuable, we continue to read the core file from stdin,
+  // but only skip the core-to-minidump conversion, so that we may still use
+  // the core file for debugging.
+  bool proc_files_usable =
+      CopyOffProcFiles(pid, container_dir) && ValidateProcFiles(container_dir);
+
+  if (!CopyStdinToCoreFile(core_path)) {
     return false;
   }
 
-  if (!CopyStdinToCoreFile(core_path)) {
+  if (!proc_files_usable) {
+    LOG(INFO) << "Skipped converting core file to minidump due to "
+              << "unusable proc files";
     return false;
   }
 
