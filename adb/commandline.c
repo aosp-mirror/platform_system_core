@@ -367,6 +367,83 @@ static void format_host_command(char* buffer, size_t  buflen, const char* comman
     }
 }
 
+int adb_download_buffer(const char *service, const void* data, int sz,
+                        unsigned progress)
+{
+    char buf[4096];
+    unsigned total;
+    int fd;
+    const unsigned char *ptr;
+
+    sprintf(buf,"%s:%d", service, sz);
+    fd = adb_connect(buf);
+    if(fd < 0) {
+        fprintf(stderr,"error: %s\n", adb_error());
+        return -1;
+    }
+
+    int opt = CHUNK_SIZE;
+    opt = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &opt, sizeof(opt));
+
+    total = sz;
+    ptr = data;
+
+    if(progress) {
+        char *x = strrchr(service, ':');
+        if(x) service = x + 1;
+    }
+
+    while(sz > 0) {
+        unsigned xfer = (sz > CHUNK_SIZE) ? CHUNK_SIZE : sz;
+        if(writex(fd, ptr, xfer)) {
+            adb_status(fd);
+            fprintf(stderr,"* failed to write data '%s' *\n", adb_error());
+            return -1;
+        }
+        sz -= xfer;
+        ptr += xfer;
+        if(progress) {
+            printf("sending: '%s' %4d%%    \r", service, (int)(100LL - ((100LL * sz) / (total))));
+            fflush(stdout);
+        }
+    }
+    if(progress) {
+        printf("\n");
+    }
+
+    if(readx(fd, buf, 4)){
+        fprintf(stderr,"* error reading response *\n");
+        adb_close(fd);
+        return -1;
+    }
+    if(memcmp(buf, "OKAY", 4)) {
+        buf[4] = 0;
+        fprintf(stderr,"* error response '%s' *\n", buf);
+        adb_close(fd);
+        return -1;
+    }
+
+    adb_close(fd);
+    return 0;
+}
+
+
+int adb_download(const char *service, const char *fn, unsigned progress)
+{
+    void *data;
+    unsigned sz;
+
+    data = load_file(fn, &sz);
+    if(data == 0) {
+        fprintf(stderr,"* cannot read '%s' *\n", service);
+        return -1;
+    }
+
+    int status = adb_download_buffer(service, data, sz, progress);
+    free(data);
+    return status;
+}
+
 static void status_window(transport_type ttype, const char* serial)
 {
     char command[4096];
@@ -1061,6 +1138,15 @@ top:
             return 1;
         }
         return 0;
+    }
+
+    if(!strcmp(argv[0], "sideload")) {
+        if(argc != 2) return usage();
+        if(adb_download("sideload", argv[1], 1)) {
+            return 1;
+        } else {
+            return 0;
+        }
     }
 
     if(!strcmp(argv[0], "remount") || !strcmp(argv[0], "reboot")

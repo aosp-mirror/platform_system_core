@@ -299,6 +299,13 @@ void parse_banner(char *banner, atransport *t)
         return;
     }
 
+    if(!strcmp(type, "sideload")) {
+        D("setting connection_state to CS_SIDELOAD\n");
+        t->connection_state = CS_SIDELOAD;
+        update_transports();
+        return;
+    }
+
     t->connection_state = CS_HOST;
 }
 
