@@ -21,15 +21,17 @@ TEST_BINS = \
 
 LDCONFIG = $(shell $(PKG_CONFIG) --libs libpcrecpp)
 
+PC_DEPS = glib-2.0 libchromeos $(LIST_PROXIES_PKGS)
+
 # -lglib-2.0 is needed by libbase.a now.
-COMMON_LIBS = -lchromeos -lbase -lgflags $(LDCONFIG) \
-	$(shell $(PKG_CONFIG) --libs glib-2.0 $(LIST_PROXIES_PKGS))
+COMMON_LIBS = -lbase -lgflags $(LDCONFIG) \
+	$(shell $(PKG_CONFIG) --libs $(PC_DEPS))
 REPORTER_LIBS = $(COMMON_LIBS) -lmetrics
 LIST_PROXIES_LIBS = $(COMMON_LIBS)
 
 TEST_LIBS = $(COMMON_LIBS) -lgtest -lgmock
 INCLUDE_DIRS = -I.. -I$(SYSROOT)/usr/include/google-breakpad \
-	$(shell $(PKG_CONFIG) --cflags glib-2.0 $(LIST_PROXIES_PKGS))
+	$(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
 
 CXXFLAGS += -Wall -Werror
 
