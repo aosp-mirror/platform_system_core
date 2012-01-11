@@ -1,3 +1,5 @@
+import /init.${ro.hardware}.rc
+
 on early-init
     # Set init and its forked children's oom_adj.
     write /proc/1/oom_adj -16
