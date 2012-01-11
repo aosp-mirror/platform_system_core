@@ -185,6 +185,114 @@ static void *server_socket_thread(void * arg)
     return 0;
 }
 
+/*
+ * Redefine open and write for qemu_pipe.h that contains inlined references
+ * to those routines. We will redifine them back after qemu_pipe.h inclusion.
+ */
+#undef open
+#undef write
+#define open    adb_open
+#define write   adb_write
+#include <hardware/qemu_pipe.h>
+#undef open
+#undef write
+#define open    ___xxx_open
+#define write   ___xxx_write
+
+/* A worker thread that monitors host connections, and registers a transport for
+ * every new host connection. This thread replaces server_socket_thread on
+ * condition that adbd daemon runs inside the emulator, and emulator uses QEMUD
+ * pipe to communicate with adbd daemon inside the guest. This is done in order
+ * to provide more robust communication channel between ADB host and guest. The
+ * main issue with server_socket_thread approach is that it runs on top of TCP,
+ * and thus is sensitive to network disruptions. For instance, the
+ * ConnectionManager may decide to reset all network connections, in which case
+ * the connection between ADB host and guest will be lost. To make ADB traffic
+ * independent from the network, we use here 'adb' QEMUD service to transfer data
+ * between the host, and the guest. See external/qemu/android/adb-*.* that
+ * implements the emulator's side of the protocol. Another advantage of using
+ * QEMUD approach is that ADB will be up much sooner, since it doesn't depend
+ * anymore on network being set up.
+ * The guest side of the protocol contains the following phases:
+ * - Connect with adb QEMUD service. In this phase a handle to 'adb' QEMUD service
+ *   is opened, and it becomes clear whether or not emulator supports that
+ *   protocol.
+ * - Wait for the ADB host to create connection with the guest. This is done by
+ *   sending an 'accept' request to the adb QEMUD service, and waiting on
+ *   response.
+ * - When new ADB host connection is accepted, the connection with adb QEMUD
+ *   service is registered as the transport, and a 'start' request is sent to the
+ *   adb QEMUD service, indicating that the guest is ready to receive messages.
+ *   Note that the guest will ignore messages sent down from the emulator before
+ *   the transport registration is completed. That's why we need to send the
+ *   'start' request after the transport is registered.
+ */
+static void *qemu_socket_thread(void * arg)
+{
+/* 'accept' request to the adb QEMUD service. */
+static const char _accept_req[] = "accept";
+/* 'start' request to the adb QEMUD service. */
+static const char _start_req[]  = "start";
+/* 'ok' reply from the adb QEMUD service. */
+static const char _ok_resp[]    = "ok";
+
+    const int port = (int)arg;
+    int res, fd;
+    char tmp[256];
+    char con_name[32];
+
+    D("transport: qemu_socket_thread() starting\n");
+
+    /* adb QEMUD service connection request. */
+    snprintf(con_name, sizeof(con_name), "qemud:adb:%d", port);
+
+    /* Connect to the adb QEMUD service. */
+    fd = qemu_pipe_open(con_name);
+    if (fd < 0) {
+        /* This could be an older version of the emulator, that doesn't
+         * implement adb QEMUD service. Fall back to the old TCP way. */
+        adb_thread_t thr;
+        D("adb service is not available. Falling back to TCP socket.\n");
+        adb_thread_create(&thr, server_socket_thread, arg);
+        return 0;
+    }
+
+    for(;;) {
+        /*
+         * Wait till the host creates a new connection.
+         */
+
+        /* Send the 'accept' request. */
+        res = adb_write(fd, _accept_req, strlen(_accept_req));
+        if (res == strlen(_accept_req)) {
+            /* Wait for the response. In the response we expect 'ok' on success,
+             * or 'ko' on failure. */
+            res = adb_read(fd, tmp, sizeof(tmp));
+            if (res != 2 || memcmp(tmp, _ok_resp, 2)) {
+                D("Accepting ADB host connection has failed.\n");
+                adb_close(fd);
+            } else {
+                /* Host is connected. Register the transport, and start the
+                 * exchange. */
+                register_socket_transport(fd, "host", port, 1);
+                adb_write(fd, _start_req, strlen(_start_req));
+            }
+
+            /* Prepare for accepting of the next ADB host connection. */
+            fd = qemu_pipe_open(con_name);
+            if (fd < 0) {
+                D("adb service become unavailable.\n");
+                return 0;
+            }
+        } else {
+            D("Unable to send the '%s' request to ADB service.\n", _accept_req);
+            return 0;
+        }
+    }
+    D("transport: qemu_socket_thread() exiting\n");
+    return 0;
+}
+
 void local_init(int port)
 {
     adb_thread_t thr;
@@ -193,7 +301,17 @@ void local_init(int port)
     if(HOST) {
         func = client_socket_thread;
     } else {
-        func = server_socket_thread;
+        /* For the adbd daemon in the system image we need to distinguish
+         * between the device, and the emulator. */
+        char is_qemu[PROPERTY_VALUE_MAX];
+        property_get("ro.kernel.qemu", is_qemu, "");
+        if (!strcmp(is_qemu, "1")) {
+            /* Running inside the emulator: use QEMUD pipe as the transport. */
+            func = qemu_socket_thread;
+        } else {
+            /* Running inside the device: use TCP socket as the transport. */
+            func = server_socket_thread;
+        }
     }
 
     D("transport: local %s init\n", HOST ? "client" : "server");
