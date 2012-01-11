@@ -5,8 +5,10 @@
 # Makefile for metrics utilities -- library, client and daemon
 #
 
-CCONFIG = $(shell $(PKG_CONFIG) --cflags dbus-1 glib-2.0 dbus-glib-1)
-LDCONFIG = $(shell $(PKG_CONFIG) --libs dbus-1 glib-2.0 gthread-2.0 dbus-glib-1)
+PC_DEPS = dbus-1 glib-2.0 dbus-glib-1 libchrome libchromeos
+
+CCONFIG = $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
+LDCONFIG = $(shell $(PKG_CONFIG) --libs $(PC_DEPS) gthread-2.0)
 
 CXXFLAGS += -Wall -Werror -fPIC -fno-exceptions $(CCONFIG)
 
@@ -44,7 +46,7 @@ TESTLIB_OBJS = \
 
 TESTCOUNTER_LIBS = -lgmock -lgtest -lbase -lrt -lpthread -lglib-2.0
 TESTTIMER_LIBS = -lgmock -lgtest -lbase -lrt -lpthread -lglib-2.0
-DAEMON_LDFLAGS = $(LDFLAGS) $(LDCONFIG) -lrt -lbase -lpthread -lgflags \
+DAEMON_LDFLAGS = $(LDFLAGS) $(LDCONFIG) -lpthread -lgflags \
 		 -lglib-2.0 -lrootdev -lpolicy
 TESTDAEMON_LIBS = -lgmock -lgtest
 TESTLIB_LIBS = -lgtest -lgmock -lbase -lrt -lpthread -lglib-2.0
