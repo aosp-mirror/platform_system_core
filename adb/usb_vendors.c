@@ -111,6 +111,10 @@
 #define VENDOR_ID_ARCHOS        0x0E79
 // Positivo's USB Vendor ID
 #define VENDOR_ID_POSITIVO      0x1662
+// Fujitsu's USB Vendor ID
+#define VENDOR_ID_FUJITSU       0x04C5
+// Lumigon's USB Vendor ID
+#define VENDOR_ID_LUMIGON       0x25E3
 
 
 /** built-in vendor list */
@@ -153,6 +157,8 @@ int builtInVendorIds[] = {
     VENDOR_ID_PEGATRON,
     VENDOR_ID_ARCHOS,
     VENDOR_ID_POSITIVO,
+    VENDOR_ID_FUJITSU,
+    VENDOR_ID_LUMIGON,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
