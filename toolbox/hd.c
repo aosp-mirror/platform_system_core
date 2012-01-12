@@ -68,6 +68,8 @@ int hd_main(int argc, char *argv[])
 			if(count > 0 && base + count - filepos < read_len)
 				read_len = base + count - filepos;
 	        res = read(fd, &buf, read_len);
+			if(res == 0)
+				break;
 			for(i = 0; i < res; i++) {
 				if((i & 15) == 0) {
 					printf("%08x: ", filepos + i);
@@ -80,7 +82,7 @@ int hd_main(int argc, char *argv[])
 					lsum = 0;
 				}
 			}
-			if(res <= 0) {
+			if(res < 0) {
 				printf("Read error on %s, offset %d len %d, %s\n", argv[optind], filepos, read_len, strerror(errno));
 				return 1;
 			}
