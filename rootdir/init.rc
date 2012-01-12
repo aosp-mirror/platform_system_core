@@ -180,8 +180,9 @@ on post-fs-data
     # create the lost+found directories, so as to enforce our permissions
     mkdir /data/lost+found 0770 root root
 
-    # create directory for DRM plug-ins
-    mkdir /data/drm 0774 drm drm
+    # create directory for DRM plug-ins - give drm the read/write access to
+    # the following directory.
+    mkdir /data/drm 0770 drm drm
 
     # If there is no fs-post-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
