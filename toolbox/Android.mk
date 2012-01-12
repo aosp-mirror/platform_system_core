@@ -55,7 +55,8 @@ TOOLS := \
 	nandread \
 	ionice \
 	touch \
-	lsof
+	lsof \
+	md5
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 TOOLS += r
@@ -67,6 +68,8 @@ LOCAL_SRC_FILES:= \
 	$(patsubst %,%.c,$(TOOLS))
 
 LOCAL_SHARED_LIBRARIES := libcutils libc libusbhost
+
+LOCAL_C_INCLUDES := bionic/libc/bionic
 
 LOCAL_MODULE:= toolbox
 
