@@ -382,7 +382,7 @@ static inline bool audio_is_output_channel(uint32_t channel)
         return false;
 }
 
-static inline bool audio_is_valid_format(uint32_t format)
+static inline bool audio_is_valid_format(audio_format_t format)
 {
     switch (format & AUDIO_FORMAT_MAIN_MASK) {
     case AUDIO_FORMAT_PCM:
@@ -403,12 +403,12 @@ static inline bool audio_is_valid_format(uint32_t format)
     }
 }
 
-static inline bool audio_is_linear_pcm(uint32_t format)
+static inline bool audio_is_linear_pcm(audio_format_t format)
 {
     return ((format & AUDIO_FORMAT_MAIN_MASK) == AUDIO_FORMAT_PCM);
 }
 
-static inline size_t audio_bytes_per_sample(uint32_t format)
+static inline size_t audio_bytes_per_sample(audio_format_t format)
 {
     size_t size = 0;
 
