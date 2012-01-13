@@ -65,6 +65,7 @@ static char baseband[32];
 static char carrier[32];
 static char bootloader[32];
 static char hardware[32];
+static char modelno[32];
 static unsigned revision = 0;
 static char qemu[32];
 
@@ -447,6 +448,8 @@ static void import_kernel_nv(char *name, int in_qemu)
             strlcpy(bootloader, value, sizeof(bootloader));
         } else if (!strcmp(name,"androidboot.hardware")) {
             strlcpy(hardware, value, sizeof(hardware));
+        } else if (!strcmp(name,"androidboot.modelno")) {
+            strlcpy(modelno, value, sizeof(modelno));
         }
     } else {
         /* in the emulator, export any kernel option with the
@@ -595,6 +598,9 @@ static int set_init_properties_action(int nargs, char **args)
     property_set("ro.baseband", baseband[0] ? baseband : "unknown");
     property_set("ro.carrier", carrier[0] ? carrier : "unknown");
     property_set("ro.bootloader", bootloader[0] ? bootloader : "unknown");
+
+    if (modelno[0])
+        property_set("ro.boot.modelno", modelno);
 
     property_set("ro.hardware", hardware);
     snprintf(tmp, PROP_VALUE_MAX, "%d", revision);
