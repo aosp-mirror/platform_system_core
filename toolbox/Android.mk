@@ -57,6 +57,21 @@ TOOLS := \
 	touch \
 	lsof
 
+ifeq ($(HAVE_SELINUX),true)
+
+TOOLS += \
+	getenforce \
+	setenforce \
+	chcon \
+	restorecon \
+	runcon \
+	getsebool \
+	setsebool \
+	load_policy
+
+endif
+
+
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 TOOLS += r
 endif
@@ -67,6 +82,14 @@ LOCAL_SRC_FILES:= \
 	$(patsubst %,%.c,$(TOOLS))
 
 LOCAL_SHARED_LIBRARIES := libcutils libc libusbhost
+
+ifeq ($(HAVE_SELINUX),true)
+
+LOCAL_CFLAGS += -DHAVE_SELINUX
+LOCAL_SHARED_LIBRARIES += libselinux
+LOCAL_C_INCLUDES += external/libselinux/include
+
+endif
 
 LOCAL_MODULE:= toolbox
 
