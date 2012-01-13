@@ -5,10 +5,8 @@
 # Makefile for metrics utilities -- library, client and daemon
 #
 
-PC_DEPS = dbus-1 glib-2.0 dbus-glib-1 libchromeos
-
-CCONFIG = $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
-LDCONFIG = $(shell $(PKG_CONFIG) --libs $(PC_DEPS) gthread-2.0)
+CCONFIG = $(shell $(PKG_CONFIG) --cflags dbus-1 glib-2.0 dbus-glib-1)
+LDCONFIG = $(shell $(PKG_CONFIG) --libs dbus-1 glib-2.0 gthread-2.0 dbus-glib-1)
 
 CXXFLAGS += -Wall -Werror -fPIC -fno-exceptions $(CCONFIG)
 
