@@ -30,6 +30,12 @@ LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
 
 LOCAL_STATIC_LIBRARIES := libcutils libc
 
+ifeq ($(HAVE_SELINUX),true)
+LOCAL_STATIC_LIBRARIES += libselinux
+LOCAL_C_INCLUDES := external/libselinux/include
+LOCAL_CFLAGS += -DHAVE_SELINUX
+endif
+
 include $(BUILD_EXECUTABLE)
 
 # Make a symlink from /sbin/ueventd to /init

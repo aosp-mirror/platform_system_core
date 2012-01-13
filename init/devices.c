@@ -29,6 +29,12 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <linux/netlink.h>
+
+#ifdef HAVE_SELINUX
+#include <selinux/selinux.h>
+#include <selinux/label.h>
+#endif
+
 #include <private/android_filesystem_config.h>
 #include <sys/time.h>
 #include <asm/page.h>
@@ -44,6 +50,10 @@
 #define SYSFS_PREFIX    "/sys"
 #define FIRMWARE_DIR1   "/etc/firmware"
 #define FIRMWARE_DIR2   "/vendor/firmware"
+
+#ifdef HAVE_SELINUX
+static struct selabel_handle *sehandle;
+#endif
 
 static int device_fd = -1;
 
@@ -180,8 +190,17 @@ static void make_device(const char *path,
     unsigned gid;
     mode_t mode;
     dev_t dev;
+#ifdef HAVE_SELINUX
+    char *secontext = NULL;
+#endif
 
     mode = get_device_perm(path, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
+#ifdef HAVE_SELINUX
+    if (sehandle) {
+        selabel_lookup(sehandle, &secontext, path, mode);
+        setfscreatecon(secontext);
+    }
+#endif
     dev = makedev(major, minor);
     /* Temporarily change egid to avoid race condition setting the gid of the
      * device node. Unforunately changing the euid would prevent creation of
@@ -192,7 +211,39 @@ static void make_device(const char *path,
     mknod(path, mode, dev);
     chown(path, uid, -1);
     setegid(AID_ROOT);
+#ifdef HAVE_SELINUX
+    if (secontext) {
+        freecon(secontext);
+        setfscreatecon(NULL);
+    }
+#endif
 }
+
+
+static int make_dir(const char *path, mode_t mode)
+{
+    int rc;
+
+#ifdef HAVE_SELINUX
+    char *secontext = NULL;
+
+    if (sehandle) {
+        selabel_lookup(sehandle, &secontext, path, mode);
+        setfscreatecon(secontext);
+    }
+#endif
+
+    rc = mkdir(path, mode);
+
+#ifdef HAVE_SELINUX
+    if (secontext) {
+        freecon(secontext);
+        setfscreatecon(NULL);
+    }
+#endif
+    return rc;
+}
+
 
 static void add_platform_device(const char *name)
 {
@@ -506,7 +557,7 @@ static void handle_block_device_event(struct uevent *uevent)
         return;
 
     snprintf(devpath, sizeof(devpath), "%s%s", base, name);
-    mkdir(base, 0755);
+    make_dir(base, 0755);
 
     if (!strncmp(uevent->path, "/devices/platform/", 18))
         links = parse_platform_block_device(uevent);
@@ -535,10 +586,10 @@ static void handle_generic_device_event(struct uevent *uevent)
              int bus_id = uevent->minor / 128 + 1;
              int device_id = uevent->minor % 128 + 1;
              /* build directories */
-             mkdir("/dev/bus", 0755);
-             mkdir("/dev/bus/usb", 0755);
+             make_dir("/dev/bus", 0755);
+             make_dir("/dev/bus/usb", 0755);
              snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d", bus_id);
-             mkdir(devpath, 0755);
+             make_dir(devpath, 0755);
              snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d/%03d", bus_id, device_id);
          } else {
              /* ignore other USB events */
@@ -546,29 +597,29 @@ static void handle_generic_device_event(struct uevent *uevent)
          }
      } else if (!strncmp(uevent->subsystem, "graphics", 8)) {
          base = "/dev/graphics/";
-         mkdir(base, 0755);
+         make_dir(base, 0755);
      } else if (!strncmp(uevent->subsystem, "oncrpc", 6)) {
          base = "/dev/oncrpc/";
-         mkdir(base, 0755);
+         make_dir(base, 0755);
      } else if (!strncmp(uevent->subsystem, "adsp", 4)) {
          base = "/dev/adsp/";
-         mkdir(base, 0755);
+         make_dir(base, 0755);
      } else if (!strncmp(uevent->subsystem, "msm_camera", 10)) {
          base = "/dev/msm_camera/";
-         mkdir(base, 0755);
+         make_dir(base, 0755);
      } else if(!strncmp(uevent->subsystem, "input", 5)) {
          base = "/dev/input/";
-         mkdir(base, 0755);
+         make_dir(base, 0755);
      } else if(!strncmp(uevent->subsystem, "mtd", 3)) {
          base = "/dev/mtd/";
-         mkdir(base, 0755);
+         make_dir(base, 0755);
      } else if(!strncmp(uevent->subsystem, "sound", 5)) {
          base = "/dev/snd/";
-         mkdir(base, 0755);
+         make_dir(base, 0755);
      } else if(!strncmp(uevent->subsystem, "misc", 4) &&
                  !strncmp(name, "log_", 4)) {
          base = "/dev/log/";
-         mkdir(base, 0755);
+         make_dir(base, 0755);
          name += 4;
      } else
          base = "/dev/";
@@ -819,7 +870,14 @@ void device_init(void)
     suseconds_t t0, t1;
     struct stat info;
     int fd;
+#ifdef HAVE_SELINUX
+    struct selinux_opt seopts[] = {
+        { SELABEL_OPT_PATH, "/file_contexts" }
+    };
 
+    if (is_selinux_enabled() > 0)
+        sehandle = selabel_open(SELABEL_CTX_FILE, seopts, 1);
+#endif
     /* is 64K enough? udev uses 16MB! */
     device_fd = uevent_open_socket(64*1024, true);
     if(device_fd < 0)
