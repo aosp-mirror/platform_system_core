@@ -96,6 +96,12 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 
 # Shared and static library for target
 # ========================================================
+
+# This is needed in LOCAL_C_INCLUDES to access the C library's private
+# header named <bionic_time.h>
+#
+libcutils_c_includes := bionic/libc/private
+
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(commonSources) ashmem-dev.c mq.c android_reboot.c partition_utils.c uevent.c qtaguid.c klog.c
@@ -115,7 +121,7 @@ endif # !x86-atom
 endif # !sh
 endif # !arm
 
-LOCAL_C_INCLUDES := $(KERNEL_HEADERS)
+LOCAL_C_INCLUDES := $(libcutils_c_includes) $(KERNEL_HEADERS)
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(targetSmpFlag)
 include $(BUILD_STATIC_LIBRARY)
@@ -125,6 +131,7 @@ LOCAL_MODULE := libcutils
 LOCAL_WHOLE_STATIC_LIBRARIES := libcutils
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_CFLAGS += $(targetSmpFlag)
+LOCAL_C_INCLUDES := $(libcutils_c_includes)
 include $(BUILD_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
