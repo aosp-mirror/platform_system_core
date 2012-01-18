@@ -512,7 +512,9 @@ int properties_inited(void)
  */
 void load_persist_props(void)
 {
+#ifdef ALLOW_LOCAL_PROP_OVERRIDE
     load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE);
+#endif /* ALLOW_LOCAL_PROP_OVERRIDE */
     /* Read persistent properties after all default values have been loaded. */
     load_persistent_properties();
 }
@@ -523,7 +525,9 @@ void start_property_service(void)
 
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD);
     load_properties_from_file(PROP_PATH_SYSTEM_DEFAULT);
+#ifdef ALLOW_LOCAL_PROP_OVERRIDE
     load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE);
+#endif /* ALLOW_LOCAL_PROP_OVERRIDE */
     /* Read persistent properties after all default values have been loaded. */
     load_persistent_properties();
 
