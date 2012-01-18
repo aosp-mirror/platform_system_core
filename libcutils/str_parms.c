@@ -103,7 +103,7 @@ struct str_parms *str_parms_create_str(const char *_string)
     if (!str)
         goto err_strdup;
 
-    LOGV("%s: source string == '%s'\n", __func__, _string);
+    ALOGV("%s: source string == '%s'\n", __func__, _string);
 
     kvpair = strtok_r(str, ";", &tmpstr);
     while (kvpair && *kvpair) {
@@ -137,7 +137,7 @@ next_pair:
     }
 
     if (!items)
-        LOGV("%s: no items found in string\n", __func__);
+        ALOGV("%s: no items found in string\n", __func__);
 
     free(str);
 
@@ -281,7 +281,7 @@ char *str_parms_to_str(struct str_parms *str_parms)
 
 static bool dump_entry(void *key, void *value, void *context)
 {
-    LOGI("key: '%s' value: '%s'\n", (char *)key, (char *)value);
+    ALOGI("key: '%s' value: '%s'\n", (char *)key, (char *)value);
     return true;
 }
 
@@ -301,7 +301,7 @@ static void test_str_parms_str(const char *str)
     str_parms_dump(str_parms);
     out_str = str_parms_to_str(str_parms);
     str_parms_destroy(str_parms);
-    LOGI("%s: '%s' stringified is '%s'", __func__, str, out_str);
+    ALOGI("%s: '%s' stringified is '%s'", __func__, str, out_str);
     free(out_str);
 }
 

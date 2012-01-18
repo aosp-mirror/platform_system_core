@@ -48,13 +48,13 @@ bool SupplicantListener::onDataAvailable(SocketClient *cli) {
     size_t nread = buflen - 1;
 
     if ((rc = wpa_ctrl_recv(mMonitor, buf, &nread))) {
-        LOGE("wpa_ctrl_recv failed (%s)", strerror(errno));
+        ALOGE("wpa_ctrl_recv failed (%s)", strerror(errno));
         return false;
     }
 
     buf[nread] = '\0';
     if (!rc && !nread) {
-        LOGD("Received EOF on supplicant socket\n");
+        ALOGD("Received EOF on supplicant socket\n");
         strncpy(buf, WPA_EVENT_TERMINATING " - signal 0 received", buflen-1);
         buf[buflen-1] = '\0';
         return false;
@@ -63,7 +63,7 @@ bool SupplicantListener::onDataAvailable(SocketClient *cli) {
     SupplicantEvent *evt = mFactory->createEvent(buf, nread);
 
     if (!evt) {
-        LOGW("Dropping unknown supplicant event '%s'", buf);
+        ALOGW("Dropping unknown supplicant event '%s'", buf);
         return true;
     }
 
@@ -83,7 +83,7 @@ bool SupplicantListener::onDataAvailable(SocketClient *cli) {
     else if (evt->getType() == SupplicantEvent::EVENT_DISCONNECTED)
         mHandlers->onDisconnectedEvent((SupplicantDisconnectedEvent *) evt);
     else
-        LOGW("Whoops - no handler available for event '%s'\n", buf);
+        ALOGW("Whoops - no handler available for event '%s'\n", buf);
 #if 0
     else if (evt->getType() == SupplicantEvent::EVENT_TERMINATING)
         mHandlers->onTerminatingEvent(evt);

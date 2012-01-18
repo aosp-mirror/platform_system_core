@@ -53,7 +53,7 @@ int OpenVpnController::enable() {
     char tmp[64];
 
     if (!mPropMngr->get("vpn.gateway", tmp, sizeof(tmp))) {
-        LOGE("Error reading property 'vpn.gateway' (%s)", strerror(errno));
+        ALOGE("Error reading property 'vpn.gateway' (%s)", strerror(errno));
         return -1;
     }
     snprintf(svc, sizeof(svc), "openvpn:--remote %s 1194", tmp);

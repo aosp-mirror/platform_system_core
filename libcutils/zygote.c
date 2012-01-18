@@ -46,7 +46,7 @@ static int send_request(int fd, int sendStdio, int argc, const char **argv)
 {
 #ifndef HAVE_ANDROID_OS
     // not supported on simulator targets
-    //LOGE("zygote_* not supported on simulator targets");
+    //ALOGE("zygote_* not supported on simulator targets");
     return -1;
 #else /* HAVE_ANDROID_OS */
     uint32_t pid;

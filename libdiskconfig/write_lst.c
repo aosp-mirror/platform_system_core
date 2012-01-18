@@ -32,7 +32,7 @@ alloc_wl(uint32_t data_len)
     struct write_list *item;
 
     if (!(item = malloc(sizeof(struct write_list) + data_len))) {
-        LOGE("Unable to allocate memory.");
+        ALOGE("Unable to allocate memory.");
         return NULL;
     }
 
@@ -71,18 +71,18 @@ wlist_commit(int fd, struct write_list *lst, int test)
 {
     for(; lst; lst = lst->next) {
         if (lseek64(fd, lst->offset, SEEK_SET) != (loff_t)lst->offset) {
-            LOGE("Cannot seek to the specified position (%lld).", lst->offset);
+            ALOGE("Cannot seek to the specified position (%lld).", lst->offset);
             goto fail;
         }
 
         if (!test) {
             if (write(fd, lst->data, lst->len) != (int)lst->len) {
-                LOGE("Failed writing %u bytes at position %lld.", lst->len,
+                ALOGE("Failed writing %u bytes at position %lld.", lst->len,
                      lst->offset);
                 goto fail;
             }
         } else
-            LOGI("Would write %d bytes @ offset %lld.", lst->len, lst->offset);
+            ALOGI("Would write %d bytes @ offset %lld.", lst->len, lst->offset);
     }
 
     return 0;

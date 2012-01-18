@@ -159,7 +159,7 @@ int CodeCache::cache(  const AssemblyKeyBase& keyBase,
         const long base = long(assembly->base());
         const long curr = base + long(assembly->size());
         err = cacheflush(base, curr, 0);
-        LOGE_IF(err, "__ARM_NR_cacheflush error %s\n",
+        ALOGE_IF(err, "__ARM_NR_cacheflush error %s\n",
                 strerror(errno));
 #endif
     }

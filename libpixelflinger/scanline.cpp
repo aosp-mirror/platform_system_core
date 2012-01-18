@@ -351,7 +351,7 @@ static void pick_scanline(context_t* c)
     }
 
 #if DEBUG_NEEDS
-    LOGI("Needs: n=0x%08x p=0x%08x t0=0x%08x t1=0x%08x",
+    ALOGI("Needs: n=0x%08x p=0x%08x t0=0x%08x t1=0x%08x",
          c->state.needs.n, c->state.needs.p,
          c->state.needs.t[0], c->state.needs.t[1]);
 #endif
@@ -381,7 +381,7 @@ static void pick_scanline(context_t* c)
             err = gCodeCache.cache(a->key(), a);
         }
         if (ggl_unlikely(err)) {
-            LOGE("error generating or caching assembly. Reverting to NOP.");
+            ALOGE("error generating or caching assembly. Reverting to NOP.");
             c->scanline = scanline_noop;
             c->init_y = init_y_noop;
             c->step_y = step_y__nop;
@@ -395,12 +395,12 @@ static void pick_scanline(context_t* c)
         c->scanline_as->decStrong(c);
     }
 
-    //LOGI("using generated pixel-pipeline");
+    //ALOGI("using generated pixel-pipeline");
     c->scanline_as = assembly.get();
     c->scanline_as->incStrong(c); //  hold on to assembly
     c->scanline = (void(*)(context_t* c))assembly->base();
 #else
-//    LOGW("using generic (slow) pixel-pipeline");
+//    ALOGW("using generic (slow) pixel-pipeline");
     c->scanline = scanline;
 #endif
 }
@@ -1761,7 +1761,7 @@ void init_y_error(context_t* c, int32_t y0)
     // woooops, shoud never happen,
     // fail gracefully (don't display anything)
     init_y_noop(c, y0);
-    LOGE("color-buffer has an invalid format!");
+    ALOGE("color-buffer has an invalid format!");
 }
 
 // ----------------------------------------------------------------------------
