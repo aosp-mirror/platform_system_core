@@ -133,6 +133,10 @@ ifeq ($(TARGET_ARCH),arm)
 LOCAL_CFLAGS += -DANDROID_GADGET=1
 endif
 
+ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
+LOCAL_CFLAGS += -DALLOW_ADBD_ROOT=1
+endif
+
 LOCAL_MODULE := adbd
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
