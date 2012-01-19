@@ -60,7 +60,7 @@ void qtaguid_resTrack(void) {
 static int write_ctrl(const char *cmd) {
     int fd, res, savedErrno;
 
-    LOGV("write_ctrl(%s)", cmd);
+    ALOGV("write_ctrl(%s)", cmd);
 
     fd = TEMP_FAILURE_RETRY(open(CTRL_PROCPATH, O_WRONLY));
     if (fd < 0) {
@@ -74,7 +74,7 @@ static int write_ctrl(const char *cmd) {
         savedErrno = 0;
     }
     if (res < 0) {
-        LOGI("Failed write_ctrl(%s) res=%d errno=%d", cmd, res, savedErrno);
+        ALOGI("Failed write_ctrl(%s) res=%d errno=%d", cmd, res, savedErrno);
     }
     close(fd);
     return -savedErrno;
@@ -107,11 +107,11 @@ int qtaguid_tagSocket(int sockfd, int tag, uid_t uid) {
 
     snprintf(lineBuf, sizeof(lineBuf), "t %d %llu %d", sockfd, kTag, uid);
 
-    LOGV("Tagging socket %d with tag %llx{%u,0} for uid %d", sockfd, kTag, tag, uid);
+    ALOGV("Tagging socket %d with tag %llx{%u,0} for uid %d", sockfd, kTag, tag, uid);
 
     res = write_ctrl(lineBuf);
     if (res < 0) {
-        LOGI("Tagging socket %d with tag %llx(%d) for uid %d failed errno=%d",
+        ALOGI("Tagging socket %d with tag %llx(%d) for uid %d failed errno=%d",
              sockfd, kTag, tag, uid, res);
     }
 
@@ -122,12 +122,12 @@ int qtaguid_untagSocket(int sockfd) {
     char lineBuf[CTRL_MAX_INPUT_LEN];
     int res;
 
-    LOGV("Untagging socket %d", sockfd);
+    ALOGV("Untagging socket %d", sockfd);
 
     snprintf(lineBuf, sizeof(lineBuf), "u %d", sockfd);
     res = write_ctrl(lineBuf);
     if (res < 0) {
-        LOGI("Untagging socket %d failed errno=%d", sockfd, res);
+        ALOGI("Untagging socket %d failed errno=%d", sockfd, res);
     }
 
     return res;
@@ -137,7 +137,7 @@ int qtaguid_setCounterSet(int counterSetNum, uid_t uid) {
     char lineBuf[CTRL_MAX_INPUT_LEN];
     int res;
 
-    LOGV("Setting counters to set %d for uid %d", counterSetNum, uid);
+    ALOGV("Setting counters to set %d for uid %d", counterSetNum, uid);
 
     snprintf(lineBuf, sizeof(lineBuf), "s %d %d", counterSetNum, uid);
     res = write_ctrl(lineBuf);
@@ -149,14 +149,14 @@ int qtaguid_deleteTagData(int tag, uid_t uid) {
     int fd, cnt = 0, res = 0;
     uint64_t kTag = (uint64_t)tag << 32;
 
-    LOGV("Deleting tag data with tag %llx{%d,0} for uid %d", kTag, tag, uid);
+    ALOGV("Deleting tag data with tag %llx{%d,0} for uid %d", kTag, tag, uid);
 
     pthread_once(&resTrackInitDone, qtaguid_resTrack);
 
     snprintf(lineBuf, sizeof(lineBuf), "d %llu %d", kTag, uid);
     res = write_ctrl(lineBuf);
     if (res < 0) {
-        LOGI("Deleteing tag data with tag %llx/%d for uid %d failed with cnt=%d errno=%d",
+        ALOGI("Deleteing tag data with tag %llx/%d for uid %d failed with cnt=%d errno=%d",
              kTag, tag, uid, cnt, errno);
     }
 

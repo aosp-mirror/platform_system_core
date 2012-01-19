@@ -58,13 +58,13 @@ int WifiScanner::stop() {
     char c = 0;
 
     if (write(mCtrlPipe[1], &c, 1) != 1) {
-        LOGE("Error writing to control pipe (%s)", strerror(errno));
+        ALOGE("Error writing to control pipe (%s)", strerror(errno));
         return -1;
     }
 
     void *ret;
     if (pthread_join(mThread, &ret)) {
-        LOGE("Error joining to scanner thread (%s)", strerror(errno));
+        ALOGE("Error joining to scanner thread (%s)", strerror(errno));
         return -1;
     }
 
@@ -74,7 +74,7 @@ int WifiScanner::stop() {
 }
 
 void WifiScanner::run() {
-    LOGD("Starting wifi scanner (active = %d)", mActive);
+    ALOGD("Starting wifi scanner (active = %d)", mActive);
 
     while(1) {
         fd_set read_fds;
@@ -88,16 +88,16 @@ void WifiScanner::run() {
         FD_SET(mCtrlPipe[0], &read_fds);
 
         if (mSuppl->triggerScan(mActive)) {
-            LOGW("Error triggering scan (%s)", strerror(errno));
+            ALOGW("Error triggering scan (%s)", strerror(errno));
         }
 
         if ((rc = select(mCtrlPipe[0] + 1, &read_fds, NULL, NULL, &to)) < 0) {
-            LOGE("select failed (%s) - sleeping for one scanner period", strerror(errno));
+            ALOGE("select failed (%s) - sleeping for one scanner period", strerror(errno));
             sleep(mPeriod);
             continue;
         } else if (!rc) {
         } else if (FD_ISSET(mCtrlPipe[0], &read_fds))
             break;
     } // while
-    LOGD("Stopping wifi scanner");
+    ALOGD("Stopping wifi scanner");
 }

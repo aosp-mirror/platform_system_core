@@ -144,7 +144,7 @@ int record_stream_get_next (RecordStream *p_rs, void ** p_outRecord,
         && p_rs->read_end == p_rs->buffer_end
     ) {
         // this should never happen
-        //LOGE("max record length exceeded\n");
+        //ALOGE("max record length exceeded\n");
         assert (0);
         errno = EFBIG;
         return -1;

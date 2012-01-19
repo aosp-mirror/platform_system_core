@@ -64,22 +64,22 @@ Supplicant::~Supplicant() {
 int Supplicant::start() {
 
     if (setupConfig()) {
-        LOGW("Unable to setup supplicant.conf");
+        ALOGW("Unable to setup supplicant.conf");
     }
 
     if (mServiceManager->start(SUPPLICANT_SERVICE_NAME)) {
-        LOGE("Error starting supplicant (%s)", strerror(errno));
+        ALOGE("Error starting supplicant (%s)", strerror(errno));
         return -1;
     }
 
     wpa_ctrl_cleanup();
     if (connectToSupplicant()) {
-        LOGE("Error connecting to supplicant (%s)\n", strerror(errno));
+        ALOGE("Error connecting to supplicant (%s)\n", strerror(errno));
         return -1;
     }
     
     if (retrieveInterfaceName()) {
-        LOGE("Error retrieving interface name (%s)\n", strerror(errno));
+        ALOGE("Error retrieving interface name (%s)\n", strerror(errno));
         return -1;
     }
 
@@ -89,12 +89,12 @@ int Supplicant::start() {
 int Supplicant::stop() {
 
     if (mListener->stopListener()) {
-        LOGW("Unable to stop supplicant listener (%s)", strerror(errno));
+        ALOGW("Unable to stop supplicant listener (%s)", strerror(errno));
         return -1;
     }
 
     if (mServiceManager->stop(SUPPLICANT_SERVICE_NAME)) {
-        LOGW("Error stopping supplicant (%s)", strerror(errno));
+        ALOGW("Error stopping supplicant (%s)", strerror(errno));
     }
 
     if (mCtrl) {
@@ -120,7 +120,7 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len) {
         return -1;
     }
 
-//    LOGD("sendCommand(): -> '%s'", cmd);
+//    ALOGD("sendCommand(): -> '%s'", cmd);
 
     int rc;
     memset(reply, 0, *reply_len);
@@ -133,7 +133,7 @@ int Supplicant::sendCommand(const char *cmd, char *reply, size_t *reply_len) {
         return -1;
     }
 
- //   LOGD("sendCommand(): <- '%s'", reply);
+ //   ALOGD("sendCommand(): <- '%s'", reply);
     return 0;
 }
 SupplicantStatus *Supplicant::getStatus() {
@@ -178,7 +178,7 @@ int Supplicant::refreshNetworkList() {
     char *linep_next = NULL;
 
     if (!strtok_r(reply, "\n", &linep_next)) {
-        LOGW("Malformatted network list\n");
+        ALOGW("Malformatted network list\n");
         free(reply);
         errno = EIO;
         return -1;
@@ -199,7 +199,7 @@ int Supplicant::refreshNetworkList() {
         if ((merge_wn = this->lookupNetwork_UNLOCKED(new_wn->getNetworkId()))) {
             num_refreshed++;
             if (merge_wn->refresh()) {
-                LOGW("Error refreshing network %d (%s)",
+                ALOGW("Error refreshing network %d (%s)",
                      merge_wn->getNetworkId(), strerror(errno));
                 }
             delete new_wn;
@@ -210,7 +210,7 @@ int Supplicant::refreshNetworkList() {
             new_wn->attachProperties(pm, new_ns);
             mNetworks->push_back(new_wn);
             if (new_wn->refresh()) {
-                LOGW("Unable to refresh network id %d (%s)",
+                ALOGW("Unable to refresh network id %d (%s)",
                     new_wn->getNetworkId(), strerror(errno));
             }
         }
@@ -233,7 +233,7 @@ int Supplicant::refreshNetworkList() {
     }
 
 
-    LOGD("Networks added %d, refreshed %d, removed %d\n", 
+    ALOGD("Networks added %d, refreshed %d, removed %d\n",
          num_added, num_refreshed, num_removed);
     pthread_mutex_unlock(&mNetworksLock);
 
@@ -243,11 +243,11 @@ int Supplicant::refreshNetworkList() {
 
 int Supplicant::connectToSupplicant() {
     if (!isStarted())
-        LOGW("Supplicant service not running");
+        ALOGW("Supplicant service not running");
 
     mCtrl = wpa_ctrl_open("tiwlan0"); // XXX:
     if (mCtrl == NULL) {
-        LOGE("Unable to open connection to supplicant on \"%s\": %s",
+        ALOGE("Unable to open connection to supplicant on \"%s\": %s",
              "tiwlan0", strerror(errno));
         return -1;
     }
@@ -267,7 +267,7 @@ int Supplicant::connectToSupplicant() {
     mListener = new SupplicantListener(mHandlers, mMonitor);
 
     if (mListener->startListener()) {
-        LOGE("Error - unable to start supplicant listener");
+        ALOGE("Error - unable to start supplicant listener");
         stop();
         return -1;
     }
@@ -280,7 +280,7 @@ int Supplicant::setScanMode(bool active) {
 
     if (sendCommand((active ? "DRIVER SCAN-ACTIVE" : "DRIVER SCAN-PASSIVE"),
                      reply, &len)) {
-        LOGW("triggerScan(%d): Error setting scan mode (%s)", active,
+        ALOGW("triggerScan(%d): Error setting scan mode (%s)", active,
              strerror(errno));
         return -1;
     }
@@ -292,7 +292,7 @@ int Supplicant::triggerScan() {
     size_t len = sizeof(reply);
 
     if (sendCommand("SCAN", reply, &len)) {
-        LOGW("triggerScan(): Error initiating scan");
+        ALOGW("triggerScan(): Error initiating scan");
         return -1;
     }
     return 0;
@@ -303,7 +303,7 @@ int Supplicant::getRssi(int *buffer) {
     size_t len = sizeof(reply);
 
     if (sendCommand("DRIVER RSSI", reply, &len)) {
-        LOGW("Failed to get RSSI (%s)", strerror(errno));
+        ALOGW("Failed to get RSSI (%s)", strerror(errno));
         return -1;
     }
 
@@ -311,7 +311,7 @@ int Supplicant::getRssi(int *buffer) {
     char *s;
     for (int i = 0; i < 3; i++) {
         if (!(s = strsep(&next, " "))) {
-            LOGE("Error parsing RSSI");
+            ALOGE("Error parsing RSSI");
             errno = EIO;
             return -1;
         }
@@ -325,7 +325,7 @@ int Supplicant::getLinkSpeed() {
     size_t len = sizeof(reply);
 
     if (sendCommand("DRIVER LINKSPEED", reply, &len)) {
-        LOGW("Failed to get LINKSPEED (%s)", strerror(errno));
+        ALOGW("Failed to get LINKSPEED (%s)", strerror(errno));
         return -1;
     }
 
@@ -333,13 +333,13 @@ int Supplicant::getLinkSpeed() {
     char *s;
 
     if (!(s = strsep(&next, " "))) {
-        LOGE("Error parsing LINKSPEED");
+        ALOGE("Error parsing LINKSPEED");
         errno = EIO;
         return -1;
     }
 
     if (!(s = strsep(&next, " "))) {
-        LOGE("Error parsing LINKSPEED");
+        ALOGE("Error parsing LINKSPEED");
         errno = EIO;
         return -1;
     }
@@ -350,10 +350,10 @@ int Supplicant::stopDriver() {
     char reply[64];
     size_t len = sizeof(reply);
 
-    LOGD("stopDriver()");
+    ALOGD("stopDriver()");
 
     if (sendCommand("DRIVER STOP", reply, &len)) {
-        LOGW("Failed to stop driver (%s)", strerror(errno));
+        ALOGW("Failed to stop driver (%s)", strerror(errno));
         return -1;
     }
     return 0;
@@ -363,9 +363,9 @@ int Supplicant::startDriver() {
     char reply[64];
     size_t len = sizeof(reply);
 
-    LOGD("startDriver()");
+    ALOGD("startDriver()");
     if (sendCommand("DRIVER START", reply, &len)) {
-        LOGW("Failed to start driver (%s)", strerror(errno));
+        ALOGW("Failed to start driver (%s)", strerror(errno));
         return -1;
     }
     return 0;
@@ -452,26 +452,26 @@ int Supplicant::setupConfig() {
     if (access(SUPP_CONFIG_FILE, R_OK|W_OK) == 0) {
         return 0;
     } else if (errno != ENOENT) {
-        LOGE("Cannot access \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
+        ALOGE("Cannot access \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
         return -1;
     }
 
     srcfd = open(SUPP_CONFIG_TEMPLATE, O_RDONLY);
     if (srcfd < 0) {
-        LOGE("Cannot open \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
+        ALOGE("Cannot open \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
         return -1;
     }
 
     destfd = open(SUPP_CONFIG_FILE, O_CREAT|O_WRONLY, 0660);
     if (destfd < 0) {
         close(srcfd);
-        LOGE("Cannot create \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
+        ALOGE("Cannot create \"%s\": %s", SUPP_CONFIG_FILE, strerror(errno));
         return -1;
     }
 
     while ((nread = read(srcfd, buf, sizeof(buf))) != 0) {
         if (nread < 0) {
-            LOGE("Error reading \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
+            ALOGE("Error reading \"%s\": %s", SUPP_CONFIG_TEMPLATE, strerror(errno));
             close(srcfd);
             close(destfd);
             unlink(SUPP_CONFIG_FILE);
@@ -484,7 +484,7 @@ int Supplicant::setupConfig() {
     close(srcfd);
 
     if (chown(SUPP_CONFIG_FILE, AID_SYSTEM, AID_WIFI) < 0) {
-        LOGE("Error changing group ownership of %s to %d: %s",
+        ALOGE("Error changing group ownership of %s to %d: %s",
              SUPP_CONFIG_FILE, AID_WIFI, strerror(errno));
         unlink(SUPP_CONFIG_FILE);
         return -1;
@@ -496,7 +496,7 @@ int Supplicant::setNetworkVar(int networkId, const char *var, const char *val) {
     char reply[255];
     size_t len = sizeof(reply) -1;
 
-    LOGD("netid %d, var '%s' = '%s'", networkId, var, val);
+    ALOGD("netid %d, var '%s' = '%s'", networkId, var, val);
     char *tmp;
     asprintf(&tmp, "SET_NETWORK %d %s %s", networkId, var, val);
     if (sendCommand(tmp, reply, &len)) {
@@ -507,7 +507,7 @@ int Supplicant::setNetworkVar(int networkId, const char *var, const char *val) {
 
     len = sizeof(reply) -1;
     if (sendCommand("SAVE_CONFIG", reply, &len)) {
-        LOGE("Error saving config after %s = %s", var, val);
+        ALOGE("Error saving config after %s = %s", var, val);
         return -1;
     }
     return 0;
@@ -621,7 +621,7 @@ int Supplicant::setBluetoothCoexistenceMode(int mode) {
 int Supplicant::setApScanMode(int mode) {
     char req[64];
 
-//    LOGD("setApScanMode(%d)", mode);
+//    ALOGD("setApScanMode(%d)", mode);
     sprintf(req, "AP_SCAN %d", mode);
 
     char reply[16];

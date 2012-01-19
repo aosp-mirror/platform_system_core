@@ -81,9 +81,9 @@ SupplicantStatus *SupplicantStatus::createStatus(char *data, int len) {
             else if (!strcmp(value, "IDLE"))
                 state = SupplicantState::IDLE;
             else 
-                LOGE("Unknown supplicant state '%s'", value);
+                ALOGE("Unknown supplicant state '%s'", value);
         } else
-            LOGD("Ignoring unsupported status token '%s'", token);
+            ALOGD("Ignoring unsupported status token '%s'", token);
     }
 
     return new SupplicantStatus(state, id, bssid, ssid);

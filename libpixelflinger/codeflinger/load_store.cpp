@@ -257,7 +257,7 @@ void GGLAssembler::downshift(
     int dbits = dh - dl;
     int dithering = 0;
     
-    LOGE_IF(sbits<dbits, "sbits (%d) < dbits (%d) in downshift", sbits, dbits);
+    ALOGE_IF(sbits<dbits, "sbits (%d) < dbits (%d) in downshift", sbits, dbits);
 
     if (sbits>dbits) {
         // see if we need to dither

@@ -66,10 +66,10 @@ Property *PropertyManager::lookupProperty_UNLOCKED(PropertyNamespace *ns, const 
 int PropertyManager::attachProperty(const char *ns_name, Property *p) {
     PropertyNamespace *ns;
 
-    LOGD("Attaching property %s to namespace %s", p->getName(), ns_name);
+    ALOGD("Attaching property %s to namespace %s", p->getName(), ns_name);
     pthread_mutex_lock(&mLock);
     if (!(ns = lookupNamespace_UNLOCKED(ns_name))) {
-        LOGD("Creating namespace %s", ns_name);
+        ALOGD("Creating namespace %s", ns_name);
         ns = new PropertyNamespace(ns_name);
         mNamespaces->push_back(ns);
     }
@@ -77,7 +77,7 @@ int PropertyManager::attachProperty(const char *ns_name, Property *p) {
     if (lookupProperty_UNLOCKED(ns, p->getName())) {
         errno = EADDRINUSE;
         pthread_mutex_unlock(&mLock);
-        LOGE("Failed to register property %s.%s (%s)",
+        ALOGE("Failed to register property %s.%s (%s)",
             ns_name, p->getName(), strerror(errno));
         return -1;
     }
@@ -90,11 +90,11 @@ int PropertyManager::attachProperty(const char *ns_name, Property *p) {
 int PropertyManager::detachProperty(const char *ns_name, Property *p) {
     PropertyNamespace *ns;
 
-    LOGD("Detaching property %s from namespace %s", p->getName(), ns_name);
+    ALOGD("Detaching property %s from namespace %s", p->getName(), ns_name);
     pthread_mutex_lock(&mLock);
     if (!(ns = lookupNamespace_UNLOCKED(ns_name))) {
         pthread_mutex_unlock(&mLock);
-        LOGE("Namespace '%s' not found", ns_name);
+        ALOGE("Namespace '%s' not found", ns_name);
         return -1;
     }
 
@@ -110,7 +110,7 @@ int PropertyManager::detachProperty(const char *ns_name, Property *p) {
         }
     }
 
-    LOGE("Property %s.%s not found", ns_name, p->getName());
+    ALOGE("Property %s.%s not found", ns_name, p->getName());
     pthread_mutex_unlock(&mLock);
     errno = ENOENT;
     return -1;
@@ -130,7 +130,7 @@ int PropertyManager::doSet(Property *p, int idx, const char *value) {
         errno = 0;
         tmp = strtol(value, (char **) NULL, 10);
         if (errno) {
-            LOGE("Failed to convert '%s' to int", value);
+            ALOGE("Failed to convert '%s' to int", value);
             errno = EINVAL;
             return -1;
         }
@@ -138,13 +138,13 @@ int PropertyManager::doSet(Property *p, int idx, const char *value) {
     } else if (p->getType() == Property::Type_IPV4) {
         struct in_addr tmp;
         if (!inet_aton(value, &tmp)) {
-            LOGE("Failed to convert '%s' to ipv4", value);
+            ALOGE("Failed to convert '%s' to ipv4", value);
             errno = EINVAL;
             return -1;
         }
         return p->set(idx, &tmp);
     } else {
-        LOGE("Property '%s' has an unknown type (%d)", p->getName(),
+        ALOGE("Property '%s' has an unknown type (%d)", p->getName(),
              p->getType());
         errno = EINVAL;
         return -1;
@@ -157,7 +157,7 @@ int PropertyManager::doGet(Property *p, int idx, char *buffer, size_t max) {
 
     if (p->getType() == Property::Type_STRING) {
         if (p->get(idx, buffer, max)) {
-            LOGW("String property %s get failed (%s)", p->getName(),
+            ALOGW("String property %s get failed (%s)", p->getName(),
                  strerror(errno));
             return -1;
         }
@@ -165,7 +165,7 @@ int PropertyManager::doGet(Property *p, int idx, char *buffer, size_t max) {
     else if (p->getType() == Property::Type_INTEGER) {
         int tmp;
         if (p->get(idx, &tmp)) {
-            LOGW("Integer property %s get failed (%s)", p->getName(),
+            ALOGW("Integer property %s get failed (%s)", p->getName(),
                  strerror(errno));
             return -1;
         }
@@ -173,13 +173,13 @@ int PropertyManager::doGet(Property *p, int idx, char *buffer, size_t max) {
     } else if (p->getType() == Property::Type_IPV4) {
         struct in_addr tmp;
         if (p->get(idx, &tmp)) {
-            LOGW("IPV4 property %s get failed (%s)", p->getName(),
+            ALOGW("IPV4 property %s get failed (%s)", p->getName(),
                  strerror(errno));
             return -1;
         }
         strncpy(buffer, inet_ntoa(tmp), max);
     } else {
-        LOGE("Property '%s' has an unknown type (%d)", p->getName(),
+        ALOGE("Property '%s' has an unknown type (%d)", p->getName(),
              p->getType());
         errno = EINVAL;
         return -1;
@@ -193,7 +193,7 @@ int PropertyManager::doGet(Property *p, int idx, char *buffer, size_t max) {
 
 int PropertyManager::set(const char *name, const char *value) {
 
-    LOGD("set %s = '%s'", name, value);
+    ALOGD("set %s = '%s'", name, value);
     pthread_mutex_lock(&mLock);
     PropertyNamespaceCollection::iterator ns_it;
     for (ns_it = mNamespaces->begin(); ns_it != mNamespaces->end(); ++ns_it) {
@@ -215,7 +215,7 @@ int PropertyManager::set(const char *name, const char *value) {
         }
     }
 
-    LOGE("Property %s not found", name);
+    ALOGE("Property %s not found", name);
     pthread_mutex_unlock(&mLock);
     errno = ENOENT;
     return -1;
@@ -246,7 +246,7 @@ const char *PropertyManager::get(const char *name, char *buffer, size_t max) {
         }
     }
 
-    LOGE("Property %s not found", name);
+    ALOGE("Property %s not found", name);
     pthread_mutex_unlock(&mLock);
     errno = ENOENT;
     return NULL;

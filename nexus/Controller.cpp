@@ -86,7 +86,7 @@ int Controller::unloadKernelModule(const char *modtag) {
     }
 
     if (rc != 0) {
-        LOGW("Unable to unload kernel driver '%s' (%s)", modtag,
+        ALOGW("Unable to unload kernel driver '%s' (%s)", modtag,
              strerror(errno));
     }
     return rc;
@@ -96,7 +96,7 @@ bool Controller::isKernelModuleLoaded(const char *modtag) {
     FILE *fp = fopen("/proc/modules", "r");
 
     if (!fp) {
-        LOGE("Unable to open /proc/modules (%s)", strerror(errno));
+        ALOGE("Unable to open /proc/modules (%s)", strerror(errno));
         return false;
     }
 
@@ -105,7 +105,7 @@ bool Controller::isKernelModuleLoaded(const char *modtag) {
         char *endTag = strchr(line, ' ');
 
         if (!endTag) {
-            LOGW("Unable to find tag for line '%s'", line);
+            ALOGW("Unable to find tag for line '%s'", line);
             continue;
         }
         if (!strncmp(line, modtag, (endTag - line))) {

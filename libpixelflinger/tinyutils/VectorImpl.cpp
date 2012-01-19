@@ -57,7 +57,7 @@ VectorImpl::VectorImpl(const VectorImpl& rhs)
 
 VectorImpl::~VectorImpl()
 {
-    LOG_ASSERT(!mCount,
+    ALOG_ASSERT(!mCount,
         "[%p] "
         "subclasses of VectorImpl must call finish_vector()"
         " in their destructor. Leaking %d bytes.",
@@ -67,7 +67,7 @@ VectorImpl::~VectorImpl()
 
 VectorImpl& VectorImpl::operator = (const VectorImpl& rhs)
 {
-    LOG_ASSERT(mItemSize == rhs.mItemSize,
+    ALOG_ASSERT(mItemSize == rhs.mItemSize,
         "Vector<> have different types (this=%p, rhs=%p)", this, &rhs);
     if (this != &rhs) {
         release_storage();
@@ -176,7 +176,7 @@ ssize_t VectorImpl::replaceAt(size_t index)
 
 ssize_t VectorImpl::replaceAt(const void* prototype, size_t index)
 {
-    LOG_ASSERT(index<size(),
+    ALOG_ASSERT(index<size(),
         "[%p] replace: index=%d, size=%d", this, (int)index, (int)size());
 
     void* item = editItemLocation(index);
@@ -193,7 +193,7 @@ ssize_t VectorImpl::replaceAt(const void* prototype, size_t index)
 
 ssize_t VectorImpl::removeItemsAt(size_t index, size_t count)
 {
-    LOG_ASSERT((index+count)<=size(),
+    ALOG_ASSERT((index+count)<=size(),
         "[%p] remove: index=%d, count=%d, size=%d",
                this, (int)index, (int)count, (int)size());
 
@@ -217,7 +217,7 @@ void VectorImpl::clear()
 
 void* VectorImpl::editItemLocation(size_t index)
 {
-    LOG_ASSERT(index<capacity(),
+    ALOG_ASSERT(index<capacity(),
         "[%p] itemLocation: index=%d, capacity=%d, count=%d",
         this, (int)index, (int)capacity(), (int)mCount);
             
@@ -229,7 +229,7 @@ void* VectorImpl::editItemLocation(size_t index)
 
 const void* VectorImpl::itemLocation(size_t index) const
 {
-    LOG_ASSERT(index<capacity(),
+    ALOG_ASSERT(index<capacity(),
         "[%p] editItemLocation: index=%d, capacity=%d, count=%d",
         this, (int)index, (int)capacity(), (int)mCount);
 
@@ -272,7 +272,7 @@ void VectorImpl::release_storage()
 
 void* VectorImpl::_grow(size_t where, size_t amount)
 {
-//    LOGV("_grow(this=%p, where=%d, amount=%d) count=%d, capacity=%d",
+//    ALOGV("_grow(this=%p, where=%d, amount=%d) count=%d, capacity=%d",
 //        this, (int)where, (int)amount, (int)mCount, (int)capacity());
 
     if (where > mCount)
@@ -281,7 +281,7 @@ void* VectorImpl::_grow(size_t where, size_t amount)
     const size_t new_size = mCount + amount;
     if (capacity() < new_size) {
         const size_t new_capacity = max(kMinVectorCapacity, ((new_size*3)+1)/2);
-//        LOGV("grow vector %p, new_capacity=%d", this, (int)new_capacity);
+//        ALOGV("grow vector %p, new_capacity=%d", this, (int)new_capacity);
         if ((mStorage) &&
             (mCount==where) &&
             (mFlags & HAS_TRIVIAL_COPY) &&
@@ -325,7 +325,7 @@ void VectorImpl::_shrink(size_t where, size_t amount)
     if (!mStorage)
         return;
 
-//    LOGV("_shrink(this=%p, where=%d, amount=%d) count=%d, capacity=%d",
+//    ALOGV("_shrink(this=%p, where=%d, amount=%d) count=%d, capacity=%d",
 //        this, (int)where, (int)amount, (int)mCount, (int)capacity());
 
     if (where >= mCount)
@@ -334,7 +334,7 @@ void VectorImpl::_shrink(size_t where, size_t amount)
     const size_t new_size = mCount - amount;
     if (new_size*3 < capacity()) {
         const size_t new_capacity = max(kMinVectorCapacity, new_size*2);
-//        LOGV("shrink vector %p, new_capacity=%d", this, (int)new_capacity);
+//        ALOGV("shrink vector %p, new_capacity=%d", this, (int)new_capacity);
         if ((where == mCount-amount) &&
             (mFlags & HAS_TRIVIAL_COPY) &&
             (mFlags & HAS_TRIVIAL_DTOR))

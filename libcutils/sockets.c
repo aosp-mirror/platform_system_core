@@ -30,12 +30,12 @@ bool socket_peer_is_trusted(int fd)
     int n = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cr, &len);
 
     if (n != 0) {
-        LOGE("could not get socket credentials: %s\n", strerror(errno));
+        ALOGE("could not get socket credentials: %s\n", strerror(errno));
         return false;
     }
 
     if ((cr.uid != AID_ROOT) && (cr.uid != AID_SHELL)) {
-        LOGE("untrusted userid on other end of socket: userid %d\n", cr.uid);
+        ALOGE("untrusted userid on other end of socket: userid %d\n", cr.uid);
         return false;
     }
 #endif

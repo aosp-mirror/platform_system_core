@@ -30,7 +30,7 @@ Property::Property(const char *name, bool readOnly,
           mName(name), mReadOnly(readOnly), mType(type),
           mNumElements(numElements) {
     if (index(name, '.')) {
-        LOGW("Property name %s violates namespace rules", name);
+        ALOGW("Property name %s violates namespace rules", name);
     }
 }
 
@@ -38,22 +38,22 @@ StringProperty::StringProperty(const char *name, bool ro, int elements) :
                 Property(name, ro, Property::Type_STRING, elements) {
 }
 int StringProperty::set(int idx, int value) {
-    LOGE("Integer 'set' called on string property!");
+    ALOGE("Integer 'set' called on string property!");
     errno = EINVAL;
     return -1;
 }
 int StringProperty::set(int idx, struct in_addr *value) {
-    LOGE("IpAddr 'set' called on string property!");
+    ALOGE("IpAddr 'set' called on string property!");
     errno = EINVAL;
     return -1;
 }
 int StringProperty::get(int idx, int *buffer) {
-    LOGE("Integer 'get' called on string property!");
+    ALOGE("Integer 'get' called on string property!");
     errno = EINVAL;
     return -1;
 }
 int StringProperty::get(int idx, struct in_addr *buffer) {
-    LOGE("IpAddr 'get' called on string property!");
+    ALOGE("IpAddr 'get' called on string property!");
     errno = EINVAL;
     return -1;
 }
@@ -67,7 +67,7 @@ StringPropertyHelper::StringPropertyHelper(const char *name, bool ro,
 
 int StringPropertyHelper::set(int idx, const char *value) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on StringPropertyHelper::set");
+        ALOGW("Attempt to use array index on StringPropertyHelper::set");
         errno = EINVAL;
         return -1;
     }
@@ -77,7 +77,7 @@ int StringPropertyHelper::set(int idx, const char *value) {
 
 int StringPropertyHelper::get(int idx, char *buffer, size_t max) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on StringPropertyHelper::get");
+        ALOGW("Attempt to use array index on StringPropertyHelper::get");
         errno = EINVAL;
         return -1;
     }
@@ -90,22 +90,22 @@ IntegerProperty::IntegerProperty(const char *name, bool ro, int elements) :
 }
 
 int IntegerProperty::set(int idx, const char *value) {
-    LOGE("String 'set' called on integer property!");
+    ALOGE("String 'set' called on integer property!");
     errno = EINVAL;
     return -1;
 }
 int IntegerProperty::set(int idx, struct in_addr *value) {
-    LOGE("IpAddr 'set' called on integer property!");
+    ALOGE("IpAddr 'set' called on integer property!");
     errno = EINVAL;
     return -1;
 }
 int IntegerProperty::get(int idx, char *buffer, size_t max) {
-    LOGE("String 'get' called on integer property!");
+    ALOGE("String 'get' called on integer property!");
     errno = EINVAL;
     return -1;
 }
 int IntegerProperty::get(int idx, struct in_addr *buffer) {
-    LOGE("IpAddr 'get' called on integer property!");
+    ALOGE("IpAddr 'get' called on integer property!");
     errno = EINVAL;
     return -1;
 }
@@ -118,7 +118,7 @@ IntegerPropertyHelper::IntegerPropertyHelper(const char *name, bool ro,
 
 int IntegerPropertyHelper::set(int idx, int value) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on IntegerPropertyHelper::set");
+        ALOGW("Attempt to use array index on IntegerPropertyHelper::set");
         errno = EINVAL;
         return -1;
     }
@@ -128,7 +128,7 @@ int IntegerPropertyHelper::set(int idx, int value) {
 
 int IntegerPropertyHelper::get(int idx, int *buffer) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on IntegerPropertyHelper::get");
+        ALOGW("Attempt to use array index on IntegerPropertyHelper::get");
         errno = EINVAL;
         return -1;
     }
@@ -141,22 +141,22 @@ IPV4AddressProperty::IPV4AddressProperty(const char *name, bool ro, int elements
 }
 
 int IPV4AddressProperty::set(int idx, const char *value) {
-    LOGE("String 'set' called on ipv4 property!");
+    ALOGE("String 'set' called on ipv4 property!");
     errno = EINVAL;
     return -1;
 }
 int IPV4AddressProperty::set(int idx, int value) {
-    LOGE("Integer 'set' called on ipv4 property!");
+    ALOGE("Integer 'set' called on ipv4 property!");
     errno = EINVAL;
     return -1;
 }
 int IPV4AddressProperty::get(int idx, char *buffer, size_t max) {
-    LOGE("String 'get' called on ipv4 property!");
+    ALOGE("String 'get' called on ipv4 property!");
     errno = EINVAL;
     return -1;
 }
 int IPV4AddressProperty::get(int idx, int *buffer) {
-    LOGE("Integer 'get' called on ipv4 property!");
+    ALOGE("Integer 'get' called on ipv4 property!");
     errno = EINVAL;
     return -1;
 }
@@ -169,7 +169,7 @@ IPV4AddressPropertyHelper::IPV4AddressPropertyHelper(const char *name, bool ro,
 
 int IPV4AddressPropertyHelper::set(int idx, struct in_addr *value) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on IPV4AddressPropertyHelper::set");
+        ALOGW("Attempt to use array index on IPV4AddressPropertyHelper::set");
         errno = EINVAL;
         return -1;
     }
@@ -179,7 +179,7 @@ int IPV4AddressPropertyHelper::set(int idx, struct in_addr *value) {
 
 int IPV4AddressPropertyHelper::get(int idx, struct in_addr *buffer) {
     if (idx != 0) {
-        LOGW("Attempt to use array index on IPV4AddressPropertyHelper::get");
+        ALOGW("Attempt to use array index on IPV4AddressPropertyHelper::get");
         errno = EINVAL;
         return -1;
     }

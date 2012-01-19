@@ -43,15 +43,15 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, const char *data)
     char *flags;
 
     if (!(id = strsep(&next, "\t")))
-        LOGE("Failed to extract network id");
+        ALOGE("Failed to extract network id");
     if (!(ssid = strsep(&next, "\t")))
-        LOGE("Failed to extract ssid");
+        ALOGE("Failed to extract ssid");
     if (!(bssid = strsep(&next, "\t")))
-        LOGE("Failed to extract bssid");
+        ALOGE("Failed to extract bssid");
     if (!(flags = strsep(&next, "\t")))
-        LOGE("Failed to extract flags");
+        ALOGE("Failed to extract flags");
 
-   // LOGD("id '%s', ssid '%s', bssid '%s', flags '%s'", id, ssid, bssid,
+   // ALOGD("id '%s', ssid '%s', bssid '%s', flags '%s'", id, ssid, bssid,
    //      flags ? flags :"null");
 
     if (id)
@@ -77,7 +77,7 @@ WifiNetwork::WifiNetwork(WifiController *c, Supplicant *suppl, const char *data)
         if (!strcmp(flags, "[DISABLED]"))
             mEnabled = false;
         else
-            LOGW("Unsupported flags '%s'", flags);
+            ALOGW("Unsupported flags '%s'", flags);
     }
 
     free(tmp);
@@ -215,7 +215,7 @@ int WifiNetwork::refresh() {
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "key_mgmt", buffer, len)) {
         if (WifiNetwork::parseKeyManagementMask(buffer, &mask)) {
-            LOGE("Error parsing key_mgmt (%s)", strerror(errno));
+            ALOGE("Error parsing key_mgmt (%s)", strerror(errno));
         } else {
            mKeyManagement = mask;
         }
@@ -224,7 +224,7 @@ int WifiNetwork::refresh() {
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "proto", buffer, len)) {
         if (WifiNetwork::parseProtocolsMask(buffer, &mask)) {
-            LOGE("Error parsing proto (%s)", strerror(errno));
+            ALOGE("Error parsing proto (%s)", strerror(errno));
         } else {
            mProtocols = mask;
         }
@@ -233,7 +233,7 @@ int WifiNetwork::refresh() {
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "auth_alg", buffer, len)) {
         if (WifiNetwork::parseAuthAlgorithmsMask(buffer, &mask)) {
-            LOGE("Error parsing auth_alg (%s)", strerror(errno));
+            ALOGE("Error parsing auth_alg (%s)", strerror(errno));
         } else {
            mAuthAlgorithms = mask;
         }
@@ -242,7 +242,7 @@ int WifiNetwork::refresh() {
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "pairwise", buffer, len)) {
         if (WifiNetwork::parsePairwiseCiphersMask(buffer, &mask)) {
-            LOGE("Error parsing pairwise (%s)", strerror(errno));
+            ALOGE("Error parsing pairwise (%s)", strerror(errno));
         } else {
            mPairwiseCiphers = mask;
         }
@@ -251,7 +251,7 @@ int WifiNetwork::refresh() {
     len = sizeof(buffer);
     if (mSuppl->getNetworkVar(mNetid, "group", buffer, len)) {
         if (WifiNetwork::parseGroupCiphersMask(buffer, &mask)) {
-            LOGE("Error parsing group (%s)", strerror(errno));
+            ALOGE("Error parsing group (%s)", strerror(errno));
         } else {
            mGroupCiphers = mask;
         }
@@ -259,7 +259,7 @@ int WifiNetwork::refresh() {
 
     return 0;
 out_err:
-    LOGE("Refresh failed (%s)",strerror(errno));
+    ALOGE("Refresh failed (%s)",strerror(errno));
     return -1;
 }
 
@@ -453,12 +453,12 @@ int WifiNetwork::setEnabled(bool enabled) {
 
     if (enabled) {
         if (getPriority() == -1) {
-            LOGE("Cannot enable network when priority is not set");
+            ALOGE("Cannot enable network when priority is not set");
             errno = EAGAIN;
             return -1;
         }
         if (getKeyManagement() == KeyManagementMask::UNKNOWN) {
-            LOGE("Cannot enable network when KeyManagement is not set");
+            ALOGE("Cannot enable network when KeyManagement is not set");
             errno = EAGAIN;
             return -1;
         }
@@ -511,7 +511,7 @@ int WifiNetwork::parseKeyManagementMask(const char *buffer, uint32_t *mask) {
     char *v_next = v_tmp;
     char *v_token;
 
-//    LOGD("parseKeyManagementMask(%s)", buffer);
+//    ALOGD("parseKeyManagementMask(%s)", buffer);
     *mask = 0;
 
     while((v_token = strsep(&v_next, " "))) {
@@ -526,13 +526,13 @@ int WifiNetwork::parseKeyManagementMask(const char *buffer, uint32_t *mask) {
             else if (!strcasecmp(v_token, "IEEE8021X"))
                 *mask |= KeyManagementMask::IEEE8021X;
             else {
-                LOGW("Invalid KeyManagementMask value '%s'", v_token);
+                ALOGW("Invalid KeyManagementMask value '%s'", v_token);
                 errno = EINVAL;
                 free(v_tmp);
                 return -1;
             }
         } else {
-            LOGW("KeyManagementMask value '%s' when NONE", v_token);
+            ALOGW("KeyManagementMask value '%s' when NONE", v_token);
             errno = EINVAL;
             free(v_tmp);
             return -1;
@@ -548,7 +548,7 @@ int WifiNetwork::parseProtocolsMask(const char *buffer, uint32_t *mask) {
     char *v_next = v_tmp;
     char *v_token;
 
-//    LOGD("parseProtocolsMask(%s)", buffer);
+//    ALOGD("parseProtocolsMask(%s)", buffer);
     *mask = 0;
     while((v_token = strsep(&v_next, " "))) {
         if (!strcasecmp(v_token, "WPA"))
@@ -556,7 +556,7 @@ int WifiNetwork::parseProtocolsMask(const char *buffer, uint32_t *mask) {
         else if (!strcasecmp(v_token, "RSN"))
             *mask |= SecurityProtocolMask::RSN;
         else {
-            LOGW("Invalid ProtocolsMask value '%s'", v_token);
+            ALOGW("Invalid ProtocolsMask value '%s'", v_token);
             errno = EINVAL;
             free(v_tmp);
             return -1;
@@ -573,7 +573,7 @@ int WifiNetwork::parseAuthAlgorithmsMask(const char *buffer, uint32_t *mask) {
     char *v_next = v_tmp;
     char *v_token;
 
-//    LOGD("parseAuthAlgorithmsMask(%s)", buffer);
+//    ALOGD("parseAuthAlgorithmsMask(%s)", buffer);
 
     *mask = 0;
     if (buffer[0] == '\0')
@@ -587,7 +587,7 @@ int WifiNetwork::parseAuthAlgorithmsMask(const char *buffer, uint32_t *mask) {
         else if (!strcasecmp(v_token, "LEAP"))
             *mask |= AuthenticationAlgorithmMask::LEAP;
         else {
-            LOGW("Invalid AuthAlgorithmsMask value '%s'", v_token);
+            ALOGW("Invalid AuthAlgorithmsMask value '%s'", v_token);
             errno = EINVAL;
             free(v_tmp);
             return -1;
@@ -603,7 +603,7 @@ int WifiNetwork::parsePairwiseCiphersMask(const char *buffer, uint32_t *mask) {
     char *v_next = v_tmp;
     char *v_token;
 
-//    LOGD("parsePairwiseCiphersMask(%s)", buffer);
+//    ALOGD("parsePairwiseCiphersMask(%s)", buffer);
 
     *mask = 0;
     while((v_token = strsep(&v_next, " "))) {
@@ -616,13 +616,13 @@ int WifiNetwork::parsePairwiseCiphersMask(const char *buffer, uint32_t *mask) {
             else if (!strcasecmp(v_token, "CCMP"))
                 *mask |= PairwiseCiphersMask::CCMP;
         else {
-                LOGW("PairwiseCiphersMask value '%s' when NONE", v_token);
+                ALOGW("PairwiseCiphersMask value '%s' when NONE", v_token);
                 errno = EINVAL;
                 free(v_tmp);
                 return -1;
             }
         } else {
-            LOGW("Invalid PairwiseCiphersMask value '%s'", v_token);
+            ALOGW("Invalid PairwiseCiphersMask value '%s'", v_token);
             errno = EINVAL;
             free(v_tmp);
             return -1;
@@ -638,7 +638,7 @@ int WifiNetwork::parseGroupCiphersMask(const char *buffer, uint32_t *mask) {
     char *v_next = v_tmp;
     char *v_token;
 
-//    LOGD("parseGroupCiphersMask(%s)", buffer);
+//    ALOGD("parseGroupCiphersMask(%s)", buffer);
 
     *mask = 0;
     while((v_token = strsep(&v_next, " "))) {
@@ -651,7 +651,7 @@ int WifiNetwork::parseGroupCiphersMask(const char *buffer, uint32_t *mask) {
         else if (!strcasecmp(v_token, "CCMP"))
             *mask |= GroupCiphersMask::CCMP;
         else {
-            LOGW("Invalid GroupCiphersMask value '%s'", v_token);
+            ALOGW("Invalid GroupCiphersMask value '%s'", v_token);
             errno = EINVAL;
             free(v_tmp);
             return -1;
