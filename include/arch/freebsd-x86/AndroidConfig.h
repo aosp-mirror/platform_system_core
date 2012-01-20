@@ -114,7 +114,7 @@
 /*
  * Define this if we have localtime_r().
  */
-#define HAVE_LOCALTIME_R
+#define HAVE_LOCALTIME_R 1
 
 /*
  * Define this if we have gethostbyname_r().
