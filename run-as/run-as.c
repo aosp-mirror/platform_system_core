@@ -41,9 +41,9 @@
  *
  *  - This program should only run for the 'root' or 'shell' users
  *
- *  - Statically link against the C library, and avoid anything that
- *    is more complex than simple system calls until the uid/gid has
- *    been dropped to that of a normal user or you are sure to exit.
+ *  - Avoid anything that is more complex than simple system calls
+ *    until the uid/gid has been dropped to that of a normal user
+ *    or you are sure to exit.
  *
  *    This avoids depending on environment variables, system properties
  *    and other external factors that may affect the C library in
