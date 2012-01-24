@@ -37,6 +37,8 @@
 
 // Google's USB Vendor ID
 #define VENDOR_ID_GOOGLE        0x18d1
+// Intel's USB Vendor ID
+#define VENDOR_ID_INTEL         0x8087
 // HTC's USB Vendor ID
 #define VENDOR_ID_HTC           0x0bb4
 // Samsung's USB Vendor ID
@@ -121,6 +123,7 @@
 /** built-in vendor list */
 int builtInVendorIds[] = {
     VENDOR_ID_GOOGLE,
+    VENDOR_ID_INTEL,
     VENDOR_ID_HTC,
     VENDOR_ID_SAMSUNG,
     VENDOR_ID_MOTOROLA,
