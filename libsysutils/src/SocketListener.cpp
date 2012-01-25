@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2008-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -164,6 +164,7 @@ void SocketListener::runListener() {
 
         pthread_mutex_lock(&mClientsLock);
         for (it = mClients->begin(); it != mClients->end(); ++it) {
+            // NB: calling out to an other object with mClientsLock held (safe)
             int fd = (*it)->getSocket();
             FD_SET(fd, &read_fds);
             if (fd > max)
@@ -206,9 +207,12 @@ void SocketListener::runListener() {
         pendingList->clear();
         pthread_mutex_lock(&mClientsLock);
         for (it = mClients->begin(); it != mClients->end(); ++it) {
-            int fd = (*it)->getSocket();
+            SocketClient* c = *it;
+            // NB: calling out to an other object with mClientsLock held (safe)
+            int fd = c->getSocket();
             if (FD_ISSET(fd, &read_fds)) {
-                pendingList->push_back(*it);
+                pendingList->push_back(c);
+                c->incRef();
             }
         }
         pthread_mutex_unlock(&mClientsLock);
@@ -236,20 +240,61 @@ void SocketListener::runListener() {
                 /* Remove our reference to the client */
                 c->decRef();
             }
+            c->decRef();
         }
     }
     delete pendingList;
 }
 
 void SocketListener::sendBroadcast(int code, const char *msg, bool addErrno) {
+    SocketClientCollection safeList;
+
+    /* Add all active clients to the safe list first */
+    safeList.clear();
     pthread_mutex_lock(&mClientsLock);
     SocketClientCollection::iterator i;
 
     for (i = mClients->begin(); i != mClients->end(); ++i) {
-        // broadcasts are unsolicited and should not include a cmd number
-        if ((*i)->sendMsg(code, msg, addErrno, false)) {
-            SLOGW("Error sending broadcast (%s)", strerror(errno));
-        }
+        SocketClient* c = *i;
+        c->incRef();
+        safeList.push_back(c);
     }
     pthread_mutex_unlock(&mClientsLock);
+
+    while (!safeList.empty()) {
+        /* Pop the first item from the list */
+        i = safeList.begin();
+        SocketClient* c = *i;
+        safeList.erase(i);
+        // broadcasts are unsolicited and should not include a cmd number
+        if (c->sendMsg(code, msg, addErrno, false)) {
+            SLOGW("Error sending broadcast (%s)", strerror(errno));
+        }
+        c->decRef();
+    }
+}
+
+void SocketListener::runOnEachSocket(SocketClientCommand *command) {
+    SocketClientCollection safeList;
+
+    /* Add all active clients to the safe list first */
+    safeList.clear();
+    pthread_mutex_lock(&mClientsLock);
+    SocketClientCollection::iterator i;
+
+    for (i = mClients->begin(); i != mClients->end(); ++i) {
+        SocketClient* c = *i;
+        c->incRef();
+        safeList.push_back(c);
+    }
+    pthread_mutex_unlock(&mClientsLock);
+
+    while (!safeList.empty()) {
+        /* Pop the first item from the list */
+        i = safeList.begin();
+        SocketClient* c = *i;
+        safeList.erase(i);
+        command->runSocketCommand(c);
+        c->decRef();
+    }
 }
