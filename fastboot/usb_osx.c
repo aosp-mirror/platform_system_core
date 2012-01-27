@@ -331,7 +331,8 @@ static int try_device(io_service_t device, usb_handle *handle) {
         req.bmRequestType = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice);
         req.bRequest = kUSBRqGetDescriptor;
         req.wValue = (kUSBStringDesc << 8) | serialIndex;
-        req.wIndex = 0;
+        //language ID (en-us) for serial number string
+        req.wIndex = 0x0409;
         req.pData = buffer;
         req.wLength = sizeof(buffer);
         kr = (*dev)->DeviceRequest(dev, &req);

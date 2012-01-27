@@ -139,10 +139,11 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
         ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
         ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
         ctrl.wValue = (USB_DT_STRING << 8) | dev->iSerialNumber;
-        ctrl.wIndex = 0;
+        //language ID (en-us) for serial number string
+        ctrl.wIndex = 0x0409;
         ctrl.wLength = sizeof(buffer);
         ctrl.data = buffer;
-	ctrl.timeout = 50;
+        ctrl.timeout = 50;
 
         result = ioctl(fd, USBDEVFS_CONTROL, &ctrl);
         if (result > 0) {
