@@ -110,7 +110,11 @@ void GGLAssembler::extract(integer_t& d, int s, int h, int l, int bits)
 {
     const int maskLen = h-l;
 
+#ifdef __mips__
+    assert(maskLen<=11);
+#else
     assert(maskLen<=8);
+#endif
     assert(h);
     
 #if __ARM_ARCH__ >= 7
