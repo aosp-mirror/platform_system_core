@@ -225,7 +225,6 @@ void usage(void)
             "  flashall                                 flash boot + recovery + system\n"
             "  flash <partition> [ <filename> ]         write a file to a flash partition\n"
             "  erase <partition>                        erase a flash partition\n"
-            "  format <partition>                       format a flash partition \n"
             "  getvar <variable>                        display a bootloader variable\n"
             "  boot <kernel> [ <ramdisk> ]              download and boot kernel\n"
             "  flash:raw boot <kernel> [ <ramdisk> ]    create bootimage and flash it\n"
@@ -636,10 +635,6 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "erase")) {
             require(2);
             fb_queue_erase(argv[1]);
-            skip(2);
-        } else if(!strcmp(*argv, "format")) {
-            require(2);
-            fb_queue_format(argv[1]);
             skip(2);
         } else if(!strcmp(*argv, "signature")) {
             require(2);

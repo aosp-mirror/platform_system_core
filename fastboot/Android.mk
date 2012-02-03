@@ -16,9 +16,8 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
-  $(LOCAL_PATH)/../../extras/ext4_utils
-LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg
+LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c 
 LOCAL_MODULE := fastboot
 
 ifeq ($(HOST_OS),linux)
@@ -48,7 +47,7 @@ ifeq ($(HOST_OS),windows)
   LOCAL_C_INCLUDES += development/host/windows/usb/api
 endif
 
-LOCAL_STATIC_LIBRARIES := $(EXTRA_STATIC_LIBS) libzipfile libunz libext4_utils libz
+LOCAL_STATIC_LIBRARIES := $(EXTRA_STATIC_LIBS) libzipfile libunz
 
 include $(BUILD_HOST_EXECUTABLE)
 $(call dist-for-goals,dist_files,$(LOCAL_BUILT_MODULE))
