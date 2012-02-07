@@ -24,6 +24,9 @@ class SocketClient {
     pthread_mutex_t mRefCountMutex;
     int mRefCount;
 
+    pthread_mutex_t mCmdNumMutex;
+    int mCmdNum;
+
 public:
     SocketClient(int sock, bool owned);
     virtual ~SocketClient();
@@ -32,12 +35,13 @@ public:
     pid_t getPid() const { return mPid; }
     uid_t getUid() const { return mUid; }
     gid_t getGid() const { return mGid; }
+    void setCmdNum(int cmdNum);
+    int getCmdNum();
 
     // Send null-terminated C strings:
     int sendMsg(int code, const char *msg, bool addErrno);
-    int sendMsg(const char *msg);
 
-    // Sending binary data:
+    //Sending binary data:
     int sendData(const void *data, int len);
 
     // Optional reference counting.  Reference count starts at 1.  If
@@ -46,6 +50,10 @@ public:
     // decRef() when it's done with the client.
     void incRef();
     bool decRef(); // returns true at 0 (but note: SocketClient already deleted)
+
+private:
+    // Send null-terminated C strings
+    int sendMsg(const char *msg);
 };
 
 typedef android::List<SocketClient *> SocketClientCollection;

@@ -17,9 +17,11 @@ SocketClient::SocketClient(int socket, bool owned)
         , mUid(-1)
         , mGid(-1)
         , mRefCount(1)
+        , mCmdNum(0)
 {
     pthread_mutex_init(&mWriteMutex, NULL);
     pthread_mutex_init(&mRefCountMutex, NULL);
+    pthread_mutex_init(&mCmdNumMutex, NULL);
 
     struct ucred creds;
     socklen_t szCreds = sizeof(creds);
@@ -46,19 +48,20 @@ int SocketClient::sendMsg(int code, const char *msg, bool addErrno) {
     const char* fmt;
     char tmp[1];
     int  len;
+    int cmdNum = getCmdNum();
 
     if (addErrno) {
-        fmt = "%.3d %s (%s)";
+        fmt = "%d %.3d %s (%s)";
         arg = strerror(errno);
     } else {
-        fmt = "%.3d %s";
+        fmt = "%d %.3d %s";
         arg = NULL;
     }
     /* Measure length of required buffer */
-    len = snprintf(tmp, sizeof tmp, fmt, code, msg, arg);
+    len = snprintf(tmp, sizeof tmp, fmt, cmdNum, code, msg, arg);
     /* Allocate in the stack, then write to it */
     buf = (char*)alloca(len+1);
-    snprintf(buf, len+1, fmt, code, msg, arg);
+    snprintf(buf, len+1, fmt, cmdNum, code, msg, arg);
     /* Send the zero-terminated message */
     return sendMsg(buf);
 }
@@ -131,4 +134,18 @@ bool SocketClient::decRef() {
         delete this;
     }
     return deleteSelf;
+}
+
+void SocketClient::setCmdNum(int cmdNum) {
+    pthread_mutex_lock(&mCmdNumMutex);
+    mCmdNum = cmdNum;
+    pthread_mutex_unlock(&mCmdNumMutex);
+}
+
+int SocketClient::getCmdNum() {
+    int ret;
+    pthread_mutex_lock(&mCmdNumMutex);
+    ret = mCmdNum;
+    pthread_mutex_unlock(&mCmdNumMutex);
+    return ret;
 }

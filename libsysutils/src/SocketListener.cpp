@@ -29,6 +29,8 @@
 #include <sysutils/SocketListener.h>
 #include <sysutils/SocketClient.h>
 
+#define DBG 0
+
 SocketListener::SocketListener(const char *socketName, bool listen) {
     mListen = listen;
     mSocketName = socketName;
@@ -73,6 +75,7 @@ int SocketListener::startListener() {
                  mSocketName, strerror(errno));
             return -1;
         }
+        if (DBG) SLOGE("got mSock = %d for %s", mSock, mSocketName);
     }
 
     if (mListen && listen(mSock, 4) < 0) {
@@ -164,11 +167,11 @@ void SocketListener::runListener() {
                 max = fd;
         }
         pthread_mutex_unlock(&mClientsLock);
-
+        if (DBG) SLOGE("mListen=%d, max=%d, mSocketName=%s", mListen, max, mSocketName);
         if ((rc = select(max + 1, &read_fds, NULL, NULL, NULL)) < 0) {
             if (errno == EINTR)
                 continue;
-            SLOGE("select failed (%s)", strerror(errno));
+            SLOGE("select failed (%s) mListen=%d, max=%d", strerror(errno), mListen, max);
             sleep(1);
             continue;
         } else if (!rc)
@@ -184,6 +187,7 @@ void SocketListener::runListener() {
             do {
                 alen = sizeof(addr);
                 c = accept(mSock, &addr, &alen);
+                if (DBG) SLOGE("%s got %d from accept", mSocketName, c);
             } while (c < 0 && errno == EINTR);
             if (c < 0) {
                 SLOGE("accept failed (%s)", strerror(errno));
@@ -217,6 +221,7 @@ void SocketListener::runListener() {
              * connection-based, remove and destroy it */
             if (!onDataAvailable(c) && mListen) {
                 /* Remove the client from our array */
+                if (DBG) SLOGE("going to zap %d for %s", c->getSocket(), mSocketName);
                 pthread_mutex_lock(&mClientsLock);
                 for (it = mClients->begin(); it != mClients->end(); ++it) {
                     if (*it == c) {
@@ -239,18 +244,6 @@ void SocketListener::sendBroadcast(int code, const char *msg, bool addErrno) {
 
     for (i = mClients->begin(); i != mClients->end(); ++i) {
         if ((*i)->sendMsg(code, msg, addErrno)) {
-            SLOGW("Error sending broadcast (%s)", strerror(errno));
-        }
-    }
-    pthread_mutex_unlock(&mClientsLock);
-}
-
-void SocketListener::sendBroadcast(const char *msg) {
-    pthread_mutex_lock(&mClientsLock);
-    SocketClientCollection::iterator i;
-
-    for (i = mClients->begin(); i != mClients->end(); ++i) {
-        if ((*i)->sendMsg(msg)) {
             SLOGW("Error sending broadcast (%s)", strerror(errno));
         }
     }

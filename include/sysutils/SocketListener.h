@@ -38,7 +38,6 @@ public:
     int stopListener();
 
     void sendBroadcast(int code, const char *msg, bool addErrno);
-    void sendBroadcast(const char *msg);
 
 protected:
     virtual bool onDataAvailable(SocketClient *c) = 0;
