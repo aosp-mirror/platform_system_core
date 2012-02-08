@@ -28,8 +28,6 @@
 FrameworkListener::FrameworkListener(const char *socketName) :
                             SocketListener(socketName, true) {
     mCommands = new FrameworkCommandCollection();
-    errorRate = 0;
-    mCommandCount = 0;
 }
 
 bool FrameworkListener::onDataAvailable(SocketClient *c) {
@@ -71,7 +69,6 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
     bool esc = false;
     bool quote = false;
     int k;
-    bool haveCmdNum = false;
 
     memset(argv, 0, sizeof(argv));
     memset(tmp, 0, sizeof(tmp));
@@ -118,14 +115,9 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
         *q = *p++;
         if (!quote && *q == ' ') {
             *q = '\0';
-            if (!haveCmdNum) {
-                cli->setCmdNum(atoi(tmp));
-                haveCmdNum = true;
-            } else {
-                if (argc >= CMD_ARGS_MAX)
-                    goto overflow;
-                argv[argc++] = strdup(tmp);
-            }
+            if (argc >= CMD_ARGS_MAX)
+                goto overflow;
+            argv[argc++] = strdup(tmp);
             memset(tmp, 0, sizeof(tmp));
             q = tmp;
             continue;
@@ -145,12 +137,6 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
 
     if (quote) {
         cli->sendMsg(500, "Unclosed quotes error", false);
-        goto out;
-    }
-
-    if (errorRate && (++mCommandCount % errorRate == 0)) {
-        /* ignore this command - let the timeout handler handle it */
-        SLOGE("Faking a timeout");
         goto out;
     }
 
