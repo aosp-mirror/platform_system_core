@@ -89,6 +89,16 @@ map_file(const char* filename, size_t* filesize)
     if (ret < 0)
         goto EXIT;
 
+    /* Ensure that the file is owned by the system user */
+    if ((st.st_uid != AID_SYSTEM) || (st.st_gid != AID_SYSTEM)) {
+        goto EXIT;
+    }
+
+    /* Ensure that the file has sane permissions */
+    if ((st.st_mode & S_IWOTH) != 0) {
+        goto EXIT;
+    }
+
     /* Ensure that the size is not ridiculously large */
     length = (size_t)st.st_size;
     if ((off_t)length != st.st_size) {
