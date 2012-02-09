@@ -79,7 +79,12 @@
 #define AID_MISC          9998  /* access to misc storage */
 #define AID_NOBODY        9999
 
-#define AID_APP          10000 /* first app user */
+#define AID_APP          10000  /* first app user */
+
+#define AID_ISOLATED_START 99000 /* start of uids for fully isolated sandboxed processes */
+#define AID_ISOLATED_END   99999 /* end of uids for fully isolated sandboxed processes */
+
+#define AID_USER        100000  /* offset for uid ranges for each user */
 
 #if !defined(EXCLUDE_FS_CONFIG_STRUCTURES)
 struct android_id_info {
