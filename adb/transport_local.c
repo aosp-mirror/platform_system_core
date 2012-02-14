@@ -318,7 +318,7 @@ void local_init(int port)
             /* Running inside the device: use TCP socket as the transport. */
             func = server_socket_thread;
         }
-#endif !ADB_HOST
+#endif // !ADB_HOST
     }
 
     D("transport: local %s init\n", HOST ? "client" : "server");
