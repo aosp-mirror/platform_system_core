@@ -5,10 +5,10 @@
 # Makefile for metrics utilities -- library, client and daemon
 #
 
+PKG_CONFIG ?= pkg-config
 PC_DEPS = dbus-1 glib-2.0 dbus-glib-1 libchrome libchromeos
-
-CCONFIG = $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
-LDCONFIG = $(shell $(PKG_CONFIG) --libs $(PC_DEPS) gthread-2.0)
+CCONFIG := $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
+LDCONFIG := $(shell $(PKG_CONFIG) --libs $(PC_DEPS) gthread-2.0)
 
 CXXFLAGS += -Wall -Werror -fPIC -fno-exceptions $(CCONFIG)
 
@@ -50,14 +50,14 @@ DAEMON_LDFLAGS = $(LDFLAGS) $(LDCONFIG) -lpthread -lgflags \
 		 -lglib-2.0 -lrootdev -lpolicy
 TESTDAEMON_LIBS = -lgmock -lgtest
 TESTLIB_LIBS = -lgtest -lgmock -lbase -lrt -lpthread -lglib-2.0
-POLICY_LIBS = -lpolicy
+POLICY_LIBS := -lpolicy $(shell $(PKG_CONFIG) --libs libchrome)
 
 all: $(LIB) $(SHAREDLIB) $(CLIENT) $(DAEMON)
 
 tests: $(COUNTER_TEST) $(DAEMON_TEST) $(LIB_TEST) $(TIMER_TEST)
 
 $(CLIENT): $(CLIENT_OBJS) $(SHAREDLIB)
-	$(CXX) $(LDFLAGS) $(POLICY_LIBS) -lrt $^ -o $@
+	$(CXX) $(LDFLAGS) $^ -o $@ $(POLICY_LIBS) -lrt
 
 $(COUNTER_TEST): $(TESTCOUNTER_OBJS)
 	$(CXX) -o $@ $^ $(TESTCOUNTER_LIBS)
@@ -75,7 +75,7 @@ $(LIB): $(LIB_OBJS)
 	$(AR) rcs $@ $^
 
 $(SHAREDLIB): $(LIB_OBJS)
-	$(CXX) $(LDFLAGS) $(POLICY_LIBS) -shared $^ -o $@
+	$(CXX) $(LDFLAGS) -shared $^ -o $@ $(POLICY_LIBS)
 
 $(LIB_TEST): $(TESTLIB_OBJS) $(SHAREDLIB)
 	$(CXX) -o $@ $^ $(LDFLAGS) $(POLICY_LIBS) $(TESTLIB_LIBS)
