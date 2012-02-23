@@ -253,7 +253,7 @@ static void readLogLines(log_device_t* devices)
     int max = 0;
     int ret;
     int queued_lines = 0;
-    bool sleep = true;
+    bool sleep = false;
 
     int result;
     fd_set readset;
