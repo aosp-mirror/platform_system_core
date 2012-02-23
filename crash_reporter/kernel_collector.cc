@@ -80,8 +80,9 @@ bool KernelCollector::ReadRecordToString(std::string *contents,
   }
 
   if (record_re.FullMatch(record, &captured)){
-    // Found a match, append it to the content.
+    // Found a match, append it to the content, and remove from pstore.
     contents->append(captured);
+    file_util::Delete(ramoops_record, false);
     *record_found = true;
   } else {
     *record_found = false;
