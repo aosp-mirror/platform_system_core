@@ -31,6 +31,13 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+
+#ifdef HAVE_SELINUX
+#include <sys/mman.h>
+#include <selinux/selinux.h>
+#include <selinux/label.h>
+#endif
+
 #include <libgen.h>
 
 #include <cutils/list.h>
@@ -52,6 +59,10 @@
 #include "util.h"
 #include "ueventd.h"
 
+#ifdef HAVE_SELINUX
+struct selabel_handle *sehandle;
+#endif
+
 static int property_triggers_enabled = 0;
 
 #if BOOTCHART
@@ -63,6 +74,11 @@ static char bootmode[32];
 static char hardware[32];
 static unsigned revision = 0;
 static char qemu[32];
+
+#ifdef HAVE_SELINUX
+static int selinux_enabled = 1;
+static int selinux_enforcing = 0;
+#endif
 
 static struct action *cur_action = NULL;
 static struct command *cur_command = NULL;
@@ -145,7 +161,10 @@ void service_start(struct service *svc, const char *dynamic_args)
     pid_t pid;
     int needs_console;
     int n;
-
+#ifdef HAVE_SELINUX
+    char *scon = NULL;
+    int rc;
+#endif
         /* starting a service removes it from the disabled or reset
          * state and immediately takes it out of the restarting
          * state if it was in there
@@ -182,6 +201,34 @@ void service_start(struct service *svc, const char *dynamic_args)
         return;
     }
 
+#ifdef HAVE_SELINUX
+    if (is_selinux_enabled() > 0) {
+        char *mycon = NULL, *fcon = NULL;
+
+        INFO("computing context for service '%s'\n", svc->args[0]);
+        rc = getcon(&mycon);
+        if (rc < 0) {
+            ERROR("could not get context while starting '%s'\n", svc->name);
+            return;
+        }
+
+        rc = getfilecon(svc->args[0], &fcon);
+        if (rc < 0) {
+            ERROR("could not get context while starting '%s'\n", svc->name);
+            freecon(mycon);
+            return;
+        }
+
+        rc = security_compute_create(mycon, fcon, string_to_security_class("process"), &scon);
+        freecon(mycon);
+        freecon(fcon);
+        if (rc < 0) {
+            ERROR("could not get context while starting '%s'\n", svc->name);
+            return;
+        }
+    }
+#endif
+
     NOTICE("starting '%s'\n", svc->name);
 
     pid = fork();
@@ -201,6 +248,10 @@ void service_start(struct service *svc, const char *dynamic_args)
         for (ei = svc->envvars; ei; ei = ei->next)
             add_environment(ei->name, ei->value);
 
+#ifdef HAVE_SELINUX
+        setsockcreatecon(scon);
+#endif
+
         for (si = svc->sockets; si; si = si->next) {
             int socket_type = (
                     !strcmp(si->type, "stream") ? SOCK_STREAM :
@@ -211,6 +262,12 @@ void service_start(struct service *svc, const char *dynamic_args)
                 publish_socket(si->name, s);
             }
         }
+
+#ifdef HAVE_SELINUX
+        freecon(scon);
+        scon = NULL;
+        setsockcreatecon(NULL);
+#endif
 
         if (svc->ioprio_class != IoSchedClass_NONE) {
             if (android_set_ioprio(getpid(), svc->ioprio_class, svc->ioprio_pri)) {
@@ -257,6 +314,15 @@ void service_start(struct service *svc, const char *dynamic_args)
             }
         }
 
+#ifdef HAVE_SELINUX
+        if (svc->seclabel) {
+            if (is_selinux_enabled() > 0 && setexeccon(svc->seclabel) < 0) {
+                ERROR("cannot setexeccon('%s'): %s\n", svc->seclabel, strerror(errno));
+                _exit(127);
+            }
+        }
+#endif
+
         if (!dynamic_args) {
             if (execve(svc->args[0], (char**) svc->args, (char**) ENV) < 0) {
                 ERROR("cannot execve('%s'): %s\n", svc->args[0], strerror(errno));
@@ -281,6 +347,10 @@ void service_start(struct service *svc, const char *dynamic_args)
         }
         _exit(127);
     }
+
+#ifdef HAVE_SELINUX
+    freecon(scon);
+#endif
 
     if (pid < 0) {
         ERROR("failed to start '%s'\n", svc->name);
@@ -531,6 +601,14 @@ static void import_kernel_nv(char *name, int for_emulator)
     *value++ = 0;
     if (name_len == 0) return;
 
+#ifdef HAVE_SELINUX
+    if (!strcmp(name,"enforcing")) {
+        selinux_enforcing = atoi(value);
+    } else if (!strcmp(name,"selinux")) {
+        selinux_enabled = atoi(value);
+    }
+#endif
+
     if (for_emulator) {
         /* in the emulator, export any kernel option with the
          * ro.kernel. prefix */
@@ -678,6 +756,97 @@ static int bootchart_init_action(int nargs, char **args)
 }
 #endif
 
+#ifdef HAVE_SELINUX
+void selinux_load_policy(void)
+{
+    const char path_prefix[] = "/sepolicy";
+    struct selinux_opt seopts[] = {
+        { SELABEL_OPT_PATH, "/file_contexts" }
+    };
+    char path[PATH_MAX];
+    int fd, rc, vers;
+    struct stat sb;
+    void *map;
+
+    sehandle = NULL;
+    if (!selinux_enabled) {
+        INFO("SELinux:  Disabled by command line option\n");
+        return;
+    }
+
+    mkdir(SELINUXMNT, 0755);
+    if (mount("selinuxfs", SELINUXMNT, "selinuxfs", 0, NULL)) {
+        if (errno == ENODEV) {
+            /* SELinux not enabled in kernel */
+            return;
+        }
+        ERROR("SELinux:  Could not mount selinuxfs:  %s\n",
+              strerror(errno));
+        return;
+    }
+    set_selinuxmnt(SELINUXMNT);
+
+    vers = security_policyvers();
+    if (vers <= 0) {
+        ERROR("SELinux:  Unable to read policy version\n");
+        return;
+    }
+    INFO("SELinux:  Maximum supported policy version:  %d\n", vers);
+
+    snprintf(path, sizeof(path), "%s.%d",
+             path_prefix, vers);
+    fd = open(path, O_RDONLY);
+    while (fd < 0 && errno == ENOENT && --vers) {
+        snprintf(path, sizeof(path), "%s.%d",
+                 path_prefix, vers);
+        fd = open(path, O_RDONLY);
+    }
+    if (fd < 0) {
+        ERROR("SELinux:  Could not open %s:  %s\n",
+              path, strerror(errno));
+        return;
+    }
+    if (fstat(fd, &sb) < 0) {
+        ERROR("SELinux:  Could not stat %s:  %s\n",
+              path, strerror(errno));
+        return;
+    }
+    map = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map == MAP_FAILED) {
+        ERROR("SELinux:  Could not map %s:  %s\n",
+              path, strerror(errno));
+        return;
+    }
+
+    rc = security_load_policy(map, sb.st_size);
+    if (rc < 0) {
+        ERROR("SELinux:  Could not load policy:  %s\n",
+              strerror(errno));
+        return;
+    }
+
+    rc = security_setenforce(selinux_enforcing);
+    if (rc < 0) {
+        ERROR("SELinux:  Could not set enforcing mode to %s:  %s\n",
+              selinux_enforcing ? "enforcing" : "permissive", strerror(errno));
+        return;
+    }
+
+    munmap(map, sb.st_size);
+    close(fd);
+    INFO("SELinux: Loaded policy from %s\n", path);
+
+    sehandle = selabel_open(SELABEL_CTX_FILE, seopts, 1);
+    if (!sehandle) {
+        ERROR("SELinux:  Could not load file_contexts:  %s\n",
+              strerror(errno));
+        return;
+    }
+    INFO("SELinux: Loaded file contexts from %s\n", seopts[0].value);
+    return;
+}
+#endif
+
 int main(int argc, char **argv)
 {
     int fd_count = 0;
@@ -727,6 +896,11 @@ int main(int argc, char **argv)
     get_hardware_name(hardware, &revision);
 
     process_kernel_cmdline();
+
+#ifdef HAVE_SELINUX
+    INFO("loading selinux policy\n");
+    selinux_load_policy();
+#endif
 
     is_charger = !strcmp(bootmode, "charger");
 

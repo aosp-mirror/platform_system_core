@@ -14,11 +14,15 @@ int do_insmod(int nargs, char **args);
 int do_mkdir(int nargs, char **args);
 int do_mount(int nargs, char **args);
 int do_restart(int nargs, char **args);
+int do_restorecon(int nargs, char **args);
 int do_rm(int nargs, char **args);
 int do_rmdir(int nargs, char **args);
+int do_setcon(int nargs, char **args);
+int do_setenforce(int nargs, char **args);
 int do_setkey(int nargs, char **args);
 int do_setprop(int nargs, char **args);
 int do_setrlimit(int nargs, char **args);
+int do_setsebool(int nargs, char **args);
 int do_start(int nargs, char **args);
 int do_stop(int nargs, char **args);
 int do_trigger(int nargs, char **args);
@@ -61,13 +65,18 @@ enum {
     KEYWORD(oneshot,     OPTION,  0, 0)
     KEYWORD(onrestart,   OPTION,  0, 0)
     KEYWORD(restart,     COMMAND, 1, do_restart)
+    KEYWORD(restorecon,  COMMAND, 1, do_restorecon)
     KEYWORD(rm,          COMMAND, 1, do_rm)
     KEYWORD(rmdir,       COMMAND, 1, do_rmdir)
+    KEYWORD(seclabel,    OPTION,  0, 0)
     KEYWORD(service,     SECTION, 0, 0)
+    KEYWORD(setcon,      COMMAND, 1, do_setcon)
+    KEYWORD(setenforce,  COMMAND, 1, do_setenforce)
     KEYWORD(setenv,      OPTION,  2, 0)
     KEYWORD(setkey,      COMMAND, 0, do_setkey)
     KEYWORD(setprop,     COMMAND, 2, do_setprop)
     KEYWORD(setrlimit,   COMMAND, 3, do_setrlimit)
+    KEYWORD(setsebool,   COMMAND, 1, do_setsebool)
     KEYWORD(socket,      OPTION,  0, 0)
     KEYWORD(start,       COMMAND, 1, do_start)
     KEYWORD(stop,        COMMAND, 1, do_stop)

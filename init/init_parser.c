@@ -131,15 +131,20 @@ int lookup_keyword(const char *s)
         break;
     case 'r':
         if (!strcmp(s, "estart")) return K_restart;
+        if (!strcmp(s, "estorecon")) return K_restorecon;
         if (!strcmp(s, "mdir")) return K_rmdir;
         if (!strcmp(s, "m")) return K_rm;
         break;
     case 's':
+        if (!strcmp(s, "eclabel")) return K_seclabel;
         if (!strcmp(s, "ervice")) return K_service;
+        if (!strcmp(s, "etcon")) return K_setcon;
+        if (!strcmp(s, "etenforce")) return K_setenforce;
         if (!strcmp(s, "etenv")) return K_setenv;
         if (!strcmp(s, "etkey")) return K_setkey;
         if (!strcmp(s, "etprop")) return K_setprop;
         if (!strcmp(s, "etrlimit")) return K_setrlimit;
+        if (!strcmp(s, "etsebool")) return K_setsebool;
         if (!strcmp(s, "ocket")) return K_socket;
         if (!strcmp(s, "tart")) return K_start;
         if (!strcmp(s, "top")) return K_stop;
@@ -792,6 +797,16 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
             svc->uid = decode_uid(args[1]);
         }
         break;
+    case K_seclabel:
+#ifdef HAVE_SELINUX
+        if (nargs != 2) {
+            parse_error(state, "seclabel option requires a label string\n");
+        } else {
+            svc->seclabel = args[1];
+        }
+#endif
+        break;
+
     default:
         parse_error(state, "invalid option '%s'\n", args[0]);
     }
