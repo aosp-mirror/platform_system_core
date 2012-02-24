@@ -5,6 +5,10 @@
 #include <dirent.h>
 #include <errno.h>
 
+#ifdef HAVE_SELINUX
+#include <selinux/selinux.h>
+#endif
+
 #include <sys/stat.h>
 #include <unistd.h>
 #include <time.h>
@@ -25,6 +29,7 @@
 #define LIST_SIZE           (1 << 4)
 #define LIST_LONG_NUMERIC   (1 << 5)
 #define LIST_CLASSIFY       (1 << 6)
+#define LIST_MACLABEL       (1 << 7)
 
 // fwd
 static int listpath(const char *name, int flags);
@@ -234,9 +239,75 @@ static int listfile_long(const char *path, int flags)
     return 0;
 }
 
+static int listfile_maclabel(const char *path, int flags)
+{
+    struct stat s;
+    char mode[16];
+    char user[16];
+    char group[16];
+    char *maclabel = NULL;
+    const char *name;
+
+    /* name is anything after the final '/', or the whole path if none*/
+    name = strrchr(path, '/');
+    if(name == 0) {
+        name = path;
+    } else {
+        name++;
+    }
+
+    if(lstat(path, &s) < 0) {
+        return -1;
+    }
+
+#ifdef HAVE_SELINUX
+    lgetfilecon(path, &maclabel);
+#else
+    maclabel = strdup("-");
+#endif
+    if (!maclabel) {
+        return -1;
+    }
+
+    mode2str(s.st_mode, mode);
+    user2str(s.st_uid, user);
+    group2str(s.st_gid, group);
+
+    switch(s.st_mode & S_IFMT) {
+    case S_IFLNK: {
+        char linkto[256];
+        int len;
+
+        len = readlink(path, linkto, sizeof(linkto));
+        if(len < 0) return -1;
+
+        if(len > sizeof(linkto)-1) {
+            linkto[sizeof(linkto)-4] = '.';
+            linkto[sizeof(linkto)-3] = '.';
+            linkto[sizeof(linkto)-2] = '.';
+            linkto[sizeof(linkto)-1] = 0;
+        } else {
+            linkto[len] = 0;
+        }
+
+        printf("%s %-8s %-8s          %s %s -> %s\n",
+               mode, user, group, maclabel, name, linkto);
+        break;
+    }
+    default:
+        printf("%s %-8s %-8s          %s %s\n",
+               mode, user, group, maclabel, name);
+
+    }
+
+    free(maclabel);
+
+    return 0;
+}
+
 static int listfile(const char *dirname, const char *filename, int flags)
 {
-    if ((flags & (LIST_LONG | LIST_SIZE | LIST_CLASSIFY)) == 0) {
+    if ((flags & LIST_LONG | LIST_SIZE | LIST_CLASSIFY | LIST_MACLABEL) == 0) {
         printf("%s\n", filename);
         return 0;
     }
@@ -251,7 +322,9 @@ static int listfile(const char *dirname, const char *filename, int flags)
         pathname = filename;
     }
 
-    if ((flags & LIST_LONG) != 0) {
+    if ((flags & LIST_MACLABEL) != 0) {
+        return listfile_maclabel(pathname, flags);
+    } else if ((flags & LIST_LONG) != 0) {
         return listfile_long(pathname, flags);
     } else /*((flags & LIST_SIZE) != 0)*/ {
         return listfile_size(pathname, filename, flags);
@@ -386,6 +459,7 @@ int ls_main(int argc, char **argv)
                     case 's': flags |= LIST_SIZE; break;
                     case 'R': flags |= LIST_RECURSIVE; break;
                     case 'd': flags |= LIST_DIRECTORIES; break;
+                    case 'Z': flags |= LIST_MACLABEL; break;
                     case 'a': flags |= LIST_ALL; break;
                     case 'F': flags |= LIST_CLASSIFY; break;
                     default:
