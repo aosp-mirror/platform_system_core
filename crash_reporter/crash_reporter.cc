@@ -32,6 +32,9 @@ static const char kUserCrashSignal[] =
     "org.chromium.CrashReporter.UserCrash";
 static const char kUncleanShutdownFile[] =
     "/var/lib/crash_reporter/pending_clean_shutdown";
+static const char kKernelCrashDetected[] = "/var/run/kernel-crash-detected";
+static const char kUncleanShutdownDetected[] =
+    "/var/run/unclean-shutdown-detected";
 
 
 // Enumeration of kinds of crashes to be used in the CrashCounter histogram.
@@ -121,11 +124,11 @@ static int Initialize(KernelCollector *kernel_collector,
   // the last kernel crash.
   if (IsFeedbackAllowed()) {
     if (was_kernel_crash) {
-      TouchFile(FilePath("/tmp/kernel-crash-detected"));
+      TouchFile(FilePath(kKernelCrashDetected));
     } else if (was_unclean_shutdown) {
       // We only count an unclean shutdown if it did not come with
       // an associated kernel crash.
-      TouchFile(FilePath("/tmp/unclean-shutdown-detected"));
+      TouchFile(FilePath(kUncleanShutdownDetected));
     }
   }
 
