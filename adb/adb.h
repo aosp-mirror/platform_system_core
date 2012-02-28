@@ -345,6 +345,21 @@ typedef enum {
 
 #if ADB_TRACE
 
+#if !ADB_HOST
+/*
+ * When running inside the emulator, guest's adbd can connect to 'adb-debug'
+ * qemud service that can display adb trace messages (on condition that emulator
+ * has been started with '-debug adb' option).
+ */
+
+/* Delivers a trace message to the emulator via QEMU pipe. */
+void adb_qemu_trace(const char* fmt, ...);
+/* Macro to use to send ADB trace messages to the emulator. */
+#define DQ(...)    adb_qemu_trace(__VA_ARGS__)
+#else
+#define DQ(...) ((void)0)
+#endif  /* !ADB_HOST */
+
   extern int     adb_trace_mask;
   extern unsigned char    adb_trace_output_count;
   void    adb_trace_init(void);

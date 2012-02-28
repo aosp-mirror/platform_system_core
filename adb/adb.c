@@ -131,6 +131,58 @@ void  adb_trace_init(void)
     }
 }
 
+#if !ADB_HOST
+/*
+ * Implements ADB tracing inside the emulator.
+ */
+
+#include <stdarg.h>
+
+/*
+ * Redefine open and write for qemu_pipe.h that contains inlined references
+ * to those routines. We will redifine them back after qemu_pipe.h inclusion.
+ */
+
+#undef open
+#undef write
+#define open    adb_open
+#define write   adb_write
+#include <hardware/qemu_pipe.h>
+#undef open
+#undef write
+#define open    ___xxx_open
+#define write   ___xxx_write
+
+/* A handle to adb-debug qemud service in the emulator. */
+int   adb_debug_qemu = -1;
+
+/* Initializes connection with the adb-debug qemud service in the emulator. */
+static int adb_qemu_trace_init(void)
+{
+    char con_name[32];
+
+    if (adb_debug_qemu >= 0) {
+        return 0;
+    }
+
+    /* adb debugging QEMUD service connection request. */
+    snprintf(con_name, sizeof(con_name), "qemud:adb-debug");
+    adb_debug_qemu = qemu_pipe_open(con_name);
+    return (adb_debug_qemu >= 0) ? 0 : -1;
+}
+
+void adb_qemu_trace(const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    char msg[1024];
+
+    if (adb_debug_qemu >= 0) {
+        vsnprintf(msg, sizeof(msg), fmt, args);
+        adb_write(adb_debug_qemu, msg, strlen(msg));
+    }
+}
+#endif  /* !ADB_HOST */
 
 apacket *get_apacket(void)
 {
@@ -1297,6 +1349,9 @@ int main(int argc, char **argv)
     D("Handling commandline()\n");
     return adb_commandline(argc - 1, argv + 1);
 #else
+    /* If adbd runs inside the emulator this will enable adb tracing via
+     * adb-debug qemud service in the emulator. */
+    adb_qemu_trace_init();
     if((argc > 1) && (!strcmp(argv[1],"recovery"))) {
         adb_device_banner = "recovery";
         recovery_mode = 1;
