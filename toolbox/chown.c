@@ -62,7 +62,7 @@ int chown_main(int argc, char **argv)
 
     for (i = 2; i < argc; i++) {
         if (chown(argv[i], uid, gid) < 0) {
-            fprintf(stderr, "Unable to chmod %s: %s\n", argv[i], strerror(errno));
+            fprintf(stderr, "Unable to chown %s: %s\n", argv[i], strerror(errno));
             return 10;
         }
     }
