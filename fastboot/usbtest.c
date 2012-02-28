@@ -9,7 +9,7 @@
  *    notice, this list of conditions and the following disclaimer.
  *  * Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the 
+ *    the documentation and/or other materials provided with the
  *    distribution.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
@@ -19,7 +19,7 @@
  * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
  * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
@@ -38,11 +38,11 @@
 static unsigned arg_size = 4096;
 static unsigned arg_count = 4096;
 
-long long NOW(void) 
+long long NOW(void)
 {
     struct timeval tv;
     gettimeofday(&tv, 0);
-    
+
     return (((long long) tv.tv_sec) * ((long long) 1000000)) +
         (((long long) tv.tv_usec));
 }
@@ -110,7 +110,7 @@ int test_zero(usb_handle *usb)
     int i;
     unsigned char buf[4096];
     long long t0, t1;
-    
+
     t0 = NOW();
     for(i = 0; i < arg_count; i++) {
         if(usb_read(usb, buf, arg_size) != arg_size) {
@@ -123,7 +123,7 @@ int test_zero(usb_handle *usb)
     return 0;
 }
 
-struct 
+struct
 {
     const char *cmd;
     ifc_match_func match;
@@ -179,12 +179,12 @@ int main(int argc, char **argv)
 {
     usb_handle *usb;
     int i;
-    
+
     if(argc < 2)
         return usage();
 
     if(argc > 2) {
-        if(process_args(argc - 2, argv + 2)) 
+        if(process_args(argc - 2, argv + 2))
             return -1;
     }
 

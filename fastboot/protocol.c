@@ -9,7 +9,7 @@
  *    notice, this list of conditions and the following disclaimer.
  *  * Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the 
+ *    the documentation and/or other materials provided with the
  *    distribution.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
@@ -19,7 +19,7 @@
  * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
  * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
@@ -40,7 +40,7 @@ char *fb_get_error(void)
     return ERROR;
 }
 
-static int check_response(usb_handle *usb, unsigned size, 
+static int check_response(usb_handle *usb, unsigned size,
                           unsigned data_okay, char *response)
 {
     unsigned char status[65];
@@ -106,7 +106,7 @@ static int _command_send(usb_handle *usb, const char *cmd,
 {
     int cmdsize = strlen(cmd);
     int r;
-    
+
     if(response) {
         response[0] = 0;
     }
@@ -145,7 +145,7 @@ static int _command_send(usb_handle *usb, const char *cmd,
             return -1;
         }
     }
-    
+
     r = check_response(usb, 0, 0, 0);
     if(r < 0) {
         return -1;
@@ -168,10 +168,10 @@ int fb_download_data(usb_handle *usb, const void *data, unsigned size)
 {
     char cmd[64];
     int r;
-    
+
     sprintf(cmd, "download:%08x", size);
     r = _command_send(usb, cmd, data, size, 0);
-    
+
     if(r < 0) {
         return -1;
     } else {

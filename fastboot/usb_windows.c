@@ -9,7 +9,7 @@
  *    notice, this list of conditions and the following disclaimer.
  *  * Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the 
+ *    the documentation and/or other materials provided with the
  *    distribution.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
@@ -19,7 +19,7 @@
  * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
  * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
@@ -51,13 +51,13 @@
 struct usb_handle {
     /// Handle to USB interface
     ADBAPIHANDLE  adb_interface;
-    
+
     /// Handle to USB read pipe (endpoint)
     ADBAPIHANDLE  adb_read_pipe;
-    
+
     /// Handle to USB write pipe (endpoint)
     ADBAPIHANDLE  adb_write_pipe;
-    
+
     /// Interface name
     char*         interface_name;
 };
@@ -303,7 +303,7 @@ int recognized_device(usb_handle* handle, ifc_match_func callback) {
     info.ifc_subclass = interf_desc.bInterfaceSubClass;
     info.ifc_protocol = interf_desc.bInterfaceProtocol;
     info.writable = 1;
-    
+
     // read serial number (if there is one)
     unsigned long serial_number_len = sizeof(info.serial_number);
     if (!AdbGetSerialNumber(handle->adb_interface, info.serial_number,
