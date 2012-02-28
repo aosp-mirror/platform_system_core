@@ -45,7 +45,18 @@ public:
     int sendMsg(int code, const char *msg, bool addErrno);
     int sendMsg(int code, const char *msg, bool addErrno, bool useCmdNum);
 
-    //Sending binary data:
+    // Provides a mechanism to send a response code to the client. The message uses
+    // the same format as in sendMsg method above.
+    // Sends the code, a space, and a null character.
+    int sendCode(int code);
+
+    // Provides a mechanism to send binary data to client. The message uses the
+    // same format as in sendMsg method above.
+    // Sends the code, a space, and a null character, followed by 4 bytes of
+    // big-endian length, and the data.
+    int sendBinaryMsg(int code, const void *data, int len);
+
+    // Sending binary data:
     int sendData(const void *data, int len);
 
     // Optional reference counting.  Reference count starts at 1.  If
@@ -59,6 +70,12 @@ private:
     // Send null-terminated C strings
     int sendMsg(const char *msg);
     void init(int socket, bool owned, bool useCmdNum);
+
+    // Sending binary data. The caller should use make sure this is protected
+    // from multiple threads entering simultaneously.
+    // returns 0 if successful, -1 if there is a 0 byte write and -2 if any other
+    // error occurred (use errno to get the error)
+    int sendDataLocked(const void *data, int len);
 };
 
 typedef android::sysutils::List<SocketClient *> SocketClientCollection;
