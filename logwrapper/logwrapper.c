@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <libgen.h>
 
 #include "private/android_filesystem_config.h"
 #include "cutils/log.h"
@@ -34,13 +35,13 @@ void fatal(const char *msg) {
 
 void usage() {
     fatal(
-        "Usage: logwrapper [-x] BINARY [ARGS ...]\n"
+        "Usage: logwrapper [-d] BINARY [ARGS ...]\n"
         "\n"
         "Forks and executes BINARY ARGS, redirecting stdout and stderr to\n"
         "the Android logging system. Tag is set to BINARY, priority is\n"
         "always LOG_INFO.\n"
         "\n"
-        "-x: Causes logwrapper to SIGSEGV when BINARY terminates\n"
+        "-d: Causes logwrapper to SIGSEGV when BINARY terminates\n"
         "    fault address is set to the status of wait()\n");
 }
 
@@ -51,6 +52,10 @@ void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
     int a = 0;  // start index of unprocessed data
     int b = 0;  // end index of unprocessed data
     int sz;
+
+    char *btag = basename(tag);
+    if (!btag) btag = (char*) tag;
+
     while ((sz = read(parent_read, &buffer[b], sizeof(buffer) - 1 - b)) > 0) {
 
         sz += b;
@@ -60,7 +65,7 @@ void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
                 buffer[b] = '\0';
             } else if (buffer[b] == '\n') {
                 buffer[b] = '\0';
-                ALOG(LOG_INFO, tag, "%s", &buffer[a]);
+                ALOG(LOG_INFO, btag, "%s", &buffer[a]);
                 a = b + 1;
             }
         }
@@ -68,7 +73,7 @@ void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
         if (a == 0 && b == sizeof(buffer) - 1) {
             // buffer is full, flush
             buffer[b] = '\0';
-            ALOG(LOG_INFO, tag, "%s", &buffer[a]);
+            ALOG(LOG_INFO, btag, "%s", &buffer[a]);
             b = 0;
         } else if (a != b) {
             // Keep left-overs
@@ -84,11 +89,11 @@ void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
     // Flush remaining data
     if (a != b) {
         buffer[b] = '\0';
-        ALOG(LOG_INFO, tag, "%s", &buffer[a]);
+        ALOG(LOG_INFO, btag, "%s", &buffer[a]);
     }
     status = 0xAAAA;
     if (wait(&status) != -1) {  // Wait for child
-        if (WIFEXITED(status))
+        if (WIFEXITED(status) && WEXITSTATUS(status))
             ALOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", tag,
                     WEXITSTATUS(status));
         else if (WIFSIGNALED(status))
