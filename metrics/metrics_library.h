@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #include <string>
 
-#include <base/scoped_ptr.h>
+#include <base/memory/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "policy/libpolicy.h"
