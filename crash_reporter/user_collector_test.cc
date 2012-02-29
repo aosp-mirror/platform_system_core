@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <bits/wordsize.h>
+#include <elf.h>
 #include <unistd.h>
 
 #include "base/file_util.h"
@@ -430,6 +432,53 @@ TEST_F(UserCollectorTest, ValidateProcFiles) {
   ASSERT_EQ(sizeof(data), file_util::WriteFile(maps_file, data, sizeof(data)));
   ASSERT_TRUE(file_util::PathExists(maps_file));
   EXPECT_TRUE(collector_.ValidateProcFiles(container_dir));
+}
+
+TEST_F(UserCollectorTest, ValidateCoreFile) {
+  ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  FilePath container_dir = temp_dir.path();
+  FilePath core_file = container_dir.Append("core");
+
+  // Core file does not exist
+  EXPECT_EQ(UserCollector::kErrorInvalidCoreFile,
+            collector_.ValidateCoreFile(core_file));
+  char e_ident[EI_NIDENT];
+  e_ident[EI_MAG0] = ELFMAG0;
+  e_ident[EI_MAG1] = ELFMAG1;
+  e_ident[EI_MAG2] = ELFMAG2;
+  e_ident[EI_MAG3] = ELFMAG3;
+#if __WORDSIZE == 32
+  e_ident[EI_CLASS] = ELFCLASS32;
+#elif __WORDSIZE == 64
+  e_ident[EI_CLASS] = ELFCLASS64;
+#else
+#error Unknown/unsupported value of __WORDSIZE.
+#endif
+
+  // Core file has the expected header
+  ASSERT_TRUE(file_util::WriteFile(core_file, e_ident, sizeof(e_ident)));
+  EXPECT_EQ(UserCollector::kErrorNone,
+            collector_.ValidateCoreFile(core_file));
+
+#if __WORDSIZE == 64
+  // 32-bit core file on 64-bit platform
+  e_ident[EI_CLASS] = ELFCLASS32;
+  ASSERT_TRUE(file_util::WriteFile(core_file, e_ident, sizeof(e_ident)));
+  EXPECT_EQ(UserCollector::kErrorUnsupported32BitCoreFile,
+            collector_.ValidateCoreFile(core_file));
+  e_ident[EI_CLASS] = ELFCLASS64;
+#endif
+
+  // Invalid core files
+  ASSERT_TRUE(file_util::WriteFile(core_file, e_ident, sizeof(e_ident) - 1));
+  EXPECT_EQ(UserCollector::kErrorInvalidCoreFile,
+            collector_.ValidateCoreFile(core_file));
+
+  e_ident[EI_MAG0] = 0;
+  ASSERT_TRUE(file_util::WriteFile(core_file, e_ident, sizeof(e_ident)));
+  EXPECT_EQ(UserCollector::kErrorInvalidCoreFile,
+            collector_.ValidateCoreFile(core_file));
 }
 
 int main(int argc, char **argv) {

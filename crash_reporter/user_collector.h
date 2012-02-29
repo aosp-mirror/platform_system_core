@@ -69,6 +69,7 @@ class UserCollector : public CrashCollector {
   FRIEND_TEST(UserCollectorTest, ShouldDumpDeveloperImageOverridesConsent);
   FRIEND_TEST(UserCollectorTest, ShouldDumpUseConsentProductionImage);
   FRIEND_TEST(UserCollectorTest, ValidateProcFiles);
+  FRIEND_TEST(UserCollectorTest, ValidateCoreFile);
 
   // Enumeration to pass to GetIdFromStatus.  Must match the order
   // that the kernel lists IDs in the status file.
@@ -80,7 +81,22 @@ class UserCollector : public CrashCollector {
     kIdMax
   };
 
+  enum ErrorType {
+    kErrorNone,
+    kErrorSystemIssue,
+    kErrorReadCoreData,
+    kErrorUnusableProcFiles,
+    kErrorInvalidCoreFile,
+    kErrorUnsupported32BitCoreFile,
+    kErrorCore2MinidumpConversion,
+  };
+
   static const int kForkProblem = 255;
+
+  // Returns an error type signature for a given |error_type| value,
+  // which is reported to the crash server along with the
+  // crash_reporter-user-collection signature.
+  std::string GetErrorTypeSignature(ErrorType error_type) const;
 
   std::string GetPattern(bool enabled) const;
   bool SetUpInternal(bool enabled);
@@ -110,7 +126,8 @@ class UserCollector : public CrashCollector {
                           std::string *state);
 
   void LogCollectionError(const std::string &error_message);
-  void EnqueueCollectionErrorLog(pid_t pid, const std::string &exec_name);
+  void EnqueueCollectionErrorLog(pid_t pid, ErrorType error_type,
+                                 const std::string &exec_name);
 
   bool CopyOffProcFiles(pid_t pid, const FilePath &container_dir);
 
@@ -119,7 +136,14 @@ class UserCollector : public CrashCollector {
   // a process is reaped by the kernel before the copying of its proc files
   // takes place, some proc files like /proc/<pid>/maps may contain nothing
   // and thus become unusable.
-  bool ValidateProcFiles(const FilePath &container_dir);
+  bool ValidateProcFiles(const FilePath &container_dir) const;
+
+  // Validates the core file at |core_path| and returns kErrorNone if
+  // the file contains the ELF magic bytes and an ELF class that matches the
+  // platform (i.e. 32-bit ELF on a 32-bit platform or 64-bit ELF on a 64-bit
+  // platform), which is due to the limitation in core2md. It returns an error
+  // type otherwise.
+  ErrorType ValidateCoreFile(const FilePath &core_path) const;
 
   // Determines the crash directory for given pid based on pid's owner,
   // and creates the directory if necessary with appropriate permissions.
@@ -133,12 +157,12 @@ class UserCollector : public CrashCollector {
                          const FilePath &procfs_directory,
                          const FilePath &minidump_path,
                          const FilePath &temp_directory);
-  bool ConvertCoreToMinidump(pid_t pid,
-                             const FilePath &container_dir,
-                             const FilePath &core_path,
-                             const FilePath &minidump_path);
-  bool ConvertAndEnqueueCrash(int pid, const std::string &exec_name,
-                              bool *out_of_capacity);
+  ErrorType ConvertCoreToMinidump(pid_t pid,
+                                  const FilePath &container_dir,
+                                  const FilePath &core_path,
+                                  const FilePath &minidump_path);
+  ErrorType ConvertAndEnqueueCrash(int pid, const std::string &exec_name,
+                                   bool *out_of_capacity);
   bool ParseCrashAttributes(const std::string &crash_attributes,
                             pid_t *pid, int *signal,
                             std::string *kernel_supplied_name);

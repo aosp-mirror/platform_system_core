@@ -4,6 +4,9 @@
 
 #include "crash-reporter/user_collector.h"
 
+#include <bits/wordsize.h>
+#include <elf.h>
+#include <fcntl.h>
 #include <grp.h>  // For struct group.
 #include <pcrecpp.h>
 #include <pwd.h>  // For struct passwd.
@@ -65,6 +68,25 @@ void UserCollector::Initialize(
 }
 
 UserCollector::~UserCollector() {
+}
+
+std::string UserCollector::GetErrorTypeSignature(ErrorType error_type) const {
+  switch (error_type) {
+    case kErrorSystemIssue:
+      return "system-issue";
+    case kErrorReadCoreData:
+      return "read-core-data";
+    case kErrorUnusableProcFiles:
+      return "unusable-proc-files";
+    case kErrorInvalidCoreFile:
+      return "invalid-core-file";
+    case kErrorUnsupported32BitCoreFile:
+      return "unsupported-32bit-core-file";
+    case kErrorCore2MinidumpConversion:
+      return "core2md-conversion";
+    default:
+      return "";
+  }
 }
 
 std::string UserCollector::GetPattern(bool enabled) const {
@@ -210,6 +232,7 @@ bool UserCollector::GetStateFromStatus(
 }
 
 void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
+                                              ErrorType error_type,
                                               const std::string &exec) {
   FilePath crash_path;
   LOG(INFO) << "Writing conversion problems as separate crash report.";
@@ -237,6 +260,7 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
   // might have created.
   WriteNewFile(log_path, error_log.data(), error_log.length());
   AddCrashMetaData("sig", kCollectionErrorSignature);
+  AddCrashMetaData("error_type", GetErrorTypeSignature(error_type));
   WriteCrashMetaData(meta_path, exec, log_path.value());
 }
 
@@ -268,7 +292,7 @@ bool UserCollector::CopyOffProcFiles(pid_t pid,
   return true;
 }
 
-bool UserCollector::ValidateProcFiles(const FilePath &container_dir) {
+bool UserCollector::ValidateProcFiles(const FilePath &container_dir) const {
   // Check if the maps file is empty, which could be due to the crashed
   // process being reaped by the kernel before finishing a core dump.
   int64 file_size = 0;
@@ -281,6 +305,41 @@ bool UserCollector::ValidateProcFiles(const FilePath &container_dir) {
     return false;
   }
   return true;
+}
+
+UserCollector::ErrorType UserCollector::ValidateCoreFile(
+    const FilePath &core_path) const {
+  int fd = HANDLE_EINTR(open(core_path.value().c_str(), O_RDONLY));
+  if (fd < 0) {
+    LOG(ERROR) << "Could not open core file " << core_path.value();
+    return kErrorInvalidCoreFile;
+  }
+
+  char e_ident[EI_NIDENT];
+  bool read_ok = file_util::ReadFromFD(fd, e_ident, sizeof(e_ident));
+  HANDLE_EINTR(close(fd));
+  if (!read_ok) {
+    LOG(ERROR) << "Could not read header of core file";
+    return kErrorInvalidCoreFile;
+  }
+
+  if (e_ident[EI_MAG0] != ELFMAG0 || e_ident[EI_MAG1] != ELFMAG1 ||
+      e_ident[EI_MAG2] != ELFMAG2 || e_ident[EI_MAG3] != ELFMAG3) {
+    LOG(ERROR) << "Invalid core file";
+    return kErrorInvalidCoreFile;
+  }
+
+#if __WORDSIZE == 64
+  // TODO(benchan, mkrebs): Remove this check once core2md can
+  // handles both 32-bit and 64-bit ELF on a 64-bit platform.
+  if (e_ident[EI_CLASS] == ELFCLASS32) {
+    LOG(ERROR) << "Conversion of 32-bit core file on 64-bit platform is "
+               << "currently not supported";
+    return kErrorUnsupported32BitCoreFile;
+  }
+#endif
+
+  return kErrorNone;
 }
 
 bool UserCollector::GetCreatedCrashDirectory(pid_t pid,
@@ -373,10 +432,11 @@ bool UserCollector::RunCoreToMinidump(const FilePath &core_path,
   return true;
 }
 
-bool UserCollector::ConvertCoreToMinidump(pid_t pid,
-                                          const FilePath &container_dir,
-                                          const FilePath &core_path,
-                                          const FilePath &minidump_path) {
+UserCollector::ErrorType UserCollector::ConvertCoreToMinidump(
+    pid_t pid,
+    const FilePath &container_dir,
+    const FilePath &core_path,
+    const FilePath &minidump_path) {
   // If proc files are unuable, we continue to read the core file from stdin,
   // but only skip the core-to-minidump conversion, so that we may still use
   // the core file for debugging.
@@ -384,35 +444,37 @@ bool UserCollector::ConvertCoreToMinidump(pid_t pid,
       CopyOffProcFiles(pid, container_dir) && ValidateProcFiles(container_dir);
 
   if (!CopyStdinToCoreFile(core_path)) {
-    return false;
+    return kErrorReadCoreData;
   }
 
   if (!proc_files_usable) {
     LOG(INFO) << "Skipped converting core file to minidump due to "
               << "unusable proc files";
-    return false;
+    return kErrorUnusableProcFiles;
   }
 
-  bool conversion_result = RunCoreToMinidump(
-      core_path,
-      container_dir,  // procfs directory
-      minidump_path,
-      container_dir);  // temporary directory
-
-  if (conversion_result) {
-    LOG(INFO) << "Stored minidump to " << minidump_path.value();
+  ErrorType error = ValidateCoreFile(core_path);
+  if (error != kErrorNone) {
+    return error;
   }
 
-  return conversion_result;
+  if (!RunCoreToMinidump(core_path,
+                         container_dir,  // procfs directory
+                         minidump_path,
+                         container_dir)) {  // temporary directory
+    return kErrorCore2MinidumpConversion;
+  }
+
+  LOG(INFO) << "Stored minidump to " << minidump_path.value();
+  return kErrorNone;
 }
 
-bool UserCollector::ConvertAndEnqueueCrash(int pid,
-                                           const std::string &exec,
-                                           bool *out_of_capacity) {
+UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
+    int pid, const std::string &exec, bool *out_of_capacity) {
   FilePath crash_path;
   if (!GetCreatedCrashDirectory(pid, &crash_path, out_of_capacity)) {
     LOG(ERROR) << "Unable to find/create process-specific crash path";
-    return false;
+    return kErrorSystemIssue;
   }
 
   // Directory like /tmp/crash_reporter/1234 which contains the
@@ -431,11 +493,12 @@ bool UserCollector::ConvertAndEnqueueCrash(int pid,
   if (GetLogContents(FilePath(kDefaultLogConfig), exec, log_path))
     AddCrashMetaData("log", log_path.value());
 
-  if (!ConvertCoreToMinidump(pid, container_dir, core_path,
-                            minidump_path)) {
+  ErrorType error_type =
+      ConvertCoreToMinidump(pid, container_dir, core_path, minidump_path);
+  if (error_type != kErrorNone) {
     LOG(INFO) << "Leaving core file at " << core_path.value()
               << " due to conversion error";
-    return false;
+    return error_type;
   }
 
   // Here we commit to sending this file.  We must not return false
@@ -453,7 +516,7 @@ bool UserCollector::ConvertAndEnqueueCrash(int pid,
   }
 
   file_util::Delete(container_dir, true);
-  return true;
+  return kErrorNone;
 }
 
 bool UserCollector::ParseCrashAttributes(const std::string &crash_attributes,
@@ -546,11 +609,11 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
 
     if (generate_diagnostics_) {
       bool out_of_capacity = false;
-      bool convert_and_enqueue_result =
+      ErrorType error_type =
           ConvertAndEnqueueCrash(pid, exec, &out_of_capacity);
-      if (!convert_and_enqueue_result) {
+      if (error_type != kErrorNone) {
         if (!out_of_capacity)
-          EnqueueCollectionErrorLog(pid, exec);
+          EnqueueCollectionErrorLog(pid, error_type, exec);
         return false;
       }
     }
