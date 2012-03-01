@@ -34,7 +34,7 @@ __BEGIN_DECLS
  * sharing an output with other AudioTracks)
  */
 typedef enum {
-    AUDIO_POLICY_OUTPUT_FLAG_INDIRECT = 0x0,
+    AUDIO_POLICY_OUTPUT_FLAG_NONE = 0x0,
     AUDIO_POLICY_OUTPUT_FLAG_DIRECT = 0x1
 } audio_policy_output_flags_t;
 
