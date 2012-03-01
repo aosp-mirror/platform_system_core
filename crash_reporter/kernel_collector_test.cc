@@ -28,14 +28,6 @@ bool IsMetrics() {
   return s_metrics;
 }
 
-class TKernelCollector : public KernelCollector {
-  bool LoadParameters() {
-    // Since we don't have /sys/module/ramoops/parameters on our system just
-    // return true instead of getting the parameters from the files.
-    return true;
-  }
-};
-
 class KernelCollectorTest : public ::testing::Test {
   void SetUp() {
     s_crashes = 0;
@@ -61,13 +53,13 @@ class KernelCollectorTest : public ::testing::Test {
   void SetUpSuccessfulCollect();
   void ComputeKernelStackSignatureCommon();
 
-  TKernelCollector collector_;
+  KernelCollector collector_;
   FilePath test_kcrash_;
 };
 
 TEST_F(KernelCollectorTest, ComputeKernelStackSignatureBase) {
   // Make sure the normal build architecture is detected
-  EXPECT_TRUE(collector_.GetArch() != TKernelCollector::archUnknown);
+  EXPECT_TRUE(collector_.GetArch() != KernelCollector::archUnknown);
 }
 
 TEST_F(KernelCollectorTest, LoadPreservedDump) {
@@ -76,10 +68,12 @@ TEST_F(KernelCollectorTest, LoadPreservedDump) {
   dump.clear();
 
   WriteStringToFile(test_kcrash_, "emptydata");
+  ASSERT_TRUE(collector_.LoadParameters());
   ASSERT_FALSE(collector_.LoadPreservedDump(&dump));
   ASSERT_EQ("", dump);
 
   WriteStringToFile(test_kcrash_, "====1.1\nsomething");
+  ASSERT_TRUE(collector_.LoadParameters());
   ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
   ASSERT_EQ("something", dump);
 }
@@ -219,15 +213,15 @@ TEST_F(KernelCollectorTest, StripSensitiveDataSample) {
 
 TEST_F(KernelCollectorTest, CollectPreservedFileMissing) {
   ASSERT_FALSE(collector_.Collect());
-  ASSERT_TRUE(FindLog("Unable to open"));
-  ASSERT_TRUE(FindLog("No valid records found"));
+  ASSERT_FALSE(FindLog("Stored kcrash to "));
   ASSERT_EQ(0, s_crashes);
 }
 
 TEST_F(KernelCollectorTest, CollectNoCrash) {
   WriteStringToFile(test_kcrash_, "");
   ASSERT_FALSE(collector_.Collect());
-  ASSERT_FALSE(FindLog("Collected kernel crash"));
+  ASSERT_TRUE(FindLog("No valid records found"));
+  ASSERT_FALSE(FindLog("Stored kcrash to "));
   ASSERT_EQ(0, s_crashes);
 }
 
@@ -353,7 +347,7 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignatureARM) {
           "[<c017bfe0>] (proc_reg_write+0x88/0x9c)\n";
   std::string signature;
 
-  collector_.SetArch(TKernelCollector::archArm);
+  collector_.SetArch(KernelCollector::archArm);
   EXPECT_TRUE(
       collector_.ComputeKernelStackSignature(kBugToPanic, &signature, false));
   EXPECT_EQ("kernel-write_breakme-97D3E92F", signature);

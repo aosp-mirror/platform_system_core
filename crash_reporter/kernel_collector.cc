@@ -48,7 +48,8 @@ COMPILE_ASSERT(arraysize(s_pc_regex) == KernelCollector::archCount,
 
 KernelCollector::KernelCollector()
     : is_enabled_(false),
-      ramoops_dump_path_(kDumpPath) {
+      ramoops_dump_path_(kDumpPath),
+      records_(0) {
   // We expect crash dumps in the format of the architecture we are built for.
   arch_ = GetCompilerArch();
 }
