@@ -398,7 +398,7 @@ static void showLog(LogState *state,
         break;
     case FORMAT_THREAD:
         prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
-            "%c(%5d:%p) ", priChar, pid, (void*)tid);
+            "%c(%5d:%5d) ", priChar, pid, tid);
         strcpy(suffixBuf, "\n"); suffixLen = 1;
         break;
     case FORMAT_RAW:
@@ -417,8 +417,8 @@ static void showLog(LogState *state,
         break;
     case FORMAT_LONG:
         prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
-            "[ %s %5d:%p %c/%-8s ]\n",
-            timeBuf, pid, (void*)tid, priChar, tag);
+            "[ %s %5d:%5d %c/%-8s ]\n",
+            timeBuf, pid, tid, priChar, tag);
         strcpy(suffixBuf, "\n\n"); suffixLen = 2;
         break;
     default:
