@@ -30,12 +30,23 @@ __BEGIN_DECLS
  * frameworks/base/include/media/AudioSystem.h
  */
 
-/* request to open a direct output with get_output() (by opposition to
- * sharing an output with other AudioTracks)
+/* the audio output flags serve two purposes:
+ * - when an AudioTrack is created they indicate a "wish" to be connected to an output stream with
+ * attributes corresponding to the specified flags
+ * - when present in an output profile descriptor listed for a particular audio hardware module,
+ * they indicate that an output stream can be opened that supports the attributes indicated by
+ * the flags.
+ * the audio policy manager will try to match the flags in the request (when getOuput() is called)
+ * to an available output stream.
  */
 typedef enum {
-    AUDIO_POLICY_OUTPUT_FLAG_NONE = 0x0,
-    AUDIO_POLICY_OUTPUT_FLAG_DIRECT = 0x1
+    AUDIO_POLICY_OUTPUT_FLAG_NONE = 0x0,    // no attributes
+    AUDIO_POLICY_OUTPUT_FLAG_DIRECT = 0x1,  // this output directly connects a track to one output
+                                            // stream (no software mixer)
+    AUDIO_POLICY_OUTPUT_FLAG_PRIMARY = 0x2  // this output is the primary output of the device.
+                                            // it is unique and must be present. it is opened by
+                                            // default and receives routing, audio mode and
+                                            // volume controls related to voice calls.
 } audio_policy_output_flags_t;
 
 /* device categories used for audio_policy->set_force_use() */
