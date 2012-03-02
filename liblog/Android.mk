@@ -40,6 +40,7 @@ endif
 
 liblog_host_sources := $(liblog_sources) fake_log_device.c
 
+
 # Static library for host
 # ========================================================
 LOCAL_MODULE := liblog
@@ -47,6 +48,17 @@ LOCAL_SRC_FILES := $(liblog_host_sources)
 LOCAL_LDLIBS := -lpthread
 LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1
 include $(BUILD_HOST_STATIC_LIBRARY)
+
+
+# Static library for host, 64-bit
+# ========================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE := lib64log
+LOCAL_SRC_FILES := $(liblog_host_sources)
+LOCAL_LDLIBS := -lpthread
+LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1 -m64
+include $(BUILD_HOST_STATIC_LIBRARY)
+
 
 # Shared and static library for target
 # ========================================================
