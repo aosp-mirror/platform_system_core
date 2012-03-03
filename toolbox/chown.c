@@ -15,7 +15,7 @@ int chown_main(int argc, char **argv)
     int i;
 
     if (argc < 3) {
-        fprintf(stderr, "Usage: chown <USER>[.GROUP] <FILE1> [FILE2] ...\n");
+        fprintf(stderr, "Usage: chown <USER>[:GROUP] <FILE1> [FILE2] ...\n");
         return 10;
     }
 
@@ -24,7 +24,9 @@ int chown_main(int argc, char **argv)
     char user[32];
     char *group = NULL;
     strncpy(user, argv[1], sizeof(user));
-    if ((group = strchr(user, '.')) != NULL) {
+    if ((group = strchr(user, ':')) != NULL) {
+        *group++ = '\0';
+    } else if ((group = strchr(user, '.')) != NULL) {
         *group++ = '\0';
     }
 
