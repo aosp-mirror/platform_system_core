@@ -250,7 +250,9 @@ typedef enum {
                                AUDIO_CHANNEL_IN_Z_AXIS |
                                AUDIO_CHANNEL_IN_VOICE_UPLINK |
                                AUDIO_CHANNEL_IN_VOICE_DNLINK),
-} audio_channels_t;
+};
+
+typedef uint32_t audio_channel_mask_t;
 
 typedef enum {
     AUDIO_MODE_INVALID          = -2,
@@ -380,6 +382,38 @@ static inline bool audio_is_output_channel(uint32_t channel)
         return true;
     else
         return false;
+}
+
+/* Derive a channel mask from a channel count.
+ * This is to be used when the content channel mask is unknown. The 1, 2, 4, 5, 6, 7 and 8 channel
+ * cases are mapped to the standard game/home-theater layouts, but note that 4 is mapped to quad,
+ * and not stereo + FC + mono surround. A channel count of 3 is arbitrarily mapped to stereo + FC
+ * for continuity with stereo.
+ * Returns the matching channel mask, or 0 if the number of channels exceeds that of the
+ * configurations for which a default channel mask is defined.
+ */
+static inline audio_channel_mask_t audio_channel_mask_from_count(uint32_t channel_count)
+{
+    switch(channel_count) {
+    case 1:
+        return AUDIO_CHANNEL_OUT_MONO;
+    case 2:
+        return AUDIO_CHANNEL_OUT_STEREO;
+    case 3:
+        return (AUDIO_CHANNEL_OUT_STEREO | AUDIO_CHANNEL_OUT_FRONT_CENTER);
+    case 4: // 4.0
+        return AUDIO_CHANNEL_OUT_QUAD;
+    case 5: // 5.0
+        return (AUDIO_CHANNEL_OUT_QUAD | AUDIO_CHANNEL_OUT_FRONT_CENTER);
+    case 6: // 5.1
+        return AUDIO_CHANNEL_OUT_5POINT1;
+    case 7: // 6.1
+        return (AUDIO_CHANNEL_OUT_5POINT1 | AUDIO_CHANNEL_OUT_BACK_CENTER);
+    case 8:
+        return AUDIO_CHANNEL_OUT_7POINT1;
+    default:
+        return 0;
+    }
 }
 
 static inline bool audio_is_valid_format(audio_format_t format)
