@@ -447,18 +447,18 @@ static inline size_t audio_bytes_per_sample(audio_format_t format)
     size_t size = 0;
 
     switch (format) {
-        case AUDIO_FORMAT_PCM_32_BIT:
-        case AUDIO_FORMAT_PCM_8_24_BIT:
-            size = sizeof(int32_t);
-            break;
-        case AUDIO_FORMAT_PCM_16_BIT:
-            size = sizeof(int16_t);
-            break;
-        case AUDIO_FORMAT_PCM_8_BIT:
-            size = sizeof(uint8_t);
-            break;
-        default:
-            break;
+    case AUDIO_FORMAT_PCM_32_BIT:
+    case AUDIO_FORMAT_PCM_8_24_BIT:
+        size = sizeof(int32_t);
+        break;
+    case AUDIO_FORMAT_PCM_16_BIT:
+        size = sizeof(int16_t);
+        break;
+    case AUDIO_FORMAT_PCM_8_BIT:
+        size = sizeof(uint8_t);
+        break;
+    default:
+        break;
     }
     return size;
 }
