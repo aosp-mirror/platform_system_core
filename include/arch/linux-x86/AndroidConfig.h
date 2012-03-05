@@ -83,7 +83,7 @@
 /*
  * Define this if you have <termio.h>
  */
-#define  HAVE_TERMIO_H
+#define  HAVE_TERMIO_H 1
 
 /*
  * Define this if you have <sys/sendfile.h>
@@ -98,7 +98,7 @@
 /*
  * Define this if you have sys/uio.h
  */
-#define  HAVE_SYS_UIO_H
+#define  HAVE_SYS_UIO_H 1
 
 /*
  * Define this if your platforms implements symbolic links
