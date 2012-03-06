@@ -167,14 +167,8 @@ static int ps_line(int pid, int tid, char *namefilter)
             SchedPolicy p;
             if (get_sched_policy(pid, &p) < 0)
                 printf(" un ");
-            else {
-                if (p == SP_BACKGROUND)
-                    printf(" bg ");
-                else if (p == SP_FOREGROUND)
-                    printf(" fg ");
-                else
-                    printf(" er ");
-            }
+            else
+                printf(" %.2s ", get_sched_policy_name(p));
         }
         printf(" %08x %08x %s %s", wchan, eip, state, cmdline[0] ? cmdline : name);
         if(display_flags&SHOW_TIME)
