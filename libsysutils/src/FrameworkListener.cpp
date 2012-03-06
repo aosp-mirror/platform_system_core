@@ -25,9 +25,21 @@
 #include <sysutils/FrameworkCommand.h>
 #include <sysutils/SocketClient.h>
 
+FrameworkListener::FrameworkListener(const char *socketName, bool withSeq) :
+                            SocketListener(socketName, true, withSeq) {
+    init(socketName, withSeq);
+}
+
 FrameworkListener::FrameworkListener(const char *socketName) :
-                            SocketListener(socketName, true) {
+                            SocketListener(socketName, true, false) {
+    init(socketName, false);
+}
+
+void FrameworkListener::init(const char *socketName, bool withSeq) {
     mCommands = new FrameworkCommandCollection();
+    errorRate = 0;
+    mCommandCount = 0;
+    mWithSeq = withSeq;
 }
 
 bool FrameworkListener::onDataAvailable(SocketClient *c) {
@@ -69,6 +81,7 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
     bool esc = false;
     bool quote = false;
     int k;
+    bool haveCmdNum = !mWithSeq;
 
     memset(argv, 0, sizeof(argv));
     memset(tmp, 0, sizeof(tmp));
@@ -115,9 +128,20 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
         *q = *p++;
         if (!quote && *q == ' ') {
             *q = '\0';
-            if (argc >= CMD_ARGS_MAX)
-                goto overflow;
-            argv[argc++] = strdup(tmp);
+            if (!haveCmdNum) {
+                char *endptr;
+                int cmdNum = (int)strtol(tmp, &endptr, 0);
+                if (endptr == NULL || *endptr != '\0') {
+                    cli->sendMsg(500, "Invalid sequence number", false);
+                    goto out;
+                }
+                cli->setCmdNum(cmdNum);
+                haveCmdNum = true;
+            } else {
+                if (argc >= CMD_ARGS_MAX)
+                    goto overflow;
+                argv[argc++] = strdup(tmp);
+            }
             memset(tmp, 0, sizeof(tmp));
             q = tmp;
             continue;
@@ -137,6 +161,12 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
 
     if (quote) {
         cli->sendMsg(500, "Unclosed quotes error", false);
+        goto out;
+    }
+
+    if (errorRate && (++mCommandCount % errorRate == 0)) {
+        /* ignore this command - let the timeout handler handle it */
+        SLOGE("Faking a timeout");
         goto out;
     }
 

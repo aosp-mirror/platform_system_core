@@ -10,16 +10,25 @@
 
 #include <sysutils/SocketClient.h>
 
-SocketClient::SocketClient(int socket, bool owned)
-        : mSocket(socket)
-        , mSocketOwned(owned)
-        , mPid(-1)
-        , mUid(-1)
-        , mGid(-1)
-        , mRefCount(1)
-{
+SocketClient::SocketClient(int socket, bool owned) {
+    init(socket, owned, false);
+}
+
+SocketClient::SocketClient(int socket, bool owned, bool useCmdNum) {
+    init(socket, owned, useCmdNum);
+}
+
+void SocketClient::init(int socket, bool owned, bool useCmdNum) {
+    mSocket = socket;
+    mSocketOwned = owned;
+    mUseCmdNum = useCmdNum;
     pthread_mutex_init(&mWriteMutex, NULL);
     pthread_mutex_init(&mRefCountMutex, NULL);
+    mPid = -1;
+    mUid = -1;
+    mGid = -1;
+    mRefCount = 1;
+    mCmdNum = 0;
 
     struct ucred creds;
     socklen_t szCreds = sizeof(creds);
@@ -41,26 +50,32 @@ SocketClient::~SocketClient()
 }
 
 int SocketClient::sendMsg(int code, const char *msg, bool addErrno) {
+    return sendMsg(code, msg, addErrno, mUseCmdNum);
+}
+
+int SocketClient::sendMsg(int code, const char *msg, bool addErrno, bool useCmdNum) {
     char *buf;
-    const char* arg;
-    const char* fmt;
-    char tmp[1];
-    int  len;
+    int ret = 0;
 
     if (addErrno) {
-        fmt = "%.3d %s (%s)";
-        arg = strerror(errno);
+        if (useCmdNum) {
+            ret = asprintf(&buf, "%d %d %s (%s)", code, getCmdNum(), msg, strerror(errno));
+        } else {
+            ret = asprintf(&buf, "%d %s (%s)", code, msg, strerror(errno));
+        }
     } else {
-        fmt = "%.3d %s";
-        arg = NULL;
+        if (useCmdNum) {
+            ret = asprintf(&buf, "%d %d %s", code, getCmdNum(), msg);
+        } else {
+            ret = asprintf(&buf, "%d %s", code, msg);
+        }
     }
-    /* Measure length of required buffer */
-    len = snprintf(tmp, sizeof tmp, fmt, code, msg, arg);
-    /* Allocate in the stack, then write to it */
-    buf = (char*)alloca(len+1);
-    snprintf(buf, len+1, fmt, code, msg, arg);
     /* Send the zero-terminated message */
-    return sendMsg(buf);
+    if (ret != -1) {
+        ret = sendMsg(buf);
+        free(buf);
+    }
+    return ret;
 }
 
 int SocketClient::sendMsg(const char *msg) {

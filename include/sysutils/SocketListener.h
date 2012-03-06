@@ -21,16 +21,18 @@
 #include <sysutils/SocketClient.h>
 
 class SocketListener {
-    int                     mSock;
+    bool                    mListen;
     const char              *mSocketName;
+    int                     mSock;
     SocketClientCollection  *mClients;
     pthread_mutex_t         mClientsLock;
-    bool                    mListen;
     int                     mCtrlPipe[2];
     pthread_t               mThread;
+    bool                    mUseCmdNum;
 
 public:
     SocketListener(const char *socketName, bool listen);
+    SocketListener(const char *socketName, bool listen, bool useCmdNum);
     SocketListener(int socketFd, bool listen);
 
     virtual ~SocketListener();
@@ -38,7 +40,6 @@ public:
     int stopListener();
 
     void sendBroadcast(int code, const char *msg, bool addErrno);
-    void sendBroadcast(const char *msg);
 
 protected:
     virtual bool onDataAvailable(SocketClient *c) = 0;
@@ -46,5 +47,6 @@ protected:
 private:
     static void *threadStart(void *obj);
     void runListener();
+    void init(const char *socketName, int socketFd, bool listen, bool useCmdNum);
 };
 #endif
