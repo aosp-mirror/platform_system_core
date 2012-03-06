@@ -1,7 +1,7 @@
 #ifndef _SOCKET_CLIENT_H
 #define _SOCKET_CLIENT_H
 
-#include "../../../frameworks/base/include/utils/List.h"
+#include "List.h"
 
 #include <pthread.h>
 #include <sys/types.h>
@@ -48,5 +48,5 @@ public:
     bool decRef(); // returns true at 0 (but note: SocketClient already deleted)
 };
 
-typedef android::List<SocketClient *> SocketClientCollection;
+typedef android::sysutils::List<SocketClient *> SocketClientCollection;
 #endif

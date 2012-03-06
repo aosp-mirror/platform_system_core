@@ -1,7 +1,7 @@
 #ifndef _FRAMEWORK_CLIENT_H
 #define _FRAMEWORK_CLIENT_H
 
-#include "../../../frameworks/base/include/utils/List.h"
+#include "List.h"
 
 #include <pthread.h>
 
@@ -17,5 +17,5 @@ public:
     int sendMsg(const char *msg, const char *data);
 };
 
-typedef android::List<FrameworkClient *> FrameworkClientCollection;
+typedef android::sysutils::List<FrameworkClient *> FrameworkClientCollection;
 #endif
