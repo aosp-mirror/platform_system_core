@@ -151,11 +151,30 @@ enum {
      * arg1 = 0 will disable, while passing arg1 = 1 will enable the callback.
      */
     CAMERA_CMD_ENABLE_FOCUS_MOVE_MSG = 8,
+
+    /**
+     * Ping camera service to see if camera hardware is released.
+     *
+     * When any camera method returns error, the client can use ping command
+     * to see if the camera has been taken away by other clients. If the result
+     * is NO_ERROR, it means the camera hardware is not released. If the result
+     * is not NO_ERROR, the camera has been released and the existing client
+     * can silently finish itself or show a dialog.
+     */
+    CAMERA_CMD_PING = 9,
 };
 
 /** camera fatal errors */
 enum {
     CAMERA_ERROR_UNKNOWN = 1,
+    /**
+     * Camera was released because another client has connected to the camera.
+     * The original client should call Camera::disconnect immediately after
+     * getting this notification. Otherwise, the camera will be released by
+     * camera service in a short time. The client should not call any method
+     * (except disconnect and sending CAMERA_CMD_PING) after getting this.
+     */
+    CAMERA_ERROR_RELEASED = 2,
     CAMERA_ERROR_SERVER_DIED = 100
 };
 
