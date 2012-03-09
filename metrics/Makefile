@@ -1,16 +1,19 @@
-# Copyright (c) 2011 The Chromium OS Authors. All rights reserved.
+# Copyright (c) 2012 The Chromium OS Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 #
 # Makefile for metrics utilities -- library, client and daemon
 #
 
+BASE_VER = 85268
 PKG_CONFIG ?= pkg-config
-PC_DEPS = dbus-1 glib-2.0 dbus-glib-1 libchrome libchromeos
-CCONFIG := $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
-LDCONFIG := $(shell $(PKG_CONFIG) --libs $(PC_DEPS) gthread-2.0)
+PC_DEPS = dbus-1 glib-2.0 dbus-glib-1 \
+	libchrome-$(BASE_VER) libchromeos-$(BASE_VER)
+PC_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
+LDLIBS := $(shell $(PKG_CONFIG) --libs $(PC_DEPS))
 
-CXXFLAGS += -Wall -Werror -fPIC -fno-exceptions $(CCONFIG)
+CXXFLAGS += -Wall -Werror -fPIC -fno-exceptions
+CPPFLAGS += $(PC_CFLAGS)
 
 CLIENT = metrics_client
 DAEMON = metrics_daemon
@@ -44,44 +47,42 @@ LIB_OBJS = \
 TESTLIB_OBJS = \
 	metrics_library_test.o
 
-TESTCOUNTER_LIBS = -lgmock -lgtest -lbase -lrt -lpthread -lglib-2.0
-TESTTIMER_LIBS = -lgmock -lgtest -lbase -lrt -lpthread -lglib-2.0
-DAEMON_LDFLAGS = $(LDFLAGS) $(LDCONFIG) -lpthread -lgflags \
-		 -lglib-2.0 -lrootdev -lpolicy
-TESTDAEMON_LIBS = -lgmock -lgtest
-TESTLIB_LIBS = -lgtest -lgmock -lbase -lrt -lpthread -lglib-2.0
-POLICY_LIBS := -lpolicy $(shell $(PKG_CONFIG) --libs libchrome)
+POLICY_LIBS = -lpolicy-$(BASE_VER)
+TEST_LIBS = -lgmock -lgtest
+DAEMON_LIBS = -lgflags -lrootdev
+
+LINK = $(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
 all: $(LIB) $(SHAREDLIB) $(CLIENT) $(DAEMON)
 
 tests: $(COUNTER_TEST) $(DAEMON_TEST) $(LIB_TEST) $(TIMER_TEST)
 
 $(CLIENT): $(CLIENT_OBJS) $(SHAREDLIB)
-	$(CXX) $(LDFLAGS) $^ -o $@ $(POLICY_LIBS) -lrt
+	$(LINK)
 
 $(COUNTER_TEST): $(TESTCOUNTER_OBJS)
-	$(CXX) -o $@ $^ $(TESTCOUNTER_LIBS)
+	$(LINK) $(TEST_LIBS)
 
 $(TIMER_TEST): $(TESTTIMER_OBJS)
-	$(CXX) -o $@ $^ $(TESTTIMER_LIBS)
+	$(LINK) $(TEST_LIBS)
 
 $(DAEMON): $(DAEMON_OBJS) $(SHAREDLIB)
-	$(CXX) -o $@ $^ $(DAEMON_LDFLAGS)
+	$(LINK) $(DAEMON_LIBS)
 
 $(DAEMON_TEST): $(TESTDAEMON_OBJS)
-	$(CXX) -o $@ $^ $(DAEMON_LDFLAGS) $(TESTDAEMON_LIBS)
+	$(LINK) $(DAEMON_LIBS) $(TEST_LIBS)
 
 $(LIB): $(LIB_OBJS)
 	$(AR) rcs $@ $^
 
 $(SHAREDLIB): $(LIB_OBJS)
-	$(CXX) $(LDFLAGS) -shared $^ -o $@ $(POLICY_LIBS)
+	$(LINK) -shared $(POLICY_LIBS)
 
 $(LIB_TEST): $(TESTLIB_OBJS) $(SHAREDLIB)
-	$(CXX) -o $@ $^ $(LDFLAGS) $(POLICY_LIBS) $(TESTLIB_LIBS)
+	$(LINK) $(POLICY_LIBS) $(TEST_LIBS)
 
 %.o: %.cc
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	rm -f $(CLIENT) $(DAEMON) $(LIB) $(SHAREDLIB) *.o
