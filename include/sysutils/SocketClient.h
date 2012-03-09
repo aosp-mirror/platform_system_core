@@ -45,14 +45,12 @@ public:
     int sendMsg(int code, const char *msg, bool addErrno);
     int sendMsg(int code, const char *msg, bool addErrno, bool useCmdNum);
 
-    // Provides a mechanism to send a response code to the client. The message uses
-    // the same format as in sendMsg method above.
-    // Sends the code, a space, and a null character.
+    // Provides a mechanism to send a response code to the client.
+    // Sends the code and a null character.
     int sendCode(int code);
 
-    // Provides a mechanism to send binary data to client. The message uses the
-    // same format as in sendMsg method above.
-    // Sends the code, a space, and a null character, followed by 4 bytes of
+    // Provides a mechanism to send binary data to client.
+    // Sends the code and a null character, followed by 4 bytes of
     // big-endian length, and the data.
     int sendBinaryMsg(int code, const void *data, int len);
 
