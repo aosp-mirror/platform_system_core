@@ -64,6 +64,7 @@ static const char *get_signame(int sig)
     case SIGBUS:     return "SIGBUS";
     case SIGFPE:     return "SIGFPE";
     case SIGSEGV:    return "SIGSEGV";
+    case SIGPIPE:    return "SIGPIPE";
     case SIGSTKFLT:  return "SIGSTKFLT";
     case SIGSTOP:    return "SIGSTOP";
     default:         return "?";
@@ -719,7 +720,8 @@ static void handle_request(int fd) {
     request_t request;
     int status = read_request(fd, &request);
     if (!status) {
-        XLOG("BOOM: pid=%d uid=%d gid=%d tid=%d\n", pid, uid, gid, tid);
+        XLOG("BOOM: pid=%d uid=%d gid=%d tid=%d\n",
+            request.pid, request.uid, request.gid, request.tid);
 
         /* At this point, the thread that made the request is blocked in
          * a read() call.  If the thread has crashed, then this gives us
@@ -776,8 +778,16 @@ static void handle_request(int fd) {
                     case SIGBUS:
                     case SIGFPE:
                     case SIGSEGV:
+                    case SIGPIPE:
                     case SIGSTKFLT: {
                         XLOG("stopped -- fatal signal\n");
+                        /*
+                         * Send a SIGSTOP to the process to make all of
+                         * the non-signaled threads stop moving.  Without
+                         * this we get a lot of "ptrace detach failed:
+                         * No such process".
+                         */
+                        kill(request.pid, SIGSTOP);
                         /* don't dump sibling threads when attaching to GDB because it
                          * makes the process less reliable, apparently... */
                         tombstone_path = engrave_tombstone(request.pid, request.tid,
@@ -861,8 +871,8 @@ static int do_server() {
     signal(SIGBUS, SIG_DFL);
     signal(SIGFPE, SIG_DFL);
     signal(SIGSEGV, SIG_DFL);
-    signal(SIGSTKFLT, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
+    signal(SIGSTKFLT, SIG_DFL);
 
     logsocket = socket_local_client("logd",
             ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_DGRAM);
