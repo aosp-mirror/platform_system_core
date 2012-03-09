@@ -38,12 +38,16 @@
 // has a performance cost even when the trace is not being recorded.  Defining
 // ATRACE_TAG to be ATRACE_TAG_NEVER or leaving ATRACE_TAG undefined will result
 // in the tracing always being disabled.
+//
+// These tags must be kept in sync with frameworks/base/core/java/android/os/Trace.java.
 #define ATRACE_TAG_NEVER    0           // The "never" tag is never enabled.
 #define ATRACE_TAG_ALWAYS   (1<<0)      // The "always" tag is always enabled.
 #define ATRACE_TAG_GRAPHICS (1<<1)
-#define ATRACE_TAG_LAST     (1<<1)
+#define ATRACE_TAG_INPUT    (1<<2)
+#define ATRACE_TAG_VIEW     (1<<3)
+#define ATRACE_TAG_LAST     ATRACE_TAG_VIEW
 
-#define ATRACE_TAG_INVALID (~((ATRACE_TAG_LAST - 1) | ATRACE_TAG_LAST))
+#define ATRACE_TAG_VALID_MASK ((ATRACE_TAG_LAST - 1) | ATRACE_TAG_LAST)
 
 #ifndef ATRACE_TAG
 #define ATRACE_TAG ATRACE_TAG_NEVER
@@ -60,52 +64,56 @@
 // value changes over time in a trace.
 #define ATRACE_INT(name, value) android::Tracer::traceCounter(ATRACE_TAG, name, value)
 
+// ATRACE_ENABLED returns true if the trace tag is enabled.  It can be used as a
+// guard condition around more expensive trace calculations.
+#define ATRACE_ENABLED() android::Tracer::isTagEnabled(ATRACE_TAG)
+
 namespace android {
 
 class Tracer {
 
 public:
 
+    static uint64_t getEnabledTags() {
+        initIfNeeded();
+        return sEnabledTags;
+    }
+
+    static inline bool isTagEnabled(uint64_t tag) {
+        initIfNeeded();
+        return sEnabledTags & tag;
+    }
+
     static inline void traceCounter(uint64_t tag, const char* name,
             int32_t value) {
-        if (!android_atomic_acquire_load(&sIsReady)) {
-            init();
-        }
-        int traceFD = sTraceFD;
-        if (CC_UNLIKELY(tagEnabled(tag) && traceFD != -1)) {
+        if (CC_UNLIKELY(isTagEnabled(tag))) {
             char buf[1024];
             snprintf(buf, 1024, "C|%d|%s|%d", getpid(), name, value);
-            write(traceFD, buf, strlen(buf));
+            write(sTraceFD, buf, strlen(buf));
         }
     }
 
     static inline void traceBegin(uint64_t tag, const char* name) {
-        if (CC_UNLIKELY(!android_atomic_acquire_load(&sIsReady))) {
-            init();
-        }
-        int traceFD = sTraceFD;
-        if (CC_UNLIKELY(tagEnabled(tag) && (traceFD != -1))) {
+        if (CC_UNLIKELY(isTagEnabled(tag))) {
             char buf[1024];
             size_t len = snprintf(buf, 1024, "B|%d|%s", getpid(), name);
-            write(traceFD, buf, len);
+            write(sTraceFD, buf, len);
         }
     }
 
    static inline void traceEnd(uint64_t tag) {
-        if (CC_UNLIKELY(!android_atomic_acquire_load(&sIsReady))) {
-            init();
-        }
-        int traceFD = sTraceFD;
-        if (CC_UNLIKELY(tagEnabled(tag) && (traceFD != -1))) {
+        if (CC_UNLIKELY(isTagEnabled(tag))) {
             char buf = 'E';
-            write(traceFD, &buf, 1);
+            write(sTraceFD, &buf, 1);
         }
     }
 
 private:
 
-    static inline bool tagEnabled(uint64_t tag) {
-        return !(tag & ATRACE_TAG_INVALID) && (tag & sEnabledTags);
+    static inline void initIfNeeded() {
+        if (!android_atomic_acquire_load(&sIsReady)) {
+            init();
+        }
     }
 
     // init opens the trace marker file for writing and reads the
@@ -138,6 +146,8 @@ private:
     //
     // This should only be used by a trace function after init() has
     // successfully completed.
+    //
+    // This value is only ever non-zero when tracing is initialized and sTraceFD is not -1.
     static uint64_t sEnabledTags;
 
     // sMutex is used to protect the execution of init().

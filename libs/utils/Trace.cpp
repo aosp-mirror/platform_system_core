@@ -34,10 +34,12 @@ void Tracer::init() {
         sTraceFD = open(traceFileName, O_WRONLY);
         if (sTraceFD == -1) {
             ALOGE("error opening trace file: %s (%d)", strerror(errno), errno);
+            // sEnabledTags remains zero indicating that no tracing can occur
         } else {
             char value[PROPERTY_VALUE_MAX];
             property_get("atrace.tags.enableflags", value, "0");
-            sEnabledTags = strtoll(value, NULL, 0) | ATRACE_TAG_ALWAYS;
+            sEnabledTags = (strtoll(value, NULL, 0) & ATRACE_TAG_VALID_MASK)
+                    | ATRACE_TAG_ALWAYS;
         }
 
         android_atomic_release_store(1, &sIsReady);
