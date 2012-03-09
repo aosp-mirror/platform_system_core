@@ -79,16 +79,16 @@ int SocketClient::sendMsg(int code, const char *msg, bool addErrno, bool useCmdN
     return ret;
 }
 
-
+/** send 3-digit code, null, binary-length, binary data */
 int SocketClient::sendBinaryMsg(int code, const void *data, int len) {
 
-    /* 5 bytes for the code & space + 4 bytes for the len */
-    char buf[9];
+    /* 4 bytes for the code & null + 4 bytes for the len */
+    char buf[8];
     /* Write the code */
-    snprintf(buf, 5, "%.3d ", code);
+    snprintf(buf, 4, "%.3d", code);
     /* Write the len */
     uint32_t tmp = htonl(len);
-    memcpy(buf + 5, &tmp, sizeof(uint32_t));
+    memcpy(buf + 4, &tmp, sizeof(uint32_t));
 
     pthread_mutex_lock(&mWriteMutex);
     int result = sendDataLocked(buf, sizeof(buf));
@@ -102,9 +102,9 @@ int SocketClient::sendBinaryMsg(int code, const void *data, int len) {
 
 // Sends the code (c-string null-terminated).
 int SocketClient::sendCode(int code) {
-    char buf[5];
-    snprintf(buf, 5, "%.3d ", code);
-    return sendData(buf, 5);
+    char buf[4];
+    snprintf(buf, sizeof(buf), "%.3d", code);
+    return sendData(buf, sizeof(buf));
 }
 
 int SocketClient::sendMsg(const char *msg) {
