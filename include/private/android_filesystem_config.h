@@ -119,6 +119,7 @@ static const struct android_id_info android_ids[] = {
     { "diag",      AID_DIAG, },
     { "net_bt_admin", AID_NET_BT_ADMIN, },
     { "net_bt",    AID_NET_BT, },
+    { "sdcard_r",  AID_SDCARD_R, },
     { "sdcard_rw", AID_SDCARD_RW, },
     { "media_rw",  AID_MEDIA_RW, },
     { "vpn",       AID_VPN, },
