@@ -140,7 +140,7 @@ int SocketClient::sendDataLocked(const void *data, int len) {
     }
 
     while (brtw > 0) {
-        rc = write(mSocket, p, brtw);
+        rc = send(mSocket, p, brtw, MSG_NOSIGNAL);
         if (rc > 0) {
             p += rc;
             brtw -= rc;
