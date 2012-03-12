@@ -158,15 +158,18 @@ int str_parms_add_str(struct str_parms *str_parms, const char *key,
                       const char *value)
 {
     void *old_val;
-    char *tmp;
+    void *tmp_key;
+    void *tmp_val;
 
-    tmp = strdup(value);
-    old_val = hashmapPut(str_parms->map, (void *)key, tmp);
+    tmp_key = strdup(key);
+    tmp_val = strdup(value);
+    old_val = hashmapPut(str_parms->map, tmp_key, tmp_val);
 
     if (old_val) {
         free(old_val);
     } else if (errno == ENOMEM) {
-        free(tmp);
+        free(tmp_key);
+        free(tmp_val);
         return -ENOMEM;
     }
     return 0;
