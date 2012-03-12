@@ -301,6 +301,7 @@ static void test_str_parms_str(const char *str)
     int ret;
 
     str_parms = str_parms_create_str(str);
+    str_parms_add_str(str_parms, "dude", "woah");
     str_parms_dump(str_parms);
     out_str = str_parms_to_str(str_parms);
     str_parms_destroy(str_parms);
