@@ -95,16 +95,6 @@ endif
 # adbd device daemon
 # =========================================================
 
-BUILD_ADBD := true
-
-# build adbd for the Linux simulator build
-# so we can use it to test the adb USB gadget driver on x86
-#ifeq ($(HOST_OS),linux)
-#    BUILD_ADBD := true
-#endif
-
-
-ifeq ($(BUILD_ADBD),true)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
@@ -127,12 +117,6 @@ LOCAL_SRC_FILES := \
 LOCAL_CFLAGS := -O2 -g -DADB_HOST=0 -Wall -Wno-unused-parameter
 LOCAL_CFLAGS += -D_XOPEN_SOURCE -D_GNU_SOURCE
 
-# TODO: This should probably be board specific, whether or not the kernel has
-# the gadget driver; rather than relying on the architecture type.
-ifeq ($(TARGET_ARCH),arm)
-LOCAL_CFLAGS += -DANDROID_GADGET=1
-endif
-
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_ADBD_ROOT=1
 endif
@@ -145,8 +129,6 @@ LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 
 LOCAL_STATIC_LIBRARIES := libcutils libc
 include $(BUILD_EXECUTABLE)
-
-endif
 
 
 # adb host tool for device-as-host
