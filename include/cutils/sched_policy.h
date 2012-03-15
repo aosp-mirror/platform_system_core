@@ -24,10 +24,27 @@ extern "C" {
 typedef enum {
     SP_BACKGROUND = 0,
     SP_FOREGROUND = 1,
+    SP_CNT,
+    SP_MAX        = SP_CNT - 1,
 } SchedPolicy;
 
+/* Assign thread tid to the cgroup associated with the specified policy.
+ * If the thread is a thread group leader, that is it's gettid() == getpid(),
+ * then the other threads in the same thread group are _not_ affected.
+ * Return value: 0 for success, or -errno for error.
+ */
 extern int set_sched_policy(int tid, SchedPolicy policy);
+
+/* Return the policy associated with the cgroup of thread tid via policy pointer.
+ * Return value: 0 for success, or -1 for error and set errno.
+ */
 extern int get_sched_policy(int tid, SchedPolicy *policy);
+
+/* Return a displayable string corresponding to policy.
+ * Return value: non-NULL NUL-terminated name of unspecified length;
+ * the caller is responsible for displaying the useful part of the string.
+ */
+extern const char *get_sched_policy_name(SchedPolicy policy);
 
 #ifdef __cplusplus
 }

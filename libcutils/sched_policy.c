@@ -273,5 +273,17 @@ int set_sched_policy(int tid, SchedPolicy policy)
     return 0;
 }
 
+const char *get_sched_policy_name(SchedPolicy policy)
+{
+    static const char * const strings[SP_CNT] = {
+       [SP_BACKGROUND] = "bg",
+       [SP_FOREGROUND] = "fg",
+    };
+    if ((policy < SP_CNT) && (strings[policy] != NULL))
+        return strings[policy];
+    else
+        return "error";
+}
+
 #endif /* HAVE_PTHREADS */
 #endif /* HAVE_SCHED_H */

@@ -48,6 +48,7 @@ struct cpu_info {
 
 #define PROC_NAME_LEN 64
 #define THREAD_NAME_LEN 32
+#define POLICY_NAME_LEN 4
 
 struct proc_info {
     struct proc_info *next;
@@ -67,7 +68,7 @@ struct proc_info {
     long rss;
     int prs;
     int num_threads;
-    char policy[32];
+    char policy[POLICY_NAME_LEN];
 };
 
 struct proc_list {
@@ -381,14 +382,10 @@ static int read_cmdline(char *filename, struct proc_info *proc) {
 static void read_policy(int pid, struct proc_info *proc) {
     SchedPolicy p;
     if (get_sched_policy(pid, &p) < 0)
-        strcpy(proc->policy, "unk");
+        strlcpy(proc->policy, "unk", POLICY_NAME_LEN);
     else {
-        if (p == SP_BACKGROUND)
-            strcpy(proc->policy, "bg");
-        else if (p == SP_FOREGROUND)
-            strcpy(proc->policy, "fg");
-        else
-            strcpy(proc->policy, "er");
+        strlcpy(proc->policy, get_sched_policy_name(p), POLICY_NAME_LEN);
+        proc->policy[2] = '\0';
     }
 }
 
