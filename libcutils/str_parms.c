@@ -128,8 +128,10 @@ struct str_parms *str_parms_create_str(const char *_string)
 
         /* if we replaced a value, free it */
         old_val = hashmapPut(str_parms->map, key, value);
-        if (old_val)
+        if (old_val) {
             free(old_val);
+            free(key);
+        }
 
         items++;
 next_pair:
@@ -167,6 +169,7 @@ int str_parms_add_str(struct str_parms *str_parms, const char *key,
 
     if (old_val) {
         free(old_val);
+        free(tmp_key);
     } else if (errno == ENOMEM) {
         free(tmp_key);
         free(tmp_val);
@@ -327,6 +330,7 @@ int main(void)
     test_str_parms_str("foo=bar;baz=");
     test_str_parms_str("foo=bar;baz=bat");
     test_str_parms_str("foo=bar;baz=bat;");
+    test_str_parms_str("foo=bar;baz=bat;foo=bar");
 
     return 0;
 }
