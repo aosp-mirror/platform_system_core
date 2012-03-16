@@ -74,12 +74,6 @@ extern void androidSetCreateThreadFunc(android_create_thread_fn func);
 extern pid_t androidGetTid();
 
 #ifdef HAVE_ANDROID_OS
-// Change the scheduling group of a particular thread.  The group
-// should be one of the ANDROID_TGROUP constants.  Returns BAD_VALUE if
-// grp is out of range, else another non-zero value with errno set if
-// the operation failed.  Thread ID zero means current thread.
-extern int androidSetThreadSchedulingGroup(pid_t tid, int grp);
-
 // Change the priority AND scheduling group of a particular thread.  The priority
 // should be one of the ANDROID_PRIORITY constants.  Returns INVALID_OPERATION
 // if the priority set failed, else another value if just the group set failed;
@@ -89,13 +83,6 @@ extern int androidSetThreadPriority(pid_t tid, int prio);
 // Get the current priority of a particular thread. Returns one of the
 // ANDROID_PRIORITY constants or a negative result in case of error.
 extern int androidGetThreadPriority(pid_t tid);
-
-// Get the current scheduling group of a particular thread. Normally returns
-// one of the ANDROID_TGROUP constants other than ANDROID_TGROUP_DEFAULT.
-// Returns ANDROID_TGROUP_DEFAULT if no pthread support (e.g. on host) or if
-// scheduling groups are disabled.  Returns INVALID_OPERATION if unexpected error.
-// Thread ID zero means current thread.
-extern int androidGetThreadSchedulingGroup(pid_t tid);
 #endif
 
 #ifdef __cplusplus

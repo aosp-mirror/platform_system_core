@@ -324,29 +324,6 @@ pid_t androidGetTid()
 }
 
 #ifdef HAVE_ANDROID_OS
-int androidSetThreadSchedulingGroup(pid_t tid, int grp)
-{
-    if (grp > ANDROID_TGROUP_MAX || grp < 0) { 
-        return BAD_VALUE;
-    }
-
-#if defined(HAVE_PTHREADS)
-    pthread_once(&gDoSchedulingGroupOnce, checkDoSchedulingGroup);
-    if (gDoSchedulingGroup) {
-        // set_sched_policy does not support tid == 0
-        if (tid == 0) {
-            tid = androidGetTid();
-        }
-        if (set_sched_policy(tid, (grp == ANDROID_TGROUP_BG_NONINTERACT) ?
-                                          SP_BACKGROUND : SP_FOREGROUND)) {
-            return PERMISSION_DENIED;
-        }
-    }
-#endif
-    
-    return NO_ERROR;
-}
-
 int androidSetThreadPriority(pid_t tid, int pri)
 {
     int rc = 0;
@@ -392,40 +369,6 @@ int androidGetThreadPriority(pid_t tid) {
 #endif
 }
 
-int androidGetThreadSchedulingGroup(pid_t tid)
-{
-    int ret = ANDROID_TGROUP_DEFAULT;
-
-#if defined(HAVE_PTHREADS)
-    // convention is to not call get/set_sched_policy methods if disabled by property
-    pthread_once(&gDoSchedulingGroupOnce, checkDoSchedulingGroup);
-    if (gDoSchedulingGroup) {
-        SchedPolicy policy;
-        // get_sched_policy does not support tid == 0
-        if (tid == 0) {
-            tid = androidGetTid();
-        }
-        if (get_sched_policy(tid, &policy) < 0) {
-            ret = INVALID_OPERATION;
-        } else {
-            switch (policy) {
-            case SP_BACKGROUND:
-                ret = ANDROID_TGROUP_BG_NONINTERACT;
-                break;
-            case SP_FOREGROUND:
-                ret = ANDROID_TGROUP_FG_BOOST;
-                break;
-            default:
-                // should not happen, as enum SchedPolicy does not have any other values
-                ret = INVALID_OPERATION;
-                break;
-            }
-        }
-    }
-#endif
-
-    return ret;
-}
 #endif
 
 namespace android {
