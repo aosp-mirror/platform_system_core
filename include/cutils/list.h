@@ -18,6 +18,9 @@
 #define _CUTILS_LIST_H_
 
 #include <stddef.h>
+#include <sys/cdefs.h>
+
+__BEGIN_DECLS
 
 struct listnode
 {
@@ -47,5 +50,7 @@ void list_remove(struct listnode *item);
 #define list_empty(list) ((list) == (list)->next)
 #define list_head(list) ((list)->next)
 #define list_tail(list) ((list)->prev)
+
+__END_DECLS
 
 #endif
