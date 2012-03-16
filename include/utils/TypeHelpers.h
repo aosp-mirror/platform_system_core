@@ -68,11 +68,23 @@ struct aggregate_traits {
     };
 };
 
-#define ANDROID_BASIC_TYPES_TRAITS( T )                                     \
-    template<> struct trait_trivial_ctor< T >   { enum { value = true }; }; \
-    template<> struct trait_trivial_dtor< T >   { enum { value = true }; }; \
-    template<> struct trait_trivial_copy< T >   { enum { value = true }; }; \
+#define ANDROID_TRIVIAL_CTOR_TRAIT( T ) \
+    template<> struct trait_trivial_ctor< T >   { enum { value = true }; };
+
+#define ANDROID_TRIVIAL_DTOR_TRAIT( T ) \
+    template<> struct trait_trivial_dtor< T >   { enum { value = true }; };
+
+#define ANDROID_TRIVIAL_COPY_TRAIT( T ) \
+    template<> struct trait_trivial_copy< T >   { enum { value = true }; };
+
+#define ANDROID_TRIVIAL_MOVE_TRAIT( T ) \
     template<> struct trait_trivial_move< T >   { enum { value = true }; };
+
+#define ANDROID_BASIC_TYPES_TRAITS( T ) \
+    ANDROID_TRIVIAL_CTOR_TRAIT( T ) \
+    ANDROID_TRIVIAL_DTOR_TRAIT( T ) \
+    ANDROID_TRIVIAL_COPY_TRAIT( T ) \
+    ANDROID_TRIVIAL_MOVE_TRAIT( T )
 
 // ---------------------------------------------------------------------------
 

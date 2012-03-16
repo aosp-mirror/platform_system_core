@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include <utils/StrongPointer.h>
+#include <utils/TypeHelpers.h>
 
 // ---------------------------------------------------------------------------
 namespace android {

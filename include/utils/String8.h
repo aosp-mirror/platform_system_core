@@ -20,6 +20,7 @@
 #include <utils/Errors.h>
 #include <utils/SharedBuffer.h>
 #include <utils/Unicode.h>
+#include <utils/TypeHelpers.h>
 
 #include <string.h> // for strcmp
 #include <stdarg.h>
@@ -218,6 +219,10 @@ private:
 
             const char* mString;
 };
+
+// String8 can be trivially moved using memcpy() because moving does not
+// require any change to the underlying SharedBuffer contents or reference count.
+ANDROID_TRIVIAL_MOVE_TRAIT(String8)
 
 TextOutput& operator<<(TextOutput& to, const String16& val);
 
