@@ -189,6 +189,11 @@ static int getSchedulerGroup(int tid, char* buf, size_t bufLen)
 
 int get_sched_policy(int tid, SchedPolicy *policy)
 {
+#ifdef HAVE_GETTID
+    if (tid == 0) {
+        tid = gettid();
+    }
+#endif
     pthread_once(&the_once, __initialize);
 
     if (__sys_supports_schedgroups) {
@@ -219,8 +224,23 @@ int get_sched_policy(int tid, SchedPolicy *policy)
     return 0;
 }
 
+/* Re-map SP_DEFAULT to the system default policy, and leave other values unchanged.
+ * Call this any place a SchedPolicy is used as an input parameter.
+ * Returns the possibly re-mapped policy.
+ */
+static inline SchedPolicy _policy(SchedPolicy p)
+{
+   return p == SP_DEFAULT ? SP_SYSTEM_DEFAULT : p;
+}
+
 int set_sched_policy(int tid, SchedPolicy policy)
 {
+#ifdef HAVE_GETTID
+    if (tid == 0) {
+        tid = gettid();
+    }
+#endif
+    policy = _policy(policy);
     pthread_once(&the_once, __initialize);
 
 #if POLICY_DEBUG
@@ -275,6 +295,7 @@ int set_sched_policy(int tid, SchedPolicy policy)
 
 const char *get_sched_policy_name(SchedPolicy policy)
 {
+    policy = _policy(policy);
     static const char * const strings[SP_CNT] = {
        [SP_BACKGROUND] = "bg",
        [SP_FOREGROUND] = "fg",
