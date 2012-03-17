@@ -73,6 +73,7 @@ extern void androidSetCreateThreadFunc(android_create_thread_fn func);
 // Get pid for the current thread.
 extern pid_t androidGetTid();
 
+#ifdef HAVE_ANDROID_OS
 // Change the scheduling group of a particular thread.  The group
 // should be one of the ANDROID_TGROUP constants.  Returns BAD_VALUE if
 // grp is out of range, else another non-zero value with errno set if
@@ -95,6 +96,7 @@ extern int androidGetThreadPriority(pid_t tid);
 // scheduling groups are disabled.  Returns INVALID_OPERATION if unexpected error.
 // Thread ID zero means current thread.
 extern int androidGetThreadSchedulingGroup(pid_t tid);
+#endif
 
 #ifdef __cplusplus
 } // extern "C"

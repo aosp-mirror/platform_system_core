@@ -323,6 +323,7 @@ pid_t androidGetTid()
 #endif
 }
 
+#ifdef HAVE_ANDROID_OS
 int androidSetThreadSchedulingGroup(pid_t tid, int grp)
 {
     if (grp > ANDROID_TGROUP_MAX || grp < 0) { 
@@ -425,6 +426,7 @@ int androidGetThreadSchedulingGroup(pid_t tid)
 
     return ret;
 }
+#endif
 
 namespace android {
 
