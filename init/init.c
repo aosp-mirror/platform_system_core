@@ -134,6 +134,7 @@ static void open_console()
     if ((fd = open(console_name, O_RDWR)) < 0) {
         fd = open("/dev/null", O_RDWR);
     }
+    ioctl(fd, TIOCSCTTY, 0);
     dup2(fd, 0);
     dup2(fd, 1);
     dup2(fd, 2);
