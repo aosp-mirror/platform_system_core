@@ -8,6 +8,7 @@ static char	elsieid[] = "@(#)strftime.c	8.1";
 #endif /* !defined NOID */
 #endif /* !defined lint */
 
+#include <stdio.h>
 #include <time.h>
 #include <tzfile.h>
 #include <limits.h>
