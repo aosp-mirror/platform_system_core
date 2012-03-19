@@ -46,6 +46,7 @@ commonSources := \
 	record_stream.c \
 	process_name.c \
 	properties.c \
+	qsort_r_compat.c \
 	threads.c \
 	sched_policy.c \
 	iosched_policy.c \
