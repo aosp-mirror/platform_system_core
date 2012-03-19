@@ -384,7 +384,7 @@ static inline bool audio_is_output_channel(uint32_t channel)
         return false;
 }
 
-/* Derive a channel mask from a channel count.
+/* Derive an output channel mask from a channel count.
  * This is to be used when the content channel mask is unknown. The 1, 2, 4, 5, 6, 7 and 8 channel
  * cases are mapped to the standard game/home-theater layouts, but note that 4 is mapped to quad,
  * and not stereo + FC + mono surround. A channel count of 3 is arbitrarily mapped to stereo + FC
@@ -392,7 +392,7 @@ static inline bool audio_is_output_channel(uint32_t channel)
  * Returns the matching channel mask, or 0 if the number of channels exceeds that of the
  * configurations for which a default channel mask is defined.
  */
-static inline audio_channel_mask_t audio_channel_mask_from_count(uint32_t channel_count)
+static inline audio_channel_mask_t audio_channel_out_mask_from_count(uint32_t channel_count)
 {
     switch(channel_count) {
     case 1:
@@ -411,6 +411,19 @@ static inline audio_channel_mask_t audio_channel_mask_from_count(uint32_t channe
         return (AUDIO_CHANNEL_OUT_5POINT1 | AUDIO_CHANNEL_OUT_BACK_CENTER);
     case 8:
         return AUDIO_CHANNEL_OUT_7POINT1;
+    default:
+        return 0;
+    }
+}
+
+/* Similar to above, but for input.  Currently handles only mono and stereo. */
+static inline audio_channel_mask_t audio_channel_in_mask_from_count(uint32_t channel_count)
+{
+    switch (channel_count) {
+    case 1:
+        return AUDIO_CHANNEL_IN_MONO;
+    case 2:
+        return AUDIO_CHANNEL_IN_STEREO;
     default:
         return 0;
     }
