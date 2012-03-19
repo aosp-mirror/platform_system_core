@@ -70,19 +70,57 @@ err:
     return NULL;
 }
 
+struct remove_ctxt {
+    struct str_parms *str_parms;
+    const char *key;
+};
+
 static bool remove_pair(void *key, void *value, void *context)
 {
-    struct str_parms *str_parms = context;
+    struct remove_ctxt *ctxt = context;
+    bool should_continue;
 
-    hashmapRemove(str_parms->map, key);
+    /*
+     * - if key is not supplied, then we are removing all entries,
+     *   so remove key and continue (i.e. return true)
+     * - if key is supplied and matches, then remove it and don't
+     *   continue (return false). Otherwise, return true and keep searching
+     *   for key.
+     *
+     */
+    if (!ctxt->key) {
+        should_continue = true;
+        goto do_remove;
+    } else if (!strcmp(ctxt->key, key)) {
+        should_continue = false;
+        goto do_remove;
+    }
+
+    return true;
+
+do_remove:
+    hashmapRemove(ctxt->str_parms->map, key);
     free(key);
     free(value);
-    return true;
+    return should_continue;
+}
+
+void str_parms_del(struct str_parms *str_parms, const char *key)
+{
+    struct remove_ctxt ctxt = {
+        .str_parms = str_parms,
+        .key = key,
+    };
+    hashmapForEach(str_parms->map, remove_pair, &ctxt);
 }
 
 void str_parms_destroy(struct str_parms *str_parms)
 {
-    hashmapForEach(str_parms->map, remove_pair, str_parms);
+    struct remove_ctxt ctxt = {
+        .str_parms = str_parms,
+    };
+
+    hashmapForEach(str_parms->map, remove_pair, &ctxt);
     hashmapFree(str_parms->map);
     free(str_parms);
 }
@@ -149,11 +187,6 @@ err_strdup:
     str_parms_destroy(str_parms);
 err_create_str_parms:
     return NULL;
-}
-
-void str_parms_del(struct str_parms *str_parms, const char *key)
-{
-    hashmapRemove(str_parms->map, (void *)key);
 }
 
 int str_parms_add_str(struct str_parms *str_parms, const char *key,
@@ -305,6 +338,8 @@ static void test_str_parms_str(const char *str)
 
     str_parms = str_parms_create_str(str);
     str_parms_add_str(str_parms, "dude", "woah");
+    str_parms_add_str(str_parms, "dude", "woah");
+    str_parms_del(str_parms, "dude");
     str_parms_dump(str_parms);
     out_str = str_parms_to_str(str_parms);
     str_parms_destroy(str_parms);
