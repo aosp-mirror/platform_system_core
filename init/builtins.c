@@ -75,6 +75,52 @@ static int write_file(const char *path, const char *value)
     }
 }
 
+static int _chown(const char *path, unsigned int uid, unsigned int gid)
+{
+    int fd;
+    int ret;
+
+    fd = open(path, O_RDONLY | O_NOFOLLOW);
+    if (fd < 0) {
+        return -1;
+    }
+
+    ret = fchown(fd, uid, gid);
+    if (ret < 0) {
+        int errno_copy = errno;
+        close(fd);
+        errno = errno_copy;
+        return -1;
+    }
+
+    close(fd);
+
+    return 0;
+}
+
+static int _chmod(const char *path, mode_t mode)
+{
+    int fd;
+    int ret;
+
+    fd = open(path, O_RDONLY | O_NOFOLLOW);
+    if (fd < 0) {
+        return -1;
+    }
+
+    ret = fchmod(fd, mode);
+    if (ret < 0) {
+        int errno_copy = errno;
+        close(fd);
+        errno = errno_copy;
+        return -1;
+    }
+
+    close(fd);
+
+    return 0;
+}
+
 static int insmod(const char *filename, char *options)
 {
     void *module;
@@ -246,7 +292,7 @@ int do_mkdir(int nargs, char **args)
     ret = mkdir(args[1], mode);
     /* chmod in case the directory already exists */
     if (ret == -1 && errno == EEXIST) {
-        ret = chmod(args[1], mode);
+        ret = _chmod(args[1], mode);
     }
     if (ret == -1) {
         return -errno;
@@ -260,7 +306,7 @@ int do_mkdir(int nargs, char **args)
             gid = decode_uid(args[4]);
         }
 
-        if (chown(args[1], uid, gid)) {
+        if (_chown(args[1], uid, gid) < 0) {
             return -errno;
         }
     }
@@ -645,10 +691,10 @@ out:
 int do_chown(int nargs, char **args) {
     /* GID is optional. */
     if (nargs == 3) {
-        if (chown(args[2], decode_uid(args[1]), -1) < 0)
+        if (_chown(args[2], decode_uid(args[1]), -1) < 0)
             return -errno;
     } else if (nargs == 4) {
-        if (chown(args[3], decode_uid(args[1]), decode_uid(args[2])))
+        if (_chown(args[3], decode_uid(args[1]), decode_uid(args[2])) < 0)
             return -errno;
     } else {
         return -1;
@@ -671,7 +717,7 @@ static mode_t get_mode(const char *s) {
 
 int do_chmod(int nargs, char **args) {
     mode_t mode = get_mode(args[1]);
-    if (chmod(args[2], mode) < 0) {
+    if (_chmod(args[2], mode) < 0) {
         return -errno;
     }
     return 0;
