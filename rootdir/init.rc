@@ -491,3 +491,4 @@ service dumpstate /system/bin/dumpstate -s
 
 service sshd /system/bin/start-ssh
     class main
+    disabled
