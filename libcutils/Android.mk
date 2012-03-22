@@ -94,6 +94,17 @@ LOCAL_CFLAGS += $(hostSmpFlag)
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
+# Static library for host, 64-bit
+# ========================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE := lib64cutils
+LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
+LOCAL_LDLIBS := -lpthread
+LOCAL_STATIC_LIBRARIES := lib64log
+LOCAL_CFLAGS += $(hostSmpFlag) -m64
+include $(BUILD_HOST_STATIC_LIBRARY)
+
+
 # Shared and static library for target
 # ========================================================
 include $(CLEAR_VARS)
