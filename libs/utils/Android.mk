@@ -68,6 +68,9 @@ endif
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= $(commonSources)
 LOCAL_MODULE:= libutils
+LOCAL_STATIC_LIBRARIES := libz
+LOCAL_C_INCLUDES := \
+	external/zlib
 LOCAL_CFLAGS += $(host_commonCflags)
 LOCAL_LDLIBS += $(host_commonLdlibs)
 include $(BUILD_HOST_STATIC_LIBRARY)
@@ -78,6 +81,9 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= $(commonSources)
 LOCAL_MODULE:= lib64utils
+LOCAL_STATIC_LIBRARIES := libz
+LOCAL_C_INCLUDES := \
+	external/zlib
 LOCAL_CFLAGS += $(host_commonCflags) -m64
 LOCAL_LDLIBS += $(host_commonLdlibs)
 include $(BUILD_HOST_STATIC_LIBRARY)
