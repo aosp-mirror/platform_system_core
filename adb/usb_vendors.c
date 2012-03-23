@@ -117,8 +117,6 @@
 #define VENDOR_ID_FUJITSU       0x04C5
 // Lumigon's USB Vendor ID
 #define VENDOR_ID_LUMIGON       0x25E3
-//Intel's USB Vendor ID
-#define VENDOR_ID_INTEL         0x8087
 // Quanta's USB Vendor ID
 #define VENDOR_ID_QUANTA        0x0408
 // INQ Mobile's USB Vendor ID
@@ -169,7 +167,6 @@ int builtInVendorIds[] = {
     VENDOR_ID_POSITIVO,
     VENDOR_ID_FUJITSU,
     VENDOR_ID_LUMIGON,
-    VENDOR_ID_INTEL,
     VENDOR_ID_QUANTA,
     VENDOR_ID_INQ_MOBILE,
     VENDOR_ID_SONY,
