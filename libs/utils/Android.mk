@@ -42,6 +42,9 @@ commonSources:= \
 	Unicode.cpp \
 	VectorImpl.cpp \
 	WorkQueue.cpp \
+	ZipFileCRO.cpp \
+	ZipFileRO.cpp \
+	ZipUtils.cpp \
 	misc.cpp
 
 host_commonCflags := -DLIBUTILS_NATIVE=1 $(TOOL_CFLAGS)
@@ -96,7 +99,8 @@ LOCAL_LDLIBS += -lrt -ldl
 endif
 
 LOCAL_C_INCLUDES += \
-		bionic/libc/private
+		bionic/libc/private \
+		external/zlib
 
 LOCAL_LDLIBS += -lpthread
 
@@ -104,7 +108,8 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libcutils \
 	libdl \
-	libcorkscrew
+	libcorkscrew \
+	libz
 
 LOCAL_MODULE:= libutils
 include $(BUILD_SHARED_LIBRARY)
