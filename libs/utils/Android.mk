@@ -67,6 +67,9 @@ endif
 # =====================================================
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= $(commonSources)
+ifeq ($(HOST_OS), linux)
+LOCAL_SRC_FILES += Looper.cpp
+endif
 LOCAL_MODULE:= libutils
 LOCAL_STATIC_LIBRARIES := libz
 LOCAL_C_INCLUDES := \
@@ -80,6 +83,9 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 # =====================================================
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= $(commonSources)
+ifeq ($(HOST_OS), linux)
+LOCAL_SRC_FILES += Looper.cpp
+endif
 LOCAL_MODULE:= lib64utils
 LOCAL_STATIC_LIBRARIES := libz
 LOCAL_C_INCLUDES := \
