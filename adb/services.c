@@ -129,10 +129,6 @@ void restart_root_service(int fd, void *cookie)
         snprintf(buf, sizeof(buf), "restarting adbd as root\n");
         writex(fd, buf, strlen(buf));
         adb_close(fd);
-
-        // quit, and init will restart us as root
-        sleep(1);
-        exit(1);
     }
 }
 
@@ -154,10 +150,6 @@ void restart_tcp_service(int fd, void *cookie)
     snprintf(buf, sizeof(buf), "restarting in TCP mode port: %d\n", port);
     writex(fd, buf, strlen(buf));
     adb_close(fd);
-
-    // quit, and init will restart us in TCP mode
-    sleep(1);
-    exit(1);
 }
 
 void restart_usb_service(int fd, void *cookie)
@@ -168,10 +160,6 @@ void restart_usb_service(int fd, void *cookie)
     snprintf(buf, sizeof(buf), "restarting in USB mode\n");
     writex(fd, buf, strlen(buf));
     adb_close(fd);
-
-    // quit, and init will restart us in USB mode
-    sleep(1);
-    exit(1);
 }
 
 void reboot_service(int fd, void *arg)
@@ -371,7 +359,6 @@ static void subproc_waiter_service(int fd, void *cookie)
                 break;
             }
          }
-        usleep(100000);  // poll every 0.1 sec
     }
     D("shell exited fd=%d of pid=%d err=%d\n", fd, pid, errno);
     if (SHELL_EXIT_NOTIFY_FD >=0) {
