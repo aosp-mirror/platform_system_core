@@ -1575,7 +1575,7 @@ int install_app(transport_type transport, char* serial, int argc, char** argv)
 
     err = do_sync_push(apk_file, apk_dest, 1 /* verify APK */);
     if (err) {
-        return err;
+        goto cleanup_apk;
     } else {
         argv[file_arg] = apk_dest; /* destination name, not source location */
     }
@@ -1591,11 +1591,11 @@ int install_app(transport_type transport, char* serial, int argc, char** argv)
 
     pm_command(transport, serial, argc, argv);
 
+cleanup_apk:
     if (verification_file != NULL) {
         delete_file(transport, serial, verification_dest);
     }
 
-cleanup_apk:
     delete_file(transport, serial, apk_dest);
 
     return err;
