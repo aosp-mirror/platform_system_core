@@ -53,11 +53,18 @@ int ueventd_main(int argc, char **argv)
     int nr;
     char tmp[32];
 
-        /* Prevent fire-and-forget children from becoming zombies.
-         * If we should need to wait() for some children in the future
-         * (as opposed to none right now), double-forking here instead
-         * of ignoring SIGCHLD may be the better solution.
-         */
+    /*
+     * init sets the umask to 077 for forked processes. We need to
+     * create files with exact permissions, without modification by
+     * the umask.
+     */
+    umask(000);
+
+    /* Prevent fire-and-forget children from becoming zombies.
+     * If we should need to wait() for some children in the future
+     * (as opposed to none right now), double-forking here instead
+     * of ignoring SIGCHLD may be the better solution.
+     */
     signal(SIGCHLD, SIG_IGN);
 
     open_devnull_stdio();
