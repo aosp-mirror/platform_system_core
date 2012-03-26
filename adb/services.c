@@ -125,12 +125,14 @@ void restart_root_service(int fd, void *cookie)
             return;
         }
 
+        property_set("service.adb.root", "1");
         snprintf(buf, sizeof(buf), "restarting adbd as root\n");
         writex(fd, buf, strlen(buf));
         adb_close(fd);
 
-        // This will cause a property trigger in init.rc to restart us
-        property_set("service.adb.root", "1");
+        // quit, and init will restart us as root
+        sleep(1);
+        exit(1);
     }
 }
 
