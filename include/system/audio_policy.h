@@ -43,10 +43,11 @@ typedef enum {
     AUDIO_POLICY_OUTPUT_FLAG_NONE = 0x0,    // no attributes
     AUDIO_POLICY_OUTPUT_FLAG_DIRECT = 0x1,  // this output directly connects a track to one output
                                             // stream (no software mixer)
-    AUDIO_POLICY_OUTPUT_FLAG_PRIMARY = 0x2  // this output is the primary output of the device.
+    AUDIO_POLICY_OUTPUT_FLAG_PRIMARY = 0x2, // this output is the primary output of the device.
                                             // it is unique and must be present. it is opened by
                                             // default and receives routing, audio mode and
                                             // volume controls related to voice calls.
+    AUDIO_POLICY_OUTPUT_FLAG_FAST = 0x4,    // output supports "fast tracks", defined elsewhere
 } audio_policy_output_flags_t;
 
 /* device categories used for audio_policy->set_force_use() */
