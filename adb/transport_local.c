@@ -21,7 +21,6 @@
 
 #include "sysdeps.h"
 #include <sys/types.h>
-#include <arpa/inet.h>
 
 #define  TRACE_TAG  TRACE_TRANSPORT
 #include "adb.h"
@@ -152,36 +151,10 @@ static void *client_socket_thread(void *x)
     return 0;
 }
 
-#if !ADB_HOST
-static int is_whitelisted(struct sockaddr_in *addr)
-{
-    char value[PROPERTY_VALUE_MAX];
-
-    /* whitelist emulator */
-    property_get("ro.kernel.qemu", value, "");
-    if(!strcmp(value, "1")) {
-        return 1;
-    }
-
-    /* whitelist "eng" and "tests" builds */
-    property_get("ro.build.type", value, "");
-    if(!strcmp(value, "eng") || !strcmp(value, "tests")) {
-        return 1;
-    }
-
-    /* whitelist persist.service.adb.client_ip */
-    property_get("persist.service.adb.client_ip", value, "");
-    if(!strncmp(value, inet_ntoa(addr->sin_addr), sizeof(value))) {
-        return 1;
-    }
-    return 0;
-}
-#endif
-
 static void *server_socket_thread(void * arg)
 {
     int serverfd, fd;
-    struct sockaddr_in addr;
+    struct sockaddr addr;
     socklen_t alen;
     int port = (int)arg;
 
@@ -200,16 +173,9 @@ static void *server_socket_thread(void * arg)
 
         alen = sizeof(addr);
         D("server: trying to get new connection from %d\n", port);
-        fd = adb_socket_accept(serverfd, (struct sockaddr *)&addr, &alen);
+        fd = adb_socket_accept(serverfd, &addr, &alen);
         if(fd >= 0) {
             D("server: new connection on fd %d\n", fd);
- #if !ADB_HOST
-            if(!is_whitelisted(&addr)) {
-                D("server: connection %d blacklisted and closed\n", port);
-                adb_close(fd);
-                continue;
-            }
-#endif
             close_on_exec(fd);
             disable_tcp_nagle(fd);
             register_socket_transport(fd, "host", port, 1);
