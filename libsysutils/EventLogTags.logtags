@@ -2,3 +2,4 @@
 
 # FrameworkListener dispatchCommand overflow
 78001 dispatchCommand_overflow
+65537 netlink_failure (uid|1)
