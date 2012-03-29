@@ -26,6 +26,7 @@ extern "C" {
 
 int uevent_open_socket(int buf_sz, bool passcred);
 ssize_t uevent_kernel_multicast_recv(int socket, void *buffer, size_t length);
+ssize_t uevent_kernel_multicast_uid_recv(int socket, void *buffer, size_t length, uid_t *uid);
 
 #ifdef __cplusplus
 }
