@@ -257,7 +257,7 @@ void generate_ext4_image(struct image_data *image)
 #endif
     reset_ext4fs_info();
     info.len = image->partition_size;
-    make_ext4fs_internal(fd, NULL, NULL, 0, 0, 1, 0, 0, 0);
+    make_ext4fs_internal(fd, NULL, NULL, NULL, 0, 1, 0, 0, 0, NULL);
 
     fstat(fd, &st);
     image->image_size = st.st_size;
