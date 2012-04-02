@@ -933,6 +933,8 @@ int adb_main(int is_daemon, int server_port)
 #if !ADB_HOST
     int port;
     char value[PROPERTY_VALUE_MAX];
+
+    umask(000);
 #endif
 
     atexit(adb_cleanup);
