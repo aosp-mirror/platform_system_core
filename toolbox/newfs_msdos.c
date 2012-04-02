@@ -431,7 +431,8 @@ newfs_msdos_main(int argc, char *argv[])
 		bpb.spc = 8;
 	    else if (bpb.bsec <= (1<<19)) /* 256M -> 8k */
 		bpb.spc = 16;
-	    else if (bpb.bsec <= (1<<21)) /* 1G -> 16k */
+	    else if (bpb.bsec <= (1<<22)) /* 2G -> 16k, some versions of windows
+					     require a minimum of 65527 clusters */
 		bpb.spc = 32;
 	    else
 		bpb.spc = 64;		/* otherwise 32k */
