@@ -41,6 +41,7 @@ static const char *s_pc_regex[] = {
   0,
   " PC is at ([^\\+ ]+).*",
   " EIP: \\[<.*>\\] ([^\\+ ]+).*",  // X86 uses EIP for the program counter
+  " RIP  \\[<.*>\\] ([^\\+ ]+).*",  // X86_64 uses RIP for the program counter
 };
 
 COMPILE_ASSERT(arraysize(s_pc_regex) == KernelCollector::archCount,
@@ -342,6 +343,8 @@ enum KernelCollector::ArchKind KernelCollector::GetCompilerArch(void)
 {
 #if defined(COMPILER_GCC) && defined(ARCH_CPU_ARM_FAMILY)
   return archArm;
+#elif defined(COMPILER_GCC) && defined(ARCH_CPU_X86_64)
+  return archX86_64;
 #elif defined(COMPILER_GCC) && defined(ARCH_CPU_X86_FAMILY)
   return archX86;
 #else

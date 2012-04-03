@@ -23,6 +23,7 @@ class KernelCollector : public CrashCollector {
     archUnknown,
     archArm,
     archX86,
+    archX86_64,
 
     archCount  // Number of architectures.
   };
