@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "Trace"
+
 #include <cutils/properties.h>
 #include <utils/Log.h>
 #include <utils/Trace.h>
