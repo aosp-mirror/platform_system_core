@@ -233,6 +233,12 @@ send_crash() {
     extra_value1="@${log}"
   fi
 
+  local error_type="$(get_key_value "${meta_path}" "error_type")"
+  if [ "${error_type}" != "undefined" ]; then
+    extra_key3="error_type"
+    extra_value3="${error_type}"
+  fi
+
   lecho "Sending crash:"
   lecho "  Scheduled to send in ${sleep_time}s"
   lecho "  Metadata: ${meta_path} (${kind})"
@@ -245,6 +251,9 @@ send_crash() {
     lecho "  HWClass: ${hwclass}"
     lecho "  ${extra_key1}: ${extra_value1}"
     lecho "  ${extra_key2}: ${extra_value2}"
+    if [ -n "${extra_key3}" ]; then
+      lecho "  ${extra_key3}: ${extra_value3}"
+    fi
   fi
   lecho "  Exec name: ${exec_name}"
   if is_mock; then
@@ -284,6 +293,7 @@ send_crash() {
     -F "exec_name=${exec_name}" \
     -F "${extra_key1}=${extra_value1}" \
     -F "${extra_key2}=${extra_value2}" \
+    ${extra_key3:+-F "${extra_key3}=${extra_value3}"} \
     -F "guid=<${CONSENT_ID}" -o "${report_id}" 2>"${curl_stderr}"
   curl_result=$?
   set -e
