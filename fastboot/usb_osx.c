@@ -264,6 +264,7 @@ static int try_device(io_service_t device, usb_handle *handle) {
     SInt32 score;
     HRESULT result;
     UInt8 serialIndex;
+    UInt32 locationId;
 
     // Create an intermediate plugin.
     kr = IOCreatePlugInInterfaceForService(device,
@@ -321,6 +322,13 @@ static int try_device(io_service_t device, usb_handle *handle) {
         ERR("GetDeviceProtocol");
         goto error;
     }
+
+    kr = (*dev)->GetLocationID(dev, &locationId);
+    if (kr != 0) {
+        ERR("GetLocationId");
+        goto error;
+    }
+    snprintf(handle->info.device_path, sizeof(handle->info.device_path), "usb:%lX", locationId);
 
     kr = (*dev)->USBGetSerialNumberStringIndex(dev, &serialIndex);
 

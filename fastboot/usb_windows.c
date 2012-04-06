@@ -311,6 +311,8 @@ int recognized_device(usb_handle* handle, ifc_match_func callback) {
         info.serial_number[0] = 0;
     }
 
+    info.device_path[0] = 0;
+
     if (callback(&info) == 0) {
         return 1;
     }
