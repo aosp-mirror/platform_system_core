@@ -5,7 +5,7 @@
 # Makefile for metrics utilities -- library, client and daemon
 #
 
-BASE_VER = 85268
+BASE_VER ?= 125070
 PKG_CONFIG ?= pkg-config
 PC_DEPS = dbus-1 glib-2.0 dbus-glib-1 \
 	libchrome-$(BASE_VER) libchromeos-$(BASE_VER)
