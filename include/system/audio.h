@@ -290,6 +290,8 @@ typedef enum {
     AUDIO_DEVICE_OUT_AUX_DIGITAL               = 0x400,
     AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET         = 0x800,
     AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET         = 0x1000,
+    AUDIO_DEVICE_OUT_USB_ACCESSORY             = 0x2000,
+    AUDIO_DEVICE_OUT_USB_DEVICE                = 0x4000,
     AUDIO_DEVICE_OUT_DEFAULT                   = 0x8000,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
@@ -304,6 +306,8 @@ typedef enum {
                                  AUDIO_DEVICE_OUT_AUX_DIGITAL |
                                  AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET |
                                  AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET |
+                                 AUDIO_DEVICE_OUT_USB_ACCESSORY |
+                                 AUDIO_DEVICE_OUT_USB_DEVICE |
                                  AUDIO_DEVICE_OUT_DEFAULT),
     AUDIO_DEVICE_OUT_ALL_A2DP = (AUDIO_DEVICE_OUT_BLUETOOTH_A2DP |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
@@ -311,6 +315,8 @@ typedef enum {
     AUDIO_DEVICE_OUT_ALL_SCO  = (AUDIO_DEVICE_OUT_BLUETOOTH_SCO |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_SCO_HEADSET |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_SCO_CARKIT),
+    AUDIO_DEVICE_OUT_ALL_USB  = (AUDIO_DEVICE_OUT_USB_ACCESSORY |
+                                 AUDIO_DEVICE_OUT_USB_DEVICE),
 
     /* input devices */
     AUDIO_DEVICE_IN_COMMUNICATION         = 0x10000,
@@ -363,6 +369,14 @@ static inline bool audio_is_bluetooth_sco_device(audio_devices_t device)
 {
     if ((popcount(device) == 1) && (device & (AUDIO_DEVICE_OUT_ALL_SCO |
                    AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET)))
+        return true;
+    else
+        return false;
+}
+
+static inline bool audio_is_usb_device(audio_devices_t device)
+{
+    if ((popcount(device) == 1) && (device & AUDIO_DEVICE_OUT_ALL_USB))
         return true;
     else
         return false;
