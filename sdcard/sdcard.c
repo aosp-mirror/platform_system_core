@@ -43,7 +43,7 @@
  * usage:  sdcard <path> <uid> <gid>
  *
  * It must be run as root, but will change to uid/gid as soon as it
- * mounts a filesystem on /mnt/sdcard.  It will refuse to run if uid or
+ * mounts a filesystem on /storage/sdcard.  It will refuse to run if uid or
  * gid are zero.
  *
  *
@@ -70,7 +70,7 @@
 
 #define FUSE_UNKNOWN_INO 0xffffffff
 
-#define MOUNT_POINT "/mnt/sdcard"
+#define MOUNT_POINT "/storage/sdcard0"
 
 struct handle {
     struct node *node;
