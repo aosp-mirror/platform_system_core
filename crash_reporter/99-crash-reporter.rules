@@ -1,0 +1,1 @@
+ACTION=="change", SUBSYSTEM=="drm", KERNEL=="card0", ENV{ERROR}=="1", RUN+="/sbin/crash_reporter --udev=KERNEL=card0:SUBSYSTEM=drm:ACTION=change"

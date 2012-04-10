@@ -1,14 +1,16 @@
-// Copyright (c) 2010 The Chromium OS Authors. All rights reserved.
+// Copyright (c) 2012 The Chromium OS Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <fcntl.h>  // for open
 
 #include <string>
+#include <vector>
 
 #include "base/file_util.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/string_split.h"
 #include "base/string_util.h"
 #include "chromeos/syslog_logging.h"
 #include "crash-reporter/kernel_collector.h"
@@ -25,6 +27,7 @@ DEFINE_string(generate_kernel_signature, "",
 DEFINE_bool(crash_test, false, "Crash test");
 DEFINE_string(user, "", "User crash info (pid:signal:exec_name)");
 DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
+DEFINE_string(udev, "", "Udev event description (type:device:subsystem)");
 #pragma GCC diagnostic error "-Wstrict-aliasing"
 
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
@@ -160,6 +163,19 @@ static int HandleUserCrash(UserCollector *user_collector) {
   return 0;
 }
 
+static int HandleUdevCrash(CrashCollector *udev_collector) {
+  // Handle a crash indicated by a udev event.
+  CHECK(!FLAGS_udev.empty()) << "--udev= must be set";
+
+  // Accumulate logs to help in diagnosing failures during user collection.
+  chromeos::LogToString(true);
+  bool handled = udev_collector->HandleUdevCrash(FLAGS_udev);
+  chromeos::LogToString(false);
+  if (!handled)
+    return 1;
+  return 0;
+}
+
 // Interactive/diagnostics mode for generating kernel crash signatures.
 static int GenerateKernelSignature(KernelCollector *kernel_collector) {
   std::string kcrash_contents;
@@ -234,6 +250,11 @@ int main(int argc, char *argv[]) {
 
   if (!FLAGS_generate_kernel_signature.empty()) {
     return GenerateKernelSignature(&kernel_collector);
+  }
+
+  if (!FLAGS_udev.empty()) {
+    CrashCollector udev_collector;
+    return HandleUdevCrash(&udev_collector);
   }
 
   return HandleUserCrash(&user_collector);
