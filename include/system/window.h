@@ -157,9 +157,10 @@ enum {
 
 
     /*
-     * Default width and height of the ANativeWindow, these are the dimensions
-     * of the window irrespective of the NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS
-     * call.
+     * Default width and height of ANativeWindow buffers, these are the
+     * dimensions of the window buffers irrespective of the
+     * NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS call and match the native window
+     * size unless overriden by NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS.
      */
     NATIVE_WINDOW_DEFAULT_WIDTH = 6,
     NATIVE_WINDOW_DEFAULT_HEIGHT = 7,
@@ -231,6 +232,7 @@ enum {
     NATIVE_WINDOW_UNLOCK_AND_POST           = 12,   /* private */
     NATIVE_WINDOW_API_CONNECT               = 13,   /* private */
     NATIVE_WINDOW_API_DISCONNECT            = 14,   /* private */
+    NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS = 15, /* private */
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -417,6 +419,7 @@ struct ANativeWindow
      *     NATIVE_WINDOW_UNLOCK_AND_POST        (private)
      *     NATIVE_WINDOW_API_CONNECT            (private)
      *     NATIVE_WINDOW_API_DISCONNECT         (private)
+     *     NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS (private)
      *
      */
 
@@ -527,7 +530,7 @@ static inline int native_window_set_buffers_geometry(
 /*
  * native_window_set_buffers_dimensions(..., int w, int h)
  * All buffers dequeued after this call will have the dimensions specified.
- * In particular, all buffers will have a fixed-size, independent form the
+ * In particular, all buffers will have a fixed-size, independent from the
  * native-window size. They will be scaled according to the scaling mode
  * (see native_window_set_scaling_mode) upon window composition.
  *
@@ -542,6 +545,31 @@ static inline int native_window_set_buffers_dimensions(
         int w, int h)
 {
     return window->perform(window, NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS,
+            w, h);
+}
+
+/*
+ * native_window_set_buffers_user_dimensions(..., int w, int h)
+ *
+ * Sets the user buffer size for the window, which overrides the
+ * window's size.  All buffers dequeued after this call will have the
+ * dimensions specified unless overridden by
+ * native_window_set_buffers_dimensions.  All buffers will have a
+ * fixed-size, independent from the native-window size. They will be
+ * scaled according to the scaling mode (see
+ * native_window_set_scaling_mode) upon window composition.
+ *
+ * If w and h are 0, the normal behavior is restored. That is, the
+ * default buffer size will match the windows's size.
+ *
+ * Calling this function will reset the window crop to a NULL value, which
+ * disables cropping of the buffers.
+ */
+static inline int native_window_set_buffers_user_dimensions(
+        struct ANativeWindow* window,
+        int w, int h)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS,
             w, h);
 }
 
