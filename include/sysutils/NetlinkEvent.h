@@ -34,6 +34,8 @@ public:
     const static int NlActionChange;
     const static int NlActionLinkDown;
     const static int NlActionLinkUp;
+    const static int NlActionIfaceActive;
+    const static int NlActionIfaceIdle;
 
     NetlinkEvent();
     virtual ~NetlinkEvent();
