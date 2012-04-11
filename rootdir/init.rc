@@ -370,6 +370,10 @@ service console /system/bin/sh
 on property:ro.debuggable=1
     start console
 
+# Allow writing to the kernel trace log.  Enabling tracing still requires root.
+on property:ro.debuggable=1
+    chmod 0222 /sys/kernel/debug/tracing/trace_marker
+
 # adbd is controlled via property triggers in init.<platform>.usb.rc
 service adbd /sbin/adbd
     class core
