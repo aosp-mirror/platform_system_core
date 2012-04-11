@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "base/string_split.h"
 #include "base/string_util.h"
+#include "base/stringprintf.h"
 #include "chromeos/syslog_logging.h"
 #include "crash-reporter/kernel_collector.h"
 #include "crash-reporter/unclean_shutdown_collector.h"
