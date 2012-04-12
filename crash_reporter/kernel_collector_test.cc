@@ -41,7 +41,11 @@ class KernelCollectorTest : public ::testing::Test {
     collector_.OverridePreservedDumpPath(test_kcrash_);
     test_kcrash_ = test_kcrash_.Append("dmesg-ramoops-0");
     unlink(test_kcrash_.value().c_str());
-    mkdir(kTestCrashDirectory, 0777);
+    if (mkdir(kTestCrashDirectory, 0777)) {
+      ASSERT_EQ(EEXIST, errno)
+          << "Error while creating directory '" << kTestCrashDirectory
+          << "': " << strerror(errno);
+    }
     chromeos::ClearLog();
   }
  protected:
@@ -257,7 +261,9 @@ TEST_F(KernelCollectorTest, CollectOK) {
   static const char kNamePrefix[] = "Stored kcrash to ";
   std::string log = chromeos::GetLog();
   size_t pos = log.find(kNamePrefix);
-  ASSERT_NE(std::string::npos, pos);
+  ASSERT_NE(std::string::npos, pos)
+      << "Did not find string \"" << kNamePrefix << "\" in log: {\n"
+      << log << "}";
   pos += strlen(kNamePrefix);
   std::string filename = log.substr(pos, std::string::npos);
   // Take the name up until \n

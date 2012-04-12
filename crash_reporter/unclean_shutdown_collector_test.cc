@@ -15,6 +15,7 @@
 static int s_crashes = 0;
 static bool s_metrics = true;
 
+static const char kTestDirectory[] = "test";
 static const char kTestLowBattery[] = "test/low_battery";
 static const char kTestSuspended[] = "test/suspended";
 static const char kTestUnclean[] = "test/unclean";
@@ -34,7 +35,7 @@ class UncleanShutdownCollectorTest : public ::testing::Test {
     s_crashes = 0;
     collector_.Initialize(CountCrash,
                           IsMetrics);
-    rmdir("test");
+    rmdir(kTestDirectory);
     test_unclean_ = FilePath(kTestUnclean);
     collector_.unclean_shutdown_file_ = kTestUnclean;
     file_util::Delete(test_unclean_, true);
@@ -60,7 +61,7 @@ TEST_F(UncleanShutdownCollectorTest, EnableWithoutParent) {
 }
 
 TEST_F(UncleanShutdownCollectorTest, EnableWithParent) {
-  mkdir("test", 0777);
+  mkdir(kTestDirectory, 0777);
   ASSERT_TRUE(collector_.Enable());
   ASSERT_TRUE(file_util::PathExists(test_unclean_));
 }
@@ -121,8 +122,15 @@ TEST_F(UncleanShutdownCollectorTest, DisableWhenNotEnabled) {
 }
 
 TEST_F(UncleanShutdownCollectorTest, CantDisable) {
-  mkdir(kTestUnclean, 0700);
-  file_util::WriteFile(test_unclean_.Append("foo"), "", 0);
+  mkdir(kTestDirectory, 0700);
+  if (mkdir(kTestUnclean, 0700)) {
+    ASSERT_EQ(EEXIST, errno)
+        << "Error while creating directory '" << kTestUnclean
+        << "': " << strerror(errno);
+  }
+  ASSERT_EQ(0, file_util::WriteFile(test_unclean_.Append("foo"), "", 0))
+      << "Error while creating empty file '"
+      << test_unclean_.Append("foo").value() << "': " << strerror(errno);
   ASSERT_FALSE(collector_.Disable());
   rmdir(kTestUnclean);
 }
