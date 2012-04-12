@@ -2,55 +2,72 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# TODO(mkrebs): This currently grabs a copy we made from
+# src/platform/common-mk; we should instead share it.
+include common.mk
+
 BASE_VER ?= 125070
 PKG_CONFIG ?= pkg-config
 
-CRASH_REPORTER = crash_reporter
-LIST_PROXIES_BIN = list_proxies
-REPORTER_BINS = $(CRASH_REPORTER) $(LIST_PROXIES_BIN)
 CRASH_OBJS = \
 	crash_collector.o \
 	kernel_collector.o \
 	unclean_shutdown_collector.o \
 	user_collector.o
-LIST_PROXIES_OBJS = list_proxies.o
-LIST_PROXIES_PKGS = dbus-1 dbus-glib-1
-TEST_OBJS = $(CRASH_OBJS)
-TEST_BINS = \
-	crash_collector_test \
-	kernel_collector_test \
-	unclean_shutdown_collector_test \
-	user_collector_test
 
-PC_DEPS = glib-2.0 $(LIST_PROXIES_PKGS) libpcrecpp \
-	libchrome-$(BASE_VER) libchromeos-$(BASE_VER)
+PC_DEPS = glib-2.0 libpcrecpp libchrome-$(BASE_VER) libchromeos-$(BASE_VER)
 PC_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
 PC_LIBS := $(shell $(PKG_CONFIG) --libs $(PC_DEPS))
 
-COMMON_LIBS = -lgflags $(PC_LIBS)
-REPORTER_LIBS = $(COMMON_LIBS) -lmetrics
-LIST_PROXIES_LIBS = $(COMMON_LIBS)
-
-TEST_LIBS = $(COMMON_LIBS) -lgtest -lgmock
 CPPFLAGS += -I.. -I$(SYSROOT)/usr/include/google-breakpad $(PC_CFLAGS)
+LDLIBS = -lgflags $(PC_LIBS)
 
-CXXFLAGS += -Wall -Werror
 
-all: $(REPORTER_BINS)
+# -- Executable crash_reporter --
+# Disable error "format not a string literal, argument types not checked" for
+# the StringPrintf() in KernelCollector::GetRamoopsRecordPath() because it's
+# valid, but GNU apparently doesn't bother checking a const format string.
+kernel_collector.o: CXXFLAGS += -Wno-format-nonliteral
 
-$(CRASH_REPORTER): crash_reporter.o $(CRASH_OBJS)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ $(REPORTER_LIBS) -o $@
+CXX_BINARY(crash_reporter): LDLIBS += -lmetrics
+CXX_BINARY(crash_reporter): crash_reporter.o $(CRASH_OBJS)
+clean: CLEAN(crash_reporter)
+all: CXX_BINARY(crash_reporter)
 
-$(LIST_PROXIES_BIN): $(LIST_PROXIES_OBJS)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ $(LIST_PROXIES_LIBS) -o $@
 
-tests: $(TEST_BINS)
+# -- Executable list_proxies --
+LIST_PROXIES_PKGS = dbus-1 dbus-glib-1
+LIST_PROXIES_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(LIST_PROXIES_PKGS))
+LIST_PROXIES_LIBS := $(shell $(PKG_CONFIG) --libs $(LIST_PROXIES_PKGS))
+CXX_BINARY(list_proxies): CPPFLAGS += $(LIST_PROXIES_CFLAGS)
+CXX_BINARY(list_proxies): LDLIBS += $(LIST_PROXIES_LIBS)
+CXX_BINARY(list_proxies): list_proxies.o
+clean: CLEAN(list_proxies)
+all: CXX_BINARY(list_proxies)
 
-%_test: %_test.o $(TEST_OBJS)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ $(TEST_LIBS) -o $@
 
-.cc.o:
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
+# -- Unit Tests --
 
-clean:
-	rm -rf *.o $(CRASH_BIN) $(LIST_PROXIES_BIN) $(TEST_BINS)
+# Uncomment these to just run specific test(s).
+#TEST_BINS += crash_collector_test
+#TEST_BINS += kernel_collector_test
+#TEST_BINS += unclean_shutdown_collector_test
+#TEST_BINS += user_collector_test
+
+
+# Define a template that defines the rules for a unittest.  In case you want
+# to add options, etc. for a particular test, the rule to build the test will
+# be for "CXX_BINARY(<test name>)".  For example, you could add options with:
+#  CXX_BINARY(crash_collector_test): CXXFLAGS += -some-other-option
+define TEST_RULES_template
+CXX_BINARY($(1)): LDLIBS += -lgtest -lgmock
+CXX_BINARY($(1)): $(1).o $(CRASH_OBJS)
+clean: CLEAN($(1))
+tests: TEST(CXX_BINARY($(1)))
+endef
+
+# If $(TEST_BINS) is not already set, assume any filename matching *_test.cc
+# is a test.
+TEST_BINS ?= $(patsubst $(SRC)/%.cc,%,$(wildcard $(SRC)/*_test.cc))
+$(foreach prog,$(TEST_BINS),$(eval $(call TEST_RULES_template,$(prog))))
+
