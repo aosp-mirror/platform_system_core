@@ -278,6 +278,10 @@ enum {
     NATIVE_WINDOW_SCALING_MODE_FREEZE           = 0,
     /* the buffer is scaled in both dimensions to match the window size */
     NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW  = 1,
+    /* the buffer is scaled uniformly such that the smaller dimension
+     * of the buffer matches the window size (cropping in the process)
+     */
+    NATIVE_WINDOW_SCALING_MODE_SCALE_CROP       = 2,
 };
 
 /* values returned by the NATIVE_WINDOW_CONCRETE_TYPE query */
