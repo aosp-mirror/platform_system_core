@@ -648,7 +648,6 @@ static void export_kernel_boot_props(void)
         { "ro.boot.serialno", "ro.serialno", "", },
         { "ro.boot.mode", "ro.bootmode", "unknown", },
         { "ro.boot.baseband", "ro.baseband", "unknown", },
-        { "ro.boot.carrier", "ro.carrier", "unknown", },
         { "ro.boot.bootloader", "ro.bootloader", "unknown", },
     };
 
