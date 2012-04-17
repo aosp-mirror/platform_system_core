@@ -341,6 +341,28 @@ typedef enum {
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
 } audio_devices_t;
 
+/* the audio output flags serve two purposes:
+ * - when an AudioTrack is created they indicate a "wish" to be connected to an
+ * output stream with attributes corresponding to the specified flags
+ * - when present in an output profile descriptor listed for a particular audio
+ * hardware module, they indicate that an output stream can be opened that
+ * supports the attributes indicated by the flags.
+ * the audio policy manager will try to match the flags in the request
+ * (when getOuput() is called) to an available output stream.
+ */
+typedef enum {
+    AUDIO_OUTPUT_FLAG_NONE = 0x0,    // no attributes
+    AUDIO_OUTPUT_FLAG_DIRECT = 0x1,  // this output directly connects a track
+                                     // to one output stream: no software mixer
+    AUDIO_OUTPUT_FLAG_PRIMARY = 0x2, // this output is the primary output of
+                                     // the device. It is unique and must be
+                                     // present. It is opened by default and
+                                     // receives routing, audio mode and volume
+                                     // controls related to voice calls.
+    AUDIO_OUTPUT_FLAG_FAST = 0x4,    // output supports "fast tracks",
+                                     // defined elsewhere
+} audio_output_flags_t;
+
 static inline bool audio_is_output_device(audio_devices_t device)
 {
     if ((popcount(device) == 1) && ((device & ~AUDIO_DEVICE_OUT_ALL) == 0))
