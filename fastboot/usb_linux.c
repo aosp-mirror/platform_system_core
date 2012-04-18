@@ -131,7 +131,9 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
     info.serial_number[0] = 0;
     if (dev->iSerialNumber) {
         struct usbdevfs_ctrltransfer  ctrl;
-        __u16 buffer[128];
+        // Keep it short enough because some bootloaders are borked if the URB len is > 255
+        // 128 is too big by 1.
+        __u16 buffer[127];
         int result;
 
         memset(buffer, 0, sizeof(buffer));
