@@ -160,7 +160,7 @@ enum {
      * Default width and height of ANativeWindow buffers, these are the
      * dimensions of the window buffers irrespective of the
      * NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS call and match the native window
-     * size unless overriden by NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS.
+     * size unless overridden by NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS.
      */
     NATIVE_WINDOW_DEFAULT_WIDTH = 6,
     NATIVE_WINDOW_DEFAULT_HEIGHT = 7,
@@ -213,6 +213,12 @@ enum {
      *
      */
     NATIVE_WINDOW_TRANSFORM_HINT = 8,
+
+    /*
+     * Boolean that indicates whether the consumer is running more than
+     * one buffer behind the producer.
+     */
+    NATIVE_WINDOW_CONSUMER_RUNNING_BEHIND = 9
 };
 
 /* valid operations for the (*perform)() hook */
