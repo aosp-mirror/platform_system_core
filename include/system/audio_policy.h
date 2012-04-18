@@ -30,15 +30,6 @@ __BEGIN_DECLS
  * frameworks/base/include/media/AudioSystem.h
  */
 
-/* FIXME: temporary definitions to be removed once all projects have been changed
- * to use audio_output_flags_t */
-typedef enum {
-    AUDIO_POLICY_OUTPUT_FLAG_NONE = AUDIO_OUTPUT_FLAG_NONE,
-    AUDIO_POLICY_OUTPUT_FLAG_DIRECT = AUDIO_OUTPUT_FLAG_DIRECT,
-    AUDIO_POLICY_OUTPUT_FLAG_PRIMARY = AUDIO_OUTPUT_FLAG_PRIMARY,
-    AUDIO_POLICY_OUTPUT_FLAG_FAST = AUDIO_OUTPUT_FLAG_FAST,
-} audio_policy_output_flags_t;
-
 /* device categories used for audio_policy->set_force_use() */
 typedef enum {
     AUDIO_POLICY_FORCE_NONE,
