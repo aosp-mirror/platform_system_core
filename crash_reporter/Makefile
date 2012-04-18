@@ -24,10 +24,6 @@ LDLIBS = -lgflags $(PC_LIBS)
 
 
 # -- Executable crash_reporter --
-# Disable error "format not a string literal, argument types not checked" for
-# the StringPrintf() in KernelCollector::GetRamoopsRecordPath() because it's
-# valid, but GNU apparently doesn't bother checking a const format string.
-kernel_collector.o: CXXFLAGS += -Wno-format-nonliteral
 
 CXX_BINARY(crash_reporter): LDLIBS += -lmetrics
 CXX_BINARY(crash_reporter): crash_reporter.o $(CRASH_OBJS)
@@ -36,6 +32,7 @@ all: CXX_BINARY(crash_reporter)
 
 
 # -- Executable list_proxies --
+
 LIST_PROXIES_PKGS = dbus-1 dbus-glib-1
 LIST_PROXIES_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(LIST_PROXIES_PKGS))
 LIST_PROXIES_LIBS := $(shell $(PKG_CONFIG) --libs $(LIST_PROXIES_PKGS))
