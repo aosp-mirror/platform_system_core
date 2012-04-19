@@ -80,25 +80,47 @@ loglevel 3
     write /proc/sys/kernel/kptr_restrict 2
     write /proc/sys/kernel/dmesg_restrict 1
     write /proc/sys/vm/mmap_min_addr 32768
+    write /proc/sys/kernel/sched_rt_runtime_us 950000
+    write /proc/sys/kernel/sched_rt_period_us 1000000
 
 # Create cgroup mount points for process groups
     mkdir /dev/cpuctl
     mount cgroup none /dev/cpuctl cpu
     chown system system /dev/cpuctl
     chown system system /dev/cpuctl/tasks
-    chmod 0777 /dev/cpuctl/tasks
+    chmod 0660 /dev/cpuctl/tasks
     write /dev/cpuctl/cpu.shares 1024
+    write /dev/cpuctl/cpu.rt_runtime_us 950000
+    write /dev/cpuctl/cpu.rt_period_us 1000000
 
-    mkdir /dev/cpuctl/fg_boost
-    chown system system /dev/cpuctl/fg_boost/tasks
-    chmod 0777 /dev/cpuctl/fg_boost/tasks
-    write /dev/cpuctl/fg_boost/cpu.shares 1024
+    mkdir /dev/cpuctl/foreground
+    chown system system /dev/cpuctl/foreground/tasks
+    chmod 0666 /dev/cpuctl/foreground/tasks
+    write /dev/cpuctl/foreground/cpu.shares 1024
+    write /dev/cpuctl/foreground/cpu.rt_runtime_us 0
+    write /dev/cpuctl/foreground/cpu.rt_period_us 1000000
 
     mkdir /dev/cpuctl/bg_non_interactive
     chown system system /dev/cpuctl/bg_non_interactive/tasks
-    chmod 0777 /dev/cpuctl/bg_non_interactive/tasks
+    chmod 0666 /dev/cpuctl/bg_non_interactive/tasks
     # 5.0 %
     write /dev/cpuctl/bg_non_interactive/cpu.shares 52
+    write /dev/cpuctl/bg_non_interactive/cpu.rt_runtime_us 0
+    write /dev/cpuctl/bg_non_interactive/cpu.rt_period_us 1000000
+
+    mkdir /dev/cpuctl/audio_app
+    chown system system /dev/cpuctl/audio_app/tasks
+    chmod 0660 /dev/cpuctl/audio_app/tasks
+    write /dev/cpuctl/audio_app/cpu.shares 10
+    write /dev/cpuctl/audio_app/cpu.rt_runtime_us  50000
+    write /dev/cpuctl/audio_app/cpu.rt_period_us 1000000
+
+    mkdir /dev/cpuctl/audio_sys
+    chown system system /dev/cpuctl/audio_sys/tasks
+    chmod 0660 /dev/cpuctl/audio_sys/tasks
+    write /dev/cpuctl/audio_sys/cpu.shares 10
+    write /dev/cpuctl/audio_sys/cpu.rt_runtime_us  50000
+    write /dev/cpuctl/audio_sys/cpu.rt_period_us 1000000
 
 # Allow everybody to read the xt_qtaguid resource tracking misc dev.
 # This is needed by any process that uses socket tagging.
@@ -213,7 +235,7 @@ on boot
 
 # Memory management.  Basic kernel parameters, and allow the high
 # level system server to be able to adjust the kernel OOM driver
-# paramters to match how it is managing things.
+# parameters to match how it is managing things.
     write /proc/sys/vm/overcommit_memory 1
     write /proc/sys/vm/min_free_order_shift 4
     chown root system /sys/module/lowmemorykiller/parameters/adj
