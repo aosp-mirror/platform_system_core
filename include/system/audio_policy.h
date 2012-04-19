@@ -38,6 +38,9 @@ typedef enum {
     AUDIO_POLICY_OUTPUT_FLAG_DIRECT = 0x1
 } audio_policy_output_flags_t;
 
+/* for future compatibility */
+typedef audio_policy_output_flags_t audio_output_flags_t;
+
 /* device categories used for audio_policy->set_force_use() */
 typedef enum {
     AUDIO_POLICY_FORCE_NONE,
