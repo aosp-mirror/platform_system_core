@@ -84,8 +84,8 @@ void help()
         "                                 returns an error if more than one USB device is present.\n"
         " -e                            - directs command to the only running emulator.\n"
         "                                 returns an error if more than one emulator is running.\n"
-        " -s <serial number>            - directs command to the USB device or emulator with\n"
-        "                                 the given serial number. Overrides ANDROID_SERIAL\n"
+        " -s <specific device>          - directs command to the device or emulator with the given\n"
+        "                                 serial number or device path. Overrides ANDROID_SERIAL\n"
         "                                 environment variable.\n"
         " -p <product name or path>     - simple product name like 'sooner', or\n"
         "                                 a relative/absolute path to a product\n"
@@ -93,7 +93,8 @@ void help()
         "                                 If -p is not specified, the ANDROID_PRODUCT_OUT\n"
         "                                 environment variable is used, which must\n"
         "                                 be an absolute path.\n"
-        " devices                       - list all connected devices\n"
+        " devices [-l]                  - list all connected devices\n"
+        "                                 ('-l' means list device paths)\n"
         " connect <host>[:<port>]       - connect to a device via TCP/IP\n"
         "                                 Port 5555 is used by default if no port number is specified.\n"
         " disconnect [<host>[:<port>]]  - disconnect from a TCP/IP device.\n"
@@ -157,6 +158,7 @@ void help()
         "  adb kill-server              - kill the server if it is running\n"
         "  adb get-state                - prints: offline | bootloader | device\n"
         "  adb get-serialno             - prints: <serial-number>\n"
+        "  adb get-devpath              - prints: <device-path>\n"
         "  adb status-window            - continuously print device status for a specified device\n"
         "  adb remount                  - remounts the /system partition on the device read-write\n"
         "  adb reboot [bootloader|recovery] - reboots the device, optionally into the bootloader or recovery program\n"
@@ -931,7 +933,16 @@ top:
 
     if(!strcmp(argv[0], "devices")) {
         char *tmp;
-        snprintf(buf, sizeof buf, "host:%s", argv[0]);
+        char *listopt;
+        if (argc < 2)
+            listopt = "";
+        else if (argc == 2 && !strcmp(argv[1], "-l"))
+            listopt = argv[1];
+        else {
+            fprintf(stderr, "Usage: adb devices [-l]\n");
+            return 1;
+        }
+        snprintf(buf, sizeof buf, "host:%s%s", argv[0], listopt);
         tmp = adb_query(buf);
         if(tmp) {
             printf("List of devices attached \n");
@@ -1204,7 +1215,8 @@ top:
     /* passthrough commands */
 
     if(!strcmp(argv[0],"get-state") ||
-        !strcmp(argv[0],"get-serialno"))
+        !strcmp(argv[0],"get-serialno") ||
+        !strcmp(argv[0],"get-devpath"))
     {
         char *tmp;
 

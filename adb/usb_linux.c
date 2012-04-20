@@ -116,7 +116,8 @@ static void kick_disconnected_devices()
 
 }
 
-static void register_device(const char *dev_name, unsigned char ep_in, unsigned char ep_out,
+static void register_device(const char *dev_name, const char *devpath,
+                            unsigned char ep_in, unsigned char ep_out,
                             int ifc, int serial_index, unsigned zero_mask);
 
 static inline int badname(const char *name)
@@ -129,7 +130,7 @@ static inline int badname(const char *name)
 
 static void find_usb_device(const char *base,
         void (*register_device_callback)
-                (const char *, unsigned char, unsigned char, int, int, unsigned))
+                (const char *, const char *, unsigned char, unsigned char, int, int, unsigned))
 {
     char busname[32], devname[32];
     unsigned char local_ep_in, local_ep_out;
@@ -227,6 +228,11 @@ static void find_usb_device(const char *base,
                             is_adb_interface(vid, pid, interface->bInterfaceClass,
                             interface->bInterfaceSubClass, interface->bInterfaceProtocol))  {
 
+                        struct stat st;
+                        char pathbuf[128];
+                        char link[256];
+                        char *devpath = NULL;
+
                         DBGX("looking for bulk endpoints\n");
                             // looks like ADB...
                         ep1 = (struct usb_endpoint_descriptor *)bufptr;
@@ -263,7 +269,26 @@ static void find_usb_device(const char *base,
                             local_ep_out = ep1->bEndpointAddress;
                         }
 
-                        register_device_callback(devname, local_ep_in, local_ep_out,
+                            // Determine the device path
+                        if (!fstat(fd, &st) && S_ISCHR(st.st_mode)) {
+                            char *slash;
+                            ssize_t link_len;
+                            snprintf(pathbuf, sizeof(pathbuf), "/sys/dev/char/%d:%d",
+                                     major(st.st_rdev), minor(st.st_rdev));
+                            link_len = readlink(pathbuf, link, sizeof(link) - 1);
+                            if (link_len > 0) {
+                                link[link_len] = '\0';
+                                slash = strrchr(link, '/');
+                                if (slash) {
+                                    snprintf(pathbuf, sizeof(pathbuf),
+                                             "usb:%s", slash + 1);
+                                    devpath = pathbuf;
+                                }
+                            }
+                        }
+
+                        register_device_callback(devname, devpath,
+                                local_ep_in, local_ep_out,
                                 interface->bInterfaceNumber, device->iSerialNumber, zero_mask);
                         break;
                     }
@@ -532,7 +557,7 @@ int usb_close(usb_handle *h)
     return 0;
 }
 
-static void register_device(const char *dev_name,
+static void register_device(const char *dev_name, const char *devpath,
                             unsigned char ep_in, unsigned char ep_out,
                             int interface, int serial_index, unsigned zero_mask)
 {
@@ -644,7 +669,7 @@ static void register_device(const char *dev_name,
     usb->next->prev = usb;
     adb_mutex_unlock(&usb_lock);
 
-    register_usb_transport(usb, serial, usb->writeable);
+    register_usb_transport(usb, serial, devpath, usb->writeable);
     return;
 
 fail:

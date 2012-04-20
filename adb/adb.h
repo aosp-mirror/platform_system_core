@@ -185,6 +185,7 @@ struct atransport
         /* used to identify transports for clients */
     char *serial;
     char *product;
+    char *devpath;
     int adb_port; // Use for emulators (local transport)
 
         /* a list of adisconnect callbacks called when the transport is kicked */
@@ -248,7 +249,7 @@ int adb_main(int is_daemon, int server_port);
 ** get_device_transport does an acquire on your behalf before returning
 */
 void init_transport_registration(void);
-int  list_transports(char *buf, size_t  bufsize);
+int  list_transports(char *buf, size_t  bufsize, int show_devpath);
 void update_transports(void);
 
 asocket*  create_device_tracker(void);
@@ -281,7 +282,7 @@ void register_socket_transport(int s, const char *serial, int port, int local);
 void unregister_transport(atransport *t);
 void unregister_all_tcp_transports();
 
-void register_usb_transport(usb_handle *h, const char *serial, unsigned writeable);
+void register_usb_transport(usb_handle *h, const char *serial, const char *devpath, unsigned writeable);
 
 /* this should only be used for transports with connection_state == CS_NOPERM */
 void unregister_usb_transport(usb_handle *usb);

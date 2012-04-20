@@ -370,7 +370,7 @@ static int list_transports_msg(char*  buffer, size_t  bufferlen)
     char  head[5];
     int   len;
 
-    len = list_transports(buffer+4, bufferlen-4);
+    len = list_transports(buffer+4, bufferlen-4, 0);
     snprintf(head, sizeof(head), "%04x", len);
     memcpy(buffer, head, 4);
     len += 4;
@@ -601,6 +601,8 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
             free(t->product);
         if (t->serial)
             free(t->serial);
+        if (t->devpath)
+            free(t->devpath);
 
         memset(t,0xee,sizeof(atransport));
         free(t);
@@ -762,6 +764,10 @@ retry:
                 result = t;
                 break;
             }
+            if (t->devpath && !strcmp(serial, t->devpath)) {
+                result = t;
+                break;
+            }
         } else {
             if (ttype == kTransportUsb && t->type == kTransportUsb) {
                 if (result) {
@@ -836,7 +842,7 @@ static const char *statename(atransport *t)
     }
 }
 
-int list_transports(char *buf, size_t  bufsize)
+int list_transports(char *buf, size_t  bufsize, int show_devpath)
 {
     char*       p   = buf;
     char*       end = buf + bufsize;
@@ -849,7 +855,13 @@ int list_transports(char *buf, size_t  bufsize)
         const char* serial = t->serial;
         if (!serial || !serial[0])
             serial = "????????????";
-        len = snprintf(p, end - p, "%s\t%s\n", serial, statename(t));
+        if (show_devpath) {
+            const char* devpath = t->devpath;
+            if (!devpath || !devpath[0])
+                devpath = "????????????";
+            len = snprintf(p, end - p, "%s\t%s\t%s\n", serial, devpath, statename(t));
+        } else
+            len = snprintf(p, end - p, "%s\t%s\n", serial, statename(t));
 
         if (p + len >= end) {
             /* discard last line if buffer is too short */
@@ -910,6 +922,9 @@ atransport *find_transport(const char *serial)
         if (t->serial && !strcmp(serial, t->serial)) {
             break;
         }
+        if (t->devpath && !strcmp(serial, t->devpath)) {
+            break;
+        }
      }
     adb_mutex_unlock(&transport_lock);
 
@@ -955,7 +970,7 @@ void unregister_all_tcp_transports()
 
 #endif
 
-void register_usb_transport(usb_handle *usb, const char *serial, unsigned writeable)
+void register_usb_transport(usb_handle *usb, const char *serial, const char *devpath, unsigned writeable)
 {
     atransport *t = calloc(1, sizeof(atransport));
     D("transport: %p init'ing for usb_handle %p (sn='%s')\n", t, usb,
@@ -963,6 +978,9 @@ void register_usb_transport(usb_handle *usb, const char *serial, unsigned writea
     init_usb_transport(t, usb, (writeable ? CS_OFFLINE : CS_NOPERM));
     if(serial) {
         t->serial = strdup(serial);
+    }
+    if(devpath) {
+        t->devpath = strdup(devpath);
     }
     register_transport(t);
 }
