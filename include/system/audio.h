@@ -351,16 +351,17 @@ typedef enum {
  * (when getOuput() is called) to an available output stream.
  */
 typedef enum {
-    AUDIO_OUTPUT_FLAG_NONE = 0x0,    // no attributes
-    AUDIO_OUTPUT_FLAG_DIRECT = 0x1,  // this output directly connects a track
-                                     // to one output stream: no software mixer
-    AUDIO_OUTPUT_FLAG_PRIMARY = 0x2, // this output is the primary output of
-                                     // the device. It is unique and must be
-                                     // present. It is opened by default and
-                                     // receives routing, audio mode and volume
-                                     // controls related to voice calls.
-    AUDIO_OUTPUT_FLAG_FAST = 0x4,    // output supports "fast tracks",
-                                     // defined elsewhere
+    AUDIO_OUTPUT_FLAG_NONE = 0x0,       // no attributes
+    AUDIO_OUTPUT_FLAG_DIRECT = 0x1,     // this output directly connects a track
+                                        // to one output stream: no software mixer
+    AUDIO_OUTPUT_FLAG_PRIMARY = 0x2,    // this output is the primary output of
+                                        // the device. It is unique and must be
+                                        // present. It is opened by default and
+                                        // receives routing, audio mode and volume
+                                        // controls related to voice calls.
+    AUDIO_OUTPUT_FLAG_FAST = 0x4,       // output supports "fast tracks",
+                                        // defined elsewhere
+    AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8 // use deep audio buffers
 } audio_output_flags_t;
 
 static inline bool audio_is_output_device(audio_devices_t device)
