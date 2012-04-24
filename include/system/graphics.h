@@ -86,7 +86,8 @@ enum {
      */
     HAL_PIXEL_FORMAT_YV12   = 0x32315659, // YCrCb 4:2:0 Planar
 
-
+    /* Forward compatibility */
+    HAL_PIXEL_FORMAT_RAW_SENSOR = 0x20,
 
     /* Legacy formats (deprecated), used by ImageFormat.java */
     HAL_PIXEL_FORMAT_YCbCr_422_SP       = 0x10, // NV16
