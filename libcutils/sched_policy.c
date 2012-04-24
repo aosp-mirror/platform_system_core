@@ -44,28 +44,51 @@
 
 #define POLICY_DEBUG 0
 
+#define CAN_SET_SP_SYSTEM 0 // non-zero means to implement set_sched_policy(tid, SP_SYSTEM)
+
 static pthread_once_t the_once = PTHREAD_ONCE_INIT;
 
 static int __sys_supports_schedgroups = -1;
 
 // File descriptors open to /dev/cpuctl/../tasks, setup by initialize, or -1 on error.
-static int normal_cgroup_fd = -1;
 static int bg_cgroup_fd = -1;
+static int fg_cgroup_fd = -1;
+#if CAN_SET_SP_SYSTEM
+static int system_cgroup_fd = -1;
+#endif
+static int audio_app_cgroup_fd = -1;
+static int audio_sys_cgroup_fd = -1;
 
 /* Add tid to the scheduling group defined by the policy */
 static int add_tid_to_cgroup(int tid, SchedPolicy policy)
 {
     int fd;
 
-    if (policy == SP_BACKGROUND) {
+    switch (policy) {
+    case SP_BACKGROUND:
         fd = bg_cgroup_fd;
-    } else {
-        fd = normal_cgroup_fd;
+        break;
+    case SP_FOREGROUND:
+        fd = fg_cgroup_fd;
+        break;
+#if CAN_SET_SP_SYSTEM
+    case SP_SYSTEM:
+        fd = system_cgroup_fd;
+        break;
+#endif
+    case SP_AUDIO_APP:
+        fd = audio_app_cgroup_fd;
+        break;
+    case SP_AUDIO_SYS:
+        fd = audio_sys_cgroup_fd;
+        break;
+    default:
+        fd = -1;
+        break;
     }
 
     if (fd < 0) {
-        SLOGE("add_tid_to_cgroup failed; background=%d\n",
-              policy == SP_BACKGROUND ? 1 : 0);
+        SLOGE("add_tid_to_cgroup failed; policy=%d\n", policy);
         return -1;
     }
 
@@ -86,8 +109,8 @@ static int add_tid_to_cgroup(int tid, SchedPolicy policy)
          */
         if (errno == ESRCH)
                 return 0;
-        SLOGW("add_tid_to_cgroup failed to write '%s' (%s); background=%d\n",
-              ptr, strerror(errno), policy == SP_BACKGROUND ? 1 : 0);
+        SLOGW("add_tid_to_cgroup failed to write '%s' (%s); policy=%d\n",
+              ptr, strerror(errno), policy);
         return -1;
     }
 
@@ -99,9 +122,17 @@ static void __initialize(void) {
     if (!access("/dev/cpuctl/tasks", F_OK)) {
         __sys_supports_schedgroups = 1;
 
+#if CAN_SET_SP_SYSTEM
         filename = "/dev/cpuctl/tasks";
-        normal_cgroup_fd = open(filename, O_WRONLY);
-        if (normal_cgroup_fd < 0) {
+        system_cgroup_fd = open(filename, O_WRONLY);
+        if (system_cgroup_fd < 0) {
+            SLOGV("open of %s failed: %s\n", filename, strerror(errno));
+        }
+#endif
+
+        filename = "/dev/cpuctl/foreground/tasks";
+        fg_cgroup_fd = open(filename, O_WRONLY);
+        if (fg_cgroup_fd < 0) {
             SLOGE("open of %s failed: %s\n", filename, strerror(errno));
         }
 
@@ -110,6 +141,19 @@ static void __initialize(void) {
         if (bg_cgroup_fd < 0) {
             SLOGE("open of %s failed: %s\n", filename, strerror(errno));
         }
+
+        filename = "/dev/cpuctl/audio_app/tasks";
+        audio_app_cgroup_fd = open(filename, O_WRONLY);
+        if (audio_app_cgroup_fd < 0) {
+            SLOGV("open of %s failed: %s\n", filename, strerror(errno));
+        }
+
+        filename = "/dev/cpuctl/audio_sys/tasks";
+        audio_sys_cgroup_fd = open(filename, O_WRONLY);
+        if (audio_sys_cgroup_fd < 0) {
+            SLOGV("open of %s failed: %s\n", filename, strerror(errno));
+        }
+
     } else {
         __sys_supports_schedgroups = 0;
     }
@@ -201,9 +245,15 @@ int get_sched_policy(int tid, SchedPolicy *policy)
         if (getSchedulerGroup(tid, grpBuf, sizeof(grpBuf)) < 0)
             return -1;
         if (grpBuf[0] == '\0') {
-            *policy = SP_FOREGROUND;
+            *policy = SP_SYSTEM;
         } else if (!strcmp(grpBuf, "bg_non_interactive")) {
             *policy = SP_BACKGROUND;
+        } else if (!strcmp(grpBuf, "foreground")) {
+            *policy = SP_FOREGROUND;
+        } else if (!strcmp(grpBuf, "audio_app")) {
+            *policy = SP_AUDIO_APP;
+        } else if (!strcmp(grpBuf, "audio_sys")) {
+            *policy = SP_AUDIO_SYS;
         } else {
             errno = ERANGE;
             return -1;
@@ -266,12 +316,25 @@ int set_sched_policy(int tid, SchedPolicy policy)
 
         strncpy(thread_name, p, (q-p));
     }
-    if (policy == SP_BACKGROUND) {
+    switch (policy) {
+    case SP_BACKGROUND:
         SLOGD("vvv tid %d (%s)", tid, thread_name);
-    } else if (policy == SP_FOREGROUND) {
+        break;
+    case SP_FOREGROUND:
         SLOGD("^^^ tid %d (%s)", tid, thread_name);
-    } else {
+        break;
+    case SP_SYSTEM:
+        SLOGD("/// tid %d (%s)", tid, thread_name);
+        break;
+    case SP_AUDIO_APP:
+        SLOGD("aaa tid %d (%s)", tid, thread_name);
+        break;
+    case SP_AUDIO_SYS:
+        SLOGD("sss tid %d (%s)", tid, thread_name);
+        break;
+    default:
         SLOGD("??? tid %d (%s)", tid, thread_name);
+        break;
     }
 #endif
 
@@ -299,6 +362,9 @@ const char *get_sched_policy_name(SchedPolicy policy)
     static const char * const strings[SP_CNT] = {
        [SP_BACKGROUND] = "bg",
        [SP_FOREGROUND] = "fg",
+       [SP_SYSTEM]     = "  ",
+       [SP_AUDIO_APP]  = "aa",
+       [SP_AUDIO_SYS]  = "as",
     };
     if ((policy < SP_CNT) && (strings[policy] != NULL))
         return strings[policy];

@@ -26,6 +26,9 @@ typedef enum {
     SP_DEFAULT    = -1,
     SP_BACKGROUND = 0,
     SP_FOREGROUND = 1,
+    SP_SYSTEM     = 2,  // can't be used with set_sched_policy()
+    SP_AUDIO_APP  = 3,
+    SP_AUDIO_SYS  = 4,
     SP_CNT,
     SP_MAX        = SP_CNT - 1,
     SP_SYSTEM_DEFAULT = SP_FOREGROUND,
