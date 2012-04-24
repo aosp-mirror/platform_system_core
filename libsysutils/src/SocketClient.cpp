@@ -107,6 +107,29 @@ int SocketClient::sendCode(int code) {
     return sendData(buf, sizeof(buf));
 }
 
+char *SocketClient::quoteArg(const char *arg) {
+    int len = strlen(arg);
+    char *result = (char *)malloc(len * 2 + 3);
+    char *current = result;
+    const char *end = arg + len;
+
+    *(current++) = '"';
+    while (arg < end) {
+        switch (*arg) {
+        case '\\':
+        case '"':
+            *(current++) = '\\'; // fallthrough
+        default:
+            *(current++) = *(arg++);
+        }
+    }
+    *(current++) = '"';
+    *(current++) = '\0';
+    result = (char *)realloc(result, current-result);
+    return result;
+}
+
+
 int SocketClient::sendMsg(const char *msg) {
     if (mSocket < 0) {
         errno = EHOSTUNREACH;

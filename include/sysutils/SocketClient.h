@@ -64,6 +64,9 @@ public:
     void incRef();
     bool decRef(); // returns true at 0 (but note: SocketClient already deleted)
 
+    // return a new string in quotes with '\\' and '\"' escaped for "my arg" transmissions
+    static char *quoteArg(const char *arg);
+
 private:
     // Send null-terminated C strings
     int sendMsg(const char *msg);
