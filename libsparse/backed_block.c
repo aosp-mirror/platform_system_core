@@ -33,32 +33,57 @@ struct data_block {
 	u16 pad2;
 };
 
-static struct data_block *data_blocks = NULL;
-static struct data_block *last_used = NULL;
+struct backed_block_list {
+	struct data_block *data_blocks;
+	struct data_block *last_used;
+};
 
-static void queue_db(struct data_block *new_db)
+struct backed_block_list *backed_block_list_new(void)
+{
+	struct backed_block_list *b = calloc(sizeof(struct backed_block_list), 1);
+
+	return b;
+}
+
+void backed_block_list_destroy(struct backed_block_list *b)
+{
+	if (b->data_blocks) {
+		struct data_block *db = b->data_blocks;
+		while (db) {
+			struct data_block *next = db->next;
+			free((void*)db->filename);
+
+			free(db);
+			db = next;
+		}
+	}
+
+	free(b);
+}
+
+static void queue_db(struct backed_block_list *b, struct data_block *new_db)
 {
 	struct data_block *db;
 
-	if (data_blocks == NULL) {
-		data_blocks = new_db;
+	if (b->data_blocks == NULL) {
+		b->data_blocks = new_db;
 		return;
 	}
 
-	if (data_blocks->block > new_db->block) {
-		new_db->next = data_blocks;
-		data_blocks = new_db;
+	if (b->data_blocks->block > new_db->block) {
+		new_db->next = b->data_blocks;
+		b->data_blocks = new_db;
 		return;
 	}
 
 	/* Optimization: blocks are mostly queued in sequence, so save the
 	   pointer to the last db that was added, and start searching from
 	   there if the next block number is higher */
-	if (last_used && new_db->block > last_used->block)
-		db = last_used;
+	if (b->last_used && new_db->block > b->last_used->block)
+		db = b->last_used;
 	else
-		db = data_blocks;
-	last_used = new_db;
+		db = b->data_blocks;
+	b->last_used = new_db;
 
 	for (; db->next && db->next->block < new_db->block; db = db->next)
 		;
@@ -72,9 +97,10 @@ static void queue_db(struct data_block *new_db)
 }
 
 /* Queues a fill block of memory to be written to the specified data blocks */
-void queue_fill_block(unsigned int fill_val, unsigned int len, unsigned int block)
+void queue_fill_block(struct backed_block_list *b, unsigned int fill_val,
+		unsigned int len, unsigned int block)
 {
-	struct data_block *db = malloc(sizeof(struct data_block));
+	struct data_block *db = calloc(1, sizeof(struct data_block));
 	if (db == NULL) {
 		error_errno("malloc");
 		return;
@@ -88,11 +114,12 @@ void queue_fill_block(unsigned int fill_val, unsigned int len, unsigned int bloc
 	db->filename = NULL;
 	db->next = NULL;
 
-	queue_db(db);
+	queue_db(b, db);
 }
 
 /* Queues a block of memory to be written to the specified data blocks */
-void queue_data_block(void *data, unsigned int len, unsigned int block)
+void queue_data_block(struct backed_block_list *b, void *data, unsigned int len,
+		unsigned int block)
 {
 	struct data_block *db = malloc(sizeof(struct data_block));
 	if (db == NULL) {
@@ -107,12 +134,12 @@ void queue_data_block(void *data, unsigned int len, unsigned int block)
 	db->fill = 0;
 	db->next = NULL;
 
-	queue_db(db);
+	queue_db(b, db);
 }
 
 /* Queues a chunk of a file on disk to be written to the specified data blocks */
-void queue_data_file(const char *filename, int64_t offset, unsigned int len,
-		unsigned int block)
+void queue_data_file(struct backed_block_list *b, const char *filename,
+		int64_t offset, unsigned int len, unsigned int block)
 {
 	struct data_block *db = malloc(sizeof(struct data_block));
 	if (db == NULL) {
@@ -128,19 +155,21 @@ void queue_data_file(const char *filename, int64_t offset, unsigned int len,
 	db->fill = 0;
 	db->next = NULL;
 
-	queue_db(db);
+	queue_db(b, db);
 }
 
 /* Iterates over the queued data blocks, calling data_func for each contiguous
    data block, and file_func for each contiguous file block */
-void for_each_data_block(data_block_callback_t data_func,
+void for_each_data_block(struct backed_block_list *b,
+	data_block_callback_t data_func,
 	data_block_file_callback_t file_func,
-	data_block_fill_callback_t fill_func, void *priv, unsigned int block_size)
+	data_block_fill_callback_t fill_func,
+	void *priv, unsigned int block_size)
 {
 	struct data_block *db;
 	u32 last_block = 0;
 
-	for (db = data_blocks; db; db = db->next) {
+	for (db = b->data_blocks; db; db = db->next) {
 		if (db->block < last_block)
 			error("data blocks out of order: %u < %u", db->block, last_block);
 		last_block = db->block + DIV_ROUND_UP(db->len, block_size) - 1;
@@ -152,28 +181,4 @@ void for_each_data_block(data_block_callback_t data_func,
 		else
 			data_func(priv, (u64)db->block * block_size, db->data, db->len);
 	}
-}
-
-/* Frees the memory used by the linked list of data blocks */
-void free_data_blocks()
-{
-	if (!data_blocks) return;
-	struct data_block *db = data_blocks;
-	while (db) {
-		struct data_block *next = db->next;
-		free((void*)db->filename);
-
-                // There used to be a free() of db->data here, but it
-		// made the function crash since queue_data_block() is
-		// sometimes passed pointers it can't take ownership of
-		// (like a pointer into the middle of an allocated
-		// block).  It's not clear what the queue_data_block
-		// contract is supposed to be, but we'd rather leak
-		// memory than crash.
-
-		free(db);
-		db = next;
-	}
-	data_blocks = NULL;
-	last_used = NULL;
 }

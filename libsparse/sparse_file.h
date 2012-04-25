@@ -23,6 +23,7 @@ struct sparse_file {
 	unsigned int block_size;
 	int64_t len;
 
+	struct backed_block_list *backed_block_list;
 	struct output_file *out;
 };
 

@@ -17,23 +17,29 @@
 #ifndef _BACKED_BLOCK_H_
 #define _BACKED_BLOCK_H_
 
-#include <sparse/sparse.h>
+struct backed_block_list;
 
-typedef void (*data_block_callback_t)(void *priv, int64_t off, void *data, int len);
-typedef void (*data_block_fill_callback_t)(void *priv, int64_t off, unsigned int fill_val, int len);
+typedef void (*data_block_callback_t)(void *priv, int64_t off, void *data,
+		int len);
+typedef void (*data_block_fill_callback_t)(void *priv, int64_t off,
+		unsigned int fill_val, int len);
 typedef void (*data_block_file_callback_t)(void *priv, int64_t off,
-					   const char *file, int64_t offset,
-					   int len);
+		const char *file, int64_t offset, int len);
 
-void for_each_data_block(data_block_callback_t data_func,
+void for_each_data_block(struct backed_block_list *b,
+	data_block_callback_t data_func,
 	data_block_file_callback_t file_func,
-	data_block_fill_callback_t fill_func, void *priv, unsigned int);
+	data_block_fill_callback_t fill_func,
+	void *priv, unsigned int);
 
-void queue_data_block(void *data, unsigned int len, unsigned int block);
-void queue_fill_block(unsigned int fill_val, unsigned int len, unsigned int block);
-void queue_data_file(const char *filename, int64_t offset, unsigned int len,
+void queue_data_block(struct backed_block_list *b,void *data, unsigned int len,
 		unsigned int block);
+void queue_fill_block(struct backed_block_list *b,unsigned int fill_val,
+		unsigned int len, unsigned int block);
+void queue_data_file(struct backed_block_list *b,const char *filename,
+		int64_t offset, unsigned int len, unsigned int block);
 
-void free_data_blocks();
+struct backed_block_list *backed_block_list_new(void);
+void backed_block_list_destroy(struct backed_block_list *b);
 
 #endif
