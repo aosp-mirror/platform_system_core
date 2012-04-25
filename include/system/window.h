@@ -221,24 +221,34 @@ enum {
     NATIVE_WINDOW_CONSUMER_RUNNING_BEHIND = 9
 };
 
-/* valid operations for the (*perform)() hook */
+/* Valid operations for the (*perform)() hook.
+ *
+ * Values marked as 'deprecated' are supported, but have been superceded by
+ * other functionality.
+ *
+ * Values marked as 'private' should be considered private to the framework.
+ * HAL implementation code with access to an ANativeWindow should not use these,
+ * as it may not interact properly with the framework's use of the
+ * ANativeWindow.
+ */
 enum {
     NATIVE_WINDOW_SET_USAGE                 =  0,
     NATIVE_WINDOW_CONNECT                   =  1,   /* deprecated */
     NATIVE_WINDOW_DISCONNECT                =  2,   /* deprecated */
-    NATIVE_WINDOW_SET_CROP                  =  3,
+    NATIVE_WINDOW_SET_CROP                  =  3,   /* private */
     NATIVE_WINDOW_SET_BUFFER_COUNT          =  4,
     NATIVE_WINDOW_SET_BUFFERS_GEOMETRY      =  5,   /* deprecated */
     NATIVE_WINDOW_SET_BUFFERS_TRANSFORM     =  6,
     NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP     =  7,
     NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS    =  8,
     NATIVE_WINDOW_SET_BUFFERS_FORMAT        =  9,
-    NATIVE_WINDOW_SET_SCALING_MODE          = 10,
+    NATIVE_WINDOW_SET_SCALING_MODE          = 10,   /* private */
     NATIVE_WINDOW_LOCK                      = 11,   /* private */
     NATIVE_WINDOW_UNLOCK_AND_POST           = 12,   /* private */
     NATIVE_WINDOW_API_CONNECT               = 13,   /* private */
     NATIVE_WINDOW_API_DISCONNECT            = 14,   /* private */
     NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS = 15, /* private */
+    NATIVE_WINDOW_SET_ACTIVE_RECT           = 16,   /* private */
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -510,6 +520,26 @@ static inline int native_window_set_crop(
 }
 
 /*
+ * native_window_set_active_rect(..., active_rect)
+ * Sets the region of future queued buffers that are 'active'.  Pixels outside
+ * this 'active' region are considered to be completely transparent regardless
+ * of the pixel values in the buffer.  The active_rect argument specifies the
+ * active rectangle in buffer pixel coordinates.
+ *
+ * The specified active rectangle applies to all buffers queued after it is
+ * called.
+ *
+ * An error is returned if for instance the crop region is invalid,
+ * out of the buffer's bound or if the window is invalid.
+ */
+static inline int native_window_set_active_rect(
+        struct ANativeWindow* window,
+        android_native_rect_t const * active_rect)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_ACTIVE_RECT, active_rect);
+}
+
+/*
  * native_window_set_buffer_count(..., count)
  * Sets the number of buffers associated with this native window.
  */
@@ -639,7 +669,6 @@ static inline int native_window_set_scaling_mode(
     return window->perform(window, NATIVE_WINDOW_SET_SCALING_MODE,
             mode);
 }
-
 
 /*
  * native_window_api_connect(..., int api)
