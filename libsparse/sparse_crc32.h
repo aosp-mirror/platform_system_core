@@ -14,5 +14,7 @@
  * limitations under the License.
  */
 
-u32 sparse_crc32(u32 crc, const void *buf, size_t size);
+#include <stdint.h>
+
+uint32_t sparse_crc32(uint32_t crc, const void *buf, size_t size);
 

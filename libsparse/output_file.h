@@ -26,11 +26,12 @@ struct output_file *open_output_file(const char *filename,
 		int gz, int sparse, int chunks, int crc);
 struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
 		int gz, int sparse, int chunks, int crc);
-void write_data_block(struct output_file *out, int64_t off, void *data, int len);
-void write_fill_block(struct output_file *out, int64_t off, unsigned int fill_val, int len);
-void write_data_file(struct output_file *out, int64_t off, const char *file,
-		int64_t offset, int len);
-void pad_output_file(struct output_file *out, int64_t len);
+int write_data_chunk(struct output_file *out, unsigned int len, void *data);
+int write_fill_chunk(struct output_file *out, unsigned int len,
+		uint32_t fill_val);
+int write_file_chunk(struct output_file *out, unsigned int len,
+		const char *file, int64_t offset);
+int write_skip_chunk(struct output_file *out, int64_t len);
 void close_output_file(struct output_file *out);
 
 #endif

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <assert.h>
 #include <stdlib.h>
 
 #include <sparse/sparse.h>
@@ -23,7 +24,6 @@
 #include "output_file.h"
 #include "backed_block.h"
 #include "sparse_defs.h"
-
 
 struct sparse_file *sparse_file_new(unsigned int block_size, int64_t len)
 {
@@ -53,108 +53,89 @@ void sparse_file_destroy(struct sparse_file *s)
 int sparse_file_add_data(struct sparse_file *s,
 		void *data, unsigned int len, unsigned int block)
 {
-	queue_data_block(s->backed_block_list, data, len, block);
-
-	return 0;
+	return backed_block_add_data(s->backed_block_list, data, len, block);
 }
 
 int sparse_file_add_fill(struct sparse_file *s,
 		uint32_t fill_val, unsigned int len, unsigned int block)
 {
-	queue_fill_block(s->backed_block_list, fill_val, len, block);
-
-	return 0;
+	return backed_block_add_fill(s->backed_block_list, fill_val, len, block);
 }
 
 int sparse_file_add_file(struct sparse_file *s,
 		const char *filename, int64_t file_offset, unsigned int len,
 		unsigned int block)
 {
-	queue_data_file(s->backed_block_list, filename, file_offset, len, block);
-
-	return 0;
+	return backed_block_add_file(s->backed_block_list, filename, file_offset,
+			len, block);
 }
 
-struct count_chunks {
-	unsigned int chunks;
-	int64_t cur_ptr;
-	unsigned int block_size;
-};
-
-static void count_data_block(void *priv, int64_t off, void *data, int len)
+unsigned int sparse_count_chunks(struct sparse_file *s)
 {
-	struct count_chunks *count_chunks = priv;
-	if (off > count_chunks->cur_ptr)
-		count_chunks->chunks++;
-	count_chunks->cur_ptr = off + ALIGN(len, count_chunks->block_size);
-	count_chunks->chunks++;
-}
+	struct backed_block *bb;
+	unsigned int last_block = 0;
+	unsigned int chunks = 0;
 
-static void count_fill_block(void *priv, int64_t off, unsigned int fill_val, int len)
-{
-	struct count_chunks *count_chunks = priv;
-	if (off > count_chunks->cur_ptr)
-		count_chunks->chunks++;
-	count_chunks->cur_ptr = off + ALIGN(len, count_chunks->block_size);
-	count_chunks->chunks++;
-}
+	for (bb = backed_block_iter_new(s->backed_block_list); bb;
+			bb = backed_block_iter_next(bb)) {
+		if (backed_block_block(bb) > last_block) {
+			/* If there is a gap between chunks, add a skip chunk */
+			chunks++;
+		}
+		chunks++;
+		last_block = backed_block_block(bb) +
+				DIV_ROUND_UP(backed_block_len(bb), s->block_size);
+	}
+	if (last_block < DIV_ROUND_UP(s->len, s->block_size)) {
+		chunks++;
+	}
 
-static void count_file_block(void *priv, int64_t off, const char *file,
-		int64_t offset, int len)
-{
-	struct count_chunks *count_chunks = priv;
-	if (off > count_chunks->cur_ptr)
-		count_chunks->chunks++;
-	count_chunks->cur_ptr = off + ALIGN(len, count_chunks->block_size);
-	count_chunks->chunks++;
-}
-
-static int count_sparse_chunks(struct backed_block_list *b,
-		unsigned int block_size, int64_t len)
-{
-	struct count_chunks count_chunks = {0, 0, block_size};
-
-	for_each_data_block(b, count_data_block, count_file_block,
-			count_fill_block, &count_chunks, block_size);
-
-	if (count_chunks.cur_ptr != len)
-		count_chunks.chunks++;
-
-	return count_chunks.chunks;
-}
-
-static void ext4_write_data_block(void *priv, int64_t off, void *data, int len)
-{
-	write_data_block(priv, off, data, len);
-}
-
-static void ext4_write_fill_block(void *priv, int64_t off, unsigned int fill_val, int len)
-{
-	write_fill_block(priv, off, fill_val, len);
-}
-
-static void ext4_write_data_file(void *priv, int64_t off, const char *file,
-		int64_t offset, int len)
-{
-	write_data_file(priv, off, file, offset, len);
+	return chunks;
 }
 
 int sparse_file_write(struct sparse_file *s, int fd, bool gz, bool sparse,
 		bool crc)
 {
-	int chunks = count_sparse_chunks(s->backed_block_list, s->block_size,
-			s->len);
-	struct output_file *out = open_output_fd(fd, s->block_size, s->len,
-			gz, sparse, chunks, crc);
+	struct backed_block *bb;
+	unsigned int last_block = 0;
+	int64_t pad;
+	int chunks;
+	struct output_file *out;
+
+	chunks = sparse_count_chunks(s);
+	out = open_output_fd(fd, s->block_size, s->len, gz, sparse, chunks, crc);
 
 	if (!out)
 		return -ENOMEM;
 
-	for_each_data_block(s->backed_block_list, ext4_write_data_block,
-			ext4_write_data_file, ext4_write_fill_block, out, s->block_size);
+	for (bb = backed_block_iter_new(s->backed_block_list); bb;
+			bb = backed_block_iter_next(bb)) {
+		if (backed_block_block(bb) > last_block) {
+			unsigned int blocks = backed_block_block(bb) - last_block;
+			write_skip_chunk(out, (int64_t)blocks * s->block_size);
+		}
+		switch (backed_block_type(bb)) {
+		case BACKED_BLOCK_DATA:
+			write_data_chunk(out, backed_block_len(bb), backed_block_data(bb));
+			break;
+		case BACKED_BLOCK_FILE:
+			write_file_chunk(out, backed_block_len(bb),
+					backed_block_filename(bb), backed_block_file_offset(bb));
+			break;
+		case BACKED_BLOCK_FILL:
+			write_fill_chunk(out, backed_block_len(bb),
+					backed_block_fill_val(bb));
+			break;
+		}
+		last_block = backed_block_block(bb) +
+				DIV_ROUND_UP(backed_block_len(bb), s->block_size);
+	}
 
-	if (s->len)
-		pad_output_file(out, s->len);
+	pad = s->len - last_block * s->block_size;
+	assert(pad >= 0);
+	if (pad > 0) {
+		write_skip_chunk(out, pad);
+	}
 
 	close_output_file(out);
 

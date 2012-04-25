@@ -17,29 +17,38 @@
 #ifndef _BACKED_BLOCK_H_
 #define _BACKED_BLOCK_H_
 
+#include <stdint.h>
+
 struct backed_block_list;
+struct backed_block;
 
-typedef void (*data_block_callback_t)(void *priv, int64_t off, void *data,
-		int len);
-typedef void (*data_block_fill_callback_t)(void *priv, int64_t off,
-		unsigned int fill_val, int len);
-typedef void (*data_block_file_callback_t)(void *priv, int64_t off,
-		const char *file, int64_t offset, int len);
+enum backed_block_type {
+	BACKED_BLOCK_DATA,
+	BACKED_BLOCK_FILE,
+	BACKED_BLOCK_FILL,
+};
 
-void for_each_data_block(struct backed_block_list *b,
-	data_block_callback_t data_func,
-	data_block_file_callback_t file_func,
-	data_block_fill_callback_t fill_func,
-	void *priv, unsigned int);
-
-void queue_data_block(struct backed_block_list *b,void *data, unsigned int len,
-		unsigned int block);
-void queue_fill_block(struct backed_block_list *b,unsigned int fill_val,
+int backed_block_add_data(struct backed_block_list *bbl, void *data,
 		unsigned int len, unsigned int block);
-void queue_data_file(struct backed_block_list *b,const char *filename,
+int backed_block_add_fill(struct backed_block_list *bbl, unsigned int fill_val,
+		unsigned int len, unsigned int block);
+int backed_block_add_file(struct backed_block_list *bbl, const char *filename,
 		int64_t offset, unsigned int len, unsigned int block);
 
+struct backed_block *backed_block_iter_new(struct backed_block_list *bbl);
+struct backed_block *backed_block_iter_next(struct backed_block *bb);
+unsigned int backed_block_len(struct backed_block *bb);
+unsigned int backed_block_block(struct backed_block *bb);
+void *backed_block_data(struct backed_block *bb);
+const char *backed_block_filename(struct backed_block *bb);
+int64_t backed_block_file_offset(struct backed_block *bb);
+uint32_t backed_block_fill_val(struct backed_block *bb);
+enum backed_block_type backed_block_type(struct backed_block *bb);
+
+struct backed_block *backed_block_iter_new(struct backed_block_list *bbl);
+struct backed_block *backed_block_iter_next(struct backed_block *bb);
+
 struct backed_block_list *backed_block_list_new(void);
-void backed_block_list_destroy(struct backed_block_list *b);
+void backed_block_list_destroy(struct backed_block_list *bbl);
 
 #endif

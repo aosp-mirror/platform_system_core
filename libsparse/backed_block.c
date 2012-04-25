@@ -14,29 +14,86 @@
  * limitations under the License.
  */
 
+#include <assert.h>
+#include <errno.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "backed_block.h"
-#include "sparse_defs.h"
 
-struct data_block {
-	u32 block;
-	u32 len;
-	void *data;
-	const char *filename;
-	int64_t offset;
-	struct data_block *next;
-	u32 fill_val;
-	u8 fill;
-	u8 pad1;
-	u16 pad2;
+struct backed_block {
+	unsigned int block;
+	unsigned int len;
+	enum backed_block_type type;
+	union {
+		struct {
+			void *data;
+		} data;
+		struct {
+			char *filename;
+			int64_t offset;
+		} file;
+		struct {
+			uint32_t val;
+		} fill;
+	};
+	struct backed_block *next;
 };
 
 struct backed_block_list {
-	struct data_block *data_blocks;
-	struct data_block *last_used;
+	struct backed_block *data_blocks;
+	struct backed_block *last_used;
 };
+
+struct backed_block *backed_block_iter_new(struct backed_block_list *bbl)
+{
+	return bbl->data_blocks;
+}
+
+struct backed_block *backed_block_iter_next(struct backed_block *bb)
+{
+	return bb->next;
+}
+
+unsigned int backed_block_len(struct backed_block *bb)
+{
+	return bb->len;
+}
+
+unsigned int backed_block_block(struct backed_block *bb)
+{
+	return bb->block;
+}
+
+void *backed_block_data(struct backed_block *bb)
+{
+	assert(bb->type == BACKED_BLOCK_DATA);
+	return bb->data.data;
+}
+
+const char *backed_block_filename(struct backed_block *bb)
+{
+	assert(bb->type == BACKED_BLOCK_FILE);
+	return bb->file.filename;
+}
+
+int64_t backed_block_file_offset(struct backed_block *bb)
+{
+	assert(bb->type == BACKED_BLOCK_FILE);
+	return bb->file.offset;
+}
+
+uint32_t backed_block_fill_val(struct backed_block *bb)
+{
+	assert(bb->type == BACKED_BLOCK_FILL);
+	return bb->fill.val;
+}
+
+enum backed_block_type backed_block_type(struct backed_block *bb)
+{
+	return bb->type;
+}
 
 struct backed_block_list *backed_block_list_new(void)
 {
@@ -45,140 +102,112 @@ struct backed_block_list *backed_block_list_new(void)
 	return b;
 }
 
-void backed_block_list_destroy(struct backed_block_list *b)
+void backed_block_list_destroy(struct backed_block_list *bbl)
 {
-	if (b->data_blocks) {
-		struct data_block *db = b->data_blocks;
-		while (db) {
-			struct data_block *next = db->next;
-			free((void*)db->filename);
+	if (bbl->data_blocks) {
+		struct backed_block *bb = bbl->data_blocks;
+		while (bb) {
+			struct backed_block *next = bb->next;
+			if (bb->type == BACKED_BLOCK_FILE) {
+				free(bb->file.filename);
+			}
 
-			free(db);
-			db = next;
+			free(bb);
+			bb = next;
 		}
 	}
 
-	free(b);
+	free(bbl);
 }
 
-static void queue_db(struct backed_block_list *b, struct data_block *new_db)
+static int queue_bb(struct backed_block_list *bbl, struct backed_block *new_bb)
 {
-	struct data_block *db;
+	struct backed_block *bb;
 
-	if (b->data_blocks == NULL) {
-		b->data_blocks = new_db;
-		return;
+	if (bbl->data_blocks == NULL) {
+		bbl->data_blocks = new_bb;
+		return 0;
 	}
 
-	if (b->data_blocks->block > new_db->block) {
-		new_db->next = b->data_blocks;
-		b->data_blocks = new_db;
-		return;
+	if (bbl->data_blocks->block > new_bb->block) {
+		new_bb->next = bbl->data_blocks;
+		bbl->data_blocks = new_bb;
+		return 0;
 	}
 
 	/* Optimization: blocks are mostly queued in sequence, so save the
-	   pointer to the last db that was added, and start searching from
+	   pointer to the last bb that was added, and start searching from
 	   there if the next block number is higher */
-	if (b->last_used && new_db->block > b->last_used->block)
-		db = b->last_used;
+	if (bbl->last_used && new_bb->block > bbl->last_used->block)
+		bb = bbl->last_used;
 	else
-		db = b->data_blocks;
-	b->last_used = new_db;
+		bb = bbl->data_blocks;
+	bbl->last_used = new_bb;
 
-	for (; db->next && db->next->block < new_db->block; db = db->next)
+	for (; bb->next && bb->next->block < new_bb->block; bb = bb->next)
 		;
 
-	if (db->next == NULL) {
-		db->next = new_db;
+	if (bb->next == NULL) {
+		bb->next = new_bb;
 	} else {
-		new_db->next = db->next;
-		db->next = new_db;
+		new_bb->next = bb->next;
+		bb->next = new_bb;
 	}
+
+	return 0;
 }
 
 /* Queues a fill block of memory to be written to the specified data blocks */
-void queue_fill_block(struct backed_block_list *b, unsigned int fill_val,
+int backed_block_add_fill(struct backed_block_list *bbl, unsigned int fill_val,
 		unsigned int len, unsigned int block)
 {
-	struct data_block *db = calloc(1, sizeof(struct data_block));
-	if (db == NULL) {
-		error_errno("malloc");
-		return;
+	struct backed_block *bb = calloc(1, sizeof(struct backed_block));
+	if (bb == NULL) {
+		return -ENOMEM;
 	}
 
-	db->block = block;
-	db->len = len;
-	db->fill = 1;
-	db->fill_val = fill_val;
-	db->data = NULL;
-	db->filename = NULL;
-	db->next = NULL;
+	bb->block = block;
+	bb->len = len;
+	bb->type = BACKED_BLOCK_FILL;
+	bb->fill.val = fill_val;
+	bb->next = NULL;
 
-	queue_db(b, db);
+	return queue_bb(bbl, bb);
 }
 
 /* Queues a block of memory to be written to the specified data blocks */
-void queue_data_block(struct backed_block_list *b, void *data, unsigned int len,
-		unsigned int block)
+int backed_block_add_data(struct backed_block_list *bbl, void *data,
+		unsigned int len, unsigned int block)
 {
-	struct data_block *db = malloc(sizeof(struct data_block));
-	if (db == NULL) {
-		error_errno("malloc");
-		return;
+	struct backed_block *bb = calloc(1, sizeof(struct backed_block));
+	if (bb == NULL) {
+		return -ENOMEM;
 	}
 
-	db->block = block;
-	db->len = len;
-	db->data = data;
-	db->filename = NULL;
-	db->fill = 0;
-	db->next = NULL;
+	bb->block = block;
+	bb->len = len;
+	bb->type = BACKED_BLOCK_DATA;
+	bb->data.data = data;
+	bb->next = NULL;
 
-	queue_db(b, db);
+	return queue_bb(bbl, bb);
 }
 
 /* Queues a chunk of a file on disk to be written to the specified data blocks */
-void queue_data_file(struct backed_block_list *b, const char *filename,
+int backed_block_add_file(struct backed_block_list *bbl, const char *filename,
 		int64_t offset, unsigned int len, unsigned int block)
 {
-	struct data_block *db = malloc(sizeof(struct data_block));
-	if (db == NULL) {
-		error_errno("malloc");
-		return;
+	struct backed_block *bb = calloc(1, sizeof(struct backed_block));
+	if (bb == NULL) {
+		return -ENOMEM;
 	}
 
-	db->block = block;
-	db->len = len;
-	db->filename = strdup(filename);
-	db->offset = offset;
-	db->data = NULL;
-	db->fill = 0;
-	db->next = NULL;
+	bb->block = block;
+	bb->len = len;
+	bb->type = BACKED_BLOCK_FILE;
+	bb->file.filename = strdup(filename);
+	bb->file.offset = offset;
+	bb->next = NULL;
 
-	queue_db(b, db);
-}
-
-/* Iterates over the queued data blocks, calling data_func for each contiguous
-   data block, and file_func for each contiguous file block */
-void for_each_data_block(struct backed_block_list *b,
-	data_block_callback_t data_func,
-	data_block_file_callback_t file_func,
-	data_block_fill_callback_t fill_func,
-	void *priv, unsigned int block_size)
-{
-	struct data_block *db;
-	u32 last_block = 0;
-
-	for (db = b->data_blocks; db; db = db->next) {
-		if (db->block < last_block)
-			error("data blocks out of order: %u < %u", db->block, last_block);
-		last_block = db->block + DIV_ROUND_UP(db->len, block_size) - 1;
-
-		if (db->filename)
-			file_func(priv, (u64)db->block * block_size, db->filename, db->offset, db->len);
-		else if (db->fill)
-			fill_func(priv, (u64)db->block * block_size, db->fill_val, db->len);
-		else
-			data_func(priv, (u64)db->block * block_size, db->data, db->len);
-	}
+	return queue_bb(bbl, bb);
 }

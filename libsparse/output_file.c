@@ -51,36 +51,50 @@ static inline void *mmap64(void *addr, size_t length, int prot, int flags,
 }
 #endif
 
+#define min(a, b) \
+	({ typeof(a) _a = (a); typeof(b) _b = (b); (_a < _b) ? _a : _b; })
+
 #define SPARSE_HEADER_MAJOR_VER 1
 #define SPARSE_HEADER_MINOR_VER 0
 #define SPARSE_HEADER_LEN       (sizeof(sparse_header_t))
 #define CHUNK_HEADER_LEN (sizeof(chunk_header_t))
 
 struct output_file_ops {
-	int (*seek)(struct output_file *, int64_t);
-	int (*write)(struct output_file *, u8 *, int);
+	int (*skip)(struct output_file *, int64_t);
+	int (*write)(struct output_file *, void *, int);
 	void (*close)(struct output_file *);
+};
+
+struct sparse_file_ops {
+	int (*write_data_chunk)(struct output_file *out, unsigned int len,
+			void *data);
+	int (*write_fill_chunk)(struct output_file *out, unsigned int len,
+			uint32_t fill_val);
+	int (*write_skip_chunk)(struct output_file *out, int64_t len);
+	int (*write_end_chunk)(struct output_file *out);
 };
 
 struct output_file {
 	int fd;
 	gzFile gz_fd;
 	bool close_fd;
-	int sparse;
 	int64_t cur_out_ptr;
-	u32 chunk_cnt;
-	u32 crc32;
+	unsigned int chunk_cnt;
+	uint32_t crc32;
 	struct output_file_ops *ops;
+	struct sparse_file_ops *sparse_ops;
 	int use_crc;
 	unsigned int block_size;
 	int64_t len;
+	char *zero_buf;
+	uint32_t *fill_buf;
 };
 
-static int file_seek(struct output_file *out, int64_t off)
+static int file_skip(struct output_file *out, int64_t cnt)
 {
 	off64_t ret;
 
-	ret = lseek64(out->fd, off, SEEK_SET);
+	ret = lseek64(out->fd, cnt, SEEK_CUR);
 	if (ret < 0) {
 		error_errno("lseek64");
 		return -1;
@@ -88,7 +102,7 @@ static int file_seek(struct output_file *out, int64_t off)
 	return 0;
 }
 
-static int file_write(struct output_file *out, u8 *data, int len)
+static int file_write(struct output_file *out, void *data, int len)
 {
 	int ret;
 	ret = write(out->fd, data, len);
@@ -110,18 +124,17 @@ static void file_close(struct output_file *out)
 	}
 }
 
-
 static struct output_file_ops file_ops = {
-	.seek = file_seek,
+	.skip = file_skip,
 	.write = file_write,
 	.close = file_close,
 };
 
-static int gz_file_seek(struct output_file *out, int64_t off)
+static int gz_file_skip(struct output_file *out, int64_t cnt)
 {
 	off64_t ret;
 
-	ret = gzseek(out->gz_fd, off, SEEK_SET);
+	ret = gzseek(out->gz_fd, cnt, SEEK_CUR);
 	if (ret < 0) {
 		error_errno("gzseek");
 		return -1;
@@ -129,7 +142,7 @@ static int gz_file_seek(struct output_file *out, int64_t off)
 	return 0;
 }
 
-static int gz_file_write(struct output_file *out, u8 *data, int len)
+static int gz_file_write(struct output_file *out, void *data, int len)
 {
 	int ret;
 	ret = gzwrite(out->gz_fd, data, len);
@@ -150,31 +163,15 @@ static void gz_file_close(struct output_file *out)
 }
 
 static struct output_file_ops gz_file_ops = {
-	.seek = gz_file_seek,
+	.skip = gz_file_skip,
 	.write = gz_file_write,
 	.close = gz_file_close,
 };
 
-static sparse_header_t sparse_header = {
-	.magic = SPARSE_HEADER_MAGIC,
-	.major_version = SPARSE_HEADER_MAJOR_VER,
-	.minor_version = SPARSE_HEADER_MINOR_VER,
-	.file_hdr_sz = SPARSE_HEADER_LEN,
-	.chunk_hdr_sz = CHUNK_HEADER_LEN,
-	.blk_sz = 0,
-	.total_blks = 0,
-	.total_chunks = 0,
-	.image_checksum = 0
-};
-
-static u8 *zero_buf;
-
-static int emit_skip_chunk(struct output_file *out, u64 skip_len)
+static int write_sparse_skip_chunk(struct output_file *out, int64_t skip_len)
 {
 	chunk_header_t chunk_header;
 	int ret, chunk;
-
-	//DBG printf("skip chunk: 0x%llx bytes\n", skip_len);
 
 	if (skip_len % out->block_size) {
 		error("don't care size %llu is not a multiple of the block size %u",
@@ -187,7 +184,7 @@ static int emit_skip_chunk(struct output_file *out, u64 skip_len)
 	chunk_header.reserved1 = 0;
 	chunk_header.chunk_sz = skip_len / out->block_size;
 	chunk_header.total_sz = CHUNK_HEADER_LEN;
-	ret = out->ops->write(out, (u8 *)&chunk_header, sizeof(chunk_header));
+	ret = out->ops->write(out, &chunk_header, sizeof(chunk_header));
 	if (ret < 0)
 		return -1;
 
@@ -197,71 +194,34 @@ static int emit_skip_chunk(struct output_file *out, u64 skip_len)
 	return 0;
 }
 
-static int write_chunk_fill(struct output_file *out, int64_t off, u32 fill_val, int len)
+static int write_sparse_fill_chunk(struct output_file *out, unsigned int len,
+		uint32_t fill_val)
 {
 	chunk_header_t chunk_header;
 	int rnd_up_len, zero_len, count;
 	int ret;
 	unsigned int i;
-	u32 fill_buf[4096/sizeof(u32)]; /* Maximum size of a block */
 
-	/* We can assume that all the chunks to be written are in
-	 * ascending order, block-size aligned, and non-overlapping.
-	 * So, if the offset is less than the current output pointer,
-	 * throw an error, and if there is a gap, emit a "don't care"
-	 * chunk.  The first write (of the super block) may not be
-	 * blocksize aligned, so we need to deal with that too.
-	 */
-	//DBG printf("write chunk: offset 0x%llx, length 0x%x bytes\n", off, len);
-
-	if (off < out->cur_out_ptr) {
-		error("offset %llu is less than the current output offset %llu",
-				off, out->cur_out_ptr);
-		return -1;
-	}
-
-	if (off > out->cur_out_ptr) {
-		emit_skip_chunk(out, off - out->cur_out_ptr);
-	}
-
-	if (off % out->block_size) {
-		error("write chunk offset %llu is not a multiple of the block size %u",
-				off, out->block_size);
-		return -1;
-	}
-
-	if (off != out->cur_out_ptr) {
-		error("internal error, offset accounting screwy in write_chunk_raw()");
-		return -1;
-	}
-
-	/* Round up the file length to a multiple of the block size */
-	rnd_up_len = (len + (out->block_size - 1)) & (~(out->block_size -1));
+	/* Round up the fill length to a multiple of the block size */
+	rnd_up_len = ALIGN(len, out->block_size);
 
 	/* Finally we can safely emit a chunk of data */
 	chunk_header.chunk_type = CHUNK_TYPE_FILL;
 	chunk_header.reserved1 = 0;
 	chunk_header.chunk_sz = rnd_up_len / out->block_size;
 	chunk_header.total_sz = CHUNK_HEADER_LEN + sizeof(fill_val);
-	ret = out->ops->write(out, (u8 *)&chunk_header, sizeof(chunk_header));
+	ret = out->ops->write(out, &chunk_header, sizeof(chunk_header));
 
 	if (ret < 0)
 		return -1;
-	ret = out->ops->write(out, (u8 *)&fill_val, sizeof(fill_val));
+	ret = out->ops->write(out, &fill_val, sizeof(fill_val));
 	if (ret < 0)
 		return -1;
 
 	if (out->use_crc) {
-                /* Initialize fill_buf with the fill_val */
-		for (i = 0; i < (out->block_size / sizeof(u32)); i++) {
-			fill_buf[i] = fill_val;
-		}
-
-		count = chunk_header.chunk_sz;
-		while (count) {
-			out->crc32 = sparse_crc32(out->crc32, fill_buf, out->block_size);
-			count--;
-		}
+		count = out->block_size / sizeof(uint32_t);
+		while (count--)
+			out->crc32 = sparse_crc32(out->crc32, &fill_val, sizeof(uint32_t));
 	}
 
 	out->cur_out_ptr += rnd_up_len;
@@ -270,44 +230,15 @@ static int write_chunk_fill(struct output_file *out, int64_t off, u32 fill_val, 
 	return 0;
 }
 
-static int write_chunk_raw(struct output_file *out, int64_t off, u8 *data, int len)
+static int write_sparse_data_chunk(struct output_file *out, unsigned int len,
+		void *data)
 {
 	chunk_header_t chunk_header;
 	int rnd_up_len, zero_len;
 	int ret;
 
-	/* We can assume that all the chunks to be written are in
-	 * ascending order, block-size aligned, and non-overlapping.
-	 * So, if the offset is less than the current output pointer,
-	 * throw an error, and if there is a gap, emit a "don't care"
-	 * chunk.  The first write (of the super block) may not be
-	 * blocksize aligned, so we need to deal with that too.
-	 */
-	//DBG printf("write chunk: offset 0x%llx, length 0x%x bytes\n", off, len);
-
-	if (off < out->cur_out_ptr) {
-		error("offset %llu is less than the current output offset %llu",
-				off, out->cur_out_ptr);
-		return -1;
-	}
-
-	if (off > out->cur_out_ptr) {
-		emit_skip_chunk(out, off - out->cur_out_ptr);
-	}
-
-	if (off % out->block_size) {
-		error("write chunk offset %llu is not a multiple of the block size %u",
-				off, out->block_size);
-		return -1;
-	}
-
-	if (off != out->cur_out_ptr) {
-		error("internal error, offset accounting screwy in write_chunk_raw()");
-		return -1;
-	}
-
-	/* Round up the file length to a multiple of the block size */
-	rnd_up_len = (len + (out->block_size - 1)) & (~(out->block_size -1));
+	/* Round up the data length to a multiple of the block size */
+	rnd_up_len = ALIGN(len, out->block_size);
 	zero_len = rnd_up_len - len;
 
 	/* Finally we can safely emit a chunk of data */
@@ -315,7 +246,7 @@ static int write_chunk_raw(struct output_file *out, int64_t off, u8 *data, int l
 	chunk_header.reserved1 = 0;
 	chunk_header.chunk_sz = rnd_up_len / out->block_size;
 	chunk_header.total_sz = CHUNK_HEADER_LEN + rnd_up_len;
-	ret = out->ops->write(out, (u8 *)&chunk_header, sizeof(chunk_header));
+	ret = out->ops->write(out, &chunk_header, sizeof(chunk_header));
 
 	if (ret < 0)
 		return -1;
@@ -323,7 +254,7 @@ static int write_chunk_raw(struct output_file *out, int64_t off, u8 *data, int l
 	if (ret < 0)
 		return -1;
 	if (zero_len) {
-		ret = out->ops->write(out, zero_buf, zero_len);
+		ret = out->ops->write(out, out->zero_buf, zero_len);
 		if (ret < 0)
 			return -1;
 	}
@@ -331,7 +262,7 @@ static int write_chunk_raw(struct output_file *out, int64_t off, u8 *data, int l
 	if (out->use_crc) {
 		out->crc32 = sparse_crc32(out->crc32, data, len);
 		if (zero_len)
-			out->crc32 = sparse_crc32(out->crc32, zero_buf, zero_len);
+			out->crc32 = sparse_crc32(out->crc32, out->zero_buf, zero_len);
 	}
 
 	out->cur_out_ptr += rnd_up_len;
@@ -340,29 +271,115 @@ static int write_chunk_raw(struct output_file *out, int64_t off, u8 *data, int l
 	return 0;
 }
 
+int write_sparse_end_chunk(struct output_file *out)
+{
+	chunk_header_t chunk_header;
+	int ret;
+
+	if (out->use_crc) {
+		chunk_header.chunk_type = CHUNK_TYPE_CRC32;
+		chunk_header.reserved1 = 0;
+		chunk_header.chunk_sz = 0;
+		chunk_header.total_sz = CHUNK_HEADER_LEN + 4;
+
+		ret = out->ops->write(out, &chunk_header, sizeof(chunk_header));
+		if (ret < 0) {
+			return ret;
+		}
+		out->ops->write(out, &out->crc32, 4);
+		if (ret < 0) {
+			return ret;
+		}
+
+		out->chunk_cnt++;
+	}
+
+	return 0;
+}
+
+static struct sparse_file_ops sparse_file_ops = {
+		.write_data_chunk = write_sparse_data_chunk,
+		.write_fill_chunk = write_sparse_fill_chunk,
+		.write_skip_chunk = write_sparse_skip_chunk,
+		.write_end_chunk = write_sparse_end_chunk,
+};
+
+static int write_normal_data_chunk(struct output_file *out, unsigned int len,
+		void *data)
+{
+	int ret;
+	unsigned int rnd_up_len = ALIGN(len, out->block_size);
+
+	ret = out->ops->write(out, data, len);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (rnd_up_len > len) {
+		ret = out->ops->skip(out, rnd_up_len - len);
+	}
+
+	return ret;
+}
+
+static int write_normal_fill_chunk(struct output_file *out, unsigned int len,
+		uint32_t fill_val)
+{
+	int ret;
+	unsigned int i;
+	unsigned int write_len;
+
+	/* Initialize fill_buf with the fill_val */
+	for (i = 0; i < out->block_size / sizeof(uint32_t); i++) {
+		out->fill_buf[i] = fill_val;
+	}
+
+	while (len) {
+		write_len = min(len, out->block_size);
+		ret = out->ops->write(out, out->fill_buf, write_len);
+		if (ret < 0) {
+			return ret;
+		}
+
+		len -= write_len;
+	}
+
+	return 0;
+}
+
+static int write_normal_skip_chunk(struct output_file *out, int64_t len)
+{
+	int ret;
+
+	return out->ops->skip(out, len);
+}
+
+int write_normal_end_chunk(struct output_file *out)
+{
+	int ret;
+
+	ret = ftruncate64(out->fd, out->len);
+	if (ret < 0) {
+		return -errno;
+	}
+
+	return 0;
+}
+
+static struct sparse_file_ops normal_file_ops = {
+		.write_data_chunk = write_normal_data_chunk,
+		.write_fill_chunk = write_normal_fill_chunk,
+		.write_skip_chunk = write_normal_skip_chunk,
+		.write_end_chunk = write_normal_end_chunk,
+};
+
 void close_output_file(struct output_file *out)
 {
 	int ret;
-	chunk_header_t chunk_header;
 
-	if (out->sparse) {
-		if (out->use_crc) {
-			chunk_header.chunk_type = CHUNK_TYPE_CRC32;
-			chunk_header.reserved1 = 0;
-			chunk_header.chunk_sz = 0;
-			chunk_header.total_sz = CHUNK_HEADER_LEN + 4;
-
-			out->ops->write(out, (u8 *)&chunk_header, sizeof(chunk_header));
-			out->ops->write(out, (u8 *)&out->crc32, 4);
-
-			out->chunk_cnt++;
-		}
-
-		if (out->chunk_cnt != sparse_header.total_chunks)
-			error("sparse chunk count did not match: %d %d", out->chunk_cnt,
-					sparse_header.total_chunks);
-	}
+	out->sparse_ops->write_end_chunk(out);
 	out->ops->close(out);
+	free(out);
 }
 
 struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
@@ -374,28 +391,37 @@ struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
 		error_errno("malloc struct out");
 		return NULL;
 	}
-	zero_buf = malloc(out->block_size);
-	if (!zero_buf) {
+	out->zero_buf = calloc(block_size, 1);
+	if (!out->zero_buf) {
 		error_errno("malloc zero_buf");
-		free(out);
-		return NULL;
+		goto err_zero_buf;
 	}
-	memset(zero_buf, '\0', out->block_size);
+
+	out->fill_buf = calloc(block_size, 1);
+	if (!out->fill_buf) {
+		error_errno("malloc fill_buf");
+		goto err_fill_buf;
+	}
 
 	if (gz) {
 		out->ops = &gz_file_ops;
 		out->gz_fd = gzdopen(fd, "wb9");
 		if (!out->gz_fd) {
 			error_errno("gzopen");
-			free(out);
-			return NULL;
+			goto err_gzopen;
 		}
 	} else {
 		out->fd = fd;
 		out->ops = &file_ops;
 	}
+
+	if (sparse) {
+		out->sparse_ops = &sparse_file_ops;
+	} else {
+		out->sparse_ops = &normal_file_ops;
+	}
+
 	out->close_fd = false;
-	out->sparse = sparse;
 	out->cur_out_ptr = 0ll;
 	out->chunk_cnt = 0;
 
@@ -406,19 +432,42 @@ struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
 	out->len = len;
 	out->block_size = block_size;
 
-	if (out->sparse) {
-		sparse_header.blk_sz = out->block_size,
-		sparse_header.total_blks = out->len / out->block_size,
-		sparse_header.total_chunks = chunks;
-		if (out->use_crc)
-			sparse_header.total_chunks++;
+	if (sparse) {
+		sparse_header_t sparse_header = {
+				.magic = SPARSE_HEADER_MAGIC,
+				.major_version = SPARSE_HEADER_MAJOR_VER,
+				.minor_version = SPARSE_HEADER_MINOR_VER,
+				.file_hdr_sz = SPARSE_HEADER_LEN,
+				.chunk_hdr_sz = CHUNK_HEADER_LEN,
+				.blk_sz = out->block_size,
+				.total_blks = out->len / out->block_size,
+				.total_chunks = chunks,
+				.image_checksum = 0
+		};
 
-		ret = out->ops->write(out, (u8 *)&sparse_header, sizeof(sparse_header));
-		if (ret < 0)
-			return NULL;
+		if (out->use_crc) {
+			sparse_header.total_chunks++;
+		}
+
+		ret = out->ops->write(out, &sparse_header, sizeof(sparse_header));
+		if (ret < 0) {
+			goto err_write;
+		}
 	}
 
 	return out;
+
+err_write:
+	if (gz) {
+		gzclose(out->gz_fd);
+	}
+err_gzopen:
+	free(out->fill_buf);
+err_fill_buf:
+	free(out->zero_buf);
+err_zero_buf:
+	free(out);
+	return NULL;
 }
 
 struct output_file *open_output_file(const char *filename,
@@ -449,123 +498,31 @@ struct output_file *open_output_file(const char *filename,
 	return file;
 }
 
-void pad_output_file(struct output_file *out, int64_t len)
-{
-	int ret;
-
-	if (len > out->len) {
-		error("attempted to pad file %llu bytes past end of filesystem",
-				len - out->len);
-		return;
-	}
-	if (out->sparse) {
-		/* We need to emit a DONT_CARE chunk to pad out the file if the
-		 * cur_out_ptr is not already at the end of the filesystem.
-		 */
-		if (len < out->cur_out_ptr) {
-			error("attempted to pad file %llu bytes less than the current output pointer",
-					out->cur_out_ptr - len);
-			return;
-		}
-		if (len > out->cur_out_ptr) {
-			emit_skip_chunk(out, len - out->cur_out_ptr);
-		}
-	} else {
-		//KEN TODO: Fixme.  If the filesystem image needs no padding,
-		//          this will overwrite the last byte in the file with 0
-		//          The answer is to do accounting like the sparse image
-		//          code does and know if there is already data there.
-		ret = out->ops->seek(out, len - 1);
-		if (ret < 0)
-			return;
-
-		ret = out->ops->write(out, (u8*)"", 1);
-		if (ret < 0)
-			return;
-	}
-}
-
 /* Write a contiguous region of data blocks from a memory buffer */
-void write_data_block(struct output_file *out, int64_t off, void *data, int len)
+int write_data_chunk(struct output_file *out, unsigned int len, void *data)
 {
-	int ret;
-
-	if (off + len > out->len) {
-		error("attempted to write block %llu past end of filesystem",
-				off + len - out->len);
-		return;
-	}
-
-	if (out->sparse) {
-		write_chunk_raw(out, off, data, len);
-	} else {
-		ret = out->ops->seek(out, off);
-		if (ret < 0)
-			return;
-
-		ret = out->ops->write(out, data, len);
-		if (ret < 0)
-			return;
-	}
+	return out->sparse_ops->write_data_chunk(out, len, data);
 }
 
 /* Write a contiguous region of data blocks with a fill value */
-void write_fill_block(struct output_file *out, int64_t off, unsigned int fill_val, int len)
+int write_fill_chunk(struct output_file *out, unsigned int len,
+		uint32_t fill_val)
 {
-	int ret;
-	unsigned int i;
-	int write_len;
-	u32 fill_buf[4096/sizeof(u32)]; /* Maximum size of a block */
-
-	if (off + len > out->len) {
-		error("attempted to write block %llu past end of filesystem",
-				off + len - out->len);
-		return;
-	}
-
-	if (out->sparse) {
-		write_chunk_fill(out, off, fill_val, len);
-	} else {
-		/* Initialize fill_buf with the fill_val */
-		for (i = 0; i < sizeof(fill_buf)/sizeof(u32); i++) {
-			fill_buf[i] = fill_val;
-		}
-
-		ret = out->ops->seek(out, off);
-		if (ret < 0)
-			return;
-
-		while (len) {
-			write_len = (len > (int)sizeof(fill_buf) ? (int)sizeof(fill_buf) : len);
-			ret = out->ops->write(out, (u8 *)fill_buf, write_len);
-			if (ret < 0) {
-				return;
-			} else {
-				len -= write_len;
-			}
-		}
-	}
+	return out->sparse_ops->write_fill_chunk(out, len, fill_val);
 }
 
 /* Write a contiguous region of data blocks from a file */
-void write_data_file(struct output_file *out, int64_t off, const char *file,
-		int64_t offset, int len)
+int write_file_chunk(struct output_file *out, unsigned int len,
+		const char *file, int64_t offset)
 {
 	int ret;
 	int64_t aligned_offset;
 	int aligned_diff;
 	int buffer_size;
 
-	if (off + len >= out->len) {
-		error("attempted to write block %llu past end of filesystem",
-				off + len - out->len);
-		return;
-	}
-
 	int file_fd = open(file, O_RDONLY | O_BINARY);
 	if (file_fd < 0) {
-		error_errno("open");
-		return;
+		return -errno;
 	}
 
 	aligned_offset = offset & ~(4096 - 1);
@@ -573,41 +530,36 @@ void write_data_file(struct output_file *out, int64_t off, const char *file,
 	buffer_size = len + aligned_diff;
 
 #ifndef USE_MINGW
-	u8 *data = mmap64(NULL, buffer_size, PROT_READ, MAP_SHARED, file_fd,
+	char *data = mmap64(NULL, buffer_size, PROT_READ, MAP_SHARED, file_fd,
 			aligned_offset);
 	if (data == MAP_FAILED) {
-		error_errno("mmap64");
+		ret = -errno;
 		close(file_fd);
-		return;
+		return ret;
 	}
 #else
-	u8 *data = malloc(buffer_size);
+	char *data = malloc(buffer_size);
 	if (!data) {
-		error_errno("malloc");
+		ret = -errno;
 		close(file_fd);
-		return;
+		return ret;
 	}
 	memset(data, 0, buffer_size);
 #endif
 
-	if (out->sparse) {
-		write_chunk_raw(out, off, data + aligned_diff, len);
-	} else {
-		ret = out->ops->seek(out, off);
-		if (ret < 0)
-			goto err;
+	ret = out->sparse_ops->write_data_chunk(out, len, data + aligned_diff);
 
-		ret = out->ops->write(out, data + aligned_diff, len);
-		if (ret < 0)
-			goto err;
-	}
-
-err:
 #ifndef USE_MINGW
 	munmap(data, buffer_size);
 #else
-	write(file_fd, data, buffer_size);
 	free(data);
 #endif
 	close(file_fd);
+
+	return ret;
+}
+
+int write_skip_chunk(struct output_file *out, int64_t len)
+{
+	return out->sparse_ops->write_skip_chunk(out, len);
 }
