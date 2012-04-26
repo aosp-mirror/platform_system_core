@@ -52,7 +52,7 @@ enum backed_block_type backed_block_type(struct backed_block *bb);
 struct backed_block *backed_block_iter_new(struct backed_block_list *bbl);
 struct backed_block *backed_block_iter_next(struct backed_block *bb);
 
-struct backed_block_list *backed_block_list_new(void);
+struct backed_block_list *backed_block_list_new(unsigned int block_size);
 void backed_block_list_destroy(struct backed_block_list *bbl);
 
 #endif

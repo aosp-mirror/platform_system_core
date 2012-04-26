@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "backed_block.h"
+#include "sparse_defs.h"
 
 struct backed_block {
 	unsigned int block;
@@ -48,6 +49,7 @@ struct backed_block {
 struct backed_block_list {
 	struct backed_block *data_blocks;
 	struct backed_block *last_used;
+	unsigned int block_size;
 };
 
 struct backed_block *backed_block_iter_new(struct backed_block_list *bbl)
@@ -109,10 +111,19 @@ enum backed_block_type backed_block_type(struct backed_block *bb)
 	return bb->type;
 }
 
-struct backed_block_list *backed_block_list_new(void)
+void backed_block_destroy(struct backed_block *bb)
+{
+	if (bb->type == BACKED_BLOCK_FILE) {
+		free(bb->file.filename);
+	}
+
+	free(bb);
+}
+
+struct backed_block_list *backed_block_list_new(unsigned int block_size)
 {
 	struct backed_block_list *b = calloc(sizeof(struct backed_block_list), 1);
-
+	b->block_size = block_size;
 	return b;
 }
 
@@ -122,16 +133,69 @@ void backed_block_list_destroy(struct backed_block_list *bbl)
 		struct backed_block *bb = bbl->data_blocks;
 		while (bb) {
 			struct backed_block *next = bb->next;
-			if (bb->type == BACKED_BLOCK_FILE) {
-				free(bb->file.filename);
-			}
-
-			free(bb);
+			backed_block_destroy(bb);
 			bb = next;
 		}
 	}
 
 	free(bbl);
+}
+
+/* may free b */
+static int merge_bb(struct backed_block_list *bbl,
+		struct backed_block *a, struct backed_block *b)
+{
+	unsigned int block_len;
+
+	/* Block doesn't exist (possible if one block is the last block) */
+	if (!a || !b) {
+		return -EINVAL;
+	}
+
+	assert(a->block < b->block);
+
+	/* Blocks are of different types */
+	if (a->type != b->type) {
+		return -EINVAL;
+	}
+
+	/* Blocks are not adjacent */
+	block_len = a->len / bbl->block_size; /* rounds down */
+	if (a->block + block_len != b->block) {
+		return -EINVAL;
+	}
+
+	switch (a->type) {
+	case BACKED_BLOCK_DATA:
+		/* Don't support merging data for now */
+		return -EINVAL;
+	case BACKED_BLOCK_FILL:
+		if (a->fill.val != b->fill.val) {
+			return -EINVAL;
+		}
+		break;
+	case BACKED_BLOCK_FILE:
+		if (a->file.filename != b->file.filename ||
+				a->file.offset + a->len != b->file.offset) {
+			return -EINVAL;
+		}
+		break;
+	case BACKED_BLOCK_FD:
+		if (a->fd.fd != b->fd.fd ||
+				a->fd.offset + a->len != b->fd.offset) {
+			return -EINVAL;
+		}
+		break;
+	}
+
+	/* Blocks are compatible and adjacent, with a before b.  Merge b into a,
+	 * and free b */
+	a->len += b->len;
+	a->next = b->next;
+
+	backed_block_destroy(b);
+
+	return 0;
 }
 
 static int queue_bb(struct backed_block_list *bbl, struct backed_block *new_bb)
@@ -167,6 +231,9 @@ static int queue_bb(struct backed_block_list *bbl, struct backed_block *new_bb)
 		new_bb->next = bb->next;
 		bb->next = new_bb;
 	}
+
+	merge_bb(bbl, new_bb, new_bb->next);
+	merge_bb(bbl, bb, new_bb);
 
 	return 0;
 }

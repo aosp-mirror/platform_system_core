@@ -32,7 +32,7 @@ struct sparse_file *sparse_file_new(unsigned int block_size, int64_t len)
 		return NULL;
 	}
 
-	s->backed_block_list = backed_block_list_new();
+	s->backed_block_list = backed_block_list_new(block_size);
 	if (!s->backed_block_list) {
 		free(s);
 		return NULL;
