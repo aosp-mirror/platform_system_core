@@ -158,6 +158,55 @@ int sparse_file_write(struct sparse_file *s, int fd, bool gz, bool sparse,
 		bool crc);
 
 /**
+ * sparse_file_read - read a file into a sparse file cookie
+ *
+ * @s - sparse file cookie
+ * @fd - file descriptor to read from
+ * @sparse - read a file in the Android sparse file format
+ * @crc - verify the crc of a file in the Android sparse file format
+ *
+ * Reads a file into a sparse file cookie.  If sparse is true, the file is
+ * assumed to be in the Android sparse file format.  If sparse is false, the
+ * file will be sparsed by looking for block aligned chunks of all zeros or
+ * another 32 bit value.  If crc is true, the crc of the sparse file will be
+ * verified.
+ *
+ * Returns 0 on success, negative errno on error.
+ */
+int sparse_file_read(struct sparse_file *s, int fd, bool sparse, bool crc);
+
+/**
+ * sparse_file_import - import an existing sparse file
+ *
+ * @s - sparse file cookie
+ * @verbose - print verbose errors while reading the sparse file
+ * @crc - verify the crc of a file in the Android sparse file format
+ *
+ * Reads an existing sparse file into a sparse file cookie, recreating the same
+ * sparse cookie that was used to write it.  If verbose is true, prints verbose
+ * errors when the sparse file is formatted incorrectly.
+ *
+ * Returns a new sparse file cookie on success, NULL on error.
+ */
+struct sparse_file *sparse_file_import(int fd, bool verbose, bool crc);
+
+/**
+ * sparse_file_import_auto - import an existing sparse or normal file
+ *
+ * @fd - file descriptor to read from
+ * @crc - verify the crc of a file in the Android sparse file format
+ *
+ * Reads an existing sparse or normal file into a sparse file cookie.
+ * Attempts to determine if the file is sparse or not by looking for the sparse
+ * file magic number in the first 4 bytes.  If the file is not sparse, the file
+ * will be sparsed by looking for block aligned chunks of all zeros or another
+ * 32 bit value.  If crc is true, the crc of the sparse file will be verified.
+ *
+ * Returns a new sparse file cookie on success, NULL on error.
+ */
+struct sparse_file *sparse_file_import_auto(int fd, bool crc);
+
+/**
  * sparse_file_verbose - set a sparse file cookie to print verbose errors
  *
  * @s - sparse file cookie

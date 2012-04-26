@@ -7,7 +7,8 @@ libsparse_src_files := \
         output_file.c \
         sparse.c \
         sparse_crc32.c \
-        sparse_err.c
+        sparse_err.c \
+        sparse_read.c
 
 include $(CLEAR_VARS)
 
@@ -48,6 +49,7 @@ LOCAL_SRC_FILES := simg2img.c \
 	sparse_crc32.c
 LOCAL_MODULE := simg2img
 LOCAL_MODULE_TAGS := debug
+LOCAL_STATIC_LIBRARIES := libsparse libz
 
 include $(BUILD_HOST_EXECUTABLE)
 
@@ -57,6 +59,7 @@ LOCAL_SRC_FILES := simg2img.c \
 	sparse_crc32.c
 LOCAL_MODULE := simg2img
 LOCAL_MODULE_TAGS := optional
+LOCAL_STATIC_LIBRARIES := libsparse libz
 
 include $(BUILD_EXECUTABLE)
 
@@ -65,6 +68,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := img2simg.c
 LOCAL_MODULE := img2simg
 LOCAL_MODULE_TAGS := debug
+LOCAL_STATIC_LIBRARIES := libsparse libz
 
 include $(BUILD_HOST_EXECUTABLE)
 
@@ -73,6 +77,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := img2simg.c
 LOCAL_MODULE := img2simg
 LOCAL_MODULE_TAGS := optional
+LOCAL_STATIC_LIBRARIES := libsparse libz
 
 include $(BUILD_EXECUTABLE)
 
