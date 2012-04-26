@@ -40,13 +40,15 @@
 // in the tracing always being disabled.
 //
 // These tags must be kept in sync with frameworks/base/core/java/android/os/Trace.java.
-#define ATRACE_TAG_NEVER    0           // The "never" tag is never enabled.
-#define ATRACE_TAG_ALWAYS   (1<<0)      // The "always" tag is always enabled.
-#define ATRACE_TAG_GRAPHICS (1<<1)
-#define ATRACE_TAG_INPUT    (1<<2)
-#define ATRACE_TAG_VIEW     (1<<3)
-#define ATRACE_TAG_WEBVIEW  (1<<4)
-#define ATRACE_TAG_LAST     ATRACE_TAG_WEBVIEW
+#define ATRACE_TAG_NEVER            0       // The "never" tag is never enabled.
+#define ATRACE_TAG_ALWAYS           (1<<0)  // The "always" tag is always enabled.
+#define ATRACE_TAG_GRAPHICS         (1<<1)
+#define ATRACE_TAG_INPUT            (1<<2)
+#define ATRACE_TAG_VIEW             (1<<3)
+#define ATRACE_TAG_WEBVIEW          (1<<4)
+#define ATRACE_TAG_WINDOW_MANAGER   (1<<5)
+#define ATRACE_TAG_ACTIVITY_MANAGER (1<<6)
+#define ATRACE_TAG_LAST             ATRACE_TAG_ACTIVITY_MANAGER
 
 #define ATRACE_TAG_VALID_MASK ((ATRACE_TAG_LAST - 1) | ATRACE_TAG_LAST)
 
