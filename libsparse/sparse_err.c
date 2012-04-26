@@ -14,19 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef _LIBSPARSE_SPARSE_FILE_H_
-#define _LIBSPARSE_SPARSE_FILE_H_
-
 #include <sparse/sparse.h>
 
-struct sparse_file {
-	unsigned int block_size;
-	int64_t len;
-	bool verbose;
+#include <stdarg.h>
+#include <stdio.h>
+#include <unistd.h>
 
-	struct backed_block_list *backed_block_list;
-	struct output_file *out;
-};
+void sparse_default_print(const char *fmt, ...)
+{
+	va_list argp;
 
+	va_start(argp, fmt);
+	vfprintf(stderr, fmt, argp);
+	va_end(argp);
+}
 
-#endif /* _LIBSPARSE_SPARSE_FILE_H_ */
+void (*sparse_print_error)(const char *fmt, ...) = sparse_default_print;
+void (*sparse_print_verbose)(const char *fmt, ...) = sparse_default_print;

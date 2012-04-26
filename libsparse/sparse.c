@@ -151,3 +151,8 @@ int sparse_file_write(struct sparse_file *s, int fd, bool gz, bool sparse,
 
 	return 0;
 }
+
+void sparse_file_verbose(struct sparse_file *s)
+{
+	s->verbose = true;
+}

@@ -6,7 +6,8 @@ libsparse_src_files := \
         backed_block.c \
         output_file.c \
         sparse.c \
-        sparse_crc32.c
+        sparse_crc32.c \
+        sparse_err.c
 
 include $(CLEAR_VARS)
 

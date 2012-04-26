@@ -157,4 +157,22 @@ int sparse_file_add_fd(struct sparse_file *s,
 int sparse_file_write(struct sparse_file *s, int fd, bool gz, bool sparse,
 		bool crc);
 
+/**
+ * sparse_file_verbose - set a sparse file cookie to print verbose errors
+ *
+ * @s - sparse file cookie
+ *
+ * Print verbose sparse file errors whenever using the sparse file cookie.
+ */
+void sparse_file_verbose(struct sparse_file *s);
+
+/**
+ * sparse_print_verbose - function called to print verbose errors
+ *
+ * By default, verbose errors will print to standard error.
+ * sparse_print_verbose may be overridden to log verbose errors somewhere else.
+ *
+ */
+extern void (*sparse_print_verbose)(const char *fmt, ...);
+
 #endif
