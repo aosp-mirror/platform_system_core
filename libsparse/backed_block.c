@@ -35,6 +35,10 @@ struct backed_block {
 			int64_t offset;
 		} file;
 		struct {
+			int fd;
+			int64_t offset;
+		} fd;
+		struct {
 			uint32_t val;
 		} fill;
 	};
@@ -78,10 +82,20 @@ const char *backed_block_filename(struct backed_block *bb)
 	return bb->file.filename;
 }
 
+int backed_block_fd(struct backed_block *bb)
+{
+	assert(bb->type == BACKED_BLOCK_FD);
+	return bb->fd.fd;
+}
+
 int64_t backed_block_file_offset(struct backed_block *bb)
 {
-	assert(bb->type == BACKED_BLOCK_FILE);
-	return bb->file.offset;
+	assert(bb->type == BACKED_BLOCK_FILE || bb->type == BACKED_BLOCK_FD);
+	if (bb->type == BACKED_BLOCK_FILE) {
+		return bb->file.offset;
+	} else { /* bb->type == BACKED_BLOCK_FD */
+		return bb->fd.offset;
+	}
 }
 
 uint32_t backed_block_fill_val(struct backed_block *bb)
@@ -207,6 +221,25 @@ int backed_block_add_file(struct backed_block_list *bbl, const char *filename,
 	bb->type = BACKED_BLOCK_FILE;
 	bb->file.filename = strdup(filename);
 	bb->file.offset = offset;
+	bb->next = NULL;
+
+	return queue_bb(bbl, bb);
+}
+
+/* Queues a chunk of a fd to be written to the specified data blocks */
+int backed_block_add_fd(struct backed_block_list *bbl, int fd, int64_t offset,
+		unsigned int len, unsigned int block)
+{
+	struct backed_block *bb = calloc(1, sizeof(struct backed_block));
+	if (bb == NULL) {
+		return -ENOMEM;
+	}
+
+	bb->block = block;
+	bb->len = len;
+	bb->type = BACKED_BLOCK_FD;
+	bb->fd.fd = fd;
+	bb->fd.offset = offset;
 	bb->next = NULL;
 
 	return queue_bb(bbl, bb);

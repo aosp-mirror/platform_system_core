@@ -31,6 +31,8 @@ int write_fill_chunk(struct output_file *out, unsigned int len,
 		uint32_t fill_val);
 int write_file_chunk(struct output_file *out, unsigned int len,
 		const char *file, int64_t offset);
+int write_fd_chunk(struct output_file *out, unsigned int len,
+		int fd, int64_t offset);
 int write_skip_chunk(struct output_file *out, int64_t len);
 void close_output_file(struct output_file *out);
 

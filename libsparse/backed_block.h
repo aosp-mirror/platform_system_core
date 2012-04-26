@@ -25,6 +25,7 @@ struct backed_block;
 enum backed_block_type {
 	BACKED_BLOCK_DATA,
 	BACKED_BLOCK_FILE,
+	BACKED_BLOCK_FD,
 	BACKED_BLOCK_FILL,
 };
 
@@ -34,6 +35,8 @@ int backed_block_add_fill(struct backed_block_list *bbl, unsigned int fill_val,
 		unsigned int len, unsigned int block);
 int backed_block_add_file(struct backed_block_list *bbl, const char *filename,
 		int64_t offset, unsigned int len, unsigned int block);
+int backed_block_add_fd(struct backed_block_list *bbl, int fd,
+		int64_t offset, unsigned int len, unsigned int block);
 
 struct backed_block *backed_block_iter_new(struct backed_block_list *bbl);
 struct backed_block *backed_block_iter_next(struct backed_block *bb);
@@ -41,6 +44,7 @@ unsigned int backed_block_len(struct backed_block *bb);
 unsigned int backed_block_block(struct backed_block *bb);
 void *backed_block_data(struct backed_block *bb);
 const char *backed_block_filename(struct backed_block *bb);
+int backed_block_fd(struct backed_block *bb);
 int64_t backed_block_file_offset(struct backed_block *bb);
 uint32_t backed_block_fill_val(struct backed_block *bb);
 enum backed_block_type backed_block_type(struct backed_block *bb);

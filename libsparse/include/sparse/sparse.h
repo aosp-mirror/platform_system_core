@@ -111,6 +111,32 @@ int sparse_file_add_file(struct sparse_file *s,
 		unsigned int block);
 
 /**
+ * sparse_file_add_file - associate a chunk of a file with a sparse file
+ *
+ * @s - sparse file cookie
+ * @filename - filename of the file to be copied
+ * @file_offset - offset into the copied file
+ * @len - length of the copied block
+ * @block - offset in blocks into the sparse file to place the file chunk
+ *
+ * Associates a chunk of an existing fd with a sparse file cookie.
+ * The region [block * block_size : block * block_size + len) must not already
+ * be used in the sparse file. If len is not a multiple of the block size the
+ * data will be padded with zeros.
+ *
+ * Allows adding large amounts of data to a sparse file without needing to keep
+ * it all mapped.  File size is limited by available virtual address space,
+ * exceptionally large files may need to be added in multiple chunks.
+ *
+ * The fd must remain open until the sparse file is closed or the fd block is
+ * removed from the sparse file.
+ *
+ * Returns 0 on success, negative errno on error.
+ */
+int sparse_file_add_fd(struct sparse_file *s,
+		int fd, int64_t file_offset, unsigned int len, unsigned int block);
+
+/**
  * sparse_file_write - write a sparse file to a file
  *
  * @s - sparse file cookie

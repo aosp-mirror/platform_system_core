@@ -70,6 +70,12 @@ int sparse_file_add_file(struct sparse_file *s,
 			len, block);
 }
 
+int sparse_file_add_fd(struct sparse_file *s,
+		int fd, int64_t file_offset, unsigned int len, unsigned int block)
+{
+	return backed_block_add_fd(s->backed_block_list, fd, file_offset,
+			len, block);
+}
 unsigned int sparse_count_chunks(struct sparse_file *s)
 {
 	struct backed_block *bb;
@@ -121,6 +127,10 @@ int sparse_file_write(struct sparse_file *s, int fd, bool gz, bool sparse,
 		case BACKED_BLOCK_FILE:
 			write_file_chunk(out, backed_block_len(bb),
 					backed_block_filename(bb), backed_block_file_offset(bb));
+			break;
+		case BACKED_BLOCK_FD:
+			write_fd_chunk(out, backed_block_len(bb),
+					backed_block_fd(bb), backed_block_file_offset(bb));
 			break;
 		case BACKED_BLOCK_FILL:
 			write_fill_chunk(out, backed_block_len(bb),

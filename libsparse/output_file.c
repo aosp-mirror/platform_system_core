@@ -511,38 +511,28 @@ int write_fill_chunk(struct output_file *out, unsigned int len,
 	return out->sparse_ops->write_fill_chunk(out, len, fill_val);
 }
 
-/* Write a contiguous region of data blocks from a file */
-int write_file_chunk(struct output_file *out, unsigned int len,
-		const char *file, int64_t offset)
+int write_fd_chunk(struct output_file *out, unsigned int len,
+		int fd, int64_t offset)
 {
 	int ret;
 	int64_t aligned_offset;
 	int aligned_diff;
 	int buffer_size;
 
-	int file_fd = open(file, O_RDONLY | O_BINARY);
-	if (file_fd < 0) {
-		return -errno;
-	}
-
 	aligned_offset = offset & ~(4096 - 1);
 	aligned_diff = offset - aligned_offset;
 	buffer_size = len + aligned_diff;
 
 #ifndef USE_MINGW
-	char *data = mmap64(NULL, buffer_size, PROT_READ, MAP_SHARED, file_fd,
+	char *data = mmap64(NULL, buffer_size, PROT_READ, MAP_SHARED, fd,
 			aligned_offset);
 	if (data == MAP_FAILED) {
-		ret = -errno;
-		close(file_fd);
-		return ret;
+		return -errno;
 	}
 #else
 	char *data = malloc(buffer_size);
 	if (!data) {
-		ret = -errno;
-		close(file_fd);
-		return ret;
+		return -errno;
 	}
 	memset(data, 0, buffer_size);
 #endif
@@ -554,6 +544,23 @@ int write_file_chunk(struct output_file *out, unsigned int len,
 #else
 	free(data);
 #endif
+
+	return ret;
+}
+
+/* Write a contiguous region of data blocks from a file */
+int write_file_chunk(struct output_file *out, unsigned int len,
+		const char *file, int64_t offset)
+{
+	int ret;
+
+	int file_fd = open(file, O_RDONLY | O_BINARY);
+	if (file_fd < 0) {
+		return -errno;
+	}
+
+	ret = write_fd_chunk(out, len, file_fd, offset);
+
 	close(file_fd);
 
 	return ret;
