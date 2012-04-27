@@ -25,7 +25,6 @@
 #include <sys/socket.h>
 #include <linux/if.h>
 #include <linux/netfilter/nfnetlink.h>
-#include <linux/netfilter/xt_IDLETIMER.h>
 #include <linux/netfilter_ipv4/ipt_ULOG.h>
 /* From kernel's net/netfilter/xt_quota2.c */
 const int QLOG_NL_EVENT  = 112;
@@ -39,8 +38,6 @@ const int NetlinkEvent::NlActionRemove = 2;
 const int NetlinkEvent::NlActionChange = 3;
 const int NetlinkEvent::NlActionLinkUp = 4;
 const int NetlinkEvent::NlActionLinkDown = 5;
-const int NetlinkEvent::NlActionIfaceActive = 6;
-const int NetlinkEvent::NlActionIfaceIdle = 7;
 
 NetlinkEvent::NetlinkEvent() {
     mAction = NlActionUnknown;
@@ -73,8 +70,7 @@ void NetlinkEvent::dump() {
 }
 
 /*
- * Parse an binary message from a NETLINK_ROUTE netlink socket
- * and IDLETIMER netlink socket.
+ * Parse an binary message from a NETLINK_ROUTE netlink socket.
  */
 bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
     size_t sz = size;
@@ -131,14 +127,6 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
             mSubsystem = strdup("qlog");
             mAction = NlActionChange;
 
-        } else if (nh->nlmsg_type == NL_EVENT_TYPE_ACTIVE
-                   || nh->nlmsg_type == NL_EVENT_TYPE_INACTIVE) {
-            char *ifacename;
-            ifacename = (char *)NLMSG_DATA(nh);
-            asprintf(&mParams[0], "INTERFACE=%s", ifacename);
-            mSubsystem = strdup("idletimer");
-            mAction = (nh->nlmsg_type == NL_EVENT_TYPE_ACTIVE) ?
-              NlActionIfaceActive : NlActionIfaceIdle;
         } else {
                 SLOGD("Unexpected netlink message. type=0x%x\n", nh->nlmsg_type);
         }
