@@ -330,6 +330,7 @@ static struct {
     unsigned flag;
 } mount_flags[] = {
     { "noatime",    MS_NOATIME },
+    { "noexec",     MS_NOEXEC },
     { "nosuid",     MS_NOSUID },
     { "nodev",      MS_NODEV },
     { "nodiratime", MS_NODIRATIME },
