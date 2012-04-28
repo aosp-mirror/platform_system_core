@@ -414,7 +414,7 @@ service surfaceflinger /system/bin/surfaceflinger
 
 service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
     class main
-    socket zygote stream 666
+    socket zygote stream 660 root system
     onrestart write /sys/android_power/request_state wake
     onrestart write /sys/power/state on
     onrestart restart media
