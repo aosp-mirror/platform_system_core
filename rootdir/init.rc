@@ -274,6 +274,8 @@ on boot
     chmod 0660 /sys/devices/system/cpu/cpufreq/interactive/above_hispeed_delay
     chown system system /sys/devices/system/cpu/cpufreq/interactive/boost
     chmod 0660 /sys/devices/system/cpu/cpufreq/interactive/boost
+    chown system system /sys/devices/system/cpu/cpufreq/interactive/input_boost
+    chmod 0660 /sys/devices/system/cpu/cpufreq/interactive/input_boost
 
     # Assume SMP uses shared cpufreq policy for all CPUs
     chown system system /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
