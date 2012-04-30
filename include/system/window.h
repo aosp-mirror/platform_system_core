@@ -427,19 +427,20 @@ struct ANativeWindow
      *     NATIVE_WINDOW_SET_USAGE
      *     NATIVE_WINDOW_CONNECT               (deprecated)
      *     NATIVE_WINDOW_DISCONNECT            (deprecated)
-     *     NATIVE_WINDOW_SET_CROP
+     *     NATIVE_WINDOW_SET_CROP              (private)
      *     NATIVE_WINDOW_SET_BUFFER_COUNT
      *     NATIVE_WINDOW_SET_BUFFERS_GEOMETRY  (deprecated)
      *     NATIVE_WINDOW_SET_BUFFERS_TRANSFORM
      *     NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP
      *     NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS
      *     NATIVE_WINDOW_SET_BUFFERS_FORMAT
-     *     NATIVE_WINDOW_SET_SCALING_MODE
+     *     NATIVE_WINDOW_SET_SCALING_MODE       (private)
      *     NATIVE_WINDOW_LOCK                   (private)
      *     NATIVE_WINDOW_UNLOCK_AND_POST        (private)
      *     NATIVE_WINDOW_API_CONNECT            (private)
      *     NATIVE_WINDOW_API_DISCONNECT         (private)
      *     NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS (private)
+     *     NATIVE_WINDOW_SET_ACTIVE_RECT        (private)
      *
      */
 
