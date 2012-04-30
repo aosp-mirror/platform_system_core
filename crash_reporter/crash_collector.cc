@@ -37,6 +37,7 @@ static const char kSystemCrashPath[] = "/var/spool/crash";
 static const char kUdevExecName[] = "udev";
 static const char kUdevSignatureKey[] = "sig";
 static const char kUserCrashPath[] = "/home/chronos/user/crash";
+static const char kGzipPath[] = "/bin/gzip";
 
 // Directory mode of the user crash spool directory.
 static const mode_t kUserCrashPathMode = 0755;
@@ -121,6 +122,18 @@ bool CrashCollector::HandleUdevCrash(const std::string &udev_event) {
     LOG(ERROR) << "Error reading udev log info " << udev_log_name;
     return false;
   }
+
+  // Compress the output using gzip.
+  chromeos::ProcessImpl gzip_process;
+  gzip_process.AddArg(kGzipPath);
+  gzip_process.AddArg(crash_path.value());
+  int process_result = gzip_process.Run();
+  FilePath crash_path_zipped = FilePath(crash_path.value() + ".gz");
+  // If the zip file was not created, use the uncompressed file.
+  if (process_result != 0 || !file_util::PathExists(crash_path_zipped))
+    LOG(ERROR) << "Could not create zip file " << crash_path_zipped.value();
+  else
+    crash_path = crash_path_zipped;
 
   AddCrashMetaData(kUdevSignatureKey, kCollectUdevSignature);
   WriteCrashMetaData(GetCrashPath(crash_directory, log_file_name, "meta"),

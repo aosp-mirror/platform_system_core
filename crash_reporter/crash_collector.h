@@ -28,6 +28,7 @@ class CrashCollector {
   void Initialize(CountCrashFunction count_crash,
                   IsFeedbackAllowedFunction is_metrics_allowed);
 
+  // TODO(crosbug.com/30268): refactor into separate class.
   bool HandleUdevCrash(const std::string &udev_event);
 
  protected:
