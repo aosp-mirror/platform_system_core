@@ -112,14 +112,14 @@ loglevel 3
     chown system system /dev/cpuctl/audio_app/tasks
     chmod 0660 /dev/cpuctl/audio_app/tasks
     write /dev/cpuctl/audio_app/cpu.shares 10
-    write /dev/cpuctl/audio_app/cpu.rt_runtime_us  50000
+    write /dev/cpuctl/audio_app/cpu.rt_runtime_us 100000
     write /dev/cpuctl/audio_app/cpu.rt_period_us 1000000
 
     mkdir /dev/cpuctl/audio_sys
     chown system system /dev/cpuctl/audio_sys/tasks
     chmod 0660 /dev/cpuctl/audio_sys/tasks
     write /dev/cpuctl/audio_sys/cpu.shares 10
-    write /dev/cpuctl/audio_sys/cpu.rt_runtime_us  50000
+    write /dev/cpuctl/audio_sys/cpu.rt_runtime_us 100000
     write /dev/cpuctl/audio_sys/cpu.rt_period_us 1000000
 
 # Allow everybody to read the xt_qtaguid resource tracking misc dev.
