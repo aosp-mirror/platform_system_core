@@ -58,6 +58,7 @@ static const char *product = 0;
 static const char *cmdline = 0;
 static int wipe_data = 0;
 static unsigned short vendor_id = 0;
+static int long_listing = 0;
 
 static unsigned base_addr = 0x10000000;
 
@@ -167,9 +168,10 @@ int match_fastboot(usb_ifc_info *info)
     if(info->ifc_class != 0xff) return -1;
     if(info->ifc_subclass != 0x42) return -1;
     if(info->ifc_protocol != 0x03) return -1;
-    // require matching serial number if a serial number is specified
+    // require matching serial number or device path if requested
     // at the command line with the -s option.
-    if (serial && strcmp(serial, info->serial_number) != 0) return -1;
+    if (serial && (strcmp(serial, info->serial_number) != 0 &&
+                   strcmp(serial, info->device_path) != 0)) return -1;
     return 0;
 }
 
@@ -183,8 +185,16 @@ int list_devices_callback(usb_ifc_info *info)
         if (!serial[0]) {
             serial = "????????????";
         }
-        // output compatible with "adb devices"
-        printf("%s\tfastboot\n", serial);
+        if (!long_listing) {
+            // output compatible with "adb devices"
+            printf("%s\tfastboot\n", serial);
+        } else {
+            char* device_path = info->device_path;
+            if (!device_path[0]) {
+                device_path = "????????????";
+            }
+            printf("%s\t%s\tfastboot\n", serial, device_path);
+        }
     }
 
     return -1;
@@ -238,7 +248,9 @@ void usage(void)
             "\n"
             "options:\n"
             "  -w                                       erase userdata and cache\n"
-            "  -s <serial number>                       specify device serial number\n"
+            "  -s <specific device>                     specify device serial number\n"
+            "                                           or path to device port\n"
+            "  -l                                       with \"devices\", lists device paths\n"
             "  -p <product>                             specify product name\n"
             "  -c <cmdline>                             override kernel commandline\n"
             "  -i <vendor id>                           specify a custom USB vendor id\n"
@@ -571,6 +583,7 @@ int main(int argc, char **argv)
     int wants_wipe = 0;
     int wants_reboot = 0;
     int wants_reboot_bootloader = 0;
+    int wants_device_list = 0;
     void *data;
     unsigned sz;
     unsigned page_size = 2048;
@@ -580,11 +593,6 @@ int main(int argc, char **argv)
     if (argc == 0) {
         usage();
         return 1;
-    }
-
-    if (!strcmp(*argv, "devices")) {
-        list_devices();
-        return 0;
     }
 
     if (!strcmp(*argv, "help")) {
@@ -612,6 +620,9 @@ int main(int argc, char **argv)
             require(2);
             serial = argv[1];
             skip(2);
+        } else if(!strcmp(*argv, "-l")) {
+            long_listing = 1;
+            skip(1);
         } else if(!strcmp(*argv, "-p")) {
             require(2);
             product = argv[1];
@@ -630,6 +641,9 @@ int main(int argc, char **argv)
                 die("invalid vendor id '%s'", argv[1]);
             vendor_id = (unsigned short)val;
             skip(2);
+        } else if (!strcmp(*argv, "devices")) {
+            skip(1);
+            wants_device_list = 1;
         } else if(!strcmp(*argv, "getvar")) {
             require(2);
             fb_queue_display(argv[1], argv[1]);
@@ -725,6 +739,9 @@ int main(int argc, char **argv)
         }
     }
 
+    if (wants_device_list)
+        list_devices();
+
     if (wants_wipe) {
         fb_queue_erase("userdata");
         fb_queue_erase("cache");
@@ -734,6 +751,9 @@ int main(int argc, char **argv)
     } else if (wants_reboot_bootloader) {
         fb_queue_command("reboot-bootloader", "rebooting into bootloader");
     }
+
+    if (fb_queue_is_empty())
+        return 0;
 
     usb = open_device();
 

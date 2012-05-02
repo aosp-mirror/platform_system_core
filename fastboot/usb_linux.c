@@ -32,6 +32,7 @@
 #include <string.h>
 
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -107,6 +108,9 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
     int in, out;
     unsigned i;
     unsigned e;
+    
+    struct stat st;
+    int result;
 
     if(check(ptr, len, USB_DT_DEVICE, USB_DT_DEVICE_SIZE))
         return -1;
@@ -134,7 +138,6 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
         // Keep it short enough because some bootloaders are borked if the URB len is > 255
         // 128 is too big by 1.
         __u16 buffer[127];
-        int result;
 
         memset(buffer, 0, sizeof(buffer));
 
@@ -155,6 +158,42 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
             for (i = 1; i < result; i++)
                 info.serial_number[i - 1] = buffer[i];
             info.serial_number[i - 1] = 0;
+        }
+    }
+
+    /* We need to get a path that represents a particular port on a particular
+     * hub.  We are passed an fd that was obtained by opening an entry under
+     * /dev/bus/usb.  Unfortunately, the names of those entries change each
+     * time devices are plugged and unplugged.  So how to get a repeatable
+     * path?  udevadm provided the inspiration.  We can get the major and
+     * minor of the device file, read the symlink that can be found here:
+     *   /sys/dev/char/<major>:<minor>
+     * and then use the last element of that path.  As a concrete example, I
+     * have an Android device at /dev/bus/usb/001/027 so working with bash:
+     *   $ ls -l /dev/bus/usb/001/027
+     *   crw-rw-r-- 1 root plugdev 189, 26 Apr  9 11:03 /dev/bus/usb/001/027
+     *   $ ls -l /sys/dev/char/189:26
+     *   lrwxrwxrwx 1 root root 0 Apr  9 11:03 /sys/dev/char/189:26 ->
+     *           ../../devices/pci0000:00/0000:00:1a.7/usb1/1-4/1-4.2/1-4.2.3
+     * So our device_path would be 1-4.2.3 which says my device is connected
+     * to port 3 of a hub on port 2 of a hub on port 4 of bus 1 (per
+     * http://www.linux-usb.org/FAQ.html).
+     */
+    info.device_path[0] = '\0';
+    result = fstat(fd, &st);
+    if (!result && S_ISCHR(st.st_mode)) {
+        char cdev[128];
+        char link[256];
+        char *slash;
+        ssize_t link_len;
+        snprintf(cdev, sizeof(cdev), "/sys/dev/char/%d:%d",
+                 major(st.st_rdev), minor(st.st_rdev));
+        link_len = readlink(cdev, link, sizeof(link) - 1);
+        if (link_len > 0) {
+            link[link_len] = '\0';
+            slash = strrchr(link, '/');
+            if (slash)
+                snprintf(info.device_path, sizeof(info.device_path), "usb:%s", slash+1);
         }
     }
 

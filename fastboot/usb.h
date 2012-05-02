@@ -53,6 +53,7 @@ struct usb_ifc_info
     unsigned char writable;
 
     char serial_number[256];
+    char device_path[256];
 };
 
 typedef int (*ifc_match_func)(usb_ifc_info *ifc);

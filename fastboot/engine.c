@@ -520,6 +520,8 @@ int fb_execute_queue(usb_handle *usb)
     int status = 0;
 
     a = action_list;
+    if (!a)
+        return status;
     resp[FB_RESPONSE_SZ] = 0;
 
     double start = -1;
@@ -555,4 +557,9 @@ int fb_execute_queue(usb_handle *usb)
 
     fprintf(stderr,"finished. total time: %.3fs\n", (now() - start));
     return status;
+}
+
+int fb_queue_is_empty(void)
+{
+    return (action_list == NULL);
 }
