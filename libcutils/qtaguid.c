@@ -99,9 +99,7 @@ static int write_param(const char *param_path, const char *value) {
 int qtaguid_tagSocket(int sockfd, int tag, uid_t uid) {
     char lineBuf[CTRL_MAX_INPUT_LEN];
     int res;
-    /* Doing java-land a favor, enforcing "long" */
-    uint64_t kTag = ((uint64_t)tag << 32) & ~(1LLU<<63);
-
+    uint64_t kTag = ((uint64_t)tag << 32);
 
     pthread_once(&resTrackInitDone, qtaguid_resTrack);
 
