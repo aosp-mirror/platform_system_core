@@ -227,6 +227,20 @@ struct sparse_file *sparse_file_import(int fd, bool verbose, bool crc);
  */
 struct sparse_file *sparse_file_import_auto(int fd, bool crc);
 
+/** sparse_file_resparse - rechunk an existing sparse file into smaller files
+ *
+ * @in_s - sparse file cookie of the existing sparse file
+ * @max_len - maximum file size
+ * @out_s - array of sparse file cookies
+ * @out_s_count - size of out_s array
+ *
+ * Splits chunks of an existing sparse file into smaller sparse files such that
+ * each sparse file is less than max_len.  Returns the number of sparse_files
+ * that would have been written to out_s if out_s were big enough.
+ */
+int sparse_file_resparse(struct sparse_file *in_s, unsigned int max_len,
+		struct sparse_file **out_s, int out_s_count);
+
 /**
  * sparse_file_verbose - set a sparse file cookie to print verbose errors
  *

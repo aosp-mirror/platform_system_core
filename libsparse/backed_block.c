@@ -141,6 +141,52 @@ void backed_block_list_destroy(struct backed_block_list *bbl)
 	free(bbl);
 }
 
+void backed_block_list_move(struct backed_block_list *from,
+		struct backed_block_list *to, struct backed_block *start,
+		struct backed_block *end)
+{
+	struct backed_block *bb;
+
+	if (start == NULL) {
+		start = from->data_blocks;
+	}
+
+	if (!end) {
+		for (end = start; end && end->next; end = end->next)
+			;
+	}
+
+	if (start == NULL || end == NULL) {
+		return;
+	}
+
+	from->last_used = NULL;
+	to->last_used = NULL;
+	if (from->data_blocks == start) {
+		from->data_blocks = end->next;
+	} else {
+		for (bb = from->data_blocks; bb; bb = bb->next) {
+			if (bb->next == start) {
+				bb->next = end->next;
+				break;
+			}
+		}
+	}
+
+	if (!to->data_blocks) {
+		to->data_blocks = start;
+		end->next = NULL;
+	} else {
+		for (bb = to->data_blocks; bb; bb = bb->next) {
+			if (!bb->next || bb->next->block > start->block) {
+				end->next = bb->next;
+				bb->next = start;
+				break;
+			}
+		}
+	}
+}
+
 /* may free b */
 static int merge_bb(struct backed_block_list *bbl,
 		struct backed_block *a, struct backed_block *b)
@@ -310,4 +356,45 @@ int backed_block_add_fd(struct backed_block_list *bbl, int fd, int64_t offset,
 	bb->next = NULL;
 
 	return queue_bb(bbl, bb);
+}
+
+int backed_block_split(struct backed_block_list *bbl, struct backed_block *bb,
+		unsigned int max_len)
+{
+	struct backed_block *new_bb;
+
+	max_len = ALIGN_DOWN(max_len, bbl->block_size);
+
+	if (bb->len <= max_len) {
+		return 0;
+	}
+
+	new_bb = malloc(sizeof(struct backed_block));
+	if (bb == NULL) {
+		return -ENOMEM;
+	}
+
+	*new_bb = *bb;
+
+	new_bb->len = bb->len - max_len;
+	new_bb->block = bb->block + max_len / bbl->block_size;
+	new_bb->next = bb->next;
+	bb->next = new_bb;
+	bb->len = max_len;
+
+	switch (bb->type) {
+	case BACKED_BLOCK_DATA:
+		new_bb->data.data = (char *)bb->data.data + max_len;
+		break;
+	case BACKED_BLOCK_FILE:
+		new_bb->file.offset += max_len;
+		break;
+	case BACKED_BLOCK_FD:
+		new_bb->fd.offset += max_len;
+		break;
+	case BACKED_BLOCK_FILL:
+		break;
+	}
+
+	return 0;
 }

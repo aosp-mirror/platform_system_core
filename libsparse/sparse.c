@@ -24,6 +24,7 @@
 #include "output_file.h"
 #include "backed_block.h"
 #include "sparse_defs.h"
+#include "sparse_format.h"
 
 struct sparse_file *sparse_file_new(unsigned int block_size, int64_t len)
 {
@@ -186,6 +187,104 @@ int sparse_file_callback(struct sparse_file *s, bool sparse, bool crc,
 	close_output_file(out);
 
 	return ret;
+}
+
+static int out_counter_write(void *priv, const void *data, int len)
+{
+	int64_t *count = priv;
+	*count += len;
+	return 0;
+}
+
+static struct backed_block *move_chunks_up_to_len(struct sparse_file *from,
+		struct sparse_file *to, unsigned int len)
+{
+	int64_t count = 0;
+	struct output_file *out_counter;
+	struct backed_block *last_bb = NULL;
+	struct backed_block *bb;
+	struct backed_block *start;
+	int64_t file_len = 0;
+
+	/*
+	 * overhead is sparse file header, initial skip chunk, split chunk, end
+	 * skip chunk, and crc chunk.
+	 */
+	int overhead = sizeof(sparse_header_t) + 4 * sizeof(chunk_header_t) +
+			sizeof(uint32_t);
+	len -= overhead;
+
+	start = backed_block_iter_new(from->backed_block_list);
+	out_counter = open_output_callback(out_counter_write, &count,
+			to->block_size, to->len, false, true, 0, false);
+	if (!out_counter) {
+		return NULL;
+	}
+
+	for (bb = start; bb; bb = backed_block_iter_next(bb)) {
+		count = 0;
+		/* will call out_counter_write to update count */
+		sparse_file_write_block(out_counter, bb);
+		if (file_len + count > len) {
+			/*
+			 * If the remaining available size is more than 1/8th of the
+			 * requested size, split the chunk.  Results in sparse files that
+			 * are at least 7/8ths of the requested size
+			 */
+			if (!last_bb || (len - file_len > (len / 8))) {
+				backed_block_split(from->backed_block_list, bb, len - file_len);
+				last_bb = bb;
+			}
+			goto out;
+		}
+		file_len += count;
+		last_bb = bb;
+	}
+
+out:
+	backed_block_list_move(from->backed_block_list,
+		to->backed_block_list, start, last_bb);
+
+	close_output_file(out_counter);
+
+	return bb;
+}
+
+int sparse_file_resparse(struct sparse_file *in_s, unsigned int max_len,
+		struct sparse_file **out_s, int out_s_count)
+{
+	struct backed_block *bb;
+	unsigned int overhead;
+	struct sparse_file *s;
+	struct sparse_file *tmp;
+	int c = 0;
+
+	tmp = sparse_file_new(in_s->block_size, in_s->len);
+	if (!tmp) {
+		return -ENOMEM;
+	}
+
+	do {
+		s = sparse_file_new(in_s->block_size, in_s->len);
+
+		bb = move_chunks_up_to_len(in_s, s, max_len);
+
+		if (c < out_s_count) {
+			out_s[c] = s;
+		} else {
+			backed_block_list_move(s->backed_block_list, tmp->backed_block_list,
+					NULL, NULL);
+			sparse_file_destroy(s);
+		}
+		c++;
+	} while (bb);
+
+	backed_block_list_move(tmp->backed_block_list, in_s->backed_block_list,
+			NULL, NULL);
+
+	sparse_file_destroy(tmp);
+
+	return c;
 }
 
 void sparse_file_verbose(struct sparse_file *s)
