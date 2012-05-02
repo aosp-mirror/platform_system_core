@@ -118,7 +118,7 @@ ZipFileRO::~ZipFileRO() {
  */
 int ZipFileRO::entryToIndex(const ZipEntryRO entry) const
 {
-    long ent = ((long) entry) - kZipEntryAdj;
+    long ent = ((intptr_t) entry) - kZipEntryAdj;
     if (ent < 0 || ent >= mHashTableSize || mHashTable[ent].name == NULL) {
         ALOGW("Invalid ZipEntryRO %p (%ld)\n", entry, ent);
         return -1;
@@ -459,7 +459,7 @@ ZipEntryRO ZipFileRO::findEntryByIndex(int idx) const
     for (int ent = 0; ent < mHashTableSize; ent++) {
         if (mHashTable[ent].name != NULL) {
             if (idx-- == 0)
-                return (ZipEntryRO) (ent + kZipEntryAdj);
+                return (ZipEntryRO) (intptr_t)(ent + kZipEntryAdj);
         }
     }
 
