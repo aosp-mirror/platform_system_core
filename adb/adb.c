@@ -1132,16 +1132,19 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     }
 
     // return a list of all connected devices
-    if (!strcmp(service, "devices")) {
+    if (!strncmp(service, "devices", 7)) {
         char buffer[4096];
-        memset(buf, 0, sizeof(buf));
-        memset(buffer, 0, sizeof(buffer));
-        D("Getting device list \n");
-        list_transports(buffer, sizeof(buffer));
-        snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer),buffer);
-        D("Wrote device list \n");
-        writex(reply_fd, buf, strlen(buf));
-        return 0;
+        int use_long = !strcmp(service+7, "-l");
+        if (use_long || service[7] == 0) {
+            memset(buf, 0, sizeof(buf));
+            memset(buffer, 0, sizeof(buffer));
+            D("Getting device list \n");
+            list_transports(buffer, sizeof(buffer), use_long);
+            snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer),buffer);
+            D("Wrote device list \n");
+            writex(reply_fd, buf, strlen(buf));
+            return 0;
+        }
     }
 
     // add a new TCP transport, device or emulator
@@ -1202,6 +1205,16 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
          transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
        if (transport && transport->serial) {
             out = transport->serial;
+        }
+        snprintf(buf, sizeof buf, "OKAY%04x%s",(unsigned)strlen(out),out);
+        writex(reply_fd, buf, strlen(buf));
+        return 0;
+    }
+    if(!strncmp(service,"get-devpath",strlen("get-devpath"))) {
+        char *out = "unknown";
+         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
+       if (transport && transport->devpath) {
+            out = transport->devpath;
         }
         snprintf(buf, sizeof buf, "OKAY%04x%s",(unsigned)strlen(out),out);
         writex(reply_fd, buf, strlen(buf));

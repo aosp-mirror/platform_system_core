@@ -17,8 +17,10 @@ host:kill
     upgrade.
 
 host:devices
+host:devices-l
     Ask to return the list of available Android devices and their
-    state. After the OKAY, this is followed by a 4-byte hex len,
+    state. devices-l includes the device paths in the state.
+    After the OKAY, this is followed by a 4-byte hex len,
     and a string that will be dumped as-is by the client, then
     the connection is closed
 
@@ -87,6 +89,9 @@ host:<request>
 <host-prefix>:get-serialno
     Returns the serial number of the corresponding device/emulator.
     Note that emulator serial numbers are of the form "emulator-5554"
+
+<host-prefix>:get-devpath
+    Returns the device path of the corresponding device/emulator.
 
 <host-prefix>:get-state
     Returns the state of a given device as a string.
