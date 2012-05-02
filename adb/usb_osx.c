@@ -125,10 +125,13 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
     IOUSBDeviceInterface197  **dev = NULL;
     HRESULT                  result;
     SInt32                   score;
+    UInt32                   locationId;
     UInt16                   vendor;
     UInt16                   product;
     UInt8                    serialIndex;
     char                     serial[256];
+    char                     devpathBuf[64];
+    char                     *devpath = NULL;
 
     while ((usbInterface = IOIteratorNext(iterator))) {
         //* Create an intermediate interface plugin
@@ -192,6 +195,11 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
 
         kr = (*dev)->GetDeviceVendor(dev, &vendor);
         kr = (*dev)->GetDeviceProduct(dev, &product);
+        kr = (*dev)->GetLocationID(dev, &locationId);
+        if (kr == 0) {
+            snprintf(devpathBuf, sizeof(devpathBuf), "usb:%lX", locationId);
+            devpath = devpathBuf;
+        }
         kr = (*dev)->USBGetSerialNumberStringIndex(dev, &serialIndex);
 
 	if (serialIndex > 0) {
@@ -256,7 +264,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         }
 
         DBG("AndroidDeviceAdded calling register_usb_transport\n");
-        register_usb_transport(handle, (serial[0] ? serial : NULL), 1);
+        register_usb_transport(handle, (serial[0] ? serial : NULL), devpath, 1);
 
         // Register for an interest notification of this device being removed.
         // Pass the reference to our private data as the refCon for the
