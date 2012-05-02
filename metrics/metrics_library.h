@@ -7,6 +7,7 @@
 
 #include <sys/types.h>
 #include <string>
+#include <unistd.h>
 
 #include <base/memory/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
