@@ -138,7 +138,7 @@ static const struct android_id_info android_ids[] = {
 
 #define android_id_count \
     (sizeof(android_ids) / sizeof(android_ids[0]))
-    
+
 struct fs_path_config {
     unsigned mode;
     unsigned uid;
@@ -225,7 +225,7 @@ static struct fs_path_config android_files[] = {
     { 00750, AID_ROOT,      AID_SHELL,     "init*" },
     { 00750, AID_ROOT,      AID_SHELL,     "charger*" },
     { 00750, AID_ROOT,      AID_SHELL,     "sbin/fs_mgr" },
-    { 00640, AID_ROOT,      AID_SHELL,     "fstab.*" },
+    { 00644, AID_ROOT,      AID_SHELL,     "fstab.*" },
     { 00644, AID_ROOT,      AID_ROOT,       0 },
 };
 
@@ -234,7 +234,7 @@ static inline void fs_config(const char *path, int dir,
 {
     struct fs_path_config *pc;
     int plen;
-    
+
     pc = dir ? android_dirs : android_files;
     plen = strlen(path);
     for(; pc->prefix; pc++){
@@ -254,9 +254,9 @@ static inline void fs_config(const char *path, int dir,
     *uid = pc->uid;
     *gid = pc->gid;
     *mode = (*mode & (~07777)) | pc->mode;
-    
+
 #if 0
-    fprintf(stderr,"< '%s' '%s' %d %d %o >\n", 
+    fprintf(stderr,"< '%s' '%s' %d %d %o >\n",
             path, pc->prefix ? pc->prefix : "", *uid, *gid, *mode);
 #endif
 }
