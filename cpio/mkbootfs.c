@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <ctype.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -34,12 +35,47 @@ void die(const char *why, ...)
     exit(1);
 }
 
+struct fs_config_entry {
+    char* name;
+    int uid, gid, mode;
+};
+
+static struct fs_config_entry* canned_config = NULL;
+
+/* Each line in the canned file should be a path plus three ints (uid,
+ * gid, mode). */
+#define CANNED_LINE_LENGTH  (PATH_MAX+100)
+
 static int verbose = 0;
 static int total_size = 0;
 
 static void fix_stat(const char *path, struct stat *s)
 {
-    fs_config(path, S_ISDIR(s->st_mode), &s->st_uid, &s->st_gid, &s->st_mode);
+    if (canned_config) {
+        // Use the list of file uid/gid/modes loaded from the file
+        // given with -f.
+
+        struct fs_config_entry* empty_path_config = NULL;
+        struct fs_config_entry* p;
+        for (p = canned_config; p->name; ++p) {
+            if (!p->name[0]) {
+                empty_path_config = p;
+            }
+            if (strcmp(p->name, path) == 0) {
+                s->st_uid = p->uid;
+                s->st_gid = p->gid;
+                s->st_mode = p->mode | (s->st_mode & ~07777);
+                return;
+            }
+        }
+        s->st_uid = empty_path_config->uid;
+        s->st_gid = empty_path_config->gid;
+        s->st_mode = empty_path_config->mode | (s->st_mode & ~07777);
+    } else {
+        // Use the compiled-in fs_config() function.
+
+        fs_config(path, S_ISDIR(s->st_mode), &s->st_uid, &s->st_gid, &s->st_mode);
+    }
 }
 
 static void _eject(struct stat *s, char *out, int olen, char *data, unsigned datasize)
@@ -79,7 +115,7 @@ static void _eject(struct stat *s, char *out, int olen, char *data, unsigned dat
 
     total_size += 6 + 8*13 + olen + 1;
 
-    if(strlen(out) != olen) die("ACK!");
+    if(strlen(out) != (unsigned int)olen) die("ACK!");
 
     while(total_size & 3) {
         total_size++;
@@ -235,10 +271,60 @@ void archive(const char *start, const char *prefix)
     _archive_dir(in, out, strlen(in), strlen(out));
 }
 
+static void read_canned_config(char* filename)
+{
+    int allocated = 8;
+    int used = 0;
+
+    canned_config =
+        (struct fs_config_entry*)malloc(allocated * sizeof(struct fs_config_entry));
+
+    char line[CANNED_LINE_LENGTH];
+    FILE* f = fopen(filename, "r");
+    if (f == NULL) die("failed to open canned file");
+
+    while (fgets(line, CANNED_LINE_LENGTH, f) != NULL) {
+        if (!line[0]) break;
+        if (used >= allocated) {
+            allocated *= 2;
+            canned_config = (struct fs_config_entry*)realloc(
+                canned_config, allocated * sizeof(struct fs_config_entry));
+        }
+
+        struct fs_config_entry* cc = canned_config + used;
+
+        if (isspace(line[0])) {
+            cc->name = strdup("");
+            cc->uid = atoi(strtok(line, " \n"));
+        } else {
+            cc->name = strdup(strtok(line, " \n"));
+            cc->uid = atoi(strtok(NULL, " \n"));
+        }
+        cc->gid = atoi(strtok(NULL, " \n"));
+        cc->mode = strtol(strtok(NULL, " \n"), NULL, 8);
+        ++used;
+    }
+    if (used >= allocated) {
+        ++allocated;
+        canned_config = (struct fs_config_entry*)realloc(
+            canned_config, allocated * sizeof(struct fs_config_entry));
+    }
+    canned_config[used].name = NULL;
+
+    fclose(f);
+}
+
+
 int main(int argc, char *argv[])
 {
     argc--;
     argv++;
+
+    if (argc > 1 && strcmp(argv[0], "-f") == 0) {
+        read_canned_config(argv[1]);
+        argc -= 2;
+        argv += 2;
+    }
 
     if(argc == 0) die("no directories to process?!");
 
