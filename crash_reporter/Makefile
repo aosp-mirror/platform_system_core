@@ -12,6 +12,7 @@ PKG_CONFIG ?= pkg-config
 CRASH_OBJS = \
 	crash_collector.o \
 	kernel_collector.o \
+	udev_collector.o \
 	unclean_shutdown_collector.o \
 	user_collector.o
 
@@ -48,6 +49,7 @@ all: CXX_BINARY(list_proxies)
 # Uncomment these to just run specific test(s).
 #TEST_BINS += crash_collector_test
 #TEST_BINS += kernel_collector_test
+#TEST_BINS += udev_collector_test
 #TEST_BINS += unclean_shutdown_collector_test
 #TEST_BINS += user_collector_test
 

@@ -15,6 +15,7 @@
 #include "base/stringprintf.h"
 #include "chromeos/syslog_logging.h"
 #include "crash-reporter/kernel_collector.h"
+#include "crash-reporter/udev_collector.h"
 #include "crash-reporter/unclean_shutdown_collector.h"
 #include "crash-reporter/user_collector.h"
 #include "gflags/gflags.h"
@@ -46,6 +47,7 @@ enum CrashKinds {
   kCrashKindUncleanShutdown = 1,
   kCrashKindUser = 2,
   kCrashKindKernel = 3,
+  kCrashKindUdev = 4,
   kCrashKindMax
 };
 
@@ -68,6 +70,10 @@ static void SendCrashMetrics(CrashKinds type, const char* name) {
 
 static void CountKernelCrash() {
   SendCrashMetrics(kCrashKindKernel, "kernel");
+}
+
+static void CountUdevCrash() {
+  SendCrashMetrics(kCrashKindUdev, "udevcrash");
 }
 
 static void CountUncleanShutdown() {
@@ -156,13 +162,13 @@ static int HandleUserCrash(UserCollector *user_collector) {
   return 0;
 }
 
-static int HandleUdevCrash(CrashCollector *udev_collector) {
+static int HandleUdevCrash(UdevCollector *udev_collector) {
   // Handle a crash indicated by a udev event.
   CHECK(!FLAGS_udev.empty()) << "--udev= must be set";
 
   // Accumulate logs to help in diagnosing failures during user collection.
   chromeos::LogToString(true);
-  bool handled = udev_collector->HandleUdevCrash(FLAGS_udev);
+  bool handled = udev_collector->HandleCrash(FLAGS_udev);
   chromeos::LogToString(false);
   if (!handled)
     return 1;
@@ -228,6 +234,8 @@ int main(int argc, char *argv[]) {
   UncleanShutdownCollector unclean_shutdown_collector;
   unclean_shutdown_collector.Initialize(CountUncleanShutdown,
                                         IsFeedbackAllowed);
+  UdevCollector udev_collector;
+  udev_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
 
   if (FLAGS_init) {
     return Initialize(&kernel_collector,
@@ -246,7 +254,6 @@ int main(int argc, char *argv[]) {
   }
 
   if (!FLAGS_udev.empty()) {
-    CrashCollector udev_collector;
     return HandleUdevCrash(&udev_collector);
   }
 

@@ -28,9 +28,6 @@ class CrashCollector {
   void Initialize(CountCrashFunction count_crash,
                   IsFeedbackAllowedFunction is_metrics_allowed);
 
-  // TODO(crosbug.com/30268): refactor into separate class.
-  bool HandleUdevCrash(const std::string &udev_event);
-
  protected:
   friend class CrashCollectorTest;
   FRIEND_TEST(CrashCollectorTest, CheckHasCapacityCorrectBasename);
@@ -149,6 +146,7 @@ class CrashCollector {
   std::string extra_metadata_;
   const char *forced_crash_directory_;
   const char *lsb_release_;
+  FilePath log_config_path_;
 };
 
 #endif  // _CRASH_REPORTER_CRASH_COLLECTOR_H_

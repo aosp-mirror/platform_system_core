@@ -26,7 +26,6 @@
 
 static const char kCollectChromeFile[] =
     "/mnt/stateful_partition/etc/collect_chrome_crashes";
-static const char kCollectUdevSignature[] = "crash_reporter-udev-collection";
 static const char kCrashTestInProgressPath[] = "/tmp/crash-test-in-progress";
 static const char kDefaultLogConfig[] = "/etc/crash_reporter_logs.conf";
 static const char kDefaultUserName[] = "chronos";
@@ -34,10 +33,7 @@ static const char kLeaveCoreFile[] = "/root/.leave_core";
 static const char kLsbRelease[] = "/etc/lsb-release";
 static const char kShellPath[] = "/bin/sh";
 static const char kSystemCrashPath[] = "/var/spool/crash";
-static const char kUdevExecName[] = "udev";
-static const char kUdevSignatureKey[] = "sig";
 static const char kUserCrashPath[] = "/home/chronos/user/crash";
-static const char kGzipPath[] = "/bin/gzip";
 
 // Directory mode of the user crash spool directory.
 static const mode_t kUserCrashPathMode = 0755;
@@ -60,7 +56,8 @@ const int CrashCollector::kMaxCrashDirectorySize = 32;
 
 CrashCollector::CrashCollector()
     : forced_crash_directory_(NULL),
-      lsb_release_(kLsbRelease) {
+      lsb_release_(kLsbRelease),
+      log_config_path_(kDefaultLogConfig) {
 }
 
 CrashCollector::~CrashCollector() {
@@ -74,71 +71,6 @@ void CrashCollector::Initialize(
 
   count_crash_function_ = count_crash_function;
   is_feedback_allowed_function_ = is_feedback_allowed_function;
-}
-
-bool CrashCollector::HandleUdevCrash(const std::string &udev_event) {
-  // Process the udev event string.
-  // The udev string should be formatted as follows:
-  //   "ACTION=[action]:KERNEL=[name]:SUBSYSTEM=[subsystem]"
-  // The values don't have to be in any particular order.
-
-  // First get all the key-value pairs.
-  std::vector<std::pair<std::string, std::string> > udev_event_keyval;
-  base::SplitStringIntoKeyValuePairs(udev_event, '=', ':', &udev_event_keyval);
-  std::vector<std::pair<std::string, std::string> >::const_iterator iter;
-  std::map<std::string, std::string> udev_event_map;
-  for (iter = udev_event_keyval.begin();
-       iter != udev_event_keyval.end();
-       ++iter) {
-    udev_event_map[iter->first] = iter->second;
-  }
-
-  // Construct the basename string for crash_reporter_logs.conf:
-  //   "crash_reporter-udev-collection-[action]-[name]-[subsystem]"
-  // If a udev field is not provided, "" is used in its place, e.g.:
-  //   "crash_reporter-udev-collection-[action]--[subsystem]"
-  // Hence, "" is used as a wildcard name string.
-  std::string basename = udev_event_map["ACTION"] + "-" +
-                         udev_event_map["KERNEL"] + "-" +
-                         udev_event_map["SUBSYSTEM"];
-  std::string udev_log_name = std::string(kCollectUdevSignature) + '-' +
-                              basename;
-
-  // Make sure the crash directory exists, or create it if it doesn't.
-  FilePath crash_directory;
-  if (!GetCreatedCrashDirectoryByEuid(0, &crash_directory, NULL)) {
-    LOG(ERROR) << "Could not get crash directory.";
-    return false;
-  }
-  // Create the destination path.
-  std::string log_file_name =
-      FormatDumpBasename(basename, time(NULL), 0);
-  FilePath crash_path = GetCrashPath(crash_directory, log_file_name, "log");
-
-  // Handle the crash.
-  bool result = GetLogContents(FilePath(kDefaultLogConfig), udev_log_name,
-                               crash_path);
-  if (!result) {
-    LOG(ERROR) << "Error reading udev log info " << udev_log_name;
-    return false;
-  }
-
-  // Compress the output using gzip.
-  chromeos::ProcessImpl gzip_process;
-  gzip_process.AddArg(kGzipPath);
-  gzip_process.AddArg(crash_path.value());
-  int process_result = gzip_process.Run();
-  FilePath crash_path_zipped = FilePath(crash_path.value() + ".gz");
-  // If the zip file was not created, use the uncompressed file.
-  if (process_result != 0 || !file_util::PathExists(crash_path_zipped))
-    LOG(ERROR) << "Could not create zip file " << crash_path_zipped.value();
-  else
-    crash_path = crash_path_zipped;
-
-  AddCrashMetaData(kUdevSignatureKey, kCollectUdevSignature);
-  WriteCrashMetaData(GetCrashPath(crash_directory, log_file_name, "meta"),
-                     kUdevExecName, crash_path.value());
-  return true;
 }
 
 int CrashCollector::WriteNewFile(const FilePath &filename,

@@ -43,7 +43,6 @@ static const char kCorePipeLimitFile[] = "/proc/sys/kernel/core_pipe_limit";
 static const char kCorePipeLimit[] = "4";
 static const char kCoreToMinidumpConverterPath[] = "/usr/bin/core2md";
 
-static const char kDefaultLogConfig[] = "/etc/crash_reporter_logs.conf";
 static const char kStatePrefix[] = "State:\t";
 
 const char *UserCollector::kUserId = "Uid:\t";
@@ -244,7 +243,7 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
   std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
   std::string error_log = chromeos::GetLog();
   FilePath diag_log_path = GetCrashPath(crash_path, dump_basename, "diaglog");
-  if (GetLogContents(FilePath(kDefaultLogConfig), kCollectionErrorSignature,
+  if (GetLogContents(FilePath(log_config_path_), kCollectionErrorSignature,
                      diag_log_path)) {
     // We load the contents of diag_log into memory and append it to
     // the error log.  We cannot just append to files because we need
@@ -491,7 +490,7 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
   FilePath minidump_path = GetCrashPath(crash_path, dump_basename, "dmp");
   FilePath log_path = GetCrashPath(crash_path, dump_basename, "log");
 
-  if (GetLogContents(FilePath(kDefaultLogConfig), exec, log_path))
+  if (GetLogContents(FilePath(log_config_path_), exec, log_path))
     AddCrashMetaData("log", log_path.value());
 
   ErrorType error_type =
