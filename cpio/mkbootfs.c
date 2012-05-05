@@ -44,7 +44,11 @@ static struct fs_config_entry* canned_config = NULL;
 
 /* Each line in the canned file should be a path plus three ints (uid,
  * gid, mode). */
+#ifdef PATH_MAX
 #define CANNED_LINE_LENGTH  (PATH_MAX+100)
+#else
+#define CANNED_LINE_LENGTH  (1024)
+#endif
 
 static int verbose = 0;
 static int total_size = 0;
