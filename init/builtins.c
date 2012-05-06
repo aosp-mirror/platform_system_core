@@ -75,12 +75,23 @@ static int write_file(const char *path, const char *value)
     }
 }
 
+static int _open(const char *path)
+{
+    int fd;
+
+    fd = open(path, O_RDONLY | O_NOFOLLOW);
+    if (fd < 0)
+        fd = open(path, O_WRONLY | O_NOFOLLOW);
+
+    return fd;
+}
+
 static int _chown(const char *path, unsigned int uid, unsigned int gid)
 {
     int fd;
     int ret;
 
-    fd = open(path, O_RDONLY | O_NOFOLLOW);
+    fd = _open(path);
     if (fd < 0) {
         return -1;
     }
@@ -103,7 +114,7 @@ static int _chmod(const char *path, mode_t mode)
     int fd;
     int ret;
 
-    fd = open(path, O_RDONLY | O_NOFOLLOW);
+    fd = _open(path);
     if (fd < 0) {
         return -1;
     }
