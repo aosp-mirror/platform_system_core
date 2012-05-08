@@ -39,7 +39,7 @@ void Tracer::init() {
             // sEnabledTags remains zero indicating that no tracing can occur
         } else {
             char value[PROPERTY_VALUE_MAX];
-            property_get("atrace.tags.enableflags", value, "0");
+            property_get("debug.atrace.tags.enableflags", value, "0");
             sEnabledTags = (strtoll(value, NULL, 0) & ATRACE_TAG_VALID_MASK)
                     | ATRACE_TAG_ALWAYS;
         }
