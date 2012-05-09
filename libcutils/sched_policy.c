@@ -16,23 +16,30 @@
 ** limitations under the License.
 */
 
+#define LOG_TAG "SchedPolicy"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <cutils/sched_policy.h>
+#include <cutils/log.h>
 
-#define LOG_TAG "SchedPolicy"
-#include "cutils/log.h"
+/* Re-map SP_DEFAULT to the system default policy, and leave other values unchanged.
+ * Call this any place a SchedPolicy is used as an input parameter.
+ * Returns the possibly re-mapped policy.
+ */
+static inline SchedPolicy _policy(SchedPolicy p)
+{
+   return p == SP_DEFAULT ? SP_SYSTEM_DEFAULT : p;
+}
 
-#ifdef HAVE_SCHED_H
-#ifdef HAVE_PTHREADS
+#if defined(HAVE_ANDROID_OS) && defined(HAVE_SCHED_H) && defined(HAVE_PTHREADS)
 
 #include <sched.h>
 #include <pthread.h>
-
-#include <cutils/sched_policy.h>
 
 #ifndef SCHED_NORMAL
   #define SCHED_NORMAL 0
@@ -274,15 +281,6 @@ int get_sched_policy(int tid, SchedPolicy *policy)
     return 0;
 }
 
-/* Re-map SP_DEFAULT to the system default policy, and leave other values unchanged.
- * Call this any place a SchedPolicy is used as an input parameter.
- * Returns the possibly re-mapped policy.
- */
-static inline SchedPolicy _policy(SchedPolicy p)
-{
-   return p == SP_DEFAULT ? SP_SYSTEM_DEFAULT : p;
-}
-
 int set_sched_policy(int tid, SchedPolicy policy)
 {
 #ifdef HAVE_GETTID
@@ -356,6 +354,23 @@ int set_sched_policy(int tid, SchedPolicy policy)
     return 0;
 }
 
+#else
+
+/* Stubs for non-Android targets. */
+
+int set_sched_policy(int tid, SchedPolicy policy)
+{
+    return 0;
+}
+
+int get_sched_policy(int tid, SchedPolicy *policy)
+{
+    *policy = SP_SYSTEM_DEFAULT;
+    return 0;
+}
+
+#endif
+
 const char *get_sched_policy_name(SchedPolicy policy)
 {
     policy = _policy(policy);
@@ -372,5 +387,3 @@ const char *get_sched_policy_name(SchedPolicy policy)
         return "error";
 }
 
-#endif /* HAVE_PTHREADS */
-#endif /* HAVE_SCHED_H */
