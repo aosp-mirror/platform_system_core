@@ -248,7 +248,7 @@ enum {
     NATIVE_WINDOW_API_CONNECT               = 13,   /* private */
     NATIVE_WINDOW_API_DISCONNECT            = 14,   /* private */
     NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS = 15, /* private */
-    NATIVE_WINDOW_SET_ACTIVE_RECT           = 16,   /* private */
+    NATIVE_WINDOW_SET_POST_TRANSFORM_CROP   = 16,   /* private */
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -298,6 +298,11 @@ enum {
      * of the buffer matches the window size (cropping in the process)
      */
     NATIVE_WINDOW_SCALING_MODE_SCALE_CROP       = 2,
+    /* the window is clipped to the size of the buffer's crop rectangle; pixels
+     * outside the crop rectangle are treated as if they are completely
+     * transparent.
+     */
+    NATIVE_WINDOW_SCALING_MODE_NO_SCALE_CROP    = 3,
 };
 
 /* values returned by the NATIVE_WINDOW_CONCRETE_TYPE query */
@@ -440,7 +445,7 @@ struct ANativeWindow
      *     NATIVE_WINDOW_API_CONNECT            (private)
      *     NATIVE_WINDOW_API_DISCONNECT         (private)
      *     NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS (private)
-     *     NATIVE_WINDOW_SET_ACTIVE_RECT        (private)
+     *     NATIVE_WINDOW_SET_POST_TRANSFORM_CROP (private)
      *
      */
 
@@ -504,14 +509,16 @@ static inline int native_window_disconnect(
 /*
  * native_window_set_crop(..., crop)
  * Sets which region of the next queued buffers needs to be considered.
- * A buffer's crop region is scaled to match the surface's size.
+ * Depending on the scaling mode, a buffer's crop region is scaled and/or
+ * cropped to match the surface's size.  This function sets the crop in
+ * pre-transformed buffer pixel coordinates.
  *
  * The specified crop region applies to all buffers queued after it is called.
  *
- * if 'crop' is NULL, subsequently queued buffers won't be cropped.
+ * If 'crop' is NULL, subsequently queued buffers won't be cropped.
  *
- * An error is returned if for instance the crop region is invalid,
- * out of the buffer's bound or if the window is invalid.
+ * An error is returned if for instance the crop region is invalid, out of the
+ * buffer's bound or if the window is invalid.
  */
 static inline int native_window_set_crop(
         struct ANativeWindow* window,
@@ -521,23 +528,38 @@ static inline int native_window_set_crop(
 }
 
 /*
+ * native_window_set_post_transform_crop(..., crop)
+ * Sets which region of the next queued buffers needs to be considered.
+ * Depending on the scaling mode, a buffer's crop region is scaled and/or
+ * cropped to match the surface's size.  This function sets the crop in
+ * post-transformed pixel coordinates.
+ *
+ * The specified crop region applies to all buffers queued after it is called.
+ *
+ * If 'crop' is NULL, subsequently queued buffers won't be cropped.
+ *
+ * An error is returned if for instance the crop region is invalid, out of the
+ * buffer's bound or if the window is invalid.
+ */
+static inline int native_window_set_post_transform_crop(
+        struct ANativeWindow* window,
+        android_native_rect_t const * crop)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_POST_TRANSFORM_CROP, crop);
+}
+
+/*
  * native_window_set_active_rect(..., active_rect)
- * Sets the region of future queued buffers that are 'active'.  Pixels outside
- * this 'active' region are considered to be completely transparent regardless
- * of the pixel values in the buffer.  The active_rect argument specifies the
- * active rectangle in buffer pixel coordinates.
  *
- * The specified active rectangle applies to all buffers queued after it is
- * called.
- *
- * An error is returned if for instance the crop region is invalid,
- * out of the buffer's bound or if the window is invalid.
+ * This function is deprectated and will be removed soon.  For now it simply
+ * sets the post-transform crop for compatibility while multi-project commits
+ * get checked.
  */
 static inline int native_window_set_active_rect(
         struct ANativeWindow* window,
         android_native_rect_t const * active_rect)
 {
-    return window->perform(window, NATIVE_WINDOW_SET_ACTIVE_RECT, active_rect);
+    return native_window_set_post_transform_crop(window, active_rect);
 }
 
 /*
