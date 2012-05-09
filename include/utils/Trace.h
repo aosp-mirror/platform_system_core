@@ -121,10 +121,15 @@ private:
         }
     }
 
+    static void changeCallback();
+
     // init opens the trace marker file for writing and reads the
     // atrace.tags.enableflags system property.  It does this only the first
     // time it is run, using sMutex for synchronization.
     static void init();
+
+    // retrieve the current value of the system property.
+    static void loadSystemProperty();
 
     // sIsReady is a boolean value indicating whether a call to init() has
     // completed in this process.  It is initialized to 0 and set to 1 when the

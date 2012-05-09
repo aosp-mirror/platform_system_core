@@ -14,16 +14,25 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "misc"
+
 //
 // Miscellaneous utility functions.
 //
 #include <utils/misc.h>
+#include <utils/Log.h>
 
 #include <sys/stat.h>
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
 #include <stdio.h>
+
+#if defined(HAVE_PTHREADS)
+# include <pthread.h>
+#endif
+
+#include <utils/Vector.h>
 
 using namespace android;
 
@@ -181,5 +190,54 @@ unsigned int roundUpPower2(unsigned int val)
     return val;
 }
 
-}; // namespace android
+struct sysprop_change_callback_info {
+    sysprop_change_callback callback;
+    int priority;
+};
 
+#if defined(HAVE_PTHREADS)
+static pthread_mutex_t gSyspropMutex = PTHREAD_MUTEX_INITIALIZER;
+static Vector<sysprop_change_callback_info>* gSyspropList = NULL;
+#endif
+
+void add_sysprop_change_callback(sysprop_change_callback cb, int priority) {
+#if defined(HAVE_PTHREADS)
+    pthread_mutex_lock(&gSyspropMutex);
+    if (gSyspropList == NULL) {
+        gSyspropList = new Vector<sysprop_change_callback_info>();
+    }
+    sysprop_change_callback_info info;
+    info.callback = cb;
+    info.priority = priority;
+    bool added = false;
+    for (size_t i=0; i<gSyspropList->size(); i++) {
+        if (priority >= gSyspropList->itemAt(i).priority) {
+            gSyspropList->insertAt(info, i);
+            added = true;
+            break;
+        }
+    }
+    if (!added) {
+        gSyspropList->add(info);
+    }
+    pthread_mutex_unlock(&gSyspropMutex);
+#endif
+}
+
+void report_sysprop_change() {
+#if defined(HAVE_PTHREADS)
+    pthread_mutex_lock(&gSyspropMutex);
+    Vector<sysprop_change_callback_info> listeners;
+    if (gSyspropList != NULL) {
+        listeners = *gSyspropList;
+    }
+    pthread_mutex_unlock(&gSyspropMutex);
+
+    //ALOGI("Reporting sysprop change to %d listeners", listeners.size());
+    for (size_t i=0; i<listeners.size(); i++) {
+        listeners[i].callback();
+    }
+#endif
+}
+
+}; // namespace android

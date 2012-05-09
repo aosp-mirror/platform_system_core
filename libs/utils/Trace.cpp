@@ -19,6 +19,7 @@
 #include <cutils/properties.h>
 #include <utils/Log.h>
 #include <utils/Trace.h>
+#include <utils/misc.h>
 
 namespace android {
 
@@ -27,10 +28,19 @@ int Tracer::sTraceFD = -1;
 uint64_t Tracer::sEnabledTags = 0;
 Mutex Tracer::sMutex;
 
+void Tracer::changeCallback() {
+    Mutex::Autolock lock(sMutex);
+    if (sIsReady && sTraceFD >= 0) {
+        loadSystemProperty();
+    }
+}
+
 void Tracer::init() {
     Mutex::Autolock lock(sMutex);
 
     if (!sIsReady) {
+        add_sysprop_change_callback(changeCallback, 0);
+
         const char* const traceFileName =
                 "/sys/kernel/debug/tracing/trace_marker";
         sTraceFD = open(traceFileName, O_WRONLY);
@@ -38,14 +48,18 @@ void Tracer::init() {
             ALOGE("error opening trace file: %s (%d)", strerror(errno), errno);
             // sEnabledTags remains zero indicating that no tracing can occur
         } else {
-            char value[PROPERTY_VALUE_MAX];
-            property_get("debug.atrace.tags.enableflags", value, "0");
-            sEnabledTags = (strtoll(value, NULL, 0) & ATRACE_TAG_VALID_MASK)
-                    | ATRACE_TAG_ALWAYS;
+            loadSystemProperty();
         }
 
         android_atomic_release_store(1, &sIsReady);
     }
+}
+
+void Tracer::loadSystemProperty() {
+    char value[PROPERTY_VALUE_MAX];
+    property_get("debug.atrace.tags.enableflags", value, "0");
+    sEnabledTags = (strtoll(value, NULL, 0) & ATRACE_TAG_VALID_MASK)
+            | ATRACE_TAG_ALWAYS;
 }
 
 } // namespace andoid
