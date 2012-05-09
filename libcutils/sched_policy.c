@@ -131,32 +131,32 @@ static void __initialize(void) {
 
 #if CAN_SET_SP_SYSTEM
         filename = "/dev/cpuctl/tasks";
-        system_cgroup_fd = open(filename, O_WRONLY);
+        system_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
         if (system_cgroup_fd < 0) {
             SLOGV("open of %s failed: %s\n", filename, strerror(errno));
         }
 #endif
 
         filename = "/dev/cpuctl/foreground/tasks";
-        fg_cgroup_fd = open(filename, O_WRONLY);
+        fg_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
         if (fg_cgroup_fd < 0) {
             SLOGE("open of %s failed: %s\n", filename, strerror(errno));
         }
 
         filename = "/dev/cpuctl/bg_non_interactive/tasks";
-        bg_cgroup_fd = open(filename, O_WRONLY);
+        bg_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
         if (bg_cgroup_fd < 0) {
             SLOGE("open of %s failed: %s\n", filename, strerror(errno));
         }
 
         filename = "/dev/cpuctl/audio_app/tasks";
-        audio_app_cgroup_fd = open(filename, O_WRONLY);
+        audio_app_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
         if (audio_app_cgroup_fd < 0) {
             SLOGV("open of %s failed: %s\n", filename, strerror(errno));
         }
 
         filename = "/dev/cpuctl/audio_sys/tasks";
-        audio_sys_cgroup_fd = open(filename, O_WRONLY);
+        audio_sys_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
         if (audio_sys_cgroup_fd < 0) {
             SLOGV("open of %s failed: %s\n", filename, strerror(errno));
         }
