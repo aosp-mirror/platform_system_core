@@ -101,8 +101,10 @@ struct thread_data_t {
         if (gDoSchedulingGroup) {
             if (prio >= ANDROID_PRIORITY_BACKGROUND) {
                 set_sched_policy(androidGetTid(), SP_BACKGROUND);
-            } else {
+            } else if (prio > ANDROID_PRIORITY_AUDIO) {
                 set_sched_policy(androidGetTid(), SP_FOREGROUND);
+            } else {
+                // defaults to that of parent, or as set by requestPriority()
             }
         }
         
