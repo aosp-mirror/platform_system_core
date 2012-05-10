@@ -97,7 +97,7 @@ loglevel 3
     chown system system /dev/cpuctl/foreground/tasks
     chmod 0666 /dev/cpuctl/foreground/tasks
     write /dev/cpuctl/foreground/cpu.shares 1024
-    write /dev/cpuctl/foreground/cpu.rt_runtime_us 0
+    write /dev/cpuctl/foreground/cpu.rt_runtime_us 1000
     write /dev/cpuctl/foreground/cpu.rt_period_us 1000000
 
     mkdir /dev/cpuctl/bg_non_interactive
@@ -105,7 +105,7 @@ loglevel 3
     chmod 0666 /dev/cpuctl/bg_non_interactive/tasks
     # 5.0 %
     write /dev/cpuctl/bg_non_interactive/cpu.shares 52
-    write /dev/cpuctl/bg_non_interactive/cpu.rt_runtime_us 0
+    write /dev/cpuctl/bg_non_interactive/cpu.rt_runtime_us 1000
     write /dev/cpuctl/bg_non_interactive/cpu.rt_period_us 1000000
 
     mkdir /dev/cpuctl/audio_app
