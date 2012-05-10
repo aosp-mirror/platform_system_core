@@ -137,7 +137,8 @@ enum {
      * KEY_FOCUS_AREAS and KEY_METERING_AREAS have no effect.
      *
      * arg1 is the face detection type. It can be CAMERA_FACE_DETECTION_HW or
-     * CAMERA_FACE_DETECTION_SW.
+     * CAMERA_FACE_DETECTION_SW. If the type of face detection requested is not
+     * supported, the HAL must return BAD_VALUE.
      */
     CAMERA_CMD_START_FACE_DETECTION = 6,
 
