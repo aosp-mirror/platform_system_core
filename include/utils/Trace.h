@@ -50,7 +50,8 @@
 #define ATRACE_TAG_ACTIVITY_MANAGER (1<<6)
 #define ATRACE_TAG_SYNC_MANAGER     (1<<7)
 #define ATRACE_TAG_AUDIO            (1<<8)
-#define ATRACE_TAG_LAST             ATRACE_TAG_AUDIO
+#define ATRACE_TAG_VIDEO            (1<<9)
+#define ATRACE_TAG_LAST             ATRACE_TAG_VIDEO
 
 #define ATRACE_TAG_VALID_MASK ((ATRACE_TAG_LAST - 1) | ATRACE_TAG_LAST)
 
