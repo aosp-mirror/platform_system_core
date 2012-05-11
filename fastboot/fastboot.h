@@ -43,7 +43,7 @@ char *fb_get_error(void);
 /* engine.c - high level command queue engine */
 void fb_queue_flash(const char *ptn, void *data, unsigned sz);;
 void fb_queue_erase(const char *ptn);
-void fb_queue_format(const char *ptn);
+void fb_queue_format(const char *ptn, int skip_if_not_supported);
 void fb_queue_require(const char *prod, const char *var, int invert,
         unsigned nvalues, const char **value);
 void fb_queue_display(const char *var, const char *prettyname);
