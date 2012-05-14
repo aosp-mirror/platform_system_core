@@ -255,6 +255,7 @@ void generate_ext4_image(struct image_data *image)
 #else
     fd = fileno(tmpfile());
 #endif
+    /* reset ext4fs info so we can be called multiple times */
     reset_ext4fs_info();
     info.len = image->partition_size;
     make_ext4fs_internal(fd, NULL, NULL, NULL, 0, 1, 0, 0, 0, NULL);
@@ -266,7 +267,7 @@ void generate_ext4_image(struct image_data *image)
     close(fd);
 }
 
-int fb_format(Action *a, usb_handle *usb)
+int fb_format(Action *a, usb_handle *usb, int skip_if_not_supported)
 {
     const char *partition = a->cmd;
     char response[FB_RESPONSE_SZ+1];
@@ -281,6 +282,13 @@ int fb_format(Action *a, usb_handle *usb)
     snprintf(cmd, sizeof(cmd), "getvar:partition-type:%s", partition);
     status = fb_command_response(usb, cmd, response);
     if (status) {
+        if (skip_if_not_supported) {
+            fprintf(stderr,
+                    "Erase successful, but not automatically formatting.\n");
+            fprintf(stderr,
+                    "Can't determine partition type.\n");
+            return 0;
+        }
         fprintf(stderr,"FAILED (%s)\n", fb_get_error());
         return status;
     }
@@ -292,6 +300,13 @@ int fb_format(Action *a, usb_handle *usb)
         }
     }
     if (!generator) {
+        if (skip_if_not_supported) {
+            fprintf(stderr,
+                    "Erase successful, but not automatically formatting.\n");
+            fprintf(stderr,
+                    "File system type %s not supported.\n", response);
+            return 0;
+        }
         fprintf(stderr,"Formatting is not supported for filesystem with type '%s'.\n",
                 response);
         return -1;
@@ -301,6 +316,12 @@ int fb_format(Action *a, usb_handle *usb)
     snprintf(cmd, sizeof(cmd), "getvar:partition-size:%s", partition);
     status = fb_command_response(usb, cmd, response);
     if (status) {
+        if (skip_if_not_supported) {
+            fprintf(stderr,
+                    "Erase successful, but not automatically formatting.\n");
+            fprintf(stderr, "Unable to get partition size\n.");
+            return 0;
+        }
         fprintf(stderr,"FAILED (%s)\n", fb_get_error());
         return status;
     }
@@ -329,11 +350,12 @@ cleanup:
     return status;
 }
 
-void fb_queue_format(const char *partition)
+void fb_queue_format(const char *partition, int skip_if_not_supported)
 {
     Action *a;
 
     a = queue_action(OP_FORMAT, partition);
+    a->data = (void*)skip_if_not_supported;
     a->msg = mkmsg("formatting '%s' partition", partition);
 }
 
@@ -547,7 +569,7 @@ int fb_execute_queue(usb_handle *usb)
         } else if (a->op == OP_NOTICE) {
             fprintf(stderr,"%s\n",(char*)a->data);
         } else if (a->op == OP_FORMAT) {
-            status = fb_format(a, usb);
+            status = fb_format(a, usb, (int)a->data);
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
         } else {

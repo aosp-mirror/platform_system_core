@@ -654,7 +654,7 @@ int main(int argc, char **argv)
             skip(2);
         } else if(!strcmp(*argv, "format")) {
             require(2);
-            fb_queue_format(argv[1]);
+            fb_queue_format(argv[1], 0);
             skip(2);
         } else if(!strcmp(*argv, "signature")) {
             require(2);
@@ -744,7 +744,9 @@ int main(int argc, char **argv)
 
     if (wants_wipe) {
         fb_queue_erase("userdata");
+        fb_queue_format("userdata", 1);
         fb_queue_erase("cache");
+        fb_queue_format("cache", 1);
     }
     if (wants_reboot) {
         fb_queue_reboot();
