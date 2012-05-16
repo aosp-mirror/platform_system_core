@@ -267,13 +267,11 @@ void dump_nearby_maps(const ptrace_context_t* context, int tfd, pid_t tid) {
      * Search for a match, or for a hole where the match would be.  The list
      * is backward from the file content, so it starts at high addresses.
      */
-    bool found = false;
     map_info_t* map = context->map_info_list;
     map_info_t *next = NULL;
     map_info_t *prev = NULL;
     while (map != NULL) {
         if (addr >= map->start && addr < map->end) {
-            found = true;
             next = map->next;
             break;
         } else if (addr >= map->end) {
