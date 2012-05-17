@@ -9,6 +9,7 @@ test_src_files := \
 	Looper_test.cpp \
 	String8_test.cpp \
 	Unicode_test.cpp \
+	Vector_test.cpp \
 	ZipFileRO_test.cpp
 
 shared_libraries := \

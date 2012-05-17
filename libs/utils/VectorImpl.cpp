@@ -382,8 +382,8 @@ void* VectorImpl::_grow(size_t where, size_t amount)
             }
         }
     } else {
+        void* array = editArrayImpl();
         if (where != mCount) {
-            void* array = editArrayImpl();
             const void* from = reinterpret_cast<const uint8_t *>(array) + where*mItemSize;
             void* to = reinterpret_cast<uint8_t *>(array) + (where+amount)*mItemSize;
             _do_move_forward(to, from, mCount - where);
