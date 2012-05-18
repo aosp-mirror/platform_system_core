@@ -1,4 +1,5 @@
 #include <corkscrew/backtrace.h>
+#include <corkscrew/symbol_table.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -15,7 +16,28 @@ void do_backtrace() {
     char line[MAX_BACKTRACE_LINE_LENGTH];
     format_backtrace_line(i, &frames[i], &backtrace_symbols[i],
                           line, MAX_BACKTRACE_LINE_LENGTH);
-    fprintf(stderr, "  %s\n", line);
+    if (backtrace_symbols[i].symbol_name != NULL) {
+      // get_backtrace_symbols found the symbol's name with dladdr(3).
+      fprintf(stderr, "  %s\n", line);
+    } else {
+      // We don't have a symbol. Maybe this is a static symbol, and
+      // we can look it up?
+      symbol_table_t* symbols = NULL;
+      if (backtrace_symbols[i].map_name != NULL) {
+        symbols = load_symbol_table(backtrace_symbols[i].map_name);
+      }
+      const symbol_t* symbol = NULL;
+      if (symbols != NULL) {
+        symbol = find_symbol(symbols, frames[i].absolute_pc);
+      }
+      if (symbol != NULL) {
+        uintptr_t offset = frames[i].absolute_pc - symbol->start;
+        fprintf(stderr, "  %s (%s%+d)\n", line, symbol->name, offset);
+      } else {
+        fprintf(stderr, "  %s (\?\?\?)\n", line);
+      }
+      free(symbols);
+    }
   }
 
   free_backtrace_symbols(backtrace_symbols, frame_count);
