@@ -27,14 +27,39 @@
 
 #include <unistd.h>
 #include <signal.h>
+#include <stdlib.h>
+#include <string.h>
 #include <pthread.h>
 #include <unwind.h>
-#include <sys/exec_elf.h>
 #include <cutils/log.h>
 #include <cutils/atomic.h>
+#include <elf.h>
 
 #if HAVE_DLADDR
+#define __USE_GNU // For dladdr(3) in glibc.
 #include <dlfcn.h>
+#endif
+
+#if defined(__BIONIC__)
+
+// Bionic implements and exports gettid but only implements tgkill.
+extern int tgkill(int tgid, int tid, int sig);
+
+#else
+
+// glibc doesn't implement or export either gettid or tgkill.
+
+#include <unistd.h>
+#include <sys/syscall.h>
+
+static pid_t gettid() {
+  return syscall(__NR_gettid);
+}
+
+static int tgkill(int tgid, int tid, int sig) {
+  return syscall(__NR_tgkill, tgid, tid, sig);
+}
+
 #endif
 
 typedef struct {
@@ -114,8 +139,6 @@ static void unwind_backtrace_thread_signal_handler(int n, siginfo_t* siginfo, vo
     }
 }
 #endif
-
-extern int tgkill(int tgid, int tid, int sig);
 
 ssize_t unwind_backtrace_thread(pid_t tid, backtrace_frame_t* backtrace,
         size_t ignore_depth, size_t max_depth) {

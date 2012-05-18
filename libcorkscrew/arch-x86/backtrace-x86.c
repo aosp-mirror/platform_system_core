@@ -31,40 +31,10 @@
 #include <limits.h>
 #include <errno.h>
 #include <sys/ptrace.h>
-#include <sys/exec_elf.h>
 #include <cutils/log.h>
 
-/* Machine context at the time a signal was raised. */
-typedef struct ucontext {
-    uint32_t uc_flags;
-    struct ucontext* uc_link;
-    stack_t uc_stack;
-    struct sigcontext {
-        uint32_t gs;
-        uint32_t fs;
-        uint32_t es;
-        uint32_t ds;
-        uint32_t edi;
-        uint32_t esi;
-        uint32_t ebp;
-        uint32_t esp;
-        uint32_t ebx;
-        uint32_t edx;
-        uint32_t ecx;
-        uint32_t eax;
-        uint32_t trapno;
-        uint32_t err;
-        uint32_t eip;
-        uint32_t cs;
-        uint32_t efl;
-        uint32_t uesp;
-        uint32_t ss;
-        void* fpregs;
-        uint32_t oldmask;
-        uint32_t cr2;
-    } uc_mcontext;
-    uint32_t uc_sigmask;
-} ucontext_t;
+#define __USE_GNU // For REG_EBP, REG_ESP, and REG_EIP.
+#include <ucontext.h>
 
 /* Unwind state. */
 typedef struct {
@@ -114,9 +84,9 @@ ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo, void* sigcontext,
     const ucontext_t* uc = (const ucontext_t*)sigcontext;
 
     unwind_state_t state;
-    state.ebp = uc->uc_mcontext.ebp;
-    state.eip = uc->uc_mcontext.eip;
-    state.esp = uc->uc_mcontext.esp;
+    state.ebp = uc->uc_mcontext.gregs[REG_EBP];
+    state.esp = uc->uc_mcontext.gregs[REG_ESP];
+    state.eip = uc->uc_mcontext.gregs[REG_EIP];
 
     memory_t memory;
     init_memory(&memory, map_info_list);
