@@ -19,6 +19,7 @@
 
 #include <fcntl.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -33,6 +34,8 @@
 #ifndef USE_MINGW
 #include <sys/mman.h>
 #define O_BINARY 0
+#else
+#define ftruncate64 ftruncate
 #endif
 
 #if defined(__APPLE__) && defined(__MACH__)
@@ -59,8 +62,13 @@ static inline void *mmap64(void *addr, size_t length, int prot, int flags,
 #define SPARSE_HEADER_LEN       (sizeof(sparse_header_t))
 #define CHUNK_HEADER_LEN (sizeof(chunk_header_t))
 
+#define container_of(inner, outer_t, elem) \
+	((outer_t *)((char *)inner - offsetof(outer_t, elem)))
+
 struct output_file_ops {
+	int (*open)(struct output_file *, int fd);
 	int (*skip)(struct output_file *, int64_t);
+	int (*pad)(struct output_file *, int64_t);
 	int (*write)(struct output_file *, void *, int);
 	void (*close)(struct output_file *);
 };
@@ -75,9 +83,6 @@ struct sparse_file_ops {
 };
 
 struct output_file {
-	int fd;
-	gzFile gz_fd;
-	bool close_fd;
 	int64_t cur_out_ptr;
 	unsigned int chunk_cnt;
 	uint32_t crc32;
@@ -88,13 +93,39 @@ struct output_file {
 	int64_t len;
 	char *zero_buf;
 	uint32_t *fill_buf;
+	char *buf;
 };
+
+struct output_file_gz {
+	struct output_file out;
+	gzFile gz_fd;
+};
+
+#define to_output_file_gz(_o) \
+	container_of((_o), struct output_file_gz, out)
+
+struct output_file_normal {
+	struct output_file out;
+	int fd;
+};
+
+#define to_output_file_normal(_o) \
+	container_of((_o), struct output_file_normal, out)
+
+static int file_open(struct output_file *out, int fd)
+{
+	struct output_file_normal *outn = to_output_file_normal(out);
+
+	outn->fd = fd;
+	return 0;
+}
 
 static int file_skip(struct output_file *out, int64_t cnt)
 {
 	off64_t ret;
+	struct output_file_normal *outn = to_output_file_normal(out);
 
-	ret = lseek64(out->fd, cnt, SEEK_CUR);
+	ret = lseek64(outn->fd, cnt, SEEK_CUR);
 	if (ret < 0) {
 		error_errno("lseek64");
 		return -1;
@@ -102,10 +133,25 @@ static int file_skip(struct output_file *out, int64_t cnt)
 	return 0;
 }
 
+static int file_pad(struct output_file *out, int64_t len)
+{
+	int ret;
+	struct output_file_normal *outn = to_output_file_normal(out);
+
+	ret = ftruncate64(outn->fd, len);
+	if (ret < 0) {
+		return -errno;
+	}
+
+	return 0;
+}
+
 static int file_write(struct output_file *out, void *data, int len)
 {
 	int ret;
-	ret = write(out->fd, data, len);
+	struct output_file_normal *outn = to_output_file_normal(out);
+
+	ret = write(outn->fd, data, len);
 	if (ret < 0) {
 		error_errno("write");
 		return -1;
@@ -119,22 +165,39 @@ static int file_write(struct output_file *out, void *data, int len)
 
 static void file_close(struct output_file *out)
 {
-	if (out->close_fd) {
-		close(out->fd);
-	}
+	struct output_file_normal *outn = to_output_file_normal(out);
+
+	free(outn);
 }
 
 static struct output_file_ops file_ops = {
+	.open = file_open,
 	.skip = file_skip,
+	.pad = file_pad,
 	.write = file_write,
 	.close = file_close,
 };
 
+static int gz_file_open(struct output_file *out, int fd)
+{
+	struct output_file_gz *outgz = to_output_file_gz(out);
+
+	outgz->gz_fd = gzdopen(fd, "wb9");
+	if (!outgz->gz_fd) {
+		error_errno("gzopen");
+		return -errno;
+	}
+
+	return 0;
+}
+
+
 static int gz_file_skip(struct output_file *out, int64_t cnt)
 {
 	off64_t ret;
+	struct output_file_gz *outgz = to_output_file_gz(out);
 
-	ret = gzseek(out->gz_fd, cnt, SEEK_CUR);
+	ret = gzseek(outgz->gz_fd, cnt, SEEK_CUR);
 	if (ret < 0) {
 		error_errno("gzseek");
 		return -1;
@@ -142,10 +205,36 @@ static int gz_file_skip(struct output_file *out, int64_t cnt)
 	return 0;
 }
 
+static int gz_file_pad(struct output_file *out, int64_t len)
+{
+	off64_t ret;
+	struct output_file_gz *outgz = to_output_file_gz(out);
+
+	ret = gztell(outgz->gz_fd);
+	if (ret < 0) {
+		return -1;
+	}
+
+	if (ret >= len) {
+		return 0;
+	}
+
+	ret = gzseek(outgz->gz_fd, len - 1, SEEK_SET);
+	if (ret < 0) {
+		return -1;
+	}
+
+	gzwrite(outgz->gz_fd, "", 1);
+
+	return 0;
+}
+
 static int gz_file_write(struct output_file *out, void *data, int len)
 {
 	int ret;
-	ret = gzwrite(out->gz_fd, data, len);
+	struct output_file_gz *outgz = to_output_file_gz(out);
+
+	ret = gzwrite(outgz->gz_fd, data, len);
 	if (ret < 0) {
 		error_errno("gzwrite");
 		return -1;
@@ -159,11 +248,16 @@ static int gz_file_write(struct output_file *out, void *data, int len)
 
 static void gz_file_close(struct output_file *out)
 {
-	gzclose(out->gz_fd);
+	struct output_file_gz *outgz = to_output_file_gz(out);
+
+	gzclose(outgz->gz_fd);
+	free(outgz);
 }
 
 static struct output_file_ops gz_file_ops = {
+	.open = gz_file_open,
 	.skip = gz_file_skip,
+	.pad = gz_file_pad,
 	.write = gz_file_write,
 	.close = gz_file_close,
 };
@@ -371,21 +465,12 @@ static int write_normal_fill_chunk(struct output_file *out, unsigned int len,
 
 static int write_normal_skip_chunk(struct output_file *out, int64_t len)
 {
-	int ret;
-
 	return out->ops->skip(out, len);
 }
 
 int write_normal_end_chunk(struct output_file *out)
 {
-	int ret;
-
-	ret = ftruncate64(out->fd, out->len);
-	if (ret < 0) {
-		return -errno;
-	}
-
-	return 0;
+	return out->ops->pad(out, out->len);
 }
 
 static struct sparse_file_ops normal_file_ops = {
@@ -401,40 +486,31 @@ void close_output_file(struct output_file *out)
 
 	out->sparse_ops->write_end_chunk(out);
 	out->ops->close(out);
-	free(out);
 }
 
-struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
-		int gz, int sparse, int chunks, int crc)
+static int output_file_init(struct output_file *out, int block_size,
+		int64_t len, bool sparse, int chunks, bool crc)
 {
 	int ret;
-	struct output_file *out = malloc(sizeof(struct output_file));
-	if (!out) {
-		error_errno("malloc struct out");
-		return NULL;
-	}
+
+	out->len = len;
+	out->block_size = block_size;
+	out->cur_out_ptr = 0ll;
+	out->chunk_cnt = 0;
+	out->crc32 = 0;
+	out->use_crc = crc;
+
 	out->zero_buf = calloc(block_size, 1);
 	if (!out->zero_buf) {
 		error_errno("malloc zero_buf");
-		goto err_zero_buf;
+		return -ENOMEM;
 	}
 
 	out->fill_buf = calloc(block_size, 1);
 	if (!out->fill_buf) {
 		error_errno("malloc fill_buf");
+		ret = -ENOMEM;
 		goto err_fill_buf;
-	}
-
-	if (gz) {
-		out->ops = &gz_file_ops;
-		out->gz_fd = gzdopen(fd, "wb9");
-		if (!out->gz_fd) {
-			error_errno("gzopen");
-			goto err_gzopen;
-		}
-	} else {
-		out->fd = fd;
-		out->ops = &file_ops;
 	}
 
 	if (sparse) {
@@ -442,17 +518,6 @@ struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
 	} else {
 		out->sparse_ops = &normal_file_ops;
 	}
-
-	out->close_fd = false;
-	out->cur_out_ptr = 0ll;
-	out->chunk_cnt = 0;
-
-	/* Initialize the crc32 value */
-	out->crc32 = 0;
-	out->use_crc = crc;
-
-	out->len = len;
-	out->block_size = block_size;
 
 	if (sparse) {
 		sparse_header_t sparse_header = {
@@ -477,47 +542,62 @@ struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
 		}
 	}
 
-	return out;
+	return 0;
 
 err_write:
-	if (gz) {
-		gzclose(out->gz_fd);
-	}
-err_gzopen:
 	free(out->fill_buf);
 err_fill_buf:
 	free(out->zero_buf);
-err_zero_buf:
-	free(out);
-	return NULL;
+	return ret;
 }
 
-struct output_file *open_output_file(const char *filename,
-		unsigned int block_size, int64_t len,
-		int gz, int sparse, int chunks, int crc)
+static struct output_file *output_file_new_gz(void)
 {
-	int fd;
-	struct output_file *file;
-
-	if (strcmp(filename, "-")) {
-		fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0644);
-		if (fd < 0) {
-			error_errno("open");
-			return NULL;
-		}
-	} else {
-		fd = STDOUT_FILENO;
-	}
-
-	file = open_output_fd(fd, block_size, len, gz, sparse, chunks, crc);
-	if (!file) {
-		close(fd);
+	struct output_file_gz *outgz = calloc(1, sizeof(struct output_file_gz));
+	if (!outgz) {
+		error_errno("malloc struct outgz");
 		return NULL;
 	}
 
-	file->close_fd = true; // we opened descriptor thus we responsible for closing it
+	outgz->out.ops = &gz_file_ops;
 
-	return file;
+	return &outgz->out;
+}
+
+static struct output_file *output_file_new_normal(void)
+{
+	struct output_file_normal *outn = calloc(1, sizeof(struct output_file_normal));
+	if (!outn) {
+		error_errno("malloc struct outn");
+		return NULL;
+	}
+
+	outn->out.ops = &file_ops;
+
+	return &outn->out;
+}
+
+struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
+		int gz, int sparse, int chunks, int crc)
+{
+	int ret;
+	struct output_file *out;
+
+	if (gz) {
+		out = output_file_new_gz();
+	} else {
+		out = output_file_new_normal();
+	}
+
+	out->ops->open(out, fd);
+
+	ret = output_file_init(out, block_size, len, sparse, chunks, crc);
+	if (ret < 0) {
+		free(out);
+		return NULL;
+	}
+
+	return out;
 }
 
 /* Write a contiguous region of data blocks from a memory buffer */
