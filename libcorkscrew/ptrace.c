@@ -21,6 +21,7 @@
 #include <corkscrew/ptrace.h>
 
 #include <errno.h>
+#include <stdlib.h>
 #include <sys/ptrace.h>
 #include <cutils/log.h>
 
