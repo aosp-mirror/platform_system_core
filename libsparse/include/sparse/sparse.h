@@ -158,6 +158,27 @@ int sparse_file_write(struct sparse_file *s, int fd, bool gz, bool sparse,
 		bool crc);
 
 /**
+ * sparse_file_callback - call a callback for blocks in sparse file
+ *
+ * @s - sparse file cookie
+ * @sparse - write in the Android sparse file format
+ * @crc - append a crc chunk
+ * @write - function to call for each block
+ * @priv - value that will be passed as the first argument to write
+ *
+ * Writes a sparse file by calling a callback function.  If sparse is true, the
+ * file will be written in the Android sparse file format.  If crc is true, the
+ * crc of the expanded data will be calculated and appended in a crc chunk.
+ * The callback 'write' will be called with data and length for each data,
+ * and with data==NULL to skip over a region (only used for non-sparse format).
+ * The callback should return negative on error, 0 on success.
+ *
+ * Returns 0 on success, negative errno on error.
+ */
+int sparse_file_callback(struct sparse_file *s, bool sparse, bool crc,
+		int (*write)(void *priv, const void *data, int len), void *priv);
+
+/**
  * sparse_file_read - read a file into a sparse file cookie
  *
  * @s - sparse file cookie

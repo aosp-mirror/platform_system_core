@@ -23,6 +23,9 @@ struct output_file;
 
 struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
 		int gz, int sparse, int chunks, int crc);
+struct output_file *open_output_callback(int (*write)(void *, const void *, int),
+		void *priv, unsigned int block_size, int64_t len, int gz, int sparse,
+		int chunks, int crc);
 int write_data_chunk(struct output_file *out, unsigned int len, void *data);
 int write_fill_chunk(struct output_file *out, unsigned int len,
 		uint32_t fill_val);

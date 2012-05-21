@@ -18,6 +18,7 @@
 #define _LARGEFILE64_SOURCE 1
 
 #include <fcntl.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -111,6 +112,15 @@ struct output_file_normal {
 
 #define to_output_file_normal(_o) \
 	container_of((_o), struct output_file_normal, out)
+
+struct output_file_callback {
+	struct output_file out;
+	void *priv;
+	int (*write)(void *priv, const void *buf, int len);
+};
+
+#define to_output_file_callback(_o) \
+	container_of((_o), struct output_file_callback, out)
 
 static int file_open(struct output_file *out, int fd)
 {
@@ -260,6 +270,57 @@ static struct output_file_ops gz_file_ops = {
 	.pad = gz_file_pad,
 	.write = gz_file_write,
 	.close = gz_file_close,
+};
+
+static int callback_file_open(struct output_file *out, int fd)
+{
+	return 0;
+}
+
+static int callback_file_skip(struct output_file *out, int64_t off)
+{
+	struct output_file_callback *outc = to_output_file_callback(out);
+	int to_write;
+	int ret;
+
+	while (off > 0) {
+		to_write = min(off, (int64_t)INT_MAX);
+		ret = outc->write(outc->priv, NULL, to_write);
+		if (ret < 0) {
+			return ret;
+		}
+		off -= to_write;
+	}
+
+	return 0;
+}
+
+static int callback_file_pad(struct output_file *out, int64_t len)
+{
+	return -1;
+}
+
+static int callback_file_write(struct output_file *out, void *data, int len)
+{
+	int ret;
+	struct output_file_callback *outc = to_output_file_callback(out);
+
+	return outc->write(outc->priv, data, len);
+}
+
+static void callback_file_close(struct output_file *out)
+{
+	struct output_file_callback *outc = to_output_file_callback(out);
+
+	free(outc);
+}
+
+static struct output_file_ops callback_file_ops = {
+	.open = callback_file_open,
+	.skip = callback_file_skip,
+	.pad = callback_file_pad,
+	.write = callback_file_write,
+	.close = callback_file_close,
 };
 
 int read_all(int fd, void *buf, size_t len)
@@ -575,6 +636,32 @@ static struct output_file *output_file_new_normal(void)
 	outn->out.ops = &file_ops;
 
 	return &outn->out;
+}
+
+struct output_file *open_output_callback(int (*write)(void *, const void *, int),
+		void *priv, unsigned int block_size, int64_t len, int gz, int sparse,
+		int chunks, int crc)
+{
+	int ret;
+	struct output_file_callback *outc;
+
+	outc = calloc(1, sizeof(struct output_file_callback));
+	if (!outc) {
+		error_errno("malloc struct outc");
+		return NULL;
+	}
+
+	outc->out.ops = &callback_file_ops;
+	outc->priv = priv;
+	outc->write = write;
+
+	ret = output_file_init(&outc->out, block_size, len, sparse, chunks, crc);
+	if (ret < 0) {
+		free(outc);
+		return NULL;
+	}
+
+	return &outc->out;
 }
 
 struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
