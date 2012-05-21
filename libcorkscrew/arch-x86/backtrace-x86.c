@@ -33,8 +33,20 @@
 #include <sys/ptrace.h>
 #include <cutils/log.h>
 
+#if defined(__BIONIC__)
+
+// Bionic offers the Linux kernel headers.
+#include <asm/sigcontext.h>
+#include <asm/ucontext.h>
+typedef struct ucontext ucontext_t;
+
+#else
+
+// glibc has its own renaming of the Linux kernel's structures.
 #define __USE_GNU // For REG_EBP, REG_ESP, and REG_EIP.
 #include <ucontext.h>
+
+#endif
 
 /* Unwind state. */
 typedef struct {
@@ -84,9 +96,15 @@ ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo, void* sigcontext,
     const ucontext_t* uc = (const ucontext_t*)sigcontext;
 
     unwind_state_t state;
+#if defined(__BIONIC__)
+    state.ebp = uc->uc_mcontext.ebp;
+    state.esp = uc->uc_mcontext.esp;
+    state.eip = uc->uc_mcontext.eip;
+#else
     state.ebp = uc->uc_mcontext.gregs[REG_EBP];
     state.esp = uc->uc_mcontext.gregs[REG_ESP];
     state.eip = uc->uc_mcontext.gregs[REG_EIP];
+#endif
 
     memory_t memory;
     init_memory(&memory, map_info_list);
