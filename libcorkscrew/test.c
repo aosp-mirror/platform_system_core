@@ -36,7 +36,7 @@ void do_backtrace() {
       } else {
         fprintf(stderr, "  %s (\?\?\?)\n", line);
       }
-      free(symbols);
+      free_symbol_table(symbols);
     }
   }
 
