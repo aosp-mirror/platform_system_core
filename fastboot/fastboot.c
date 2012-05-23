@@ -35,6 +35,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <ctype.h>
+#include <getopt.h>
 
 #include <sys/time.h>
 #include <bootimg.h>
@@ -575,62 +576,76 @@ int main(int argc, char **argv)
     unsigned sz;
     unsigned page_size = 2048;
     int status;
+    int c;
 
-    skip(1);
-    if (argc == 0) {
+    struct option longopts = { 0, 0, 0, 0 };
+
+    serial = getenv("ANDROID_SERIAL");
+
+    while (1) {
+        c = getopt_long(argc, argv, "wb:n:s:p:c:i:h", &longopts, NULL);
+        if (c < 0) {
+            break;
+        }
+
+        switch (c) {
+        case 'w':
+            wants_wipe = 1;
+            break;
+        case 'b':
+            base_addr = strtoul(optarg, 0, 16);
+            break;
+        case 'n':
+            page_size = (unsigned)strtoul(optarg, NULL, 0);
+            if (!page_size) die("invalid page size");
+            break;
+        case 's':
+            serial = optarg;
+            break;
+        case 'p':
+            product = optarg;
+            break;
+        case 'c':
+            cmdline = optarg;
+            break;
+        case 'i': {
+                char *endptr = NULL;
+                unsigned long val;
+
+                val = strtoul(optarg, &endptr, 0);
+                if (!endptr || *endptr != '\0' || (val & ~0xffff))
+                    die("invalid vendor id '%s'", optarg);
+                vendor_id = (unsigned short)val;
+                break;
+            }
+        case 'h':
+            usage();
+            return 1;
+        case '?':
+            return 1;
+        default:
+            abort();
+        }
+    }
+
+    argc -= optind;
+    argv += optind;
+
+    if (argc == 0 && !wants_wipe) {
         usage();
         return 1;
     }
 
     if (!strcmp(*argv, "devices")) {
+        skip(1);
         list_devices();
         return 0;
     }
 
-    if (!strcmp(*argv, "help")) {
-        usage();
-        return 0;
-    }
-
-
-    serial = getenv("ANDROID_SERIAL");
+    usb = open_device();
 
     while (argc > 0) {
-        if(!strcmp(*argv, "-w")) {
-            wants_wipe = 1;
-            skip(1);
-        } else if(!strcmp(*argv, "-b")) {
-            require(2);
-            base_addr = strtoul(argv[1], 0, 16);
-            skip(2);
-        } else if(!strcmp(*argv, "-n")) {
-            require(2);
-            page_size = (unsigned)strtoul(argv[1], NULL, 0);
-            if (!page_size) die("invalid page size");
-            skip(2);
-        } else if(!strcmp(*argv, "-s")) {
-            require(2);
-            serial = argv[1];
-            skip(2);
-        } else if(!strcmp(*argv, "-p")) {
-            require(2);
-            product = argv[1];
-            skip(2);
-        } else if(!strcmp(*argv, "-c")) {
-            require(2);
-            cmdline = argv[1];
-            skip(2);
-        } else if(!strcmp(*argv, "-i")) {
-            char *endptr = NULL;
-            unsigned long val;
-
-            require(2);
-            val = strtoul(argv[1], &endptr, 0);
-            if (!endptr || *endptr != '\0' || (val & ~0xffff))
-                die("invalid vendor id '%s'", argv[1]);
-            vendor_id = (unsigned short)val;
-            skip(2);
-        } else if(!strcmp(*argv, "getvar")) {
+        if(!strcmp(*argv, "getvar")) {
             require(2);
             fb_queue_display(argv[1], argv[1]);
             skip(2);
@@ -719,6 +734,9 @@ int main(int argc, char **argv)
             wants_reboot = 1;
         } else if(!strcmp(*argv, "oem")) {
             argc = do_oem_command(argc, argv);
+        } else if (!strcmp(*argv, "help")) {
+            usage();
+            return 0;
         } else {
             usage();
             return 1;
@@ -736,8 +754,6 @@ int main(int argc, char **argv)
     } else if (wants_reboot_bootloader) {
         fb_queue_command("reboot-bootloader", "rebooting into bootloader");
     }
-
-    usb = open_device();
 
     status = fb_execute_queue(usb);
     return (status) ? 1 : 0;
