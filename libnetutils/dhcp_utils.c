@@ -33,8 +33,28 @@ static const int NAP_TIME = 200;   /* wait for 200ms at a time */
                                   /* when polling for property values */
 static const char DAEMON_NAME_RENEW[]  = "iprenew";
 static char errmsg[100];
-/* interface suffix on dhcpcd */
-#define MAX_DAEMON_SUFFIX 25
+/* interface length for dhcpcd daemon start (dhcpcd_<interface> as defined in init.rc file)
+ * or for filling up system properties dhcpcd.<interface>.ipaddress, dhcpcd.<interface>.dns1
+ * and other properties on a successful bind
+ */
+#define MAX_INTERFACE_LENGTH 25
+
+/*
+ * P2p interface names increase sequentially p2p-p2p0-1, p2p-p2p0-2.. after
+ * group formation. This does not work well with system properties which can quickly
+ * exhaust or for specifiying a dhcp start target in init which requires
+ * interface to be pre-defined in init.rc file.
+ *
+ * This function returns a common string p2p for all p2p interfaces.
+ */
+void get_p2p_interface_replacement(const char *interface, char *p2p_interface) {
+    /* Use p2p for any interface starting with p2p. */
+    if (strncmp(interface, "p2p",3) == 0) {
+        strncpy(p2p_interface, "p2p", MAX_INTERFACE_LENGTH);
+    } else {
+        strncpy(p2p_interface, interface, MAX_INTERFACE_LENGTH);
+    }
+}
 
 /*
  * Wait for a system property to be assigned a specified value.
@@ -75,14 +95,18 @@ static int fill_ip_info(const char *interface,
 {
     char prop_name[PROPERTY_KEY_MAX];
     char prop_value[PROPERTY_VALUE_MAX];
+    /* Interface name after converting p2p0-p2p0-X to p2p to reuse system properties */
+    char p2p_interface[MAX_INTERFACE_LENGTH];
 
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.ipaddress", DHCP_PROP_NAME_PREFIX, interface);
+    get_p2p_interface_replacement(interface, p2p_interface);
+
+    snprintf(prop_name, sizeof(prop_name), "%s.%s.ipaddress", DHCP_PROP_NAME_PREFIX, p2p_interface);
     property_get(prop_name, ipaddr, NULL);
 
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.gateway", DHCP_PROP_NAME_PREFIX, interface);
+    snprintf(prop_name, sizeof(prop_name), "%s.%s.gateway", DHCP_PROP_NAME_PREFIX, p2p_interface);
     property_get(prop_name, gateway, NULL);
 
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.server", DHCP_PROP_NAME_PREFIX, interface);
+    snprintf(prop_name, sizeof(prop_name), "%s.%s.server", DHCP_PROP_NAME_PREFIX, p2p_interface);
     property_get(prop_name, server, NULL);
 
     //TODO: Handle IPv6 when we change system property usage
@@ -91,7 +115,7 @@ static int fill_ip_info(const char *interface,
         strncpy(gateway, server, PROPERTY_VALUE_MAX);
     }
 
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.mask", DHCP_PROP_NAME_PREFIX, interface);
+    snprintf(prop_name, sizeof(prop_name), "%s.%s.mask", DHCP_PROP_NAME_PREFIX, p2p_interface);
     if (property_get(prop_name, prop_value, NULL)) {
         int p;
         // this conversion is v4 only, but this dhcp client is v4 only anyway
@@ -113,18 +137,19 @@ static int fill_ip_info(const char *interface,
         }
         *prefixLength = p;
     }
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.dns1", DHCP_PROP_NAME_PREFIX, interface);
+    snprintf(prop_name, sizeof(prop_name), "%s.%s.dns1", DHCP_PROP_NAME_PREFIX, p2p_interface);
     property_get(prop_name, dns1, NULL);
 
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.dns2", DHCP_PROP_NAME_PREFIX, interface);
+    snprintf(prop_name, sizeof(prop_name), "%s.%s.dns2", DHCP_PROP_NAME_PREFIX, p2p_interface);
     property_get(prop_name, dns2, NULL);
 
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.leasetime", DHCP_PROP_NAME_PREFIX, interface);
+    snprintf(prop_name, sizeof(prop_name), "%s.%s.leasetime", DHCP_PROP_NAME_PREFIX, p2p_interface);
     if (property_get(prop_name, prop_value, NULL)) {
         *lease = atol(prop_value);
     }
 
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.vendorInfo", DHCP_PROP_NAME_PREFIX, interface);
+    snprintf(prop_name, sizeof(prop_name), "%s.%s.vendorInfo", DHCP_PROP_NAME_PREFIX,
+            p2p_interface);
     property_get(prop_name, vendorInfo, NULL);
 
     return 0;
@@ -136,15 +161,6 @@ static const char *ipaddr_to_string(in_addr_t addr)
 
     in_addr.s_addr = addr;
     return inet_ntoa(in_addr);
-}
-
-void get_daemon_suffix(const char *interface, char *daemon_suffix) {
-    /* Use p2p suffix for any p2p interface. */
-    if (strncmp(interface, "p2p",3) == 0) {
-        sprintf(daemon_suffix, "p2p");
-    } else {
-        snprintf(daemon_suffix, MAX_DAEMON_SUFFIX, "%s", interface);
-    }
 }
 
 /*
@@ -172,27 +188,28 @@ int dhcp_do_request(const char *interface,
     char daemon_cmd[PROPERTY_VALUE_MAX * 2];
     const char *ctrl_prop = "ctl.start";
     const char *desired_status = "running";
-    char daemon_suffix[MAX_DAEMON_SUFFIX];
+    /* Interface name after converting p2p0-p2p0-X to p2p to reuse system properties */
+    char p2p_interface[MAX_INTERFACE_LENGTH];
 
-    get_daemon_suffix(interface, daemon_suffix);
+    get_p2p_interface_replacement(interface, p2p_interface);
 
     snprintf(result_prop_name, sizeof(result_prop_name), "%s.%s.result",
             DHCP_PROP_NAME_PREFIX,
-            interface);
+            p2p_interface);
 
     snprintf(daemon_prop_name, sizeof(daemon_prop_name), "%s_%s",
             DAEMON_PROP_NAME,
-            daemon_suffix);
+            p2p_interface);
 
     /* Erase any previous setting of the dhcp result property */
     property_set(result_prop_name, "");
 
     /* Start the daemon and wait until it's ready */
     if (property_get(HOSTNAME_PROP_NAME, prop_value, NULL) && (prop_value[0] != '\0'))
-        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:-h %s %s", DAEMON_NAME, daemon_suffix,
+        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:-h %s %s", DAEMON_NAME, p2p_interface,
                  prop_value, interface);
     else
-        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:%s", DAEMON_NAME, daemon_suffix, interface);
+        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:%s", DAEMON_NAME, p2p_interface, interface);
     memset(prop_value, '\0', PROPERTY_VALUE_MAX);
     property_set(ctrl_prop, daemon_cmd);
     if (wait_for_property(daemon_prop_name, desired_status, 10) < 0) {
@@ -242,19 +259,19 @@ int dhcp_stop(const char *interface)
     const char *ctrl_prop = "ctl.stop";
     const char *desired_status = "stopped";
 
-    char daemon_suffix[MAX_DAEMON_SUFFIX];
+    char p2p_interface[MAX_INTERFACE_LENGTH];
 
-    get_daemon_suffix(interface, daemon_suffix);
+    get_p2p_interface_replacement(interface, p2p_interface);
 
     snprintf(result_prop_name, sizeof(result_prop_name), "%s.%s.result",
             DHCP_PROP_NAME_PREFIX,
-            interface);
+            p2p_interface);
 
     snprintf(daemon_prop_name, sizeof(daemon_prop_name), "%s_%s",
             DAEMON_PROP_NAME,
-            daemon_suffix);
+            p2p_interface);
 
-    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME, daemon_suffix);
+    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME, p2p_interface);
 
     /* Stop the daemon and wait until it's reported to be stopped */
     property_set(ctrl_prop, daemon_cmd);
@@ -275,15 +292,15 @@ int dhcp_release_lease(const char *interface)
     const char *ctrl_prop = "ctl.stop";
     const char *desired_status = "stopped";
 
-    char daemon_suffix[MAX_DAEMON_SUFFIX];
+    char p2p_interface[MAX_INTERFACE_LENGTH];
 
-    get_daemon_suffix(interface, daemon_suffix);
+    get_p2p_interface_replacement(interface, p2p_interface);
 
     snprintf(daemon_prop_name, sizeof(daemon_prop_name), "%s_%s",
             DAEMON_PROP_NAME,
-            daemon_suffix);
+            p2p_interface);
 
-    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME, daemon_suffix);
+    snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s", DAEMON_NAME, p2p_interface);
 
     /* Stop the daemon and wait until it's reported to be stopped */
     property_set(ctrl_prop, daemon_cmd);
@@ -305,12 +322,12 @@ char *dhcp_get_errmsg() {
  *
  */
 int dhcp_do_request_renew(const char *interface,
-                    in_addr_t *ipaddr,
-                    in_addr_t *gateway,
+                    char *ipaddr,
+                    char *gateway,
                     uint32_t *prefixLength,
-                    in_addr_t *dns1,
-                    in_addr_t *dns2,
-                    in_addr_t *server,
+                    char *dns1,
+                    char *dns2,
+                    char *server,
                     uint32_t *lease,
                     char *vendorInfo)
 {
@@ -319,20 +336,20 @@ int dhcp_do_request_renew(const char *interface,
     char daemon_cmd[PROPERTY_VALUE_MAX * 2];
     const char *ctrl_prop = "ctl.start";
 
-    char daemon_suffix[MAX_DAEMON_SUFFIX];
+    char p2p_interface[MAX_INTERFACE_LENGTH];
 
-    get_daemon_suffix(interface, daemon_suffix);
+    get_p2p_interface_replacement(interface, p2p_interface);
 
     snprintf(result_prop_name, sizeof(result_prop_name), "%s.%s.result",
             DHCP_PROP_NAME_PREFIX,
-            interface);
+            p2p_interface);
 
     /* Erase any previous setting of the dhcp result property */
     property_set(result_prop_name, "");
 
     /* Start the renew daemon and wait until it's ready */
     snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:%s", DAEMON_NAME_RENEW,
-            daemon_suffix, interface);
+            p2p_interface, interface);
     memset(prop_value, '\0', PROPERTY_VALUE_MAX);
     property_set(ctrl_prop, daemon_cmd);
 
