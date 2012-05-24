@@ -175,7 +175,7 @@
  * with a memory address.  If not defined, stack crawls will not have symbolic
  * information.
  */
-#define HAVE_DLADDR 0
+#define HAVE_DLADDR 1
 
 /*
  * Defined if we have the cxxabi.h header for demangling C++ symbols.  If
