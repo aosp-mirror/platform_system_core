@@ -31,10 +31,13 @@
 
 #include "usb.h"
 
+struct sparse_file;
+
 /* protocol.c - fastboot protocol */
 int fb_command(usb_handle *usb, const char *cmd);
 int fb_command_response(usb_handle *usb, const char *cmd, char *response);
 int fb_download_data(usb_handle *usb, const void *data, unsigned size);
+int fb_download_data_sparse(usb_handle *usb, struct sparse_file *s);
 char *fb_get_error(void);
 
 #define FB_COMMAND_SZ 64
@@ -43,6 +46,7 @@ char *fb_get_error(void);
 /* engine.c - high level command queue engine */
 int fb_getvar(struct usb_handle *usb, char *response, const char *fmt, ...);
 void fb_queue_flash(const char *ptn, void *data, unsigned sz);;
+void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, unsigned sz);
 void fb_queue_erase(const char *ptn);
 void fb_queue_format(const char *ptn, int skip_if_not_supported);
 void fb_queue_require(const char *prod, const char *var, int invert,

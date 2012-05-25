@@ -26,9 +26,13 @@
  * SUCH DAMAGE.
  */
 
+#define _LARGEFILE64_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -38,10 +42,19 @@
 #include <getopt.h>
 
 #include <sys/time.h>
+#include <sys/types.h>
+
 #include <bootimg.h>
+#include <sparse/sparse.h>
 #include <zipfile/zipfile.h>
 
 #include "fastboot.h"
+
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+
+#define DEFAULT_SPARSE_LIMIT (256 * 1024 * 1024)
 
 char cur_product[FB_RESPONSE_SZ + 1];
 
@@ -59,6 +72,8 @@ static const char *product = 0;
 static const char *cmdline = 0;
 static int wipe_data = 0;
 static unsigned short vendor_id = 0;
+static int64_t sparse_limit = -1;
+static int64_t target_sparse_limit = -1;
 
 static unsigned base_addr = 0x10000000;
 
@@ -117,7 +132,27 @@ char *find_item(const char *item, const char *product)
 
 #ifdef _WIN32
 void *load_file(const char *fn, unsigned *_sz);
+int64_t file_size(const char *fn);
 #else
+#if defined(__APPLE__) && defined(__MACH__)
+#define lseek64 lseek
+#define off64_t off_t
+#endif
+
+int64_t file_size(const char *fn)
+{
+    off64_t off;
+    int fd;
+
+    fd = open(fn, O_RDONLY);
+    if (fd < 0) return -1;
+
+    off = lseek64(fd, 0, SEEK_END);
+    close(fd);
+
+    return off;
+}
+
 void *load_file(const char *fn, unsigned *_sz)
 {
     char *data;
@@ -245,6 +280,8 @@ void usage(void)
             "  -i <vendor id>                           specify a custom USB vendor id\n"
             "  -b <base_addr>                           specify a custom kernel base address\n"
             "  -n <page size>                           specify the nand page size. default: 2048\n"
+            "  -S <size>[K|M|G]                         automatically sparse files greater than\n"
+            "                                           size. default: 256M, 0 to disable\n"
         );
 }
 
@@ -430,6 +467,110 @@ void queue_info_dump(void)
     fb_queue_notice("--------------------------------------------");
 }
 
+
+struct sparse_file **load_sparse_files(const char *fname, int max_size)
+{
+    int fd;
+    struct sparse_file *s;
+    int files;
+    struct sparse_file **out_s;
+
+    fd = open(fname, O_RDONLY | O_BINARY);
+    if (fd < 0) {
+        die("cannot open '%s'\n", fname);
+    }
+
+    s = sparse_file_import_auto(fd, false);
+    if (!s) {
+        die("cannot sparse read file '%s'\n", fname);
+    }
+
+    files = sparse_file_resparse(s, max_size, NULL, 0);
+    if (files < 0) {
+        die("Failed to resparse '%s'\n", fname);
+    }
+
+    out_s = calloc(sizeof(struct sparse_file *), files + 1);
+    if (!out_s) {
+        die("Failed to allocate sparse file array\n");
+    }
+
+    files = sparse_file_resparse(s, max_size, out_s, files);
+    if (files < 0) {
+        die("Failed to resparse '%s'\n", fname);
+    }
+
+    return out_s;
+}
+
+static int64_t get_target_sparse_limit(struct usb_handle *usb)
+{
+    int64_t limit = 0;
+    char response[FB_RESPONSE_SZ + 1];
+    int status = fb_getvar(usb, response, "max-download-size");
+
+    if (!status) {
+        limit = strtoul(response, NULL, 0);
+        if (limit > 0) {
+            fprintf(stderr, "target reported max download size of %lld bytes\n",
+                    limit);
+        }
+    }
+
+    return limit;
+}
+
+static int64_t get_sparse_limit(struct usb_handle *usb, int64_t size)
+{
+    int64_t limit;
+
+    if (sparse_limit == 0) {
+        return 0;
+    } else if (sparse_limit > 0) {
+        limit = sparse_limit;
+    } else {
+        if (target_sparse_limit == -1) {
+            target_sparse_limit = get_target_sparse_limit(usb);
+        }
+        if (target_sparse_limit > 0) {
+            limit = target_sparse_limit;
+        } else {
+            limit = DEFAULT_SPARSE_LIMIT;
+        }
+    }
+
+    if (size > limit) {
+        return limit;
+    }
+
+    return 0;
+}
+
+void do_flash(usb_handle *usb, const char *pname, const char *fname)
+{
+    int64_t sz64;
+    void *data;
+    int64_t limit;
+
+    sz64 = file_size(fname);
+    limit = get_sparse_limit(usb, sz64);
+    if (limit) {
+        struct sparse_file **s = load_sparse_files(fname, limit);
+        if (s == NULL) {
+            die("cannot sparse load '%s'\n", fname);
+        }
+        while (*s) {
+            sz64 = sparse_file_len(*s, true, false);
+            fb_queue_flash_sparse(pname, *s++, sz64);
+        }
+    } else {
+        unsigned int sz;
+        data = load_file(fname, &sz);
+        if (data == 0) die("cannot load '%s'\n", fname);
+        fb_queue_flash(pname, data, sz);
+    }
+}
+
 void do_update_signature(zipfile_t zip, char *fn)
 {
     void *data;
@@ -567,6 +708,47 @@ int do_oem_command(int argc, char **argv)
     return 0;
 }
 
+static int64_t parse_num(const char *arg)
+{
+    char *endptr;
+    unsigned long long num;
+
+    num = strtoull(arg, &endptr, 0);
+    if (endptr == arg) {
+        return -1;
+    }
+
+    if (*endptr == 'k' || *endptr == 'K') {
+        if (num >= (-1ULL) / 1024) {
+            return -1;
+        }
+        num *= 1024LL;
+        endptr++;
+    } else if (*endptr == 'm' || *endptr == 'M') {
+        if (num >= (-1ULL) / (1024 * 1024)) {
+            return -1;
+        }
+        num *= 1024LL * 1024LL;
+        endptr++;
+    } else if (*endptr == 'g' || *endptr == 'G') {
+        if (num >= (-1ULL) / (1024 * 1024 * 1024)) {
+            return -1;
+        }
+        num *= 1024LL * 1024LL * 1024LL;
+        endptr++;
+    }
+
+    if (*endptr != '\0') {
+        return -1;
+    }
+
+    if (num > INT64_MAX) {
+        return -1;
+    }
+
+    return num;
+}
+
 int main(int argc, char **argv)
 {
     int wants_wipe = 0;
@@ -577,13 +759,14 @@ int main(int argc, char **argv)
     unsigned page_size = 2048;
     int status;
     int c;
+    int r;
 
-    struct option longopts = { 0, 0, 0, 0 };
+    const struct option longopts = { 0, 0, 0, 0 };
 
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        c = getopt_long(argc, argv, "wb:n:s:p:c:i:h", &longopts, NULL);
+        c = getopt_long(argc, argv, "wb:n:s:S:p:c:i:m:h", &longopts, NULL);
         if (c < 0) {
             break;
         }
@@ -601,6 +784,12 @@ int main(int argc, char **argv)
             break;
         case 's':
             serial = optarg;
+            break;
+        case 'S':
+            sparse_limit = parse_num(optarg);
+            if (sparse_limit < 0) {
+                    die("invalid sparse limit");
+            }
             break;
         case 'p':
             product = optarg;
@@ -702,9 +891,7 @@ int main(int argc, char **argv)
                 skip(2);
             }
             if (fname == 0) die("cannot determine image filename for '%s'", pname);
-            data = load_file(fname, &sz);
-            if (data == 0) die("cannot load '%s'\n", fname);
-            fb_queue_flash(pname, data, sz);
+            do_flash(usb, pname, fname);
         } else if(!strcmp(*argv, "flash:raw")) {
             char *pname = argv[1];
             char *kname = argv[2];

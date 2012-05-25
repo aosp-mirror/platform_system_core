@@ -28,7 +28,6 @@
 
 #include "fastboot.h"
 #include "make_ext4fs.h"
-#include "ext4_utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,6 +76,7 @@ char *mkmsg(const char *fmt, ...)
 #define OP_QUERY      3
 #define OP_NOTICE     4
 #define OP_FORMAT     5
+#define OP_DOWNLOAD_SPARSE 6
 
 typedef struct Action Action;
 
@@ -382,6 +382,19 @@ void fb_queue_flash(const char *ptn, void *data, unsigned sz)
     a->msg = mkmsg("writing '%s'", ptn);
 }
 
+void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, unsigned sz)
+{
+    Action *a;
+
+    a = queue_action(OP_DOWNLOAD_SPARSE, "");
+    a->data = s;
+    a->size = 0;
+    a->msg = mkmsg("sending sparse '%s' (%d KB)", ptn, sz / 1024);
+
+    a = queue_action(OP_COMMAND, "flash:%s", ptn);
+    a->msg = mkmsg("writing '%s'", ptn);
+}
+
 static int match(char *str, const char **value, unsigned count)
 {
     const char *val;
@@ -578,6 +591,10 @@ int fb_execute_queue(usb_handle *usb)
             fprintf(stderr,"%s\n",(char*)a->data);
         } else if (a->op == OP_FORMAT) {
             status = fb_format(a, usb, (int)a->data);
+            status = a->func(a, status, status ? fb_get_error() : "");
+            if (status) break;
+        } else if (a->op == OP_DOWNLOAD_SPARSE) {
+            status = fb_download_data_sparse(usb, a->data);
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
         } else {
