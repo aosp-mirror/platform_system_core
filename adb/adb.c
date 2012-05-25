@@ -21,6 +21,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <stddef.h>
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
@@ -998,7 +999,7 @@ void connect_device(char* host, char* buffer, int buffer_size)
 
     strncpy(hostbuf, host, sizeof(hostbuf) - 1);
     if (portstr) {
-        if (portstr - host >= sizeof(hostbuf)) {
+        if (portstr - host >= (ptrdiff_t)sizeof(hostbuf)) {
             snprintf(buffer, buffer_size, "bad host name %s", host);
             return;
         }
