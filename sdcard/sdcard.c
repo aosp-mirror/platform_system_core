@@ -72,6 +72,17 @@
 
 #define MOUNT_POINT "/storage/sdcard0"
 
+/* Maximum number of bytes to write in one request. */
+#define MAX_WRITE (256 * 1024)
+
+/* Maximum number of bytes to read in one request. */
+#define MAX_READ (128 * 1024)
+
+/* Largest possible request.
+ * The request size is bounded by the maximum size of a FUSE_WRITE request because it has
+ * the largest possible data payload. */
+#define MAX_REQUEST_SIZE (sizeof(struct fuse_in_header) + sizeof(struct fuse_write_in) + MAX_WRITE)
+
 struct handle {
     struct node *node;
     int fd;
@@ -519,16 +530,10 @@ void lookup_entry(struct fuse *fuse, struct node *node,
     fuse_reply(fuse, unique, &out, sizeof(out));
 }
 
-void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *data, unsigned len)
+void handle_fuse_request(struct fuse *fuse,
+        const struct fuse_in_header *hdr, const void *data, size_t data_len)
 {
     struct node *node;
-
-    if ((len < sizeof(*hdr)) || (hdr->len != len)) {
-        ERROR("malformed header\n");
-        return;
-    }
-
-    len -= hdr->len;
 
     if (hdr->nodeid) {
         node = lookup_by_inode(fuse, hdr->nodeid);
@@ -542,20 +547,24 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
 
     switch (hdr->opcode) {
     case FUSE_LOOKUP: { /* bytez[] -> entry_out */
-        TRACE("LOOKUP %llx %s\n", hdr->nodeid, (char*) data);
-        lookup_entry(fuse, node, (char*) data, hdr->unique);
+        const char* name = data;
+        TRACE("LOOKUP %llx %s\n", hdr->nodeid, name);
+        lookup_entry(fuse, node, name, hdr->unique);
         return;
     }
+
     case FUSE_FORGET: {
-        struct fuse_forget_in *req = data;
-        TRACE("FORGET %llx (%s) #%lld\n", hdr->nodeid, node->name, req->nlookup);
+        const struct fuse_forget_in *req = data;
+        __u64 n = req->nlookup;
+        TRACE("FORGET %llx (%s) #%lld\n", hdr->nodeid, node->name, n);
             /* no reply */
-        while (req->nlookup--)
+        while (n--)
             node_release(node);
         return;
     }
+
     case FUSE_GETATTR: { /* getattr_in -> attr_out */
-        struct fuse_getattr_in *req = data;
+        const struct fuse_getattr_in *req = data;
         struct fuse_attr_out out;
 
         TRACE("GETATTR flags=%x fh=%llx\n", req->getattr_flags, req->fh);
@@ -567,8 +576,9 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         fuse_reply(fuse, hdr->unique, &out, sizeof(out));
         return;
     }
+
     case FUSE_SETATTR: { /* setattr_in -> attr_out */
-        struct fuse_setattr_in *req = data;
+        const struct fuse_setattr_in *req = data;
         struct fuse_attr_out out;
         char *path, buffer[PATH_BUFFER_SIZE];
         int res = 0;
@@ -626,19 +636,20 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
             fuse_reply(fuse, hdr->unique, &out, sizeof(out));
         return;
     }
+
 //    case FUSE_READLINK:
 //    case FUSE_SYMLINK:
     case FUSE_MKNOD: { /* mknod_in, bytez[] -> entry_out */
-        struct fuse_mknod_in *req = data;
+        const struct fuse_mknod_in *req = data;
+        const char *name = ((const char*) data) + sizeof(*req);
         char *path, buffer[PATH_BUFFER_SIZE];
-        char *name = ((char*) data) + sizeof(*req);
         int res;
 
         TRACE("MKNOD %s @ %llx\n", name, hdr->nodeid);
         path = node_get_path(node, buffer, name);
 
-        req->mode = (req->mode & (~0777)) | 0664;
-        res = mknod(path, req->mode, req->rdev); /* XXX perm?*/
+        __u32 mode = (req->mode & (~0777)) | 0664;
+        res = mknod(path, mode, req->rdev); /* XXX perm?*/
         if (res < 0) {
             fuse_status(fuse, hdr->unique, -errno);
         } else {
@@ -646,18 +657,19 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         }
         return;
     }
+
     case FUSE_MKDIR: { /* mkdir_in, bytez[] -> entry_out */
-        struct fuse_mkdir_in *req = data;
+        const struct fuse_mkdir_in *req = data;
+        const char *name = ((const char*) data) + sizeof(*req);
         struct fuse_entry_out out;
         char *path, buffer[PATH_BUFFER_SIZE];
-        char *name = ((char*) data) + sizeof(*req);
         int res;
 
         TRACE("MKDIR %s @ %llx 0%o\n", name, hdr->nodeid, req->mode);
         path = node_get_path(node, buffer, name);
 
-        req->mode = (req->mode & (~0777)) | 0775;
-        res = mkdir(path, req->mode);
+        __u32 mode = (req->mode & (~0777)) | 0775;
+        res = mkdir(path, mode);
         if (res < 0) {
             fuse_status(fuse, hdr->unique, -errno);
         } else {
@@ -665,28 +677,33 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         }
         return;
     }
+
     case FUSE_UNLINK: { /* bytez[] -> */
+        const char* name = data;
         char *path, buffer[PATH_BUFFER_SIZE];
         int res;
-        TRACE("UNLINK %s @ %llx\n", (char*) data, hdr->nodeid);
-        path = node_get_path(node, buffer, (char*) data);
+        TRACE("UNLINK %s @ %llx\n", name, hdr->nodeid);
+        path = node_get_path(node, buffer, name);
         res = unlink(path);
         fuse_status(fuse, hdr->unique, res ? -errno : 0);
         return;
     }
+
     case FUSE_RMDIR: { /* bytez[] -> */
+        const char* name = data;
         char *path, buffer[PATH_BUFFER_SIZE];
         int res;
-        TRACE("RMDIR %s @ %llx\n", (char*) data, hdr->nodeid);
-        path = node_get_path(node, buffer, (char*) data);
+        TRACE("RMDIR %s @ %llx\n", name, hdr->nodeid);
+        path = node_get_path(node, buffer, name);
         res = rmdir(path);
         fuse_status(fuse, hdr->unique, res ? -errno : 0);
         return;
     }
+
     case FUSE_RENAME: { /* rename_in, oldname, newname ->  */
-        struct fuse_rename_in *req = data;
-        char *oldname = ((char*) data) + sizeof(*req);
-        char *newname = oldname + strlen(oldname) + 1;
+        const struct fuse_rename_in *req = data;
+        const char *oldname = ((const char*) data) + sizeof(*req);
+        const char *newname = oldname + strlen(oldname) + 1;
         char *oldpath, oldbuffer[PATH_BUFFER_SIZE];
         char *newpath, newbuffer[PATH_BUFFER_SIZE];
         struct node *target;
@@ -735,9 +752,10 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         fuse_status(fuse, hdr->unique, res ? -errno : 0);
         return;
     }
+
 //    case FUSE_LINK:        
     case FUSE_OPEN: { /* open_in -> open_out */
-        struct fuse_open_in *req = data;
+        const struct fuse_open_in *req = data;
         struct fuse_open_out out;
         char *path, buffer[PATH_BUFFER_SIZE];
         struct handle *h;
@@ -763,9 +781,10 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         fuse_reply(fuse, hdr->unique, &out, sizeof(out));
         return;
     }
+
     case FUSE_READ: { /* read_in -> byte[] */
-        char buffer[128 * 1024];
-        struct fuse_read_in *req = data;
+        char buffer[MAX_READ];
+        const struct fuse_read_in *req = data;
         struct handle *h = id_to_ptr(req->fh);
         int res;
         TRACE("READ %p(%d) %u@%llu\n", h, h->fd, req->size, req->offset);
@@ -781,21 +800,24 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         fuse_reply(fuse, hdr->unique, buffer, res);
         return;
     }
+
     case FUSE_WRITE: { /* write_in, byte[write_in.size] -> write_out */
-        struct fuse_write_in *req = data;
+        const struct fuse_write_in *req = data;
+        const void* buffer = (const __u8*)data + sizeof(*req);
         struct fuse_write_out out;
         struct handle *h = id_to_ptr(req->fh);
         int res;
         TRACE("WRITE %p(%d) %u@%llu\n", h, h->fd, req->size, req->offset);
-        res = pwrite64(h->fd, ((char*) data) + sizeof(*req), req->size, req->offset);
+        res = pwrite64(h->fd, buffer, req->size, req->offset);
         if (res < 0) {
             fuse_status(fuse, hdr->unique, -errno);
             return;
         }
         out.size = res;
         fuse_reply(fuse, hdr->unique, &out, sizeof(out));
-        goto oops;
+        return;
     }
+
     case FUSE_STATFS: { /* getattr_in -> attr_out */
         struct statfs stat;
         struct fuse_statfs_out out;
@@ -820,8 +842,9 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         fuse_reply(fuse, hdr->unique, &out, sizeof(out));
         return;
     }
+
     case FUSE_RELEASE: { /* release_in -> */
-        struct fuse_release_in *req = data;
+        const struct fuse_release_in *req = data;
         struct handle *h = id_to_ptr(req->fh);
         TRACE("RELEASE %p(%d)\n", h, h->fd);
         close(h->fd);
@@ -829,16 +852,19 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         fuse_status(fuse, hdr->unique, 0);
         return;
     }
+
 //    case FUSE_FSYNC:
 //    case FUSE_SETXATTR:
 //    case FUSE_GETXATTR:
 //    case FUSE_LISTXATTR:
 //    case FUSE_REMOVEXATTR:
-    case FUSE_FLUSH:
+    case FUSE_FLUSH: {
         fuse_status(fuse, hdr->unique, 0);
         return;
+    }
+
     case FUSE_OPENDIR: { /* open_in -> open_out */
-        struct fuse_open_in *req = data;
+        const struct fuse_open_in *req = data;
         struct fuse_open_out out;
         char *path, buffer[PATH_BUFFER_SIZE];
         struct dirhandle *h;
@@ -862,8 +888,9 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         fuse_reply(fuse, hdr->unique, &out, sizeof(out));
         return;
     }
+
     case FUSE_READDIR: {
-        struct fuse_read_in *req = data;
+        const struct fuse_read_in *req = data;
         char buffer[8192];
         struct fuse_dirent *fde = (struct fuse_dirent*) buffer;
         struct dirent *de;
@@ -889,8 +916,9 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
                    FUSE_DIRENT_ALIGN(sizeof(struct fuse_dirent) + fde->namelen));
         return;
     }
+
     case FUSE_RELEASEDIR: { /* release_in -> */
-        struct fuse_release_in *req = data;
+        const struct fuse_release_in *req = data;
         struct dirhandle *h = id_to_ptr(req->fh);
         TRACE("RELEASEDIR %p\n",h);
         closedir(h->d);
@@ -898,9 +926,10 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         fuse_status(fuse, hdr->unique, 0);
         return;
     }
+
 //    case FUSE_FSYNCDIR:
     case FUSE_INIT: { /* init_in -> init_out */
-        struct fuse_init_in *req = data;
+        const struct fuse_init_in *req = data;
         struct fuse_init_out out;
         
         TRACE("INIT ver=%d.%d maxread=%d flags=%x\n",
@@ -912,40 +941,48 @@ void handle_fuse_request(struct fuse *fuse, struct fuse_in_header *hdr, void *da
         out.flags = FUSE_ATOMIC_O_TRUNC | FUSE_BIG_WRITES;
         out.max_background = 32;
         out.congestion_threshold = 32;
-        out.max_write = 256 * 1024;
+        out.max_write = MAX_WRITE;
 
         fuse_reply(fuse, hdr->unique, &out, sizeof(out));
         return;
     }
+
     default: {
-        struct fuse_out_header h;
         ERROR("NOTIMPL op=%d uniq=%llx nid=%llx\n",
                 hdr->opcode, hdr->unique, hdr->nodeid);
-
-        oops:
-        h.len = sizeof(h);
-        h.error = -ENOSYS;
-        h.unique = hdr->unique;
-        write(fuse->fd, &h, sizeof(h));
+        fuse_status(fuse, hdr->unique, -ENOSYS);
         break;
     }
-    }   
+    }
 }
 
 void handle_fuse_requests(struct fuse *fuse)
 {
-    unsigned char req[256 * 1024 + 128];
-    int len;
-    
+    __u8 req[MAX_REQUEST_SIZE];
+
     for (;;) {
-        len = read(fuse->fd, req, sizeof(req));
+        ssize_t len = read(fuse->fd, req, sizeof(req));
         if (len < 0) {
             if (errno == EINTR)
                 continue;
             ERROR("handle_fuse_requests: errno=%d\n", errno);
             return;
         }
-        handle_fuse_request(fuse, (void*) req, (void*) (req + sizeof(struct fuse_in_header)), len);
+
+        if ((size_t)len < sizeof(struct fuse_in_header)) {
+            ERROR("request too short: len=%zu\n", (size_t)len);
+            return;
+        }
+
+        const struct fuse_in_header *hdr = (void*)req;
+        if (hdr->len != (size_t)len) {
+            ERROR("malformed header: len=%zu, hdr->len=%u\n", (size_t)len, hdr->len);
+            return;
+        }
+
+        const void *data = req + sizeof(struct fuse_in_header);
+        size_t data_len = len - sizeof(struct fuse_in_header);
+        handle_fuse_request(fuse, hdr, data, data_len);
     }
 }
 
