@@ -115,9 +115,6 @@ struct fuse {
     char rootpath[1024];
 };
 
-static unsigned uid = -1;
-static unsigned gid = -1;
-
 #define PATH_BUFFER_SIZE 1024
 
 #define NO_CASE_SENSITIVE_MATCH 0
@@ -334,12 +331,12 @@ void fuse_init(struct fuse *fuse, int fd, const char *path)
 
 static inline void *id_to_ptr(__u64 nid)
 {
-    return (void *) nid;
+    return (void *) (uintptr_t) nid;
 }
 
 static inline __u64 ptr_to_id(void *ptr)
 {
-    return (__u64) ptr;
+    return (__u64) (uintptr_t) ptr;
 }
 
 
@@ -954,26 +951,78 @@ void handle_fuse_requests(struct fuse *fuse)
 
 static int usage()
 {
-    ERROR("usage: sdcard [-l -f] <path> <uid> <gid>\n\n\t-l force file names to lower case when creating new files\n\t-f fix up file system before starting (repairs bad file name case and group ownership)\n");
-    return -1;
+    ERROR("usage: sdcard <path> <uid> <gid>\n\n");
+    return 1;
+}
+
+static int run(const char* path, uid_t uid, gid_t gid)
+{
+    int fd;
+    char opts[256];
+    int res;
+    struct fuse fuse;
+
+    /* cleanup from previous instance, if necessary */
+    umount2(MOUNT_POINT, 2);
+
+    fd = open("/dev/fuse", O_RDWR);
+    if (fd < 0){
+        ERROR("cannot open fuse device (error %d)\n", errno);
+        return -1;
+    }
+
+    snprintf(opts, sizeof(opts),
+            "fd=%i,rootmode=40000,default_permissions,allow_other,user_id=%d,group_id=%d",
+            fd, uid, gid);
+
+    res = mount("/dev/fuse", MOUNT_POINT, "fuse", MS_NOSUID | MS_NODEV, opts);
+    if (res < 0) {
+        ERROR("cannot mount fuse filesystem (error %d)\n", errno);
+        goto error;
+    }
+
+    res = setgid(gid);
+    if (res < 0) {
+        ERROR("cannot setgid (error %d)\n", errno);
+        goto error;
+    }
+
+    res = setuid(uid);
+    if (res < 0) {
+        ERROR("cannot setuid (error %d)\n", errno);
+        goto error;
+    }
+
+    fuse_init(&fuse, fd, path);
+
+    umask(0);
+    handle_fuse_requests(&fuse);
+
+    /* we do not attempt to umount the file system here because we are no longer
+     * running as the root user */
+    res = 0;
+
+error:
+    close(fd);
+    return res;
 }
 
 int main(int argc, char **argv)
 {
-    struct fuse fuse;
-    char opts[256];
     int fd;
     int res;
     const char *path = NULL;
+    uid_t uid = 0;
+    gid_t gid = 0;
     int i;
 
     for (i = 1; i < argc; i++) {
         char* arg = argv[i];
         if (!path)
             path = arg;
-        else if (uid == -1)
+        else if (!uid)
             uid = strtoul(arg, 0, 10);
-        else if (gid == -1)
+        else if (!gid)
             gid = strtoul(arg, 0, 10);
         else {
             ERROR("too many arguments\n");
@@ -985,42 +1034,11 @@ int main(int argc, char **argv)
         ERROR("no path specified\n");
         return usage();
     }
-    if (uid <= 0 || gid <= 0) {
+    if (!uid || !gid) {
         ERROR("uid and gid must be nonzero\n");
         return usage();
     }
 
-        /* cleanup from previous instance, if necessary */
-    umount2(MOUNT_POINT, 2);
-
-    fd = open("/dev/fuse", O_RDWR);
-    if (fd < 0){
-        ERROR("cannot open fuse device (%d)\n", errno);
-        return -1;
-    }
-
-    sprintf(opts, "fd=%i,rootmode=40000,default_permissions,allow_other,"
-            "user_id=%d,group_id=%d", fd, uid, gid);
-    
-    res = mount("/dev/fuse", MOUNT_POINT, "fuse", MS_NOSUID | MS_NODEV, opts);
-    if (res < 0) {
-        ERROR("cannot mount fuse filesystem (%d)\n", errno);
-        return -1;
-    }
-
-    if (setgid(gid) < 0) {
-        ERROR("cannot setgid!\n");
-        return -1;
-    }
-    if (setuid(uid) < 0) {
-        ERROR("cannot setuid!\n");
-        return -1;
-    }
-
-    fuse_init(&fuse, fd, path);
-
-    umask(0);
-    handle_fuse_requests(&fuse);
-    
-    return 0;
+    res = run(path, uid, gid);
+    return res < 0 ? 1 : 0;
 }
