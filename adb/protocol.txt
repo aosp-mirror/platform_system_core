@@ -72,7 +72,7 @@ large maxdata value, the connection with the other side must be closed.
 The system identity string should be "<systemtype>:<serialno>:<banner>"
 where systemtype is "bootloader", "device", or "host", serialno is some
 kind of unique ID (or empty), and banner is a human-readable version
-or identifier string (informational only).
+or identifier string.  The banner is used to transmit useful properties.
 
 
 --- OPEN(local-id, 0, "destination") -----------------------------------

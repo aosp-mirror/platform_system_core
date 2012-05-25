@@ -185,6 +185,8 @@ struct atransport
         /* used to identify transports for clients */
     char *serial;
     char *product;
+    char *model;
+    char *device;
     char *devpath;
     int adb_port; // Use for emulators (local transport)
 
