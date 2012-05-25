@@ -7,14 +7,17 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#define OPT_RECURSIVE 1
+#define OPT_FORCE     2
+
 static int usage()
 {
-    fprintf(stderr,"rm [-rR] <target>\n");
+    fprintf(stderr,"Usage: rm [-rR] [-f] <target>\n");
     return -1;
 }
 
 /* return -1 on failure, with errno set to the first error */
-static int unlink_recursive(const char* name)
+static int unlink_recursive(const char* name, int flags)
 {
     struct stat st;
     DIR *dir;
@@ -23,7 +26,7 @@ static int unlink_recursive(const char* name)
 
     /* is it a file or directory? */
     if (lstat(name, &st) < 0)
-        return -1;
+        return ((flags & OPT_FORCE) && errno == ENOENT) ? 0 : -1;
 
     /* a file, so unlink it */
     if (!S_ISDIR(st.st_mode))
@@ -41,7 +44,7 @@ static int unlink_recursive(const char* name)
         if (!strcmp(de->d_name, "..") || !strcmp(de->d_name, "."))
             continue;
         sprintf(dn, "%s/%s", name, de->d_name);
-        if (unlink_recursive(dn) < 0) {
+        if (unlink_recursive(dn, flags) < 0) {
             fail = 1;
             break;
         }
@@ -66,21 +69,45 @@ static int unlink_recursive(const char* name)
 int rm_main(int argc, char *argv[])
 {
     int ret;
-    int i = 1;
-    int recursive = 0;
+    int i, c;
+    int flags = 0;
 
     if (argc < 2)
         return usage();
 
-    /* check if recursive */
-    if (argc >=2 && (!strcmp(argv[1], "-r") || !strcmp(argv[1], "-R"))) {
-        recursive = 1;
-        i = 2;
+    /* check flags */
+    do {
+        c = getopt(argc, argv, "frR");
+        if (c == EOF)
+            break;
+        switch (c) {
+        case 'f':
+            flags |= OPT_FORCE;
+            break;
+        case 'r':
+        case 'R':
+            flags |= OPT_RECURSIVE;
+            break;
+        }
+    } while (1);
+
+    if (optind < 1 || optind >= argc) {
+        usage();
+        return -1;
     }
-    
+
     /* loop over the file/directory args */
-    for (; i < argc; i++) {
-        int ret = recursive ? unlink_recursive(argv[i]) : unlink(argv[i]);
+    for (i = optind; i < argc; i++) {
+
+        if (flags & OPT_RECURSIVE) {
+            ret = unlink_recursive(argv[i], flags);
+        } else {
+            ret = unlink(argv[i]);
+            if (errno == ENOENT && (flags & OPT_FORCE)) {
+                return 0;
+            }
+        }
+
         if (ret < 0) {
             fprintf(stderr, "rm failed for %s, %s\n", argv[i], strerror(errno));
             return -1;
