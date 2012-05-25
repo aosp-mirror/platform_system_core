@@ -41,6 +41,7 @@ char *fb_get_error(void);
 #define FB_RESPONSE_SZ 64
 
 /* engine.c - high level command queue engine */
+int fb_getvar(struct usb_handle *usb, char *response, const char *fmt, ...);
 void fb_queue_flash(const char *ptn, void *data, unsigned sz);;
 void fb_queue_erase(const char *ptn);
 void fb_queue_format(const char *ptn, int skip_if_not_supported);

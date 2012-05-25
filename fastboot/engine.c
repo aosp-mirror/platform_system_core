@@ -111,6 +111,20 @@ struct image_data {
 void generate_ext4_image(struct image_data *image);
 void cleanup_image(struct image_data *image);
 
+int fb_getvar(struct usb_handle *usb, char *response, const char *fmt, ...)
+{
+    char cmd[CMD_SIZE] = "getvar:";
+    int getvar_len = strlen(cmd);
+    va_list args;
+
+    response[FB_RESPONSE_SZ] = '\0';
+    va_start(args, fmt);
+    vsnprintf(cmd + getvar_len, sizeof(cmd) - getvar_len, fmt, args);
+    va_end(args);
+    cmd[CMD_SIZE - 1] = '\0';
+    return fb_command_response(usb, cmd, response);
+}
+
 struct generator {
     char *fs_type;
 
@@ -278,9 +292,7 @@ int fb_format(Action *a, usb_handle *usb, int skip_if_not_supported)
     unsigned i;
     char cmd[CMD_SIZE];
 
-    response[FB_RESPONSE_SZ] = '\0';
-    snprintf(cmd, sizeof(cmd), "getvar:partition-type:%s", partition);
-    status = fb_command_response(usb, cmd, response);
+    status = fb_getvar(usb, response, "partition-type:%s", partition);
     if (status) {
         if (skip_if_not_supported) {
             fprintf(stderr,
@@ -312,9 +324,7 @@ int fb_format(Action *a, usb_handle *usb, int skip_if_not_supported)
         return -1;
     }
 
-    response[FB_RESPONSE_SZ] = '\0';
-    snprintf(cmd, sizeof(cmd), "getvar:partition-size:%s", partition);
-    status = fb_command_response(usb, cmd, response);
+    status = fb_getvar(usb, response, "partition-size:%s", partition);
     if (status) {
         if (skip_if_not_supported) {
             fprintf(stderr,
