@@ -158,6 +158,20 @@ int sparse_file_write(struct sparse_file *s, int fd, bool gz, bool sparse,
 		bool crc);
 
 /**
+ * sparse_file_len - return the length of a sparse file if written to disk
+ *
+ * @s - sparse file cookie
+ * @sparse - write in the Android sparse file format
+ * @crc - append a crc chunk
+ *
+ * Returns the size a sparse file would be on disk if it were written in the
+ * specified format.  If sparse is true, this is the size of the data in the
+ * sparse format.  If sparse is false, this is the size of the normal
+ * non-sparse file.
+ */
+int64_t sparse_file_len(struct sparse_file *s, bool sparse, bool crc);
+
+/**
  * sparse_file_callback - call a callback for blocks in sparse file
  *
  * @s - sparse file cookie

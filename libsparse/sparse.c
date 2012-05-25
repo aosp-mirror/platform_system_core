@@ -196,6 +196,30 @@ static int out_counter_write(void *priv, const void *data, int len)
 	return 0;
 }
 
+int64_t sparse_file_len(struct sparse_file *s, bool sparse, bool crc)
+{
+	int ret;
+	int chunks = sparse_count_chunks(s);
+	int64_t count = 0;
+	struct output_file *out;
+
+	out = open_output_callback(out_counter_write, &count,
+			s->block_size, s->len, false, sparse, chunks, crc);
+	if (!out) {
+		return -1;
+	}
+
+	ret = write_all_blocks(s, out);
+
+	close_output_file(out);
+
+	if (ret < 0) {
+		return -1;
+	}
+
+	return count;
+}
+
 static struct backed_block *move_chunks_up_to_len(struct sparse_file *from,
 		struct sparse_file *to, unsigned int len)
 {
