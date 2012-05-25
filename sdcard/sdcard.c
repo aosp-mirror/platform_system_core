@@ -25,6 +25,7 @@
 #include <sys/statfs.h>
 #include <sys/uio.h>
 #include <dirent.h>
+#include <limits.h>
 #include <ctype.h>
 
 #include <private/android_filesystem_config.h>
@@ -114,6 +115,7 @@ struct node {
     char *actual_name;
 };
 
+/* Global data structure shared by all fuse handlers. */
 struct fuse {
     __u64 next_generation;
     __u64 next_node_id;
@@ -123,10 +125,18 @@ struct fuse {
     struct node *all;
 
     struct node root;
-    char rootpath[1024];
+    char rootpath[PATH_MAX];
 };
 
-#define PATH_BUFFER_SIZE 1024
+/* Private data used by a single fuse handler. */
+struct fuse_handler {
+    /* To save memory, we never use the contents of the request buffer and the read
+     * buffer at the same time.  This allows us to share the underlying storage. */
+    union {
+        __u8 request_buffer[MAX_REQUEST_SIZE];
+        __u8 read_buffer[MAX_READ];
+    };
+};
 
 #define NO_CASE_SENSITIVE_MATCH 0
 #define CASE_SENSITIVE_MATCH 1
@@ -141,7 +151,7 @@ char *do_node_get_path(struct node *node, char *buf, const char *name, int match
 {
     struct node *in_node = node;
     const char *in_name = name;
-    char *out = buf + PATH_BUFFER_SIZE - 1;
+    char *out = buf + PATH_MAX - 1;
     int len;
     out[0] = 0;
 
@@ -170,7 +180,7 @@ char *do_node_get_path(struct node *node, char *buf, const char *name, int match
      * and fail, then we need to look for a case insensitive match.
      */
     if (in_name && match_case_insensitive && access(out, F_OK) != 0) {
-        char *path, buffer[PATH_BUFFER_SIZE];
+        char *path, buffer[PATH_MAX];
         DIR* dir;
         struct dirent* entry;
         path = do_node_get_path(in_node, buffer, NULL, NO_CASE_SENSITIVE_MATCH);
@@ -184,7 +194,7 @@ char *do_node_get_path(struct node *node, char *buf, const char *name, int match
             if (!strcasecmp(entry->d_name, in_name)) {
                 /* we have a match - replace the name */
                 len = strlen(in_name);
-                memcpy(buf + PATH_BUFFER_SIZE - len - 1, entry->d_name, len);
+                memcpy(buf + PATH_MAX - len - 1, entry->d_name, len);
                 break;
             }
         }
@@ -233,7 +243,7 @@ int node_get_attr(struct node *node, struct fuse_attr *attr)
 {
     int res;
     struct stat s;
-    char *path, buffer[PATH_BUFFER_SIZE];
+    char *path, buffer[PATH_MAX];
 
     path = node_get_path(node, buffer, 0);
     res = lstat(path, &s);
@@ -261,7 +271,7 @@ static void add_node_to_parent(struct node *node, struct node *parent) {
  */
 static void node_find_actual_name(struct node *node)
 {
-    char *path, buffer[PATH_BUFFER_SIZE];
+    char *path, buffer[PATH_MAX];
     const char *node_name = node->name;
     DIR* dir;
     struct dirent* entry;
@@ -416,7 +426,7 @@ struct node *node_lookup(struct fuse *fuse, struct node *parent, const char *nam
 {
     int res;
     struct stat s;
-    char *path, buffer[PATH_BUFFER_SIZE];
+    char *path, buffer[PATH_MAX];
     struct node *node;
 
     path = node_get_path(parent, buffer, name);
@@ -530,7 +540,7 @@ void lookup_entry(struct fuse *fuse, struct node *node,
     fuse_reply(fuse, unique, &out, sizeof(out));
 }
 
-void handle_fuse_request(struct fuse *fuse,
+void handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
         const struct fuse_in_header *hdr, const void *data, size_t data_len)
 {
     struct node *node;
@@ -580,7 +590,7 @@ void handle_fuse_request(struct fuse *fuse,
     case FUSE_SETATTR: { /* setattr_in -> attr_out */
         const struct fuse_setattr_in *req = data;
         struct fuse_attr_out out;
-        char *path, buffer[PATH_BUFFER_SIZE];
+        char *path, buffer[PATH_MAX];
         int res = 0;
         struct timespec times[2];
 
@@ -642,7 +652,7 @@ void handle_fuse_request(struct fuse *fuse,
     case FUSE_MKNOD: { /* mknod_in, bytez[] -> entry_out */
         const struct fuse_mknod_in *req = data;
         const char *name = ((const char*) data) + sizeof(*req);
-        char *path, buffer[PATH_BUFFER_SIZE];
+        char *path, buffer[PATH_MAX];
         int res;
 
         TRACE("MKNOD %s @ %llx\n", name, hdr->nodeid);
@@ -662,7 +672,7 @@ void handle_fuse_request(struct fuse *fuse,
         const struct fuse_mkdir_in *req = data;
         const char *name = ((const char*) data) + sizeof(*req);
         struct fuse_entry_out out;
-        char *path, buffer[PATH_BUFFER_SIZE];
+        char *path, buffer[PATH_MAX];
         int res;
 
         TRACE("MKDIR %s @ %llx 0%o\n", name, hdr->nodeid, req->mode);
@@ -680,7 +690,7 @@ void handle_fuse_request(struct fuse *fuse,
 
     case FUSE_UNLINK: { /* bytez[] -> */
         const char* name = data;
-        char *path, buffer[PATH_BUFFER_SIZE];
+        char *path, buffer[PATH_MAX];
         int res;
         TRACE("UNLINK %s @ %llx\n", name, hdr->nodeid);
         path = node_get_path(node, buffer, name);
@@ -691,7 +701,7 @@ void handle_fuse_request(struct fuse *fuse,
 
     case FUSE_RMDIR: { /* bytez[] -> */
         const char* name = data;
-        char *path, buffer[PATH_BUFFER_SIZE];
+        char *path, buffer[PATH_MAX];
         int res;
         TRACE("RMDIR %s @ %llx\n", name, hdr->nodeid);
         path = node_get_path(node, buffer, name);
@@ -704,8 +714,8 @@ void handle_fuse_request(struct fuse *fuse,
         const struct fuse_rename_in *req = data;
         const char *oldname = ((const char*) data) + sizeof(*req);
         const char *newname = oldname + strlen(oldname) + 1;
-        char *oldpath, oldbuffer[PATH_BUFFER_SIZE];
-        char *newpath, newbuffer[PATH_BUFFER_SIZE];
+        char *oldpath, oldbuffer[PATH_MAX];
+        char *newpath, newbuffer[PATH_MAX];
         struct node *target;
         struct node *newparent;
         int res;
@@ -757,7 +767,7 @@ void handle_fuse_request(struct fuse *fuse,
     case FUSE_OPEN: { /* open_in -> open_out */
         const struct fuse_open_in *req = data;
         struct fuse_open_out out;
-        char *path, buffer[PATH_BUFFER_SIZE];
+        char *path, buffer[PATH_MAX];
         struct handle *h;
 
         h = malloc(sizeof(*h));
@@ -783,21 +793,26 @@ void handle_fuse_request(struct fuse *fuse,
     }
 
     case FUSE_READ: { /* read_in -> byte[] */
-        char buffer[MAX_READ];
         const struct fuse_read_in *req = data;
         struct handle *h = id_to_ptr(req->fh);
+        __u64 unique = hdr->unique;
+        __u32 size = req->size;
+        __u64 offset = req->offset;
+        /* Don't access any other fields of hdr or req beyond this point, the read buffer
+         * overlaps the request buffer and will clobber data in the request.  This
+         * saves us 128KB per request handler thread at the cost of this scary comment. */
         int res;
-        TRACE("READ %p(%d) %u@%llu\n", h, h->fd, req->size, req->offset);
-        if (req->size > sizeof(buffer)) {
-            fuse_status(fuse, hdr->unique, -EINVAL);
+        TRACE("READ %p(%d) %u@%llu\n", h, h->fd, size, offset);
+        if (size > sizeof(handler->read_buffer)) {
+            fuse_status(fuse, unique, -EINVAL);
             return;
         }
-        res = pread64(h->fd, buffer, req->size, req->offset);
+        res = pread64(h->fd, handler->read_buffer, size, offset);
         if (res < 0) {
-            fuse_status(fuse, hdr->unique, -errno);
+            fuse_status(fuse, unique, -errno);
             return;
         }
-        fuse_reply(fuse, hdr->unique, buffer, res);
+        fuse_reply(fuse, unique, handler->read_buffer, res);
         return;
     }
 
@@ -880,7 +895,7 @@ void handle_fuse_request(struct fuse *fuse,
     case FUSE_OPENDIR: { /* open_in -> open_out */
         const struct fuse_open_in *req = data;
         struct fuse_open_out out;
-        char *path, buffer[PATH_BUFFER_SIZE];
+        char *path, buffer[PATH_MAX];
         struct dirhandle *h;
 
         h = malloc(sizeof(*h));
@@ -970,12 +985,10 @@ void handle_fuse_request(struct fuse *fuse,
     }
 }
 
-void handle_fuse_requests(struct fuse *fuse)
+void handle_fuse_requests(struct fuse *fuse, struct fuse_handler* handler)
 {
-    __u8 req[MAX_REQUEST_SIZE];
-
     for (;;) {
-        ssize_t len = read(fuse->fd, req, sizeof(req));
+        ssize_t len = read(fuse->fd, handler->request_buffer, sizeof(handler->request_buffer));
         if (len < 0) {
             if (errno == EINTR)
                 continue;
@@ -988,16 +1001,27 @@ void handle_fuse_requests(struct fuse *fuse)
             return;
         }
 
-        const struct fuse_in_header *hdr = (void*)req;
+        const struct fuse_in_header *hdr = (void*)handler->request_buffer;
         if (hdr->len != (size_t)len) {
             ERROR("malformed header: len=%zu, hdr->len=%u\n", (size_t)len, hdr->len);
             return;
         }
 
-        const void *data = req + sizeof(struct fuse_in_header);
+        const void *data = handler->request_buffer + sizeof(struct fuse_in_header);
         size_t data_len = len - sizeof(struct fuse_in_header);
-        handle_fuse_request(fuse, hdr, data, data_len);
+        handle_fuse_request(fuse, handler, hdr, data, data_len);
+
+        /* We do not access the request again after this point because the underlying
+         * buffer storage may have been reused while processing the request. */
     }
+}
+
+int ignite_fuse(struct fuse* fuse)
+{
+    /* use only one handler thread for now */
+    struct fuse_handler handler;
+    handle_fuse_requests(fuse, &handler);
+    return 0;
 }
 
 static int usage()
@@ -1047,11 +1071,10 @@ static int run(const char* path, uid_t uid, gid_t gid)
     fuse_init(&fuse, fd, path);
 
     umask(0);
-    handle_fuse_requests(&fuse);
+    res = ignite_fuse(&fuse);
 
     /* we do not attempt to umount the file system here because we are no longer
      * running as the root user */
-    res = 0;
 
 error:
     close(fd);
