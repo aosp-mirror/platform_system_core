@@ -853,7 +853,21 @@ void handle_fuse_request(struct fuse *fuse,
         return;
     }
 
-//    case FUSE_FSYNC:
+    case FUSE_FSYNC: {
+        const struct fuse_fsync_in *req = data;
+        int is_data_sync = req->fsync_flags & 1;
+        struct handle *h = id_to_ptr(req->fh);
+        int res;
+        TRACE("FSYNC %p(%d) is_data_sync=%d\n", h, h->fd, is_data_sync);
+        res = is_data_sync ? fdatasync(h->fd) : fsync(h->fd);
+        if (res < 0) {
+            fuse_status(fuse, hdr->unique, -errno);
+            return;
+        }
+        fuse_status(fuse, hdr->unique, 0);
+        return;
+    }
+
 //    case FUSE_SETXATTR:
 //    case FUSE_GETXATTR:
 //    case FUSE_LISTXATTR:
