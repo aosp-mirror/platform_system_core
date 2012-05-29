@@ -91,3 +91,4 @@ typedef struct {
 #define	C_UNBLOCK	0x80000
 #define	C_OSYNC		0x100000
 #define	C_SPARSE	0x200000
+#define	C_FDATASYNC	0x400000

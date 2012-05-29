@@ -64,7 +64,7 @@ __RCSID("$NetBSD: dd.c,v 1.37 2004/01/17 21:00:16 dbj Exp $");
 
 #include "dd.h"
 
-#define NO_CONV
+//#define NO_CONV
 
 //#include "extern.h"
 void block(void);
@@ -91,12 +91,9 @@ extern u_int		ddflags;
 extern u_int		files_cnt;
 extern int		progress;
 extern const u_char	*ctab;
-extern const u_char	a2e_32V[], a2e_POSIX[];
-extern const u_char	e2a_32V[], e2a_POSIX[];
-extern const u_char	a2ibm_32V[], a2ibm_POSIX[];
-extern u_char		casetab[];
 
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 static void dd_close(void);
@@ -242,42 +239,6 @@ setup(void)
 	 */
 	if ((ddflags & (C_OF | C_SEEK | C_NOTRUNC)) == (C_OF | C_SEEK))
 		(void)ftruncate(out.fd, (off_t)out.offset * out.dbsz);
-
-	/*
-	 * If converting case at the same time as another conversion, build a
-	 * table that does both at once.  If just converting case, use the
-	 * built-in tables.
-	 */
-	if (ddflags & (C_LCASE|C_UCASE)) {
-#ifdef	NO_CONV
-		/* Should not get here, but just in case... */
-		fprintf(stderr, "case conv and -DNO_CONV\n");
-		exit(1);
-		/* NOTREACHED */
-#else	/* NO_CONV */
-		u_int cnt;
-
-		if (ddflags & C_ASCII || ddflags & C_EBCDIC) {
-			if (ddflags & C_LCASE) {
-				for (cnt = 0; cnt < 0377; ++cnt)
-					casetab[cnt] = tolower(ctab[cnt]);
-			} else {
-				for (cnt = 0; cnt < 0377; ++cnt)
-					casetab[cnt] = toupper(ctab[cnt]);
-			}
-		} else {
-			if (ddflags & C_LCASE) {
-				for (cnt = 0; cnt < 0377; ++cnt)
-					casetab[cnt] = tolower(cnt);
-			} else {
-				for (cnt = 0; cnt < 0377; ++cnt)
-					casetab[cnt] = toupper(cnt);
-			}
-		}
-
-		ctab = casetab;
-#endif	/* NO_CONV */
-	}
 
 	(void)gettimeofday(&st.start, NULL);	/* Statistics timestamp. */
 }
@@ -796,6 +757,9 @@ def(void)
 void
 def_close(void)
 {
+	if (ddflags & C_FDATASYNC) {
+		fdatasync(out.fd);
+	}
 
 	/* Just update the count, everything is already in the buffer. */
 	if (in.dbcnt)
@@ -1301,21 +1265,14 @@ static const struct conv {
 	u_int set, noset;
 	const u_char *ctab;
 } clist[] = {
-	{ "ascii",	C_ASCII,	C_EBCDIC,	e2a_POSIX },
 	{ "block",	C_BLOCK,	C_UNBLOCK,	NULL },
-	{ "ebcdic",	C_EBCDIC,	C_ASCII,	a2e_POSIX },
-	{ "ibm",	C_EBCDIC,	C_ASCII,	a2ibm_POSIX },
-	{ "lcase",	C_LCASE,	C_UCASE,	NULL },
+	{ "fdatasync",	C_FDATASYNC,	0,		NULL },
 	{ "noerror",	C_NOERROR,	0,		NULL },
 	{ "notrunc",	C_NOTRUNC,	0,		NULL },
-	{ "oldascii",	C_ASCII,	C_EBCDIC,	e2a_32V },
-	{ "oldebcdic",	C_EBCDIC,	C_ASCII,	a2e_32V },
-	{ "oldibm",	C_EBCDIC,	C_ASCII,	a2ibm_32V },
 	{ "osync",	C_OSYNC,	C_BS,		NULL },
 	{ "sparse",	C_SPARSE,	0,		NULL },
 	{ "swab",	C_SWAB,		0,		NULL },
 	{ "sync",	C_SYNC,		0,		NULL },
-	{ "ucase",	C_UCASE,	C_LCASE,	NULL },
 	{ "unblock",	C_UNBLOCK,	C_BLOCK,	NULL },
 	/* If you add items to this table, be sure to add the
 	 * conversions to the C_BS check in the jcl routine above.
