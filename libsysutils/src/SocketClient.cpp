@@ -131,11 +131,6 @@ char *SocketClient::quoteArg(const char *arg) {
 
 
 int SocketClient::sendMsg(const char *msg) {
-    if (mSocket < 0) {
-        errno = EHOSTUNREACH;
-        return -1;
-    }
-
     // Send the message including null character
     if (sendData(msg, strlen(msg) + 1) != 0) {
         SLOGW("Unable to send msg '%s'", msg);
@@ -157,6 +152,11 @@ int SocketClient::sendDataLocked(const void *data, int len) {
     int rc = 0;
     const char *p = (const char*) data;
     int brtw = len;
+
+    if (mSocket < 0) {
+        errno = EHOSTUNREACH;
+        return -1;
+    }
 
     if (len == 0) {
         return 0;
