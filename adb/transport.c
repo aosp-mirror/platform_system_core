@@ -922,9 +922,6 @@ atransport *find_transport(const char *serial)
         if (t->serial && !strcmp(serial, t->serial)) {
             break;
         }
-        if (t->devpath && !strcmp(serial, t->devpath)) {
-            break;
-        }
      }
     adb_mutex_unlock(&transport_lock);
 
