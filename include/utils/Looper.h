@@ -70,12 +70,52 @@ public:
  * A simple proxy that holds a weak reference to a message handler.
  */
 class WeakMessageHandler : public MessageHandler {
+protected:
+    virtual ~WeakMessageHandler();
+
 public:
     WeakMessageHandler(const wp<MessageHandler>& handler);
     virtual void handleMessage(const Message& message);
 
 private:
     wp<MessageHandler> mHandler;
+};
+
+
+/**
+ * A looper callback.
+ */
+class LooperCallback : public virtual RefBase {
+protected:
+    virtual ~LooperCallback() { }
+
+public:
+    /**
+     * Handles a poll event for the given file descriptor.
+     * It is given the file descriptor it is associated with,
+     * a bitmask of the poll events that were triggered (typically ALOOPER_EVENT_INPUT),
+     * and the data pointer that was originally supplied.
+     *
+     * Implementations should return 1 to continue receiving callbacks, or 0
+     * to have this file descriptor and callback unregistered from the looper.
+     */
+    virtual int handleEvent(int fd, int events, void* data) = 0;
+};
+
+
+/**
+ * Wraps a ALooper_callbackFunc function pointer.
+ */
+class SimpleLooperCallback : public LooperCallback {
+protected:
+    virtual ~SimpleLooperCallback();
+
+public:
+    SimpleLooperCallback(ALooper_callbackFunc callback);
+    virtual int handleEvent(int fd, int events, void* data);
+
+private:
+    ALooper_callbackFunc mCallback;
 };
 
 
@@ -159,7 +199,7 @@ public:
      * If the same file descriptor was previously added, it is replaced.
      *
      * "fd" is the file descriptor to be added.
-     * "ident" is an identifier for this event, which is returned from ALooper_pollOnce().
+     * "ident" is an identifier for this event, which is returned from pollOnce().
      * The identifier must be >= 0, or ALOOPER_POLL_CALLBACK if providing a non-NULL callback.
      * "events" are the poll events to wake up on.  Typically this is ALOOPER_EVENT_INPUT.
      * "callback" is the function to call when there is an event on the file descriptor.
@@ -179,8 +219,14 @@ public:
      *
      * This method can be called on any thread.
      * This method may block briefly if it needs to wake the poll.
+     *
+     * The callback may either be specified as a bare function pointer or as a smart
+     * pointer callback object.  The smart pointer should be preferred because it is
+     * easier to avoid races when the callback is removed from a different thread.
+     * See removeFd() for details.
      */
     int addFd(int fd, int ident, int events, ALooper_callbackFunc callback, void* data);
+    int addFd(int fd, int ident, int events, const sp<LooperCallback>& callback, void* data);
 
     /**
      * Removes a previously added file descriptor from the looper.
@@ -192,6 +238,10 @@ public:
      * For example, if the callback takes care of removing itself during its own execution either
      * by returning 0 or by calling this method, then it can be guaranteed to not be invoked
      * again at any later time unless registered anew.
+     *
+     * A simple way to avoid this problem is to use the version of addFd() that takes
+     * a sp<LooperCallback> instead of a bare function pointer.  The LooperCallback will
+     * be released at the appropriate time by the Looper.
      *
      * Returns 1 if the file descriptor was removed, 0 if none was previously registered.
      *
@@ -273,7 +323,7 @@ private:
     struct Request {
         int fd;
         int ident;
-        ALooper_callbackFunc callback;
+        sp<LooperCallback> callback;
         void* data;
     };
 

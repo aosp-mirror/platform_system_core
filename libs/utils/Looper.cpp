@@ -30,11 +30,28 @@ WeakMessageHandler::WeakMessageHandler(const wp<MessageHandler>& handler) :
         mHandler(handler) {
 }
 
+WeakMessageHandler::~WeakMessageHandler() {
+}
+
 void WeakMessageHandler::handleMessage(const Message& message) {
     sp<MessageHandler> handler = mHandler.promote();
     if (handler != NULL) {
         handler->handleMessage(message);
     }
+}
+
+
+// --- SimpleLooperCallback ---
+
+SimpleLooperCallback::SimpleLooperCallback(ALooper_callbackFunc callback) :
+        mCallback(callback) {
+}
+
+SimpleLooperCallback::~SimpleLooperCallback() {
+}
+
+int SimpleLooperCallback::handleEvent(int fd, int events, void* data) {
+    return mCallback(fd, events, data);
 }
 
 
@@ -142,9 +159,8 @@ int Looper::pollOnce(int timeoutMillis, int* outFd, int* outEvents, void** outDa
     for (;;) {
         while (mResponseIndex < mResponses.size()) {
             const Response& response = mResponses.itemAt(mResponseIndex++);
-            ALooper_callbackFunc callback = response.request.callback;
-            if (!callback) {
-                int ident = response.request.ident;
+            int ident = response.request.ident;
+            if (ident >= 0) {
                 int fd = response.request.fd;
                 int events = response.events;
                 void* data = response.request.data;
@@ -165,7 +181,7 @@ int Looper::pollOnce(int timeoutMillis, int* outFd, int* outEvents, void** outDa
             ALOGD("%p ~ pollOnce - returning result %d", this, result);
 #endif
             if (outFd != NULL) *outFd = 0;
-            if (outEvents != NULL) *outEvents = NULL;
+            if (outEvents != NULL) *outEvents = 0;
             if (outData != NULL) *outData = NULL;
             return result;
         }
@@ -293,20 +309,22 @@ Done: ;
 
     // Invoke all response callbacks.
     for (size_t i = 0; i < mResponses.size(); i++) {
-        const Response& response = mResponses.itemAt(i);
-        ALooper_callbackFunc callback = response.request.callback;
-        if (callback) {
+        Response& response = mResponses.editItemAt(i);
+        if (response.request.ident == ALOOPER_POLL_CALLBACK) {
             int fd = response.request.fd;
             int events = response.events;
             void* data = response.request.data;
 #if DEBUG_POLL_AND_WAKE || DEBUG_CALLBACKS
             ALOGD("%p ~ pollOnce - invoking fd event callback %p: fd=%d, events=0x%x, data=%p",
-                    this, callback, fd, events, data);
+                    this, response.request.callback.get(), fd, events, data);
 #endif
-            int callbackResult = callback(fd, events, data);
+            int callbackResult = response.request.callback->handleEvent(fd, events, data);
             if (callbackResult == 0) {
                 removeFd(fd);
             }
+            // Clear the callback reference in the response structure promptly because we
+            // will not clear the response vector itself until the next poll.
+            response.request.callback.clear();
             result = ALOOPER_POLL_CALLBACK;
         }
     }
@@ -376,21 +394,27 @@ void Looper::pushResponse(int events, const Request& request) {
 }
 
 int Looper::addFd(int fd, int ident, int events, ALooper_callbackFunc callback, void* data) {
+    return addFd(fd, ident, events, callback ? new SimpleLooperCallback(callback) : NULL, data);
+}
+
+int Looper::addFd(int fd, int ident, int events, const sp<LooperCallback>& callback, void* data) {
 #if DEBUG_CALLBACKS
     ALOGD("%p ~ addFd - fd=%d, ident=%d, events=0x%x, callback=%p, data=%p", this, fd, ident,
-            events, callback, data);
+            events, callback.get(), data);
 #endif
 
-    if (! callback) {
+    if (!callback.get()) {
         if (! mAllowNonCallbacks) {
             ALOGE("Invalid attempt to set NULL callback but not allowed for this looper.");
             return -1;
         }
 
         if (ident < 0) {
-            ALOGE("Invalid attempt to set NULL callback with ident <= 0.");
+            ALOGE("Invalid attempt to set NULL callback with ident < 0.");
             return -1;
         }
+    } else {
+        ident = ALOOPER_POLL_CALLBACK;
     }
 
     int epollEvents = 0;
