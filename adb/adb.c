@@ -289,9 +289,7 @@ static char *connection_state_name(atransport *t)
 
 /* qual_overwrite is used to overwrite a qualifier string.  dst is a
  * pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
- * was malloc'ed and needs to freed.  A char buffer will be malloc'ed and
- * filled with src and *dst will be set to
- * point to the buffer.
+ * was malloc'ed and needs to freed.  *dst will be set to a dup of src.
  */
 static void qual_overwrite(char **dst, const char *src)
 {
@@ -311,7 +309,8 @@ void parse_banner(char *banner, atransport *t)
 {
     static const char *prop_seps = ";";
     static const char key_val_sep = '=';
-    char *cp, *type;
+    char *cp;
+    char *type;
 
     D("parse_banner: %s\n", banner);
     type = banner;
