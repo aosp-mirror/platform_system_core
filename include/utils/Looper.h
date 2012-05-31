@@ -27,9 +27,6 @@
 // When defined, uses epoll_wait() for polling, otherwise uses poll().
 #define LOOPER_USES_EPOLL
 
-// When defined, logs performance statistics for tuning and debugging purposes.
-//#define LOOPER_STATISTICS
-
 #ifdef LOOPER_USES_EPOLL
 #include <sys/epoll.h>
 #else
@@ -338,24 +335,6 @@ private:
 
     ssize_t getRequestIndexLocked(int fd);
     void wakeAndLock();
-#endif
-
-#ifdef LOOPER_STATISTICS
-    static const int SAMPLED_WAKE_CYCLES_TO_AGGREGATE = 100;
-    static const int SAMPLED_POLLS_TO_AGGREGATE = 1000;
-
-    nsecs_t mPendingWakeTime;
-    int mPendingWakeCount;
-
-    int mSampledWakeCycles;
-    int mSampledWakeCountSum;
-    nsecs_t mSampledWakeLatencySum;
-
-    int mSampledPolls;
-    int mSampledZeroPollCount;
-    int mSampledZeroPollLatencySum;
-    int mSampledTimeoutPollCount;
-    int mSampledTimeoutPollLatencySum;
 #endif
 
     // This state is only used privately by pollOnce and does not require a lock since

@@ -98,20 +98,6 @@ Looper::Looper(bool allowNonCallbacks) :
     mPolling = false;
     mWaiters = 0;
 #endif
-
-#ifdef LOOPER_STATISTICS
-    mPendingWakeTime = -1;
-    mPendingWakeCount = 0;
-    mSampledWakeCycles = 0;
-    mSampledWakeCountSum = 0;
-    mSampledWakeLatencySum = 0;
-
-    mSampledPolls = 0;
-    mSampledZeroPollCount = 0;
-    mSampledZeroPollLatencySum = 0;
-    mSampledTimeoutPollCount = 0;
-    mSampledTimeoutPollLatencySum = 0;
-#endif
 }
 
 Looper::~Looper() {
@@ -234,10 +220,6 @@ int Looper::pollInner(int timeoutMillis) {
     mResponses.clear();
     mResponseIndex = 0;
 
-#ifdef LOOPER_STATISTICS
-    nsecs_t pollStartTime = systemTime(SYSTEM_TIME_MONOTONIC);
-#endif
-
 #ifdef LOOPER_USES_EPOLL
     struct epoll_event eventItems[EPOLL_MAX_EVENTS];
     int eventCount = epoll_wait(mEpollFd, eventItems, EPOLL_MAX_EVENTS, timeoutMillis);
@@ -341,29 +323,6 @@ Done:
     }
 #endif
 
-#ifdef LOOPER_STATISTICS
-    nsecs_t pollEndTime = systemTime(SYSTEM_TIME_MONOTONIC);
-    mSampledPolls += 1;
-    if (timeoutMillis == 0) {
-        mSampledZeroPollCount += 1;
-        mSampledZeroPollLatencySum += pollEndTime - pollStartTime;
-    } else if (timeoutMillis > 0 && result == ALOOPER_POLL_TIMEOUT) {
-        mSampledTimeoutPollCount += 1;
-        mSampledTimeoutPollLatencySum += pollEndTime - pollStartTime
-                - milliseconds_to_nanoseconds(timeoutMillis);
-    }
-    if (mSampledPolls == SAMPLED_POLLS_TO_AGGREGATE) {
-        ALOGD("%p ~ poll latency statistics: %0.3fms zero timeout, %0.3fms non-zero timeout", this,
-                0.000001f * float(mSampledZeroPollLatencySum) / mSampledZeroPollCount,
-                0.000001f * float(mSampledTimeoutPollLatencySum) / mSampledTimeoutPollCount);
-        mSampledPolls = 0;
-        mSampledZeroPollCount = 0;
-        mSampledZeroPollLatencySum = 0;
-        mSampledTimeoutPollCount = 0;
-        mSampledTimeoutPollLatencySum = 0;
-    }
-#endif
-
     // Invoke pending message callbacks.
     mNextMessageUptime = LLONG_MAX;
     while (mMessageEnvelopes.size() != 0) {
@@ -454,13 +413,6 @@ void Looper::wake() {
     ALOGD("%p ~ wake", this);
 #endif
 
-#ifdef LOOPER_STATISTICS
-    // FIXME: Possible race with awoken() but this code is for testing only and is rarely enabled.
-    if (mPendingWakeCount++ == 0) {
-        mPendingWakeTime = systemTime(SYSTEM_TIME_MONOTONIC);
-    }
-#endif
-
     ssize_t nWrite;
     do {
         nWrite = write(mWakeWritePipeFd, "W", 1);
@@ -476,26 +428,6 @@ void Looper::wake() {
 void Looper::awoken() {
 #if DEBUG_POLL_AND_WAKE
     ALOGD("%p ~ awoken", this);
-#endif
-
-#ifdef LOOPER_STATISTICS
-    if (mPendingWakeCount == 0) {
-        ALOGD("%p ~ awoken: spurious!", this);
-    } else {
-        mSampledWakeCycles += 1;
-        mSampledWakeCountSum += mPendingWakeCount;
-        mSampledWakeLatencySum += systemTime(SYSTEM_TIME_MONOTONIC) - mPendingWakeTime;
-        mPendingWakeCount = 0;
-        mPendingWakeTime = -1;
-        if (mSampledWakeCycles == SAMPLED_WAKE_CYCLES_TO_AGGREGATE) {
-            ALOGD("%p ~ wake statistics: %0.3fms wake latency, %0.3f wakes per cycle", this,
-                    0.000001f * float(mSampledWakeLatencySum) / mSampledWakeCycles,
-                    float(mSampledWakeCountSum) / mSampledWakeCycles);
-            mSampledWakeCycles = 0;
-            mSampledWakeCountSum = 0;
-            mSampledWakeLatencySum = 0;
-        }
-    }
 #endif
 
     char buffer[16];
