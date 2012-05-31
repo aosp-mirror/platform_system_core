@@ -24,14 +24,7 @@
 
 #include <android/looper.h>
 
-// When defined, uses epoll_wait() for polling, otherwise uses poll().
-#define LOOPER_USES_EPOLL
-
-#ifdef LOOPER_USES_EPOLL
 #include <sys/epoll.h>
-#else
-#include <sys/poll.h>
-#endif
 
 /*
  * Declare a concrete type for the NDK's looper forward declaration.
@@ -310,32 +303,10 @@ private:
     Vector<MessageEnvelope> mMessageEnvelopes; // guarded by mLock
     bool mSendingMessage; // guarded by mLock
 
-#ifdef LOOPER_USES_EPOLL
     int mEpollFd; // immutable
 
     // Locked list of file descriptor monitoring requests.
     KeyedVector<int, Request> mRequests;  // guarded by mLock
-#else
-    // The lock guards state used to track whether there is a poll() in progress and whether
-    // there are any other threads waiting in wakeAndLock().  The condition variables
-    // are used to transfer control among these threads such that all waiters are
-    // serviced before a new poll can begin.
-    // The wakeAndLock() method increments mWaiters, wakes the poll, blocks on mAwake
-    // until mPolling becomes false, then decrements mWaiters again.
-    // The poll() method blocks on mResume until mWaiters becomes 0, then sets
-    // mPolling to true, blocks until the poll completes, then resets mPolling to false
-    // and signals mResume if there are waiters.
-    bool mPolling;      // guarded by mLock
-    uint32_t mWaiters;  // guarded by mLock
-    Condition mAwake;   // guarded by mLock
-    Condition mResume;  // guarded by mLock
-
-    Vector<struct pollfd> mRequestedFds;  // must hold mLock and mPolling must be false to modify
-    Vector<Request> mRequests;            // must hold mLock and mPolling must be false to modify
-
-    ssize_t getRequestIndexLocked(int fd);
-    void wakeAndLock();
-#endif
 
     // This state is only used privately by pollOnce and does not require a lock since
     // it runs on a single thread.

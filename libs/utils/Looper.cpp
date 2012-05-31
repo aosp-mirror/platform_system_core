@@ -40,13 +40,11 @@ void WeakMessageHandler::handleMessage(const Message& message) {
 
 // --- Looper ---
 
-#ifdef LOOPER_USES_EPOLL
 // Hint for number of file descriptors to be associated with the epoll instance.
 static const int EPOLL_SIZE_HINT = 8;
 
 // Maximum number of file descriptors for which to retrieve poll events each iteration.
 static const int EPOLL_MAX_EVENTS = 16;
-#endif
 
 static pthread_once_t gTLSOnce = PTHREAD_ONCE_INIT;
 static pthread_key_t gTLSKey = 0;
@@ -69,7 +67,6 @@ Looper::Looper(bool allowNonCallbacks) :
     LOG_ALWAYS_FATAL_IF(result != 0, "Could not make wake write pipe non-blocking.  errno=%d",
             errno);
 
-#ifdef LOOPER_USES_EPOLL
     // Allocate the epoll instance and register the wake pipe.
     mEpollFd = epoll_create(EPOLL_SIZE_HINT);
     LOG_ALWAYS_FATAL_IF(mEpollFd < 0, "Could not create epoll instance.  errno=%d", errno);
@@ -81,31 +78,12 @@ Looper::Looper(bool allowNonCallbacks) :
     result = epoll_ctl(mEpollFd, EPOLL_CTL_ADD, mWakeReadPipeFd, & eventItem);
     LOG_ALWAYS_FATAL_IF(result != 0, "Could not add wake read pipe to epoll instance.  errno=%d",
             errno);
-#else
-    // Add the wake pipe to the head of the request list with a null callback.
-    struct pollfd requestedFd;
-    requestedFd.fd = mWakeReadPipeFd;
-    requestedFd.events = POLLIN;
-    mRequestedFds.push(requestedFd);
-
-    Request request;
-    request.fd = mWakeReadPipeFd;
-    request.callback = NULL;
-    request.ident = 0;
-    request.data = NULL;
-    mRequests.push(request);
-
-    mPolling = false;
-    mWaiters = 0;
-#endif
 }
 
 Looper::~Looper() {
     close(mWakeReadPipeFd);
     close(mWakeWritePipeFd);
-#ifdef LOOPER_USES_EPOLL
     close(mEpollFd);
-#endif
 }
 
 void Looper::initTLSKey() {
@@ -220,21 +198,8 @@ int Looper::pollInner(int timeoutMillis) {
     mResponses.clear();
     mResponseIndex = 0;
 
-#ifdef LOOPER_USES_EPOLL
     struct epoll_event eventItems[EPOLL_MAX_EVENTS];
     int eventCount = epoll_wait(mEpollFd, eventItems, EPOLL_MAX_EVENTS, timeoutMillis);
-#else
-    // Wait for wakeAndLock() waiters to run then set mPolling to true.
-    mLock.lock();
-    while (mWaiters != 0) {
-        mResume.wait(mLock);
-    }
-    mPolling = true;
-    mLock.unlock();
-
-    size_t requestedCount = mRequestedFds.size();
-    int eventCount = poll(mRequestedFds.editArray(), requestedCount, timeoutMillis);
-#endif
 
     // Acquire lock.
     mLock.lock();
@@ -263,7 +228,6 @@ int Looper::pollInner(int timeoutMillis) {
     ALOGD("%p ~ pollOnce - handling events from %d fds", this, eventCount);
 #endif
 
-#ifdef LOOPER_USES_EPOLL
     for (int i = 0; i < eventCount; i++) {
         int fd = eventItems[i].data.fd;
         uint32_t epollEvents = eventItems[i].events;
@@ -289,39 +253,6 @@ int Looper::pollInner(int timeoutMillis) {
         }
     }
 Done: ;
-#else
-    for (size_t i = 0; i < requestedCount; i++) {
-        const struct pollfd& requestedFd = mRequestedFds.itemAt(i);
-
-        short pollEvents = requestedFd.revents;
-        if (pollEvents) {
-            if (requestedFd.fd == mWakeReadPipeFd) {
-                if (pollEvents & POLLIN) {
-                    awoken();
-                } else {
-                    ALOGW("Ignoring unexpected poll events 0x%x on wake read pipe.", pollEvents);
-                }
-            } else {
-                int events = 0;
-                if (pollEvents & POLLIN) events |= ALOOPER_EVENT_INPUT;
-                if (pollEvents & POLLOUT) events |= ALOOPER_EVENT_OUTPUT;
-                if (pollEvents & POLLERR) events |= ALOOPER_EVENT_ERROR;
-                if (pollEvents & POLLHUP) events |= ALOOPER_EVENT_HANGUP;
-                if (pollEvents & POLLNVAL) events |= ALOOPER_EVENT_INVALID;
-                pushResponse(events, mRequests.itemAt(i));
-            }
-            if (--eventCount == 0) {
-                break;
-            }
-        }
-    }
-Done:
-    // Set mPolling to false and wake up the wakeAndLock() waiters.
-    mPolling = false;
-    if (mWaiters != 0) {
-        mAwake.broadcast();
-    }
-#endif
 
     // Invoke pending message callbacks.
     mNextMessageUptime = LLONG_MAX;
@@ -462,7 +393,6 @@ int Looper::addFd(int fd, int ident, int events, ALooper_callbackFunc callback, 
         }
     }
 
-#ifdef LOOPER_USES_EPOLL
     int epollEvents = 0;
     if (events & ALOOPER_EVENT_INPUT) epollEvents |= EPOLLIN;
     if (events & ALOOPER_EVENT_OUTPUT) epollEvents |= EPOLLOUT;
@@ -498,33 +428,6 @@ int Looper::addFd(int fd, int ident, int events, ALooper_callbackFunc callback, 
             mRequests.replaceValueAt(requestIndex, request);
         }
     } // release lock
-#else
-    int pollEvents = 0;
-    if (events & ALOOPER_EVENT_INPUT) pollEvents |= POLLIN;
-    if (events & ALOOPER_EVENT_OUTPUT) pollEvents |= POLLOUT;
-
-    wakeAndLock(); // acquire lock
-
-    struct pollfd requestedFd;
-    requestedFd.fd = fd;
-    requestedFd.events = pollEvents;
-
-    Request request;
-    request.fd = fd;
-    request.ident = ident;
-    request.callback = callback;
-    request.data = data;
-    ssize_t index = getRequestIndexLocked(fd);
-    if (index < 0) {
-        mRequestedFds.push(requestedFd);
-        mRequests.push(request);
-    } else {
-        mRequestedFds.replaceAt(requestedFd, size_t(index));
-        mRequests.replaceAt(request, size_t(index));
-    }
-
-    mLock.unlock(); // release lock
-#endif
     return 1;
 }
 
@@ -533,7 +436,6 @@ int Looper::removeFd(int fd) {
     ALOGD("%p ~ removeFd - fd=%d", this, fd);
 #endif
 
-#ifdef LOOPER_USES_EPOLL
     { // acquire lock
         AutoMutex _l(mLock);
         ssize_t requestIndex = mRequests.indexOfKey(fd);
@@ -550,48 +452,7 @@ int Looper::removeFd(int fd) {
         mRequests.removeItemsAt(requestIndex);
     } // release lock
     return 1;
-#else
-    wakeAndLock(); // acquire lock
-
-    ssize_t index = getRequestIndexLocked(fd);
-    if (index >= 0) {
-        mRequestedFds.removeAt(size_t(index));
-        mRequests.removeAt(size_t(index));
-    }
-
-    mLock.unlock(); // release lock
-    return index >= 0;
-#endif
 }
-
-#ifndef LOOPER_USES_EPOLL
-ssize_t Looper::getRequestIndexLocked(int fd) {
-    size_t requestCount = mRequestedFds.size();
-
-    for (size_t i = 0; i < requestCount; i++) {
-        if (mRequestedFds.itemAt(i).fd == fd) {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
-void Looper::wakeAndLock() {
-    mLock.lock();
-
-    mWaiters += 1;
-    while (mPolling) {
-        wake();
-        mAwake.wait(mLock);
-    }
-
-    mWaiters -= 1;
-    if (mWaiters == 0) {
-        mResume.signal();
-    }
-}
-#endif
 
 void Looper::sendMessage(const sp<MessageHandler>& handler, const Message& message) {
     nsecs_t now = systemTime(SYSTEM_TIME_MONOTONIC);
