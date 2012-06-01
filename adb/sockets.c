@@ -615,6 +615,10 @@ unsigned unhex(unsigned char *s, int len)
 char *skip_host_serial(char *service) {
     char *first_colon, *serial_end;
 
+    if (!strncmp(service, "usb:", 4)) {
+        return strchr(service + 4, ':');
+    }
+
     first_colon = strchr(service, ':');
     if (!first_colon) {
         /* No colon in service string. */
