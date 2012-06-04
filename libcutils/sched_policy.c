@@ -137,13 +137,13 @@ static void __initialize(void) {
         }
 #endif
 
-        filename = "/dev/cpuctl/foreground/tasks";
+        filename = "/dev/cpuctl/apps/tasks";
         fg_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
         if (fg_cgroup_fd < 0) {
             SLOGE("open of %s failed: %s\n", filename, strerror(errno));
         }
 
-        filename = "/dev/cpuctl/bg_non_interactive/tasks";
+        filename = "/dev/cpuctl/apps/bg_non_interactive/tasks";
         bg_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
         if (bg_cgroup_fd < 0) {
             SLOGE("open of %s failed: %s\n", filename, strerror(errno));
@@ -253,9 +253,9 @@ int get_sched_policy(int tid, SchedPolicy *policy)
             return -1;
         if (grpBuf[0] == '\0') {
             *policy = SP_SYSTEM;
-        } else if (!strcmp(grpBuf, "bg_non_interactive")) {
+        } else if (!strcmp(grpBuf, "apps/bg_non_interactive")) {
             *policy = SP_BACKGROUND;
-        } else if (!strcmp(grpBuf, "foreground")) {
+        } else if (!strcmp(grpBuf, "apps")) {
             *policy = SP_FOREGROUND;
         } else if (!strcmp(grpBuf, "audio_app")) {
             *policy = SP_AUDIO_APP;
