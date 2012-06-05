@@ -29,6 +29,8 @@
 #include "sysdeps.h"
 #include "adb.h"
 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
 #if !ADB_HOST
 #include <private/android_filesystem_config.h>
 #include <linux/capability.h>
@@ -43,7 +45,9 @@ ADB_MUTEX_DEFINE( D_lock );
 
 int HOST = 0;
 
+#if !ADB_HOST
 static const char *adb_device_banner = "device";
+#endif
 
 void fatal(const char *fmt, ...)
 {
@@ -270,6 +274,36 @@ static void send_close(unsigned local, unsigned remote, atransport *t)
     send_packet(p, t);
 }
 
+static size_t fill_connect_data(char *buf, size_t bufsize)
+{
+#if ADB_HOST
+    return snprintf(buf, bufsize, "host::") + 1;
+#else
+    static const char *cnxn_props[] = {
+        "ro.product.name",
+        "ro.product.model",
+        "ro.product.device",
+    };
+    static const int num_cnxn_props = ARRAY_SIZE(cnxn_props);
+    int i;
+    size_t remaining = bufsize;
+    size_t len;
+
+    len = snprintf(buf, remaining, "%s::", adb_device_banner);
+    remaining -= len;
+    buf += len;
+    for (i = 0; i < num_cnxn_props; i++) {
+        char value[PROPERTY_VALUE_MAX];
+        property_get(cnxn_props[i], value, "");
+        len = snprintf(buf, remaining, "%s=%s;", cnxn_props[i], value);
+        remaining -= len;
+        buf += len;
+    }
+
+    return bufsize - remaining + 1;
+#endif
+}
+
 static void send_connect(atransport *t)
 {
     D("Calling send_connect \n");
@@ -277,9 +311,8 @@ static void send_connect(atransport *t)
     cp->msg.command = A_CNXN;
     cp->msg.arg0 = A_VERSION;
     cp->msg.arg1 = MAX_PAYLOAD;
-    snprintf((char*) cp->data, sizeof cp->data, "%s::",
-            HOST ? "host" : adb_device_banner);
-    cp->msg.data_length = strlen((char*) cp->data) + 1;
+    cp->msg.data_length = fill_connect_data((char *)cp->data,
+                                            sizeof(cp->data));
     send_packet(cp, t);
 #if ADB_HOST
         /* XXX why sleep here? */
@@ -306,29 +339,57 @@ static char *connection_state_name(atransport *t)
     }
 }
 
+/* qual_overwrite is used to overwrite a qualifier string.  dst is a
+ * pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
+ * was malloc'ed and needs to freed.  A char buffer will be malloc'ed and
+ * filled with src and *dst will be set to
+ * point to the buffer.
+ */
+static void qual_overwrite(char **dst, const char *src)
+{
+    if (!dst)
+        return;
+
+    free(*dst);
+    *dst = NULL;
+
+    if (!src || !*src)
+        return;
+
+    *dst = strdup(src);
+}
+
 void parse_banner(char *banner, atransport *t)
 {
-    char *type, *product, *end;
+    static const char *prop_seps = ";";
+    static const char key_val_sep = '=';
+    char *cp, *type;
 
     D("parse_banner: %s\n", banner);
     type = banner;
-    product = strchr(type, ':');
-    if(product) {
-        *product++ = 0;
-    } else {
-        product = "";
-    }
-
-        /* remove trailing ':' */
-    end = strchr(product, ':');
-    if(end) *end = 0;
-
-        /* save product name in device structure */
-    if (t->product == NULL) {
-        t->product = strdup(product);
-    } else if (strcmp(product, t->product) != 0) {
-        free(t->product);
-        t->product = strdup(product);
+    cp = strchr(type, ':');
+    if (cp) {
+        *cp++ = 0;
+        /* Nothing is done with second field. */
+        cp = strchr(cp, ':');
+        if (cp) {
+            char *save;
+            char *key;
+            key = strtok_r(cp + 1, prop_seps, &save);
+            while (key) {
+                cp = strchr(key, key_val_sep);
+                if (cp) {
+                    *cp++ = '\0';
+                    if (!strcmp(key, "ro.product.name"))
+                        qual_overwrite(&t->product, cp);
+                    else if (!strcmp(key, "ro.product.model"))
+                        qual_overwrite(&t->model, cp);
+                    else if (!strcmp(key, "ro.product.device"))
+                        qual_overwrite(&t->device, cp);
+                }
+                key = strtok_r(NULL, prop_seps, &save);
+            }
+        }
     }
 
     if(!strcmp(type, "bootloader")){

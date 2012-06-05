@@ -601,6 +601,10 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
             free(t->product);
         if (t->serial)
             free(t->serial);
+        if (t->model)
+            free(t->model);
+        if (t->device)
+            free(t->device);
         if (t->devpath)
             free(t->devpath);
 
