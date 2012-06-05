@@ -63,8 +63,6 @@ static int fg_cgroup_fd = -1;
 #if CAN_SET_SP_SYSTEM
 static int system_cgroup_fd = -1;
 #endif
-static int audio_app_cgroup_fd = -1;
-static int audio_sys_cgroup_fd = -1;
 
 /* Add tid to the scheduling group defined by the policy */
 static int add_tid_to_cgroup(int tid, SchedPolicy policy)
@@ -76,6 +74,8 @@ static int add_tid_to_cgroup(int tid, SchedPolicy policy)
         fd = bg_cgroup_fd;
         break;
     case SP_FOREGROUND:
+    case SP_AUDIO_APP:
+    case SP_AUDIO_SYS:
         fd = fg_cgroup_fd;
         break;
 #if CAN_SET_SP_SYSTEM
@@ -83,12 +83,6 @@ static int add_tid_to_cgroup(int tid, SchedPolicy policy)
         fd = system_cgroup_fd;
         break;
 #endif
-    case SP_AUDIO_APP:
-        fd = audio_app_cgroup_fd;
-        break;
-    case SP_AUDIO_SYS:
-        fd = audio_sys_cgroup_fd;
-        break;
     default:
         fd = -1;
         break;
@@ -148,19 +142,6 @@ static void __initialize(void) {
         if (bg_cgroup_fd < 0) {
             SLOGE("open of %s failed: %s\n", filename, strerror(errno));
         }
-
-        filename = "/dev/cpuctl/audio_app/tasks";
-        audio_app_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        if (audio_app_cgroup_fd < 0) {
-            SLOGV("open of %s failed: %s\n", filename, strerror(errno));
-        }
-
-        filename = "/dev/cpuctl/audio_sys/tasks";
-        audio_sys_cgroup_fd = open(filename, O_WRONLY | O_CLOEXEC);
-        if (audio_sys_cgroup_fd < 0) {
-            SLOGV("open of %s failed: %s\n", filename, strerror(errno));
-        }
-
     } else {
         __sys_supports_schedgroups = 0;
     }
@@ -257,10 +238,6 @@ int get_sched_policy(int tid, SchedPolicy *policy)
             *policy = SP_BACKGROUND;
         } else if (!strcmp(grpBuf, "apps")) {
             *policy = SP_FOREGROUND;
-        } else if (!strcmp(grpBuf, "audio_app")) {
-            *policy = SP_AUDIO_APP;
-        } else if (!strcmp(grpBuf, "audio_sys")) {
-            *policy = SP_AUDIO_SYS;
         } else {
             errno = ERANGE;
             return -1;
@@ -319,16 +296,12 @@ int set_sched_policy(int tid, SchedPolicy policy)
         SLOGD("vvv tid %d (%s)", tid, thread_name);
         break;
     case SP_FOREGROUND:
+    case SP_AUDIO_APP:
+    case SP_AUDIO_SYS:
         SLOGD("^^^ tid %d (%s)", tid, thread_name);
         break;
     case SP_SYSTEM:
         SLOGD("/// tid %d (%s)", tid, thread_name);
-        break;
-    case SP_AUDIO_APP:
-        SLOGD("aaa tid %d (%s)", tid, thread_name);
-        break;
-    case SP_AUDIO_SYS:
-        SLOGD("sss tid %d (%s)", tid, thread_name);
         break;
     default:
         SLOGD("??? tid %d (%s)", tid, thread_name);
