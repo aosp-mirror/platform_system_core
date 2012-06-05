@@ -256,7 +256,7 @@ int adb_main(int is_daemon, int server_port);
 ** get_device_transport does an acquire on your behalf before returning
 */
 void init_transport_registration(void);
-int  list_transports(char *buf, size_t  bufsize, int show_devpath);
+int  list_transports(char *buf, size_t  bufsize, int long_listing);
 void update_transports(void);
 
 asocket*  create_device_tracker(void);

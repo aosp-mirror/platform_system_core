@@ -608,15 +608,29 @@ unsigned unhex(unsigned char *s, int len)
     return n;
 }
 
+#define PREFIX(str) { str, sizeof(str) - 1 }
+static const struct prefix_struct {
+    const char *str;
+    const size_t len;
+} prefixes[] = {
+    PREFIX("usb:"),
+    PREFIX("product:"),
+    PREFIX("model:"),
+    PREFIX("device:"),
+};
+static const int num_prefixes = (sizeof(prefixes) / sizeof(prefixes[0]));
+
 /* skip_host_serial return the position in a string
    skipping over the 'serial' parameter in the ADB protocol,
    where parameter string may be a host:port string containing
    the protocol delimiter (colon). */
 char *skip_host_serial(char *service) {
     char *first_colon, *serial_end;
+    int i;
 
-    if (!strncmp(service, "usb:", 4)) {
-        return strchr(service + 4, ':');
+    for (i = 0; i < num_prefixes; i++) {
+        if (!strncmp(service, prefixes[i].str, prefixes[i].len))
+            return strchr(service + prefixes[i].len, ':');
     }
 
     first_colon = strchr(service, ':');
