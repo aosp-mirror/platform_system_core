@@ -93,20 +93,20 @@ loglevel 3
     write /dev/cpuctl/cpu.rt_runtime_us 950000
     write /dev/cpuctl/cpu.rt_period_us 1000000
 
-    mkdir /dev/cpuctl/foreground
-    chown system system /dev/cpuctl/foreground/tasks
-    chmod 0666 /dev/cpuctl/foreground/tasks
-    write /dev/cpuctl/foreground/cpu.shares 1024
-    write /dev/cpuctl/foreground/cpu.rt_runtime_us 100000
-    write /dev/cpuctl/foreground/cpu.rt_period_us 1000000
+    mkdir /dev/cpuctl/apps
+    chown system system /dev/cpuctl/apps/tasks
+    chmod 0666 /dev/cpuctl/apps/tasks
+    write /dev/cpuctl/apps/cpu.shares 1024
+    write /dev/cpuctl/apps/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/apps/cpu.rt_period_us 1000000
 
-    mkdir /dev/cpuctl/bg_non_interactive
-    chown system system /dev/cpuctl/bg_non_interactive/tasks
-    chmod 0666 /dev/cpuctl/bg_non_interactive/tasks
+    mkdir /dev/cpuctl/apps/bg_non_interactive
+    chown system system /dev/cpuctl/apps/bg_non_interactive/tasks
+    chmod 0666 /dev/cpuctl/apps/bg_non_interactive/tasks
     # 5.0 %
-    write /dev/cpuctl/bg_non_interactive/cpu.shares 52
-    write /dev/cpuctl/bg_non_interactive/cpu.rt_runtime_us 100000
-    write /dev/cpuctl/bg_non_interactive/cpu.rt_period_us 1000000
+    write /dev/cpuctl/apps/bg_non_interactive/cpu.shares 52
+    write /dev/cpuctl/apps/bg_non_interactive/cpu.rt_runtime_us 100000
+    write /dev/cpuctl/apps/bg_non_interactive/cpu.rt_period_us 1000000
 
     mkdir /dev/cpuctl/audio_app
     chown system system /dev/cpuctl/audio_app/tasks
