@@ -185,15 +185,13 @@ int list_devices_callback(usb_ifc_info *info)
         if (!serial[0]) {
             serial = "????????????";
         }
+        // output compatible with "adb devices"
         if (!long_listing) {
-            // output compatible with "adb devices"
             printf("%s\tfastboot\n", serial);
+        } else if (!info->device_path) {
+            printf("%-22s fastboot\n", serial);
         } else {
-            char* device_path = info->device_path;
-            if (!device_path[0]) {
-                device_path = "????????????";
-            }
-            printf("%s\t%s\tfastboot\n", serial, device_path);
+            printf("%-22s fastboot %s\n", serial, info->device_path);
         }
     }
 
