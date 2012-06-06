@@ -374,7 +374,7 @@ void parse_banner(char *banner, atransport *t)
         if (cp) {
             char *save;
             char *key;
-            key = strtok_r(cp + 1, prop_seps, &save);
+            key = adb_strtok_r(cp + 1, prop_seps, &save);
             while (key) {
                 cp = strchr(key, key_val_sep);
                 if (cp) {
@@ -386,7 +386,7 @@ void parse_banner(char *banner, atransport *t)
                     else if (!strcmp(key, "ro.product.device"))
                         qual_overwrite(&t->device, cp);
                 }
-                key = strtok_r(NULL, prop_seps, &save);
+                key = adb_strtok_r(NULL, prop_seps, &save);
             }
         }
     }
