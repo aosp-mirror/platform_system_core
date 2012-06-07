@@ -151,6 +151,11 @@ oops:
 
 int match_fastboot(usb_ifc_info *info)
 {
+    return match_fastboot_with_serial(info, serial);
+}
+
+int match_fastboot_with_serial(usb_ifc_info *info, const char *local_serial)
+{
     if(!(vendor_id && (info->dev_vendor == vendor_id)) &&
        (info->dev_vendor != 0x18d1) &&  // Google
        (info->dev_vendor != 0x8087) &&  // Intel
@@ -170,14 +175,14 @@ int match_fastboot(usb_ifc_info *info)
     if(info->ifc_protocol != 0x03) return -1;
     // require matching serial number or device path if requested
     // at the command line with the -s option.
-    if (serial && (strcmp(serial, info->serial_number) != 0 &&
-                   strcmp(serial, info->device_path) != 0)) return -1;
+    if (local_serial && (strcmp(local_serial, info->serial_number) != 0 &&
+                   strcmp(local_serial, info->device_path) != 0)) return -1;
     return 0;
 }
 
 int list_devices_callback(usb_ifc_info *info)
 {
-    if (match_fastboot(info) == 0) {
+    if (match_fastboot_with_serial(info, NULL) == 0) {
         char* serial = info->serial_number;
         if (!info->writable) {
             serial = "no permissions"; // like "adb devices"
