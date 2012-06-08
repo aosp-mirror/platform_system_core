@@ -5,9 +5,15 @@ ifneq ($(filter arm x86,$(TARGET_ARCH)),)
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:= debuggerd.c utility.c getevent.c $(TARGET_ARCH)/machine.c
+LOCAL_SRC_FILES:= \
+	backtrace.c \
+	debuggerd.c \
+	getevent.c \
+	tombstone.c \
+	utility.c \
+	$(TARGET_ARCH)/machine.c
 
-LOCAL_CFLAGS := -Wall -Werror -std=gnu99
+LOCAL_CFLAGS := -Wall -Wno-unused-parameter -std=gnu99
 LOCAL_MODULE := debuggerd
 
 ifeq ($(ARCH_ARM_HAVE_VFP),true)

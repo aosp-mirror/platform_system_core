@@ -15,23 +15,17 @@
 ** limitations under the License.
 */
 
+#include <stddef.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <errno.h>
-#include <signal.h>
-#include <pthread.h>
-#include <fcntl.h>
 #include <sys/types.h>
-#include <dirent.h>
-
 #include <sys/ptrace.h>
-#include <sys/wait.h>
-#include <sys/exec_elf.h>
-#include <sys/stat.h>
 
-#include <cutils/sockets.h>
-#include <cutils/properties.h>
+#include <corkscrew/ptrace.h>
 
-#include <linux/input.h>
 #include <linux/user.h>
 
 #include "../utility.h"
@@ -48,11 +42,72 @@
 #endif
 #endif
 
+static void dump_memory(log_t* log, pid_t tid, uintptr_t addr, bool at_fault) {
+    char code_buffer[64];       /* actual 8+1+((8+1)*4) + 1 == 45 */
+    char ascii_buffer[32];      /* actual 16 + 1 == 17 */
+    uintptr_t p, end;
+
+    p = addr & ~3;
+    p -= 32;
+    if (p > addr) {
+        /* catch underflow */
+        p = 0;
+    }
+    end = p + 80;
+    /* catch overflow; 'end - p' has to be multiples of 16 */
+    while (end < p)
+        end -= 16;
+
+    /* Dump the code around PC as:
+     *  addr     contents                             ascii
+     *  00008d34 ef000000 e8bd0090 e1b00000 512fff1e  ............../Q
+     *  00008d44 ea00b1f9 e92d0090 e3a070fc ef000000  ......-..p......
+     */
+    while (p < end) {
+        char* asc_out = ascii_buffer;
+
+        sprintf(code_buffer, "%08x ", p);
+
+        int i;
+        for (i = 0; i < 4; i++) {
+            /*
+             * If we see (data == -1 && errno != 0), we know that the ptrace
+             * call failed, probably because we're dumping memory in an
+             * unmapped or inaccessible page.  I don't know if there's
+             * value in making that explicit in the output -- it likely
+             * just complicates parsing and clarifies nothing for the
+             * enlightened reader.
+             */
+            long data = ptrace(PTRACE_PEEKTEXT, tid, (void*)p, NULL);
+            sprintf(code_buffer + strlen(code_buffer), "%08lx ", data);
+
+            int j;
+            for (j = 0; j < 4; j++) {
+                /*
+                 * Our isprint() allows high-ASCII characters that display
+                 * differently (often badly) in different viewers, so we
+                 * just use a simpler test.
+                 */
+                char val = (data >> (j*8)) & 0xff;
+                if (val >= 0x20 && val < 0x7f) {
+                    *asc_out++ = val;
+                } else {
+                    *asc_out++ = '.';
+                }
+            }
+            p += 4;
+        }
+        *asc_out = '\0';
+        _LOG(log, !at_fault, "    %s %s\n", code_buffer, ascii_buffer);
+    }
+}
+
 /*
  * If configured to do so, dump memory around *all* registers
  * for the crashing thread.
  */
-static void dump_memory_and_code(int tfd, pid_t tid, bool at_fault) {
+void dump_memory_and_code(const ptrace_context_t* context __attribute((unused)),
+        log_t* log, pid_t tid, bool at_fault) {
     struct pt_regs regs;
     if(ptrace(PTRACE_GETREGS, tid, 0, &regs)) {
         return;
@@ -73,38 +128,38 @@ static void dump_memory_and_code(int tfd, pid_t tid, bool at_fault) {
                 continue;
             }
 
-            _LOG(tfd, false, "\nmemory near %.2s:\n", &REG_NAMES[reg * 2]);
-            dump_memory(tfd, tid, addr, at_fault);
+            _LOG(log, false, "\nmemory near %.2s:\n", &REG_NAMES[reg * 2]);
+            dump_memory(log, tid, addr, at_fault);
         }
     }
 
-    _LOG(tfd, !at_fault, "\ncode around pc:\n");
-    dump_memory(tfd, tid, (uintptr_t)regs.ARM_pc, at_fault);
+    _LOG(log, !at_fault, "\ncode around pc:\n");
+    dump_memory(log, tid, (uintptr_t)regs.ARM_pc, at_fault);
 
     if (regs.ARM_pc != regs.ARM_lr) {
-        _LOG(tfd, !at_fault, "\ncode around lr:\n");
-        dump_memory(tfd, tid, (uintptr_t)regs.ARM_lr, at_fault);
+        _LOG(log, !at_fault, "\ncode around lr:\n");
+        dump_memory(log, tid, (uintptr_t)regs.ARM_lr, at_fault);
     }
 }
 
 void dump_registers(const ptrace_context_t* context __attribute((unused)),
-        int tfd, pid_t tid, bool at_fault)
+        log_t* log, pid_t tid, bool at_fault)
 {
     struct pt_regs r;
     bool only_in_tombstone = !at_fault;
 
     if(ptrace(PTRACE_GETREGS, tid, 0, &r)) {
-        _LOG(tfd, only_in_tombstone, "cannot get registers: %s\n", strerror(errno));
+        _LOG(log, only_in_tombstone, "cannot get registers: %s\n", strerror(errno));
         return;
     }
 
-    _LOG(tfd, only_in_tombstone, "    r0 %08x  r1 %08x  r2 %08x  r3 %08x\n",
+    _LOG(log, only_in_tombstone, "    r0 %08x  r1 %08x  r2 %08x  r3 %08x\n",
             (uint32_t)r.ARM_r0, (uint32_t)r.ARM_r1, (uint32_t)r.ARM_r2, (uint32_t)r.ARM_r3);
-    _LOG(tfd, only_in_tombstone, "    r4 %08x  r5 %08x  r6 %08x  r7 %08x\n",
+    _LOG(log, only_in_tombstone, "    r4 %08x  r5 %08x  r6 %08x  r7 %08x\n",
             (uint32_t)r.ARM_r4, (uint32_t)r.ARM_r5, (uint32_t)r.ARM_r6, (uint32_t)r.ARM_r7);
-    _LOG(tfd, only_in_tombstone, "    r8 %08x  r9 %08x  sl %08x  fp %08x\n",
+    _LOG(log, only_in_tombstone, "    r8 %08x  r9 %08x  sl %08x  fp %08x\n",
             (uint32_t)r.ARM_r8, (uint32_t)r.ARM_r9, (uint32_t)r.ARM_r10, (uint32_t)r.ARM_fp);
-    _LOG(tfd, only_in_tombstone, "    ip %08x  sp %08x  lr %08x  pc %08x  cpsr %08x\n",
+    _LOG(log, only_in_tombstone, "    ip %08x  sp %08x  lr %08x  pc %08x  cpsr %08x\n",
             (uint32_t)r.ARM_ip, (uint32_t)r.ARM_sp, (uint32_t)r.ARM_lr,
             (uint32_t)r.ARM_pc, (uint32_t)r.ARM_cpsr);
 
@@ -113,25 +168,14 @@ void dump_registers(const ptrace_context_t* context __attribute((unused)),
     int i;
 
     if(ptrace(PTRACE_GETVFPREGS, tid, 0, &vfp_regs)) {
-        _LOG(tfd, only_in_tombstone, "cannot get registers: %s\n", strerror(errno));
+        _LOG(log, only_in_tombstone, "cannot get registers: %s\n", strerror(errno));
         return;
     }
 
     for (i = 0; i < NUM_VFP_REGS; i += 2) {
-        _LOG(tfd, only_in_tombstone, "    d%-2d %016llx  d%-2d %016llx\n",
+        _LOG(log, only_in_tombstone, "    d%-2d %016llx  d%-2d %016llx\n",
                 i, vfp_regs.fpregs[i], i+1, vfp_regs.fpregs[i+1]);
     }
-    _LOG(tfd, only_in_tombstone, "    scr %08lx\n", vfp_regs.fpscr);
+    _LOG(log, only_in_tombstone, "    scr %08lx\n", vfp_regs.fpscr);
 #endif
-}
-
-void dump_thread(const ptrace_context_t* context, int tfd, pid_t tid, bool at_fault) {
-    dump_registers(context, tfd, tid, at_fault);
-
-    dump_backtrace_and_stack(context, tfd, tid, at_fault);
-
-    if (at_fault) {
-        dump_memory_and_code(tfd, tid, at_fault);
-        dump_nearby_maps(context, tfd, tid);
-    }
 }
