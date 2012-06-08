@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 The Android Open Source Project
+ * Copyright (C) 2012 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef _DEBUGGERD_MACHINE_H
-#define _DEBUGGERD_MACHINE_H
+#ifndef _DEBUGGERD_TOMBSTONE_H
+#define _DEBUGGERD_TOMBSTONE_H
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -23,9 +23,9 @@
 
 #include <corkscrew/ptrace.h>
 
-#include "utility.h"
+/* Creates a tombstone file and writes the crash dump to it.
+ * Returns the path of the tombstone, which must be freed using free(). */
+char* engrave_tombstone(pid_t pid, pid_t tid, int signal,
+        bool dump_sibling_threads, bool quiet, bool* detach_failed, int* total_sleep_time_usec);
 
-void dump_memory_and_code(const ptrace_context_t* context, log_t* log, pid_t tid, bool at_fault);
-void dump_registers(const ptrace_context_t* context, log_t* log, pid_t tid, bool at_fault);
-
-#endif // _DEBUGGERD_MACHINE_H
+#endif // _DEBUGGERD_TOMBSTONE_H
