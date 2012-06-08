@@ -156,14 +156,14 @@ int sparse_file_write(struct sparse_file *s, int fd, bool gz, bool sparse,
 	struct output_file *out;
 
 	chunks = sparse_count_chunks(s);
-	out = open_output_fd(fd, s->block_size, s->len, gz, sparse, chunks, crc);
+	out = output_file_open_fd(fd, s->block_size, s->len, gz, sparse, chunks, crc);
 
 	if (!out)
 		return -ENOMEM;
 
 	ret = write_all_blocks(s, out);
 
-	close_output_file(out);
+	output_file_close(out);
 
 	return ret;
 }
@@ -176,7 +176,7 @@ int sparse_file_callback(struct sparse_file *s, bool sparse, bool crc,
 	struct output_file *out;
 
 	chunks = sparse_count_chunks(s);
-	out = open_output_callback(write, priv, s->block_size, s->len, false,
+	out = output_file_open_callback(write, priv, s->block_size, s->len, false,
 			sparse, chunks, crc);
 
 	if (!out)
@@ -184,7 +184,7 @@ int sparse_file_callback(struct sparse_file *s, bool sparse, bool crc,
 
 	ret = write_all_blocks(s, out);
 
-	close_output_file(out);
+	output_file_close(out);
 
 	return ret;
 }
@@ -203,7 +203,7 @@ int64_t sparse_file_len(struct sparse_file *s, bool sparse, bool crc)
 	int64_t count = 0;
 	struct output_file *out;
 
-	out = open_output_callback(out_counter_write, &count,
+	out = output_file_open_callback(out_counter_write, &count,
 			s->block_size, s->len, false, sparse, chunks, crc);
 	if (!out) {
 		return -1;
@@ -211,7 +211,7 @@ int64_t sparse_file_len(struct sparse_file *s, bool sparse, bool crc)
 
 	ret = write_all_blocks(s, out);
 
-	close_output_file(out);
+	output_file_close(out);
 
 	if (ret < 0) {
 		return -1;
@@ -239,7 +239,7 @@ static struct backed_block *move_chunks_up_to_len(struct sparse_file *from,
 	len -= overhead;
 
 	start = backed_block_iter_new(from->backed_block_list);
-	out_counter = open_output_callback(out_counter_write, &count,
+	out_counter = output_file_open_callback(out_counter_write, &count,
 			to->block_size, to->len, false, true, 0, false);
 	if (!out_counter) {
 		return NULL;
@@ -269,7 +269,7 @@ out:
 	backed_block_list_move(from->backed_block_list,
 		to->backed_block_list, start, last_bb);
 
-	close_output_file(out_counter);
+	output_file_close(out_counter);
 
 	return bb;
 }

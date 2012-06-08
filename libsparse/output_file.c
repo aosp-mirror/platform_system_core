@@ -541,7 +541,7 @@ static struct sparse_file_ops normal_file_ops = {
 		.write_end_chunk = write_normal_end_chunk,
 };
 
-void close_output_file(struct output_file *out)
+void output_file_close(struct output_file *out)
 {
 	int ret;
 
@@ -638,7 +638,7 @@ static struct output_file *output_file_new_normal(void)
 	return &outn->out;
 }
 
-struct output_file *open_output_callback(int (*write)(void *, const void *, int),
+struct output_file *output_file_open_callback(int (*write)(void *, const void *, int),
 		void *priv, unsigned int block_size, int64_t len, int gz, int sparse,
 		int chunks, int crc)
 {
@@ -664,7 +664,7 @@ struct output_file *open_output_callback(int (*write)(void *, const void *, int)
 	return &outc->out;
 }
 
-struct output_file *open_output_fd(int fd, unsigned int block_size, int64_t len,
+struct output_file *output_file_open_fd(int fd, unsigned int block_size, int64_t len,
 		int gz, int sparse, int chunks, int crc)
 {
 	int ret;
