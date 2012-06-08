@@ -54,7 +54,7 @@ static void dump_process_header(log_t* log, pid_t pid) {
     _LOG(log, false, "\n\n----- pid %d at %s -----\n", pid, timestr);
 
     if (procname) {
-        _LOG(log, false, "\nCmd line: %s\n", procname);
+        _LOG(log, false, "Cmd line: %s\n", procname);
     }
 }
 
