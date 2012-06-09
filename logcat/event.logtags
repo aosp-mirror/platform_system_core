@@ -134,5 +134,21 @@
 70200 aggregation (aggregation time|2|3)
 70201 aggregation_test (field1|1|2),(field2|1|2),(field3|1|2),(field4|1|2),(field5|1|2)
 
+# libc failure logging
+80100 bionic_event_memcpy_buffer_overflow (uid|1)
+80105 bionic_event_strcat_buffer_overflow (uid|1)
+80110 bionic_event_memmov_buffer_overflow (uid|1)
+80115 bionic_event_strncat_buffer_overflow (uid|1)
+80120 bionic_event_strncpy_buffer_overflow (uid|1)
+80125 bionic_event_memset_buffer_overflow (uid|1)
+80130 bionic_event_strcpy_buffer_overflow (uid|1)
+
+80200 bionic_event_strcat_integer_overflow (uid|1)
+80205 bionic_event_strncat_integer_overflow (uid|1)
+
+80300 bionic_event_resolver_old_response (uid|1)
+80305 bionic_event_resolver_wrong_server (uid|1)
+80310 bionic_event_resolver_wrong_query (uid|1)
+
 # NOTE - the range 1000000-2000000 is reserved for partners and others who
 # want to define their own log tags without conflicting with the core platform.
