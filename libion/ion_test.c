@@ -19,8 +19,8 @@ size_t len = 1024*1024, align = 0;
 int prot = PROT_READ | PROT_WRITE;
 int map_flags = MAP_SHARED;
 int alloc_flags = 0;
+int heap_mask = 1;
 int test = -1;
-size_t width = 1024*1024, height = 1024*1024;
 size_t stride;
 
 int _ion_alloc_test(int *fd, struct ion_handle **handle)
@@ -31,7 +31,7 @@ int _ion_alloc_test(int *fd, struct ion_handle **handle)
 	if (*fd < 0)
 		return *fd;
 
-	ret = ion_alloc(*fd, len, align, alloc_flags, handle);
+	ret = ion_alloc(*fd, len, align, heap_mask, alloc_flags, handle);
 
 	if (ret)
 		printf("%s failed: %s\n", __func__, strerror(ret));
@@ -203,17 +203,16 @@ int main(int argc, char* argv[]) {
 		static struct option opts[] = {
 			{"alloc", no_argument, 0, 'a'},
 			{"alloc_flags", required_argument, 0, 'f'},
+			{"heap_mask", required_argument, 0, 'h'},
 			{"map", no_argument, 0, 'm'},
 			{"share", no_argument, 0, 's'},
 			{"len", required_argument, 0, 'l'},
 			{"align", required_argument, 0, 'g'},
 			{"map_flags", required_argument, 0, 'z'},
 			{"prot", required_argument, 0, 'p'},
-			{"width", required_argument, 0, 'w'},
-			{"height", required_argument, 0, 'h'},
 		};
 		int i = 0;
-		c = getopt_long(argc, argv, "af:h:l:mr:stw:", opts, &i);
+		c = getopt_long(argc, argv, "af:h:l:mr:st", opts, &i);
 		if (c == -1)
 			break;
 
@@ -245,6 +244,9 @@ int main(int argc, char* argv[]) {
 		case 'f':
 			alloc_flags = atol(optarg);
 			break;
+		case 'h':
+			heap_mask = atol(optarg);
+			break;
 		case 'a':
 			test = ALLOC_TEST;
 			break;
@@ -254,17 +256,11 @@ int main(int argc, char* argv[]) {
 		case 's':
 			test = SHARE_TEST;
 			break;
-		case 'w':
-			width = atol(optarg);
-			break;
-		case 'h':
-			height = atol(optarg);
-			break;
 		}
 	}
-	printf("test %d, len %u, width %u, height %u align %u, "
-		   "map_flags %d, prot %d, alloc_flags %d\n", test, len, width,
-		   height, align, map_flags, prot, alloc_flags);
+	printf("test %d, len %u, align %u, map_flags %d, prot %d, heap_mask %d,"
+	       " alloc_flags %d\n", test, len, align, map_flags, prot,
+	       heap_mask, alloc_flags);
 	switch (test) {
 		case ALLOC_TEST:
 			ion_alloc_test();
