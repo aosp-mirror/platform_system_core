@@ -152,7 +152,7 @@ typedef enum {
                                         AUDIO_FORMAT_PCM_SUB_8_24_BIT),
 } audio_format_t;
 
-typedef enum {
+enum {
     /* output channels */
     AUDIO_CHANNEL_OUT_FRONT_LEFT            = 0x1,
     AUDIO_CHANNEL_OUT_FRONT_RIGHT           = 0x2,
