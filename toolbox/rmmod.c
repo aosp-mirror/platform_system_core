@@ -10,7 +10,7 @@ extern int delete_module(const char *, unsigned int);
 
 int rmmod_main(int argc, char **argv)
 {
-	int ret;
+	int ret, i;
 	char *modname, *dot;
 
 	/* make sure we've got an argument */
@@ -30,6 +30,15 @@ int rmmod_main(int argc, char **argv)
 	dot = strchr(argv[1], '.');
 	if (dot)
 		*dot = '\0';
+
+	/* Replace "-" with "_". This would keep rmmod
+	 * compatible with module-init-tools version of
+	 * rmmod
+	 */
+	for (i = 0; modname[i] != '\0'; i++) {
+		if (modname[i] == '-')
+			modname[i] = '_';
+	}
 
 	/* pass it to the kernel */
 	ret = delete_module(modname, O_NONBLOCK | O_EXCL);
