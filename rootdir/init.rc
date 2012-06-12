@@ -6,6 +6,7 @@
 
 import /init.${ro.hardware}.rc
 import /init.usb.rc
+import /init.trace.rc
 
 on early-init
     # Set init and its forked children's oom_adj.
@@ -354,10 +355,6 @@ service console /system/bin/sh
 on property:ro.debuggable=1
     start console
 
-# Allow writing to the kernel trace log.  Enabling tracing still requires root.
-on property:ro.debuggable=1
-    chmod 0222 /sys/kernel/debug/tracing/trace_marker
-
 # adbd is controlled via property triggers in init.<platform>.usb.rc
 service adbd /sbin/adbd
     class core
@@ -492,4 +489,3 @@ service mdnsd /system/bin/mdnsd
     socket mdnsd stream 0660 mdnsr inet
     disabled
     oneshot
-
