@@ -83,7 +83,7 @@ map_info_t* load_map_info_list(pid_t pid) {
             milist = mi;
         }
     }
-    fclose(fp);
+    pclose(fp);
     return milist;
 }
 
@@ -220,7 +220,7 @@ map_info_t* acquire_my_map_info_list() {
     pthread_mutex_lock(&g_my_map_info_list_mutex);
 
     int64_t time = now_ns();
-    if (g_my_map_info_list) {
+    if (g_my_map_info_list != NULL) {
         my_map_info_data_t* data = (my_map_info_data_t*)g_my_map_info_list->data;
         int64_t age = time - data->timestamp;
         if (age >= MAX_CACHE_AGE) {
@@ -232,10 +232,10 @@ map_info_t* acquire_my_map_info_list() {
         }
     }
 
-    if (!g_my_map_info_list) {
+    if (g_my_map_info_list == NULL) {
         my_map_info_data_t* data = (my_map_info_data_t*)malloc(sizeof(my_map_info_data_t));
         g_my_map_info_list = load_map_info_list(getpid());
-        if (g_my_map_info_list) {
+        if (g_my_map_info_list != NULL) {
             ALOGV("Loaded my_map_info_list %p.", g_my_map_info_list);
             g_my_map_info_list->data = data;
             data->refs = 1;
@@ -264,4 +264,16 @@ void release_my_map_info_list(map_info_t* milist) {
 
         pthread_mutex_unlock(&g_my_map_info_list_mutex);
     }
+}
+
+void flush_my_map_info_list() {
+    pthread_mutex_lock(&g_my_map_info_list_mutex);
+
+    if (g_my_map_info_list != NULL) {
+        my_map_info_data_t* data = (my_map_info_data_t*) g_my_map_info_list->data;
+        dec_ref(g_my_map_info_list, data);
+        g_my_map_info_list = NULL;
+    }
+
+    pthread_mutex_unlock(&g_my_map_info_list_mutex);
 }

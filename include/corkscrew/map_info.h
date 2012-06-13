@@ -63,6 +63,10 @@ map_info_t* acquire_my_map_info_list();
  * previous acquired using acquire_my_map_info_list(). */
 void release_my_map_info_list(map_info_t* milist);
 
+/* Flushes the cached memory map so the next call to
+ * acquire_my_map_info_list() gets fresh data. */
+void flush_my_map_info_list();
+
 #ifdef __cplusplus
 }
 #endif

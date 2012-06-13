@@ -66,6 +66,11 @@ extern "C" __attribute__ ((noinline)) int f() {
 }
 
 int main() {
+  flush_my_map_info_list();
   f();
+
+  flush_my_map_info_list();
+  f();
+
   return 0;
 }
