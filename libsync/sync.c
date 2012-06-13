@@ -20,11 +20,12 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <linux/sync.h>
+#include <linux/sw_sync.h>
+
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-
-#include <sync/sync.h>
 
 int sync_wait(int fd, unsigned int timeout)
 {
