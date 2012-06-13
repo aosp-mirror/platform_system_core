@@ -109,6 +109,21 @@ enum {
      */
     HAL_PIXEL_FORMAT_RAW_SENSOR = 0x20,
 
+    /*
+     * Android binary blob graphics buffer format:
+     *
+     * This format is used to carry task-specific data which does not have a
+     * standard image structure. The details of the format are left to the two
+     * endpoints.
+     *
+     * A typical use case is for transporting JPEG-compressed images from the
+     * Camera HAL to the framework or to applications.
+     *
+     * Buffers of this format must have a height of 1, and width equal to their
+     * size in bytes.
+     */
+    HAL_PIXEL_FORMAT_BLOB = 0x21,
+
     /* Legacy formats (deprecated), used by ImageFormat.java */
     HAL_PIXEL_FORMAT_YCbCr_422_SP       = 0x10, // NV16
     HAL_PIXEL_FORMAT_YCrCb_420_SP       = 0x11, // NV21
