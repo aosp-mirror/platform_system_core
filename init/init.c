@@ -58,6 +58,7 @@
 #include "init_parser.h"
 #include "util.h"
 #include "ueventd.h"
+#include "watchdogd.h"
 
 #ifdef HAVE_SELINUX
 struct selabel_handle *sehandle;
@@ -862,6 +863,9 @@ int main(int argc, char **argv)
 
     if (!strcmp(basename(argv[0]), "ueventd"))
         return ueventd_main(argc, argv);
+
+    if (!strcmp(basename(argv[0]), "watchdogd"))
+        return watchdogd_main(argc, argv);
 
     /* clear the umask */
     umask(0);
