@@ -15,7 +15,8 @@ LOCAL_SRC_FILES:= \
 	signal_handler.c \
 	init_parser.c \
 	ueventd.c \
-	ueventd_parser.c
+	ueventd_parser.c \
+	watchdogd.c
 
 ifeq ($(strip $(INIT_BOOTCHART)),true)
 LOCAL_SRC_FILES += bootchart.c
@@ -42,8 +43,11 @@ endif
 
 include $(BUILD_EXECUTABLE)
 
-# Make a symlink from /sbin/ueventd to /init
-SYMLINKS := $(TARGET_ROOT_OUT)/sbin/ueventd
+# Make a symlink from /sbin/ueventd and /sbin/watchdogd to /init
+SYMLINKS := \
+	$(TARGET_ROOT_OUT)/sbin/ueventd \
+	$(TARGET_ROOT_OUT)/sbin/watchdogd
+
 $(SYMLINKS): INIT_BINARY := $(LOCAL_MODULE)
 $(SYMLINKS): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk
 	@echo "Symlink: $@ -> ../$(INIT_BINARY)"
