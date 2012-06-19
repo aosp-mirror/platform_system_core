@@ -36,4 +36,6 @@ int write_fd_chunk(struct output_file *out, unsigned int len,
 int write_skip_chunk(struct output_file *out, int64_t len);
 void close_output_file(struct output_file *out);
 
+int read_all(int fd, void *buf, size_t len);
+
 #endif

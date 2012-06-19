@@ -168,6 +168,28 @@ static struct output_file_ops gz_file_ops = {
 	.close = gz_file_close,
 };
 
+int read_all(int fd, void *buf, size_t len)
+{
+	size_t total = 0;
+	int ret;
+	char *ptr = buf;
+
+	while (total < len) {
+		ret = read(fd, ptr, len - total);
+
+		if (ret < 0)
+			return -errno;
+
+		if (ret == 0)
+			return -EINVAL;
+
+		ptr += ret;
+		total += ret;
+	}
+
+	return 0;
+}
+
 static int write_sparse_skip_chunk(struct output_file *out, int64_t skip_len)
 {
 	chunk_header_t chunk_header;
@@ -518,6 +540,7 @@ int write_fd_chunk(struct output_file *out, unsigned int len,
 	int64_t aligned_offset;
 	int aligned_diff;
 	int buffer_size;
+	char *ptr;
 
 	aligned_offset = offset & ~(4096 - 1);
 	aligned_diff = offset - aligned_offset;
@@ -529,15 +552,25 @@ int write_fd_chunk(struct output_file *out, unsigned int len,
 	if (data == MAP_FAILED) {
 		return -errno;
 	}
+	ptr = data + aligned_diff;
 #else
-	char *data = malloc(buffer_size);
+	off64_t pos;
+	char *data = malloc(len);
 	if (!data) {
 		return -errno;
 	}
-	memset(data, 0, buffer_size);
+	pos = lseek64(fd, offset, SEEK_SET);
+	if (pos < 0) {
+		return -errno;
+	}
+	ret = read_all(fd, data, len);
+	if (ret < 0) {
+		return ret;
+	}
+	ptr = data;
 #endif
 
-	ret = out->sparse_ops->write_data_chunk(out, len, data + aligned_diff);
+	ret = out->sparse_ops->write_data_chunk(out, len, ptr);
 
 #ifndef USE_MINGW
 	munmap(data, buffer_size);
