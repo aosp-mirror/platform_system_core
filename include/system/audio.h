@@ -93,6 +93,13 @@ typedef enum {
      * (value must be 0)
      */
     AUDIO_SESSION_OUTPUT_MIX = 0,
+
+    /* application does not specify an explicit session ID to be used,
+     * and requests a new session ID to be allocated
+     * TODO use unique values for AUDIO_SESSION_OUTPUT_MIX and AUDIO_SESSION_ALLOCATE,
+     * after all uses have been updated from 0 to the appropriate symbol, and have been tested.
+     */
+    AUDIO_SESSION_ALLOCATE = 0,
 } audio_session_t;
 
 /* Audio sub formats (see enum audio_format). */
