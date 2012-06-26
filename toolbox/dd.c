@@ -95,6 +95,7 @@ extern const u_char	*ctab;
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define DEFFILEMODE (S_IRUSR | S_IWUSR)
 
 static void dd_close(void);
 static void dd_in(void);
@@ -185,14 +186,14 @@ setup(void)
 	} else {
 #define	OFLAGS \
     (O_CREAT | (ddflags & (C_SEEK | C_NOTRUNC) ? 0 : O_TRUNC))
-		out.fd = open(out.name, O_RDWR | OFLAGS /*, DEFFILEMODE */);
+		out.fd = open(out.name, O_RDWR | OFLAGS, DEFFILEMODE);
 		/*
 		 * May not have read access, so try again with write only.
 		 * Without read we may have a problem if output also does
 		 * not support seeks.
 		 */
 		if (out.fd < 0) {
-			out.fd = open(out.name, O_WRONLY | OFLAGS /*, DEFFILEMODE */);
+			out.fd = open(out.name, O_WRONLY | OFLAGS, DEFFILEMODE);
 			out.flags |= NOREAD;
 		}
 		if (out.fd < 0) {
