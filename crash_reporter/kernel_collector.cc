@@ -12,7 +12,7 @@
 static const char kDefaultKernelStackSignature[] =
     "kernel-UnspecifiedStackSignature";
 static const char kDumpPath[] = "/dev/pstore";
-static const char kDumpFormat[] = "dmesg-ramoops-%d";
+static const char kDumpFormat[] = "dmesg-ramoops-%zu";
 static const char kKernelExecName[] = "kernel";
 // Maximum number of records to examine in the kDumpPath.
 static const size_t kMaxDumpRecords = 100;
