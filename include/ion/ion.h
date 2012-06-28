@@ -27,8 +27,10 @@ __BEGIN_DECLS
 
 int ion_open();
 int ion_close(int fd);
-int ion_alloc(int fd, size_t len, size_t align, unsigned int flags,
-              struct ion_handle **handle);
+int ion_alloc(int fd, size_t len, size_t align, unsigned int heap_mask,
+	      unsigned int flags, struct ion_handle **handle);
+int ion_alloc_fd(int fd, size_t len, size_t align, unsigned int heap_mask,
+		 unsigned int flags, int *handle_fd);
 int ion_free(int fd, struct ion_handle *handle);
 int ion_map(int fd, struct ion_handle *handle, size_t length, int prot,
             int flags, off_t offset, unsigned char **ptr, int *map_fd);
