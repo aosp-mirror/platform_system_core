@@ -59,31 +59,23 @@ static bool TouchFile(const FilePath &file_path) {
   return file_util::WriteFile(file_path, "", 0) == 0;
 }
 
-static void CountKernelCrash() {
+static void SendCrashMetrics(CrashKinds type, const char* name) {
   // TODO(kmixter): We can remove this histogram as part of
   // crosbug.com/11163.
-  s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
-                              kCrashKindKernel,
-                              kCrashKindMax);
-  s_metrics_lib.SendCrashToUMA("kernel");
+  s_metrics_lib.SendEnumToUMA(kCrashCounterHistogram, type, kCrashKindMax);
+  s_metrics_lib.SendCrashToUMA(name);
+}
+
+static void CountKernelCrash() {
+  SendCrashMetrics(kCrashKindKernel, "kernel");
 }
 
 static void CountUncleanShutdown() {
-  // TODO(kmixter): We can remove this histogram as part of
-  // crosbug.com/11163.
-  s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
-                              kCrashKindUncleanShutdown,
-                              kCrashKindMax);
-  s_metrics_lib.SendCrashToUMA("uncleanshutdown");
+  SendCrashMetrics(kCrashKindUncleanShutdown, "uncleanshutdown");
 }
 
 static void CountUserCrash() {
-  // TODO(kmixter): We can remove this histogram as part of
-  // crosbug.com/11163.
-  s_metrics_lib.SendEnumToUMA(std::string(kCrashCounterHistogram),
-                              kCrashKindUser,
-                              kCrashKindMax);
-  s_metrics_lib.SendCrashToUMA("user");
+  SendCrashMetrics(kCrashKindUser, "user");
   std::string command = StringPrintf(
       "/usr/bin/dbus-send --type=signal --system / \"%s\" &",
       kUserCrashSignal);
