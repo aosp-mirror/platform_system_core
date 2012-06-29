@@ -72,11 +72,11 @@ public:
 
     //! returns number of items in the vector
     inline  size_t          size() const                { return VectorImpl::size(); }
-    //! returns wether or not the vector is empty
+    //! returns whether or not the vector is empty
     inline  bool            isEmpty() const             { return VectorImpl::isEmpty(); }
     //! returns how many items can be stored without reallocating the backing store
     inline  size_t          capacity() const            { return VectorImpl::capacity(); }
-    //! setst the capacity. capacity can never be reduced less than size()
+    //! sets the capacity. capacity can never be reduced less than size()
     inline  ssize_t         setCapacity(size_t size)    { return VectorImpl::setCapacity(size); }
 
     /*! 
@@ -102,12 +102,12 @@ public:
             const TYPE&     mirrorItemAt(ssize_t index) const;
 
     /*!
-     * modifing the array
+     * modifying the array
      */
 
     //! copy-on write support, grants write access to an item
             TYPE&           editItemAt(size_t index);
-    //! grants right acces to the top of the stack (last element)
+    //! grants right access to the top of the stack (last element)
             TYPE&           editTop();
 
             /*! 
