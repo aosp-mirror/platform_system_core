@@ -127,3 +127,15 @@ int nl_socket_get_fd(struct nl_sock *sk)
 {
 	return sk->s_fd;
 }
+
+void nl_socket_set_cb(struct nl_sock *sk, struct nl_cb *cb)
+{
+	nl_cb_put(sk->s_cb);
+	sk->s_cb = cb;
+	nl_cb_get(cb);
+}
+
+struct nl_cb *nl_socket_get_cb(struct nl_sock *sk)
+{
+	return nl_cb_get(sk->s_cb);
+}
