@@ -21,6 +21,8 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <linux/netlink.h>
+#include <netlink/genl/ctrl.h>
+#include <netlink/genl/family.h>
 #include "netlink-types.h"
 
 /* Get head of attribute data. */
@@ -250,7 +252,6 @@ error:
 struct genl_family *genl_ctrl_search_by_name(struct nl_cache *cache, \
 					const char *name)
 {
-	/* TODO: When will we release this memory ? */
 	struct genl_family *gf = (struct genl_family *) \
 		malloc(sizeof(struct genl_family));
 	if (!gf)
@@ -262,7 +263,7 @@ struct genl_family *genl_ctrl_search_by_name(struct nl_cache *cache, \
 
 	/* Overriding cache pointer as family id for now */
 	gf->gf_id = (uint16_t) ((uint32_t) cache);
-	strcpy(gf->gf_name, "nl80211");
+	strncpy(gf->gf_name, name, GENL_NAMSIZ);
 
 	return gf;
 fail:
@@ -272,15 +273,29 @@ fail:
 
 int genl_ctrl_resolve(struct nl_sock *sk, const char *name)
 {
+	struct nl_cache *cache = NULL;
+	struct genl_family *gf = NULL;
+	int id = -1;
+
 	/* Hack to support wpa_supplicant */
 	if (strcmp(name, "nlctrl") == 0)
 		return NETLINK_GENERIC;
-	else {
-		int errsv = errno;
-		fprintf(stderr, \
-			"Only nlctrl supported by genl_ctrl_resolve!\n");
-		return -errsv;
+
+	if (strcmp(name, "nl80211") != 0) {
+		fprintf(stderr, "%s is not supported\n", name);
+		return id;
 	}
 
-}
+	if (!genl_ctrl_alloc_cache(sk, &cache)) {
+		gf = genl_ctrl_search_by_name(cache, name);
+		if (gf)
+			id = genl_family_get_id(gf);
+	}
 
+	if (gf)
+		genl_family_put(gf);
+	if (cache)
+		nl_cache_free(cache);
+
+	return id;
+}
