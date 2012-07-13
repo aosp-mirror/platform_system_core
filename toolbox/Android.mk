@@ -56,7 +56,7 @@ TOOLS := \
 	ionice \
 	touch \
 	lsof \
-        du \
+	du \
 	md5
 
 ifeq ($(HAVE_SELINUX),true)
@@ -78,10 +78,15 @@ ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 TOOLS += r
 endif
 
-LOCAL_SRC_FILES:= \
+ALL_TOOLS = $(TOOLS)
+ALL_TOOLS += \
+	cp
+
+LOCAL_SRC_FILES := \
 	dynarray.c \
 	toolbox.c \
-	$(patsubst %,%.c,$(TOOLS))
+	$(patsubst %,%.c,$(TOOLS)) \
+	cp/cp.c cp/utils.c
 
 LOCAL_SHARED_LIBRARIES := libcutils libc libusbhost
 
@@ -95,7 +100,7 @@ LOCAL_C_INCLUDES += external/libselinux/include
 
 endif
 
-LOCAL_MODULE:= toolbox
+LOCAL_MODULE := toolbox
 
 # Including this will define $(intermediates).
 #
@@ -104,7 +109,7 @@ include $(BUILD_EXECUTABLE)
 $(LOCAL_PATH)/toolbox.c: $(intermediates)/tools.h
 
 TOOLS_H := $(intermediates)/tools.h
-$(TOOLS_H): PRIVATE_TOOLS := $(TOOLS)
+$(TOOLS_H): PRIVATE_TOOLS := $(ALL_TOOLS)
 $(TOOLS_H): PRIVATE_CUSTOM_TOOL = echo "/* file generated automatically */" > $@ ; for t in $(PRIVATE_TOOLS) ; do echo "TOOL($$t)" >> $@ ; done
 $(TOOLS_H): $(LOCAL_PATH)/Android.mk
 $(TOOLS_H):
@@ -112,7 +117,7 @@ $(TOOLS_H):
 
 # Make #!/system/bin/toolbox launchers for each tool.
 #
-SYMLINKS := $(addprefix $(TARGET_OUT)/bin/,$(TOOLS))
+SYMLINKS := $(addprefix $(TARGET_OUT)/bin/,$(ALL_TOOLS))
 $(SYMLINKS): TOOLBOX_BINARY := $(LOCAL_MODULE)
 $(SYMLINKS): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk
 	@echo "Symlink: $@ -> $(TOOLBOX_BINARY)"
