@@ -392,7 +392,7 @@ service ril-daemon /system/bin/rild
     socket rild stream 660 root radio
     socket rild-debug stream 660 radio system
     user root
-    group radio cache inet misc audio sdcard_rw log
+    group radio cache inet misc audio sdcard_r sdcard_rw log
 
 service surfaceflinger /system/bin/surfaceflinger
     class main
