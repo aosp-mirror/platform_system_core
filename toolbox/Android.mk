@@ -80,13 +80,15 @@ endif
 
 ALL_TOOLS = $(TOOLS)
 ALL_TOOLS += \
-	cp
+	cp \
+	grep
 
 LOCAL_SRC_FILES := \
 	dynarray.c \
 	toolbox.c \
 	$(patsubst %,%.c,$(TOOLS)) \
-	cp/cp.c cp/utils.c
+	cp/cp.c cp/utils.c \
+	grep/grep.c grep/fastgrep.c grep/file.c grep/queue.c grep/util.c
 
 LOCAL_SHARED_LIBRARIES := libcutils libc libusbhost
 
