@@ -146,7 +146,9 @@ int __android_log_write(int prio, const char *tag, const char *msg)
         !strcmp(tag, "STK") ||
         !strcmp(tag, "CDMA") ||
         !strcmp(tag, "PHONE") ||
-        !strcmp(tag, "SMS"))
+        !strcmp(tag, "SMS") ||
+        !strcmp(tag, "IMS") ||
+        !strcmp(tag, "IMSFW"))
             log_id = LOG_ID_RADIO;
 
     vec[0].iov_base   = (unsigned char *) &prio;
@@ -174,7 +176,9 @@ int __android_log_buf_write(int bufID, int prio, const char *tag, const char *ms
         !strcmp(tag, "STK") ||
         !strcmp(tag, "CDMA") ||
         !strcmp(tag, "PHONE") ||
-        !strcmp(tag, "SMS"))
+        !strcmp(tag, "SMS") ||
+        !strcmp(tag, "IMS") ||
+        !strcmp(tag, "IMSFW"))
             bufID = LOG_ID_RADIO;
 
     vec[0].iov_base   = (unsigned char *) &prio;
