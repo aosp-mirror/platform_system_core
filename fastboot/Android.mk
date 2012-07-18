@@ -48,7 +48,13 @@ ifeq ($(HOST_OS),windows)
   LOCAL_C_INCLUDES += development/host/windows/usb/api
 endif
 
-LOCAL_STATIC_LIBRARIES := $(EXTRA_STATIC_LIBS) libzipfile libunz libext4_utils libsparse libz
+LOCAL_STATIC_LIBRARIES := \
+    $(EXTRA_STATIC_LIBS) \
+    libzipfile \
+    libunz \
+    libext4_utils_host \
+    libsparse \
+    libz
 
 ifneq ($(HOST_OS),windows)
 ifeq ($(HAVE_SELINUX), true)
