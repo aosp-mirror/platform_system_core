@@ -127,6 +127,8 @@
 #define VENDOR_ID_LAB126        0x1949
 // Yulong Coolpad's USB Vendor ID
 #define VENDOR_ID_YULONG_COOLPAD 0x1EBF
+// Kobo's USB Vendor ID
+#define VENDOR_ID_KOBO          0x2237
 
 /** built-in vendor list */
 int builtInVendorIds[] = {
@@ -176,6 +178,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_SONY,
     VENDOR_ID_LAB126,
     VENDOR_ID_YULONG_COOLPAD,
+    VENDOR_ID_KOBO,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
