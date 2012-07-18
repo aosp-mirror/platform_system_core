@@ -26,10 +26,17 @@
  * SUCH DAMAGE.
  */
 
+#define min(a, b) \
+    ({ typeof(a) _a = (a); typeof(b) _b = (b); (_a < _b) ? _a : _b; })
+#define round_down(a, b) \
+    ({ typeof(a) _a = (a); typeof(b) _b = (b); _a - (_a % _b); })
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+
+#include <sparse/sparse.h>
 
 #include "fastboot.h"
 
@@ -40,8 +47,7 @@ char *fb_get_error(void)
     return ERROR;
 }
 
-static int check_response(usb_handle *usb, unsigned size,
-                          unsigned data_okay, char *response)
+static int check_response(usb_handle *usb, unsigned int size, char *response)
 {
     unsigned char status[65];
     int r;
@@ -82,7 +88,7 @@ static int check_response(usb_handle *usb, unsigned size,
             return -1;
         }
 
-        if(!memcmp(status, "DATA", 4) && data_okay){
+        if(!memcmp(status, "DATA", 4) && size > 0){
             unsigned dsize = strtoul((char*) status + 4, 0, 16);
             if(dsize > size) {
                 strcpy(ERROR, "data size too large");
@@ -100,9 +106,8 @@ static int check_response(usb_handle *usb, unsigned size,
     return -1;
 }
 
-static int _command_send(usb_handle *usb, const char *cmd,
-                         const void *data, unsigned size,
-                         char *response)
+static int _command_start(usb_handle *usb, const char *cmd, unsigned size,
+                          char *response)
 {
     int cmdsize = strlen(cmd);
     int r;
@@ -122,46 +127,81 @@ static int _command_send(usb_handle *usb, const char *cmd,
         return -1;
     }
 
-    if(data == 0) {
-        return check_response(usb, size, 0, response);
+    return check_response(usb, size, response);
+}
+
+static int _command_data(usb_handle *usb, const void *data, unsigned size)
+{
+    int r;
+
+    r = usb_write(usb, data, size);
+    if(r < 0) {
+        sprintf(ERROR, "data transfer failure (%s)", strerror(errno));
+        usb_close(usb);
+        return -1;
+    }
+    if(r != ((int) size)) {
+        sprintf(ERROR, "data transfer failure (short transfer)");
+        usb_close(usb);
+        return -1;
     }
 
-    r = check_response(usb, size, 1, 0);
+    return r;
+}
+
+static int _command_end(usb_handle *usb)
+{
+    int r;
+    r = check_response(usb, 0, 0);
     if(r < 0) {
         return -1;
     }
-    size = r;
+    return 0;
+}
 
-    if(size) {
-        r = usb_write(usb, data, size);
-        if(r < 0) {
-            sprintf(ERROR, "data transfer failure (%s)", strerror(errno));
-            usb_close(usb);
-            return -1;
-        }
-        if(r != ((int) size)) {
-            sprintf(ERROR, "data transfer failure (short transfer)");
-            usb_close(usb);
-            return -1;
-        }
+static int _command_send(usb_handle *usb, const char *cmd,
+                         const void *data, unsigned size,
+                         char *response)
+{
+    int r;
+    if (size == 0) {
+        return -1;
     }
 
-    r = check_response(usb, 0, 0, 0);
+    r = _command_start(usb, cmd, size, response);
+    if (r < 0) {
+        return -1;
+    }
+
+    r = _command_data(usb, data, size);
+    if (r < 0) {
+        return -1;
+    }
+
+    r = _command_end(usb);
     if(r < 0) {
         return -1;
-    } else {
-        return size;
     }
+
+    return size;
+}
+
+static int _command_send_no_data(usb_handle *usb, const char *cmd,
+                                 char *response)
+{
+    int r;
+
+    return _command_start(usb, cmd, 0, response);
 }
 
 int fb_command(usb_handle *usb, const char *cmd)
 {
-    return _command_send(usb, cmd, 0, 0, 0);
+    return _command_send_no_data(usb, cmd, 0);
 }
 
 int fb_command_response(usb_handle *usb, const char *cmd, char *response)
 {
-    return _command_send(usb, cmd, 0, 0, response);
+    return _command_send_no_data(usb, cmd, response);
 }
 
 int fb_download_data(usb_handle *usb, const void *data, unsigned size)
@@ -179,3 +219,96 @@ int fb_download_data(usb_handle *usb, const void *data, unsigned size)
     }
 }
 
+#define USB_BUF_SIZE 512
+static char usb_buf[USB_BUF_SIZE];
+static int usb_buf_len;
+
+static int fb_download_data_sparse_write(void *priv, const void *data, int len)
+{
+    int r;
+    usb_handle *usb = priv;
+    int to_write;
+    const char *ptr = data;
+
+    if (usb_buf_len) {
+        to_write = min(USB_BUF_SIZE - usb_buf_len, len);
+
+        memcpy(usb_buf + usb_buf_len, ptr, to_write);
+        usb_buf_len += to_write;
+        ptr += to_write;
+        len -= to_write;
+    }
+
+    if (usb_buf_len == USB_BUF_SIZE) {
+        r = _command_data(usb, usb_buf, USB_BUF_SIZE);
+        if (r != USB_BUF_SIZE) {
+            return -1;
+        }
+        usb_buf_len = 0;
+    }
+
+    if (len > USB_BUF_SIZE) {
+        if (usb_buf_len > 0) {
+            sprintf(ERROR, "internal error: usb_buf not empty\n");
+            return -1;
+        }
+        to_write = round_down(len, USB_BUF_SIZE);
+        r = _command_data(usb, ptr, to_write);
+        if (r != to_write) {
+            return -1;
+        }
+        ptr += to_write;
+        len -= to_write;
+    }
+
+    if (len > 0) {
+        if (len > USB_BUF_SIZE) {
+            sprintf(ERROR, "internal error: too much left for usb_buf\n");
+            return -1;
+        }
+        memcpy(usb_buf, ptr, len);
+        usb_buf_len = len;
+    }
+
+    return 0;
+}
+
+static int fb_download_data_sparse_flush(usb_handle *usb)
+{
+    int r;
+
+    if (usb_buf_len > 0) {
+        r = _command_data(usb, usb_buf, usb_buf_len);
+        if (r != usb_buf_len) {
+            return -1;
+        }
+        usb_buf_len = 0;
+    }
+
+    return 0;
+}
+
+int fb_download_data_sparse(usb_handle *usb, struct sparse_file *s)
+{
+    char cmd[64];
+    int r;
+    int size = sparse_file_len(s, true, false);
+    if (size <= 0) {
+        return -1;
+    }
+
+    sprintf(cmd, "download:%08x", size);
+    r = _command_start(usb, cmd, size, 0);
+    if (r < 0) {
+        return -1;
+    }
+
+    r = sparse_file_callback(s, true, false, fb_download_data_sparse_write, usb);
+    if (r < 0) {
+        return -1;
+    }
+
+    fb_download_data_sparse_flush(usb);
+
+    return _command_end(usb);
+}
