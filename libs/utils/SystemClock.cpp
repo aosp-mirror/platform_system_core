@@ -106,7 +106,22 @@ int64_t uptimeMillis()
  */
 int64_t elapsedRealtime()
 {
+	return nanoseconds_to_milliseconds(elapsedRealtimeNano());
+}
+
+/*
+ * native public static long elapsedRealtimeNano();
+ */
+int64_t elapsedRealtimeNano()
+{
 #ifdef HAVE_ANDROID_OS
+    struct timespec ts;
+    int result = clock_gettime(CLOCK_BOOTTIME, &ts);
+    if (result == 0) {
+        return seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
+    }
+
+    // CLOCK_BOOTTIME doesn't exist, fallback to /dev/alarm
     static int s_fd = -1;
 
     if (s_fd == -1) {
@@ -114,25 +129,20 @@ int64_t elapsedRealtime()
         if (android_atomic_cmpxchg(-1, fd, &s_fd)) {
             close(fd);
         }
+        result = ioctl(s_fd,
+                ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), &ts);
     }
-
-    struct timespec ts;
-    int result = ioctl(s_fd,
-            ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), &ts);
 
     if (result == 0) {
-        int64_t when = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
-        return (int64_t) nanoseconds_to_milliseconds(when);
-    } else {
-        // XXX: there was an error, probably because the driver didn't
-        // exist ... this should return
-        // a real error, like an exception!
-        int64_t when = systemTime(SYSTEM_TIME_MONOTONIC);
-        return (int64_t) nanoseconds_to_milliseconds(when);
+        return seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
     }
+
+    // XXX: there was an error, probably because the driver didn't
+    // exist ... this should return
+    // a real error, like an exception!
+    return systemTime(SYSTEM_TIME_MONOTONIC);
 #else
-    int64_t when = systemTime(SYSTEM_TIME_MONOTONIC);
-    return (int64_t) nanoseconds_to_milliseconds(when);
+    return systemTime(SYSTEM_TIME_MONOTONIC);
 #endif
 }
 

@@ -39,7 +39,8 @@ nsecs_t systemTime(int clock)
             CLOCK_REALTIME,
             CLOCK_MONOTONIC,
             CLOCK_PROCESS_CPUTIME_ID,
-            CLOCK_THREAD_CPUTIME_ID
+            CLOCK_THREAD_CPUTIME_ID,
+            CLOCK_BOOTTIME
     };
     struct timespec t;
     t.tv_sec = t.tv_nsec = 0;
