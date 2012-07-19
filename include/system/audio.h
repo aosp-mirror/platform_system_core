@@ -152,7 +152,7 @@ typedef enum {
                                         AUDIO_FORMAT_PCM_SUB_8_24_BIT),
 } audio_format_t;
 
-typedef enum {
+enum {
     /* output channels */
     AUDIO_CHANNEL_OUT_FRONT_LEFT            = 0x1,
     AUDIO_CHANNEL_OUT_FRONT_RIGHT           = 0x2,
@@ -275,7 +275,7 @@ typedef enum {
     AUDIO_IN_ACOUSTICS_TX_DISABLE    = 0,
 } audio_in_acoustics_t;
 
-typedef enum {
+enum {
     /* output devices */
     AUDIO_DEVICE_OUT_EARPIECE                  = 0x1,
     AUDIO_DEVICE_OUT_SPEAKER                   = 0x2,
@@ -339,7 +339,9 @@ typedef enum {
                                AUDIO_DEVICE_IN_BACK_MIC |
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
-} audio_devices_t;
+};
+
+typedef uint32_t audio_devices_t;
 
 /* the audio output flags serve two purposes:
  * - when an AudioTrack is created they indicate a "wish" to be connected to an
