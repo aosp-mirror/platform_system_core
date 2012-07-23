@@ -660,7 +660,7 @@ static void handle_generic_device_event(struct uevent *uevent)
 
 static void handle_device_event(struct uevent *uevent)
 {
-    if (!strcmp(uevent->action,"add"))
+    if (!strcmp(uevent->action,"add") || !strcmp(uevent->action, "change"))
         fixup_sys_perms(uevent->path);
 
     if (!strncmp(uevent->subsystem, "block", 5)) {
