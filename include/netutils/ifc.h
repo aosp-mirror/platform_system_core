@@ -66,6 +66,8 @@ extern int ifc_configure(const char *ifname, in_addr_t address,
                          uint32_t prefixLength, in_addr_t gateway,
                          in_addr_t dns1, in_addr_t dns2);
 
+extern in_addr_t prefixLengthToIpv4Netmask(int prefix_length);
+
 __END_DECLS
 
 #endif /* _NETUTILS_IFC_H_ */
