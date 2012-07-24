@@ -358,13 +358,34 @@ static void free_fstab(struct fstab_rec *fstab)
     free(fstab);
 }
 
-static void check_fs(char *blk_dev, char *type)
+static void check_fs(char *blk_dev, char *type, char *target)
 {
     pid_t pid;
     int status;
+    int ret;
+    long tmpmnt_flags = MS_NOATIME | MS_NOEXEC | MS_NOSUID;
+    char *tmpmnt_opts = "nomblk_io_submit,errors=remount-ro";
 
     /* Check for the types of filesystems we know how to check */
     if (!strcmp(type, "ext2") || !strcmp(type, "ext3") || !strcmp(type, "ext4")) {
+        /*
+         * First try to mount and unmount the filesystem.  We do this because
+         * the kernel is more efficient than e2fsck in running the journal and
+         * processing orphaned inodes, and on at least one device with a
+         * performance issue in the emmc firmware, it can take e2fsck 2.5 minutes
+         * to do what the kernel does in about a second.
+         *
+         * After mounting and unmounting the filesystem, run e2fsck, and if an
+         * error is recorded in the filesystem superblock, e2fsck will do a full
+         * check.  Otherwise, it does nothing.  If the kernel cannot mount the
+         * filesytsem due to an error, e2fsck is still run to do a full check
+         * fix the filesystem.
+         */
+        ret = mount(blk_dev, target, type, tmpmnt_flags, tmpmnt_opts);
+        if (! ret) {
+            umount(target);
+        }
+
         INFO("Running %s on %s\n", E2FSCK_BIN, blk_dev);
         pid = fork();
         if (pid > 0) {
@@ -434,7 +455,7 @@ int fs_mgr_mount_all(char *fstab_file)
         }
 
         if (fstab[i].fs_mgr_flags & MF_CHECK) {
-            check_fs(fstab[i].blk_dev, fstab[i].type);
+            check_fs(fstab[i].blk_dev, fstab[i].type, fstab[i].mnt_point);
         }
 
         mret = mount(fstab[i].blk_dev, fstab[i].mnt_point, fstab[i].type,
@@ -500,7 +521,7 @@ int fs_mgr_do_mount(char *fstab_file, char *n_name, char *n_blk_dev, char *tmp_m
         }
 
         if (fstab[i].fs_mgr_flags & MF_CHECK) {
-            check_fs(fstab[i].blk_dev, fstab[i].type);
+            check_fs(fstab[i].blk_dev, fstab[i].type, fstab[i].mnt_point);
         }
 
         /* Now mount it where requested */
