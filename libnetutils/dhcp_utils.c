@@ -29,6 +29,7 @@ static const char DAEMON_NAME[]        = "dhcpcd";
 static const char DAEMON_PROP_NAME[]   = "init.svc.dhcpcd";
 static const char HOSTNAME_PROP_NAME[] = "net.hostname";
 static const char DHCP_PROP_NAME_PREFIX[]  = "dhcp";
+static const char DHCP_CONFIG_PATH[]   = "/system/etc/dhcpcd/dhcpcd.conf";
 static const int NAP_TIME = 200;   /* wait for 200ms at a time */
                                   /* when polling for property values */
 static const char DAEMON_NAME_RENEW[]  = "iprenew";
@@ -170,7 +171,7 @@ static const char *ipaddr_to_string(in_addr_t addr)
  * The device init.rc file needs a corresponding entry for this work.
  *
  * Example:
- * service dhcpcd_<interface> /system/bin/dhcpcd -ABKL
+ * service dhcpcd_<interface> /system/bin/dhcpcd -ABKL -f dhcpcd.conf
  */
 int dhcp_do_request(const char *interface,
                     char *ipaddr,
@@ -185,7 +186,7 @@ int dhcp_do_request(const char *interface,
     char result_prop_name[PROPERTY_KEY_MAX];
     char daemon_prop_name[PROPERTY_KEY_MAX];
     char prop_value[PROPERTY_VALUE_MAX] = {'\0'};
-    char daemon_cmd[PROPERTY_VALUE_MAX * 2];
+    char daemon_cmd[PROPERTY_VALUE_MAX * 2 + sizeof(DHCP_CONFIG_PATH)];
     const char *ctrl_prop = "ctl.start";
     const char *desired_status = "running";
     /* Interface name after converting p2p0-p2p0-X to p2p to reuse system properties */
@@ -206,10 +207,11 @@ int dhcp_do_request(const char *interface,
 
     /* Start the daemon and wait until it's ready */
     if (property_get(HOSTNAME_PROP_NAME, prop_value, NULL) && (prop_value[0] != '\0'))
-        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:-h %s %s", DAEMON_NAME, p2p_interface,
-                 prop_value, interface);
+        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:-f %s -h %s %s", DAEMON_NAME,
+                 p2p_interface, DHCP_CONFIG_PATH, prop_value, interface);
     else
-        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:%s", DAEMON_NAME, p2p_interface, interface);
+        snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:-f %s %s", DAEMON_NAME,
+                 DHCP_CONFIG_PATH, p2p_interface, interface);
     memset(prop_value, '\0', PROPERTY_VALUE_MAX);
     property_set(ctrl_prop, daemon_cmd);
     if (wait_for_property(daemon_prop_name, desired_status, 10) < 0) {
