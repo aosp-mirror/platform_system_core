@@ -53,7 +53,7 @@ LOCAL_STATIC_LIBRARIES := \
     libzipfile \
     libunz \
     libext4_utils_host \
-    libsparse \
+    libsparse_host \
     libz
 
 ifneq ($(HOST_OS),windows)
@@ -63,7 +63,10 @@ endif # HAVE_SELINUX
 endif # HOST_OS != windows
 
 include $(BUILD_HOST_EXECUTABLE)
+
+
 $(call dist-for-goals,dist_files,$(LOCAL_BUILT_MODULE))
+
 
 ifeq ($(HOST_OS),linux)
 include $(CLEAR_VARS)
