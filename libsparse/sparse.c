@@ -139,7 +139,7 @@ static int write_all_blocks(struct sparse_file *s, struct output_file *out)
 				DIV_ROUND_UP(backed_block_len(bb), s->block_size);
 	}
 
-	pad = s->len - last_block * s->block_size;
+	pad = s->len - (int64_t)last_block * s->block_size;
 	assert(pad >= 0);
 	if (pad > 0) {
 		write_skip_chunk(out, pad);
