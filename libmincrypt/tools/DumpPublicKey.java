@@ -34,33 +34,54 @@ import sun.misc.BASE64Encoder;
 class DumpPublicKey {
     /**
      * @param key to perform sanity checks on
+     * @return version number of key.  Supported versions are:
+     *     1: 2048-bit key with e=3
+     *     2: 2048-bit key with e=65537
      * @throws Exception if the key has the wrong size or public exponent
+
      */
-    static void check(RSAPublicKey key) throws Exception {
+    static int check(RSAPublicKey key) throws Exception {
         BigInteger pubexp = key.getPublicExponent();
         BigInteger modulus = key.getModulus();
+        int version;
 
-        if (!pubexp.equals(BigInteger.valueOf(3)))
-                throw new Exception("Public exponent should be 3 but is " +
-                        pubexp.toString(10) + ".");
+        if (pubexp.equals(BigInteger.valueOf(3))) {
+            version = 1;
+        } else if (pubexp.equals(BigInteger.valueOf(65537))) {
+            version = 2;
+        } else {
+            throw new Exception("Public exponent should be 3 or 65537 but is " +
+                                pubexp.toString(10) + ".");
+        }
 
-        if (modulus.bitLength() != 2048)
+        if (modulus.bitLength() != 2048) {
              throw new Exception("Modulus should be 2048 bits long but is " +
                         modulus.bitLength() + " bits.");
+        }
+
+        return version;
     }
 
     /**
      * @param key to output
-     * @return a C initializer representing this public key.
+     * @return a String representing this public key.  If the key is a
+     *    version 1 key, the string will be a C initializer; this is
+     *    not true for newer key versions.
      */
     static String print(RSAPublicKey key) throws Exception {
-        check(key);
+        int version = check(key);
 
         BigInteger N = key.getModulus();
 
         StringBuilder result = new StringBuilder();
 
         int nwords = N.bitLength() / 32;    // # of 32 bit integers in modulus
+
+        if (version > 1) {
+            result.append("v");
+            result.append(Integer.toString(version));
+            result.append(" ");
+        }
 
         result.append("{");
         result.append(nwords);
