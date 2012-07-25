@@ -54,8 +54,6 @@
 #define O_BINARY 0
 #endif
 
-#define DEFAULT_SPARSE_LIMIT (256 * 1024 * 1024)
-
 char cur_product[FB_RESPONSE_SZ + 1];
 
 void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline);
@@ -281,7 +279,7 @@ void usage(void)
             "  -b <base_addr>                           specify a custom kernel base address\n"
             "  -n <page size>                           specify the nand page size. default: 2048\n"
             "  -S <size>[K|M|G]                         automatically sparse files greater than\n"
-            "                                           size. default: 256M, 0 to disable\n"
+            "                                           size.  0 to disable\n"
         );
 }
 
@@ -535,7 +533,7 @@ static int64_t get_sparse_limit(struct usb_handle *usb, int64_t size)
         if (target_sparse_limit > 0) {
             limit = target_sparse_limit;
         } else {
-            limit = DEFAULT_SPARSE_LIMIT;
+            return 0;
         }
     }
 
