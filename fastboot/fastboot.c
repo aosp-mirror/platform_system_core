@@ -825,7 +825,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (!strcmp(*argv, "devices")) {
+    if (argc > 0 && !strcmp(*argv, "devices")) {
         skip(1);
         list_devices();
         return 0;
