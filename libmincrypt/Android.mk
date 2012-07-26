@@ -4,13 +4,13 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := libmincrypt
-LOCAL_SRC_FILES := rsa.c sha.c
+LOCAL_SRC_FILES := rsa.c rsa_e_3.c rsa_e_f4.c sha.c
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := libmincrypt
-LOCAL_SRC_FILES := rsa.c sha.c
+LOCAL_SRC_FILES := rsa.c rsa_e_3.c rsa_e_f4.c sha.c
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
