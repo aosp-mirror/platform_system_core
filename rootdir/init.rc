@@ -358,6 +358,7 @@ on property:ro.debuggable=1
 # adbd is controlled via property triggers in init.<platform>.usb.rc
 service adbd /sbin/adbd
     class core
+    socket adbd stream 660 system system
     disabled
 
 # adbd on at boot in emulator
