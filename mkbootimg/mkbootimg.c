@@ -142,7 +142,7 @@ int main(int argc, char **argv)
         } else if(!strcmp(arg, "--base")) {
             unsigned base = strtoul(val, 0, 16);
             hdr.kernel_addr =  base + 0x00008000;
-            hdr.ramdisk_addr = base + 0x01000000;
+            hdr.ramdisk_addr = base + 0x01300000;
             hdr.second_addr =  base + 0x00F00000;
             hdr.tags_addr =    base + 0x00000100;
         } else if(!strcmp(arg, "--board")) {
