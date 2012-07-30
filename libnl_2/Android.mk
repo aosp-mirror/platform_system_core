@@ -1,4 +1,10 @@
+#######################################
+# * Netlink cache not implemented
+# * Library is not thread safe
+#######################################
+
 LOCAL_PATH := $(call my-dir)
+
 
 include $(CLEAR_VARS)
 
@@ -22,9 +28,10 @@ LOCAL_MODULE := libnl_2
 LOCAL_MODULE_TAGS := optional
 include $(BUILD_STATIC_LIBRARY)
 
-#######################################
-# Shared library currently unavailiable
-# * Netlink cache not implemented
-# * Library is not thread safe
-#######################################
-
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES :=
+LOCAL_WHOLE_STATIC_LIBRARIES:= libnl_2
+LOCAL_SHARED_LIBRARIES:= liblog
+LOCAL_MODULE := libnl_2
+LOCAL_MODULE_TAGS := optional
+include $(BUILD_SHARED_LIBRARY)
