@@ -5,6 +5,10 @@ on early-init
     symlink /mnt/sdcard /sdcard
 
 on boot
+    setsebool in_qemu=1
+    restorecon /sys/qemu_trace/process_name
+    restorecon /sys/qemu_trace/state
+    restorecon /sys/qemu_trace/symbol
     setprop ARGH ARGH
     setprop net.eth0.gw 10.0.2.2
     setprop net.eth0.dns1 10.0.2.3

@@ -12,6 +12,10 @@ on early-init
     # Set init and its forked children's oom_adj.
     write /proc/1/oom_adj -16
 
+    # Set the security context for the init process.
+    # This should occur before anything else (e.g. ueventd) is started.
+    setcon u:r:init:s0
+
     start ueventd
 
 # create mountpoints
@@ -128,10 +132,14 @@ on post-fs
     # We chown/chmod /cache again so because mount is run as root + defaults
     chown system cache /cache
     chmod 0770 /cache
+    # We restorecon /cache in case the cache partition has been reset.
+    restorecon /cache
 
     # This may have been created by the recovery system with odd permissions
     chown system cache /cache/recovery
     chmod 0770 /cache/recovery
+    # This may have been created by the recovery system with the wrong context.
+    restorecon /cache/recovery
 
     #change permissions on vmallocinfo so we can grab it from bugreports
     chown root log /proc/vmallocinfo
@@ -150,6 +158,8 @@ on post-fs-data
     # We chown/chmod /data again so because mount is run as root + defaults
     chown system system /data
     chmod 0771 /data
+    # We restorecon /data in case the userdata partition has been reset.
+    restorecon /data
 
     # Create dump dir and collect dumps.
     # Do this before we mount cache so eventually we can use cache for
@@ -343,6 +353,7 @@ on property:vold.decrypt=trigger_shutdown_framework
 service ueventd /sbin/ueventd
     class core
     critical
+    seclabel u:r:ueventd:s0
 
 service console /system/bin/sh
     class core
@@ -358,6 +369,7 @@ on property:ro.debuggable=1
 service adbd /sbin/adbd
     class core
     disabled
+    seclabel u:r:adbd:s0
 
 # adbd on at boot in emulator
 on property:ro.kernel.qemu=1
