@@ -77,13 +77,35 @@ static inline int badname(const char *name)
     return 0;
 }
 
+static int find_existing_devices_bus(char *busname,
+                                     usb_device_added_cb added_cb,
+                                     void *client_data)
+{
+    char devname[32];
+    DIR *devdir;
+    struct dirent *de;
+    int done = 0;
+
+    devdir = opendir(busname);
+    if(devdir == 0) return 0;
+
+    while ((de = readdir(devdir)) && !done) {
+        if(badname(de->d_name)) continue;
+
+        snprintf(devname, sizeof(devname), "%s/%s", busname, de->d_name);
+        done = added_cb(devname, client_data);
+    } // end of devdir while
+    closedir(devdir);
+
+    return done;
+}
+
 /* returns true if one of the callbacks indicates we are done */
 static int find_existing_devices(usb_device_added_cb added_cb,
-                                  usb_device_removed_cb removed_cb,
                                   void *client_data)
 {
-    char busname[32], devname[32];
-    DIR *busdir , *devdir ;
+    char busname[32];
+    DIR *busdir;
     struct dirent *de;
     int done = 0;
 
@@ -93,18 +115,10 @@ static int find_existing_devices(usb_device_added_cb added_cb,
     while ((de = readdir(busdir)) != 0 && !done) {
         if(badname(de->d_name)) continue;
 
-        snprintf(busname, sizeof busname, "%s/%s", USB_FS_DIR, de->d_name);
-        devdir = opendir(busname);
-        if(devdir == 0) continue;
-
-        while ((de = readdir(devdir)) && !done) {
-            if(badname(de->d_name)) continue;
-
-            snprintf(devname, sizeof devname, "%s/%s", busname, de->d_name);
-            done = added_cb(devname, client_data);
-        } // end of devdir while
-        closedir(devdir);
-    } //end of busdir while
+        snprintf(busname, sizeof(busname), "%s/%s", USB_FS_DIR, de->d_name);
+        done = find_existing_devices_bus(busname, added_cb,
+                                         client_data);
+    }
     closedir(busdir);
 
     return done;
@@ -167,7 +181,7 @@ void usb_host_run(struct usb_host_context *context,
     }
 
     /* check for existing devices first, after we have inotify set up */
-    done = find_existing_devices(added_cb, removed_cb, client_data);
+    done = find_existing_devices(added_cb, client_data);
     if (discovery_done_cb)
         done |= discovery_done_cb(client_data);
 
@@ -179,11 +193,20 @@ void usb_host_run(struct usb_host_context *context,
             if (wd == wds[0]) {
                 i = atoi(event->name);
                 snprintf(path, sizeof(path), "%s/%s", USB_FS_DIR, event->name);
-                D("new subdirectory %s: index: %d\n", path, i);
+                D("%s subdirectory %s: index: %d\n", (event->mask & IN_CREATE) ?
+                                                     "new" : "gone", path, i);
                 if (i > 0 && i < wd_count) {
-                ret = inotify_add_watch(context->fd, path, IN_CREATE | IN_DELETE);
-                if (ret > 0)
-                    wds[i] = ret;
+                    if (event->mask & IN_CREATE) {
+                        ret = inotify_add_watch(context->fd, path,
+                                                IN_CREATE | IN_DELETE);
+                        if (ret > 0)
+                            wds[i] = ret;
+                        done = find_existing_devices_bus(path, added_cb,
+                                                         client_data);
+                    } else if (event->mask & IN_DELETE) {
+                        inotify_rm_watch(context->fd, wds[i]);
+                        wds[i] = -1;
+                    }
                 }
             } else {
                 for (i = 1; i < wd_count && !done; i++) {
