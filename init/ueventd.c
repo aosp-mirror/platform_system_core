@@ -105,7 +105,7 @@ static int get_android_id(const char *id)
     for (i = 0; i < ARRAY_SIZE(android_ids); i++)
         if (!strcmp(id, android_ids[i].name))
             return android_ids[i].aid;
-    return 0;
+    return -1;
 }
 
 void set_device_permission(int nargs, char **args)
