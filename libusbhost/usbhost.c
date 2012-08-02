@@ -49,7 +49,8 @@
 
 #include "usbhost/usbhost.h"
 
-#define USB_FS_DIR "/dev/bus/usb"
+#define DEV_DIR             "/dev"
+#define USB_FS_DIR          "/dev/bus/usb"
 #define USB_FS_ID_SCANNER   "/dev/bus/usb/%d/%d"
 #define USB_FS_ID_FORMAT    "/dev/bus/usb/%03d/%03d"
 
@@ -110,7 +111,7 @@ static int find_existing_devices(usb_device_added_cb added_cb,
     int done = 0;
 
     busdir = opendir(USB_FS_DIR);
-    if(busdir == 0) return 1;
+    if(busdir == 0) return 0;
 
     while ((de = readdir(busdir)) != 0 && !done) {
         if(badname(de->d_name)) continue;
@@ -122,6 +123,25 @@ static int find_existing_devices(usb_device_added_cb added_cb,
     closedir(busdir);
 
     return done;
+}
+
+static void watch_existing_subdirs(struct usb_host_context *context,
+                                   int *wds, int wd_count)
+{
+    char path[100];
+    int i, ret;
+
+    wds[0] = inotify_add_watch(context->fd, USB_FS_DIR, IN_CREATE | IN_DELETE);
+    if (wds[0] < 0)
+        return;
+
+    /* watch existing subdirectories of USB_FS_DIR */
+    for (i = 1; i < wd_count; i++) {
+        snprintf(path, sizeof(path), "%s/%03d", USB_FS_DIR, i);
+        ret = inotify_add_watch(context->fd, path, IN_CREATE | IN_DELETE);
+        if (ret >= 0)
+            wds[i] = ret;
+    }
 }
 
 struct usb_host_context *usb_host_init()
@@ -156,29 +176,25 @@ void usb_host_run(struct usb_host_context *context,
     char event_buf[512];
     char path[100];
     int i, ret, done = 0;
-    int wd, wds[10];
+    int wd, wdd, wds[10];
     int wd_count = sizeof(wds) / sizeof(wds[0]);
 
     D("Created device discovery thread\n");
 
     /* watch for files added and deleted within USB_FS_DIR */
-    memset(wds, 0, sizeof(wds));
+    for (i = 0; i < wd_count; i++)
+        wds[i] = -1;
+
     /* watch the root for new subdirectories */
-    wds[0] = inotify_add_watch(context->fd, USB_FS_DIR, IN_CREATE | IN_DELETE);
-    if (wds[0] < 0) {
+    wdd = inotify_add_watch(context->fd, DEV_DIR, IN_CREATE | IN_DELETE);
+    if (wdd < 0) {
         fprintf(stderr, "inotify_add_watch failed\n");
         if (discovery_done_cb)
             discovery_done_cb(client_data);
         return;
     }
 
-    /* watch existing subdirectories of USB_FS_DIR */
-    for (i = 1; i < wd_count; i++) {
-        snprintf(path, sizeof(path), "%s/%03d", USB_FS_DIR, i);
-        ret = inotify_add_watch(context->fd, path, IN_CREATE | IN_DELETE);
-        if (ret > 0)
-            wds[i] = ret;
-    }
+    watch_existing_subdirs(context, wds, wd_count);
 
     /* check for existing devices first, after we have inotify set up */
     done = find_existing_devices(added_cb, client_data);
@@ -190,7 +206,19 @@ void usb_host_run(struct usb_host_context *context,
         if (ret >= (int)sizeof(struct inotify_event)) {
             event = (struct inotify_event *)event_buf;
             wd = event->wd;
-            if (wd == wds[0]) {
+            if (wd == wdd) {
+                if ((event->mask & IN_CREATE) && !strcmp(event->name, "bus")) {
+                    watch_existing_subdirs(context, wds, wd_count);
+                    done = find_existing_devices(added_cb, client_data);
+                } else if ((event->mask & IN_DELETE) && !strcmp(event->name, "bus")) {
+                    for (i = 0; i < wd_count; i++) {
+                        if (wds[i] >= 0) {
+                            inotify_rm_watch(context->fd, wds[i]);
+                            wds[i] = -1;
+                        }
+                    }
+                }
+            } else if (wd == wds[0]) {
                 i = atoi(event->name);
                 snprintf(path, sizeof(path), "%s/%s", USB_FS_DIR, event->name);
                 D("%s subdirectory %s: index: %d\n", (event->mask & IN_CREATE) ?
@@ -199,7 +227,7 @@ void usb_host_run(struct usb_host_context *context,
                     if (event->mask & IN_CREATE) {
                         ret = inotify_add_watch(context->fd, path,
                                                 IN_CREATE | IN_DELETE);
-                        if (ret > 0)
+                        if (ret >= 0)
                             wds[i] = ret;
                         done = find_existing_devices_bus(path, added_cb,
                                                          client_data);
