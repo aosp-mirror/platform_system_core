@@ -320,6 +320,25 @@ bool ZipFileRO::mapCentralDirectory(void)
     return true;
 }
 
+
+/*
+ * Round up to the next highest power of 2.
+ *
+ * Found on http://graphics.stanford.edu/~seander/bithacks.html.
+ */
+static unsigned int roundUpPower2(unsigned int val)
+{
+    val--;
+    val |= val >> 1;
+    val |= val >> 2;
+    val |= val >> 4;
+    val |= val >> 8;
+    val |= val >> 16;
+    val++;
+
+    return val;
+}
+
 bool ZipFileRO::parseZipArchive(void)
 {
     bool result = false;

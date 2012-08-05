@@ -39,90 +39,6 @@ using namespace android;
 namespace android {
 
 /*
- * Like strdup(), but uses C++ "new" operator instead of malloc.
- */
-char* strdupNew(const char* str)
-{
-    char* newStr;
-    int len;
-
-    if (str == NULL)
-        return NULL;
-
-    len = strlen(str);
-    newStr = new char[len+1];
-    memcpy(newStr, str, len+1);
-
-    return newStr;
-}
-
-/*
- * Concatenate an argument vector.
- */
-char* concatArgv(int argc, const char* const argv[])
-{
-    char* newStr = NULL;
-    int len, totalLen, posn, idx;
-
-    /*
-     * First, figure out the total length.
-     */
-    totalLen = idx = 0;
-    while (1) {
-        if (idx == argc || argv[idx] == NULL)
-            break;
-        if (idx)
-            totalLen++;  // leave a space between args
-        totalLen += strlen(argv[idx]);
-        idx++;
-    }
-
-    /*
-     * Alloc the string.
-     */
-    newStr = new char[totalLen +1];
-    if (newStr == NULL)
-        return NULL;
-
-    /*
-     * Finally, allocate the string and copy data over.
-     */
-    idx = posn = 0;
-    while (1) {
-        if (idx == argc || argv[idx] == NULL)
-            break;
-        if (idx)
-            newStr[posn++] = ' ';
-
-        len = strlen(argv[idx]);
-        memcpy(&newStr[posn], argv[idx], len);
-        posn += len;
-
-        idx++;
-    }
-
-    assert(posn == totalLen);
-    newStr[posn] = '\0';
-
-    return newStr;
-}
-
-/*
- * Count the #of args in an argument vector.  Don't count the final NULL.
- */
-int countArgv(const char* const argv[])
-{
-    int count = 0;
-
-    while (argv[count] != NULL)
-        count++;
-
-    return count;
-}
-
-
-#include <stdio.h>
-/*
  * Get a file's type.
  */
 FileType getFileType(const char* fileName)
@@ -170,24 +86,6 @@ time_t getFileModDate(const char* fileName)
         return (time_t) -1;
 
     return sb.st_mtime;
-}
-
-/*
- * Round up to the next highest power of 2.
- *
- * Found on http://graphics.stanford.edu/~seander/bithacks.html.
- */
-unsigned int roundUpPower2(unsigned int val)
-{
-    val--;
-    val |= val >> 1;
-    val |= val >> 2;
-    val |= val >> 4;
-    val |= val >> 8;
-    val |= val >> 16;
-    val++;
-
-    return val;
 }
 
 struct sysprop_change_callback_info {
