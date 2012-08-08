@@ -901,6 +901,12 @@ int main(int argc, char **argv)
 #ifdef HAVE_SELINUX
     INFO("loading selinux policy\n");
     selinux_load_policy();
+    /* These directories were necessarily created before policy load
+     * and therefore need their security context restored to the proper value.
+     * This must happen before /dev is populated by ueventd.
+     */
+    restorecon("/dev");
+    restorecon("/dev/socket");
 #endif
 
     is_charger = !strcmp(bootmode, "charger");
