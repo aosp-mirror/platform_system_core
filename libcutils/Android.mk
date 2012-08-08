@@ -50,7 +50,8 @@ commonSources := \
 	threads.c \
 	sched_policy.c \
 	iosched_policy.c \
-	str_parms.c
+	str_parms.c \
+	multiuser.c
 
 commonHostSources := \
         ashmem-host.c
