@@ -35,6 +35,10 @@
 #include <corkscrew/demangle.h>
 #include <corkscrew/backtrace.h>
 
+#ifdef HAVE_SELINUX
+#include <selinux/android.h>
+#endif
+
 #include "machine.h"
 #include "tombstone.h"
 #include "utility.h"
@@ -679,6 +683,13 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal,
         int* total_sleep_time_usec) {
     mkdir(TOMBSTONE_DIR, 0755);
     chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM);
+
+#ifdef HAVE_SELINUX
+    if (selinux_android_restorecon(TOMBSTONE_DIR) == -1) {
+        *detach_failed = false;
+        return NULL;
+    }
+#endif
 
     int fd;
     char* path = find_and_open_tombstone(&fd);
