@@ -17,6 +17,8 @@
 #ifndef __CUTILS_MULTIUSER_H
 #define __CUTILS_MULTIUSER_H
 
+#include <sys/types.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
