@@ -687,14 +687,14 @@ evalcommand(union node *cmd, int flags, struct backcmd *backcmd)
 	struct cmdentry cmdentry;
 	struct job *jp;
 	struct jmploc jmploc;
-	struct jmploc *volatile savehandler;
+	struct jmploc *volatile savehandler = 0;
 	char *volatile savecmdname;
 	volatile struct shparam saveparam;
 	struct localvar *volatile savelocalvars;
 	volatile int e;
 	char *lastarg;
 	const char *path = pathval();
-	volatile int temp_path;
+	volatile int temp_path = 0;
 #if __GNUC__
 	/* Avoid longjmp clobbering */
 	(void) &argv;
