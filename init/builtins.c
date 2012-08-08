@@ -302,7 +302,7 @@ int do_mkdir(int nargs, char **args)
         mode = strtoul(args[2], 0, 8);
     }
 
-    ret = mkdir(args[1], mode);
+    ret = make_dir(args[1], mode);
     /* chmod in case the directory already exists */
     if (ret == -1 && errno == EEXIST) {
         ret = _chmod(args[1], mode);
@@ -736,26 +736,12 @@ int do_chmod(int nargs, char **args) {
 }
 
 int do_restorecon(int nargs, char **args) {
-#ifdef HAVE_SELINUX
-    char *secontext = NULL;
-    struct stat sb;
     int i;
 
-    if (is_selinux_enabled() <= 0 || !sehandle)
-        return 0;
-
     for (i = 1; i < nargs; i++) {
-        if (lstat(args[i], &sb) < 0)
+        if (restorecon(args[i]) < 0)
             return -errno;
-        if (selabel_lookup(sehandle, &secontext, args[i], sb.st_mode) < 0)
-            return -errno;
-        if (lsetfilecon(args[i], secontext) < 0) {
-            freecon(secontext);
-            return -errno;
-        }
-        freecon(secontext);
     }
-#endif
     return 0;
 }
 
