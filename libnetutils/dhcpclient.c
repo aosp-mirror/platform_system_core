@@ -197,7 +197,11 @@ int decode_dhcp_msg(dhcp_msg *msg, int len, dhcp_info *info)
         }
         switch(opt) {
         case OPT_SUBNET_MASK:
-            if (optlen >= 4) info->prefixLength = ipv4NetmaskToPrefixLength(*((uint32_t*)x));
+            if (optlen >= 4) {
+                in_addr_t mask;
+                memcpy(&mask, x, 4);
+                info->prefixLength = ipv4NetmaskToPrefixLength(mask);
+            }
             break;
         case OPT_GATEWAY:
             if (optlen >= 4) memcpy(&info->gateway, x, 4);
