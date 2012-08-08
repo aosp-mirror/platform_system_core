@@ -42,7 +42,9 @@ static struct {
     /* non-SUS signals */
     _SIG(IO),
     _SIG(PWR),
+#ifdef SIGSTKFLT
     _SIG(STKFLT),
+#endif
     _SIG(WINCH),
 #undef _SIG
 };
