@@ -152,7 +152,7 @@ mk_ext_pentry(struct disk_info *dinfo, struct part_info *pinfo, uint32_t *lba,
 
     /* we are going to write the ebr at the current LBA, and then bump the
      * lba counter since that is where the logical data partition will start */
-    item->offset = (*lba) * dinfo->sect_size;
+    item->offset = ((loff_t)(*lba)) * dinfo->sect_size;
     (*lba)++;
 
     ebr = (struct pc_boot_record *) &item->data;
