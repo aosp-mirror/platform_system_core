@@ -38,7 +38,7 @@ static pthread_t suspend_thread;
 static sem_t suspend_lockout;
 static const char *sleep_state = "mem";
 
-static void *suspend_thread_func(void *arg)
+static void *suspend_thread_func(void *arg __attribute__((unused)))
 {
     char buf[80];
     char wakeup_count[20];
