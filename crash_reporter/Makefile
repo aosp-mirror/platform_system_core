@@ -20,7 +20,7 @@ PC_DEPS = glib-2.0 libpcrecpp libchrome-$(BASE_VER) libchromeos-$(BASE_VER)
 PC_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
 PC_LIBS := $(shell $(PKG_CONFIG) --libs $(PC_DEPS))
 
-CPPFLAGS += -I.. -I$(SYSROOT)/usr/include/google-breakpad $(PC_CFLAGS)
+CPPFLAGS += -I$(SRC)/.. -I$(SYSROOT)/usr/include/google-breakpad $(PC_CFLAGS)
 LDLIBS = -lgflags $(PC_LIBS)
 
 
