@@ -266,7 +266,7 @@ static const char _ok_resp[]    = "ok";
 
         /* Send the 'accept' request. */
         res = adb_write(fd, _accept_req, strlen(_accept_req));
-        if (res == strlen(_accept_req)) {
+        if ((size_t)res == strlen(_accept_req)) {
             /* Wait for the response. In the response we expect 'ok' on success,
              * or 'ko' on failure. */
             res = adb_read(fd, tmp, sizeof(tmp));
