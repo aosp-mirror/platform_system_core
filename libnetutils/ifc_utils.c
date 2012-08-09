@@ -75,9 +75,8 @@ in_addr_t prefixLengthToIpv4Netmask(int prefix_length)
 
 int ipv4NetmaskToPrefixLength(in_addr_t mask)
 {
-    mask = ntohl(mask);
     int prefixLength = 0;
-    uint32_t m = (uint32_t)mask;
+    uint32_t m = (uint32_t)ntohl(mask);
     while (m & 0x80000000) {
         prefixLength++;
         m = m << 1;
@@ -486,7 +485,7 @@ int ifc_get_info(const char *name, in_addr_t *addr, int *prefixLength, unsigned 
         if(ioctl(ifc_ctl_sock, SIOCGIFNETMASK, &ifr) < 0) {
             *prefixLength = 0;
         } else {
-            *prefixLength = ipv4NetmaskToPrefixLength((int)
+            *prefixLength = ipv4NetmaskToPrefixLength(
                     ((struct sockaddr_in*) &ifr.ifr_addr)->sin_addr.s_addr);
         }
     }
