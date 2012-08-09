@@ -160,9 +160,31 @@ int nla_put(struct nl_msg *msg, int attrtype, int datalen, const void *data)
 	}
 
 	return -EINVAL;
-
 }
 
+/* Add 8 bit integer attribute to netlink message. */
+int nla_put_u8(struct nl_msg *msg, int attrtype, uint8_t value)
+{
+	return nla_put(msg, attrtype, sizeof(uint8_t), &value);
+}
+
+/* Add 16 bit integer attribute to netlink message. */
+int nla_put_u16(struct nl_msg *msg, int attrtype, uint16_t value)
+{
+	return nla_put(msg, attrtype, sizeof(uint16_t), &value);
+}
+
+/* Add 32 bit integer attribute to netlink message. */
+int nla_put_u32(struct nl_msg *msg, int attrtype, uint32_t value)
+{
+	return nla_put(msg, attrtype, sizeof(uint32_t), &value);
+}
+
+/* Add 64 bit integer attribute to netlink message. */
+int nla_put_u64(struct nl_msg *msg, int attrtype, uint64_t value)
+{
+	return nla_put(msg, attrtype, sizeof(uint64_t), &value);
+}
 
 /* Add nested attributes to netlink message. */
 /* Takes the attributes found in the nested message and appends them
