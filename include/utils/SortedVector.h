@@ -21,6 +21,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include <cutils/log.h>
+
 #include <utils/Vector.h>
 #include <utils/VectorImpl.h>
 #include <utils/TypeHelpers.h>
@@ -61,11 +63,11 @@ public:
 
     //! returns number of items in the vector
     inline  size_t          size() const                { return VectorImpl::size(); }
-    //! returns wether or not the vector is empty
+    //! returns whether or not the vector is empty
     inline  bool            isEmpty() const             { return VectorImpl::isEmpty(); }
     //! returns how many items can be stored without reallocating the backing store
     inline  size_t          capacity() const            { return VectorImpl::capacity(); }
-    //! setst the capacity. capacity can never be reduced less than size()
+    //! sets the capacity. capacity can never be reduced less than size()
     inline  ssize_t         setCapacity(size_t size)    { return VectorImpl::setCapacity(size); }
 
     /*! 
@@ -76,7 +78,7 @@ public:
     inline  const TYPE*     array() const;
 
     //! read-write C-style access. BE VERY CAREFUL when modifying the array
-    //! you ust keep it sorted! You usually don't use this function.
+    //! you must keep it sorted! You usually don't use this function.
             TYPE*           editArray();
 
             //! finds the index of an item
@@ -100,7 +102,7 @@ public:
             const TYPE&     mirrorItemAt(ssize_t index) const;
 
     /*!
-     * modifing the array
+     * modifying the array
      */
 
             //! add an item in the right place (and replace the one that is there)
@@ -186,7 +188,9 @@ TYPE* SortedVector<TYPE>::editArray() {
 
 template<class TYPE> inline
 const TYPE& SortedVector<TYPE>::operator[](size_t index) const {
-    assert( index<size() );
+    LOG_FATAL_IF(index>=size(),
+            "%s: index=%u out of range (%u)", __PRETTY_FUNCTION__,
+            int(index), int(size()));
     return *(array() + index);
 }
 
@@ -197,8 +201,11 @@ const TYPE& SortedVector<TYPE>::itemAt(size_t index) const {
 
 template<class TYPE> inline
 const TYPE& SortedVector<TYPE>::mirrorItemAt(ssize_t index) const {
-    assert( (index>0 ? index : -index)<size() );
-    return *(array() + ((index<0) ? (size()-index) : index));
+    const size_t i = index>0 ? index : -index;
+    LOG_FATAL_IF(index>=size(),
+            "%s: index=%u out of range (%u)", __PRETTY_FUNCTION__,
+            int(index), int(size()));
+    return *(array() + i);
 }
 
 template<class TYPE> inline

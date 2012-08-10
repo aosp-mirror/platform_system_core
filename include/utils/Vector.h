@@ -21,7 +21,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include <utils/Log.h>
+#include <cutils/log.h>
+
 #include <utils/VectorImpl.h>
 #include <utils/TypeHelpers.h>
 
@@ -271,8 +272,9 @@ TYPE* Vector<TYPE>::editArray() {
 
 template<class TYPE> inline
 const TYPE& Vector<TYPE>::operator[](size_t index) const {
-    LOG_FATAL_IF( index>=size(),
-                  "itemAt: index %d is past size %d", (int)index, (int)size() );
+    LOG_FATAL_IF(index>=size(),
+            "%s: index=%u out of range (%u)", __PRETTY_FUNCTION__,
+            int(index), int(size()));
     return *(array() + index);
 }
 
@@ -283,10 +285,11 @@ const TYPE& Vector<TYPE>::itemAt(size_t index) const {
 
 template<class TYPE> inline
 const TYPE& Vector<TYPE>::mirrorItemAt(ssize_t index) const {
-    LOG_FATAL_IF( (index>0 ? index : -index)>=size(),
-                  "mirrorItemAt: index %d is past size %d",
-                  (int)index, (int)size() );
-    return *(array() + ((index<0) ? (size()-index) : index));
+    const size_t i = index>0 ? index : -index;
+    LOG_FATAL_IF(index>=size(),
+            "%s: index=%u out of range (%u)", __PRETTY_FUNCTION__,
+            int(index), int(size()));
+    return *(array() + i);
 }
 
 template<class TYPE> inline

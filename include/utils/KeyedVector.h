@@ -21,6 +21,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include <cutils/log.h>
+
 #include <utils/SortedVector.h>
 #include <utils/TypeHelpers.h>
 #include <utils/Errors.h>
@@ -50,11 +52,11 @@ public:
 
     //! returns number of items in the vector
     inline  size_t          size() const                { return mVector.size(); }
-    //! returns wether or not the vector is empty
+    //! returns whether or not the vector is empty
     inline  bool            isEmpty() const             { return mVector.isEmpty(); }
     //! returns how many items can be stored without reallocating the backing store
     inline  size_t          capacity() const            { return mVector.capacity(); }
-    //! setst the capacity. capacity can never be reduced less than size()
+    //! sets the capacity. capacity can never be reduced less than size()
     inline ssize_t          setCapacity(size_t size)    { return mVector.setCapacity(size); }
 
     // returns true if the arguments is known to be identical to this vector
@@ -139,7 +141,7 @@ ssize_t KeyedVector<KEY,VALUE>::indexOfKey(const KEY& key) const {
 template<typename KEY, typename VALUE> inline
 const VALUE& KeyedVector<KEY,VALUE>::valueFor(const KEY& key) const {
     ssize_t i = this->indexOfKey(key);
-    assert(i>=0);
+    LOG_ALWAYS_FATAL_IF(i<0, "%s: key not found", __PRETTY_FUNCTION__);
     return mVector.itemAt(i).value;
 }
 
@@ -161,7 +163,7 @@ const KEY& KeyedVector<KEY,VALUE>::keyAt(size_t index) const {
 template<typename KEY, typename VALUE> inline
 VALUE& KeyedVector<KEY,VALUE>::editValueFor(const KEY& key) {
     ssize_t i = this->indexOfKey(key);
-    assert(i>=0);
+    LOG_ALWAYS_FATAL_IF(i<0, "%s: key not found", __PRETTY_FUNCTION__);
     return mVector.editItemAt(i).value;
 }
 

@@ -20,7 +20,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include <utils/Log.h>
+#include <cutils/log.h>
+
 #include <utils/Errors.h>
 #include <utils/SharedBuffer.h>
 #include <utils/VectorImpl.h>
@@ -56,9 +57,8 @@ VectorImpl::VectorImpl(const VectorImpl& rhs)
 
 VectorImpl::~VectorImpl()
 {
-    ALOG_ASSERT(!mCount,
-        "[%p] "
-        "subclasses of VectorImpl must call finish_vector()"
+    ALOGW_IF(mCount,
+        "[%p] subclasses of VectorImpl must call finish_vector()"
         " in their destructor. Leaking %d bytes.",
         this, (int)(mCount*mItemSize));
     // We can't call _do_destroy() here because the vtable is already gone. 
@@ -66,7 +66,7 @@ VectorImpl::~VectorImpl()
 
 VectorImpl& VectorImpl::operator = (const VectorImpl& rhs)
 {
-    ALOG_ASSERT(mItemSize == rhs.mItemSize,
+    LOG_ALWAYS_FATAL_IF(mItemSize != rhs.mItemSize,
         "Vector<> have different types (this=%p, rhs=%p)", this, &rhs);
     if (this != &rhs) {
         release_storage();
@@ -251,6 +251,10 @@ ssize_t VectorImpl::replaceAt(const void* prototype, size_t index)
     ALOG_ASSERT(index<size(),
         "[%p] replace: index=%d, size=%d", this, (int)index, (int)size());
 
+    if (index >= size()) {
+        return BAD_INDEX;
+    }
+
     void* item = editItemLocation(index);
     if (item != prototype) {
         if (item == 0)
@@ -294,10 +298,13 @@ void* VectorImpl::editItemLocation(size_t index)
     ALOG_ASSERT(index<capacity(),
         "[%p] editItemLocation: index=%d, capacity=%d, count=%d",
         this, (int)index, (int)capacity(), (int)mCount);
-            
-    void* buffer = editArrayImpl();
-    if (buffer)
-        return reinterpret_cast<char*>(buffer) + index*mItemSize;
+
+    if (index < capacity()) {
+        void* buffer = editArrayImpl();
+        if (buffer) {
+            return reinterpret_cast<char*>(buffer) + index*mItemSize;
+        }
+    }
     return 0;
 }
 
@@ -307,9 +314,12 @@ const void* VectorImpl::itemLocation(size_t index) const
         "[%p] itemLocation: index=%d, capacity=%d, count=%d",
         this, (int)index, (int)capacity(), (int)mCount);
 
-    const  void* buffer = arrayImpl();
-    if (buffer)
-        return reinterpret_cast<const char*>(buffer) + index*mItemSize;
+    if (index < capacity()) {
+        const  void* buffer = arrayImpl();
+        if (buffer) {
+            return reinterpret_cast<const char*>(buffer) + index*mItemSize;
+        }
+    }
     return 0;
 }
 
@@ -484,15 +494,6 @@ void VectorImpl::_do_move_backward(void* dest, const void* from, size_t num) con
     do_move_backward(dest, from, num);
 }
 
-void VectorImpl::reservedVectorImpl1() { }
-void VectorImpl::reservedVectorImpl2() { }
-void VectorImpl::reservedVectorImpl3() { }
-void VectorImpl::reservedVectorImpl4() { }
-void VectorImpl::reservedVectorImpl5() { }
-void VectorImpl::reservedVectorImpl6() { }
-void VectorImpl::reservedVectorImpl7() { }
-void VectorImpl::reservedVectorImpl8() { }
-
 /*****************************************************************************/
 
 SortedVectorImpl::SortedVectorImpl(size_t itemSize, uint32_t flags)
@@ -607,16 +608,6 @@ ssize_t SortedVectorImpl::remove(const void* item)
     }
     return i;
 }
-
-void SortedVectorImpl::reservedSortedVectorImpl1() { };
-void SortedVectorImpl::reservedSortedVectorImpl2() { };
-void SortedVectorImpl::reservedSortedVectorImpl3() { };
-void SortedVectorImpl::reservedSortedVectorImpl4() { };
-void SortedVectorImpl::reservedSortedVectorImpl5() { };
-void SortedVectorImpl::reservedSortedVectorImpl6() { };
-void SortedVectorImpl::reservedSortedVectorImpl7() { };
-void SortedVectorImpl::reservedSortedVectorImpl8() { };
-
 
 /*****************************************************************************/
 
