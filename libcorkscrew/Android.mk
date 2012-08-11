@@ -36,6 +36,12 @@ LOCAL_SRC_FILES += \
 	arch-x86/ptrace-x86.c
 LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH
 endif
+ifeq ($(TARGET_ARCH),mips)
+LOCAL_SRC_FILES += \
+	arch-mips/backtrace-mips.c \
+	arch-mips/ptrace-mips.c
+LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH
+endif
 
 LOCAL_SHARED_LIBRARIES += libdl libcutils libgccdemangle
 

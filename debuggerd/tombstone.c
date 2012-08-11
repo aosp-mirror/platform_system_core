@@ -76,7 +76,9 @@ static const char *get_signame(int sig)
     case SIGFPE:     return "SIGFPE";
     case SIGSEGV:    return "SIGSEGV";
     case SIGPIPE:    return "SIGPIPE";
+#ifdef SIGSTKFLT
     case SIGSTKFLT:  return "SIGSTKFLT";
+#endif
     case SIGSTOP:    return "SIGSTOP";
     default:         return "?";
     }
