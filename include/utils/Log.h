@@ -29,5 +29,43 @@
 #define _LIBS_UTILS_LOG_H
 
 #include <cutils/log.h>
+#include <sys/types.h>
+
+#ifdef __cplusplus
+
+namespace android {
+
+/*
+ * A very simple utility that yells in the log when an operation takes too long.
+ */
+class LogIfSlow {
+public:
+    LogIfSlow(const char* tag, android_LogPriority priority,
+            int timeoutMillis, const char* message);
+    ~LogIfSlow();
+
+private:
+    const char* const mTag;
+    const android_LogPriority mPriority;
+    const int mTimeoutMillis;
+    const char* const mMessage;
+    const int64_t mStart;
+};
+
+/*
+ * Writes the specified debug log message if this block takes longer than the
+ * specified number of milliseconds to run.  Includes the time actually taken.
+ *
+ * {
+ *     ALOGD_IF_SLOW(50, "Excessive delay doing something.");
+ *     doSomething();
+ * }
+ */
+#define ALOGD_IF_SLOW(timeoutMillis, message) \
+        LogIfSlow _logIfSlow(LOG_TAG, ANDROID_LOG_DEBUG, timeoutMillis, message);
+
+} // namespace android
+
+#endif // __cplusplus
 
 #endif // _LIBS_UTILS_LOG_H

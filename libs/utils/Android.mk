@@ -26,6 +26,7 @@ commonSources:= \
 	FileMap.cpp \
 	Flattenable.cpp \
 	LinearTransform.cpp \
+	Log.cpp \
 	PropertyMap.cpp \
 	RefBase.cpp \
 	SharedBuffer.cpp \
