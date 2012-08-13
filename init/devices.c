@@ -33,6 +33,7 @@
 #ifdef HAVE_SELINUX
 #include <selinux/selinux.h>
 #include <selinux/label.h>
+#include <selinux/android.h>
 #endif
 
 #include <private/android_filesystem_config.h>
@@ -879,12 +880,10 @@ void device_init(void)
     struct stat info;
     int fd;
 #ifdef HAVE_SELINUX
-    struct selinux_opt seopts[] = {
-        { SELABEL_OPT_PATH, "/file_contexts" }
-    };
-
-    if (is_selinux_enabled() > 0)
-        sehandle = selabel_open(SELABEL_CTX_FILE, seopts, 1);
+    sehandle = NULL;
+    if (is_selinux_enabled() > 0) {
+        sehandle = selinux_android_file_context_handle();
+    }
 #endif
     /* is 64K enough? udev uses 16MB! */
     device_fd = uevent_open_socket(64*1024, true);
