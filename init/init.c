@@ -33,9 +33,9 @@
 #include <sys/un.h>
 
 #ifdef HAVE_SELINUX
-#include <sys/mman.h>
 #include <selinux/selinux.h>
 #include <selinux/label.h>
+#include <selinux/android.h>
 #endif
 
 #include <libgen.h>
@@ -77,7 +77,6 @@ static char qemu[32];
 
 #ifdef HAVE_SELINUX
 static int selinux_enabled = 1;
-static int selinux_enforcing = 0;
 #endif
 
 static struct action *cur_action = NULL;
@@ -604,9 +603,7 @@ static void import_kernel_nv(char *name, int for_emulator)
     if (name_len == 0) return;
 
 #ifdef HAVE_SELINUX
-    if (!strcmp(name,"enforcing")) {
-        selinux_enforcing = atoi(value);
-    } else if (!strcmp(name,"selinux")) {
+    if (!strcmp(name,"selinux")) {
         selinux_enabled = atoi(value);
     }
 #endif
@@ -758,93 +755,28 @@ static int bootchart_init_action(int nargs, char **args)
 #endif
 
 #ifdef HAVE_SELINUX
-void selinux_load_policy(void)
+void selinux_init_all_handles(void)
 {
-    const char path_prefix[] = "/sepolicy";
-    struct selinux_opt seopts[] = {
-        { SELABEL_OPT_PATH, "/file_contexts" }
-    };
-    char path[PATH_MAX];
-    int fd, rc, vers;
-    struct stat sb;
-    void *map;
+    sehandle = selinux_android_file_context_handle();
+}
 
-    sehandle = NULL;
+int selinux_reload_policy(void)
+{
     if (!selinux_enabled) {
-        INFO("SELinux:  Disabled by command line option\n");
-        return;
+        return -1;
     }
 
-    mkdir(SELINUXMNT, 0755);
-    if (mount("selinuxfs", SELINUXMNT, "selinuxfs", 0, NULL)) {
-        if (errno == ENODEV) {
-            /* SELinux not enabled in kernel */
-            return;
-        }
-        ERROR("SELinux:  Could not mount selinuxfs:  %s\n",
-              strerror(errno));
-        return;
-    }
-    set_selinuxmnt(SELINUXMNT);
+    INFO("SELinux: Attempting to reload policy files\n");
 
-    vers = security_policyvers();
-    if (vers <= 0) {
-        ERROR("SELinux:  Unable to read policy version\n");
-        return;
-    }
-    INFO("SELinux:  Maximum supported policy version:  %d\n", vers);
-
-    snprintf(path, sizeof(path), "%s.%d",
-             path_prefix, vers);
-    fd = open(path, O_RDONLY);
-    while (fd < 0 && errno == ENOENT && --vers) {
-        snprintf(path, sizeof(path), "%s.%d",
-                 path_prefix, vers);
-        fd = open(path, O_RDONLY);
-    }
-    if (fd < 0) {
-        ERROR("SELinux:  Could not open %s:  %s\n",
-              path, strerror(errno));
-        return;
-    }
-    if (fstat(fd, &sb) < 0) {
-        ERROR("SELinux:  Could not stat %s:  %s\n",
-              path, strerror(errno));
-        return;
-    }
-    map = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (map == MAP_FAILED) {
-        ERROR("SELinux:  Could not map %s:  %s\n",
-              path, strerror(errno));
-        return;
+    if (selinux_android_reload_policy() == -1) {
+        return -1;
     }
 
-    rc = security_load_policy(map, sb.st_size);
-    if (rc < 0) {
-        ERROR("SELinux:  Could not load policy:  %s\n",
-              strerror(errno));
-        return;
-    }
+    if (sehandle)
+        selabel_close(sehandle);
 
-    rc = security_setenforce(selinux_enforcing);
-    if (rc < 0) {
-        ERROR("SELinux:  Could not set enforcing mode to %s:  %s\n",
-              selinux_enforcing ? "enforcing" : "permissive", strerror(errno));
-        return;
-    }
-
-    munmap(map, sb.st_size);
-    close(fd);
-    INFO("SELinux: Loaded policy from %s\n", path);
-
-    sehandle = selabel_open(SELABEL_CTX_FILE, seopts, 1);
-    if (!sehandle) {
-        ERROR("SELinux:  Could not load file_contexts:  %s\n",
-              strerror(errno));
-        return;
-    }
-    INFO("SELinux: Loaded file contexts from %s\n", seopts[0].value);
-    return;
+    selinux_init_all_handles();
+    return 0;
 }
 #endif
 
@@ -900,8 +832,17 @@ int main(int argc, char **argv)
 
 #ifdef HAVE_SELINUX
     INFO("loading selinux policy\n");
-    selinux_load_policy();
-    /* These directories were necessarily created before policy load
+    if (selinux_enabled) {
+        if (selinux_android_load_policy() < 0) {
+            selinux_enabled = 0;
+            INFO("SELinux: Disabled due to failed policy load\n");
+        } else {
+            selinux_init_all_handles();
+        }
+    } else {
+        INFO("SELinux:  Disabled by command line option\n");
+    }
+    /* These directories were necessarily created before initial policy load
      * and therefore need their security context restored to the proper value.
      * This must happen before /dev is populated by ueventd.
      */

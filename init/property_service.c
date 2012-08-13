@@ -86,6 +86,7 @@ struct {
     { "persist.sys.",     AID_SYSTEM,   0 },
     { "persist.service.", AID_SYSTEM,   0 },
     { "persist.security.", AID_SYSTEM,   0 },
+    { "selinux."         , AID_SYSTEM,   0 },
     { NULL, 0, 0 }
 };
 
@@ -334,6 +335,11 @@ int property_set(const char *name, const char *value)
          * to prevent them from being overwritten by default values.
          */
         write_persistent_property(name, value);
+#ifdef HAVE_SELINUX
+    } else if (strcmp("selinux.reload_policy", name) == 0 &&
+               strcmp("1", value) == 0) {
+        selinux_reload_policy();
+#endif
     }
     property_changed(name, value);
     return 0;
