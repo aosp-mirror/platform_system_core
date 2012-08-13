@@ -62,6 +62,7 @@
 
 #ifdef HAVE_SELINUX
 struct selabel_handle *sehandle;
+struct selabel_handle *sehandle_prop;
 #endif
 
 static int property_triggers_enabled = 0;
@@ -756,9 +757,34 @@ static int bootchart_init_action(int nargs, char **args)
 #endif
 
 #ifdef HAVE_SELINUX
+static const struct selinux_opt seopts_prop[] = {
+        { SELABEL_OPT_PATH, "/data/system/property_contexts" },
+        { SELABEL_OPT_PATH, "/property_contexts" },
+        { 0, NULL }
+};
+
+struct selabel_handle* selinux_android_prop_context_handle(void)
+{
+    int i = 0;
+    struct selabel_handle* sehandle = NULL;
+    while ((sehandle == NULL) && seopts_prop[i].value) {
+        sehandle = selabel_open(SELABEL_CTX_ANDROID_PROP, &seopts_prop[i], 1);
+        i++;
+    }
+
+    if (!sehandle) {
+        ERROR("SELinux:  Could not load property_contexts:  %s\n",
+              strerror(errno));
+        return NULL;
+    }
+    INFO("SELinux: Loaded property contexts from %s\n", seopts_prop[i - 1].value);
+    return sehandle;
+}
+
 void selinux_init_all_handles(void)
 {
     sehandle = selinux_android_file_context_handle();
+    sehandle_prop = selinux_android_prop_context_handle();
 }
 
 int selinux_reload_policy(void)
@@ -776,9 +802,19 @@ int selinux_reload_policy(void)
     if (sehandle)
         selabel_close(sehandle);
 
+    if (sehandle_prop)
+        selabel_close(sehandle_prop);
+
     selinux_init_all_handles();
     return 0;
 }
+
+int audit_callback(void *data, security_class_t cls, char *buf, size_t len)
+{
+    snprintf(buf, len, "property=%s", !data ? "NULL" : (char *)data);
+    return 0;
+}
+
 #endif
 
 int main(int argc, char **argv)
@@ -835,6 +871,13 @@ int main(int argc, char **argv)
     process_kernel_cmdline();
 
 #ifdef HAVE_SELINUX
+    union selinux_callback cb;
+    cb.func_log = klog_write;
+    selinux_set_callback(SELINUX_CB_LOG, cb);
+
+    cb.func_audit = audit_callback;
+    selinux_set_callback(SELINUX_CB_AUDIT, cb);
+
     INFO("loading selinux policy\n");
     if (selinux_enabled) {
         if (selinux_android_load_policy() < 0) {
