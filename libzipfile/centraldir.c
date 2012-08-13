@@ -192,7 +192,7 @@ read_central_dir(Zipfile *file)
 
     // too small to be a ZIP archive?
     if (bufsize < EOCD_LEN) {
-        fprintf(stderr, "Length is %d -- too small\n", bufsize);
+        fprintf(stderr, "Length is %zd -- too small\n", bufsize);
         goto bail;
     }
 
