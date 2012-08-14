@@ -62,7 +62,7 @@ __RCSID("$NetBSD: du.c,v 1.33 2008/07/30 22:03:40 dsl Exp $");
 
 int	linkchk(dev_t, ino_t);
 void	prstat(const char *, int64_t);
-void	usage(void);
+static void	usage(void);
 
 long blocksize;
 
@@ -312,7 +312,7 @@ linkchk(dev_t dev, ino_t ino)
 	return 0;
 }
 
-void
+static void
 usage(void)
 {
 
