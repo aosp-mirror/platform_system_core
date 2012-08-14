@@ -42,12 +42,10 @@
  * permissions at creation, owner, group, and permissions are not 
  * changeable, symlinks and hardlinks are not createable, etc.
  *
- * usage:  sdcard <path> <uid> <gid>
+ * See usage() for command line options.
  *
- * It must be run as root, but will change to uid/gid as soon as it
- * mounts a filesystem on /storage/sdcard.  It will refuse to run if uid or
- * gid are zero.
- *
+ * It must be run as root, but will drop to requested UID/GID as soon as it
+ * mounts a filesystem.  It will refuse to run if requested UID/GID are zero.
  *
  * Things I believe to be true:
  *
@@ -57,7 +55,6 @@
  * - if an op that returns a fuse_entry fails writing the reply to the
  * kernel, you must rollback the refcount to reflect the reference the
  * kernel did not actually acquire
- *
  */
 
 #define FUSE_TRACE 0
@@ -71,8 +68,6 @@
 #define ERROR(x...) fprintf(stderr,x)
 
 #define FUSE_UNKNOWN_INO 0xffffffff
-
-#define MOUNT_POINT "/storage/sdcard0"
 
 /* Maximum number of bytes to write in one request. */
 #define MAX_WRITE (256 * 1024)
@@ -425,7 +420,7 @@ static struct node* acquire_or_create_child_locked(
     return child;
 }
 
-static void fuse_init(struct fuse *fuse, int fd, const char *path)
+static void fuse_init(struct fuse *fuse, int fd, const char *source_path)
 {
     pthread_mutex_init(&fuse->lock, NULL);
 
@@ -435,8 +430,8 @@ static void fuse_init(struct fuse *fuse, int fd, const char *path)
     memset(&fuse->root, 0, sizeof(fuse->root));
     fuse->root.nid = FUSE_ROOT_ID; /* 1 */
     fuse->root.refcount = 2;
-    fuse->root.namelen = strlen(path);
-    fuse->root.name = strdup(path);
+    fuse->root.namelen = strlen(source_path);
+    fuse->root.name = strdup(source_path);
 }
 
 static void fuse_status(struct fuse *fuse, __u64 unique, int err)
@@ -1244,21 +1239,21 @@ quit:
 
 static int usage()
 {
-    ERROR("usage: sdcard [-t<threads>] <path> <uid> <gid>\n"
+    ERROR("usage: sdcard [-t<threads>] <source_path> <dest_path> <uid> <gid>\n"
             "    -t<threads>: specify number of threads to use, default -t%d\n"
             "\n", DEFAULT_NUM_THREADS);
     return 1;
 }
 
-static int run(const char* path, uid_t uid, gid_t gid, int num_threads)
-{
+static int run(const char* source_path, const char* dest_path, uid_t uid, gid_t gid,
+        int num_threads) {
     int fd;
     char opts[256];
     int res;
     struct fuse fuse;
 
     /* cleanup from previous instance, if necessary */
-    umount2(MOUNT_POINT, 2);
+    umount2(dest_path, 2);
 
     fd = open("/dev/fuse", O_RDWR);
     if (fd < 0){
@@ -1270,7 +1265,7 @@ static int run(const char* path, uid_t uid, gid_t gid, int num_threads)
             "fd=%i,rootmode=40000,default_permissions,allow_other,user_id=%d,group_id=%d",
             fd, uid, gid);
 
-    res = mount("/dev/fuse", MOUNT_POINT, "fuse", MS_NOSUID | MS_NODEV, opts);
+    res = mount("/dev/fuse", dest_path, "fuse", MS_NOSUID | MS_NODEV, opts);
     if (res < 0) {
         ERROR("cannot mount fuse filesystem (error %d)\n", errno);
         goto error;
@@ -1288,7 +1283,7 @@ static int run(const char* path, uid_t uid, gid_t gid, int num_threads)
         goto error;
     }
 
-    fuse_init(&fuse, fd, path);
+    fuse_init(&fuse, fd, source_path);
 
     umask(0);
     res = ignite_fuse(&fuse, num_threads);
@@ -1304,7 +1299,8 @@ error:
 int main(int argc, char **argv)
 {
     int res;
-    const char *path = NULL;
+    const char *source_path = NULL;
+    const char *dest_path = NULL;
     uid_t uid = 0;
     gid_t gid = 0;
     int num_threads = DEFAULT_NUM_THREADS;
@@ -1314,8 +1310,10 @@ int main(int argc, char **argv)
         char* arg = argv[i];
         if (!strncmp(arg, "-t", 2))
             num_threads = strtoul(arg + 2, 0, 10);
-        else if (!path)
-            path = arg;
+        else if (!source_path)
+            source_path = arg;
+        else if (!dest_path)
+            dest_path = arg;
         else if (!uid)
             uid = strtoul(arg, 0, 10);
         else if (!gid)
@@ -1326,8 +1324,12 @@ int main(int argc, char **argv)
         }
     }
 
-    if (!path) {
-        ERROR("no path specified\n");
+    if (!source_path) {
+        ERROR("no source path specified\n");
+        return usage();
+    }
+    if (!dest_path) {
+        ERROR("no dest path specified\n");
         return usage();
     }
     if (!uid || !gid) {
@@ -1339,6 +1341,6 @@ int main(int argc, char **argv)
         return usage();
     }
 
-    res = run(path, uid, gid, num_threads);
+    res = run(source_path, dest_path, uid, gid, num_threads);
     return res < 0 ? 1 : 0;
 }
