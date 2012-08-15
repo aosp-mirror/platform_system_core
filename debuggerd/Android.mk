@@ -1,6 +1,6 @@
 # Copyright 2005 The Android Open Source Project
 
-ifneq ($(filter arm x86,$(TARGET_ARCH)),)
+ifneq ($(filter arm mips x86,$(TARGET_ARCH)),)
 
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
