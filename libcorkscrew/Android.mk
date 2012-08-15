@@ -42,6 +42,12 @@ ifeq ($(TARGET_ARCH),x86)
 LOCAL_SRC_FILES += $(x86_src_files)
 LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH
 endif
+ifeq ($(TARGET_ARCH),mips)
+LOCAL_SRC_FILES += \
+	arch-mips/backtrace-mips.c \
+	arch-mips/ptrace-mips.c
+LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH
+endif
 
 LOCAL_SHARED_LIBRARIES += libdl libcutils libgccdemangle
 
