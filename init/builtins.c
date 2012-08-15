@@ -322,6 +322,14 @@ int do_mkdir(int nargs, char **args)
         if (_chown(args[1], uid, gid) < 0) {
             return -errno;
         }
+
+        /* chown may have cleared S_ISUID and S_ISGID, chmod again */
+        if (mode & (S_ISUID | S_ISGID)) {
+            ret = _chmod(args[1], mode);
+            if (ret == -1) {
+                return -errno;
+            }
+        }
     }
 
     return 0;
