@@ -21,8 +21,11 @@
 
 #include <cutils/log.h>
 
-void load_ptrace_map_info_data_arch(pid_t pid, map_info_t* mi, map_info_data_t* data) {
+void load_ptrace_map_info_data_arch(pid_t pid __attribute__((unused)),
+                                    map_info_t* mi __attribute__((unused)),
+                                    map_info_data_t* data __attribute__((unused))) {
 }
 
-void free_ptrace_map_info_data_arch(map_info_t* mi, map_info_data_t* data) {
+void free_ptrace_map_info_data_arch(map_info_t* mi __attribute__((unused)),
+                                    map_info_data_t* data __attribute__((unused))) {
 }
