@@ -131,11 +131,9 @@ void signal_init(void)
     int s[2];
 
     struct sigaction act;
-
+    memset(&act, 0, sizeof(act));
     act.sa_handler = sigchld_handler;
     act.sa_flags = SA_NOCLDSTOP;
-    act.sa_mask = 0;
-    act.sa_restorer = NULL;
     sigaction(SIGCHLD, &act, 0);
 
     /* create a signalling mechanism for the sigchld handler */
