@@ -115,9 +115,6 @@ struct fuse {
     char rootpath[1024];
 };
 
-static unsigned uid = -1;
-static unsigned gid = -1;
-
 #define PATH_BUFFER_SIZE 1024
 
 #define NO_CASE_SENSITIVE_MATCH 0
@@ -954,7 +951,7 @@ void handle_fuse_requests(struct fuse *fuse)
 
 static int usage()
 {
-    ERROR("usage: sdcard [-l -f] <path> <uid> <gid>\n\n\t-l force file names to lower case when creating new files\n\t-f fix up file system before starting (repairs bad file name case and group ownership)\n");
+    ERROR("usage: sdcard <path> <uid> <gid>\n");
     return -1;
 }
 
@@ -966,28 +963,30 @@ int main(int argc, char **argv)
     int res;
     const char *path = NULL;
     int i;
+    unsigned int uid = 0;
+    unsigned int gid = 0;
 
-    for (i = 1; i < argc; i++) {
-        char* arg = argv[i];
-        if (!path)
-            path = arg;
-        else if (uid == -1)
-            uid = strtoul(arg, 0, 10);
-        else if (gid == -1)
-            gid = strtoul(arg, 0, 10);
-        else {
-            ERROR("too many arguments\n");
-            return usage();
-        }
+
+    if (argc != 4) {
+      return usage();
     }
 
-    if (!path) {
-        ERROR("no path specified\n");
-        return usage();
+    path = argv[1];
+
+    char* endptr = NULL;
+    errno = 0;
+    uid = strtoul(argv[2], &endptr, 10);
+    if (*endptr != '\0' || errno != 0) {
+      ERROR("Invalid uid");
+      return usage();
     }
-    if (uid <= 0 || gid <= 0) {
-        ERROR("uid and gid must be nonzero\n");
-        return usage();
+
+    endptr = NULL;
+    errno = 0;
+    gid = strtoul(argv[3], &endptr, 10);
+    if (*endptr != '\0' || errno != 0) {
+      ERROR("Invalid gid");
+      return usage();
     }
 
         /* cleanup from previous instance, if necessary */
