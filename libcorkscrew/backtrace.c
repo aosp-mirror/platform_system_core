@@ -124,7 +124,7 @@ static volatile struct {
     size_t returned_frames;
 } g_unwind_signal_state;
 
-static void unwind_backtrace_thread_signal_handler(int n, siginfo_t* siginfo, void* sigcontext) {
+static void unwind_backtrace_thread_signal_handler(int n __attribute__((unused)), siginfo_t* siginfo, void* sigcontext) {
     if (!android_atomic_acquire_cas(gettid(), STATE_DUMPING, &g_unwind_signal_state.tid_state)) {
         g_unwind_signal_state.returned_frames = unwind_backtrace_signal_arch(
                 siginfo, sigcontext,
@@ -305,7 +305,7 @@ void free_backtrace_symbols(backtrace_symbol_t* backtrace_symbols, size_t frames
     }
 }
 
-void format_backtrace_line(unsigned frameNumber, const backtrace_frame_t* frame,
+void format_backtrace_line(unsigned frameNumber, const backtrace_frame_t* frame __attribute__((unused)),
         const backtrace_symbol_t* symbol, char* buffer, size_t bufferSize) {
     const char* mapName = symbol->map_name ? symbol->map_name : "<unknown>";
     const char* symbolName = symbol->demangled_name ? symbol->demangled_name : symbol->symbol_name;
