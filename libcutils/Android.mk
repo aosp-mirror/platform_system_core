@@ -50,7 +50,8 @@ commonSources := \
 	threads.c \
 	sched_policy.c \
 	iosched_policy.c \
-	str_parms.c
+	str_parms.c \
+	multiuser.c
 
 commonHostSources := \
         ashmem-host.c
@@ -124,8 +125,7 @@ LOCAL_SRC_FILES := $(commonSources) \
         mq.c \
         partition_utils.c \
         qtaguid.c \
-        uevent.c \
-        multiuser.c
+        uevent.c
 
 ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += arch-arm/memset32.S
