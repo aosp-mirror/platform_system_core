@@ -330,7 +330,10 @@ static void handle_request(int fd) {
                     case SIGFPE:
                     case SIGSEGV:
                     case SIGPIPE:
-                    case SIGSTKFLT: {
+#ifdef SIGSTKFLT
+                    case SIGSTKFLT:
+#endif
+                        {
                         XLOG("stopped -- fatal signal\n");
                         /*
                          * Send a SIGSTOP to the process to make all of
@@ -424,7 +427,9 @@ static int do_server() {
     signal(SIGFPE, SIG_DFL);
     signal(SIGSEGV, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
+#ifdef SIGSTKFLT
     signal(SIGSTKFLT, SIG_DFL);
+#endif
 
     logsocket = socket_local_client("logd",
             ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_DGRAM);
