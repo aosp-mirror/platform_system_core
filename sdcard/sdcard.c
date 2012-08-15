@@ -1314,11 +1314,23 @@ int main(int argc, char **argv)
             source_path = arg;
         else if (!dest_path)
             dest_path = arg;
-        else if (!uid)
-            uid = strtoul(arg, 0, 10);
-        else if (!gid)
-            gid = strtoul(arg, 0, 10);
-        else {
+        else if (!uid) {
+            char* endptr = NULL;
+            errno = 0;
+            uid = strtoul(arg, &endptr, 10);
+            if (*endptr != '\0' || errno != 0) {
+                ERROR("Invalid uid");
+                return usage();
+            }
+        } else if (!gid) {
+            char* endptr = NULL;
+            errno = 0;
+            gid = strtoul(arg, &endptr, 10);
+            if (*endptr != '\0' || errno != 0) {
+                ERROR("Invalid gid");
+                return usage();
+            }
+        } else {
             ERROR("too many arguments\n");
             return usage();
         }
