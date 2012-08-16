@@ -128,6 +128,8 @@ on fs
 on post-fs
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
+    # mount shared so changes propagate into child namespaces
+    mount rootfs rootfs / shared rec
 
     # We chown/chmod /cache again so because mount is run as root + defaults
     chown system cache /cache
