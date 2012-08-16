@@ -229,6 +229,9 @@ static struct fs_path_config android_files[] = {
     { 00644, AID_ROOT,      AID_ROOT,       0 },
 };
 
+#define EXTERNAL_STORAGE_SYSTEM "/mnt/secure/sdcard0"
+#define EXTERNAL_STORAGE_APP "/storage/sdcard0"
+
 static inline void fs_config(const char *path, int dir,
                              unsigned *uid, unsigned *gid, unsigned *mode)
 {
