@@ -30,9 +30,9 @@ extern "C" {
 typedef uid_t userid_t;
 typedef uid_t appid_t;
 
-extern userid_t getUserId(uid_t uid);
-extern appid_t getAppId(uid_t uid);
-extern uid_t getUid(userid_t userId, appid_t appId);
+extern userid_t multiuser_getUserId(uid_t uid);
+extern appid_t multiuser_getAppId(uid_t uid);
+extern uid_t multiuser_getUid(userid_t userId, appid_t appId);
 
 #ifdef __cplusplus
 }
