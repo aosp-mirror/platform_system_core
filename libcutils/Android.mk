@@ -51,7 +51,6 @@ commonSources := \
 	sched_policy.c \
 	iosched_policy.c \
 	str_parms.c \
-	multiuser.c
 
 commonHostSources := \
         ashmem-host.c
@@ -79,6 +78,7 @@ else
         mspace.c \
         selector.c \
         tztime.c \
+        multiuser.c \
         zygote.c
 
     commonHostSources += \
