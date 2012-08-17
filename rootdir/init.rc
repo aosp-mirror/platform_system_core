@@ -56,6 +56,9 @@ loglevel 3
     mkdir /cache 0770 system cache
     mkdir /config 0500 root root
 
+    # Directory for shell-visible mount points, like external storage
+    mkdir /mnt/shell 0700 shell shell
+
     # Directory for putting things only root should see.
     mkdir /mnt/secure 0700 root root
 

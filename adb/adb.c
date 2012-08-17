@@ -990,26 +990,6 @@ static int should_drop_privileges() {
 }
 #endif /* !ADB_HOST */
 
-#if !ADB_HOST
-/* Give ourselves access to external storage, which is otherwise protected. */
-static void mount_external_storage(void) {
-    // Create private mount namespace for our process
-    if (unshare(CLONE_NEWNS) == -1) {
-        fatal_errno("Failed to unshare()");
-    }
-
-    // Mark rootfs as being a slave in our process so that changes
-    // from parent namespace flow into our process.
-    if (mount("rootfs", "/", NULL, (MS_SLAVE | MS_REC), NULL) == -1) {
-        fatal_errno("Failed to mount() rootfs as MS_SLAVE");
-    }
-
-    if (mount(EXTERNAL_STORAGE_SYSTEM, EXTERNAL_STORAGE_APP, "none", MS_BIND, NULL) == -1) {
-        fatal_errno("Failed to mount() from %s", EXTERNAL_STORAGE_SYSTEM);
-    }
-}
-#endif /* !ADB_HOST */
-
 int adb_main(int is_daemon, int server_port)
 {
 #if !ADB_HOST
@@ -1042,7 +1022,9 @@ int adb_main(int is_daemon, int server_port)
     }
 #else
 
-    mount_external_storage();
+    // Our external storage path may be different than apps, since
+    // we aren't able to bind mount after dropping root.
+    setenv("EXTERNAL_STORAGE", getenv("ADB_EXTERNAL_STORAGE"), 1);
 
     /* don't listen on a port (default 5037) if running in secure mode */
     /* don't run as root if we are running in secure mode */
