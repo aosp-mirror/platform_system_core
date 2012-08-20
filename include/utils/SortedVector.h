@@ -98,8 +98,6 @@ public:
     inline  const TYPE&     itemAt(size_t index) const;
     //! stack-usage of the vector. returns the top of the stack (last element)
             const TYPE&     top() const;
-    //! same as operator [], but allows to access the vector backward (from the end) with a negative index
-            const TYPE&     mirrorItemAt(ssize_t index) const;
 
     /*!
      * modifying the array
@@ -197,15 +195,6 @@ const TYPE& SortedVector<TYPE>::operator[](size_t index) const {
 template<class TYPE> inline
 const TYPE& SortedVector<TYPE>::itemAt(size_t index) const {
     return operator[](index);
-}
-
-template<class TYPE> inline
-const TYPE& SortedVector<TYPE>::mirrorItemAt(ssize_t index) const {
-    const size_t i = index>0 ? index : -index;
-    LOG_FATAL_IF(index>=size(),
-            "%s: index=%u out of range (%u)", __PRETTY_FUNCTION__,
-            int(index), int(size()));
-    return *(array() + i);
 }
 
 template<class TYPE> inline
