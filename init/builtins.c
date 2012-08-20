@@ -799,6 +799,8 @@ int do_wait(int nargs, char **args)
 {
     if (nargs == 2) {
         return wait_for_file(args[1], COMMAND_RETRY_TIMEOUT);
-    }
-    return -1;
+    } else if (nargs == 3) {
+        return wait_for_file(args[1], atoi(args[2]));
+    } else
+        return -1;
 }
