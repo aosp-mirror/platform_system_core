@@ -75,7 +75,7 @@ int vmstat_main(int argc, char *argv[]) {
     int toggle, count;
     int i;
 
-    iterations = 0;
+    iterations = -1;
     delay = 1;
     header_interval = 20;
 
@@ -119,7 +119,7 @@ int vmstat_main(int argc, char *argv[]) {
     if (!header_interval)
         print_header();
     read_state(&s[1 - toggle]);
-    while ((iterations == 0) || (iterations-- > 0)) {
+    while ((iterations < 0) || (iterations-- > 0)) {
         sleep(delay);
         read_state(&s[toggle]);
         if (header_interval) {
