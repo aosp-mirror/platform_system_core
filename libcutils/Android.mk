@@ -75,7 +75,6 @@ ifeq ($(WINDOWS_HOST_ONLY),1)
 else
     commonSources += \
         abort_socket.c \
-        mspace.c \
         selector.c \
         tztime.c \
         zygote.c
