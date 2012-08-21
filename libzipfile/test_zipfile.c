@@ -1,5 +1,5 @@
 #include <zipfile/zipfile.h>
-
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -55,6 +55,8 @@ main(int argc, char** argv)
 
     switch (what)
     {
+        case HUH:
+            break;
         case LIST:
             dump_zipfile(stdout, zip);
             break;
