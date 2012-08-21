@@ -28,6 +28,7 @@
 
 #include "sysdeps.h"
 #include "adb.h"
+#include "adb_auth.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -45,6 +46,8 @@ ADB_MUTEX_DEFINE( D_lock );
 #endif
 
 int HOST = 0;
+
+static int auth_enabled = 0;
 
 #if !ADB_HOST
 static const char *adb_device_banner = "device";
@@ -100,6 +103,7 @@ void  adb_trace_init(void)
         { "transport", TRACE_TRANSPORT },
         { "jdwp", TRACE_JDWP },
         { "services", TRACE_SERVICES },
+        { "auth", TRACE_AUTH },
         { NULL, 0 }
     };
 
@@ -203,19 +207,21 @@ void put_apacket(apacket *p)
     free(p);
 }
 
-void handle_online(void)
+void handle_online(atransport *t)
 {
     D("adb: online\n");
+    t->online = 1;
 }
 
 void handle_offline(atransport *t)
 {
     D("adb: offline\n");
     //Close the associated usb
+    t->online = 0;
     run_transport_disconnects(t);
 }
 
-#if TRACE_PACKETS
+#if DEBUG_PACKETS
 #define DUMPMAX 32
 void print_packet(const char *label, apacket *p)
 {
@@ -230,6 +236,7 @@ void print_packet(const char *label, apacket *p)
     case A_OKAY: tag = "OKAY"; break;
     case A_CLSE: tag = "CLSE"; break;
     case A_WRTE: tag = "WRTE"; break;
+    case A_AUTH: tag = "AUTH"; break;
     default: tag = "????"; break;
     }
 
@@ -251,7 +258,7 @@ void print_packet(const char *label, apacket *p)
         }
         x++;
     }
-    fprintf(stderr, tag);
+    fprintf(stderr, "%s", tag);
 }
 #endif
 
@@ -315,11 +322,70 @@ static void send_connect(atransport *t)
     cp->msg.data_length = fill_connect_data((char *)cp->data,
                                             sizeof(cp->data));
     send_packet(cp, t);
-#if ADB_HOST
-        /* XXX why sleep here? */
-    // allow the device some time to respond to the connect message
-    adb_sleep_ms(1000);
-#endif
+}
+
+static void send_auth_request(atransport *t)
+{
+    D("Calling send_auth_request\n");
+    apacket *p;
+    int ret;
+
+    ret = adb_auth_generate_token(t->token, sizeof(t->token));
+    if (ret != sizeof(t->token)) {
+        D("Error generating token ret=%d\n", ret);
+        return;
+    }
+
+    p = get_apacket();
+    memcpy(p->data, t->token, ret);
+    p->msg.command = A_AUTH;
+    p->msg.arg0 = ADB_AUTH_TOKEN;
+    p->msg.data_length = ret;
+    send_packet(p, t);
+}
+
+static void send_auth_response(uint8_t *token, size_t token_size, atransport *t)
+{
+    D("Calling send_auth_response\n");
+    apacket *p = get_apacket();
+    int ret;
+
+    ret = adb_auth_sign(t->key, token, token_size, p->data);
+    if (!ret) {
+        D("Error signing the token\n");
+        put_apacket(p);
+        return;
+    }
+
+    p->msg.command = A_AUTH;
+    p->msg.arg0 = ADB_AUTH_SIGNATURE;
+    p->msg.data_length = ret;
+    send_packet(p, t);
+}
+
+static void send_auth_publickey(atransport *t)
+{
+    D("Calling send_auth_publickey\n");
+    apacket *p = get_apacket();
+    int ret;
+
+    ret = adb_auth_get_userkey(p->data, sizeof(p->data));
+    if (!ret) {
+        D("Failed to get user public key\n");
+        put_apacket(p);
+        return;
+    }
+
+    p->msg.command = A_AUTH;
+    p->msg.arg0 = ADB_AUTH_RSAPUBLICKEY;
+    p->msg.data_length = ret;
+    send_packet(p, t);
+}
+
+void adb_auth_verified(atransport *t)
+{
+    handle_online(t);
+    send_connect(t);
 }
 
 static char *connection_state_name(atransport *t)
@@ -451,13 +517,42 @@ void handle_packet(apacket *p, atransport *t)
             t->connection_state = CS_OFFLINE;
             handle_offline(t);
         }
+
         parse_banner((char*) p->data, t);
-        handle_online();
-        if(!HOST) send_connect(t);
+
+        if (HOST || !auth_enabled) {
+            handle_online(t);
+            if(!HOST) send_connect(t);
+        } else {
+            send_auth_request(t);
+        }
+        break;
+
+    case A_AUTH:
+        if (p->msg.arg0 == ADB_AUTH_TOKEN) {
+            t->key = adb_auth_nextkey(t->key);
+            if (t->key) {
+                send_auth_response(p->data, p->msg.data_length, t);
+            } else {
+                /* No more private keys to try, send the public key */
+                send_auth_publickey(t);
+            }
+        } else if (p->msg.arg0 == ADB_AUTH_SIGNATURE) {
+            if (adb_auth_verify(t->token, p->data, p->msg.data_length)) {
+                adb_auth_verified(t);
+                t->failed_auth_attempts = 0;
+            } else {
+                if (t->failed_auth_attempts++ > 10)
+                    sleep(1);
+                send_auth_request(t);
+            }
+        } else if (p->msg.arg0 == ADB_AUTH_RSAPUBLICKEY) {
+            adb_auth_confirm_key(p->data, p->msg.data_length, t);
+        }
         break;
 
     case A_OPEN: /* OPEN(local-id, 0, "destination") */
-        if(t->connection_state != CS_OFFLINE) {
+        if (t->online) {
             char *name = (char*) p->data;
             name[p->msg.data_length > 0 ? p->msg.data_length - 1 : 0] = 0;
             s = create_local_service_socket(name);
@@ -473,7 +568,7 @@ void handle_packet(apacket *p, atransport *t)
         break;
 
     case A_OKAY: /* READY(local-id, remote-id, "") */
-        if(t->connection_state != CS_OFFLINE) {
+        if (t->online) {
             if((s = find_local_socket(p->msg.arg1))) {
                 if(s->peer == 0) {
                     s->peer = create_remote_socket(p->msg.arg0, t);
@@ -485,7 +580,7 @@ void handle_packet(apacket *p, atransport *t)
         break;
 
     case A_CLSE: /* CLOSE(local-id, remote-id, "") */
-        if(t->connection_state != CS_OFFLINE) {
+        if (t->online) {
             if((s = find_local_socket(p->msg.arg1))) {
                 s->close(s);
             }
@@ -493,7 +588,7 @@ void handle_packet(apacket *p, atransport *t)
         break;
 
     case A_WRTE:
-        if(t->connection_state != CS_OFFLINE) {
+        if (t->online) {
             if((s = find_local_socket(p->msg.arg1))) {
                 unsigned rid = p->msg.arg0;
                 p->len = p->msg.data_length;
@@ -1014,6 +1109,7 @@ int adb_main(int is_daemon, int server_port)
     usb_vendors_init();
     usb_init();
     local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
+    adb_auth_init();
 
     char local_name[30];
     build_local_name(local_name, sizeof(local_name), server_port);
@@ -1021,6 +1117,10 @@ int adb_main(int is_daemon, int server_port)
         exit(1);
     }
 #else
+    property_get("ro.adb.secure", value, "0");
+    auth_enabled = !strcmp(value, "1");
+    if (auth_enabled)
+        adb_auth_init();
 
     // Our external storage path may be different than apps, since
     // we aren't able to bind mount after dropping root.
