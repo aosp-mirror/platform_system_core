@@ -75,24 +75,6 @@ kind of unique ID (or empty), and banner is a human-readable version
 or identifier string.  The banner is used to transmit useful properties.
 
 
---- AUTH(type, 0, "data") ----------------------------------------------
-
-The AUTH message informs the recipient that authentication is required to
-connect to the sender. If type is TOKEN(1), data is a random token that
-the recipient can sign with a private key. The recipient replies with an
-AUTH packet where type is SIGNATURE(2) and data is the signature. If the
-signature verification succeeds, the sender replies with a CONNECT packet.
-
-If the signature verification fails, the sender replies with a new AUTH
-packet and a new random token, so that the recipient can retry signing
-with a different private key.
-
-Once the recipient has tried all its private keys, it can reply with an
-AUTH packet where type is RSAPUBLICKEY(3) and data is the public key. If
-possible, an on-screen confirmation may be displayed for the user to
-confirm they want to install the public key on the device.
-
-
 --- OPEN(local-id, 0, "destination") -----------------------------------
 
 The OPEN message informs the recipient that the sender has a stream
@@ -184,7 +166,6 @@ to send across the wire.
 
 #define A_SYNC 0x434e5953
 #define A_CNXN 0x4e584e43
-#define A_AUTH 0x48545541
 #define A_OPEN 0x4e45504f
 #define A_OKAY 0x59414b4f
 #define A_CLSE 0x45534c43

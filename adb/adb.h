@@ -29,14 +29,13 @@
 #define A_OKAY 0x59414b4f
 #define A_CLSE 0x45534c43
 #define A_WRTE 0x45545257
-#define A_AUTH 0x48545541
 
 #define A_VERSION 0x01000000        // ADB protocol version
 
 #define ADB_VERSION_MAJOR 1         // Used for help/version information
 #define ADB_VERSION_MINOR 0         // Used for help/version information
 
-#define ADB_SERVER_VERSION    30    // Increment this when we want to force users to start a new adb server
+#define ADB_SERVER_VERSION    29    // Increment this when we want to force users to start a new adb server
 
 typedef struct amessage amessage;
 typedef struct apacket apacket;
@@ -166,8 +165,6 @@ typedef enum transport_type {
         kTransportHost,
 } transport_type;
 
-#define TOKEN_SIZE 20
-
 struct atransport
 {
     atransport *next;
@@ -184,7 +181,6 @@ struct atransport
     int ref_count;
     unsigned sync_token;
     int connection_state;
-    int online;
     transport_type type;
 
         /* usb handle or socket fd as needed */
@@ -202,11 +198,6 @@ struct atransport
         /* a list of adisconnect callbacks called when the transport is kicked */
     int          kicked;
     adisconnect  disconnects;
-
-    void *key;
-    unsigned char token[TOKEN_SIZE];
-    fdevent auth_fde;
-    unsigned failed_auth_attempts;
 };
 
 
@@ -358,7 +349,6 @@ typedef enum {
     TRACE_SYSDEPS,
     TRACE_JDWP,      /* 0x100 */
     TRACE_SERVICES,
-    TRACE_AUTH,
 } AdbTrace;
 
 #if ADB_TRACE
@@ -418,7 +408,7 @@ void adb_qemu_trace(const char* fmt, ...);
 #endif
 
 
-#if !DEBUG_PACKETS
+#if !TRACE_PACKETS
 #define print_packet(tag,p) do {} while (0)
 #endif
 

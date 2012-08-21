@@ -17,20 +17,18 @@ ifeq ($(HOST_OS),linux)
   USB_SRCS := usb_linux.c
   EXTRA_SRCS := get_my_path_linux.c
   LOCAL_LDLIBS += -lrt -lncurses -lpthread
-  LOCAL_SHARED_LIBRARIES := libcrypto
 endif
 
 ifeq ($(HOST_OS),darwin)
   USB_SRCS := usb_osx.c
   EXTRA_SRCS := get_my_path_darwin.c
-  LOCAL_LDLIBS += -lpthread -lcrypto -framework CoreFoundation -framework IOKit -framework Carbon
+  LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
 endif
 
 ifeq ($(HOST_OS),freebsd)
   USB_SRCS := usb_libusb.c
   EXTRA_SRCS := get_my_path_freebsd.c
   LOCAL_LDLIBS += -lpthread -lusb
-  LOCAL_SHARED_LIBRARIES := libcrypto
 endif
 
 ifeq ($(HOST_OS),windows)
@@ -49,7 +47,6 @@ ifeq ($(HOST_OS),windows)
     LOCAL_C_INCLUDES += /usr/i586-mingw32msvc/include/ddk
   endif
   LOCAL_C_INCLUDES += development/host/windows/usb/api/
-  LOCAL_SHARED_LIBRARIES := libcrypto
 endif
 
 LOCAL_SRC_FILES := \
@@ -60,7 +57,6 @@ LOCAL_SRC_FILES := \
 	transport_usb.c \
 	commandline.c \
 	adb_client.c \
-	adb_auth_host.c \
 	sockets.c \
 	services.c \
 	file_sync_client.c \
@@ -69,7 +65,6 @@ LOCAL_SRC_FILES := \
 	utils.c \
 	usb_vendors.c
 
-LOCAL_C_INCLUDES += external/openssl/include
 
 ifneq ($(USE_SYSDEPS_WIN32),)
   LOCAL_SRC_FILES += sysdeps_win32.c
@@ -109,7 +104,6 @@ LOCAL_SRC_FILES := \
 	transport.c \
 	transport_local.c \
 	transport_usb.c \
-	adb_auth_client.c \
 	sockets.c \
 	services.c \
 	file_sync_service.c \
@@ -133,7 +127,7 @@ LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 
-LOCAL_STATIC_LIBRARIES := libcutils libc libmincrypt
+LOCAL_STATIC_LIBRARIES := libcutils libc
 include $(BUILD_EXECUTABLE)
 
 
@@ -152,7 +146,6 @@ LOCAL_SRC_FILES := \
 	transport_usb.c \
 	commandline.c \
 	adb_client.c \
-	adb_auth_host.c \
 	sockets.c \
 	services.c \
 	file_sync_client.c \
@@ -172,13 +165,9 @@ LOCAL_CFLAGS := \
 	-D_XOPEN_SOURCE \
 	-D_GNU_SOURCE
 
-LOCAL_C_INCLUDES += external/openssl/include
-
 LOCAL_MODULE := adb
 
 LOCAL_STATIC_LIBRARIES := libzipfile libunz libcutils
-
-LOCAL_SHARED_LIBRARIES := libcrypto
 
 include $(BUILD_EXECUTABLE)
 endif
