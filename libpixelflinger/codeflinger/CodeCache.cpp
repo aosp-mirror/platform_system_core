@@ -23,9 +23,12 @@
 #include <sys/mman.h>
 
 #include <cutils/log.h>
+#include <cutils/ashmem.h>
 #include <cutils/atomic.h>
 
 #include "codeflinger/CodeCache.h"
+
+#define LOG_TAG "CodeCache"
 
 namespace android {
 
@@ -38,12 +41,72 @@ namespace android {
 
 // ----------------------------------------------------------------------------
 
+// A dlmalloc mspace is used to manage the code cache over a mmaped region.
+#define HAVE_MMAP 0
+#define HAVE_MREMAP 0
+#define HAVE_MORECORE 0
+#define MALLOC_ALIGNMENT 16
+#define MSPACES 1
+#define NO_MALLINFO 1
+#define ONLY_MSPACES 1
+// Custom heap error handling.
+#define PROCEED_ON_ERROR 0
+static void heap_error(const char* msg, const char* function, void* p);
+#define CORRUPTION_ERROR_ACTION(m) \
+    heap_error("HEAP MEMORY CORRUPTION", __FUNCTION__, NULL)
+#define USAGE_ERROR_ACTION(m,p) \
+    heap_error("ARGUMENT IS INVALID HEAP ADDRESS", __FUNCTION__, p)
+
+
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC diagnostic ignored "-Wempty-body"
+#include "../../../../bionic/libc/upstream-dlmalloc/malloc.c"
+#pragma GCC diagnostic warning "-Wstrict-aliasing"
+#pragma GCC diagnostic warning "-Wempty-body"
+
+static void heap_error(const char* msg, const char* function, void* p) {
+    ALOG(LOG_FATAL, LOG_TAG, "@@@ ABORTING: CODE FLINGER: %s IN %s addr=%p",
+         msg, function, p);
+    /* So that we can get a memory dump around p */
+    *((int **) 0xdeadbaad) = (int *) p;
+}
+
+// ----------------------------------------------------------------------------
+
+static void* gExecutableStore = NULL;
+static mspace gMspace = NULL;
+const size_t kMaxCodeCacheCapacity = 1024 * 1024;
+
+static mspace getMspace()
+{
+    if (gExecutableStore == NULL) {
+        int fd = ashmem_create_region("CodeFlinger code cache",
+                                      kMaxCodeCacheCapacity);
+        LOG_ALWAYS_FATAL_IF(fd < 0,
+                            "Creating code cache, ashmem_create_region "
+                            "failed with error '%s'", strerror(errno));
+        gExecutableStore = mmap(NULL, kMaxCodeCacheCapacity,
+                                PROT_READ | PROT_WRITE | PROT_EXEC,
+                                MAP_PRIVATE, fd, 0);
+        LOG_ALWAYS_FATAL_IF(gExecutableStore == NULL,
+                            "Creating code cache, mmap failed with error "
+                            "'%s'", strerror(errno));
+        close(fd);
+        gMspace = create_mspace_with_base(gExecutableStore, kMaxCodeCacheCapacity,
+                                          /*locked=*/ false);
+        mspace_set_footprint_limit(gMspace, kMaxCodeCacheCapacity);
+    }
+    return gMspace;
+}
+
 Assembly::Assembly(size_t size)
     : mCount(1), mSize(0)
 {
     mBase = (uint32_t*)mspace_malloc(getMspace(), size);
+    LOG_ALWAYS_FATAL_IF(mBase == NULL,
+                        "Failed to create Assembly of size %zd in executable "
+                        "store of size %zd", size, kMaxCodeCacheCapacity);
     mSize = size;
-    ensureMbaseExecutable();
 }
 
 Assembly::~Assembly()
@@ -77,29 +140,11 @@ uint32_t* Assembly::base() const
 ssize_t Assembly::resize(size_t newSize)
 {
     mBase = (uint32_t*)mspace_realloc(getMspace(), mBase, newSize);
+    LOG_ALWAYS_FATAL_IF(mBase == NULL,
+                        "Failed to resize Assembly to %zd in code cache "
+                        "of size %zd", newSize, kMaxCodeCacheCapacity);
     mSize = newSize;
-    ensureMbaseExecutable();
     return size();
-}
-
-mspace Assembly::getMspace()
-{
-    static mspace msp = create_contiguous_mspace(2 * 1024, 1024 * 1024, /*locked=*/ false);
-    return msp;
-}
-
-void Assembly::ensureMbaseExecutable()
-{
-    long pagesize = sysconf(_SC_PAGESIZE);
-    long pagemask = ~(pagesize - 1);  // assumes pagesize is a power of 2
-
-    uint32_t* pageStart = (uint32_t*) (((uintptr_t) mBase) & pagemask);
-    size_t adjustedLength = (mBase - pageStart) * sizeof(uint32_t) + mSize;
-
-    if (mBase && mprotect(pageStart, adjustedLength, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
-        mspace_free(getMspace(), mBase);
-        mBase = NULL;
-    }
 }
 
 // ----------------------------------------------------------------------------
