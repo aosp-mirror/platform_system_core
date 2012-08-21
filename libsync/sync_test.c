@@ -72,7 +72,7 @@ void *sync_thread(void *data)
     return NULL;
 }
 
-int main(int argc, char *argv[])
+int main(int argc __attribute__((unused)), char *argv[] __attribute__((unused)))
 {
     struct sync_thread_data sync_data[4];
     pthread_t threads[4];
