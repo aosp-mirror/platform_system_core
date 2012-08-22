@@ -49,12 +49,17 @@ static const struct mount_opts options[] = {
 	{ "exec",	MS_NOEXEC,	0,		MS_NOEXEC	},
 	{ "move",	MS_TYPE,	MS_MOVE,	0		},
 	{ "recurse",	MS_REC,		MS_REC,		0		},
+	{ "rec",	MS_REC,		MS_REC,		0		},
 	{ "remount",	MS_TYPE,	MS_REMOUNT,	0		},
 	{ "ro",		MS_RDONLY,	MS_RDONLY,	0		},
 	{ "rw",		MS_RDONLY,	0,		MS_RDONLY	},
 	{ "suid",	MS_NOSUID,	0,		MS_NOSUID	},
 	{ "sync",	MS_SYNCHRONOUS,	MS_SYNCHRONOUS,	0		},
 	{ "verbose",	MS_VERBOSE,	MS_VERBOSE,	0		},
+	{ "unbindable",	MS_UNBINDABLE,	MS_UNBINDABLE,	0		},
+	{ "private",	MS_PRIVATE,	MS_PRIVATE,	0		},
+	{ "slave",	MS_SLAVE,	MS_SLAVE,	0		},
+	{ "shared",	MS_SHARED,	MS_SHARED,	0		},
 };
 
 static void add_extra_option(struct extra_opts *extra, char *s)
