@@ -42,7 +42,7 @@ struct sync_pt_info {
 };
 
 /* timeout in msecs */
-int sync_wait(int fd, unsigned int timeout);
+int sync_wait(int fd, int timeout);
 int sync_merge(const char *name, int fd1, int fd2);
 struct sync_fence_info_data *sync_fence_info(int fd);
 struct sync_pt_info *sync_pt_info(struct sync_fence_info_data *info,
