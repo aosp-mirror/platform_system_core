@@ -14,22 +14,16 @@
  * limitations under the License.
  */
 
-#include "../../../bionic/libc/bionic/dlmalloc.h"
-#include "cutils/log.h"
-
-/*
- * Stubs for functions defined in bionic/libc/bionic/dlmalloc.c. These
- * are used in host builds, as the host libc will not contain these
- * functions.
+/* No-op stubs for functions defined in system/bionic/bionic/dlmalloc.c.
  */
-void dlmalloc_inspect_all(void(*handler)(void*, void *, size_t, void*),
-                          void* arg)
+void dlmalloc_walk_free_pages()
 {
-  ALOGW("Called host unimplemented stub: dlmalloc_inspect_all");
 }
 
-int dlmalloc_trim(size_t unused)
+void dlmalloc_walk_heap()
 {
-  ALOGW("Called host unimplemented stub: dlmalloc_trim");
-  return 0;
+}
+
+void dlmalloc_trim()
+{
 }
