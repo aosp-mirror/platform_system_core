@@ -27,9 +27,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-int sync_wait(int fd, unsigned int timeout)
+int sync_wait(int fd, int timeout)
 {
-    __u32 to = timeout;
+    __s32 to = timeout;
 
     return ioctl(fd, SYNC_IOC_WAIT, &to);
 }
