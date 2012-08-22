@@ -34,37 +34,33 @@
 #include <sys/exec_elf.h>
 #include <cutils/log.h>
 
+#if !defined(__BIONIC_HAVE_UCONTEXT_T)
+/* Old versions of the Android <signal.h> didn't define ucontext_t. */
+
+typedef struct {
+  uint32_t  gregs[32];
+  void*     fpregs;
+  uint32_t  oldmask;
+  uint32_t  cr2;
+} mcontext_t;
+
+enum {
+  REG_GS = 0, REG_FS, REG_ES, REG_DS,
+  REG_EDI, REG_ESI, REG_EBP, REG_ESP,
+  REG_EBX, REG_EDX, REG_ECX, REG_EAX,
+  REG_TRAPNO, REG_ERR, REG_EIP, REG_CS,
+  REG_EFL, REG_UESP, REG_SS
+};
+
 /* Machine context at the time a signal was raised. */
 typedef struct ucontext {
     uint32_t uc_flags;
     struct ucontext* uc_link;
     stack_t uc_stack;
-    struct sigcontext {
-        uint32_t gs;
-        uint32_t fs;
-        uint32_t es;
-        uint32_t ds;
-        uint32_t edi;
-        uint32_t esi;
-        uint32_t ebp;
-        uint32_t esp;
-        uint32_t ebx;
-        uint32_t edx;
-        uint32_t ecx;
-        uint32_t eax;
-        uint32_t trapno;
-        uint32_t err;
-        uint32_t eip;
-        uint32_t cs;
-        uint32_t efl;
-        uint32_t uesp;
-        uint32_t ss;
-        void* fpregs;
-        uint32_t oldmask;
-        uint32_t cr2;
-    } uc_mcontext;
+    mcontext_t uc_mcontext;
     uint32_t uc_sigmask;
 } ucontext_t;
+#endif /* !__BIONIC_HAVE_UCONTEXT_T */
 
 /* Unwind state. */
 typedef struct {
@@ -114,9 +110,9 @@ ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo __attribute__((unused)),
     const ucontext_t* uc = (const ucontext_t*)sigcontext;
 
     unwind_state_t state;
-    state.ebp = uc->uc_mcontext.ebp;
-    state.eip = uc->uc_mcontext.eip;
-    state.esp = uc->uc_mcontext.esp;
+    state.ebp = uc->uc_mcontext.gregs[REG_EBP];
+    state.eip = uc->uc_mcontext.gregs[REG_EIP];
+    state.esp = uc->uc_mcontext.gregs[REG_ESP];
 
     memory_t memory;
     init_memory(&memory, map_info_list);
