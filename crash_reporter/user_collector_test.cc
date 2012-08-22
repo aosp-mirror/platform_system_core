@@ -151,11 +151,53 @@ TEST_F(UserCollectorTest, ShouldDumpChromeOverridesDeveloperImage) {
   EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                      "chrome", &reason));
   EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
+                                     "supplied_Compositor", &reason));
+  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
+                                     "supplied_PipelineThread", &reason));
+  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
+                                     "Chrome_ChildIOThread", &reason));
+  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
+                                     "supplied_Chrome_ChildIOT", &reason));
+  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
+                                     "supplied_ChromotingClien", &reason));
+  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_FALSE(collector_.ShouldDump(false, false, false,
+                                     "supplied_LocalInputMonit", &reason));
+  EXPECT_EQ("ignoring - chrome crash", reason);
 
   // When running a developer image, test that chrome crashes are handled
   // when the "handle_chrome_crashes" flag is set.
   EXPECT_TRUE(collector_.ShouldDump(false, true, true,
                                     "chrome", &reason));
+  EXPECT_EQ("developer build - not testing - always dumping",
+            reason);
+  EXPECT_TRUE(collector_.ShouldDump(false, true, true,
+                                    "supplied_Compositor", &reason));
+  EXPECT_EQ("developer build - not testing - always dumping",
+            reason);
+  EXPECT_TRUE(collector_.ShouldDump(false, true, true,
+                                    "supplied_PipelineThread", &reason));
+  EXPECT_EQ("developer build - not testing - always dumping",
+            reason);
+  EXPECT_TRUE(collector_.ShouldDump(false, true, true,
+                                    "Chrome_ChildIOThread", &reason));
+  EXPECT_EQ("developer build - not testing - always dumping",
+            reason);
+  EXPECT_TRUE(collector_.ShouldDump(false, true, true,
+                                    "supplied_Chrome_ChildIOT", &reason));
+  EXPECT_EQ("developer build - not testing - always dumping",
+            reason);
+  EXPECT_TRUE(collector_.ShouldDump(false, true, true,
+                                    "supplied_ChromotingClien", &reason));
+  EXPECT_EQ("developer build - not testing - always dumping",
+            reason);
+  EXPECT_TRUE(collector_.ShouldDump(false, true, true,
+                                    "supplied_LocalInputMonit", &reason));
   EXPECT_EQ("developer build - not testing - always dumping",
             reason);
 }

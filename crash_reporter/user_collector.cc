@@ -17,6 +17,7 @@
 
 #include "base/file_util.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/string_split.h"
 #include "base/string_util.h"
 #include "base/stringprintf.h"
@@ -526,6 +527,83 @@ bool UserCollector::ParseCrashAttributes(const std::string &crash_attributes,
   return re.FullMatch(crash_attributes, pid, signal, kernel_supplied_name);
 }
 
+/* Returns true if the given executable name matches that of Chrome.  This
+ * includes checks for threads that Chrome has renamed. */
+static bool IsChromeExecName(const std::string &exec) {
+  static const char *kChromeNames[] = {
+    "chrome",
+    /* These come from the use of base::PlatformThread::SetName() directly */
+    "CrBrowserMain", "CrRendererMain", "CrUtilityMain", "CrPPAPIMain",
+    "CrPPAPIBrokerMain", "CrPluginMain", "CrWorkerMain", "CrGpuMain",
+    "BrokerEvent", "CrVideoRenderer", "CrShutdownDetector",
+    "UsbEventHandler", "CrNaClMain", "CrServiceMain",
+    /* These thread names come from the use of base::Thread */
+    "Gamepad polling thread", "Chrome_InProcGpuThread",
+    "Chrome_DragDropThread", "Renderer::FILE", "VC manager",
+    "VideoCaptureModuleImpl", "JavaBridge", "VideoCaptureManagerThread",
+    "Geolocation", "Geolocation_wifi_provider",
+    "Device orientation polling thread", "Chrome_InProcRendererThread",
+    "NetworkChangeNotifier", "Watchdog", "inotify_reader",
+    "cf_iexplore_background_thread", "BrowserWatchdog",
+    "Chrome_HistoryThread", "Chrome_SyncThread", "Chrome_ShellDialogThread",
+    "Printing_Worker", "Chrome_SafeBrowsingThread", "SimpleDBThread",
+    "D-Bus thread", "AudioThread", "NullAudioThread", "V4L2Thread",
+    "ChromotingClientDecodeThread", "Profiling_Flush",
+    "worker_thread_ticker", "AudioMixerAlsa", "AudioMixerCras",
+    "FakeAudioRecordingThread", "CaptureThread",
+    "Chrome_WebSocketproxyThread", "ProcessWatcherThread",
+    "Chrome_CameraThread", "import_thread", "NaCl_IOThread",
+    "Chrome_CloudPrintJobPrintThread", "Chrome_CloudPrintProxyCoreThread",
+    "DaemonControllerFileIO", "ChromotingMainThread",
+    "ChromotingEncodeThread", "ChromotingDesktopThread",
+    "ChromotingIOThread", "ChromotingFileIOThread",
+    "Chrome_libJingle_WorkerThread", "Chrome_ChildIOThread",
+    "GLHelperThread", "RemotingHostPlugin",
+    // "PAC thread #%d",  // not easy to check because of "%d"
+    "Chrome_DBThread", "Chrome_WebKitThread", "Chrome_FileThread",
+    "Chrome_FileUserBlockingThread", "Chrome_ProcessLauncherThread",
+    "Chrome_CacheThread", "Chrome_IOThread", "Cache Thread", "File Thread",
+    "ServiceProcess_IO", "ServiceProcess_File",
+    "extension_crash_uploader", "gpu-process_crash_uploader",
+    "plugin_crash_uploader", "renderer_crash_uploader",
+    /* These come from the use of webkit_glue::WebThreadImpl */
+    "Compositor", "Browser Compositor",
+    // "WorkerPool/%d",  // not easy to check because of "%d"
+    /* These come from the use of base::Watchdog */
+    "Startup watchdog thread Watchdog", "Shutdown watchdog thread Watchdog",
+    /* These come from the use of AudioDeviceThread::Start */
+    "AudioDevice", "AudioInputDevice",
+    /* These come from the use of MessageLoopFactory::GetMessageLoop */
+    "GpuVideoDecoder", "RtcVideoDecoderThread", "PipelineThread",
+    "AudioDecoderThread", "VideoDecoderThread",
+    /* These come from the use of MessageLoopFactory::GetMessageLoopProxy */
+    "CaptureVideoDecoderThread", "CaptureVideoDecoder",
+    /* These come from the use of base::SimpleThread */
+    "LocalInputMonitor/%d",  // "%d" gets lopped off for kernel-supplied
+    /* These come from the use of base::DelegateSimpleThread */
+    "ipc_channel_nacl reader thread/%d", "plugin_audio_input_thread/%d",
+    "plugin_audio_thread/%d",
+    /* These come from the use of base::SequencedWorkerPool */
+    "BrowserBlockingWorker%d/%d",  // "%d" gets lopped off for kernel-supplied
+  };
+  static std::set<std::string> chrome_names;
+
+  /* Initialize a set of chrome names, for efficient lookup */
+  if (chrome_names.empty()) {
+    for (size_t i = 0; i < arraysize(kChromeNames); i++) {
+      std::string check_name(kChromeNames[i]);
+      chrome_names.insert(check_name);
+      // When checking a kernel-supplied name, it should be truncated to 15
+      // chars.  See PR_SET_NAME in
+      // http://www.kernel.org/doc/man-pages/online/pages/man2/prctl.2.html,
+      // although that page misleads by saying "16 bytes".
+      chrome_names.insert("supplied_" + std::string(check_name, 0, 15));
+    }
+  }
+
+  return ContainsKey(chrome_names, exec);
+}
+
 bool UserCollector::ShouldDump(bool has_owner_consent,
                                bool is_developer,
                                bool handle_chrome_crashes,
@@ -536,8 +614,7 @@ bool UserCollector::ShouldDump(bool has_owner_consent,
   // Treat Chrome crashes as if the user opted-out.  We stop counting Chrome
   // crashes towards user crashes, so user crashes really mean non-Chrome
   // user-space crashes.
-  if ((exec == "chrome" || exec == "supplied_chrome") &&
-      !handle_chrome_crashes) {
+  if (!handle_chrome_crashes && IsChromeExecName(exec)) {
     *reason = "ignoring - chrome crash";
     return false;
   }
