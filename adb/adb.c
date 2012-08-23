@@ -1022,16 +1022,6 @@ int adb_main(int is_daemon, int server_port)
     }
 #else
 
-    // Our external storage path may be different than apps, since
-    // we aren't able to bind mount after dropping root.
-    const char* adb_external_storage = getenv("ADB_EXTERNAL_STORAGE");
-    if (NULL != adb_external_storage) {
-        setenv("EXTERNAL_STORAGE", adb_external_storage, 1);
-    } else {
-        D("Warning: ADB_EXTERNAL_STORAGE is not set.  Leaving EXTERNAL_STORAGE"
-          " unchanged.\n");
-    }
-
     /* don't listen on a port (default 5037) if running in secure mode */
     /* don't run as root if we are running in secure mode */
     if (should_drop_privileges()) {
