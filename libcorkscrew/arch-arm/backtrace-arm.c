@@ -62,21 +62,19 @@
 #include <sys/exec_elf.h>
 #include <cutils/log.h>
 
+#if !defined(__BIONIC_HAVE_UCONTEXT_T)
+/* Old versions of the Android <signal.h> didn't define ucontext_t. */
+#include <asm/sigcontext.h> /* Ensure 'struct sigcontext' is defined. */
+
 /* Machine context at the time a signal was raised. */
 typedef struct ucontext {
     uint32_t uc_flags;
     struct ucontext* uc_link;
     stack_t uc_stack;
-    struct sigcontext {
-        uint32_t trap_no;
-        uint32_t error_code;
-        uint32_t oldmask;
-        uint32_t gregs[16];
-        uint32_t arm_cpsr;
-        uint32_t fault_address;
-    } uc_mcontext;
+    struct sigcontext uc_mcontext;
     uint32_t uc_sigmask;
 } ucontext_t;
+#endif /* !__BIONIC_HAVE_UCONTEXT_T */
 
 /* Unwind state. */
 typedef struct {
@@ -560,9 +558,23 @@ ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo, void* sigcontext,
     const ucontext_t* uc = (const ucontext_t*)sigcontext;
 
     unwind_state_t state;
-    for (int i = 0; i < 16; i++) {
-        state.gregs[i] = uc->uc_mcontext.gregs[i];
-    }
+
+    state.gregs[0] = uc->uc_mcontext.arm_r0;
+    state.gregs[1] = uc->uc_mcontext.arm_r1;
+    state.gregs[2] = uc->uc_mcontext.arm_r2;
+    state.gregs[3] = uc->uc_mcontext.arm_r3;
+    state.gregs[4] = uc->uc_mcontext.arm_r4;
+    state.gregs[5] = uc->uc_mcontext.arm_r5;
+    state.gregs[6] = uc->uc_mcontext.arm_r6;
+    state.gregs[7] = uc->uc_mcontext.arm_r7;
+    state.gregs[8] = uc->uc_mcontext.arm_r8;
+    state.gregs[9] = uc->uc_mcontext.arm_r9;
+    state.gregs[10] = uc->uc_mcontext.arm_r10;
+    state.gregs[11] = uc->uc_mcontext.arm_fp;
+    state.gregs[12] = uc->uc_mcontext.arm_ip;
+    state.gregs[13] = uc->uc_mcontext.arm_sp;
+    state.gregs[14] = uc->uc_mcontext.arm_lr;
+    state.gregs[15] = uc->uc_mcontext.arm_pc;
 
     memory_t memory;
     init_memory(&memory, map_info_list);
