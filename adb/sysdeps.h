@@ -38,6 +38,7 @@
 
 #define OS_PATH_SEPARATOR '\\'
 #define OS_PATH_SEPARATOR_STR "\\"
+#define ENV_PATH_SEPARATOR_STR ";"
 
 typedef CRITICAL_SECTION          adb_mutex_t;
 
@@ -277,6 +278,7 @@ extern char*  adb_strtok_r(char *str, const char *delim, char **saveptr);
 
 #define OS_PATH_SEPARATOR '/'
 #define OS_PATH_SEPARATOR_STR "/"
+#define ENV_PATH_SEPARATOR_STR ":"
 
 typedef  pthread_mutex_t          adb_mutex_t;
 
