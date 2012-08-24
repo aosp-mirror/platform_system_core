@@ -124,6 +124,22 @@ enum {
      */
     HAL_PIXEL_FORMAT_BLOB = 0x21,
 
+    /*
+     * Android format indicating that the choice of format is entirely up to the
+     * device-specific Gralloc implementation.
+     *
+     * The Gralloc implementation should examine the usage bits passed in when
+     * allocating a buffer with this format, and it should derive the pixel
+     * format from those usage flags.  This format will never be used with any
+     * of the GRALLOC_USAGE_SW_* usage flags.
+     *
+     * If a buffer of this format is to be used as an OpenGL ES texture, the
+     * framework will assume that sampling the texture will always return an
+     * alpha value of 1.0 (i.e. the buffer contains only opaque pixel values).
+     *
+     */
+    HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED = 0x22,
+
     /* Legacy formats (deprecated), used by ImageFormat.java */
     HAL_PIXEL_FORMAT_YCbCr_422_SP       = 0x10, // NV16
     HAL_PIXEL_FORMAT_YCrCb_420_SP       = 0x11, // NV21
