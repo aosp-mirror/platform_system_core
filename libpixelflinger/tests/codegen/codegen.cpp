@@ -9,14 +9,19 @@
 #include "codeflinger/CodeCache.h"
 #include "codeflinger/GGLAssembler.h"
 #include "codeflinger/ARMAssembler.h"
+#include "codeflinger/MIPSAssembler.h"
 
-#if defined(__arm__)
+#if defined(__arm__) || defined(__mips__)
 #   define ANDROID_ARM_CODEGEN  1
 #else
 #   define ANDROID_ARM_CODEGEN  0
 #endif
 
+#if defined (__mips__)
+#define ASSEMBLY_SCRATCH_SIZE   4096
+#else
 #define ASSEMBLY_SCRATCH_SIZE   2048
+#endif
 
 using namespace android;
 
@@ -39,14 +44,22 @@ static void ggl_test_codegen(uint32_t n, uint32_t p, uint32_t t0, uint32_t t1)
     needs.t[0] = t0;
     needs.t[1] = t1;
     sp<ScanlineAssembly> a(new ScanlineAssembly(needs, ASSEMBLY_SCRATCH_SIZE));
+
+#if defined(__arm__)
     GGLAssembler assembler( new ARMAssembler(a) );
+#endif
+
+#if defined(__mips__)
+    GGLAssembler assembler( new ArmToMipsAssembler(a) );
+#endif
+
     int err = assembler.scanline(needs, (context_t*)c);
     if (err != 0) {
         printf("error %08x (%s)\n", err, strerror(-err));
     }
     gglUninit(c);
 #else
-    printf("This test runs only on ARM\n");
+    printf("This test runs only on ARM or MIPS\n");
 #endif
 }
 

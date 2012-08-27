@@ -55,6 +55,10 @@ int ARMAssemblerProxy::generate(const char* name) {
 void ARMAssemblerProxy::disassemble(const char* name) {
     return mTarget->disassemble(name);
 }
+int ARMAssemblerProxy::getCodegenArch()
+{
+    return mTarget->getCodegenArch();
+}
 void ARMAssemblerProxy::prolog() {
     mTarget->prolog();
 }
@@ -64,6 +68,93 @@ void ARMAssemblerProxy::epilog(uint32_t touched) {
 void ARMAssemblerProxy::comment(const char* string) {
     mTarget->comment(string);
 }
+
+
+
+// addressing modes
+
+bool ARMAssemblerProxy::isValidImmediate(uint32_t immed)
+{
+    return mTarget->isValidImmediate(immed);
+}
+
+int ARMAssemblerProxy::buildImmediate(uint32_t i, uint32_t& rot, uint32_t& imm)
+{
+    return mTarget->buildImmediate(i, rot, imm);
+}
+
+
+
+uint32_t ARMAssemblerProxy::imm(uint32_t immediate)
+{
+    return mTarget->imm(immediate);
+}
+
+uint32_t ARMAssemblerProxy::reg_imm(int Rm, int type, uint32_t shift)
+{
+    return mTarget->reg_imm(Rm, type, shift);
+}
+
+uint32_t ARMAssemblerProxy::reg_rrx(int Rm)
+{
+    return mTarget->reg_rrx(Rm);
+}
+
+uint32_t ARMAssemblerProxy::reg_reg(int Rm, int type, int Rs)
+{
+    return mTarget->reg_reg(Rm, type, Rs);
+}
+
+
+// addressing modes...
+// LDR(B)/STR(B)/PLD
+// (immediate and Rm can be negative, which indicates U=0)
+uint32_t ARMAssemblerProxy::immed12_pre(int32_t immed12, int W)
+{
+    return mTarget->immed12_pre(immed12, W);
+}
+
+uint32_t ARMAssemblerProxy::immed12_post(int32_t immed12)
+{
+    return mTarget->immed12_post(immed12);
+}
+
+uint32_t ARMAssemblerProxy::reg_scale_pre(int Rm, int type, uint32_t shift, int W)
+{
+    return mTarget->reg_scale_pre(Rm, type, shift, W);
+}
+
+uint32_t ARMAssemblerProxy::reg_scale_post(int Rm, int type, uint32_t shift)
+{
+    return mTarget->reg_scale_post(Rm, type, shift);
+}
+
+
+// LDRH/LDRSB/LDRSH/STRH
+// (immediate and Rm can be negative, which indicates U=0)
+uint32_t ARMAssemblerProxy::immed8_pre(int32_t immed8, int W)
+{
+    return mTarget->immed8_pre(immed8, W);
+}
+
+uint32_t ARMAssemblerProxy::immed8_post(int32_t immed8)
+{
+    return mTarget->immed8_post(immed8);
+}
+
+uint32_t ARMAssemblerProxy::reg_pre(int Rm, int W)
+{
+    return mTarget->reg_pre(Rm, W);
+}
+
+uint32_t ARMAssemblerProxy::reg_post(int Rm)
+{
+    return mTarget->reg_post(Rm);
+}
+
+
+//------------------------------------------------------------------------
+
 
 
 void ARMAssemblerProxy::dataProcessing( int opcode, int cc, int s,
