@@ -44,6 +44,8 @@ PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
 endif
 
 ifeq ($(TARGET_ARCH),mips)
+PIXELFLINGER_SRC_FILES += codeflinger/MIPSAssembler.cpp
+PIXELFLINGER_SRC_FILES += codeflinger/mips_disassem.c
 PIXELFLINGER_SRC_FILES += arch-mips/t32cb16blend.S
 PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
 endif

@@ -62,33 +62,40 @@ public:
         LSAVED = LR4|LR5|LR6|LR7|LR8|LR9|LR10|LR11 | LLR
     };
 
+    enum {
+        CODEGEN_ARCH_ARM = 1, CODEGEN_ARCH_MIPS
+    };
+
     // -----------------------------------------------------------------------
     // shifters and addressing modes
     // -----------------------------------------------------------------------
 
-    // shifters...
-    static bool        isValidImmediate(uint32_t immed);
-    static int         buildImmediate(uint32_t i, uint32_t& rot, uint32_t& imm);
+    // these static versions are used for initializers on LDxx/STxx below
+    static uint32_t    __immed12_pre(int32_t immed12, int W=0);
+    static uint32_t    __immed8_pre(int32_t immed12, int W=0);
 
-    static uint32_t    imm(uint32_t immediate);
-    static uint32_t    reg_imm(int Rm, int type, uint32_t shift);
-    static uint32_t    reg_rrx(int Rm);
-    static uint32_t    reg_reg(int Rm, int type, int Rs);
+    virtual bool        isValidImmediate(uint32_t immed) = 0;
+    virtual int         buildImmediate(uint32_t i, uint32_t& rot, uint32_t& imm) = 0;
+
+    virtual uint32_t    imm(uint32_t immediate) = 0;
+    virtual uint32_t    reg_imm(int Rm, int type, uint32_t shift) = 0;
+    virtual uint32_t    reg_rrx(int Rm) = 0;
+    virtual uint32_t    reg_reg(int Rm, int type, int Rs) = 0;
 
     // addressing modes... 
     // LDR(B)/STR(B)/PLD
     // (immediate and Rm can be negative, which indicates U=0)
-    static uint32_t    immed12_pre(int32_t immed12, int W=0);
-    static uint32_t    immed12_post(int32_t immed12);
-    static uint32_t    reg_scale_pre(int Rm, int type=0, uint32_t shift=0, int W=0);
-    static uint32_t    reg_scale_post(int Rm, int type=0, uint32_t shift=0);
+    virtual uint32_t    immed12_pre(int32_t immed12, int W=0) = 0;
+    virtual uint32_t    immed12_post(int32_t immed12) = 0;
+    virtual uint32_t    reg_scale_pre(int Rm, int type=0, uint32_t shift=0, int W=0) = 0;
+    virtual uint32_t    reg_scale_post(int Rm, int type=0, uint32_t shift=0) = 0;
 
     // LDRH/LDRSB/LDRSH/STRH
     // (immediate and Rm can be negative, which indicates U=0)
-    static uint32_t    immed8_pre(int32_t immed8, int W=0);
-    static uint32_t    immed8_post(int32_t immed8);
-    static uint32_t    reg_pre(int Rm, int W=0);
-    static uint32_t    reg_post(int Rm);
+    virtual uint32_t    immed8_pre(int32_t immed8, int W=0) = 0;
+    virtual uint32_t    immed8_post(int32_t immed8) = 0;
+    virtual uint32_t    reg_pre(int Rm, int W=0) = 0;
+    virtual uint32_t    reg_post(int Rm) = 0;
 
     // -----------------------------------------------------------------------
     // basic instructions & code generation
@@ -98,6 +105,7 @@ public:
     virtual void reset() = 0;
     virtual int  generate(const char* name) = 0;
     virtual void disassemble(const char* name) = 0;
+    virtual int  getCodegenArch() = 0;
     
     // construct prolog and epilog
     virtual void prolog() = 0;
@@ -143,22 +151,22 @@ public:
 
     // data transfer...
     virtual void LDR (int cc, int Rd,
-                int Rn, uint32_t offset = immed12_pre(0)) = 0;
+                int Rn, uint32_t offset = __immed12_pre(0)) = 0;
     virtual void LDRB(int cc, int Rd,
-                int Rn, uint32_t offset = immed12_pre(0)) = 0;
+                int Rn, uint32_t offset = __immed12_pre(0)) = 0;
     virtual void STR (int cc, int Rd,
-                int Rn, uint32_t offset = immed12_pre(0)) = 0;
+                int Rn, uint32_t offset = __immed12_pre(0)) = 0;
     virtual void STRB(int cc, int Rd,
-                int Rn, uint32_t offset = immed12_pre(0)) = 0;
+                int Rn, uint32_t offset = __immed12_pre(0)) = 0;
 
     virtual void LDRH (int cc, int Rd,
-                int Rn, uint32_t offset = immed8_pre(0)) = 0;
+                int Rn, uint32_t offset = __immed8_pre(0)) = 0;
     virtual void LDRSB(int cc, int Rd, 
-                int Rn, uint32_t offset = immed8_pre(0)) = 0;
+                int Rn, uint32_t offset = __immed8_pre(0)) = 0;
     virtual void LDRSH(int cc, int Rd,
-                int Rn, uint32_t offset = immed8_pre(0)) = 0;
+                int Rn, uint32_t offset = __immed8_pre(0)) = 0;
     virtual void STRH (int cc, int Rd,
-                int Rn, uint32_t offset = immed8_pre(0)) = 0;
+                int Rn, uint32_t offset = __immed8_pre(0)) = 0;
 
     // block data transfer...
     virtual void LDM(int cc, int dir,
