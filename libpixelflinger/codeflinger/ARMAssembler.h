@@ -52,10 +52,41 @@ public:
     virtual void    reset();
 
     virtual int     generate(const char* name);
+    virtual int     getCodegenArch();
 
     virtual void    prolog();
     virtual void    epilog(uint32_t touched);
     virtual void    comment(const char* string);
+
+
+    // -----------------------------------------------------------------------
+    // shifters and addressing modes
+    // -----------------------------------------------------------------------
+
+    // shifters...
+    virtual bool        isValidImmediate(uint32_t immed);
+    virtual int         buildImmediate(uint32_t i, uint32_t& rot, uint32_t& imm);
+
+    virtual uint32_t    imm(uint32_t immediate);
+    virtual uint32_t    reg_imm(int Rm, int type, uint32_t shift);
+    virtual uint32_t    reg_rrx(int Rm);
+    virtual uint32_t    reg_reg(int Rm, int type, int Rs);
+
+    // addressing modes...
+    // LDR(B)/STR(B)/PLD
+    // (immediate and Rm can be negative, which indicates U=0)
+    virtual uint32_t    immed12_pre(int32_t immed12, int W=0);
+    virtual uint32_t    immed12_post(int32_t immed12);
+    virtual uint32_t    reg_scale_pre(int Rm, int type=0, uint32_t shift=0, int W=0);
+    virtual uint32_t    reg_scale_post(int Rm, int type=0, uint32_t shift=0);
+
+    // LDRH/LDRSB/LDRSH/STRH
+    // (immediate and Rm can be negative, which indicates U=0)
+    virtual uint32_t    immed8_pre(int32_t immed8, int W=0);
+    virtual uint32_t    immed8_post(int32_t immed8);
+    virtual uint32_t    reg_pre(int Rm, int W=0);
+    virtual uint32_t    reg_post(int Rm);
+
 
     virtual void    dataProcessing(int opcode, int cc, int s,
                                 int Rd, int Rn,
@@ -83,21 +114,23 @@ public:
     virtual uint32_t* pcForLabel(const char* label);
 
     virtual void LDR (int cc, int Rd,
-                int Rn, uint32_t offset = immed12_pre(0));
+                int Rn, uint32_t offset = __immed12_pre(0));
     virtual void LDRB(int cc, int Rd,
-                int Rn, uint32_t offset = immed12_pre(0));
+                int Rn, uint32_t offset = __immed12_pre(0));
     virtual void STR (int cc, int Rd,
-                int Rn, uint32_t offset = immed12_pre(0));
+                int Rn, uint32_t offset = __immed12_pre(0));
     virtual void STRB(int cc, int Rd,
-                int Rn, uint32_t offset = immed12_pre(0));
+                int Rn, uint32_t offset = __immed12_pre(0));
     virtual void LDRH (int cc, int Rd,
-                int Rn, uint32_t offset = immed8_pre(0));
+                int Rn, uint32_t offset = __immed8_pre(0));
     virtual void LDRSB(int cc, int Rd, 
-                int Rn, uint32_t offset = immed8_pre(0));
+                int Rn, uint32_t offset = __immed8_pre(0));
     virtual void LDRSH(int cc, int Rd,
-                int Rn, uint32_t offset = immed8_pre(0));
+                int Rn, uint32_t offset = __immed8_pre(0));
     virtual void STRH (int cc, int Rd,
-                int Rn, uint32_t offset = immed8_pre(0));
+                int Rn, uint32_t offset = __immed8_pre(0));
+
+
     virtual void LDM(int cc, int dir,
                 int Rn, int W, uint32_t reg_list);
     virtual void STM(int cc, int dir,
