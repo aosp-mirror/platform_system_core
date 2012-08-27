@@ -16,14 +16,14 @@
 
 #include <cutils/multiuser.h>
 
-userid_t multiuser_getUserId(uid_t uid) {
+userid_t multiuser_get_user_id(uid_t uid) {
     return uid / MULTIUSER_APP_PER_USER_RANGE;
 }
 
-appid_t multiuser_getAppId(uid_t uid) {
+appid_t multiuser_get_app_id(uid_t uid) {
     return uid % MULTIUSER_APP_PER_USER_RANGE;
 }
 
-uid_t multiuser_getUid(userid_t userId, appid_t appId) {
+uid_t multiuser_get_uid(userid_t userId, appid_t appId) {
     return userId * MULTIUSER_APP_PER_USER_RANGE + (appId % MULTIUSER_APP_PER_USER_RANGE);
 }
