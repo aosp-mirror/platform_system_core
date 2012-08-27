@@ -464,6 +464,9 @@ void GGLAssembler::build_textures(  fragment_parts_t& parts,
                 CONTEXT_LOAD(t.reg, generated_vars.texture[i].spill[1]);
             }
 
+            if (registerFile().status() & RegisterFile::OUT_OF_REGISTERS)
+                return;
+
             comment("compute repeat/clamp");
             int u       = scratches.obtain();
             int v       = scratches.obtain();
@@ -471,6 +474,9 @@ void GGLAssembler::build_textures(  fragment_parts_t& parts,
             int height  = scratches.obtain();
             int U = 0;
             int V = 0;
+
+            if (registerFile().status() & RegisterFile::OUT_OF_REGISTERS)
+                return;
 
             CONTEXT_LOAD(width,  generated_vars.texture[i].width);
             CONTEXT_LOAD(height, generated_vars.texture[i].height);
@@ -509,6 +515,9 @@ void GGLAssembler::build_textures(  fragment_parts_t& parts,
                 const int shift = 31 - gglClz(tmu.format.size);
                 U = scratches.obtain();
                 V = scratches.obtain();
+
+                if (registerFile().status() & RegisterFile::OUT_OF_REGISTERS)
+                    return;
 
                 // sample the texel center
                 SUB(AL, 0, u, u, imm(1<<(FRAC_BITS-1)));
@@ -593,6 +602,10 @@ void GGLAssembler::build_textures(  fragment_parts_t& parts,
             comment("iterate s,t");
             int dsdx = scratches.obtain();
             int dtdx = scratches.obtain();
+
+            if (registerFile().status() & RegisterFile::OUT_OF_REGISTERS)
+                return;
+
             CONTEXT_LOAD(dsdx, generated_vars.texture[i].dsdx);
             CONTEXT_LOAD(dtdx, generated_vars.texture[i].dtdx);
             ADD(AL, 0, s.reg, s.reg, dsdx);
@@ -611,6 +624,10 @@ void GGLAssembler::build_textures(  fragment_parts_t& parts,
             texel.setTo(regs.obtain(), &tmu.format);
             txPtr.setTo(texel.reg, tmu.bits);
             int stride = scratches.obtain();
+
+            if (registerFile().status() & RegisterFile::OUT_OF_REGISTERS)
+                return;
+
             CONTEXT_LOAD(stride,    generated_vars.texture[i].stride);
             CONTEXT_LOAD(txPtr.reg, generated_vars.texture[i].data);
             SMLABB(AL, u, v, stride, u);    // u+v*stride 
@@ -1078,6 +1095,7 @@ void GGLAssembler::build_texture_environment(
 
                 Scratch scratches(registerFile());
                 pixel_t texel(parts.texel[i]);
+
                 if (multiTexture && 
                     tmu.swrap == GGL_NEEDS_WRAP_11 &&
                     tmu.twrap == GGL_NEEDS_WRAP_11)
