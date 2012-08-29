@@ -599,10 +599,6 @@ int ifc_disable(const char *ifname)
     return result;
 }
 
-#define RESET_IPV4_ADDRESSES 0x01
-#define RESET_IPV6_ADDRESSES 0x02
-#define RESET_ALL_ADDRESSES  (RESET_IPV4_ADDRESSES | RESET_IPV6_ADDRESSES)
-
 int ifc_reset_connections(const char *ifname, const int reset_mask)
 {
 #ifdef HAVE_ANDROID_OS
