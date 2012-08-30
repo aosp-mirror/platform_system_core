@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef __CUTILS_MULTIUSER_H
-#define __CUTILS_MULTIUSER_H
+#ifndef __CUTILS_FS_H
+#define __CUTILS_FS_H
 
 #include <sys/types.h>
 
@@ -23,19 +23,25 @@
 extern "C" {
 #endif
 
-// NOTE: keep in sync with android.os.UserId
+/*
+ * Ensure that directory exists with given mode and owners.
+ */
+extern int fs_prepare_dir(const char* path, mode_t mode, uid_t uid, gid_t gid);
 
-#define MULTIUSER_APP_PER_USER_RANGE 100000
+/*
+ * Read single plaintext integer from given file, correctly handling files
+ * partially written with fs_write_atomic_int().
+ */
+extern int fs_read_atomic_int(const char* path, int* value);
 
-typedef uid_t userid_t;
-typedef uid_t appid_t;
-
-extern userid_t multiuser_get_user_id(uid_t uid);
-extern appid_t multiuser_get_app_id(uid_t uid);
-extern uid_t multiuser_get_uid(userid_t userId, appid_t appId);
+/*
+ * Write single plaintext integer to given file, creating backup while
+ * in progress.
+ */
+extern int fs_write_atomic_int(const char* path, int value);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __CUTILS_MULTIUSER_H */
+#endif /* __CUTILS_FS_H */
