@@ -832,6 +832,11 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    if (argc > 0 && !strcmp(*argv, "help")) {
+        usage();
+        return 0;
+    }
+
     usb = open_device();
 
     while (argc > 0) {
@@ -922,9 +927,6 @@ int main(int argc, char **argv)
             wants_reboot = 1;
         } else if(!strcmp(*argv, "oem")) {
             argc = do_oem_command(argc, argv);
-        } else if (!strcmp(*argv, "help")) {
-            usage();
-            return 0;
         } else {
             usage();
             return 1;
