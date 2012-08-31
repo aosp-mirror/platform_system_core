@@ -48,7 +48,7 @@
 #define TRACE_TAG TRACE_AUTH
 
 #define ANDROID_PATH   ".android"
-#define ADB_KEY_FILE   "adb_key"
+#define ADB_KEY_FILE   "adbkey"
 
 
 struct adb_private_key {
@@ -176,6 +176,7 @@ static int generate_key(const char *file)
     EVP_PKEY* pkey = EVP_PKEY_new();
     BIGNUM* exponent = BN_new();
     RSA* rsa = RSA_new();
+    mode_t old_mask;
     FILE *f = NULL;
     int ret = 0;
 
@@ -190,11 +191,16 @@ static int generate_key(const char *file)
     RSA_generate_key_ex(rsa, 2048, exponent, NULL);
     EVP_PKEY_set1_RSA(pkey, rsa);
 
+    old_mask = umask(077);
+
     f = fopen(file, "w");
     if (!f) {
         D("Failed to open '%s'\n", file);
+        umask(old_mask);
         goto out;
     }
+
+    umask(old_mask);
 
     if (!PEM_write_PrivateKey(f, pkey, NULL, NULL, 0, NULL, NULL)) {
         D("Failed to write key\n");
