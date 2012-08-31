@@ -44,9 +44,6 @@ public:
      * users.
      */
     static          ssize_t                 dealloc(const SharedBuffer* released);
-    
-    //! get the SharedBuffer from the data pointer
-    static  inline  const SharedBuffer*     sharedBuffer(const void* data);
 
     //! access the data for read
     inline          const void*             data() const;
@@ -94,7 +91,8 @@ public:
 private:
         inline SharedBuffer() { }
         inline ~SharedBuffer() { }
-        inline SharedBuffer(const SharedBuffer&);
+        SharedBuffer(const SharedBuffer&);
+        SharedBuffer& operator = (const SharedBuffer&);
  
         // 16 bytes. must be sized to preserve correct alignment.
         mutable int32_t        mRefs;
@@ -103,10 +101,6 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-
-const SharedBuffer* SharedBuffer::sharedBuffer(const void* data) {
-    return data ? reinterpret_cast<const SharedBuffer *>(data)-1 : 0;
-}
 
 const void* SharedBuffer::data() const {
     return this + 1;
@@ -120,19 +114,16 @@ size_t SharedBuffer::size() const {
     return mSize;
 }
 
-SharedBuffer* SharedBuffer::bufferFromData(void* data)
-{
-    return ((SharedBuffer*)data)-1;
+SharedBuffer* SharedBuffer::bufferFromData(void* data) {
+    return data ? static_cast<SharedBuffer *>(data)-1 : 0;
 }
     
-const SharedBuffer* SharedBuffer::bufferFromData(const void* data)
-{
-    return ((const SharedBuffer*)data)-1;
+const SharedBuffer* SharedBuffer::bufferFromData(const void* data) {
+    return data ? static_cast<const SharedBuffer *>(data)-1 : 0;
 }
 
-size_t SharedBuffer::sizeFromData(const void* data)
-{
-    return (((const SharedBuffer*)data)-1)->mSize;
+size_t SharedBuffer::sizeFromData(const void* data) {
+    return data ? bufferFromData(data)->mSize : 0;
 }
 
 bool SharedBuffer::onlyOwner() const {

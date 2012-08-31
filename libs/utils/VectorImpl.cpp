@@ -51,7 +51,7 @@ VectorImpl::VectorImpl(const VectorImpl& rhs)
         mFlags(rhs.mFlags), mItemSize(rhs.mItemSize)
 {
     if (mStorage) {
-        SharedBuffer::sharedBuffer(mStorage)->acquire();
+        SharedBuffer::bufferFromData(mStorage)->acquire();
     }
 }
 
@@ -73,7 +73,7 @@ VectorImpl& VectorImpl::operator = (const VectorImpl& rhs)
         if (rhs.mCount) {
             mStorage = rhs.mStorage;
             mCount = rhs.mCount;
-            SharedBuffer::sharedBuffer(mStorage)->acquire();
+            SharedBuffer::bufferFromData(mStorage)->acquire();
         } else {
             mStorage = 0;
             mCount = 0;
@@ -85,7 +85,7 @@ VectorImpl& VectorImpl::operator = (const VectorImpl& rhs)
 void* VectorImpl::editArrayImpl()
 {
     if (mStorage) {
-        SharedBuffer* sb = SharedBuffer::sharedBuffer(mStorage)->attemptEdit();
+        SharedBuffer* sb = SharedBuffer::bufferFromData(mStorage)->attemptEdit();
         if (sb == 0) {
             sb = SharedBuffer::alloc(capacity() * mItemSize);
             if (sb) {
@@ -101,7 +101,7 @@ void* VectorImpl::editArrayImpl()
 size_t VectorImpl::capacity() const
 {
     if (mStorage) {
-        return SharedBuffer::sharedBuffer(mStorage)->size() / mItemSize;
+        return SharedBuffer::bufferFromData(mStorage)->size() / mItemSize;
     }
     return 0;
 }
@@ -346,7 +346,7 @@ ssize_t VectorImpl::setCapacity(size_t new_capacity)
 void VectorImpl::release_storage()
 {
     if (mStorage) {
-        const SharedBuffer* sb = SharedBuffer::sharedBuffer(mStorage);
+        const SharedBuffer* sb = SharedBuffer::bufferFromData(mStorage);
         if (sb->release(SharedBuffer::eKeepStorage) == 1) {
             _do_destroy(mStorage, mCount);
             SharedBuffer::dealloc(sb);
@@ -372,7 +372,7 @@ void* VectorImpl::_grow(size_t where, size_t amount)
             (mFlags & HAS_TRIVIAL_COPY) &&
             (mFlags & HAS_TRIVIAL_DTOR))
         {
-            const SharedBuffer* cur_sb = SharedBuffer::sharedBuffer(mStorage);
+            const SharedBuffer* cur_sb = SharedBuffer::bufferFromData(mStorage);
             SharedBuffer* sb = cur_sb->editResize(new_capacity * mItemSize);
             mStorage = sb->data();
         } else {
@@ -424,7 +424,7 @@ void VectorImpl::_shrink(size_t where, size_t amount)
             (mFlags & HAS_TRIVIAL_COPY) &&
             (mFlags & HAS_TRIVIAL_DTOR))
         {
-            const SharedBuffer* cur_sb = SharedBuffer::sharedBuffer(mStorage);
+            const SharedBuffer* cur_sb = SharedBuffer::bufferFromData(mStorage);
             SharedBuffer* sb = cur_sb->editResize(new_capacity * mItemSize);
             mStorage = sb->data();
         } else {
