@@ -17,26 +17,24 @@ ifeq ($(HOST_OS),linux)
   USB_SRCS := usb_linux.c
   EXTRA_SRCS := get_my_path_linux.c
   LOCAL_LDLIBS += -lrt -lncurses -lpthread
-  LOCAL_SHARED_LIBRARIES := libcrypto
 endif
 
 ifeq ($(HOST_OS),darwin)
   USB_SRCS := usb_osx.c
   EXTRA_SRCS := get_my_path_darwin.c
-  LOCAL_LDLIBS += -lpthread -lcrypto -framework CoreFoundation -framework IOKit -framework Carbon
+  LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
 endif
 
 ifeq ($(HOST_OS),freebsd)
   USB_SRCS := usb_libusb.c
   EXTRA_SRCS := get_my_path_freebsd.c
   LOCAL_LDLIBS += -lpthread -lusb
-  LOCAL_SHARED_LIBRARIES := libcrypto
 endif
 
 ifeq ($(HOST_OS),windows)
   USB_SRCS := usb_windows.c
   EXTRA_SRCS := get_my_path_windows.c ../libcutils/list.c
-  EXTRA_STATIC_LIBS := AdbWinApi libcrypto_static
+  EXTRA_STATIC_LIBS := AdbWinApi
   ifneq ($(strip $(USE_CYGWIN)),)
     # Pure cygwin case
     LOCAL_LDLIBS += -lpthread -lgdi32
@@ -80,7 +78,7 @@ LOCAL_CFLAGS += -O2 -g -DADB_HOST=1  -Wall -Wno-unused-parameter
 LOCAL_CFLAGS += -D_XOPEN_SOURCE -D_GNU_SOURCE
 LOCAL_MODULE := adb
 
-LOCAL_STATIC_LIBRARIES := libzipfile libunz $(EXTRA_STATIC_LIBS)
+LOCAL_STATIC_LIBRARIES := libzipfile libunz libcrypto_static $(EXTRA_STATIC_LIBS)
 ifeq ($(USE_SYSDEPS_WIN32),)
 	LOCAL_STATIC_LIBRARIES += libcutils
 endif
