@@ -65,7 +65,7 @@ endif # HOST_OS != windows
 include $(BUILD_HOST_EXECUTABLE)
 
 
-$(call dist-for-goals,dist_files,$(LOCAL_BUILT_MODULE))
+$(call dist-for-goals,dist_files sdk,$(LOCAL_BUILT_MODULE))
 
 
 ifeq ($(HOST_OS),linux)
