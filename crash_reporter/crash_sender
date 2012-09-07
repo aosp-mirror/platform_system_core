@@ -18,6 +18,9 @@ CLEAN_UP_RUN_FILE=0
 # contents includes our machine's anonymized guid.
 CONSENT_ID="/home/chronos/Consent To Send Stats"
 
+# Path to file that indicates a crash test is currently running.
+CRASH_TEST_IN_PROGRESS_FILE="/tmp/crash-test-in-progress"
+
 # Path to find which is required for computing the crash rate.
 FIND="/usr/bin/find"
 
@@ -28,8 +31,11 @@ FORCE_OFFICIAL=${FORCE_OFFICIAL:-0}
 # Path to hardware class description.
 HWCLASS_PATH="/sys/devices/platform/chromeos_acpi/HWID"
 
-# Ignore PAUSE_CRASH_SENDING file if set.
-OVERRIDE_PAUSE_SENDING=${OVERRIDE_PAUSE_SENDING:-0}
+# Path to file that indicates this is a developer image.
+LEAVE_CORE_FILE="/root/.leave_core"
+
+# Path to list_proxies.
+LIST_PROXIES="/usr/bin/list_proxies"
 
 # Maximum crashes to send per day.
 MAX_CRASH_RATE=${MAX_CRASH_RATE:-32}
@@ -41,12 +47,19 @@ METRICS_CLIENT="/usr/bin/metrics_client"
 # crash sending was successful, otherwise unsuccessful.
 MOCK_CRASH_SENDING="/tmp/mock-crash-sending"
 
+# Ignore PAUSE_CRASH_SENDING file if set.
+OVERRIDE_PAUSE_SENDING=${OVERRIDE_PAUSE_SENDING:-0}
+
 # File whose existence causes crash sending to be delayed (for testing).
 # Must be stateful to enable testing kernel crashes.
 PAUSE_CRASH_SENDING="/var/lib/crash_sender_paused"
 
 # URL to send official build crash reports to.
 REPORT_UPLOAD_PROD_URL="https://clients2.google.com/cr/report"
+
+# Path to a directory of restricted certificates which includes
+# a certificate for ${REPORT_UPLOAD_PROD_URL}.
+RESTRICTED_CERTIFICATES_PATH="/usr/share/chromeos-ca-certificates"
 
 # File whose existence implies we're running and not to start again.
 RUN_FILE="/var/run/crash_sender.pid"
@@ -61,15 +74,8 @@ TAG="$(basename $0)[$$]"
 # hours.
 TIMESTAMPS_DIR="/var/lib/crash_sender"
 
-# Path to a directory of restricted certificates which includes
-# a certificate for ${REPORT_UPLOAD_PROD_URL}.
-RESTRICTED_CERTIFICATES_PATH="/usr/share/chromeos-ca-certificates"
-
 # Temp directory for this process.
 TMP_DIR=""
-
-# Path to list_proxies.
-LIST_PROXIES="/usr/bin/list_proxies"
 
 lecho() {
   logger -t "${TAG}" "$@"
@@ -78,6 +84,12 @@ lecho() {
 # Returns true if mock is enabled.
 is_mock() {
   [ -f "${MOCK_CRASH_SENDING}" ] && return 0
+  return 1
+}
+
+is_mock_successful() {
+  local mock_in=$(cat "${MOCK_CRASH_SENDING}")
+  [ "${mock_in}" = "" ] && return 0  # empty file means success
   return 1
 }
 
@@ -117,9 +129,26 @@ check_not_already_running() {
   exit 1
 }
 
-is_official() {
+is_official_image() {
   [ ${FORCE_OFFICIAL} -ne 0 ] && return 0
   grep ^CHROMEOS_RELEASE_DESCRIPTION /etc/lsb-release | grep -q Official
+}
+
+# Returns 0 if the a crash test is currently running.  NOTE: Mirrors
+# crash_collector.cc:CrashCollector::IsCrashTestInProgress().
+is_crash_test_in_progress() {
+  [ -f "${CRASH_TEST_IN_PROGRESS_FILE}" ] && return 0
+  return 1
+}
+
+# Returns 0 if we should consider ourselves to be running on a developer
+# image.  NOTE: Mirrors crash_collector.cc:CrashCollector::IsDeveloperImage().
+is_developer_image() {
+  # If we're testing crash reporter itself, we don't want to special-case
+  # for developer images.
+  is_crash_test_in_progress && return 1
+  [ -f "${LEAVE_CORE_FILE}" ] && return 0
+  return 1
 }
 
 # Generate a uniform random number in 0..max-1.
@@ -218,6 +247,15 @@ send_crash() {
   local sig="$(get_key_value "${meta_path}" "sig")"
   local send_payload_size="$(stat --printf=%s "${report_payload}" 2>/dev/null)"
 
+  local image_type
+  if is_developer_image; then
+    image_type="dev"
+  elif [ ${FORCE_OFFICIAL} -ne 0 ]; then
+    image_type="force-official"
+  elif is_mock && ! is_mock_successful; then
+    image_type="mock-fail"
+  fi
+
   local extra_key1="write_payload_size"
   local extra_value1="${write_payload_size}"
   local extra_key2="send_payload_size"
@@ -234,16 +272,14 @@ send_crash() {
   fi
 
   local error_type="$(get_key_value "${meta_path}" "error_type")"
-  if [ "${error_type}" != "undefined" ]; then
-    extra_key3="error_type"
-    extra_value3="${error_type}"
-  fi
+  [ "${error_type}" = "undefined" ] && error_type=
 
   lecho "Sending crash:"
   lecho "  Scheduled to send in ${sleep_time}s"
   lecho "  Metadata: ${meta_path} (${kind})"
   lecho "  Payload: ${report_payload}"
   lecho "  Version: ${chromeos_version}"
+  [ -n "${image_type}" ] && lecho "  Image type: ${image_type}"
   if is_mock; then
     lecho "  Product: ${CHROMEOS_PRODUCT}"
     lecho "  URL: ${url}"
@@ -251,20 +287,16 @@ send_crash() {
     lecho "  HWClass: ${hwclass}"
     lecho "  ${extra_key1}: ${extra_value1}"
     lecho "  ${extra_key2}: ${extra_value2}"
-    if [ -n "${extra_key3}" ]; then
-      lecho "  ${extra_key3}: ${extra_value3}"
-    fi
   fi
   lecho "  Exec name: ${exec_name}"
+  [ -n "${error_type}" ] && lecho "  Error type: ${error_type}"
   if is_mock; then
-    local mock_in=$(cat "${MOCK_CRASH_SENDING}")
-    if [ "${mock_in}" = "" ]; then
-      lecho "Mocking successful send"
-      return 0
-    else
+    if ! is_mock_successful; then
       lecho "Mocking unsuccessful send"
       return 1
     fi
+    lecho "Mocking successful send"
+    return 0
   fi
 
   if ! sleep ${sleep_time}; then
@@ -291,9 +323,10 @@ send_crash() {
     -F "board=${board}" \
     -F "hwclass=${hwclass}" \
     -F "exec_name=${exec_name}" \
+    ${image_type:+-F "image_type=${image_type}"} \
+    ${error_type:+-F "error_type=${error_type}"} \
     -F "${extra_key1}=${extra_value1}" \
     -F "${extra_key2}=${extra_value2}" \
-    ${extra_key3:+-F "${extra_key3}=${extra_value3}"} \
     -F "guid=<${CONSENT_ID}" -o "${report_id}" 2>"${curl_stderr}"
   curl_result=$?
   set -e
@@ -364,7 +397,7 @@ send_crashes() {
       continue
     fi
 
-    if ! is_mock && ! is_official; then
+    if ! is_mock && ! is_official_image; then
       lecho "Not an official OS version.  Removing crash."
       remove_report "${meta_path}"
       continue
