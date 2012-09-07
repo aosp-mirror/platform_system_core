@@ -63,7 +63,10 @@ typedef enum {
     AUDIO_SOURCE_CAMCORDER           = 5,
     AUDIO_SOURCE_VOICE_RECOGNITION   = 6,
     AUDIO_SOURCE_VOICE_COMMUNICATION = 7,
-
+    AUDIO_SOURCE_REMOTE_SUBMIX       = 8, /* Source for the mix to be presented remotely.      */
+                                          /* An example of remote presentation is Wifi Display */
+                                          /*  where a dongle attached to a TV can be used to   */
+                                          /*  play the mix captured by this audio source.      */
     AUDIO_SOURCE_CNT,
     AUDIO_SOURCE_MAX                 = AUDIO_SOURCE_CNT - 1,
 } audio_source_t;
@@ -292,7 +295,8 @@ enum {
     AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET         = 0x1000,
     AUDIO_DEVICE_OUT_USB_ACCESSORY             = 0x2000,
     AUDIO_DEVICE_OUT_USB_DEVICE                = 0x4000,
-    AUDIO_DEVICE_OUT_DEFAULT                   = 0x8000,
+    AUDIO_DEVICE_OUT_REMOTE_SUBMIX             = 0x8000, //temporary change
+    AUDIO_DEVICE_OUT_DEFAULT                   = 0x10000,//temporary change
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
                                  AUDIO_DEVICE_OUT_WIRED_HEADSET |
@@ -308,6 +312,7 @@ enum {
                                  AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET |
                                  AUDIO_DEVICE_OUT_USB_ACCESSORY |
                                  AUDIO_DEVICE_OUT_USB_DEVICE |
+                                 AUDIO_DEVICE_OUT_REMOTE_SUBMIX | //temporary change
                                  AUDIO_DEVICE_OUT_DEFAULT),
     AUDIO_DEVICE_OUT_ALL_A2DP = (AUDIO_DEVICE_OUT_BLUETOOTH_A2DP |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
@@ -319,14 +324,15 @@ enum {
                                  AUDIO_DEVICE_OUT_USB_DEVICE),
 
     /* input devices */
-    AUDIO_DEVICE_IN_COMMUNICATION         = 0x10000,
-    AUDIO_DEVICE_IN_AMBIENT               = 0x20000,
-    AUDIO_DEVICE_IN_BUILTIN_MIC           = 0x40000,
-    AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET = 0x80000,
-    AUDIO_DEVICE_IN_WIRED_HEADSET         = 0x100000,
-    AUDIO_DEVICE_IN_AUX_DIGITAL           = 0x200000,
-    AUDIO_DEVICE_IN_VOICE_CALL            = 0x400000,
-    AUDIO_DEVICE_IN_BACK_MIC              = 0x800000,
+    AUDIO_DEVICE_IN_COMMUNICATION         = 0x20000,     //temporary change
+    AUDIO_DEVICE_IN_AMBIENT               = 0x40000,     //temporary change
+    AUDIO_DEVICE_IN_BUILTIN_MIC           = 0x80000,     //temporary change
+    AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET = 0x100000,    //temporary change
+    AUDIO_DEVICE_IN_WIRED_HEADSET         = 0x200000,    //temporary change
+    AUDIO_DEVICE_IN_AUX_DIGITAL           = 0x400000,    //temporary change
+    AUDIO_DEVICE_IN_VOICE_CALL            = 0x800000,    //temporary change
+    AUDIO_DEVICE_IN_BACK_MIC              = 0x1000000,   //temporary change
+    AUDIO_DEVICE_IN_REMOTE_SUBMIX         = 0x2000000,   //temporary change
     AUDIO_DEVICE_IN_DEFAULT               = 0x80000000,
 
     AUDIO_DEVICE_IN_ALL     = (AUDIO_DEVICE_IN_COMMUNICATION |
@@ -337,6 +343,7 @@ enum {
                                AUDIO_DEVICE_IN_AUX_DIGITAL |
                                AUDIO_DEVICE_IN_VOICE_CALL |
                                AUDIO_DEVICE_IN_BACK_MIC |
+                               AUDIO_DEVICE_IN_REMOTE_SUBMIX | //temporary change
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
 };
@@ -402,6 +409,14 @@ static inline bool audio_is_bluetooth_sco_device(audio_devices_t device)
 static inline bool audio_is_usb_device(audio_devices_t device)
 {
     if ((popcount(device) == 1) && (device & AUDIO_DEVICE_OUT_ALL_USB))
+        return true;
+    else
+        return false;
+}
+
+static inline bool audio_is_remote_submix_device(audio_devices_t device)
+{
+    if ((popcount(device) == 1) && (device & AUDIO_DEVICE_OUT_REMOTE_SUBMIX))
         return true;
     else
         return false;
