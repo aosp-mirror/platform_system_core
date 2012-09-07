@@ -7,7 +7,7 @@
 
 BASE_VER ?= 125070
 PKG_CONFIG ?= pkg-config
-PC_DEPS = dbus-1 glib-2.0 dbus-glib-1 \
+PC_DEPS = dbus-1 glib-2.0 gthread-2.0 dbus-glib-1 \
 	libchrome-$(BASE_VER) libchromeos-$(BASE_VER)
 PC_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
 LDLIBS := $(shell $(PKG_CONFIG) --libs $(PC_DEPS))
