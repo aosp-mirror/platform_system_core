@@ -279,6 +279,10 @@ typedef enum {
 } audio_in_acoustics_t;
 
 enum {
+    AUDIO_DEVICE_NONE                          = 0x0,
+    /* reserved bits */
+    AUDIO_DEVICE_BIT_IN                        = 0x80000000,
+    AUDIO_DEVICE_BIT_DEFAULT                   = 0x40000000,
     /* output devices */
     AUDIO_DEVICE_OUT_EARPIECE                  = 0x1,
     AUDIO_DEVICE_OUT_SPEAKER                   = 0x2,
@@ -295,8 +299,8 @@ enum {
     AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET         = 0x1000,
     AUDIO_DEVICE_OUT_USB_ACCESSORY             = 0x2000,
     AUDIO_DEVICE_OUT_USB_DEVICE                = 0x4000,
-    AUDIO_DEVICE_OUT_REMOTE_SUBMIX             = 0x8000, //temporary change
-    AUDIO_DEVICE_OUT_DEFAULT                   = 0x10000,//temporary change
+    AUDIO_DEVICE_OUT_REMOTE_SUBMIX             = 0x8000,
+    AUDIO_DEVICE_OUT_DEFAULT                   = AUDIO_DEVICE_BIT_DEFAULT,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
                                  AUDIO_DEVICE_OUT_WIRED_HEADSET |
@@ -312,7 +316,7 @@ enum {
                                  AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET |
                                  AUDIO_DEVICE_OUT_USB_ACCESSORY |
                                  AUDIO_DEVICE_OUT_USB_DEVICE |
-                                 AUDIO_DEVICE_OUT_REMOTE_SUBMIX | //temporary change
+                                 AUDIO_DEVICE_OUT_REMOTE_SUBMIX |
                                  AUDIO_DEVICE_OUT_DEFAULT),
     AUDIO_DEVICE_OUT_ALL_A2DP = (AUDIO_DEVICE_OUT_BLUETOOTH_A2DP |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
@@ -324,16 +328,20 @@ enum {
                                  AUDIO_DEVICE_OUT_USB_DEVICE),
 
     /* input devices */
-    AUDIO_DEVICE_IN_COMMUNICATION         = 0x20000,     //temporary change
-    AUDIO_DEVICE_IN_AMBIENT               = 0x40000,     //temporary change
-    AUDIO_DEVICE_IN_BUILTIN_MIC           = 0x80000,     //temporary change
-    AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET = 0x100000,    //temporary change
-    AUDIO_DEVICE_IN_WIRED_HEADSET         = 0x200000,    //temporary change
-    AUDIO_DEVICE_IN_AUX_DIGITAL           = 0x400000,    //temporary change
-    AUDIO_DEVICE_IN_VOICE_CALL            = 0x800000,    //temporary change
-    AUDIO_DEVICE_IN_BACK_MIC              = 0x1000000,   //temporary change
-    AUDIO_DEVICE_IN_REMOTE_SUBMIX         = 0x2000000,   //temporary change
-    AUDIO_DEVICE_IN_DEFAULT               = 0x80000000,
+    AUDIO_DEVICE_IN_COMMUNICATION         = AUDIO_DEVICE_BIT_IN | 0x1,
+    AUDIO_DEVICE_IN_AMBIENT               = AUDIO_DEVICE_BIT_IN | 0x2,
+    AUDIO_DEVICE_IN_BUILTIN_MIC           = AUDIO_DEVICE_BIT_IN | 0x4,
+    AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET = AUDIO_DEVICE_BIT_IN | 0x8,
+    AUDIO_DEVICE_IN_WIRED_HEADSET         = AUDIO_DEVICE_BIT_IN | 0x10,
+    AUDIO_DEVICE_IN_AUX_DIGITAL           = AUDIO_DEVICE_BIT_IN | 0x20,
+    AUDIO_DEVICE_IN_VOICE_CALL            = AUDIO_DEVICE_BIT_IN | 0x40,
+    AUDIO_DEVICE_IN_BACK_MIC              = AUDIO_DEVICE_BIT_IN | 0x80,
+    AUDIO_DEVICE_IN_REMOTE_SUBMIX         = AUDIO_DEVICE_BIT_IN | 0x100,
+    AUDIO_DEVICE_IN_ANLG_DOCK_HEADSET     = AUDIO_DEVICE_BIT_IN | 0x200,
+    AUDIO_DEVICE_IN_DGTL_DOCK_HEADSET     = AUDIO_DEVICE_BIT_IN | 0x400,
+    AUDIO_DEVICE_IN_USB_ACCESSORY         = AUDIO_DEVICE_BIT_IN | 0x800,
+    AUDIO_DEVICE_IN_USB_DEVICE            = AUDIO_DEVICE_BIT_IN | 0x1000,
+    AUDIO_DEVICE_IN_DEFAULT               = AUDIO_DEVICE_BIT_IN | AUDIO_DEVICE_BIT_DEFAULT,
 
     AUDIO_DEVICE_IN_ALL     = (AUDIO_DEVICE_IN_COMMUNICATION |
                                AUDIO_DEVICE_IN_AMBIENT |
@@ -343,7 +351,11 @@ enum {
                                AUDIO_DEVICE_IN_AUX_DIGITAL |
                                AUDIO_DEVICE_IN_VOICE_CALL |
                                AUDIO_DEVICE_IN_BACK_MIC |
-                               AUDIO_DEVICE_IN_REMOTE_SUBMIX | //temporary change
+                               AUDIO_DEVICE_IN_REMOTE_SUBMIX |
+                               AUDIO_DEVICE_IN_ANLG_DOCK_HEADSET |
+                               AUDIO_DEVICE_IN_DGTL_DOCK_HEADSET |
+                               AUDIO_DEVICE_IN_USB_ACCESSORY |
+                               AUDIO_DEVICE_IN_USB_DEVICE |
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
 };
@@ -375,7 +387,8 @@ typedef enum {
 
 static inline bool audio_is_output_device(audio_devices_t device)
 {
-    if ((popcount(device) == 1) && ((device & ~AUDIO_DEVICE_OUT_ALL) == 0))
+    if (((device & AUDIO_DEVICE_BIT_IN) == 0) &&
+            (popcount(device) == 1) && ((device & ~AUDIO_DEVICE_OUT_ALL) == 0))
         return true;
     else
         return false;
@@ -383,11 +396,19 @@ static inline bool audio_is_output_device(audio_devices_t device)
 
 static inline bool audio_is_input_device(audio_devices_t device)
 {
-    if ((popcount(device) == 1) && ((device & ~AUDIO_DEVICE_IN_ALL) == 0))
-        return true;
-    else
-        return false;
+    if ((device & AUDIO_DEVICE_BIT_IN) != 0) {
+        device &= ~AUDIO_DEVICE_BIT_IN;
+        if ((popcount(device) == 1) && ((device & ~AUDIO_DEVICE_IN_ALL) == 0))
+            return true;
+    }
+    return false;
 }
+
+static inline bool audio_is_output_devices(audio_devices_t device)
+{
+    return (device & AUDIO_DEVICE_BIT_IN) == 0;
+}
+
 
 static inline bool audio_is_a2dp_device(audio_devices_t device)
 {
@@ -399,6 +420,7 @@ static inline bool audio_is_a2dp_device(audio_devices_t device)
 
 static inline bool audio_is_bluetooth_sco_device(audio_devices_t device)
 {
+    device &= ~AUDIO_DEVICE_BIT_IN;
     if ((popcount(device) == 1) && (device & (AUDIO_DEVICE_OUT_ALL_SCO |
                    AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET)))
         return true;
