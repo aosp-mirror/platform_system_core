@@ -18,6 +18,7 @@
 
 #include <malloc.h>
 #include <unistd.h>
+#include <sys/socket.h>
 #include <linux/netlink.h>
 #include "netlink-types.h"
 

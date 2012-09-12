@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <sys/socket.h>
 #include <linux/netlink.h>
 #include <netlink/genl/ctrl.h>
 #include <netlink/genl/family.h>
