@@ -572,7 +572,7 @@ static bool IsChromeExecName(const std::string &exec) {
     /* These come from the use of base::Watchdog */
     "Startup watchdog thread Watchdog", "Shutdown watchdog thread Watchdog",
     /* These come from the use of AudioDeviceThread::Start */
-    "AudioDevice", "AudioInputDevice",
+    "AudioDevice", "AudioInputDevice", "AudioOutputDevice",
     /* These come from the use of MessageLoopFactory::GetMessageLoop */
     "GpuVideoDecoder", "RtcVideoDecoderThread", "PipelineThread",
     "AudioDecoderThread", "VideoDecoderThread",
