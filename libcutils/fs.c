@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "cutils"
+
 #include <cutils/fs.h>
 #include <cutils/log.h>
 
@@ -31,11 +33,11 @@
 int fs_prepare_dir(const char* path, mode_t mode, uid_t uid, gid_t gid) {
     // Check if path needs to be created
     struct stat sb;
-    if (lstat(path, &sb) == -1) {
+    if (TEMP_FAILURE_RETRY(lstat(path, &sb)) == -1) {
         if (errno == ENOENT) {
             goto create;
         } else {
-            ALOGE("Failed to stat(%s): %s", path, strerror(errno));
+            ALOGE("Failed to lstat(%s): %s", path, strerror(errno));
             return -1;
         }
     }
@@ -52,17 +54,17 @@ int fs_prepare_dir(const char* path, mode_t mode, uid_t uid, gid_t gid) {
     }
 
 create:
-    if (mkdir(path, mode) == -1) {
+    if (TEMP_FAILURE_RETRY(mkdir(path, mode)) == -1) {
         ALOGE("Failed to mkdir(%s): %s", path, strerror(errno));
         return -1;
     }
 
 fixup:
-    if (chmod(path, mode) == -1) {
-        ALOGE("Failed to chown(%s, %d): %s", path, mode, strerror(errno));
+    if (TEMP_FAILURE_RETRY(chmod(path, mode)) == -1) {
+        ALOGE("Failed to chmod(%s, %d): %s", path, mode, strerror(errno));
         return -1;
     }
-    if (chown(path, uid, gid) == -1) {
+    if (TEMP_FAILURE_RETRY(chown(path, uid, gid)) == -1) {
         ALOGE("Failed to chown(%s, %d, %d): %s", path, uid, gid, strerror(errno));
         return -1;
     }
