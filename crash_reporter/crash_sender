@@ -47,6 +47,10 @@ METRICS_CLIENT="/usr/bin/metrics_client"
 # crash sending was successful, otherwise unsuccessful.
 MOCK_CRASH_SENDING="/tmp/mock-crash-sending"
 
+# Set this to 1 in the environment to pretend to have booted in developer
+# mode.  This is used by autotests.
+MOCK_DEVELOPER_MODE=${MOCK_DEVELOPER_MODE:-0}
+
 # Ignore PAUSE_CRASH_SENDING file if set.
 OVERRIDE_PAUSE_SENDING=${OVERRIDE_PAUSE_SENDING:-0}
 
@@ -149,6 +153,15 @@ is_developer_image() {
   is_crash_test_in_progress && return 1
   [ -f "${LEAVE_CORE_FILE}" ] && return 0
   return 1
+}
+
+# Returns 0 if the machine booted up in developer mode.
+is_developer_mode() {
+  [ ${MOCK_DEVELOPER_MODE} -ne 0 ] && return 0
+  # If we're testing crash reporter itself, we don't want to special-case
+  # for developer mode.
+  is_crash_test_in_progress && return 1
+  crossystem "devsw_boot?1"  # exit status will be accurate
 }
 
 # Generate a uniform random number in 0..max-1.
@@ -256,6 +269,15 @@ send_crash() {
     image_type="mock-fail"
   fi
 
+  local boot_mode
+  if ! crossystem "cros_debug" > /dev/null 2>&1; then
+    # Sanity-check failed that makes sure crossystem exists.
+    lecho "Cannot determine boot mode due to error running crossystem command"
+    boot_mode="missing-crossystem"
+  elif is_developer_mode; then
+    boot_mode="dev"
+  fi
+
   local extra_key1="write_payload_size"
   local extra_value1="${write_payload_size}"
   local extra_key2="send_payload_size"
@@ -280,6 +302,7 @@ send_crash() {
   lecho "  Payload: ${report_payload}"
   lecho "  Version: ${chromeos_version}"
   [ -n "${image_type}" ] && lecho "  Image type: ${image_type}"
+  [ -n "${boot_mode}" ] && lecho "  Boot mode: ${boot_mode}"
   if is_mock; then
     lecho "  Product: ${CHROMEOS_PRODUCT}"
     lecho "  URL: ${url}"
@@ -324,6 +347,7 @@ send_crash() {
     -F "hwclass=${hwclass}" \
     -F "exec_name=${exec_name}" \
     ${image_type:+-F "image_type=${image_type}"} \
+    ${boot_mode:+-F "boot_mode=${boot_mode}"} \
     ${error_type:+-F "error_type=${error_type}"} \
     -F "${extra_key1}=${extra_value1}" \
     -F "${extra_key2}=${extra_value2}" \
