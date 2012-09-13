@@ -87,6 +87,9 @@
 
 #define AID_USER        100000  /* offset for uid ranges for each user */
 
+#define AID_SHARED_GID_START 50000 /* start of gids for apps in each user to share */
+#define AID_SHARED_GID_END   59999 /* start of gids for apps in each user to share */
+
 #if !defined(EXCLUDE_FS_CONFIG_STRUCTURES)
 struct android_id_info {
     const char *name;
