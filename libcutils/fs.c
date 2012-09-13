@@ -73,14 +73,14 @@ fixup:
 }
 
 int fs_read_atomic_int(const char* path, int* out_value) {
-    int fd = open(path, O_RDONLY);
+    int fd = TEMP_FAILURE_RETRY(open(path, O_RDONLY));
     if (fd == -1) {
         ALOGE("Failed to read %s: %s", path, strerror(errno));
         return -1;
     }
 
     char buf[BUF_SIZE];
-    if (read(fd, buf, BUF_SIZE) == -1) {
+    if (TEMP_FAILURE_RETRY(read(fd, buf, BUF_SIZE)) == -1) {
         ALOGE("Failed to read %s: %s", path, strerror(errno));
         goto fail;
     }
@@ -104,7 +104,7 @@ int fs_write_atomic_int(const char* path, int value) {
         return -1;
     }
 
-    int fd = mkstemp(temp);
+    int fd = TEMP_FAILURE_RETRY(mkstemp(temp));
     if (fd == -1) {
         ALOGE("Failed to open %s: %s", temp, strerror(errno));
         return -1;
@@ -116,7 +116,7 @@ int fs_write_atomic_int(const char* path, int value) {
         ALOGE("Value %d too large: %s", value, strerror(errno));
         goto fail;
     }
-    if (write(fd, buf, len) < len) {
+    if (TEMP_FAILURE_RETRY(write(fd, buf, len)) < len) {
         ALOGE("Failed to write %s: %s", temp, strerror(errno));
         goto fail;
     }
