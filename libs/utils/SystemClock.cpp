@@ -109,6 +109,43 @@ int64_t elapsedRealtime()
 	return nanoseconds_to_milliseconds(elapsedRealtimeNano());
 }
 
+#define METHOD_CLOCK_GETTIME    0
+#define METHOD_IOCTL            1
+#define METHOD_SYSTEMTIME       2
+
+static const char *gettime_method_names[] = {
+    "clock_gettime",
+    "ioctl",
+    "systemTime",
+};
+
+static inline void checkTimeStamps(int64_t timestamp,
+                                   int64_t volatile *prevTimestampPtr,
+                                   int volatile *prevMethodPtr,
+                                   int curMethod)
+{
+    /*
+     * Disable the check for SDK since the prebuilt toolchain doesn't contain
+     * gettid, and int64_t is different on the ARM platform
+     * (ie long vs long long).
+     */
+#ifdef ARCH_ARM
+    int64_t prevTimestamp = *prevTimestampPtr;
+    int prevMethod = *prevMethodPtr;
+
+    if (timestamp < prevTimestamp) {
+        ALOGW("time going backwards: prev %lld(%s) vs now %lld(%s), tid=%d",
+              prevTimestamp, gettime_method_names[prevMethod],
+              timestamp, gettime_method_names[curMethod],
+              gettid());
+    }
+    // NOTE - not atomic and may generate spurious warnings if the 64-bit
+    // write is interrupted or not observed as a whole.
+    *prevTimestampPtr = timestamp;
+    *prevMethodPtr = curMethod;
+#endif
+}
+
 /*
  * native public static long elapsedRealtimeNano();
  */
@@ -117,8 +154,15 @@ int64_t elapsedRealtimeNano()
 #ifdef HAVE_ANDROID_OS
     struct timespec ts;
     int result = clock_gettime(CLOCK_BOOTTIME, &ts);
+    int64_t timestamp;
+    static volatile int64_t prevTimestamp;
+    static volatile int prevMethod;
+
     if (result == 0) {
-        return seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
+        timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
+        checkTimeStamps(timestamp, &prevTimestamp, &prevMethod,
+                        METHOD_CLOCK_GETTIME);
+        return timestamp;
     }
 
     // CLOCK_BOOTTIME doesn't exist, fallback to /dev/alarm
@@ -129,18 +173,24 @@ int64_t elapsedRealtimeNano()
         if (android_atomic_cmpxchg(-1, fd, &s_fd)) {
             close(fd);
         }
-        result = ioctl(s_fd,
-                ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), &ts);
     }
 
+    result = ioctl(s_fd,
+            ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), &ts);
+
     if (result == 0) {
-        return seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
+        timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
+        checkTimeStamps(timestamp, &prevTimestamp, &prevMethod, METHOD_IOCTL);
+        return timestamp;
     }
 
     // XXX: there was an error, probably because the driver didn't
     // exist ... this should return
     // a real error, like an exception!
-    return systemTime(SYSTEM_TIME_MONOTONIC);
+    timestamp = systemTime(SYSTEM_TIME_MONOTONIC);
+    checkTimeStamps(timestamp, &prevTimestamp, &prevMethod,
+                    METHOD_SYSTEMTIME);
+    return timestamp;
 #else
     return systemTime(SYSTEM_TIME_MONOTONIC);
 #endif
