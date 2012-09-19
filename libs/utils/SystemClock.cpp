@@ -153,17 +153,25 @@ int64_t elapsedRealtimeNano()
 {
 #ifdef HAVE_ANDROID_OS
     struct timespec ts;
-    int result = clock_gettime(CLOCK_BOOTTIME, &ts);
+    int result;
     int64_t timestamp;
     static volatile int64_t prevTimestamp;
     static volatile int prevMethod;
 
+#if 0
+    /*
+     * b/7100774
+     * clock_gettime appears to have clock skews and can sometimes return
+     * backwards values. Disable its use until we find out what's wrong.
+     */
+    result = clock_gettime(CLOCK_BOOTTIME, &ts);
     if (result == 0) {
         timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
         checkTimeStamps(timestamp, &prevTimestamp, &prevMethod,
                         METHOD_CLOCK_GETTIME);
         return timestamp;
     }
+#endif
 
     // CLOCK_BOOTTIME doesn't exist, fallback to /dev/alarm
     static int s_fd = -1;
