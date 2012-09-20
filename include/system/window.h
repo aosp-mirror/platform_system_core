@@ -828,9 +828,8 @@ static inline int native_window_dequeue_buffer_and_wait(ANativeWindow *anw,
     int err = anw->dequeueBuffer(anw, anb, &fenceFd);
     if (err == 0 && fenceFd != -1) {
         err = sync_wait(fenceFd, UINT_MAX);
-        if (err == 0) {
-            close(fenceFd);
-        } else {
+        close(fenceFd);
+        if (err != 0) {
             anw->cancelBuffer(anw, *anb, fenceFd);
             *anb = NULL;
         }
