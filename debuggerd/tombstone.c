@@ -128,6 +128,15 @@ static const char *get_sigcode(int signo, int code)
     return "?";
 }
 
+static void dump_revision_info(log_t* log)
+{
+    char revision[PROPERTY_VALUE_MAX];
+
+    property_get("ro.revision", revision, "unknown");
+
+    _LOG(log, false, "Revision: '%s'\n", revision);
+}
+
 static void dump_build_info(log_t* log)
 {
     char fingerprint[PROPERTY_VALUE_MAX];
@@ -599,6 +608,7 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal,
     _LOG(log, false,
             "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
     dump_build_info(log);
+    dump_revision_info(log);
     dump_thread_info(log, pid, tid, true);
     if(signal) {
         dump_fault_addr(log, tid, signal);
