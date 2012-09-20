@@ -24,7 +24,6 @@ import java.security.KeyStore;
 import java.security.Key;
 import java.security.PublicKey;
 import java.security.interfaces.RSAPublicKey;
-import sun.misc.BASE64Encoder;
 
 /**
  * Command line tool to extract RSA public keys from X.509 certificates
