@@ -830,7 +830,7 @@ static inline int native_window_dequeue_buffer_and_wait(ANativeWindow *anw,
         err = sync_wait(fenceFd, UINT_MAX);
         close(fenceFd);
         if (err != 0) {
-            anw->cancelBuffer(anw, *anb, fenceFd);
+            anw->cancelBuffer(anw, *anb, -1);
             *anb = NULL;
         }
     }
