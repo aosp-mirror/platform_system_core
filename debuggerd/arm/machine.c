@@ -53,7 +53,8 @@ static void dump_memory(log_t* log, pid_t tid, uintptr_t addr, bool at_fault) {
         /* catch underflow */
         p = 0;
     }
-    end = p + 80;
+    /* Dump more memory content for the crashing thread. */
+    end = p + 256;
     /* catch overflow; 'end - p' has to be multiples of 16 */
     while (end < p)
         end -= 16;
@@ -81,6 +82,8 @@ static void dump_memory(log_t* log, pid_t tid, uintptr_t addr, bool at_fault) {
             long data = ptrace(PTRACE_PEEKTEXT, tid, (void*)p, NULL);
             sprintf(code_buffer + strlen(code_buffer), "%08lx ", data);
 
+            /* Enable the following code blob to dump ASCII values */
+#if 0
             int j;
             for (j = 0; j < 4; j++) {
                 /*
@@ -95,6 +98,7 @@ static void dump_memory(log_t* log, pid_t tid, uintptr_t addr, bool at_fault) {
                     *asc_out++ = '.';
                 }
             }
+#endif
             p += 4;
         }
         *asc_out = '\0';
