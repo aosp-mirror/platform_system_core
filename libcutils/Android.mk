@@ -76,11 +76,7 @@ else
     commonSources += \
         abort_socket.c \
         selector.c \
-        tztime.c \
         zygote.c
-
-    commonHostSources += \
-        tzstrftime.c
 endif
 
 
