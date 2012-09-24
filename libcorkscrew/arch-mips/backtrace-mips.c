@@ -90,7 +90,8 @@ static ssize_t unwind_backtrace_common(const memory_t* memory,
         if (frame)
             frame->stack_top = state->sp;
 
-        ALOGV("#%d: frame=%p pc=%08x sp=%08x\n", index, frame, frame->absolute_pc, frame->stack_top);
+        ALOGV("#%d: frame=%p pc=%08x sp=%08x\n",
+              index, frame, frame->absolute_pc, frame->stack_top);
 
         for (addr = state->pc; maxcheck-- > 0 && !found_start; addr -= 4) {
             uint32_t op;
@@ -115,7 +116,7 @@ static ssize_t unwind_backtrace_common(const memory_t* memory,
                 ALOGV("@0x%08x: found ra offset=%d\n", addr, ra_offset);
                 break;
             case 0x3c1c0000: // lui gp
-                    ALOGV("@0x%08x: found function boundary\n", addr);
+                ALOGV("@0x%08x: found function boundary\n", addr);
                 found_start = true;
                 break;
             default:
@@ -162,7 +163,8 @@ ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo, void* sigcontext,
     state.pc = uc->pc;
     state.ra = uc->ra;
 
-    ALOGV("unwind_backtrace_signal_arch: ignore_depth=%d max_depth=%d pc=0x%08x sp=0x%08x ra=0x%08x\n",
+    ALOGV("unwind_backtrace_signal_arch: "
+          "ignore_depth=%d max_depth=%d pc=0x%08x sp=0x%08x ra=0x%08x\n",
           ignore_depth, max_depth, state.pc, state.sp, state.ra);
 
     memory_t memory;
@@ -184,7 +186,8 @@ ssize_t unwind_backtrace_ptrace_arch(pid_t tid, const ptrace_context_t* context,
     state.ra = regs.regs[31];
     state.pc = regs.epc;
 
-    ALOGV("unwind_backtrace_ptrace_arch: ignore_depth=%d max_depth=%d pc=0x%08x sp=0x%08x ra=0x%08x\n",
+    ALOGV("unwind_backtrace_ptrace_arch: "
+          "ignore_depth=%d max_depth=%d pc=0x%08x sp=0x%08x ra=0x%08x\n",
           ignore_depth, max_depth, state.pc, state.sp, state.ra);
 
     memory_t memory;
