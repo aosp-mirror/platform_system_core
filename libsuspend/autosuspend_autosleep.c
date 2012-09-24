@@ -95,5 +95,8 @@ struct autosuspend_ops *autosuspend_autosleep_init(void)
     }
 
     ALOGI("Selected autosleep\n");
+
+    autosuspend_autosleep_disable();
+
     return &autosuspend_autosleep_ops;
 }
