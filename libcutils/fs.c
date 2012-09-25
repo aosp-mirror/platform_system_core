@@ -55,8 +55,10 @@ int fs_prepare_dir(const char* path, mode_t mode, uid_t uid, gid_t gid) {
 
 create:
     if (TEMP_FAILURE_RETRY(mkdir(path, mode)) == -1) {
-        ALOGE("Failed to mkdir(%s): %s", path, strerror(errno));
-        return -1;
+        if (errno != EEXIST) {
+            ALOGE("Failed to mkdir(%s): %s", path, strerror(errno));
+            return -1;
+        }
     }
 
 fixup:
