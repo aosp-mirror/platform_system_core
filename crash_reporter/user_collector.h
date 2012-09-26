@@ -104,7 +104,7 @@ class UserCollector : public CrashCollector {
   FilePath GetProcessPath(pid_t pid);
   bool GetSymlinkTarget(const FilePath &symlink,
                         FilePath *target);
-  bool GetExecutableBaseNameFromPid(uid_t pid,
+  bool GetExecutableBaseNameFromPid(pid_t pid,
                                     std::string *base_name);
   // Returns, via |line|, the first line in |lines| that starts with |prefix|.
   // Returns true if a line is found, or false otherwise.
@@ -149,7 +149,7 @@ class UserCollector : public CrashCollector {
   // and creates the directory if necessary with appropriate permissions.
   // Returns true whether or not directory needed to be created, false on
   // any failure.
-  bool GetCreatedCrashDirectory(pid_t pid,
+  bool GetCreatedCrashDirectory(pid_t pid, uid_t supplied_ruid,
                                 FilePath *crash_file_path,
                                 bool *out_of_capacity);
   bool CopyStdinToCoreFile(const FilePath &core_path);
@@ -161,10 +161,10 @@ class UserCollector : public CrashCollector {
                                   const FilePath &container_dir,
                                   const FilePath &core_path,
                                   const FilePath &minidump_path);
-  ErrorType ConvertAndEnqueueCrash(int pid, const std::string &exec_name,
-                                   bool *out_of_capacity);
+  ErrorType ConvertAndEnqueueCrash(pid_t pid, const std::string &exec_name,
+                                   uid_t supplied_ruid, bool *out_of_capacity);
   bool ParseCrashAttributes(const std::string &crash_attributes,
-                            pid_t *pid, int *signal,
+                            pid_t *pid, int *signal, uid_t *uid,
                             std::string *kernel_supplied_name);
 
   bool ShouldDump(bool has_owner_consent,

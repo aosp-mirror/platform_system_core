@@ -46,6 +46,9 @@ static const char kCoreToMinidumpConverterPath[] = "/usr/bin/core2md";
 
 static const char kStatePrefix[] = "State:\t";
 
+// Define an otherwise invalid value that represents an unknown UID.
+static const uid_t kUnknownUid = -1;
+
 const char *UserCollector::kUserId = "Uid:\t";
 const char *UserCollector::kGroupId = "Gid:\t";
 
@@ -90,13 +93,17 @@ std::string UserCollector::GetErrorTypeSignature(ErrorType error_type) const {
   }
 }
 
+// Return the string that should be used for the kernel's core_pattern file.
+// Note that if you change the format of the enabled pattern, you'll probably
+// also need to change the ParseCrashAttributes() function below, the
+// user_collector_test.cc unittest, and the logging_UserCrash.py autotest.
 std::string UserCollector::GetPattern(bool enabled) const {
   if (enabled) {
-    // Combine the three crash attributes into one parameter to try to reduce
-    // the size of the invocation line for crash_reporter since the kernel
-    // has a fixed-sized (128B) buffer that it will truncate into.  Note that
-    // the kernel does not support quoted arguments in core_pattern.
-    return StringPrintf("|%s --user=%%p:%%s:%%e", our_path_.c_str());
+    // Combine the four crash attributes into one parameter to try to reduce
+    // the size of the invocation line for crash_reporter, since the kernel
+    // has a fixed-sized (128B) buffer for it (before parameter expansion).
+    // Note that the kernel does not support quoted arguments in core_pattern.
+    return StringPrintf("|%s --user=%%p:%%s:%%u:%%e", our_path_.c_str());
   } else {
     return "core";
   }
@@ -158,7 +165,7 @@ bool UserCollector::GetSymlinkTarget(const FilePath &symlink,
   return true;
 }
 
-bool UserCollector::GetExecutableBaseNameFromPid(uid_t pid,
+bool UserCollector::GetExecutableBaseNameFromPid(pid_t pid,
                                                  std::string *base_name) {
   FilePath target;
   FilePath process_path = GetProcessPath(pid);
@@ -343,7 +350,7 @@ UserCollector::ErrorType UserCollector::ValidateCoreFile(
   return kErrorNone;
 }
 
-bool UserCollector::GetCreatedCrashDirectory(pid_t pid,
+bool UserCollector::GetCreatedCrashDirectory(pid_t pid, uid_t supplied_ruid,
                                              FilePath *crash_file_path,
                                              bool *out_of_capacity) {
   FilePath process_path = GetProcessPath(pid);
@@ -352,32 +359,39 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid,
     LOG(ERROR) << "Purposefully failing to create spool directory";
     return false;
   }
-  if (!file_util::ReadFileToString(process_path.Append("status"),
-                                   &status)) {
-    LOG(ERROR) << "Could not read status file";
+
+  uid_t uid;
+  if (file_util::ReadFileToString(process_path.Append("status"), &status)) {
+    std::vector<std::string> status_lines;
+    base::SplitString(status, '\n', &status_lines);
+
+    std::string process_state;
+    if (!GetStateFromStatus(status_lines, &process_state)) {
+      LOG(ERROR) << "Could not find process state in status file";
+      return false;
+    }
+    LOG(INFO) << "State of crashed process [" << pid << "]: " << process_state;
+
+    // Get effective UID of crashing process.
+    int id;
+    if (!GetIdFromStatus(kUserId, kIdEffective, status_lines, &id)) {
+      LOG(ERROR) << "Could not find euid in status file";
+      return false;
+    }
+    uid = id;
+  } else if (supplied_ruid != kUnknownUid) {
+    LOG(INFO) << "Using supplied UID " << supplied_ruid
+              << " for crashed process [" << pid
+              << "] due to error reading status file";
+    uid = supplied_ruid;
+  } else {
+    LOG(ERROR) << "Could not read status file and kernel did not supply UID";
     LOG(INFO) << "Path " << process_path.value() << " DirectoryExists: "
               << file_util::DirectoryExists(process_path);
     return false;
   }
 
-  std::vector<std::string> status_lines;
-  base::SplitString(status, '\n', &status_lines);
-
-  std::string process_state;
-  if (!GetStateFromStatus(status_lines, &process_state)) {
-    LOG(ERROR) << "Could not find process state in status file";
-    return false;
-  }
-  LOG(INFO) << "State of crashed process [" << pid << "]: " << process_state;
-
-  int process_euid;
-  if (!GetIdFromStatus(kUserId, kIdEffective, status_lines, &process_euid)) {
-    LOG(ERROR) << "Could not find euid in status file";
-    return false;
-  }
-  if (!GetCreatedCrashDirectoryByEuid(process_euid,
-                                      crash_file_path,
-                                      out_of_capacity)) {
+  if (!GetCreatedCrashDirectoryByEuid(uid, crash_file_path, out_of_capacity)) {
     LOG(ERROR) << "Could not create crash directory";
     return false;
   }
@@ -471,16 +485,18 @@ UserCollector::ErrorType UserCollector::ConvertCoreToMinidump(
 }
 
 UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
-    int pid, const std::string &exec, bool *out_of_capacity) {
+    pid_t pid, const std::string &exec, uid_t supplied_ruid,
+    bool *out_of_capacity) {
   FilePath crash_path;
-  if (!GetCreatedCrashDirectory(pid, &crash_path, out_of_capacity)) {
+  if (!GetCreatedCrashDirectory(pid, supplied_ruid, &crash_path,
+      out_of_capacity)) {
     LOG(ERROR) << "Unable to find/create process-specific crash path";
     return kErrorSystemIssue;
   }
 
   // Directory like /tmp/crash_reporter/1234 which contains the
   // procfs entries and other temporary files used during conversion.
-  FilePath container_dir(StringPrintf("/tmp/crash_reporter/%d", pid));
+  FilePath container_dir(StringPrintf("/tmp/crash_reporter/%d", (int)pid));
   // Delete a pre-existing directory from crash reporter that may have
   // been left around for diagnostics from a failed conversion attempt.
   // If we don't, existing files can cause forking to fail.
@@ -521,10 +537,18 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
 }
 
 bool UserCollector::ParseCrashAttributes(const std::string &crash_attributes,
-                                         pid_t *pid, int *signal,
+                                         pid_t *pid, int *signal, uid_t *uid,
                                          std::string *kernel_supplied_name) {
-  pcrecpp::RE re("(\\d+):(\\d+):(.*)");
-  return re.FullMatch(crash_attributes, pid, signal, kernel_supplied_name);
+  pcrecpp::RE re("(\\d+):(\\d+):(\\d+):(.*)");
+  if (re.FullMatch(crash_attributes, pid, signal, uid, kernel_supplied_name))
+    return true;
+
+  LOG(INFO) << "Falling back to parsing crash attributes '"
+            << crash_attributes << "' without UID";
+  pcrecpp::RE re_without_uid("(\\d+):(\\d+):(.*)");
+  *uid = kUnknownUid;
+  return re_without_uid.FullMatch(crash_attributes, pid, signal,
+      kernel_supplied_name);
 }
 
 /* Returns true if the given executable name matches that of Chrome.  This
@@ -641,11 +665,12 @@ bool UserCollector::ShouldDump(bool has_owner_consent,
 bool UserCollector::HandleCrash(const std::string &crash_attributes,
                                 const char *force_exec) {
   CHECK(initialized_);
-  int pid = 0;
+  pid_t pid = 0;
   int signal = 0;
+  uid_t supplied_ruid = kUnknownUid;
   std::string kernel_supplied_name;
 
-  if (!ParseCrashAttributes(crash_attributes, &pid, &signal,
+  if (!ParseCrashAttributes(crash_attributes, &pid, &signal, &supplied_ruid,
                             &kernel_supplied_name)) {
     LOG(ERROR) << "Invalid parameter: --user=" <<  crash_attributes;
     return false;
@@ -681,7 +706,8 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
                          &reason);
 
   LOG(WARNING) << "Received crash notification for " << exec << "[" << pid
-               << "] sig " << signal << " (" << reason << ")";
+               << "] sig " << signal << ", user " << supplied_ruid
+               << " (" << reason << ")";
 
   if (dump) {
     count_crash_function_();
@@ -689,7 +715,7 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
     if (generate_diagnostics_) {
       bool out_of_capacity = false;
       ErrorType error_type =
-          ConvertAndEnqueueCrash(pid, exec, &out_of_capacity);
+          ConvertAndEnqueueCrash(pid, exec, supplied_ruid, &out_of_capacity);
       if (error_type != kErrorNone) {
         if (!out_of_capacity)
           EnqueueCollectionErrorLog(pid, error_type, exec);

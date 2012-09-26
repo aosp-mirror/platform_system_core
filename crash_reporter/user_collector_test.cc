@@ -66,7 +66,7 @@ class UserCollectorTest : public ::testing::Test {
 
 TEST_F(UserCollectorTest, EnableOK) {
   ASSERT_TRUE(collector_.Enable());
-  ExpectFileEquals("|/my/path --user=%p:%s:%e", "test/core_pattern");
+  ExpectFileEquals("|/my/path --user=%p:%s:%u:%e", "test/core_pattern");
   ExpectFileEquals("4", "test/core_pipe_limit");
   ASSERT_EQ(s_crashes, 0);
   EXPECT_TRUE(FindLog("Enabling user crash handling"));
@@ -109,28 +109,36 @@ TEST_F(UserCollectorTest, DisableNoFileAccess) {
 TEST_F(UserCollectorTest, ParseCrashAttributes) {
   pid_t pid;
   int signal;
+  uid_t uid;
   std::string exec_name;
-  EXPECT_TRUE(collector_.ParseCrashAttributes("123456:11:foobar",
-                                              &pid, &signal, &exec_name));
+  EXPECT_TRUE(collector_.ParseCrashAttributes("123456:11:1000:foobar",
+      &pid, &signal, &uid, &exec_name));
   EXPECT_EQ(123456, pid);
   EXPECT_EQ(11, signal);
+  EXPECT_EQ(1000, uid);
   EXPECT_EQ("foobar", exec_name);
+  EXPECT_TRUE(collector_.ParseCrashAttributes("4321:6:barfoo",
+      &pid, &signal, &uid, &exec_name));
+  EXPECT_EQ(4321, pid);
+  EXPECT_EQ(6, signal);
+  EXPECT_EQ(-1, uid);
+  EXPECT_EQ("barfoo", exec_name);
 
   EXPECT_FALSE(collector_.ParseCrashAttributes("123456:11",
-                                               &pid, &signal, &exec_name));
+      &pid, &signal, &uid, &exec_name));
 
   EXPECT_TRUE(collector_.ParseCrashAttributes("123456:11:exec:extra",
-                                              &pid, &signal, &exec_name));
+      &pid, &signal, &uid, &exec_name));
   EXPECT_EQ("exec:extra", exec_name);
 
   EXPECT_FALSE(collector_.ParseCrashAttributes("12345p:11:foobar",
-                                              &pid, &signal, &exec_name));
+      &pid, &signal, &uid, &exec_name));
 
   EXPECT_FALSE(collector_.ParseCrashAttributes("123456:1 :foobar",
-                                              &pid, &signal, &exec_name));
+      &pid, &signal, &uid, &exec_name));
 
   EXPECT_FALSE(collector_.ParseCrashAttributes("123456::foobar",
-                                              &pid, &signal, &exec_name));
+      &pid, &signal, &uid, &exec_name));
 }
 
 TEST_F(UserCollectorTest, ShouldDumpDeveloperImageOverridesConsent) {
