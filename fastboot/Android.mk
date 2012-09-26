@@ -20,6 +20,7 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
   $(LOCAL_PATH)/../../extras/ext4_utils
 LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c
 LOCAL_MODULE := fastboot
+LOCAL_MODULE_TAGS := debug
 
 ifeq ($(HOST_OS),linux)
   LOCAL_SRC_FILES += usb_linux.c util_linux.c
