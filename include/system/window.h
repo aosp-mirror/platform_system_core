@@ -18,6 +18,7 @@
 #define SYSTEM_CORE_INCLUDE_ANDROID_WINDOW_H
 
 #include <cutils/native_handle.h>
+#include <errno.h>
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
@@ -824,17 +825,7 @@ static inline int native_window_api_disconnect(
  */
 static inline int native_window_dequeue_buffer_and_wait(ANativeWindow *anw,
         struct ANativeWindowBuffer** anb) {
-    int fenceFd = -1;
-    int err = anw->dequeueBuffer(anw, anb, &fenceFd);
-    if (err == 0 && fenceFd != -1) {
-        err = sync_wait(fenceFd, UINT_MAX);
-        close(fenceFd);
-        if (err != 0) {
-            anw->cancelBuffer(anw, *anb, -1);
-            *anb = NULL;
-        }
-    }
-    return err;
+    return anw->dequeueBuffer_DEPRECATED(anw, anb);
 }
 
 
