@@ -287,7 +287,10 @@ void usage(void)
             "  help                                     show this help message\n"
             "\n"
             "options:\n"
-            "  -w                                       erase userdata and cache\n"
+            "  -w                                       erase userdata and cache (and format\n"
+            "                                           if supported by partition type)\n"
+            "  -u                                       do not first erase partition before\n"
+            "                                           formatting\n"
             "  -s <specific device>                     specify device serial number\n"
             "                                           or path to device port\n"
             "  -l                                       with \"devices\", lists device paths\n"
@@ -562,6 +565,18 @@ static int64_t get_sparse_limit(struct usb_handle *usb, int64_t size)
     return 0;
 }
 
+/* Until we get lazy inode table init working in make_ext4fs, we need to
+ * erase partitions of type ext4 before flashing a filesystem so no stale
+ * inodes are left lying around.  Otherwise, e2fsck gets very upset.
+ */
+static int needs_erase(const char *part)
+{
+    /* The function fb_format_supported() currently returns the value
+     * we want, so just call it.
+     */
+     return fb_format_supported(usb, part);
+}
+
 void do_flash(usb_handle *usb, const char *pname, const char *fname)
 {
     int64_t sz64;
@@ -597,7 +612,7 @@ void do_update_signature(zipfile_t zip, char *fn)
     fb_queue_command("signature", "installing signature");
 }
 
-void do_update(char *fn)
+void do_update(char *fn, int erase_first)
 {
     void *zdata;
     unsigned zsize;
@@ -635,17 +650,26 @@ void do_update(char *fn)
     data = unzip_file(zip, "boot.img", &sz);
     if (data == 0) die("update package missing boot.img");
     do_update_signature(zip, "boot.sig");
+    if (erase_first && needs_erase("boot")) {
+        fb_queue_erase("boot");
+    }
     fb_queue_flash("boot", data, sz);
 
     data = unzip_file(zip, "recovery.img", &sz);
     if (data != 0) {
         do_update_signature(zip, "recovery.sig");
+        if (erase_first && needs_erase("recovery")) {
+            fb_queue_erase("recovery");
+        }
         fb_queue_flash("recovery", data, sz);
     }
 
     data = unzip_file(zip, "system.img", &sz);
     if (data == 0) die("update package missing system.img");
     do_update_signature(zip, "system.sig");
+    if (erase_first && needs_erase("system")) {
+        fb_queue_erase("system");
+    }
     fb_queue_flash("system", data, sz);
 }
 
@@ -667,7 +691,7 @@ void do_send_signature(char *fn)
     fb_queue_command("signature", "installing signature");
 }
 
-void do_flashall(void)
+void do_flashall(int erase_first)
 {
     char *fname;
     void *data;
@@ -687,12 +711,18 @@ void do_flashall(void)
     data = load_file(fname, &sz);
     if (data == 0) die("could not load boot.img: %s", strerror(errno));
     do_send_signature(fname);
+    if (erase_first && needs_erase("boot")) {
+        fb_queue_erase("boot");
+    }
     fb_queue_flash("boot", data, sz);
 
     fname = find_item("recovery", product);
     data = load_file(fname, &sz);
     if (data != 0) {
         do_send_signature(fname);
+        if (erase_first && needs_erase("recovery")) {
+            fb_queue_erase("recovery");
+        }
         fb_queue_flash("recovery", data, sz);
     }
 
@@ -700,6 +730,9 @@ void do_flashall(void)
     data = load_file(fname, &sz);
     if (data == 0) die("could not load system.img: %s", strerror(errno));
     do_send_signature(fname);
+    if (erase_first && needs_erase("system")) {
+        fb_queue_erase("system");
+    }
     fb_queue_flash("system", data, sz);
 }
 
@@ -770,6 +803,7 @@ int main(int argc, char **argv)
     int wants_wipe = 0;
     int wants_reboot = 0;
     int wants_reboot_bootloader = 0;
+    int erase_first = 1;
     void *data;
     unsigned sz;
     unsigned page_size = 2048;
@@ -782,7 +816,7 @@ int main(int argc, char **argv)
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        c = getopt_long(argc, argv, "wb:n:s:S:lp:c:i:m:h", &longopts, NULL);
+        c = getopt_long(argc, argv, "wub:n:s:S:lp:c:i:m:h", &longopts, NULL);
         if (c < 0) {
             break;
         }
@@ -790,6 +824,9 @@ int main(int argc, char **argv)
         switch (c) {
         case 'w':
             wants_wipe = 1;
+            break;
+        case 'u':
+            erase_first = 0;
             break;
         case 'b':
             base_addr = strtoul(optarg, 0, 16);
@@ -864,10 +901,18 @@ int main(int argc, char **argv)
             skip(2);
         } else if(!strcmp(*argv, "erase")) {
             require(2);
+
+            if (fb_format_supported(usb, argv[1])) {
+                fprintf(stderr, "******** Did you mean to fastboot format this partition?\n");
+            }
+
             fb_queue_erase(argv[1]);
             skip(2);
         } else if(!strcmp(*argv, "format")) {
             require(2);
+            if (erase_first && needs_erase(argv[1])) {
+                fb_queue_erase(argv[1]);
+            }
             fb_queue_format(argv[1], 0);
             skip(2);
         } else if(!strcmp(*argv, "signature")) {
@@ -915,6 +960,9 @@ int main(int argc, char **argv)
                 skip(2);
             }
             if (fname == 0) die("cannot determine image filename for '%s'", pname);
+            if (erase_first && needs_erase(pname)) {
+                fb_queue_erase(pname);
+            }
             do_flash(usb, pname, fname);
         } else if(!strcmp(*argv, "flash:raw")) {
             char *pname = argv[1];
@@ -932,14 +980,14 @@ int main(int argc, char **argv)
             fb_queue_flash(pname, data, sz);
         } else if(!strcmp(*argv, "flashall")) {
             skip(1);
-            do_flashall();
+            do_flashall(erase_first);
             wants_reboot = 1;
         } else if(!strcmp(*argv, "update")) {
             if (argc > 1) {
-                do_update(argv[1]);
+                do_update(argv[1], erase_first);
                 skip(2);
             } else {
-                do_update("update.zip");
+                do_update("update.zip", erase_first);
                 skip(1);
             }
             wants_reboot = 1;

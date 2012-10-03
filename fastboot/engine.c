@@ -144,6 +144,39 @@ struct generator {
     { "ext4", generate_ext4_image, cleanup_image }
 };
 
+/* Return true if this partition is supported by the fastboot format command.
+ * It is also used to determine if we should first erase a partition before
+ * flashing it with an ext4 filesystem.  See needs_erase()
+ *
+ * Not all devices report the filesystem type, so don't report any errors,
+ * just return false.
+ */
+int fb_format_supported(usb_handle *usb, const char *partition)
+{
+    char response[FB_RESPONSE_SZ+1];
+    struct generator *generator = NULL;
+    int status;
+    unsigned int i;
+
+    status = fb_getvar(usb, response, "partition-type:%s", partition);
+    if (status) {
+        return 0;
+    }
+
+    for (i = 0; i < ARRAY_SIZE(generators); i++) {
+        if (!strncmp(generators[i].fs_type, response, FB_RESPONSE_SZ)) {
+            generator = &generators[i];
+            break;
+        }
+    }
+
+    if (generator) {
+        return 1;
+    }
+
+    return 0;
+}
+
 static int cb_default(Action *a, int status, char *resp)
 {
     if (status) {
