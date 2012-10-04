@@ -125,7 +125,7 @@ static int init_workspace(workspace *w, size_t size)
         /* dev is a tmpfs that we can use to carve a shared workspace
          * out of, so let's do that...
          */
-    fd = open("/dev/__properties__", O_RDWR | O_CREAT, 0600);
+    fd = open("/dev/__properties__", O_RDWR | O_CREAT | O_NOFOLLOW, 0600);
     if (fd < 0)
         return -1;
 
@@ -138,7 +138,7 @@ static int init_workspace(workspace *w, size_t size)
 
     close(fd);
 
-    fd = open("/dev/__properties__", O_RDONLY);
+    fd = open("/dev/__properties__", O_RDONLY | O_NOFOLLOW);
     if (fd < 0)
         return -1;
 
@@ -320,13 +320,12 @@ const char* property_get(const char *name)
 
 static void write_persistent_property(const char *name, const char *value)
 {
-    const char *tempPath = PERSISTENT_PROPERTY_DIR "/.temp";
+    char tempPath[PATH_MAX];
     char path[PATH_MAX];
-    int fd, length;
+    int fd;
 
-    snprintf(path, sizeof(path), "%s/%s", PERSISTENT_PROPERTY_DIR, name);
-
-    fd = open(tempPath, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+    snprintf(tempPath, sizeof(tempPath), "%s/.temp.XXXXXX", PERSISTENT_PROPERTY_DIR);
+    fd = mkstemp(tempPath);
     if (fd < 0) {
         ERROR("Unable to write persistent property to temp file %s errno: %d\n", tempPath, errno);
         return;
@@ -334,6 +333,7 @@ static void write_persistent_property(const char *name, const char *value)
     write(fd, value, strlen(value));
     close(fd);
 
+    snprintf(path, sizeof(path), "%s/%s", PERSISTENT_PROPERTY_DIR, name);
     if (rename(tempPath, path)) {
         unlink(tempPath);
         ERROR("Unable to rename persistent property file %s to %s\n", tempPath, path);
@@ -345,8 +345,8 @@ int property_set(const char *name, const char *value)
     prop_area *pa;
     prop_info *pi;
 
-    int namelen = strlen(name);
-    int valuelen = strlen(value);
+    size_t namelen = strlen(name);
+    size_t valuelen = strlen(value);
 
     if(namelen >= PROP_NAME_MAX) return -1;
     if(valuelen >= PROP_VALUE_MAX) return -1;
@@ -425,13 +425,13 @@ void handle_property_set_fd()
     /* Check socket options here */
     if (getsockopt(s, SOL_SOCKET, SO_PEERCRED, &cr, &cr_size) < 0) {
         close(s);
-        ERROR("Unable to recieve socket options\n");
+        ERROR("Unable to receive socket options\n");
         return;
     }
 
     r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), 0));
     if(r != sizeof(prop_msg)) {
-        ERROR("sys_prop: mis-match msg size recieved: %d expected: %d errno: %d\n",
+        ERROR("sys_prop: mis-match msg size received: %d expected: %d errno: %d\n",
               r, sizeof(prop_msg), errno);
         close(s);
         return;
@@ -530,10 +530,11 @@ static void load_properties_from_file(const char *fn)
 static void load_persistent_properties()
 {
     DIR* dir = opendir(PERSISTENT_PROPERTY_DIR);
+    int dir_fd = dirfd(dir);
     struct dirent*  entry;
-    char path[PATH_MAX];
     char value[PROP_VALUE_MAX];
     int fd, length;
+    struct stat sb;
 
     if (dir) {
         while ((entry = readdir(dir)) != NULL) {
@@ -544,20 +545,39 @@ static void load_persistent_properties()
                 continue;
 #endif
             /* open the file and read the property value */
-            snprintf(path, sizeof(path), "%s/%s", PERSISTENT_PROPERTY_DIR, entry->d_name);
-            fd = open(path, O_RDONLY);
-            if (fd >= 0) {
-                length = read(fd, value, sizeof(value) - 1);
-                if (length >= 0) {
-                    value[length] = 0;
-                    property_set(entry->d_name, value);
-                } else {
-                    ERROR("Unable to read persistent property file %s errno: %d\n", path, errno);
-                }
-                close(fd);
-            } else {
-                ERROR("Unable to open persistent property file %s errno: %d\n", path, errno);
+            fd = openat(dir_fd, entry->d_name, O_RDONLY | O_NOFOLLOW);
+            if (fd < 0) {
+                ERROR("Unable to open persistent property file \"%s\" errno: %d\n",
+                      entry->d_name, errno);
+                continue;
             }
+            if (fstat(fd, &sb) < 0) {
+                ERROR("fstat on property file \"%s\" failed errno: %d\n", entry->d_name, errno);
+                close(fd);
+                continue;
+            }
+
+            // File must not be accessible to others, be owned by root/root, and
+            // not be a hard link to any other file.
+            if (((sb.st_mode & (S_IRWXG | S_IRWXO)) != 0)
+                    || (sb.st_uid != 0)
+                    || (sb.st_gid != 0)
+                    || (sb.st_nlink != 1)) {
+                ERROR("skipping insecure property file %s (uid=%lu gid=%lu nlink=%d mode=%o)\n",
+                      entry->d_name, sb.st_uid, sb.st_gid, sb.st_nlink, sb.st_mode);
+                close(fd);
+                continue;
+            }
+
+            length = read(fd, value, sizeof(value) - 1);
+            if (length >= 0) {
+                value[length] = 0;
+                property_set(entry->d_name, value);
+            } else {
+                ERROR("Unable to read persistent property file %s errno: %d\n",
+                      entry->d_name, errno);
+            }
+            close(fd);
         }
         closedir(dir);
     } else {
