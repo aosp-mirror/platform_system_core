@@ -57,9 +57,7 @@ LOCAL_STATIC_LIBRARIES := \
     libz
 
 ifneq ($(HOST_OS),windows)
-ifeq ($(HAVE_SELINUX), true)
 LOCAL_STATIC_LIBRARIES += libselinux
-endif # HAVE_SELINUX
 endif # HOST_OS != windows
 
 include $(BUILD_HOST_EXECUTABLE)
