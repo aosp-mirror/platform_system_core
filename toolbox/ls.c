@@ -276,12 +276,12 @@ static int listfile_maclabel(const char *path, int flags)
     switch(s.st_mode & S_IFMT) {
     case S_IFLNK: {
         char linkto[256];
-        int len;
+        ssize_t len;
 
         len = readlink(path, linkto, sizeof(linkto));
         if(len < 0) return -1;
 
-        if(len > sizeof(linkto)-1) {
+        if((size_t)len > sizeof(linkto)-1) {
             linkto[sizeof(linkto)-4] = '.';
             linkto[sizeof(linkto)-3] = '.';
             linkto[sizeof(linkto)-2] = '.';
@@ -307,7 +307,7 @@ static int listfile_maclabel(const char *path, int flags)
 
 static int listfile(const char *dirname, const char *filename, int flags)
 {
-    if ((flags & LIST_LONG | LIST_SIZE | LIST_CLASSIFY | LIST_MACLABEL) == 0) {
+    if ((flags & (LIST_LONG | LIST_SIZE | LIST_CLASSIFY | LIST_MACLABEL)) == 0) {
         printf("%s\n", filename);
         return 0;
     }
