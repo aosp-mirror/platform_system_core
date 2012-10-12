@@ -140,7 +140,7 @@ status_t ZipFileRO::open(const char* zipFileName)
     /*
      * Open and map the specified file.
      */
-    fd = ::open(zipFileName, O_RDONLY | O_BINARY);
+    fd = TEMP_FAILURE_RETRY(::open(zipFileName, O_RDONLY | O_BINARY));
     if (fd < 0) {
         ALOGW("Unable to open zip '%s': %s\n", zipFileName, strerror(errno));
         return NAME_NOT_FOUND;
@@ -771,7 +771,7 @@ bool ZipFileRO::uncompressEntry(ZipEntryRO entry, int fd) const
     ptr = (const unsigned char*) file->getDataPtr();
 
     if (method == kCompressStored) {
-        ssize_t actual = write(fd, ptr, uncompLen);
+        ssize_t actual = TEMP_FAILURE_RETRY(write(fd, ptr, uncompLen));
         if (actual < 0) {
             ALOGE("Write failed: %s\n", strerror(errno));
             goto unmap;
@@ -920,9 +920,12 @@ bail:
             (zerr == Z_STREAM_END && zstream.avail_out != sizeof(writeBuf)))
         {
             long writeSize = zstream.next_out - writeBuf;
-            int cc = write(fd, writeBuf, writeSize);
-            if (cc != (int) writeSize) {
-                ALOGW("write failed in inflate (%d vs %ld)\n", cc, writeSize);
+            int cc = TEMP_FAILURE_RETRY(write(fd, writeBuf, writeSize));
+            if (cc < 0) {
+                ALOGW("write failed in inflate: %s", strerror(errno));
+                goto z_bail;
+            } else if (cc != (int) writeSize) {
+                ALOGW("write failed in inflate (%d vs %ld)", cc, writeSize);
                 goto z_bail;
             }
 
