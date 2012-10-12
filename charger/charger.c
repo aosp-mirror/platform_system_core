@@ -975,7 +975,9 @@ int main(int argc, char **argv)
 
     ev_sync_key_state(set_key_callback, charger);
 
+#ifndef CHARGER_DISABLE_INIT_BLANK
     gr_fb_blank(true);
+#endif
 
     charger->next_screen_transition = now - 1;
     charger->next_key_check = -1;
