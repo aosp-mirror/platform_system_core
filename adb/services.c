@@ -202,7 +202,7 @@ static void echo_service(int fd, void *cookie)
     int c;
 
     for(;;) {
-        r = read(fd, buf, 4096);
+        r = adb_read(fd, buf, 4096);
         if(r == 0) goto done;
         if(r < 0) {
             if(errno == EINTR) continue;
