@@ -21,6 +21,7 @@
 #define LOG_TAG "ziputil"
 
 #include <utils/Log.h>
+#include <utils/Compat.h>
 #include <utils/ZipUtils.h>
 #include <utils/ZipFileRO.h>
 
@@ -98,10 +99,11 @@ using namespace android;
             ALOGV("+++ reading %ld bytes (%ld left)\n",
                 getSize, compRemaining);
 
-            int cc = read(fd, readBuf, getSize);
-            if (cc != (int) getSize) {
-                ALOGD("inflate read failed (%d vs %ld)\n",
-                    cc, getSize);
+            int cc = TEMP_FAILURE_RETRY(read(fd, readBuf, getSize));
+            if (cc < 0) {
+                ALOGW("inflate read failed: %s", strerror(errno));
+            } else if (cc != (int) getSize) {
+                ALOGW("inflate read failed (%d vs %ld)", cc, getSize);
                 goto z_bail;
             }
 
