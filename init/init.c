@@ -32,11 +32,9 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#ifdef HAVE_SELINUX
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 #include <selinux/android.h>
-#endif
 
 #include <libgen.h>
 
@@ -60,10 +58,8 @@
 #include "ueventd.h"
 #include "watchdogd.h"
 
-#ifdef HAVE_SELINUX
 struct selabel_handle *sehandle;
 struct selabel_handle *sehandle_prop;
-#endif
 
 static int property_triggers_enabled = 0;
 
@@ -77,9 +73,7 @@ static char hardware[32];
 static unsigned revision = 0;
 static char qemu[32];
 
-#ifdef HAVE_SELINUX
 static int selinux_enabled = 1;
-#endif
 
 static struct action *cur_action = NULL;
 static struct command *cur_command = NULL;
@@ -163,10 +157,9 @@ void service_start(struct service *svc, const char *dynamic_args)
     pid_t pid;
     int needs_console;
     int n;
-#ifdef HAVE_SELINUX
     char *scon = NULL;
     int rc;
-#endif
+
         /* starting a service removes it from the disabled or reset
          * state and immediately takes it out of the restarting
          * state if it was in there
@@ -203,7 +196,6 @@ void service_start(struct service *svc, const char *dynamic_args)
         return;
     }
 
-#ifdef HAVE_SELINUX
     if (is_selinux_enabled() > 0) {
         char *mycon = NULL, *fcon = NULL;
 
@@ -229,7 +221,6 @@ void service_start(struct service *svc, const char *dynamic_args)
             return;
         }
     }
-#endif
 
     NOTICE("starting '%s'\n", svc->name);
 
@@ -251,9 +242,7 @@ void service_start(struct service *svc, const char *dynamic_args)
         for (ei = svc->envvars; ei; ei = ei->next)
             add_environment(ei->name, ei->value);
 
-#ifdef HAVE_SELINUX
         setsockcreatecon(scon);
-#endif
 
         for (si = svc->sockets; si; si = si->next) {
             int socket_type = (
@@ -266,11 +255,9 @@ void service_start(struct service *svc, const char *dynamic_args)
             }
         }
 
-#ifdef HAVE_SELINUX
         freecon(scon);
         scon = NULL;
         setsockcreatecon(NULL);
-#endif
 
         if (svc->ioprio_class != IoSchedClass_NONE) {
             if (android_set_ioprio(getpid(), svc->ioprio_class, svc->ioprio_pri)) {
@@ -316,15 +303,12 @@ void service_start(struct service *svc, const char *dynamic_args)
                 _exit(127);
             }
         }
-
-#ifdef HAVE_SELINUX
         if (svc->seclabel) {
             if (is_selinux_enabled() > 0 && setexeccon(svc->seclabel) < 0) {
                 ERROR("cannot setexeccon('%s'): %s\n", svc->seclabel, strerror(errno));
                 _exit(127);
             }
         }
-#endif
 
         if (!dynamic_args) {
             if (execve(svc->args[0], (char**) svc->args, (char**) ENV) < 0) {
@@ -351,9 +335,7 @@ void service_start(struct service *svc, const char *dynamic_args)
         _exit(127);
     }
 
-#ifdef HAVE_SELINUX
     freecon(scon);
-#endif
 
     if (pid < 0) {
         ERROR("failed to start '%s'\n", svc->name);
@@ -604,11 +586,9 @@ static void import_kernel_nv(char *name, int for_emulator)
     *value++ = 0;
     if (name_len == 0) return;
 
-#ifdef HAVE_SELINUX
     if (!strcmp(name,"selinux")) {
         selinux_enabled = atoi(value);
     }
-#endif
 
     if (for_emulator) {
         /* in the emulator, export any kernel option with the
@@ -756,7 +736,6 @@ static int bootchart_init_action(int nargs, char **args)
 }
 #endif
 
-#ifdef HAVE_SELINUX
 static const struct selinux_opt seopts_prop[] = {
         { SELABEL_OPT_PATH, "/data/system/property_contexts" },
         { SELABEL_OPT_PATH, "/property_contexts" },
@@ -815,8 +794,6 @@ int audit_callback(void *data, security_class_t cls, char *buf, size_t len)
     return 0;
 }
 
-#endif
-
 int main(int argc, char **argv)
 {
     int fd_count = 0;
@@ -870,7 +847,6 @@ int main(int argc, char **argv)
 
     process_kernel_cmdline();
 
-#ifdef HAVE_SELINUX
     union selinux_callback cb;
     cb.func_log = klog_write;
     selinux_set_callback(SELINUX_CB_LOG, cb);
@@ -895,7 +871,6 @@ int main(int argc, char **argv)
      */
     restorecon("/dev");
     restorecon("/dev/socket");
-#endif
 
     is_charger = !strcmp(bootmode, "charger");
 
