@@ -5,9 +5,7 @@
 #include <dirent.h>
 #include <errno.h>
 
-#ifdef HAVE_SELINUX
 #include <selinux/selinux.h>
-#endif
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -260,11 +258,7 @@ static int listfile_maclabel(const char *path, int flags)
         return -1;
     }
 
-#ifdef HAVE_SELINUX
     lgetfilecon(path, &maclabel);
-#else
-    maclabel = strdup("-");
-#endif
     if (!maclabel) {
         return -1;
     }
