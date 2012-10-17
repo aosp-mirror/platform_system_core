@@ -23,13 +23,11 @@ ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
 LOCAL_CFLAGS += -DWITH_VFP_D32
 endif # ARCH_ARM_HAVE_VFP_D32
 
-LOCAL_SHARED_LIBRARIES := libcutils libc libcorkscrew
-
-ifeq ($(HAVE_SELINUX),true)
-LOCAL_SHARED_LIBRARIES += libselinux
-LOCAL_C_INCLUDES += external/libselinux/include
-LOCAL_CFLAGS += -DHAVE_SELINUX
-endif
+LOCAL_SHARED_LIBRARIES := \
+	libcutils \
+	libc \
+	libcorkscrew \
+	libselinux
 
 include $(BUILD_EXECUTABLE)
 
