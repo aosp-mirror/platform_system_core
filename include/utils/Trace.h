@@ -67,6 +67,11 @@
 // function body.
 #define ATRACE_CALL() android::ScopedTrace ___tracer(ATRACE_TAG, __FUNCTION__)
 
+// ATRACE_NAME traces the beginning and end of the current function.  To trace
+// the correct start and end times this macro should be the first line of the
+// function body.
+#define ATRACE_NAME(name) android::ScopedTrace ___tracer(ATRACE_TAG, name)
+
 // ATRACE_INT traces a named integer value.  This can be used to track how the
 // value changes over time in a trace.
 #define ATRACE_INT(name, value) android::Tracer::traceCounter(ATRACE_TAG, name, value)
