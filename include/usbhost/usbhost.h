@@ -72,6 +72,19 @@ struct usb_host_context *usb_host_init(void);
 /* Call this to cleanup the USB host library. */
 void usb_host_cleanup(struct usb_host_context *context);
 
+/* Call this to get the inotify file descriptor. */
+int usb_host_get_fd(struct usb_host_context *context);
+
+/* Call this to initialize the usb host context. */
+int usb_host_load(struct usb_host_context *context,
+                  usb_device_added_cb added_cb,
+                  usb_device_removed_cb removed_cb,
+                  usb_discovery_done_cb discovery_done_cb,
+                  void *client_data);
+
+/* Call this to read and handle occuring usb event. */
+int usb_host_read_event(struct usb_host_context *context);
+
 /* Call this to monitor the USB bus for new and removed devices.
  * This is intended to be called from a dedicated thread,
  * as it will not return until one of the callbacks returns true.
