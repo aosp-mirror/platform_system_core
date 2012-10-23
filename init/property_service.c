@@ -512,13 +512,14 @@ static void load_properties_from_file(const char *fn)
 static void load_persistent_properties()
 {
     DIR* dir = opendir(PERSISTENT_PROPERTY_DIR);
-    int dir_fd = dirfd(dir);
+    int dir_fd;
     struct dirent*  entry;
     char value[PROP_VALUE_MAX];
     int fd, length;
     struct stat sb;
 
     if (dir) {
+        dir_fd = dirfd(dir);
         while ((entry = readdir(dir)) != NULL) {
             if (strncmp("persist.", entry->d_name, strlen("persist.")))
                 continue;
