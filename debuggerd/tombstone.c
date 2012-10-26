@@ -405,9 +405,8 @@ static bool dump_sibling_thread_report(const ptrace_context_t* context,
     }
 
     bool detach_failed = false;
-    struct dirent debuf;
-    struct dirent *de;
-    while (!readdir_r(d, &debuf, &de) && de) {
+    struct dirent* de;
+    while ((de = readdir(d)) != NULL) {
         /* Ignore "." and ".." */
         if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) {
             continue;
