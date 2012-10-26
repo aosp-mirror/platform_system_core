@@ -7,6 +7,7 @@ test_src_files := \
     BasicHashtable_test.cpp \
     BlobCache_test.cpp \
     Looper_test.cpp \
+    LruCache_test.cpp \
     String8_test.cpp \
     Unicode_test.cpp \
     Vector_test.cpp \

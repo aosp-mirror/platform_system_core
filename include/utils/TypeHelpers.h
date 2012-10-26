@@ -291,7 +291,7 @@ ANDROID_INT64_HASH(uint64_t)
 ANDROID_REINTERPRET_HASH(float, uint32_t)
 ANDROID_REINTERPRET_HASH(double, uint64_t)
 
-template <typename T> inline hash_t hash_type(const T*& value) {
+template <typename T> inline hash_t hash_type(T* const & value) {
     return hash_type(uintptr_t(value));
 }
 

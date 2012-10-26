@@ -80,7 +80,7 @@ void BasicHashtableImpl::clear() {
             SharedBuffer* sb = SharedBuffer::bufferFromData(mBuckets);
             if (sb->onlyOwner()) {
                 destroyBuckets(mBuckets, mBucketCount);
-                for (size_t i = 0; i < mSize; i++) {
+                for (size_t i = 0; i < mBucketCount; i++) {
                     Bucket& bucket = bucketAt(mBuckets, i);
                     bucket.cookie = 0;
                 }

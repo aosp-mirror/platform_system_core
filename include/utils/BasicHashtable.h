@@ -328,6 +328,14 @@ public:
         BasicHashtableImpl::rehash(minimumCapacity, loadFactor);
     }
 
+    /* Determines whether there is room to add another entry without rehashing.
+     * When this returns true, a subsequent add() operation is guaranteed to
+     * complete without performing a rehash.
+     */
+    inline bool hasMoreRoom() const {
+        return mCapacity > mFilledBuckets;
+    }
+
 protected:
     static inline const TEntry& entryFor(const Bucket& bucket) {
         return reinterpret_cast<const TEntry&>(bucket.entry);

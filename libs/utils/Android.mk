@@ -25,6 +25,7 @@ commonSources:= \
 	Debug.cpp \
 	FileMap.cpp \
 	Flattenable.cpp \
+	JenkinsHash.cpp \
 	LinearTransform.cpp \
 	Log.cpp \
 	PropertyMap.cpp \
