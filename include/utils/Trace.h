@@ -54,6 +54,8 @@
 #define ATRACE_TAG_CAMERA           (1<<10)
 #define ATRACE_TAG_LAST             ATRACE_TAG_CAMERA
 
+#define ATRACE_TAG_NOT_READY        (1LL<<63)   // Reserved for use during init
+
 #define ATRACE_TAG_VALID_MASK ((ATRACE_TAG_LAST - 1) | ATRACE_TAG_LAST)
 
 #ifndef ATRACE_TAG
