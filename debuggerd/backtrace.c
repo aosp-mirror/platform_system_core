@@ -125,10 +125,9 @@ void dump_backtrace(int fd, pid_t pid, pid_t tid, bool* detach_failed,
     char task_path[64];
     snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
     DIR* d = opendir(task_path);
-    if (d) {
-        struct dirent debuf;
-        struct dirent *de;
-        while (!readdir_r(d, &debuf, &de) && de) {
+    if (d != NULL) {
+        struct dirent* de = NULL;
+        while ((de = readdir(d)) != NULL) {
             if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) {
                 continue;
             }
