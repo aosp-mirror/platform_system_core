@@ -202,7 +202,14 @@ get_base() {
 }
 
 get_extension() {
-  echo "${1##*.}"
+  local extension="${1##*.}"
+  local filename="${1%.*}"
+  # For gzipped file, we ignore .gz and get the real extension
+  if [ "${extension}" = "gz" ]; then
+    echo "${filename##*.}"
+  else
+    echo "${extension}"
+  fi
 }
 
 # Return which kind of report the given metadata file relates to
