@@ -80,8 +80,10 @@ bool UdevCollector::HandleCrash(const std::string &udev_event) {
   else
     crash_path = crash_path_zipped;
 
-  AddCrashMetaData(kUdevSignatureKey, kCollectUdevSignature);
+  std::string exec_name = std::string(kUdevExecName) + "-" +
+      udev_event_map["SUBSYSTEM"];
+  AddCrashMetaData(kUdevSignatureKey, udev_log_name);
   WriteCrashMetaData(GetCrashPath(crash_directory, log_file_name, "meta"),
-                     kUdevExecName, crash_path.value());
+                     exec_name, crash_path.value());
   return true;
 }
