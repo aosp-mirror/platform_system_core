@@ -523,11 +523,11 @@ int fs_mgr_do_mount(char *fstab_file, char *n_name, char *n_blk_dev, char *tmp_m
         /* We found our match */
         /* First check the filesystem if requested */
         if (fstab[i].fs_mgr_flags & MF_WAIT) {
-            wait_for_file(fstab[i].blk_dev, WAIT_TIMEOUT);
+            wait_for_file(n_blk_dev, WAIT_TIMEOUT);
         }
 
         if (fstab[i].fs_mgr_flags & MF_CHECK) {
-            check_fs(fstab[i].blk_dev, fstab[i].type, fstab[i].mnt_point);
+            check_fs(n_blk_dev, fstab[i].type, fstab[i].mnt_point);
         }
 
         /* Now mount it where requested */
