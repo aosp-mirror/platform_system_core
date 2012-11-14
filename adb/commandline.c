@@ -46,6 +46,7 @@ int install_app(transport_type transport, char* serial, int argc, char** argv);
 int uninstall_app(transport_type transport, char* serial, int argc, char** argv);
 
 static const char *gProductOutPath = NULL;
+extern int gListenAll;
 
 static char *product_file(const char *extra)
 {
@@ -80,6 +81,7 @@ void help()
 
     fprintf(stderr,
         "\n"
+        " -a                            - directs adb to listen on all interfaces for a connection\n"
         " -d                            - directs command to the only connected USB device\n"
         "                                 returns an error if more than one USB device is present.\n"
         " -e                            - directs command to the only running emulator.\n"
@@ -93,6 +95,8 @@ void help()
         "                                 If -p is not specified, the ANDROID_PRODUCT_OUT\n"
         "                                 environment variable is used, which must\n"
         "                                 be an absolute path.\n"
+        " -H                            - Name of adb server host (default: localhost)\n"
+        " -P                            - Port of adb server (default: 5037)\n"
         " devices [-l]                  - list all connected devices\n"
         "                                 ('-l' will also list device qualifiers)\n"
         " connect <host>[:<port>]       - connect to a device via TCP/IP\n"
@@ -946,9 +950,9 @@ int adb_commandline(int argc, char **argv)
     int server_port = DEFAULT_ADB_PORT;
     if (server_port_str && strlen(server_port_str) > 0) {
         server_port = (int) strtol(server_port_str, NULL, 0);
-        if (server_port <= 0) {
+        if (server_port <= 0 || server_port > 65535) {
             fprintf(stderr,
-                    "adb: Env var ANDROID_ADB_SERVER_PORT must be a positive number. Got \"%s\"\n",
+                    "adb: Env var ANDROID_ADB_SERVER_PORT must be a positive number less than 65535. Got \"%s\"\n",
                     server_port_str);
             return usage();
         }
@@ -994,6 +998,42 @@ int adb_commandline(int argc, char **argv)
             ttype = kTransportUsb;
         } else if (!strcmp(argv[0],"-e")) {
             ttype = kTransportLocal;
+        } else if (!strcmp(argv[0],"-a")) {
+            gListenAll = 1;
+        } else if(!strncmp(argv[0], "-H", 2)) {
+            const char *hostname = NULL;
+            if (argv[0][2] == '\0') {
+                if (argc < 2) return usage();
+                hostname = argv[1];
+                argc--;
+                argv++;
+            } else {
+                hostname = argv[0] + 2;
+            }
+            adb_set_tcp_name(hostname);
+
+        } else if(!strncmp(argv[0], "-P", 2)) {
+            if (argv[0][2] == '\0') {
+                if (argc < 2) return usage();
+                server_port_str = argv[1];
+                argc--;
+                argv++;
+            } else {
+                server_port_str = argv[0] + 2;
+            }
+            if (strlen(server_port_str) > 0) {
+                server_port = (int) strtol(server_port_str, NULL, 0);
+                if (server_port <= 0 || server_port > 65535) {
+                    fprintf(stderr,
+                            "adb: port number must be a positive number less than 65536. Got \"%s\"\n",
+                            server_port_str);
+                    return usage();
+                }
+            } else {
+                fprintf(stderr,
+                "adb: port number must be a positive number less than 65536. Got empty string.\n");
+                return usage();
+            }
         } else {
                 /* out of recognized modifiers and flags */
             break;
