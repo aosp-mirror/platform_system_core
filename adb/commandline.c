@@ -112,6 +112,9 @@ void help()
         "  adb shell <command>          - run remote shell command\n"
         "  adb emu <command>            - run emulator console command\n"
         "  adb logcat [ <filter-spec> ] - View device log\n"
+        "  adb forward --list           - list all forward socket connections.\n"
+        "                                 the format is a list of lines with the following format:\n"
+        "                                    <serial> \" \" <local> \" \" <remote> \"\\n\"\n"
         "  adb forward <local> <remote> - forward socket connections\n"
         "                                 forward specs are one of: \n"
         "                                   tcp:<port>\n"
@@ -120,6 +123,11 @@ void help()
         "                                   localfilesystem:<unix domain socket name>\n"
         "                                   dev:<character device name>\n"
         "                                   jdwp:<process pid> (remote only)\n"
+        "  adb forward --no-rebind <local> <remote>\n"
+        "                               - same as 'adb forward <local> <remote>' but fails\n"
+        "                                 if <local> is already forwarded\n"
+        "  adb forward --remove <local> - remove a specific forward socket connection\n"
+        "  adb forward --remove-all     - remove all forward socket connections\n"
         "  adb jdwp                     - list PIDs of processes hosting a JDWP transport\n"
         "  adb install [-l] [-r] [-s] [--algo <algorithm name> --key <hex-encoded key> --iv <hex-encoded iv>] <file>\n"
         "                               - push this package file to the device and install it\n"
@@ -1223,16 +1231,85 @@ top:
     }
 
     if(!strcmp(argv[0], "forward")) {
-        if(argc != 3) return usage();
-        if (serial) {
-            snprintf(buf, sizeof buf, "host-serial:%s:forward:%s;%s",serial, argv[1], argv[2]);
-        } else if (ttype == kTransportUsb) {
-            snprintf(buf, sizeof buf, "host-usb:forward:%s;%s", argv[1], argv[2]);
-        } else if (ttype == kTransportLocal) {
-            snprintf(buf, sizeof buf, "host-local:forward:%s;%s", argv[1], argv[2]);
-        } else {
-            snprintf(buf, sizeof buf, "host:forward:%s;%s", argv[1], argv[2]);
+        char host_prefix[64];
+        char remove = 0;
+        char remove_all = 0;
+        char list = 0;
+        char no_rebind = 0;
+
+        // Parse options here.
+        while (argc > 1 && argv[1][0] == '-') {
+            if (!strcmp(argv[1], "--list"))
+                list = 1;
+            else if (!strcmp(argv[1], "--remove"))
+                remove = 1;
+            else if (!strcmp(argv[1], "--remove-all"))
+                remove_all = 1;
+            else if (!strcmp(argv[1], "--no-rebind"))
+                no_rebind = 1;
+            else {
+                return usage();
+            }
+            argc--;
+            argv++;
         }
+
+        // Ensure we can only use one option at a time.
+        if (list + remove + remove_all + no_rebind > 1) {
+            return usage();
+        }
+
+        // Determine the <host-prefix> for this command.
+        if (serial) {
+            snprintf(host_prefix, sizeof host_prefix, "host-serial:%s",
+                    serial);
+        } else if (ttype == kTransportUsb) {
+            snprintf(host_prefix, sizeof host_prefix, "host-usb");
+        } else if (ttype == kTransportLocal) {
+            snprintf(host_prefix, sizeof host_prefix, "host-local");
+        } else {
+            snprintf(host_prefix, sizeof host_prefix, "host");
+        }
+
+        // Implement forward --list
+        if (list) {
+            if (argc != 1)
+                return usage();
+            snprintf(buf, sizeof buf, "%s:list-forward", host_prefix);
+            char* forwards = adb_query(buf);
+            if (forwards == NULL) {
+                fprintf(stderr, "error: %s\n", adb_error());
+                return 1;
+            }
+            printf("%s", forwards);
+            free(forwards);
+            return 0;
+        }
+
+        // Implement forward --remove-all
+        else if (remove_all) {
+            if (argc != 1)
+                return usage();
+            snprintf(buf, sizeof buf, "%s:killforward-all", host_prefix);
+        }
+
+        // Implement forward --remove <local>
+        else if (remove) {
+            if (argc != 2)
+                return usage();
+            snprintf(buf, sizeof buf, "%s:killforward:%s", host_prefix, argv[1]);
+        }
+        // Or implement one of:
+        //    forward <local> <remote>
+        //    forward --no-rebind <local> <remote>
+        else
+        {
+          if (argc != 3)
+            return usage();
+          const char* command = no_rebind ? "forward:norebind:" : "forward";
+          snprintf(buf, sizeof buf, "%s:%s:%s;%s", host_prefix, command, argv[1], argv[2]);
+        }
+
         if(adb_command(buf)) {
             fprintf(stderr,"error: %s\n", adb_error());
             return 1;
