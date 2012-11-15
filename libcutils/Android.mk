@@ -121,6 +121,7 @@ LOCAL_SRC_FILES := $(commonSources) \
         mq.c \
         partition_utils.c \
         qtaguid.c \
+        trace.c \
         uevent.c
 
 ifeq ($(TARGET_ARCH),arm)
