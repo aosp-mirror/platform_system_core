@@ -41,6 +41,10 @@
 #include <cutils/misc.h>
 #include <cutils/uevent.h>
 
+#ifdef CHARGER_ENABLE_SUSPEND
+#include <suspend/autosuspend.h>
+#endif
+
 #include "minui/minui.h"
 
 #ifndef max
@@ -351,6 +355,21 @@ static void remove_supply(struct charger *charger, struct power_supply *supply)
     charger->num_supplies--;
     free(supply);
 }
+
+#ifdef CHARGER_ENABLE_SUSPEND
+static int request_suspend(bool enable)
+{
+    if (enable)
+        return autosuspend_enable();
+    else
+        return autosuspend_disable();
+}
+#else
+static int request_suspend(bool enable)
+{
+    return 0;
+}
+#endif
 
 static void parse_uevent(const char *msg, struct uevent *uevent)
 {
@@ -685,6 +704,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
         charger->next_screen_transition = -1;
         gr_fb_blank(true);
         LOGV("[%lld] animation done\n", now);
+        request_suspend(true);
         return;
     }
 
@@ -824,8 +844,10 @@ static void process_key(struct charger *charger, int code, int64_t now)
             }
         } else {
             /* if the power key got released, force screen state cycle */
-            if (key->pending)
+            if (key->pending) {
+                request_suspend(false);
                 kick_animation(charger->batt_anim);
+            }
         }
     }
 
@@ -843,6 +865,7 @@ static void handle_input_state(struct charger *charger, int64_t now)
 static void handle_power_supply_state(struct charger *charger, int64_t now)
 {
     if (charger->num_supplies_online == 0) {
+        request_suspend(false);
         if (charger->next_pwr_check == -1) {
             charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
             LOGI("[%lld] device unplugged: shutting down in %lld (@ %lld)\n",
