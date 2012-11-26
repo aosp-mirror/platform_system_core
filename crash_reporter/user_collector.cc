@@ -532,6 +532,8 @@ bool UserCollector::ParseCrashAttributes(const std::string &crash_attributes,
 static bool IsChromeExecName(const std::string &exec) {
   static const char *kChromeNames[] = {
     "chrome",
+    /* These are additional thread names seen in http://crash/ */
+    "MediaPipeline",
     /* These come from the use of base::PlatformThread::SetName() directly */
     "CrBrowserMain", "CrRendererMain", "CrUtilityMain", "CrPPAPIMain",
     "CrPPAPIBrokerMain", "CrPluginMain", "CrWorkerMain", "CrGpuMain",
