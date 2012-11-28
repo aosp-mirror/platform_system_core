@@ -86,6 +86,12 @@ __BEGIN_DECLS
 void atrace_setup();
 
 /**
+ * If tracing is ready, set atrace_enabled_tags to the system property
+ * debug.atrace.tags.enableflags. Can be used as a sysprop change callback.
+ */
+void atrace_update_tags();
+
+/**
  * Flag indicating whether setup has been completed, initialized to 0.
  * Nonzero indicates setup has completed.
  * Note: This does NOT indicate whether or not setup was successful.
