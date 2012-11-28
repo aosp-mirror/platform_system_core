@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#ifndef ANDROID_UTILS_LRU_CACHE_H
+#define ANDROID_UTILS_LRU_CACHE_H
+
 #include <utils/BasicHashtable.h>
 #include <utils/GenerationCache.h>
 #include <utils/UniquePtr.h>
@@ -197,3 +200,5 @@ void LruCache<TKey, TValue>::rehash(size_t newCapacity) {
 }
 
 }
+
+#endif // ANDROID_UTILS_LRU_CACHE_H
