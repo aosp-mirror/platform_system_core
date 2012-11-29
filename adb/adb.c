@@ -25,6 +25,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <stdint.h>
 
 #include "sysdeps.h"
 #include "adb.h"
