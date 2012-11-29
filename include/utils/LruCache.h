@@ -36,6 +36,9 @@ public:
 
     void setOnEntryRemovedListener(OnEntryRemoved<TKey, TValue>* listener);
     size_t size() const;
+    const TKey& keyAt(size_t index) const;
+    const TValue& valueAt(size_t index) const;
+    void removeAt(size_t index);
     const TValue& get(const TKey& key);
     bool put(const TKey& key, const TValue& value);
     bool remove(const TKey& key);
@@ -83,6 +86,27 @@ void LruCache<K, V>::setOnEntryRemovedListener(OnEntryRemoved<K, V>* listener) {
 template <typename TKey, typename TValue>
 size_t LruCache<TKey, TValue>::size() const {
     return mTable->size();
+}
+
+template <typename TKey, typename TValue>
+const TKey& LruCache<TKey, TValue>::keyAt(size_t index) const {
+    const Entry& entry = mTable->entryAt(index);
+    return entry.key;
+}
+
+template <typename TKey, typename TValue>
+const TValue& LruCache<TKey, TValue>::valueAt(size_t index) const {
+    const Entry& entry = mTable->entryAt(index);
+    return entry.value;
+}
+
+template <typename TKey, typename TValue>
+void LruCache<TKey, TValue>::removeAt(size_t index) {
+    if (index < 0) {
+        return;
+    }
+
+    mTable->removeAt(index);
 }
 
 template <typename TKey, typename TValue>

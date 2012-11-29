@@ -19,6 +19,9 @@
  * should still be quite good.
  **/
 
+#ifndef ANDROID_JENKINS_HASH_H
+#define ANDROID_JENKINS_HASH_H
+
 #include <utils/TypeHelpers.h>
 
 namespace android {
@@ -42,3 +45,4 @@ uint32_t JenkinsHashMixShorts(uint32_t hash, const uint16_t* shorts, size_t size
 
 }
 
+#endif // ANDROID_JENKINS_HASH_H
