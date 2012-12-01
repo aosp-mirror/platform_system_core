@@ -31,15 +31,12 @@
 
 // See <cutils/trace.h> for more ATRACE_* macros.
 
-// ATRACE_CALL traces the beginning and end of the current function.  To trace
-// the correct start and end times this macro should be the first line of the
-// function body.
-#define ATRACE_CALL() android::ScopedTrace ___tracer(ATRACE_TAG, __FUNCTION__)
-
-// ATRACE_NAME traces the beginning and end of the current function.  To trace
-// the correct start and end times this macro should be the first line of the
-// function body.
+// ATRACE_NAME traces the beginning and end of the current scope.  To trace
+// the correct start and end times this macro should be declared first in the
+// scope body.
 #define ATRACE_NAME(name) android::ScopedTrace ___tracer(ATRACE_TAG, name)
+// ATRACE_CALL is an ATRACE_NAME that uses the current function name.
+#define ATRACE_CALL() ATRACE_NAME(__FUNCTION__)
 
 namespace android {
 

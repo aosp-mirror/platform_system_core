@@ -21,5 +21,5 @@ static void traceInit() __attribute__((constructor));
 
 static void traceInit()
 {
-    android::add_sysprop_change_callback(atrace_update_tags, 0);
+    ::android::add_sysprop_change_callback(atrace_update_tags, 0);
 }
