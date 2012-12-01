@@ -21,8 +21,13 @@
 #include <sys/types.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <cutils/atomic.h>
 #include <cutils/compiler.h>
+
+#ifdef ANDROID_SMP
+#include <cutils/atomic-inline.h>
+#else
+#include <cutils/atomic.h>
+#endif
 
 __BEGIN_DECLS
 
