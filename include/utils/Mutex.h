@@ -91,10 +91,10 @@ private:
 inline Mutex::Mutex() {
     pthread_mutex_init(&mMutex, NULL);
 }
-inline Mutex::Mutex(const char* name) {
+inline Mutex::Mutex(__attribute__((unused)) const char* name) {
     pthread_mutex_init(&mMutex, NULL);
 }
-inline Mutex::Mutex(int type, const char* name) {
+inline Mutex::Mutex(int type, __attribute__((unused)) const char* name) {
     if (type == SHARED) {
         pthread_mutexattr_t attr;
         pthread_mutexattr_init(&attr);

@@ -84,10 +84,10 @@ private:
 inline RWLock::RWLock() {
     pthread_rwlock_init(&mRWLock, NULL);
 }
-inline RWLock::RWLock(const char* name) {
+inline RWLock::RWLock(__attribute__((unused)) const char* name) {
     pthread_rwlock_init(&mRWLock, NULL);
 }
-inline RWLock::RWLock(int type, const char* name) {
+inline RWLock::RWLock(int type, __attribute__((unused)) const char* name) {
     if (type == SHARED) {
         pthread_rwlockattr_t attr;
         pthread_rwlockattr_init(&attr);
