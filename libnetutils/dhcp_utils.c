@@ -242,13 +242,6 @@ int dhcp_do_request(const char *interface,
                 dns1, dns2, server, lease, vendorInfo, domain) == -1) {
             return -1;
         }
-
-        /* copy dns data to system properties - TODO - remove this after we have async
-         * notification of renewal's */
-        snprintf(dns_prop_name, sizeof(dns_prop_name), "net.%s.dns1", interface);
-        property_set(dns_prop_name, *dns1 ? ipaddr_to_string(*dns1) : "");
-        snprintf(dns_prop_name, sizeof(dns_prop_name), "net.%s.dns2", interface);
-        property_set(dns_prop_name, *dns2 ? ipaddr_to_string(*dns2) : "");
         return 0;
     } else {
         snprintf(errmsg, sizeof(errmsg), "DHCP result was %s", prop_value);
