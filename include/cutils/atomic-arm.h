@@ -20,72 +20,78 @@
 #include <stdint.h>
 #include <machine/cpu-features.h>
 
-extern inline void android_compiler_barrier(void)
+#ifndef ANDROID_ATOMIC_INLINE
+#define ANDROID_ATOMIC_INLINE inline __attribute__((always_inline))
+#endif
+
+extern ANDROID_ATOMIC_INLINE void android_compiler_barrier(void)
 {
     __asm__ __volatile__ ("" : : : "memory");
 }
 
 #if ANDROID_SMP == 0
-extern inline void android_memory_barrier(void)
+extern ANDROID_ATOMIC_INLINE void android_memory_barrier(void)
 {
     android_compiler_barrier();
 }
-extern inline void android_memory_store_barrier(void)
+extern ANDROID_ATOMIC_INLINE void android_memory_store_barrier(void)
 {
     android_compiler_barrier();
 }
 #elif defined(__ARM_HAVE_DMB)
-extern inline void android_memory_barrier(void)
+extern ANDROID_ATOMIC_INLINE void android_memory_barrier(void)
 {
     __asm__ __volatile__ ("dmb" : : : "memory");
 }
-extern inline void android_memory_store_barrier(void)
+extern ANDROID_ATOMIC_INLINE void android_memory_store_barrier(void)
 {
     __asm__ __volatile__ ("dmb st" : : : "memory");
 }
 #elif defined(__ARM_HAVE_LDREX_STREX)
-extern inline void android_memory_barrier(void)
+extern ANDROID_ATOMIC_INLINE void android_memory_barrier(void)
 {
     __asm__ __volatile__ ("mcr p15, 0, %0, c7, c10, 5" : : "r" (0) : "memory");
 }
-extern inline void android_memory_store_barrier(void)
+extern ANDROID_ATOMIC_INLINE void android_memory_store_barrier(void)
 {
     android_memory_barrier();
 }
 #else
-extern inline void android_memory_barrier(void)
+extern ANDROID_ATOMIC_INLINE void android_memory_barrier(void)
 {
     typedef void (kuser_memory_barrier)(void);
     (*(kuser_memory_barrier *)0xffff0fa0)();
 }
-extern inline void android_memory_store_barrier(void)
+extern ANDROID_ATOMIC_INLINE void android_memory_store_barrier(void)
 {
     android_memory_barrier();
 }
 #endif
 
-extern inline int32_t android_atomic_acquire_load(volatile const int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE
+int32_t android_atomic_acquire_load(volatile const int32_t *ptr)
 {
     int32_t value = *ptr;
     android_memory_barrier();
     return value;
 }
 
-extern inline int32_t android_atomic_release_load(volatile const int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE
+int32_t android_atomic_release_load(volatile const int32_t *ptr)
 {
     android_memory_barrier();
     return *ptr;
 }
 
-extern inline void android_atomic_acquire_store(int32_t value,
-                                                volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE void
+android_atomic_acquire_store(int32_t value, volatile int32_t *ptr)
 {
     *ptr = value;
     android_memory_barrier();
 }
 
-extern inline void android_atomic_release_store(int32_t value,
-                                                volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE void
+android_atomic_release_store(int32_t value, volatile int32_t *ptr)
 {
     android_memory_barrier();
     *ptr = value;
@@ -95,8 +101,8 @@ extern inline void android_atomic_release_store(int32_t value,
 extern int android_atomic_cas(int32_t old_value, int32_t new_value,
                               volatile int32_t *ptr);
 #elif defined(__ARM_HAVE_LDREX_STREX)
-extern inline int android_atomic_cas(int32_t old_value, int32_t new_value,
-                                     volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE int
+android_atomic_cas(int32_t old_value, int32_t new_value, volatile int32_t *ptr)
 {
     int32_t prev, status;
     do {
@@ -111,8 +117,8 @@ extern inline int android_atomic_cas(int32_t old_value, int32_t new_value,
     return prev != old_value;
 }
 #else
-extern inline int android_atomic_cas(int32_t old_value, int32_t new_value,
-                                     volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE int
+android_atomic_cas(int32_t old_value, int32_t new_value, volatile int32_t *ptr)
 {
     typedef int (kuser_cmpxchg)(int32_t, int32_t, volatile int32_t *);
     int32_t prev, status;
@@ -127,18 +133,20 @@ extern inline int android_atomic_cas(int32_t old_value, int32_t new_value,
 }
 #endif
 
-extern inline int android_atomic_acquire_cas(int32_t old_value,
-                                             int32_t new_value,
-                                             volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE int
+android_atomic_acquire_cas(int32_t old_value,
+                           int32_t new_value,
+                           volatile int32_t *ptr)
 {
     int status = android_atomic_cas(old_value, new_value, ptr);
     android_memory_barrier();
     return status;
 }
 
-extern inline int android_atomic_release_cas(int32_t old_value,
-                                             int32_t new_value,
-                                             volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE int
+android_atomic_release_cas(int32_t old_value,
+                           int32_t new_value,
+                           volatile int32_t *ptr)
 {
     android_memory_barrier();
     return android_atomic_cas(old_value, new_value, ptr);
@@ -149,8 +157,8 @@ extern inline int android_atomic_release_cas(int32_t old_value,
 extern int32_t android_atomic_add(int32_t increment,
                                   volatile int32_t *ptr);
 #elif defined(__ARM_HAVE_LDREX_STREX)
-extern inline int32_t android_atomic_add(int32_t increment,
-                                         volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE int32_t
+android_atomic_add(int32_t increment, volatile int32_t *ptr)
 {
     int32_t prev, tmp, status;
     android_memory_barrier();
@@ -166,8 +174,8 @@ extern inline int32_t android_atomic_add(int32_t increment,
     return prev;
 }
 #else
-extern inline int32_t android_atomic_add(int32_t increment,
-                                         volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE int32_t
+android_atomic_add(int32_t increment, volatile int32_t *ptr)
 {
     int32_t prev, status;
     android_memory_barrier();
@@ -179,12 +187,12 @@ extern inline int32_t android_atomic_add(int32_t increment,
 }
 #endif
 
-extern inline int32_t android_atomic_inc(volatile int32_t *addr)
+extern ANDROID_ATOMIC_INLINE int32_t android_atomic_inc(volatile int32_t *addr)
 {
     return android_atomic_add(1, addr);
 }
 
-extern inline int32_t android_atomic_dec(volatile int32_t *addr)
+extern ANDROID_ATOMIC_INLINE int32_t android_atomic_dec(volatile int32_t *addr)
 {
     return android_atomic_add(-1, addr);
 }
@@ -192,7 +200,8 @@ extern inline int32_t android_atomic_dec(volatile int32_t *addr)
 #if defined(__thumb__)
 extern int32_t android_atomic_and(int32_t value, volatile int32_t *ptr);
 #elif defined(__ARM_HAVE_LDREX_STREX)
-extern inline int32_t android_atomic_and(int32_t value, volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE int32_t
+android_atomic_and(int32_t value, volatile int32_t *ptr)
 {
     int32_t prev, tmp, status;
     android_memory_barrier();
@@ -208,7 +217,8 @@ extern inline int32_t android_atomic_and(int32_t value, volatile int32_t *ptr)
     return prev;
 }
 #else
-extern inline int32_t android_atomic_and(int32_t value, volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE int32_t
+android_atomic_and(int32_t value, volatile int32_t *ptr)
 {
     int32_t prev, status;
     android_memory_barrier();
@@ -223,7 +233,8 @@ extern inline int32_t android_atomic_and(int32_t value, volatile int32_t *ptr)
 #if defined(__thumb__)
 extern int32_t android_atomic_or(int32_t value, volatile int32_t *ptr);
 #elif defined(__ARM_HAVE_LDREX_STREX)
-extern inline int32_t android_atomic_or(int32_t value, volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE int32_t
+android_atomic_or(int32_t value, volatile int32_t *ptr)
 {
     int32_t prev, tmp, status;
     android_memory_barrier();
@@ -239,7 +250,8 @@ extern inline int32_t android_atomic_or(int32_t value, volatile int32_t *ptr)
     return prev;
 }
 #else
-extern inline int32_t android_atomic_or(int32_t value, volatile int32_t *ptr)
+extern ANDROID_ATOMIC_INLINE int32_t
+android_atomic_or(int32_t value, volatile int32_t *ptr)
 {
     int32_t prev, status;
     android_memory_barrier();
