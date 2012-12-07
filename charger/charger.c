@@ -704,7 +704,8 @@ static void update_screen_state(struct charger *charger, int64_t now)
         charger->next_screen_transition = -1;
         gr_fb_blank(true);
         LOGV("[%lld] animation done\n", now);
-        request_suspend(true);
+        if (charger->num_supplies_online > 0)
+            request_suspend(true);
         return;
     }
 
