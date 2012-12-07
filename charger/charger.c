@@ -41,7 +41,9 @@
 #include <cutils/misc.h>
 #include <cutils/uevent.h>
 
+#ifdef CHARGER_ENABLE_SUSPEND
 #include <suspend/autosuspend.h>
+#endif
 
 #include "minui/minui.h"
 
