@@ -202,18 +202,20 @@ static int read_request(int fd, debugger_request_t* out_request) {
     pollfds[0].revents = 0;
     status = TEMP_FAILURE_RETRY(poll(pollfds, 1, 3000));
     if (status != 1) {
-        LOG("timed out reading tid\n");
+        LOG("timed out reading tid (from pid=%d uid=%d)\n", cr.pid, cr.uid);
         return -1;
     }
 
     debugger_msg_t msg;
     status = TEMP_FAILURE_RETRY(read(fd, &msg, sizeof(msg)));
     if (status < 0) {
-        LOG("read failure? %s\n", strerror(errno));
+        LOG("read failure? %s (pid=%d uid=%d)\n",
+            strerror(errno), cr.pid, cr.uid);
         return -1;
     }
     if (status != sizeof(msg)) {
-        LOG("invalid crash request of size %d\n", status);
+        LOG("invalid crash request of size %d (from pid=%d uid=%d)\n",
+            status, cr.pid, cr.uid);
         return -1;
     }
 
@@ -245,7 +247,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
             return -1;
         }
     } else {
-        /* No one else is not allowed to dump arbitrary processes. */
+        /* No one else is allowed to dump arbitrary processes. */
         return -1;
     }
     return 0;
