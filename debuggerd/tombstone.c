@@ -84,6 +84,7 @@ static const char *get_signame(int sig)
 
 static const char *get_sigcode(int signo, int code)
 {
+    // Try the signal-specific codes...
     switch (signo) {
     case SIGILL:
         switch (code) {
@@ -122,7 +123,31 @@ static const char *get_sigcode(int signo, int code)
         case SEGV_ACCERR: return "SEGV_ACCERR";
         }
         break;
+    case SIGTRAP:
+        switch (code) {
+        case TRAP_BRKPT: return "TRAP_BRKPT";
+        case TRAP_TRACE: return "TRAP_TRACE";
+        }
+        break;
     }
+    // Then the other codes...
+    switch (code) {
+    case SI_USER:    return "SI_USER";
+#if defined(SI_KERNEL)
+    case SI_KERNEL:  return "SI_KERNEL";
+#endif
+    case SI_QUEUE:   return "SI_QUEUE";
+    case SI_TIMER:   return "SI_TIMER";
+    case SI_MESGQ:   return "SI_MESGQ";
+    case SI_ASYNCIO: return "SI_ASYNCIO";
+#if defined(SI_SIGIO)
+    case SI_SIGIO:   return "SI_SIGIO";
+#endif
+#if defined(SI_TKILL)
+    case SI_TKILL:   return "SI_TKILL";
+#endif
+    }
+    // Then give up...
     return "?";
 }
 
