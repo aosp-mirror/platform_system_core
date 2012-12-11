@@ -29,12 +29,15 @@
 static void load_exidx_header(pid_t pid, map_info_t* mi,
         uintptr_t* out_exidx_start, size_t* out_exidx_size) {
     uint32_t elf_phoff;
-    uint32_t elf_phentsize_phnum;
+    uint32_t elf_phentsize_ehsize;
+    uint32_t elf_shentsize_phnum;
     if (try_get_word_ptrace(pid, mi->start + offsetof(Elf32_Ehdr, e_phoff), &elf_phoff)
+            && try_get_word_ptrace(pid, mi->start + offsetof(Elf32_Ehdr, e_ehsize),
+                    &elf_phentsize_ehsize)
             && try_get_word_ptrace(pid, mi->start + offsetof(Elf32_Ehdr, e_phnum),
-                    &elf_phentsize_phnum)) {
-        uint32_t elf_phentsize = elf_phentsize_phnum >> 16;
-        uint32_t elf_phnum = elf_phentsize_phnum & 0xffff;
+                    &elf_shentsize_phnum)) {
+        uint32_t elf_phentsize = elf_phentsize_ehsize >> 16;
+        uint32_t elf_phnum = elf_shentsize_phnum & 0xffff;
         for (uint32_t i = 0; i < elf_phnum; i++) {
             uintptr_t elf_phdr = mi->start + elf_phoff + i * elf_phentsize;
             uint32_t elf_phdr_type;
