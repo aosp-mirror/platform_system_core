@@ -117,7 +117,34 @@ host:<request>
 
     or even any one of the local services described below.
 
+<host-prefix>:forward:norebind:<local>;<remote>
+    Same as <host-prefix>:forward:<local>;<remote> except that it will
+    fail it there is already a forward connection from <local>.
 
+    Used to implement 'adb forward --no-rebind <local> <remote>'
+
+<host-prefix>:killforward:<local>
+    Remove any existing forward local connection from <local>.
+    This is used to implement 'adb forward --remove <local>'
+
+<host-prefix>:killforward-all
+    Remove all forward network connections.
+    This is used to implement 'adb forward --remove-all'.
+
+<host-prefix>:list-forward
+    List all existing forward connections from this server.
+    This returns something that looks like the following:
+
+       <hex4>: The length of the payload, as 4 hexadecimal chars.
+       <payload>: A series of lines of the following format:
+
+         <serial> " " <local> " " <remote> "\n"
+
+    Where <serial> is a device serial number.
+          <local>  is the host-specific endpoint (e.g. tcp:9000).
+          <remote> is the device-specific endpoint.
+
+    Used to implement 'adb forward --list'.
 
 LOCAL SERVICES:
 
