@@ -118,7 +118,9 @@ String8 CallStack::toString(const char* prefix) const {
         char line[MAX_BACKTRACE_LINE_LENGTH];
         format_backtrace_line(i, &mStack[i], &symbols[i],
                 line, MAX_BACKTRACE_LINE_LENGTH);
-        str.append(prefix);
+        if (prefix) {
+            str.append(prefix);
+        }
         str.append(line);
         str.append("\n");
     }
