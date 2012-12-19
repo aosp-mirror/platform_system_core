@@ -213,7 +213,7 @@ setprop <name> <value>
 setrlimit <resource> <cur> <max>
    Set the rlimit for a resource.
 
-setsebool <name>=<value>
+setsebool <name> <value>
    Set SELinux boolean <name> to <value>.
    <value> may be 1|true|on or 0|false|off
 
