@@ -236,6 +236,10 @@ static inline void fs_config(const char *path, int dir,
     struct fs_path_config *pc;
     int plen;
 
+    if (path[0] == '/') {
+        path++;
+    }
+
     pc = dir ? android_dirs : android_files;
     plen = strlen(path);
     for(; pc->prefix; pc++){
