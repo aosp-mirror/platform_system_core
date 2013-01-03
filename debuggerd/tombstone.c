@@ -350,6 +350,18 @@ static void dump_backtrace_and_stack(const ptrace_context_t* context, log_t* log
     }
 }
 
+static void dump_map(log_t* log, map_info_t* m, const char* what) {
+    if (m != NULL) {
+        _LOG(log, false, "    %08x-%08x %c%c%c %s\n", m->start, m->end,
+             m->is_readable ? 'r' : '-',
+             m->is_writable ? 'w' : '-',
+             m->is_executable ? 'x' : '-',
+             m->name);
+    } else {
+        _LOG(log, false, "    (no %s)\n", what);
+    }
+}
+
 static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t tid) {
     siginfo_t si;
     memset(&si, 0, sizeof(si));
@@ -396,21 +408,9 @@ static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t 
      * Show "next" then "match" then "prev" so that the addresses appear in
      * ascending order (like /proc/pid/maps).
      */
-    if (next != NULL) {
-        _LOG(log, false, "    %08x-%08x %s\n", next->start, next->end, next->name);
-    } else {
-        _LOG(log, false, "    (no map below)\n");
-    }
-    if (map != NULL) {
-        _LOG(log, false, "    %08x-%08x %s\n", map->start, map->end, map->name);
-    } else {
-        _LOG(log, false, "    (no map for address)\n");
-    }
-    if (prev != NULL) {
-        _LOG(log, false, "    %08x-%08x %s\n", prev->start, prev->end, prev->name);
-    } else {
-        _LOG(log, false, "    (no map above)\n");
-    }
+    dump_map(log, next, "map below");
+    dump_map(log, map, "map for address");
+    dump_map(log, prev, "map above");
 }
 
 static void dump_thread(const ptrace_context_t* context, log_t* log, pid_t tid, bool at_fault,
