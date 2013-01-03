@@ -32,6 +32,7 @@ typedef struct map_info {
     uintptr_t start;
     uintptr_t end;
     bool is_readable;
+    bool is_writable;
     bool is_executable;
     void* data; // arbitrary data associated with the map by the user, initially NULL
     char name[];
@@ -46,9 +47,10 @@ void free_map_info_list(map_info_t* milist);
 /* Finds the memory map that contains the specified address. */
 const map_info_t* find_map_info(const map_info_t* milist, uintptr_t addr);
 
-/* Returns true if the addr is in an readable map. */
+/* Returns true if the addr is in a readable map. */
 bool is_readable_map(const map_info_t* milist, uintptr_t addr);
-
+/* Returns true if the addr is in a writable map. */
+bool is_writable_map(const map_info_t* milist, uintptr_t addr);
 /* Returns true if the addr is in an executable map. */
 bool is_executable_map(const map_info_t* milist, uintptr_t addr);
 
