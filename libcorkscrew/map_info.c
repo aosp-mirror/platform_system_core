@@ -57,13 +57,15 @@ static map_info_t* parse_maps_line(const char* line)
         mi->start = start;
         mi->end = end;
         mi->is_readable = strlen(permissions) == 4 && permissions[0] == 'r';
+        mi->is_writable = strlen(permissions) == 4 && permissions[1] == 'w';
         mi->is_executable = strlen(permissions) == 4 && permissions[2] == 'x';
         mi->data = NULL;
         memcpy(mi->name, name, name_len);
         mi->name[name_len] = '\0';
         ALOGV("Parsed map: start=0x%08x, end=0x%08x, "
-                "is_readable=%d, is_executable=%d, name=%s",
-                mi->start, mi->end, mi->is_readable, mi->is_executable, mi->name);
+                "is_readable=%d, is_writable=%d, is_executable=%d, name=%s",
+                mi->start, mi->end,
+                mi->is_readable, mi->is_writable, mi->is_executable, mi->name);
     }
     return mi;
 }
@@ -108,6 +110,11 @@ const map_info_t* find_map_info(const map_info_t* milist, uintptr_t addr) {
 bool is_readable_map(const map_info_t* milist, uintptr_t addr) {
     const map_info_t* mi = find_map_info(milist, addr);
     return mi && mi->is_readable;
+}
+
+bool is_writable_map(const map_info_t* milist, uintptr_t addr) {
+    const map_info_t* mi = find_map_info(milist, addr);
+    return mi && mi->is_writable;
 }
 
 bool is_executable_map(const map_info_t* milist, uintptr_t addr) {
