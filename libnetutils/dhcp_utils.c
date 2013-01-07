@@ -217,7 +217,7 @@ int dhcp_do_request(const char *interface,
                  p2p_interface, DHCP_CONFIG_PATH, prop_value, interface);
     else
         snprintf(daemon_cmd, sizeof(daemon_cmd), "%s_%s:-f %s %s", DAEMON_NAME,
-                 DHCP_CONFIG_PATH, p2p_interface, interface);
+                 p2p_interface, DHCP_CONFIG_PATH, interface);
     memset(prop_value, '\0', PROPERTY_VALUE_MAX);
     property_set(ctrl_prop, daemon_cmd);
     if (wait_for_property(daemon_prop_name, desired_status, 10) < 0) {
