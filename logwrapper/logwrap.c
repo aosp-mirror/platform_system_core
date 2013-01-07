@@ -36,10 +36,17 @@
 
 static int signal_fd_write;
 
-static void fatal(const char *msg) {
-    fprintf(stderr, "%s", msg);
-    ALOG(LOG_ERROR, "logwrapper", "%s", msg);
-}
+#define ERROR(fmt, args...)                                                   \
+do {                                                                          \
+    fprintf(stderr, fmt, ## args);                                            \
+    ALOG(LOG_ERROR, "logwrapper", fmt, ## args);                              \
+} while(0)
+
+#define FATAL_CHILD(fmt, args...)                                             \
+do {                                                                          \
+    ERROR(fmt, ## args);                                                      \
+    _exit(-1);                                                                \
+} while(0)
 
 static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
         int *chld_sts) {
@@ -75,7 +82,7 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
         if (poll(poll_fds, remote_hung ? 1 : 2, -1) < 0) {
             if (errno == EINTR)
                 continue;
-            fatal("poll failed\n");
+            ERROR("poll failed\n");
             rc = -1;
             goto err_poll;
         }
@@ -166,9 +173,8 @@ static void child(int argc, char* argv[]) {
     argv_child[argc] = NULL;
 
     if (execvp(argv_child[0], argv_child)) {
-        ALOG(LOG_ERROR, "logwrapper",
-            "executing %s failed: %s\n", argv_child[0], strerror(errno));
-        exit(-1);
+        FATAL_CHILD("executing %s failed: %s\n", argv_child[0],
+                strerror(errno));
     }
 }
 
@@ -191,14 +197,14 @@ int logwrap(int argc, char* argv[], int *status) {
     /* Use ptty instead of socketpair so that STDOUT is not buffered */
     parent_ptty = open("/dev/ptmx", O_RDWR);
     if (parent_ptty < 0) {
-        fatal("Cannot create parent ptty\n");
+        ERROR("Cannot create parent ptty\n");
         rc = -1;
         goto err_open;
     }
 
     if (grantpt(parent_ptty) || unlockpt(parent_ptty) ||
             ((child_devname = (char*)ptsname(parent_ptty)) == 0)) {
-        fatal("Problem with /dev/ptmx\n");
+        ERROR("Problem with /dev/ptmx\n");
         rc = -1;
         goto err_ptty;
     }
@@ -209,7 +215,7 @@ int logwrap(int argc, char* argv[], int *status) {
 
     pid = fork();
     if (pid < 0) {
-        fatal("Failed to fork\n");
+        ERROR("Failed to fork\n");
         rc = -1;
         goto err_fork;
     } else if (pid == 0) {
@@ -218,8 +224,7 @@ int logwrap(int argc, char* argv[], int *status) {
 
         child_ptty = open(child_devname, O_RDWR);
         if (child_ptty < 0) {
-            fatal("Problem with child ptty\n");
-            return -1;
+            FATAL_CHILD("Problem with child ptty\n");
         }
 
         // redirect stdout and stderr
@@ -228,8 +233,6 @@ int logwrap(int argc, char* argv[], int *status) {
         close(child_ptty);
 
         child(argc, argv);
-        fatal("This should never happen\n");
-        return -1;
     } else {
         memset(&chldact, 0, sizeof(chldact));
         chldact.sa_handler = sigchld_handler;
@@ -247,11 +250,7 @@ int logwrap(int argc, char* argv[], int *status) {
 
         rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sockets);
         if (rc == -1) {
-            char msg[40];
-
-            snprintf(msg, sizeof(msg), "socketpair failed: %d\n", errno);
-
-            fatal(msg);
+            ERROR("socketpair failed: %s\n", strerror(errno));
             goto err_socketpair;
         }
 
