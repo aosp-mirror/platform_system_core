@@ -17,6 +17,7 @@
 #ifndef __CUTILS_BITOPS_H
 #define __CUTILS_BITOPS_H
 
+#include <stdbool.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/cdefs.h>
