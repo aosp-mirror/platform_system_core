@@ -18,6 +18,8 @@
 #ifndef __LIBS_LOGWRAP_H
 #define __LIBS_LOGWRAP_H
 
+#include <stdbool.h>
+
 __BEGIN_DECLS
 
 /*
@@ -36,13 +38,17 @@ __BEGIN_DECLS
  *           NULL-terminated
  *   status: the equivalent child status as populated by wait(status). This
  *           value is only valid when logwrap successfully completes
+ *   ignore_int_quit: set to true if you want to completely ignore SIGINT and
+ *           SIGQUIT while logwrap is running. This may force the end-user to
+ *           send a signal twice to signal the caller (once for the child, and
+ *           once for the caller)
  *
  * Return value:
  *   0 when logwrap successfully run the child process and captured its status
  *   -1 when an internal error occurred
  *
  */
-int logwrap(int argc, char* argv[], int *status);
+int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit);
 
 __END_DECLS
 
