@@ -35,14 +35,17 @@ void fatal(const char *msg) {
 
 void usage() {
     fatal(
-        "Usage: logwrapper BINARY [ARGS ...]\n"
+        "Usage: logwrapper [-d] BINARY [ARGS ...]\n"
         "\n"
         "Forks and executes BINARY ARGS, redirecting stdout and stderr to\n"
         "the Android logging system. Tag is set to BINARY, priority is\n"
-        "always LOG_INFO.\n");
+        "always LOG_INFO.\n"
+        "\n"
+        "-d: Causes logwrapper to SIGSEGV when BINARY terminates\n"
+        "    fault address is set to the status of wait()\n");
 }
 
-void parent(const char *tag, int parent_read) {
+void parent(const char *tag, int seg_fault_on_exit, int parent_read) {
     int status;
     char buffer[4096];
 
@@ -102,6 +105,8 @@ void parent(const char *tag, int parent_read) {
     } else
         ALOG(LOG_INFO, "logwrapper", "%s wait() failed: %s (%d)", tag,
                 strerror(errno), errno);
+    if (seg_fault_on_exit)
+        *(int *)status = 0;  // causes SIGSEGV with fault_address = status
 }
 
 void child(int argc, char* argv[]) {
@@ -119,10 +124,21 @@ void child(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     pid_t pid;
+    int seg_fault_on_exit = 0;
 
     int parent_ptty;
     int child_ptty;
     char *child_devname = NULL;
+
+    if (argc < 2) {
+        usage();
+    }
+
+    if (strncmp(argv[1], "-d", 2) == 0) {
+        seg_fault_on_exit = 1;
+        argc--;
+        argv++;
+    }
 
     if (argc < 2) {
         usage();
@@ -163,7 +179,7 @@ int main(int argc, char* argv[]) {
         setgid(AID_LOG);
         setuid(AID_LOG);
 
-        parent(argv[1], parent_ptty);
+        parent(argv[1], seg_fault_on_exit, parent_ptty);
     }
 
     return 0;
