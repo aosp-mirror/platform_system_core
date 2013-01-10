@@ -88,8 +88,7 @@ static int fill_ip_info(const char *interface,
                      char *ipaddr,
                      char *gateway,
                      uint32_t *prefixLength,
-                     char *dns1,
-                     char *dns2,
+                     char *dns[],
                      char *server,
                      uint32_t *lease,
                      char *vendorInfo,
@@ -99,6 +98,7 @@ static int fill_ip_info(const char *interface,
     char prop_value[PROPERTY_VALUE_MAX];
     /* Interface name after converting p2p0-p2p0-X to p2p to reuse system properties */
     char p2p_interface[MAX_INTERFACE_LENGTH];
+    int x;
 
     get_p2p_interface_replacement(interface, p2p_interface);
 
@@ -139,11 +139,11 @@ static int fill_ip_info(const char *interface,
         }
         *prefixLength = p;
     }
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.dns1", DHCP_PROP_NAME_PREFIX, p2p_interface);
-    property_get(prop_name, dns1, NULL);
 
-    snprintf(prop_name, sizeof(prop_name), "%s.%s.dns2", DHCP_PROP_NAME_PREFIX, p2p_interface);
-    property_get(prop_name, dns2, NULL);
+    for (x=0; dns[x] != NULL; x++) {
+        snprintf(prop_name, sizeof(prop_name), "%s.%s.dns%d", DHCP_PROP_NAME_PREFIX, p2p_interface, x+1);
+        property_get(prop_name, dns[x], NULL);
+    }
 
     snprintf(prop_name, sizeof(prop_name), "%s.%s.leasetime", DHCP_PROP_NAME_PREFIX, p2p_interface);
     if (property_get(prop_name, prop_value, NULL)) {
@@ -182,8 +182,7 @@ int dhcp_do_request(const char *interface,
                     char *ipaddr,
                     char *gateway,
                     uint32_t *prefixLength,
-                    char *dns1,
-                    char *dns2,
+                    char *dns[],
                     char *server,
                     uint32_t *lease,
                     char *vendorInfo,
@@ -238,8 +237,8 @@ int dhcp_do_request(const char *interface,
     }
     if (strcmp(prop_value, "ok") == 0) {
         char dns_prop_name[PROPERTY_KEY_MAX];
-        if (fill_ip_info(interface, ipaddr, gateway, prefixLength,
-                dns1, dns2, server, lease, vendorInfo, domain) == -1) {
+        if (fill_ip_info(interface, ipaddr, gateway, prefixLength, dns,
+                server, lease, vendorInfo, domain) == -1) {
             return -1;
         }
         return 0;
@@ -326,8 +325,7 @@ int dhcp_do_request_renew(const char *interface,
                     char *ipaddr,
                     char *gateway,
                     uint32_t *prefixLength,
-                    char *dns1,
-                    char *dns2,
+                    char *dns[],
                     char *server,
                     uint32_t *lease,
                     char *vendorInfo,
@@ -367,8 +365,8 @@ int dhcp_do_request_renew(const char *interface,
         return -1;
     }
     if (strcmp(prop_value, "ok") == 0) {
-        fill_ip_info(interface, ipaddr, gateway, prefixLength,
-                dns1, dns2, server, lease, vendorInfo, domain);
+        fill_ip_info(interface, ipaddr, gateway, prefixLength, dns,
+                server, lease, vendorInfo, domain);
         return 0;
     } else {
         snprintf(errmsg, sizeof(errmsg), "DHCP Renew result was %s", prop_value);
