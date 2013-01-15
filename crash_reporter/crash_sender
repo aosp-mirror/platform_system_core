@@ -468,6 +468,39 @@ send_crashes() {
   done
 }
 
+USE_FLAGS_PATH="/etc/session_manager_use_flags.txt"
+# Returns success if the USE flag passed as its sole parameter was defined.
+# New flags must be first be added to the ebuild file.
+use_flag_is_set() {
+  local use_flags flag i
+  flag="$1"
+  if [ ! -e ${USE_FLAGS_PATH} ]; then
+    use_flags=""
+  else
+    use_flags="$(cat ${USE_FLAGS_PATH})"
+  fi
+  lecho "use_flags : $use_flags"
+  for i in $use_flags; do
+    if [ $i = "${flag}" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Returns success if we were built for the board passed as the sole parameter.
+# Not all boards are handled; see the ebuild file.
+is_board() {
+  use_flag_is_set "board_use_$1"
+}
+
+set_max_crash_rate_link() {
+  if is_board link; then
+    MAX_CRASH_RATE=100
+  fi
+  lecho "MAX_CRASH_RATE set to $MAX_CRASH_RATE"
+}
+
 main() {
   trap cleanup EXIT INT TERM
   if [ -e "${PAUSE_CRASH_SENDING}" ] && \
@@ -487,6 +520,10 @@ main() {
   done
 
   TMP_DIR="$(mktemp -d /tmp/crash_sender.XXXX)"
+
+  # Temporary hack to set MAX_CRASH_RATE, see chrome-os-partner:17244
+  # TODO(miletus)Once R23 is live for Link, we should remove this.
+  set_max_crash_rate_link
 
   # Send system-wide crashes
   send_crashes "/var/spool/crash"
