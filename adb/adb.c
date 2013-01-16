@@ -326,7 +326,7 @@ static void send_connect(atransport *t)
     send_packet(cp, t);
 }
 
-static void send_auth_request(atransport *t)
+void send_auth_request(atransport *t)
 {
     D("Calling send_auth_request\n");
     apacket *p;

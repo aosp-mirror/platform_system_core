@@ -43,6 +43,10 @@ static char *key_paths[] = {
 static fdevent listener_fde;
 static int framework_fd = -1;
 
+static void usb_disconnected(void* unused, atransport* t);
+static struct adisconnect usb_disconnect = { usb_disconnected, 0, 0, 0 };
+static atransport* usb_transport;
+static bool needs_retry = false;
 
 static void read_keys(const char *file, struct listnode *list)
 {
@@ -155,21 +159,30 @@ int adb_auth_verify(void *token, void *sig, int siglen)
     return ret;
 }
 
+static void usb_disconnected(void* unused, atransport* t)
+{
+    D("USB disconnect");
+    remove_transport_disconnect(usb_transport, &usb_disconnect);
+    usb_transport = NULL;
+    needs_retry = false;
+}
+
 static void adb_auth_event(int fd, unsigned events, void *data)
 {
-    atransport *t = data;
     char response[2];
     int ret;
 
     if (events & FDE_READ) {
         ret = unix_read(fd, response, sizeof(response));
         if (ret < 0) {
-            D("Disconnect");
-            fdevent_remove(&t->auth_fde);
+            D("Framework disconnect");
+            if (usb_transport)
+                fdevent_remove(&usb_transport->auth_fde);
             framework_fd = -1;
         }
         else if (ret == 2 && response[0] == 'O' && response[1] == 'K') {
-            adb_auth_verified(t);
+            if (usb_transport)
+                adb_auth_verified(usb_transport);
         }
     }
 }
@@ -179,8 +192,12 @@ void adb_auth_confirm_key(unsigned char *key, size_t len, atransport *t)
     char msg[MAX_PAYLOAD];
     int ret;
 
+    usb_transport = t;
+    add_transport_disconnect(t, &usb_disconnect);
+
     if (framework_fd < 0) {
         D("Client not connected\n");
+        needs_retry = true;
         return;
     }
 
@@ -221,6 +238,11 @@ static void adb_auth_listener(int fd, unsigned events, void *data)
     }
 
     framework_fd = s;
+
+    if (needs_retry) {
+        needs_retry = false;
+        send_auth_request(usb_transport);
+    }
 }
 
 void adb_auth_init(void)
