@@ -233,11 +233,6 @@ void service_start(struct service *svc, const char *dynamic_args)
         int fd, sz;
 
         umask(077);
-        if (properties_inited()) {
-            get_property_workspace(&fd, &sz);
-            sprintf(tmp, "%d,%d", dup(fd), sz);
-            add_environment("ANDROID_PROPERTY_WORKSPACE", tmp);
-        }
 
         for (ei = svc->envvars; ei; ei = ei->next)
             add_environment(ei->name, ei->value);
