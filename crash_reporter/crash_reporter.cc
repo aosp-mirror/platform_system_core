@@ -148,7 +148,7 @@ static int HandleUserCrash(UserCollector *user_collector) {
   // Make it possible to test what happens when we crash while
   // handling a crash.
   if (FLAGS_crash_test) {
-    *(char *)0 = 0;
+    *(volatile char *)0 = 0;
     return 0;
   }
 
