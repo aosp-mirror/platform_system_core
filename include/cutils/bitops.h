@@ -75,6 +75,16 @@ static inline int bitmask_ffz(unsigned int *bitmask, int num_bits)
     return -1;
 }
 
+static inline int bitmask_weight(unsigned int *bitmask, int num_bits)
+{
+    int i;
+    int weight = 0;
+
+    for (i = 0; i < BITS_TO_WORDS(num_bits); i++)
+        weight += __builtin_popcount(bitmask[i]);
+    return weight;
+}
+
 static inline void bitmask_set(unsigned int *bitmask, int bit)
 {
     bitmask[BIT_WORD(bit)] |= BIT_MASK(bit);
