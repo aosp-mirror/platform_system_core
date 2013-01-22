@@ -35,11 +35,12 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sched.h>
+#include <getopt.h>
 
 static void
 usage(const char *s)
 {
-    fprintf(stderr, "USAGE: %s [[-r] priority pids ...] [-g pid]\n", s);
+    fprintf(stderr, "USAGE: %s [[-r] [-t TYPE] priority pids ...] [-g pid]\n", s);
     exit(EXIT_FAILURE);
 }
 
@@ -74,32 +75,49 @@ void print_prio(pid_t pid)
            sched_get_priority_min(sched), sched_get_priority_max(sched));
 }
 
+int get_sched(char *str)
+{
+    if (strcasecmp(str, "RR") == 0)
+        return SCHED_RR;
+    else if (strcasecmp(str, "FIFO") == 0)
+        return SCHED_FIFO;
+    else if (strcasecmp(str, "NORMAL") == 0)
+        return SCHED_OTHER;
+    else if (strcasecmp(str, "OTHER") == 0)
+        return SCHED_OTHER;
+    return SCHED_RR;
+}
+
 int renice_main(int argc, char *argv[])
 {
     int prio;
     int realtime = 0;
+    int opt;
+    int sched = SCHED_RR;
     char *cmd = argv[0];
 
-    // consume command name
-    argc--;
-    argv++;
-
-    if (argc < 1)
-        usage(cmd);
-
-    if(strcmp("-r", argv[0]) == 0) {
-        // do realtime priority adjustment
-        realtime = 1;
-        argc--;
-        argv++;
-    }
-
-	if(strcmp("-g", argv[0]) == 0) {
-        if (argc < 2)
+    do {
+        opt = getopt(argc, argv, "rt:g:");
+        if (opt == -1)
+            break;
+        switch (opt) {
+        case 'r':
+            // do realtime priority adjustment
+            realtime = 1;
+            break;
+        case 't':
+            sched = get_sched(optarg);
+            break;
+        case 'g':
+            print_prio(atoi(optarg));
+            return 0;
+        default:
             usage(cmd);
-        print_prio(atoi(argv[1]));
-        return 0;
-    }
+        }
+    } while (1);
+
+    argc -= optind;
+    argv += optind;
 
     if (argc < 1)
         usage(cmd);
@@ -122,7 +140,7 @@ int renice_main(int argc, char *argv[])
             struct sched_param sp = { .sched_priority = prio };
             int ret;
 
-            ret = sched_setscheduler(pid, SCHED_RR, &sp);
+            ret = sched_setscheduler(pid, sched, &sp);
             if (ret) {
                 perror("sched_set_scheduler");
                 exit(EXIT_FAILURE);
@@ -137,8 +155,6 @@ int renice_main(int argc, char *argv[])
             }
         }
     }
-   
+
     return 0;
 }
-
-
