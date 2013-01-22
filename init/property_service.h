@@ -24,6 +24,7 @@ extern void property_init(void);
 extern void property_load_boot_defaults(void);
 extern void load_persist_props(void);
 extern void start_property_service(void);
+void get_property_workspace(int *fd, int *sz);
 extern const char* property_get(const char *name);
 extern int property_set(const char *name, const char *value);
 extern int properties_inited();
