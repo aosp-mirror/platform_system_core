@@ -112,6 +112,7 @@ struct {
 typedef struct {
     void *data;
     size_t size;
+    int fd;
 } workspace;
 
 static int init_workspace(workspace *w, size_t size)
@@ -119,10 +120,10 @@ static int init_workspace(workspace *w, size_t size)
     void *data;
     int fd;
 
-    /* dev is a tmpfs that we can use to carve a shared workspace
-     * out of, so let's do that...
-     */
-    fd = open(PROP_FILENAME, O_RDWR | O_CREAT | O_NOFOLLOW, 0644);
+        /* dev is a tmpfs that we can use to carve a shared workspace
+         * out of, so let's do that...
+         */
+    fd = open("/dev/__properties__", O_RDWR | O_CREAT | O_NOFOLLOW, 0600);
     if (fd < 0)
         return -1;
 
@@ -135,8 +136,15 @@ static int init_workspace(workspace *w, size_t size)
 
     close(fd);
 
+    fd = open("/dev/__properties__", O_RDONLY | O_NOFOLLOW);
+    if (fd < 0)
+        return -1;
+
+    unlink("/dev/__properties__");
+
     w->data = data;
     w->size = size;
+    w->fd = fd;
     return 0;
 
 out:
@@ -165,6 +173,8 @@ static int init_property_area(void)
 
     if(init_workspace(&pa_workspace, PA_SIZE))
         return -1;
+
+    fcntl(pa_workspace.fd, F_SETFD, FD_CLOEXEC);
 
     pa_info_array = (void*) (((char*) pa_workspace.data) + PA_INFO_START);
 
@@ -451,6 +461,12 @@ void handle_property_set_fd()
         close(s);
         break;
     }
+}
+
+void get_property_workspace(int *fd, int *sz)
+{
+    *fd = pa_workspace.fd;
+    *sz = pa_workspace.size;
 }
 
 static void load_properties(char *data)
