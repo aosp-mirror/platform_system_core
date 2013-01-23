@@ -123,7 +123,7 @@ static int init_workspace(workspace *w, size_t size)
         /* dev is a tmpfs that we can use to carve a shared workspace
          * out of, so let's do that...
          */
-    fd = open("/dev/__properties__", O_RDWR | O_CREAT | O_NOFOLLOW, 0600);
+    fd = open(PROP_FILENAME, O_RDWR | O_CREAT | O_NOFOLLOW, 0644);
     if (fd < 0)
         return -1;
 
@@ -136,11 +136,9 @@ static int init_workspace(workspace *w, size_t size)
 
     close(fd);
 
-    fd = open("/dev/__properties__", O_RDONLY | O_NOFOLLOW);
+    fd = open(PROP_FILENAME, O_RDONLY | O_NOFOLLOW);
     if (fd < 0)
         return -1;
-
-    unlink("/dev/__properties__");
 
     w->data = data;
     w->size = size;
