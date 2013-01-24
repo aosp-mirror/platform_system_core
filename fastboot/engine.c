@@ -45,8 +45,6 @@
 #include <sys/mman.h>
 #endif
 
-extern struct fs_info info;
-
 #define ARRAY_SIZE(x)           (sizeof(x)/sizeof(x[0]))
 
 double now()
@@ -302,10 +300,7 @@ void generate_ext4_image(struct image_data *image)
 #else
     fd = fileno(tmpfile());
 #endif
-    /* reset ext4fs info so we can be called multiple times */
-    reset_ext4fs_info();
-    info.len = image->partition_size;
-    make_ext4fs_internal(fd, NULL, NULL, NULL, 0, 1, 0, 0, 0, NULL);
+    make_ext4fs_sparse_fd(fd, image->partition_size, NULL, NULL);
 
     fstat(fd, &st);
     image->image_size = st.st_size;
