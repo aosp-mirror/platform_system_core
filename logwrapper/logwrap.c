@@ -36,20 +36,22 @@
 
 static int signal_fd_write;
 
-#define ERROR(fmt, args...)                                                   \
+#define ERROR(fmt, quiet, args...)                                            \
 do {                                                                          \
-    fprintf(stderr, fmt, ## args);                                            \
-    ALOG(LOG_ERROR, "logwrapper", fmt, ## args);                              \
+    if (!quiet) {                                                             \
+        fprintf(stderr, fmt, ## args);                                        \
+        ALOG(LOG_ERROR, "logwrapper", fmt, ## args);                          \
+    }                                                                         \
 } while(0)
 
-#define FATAL_CHILD(fmt, args...)                                             \
+#define FATAL_CHILD(fmt, quiet, args...)                                      \
 do {                                                                          \
-    ERROR(fmt, ## args);                                                      \
+    ERROR(fmt, quiet, ## args);                                               \
     _exit(-1);                                                                \
 } while(0)
 
 static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
-        int *chld_sts) {
+        int *chld_sts, bool quiet) {
     int status = 0;
     char buffer[4096];
     struct pollfd poll_fds[] = {
@@ -82,7 +84,7 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
         if (poll(poll_fds, remote_hung ? 1 : 2, -1) < 0) {
             if (errno == EINTR)
                 continue;
-            ERROR("poll failed\n");
+            ERROR("poll failed\n", quiet);
             rc = -1;
             goto err_poll;
         }
@@ -98,7 +100,8 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
                         buffer[b] = '\0';
                     } else if (buffer[b] == '\n') {
                         buffer[b] = '\0';
-                        ALOG(LOG_INFO, btag, "%s", &buffer[a]);
+                        if (!quiet)
+                            ALOG(LOG_INFO, btag, "%s", &buffer[a]);
                         a = b + 1;
                     }
                 }
@@ -106,7 +109,8 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
                 if (a == 0 && b == sizeof(buffer) - 1) {
                     // buffer is full, flush
                     buffer[b] = '\0';
-                    ALOG(LOG_INFO, btag, "%s", &buffer[a]);
+                    if (!quiet)
+                        ALOG(LOG_INFO, btag, "%s", &buffer[a]);
                     b = 0;
                 } else if (a != b) {
                     // Keep left-overs
@@ -145,19 +149,22 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
     // Flush remaining data
     if (a != b) {
         buffer[b] = '\0';
-        ALOG(LOG_INFO, btag, "%s", &buffer[a]);
+        if (!quiet)
+            ALOG(LOG_INFO, btag, "%s", &buffer[a]);
     }
 
-    if (WIFEXITED(status)) {
-        if (WEXITSTATUS(status))
-            ALOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", btag,
-                    WEXITSTATUS(status));
-    } else if (WIFSIGNALED(status)) {
-        ALOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", btag,
-                WTERMSIG(status));
-    } else if (WIFSTOPPED(status)) {
-        ALOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", btag,
-                WSTOPSIG(status));
+    if (!quiet) {
+        if (WIFEXITED(status)) {
+            if (WEXITSTATUS(status))
+                ALOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", btag,
+                        WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+            ALOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", btag,
+                    WTERMSIG(status));
+        } else if (WIFSTOPPED(status)) {
+            ALOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", btag,
+                    WSTOPSIG(status));
+        }
     }
     if (chld_sts != NULL)
         *chld_sts = status;
@@ -166,14 +173,14 @@ err_poll:
     return rc;
 }
 
-static void child(int argc, char* argv[]) {
+static void child(int argc, char* argv[], bool quiet) {
     // create null terminated argv_child array
     char* argv_child[argc + 1];
     memcpy(argv_child, argv, argc * sizeof(char *));
     argv_child[argc] = NULL;
 
     if (execvp(argv_child[0], argv_child)) {
-        FATAL_CHILD("executing %s failed: %s\n", argv_child[0],
+        FATAL_CHILD("executing %s failed: %s\n", quiet, argv_child[0],
                 strerror(errno));
     }
 }
@@ -182,7 +189,8 @@ void sigchld_handler(int sig) {
     write(signal_fd_write, &sig, 1);
 }
 
-int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit) {
+int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit,
+        bool quiet) {
     pid_t pid;
     int parent_ptty;
     int child_ptty;
@@ -199,14 +207,14 @@ int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit) {
     /* Use ptty instead of socketpair so that STDOUT is not buffered */
     parent_ptty = open("/dev/ptmx", O_RDWR);
     if (parent_ptty < 0) {
-        ERROR("Cannot create parent ptty\n");
+        ERROR("Cannot create parent ptty\n", quiet);
         rc = -1;
         goto err_open;
     }
 
     if (grantpt(parent_ptty) || unlockpt(parent_ptty) ||
             ((child_devname = (char*)ptsname(parent_ptty)) == 0)) {
-        ERROR("Problem with /dev/ptmx\n");
+        ERROR("Problem with /dev/ptmx\n", quiet);
         rc = -1;
         goto err_ptty;
     }
@@ -219,7 +227,7 @@ int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit) {
 
     pid = fork();
     if (pid < 0) {
-        ERROR("Failed to fork\n");
+        ERROR("Failed to fork\n", quiet);
         rc = -1;
         goto err_fork;
     } else if (pid == 0) {
@@ -228,7 +236,8 @@ int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit) {
 
         child_ptty = open(child_devname, O_RDWR);
         if (child_ptty < 0) {
-            FATAL_CHILD("Problem with child ptty\n");
+            FATAL_CHILD("Problem with child ptty\n", quiet);
+            return -1;
         }
 
         // redirect stdout and stderr
@@ -236,7 +245,7 @@ int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit) {
         dup2(child_ptty, 2);
         close(child_ptty);
 
-        child(argc, argv);
+        child(argc, argv, quiet);
     } else {
         struct sigaction ignact;
 
@@ -263,7 +272,7 @@ int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit) {
 
         rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sockets);
         if (rc == -1) {
-            ERROR("socketpair failed: %s\n", strerror(errno));
+            ERROR("socketpair failed: %s\n", quiet, strerror(errno));
             goto err_socketpair;
         }
 
@@ -274,7 +283,7 @@ int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit) {
 
         signal_fd_write = sockets[0];
 
-        rc = parent(argv[0], parent_ptty, sockets[1], pid, status);
+        rc = parent(argv[0], parent_ptty, sockets[1], pid, status, quiet);
     }
 
     close(sockets[0]);

@@ -42,13 +42,15 @@ __BEGIN_DECLS
  *           SIGQUIT while logwrap is running. This may force the end-user to
  *           send a signal twice to signal the caller (once for the child, and
  *           once for the caller)
+ *   quiet: when true, don't display log messages
  *
  * Return value:
  *   0 when logwrap successfully run the child process and captured its status
  *   -1 when an internal error occurred
  *
  */
-int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit);
+int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit,
+        bool quiet);
 
 __END_DECLS
 
