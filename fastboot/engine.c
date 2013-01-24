@@ -29,6 +29,7 @@
 #include "fastboot.h"
 #include "make_ext4fs.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
