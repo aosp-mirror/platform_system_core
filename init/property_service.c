@@ -152,23 +152,11 @@ out:
     return -1;
 }
 
-/* (8 header words + 247 toc words) = 1020 bytes */
-/* 1024 bytes header and toc + 247 prop_infos @ 128 bytes = 32640 bytes */
-
-#define PA_COUNT_MAX  247
-#define PA_INFO_START 1024
-#define PA_SIZE       32768
-
 static workspace pa_workspace;
-static prop_info *pa_info_array;
-
-extern prop_area *__system_property_area__;
 
 static int init_property_area(void)
 {
-    prop_area *pa;
-
-    if(pa_info_array)
+    if (property_area_inited)
         return -1;
 
     if(init_workspace(&pa_workspace, PA_SIZE))
@@ -176,25 +164,10 @@ static int init_property_area(void)
 
     fcntl(pa_workspace.fd, F_SETFD, FD_CLOEXEC);
 
-    pa_info_array = (void*) (((char*) pa_workspace.data) + PA_INFO_START);
+    __system_property_area_init(pa_workspace.data);
 
-    pa = pa_workspace.data;
-    memset(pa, 0, PA_SIZE);
-    pa->magic = PROP_AREA_MAGIC;
-    pa->version = PROP_AREA_VERSION;
-
-        /* plug into the lib property services */
-    __system_property_area__ = pa;
     property_area_inited = 1;
     return 0;
-}
-
-static void update_prop_info(prop_info *pi, const char *value, unsigned len)
-{
-    pi->serial = pi->serial | 1;
-    memcpy(pi->value, value, len + 1);
-    pi->serial = (len << 24) | ((pi->serial + 1) & 0xffffff);
-    __futex_wake(&pi->serial, INT32_MAX);
 }
 
 static int check_mac_perms(const char *name, char *sctx)
@@ -328,8 +301,8 @@ static void write_persistent_property(const char *name, const char *value)
 
 int property_set(const char *name, const char *value)
 {
-    prop_area *pa;
     prop_info *pi;
+    int ret;
 
     size_t namelen = strlen(name);
     size_t valuelen = strlen(value);
@@ -344,29 +317,13 @@ int property_set(const char *name, const char *value)
         /* ro.* properties may NEVER be modified once set */
         if(!strncmp(name, "ro.", 3)) return -1;
 
-        pa = __system_property_area__;
-        update_prop_info(pi, value, valuelen);
-        pa->serial++;
-        __futex_wake(&pa->serial, INT32_MAX);
+        __system_property_update(pi, value, valuelen);
     } else {
-        pa = __system_property_area__;
-        if(pa->count == PA_COUNT_MAX) {
-            ERROR("Failed to set '%s'='%s',  property pool is exhausted at %d entries",
-                    name, value, PA_COUNT_MAX);
-            return -1;
+        ret = __system_property_add(name, namelen, value, valuelen);
+        if (ret < 0) {
+            ERROR("Failed to set '%s'='%s'", name, value);
+            return ret;
         }
-
-        pi = pa_info_array + pa->count;
-        pi->serial = (valuelen << 24);
-        memcpy(pi->name, name, namelen + 1);
-        memcpy(pi->value, value, valuelen + 1);
-
-        pa->toc[pa->count] =
-            (namelen << 24) | (((unsigned) pi) - ((unsigned) pa));
-
-        pa->count++;
-        pa->serial++;
-        __futex_wake(&pa->serial, INT32_MAX);
     }
     /* If name starts with "net." treat as a DNS property. */
     if (strncmp("net.", name, strlen("net.")) == 0)  {
