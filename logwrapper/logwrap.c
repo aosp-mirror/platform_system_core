@@ -16,7 +16,7 @@
 
 #include <string.h>
 #include <sys/types.h>
-#include <sys/signalfd.h>
+#include <sys/socket.h>
 #include <signal.h>
 #include <poll.h>
 #include <sys/wait.h>
@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <stdbool.h>
 
 #include <logwrap/logwrap.h>
 #include "private/android_filesystem_config.h"
@@ -33,83 +34,104 @@
 
 #define ARRAY_SIZE(x)	(sizeof(x) / sizeof(*(x)))
 
-static int fatal(const char *msg) {
+static int signal_fd_write;
+
+static void fatal(const char *msg) {
     fprintf(stderr, "%s", msg);
     ALOG(LOG_ERROR, "logwrapper", "%s", msg);
-    return -1;
 }
 
 static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
         int *chld_sts) {
-    int status;
+    int status = 0;
     char buffer[4096];
     struct pollfd poll_fds[] = {
         [0] = {
-            .fd = parent_read,
-            .events = POLLIN,
-        },
-        [1] = {
             .fd = signal_fd,
             .events = POLLIN,
         },
+        [1] = {
+            .fd = parent_read,
+            .events = POLLIN,
+        },
     };
+    int rc = 0;
+    sigset_t chldset;
 
     int a = 0;  // start index of unprocessed data
     int b = 0;  // end index of unprocessed data
     int sz;
+    bool remote_hung = false;
+    bool found_child = false;
 
     char *btag = basename(tag);
     if (!btag) btag = (char*) tag;
 
-    while (1) {
-        if (poll(poll_fds, ARRAY_SIZE(poll_fds), -1) <= 0) {
-            return fatal("poll failed\n");
+    sigemptyset(&chldset);
+    sigaddset(&chldset, SIGCHLD);
+    sigprocmask(SIG_UNBLOCK, &chldset, NULL);
+
+    while (!found_child) {
+        if (poll(poll_fds, remote_hung ? 1 : 2, -1) < 0) {
+            if (errno == EINTR)
+                continue;
+            fatal("poll failed\n");
+            rc = -1;
+            goto err_poll;
         }
 
-        if (poll_fds[0].revents & POLLIN) {
-            sz = read(parent_read, &buffer[b], sizeof(buffer) - 1 - b);
+        if (!remote_hung) {
+            if (poll_fds[1].revents & POLLIN) {
+                sz = read(parent_read, &buffer[b], sizeof(buffer) - 1 - b);
 
-            sz += b;
-            // Log one line at a time
-            for (b = 0; b < sz; b++) {
-                if (buffer[b] == '\r') {
-                    buffer[b] = '\0';
-                } else if (buffer[b] == '\n') {
+                sz += b;
+                // Log one line at a time
+                for (b = 0; b < sz; b++) {
+                    if (buffer[b] == '\r') {
+                        buffer[b] = '\0';
+                    } else if (buffer[b] == '\n') {
+                        buffer[b] = '\0';
+                        ALOG(LOG_INFO, btag, "%s", &buffer[a]);
+                        a = b + 1;
+                    }
+                }
+
+                if (a == 0 && b == sizeof(buffer) - 1) {
+                    // buffer is full, flush
                     buffer[b] = '\0';
                     ALOG(LOG_INFO, btag, "%s", &buffer[a]);
-                    a = b + 1;
+                    b = 0;
+                } else if (a != b) {
+                    // Keep left-overs
+                    b -= a;
+                    memmove(buffer, &buffer[a], b);
+                    a = 0;
+                } else {
+                    a = 0;
+                    b = 0;
                 }
             }
 
-            if (a == 0 && b == sizeof(buffer) - 1) {
-                // buffer is full, flush
-                buffer[b] = '\0';
-                ALOG(LOG_INFO, btag, "%s", &buffer[a]);
-                b = 0;
-            } else if (a != b) {
-                // Keep left-overs
-                b -= a;
-                memmove(buffer, &buffer[a], b);
-                a = 0;
-            } else {
-                a = 0;
-                b = 0;
+            if (poll_fds[1].revents & POLLHUP) {
+                remote_hung = true;
             }
         }
 
-        if (poll_fds[1].revents & POLLIN) {
-            struct signalfd_siginfo sfd_info;
-            pid_t wpid;
+        if (poll_fds[0].revents & POLLIN) {
+            char tmp[32];
+            int ret;
 
-            // Clear all pending signals before reading the child's status
-            while (read(signal_fd, &sfd_info, sizeof(sfd_info)) > 0) {
-                if ((pid_t)sfd_info.ssi_pid != pid)
-                    ALOG(LOG_WARN, "logwrapper", "cleared SIGCHLD for pid %u\n",
-                            sfd_info.ssi_pid);
+            read(signal_fd, tmp, sizeof(tmp));
+            while (!found_child) {
+                do {
+                    ret = waitpid(-1, &status, WNOHANG);
+                } while (ret < 0 && errno == EINTR);
+
+                if (ret <= 0)
+                    break;
+
+                found_child = (pid == ret);
             }
-            wpid = waitpid(pid, &status, WNOHANG);
-            if (wpid > 0)
-                break;
         }
     }
 
@@ -121,19 +143,20 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
 
     if (WIFEXITED(status)) {
         if (WEXITSTATUS(status))
-            ALOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", tag,
+            ALOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", btag,
                     WEXITSTATUS(status));
     } else if (WIFSIGNALED(status)) {
-        ALOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", tag,
+        ALOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", btag,
                 WTERMSIG(status));
     } else if (WIFSTOPPED(status)) {
-        ALOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", tag,
+        ALOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", btag,
                 WSTOPSIG(status));
     }
     if (chld_sts != NULL)
         *chld_sts = status;
 
-    return 0;
+err_poll:
+    return rc;
 }
 
 static void child(int argc, char* argv[]) {
@@ -149,40 +172,54 @@ static void child(int argc, char* argv[]) {
     }
 }
 
+void sigchld_handler(int sig) {
+    write(signal_fd_write, &sig, 1);
+}
+
 int logwrap(int argc, char* argv[], int *status) {
     pid_t pid;
-
     int parent_ptty;
     int child_ptty;
     char *child_devname = NULL;
-    sigset_t chldset;
+    struct sigaction chldact;
+    struct sigaction oldchldact;
+    sigset_t blockset;
+    sigset_t oldset;
+    int sockets[2];
+    int rc = 0;
 
     /* Use ptty instead of socketpair so that STDOUT is not buffered */
     parent_ptty = open("/dev/ptmx", O_RDWR);
     if (parent_ptty < 0) {
-        return fatal("Cannot create parent ptty\n");
+        fatal("Cannot create parent ptty\n");
+        rc = -1;
+        goto err_open;
     }
 
     if (grantpt(parent_ptty) || unlockpt(parent_ptty) ||
             ((child_devname = (char*)ptsname(parent_ptty)) == 0)) {
-        return fatal("Problem with /dev/ptmx\n");
+        fatal("Problem with /dev/ptmx\n");
+        rc = -1;
+        goto err_ptty;
     }
 
-    sigemptyset(&chldset);
-    sigaddset(&chldset, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &chldset, NULL);
+    sigemptyset(&blockset);
+    sigaddset(&blockset, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &blockset, &oldset);
 
     pid = fork();
     if (pid < 0) {
-        close(parent_ptty);
-        sigprocmask(SIG_UNBLOCK, &chldset, NULL);
-        return fatal("Failed to fork\n");
+        fatal("Failed to fork\n");
+        rc = -1;
+        goto err_fork;
     } else if (pid == 0) {
+        sigprocmask(SIG_SETMASK, &oldset, NULL);
         close(parent_ptty);
-        sigprocmask(SIG_UNBLOCK, &chldset, NULL);
+
         child_ptty = open(child_devname, O_RDWR);
         if (child_ptty < 0) {
-            return fatal("Problem with child ptty\n");
+            fatal("Problem with child ptty\n");
+            return -1;
         }
 
         // redirect stdout and stderr
@@ -191,22 +228,39 @@ int logwrap(int argc, char* argv[], int *status) {
         close(child_ptty);
 
         child(argc - 1, &argv[1]);
-        return fatal("This should never happen\n");
-
+        fatal("This should never happen\n");
+        return -1;
     } else {
-        int rc;
-        int fd;
+        memset(&chldact, 0, sizeof(chldact));
+        chldact.sa_handler = sigchld_handler;
+        chldact.sa_flags = SA_NOCLDSTOP;
 
-        fd = signalfd(-1, &chldset, SFD_NONBLOCK);
-        if (fd == -1) {
+        sigaction(SIGCHLD, &chldact, &oldchldact);
+        if ((!(oldchldact.sa_flags & SA_SIGINFO) &&
+                oldchldact.sa_handler != SIG_DFL &&
+                oldchldact.sa_handler != SIG_IGN) ||
+                ((oldchldact.sa_flags & SA_SIGINFO) &&
+                oldchldact.sa_sigaction != NULL)) {
+            ALOG(LOG_WARN, "logwrapper", "logwrap replaced the SIGCHLD "
+                    "handler and might cause interaction issues");
+        }
+
+        rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sockets);
+        if (rc == -1) {
             char msg[40];
 
-            snprintf(msg, sizeof(msg), "signalfd failed: %d\n", errno);
+            snprintf(msg, sizeof(msg), "socketpair failed: %d\n", errno);
 
-            close(parent_ptty);
-            sigprocmask(SIG_UNBLOCK, &chldset, NULL);
-            return fatal(msg);
+            fatal(msg);
+            goto err_socketpair;
         }
+
+        fcntl(sockets[0], F_SETFD, FD_CLOEXEC);
+        fcntl(sockets[0], F_SETFL, O_NONBLOCK);
+        fcntl(sockets[1], F_SETFD, FD_CLOEXEC);
+        fcntl(sockets[1], F_SETFL, O_NONBLOCK);
+
+        signal_fd_write = sockets[0];
 
         // switch user and group to "log"
         // this may fail if we are not root,
@@ -214,12 +268,17 @@ int logwrap(int argc, char* argv[], int *status) {
         setgid(AID_LOG);
         setuid(AID_LOG);
 
-        rc = parent(argv[1], parent_ptty, fd, pid, status);
-        close(parent_ptty);
-        close(fd);
-
-        sigprocmask(SIG_UNBLOCK, &chldset, NULL);
-
-        return rc;
+        rc = parent(argv[1], parent_ptty, sockets[1], pid, status);
     }
+
+    close(sockets[0]);
+    close(sockets[1]);
+err_socketpair:
+    sigaction(SIGCHLD, &oldchldact, NULL);
+err_fork:
+    sigprocmask(SIG_SETMASK, &oldset, NULL);
+err_ptty:
+    close(parent_ptty);
+err_open:
+    return rc;
 }
