@@ -227,7 +227,7 @@ int logwrap(int argc, char* argv[], int *status) {
         dup2(child_ptty, 2);
         close(child_ptty);
 
-        child(argc - 1, &argv[1]);
+        child(argc, argv);
         fatal("This should never happen\n");
         return -1;
     } else {
@@ -268,7 +268,7 @@ int logwrap(int argc, char* argv[], int *status) {
         setgid(AID_LOG);
         setuid(AID_LOG);
 
-        rc = parent(argv[1], parent_ptty, sockets[1], pid, status);
+        rc = parent(argv[0], parent_ptty, sockets[1], pid, status);
     }
 
     close(sockets[0]);
