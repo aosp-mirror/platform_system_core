@@ -36,7 +36,6 @@ int adb_auth_get_userkey(unsigned char *data, size_t len);
 static inline int adb_auth_generate_token(void *token, size_t token_size) { return 0; }
 static inline int adb_auth_verify(void *token, void *sig, int siglen) { return 0; }
 static inline void adb_auth_confirm_key(unsigned char *data, size_t len, atransport *t) { }
-static inline void adb_auth_reload_keys(void) { }
 
 #else // !ADB_HOST
 
@@ -47,7 +46,6 @@ static inline int adb_auth_get_userkey(unsigned char *data, size_t len) { return
 int adb_auth_generate_token(void *token, size_t token_size);
 int adb_auth_verify(void *token, void *sig, int siglen);
 void adb_auth_confirm_key(unsigned char *data, size_t len, atransport *t);
-void adb_auth_reload_keys(void);
 
 #endif // ADB_HOST
 
