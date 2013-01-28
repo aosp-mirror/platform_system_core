@@ -262,12 +262,6 @@ int logwrap(int argc, char* argv[], int *status) {
 
         signal_fd_write = sockets[0];
 
-        // switch user and group to "log"
-        // this may fail if we are not root,
-        // but in that case switching user/group is unnecessary
-        setgid(AID_LOG);
-        setuid(AID_LOG);
-
         rc = parent(argv[0], parent_ptty, sockets[1], pid, status);
     }
 
