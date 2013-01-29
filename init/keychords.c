@@ -95,20 +95,19 @@ void keychord_init()
 void handle_keychord()
 {
     struct service *svc;
-    const char* debuggable;
-    const char* adb_enabled;
+    char adb_enabled[PROP_VALUE_MAX];
     int ret;
     __u16 id;
 
     // Only handle keychords if adb is enabled.
-    adb_enabled = property_get("init.svc.adbd");
+    property_get("init.svc.adbd", adb_enabled);
     ret = read(keychord_fd, &id, sizeof(id));
     if (ret != sizeof(id)) {
         ERROR("could not read keychord id\n");
         return;
     }
 
-    if ((adb_enabled && !strcmp(adb_enabled, "running"))) {
+    if (!strcmp(adb_enabled, "running")) {
         svc = service_find_by_keychord(id);
         if (svc) {
             INFO("starting service %s from keychord\n", svc->name);
