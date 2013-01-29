@@ -292,19 +292,9 @@ static int check_perms(const char *name, unsigned int uid, unsigned int gid, cha
     return 0;
 }
 
-const char* property_get(const char *name)
+int property_get(const char *name, char value[PROP_VALUE_MAX])
 {
-    prop_info *pi;
-
-    if(strlen(name) >= PROP_NAME_MAX) return 0;
-
-    pi = (prop_info*) __system_property_find(name);
-
-    if(pi != 0) {
-        return pi->value;
-    } else {
-        return 0;
-    }
+    return __system_property_get(name, value);
 }
 
 static void write_persistent_property(const char *name, const char *value)
@@ -591,8 +581,11 @@ int properties_inited(void)
 
 static void load_override_properties() {
 #ifdef ALLOW_LOCAL_PROP_OVERRIDE
-    const char *debuggable = property_get("ro.debuggable");
-    if (debuggable && (strcmp(debuggable, "1") == 0)) {
+    char debuggable[PROP_VALUE_MAX];
+    int ret;
+
+    ret = property_get("ro.debuggable", debuggable);
+    if (ret && (strcmp(debuggable, "1") == 0)) {
         load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE);
     }
 #endif /* ALLOW_LOCAL_PROP_OVERRIDE */
