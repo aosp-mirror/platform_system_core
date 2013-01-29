@@ -76,7 +76,7 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
 
     sigemptyset(&chldset);
     sigaddset(&chldset, SIGCHLD);
-    sigprocmask(SIG_UNBLOCK, &chldset, NULL);
+    pthread_sigmask(SIG_UNBLOCK, &chldset, NULL);
 
     while (!found_child) {
         if (poll(poll_fds, remote_hung ? 1 : 2, -1) < 0) {
@@ -215,7 +215,7 @@ int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit) {
     sigaddset(&blockset, SIGINT);
     sigaddset(&blockset, SIGQUIT);
     sigaddset(&blockset, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &blockset, &oldset);
+    pthread_sigmask(SIG_BLOCK, &blockset, &oldset);
 
     pid = fork();
     if (pid < 0) {
@@ -223,7 +223,7 @@ int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit) {
         rc = -1;
         goto err_fork;
     } else if (pid == 0) {
-        sigprocmask(SIG_SETMASK, &oldset, NULL);
+        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
         close(parent_ptty);
 
         child_ptty = open(child_devname, O_RDWR);
@@ -286,7 +286,7 @@ err_socketpair:
     }
     sigaction(SIGCHLD, &oldchldact, NULL);
 err_fork:
-    sigprocmask(SIG_SETMASK, &oldset, NULL);
+    pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 err_ptty:
     close(parent_ptty);
 err_open:
