@@ -182,13 +182,15 @@ void sigchld_handler(int sig) {
     write(signal_fd_write, &sig, 1);
 }
 
-int logwrap(int argc, char* argv[], int *status) {
+int logwrap(int argc, char* argv[], int *status, bool ignore_int_quit) {
     pid_t pid;
     int parent_ptty;
     int child_ptty;
     char *child_devname = NULL;
     struct sigaction chldact;
     struct sigaction oldchldact;
+    struct sigaction intact;
+    struct sigaction quitact;
     sigset_t blockset;
     sigset_t oldset;
     int sockets[2];
@@ -210,6 +212,8 @@ int logwrap(int argc, char* argv[], int *status) {
     }
 
     sigemptyset(&blockset);
+    sigaddset(&blockset, SIGINT);
+    sigaddset(&blockset, SIGQUIT);
     sigaddset(&blockset, SIGCHLD);
     sigprocmask(SIG_BLOCK, &blockset, &oldset);
 
@@ -234,6 +238,8 @@ int logwrap(int argc, char* argv[], int *status) {
 
         child(argc, argv);
     } else {
+        struct sigaction ignact;
+
         memset(&chldact, 0, sizeof(chldact));
         chldact.sa_handler = sigchld_handler;
         chldact.sa_flags = SA_NOCLDSTOP;
@@ -246,6 +252,13 @@ int logwrap(int argc, char* argv[], int *status) {
                 oldchldact.sa_sigaction != NULL)) {
             ALOG(LOG_WARN, "logwrapper", "logwrap replaced the SIGCHLD "
                     "handler and might cause interaction issues");
+        }
+
+        if (ignore_int_quit) {
+            memset(&ignact, 0, sizeof(ignact));
+            ignact.sa_handler = SIG_IGN;
+            sigaction(SIGINT, &ignact, &intact);
+            sigaction(SIGQUIT, &ignact, &quitact);
         }
 
         rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sockets);
@@ -267,6 +280,10 @@ int logwrap(int argc, char* argv[], int *status) {
     close(sockets[0]);
     close(sockets[1]);
 err_socketpair:
+    if (ignore_int_quit) {
+        sigaction(SIGINT, &intact, NULL);
+        sigaction(SIGQUIT, &quitact, NULL);
+    }
     sigaction(SIGCHLD, &oldchldact, NULL);
 err_fork:
     sigprocmask(SIG_SETMASK, &oldset, NULL);
