@@ -23,7 +23,6 @@ extern "C" {
 
 int zygote_run_oneshot(int sendStdio, int argc, const char **argv);
 int zygote_run(int argc, const char **argv);
-int zygote_run_wait(int argc, const char **argv, void (*post_run_func)(int));
 
 #ifdef __cplusplus
 }

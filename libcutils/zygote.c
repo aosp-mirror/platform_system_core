@@ -159,44 +159,6 @@ static int send_request(int fd, int sendStdio, int argc, const char **argv)
 #endif /* HAVE_ANDROID_OS */
 }
 
-int zygote_run_wait(int argc, const char **argv, void (*post_run_func)(int))
-{
-    int fd;
-    int pid;
-    int err;
-    const char *newargv[argc + 1];
-
-    fd = socket_local_client(ZYGOTE_SOCKET, 
-            ANDROID_SOCKET_NAMESPACE_RESERVED, AF_LOCAL);
-
-    if (fd < 0) {
-        return -1;
-    }
-
-    // The command socket is passed to the peer as close-on-exec
-    // and will close when the peer dies
-    newargv[0] = "--peer-wait";
-    memcpy(newargv + 1, argv, argc * sizeof(*argv)); 
-
-    pid = send_request(fd, 1, argc + 1, newargv);
-
-    if (pid > 0 && post_run_func != NULL) {
-        post_run_func(pid);
-    }
-
-    // Wait for socket to close
-    do {
-        int dummy;
-        err = read(fd, &dummy, sizeof(dummy));
-    } while ((err < 0 && errno == EINTR) || err != 0);
-
-    do {
-        err = close(fd);
-    } while (err < 0 && errno == EINTR);
-
-    return 0;
-}
-
 /**
  * Spawns a new dalvik instance via the Zygote process. The non-zygote
  * arguments are passed to com.android.internal.os.RuntimeInit(). The
