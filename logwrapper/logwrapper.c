@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
         usage();
     }
 
-    rc = logwrap(argc - 1, &argv[1], &status, true);
+    rc = logwrap(argc - 1, &argv[1], &status, true, false);
     if (!rc) {
         if (WIFEXITED(status))
             rc = WEXITSTATUS(status);
