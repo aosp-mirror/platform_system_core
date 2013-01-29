@@ -63,6 +63,7 @@
 #define AID_NFC           1027  /* nfc subsystem */
 #define AID_SDCARD_R      1028  /* external storage read access */
 #define AID_CLAT          1029  /* clat part of nat464 */
+#define AID_LOOP_RADIO    1030  /* loop radio devices */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -138,6 +139,7 @@ static const struct android_id_info android_ids[] = {
     { "net_admin", AID_NET_ADMIN, },
     { "net_bw_stats", AID_NET_BW_STATS, },
     { "net_bw_acct", AID_NET_BW_ACCT, },
+    { "loop_radio", AID_LOOP_RADIO, },
     { "misc",      AID_MISC, },
     { "nobody",    AID_NOBODY, },
     { "clat",      AID_CLAT, },
