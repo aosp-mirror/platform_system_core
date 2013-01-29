@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
         usage();
     }
 
-    rc = logwrap(argc - 1, &argv[1], &status, true, false);
+    rc = android_fork_execvp(argc - 1, &argv[1], &status, true, true);
     if (!rc) {
         if (WIFEXITED(status))
             rc = WEXITSTATUS(status);
