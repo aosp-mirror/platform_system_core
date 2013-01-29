@@ -851,6 +851,12 @@ retry:
     adb_mutex_unlock(&transport_lock);
 
     if (result) {
+        if (result->connection_state == CS_UNAUTHORIZED) {
+            if (error_out)
+                *error_out = "device unauthorized. Please check the confirmation dialog on your device.";
+            result = NULL;
+        }
+
          /* offline devices are ignored -- they are either being born or dying */
         if (result && result->connection_state == CS_OFFLINE) {
             if (error_out)
@@ -888,6 +894,7 @@ static const char *statename(atransport *t)
     case CS_RECOVERY: return "recovery";
     case CS_SIDELOAD: return "sideload";
     case CS_NOPERM: return "no permissions";
+    case CS_UNAUTHORIZED: return "unauthorized";
     default: return "unknown";
     }
 }
