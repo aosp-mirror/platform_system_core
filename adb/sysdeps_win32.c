@@ -781,7 +781,7 @@ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrle
 void  disable_tcp_nagle(int fd)
 {
     FH   fh = _fh_from_int(fd);
-    int  on;
+    int  on = 1;
 
     if ( !fh || fh->clazz != &_fh_socket_class )
         return;
