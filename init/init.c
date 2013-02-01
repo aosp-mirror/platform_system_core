@@ -198,28 +198,36 @@ void service_start(struct service *svc, const char *dynamic_args)
     }
 
     if (is_selinux_enabled() > 0) {
-        char *mycon = NULL, *fcon = NULL;
+        if (svc->seclabel) {
+            scon = strdup(svc->seclabel);
+            if (!scon) {
+                ERROR("Out of memory while starting '%s'\n", svc->name);
+                return;
+            }
+        } else {
+            char *mycon = NULL, *fcon = NULL;
 
-        INFO("computing context for service '%s'\n", svc->args[0]);
-        rc = getcon(&mycon);
-        if (rc < 0) {
-            ERROR("could not get context while starting '%s'\n", svc->name);
-            return;
-        }
+            INFO("computing context for service '%s'\n", svc->args[0]);
+            rc = getcon(&mycon);
+            if (rc < 0) {
+                ERROR("could not get context while starting '%s'\n", svc->name);
+                return;
+            }
 
-        rc = getfilecon(svc->args[0], &fcon);
-        if (rc < 0) {
-            ERROR("could not get context while starting '%s'\n", svc->name);
+            rc = getfilecon(svc->args[0], &fcon);
+            if (rc < 0) {
+                ERROR("could not get context while starting '%s'\n", svc->name);
+                freecon(mycon);
+                return;
+            }
+
+            rc = security_compute_create(mycon, fcon, string_to_security_class("process"), &scon);
             freecon(mycon);
-            return;
-        }
-
-        rc = security_compute_create(mycon, fcon, string_to_security_class("process"), &scon);
-        freecon(mycon);
-        freecon(fcon);
-        if (rc < 0) {
-            ERROR("could not get context while starting '%s'\n", svc->name);
-            return;
+            freecon(fcon);
+            if (rc < 0) {
+                ERROR("could not get context while starting '%s'\n", svc->name);
+                return;
+            }
         }
     }
 
