@@ -62,7 +62,6 @@
 #define AID_DRMRPC        1026  /* group for drm rpc */
 #define AID_NFC           1027  /* nfc subsystem */
 #define AID_SDCARD_R      1028  /* external storage read access */
-#define AID_CLAT          1029  /* clat part of nat464 */
 #define AID_LOOP_RADIO    1030  /* loop radio devices */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
@@ -142,7 +141,6 @@ static const struct android_id_info android_ids[] = {
     { "loop_radio", AID_LOOP_RADIO, },
     { "misc",      AID_MISC, },
     { "nobody",    AID_NOBODY, },
-    { "clat",      AID_CLAT, },
 };
 
 #define android_id_count \
@@ -237,10 +235,6 @@ static inline void fs_config(const char *path, int dir,
 {
     struct fs_path_config *pc;
     int plen;
-
-    if (path[0] == '/') {
-        path++;
-    }
 
     pc = dir ? android_dirs : android_files;
     plen = strlen(path);

@@ -23,11 +23,10 @@ class SocketClient;
 
 class FrameworkListener : public SocketListener {
 public:
-    static const int CMD_ARGS_MAX = 26;
+    static const int CMD_ARGS_MAX = 16;
 
     /* 1 out of errorRate will be dropped */
     int errorRate;
-
 private:
     int mCommandCount;
     bool mWithSeq;

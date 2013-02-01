@@ -35,7 +35,9 @@
 #include <corkscrew/demangle.h>
 #include <corkscrew/backtrace.h>
 
+#ifdef HAVE_SELINUX
 #include <selinux/android.h>
+#endif
 
 #include "machine.h"
 #include "tombstone.h"
@@ -84,7 +86,6 @@ static const char *get_signame(int sig)
 
 static const char *get_sigcode(int signo, int code)
 {
-    // Try the signal-specific codes...
     switch (signo) {
     case SIGILL:
         switch (code) {
@@ -123,31 +124,7 @@ static const char *get_sigcode(int signo, int code)
         case SEGV_ACCERR: return "SEGV_ACCERR";
         }
         break;
-    case SIGTRAP:
-        switch (code) {
-        case TRAP_BRKPT: return "TRAP_BRKPT";
-        case TRAP_TRACE: return "TRAP_TRACE";
-        }
-        break;
     }
-    // Then the other codes...
-    switch (code) {
-    case SI_USER:    return "SI_USER";
-#if defined(SI_KERNEL)
-    case SI_KERNEL:  return "SI_KERNEL";
-#endif
-    case SI_QUEUE:   return "SI_QUEUE";
-    case SI_TIMER:   return "SI_TIMER";
-    case SI_MESGQ:   return "SI_MESGQ";
-    case SI_ASYNCIO: return "SI_ASYNCIO";
-#if defined(SI_SIGIO)
-    case SI_SIGIO:   return "SI_SIGIO";
-#endif
-#if defined(SI_TKILL)
-    case SI_TKILL:   return "SI_TKILL";
-#endif
-    }
-    // Then give up...
     return "?";
 }
 
@@ -350,18 +327,6 @@ static void dump_backtrace_and_stack(const ptrace_context_t* context, log_t* log
     }
 }
 
-static void dump_map(log_t* log, map_info_t* m, const char* what) {
-    if (m != NULL) {
-        _LOG(log, false, "    %08x-%08x %c%c%c %s\n", m->start, m->end,
-             m->is_readable ? 'r' : '-',
-             m->is_writable ? 'w' : '-',
-             m->is_executable ? 'x' : '-',
-             m->name);
-    } else {
-        _LOG(log, false, "    (no %s)\n", what);
-    }
-}
-
 static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t tid) {
     siginfo_t si;
     memset(&si, 0, sizeof(si));
@@ -408,9 +373,21 @@ static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t 
      * Show "next" then "match" then "prev" so that the addresses appear in
      * ascending order (like /proc/pid/maps).
      */
-    dump_map(log, next, "map below");
-    dump_map(log, map, "map for address");
-    dump_map(log, prev, "map above");
+    if (next != NULL) {
+        _LOG(log, false, "    %08x-%08x %s\n", next->start, next->end, next->name);
+    } else {
+        _LOG(log, false, "    (no map below)\n");
+    }
+    if (map != NULL) {
+        _LOG(log, false, "    %08x-%08x %s\n", map->start, map->end, map->name);
+    } else {
+        _LOG(log, false, "    (no map for address)\n");
+    }
+    if (prev != NULL) {
+        _LOG(log, false, "    %08x-%08x %s\n", prev->start, prev->end, prev->name);
+    } else {
+        _LOG(log, false, "    (no map above)\n");
+    }
 }
 
 static void dump_thread(const ptrace_context_t* context, log_t* log, pid_t tid, bool at_fault,
@@ -439,8 +416,9 @@ static bool dump_sibling_thread_report(const ptrace_context_t* context,
     }
 
     bool detach_failed = false;
-    struct dirent* de;
-    while ((de = readdir(d)) != NULL) {
+    struct dirent debuf;
+    struct dirent *de;
+    while (!readdir_r(d, &debuf, &de) && de) {
         /* Ignore "." and ".." */
         if (!strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) {
             continue;
@@ -718,10 +696,12 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal,
     mkdir(TOMBSTONE_DIR, 0755);
     chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM);
 
+#ifdef HAVE_SELINUX
     if (selinux_android_restorecon(TOMBSTONE_DIR) == -1) {
         *detach_failed = false;
         return NULL;
     }
+#endif
 
     int fd;
     char* path = find_and_open_tombstone(&fd);

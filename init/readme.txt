@@ -88,13 +88,6 @@ group <groupname> [ <groupname> ]*
    supplemental groups of the process (via setgroups()).
    Currently defaults to root.  (??? probably should default to nobody)
 
-seclabel <securitycontext>
-  Change to securitycontext before exec'ing this service.
-  Primarily for use by services run from the rootfs, e.g. ueventd, adbd.
-  Services on the system partition can instead use policy-defined transitions
-  based on their file security context.
-  If not specified and no transition is defined in policy, defaults to the init context.
-
 oneshot
    Do not restart the service when it exits.
 
@@ -189,21 +182,6 @@ mount <type> <device> <dir> [ <mountoption> ]*
    device by name.
    <mountoption>s include "ro", "rw", "remount", "noatime", ...
 
-restorecon <path>
-   Restore the file named by <path> to the security context specified
-   in the file_contexts configuration.
-   Not required for directories created by the init.rc as these are
-   automatically labeled correctly by init.
-
-setcon <securitycontext>
-   Set the current process security context to the specified string.
-   This is typically only used from early-init to set the init context
-   before any other process is started.
-
-setenforce 0|1
-   Set the SELinux system-wide enforcing status.
-   0 is permissive (i.e. log but do not deny), 1 is enforcing.
-
 setkey
    TBD
 
@@ -212,10 +190,6 @@ setprop <name> <value>
 
 setrlimit <resource> <cur> <max>
    Set the rlimit for a resource.
-
-setsebool <name> <value>
-   Set SELinux boolean <name> to <value>.
-   <value> may be 1|true|on or 0|false|off
 
 start <service>
    Start a service running if it is not already running.

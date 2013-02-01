@@ -46,7 +46,6 @@ int install_app(transport_type transport, char* serial, int argc, char** argv);
 int uninstall_app(transport_type transport, char* serial, int argc, char** argv);
 
 static const char *gProductOutPath = NULL;
-extern int gListenAll;
 
 static char *product_file(const char *extra)
 {
@@ -81,7 +80,6 @@ void help()
 
     fprintf(stderr,
         "\n"
-        " -a                            - directs adb to listen on all interfaces for a connection\n"
         " -d                            - directs command to the only connected USB device\n"
         "                                 returns an error if more than one USB device is present.\n"
         " -e                            - directs command to the only running emulator.\n"
@@ -95,8 +93,6 @@ void help()
         "                                 If -p is not specified, the ANDROID_PRODUCT_OUT\n"
         "                                 environment variable is used, which must\n"
         "                                 be an absolute path.\n"
-        " -H                            - Name of adb server host (default: localhost)\n"
-        " -P                            - Port of adb server (default: 5037)\n"
         " devices [-l]                  - list all connected devices\n"
         "                                 ('-l' will also list device qualifiers)\n"
         " connect <host>[:<port>]       - connect to a device via TCP/IP\n"
@@ -116,9 +112,6 @@ void help()
         "  adb shell <command>          - run remote shell command\n"
         "  adb emu <command>            - run emulator console command\n"
         "  adb logcat [ <filter-spec> ] - View device log\n"
-        "  adb forward --list           - list all forward socket connections.\n"
-        "                                 the format is a list of lines with the following format:\n"
-        "                                    <serial> \" \" <local> \" \" <remote> \"\\n\"\n"
         "  adb forward <local> <remote> - forward socket connections\n"
         "                                 forward specs are one of: \n"
         "                                   tcp:<port>\n"
@@ -127,11 +120,6 @@ void help()
         "                                   localfilesystem:<unix domain socket name>\n"
         "                                   dev:<character device name>\n"
         "                                   jdwp:<process pid> (remote only)\n"
-        "  adb forward --no-rebind <local> <remote>\n"
-        "                               - same as 'adb forward <local> <remote>' but fails\n"
-        "                                 if <local> is already forwarded\n"
-        "  adb forward --remove <local> - remove a specific forward socket connection\n"
-        "  adb forward --remove-all     - remove all forward socket connections\n"
         "  adb jdwp                     - list PIDs of processes hosting a JDWP transport\n"
         "  adb install [-l] [-r] [-s] [--algo <algorithm name> --key <hex-encoded key> --iv <hex-encoded iv>] <file>\n"
         "                               - push this package file to the device and install it\n"
@@ -950,9 +938,9 @@ int adb_commandline(int argc, char **argv)
     int server_port = DEFAULT_ADB_PORT;
     if (server_port_str && strlen(server_port_str) > 0) {
         server_port = (int) strtol(server_port_str, NULL, 0);
-        if (server_port <= 0 || server_port > 65535) {
+        if (server_port <= 0) {
             fprintf(stderr,
-                    "adb: Env var ANDROID_ADB_SERVER_PORT must be a positive number less than 65535. Got \"%s\"\n",
+                    "adb: Env var ANDROID_ADB_SERVER_PORT must be a positive number. Got \"%s\"\n",
                     server_port_str);
             return usage();
         }
@@ -998,42 +986,6 @@ int adb_commandline(int argc, char **argv)
             ttype = kTransportUsb;
         } else if (!strcmp(argv[0],"-e")) {
             ttype = kTransportLocal;
-        } else if (!strcmp(argv[0],"-a")) {
-            gListenAll = 1;
-        } else if(!strncmp(argv[0], "-H", 2)) {
-            const char *hostname = NULL;
-            if (argv[0][2] == '\0') {
-                if (argc < 2) return usage();
-                hostname = argv[1];
-                argc--;
-                argv++;
-            } else {
-                hostname = argv[0] + 2;
-            }
-            adb_set_tcp_name(hostname);
-
-        } else if(!strncmp(argv[0], "-P", 2)) {
-            if (argv[0][2] == '\0') {
-                if (argc < 2) return usage();
-                server_port_str = argv[1];
-                argc--;
-                argv++;
-            } else {
-                server_port_str = argv[0] + 2;
-            }
-            if (strlen(server_port_str) > 0) {
-                server_port = (int) strtol(server_port_str, NULL, 0);
-                if (server_port <= 0 || server_port > 65535) {
-                    fprintf(stderr,
-                            "adb: port number must be a positive number less than 65536. Got \"%s\"\n",
-                            server_port_str);
-                    return usage();
-                }
-            } else {
-                fprintf(stderr,
-                "adb: port number must be a positive number less than 65536. Got empty string.\n");
-                return usage();
-            }
         } else {
                 /* out of recognized modifiers and flags */
             break;
@@ -1271,85 +1223,16 @@ top:
     }
 
     if(!strcmp(argv[0], "forward")) {
-        char host_prefix[64];
-        char remove = 0;
-        char remove_all = 0;
-        char list = 0;
-        char no_rebind = 0;
-
-        // Parse options here.
-        while (argc > 1 && argv[1][0] == '-') {
-            if (!strcmp(argv[1], "--list"))
-                list = 1;
-            else if (!strcmp(argv[1], "--remove"))
-                remove = 1;
-            else if (!strcmp(argv[1], "--remove-all"))
-                remove_all = 1;
-            else if (!strcmp(argv[1], "--no-rebind"))
-                no_rebind = 1;
-            else {
-                return usage();
-            }
-            argc--;
-            argv++;
-        }
-
-        // Ensure we can only use one option at a time.
-        if (list + remove + remove_all + no_rebind > 1) {
-            return usage();
-        }
-
-        // Determine the <host-prefix> for this command.
+        if(argc != 3) return usage();
         if (serial) {
-            snprintf(host_prefix, sizeof host_prefix, "host-serial:%s",
-                    serial);
+            snprintf(buf, sizeof buf, "host-serial:%s:forward:%s;%s",serial, argv[1], argv[2]);
         } else if (ttype == kTransportUsb) {
-            snprintf(host_prefix, sizeof host_prefix, "host-usb");
+            snprintf(buf, sizeof buf, "host-usb:forward:%s;%s", argv[1], argv[2]);
         } else if (ttype == kTransportLocal) {
-            snprintf(host_prefix, sizeof host_prefix, "host-local");
+            snprintf(buf, sizeof buf, "host-local:forward:%s;%s", argv[1], argv[2]);
         } else {
-            snprintf(host_prefix, sizeof host_prefix, "host");
+            snprintf(buf, sizeof buf, "host:forward:%s;%s", argv[1], argv[2]);
         }
-
-        // Implement forward --list
-        if (list) {
-            if (argc != 1)
-                return usage();
-            snprintf(buf, sizeof buf, "%s:list-forward", host_prefix);
-            char* forwards = adb_query(buf);
-            if (forwards == NULL) {
-                fprintf(stderr, "error: %s\n", adb_error());
-                return 1;
-            }
-            printf("%s", forwards);
-            free(forwards);
-            return 0;
-        }
-
-        // Implement forward --remove-all
-        else if (remove_all) {
-            if (argc != 1)
-                return usage();
-            snprintf(buf, sizeof buf, "%s:killforward-all", host_prefix);
-        }
-
-        // Implement forward --remove <local>
-        else if (remove) {
-            if (argc != 2)
-                return usage();
-            snprintf(buf, sizeof buf, "%s:killforward:%s", host_prefix, argv[1]);
-        }
-        // Or implement one of:
-        //    forward <local> <remote>
-        //    forward --no-rebind <local> <remote>
-        else
-        {
-          if (argc != 3)
-            return usage();
-          const char* command = no_rebind ? "forward:norebind:" : "forward";
-          snprintf(buf, sizeof buf, "%s:%s:%s;%s", host_prefix, command, argv[1], argv[2]);
-        }
-
         if(adb_command(buf)) {
             fprintf(stderr,"error: %s\n", adb_error());
             return 1;

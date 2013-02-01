@@ -30,9 +30,11 @@
 #include <sys/un.h>
 #include <linux/netlink.h>
 
+#ifdef HAVE_SELINUX
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 #include <selinux/android.h>
+#endif
 
 #include <private/android_filesystem_config.h>
 #include <sys/time.h>
@@ -51,7 +53,9 @@
 #define FIRMWARE_DIR2   "/vendor/firmware"
 #define FIRMWARE_DIR3   "/firmware/image"
 
+#ifdef HAVE_SELINUX
 extern struct selabel_handle *sehandle;
+#endif
 
 static int device_fd = -1;
 
@@ -189,15 +193,17 @@ static void make_device(const char *path,
     unsigned gid;
     mode_t mode;
     dev_t dev;
+#ifdef HAVE_SELINUX
     char *secontext = NULL;
+#endif
 
     mode = get_device_perm(path, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
-
+#ifdef HAVE_SELINUX
     if (sehandle) {
         selabel_lookup(sehandle, &secontext, path, mode);
         setfscreatecon(secontext);
     }
-
+#endif
     dev = makedev(major, minor);
     /* Temporarily change egid to avoid race condition setting the gid of the
      * device node. Unforunately changing the euid would prevent creation of
@@ -208,11 +214,12 @@ static void make_device(const char *path,
     mknod(path, mode, dev);
     chown(path, uid, -1);
     setegid(AID_ROOT);
-
+#ifdef HAVE_SELINUX
     if (secontext) {
         freecon(secontext);
         setfscreatecon(NULL);
     }
+#endif
 }
 
 static void add_platform_device(const char *name)
@@ -875,14 +882,14 @@ void device_init(void)
     suseconds_t t0, t1;
     struct stat info;
     int fd;
-
+#ifdef HAVE_SELINUX
     sehandle = NULL;
     if (is_selinux_enabled() > 0) {
         sehandle = selinux_android_file_context_handle();
     }
-
-    /* is 256K enough? udev uses 16MB! */
-    device_fd = uevent_open_socket(256*1024, true);
+#endif
+    /* is 64K enough? udev uses 16MB! */
+    device_fd = uevent_open_socket(64*1024, true);
     if(device_fd < 0)
         return;
 

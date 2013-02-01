@@ -14,6 +14,6 @@
  * limitations under the License.
  */
 
-#define ANDROID_ATOMIC_INLINE
+#define inline
 
 #include <cutils/atomic-inline.h>

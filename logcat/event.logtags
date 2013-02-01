@@ -150,8 +150,5 @@
 80305 bionic_event_resolver_wrong_server (uid|1)
 80310 bionic_event_resolver_wrong_query (uid|1)
 
-# libcore failure logging
-90100 cert_pin_failure (certs|4)
-
 # NOTE - the range 1000000-2000000 is reserved for partners and others who
 # want to define their own log tags without conflicting with the core platform.

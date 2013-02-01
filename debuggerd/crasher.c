@@ -20,7 +20,6 @@
 void crash1(void);
 void crashnostack(void);
 void maybeabort(void);
-int do_action(const char* arg);
 
 static void debuggerd_connect()
 {
@@ -75,46 +74,24 @@ int ctest()
     return 0;
 }
 
-static void* thread_callback(void* raw_arg)
-{
-    return (void*) do_action((const char*) raw_arg);
-}
-
-int do_action_on_thread(const char* arg)
-{
-    pthread_t t;
-    pthread_create(&t, NULL, thread_callback, (void*) arg);
-    void* result = NULL;
-    pthread_join(t, &result);
-    return (int) result;
-}
-
-int do_action(const char* arg)
-{
-    if(!strncmp(arg, "thread-", strlen("thread-"))) {
-        return do_action_on_thread(arg + strlen("thread-"));
-    }
-
-    if(!strcmp(arg,"nostack")) crashnostack();
-    if(!strcmp(arg,"ctest")) return ctest();
-    if(!strcmp(arg,"exit")) exit(1);
-    if(!strcmp(arg,"abort")) maybeabort();
-
-    pthread_t thr;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    pthread_create(&thr, &attr, test_thread, 0);
-    while(1) sleep(1);
-}
-
 int main(int argc, char **argv)
 {
-    fprintf(stderr,"crasher: built at " __TIME__ "!@\n");
+    pthread_t thr;
+    pthread_attr_t attr;
+
+    fprintf(stderr,"crasher: " __TIME__ "!@\n");
     fprintf(stderr,"crasher: init pid=%d tid=%d\n", getpid(), gettid());
 
     if(argc > 1) {
-        return do_action(argv[1]);
+        if(!strcmp(argv[1],"nostack")) crashnostack();
+        if(!strcmp(argv[1],"ctest")) return ctest();
+        if(!strcmp(argv[1],"exit")) exit(1);
+        if(!strcmp(argv[1],"abort")) maybeabort();
+        
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+        pthread_create(&thr, &attr, test_thread, 0);
+        while(1) sleep(1);
     } else {
         crash1();
 //        *((int*) 0) = 42;

@@ -799,11 +799,13 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
         }
         break;
     case K_seclabel:
+#ifdef HAVE_SELINUX
         if (nargs != 2) {
             parse_error(state, "seclabel option requires a label string\n");
         } else {
             svc->seclabel = args[1];
         }
+#endif
         break;
 
     default:

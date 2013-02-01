@@ -77,8 +77,12 @@ else
         abort_socket.c \
         fs.c \
         selector.c \
+        tztime.c \
         multiuser.c \
         zygote.c
+
+    commonHostSources += \
+        tzstrftime.c
 endif
 
 

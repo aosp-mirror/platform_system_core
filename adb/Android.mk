@@ -16,7 +16,7 @@ EXTRA_SRCS :=
 ifeq ($(HOST_OS),linux)
   USB_SRCS := usb_linux.c
   EXTRA_SRCS := get_my_path_linux.c
-  LOCAL_LDLIBS += -lrt -ldl -lpthread
+  LOCAL_LDLIBS += -lrt -lncurses -lpthread
 endif
 
 ifeq ($(HOST_OS),darwin)
@@ -139,7 +139,7 @@ include $(BUILD_EXECUTABLE)
 ifneq ($(SDK_ONLY),true)
 include $(CLEAR_VARS)
 
-LOCAL_LDLIBS := -lrt -ldl -lpthread
+LOCAL_LDLIBS := -lrt -lncurses -lpthread
 
 LOCAL_SRC_FILES := \
 	adb.c \

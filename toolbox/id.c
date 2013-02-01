@@ -4,7 +4,10 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <grp.h>
+
+#ifdef HAVE_SELINUX
 #include <selinux/selinux.h>
+#endif
 
 static void print_uid(uid_t uid)
 {
@@ -31,7 +34,9 @@ int id_main(int argc, char **argv)
 {
     gid_t list[64];
     int n, max;
+#ifdef HAVE_SELINUX
     char *secctx;
+#endif
 
     max = getgroups(64, list);
     if (max < 0) max = 0;
@@ -48,10 +53,12 @@ int id_main(int argc, char **argv)
             print_gid(list[n]);
         }
     }
+#ifdef HAVE_SELINUX
     if (getcon(&secctx) == 0) {
         printf(" context=%s", secctx);
         free(secctx);
     }
+#endif
     printf("\n");
     return 0;
 }

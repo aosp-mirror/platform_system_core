@@ -35,8 +35,10 @@
 #include <cutils/atomic.h>
 #include <elf.h>
 
+#if HAVE_DLADDR
 #define __USE_GNU // For dladdr(3) in glibc.
 #include <dlfcn.h>
+#endif
 
 #if defined(__BIONIC__)
 
@@ -254,6 +256,7 @@ void get_backtrace_symbols(const backtrace_frame_t* backtrace, size_t frames,
             if (mi->name[0]) {
                 symbol->map_name = strdup(mi->name);
             }
+#if HAVE_DLADDR
             Dl_info info;
             if (dladdr((const void*)frame->absolute_pc, &info) && info.dli_sname) {
                 symbol->relative_symbol_addr = (uintptr_t)info.dli_saddr
@@ -261,6 +264,7 @@ void get_backtrace_symbols(const backtrace_frame_t* backtrace, size_t frames,
                 symbol->symbol_name = strdup(info.dli_sname);
                 symbol->demangled_name = demangle_symbol_name(symbol->symbol_name);
             }
+#endif
         }
     }
     release_my_map_info_list(milist);
