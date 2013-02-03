@@ -21,6 +21,7 @@
 #include <utils/Log.h>
 
 #include <cutils/sched_policy.h>
+#include <cutils/properties.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,7 +31,6 @@
 #include <unistd.h>
 
 #if defined(HAVE_PTHREADS)
-# include <cutils/properties.h>
 # include <pthread.h>
 # include <sched.h>
 # include <sys/resource.h>
