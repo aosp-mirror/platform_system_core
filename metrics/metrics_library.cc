@@ -139,8 +139,7 @@ bool MetricsLibrary::AreMetricsEnabled() {
 
     if (!policy_provider_.get())
       policy_provider_.reset(new policy::PolicyProvider());
-    else
-      policy_provider_->Reload();
+    policy_provider_->Reload();
     // We initialize with the default value which is false and will be preserved
     // if the policy is not set.
     bool enabled = false;
