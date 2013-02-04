@@ -17,9 +17,6 @@
 #ifndef __CUTILS_PROPERTIES_H
 #define __CUTILS_PROPERTIES_H
 
-#include <sys/cdefs.h>
-#include <stddef.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -65,23 +62,6 @@ enum {
 };
 #endif /*HAVE_SYSTEM_PROPERTY_SERVER*/
 
-#ifdef __BIONIC_FORTIFY_INLINE
-
-extern int __property_get_real(const char *, char *, const char *)
-    __asm__(__USER_LABEL_PREFIX__ "property_get");
-extern void __property_get_too_small_error()
-    __attribute__((__error__("property_get() called with too small of a buffer")));
-
-__BIONIC_FORTIFY_INLINE
-int property_get(const char *key, char *value, const char *default_value) {
-    size_t bos = __builtin_object_size(value, 0);
-    if (bos < PROPERTY_VALUE_MAX) {
-        __property_get_too_small_error();
-    }
-    return __property_get_real(key, value, default_value);
-}
-
-#endif /* __BIONIC_FORTIFY_INLINE */
 
 #ifdef __cplusplus
 }
