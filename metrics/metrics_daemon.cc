@@ -806,16 +806,16 @@ bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
     { "InactiveAnon", "Inactive(anon)" },
     { "ActiveFile" , "Active(file)" },
     { "InactiveFile", "Inactive(file)" },
-    { "Unevictable", "Unevictable", 1 },
+    { "Unevictable", "Unevictable", kMeminfoScaleLog },
     // { "Mlocked", "Mlocked" },
     // { "SwapTotal", "SwapTotal" },
-    // { "SwapFree", "SwapFree" },
+    { "SwapFree", "SwapFree", kMeminfoScaleLogLarge },
     // { "Dirty", "Dirty" },
     // { "Writeback", "Writeback" },
     { "AnonPages", "AnonPages" },
     { "Mapped", "Mapped" },
-    { "Shmem", "Shmem", 1 },
-    { "Slab", "Slab", 1 },
+    { "Shmem", "Shmem", kMeminfoScaleLog },
+    { "Slab", "Slab", kMeminfoScaleLog },
     // { "SReclaimable", "SReclaimable" },
     // { "SUnreclaim", "SUnreclaim" },
   };
@@ -833,13 +833,21 @@ bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
   // Send all fields retrieved, except total memory.
   for (unsigned int i = 1; i < fields.size(); i++) {
     string metrics_name = StringPrintf("Platform.Meminfo%s", fields[i].name);
-    if (fields[i].log_scale) {
-      // report value in kbytes, log scale, 4Gb max
-      SendMetric(metrics_name, fields[i].value, 1, 4 * 1000 * 1000, 100);
-    } else {
-      // report value as percent of total memory
-      int percent = fields[i].value * 100 / total_memory;
-      SendLinearMetric(metrics_name, percent, 100, 101);
+    int percent;
+    switch (fields[i].scale) {
+      case kMeminfoScalePercent:
+        // report value as percent of total memory
+        percent = fields[i].value * 100 / total_memory;
+        SendLinearMetric(metrics_name, percent, 100, 101);
+        break;
+      case kMeminfoScaleLog:
+        // report value in kbytes, log scale, 4Gb max
+        SendMetric(metrics_name, fields[i].value, 1, 4 * 1000 * 1000, 100);
+        break;
+      case kMeminfoScaleLogLarge:
+        // report value in kbytes, log scale, 8Gb max
+        SendMetric(metrics_name, fields[i].value, 1, 8 * 1000 * 1000, 100);
+        break;
     }
   }
   return true;

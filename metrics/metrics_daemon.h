@@ -97,12 +97,22 @@ class MetricsDaemon {
     int seconds_;
   };
 
+  // Type of scale to use for meminfo histograms.  For most of them we use
+  // percent of total RAM, but for some we use absolute numbers, usually in
+  // megabytes, on a log scale from 0 to 4000, and 0 to 8000 for compressed
+  // swap (since it can be larger than total RAM).
+  enum MeminfoScaleType {
+    kMeminfoScalePercent = 0,
+    kMeminfoScaleLog,
+    kMeminfoScaleLogLarge,
+  };
+
   // Record for retrieving and reporting values from /proc/meminfo.
   struct MeminfoRecord {
-    const char* name;      // print name
-    const char* match;     // string to match in output of /proc/meminfo
-    int log_scale;         // report with log scale instead of linear percent
-    int value;             // value from /proc/meminfo
+    const char* name;        // print name
+    const char* match;       // string to match in output of /proc/meminfo
+    MeminfoScaleType scale;  // histogram scale selector
+    int value;               // value from /proc/meminfo
   };
 
   typedef std::map<std::string, chromeos_metrics::FrequencyCounter*>
