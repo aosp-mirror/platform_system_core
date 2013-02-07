@@ -155,12 +155,17 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
         if (WEXITSTATUS(status))
             ALOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", btag,
                     WEXITSTATUS(status));
-    } else if (WIFSIGNALED(status)) {
-        ALOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", btag,
-                WTERMSIG(status));
-    } else if (WIFSTOPPED(status)) {
-        ALOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", btag,
-                WSTOPSIG(status));
+        if (chld_sts == NULL)
+            rc = WEXITSTATUS(status);
+    } else {
+        if (chld_sts == NULL)
+            rc = -ECHILD;
+        if (WIFSIGNALED(status))
+            ALOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", btag,
+                    WTERMSIG(status));
+        else if (WIFSTOPPED(status))
+            ALOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", btag,
+                    WSTOPSIG(status));
     }
     if (chld_sts != NULL)
         *chld_sts = status;

@@ -37,7 +37,8 @@ __BEGIN_DECLS
  *           arguments as separate strings. argv does not need to be
  *           NULL-terminated
  *   status: the equivalent child status as populated by wait(status). This
- *           value is only valid when logwrap successfully completes
+ *           value is only valid when logwrap successfully completes. If NULL
+ *           the return value of the child will be the function's return value.
  *   ignore_int_quit: set to true if you want to completely ignore SIGINT and
  *           SIGQUIT while logwrap is running. This may force the end-user to
  *           send a signal twice to signal the caller (once for the child, and
@@ -47,6 +48,8 @@ __BEGIN_DECLS
  * Return value:
  *   0 when logwrap successfully run the child process and captured its status
  *   -1 when an internal error occurred
+ *   -ECHILD if status is NULL and the child didn't exit properly
+ *   the return value of the child if it exited properly and status is NULL
  *
  */
 int android_fork_execvp(int argc, char* argv[], int *status, bool ignore_int_quit,
