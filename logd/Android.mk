@@ -19,7 +19,9 @@ LOCAL_SRC_FILES := \
     LogBufferElement.cpp \
     LogTimes.cpp \
     LogStatistics.cpp \
-    LogWhiteBlackList.cpp
+    LogWhiteBlackList.cpp \
+    libaudit.c \
+    LogAudit.cpp
 
 LOCAL_SHARED_LIBRARIES := \
     libsysutils \
