@@ -28,6 +28,8 @@
 #include <limits.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include <private/android_filesystem_config.h>
 
@@ -1305,6 +1307,7 @@ int main(int argc, char **argv)
     gid_t gid = 0;
     int num_threads = DEFAULT_NUM_THREADS;
     int i;
+    struct rlimit rlim;
 
     for (i = 1; i < argc; i++) {
         char* arg = argv[i];
@@ -1351,6 +1354,12 @@ int main(int argc, char **argv)
     if (num_threads < 1) {
         ERROR("number of threads must be at least 1\n");
         return usage();
+    }
+
+    rlim.rlim_cur = 8192;
+    rlim.rlim_max = 8192;
+    if (setrlimit(RLIMIT_NOFILE, &rlim)) {
+        ERROR("Error setting RLIMIT_NOFILE, errno = %d\n", errno);
     }
 
     res = run(source_path, dest_path, uid, gid, num_threads);
