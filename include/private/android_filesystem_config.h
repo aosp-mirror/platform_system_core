@@ -27,6 +27,12 @@
 #include <sys/types.h>
 #include <stdint.h>
 
+#ifdef HAVE_ANDROID_OS
+#include <linux/capability.h>
+#else
+#include "android_filesystem_capability.h"
+#endif
+
 /* This is the master Users and Groups config for the platform.
 ** DO NOT EVER RENUMBER.
 */
@@ -206,21 +212,24 @@ static const struct fs_path_config android_files[] = {
     { 00644, AID_MEDIA_RW,  AID_MEDIA_RW,  0, "data/media/*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-private/*" },
     { 00644, AID_APP,       AID_APP,       0, "data/data/*" },
-        /* the following two files are INTENTIONALLY set-gid and not set-uid.
-         * Do not change. */
-    { 02755, AID_ROOT,      AID_NET_RAW,   0, "system/bin/ping" },
+    { 00755, AID_ROOT,      AID_ROOT,      0, "system/bin/ping" },
+
+    /* the following file is INTENTIONALLY set-gid and not set-uid.
+     * Do not change. */
     { 02750, AID_ROOT,      AID_INET,      0, "system/bin/netcfg" },
-    	/* the following five files are INTENTIONALLY set-uid, but they
-	 * are NOT included on user builds. */
+
+    /* the following five files are INTENTIONALLY set-uid, but they
+     * are NOT included on user builds. */
     { 06755, AID_ROOT,      AID_ROOT,      0, "system/xbin/su" },
     { 06755, AID_ROOT,      AID_ROOT,      0, "system/xbin/librank" },
     { 06755, AID_ROOT,      AID_ROOT,      0, "system/xbin/procrank" },
     { 06755, AID_ROOT,      AID_ROOT,      0, "system/xbin/procmem" },
     { 06755, AID_ROOT,      AID_ROOT,      0, "system/xbin/tcpdump" },
     { 04770, AID_ROOT,      AID_RADIO,     0, "system/bin/pppd-ril" },
-		/* the following file is INTENTIONALLY set-uid, and IS included
-		 * in user builds. */
-    { 06750, AID_ROOT,      AID_SHELL,     0, "system/bin/run-as" },
+
+    /* the following file has enhanced capabilities and IS included in user builds. */
+    { 00750, AID_ROOT,      AID_SHELL,     (1 << CAP_SETUID) | (1 << CAP_SETGID), "system/bin/run-as" },
+
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib/valgrind/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/xbin/*" },
