@@ -106,12 +106,7 @@ enum {
      * - a horizontal stride multiple of 16 pixels
      * - a vertical stride equal to the height
      *
-     *   y_size = stride * height
-     *   c_stride = ALIGN(stride/2, 16)
-     *   c_size = c_stride * height/2
-     *   size = y_size + c_size * 2
-     *   cr_offset = y_size
-     *   cb_offset = y_size + c_size
+     *   size = stride * height
      *
      */
     HAL_PIXEL_FORMAT_Y8     = 0x20203859,
@@ -135,12 +130,7 @@ enum {
      * - a vertical stride equal to the height
      * - strides are specified in pixels, not in bytes
      *
-     *   y_size = stride * height
-     *   c_stride = ALIGN(stride/2, 16)
-     *   c_size = c_stride * height/2
-     *   size = y_size + c_size * 2
-     *   cr_offset = y_size
-     *   cb_offset = y_size + c_size
+     *   size = stride * height * 2
      *
      */
     HAL_PIXEL_FORMAT_Y16    = 0x20363159,
