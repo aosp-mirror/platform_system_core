@@ -87,6 +87,64 @@ enum {
      */
     HAL_PIXEL_FORMAT_YV12   = 0x32315659, // YCrCb 4:2:0 Planar
 
+
+    /*
+     * Android Y8 format:
+     *
+     * This format is exposed outside of the HAL to the framework.
+     * The expected gralloc usage flags are SW_* and HW_CAMERA_*,
+     * and no other HW_ flags will be used.
+     *
+     * Y8 is a YUV planar format comprised of a WxH Y plane,
+     * with each pixel being represented by 8 bits.
+     *
+     * It is equivalent to just the Y plane from YV12.
+     *
+     * This format assumes
+     * - an even width
+     * - an even height
+     * - a horizontal stride multiple of 16 pixels
+     * - a vertical stride equal to the height
+     *
+     *   y_size = stride * height
+     *   c_stride = ALIGN(stride/2, 16)
+     *   c_size = c_stride * height/2
+     *   size = y_size + c_size * 2
+     *   cr_offset = y_size
+     *   cb_offset = y_size + c_size
+     *
+     */
+    HAL_PIXEL_FORMAT_Y8     = 0x20203859,
+
+    /*
+     * Android Y16 format:
+     *
+     * This format is exposed outside of the HAL to the framework.
+     * The expected gralloc usage flags are SW_* and HW_CAMERA_*,
+     * and no other HW_ flags will be used.
+     *
+     * Y16 is a YUV planar format comprised of a WxH Y plane,
+     * with each pixel being represented by 16 bits.
+     *
+     * It is just like Y8, but has double the bits per pixel (little endian).
+     *
+     * This format assumes
+     * - an even width
+     * - an even height
+     * - a horizontal stride multiple of 16 pixels
+     * - a vertical stride equal to the height
+     * - strides are specified in pixels, not in bytes
+     *
+     *   y_size = stride * height
+     *   c_stride = ALIGN(stride/2, 16)
+     *   c_size = c_stride * height/2
+     *   size = y_size + c_size * 2
+     *   cr_offset = y_size
+     *   cb_offset = y_size + c_size
+     *
+     */
+    HAL_PIXEL_FORMAT_Y16    = 0x20363159,
+
     /*
      * Android RAW sensor format:
      *
