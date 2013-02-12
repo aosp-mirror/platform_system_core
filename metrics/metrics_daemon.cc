@@ -806,16 +806,16 @@ bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
     { "InactiveAnon", "Inactive(anon)" },
     { "ActiveFile" , "Active(file)" },
     { "InactiveFile", "Inactive(file)" },
-    { "Unevictable", "Unevictable", kMeminfoScaleLog },
+    { "Unevictable", "Unevictable", kMeminfoOp_HistLog },
     // { "Mlocked", "Mlocked" },
-    // { "SwapTotal", "SwapTotal" },
-    { "SwapFree", "SwapFree", kMeminfoScaleLogLarge },
+    { "SwapTotal", "SwapTotal", kMeminfoOp_SwapTotal },
+    { "SwapFree", "SwapFree", kMeminfoOp_SwapFree },
     // { "Dirty", "Dirty" },
     // { "Writeback", "Writeback" },
     { "AnonPages", "AnonPages" },
     { "Mapped", "Mapped" },
-    { "Shmem", "Shmem", kMeminfoScaleLog },
-    { "Slab", "Slab", kMeminfoScaleLog },
+    { "Shmem", "Shmem", kMeminfoOp_HistLog },
+    { "Slab", "Slab", kMeminfoOp_HistLog },
     // { "SReclaimable", "SReclaimable" },
     // { "SUnreclaim", "SUnreclaim" },
   };
@@ -830,25 +830,35 @@ bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
     LOG(WARNING) << "borked meminfo parser";
     return false;
   }
+  int swap_total = 0;
+  int swap_free = 0;
   // Send all fields retrieved, except total memory.
   for (unsigned int i = 1; i < fields.size(); i++) {
     string metrics_name = StringPrintf("Platform.Meminfo%s", fields[i].name);
     int percent;
-    switch (fields[i].scale) {
-      case kMeminfoScalePercent:
+    switch (fields[i].op) {
+      case kMeminfoOp_HistPercent:
         // report value as percent of total memory
         percent = fields[i].value * 100 / total_memory;
         SendLinearMetric(metrics_name, percent, 100, 101);
         break;
-      case kMeminfoScaleLog:
+      case kMeminfoOp_HistLog:
         // report value in kbytes, log scale, 4Gb max
         SendMetric(metrics_name, fields[i].value, 1, 4 * 1000 * 1000, 100);
         break;
-      case kMeminfoScaleLogLarge:
-        // report value in kbytes, log scale, 8Gb max
-        SendMetric(metrics_name, fields[i].value, 1, 8 * 1000 * 1000, 100);
+      case kMeminfoOp_SwapTotal:
+        swap_total = fields[i].value;
+      case kMeminfoOp_SwapFree:
+        swap_free = fields[i].value;
         break;
     }
+  }
+  if (swap_total > 0) {
+    int swap_used = swap_total - swap_free;
+    int swap_used_percent = swap_used * 100 / swap_total;
+    SendMetric("Platform.MeminfoSwapUsed", swap_used, 1, 8 * 1000 * 1000, 100);
+    SendLinearMetric("Platform.MeminfoSwapUsedPercent", swap_used_percent,
+                     100, 101);
   }
   return true;
 }

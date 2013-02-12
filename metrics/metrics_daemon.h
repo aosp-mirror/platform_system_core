@@ -101,17 +101,18 @@ class MetricsDaemon {
   // percent of total RAM, but for some we use absolute numbers, usually in
   // megabytes, on a log scale from 0 to 4000, and 0 to 8000 for compressed
   // swap (since it can be larger than total RAM).
-  enum MeminfoScaleType {
-    kMeminfoScalePercent = 0,
-    kMeminfoScaleLog,
-    kMeminfoScaleLogLarge,
+  enum MeminfoOp {
+    kMeminfoOp_HistPercent = 0,
+    kMeminfoOp_HistLog,
+    kMeminfoOp_SwapTotal,
+    kMeminfoOp_SwapFree,
   };
 
   // Record for retrieving and reporting values from /proc/meminfo.
   struct MeminfoRecord {
     const char* name;        // print name
     const char* match;       // string to match in output of /proc/meminfo
-    MeminfoScaleType scale;  // histogram scale selector
+    MeminfoOp op;            // histogram scale selector, or other operator
     int value;               // value from /proc/meminfo
   };
 
