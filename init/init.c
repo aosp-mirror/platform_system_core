@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/personality.h>
 
 #include <selinux/selinux.h>
 #include <selinux/label.h>
@@ -241,6 +242,21 @@ void service_start(struct service *svc, const char *dynamic_args)
         int fd, sz;
 
         umask(077);
+#ifdef __arm__
+        /*
+         * b/7188322 - Temporarily revert to the compat memory layout
+         * to avoid breaking third party apps.
+         *
+         * THIS WILL GO AWAY IN A FUTURE ANDROID RELEASE.
+         *
+         * http://git.kernel.org/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commitdiff;h=7dbaa466
+         * changes the kernel mapping from bottom up to top-down.
+         * This breaks some programs which improperly embed
+         * an out of date copy of Android's linker.
+         */
+        int current = personality(0xffffFFFF);
+        personality(current | ADDR_COMPAT_LAYOUT);
+#endif
         if (properties_inited()) {
             get_property_workspace(&fd, &sz);
             sprintf(tmp, "%d,%d", dup(fd), sz);
