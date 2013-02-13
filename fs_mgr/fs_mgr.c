@@ -72,6 +72,9 @@ static struct flag_list fs_mgr_flags[] = {
     { "wait",        MF_WAIT },
     { "check",       MF_CHECK },
     { "encryptable=",MF_CRYPT },
+    { "nonremovable",MF_NONREMOVABLE },
+    { "voldmanaged=",MF_VOLDMANAGED},
+    { "length=",     MF_LENGTH },
     { "defaults",    0 },
     { 0,             0 },
 };
@@ -106,7 +109,8 @@ static int wait_for_file(const char *filename, int timeout)
     return ret;
 }
 
-static int parse_flags(char *flags, struct flag_list *fl, char **key_loc,
+static int parse_flags(char *flags, struct flag_list *fl,
+                       char **key_loc, long long *part_length, char **label, int *partnum,
                        char *fs_options, int fs_options_len)
 {
     int f = 0;
@@ -119,6 +123,18 @@ static int parse_flags(char *flags, struct flag_list *fl, char **key_loc,
     if (key_loc) {
         *key_loc = NULL;
     }
+    /* initialize part_length to 0, if we find an MF_LENGTH flag,
+     * then we'll set part_length to the proper value */
+    if (part_length) {
+        *part_length = 0;
+    }
+    if (partnum) {
+        *partnum = -1;
+    }
+    if (label) {
+        *label = NULL;
+    }
+
     /* initialize fs_options to the null string */
     if (fs_options && (fs_options_len > 0)) {
         fs_options[0] = '\0';
@@ -137,6 +153,36 @@ static int parse_flags(char *flags, struct flag_list *fl, char **key_loc,
                      * location of the keys.  Get it and return it.
                      */
                     *key_loc = strdup(strchr(p, '=') + 1);
+                } else if ((fl[i].flag == MF_LENGTH) && part_length) {
+                    /* The length flag is followed by an = and the
+                     * size of the partition.  Get it and return it.
+                     */
+                    *part_length = strtoll(strchr(p, '=') + 1, NULL, 0);
+                } else if ((fl[i].flag == MF_VOLDMANAGED) && label && partnum) {
+                    /* The voldmanaged flag is followed by an = and the
+                     * label, a colon and the partition number or the
+                     * word "auto", e.g.
+                     *   voldmanaged=sdcard:3
+                     * Get and return them.
+                     */
+                    char *label_start;
+                    char *label_end;
+                    char *part_start;
+
+                    label_start = strchr(p, '=') + 1;
+                    label_end = strchr(p, ':');
+                    if (label_end) {
+                        *label = strndup(label_start,
+                                         (int) (label_end - label_start));
+                        part_start = strchr(p, ':') + 1;
+                        if (!strcmp(part_start, "auto")) {
+                            *partnum = -1;
+                        } else {
+                            *partnum = strtol(part_start, NULL, 0);
+                        }
+                    } else {
+                        ERROR("Warning: voldmanaged= flag malformed\n");
+                    }
                 }
                 break;
             }
@@ -227,7 +273,7 @@ static char *fs_getline(char *buf, int size, FILE *file)
     }
 }
 
-static struct fstab_rec *read_fstab(char *fstab_path)
+struct fstab *fs_mgr_read_fstab(const char *fstab_path)
 {
     FILE *fstab_file;
     int cnt, entries;
@@ -235,8 +281,12 @@ static struct fstab_rec *read_fstab(char *fstab_path)
     char line[256];
     const char *delim = " \t";
     char *save_ptr, *p;
-    struct fstab_rec *fstab;
+    struct fstab *fstab;
+    struct fstab_rec *recs;
     char *key_loc;
+    long long part_length;
+    char *label;
+    int partnum;
 #define FS_OPTIONS_LEN 1024
     char tmp_fs_options[FS_OPTIONS_LEN];
 
@@ -269,7 +319,11 @@ static struct fstab_rec *read_fstab(char *fstab_path)
         return 0;
     }
 
-    fstab = calloc(entries + 1, sizeof(struct fstab_rec));
+    /* Allocate and init the fstab structure */
+    fstab = calloc(1, sizeof(struct fstab));
+    fstab->num_entries = entries;
+    fstab->fstab_filename = strdup(fstab_path);
+    fstab->recs = calloc(fstab->num_entries, sizeof(struct fstab_rec));
 
     fseek(fstab_file, 0, SEEK_SET);
 
@@ -303,41 +357,48 @@ static struct fstab_rec *read_fstab(char *fstab_path)
             ERROR("Error parsing mount source\n");
             return 0;
         }
-        fstab[cnt].blk_dev = strdup(p);
+        fstab->recs[cnt].blk_device = strdup(p);
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
-            ERROR("Error parsing mnt_point\n");
+            ERROR("Error parsing mount_point\n");
             return 0;
         }
-        fstab[cnt].mnt_point = strdup(p);
+        fstab->recs[cnt].mount_point = strdup(p);
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             ERROR("Error parsing fs_type\n");
             return 0;
         }
-        fstab[cnt].type = strdup(p);
+        fstab->recs[cnt].fs_type = strdup(p);
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             ERROR("Error parsing mount_flags\n");
             return 0;
         }
         tmp_fs_options[0] = '\0';
-        fstab[cnt].flags = parse_flags(p, mount_flags, 0, tmp_fs_options, FS_OPTIONS_LEN);
+        fstab->recs[cnt].flags = parse_flags(p, mount_flags,
+                                       NULL, NULL, NULL, NULL,
+                                       tmp_fs_options, FS_OPTIONS_LEN);
 
         /* fs_options are optional */
         if (tmp_fs_options[0]) {
-            fstab[cnt].fs_options = strdup(tmp_fs_options);
+            fstab->recs[cnt].fs_options = strdup(tmp_fs_options);
         } else {
-            fstab[cnt].fs_options = NULL;
+            fstab->recs[cnt].fs_options = NULL;
         }
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             ERROR("Error parsing fs_mgr_options\n");
             return 0;
         }
-        fstab[cnt].fs_mgr_flags = parse_flags(p, fs_mgr_flags, &key_loc, 0, 0);
-        fstab[cnt].key_loc = key_loc;
-
+        fstab->recs[cnt].fs_mgr_flags = parse_flags(p, fs_mgr_flags,
+                                              &key_loc, &part_length,
+                                              &label, &partnum,
+                                              NULL, 0);
+        fstab->recs[cnt].key_loc = key_loc;
+        fstab->recs[cnt].length = part_length;
+        fstab->recs[cnt].label = label;
+        fstab->recs[cnt].partnum = partnum;
         cnt++;
     }
     fclose(fstab_file);
@@ -345,26 +406,32 @@ static struct fstab_rec *read_fstab(char *fstab_path)
     return fstab;
 }
 
-static void free_fstab(struct fstab_rec *fstab)
+void fs_mgr_free_fstab(struct fstab *fstab)
 {
-    int i = 0;
+    int i;
 
-    while (fstab[i].blk_dev) {
+    for (i = 0; i < fstab->num_entries; i++) {
         /* Free the pointers return by strdup(3) */
-        free(fstab[i].blk_dev);
-        free(fstab[i].mnt_point);
-        free(fstab[i].type);
-        free(fstab[i].fs_options);
-        free(fstab[i].key_loc);
-
+        free(fstab->recs[i].blk_device);
+        free(fstab->recs[i].mount_point);
+        free(fstab->recs[i].fs_type);
+        free(fstab->recs[i].fs_options);
+        free(fstab->recs[i].key_loc);
+        free(fstab->recs[i].label);
         i++;
     }
 
-    /* Free the actual fstab array created by calloc(3) */
+    /* Free the fstab_recs array created by calloc(3) */
+    free(fstab->recs);
+
+    /* Free the fstab filename */
+    free(fstab->fstab_filename);
+
+    /* Free fstab */
     free(fstab);
 }
 
-static void check_fs(char *blk_dev, char *type, char *target)
+static void check_fs(char *blk_device, char *fs_type, char *target)
 {
     pid_t pid;
     int status;
@@ -373,7 +440,7 @@ static void check_fs(char *blk_dev, char *type, char *target)
     char *tmpmnt_opts = "nomblk_io_submit,errors=remount-ro";
 
     /* Check for the types of filesystems we know how to check */
-    if (!strcmp(type, "ext2") || !strcmp(type, "ext3") || !strcmp(type, "ext4")) {
+    if (!strcmp(fs_type, "ext2") || !strcmp(fs_type, "ext3") || !strcmp(fs_type, "ext4")) {
         /*
          * First try to mount and unmount the filesystem.  We do this because
          * the kernel is more efficient than e2fsck in running the journal and
@@ -387,19 +454,19 @@ static void check_fs(char *blk_dev, char *type, char *target)
          * filesytsem due to an error, e2fsck is still run to do a full check
          * fix the filesystem.
          */
-        ret = mount(blk_dev, target, type, tmpmnt_flags, tmpmnt_opts);
-        if (! ret) {
+        ret = mount(blk_device, target, fs_type, tmpmnt_flags, tmpmnt_opts);
+        if (!ret) {
             umount(target);
         }
 
-        INFO("Running %s on %s\n", E2FSCK_BIN, blk_dev);
+        INFO("Running %s on %s\n", E2FSCK_BIN, blk_device);
         pid = fork();
         if (pid > 0) {
             /* Parent, wait for the child to return */
             waitpid(pid, &status, 0);
         } else if (pid == 0) {
             /* child, run checker */
-            execlp(E2FSCK_BIN, E2FSCK_BIN, "-y", blk_dev, (char *)NULL);
+            execlp(E2FSCK_BIN, E2FSCK_BIN, "-y", blk_device, (char *)NULL);
 
             /* Only gets here on error */
             ERROR("Cannot run fs_mgr binary %s\n", E2FSCK_BIN);
@@ -443,49 +510,62 @@ static int fs_match(char *in1, char *in2)
     return ret;
 }
 
-int fs_mgr_mount_all(char *fstab_file)
+int fs_mgr_mount_all(struct fstab *fstab)
 {
     int i = 0;
     int encrypted = 0;
     int ret = -1;
     int mret;
-    struct fstab_rec *fstab = 0;
 
-    if (!(fstab = read_fstab(fstab_file))) {
+    if (!fstab) {
         return ret;
     }
 
-    for (i = 0; fstab[i].blk_dev; i++) {
-        if (fstab[i].fs_mgr_flags & MF_WAIT) {
-            wait_for_file(fstab[i].blk_dev, WAIT_TIMEOUT);
+    for (i = 0; i < fstab->num_entries; i++) {
+        /* Don't mount entries that are managed by vold */
+        if (fstab->recs[i].fs_mgr_flags & MF_VOLDMANAGED) {
+            continue;
         }
 
-        if (fstab[i].fs_mgr_flags & MF_CHECK) {
-            check_fs(fstab[i].blk_dev, fstab[i].type, fstab[i].mnt_point);
+        /* Skip raw partition entries such as boot, recovery, etc */
+        if (!strcmp(fstab->recs[i].fs_type, "emmc") ||
+            !strcmp(fstab->recs[i].fs_type, "mtd")) {
+            continue;
         }
 
-        mret = mount(fstab[i].blk_dev, fstab[i].mnt_point, fstab[i].type,
-                     fstab[i].flags, fstab[i].fs_options);
+        if (fstab->recs[i].fs_mgr_flags & MF_WAIT) {
+            wait_for_file(fstab->recs[i].blk_device, WAIT_TIMEOUT);
+        }
+
+        if (fstab->recs[i].fs_mgr_flags & MF_CHECK) {
+            check_fs(fstab->recs[i].blk_device, fstab->recs[i].fs_type,
+                     fstab->recs[i].mount_point);
+        }
+
+        mret = mount(fstab->recs[i].blk_device, fstab->recs[i].mount_point,
+                     fstab->recs[i].fs_type, fstab->recs[i].flags,
+                     fstab->recs[i].fs_options);
         if (!mret) {
             /* Success!  Go get the next one */
             continue;
         }
 
         /* mount(2) returned an error, check if it's encrypted and deal with it */
-        if ((fstab[i].fs_mgr_flags & MF_CRYPT) && !partition_wiped(fstab[i].blk_dev)) {
+        if ((fstab->recs[i].fs_mgr_flags & MF_CRYPT) &&
+            !partition_wiped(fstab->recs[i].blk_device)) {
             /* Need to mount a tmpfs at this mountpoint for now, and set
              * properties that vold will query later for decrypting
              */
-            if (mount("tmpfs", fstab[i].mnt_point, "tmpfs",
+            if (mount("tmpfs", fstab->recs[i].mount_point, "tmpfs",
                   MS_NOATIME | MS_NOSUID | MS_NODEV, CRYPTO_TMPFS_OPTIONS) < 0) {
                 ERROR("Cannot mount tmpfs filesystem for encrypted fs at %s\n",
-                        fstab[i].mnt_point);
+                        fstab->recs[i].mount_point);
                 goto out;
             }
             encrypted = 1;
         } else {
             ERROR("Cannot mount filesystem on %s at %s\n",
-                    fstab[i].blk_dev, fstab[i].mnt_point);
+                    fstab->recs[i].blk_device, fstab->recs[i].mount_point);
             goto out;
         }
     }
@@ -497,49 +577,57 @@ int fs_mgr_mount_all(char *fstab_file)
     }
 
 out:
-    free_fstab(fstab);
     return ret;
 }
 
-/* If tmp_mnt_point is non-null, mount the filesystem there.  This is for the
+/* If tmp_mount_point is non-null, mount the filesystem there.  This is for the
  * tmp mount we do to check the user password
  */
-int fs_mgr_do_mount(char *fstab_file, char *n_name, char *n_blk_dev, char *tmp_mnt_point)
+int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
+                    char *tmp_mount_point)
 {
     int i = 0;
     int ret = -1;
-    struct fstab_rec *fstab = 0;
     char *m;
 
-    if (!(fstab = read_fstab(fstab_file))) {
+    if (!fstab) {
         return ret;
     }
 
-    for (i = 0; fstab[i].blk_dev; i++) {
-        if (!fs_match(fstab[i].mnt_point, n_name)) {
+    for (i = 0; i < fstab->num_entries; i++) {
+        if (!fs_match(fstab->recs[i].mount_point, n_name)) {
             continue;
         }
 
         /* We found our match */
-        /* First check the filesystem if requested */
-        if (fstab[i].fs_mgr_flags & MF_WAIT) {
-            wait_for_file(n_blk_dev, WAIT_TIMEOUT);
+        /* If this is a raw partition, report an error */
+        if (!strcmp(fstab->recs[i].fs_type, "emmc") ||
+            !strcmp(fstab->recs[i].fs_type, "mtd")) {
+            ERROR("Cannot mount filesystem of type %s on %s\n",
+                  fstab->recs[i].fs_type, n_blk_device);
+            goto out;
         }
 
-        if (fstab[i].fs_mgr_flags & MF_CHECK) {
-            check_fs(n_blk_dev, fstab[i].type, fstab[i].mnt_point);
+        /* First check the filesystem if requested */
+        if (fstab->recs[i].fs_mgr_flags & MF_WAIT) {
+            wait_for_file(n_blk_device, WAIT_TIMEOUT);
+        }
+
+        if (fstab->recs[i].fs_mgr_flags & MF_CHECK) {
+            check_fs(n_blk_device, fstab->recs[i].fs_type,
+                     fstab->recs[i].mount_point);
         }
 
         /* Now mount it where requested */
-        if (tmp_mnt_point) {
-            m = tmp_mnt_point;
+        if (tmp_mount_point) {
+            m = tmp_mount_point;
         } else {
-            m = fstab[i].mnt_point;
+            m = fstab->recs[i].mount_point;
         }
-        if (mount(n_blk_dev, m, fstab[i].type,
-                  fstab[i].flags, fstab[i].fs_options)) {
+        if (mount(n_blk_device, m, fstab->recs[i].fs_type,
+                  fstab->recs[i].flags, fstab->recs[i].fs_options)) {
             ERROR("Cannot mount filesystem on %s at %s\n",
-                    n_blk_dev, m);
+                    n_blk_device, m);
             goto out;
         } else {
             ret = 0;
@@ -548,10 +636,9 @@ int fs_mgr_do_mount(char *fstab_file, char *n_name, char *n_blk_dev, char *tmp_m
     }
 
     /* We didn't find a match, say so and return an error */
-    ERROR("Cannot find mount point %s in fstab\n", fstab[i].mnt_point);
+    ERROR("Cannot find mount point %s in fstab\n", fstab->recs[i].mount_point);
 
 out:
-    free_fstab(fstab);
     return ret;
 }
 
@@ -574,65 +661,128 @@ int fs_mgr_do_tmpfs_mount(char *n_name)
     return 0;
 }
 
-int fs_mgr_unmount_all(char *fstab_file)
+int fs_mgr_unmount_all(struct fstab *fstab)
 {
     int i = 0;
     int ret = 0;
-    struct fstab_rec *fstab = 0;
 
-    if (!(fstab = read_fstab(fstab_file))) {
+    if (!fstab) {
         return -1;
     }
 
-    while (fstab[i].blk_dev) {
-        if (umount(fstab[i].mnt_point)) {
-            ERROR("Cannot unmount filesystem at %s\n", fstab[i].mnt_point);
+    while (fstab->recs[i].blk_device) {
+        if (umount(fstab->recs[i].mount_point)) {
+            ERROR("Cannot unmount filesystem at %s\n", fstab->recs[i].mount_point);
             ret = -1;
         }
         i++;
     }
 
-    free_fstab(fstab);
     return ret;
 }
 /*
  * key_loc must be at least PROPERTY_VALUE_MAX bytes long
  *
- * real_blk_dev must be at least PROPERTY_VALUE_MAX bytes long
+ * real_blk_device must be at least PROPERTY_VALUE_MAX bytes long
  */
-int fs_mgr_get_crypt_info(char *fstab_file, char *key_loc, char *real_blk_dev, int size)
+int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc, char *real_blk_device, int size)
 {
     int i = 0;
-    struct fstab_rec *fstab = 0;
 
-    if (!(fstab = read_fstab(fstab_file))) {
+    if (!fstab) {
         return -1;
     }
     /* Initialize return values to null strings */
     if (key_loc) {
         *key_loc = '\0';
     }
-    if (real_blk_dev) {
-        *real_blk_dev = '\0';
+    if (real_blk_device) {
+        *real_blk_device = '\0';
     }
 
     /* Look for the encryptable partition to find the data */
-    for (i = 0; fstab[i].blk_dev; i++) {
-        if (!(fstab[i].fs_mgr_flags & MF_CRYPT)) {
+    for (i = 0; i < fstab->num_entries; i++) {
+        /* Don't deal with vold managed enryptable partitions here */
+        if (fstab->recs[i].fs_mgr_flags & MF_VOLDMANAGED) {
+            continue;
+        }
+        if (!(fstab->recs[i].fs_mgr_flags & MF_CRYPT)) {
             continue;
         }
 
         /* We found a match */
         if (key_loc) {
-            strlcpy(key_loc, fstab[i].key_loc, size);
+            strlcpy(key_loc, fstab->recs[i].key_loc, size);
         }
-        if (real_blk_dev) {
-            strlcpy(real_blk_dev, fstab[i].blk_dev, size);
+        if (real_blk_device) {
+            strlcpy(real_blk_device, fstab->recs[i].blk_device, size);
         }
         break;
     }
 
-    free_fstab(fstab);
     return 0;
+}
+
+/* Add an entry to the fstab, and return 0 on success or -1 on error */
+int fs_mgr_add_entry(struct fstab *fstab,
+                     const char *mount_point, const char *fs_type,
+                     const char *blk_device, long long length)
+{
+    struct fstab_rec *new_fstab_recs;
+    int n = fstab->num_entries;
+
+    new_fstab_recs = (struct fstab_rec *)
+                     realloc(fstab->recs, sizeof(struct fstab_rec) * (n + 1));
+
+    if (!new_fstab_recs) {
+        return -1;
+    }
+
+    /* A new entry was added, so initialize it */
+     memset(&new_fstab_recs[n], 0, sizeof(struct fstab_rec));
+     new_fstab_recs[n].mount_point = strdup(mount_point);
+     new_fstab_recs[n].fs_type = strdup(fs_type);
+     new_fstab_recs[n].blk_device = strdup(blk_device);
+     new_fstab_recs[n].length = 0;
+
+     /* Update the fstab struct */
+     fstab->recs = new_fstab_recs;
+     fstab->num_entries++;
+
+     return 0;
+}
+
+struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const char *path)
+{
+    int i;
+
+    if (!fstab) {
+        return NULL;
+    }
+
+    for (i = 0; i < fstab->num_entries; i++) {
+        int len = strlen(fstab->recs[i].mount_point);
+        if (strncmp(path, fstab->recs[i].mount_point, len) == 0 &&
+            (path[len] == '\0' || path[len] == '/')) {
+            return &fstab->recs[i];
+        }
+    }
+
+    return NULL;
+}
+
+int fs_mgr_is_voldmanaged(struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_VOLDMANAGED;
+}
+
+int fs_mgr_is_nonremovable(struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_NONREMOVABLE;
+}
+
+int fs_mgr_is_encryptable(struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_CRYPT;
 }
 
