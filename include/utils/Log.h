@@ -62,7 +62,7 @@ private:
  * }
  */
 #define ALOGD_IF_SLOW(timeoutMillis, message) \
-        LogIfSlow _logIfSlow(LOG_TAG, ANDROID_LOG_DEBUG, timeoutMillis, message);
+    android::LogIfSlow _logIfSlow(LOG_TAG, ANDROID_LOG_DEBUG, timeoutMillis, message);
 
 } // namespace android
 
