@@ -6,8 +6,9 @@
 
 #include <fcntl.h>
 
-#include <base/eintr_wrapper.h>
 #include <base/logging.h>
+#include <base/posix/eintr_wrapper.h>
+
 #include "metrics_library.h"
 
 namespace chromeos_metrics {

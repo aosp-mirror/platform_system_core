@@ -12,7 +12,9 @@
 #include <cstdio>
 #include <cstring>
 
-#include "base/eintr_wrapper.h"  // HANDLE_EINTR macro, no libbase required.
+// HANDLE_EINTR macro, no libbase required.
+#include <base/posix/eintr_wrapper.h>
+
 #include "policy/device_policy.h"
 
 #define READ_WRITE_ALL_FILE_FLAGS \
