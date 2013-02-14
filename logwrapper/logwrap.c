@@ -32,7 +32,7 @@
 #include "private/android_filesystem_config.h"
 #include "cutils/log.h"
 
-#define ARRAY_SIZE(x)	(sizeof(x) / sizeof(*(x)))
+#define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
 
 static int signal_fd_write;
 
@@ -144,31 +144,34 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
         }
     }
 
-    // Flush remaining data
-    if (a != b) {
-        buffer[b] = '\0';
-        if (logwrap)
-            ALOG(LOG_INFO, btag, "%s", &buffer[a]);
+    if (chld_sts != NULL) {
+        *chld_sts = status;
+    } else {
+      if (WIFEXITED(status))
+        rc = WEXITSTATUS(status);
+      else
+        rc = -ECHILD;
     }
 
-    if (WIFEXITED(status)) {
+    if (logwrap) {
+      // Flush remaining data
+      if (a != b) {
+        buffer[b] = '\0';
+        ALOG(LOG_INFO, btag, "%s", &buffer[a]);
+      }
+      if (WIFEXITED(status)) {
         if (WEXITSTATUS(status))
-            ALOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", btag,
-                    WEXITSTATUS(status));
-        if (chld_sts == NULL)
-            rc = WEXITSTATUS(status);
-    } else {
-        if (chld_sts == NULL)
-            rc = -ECHILD;
+          ALOG(LOG_INFO, "logwrapper", "%s terminated by exit(%d)", btag,
+               WEXITSTATUS(status));
+      } else {
         if (WIFSIGNALED(status))
-            ALOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", btag,
-                    WTERMSIG(status));
+          ALOG(LOG_INFO, "logwrapper", "%s terminated by signal %d", btag,
+               WTERMSIG(status));
         else if (WIFSTOPPED(status))
-            ALOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", btag,
-                    WSTOPSIG(status));
+          ALOG(LOG_INFO, "logwrapper", "%s stopped by signal %d", btag,
+               WSTOPSIG(status));
+      }
     }
-    if (chld_sts != NULL)
-        *chld_sts = status;
 
 err_poll:
     return rc;
