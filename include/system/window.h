@@ -321,7 +321,6 @@ enum {
 enum {
     NATIVE_WINDOW_FRAMEBUFFER               = 0, /* FramebufferNativeWindow */
     NATIVE_WINDOW_SURFACE                   = 1, /* Surface */
-    NATIVE_WINDOW_SURFACE_TEXTURE_CLIENT    = 2, /* SurfaceTextureClient */
 };
 
 /* parameter for NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP
