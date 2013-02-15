@@ -1184,6 +1184,33 @@ void build_local_name(char* target_str, size_t target_size, int server_port)
 }
 
 #if !ADB_HOST
+
+static void drop_capabilities_bounding_set_if_needed() {
+#ifdef ALLOW_ADBD_ROOT
+    char value[PROPERTY_VALUE_MAX];
+    property_get("ro.debuggable", value, "");
+    if (strcmp(value, "1") == 0) {
+        return;
+    }
+#endif
+    int i;
+    for (i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0) >= 0; i++) {
+        if ((i == CAP_NET_RAW) || (i == CAP_SETUID) || (i == CAP_SETGID)) {
+            // CAP_NET_RAW needed by /system/bin/ping
+            // CAP_SETUID CAP_SETGID needed by /system/bin/run-as
+            continue;
+        }
+        int err = prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
+
+        // Some kernels don't have file capabilities compiled in, and
+        // prctl(PR_CAPBSET_DROP) returns EINVAL. Don't automatically
+        // die when we see such misconfigured kernels.
+        if ((err < 0) && (errno != EINVAL)) {
+            exit(1);
+        }
+    }
+}
+
 static int should_drop_privileges() {
 #ifndef ALLOW_ADBD_ROOT
     return 1;
@@ -1277,6 +1304,8 @@ int adb_main(int is_daemon, int server_port)
         if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) != 0) {
             exit(1);
         }
+
+        drop_capabilities_bounding_set_if_needed();
 
         /* add extra groups:
         ** AID_ADB to access the USB driver

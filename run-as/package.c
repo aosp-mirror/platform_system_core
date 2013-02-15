@@ -76,13 +76,30 @@ map_file(const char* filename, size_t* filesize)
     struct stat  st;
     size_t  length = 0;
     void*   address = NULL;
+    gid_t   oldegid;
 
     *filesize = 0;
 
+    /*
+     * Temporarily switch effective GID to allow us to read
+     * the packages file
+     */
+
+    oldegid = getegid();
+    if (setegid(AID_SYSTEM) < 0) {
+        return NULL;
+    }
+
     /* open the file for reading */
     fd = TEMP_FAILURE_RETRY(open(filename, O_RDONLY));
-    if (fd < 0)
+    if (fd < 0) {
         return NULL;
+    }
+
+    /* restore back to our old egid */
+    if (setegid(oldegid) < 0) {
+        goto EXIT;
+    }
 
     /* get its size */
     ret = TEMP_FAILURE_RETRY(fstat(fd, &st));
