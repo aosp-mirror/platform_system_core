@@ -1272,7 +1272,7 @@ int adb_main(int is_daemon, int server_port)
     /* don't run as root if we are running in secure mode */
     if (should_drop_privileges()) {
         struct __user_cap_header_struct header;
-        struct __user_cap_data_struct cap;
+        struct __user_cap_data_struct cap[2];
 
         if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) != 0) {
             exit(1);
@@ -1305,12 +1305,15 @@ int adb_main(int is_daemon, int server_port)
             exit(1);
         }
 
+        memset(&header, 0, sizeof(header));
+        memset(cap, 0, sizeof(cap));
+
         /* set CAP_SYS_BOOT capability, so "adb reboot" will succeed */
-        header.version = _LINUX_CAPABILITY_VERSION;
+        header.version = _LINUX_CAPABILITY_VERSION_3;
         header.pid = 0;
-        cap.effective = cap.permitted = (1 << CAP_SYS_BOOT);
-        cap.inheritable = 0;
-        capset(&header, &cap);
+        cap[CAP_TO_INDEX(CAP_SYS_BOOT)].effective |= CAP_TO_MASK(CAP_SYS_BOOT);
+        cap[CAP_TO_INDEX(CAP_SYS_BOOT)].permitted |= CAP_TO_MASK(CAP_SYS_BOOT);
+        capset(&header, cap);
 
         D("Local port disabled\n");
     } else {
