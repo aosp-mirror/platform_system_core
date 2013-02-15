@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #include "base/file_util.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/memory/scoped_ptr.h"
-#include "base/scoped_temp_dir.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/udev_collector.h"
 #include "gtest/gtest.h"
@@ -51,7 +51,7 @@ class UdevCollectorTest : public ::testing::Test {
     collector_.reset(new UdevCollector);
     collector_->Initialize(CountCrash, IsMetrics);
 
-    temp_dir_generator_.reset(new ScopedTempDir());
+    temp_dir_generator_.reset(new base::ScopedTempDir());
     ASSERT_TRUE(temp_dir_generator_->CreateUniqueTempDir());
     EXPECT_TRUE(temp_dir_generator_->IsValid());
 
@@ -72,7 +72,7 @@ class UdevCollectorTest : public ::testing::Test {
 
  protected:
   scoped_ptr<UdevCollector> collector_;
-  scoped_ptr<ScopedTempDir> temp_dir_generator_;
+  scoped_ptr<base::ScopedTempDir> temp_dir_generator_;
 };
 
 TEST_F(UdevCollectorTest, TestNoConsent) {

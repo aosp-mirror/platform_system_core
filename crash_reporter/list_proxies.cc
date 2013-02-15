@@ -12,8 +12,8 @@
 
 #include "base/command_line.h"
 #include "base/file_util.h"
-#include "base/string_tokenizer.h"
 #include "base/string_util.h"
+#include "base/strings/string_tokenizer.h"
 #include "base/values.h"
 #include "chromeos/dbus/dbus.h"
 #include "chromeos/syslog_logging.h"
@@ -51,7 +51,7 @@ std::deque<std::string> ParseProxyString(const std::string &input) {
   // Some of this code taken from
   // http://src.chromium.org/svn/trunk/src/net/proxy/proxy_server.cc and
   // http://src.chromium.org/svn/trunk/src/net/proxy/proxy_list.cc
-  StringTokenizer entry_tok(input, ";");
+  base::StringTokenizer entry_tok(input, ";");
   while (entry_tok.GetNext()) {
     std::string token = entry_tok.token();
     TrimWhitespaceASCII(token, TRIM_ALL, &token);

@@ -7,8 +7,8 @@
 #include <unistd.h>
 
 #include "base/file_util.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/string_split.h"
-#include "base/scoped_temp_dir.h"
 #include "chromeos/syslog_logging.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/user_collector.h"
@@ -464,7 +464,7 @@ TEST_F(UserCollectorTest, CopyOffProcFilesOK) {
 }
 
 TEST_F(UserCollectorTest, ValidateProcFiles) {
-  ScopedTempDir temp_dir;
+  base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   FilePath container_dir = temp_dir.path();
 
@@ -485,7 +485,7 @@ TEST_F(UserCollectorTest, ValidateProcFiles) {
 }
 
 TEST_F(UserCollectorTest, ValidateCoreFile) {
-  ScopedTempDir temp_dir;
+  base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   FilePath container_dir = temp_dir.path();
   FilePath core_file = container_dir.Append("core");

@@ -17,6 +17,7 @@
 
 #include "base/file_util.h"
 #include "base/logging.h"
+#include "base/posix/eintr_wrapper.h"
 #include "base/stl_util.h"
 #include "base/string_split.h"
 #include "base/string_util.h"
