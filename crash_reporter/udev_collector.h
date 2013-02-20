@@ -7,10 +7,9 @@
 
 #include <string>
 
+#include "base/file_path.h"
 #include "crash-reporter/crash_collector.h"
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
-
-class FilePath;
 
 // Udev crash collector.
 class UdevCollector : public CrashCollector {
@@ -30,7 +29,7 @@ class UdevCollector : public CrashCollector {
 
   // Mutator for unit testing.
   void set_log_config_path(const std::string& path) {
-    log_config_path_ = FilePath(path);
+    log_config_path_ = base::FilePath(path);
   }
 };
 

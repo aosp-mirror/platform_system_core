@@ -19,6 +19,7 @@ static bool s_metrics = false;
 static const char kTestKCrash[] = "test/kcrash";
 static const char kTestCrashDirectory[] = "test/crash_directory";
 
+using base::FilePath;
 using chromeos::FindLog;
 using chromeos::GetLog;
 

@@ -40,9 +40,9 @@ class UncleanShutdownCollector : public CrashCollector {
   bool DeadBatteryCausedUncleanShutdown();
 
   const char *unclean_shutdown_file_;
-  FilePath powerd_trace_path_;
-  FilePath powerd_suspended_file_;
-  FilePath powerd_low_battery_file_;
+  base::FilePath powerd_trace_path_;
+  base::FilePath powerd_suspended_file_;
+  base::FilePath powerd_low_battery_file_;
 };
 
 #endif  // _CRASH_REPORTER_UNCLEAN_SHUTDOWN_COLLECTOR_H_

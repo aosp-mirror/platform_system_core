@@ -17,6 +17,8 @@ static const char kPowerdSuspended[] = "powerd_suspended";
 // Presence of this file indicates that the battery was critically low.
 static const char kPowerdLowBattery[] = "powerd_low_battery";
 
+using base::FilePath;
+
 UncleanShutdownCollector::UncleanShutdownCollector()
     : unclean_shutdown_file_(kUncleanShutdownFile),
       powerd_trace_path_(kPowerdTracePath),

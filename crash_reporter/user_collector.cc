@@ -53,6 +53,8 @@ static const uid_t kUnknownUid = -1;
 const char *UserCollector::kUserId = "Uid:\t";
 const char *UserCollector::kGroupId = "Gid:\t";
 
+using base::FilePath;
+
 UserCollector::UserCollector()
     : generate_diagnostics_(false),
       core_pattern_file_(kCorePatternFile),

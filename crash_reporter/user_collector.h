@@ -8,10 +8,10 @@
 #include <string>
 #include <vector>
 
+#include "base/file_path.h"
 #include "crash-reporter/crash_collector.h"
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
-class FilePath;
 class SystemLogging;
 
 // User crash collector.
@@ -101,9 +101,9 @@ class UserCollector : public CrashCollector {
   std::string GetPattern(bool enabled) const;
   bool SetUpInternal(bool enabled);
 
-  FilePath GetProcessPath(pid_t pid);
-  bool GetSymlinkTarget(const FilePath &symlink,
-                        FilePath *target);
+  base::FilePath GetProcessPath(pid_t pid);
+  bool GetSymlinkTarget(const base::FilePath &symlink,
+                        base::FilePath *target);
   bool GetExecutableBaseNameFromPid(pid_t pid,
                                     std::string *base_name);
   // Returns, via |line|, the first line in |lines| that starts with |prefix|.
@@ -129,38 +129,38 @@ class UserCollector : public CrashCollector {
   void EnqueueCollectionErrorLog(pid_t pid, ErrorType error_type,
                                  const std::string &exec_name);
 
-  bool CopyOffProcFiles(pid_t pid, const FilePath &container_dir);
+  bool CopyOffProcFiles(pid_t pid, const base::FilePath &container_dir);
 
   // Validates the proc files at |container_dir| and returns true if they
   // are usable for the core-to-minidump conversion later. For instance, if
   // a process is reaped by the kernel before the copying of its proc files
   // takes place, some proc files like /proc/<pid>/maps may contain nothing
   // and thus become unusable.
-  bool ValidateProcFiles(const FilePath &container_dir) const;
+  bool ValidateProcFiles(const base::FilePath &container_dir) const;
 
   // Validates the core file at |core_path| and returns kErrorNone if
   // the file contains the ELF magic bytes and an ELF class that matches the
   // platform (i.e. 32-bit ELF on a 32-bit platform or 64-bit ELF on a 64-bit
   // platform), which is due to the limitation in core2md. It returns an error
   // type otherwise.
-  ErrorType ValidateCoreFile(const FilePath &core_path) const;
+  ErrorType ValidateCoreFile(const base::FilePath &core_path) const;
 
   // Determines the crash directory for given pid based on pid's owner,
   // and creates the directory if necessary with appropriate permissions.
   // Returns true whether or not directory needed to be created, false on
   // any failure.
   bool GetCreatedCrashDirectory(pid_t pid, uid_t supplied_ruid,
-                                FilePath *crash_file_path,
+                                base::FilePath *crash_file_path,
                                 bool *out_of_capacity);
-  bool CopyStdinToCoreFile(const FilePath &core_path);
-  bool RunCoreToMinidump(const FilePath &core_path,
-                         const FilePath &procfs_directory,
-                         const FilePath &minidump_path,
-                         const FilePath &temp_directory);
+  bool CopyStdinToCoreFile(const base::FilePath &core_path);
+  bool RunCoreToMinidump(const base::FilePath &core_path,
+                         const base::FilePath &procfs_directory,
+                         const base::FilePath &minidump_path,
+                         const base::FilePath &temp_directory);
   ErrorType ConvertCoreToMinidump(pid_t pid,
-                                  const FilePath &container_dir,
-                                  const FilePath &core_path,
-                                  const FilePath &minidump_path);
+                                  const base::FilePath &container_dir,
+                                  const base::FilePath &core_path,
+                                  const base::FilePath &minidump_path);
   ErrorType ConvertAndEnqueueCrash(pid_t pid, const std::string &exec_name,
                                    uid_t supplied_ruid, bool *out_of_capacity);
   bool ParseCrashAttributes(const std::string &crash_attributes,

@@ -20,6 +20,7 @@ static const char kTestLowBattery[] = "test/low_battery";
 static const char kTestSuspended[] = "test/suspended";
 static const char kTestUnclean[] = "test/unclean";
 
+using base::FilePath;
 using ::chromeos::FindLog;
 
 void CountCrash() {

@@ -19,6 +19,7 @@ static const char kBinCp[] = "/bin/cp";
 static const char kBinEcho[] = "/bin/echo";
 static const char kBinFalse[] = "/bin/false";
 
+using base::FilePath;
 using chromeos::FindLog;
 
 void CountCrash() {

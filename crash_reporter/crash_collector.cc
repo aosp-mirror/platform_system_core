@@ -54,6 +54,8 @@ static const uid_t kRootGroup = 0;
 // number of core files or minidumps reaches this number.
 const int CrashCollector::kMaxCrashDirectorySize = 32;
 
+using base::FilePath;
+
 CrashCollector::CrashCollector()
     : forced_crash_directory_(NULL),
       lsb_release_(kLsbRelease),

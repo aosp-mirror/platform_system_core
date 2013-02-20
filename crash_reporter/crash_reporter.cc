@@ -41,7 +41,6 @@ static const char kKernelCrashDetected[] = "/var/run/kernel-crash-detected";
 static const char kUncleanShutdownDetected[] =
     "/var/run/unclean-shutdown-detected";
 
-
 // Enumeration of kinds of crashes to be used in the CrashCounter histogram.
 enum CrashKinds {
   kCrashKindUncleanShutdown = 1,
@@ -52,6 +51,8 @@ enum CrashKinds {
 };
 
 static MetricsLibrary s_metrics_lib;
+
+using base::FilePath;
 
 static bool IsFeedbackAllowed() {
   return s_metrics_lib.AreMetricsEnabled();

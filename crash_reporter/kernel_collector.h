@@ -13,8 +13,6 @@
 #include "crash-reporter/crash_collector.h"
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
-class FilePath;
-
 // Kernel crash collector.
 class KernelCollector : public CrashCollector {
  public:
@@ -32,7 +30,7 @@ class KernelCollector : public CrashCollector {
 
   virtual ~KernelCollector();
 
-  void OverridePreservedDumpPath(const FilePath &file_path);
+  void OverridePreservedDumpPath(const base::FilePath &file_path);
 
   // Enable collection.
   bool Enable();
@@ -66,7 +64,7 @@ class KernelCollector : public CrashCollector {
   bool LoadPreservedDump(std::string *contents);
   void StripSensitiveData(std::string *kernel_dump);
 
-  void GetRamoopsRecordPath(FilePath *path, size_t record);
+  void GetRamoopsRecordPath(base::FilePath *path, size_t record);
   virtual bool LoadParameters();
   bool HasMoreRecords();
 
@@ -98,7 +96,7 @@ class KernelCollector : public CrashCollector {
   enum ArchKind GetCompilerArch(void);
 
   bool is_enabled_;
-  FilePath ramoops_dump_path_;
+  base::FilePath ramoops_dump_path_;
   size_t records_;
 
   // The architecture of kernel dump strings we are working with.

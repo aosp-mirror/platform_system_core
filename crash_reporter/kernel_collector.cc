@@ -45,6 +45,8 @@ static const char *s_pc_regex[] = {
   " RIP  \\[<.*>\\] ([^\\+ ]+).*",  // X86_64 uses RIP for the program counter
 };
 
+using base::FilePath;
+
 COMPILE_ASSERT(arraysize(s_pc_regex) == KernelCollector::archCount,
                missing_arch_pc_regexp);
 

@@ -16,6 +16,8 @@ static const char kGzipPath[] = "/bin/gzip";
 static const char kUdevExecName[] = "udev";
 static const char kUdevSignatureKey[] = "sig";
 
+using base::FilePath;
+
 UdevCollector::UdevCollector() {}
 
 UdevCollector::~UdevCollector() {}

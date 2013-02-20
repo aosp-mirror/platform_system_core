@@ -9,6 +9,8 @@
 #include "crash-reporter/udev_collector.h"
 #include "gtest/gtest.h"
 
+using base::FilePath;
+
 namespace {
 
 // Dummy log config file name.

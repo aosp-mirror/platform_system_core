@@ -20,6 +20,7 @@ static bool s_metrics = false;
 
 static const char kFilePath[] = "/my/path";
 
+using base::FilePath;
 using chromeos::FindLog;
 
 void CountCrash() {
