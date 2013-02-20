@@ -225,27 +225,6 @@ framebuffer:
       If the adbd daemon doesn't have sufficient privileges to open
       the framebuffer device, the connection is simply closed immediately.
 
-dns:<server-name>
-    This service is an exception because it only runs within the ADB server.
-    It is used to implement USB networking, i.e. to provide a network connection
-    to the device through the host machine (note: this is the exact opposite of
-    network tethering).
-
-    It is used to perform a gethostbyname(<address>) on the host and return
-    the corresponding IP address as a 4-byte string.
-
-recover:<size>
-    This service is used to upload a recovery image to the device. <size>
-    must be a number corresponding to the size of the file. The service works
-    by:
-
-       - creating a file named /tmp/update
-       - reading 'size' bytes from the client and writing them to /tmp/update
-       - when everything is read successfully, create a file named /tmp/update.start
-
-    This service can only work when the device is in recovery mode. Otherwise,
-    the /tmp directory doesn't exist and the connection will be closed immediately.
-
 jdwp:<pid>
     Connects to the JDWP thread running in the VM of process <pid>.
 

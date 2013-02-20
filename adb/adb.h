@@ -128,10 +128,7 @@ struct asocket {
         */
     void (*close)(asocket *s);
 
-        /* socket-type-specific extradata */
-    void *extra;
-
-    	/* A socket is bound to atransport */
+        /* A socket is bound to atransport */
     atransport *transport;
 };
 
