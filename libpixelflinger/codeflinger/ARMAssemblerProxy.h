@@ -146,6 +146,15 @@ public:
     virtual void UXTB16(int cc, int Rd, int Rm, int rotate);
     virtual void UBFX(int cc, int Rd, int Rn, int lsb, int width);
 
+    virtual void ADDR_LDR(int cc, int Rd,
+                int Rn, uint32_t offset = __immed12_pre(0));
+    virtual void ADDR_STR (int cc, int Rd,
+                int Rn, uint32_t offset = __immed12_pre(0));
+    virtual void ADDR_ADD(int cc, int s, int Rd,
+                int Rn, uint32_t Op2);
+    virtual void ADDR_SUB(int cc, int s, int Rd,
+                int Rn, uint32_t Op2);
+
 private:
     ARMAssemblerInterface*  mTarget;
 };

@@ -331,6 +331,16 @@ public:
     inline void
     SMLAWT(int cc, int Rd, int Rm, int Rs, int Rn) {
         SMLAW(cc, yT, Rd, Rm, Rs, Rn);    }
+
+    // Address loading/storing/manipulation
+    virtual void ADDR_LDR(int cc, int Rd,
+                int Rn, uint32_t offset = __immed12_pre(0));
+    virtual void ADDR_STR (int cc, int Rd,
+                int Rn, uint32_t offset = __immed12_pre(0));
+    virtual void ADDR_ADD(int cc, int s, int Rd,
+                int Rn, uint32_t Op2);
+    virtual void ADDR_SUB(int cc, int s, int Rd,
+                int Rn, uint32_t Op2);
 };
 
 }; // namespace android
