@@ -20,6 +20,8 @@
 void adb_auth_init(void);
 void adb_auth_verified(atransport *t);
 
+void send_auth_request(atransport *t);
+
 /* AUTH packets first argument */
 /* Request */
 #define ADB_AUTH_TOKEN         1
