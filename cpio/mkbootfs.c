@@ -55,6 +55,7 @@ static int total_size = 0;
 
 static void fix_stat(const char *path, struct stat *s)
 {
+    uint64_t capabilities;
     if (canned_config) {
         // Use the list of file uid/gid/modes loaded from the file
         // given with -f.
@@ -78,7 +79,7 @@ static void fix_stat(const char *path, struct stat *s)
     } else {
         // Use the compiled-in fs_config() function.
 
-        fs_config(path, S_ISDIR(s->st_mode), &s->st_uid, &s->st_gid, &s->st_mode);
+        fs_config(path, S_ISDIR(s->st_mode), &s->st_uid, &s->st_gid, &s->st_mode, &capabilities);
     }
 }
 
