@@ -68,6 +68,7 @@
 #define MF_NONREMOVABLE 0x8
 #define MF_VOLDMANAGED  0x10
 #define MF_LENGTH       0x20
+#define MF_RECOVERYONLY 0x40
 
 #endif /* __CORE_FS_MGR_PRIV_H */
 

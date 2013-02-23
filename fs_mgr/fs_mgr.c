@@ -75,6 +75,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "nonremovable",MF_NONREMOVABLE },
     { "voldmanaged=",MF_VOLDMANAGED},
     { "length=",     MF_LENGTH },
+    { "recoveryonly",MF_RECOVERYONLY },
     { "defaults",    0 },
     { 0,             0 },
 };
@@ -523,7 +524,7 @@ int fs_mgr_mount_all(struct fstab *fstab)
 
     for (i = 0; i < fstab->num_entries; i++) {
         /* Don't mount entries that are managed by vold */
-        if (fstab->recs[i].fs_mgr_flags & MF_VOLDMANAGED) {
+        if (fstab->recs[i].fs_mgr_flags & (MF_VOLDMANAGED | MF_RECOVERYONLY)) {
             continue;
         }
 
