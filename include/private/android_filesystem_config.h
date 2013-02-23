@@ -26,7 +26,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <stdint.h>
-#include <linux/capability.h>
 
 /* This is the master Users and Groups config for the platform.
 ** DO NOT EVER RENUMBER.
