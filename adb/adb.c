@@ -1195,8 +1195,7 @@ static void drop_capabilities_bounding_set_if_needed() {
 #endif
     int i;
     for (i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0) >= 0; i++) {
-        if ((i == CAP_NET_RAW) || (i == CAP_SETUID) || (i == CAP_SETGID)) {
-            // CAP_NET_RAW needed by /system/bin/ping
+        if ((i == CAP_SETUID) || (i == CAP_SETGID)) {
             // CAP_SETUID CAP_SETGID needed by /system/bin/run-as
             continue;
         }
