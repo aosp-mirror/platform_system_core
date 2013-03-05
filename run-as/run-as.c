@@ -29,6 +29,7 @@
 #include <time.h>
 #include <stdarg.h>
 
+#include <selinux/android.h>
 #include <private/android_filesystem_config.h>
 #include "package.h"
 
@@ -159,6 +160,11 @@ int main(int argc, char **argv)
     uid = gid = info.uid;
     if(setresgid(gid,gid,gid) || setresuid(uid,uid,uid)) {
         panic("Permission denied\n");
+        return 1;
+    }
+
+    if (selinux_android_setcontext(uid, 0, NULL, pkgname) < 0) {
+        panic("Could not set SELinux security context:  %s\n", strerror(errno));
         return 1;
     }
 
