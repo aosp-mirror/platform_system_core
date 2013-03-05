@@ -49,14 +49,6 @@ struct sync_pt_info *sync_pt_info(struct sync_fence_info_data *info,
                                   struct sync_pt_info *itr);
 void sync_fence_info_free(struct sync_fence_info_data *info);
 
-/* sw_sync is mainly inteded for testing and should not be complied into
- * production kernels
- */
-
-int sw_sync_timeline_create(void);
-int sw_sync_timeline_inc(int fd, unsigned count);
-int sw_sync_fence_create(int fd, const char *name, unsigned value);
-
 __END_DECLS
 
 #endif /* __SYS_CORE_SYNC_H */
