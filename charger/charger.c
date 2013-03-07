@@ -610,7 +610,7 @@ static int draw_text(const char *str, int x, int y)
         x = (gr_fb_width() - str_len_px) / 2;
     if (y < 0)
         y = (gr_fb_height() - char_height) / 2;
-    gr_text(x, y, str);
+    gr_text(x, y, str, 0);
 
     return y + char_height;
 }
