@@ -199,7 +199,7 @@ public:
         {
             char name[100];
             snprintf(name, 100, "/data/%p.stack", this);
-            int rc = open(name, O_RDWR | O_CREAT | O_APPEND);
+            int rc = open(name, O_RDWR | O_CREAT | O_APPEND, 644);
             if (rc >= 0) {
                 write(rc, text.string(), text.length());
                 close(rc);
