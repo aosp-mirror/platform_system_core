@@ -58,10 +58,10 @@ char cur_product[FB_RESPONSE_SZ + 1];
 
 void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline);
 
-boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size,
-                        void *ramdisk, unsigned ramdisk_size,
-                        void *second, unsigned second_size,
-                        unsigned page_size, unsigned base,
+boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size, unsigned kernel_offset,
+                        void *ramdisk, unsigned ramdisk_size, unsigned ramdisk_offset,
+                        void *second, unsigned second_size, unsigned second_offset,
+                        unsigned page_size, unsigned base, unsigned tags_offset,
                         unsigned *bootimg_size);
 
 static usb_handle *usb = 0;
@@ -74,7 +74,13 @@ static int long_listing = 0;
 static int64_t sparse_limit = -1;
 static int64_t target_sparse_limit = -1;
 
-static unsigned base_addr = 0x10000000;
+unsigned page_size = 2048;
+unsigned base_addr      = 0x10000000;
+unsigned kernel_offset  = 0x00008000;
+unsigned ramdisk_offset = 0x01000000;
+unsigned second_offset  = 0x00f00000;
+unsigned tags_offset    = 0x00000100;
+
 
 void die(const char *fmt, ...)
 {
@@ -186,11 +192,6 @@ oops:
 }
 #endif
 
-int match_fastboot(usb_ifc_info *info)
-{
-    return match_fastboot_with_serial(info, serial);
-}
-
 int match_fastboot_with_serial(usb_ifc_info *info, const char *local_serial)
 {
     if(!(vendor_id && (info->dev_vendor == vendor_id)) &&
@@ -215,6 +216,11 @@ int match_fastboot_with_serial(usb_ifc_info *info, const char *local_serial)
     if (local_serial && (strcmp(local_serial, info->serial_number) != 0 &&
                    strcmp(local_serial, info->device_path) != 0)) return -1;
     return 0;
+}
+
+int match_fastboot(usb_ifc_info *info)
+{
+    return match_fastboot_with_serial(info, serial);
 }
 
 int list_devices_callback(usb_ifc_info *info)
@@ -297,14 +303,14 @@ void usage(void)
             "  -p <product>                             specify product name\n"
             "  -c <cmdline>                             override kernel commandline\n"
             "  -i <vendor id>                           specify a custom USB vendor id\n"
-            "  -b <base_addr>                           specify a custom kernel base address\n"
+            "  -b <base_addr>                           specify a custom kernel base address. default: 0x10000000\n"
             "  -n <page size>                           specify the nand page size. default: 2048\n"
             "  -S <size>[K|M|G]                         automatically sparse files greater than\n"
             "                                           size.  0 to disable\n"
         );
 }
 
-void *load_bootable_image(unsigned page_size, const char *kernel, const char *ramdisk,
+void *load_bootable_image(const char *kernel, const char *ramdisk,
                           unsigned *sz, const char *cmdline)
 {
     void *kdata = 0, *rdata = 0;
@@ -345,7 +351,10 @@ void *load_bootable_image(unsigned page_size, const char *kernel, const char *ra
     }
 
     fprintf(stderr,"creating boot image...\n");
-    bdata = mkbootimg(kdata, ksize, rdata, rsize, 0, 0, page_size, base_addr, &bsize);
+    bdata = mkbootimg(kdata, ksize, kernel_offset,
+                      rdata, rsize, ramdisk_offset,
+                      0, 0, second_offset,
+                      page_size, base_addr, tags_offset, &bsize);
     if(bdata == 0) {
         fprintf(stderr,"failed to create boot.img\n");
         return 0;
@@ -806,53 +815,38 @@ int main(int argc, char **argv)
     int erase_first = 1;
     void *data;
     unsigned sz;
-    unsigned page_size = 2048;
     int status;
     int c;
     int r;
 
-    const struct option longopts = { 0, 0, 0, 0 };
+    const struct option longopts[] = {
+        {"base", required_argument, 0, 'b'},
+        {"kernel_offset", required_argument, 0, 'k'},
+        {"page_size", required_argument, 0, 'n'},
+        {"ramdisk_offset", required_argument, 0, 'r'},
+        {"help", 0, 0, 'h'},
+        {0, 0, 0, 0}
+    };
 
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        c = getopt_long(argc, argv, "wub:n:s:S:lp:c:i:m:h", &longopts, NULL);
+        int option_index = 0;
+        c = getopt_long(argc, argv, "wub:k:n:r:s:S:lp:c:i:m:h", longopts, NULL);
         if (c < 0) {
             break;
         }
-
+        /* Alphabetical cases */
         switch (c) {
-        case 'w':
-            wants_wipe = 1;
-            break;
-        case 'u':
-            erase_first = 0;
-            break;
         case 'b':
             base_addr = strtoul(optarg, 0, 16);
-            break;
-        case 'n':
-            page_size = (unsigned)strtoul(optarg, NULL, 0);
-            if (!page_size) die("invalid page size");
-            break;
-        case 's':
-            serial = optarg;
-            break;
-        case 'S':
-            sparse_limit = parse_num(optarg);
-            if (sparse_limit < 0) {
-                    die("invalid sparse limit");
-            }
-            break;
-        case 'l':
-            long_listing = 1;
-            break;
-        case 'p':
-            product = optarg;
             break;
         case 'c':
             cmdline = optarg;
             break;
+        case 'h':
+            usage();
+            return 1;
         case 'i': {
                 char *endptr = NULL;
                 unsigned long val;
@@ -863,9 +857,37 @@ int main(int argc, char **argv)
                 vendor_id = (unsigned short)val;
                 break;
             }
-        case 'h':
-            usage();
-            return 1;
+        case 'k':
+            kernel_offset = strtoul(optarg, 0, 16);
+            break;
+        case 'l':
+            long_listing = 1;
+            break;
+        case 'n':
+            page_size = (unsigned)strtoul(optarg, NULL, 0);
+            if (!page_size) die("invalid page size");
+            break;
+        case 'p':
+            product = optarg;
+            break;
+        case 'r':
+            ramdisk_offset = strtoul(optarg, 0, 16);
+            break;
+        case 's':
+            serial = optarg;
+            break;
+        case 'S':
+            sparse_limit = parse_num(optarg);
+            if (sparse_limit < 0) {
+                    die("invalid sparse limit");
+            }
+            break;
+        case 'u':
+            erase_first = 0;
+            break;
+        case 'w':
+            wants_wipe = 1;
+            break;
         case '?':
             return 1;
         default:
@@ -944,7 +966,7 @@ int main(int argc, char **argv)
                 rname = argv[0];
                 skip(1);
             }
-            data = load_bootable_image(page_size, kname, rname, &sz, cmdline);
+            data = load_bootable_image(kname, rname, &sz, cmdline);
             if (data == 0) return 1;
             fb_queue_download("boot.img", data, sz);
             fb_queue_command("boot", "booting");
@@ -975,7 +997,7 @@ int main(int argc, char **argv)
             } else {
                 skip(3);
             }
-            data = load_bootable_image(page_size, kname, rname, &sz, cmdline);
+            data = load_bootable_image(kname, rname, &sz, cmdline);
             if (data == 0) die("cannot load bootable image");
             fb_queue_flash(pname, data, sz);
         } else if(!strcmp(*argv, "flashall")) {
