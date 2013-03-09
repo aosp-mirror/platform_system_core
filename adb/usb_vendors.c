@@ -235,6 +235,7 @@ void usb_vendors_init(void)
                     break;
                 }
             }
+            fclose(f);
         }
     }
 }
