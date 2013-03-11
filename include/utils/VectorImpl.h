@@ -64,6 +64,7 @@ public:
     inline  bool            isEmpty() const     { return mCount == 0; }
             size_t          capacity() const;
             ssize_t         setCapacity(size_t size);
+            ssize_t         resize(size_t size);
 
             /*! append/insert another vector or array */
             ssize_t         insertVectorAt(const VectorImpl& vector, size_t index);

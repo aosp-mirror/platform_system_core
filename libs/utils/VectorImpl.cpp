@@ -343,6 +343,16 @@ ssize_t VectorImpl::setCapacity(size_t new_capacity)
     return new_capacity;
 }
 
+ssize_t VectorImpl::resize(size_t size) {
+    ssize_t result = NO_ERROR;
+    if (size > mCount) {
+        result = insertAt(mCount, size - mCount);
+    } else if (size < mCount) {
+        result = removeItemsAt(size, mCount - size);
+    }
+    return result < 0 ? result : size;
+}
+
 void VectorImpl::release_storage()
 {
     if (mStorage) {

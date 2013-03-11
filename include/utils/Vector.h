@@ -80,7 +80,13 @@ public:
     //! sets the capacity. capacity can never be reduced less than size()
     inline  ssize_t         setCapacity(size_t size)    { return VectorImpl::setCapacity(size); }
 
-    /*! 
+    /*!
+     * set the size of the vector. items are appended with the default
+     * constructor, or removed from the end as needed.
+     */
+    inline  ssize_t         resize(size_t size)         { return VectorImpl::resize(size); }
+
+    /*!
      * C-style array access
      */
      
