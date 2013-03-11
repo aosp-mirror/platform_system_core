@@ -846,6 +846,11 @@ status_t Thread::join()
     return mStatus;
 }
 
+bool Thread::isRunning() const {
+    Mutex::Autolock _l(mLock);
+    return mRunning;
+}
+
 #ifdef HAVE_ANDROID_OS
 pid_t Thread::getTid() const
 {

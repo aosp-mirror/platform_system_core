@@ -48,6 +48,11 @@ public:
         SHARED = 1
     };
 
+    enum WakeUpType {
+        WAKE_UP_ONE = 0,
+        WAKE_UP_ALL = 1
+    };
+
     Condition();
     Condition(int type);
     ~Condition();
@@ -57,6 +62,14 @@ public:
     status_t waitRelative(Mutex& mutex, nsecs_t reltime);
     // Signal the condition variable, allowing one thread to continue.
     void signal();
+    // Signal the condition variable, allowing one or all threads to continue.
+    void signal(WakeUpType type) {
+        if (type == WAKE_UP_ONE) {
+            signal();
+        } else {
+            broadcast();
+        }
+    }
     // Signal the condition variable, allowing all threads to continue.
     void broadcast();
 
