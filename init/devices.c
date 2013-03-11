@@ -83,7 +83,8 @@ struct perm_node {
 
 struct platform_node {
     char *name;
-    int name_len;
+    char *path;
+    int path_len;
     struct listnode list;
 };
 
@@ -215,61 +216,69 @@ static void make_device(const char *path,
     }
 }
 
-static void add_platform_device(const char *name)
+static void add_platform_device(const char *path)
 {
-    int name_len = strlen(name);
+    int path_len = strlen(path);
     struct listnode *node;
     struct platform_node *bus;
+    const char *name = path;
+
+    if (!strncmp(path, "/devices/", 9)) {
+        name += 9;
+        if (!strncmp(name, "platform/", 9))
+            name += 9;
+    }
 
     list_for_each_reverse(node, &platform_names) {
         bus = node_to_item(node, struct platform_node, list);
-        if ((bus->name_len < name_len) &&
-                (name[bus->name_len] == '/') &&
-                !strncmp(name, bus->name, bus->name_len))
+        if ((bus->path_len < path_len) &&
+                (path[bus->path_len] == '/') &&
+                !strncmp(path, bus->path, bus->path_len))
             /* subdevice of an existing platform, ignore it */
             return;
     }
 
-    INFO("adding platform device %s\n", name);
+    INFO("adding platform device %s (%s)\n", name, path);
 
     bus = calloc(1, sizeof(struct platform_node));
-    bus->name = strdup(name);
-    bus->name_len = name_len;
+    bus->path = strdup(path);
+    bus->path_len = path_len;
+    bus->name = bus->path + (name - path);
     list_add_tail(&platform_names, &bus->list);
 }
 
 /*
- * given a name that may start with a platform device, find the length of the
+ * given a path that may start with a platform device, find the length of the
  * platform device prefix.  If it doesn't start with a platform device, return
  * 0.
  */
-static const char *find_platform_device(const char *name)
+static struct platform_node *find_platform_device(const char *path)
 {
-    int name_len = strlen(name);
+    int path_len = strlen(path);
     struct listnode *node;
     struct platform_node *bus;
 
     list_for_each_reverse(node, &platform_names) {
         bus = node_to_item(node, struct platform_node, list);
-        if ((bus->name_len < name_len) &&
-                (name[bus->name_len] == '/') &&
-                !strncmp(name, bus->name, bus->name_len))
-            return bus->name;
+        if ((bus->path_len < path_len) &&
+                (path[bus->path_len] == '/') &&
+                !strncmp(path, bus->path, bus->path_len))
+            return bus;
     }
 
     return NULL;
 }
 
-static void remove_platform_device(const char *name)
+static void remove_platform_device(const char *path)
 {
     struct listnode *node;
     struct platform_node *bus;
 
     list_for_each_reverse(node, &platform_names) {
         bus = node_to_item(node, struct platform_node, list);
-        if (!strcmp(name, bus->name)) {
-            INFO("removing platform device %s\n", name);
-            free(bus->name);
+        if (!strcmp(path, bus->path)) {
+            INFO("removing platform device %s\n", bus->name);
+            free(bus->path);
             list_remove(node);
             free(bus);
             return;
@@ -355,8 +364,10 @@ static char **get_character_device_symlinks(struct uevent *uevent)
     char **links;
     int link_num = 0;
     int width;
+    struct platform_node *pdev;
 
-    if (strncmp(uevent->path, "/devices/platform/", 18))
+    pdev = find_platform_device(uevent->path);
+    if (!pdev)
         return NULL;
 
     links = malloc(sizeof(char *) * 2);
@@ -365,7 +376,7 @@ static char **get_character_device_symlinks(struct uevent *uevent)
     memset(links, 0, sizeof(char *) * 2);
 
     /* skip "/devices/platform/<driver>" */
-    parent = strchr(uevent->path + 18, '/');
+    parent = strchr(uevent->path + pdev->path_len, '/');
     if (!*parent)
         goto err;
 
@@ -402,7 +413,7 @@ err:
 static char **parse_platform_block_device(struct uevent *uevent)
 {
     const char *device;
-    const char *path;
+    struct platform_node *pdev;
     char *slash;
     int width;
     char buf[256];
@@ -414,17 +425,15 @@ static char **parse_platform_block_device(struct uevent *uevent)
     unsigned int size;
     struct stat info;
 
+    pdev = find_platform_device(uevent->path);
+    if (!pdev)
+        return NULL;
+    device = pdev->name;
+
     char **links = malloc(sizeof(char *) * 4);
     if (!links)
         return NULL;
     memset(links, 0, sizeof(char *) * 4);
-
-    /* Drop "/devices/platform/" */
-    path = uevent->path;
-    device = path + 18;
-    device = find_platform_device(device);
-    if (!device)
-        goto err;
 
     INFO("found platform device %s\n", device);
 
@@ -447,17 +456,13 @@ static char **parse_platform_block_device(struct uevent *uevent)
             links[link_num] = NULL;
     }
 
-    slash = strrchr(path, '/');
+    slash = strrchr(uevent->path, '/');
     if (asprintf(&links[link_num], "%s/%s", link_path, slash + 1) > 0)
         link_num++;
     else
         links[link_num] = NULL;
 
     return links;
-
-err:
-    free(links);
-    return NULL;
 }
 
 static void handle_device(const char *action, const char *devpath,
@@ -490,12 +495,12 @@ static void handle_device(const char *action, const char *devpath,
 
 static void handle_platform_device_event(struct uevent *uevent)
 {
-    const char *name = uevent->path + 18; /* length of /devices/platform/ */
+    const char *path = uevent->path;
 
     if (!strcmp(uevent->action, "add"))
-        add_platform_device(name);
+        add_platform_device(path);
     else if (!strcmp(uevent->action, "remove"))
-        remove_platform_device(name);
+        remove_platform_device(path);
 }
 
 static const char *parse_device_name(struct uevent *uevent, unsigned int len)
@@ -533,7 +538,7 @@ static void handle_block_device_event(struct uevent *uevent)
     snprintf(devpath, sizeof(devpath), "%s%s", base, name);
     make_dir(base, 0755);
 
-    if (!strncmp(uevent->path, "/devices/platform/", 18))
+    if (!strncmp(uevent->path, "/devices/", 9))
         links = parse_platform_block_device(uevent);
 
     handle_device(uevent->action, devpath, uevent->path, 1,
