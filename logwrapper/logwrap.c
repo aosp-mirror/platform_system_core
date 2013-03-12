@@ -79,9 +79,7 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
     pthread_sigmask(SIG_UNBLOCK, &chldset, NULL);
 
     while (!found_child) {
-        if (poll(poll_fds, remote_hung ? 1 : 2, -1) < 0) {
-            if (errno == EINTR)
-                continue;
+        if (TEMP_FAILURE_RETRY(poll(poll_fds, remote_hung ? 1 : 2, -1)) < 0) {
             ERROR("poll failed\n");
             rc = -1;
             goto err_poll;
@@ -132,9 +130,7 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
 
             read(signal_fd, tmp, sizeof(tmp));
             while (!found_child) {
-                do {
-                    ret = waitpid(-1, &status, WNOHANG);
-                } while (ret < 0 && errno == EINTR);
+                ret = TEMP_FAILURE_RETRY(waitpid(-1, &status, WNOHANG));
 
                 if (ret <= 0)
                     break;
