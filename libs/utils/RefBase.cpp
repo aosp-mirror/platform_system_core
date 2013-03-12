@@ -15,6 +15,7 @@
  */
 
 #define LOG_TAG "RefBase"
+#define LOG_NDEBUG 0
 
 #include <utils/RefBase.h>
 
