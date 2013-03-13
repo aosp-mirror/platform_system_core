@@ -24,6 +24,8 @@ static const char kAutotestPath[] = "/var/log/metrics/autotest-events";
 static const char kUMAEventsPath[] = "/var/log/metrics/uma-events";
 static const char kConsentFile[] = "/home/chronos/Consent To Send Stats";
 static const int32_t kBufferSize = 1024;
+static const char kCrosEventHistogramName[] = "Platform.CrOSEvent";
+static const int kCrosEventHistogramMax = 100;
 
 time_t MetricsLibrary::cached_enabled_time_ = 0;
 bool MetricsLibrary::cached_enabled_ = false;
@@ -305,4 +307,20 @@ bool MetricsLibrary::SendCrashToUMA(const char *crash_kind) {
 
 void MetricsLibrary::SetPolicyProvider(policy::PolicyProvider* provider) {
   policy_provider_.reset(provider);
+}
+
+bool MetricsLibrary::SendCrosEventToUMA(const std::string& event) {
+  int n;
+  /* Add new events here.
+   *
+   * Whoever adds the second event (if anybody) please be so kind to change
+   * this to a map lookup.  (Or at least change "second" above to "third",
+   * etc.)
+   */
+  if (event.compare("ModemManagerCommandSendFailure") == 0) {
+    n = 0;
+  } else {
+    return false;
+  }
+  return SendEnumToUMA(kCrosEventHistogramName, n, kCrosEventHistogramMax);
 }
