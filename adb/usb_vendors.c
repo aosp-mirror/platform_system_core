@@ -131,6 +131,12 @@
 #define VENDOR_ID_KOBO          0x2237
 // Teleepoch's USB Vendor ID
 #define VENDOR_ID_TELEEPOCH     0x2340
+// AnyDATA's USB Vendor ID
+#define VENDOR_ID_ANYDATA       0x16D5
+// Harris's USB Vendor ID
+#define VENDOR_ID_HARRIS        0x19A5
+// OPPO's USB Vendor ID
+#define VENDOR_ID_OPPO          0x22D9
 
 
 /** built-in vendor list */
@@ -183,6 +189,9 @@ int builtInVendorIds[] = {
     VENDOR_ID_YULONG_COOLPAD,
     VENDOR_ID_KOBO,
     VENDOR_ID_TELEEPOCH,
+    VENDOR_ID_ANYDATA,
+    VENDOR_ID_HARRIS,
+    VENDOR_ID_OPPO,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
