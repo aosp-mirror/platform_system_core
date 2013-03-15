@@ -24,6 +24,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include <cutils/logger.h>
 #include <cutils/logd.h>
@@ -37,7 +39,7 @@
 #define log_writev(filedes, vector, count) fakeLogWritev(filedes, vector, count)
 #define log_close(filedes) fakeLogClose(filedes)
 #else
-#define log_open(pathname, flags) open(pathname, flags)
+#define log_open(pathname, flags) open(pathname, (flags) | O_CLOEXEC)
 #define log_writev(filedes, vector, count) writev(filedes, vector, count)
 #define log_close(filedes) close(filedes)
 #endif
