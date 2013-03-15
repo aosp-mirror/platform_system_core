@@ -139,6 +139,8 @@
 #define VENDOR_ID_OPPO          0x22D9
 // Xiaomi's USB Vendor ID
 #define VENDOR_ID_XIAOMI        0x2717
+// BYD's USB Vendor ID
+#define VENDOR_ID_BYD           0x19D1
 
 
 /** built-in vendor list */
@@ -195,6 +197,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_HARRIS,
     VENDOR_ID_OPPO,
     VENDOR_ID_XIAOMI,
+    VENDOR_ID_BYD,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
