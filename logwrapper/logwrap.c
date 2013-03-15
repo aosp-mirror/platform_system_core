@@ -27,6 +27,7 @@
 #include <fcntl.h>
 #include <libgen.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #include <logwrap/logwrap.h>
 #include "private/android_filesystem_config.h"
@@ -35,6 +36,7 @@
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
 
 static int signal_fd_write;
+static pthread_mutex_t fd_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #define ERROR(fmt, args...)                                                   \
 do {                                                                          \
@@ -204,6 +206,12 @@ int android_fork_execvp(int argc, char* argv[], int *status, bool ignore_int_qui
     int sockets[2];
     int rc = 0;
 
+    rc = pthread_mutex_lock(&fd_mutex);
+    if (rc) {
+        ERROR("failed to lock signal_fd mutex\n");
+        goto err_lock;
+    }
+
     /* Use ptty instead of socketpair so that STDOUT is not buffered */
     parent_ptty = open("/dev/ptmx", O_RDWR);
     if (parent_ptty < 0) {
@@ -231,6 +239,7 @@ int android_fork_execvp(int argc, char* argv[], int *status, bool ignore_int_qui
         rc = -1;
         goto err_fork;
     } else if (pid == 0) {
+        pthread_mutex_unlock(&fd_mutex);
         pthread_sigmask(SIG_SETMASK, &oldset, NULL);
         close(parent_ptty);
 
@@ -299,5 +308,7 @@ err_fork:
 err_ptty:
     close(parent_ptty);
 err_open:
+    pthread_mutex_unlock(&fd_mutex);
+err_lock:
     return rc;
 }
