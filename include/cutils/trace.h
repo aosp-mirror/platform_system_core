@@ -182,6 +182,47 @@ static inline void atrace_end(uint64_t tag)
 }
 
 /**
+ * Trace the beginning of an asynchronous event. Unlike ATRACE_BEGIN/ATRACE_END
+ * contexts, asynchronous events do not need to be nested. The name describes
+ * the event, and the cookie provides a unique identifier for distinguishing
+ * simultaneous events. The name and cookie used to begin an event must be
+ * used to end it.
+ */
+#define ATRACE_ASYNC_BEGIN(name, cookie) \
+    atrace_async_begin(ATRACE_TAG, name, cookie)
+static inline void atrace_async_begin(uint64_t tag, const char* name,
+        int32_t cookie)
+{
+    if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
+        char buf[ATRACE_MESSAGE_LENGTH];
+        size_t len;
+
+        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "S|%d|%s|%d", getpid(),
+                name, cookie);
+        write(atrace_marker_fd, buf, len);
+    }
+}
+
+/**
+ * Trace the end of an asynchronous event.
+ * This should have a corresponding ATRACE_ASYNC_BEGIN.
+ */
+#define ATRACE_ASYNC_END(name, cookie) atrace_async_end(ATRACE_TAG, name, cookie)
+static inline void atrace_async_end(uint64_t tag, const char* name,
+        int32_t cookie)
+{
+    if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
+        char buf[ATRACE_MESSAGE_LENGTH];
+        size_t len;
+
+        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "F|%d|%s|%d", getpid(),
+                name, cookie);
+        write(atrace_marker_fd, buf, len);
+    }
+}
+
+
+/**
  * Traces an integer counter value.  name is used to identify the counter.
  * This can be used to track how a value changes over time.
  */
