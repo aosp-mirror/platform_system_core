@@ -17,6 +17,8 @@
 #ifndef SYSTEM_CORE_INCLUDE_ANDROID_GRAPHICS_H
 #define SYSTEM_CORE_INCLUDE_ANDROID_GRAPHICS_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -188,12 +190,64 @@ enum {
      */
     HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED = 0x22,
 
+    /*
+     * Android flexible YCbCr formats
+     *
+     * This format allows platforms to use an efficient YCbCr/YCrCb buffer
+     * layout, while still describing the buffer layout in a way accessible to
+     * the CPU in a device-independent manner.  While called YCbCr, it can be
+     * used to describe formats with either chromatic ordering, as well as
+     * whole planar or semiplanar layouts.
+     *
+     * struct android_ycbcr (below) is the the struct used to describe it.
+     *
+     * This format must be accepted by the gralloc module when
+     * USAGE_HW_CAMERA_WRITE and USAGE_SW_READ_* are set.
+     *
+     * This format is locked for use by gralloc's (*lock_ycbcr) method, and
+     * locking with the (*lock) method will return an error.
+     */
+    HAL_PIXEL_FORMAT_YCbCr_420_888 = 0x23,
+
     /* Legacy formats (deprecated), used by ImageFormat.java */
     HAL_PIXEL_FORMAT_YCbCr_422_SP       = 0x10, // NV16
     HAL_PIXEL_FORMAT_YCrCb_420_SP       = 0x11, // NV21
     HAL_PIXEL_FORMAT_YCbCr_422_I        = 0x14, // YUY2
 };
 
+/*
+ * Structure for describing YCbCr formats for consumption by applications.
+ * This is used with HAL_PIXEL_FORMAT_YCbCr_*_888.
+ *
+ * Buffer chroma subsampling is defined in the format.
+ * e.g. HAL_PIXEL_FORMAT_YCbCr_420_888 has subsampling 4:2:0.
+ *
+ * Buffers must have a 8 bit depth.
+ *
+ * @y, @cb, and @cr point to the first byte of their respective planes.
+ *
+ * Stride describes the distance in bytes from the first value of one row of
+ * the image to the first value of the next row.  It includes the width of the
+ * image plus padding.
+ * @ystride is the stride of the luma plane.
+ * @cstride is the stride of the chroma planes.
+ *
+ * @chroma_step is the distance in bytes from one chroma pixel value to the
+ * next.  This is 2 bytes for semiplanar (because chroma values are interleaved
+ * and each chroma value is one byte) and 1 for planar.
+ */
+
+struct android_ycbcr {
+    void *y;
+    void *cb;
+    void *cr;
+    size_t ystride;
+    size_t cstride;
+    size_t chroma_step;
+
+    /** reserved for future use, set to 0 by gralloc's (*lock_ycbcr)() */
+    uint32_t reserved[8];
+};
 
 /**
  * Transformation definitions
