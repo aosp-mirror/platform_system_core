@@ -112,10 +112,11 @@ static void dump_thread(log_t* log, pid_t tid, ptrace_context_t* context, bool a
     }
 }
 
-void dump_backtrace(int fd, pid_t pid, pid_t tid, bool* detach_failed,
+void dump_backtrace(int fd, int amfd, pid_t pid, pid_t tid, bool* detach_failed,
         int* total_sleep_time_usec) {
     log_t log;
     log.tfd = fd;
+    log.amfd = amfd;
     log.quiet = true;
 
     ptrace_context_t* context = load_ptrace_context(tid);

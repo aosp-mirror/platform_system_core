@@ -24,7 +24,9 @@
 typedef struct {
     /* tombstone file descriptor */
     int tfd;
-    /* if true, does not log anything to the Android logcat */
+    /* Activity Manager socket file descriptor */
+    int amfd;
+    /* if true, does not log anything to the Android logcat or Activity Manager */
     bool quiet;
 } log_t;
 

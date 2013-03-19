@@ -25,27 +25,63 @@
 #include <cutils/logd.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
+#include <arpa/inet.h>
+#include <assert.h>
 
 #include "utility.h"
 
 const int sleep_time_usec = 50000;         /* 0.05 seconds */
 const int max_total_sleep_usec = 10000000; /* 10 seconds */
 
+static int write_to_am(int fd, const char* buf, int len) {
+    int to_write = len;
+    while (to_write > 0) {
+        int written = TEMP_FAILURE_RETRY( write(fd, buf + len - to_write, to_write) );
+        if (written < 0) {
+            /* hard failure */
+            return -1;
+        }
+        to_write -= written;
+    }
+    return len;
+}
+
 void _LOG(log_t* log, bool in_tombstone_only, const char *fmt, ...) {
     char buf[512];
+    bool want_tfd_write;
+    bool want_log_write;
+    bool want_amfd_write;
+    int len;
 
     va_list ap;
     va_start(ap, fmt);
 
-    if (log && log->tfd >= 0) {
-        int len;
+    // where is the information going to go?
+    want_tfd_write = log && log->tfd >= 0;      // write to the tombstone fd?
+    want_log_write = !in_tombstone_only && (!log || !log->quiet);
+    want_amfd_write = log && log->amfd >= 0;    // only used when want_log_write is true
+
+    // if we're going to need the literal string, generate it once here
+    if (want_tfd_write || want_amfd_write) {
         vsnprintf(buf, sizeof(buf), fmt, ap);
         len = strlen(buf);
+    }
+
+    if (want_tfd_write) {
         write(log->tfd, buf, len);
     }
 
-    if (!in_tombstone_only && (!log || !log->quiet)) {
+    if (want_log_write) {
+        // whatever goes to logcat also goes to the Activity Manager
         __android_log_vprint(ANDROID_LOG_INFO, "DEBUG", fmt, ap);
+        if (want_amfd_write && len > 0) {
+            int written = write_to_am(log->amfd, buf, len);
+            if (written <= 0) {
+                // timeout or other failure on write; stop informing the activity manager
+                LOG("AM write failure, giving up\n");
+                log->amfd = -1;
+            }
+        }
     }
     va_end(ap);
 }
