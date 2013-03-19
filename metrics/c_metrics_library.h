@@ -28,6 +28,10 @@ int CMetricsLibrarySendToUMA(CMetricsLibrary handle,
 int CMetricsLibrarySendEnumToUMA(CMetricsLibrary handle,
                                  const char* name, int sample, int max);
 
+// C wrapper for MetricsLibrary::SendSparseToUMA.
+int CMetricsLibrarySendSparseToUMA(CMetricsLibrary handle,
+                                   const char* name, int sample);
+
 // C wrapper for MetricsLibrary::SendUserActionToUMA.
 int CMetricsLibrarySendUserActionToUMA(CMetricsLibrary handle,
                                        const char* action);

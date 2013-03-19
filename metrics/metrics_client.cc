@@ -7,10 +7,21 @@
 
 #include "metrics_library.h"
 
+enum Mode {
+    kModeSendSample,
+    kModeSendEnumSample,
+    kModeSendSparseSample,
+    kModeSendUserAction,
+    kModeSendCrosEvent,
+    kModeHasConsent,
+    kModeIsGuestMode,
+};
+
 void ShowUsage() {
   fprintf(stderr,
           "Usage:  metrics_client [-ab] [-t] name sample min max nbuckets\n"
           "        metrics_client [-ab] -e   name sample max\n"
+          "        metrics_client [-ab] -s   name sample\n"
           "        metrics_client [-ab] -v   event\n"
           "        metrics_client -u action\n"
           "        metrics_client [-cg]\n"
@@ -22,6 +33,7 @@ void ShowUsage() {
           "  -c: return exit status 0 if user consents to stats, 1 otherwise\n"
           "  -e: send linear/enumeration histogram data\n"
           "  -g: return exit status 0 if machine in guest mode, 1 otherwise\n"
+          "  -s: send a sparse histogram sample\n"
           "  -t: convert sample from double seconds to int milliseconds\n"
           "  -u: send a user action to Chrome\n"
           "  -v: send a Platform.CrOSEvent enum histogram sample\n"
@@ -31,7 +43,7 @@ void ShowUsage() {
 
 static int SendStats(char* argv[],
                      int name_index,
-                     bool send_enum,
+                     enum Mode mode,
                      bool secs_to_msecs,
                      bool send_to_autotest,
                      bool send_to_chrome) {
@@ -51,7 +63,9 @@ static int SendStats(char* argv[],
   if (send_to_chrome) {
     MetricsLibrary metrics_lib;
     metrics_lib.Init();
-    if (send_enum) {
+    if (mode == kModeSendSparseSample) {
+      metrics_lib.SendSparseToUMA(name, sample);
+    } else if (mode == kModeSendEnumSample) {
       int max = atoi(argv[name_index + 2]);
       metrics_lib.SendEnumToUMA(name, sample, max);
     } else {
@@ -98,29 +112,20 @@ static int IsGuestMode() {
 }
 
 int main(int argc, char** argv) {
-  enum Mode {
-    kModeSendStats,
-    kModeSendUserAction,
-    kModeSendCrosEvent,
-    kModeHasConsent,
-    kModeIsGuestMode
-  } mode = kModeSendStats;
+  enum Mode mode = kModeSendSample;
   bool send_to_autotest = false;
   bool send_to_chrome = true;
-  bool send_enum = false;
   bool secs_to_msecs = false;
 
   // Parse arguments
   int flag;
-  while ((flag = getopt(argc, argv, "abcegtuv")) != -1) {
+  while ((flag = getopt(argc, argv, "abcegstuv")) != -1) {
     switch (flag) {
       case 'a':
-        mode = kModeSendStats;
         send_to_autotest = true;
         send_to_chrome = false;
         break;
       case 'b':
-        mode = kModeSendStats;
         send_to_chrome = true;
         send_to_autotest = true;
         break;
@@ -128,10 +133,13 @@ int main(int argc, char** argv) {
         mode = kModeHasConsent;
         break;
       case 'e':
-        send_enum = true;
+        mode = kModeSendEnumSample;
         break;
       case 'g':
         mode = kModeIsGuestMode;
+        break;
+      case 's':
+        mode = kModeSendSparseSample;
         break;
       case 't':
         secs_to_msecs = true;
@@ -150,8 +158,12 @@ int main(int argc, char** argv) {
   int arg_index = optind;
 
   int expected_args = 0;
-  if (mode == kModeSendStats)
-    expected_args = send_enum ? 3 : 5;
+  if (mode == kModeSendSample)
+    expected_args = 5;
+  else if (mode == kModeSendEnumSample)
+    expected_args = 3;
+  else if (mode == kModeSendSparseSample)
+    expected_args = 2;
   else if (mode == kModeSendUserAction)
     expected_args = 1;
   else if (mode == kModeSendCrosEvent)
@@ -162,13 +174,15 @@ int main(int argc, char** argv) {
   }
 
   switch(mode) {
-    case kModeSendStats:
-      if (send_enum && secs_to_msecs) {
+    case kModeSendSample:
+    case kModeSendEnumSample:
+    case kModeSendSparseSample:
+      if ((mode != kModeSendSample) && secs_to_msecs) {
         ShowUsage();
       }
       return SendStats(argv,
                        arg_index,
-                       send_enum,
+                       mode,
                        secs_to_msecs,
                        send_to_autotest,
                        send_to_chrome);

@@ -230,6 +230,17 @@ TEST_F(MetricsLibraryTest, SendUserActionToUMA) {
   EXPECT_EQ(0, memcmp(exp, buf, kLen));
 }
 
+TEST_F(MetricsLibraryTest, SendSparseToUMA) {
+  char buf[100];
+  const int kLen = 4 + sizeof("sparsehistogram") + sizeof("Test.Sparse 1234");
+  EXPECT_TRUE(lib_.SendSparseToUMA("Test.Sparse", 1234));
+  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+
+  char exp[kLen];
+  sprintf(exp, "%c%c%c%csparsehistogram%cTest.Sparse 1234", kLen, 0, 0, 0, 0);
+  EXPECT_EQ(0, memcmp(exp, buf, kLen));
+}
+
 TEST_F(MetricsLibraryTest, SendCrashToUMA) {
   EXPECT_TRUE(lib_.SendCrashToUMA("kernel"));
   char exp[100];

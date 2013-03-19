@@ -43,6 +43,14 @@ extern "C" int CMetricsLibrarySendEnumToUMA(CMetricsLibrary handle,
   return lib->SendEnumToUMA(std::string(name), sample, max);
 }
 
+extern "C" int CMetricsLibrarySendSparseToUMA(CMetricsLibrary handle,
+                                              const char* name, int sample) {
+  MetricsLibrary* lib = reinterpret_cast<MetricsLibrary*>(handle);
+  if (lib == NULL)
+    return 0;
+  return lib->SendSparseToUMA(std::string(name), sample);
+}
+
 extern "C" int CMetricsLibrarySendUserActionToUMA(CMetricsLibrary handle,
                                                   const char* action) {
   MetricsLibrary* lib = reinterpret_cast<MetricsLibrary*>(handle);

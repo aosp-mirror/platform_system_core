@@ -20,6 +20,7 @@ class MetricsLibraryInterface {
   virtual bool SendToUMA(const std::string& name, int sample,
                          int min, int max, int nbuckets) = 0;
   virtual bool SendEnumToUMA(const std::string& name, int sample, int max) = 0;
+  virtual bool SendSparseToUMA(const std::string& name, int sample) = 0;
   virtual bool SendUserActionToUMA(const std::string& action) = 0;
   virtual ~MetricsLibraryInterface() {}
 };
@@ -73,6 +74,12 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // is strongly recommended to keep this number low (e.g., 50 is
   // normal, while 100 is high).
   bool SendEnumToUMA(const std::string& name, int sample, int max);
+
+  // Sends sparse histogram sample to Chrome for transport to UMA.  Returns
+  // true on success.
+  //
+  // |sample| is the 32-bit integer value to be recorded.
+  bool SendSparseToUMA(const std::string& name, int sample);
 
   // Sends a user action to Chrome for transport to UMA and returns true on
   // success. This method results in the equivalent of an asynchronous

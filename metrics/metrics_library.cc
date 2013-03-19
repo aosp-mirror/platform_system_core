@@ -290,6 +290,19 @@ bool MetricsLibrary::SendEnumToUMA(const std::string& name, int sample,
   return SendMessageToChrome(message_length, message);
 }
 
+bool MetricsLibrary::SendSparseToUMA(const std::string& name, int sample) {
+  // Format the message.
+  char message[kBufferSize];
+  int32_t message_length =
+      FormatChromeMessage(kBufferSize, message, "sparsehistogram%c%s %d",
+                          '\0', name.c_str(), sample);
+  if (message_length < 0)
+    return false;
+
+  // Send the message.
+  return SendMessageToChrome(message_length, message);
+}
+
 bool MetricsLibrary::SendUserActionToUMA(const std::string& action) {
   // Format the message.
   char message[kBufferSize];
