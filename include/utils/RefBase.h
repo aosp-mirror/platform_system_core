@@ -52,12 +52,16 @@ inline bool operator _op_ (const U* o) const {                  \
 }
 
 // ---------------------------------------------------------------------------
-class ReferenceMover;
-class ReferenceConverterBase {
+
+class ReferenceRenamer {
+protected:
+    // destructor is purposedly not virtual so we avoid code overhead from
+    // subclasses; we have to make it protected to guarantee that it
+    // cannot be called from this base class (and to make strict compilers
+    // happy).
+    ~ReferenceRenamer() { }
 public:
-    virtual size_t getReferenceTypeSize() const = 0;
-    virtual void* getReferenceBase(void const*) const = 0;
-    inline virtual ~ReferenceConverterBase() { }
+    virtual void operator()(size_t i) const = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -144,16 +148,22 @@ protected:
     virtual void            onLastWeakRef(const void* id);
 
 private:
-    friend class ReferenceMover;
-    static void moveReferences(void* d, void const* s, size_t n,
-            const ReferenceConverterBase& caster);
-
-private:
     friend class weakref_type;
     class weakref_impl;
     
                             RefBase(const RefBase& o);
             RefBase&        operator=(const RefBase& o);
+
+private:
+    friend class ReferenceMover;
+
+    static void renameRefs(size_t n, const ReferenceRenamer& renamer);
+
+    static void renameRefId(weakref_type* ref,
+            const void* old_id, const void* new_id);
+
+    static void renameRefId(RefBase* ref,
+            const void* old_id, const void* new_id);
 
         weakref_impl* const mRefs;
 };
@@ -185,8 +195,9 @@ protected:
 
 private:
     friend class ReferenceMover;
-    inline static void moveReferences(void* d, void const* s, size_t n,
-            const ReferenceConverterBase& caster) { }
+    inline static void renameRefs(size_t n, const ReferenceRenamer& renamer) { }
+    inline static void renameRefId(T* ref,
+            const void* old_id, const void* new_id) { }
 
 private:
     mutable volatile int32_t mCount;
@@ -455,42 +466,48 @@ inline TextOutput& operator<<(TextOutput& to, const wp<T>& val)
 
 // this class just serves as a namespace so TYPE::moveReferences can stay
 // private.
-
 class ReferenceMover {
-    // StrongReferenceCast and WeakReferenceCast do the impedance matching
-    // between the generic (void*) implementation in Refbase and the strongly typed
-    // template specializations below.
-
-    template <typename TYPE>
-    struct StrongReferenceCast : public ReferenceConverterBase {
-        virtual size_t getReferenceTypeSize() const { return sizeof( sp<TYPE> ); }
-        virtual void* getReferenceBase(void const* p) const {
-            sp<TYPE> const* sptr(reinterpret_cast<sp<TYPE> const*>(p));
-            return static_cast<typename TYPE::basetype *>(sptr->get());
-        }
-    };
-
-    template <typename TYPE>
-    struct WeakReferenceCast : public ReferenceConverterBase {
-        virtual size_t getReferenceTypeSize() const { return sizeof( wp<TYPE> ); }
-        virtual void* getReferenceBase(void const* p) const {
-            wp<TYPE> const* sptr(reinterpret_cast<wp<TYPE> const*>(p));
-            return static_cast<typename TYPE::basetype *>(sptr->unsafe_get());
-        }
-    };
-
 public:
+    // it would be nice if we could make sure no extra code is generated
+    // for sp<TYPE> or wp<TYPE> when TYPE is a descendant of RefBase:
+    // Using a sp<RefBase> override doesn't work; it's a bit like we wanted
+    // a template<typename TYPE inherits RefBase> template...
+
     template<typename TYPE> static inline
     void move_references(sp<TYPE>* d, sp<TYPE> const* s, size_t n) {
+
+        class Renamer : public ReferenceRenamer {
+            sp<TYPE>* d;
+            sp<TYPE> const* s;
+            virtual void operator()(size_t i) const {
+                // The id are known to be the sp<>'s this pointer
+                TYPE::renameRefId(d[i].get(), &s[i], &d[i]);
+            }
+        public:
+            Renamer(sp<TYPE>* d, sp<TYPE> const* s) : s(s), d(d) { }
+        };
+
         memmove(d, s, n*sizeof(sp<TYPE>));
-        StrongReferenceCast<TYPE> caster;
-        TYPE::moveReferences(d, s, n, caster);
+        TYPE::renameRefs(n, Renamer(d, s));
     }
+
+
     template<typename TYPE> static inline
     void move_references(wp<TYPE>* d, wp<TYPE> const* s, size_t n) {
+
+        class Renamer : public ReferenceRenamer {
+            wp<TYPE>* d;
+            wp<TYPE> const* s;
+            virtual void operator()(size_t i) const {
+                // The id are known to be the wp<>'s this pointer
+                TYPE::renameRefId(d[i].get_refs(), &s[i], &d[i]);
+            }
+        public:
+            Renamer(wp<TYPE>* d, wp<TYPE> const* s) : s(s), d(d) { }
+        };
+
         memmove(d, s, n*sizeof(wp<TYPE>));
-        WeakReferenceCast<TYPE> caster;
-        TYPE::moveReferences(d, s, n, caster);
+        TYPE::renameRefs(n, Renamer(d, s));
     }
 };
 

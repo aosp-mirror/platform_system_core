@@ -631,19 +631,25 @@ void RefBase::onLastWeakRef(const void* /*id*/)
 
 // ---------------------------------------------------------------------------
 
-void RefBase::moveReferences(void* dst, void const* src, size_t n,
-        const ReferenceConverterBase& caster)
-{
+void RefBase::renameRefs(size_t n, const ReferenceRenamer& renamer) {
 #if DEBUG_REFS
-    const size_t itemSize = caster.getReferenceTypeSize();
     for (size_t i=0 ; i<n ; i++) {
-        void*       d = reinterpret_cast<void      *>(intptr_t(dst) + i*itemSize);
-        void const* s = reinterpret_cast<void const*>(intptr_t(src) + i*itemSize);
-        RefBase* ref(reinterpret_cast<RefBase*>(caster.getReferenceBase(d)));
-        ref->mRefs->renameStrongRefId(s, d);
-        ref->mRefs->renameWeakRefId(s, d);
+        renamer(i);
     }
 #endif
+}
+
+void RefBase::renameRefId(weakref_type* ref,
+        const void* old_id, const void* new_id) {
+    weakref_impl* const impl = static_cast<weakref_impl*>(ref);
+    impl->renameStrongRefId(old_id, new_id);
+    impl->renameWeakRefId(old_id, new_id);
+}
+
+void RefBase::renameRefId(RefBase* ref,
+        const void* old_id, const void* new_id) {
+    ref->mRefs->renameStrongRefId(old_id, new_id);
+    ref->mRefs->renameWeakRefId(old_id, new_id);
 }
 
 // ---------------------------------------------------------------------------
