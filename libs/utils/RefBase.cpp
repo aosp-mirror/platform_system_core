@@ -35,9 +35,17 @@
 
 // compile with refcounting debugging enabled
 #define DEBUG_REFS                      0
-#define DEBUG_REFS_FATAL_SANITY_CHECKS  0
-#define DEBUG_REFS_ENABLED_BY_DEFAULT   1
+
+// whether ref-tracking is enabled by default, if not, trackMe(true, false)
+// needs to be called explicitly
+#define DEBUG_REFS_ENABLED_BY_DEFAULT   0
+
+// whether callstack are collected (significantly slows things down)
 #define DEBUG_REFS_CALLSTACK_ENABLED    1
+
+// folder where stack traces are saved when DEBUG_REFS is enabled
+// this folder needs to exist and be writable
+#define DEBUG_REFS_CALLSTACK_PATH       "/data/debug"
 
 // log all reference counting operations
 #define PRINT_REFS                      0
@@ -96,11 +104,7 @@ public:
         bool dumpStack = false;
         if (!mRetain && mStrongRefs != NULL) {
             dumpStack = true;
-#if DEBUG_REFS_FATAL_SANITY_CHECKS
-            LOG_ALWAYS_FATAL("Strong references remain!");
-#else
             ALOGE("Strong references remain:");
-#endif
             ref_entry* refs = mStrongRefs;
             while (refs) {
                 char inc = refs->ref >= 0 ? '+' : '-';
@@ -114,11 +118,7 @@ public:
 
         if (!mRetain && mWeakRefs != NULL) {
             dumpStack = true;
-#if DEBUG_REFS_FATAL_SANITY_CHECKS
-            LOG_ALWAYS_FATAL("Weak references remain:");
-#else
             ALOGE("Weak references remain!");
-#endif
             ref_entry* refs = mWeakRefs;
             while (refs) {
                 char inc = refs->ref >= 0 ? '+' : '-';
@@ -199,7 +199,7 @@ public:
 
         {
             char name[100];
-            snprintf(name, 100, "/data/%p.stack", this);
+            snprintf(name, 100, DEBUG_REFS_CALLSTACK_PATH "/%p.stack", this);
             int rc = open(name, O_RDWR | O_CREAT | O_APPEND, 644);
             if (rc >= 0) {
                 write(rc, text.string(), text.length());
@@ -257,12 +257,6 @@ private:
                 refs = &ref->next;
                 ref = *refs;
             }
-
-#if DEBUG_REFS_FATAL_SANITY_CHECKS
-            LOG_ALWAYS_FATAL("RefBase: removing id %p on RefBase %p"
-                    "(weakref_type %p) that doesn't exist!",
-                    id, mBase, this);
-#endif
 
             ALOGE("RefBase: removing id %p on RefBase %p"
                     "(weakref_type %p) that doesn't exist!",
