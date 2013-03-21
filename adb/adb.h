@@ -323,6 +323,8 @@ asocket*  create_jdwp_tracker_service_socket();
 int       create_jdwp_connection_fd(int  jdwp_pid);
 #endif
 
+int handle_forward_request(const char* service, transport_type ttype, char* serial, int reply_fd);
+
 #if !ADB_HOST
 typedef enum {
     BACKUP,
