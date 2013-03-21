@@ -17,7 +17,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <signal.h>
 #include <poll.h>
 #include <sys/wait.h>
 #include <stdio.h>
@@ -35,7 +34,6 @@
 
 #define ARRAY_SIZE(x)   (sizeof(x) / sizeof(*(x)))
 
-static int signal_fd_write;
 static pthread_mutex_t fd_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #define ERROR(fmt, args...)                                                   \
@@ -50,94 +48,77 @@ do {                                                                          \
     _exit(-1);                                                                \
 } while(0)
 
-static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
-        int *chld_sts, bool logwrap) {
+static int parent(const char *tag, int parent_read, pid_t pid, int *chld_sts,
+        bool logwrap) {
     int status = 0;
     char buffer[4096];
     struct pollfd poll_fds[] = {
         [0] = {
-            .fd = signal_fd,
-            .events = POLLIN,
-        },
-        [1] = {
             .fd = parent_read,
             .events = POLLIN,
         },
     };
     int rc = 0;
-    sigset_t chldset;
 
     int a = 0;  // start index of unprocessed data
     int b = 0;  // end index of unprocessed data
     int sz;
-    bool remote_hung = false;
     bool found_child = false;
 
     char *btag = basename(tag);
     if (!btag) btag = (char*) tag;
 
-    sigemptyset(&chldset);
-    sigaddset(&chldset, SIGCHLD);
-    pthread_sigmask(SIG_UNBLOCK, &chldset, NULL);
-
     while (!found_child) {
-        if (TEMP_FAILURE_RETRY(poll(poll_fds, remote_hung ? 1 : 2, -1)) < 0) {
+        if (TEMP_FAILURE_RETRY(poll(poll_fds, ARRAY_SIZE(poll_fds), -1)) < 0) {
             ERROR("poll failed\n");
             rc = -1;
             goto err_poll;
         }
 
-        if (!remote_hung) {
-            if (poll_fds[1].revents & POLLIN) {
-                sz = read(parent_read, &buffer[b], sizeof(buffer) - 1 - b);
+        if (poll_fds[0].revents & POLLIN) {
+            sz = read(parent_read, &buffer[b], sizeof(buffer) - 1 - b);
 
-                sz += b;
-                // Log one line at a time
-                for (b = 0; b < sz; b++) {
-                    if (buffer[b] == '\r') {
-                        buffer[b] = '\0';
-                    } else if (buffer[b] == '\n') {
-                        buffer[b] = '\0';
-                        if (logwrap)
-                            ALOG(LOG_INFO, btag, "%s", &buffer[a]);
-                        a = b + 1;
-                    }
-                }
-
-                if (a == 0 && b == sizeof(buffer) - 1) {
-                    // buffer is full, flush
+            sz += b;
+            // Log one line at a time
+            for (b = 0; b < sz; b++) {
+                if (buffer[b] == '\r') {
+                    buffer[b] = '\0';
+                } else if (buffer[b] == '\n') {
                     buffer[b] = '\0';
                     if (logwrap)
                         ALOG(LOG_INFO, btag, "%s", &buffer[a]);
-                    b = 0;
-                } else if (a != b) {
-                    // Keep left-overs
-                    b -= a;
-                    memmove(buffer, &buffer[a], b);
-                    a = 0;
-                } else {
-                    a = 0;
-                    b = 0;
+                    a = b + 1;
                 }
             }
 
-            if (poll_fds[1].revents & POLLHUP) {
-                remote_hung = true;
+            if (a == 0 && b == sizeof(buffer) - 1) {
+                // buffer is full, flush
+                buffer[b] = '\0';
+                if (logwrap)
+                    ALOG(LOG_INFO, btag, "%s", &buffer[a]);
+                b = 0;
+            } else if (a != b) {
+                // Keep left-overs
+                b -= a;
+                memmove(buffer, &buffer[a], b);
+                a = 0;
+            } else {
+                a = 0;
+                b = 0;
             }
         }
 
-        if (poll_fds[0].revents & POLLIN) {
-            char tmp[32];
+        if (poll_fds[0].revents & POLLHUP) {
             int ret;
 
-            read(signal_fd, tmp, sizeof(tmp));
-            while (!found_child) {
-                ret = TEMP_FAILURE_RETRY(waitpid(-1, &status, WNOHANG));
-
-                if (ret <= 0)
-                    break;
-
-                found_child = (pid == ret);
+            ret = waitpid(pid, &status, WNOHANG);
+            if (ret < 0) {
+                rc = errno;
+                ALOG(LOG_ERROR, "logwrap", "waitpid failed with %s\n", strerror(errno));
+                goto err_waitpid;
+            }
+            if (ret > 0) {
+                found_child = true;
             }
         }
     }
@@ -171,6 +152,7 @@ static int parent(const char *tag, int parent_read, int signal_fd, pid_t pid,
       }
     }
 
+err_waitpid:
 err_poll:
     return rc;
 }
@@ -187,23 +169,16 @@ static void child(int argc, char* argv[], bool logwrap) {
     }
 }
 
-static void sigchld_handler(int sig) {
-    write(signal_fd_write, &sig, 1);
-}
-
 int android_fork_execvp(int argc, char* argv[], int *status, bool ignore_int_quit,
         bool logwrap) {
     pid_t pid;
     int parent_ptty;
     int child_ptty;
     char *child_devname = NULL;
-    struct sigaction chldact;
-    struct sigaction oldchldact;
     struct sigaction intact;
     struct sigaction quitact;
     sigset_t blockset;
     sigset_t oldset;
-    int sockets[2];
     int rc = 0;
 
     rc = pthread_mutex_lock(&fd_mutex);
@@ -227,14 +202,21 @@ int android_fork_execvp(int argc, char* argv[], int *status, bool ignore_int_qui
         goto err_ptty;
     }
 
+    child_ptty = open(child_devname, O_RDWR);
+    if (child_ptty < 0) {
+        ERROR("Cannot open child_ptty\n");
+        rc = -1;
+        goto err_child_ptty;
+    }
+
     sigemptyset(&blockset);
     sigaddset(&blockset, SIGINT);
     sigaddset(&blockset, SIGQUIT);
-    sigaddset(&blockset, SIGCHLD);
     pthread_sigmask(SIG_BLOCK, &blockset, &oldset);
 
     pid = fork();
     if (pid < 0) {
+        close(child_ptty);
         ERROR("Failed to fork\n");
         rc = -1;
         goto err_fork;
@@ -243,12 +225,6 @@ int android_fork_execvp(int argc, char* argv[], int *status, bool ignore_int_qui
         pthread_sigmask(SIG_SETMASK, &oldset, NULL);
         close(parent_ptty);
 
-        child_ptty = open(child_devname, O_RDWR);
-        if (child_ptty < 0) {
-            FATAL_CHILD("Problem with child ptty\n");
-            return -1;
-        }
-
         // redirect stdout and stderr
         dup2(child_ptty, 1);
         dup2(child_ptty, 2);
@@ -256,55 +232,26 @@ int android_fork_execvp(int argc, char* argv[], int *status, bool ignore_int_qui
 
         child(argc, argv, logwrap);
     } else {
-        struct sigaction ignact;
-
-        memset(&chldact, 0, sizeof(chldact));
-        chldact.sa_handler = sigchld_handler;
-        chldact.sa_flags = SA_NOCLDSTOP;
-
-        sigaction(SIGCHLD, &chldact, &oldchldact);
-        if ((!(oldchldact.sa_flags & SA_SIGINFO) &&
-                oldchldact.sa_handler != SIG_DFL &&
-                oldchldact.sa_handler != SIG_IGN) ||
-                ((oldchldact.sa_flags & SA_SIGINFO) &&
-                oldchldact.sa_sigaction != NULL)) {
-            ALOG(LOG_WARN, "logwrapper", "logwrap replaced the SIGCHLD "
-                    "handler and might cause interaction issues");
-        }
-
+        close(child_ptty);
         if (ignore_int_quit) {
+            struct sigaction ignact;
+
             memset(&ignact, 0, sizeof(ignact));
             ignact.sa_handler = SIG_IGN;
             sigaction(SIGINT, &ignact, &intact);
             sigaction(SIGQUIT, &ignact, &quitact);
         }
 
-        rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sockets);
-        if (rc == -1) {
-            ERROR("socketpair failed: %s\n", strerror(errno));
-            goto err_socketpair;
-        }
-
-        fcntl(sockets[0], F_SETFD, FD_CLOEXEC);
-        fcntl(sockets[0], F_SETFL, O_NONBLOCK);
-        fcntl(sockets[1], F_SETFD, FD_CLOEXEC);
-        fcntl(sockets[1], F_SETFL, O_NONBLOCK);
-
-        signal_fd_write = sockets[0];
-
-        rc = parent(argv[0], parent_ptty, sockets[1], pid, status, logwrap);
+        rc = parent(argv[0], parent_ptty, pid, status, logwrap);
     }
 
-    close(sockets[0]);
-    close(sockets[1]);
-err_socketpair:
     if (ignore_int_quit) {
         sigaction(SIGINT, &intact, NULL);
         sigaction(SIGQUIT, &quitact, NULL);
     }
-    sigaction(SIGCHLD, &oldchldact, NULL);
 err_fork:
     pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+err_child_ptty:
 err_ptty:
     close(parent_ptty);
 err_open:
