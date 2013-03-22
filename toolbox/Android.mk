@@ -16,7 +16,6 @@ TOOLS := \
 	rm \
 	mkdir \
 	rmdir \
-	reboot \
 	getevent \
 	sendevent \
 	date \

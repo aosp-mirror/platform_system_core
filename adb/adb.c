@@ -1195,8 +1195,9 @@ static void drop_capabilities_bounding_set_if_needed() {
 #endif
     int i;
     for (i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0) >= 0; i++) {
-        if ((i == CAP_SETUID) || (i == CAP_SETGID)) {
+        if (i == CAP_SETUID || i == CAP_SETGID || i == CAP_SYS_BOOT) {
             // CAP_SETUID CAP_SETGID needed by /system/bin/run-as
+            // CAP_SYS_BOOT          needed by /system/bin/reboot
             continue;
         }
         int err = prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
