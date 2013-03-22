@@ -98,7 +98,7 @@ LOCAL_LDLIBS += $(host_commonLdlibs)
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
-# For the device
+# For the device, static
 # =====================================================
 include $(CLEAR_VARS)
 
@@ -123,14 +123,29 @@ LOCAL_C_INCLUDES += \
 
 LOCAL_LDLIBS += -lpthread
 
-LOCAL_SHARED_LIBRARIES := \
-	liblog \
+LOCAL_STATIC_LIBRARIES := \
 	libcutils \
-	libdl \
-	libcorkscrew \
 	libz
 
+LOCAL_SHARED_LIBRARIES := \
+        libcorkscrew \
+        liblog \
+        libdl
+
 LOCAL_MODULE:= libutils
+include $(BUILD_STATIC_LIBRARY)
+
+# For the device, shared
+# =====================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE:= libutils
+LOCAL_WHOLE_STATIC_LIBRARIES := libutils
+LOCAL_SHARED_LIBRARIES := \
+        liblog \
+        libcutils \
+        libdl \
+        libcorkscrew \
+        libz
 include $(BUILD_SHARED_LIBRARY)
 
 # Include subdirectory makefiles
