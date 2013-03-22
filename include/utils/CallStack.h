@@ -35,6 +35,8 @@ public:
     };
 
     CallStack();
+    CallStack(const char* logtag, int32_t ignoreDepth=1,
+            int32_t maxDepth=MAX_DEPTH);
     CallStack(const CallStack& rhs);
     ~CallStack();
 
@@ -53,8 +55,8 @@ public:
 
     void update(int32_t ignoreDepth=1, int32_t maxDepth=MAX_DEPTH);
 
-    // Dump a stack trace to the log
-    void dump(const char* prefix = 0) const;
+    // Dump a stack trace to the log using the supplied logtag
+    void dump(const char* logtag, const char* prefix = 0) const;
 
     // Return a string (possibly very long) containing the complete stack trace
     String8 toString(const char* prefix = 0) const;

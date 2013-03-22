@@ -110,7 +110,7 @@ public:
                 char inc = refs->ref >= 0 ? '+' : '-';
                 ALOGD("\t%c ID %p (ref %d):", inc, refs->id, refs->ref);
 #if DEBUG_REFS_CALLSTACK_ENABLED
-                refs->stack.dump();
+                refs->stack.dump(LOG_TAG);
 #endif
                 refs = refs->next;
             }
@@ -124,16 +124,14 @@ public:
                 char inc = refs->ref >= 0 ? '+' : '-';
                 ALOGD("\t%c ID %p (ref %d):", inc, refs->id, refs->ref);
 #if DEBUG_REFS_CALLSTACK_ENABLED
-                refs->stack.dump();
+                refs->stack.dump(LOG_TAG);
 #endif
                 refs = refs->next;
             }
         }
         if (dumpStack) {
             ALOGE("above errors at:");
-            CallStack stack;
-            stack.update();
-            stack.dump();
+            CallStack stack(LOG_TAG);
         }
     }
 
@@ -269,9 +267,7 @@ private:
                 ref = ref->next;
             }
 
-            CallStack stack;
-            stack.update();
-            stack.dump();
+            CallStack stack(LOG_TAG);
         }
     }
 
