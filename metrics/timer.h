@@ -111,8 +111,7 @@ class TimerReporter : public Timer {
   }
 
   // Reports the current duration to UMA, in milliseconds. Returns false if
-  // there is nothing to report, i.e. the timer was not started or a metrics
-  // library is not set.
+  // there is nothing to report, e.g. a metrics library is not set.
   virtual bool ReportMilliseconds() const;
 
   // Accessor methods.
