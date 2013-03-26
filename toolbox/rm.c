@@ -103,8 +103,8 @@ int rm_main(int argc, char *argv[])
             ret = unlink_recursive(argv[i], flags);
         } else {
             ret = unlink(argv[i]);
-            if (errno == ENOENT && (flags & OPT_FORCE)) {
-                return 0;
+            if (ret < 0 && errno == ENOENT && (flags & OPT_FORCE)) {
+                continue;
             }
         }
 
