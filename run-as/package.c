@@ -47,15 +47,18 @@
 /* Copy 'srclen' string bytes from 'src' into buffer 'dst' of size 'dstlen'
  * This function always zero-terminate the destination buffer unless
  * 'dstlen' is 0, even in case of overflow.
+ * Returns a pointer into the src string, leaving off where the copy
+ * has stopped. The copy will stop when dstlen, srclen or a null
+ * character on src has been reached.
  */
-static void
+static const char*
 string_copy(char* dst, size_t dstlen, const char* src, size_t srclen)
 {
     const char* srcend = src + srclen;
     const char* dstend = dst + dstlen;
 
     if (dstlen == 0)
-        return;
+        return src;
 
     dstend--; /* make room for terminating zero */
 
@@ -63,6 +66,7 @@ string_copy(char* dst, size_t dstlen, const char* src, size_t srclen)
         *dst++ = *src++;
 
     *dst = '\0'; /* zero-terminate result */
+    return src;
 }
 
 /* Open 'filename' and map it into our address-space.
@@ -411,6 +415,7 @@ get_package_info(const char* pkgName, PackageInfo *info)
     info->uid          = 0;
     info->isDebuggable = 0;
     info->dataDir[0]   = '\0';
+    info->seinfo[0]    = '\0';
 
     buffer = map_file(PACKAGES_LIST_FILE, &buffer_len);
     if (buffer == NULL)
@@ -421,13 +426,14 @@ get_package_info(const char* pkgName, PackageInfo *info)
 
     /* expect the following format on each line of the control file:
      *
-     *  <pkgName> <uid> <debugFlag> <dataDir>
+     *  <pkgName> <uid> <debugFlag> <dataDir> <seinfo>
      *
      * where:
      *  <pkgName>    is the package's name
      *  <uid>        is the application-specific user Id (decimal)
      *  <debugFlag>  is 1 if the package is debuggable, or 0 otherwise
      *  <dataDir>    is the path to the package's data directory (e.g. /data/data/com.example.foo)
+     *  <seinfo>     is the seinfo label associated with the package
      *
      * The file is generated in com.android.server.PackageManagerService.Settings.writeLP()
      */
@@ -483,7 +489,18 @@ get_package_info(const char* pkgName, PackageInfo *info)
         if (q == p)
             goto BAD_FORMAT;
 
-        string_copy(info->dataDir, sizeof info->dataDir, p, q - p);
+        p = string_copy(info->dataDir, sizeof info->dataDir, p, q - p);
+
+        /* skip spaces */
+        if (parse_spaces(&p, end) < 0)
+            goto BAD_FORMAT;
+
+        /* fifth field is the seinfo string */
+        q = skip_non_spaces(p, end);
+        if (q == p)
+            goto BAD_FORMAT;
+
+        string_copy(info->seinfo, sizeof info->seinfo, p, q - p);
 
         /* Ignore the rest */
         result = 0;
