@@ -319,6 +319,8 @@ bool MetricsLibrary::SendCrosEventToUMA(const std::string& event) {
    */
   if (event.compare("ModemManagerCommandSendFailure") == 0) {
     n = 0;
+  } else if (event.compare("HwWatchdogReboot") == 0) {
+    n = 1;
   } else {
     return false;
   }
