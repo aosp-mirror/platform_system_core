@@ -20,6 +20,7 @@
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <cutils/compiler.h>
 
@@ -62,7 +63,8 @@ __BEGIN_DECLS
 #define ATRACE_TAG_VIDEO            (1<<9)
 #define ATRACE_TAG_CAMERA           (1<<10)
 #define ATRACE_TAG_HAL              (1<<11)
-#define ATRACE_TAG_LAST             ATRACE_TAG_HAL
+#define ATRACE_TAG_APP              (1<<12)
+#define ATRACE_TAG_LAST             ATRACE_TAG_APP
 
 // Reserved for initialization.
 #define ATRACE_TAG_NOT_READY        (1LL<<63)
@@ -95,6 +97,14 @@ void atrace_setup();
  * debug.atrace.tags.enableflags. Can be used as a sysprop change callback.
  */
 void atrace_update_tags();
+
+/**
+ * Set whether the process is debuggable.  By default the process is not
+ * considered debuggable.  If the process is not debuggable then application-
+ * level tracing is not allowed unless the ro.debuggable system property is
+ * set to '1'.
+ */
+void atrace_set_debuggable(bool debuggable);
 
 /**
  * Flag indicating whether setup has been completed, initialized to 0.
