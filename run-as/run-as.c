@@ -163,7 +163,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (selinux_android_setcontext(uid, 0, NULL, pkgname) < 0) {
+    if (selinux_android_setcontext(uid, 0, info.seinfo, pkgname) < 0) {
         panic("Could not set SELinux security context:  %s\n", strerror(errno));
         return 1;
     }

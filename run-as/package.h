@@ -30,6 +30,7 @@ typedef struct {
     uid_t  uid;
     char   isDebuggable;
     char   dataDir[PATH_MAX];
+    char   seinfo[PATH_MAX];
 } PackageInfo;
 
 /* see documentation in package.c for these functiosn */
