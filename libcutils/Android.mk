@@ -130,7 +130,11 @@ ifeq ($(TARGET_ARCH_VARIANT),x86-atom)
 LOCAL_CFLAGS += -DHAVE_MEMSET16 -DHAVE_MEMSET32
 LOCAL_SRC_FILES += arch-x86/android_memset16.S arch-x86/android_memset32.S memory.c
 else # !x86-atom
+ifeq ($(TARGET_ARCH),mips)
+LOCAL_SRC_FILES += arch-mips/android_memset.c
+else # !mips
 LOCAL_SRC_FILES += memory.c
+endif # !mips
 endif # !x86-atom
 endif # !arm
 
