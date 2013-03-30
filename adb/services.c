@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -429,6 +430,124 @@ static void wait_for_state(int fd, void* cookie)
     adb_close(fd);
     D("wait_for_state is done\n");
 }
+
+static void connect_device(char* host, char* buffer, int buffer_size)
+{
+    int port, fd;
+    char* portstr = strchr(host, ':');
+    char hostbuf[100];
+    char serial[100];
+    int ret;
+
+    strncpy(hostbuf, host, sizeof(hostbuf) - 1);
+    if (portstr) {
+        if (portstr - host >= (ptrdiff_t)sizeof(hostbuf)) {
+            snprintf(buffer, buffer_size, "bad host name %s", host);
+            return;
+        }
+        // zero terminate the host at the point we found the colon
+        hostbuf[portstr - host] = 0;
+        if (sscanf(portstr + 1, "%d", &port) == 0) {
+            snprintf(buffer, buffer_size, "bad port number %s", portstr);
+            return;
+        }
+    } else {
+        port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
+    }
+
+    snprintf(serial, sizeof(serial), "%s:%d", hostbuf, port);
+
+    fd = socket_network_client(hostbuf, port, SOCK_STREAM);
+    if (fd < 0) {
+        snprintf(buffer, buffer_size, "unable to connect to %s:%d", host, port);
+        return;
+    }
+
+    D("client: connected on remote on fd %d\n", fd);
+    close_on_exec(fd);
+    disable_tcp_nagle(fd);
+
+    ret = register_socket_transport(fd, serial, port, 0);
+    if (ret < 0) {
+        adb_close(fd);
+        snprintf(buffer, buffer_size, "already connected to %s", serial);
+    } else {
+        snprintf(buffer, buffer_size, "connected to %s", serial);
+    }
+}
+
+void connect_emulator(char* port_spec, char* buffer, int buffer_size)
+{
+    char* port_separator = strchr(port_spec, ',');
+    if (!port_separator) {
+        snprintf(buffer, buffer_size,
+                "unable to parse '%s' as <console port>,<adb port>",
+                port_spec);
+        return;
+    }
+
+    // Zero-terminate console port and make port_separator point to 2nd port.
+    *port_separator++ = 0;
+    int console_port = strtol(port_spec, NULL, 0);
+    int adb_port = strtol(port_separator, NULL, 0);
+    if (!(console_port > 0 && adb_port > 0)) {
+        *(port_separator - 1) = ',';
+        snprintf(buffer, buffer_size,
+                "Invalid port numbers: Expected positive numbers, got '%s'",
+                port_spec);
+        return;
+    }
+
+    /* Check if the emulator is already known.
+     * Note: There's a small but harmless race condition here: An emulator not
+     * present just yet could be registered by another invocation right
+     * after doing this check here. However, local_connect protects
+     * against double-registration too. From here, a better error message
+     * can be produced. In the case of the race condition, the very specific
+     * error message won't be shown, but the data doesn't get corrupted. */
+    atransport* known_emulator = find_emulator_transport_by_adb_port(adb_port);
+    if (known_emulator != NULL) {
+        snprintf(buffer, buffer_size,
+                "Emulator on port %d already registered.", adb_port);
+        return;
+    }
+
+    /* Check if more emulators can be registered. Similar unproblematic
+     * race condition as above. */
+    int candidate_slot = get_available_local_transport_index();
+    if (candidate_slot < 0) {
+        snprintf(buffer, buffer_size, "Cannot accept more emulators.");
+        return;
+    }
+
+    /* Preconditions met, try to connect to the emulator. */
+    if (!local_connect_arbitrary_ports(console_port, adb_port)) {
+        snprintf(buffer, buffer_size,
+                "Connected to emulator on ports %d,%d", console_port, adb_port);
+    } else {
+        snprintf(buffer, buffer_size,
+                "Could not connect to emulator on ports %d,%d",
+                console_port, adb_port);
+    }
+}
+
+static void connect_service(int fd, void* cookie)
+{
+    char buf[4096];
+    char resp[4096];
+    char *host = cookie;
+
+    if (!strncmp(host, "emu:", 4)) {
+        connect_emulator(host + 4, buf, sizeof(buf));
+    } else {
+        connect_device(host, buf, sizeof(buf));
+    }
+
+    // Send response for emulator and device
+    snprintf(resp, sizeof(resp), "%04x%s",(unsigned)strlen(buf), buf);
+    writex(fd, resp, strlen(resp));
+    adb_close(fd);
+}
 #endif
 
 #if ADB_HOST
@@ -461,6 +580,10 @@ asocket*  host_service_to_socket(const char*  name, const char *serial)
         }
 
         int fd = create_service_thread(wait_for_state, sinfo);
+        return create_local_socket(fd);
+    } else if (!strncmp(name, "connect:", 8)) {
+        const char *host = name + 8;
+        int fd = create_service_thread(connect_service, (void *)host);
         return create_local_socket(fd);
     }
     return NULL;
