@@ -19,6 +19,7 @@
 
 #define READ_WRITE_ALL_FILE_FLAGS \
   (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 static const char kAutotestPath[] = "/var/log/metrics/autotest-events";
 static const char kUMAEventsPath[] = "/var/log/metrics/uma-events";
@@ -26,6 +27,17 @@ static const char kConsentFile[] = "/home/chronos/Consent To Send Stats";
 static const int32_t kBufferSize = 1024;
 static const char kCrosEventHistogramName[] = "Platform.CrOSEvent";
 static const int kCrosEventHistogramMax = 100;
+
+/* Add new cros events here.
+ *
+ * The index of the event is sent in the message, so please do not
+ * reorder the names.
+ */
+static const char *kCrosEventNames[] = {
+  "ModemManagerCommandSendFailure",  // 0
+  "HwWatchdogReboot",  // 1
+  "Cras.NoCodecsFoundAtBoot",  // 2
+};
 
 time_t MetricsLibrary::cached_enabled_time_ = 0;
 bool MetricsLibrary::cached_enabled_ = false;
@@ -310,19 +322,10 @@ void MetricsLibrary::SetPolicyProvider(policy::PolicyProvider* provider) {
 }
 
 bool MetricsLibrary::SendCrosEventToUMA(const std::string& event) {
-  int n;
-  /* Add new events here.
-   *
-   * Whoever adds the second event (if anybody) please be so kind to change
-   * this to a map lookup.  (Or at least change "second" above to "third",
-   * etc.)
-   */
-  if (event.compare("ModemManagerCommandSendFailure") == 0) {
-    n = 0;
-  } else if (event.compare("HwWatchdogReboot") == 0) {
-    n = 1;
-  } else {
-    return false;
+  for (size_t i = 0; i < ARRAY_SIZE(kCrosEventNames); i++) {
+    if (strcmp(event.c_str(), kCrosEventNames[i]) == 0) {
+      return SendEnumToUMA(kCrosEventHistogramName, i, kCrosEventHistogramMax);
+    }
   }
-  return SendEnumToUMA(kCrosEventHistogramName, n, kCrosEventHistogramMax);
+  return false;
 }
