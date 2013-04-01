@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright 2007 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_ERRORS_H
-#define ANDROID_ERRORS_H
+#ifndef ANDROID_PIXELFLINGER_ERRORS_H
+#define ANDROID_PIXELFLINGER_ERRORS_H
 
 #include <sys/types.h>
 #include <errno.h>
 
 namespace android {
+namespace tinyutils {
 
 // use this type to return error codes
 typedef int32_t     status_t;
@@ -31,32 +32,17 @@ typedef int32_t     status_t;
  */
 
 enum {
-    OK                = 0,    // Everything's swell.
     NO_ERROR          = 0,    // No errors.
-    
-    UNKNOWN_ERROR       = 0x80000000,
-
     NO_MEMORY           = -ENOMEM,
-    INVALID_OPERATION   = -ENOSYS,
     BAD_VALUE           = -EINVAL,
-    BAD_TYPE            = 0x80000001,
-    NAME_NOT_FOUND      = -ENOENT,
-    PERMISSION_DENIED   = -EPERM,
-    NO_INIT             = -ENODEV,
-    ALREADY_EXISTS      = -EEXIST,
-    DEAD_OBJECT         = -EPIPE,
-    FAILED_TRANSACTION  = 0x80000002,
-    JPARKS_BROKE_IT     = -EPIPE,
     BAD_INDEX           = -EOVERFLOW,
-    NOT_ENOUGH_DATA     = -ENODATA,
-    WOULD_BLOCK         = -EWOULDBLOCK, 
-    TIMED_OUT           = -ETIME,
-    UNKNOWN_TRANSACTION = -EBADMSG,
+    NAME_NOT_FOUND      = -ENOENT,
 };
 
 
-}; // namespace android
+} // namespace tinyutils
+} // namespace android
     
 // ---------------------------------------------------------------------------
     
-#endif // ANDROID_ERRORS_H
+#endif // ANDROID_PIXELFLINGER_ERRORS_H

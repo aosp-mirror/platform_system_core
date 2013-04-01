@@ -24,7 +24,7 @@
 
 #include <private/pixelflinger/ggl_context.h>
 
-#include "codeflinger/ARMAssemblerProxy.h"
+#include "ARMAssemblerProxy.h"
 
 
 namespace android {

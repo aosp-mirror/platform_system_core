@@ -24,7 +24,7 @@
 #include <sys/types.h>
 #include <cutils/log.h>
 
-#include "codeflinger/GGLAssembler.h"
+#include "GGLAssembler.h"
 
 namespace android {
 

@@ -28,9 +28,9 @@
 
 #include <private/pixelflinger/ggl_context.h>
 
-#include "codeflinger/ARMAssembler.h"
-#include "codeflinger/CodeCache.h"
-#include "codeflinger/disassem.h"
+#include "ARMAssembler.h"
+#include "CodeCache.h"
+#include "disassem.h"
 
 // ----------------------------------------------------------------------------
 

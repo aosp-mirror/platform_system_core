@@ -28,6 +28,8 @@
 
 namespace android {
 
+using namespace tinyutils;
+
 // ----------------------------------------------------------------------------
 
 class AssemblyKeyBase {

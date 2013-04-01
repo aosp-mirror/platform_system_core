@@ -22,7 +22,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include "codeflinger/ARMAssemblerInterface.h"
+#include "ARMAssemblerInterface.h"
 
 namespace android {
 
