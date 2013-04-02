@@ -39,6 +39,7 @@ static int write_to_am(int fd, const char* buf, int len) {
         int written = TEMP_FAILURE_RETRY( write(fd, buf + len - to_write, to_write) );
         if (written < 0) {
             /* hard failure */
+            LOG("AM write failure (%d / %s)\n", errno, strerror(errno));
             return -1;
         }
         to_write -= written;
@@ -46,20 +47,20 @@ static int write_to_am(int fd, const char* buf, int len) {
     return len;
 }
 
-void _LOG(log_t* log, bool in_tombstone_only, const char *fmt, ...) {
+void _LOG(log_t* log, int scopeFlags, const char *fmt, ...) {
     char buf[512];
     bool want_tfd_write;
     bool want_log_write;
     bool want_amfd_write;
-    int len;
+    int len = 0;
 
     va_list ap;
     va_start(ap, fmt);
 
     // where is the information going to go?
-    want_tfd_write = log && log->tfd >= 0;      // write to the tombstone fd?
-    want_log_write = !in_tombstone_only && (!log || !log->quiet);
-    want_amfd_write = log && log->amfd >= 0;    // only used when want_log_write is true
+    want_tfd_write = log && log->tfd >= 0;
+    want_log_write = IS_AT_FAULT(scopeFlags) && (!log || !log->quiet);
+    want_amfd_write = IS_AT_FAULT(scopeFlags) && !IS_SENSITIVE(scopeFlags) && log && log->amfd >= 0;
 
     // if we're going to need the literal string, generate it once here
     if (want_tfd_write || want_amfd_write) {
@@ -78,7 +79,6 @@ void _LOG(log_t* log, bool in_tombstone_only, const char *fmt, ...) {
             int written = write_to_am(log->amfd, buf, len);
             if (written <= 0) {
                 // timeout or other failure on write; stop informing the activity manager
-                LOG("AM write failure, giving up\n");
                 log->amfd = -1;
             }
         }
