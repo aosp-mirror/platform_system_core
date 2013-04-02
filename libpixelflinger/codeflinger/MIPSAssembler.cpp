@@ -61,9 +61,9 @@
 
 #include <private/pixelflinger/ggl_context.h>
 
-#include "codeflinger/MIPSAssembler.h"
-#include "codeflinger/CodeCache.h"
-#include "codeflinger/mips_disassem.h"
+#include "MIPSAssembler.h"
+#include "CodeCache.h"
+#include "mips_disassem.h"
 
 // Choose MIPS arch variant following gcc flags
 #if defined(__mips__) && __mips==32 && __mips_isa_rev>=2

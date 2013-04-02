@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005 The Android Open Source Project
+ * Copyright 2005 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_SORTED_VECTOR_H
-#define ANDROID_SORTED_VECTOR_H
+#ifndef ANDROID_PIXELFLINGER_SORTED_VECTOR_H
+#define ANDROID_PIXELFLINGER_SORTED_VECTOR_H
 
 #include <assert.h>
 #include <stdint.h>
 #include <sys/types.h>
 
-#include "tinyutils/Vector.h"
-#include "tinyutils/VectorImpl.h"
-#include "tinyutils/TypeHelpers.h"
+#include "Vector.h"
+#include "VectorImpl.h"
+#include "TypeHelpers.h"
 
 // ---------------------------------------------------------------------------
 
 namespace android {
+namespace tinyutils {
 
 template <class TYPE>
 class SortedVector : private SortedVectorImpl
@@ -274,9 +275,10 @@ int SortedVector<TYPE>::do_compare(const void* lhs, const void* rhs) const {
     return compare_type( *reinterpret_cast<const TYPE*>(lhs), *reinterpret_cast<const TYPE*>(rhs) );
 }
 
-}; // namespace android
+} // namespace tinyutils
+} // namespace android
 
 
 // ---------------------------------------------------------------------------
 
-#endif // ANDROID_SORTED_VECTOR_H
+#endif // ANDROID_PIXELFLINGER_SORTED_VECTOR_H

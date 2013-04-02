@@ -16,8 +16,8 @@ PIXELFLINGER_SRC_FILES:= \
     codeflinger/blending.cpp \
     codeflinger/texturing.cpp \
     codeflinger/disassem.c \
-	tinyutils/SharedBuffer.cpp \
-	tinyutils/VectorImpl.cpp \
+	codeflinger/tinyutils/SharedBuffer.cpp \
+	codeflinger/tinyutils/VectorImpl.cpp \
 	fixed.cpp.arm \
 	picker.cpp.arm \
 	pixelflinger.cpp.arm \
@@ -51,13 +51,6 @@ PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
 endif
 
 LOCAL_SHARED_LIBRARIES := libcutils
-
-ifneq ($(TARGET_ARCH),arm)
-# Required to define logging functions on the simulator.
-# TODO: move the simulator logging functions into libcutils with
-# the rest of the basic log stuff.
-LOCAL_SHARED_LIBRARIES += libutils
-endif
 
 #
 # Shared library
