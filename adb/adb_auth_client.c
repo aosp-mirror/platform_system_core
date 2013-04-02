@@ -161,7 +161,7 @@ int adb_auth_verify(void *token, void *sig, int siglen)
 
 static void usb_disconnected(void* unused, atransport* t)
 {
-    D("USB disconnect");
+    D("USB disconnect\n");
     remove_transport_disconnect(usb_transport, &usb_disconnect);
     usb_transport = NULL;
     needs_retry = false;
@@ -175,7 +175,7 @@ static void adb_auth_event(int fd, unsigned events, void *data)
     if (events & FDE_READ) {
         ret = unix_read(fd, response, sizeof(response));
         if (ret < 0) {
-            D("Framework disconnect");
+            D("Framework disconnect\n");
             if (usb_transport)
                 fdevent_remove(&usb_transport->auth_fde);
             framework_fd = -1;
@@ -192,8 +192,10 @@ void adb_auth_confirm_key(unsigned char *key, size_t len, atransport *t)
     char msg[MAX_PAYLOAD];
     int ret;
 
-    usb_transport = t;
-    add_transport_disconnect(t, &usb_disconnect);
+    if (!usb_transport) {
+        usb_transport = t;
+        add_transport_disconnect(t, &usb_disconnect);
+    }
 
     if (framework_fd < 0) {
         D("Client not connected\n");
