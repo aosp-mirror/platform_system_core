@@ -25,7 +25,7 @@
 
 /* Dumps a backtrace using a format similar to what Dalvik uses so that the result
  * can be intermixed in a bug report. */
-void dump_backtrace(int fd, pid_t pid, pid_t tid, bool* detach_failed,
+void dump_backtrace(int fd, int amfd, pid_t pid, pid_t tid, bool* detach_failed,
         int* total_sleep_time_usec);
 
 #endif // _DEBUGGERD_BACKTRACE_H

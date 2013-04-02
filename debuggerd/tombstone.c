@@ -35,6 +35,9 @@
 #include <corkscrew/demangle.h>
 #include <corkscrew/backtrace.h>
 
+#include <sys/socket.h>
+#include <linux/un.h>
+
 #include <selinux/android.h>
 
 #include "machine.h"
@@ -46,6 +49,9 @@
 
 #define MAX_TOMBSTONES  10
 #define TOMBSTONE_DIR   "/data/tombstones"
+
+/* Must match the path defined in NativeCrashListener.java */
+#define NCRASH_SOCKET_PATH "/data/system/ndebugsocket"
 
 #define typecheck(x,y) {    \
     typeof(x) __dummy1;     \
@@ -627,6 +633,18 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal,
     property_get("ro.debuggable", value, "0");
     bool want_logs = (value[0] == '1');
 
+    if (log->amfd >= 0) {
+        /*
+         * Activity Manager protocol: binary 32-bit network-byte-order ints for the
+         * pid and signal number, followed by the raw text of the dump, culminating
+         * in a zero byte that marks end-of-data.
+         */
+        uint32_t datum = htonl(pid);
+        TEMP_FAILURE_RETRY( write(log->amfd, &datum, 4) );
+        datum = htonl(signal);
+        TEMP_FAILURE_RETRY( write(log->amfd, &datum, 4) );
+    }
+
     _LOG(log, false,
             "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
     dump_build_info(log);
@@ -653,6 +671,16 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal,
     if (want_logs) {
         dump_logs(log, pid, false);
     }
+
+    /* send EOD to the Activity Manager, then wait for its ack to avoid racing ahead
+     * and killing the target out from under it */
+    if (log->amfd >= 0) {
+        uint8_t eodMarker = 0;
+        TEMP_FAILURE_RETRY( write(log->amfd, &eodMarker, 1) );
+        /* 3 sec timeout reading the ack; we're fine if that happens */
+        TEMP_FAILURE_RETRY( read(log->amfd, &eodMarker, 1) );
+    }
+
     return detach_failed;
 }
 
@@ -712,6 +740,35 @@ static char* find_and_open_tombstone(int* fd)
     return strdup(path);
 }
 
+static int activity_manager_connect() {
+    int amfd = socket(PF_UNIX, SOCK_STREAM, 0);
+    if (amfd >= 0) {
+        struct sockaddr_un address;
+        int err;
+
+        memset(&address, 0, sizeof(address));
+        address.sun_family = AF_UNIX;
+        strncpy(address.sun_path, NCRASH_SOCKET_PATH, sizeof(address.sun_path));
+        err = TEMP_FAILURE_RETRY( connect(amfd, (struct sockaddr*) &address, sizeof(address)) );
+        if (!err) {
+            struct timeval tv;
+            memset(&tv, 0, sizeof(tv));
+            tv.tv_sec = 1;  // tight leash
+            err = setsockopt(amfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+            if (!err) {
+                tv.tv_sec = 3;  // 3 seconds on handshake read
+                err = setsockopt(amfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+            }
+        }
+        if (err) {
+            close(amfd);
+            amfd = -1;
+        }
+    }
+
+    return amfd;
+}
+
 char* engrave_tombstone(pid_t pid, pid_t tid, int signal,
         bool dump_sibling_threads, bool quiet, bool* detach_failed,
         int* total_sleep_time_usec) {
@@ -732,10 +789,12 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal,
 
     log_t log;
     log.tfd = fd;
+    log.amfd = activity_manager_connect();
     log.quiet = quiet;
     *detach_failed = dump_crash(&log, pid, tid, signal, dump_sibling_threads,
             total_sleep_time_usec);
 
+    close(log.amfd);
     close(fd);
     return path;
 }
