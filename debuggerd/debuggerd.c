@@ -314,7 +314,8 @@ static void handle_request(int fd) {
                                     &total_sleep_time_usec);
                         } else if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE) {
                             XLOG("stopped -- dumping to fd\n");
-                            dump_backtrace(fd, request.pid, request.tid, &detach_failed,
+                            dump_backtrace(fd, -1,
+                                    request.pid, request.tid, &detach_failed,
                                     &total_sleep_time_usec);
                         } else {
                             XLOG("stopped -- continuing\n");
