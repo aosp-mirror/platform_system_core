@@ -28,7 +28,7 @@
 #include <cutils/log.h>
 
 
-#include "codeflinger/CodeCache.h"
+#include "CodeCache.h"
 
 namespace android {
 
