@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include "codeflinger/ARMAssemblerProxy.h"
+#include "ARMAssemblerProxy.h"
 
 namespace android {
 

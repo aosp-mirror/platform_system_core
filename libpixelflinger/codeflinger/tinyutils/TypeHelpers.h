@@ -1,12 +1,21 @@
 /*
- *  TypeHelpers.h
- *  
- *  Copyright 2005 The Android Open Source Project
+ * Copyright 2005 The Android Open Source Project
  *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
-#ifndef ANDROID_TYPE_HELPERS_H
-#define ANDROID_TYPE_HELPERS_H
+#ifndef ANDROID_PIXELFLINGER_TYPE_HELPERS_H
+#define ANDROID_PIXELFLINGER_TYPE_HELPERS_H
 
 #include <new>
 #include <stdint.h>
@@ -16,6 +25,7 @@
 // ---------------------------------------------------------------------------
 
 namespace android {
+namespace tinyutils {
 
 /*
  * Types traits
@@ -238,8 +248,9 @@ struct trait_trivial_assign< key_value_pair_t<K, V> >
 
 // ---------------------------------------------------------------------------
 
-}; // namespace android
+} // namespace tinyutils
+} // namespace android
 
 // ---------------------------------------------------------------------------
 
-#endif // ANDROID_TYPE_HELPERS_H
+#endif // ANDROID_PIXELFLINGER_TYPE_HELPERS_H
