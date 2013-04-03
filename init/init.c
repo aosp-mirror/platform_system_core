@@ -879,6 +879,7 @@ int main(int argc, char **argv)
      */
     restorecon("/dev");
     restorecon("/dev/socket");
+    restorecon("/dev/__properties__");
 
     is_charger = !strcmp(bootmode, "charger");
 
