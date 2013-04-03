@@ -127,6 +127,7 @@ void fixup_sys_perms(const char *upath)
     char buf[512];
     struct listnode *node;
     struct perms_ *dp;
+    char *secontext;
 
         /* upaths omit the "/sys" that paths in this list
          * contain, so we add 4 when comparing...
@@ -148,6 +149,14 @@ void fixup_sys_perms(const char *upath)
         INFO("fixup %s %d %d 0%o\n", buf, dp->uid, dp->gid, dp->perm);
         chown(buf, dp->uid, dp->gid);
         chmod(buf, dp->perm);
+        if (sehandle) {
+            secontext = NULL;
+            selabel_lookup(sehandle, &secontext, buf, 0);
+            if (secontext) {
+                setfilecon(buf, secontext);
+                freecon(secontext);
+           }
+        }
     }
 }
 
