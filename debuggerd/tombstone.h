@@ -25,7 +25,7 @@
 
 /* Creates a tombstone file and writes the crash dump to it.
  * Returns the path of the tombstone, which must be freed using free(). */
-char* engrave_tombstone(pid_t pid, pid_t tid, int signal,
+char* engrave_tombstone(pid_t pid, pid_t tid, int signal, uintptr_t abort_msg_address,
         bool dump_sibling_threads, bool quiet, bool* detach_failed, int* total_sleep_time_usec);
 
 #endif // _DEBUGGERD_TOMBSTONE_H
