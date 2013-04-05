@@ -180,7 +180,7 @@ static void dump_fault_addr(log_t* log, pid_t tid, int sig)
     siginfo_t si;
 
     memset(&si, 0, sizeof(si));
-    if(ptrace(PTRACE_GETSIGINFO, tid, 0, &si)){
+    if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si)){
         _LOG(log, false, "cannot get siginfo: %s\n", strerror(errno));
     } else if (signal_has_address(sig)) {
         _LOG(log, false, "signal %d (%s), code %d (%s), fault addr %08x\n",
@@ -622,11 +622,46 @@ static void dump_logs(log_t* log, pid_t pid, bool tailOnly)
     dump_log_file(log, pid, "/dev/log/main", tailOnly);
 }
 
+static void dump_abort_message(log_t* log, pid_t tid, uintptr_t address) {
+  if (address == 0) {
+    return;
+  }
+
+  address += sizeof(size_t); // Skip the buffer length.
+
+  char msg[512];
+  memset(msg, 0, sizeof(msg));
+  char* p = &msg[0];
+  while (p < &msg[sizeof(msg)]) {
+    uint32_t data;
+    if (!try_get_word_ptrace(tid, address, &data)) {
+      break;
+    }
+    address += sizeof(uint32_t);
+
+    if ((*p++ = (data >>  0) & 0xff) == 0) {
+      break;
+    }
+    if ((*p++ = (data >>  8) & 0xff) == 0) {
+      break;
+    }
+    if ((*p++ = (data >> 16) & 0xff) == 0) {
+      break;
+    }
+    if ((*p++ = (data >> 24) & 0xff) == 0) {
+      break;
+    }
+  }
+  msg[sizeof(msg) - 1] = '\0';
+
+  _LOG(log, false, "Abort message: '%s'\n", msg);
+}
+
 /*
  * Dumps all information about the specified pid to the tombstone.
  */
-static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal,
-        bool dump_sibling_threads, int* total_sleep_time_usec)
+static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t abort_msg_address,
+                       bool dump_sibling_threads, int* total_sleep_time_usec)
 {
     /* don't copy log messages to tombstone unless this is a dev device */
     char value[PROPERTY_VALUE_MAX];
@@ -650,9 +685,10 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal,
     dump_build_info(log);
     dump_revision_info(log);
     dump_thread_info(log, pid, tid, true);
-    if(signal) {
+    if (signal) {
         dump_fault_addr(log, tid, signal);
     }
+    dump_abort_message(log, tid, abort_msg_address);
 
     ptrace_context_t* context = load_ptrace_context(tid);
     dump_thread(context, log, tid, true, total_sleep_time_usec);
@@ -769,7 +805,7 @@ static int activity_manager_connect() {
     return amfd;
 }
 
-char* engrave_tombstone(pid_t pid, pid_t tid, int signal,
+char* engrave_tombstone(pid_t pid, pid_t tid, int signal, uintptr_t abort_msg_address,
         bool dump_sibling_threads, bool quiet, bool* detach_failed,
         int* total_sleep_time_usec) {
     mkdir(TOMBSTONE_DIR, 0755);
@@ -791,7 +827,7 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal,
     log.tfd = fd;
     log.amfd = activity_manager_connect();
     log.quiet = quiet;
-    *detach_failed = dump_crash(&log, pid, tid, signal, dump_sibling_threads,
+    *detach_failed = dump_crash(&log, pid, tid, signal, abort_msg_address, dump_sibling_threads,
             total_sleep_time_usec);
 
     close(log.amfd);
