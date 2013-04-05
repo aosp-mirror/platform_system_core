@@ -30,22 +30,32 @@ typedef struct {
     bool quiet;
 } log_t;
 
-/* Log information onto the tombstone. */
-void _LOG(log_t* log, bool in_tombstone_only, const char *fmt, ...)
+/* Log information onto the tombstone.  scopeFlags is a bitmask of the flags defined
+ * here. */
+void _LOG(log_t* log, int scopeFlags, const char *fmt, ...)
         __attribute__ ((format(printf, 3, 4)));
 
-#define LOG(fmt...) _LOG(NULL, 0, fmt)
+/* The message pertains specifically to the faulting thread / process */
+#define SCOPE_AT_FAULT (1 << 0)
+/* The message contains sensitive information such as RAM contents */
+#define SCOPE_SENSITIVE  (1 << 1)
+
+#define IS_AT_FAULT(x)    (((x) & SCOPE_AT_FAULT) != 0)
+#define IS_SENSITIVE(x)    (((x) & SCOPE_SENSITIVE) != 0)
+
+/* Further helpful macros */
+#define LOG(fmt...) _LOG(NULL, SCOPE_AT_FAULT, fmt)
 
 /* Set to 1 for normal debug traces */
 #if 0
-#define XLOG(fmt...) _LOG(NULL, 0, fmt)
+#define XLOG(fmt...) _LOG(NULL, SCOPE_AT_FAULT, fmt)
 #else
 #define XLOG(fmt...) do {} while(0)
 #endif
 
 /* Set to 1 for chatty debug traces. Includes all resolved dynamic symbols */
 #if 0
-#define XLOG2(fmt...) _LOG(NULL, 0, fmt)
+#define XLOG2(fmt...) _LOG(NULL, SCOPE_AT_FAULT, fmt)
 #else
 #define XLOG2(fmt...) do {} while(0)
 #endif

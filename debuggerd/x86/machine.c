@@ -38,21 +38,21 @@ void dump_memory_and_code(const ptrace_context_t* context __attribute((unused)),
 void dump_registers(const ptrace_context_t* context __attribute((unused)),
         log_t* log, pid_t tid, bool at_fault) {
     struct pt_regs_x86 r;
-    bool only_in_tombstone = !at_fault;
+    int scopeFlags = (at_fault ? SCOPE_AT_FAULT : 0);
 
     if(ptrace(PTRACE_GETREGS, tid, 0, &r)) {
-        _LOG(log, only_in_tombstone, "cannot get registers: %s\n", strerror(errno));
+        _LOG(log, scopeFlags, "cannot get registers: %s\n", strerror(errno));
         return;
     }
     //if there is no stack, no print just like arm
     if(!r.ebp)
         return;
-    _LOG(log, only_in_tombstone, "    eax %08x  ebx %08x  ecx %08x  edx %08x\n",
+    _LOG(log, scopeFlags, "    eax %08x  ebx %08x  ecx %08x  edx %08x\n",
          r.eax, r.ebx, r.ecx, r.edx);
-    _LOG(log, only_in_tombstone, "    esi %08x  edi %08x\n",
+    _LOG(log, scopeFlags, "    esi %08x  edi %08x\n",
          r.esi, r.edi);
-    _LOG(log, only_in_tombstone, "    xcs %08x  xds %08x  xes %08x  xfs %08x  xss %08x\n",
+    _LOG(log, scopeFlags, "    xcs %08x  xds %08x  xes %08x  xfs %08x  xss %08x\n",
          r.xcs, r.xds, r.xes, r.xfs, r.xss);
-    _LOG(log, only_in_tombstone, "    eip %08x  ebp %08x  esp %08x  flags %08x\n",
+    _LOG(log, scopeFlags, "    eip %08x  ebp %08x  esp %08x  flags %08x\n",
          r.eip, r.ebp, r.esp, r.eflags);
 }
