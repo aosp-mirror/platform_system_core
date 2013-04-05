@@ -52,6 +52,7 @@ typedef struct {
     debugger_action_t action;
     pid_t pid, tid;
     uid_t uid, gid;
+    uintptr_t abort_msg_address;
 } debugger_request_t;
 
 static int
@@ -207,12 +208,15 @@ static int read_request(int fd, debugger_request_t* out_request) {
     }
 
     debugger_msg_t msg;
+    memset(&msg, 0, sizeof(msg));
     status = TEMP_FAILURE_RETRY(read(fd, &msg, sizeof(msg)));
     if (status < 0) {
         LOG("read failure? %s\n", strerror(errno));
         return -1;
     }
-    if (status != sizeof(msg)) {
+    if (status == sizeof(debugger_msg_t)) {
+        XLOG("crash request of size %d abort_msg_address=%#08x\n", status, msg.abort_msg_address);
+    } else {
         LOG("invalid crash request of size %d\n", status);
         return -1;
     }
@@ -222,6 +226,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
     out_request->pid = cr.pid;
     out_request->uid = cr.uid;
     out_request->gid = cr.gid;
+    out_request->abort_msg_address = msg.abort_msg_address;
 
     if (msg.action == DEBUGGER_ACTION_CRASH) {
         /* Ensure that the tid reported by the crashing process is valid. */
@@ -265,6 +270,7 @@ static void handle_request(int fd) {
     XLOG("handle_request(%d)\n", fd);
 
     debugger_request_t request;
+    memset(&request, 0, sizeof(request));
     int status = read_request(fd, &request);
     if (!status) {
         XLOG("BOOM: pid=%d uid=%d gid=%d tid=%d\n",
@@ -308,7 +314,7 @@ static void handle_request(int fd) {
                         if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
                             XLOG("stopped -- dumping to tombstone\n");
                             tombstone_path = engrave_tombstone(request.pid, request.tid,
-                                    signal, true, true, &detach_failed,
+                                    signal, request.abort_msg_address, true, true, &detach_failed,
                                     &total_sleep_time_usec);
                         } else if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE) {
                             XLOG("stopped -- dumping to fd\n");
@@ -345,8 +351,8 @@ static void handle_request(int fd) {
                         /* don't dump sibling threads when attaching to GDB because it
                          * makes the process less reliable, apparently... */
                         tombstone_path = engrave_tombstone(request.pid, request.tid,
-                                signal, !attach_gdb, false, &detach_failed,
-                                &total_sleep_time_usec);
+                                signal, request.abort_msg_address, !attach_gdb, false,
+                                &detach_failed, &total_sleep_time_usec);
                         break;
                     }
 

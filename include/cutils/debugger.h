@@ -34,10 +34,10 @@ typedef enum {
     DEBUGGER_ACTION_DUMP_BACKTRACE,
 } debugger_action_t;
 
-/* message sent over the socket */
 typedef struct {
     debugger_action_t action;
     pid_t tid;
+    uintptr_t abort_msg_address;
 } debugger_msg_t;
 
 /* Dumps a process backtrace, registers, and stack to a tombstone file (requires root).
