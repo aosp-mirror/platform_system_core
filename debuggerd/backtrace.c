@@ -51,15 +51,15 @@ static void dump_process_header(log_t* log, pid_t pid) {
     localtime_r(&t, &tm);
     char timestr[64];
     strftime(timestr, sizeof(timestr), "%F %T", &tm);
-    _LOG(log, false, "\n\n----- pid %d at %s -----\n", pid, timestr);
+    _LOG(log, SCOPE_AT_FAULT, "\n\n----- pid %d at %s -----\n", pid, timestr);
 
     if (procname) {
-        _LOG(log, false, "Cmd line: %s\n", procname);
+        _LOG(log, SCOPE_AT_FAULT, "Cmd line: %s\n", procname);
     }
 }
 
 static void dump_process_footer(log_t* log, pid_t pid) {
-    _LOG(log, false, "\n----- end %d -----\n", pid);
+    _LOG(log, SCOPE_AT_FAULT, "\n----- end %d -----\n", pid);
 }
 
 static void dump_thread(log_t* log, pid_t tid, ptrace_context_t* context, bool attached,
@@ -81,10 +81,11 @@ static void dump_thread(log_t* log, pid_t tid, ptrace_context_t* context, bool a
         }
     }
 
-    _LOG(log, false, "\n\"%s\" sysTid=%d\n", threadname ? threadname : "<unknown>", tid);
+    _LOG(log, SCOPE_AT_FAULT, "\n\"%s\" sysTid=%d\n",
+            threadname ? threadname : "<unknown>", tid);
 
     if (!attached && ptrace(PTRACE_ATTACH, tid, 0, 0) < 0) {
-        _LOG(log, false, "Could not attach to thread: %s\n", strerror(errno));
+        _LOG(log, SCOPE_AT_FAULT, "Could not attach to thread: %s\n", strerror(errno));
         return;
     }
 
@@ -93,7 +94,7 @@ static void dump_thread(log_t* log, pid_t tid, ptrace_context_t* context, bool a
     backtrace_frame_t backtrace[STACK_DEPTH];
     ssize_t frames = unwind_backtrace_ptrace(tid, context, backtrace, 0, STACK_DEPTH);
     if (frames <= 0) {
-        _LOG(log, false, "Could not obtain stack trace for thread.\n");
+        _LOG(log, SCOPE_AT_FAULT, "Could not obtain stack trace for thread.\n");
     } else {
         backtrace_symbol_t backtrace_symbols[STACK_DEPTH];
         get_backtrace_symbols_ptrace(context, backtrace, frames, backtrace_symbols);
@@ -101,7 +102,7 @@ static void dump_thread(log_t* log, pid_t tid, ptrace_context_t* context, bool a
             char line[MAX_BACKTRACE_LINE_LENGTH];
             format_backtrace_line(i, &backtrace[i], &backtrace_symbols[i],
                     line, MAX_BACKTRACE_LINE_LENGTH);
-            _LOG(log, false, "  %s\n", line);
+            _LOG(log, SCOPE_AT_FAULT, "  %s\n", line);
         }
         free_backtrace_symbols(backtrace_symbols, frames);
     }

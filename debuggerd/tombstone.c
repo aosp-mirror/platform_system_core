@@ -163,7 +163,7 @@ static void dump_revision_info(log_t* log)
 
     property_get("ro.revision", revision, "unknown");
 
-    _LOG(log, false, "Revision: '%s'\n", revision);
+    _LOG(log, SCOPE_AT_FAULT, "Revision: '%s'\n", revision);
 }
 
 static void dump_build_info(log_t* log)
@@ -172,7 +172,7 @@ static void dump_build_info(log_t* log)
 
     property_get("ro.build.fingerprint", fingerprint, "unknown");
 
-    _LOG(log, false, "Build fingerprint: '%s'\n", fingerprint);
+    _LOG(log, SCOPE_AT_FAULT, "Build fingerprint: '%s'\n", fingerprint);
 }
 
 static void dump_fault_addr(log_t* log, pid_t tid, int sig)
@@ -180,15 +180,15 @@ static void dump_fault_addr(log_t* log, pid_t tid, int sig)
     siginfo_t si;
 
     memset(&si, 0, sizeof(si));
-    if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si)){
-        _LOG(log, false, "cannot get siginfo: %s\n", strerror(errno));
+    if(ptrace(PTRACE_GETSIGINFO, tid, 0, &si)){
+        _LOG(log, SCOPE_AT_FAULT, "cannot get siginfo: %s\n", strerror(errno));
     } else if (signal_has_address(sig)) {
-        _LOG(log, false, "signal %d (%s), code %d (%s), fault addr %08x\n",
+        _LOG(log, SCOPE_AT_FAULT, "signal %d (%s), code %d (%s), fault addr %08x\n",
              sig, get_signame(sig),
              si.si_code, get_sigcode(sig, si.si_code),
              (uintptr_t) si.si_addr);
     } else {
-        _LOG(log, false, "signal %d (%s), code %d (%s), fault addr --------\n",
+        _LOG(log, SCOPE_AT_FAULT, "signal %d (%s), code %d (%s), fault addr --------\n",
              sig, get_signame(sig), si.si_code, get_sigcode(sig, si.si_code));
     }
 }
@@ -221,19 +221,20 @@ static void dump_thread_info(log_t* log, pid_t pid, pid_t tid, bool at_fault) {
             fclose(fp);
         }
 
-        _LOG(log, false, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", pid, tid,
+        _LOG(log, SCOPE_AT_FAULT, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", pid, tid,
                 threadname ? threadname : "UNKNOWN",
                 procname ? procname : "UNKNOWN");
     } else {
-        _LOG(log, true, "pid: %d, tid: %d, name: %s\n", pid, tid,
-                threadname ? threadname : "UNKNOWN");
+        _LOG(log, 0, "pid: %d, tid: %d, name: %s\n",
+                pid, tid, threadname ? threadname : "UNKNOWN");
     }
 }
 
 static void dump_backtrace(const ptrace_context_t* context __attribute((unused)),
         log_t* log, pid_t tid __attribute((unused)), bool at_fault,
         const backtrace_frame_t* backtrace, size_t frames) {
-    _LOG(log, !at_fault, "\nbacktrace:\n");
+    int scopeFlags = at_fault ? SCOPE_AT_FAULT : 0;
+    _LOG(log, scopeFlags, "\nbacktrace:\n");
 
     backtrace_symbol_t backtrace_symbols[STACK_DEPTH];
     get_backtrace_symbols_ptrace(context, backtrace, frames, backtrace_symbols);
@@ -241,13 +242,13 @@ static void dump_backtrace(const ptrace_context_t* context __attribute((unused))
         char line[MAX_BACKTRACE_LINE_LENGTH];
         format_backtrace_line(i, &backtrace[i], &backtrace_symbols[i],
                 line, MAX_BACKTRACE_LINE_LENGTH);
-        _LOG(log, !at_fault, "    %s\n", line);
+        _LOG(log, scopeFlags, "    %s\n", line);
     }
     free_backtrace_symbols(backtrace_symbols, frames);
 }
 
 static void dump_stack_segment(const ptrace_context_t* context, log_t* log, pid_t tid,
-        bool only_in_tombstone, uintptr_t* sp, size_t words, int label) {
+        int scopeFlags, uintptr_t* sp, size_t words, int label) {
     for (size_t i = 0; i < words; i++) {
         uint32_t stack_content;
         if (!try_get_word_ptrace(tid, *sp, &stack_content)) {
@@ -264,28 +265,28 @@ static void dump_stack_segment(const ptrace_context_t* context, log_t* log, pid_
             uint32_t offset = stack_content - (mi->start + symbol->start);
             if (!i && label >= 0) {
                 if (offset) {
-                    _LOG(log, only_in_tombstone, "    #%02d  %08x  %08x  %s (%s+%u)\n",
+                    _LOG(log, scopeFlags, "    #%02d  %08x  %08x  %s (%s+%u)\n",
                             label, *sp, stack_content, mi ? mi->name : "", symbol_name, offset);
                 } else {
-                    _LOG(log, only_in_tombstone, "    #%02d  %08x  %08x  %s (%s)\n",
+                    _LOG(log, scopeFlags, "    #%02d  %08x  %08x  %s (%s)\n",
                             label, *sp, stack_content, mi ? mi->name : "", symbol_name);
                 }
             } else {
                 if (offset) {
-                    _LOG(log, only_in_tombstone, "         %08x  %08x  %s (%s+%u)\n",
+                    _LOG(log, scopeFlags, "         %08x  %08x  %s (%s+%u)\n",
                             *sp, stack_content, mi ? mi->name : "", symbol_name, offset);
                 } else {
-                    _LOG(log, only_in_tombstone, "         %08x  %08x  %s (%s)\n",
+                    _LOG(log, scopeFlags, "         %08x  %08x  %s (%s)\n",
                             *sp, stack_content, mi ? mi->name : "", symbol_name);
                 }
             }
             free(demangled_name);
         } else {
             if (!i && label >= 0) {
-                _LOG(log, only_in_tombstone, "    #%02d  %08x  %08x  %s\n",
+                _LOG(log, scopeFlags, "    #%02d  %08x  %08x  %s\n",
                         label, *sp, stack_content, mi ? mi->name : "");
             } else {
-                _LOG(log, only_in_tombstone, "         %08x  %08x  %s\n",
+                _LOG(log, scopeFlags, "         %08x  %08x  %s\n",
                         *sp, stack_content, mi ? mi->name : "");
             }
         }
@@ -311,28 +312,28 @@ static void dump_stack(const ptrace_context_t* context, log_t* log, pid_t tid, b
         return;
     }
 
-    _LOG(log, !at_fault, "\nstack:\n");
+    int scopeFlags = SCOPE_SENSITIVE | (at_fault ? SCOPE_AT_FAULT : 0);
+    _LOG(log, scopeFlags, "\nstack:\n");
 
     // Dump a few words before the first frame.
-    bool only_in_tombstone = !at_fault;
     uintptr_t sp = backtrace[first].stack_top - STACK_WORDS * sizeof(uint32_t);
-    dump_stack_segment(context, log, tid, only_in_tombstone, &sp, STACK_WORDS, -1);
+    dump_stack_segment(context, log, tid, scopeFlags, &sp, STACK_WORDS, -1);
 
     // Dump a few words from all successive frames.
     // Only log the first 3 frames, put the rest in the tombstone.
     for (size_t i = first; i <= last; i++) {
         const backtrace_frame_t* frame = &backtrace[i];
         if (sp != frame->stack_top) {
-            _LOG(log, only_in_tombstone, "         ........  ........\n");
+            _LOG(log, scopeFlags, "         ........  ........\n");
             sp = frame->stack_top;
         }
         if (i - first == 3) {
-            only_in_tombstone = true;
+            scopeFlags &= (~SCOPE_AT_FAULT);
         }
         if (i == last) {
-            dump_stack_segment(context, log, tid, only_in_tombstone, &sp, STACK_WORDS, i);
+            dump_stack_segment(context, log, tid, scopeFlags, &sp, STACK_WORDS, i);
             if (sp < frame->stack_top + frame->stack_size) {
-                _LOG(log, only_in_tombstone, "         ........  ........\n");
+                _LOG(log, scopeFlags, "         ........  ........\n");
             }
         } else {
             size_t words = frame->stack_size / sizeof(uint32_t);
@@ -341,7 +342,7 @@ static void dump_stack(const ptrace_context_t* context, log_t* log, pid_t tid, b
             } else if (words > STACK_WORDS) {
                 words = STACK_WORDS;
             }
-            dump_stack_segment(context, log, tid, only_in_tombstone, &sp, words, i);
+            dump_stack_segment(context, log, tid, scopeFlags, &sp, words, i);
         }
     }
 }
@@ -358,13 +359,13 @@ static void dump_backtrace_and_stack(const ptrace_context_t* context, log_t* log
 
 static void dump_map(log_t* log, map_info_t* m, const char* what) {
     if (m != NULL) {
-        _LOG(log, false, "    %08x-%08x %c%c%c %s\n", m->start, m->end,
+        _LOG(log, SCOPE_SENSITIVE, "    %08x-%08x %c%c%c %s\n", m->start, m->end,
              m->is_readable ? 'r' : '-',
              m->is_writable ? 'w' : '-',
              m->is_executable ? 'x' : '-',
              m->name);
     } else {
-        _LOG(log, false, "    (no %s)\n", what);
+        _LOG(log, SCOPE_SENSITIVE, "    (no %s)\n", what);
     }
 }
 
@@ -372,7 +373,7 @@ static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t 
     siginfo_t si;
     memset(&si, 0, sizeof(si));
     if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si)) {
-        _LOG(log, false, "cannot get siginfo for %d: %s\n",
+        _LOG(log, SCOPE_SENSITIVE, "cannot get siginfo for %d: %s\n",
                 tid, strerror(errno));
         return;
     }
@@ -386,7 +387,7 @@ static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t 
         return;
     }
 
-    _LOG(log, false, "\nmemory map around fault addr %08x:\n", (int)si.si_addr);
+    _LOG(log, SCOPE_SENSITIVE, "\nmemory map around fault addr %08x:\n", (int)si.si_addr);
 
     /*
      * Search for a match, or for a hole where the match would be.  The list
@@ -464,7 +465,7 @@ static bool dump_sibling_thread_report(const ptrace_context_t* context,
             continue;
         }
 
-        _LOG(log, true, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
+        _LOG(log, 0, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
         dump_thread_info(log, pid, new_tid, false);
         dump_thread(context, log, new_tid, false, total_sleep_time_usec);
 
@@ -517,12 +518,12 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
                 /* non-blocking EOF; we're done */
                 break;
             } else {
-                _LOG(log, true, "Error while reading log: %s\n",
+                _LOG(log, 0, "Error while reading log: %s\n",
                     strerror(errno));
                 break;
             }
         } else if (actual == 0) {
-            _LOG(log, true, "Got zero bytes while reading log: %s\n",
+            _LOG(log, 0, "Got zero bytes while reading log: %s\n",
                 strerror(errno));
             break;
         }
@@ -542,7 +543,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
         }
 
         if (first) {
-            _LOG(log, true, "--------- %slog %s\n",
+            _LOG(log, 0, "--------- %slog %s\n",
                 tailOnly ? "tail end of " : "", filename);
             first = false;
         }
@@ -584,7 +585,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
             shortLogNext = (shortLogNext + 1) % kShortLogMaxLines;
             shortLogCount++;
         } else {
-            _LOG(log, true, "%s.%03d %5d %5d %c %-8s: %s\n",
+            _LOG(log, 0, "%s.%03d %5d %5d %c %-8s: %s\n",
                 timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
                 prioChar, tag, msg);
         }
@@ -604,7 +605,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
         }
 
         for (i = 0; i < shortLogCount; i++) {
-            _LOG(log, true, "%s\n", shortLog[shortLogNext]);
+            _LOG(log, 0, "%s\n", shortLog[shortLogNext]);
             shortLogNext = (shortLogNext + 1) % kShortLogMaxLines;
         }
     }
@@ -654,7 +655,7 @@ static void dump_abort_message(log_t* log, pid_t tid, uintptr_t address) {
   }
   msg[sizeof(msg) - 1] = '\0';
 
-  _LOG(log, false, "Abort message: '%s'\n", msg);
+  _LOG(log, SCOPE_AT_FAULT, "Abort message: '%s'\n", msg);
 }
 
 /*
@@ -680,7 +681,7 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
         TEMP_FAILURE_RETRY( write(log->amfd, &datum, 4) );
     }
 
-    _LOG(log, false,
+    _LOG(log, SCOPE_AT_FAULT,
             "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
     dump_build_info(log);
     dump_revision_info(log);
