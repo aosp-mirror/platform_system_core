@@ -3,6 +3,7 @@ on early-init
     mkdir /mnt/sdcard 0000 system system
     # for backwards compatibility
     symlink /mnt/sdcard /sdcard
+    mount debugfs debugfs /sys/kernel/debug
 
 on boot
     setsebool in_qemu 1
