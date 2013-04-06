@@ -90,7 +90,7 @@ void notify_service_state(const char *name, const char *state)
 }
 
 static int have_console;
-static char *console_name = "/dev/console";
+static char console_name[PROP_VALUE_MAX] = "/dev/console";
 static time_t process_needs_restart;
 
 static const char *ENV[32];
@@ -430,7 +430,7 @@ static void restart_processes()
 
 static void msg_start(const char *name)
 {
-    struct service *svc;
+    struct service *svc = NULL;
     char *tmp = NULL;
     char *args = NULL;
 
@@ -438,11 +438,13 @@ static void msg_start(const char *name)
         svc = service_find_by_name(name);
     else {
         tmp = strdup(name);
-        args = strchr(tmp, ':');
-        *args = '\0';
-        args++;
+        if (tmp) {
+            args = strchr(tmp, ':');
+            *args = '\0';
+            args++;
 
-        svc = service_find_by_name(tmp);
+            svc = service_find_by_name(tmp);
+        }
     }
 
     if (svc) {
@@ -547,11 +549,9 @@ static int keychord_init_action(int nargs, char **args)
 static int console_init_action(int nargs, char **args)
 {
     int fd;
-    char tmp[PROP_VALUE_MAX];
 
     if (console[0]) {
-        snprintf(tmp, sizeof(tmp), "/dev/%s", console);
-        console_name = strdup(tmp);
+        snprintf(console_name, sizeof(console_name), "/dev/%s", console);
     }
 
     fd = open(console_name, O_RDWR);
