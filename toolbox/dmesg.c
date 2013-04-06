@@ -5,15 +5,30 @@
 #include <sys/klog.h>
 #include <string.h>
 
-#define KLOG_BUF_SHIFT	17	/* CONFIG_LOG_BUF_SHIFT from our kernel */
-#define KLOG_BUF_LEN	(1 << KLOG_BUF_SHIFT)
+#define FALLBACK_KLOG_BUF_SHIFT	17	/* CONFIG_LOG_BUF_SHIFT from our kernel */
+#define FALLBACK_KLOG_BUF_LEN	(1 << FALLBACK_KLOG_BUF_SHIFT)
 
 int dmesg_main(int argc, char **argv)
 {
-    char buffer[KLOG_BUF_LEN + 1];
-    char *p = buffer;
+    char *buffer;
+    char *p;
     ssize_t ret;
-    int n, op;
+    int n, op, klog_buf_len;
+
+    klog_buf_len = klogctl(KLOG_SIZE_BUFFER, 0, 0);
+
+    if (klog_buf_len <= 0) {
+        klog_buf_len = FALLBACK_KLOG_BUF_LEN;
+    }
+
+    buffer = (char *)malloc(klog_buf_len + 1);
+
+    if (!buffer) {
+        perror("malloc");
+        return EXIT_FAILURE;
+    }
+
+    p = buffer;
 
     if((argc == 2) && (!strcmp(argv[1],"-c"))) {
         op = KLOG_READ_CLEAR;
@@ -21,7 +36,7 @@ int dmesg_main(int argc, char **argv)
         op = KLOG_READ_ALL;
     }
 
-    n = klogctl(op, buffer, KLOG_BUF_LEN);
+    n = klogctl(op, buffer, klog_buf_len);
     if (n < 0) {
         perror("klogctl");
         return EXIT_FAILURE;
