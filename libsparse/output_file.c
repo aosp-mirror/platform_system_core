@@ -675,6 +675,9 @@ struct output_file *output_file_open_fd(int fd, unsigned int block_size, int64_t
 	} else {
 		out = output_file_new_normal();
 	}
+	if (!out) {
+		return NULL;
+	}
 
 	out->ops->open(out, fd);
 
