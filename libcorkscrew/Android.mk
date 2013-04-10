@@ -49,7 +49,7 @@ LOCAL_SRC_FILES += \
 LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH
 endif
 
-LOCAL_SHARED_LIBRARIES += libdl libcutils libgccdemangle
+LOCAL_SHARED_LIBRARIES += libdl libcutils liblog libgccdemangle
 
 LOCAL_CFLAGS += -std=gnu99 -Werror
 LOCAL_MODULE := libcorkscrew
@@ -74,7 +74,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES += $(generic_src_files) $(x86_src_files)
 LOCAL_CFLAGS += -DCORKSCREW_HAVE_ARCH
 LOCAL_SHARED_LIBRARIES += libgccdemangle
-LOCAL_STATIC_LIBRARIES += libcutils
+LOCAL_STATIC_LIBRARIES += libcutils liblog
 LOCAL_LDLIBS += -ldl -lrt
 LOCAL_CFLAGS += -std=gnu99 -Werror
 LOCAL_MODULE := libcorkscrew
