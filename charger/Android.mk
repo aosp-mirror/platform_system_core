@@ -28,7 +28,7 @@ LOCAL_STATIC_LIBRARIES := libminui libpixelflinger_static libpng
 ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
 LOCAL_STATIC_LIBRARIES += libsuspend
 endif
-LOCAL_STATIC_LIBRARIES += libz libstdc++ libcutils libm libc
+LOCAL_STATIC_LIBRARIES += libz libstdc++ libcutils liblog libm libc
 
 include $(BUILD_EXECUTABLE)
 
