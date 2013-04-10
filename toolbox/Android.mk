@@ -87,6 +87,7 @@ LOCAL_C_INCLUDES := bionic/libc/bionic
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
+	liblog \
 	libc \
 	libusbhost \
 	libselinux
