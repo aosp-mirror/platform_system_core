@@ -146,7 +146,9 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
-LOCAL_WHOLE_STATIC_LIBRARIES := libcutils
+# TODO: remove liblog as whole static library, once we don't have prebuilt that requires
+# liblog symbols present in libcutils.
+LOCAL_WHOLE_STATIC_LIBRARIES := libcutils liblog
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_CFLAGS += $(targetSmpFlag)
 LOCAL_C_INCLUDES := $(libcutils_c_includes)
