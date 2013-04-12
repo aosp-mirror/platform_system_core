@@ -64,7 +64,8 @@ __BEGIN_DECLS
 #define ATRACE_TAG_CAMERA           (1<<10)
 #define ATRACE_TAG_HAL              (1<<11)
 #define ATRACE_TAG_APP              (1<<12)
-#define ATRACE_TAG_LAST             ATRACE_TAG_APP
+#define ATRACE_TAG_RESOURCES        (1<<13)
+#define ATRACE_TAG_LAST             ATRACE_TAG_RESOURCES
 
 // Reserved for initialization.
 #define ATRACE_TAG_NOT_READY        (1LL<<63)
