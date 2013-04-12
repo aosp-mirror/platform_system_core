@@ -15,6 +15,7 @@
 #include "base/stringprintf.h"
 #include "chromeos/syslog_logging.h"
 #include "crash-reporter/kernel_collector.h"
+#include "crash-reporter/kernel_warning_collector.h"
 #include "crash-reporter/udev_collector.h"
 #include "crash-reporter/unclean_shutdown_collector.h"
 #include "crash-reporter/user_collector.h"
@@ -30,6 +31,7 @@ DEFINE_bool(crash_test, false, "Crash test");
 DEFINE_string(user, "", "User crash info (pid:signal:exec_name)");
 DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
 DEFINE_string(udev, "", "Udev event description (type:device:subsystem)");
+DEFINE_bool(kernel_warning, false, "Report collected kernel warning");
 #pragma GCC diagnostic error "-Wstrict-aliasing"
 
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
@@ -47,6 +49,7 @@ enum CrashKinds {
   kCrashKindUser = 2,
   kCrashKindKernel = 3,
   kCrashKindUdev = 4,
+  kCrashKindKernelWarning = 5,
   kCrashKindMax
 };
 
@@ -176,6 +179,17 @@ static int HandleUdevCrash(UdevCollector *udev_collector) {
   return 0;
 }
 
+static int HandleKernelWarning(KernelWarningCollector
+                               *kernel_warning_collector) {
+  // Accumulate logs to help in diagnosing failures during collection.
+  chromeos::LogToString(true);
+  bool handled = kernel_warning_collector->Collect();
+  chromeos::LogToString(false);
+  if (!handled)
+    return 1;
+  return 0;
+}
+
 // Interactive/diagnostics mode for generating kernel crash signatures.
 static int GenerateKernelSignature(KernelCollector *kernel_collector) {
   std::string kcrash_contents;
@@ -238,6 +252,9 @@ int main(int argc, char *argv[]) {
   UdevCollector udev_collector;
   udev_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
 
+  KernelWarningCollector kernel_warning_collector;
+  udev_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
+
   if (FLAGS_init) {
     return Initialize(&kernel_collector,
                       &user_collector,
@@ -256,6 +273,10 @@ int main(int argc, char *argv[]) {
 
   if (!FLAGS_udev.empty()) {
     return HandleUdevCrash(&udev_collector);
+  }
+
+  if (FLAGS_kernel_warning) {
+    return HandleKernelWarning(&kernel_warning_collector);
   }
 
   return HandleUserCrash(&user_collector);

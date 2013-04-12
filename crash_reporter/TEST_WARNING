@@ -1,0 +1,31 @@
+Apr 31 25:25:25 localhost kernel: [117959.226729]  [<ffffffff810e16bf>] do_vfs_ioctl+0x469/0x4b3
+Apr 31 25:25:25 localhost kernel: [117959.226738]  [<ffffffff810d3117>] ? fsnotify_access+0x58/0x60
+Apr 31 25:25:25 localhost kernel: [117959.226747]  [<ffffffff810d3791>] ? vfs_read+0xad/0xd7
+Apr 31 25:25:25 localhost kernel: [117959.226756]  [<ffffffff810e175f>] sys_ioctl+0x56/0x7b
+Apr 31 25:25:25 localhost kernel: [117959.226765]  [<ffffffff810d37fe>] ? sys_read+0x43/0x73
+Apr 31 25:25:25 localhost kernel: [117959.226774]  [<ffffffff8146b7d2>] system_call_fastpath+0x16/0x1b
+Apr 31 25:25:25 localhost kernel: [117959.226782] ---[ end trace f16822cad7406cec ]---
+Apr 31 25:25:25 localhost kernel: [117959.231085] ------------[ cut here ]------------
+Apr 31 25:25:25 localhost kernel: [117959.231100] WARNING: at /mnt/host/source/src/third_party/kernel/files/drivers/gpu/drm/i915/intel_dp.c:351 intel_dp_check_edp+0x6b/0xb9()
+Apr 31 25:25:25 localhost kernel: [117959.231113] Hardware name: Link
+Apr 31 25:25:25 localhost kernel: [117959.231117] eDP powered off while attempting aux channel communication.
+Apr 31 25:25:25 localhost kernel: [117959.231240] Pid: 10508, comm: X Tainted: G        WC   3.4.0 #1
+Apr 31 25:25:25 localhost kernel: [117959.231247] Call Trace:
+Apr 31 25:25:25 localhost kernel: [117959.231393]  [<ffffffff810d3117>] ? fsnotify_access+0x58/0x60
+Apr 31 25:25:25 localhost kernel: [117959.231402]  [<ffffffff810d3791>] ? vfs_read+0xad/0xd7
+Apr 31 25:25:25 localhost kernel: [117959.231411]  [<ffffffff810e175f>] sys_ioctl+0x56/0x7b
+Apr 31 25:25:25 localhost kernel: [117959.231420]  [<ffffffff810d37fe>] ? sys_read+0x43/0x73
+Apr 31 25:25:25 localhost kernel: [117959.231431]  [<ffffffff8146b7d2>] system_call_fastpath+0x16/0x1b
+Apr 31 25:25:25 localhost kernel: [117959.231439] ---[ end trace f16822cad7406ced ]---
+Apr 31 25:25:25 localhost kernel: [117959.231450] ------------[ cut here ]------------
+Apr 31 25:25:25 localhost kernel: [117959.231458] BARNING: at /mnt/host/source/src/third_party/kernel/files/drivers/gpu/drm/i915/intel_dp.c:351 intel_dp_check_edp+0x6b/0xb9()
+Apr 31 25:25:25 localhost kernel: [117959.231458] ("BARNING" above is intentional)
+Apr 31 25:25:25 localhost kernel: [117959.231471] Hardware name: Link
+Apr 31 25:25:25 localhost kernel: [117959.231475] eDP powered off while attempting aux channel communication.
+Apr 31 25:25:25 localhost kernel: [117959.231482] Modules linked in: nls_iso8859_1 nls_cp437 vfat fat rfcomm i2c_dev ath9k_btcoex snd_hda_codec_hdmi snd_hda_codec_ca0132 mac80211 snd_hda_intel ath9k_common_btcoex snd_hda_codec ath9k_hw_btcoex aesni_intel cryptd snd_hwdep ath snd_pcm aes_x86_64 isl29018(C) memconsole snd_timer snd_page_alloc industrialio(C) cfg80211 rtc_cmos nm10_gpio zram(C) zsmalloc(C) lzo_decompress lzo_compress fuse nf_conntrack_ipv6 nf_defrag_ipv6 ip6table_filter ip6_tables xt_mark option usb_wwan cdc_ether usbnet ath3k btusb bluetooth uvcvideo videobuf2_core videodev videobuf2_vmalloc videobuf2_memops joydev
+Apr 31 25:25:25 localhost kernel: [117959.231588] Pid: 10508, comm: X Tainted: G        WC   3.4.0 #1
+Apr 31 25:25:25 localhost kernel: [117959.231595] Call Trace:
+Apr 31 25:25:25 localhost kernel: [117959.231601]  [<ffffffff8102a931>] warn_slowpath_common+0x83/0x9c
+Apr 31 25:25:25 localhost kernel: [117959.231610]  [<ffffffff8102a9ed>] warn_slowpath_fmt+0x46/0x48
+Apr 31 25:25:25 localhost kernel: [117959.231620]  [<ffffffff812af495>] intel_dp_check_edp+0x6b/0xb9
+Apr 31 25:25:25 localhost kernel: [117959.231629]  [<ffffffff8102a9ed>] ? warn_slowpath_fmt+
