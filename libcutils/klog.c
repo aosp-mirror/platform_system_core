@@ -35,6 +35,9 @@ void klog_set_level(int level) {
 void klog_init(void)
 {
     static const char *name = "/dev/__kmsg__";
+
+    if (klog_fd >= 0) return; /* Already initialized */
+
     if (mknod(name, S_IFCHR | 0600, (1 << 8) | 11) == 0) {
         klog_fd = open(name, O_WRONLY);
         fcntl(klog_fd, F_SETFD, FD_CLOEXEC);
@@ -50,7 +53,7 @@ void klog_write(int level, const char *fmt, ...)
     va_list ap;
 
     if (level > klog_level) return;
-    if (klog_fd < 0) return;
+    if (klog_fd < 0) klog_init();
 
     va_start(ap, fmt);
     vsnprintf(buf, LOG_BUF_MAX, fmt, ap);
