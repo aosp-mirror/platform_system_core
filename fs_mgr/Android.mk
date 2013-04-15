@@ -28,7 +28,7 @@ LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)/sbin
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
 
-LOCAL_STATIC_LIBRARIES := libfs_mgr liblogwrap libcutils libc
+LOCAL_STATIC_LIBRARIES := libfs_mgr liblogwrap libcutils liblog libc
 
 include $(BUILD_EXECUTABLE)
 
