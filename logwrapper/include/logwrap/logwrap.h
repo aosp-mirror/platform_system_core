@@ -43,7 +43,12 @@ __BEGIN_DECLS
  *           SIGQUIT while logwrap is running. This may force the end-user to
  *           send a signal twice to signal the caller (once for the child, and
  *           once for the caller)
- *   logwrap: when true, log messages from the child
+ *   log_target: Specify where to log the output of the child, either LOG_NONE,
+ *           LOG_ALOG (for the Android system log) or LOG_KLOG (for the kernel
+ *           log).
+ *   abbreviated: If true, capture up to the first 100 lines and last 4K of
+ *           output from the child.  The abbreviated output is not dumped to
+ *           the specified log until the child has exited.
  *
  * Return value:
  *   0 when logwrap successfully run the child process and captured its status
@@ -52,8 +57,26 @@ __BEGIN_DECLS
  *   the return value of the child if it exited properly and status is NULL
  *
  */
-int android_fork_execvp(int argc, char* argv[], int *status, bool ignore_int_quit,
-        bool logwrap);
+
+/* Values for the log_target parameter android_fork_exec_ext() */
+#define LOG_NONE        0
+#define LOG_ALOG        1
+#define LOG_KLOG        2
+
+int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int_quit,
+        int log_target, bool abbreviated);
+
+/* Similar to above, except abbreviated logging is not available, and if logwrap
+ * is true, logging is to the Android system log, and if false, there is no
+ * logging.
+ */
+static inline int android_fork_execvp(int argc, char* argv[], int *status,
+                                     bool ignore_int_quit, bool logwrap)
+{
+    return android_fork_execvp_ext(argc, argv, status, ignore_int_quit,
+                                   (logwrap ? LOG_ALOG : LOG_NONE), false);
+}
+
 
 __END_DECLS
 

@@ -30,5 +30,5 @@ include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= logwrapper.c
 LOCAL_MODULE := logwrapper
-LOCAL_STATIC_LIBRARIES := liblog liblogwrap
+LOCAL_STATIC_LIBRARIES := liblog liblogwrap libcutils
 include $(BUILD_EXECUTABLE)
