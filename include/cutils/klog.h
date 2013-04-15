@@ -17,11 +17,17 @@
 #ifndef _CUTILS_KLOG_H_
 #define _CUTILS_KLOG_H_
 
+#include <sys/cdefs.h>
+
+__BEGIN_DECLS
+
 void klog_init(void);
 void klog_set_level(int level);
 void klog_close(void);
 void klog_write(int level, const char *fmt, ...)
     __attribute__ ((format(printf, 2, 3)));
+
+__END_DECLS
 
 #define KLOG_ERROR(tag,x...)   klog_write(3, "<3>" tag ": " x)
 #define KLOG_WARNING(tag,x...) klog_write(4, "<4>" tag ": " x)
