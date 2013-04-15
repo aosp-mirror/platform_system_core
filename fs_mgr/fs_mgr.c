@@ -14,11 +14,6 @@
  * limitations under the License.
  */
 
-/* TO DO:
- *   1. Re-direct fsck output to the kernel log?
- *
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,6 +31,7 @@
 #include <private/android_filesystem_config.h>
 #include <cutils/partition_utils.h>
 #include <cutils/properties.h>
+#include <logwrap/logwrap.h>
 
 #include "fs_mgr_priv.h"
 
@@ -43,6 +39,8 @@
 #define KEY_IN_FOOTER  "footer"
 
 #define E2FSCK_BIN      "/system/bin/e2fsck"
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
 struct flag_list {
     const char *name;
@@ -434,11 +432,15 @@ void fs_mgr_free_fstab(struct fstab *fstab)
 
 static void check_fs(char *blk_device, char *fs_type, char *target)
 {
-    pid_t pid;
     int status;
     int ret;
     long tmpmnt_flags = MS_NOATIME | MS_NOEXEC | MS_NOSUID;
     char *tmpmnt_opts = "nomblk_io_submit,errors=remount-ro";
+    char *e2fsck_argv[] = {
+        E2FSCK_BIN,
+        "-y",
+        blk_device
+    };
 
     /* Check for the types of filesystems we know how to check */
     if (!strcmp(fs_type, "ext2") || !strcmp(fs_type, "ext3") || !strcmp(fs_type, "ext4")) {
@@ -461,19 +463,13 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
         }
 
         INFO("Running %s on %s\n", E2FSCK_BIN, blk_device);
-        pid = fork();
-        if (pid > 0) {
-            /* Parent, wait for the child to return */
-            waitpid(pid, &status, 0);
-        } else if (pid == 0) {
-            /* child, run checker */
-            execlp(E2FSCK_BIN, E2FSCK_BIN, "-y", blk_device, (char *)NULL);
 
-            /* Only gets here on error */
-            ERROR("Cannot run fs_mgr binary %s\n", E2FSCK_BIN);
-        } else {
+        ret = android_fork_execvp_ext(ARRAY_SIZE(e2fsck_argv), e2fsck_argv,
+                                      &status, true, LOG_KLOG, true);
+
+        if (ret < 0) {
             /* No need to check for error in fork, we can't really handle it now */
-            ERROR("Fork failed trying to run %s\n", E2FSCK_BIN);
+            ERROR("Failed trying to run %s\n", E2FSCK_BIN);
         }
     }
 

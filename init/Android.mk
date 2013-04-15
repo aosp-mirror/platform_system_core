@@ -35,7 +35,9 @@ LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
 
 LOCAL_STATIC_LIBRARIES := \
 	libfs_mgr \
+	liblogwrap \
 	libcutils \
+	liblog \
 	libc \
 	libselinux
 
