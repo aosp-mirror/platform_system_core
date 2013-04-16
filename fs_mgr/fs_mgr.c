@@ -487,6 +487,43 @@ static void remove_trailing_slashes(char *n)
     }
 }
 
+/*
+ * Mark the given block device as read-only, using the BLKROSET ioctl.
+ * Return 0 on success, and -1 on error.
+ */
+static void fs_set_blk_ro(const char *blockdev)
+{
+    int fd;
+    int ON = 1;
+
+    fd = open(blockdev, O_RDONLY);
+    if (fd < 0) {
+        // should never happen
+        return;
+    }
+
+    ioctl(fd, BLKROSET, &ON);
+    close(fd);
+}
+
+/*
+ * __mount(): wrapper around the mount() system call which also
+ * sets the underlying block device to read-only if the mount is read-only.
+ * See "man 2 mount" for return values.
+ */
+static int __mount(const char *source, const char *target,
+                   const char *filesystemtype, unsigned long mountflags,
+                   const void *data)
+{
+    int ret = mount(source, target, filesystemtype, mountflags, data);
+
+    if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
+        fs_set_blk_ro(source);
+    }
+
+    return ret;
+}
+
 static int fs_match(char *in1, char *in2)
 {
     char *n1;
@@ -539,9 +576,9 @@ int fs_mgr_mount_all(struct fstab *fstab)
                      fstab->recs[i].mount_point);
         }
 
-        mret = mount(fstab->recs[i].blk_device, fstab->recs[i].mount_point,
-                     fstab->recs[i].fs_type, fstab->recs[i].flags,
-                     fstab->recs[i].fs_options);
+        mret = __mount(fstab->recs[i].blk_device, fstab->recs[i].mount_point,
+                       fstab->recs[i].fs_type, fstab->recs[i].flags,
+                       fstab->recs[i].fs_options);
         if (!mret) {
             /* Success!  Go get the next one */
             continue;
@@ -621,8 +658,8 @@ int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
         } else {
             m = fstab->recs[i].mount_point;
         }
-        if (mount(n_blk_device, m, fstab->recs[i].fs_type,
-                  fstab->recs[i].flags, fstab->recs[i].fs_options)) {
+        if (__mount(n_blk_device, m, fstab->recs[i].fs_type,
+                    fstab->recs[i].flags, fstab->recs[i].fs_options)) {
             ERROR("Cannot mount filesystem on %s at %s\n",
                     n_blk_device, m);
             goto out;
