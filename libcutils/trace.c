@@ -30,12 +30,13 @@
 #define LOG_TAG "cutils-trace"
 #include <cutils/log.h>
 
-int32_t                atrace_is_ready      = 0;
-int                    atrace_marker_fd     = -1;
-uint64_t               atrace_enabled_tags  = ATRACE_TAG_NOT_READY;
-static bool            atrace_is_debuggable = false;
-static pthread_once_t  atrace_once_control  = PTHREAD_ONCE_INIT;
-static pthread_mutex_t atrace_tags_mutex    = PTHREAD_MUTEX_INITIALIZER;
+volatile int32_t        atrace_is_ready      = 0;
+int                     atrace_marker_fd     = -1;
+uint64_t                atrace_enabled_tags  = ATRACE_TAG_NOT_READY;
+static bool             atrace_is_debuggable = false;
+static volatile int32_t atrace_is_enabled    = 1;
+static pthread_once_t   atrace_once_control  = PTHREAD_ONCE_INIT;
+static pthread_mutex_t  atrace_tags_mutex    = PTHREAD_MUTEX_INITIALIZER;
 
 // Set whether this process is debuggable, which determines whether
 // application-level tracing is allowed when the ro.debuggable system property
@@ -46,9 +47,18 @@ void atrace_set_debuggable(bool debuggable)
     atrace_update_tags();
 }
 
+// Set whether tracing is enabled in this process.  This is used to prevent
+// the Zygote process from tracing.
+void atrace_set_tracing_enabled(bool enabled)
+{
+    android_atomic_release_store(enabled ? 1 : 0, &atrace_is_enabled);
+    atrace_update_tags();
+}
+
 // Check whether the given command line matches one of the comma-separated
 // values listed in the app_cmdlines property.
-static bool atrace_is_cmdline_match(const char* cmdline) {
+static bool atrace_is_cmdline_match(const char* cmdline)
+{
     char value[PROPERTY_VALUE_MAX];
     char* start = value;
 
@@ -140,10 +150,18 @@ void atrace_update_tags()
 {
     uint64_t tags;
     if (CC_UNLIKELY(android_atomic_acquire_load(&atrace_is_ready))) {
-        tags = atrace_get_property();
-        pthread_mutex_lock(&atrace_tags_mutex);
-        atrace_enabled_tags = tags;
-        pthread_mutex_unlock(&atrace_tags_mutex);
+        if (android_atomic_acquire_load(&atrace_is_enabled)) {
+            tags = atrace_get_property();
+            pthread_mutex_lock(&atrace_tags_mutex);
+            atrace_enabled_tags = tags;
+            pthread_mutex_unlock(&atrace_tags_mutex);
+        } else {
+            // Tracing is disabled for this process, so we simply don't
+            // initialize the tags.
+            pthread_mutex_lock(&atrace_tags_mutex);
+            atrace_enabled_tags = ATRACE_TAG_NOT_READY;
+            pthread_mutex_unlock(&atrace_tags_mutex);
+        }
     }
 }
 
