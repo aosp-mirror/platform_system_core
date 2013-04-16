@@ -107,11 +107,17 @@ void atrace_update_tags();
 void atrace_set_debuggable(bool debuggable);
 
 /**
+ * Set whether tracing is enabled for the current process.  This is used to
+ * prevent tracing within the Zygote process.
+ */
+void atrace_set_tracing_enabled(bool enabled);
+
+/**
  * Flag indicating whether setup has been completed, initialized to 0.
  * Nonzero indicates setup has completed.
  * Note: This does NOT indicate whether or not setup was successful.
  */
-extern int32_t atrace_is_ready;
+extern volatile int32_t atrace_is_ready;
 
 /**
  * Set of ATRACE_TAG flags to trace for, initialized to ATRACE_TAG_NOT_READY.
