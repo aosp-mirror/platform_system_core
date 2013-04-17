@@ -401,6 +401,10 @@ static char *connection_state_name(atransport *t)
         return "bootloader";
     case CS_DEVICE:
         return "device";
+    case CS_RECOVERY:
+        return "recovery";
+    case CS_SIDELOAD:
+        return "sideload";
     case CS_OFFLINE:
         return "offline";
     case CS_UNAUTHORIZED:
