@@ -357,23 +357,24 @@ static void dump_backtrace_and_stack(const ptrace_context_t* context, log_t* log
     }
 }
 
-static void dump_map(log_t* log, map_info_t* m, const char* what) {
+static void dump_map(log_t* log, map_info_t* m, const char* what, int scopeFlags) {
     if (m != NULL) {
-        _LOG(log, SCOPE_SENSITIVE, "    %08x-%08x %c%c%c %s\n", m->start, m->end,
+        _LOG(log, scopeFlags, "    %08x-%08x %c%c%c %s\n", m->start, m->end,
              m->is_readable ? 'r' : '-',
              m->is_writable ? 'w' : '-',
              m->is_executable ? 'x' : '-',
              m->name);
     } else {
-        _LOG(log, SCOPE_SENSITIVE, "    (no %s)\n", what);
+        _LOG(log, scopeFlags, "    (no %s)\n", what);
     }
 }
 
-static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t tid) {
+static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t tid, bool at_fault) {
+    int scopeFlags = SCOPE_SENSITIVE | (at_fault ? SCOPE_AT_FAULT : 0);
     siginfo_t si;
     memset(&si, 0, sizeof(si));
     if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si)) {
-        _LOG(log, SCOPE_SENSITIVE, "cannot get siginfo for %d: %s\n",
+        _LOG(log, scopeFlags, "cannot get siginfo for %d: %s\n",
                 tid, strerror(errno));
         return;
     }
@@ -387,7 +388,7 @@ static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t 
         return;
     }
 
-    _LOG(log, SCOPE_SENSITIVE, "\nmemory map around fault addr %08x:\n", (int)si.si_addr);
+    _LOG(log, scopeFlags, "\nmemory map around fault addr %08x:\n", (int)si.si_addr);
 
     /*
      * Search for a match, or for a hole where the match would be.  The list
@@ -415,9 +416,9 @@ static void dump_nearby_maps(const ptrace_context_t* context, log_t* log, pid_t 
      * Show "next" then "match" then "prev" so that the addresses appear in
      * ascending order (like /proc/pid/maps).
      */
-    dump_map(log, next, "map below");
-    dump_map(log, map, "map for address");
-    dump_map(log, prev, "map above");
+    dump_map(log, next, "map below", scopeFlags);
+    dump_map(log, map, "map for address", scopeFlags);
+    dump_map(log, prev, "map above", scopeFlags);
 }
 
 static void dump_thread(const ptrace_context_t* context, log_t* log, pid_t tid, bool at_fault,
@@ -428,7 +429,7 @@ static void dump_thread(const ptrace_context_t* context, log_t* log, pid_t tid, 
     dump_backtrace_and_stack(context, log, tid, at_fault);
     if (at_fault) {
         dump_memory_and_code(context, log, tid, at_fault);
-        dump_nearby_maps(context, log, tid);
+        dump_nearby_maps(context, log, tid, at_fault);
     }
 }
 
