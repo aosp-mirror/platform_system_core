@@ -590,8 +590,8 @@ pos_in(void)
 
 	/* If not a pipe or tape device, try to seek on it. */
 	if (!(in.flags & (ISPIPE|ISTAPE))) {
-		if (lseek(in.fd,
-		    (off_t)in.offset * (off_t)in.dbsz, SEEK_CUR) == -1) {
+		if (lseek64(in.fd,
+		    (off64_t)in.offset * (off64_t)in.dbsz, SEEK_CUR) == -1) {
 			fprintf(stderr, "%s: seek error: %s",
 				in.name, strerror(errno));
 			exit(1);
@@ -661,8 +661,8 @@ pos_out(void)
 	 * have specified the seek operand.
 	 */
 	if (!(out.flags & ISTAPE)) {
-		if (lseek(out.fd,
-		    (off_t)out.offset * (off_t)out.dbsz, SEEK_SET) == -1) {
+		if (lseek64(out.fd,
+		    (off64_t)out.offset * (off64_t)out.dbsz, SEEK_SET) == -1) {
 			fprintf(stderr, "%s: seek error: %s\n",
 				out.name, strerror(errno));
 			exit(1);
