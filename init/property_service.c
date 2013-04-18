@@ -77,6 +77,7 @@ struct {
     { "runtime.",         AID_SYSTEM,   0 },
     { "hw.",              AID_SYSTEM,   0 },
     { "sys.",             AID_SYSTEM,   0 },
+    { "sys.powerctl",     AID_SHELL,    0 },
     { "service.",         AID_SYSTEM,   0 },
     { "wlan.",            AID_SYSTEM,   0 },
     { "bluetooth.",       AID_BLUETOOTH,   0 },

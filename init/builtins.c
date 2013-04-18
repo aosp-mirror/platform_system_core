@@ -32,6 +32,7 @@
 #include <sys/wait.h>
 #include <linux/loop.h>
 #include <cutils/partition_utils.h>
+#include <cutils/android_reboot.h>
 #include <sys/system_properties.h>
 #include <fs_mgr.h>
 
@@ -597,6 +598,43 @@ int do_restart(int nargs, char **args)
         service_start(svc, NULL);
     }
     return 0;
+}
+
+int do_powerctl(int nargs, char **args)
+{
+    char command[PROP_VALUE_MAX];
+    int res;
+    int len = 0;
+    int cmd = 0;
+    char *reboot_target;
+
+    res = expand_props(command, args[1], sizeof(command));
+    if (res) {
+        ERROR("powerctl: cannot expand '%s'\n", args[1]);
+        return -EINVAL;
+    }
+
+    if (strncmp(command, "shutdown", 8) == 0) {
+        cmd = ANDROID_RB_POWEROFF;
+        len = 8;
+    } else if (strncmp(command, "reboot", 6) == 0) {
+        cmd = ANDROID_RB_RESTART2;
+        len = 6;
+    } else {
+        ERROR("powerctl: unrecognized command '%s'\n", command);
+        return -EINVAL;
+    }
+
+    if (command[len] == ',') {
+        reboot_target = &command[len + 1];
+    } else if (command[len] == '\0') {
+        reboot_target = "";
+    } else {
+        ERROR("powerctl: unrecognized reboot target '%s'\n", &command[len]);
+        return -EINVAL;
+    }
+
+    return android_reboot(cmd, 0, reboot_target);
 }
 
 int do_trigger(int nargs, char **args)

@@ -165,6 +165,7 @@ void restart_usb_service(int fd, void *cookie)
 void reboot_service(int fd, void *arg)
 {
     char buf[100];
+    char property_val[PROPERTY_VALUE_MAX];
     int pid, ret;
 
     sync();
@@ -182,11 +183,19 @@ void reboot_service(int fd, void *arg)
         waitpid(pid, &ret, 0);
     }
 
-    ret = android_reboot(ANDROID_RB_RESTART2, 0, (char *) arg);
+    ret = snprintf(property_val, sizeof(property_val), "reboot,%s", (char *) arg);
+    if (ret >= (int) sizeof(property_val)) {
+        snprintf(buf, sizeof(buf), "reboot string too long. length=%d\n", ret);
+        writex(fd, buf, strlen(buf));
+        goto cleanup;
+    }
+
+    ret = property_set(ANDROID_RB_PROPERTY, property_val);
     if (ret < 0) {
-        snprintf(buf, sizeof(buf), "reboot failed: %s\n", strerror(errno));
+        snprintf(buf, sizeof(buf), "reboot failed: %d\n", ret);
         writex(fd, buf, strlen(buf));
     }
+cleanup:
     free(arg);
     adb_close(fd);
 }

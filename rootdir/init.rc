@@ -398,6 +398,9 @@ on property:vold.decrypt=trigger_shutdown_framework
     class_reset late_start
     class_reset main
 
+on property:sys.powerctl=*
+    powerctl ${sys.powerctl}
+
 ## Daemon processes to be run by init.
 ##
 service ueventd /sbin/ueventd
