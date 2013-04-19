@@ -110,9 +110,10 @@ void help()
         "  adb push [-p] <local> <remote>\n"
         "                               - copy file/dir to device\n"
         "                                 ('-p' to display the transfer progress)\n"
-        "  adb pull [-p] <remote> [<local>]\n"
+        "  adb pull [-p] [-a] <remote> [<local>]\n"
         "                               - copy file/dir from device\n"
         "                                 ('-p' to display the transfer progress)\n"
+        "                                 ('-a' means copy timestamp and mode)\n"
         "  adb sync [ <directory> ]     - copy host->device only if changed\n"
         "                                 (-l means list but don't copy)\n"
         "                                 (see 'adb help all')\n"
@@ -939,12 +940,19 @@ static const char *find_product_out_path(const char *hint)
 }
 
 
-static void parse_push_pull_args(char** arg, int narg, char const** path1, char const** path2,
-                                 int* show_progress) {
+static void parse_push_pull_args(char **arg, int narg, char const **path1, char const **path2,
+                                 int *show_progress, int *copy_attrs) {
     *show_progress = 0;
+    *copy_attrs = 0;
 
-    if ((narg > 0) && !strcmp(*arg, "-p")) {
-        *show_progress = 1;
+    while (narg > 0) {
+        if (!strcmp(*arg, "-p")) {
+            *show_progress = 1;
+        } else if (!strcmp(*arg, "-a")) {
+            *copy_attrs = 1;
+        } else {
+            break;
+        }
         ++arg;
         --narg;
     }
@@ -1415,9 +1423,10 @@ top:
 
     if(!strcmp(argv[0], "push")) {
         int show_progress = 0;
+        int copy_attrs = 0; // unused
         const char* lpath = NULL, *rpath = NULL;
 
-        parse_push_pull_args(&argv[1], argc - 1, &lpath, &rpath, &show_progress);
+        parse_push_pull_args(&argv[1], argc - 1, &lpath, &rpath, &show_progress, &copy_attrs);
 
         if ((lpath != NULL) && (rpath != NULL)) {
             return do_sync_push(lpath, rpath, 0 /* no verify APK */, show_progress);
@@ -1428,12 +1437,13 @@ top:
 
     if(!strcmp(argv[0], "pull")) {
         int show_progress = 0;
+        int copy_attrs = 0;
         const char* rpath = NULL, *lpath = ".";
 
-        parse_push_pull_args(&argv[1], argc - 1, &rpath, &lpath, &show_progress);
+        parse_push_pull_args(&argv[1], argc - 1, &rpath, &lpath, &show_progress, &copy_attrs);
 
         if (rpath != NULL) {
-            return do_sync_pull(rpath, lpath, show_progress);
+            return do_sync_pull(rpath, lpath, show_progress, copy_attrs);
         }
 
         return usage();
