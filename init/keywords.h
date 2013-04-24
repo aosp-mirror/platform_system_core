@@ -14,6 +14,7 @@ int do_insmod(int nargs, char **args);
 int do_mkdir(int nargs, char **args);
 int do_mount_all(int nargs, char **args);
 int do_mount(int nargs, char **args);
+int do_powerctl(int nargs, char **args);
 int do_restart(int nargs, char **args);
 int do_restorecon(int nargs, char **args);
 int do_rm(int nargs, char **args);
@@ -66,6 +67,7 @@ enum {
     KEYWORD(on,          SECTION, 0, 0)
     KEYWORD(oneshot,     OPTION,  0, 0)
     KEYWORD(onrestart,   OPTION,  0, 0)
+    KEYWORD(powerctl,    COMMAND, 1, do_powerctl)
     KEYWORD(restart,     COMMAND, 1, do_restart)
     KEYWORD(restorecon,  COMMAND, 1, do_restorecon)
     KEYWORD(rm,          COMMAND, 1, do_rm)

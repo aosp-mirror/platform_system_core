@@ -230,7 +230,6 @@ static const struct fs_path_config android_files[] = {
 
     /* the following files have enhanced capabilities and ARE included in user builds. */
     { 00750, AID_ROOT,      AID_SHELL,     (1 << CAP_SETUID) | (1 << CAP_SETGID), "system/bin/run-as" },
-    { 00750, AID_ROOT,      AID_SHELL,     1 << CAP_SYS_BOOT, "system/bin/reboot" },
 
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib/valgrind/*" },

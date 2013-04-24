@@ -1199,9 +1199,8 @@ static void drop_capabilities_bounding_set_if_needed() {
 #endif
     int i;
     for (i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0) >= 0; i++) {
-        if (i == CAP_SETUID || i == CAP_SETGID || i == CAP_SYS_BOOT) {
+        if (i == CAP_SETUID || i == CAP_SETGID) {
             // CAP_SETUID CAP_SETGID needed by /system/bin/run-as
-            // CAP_SYS_BOOT          needed by /system/bin/reboot
             continue;
         }
         int err = prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
@@ -1302,13 +1301,6 @@ int adb_main(int is_daemon, int server_port)
     /* don't listen on a port (default 5037) if running in secure mode */
     /* don't run as root if we are running in secure mode */
     if (should_drop_privileges()) {
-        struct __user_cap_header_struct header;
-        struct __user_cap_data_struct cap[2];
-
-        if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) != 0) {
-            exit(1);
-        }
-
         drop_capabilities_bounding_set_if_needed();
 
         /* add extra groups:
@@ -1337,16 +1329,6 @@ int adb_main(int is_daemon, int server_port)
         if (setuid(AID_SHELL) != 0) {
             exit(1);
         }
-
-        memset(&header, 0, sizeof(header));
-        memset(cap, 0, sizeof(cap));
-
-        /* set CAP_SYS_BOOT capability, so "adb reboot" will succeed */
-        header.version = _LINUX_CAPABILITY_VERSION_3;
-        header.pid = 0;
-        cap[CAP_TO_INDEX(CAP_SYS_BOOT)].effective |= CAP_TO_MASK(CAP_SYS_BOOT);
-        cap[CAP_TO_INDEX(CAP_SYS_BOOT)].permitted |= CAP_TO_MASK(CAP_SYS_BOOT);
-        capset(&header, cap);
 
         D("Local port disabled\n");
     } else {

@@ -105,11 +105,8 @@ int android_reboot(int cmd, int flags, char *arg)
 {
     int ret;
 
-    if (!(flags & ANDROID_RB_FLAG_NO_SYNC))
-        sync();
-
-    if (!(flags & ANDROID_RB_FLAG_NO_REMOUNT_RO))
-        remount_ro();
+    sync();
+    remount_ro();
 
     switch (cmd) {
         case ANDROID_RB_RESTART:
