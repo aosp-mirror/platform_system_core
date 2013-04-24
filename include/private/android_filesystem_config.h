@@ -205,7 +205,6 @@ static const struct fs_path_config android_files[] = {
     { 00550, AID_ROOT,      AID_SHELL,     0, "system/etc/init.ril" },
     { 00550, AID_ROOT,      AID_SHELL,     0, "system/etc/init.testmenu" },
     { 00550, AID_DHCP,      AID_SHELL,     0, "system/etc/dhcpcd/dhcpcd-run-hooks" },
-    { 00440, AID_BLUETOOTH, AID_BLUETOOTH, 0, "system/etc/dbus.conf" },
     { 00444, AID_RADIO,     AID_AUDIO,     0, "system/etc/AudioPara4.csv" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/ppp/*" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/rc.*" },
