@@ -17,6 +17,8 @@
 
 #include <cutils/sockets.h>
 
+extern const char* __progname;
+
 void crash1(void);
 void crashnostack(void);
 void maybeabort(void);
@@ -47,20 +49,16 @@ int smash_stack(int i) {
     return *(int*)(&buf[0]);
 }
 
+__attribute__((noinline)) void overflow_stack(void* p) {
+    fprintf(stderr, "p = %p\n", p);
+    void* buf[1];
+    buf[0] = p;
+    overflow_stack(&buf);
+}
+
 void test_call1()
 {
     *((int*) 32) = 1;
-}
-
-void *test_thread(void *x)
-{
-    printf("crasher: thread pid=%d tid=%d\n", getpid(), gettid());
-
-    sleep(1);
-    test_call1();
-    printf("goodbye\n");
-
-    return 0;
 }
 
 void *noisy(void *x)
@@ -118,35 +116,48 @@ __attribute__((noinline)) int crash(int a) {
 
 int do_action(const char* arg)
 {
-    if(!strncmp(arg, "thread-", strlen("thread-"))) {
+    fprintf(stderr,"crasher: init pid=%d tid=%d\n", getpid(), gettid());
+
+    if (!strncmp(arg, "thread-", strlen("thread-"))) {
         return do_action_on_thread(arg + strlen("thread-"));
+    } else if (!strcmp(arg,"smash-stack")) {
+        return smash_stack(42);
+    } else if (!strcmp(arg,"stack-overflow")) {
+        overflow_stack(NULL);
+    } else if (!strcmp(arg,"nostack")) {
+        crashnostack();
+    } else if (!strcmp(arg,"ctest")) {
+        return ctest();
+    } else if (!strcmp(arg,"exit")) {
+        exit(1);
+    } else if (!strcmp(arg,"crash")) {
+        return crash(42);
+    } else if (!strcmp(arg,"abort")) {
+        maybeabort();
     }
 
-    if(!strcmp(arg,"smash-stack")) return smash_stack(42);
-    if(!strcmp(arg,"nostack")) crashnostack();
-    if(!strcmp(arg,"ctest")) return ctest();
-    if(!strcmp(arg,"exit")) exit(1);
-    if(!strcmp(arg,"crash")) return crash(42);
-    if(!strcmp(arg,"abort")) maybeabort();
-
-    pthread_t thr;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    pthread_create(&thr, &attr, test_thread, 0);
-    while(1) sleep(1);
+    fprintf(stderr, "%s OP\n", __progname);
+    fprintf(stderr, "where OP is:\n");
+    fprintf(stderr, "  smash-stack     overwrite a stack-guard canary\n");
+    fprintf(stderr, "  stack-overflow  recurse until the stack overflows\n");
+    fprintf(stderr, "  nostack         crash with a NULL stack pointer\n");
+    fprintf(stderr, "  ctest           (obsoleted by thread-crash?)\n");
+    fprintf(stderr, "  exit            call exit(1)\n");
+    fprintf(stderr, "  crash           cause a SIGSEGV\n");
+    fprintf(stderr, "  abort           call abort()\n");
+    fprintf(stderr, "prefix any of the above with 'thread-' to not run\n");
+    fprintf(stderr, "on the process' main thread.\n");
+    return EXIT_SUCCESS;
 }
 
 int main(int argc, char **argv)
 {
     fprintf(stderr,"crasher: built at " __TIME__ "!@\n");
-    fprintf(stderr,"crasher: init pid=%d tid=%d\n", getpid(), gettid());
 
     if(argc > 1) {
         return do_action(argv[1]);
     } else {
         crash1();
-//        *((int*) 0) = 42;
     }
     
     return 0;
