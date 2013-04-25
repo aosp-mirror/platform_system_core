@@ -243,6 +243,10 @@ on post-fs-data
     # the following directory.
     mkdir /data/drm 0770 drm drm
 
+    # create directory for MediaDrm plug-ins - give drm the read/write access to
+    # the following directory.
+    mkdir /data/mediadrm 0770 mediadrm mediadrm
+
     # symlink to bugreport storage location
     symlink /data/data/com.android.shell/files/bugreports /data/bugreports
 
@@ -486,7 +490,7 @@ service drm /system/bin/drmserver
 service media /system/bin/mediaserver
     class main
     user media
-    group audio camera inet net_bt net_bt_admin net_bw_acct drmrpc
+    group audio camera inet net_bt net_bt_admin net_bw_acct drmrpc mediadrm
     ioprio rt 4
 
 service bootanim /system/bin/bootanimation
