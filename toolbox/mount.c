@@ -19,7 +19,7 @@
 #define LOOPDEV_MAXLEN 64
 
 struct mount_opts {
-	const char str[8];
+	const char str[16];
 	unsigned long rwmask;
 	unsigned long rwset;
 	unsigned long rwnoset;
@@ -65,10 +65,11 @@ static const struct mount_opts options[] = {
 static void add_extra_option(struct extra_opts *extra, char *s)
 {
 	int len = strlen(s);
-	int newlen = extra->used_size + len;
+	int newlen;
 
 	if (extra->str)
 	       len++;			/* +1 for ',' */
+	newlen = extra->used_size + len;
 
 	if (newlen >= extra->alloc_size) {
 		char *new;
@@ -79,7 +80,7 @@ static void add_extra_option(struct extra_opts *extra, char *s)
 
 		extra->str = new;
 		extra->end = extra->str + extra->used_size;
-		extra->alloc_size = newlen;
+		extra->alloc_size = newlen + 1;
 	}
 
 	if (extra->used_size) {
