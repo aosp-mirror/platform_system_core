@@ -91,6 +91,7 @@ struct {
     { "persist.service.", AID_SYSTEM,   0 },
     { "persist.security.", AID_SYSTEM,   0 },
     { "persist.service.bdroid.", AID_BLUETOOTH,   0 },
+    { "persist.selinux.enforcing", AID_SYSTEM,  0},
     { "selinux."         , AID_SYSTEM,   0 },
     { NULL, 0, 0 }
 };
