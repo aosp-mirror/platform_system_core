@@ -13,6 +13,7 @@
 #include <base/logging.h>
 #include <base/string_util.h>
 #include <base/stringprintf.h>
+#include <chromeos/dbus/service_constants.h>
 #include <dbus/dbus-glib-lowlevel.h>
 
 #include "counter.h"
@@ -26,9 +27,9 @@ using std::vector;
 
 
 #define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
-#define DBUS_IFACE_CRASH_REPORTER "org.chromium.CrashReporter"
-#define DBUS_IFACE_POWER_MANAGER "org.chromium.PowerManager"
-#define DBUS_IFACE_SESSION_MANAGER "org.chromium.SessionManagerInterface"
+
+static const char kCrashReporterInterface[] = "org.chromium.CrashReporter";
+static const char kCrashReporterUserCrashSignal[] = "UserCrash";
 
 static const int kSecondsPerMinute = 60;
 static const int kMinutesPerHour = 60;
@@ -129,25 +130,6 @@ const char MetricsDaemon::kMetricPageFaultsShortName[] =
 
 // persistent metrics path
 const char MetricsDaemon::kMetricsPath[] = "/var/log/metrics";
-
-
-// static
-const char* MetricsDaemon::kDBusMatches_[] = {
-  "type='signal',"
-  "interface='" DBUS_IFACE_CRASH_REPORTER "',"
-  "path='/',"
-  "member='UserCrash'",
-
-  "type='signal',"
-  "interface='" DBUS_IFACE_POWER_MANAGER "',"
-  "path='/'",
-
-  "type='signal',"
-  "sender='org.chromium.SessionManager',"
-  "interface='" DBUS_IFACE_SESSION_MANAGER "',"
-  "path='/org/chromium/SessionManager',"
-  "member='SessionStateChanged'",
-};
 
 // static
 const char* MetricsDaemon::kPowerStates_[] = {
@@ -318,9 +300,26 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
 
   dbus_connection_setup_with_g_main(connection, NULL);
 
+  vector<string> matches;
+  matches.push_back(
+      StringPrintf("type='signal',interface='%s',path='/',member='%s'",
+                   kCrashReporterInterface,
+                   kCrashReporterUserCrashSignal));
+  matches.push_back(
+      StringPrintf("type='signal',interface='%s',path='%s',member='%s'",
+                   power_manager::kPowerManagerInterface,
+                   power_manager::kPowerManagerServicePath,
+                   power_manager::kPowerStateChangedSignal));
+  matches.push_back(
+      StringPrintf("type='signal',sender='%s',interface='%s',path='%s'",
+                   login_manager::kSessionManagerServiceName,
+                   login_manager::kSessionManagerInterface,
+                   login_manager::kSessionManagerServicePath));
+
   // Registers D-Bus matches for the signals we would like to catch.
-  for (unsigned int m = 0; m < arraysize(kDBusMatches_); m++) {
-    const char* match = kDBusMatches_[m];
+  for (vector<string>::const_iterator it = matches.begin();
+       it != matches.end(); ++it) {
+    const char* match = it->c_str();
     DLOG(INFO) << "adding dbus match: " << match;
     dbus_bus_add_match(connection, match, &error);
     LOG_IF(FATAL, dbus_error_is_set(&error)) <<
@@ -359,28 +358,27 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
 
   DBusMessageIter iter;
   dbus_message_iter_init(message, &iter);
-  if (strcmp(interface, DBUS_IFACE_CRASH_REPORTER) == 0) {
+  if (strcmp(interface, kCrashReporterInterface) == 0) {
     CHECK(strcmp(dbus_message_get_member(message),
-                 "UserCrash") == 0);
+                 kCrashReporterUserCrashSignal) == 0);
     daemon->ProcessUserCrash();
-  } else if (strcmp(interface, DBUS_IFACE_POWER_MANAGER) == 0) {
-    const char* member = dbus_message_get_member(message);
-    if (strcmp(member, "ScreenIsLocked") == 0) {
-      daemon->SetUserActiveState(false, now);
-    } else if (strcmp(member, "ScreenIsUnlocked") == 0) {
-      daemon->SetUserActiveState(true, now);
-    } else if (strcmp(member, "PowerStateChanged") == 0) {
-      char* state_name;
-      dbus_message_iter_get_basic(&iter, &state_name);
-      daemon->PowerStateChanged(state_name, now);
-    }
-  } else if (strcmp(interface, DBUS_IFACE_SESSION_MANAGER) == 0) {
+  } else if (strcmp(interface, power_manager::kPowerManagerInterface) == 0) {
     CHECK(strcmp(dbus_message_get_member(message),
-                 "SessionStateChanged") == 0);
-
+                 power_manager::kPowerStateChangedSignal) == 0);
     char* state_name;
     dbus_message_iter_get_basic(&iter, &state_name);
-    daemon->SessionStateChanged(state_name, now);
+    daemon->PowerStateChanged(state_name, now);
+  } else if (strcmp(interface, login_manager::kSessionManagerInterface) == 0) {
+    const char* member = dbus_message_get_member(message);
+    if (strcmp(member, login_manager::kScreenIsLockedSignal) == 0) {
+      daemon->SetUserActiveState(false, now);
+    } else if (strcmp(member, login_manager::kScreenIsUnlockedSignal) == 0) {
+      daemon->SetUserActiveState(true, now);
+    } else if (strcmp(member, login_manager::kSessionStateChangedSignal) == 0) {
+      char* state_name;
+      dbus_message_iter_get_basic(&iter, &state_name);
+      daemon->SessionStateChanged(state_name, now);
+    }
   } else {
     DLOG(WARNING) << "unexpected interface: " << interface;
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;

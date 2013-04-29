@@ -158,9 +158,6 @@ class MetricsDaemon {
   static const char kMetricsDiskStatsPath[];
   static const char kMetricsVmStatsPath[];
 
-  // D-Bus message match strings.
-  static const char* kDBusMatches_[];
-
   // Array of power states.
   static const char* kPowerStates_[kNumberPowerStates];
 

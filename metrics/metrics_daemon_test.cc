@@ -9,6 +9,7 @@
 
 #include <base/file_util.h>
 #include <base/stringprintf.h>
+#include <chromeos/dbus/service_constants.h>
 #include <gtest/gtest.h>
 
 #include "counter_mock.h"
@@ -355,9 +356,9 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
 
   signal_args.clear();
   signal_args.push_back("on");
-  msg = NewDBusSignalString("/",
-                            "org.chromium.PowerManager",
-                            "PowerStateChanged",
+  msg = NewDBusSignalString(power_manager::kPowerManagerServicePath,
+                            power_manager::kPowerManagerInterface,
+                            power_manager::kPowerStateChangedSignal,
                             signal_args);
   EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
   res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
@@ -367,9 +368,9 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
 
   signal_args.clear();
   IgnoreActiveUseUpdate();
-  msg = NewDBusSignalString("/",
-                            "org.chromium.PowerManager",
-                            "ScreenIsUnlocked",
+  msg = NewDBusSignalString(login_manager::kSessionManagerServicePath,
+                            login_manager::kSessionManagerInterface,
+                            login_manager::kScreenIsUnlockedSignal,
                             signal_args);
   EXPECT_FALSE(daemon_.user_active_);
   res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
@@ -381,9 +382,9 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   signal_args.clear();
   signal_args.push_back("started");
   signal_args.push_back("bob");  // arbitrary username
-  msg = NewDBusSignalString("/org/chromium/SessionManager",
-                            "org.chromium.SessionManagerInterface",
-                            "SessionStateChanged",
+  msg = NewDBusSignalString(login_manager::kSessionManagerServicePath,
+                            login_manager::kSessionManagerInterface,
+                            login_manager::kSessionStateChangedSignal,
                             signal_args);
   EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
   res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
