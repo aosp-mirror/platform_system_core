@@ -177,6 +177,9 @@ on post-fs
     mkdir /cache/lost+found 0770 root root
 
 on post-fs-data
+    # reload SELinux based on what we find on the data partition
+    selinux_reload_policy
+
     # We chown/chmod /data again so because mount is run as root + defaults
     chown system system /data
     chmod 0771 /data
@@ -410,6 +413,7 @@ service ueventd /sbin/ueventd
     seclabel u:r:ueventd:s0
 
 on property:selinux.reload_policy=1
+    selinux_reload_policy
     restart ueventd
     restart installd
 

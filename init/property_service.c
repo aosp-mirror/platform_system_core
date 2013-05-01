@@ -384,9 +384,6 @@ int property_set(const char *name, const char *value)
          * to prevent them from being overwritten by default values.
          */
         write_persistent_property(name, value);
-    } else if (strcmp("selinux.reload_policy", name) == 0 &&
-               strcmp("1", value) == 0) {
-        selinux_reload_policy();
     }
     property_changed(name, value);
     return 0;

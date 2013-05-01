@@ -138,6 +138,7 @@ int lookup_keyword(const char *s)
         break;
     case 's':
         if (!strcmp(s, "eclabel")) return K_seclabel;
+        if (!strcmp(s, "elinux_reload_policy")) return K_selinux_reload_policy;
         if (!strcmp(s, "ervice")) return K_service;
         if (!strcmp(s, "etcon")) return K_setcon;
         if (!strcmp(s, "etenforce")) return K_setenforce;
