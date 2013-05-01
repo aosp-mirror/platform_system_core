@@ -254,7 +254,7 @@ on post-fs-data
     symlink /data/data/com.android.shell/files/bugreports /data/bugreports
 
     # Separate location for storing security policy files on data
-    mkdir /data/security 0700 system system
+    mkdir /data/security 0711 system system
 
     # If there is no fs-post-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
