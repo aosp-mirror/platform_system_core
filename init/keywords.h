@@ -19,6 +19,7 @@ int do_restart(int nargs, char **args);
 int do_restorecon(int nargs, char **args);
 int do_rm(int nargs, char **args);
 int do_rmdir(int nargs, char **args);
+int do_selinux_reload(int nargs, char **args);
 int do_setcon(int nargs, char **args);
 int do_setenforce(int nargs, char **args);
 int do_setkey(int nargs, char **args);
@@ -73,6 +74,7 @@ enum {
     KEYWORD(rm,          COMMAND, 1, do_rm)
     KEYWORD(rmdir,       COMMAND, 1, do_rmdir)
     KEYWORD(seclabel,    OPTION,  0, 0)
+    KEYWORD(selinux_reload_policy,    COMMAND, 0, do_selinux_reload)
     KEYWORD(service,     SECTION, 0, 0)
     KEYWORD(setcon,      COMMAND, 1, do_setcon)
     KEYWORD(setenforce,  COMMAND, 1, do_setenforce)
