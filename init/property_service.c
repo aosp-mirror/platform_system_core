@@ -353,7 +353,11 @@ int property_set(const char *name, const char *value)
         __futex_wake(&pa->serial, INT32_MAX);
     } else {
         pa = __system_property_area__;
-        if(pa->count == PA_COUNT_MAX) return -1;
+        if(pa->count == PA_COUNT_MAX) {
+            ERROR("Failed to set '%s'='%s',  property pool is exhausted at %d entries",
+                    name, value, PA_COUNT_MAX);
+            return -1;
+        }
 
         pi = pa_info_array + pa->count;
         pi->serial = (valuelen << 24);
