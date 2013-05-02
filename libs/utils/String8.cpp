@@ -48,12 +48,16 @@ int gDarwinIsReallyAnnoying;
 
 static inline char* getEmptyString()
 {
+    if (!gEmptyStringBuf) initialize_string8();
+
     gEmptyStringBuf->acquire();
     return gEmptyString;
 }
 
 void initialize_string8()
 {
+    if (gEmptyStringBuf) return;
+
     // HACK: This dummy dependency forces linking libutils Static.cpp,
     // which is needed to initialize String8/String16 classes.
     // These variables are named for Darwin, but are needed elsewhere too,
