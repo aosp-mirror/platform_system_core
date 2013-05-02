@@ -10,6 +10,7 @@ BASE_VER ?= 125070
 PKG_CONFIG ?= pkg-config
 
 CRASH_OBJS = \
+	chrome_collector.o \
 	crash_collector.o \
 	kernel_collector.o \
 	kernel_warning_collector.o \
@@ -60,6 +61,7 @@ $(eval $(call add_object_rules,lex.yy.o,CC,c))
 # -- Unit Tests --
 
 # Uncomment these to just run specific test(s).
+#TEST_BINS += chrome_collector_test
 #TEST_BINS += crash_collector_test
 #TEST_BINS += kernel_collector_test
 #TEST_BINS += udev_collector_test

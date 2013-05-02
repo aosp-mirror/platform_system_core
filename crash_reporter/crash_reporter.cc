@@ -7,13 +7,14 @@
 #include <string>
 #include <vector>
 
-#include "base/file_util.h"
-#include "base/command_line.h"
-#include "base/logging.h"
-#include "base/string_split.h"
-#include "base/string_util.h"
-#include "base/stringprintf.h"
+#include <base/file_util.h>
+#include <base/command_line.h>
+#include <base/logging.h>
+#include <base/string_split.h>
+#include <base/string_util.h>
+#include <base/stringprintf.h>
 #include "chromeos/syslog_logging.h"
+#include "crash-reporter/chrome_collector.h"
 #include "crash-reporter/kernel_collector.h"
 #include "crash-reporter/kernel_warning_collector.h"
 #include "crash-reporter/udev_collector.h"
@@ -32,6 +33,9 @@ DEFINE_string(user, "", "User crash info (pid:signal:exec_name)");
 DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
 DEFINE_string(udev, "", "Udev event description (type:device:subsystem)");
 DEFINE_bool(kernel_warning, false, "Report collected kernel warning");
+DEFINE_string(chrome, "", "Chrome crash dump file");
+DEFINE_string(pid, "", "PID of crashing process");
+DEFINE_string(uid, "", "UID of crashing process");
 #pragma GCC diagnostic error "-Wstrict-aliasing"
 
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
@@ -109,6 +113,13 @@ static void CountUserCrash() {
   LOG_IF(WARNING, status != 0) << "dbus-send running failed";
 }
 
+static void CountChromeCrash() {
+  // For now, consider chrome crashes the same as user crashes for reporting
+  // purposes.
+  CountUserCrash();
+}
+
+
 static int Initialize(KernelCollector *kernel_collector,
                       UserCollector *user_collector,
                       UncleanShutdownCollector *unclean_shutdown_collector) {
@@ -160,6 +171,20 @@ static int HandleUserCrash(UserCollector *user_collector) {
   chromeos::LogToString(true);
   // Handle the crash, get the name of the process from procfs.
   bool handled = user_collector->HandleCrash(FLAGS_user, NULL);
+  chromeos::LogToString(false);
+  if (!handled)
+    return 1;
+  return 0;
+}
+
+static int HandleChromeCrash(ChromeCollector *chrome_collector) {
+  CHECK(!FLAGS_chrome.empty()) << "--chrome= must be set";
+  CHECK(!FLAGS_pid.empty()) << "--pid= must be set";
+  CHECK(!FLAGS_uid.empty()) << "--uid= must be set";
+
+  chromeos::LogToString(true);
+  bool handled = chrome_collector->HandleCrash(FLAGS_chrome, FLAGS_pid,
+                                               FLAGS_uid);
   chromeos::LogToString(false);
   if (!handled)
     return 1;
@@ -251,6 +276,8 @@ int main(int argc, char *argv[]) {
                                         IsFeedbackAllowed);
   UdevCollector udev_collector;
   udev_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
+  ChromeCollector chrome_collector;
+  chrome_collector.Initialize(CountChromeCrash, IsFeedbackAllowed);
 
   KernelWarningCollector kernel_warning_collector;
   udev_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
@@ -277,6 +304,10 @@ int main(int argc, char *argv[]) {
 
   if (FLAGS_kernel_warning) {
     return HandleKernelWarning(&kernel_warning_collector);
+  }
+
+  if (!FLAGS_chrome.empty()) {
+    return HandleChromeCrash(&chrome_collector);
   }
 
   return HandleUserCrash(&user_collector);

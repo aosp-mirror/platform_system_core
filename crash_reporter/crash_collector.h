@@ -102,6 +102,12 @@ class CrashCollector {
                               const std::string &basename,
                               const std::string &extension);
 
+  base::FilePath GetProcessPath(pid_t pid);
+  bool GetSymlinkTarget(const base::FilePath &symlink,
+                        base::FilePath *target);
+  bool GetExecutableBaseNameFromPid(pid_t pid,
+                                    std::string *base_name);
+
   // Check given crash directory still has remaining capacity for another
   // crash.
   bool CheckHasCapacity(const base::FilePath &crash_directory);

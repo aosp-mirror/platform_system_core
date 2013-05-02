@@ -226,6 +226,66 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
   return true;
 }
 
+FilePath CrashCollector::GetProcessPath(pid_t pid) {
+  return FilePath(StringPrintf("/proc/%d", pid));
+}
+
+bool CrashCollector::GetSymlinkTarget(const FilePath &symlink,
+                                     FilePath *target) {
+  int max_size = 32;
+  scoped_array<char> buffer;
+  while (true) {
+    buffer.reset(new char[max_size + 1]);
+    ssize_t size = readlink(symlink.value().c_str(), buffer.get(), max_size);
+    if (size < 0) {
+      int saved_errno = errno;
+      LOG(ERROR) << "Readlink failed on " << symlink.value() << " with "
+                 << saved_errno;
+      return false;
+    }
+    buffer[size] = 0;
+    if (size == max_size) {
+      // Avoid overflow when doubling.
+      if (max_size * 2 > max_size) {
+        max_size *= 2;
+        continue;
+      } else {
+        return false;
+      }
+    }
+    break;
+  }
+
+  *target = FilePath(buffer.get());
+  return true;
+}
+
+bool CrashCollector::GetExecutableBaseNameFromPid(pid_t pid,
+                                                 std::string *base_name) {
+  FilePath target;
+  FilePath process_path = GetProcessPath(pid);
+  FilePath exe_path = process_path.Append("exe");
+  if (!GetSymlinkTarget(exe_path, &target)) {
+    LOG(INFO) << "GetSymlinkTarget failed - Path " << process_path.value()
+              << " DirectoryExists: "
+              << file_util::DirectoryExists(process_path);
+    // Try to further diagnose exe readlink failure cause.
+    struct stat buf;
+    int stat_result = stat(exe_path.value().c_str(), &buf);
+    int saved_errno = errno;
+    if (stat_result < 0) {
+      LOG(INFO) << "stat " << exe_path.value() << " failed: " << stat_result
+                << " " << saved_errno;
+    } else {
+      LOG(INFO) << "stat " << exe_path.value() << " succeeded: st_mode="
+                << buf.st_mode;
+    }
+    return false;
+  }
+  *base_name = target.BaseName().value();
+  return true;
+}
+
 // Return true if the given crash directory has not already reached
 // maximum capacity.
 bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {

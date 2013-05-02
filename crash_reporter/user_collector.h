@@ -101,11 +101,6 @@ class UserCollector : public CrashCollector {
   std::string GetPattern(bool enabled) const;
   bool SetUpInternal(bool enabled);
 
-  base::FilePath GetProcessPath(pid_t pid);
-  bool GetSymlinkTarget(const base::FilePath &symlink,
-                        base::FilePath *target);
-  bool GetExecutableBaseNameFromPid(pid_t pid,
-                                    std::string *base_name);
   // Returns, via |line|, the first line in |lines| that starts with |prefix|.
   // Returns true if a line is found, or false otherwise.
   bool GetFirstLineWithPrefix(const std::vector<std::string> &lines,
