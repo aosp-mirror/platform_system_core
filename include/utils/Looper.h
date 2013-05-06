@@ -297,6 +297,13 @@ public:
     void removeMessages(const sp<MessageHandler>& handler, int what);
 
     /**
+     * Return whether this looper's thread is currently idling -- that is, whether it
+     * stopped waiting for more work to do.  Note that this is intrinsically racy, since
+     * its state can change before you get the result back.
+     */
+    bool isIdling() const;
+
+    /**
      * Prepares a looper associated with the calling thread, and returns it.
      * If the thread already has a looper, it is returned.  Otherwise, a new
      * one is created, associated with the thread, and returned.
@@ -352,6 +359,10 @@ private:
 
     Vector<MessageEnvelope> mMessageEnvelopes; // guarded by mLock
     bool mSendingMessage; // guarded by mLock
+
+    // Whether we are currently waiting for work.  Not protected by a lock,
+    // any use of it is racy anyway.
+    volatile bool mIdling;
 
     int mEpollFd; // immutable
 

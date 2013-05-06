@@ -84,6 +84,8 @@ Looper::Looper(bool allowNonCallbacks) :
     LOG_ALWAYS_FATAL_IF(result != 0, "Could not make wake write pipe non-blocking.  errno=%d",
             errno);
 
+    mIdling = false;
+
     // Allocate the epoll instance and register the wake pipe.
     mEpollFd = epoll_create(EPOLL_SIZE_HINT);
     LOG_ALWAYS_FATAL_IF(mEpollFd < 0, "Could not create epoll instance.  errno=%d", errno);
@@ -214,8 +216,14 @@ int Looper::pollInner(int timeoutMillis) {
     mResponses.clear();
     mResponseIndex = 0;
 
+    // We are about to idle.
+    mIdling = true;
+
     struct epoll_event eventItems[EPOLL_MAX_EVENTS];
     int eventCount = epoll_wait(mEpollFd, eventItems, EPOLL_MAX_EVENTS, timeoutMillis);
+
+    // No longer idling.
+    mIdling = false;
 
     // Acquire lock.
     mLock.lock();
@@ -556,6 +564,10 @@ void Looper::removeMessages(const sp<MessageHandler>& handler, int what) {
             }
         }
     } // release lock
+}
+
+bool Looper::isIdling() const {
+    return mIdling;
 }
 
 } // namespace android
