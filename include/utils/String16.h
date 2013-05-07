@@ -117,8 +117,6 @@ private:
 // require any change to the underlying SharedBuffer contents or reference count.
 ANDROID_TRIVIAL_MOVE_TRAIT(String16)
 
-TextOutput& operator<<(TextOutput& to, const String16& val);
-
 // ---------------------------------------------------------------------------
 // No user servicable parts below.
 

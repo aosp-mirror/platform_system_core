@@ -20,9 +20,7 @@ LOCAL_PATH:= $(call my-dir)
 commonSources:= \
 	BasicHashtable.cpp \
 	BlobCache.cpp \
-	BufferedTextOutput.cpp \
 	CallStack.cpp \
-	Debug.cpp \
 	FileMap.cpp \
 	Flattenable.cpp \
 	JenkinsHash.cpp \
@@ -36,18 +34,12 @@ commonSources:= \
 	StopWatch.cpp \
 	String8.cpp \
 	String16.cpp \
-	StringArray.cpp \
 	SystemClock.cpp \
-	TextOutput.cpp \
 	Threads.cpp \
 	Timers.cpp \
 	Tokenizer.cpp \
 	Unicode.cpp \
 	VectorImpl.cpp \
-	WorkQueue.cpp \
-	ZipFileCRO.cpp \
-	ZipFileRO.cpp \
-	ZipUtils.cpp \
 	misc.cpp
 
 host_commonCflags := -DLIBUTILS_NATIVE=1 $(TOOL_CFLAGS)
@@ -74,9 +66,6 @@ ifeq ($(HOST_OS), linux)
 LOCAL_SRC_FILES += Looper.cpp
 endif
 LOCAL_MODULE:= libutils
-LOCAL_STATIC_LIBRARIES := libz
-LOCAL_C_INCLUDES := \
-	external/zlib
 LOCAL_CFLAGS += $(host_commonCflags)
 LOCAL_LDLIBS += $(host_commonLdlibs)
 include $(BUILD_HOST_STATIC_LIBRARY)
@@ -90,9 +79,6 @@ ifeq ($(HOST_OS), linux)
 LOCAL_SRC_FILES += Looper.cpp
 endif
 LOCAL_MODULE:= lib64utils
-LOCAL_STATIC_LIBRARIES := libz
-LOCAL_C_INCLUDES := \
-	external/zlib
 LOCAL_CFLAGS += $(host_commonCflags) -m64
 LOCAL_LDLIBS += $(host_commonLdlibs)
 include $(BUILD_HOST_STATIC_LIBRARY)
@@ -124,8 +110,7 @@ LOCAL_C_INCLUDES += \
 LOCAL_LDLIBS += -lpthread
 
 LOCAL_STATIC_LIBRARIES := \
-	libcutils \
-	libz
+	libcutils
 
 LOCAL_SHARED_LIBRARIES := \
         libcorkscrew \
@@ -144,8 +129,8 @@ LOCAL_SHARED_LIBRARIES := \
         liblog \
         libcutils \
         libdl \
-        libcorkscrew \
-        libz
+        libcorkscrew
+
 include $(BUILD_SHARED_LIBRARY)
 
 # Include subdirectory makefiles

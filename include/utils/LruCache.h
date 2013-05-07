@@ -18,12 +18,19 @@
 #define ANDROID_UTILS_LRU_CACHE_H
 
 #include <utils/BasicHashtable.h>
-#include <utils/GenerationCache.h>
 #include <utils/UniquePtr.h>
 
 namespace android {
 
-// OnEntryRemoved is defined in GenerationCache.h, but maybe should move here.
+/**
+ * GenerationCache callback used when an item is removed
+ */
+template<typename EntryKey, typename EntryValue>
+class OnEntryRemoved {
+public:
+    virtual ~OnEntryRemoved() { };
+    virtual void operator()(EntryKey& key, EntryValue& value) = 0;
+}; // class OnEntryRemoved
 
 template <typename TKey, typename TValue>
 class LruCache {

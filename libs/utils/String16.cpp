@@ -20,10 +20,7 @@
 #include <utils/Log.h>
 #include <utils/Unicode.h>
 #include <utils/String8.h>
-#include <utils/TextOutput.h>
 #include <utils/threads.h>
-
-#include <private/utils/Static.h>
 
 #include <memory.h>
 #include <stdio.h>
@@ -407,12 +404,6 @@ status_t String16::remove(size_t len, size_t begin)
         return NO_ERROR;
     }
     return NO_MEMORY;
-}
-
-TextOutput& operator<<(TextOutput& to, const String16& val)
-{
-    to << String8(val).string();
-    return to;
 }
 
 }; // namespace android

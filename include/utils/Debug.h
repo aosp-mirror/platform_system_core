@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_DEBUG_H
-#define ANDROID_DEBUG_H
+#ifndef ANDROID_UTILS_DEBUG_H
+#define ANDROID_UTILS_DEBUG_H
 
 #include <stdint.h>
 #include <sys/types.h>
@@ -43,28 +43,6 @@ struct CompileTimeIfElse<false, LHS, RHS> { typedef RHS TYPE; };
 #endif
 
 // ---------------------------------------------------------------------------
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-const char* stringForIndent(int32_t indentLevel);
-
-typedef void (*debugPrintFunc)(void* cookie, const char* txt);
-
-void printTypeCode(uint32_t typeCode,
-    debugPrintFunc func = 0, void* cookie = 0);
-
-void printHexData(int32_t indent, const void *buf, size_t length,
-    size_t bytesPerLine=16, int32_t singleLineBytesCutoff=16,
-    size_t alignment=0, bool cArrayStyle=false,
-    debugPrintFunc func = 0, void* cookie = 0);
-
-#ifdef __cplusplus
-}
-#endif
-
-// ---------------------------------------------------------------------------
 }; // namespace android
 
-#endif // ANDROID_DEBUG_H
+#endif // ANDROID_UTILS_DEBUG_H

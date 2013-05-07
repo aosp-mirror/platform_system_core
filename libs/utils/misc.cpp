@@ -25,7 +25,6 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <errno.h>
-#include <assert.h>
 #include <stdio.h>
 
 #if defined(HAVE_PTHREADS)
@@ -37,56 +36,6 @@
 using namespace android;
 
 namespace android {
-
-/*
- * Get a file's type.
- */
-FileType getFileType(const char* fileName)
-{
-    struct stat sb;
-
-    if (stat(fileName, &sb) < 0) {
-        if (errno == ENOENT || errno == ENOTDIR)
-            return kFileTypeNonexistent;
-        else {
-            fprintf(stderr, "getFileType got errno=%d on '%s'\n",
-                errno, fileName);
-            return kFileTypeUnknown;
-        }
-    } else {
-        if (S_ISREG(sb.st_mode))
-            return kFileTypeRegular;
-        else if (S_ISDIR(sb.st_mode))
-            return kFileTypeDirectory;
-        else if (S_ISCHR(sb.st_mode))
-            return kFileTypeCharDev;
-        else if (S_ISBLK(sb.st_mode))
-            return kFileTypeBlockDev;
-        else if (S_ISFIFO(sb.st_mode))
-            return kFileTypeFifo;
-#ifdef HAVE_SYMLINKS            
-        else if (S_ISLNK(sb.st_mode))
-            return kFileTypeSymlink;
-        else if (S_ISSOCK(sb.st_mode))
-            return kFileTypeSocket;
-#endif            
-        else
-            return kFileTypeUnknown;
-    }
-}
-
-/*
- * Get a file's modification date.
- */
-time_t getFileModDate(const char* fileName)
-{
-    struct stat sb;
-
-    if (stat(fileName, &sb) < 0)
-        return (time_t) -1;
-
-    return sb.st_mtime;
-}
 
 struct sysprop_change_callback_info {
     sysprop_change_callback callback;

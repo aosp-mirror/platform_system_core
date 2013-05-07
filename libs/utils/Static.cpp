@@ -17,12 +17,15 @@
 // All static variables go here, to control initialization and
 // destruction order in the library.
 
-#include <private/utils/Static.h>
-
-#include <utils/BufferedTextOutput.h>
-#include <utils/Log.h>
-
 namespace android {
+
+// For String8.cpp
+extern void initialize_string8();
+extern void terminate_string8();
+
+// For String16.cpp
+extern void initialize_string16();
+extern void terminate_string16();
 
 class LibUtilsFirstStatics
 {
@@ -42,50 +45,5 @@ public:
 
 static LibUtilsFirstStatics gFirstStatics;
 int gDarwinCantLoadAllObjects = 1;
-
-// ------------ Text output streams
-
-Vector<int32_t> gTextBuffers;
-
-class LogTextOutput : public BufferedTextOutput
-{
-public:
-    LogTextOutput() : BufferedTextOutput(MULTITHREADED) { }
-    virtual ~LogTextOutput() { };
-
-protected:
-    virtual status_t writeLines(const struct iovec& vec, size_t N)
-    {
-        //android_writevLog(&vec, N);       <-- this is now a no-op
-        if (N != 1) ALOGI("WARNING: writeLines N=%zu\n", N);
-        ALOGI("%.*s", (int)vec.iov_len, (const char*) vec.iov_base);
-        return NO_ERROR;
-    }
-};
-
-class FdTextOutput : public BufferedTextOutput
-{
-public:
-    FdTextOutput(int fd) : BufferedTextOutput(MULTITHREADED), mFD(fd) { }
-    virtual ~FdTextOutput() { };
-
-protected:
-    virtual status_t writeLines(const struct iovec& vec, size_t N)
-    {
-        writev(mFD, &vec, N);
-        return NO_ERROR;
-    }
-
-private:
-    int mFD;
-};
-
-static LogTextOutput gLogTextOutput;
-static FdTextOutput gStdoutTextOutput(STDOUT_FILENO);
-static FdTextOutput gStderrTextOutput(STDERR_FILENO);
-
-TextOutput& alog(gLogTextOutput);
-TextOutput& aout(gStdoutTextOutput);
-TextOutput& aerr(gStderrTextOutput);
 
 }   // namespace android

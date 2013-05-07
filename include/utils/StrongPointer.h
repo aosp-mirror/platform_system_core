@@ -207,12 +207,6 @@ void sp<T>::set_pointer(T* ptr) {
     m_ptr = ptr;
 }
 
-template <typename T>
-inline TextOutput& operator<<(TextOutput& to, const sp<T>& val)
-{
-    return printStrongPointer(to, val.get());
-}
-
 }; // namespace android
 
 // ---------------------------------------------------------------------------

@@ -22,7 +22,6 @@
 
 namespace android {
 
-int setCurrentTimeMillis(int64_t millis);
 int64_t uptimeMillis();
 int64_t elapsedRealtime();
 int64_t elapsedRealtimeNano();

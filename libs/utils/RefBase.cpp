@@ -23,7 +23,6 @@
 #include <utils/CallStack.h>
 #include <utils/Log.h>
 #include <utils/threads.h>
-#include <utils/TextOutput.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -647,20 +646,5 @@ void RefBase::renameRefId(RefBase* ref,
     ref->mRefs->renameStrongRefId(old_id, new_id);
     ref->mRefs->renameWeakRefId(old_id, new_id);
 }
-
-// ---------------------------------------------------------------------------
-
-TextOutput& printStrongPointer(TextOutput& to, const void* val)
-{
-    to << "sp<>(" << val << ")";
-    return to;
-}
-
-TextOutput& printWeakPointer(TextOutput& to, const void* val)
-{
-    to << "wp<>(" << val << ")";
-    return to;
-}
-
 
 }; // namespace android

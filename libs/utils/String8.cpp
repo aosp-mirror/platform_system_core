@@ -20,10 +20,7 @@
 #include <utils/Unicode.h>
 #include <utils/SharedBuffer.h>
 #include <utils/String16.h>
-#include <utils/TextOutput.h>
 #include <utils/threads.h>
-
-#include <private/utils/Static.h>
 
 #include <ctype.h>
 
@@ -45,6 +42,8 @@ static char* gEmptyString = NULL;
 
 extern int gDarwinCantLoadAllObjects;
 int gDarwinIsReallyAnnoying;
+
+void initialize_string8();
 
 static inline char* getEmptyString()
 {
@@ -452,12 +451,6 @@ int32_t String8::getUtf32At(size_t index, size_t *next_index) const
 void String8::getUtf32(char32_t* dst) const
 {
     utf8_to_utf32(mString, length(), dst);
-}
-
-TextOutput& operator<<(TextOutput& to, const String8& val)
-{
-    to << val.string();
-    return to;
 }
 
 // ---------------------------------------------------------------------------

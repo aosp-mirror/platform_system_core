@@ -36,61 +36,9 @@
 #include <utils/Timers.h>
 
 #define LOG_TAG "SystemClock"
-#include "utils/Log.h"
+#include <utils/Log.h>
 
 namespace android {
-
-/*
- * Set the current time.  This only works when running as root.
- */
-int setCurrentTimeMillis(int64_t millis)
-{
-#if WIN32
-    // not implemented
-    return -1;
-#else
-    struct timeval tv;
-#ifdef HAVE_ANDROID_OS
-    struct timespec ts;
-    int fd;
-    int res;
-#endif
-    int ret = 0;
-
-    if (millis <= 0 || millis / 1000LL >= INT_MAX) {
-        return -1;
-    }
-
-    tv.tv_sec = (time_t) (millis / 1000LL);
-    tv.tv_usec = (suseconds_t) ((millis % 1000LL) * 1000LL);
-
-    ALOGD("Setting time of day to sec=%d\n", (int) tv.tv_sec);
-
-#ifdef HAVE_ANDROID_OS
-    fd = open("/dev/alarm", O_RDWR);
-    if(fd < 0) {
-        ALOGW("Unable to open alarm driver: %s\n", strerror(errno));
-        return -1;
-    }
-    ts.tv_sec = tv.tv_sec;
-    ts.tv_nsec = tv.tv_usec * 1000;
-    res = ioctl(fd, ANDROID_ALARM_SET_RTC, &ts);
-    if(res < 0) {
-        ALOGW("Unable to set rtc to %ld: %s\n", tv.tv_sec, strerror(errno));
-        ret = -1;
-    }
-    close(fd);
-#else
-    if (settimeofday(&tv, NULL) != 0) {
-        ALOGW("Unable to set clock to %d.%d: %s\n",
-            (int) tv.tv_sec, (int) tv.tv_usec, strerror(errno));
-        ret = -1;
-    }
-#endif
-
-    return ret;
-#endif // WIN32
-}
 
 /*
  * native public static long uptimeMillis();
