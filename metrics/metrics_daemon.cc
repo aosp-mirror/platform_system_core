@@ -11,6 +11,7 @@
 
 #include <base/file_util.h>
 #include <base/logging.h>
+#include <base/string_number_conversions.h>
 #include <base/string_util.h>
 #include <base/stringprintf.h>
 #include <chromeos/dbus/service_constants.h>
@@ -127,6 +128,11 @@ const char MetricsDaemon::kMetricPageFaultsLongName[] =
     "Platform.PageFaultsLong";
 const char MetricsDaemon::kMetricPageFaultsShortName[] =
     "Platform.PageFaultsShort";
+
+// Thermal CPU throttling.
+
+const char MetricsDaemon::kMetricScaledCpuFrequencyName[] =
+    "Platform.CpuFrequencyThermalScaling";
 
 // persistent metrics path
 const char MetricsDaemon::kMetricsPath[] = "/var/log/metrics";
@@ -247,7 +253,10 @@ void MetricsDaemon::ConfigureCrashFrequencyReporter(
 
 void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
                          const string& diskstats_path,
-                         const string& vmstats_path) {
+                         const string& vmstats_path,
+                         const string& scaling_max_freq_path,
+                         const string& cpuinfo_max_freq_path
+                         ) {
   testing_ = testing;
   DCHECK(metrics_lib != NULL);
   metrics_lib_ = metrics_lib;
@@ -277,6 +286,8 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
 
   diskstats_path_ = diskstats_path;
   vmstats_path_ = vmstats_path;
+  scaling_max_freq_path_ = scaling_max_freq_path;
+  cpuinfo_max_freq_path_ = cpuinfo_max_freq_path;
   StatsReporterInit();
 
   // Start collecting meminfo stats.
@@ -632,17 +643,16 @@ bool MetricsDaemon::DiskStatsReadStats(long int* read_sectors,
 bool MetricsDaemon::VmStatsParseStats(char* stats, long int* page_faults) {
   static const char kPageFaultSearchString[] = "\npgmajfault ";
   bool success = false;
-  /* Each line in the file has the form
-   * <ID> <VALUE>
-   * for instance:
-   * nr_free_pages 213427
-   */
+  // Each line in the file has the form
+  // <ID> <VALUE>
+  // for instance:
+  // nr_free_pages 213427
   char* s = strstr(stats, kPageFaultSearchString);
   if (s == NULL) {
     LOG(WARNING) << "cannot find page fault entry in vmstats";
   } else {
     char* endp;
-    /* Skip <ID> and space.  Don't count the terminating null. */
+    // Skip <ID> and space.  Don't count the terminating null.
     s += sizeof(kPageFaultSearchString) - 1;
     *page_faults = strtol(s, &endp, 10);
     if (*endp == '\n') {
@@ -679,6 +689,64 @@ bool MetricsDaemon::VmStatsReadStats(long int* page_faults) {
   }
   HANDLE_EINTR(close(file));
   return success;
+}
+
+bool MetricsDaemon::ReadFreqToInt(const string& sysfs_file_name, int* value) {
+  const string sysfs_dirpath(testing_ ?
+                             "./" : "/sys/devices/system/cpu/cpu0/cpufreq/");
+  const FilePath sysfs_path(sysfs_dirpath + sysfs_file_name);
+  string value_string;
+  if (!file_util::ReadFileToString(sysfs_path, &value_string)) {
+    LOG(WARNING) << "cannot read " << sysfs_path.value().c_str();
+    return false;
+  }
+  if (!RemoveChars(value_string, "\n", &value_string)) {
+    LOG(WARNING) << "no newline in " << value_string;
+    // Continue even though the lack of newline is suspicious.
+  }
+  if (!base::StringToInt(value_string, value)) {
+    LOG(WARNING) << "cannot convert " << value_string << " to int";
+    return false;
+  }
+  return true;
+}
+
+void MetricsDaemon::SendCpuThrottleMetrics() {
+  // |max_freq| is 0 only the first time through.
+  static int max_freq = 0;
+  if (max_freq == -1)
+    // Give up, as sysfs did not report max_freq correctly.
+    return;
+  if (max_freq == 0 || testing_) {
+    // One-time initialization of max_freq.  (Every time when testing.)
+    if (!ReadFreqToInt(cpuinfo_max_freq_path_, &max_freq)) {
+      max_freq = -1;
+      return;
+    }
+    if (max_freq == 0) {
+      LOG(WARNING) << "sysfs reports 0 max CPU frequency\n";
+      max_freq = -1;
+      return;
+    }
+    if (max_freq % 10000 == 1000) {
+      // Special case: system has turbo mode, and max non-turbo frequency is
+      // max_freq - 1000.  This relies on "normal" (non-turbo) frequencies
+      // being multiples of (at least) 10 MHz.  Although there is no guarantee
+      // of this, it seems a fairly reasonable assumption.  Otherwise we should
+      // read scaling_available_frequencies, sort the frequencies, compare the
+      // two highest ones, and check if they differ by 1000 (kHz) (and that's a
+      // hack too, no telling when it will change).
+      max_freq -= 1000;
+    }
+  }
+  int scaled_freq = 0;
+  if (!ReadFreqToInt(scaling_max_freq_path_, &scaled_freq))
+    return;
+  // Frequencies are in kHz.  If scaled_freq > max_freq, turbo is on, but
+  // scaled_freq is not the actual turbo frequency.  We indicate this situation
+  // with a 101% value.
+  int percent = scaled_freq > max_freq ? 101 : scaled_freq / (max_freq / 100);
+  SendLinearMetric(kMetricScaledCpuFrequencyName, percent, 101, 102);
 }
 
 // static
@@ -758,6 +826,7 @@ void MetricsDaemon::StatsCallback() {
                    kMetricPageFaultsBuckets);
         page_faults_ = page_faults_now;
       }
+      SendCpuThrottleMetrics();
       // Set start time for new cycle.
       stats_initial_time_ = time_now;
       // Schedule short callback.

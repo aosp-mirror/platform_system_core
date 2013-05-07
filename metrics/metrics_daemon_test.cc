@@ -45,6 +45,8 @@ static const int kFakeReadSectors[] = {80000, 100000};
 static const int kFakeWriteSectors[] = {3000, 4000};
 
 static const char kFakeVmStatsPath[] = "fake-vm-stats";
+static const char kFakeScalingMaxFreqPath[] = "fake-scaling-max-freq";
+static const char kFakeCpuinfoMaxFreqPath[] = "fake-cpuinfo-max-freq";
 
 // This class allows a TimeTicks object to be initialized with seconds
 // (rather than microseconds) through the protected TimeTicks(int64)
@@ -72,7 +74,11 @@ class MetricsDaemonTest : public testing::Test {
     kFakeDiskStats[1] = StringPrintf(kFakeDiskStatsFormat,
                                      kFakeReadSectors[1], kFakeWriteSectors[1]);
     CreateFakeDiskStatsFile(kFakeDiskStats[0].c_str());
-    daemon_.Init(true, &metrics_lib_, kFakeDiskStatsPath, kFakeVmStatsPath);
+    CreateFakeCpuFrequencyFile(kFakeCpuinfoMaxFreqPath, 10000000);
+    CreateFakeCpuFrequencyFile(kFakeScalingMaxFreqPath, 10000000);
+
+    daemon_.Init(true, &metrics_lib_, kFakeDiskStatsPath, kFakeVmStatsPath,
+        kFakeScalingMaxFreqPath, kFakeCpuinfoMaxFreqPath);
 
     // Check configuration of a few histograms.
     FrequencyCounter* frequency_counter =
@@ -139,7 +145,9 @@ class MetricsDaemonTest : public testing::Test {
   }
 
   virtual void TearDown() {
-    EXPECT_EQ(unlink(kFakeDiskStatsPath), 0);
+    EXPECT_EQ(0, unlink(kFakeDiskStatsPath));
+    EXPECT_EQ(0, unlink(kFakeScalingMaxFreqPath));
+    EXPECT_EQ(0, unlink(kFakeCpuinfoMaxFreqPath));
   }
 
   const TaggedCounterReporter*
@@ -256,6 +264,17 @@ class MetricsDaemonTest : public testing::Test {
     FILE* f = fopen(kFakeDiskStatsPath, "w");
     EXPECT_EQ(1, fwrite(fake_stats, strlen(fake_stats), 1, f));
     EXPECT_EQ(0, fclose(f));
+  }
+
+  // Creates or overwrites an input file containing a fake CPU frequency.
+  void CreateFakeCpuFrequencyFile(const char* filename, int frequency) {
+    FilePath path(filename);
+    file_util::Delete(path, false);
+    std::string frequency_string = StringPrintf("%d\n", frequency);
+    int frequency_string_length = frequency_string.length();
+    EXPECT_EQ(frequency_string.length(),
+        file_util::WriteFile(path, frequency_string.c_str(),
+            frequency_string_length));
   }
 
   // The MetricsDaemon under test.
@@ -578,6 +597,7 @@ TEST_F(MetricsDaemonTest, ReportDiskStats) {
   EXPECT_CALL(metrics_lib_,
               SendToUMA(_, (kFakeWriteSectors[1] - kFakeWriteSectors[0]) / 30,
                         _, _, _));
+  EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, _, _));  // SendCpuThrottleMetrics
   daemon_.StatsCallback();
   EXPECT_TRUE(s_state != daemon_.stats_state_);
 }
@@ -642,7 +662,7 @@ TEST_F(MetricsDaemonTest, ProcessMeminfo2) {
 MemTotal:        2000000 kB\n\
 MemFree:         1000000 kB\n\
 ";
-  /* Not enough fields */
+  // Not enough fields.
   EXPECT_FALSE(daemon_.ProcessMeminfo(meminfo));
 }
 
@@ -651,6 +671,32 @@ TEST_F(MetricsDaemonTest, ParseVmStats) {
   long int page_faults = 0;
   EXPECT_TRUE(daemon_.VmStatsParseStats(kVmStats, &page_faults));
   EXPECT_EQ(page_faults, 42);
+}
+
+TEST_F(MetricsDaemonTest, ReadFreqToInt) {
+  const int fake_scaled_freq = 1666999;
+  const int fake_max_freq = 2000000;
+  int scaled_freq = 0;
+  int max_freq = 0;
+  CreateFakeCpuFrequencyFile(kFakeScalingMaxFreqPath, fake_scaled_freq);
+  CreateFakeCpuFrequencyFile(kFakeCpuinfoMaxFreqPath, fake_max_freq);
+  EXPECT_TRUE(daemon_.testing_);
+  EXPECT_TRUE(daemon_.ReadFreqToInt(kFakeScalingMaxFreqPath, &scaled_freq));
+  EXPECT_TRUE(daemon_.ReadFreqToInt(kFakeCpuinfoMaxFreqPath, &max_freq));
+  EXPECT_EQ(fake_scaled_freq, scaled_freq);
+  EXPECT_EQ(fake_max_freq, max_freq);
+}
+
+TEST_F(MetricsDaemonTest, SendCpuThrottleMetrics) {
+  CreateFakeCpuFrequencyFile(kFakeCpuinfoMaxFreqPath, 2001000);
+  // Test the 101% and 100% cases.
+  CreateFakeCpuFrequencyFile(kFakeScalingMaxFreqPath, 2001000);
+  EXPECT_TRUE(daemon_.testing_);
+  EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, 101, 101));
+  daemon_.SendCpuThrottleMetrics();
+  CreateFakeCpuFrequencyFile(kFakeScalingMaxFreqPath, 2000000);
+  EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, 100, 101));
+  daemon_.SendCpuThrottleMetrics();
 }
 
 int main(int argc, char** argv) {

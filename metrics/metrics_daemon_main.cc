@@ -10,6 +10,11 @@
 
 #include "metrics_daemon.h"
 
+const char kScalingMaxFreqPath[] =
+    "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq";
+const char kCpuinfoMaxFreqPath[] =
+    "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq";
+
 DEFINE_bool(daemon, true, "run as daemon (use -nodaemon for debugging)");
 
 // Returns the path to the disk stats in the sysfs.  Returns the null string if
@@ -42,6 +47,7 @@ int main(int argc, char** argv) {
   MetricsLibrary metrics_lib;
   metrics_lib.Init();
   MetricsDaemon daemon;
-  daemon.Init(false, &metrics_lib, MetricsMainDiskStatsPath(), "/proc/vmstat");
+  daemon.Init(false, &metrics_lib, MetricsMainDiskStatsPath(),
+      "/proc/vmstat", kScalingMaxFreqPath, kCpuinfoMaxFreqPath);
   daemon.Run(FLAGS_daemon);
 }

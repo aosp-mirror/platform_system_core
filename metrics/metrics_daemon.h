@@ -31,7 +31,9 @@ class MetricsDaemon {
   // Initializes.
   void Init(bool testing, MetricsLibraryInterface* metrics_lib,
             const std::string& diskstats_path,
-            const std::string& vmstats_path);
+            const std::string& vmstats_path,
+            const std::string& cpuinfo_max_freq_path,
+            const std::string& scaling_max_freq_path);
 
   // Does all the work. If |run_as_daemon| is true, daemonizes by
   // forking.
@@ -56,6 +58,7 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, ProcessUncleanShutdown);
   FRIEND_TEST(MetricsDaemonTest, ProcessUserCrash);
   FRIEND_TEST(MetricsDaemonTest, ReportCrashesDailyFrequency);
+  FRIEND_TEST(MetricsDaemonTest, ReadFreqToInt);
   FRIEND_TEST(MetricsDaemonTest, ReportDailyUse);
   FRIEND_TEST(MetricsDaemonTest, ReportDiskStats);
   FRIEND_TEST(MetricsDaemonTest, ReportKernelCrashInterval);
@@ -63,6 +66,7 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, ReportUserCrashInterval);
   FRIEND_TEST(MetricsDaemonTest, ScreenSaverStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SendMetric);
+  FRIEND_TEST(MetricsDaemonTest, SendCpuThrottleMetrics);
   FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveState);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateTimeJump);
@@ -148,6 +152,7 @@ class MetricsDaemon {
   static const char kMetricWriteSectorsShortName[];
   static const char kMetricPageFaultsShortName[];
   static const char kMetricPageFaultsLongName[];
+  static const char kMetricScaledCpuFrequencyName[];
   static const int kMetricStatsShortInterval;
   static const int kMetricStatsLongInterval;
   static const int kMetricMeminfoInterval;
@@ -331,8 +336,14 @@ class MetricsDaemon {
   // Reads /proc/meminfo and sends total anonymous memory usage to UMA.
   bool MemuseCallbackWork();
 
-  // Parse meminfo data and send to UMA.
+  // Parses meminfo data and sends it to UMA.
   bool ProcessMemuse(const std::string& meminfo_raw);
+
+  // Sends stats for thermal CPU throttling.
+  void SendCpuThrottleMetrics();
+
+  // Reads an integer CPU frequency value from sysfs.
+  bool ReadFreqToInt(const std::string& sysfs_file_name, int* value);
 
   // Test mode.
   bool testing_;
@@ -399,6 +410,8 @@ class MetricsDaemon {
 
   std::string diskstats_path_;
   std::string vmstats_path_;
+  std::string scaling_max_freq_path_;
+  std::string cpuinfo_max_freq_path_;
 };
 
 #endif  // METRICS_DAEMON_H_
