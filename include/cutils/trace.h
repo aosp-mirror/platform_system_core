@@ -65,7 +65,8 @@ __BEGIN_DECLS
 #define ATRACE_TAG_HAL              (1<<11)
 #define ATRACE_TAG_APP              (1<<12)
 #define ATRACE_TAG_RESOURCES        (1<<13)
-#define ATRACE_TAG_LAST             ATRACE_TAG_RESOURCES
+#define ATRACE_TAG_DALVIK           (1<<14)
+#define ATRACE_TAG_LAST             ATRACE_TAG_DALVIK
 
 // Reserved for initialization.
 #define ATRACE_TAG_NOT_READY        (1LL<<63)
@@ -78,6 +79,7 @@ __BEGIN_DECLS
 #error ATRACE_TAG must be defined to be one of the tags defined in cutils/trace.h
 #endif
 
+#ifdef HAVE_ANDROID_OS
 /**
  * Maximum size of a message that can be logged to the trace buffer.
  * Note this message includes a tag, the pid, and the string given as the name.
@@ -255,6 +257,19 @@ static inline void atrace_int(uint64_t tag, const char* name, int32_t value)
         write(atrace_marker_fd, buf, len);
     }
 }
+
+#else // not HAVE_ANDROID_OS
+
+#define ATRACE_INIT()
+#define ATRACE_GET_ENABLED_TAGS()
+#define ATRACE_ENABLED()
+#define ATRACE_BEGIN(name)
+#define ATRACE_END()
+#define ATRACE_ASYNC_BEGIN(name, cookie)
+#define ATRACE_ASYNC_END(name, cookie)
+#define ATRACE_INT(name, value)
+
+#endif // not HAVE_ANDROID_OS
 
 __END_DECLS
 
