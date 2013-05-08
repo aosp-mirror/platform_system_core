@@ -795,7 +795,6 @@ int selinux_reload_policy(void)
     selinux_init_all_handles();
 
     selinux_android_fixcon("/data");
-    selinux_android_fixcon("/system");
     selinux_android_fixcon("/dev");
 
     return 0;
