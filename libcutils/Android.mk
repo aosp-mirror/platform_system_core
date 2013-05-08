@@ -24,11 +24,9 @@ endif
 hostSmpFlag := -DANDROID_SMP=0
 
 commonSources := \
-	array.c \
 	hashmap.c \
 	atomic.c.arm \
 	native_handle.c \
-	buffer.c \
 	socket_inaddr_any_server.c \
 	socket_local_client.c \
 	socket_local_server.c \
@@ -43,10 +41,8 @@ commonSources := \
 	open_memstream.c \
 	strdup16to8.c \
 	strdup8to16.c \
-	record_stream.c \
 	process_name.c \
 	properties.c \
-	qsort_r_compat.c \
 	threads.c \
 	sched_policy.c \
 	iosched_policy.c \
@@ -74,11 +70,8 @@ ifeq ($(WINDOWS_HOST_ONLY),1)
         uio.c
 else
     commonSources += \
-        abort_socket.c \
         fs.c \
-        selector.c \
-        multiuser.c \
-        zygote.c
+        multiuser.c
 endif
 
 
@@ -118,7 +111,6 @@ LOCAL_SRC_FILES := $(commonSources) \
         ashmem-dev.c \
         debugger.c \
         klog.c \
-        mq.c \
         partition_utils.c \
         qtaguid.c \
         trace.c \
