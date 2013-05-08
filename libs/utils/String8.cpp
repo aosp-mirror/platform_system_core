@@ -47,16 +47,12 @@ void initialize_string8();
 
 static inline char* getEmptyString()
 {
-    if (!gEmptyStringBuf) initialize_string8();
-
     gEmptyStringBuf->acquire();
     return gEmptyString;
 }
 
 void initialize_string8()
 {
-    if (gEmptyStringBuf) return;
-
     // HACK: This dummy dependency forces linking libutils Static.cpp,
     // which is needed to initialize String8/String16 classes.
     // These variables are named for Darwin, but are needed elsewhere too,
@@ -144,6 +140,19 @@ static char* allocFromUTF32(const char32_t* in, size_t len)
 String8::String8()
     : mString(getEmptyString())
 {
+}
+
+String8::String8(StaticLinkage)
+    : mString(0)
+{
+    // this constructor is used when we can't rely on the static-initializers
+    // having run. In this case we always allocate an empty string. It's less
+    // efficient than using getEmptyString(), but we assume it's uncommon.
+
+    char* data = static_cast<char*>(
+            SharedBuffer::alloc(sizeof(char))->data());
+    data[0] = 0;
+    mString = data;
 }
 
 String8::String8(const String8& o)
