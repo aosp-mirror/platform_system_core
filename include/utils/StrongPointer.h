@@ -26,9 +26,6 @@
 // ---------------------------------------------------------------------------
 namespace android {
 
-class TextOutput;
-TextOutput& printStrongPointer(TextOutput& to, const void* val);
-
 template<typename T> class wp;
 
 // ---------------------------------------------------------------------------
@@ -58,9 +55,8 @@ inline bool operator _op_ (const wp<U>& o) const {              \
 
 // ---------------------------------------------------------------------------
 
-template <typename T>
-class sp
-{
+template<typename T>
+class sp {
 public:
     inline sp() : m_ptr(0) { }
 
@@ -110,92 +106,93 @@ private:
 
 #undef COMPARE
 
-template <typename T>
-TextOutput& operator<<(TextOutput& to, const sp<T>& val);
-
 // ---------------------------------------------------------------------------
 // No user serviceable parts below here.
 
 template<typename T>
 sp<T>::sp(T* other)
-: m_ptr(other)
-  {
-    if (other) other->incStrong(this);
-  }
+        : m_ptr(other) {
+    if (other)
+        other->incStrong(this);
+}
 
 template<typename T>
 sp<T>::sp(const sp<T>& other)
-: m_ptr(other.m_ptr)
-  {
-    if (m_ptr) m_ptr->incStrong(this);
-  }
+        : m_ptr(other.m_ptr) {
+    if (m_ptr)
+        m_ptr->incStrong(this);
+}
 
 template<typename T> template<typename U>
-sp<T>::sp(U* other) : m_ptr(other)
-{
-    if (other) ((T*)other)->incStrong(this);
+sp<T>::sp(U* other)
+        : m_ptr(other) {
+    if (other)
+        ((T*) other)->incStrong(this);
 }
 
 template<typename T> template<typename U>
 sp<T>::sp(const sp<U>& other)
-: m_ptr(other.m_ptr)
-  {
-    if (m_ptr) m_ptr->incStrong(this);
-  }
-
-template<typename T>
-sp<T>::~sp()
-{
-    if (m_ptr) m_ptr->decStrong(this);
+        : m_ptr(other.m_ptr) {
+    if (m_ptr)
+        m_ptr->incStrong(this);
 }
 
 template<typename T>
-sp<T>& sp<T>::operator = (const sp<T>& other) {
+sp<T>::~sp() {
+    if (m_ptr)
+        m_ptr->decStrong(this);
+}
+
+template<typename T>
+sp<T>& sp<T>::operator =(const sp<T>& other) {
     T* otherPtr(other.m_ptr);
-    if (otherPtr) otherPtr->incStrong(this);
-    if (m_ptr) m_ptr->decStrong(this);
+    if (otherPtr)
+        otherPtr->incStrong(this);
+    if (m_ptr)
+        m_ptr->decStrong(this);
     m_ptr = otherPtr;
     return *this;
 }
 
 template<typename T>
-sp<T>& sp<T>::operator = (T* other)
-{
-    if (other) other->incStrong(this);
-    if (m_ptr) m_ptr->decStrong(this);
+sp<T>& sp<T>::operator =(T* other) {
+    if (other)
+        other->incStrong(this);
+    if (m_ptr)
+        m_ptr->decStrong(this);
     m_ptr = other;
     return *this;
 }
 
 template<typename T> template<typename U>
-sp<T>& sp<T>::operator = (const sp<U>& other)
-{
+sp<T>& sp<T>::operator =(const sp<U>& other) {
     T* otherPtr(other.m_ptr);
-    if (otherPtr) otherPtr->incStrong(this);
-    if (m_ptr) m_ptr->decStrong(this);
+    if (otherPtr)
+        otherPtr->incStrong(this);
+    if (m_ptr)
+        m_ptr->decStrong(this);
     m_ptr = otherPtr;
     return *this;
 }
 
 template<typename T> template<typename U>
-sp<T>& sp<T>::operator = (U* other)
-{
-    if (other) ((T*)other)->incStrong(this);
-    if (m_ptr) m_ptr->decStrong(this);
+sp<T>& sp<T>::operator =(U* other) {
+    if (other)
+        ((T*) other)->incStrong(this);
+    if (m_ptr)
+        m_ptr->decStrong(this);
     m_ptr = other;
     return *this;
 }
 
-template<typename T>    
-void sp<T>::force_set(T* other)
-{
+template<typename T>
+void sp<T>::force_set(T* other) {
     other->forceIncStrong(this);
     m_ptr = other;
 }
 
 template<typename T>
-void sp<T>::clear()
-{
+void sp<T>::clear() {
     if (m_ptr) {
         m_ptr->decStrong(this);
         m_ptr = 0;
