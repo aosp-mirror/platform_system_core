@@ -61,6 +61,9 @@
 struct selabel_handle *sehandle;
 struct selabel_handle *sehandle_prop;
 
+#define SELINUX_DATA_POLICY_VERSION_PATH "/data/security/bundle/metadata/version"
+#define SELINUX_BOOT_POLICY_VERSION_PATH "/sepolicy.version"
+
 static int property_triggers_enabled = 0;
 
 #if BOOTCHART
@@ -774,6 +777,58 @@ void selinux_init_all_handles(void)
     sehandle_prop = selinux_android_prop_context_handle();
 }
 
+static int selinux_read_version_file(char *version_file_path)
+{
+    unsigned version_string_length = 0;
+    unsigned characters_consumed = 0;
+    int policy_version = 0;
+    char *version_string;
+
+    version_string = read_file(version_file_path, &version_string_length);
+    if (version_string == NULL)
+        return -1;
+
+    sscanf(version_string, "%d%n", &policy_version, &characters_consumed);
+    free(version_string);
+
+    if (characters_consumed != (version_string_length - 1))
+        return -1;
+
+    return policy_version;
+}
+
+static int selinux_check_policy_version(void)
+{
+    int data_policy_version = 0;
+    int boot_policy_version = 0;
+
+    // get the policy version for the sepolicy on the data partition
+    // fail open to allow the existing policy to relabel
+    data_policy_version = selinux_read_version_file(SELINUX_DATA_POLICY_VERSION_PATH);
+    if (data_policy_version < 0) {
+        INFO("Couldn't read data policy version file");
+        return 0;
+    }
+
+    // get the policy version for the sepolicy on the boot partition
+    // fail open to allow devices without an sepolicy.version to update
+    boot_policy_version = selinux_read_version_file(SELINUX_BOOT_POLICY_VERSION_PATH);
+    if (boot_policy_version < 0) {
+        INFO("Couldn't read boot policy version file");
+        return 0;
+    }
+
+    // return an error if the "updated" policy is too old
+    if (data_policy_version <= boot_policy_version) {
+        ERROR("SELinux: data policy version (%d) <= factory policy version (%d)",
+            data_policy_version,
+            boot_policy_version);
+        return -1;
+    }
+
+    return 0;
+}
+
 int selinux_reload_policy(void)
 {
     if (!selinux_enabled) {
@@ -781,6 +836,10 @@ int selinux_reload_policy(void)
     }
 
     INFO("SELinux: Attempting to reload policy files\n");
+
+    if (selinux_check_policy_version() == -1) {
+        return -1;
+    }
 
     if (selinux_android_reload_policy() == -1) {
         return -1;
