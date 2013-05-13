@@ -57,12 +57,6 @@ class TestTicks : public TimeTicks {
       : TimeTicks(seconds * Time::kMicrosecondsPerSecond) {}
 };
 
-// Overloaded for test failure printing purposes.
-static std::ostream& operator<<(std::ostream& o, const Time& time) {
-  o << time.ToInternalValue() << "us";
-  return o;
-};
-
 class MetricsDaemonTest : public testing::Test {
  protected:
   virtual void SetUp() {

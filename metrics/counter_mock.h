@@ -34,9 +34,7 @@ class TaggedCounterReporterMock : public TaggedCounterReporter {
 
 class FrequencyCounterMock : public FrequencyCounter {
  public:
-  MOCK_METHOD4(Init, void(const char* filename,
-                          TaggedCounterInterface::Reporter reporter,
-                          void* reporter_handle,
+  MOCK_METHOD2(Init, void(TaggedCounterInterface* tagged_counter,
                           time_t cycle_duration));
   MOCK_METHOD1(Update, void(int32 count));
   MOCK_METHOD0(FlushFinishedCycles, void());
