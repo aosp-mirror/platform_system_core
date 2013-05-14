@@ -155,6 +155,17 @@ is_developer_image() {
   return 1
 }
 
+# Returns 0 if we should consider ourselves to be running on a test image.
+is_test_image() {
+  # If we're testing crash reporter itself, we don't want to special-case
+  # for test images.
+  is_crash_test_in_progress && return 1
+  case $(get_channel) in
+  test*) return 0;;
+  esac
+  return 1
+}
+
 # Returns 0 if the machine booted up in developer mode.
 is_developer_mode() {
   [ ${MOCK_DEVELOPER_MODE} -ne 0 ] && return 0
@@ -229,16 +240,25 @@ get_kind() {
 }
 
 get_key_value() {
-  if ! grep -q "$2=" "$1"; then
-    echo "undefined"
-    return
+  local file=$1 key=$2 value
+
+  if [ -f "${file}" ]; then
+    # Return the first entry.  There shouldn't be more than one anyways.
+    value=$(awk -F= '/^'"${key}"'[[:space:]]*=/ { print $NF }' "${file}")
   fi
-  grep "$2=" "$1" | cut -d = -f 2-
+
+  echo "${value:-undefined}"
 }
 
 # Return the board name.
 get_board() {
-  echo $(get_key_value "/etc/lsb-release" "CHROMEOS_RELEASE_BOARD")
+  get_key_value "/etc/lsb-release" "CHROMEOS_RELEASE_BOARD"
+}
+
+# Return the channel name (sans "-channel" suffix).
+get_channel() {
+  get_key_value "/etc/lsb-release" "CHROMEOS_RELEASE_TRACK" |
+    sed 's:-channel$::'
 }
 
 # Return the hardware class or "undefined".
@@ -268,7 +288,9 @@ send_crash() {
   local send_payload_size="$(stat --printf=%s "${report_payload}" 2>/dev/null)"
 
   local image_type
-  if is_developer_image; then
+  if is_test_image; then
+    image_type="test"
+  elif is_developer_image; then
     image_type="dev"
   elif [ ${FORCE_OFFICIAL} -ne 0 ]; then
     image_type="force-official"
@@ -473,6 +495,11 @@ main() {
   if [ -e "${PAUSE_CRASH_SENDING}" ] && \
      [ ${OVERRIDE_PAUSE_SENDING} -eq 0 ]; then
     lecho "Exiting early due to ${PAUSE_CRASH_SENDING}."
+    exit 1
+  fi
+
+  if is_test_image; then
+    lecho "Exiting early due to test image."
     exit 1
   fi
 
