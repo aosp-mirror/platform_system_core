@@ -140,7 +140,7 @@
 // Xiaomi's USB Vendor ID
 #define VENDOR_ID_XIAOMI        0x2717
 // BYD's USB Vendor ID
-#define VENDOR_ID_BYD           0x19D1
+#define VENDOR_ID_BYD           0x1D91
 // OUYA's USB Vendor ID
 #define VENDOR_ID_OUYA          0x2836
 
