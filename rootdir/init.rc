@@ -177,9 +177,6 @@ on post-fs
     mkdir /cache/lost+found 0770 root root
 
 on post-fs-data
-    # reload SELinux based on what we find on the data partition
-    selinux_reload_policy
-
     # We chown/chmod /data again so because mount is run as root + defaults
     chown system system /data
     chmod 0771 /data
@@ -263,6 +260,9 @@ on post-fs-data
     #setprop vold.post_fs_data_done 1
 
 on boot
+# reload SELinux policy to make sure we use the most up-to-date one
+    selinux_reload_policy
+
 # basic network init
     ifup lo
     hostname localhost
