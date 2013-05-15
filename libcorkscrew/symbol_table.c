@@ -21,12 +21,16 @@
 
 #include <stdbool.h>
 #include <stdlib.h>
-#include <elf.h>
 #include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <cutils/log.h>
+
+#if defined(__APPLE__)
+#else
+
+#include <elf.h>
 
 static bool is_elf(Elf32_Ehdr* e) {
     return (e->e_ident[EI_MAG0] == ELFMAG0 &&
@@ -34,6 +38,8 @@ static bool is_elf(Elf32_Ehdr* e) {
             e->e_ident[EI_MAG2] == ELFMAG2 &&
             e->e_ident[EI_MAG3] == ELFMAG3);
 }
+
+#endif
 
 // Compare function for qsort
 static int qcompar(const void *a, const void *b) {
@@ -55,6 +61,7 @@ static int bcompar(const void *key, const void *element) {
 
 symbol_table_t* load_symbol_table(const char *filename) {
     symbol_table_t* table = NULL;
+#if !defined(__APPLE__)
     ALOGV("Loading symbol table from '%s'.", filename);
 
     int fd = open(filename, O_RDONLY);
@@ -197,6 +204,7 @@ out_unmap:
 
 out_close:
     close(fd);
+#endif
 
 out:
     return table;

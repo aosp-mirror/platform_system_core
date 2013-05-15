@@ -25,6 +25,12 @@ extern char *__cxa_demangle (const char *mangled, char *buf, size_t *len,
                              int *status);
 
 char* demangle_symbol_name(const char* name) {
+#if defined(__APPLE__)
+    // Mac OS' __cxa_demangle demangles "f" as "float"; last tested on 10.7.
+    if (name != NULL && name[0] != '_') {
+        return NULL;
+    }
+#endif
     // __cxa_demangle handles NULL by returning NULL
     return __cxa_demangle(name, 0, 0, 0);
 }
