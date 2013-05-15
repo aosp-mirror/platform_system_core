@@ -75,13 +75,18 @@ typedef struct ucontext {
 
 #endif /* __BIONIC_HAVE_UCONTEXT_T */
 
-#else /* __BIONIC__ */
+#elif defined(__APPLE__)
+
+#define _XOPEN_SOURCE
+#include <ucontext.h>
+
+#else
 
 // glibc has its own renaming of the Linux kernel's structures.
 #define __USE_GNU // For REG_EBP, REG_ESP, and REG_EIP.
 #include <ucontext.h>
 
-#endif /* __ BIONIC__ */
+#endif
 
 /* Unwind state. */
 typedef struct {
@@ -819,9 +824,15 @@ ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo __attribute__((unused)),
     const ucontext_t* uc = (const ucontext_t*)sigcontext;
 
     unwind_state_t state;
+#if defined(__APPLE__)
+    state.reg[DWARF_EBP] = uc->uc_mcontext->__ss.__ebp;
+    state.reg[DWARF_ESP] = uc->uc_mcontext->__ss.__esp;
+    state.reg[DWARF_EIP] = uc->uc_mcontext->__ss.__eip;
+#else
     state.reg[DWARF_EBP] = uc->uc_mcontext.gregs[REG_EBP];
     state.reg[DWARF_ESP] = uc->uc_mcontext.gregs[REG_ESP];
     state.reg[DWARF_EIP] = uc->uc_mcontext.gregs[REG_EIP];
+#endif
 
     memory_t memory;
     init_memory(&memory, map_info_list);
@@ -831,6 +842,9 @@ ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo __attribute__((unused)),
 
 ssize_t unwind_backtrace_ptrace_arch(pid_t tid, const ptrace_context_t* context,
         backtrace_frame_t* backtrace, size_t ignore_depth, size_t max_depth) {
+#if defined(__APPLE__)
+    return -1;
+#else
     pt_regs_x86_t regs;
     if (ptrace(PTRACE_GETREGS, tid, 0, &regs)) {
         return -1;
@@ -845,4 +859,5 @@ ssize_t unwind_backtrace_ptrace_arch(pid_t tid, const ptrace_context_t* context,
     init_memory_ptrace(&memory, tid);
     return unwind_backtrace_common(&memory, context->map_info_list,
             &state, backtrace, ignore_depth, max_depth);
+#endif
 }

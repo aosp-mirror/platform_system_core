@@ -3,11 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void do_backtrace() {
+int do_backtrace(float /* just to test demangling */) {
   const size_t MAX_DEPTH = 32;
   backtrace_frame_t* frames = (backtrace_frame_t*) malloc(sizeof(backtrace_frame_t) * MAX_DEPTH);
   ssize_t frame_count = unwind_backtrace(frames, 0, MAX_DEPTH);
   fprintf(stderr, "frame_count=%d\n", (int) frame_count);
+  if (frame_count <= 0) {
+    return frame_count;
+  }
 
   backtrace_symbol_t* backtrace_symbols = (backtrace_symbol_t*) malloc(sizeof(backtrace_symbol_t) * frame_count);
   get_backtrace_symbols(frames, frame_count, backtrace_symbols);
@@ -31,7 +34,7 @@ void do_backtrace() {
         symbol = find_symbol(symbols, frames[i].absolute_pc);
       }
       if (symbol != NULL) {
-        uintptr_t offset = frames[i].absolute_pc - symbol->start;
+        int offset = frames[i].absolute_pc - symbol->start;
         fprintf(stderr, "  %s (%s%+d)\n", line, symbol->name, offset);
       } else {
         fprintf(stderr, "  %s (\?\?\?)\n", line);
@@ -43,22 +46,31 @@ void do_backtrace() {
   free_backtrace_symbols(backtrace_symbols, frame_count);
   free(backtrace_symbols);
   free(frames);
+  return frame_count;
 }
 
-__attribute__ ((noinline)) void g() {
-  fprintf(stderr, "g()\n");
-  do_backtrace();
-}
+struct C {
+  int g(int i);
+};
 
-__attribute__ ((noinline)) int f(int i) {
-  fprintf(stderr, "f(%i)\n", i);
+__attribute__ ((noinline)) int C::g(int i) {
   if (i == 0) {
-    g();
-    return 0;
+    return do_backtrace(0.1);
   }
-  return f(i - 1);
+  return g(i - 1);
+}
+
+extern "C" __attribute__ ((noinline)) int f() {
+  C c;
+  return c.g(5);
 }
 
 int main() {
-  return f(5);
+  flush_my_map_info_list();
+  f();
+
+  flush_my_map_info_list();
+  f();
+
+  return 0;
 }
