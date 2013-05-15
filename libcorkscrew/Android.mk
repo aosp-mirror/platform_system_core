@@ -67,7 +67,9 @@ LOCAL_MODULE_TAGS := optional
 include $(BUILD_EXECUTABLE)
 
 
-ifeq ($(HOST_ARCH),x86)
+# TODO: reenable darwin-x86
+# ifeq ($(HOST_ARCH),x86)
+ifeq ($(HOST_OS)-$(HOST_ARCH),linux-x86)
 
 # Build libcorkscrew.
 include $(CLEAR_VARS)
