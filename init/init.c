@@ -745,7 +745,7 @@ static int bootchart_init_action(int nargs, char **args)
 #endif
 
 static const struct selinux_opt seopts_prop[] = {
-        { SELABEL_OPT_PATH, "/data/security/current/property_contexts" },
+        { SELABEL_OPT_PATH, "/data/security/property_contexts" },
         { SELABEL_OPT_PATH, "/property_contexts" },
         { 0, NULL }
 };
@@ -793,11 +793,6 @@ int selinux_reload_policy(void)
         selabel_close(sehandle_prop);
 
     selinux_init_all_handles();
-
-    selinux_android_fixcon("/data");
-    selinux_android_fixcon("/system");
-    selinux_android_fixcon("/dev");
-
     return 0;
 }
 
