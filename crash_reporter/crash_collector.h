@@ -10,6 +10,8 @@
 #include <map>
 #include <string>
 
+#include <glib.h>
+
 #include "base/file_path.h"
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
@@ -40,6 +42,7 @@ class CrashCollector {
   FRIEND_TEST(CrashCollectorTest, FormatDumpBasename);
   FRIEND_TEST(CrashCollectorTest, Initialize);
   FRIEND_TEST(CrashCollectorTest, IsCommentLine);
+  FRIEND_TEST(CrashCollectorTest, IsUserSpecificDirectoryEnabled);
   FRIEND_TEST(CrashCollectorTest, MetaData);
   FRIEND_TEST(CrashCollectorTest, ReadKeyValueFile);
   FRIEND_TEST(CrashCollectorTest, Sanitize);
@@ -72,6 +75,8 @@ class CrashCollector {
     forced_crash_directory_ = forced_directory;
   }
 
+  virtual GHashTable *GetActiveUserSessions(void);
+  base::FilePath GetUserCrashPath(void);
   base::FilePath GetCrashDirectoryInfo(uid_t process_euid,
                                  uid_t default_user_id,
                                  gid_t default_user_group,

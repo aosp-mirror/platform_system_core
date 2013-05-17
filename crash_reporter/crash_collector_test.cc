@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "crash-reporter/crash_collector_test.h"
+
 #include <unistd.h>
+
+#include <dbus/dbus-glib-lowlevel.h>
+#include <glib.h>
 
 #include "base/file_util.h"
 #include "base/string_util.h"
@@ -21,6 +26,7 @@ static const char kBinFalse[] = "/bin/false";
 
 using base::FilePath;
 using chromeos::FindLog;
+using ::testing::Return;
 
 void CountCrash() {
   ADD_FAILURE();
@@ -48,7 +54,7 @@ class CrashCollectorTest : public ::testing::Test {
   bool CheckHasCapacity();
 
  protected:
-  CrashCollector collector_;
+  CrashCollectorMock collector_;
   FilePath test_dir_;
 };
 
@@ -115,13 +121,25 @@ TEST_F(CrashCollectorTest, GetCrashDirectoryInfo) {
   EXPECT_EQ(kRootUid, directory_owner);
   EXPECT_EQ(kRootGid, directory_group);
 
+  // No need to destroy the hash as GetCrashDirectoryInfo() will do it for us.
+  GHashTable *active_sessions = g_hash_table_new (g_str_hash, g_str_equal);
+  char kUser[] = "chicken@butt.com";
+  char kHash[] = "hashcakes";
+  g_hash_table_insert (active_sessions,
+                       static_cast<gpointer>(kUser),
+                       static_cast<gpointer>(kHash));
+  EXPECT_CALL(collector_, GetActiveUserSessions())
+      .WillOnce(Return(active_sessions));
+
+  EXPECT_EQ(collector_.IsUserSpecificDirectoryEnabled(), true);
+
   path = collector_.GetCrashDirectoryInfo(kChronosUid,
                                           kChronosUid,
                                           kChronosGid,
                                           &directory_mode,
                                           &directory_owner,
                                           &directory_group);
-  EXPECT_EQ("/home/chronos/user/crash", path.value());
+  EXPECT_EQ("/home/user/hashcakes", path.value());
   EXPECT_EQ(kExpectedUserMode, directory_mode);
   EXPECT_EQ(kChronosUid, directory_owner);
   EXPECT_EQ(kChronosGid, directory_group);
@@ -344,6 +362,7 @@ TEST_F(CrashCollectorTest, GetLogContents) {
 }
 
 int main(int argc, char **argv) {
+  ::g_type_init();
   SetUpTests(&argc, argv, false);
   return RUN_ALL_TESTS();
 }

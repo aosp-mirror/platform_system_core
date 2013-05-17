@@ -16,12 +16,18 @@
 #include <set>
 #include <vector>
 
+#include <dbus/dbus-glib-lowlevel.h>
+#include <glib.h>
+
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/string_split.h"
 #include "base/string_util.h"
 #include "base/stringprintf.h"
+#include "chromeos/cryptohome.h"
+#include "chromeos/dbus/dbus.h"
+#include "chromeos/dbus/service_constants.h"
 #include "chromeos/process.h"
 
 static const char kCollectChromeFile[] =
@@ -33,7 +39,17 @@ static const char kLeaveCoreFile[] = "/root/.leave_core";
 static const char kLsbRelease[] = "/etc/lsb-release";
 static const char kShellPath[] = "/bin/sh";
 static const char kSystemCrashPath[] = "/var/spool/crash";
-static const char kUserCrashPath[] = "/home/chronos/user/crash";
+// Normally this path is not used.  Unfortunately, there are a few edge cases
+// where we need this.  Any process that runs as kDefaultUserName that crashes
+// is consider a "user crash".  That includes the initial Chrome browser that
+// runs the login screen.  If that blows up, there is no logged in user yet,
+// so there is no per-user dir for us to stash things in.  Instead we fallback
+// to this path as it is at least encrypted on a per-system basis.
+//
+// This also comes up when running autotests.  The GUI is sitting at the login
+// screen while tests are sshing in, changing users, and triggering crashes as
+// the user (purposefully).
+static const char kFallbackUserCrashPath[] = "/home/chronos/crash";
 
 // Directory mode of the user crash spool directory.
 static const mode_t kUserCrashPathMode = 0755;
@@ -123,6 +139,72 @@ FilePath CrashCollector::GetCrashPath(const FilePath &crash_directory,
                                              extension.c_str()));
 }
 
+namespace {
+
+const char *GetGErrorMessage(const GError *error) {
+  if (!error)
+    return "Unknown error.";
+  return error->message;
+}
+
+}
+
+GHashTable *CrashCollector::GetActiveUserSessions(void) {
+  GHashTable *active_sessions = NULL;
+
+  chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
+  if (!dbus.HasConnection()) {
+    LOG(ERROR) << "Error connecting to system D-Bus";
+    return active_sessions;
+  }
+  chromeos::dbus::Proxy proxy(dbus,
+                              login_manager::kSessionManagerServiceName,
+                              login_manager::kSessionManagerServicePath,
+                              login_manager::kSessionManagerInterface);
+  if (!proxy) {
+    LOG(ERROR) << "Error creating D-Bus proxy to interface "
+               << "'" << login_manager::kSessionManagerServiceName << "'";
+    return active_sessions;
+  }
+
+  // Request all the active sessions.
+  GError *gerror = NULL;
+  if (!dbus_g_proxy_call(proxy.gproxy(),
+                         login_manager::kSessionManagerRetrieveActiveSessions,
+                         &gerror, G_TYPE_INVALID,
+                         DBUS_TYPE_G_STRING_STRING_HASHTABLE, &active_sessions,
+                         G_TYPE_INVALID)) {
+    LOG(ERROR) << "Error performing D-Bus proxy call "
+               << "'"
+               << login_manager::kSessionManagerRetrieveActiveSessions << "'"
+               << ": " << GetGErrorMessage(gerror);
+    return active_sessions;
+  }
+
+  return active_sessions;
+}
+
+FilePath CrashCollector::GetUserCrashPath(void) {
+  // In this multiprofile world, there is no one-specific user dir anymore.
+  // Ask the session manager for the active ones, then just run with the
+  // first result we get back.
+  FilePath user_path = FilePath(kFallbackUserCrashPath);
+  GHashTable *active_sessions = GetActiveUserSessions();
+  if (!active_sessions)
+    return user_path;
+
+  GList *list = g_hash_table_get_values(active_sessions);
+  if (list) {
+    const char *salted_path = static_cast<const char *>(list->data);
+    user_path = chromeos::cryptohome::home::GetHashedUserPath(salted_path);
+    g_list_free(list);
+  }
+
+  g_hash_table_destroy(active_sessions);
+
+  return user_path;
+}
+
 FilePath CrashCollector::GetCrashDirectoryInfo(
     uid_t process_euid,
     uid_t default_user_id,
@@ -140,7 +222,7 @@ FilePath CrashCollector::GetCrashDirectoryInfo(
     *mode = kUserCrashPathMode;
     *directory_owner = default_user_id;
     *directory_group = default_user_group;
-    return FilePath(kUserCrashPath);
+    return GetUserCrashPath();
   } else {
     *mode = kSystemCrashPathMode;
     *directory_owner = kRootOwner;

@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include <glib-object.h>
+
 #include <base/file_util.h>
 #include <base/command_line.h>
 #include <base/logging.h>
@@ -263,6 +265,9 @@ int main(int argc, char *argv[]) {
   CommandLine::Init(argc, argv);
   chromeos::OpenLog(my_path.BaseName().value().c_str(), true);
   chromeos::InitLog(chromeos::kLogToSyslog);
+
+  ::g_type_init();
+
   KernelCollector kernel_collector;
   kernel_collector.Initialize(CountKernelCrash,
                               IsFeedbackAllowed);

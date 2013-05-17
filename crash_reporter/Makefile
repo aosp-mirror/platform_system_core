@@ -18,9 +18,14 @@ CRASH_OBJS = \
 	unclean_shutdown_collector.o \
 	user_collector.o
 
-PC_DEPS = glib-2.0 libpcrecpp libchrome-$(BASE_VER) libchromeos-$(BASE_VER)
+PC_DEPS = glib-2.0 gobject-2.0 libpcrecpp libchrome-$(BASE_VER) \
+	libchromeos-$(BASE_VER)
 PC_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
 PC_LIBS := $(shell $(PKG_CONFIG) --libs $(PC_DEPS))
+
+DBUS_PC_DEPS = dbus-1 dbus-glib-1
+DBUS_PC_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(DBUS_PC_DEPS))
+DBUS_PC_LIBS := $(shell $(PKG_CONFIG) --libs $(DBUS_PC_DEPS))
 
 CPPFLAGS += -I$(SRC)/.. -I$(SYSROOT)/usr/include/google-breakpad $(PC_CFLAGS)
 LDLIBS = -lgflags $(PC_LIBS)
@@ -28,7 +33,8 @@ LDLIBS = -lgflags $(PC_LIBS)
 
 # -- Executable crash_reporter --
 
-CXX_BINARY(crash_reporter): LDLIBS += -lmetrics
+CXX_BINARY(crash_reporter): CPPFLAGS += $(DBUS_PC_CFLAGS)
+CXX_BINARY(crash_reporter): LDLIBS += -lmetrics $(DBUS_PC_LIBS)
 CXX_BINARY(crash_reporter): crash_reporter.o $(CRASH_OBJS)
 clean: CLEAN(crash_reporter)
 all: CXX_BINARY(crash_reporter)
@@ -36,11 +42,8 @@ all: CXX_BINARY(crash_reporter)
 
 # -- Executable list_proxies --
 
-LIST_PROXIES_PKGS = dbus-1 dbus-glib-1
-LIST_PROXIES_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(LIST_PROXIES_PKGS))
-LIST_PROXIES_LIBS := $(shell $(PKG_CONFIG) --libs $(LIST_PROXIES_PKGS))
-CXX_BINARY(list_proxies): CPPFLAGS += $(LIST_PROXIES_CFLAGS)
-CXX_BINARY(list_proxies): LDLIBS += $(LIST_PROXIES_LIBS)
+CXX_BINARY(list_proxies): CPPFLAGS += $(DBUS_PC_CFLAGS)
+CXX_BINARY(list_proxies): LDLIBS += $(DBUS_PC_LIBS)
 CXX_BINARY(list_proxies): list_proxies.o
 clean: CLEAN(list_proxies)
 all: CXX_BINARY(list_proxies)
@@ -60,6 +63,8 @@ $(eval $(call add_object_rules,lex.yy.o,CC,c))
 
 # -- Unit Tests --
 
+UNITTEST_LIBS := $(shell gmock-config --libs) $(shell gtest-config --libs)
+
 # Uncomment these to just run specific test(s).
 #TEST_BINS += chrome_collector_test
 #TEST_BINS += crash_collector_test
@@ -74,7 +79,7 @@ $(eval $(call add_object_rules,lex.yy.o,CC,c))
 # be for "CXX_BINARY(<test name>)".  For example, you could add options with:
 #  CXX_BINARY(crash_collector_test): CXXFLAGS += -some-other-option
 define TEST_RULES_template
-CXX_BINARY($(1)): LDLIBS += -lgtest -lgmock
+CXX_BINARY($(1)): LDLIBS += $(UNITTEST_LIBS) $(DBUS_PC_LIBS)
 CXX_BINARY($(1)): $(1).o $(CRASH_OBJS)
 clean: CLEAN($(1))
 tests: TEST(CXX_BINARY($(1)))

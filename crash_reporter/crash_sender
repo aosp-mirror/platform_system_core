@@ -492,7 +492,10 @@ main() {
   send_crashes "/var/spool/crash"
 
   # Send user-specific crashes
-  send_crashes "/home/chronos/user/crash"
+  local d
+  for d in /home/chronos/crash /home/chronos/u-*/crash; do
+    send_crashes "${d}"
+  done
 }
 
 main
