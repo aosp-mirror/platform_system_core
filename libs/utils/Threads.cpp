@@ -21,7 +21,6 @@
 #include <utils/Log.h>
 
 #include <cutils/sched_policy.h>
-#include <cutils/properties.h>
 
 #include <stdio.h>
 #include <stdlib.h>
