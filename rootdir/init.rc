@@ -413,12 +413,6 @@ on property:selinux.reload_policy=1
     restart ueventd
     restart installd
 
-on property:persist.selinux.enforcing=1
-    setenforce 1
-
-on property:persist.selinux.enforcing=0
-    setenforce 0
-
 service console /system/bin/sh
     class core
     console
