@@ -516,12 +516,6 @@ int do_mount_all(int nargs, char **args)
     return ret;
 }
 
-int do_selinux_reload(int nargs, char **args) {
-    if (is_selinux_enabled() <= 0)
-        return 0;
-    return selinux_reload_policy();
-}
-
 int do_setcon(int nargs, char **args) {
     if (is_selinux_enabled() <= 0)
         return 0;
