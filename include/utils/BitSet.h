@@ -101,6 +101,20 @@ struct BitSet32 {
 
     inline bool operator== (const BitSet32& other) const { return value == other.value; }
     inline bool operator!= (const BitSet32& other) const { return value != other.value; }
+    inline BitSet32 operator& (const BitSet32& other) const {
+        return BitSet32(value & other.value);
+    }
+    inline BitSet32& operator&= (const BitSet32& other) {
+        value &= other.value;
+        return *this;
+    }
+    inline BitSet32 operator| (const BitSet32& other) const {
+        return BitSet32(value | other.value);
+    }
+    inline BitSet32& operator|= (const BitSet32& other) {
+        value |= other.value;
+        return *this;
+    }
 };
 
 ANDROID_BASIC_TYPES_TRAITS(BitSet32)
