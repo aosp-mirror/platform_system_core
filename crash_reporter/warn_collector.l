@@ -200,9 +200,16 @@ void WarnInput(char *buf, int *result, size_t max_size) {
     }
     /* Nothing left to read, so we must wait. */
     struct inotify_event event;
-    int n = read(i_fd, &event, sizeof(event));
-    if (n <= 0)
-      Die("inotify: %s\n", strerror(errno));
+    while (1) {
+      int n = read(i_fd, &event, sizeof(event));
+      if (n <= 0) {
+        if (errno == EINTR)
+          continue;
+        else
+          Die("inotify: %s\n", strerror(errno));
+      } else
+        break;
+    }
     if (event.mask & IN_MOVE_SELF) {
       /* The file has been renamed.  Before switching
        * to the new one, we process any remaining
