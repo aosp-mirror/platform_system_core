@@ -9,12 +9,20 @@
 
 set -e
 
-SYSROOT=/build/link
-LD_LIBRARY_PATH=$SYSROOT/lib64:$SYSROOT/usr/lib64
-PATH=.:$SYSROOT/bin:$SYSROOT/usr/bin:$PATH
-TESTLOG=warn-test-log
+fail() {
+  printf '[ FAIL ] %b\n' "$*"
+  exit 1
+}
 
-trap cleanup EXIT
+if [[ -z ${SYSROOT} ]]; then
+  fail "SYSROOT must be set for this test to work"
+fi
+: ${OUT:=${PWD}}
+cd "${OUT}"
+PATH=${OUT}:${PATH}
+TESTLOG="${OUT}/warn-test-log"
+
+echo "Testing: $(which warn_collector)"
 
 cleanup() {
   # Kill daemon (if started) on exit
@@ -22,32 +30,30 @@ cleanup() {
 }
 
 check_log() {
-  n_expected=$1
-  if [ ! -f $TESTLOG ]; then
-    echo $TESTLOG was not created
-    exit 1
+  local n_expected=$1
+  if [[ ! -f ${TESTLOG} ]]; then
+    fail "${TESTLOG} was not created"
   fi
-  if [ "$(wc -l < $TESTLOG)" -ne $n_expected ]; then
-    echo expected $n_expected lines in $TESTLOG, found this:
-    cat $TESTLOG
-    exit 1
+  if [[ $(wc -l < "${TESTLOG}") -ne ${n_expected} ]]; then
+    fail "expected ${n_expected} lines in ${TESTLOG}, found this instead:
+$(<"${TESTLOG}")"
   fi
-  if egrep -qv '^[0-9a-f]{8}$' $TESTLOG; then
-    echo found bad lines in $TESTLOG:
-    cat $TESTLOG
-    exit 1
+  if egrep -qv '^[0-9a-f]{8}$' "${TESTLOG}"; then
+    fail "found bad lines in ${TESTLOG}:
+$(<"${TESTLOG}")"
   fi
 }
 
-rm -f warn-test-log
-cp $SRC/warn_collector_test_reporter.sh .
-cp $SRC/TEST_WARNING .
+rm -f "${TESTLOG}"
+cp "${SRC}/warn_collector_test_reporter.sh" .
+cp "${SRC}/TEST_WARNING" .
 cp TEST_WARNING messages
 
 # Start the collector daemon.  With the --test option, the daemon reads input
 # from ./messages, writes the warning into ./warning, and invokes
 # ./warn_collector_test_reporter.sh to report the warning.
 warn_collector --test &
+trap cleanup EXIT
 
 # After a while, check that the first warning has been collected.
 sleep 1

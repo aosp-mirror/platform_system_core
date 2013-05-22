@@ -48,7 +48,7 @@ END_TRACE       {PREFIX}" ---[ end trace".*
 
 ^{CUT_HERE}\n{WARNING}          BEGIN(PRE_WARN);
 .|\n                            /* ignore all other input in state 0 */
-<PRE_WARN>[^ ]+\n               if (WarnStart()) {  /* yytext is file:line */
+<PRE_WARN>[^ ]+.[^ ]+\n         if (WarnStart()) {  /* yytext is file:line func+offset/offset() */
                                   BEGIN(WARN); ECHO;
                                 } else {
                                   BEGIN(0);
