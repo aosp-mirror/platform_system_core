@@ -66,7 +66,8 @@ __BEGIN_DECLS
 #define ATRACE_TAG_APP              (1<<12)
 #define ATRACE_TAG_RESOURCES        (1<<13)
 #define ATRACE_TAG_DALVIK           (1<<14)
-#define ATRACE_TAG_LAST             ATRACE_TAG_DALVIK
+#define ATRACE_TAG_RS               (1<<15)
+#define ATRACE_TAG_LAST             ATRACE_TAG_RS
 
 // Reserved for initialization.
 #define ATRACE_TAG_NOT_READY        (1LL<<63)
