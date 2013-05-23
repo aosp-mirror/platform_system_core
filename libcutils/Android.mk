@@ -42,7 +42,6 @@ commonSources := \
 	strdup16to8.c \
 	strdup8to16.c \
 	process_name.c \
-	properties.c \
 	threads.c \
 	sched_policy.c \
 	iosched_policy.c \
@@ -112,6 +111,7 @@ LOCAL_SRC_FILES := $(commonSources) \
         debugger.c \
         klog.c \
         partition_utils.c \
+        properties.c \
         qtaguid.c \
         trace.c \
         uevent.c
