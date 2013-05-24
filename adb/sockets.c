@@ -23,6 +23,10 @@
 
 #include "sysdeps.h"
 
+#if !ADB_HOST
+#include <cutils/properties.h>
+#endif
+
 #define  TRACE_TAG  TRACE_SOCKETS
 #include "adb.h"
 
@@ -428,6 +432,9 @@ asocket *create_local_service_socket(const char *name)
 {
     asocket *s;
     int fd;
+#if !ADB_HOST
+    char debug[PROPERTY_VALUE_MAX];
+#endif
 
 #if !ADB_HOST
     if (!strcmp(name,"jdwp")) {
@@ -444,7 +451,11 @@ asocket *create_local_service_socket(const char *name)
     D("LS(%d): bound to '%s' via %d\n", s->id, name, fd);
 
 #if !ADB_HOST
-    if ((!strncmp(name, "root:", 5) && getuid() != 0)
+    if (!strncmp(name, "root:", 5))
+        property_get("ro.debuggable", debug, "");
+
+    if ((!strncmp(name, "root:", 5) && getuid() != 0
+        && strcmp(debug, "1") == 0)
         || !strncmp(name, "usb:", 4)
         || !strncmp(name, "tcpip:", 6)) {
         D("LS(%d): enabling exit_on_close\n", s->id);
