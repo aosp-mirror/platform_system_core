@@ -34,6 +34,7 @@
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 #if !ADB_HOST
+#include <cutils/properties.h>
 #include <private/android_filesystem_config.h>
 #include <sys/capability.h>
 #include <linux/prctl.h>

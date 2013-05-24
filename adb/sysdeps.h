@@ -261,7 +261,6 @@ extern char*  adb_strtok_r(char *str, const char *delim, char **saveptr);
 
 #include "fdevent.h"
 #include <cutils/sockets.h>
-#include <cutils/properties.h>
 #include <cutils/misc.h>
 #include <signal.h>
 #include <sys/wait.h>

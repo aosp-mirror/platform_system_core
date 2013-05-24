@@ -35,6 +35,7 @@
 #  endif
 #else
 #  include <cutils/android_reboot.h>
+#  include <cutils/properties.h>
 #endif
 
 typedef struct stinfo stinfo;
