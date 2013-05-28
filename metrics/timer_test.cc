@@ -16,22 +16,40 @@ using ::testing::Return;
 
 namespace chromeos_metrics {
 
+namespace {
+const int64 kStime1MSec = 1400;
+const int64 kEtime1MSec = 3000;
+const int64 kDelta1MSec = 1600;
+
+const int64 kStime2MSec = 4200;
+const int64 kEtime2MSec = 5000;
+const int64 kDelta2MSec = 800;
+
+const int64 kStime3MSec = 6600;
+const int64 kEtime3MSec = 6800;
+const int64 kDelta3MSec = 200;
+}  // namespace
+
 class TimerTest : public testing::Test {
  public:
   TimerTest() : clock_wrapper_mock_(new ClockWrapperMock()) {}
 
  protected:
   virtual void SetUp() {
-    EXPECT_FALSE(timer_.is_started_);
-    stime += base::TimeDelta::FromMilliseconds(1500);
-    etime += base::TimeDelta::FromMilliseconds(3000);
+    EXPECT_EQ(Timer::kTimerStopped, timer_.timer_state_);
+    stime += base::TimeDelta::FromMilliseconds(kStime1MSec);
+    etime += base::TimeDelta::FromMilliseconds(kEtime1MSec);
+    stime2 += base::TimeDelta::FromMilliseconds(kStime2MSec);
+    etime2 += base::TimeDelta::FromMilliseconds(kEtime2MSec);
+    stime3 += base::TimeDelta::FromMilliseconds(kStime3MSec);
+    etime3 += base::TimeDelta::FromMilliseconds(kEtime3MSec);
   }
 
   virtual void TearDown() {}
 
   Timer timer_;
   scoped_ptr<ClockWrapperMock> clock_wrapper_mock_;
-  base::TimeTicks stime, etime;
+  base::TimeTicks stime, etime, stime2, etime2, stime3, etime3;
 };
 
 TEST_F(TimerTest, StartStop) {
@@ -43,7 +61,13 @@ TEST_F(TimerTest, StartStop) {
   ASSERT_TRUE(timer_.start_time_ == stime);
   ASSERT_TRUE(timer_.HasStarted());
   ASSERT_TRUE(timer_.Stop());
-  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), 1500);
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta1MSec);
+
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+
   ASSERT_FALSE(timer_.HasStarted());
 }
 
@@ -68,9 +92,6 @@ TEST_F(TimerTest, Reset) {
 }
 
 TEST_F(TimerTest, SeparatedTimers) {
-  base::TimeTicks stime2, etime2;
-  stime2 += base::TimeDelta::FromMilliseconds(4200);
-  etime2 += base::TimeDelta::FromMilliseconds(5000);
   EXPECT_CALL(*clock_wrapper_mock_, GetCurrentTime())
       .WillOnce(Return(stime))
       .WillOnce(Return(etime))
@@ -79,12 +100,17 @@ TEST_F(TimerTest, SeparatedTimers) {
   timer_.clock_wrapper_.reset(clock_wrapper_mock_.release());
   ASSERT_TRUE(timer_.Start());
   ASSERT_TRUE(timer_.Stop());
-  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), 1500);
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta1MSec);
   ASSERT_TRUE(timer_.Start());
   ASSERT_TRUE(timer_.start_time_ == stime2);
   ASSERT_TRUE(timer_.Stop());
-  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), 800);
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta2MSec);
   ASSERT_FALSE(timer_.HasStarted());
+
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
 }
 
 TEST_F(TimerTest, InvalidStop) {
@@ -106,6 +132,269 @@ TEST_F(TimerTest, InvalidElapsedTime) {
   ASSERT_FALSE(timer_.GetElapsedTime(&elapsed_time));
 }
 
+TEST_F(TimerTest, PauseStartStopResume) {
+  EXPECT_CALL(*clock_wrapper_mock_, GetCurrentTime())
+      .WillOnce(Return(stime))
+      .WillOnce(Return(stime2))
+      .WillOnce(Return(etime2))
+      .WillOnce(Return(stime3))
+      .WillOnce(Return(etime3));
+  timer_.clock_wrapper_.reset(clock_wrapper_mock_.release());
+  ASSERT_TRUE(timer_.Pause());  // Starts timer paused.
+  ASSERT_TRUE(timer_.start_time_ == stime);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Start());  // Restarts timer.
+  ASSERT_TRUE(timer_.start_time_ == stime2);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Stop());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta2MSec);
+  ASSERT_FALSE(timer_.HasStarted());
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+
+  ASSERT_TRUE(timer_.Resume());
+  ASSERT_TRUE(timer_.HasStarted());
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(kDelta3MSec, elapsed_time.InMilliseconds());
+}
+
+TEST_F(TimerTest, ResumeStartStopPause) {
+  EXPECT_CALL(*clock_wrapper_mock_, GetCurrentTime())
+      .WillOnce(Return(stime))
+      .WillOnce(Return(stime2))
+      .WillOnce(Return(etime2))
+      .WillOnce(Return(stime3));
+  timer_.clock_wrapper_.reset(clock_wrapper_mock_.release());
+  ASSERT_TRUE(timer_.Resume());
+  ASSERT_TRUE(timer_.start_time_ == stime);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Start());
+  ASSERT_TRUE(timer_.start_time_ == stime2);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Stop());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta2MSec);
+  ASSERT_FALSE(timer_.HasStarted());
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+
+  ASSERT_TRUE(timer_.Pause());
+  ASSERT_TRUE(timer_.HasStarted());
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(0, elapsed_time.InMilliseconds());
+}
+
+TEST_F(TimerTest, StartResumeStop) {
+  EXPECT_CALL(*clock_wrapper_mock_, GetCurrentTime())
+      .WillOnce(Return(stime))
+      .WillOnce(Return(etime));
+  timer_.clock_wrapper_.reset(clock_wrapper_mock_.release());
+  ASSERT_TRUE(timer_.Start());
+  ASSERT_TRUE(timer_.start_time_ == stime);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_FALSE(timer_.Resume());
+  ASSERT_TRUE(timer_.start_time_ == stime);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Stop());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta1MSec);
+  ASSERT_FALSE(timer_.HasStarted());
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+}
+
+TEST_F(TimerTest, StartPauseStop) {
+  EXPECT_CALL(*clock_wrapper_mock_, GetCurrentTime())
+      .WillOnce(Return(stime))
+      .WillOnce(Return(etime));
+  timer_.clock_wrapper_.reset(clock_wrapper_mock_.release());
+  ASSERT_TRUE(timer_.Start());
+  ASSERT_TRUE(timer_.start_time_ == stime);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Pause());
+  ASSERT_TRUE(timer_.HasStarted());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta1MSec);
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+
+  ASSERT_TRUE(timer_.Stop());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta1MSec);
+  ASSERT_FALSE(timer_.HasStarted());
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+}
+
+TEST_F(TimerTest, StartPauseResumeStop) {
+  EXPECT_CALL(*clock_wrapper_mock_, GetCurrentTime())
+      .WillOnce(Return(stime))
+      .WillOnce(Return(etime))
+      .WillOnce(Return(stime2))
+      .WillOnce(Return(etime2));
+  timer_.clock_wrapper_.reset(clock_wrapper_mock_.release());
+  ASSERT_TRUE(timer_.Start());
+  ASSERT_TRUE(timer_.start_time_ == stime);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Pause());
+  ASSERT_TRUE(timer_.HasStarted());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta1MSec);
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+
+  ASSERT_TRUE(timer_.Resume());
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Stop());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta1MSec + kDelta2MSec);
+  ASSERT_FALSE(timer_.HasStarted());
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+}
+
+TEST_F(TimerTest, PauseStop) {
+  EXPECT_CALL(*clock_wrapper_mock_, GetCurrentTime())
+      .WillOnce(Return(stime));
+  timer_.clock_wrapper_.reset(clock_wrapper_mock_.release());
+  ASSERT_TRUE(timer_.Pause());
+  ASSERT_TRUE(timer_.start_time_ == stime);
+  ASSERT_TRUE(timer_.HasStarted());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), 0);
+
+  ASSERT_TRUE(timer_.Stop());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), 0);
+  ASSERT_FALSE(timer_.HasStarted());
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+}
+
+TEST_F(TimerTest, PauseResumeStop) {
+  EXPECT_CALL(*clock_wrapper_mock_, GetCurrentTime())
+      .WillOnce(Return(stime))
+      .WillOnce(Return(stime2))
+      .WillOnce(Return(etime2));
+  timer_.clock_wrapper_.reset(clock_wrapper_mock_.release());
+  ASSERT_TRUE(timer_.Pause());
+  ASSERT_TRUE(timer_.start_time_ == stime);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Resume());
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Stop());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta2MSec);
+  ASSERT_FALSE(timer_.HasStarted());
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+}
+
+TEST_F(TimerTest, StartPauseResumePauseStop) {
+  EXPECT_CALL(*clock_wrapper_mock_, GetCurrentTime())
+      .WillOnce(Return(stime))
+      .WillOnce(Return(etime))
+      .WillOnce(Return(stime2))
+      .WillOnce(Return(stime3))
+      .WillOnce(Return(etime3));
+  timer_.clock_wrapper_.reset(clock_wrapper_mock_.release());
+  ASSERT_TRUE(timer_.Start());
+  ASSERT_TRUE(timer_.start_time_ == stime);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Pause());
+  ASSERT_TRUE(timer_.HasStarted());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta1MSec);
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+
+  ASSERT_TRUE(timer_.Resume());
+  ASSERT_TRUE(timer_.HasStarted());
+  // Make sure GetElapsedTime works while we're running.
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(kDelta1MSec + kStime3MSec - kStime2MSec,
+            elapsed_time.InMilliseconds());
+
+  ASSERT_TRUE(timer_.Pause());
+  ASSERT_TRUE(timer_.HasStarted());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            kDelta1MSec + kEtime3MSec - kStime2MSec);
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+
+  ASSERT_TRUE(timer_.Stop());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            kDelta1MSec + kEtime3MSec - kStime2MSec);
+  ASSERT_FALSE(timer_.HasStarted());
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+}
+
+TEST_F(TimerTest, StartPauseResumePauseResumeStop) {
+  EXPECT_CALL(*clock_wrapper_mock_, GetCurrentTime())
+      .WillOnce(Return(stime))
+      .WillOnce(Return(etime))
+      .WillOnce(Return(stime2))
+      .WillOnce(Return(etime2))
+      .WillOnce(Return(stime3))
+      .WillOnce(Return(etime3));
+  timer_.clock_wrapper_.reset(clock_wrapper_mock_.release());
+  ASSERT_TRUE(timer_.Start());
+  ASSERT_TRUE(timer_.start_time_ == stime);
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Pause());
+  ASSERT_TRUE(timer_.HasStarted());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta1MSec);
+  base::TimeDelta elapsed_time;
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+
+  ASSERT_TRUE(timer_.Resume());
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Pause());
+  ASSERT_TRUE(timer_.HasStarted());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(), kDelta1MSec + kDelta2MSec);
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+
+  ASSERT_TRUE(timer_.Resume());
+  ASSERT_TRUE(timer_.HasStarted());
+
+  ASSERT_TRUE(timer_.Stop());
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            kDelta1MSec + kDelta2MSec + kDelta3MSec);
+  ASSERT_FALSE(timer_.HasStarted());
+  ASSERT_TRUE(timer_.GetElapsedTime(&elapsed_time));
+  ASSERT_EQ(timer_.elapsed_time_.InMilliseconds(),
+            elapsed_time.InMilliseconds());
+}
+
 static const char kMetricName[] = "test-timer";
 static const int kMinSample = 0;
 static const int kMaxSample = 120 * 1E6;
@@ -124,8 +413,8 @@ class TimerReporterTest : public testing::Test {
     EXPECT_EQ(timer_reporter_.min_, kMinSample);
     EXPECT_EQ(timer_reporter_.max_, kMaxSample);
     EXPECT_EQ(timer_reporter_.num_buckets_, kNumBuckets);
-    stime += base::TimeDelta::FromMilliseconds(1500);
-    etime += base::TimeDelta::FromMilliseconds(3000);
+    stime += base::TimeDelta::FromMilliseconds(kStime1MSec);
+    etime += base::TimeDelta::FromMilliseconds(kEtime1MSec);
   }
 
   virtual void TearDown() {
@@ -143,7 +432,7 @@ TEST_F(TimerReporterTest, StartStopReport) {
       .WillOnce(Return(stime))
       .WillOnce(Return(etime));
   timer_reporter_.clock_wrapper_.reset(clock_wrapper_mock_.release());
-  EXPECT_CALL(lib_, SendToUMA(kMetricName, 1500, kMinSample, kMaxSample,
+  EXPECT_CALL(lib_, SendToUMA(kMetricName, kDelta1MSec, kMinSample, kMaxSample,
                               kNumBuckets)).WillOnce(Return(true));
   ASSERT_TRUE(timer_reporter_.Start());
   ASSERT_TRUE(timer_reporter_.Stop());

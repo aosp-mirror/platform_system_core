@@ -18,38 +18,70 @@ base::TimeTicks ClockWrapper::GetCurrentTime() const {
 }
 
 Timer::Timer()
-    : is_started_(false),
+    : timer_state_(kTimerStopped),
       clock_wrapper_(new ClockWrapper()) {}
 
 bool Timer::Start() {
+  elapsed_time_ = base::TimeDelta();  // Sets elapsed_time_ to zero.
   start_time_ = clock_wrapper_->GetCurrentTime();
-  is_started_ = true;
+  timer_state_ = kTimerRunning;
   return true;
 }
 
 bool Timer::Stop() {
-  // Check if the timer has been started.
-  if (!is_started_) return false;
-  is_started_ = false;
-  elapsed_time_ = clock_wrapper_->GetCurrentTime() - start_time_;
+  if (timer_state_ == kTimerStopped)
+    return false;
+  if (timer_state_ == kTimerRunning)
+    elapsed_time_ += clock_wrapper_->GetCurrentTime() - start_time_;
+  timer_state_ = kTimerStopped;
   return true;
 }
 
+bool Timer::Pause() {
+  switch (timer_state_) {
+    case kTimerStopped:
+      if (!Start())
+        return false;
+      timer_state_ = kTimerPaused;
+      return true;
+    case kTimerRunning:
+      timer_state_ = kTimerPaused;
+      elapsed_time_ += clock_wrapper_->GetCurrentTime() - start_time_;
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool Timer::Resume() {
+  switch (timer_state_) {
+    case kTimerStopped:
+      return Start();
+    case kTimerPaused:
+      start_time_ = clock_wrapper_->GetCurrentTime();
+      timer_state_ = kTimerRunning;
+      return true;
+    default:
+      return false;
+  }
+}
+
 bool Timer::Reset() {
-  is_started_ = false;
+  elapsed_time_ = base::TimeDelta();  // Sets elapsed_time_ to zero.
+  timer_state_ = kTimerStopped;
   return true;
 }
 
 bool Timer::HasStarted() const {
-  return is_started_;
+  return timer_state_ != kTimerStopped;
 }
 
 bool Timer::GetElapsedTime(base::TimeDelta* elapsed_time) const {
-  if (start_time_.is_null() || !elapsed_time) return false;
-  if (is_started_) {
-    *elapsed_time = clock_wrapper_->GetCurrentTime() - start_time_;
-  } else {
-    *elapsed_time = elapsed_time_;
+  if (start_time_.is_null() || !elapsed_time)
+    return false;
+  *elapsed_time = elapsed_time_;
+  if (timer_state_ == kTimerRunning) {
+    *elapsed_time += clock_wrapper_->GetCurrentTime() - start_time_;
   }
   return true;
 }

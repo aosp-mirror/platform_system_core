@@ -55,6 +55,14 @@ class Timer : public TimerInterface {
   // Otherwise, it fails (returns false).
   virtual bool Stop();
 
+  // Pauses a timer.  If the timer is stopped, this call starts the timer in
+  // the paused state. Fails (returns false) if the timer is already paused.
+  virtual bool Pause();
+
+  // Restarts a paused timer (or starts a stopped timer). This method fails
+  // (returns false) if the timer is already running; otherwise, returns true.
+  virtual bool Resume();
+
   // Resets the timer, erasing the current duration being tracked. Always
   // returns true.
   virtual bool Reset();
@@ -70,15 +78,25 @@ class Timer : public TimerInterface {
   virtual bool GetElapsedTime(base::TimeDelta* elapsed_time) const;
 
  private:
+  enum TimerState { kTimerStopped, kTimerRunning, kTimerPaused };
   friend class TimerTest;
   friend class TimerReporterTest;
-  FRIEND_TEST(TimerTest, StartStop);
-  FRIEND_TEST(TimerTest, ReStart);
-  FRIEND_TEST(TimerTest, Reset);
-  FRIEND_TEST(TimerTest, SeparatedTimers);
-  FRIEND_TEST(TimerTest, InvalidStop);
-  FRIEND_TEST(TimerTest, InvalidElapsedTime);
   FRIEND_TEST(TimerReporterTest, StartStopReport);
+  FRIEND_TEST(TimerTest, InvalidElapsedTime);
+  FRIEND_TEST(TimerTest, InvalidStop);
+  FRIEND_TEST(TimerTest, PauseResumeStop);
+  FRIEND_TEST(TimerTest, PauseStartStopResume);
+  FRIEND_TEST(TimerTest, PauseStop);
+  FRIEND_TEST(TimerTest, Reset);
+  FRIEND_TEST(TimerTest, ReStart);
+  FRIEND_TEST(TimerTest, ResumeStartStopPause);
+  FRIEND_TEST(TimerTest, SeparatedTimers);
+  FRIEND_TEST(TimerTest, StartPauseResumePauseResumeStop);
+  FRIEND_TEST(TimerTest, StartPauseResumePauseStop);
+  FRIEND_TEST(TimerTest, StartPauseResumeStop);
+  FRIEND_TEST(TimerTest, StartPauseStop);
+  FRIEND_TEST(TimerTest, StartResumeStop);
+  FRIEND_TEST(TimerTest, StartStop);
 
   // Elapsed time of the last use of the timer.
   base::TimeDelta elapsed_time_;
@@ -86,8 +104,8 @@ class Timer : public TimerInterface {
   // Starting time value.
   base::TimeTicks start_time_;
 
-  // Whether the timer has started or not.
-  bool is_started_;
+  // Whether the timer is running, stopped, or paused.
+  TimerState timer_state_;
 
   // Wrapper for the calls to the system clock.
   scoped_ptr<ClockWrapper> clock_wrapper_;
