@@ -285,7 +285,7 @@ int main(int argc, char *argv[]) {
   chrome_collector.Initialize(CountChromeCrash, IsFeedbackAllowed);
 
   KernelWarningCollector kernel_warning_collector;
-  udev_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
+  kernel_warning_collector.Initialize(CountUdevCrash, IsFeedbackAllowed);
 
   if (FLAGS_init) {
     return Initialize(&kernel_collector,
