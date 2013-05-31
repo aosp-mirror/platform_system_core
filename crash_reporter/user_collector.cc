@@ -120,7 +120,7 @@ bool UserCollector::SetUpInternal(bool enabled) {
                            kCorePipeLimit,
                            strlen(kCorePipeLimit)) !=
       static_cast<int>(strlen(kCorePipeLimit))) {
-    LOG(ERROR) << "Unable to write " << core_pipe_limit_file_;
+    PLOG(ERROR) << "Unable to write " << core_pipe_limit_file_;
     return false;
   }
   std::string pattern = GetPattern(enabled);
@@ -128,7 +128,7 @@ bool UserCollector::SetUpInternal(bool enabled) {
                            pattern.c_str(),
                            pattern.length()) !=
       static_cast<int>(pattern.length())) {
-    LOG(ERROR) << "Unable to write " << core_pattern_file_;
+    PLOG(ERROR) << "Unable to write " << core_pattern_file_;
     return false;
   }
   return true;
@@ -218,7 +218,7 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
 bool UserCollector::CopyOffProcFiles(pid_t pid,
                                      const FilePath &container_dir) {
   if (!file_util::CreateDirectory(container_dir)) {
-    LOG(ERROR) << "Could not create " << container_dir.value().c_str();
+    PLOG(ERROR) << "Could not create " << container_dir.value().c_str();
     return false;
   }
   FilePath process_path = GetProcessPath(pid);
@@ -262,7 +262,7 @@ UserCollector::ErrorType UserCollector::ValidateCoreFile(
     const FilePath &core_path) const {
   int fd = HANDLE_EINTR(open(core_path.value().c_str(), O_RDONLY));
   if (fd < 0) {
-    LOG(ERROR) << "Could not open core file " << core_path.value();
+    PLOG(ERROR) << "Could not open core file " << core_path.value();
     return kErrorInvalidCoreFile;
   }
 
@@ -348,7 +348,7 @@ bool UserCollector::CopyStdinToCoreFile(const FilePath &core_path) {
     return true;
   }
 
-  LOG(ERROR) << "Could not write core file";
+  PLOG(ERROR) << "Could not write core file";
   // If the file system was full, make sure we remove any remnants.
   file_util::Delete(core_path, false);
   return false;
