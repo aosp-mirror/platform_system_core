@@ -54,7 +54,7 @@ struct pid_info_t {
     ssize_t parent_length;
 };
 
-void print_header()
+static void print_header()
 {
     printf("%-9s %5s %10s %4s %9s %18s %9s %10s %s\n",
             "COMMAND",
@@ -68,12 +68,12 @@ void print_header()
             "NAME");
 }
 
-void print_type(char *type, struct pid_info_t* info)
+static void print_type(char *type, struct pid_info_t* info)
 {
     static ssize_t link_dest_size;
     static char link_dest[PATH_MAX];
 
-    strncat(info->path, type, sizeof(info->path));
+    strlcat(info->path, type, sizeof(info->path));
     if ((link_dest_size = readlink(info->path, link_dest, sizeof(link_dest)-1)) < 0) {
         if (errno == ENOENT)
             goto out;
@@ -96,7 +96,7 @@ out:
 }
 
 // Prints out all file that have been memory mapped
-void print_maps(struct pid_info_t* info)
+static void print_maps(struct pid_info_t* info)
 {
     FILE *maps;
     char buffer[PATH_MAX + 100];
@@ -107,7 +107,7 @@ void print_maps(struct pid_info_t* info)
     long int inode;
     char file[PATH_MAX];
 
-    strncat(info->path, "maps", sizeof(info->path));
+    strlcat(info->path, "maps", sizeof(info->path));
 
     maps = fopen(info->path, "r");
     if (!maps)
@@ -131,10 +131,10 @@ out:
 }
 
 // Prints out all open file descriptors
-void print_fds(struct pid_info_t* info)
+static void print_fds(struct pid_info_t* info)
 {
     static char* fd_path = "fd/";
-    strncat(info->path, fd_path, sizeof(info->path));
+    strlcat(info->path, fd_path, sizeof(info->path));
 
     int previous_length = info->parent_length;
     info->parent_length += strlen(fd_path);
@@ -163,7 +163,7 @@ out:
     info->path[info->parent_length] = '\0';
 }
 
-void lsof_dumpinfo(pid_t pid)
+static void lsof_dumpinfo(pid_t pid)
 {
     int fd;
     struct pid_info_t info;
@@ -187,7 +187,7 @@ void lsof_dumpinfo(pid_t pid)
     }
 
     // Read the command line information; each argument is terminated with NULL.
-    strncat(info.path, "cmdline", sizeof(info.path));
+    strlcat(info.path, "cmdline", sizeof(info.path));
     fd = open(info.path, O_RDONLY);
     if (fd < 0) {
         fprintf(stderr, "Couldn't read %s\n", info.path);
