@@ -130,8 +130,8 @@ int log_main(int argc, char *argv[])
     buffer[0] = '\0';
     
     for (i = optind ; i < argc ; i++) {
-        strncat(buffer, argv[i], sizeof(buffer)-1);
-        strncat(buffer, " ", sizeof(buffer)-1);
+        strlcat(buffer, argv[i], sizeof(buffer)-1);
+        strlcat(buffer, " ", sizeof(buffer)-1);
     }
 
     if(buffer[0] == 0) {
