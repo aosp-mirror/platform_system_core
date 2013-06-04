@@ -108,7 +108,7 @@ static void ipv4(const char *filename, const char *label) {
             addr2str(AF_INET, &raddr, rport, rip);
 
             printf("%4s  %6d %6d %-22s %-22s %s\n",
-                   label, txq, rxq, lip, rip,
+                   label, rxq, txq, lip, rip,
                    state2str(state));
         }
     }
@@ -136,7 +136,7 @@ static void ipv6(const char *filename, const char *label) {
             addr2str(AF_INET6, &raddr6, rport, rip);
 
             printf("%4s  %6d %6d %-22s %-22s %s\n",
-                   label, txq, rxq, lip, rip,
+                   label, rxq, txq, lip, rip,
                    state2str(state));
         }
     }
