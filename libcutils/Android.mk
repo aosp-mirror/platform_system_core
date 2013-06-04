@@ -41,6 +41,7 @@ commonSources := \
 	open_memstream.c \
 	strdup16to8.c \
 	strdup8to16.c \
+	record_stream.c \
 	process_name.c \
 	threads.c \
 	sched_policy.c \
