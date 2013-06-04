@@ -692,9 +692,7 @@ bool MetricsDaemon::VmStatsReadStats(long int* page_faults) {
 }
 
 bool MetricsDaemon::ReadFreqToInt(const string& sysfs_file_name, int* value) {
-  const string sysfs_dirpath(testing_ ?
-                             "./" : "/sys/devices/system/cpu/cpu0/cpufreq/");
-  const FilePath sysfs_path(sysfs_dirpath + sysfs_file_name);
+  const FilePath sysfs_path(sysfs_file_name);
   string value_string;
   if (!file_util::ReadFileToString(sysfs_path, &value_string)) {
     LOG(WARNING) << "cannot read " << sysfs_path.value().c_str();
