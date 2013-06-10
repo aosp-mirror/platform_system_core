@@ -365,9 +365,8 @@ int dhcp_do_request_renew(const char *interface,
         return -1;
     }
     if (strcmp(prop_value, "ok") == 0) {
-        fill_ip_info(interface, ipaddr, gateway, prefixLength, dns,
+        return fill_ip_info(interface, ipaddr, gateway, prefixLength, dns,
                 server, lease, vendorInfo, domain);
-        return 0;
     } else {
         snprintf(errmsg, sizeof(errmsg), "DHCP Renew result was %s", prop_value);
         return -1;
