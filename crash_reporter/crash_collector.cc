@@ -196,7 +196,8 @@ FilePath CrashCollector::GetUserCrashPath(void) {
   GList *list = g_hash_table_get_values(active_sessions);
   if (list) {
     const char *salted_path = static_cast<const char *>(list->data);
-    user_path = chromeos::cryptohome::home::GetHashedUserPath(salted_path);
+    user_path = chromeos::cryptohome::home::GetHashedUserPath(salted_path)
+        .Append("crash");
     g_list_free(list);
   }
 

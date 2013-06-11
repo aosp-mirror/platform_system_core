@@ -139,7 +139,7 @@ TEST_F(CrashCollectorTest, GetCrashDirectoryInfo) {
                                           &directory_mode,
                                           &directory_owner,
                                           &directory_group);
-  EXPECT_EQ("/home/user/hashcakes", path.value());
+  EXPECT_EQ("/home/user/hashcakes/crash", path.value());
   EXPECT_EQ(kExpectedUserMode, directory_mode);
   EXPECT_EQ(kChronosUid, directory_owner);
   EXPECT_EQ(kChronosGid, directory_group);
