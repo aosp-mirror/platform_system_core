@@ -776,6 +776,7 @@ loading_close_out:
 file_free_out:
     free(file1);
     free(file2);
+    free(file3);
 data_free_out:
     free(data);
 loading_free_out:
