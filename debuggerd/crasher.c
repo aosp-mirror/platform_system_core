@@ -21,8 +21,7 @@ extern const char* __progname;
 
 void crash1(void);
 void crashnostack(void);
-void maybeabort(void);
-int do_action(const char* arg);
+static int do_action(const char* arg);
 
 static void debuggerd_connect()
 {
@@ -30,14 +29,20 @@ static void debuggerd_connect()
     int s;
     sprintf(tmp, "%d", gettid());
     s = socket_local_client("android:debuggerd",
-            ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);    
+            ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
     if(s >= 0) {
         read(s, tmp, 1);
         close(s);
     }
 }
 
-int smash_stack(int i) {
+static void maybeabort() {
+    if(time(0) != 42) {
+        abort();
+    }
+}
+
+static int smash_stack(int i) {
     printf("crasher: deliberately corrupting stack...\n");
     // Unless there's a "big enough" buffer on the stack, gcc
     // doesn't bother inserting checks.
@@ -49,19 +54,19 @@ int smash_stack(int i) {
     return *(int*)(&buf[0]);
 }
 
-__attribute__((noinline)) void overflow_stack(void* p) {
+__attribute__((noinline)) static void overflow_stack(void* p) {
     fprintf(stderr, "p = %p\n", p);
     void* buf[1];
     buf[0] = p;
     overflow_stack(&buf);
 }
 
-void test_call1()
+static void test_call1()
 {
     *((int*) 32) = 1;
 }
 
-void *noisy(void *x)
+static void *noisy(void *x)
 {
     char c = (unsigned) x;
     for(;;) {
@@ -72,7 +77,7 @@ void *noisy(void *x)
     return 0;
 }
 
-int ctest()
+static int ctest()
 {
     pthread_t thr;
     pthread_attr_t attr;
@@ -90,7 +95,7 @@ static void* thread_callback(void* raw_arg)
     return (void*) do_action((const char*) raw_arg);
 }
 
-int do_action_on_thread(const char* arg)
+static int do_action_on_thread(const char* arg)
 {
     pthread_t t;
     pthread_create(&t, NULL, thread_callback, (void*) arg);
@@ -99,22 +104,27 @@ int do_action_on_thread(const char* arg)
     return (int) result;
 }
 
-__attribute__((noinline)) int crash3(int a) {
-   *((int*) 0xdead) = a;
-   return a*4;
+__attribute__((noinline)) static int crash3(int a) {
+    *((int*) 0xdead) = a;
+    return a*4;
 }
 
-__attribute__((noinline)) int crash2(int a) {
-   a = crash3(a) + 2;
-   return a*3;
+__attribute__((noinline)) static int crash2(int a) {
+    a = crash3(a) + 2;
+    return a*3;
 }
 
-__attribute__((noinline)) int crash(int a) {
-   a = crash2(a) + 1;
-   return a*2;
+__attribute__((noinline)) static int crash(int a) {
+    a = crash2(a) + 1;
+    return a*2;
 }
 
-int do_action(const char* arg)
+static void abuse_heap() {
+    char buf[16];
+    free((void*) buf); // GCC is smart enough to warn about this, but we're doing it deliberately.
+}
+
+static int do_action(const char* arg)
 {
     fprintf(stderr,"crasher: init pid=%d tid=%d\n", getpid(), gettid());
 
@@ -134,12 +144,16 @@ int do_action(const char* arg)
         return crash(42);
     } else if (!strcmp(arg,"abort")) {
         maybeabort();
+    } else if (!strcmp(arg, "heap-usage")) {
+        abuse_heap();
     }
 
     fprintf(stderr, "%s OP\n", __progname);
     fprintf(stderr, "where OP is:\n");
     fprintf(stderr, "  smash-stack     overwrite a stack-guard canary\n");
     fprintf(stderr, "  stack-overflow  recurse until the stack overflows\n");
+    fprintf(stderr, "  heap-corruption cause a libc abort by corrupting the heap\n");
+    fprintf(stderr, "  heap-usage      cause a libc abort by abusing a heap function\n");
     fprintf(stderr, "  nostack         crash with a NULL stack pointer\n");
     fprintf(stderr, "  ctest           (obsoleted by thread-crash?)\n");
     fprintf(stderr, "  exit            call exit(1)\n");
@@ -159,11 +173,6 @@ int main(int argc, char **argv)
     } else {
         crash1();
     }
-    
-    return 0;
-}
 
-void maybeabort()
-{
-    if(time(0) != 42) abort();
+    return 0;
 }
