@@ -143,6 +143,14 @@
 #define VENDOR_ID_BYD           0x19D1
 // OUYA's USB Vendor ID
 #define VENDOR_ID_OUYA          0x2836
+// Haier's USB Vendor ID
+#define VENDOR_ID_HAIER         0x201E
+// Hisense's USB Vendor ID
+#define VENDOR_ID_HISENSE       0x109b
+// MTK's USB Vendor ID
+#define VENDOR_ID_MTK           0x0e8d
+// B&N Nook's USB Vendor ID
+#define VENDOR_ID_NOOK          0x2080
 
 
 /** built-in vendor list */
@@ -201,6 +209,10 @@ int builtInVendorIds[] = {
     VENDOR_ID_XIAOMI,
     VENDOR_ID_BYD,
     VENDOR_ID_OUYA,
+    VENDOR_ID_HAIER,
+    VENDOR_ID_HISENSE,
+    VENDOR_ID_MTK,
+    VENDOR_ID_NOOK,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
