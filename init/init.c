@@ -640,7 +640,9 @@ static void export_kernel_boot_props(void)
 
     for (i = 0; i < ARRAY_SIZE(prop_map); i++) {
         ret = property_get(prop_map[i].src_prop, tmp);
-        if (ret == 0)
+        if (ret > 0)
+            property_set(prop_map[i].dest_prop, tmp);
+        else
             property_set(prop_map[i].dest_prop, prop_map[i].def_val);
     }
 
