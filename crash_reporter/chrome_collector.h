@@ -21,7 +21,7 @@ class ChromeCollector : public CrashCollector {
 
   // Handle a specific chrome crash.  Returns true on success.
   bool HandleCrash(const std::string &file_path, const std::string &pid_string,
-                   const std::string &uid_string);
+                   const std::string &uid_string, const std::string &exe_name);
 
  private:
   friend class ChromeCollectorTest;

@@ -38,6 +38,7 @@ DEFINE_bool(kernel_warning, false, "Report collected kernel warning");
 DEFINE_string(chrome, "", "Chrome crash dump file");
 DEFINE_string(pid, "", "PID of crashing process");
 DEFINE_string(uid, "", "UID of crashing process");
+DEFINE_string(exe, "", "Executable name of crashing process");
 #pragma GCC diagnostic error "-Wstrict-aliasing"
 
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
@@ -183,10 +184,11 @@ static int HandleChromeCrash(ChromeCollector *chrome_collector) {
   CHECK(!FLAGS_chrome.empty()) << "--chrome= must be set";
   CHECK(!FLAGS_pid.empty()) << "--pid= must be set";
   CHECK(!FLAGS_uid.empty()) << "--uid= must be set";
+  CHECK(!FLAGS_exe.empty()) << "--exe= must be set";
 
   chromeos::LogToString(true);
   bool handled = chrome_collector->HandleCrash(FLAGS_chrome, FLAGS_pid,
-                                               FLAGS_uid);
+                                               FLAGS_uid, FLAGS_exe);
   chromeos::LogToString(false);
   if (!handled)
     return 1;

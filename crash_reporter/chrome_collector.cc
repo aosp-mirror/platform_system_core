@@ -40,7 +40,8 @@ ChromeCollector::~ChromeCollector() {}
 
 bool ChromeCollector::HandleCrash(const std::string &file_path,
                                   const std::string &pid_string,
-                                  const std::string &uid_string) {
+                                  const std::string &uid_string,
+                                  const std::string &exe_name) {
   if (!is_feedback_allowed_function_())
     return true;
 
@@ -53,13 +54,7 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
     return false;
   }
 
-  std::string exec;
-  if (!GetExecutableBaseNameFromPid(pid, &exec)) {
-    LOG(ERROR) << "Can't get executable name for pid " << pid;
-    return false;
-  }
-
-  std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
+  std::string dump_basename = FormatDumpBasename(exe_name, time(NULL), pid);
   FilePath meta_path = GetCrashPath(dir, dump_basename, "meta");
   FilePath minidump_path = GetCrashPath(dir, dump_basename, "dmp");
   FilePath log_path = GetCrashPath(dir, dump_basename, "log");
@@ -75,11 +70,11 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
     return false;
   }
 
-  if (GetLogContents(FilePath(log_config_path_), exec, log_path))
+  if (GetLogContents(FilePath(log_config_path_), exe_name, log_path))
     AddCrashMetaData("log", log_path.value());
 
   // We're done.
-  WriteCrashMetaData(meta_path, exec, minidump_path.value());
+  WriteCrashMetaData(meta_path, exe_name, minidump_path.value());
 
   return true;
 }
