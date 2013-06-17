@@ -32,7 +32,7 @@
 #include "file_sync_service.h"
 
 
-static unsigned total_bytes;
+static unsigned long long total_bytes;
 static long long start_time;
 
 static long long NOW()
@@ -58,8 +58,8 @@ static void END()
         t = 1000000;
 
     fprintf(stderr,"%lld KB/s (%lld bytes in %lld.%03llds)\n",
-            ((((long long) total_bytes) * 1000000LL) / t) / 1024LL,
-            (long long) total_bytes, (t / 1000000LL), (t % 1000000LL) / 1000LL);
+            ((total_bytes * 1000000LL) / t) / 1024LL,
+            total_bytes, (t / 1000000LL), (t % 1000000LL) / 1000LL);
 }
 
 void sync_quit(int fd)
