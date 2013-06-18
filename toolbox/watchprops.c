@@ -9,9 +9,6 @@
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
-
-extern prop_area *__system_property_area__;
-
 typedef struct pwatch pwatch;
 
 struct pwatch
@@ -39,33 +36,35 @@ static void announce(const prop_info *pi)
 
 int watchprops_main(int argc, char *argv[])
 {
-    prop_area *pa = __system_property_area__;
-    unsigned serial = pa->serial;
-    unsigned count = pa->count;
+    unsigned serial = 0;
+    unsigned count;
     unsigned n;
     
-    if(count >= 1024) exit(1);
-
-    for(n = 0; n < count; n++) {
+    for(n = 0; n < 1024; n++) {
         watchlist[n].pi = __system_property_find_nth(n);
-        watchlist[n].serial = watchlist[n].pi->serial;
+        if (watchlist[n].pi == 0)
+            break;
+        watchlist[n].serial = __system_property_serial(watchlist[n].pi);
     }
 
-    for(;;) {
-        do {
-            __futex_wait(&pa->serial, serial, 0);
-        } while(pa->serial == serial);
+    count = n;
+    if (count == 1024)
+        exit(1);
 
-        while(count < pa->count){
+    for(;;) {
+        serial = __system_property_wait_any(serial);
+        while(count < 1024){
             watchlist[count].pi = __system_property_find_nth(count);
-            watchlist[count].serial = watchlist[n].pi->serial;
+            if (watchlist[count].pi == 0)
+                break;
+            watchlist[count].serial = __system_property_serial(watchlist[n].pi);
             announce(watchlist[count].pi);
             count++;
             if(count == 1024) exit(1);
         }
 
         for(n = 0; n < count; n++){
-            unsigned tmp = watchlist[n].pi->serial;
+            unsigned tmp = __system_property_serial(watchlist[n].pi);
             if(watchlist[n].serial != tmp) {
                 announce(watchlist[n].pi);
                 watchlist[n].serial = tmp;
