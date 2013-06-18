@@ -625,7 +625,7 @@ static void import_kernel_nv(char *name, int for_emulator)
 static void export_kernel_boot_props(void)
 {
     char tmp[PROP_VALUE_MAX];
-    const char *pval;
+    int ret;
     unsigned i;
     struct {
         const char *src_prop;
@@ -639,22 +639,26 @@ static void export_kernel_boot_props(void)
     };
 
     for (i = 0; i < ARRAY_SIZE(prop_map); i++) {
-        pval = property_get(prop_map[i].src_prop);
-        property_set(prop_map[i].dest_prop, pval ?: prop_map[i].def_val);
+        ret = property_get(prop_map[i].src_prop, tmp);
+        if (ret > 0)
+            property_set(prop_map[i].dest_prop, tmp);
+        else
+            property_set(prop_map[i].dest_prop, prop_map[i].def_val);
     }
 
-    pval = property_get("ro.boot.console");
-    if (pval)
-        strlcpy(console, pval, sizeof(console));
+    ret = property_get("ro.boot.console", tmp);
+    if (ret)
+        strlcpy(console, tmp, sizeof(console));
 
     /* save a copy for init's usage during boot */
-    strlcpy(bootmode, property_get("ro.bootmode"), sizeof(bootmode));
+    property_get("ro.bootmode", tmp);
+    strlcpy(bootmode, tmp, sizeof(bootmode));
 
     /* if this was given on kernel command line, override what we read
      * before (e.g. from /proc/cpuinfo), if anything */
-    pval = property_get("ro.boot.hardware");
-    if (pval)
-        strlcpy(hardware, pval, sizeof(hardware));
+    ret = property_get("ro.boot.hardware", tmp);
+    if (ret)
+        strlcpy(hardware, tmp, sizeof(hardware));
     property_set("ro.hardware", hardware);
 
     snprintf(tmp, PROP_VALUE_MAX, "%d", revision);
