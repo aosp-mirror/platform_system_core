@@ -263,7 +263,7 @@ static inline void atrace_int(uint64_t tag, const char* name, int32_t value)
 
 #define ATRACE_INIT()
 #define ATRACE_GET_ENABLED_TAGS()
-#define ATRACE_ENABLED()
+#define ATRACE_ENABLED() 0
 #define ATRACE_BEGIN(name)
 #define ATRACE_END()
 #define ATRACE_ASYNC_BEGIN(name, cookie)
