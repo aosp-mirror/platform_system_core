@@ -151,6 +151,8 @@
 #define VENDOR_ID_MTK           0x0e8d
 // B&N Nook's USB Vendor ID
 #define VENDOR_ID_NOOK          0x2080
+// Qisda's USB Vendor ID
+#define VENDOR_ID_QISDA         0x1D45
 
 
 /** built-in vendor list */
@@ -213,6 +215,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_HISENSE,
     VENDOR_ID_MTK,
     VENDOR_ID_NOOK,
+    VENDOR_ID_QISDA,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
