@@ -240,14 +240,23 @@ get_kind() {
 }
 
 get_key_value() {
-  local file=$1 key=$2 value
+  local file="$1" key="$2" value
 
   if [ -f "${file}" ]; then
     # Return the first entry.  There shouldn't be more than one anyways.
-    value=$(awk -F= '/^'"${key}"'[[:space:]]*=/ { print $NF }' "${file}")
+    # Substr at length($1) + 2 skips past the key and following = sign (awk
+    # uses 1-based indexes), but preserves embedded = characters.
+    value=$(sed -n "/^${key}[[:space:]]*=/{s:^[^=]*=::p;q}" "${file}")
   fi
 
   echo "${value:-undefined}"
+}
+
+get_keys() {
+  local file="$1" regex="$2"
+
+  awk -F'[[:space:]=]' -vregex="${regex}" \
+      'match($1, regex) { print $1 }' "${file}"
 }
 
 # Return the board name.
@@ -286,6 +295,46 @@ send_crash() {
   local log="$(get_key_value "${meta_path}" "log")"
   local sig="$(get_key_value "${meta_path}" "sig")"
   local send_payload_size="$(stat --printf=%s "${report_payload}" 2>/dev/null)"
+  local product="$(get_key_value "${meta_path}" "upload_var_prod")"
+  local version="$(get_key_value "${meta_path}" "upload_var_ver")"
+  local upload_prefix="$(get_key_value "${meta_path}" "upload_prefix")"
+
+  set -- \
+    -F "write_payload_size=${write_payload_size}" \
+    -F "send_payload_size=${send_payload_size}"
+  if [ "${sig}" != "undefined" ]; then
+    set -- "$@" \
+      -F "sig=${sig}" \
+      -F "sig2=${sig}"
+  fi
+  if [ "${log}" != "undefined" ]; then
+    set -- "$@" \
+      -F "log=@${log}"
+  fi
+
+  if [ "${upload_prefix}" = "undefined" ]; then
+    upload_prefix=""
+  fi
+
+  # Grab any variable that begins with upload_.
+  local v
+  for k in $(get_keys "${meta_path}" "^upload_"); do
+    v="$(get_key_value "${meta_path}" "${k}")"
+    case ${k} in
+      # Product & version are handled separately.
+      upload_var_prod) ;;
+      upload_var_ver) ;;
+      upload_var_*) set -- "$@" -F "${upload_prefix}${k#upload_var_}=${v}" ;;
+      upload_file_*) set -- "$@" -F "${upload_prefix}${k#upload_file_}=@${v}" ;;
+    esac
+  done
+
+  # When uploading Chrome reports we need to report the right product and
+  # version, so allow the meta file to override these values.
+  if [ "${product}" = "undefined" ]; then
+    product=${CHROMEOS_PRODUCT}
+    version=${chromeos_version}
+  fi
 
   local image_type
   if is_test_image; then
@@ -307,38 +356,32 @@ send_crash() {
     boot_mode="dev"
   fi
 
-  local extra_key1="write_payload_size"
-  local extra_value1="${write_payload_size}"
-  local extra_key2="send_payload_size"
-  local extra_value2="${send_payload_size}"
-  if [ "${sig}" != "undefined" ]; then
-    extra_key1="sig"
-    extra_value1="${sig}"
-    extra_key2="sig2"
-    extra_value2="${sig}"
-  elif [ "${log}" != "undefined" ]; then
-    # Upload a log file if it was specified.
-    extra_key1="log"
-    extra_value1="@${log}"
-  fi
-
   local error_type="$(get_key_value "${meta_path}" "error_type")"
   [ "${error_type}" = "undefined" ] && error_type=
 
   lecho "Sending crash:"
+  if [ "${product}" != "${CHROMEOS_PRODUCT}" ]; then
+    lecho "  Sending crash report on behalf of ${product}"
+  fi
   lecho "  Scheduled to send in ${sleep_time}s"
   lecho "  Metadata: ${meta_path} (${kind})"
   lecho "  Payload: ${report_payload}"
-  lecho "  Version: ${chromeos_version}"
+  lecho "  Version: ${version}"
   [ -n "${image_type}" ] && lecho "  Image type: ${image_type}"
   [ -n "${boot_mode}" ] && lecho "  Boot mode: ${boot_mode}"
   if is_mock; then
-    lecho "  Product: ${CHROMEOS_PRODUCT}"
+    lecho "  Product: ${product}"
     lecho "  URL: ${url}"
     lecho "  Board: ${board}"
     lecho "  HWClass: ${hwclass}"
-    lecho "  ${extra_key1}: ${extra_value1}"
-    lecho "  ${extra_key2}: ${extra_value2}"
+    lecho "  write_payload_size: ${write_payload_size}"
+    lecho "  send_payload_size: ${send_payload_size}"
+    if [ "${log}" != "undefined" ]; then
+      lecho "  log: @${log}"
+    fi
+    if [ "${sig}" != "undefined" ]; then
+      lecho "  sig: ${sig}"
+    fi
   fi
   lecho "  Exec name: ${exec_name}"
   [ -n "${error_type}" ] && lecho "  Error type: ${error_type}"
@@ -369,8 +412,8 @@ send_crash() {
   set +e
   curl "${url}" ${proxy:+--proxy "$proxy"} \
     --capath "${RESTRICTED_CERTIFICATES_PATH}" --ciphers HIGH \
-    -F "prod=${CHROMEOS_PRODUCT}" \
-    -F "ver=${chromeos_version}" \
+    -F "prod=${product}" \
+    -F "ver=${version}" \
     -F "upload_file_${kind}=@${report_payload}" \
     -F "board=${board}" \
     -F "hwclass=${hwclass}" \
@@ -378,9 +421,10 @@ send_crash() {
     ${image_type:+-F "image_type=${image_type}"} \
     ${boot_mode:+-F "boot_mode=${boot_mode}"} \
     ${error_type:+-F "error_type=${error_type}"} \
-    -F "${extra_key1}=${extra_value1}" \
-    -F "${extra_key2}=${extra_value2}" \
-    -F "guid=<${CONSENT_ID}" -o "${report_id}" 2>"${curl_stderr}"
+    -F "guid=<${CONSENT_ID}" \
+    -o "${report_id}" \
+    "$@" \
+    2>"${curl_stderr}"
   curl_result=$?
   set -e
 

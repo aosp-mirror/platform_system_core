@@ -45,6 +45,10 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
   if (!is_feedback_allowed_function_())
     return true;
 
+  if (exe_name.find('/') != std::string::npos) {
+    LOG(ERROR) << "exe_name contains illegal characters: " << exe_name;
+    return false;
+  }
 
   FilePath dir;
   uid_t uid = atoi(uid_string.c_str());
@@ -65,7 +69,7 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
     return false;
   }
 
-  if (!ParseCrashLog(data, dir, minidump_path)) {
+  if (!ParseCrashLog(data, dir, minidump_path, dump_basename)) {
     LOG(ERROR) << "Failed to parse Chrome's crash log";
     return false;
   }
@@ -81,27 +85,37 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
 
 bool ChromeCollector::ParseCrashLog(const std::string &data,
                                     const FilePath &dir,
-                                    const FilePath &minidump) {
+                                    const FilePath &minidump,
+                                    const std::string &basename) {
   size_t at = 0;
   while (at < data.size()) {
     // Look for a : followed by a decimal number, followed by another :
     // followed by N bytes of data.
     std::string name, size_string;
-    if (!GetDelimitedString(data, ':', at, &name))
+    if (!GetDelimitedString(data, ':', at, &name)) {
+      LOG(ERROR) << "Can't find : after name @ offset " << at;
       break;
+    }
     at += name.size() + 1; // Skip the name & : delimiter.
 
-    if (!GetDelimitedString(data, ':', at, &size_string))
+    if (!GetDelimitedString(data, ':', at, &size_string)) {
+      LOG(ERROR) << "Can't find : after size @ offset " << at;
       break;
+    }
     at += size_string.size() + 1; // Skip the size & : delimiter.
 
     size_t size;
-    if (!base::StringToSizeT(size_string, &size))
+    if (!base::StringToSizeT(size_string, &size)) {
+      LOG(ERROR) << "String not convertible to integer: " << size_string;
       break;
+    }
 
     // Data would run past the end, did we get a truncated file?
-    if (at + size > data.size())
+    if (at + size > data.size()) {
+      LOG(ERROR) << "Overrun, expected " << size << " bytes of data, got "
+        << (data.size() - at);
       break;
+    }
 
     if (name.find("filename") != std::string::npos) {
       // File.
@@ -110,19 +124,19 @@ bool ChromeCollector::ParseCrashLog(const std::string &data,
       // Descriptive name will be upload_file_minidump for the dump.
       std::string desc, filename;
       pcrecpp::RE re("(.*)\" *; *filename=\"(.*)\"");
-      if (!re.FullMatch(name.c_str(), &desc, &filename))
+      if (!re.FullMatch(name.c_str(), &desc, &filename)) {
+        LOG(ERROR) << "Filename was not in expected format: " << name;
         break;
+      }
 
-      if (filename.compare(kDefaultMinidumpName) == 0) {
+      if (desc.compare(kDefaultMinidumpName) == 0) {
         // The minidump.
         WriteNewFile(minidump, data.c_str() + at, size);
       } else {
         // Some other file.
-        FilePath path = GetCrashPath(dir, filename, "other");
+        FilePath path = GetCrashPath(dir, basename + "-" + filename, "other");
         if (WriteNewFile(path, data.c_str() + at, size) >= 0) {
-          std::string value = "@";
-          value.append(path.value());
-          AddCrashMetaData(desc, value);
+          AddCrashMetaUploadFile(desc, path.value());
         }
       }
     } else {
@@ -160,7 +174,7 @@ bool ChromeCollector::ParseCrashLog(const std::string &data,
            break;
         }
       }
-      AddCrashMetaData(name, value_str);
+      AddCrashMetaUploadData(name, value_str);
     }
 
     at += size;

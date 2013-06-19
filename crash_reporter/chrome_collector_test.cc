@@ -68,7 +68,8 @@ class ChromeCollectorTest : public ::testing::Test {
 TEST_F(ChromeCollectorTest, GoodValues) {
   FilePath dir(".");
   EXPECT_TRUE(collector_.ParseCrashLog(kCrashFormatGood,
-                                       dir, dir.Append("minidump.dmp")));
+                                       dir, dir.Append("minidump.dmp"),
+                                       "base"));
 
   // Check to see if the values made it in properly.
   std::string meta = collector_.extra_metadata_;
@@ -79,7 +80,8 @@ TEST_F(ChromeCollectorTest, GoodValues) {
 TEST_F(ChromeCollectorTest, Newlines) {
   FilePath dir(".");
   EXPECT_TRUE(collector_.ParseCrashLog(kCrashFormatEmbeddedNewline,
-                                       dir, dir.Append("minidump.dmp")));
+                                       dir, dir.Append("minidump.dmp"),
+                                       "base"));
 
   // Check to see if the values were escaped.
   std::string meta = collector_.extra_metadata_;
@@ -101,14 +103,16 @@ TEST_F(ChromeCollectorTest, BadValues) {
   for (size_t i = 0; i < sizeof(list) / sizeof(list[0]); i++) {
     chromeos::ClearLog();
     EXPECT_FALSE(collector_.ParseCrashLog(list[i].data,
-                                          dir, dir.Append("minidump.dmp")));
+                                          dir, dir.Append("minidump.dmp"),
+                                          "base"));
   }
 }
 
 TEST_F(ChromeCollectorTest, File) {
   FilePath dir(".");
   EXPECT_TRUE(collector_.ParseCrashLog(kCrashFormatWithFile,
-                                       dir, dir.Append("minidump.dmp")));
+                                       dir, dir.Append("minidump.dmp"),
+                                       "base"));
 
   // Check to see if the values are still correct and that the file was
   // written with the right data.
@@ -116,8 +120,9 @@ TEST_F(ChromeCollectorTest, File) {
   EXPECT_TRUE(meta.find("value1=abcdefghij") != std::string::npos);
   EXPECT_TRUE(meta.find("value2=12345") != std::string::npos);
   EXPECT_TRUE(meta.find("value3=ok") != std::string::npos);
-  ExpectFileEquals("12345\n789\n12345", "foo.txt.other");
-  file_util::Delete(dir.Append("foo.txt.other"), false);
+  ExpectFileEquals("12345\n789\n12345",
+                   dir.Append("base-foo.txt.other").value().c_str());
+  file_util::Delete(dir.Append("base-foo.txt.other"), false);
 }
 
 int main(int argc, char **argv) {

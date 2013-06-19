@@ -37,7 +37,8 @@ class ChromeCollector : public CrashCollector {
   // For file values, name actually contains both a description and a filename,
   // in a fixed format of: <description>"; filename="<filename>"
   bool ParseCrashLog(const std::string &data, const base::FilePath &dir,
-                     const base::FilePath &minidump);
+                     const base::FilePath &minidump,
+                     const std::string &basename);
 };
 
 #endif

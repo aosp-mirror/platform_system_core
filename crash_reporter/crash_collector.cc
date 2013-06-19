@@ -39,6 +39,8 @@ static const char kLeaveCoreFile[] = "/root/.leave_core";
 static const char kLsbRelease[] = "/etc/lsb-release";
 static const char kShellPath[] = "/bin/sh";
 static const char kSystemCrashPath[] = "/var/spool/crash";
+static const char kUploadVarPrefix[] = "upload_var_";
+static const char kUploadFilePrefix[] = "upload_file_";
 // Normally this path is not used.  Unfortunately, there are a few edge cases
 // where we need this.  Any process that runs as kDefaultUserName that crashes
 // is consider a "user crash".  That includes the initial Chrome browser that
@@ -477,6 +479,18 @@ bool CrashCollector::GetLogContents(const FilePath &config_path,
 void CrashCollector::AddCrashMetaData(const std::string &key,
                                       const std::string &value) {
   extra_metadata_.append(StringPrintf("%s=%s\n", key.c_str(), value.c_str()));
+}
+
+void CrashCollector::AddCrashMetaUploadFile(const std::string &key,
+                                            const std::string &path) {
+  if (!path.empty())
+    AddCrashMetaData(kUploadFilePrefix + key, path);
+}
+
+void CrashCollector::AddCrashMetaUploadData(const std::string &key,
+                                            const std::string &value) {
+  if (!value.empty())
+    AddCrashMetaData(kUploadVarPrefix + key, value);
 }
 
 void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,

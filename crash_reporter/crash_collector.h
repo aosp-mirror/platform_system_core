@@ -137,6 +137,16 @@ class CrashCollector {
   // "\n" characters.  Value must not contain "\n" characters.
   void AddCrashMetaData(const std::string &key, const std::string &value);
 
+  // Add a file to be uploaded to the crash reporter server. The file must
+  // persist until the crash report is sent; ideally it should live in the same
+  // place as the .meta file, so it can be cleaned up automatically.
+  void AddCrashMetaUploadFile(const std::string &key, const std::string &path);
+
+  // Add non-standard meta data to the crash metadata file.
+  // Data added though this call will be uploaded to the crash reporter server,
+  // appearing as a form field.
+  void AddCrashMetaUploadData(const std::string &key, const std::string &value);
+
   // Write a file of metadata about crash.
   void WriteCrashMetaData(const base::FilePath &meta_path,
                           const std::string &exec_name,
