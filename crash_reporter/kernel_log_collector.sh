@@ -9,12 +9,13 @@
 # And only those logs which are within the last YYY seconds of the latest log
 # that has the keyword XXX are printed.
 
-# Kernel log has the format
+# Kernel log has the possible formats:
 # 2013-06-14T16:31:40.514513-07:00 localhost kernel: [    2.682472] MSG MSG ...
+# 2013-06-19T20:38:58.661826+00:00 localhost kernel: [    1.668092] MSG MSG ...
 
 search_key=$1
 time_duration=$2
-msg_pattern="^[0-9-]*T[0-9:.-]* localhost kernel"
+msg_pattern="^[0-9-]*T[0-9:.+-]* localhost kernel"
 
 die() {
   echo "kernel_log_collector: $*" >&2
