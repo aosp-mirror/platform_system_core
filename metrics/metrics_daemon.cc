@@ -298,9 +298,8 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
   if (testing)
     return;
 
-  g_thread_init(NULL);
   g_type_init();
-  dbus_g_thread_init();
+  dbus_threads_init_default();
 
   DBusError error;
   dbus_error_init(&error);
