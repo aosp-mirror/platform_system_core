@@ -594,8 +594,7 @@ int do_restart(int nargs, char **args)
     struct service *svc;
     svc = service_find_by_name(args[1]);
     if (svc) {
-        service_stop(svc);
-        service_start(svc, NULL);
+        service_restart(svc);
     }
     return 0;
 }
