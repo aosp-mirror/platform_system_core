@@ -110,7 +110,6 @@ struct {
 };
 
 typedef struct {
-    void *data;
     size_t size;
     int fd;
 } workspace;
@@ -118,38 +117,13 @@ typedef struct {
 static int init_workspace(workspace *w, size_t size)
 {
     void *data;
-    int fd;
-
-        /* dev is a tmpfs that we can use to carve a shared workspace
-         * out of, so let's do that...
-         */
-    fd = open("/dev/__properties__", O_RDWR | O_CREAT | O_NOFOLLOW, 0600);
+    int fd = open(PROP_FILENAME, O_RDONLY | O_NOFOLLOW);
     if (fd < 0)
         return -1;
 
-    if (ftruncate(fd, size) < 0)
-        goto out;
-
-    data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if(data == MAP_FAILED)
-        goto out;
-
-    close(fd);
-
-    fd = open("/dev/__properties__", O_RDONLY | O_NOFOLLOW);
-    if (fd < 0)
-        return -1;
-
-    unlink("/dev/__properties__");
-
-    w->data = data;
     w->size = size;
     w->fd = fd;
     return 0;
-
-out:
-    close(fd);
-    return -1;
 }
 
 static workspace pa_workspace;
@@ -159,12 +133,13 @@ static int init_property_area(void)
     if (property_area_inited)
         return -1;
 
-    if(init_workspace(&pa_workspace, PA_SIZE))
+    if(__system_property_area_init())
+        return -1;
+
+    if(init_workspace(&pa_workspace, 0))
         return -1;
 
     fcntl(pa_workspace.fd, F_SETFD, FD_CLOEXEC);
-
-    __system_property_area_init(pa_workspace.data);
 
     property_area_inited = 1;
     return 0;
