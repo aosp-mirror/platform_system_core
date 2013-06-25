@@ -76,6 +76,7 @@ char *mkmsg(const char *fmt, ...)
 #define OP_NOTICE     4
 #define OP_FORMAT     5
 #define OP_DOWNLOAD_SPARSE 6
+#define OP_COMMAND_IGNORE_FAIL 7
 
 typedef struct Action Action;
 
@@ -374,6 +375,8 @@ int fb_format(Action *a, usb_handle *usb, int skip_if_not_supported)
 
     // Following piece of code is similar to fb_queue_flash() but executes
     // actions directly without queuing
+    snprintf(cmd, sizeof(cmd), "preflash:%s", partition);
+    fb_command(usb, cmd);  /* Ignore status */
     fprintf(stderr, "sending '%s' (%lli KB)...\n", partition, image.image_size/1024);
     status = fb_download_data(usb, image.buffer, image.image_size);
     if (status) goto cleanup;
@@ -402,6 +405,8 @@ void fb_queue_flash(const char *ptn, void *data, unsigned sz)
 {
     Action *a;
 
+    a = queue_action(OP_COMMAND_IGNORE_FAIL, "preflash:%s", ptn);
+    a->msg = mkmsg("prep for '%s' (%d KB)", ptn, sz / 1024);
     a = queue_action(OP_DOWNLOAD, "");
     a->data = data;
     a->size = sz;
@@ -415,6 +420,8 @@ void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, unsigned sz)
 {
     Action *a;
 
+    a = queue_action(OP_COMMAND_IGNORE_FAIL, "preflash:%s", ptn);
+    a->msg = mkmsg("prep for sparse '%s' (%d KB)", ptn, sz / 1024);
     a = queue_action(OP_DOWNLOAD_SPARSE, "");
     a->data = s;
     a->size = 0;
@@ -575,7 +582,9 @@ void fb_queue_command(const char *cmd, const char *msg)
 
 void fb_queue_download(const char *name, void *data, unsigned size)
 {
-    Action *a = queue_action(OP_DOWNLOAD, "");
+    Action *a;
+    a = queue_action(OP_COMMAND_IGNORE_FAIL, "preflash:");
+    a = queue_action(OP_DOWNLOAD, "");
     a->data = data;
     a->size = size;
     a->msg = mkmsg("downloading '%s'", name);
@@ -614,6 +623,8 @@ int fb_execute_queue(usb_handle *usb)
             status = fb_command(usb, a->cmd);
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
+        } else if (a->op == OP_COMMAND_IGNORE_FAIL) {
+            fb_command(usb, a->cmd);   /* Ignore status */
         } else if (a->op == OP_QUERY) {
             status = fb_command_response(usb, a->cmd, resp);
             status = a->func(a, status, status ? fb_get_error() : resp);

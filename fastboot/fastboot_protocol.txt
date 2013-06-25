@@ -1,5 +1,5 @@
 
-FastBoot  Version  0.4
+FastBoot  Version  0.4++
 ----------------------
 
 The fastboot protocol is a mechanism for communicating with bootloaders
@@ -67,10 +67,6 @@ Transport and Framing
 Example Session
 ---------------
 
-Host:    "getvar:version"        request version variable
-
-Client:  "OKAY0.4"               return version "0.4"
-
 Host:    "getvar:nonexistant"    request some undefined variable
 
 Client:  "OKAY"                  return value ""
@@ -123,6 +119,11 @@ Command Reference
   "flash:%s"           Write the previously downloaded image to the
                        named partition (if possible).
 
+  "preflash:%s"        Optionally prepare for a download + flash.
+                       E.g. flash directly during download. To deal with a
+                       failed "flash" followed by a "boot", we send
+                       "preflash:".
+
   "erase:%s"           Erase the indicated partition (clear to 0xFFs)
 
   "boot"               The previously downloaded data is a boot.img
@@ -140,7 +141,9 @@ Command Reference
 
   "powerdown"          Power off the device.
 
-
+* Note about sparse files
+  Large files can be split up using libsparse, and sent to the bootloader
+  as repeated chunks of "download:%08x" + "flash:%s".
 
 Client Variables
 ----------------
@@ -150,9 +153,6 @@ represent various information about the device and the software
 on it.
 
 The various currently defined names are:
-
-  version             Version of FastBoot protocol supported.
-                      It should be "0.3" for this document.
 
   version-bootloader  Version string for the Bootloader.
 
