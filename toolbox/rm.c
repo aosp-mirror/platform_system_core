@@ -45,8 +45,10 @@ static int unlink_recursive(const char* name, int flags)
             continue;
         sprintf(dn, "%s/%s", name, de->d_name);
         if (unlink_recursive(dn, flags) < 0) {
-            fail = 1;
-            break;
+            if (!(flags & OPT_FORCE)) {
+                fail = 1;
+                break;
+            }
         }
         errno = 0;
     }
@@ -71,6 +73,7 @@ int rm_main(int argc, char *argv[])
     int ret;
     int i, c;
     int flags = 0;
+    int something_failed = 0;
 
     if (argc < 2)
         return usage();
@@ -110,10 +113,14 @@ int rm_main(int argc, char *argv[])
 
         if (ret < 0) {
             fprintf(stderr, "rm failed for %s, %s\n", argv[i], strerror(errno));
-            return -1;
+            if (!(flags & OPT_FORCE)) {
+                return -1;
+            } else {
+                something_failed = 1;
+            }
         }
     }
 
-    return 0;
+    return something_failed;
 }
 
