@@ -383,8 +383,40 @@ typedef enum {
                                         // controls related to voice calls.
     AUDIO_OUTPUT_FLAG_FAST = 0x4,       // output supports "fast tracks",
                                         // defined elsewhere
-    AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8 // use deep audio buffers
+    AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8, // use deep audio buffers
+    AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD = 0x10,  // offload playback of compressed
+                                                // streams to hardware codec
+    AUDIO_OUTPUT_FLAG_NON_BLOCKING = 0x20 // use non-blocking write
 } audio_output_flags_t;
+
+/* Additional information about compressed streams offloaded to
+ * hardware playback
+ * The version and size fields must be initialized by the caller by using
+ * one of the constants defined here.
+ */
+typedef struct {
+    uint16_t version;                   // version of the info structure
+    uint16_t size;                      // total size of the structure including version and size
+    uint32_t sample_rate;               // sample rate in Hz
+    audio_channel_mask_t channel_mask;  // channel mask
+    audio_format_t format;              // audio format
+    audio_stream_type_t stream_type;    // stream type
+    uint32_t bit_rate;                  // bit rate in bits per second
+    int64_t duration_us;                // duration in microseconds, -1 if unknown
+    bool has_video;                     // true if stream is tied to a video stream
+    bool is_streaming;                  // true if streaming, false if local playback
+} audio_offload_info_t;
+
+#define AUDIO_MAKE_OFFLOAD_INFO_VERSION(maj,min) \
+            ((((maj) & 0xff) << 8) | ((min) & 0xff))
+
+#define AUDIO_OFFLOAD_INFO_VERSION_0_1 AUDIO_MAKE_OFFLOAD_INFO_VERSION(0, 1)
+#define AUDIO_OFFLOAD_INFO_VERSION_CURRENT AUDIO_OFFLOAD_INFO_VERSION_0_1
+
+static const audio_offload_info_t AUDIO_INFO_INITIALIZER = {
+    version: AUDIO_OFFLOAD_INFO_VERSION_CURRENT,
+    size: sizeof(audio_offload_info_t),
+};
 
 static inline bool audio_is_output_device(audio_devices_t device)
 {
