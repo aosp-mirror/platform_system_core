@@ -5,11 +5,38 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <time.h>
 
 static void usage(void)
 {
-        fprintf(stderr, "touch: usage: touch [-alm] [-t time_t] <file>\n");
+        fprintf(stderr, "touch: usage: touch [-alm] [-t YYYYMMDD[.hhmmss]] <file>\n");
         exit(1);
+}
+
+static time_t parse_time(char *s)
+{
+    struct tm tm;
+    int day = atoi(s);
+    int hour = 0;
+
+    while (*s && *s != '.') {
+        s++;
+    }
+
+    if (*s) {
+        s++;
+        hour = atoi(s);
+    }
+
+    tm.tm_year = day / 10000 - 1900;
+    tm.tm_mon = (day % 10000) / 100 - 1;
+    tm.tm_mday = day % 100;
+    tm.tm_hour = hour / 10000;
+    tm.tm_min = (hour % 10000) / 100;
+    tm.tm_sec = hour % 100;
+    tm.tm_isdst = -1;
+
+    return mktime(&tm);
 }
 
 int touch_main(int argc, char *argv[])
@@ -31,9 +58,9 @@ int touch_main(int argc, char *argv[])
                     case 't':
                         if ((i+1) >= argc)
                             usage();
-                        specified_time.tv_sec = atol(argv[++i]);
-                        if (specified_time.tv_sec == 0) {
-                            fprintf(stderr, "touch: invalid time_t\n");
+                        specified_time.tv_sec = parse_time(argv[++i]);
+                        if (specified_time.tv_sec == -1) {
+                            fprintf(stderr, "touch: invalid timestamp specified\n");
                             exit(1);
                         }
                         specified_time.tv_nsec = 0;
