@@ -286,21 +286,7 @@ void generate_ext4_image(struct image_data *image)
     int fd;
     struct stat st;
 
-#ifdef USE_MINGW
-    /* Ideally we should use tmpfile() here, the same as with unix version.
-     * But unfortunately it is not portable as it is not clear whether this
-     * function opens file in TEXT or BINARY mode.
-     *
-     * There are also some reports it is buggy:
-     *    http://pdplab.it.uom.gr/teaching/gcc_manuals/gnulib.html#tmpfile
-     *    http://www.mega-nerd.com/erikd/Blog/Windiots/tmpfile.html
-     */
-    char *filename = tempnam(getenv("TEMP"), "fastboot-format.img");
-    fd = open(filename, O_RDWR | O_CREAT | O_TRUNC | O_BINARY, 0644);
-    unlink(filename);
-#else
     fd = fileno(tmpfile());
-#endif
     make_ext4fs_sparse_fd(fd, image->partition_size, NULL, NULL);
 
     fstat(fd, &st);

@@ -135,21 +135,17 @@ char *find_item(const char *item, const char *product)
     return strdup(path);
 }
 
-#ifdef _WIN32
-void *load_file(const char *fn, unsigned *_sz);
-int64_t file_size(const char *fn);
-#else
 #if defined(__APPLE__) && defined(__MACH__)
 #define lseek64 lseek
 #define off64_t off_t
 #endif
 
-int64_t file_size(const char *fn)
+static int64_t file_size(const char *fn)
 {
     off64_t off;
     int fd;
 
-    fd = open(fn, O_RDONLY);
+    fd = open(fn, O_RDONLY | O_BINARY);
     if (fd < 0) return -1;
 
     off = lseek64(fd, 0, SEEK_END);
@@ -158,7 +154,7 @@ int64_t file_size(const char *fn)
     return off;
 }
 
-void *load_file(const char *fn, unsigned *_sz)
+static void *load_file(const char *fn, unsigned *_sz)
 {
     char *data;
     int sz;
@@ -166,7 +162,7 @@ void *load_file(const char *fn, unsigned *_sz)
     int errno_tmp;
 
     data = 0;
-    fd = open(fn, O_RDONLY);
+    fd = open(fn, O_RDONLY | O_BINARY);
     if(fd < 0) return 0;
 
     sz = lseek(fd, 0, SEEK_END);
@@ -190,7 +186,6 @@ oops:
     errno = errno_tmp;
     return 0;
 }
-#endif
 
 int match_fastboot_with_serial(usb_ifc_info *info, const char *local_serial)
 {
