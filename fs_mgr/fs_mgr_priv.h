@@ -69,6 +69,8 @@
 #define MF_VOLDMANAGED  0x10
 #define MF_LENGTH       0x20
 #define MF_RECOVERYONLY 0x40
+#define MF_SWAPPRIO     0x80
+#define MF_ZRAMSIZE     0x100
 
 #endif /* __CORE_FS_MGR_PRIV_H */
 

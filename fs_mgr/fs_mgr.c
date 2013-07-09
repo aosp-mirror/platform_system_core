@@ -27,6 +27,12 @@
 #include <sys/wait.h>
 #include <libgen.h>
 #include <time.h>
+#include <sys/swap.h>
+/* XXX These need to be obtained from kernel headers. See b/9336527 */
+#define SWAP_FLAG_PREFER        0x8000
+#define SWAP_FLAG_PRIO_MASK     0x7fff
+#define SWAP_FLAG_PRIO_SHIFT    0
+#define SWAP_FLAG_DISCARD       0x10000
 
 #include <private/android_filesystem_config.h>
 #include <cutils/partition_utils.h>
@@ -39,6 +45,9 @@
 #define KEY_IN_FOOTER  "footer"
 
 #define E2FSCK_BIN      "/system/bin/e2fsck"
+#define MKSWAP_BIN      "/system/bin/mkswap"
+
+#define ZRAM_CONF_DEV   "/sys/block/zram0/disksize"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
@@ -74,8 +83,19 @@ static struct flag_list fs_mgr_flags[] = {
     { "voldmanaged=",MF_VOLDMANAGED},
     { "length=",     MF_LENGTH },
     { "recoveryonly",MF_RECOVERYONLY },
+    { "swapprio=",   MF_SWAPPRIO },
+    { "zramsize=",   MF_ZRAMSIZE },
     { "defaults",    0 },
     { 0,             0 },
+};
+
+struct fs_mgr_flag_values {
+    char *key_loc;
+    long long part_length;
+    char *label;
+    int partnum;
+    int swap_prio;
+    unsigned int zram_size;
 };
 
 /*
@@ -109,7 +129,7 @@ static int wait_for_file(const char *filename, int timeout)
 }
 
 static int parse_flags(char *flags, struct flag_list *fl,
-                       char **key_loc, long long *part_length, char **label, int *partnum,
+                       struct fs_mgr_flag_values *flag_vals,
                        char *fs_options, int fs_options_len)
 {
     int f = 0;
@@ -117,21 +137,12 @@ static int parse_flags(char *flags, struct flag_list *fl,
     char *p;
     char *savep;
 
-    /* initialize key_loc to null, if we find an MF_CRYPT flag,
-     * then we'll set key_loc to the proper value */
-    if (key_loc) {
-        *key_loc = NULL;
-    }
-    /* initialize part_length to 0, if we find an MF_LENGTH flag,
-     * then we'll set part_length to the proper value */
-    if (part_length) {
-        *part_length = 0;
-    }
-    if (partnum) {
-        *partnum = -1;
-    }
-    if (label) {
-        *label = NULL;
+    /* initialize flag values.  If we find a relevant flag, we'll
+     * update the value */
+    if (flag_vals) {
+        memset(flag_vals, 0, sizeof(*flag_vals));
+        flag_vals->partnum = -1;
+        flag_vals->swap_prio = -1; /* negative means it wasn't specified. */
     }
 
     /* initialize fs_options to the null string */
@@ -147,17 +158,17 @@ static int parse_flags(char *flags, struct flag_list *fl,
         for (i = 0; fl[i].name; i++) {
             if (!strncmp(p, fl[i].name, strlen(fl[i].name))) {
                 f |= fl[i].flag;
-                if ((fl[i].flag == MF_CRYPT) && key_loc) {
+                if ((fl[i].flag == MF_CRYPT) && flag_vals) {
                     /* The encryptable flag is followed by an = and the
                      * location of the keys.  Get it and return it.
                      */
-                    *key_loc = strdup(strchr(p, '=') + 1);
-                } else if ((fl[i].flag == MF_LENGTH) && part_length) {
+                    flag_vals->key_loc = strdup(strchr(p, '=') + 1);
+                } else if ((fl[i].flag == MF_LENGTH) && flag_vals) {
                     /* The length flag is followed by an = and the
                      * size of the partition.  Get it and return it.
                      */
-                    *part_length = strtoll(strchr(p, '=') + 1, NULL, 0);
-                } else if ((fl[i].flag == MF_VOLDMANAGED) && label && partnum) {
+                    flag_vals->part_length = strtoll(strchr(p, '=') + 1, NULL, 0);
+                } else if ((fl[i].flag == MF_VOLDMANAGED) && flag_vals) {
                     /* The voldmanaged flag is followed by an = and the
                      * label, a colon and the partition number or the
                      * word "auto", e.g.
@@ -171,17 +182,21 @@ static int parse_flags(char *flags, struct flag_list *fl,
                     label_start = strchr(p, '=') + 1;
                     label_end = strchr(p, ':');
                     if (label_end) {
-                        *label = strndup(label_start,
-                                         (int) (label_end - label_start));
+                        flag_vals->label = strndup(label_start,
+                                                   (int) (label_end - label_start));
                         part_start = strchr(p, ':') + 1;
                         if (!strcmp(part_start, "auto")) {
-                            *partnum = -1;
+                            flag_vals->partnum = -1;
                         } else {
-                            *partnum = strtol(part_start, NULL, 0);
+                            flag_vals->partnum = strtol(part_start, NULL, 0);
                         }
                     } else {
                         ERROR("Warning: voldmanaged= flag malformed\n");
                     }
+                } else if ((fl[i].flag == MF_SWAPPRIO) && flag_vals) {
+                    flag_vals->swap_prio = strtoll(strchr(p, '=') + 1, NULL, 0);
+                } else if ((fl[i].flag == MF_ZRAMSIZE) && flag_vals) {
+                    flag_vals->zram_size = strtoll(strchr(p, '=') + 1, NULL, 0);
                 }
                 break;
             }
@@ -282,10 +297,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
     char *save_ptr, *p;
     struct fstab *fstab;
     struct fstab_rec *recs;
-    char *key_loc;
-    long long part_length;
-    char *label;
-    int partnum;
+    struct fs_mgr_flag_values flag_vals;
 #define FS_OPTIONS_LEN 1024
     char tmp_fs_options[FS_OPTIONS_LEN];
 
@@ -375,8 +387,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
             return 0;
         }
         tmp_fs_options[0] = '\0';
-        fstab->recs[cnt].flags = parse_flags(p, mount_flags,
-                                       NULL, NULL, NULL, NULL,
+        fstab->recs[cnt].flags = parse_flags(p, mount_flags, NULL,
                                        tmp_fs_options, FS_OPTIONS_LEN);
 
         /* fs_options are optional */
@@ -391,13 +402,13 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
             return 0;
         }
         fstab->recs[cnt].fs_mgr_flags = parse_flags(p, fs_mgr_flags,
-                                              &key_loc, &part_length,
-                                              &label, &partnum,
-                                              NULL, 0);
-        fstab->recs[cnt].key_loc = key_loc;
-        fstab->recs[cnt].length = part_length;
-        fstab->recs[cnt].label = label;
-        fstab->recs[cnt].partnum = partnum;
+                                                    &flag_vals, NULL, 0);
+        fstab->recs[cnt].key_loc = flag_vals.key_loc;
+        fstab->recs[cnt].length = flag_vals.part_length;
+        fstab->recs[cnt].label = flag_vals.label;
+        fstab->recs[cnt].partnum = flag_vals.partnum;
+        fstab->recs[cnt].swap_prio = flag_vals.swap_prio;
+        fstab->recs[cnt].zram_size = flag_vals.zram_size;
         cnt++;
     }
     fclose(fstab_file);
@@ -561,8 +572,9 @@ int fs_mgr_mount_all(struct fstab *fstab)
             continue;
         }
 
-        /* Skip raw partition entries such as boot, recovery, etc */
-        if (!strcmp(fstab->recs[i].fs_type, "emmc") ||
+        /* Skip swap and raw partition entries such as boot, recovery, etc */
+        if (!strcmp(fstab->recs[i].fs_type, "swap") ||
+            !strcmp(fstab->recs[i].fs_type, "emmc") ||
             !strcmp(fstab->recs[i].fs_type, "mtd")) {
             continue;
         }
@@ -634,8 +646,9 @@ int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
         }
 
         /* We found our match */
-        /* If this is a raw partition, report an error */
-        if (!strcmp(fstab->recs[i].fs_type, "emmc") ||
+        /* If this swap or a raw partition, report an error */
+        if (!strcmp(fstab->recs[i].fs_type, "swap") ||
+            !strcmp(fstab->recs[i].fs_type, "emmc") ||
             !strcmp(fstab->recs[i].fs_type, "mtd")) {
             ERROR("Cannot mount filesystem of type %s on %s\n",
                   fstab->recs[i].fs_type, n_blk_device);
@@ -714,6 +727,83 @@ int fs_mgr_unmount_all(struct fstab *fstab)
 
     return ret;
 }
+
+/* This must be called after mount_all, because the mkswap command needs to be
+ * available.
+ */
+int fs_mgr_swapon_all(struct fstab *fstab)
+{
+    int i = 0;
+    int flags = 0;
+    int err = 0;
+    int ret = 0;
+    int status;
+    char *mkswap_argv[2] = {
+        MKSWAP_BIN,
+        NULL
+    };
+
+    if (!fstab) {
+        return -1;
+    }
+
+    for (i = 0; i < fstab->num_entries; i++) {
+        /* Skip non-swap entries */
+        if (strcmp(fstab->recs[i].fs_type, "swap")) {
+            continue;
+        }
+
+        if (fstab->recs[i].zram_size > 0) {
+            /* A zram_size was specified, so we need to configure the
+             * device.  There is no point in having multiple zram devices
+             * on a system (all the memory comes from the same pool) so
+             * we can assume the device number is 0.
+             */
+            FILE *zram_fp;
+
+            zram_fp = fopen(ZRAM_CONF_DEV, "r+");
+            if (zram_fp == NULL) {
+                ERROR("Unable to open zram conf device " ZRAM_CONF_DEV);
+                ret = -1;
+                continue;
+            }
+            fprintf(zram_fp, "%d\n", fstab->recs[i].zram_size);
+            fclose(zram_fp);
+        }
+
+        if (fstab->recs[i].fs_mgr_flags & MF_WAIT) {
+            wait_for_file(fstab->recs[i].blk_device, WAIT_TIMEOUT);
+        }
+
+        /* Initialize the swap area */
+        mkswap_argv[1] = fstab->recs[i].blk_device;
+        err = android_fork_execvp_ext(ARRAY_SIZE(mkswap_argv), mkswap_argv,
+                                      &status, true, LOG_KLOG, false);
+        if (err) {
+            ERROR("mkswap failed for %s\n", fstab->recs[i].blk_device);
+            ret = -1;
+            continue;
+        }
+
+        /* If -1, then no priority was specified in fstab, so don't set
+         * SWAP_FLAG_PREFER or encode the priority */
+        if (fstab->recs[i].swap_prio >= 0) {
+            flags = (fstab->recs[i].swap_prio << SWAP_FLAG_PRIO_SHIFT) &
+                    SWAP_FLAG_PRIO_MASK;
+            flags |= SWAP_FLAG_PREFER;
+        } else {
+            flags = 0;
+        }
+        err = swapon(fstab->recs[i].blk_device, flags);
+        if (err) {
+            ERROR("swapon failed for %s\n", fstab->recs[i].blk_device);
+            ret = -1;
+        }
+    }
+
+    return ret;
+}
+
 /*
  * key_loc must be at least PROPERTY_VALUE_MAX bytes long
  *
