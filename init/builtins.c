@@ -516,6 +516,18 @@ int do_mount_all(int nargs, char **args)
     return ret;
 }
 
+int do_swapon_all(int nargs, char **args)
+{
+    struct fstab *fstab;
+    int ret;
+
+    fstab = fs_mgr_read_fstab(args[1]);
+    ret = fs_mgr_swapon_all(fstab);
+    fs_mgr_free_fstab(fstab);
+
+    return ret;
+}
+
 int do_setcon(int nargs, char **args) {
     if (is_selinux_enabled() <= 0)
         return 0;
