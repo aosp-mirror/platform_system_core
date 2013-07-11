@@ -22,6 +22,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <time.h>
+#include <ftw.h>
 
 #include <selinux/label.h>
 
@@ -518,4 +519,18 @@ int restorecon(const char *pathname)
     }
     freecon(secontext);
     return 0;
+}
+
+static int nftw_restorecon(const char* filename, const struct stat* statptr,
+    int fileflags, struct FTW* pftw)
+{
+    restorecon(filename);
+    return 0;
+}
+
+int restorecon_recursive(const char* pathname)
+{
+    int fd_limit = 20;
+    int flags = FTW_DEPTH | FTW_MOUNT | FTW_PHYS;
+    return nftw(pathname, nftw_restorecon, fd_limit, flags);
 }
