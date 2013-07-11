@@ -14,8 +14,13 @@
 #include <base/string_util.h>
 #include "chromeos/process.h"
 #include "chromeos/syslog_logging.h"
+#include "chromeos/dbus/dbus.h"
+#include "chromeos/dbus/service_constants.h"
 
 const char kDefaultMinidumpName[] = "upload_file_minidump";
+const char kTarPath[] = "/bin/tar";
+// From //net/crash/collector/collector.h
+const int kDefaultMaxUploadBytes = 1024 * 1024;
 
 namespace {
 
@@ -31,6 +36,78 @@ bool GetDelimitedString(const std::string &str, char ch, size_t offset,
   return true;
 }
 
+bool GetDriErrorState(const chromeos::dbus::Proxy &proxy,
+                      const FilePath &error_state_path) {
+  chromeos::glib::ScopedError error;
+  gchar *error_state = NULL;
+  if (!dbus_g_proxy_call(proxy.gproxy(), debugd::kGetLog,
+                         &chromeos::Resetter(&error).lvalue(),
+                         G_TYPE_STRING, "i915_error_state", G_TYPE_INVALID,
+                         G_TYPE_STRING, &error_state, G_TYPE_INVALID)) {
+    LOG(ERROR) << "Error performing D-Bus proxy call "
+               << "'" << debugd::kGetLog << "'"
+               << ": " << (error ? error->message : "");
+    g_free(error_state);
+    return false;
+  }
+
+  std::string error_state_str(error_state);
+  g_free(error_state);
+
+  if(error_state_str == "<empty>")
+    return false;
+
+  int written;
+  written = file_util::WriteFile(error_state_path, error_state_str.c_str(),
+                                 error_state_str.length());
+
+  if (written < 0 || (size_t)written != error_state_str.length()) {
+    LOG(ERROR) << "Could not write file " << error_state_path.value();
+    file_util::Delete(error_state_path, false);
+    return false;
+  }
+
+  return true;
+}
+
+bool GetAdditionalLogs(const FilePath &log_path) {
+  chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
+  if (!dbus.HasConnection()) {
+    LOG(ERROR) << "Error connecting to system D-Bus";
+    return false;
+  }
+
+  chromeos::dbus::Proxy proxy(dbus,
+                              debugd::kDebugdServiceName,
+                              debugd::kDebugdServicePath,
+                              debugd::kDebugdInterface);
+  if (!proxy) {
+    LOG(ERROR) << "Error creating D-Bus proxy to interface "
+               << "'" << debugd::kDebugdServiceName << "'";
+    return false;
+  }
+
+  FilePath error_state_path = log_path.DirName().Append("i915_error_state.log");
+  if (!GetDriErrorState(proxy, error_state_path))
+    return false;
+
+  chromeos::ProcessImpl tar_process;
+  tar_process.AddArg(kTarPath);
+  tar_process.AddArg("cfz");
+  tar_process.AddArg(log_path.value());
+  tar_process.AddStringOption("-C", log_path.DirName().value());
+  tar_process.AddArg(error_state_path.BaseName().value());
+  int res = tar_process.Run();
+
+  file_util::Delete(error_state_path, false);
+
+  if (res || !file_util::PathExists(log_path)) {
+    LOG(ERROR) << "Could not tar file " << log_path.value();
+    return false;
+  }
+
+  return true;
+}
 } //namespace
 
 
@@ -61,7 +138,7 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
   std::string dump_basename = FormatDumpBasename(exe_name, time(NULL), pid);
   FilePath meta_path = GetCrashPath(dir, dump_basename, "meta");
   FilePath minidump_path = GetCrashPath(dir, dump_basename, "dmp");
-  FilePath log_path = GetCrashPath(dir, dump_basename, "log");
+  FilePath log_path = GetCrashPath(dir, dump_basename, "log.tgz");
 
   std::string data;
   if (!file_util::ReadFileToString(FilePath(file_path), &data)) {
@@ -74,8 +151,20 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
     return false;
   }
 
-  if (GetLogContents(FilePath(log_config_path_), exe_name, log_path))
-    AddCrashMetaData("log", log_path.value());
+  if (GetAdditionalLogs(log_path)) {
+    int64 minidump_size = 0;
+    int64 log_size = 0;
+    if (file_util::GetFileSize(minidump_path, &minidump_size) &&
+        file_util::GetFileSize(log_path, &log_size) &&
+        minidump_size > 0 && log_size > 0 &&
+        minidump_size + log_size < kDefaultMaxUploadBytes) {
+      AddCrashMetaData("log", log_path.value());
+    } else {
+      LOG(INFO) << "Skipping logs upload to prevent discarding minidump "
+          "because of report size limit < " << minidump_size + log_size;
+      file_util::Delete(log_path, false);
+    }
+  }
 
   // We're done.
   WriteCrashMetaData(meta_path, exe_name, minidump_path.value());
