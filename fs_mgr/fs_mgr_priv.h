@@ -25,16 +25,6 @@
 
 #define CRYPTO_TMPFS_OPTIONS "size=128m,mode=0771,uid=1000,gid=1000"
 
-struct fstab_rec {
-    char *blk_dev;
-    char *mnt_point;
-    char *type;
-    unsigned long flags;
-    char *fs_options;
-    int fs_mgr_flags;
-    char *key_loc;
-};
-
 #define WAIT_TIMEOUT 20
 
 /* fstab has the following format:
