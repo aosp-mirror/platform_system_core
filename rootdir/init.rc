@@ -134,10 +134,10 @@ loglevel 3
 on fs
 # mount mtd partitions
     # Mount /system rw first to give the filesystem a chance to save a checkpoint
-    mount yaffs2 mtd@system /system
-    mount yaffs2 mtd@system /system ro remount
-    mount yaffs2 mtd@userdata /data nosuid nodev
-    mount yaffs2 mtd@cache /cache nosuid nodev
+    mount ext4 mtd@system /system
+    mount ext4 mtd@system /system ro remount
+    mount ext4 mtd@userdata /data nosuid nodev
+    mount ext4 mtd@cache /cache nosuid nodev
 
 on post-fs
     # once everything is setup, no need to modify /
