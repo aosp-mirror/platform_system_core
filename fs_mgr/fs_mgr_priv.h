@@ -35,7 +35,7 @@ struct fstab_rec {
     char *key_loc;
 };
 
-#define WAIT_TIMEOUT 5
+#define WAIT_TIMEOUT 20
 
 /* fstab has the following format:
  *
