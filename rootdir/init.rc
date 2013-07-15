@@ -131,14 +131,6 @@ loglevel 3
 # This is needed by any process that uses socket tagging.
     chmod 0644 /dev/xt_qtaguid
 
-on fs
-# mount mtd partitions
-    # Mount /system rw first to give the filesystem a chance to save a checkpoint
-    mount ext4 mtd@system /system
-    mount ext4 mtd@system /system ro remount
-    mount ext4 mtd@userdata /data nosuid nodev
-    mount ext4 mtd@cache /cache nosuid nodev
-
 on post-fs
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
