@@ -41,4 +41,5 @@ void get_hardware_name(char *hardware, unsigned int *revision);
 void import_kernel_cmdline(int in_qemu, void (*import_kernel_nv)(char *name, int in_qemu));
 int make_dir(const char *path, mode_t mode);
 int restorecon(const char *pathname);
+int restorecon_recursive(const char *pathname);
 #endif
