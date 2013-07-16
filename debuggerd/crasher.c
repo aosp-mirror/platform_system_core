@@ -47,17 +47,19 @@ static int smash_stack(int i) {
     // Unless there's a "big enough" buffer on the stack, gcc
     // doesn't bother inserting checks.
     char buf[8];
-    // If we don't write something relatively unpredicatable
+    // If we don't write something relatively unpredictable
     // into the buffer and then do something with it, gcc
     // optimizes everything away and just returns a constant.
     *(int*)(&buf[7]) = (uintptr_t) &buf[0];
     return *(int*)(&buf[0]);
 }
 
+static void* global = 0; // So GCC doesn't optimize the tail recursion out of overflow_stack.
+
 __attribute__((noinline)) static void overflow_stack(void* p) {
-    fprintf(stderr, "p = %p\n", p);
     void* buf[1];
     buf[0] = p;
+    global = buf;
     overflow_stack(&buf);
 }
 
