@@ -52,6 +52,7 @@ protected:
     BasicHashtableImpl(size_t entrySize, bool hasTrivialDestructor,
             size_t minimumInitialCapacity, float loadFactor);
     BasicHashtableImpl(const BasicHashtableImpl& other);
+    virtual ~BasicHashtableImpl();
 
     void dispose();
 

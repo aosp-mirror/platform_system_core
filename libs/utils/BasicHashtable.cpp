@@ -42,6 +42,10 @@ BasicHashtableImpl::BasicHashtableImpl(const BasicHashtableImpl& other) :
     }
 }
 
+BasicHashtableImpl::~BasicHashtableImpl()
+{
+}
+
 void BasicHashtableImpl::dispose() {
     if (mBuckets) {
         releaseBuckets(mBuckets, mBucketCount);
