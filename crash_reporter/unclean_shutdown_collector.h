@@ -30,7 +30,6 @@ class UncleanShutdownCollector : public CrashCollector {
  private:
   friend class UncleanShutdownCollectorTest;
   FRIEND_TEST(UncleanShutdownCollectorTest, EnableCannotWrite);
-  FRIEND_TEST(UncleanShutdownCollectorTest, CollectDeadBatteryRunningLow);
   FRIEND_TEST(UncleanShutdownCollectorTest, CollectDeadBatterySuspended);
 
   bool DeleteUncleanShutdownFiles();
@@ -42,7 +41,6 @@ class UncleanShutdownCollector : public CrashCollector {
   const char *unclean_shutdown_file_;
   base::FilePath powerd_trace_path_;
   base::FilePath powerd_suspended_file_;
-  base::FilePath powerd_low_battery_file_;
 };
 
 #endif  // _CRASH_REPORTER_UNCLEAN_SHUTDOWN_COLLECTOR_H_

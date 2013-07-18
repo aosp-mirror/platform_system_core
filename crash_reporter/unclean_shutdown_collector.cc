@@ -14,16 +14,13 @@ static const char kUncleanShutdownFile[] =
 static const char kPowerdTracePath[] = "/var/lib/power_manager";
 // Presence of this file indicates that the system was suspended
 static const char kPowerdSuspended[] = "powerd_suspended";
-// Presence of this file indicates that the battery was critically low.
-static const char kPowerdLowBattery[] = "powerd_low_battery";
 
 using base::FilePath;
 
 UncleanShutdownCollector::UncleanShutdownCollector()
     : unclean_shutdown_file_(kUncleanShutdownFile),
       powerd_trace_path_(kPowerdTracePath),
-      powerd_suspended_file_(powerd_trace_path_.Append(kPowerdSuspended)),
-      powerd_low_battery_file_(powerd_trace_path_.Append(kPowerdLowBattery)) {
+      powerd_suspended_file_(powerd_trace_path_.Append(kPowerdSuspended)) {
 }
 
 UncleanShutdownCollector::~UncleanShutdownCollector() {
@@ -45,9 +42,8 @@ bool UncleanShutdownCollector::DeleteUncleanShutdownFiles() {
                << unclean_shutdown_file_;
     return false;
   }
-  // Delete power manager trace files if they exist.
+  // Delete power manager state file if it exists.
   file_util::Delete(powerd_suspended_file_, false);
-  file_util::Delete(powerd_low_battery_file_, false);
   return true;
 }
 
@@ -74,20 +70,11 @@ bool UncleanShutdownCollector::Disable() {
   return DeleteUncleanShutdownFiles();
 }
 
-bool UncleanShutdownCollector::DeadBatteryCausedUncleanShutdown()
-{
+bool UncleanShutdownCollector::DeadBatteryCausedUncleanShutdown() {
   // Check for case of battery running out while suspended.
   if (file_util::PathExists(powerd_suspended_file_)) {
     LOG(INFO) << "Unclean shutdown occurred while suspended. Not counting "
               << "toward unclean shutdown statistic.";
-    return true;
-  }
-  // Check for case of battery running out after resuming from a low-battery
-  // suspend.
-  if (file_util::PathExists(powerd_low_battery_file_)) {
-    LOG(INFO) << "Unclean shutdown occurred while running with battery "
-              << "critically low.  Not counting toward unclean shutdown "
-              << "statistic.";
     return true;
   }
   return false;
