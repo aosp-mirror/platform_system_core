@@ -4,6 +4,7 @@
 
 #include "crash-reporter/chrome_collector.h"
 
+#include <glib.h>
 #include <pcrecpp.h>
 #include <string>
 #include <vector>
@@ -54,14 +55,26 @@ bool GetDriErrorState(const chromeos::dbus::Proxy &proxy,
   std::string error_state_str(error_state);
   g_free(error_state);
 
-  if(error_state_str == "<empty>")
+  if (error_state_str == "<empty>")
     return false;
 
-  int written;
-  written = file_util::WriteFile(error_state_path, error_state_str.c_str(),
-                                 error_state_str.length());
+  const char kBase64Header[] = "<base64>: ";
+  const size_t kBase64HeaderLength = sizeof(kBase64Header) - 1;
+  if (error_state_str.compare(0, kBase64HeaderLength, kBase64Header)) {
+    LOG(ERROR) << "i915_error_state is missing base64 header";
+    return false;
+  }
 
-  if (written < 0 || (size_t)written != error_state_str.length()) {
+  gsize len;
+  guchar *decoded_error_state =
+      g_base64_decode(error_state_str.c_str() + kBase64HeaderLength, &len);
+
+  int written;
+  written = file_util::WriteFile(error_state_path,
+      reinterpret_cast<const char*>(decoded_error_state), len);
+  g_free(decoded_error_state);
+
+  if (written < 0 || (gsize)written != len) {
     LOG(ERROR) << "Could not write file " << error_state_path.value();
     file_util::Delete(error_state_path, false);
     return false;
@@ -87,13 +100,14 @@ bool GetAdditionalLogs(const FilePath &log_path) {
     return false;
   }
 
-  FilePath error_state_path = log_path.DirName().Append("i915_error_state.log");
+  FilePath error_state_path =
+      log_path.DirName().Append("i915_error_state.log.xz");
   if (!GetDriErrorState(proxy, error_state_path))
     return false;
 
   chromeos::ProcessImpl tar_process;
   tar_process.AddArg(kTarPath);
-  tar_process.AddArg("cfz");
+  tar_process.AddArg("cfJ");
   tar_process.AddArg(log_path.value());
   tar_process.AddStringOption("-C", log_path.DirName().value());
   tar_process.AddArg(error_state_path.BaseName().value());
@@ -138,7 +152,7 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
   std::string dump_basename = FormatDumpBasename(exe_name, time(NULL), pid);
   FilePath meta_path = GetCrashPath(dir, dump_basename, "meta");
   FilePath minidump_path = GetCrashPath(dir, dump_basename, "dmp");
-  FilePath log_path = GetCrashPath(dir, dump_basename, "log.tgz");
+  FilePath log_path = GetCrashPath(dir, dump_basename, "log.tar.xz");
 
   std::string data;
   if (!file_util::ReadFileToString(FilePath(file_path), &data)) {
