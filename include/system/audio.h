@@ -477,18 +477,18 @@ static inline bool audio_is_remote_submix_device(audio_devices_t device)
         return false;
 }
 
-static inline bool audio_is_input_channel(uint32_t channel)
+static inline bool audio_is_input_channel(audio_channel_mask_t channel)
 {
     if ((channel & ~AUDIO_CHANNEL_IN_ALL) == 0)
-        return true;
+        return channel != 0;
     else
         return false;
 }
 
-static inline bool audio_is_output_channel(uint32_t channel)
+static inline bool audio_is_output_channel(audio_channel_mask_t channel)
 {
     if ((channel & ~AUDIO_CHANNEL_OUT_ALL) == 0)
-        return true;
+        return channel != 0;
     else
         return false;
 }
