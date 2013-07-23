@@ -65,10 +65,7 @@ ifneq ($(strip $(USE_MINGW)),)
     WINDOWS_HOST_ONLY := 1
 endif
 
-ifeq ($(WINDOWS_HOST_ONLY),1)
-    commonSources += \
-        uio.c
-else
+ifneq ($(WINDOWS_HOST_ONLY),1)
     commonSources += \
         fs.c \
         multiuser.c

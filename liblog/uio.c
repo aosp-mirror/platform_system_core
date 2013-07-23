@@ -16,7 +16,7 @@
 
 #ifndef HAVE_SYS_UIO_H
 
-#include <cutils/uio.h>
+#include <log/uio.h>
 #include <unistd.h>
 
 int  readv( int  fd, struct iovec*  vecs, int  count )

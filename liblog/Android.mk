@@ -36,6 +36,9 @@ ifndef WITH_MINGW
     liblog_sources += \
         logprint.c \
         event_tag_map.c
+else
+    liblog_sources += \
+        uio.c
 endif
 
 liblog_host_sources := $(liblog_sources) fake_log_device.c

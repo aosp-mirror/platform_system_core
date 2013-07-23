@@ -22,7 +22,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <signal.h>
-#include <cutils/logd.h>
+#include <log/logd.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <arpa/inet.h>
