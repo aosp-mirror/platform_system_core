@@ -17,10 +17,11 @@
 #ifndef ANDROID_THREAD_DEFS_H
 #define ANDROID_THREAD_DEFS_H
 
-#include <sys/cdefs.h>
 #include "graphics.h"
 
-__BEGIN_DECLS
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
 enum {
     /*
@@ -69,6 +70,8 @@ enum {
     ANDROID_PRIORITY_LESS_FAVORABLE = +1,
 };
 
-__END_DECLS
+#if defined(__cplusplus)
+}
+#endif
 
 #endif /* ANDROID_THREAD_DEFS_H */
