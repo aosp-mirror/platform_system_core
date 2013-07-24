@@ -66,6 +66,7 @@ ifeq ($(HOST_OS), linux)
 LOCAL_SRC_FILES += Looper.cpp
 endif
 LOCAL_MODULE:= libutils
+LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(host_commonCflags)
 LOCAL_LDLIBS += $(host_commonLdlibs)
 include $(BUILD_HOST_STATIC_LIBRARY)
@@ -79,6 +80,7 @@ ifeq ($(HOST_OS), linux)
 LOCAL_SRC_FILES += Looper.cpp
 endif
 LOCAL_MODULE:= lib64utils
+LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(host_commonCflags) -m64
 LOCAL_LDLIBS += $(host_commonLdlibs)
 include $(BUILD_HOST_STATIC_LIBRARY)
