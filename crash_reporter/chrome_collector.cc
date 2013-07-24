@@ -4,15 +4,20 @@
 
 #include "crash-reporter/chrome_collector.h"
 
+#include <fstream>
 #include <glib.h>
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 #include <pcrecpp.h>
 #include <string>
 #include <vector>
 
 #include <base/file_util.h>
 #include <base/logging.h>
+#include <base/rand_util.h>
 #include <base/string_number_conversions.h>
 #include <base/string_util.h>
+#include <base/stringprintf.h>
 #include "chromeos/process.h"
 #include "chromeos/syslog_logging.h"
 #include "chromeos/dbus/dbus.h"
@@ -22,6 +27,33 @@ const char kDefaultMinidumpName[] = "upload_file_minidump";
 const char kTarPath[] = "/bin/tar";
 // From //net/crash/collector/collector.h
 const int kDefaultMaxUploadBytes = 1024 * 1024;
+
+const char kHeader[] = "kernel_task_states";
+const char kEnter[] = "enter";
+const char kLeave[] = "leave";
+const char kSyslogPath[] = "/var/log/messages";
+const char kFirstTwoColumnsRE[] = "\\S+\\s+\\S+\\s+";
+const char kIdent[] = "crash_reporter";
+const char kSpacesRE[] = "\\s+";
+const char kKernelIdentRE[] = "kernel:";
+const char kKernelTimestampRE[] = "\\[\\s*\\d+\\.\\d+\\]";
+const char kTaskNameRE[] = "(.{15})";
+// kernel's TASK_STATE_TO_CHAR_STR + '?'
+const char kTaskStateRE[] = "([RSDTtZXxKW?])";
+const char kHexNumRE[] = "([[:xdigit:]]+)";
+const char kNumRE[] = "([[:digit:]]+)";
+const char kRunning32[] = "running ";
+const char kRunning64[] = " running task   ";
+// This regex matches symbol+offset as printed by printk(%pB) or (%pS).
+// See https://www.kernel.org/doc/Documentation/printk-formats.txt
+// As noted in http://sourceware.org/binutils/docs-2.23.1/as/Symbol-Names.html
+// symbols may contain periods and dollars, like "scm_recv.isra.18+0x61/0xdf".
+// Strangely, occasionally there is an additional string following the symbol,
+// like "qcusbnet_get+0x3e4/0x1e46 [gobi]".
+// Those lines will be missing in the output, as parsing them is troublesome.
+// Sometimes the address is printed and not the symbol. Those are ignored too.
+const char kSymbolAndOffsetRE[] =
+    "([[:alpha:]._$][[:alnum:]._$]*)\\+0x([[:xdigit:]]+)/0x([[:xdigit:]]+)";
 
 namespace {
 
@@ -83,6 +115,216 @@ bool GetDriErrorState(const chromeos::dbus::Proxy &proxy,
   return true;
 }
 
+bool LogKernelTaskStates(const chromeos::dbus::Proxy &proxy,
+                         const std::string &task_states_id) {
+  // Wrap task states with unique id - header
+  LOG(INFO) << kHeader << " " << task_states_id.c_str() << " " << kEnter;
+
+  // Trigger asynchronous logging of task states
+  chromeos::glib::ScopedError error;
+  if (!dbus_g_proxy_call(proxy.gproxy(), debugd::kLogKernelTaskStates,
+                         &chromeos::Resetter(&error).lvalue(),
+                         G_TYPE_INVALID, G_TYPE_INVALID)) {
+    LOG(ERROR) << "Error performing D-Bus proxy call "
+               << "'" << debugd::kLogKernelTaskStates << "'"
+               << ": " << (error ? error->message : "");
+    return false;
+  }
+
+  // Give kernel a second to finish the asynchronous logging
+  sleep(1);
+  // Wrap task states with unique id - footer
+  LOG(INFO) << kHeader << " " << task_states_id.c_str() << " " << kLeave;
+
+  return true;
+}
+
+bool GetKernelTaskStates(const chromeos::dbus::Proxy &proxy,
+                         std::vector<std::string> *output) {
+  std::string task_states_id = StringPrintf("%016"PRIX64, base::RandUint64());
+
+  if (!LogKernelTaskStates(proxy, task_states_id))
+    return false;
+
+  std::ifstream syslog_stream(kSyslogPath, std::ios::in);
+  if (!syslog_stream.is_open()) {
+    LOG(ERROR) << "Couldn't open syslog for reading";
+    return false;
+  }
+
+  std::string ident_re = StringPrintf("%s\\[%d\\]:\\s+", kIdent, getpid());
+  // 2013-07-05T11:52:55.530503-07:00 localhost crash_reporter[9349]:
+  // kernel_task_states 33F114E753768B70 enter
+  pcrecpp::RE enter_re(kFirstTwoColumnsRE + ident_re + kHeader + " " +
+                       task_states_id + " " + kEnter);
+  // 2013-07-05T11:52:56.556177-07:00 localhost crash_reporter[9349]:
+  // kernel_task_states 33F114E753768B70 leave
+  pcrecpp::RE leave_re(kFirstTwoColumnsRE + ident_re + kHeader + " " +
+                       task_states_id + " " + kLeave);
+  // 2013-06-21T21:18:14.855071+00:00 localhost kernel: [362142.027766]
+  // NSS SSL ThreadW S 804f8e28     0  5995   1016 0x00000000
+  pcrecpp::RE task_header_re(std::string(kFirstTwoColumnsRE) +
+                             kKernelIdentRE + kSpacesRE +
+                             kKernelTimestampRE + kSpacesRE +
+                             kTaskNameRE + kSpacesRE +
+                             kTaskStateRE + kSpacesRE +
+                             kHexNumRE + kSpacesRE +
+                             kNumRE + kSpacesRE +
+                             kNumRE + kSpacesRE +
+                             kNumRE + kSpacesRE +
+                             "0x" + kHexNumRE);
+  // 2013-06-21T21:18:14.815190+00:00 localhost kernel: [362142.016915]
+  // rsyslogd        R running      0   340      1 0x00000000
+  pcrecpp::RE task_header_run32_re(std::string(kFirstTwoColumnsRE) +
+                                   kKernelIdentRE + kSpacesRE +
+                                   kKernelTimestampRE + kSpacesRE +
+                                   kTaskNameRE + kSpacesRE +
+                                   kTaskStateRE + kSpacesRE +
+                                   kRunning32 + kSpacesRE +
+                                   kNumRE + kSpacesRE +
+                                   kNumRE + kSpacesRE +
+                                   kNumRE + kSpacesRE +
+                                   "0x" + kHexNumRE);
+  // 2013-06-21T14:11:18.718810-07:00 localhost kernel: [  656.217932]
+  // kworker/2:1     R  running task        0    54      2 0x00000000
+  pcrecpp::RE task_header_run64_re(std::string(kFirstTwoColumnsRE) +
+                                   kKernelIdentRE + kSpacesRE +
+                                   kKernelTimestampRE + kSpacesRE +
+                                   kTaskNameRE + kSpacesRE +
+                                   kTaskStateRE + kSpacesRE +
+                                   kRunning64 + kSpacesRE +
+                                   kNumRE + kSpacesRE +
+                                   kNumRE + kSpacesRE +
+                                   kNumRE + kSpacesRE +
+                                   "0x" + kHexNumRE);
+  std::string address_re = std::string("\\[<") + kHexNumRE + ">\\]";
+  std::string braced_sym_re = std::string("\\(") + kSymbolAndOffsetRE + "\\)";
+  // 2013-07-05T11:53:20.141355-07:00 localhost kernel: [  169.476749]
+  // [<8002fb74>] (do_wait+0x1a8/0x248) from [<80030c48>] (sys_wait4+0xbc/0xf8)
+  pcrecpp::RE arm_stack_re(std::string(kFirstTwoColumnsRE) +
+                           kKernelIdentRE + kSpacesRE +
+                           kKernelTimestampRE + kSpacesRE +
+                           address_re + kSpacesRE +
+                           braced_sym_re + kSpacesRE +
+                           "from" + kSpacesRE +
+                           address_re + kSpacesRE +
+                           braced_sym_re);
+  // 2013-06-21T14:12:34.457315-07:00 localhost kernel: [  731.965907]
+  // [<ffffffff814aa602>] ? system_call_fastpath+0x16/0x1b
+  pcrecpp::RE x86_stack_re(std::string(kFirstTwoColumnsRE) +
+                           kKernelIdentRE + kSpacesRE +
+                           kKernelTimestampRE + kSpacesRE +
+                           address_re + kSpacesRE +
+                           "(\\?\\s+)?" +
+                           kSymbolAndOffsetRE);
+
+  bool enter_matched = false;
+  bool leave_matched = false;
+  uint64 prev_address = 0;
+  std::string line;
+  while (std::getline(syslog_stream, line)) {
+    if (leave_re.FullMatch(line)) {
+      if (!enter_matched) {
+        LOG(ERROR) << "Task states header not found before footer";
+        return false;
+      }
+      leave_matched = true;
+      break;  // Stop processing input after footer
+    }
+
+    if (enter_re.FullMatch(line)) {
+      if (enter_matched) {
+        LOG(ERROR) << "Task states header encountered twice";
+        return false;
+      }
+      enter_matched = true;
+      continue;
+    }
+
+    if(!enter_matched)
+      continue;  // Skip lines before header
+
+    std::string task_name, task_state;
+    uint64 address1, address2;
+    unsigned long free_stack;
+    pid_t pid, ppid;
+    unsigned long flags;
+    std::string sym1, sym2;
+    uint64 offset1a, offset1b, offset2a, offset2b;
+    std::string question;
+
+    if (task_header_re.FullMatch(line, &task_name, &task_state,
+                                 pcrecpp::Hex(&address1), &free_stack, &pid,
+                                 &ppid, pcrecpp::Hex(&flags))) {
+      prev_address = 0;
+      output->push_back(StringPrintf("%s %s %016"PRIx64" %5lu %5d %6d 0x%08lx",
+                                     task_name.c_str(), task_state.c_str(),
+                                     address1, free_stack, pid, ppid, flags));
+    } else if (task_header_run32_re.FullMatch(line, &task_name, &task_state,
+                                              &free_stack, &pid, &ppid,
+                                              pcrecpp::Hex(&flags)) ||
+        task_header_run64_re.FullMatch(line, &task_name, &task_state,
+                                       &free_stack, &pid, &ppid,
+                                       pcrecpp::Hex(&flags))) {
+      prev_address = 0;
+      output->push_back(StringPrintf("%s %s %s %5lu %5d %6d 0x%08lx",
+                                     task_name.c_str(), task_state.c_str(),
+                                     kRunning64, free_stack, pid, ppid, flags));
+    } else if (arm_stack_re.FullMatch(line, pcrecpp::Hex(&address1), &sym1,
+                                      pcrecpp::Hex(&offset1a),
+                                      pcrecpp::Hex(&offset1b),
+                                      pcrecpp::Hex(&address2), &sym2,
+                                      pcrecpp::Hex(&offset2a),
+                                      pcrecpp::Hex(&offset2b))) {
+      if (prev_address != address1) {
+        output->push_back(StringPrintf("%s+0x%"PRIx64"/0x%"PRIx64,
+                                       sym1.c_str(), offset1a, offset1b));
+      }
+      output->push_back(StringPrintf("%s+0x%"PRIx64"/0x%"PRIx64,
+                                     sym2.c_str(), offset2a, offset2b));
+      prev_address = address2;
+    } else if (x86_stack_re.FullMatch(line, pcrecpp::Hex(&address1), &question,
+                                      &sym1, pcrecpp::Hex(&offset1a),
+                                      pcrecpp::Hex(&offset1b))) {
+      output->push_back(StringPrintf("%s%s+0x%"PRIx64"/0x%"PRIx64,
+                                     question.c_str(), sym1.c_str(),
+                                     offset1a, offset1b));
+    }
+  }
+  syslog_stream.close();
+
+  if(!enter_matched || !leave_matched) {
+    LOG(ERROR) << "Task states header or footer not found";
+    return false;
+  }
+
+  return true;
+}
+
+bool WriteKernelTaskStates(const chromeos::dbus::Proxy &proxy,
+                           const FilePath &task_states_path) {
+  std::ofstream task_states_stream(task_states_path.value().c_str(),
+                                   std::ios::out);
+  if (!task_states_stream.is_open()) {
+    LOG(ERROR) << "Could not write file " << task_states_path.value();
+    return false;
+  }
+
+  std::vector<std::string> task_sates;
+  if (!GetKernelTaskStates(proxy, &task_sates)) {
+    file_util::Delete(task_states_path, false);
+    return false;
+  }
+
+  for (std::vector<std::string>::iterator it = task_sates.begin();
+      it != task_sates.end(); ++it) {
+    task_states_stream << *it << std::endl;
+  }
+  task_states_stream.close();
+
+  return true;
+}
+
 bool GetAdditionalLogs(const FilePath &log_path) {
   chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
   if (!dbus.HasConnection()) {
@@ -102,7 +344,17 @@ bool GetAdditionalLogs(const FilePath &log_path) {
 
   FilePath error_state_path =
       log_path.DirName().Append("i915_error_state.log.xz");
-  if (!GetDriErrorState(proxy, error_state_path))
+  bool has_dri_error_state = false;
+  if (GetDriErrorState(proxy, error_state_path))
+    has_dri_error_state = true;
+
+  FilePath task_states_path = log_path.DirName().Append("task_states.log");
+  bool has_task_states = false;
+  if (WriteKernelTaskStates(proxy, task_states_path)) {
+    has_task_states = true;
+  }
+
+  if (!has_dri_error_state && !has_task_states)
     return false;
 
   chromeos::ProcessImpl tar_process;
@@ -110,10 +362,14 @@ bool GetAdditionalLogs(const FilePath &log_path) {
   tar_process.AddArg("cfJ");
   tar_process.AddArg(log_path.value());
   tar_process.AddStringOption("-C", log_path.DirName().value());
-  tar_process.AddArg(error_state_path.BaseName().value());
+  if (has_dri_error_state)
+    tar_process.AddArg(error_state_path.BaseName().value());
+  if (has_task_states)
+    tar_process.AddArg(task_states_path.BaseName().value());
   int res = tar_process.Run();
 
   file_util::Delete(error_state_path, false);
+  file_util::Delete(task_states_path, false);
 
   if (res || !file_util::PathExists(log_path)) {
     LOG(ERROR) << "Could not tar file " << log_path.value();
