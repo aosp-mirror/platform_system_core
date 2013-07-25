@@ -22,7 +22,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/socket.h>
-#include <cutils/logger.h>
+#include <log/logger.h>
 #include "sysdeps.h"
 #include "adb.h"
 

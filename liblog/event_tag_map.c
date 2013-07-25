@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "cutils/event_tag_map.h"
-#include "cutils/log.h"
+#include <log/event_tag_map.h>
+#include <log/log.h>
 
 #include <stdlib.h>
 #include <string.h>

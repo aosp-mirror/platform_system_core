@@ -30,7 +30,7 @@
  */
 
 #include <stdio.h>
-#include <cutils/logd.h>
+#include <log/logd.h>
 #include <ctype.h>
 #include <sys/socket.h>
 #include <sys/types.h>
