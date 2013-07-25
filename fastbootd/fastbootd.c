@@ -20,6 +20,7 @@
 #include <cutils/klog.h>
 
 #include "debug.h"
+#include "trigger.h"
 
 unsigned int debug_level = DEBUG;
 
@@ -36,6 +37,7 @@ int main(int argc, char **argv)
     klog_set_level(6);
 
     config_init();
+    load_trigger();
     commands_init();
     usb_init();
     while (1) {
