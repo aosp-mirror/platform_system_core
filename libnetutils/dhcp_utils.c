@@ -92,7 +92,8 @@ static int fill_ip_info(const char *interface,
                      char *server,
                      uint32_t *lease,
                      char *vendorInfo,
-                     char *domain)
+                     char *domain,
+                     char *mtu)
 {
     char prop_name[PROPERTY_KEY_MAX];
     char prop_value[PROPERTY_VALUE_MAX];
@@ -158,6 +159,10 @@ static int fill_ip_info(const char *interface,
             p2p_interface);
     property_get(prop_name, domain, NULL);
 
+    snprintf(prop_name, sizeof(prop_name), "%s.%s.mtu", DHCP_PROP_NAME_PREFIX,
+            p2p_interface);
+    property_get(prop_name, mtu, NULL);
+
     return 0;
 }
 
@@ -186,7 +191,8 @@ int dhcp_do_request(const char *interface,
                     char *server,
                     uint32_t *lease,
                     char *vendorInfo,
-                    char *domain)
+                    char *domain,
+                    char *mtu)
 {
     char result_prop_name[PROPERTY_KEY_MAX];
     char daemon_prop_name[PROPERTY_KEY_MAX];
@@ -238,7 +244,7 @@ int dhcp_do_request(const char *interface,
     if (strcmp(prop_value, "ok") == 0) {
         char dns_prop_name[PROPERTY_KEY_MAX];
         if (fill_ip_info(interface, ipaddr, gateway, prefixLength, dns,
-                server, lease, vendorInfo, domain) == -1) {
+                server, lease, vendorInfo, domain, mtu) == -1) {
             return -1;
         }
         return 0;
@@ -329,7 +335,8 @@ int dhcp_do_request_renew(const char *interface,
                     char *server,
                     uint32_t *lease,
                     char *vendorInfo,
-                    char *domain)
+                    char *domain,
+                    char *mtu)
 {
     char result_prop_name[PROPERTY_KEY_MAX];
     char prop_value[PROPERTY_VALUE_MAX] = {'\0'};
@@ -366,7 +373,7 @@ int dhcp_do_request_renew(const char *interface,
     }
     if (strcmp(prop_value, "ok") == 0) {
         return fill_ip_info(interface, ipaddr, gateway, prefixLength, dns,
-                server, lease, vendorInfo, domain);
+                server, lease, vendorInfo, domain, mtu);
     } else {
         snprintf(errmsg, sizeof(errmsg), "DHCP Renew result was %s", prop_value);
         return -1;
