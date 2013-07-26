@@ -391,6 +391,10 @@ on property:vold.decrypt=trigger_shutdown_framework
 on property:sys.powerctl=*
     powerctl ${sys.powerctl}
 
+# system server cannot write to /proc/sys files, so proxy it through init
+on property:sys.sysctl.extra_free_kbytes=*
+    write /proc/sys/vm/extra_free_kbytes ${sys.sysctl.extra_free_kbytes}
+
 ## Daemon processes to be run by init.
 ##
 service ueventd /sbin/ueventd
