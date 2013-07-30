@@ -176,17 +176,7 @@ size_t BlobCache::getFlattenedSize() const {
     return size;
 }
 
-size_t BlobCache::getFdCount() const {
-    return 0;
-}
-
-status_t BlobCache::flatten(void* buffer, size_t size, int fds[], size_t count)
-        const {
-    if (count != 0) {
-        ALOGE("flatten: nonzero fd count: %zu", count);
-        return BAD_VALUE;
-    }
-
+status_t BlobCache::flatten(void* buffer, size_t size) const {
     // Write the cache header
     if (size < sizeof(Header)) {
         ALOGE("flatten: not enough room for cache header");
@@ -228,15 +218,9 @@ status_t BlobCache::flatten(void* buffer, size_t size, int fds[], size_t count)
     return OK;
 }
 
-status_t BlobCache::unflatten(void const* buffer, size_t size, int fds[],
-        size_t count) {
+status_t BlobCache::unflatten(void const* buffer, size_t size) {
     // All errors should result in the BlobCache being in an empty state.
     mCacheEntries.clear();
-
-    if (count != 0) {
-        ALOGE("unflatten: nonzero fd count: %zu", count);
-        return BAD_VALUE;
-    }
 
     // Read the cache header
     if (size < sizeof(Header)) {

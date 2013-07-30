@@ -33,7 +33,8 @@ namespace android {
 // and then reloaded in a subsequent execution of the program.  This
 // serialization is non-portable and the data should only be used by the device
 // that generated it.
-class BlobCache : public RefBase, public Flattenable {
+class BlobCache : public RefBase {
+
 public:
 
     // Create an empty blob cache. The blob cache will cache key/value pairs
@@ -78,14 +79,10 @@ public:
     //   0 <= valueSize
     size_t get(const void* key, size_t keySize, void* value, size_t valueSize);
 
+
     // getFlattenedSize returns the number of bytes needed to store the entire
     // serialized cache.
-    virtual size_t getFlattenedSize() const;
-
-    // getFdCount returns the number of file descriptors that will result from
-    // flattening the cache.  This will always return 0 so as to allow the
-    // flattened cache to be saved to disk and then later restored.
-    virtual size_t getFdCount() const;
+    size_t getFlattenedSize() const;
 
     // flatten serializes the current contents of the cache into the memory
     // pointed to by 'buffer'.  The serialized cache contents can later be
@@ -94,9 +91,7 @@ public:
     //
     // Preconditions:
     //   size >= this.getFlattenedSize()
-    //   count == 0
-    virtual status_t flatten(void* buffer, size_t size, int fds[],
-            size_t count) const;
+    status_t flatten(void* buffer, size_t size) const;
 
     // unflatten replaces the contents of the cache with the serialized cache
     // contents in the memory pointed to by 'buffer'.  The previous contents of
@@ -104,10 +99,7 @@ public:
     // unflattening the serialized cache contents then the BlobCache will be
     // left in an empty state.
     //
-    // Preconditions:
-    //   count == 0
-    virtual status_t unflatten(void const* buffer, size_t size, int fds[],
-            size_t count);
+    status_t unflatten(void const* buffer, size_t size);
 
 private:
     // Copying is disallowed.
