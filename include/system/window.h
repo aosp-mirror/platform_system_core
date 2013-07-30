@@ -230,7 +230,13 @@ enum {
      * Boolean that indicates whether the consumer is running more than
      * one buffer behind the producer.
      */
-    NATIVE_WINDOW_CONSUMER_RUNNING_BEHIND = 9
+    NATIVE_WINDOW_CONSUMER_RUNNING_BEHIND = 9,
+
+    /*
+     * The consumer gralloc usage bits currently set by the consumer.
+     * The values are defined in hardware/libhardware/include/gralloc.h.
+     */
+    NATIVE_WINDOW_CONSUMER_USAGE_BITS = 10
 };
 
 /* Valid operations for the (*perform)() hook.
