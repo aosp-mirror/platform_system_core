@@ -163,6 +163,13 @@ char16_t* utf8_to_utf16_no_null_terminator(const uint8_t* src, size_t srcLen, ch
  */
 void utf8_to_utf16(const uint8_t* src, size_t srcLen, char16_t* dst);
 
+/**
+ * Like utf8_to_utf16_no_null_terminator, but you can supply a maximum length of the
+ * decoded string.  The decoded string will fill up to that length; if it is longer
+ * the returned pointer will be to the character after dstLen.
+ */
+char16_t* utf8_to_utf16_n(const uint8_t* src, size_t srcLen, char16_t* dst, size_t dstLen);
+
 }
 
 #endif
