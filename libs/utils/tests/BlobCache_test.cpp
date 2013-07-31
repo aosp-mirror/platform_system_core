@@ -273,8 +273,8 @@ protected:
     void roundTrip() {
         size_t size = mBC->getFlattenedSize();
         uint8_t* flat = new uint8_t[size];
-        ASSERT_EQ(OK, mBC->flatten(flat, size, NULL, 0));
-        ASSERT_EQ(OK, mBC2->unflatten(flat, size, NULL, 0));
+        ASSERT_EQ(OK, mBC->flatten(flat, size));
+        ASSERT_EQ(OK, mBC2->unflatten(flat, size));
         delete[] flat;
     }
 
@@ -321,7 +321,7 @@ TEST_F(BlobCacheFlattenTest, FlattenDoesntChangeCache) {
 
     size_t size = mBC->getFlattenedSize();
     uint8_t* flat = new uint8_t[size];
-    ASSERT_EQ(OK, mBC->flatten(flat, size, NULL, 0));
+    ASSERT_EQ(OK, mBC->flatten(flat, size));
     delete[] flat;
 
     // Verify the cache that we just serialized
@@ -343,7 +343,7 @@ TEST_F(BlobCacheFlattenTest, FlattenCatchesBufferTooSmall) {
 
     size_t size = mBC->getFlattenedSize() - 1;
     uint8_t* flat = new uint8_t[size];
-    ASSERT_EQ(BAD_VALUE, mBC->flatten(flat, size, NULL, 0));
+    ASSERT_EQ(BAD_VALUE, mBC->flatten(flat, size));
     delete[] flat;
 }
 
@@ -353,11 +353,11 @@ TEST_F(BlobCacheFlattenTest, UnflattenCatchesBadMagic) {
 
     size_t size = mBC->getFlattenedSize();
     uint8_t* flat = new uint8_t[size];
-    ASSERT_EQ(OK, mBC->flatten(flat, size, NULL, 0));
+    ASSERT_EQ(OK, mBC->flatten(flat, size));
     flat[1] = ~flat[1];
 
     // Bad magic should cause an error.
-    ASSERT_EQ(BAD_VALUE, mBC2->unflatten(flat, size, NULL, 0));
+    ASSERT_EQ(BAD_VALUE, mBC2->unflatten(flat, size));
     delete[] flat;
 
     // The error should cause the unflatten to result in an empty cache
@@ -370,12 +370,12 @@ TEST_F(BlobCacheFlattenTest, UnflattenCatchesBadBlobCacheVersion) {
 
     size_t size = mBC->getFlattenedSize();
     uint8_t* flat = new uint8_t[size];
-    ASSERT_EQ(OK, mBC->flatten(flat, size, NULL, 0));
+    ASSERT_EQ(OK, mBC->flatten(flat, size));
     flat[5] = ~flat[5];
 
     // Version mismatches shouldn't cause errors, but should not use the
     // serialized entries
-    ASSERT_EQ(OK, mBC2->unflatten(flat, size, NULL, 0));
+    ASSERT_EQ(OK, mBC2->unflatten(flat, size));
     delete[] flat;
 
     // The version mismatch should cause the unflatten to result in an empty
@@ -389,12 +389,12 @@ TEST_F(BlobCacheFlattenTest, UnflattenCatchesBadBlobCacheDeviceVersion) {
 
     size_t size = mBC->getFlattenedSize();
     uint8_t* flat = new uint8_t[size];
-    ASSERT_EQ(OK, mBC->flatten(flat, size, NULL, 0));
+    ASSERT_EQ(OK, mBC->flatten(flat, size));
     flat[10] = ~flat[10];
 
     // Version mismatches shouldn't cause errors, but should not use the
     // serialized entries
-    ASSERT_EQ(OK, mBC2->unflatten(flat, size, NULL, 0));
+    ASSERT_EQ(OK, mBC2->unflatten(flat, size));
     delete[] flat;
 
     // The version mismatch should cause the unflatten to result in an empty
@@ -408,10 +408,10 @@ TEST_F(BlobCacheFlattenTest, UnflattenCatchesBufferTooSmall) {
 
     size_t size = mBC->getFlattenedSize();
     uint8_t* flat = new uint8_t[size];
-    ASSERT_EQ(OK, mBC->flatten(flat, size, NULL, 0));
+    ASSERT_EQ(OK, mBC->flatten(flat, size));
 
     // A buffer truncation shouldt cause an error
-    ASSERT_EQ(BAD_VALUE, mBC2->unflatten(flat, size-1, NULL, 0));
+    ASSERT_EQ(BAD_VALUE, mBC2->unflatten(flat, size-1));
     delete[] flat;
 
     // The error should cause the unflatten to result in an empty cache
