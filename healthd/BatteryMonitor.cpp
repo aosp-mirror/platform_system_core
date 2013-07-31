@@ -176,6 +176,8 @@ bool BatteryMonitor::update(void) {
     props.chargerWirelessOnline = false;
     props.batteryStatus = BATTERY_STATUS_UNKNOWN;
     props.batteryHealth = BATTERY_HEALTH_UNKNOWN;
+    props.batteryCurrentNow = INT_MIN;
+    props.batteryChargeCounter = INT_MIN;
 
     if (!mBatteryPresentPath.isEmpty())
         props.batteryPresent = getBooleanField(mBatteryPresentPath);
@@ -184,6 +186,13 @@ bool BatteryMonitor::update(void) {
 
     props.batteryLevel = getIntField(mBatteryCapacityPath);
     props.batteryVoltage = getIntField(mBatteryVoltagePath) / 1000;
+
+    if (!mBatteryCurrentNowPath.isEmpty())
+        props.batteryCurrentNow = getIntField(mBatteryCurrentNowPath) / 1000;
+
+    if (!mBatteryChargeCounterPath.isEmpty())
+        props.batteryChargeCounter = getIntField(mBatteryChargeCounterPath) / 1000;
+
     props.batteryTemperature = getIntField(mBatteryTemperaturePath);
 
     const int SIZE = 128;
@@ -229,12 +238,23 @@ bool BatteryMonitor::update(void) {
         }
     }
 
-    KLOG_INFO(LOG_TAG, "battery l=%d v=%d t=%s%d.%d h=%d st=%d chg=%s%s%s\n",
-              props.batteryLevel, props.batteryVoltage,
-              props.batteryTemperature < 0 ? "-" : "",
-              abs(props.batteryTemperature / 10),
-              abs(props.batteryTemperature % 10), props.batteryHealth,
-              props.batteryStatus,
+    char dmesgline[256];
+    snprintf(dmesgline, sizeof(dmesgline),
+             "battery l=%d v=%d t=%s%d.%d h=%d st=%d",
+             props.batteryLevel, props.batteryVoltage,
+             props.batteryTemperature < 0 ? "-" : "",
+             abs(props.batteryTemperature / 10),
+             abs(props.batteryTemperature % 10), props.batteryHealth,
+             props.batteryStatus);
+
+    if (!mBatteryCurrentNowPath.isEmpty()) {
+        char b[20];
+
+        snprintf(b, sizeof(b), " c=%d", props.batteryCurrentNow);
+        strlcat(dmesgline, b, sizeof(dmesgline));
+    }
+
+    KLOG_INFO(LOG_TAG, "%s chg=%s%s%s\n", dmesgline,
               props.chargerAcOnline ? "a" : "",
               props.chargerUsbOnline ? "u" : "",
               props.chargerWirelessOnline ? "w" : "");
@@ -303,6 +323,16 @@ void BatteryMonitor::init(bool nosvcmgr) {
                     if (access(path, R_OK) == 0)
                             mBatteryVoltagePath = path;
                 }
+
+                path.clear();
+                path.appendFormat("%s/%s/current_now", POWER_SUPPLY_SYSFS_PATH, name);
+                if (access(path, R_OK) == 0)
+                    mBatteryCurrentNowPath = path;
+
+                path.clear();
+                path.appendFormat("%s/%s/charge_counter", POWER_SUPPLY_SYSFS_PATH, name);
+                if (access(path, R_OK) == 0)
+                    mBatteryChargeCounterPath = path;
 
                 path.clear();
                 path.appendFormat("%s/%s/temp", POWER_SUPPLY_SYSFS_PATH, name);

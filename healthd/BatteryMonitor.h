@@ -49,6 +49,8 @@ class BatteryMonitor {
     String8 mBatteryVoltagePath;
     String8 mBatteryTemperaturePath;
     String8 mBatteryTechnologyPath;
+    String8 mBatteryCurrentNowPath;
+    String8 mBatteryChargeCounterPath;
 
     Vector<String8> mChargerNames;
 
