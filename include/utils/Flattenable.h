@@ -35,11 +35,16 @@ public:
     }
 
     template<int N>
-    static size_t align(void*& buffer) {
+    static size_t align(void const*& buffer) {
         COMPILE_TIME_ASSERT_FUNCTION_SCOPE( !(N & (N-1)) );
         intptr_t b = intptr_t(buffer);
         buffer = (void*)((intptr_t(buffer) + (N-1)) & ~(N-1));
         return size_t(intptr_t(buffer) - b);
+    }
+
+    template<int N>
+    static size_t align(void*& buffer) {
+        return align<N>( const_cast<void const*&>(buffer) );
     }
 
     static void advance(void*& buffer, size_t& size, size_t offset) {
@@ -88,8 +93,7 @@ public:
     // file descriptors are written in the fds[] array but ownership is
     // not transfered (ie: they must be dupped by the caller of
     // flatten() if needed).
-    inline status_t flatten(void*& buffer, size_t& size,
-            int*& fds, size_t& count) const;
+    inline status_t flatten(void*& buffer, size_t& size, int*& fds, size_t& count) const;
 
     // unflattens the object from buffer.
     // size should be equal to the value of getFlattenedSize() when the
@@ -98,8 +102,7 @@ public:
     // don't need to be dupped(). ie: the caller of unflatten doesn't
     // keep ownership. If a fd is not retained by unflatten() it must be
     // explicitly closed.
-    inline status_t unflatten(void const*& buffer, size_t& size,
-            int const*& fds, size_t& count);
+    inline status_t unflatten(void const*& buffer, size_t& size, int const*& fds, size_t& count);
 };
 
 template<typename T>
