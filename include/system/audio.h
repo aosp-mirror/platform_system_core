@@ -389,6 +389,16 @@ typedef enum {
     AUDIO_OUTPUT_FLAG_NON_BLOCKING = 0x20 // use non-blocking write
 } audio_output_flags_t;
 
+/* The audio input flags are analogous to audio output flags.
+ * Currently they are used only when an AudioRecord is created,
+ * to indicate a preference to be connected to an input stream with
+ * attributes corresponding to the specified flags.
+ */
+typedef enum {
+    AUDIO_INPUT_FLAG_NONE = 0x0,        // no attributes
+    AUDIO_INPUT_FLAG_FAST = 0x1,        // prefer an input that supports "fast tracks"
+} audio_input_flags_t;
+
 /* Additional information about compressed streams offloaded to
  * hardware playback
  * The version and size fields must be initialized by the caller by using
