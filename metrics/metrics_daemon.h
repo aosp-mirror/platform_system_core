@@ -120,6 +120,13 @@ class MetricsDaemon {
     int value;               // value from /proc/meminfo
   };
 
+  // Record for retrieving and reporting values from /proc/vmstat
+  struct VmstatRecord {
+    uint64_t page_faults_;    // major faults
+    uint64_t swap_in_;        // pages swapped in
+    uint64_t swap_out_;       // pages swapped out
+  };
+
   typedef std::map<std::string, chromeos_metrics::FrequencyCounter*>
     FrequencyCounters;
 
@@ -152,6 +159,10 @@ class MetricsDaemon {
   static const char kMetricWriteSectorsShortName[];
   static const char kMetricPageFaultsShortName[];
   static const char kMetricPageFaultsLongName[];
+  static const char kMetricSwapInLongName[];
+  static const char kMetricSwapInShortName[];
+  static const char kMetricSwapOutLongName[];
+  static const char kMetricSwapOutShortName[];
   static const char kMetricScaledCpuFrequencyName[];
   static const int kMetricStatsShortInterval;
   static const int kMetricStatsLongInterval;
@@ -284,10 +295,10 @@ class MetricsDaemon {
   bool DiskStatsReadStats(long int* read_sectors, long int* write_sectors);
 
   // Reads cumulative vm statistics from procfs.  Returns true for success.
-  bool VmStatsReadStats(long int* page_faults);
+  bool VmStatsReadStats(struct VmstatRecord* stats);
 
   // Parse cumulative vm statistics from a C string.  Returns true for success.
-  bool VmStatsParseStats(char* stats, long int* page_faults);
+  bool VmStatsParseStats(const char* stats, struct VmstatRecord* record);
 
   // Reports disk and vm statistics (static version for glib).  Arguments are a
   // glib artifact.
@@ -403,7 +414,7 @@ class MetricsDaemon {
   // Contain the most recent disk and vm cumulative stats.
   long int read_sectors_;
   long int write_sectors_;
-  long int page_faults_;
+  struct VmstatRecord vmstats_;
 
   StatsState stats_state_;
   double stats_initial_time_;

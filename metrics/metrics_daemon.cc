@@ -13,6 +13,7 @@
 #include <base/logging.h>
 #include <base/string_number_conversions.h>
 #include <base/string_util.h>
+#include <base/string_split.h>
 #include <base/stringprintf.h>
 #include <chromeos/dbus/service_constants.h>
 #include <dbus/dbus-glib-lowlevel.h>
@@ -129,6 +130,18 @@ const char MetricsDaemon::kMetricPageFaultsLongName[] =
 const char MetricsDaemon::kMetricPageFaultsShortName[] =
     "Platform.PageFaultsShort";
 
+// Swap in and Swap out
+
+const char MetricsDaemon::kMetricSwapInLongName[] =
+    "Platform.SwapInLong";
+const char MetricsDaemon::kMetricSwapInShortName[] =
+    "Platform.SwapInShort";
+
+const char MetricsDaemon::kMetricSwapOutLongName[] =
+    "Platform.SwapOutLong";
+const char MetricsDaemon::kMetricSwapOutShortName[] =
+    "Platform.SwapOutShort";
+
 // Thermal CPU throttling.
 
 const char MetricsDaemon::kMetricScaledCpuFrequencyName[] =
@@ -171,7 +184,7 @@ MetricsDaemon::MetricsDaemon()
       memuse_interval_index_(0),
       read_sectors_(0),
       write_sectors_(0),
-      page_faults_(0),
+      vmstats_(),
       stats_state_(kStatsShort),
       stats_initial_time_(0) {}
 
@@ -586,7 +599,7 @@ void MetricsDaemon::UnscheduleUseMonitor() {
 
 void MetricsDaemon::StatsReporterInit() {
   DiskStatsReadStats(&read_sectors_, &write_sectors_);
-  VmStatsReadStats(&page_faults_);
+  VmStatsReadStats(&vmstats_);
   // The first time around just run the long stat, so we don't delay boot.
   stats_state_ = kStatsLong;
   stats_initial_time_ = GetActiveTime();
@@ -639,55 +652,66 @@ bool MetricsDaemon::DiskStatsReadStats(long int* read_sectors,
   return success;
 }
 
-bool MetricsDaemon::VmStatsParseStats(char* stats, long int* page_faults) {
-  static const char kPageFaultSearchString[] = "\npgmajfault ";
-  bool success = false;
+bool MetricsDaemon::VmStatsParseStats(const char* stats,
+                                      struct VmstatRecord* record) {
+  // a mapping of string name to field in VmstatRecord and whether we found it
+  struct mapping {
+    const string name;
+    uint64_t* value_p;
+    bool found;
+  } map[] =
+      { { .name = "pgmajfault",
+          .value_p = &record->page_faults_,
+          .found = false },
+        { .name = "pswpin",
+          .value_p = &record->swap_in_,
+          .found = false },
+        { .name = "pswpout",
+          .value_p = &record->swap_out_,
+          .found = false }, };
+
   // Each line in the file has the form
   // <ID> <VALUE>
   // for instance:
   // nr_free_pages 213427
-  char* s = strstr(stats, kPageFaultSearchString);
-  if (s == NULL) {
-    LOG(WARNING) << "cannot find page fault entry in vmstats";
-  } else {
-    char* endp;
-    // Skip <ID> and space.  Don't count the terminating null.
-    s += sizeof(kPageFaultSearchString) - 1;
-    *page_faults = strtol(s, &endp, 10);
-    if (*endp == '\n') {
-      success = true;
+  vector<string> lines;
+  Tokenize(stats, "\n", &lines);
+  for (vector<string>::iterator it = lines.begin();
+       it != lines.end(); ++it) {
+    vector<string> tokens;
+    base::SplitString(*it, ' ', &tokens);
+    if (tokens.size() == 2) {
+      for (unsigned int i = 0; i < sizeof(map)/sizeof(struct mapping); i++) {
+        if (!tokens[0].compare(map[i].name)) {
+          if (!base::StringToUint64(tokens[1], map[i].value_p))
+            return false;
+          map[i].found = true;
+        }
+      }
     } else {
-      LOG(WARNING) << "error parsing vmstats";
+      LOG(WARNING) << "unexpected vmstat format";
     }
   }
-  return success;
+  // make sure we got all the stats
+  for (unsigned i = 0; i < sizeof(map)/sizeof(struct mapping); i++) {
+    if (map[i].found == false) {
+      LOG(WARNING) << "vmstat missing " << map[i].name;
+      return false;
+    }
+  }
+  return true;
 }
 
-bool MetricsDaemon::VmStatsReadStats(long int* page_faults) {
-  char buffer[4000];
-  int nchars;
-  int success = false;
-  if (testing_) {
+bool MetricsDaemon::VmStatsReadStats(struct VmstatRecord* stats) {
+  string value_string;
+  FilePath* path = new FilePath(vmstats_path_);
+  if (!file_util::ReadFileToString(*path, &value_string)) {
+    delete path;
+    LOG(WARNING) << "cannot read " << vmstats_path_;
     return false;
   }
-  int file = HANDLE_EINTR(open(vmstats_path_.c_str(), O_RDONLY));
-  if (file < 0) {
-    PLOG(WARNING) << "cannot open " << vmstats_path_;
-    return false;
-  }
-  nchars = HANDLE_EINTR(read(file, buffer, sizeof(buffer) - 1));
-  LOG_IF(WARNING, nchars == sizeof(buffer) - 1)
-      << "file too large in " << vmstats_path_;
-  if (nchars < 0) {
-    PLOG(WARNING) << "cannot read from " << vmstats_path_;
-  } else if (nchars == 0) {
-    LOG(WARNING) << vmstats_path_ << " is empty";
-  } else {
-    buffer[nchars] = '\0';
-    success = VmStatsParseStats(buffer, page_faults);
-  }
-  HANDLE_EINTR(close(file));
-  return success;
+  delete path;
+  return VmStatsParseStats(value_string.c_str(), stats);
 }
 
 bool MetricsDaemon::ReadFreqToInt(const string& sysfs_file_name, int* value) {
@@ -755,7 +779,8 @@ gboolean MetricsDaemon::StatsCallbackStatic(void* handle) {
 // Collects disk and vm stats alternating over a short and a long interval.
 
 void MetricsDaemon::StatsCallback() {
-  long int read_sectors_now, write_sectors_now, page_faults_now;
+  long int read_sectors_now, write_sectors_now;
+  struct VmstatRecord vmstats_now;
   double time_now = GetActiveTime();
   double delta_time = time_now - stats_initial_time_;
   if (testing_) {
@@ -769,9 +794,13 @@ void MetricsDaemon::StatsCallback() {
   int delta_write = write_sectors_now - write_sectors_;
   int read_sectors_per_second = delta_read / delta_time;
   int write_sectors_per_second = delta_write / delta_time;
-  bool vmstats_success = VmStatsReadStats(&page_faults_now);
-  int delta_faults = page_faults_now - page_faults_;
-  int page_faults_per_second = delta_faults / delta_time;
+  bool vmstats_success = VmStatsReadStats(&vmstats_now);
+  uint64_t delta_faults = vmstats_now.page_faults_ - vmstats_.page_faults_;
+  uint64_t delta_swap_in = vmstats_now.swap_in_ - vmstats_.swap_in_;
+  uint64_t delta_swap_out = vmstats_now.swap_out_ - vmstats_.swap_out_;
+  uint64_t page_faults_per_second = delta_faults / delta_time;
+  uint64_t swap_in_per_second = delta_swap_in / delta_time;
+  uint64_t swap_out_per_second = delta_swap_out / delta_time;
 
   switch (stats_state_) {
     case kStatsShort:
@@ -790,6 +819,16 @@ void MetricsDaemon::StatsCallback() {
       if (vmstats_success) {
         SendMetric(kMetricPageFaultsShortName,
                    page_faults_per_second,
+                   1,
+                   kMetricPageFaultsMax,
+                   kMetricPageFaultsBuckets);
+        SendMetric(kMetricSwapInShortName,
+                   swap_in_per_second,
+                   1,
+                   kMetricPageFaultsMax,
+                   kMetricPageFaultsBuckets);
+        SendMetric(kMetricSwapOutShortName,
+                   swap_out_per_second,
                    1,
                    kMetricPageFaultsMax,
                    kMetricPageFaultsBuckets);
@@ -821,7 +860,18 @@ void MetricsDaemon::StatsCallback() {
                    1,
                    kMetricPageFaultsMax,
                    kMetricPageFaultsBuckets);
-        page_faults_ = page_faults_now;
+        SendMetric(kMetricSwapInLongName,
+                   swap_in_per_second,
+                   1,
+                   kMetricPageFaultsMax,
+                   kMetricPageFaultsBuckets);
+        SendMetric(kMetricSwapOutLongName,
+                   swap_out_per_second,
+                   1,
+                   kMetricPageFaultsMax,
+                   kMetricPageFaultsBuckets);
+
+        vmstats_ = vmstats_now;
       }
       SendCpuThrottleMetrics();
       // Set start time for new cycle.

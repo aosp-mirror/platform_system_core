@@ -661,10 +661,13 @@ MemFree:         1000000 kB\n\
 }
 
 TEST_F(MetricsDaemonTest, ParseVmStats) {
-  static char kVmStats[] = "foo 100\nbar 200\npgmajfault 42\netcetc 300\n";
-  long int page_faults = 0;
-  EXPECT_TRUE(daemon_.VmStatsParseStats(kVmStats, &page_faults));
-  EXPECT_EQ(page_faults, 42);
+  static char kVmStats[] = "pswpin 1345\npswpout 8896\n"
+    "foo 100\nbar 200\npgmajfault 42\netcetc 300\n";
+  struct MetricsDaemon::VmstatRecord stats;
+  EXPECT_TRUE(daemon_.VmStatsParseStats(kVmStats, &stats));
+  EXPECT_EQ(stats.page_faults_, 42);
+  EXPECT_EQ(stats.swap_in_, 1345);
+  EXPECT_EQ(stats.swap_out_, 8896);
 }
 
 TEST_F(MetricsDaemonTest, ReadFreqToInt) {
