@@ -380,7 +380,7 @@ static bool execute_dwarf(const memory_t* memory, uintptr_t ptr, cie_info_t* cie
         case DW_CFA_offset_extended: // probably we don't have it on x86.
             if (!try_get_uleb128(memory, ptr, &reg, cursor)) return false;
             if (!try_get_uleb128(memory, ptr, &offset, cursor)) return false;
-            if (reg > DWARF_REGISTERS) {
+            if (reg >= DWARF_REGISTERS) {
                 ALOGE("DW_CFA_offset_extended: r%d exceeds supported number of registers (%d)", reg, DWARF_REGISTERS);
                 return false;
             }
@@ -390,39 +390,39 @@ static bool execute_dwarf(const memory_t* memory, uintptr_t ptr, cie_info_t* cie
             break;
         case DW_CFA_restore_extended: // probably we don't have it on x86.
             if (!try_get_uleb128(memory, ptr, &reg, cursor)) return false;
-            dstate->regs[reg].rule = stack->regs[reg].rule;
-            dstate->regs[reg].value = stack->regs[reg].value;
-            if (reg > DWARF_REGISTERS) {
+            if (reg >= DWARF_REGISTERS) {
                 ALOGE("DW_CFA_restore_extended: r%d exceeds supported number of registers (%d)", reg, DWARF_REGISTERS);
                 return false;
             }
+            dstate->regs[reg].rule = stack->regs[reg].rule;
+            dstate->regs[reg].value = stack->regs[reg].value;
             ALOGV("DW_CFA_restore: r%d = %c(%d)", reg, dstate->regs[reg].rule, dstate->regs[reg].value);
             break;
         case DW_CFA_undefined: // probably we don't have it on x86.
             if (!try_get_uleb128(memory, ptr, &reg, cursor)) return false;
-            dstate->regs[reg].rule = 'u';
-            dstate->regs[reg].value = 0;
-            if (reg > DWARF_REGISTERS) {
+            if (reg >= DWARF_REGISTERS) {
                 ALOGE("DW_CFA_undefined: r%d exceeds supported number of registers (%d)", reg, DWARF_REGISTERS);
                 return false;
             }
+            dstate->regs[reg].rule = 'u';
+            dstate->regs[reg].value = 0;
             ALOGV("DW_CFA_undefined: r%d", reg);
             break;
         case DW_CFA_same_value: // probably we don't have it on x86.
             if (!try_get_uleb128(memory, ptr, &reg, cursor)) return false;
-            dstate->regs[reg].rule = 's';
-            dstate->regs[reg].value = 0;
-            if (reg > DWARF_REGISTERS) {
+            if (reg >= DWARF_REGISTERS) {
                 ALOGE("DW_CFA_undefined: r%d exceeds supported number of registers (%d)", reg, DWARF_REGISTERS);
                 return false;
             }
+            dstate->regs[reg].rule = 's';
+            dstate->regs[reg].value = 0;
             ALOGV("DW_CFA_same_value: r%d", reg);
             break;
         case DW_CFA_register: // probably we don't have it on x86.
             if (!try_get_uleb128(memory, ptr, &reg, cursor)) return false;
             /* that's new register actually, not offset */
             if (!try_get_uleb128(memory, ptr, &offset, cursor)) return false;
-            if (reg > DWARF_REGISTERS || offset > DWARF_REGISTERS) {
+            if (reg >= DWARF_REGISTERS || offset >= DWARF_REGISTERS) {
                 ALOGE("DW_CFA_register: r%d or r%d exceeds supported number of registers (%d)", reg, offset, DWARF_REGISTERS);
                 return false;
             }
@@ -520,7 +520,7 @@ static bool get_old_register_value(const memory_t* memory, uint32_t cfa,
 
 /* Updaing state based on dwarf state. */
 static bool update_state(const memory_t* memory, unwind_state_t* state,
-                         dwarf_state_t* dstate, cie_info_t* cie_info) {
+                         dwarf_state_t* dstate) {
     unwind_state_t newstate;
     /* We can restore more registers here if we need them. Meanwile doing minimal work here. */
     /* Getting CFA. */
@@ -550,7 +550,6 @@ static bool update_state(const memory_t* memory, unwind_state_t* state,
 
 /* Execute CIE and FDE instructions for FDE found with find_fde. */
 static bool execute_fde(const memory_t* memory,
-                        const map_info_t* map_info_list,
                         uintptr_t fde,
                         unwind_state_t* state) {
     uint32_t fde_length = 0;
@@ -753,7 +752,7 @@ static bool execute_fde(const memory_t* memory,
         ALOGV("IP: %x, LOC: %x", state->reg[DWARF_EIP], dstate->loc);
     }
 
-    return update_state(memory, state, dstate, cie_info);
+    return update_state(memory, state, dstate);
 }
 
 static ssize_t unwind_backtrace_common(const memory_t* memory,
@@ -805,7 +804,7 @@ static ssize_t unwind_backtrace_common(const memory_t* memory,
 
         uint32_t stack_top = state->reg[DWARF_ESP];
 
-        if (!execute_fde(memory, map_info_list, fde, state)) break;
+        if (!execute_fde(memory, fde, state)) break;
 
         if (frame) {
             frame->stack_top = stack_top;
