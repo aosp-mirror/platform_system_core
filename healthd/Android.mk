@@ -18,6 +18,12 @@ LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 
 LOCAL_STATIC_LIBRARIES :=  libbatteryservice libbinder libz libutils libstdc++ libcutils liblog libm libc
 
+ifdef BOARD_LIB_HEALTHD
+LOCAL_STATIC_LIBRARIES += $(BOARD_LIB_HEALTHD)
+else
+LOCAL_SRC_FILES += healthd_board_default.cpp
+endif
+
 include $(BUILD_EXECUTABLE)
 
 endif

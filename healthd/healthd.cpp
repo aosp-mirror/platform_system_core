@@ -17,6 +17,7 @@
 #define LOG_TAG "healthd"
 #define KLOG_LEVEL 6
 
+#include "healthd.h"
 #include "BatteryMonitor.h"
 
 #include <errno.h>
@@ -34,8 +35,12 @@
 using namespace android;
 
 // Periodic chores intervals in seconds
-#define PERIODIC_CHORES_INTERVAL_FAST (60 * 1)
-#define PERIODIC_CHORES_INTERVAL_SLOW (60 * 10)
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_FAST (60 * 1)
+#define DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW (60 * 10)
+static int periodic_chores_interval_fast =
+        DEFAULT_PERIODIC_CHORES_INTERVAL_FAST;
+static int periodic_chores_interval_slow =
+        DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW;
 
 #define POWER_SUPPLY_SUBSYSTEM "power_supply"
 
@@ -48,7 +53,7 @@ static int binder_fd;
 // -1 for no epoll timeout
 static int awake_poll_interval = -1;
 
-static int wakealarm_wake_interval = PERIODIC_CHORES_INTERVAL_FAST;
+static int wakealarm_wake_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST;
 
 static BatteryMonitor* gBatteryMonitor;
 
@@ -61,6 +66,10 @@ static void wakealarm_set_interval(int interval) {
             return;
 
     wakealarm_wake_interval = interval;
+
+    if (interval == -1)
+        interval = 0;
+
     itval.it_interval.tv_sec = interval;
     itval.it_interval.tv_nsec = 0;
     itval.it_value.tv_sec = interval;
@@ -75,7 +84,7 @@ static void battery_update(void) {
     // slow wake interval when on battery (watch for drained battery).
 
    int new_wake_interval = gBatteryMonitor->update() ?
-        PERIODIC_CHORES_INTERVAL_FAST : PERIODIC_CHORES_INTERVAL_SLOW;
+        periodic_chores_interval_fast : periodic_chores_interval_slow;
 
     if (new_wake_interval != wakealarm_wake_interval)
             wakealarm_set_interval(new_wake_interval);
@@ -85,9 +94,12 @@ static void battery_update(void) {
     // poll at fast rate while awake and let alarm wake up at slow rate when
     // asleep.
 
-    awake_poll_interval =
-        new_wake_interval == PERIODIC_CHORES_INTERVAL_FAST ?
-        -1 : PERIODIC_CHORES_INTERVAL_FAST * 1000;
+    if (periodic_chores_interval_fast == -1)
+        awake_poll_interval = -1;
+    else
+        awake_poll_interval =
+            new_wake_interval == periodic_chores_interval_fast ?
+                -1 : periodic_chores_interval_fast * 1000;
 }
 
 static void periodic_chores() {
@@ -138,7 +150,10 @@ static void wakealarm_init(void) {
         return;
     }
 
-    wakealarm_set_interval(PERIODIC_CHORES_INTERVAL_FAST);
+    healthd_board_poll_intervals(&periodic_chores_interval_fast,
+                                 &periodic_chores_interval_slow);
+
+    wakealarm_set_interval(periodic_chores_interval_fast);
 }
 
 static void wakealarm_event(void) {

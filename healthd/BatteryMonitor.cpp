@@ -16,6 +16,7 @@
 
 #define LOG_TAG "healthd"
 
+#include "healthd.h"
 #include "BatteryMonitor.h"
 #include "BatteryPropertiesRegistrar.h"
 
@@ -170,6 +171,7 @@ int BatteryMonitor::getIntField(const String8& path) {
 
 bool BatteryMonitor::update(void) {
     struct BatteryProperties props;
+    bool logthis;
 
     props.chargerAcOnline = false;
     props.chargerUsbOnline = false;
@@ -238,26 +240,30 @@ bool BatteryMonitor::update(void) {
         }
     }
 
-    char dmesgline[256];
-    snprintf(dmesgline, sizeof(dmesgline),
-             "battery l=%d v=%d t=%s%d.%d h=%d st=%d",
-             props.batteryLevel, props.batteryVoltage,
-             props.batteryTemperature < 0 ? "-" : "",
-             abs(props.batteryTemperature / 10),
-             abs(props.batteryTemperature % 10), props.batteryHealth,
-             props.batteryStatus);
+    logthis = !healthd_board_battery_update(&props);
 
-    if (!mBatteryCurrentNowPath.isEmpty()) {
-        char b[20];
+    if (logthis) {
+        char dmesgline[256];
+        snprintf(dmesgline, sizeof(dmesgline),
+                 "battery l=%d v=%d t=%s%d.%d h=%d st=%d",
+                 props.batteryLevel, props.batteryVoltage,
+                 props.batteryTemperature < 0 ? "-" : "",
+                 abs(props.batteryTemperature / 10),
+                 abs(props.batteryTemperature % 10), props.batteryHealth,
+                 props.batteryStatus);
 
-        snprintf(b, sizeof(b), " c=%d", props.batteryCurrentNow);
-        strlcat(dmesgline, b, sizeof(dmesgline));
+        if (!mBatteryCurrentNowPath.isEmpty()) {
+            char b[20];
+
+            snprintf(b, sizeof(b), " c=%d", props.batteryCurrentNow);
+            strlcat(dmesgline, b, sizeof(dmesgline));
+        }
+
+        KLOG_INFO(LOG_TAG, "%s chg=%s%s%s\n", dmesgline,
+                  props.chargerAcOnline ? "a" : "",
+                  props.chargerUsbOnline ? "u" : "",
+                  props.chargerWirelessOnline ? "w" : "");
     }
-
-    KLOG_INFO(LOG_TAG, "%s chg=%s%s%s\n", dmesgline,
-              props.chargerAcOnline ? "a" : "",
-              props.chargerUsbOnline ? "u" : "",
-              props.chargerWirelessOnline ? "w" : "");
 
     if (mBatteryPropertiesRegistrar != NULL)
         mBatteryPropertiesRegistrar->notifyListeners(props);
