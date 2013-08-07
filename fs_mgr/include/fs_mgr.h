@@ -17,6 +17,9 @@
 #ifndef __CORE_FS_MGR_H
 #define __CORE_FS_MGR_H
 
+#include <stdint.h>
+#include <linux/dm-ioctl.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -35,6 +38,7 @@ struct fstab_rec {
     char *fs_options;
     int fs_mgr_flags;
     char *key_loc;
+    char *verity_loc;
     long long length;
     char *label;
     int partnum;

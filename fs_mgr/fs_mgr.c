@@ -34,12 +34,18 @@
 #define SWAP_FLAG_PRIO_SHIFT    0
 #define SWAP_FLAG_DISCARD       0x10000
 
+#include <linux/loop.h>
 #include <private/android_filesystem_config.h>
 #include <cutils/partition_utils.h>
 #include <cutils/properties.h>
 #include <logwrap/logwrap.h>
 
+#include "mincrypt/rsa.h"
+#include "mincrypt/sha.h"
+#include "mincrypt/sha256.h"
+
 #include "fs_mgr_priv.h"
+#include "fs_mgr_priv_verity.h"
 
 #define KEY_LOC_PROP   "ro.crypto.keyfile.userdata"
 #define KEY_IN_FOOTER  "footer"
@@ -85,6 +91,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "recoveryonly",MF_RECOVERYONLY },
     { "swapprio=",   MF_SWAPPRIO },
     { "zramsize=",   MF_ZRAMSIZE },
+    { "verify",      MF_VERIFY },
     { "defaults",    0 },
     { 0,             0 },
 };
@@ -588,9 +595,17 @@ int fs_mgr_mount_all(struct fstab *fstab)
                      fstab->recs[i].mount_point);
         }
 
+        if (fstab->recs[i].fs_mgr_flags & MF_VERIFY) {
+            if (fs_mgr_setup_verity(&fstab->recs[i]) < 0) {
+                ERROR("Could not set up verified partition, skipping!");
+                continue;
+            }
+        }
+
         mret = __mount(fstab->recs[i].blk_device, fstab->recs[i].mount_point,
-                       fstab->recs[i].fs_type, fstab->recs[i].flags,
-                       fstab->recs[i].fs_options);
+                     fstab->recs[i].fs_type, fstab->recs[i].flags,
+                     fstab->recs[i].fs_options);
+
         if (!mret) {
             /* Success!  Go get the next one */
             continue;
@@ -663,6 +678,13 @@ int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
         if (fstab->recs[i].fs_mgr_flags & MF_CHECK) {
             check_fs(n_blk_device, fstab->recs[i].fs_type,
                      fstab->recs[i].mount_point);
+        }
+
+        if (fstab->recs[i].fs_mgr_flags & MF_VERIFY) {
+            if (fs_mgr_setup_verity(&fstab->recs[i]) < 0) {
+                ERROR("Could not set up verified partition, skipping!");
+                continue;
+            }
         }
 
         /* Now mount it where requested */
@@ -909,4 +931,3 @@ int fs_mgr_is_encryptable(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_CRYPT;
 }
-

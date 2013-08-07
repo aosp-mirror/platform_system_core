@@ -71,6 +71,9 @@
 #define MF_RECOVERYONLY 0x40
 #define MF_SWAPPRIO     0x80
 #define MF_ZRAMSIZE     0x100
+#define MF_VERIFY       0x200
+
+#define DM_BUF_SIZE 4096
 
 #endif /* __CORE_FS_MGR_PRIV_H */
 
