@@ -16,7 +16,7 @@
 
 #include <healthd.h>
 
-void healthd_board_poll_intervals(int *fast_interval, int *slow_interval)
+void healthd_board_init(struct healthd_config *config)
 {
     // use defaults
 }

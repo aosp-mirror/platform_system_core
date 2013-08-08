@@ -37,10 +37,11 @@ using namespace android;
 // Periodic chores intervals in seconds
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_FAST (60 * 1)
 #define DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW (60 * 10)
-static int periodic_chores_interval_fast =
-        DEFAULT_PERIODIC_CHORES_INTERVAL_FAST;
-static int periodic_chores_interval_slow =
-        DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW;
+
+static struct healthd_config healthd_config = {
+    .periodic_chores_interval_fast = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST,
+    .periodic_chores_interval_slow = DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW,
+};
 
 #define POWER_SUPPLY_SUBSYSTEM "power_supply"
 
@@ -84,7 +85,8 @@ static void battery_update(void) {
     // slow wake interval when on battery (watch for drained battery).
 
    int new_wake_interval = gBatteryMonitor->update() ?
-        periodic_chores_interval_fast : periodic_chores_interval_slow;
+       healthd_config.periodic_chores_interval_fast :
+           healthd_config.periodic_chores_interval_slow;
 
     if (new_wake_interval != wakealarm_wake_interval)
             wakealarm_set_interval(new_wake_interval);
@@ -94,12 +96,12 @@ static void battery_update(void) {
     // poll at fast rate while awake and let alarm wake up at slow rate when
     // asleep.
 
-    if (periodic_chores_interval_fast == -1)
+    if (healthd_config.periodic_chores_interval_fast == -1)
         awake_poll_interval = -1;
     else
         awake_poll_interval =
-            new_wake_interval == periodic_chores_interval_fast ?
-                -1 : periodic_chores_interval_fast * 1000;
+            new_wake_interval == healthd_config.periodic_chores_interval_fast ?
+                -1 : healthd_config.periodic_chores_interval_fast * 1000;
 }
 
 static void periodic_chores() {
@@ -150,10 +152,7 @@ static void wakealarm_init(void) {
         return;
     }
 
-    healthd_board_poll_intervals(&periodic_chores_interval_fast,
-                                 &periodic_chores_interval_slow);
-
-    wakealarm_set_interval(periodic_chores_interval_fast);
+    wakealarm_set_interval(healthd_config.periodic_chores_interval_fast);
 }
 
 static void wakealarm_event(void) {
@@ -262,6 +261,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    healthd_board_init(&healthd_config);
     wakealarm_init();
     uevent_init();
     binder_init();
