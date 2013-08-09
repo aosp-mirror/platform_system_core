@@ -190,10 +190,10 @@ bool BatteryMonitor::update(void) {
     props.batteryVoltage = getIntField(mBatteryVoltagePath) / 1000;
 
     if (!mBatteryCurrentNowPath.isEmpty())
-        props.batteryCurrentNow = getIntField(mBatteryCurrentNowPath) / 1000;
+        props.batteryCurrentNow = getIntField(mBatteryCurrentNowPath);
 
     if (!mBatteryChargeCounterPath.isEmpty())
-        props.batteryChargeCounter = getIntField(mBatteryChargeCounterPath) / 1000;
+        props.batteryChargeCounter = getIntField(mBatteryChargeCounterPath);
 
     props.batteryTemperature = getIntField(mBatteryTemperaturePath);
 
@@ -255,7 +255,7 @@ bool BatteryMonitor::update(void) {
         if (!mBatteryCurrentNowPath.isEmpty()) {
             char b[20];
 
-            snprintf(b, sizeof(b), " c=%d", props.batteryCurrentNow);
+            snprintf(b, sizeof(b), " c=%d", props.batteryCurrentNow / 1000);
             strlcat(dmesgline, b, sizeof(dmesgline));
         }
 
