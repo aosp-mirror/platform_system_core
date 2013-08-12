@@ -36,6 +36,7 @@ public:
     const static int NlActionLinkUp;
     const static int NlActionAddressUpdated;
     const static int NlActionAddressRemoved;
+    const static int NlActionRdnss;
 
     NetlinkEvent();
     virtual ~NetlinkEvent();
@@ -49,9 +50,10 @@ public:
     void dump();
 
  protected:
-    bool parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr, int rtasize);
     bool parseBinaryNetlinkMessage(char *buffer, int size);
     bool parseAsciiNetlinkMessage(char *buffer, int size);
+    bool parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr, int rtasize);
+    bool parseNdUserOptMessage(struct nduseroptmsg *msg, int optsize);
 };
 
 #endif
