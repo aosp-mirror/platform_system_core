@@ -18,6 +18,9 @@ CLEAN_UP_RUN_FILE=0
 # contents includes our machine's anonymized guid.
 CONSENT_ID="/home/chronos/Consent To Send Stats"
 
+# Crash sender lock in case the sender is already running.
+CRASH_SENDER_LOCK="/var/lock/crash_sender"
+
 # Path to file that indicates a crash test is currently running.
 CRASH_TEST_IN_PROGRESS_FILE="/tmp/crash-test-in-progress"
 
@@ -569,4 +572,10 @@ main() {
   done
 }
 
+(
+if ! flock -n 9; then
+  lecho "crash_sender is already running; quitting."
+  exit 1
+fi
 main
+) 9>"${CRASH_SENDER_LOCK}"
