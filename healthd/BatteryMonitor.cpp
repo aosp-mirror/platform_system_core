@@ -369,7 +369,7 @@ void BatteryMonitor::init(bool nosvcmgr) {
     if (mBatteryStatusPath.isEmpty())
         KLOG_WARNING(LOG_TAG, "BatteryStatusPath not found\n");
     if (mBatteryHealthPath.isEmpty())
-        KLOG_WARNING("BatteryHealthPath not found\n");
+        KLOG_WARNING(LOG_TAG, "BatteryHealthPath not found\n");
     if (mBatteryPresentPath.isEmpty())
         KLOG_WARNING(LOG_TAG, "BatteryPresentPath not found\n");
     if (mBatteryCapacityPath.isEmpty())
