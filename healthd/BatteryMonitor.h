@@ -21,6 +21,7 @@
 #include <utils/String8.h>
 #include <utils/Vector.h>
 
+#include "healthd.h"
 #include "BatteryPropertiesRegistrar.h"
 
 namespace android {
@@ -38,20 +39,11 @@ class BatteryMonitor {
         ANDROID_POWER_SUPPLY_TYPE_BATTERY
     };
 
-    void init(bool nosvcmgr);
+    void init(struct healthd_config *hc, bool nosvcmgr);
     bool update(void);
 
   private:
-    String8 mBatteryStatusPath;
-    String8 mBatteryHealthPath;
-    String8 mBatteryPresentPath;
-    String8 mBatteryCapacityPath;
-    String8 mBatteryVoltagePath;
-    String8 mBatteryTemperaturePath;
-    String8 mBatteryTechnologyPath;
-    String8 mBatteryCurrentNowPath;
-    String8 mBatteryChargeCounterPath;
-
+    struct healthd_config *mHealthdConfig;
     Vector<String8> mChargerNames;
 
     sp<BatteryPropertiesRegistrar> mBatteryPropertiesRegistrar;
