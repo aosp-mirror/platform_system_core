@@ -3,6 +3,12 @@
 ifneq ($(BUILD_TINY_ANDROID),true)
 
 LOCAL_PATH := $(call my-dir)
+
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := healthd_board_default.cpp
+LOCAL_MODULE := libhealthd.default
+include $(BUILD_STATIC_LIBRARY)
+
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
@@ -17,12 +23,7 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 
 LOCAL_STATIC_LIBRARIES :=  libbatteryservice libbinder libz libutils libstdc++ libcutils liblog libm libc
-
-ifdef BOARD_LIB_HEALTHD
-LOCAL_STATIC_LIBRARIES += $(BOARD_LIB_HEALTHD)
-else
-LOCAL_SRC_FILES += healthd_board_default.cpp
-endif
+LOCAL_HAL_STATIC_LIBRARIES := libhealthd
 
 include $(BUILD_EXECUTABLE)
 
