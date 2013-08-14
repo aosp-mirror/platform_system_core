@@ -41,6 +41,15 @@ using namespace android;
 static struct healthd_config healthd_config = {
     .periodic_chores_interval_fast = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST,
     .periodic_chores_interval_slow = DEFAULT_PERIODIC_CHORES_INTERVAL_SLOW,
+    .batteryStatusPath = String8(String8::kEmptyString),
+    .batteryHealthPath = String8(String8::kEmptyString),
+    .batteryPresentPath = String8(String8::kEmptyString),
+    .batteryCapacityPath = String8(String8::kEmptyString),
+    .batteryVoltagePath = String8(String8::kEmptyString),
+    .batteryTemperaturePath = String8(String8::kEmptyString),
+    .batteryTechnologyPath = String8(String8::kEmptyString),
+    .batteryCurrentNowPath = String8(String8::kEmptyString),
+    .batteryChargeCounterPath = String8(String8::kEmptyString),
 };
 
 #define POWER_SUPPLY_SUBSYSTEM "power_supply"
@@ -266,7 +275,7 @@ int main(int argc, char **argv) {
     uevent_init();
     binder_init();
     gBatteryMonitor = new BatteryMonitor();
-    gBatteryMonitor->init(nosvcmgr);
+    gBatteryMonitor->init(&healthd_config, nosvcmgr);
 
     healthd_mainloop();
     return 0;
