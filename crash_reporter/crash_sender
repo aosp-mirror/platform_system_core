@@ -84,6 +84,9 @@ TIMESTAMPS_DIR="/var/lib/crash_sender"
 # Temp directory for this process.
 TMP_DIR=""
 
+# Chrome's crash report log file.
+CHROME_CRASH_LOG="/var/log/chrome/Crash Reports/uploads.log"
+
 lecho() {
   logger -t "${TAG}" "$@"
 }
@@ -432,7 +435,20 @@ send_crash() {
   set -e
 
   if [ ${curl_result} -eq 0 ]; then
-    lecho "Crash report receipt ID $(cat ${report_id})"
+    local id="$(cat ${report_id})"
+    local product_name
+    local timestamp="$(date +%s)"
+    case ${product} in
+      Chrome_ChromeOS)
+        product_name="Chrome"
+        ;;
+      *)
+        product_name="ChromeOS"
+        ;;
+    esac
+    /usr/bin/printf '%s,%s\u00A0(%s)\n' \
+      "${timestamp}" "${id}" "${product_name}" >> "${CHROME_CRASH_LOG}"
+    lecho "Crash report receipt ID ${id}"
   else
     lecho "Crash sending failed with: $(cat ${curl_stderr})"
   fi
