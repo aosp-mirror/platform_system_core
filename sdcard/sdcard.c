@@ -972,6 +972,8 @@ static int handle_opendir(struct fuse* fuse, struct fuse_handler* handler,
         return -errno;
     }
     out.fh = ptr_to_id(h);
+    out.open_flags = 0;
+    out.padding = 0;
     fuse_reply(fuse, hdr->unique, &out, sizeof(out));
     return NO_STATUS;
 }
