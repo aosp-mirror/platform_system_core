@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
+#include <utils/Errors.h>
 #include <utils/String8.h>
 #include <utils/Vector.h>
 
@@ -270,6 +271,40 @@ bool BatteryMonitor::update(void) {
 
     return props.chargerAcOnline | props.chargerUsbOnline |
             props.chargerWirelessOnline;
+}
+
+status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
+    status_t ret = BAD_VALUE;
+
+    switch(id) {
+    case BATTERY_PROP_CHARGE_COUNTER:
+        if (!mHealthdConfig->batteryChargeCounterPath.isEmpty()) {
+            val->valueInt =
+                getIntField(mHealthdConfig->batteryChargeCounterPath);
+            ret = NO_ERROR;
+        } else {
+            ret = NAME_NOT_FOUND;
+        }
+        break;
+
+    case BATTERY_PROP_CURRENT_NOW:
+        if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+            val->valueInt =
+                getIntField(mHealthdConfig->batteryCurrentNowPath);
+            ret = NO_ERROR;
+        } else {
+            ret = NAME_NOT_FOUND;
+        }
+        break;
+
+    default:
+        break;
+    }
+
+    if (ret != NO_ERROR)
+        val->valueInt = INT_MIN;
+
+    return ret;
 }
 
 void BatteryMonitor::init(struct healthd_config *hc, bool nosvcmgr) {

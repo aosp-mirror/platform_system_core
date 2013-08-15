@@ -67,6 +67,10 @@ void BatteryPropertiesRegistrar::unregisterListener(const sp<IBatteryPropertiesL
     }
 }
 
+status_t BatteryPropertiesRegistrar::getProperty(int id, struct BatteryProperty *val) {
+    return mBatteryMonitor->getProperty(id, val);
+}
+
 void BatteryPropertiesRegistrar::binderDied(const wp<IBinder>& who) {
     Mutex::Autolock _l(mRegistrationLock);
 

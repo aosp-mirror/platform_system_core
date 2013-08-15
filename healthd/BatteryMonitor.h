@@ -17,6 +17,7 @@
 #ifndef HEALTHD_BATTERYMONITOR_H
 #define HEALTHD_BATTERYMONITOR_H
 
+#include <batteryservice/BatteryService.h>
 #include <binder/IInterface.h>
 #include <utils/String8.h>
 #include <utils/Vector.h>
@@ -41,6 +42,7 @@ class BatteryMonitor {
 
     void init(struct healthd_config *hc, bool nosvcmgr);
     bool update(void);
+    status_t getProperty(int id, struct BatteryProperty *val);
 
   private:
     struct healthd_config *mHealthdConfig;

@@ -44,6 +44,7 @@ private:
 
     void registerListener(const sp<IBatteryPropertiesListener>& listener);
     void unregisterListener(const sp<IBatteryPropertiesListener>& listener);
+    status_t getProperty(int id, struct BatteryProperty *val);
     void binderDied(const wp<IBinder>& who);
 };
 
