@@ -75,7 +75,7 @@ enum {
      *
      */
     HAL_PIXEL_FORMAT_sRGB_A_8888        = 0xC,
-    HAL_PIXEL_FORMAT_sRGB_888           = 0xD,
+    HAL_PIXEL_FORMAT_sRGB_X_8888        = 0xD,
 
     /*
      * 0x100 - 0x1FF
