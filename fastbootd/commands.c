@@ -52,6 +52,8 @@
 
 static void cmd_boot(struct protocol_handle *phandle, const char *arg)
 {
+    int sz, atags_sz, new_atags_sz;
+    int rv;
     unsigned kernel_actual;
     unsigned ramdisk_actual;
     unsigned second_actual;
@@ -59,9 +61,11 @@ static void cmd_boot(struct protocol_handle *phandle, const char *arg)
     void *ramdisk_ptr;
     void *second_ptr;
     struct boot_img_hdr *hdr;
-    int sz, atags_sz, new_atags_sz;
-    int rv;
-    char *ptr = NULL, *atags_ptr = NULL, *new_atags = NULL;
+    char *ptr = NULL;
+    char *atags_ptr = NULL;
+    char *new_atags = NULL;
+    int data_fd = 0;
+
     D(DEBUG, "cmd_boot %s\n", arg);
 
     if (phandle->download_fd < 0) {
@@ -75,9 +79,18 @@ static void cmd_boot(struct protocol_handle *phandle, const char *arg)
         goto error;
     }
 
-    sz = get_file_size(phandle->download_fd);
+    // TODO: With cms we can also verify partition name included as
+    // cms signed attribute
+    if (flash_validate_certificate(phandle->download_fd, &data_fd) != 1) {
+        fastboot_fail(phandle, "Access forbiden you need the certificate");
+        return;
+    }
+
+    sz = get_file_size(data_fd);
+
     ptr = (char *) mmap(NULL, sz, PROT_READ,
-                        MAP_POPULATE | MAP_PRIVATE, phandle->download_fd, 0);
+                        MAP_POPULATE | MAP_PRIVATE, data_fd, 0);
+
     hdr = (struct boot_img_hdr *) ptr;
 
     if (ptr == MAP_FAILED) {
@@ -130,6 +143,7 @@ static void cmd_boot(struct protocol_handle *phandle, const char *arg)
     free(atags_ptr);
     munmap(ptr, sz);
     free(new_atags);
+    close(data_fd);
 
     D(INFO, "Kexec going to reboot");
     reboot(LINUX_REBOOT_CMD_KEXEC);
@@ -256,6 +270,7 @@ static void cmd_flash(struct protocol_handle *phandle, const char *arg)
     char data[BOOT_MAGIC_SIZE];
     char path[PATH_MAX];
     ssize_t header_sz = 0;
+    int data_fd = 0;
 
     D(DEBUG, "cmd_flash %s\n", arg);
 
@@ -273,9 +288,14 @@ static void cmd_flash(struct protocol_handle *phandle, const char *arg)
         return;
     }
 
+    if (flash_validate_certificate(phandle->download_fd, &data_fd) != 1) {
+        fastboot_fail(phandle, "Access forbiden you need certificate");
+        return;
+    }
+
     // TODO: Maybe its goot idea to check whether the partition is just bootable partition
     if (!strcmp(arg, "boot") || !strcmp(arg, "recovery")) {
-        if (read_data_once(phandle->download_fd, data, BOOT_MAGIC_SIZE) < BOOT_MAGIC_SIZE) {
+        if (read_data_once(data_fd, data, BOOT_MAGIC_SIZE) < BOOT_MAGIC_SIZE) {
             fastboot_fail(phandle, "incoming data read error, cannot read boot header");
             return;
         }
@@ -287,7 +307,10 @@ static void cmd_flash(struct protocol_handle *phandle, const char *arg)
 
     partition = flash_get_partiton(path);
 
-    sz = get_file_size64(phandle->download_fd);
+    sz = get_file_size64(data_fd);
+
+    sz -= header_sz;
+
     if (sz > get_file_size64(partition)) {
         flash_close(partition);
         D(WARN, "size of file too large");
@@ -304,6 +327,8 @@ static void cmd_flash(struct protocol_handle *phandle, const char *arg)
     D(INFO, "partition '%s' updated\n", arg);
 
     flash_close(partition);
+    close(data_fd);
+    //TODO: check who is closing phandle->download_fd
 
     fastboot_okay(phandle, "");
 }

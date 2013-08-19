@@ -30,6 +30,7 @@ LOCAL_SRC_FILES := \
     commands/virtual_partitions.c \
     fastbootd.c \
     protocol.c \
+    secure.c \
     transport.c \
     trigger.c \
     usb_linux_client.c \
@@ -37,11 +38,12 @@ LOCAL_SRC_FILES := \
 
 LOCAL_MODULE := fastbootd
 LOCAL_MODULE_TAGS := optional
-LOCAL_CFLAGS := -Wall -Werror -Wno-unused-parameter
+LOCAL_CFLAGS := -Wall -Werror -Wno-unused-parameter -DFLASH_CERT
 LOCAL_LDFLAGS := -ldl
 
 LOCAL_SHARED_LIBRARIES := \
     libhardware \
+    libcrypto \
     libhardware_legacy
 
 LOCAL_STATIC_LIBRARIES := \

@@ -29,36 +29,25 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _FASTBOOTD_ERASE_H
-#define _FASTBOOTD_ERASE_H
+#ifndef _FASTBOOTD_SECURE_H
+#define _FASTBOOTD_SECURE_H
 
-int flash_find_entry(const char *, char *, size_t);
-int flash_erase(int fd);
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
+#include <openssl/pem.h>
+#include <openssl/cms.h>
 
-static inline int flash_get_partiton(const char *path) {
-    return open(path, O_RDWR);
+void cert_init_crypto();
+
+X509_STORE *cert_store_from_path(const char*stream);
+
+static inline void cert_release_store(X509_STORE *store) {
+    X509_STORE_free(store);
 }
 
-static inline int flash_close(int fd) {
-    return close(fd);
-}
-
-int flash_write(int partition, int data, ssize_t size, ssize_t skip);
-
-static inline ssize_t read_data_once(int fd, char *buffer, ssize_t size) {
-    ssize_t readcount = 0;
-    ssize_t len;
-
-    while ((len = TEMP_FAILURE_RETRY(read(fd, (void *) &buffer[readcount], size - readcount))) > 0) {
-        readcount -= len;
-    }
-    if (len < 0)
-        return len;
-
-    return readcount;
-}
-
-int flash_validate_certificate(int signed_fd, int *data_fd);
+int cert_read(int fd, CMS_ContentInfo **content, BIO **output);
+int cert_verify(BIO *content, CMS_ContentInfo *content_info, X509_STORE *store, int *out_fd);
+void cert_release(BIO *content, CMS_ContentInfo *info);
 
 #endif
-
