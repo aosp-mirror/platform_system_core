@@ -42,6 +42,7 @@ uint64_t get_file_size64(int fd);
 uint64_t get_file_size(int fd);
 uint64_t get_block_device_size(int fd);
 int wipe_block_device(int fd, int64_t len);
+int create_temp_file();
 
 #define ROUND_TO_PAGE(address,pagesize) ((address + pagesize - 1) & (~(pagesize - 1)))
 
