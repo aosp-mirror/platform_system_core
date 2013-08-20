@@ -90,7 +90,7 @@ map_file(const char* filename, size_t* filesize)
      */
 
     oldegid = getegid();
-    if (setegid(AID_SYSTEM) < 0) {
+    if (setegid(AID_PACKAGE_INFO) < 0) {
         return NULL;
     }
 
