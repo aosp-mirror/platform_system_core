@@ -34,26 +34,62 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+static int skip_newline, quiet_errors, canonicalize;
+
 static void usage(char* name) {
-    fprintf(stderr, "Usage: %s FILE\n", name);
+    fprintf(stderr, "Usage: %s [OPTION]... FILE\n", name);
 }
 
 int readlink_main(int argc, char* argv[]) {
-    if (argc != 2) {
+    int c;
+    while ((c = getopt(argc, argv, "nfqs")) != -1) {
+        switch (c) {
+        case 'n':
+            skip_newline = 1;
+            break;
+        case 'f':
+            canonicalize = 1;
+            break;
+        case 'q':
+        case 's':
+            quiet_errors = 1;
+            break;
+        case '?':
+        default:
+            usage(argv[0]);
+            return EXIT_FAILURE;
+        }
+    }
+    int index = optind;
+    if (argc - index != 1) {
         usage(argv[0]);
         return EXIT_FAILURE;
     }
 
     char name[PATH_MAX+1];
-    ssize_t len = readlink(argv[1], name, PATH_MAX);
+    if (canonicalize) {
+        if(!realpath(argv[optind], name)) {
+            if (!quiet_errors) {
+                perror("readlink");
+            }
+            return EXIT_FAILURE;
+        }
+    } else {
+        ssize_t len = readlink(argv[1], name, PATH_MAX);
 
-    if (len < 0) {
-        perror("readlink");
-        return EXIT_FAILURE;
+        if (len < 0) {
+            if (!quiet_errors) {
+                perror("readlink");
+            }
+            return EXIT_FAILURE;
+        }
+        name[len] = '\0';
     }
 
-    name[len] = '\0';
-    printf("%s\n", name);
+    fputs(name, stdout);
+    if (!skip_newline) {
+        fputs("\n", stdout);
+    }
 
     return EXIT_SUCCESS;
 }
