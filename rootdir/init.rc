@@ -412,10 +412,6 @@ service healthd-charger /sbin/healthd -n
     critical
     seclabel u:r:healthd:s0
 
-on property:selinux.reload_policy=1
-    restart ueventd
-    restart installd
-
 service console /system/bin/sh
     class core
     console
