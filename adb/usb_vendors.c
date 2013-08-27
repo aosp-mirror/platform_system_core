@@ -140,6 +140,8 @@
 #define VENDOR_ID_QUALCOMM      0x05c6
 // Quanta's USB Vendor ID
 #define VENDOR_ID_QUANTA        0x0408
+// Rockchip's USB Vendor ID
+#define VENDOR_ID_ROCKCHIP      0x2207
 // Samsung's USB Vendor ID
 #define VENDOR_ID_SAMSUNG       0x04e8
 // Sharp's USB Vendor ID
@@ -225,6 +227,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_QISDA,
     VENDOR_ID_QUALCOMM,
     VENDOR_ID_QUANTA,
+    VENDOR_ID_ROCKCHIP,
     VENDOR_ID_SAMSUNG,
     VENDOR_ID_SHARP,
     VENDOR_ID_SK_TELESYS,
