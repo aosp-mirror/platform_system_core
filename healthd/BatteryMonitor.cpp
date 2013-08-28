@@ -297,6 +297,16 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         }
         break;
 
+    case BATTERY_PROP_CURRENT_AVG:
+        if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
+            val->valueInt =
+                getIntField(mHealthdConfig->batteryCurrentAvgPath);
+            ret = NO_ERROR;
+        } else {
+            ret = NAME_NOT_FOUND;
+        }
+        break;
+
     default:
         break;
     }
@@ -391,6 +401,14 @@ void BatteryMonitor::init(struct healthd_config *hc, bool nosvcmgr) {
                                       POWER_SUPPLY_SYSFS_PATH, name);
                     if (access(path, R_OK) == 0)
                         mHealthdConfig->batteryCurrentNowPath = path;
+                }
+
+                if (mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
+                    path.clear();
+                    path.appendFormat("%s/%s/current_avg",
+                                      POWER_SUPPLY_SYSFS_PATH, name);
+                    if (access(path, R_OK) == 0)
+                        mHealthdConfig->batteryCurrentAvgPath = path;
                 }
 
                 if (mHealthdConfig->batteryChargeCounterPath.isEmpty()) {

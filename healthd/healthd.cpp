@@ -49,6 +49,7 @@ static struct healthd_config healthd_config = {
     .batteryTemperaturePath = String8(String8::kEmptyString),
     .batteryTechnologyPath = String8(String8::kEmptyString),
     .batteryCurrentNowPath = String8(String8::kEmptyString),
+    .batteryCurrentAvgPath = String8(String8::kEmptyString),
     .batteryChargeCounterPath = String8(String8::kEmptyString),
 };
 

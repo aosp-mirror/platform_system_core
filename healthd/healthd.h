@@ -61,6 +61,7 @@ struct healthd_config {
     android::String8 batteryTemperaturePath;
     android::String8 batteryTechnologyPath;
     android::String8 batteryCurrentNowPath;
+    android::String8 batteryCurrentAvgPath;
     android::String8 batteryChargeCounterPath;
 };
 
