@@ -156,7 +156,7 @@
 // ECS's USB Vendor ID
 #define VENDOR_ID_ECS           0x03fc
 // MSI's USB Vendor ID
-#define VENDOR_ID_MSI           0x1462
+#define VENDOR_ID_MSI           0x0DB0
 // Wacom's USB Vendor ID
 #define VENDOR_ID_WACOM         0x0531
 
