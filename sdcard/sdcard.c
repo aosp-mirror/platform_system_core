@@ -488,6 +488,11 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
 
 /* Return if the calling UID holds sdcard_rw. */
 static bool get_caller_has_rw_locked(struct fuse* fuse, const struct fuse_in_header *hdr) {
+    /* No additional permissions enforcement */
+    if (fuse->derive == DERIVE_NONE) {
+        return true;
+    }
+
     appid_t appid = multiuser_get_app_id(hdr->uid);
     return hashmapContainsKey(fuse->appid_with_rw, (void*) appid);
 }
