@@ -42,6 +42,8 @@ const int NetlinkEvent::NlActionRemove = 2;
 const int NetlinkEvent::NlActionChange = 3;
 const int NetlinkEvent::NlActionLinkUp = 4;
 const int NetlinkEvent::NlActionLinkDown = 5;
+const int NetlinkEvent::NlActionAddressUpdated = 6;
+const int NetlinkEvent::NlActionAddressRemoved = 7;
 
 NetlinkEvent::NetlinkEvent() {
     mAction = NlActionUnknown;
@@ -131,11 +133,12 @@ bool NetlinkEvent::parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr,
             }
 
             // Fill in interface information.
-            mAction = (type == RTM_NEWADDR) ? NlActionAdd : NlActionRemove;
-            mSubsystem = strdup("address");
+            mAction = (type == RTM_NEWADDR) ? NlActionAddressUpdated :
+                                              NlActionAddressRemoved;
+            mSubsystem = strdup("net");
             asprintf(&mParams[0], "ADDRESS=%s/%d", addrstr,
                      ifaddr->ifa_prefixlen);
-            asprintf(&mParams[1], "IFACE=%s", ifname);
+            asprintf(&mParams[1], "INTERFACE=%s", ifname);
             asprintf(&mParams[2], "FLAGS=%u", ifaddr->ifa_flags);
             asprintf(&mParams[3], "SCOPE=%u", ifaddr->ifa_scope);
         } else if (rta->rta_type == IFA_CACHEINFO) {
@@ -205,7 +208,7 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
                     mParams[0] = strdup(buffer);
                     mAction = (ifi->ifi_flags & IFF_LOWER_UP) ?
                       NlActionLinkUp : NlActionLinkDown;
-                    mSubsystem = strdup("interface");
+                    mSubsystem = strdup("net");
                     break;
                 }
 
