@@ -945,6 +945,7 @@ int main(int argc, char **argv)
     restorecon("/dev");
     restorecon("/dev/socket");
     restorecon("/dev/__properties__");
+    restorecon_recursive("/sys");
 
     is_charger = !strcmp(bootmode, "charger");
 
