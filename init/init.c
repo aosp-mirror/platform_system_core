@@ -39,6 +39,7 @@
 #include <libgen.h>
 
 #include <cutils/list.h>
+#include <cutils/android_reboot.h>
 #include <cutils/sockets.h>
 #include <cutils/iosched_policy.h>
 #include <private/android_filesystem_config.h>
@@ -72,8 +73,6 @@ static char bootmode[32];
 static char hardware[32];
 static unsigned revision = 0;
 static char qemu[32];
-
-static int selinux_enabled = 1;
 
 static struct action *cur_action = NULL;
 static struct command *cur_command = NULL;
@@ -611,10 +610,6 @@ static void import_kernel_nv(char *name, int for_emulator)
     *value++ = 0;
     if (name_len == 0) return;
 
-    if (!strcmp(name,"selinux")) {
-        selinux_enabled = atoi(value);
-    }
-
     if (for_emulator) {
         /* in the emulator, export any kernel option with the
          * ro.kernel. prefix */
@@ -797,10 +792,6 @@ void selinux_init_all_handles(void)
 
 int selinux_reload_policy(void)
 {
-    if (!selinux_enabled) {
-        return -1;
-    }
-
     INFO("SELinux: Attempting to reload policy files\n");
 
     if (selinux_android_reload_policy() == -1) {
@@ -821,6 +812,24 @@ int audit_callback(void *data, security_class_t cls, char *buf, size_t len)
 {
     snprintf(buf, len, "property=%s", !data ? "NULL" : (char *)data);
     return 0;
+}
+
+static void selinux_initialize(void)
+{
+    if (access("/sys/fs/selinux", F_OK) != 0) {
+        // SELinux is not compiled into this kernel. Fail gracefully.
+        return;
+    }
+
+    INFO("loading selinux policy\n");
+    if (selinux_android_load_policy() < 0) {
+        ERROR("SELinux: Failed to load policy; rebooting into recovery mode\n");
+        android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
+        while (1) { pause(); }  // never reached
+    }
+
+    selinux_init_all_handles();
+    security_setenforce(1);
 }
 
 int main(int argc, char **argv)
@@ -883,17 +892,7 @@ int main(int argc, char **argv)
     cb.func_audit = audit_callback;
     selinux_set_callback(SELINUX_CB_AUDIT, cb);
 
-    INFO("loading selinux policy\n");
-    if (selinux_enabled) {
-        if (selinux_android_load_policy() < 0) {
-            selinux_enabled = 0;
-            INFO("SELinux: Disabled due to failed policy load\n");
-        } else {
-            selinux_init_all_handles();
-        }
-    } else {
-        INFO("SELinux:  Disabled by command line option\n");
-    }
+    selinux_initialize();
     /* These directories were necessarily created before initial policy load
      * and therefore need their security context restored to the proper value.
      * This must happen before /dev is populated by ueventd.
