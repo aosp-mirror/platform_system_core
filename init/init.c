@@ -790,8 +790,52 @@ void selinux_init_all_handles(void)
     sehandle_prop = selinux_android_prop_context_handle();
 }
 
+static bool selinux_is_disabled(void)
+{
+    char tmp[PROP_VALUE_MAX];
+
+    if (access("/sys/fs/selinux", F_OK) != 0) {
+        /* SELinux is not compiled into the kernel, or has been disabled
+         * via the kernel command line "selinux=0".
+         */
+        return true;
+    }
+
+    if ((property_get("ro.boot.selinux", tmp) != 0) && (strcmp(tmp, "disabled") == 0)) {
+        /* SELinux is compiled into the kernel, but we've been told to disable it. */
+        return true;
+    }
+
+    return false;
+}
+
+static bool selinux_is_enforcing(void)
+{
+    char tmp[PROP_VALUE_MAX];
+
+    if (property_get("ro.boot.selinux", tmp) == 0) {
+        /* Property is not set.  Assume enforcing */
+        return true;
+    }
+
+    if (strcmp(tmp, "permissive") == 0) {
+        /* SELinux is in the kernel, but we've been told to go into permissive mode */
+        return false;
+    }
+
+    if (strcmp(tmp, "enforcing") != 0) {
+        ERROR("SELinux: Unknown value of ro.boot.selinux. Got: \"%s\". Assuming enforcing.\n", tmp);
+    }
+
+    return true;
+}
+
 int selinux_reload_policy(void)
 {
+    if (selinux_is_disabled()) {
+        return -1;
+    }
+
     INFO("SELinux: Attempting to reload policy files\n");
 
     if (selinux_android_reload_policy() == -1) {
@@ -816,8 +860,7 @@ int audit_callback(void *data, security_class_t cls, char *buf, size_t len)
 
 static void selinux_initialize(void)
 {
-    if (access("/sys/fs/selinux", F_OK) != 0) {
-        // SELinux is not compiled into this kernel. Fail gracefully.
+    if (selinux_is_disabled()) {
         return;
     }
 
@@ -829,7 +872,9 @@ static void selinux_initialize(void)
     }
 
     selinux_init_all_handles();
-    security_setenforce(1);
+    bool is_enforcing = selinux_is_enforcing();
+    INFO("SELinux: security_setenforce(%d)\n", is_enforcing);
+    security_setenforce(is_enforcing);
 }
 
 int main(int argc, char **argv)
