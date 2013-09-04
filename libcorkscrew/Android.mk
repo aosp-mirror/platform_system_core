@@ -51,7 +51,7 @@ endif
 
 LOCAL_SHARED_LIBRARIES += libdl libcutils liblog libgccdemangle
 
-LOCAL_CFLAGS += -std=gnu99 -Werror
+LOCAL_CFLAGS += -std=gnu99 -Werror -Wno-unused-parameter
 LOCAL_MODULE := libcorkscrew
 LOCAL_MODULE_TAGS := optional
 
@@ -81,7 +81,7 @@ ifeq ($(HOST_OS),linux)
   LOCAL_SHARED_LIBRARIES += libgccdemangle # TODO: is this even needed on Linux?
   LOCAL_LDLIBS += -lrt
 endif
-LOCAL_CFLAGS += -std=gnu99 -Werror
+LOCAL_CFLAGS += -std=gnu99 -Werror -Wno-unused-parameter
 LOCAL_MODULE := libcorkscrew
 LOCAL_MODULE_TAGS := optional
 include $(BUILD_HOST_SHARED_LIBRARY)
