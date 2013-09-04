@@ -168,6 +168,8 @@
 #define VENDOR_ID_WACOM         0x0531
 // Xiaomi's USB Vendor ID
 #define VENDOR_ID_XIAOMI        0x2717
+// YotaDevices's USB Vendor ID
+#define VENDOR_ID_YOTADEVICES   0x2916
 // Yulong Coolpad's USB Vendor ID
 #define VENDOR_ID_YULONG_COOLPAD 0x1EBF
 // ZTE's USB Vendor ID
@@ -243,6 +245,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_VIZIO,
     VENDOR_ID_WACOM,
     VENDOR_ID_XIAOMI,
+    VENDOR_ID_YOTADEVICES,
     VENDOR_ID_YULONG_COOLPAD,
     VENDOR_ID_ZTE,
 };
