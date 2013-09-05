@@ -4,8 +4,12 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= fs_mgr.c fs_mgr_verity.c fs_mgr_fstab.c
+LOCAL_SRC_FILES += fs_mgr_format.c
 
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include \
+    system/vold \
+    system/extras/ext4_utils \
+    external/openssl/include
 
 LOCAL_MODULE:= libfs_mgr
 LOCAL_STATIC_LIBRARIES := liblogwrap libmincrypt libext4_utils_static
@@ -35,6 +39,7 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)/sbin
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
 
 LOCAL_STATIC_LIBRARIES := libfs_mgr liblogwrap libcutils liblog libc libmincrypt libext4_utils_static
+LOCAL_STATIC_LIBRARIES += libsparse_static libz libselinux
 
 LOCAL_CFLAGS := -Werror
 
