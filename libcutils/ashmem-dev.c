@@ -48,7 +48,7 @@ int ashmem_create_region(const char *name, size_t size)
 		return fd;
 
 	if (name) {
-		char buf[ASHMEM_NAME_LEN];
+		char buf[ASHMEM_NAME_LEN] = {0};
 
 		strlcpy(buf, name, sizeof(buf));
 		ret = ioctl(fd, ASHMEM_SET_NAME, buf);
