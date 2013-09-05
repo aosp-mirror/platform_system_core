@@ -33,7 +33,7 @@ unsigned int decode_uid(const char *s);
 
 int mkdir_recursive(const char *pathname, mode_t mode);
 void sanitize(char *p);
-void make_link(const char *oldpath, const char *newpath);
+void make_link_init(const char *oldpath, const char *newpath);
 void remove_link(const char *oldpath, const char *newpath);
 int wait_for_file(const char *filename, int timeout);
 void open_devnull_stdio(void);
