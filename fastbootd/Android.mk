@@ -30,7 +30,9 @@ LOCAL_SRC_FILES := \
     commands/virtual_partitions.c \
     fastbootd.c \
     protocol.c \
+    socket_client.c \
     transport.c \
+    transport_socket.c \
     trigger.c \
     usb_linux_client.c \
     utils.c

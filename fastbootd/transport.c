@@ -99,6 +99,7 @@ static void *transport_data_thread(void *arg)
         }
         if (ret > 0) {
             buffer[ret] = 0;
+            //TODO: multiple threads
             protocol_handle_command(phandle, buffer);
         }
     }

@@ -29,25 +29,66 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _FASTBOOT_UTLIS_H
-#define _FASTBOOT_UTILS_H
-
 #include <stdio.h>
+#include <cutils/sockets.h>
+#include <poll.h>
+#include <unistd.h>
 
-int get_stream_size(FILE *);
+#include "utils.h"
 
-char *strip(char *str);
+#define BUFFER_SIZE 256
 
-uint64_t get_file_size64(int fd);
-uint64_t get_file_size(int fd);
-uint64_t get_block_device_size(int fd);
-int wipe_block_device(int fd, int64_t len);
-int create_temp_file();
-ssize_t bulk_read(int bulk_out, char *buf, size_t length);
-ssize_t bulk_write(int bulk_in, const char *buf, size_t length);
+#define STDIN_FD 0
+#define STDOUT_FD 1
+#define STDERR_FD 2
 
-#define ROUND_TO_PAGE(address,pagesize) ((address + pagesize - 1) & (~(pagesize - 1)))
+void run_socket_client() {
+    int fd;
+    char buffer[BUFFER_SIZE];
+    int n;
+    struct pollfd fds[2];
 
-#define ROUND_UP(number,size) (((number + size - 1) / size) * size)
+    fd = socket_local_client("fastbootd",
+                         ANDROID_SOCKET_NAMESPACE_RESERVED,
+                         SOCK_STREAM);
 
-#endif
+    if (fd < 0) {
+        fprintf(stderr, "ERROR: Unable to open fastbootd socket\n");
+        return;
+    }
+
+    fds[0].fd = STDIN_FD;
+    fds[0].events = POLLIN;
+    fds[1].fd = fd;
+    fds[1].events = POLLIN;
+
+    while(true) {
+        if (poll(fds, 2, -1) <= 0) {
+            fprintf(stderr, "ERROR: socket error");
+            return;
+        }
+
+        if (fds[0].revents & POLLIN) {
+            if ((n = read(STDIN_FD, buffer, BUFFER_SIZE)) < 0) {
+                goto error;
+            }
+
+            if (bulk_write(fd, buffer, n) < 0) {
+                goto error;
+            }
+        }
+
+        if (fds[1].revents & POLLIN) {
+            if ((n = read(fd, buffer, BUFFER_SIZE)) < 0) {
+                goto error;
+            }
+
+            if (bulk_write(STDOUT_FD, buffer, n) < 0) {
+                goto error;
+            }
+        }
+    }
+
+error:
+    fprintf(stderr, "Transport error\n");
+}
