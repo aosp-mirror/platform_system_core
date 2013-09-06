@@ -23,11 +23,9 @@
 #include <utils/Mutex.h>
 #include <utils/String16.h>
 
-namespace android {
+#include "healthd.h"
 
-BatteryPropertiesRegistrar::BatteryPropertiesRegistrar(BatteryMonitor* monitor) {
-    mBatteryMonitor = monitor;
-}
+namespace android {
 
 void BatteryPropertiesRegistrar::publish() {
     defaultServiceManager()->addService(String16("batterypropreg"), this);
@@ -53,7 +51,7 @@ void BatteryPropertiesRegistrar::registerListener(const sp<IBatteryPropertiesLis
         mListeners.add(listener);
         listener->asBinder()->linkToDeath(this);
     }
-    mBatteryMonitor->update();
+    healthd_battery_update();
 }
 
 void BatteryPropertiesRegistrar::unregisterListener(const sp<IBatteryPropertiesListener>& listener) {
@@ -68,7 +66,7 @@ void BatteryPropertiesRegistrar::unregisterListener(const sp<IBatteryPropertiesL
 }
 
 status_t BatteryPropertiesRegistrar::getProperty(int id, struct BatteryProperty *val) {
-    return mBatteryMonitor->getProperty(id, val);
+    return healthd_get_property(id, val);
 }
 
 void BatteryPropertiesRegistrar::binderDied(const wp<IBinder>& who) {

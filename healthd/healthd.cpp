@@ -31,6 +31,7 @@
 #include <cutils/uevent.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
+#include <utils/Errors.h>
 
 using namespace android;
 
@@ -90,7 +91,11 @@ static void wakealarm_set_interval(int interval) {
         KLOG_ERROR(LOG_TAG, "wakealarm_set_interval: timerfd_settime failed\n");
 }
 
-static void battery_update(void) {
+status_t healthd_get_property(int id, struct BatteryProperty *val) {
+    return gBatteryMonitor->getProperty(id, val);
+}
+
+void healthd_battery_update(void) {
     // Fast wake interval when on charger (watch for overheat);
     // slow wake interval when on battery (watch for drained battery).
 
@@ -115,7 +120,7 @@ static void battery_update(void) {
 }
 
 static void periodic_chores() {
-    battery_update();
+    healthd_battery_update();
 }
 
 static void uevent_init(void) {
@@ -145,7 +150,7 @@ static void uevent_event(void) {
 
     while (*cp) {
         if (!strcmp(cp, "SUBSYSTEM=" POWER_SUPPLY_SUBSYSTEM)) {
-            battery_update();
+            healthd_battery_update();
             break;
         }
 

@@ -469,7 +469,7 @@ void BatteryMonitor::init(struct healthd_config *hc, bool nosvcmgr) {
         KLOG_WARNING(LOG_TAG, "BatteryTechnologyPath not found\n");
 
     if (nosvcmgr == false) {
-            mBatteryPropertiesRegistrar = new BatteryPropertiesRegistrar(this);
+            mBatteryPropertiesRegistrar = new BatteryPropertiesRegistrar();
             mBatteryPropertiesRegistrar->publish();
     }
 }
