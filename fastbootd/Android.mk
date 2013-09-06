@@ -27,6 +27,7 @@ LOCAL_SRC_FILES := \
     commands/boot.c \
     commands/flash.c \
     commands/partitions.c \
+    commands/virtual_partitions.c \
     fastbootd.c \
     protocol.c \
     transport.c \
