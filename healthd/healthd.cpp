@@ -249,6 +249,9 @@ static void healthd_mainloop(void) {
             if (events[n].data.ptr)
                 (*(void (*)())events[n].data.ptr)();
         }
+
+        if (!nevents)
+            periodic_chores();
     }
 
     return;
