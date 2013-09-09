@@ -21,8 +21,10 @@
 #include "BatteryMonitor.h"
 
 #include <errno.h>
+#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
@@ -79,6 +81,14 @@ extern int healthd_mode_android_preparetowait(void);
 extern void healthd_mode_android_battery_update(
     struct android::BatteryProperties *props);
 
+// Charger mode
+
+extern void healthd_mode_charger_init(struct healthd_config *config);
+extern int healthd_mode_charger_preparetowait(void);
+extern void healthd_mode_charger_heartbeat(void);
+extern void healthd_mode_charger_battery_update(
+    struct android::BatteryProperties *props);
+
 // NOPs for modes that need no special action
 
 static void healthd_mode_nop_init(struct healthd_config *config);
@@ -92,6 +102,13 @@ static struct healthd_mode_ops android_ops = {
     .preparetowait = healthd_mode_android_preparetowait,
     .heartbeat = healthd_mode_nop_heartbeat,
     .battery_update = healthd_mode_android_battery_update,
+};
+
+static struct healthd_mode_ops charger_ops = {
+    .init = healthd_mode_charger_init,
+    .preparetowait = healthd_mode_charger_preparetowait,
+    .heartbeat = healthd_mode_charger_heartbeat,
+    .battery_update = healthd_mode_charger_battery_update,
 };
 
 static struct healthd_mode_ops recovery_ops = {
@@ -307,15 +324,22 @@ int main(int argc, char **argv) {
     klog_set_level(KLOG_LEVEL);
     healthd_mode_ops = &android_ops;
 
-    while ((ch = getopt(argc, argv, "r")) != -1) {
-        switch (ch) {
-        case 'r':
-            healthd_mode_ops = &recovery_ops;
-            break;
-        case '?':
-        default:
-            KLOG_ERROR(LOG_TAG, "Unrecognized healthd option: %c\n", ch);
-            exit(1);
+    if (!strcmp(basename(argv[0]), "charger")) {
+        healthd_mode_ops = &charger_ops;
+    } else {
+        while ((ch = getopt(argc, argv, "cr")) != -1) {
+            switch (ch) {
+            case 'c':
+                healthd_mode_ops = &charger_ops;
+                break;
+            case 'r':
+                healthd_mode_ops = &recovery_ops;
+                break;
+            case '?':
+            default:
+                KLOG_ERROR(LOG_TAG, "Unrecognized healthd option: %c\n", ch);
+                exit(1);
+            }
         }
     }
 

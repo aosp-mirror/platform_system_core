@@ -82,6 +82,14 @@ struct healthd_mode_ops {
 
 extern struct healthd_mode_ops *healthd_mode_ops;
 
+// Charger mode
+
+void healthd_mode_charger_init(struct healthd_config *config);
+int healthd_mode_charger_preparetowait(void);
+void healthd_mode_charger_heartbeat(void);
+void healthd_mode_charger_battery_update(
+    struct android::BatteryProperties *props);
+
 // The following are implemented in libhealthd_board to handle board-specific
 // behavior.
 //
