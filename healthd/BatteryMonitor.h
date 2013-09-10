@@ -23,11 +23,8 @@
 #include <utils/Vector.h>
 
 #include "healthd.h"
-#include "BatteryPropertiesRegistrar.h"
 
 namespace android {
-
-class BatteryPropertiesRegistrar;
 
 class BatteryMonitor {
   public:
@@ -40,15 +37,13 @@ class BatteryMonitor {
         ANDROID_POWER_SUPPLY_TYPE_BATTERY
     };
 
-    void init(struct healthd_config *hc, bool nosvcmgr);
+    void init(struct healthd_config *hc);
     bool update(void);
     status_t getProperty(int id, struct BatteryProperty *val);
 
   private:
     struct healthd_config *mHealthdConfig;
     Vector<String8> mChargerNames;
-
-    sp<BatteryPropertiesRegistrar> mBatteryPropertiesRegistrar;
 
     int getBatteryStatus(const char* status);
     int getBatteryHealth(const char* status);

@@ -25,8 +25,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <batteryservice/BatteryService.h>
-#include <binder/IPCThreadState.h>
-#include <binder/ProcessState.h>
 #include <cutils/klog.h>
 #include <cutils/uevent.h>
 #include <sys/epoll.h>
@@ -72,7 +70,50 @@ static int wakealarm_wake_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST;
 
 static BatteryMonitor* gBatteryMonitor;
 
-static bool nosvcmgr;
+struct healthd_mode_ops *healthd_mode_ops;
+
+// Android mode
+
+extern void healthd_mode_android_init(struct healthd_config *config);
+extern int healthd_mode_android_preparetowait(void);
+extern void healthd_mode_android_battery_update(
+    struct android::BatteryProperties *props);
+
+// NOPs for modes that need no special action
+
+static void healthd_mode_nop_init(struct healthd_config *config);
+static int healthd_mode_nop_preparetowait(void);
+static void healthd_mode_nop_heartbeat(void);
+static void healthd_mode_nop_battery_update(
+    struct android::BatteryProperties *props);
+
+static struct healthd_mode_ops android_ops = {
+    .init = healthd_mode_android_init,
+    .preparetowait = healthd_mode_android_preparetowait,
+    .heartbeat = healthd_mode_nop_heartbeat,
+    .battery_update = healthd_mode_android_battery_update,
+};
+
+static struct healthd_mode_ops recovery_ops = {
+    .init = healthd_mode_nop_init,
+    .preparetowait = healthd_mode_nop_preparetowait,
+    .heartbeat = healthd_mode_nop_heartbeat,
+    .battery_update = healthd_mode_nop_battery_update,
+};
+
+static void healthd_mode_nop_init(struct healthd_config *config) {
+}
+
+static int healthd_mode_nop_preparetowait(void) {
+    return -1;
+}
+
+static void healthd_mode_nop_heartbeat(void) {
+}
+
+static void healthd_mode_nop_battery_update(
+    struct android::BatteryProperties *props) {
+}
 
 int healthd_register_event(int fd, void (*handler)(uint32_t)) {
     struct epoll_event ev;
@@ -208,32 +249,17 @@ static void wakealarm_init(void) {
     wakealarm_set_interval(healthd_config.periodic_chores_interval_fast);
 }
 
-static void binder_event(uint32_t revents) {
-    IPCThreadState::self()->handlePolledCommands();
-}
-
-static void binder_init(void) {
-    int binder_fd;
-
-    ProcessState::self()->setThreadPoolMaxThreadCount(0);
-    IPCThreadState::self()->disableBackgroundScheduling(true);
-    IPCThreadState::self()->setupPolling(&binder_fd);
-
-    if (binder_fd >= 0) {
-       if (healthd_register_event(binder_fd, binder_event))
-            KLOG_ERROR(LOG_TAG,
-                       "Register for binder events failed\n");
-    }
-}
-
 static void healthd_mainloop(void) {
     while (1) {
         struct epoll_event events[eventct];
         int nevents;
+        int timeout = awake_poll_interval;
+        int mode_timeout;
 
-        IPCThreadState::self()->flushCommands();
-
-        nevents = epoll_wait(epollfd, events, eventct, awake_poll_interval);
+        mode_timeout = healthd_mode_ops->preparetowait();
+        if (timeout < 0 || (mode_timeout > 0 && mode_timeout < timeout))
+            timeout = mode_timeout;
+        nevents = epoll_wait(epollfd, events, eventct, timeout);
 
         if (nevents == -1) {
             if (errno == EINTR)
@@ -249,6 +275,8 @@ static void healthd_mainloop(void) {
 
         if (!nevents)
             periodic_chores();
+
+        healthd_mode_ops->heartbeat();
     }
 
     return;
@@ -263,12 +291,12 @@ static int healthd_init() {
         return -1;
     }
 
+    healthd_mode_ops->init(&healthd_config);
     healthd_board_init(&healthd_config);
     wakealarm_init();
     uevent_init();
-    binder_init();
     gBatteryMonitor = new BatteryMonitor();
-    gBatteryMonitor->init(&healthd_config, nosvcmgr);
+    gBatteryMonitor->init(&healthd_config);
     return 0;
 }
 
@@ -277,11 +305,12 @@ int main(int argc, char **argv) {
     int ret;
 
     klog_set_level(KLOG_LEVEL);
+    healthd_mode_ops = &android_ops;
 
-    while ((ch = getopt(argc, argv, "n")) != -1) {
+    while ((ch = getopt(argc, argv, "r")) != -1) {
         switch (ch) {
-        case 'n':
-            nosvcmgr = true;
+        case 'r':
+            healthd_mode_ops = &recovery_ops;
             break;
         case '?':
         default:

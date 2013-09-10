@@ -18,7 +18,6 @@
 
 #include "healthd.h"
 #include "BatteryMonitor.h"
-#include "BatteryPropertiesRegistrar.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -266,9 +265,7 @@ bool BatteryMonitor::update(void) {
                   props.chargerWirelessOnline ? "w" : "");
     }
 
-    if (mBatteryPropertiesRegistrar != NULL)
-        mBatteryPropertiesRegistrar->notifyListeners(props);
-
+    healthd_mode_ops->battery_update(&props);
     return props.chargerAcOnline | props.chargerUsbOnline |
             props.chargerWirelessOnline;
 }
@@ -317,7 +314,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
     return ret;
 }
 
-void BatteryMonitor::init(struct healthd_config *hc, bool nosvcmgr) {
+void BatteryMonitor::init(struct healthd_config *hc) {
     String8 path;
 
     mHealthdConfig = hc;
@@ -467,11 +464,6 @@ void BatteryMonitor::init(struct healthd_config *hc, bool nosvcmgr) {
         KLOG_WARNING(LOG_TAG, "BatteryTemperaturePath not found\n");
     if (mHealthdConfig->batteryTechnologyPath.isEmpty())
         KLOG_WARNING(LOG_TAG, "BatteryTechnologyPath not found\n");
-
-    if (nosvcmgr == false) {
-            mBatteryPropertiesRegistrar = new BatteryPropertiesRegistrar();
-            mBatteryPropertiesRegistrar->publish();
-    }
 }
 
 }; // namespace android

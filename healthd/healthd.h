@@ -73,6 +73,15 @@ void healthd_battery_update();
 android::status_t healthd_get_property(int id,
     struct android::BatteryProperty *val);
 
+struct healthd_mode_ops {
+    void (*init)(struct healthd_config *config);
+    int (*preparetowait)(void);
+    void (*heartbeat)(void);
+    void (*battery_update)(struct android::BatteryProperties *props);
+};
+
+extern struct healthd_mode_ops *healthd_mode_ops;
+
 // The following are implemented in libhealthd_board to handle board-specific
 // behavior.
 //

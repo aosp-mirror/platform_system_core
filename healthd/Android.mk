@@ -13,6 +13,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	healthd.cpp \
+	healthd_mode_android.cpp \
 	BatteryMonitor.cpp \
 	BatteryPropertiesRegistrar.cpp
 
