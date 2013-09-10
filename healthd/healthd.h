@@ -68,6 +68,7 @@ struct healthd_config {
 
 // Global helper functions
 
+int healthd_register_event(int fd, void (*handler)(uint32_t));
 void healthd_battery_update();
 android::status_t healthd_get_property(int id,
     struct android::BatteryProperty *val);

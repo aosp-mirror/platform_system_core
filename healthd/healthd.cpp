@@ -54,10 +54,13 @@ static struct healthd_config healthd_config = {
     .batteryChargeCounterPath = String8(String8::kEmptyString),
 };
 
+static int eventct;
+static int epollfd;
+
 #define POWER_SUPPLY_SUBSYSTEM "power_supply"
 
-// epoll events: uevent, wakealarm, binder
-#define MAX_EPOLL_EVENTS 3
+// epoll_create() parameter is actually unused
+#define MAX_EPOLL_EVENTS 40
 static int uevent_fd;
 static int wakealarm_fd;
 static int binder_fd;
@@ -70,6 +73,21 @@ static int wakealarm_wake_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST;
 static BatteryMonitor* gBatteryMonitor;
 
 static bool nosvcmgr;
+
+int healthd_register_event(int fd, void (*handler)(uint32_t)) {
+    struct epoll_event ev;
+
+    ev.events = EPOLLIN | EPOLLWAKEUP;
+    ev.data.ptr = (void *)handler;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+        KLOG_ERROR(LOG_TAG,
+                   "epoll_ctl failed; errno=%d\n", errno);
+        return -1;
+    }
+
+    eventct++;
+    return 0;
+}
 
 static void wakealarm_set_interval(int interval) {
     struct itimerspec itval;
@@ -123,17 +141,8 @@ static void periodic_chores() {
     healthd_battery_update();
 }
 
-static void uevent_init(void) {
-    uevent_fd = uevent_open_socket(64*1024, true);
-
-    if (uevent_fd >= 0)
-        fcntl(uevent_fd, F_SETFL, O_NONBLOCK);
-    else
-        KLOG_ERROR(LOG_TAG, "uevent_init: uevent_open_socket failed\n");
-}
-
 #define UEVENT_MSG_LEN 1024
-static void uevent_event(void) {
+static void uevent_event(uint32_t epevents) {
     char msg[UEVENT_MSG_LEN+2];
     char *cp;
     int n;
@@ -160,6 +169,31 @@ static void uevent_event(void) {
     }
 }
 
+static void uevent_init(void) {
+    uevent_fd = uevent_open_socket(64*1024, true);
+
+    if (uevent_fd < 0) {
+        KLOG_ERROR(LOG_TAG, "uevent_init: uevent_open_socket failed\n");
+        return;
+    }
+
+    fcntl(uevent_fd, F_SETFL, O_NONBLOCK);
+    if (healthd_register_event(uevent_fd, uevent_event))
+        KLOG_ERROR(LOG_TAG,
+                   "register for uevent events failed\n");
+}
+
+static void wakealarm_event(uint32_t epevents) {
+    unsigned long long wakeups;
+
+    if (read(wakealarm_fd, &wakeups, sizeof(wakeups)) == -1) {
+        KLOG_ERROR(LOG_TAG, "wakealarm_event: read wakealarm fd failed\n");
+        return;
+    }
+
+    periodic_chores();
+}
+
 static void wakealarm_init(void) {
     wakealarm_fd = timerfd_create(CLOCK_BOOTTIME_ALARM, TFD_NONBLOCK);
     if (wakealarm_fd == -1) {
@@ -167,82 +201,39 @@ static void wakealarm_init(void) {
         return;
     }
 
+    if (healthd_register_event(wakealarm_fd, wakealarm_event))
+        KLOG_ERROR(LOG_TAG,
+                   "Registration of wakealarm event failed\n");
+
     wakealarm_set_interval(healthd_config.periodic_chores_interval_fast);
 }
 
-static void wakealarm_event(void) {
-    unsigned long long wakeups;
-
-    if (read(wakealarm_fd, &wakeups, sizeof(wakeups)) == -1) {
-        KLOG_ERROR(LOG_TAG, "wakealarm_event: read wakealarm_fd failed\n");
-        return;
-    }
-
-    periodic_chores();
-}
-
-static void binder_init(void) {
-    ProcessState::self()->setThreadPoolMaxThreadCount(0);
-    IPCThreadState::self()->disableBackgroundScheduling(true);
-    IPCThreadState::self()->setupPolling(&binder_fd);
-}
-
-static void binder_event(void) {
+static void binder_event(uint32_t revents) {
     IPCThreadState::self()->handlePolledCommands();
 }
 
-static void healthd_mainloop(void) {
-    struct epoll_event ev;
-    int epollfd;
-    int maxevents = 0;
+static void binder_init(void) {
+    int binder_fd;
 
-    epollfd = epoll_create(MAX_EPOLL_EVENTS);
-    if (epollfd == -1) {
-        KLOG_ERROR(LOG_TAG,
-                   "healthd_mainloop: epoll_create failed; errno=%d\n",
-                   errno);
-        return;
-    }
-
-    if (uevent_fd >= 0) {
-        ev.events = EPOLLIN | EPOLLWAKEUP;
-        ev.data.ptr = (void *)uevent_event;
-        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, uevent_fd, &ev) == -1)
-            KLOG_ERROR(LOG_TAG,
-                       "healthd_mainloop: epoll_ctl for uevent_fd failed; errno=%d\n",
-                       errno);
-        else
-            maxevents++;
-    }
-
-    if (wakealarm_fd >= 0) {
-        ev.events = EPOLLIN | EPOLLWAKEUP;
-        ev.data.ptr = (void *)wakealarm_event;
-        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, wakealarm_fd, &ev) == -1)
-            KLOG_ERROR(LOG_TAG,
-                       "healthd_mainloop: epoll_ctl for wakealarm_fd failed; errno=%d\n",
-                       errno);
-        else
-            maxevents++;
-   }
+    ProcessState::self()->setThreadPoolMaxThreadCount(0);
+    IPCThreadState::self()->disableBackgroundScheduling(true);
+    IPCThreadState::self()->setupPolling(&binder_fd);
 
     if (binder_fd >= 0) {
-        ev.events = EPOLLIN | EPOLLWAKEUP;
-        ev.data.ptr= (void *)binder_event;
-        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, binder_fd, &ev) == -1)
+       if (healthd_register_event(binder_fd, binder_event))
             KLOG_ERROR(LOG_TAG,
-                       "healthd_mainloop: epoll_ctl for binder_fd failed; errno=%d\n",
-                       errno);
-        else
-            maxevents++;
-   }
+                       "Register for binder events failed\n");
+    }
+}
 
+static void healthd_mainloop(void) {
     while (1) {
-        struct epoll_event events[maxevents];
+        struct epoll_event events[eventct];
         int nevents;
 
         IPCThreadState::self()->flushCommands();
-        nevents = epoll_wait(epollfd, events, maxevents, awake_poll_interval);
+
+        nevents = epoll_wait(epollfd, events, eventct, awake_poll_interval);
 
         if (nevents == -1) {
             if (errno == EINTR)
@@ -253,7 +244,7 @@ static void healthd_mainloop(void) {
 
         for (int n = 0; n < nevents; ++n) {
             if (events[n].data.ptr)
-                (*(void (*)())events[n].data.ptr)();
+                (*(void (*)(int))events[n].data.ptr)(events[n].events);
         }
 
         if (!nevents)
@@ -263,8 +254,27 @@ static void healthd_mainloop(void) {
     return;
 }
 
+static int healthd_init() {
+    epollfd = epoll_create(MAX_EPOLL_EVENTS);
+    if (epollfd == -1) {
+        KLOG_ERROR(LOG_TAG,
+                   "epoll_create failed; errno=%d\n",
+                   errno);
+        return -1;
+    }
+
+    healthd_board_init(&healthd_config);
+    wakealarm_init();
+    uevent_init();
+    binder_init();
+    gBatteryMonitor = new BatteryMonitor();
+    gBatteryMonitor->init(&healthd_config, nosvcmgr);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     int ch;
+    int ret;
 
     klog_set_level(KLOG_LEVEL);
 
@@ -275,17 +285,18 @@ int main(int argc, char **argv) {
             break;
         case '?':
         default:
-            KLOG_WARNING(LOG_TAG, "Unrecognized healthd option: %c\n", ch);
+            KLOG_ERROR(LOG_TAG, "Unrecognized healthd option: %c\n", ch);
+            exit(1);
         }
     }
 
-    healthd_board_init(&healthd_config);
-    wakealarm_init();
-    uevent_init();
-    binder_init();
-    gBatteryMonitor = new BatteryMonitor();
-    gBatteryMonitor->init(&healthd_config, nosvcmgr);
+    ret = healthd_init();
+    if (ret) {
+        KLOG_ERROR("Initialization failed, exiting\n");
+        exit(2);
+    }
 
     healthd_mainloop();
-    return 0;
+    KLOG_ERROR("Main loop terminated, exiting\n");
+    return 3;
 }
