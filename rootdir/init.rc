@@ -411,11 +411,6 @@ service healthd /sbin/healthd
     critical
     seclabel u:r:healthd:s0
 
-service healthd-charger /sbin/healthd -n
-    class charger
-    critical
-    seclabel u:r:healthd:s0
-
 service console /system/bin/sh
     class core
     console
