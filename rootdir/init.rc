@@ -42,13 +42,13 @@ loglevel 3
     mkdir /acct/uid
 
 # Create cgroup mount point for memory
-    mount tmpfs none /sys/fs/cgroup
-    mkdir /sys/fs/cgroup/memory
+    mount tmpfs none /sys/fs/cgroup mode=0750,uid=0,gid=1000
+    mkdir /sys/fs/cgroup/memory 0750 root system
     mount cgroup none /sys/fs/cgroup/memory memory
     write /sys/fs/cgroup/memory/memory.move_charge_at_immigrate 1
     chown root system /sys/fs/cgroup/memory/tasks
     chmod 0660 /sys/fs/cgroup/memory/tasks
-    mkdir /sys/fs/cgroup/memory/sw
+    mkdir /sys/fs/cgroup/memory/sw 0750 root system
     write /sys/fs/cgroup/memory/sw/memory.swappiness 100
     write /sys/fs/cgroup/memory/sw/memory.move_charge_at_immigrate 1
     chown root system /sys/fs/cgroup/memory/sw/tasks
