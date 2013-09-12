@@ -55,6 +55,14 @@ extern int fs_read_atomic_int(const char* path, int* value);
  */
 extern int fs_write_atomic_int(const char* path, int value);
 
+/*
+ * Ensure that all directories along given path exist, creating parent
+ * directories as needed.  Validates that given path is absolute and that
+ * it contains no relative "." or ".." paths or symlinks.  Last path segment
+ * is treated as filename and ignored, unless the path ends with "/".
+ */
+extern int fs_mkdirs(const char* path, mode_t mode);
+
 #ifdef __cplusplus
 }
 #endif
