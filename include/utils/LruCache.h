@@ -17,8 +17,8 @@
 #ifndef ANDROID_UTILS_LRU_CACHE_H
 #define ANDROID_UTILS_LRU_CACHE_H
 
+#include <UniquePtr.h>
 #include <utils/BasicHashtable.h>
-#include <utils/UniquePtr.h>
 
 namespace android {
 
