@@ -72,6 +72,11 @@ typedef enum {
                                           /*  play the mix captured by this audio source.      */
     AUDIO_SOURCE_CNT,
     AUDIO_SOURCE_MAX                 = AUDIO_SOURCE_CNT - 1,
+    AUDIO_SOURCE_HOTWORD             = 1999, /* A low-priority, preemptible audio source for
+                                                for background software hotword detection.
+                                                Same tuning as AUDIO_SOURCE_VOICE_RECOGNITION.
+                                                Used only internally to the framework. Not exposed
+                                                at the audio HAL. */
 } audio_source_t;
 
 /* special audio session values
