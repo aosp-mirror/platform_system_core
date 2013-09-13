@@ -450,13 +450,13 @@ void get_hardware_name(char *hardware, unsigned int *revision)
 void import_kernel_cmdline(int in_qemu,
                            void (*import_kernel_nv)(char *name, int in_qemu))
 {
-    char cmdline[1024];
+    char cmdline[2048];
     char *ptr;
     int fd;
 
     fd = open("/proc/cmdline", O_RDONLY);
     if (fd >= 0) {
-        int n = read(fd, cmdline, 1023);
+        int n = read(fd, cmdline, sizeof(cmdline) - 1);
         if (n < 0) n = 0;
 
         /* get rid of trailing newline, it happens */
