@@ -35,6 +35,7 @@
 #include <sys/ioctl.h>
 #include <linux/fs.h>
 #include <stdlib.h>
+#include <cutils/properties.h>
 
 #include "utils.h"
 #include "debug.h"
@@ -202,5 +203,54 @@ ssize_t bulk_read(int bulk_out, char *buf, size_t length)
     }
 
     return n;
+}
+
+#define NAP_TIME 200  // 200 ms between polls
+static int wait_for_property(const char *name, const char *desired_value, int maxwait)
+{
+    char value[PROPERTY_VALUE_MAX] = {'\0'};
+    int maxnaps = (maxwait * 1000) / NAP_TIME;
+
+    if (maxnaps < 1) {
+        maxnaps = 1;
+    }
+
+    while (maxnaps-- > 0) {
+        usleep(NAP_TIME * 1000);
+        if (property_get(name, value, NULL)) {
+            if (desired_value == NULL || strcmp(value, desired_value) == 0) {
+                return 0;
+            }
+        }
+    }
+    return -1; /* failure */
+}
+
+int service_start(const char *service_name)
+{
+    int result = 0;
+    char property_value[PROPERTY_VALUE_MAX];
+
+    property_get(service_name, property_value, "");
+    if (strcmp("running", property_value) != 0) {
+        D(INFO, "Starting MDNSD");
+        property_set("ctl.start", service_name);
+        if (wait_for_property(service_name, "running", 5))
+            result = -1;
+    }
+
+    return result;
+}
+
+int service_stop(const char *service_name)
+{
+    int result = 0;
+
+    D(INFO, "Stopping MDNSD");
+    property_set("ctl.stop", service_name);
+    if (wait_for_property(service_name, "stopped", 5))
+        result = -1;
+
+    return result;
 }
 

@@ -18,6 +18,7 @@ include $(CLEAR_VARS)
 
 LOCAL_C_INCLUDES := \
     external/openssl/include \
+    external/mdnsresponder/mDNSShared \
     $(LOCAL_PATH)/include \
     external/zlib/ \
 
@@ -30,12 +31,13 @@ LOCAL_SRC_FILES := \
     commands/virtual_partitions.c \
     fastbootd.c \
     protocol.c \
+    network_discovery.c \
     socket_client.c \
     transport.c \
     transport_socket.c \
     trigger.c \
     usb_linux_client.c \
-    utils.c
+    utils.c \
 
 LOCAL_MODULE := fastbootd
 LOCAL_MODULE_TAGS := optional
@@ -44,7 +46,9 @@ LOCAL_LDFLAGS := -ldl
 
 LOCAL_SHARED_LIBRARIES := \
     libhardware \
-    libhardware_legacy
+    libcrypto \
+    libhardware_legacy \
+    libmdnssd
 
 LOCAL_STATIC_LIBRARIES := \
     libsparse_static \
