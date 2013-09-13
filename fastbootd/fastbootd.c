@@ -30,6 +30,7 @@ void commands_init();
 void usb_init();
 void config_init();
 int transport_socket_init();
+int network_discovery_init();
 
 int main(int argc, char **argv)
 {
@@ -76,6 +77,7 @@ int main(int argc, char **argv)
         usb_init();
         if (!transport_socket_init())
             exit(1);
+        network_discovery_init();
         while (1) {
             sleep(1);
         }
