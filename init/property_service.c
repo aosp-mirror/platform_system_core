@@ -276,6 +276,34 @@ static void write_persistent_property(const char *name, const char *value)
     }
 }
 
+static bool is_legal_property_name(const char* name, size_t namelen)
+{
+    size_t i;
+    bool previous_was_dot = false;
+    if (namelen >= PROP_NAME_MAX) return false;
+    if (namelen < 1) return false;
+    if (name[0] == '.') return false;
+    if (name[namelen - 1] == '.') return false;
+
+    /* Only allow alphanumeric, plus '.', '-', or '_' */
+    /* Don't allow ".." to appear in a property name */
+    for (i = 0; i < namelen; i++) {
+        if (name[i] == '.') {
+            if (previous_was_dot == true) return false;
+            previous_was_dot = true;
+            continue;
+        }
+        previous_was_dot = false;
+        if (name[i] == '_' || name[i] == '-') continue;
+        if (name[i] >= 'a' && name[i] <= 'z') continue;
+        if (name[i] >= 'A' && name[i] <= 'Z') continue;
+        if (name[i] >= '0' && name[i] <= '9') continue;
+        return false;
+    }
+
+    return true;
+}
+
 int property_set(const char *name, const char *value)
 {
     prop_info *pi;
@@ -284,9 +312,8 @@ int property_set(const char *name, const char *value)
     size_t namelen = strlen(name);
     size_t valuelen = strlen(value);
 
-    if(namelen >= PROP_NAME_MAX) return -1;
-    if(valuelen >= PROP_VALUE_MAX) return -1;
-    if(namelen < 1) return -1;
+    if (!is_legal_property_name(name, namelen)) return -1;
+    if (valuelen >= PROP_VALUE_MAX) return -1;
 
     pi = (prop_info*) __system_property_find(name);
 
@@ -298,7 +325,7 @@ int property_set(const char *name, const char *value)
     } else {
         ret = __system_property_add(name, namelen, value, valuelen);
         if (ret < 0) {
-            ERROR("Failed to set '%s'='%s'", name, value);
+            ERROR("Failed to set '%s'='%s'\n", name, value);
             return ret;
         }
     }
@@ -363,6 +390,12 @@ void handle_property_set_fd()
     case PROP_MSG_SETPROP:
         msg.name[PROP_NAME_MAX-1] = 0;
         msg.value[PROP_VALUE_MAX-1] = 0;
+
+        if (!is_legal_property_name(msg.name, strlen(msg.name))) {
+            ERROR("sys_prop: illegal property name. Got: \"%s\"\n", msg.name);
+            close(s);
+            return;
+        }
 
         getpeercon(s, &source_ctx);
 
