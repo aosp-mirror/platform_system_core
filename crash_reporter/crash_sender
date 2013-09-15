@@ -553,8 +553,53 @@ send_crashes() {
   done
 }
 
+usage() {
+  cat <<EOF
+Usage: crash_sender [options]
+
+Options:
+ -e <var>=<val>     Set env |var| to |val| (only some vars)
+EOF
+  exit ${1:-1}
+}
+
+parseargs() {
+  # Parse the command line arguments.
+  while [ $# -gt 0 ]; do
+    case $1 in
+    -e)
+      shift
+      case $1 in
+      FORCE_OFFICIAL=*|\
+      MAX_CRASH_RATE=*|\
+      MOCK_DEVELOPER_MODE=*|\
+      OVERRIDE_PAUSE_SENDING=*|\
+      SECONDS_SEND_SPREAD=*)
+        export "$1"
+        ;;
+      *)
+        lecho "Unknown var passed to -e: $1"
+        exit 1
+        ;;
+      esac
+      ;;
+    -h)
+      usage 0
+      ;;
+    *)
+      lecho "Uknown options: $*"
+      exit 1
+      ;;
+    esac
+    shift
+  done
+}
+
 main() {
   trap cleanup EXIT INT TERM
+
+  parseargs "$@"
+
   if [ -e "${PAUSE_CRASH_SENDING}" ] && \
      [ ${OVERRIDE_PAUSE_SENDING} -eq 0 ]; then
     lecho "Exiting early due to ${PAUSE_CRASH_SENDING}."
@@ -593,5 +638,5 @@ if ! flock -n 9; then
   lecho "crash_sender is already running; quitting."
   exit 1
 fi
-main
+main "$@"
 ) 9>"${CRASH_SENDER_LOCK}"
