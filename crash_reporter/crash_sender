@@ -9,11 +9,6 @@ set -e
 # Default product ID in crash report (used if GOOGLE_CRASH_* is undefined).
 CHROMEOS_PRODUCT=ChromeOS
 
-# Should remove the run file when this process finishes.  We don't want
-# to always remove it since it may be for pre-existing crash_sender
-# process.
-CLEAN_UP_RUN_FILE=0
-
 # File whose existence implies crash reports may be sent, and whose
 # contents includes our machine's anonymized guid.
 CONSENT_ID="/home/chronos/Consent To Send Stats"
@@ -107,36 +102,16 @@ cleanup() {
   if [ -n "${TMP_DIR}" ]; then
     rm -rf "${TMP_DIR}"
   fi
-  if [ ${CLEAN_UP_RUN_FILE} -eq 1 ]; then
-    rm -f "${RUN_FILE}"
-  fi
+  rm -f "${RUN_FILE}"
+  crash_done
+}
+
+crash_done() {
   if is_mock; then
     # For testing purposes, emit a message to log so that we
     # know when the test has received all the messages from this run.
     lecho "crash_sender done."
   fi
-}
-
-check_not_already_running() {
-  set -o noclobber
-  if echo $$ 2>/dev/null > "${RUN_FILE}"; then
-    # Able to write RUN_FILE without contention.
-    CLEAN_UP_RUN_FILE=1
-    set +o noclobber
-    return
-  fi
-  set +o noclobber
-  local last_pid=$(cat "${RUN_FILE}")
-  if [ ! -f "/proc/${last_pid}/cmdline" ]; then
-    CLEAN_UP_RUN_FILE=1
-    # Note that this write may be executed by two crash_senders who
-    # simulataneously reap the existing dangling run file
-    echo $$ > "${RUN_FILE}"
-    return
-  fi
-  # This could just be an unrelated process, but it's ok to be conservative.
-  lecho "Already running.  Exiting now."
-  exit 1
 }
 
 is_official_image() {
@@ -669,7 +644,10 @@ main() {
     exit 1
   fi
 
-  check_not_already_running
+  # We don't perform checks on this because we have a master lock with the
+  # CRASH_SENDER_LOCK file.  This pid file is for the system to keep track
+  # (like with autotests) that we're still running.
+  echo $$ > "${RUN_FILE}"
 
   for dependency in "${FIND}" "${METRICS_CLIENT}" \
                     "${RESTRICTED_CERTIFICATES_PATH}"; do
@@ -693,7 +671,8 @@ main() {
 
 (
 if ! flock -n 9; then
-  lecho "crash_sender is already running; quitting."
+  lecho "Already running; quitting."
+  crash_done
   exit 1
 fi
 main "$@"
