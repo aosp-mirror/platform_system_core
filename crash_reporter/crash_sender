@@ -621,7 +621,7 @@ main() {
     fi
   done
 
-  TMP_DIR="$(mktemp -d /tmp/crash_sender.XXXX)"
+  TMP_DIR="$(mktemp -d /tmp/crash_sender.XXXXXX)"
 
   # Send system-wide crashes
   send_crashes "/var/spool/crash"
