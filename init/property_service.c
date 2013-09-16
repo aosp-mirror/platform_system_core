@@ -281,7 +281,6 @@ static void write_persistent_property(const char *name, const char *value)
 static bool is_legal_property_name(const char* name, size_t namelen)
 {
     size_t i;
-    bool previous_was_dot = false;
     if (namelen >= PROP_NAME_MAX) return false;
     if (namelen < 1) return false;
     if (name[0] == '.') return false;
@@ -291,11 +290,10 @@ static bool is_legal_property_name(const char* name, size_t namelen)
     /* Don't allow ".." to appear in a property name */
     for (i = 0; i < namelen; i++) {
         if (name[i] == '.') {
-            if (previous_was_dot == true) return false;
-            previous_was_dot = true;
+            // i=0 is guaranteed to never have a dot. See above.
+            if (name[i-1] == '.') return false;
             continue;
         }
-        previous_was_dot = false;
         if (name[i] == '_' || name[i] == '-') continue;
         if (name[i] >= 'a' && name[i] <= 'z') continue;
         if (name[i] >= 'A' && name[i] <= 'Z') continue;
