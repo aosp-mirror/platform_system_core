@@ -197,12 +197,16 @@ void configPrintGPT(struct GPT_entry_table *table) {
     struct GPT_entry_raw *entry = table->entries;
     unsigned n, m;
     char name[GPT_NAMELEN + 1];
+    char temp_guid[17];
+    temp_guid[16] = 0;
 
     printf("header_lba %lld\n", table->header->current_lba);
     printf("backup_lba %lld\n", table->header->backup_lba);
     printf("first_lba %lld\n", table->header->first_usable_lba);
     printf("last_lba %lld\n", table->header->last_usable_lba);
     printf("entries_lba %lld\n", table->header->entries_lba);
+    snprintf(temp_guid, 17, "%s", table->header->disk_guid);
+    printf("guid \"%s\"", temp_guid);
 
     printf("\npartitions {\n");
 
@@ -217,10 +221,18 @@ void configPrintGPT(struct GPT_entry_table *table) {
         name[m] = 0;
 
         printf("    %s {\n", name);
+        snprintf(temp_guid, 17, "%s", entry->partition_guid);
+        printf("        guid \"%s\"\n", temp_guid);
         printf("        first_lba %lld\n", entry->first_lba);
         printf("        partition_size %lld\n", size);
-        if (entry->flags != 0)
-            printf("        flags %lld\n", entry->flags);
+        if (entry->flags & GPT_FLAG_SYSTEM)
+            printf("        system\n");
+        if (entry->flags & GPT_FLAG_BOOTABLE)
+            printf("        bootable\n");
+        if (entry->flags & GPT_FLAG_READONLY)
+            printf("        readonly\n");
+        if (entry->flags & GPT_FLAG_DOAUTOMOUNT)
+            printf("        automount\n");
         printf("    }\n\n");
     }
     printf("}\n");
