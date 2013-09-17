@@ -57,7 +57,7 @@ static int write_file(const char *path, const char *value)
 {
     int fd, ret, len;
 
-    fd = open(path, O_WRONLY|O_CREAT, 0622);
+    fd = open(path, O_WRONLY|O_CREAT|O_NOFOLLOW, 0600);
 
     if (fd < 0)
         return -errno;
