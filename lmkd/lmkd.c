@@ -75,6 +75,10 @@ static int maxevents;
 #define OOM_ADJUST_MIN (-16)
 #define OOM_ADJUST_MAX 15
 
+/* kernel OOM score values */
+#define OOM_SCORE_ADJ_MIN       (-1000)
+#define OOM_SCORE_ADJ_MAX       1000
+
 static int lowmem_adj[MAX_TARGETS];
 static int lowmem_minfree[MAX_TARGETS];
 static int lowmem_targets_size;
@@ -115,6 +119,14 @@ static time_t kill_lasttime;
 
 /* PAGE_SIZE / 1024 */
 static long page_k;
+
+static int lowmem_oom_adj_to_oom_score_adj(int oom_adj)
+{
+    if (oom_adj == OOM_ADJUST_MAX)
+        return OOM_SCORE_ADJ_MAX;
+    else
+        return (oom_adj * OOM_SCORE_ADJ_MAX) / -OOM_DISABLE;
+}
 
 static struct proc *pid_lookup(int pid) {
     struct proc *procp;
@@ -219,8 +231,8 @@ static void cmd_procprio(int pid, int oomadj) {
         return;
     }
 
-    snprintf(path, sizeof(path), "/proc/%d/oom_adj", pid);
-    snprintf(val, sizeof(val), "%d", oomadj);
+    snprintf(path, sizeof(path), "/proc/%d/oom_score_adj", pid);
+    snprintf(val, sizeof(val), "%d", lowmem_oom_adj_to_oom_score_adj(oomadj));
     writefilestring(path, val);
 
     if (use_inkernel_interface)
