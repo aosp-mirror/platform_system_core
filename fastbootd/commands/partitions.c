@@ -56,7 +56,7 @@
 #define ALIGN_DOWN(x, y) ((y) * ((x) / (y)))
 
 
-const uint16_t partition_type_uuid[16] = {
+const uint8_t partition_type_uuid[16] = {
     0xa2, 0xa0, 0xd0, 0xeb, 0xe5, 0xb9, 0x33, 0x44,
     0x87, 0xc0, 0x68, 0xb6, 0xb7, 0x26, 0x99, 0xc7,
 };
@@ -422,7 +422,7 @@ void GPT_sync(struct GPT_entry_table *table)
 
     table->header->header_checksum = 0;
     crc = crc32(0, Z_NULL, 0);
-    crc = crc32(crc, (void*) table->header, sizeof(*table->header));
+    crc = crc32(crc, (void*) table->header, table->header->header_size);
     table->header->header_checksum = crc;
 
     //sync secondary partion
@@ -526,7 +526,7 @@ static int add_key_value(const char *key, const char *value, struct GPT_entry_ra
         if (*endptr != '\0') goto error;
     }
     else if (!strcmp(key, "flags")) {
-        entry->flags = strtoul(value, &endptr, 10);
+        entry->flags = strtoul(value, &endptr, 16);
         if (*endptr != '\0') goto error;
     }
     else if (!strcmp(key, "name")) {
@@ -558,25 +558,31 @@ int GPT_parse_entry(char *string, struct GPT_entry_raw *entry)
     return 0;
 }
 
-static void entry_set_guid(int n, uint8_t *guid)
+void entry_set_guid(int n, uint8_t *guid)
 {
     guid[0] = (uint8_t) (n + 1);
     int fd;
     fd = open("/dev/urandom", O_RDONLY);
     read(fd, &guid[1], 15);
     close(fd);
+
+    //rfc4122
+    guid[8] = (guid[8] & 0x3F) | 0x80;
+    guid[7] = (guid[7] & 0x0F) | 0x40;
 }
 
 void GPT_default_content(struct GPT_content *content, struct GPT_entry_table *table)
 {
     if (table != NULL) {
         memcpy(&content->header, table->header, sizeof(content->header));
+        content->header.header_size = sizeof(content->header);
+        content->header.entry_size = sizeof(struct GPT_entry_raw);
     }
     else {
         D(WARN, "Could not locate old gpt table, using default values");
         memset(&content->header, 0, sizeof(content->header) / sizeof(int));
         content->header = (struct GPT_header) {
-            .revision = 0x0100,
+            .revision = 0x10000,
             .header_size = sizeof(content->header),
             .header_checksum = 0,
             .reserved_zeros = 0,
@@ -586,7 +592,7 @@ void GPT_default_content(struct GPT_content *content, struct GPT_entry_table *ta
             .partition_array_checksum = 0
         };
         strncpy((char *)content->header.signature, "EFI PART", 8);
-        entry_set_guid(0, content->header.disk_guid);
+        strncpy((char *)content->header.disk_guid, "ANDROID MMC DISK", 16);
     }
 }
 
@@ -607,6 +613,27 @@ static int get_config_uint64(cnode *node, uint64_t *ptr, const char *name)
     return 1;
 }
 
+static int get_config_string(cnode *node, char *ptr, int max_len, const char *name)
+{
+    size_t begin, end;
+    const char *value = config_str(node, name, NULL);
+    if (!value)
+        return -1;
+
+    begin = strcspn(value, "\"") + 1;
+    end = strcspn(&value[begin], "\"");
+
+    if ((int) end > max_len) {
+        D(WARN, "Identifier \"%s\" too long", value);
+        return -1;
+    }
+
+    strncpy(ptr, &value[begin], end);
+    if((int) end < max_len)
+        ptr[end] = 0;
+    return 0;
+}
+
 static void GPT_parse_header(cnode *node, struct GPT_content *content)
 {
     get_config_uint64(node, &content->header.current_lba, "header_lba");
@@ -614,17 +641,21 @@ static void GPT_parse_header(cnode *node, struct GPT_content *content)
     get_config_uint64(node, &content->header.first_usable_lba, "first_lba");
     get_config_uint64(node, &content->header.last_usable_lba, "last_lba");
     get_config_uint64(node, &content->header.entries_lba, "entries_lba");
+    get_config_string(node, (char *) content->header.disk_guid, 16, "guid");
 }
 
 static int GPT_parse_partitions(cnode *node, struct GPT_content *content)
 {
     cnode *current;
     int i;
+    int ret;
     uint64_t partition_size;
+    struct GPT_entry_raw *entry;
     for (i = 0, current = node->first_child; current; current = current->next, ++i) {
+        entry = &content->entries[i];
         entry_set_guid(i, content->entries[i].partition_guid);
         memcpy(&content->entries[i].type_guid, partition_type_uuid, 16);
-        if (get_config_uint64(current, &content->entries[i].first_lba, "first_lba")) {
+        if (get_config_uint64(current, &entry->first_lba, "first_lba")) {
             D(ERR, "first_lba not specified");
             return 1;
         }
@@ -632,6 +663,19 @@ static int GPT_parse_partitions(cnode *node, struct GPT_content *content)
             D(ERR, "partition_size not specified");
             return 1;
         }
+        if (config_str(current, "system", NULL)) {
+            entry->flags |= GPT_FLAG_SYSTEM;
+        }
+        if (config_str(current, "bootable", NULL)) {
+            entry->flags |= GPT_FLAG_BOOTABLE;
+        }
+        if (config_str(current, "readonly", NULL)) {
+            entry->flags |= GPT_FLAG_READONLY;
+        }
+        if (config_str(current, "automount", NULL)) {
+            entry->flags |= GPT_FLAG_DOAUTOMOUNT;
+        }
+
         get_config_uint64(current, &content->entries[i].flags, "flags");
         content->entries[i].last_lba = content->entries[i].first_lba + partition_size - 1;
         GPT_to_UTF16(content->entries[i].name, current->name, 16);
@@ -721,7 +765,7 @@ int GPT_write_content(const char *device, struct GPT_content *content)
     memcpy(maptable->entries, content->entries,
            content->header.entries_count * sizeof(*maptable->entries));
 
-    //GPT_sync(maptable);
+    GPT_sync(maptable);
     GPT_release_device(maptable);
 
     return 1;
