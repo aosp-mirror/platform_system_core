@@ -222,7 +222,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
     char *line = NULL;
     const char *delim = " \t";
     char *save_ptr, *p;
-    struct fstab *fstab;
+    struct fstab *fstab = NULL;
     struct fstab_rec *recs;
     char *key_loc;
     long long part_length;
@@ -345,7 +345,10 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
     return fstab;
 
 err:
+    fclose(fstab_file);
     free(line);
+    if (fstab)
+        fs_mgr_free_fstab(fstab);
     return NULL;
 }
 
@@ -361,7 +364,6 @@ void fs_mgr_free_fstab(struct fstab *fstab)
         free(fstab->recs[i].fs_options);
         free(fstab->recs[i].key_loc);
         free(fstab->recs[i].label);
-        i++;
     }
 
     /* Free the fstab_recs array created by calloc(3) */
