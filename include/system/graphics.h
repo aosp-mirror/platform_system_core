@@ -293,6 +293,8 @@ enum {
     HAL_TRANSFORM_ROT_180   = 0x03,
     /* rotate source image 270 degrees clockwise */
     HAL_TRANSFORM_ROT_270   = 0x07,
+    /* don't use. see system/window.h */
+    HAL_TRANSFORM_RESERVED  = 0x08,
 };
 
 #ifdef __cplusplus
