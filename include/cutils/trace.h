@@ -259,6 +259,23 @@ static inline void atrace_int(uint64_t tag, const char* name, int32_t value)
     }
 }
 
+/**
+ * Traces a 64-bit integer counter value.  name is used to identify the
+ * counter. This can be used to track how a value changes over time.
+ */
+#define ATRACE_INT64(name, value) atrace_int64(ATRACE_TAG, name, value)
+static inline void atrace_int64(uint64_t tag, const char* name, int64_t value)
+{
+    if (CC_UNLIKELY(atrace_is_tag_enabled(tag))) {
+        char buf[ATRACE_MESSAGE_LENGTH];
+        size_t len;
+
+        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "C|%d|%s|%lld",
+                getpid(), name, value);
+        write(atrace_marker_fd, buf, len);
+    }
+}
+
 #else // not HAVE_ANDROID_OS
 
 #define ATRACE_INIT()
