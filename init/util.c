@@ -405,7 +405,9 @@ void open_devnull_stdio(void)
 
 void get_hardware_name(char *hardware, unsigned int *revision)
 {
-    char data[1024];
+    const char *cpuinfo = "/proc/cpuinfo";
+    char *data = NULL;
+    size_t len = 0, limit = 1024;
     int fd, n;
     char *x, *hw, *rev;
 
@@ -413,14 +415,32 @@ void get_hardware_name(char *hardware, unsigned int *revision)
     if (hardware[0])
         return;
 
-    fd = open("/proc/cpuinfo", O_RDONLY);
+    fd = open(cpuinfo, O_RDONLY);
     if (fd < 0) return;
 
-    n = read(fd, data, 1023);
-    close(fd);
-    if (n < 0) return;
+    for (;;) {
+        x = realloc(data, limit);
+        if (!x) {
+            ERROR("Failed to allocate memory to read %s\n", cpuinfo);
+            goto done;
+        }
+        data = x;
 
-    data[n] = 0;
+        n = read(fd, data + len, limit - len);
+        if (n < 0) {
+            ERROR("Failed reading %s: %s (%d)\n", cpuinfo, strerror(errno), errno);
+            goto done;
+        }
+        len += n;
+
+        if (len < limit)
+            break;
+
+        /* We filled the buffer, so increase size and loop to read more */
+        limit *= 2;
+    }
+
+    data[len] = 0;
     hw = strstr(data, "\nHardware");
     rev = strstr(data, "\nRevision");
 
@@ -445,6 +465,10 @@ void get_hardware_name(char *hardware, unsigned int *revision)
             *revision = strtoul(x + 2, 0, 16);
         }
     }
+
+done:
+    close(fd);
+    free(data);
 }
 
 void import_kernel_cmdline(int in_qemu,
