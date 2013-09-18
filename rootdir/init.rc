@@ -177,6 +177,9 @@ on post-fs-data
     # We restorecon /data in case the userdata partition has been reset.
     restorecon /data
 
+    # Avoid predictable entropy pool. Carry over entropy from previous boot.
+    copy /data/system/entropy.dat /dev/urandom
+
     # Create dump dir and collect dumps.
     # Do this before we mount cache so eventually we can use cache for
     # storing dumps on platforms which do not have a dedicated dump partition.
