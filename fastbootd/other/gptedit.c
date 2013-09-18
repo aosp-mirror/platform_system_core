@@ -154,9 +154,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    fprintf(stderr, "entries %d, name %s\n", table->header->entries_count, (char *) table->header->signature);
-
-
     if (add_cmd)
         addGPT(table, new_partition, partition_guid, type_guid);
     if (del_cmd)
