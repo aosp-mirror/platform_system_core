@@ -47,6 +47,7 @@ ssize_t bulk_read(int bulk_out, char *buf, size_t length);
 ssize_t bulk_write(int bulk_in, const char *buf, size_t length);
 int service_start(const char *service_name);
 int service_stop(const char *service_name);
+int ssh_server_start();
 
 #define ROUND_TO_PAGE(address,pagesize) ((address + pagesize - 1) & (~(pagesize - 1)))
 

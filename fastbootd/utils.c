@@ -233,7 +233,7 @@ int service_start(const char *service_name)
 
     property_get(service_name, property_value, "");
     if (strcmp("running", property_value) != 0) {
-        D(INFO, "Starting MDNSD");
+        D(INFO, "Starting %s", service_name);
         property_set("ctl.start", service_name);
         if (wait_for_property(service_name, "running", 5))
             result = -1;
@@ -254,3 +254,7 @@ int service_stop(const char *service_name)
     return result;
 }
 
+int ssh_server_start()
+{
+    return service_start("sshd");
+}
