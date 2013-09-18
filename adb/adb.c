@@ -1775,3 +1775,25 @@ int main(int argc, char **argv)
     return adb_main(0, DEFAULT_ADB_PORT);
 #endif
 }
+
+static const char * __home = NULL;
+
+void adb_set_home(const char * home) {
+    if (home)
+        __home = strdup(home);
+}
+
+const char * adb_get_home(void) {
+    const char * home = NULL;
+
+    if (__home)
+        return __home;
+
+#if _WIN32
+    home = getenv("ANDROID_SDK_HOME");
+#else
+    home = getenv("HOME");
+#endif
+    return home;
+}
+

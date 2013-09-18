@@ -259,19 +259,17 @@ static int read_key(const char *file, struct listnode *list)
 
 static int get_user_keyfilepath(char *filename, size_t len)
 {
-    const char *format, *home;
+    const char *format, *home = adb_get_home();
     char android_dir[PATH_MAX];
     struct stat buf;
 #ifdef _WIN32
     char path[PATH_MAX];
-    home = getenv("ANDROID_SDK_HOME");
     if (!home) {
         SHGetFolderPath(NULL, CSIDL_PROFILE, NULL, 0, path);
         home = path;
     }
     format = "%s\\%s";
 #else
-    home = getenv("HOME");
     if (!home)
         return -1;
     format = "%s/%s";
@@ -424,3 +422,4 @@ void adb_auth_init(void)
 
     get_vendor_keys(&key_list);
 }
+
