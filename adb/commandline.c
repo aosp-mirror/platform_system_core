@@ -1044,7 +1044,7 @@ int adb_commandline(int argc, char **argv)
 	       if (argc < 2) return usage();
 	       home = argv[1];
 	       argc--;
-	       argc++;
+	       argv++;
 	    } else {
 	       home = argv[0] + 2;
 	    }
