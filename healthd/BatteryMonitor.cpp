@@ -170,7 +170,6 @@ int BatteryMonitor::getIntField(const String8& path) {
 }
 
 bool BatteryMonitor::update(void) {
-    struct BatteryProperties props;
     struct BatteryExtraProperties extraProps;
     bool logthis;
 
@@ -241,10 +240,6 @@ bool BatteryMonitor::update(void) {
             }
         }
     }
-
-    /* temporary while these are moved and dumpsys reworked */
-    props.batteryCurrentNow  = extraProps.batteryCurrentNow;
-    props.batteryChargeCounter = extraProps.batteryChargeCounter;
 
     logthis = !healthd_board_battery_update(&props);
 
@@ -323,6 +318,41 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         val->valueInt = INT_MIN;
 
     return ret;
+}
+
+void BatteryMonitor::dumpState(int fd) {
+    int v;
+    char vs[128];
+
+    snprintf(vs, sizeof(vs), "ac: %d usb: %d wireless: %d\n",
+             props.chargerAcOnline, props.chargerUsbOnline,
+             props.chargerWirelessOnline);
+    write(fd, vs, strlen(vs));
+    snprintf(vs, sizeof(vs), "status: %d health: %d present: %d\n",
+             props.batteryStatus, props.batteryHealth, props.batteryPresent);
+    write(fd, vs, strlen(vs));
+    snprintf(vs, sizeof(vs), "level: %d voltage: %d temp: %d\n",
+             props.batteryLevel, props.batteryVoltage,
+             props.batteryTemperature);
+    write(fd, vs, strlen(vs));
+
+    if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+        v = getIntField(mHealthdConfig->batteryCurrentNowPath);
+        snprintf(vs, sizeof(vs), "current now: %d\n", v);
+        write(fd, vs, strlen(vs));
+    }
+
+    if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
+        v = getIntField(mHealthdConfig->batteryCurrentAvgPath);
+        snprintf(vs, sizeof(vs), "current avg: %d\n", v);
+        write(fd, vs, strlen(vs));
+    }
+
+    if (!mHealthdConfig->batteryChargeCounterPath.isEmpty()) {
+        v = getIntField(mHealthdConfig->batteryChargeCounterPath);
+        snprintf(vs, sizeof(vs), "charge counter: %d\n", v);
+        write(fd, vs, strlen(vs));
+    }
 }
 
 void BatteryMonitor::init(struct healthd_config *hc) {

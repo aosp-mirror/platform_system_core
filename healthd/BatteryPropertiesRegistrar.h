@@ -19,6 +19,7 @@
 
 #include <binder/IBinder.h>
 #include <utils/Mutex.h>
+#include <utils/String16.h>
 #include <utils/Vector.h>
 #include <batteryservice/BatteryService.h>
 #include <batteryservice/IBatteryPropertiesListener.h>
@@ -39,6 +40,7 @@ private:
     void registerListener(const sp<IBatteryPropertiesListener>& listener);
     void unregisterListener(const sp<IBatteryPropertiesListener>& listener);
     status_t getProperty(int id, struct BatteryProperty *val);
+    status_t dump(int fd, const Vector<String16>& args);
     void binderDied(const wp<IBinder>& who);
 };
 

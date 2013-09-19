@@ -195,6 +195,11 @@ void healthd_battery_update(void) {
                 -1 : healthd_config.periodic_chores_interval_fast * 1000;
 }
 
+void healthd_dump_battery_state(int fd) {
+    gBatteryMonitor->dumpState(fd);
+    fsync(fd);
+}
+
 static void periodic_chores() {
     healthd_battery_update();
 }

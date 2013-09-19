@@ -18,7 +18,10 @@
 #include <batteryservice/BatteryService.h>
 #include <batteryservice/IBatteryPropertiesListener.h>
 #include <batteryservice/IBatteryPropertiesRegistrar.h>
+#include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
+#include <binder/PermissionCache.h>
+#include <private/android_filesystem_config.h>
 #include <utils/Errors.h>
 #include <utils/Mutex.h>
 #include <utils/String16.h>
@@ -67,6 +70,19 @@ void BatteryPropertiesRegistrar::unregisterListener(const sp<IBatteryPropertiesL
 
 status_t BatteryPropertiesRegistrar::getProperty(int id, struct BatteryProperty *val) {
     return healthd_get_property(id, val);
+}
+
+status_t BatteryPropertiesRegistrar::dump(int fd, const Vector<String16>& args) {
+    IPCThreadState* self = IPCThreadState::self();
+    const int pid = self->getCallingPid();
+    const int uid = self->getCallingUid();
+    if ((uid != AID_SHELL) &&
+        !PermissionCache::checkPermission(
+                String16("android.permission.DUMP"), pid, uid))
+        return PERMISSION_DENIED;
+
+    healthd_dump_battery_state(fd);
+    return OK;
 }
 
 void BatteryPropertiesRegistrar::binderDied(const wp<IBinder>& who) {

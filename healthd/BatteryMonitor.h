@@ -40,11 +40,13 @@ class BatteryMonitor {
     void init(struct healthd_config *hc);
     bool update(void);
     status_t getProperty(int id, struct BatteryProperty *val);
+    void dumpState(int fd);
 
   private:
     struct healthd_config *mHealthdConfig;
     Vector<String8> mChargerNames;
     bool mBatteryDevicePresent;
+    struct BatteryProperties props;
 
     int getBatteryStatus(const char* status);
     int getBatteryHealth(const char* status);
