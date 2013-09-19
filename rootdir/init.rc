@@ -349,7 +349,6 @@ on boot
     chown root radio /proc/cmdline
 
 # Set these so we can remotely update SELinux policy
-    chown system system /sys/fs/selinux/load
     chown system system /sys/fs/selinux/enforce
 
 # Define TCP buffer sizes for various networks
