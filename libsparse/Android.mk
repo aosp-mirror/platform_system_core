@@ -82,8 +82,8 @@ include $(BUILD_EXECUTABLE)
 
 
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := simg2simg.c
-LOCAL_MODULE := simg2simg
+LOCAL_SRC_FILES := append2simg.c
+LOCAL_MODULE := append2simg
 LOCAL_STATIC_LIBRARIES := \
     libsparse_host \
     libz
