@@ -97,6 +97,7 @@ void help()
         "                                 be an absolute path.\n"
         " -H                            - Name of adb server host (default: localhost)\n"
         " -P                            - Port of adb server (default: 5037)\n"
+        " -D                            - Path to home directory\n"
         " devices [-l]                  - list all connected devices\n"
         "                                 ('-l' will also list device qualifiers)\n"
         " connect <host>[:<port>]       - connect to a device via TCP/IP\n"
@@ -1037,6 +1038,18 @@ int adb_commandline(int argc, char **argv)
                 "adb: port number must be a positive number less than 65536. Got empty string.\n");
                 return usage();
             }
+	} else if(!strncmp(argv[0], "-D", 2)) {
+	    const char *home = NULL;
+	    if (argv[0][2] == '\0') {
+	       if (argc < 2) return usage();
+	       home = argv[1];
+	       argc--;
+	       argv++;
+	    } else {
+	       home = argv[0] + 2;
+	    }
+	    adb_set_home(home);	
+
         } else {
                 /* out of recognized modifiers and flags */
             break;

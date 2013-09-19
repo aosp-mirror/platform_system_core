@@ -260,6 +260,8 @@ void get_my_path(char *s, size_t maxLen);
 int launch_server(int server_port);
 int adb_main(int is_daemon, int server_port);
 
+void adb_set_home(const char * homedir);
+const char * adb_get_home(void);
 
 /* transports are ref-counted
 ** get_device_transport does an acquire on your behalf before returning
