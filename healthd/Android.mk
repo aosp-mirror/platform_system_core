@@ -44,24 +44,12 @@ endif
 
 LOCAL_HAL_STATIC_LIBRARIES := libhealthd
 
+# Symlink /charger to /sbin/healthd
+LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT) \
+    && ln -sf /sbin/healthd $(TARGET_ROOT_OUT)/charger
+
 include $(BUILD_EXECUTABLE)
 
-# Symlink /charger to /sbin/healthd
-SYMLINKS := \
-	$(TARGET_ROOT_OUT)/charger
-
-$(SYMLINKS): HEALTHD_BINARY := $(LOCAL_MODULE)
-$(SYMLINKS): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk
-	@echo "Symlink: $@ -> /sbin/$(HEALTHD_BINARY)"
-	@rm -rf $@
-	$(hide) ln -sf /sbin/$(HEALTHD_BINARY) $@
-
-ALL_DEFAULT_INSTALLED_MODULES += $(SYMLINKS)
-
-# We need this so that the installed files could be picked up based on the
-# local module name
-ALL_MODULES.$(LOCAL_MODULE).INSTALLED := \
-    $(ALL_MODULES.$(LOCAL_MODULE).INSTALLED) $(SYMLINKS)
 
 define _add-charger-image
 include $$(CLEAR_VARS)
