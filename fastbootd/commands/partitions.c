@@ -48,8 +48,6 @@
 #include "utils.h"
 #include "protocol.h"
 
-#define MMAP2_SHIFT 12
-
 #define BLKRRPART  _IO(0x12,95) /* re-read partition table */
 #define BLKSSZGET  _IO(0x12,104)
 
@@ -68,13 +66,6 @@ const uint16_t partition_type_uuid[16] = {
 static void GPT_entry_clear(struct GPT_entry_raw *entry)
 {
     memset(entry, 0, sizeof(*entry));
-}
-
-extern void*  __mmap2(void *, size_t, int, int, int, off_t);
-
-static inline void *mmap64(void *addr, size_t length, int prot,
-                           int flags, int fd, uint64_t offset) {
-    return __mmap2(addr, length, prot, flags, fd, offset >> MMAP2_SHIFT);
 }
 
 /*
