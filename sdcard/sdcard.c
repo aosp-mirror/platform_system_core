@@ -32,6 +32,7 @@
 #include <sys/resource.h>
 #include <sys/inotify.h>
 
+#include <cutils/fs.h>
 #include <cutils/hashmap.h>
 #include <cutils/multiuser.h>
 
@@ -193,8 +194,9 @@ static int str_hash(void *key) {
     return hashmapHash(key, strlen(key));
 }
 
-static bool str_equals(void *keyA, void *keyB) {
-    return strcmp(keyA, keyB) == 0;
+/** Test if two string keys are equal ignoring case */
+static bool str_icase_equals(void *keyA, void *keyB) {
+    return strcasecmp(keyA, keyB) == 0;
 }
 
 static int int_hash(void *key) {
@@ -401,6 +403,20 @@ static void attr_from_stat(struct fuse_attr *attr, const struct stat *s, const s
     attr->mode = (attr->mode & S_IFMT) | filtered_mode;
 }
 
+static int touch(char* path, mode_t mode) {
+    int fd = open(path, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW, mode);
+    if (fd == -1) {
+        if (errno == EEXIST) {
+            return 0;
+        } else {
+            ERROR("Failed to open(%s): %s\n", path, strerror(errno));
+            return -1;
+        }
+    }
+    close(fd);
+    return 0;
+}
+
 static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
         struct node *node) {
     appid_t appid;
@@ -429,37 +445,37 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
     case PERM_ROOT:
         /* Assume masked off by default. */
         node->mode = 0770;
-        if (!strcmp(node->name, "Android")) {
+        if (!strcasecmp(node->name, "Android")) {
             /* App-specific directories inside; let anyone traverse */
             node->perm = PERM_ANDROID;
             node->mode = 0771;
         } else if (fuse->split_perms) {
-            if (!strcmp(node->name, "DCIM")
-                    || !strcmp(node->name, "Pictures")) {
+            if (!strcasecmp(node->name, "DCIM")
+                    || !strcasecmp(node->name, "Pictures")) {
                 node->gid = AID_SDCARD_PICS;
-            } else if (!strcmp(node->name, "Alarms")
-                    || !strcmp(node->name, "Movies")
-                    || !strcmp(node->name, "Music")
-                    || !strcmp(node->name, "Notifications")
-                    || !strcmp(node->name, "Podcasts")
-                    || !strcmp(node->name, "Ringtones")) {
+            } else if (!strcasecmp(node->name, "Alarms")
+                    || !strcasecmp(node->name, "Movies")
+                    || !strcasecmp(node->name, "Music")
+                    || !strcasecmp(node->name, "Notifications")
+                    || !strcasecmp(node->name, "Podcasts")
+                    || !strcasecmp(node->name, "Ringtones")) {
                 node->gid = AID_SDCARD_AV;
             }
         }
         break;
     case PERM_ANDROID:
-        if (!strcmp(node->name, "data")) {
+        if (!strcasecmp(node->name, "data")) {
             /* App-specific directories inside; let anyone traverse */
             node->perm = PERM_ANDROID_DATA;
             node->mode = 0771;
-        } else if (!strcmp(node->name, "obb")) {
+        } else if (!strcasecmp(node->name, "obb")) {
             /* App-specific directories inside; let anyone traverse */
             node->perm = PERM_ANDROID_OBB;
             node->mode = 0771;
             /* Single OBB directory is always shared */
             node->graft_path = fuse->obbpath;
             node->graft_pathlen = strlen(fuse->obbpath);
-        } else if (!strcmp(node->name, "user")) {
+        } else if (!strcasecmp(node->name, "user")) {
             /* User directories must only be accessible to system, protected
              * by sdcard_all. Zygote will bind mount the appropriate user-
              * specific path. */
@@ -505,9 +521,9 @@ static bool check_caller_access_to_name(struct fuse* fuse,
         const char* name, int mode, bool has_rw) {
     /* Always block security-sensitive files at root */
     if (parent_node && parent_node->perm == PERM_ROOT) {
-        if (!strcmp(name, "autorun.inf")
-                || !strcmp(name, ".android_secure")
-                || !strcmp(name, "android_secure")) {
+        if (!strcasecmp(name, "autorun.inf")
+                || !strcasecmp(name, ".android_secure")
+                || !strcasecmp(name, "android_secure")) {
             return false;
         }
     }
@@ -517,8 +533,9 @@ static bool check_caller_access_to_name(struct fuse* fuse,
         return true;
     }
 
-    /* Root or shell always have access */
-    if (hdr->uid == 0 || hdr->uid == AID_SHELL) {
+    /* Root always has access; access for any other UIDs should always
+     * be controlled through packages.list. */
+    if (hdr->uid == 0) {
         return true;
     }
 
@@ -696,9 +713,10 @@ static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
         fuse->root.perm = PERM_LEGACY_PRE_ROOT;
         fuse->root.mode = 0771;
         fuse->root.gid = fs_gid;
-        fuse->package_to_appid = hashmapCreate(256, str_hash, str_equals);
+        fuse->package_to_appid = hashmapCreate(256, str_hash, str_icase_equals);
         fuse->appid_with_rw = hashmapCreate(128, int_hash, int_equals);
         snprintf(fuse->obbpath, sizeof(fuse->obbpath), "%s/obb", source_path);
+        fs_prepare_dir(fuse->obbpath, 0775, getuid(), getgid());
         break;
     case DERIVE_UNIFIED:
         /* Unified multiuser layout which places secondary user_id under
@@ -706,7 +724,7 @@ static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
         fuse->root.perm = PERM_ROOT;
         fuse->root.mode = 0771;
         fuse->root.gid = fs_gid;
-        fuse->package_to_appid = hashmapCreate(256, str_hash, str_equals);
+        fuse->package_to_appid = hashmapCreate(256, str_hash, str_icase_equals);
         fuse->appid_with_rw = hashmapCreate(128, int_hash, int_equals);
         snprintf(fuse->obbpath, sizeof(fuse->obbpath), "%s/Android/obb", source_path);
         break;
@@ -752,36 +770,7 @@ static int fuse_reply_entry(struct fuse* fuse, __u64 unique,
     struct stat s;
 
     if (lstat(path, &s) < 0) {
-        /* But wait! We'll automatically create a directory if its
-         * a valid package name under data or obb, since apps may not
-         * have enough permissions to create for themselves. */
-        if (errno == ENOENT && (parent->perm == PERM_ANDROID_DATA
-                || parent->perm == PERM_ANDROID_OBB)) {
-            TRACE("automatically creating %s\n", path);
-
-            pthread_mutex_lock(&fuse->lock);
-            bool validPackage = hashmapContainsKey(fuse->package_to_appid, (char*) name);
-            pthread_mutex_unlock(&fuse->lock);
-
-            if (!validPackage) {
-                return -ENOENT;
-            }
-            if (mkdir(path, 0775) == -1) {
-                /* We might have raced with ourselves and already created */
-                if (errno != EEXIST) {
-                    ERROR("failed to mkdir(%s): %s\n", name, strerror(errno));
-                    return -ENOENT;
-                }
-            }
-
-            /* It should exist this time around! */
-            if (lstat(path, &s) < 0) {
-                ERROR("failed to lstat(%s): %s\n", name, strerror(errno));
-                return -errno;
-            }
-        } else {
-            return -errno;
-        }
+        return -errno;
     }
 
     pthread_mutex_lock(&fuse->lock);
@@ -1006,6 +995,25 @@ static int handle_mkdir(struct fuse* fuse, struct fuse_handler* handler,
     if (mkdir(child_path, mode) < 0) {
         return -errno;
     }
+
+    /* When creating /Android/data and /Android/obb, mark them as .nomedia */
+    if (parent_node->perm == PERM_ANDROID && !strcasecmp(name, "data")) {
+        char nomedia[PATH_MAX];
+        snprintf(nomedia, PATH_MAX, "%s/.nomedia", child_path);
+        if (touch(nomedia, 0664) != 0) {
+            ERROR("Failed to touch(%s): %s\n", nomedia, strerror(errno));
+            return -ENOENT;
+        }
+    }
+    if (parent_node->perm == PERM_ANDROID && !strcasecmp(name, "obb")) {
+        char nomedia[PATH_MAX];
+        snprintf(nomedia, PATH_MAX, "%s/.nomedia", fuse->obbpath);
+        if (touch(nomedia, 0664) != 0) {
+            ERROR("Failed to touch(%s): %s\n", nomedia, strerror(errno));
+            return -ENOENT;
+        }
+    }
+
     return fuse_reply_entry(fuse, hdr->unique, parent_node, name, actual_name, child_path);
 }
 
