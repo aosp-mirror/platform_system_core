@@ -65,6 +65,12 @@ ifneq ($(strip $(USE_MINGW)),)
     WINDOWS_HOST_ONLY := 1
 endif
 
+ifneq ($(WINDOWS_HOST_ONLY),1)
+    commonSources += \
+        fs.c \
+        multiuser.c
+endif
+
 
 # Static library for host
 # ========================================================
@@ -101,9 +107,7 @@ LOCAL_SRC_FILES := $(commonSources) \
         android_reboot.c \
         ashmem-dev.c \
         debugger.c \
-        fs.c \
         klog.c \
-        multiuser.c \
         partition_utils.c \
         properties.c \
         qtaguid.c \
