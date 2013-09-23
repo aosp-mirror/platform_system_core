@@ -39,6 +39,7 @@ TOOLS := \
 	nandread \
 	netstat \
 	newfs_msdos \
+	nohup \
 	notify \
 	printenv \
 	ps \
