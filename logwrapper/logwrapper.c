@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
     }
 
     rc = android_fork_execvp_ext(argc, &argv[0], &status, true,
-                                 log_target, abbreviated);
+                                 log_target, abbreviated, NULL);
     if (!rc) {
         if (WIFEXITED(status))
             rc = WEXITSTATUS(status);

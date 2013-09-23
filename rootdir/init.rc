@@ -133,6 +133,10 @@ loglevel 3
 # This is needed by any process that uses socket tagging.
     chmod 0644 /dev/xt_qtaguid
 
+# Create location for fs_mgr to store abbreviated output from filesystem
+# checker programs.
+    mkdir /dev/fscklogs 0770 root system
+
 on post-fs
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
