@@ -69,7 +69,8 @@ TOOLS := \
 	swapon \
 	swapoff \
 	mkswap \
-	readlink
+	readlink \
+	nohup
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 TOOLS += r
