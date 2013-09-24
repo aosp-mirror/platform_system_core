@@ -19,7 +19,7 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include <memtrack.h>
+#include <memtrack/memtrack.h>
 
 #include <pagemap/pagemap.h>
 
