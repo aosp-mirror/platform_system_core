@@ -53,6 +53,8 @@
 #define E2FSCK_BIN      "/system/bin/e2fsck"
 #define MKSWAP_BIN      "/system/bin/mkswap"
 
+#define FSCK_LOG_FILE   "/dev/fscklogs/log"
+
 #define ZRAM_CONF_DEV   "/sys/block/zram0/disksize"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
@@ -430,7 +432,8 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
         INFO("Running %s on %s\n", E2FSCK_BIN, blk_device);
 
         ret = android_fork_execvp_ext(ARRAY_SIZE(e2fsck_argv), e2fsck_argv,
-                                      &status, true, LOG_KLOG, true);
+                                      &status, true, LOG_KLOG | LOG_FILE,
+                                      true, FSCK_LOG_FILE);
 
         if (ret < 0) {
             /* No need to check for error in fork, we can't really handle it now */
@@ -747,7 +750,7 @@ int fs_mgr_swapon_all(struct fstab *fstab)
         /* Initialize the swap area */
         mkswap_argv[1] = fstab->recs[i].blk_device;
         err = android_fork_execvp_ext(ARRAY_SIZE(mkswap_argv), mkswap_argv,
-                                      &status, true, LOG_KLOG, false);
+                                      &status, true, LOG_KLOG, false, NULL);
         if (err) {
             ERROR("mkswap failed for %s\n", fstab->recs[i].blk_device);
             ret = -1;

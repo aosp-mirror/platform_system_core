@@ -44,11 +44,15 @@ __BEGIN_DECLS
  *           send a signal twice to signal the caller (once for the child, and
  *           once for the caller)
  *   log_target: Specify where to log the output of the child, either LOG_NONE,
- *           LOG_ALOG (for the Android system log) or LOG_KLOG (for the kernel
- *           log).
+ *           LOG_ALOG (for the Android system log), LOG_KLOG (for the kernel
+ *           log), or LOG_FILE (and you need to specify a pathname in the
+ *           file_path argument, otherwise pass NULL).  These are bit fields,
+ *           and can be OR'ed together to log to multiple places.
  *   abbreviated: If true, capture up to the first 100 lines and last 4K of
  *           output from the child.  The abbreviated output is not dumped to
  *           the specified log until the child has exited.
+ *   file_path: if log_target has the LOG_FILE bit set, then this parameter
+ *           must be set to the pathname of the file to log to.
  *
  * Return value:
  *   0 when logwrap successfully run the child process and captured its status
@@ -58,13 +62,14 @@ __BEGIN_DECLS
  *
  */
 
-/* Values for the log_target parameter android_fork_exec_ext() */
+/* Values for the log_target parameter android_fork_execvp_ext() */
 #define LOG_NONE        0
 #define LOG_ALOG        1
 #define LOG_KLOG        2
+#define LOG_FILE        4
 
 int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int_quit,
-        int log_target, bool abbreviated);
+        int log_target, bool abbreviated, char *file_path);
 
 /* Similar to above, except abbreviated logging is not available, and if logwrap
  * is true, logging is to the Android system log, and if false, there is no
@@ -74,9 +79,8 @@ static inline int android_fork_execvp(int argc, char* argv[], int *status,
                                      bool ignore_int_quit, bool logwrap)
 {
     return android_fork_execvp_ext(argc, argv, status, ignore_int_quit,
-                                   (logwrap ? LOG_ALOG : LOG_NONE), false);
+                                   (logwrap ? LOG_ALOG : LOG_NONE), false, NULL);
 }
-
 
 __END_DECLS
 
