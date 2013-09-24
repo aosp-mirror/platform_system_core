@@ -92,6 +92,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "swapprio=",   MF_SWAPPRIO },
     { "zramsize=",   MF_ZRAMSIZE },
     { "verify",      MF_VERIFY },
+    { "noemulatedsd", MF_NOEMULATEDSD },
     { "defaults",    0 },
     { 0,             0 },
 };
@@ -876,4 +877,9 @@ int fs_mgr_is_nonremovable(struct fstab_rec *fstab)
 int fs_mgr_is_encryptable(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_CRYPT;
+}
+
+int fs_mgr_is_noemulatedsd(struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_NOEMULATEDSD;
 }
