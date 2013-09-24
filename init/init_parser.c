@@ -549,12 +549,14 @@ void queue_all_property_triggers()
                 if (length > PROP_NAME_MAX) {
                     ERROR("property name too long in trigger %s", act->name);
                 } else {
+                    int ret;
                     memcpy(prop_name, name, length);
                     prop_name[length] = 0;
 
                     /* does the property exist, and match the trigger value? */
-                    property_get(prop_name, value);
-                    if (!strcmp(equals + 1, value) ||!strcmp(equals + 1, "*")) {
+                    ret = property_get(prop_name, value);
+                    if (ret > 0 && (!strcmp(equals + 1, value) ||
+                                    !strcmp(equals + 1, "*"))) {
                         action_add_queue_tail(act);
                     }
                 }
