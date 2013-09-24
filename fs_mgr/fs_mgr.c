@@ -377,6 +377,10 @@ void fs_mgr_free_fstab(struct fstab *fstab)
 {
     int i;
 
+    if (!fstab) {
+        return;
+    }
+
     for (i = 0; i < fstab->num_entries; i++) {
         /* Free the pointers return by strdup(3) */
         free(fstab->recs[i].blk_device);
