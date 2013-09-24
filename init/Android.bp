@@ -82,6 +82,7 @@ init_device_sources = [
     "uevent_listener.cpp",
     "ueventd.cpp",
     "ueventd_parser.cpp",
+    "vendor_init.cpp",
 ]
 init_host_sources = [
     "check_builtins.cpp",
@@ -211,6 +212,14 @@ cc_library_static {
                 "libbinder",
                 "libutils",
             ],
+        },
+    },
+
+    product_variables: {
+        arrow: {
+            target_init_vendor_lib: {
+                whole_static_libs: ["%s"],
+            },
         },
     },
 }

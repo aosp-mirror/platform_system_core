@@ -73,6 +73,7 @@
 #include "subcontext.h"
 #include "system/core/init/property_service.pb.h"
 #include "util.h"
+#include "vendor_init.h"
 
 using namespace std::literals;
 
@@ -1096,6 +1097,9 @@ void PropertyLoadBootDefaults() {
                        << "' while loading .prop files" << error;
         }
     }
+
+    // Update with vendor-specific property runtime overrides
+    vendor_load_properties();
 
     property_initialize_ro_product_props();
     property_initialize_build_id();
