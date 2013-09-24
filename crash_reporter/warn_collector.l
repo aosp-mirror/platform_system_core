@@ -82,6 +82,7 @@ const char warn_dump_dir[]  = "/var/run/kwarn";
 const char *warn_dump_path = "/var/run/kwarn/warning";
 const char *crash_reporter_command;
 
+__attribute__((__format__(__printf__, 1, 2)))
 static void Die(const char *format, ...) {
   va_list ap;
   va_start(ap, format);

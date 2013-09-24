@@ -51,9 +51,9 @@
 # compiling the objects.  This can be done by adding one of the following
 # to the Makefile:
 #   - For C source files
-#     $(eval $(call add_object_rules,sub/dir/gen_a.o sub/dir/gen_b.o,CC,c))
+#   $(eval $(call add_object_rules,sub/dir/gen_a.o sub/dir/b.o,CC,c,CFLAGS))
 #   - For C++ source files
-#     $(eval $(call add_object_rules,sub/dir/gen_a.o sub/dir/gen_b.o,CXX,cc))
+#   $(eval $(call add_object_rules,sub/dir/gen_a.o sub/dir/b.o,CXX,cc,CXXFLAGS))
 #
 # Exported targets meant to have prerequisites added to:
 #  - all - Your desired targets should be given
@@ -271,15 +271,48 @@ else
 CXXDRIVER = gcc
 endif
 
+# Internal macro to support check_XXX macros below.
+# Usage: $(call check_compile, [code], [compiler], [code_type], [c_flags],
+#               [extra_c_flags], [library_flags], [success_ret], [fail_ret])
+# Return: [success_ret] if compile succeeded, otherwise [fail_ret]
+check_compile = $(shell printf '%b\n' $(1) | \
+  $($(2)) $($(4)) -x $(3) $(LDFLAGS) $(5) - $(6) -o /dev/null > /dev/null 2>&1 \
+  && echo "$(7)" || echo "$(8)")
+
+# Helper macro to check whether a test program will compile with the specified
+# compiler flags.
+# Usage: $(call check_compile_cc, [code], [flags], [alternate_flags])
+# Return: [flags] if compile succeeded, otherwise [alternate_flags]
+check_compile_cc = $(call check_compile,$(1),CC,c,CFLAGS,$(2),,$(2),$(3))
+check_compile_cxx = $(call check_compile,$(1),CXX,c++,CXXFLAGS,$(2),,$(2),$(3))
+
+# Helper macro to check whether a test program will compile with the specified
+# libraries.
+# Usage: $(call check_compile_cc, [code], [library_flags], [alternate_flags])
+# Return: [library_flags] if compile succeeded, otherwise [alternate_flags]
+check_libs_cc = $(call check_compile,$(1),CC,c,CFLAGS,,$(2),$(2),$(3))
+check_libs_cxx = $(call check_compile,$(1),CXX,c++,CXXFLAGS,,$(2),$(2),$(3))
+
+# Helper macro to check whether the compiler accepts the specified flags.
+# Usage: $(call check_compile_cc, [flags], [alternate_flags])
+# Return: [flags] if compile succeeded, otherwise [alternate_flags]
+check_cc = $(call check_compile_cc,'int main() { return 0; }',$(1),$(2))
+check_cxx = $(call check_compile_cxx,'int main() { return 0; }',$(1),$(2))
+
+# Choose the stack protector flags based on whats supported by the compiler.
+SSP_CFLAGS := $(call check_cc,-fstack-protector-strong)
+ifeq ($(SSP_CFLAGS),)
+ SSP_CFLAGS := $(call check_cc,-fstack-protector-all)
+endif
+
 # To update these from an including Makefile:
 #  CXXFLAGS += -mahflag  # Append to the list
 #  CXXFLAGS := -mahflag $(CXXFLAGS) # Prepend to the list
 #  CXXFLAGS := $(filter-out badflag,$(CXXFLAGS)) # Filter out a value
 # The same goes for CFLAGS.
-COMMON_CFLAGS-gcc := -fstack-protector-strong -fvisibility=internal -ggdb3 \
-  -Wa,--noexecstack
-COMMON_CFLAGS-clang := -fstack-protector-all -fvisibility=hidden -ggdb
-COMMON_CFLAGS := -Wall -Werror -fno-strict-aliasing -O1 -Wformat=2
+COMMON_CFLAGS-gcc := -fvisibility=internal -ggdb3 -Wa,--noexecstack
+COMMON_CFLAGS-clang := -fvisibility=hidden -ggdb
+COMMON_CFLAGS := -Wall -Werror -fno-strict-aliasing $(SSP_CFLAGS) -O1 -Wformat=2
 CXXFLAGS += $(COMMON_CFLAGS) $(COMMON_CFLAGS-$(CXXDRIVER))
 CFLAGS += $(COMMON_CFLAGS) $(COMMON_CFLAGS-$(CDRIVER))
 CPPFLAGS += -D_FORTIFY_SOURCE=2
@@ -650,23 +683,22 @@ all:
 # After the test have completed, if profiling, run coverage analysis
 tests:
 ifeq ($(MODE),profiling)
-	@$(ECHO) -n "COVERAGE		gcov "
-	@$(ECHO) "[$(COLOR_YELLOW)STARTED$(COLOR_RESET)]"
-	$(QUIET)(FILES="";						\
-		for GCNO in `find . -name "*.gcno"`;			\
-		do							\
+	@$(ECHO) "COVERAGE [$(COLOR_YELLOW)STARTED$(COLOR_RESET)]"
+	$(QUIET)FILES="";						\
+		for GCNO in `find . -name "*.gcno"`; do			\
 			GCDA="$${GCNO%.gcno}.gcda";			\
-			[ -e $${GCDA} ] && FILES="$${FILES} $${GCDA}";	\
+			if [ -e $${GCDA} ]; then			\
+				FILES="$${FILES} $${GCDA}";		\
+			fi						\
 		done;							\
-		gcov -l $${FILES})
-	@$(ECHO) -n "COVERAGE		gcov "
-	@$(ECHO) "[$(COLOR_YELLOW)FINISHED$(COLOR_RESET)]"
-	@$(ECHO) -n "COVERAGE		lcov "
-	@$(ECHO) "[$(COLOR_YELLOW)STARTED$(COLOR_RESET)]"
-	$(QUIET)lcov --capture --directory . --output-file=lcov-coverage.info
-	$(QUIET)genhtml lcov-coverage.info --output-directory lcov-html
-	@$(ECHO) -n "COVERAGE		lcov "
-	@$(ECHO) "[$(COLOR_YELLOW)FINISHED$(COLOR_RESET)]"
+		if [ -n "$${FILES}" ]; then				\
+			gcov -l $${FILES};				\
+			lcov --capture --directory .			\
+				--output-file=lcov-coverage.info;	\
+			genhtml lcov-coverage.info			\
+				--output-directory lcov-html;		\
+		fi
+	@$(ECHO) "COVERAGE [$(COLOR_YELLOW)FINISHED$(COLOR_RESET)]"
 endif
 .PHONY: tests
 
@@ -683,8 +715,10 @@ endif
 
 # TODO(wad) Move to -L $(SYSROOT) and fakechroot when qemu-user
 #           doesn't hang traversing /proc from SYSROOT.
+SUDO_CMD = sudo
+UNSHARE_CMD = unshare
 QEMU_CMD =
-ROOT_CMD = $(if $(filter 1,$(NEEDS_ROOT)),sudo , )
+ROOT_CMD = $(if $(filter 1,$(NEEDS_ROOT)),$(SUDO_CMD) , )
 MOUNT_CMD = $(if $(filter 1,$(NEEDS_MOUNTS)),$(ROOT_CMD) mount, \#)
 UMOUNT_CMD = $(if $(filter 1,$(NEEDS_MOUNTS)),$(ROOT_CMD) umount, \#)
 QEMU_LDPATH = $(SYSROOT_LDPATH):/lib64:/lib:/usr/lib64:/usr/lib
@@ -693,7 +727,7 @@ ROOT_CMD_LDPATH := $(ROOT_CMD_LDPATH):$(SYSROOT)/lib:$(SYSROOT)/usr/lib64:
 ROOT_CMD_LDPATH := $(ROOT_CMD_LDPATH):$(SYSROOT)/usr/lib
 ifeq ($(USE_QEMU),1)
   export QEMU_CMD = \
-   sudo chroot $(SYSROOT) $(SYSROOT_OUT)qemu-$(QEMU_ARCH) \
+   $(SUDO_CMD) chroot $(SYSROOT) $(SYSROOT_OUT)qemu-$(QEMU_ARCH) \
    -drop-ld-preload \
    -E LD_LIBRARY_PATH="$(QEMU_LDPATH):$(patsubst $(OUT),,$(LD_DIRS))" \
    -E HOME="$(HOME)" --
@@ -725,22 +759,20 @@ define TEST_setup
   @$(ECHO) -n "TEST		$(TARGET_OR_MEMBER) "
   @$(ECHO) "[$(COLOR_YELLOW)SETUP$(COLOR_RESET)]"
   $(QUIET)# Setup a target-specific results file
+  $(QUIET)(echo > $(OUT)$(TARGET_OR_MEMBER).setup.test)
   $(QUIET)(echo 1 > $(OUT)$(TARGET_OR_MEMBER).status.test)
   $(QUIET)(echo > $(OUT)$(TARGET_OR_MEMBER).cleanup.test)
   $(QUIET)# No setup if we are not using QEMU
   $(QUIET)# TODO(wad) this is racy until we use a vfs namespace
   $(call if_qemu,\
-    $(QUIET)sudo mkdir -p "$(SYSROOT)/proc" "$(SYSROOT)/dev")
+    $(QUIET)(echo "mkdir -p '$(SYSROOT)/proc' '$(SYSROOT)/dev'" \
+             >> "$(OUT)$(TARGET_OR_MEMBER).setup.test"))
   $(call if_qemu,\
-    $(QUIET)$(MOUNT_CMD) --bind /proc "$(SYSROOT)/proc")
+    $(QUIET)(echo "$(MOUNT_CMD) --bind /proc '$(SYSROOT)/proc'" \
+             >> "$(OUT)$(TARGET_OR_MEMBER).setup.test"))
   $(call if_qemu,\
-    $(QUIET)$(MOUNT_CMD) --bind /dev "$(SYSROOT)/dev")
-  $(call if_qemu,\
-    $(QUIET)(echo "$(UMOUNT_CMD) -l '$(SYSROOT)/proc'" \
-             >> "$(OUT)$(TARGET_OR_MEMBER).cleanup.test"))
-  $(call if_qemu,\
-    $(QUIET)(echo "$(UMOUNT_CMD) -l '$(SYSROOT)/dev'" \
-             >> "$(OUT)$(TARGET_OR_MEMBER).cleanup.test"))
+    $(QUIET)(echo "$(MOUNT_CMD) --bind /dev '$(SYSROOT)/dev'" \
+             >> "$(OUT)$(TARGET_OR_MEMBER).setup.test"))
 endef
 
 define TEST_teardown
@@ -757,11 +789,13 @@ define TEST_run
   @$(ECHO) -n "TEST		$(TARGET_OR_MEMBER) "
   @$(ECHO) "[$(COLOR_GREEN)RUN$(COLOR_RESET)]"
   $(QUIET)(echo 1 > "$(OUT)$(TARGET_OR_MEMBER).status.test")
-  -($(ROOT_CMD) $(QEMU_CMD) $(VALGRIND_CMD) \
+  $(QUIET)(echo $(ROOT_CMD) $(QEMU_CMD) $(VALGRIND_CMD) \
     "$(strip $(call if_qemu, $(SYSROOT_OUT),$(OUT))$(TARGET_OR_MEMBER))" \
       $(if $(filter-out 0,$(words $(GTEST_ARGS.real))),$(GTEST_ARGS.real),\
-           $(GTEST_ARGS)) && \
-    echo 0 > "$(OUT)$(TARGET_OR_MEMBER).status.test")
+           $(GTEST_ARGS)) >> "$(OUT)$(TARGET_OR_MEMBER).setup.test")
+  -$(QUIET)$(call if_qemu,$(SUDO_CMD) $(UNSHARE_CMD) -m) $(SHELL) \
+      $(OUT)$(TARGET_OR_MEMBER).setup.test \
+  && echo 0 > "$(OUT)$(TARGET_OR_MEMBER).status.test"
 endef
 
 # Recursive list reversal so that we get RMDIR_ON_CLEAN in reverse order.

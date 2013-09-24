@@ -58,7 +58,7 @@ all: CC_BINARY(warn_collector)
 lex.yy.c: $(SRC)/warn_collector.l
 	flex $<
 clean: CLEAN(lex.yy.o)
-$(eval $(call add_object_rules,lex.yy.o,CC,c))
+$(eval $(call add_object_rules,lex.yy.o,CC,c,CFLAGS))
 
 
 # -- Unit Tests --
