@@ -61,12 +61,20 @@ int64_t elapsedRealtime()
 #define METHOD_IOCTL            1
 #define METHOD_SYSTEMTIME       2
 
+/*
+ * To debug/verify the timestamps returned by the kernel, change
+ * DEBUG_TIMESTAMP to 1 and call the timestamp routine from a single thread
+ * in the test program. b/10899829
+ */
+#define DEBUG_TIMESTAMP         0
+
 static const char *gettime_method_names[] = {
     "clock_gettime",
     "ioctl",
     "systemTime",
 };
 
+#if DEBUG_TIMESTAMP
 static inline void checkTimeStamps(int64_t timestamp,
                                    int64_t volatile *prevTimestampPtr,
                                    int volatile *prevMethodPtr,
@@ -93,6 +101,9 @@ static inline void checkTimeStamps(int64_t timestamp,
     *prevMethodPtr = curMethod;
 #endif
 }
+#else
+#define checkTimeStamps(timestamp, prevTimestampPtr, prevMethodPtr, curMethod)
+#endif
 
 /*
  * native public static long elapsedRealtimeNano();
@@ -103,8 +114,10 @@ int64_t elapsedRealtimeNano()
     struct timespec ts;
     int result;
     int64_t timestamp;
+#if DEBUG_TIMESTAMP
     static volatile int64_t prevTimestamp;
     static volatile int prevMethod;
+#endif
 
 #if 0
     /*
