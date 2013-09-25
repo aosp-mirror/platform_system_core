@@ -25,6 +25,7 @@
 #include "adb_auth.h"
 #include "fdevent.h"
 #include "mincrypt/rsa.h"
+#include "mincrypt/sha.h"
 
 #define TRACE_TAG TRACE_AUTH
 
@@ -149,7 +150,7 @@ int adb_auth_verify(void *token, void *sig, int siglen)
 
     list_for_each(item, &key_list) {
         key = node_to_item(item, struct adb_public_key, node);
-        ret = RSA_verify(&key->key, sig, siglen, token);
+        ret = RSA_verify(&key->key, sig, siglen, token, SHA_DIGEST_SIZE);
         if (ret)
             break;
     }
