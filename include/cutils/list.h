@@ -44,6 +44,11 @@ struct listnode
 #define list_for_each_reverse(node, list) \
     for (node = (list)->prev; node != (list); node = node->prev)
 
+#define list_for_each_safe(node, next, list) \
+    for (node = (list)->next, next = node->next; \
+         node != (list); \
+         node = next, next = node->next)
+
 void list_init(struct listnode *list);
 void list_add_tail(struct listnode *list, struct listnode *item);
 void list_remove(struct listnode *item);
