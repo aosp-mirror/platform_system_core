@@ -19,6 +19,11 @@
 
 #include <sys/types.h>
 #include <stddef.h>
+#include <cutils/compiler.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * struct memtrack_proc
@@ -134,5 +139,9 @@ ssize_t memtrack_proc_other_total(struct memtrack_proc *p);
  * Returns non-negative size in bytes on success, -errno on error.
  */
 ssize_t memtrack_proc_other_pss(struct memtrack_proc *p);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

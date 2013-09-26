@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <memtrack.h>
+#include <memtrack/memtrack.h>
 
 #define LOG_TAG "memtrack"
 
