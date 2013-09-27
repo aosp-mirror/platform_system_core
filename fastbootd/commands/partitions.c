@@ -648,7 +648,6 @@ static int GPT_parse_partitions(cnode *node, struct GPT_content *content)
 {
     cnode *current;
     int i;
-    int ret;
     uint64_t partition_size;
     struct GPT_entry_raw *entry;
     for (i = 0, current = node->first_child; current; current = current->next, ++i) {
