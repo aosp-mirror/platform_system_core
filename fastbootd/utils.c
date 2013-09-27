@@ -34,7 +34,6 @@
 #include <stdio.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
-#include <stdlib.h>
 
 #include "utils.h"
 #include "debug.h"
@@ -146,15 +145,3 @@ int wipe_block_device(int fd, int64_t len)
     return 0;
 }
 
-int create_temp_file() {
-    char tempname[] = "/dev/fastboot_data_XXXXXX";
-    int fd;
-
-    fd = mkstemp(tempname);
-    if (fd < 0)
-        return -1;
-
-    unlink(tempname);
-
-    return fd;
-}
