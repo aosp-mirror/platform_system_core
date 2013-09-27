@@ -39,9 +39,6 @@
 #include "utils.h"
 #include "commands/partitions.h"
 
-#ifdef FLASH_CERT
-#include "secure.h"
-#endif
 
 #define ALLOWED_CHARS "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-."
 #define BUFFER_SIZE 1024 * 1024
@@ -115,47 +112,3 @@ int flash_write(int partition_fd, int data_fd, ssize_t size, ssize_t skip)
 
     return 0;
 }
-
-#ifdef FLASH_CERT
-
-int flash_validate_certificate(int signed_fd, int *data_fd) {
-    int ret = 0;
-    const char *cert_path;
-    X509_STORE *store = NULL;
-    CMS_ContentInfo *content_info;
-    BIO *content;
-
-    cert_path = fastboot_getvar("certificate-path");
-    if (!strcmp(cert_path, "")) {
-        D(ERR, "could not find cert-key value in config file");
-        goto finish;
-    }
-
-    store = cert_store_from_path(cert_path);
-    if (store == NULL) {
-        D(ERR, "unable to create certification store");
-        goto finish;
-    }
-
-    if (cert_read(signed_fd, &content_info, &content)) {
-        D(ERR, "reading data failed");
-        goto finish;
-    }
-
-    ret = cert_verify(content, content_info, store, data_fd);
-    cert_release(content, content_info);
-
-    return ret;
-
-finish:
-    if (store != NULL)
-        cert_release_store(store);
-
-    return ret;
-}
-
-#else
-int flash_validate_certificate(int signed_fd, int *data_fd) {
-    return 1;
-}
-#endif

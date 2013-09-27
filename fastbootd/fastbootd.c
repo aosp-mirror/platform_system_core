@@ -21,7 +21,6 @@
 
 #include "debug.h"
 #include "trigger.h"
-#include "secure.h"
 
 unsigned int debug_level = DEBUG;
 
@@ -37,7 +36,6 @@ int main(int argc, char **argv)
     klog_init();
     klog_set_level(6);
 
-    cert_init_crypto();
     config_init();
     load_trigger();
     commands_init();

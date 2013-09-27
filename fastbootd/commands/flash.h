@@ -58,7 +58,5 @@ static inline ssize_t read_data_once(int fd, char *buffer, ssize_t size) {
     return readcount;
 }
 
-int flash_validate_certificate(int signed_fd, int *data_fd);
-
 #endif
 
