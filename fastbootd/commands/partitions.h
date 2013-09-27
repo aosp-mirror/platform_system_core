@@ -38,6 +38,11 @@
 #define GPT_ENTRIES 128
 #define GPT_NAMELEN 36
 
+#define GPT_FLAG_SYSTEM (1ULL << 0)
+#define GPT_FLAG_BOOTABLE (1ULL << 2)
+#define GPT_FLAG_READONLY (1ULL << 60)
+#define GPT_FLAG_DOAUTOMOUNT (1ULL << 63)
+
 // it should be passed in little endian order
 struct GPT_entry_raw {
     uint8_t type_guid[16];
