@@ -171,6 +171,7 @@ int BatteryMonitor::getIntField(const String8& path) {
 
 bool BatteryMonitor::update(void) {
     struct BatteryProperties props;
+    struct BatteryExtraProperties extraProps;
     bool logthis;
 
     props.chargerAcOnline = false;
@@ -178,8 +179,8 @@ bool BatteryMonitor::update(void) {
     props.chargerWirelessOnline = false;
     props.batteryStatus = BATTERY_STATUS_UNKNOWN;
     props.batteryHealth = BATTERY_HEALTH_UNKNOWN;
-    props.batteryCurrentNow = INT_MIN;
-    props.batteryChargeCounter = INT_MIN;
+    extraProps.batteryCurrentNow = INT_MIN;
+    extraProps.batteryChargeCounter = INT_MIN;
 
     if (!mHealthdConfig->batteryPresentPath.isEmpty())
         props.batteryPresent = getBooleanField(mHealthdConfig->batteryPresentPath);
@@ -190,10 +191,11 @@ bool BatteryMonitor::update(void) {
     props.batteryVoltage = getIntField(mHealthdConfig->batteryVoltagePath) / 1000;
 
     if (!mHealthdConfig->batteryCurrentNowPath.isEmpty())
-        props.batteryCurrentNow = getIntField(mHealthdConfig->batteryCurrentNowPath);
+        extraProps.batteryCurrentNow = getIntField(mHealthdConfig->batteryCurrentNowPath);
 
+    /* temporary while dumpsys being reworked */
     if (!mHealthdConfig->batteryChargeCounterPath.isEmpty())
-        props.batteryChargeCounter = getIntField(mHealthdConfig->batteryChargeCounterPath);
+        extraProps.batteryChargeCounter = getIntField(mHealthdConfig->batteryChargeCounterPath);
 
     props.batteryTemperature = getIntField(mHealthdConfig->batteryTemperaturePath);
 
@@ -240,6 +242,10 @@ bool BatteryMonitor::update(void) {
         }
     }
 
+    /* temporary while these are moved and dumpsys reworked */
+    props.batteryCurrentNow  = extraProps.batteryCurrentNow;
+    props.batteryChargeCounter = extraProps.batteryChargeCounter;
+
     logthis = !healthd_board_battery_update(&props);
 
     if (logthis) {
@@ -255,7 +261,7 @@ bool BatteryMonitor::update(void) {
         if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
             char b[20];
 
-            snprintf(b, sizeof(b), " c=%d", props.batteryCurrentNow / 1000);
+            snprintf(b, sizeof(b), " c=%d", extraProps.batteryCurrentNow / 1000);
             strlcat(dmesgline, b, sizeof(dmesgline));
         }
 
