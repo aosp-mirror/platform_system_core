@@ -16,6 +16,9 @@ on early-init
     # This should occur before anything else (e.g. ueventd) is started.
     setcon u:r:init:s0
 
+    # Set the security context of /adb_keys if present.
+    restorecon /adb_keys
+
     start ueventd
 
 # create mountpoints
@@ -207,6 +210,10 @@ on post-fs-data
     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
     mkdir /data/local 0751 root root
     mkdir /data/misc/media 0700 media media
+
+    # Set security context of any pre-existing /data/misc/adb/adb_keys file.
+    restorecon /data/misc/adb
+    restorecon /data/misc/adb/adb_keys
 
     # For security reasons, /data/local/tmp should always be empty.
     # Do not place files or directories in /data/local/tmp
