@@ -43,7 +43,7 @@ typedef struct {
   size_t stack_size;      /* The size of the stack, zero indicate an unknown stack size. */
   const char* map_name;   /* The name of the map to which this pc belongs, NULL indicates the pc doesn't belong to a known map. */
   uintptr_t map_offset;   /* pc relative to the start of the map, only valid if map_name is not NULL. */
-  char* proc_name;        /* The function name associated with this pc, NULL if no not found. */
+  char* proc_name;        /* The function name associated with this pc, NULL if not found. */
   uintptr_t proc_offset;  /* pc relative to the start of the procedure, only valid if proc_name is not NULL. */
 } backtrace_frame_data_t;
 
