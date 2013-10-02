@@ -259,6 +259,9 @@ on post-fs-data
     # Separate location for storing security policy files on data
     mkdir /data/security 0711 system system
 
+    # Reload policy from /data/security if present.
+    setprop selinux.reload_policy 1
+
     # If there is no fs-post-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
     # won't work.
