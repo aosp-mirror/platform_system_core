@@ -58,10 +58,13 @@ void fb_queue_reboot(void);
 void fb_queue_command(const char *cmd, const char *msg);
 void fb_queue_download(const char *name, void *data, unsigned size);
 void fb_queue_notice(const char *notice);
+void fb_queue_wait_for_disconnect(void);
 int fb_execute_queue(usb_handle *usb);
 int fb_queue_is_empty(void);
 
 /* util stuff */
+double now();
+char *mkmsg(const char *fmt, ...);
 void die(const char *fmt, ...);
 
 /* Current product */

@@ -467,6 +467,11 @@ int usb_close(usb_handle *h) {
     return 0;
 }
 
+int usb_wait_for_disconnect(usb_handle *usb) {
+    /* TODO: Punt for now */
+    return 0;
+}
+
 int usb_read(usb_handle *h, void *data, int len) {
     IOReturn result;
     UInt32 numBytes = len;
