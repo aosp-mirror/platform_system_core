@@ -22,12 +22,15 @@
 #include <signal.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
+#include <errno.h>
 #include <unistd.h>
 #include <inttypes.h>
 
 #include <backtrace/backtrace.h>
 
 #define FINISH(pid) dump_frames(&backtrace); if (pid < 0) exit(1); else return false;
+
+#define WAIT_INTERVAL_USECS   1000
 
 // Prototypes for functions in the test library.
 int test_level_one(int, int, int, int, bool (*)(pid_t));
@@ -49,6 +52,21 @@ void dump_frames(const backtrace_t* backtrace) {
       }
     }
     printf("\n");
+  }
+}
+
+void wait_for_stop(pid_t pid, size_t max_usecs_to_wait) {
+  siginfo_t si;
+  size_t usecs_waited = 0;
+
+  while (ptrace(PTRACE_GETSIGINFO, pid, 0, &si) < 0 && (errno == EINTR || errno == ESRCH)) {
+    if (usecs_waited >= max_usecs_to_wait) {
+      printf("The process did not get to a stopping point in %zu usecs.\n",
+             usecs_waited);
+      break;
+    }
+    usleep(WAIT_INTERVAL_USECS);
+    usecs_waited += WAIT_INTERVAL_USECS;
   }
 }
 
@@ -153,6 +171,10 @@ void verify_proc_test(pid_t pid, bool (*verify_func)(pid_t)) {
     kill(pid, SIGKILL);
     exit(1);
   }
+
+  // Wait up to 1 second for the process to get to a point that we can trace it.
+  wait_for_stop(pid, 1000000);
+
   bool pass = verify_func(pid);
   if (ptrace(PTRACE_DETACH, pid, 0, 0) != 0) {
     printf("Failed to detach from pid %d\n", pid);
