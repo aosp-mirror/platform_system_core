@@ -48,6 +48,7 @@ static bool local_get_frames(backtrace_t* backtrace) {
   bool returnValue = true;
   backtrace->num_frames = 0;
   uintptr_t map_start;
+  unw_word_t value;
   do {
     frame = &backtrace->frames[backtrace->num_frames];
     frame->stack_size = 0;
@@ -56,18 +57,21 @@ static bool local_get_frames(backtrace_t* backtrace) {
     frame->proc_name = NULL;
     frame->proc_offset = 0;
 
-    ret = unw_get_reg(&cursor, UNW_REG_IP, &frame->pc);
+    ret = unw_get_reg(&cursor, UNW_REG_IP, &value);
     if (ret < 0) {
       ALOGW("get_frames: Failed to read IP %d\n", ret);
       returnValue = false;
       break;
     }
-    ret = unw_get_reg(&cursor, UNW_REG_SP, &frame->sp);
+    frame->pc = (uintptr_t)value;
+    ret = unw_get_reg(&cursor, UNW_REG_SP, &value);
     if (ret < 0) {
       ALOGW("get_frames: Failed to read IP %d\n", ret);
       returnValue = false;
       break;
     }
+    frame->sp = (uintptr_t)value;
+
     if (backtrace->num_frames) {
       backtrace_frame_data_t* prev = &backtrace->frames[backtrace->num_frames-1];
       prev->stack_size = frame->sp - prev->sp;
@@ -111,8 +115,11 @@ char* local_get_proc_name(const backtrace_t* backtrace, uintptr_t pc,
   unw_context_t* context = (unw_context_t*)backtrace->private_data;
   char buf[512];
 
+  *offset = 0;
+  unw_word_t value;
   if (unw_get_proc_name_by_ip(unw_local_addr_space, pc, buf, sizeof(buf),
-                              offset, context) >= 0 && buf[0] != '\0') {
+                              &value, context) >= 0 && buf[0] != '\0') {
+    *offset = (uintptr_t)value;
     char* symbol = demangle_symbol_name(buf);
     if (!symbol) {
       symbol = strdup(buf);
