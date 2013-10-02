@@ -63,38 +63,6 @@ LOCAL_SHARED_LIBRARIES := \
 include $(BUILD_SHARED_LIBRARY)
 
 #----------------------------------------------------------------------------
-# The host libbacktrace library using libcorkscrew
-#----------------------------------------------------------------------------
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES += \
-	corkscrew.c \
-	common.c \
-	demangle.c \
-	map_info.c \
-
-LOCAL_CFLAGS += \
-	-Wall \
-	-Wno-unused-parameter \
-	-Werror \
-	-std=gnu99 \
-
-LOCAL_SHARED_LIBRARIES := \
-	liblog \
-	libcorkscrew \
-	libgccdemangle \
-	liblog \
-
-LOCAL_LDLIBS += \
-	-ldl \
-	-lrt \
-
-LOCAL_MODULE := libbacktrace
-LOCAL_MODULE_TAGS := optional
-
-include $(BUILD_HOST_SHARED_LIBRARY)
-
-#----------------------------------------------------------------------------
 # libbacktrace test library, all optimizations turned off
 #----------------------------------------------------------------------------
 include $(CLEAR_VARS)
@@ -135,6 +103,38 @@ include $(BUILD_EXECUTABLE)
 # Only linux-x86 host versions of libbacktrace supported.
 #----------------------------------------------------------------------------
 ifeq ($(HOST_OS)-$(HOST_ARCH),linux-x86)
+
+#----------------------------------------------------------------------------
+# The host libbacktrace library using libcorkscrew
+#----------------------------------------------------------------------------
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES += \
+	corkscrew.c \
+	common.c \
+	demangle.c \
+	map_info.c \
+
+LOCAL_CFLAGS += \
+	-Wall \
+	-Wno-unused-parameter \
+	-Werror \
+	-std=gnu99 \
+
+LOCAL_SHARED_LIBRARIES := \
+	liblog \
+	libcorkscrew \
+	libgccdemangle \
+	liblog \
+
+LOCAL_LDLIBS += \
+	-ldl \
+	-lrt \
+
+LOCAL_MODULE := libbacktrace
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_HOST_SHARED_LIBRARY)
 
 #----------------------------------------------------------------------------
 # libbacktrace host test library, all optimizations turned off
