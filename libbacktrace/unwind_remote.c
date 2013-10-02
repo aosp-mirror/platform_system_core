@@ -19,7 +19,7 @@
 #include <sys/ptrace.h>
 #include <string.h>
 
-#include <cutils/log.h>
+#include <log/log.h>
 #include <backtrace/backtrace.h>
 
 #include <libunwind.h>

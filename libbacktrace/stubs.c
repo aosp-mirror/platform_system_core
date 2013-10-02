@@ -16,7 +16,7 @@
 
 #define LOG_TAG "libbacktrace"
 
-#include <cutils/log.h>
+#include <log/log.h>
 #include <backtrace/backtrace.h>
 
 bool backtrace_get_data(backtrace_t* backtrace, pid_t tid) {

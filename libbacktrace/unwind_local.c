@@ -18,7 +18,7 @@
 
 #include <string.h>
 
-#include <cutils/log.h>
+#include <log/log.h>
 #include <backtrace/backtrace.h>
 
 #define UNW_LOCAL_ONLY

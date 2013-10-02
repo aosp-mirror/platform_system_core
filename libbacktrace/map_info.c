@@ -21,7 +21,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <cutils/log.h>
+#include <log/log.h>
 #include <sys/time.h>
 
 #include <backtrace/backtrace.h>

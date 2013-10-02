@@ -21,7 +21,7 @@
 #include <sys/ptrace.h>
 #include <inttypes.h>
 
-#include <cutils/log.h>
+#include <log/log.h>
 #include <backtrace/backtrace.h>
 
 #include "common.h"
