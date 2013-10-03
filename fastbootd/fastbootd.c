@@ -23,6 +23,7 @@
 #include "debug.h"
 #include "trigger.h"
 #include "socket_client.h"
+#include "secure.h"
 
 unsigned int debug_level = DEBUG;
 
@@ -72,6 +73,7 @@ int main(int argc, char **argv)
         run_socket_client();
     }
     else {
+        cert_init_crypto();
         config_init();
         load_trigger();
         commands_init();

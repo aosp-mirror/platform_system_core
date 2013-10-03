@@ -33,6 +33,7 @@ LOCAL_SRC_FILES := \
     protocol.c \
     network_discovery.c \
     socket_client.c \
+    secure.c \
     transport.c \
     transport_socket.c \
     trigger.c \
@@ -41,7 +42,7 @@ LOCAL_SRC_FILES := \
 
 LOCAL_MODULE := fastbootd
 LOCAL_MODULE_TAGS := optional
-LOCAL_CFLAGS := -Wall -Werror -Wno-unused-parameter
+LOCAL_CFLAGS := -Wall -Werror -Wno-unused-parameter -DFLASH_CERT
 LOCAL_LDFLAGS := -ldl
 
 LOCAL_SHARED_LIBRARIES := \
