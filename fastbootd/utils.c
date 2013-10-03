@@ -34,6 +34,8 @@
 #include <stdio.h>
 #include <sys/ioctl.h>
 #include <linux/fs.h>
+#include <stdlib.h>
+#include <cutils/properties.h>
 
 #include "utils.h"
 #include "debug.h"
@@ -46,6 +48,7 @@
 #define BLKSECDISCARD _IO(0x12,125)
 #endif
 
+#define READ_BUF_SIZE (16*1024)
 
 int get_stream_size(FILE *stream) {
     int size;
@@ -145,3 +148,113 @@ int wipe_block_device(int fd, int64_t len)
     return 0;
 }
 
+int create_temp_file() {
+    char tempname[] = "/dev/fastboot_data_XXXXXX";
+    int fd;
+
+    fd = mkstemp(tempname);
+    if (fd < 0)
+        return -1;
+
+    unlink(tempname);
+
+    return fd;
+}
+
+ssize_t bulk_write(int bulk_in, const char *buf, size_t length)
+{
+    size_t count = 0;
+    ssize_t ret;
+
+    do {
+        ret = TEMP_FAILURE_RETRY(write(bulk_in, buf + count, length - count));
+        if (ret < 0) {
+            D(WARN, "[ bulk_write failed fd=%d length=%d errno=%d %s ]",
+                    bulk_in, length, errno, strerror(errno));
+            return -1;
+        } else {
+            count += ret;
+        }
+    } while (count < length);
+
+    D(VERBOSE, "[ bulk_write done fd=%d ]", bulk_in);
+    return count;
+}
+
+ssize_t bulk_read(int bulk_out, char *buf, size_t length)
+{
+    ssize_t ret;
+    size_t n = 0;
+
+    while (n < length) {
+        size_t to_read = (length - n > READ_BUF_SIZE) ? READ_BUF_SIZE : length - n;
+        ret = TEMP_FAILURE_RETRY(read(bulk_out, buf + n, to_read));
+        if (ret < 0) {
+            D(WARN, "[ bulk_read failed fd=%d length=%d errno=%d %s ]",
+                    bulk_out, length, errno, strerror(errno));
+            return ret;
+        }
+        n += ret;
+        if (ret < (ssize_t)to_read) {
+            D(VERBOSE, "bulk_read short read, ret=%zd to_read=%u n=%u length=%u",
+                    ret, to_read, n, length);
+            break;
+        }
+    }
+
+    return n;
+}
+
+#define NAP_TIME 200  // 200 ms between polls
+static int wait_for_property(const char *name, const char *desired_value, int maxwait)
+{
+    char value[PROPERTY_VALUE_MAX] = {'\0'};
+    int maxnaps = (maxwait * 1000) / NAP_TIME;
+
+    if (maxnaps < 1) {
+        maxnaps = 1;
+    }
+
+    while (maxnaps-- > 0) {
+        usleep(NAP_TIME * 1000);
+        if (property_get(name, value, NULL)) {
+            if (desired_value == NULL || strcmp(value, desired_value) == 0) {
+                return 0;
+            }
+        }
+    }
+    return -1; /* failure */
+}
+
+int service_start(const char *service_name)
+{
+    int result = 0;
+    char property_value[PROPERTY_VALUE_MAX];
+
+    property_get(service_name, property_value, "");
+    if (strcmp("running", property_value) != 0) {
+        D(INFO, "Starting %s", service_name);
+        property_set("ctl.start", service_name);
+        if (wait_for_property(service_name, "running", 5))
+            result = -1;
+    }
+
+    return result;
+}
+
+int service_stop(const char *service_name)
+{
+    int result = 0;
+
+    D(INFO, "Stopping MDNSD");
+    property_set("ctl.stop", service_name);
+    if (wait_for_property(service_name, "stopped", 5))
+        result = -1;
+
+    return result;
+}
+
+int ssh_server_start()
+{
+    return service_start("sshd");
+}
