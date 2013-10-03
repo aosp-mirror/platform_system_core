@@ -136,13 +136,12 @@ static int listen_socket_init(struct socket_transport *socket_transport)
 int transport_socket_init()
 {
     struct socket_transport *socket_transport = malloc(sizeof(struct socket_transport));
-    
+
     socket_transport->transport.connect = socket_connect;
     socket_transport->transport.close = socket_close;
     socket_transport->transport.read = socket_read;
     socket_transport->transport.write = socket_write;
-    // TODO: create sshd key pair if necessary
-    
+
     if (!listen_socket_init(socket_transport)) {
         D(ERR, "socket transport init failed");
         free(socket_transport);

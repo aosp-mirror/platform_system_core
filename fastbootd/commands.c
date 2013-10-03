@@ -228,6 +228,7 @@ static void cmd_gpt_layout(struct protocol_handle *phandle, const char *arg) {
         return;
     }
 
+    //TODO: add same verification as in cmd_flash
     if (phandle->download_fd < 0) {
         fastboot_fail(phandle, "no layout file");
         return;

@@ -32,7 +32,7 @@
 #ifndef __VENDOR_TRIGGER_H_
 #define __VENDOR_TRIGGER_H_
 
-#define TRIGGER_MODULE_ID "vendortrigger"
+#define TRIGGER_MODULE_ID "fastbootd"
 #include <hardware/hardware.h>
 
 __BEGIN_DECLS
@@ -59,7 +59,7 @@ struct vendor_trigger_t {
 
 
     /*
-     * Return value 1 forbid the action from the vendor site and sets errno
+     * Return value -1 forbid the action from the vendor site and sets errno
      */
     int (* gpt_layout)(struct GPT_content *);
     int (* oem_cmd)(const char *arg, const char **response);
