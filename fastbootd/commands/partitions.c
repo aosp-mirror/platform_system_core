@@ -61,7 +61,7 @@ const uint8_t partition_type_uuid[16] = {
     0x87, 0xc0, 0x68, 0xb6, 0xb7, 0x26, 0x99, 0xc7,
 };
 
-//TODO: If both blocks are invalid should I leave everything to vendor (through libvendor)
+//TODO: There is assumption that we are using little endian
 
 static void GPT_entry_clear(struct GPT_entry_raw *entry)
 {
@@ -83,6 +83,7 @@ int gpt_mmap(struct GPT_mapping *mapping, uint64_t location, int size, int fd)
         D(ERR, "the location of mapping area is outside of the device size %lld", sz);
         return 1;
     }
+    location = ALIGN_DOWN(location, PAGE_SIZE);
 
     mapping->map_ptr = mmap64(NULL, mapping->size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, location);
 
@@ -291,7 +292,7 @@ int GPT_delete_entry(struct GPT_entry_table *table, struct GPT_entry_raw *entry)
     }
     D(DEBUG, "Deleting gpt entry '%s'\n", raw->partition_guid);
 
-    // This entry can be empty in the middle
+    // Entry in the middle of table may become empty
     GPT_entry_clear(raw);
 
     return 0;
@@ -382,7 +383,6 @@ int strncmp_UTF16(const uint16_t *s1, const uint16_t *s2, size_t n)
 
 struct GPT_entry_raw *GPT_get_pointer_by_name(struct GPT_entry_table *table, const char *name)
 {
-    //TODO: reverse direction
     int count = (int) table->header->entries_count;
     int current;
 
@@ -560,10 +560,9 @@ int GPT_parse_entry(char *string, struct GPT_entry_raw *entry)
 
 void entry_set_guid(int n, uint8_t *guid)
 {
-    guid[0] = (uint8_t) (n + 1);
     int fd;
     fd = open("/dev/urandom", O_RDONLY);
-    read(fd, &guid[1], 15);
+    read(fd, guid, 16);
     close(fd);
 
     //rfc4122

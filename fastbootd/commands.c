@@ -128,7 +128,7 @@ static void cmd_boot(struct protocol_handle *phandle, const char *arg)
     second_ptr = (void *)((unsigned) ramdisk_ptr + ramdisk_actual);
 
     D(INFO, "preparing to boot");
-    // Prepares boot physical addresses from header are ignored
+    // Prepares boot physical address. Addresses from header are ignored
     rv = prepare_boot_linux(hdr->kernel_addr, kernel_ptr, kernel_actual,
                             hdr->ramdisk_addr, ramdisk_ptr, ramdisk_actual,
                             hdr->second_addr, second_ptr, second_actual,
@@ -294,7 +294,7 @@ static void cmd_flash(struct protocol_handle *phandle, const char *arg)
         return;
     }
 
-    // TODO: Maybe its goot idea to check whether the partition is just bootable partition
+    // TODO: Maybe its goot idea to check whether the partition is bootable
     if (!strcmp(arg, "boot") || !strcmp(arg, "recovery")) {
         if (read_data_once(data_fd, data, BOOT_MAGIC_SIZE) < BOOT_MAGIC_SIZE) {
             fastboot_fail(phandle, "incoming data read error, cannot read boot header");
@@ -329,7 +329,6 @@ static void cmd_flash(struct protocol_handle *phandle, const char *arg)
 
     flash_close(partition);
     close(data_fd);
-    //TODO: check who is closing phandle->download_fd
 
     fastboot_okay(phandle, "");
 }
@@ -375,7 +374,6 @@ static void cmd_download(struct protocol_handle *phandle, const char *arg)
 
     phandle->download_fd = protocol_handle_download(phandle, len);
     if (phandle->download_fd < 0) {
-        //handle->state = STATE_ERROR;
         fastboot_fail(phandle, "download failed");
         return;
     }
@@ -386,6 +384,7 @@ static void cmd_download(struct protocol_handle *phandle, const char *arg)
 static void cmd_oem(struct protocol_handle *phandle, const char *arg) {
     const char *response = "";
 
+    //TODO: Maybe it should get download descriptor also
     if (trigger_oem_cmd(arg, &response))
         fastboot_fail(phandle, response);
     else
