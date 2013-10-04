@@ -38,23 +38,28 @@ int main(int argc, char **argv)
 {
     int socket_client = 0;
     int c;
+    int network = 1;
 
     klog_init();
     klog_set_level(6);
 
     const struct option longopts[] = {
         {"socket", no_argument, 0, 'S'},
+        {"nonetwork", no_argument, 0, 'n'},
         {0, 0, 0, 0}
     };
 
     while (1) {
-        c = getopt_long(argc, argv, "S", longopts, NULL);
+        c = getopt_long(argc, argv, "Sn", longopts, NULL);
         /* Alphabetical cases */
         if (c < 0)
             break;
         switch (c) {
         case 'S':
             socket_client = 1;
+            break;
+        case 'n':
+            network = 0;
             break;
         case '?':
             return 1;
@@ -70,6 +75,7 @@ int main(int argc, char **argv)
     klog_set_level(6);
 
     if (socket_client) {
+        //TODO: Shouldn't we change current tty into raw mode?
         run_socket_client();
     }
     else {
@@ -78,10 +84,14 @@ int main(int argc, char **argv)
         load_trigger();
         commands_init();
         usb_init();
-        if (!transport_socket_init())
-            exit(1);
-        ssh_server_start();
-        network_discovery_init();
+
+        if (network) {
+            if (!transport_socket_init())
+                exit(1);
+            ssh_server_start();
+            network_discovery_init();
+        }
+
         while (1) {
             sleep(1);
         }

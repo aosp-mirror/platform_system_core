@@ -32,6 +32,11 @@
 #ifndef _FASTBOOTD_ERASE_H
 #define _FASTBOOTD_ERASE_H
 
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include "debug.h"
+
 int flash_find_entry(const char *, char *, size_t);
 int flash_erase(int fd);
 
@@ -50,10 +55,12 @@ static inline ssize_t read_data_once(int fd, char *buffer, ssize_t size) {
     ssize_t len;
 
     while ((len = TEMP_FAILURE_RETRY(read(fd, (void *) &buffer[readcount], size - readcount))) > 0) {
-        readcount -= len;
+        readcount += len;
     }
-    if (len < 0)
+    if (len < 0) {
+        D(ERR, "Read error:%s", strerror(errno));
         return len;
+    }
 
     return readcount;
 }

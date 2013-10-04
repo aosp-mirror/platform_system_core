@@ -108,6 +108,9 @@ int cert_read(int fd, CMS_ContentInfo **content, BIO **output) {
         goto error;
     }
 
+    //TODO:
+    // read with d2i_CMS_bio to support DER
+    // with java or just encode data with base64
     *content = SMIME_read_CMS(input, output);
     if (*content == NULL) {
         unsigned long err = ERR_peek_last_error();

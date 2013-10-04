@@ -38,28 +38,9 @@ unsigned int debug_level = DEBUG;
 
 static const int version = 1;
 
-int delete_partition(struct GPT_entry_raw *);
-int add_partition(struct GPT_entry_raw *);
-int modify_partition(struct GPT_entry_raw *, struct GPT_entry_raw *);
-
 int check_version(const int fastboot_version, int *libversion) {
     *libversion = version;
     return !(fastboot_version == version);
-}
-
-int delete_partition(struct GPT_entry_raw *entry) {
-    D(DEBUG, "message from libvendor");
-    return 0;
-}
-
-int add_partition(struct GPT_entry_raw *entry) {
-    D(DEBUG, "message from libvendor");
-    return 0;
-}
-
-int modify_partition(struct GPT_entry_raw *oldentry, struct GPT_entry_raw *newentry) {
-    D(DEBUG, "message from libvendor");
-    return 0;
 }
 
 int gpt_layout(struct GPT_content *table) {
