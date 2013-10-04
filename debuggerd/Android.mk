@@ -24,11 +24,11 @@ LOCAL_CFLAGS += -DWITH_VFP_D32
 endif # ARCH_ARM_HAVE_VFP_D32
 
 LOCAL_SHARED_LIBRARIES := \
+	libbacktrace \
+	libc \
 	libcutils \
 	liblog \
-	libc \
-	libcorkscrew \
-	libselinux
+	libselinux \
 
 include $(BUILD_EXECUTABLE)
 
