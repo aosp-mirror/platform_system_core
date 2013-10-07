@@ -62,6 +62,8 @@
 #define VENDOR_ID_GARMIN_ASUS   0x091E
 // Gigabyte's USB Vendor ID
 #define VENDOR_ID_GIGABYTE      0x0414
+// Gigaset's USB Vendor ID
+#define VENDOR_ID_GIGASET       0x1E85
 // Google's USB Vendor ID
 #define VENDOR_ID_GOOGLE        0x18d1
 // Haier's USB Vendor ID
@@ -162,7 +164,6 @@
 #define VENDOR_ID_ZTE           0x19D2
 /* Keep the list above sorted alphabetically by #define name */
 
-
 /** built-in vendor list */
 /* Keep the list below sorted alphabetically */
 int builtInVendorIds[] = {
@@ -179,6 +180,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_FUNAI,
     VENDOR_ID_GARMIN_ASUS,
     VENDOR_ID_GIGABYTE,
+    VENDOR_ID_GIGASET,
     VENDOR_ID_GOOGLE,
     VENDOR_ID_HAIER,
     VENDOR_ID_HARRIS,
