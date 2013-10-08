@@ -16,6 +16,8 @@
 
 package com.android.dumpkey;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+
 import java.io.FileInputStream;
 import java.math.BigInteger;
 import java.security.cert.CertificateFactory;
@@ -23,7 +25,10 @@ import java.security.cert.X509Certificate;
 import java.security.KeyStore;
 import java.security.Key;
 import java.security.PublicKey;
+import java.security.Security;
+import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.ECPoint;
 
 /**
  * Command line tool to extract RSA public keys from X.509 certificates
@@ -39,9 +44,8 @@ class DumpPublicKey {
      *     3: 2048-bit RSA key with e=3 and SHA-256 hash
      *     4: 2048-bit RSA key with e=65537 and SHA-256 hash
      * @throws Exception if the key has the wrong size or public exponent
-
      */
-    static int check(RSAPublicKey key, boolean useSHA256) throws Exception {
+    static int checkRSA(RSAPublicKey key, boolean useSHA256) throws Exception {
         BigInteger pubexp = key.getPublicExponent();
         BigInteger modulus = key.getModulus();
         int version;
@@ -64,12 +68,42 @@ class DumpPublicKey {
     }
 
     /**
+     * @param key to perform sanity checks on
+     * @return version number of key.  Supported versions are:
+     *     5: 256-bit EC key with curve NIST P-256
+     * @throws Exception if the key has the wrong size or public exponent
+     */
+    static int checkEC(ECPublicKey key) throws Exception {
+        if (key.getParams().getCurve().getField().getFieldSize() != 256) {
+            throw new Exception("Curve must be NIST P-256");
+        }
+
+        return 5;
+    }
+
+    /**
+     * Perform sanity check on public key.
+     */
+    static int check(PublicKey key, boolean useSHA256) throws Exception {
+        if (key instanceof RSAPublicKey) {
+            return checkRSA((RSAPublicKey) key, useSHA256);
+        } else if (key instanceof ECPublicKey) {
+            if (!useSHA256) {
+                throw new Exception("Must use SHA-256 with EC keys!");
+            }
+            return checkEC((ECPublicKey) key);
+        } else {
+            throw new Exception("Unsupported key class: " + key.getClass().getName());
+        }
+    }
+
+    /**
      * @param key to output
      * @return a String representing this public key.  If the key is a
      *    version 1 key, the string will be a C initializer; this is
      *    not true for newer key versions.
      */
-    static String print(RSAPublicKey key, boolean useSHA256) throws Exception {
+    static String printRSA(RSAPublicKey key, boolean useSHA256) throws Exception {
         int version = check(key, useSHA256);
 
         BigInteger N = key.getModulus();
@@ -128,11 +162,78 @@ class DumpPublicKey {
         return result.toString();
     }
 
+    /**
+     * @param key to output
+     * @return a String representing this public key.  If the key is a
+     *    version 1 key, the string will be a C initializer; this is
+     *    not true for newer key versions.
+     */
+    static String printEC(ECPublicKey key) throws Exception {
+        int version = checkEC(key);
+
+        StringBuilder result = new StringBuilder();
+
+        result.append("v");
+        result.append(Integer.toString(version));
+        result.append(" ");
+
+        BigInteger X = key.getW().getAffineX();
+        BigInteger Y = key.getW().getAffineY();
+        int nbytes = key.getParams().getCurve().getField().getFieldSize() / 8;    // # of 32 bit integers in X coordinate
+
+        result.append("{");
+        result.append(nbytes);
+
+        BigInteger B = BigInteger.valueOf(0x100L);  // 2^8
+
+        // Write out Y coordinate as array of characters.
+        result.append(",{");
+        for (int i = 0; i < nbytes; ++i) {
+            long n = X.mod(B).longValue();
+            result.append(n);
+
+            if (i != nbytes - 1) {
+                result.append(",");
+            }
+
+            X = X.divide(B);
+        }
+        result.append("}");
+
+        // Write out Y coordinate as array of characters.
+        result.append(",{");
+        for (int i = 0; i < nbytes; ++i) {
+            long n = Y.mod(B).longValue();
+            result.append(n);
+
+            if (i != nbytes - 1) {
+                result.append(",");
+            }
+
+            Y = Y.divide(B);
+        }
+        result.append("}");
+
+        result.append("}");
+        return result.toString();
+    }
+
+    static String print(PublicKey key, boolean useSHA256) throws Exception {
+        if (key instanceof RSAPublicKey) {
+            return printRSA((RSAPublicKey) key, useSHA256);
+        } else if (key instanceof ECPublicKey) {
+            return printEC((ECPublicKey) key);
+        } else {
+            throw new Exception("Unsupported key class: " + key.getClass().getName());
+        }
+    }
+
     public static void main(String[] args) {
         if (args.length < 1) {
             System.err.println("Usage: DumpPublicKey certfile ... > source.c");
             System.exit(1);
         }
+        Security.addProvider(new BouncyCastleProvider());
         try {
             for (int i = 0; i < args.length; i++) {
                 FileInputStream input = new FileInputStream(args[i]);
@@ -147,7 +248,7 @@ class DumpPublicKey {
                     // anyway.  Continue to do so for backwards
                     // compatibility.
                   useSHA256 = false;
-                } else if ("SHA256withRSA".equals(sigAlg)) {
+                } else if ("SHA256withRSA".equals(sigAlg) || "SHA256withECDSA".equals(sigAlg)) {
                   useSHA256 = true;
                 } else {
                   System.err.println(args[i] + ": unsupported signature algorithm \"" +
@@ -155,7 +256,7 @@ class DumpPublicKey {
                   System.exit(1);
                 }
 
-                RSAPublicKey key = (RSAPublicKey) (cert.getPublicKey());
+                PublicKey key = cert.getPublicKey();
                 check(key, useSHA256);
                 System.out.print(print(key, useSHA256));
                 System.out.println(i < args.length - 1 ? "," : "");
