@@ -215,6 +215,7 @@ struct fuse {
     int fd;
     derive_t derive;
     bool split_perms;
+    gid_t write_gid;
     struct node root;
     char obbpath[PATH_MAX];
 
@@ -681,13 +682,14 @@ static struct node* acquire_or_create_child_locked(
 }
 
 static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
-        gid_t fs_gid, derive_t derive, bool split_perms) {
+        gid_t write_gid, derive_t derive, bool split_perms) {
     pthread_mutex_init(&fuse->lock, NULL);
 
     fuse->fd = fd;
     fuse->next_generation = 0;
     fuse->derive = derive;
     fuse->split_perms = split_perms;
+    fuse->write_gid = write_gid;
 
     memset(&fuse->root, 0, sizeof(fuse->root));
     fuse->root.nid = FUSE_ROOT_ID; /* 1 */
@@ -712,7 +714,7 @@ static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
          * just below that. Shared OBB path is also at top level. */
         fuse->root.perm = PERM_LEGACY_PRE_ROOT;
         fuse->root.mode = 0771;
-        fuse->root.gid = fs_gid;
+        fuse->root.gid = AID_SDCARD_R;
         fuse->package_to_appid = hashmapCreate(256, str_hash, str_icase_equals);
         fuse->appid_with_rw = hashmapCreate(128, int_hash, int_equals);
         snprintf(fuse->obbpath, sizeof(fuse->obbpath), "%s/obb", source_path);
@@ -723,7 +725,7 @@ static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
          * /Android/user and shared OBB path under /Android/obb. */
         fuse->root.perm = PERM_ROOT;
         fuse->root.mode = 0771;
-        fuse->root.gid = fs_gid;
+        fuse->root.gid = AID_SDCARD_R;
         fuse->package_to_appid = hashmapCreate(256, str_hash, str_icase_equals);
         fuse->appid_with_rw = hashmapCreate(128, int_hash, int_equals);
         snprintf(fuse->obbpath, sizeof(fuse->obbpath), "%s/Android/obb", source_path);
@@ -1623,7 +1625,7 @@ static int read_package_list(struct fuse *fuse) {
 
             char* token = strtok(gids, ",");
             while (token != NULL) {
-                if (strtoul(token, NULL, 10) == AID_SDCARD_RW) {
+                if (strtoul(token, NULL, 10) == fuse->write_gid) {
                     hashmapPut(fuse->appid_with_rw, (void*) appid, (void*) 1);
                     break;
                 }
@@ -1632,7 +1634,7 @@ static int read_package_list(struct fuse *fuse) {
         }
     }
 
-    TRACE("read_package_list: found %d packages, %d with sdcard_rw\n",
+    TRACE("read_package_list: found %d packages, %d with write_gid\n",
             hashmapSize(fuse->package_to_appid),
             hashmapSize(fuse->appid_with_rw));
     fclose(file);
@@ -1749,7 +1751,7 @@ static int usage()
     ERROR("usage: sdcard [OPTIONS] <source_path> <dest_path>\n"
             "    -u: specify UID to run as\n"
             "    -g: specify GID to run as\n"
-            "    -G: specify default GID for files (default sdcard_r, requires -d or -l)\n"
+            "    -w: specify GID required to write (default sdcard_rw, requires -d or -l)\n"
             "    -t: specify number of threads to use (default %d)\n"
             "    -d: derive file permissions based on path\n"
             "    -l: derive file permissions based on legacy internal layout\n"
@@ -1759,7 +1761,8 @@ static int usage()
 }
 
 static int run(const char* source_path, const char* dest_path, uid_t uid,
-        gid_t gid, gid_t fs_gid, int num_threads, derive_t derive, bool split_perms) {
+        gid_t gid, gid_t write_gid, int num_threads, derive_t derive,
+        bool split_perms) {
     int fd;
     char opts[256];
     int res;
@@ -1802,7 +1805,7 @@ static int run(const char* source_path, const char* dest_path, uid_t uid,
         goto error;
     }
 
-    fuse_init(&fuse, fd, source_path, fs_gid, derive, split_perms);
+    fuse_init(&fuse, fd, source_path, write_gid, derive, split_perms);
 
     umask(0);
     res = ignite_fuse(&fuse, num_threads);
@@ -1822,7 +1825,7 @@ int main(int argc, char **argv)
     const char *dest_path = NULL;
     uid_t uid = 0;
     gid_t gid = 0;
-    gid_t fs_gid = AID_SDCARD_R;
+    gid_t write_gid = AID_SDCARD_RW;
     int num_threads = DEFAULT_NUM_THREADS;
     derive_t derive = DERIVE_NONE;
     bool split_perms = false;
@@ -1830,7 +1833,7 @@ int main(int argc, char **argv)
     struct rlimit rlim;
 
     int opt;
-    while ((opt = getopt(argc, argv, "u:g:G:t:dls")) != -1) {
+    while ((opt = getopt(argc, argv, "u:g:w:t:dls")) != -1) {
         switch (opt) {
             case 'u':
                 uid = strtoul(optarg, NULL, 10);
@@ -1838,8 +1841,8 @@ int main(int argc, char **argv)
             case 'g':
                 gid = strtoul(optarg, NULL, 10);
                 break;
-            case 'G':
-                fs_gid = strtoul(optarg, NULL, 10);
+            case 'w':
+                write_gid = strtoul(optarg, NULL, 10);
                 break;
             case 't':
                 num_threads = strtoul(optarg, NULL, 10);
@@ -1902,6 +1905,6 @@ int main(int argc, char **argv)
         ERROR("Error setting RLIMIT_NOFILE, errno = %d\n", errno);
     }
 
-    res = run(source_path, dest_path, uid, gid, fs_gid, num_threads, derive, split_perms);
+    res = run(source_path, dest_path, uid, gid, write_gid, num_threads, derive, split_perms);
     return res < 0 ? 1 : 0;
 }
