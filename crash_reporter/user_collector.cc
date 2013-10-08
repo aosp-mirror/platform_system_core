@@ -584,7 +584,8 @@ bool UserCollector::ShouldDump(bool has_owner_consent,
   // crashes towards user crashes, so user crashes really mean non-Chrome
   // user-space crashes.
   if (!handle_chrome_crashes && IsChromeExecName(exec)) {
-    *reason = "ignoring - chrome crash";
+    *reason = "ignoring call by kernel - chrome crash; "
+              "waiting for chrome to call us directly";
     return false;
   }
 

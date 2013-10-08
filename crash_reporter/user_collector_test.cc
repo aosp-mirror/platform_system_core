@@ -20,6 +20,11 @@ static bool s_metrics = false;
 
 static const char kFilePath[] = "/my/path";
 
+// Keep in sync with UserCollector::ShouldDump.
+static const char kChromeIgnoreMsg[] =
+  "ignoring call by kernel - chrome crash; "
+  "waiting for chrome to call us directly";
+
 using base::FilePath;
 using chromeos::FindLog;
 
@@ -159,25 +164,25 @@ TEST_F(UserCollectorTest, ShouldDumpChromeOverridesDeveloperImage) {
   // When running a crash test, behave as normal.
   EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                      "chrome", &reason));
-  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_EQ(kChromeIgnoreMsg, reason);
   EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                      "supplied_Compositor", &reason));
-  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_EQ(kChromeIgnoreMsg, reason);
   EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                      "supplied_PipelineThread", &reason));
-  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_EQ(kChromeIgnoreMsg, reason);
   EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                      "Chrome_ChildIOThread", &reason));
-  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_EQ(kChromeIgnoreMsg, reason);
   EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                      "supplied_Chrome_ChildIOT", &reason));
-  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_EQ(kChromeIgnoreMsg, reason);
   EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                      "supplied_ChromotingClien", &reason));
-  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_EQ(kChromeIgnoreMsg, reason);
   EXPECT_FALSE(collector_.ShouldDump(false, false, false,
                                      "supplied_LocalInputMonit", &reason));
-  EXPECT_EQ("ignoring - chrome crash", reason);
+  EXPECT_EQ(kChromeIgnoreMsg, reason);
 
   // When running a developer image, test that chrome crashes are handled
   // when the "handle_chrome_crashes" flag is set.
@@ -243,7 +248,7 @@ TEST_F(UserCollectorTest, HandleChromeCrashWithConsent) {
   collector_.HandleCrash("5:2:ignored", "chrome");
   EXPECT_TRUE(FindLog(
       "Received crash notification for chrome[5] sig 2"));
-  EXPECT_TRUE(FindLog("(ignoring - chrome crash)"));
+  EXPECT_TRUE(FindLog(kChromeIgnoreMsg));
   ASSERT_EQ(s_crashes, 0);
 }
 
@@ -252,7 +257,7 @@ TEST_F(UserCollectorTest, HandleSuppliedChromeCrashWithConsent) {
   collector_.HandleCrash("0:2:chrome", NULL);
   EXPECT_TRUE(FindLog(
       "Received crash notification for supplied_chrome[0] sig 2"));
-  EXPECT_TRUE(FindLog("(ignoring - chrome crash)"));
+  EXPECT_TRUE(FindLog(kChromeIgnoreMsg));
   ASSERT_EQ(s_crashes, 0);
 }
 
