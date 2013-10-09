@@ -192,11 +192,17 @@ mount <type> <device> <dir> [ <mountoption> ]*
    device by name.
    <mountoption>s include "ro", "rw", "remount", "noatime", ...
 
-restorecon <path>
+restorecon <path> [ <path> ]*
    Restore the file named by <path> to the security context specified
    in the file_contexts configuration.
    Not required for directories created by the init.rc as these are
    automatically labeled correctly by init.
+
+restorecon_recursive <path> [ <path> ]*
+   Recursively restore the directory tree named by <path> to the
+   security contexts specified in the file_contexts configuration.
+   Do NOT use this with paths leading to shell-writable or app-writable
+   directories, e.g. /data/local/tmp, /data/data or any prefix thereof.
 
 setcon <securitycontext>
    Set the current process security context to the specified string.
