@@ -17,17 +17,9 @@
  * Contributed by: Intel Corporation
  */
 
-#if defined(USE_SSE2)
-
 # include "cache_wrapper.S"
 # undef __i686
 # define USE_AS_ANDROID
 # define sse2_memset32_atom android_memset32
 # include "sse2-memset32-atom.S"
-
-#else
-
-# include "memset32.S"
-
-#endif
 
