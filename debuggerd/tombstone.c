@@ -621,7 +621,6 @@ static void dump_abort_message(const backtrace_t* backtrace, log_t* log, uintptr
     if (!backtrace_read_word(backtrace, address, &data)) {
       break;
     }
-    data = 0;
     address += sizeof(uint32_t);
 
     if ((*p++ = (data >>  0) & 0xff) == 0) {
