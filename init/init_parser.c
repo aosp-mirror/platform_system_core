@@ -133,6 +133,7 @@ int lookup_keyword(const char *s)
     case 'r':
         if (!strcmp(s, "estart")) return K_restart;
         if (!strcmp(s, "estorecon")) return K_restorecon;
+        if (!strcmp(s, "estorecon_recursive")) return K_restorecon_recursive;
         if (!strcmp(s, "mdir")) return K_rmdir;
         if (!strcmp(s, "m")) return K_rm;
         break;
