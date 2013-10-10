@@ -797,12 +797,24 @@ int do_chmod(int nargs, char **args) {
 
 int do_restorecon(int nargs, char **args) {
     int i;
+    int ret = 0;
 
     for (i = 1; i < nargs; i++) {
         if (restorecon(args[i]) < 0)
-            return -errno;
+            ret = -errno;
     }
-    return 0;
+    return ret;
+}
+
+int do_restorecon_recursive(int nargs, char **args) {
+    int i;
+    int ret = 0;
+
+    for (i = 1; i < nargs; i++) {
+        if (restorecon_recursive(args[i]) < 0)
+            ret = -errno;
+    }
+    return ret;
 }
 
 int do_setsebool(int nargs, char **args) {
