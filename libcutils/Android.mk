@@ -96,11 +96,6 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 # Shared and static library for target
 # ========================================================
 
-# This is needed in LOCAL_C_INCLUDES to access the C library's private
-# header named <bionic_time.h>
-#
-libcutils_c_includes := bionic/libc/private
-
 include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(commonSources) \
