@@ -118,12 +118,8 @@ ifeq ($(TARGET_ARCH),arm)
     LOCAL_SRC_FILES += arch-arm/memset32.S
 else  # !arm
     ifeq ($(TARGET_ARCH),x86)
-        ifeq ($(ARCH_X86_HAVE_SSE2),true)
-            LOCAL_CFLAGS += -DHAVE_MEMSET16 -DHAVE_MEMSET32 -DUSE_SSE2
-            LOCAL_SRC_FILES += arch-x86/android_memset16.S arch-x86/android_memset32.S memory.c
-        else # !ARCH_X86_HAVE_SSE2
-            LOCAL_SRC_FILES += memory.c
-        endif # !ARCH_X86_HAVE_SSE2
+        LOCAL_CFLAGS += -DHAVE_MEMSET16 -DHAVE_MEMSET32
+        LOCAL_SRC_FILES += arch-x86/android_memset16.S arch-x86/android_memset32.S memory.c
     else # !x86
         ifeq ($(TARGET_ARCH),mips)
             LOCAL_SRC_FILES += arch-mips/android_memset.c
