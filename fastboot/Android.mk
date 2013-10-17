@@ -18,7 +18,7 @@ include $(CLEAR_VARS)
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
   $(LOCAL_PATH)/../../extras/ext4_utils
-LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c
+LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c util.c
 LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 
@@ -69,7 +69,7 @@ $(call dist-for-goals,dist_files sdk,$(LOCAL_BUILT_MODULE))
 
 ifeq ($(HOST_OS),linux)
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := usbtest.c usb_linux.c
+LOCAL_SRC_FILES := usbtest.c usb_linux.c util.c
 LOCAL_MODULE := usbtest
 include $(BUILD_HOST_EXECUTABLE)
 endif
