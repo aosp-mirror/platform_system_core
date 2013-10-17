@@ -269,6 +269,11 @@ int usb_close(usb_handle* handle) {
     return 0;
 }
 
+int usb_wait_for_disconnect(usb_handle *usb) {
+    /* TODO: Punt for now */
+    return 0;
+}
+
 int recognized_device(usb_handle* handle, ifc_match_func callback) {
     struct usb_ifc_info info;
     USB_DEVICE_DESCRIPTOR device_desc;

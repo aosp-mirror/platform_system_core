@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2013 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,42 +26,44 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _USB_H_
-#define _USB_H_
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-typedef struct usb_handle usb_handle;
+#include <sys/time.h>
 
-typedef struct usb_ifc_info usb_ifc_info;
+#include "fastboot.h"
 
-struct usb_ifc_info
+double now()
 {
-        /* from device descriptor */
-    unsigned short dev_vendor;
-    unsigned short dev_product;
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
+}
 
-    unsigned char dev_class;
-    unsigned char dev_subclass;
-    unsigned char dev_protocol;
+char *mkmsg(const char *fmt, ...)
+{
+    char buf[256];
+    char *s;
+    va_list ap;
 
-    unsigned char ifc_class;
-    unsigned char ifc_subclass;
-    unsigned char ifc_protocol;
+    va_start(ap, fmt);
+    vsprintf(buf, fmt, ap);
+    va_end(ap);
 
-    unsigned char has_bulk_in;
-    unsigned char has_bulk_out;
+    s = strdup(buf);
+    if (s == 0) die("out of memory");
+    return s;
+}
 
-    unsigned char writable;
-
-    char serial_number[256];
-    char device_path[256];
-};
-
-typedef int (*ifc_match_func)(usb_ifc_info *ifc);
-
-usb_handle *usb_open(ifc_match_func callback);
-int usb_close(usb_handle *h);
-int usb_read(usb_handle *h, void *_data, int len);
-int usb_write(usb_handle *h, const void *_data, int len);
-int usb_wait_for_disconnect(usb_handle *h);
-
-#endif
+void die(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stderr,"error: ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr,"\n");
+    va_end(ap);
+    exit(1);
+}
