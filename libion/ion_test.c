@@ -23,7 +23,7 @@ int heap_mask = 1;
 int test = -1;
 size_t stride;
 
-int _ion_alloc_test(int *fd, struct ion_handle **handle)
+int _ion_alloc_test(int *fd, ion_user_handle_t *handle)
 {
 	int ret;
 
@@ -41,7 +41,7 @@ int _ion_alloc_test(int *fd, struct ion_handle **handle)
 void ion_alloc_test()
 {
 	int fd, ret;
-	struct ion_handle *handle;
+	ion_user_handle_t handle;
 
 	if(_ion_alloc_test(&fd, &handle))
 			return;
@@ -59,7 +59,7 @@ void ion_map_test()
 {
 	int fd, map_fd, ret;
 	size_t i;
-	struct ion_handle *handle;
+	ion_user_handle_t handle;
 	unsigned char *ptr;
 
 	if(_ion_alloc_test(&fd, &handle))
@@ -100,7 +100,7 @@ void ion_map_test()
 void ion_share_test()
 
 {
-	struct ion_handle *handle;
+	ion_user_handle_t handle;
 	int sd[2];
 	int num_fd = 1;
 	struct iovec count_vec = {

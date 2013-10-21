@@ -55,13 +55,13 @@ static int ion_ioctl(int fd, int req, void *arg)
 }
 
 int ion_alloc(int fd, size_t len, size_t align, unsigned int heap_mask,
-	      unsigned int flags, struct ion_handle **handle)
+	      unsigned int flags, ion_user_handle_t *handle)
 {
         int ret;
         struct ion_allocation_data data = {
                 .len = len,
                 .align = align,
-		.heap_mask = heap_mask,
+		.heap_id_mask = heap_mask,
                 .flags = flags,
         };
 
@@ -72,7 +72,7 @@ int ion_alloc(int fd, size_t len, size_t align, unsigned int heap_mask,
         return ret;
 }
 
-int ion_free(int fd, struct ion_handle *handle)
+int ion_free(int fd, ion_user_handle_t handle)
 {
         struct ion_handle_data data = {
                 .handle = handle,
@@ -80,7 +80,7 @@ int ion_free(int fd, struct ion_handle *handle)
         return ion_ioctl(fd, ION_IOC_FREE, &data);
 }
 
-int ion_map(int fd, struct ion_handle *handle, size_t length, int prot,
+int ion_map(int fd, ion_user_handle_t handle, size_t length, int prot,
             int flags, off_t offset, unsigned char **ptr, int *map_fd)
 {
         struct ion_fd_data data = {
@@ -103,7 +103,7 @@ int ion_map(int fd, struct ion_handle *handle, size_t length, int prot,
         return ret;
 }
 
-int ion_share(int fd, struct ion_handle *handle, int *share_fd)
+int ion_share(int fd, ion_user_handle_t handle, int *share_fd)
 {
         int map_fd;
         struct ion_fd_data data = {
@@ -123,7 +123,7 @@ int ion_share(int fd, struct ion_handle *handle, int *share_fd)
 
 int ion_alloc_fd(int fd, size_t len, size_t align, unsigned int heap_mask,
 		 unsigned int flags, int *handle_fd) {
-	struct ion_handle *handle;
+	ion_user_handle_t handle;
 	int ret;
 
 	ret = ion_alloc(fd, len, align, heap_mask, flags, &handle);
@@ -134,7 +134,7 @@ int ion_alloc_fd(int fd, size_t len, size_t align, unsigned int heap_mask,
 	return ret;
 }
 
-int ion_import(int fd, int share_fd, struct ion_handle **handle)
+int ion_import(int fd, int share_fd, ion_user_handle_t *handle)
 {
         struct ion_fd_data data = {
                 .fd = share_fd,
