@@ -14,12 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef _DEMANGLE_H
-#define _DEMANGLE_H
+#ifndef _LIBBACKTRACE_THREAD_UTILS_H
+#define _LIBBACKTRACE_THREAD_UTILS_H
 
-/* Called to demangle a symbol name to be printed. Returns an allocated
- * string that must be freed by the caller.
- */
-char* demangle_symbol_name(const char* name);
+#include <unistd.h>
 
-#endif /* _DEMANGLE_H */
+__BEGIN_DECLS
+
+int tgkill(int tgid, int tid, int sig);
+
+pid_t gettid();
+
+__END_DECLS
+
+#endif /* _LIBBACKTRACE_THREAD_UTILS_H */
