@@ -44,6 +44,7 @@ class BatteryMonitor {
   private:
     struct healthd_config *mHealthdConfig;
     Vector<String8> mChargerNames;
+    bool mBatteryDevicePresent;
 
     int getBatteryStatus(const char* status);
     int getBatteryHealth(const char* status);

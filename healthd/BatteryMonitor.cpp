@@ -185,7 +185,7 @@ bool BatteryMonitor::update(void) {
     if (!mHealthdConfig->batteryPresentPath.isEmpty())
         props.batteryPresent = getBooleanField(mHealthdConfig->batteryPresentPath);
     else
-        props.batteryPresent = true;
+        props.batteryPresent = mBatteryDevicePresent;
 
     props.batteryLevel = getIntField(mHealthdConfig->batteryCapacityPath);
     props.batteryVoltage = getIntField(mHealthdConfig->batteryVoltagePath) / 1000;
@@ -250,13 +250,18 @@ bool BatteryMonitor::update(void) {
 
     if (logthis) {
         char dmesgline[256];
-        snprintf(dmesgline, sizeof(dmesgline),
+
+        if (props.batteryPresent)
+            snprintf(dmesgline, sizeof(dmesgline),
                  "battery l=%d v=%d t=%s%d.%d h=%d st=%d",
                  props.batteryLevel, props.batteryVoltage,
                  props.batteryTemperature < 0 ? "-" : "",
                  abs(props.batteryTemperature / 10),
                  abs(props.batteryTemperature % 10), props.batteryHealth,
                  props.batteryStatus);
+        else
+            snprintf(dmesgline, sizeof(dmesgline),
+                 "battery none");
 
         if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
             char b[20];
@@ -351,6 +356,8 @@ void BatteryMonitor::init(struct healthd_config *hc) {
                 break;
 
             case ANDROID_POWER_SUPPLY_TYPE_BATTERY:
+                mBatteryDevicePresent = true;
+
                 if (mHealthdConfig->batteryStatusPath.isEmpty()) {
                     path.clear();
                     path.appendFormat("%s/%s/status", POWER_SUPPLY_SYSFS_PATH,
@@ -456,20 +463,26 @@ void BatteryMonitor::init(struct healthd_config *hc) {
 
     if (!mChargerNames.size())
         KLOG_ERROR(LOG_TAG, "No charger supplies found\n");
-    if (mHealthdConfig->batteryStatusPath.isEmpty())
-        KLOG_WARNING(LOG_TAG, "BatteryStatusPath not found\n");
-    if (mHealthdConfig->batteryHealthPath.isEmpty())
-        KLOG_WARNING(LOG_TAG, "BatteryHealthPath not found\n");
-    if (mHealthdConfig->batteryPresentPath.isEmpty())
-        KLOG_WARNING(LOG_TAG, "BatteryPresentPath not found\n");
-    if (mHealthdConfig->batteryCapacityPath.isEmpty())
-        KLOG_WARNING(LOG_TAG, "BatteryCapacityPath not found\n");
-    if (mHealthdConfig->batteryVoltagePath.isEmpty())
-        KLOG_WARNING(LOG_TAG, "BatteryVoltagePath not found\n");
-    if (mHealthdConfig->batteryTemperaturePath.isEmpty())
-        KLOG_WARNING(LOG_TAG, "BatteryTemperaturePath not found\n");
-    if (mHealthdConfig->batteryTechnologyPath.isEmpty())
-        KLOG_WARNING(LOG_TAG, "BatteryTechnologyPath not found\n");
+    if (!mBatteryDevicePresent) {
+        KLOG_INFO(LOG_TAG, "No battery devices found\n");
+        hc->periodic_chores_interval_fast = -1;
+        hc->periodic_chores_interval_slow = -1;
+    } else {
+        if (mHealthdConfig->batteryStatusPath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "BatteryStatusPath not found\n");
+        if (mHealthdConfig->batteryHealthPath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "BatteryHealthPath not found\n");
+        if (mHealthdConfig->batteryPresentPath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "BatteryPresentPath not found\n");
+        if (mHealthdConfig->batteryCapacityPath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "BatteryCapacityPath not found\n");
+        if (mHealthdConfig->batteryVoltagePath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "BatteryVoltagePath not found\n");
+        if (mHealthdConfig->batteryTemperaturePath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "BatteryTemperaturePath not found\n");
+        if (mHealthdConfig->batteryTechnologyPath.isEmpty())
+            KLOG_WARNING(LOG_TAG, "BatteryTechnologyPath not found\n");
+    }
 }
 
 }; // namespace android
