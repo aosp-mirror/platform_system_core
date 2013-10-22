@@ -18,12 +18,6 @@
 #include "gflags/gflags.h"
 #include "gtest/gtest.h"
 
-// This test assumes the following standard binaries are installed.
-static const char kBinBash[] = "/bin/bash";
-static const char kBinCp[] = "/bin/cp";
-static const char kBinEcho[] = "/bin/echo";
-static const char kBinFalse[] = "/bin/false";
-
 using base::FilePath;
 using chromeos::FindLog;
 using ::testing::Return;

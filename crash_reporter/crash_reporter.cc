@@ -44,8 +44,6 @@ DEFINE_string(exe, "", "Executable name of crashing process");
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
 static const char kUserCrashSignal[] =
     "org.chromium.CrashReporter.UserCrash";
-static const char kUncleanShutdownFile[] =
-    "/var/lib/crash_reporter/pending_clean_shutdown";
 static const char kKernelCrashDetected[] = "/var/run/kernel-crash-detected";
 static const char kUncleanShutdownDetected[] =
     "/var/run/unclean-shutdown-detected";
