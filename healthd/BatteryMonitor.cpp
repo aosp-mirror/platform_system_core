@@ -170,7 +170,6 @@ int BatteryMonitor::getIntField(const String8& path) {
 }
 
 bool BatteryMonitor::update(void) {
-    struct BatteryExtraProperties extraProps;
     bool logthis;
 
     props.chargerAcOnline = false;
@@ -178,8 +177,6 @@ bool BatteryMonitor::update(void) {
     props.chargerWirelessOnline = false;
     props.batteryStatus = BATTERY_STATUS_UNKNOWN;
     props.batteryHealth = BATTERY_HEALTH_UNKNOWN;
-    extraProps.batteryCurrentNow = INT_MIN;
-    extraProps.batteryChargeCounter = INT_MIN;
 
     if (!mHealthdConfig->batteryPresentPath.isEmpty())
         props.batteryPresent = getBooleanField(mHealthdConfig->batteryPresentPath);
@@ -188,13 +185,6 @@ bool BatteryMonitor::update(void) {
 
     props.batteryLevel = getIntField(mHealthdConfig->batteryCapacityPath);
     props.batteryVoltage = getIntField(mHealthdConfig->batteryVoltagePath) / 1000;
-
-    if (!mHealthdConfig->batteryCurrentNowPath.isEmpty())
-        extraProps.batteryCurrentNow = getIntField(mHealthdConfig->batteryCurrentNowPath);
-
-    /* temporary while dumpsys being reworked */
-    if (!mHealthdConfig->batteryChargeCounterPath.isEmpty())
-        extraProps.batteryChargeCounter = getIntField(mHealthdConfig->batteryChargeCounterPath);
 
     props.batteryTemperature = getIntField(mHealthdConfig->batteryTemperaturePath);
 
@@ -246,7 +236,7 @@ bool BatteryMonitor::update(void) {
     if (logthis) {
         char dmesgline[256];
 
-        if (props.batteryPresent)
+        if (props.batteryPresent) {
             snprintf(dmesgline, sizeof(dmesgline),
                  "battery l=%d v=%d t=%s%d.%d h=%d st=%d",
                  props.batteryLevel, props.batteryVoltage,
@@ -254,15 +244,17 @@ bool BatteryMonitor::update(void) {
                  abs(props.batteryTemperature / 10),
                  abs(props.batteryTemperature % 10), props.batteryHealth,
                  props.batteryStatus);
-        else
+
+            if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+                int c = getIntField(mHealthdConfig->batteryCurrentNowPath);
+                char b[20];
+
+                snprintf(b, sizeof(b), " c=%d", c / 1000);
+                strlcat(dmesgline, b, sizeof(dmesgline));
+            }
+        } else {
             snprintf(dmesgline, sizeof(dmesgline),
                  "battery none");
-
-        if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
-            char b[20];
-
-            snprintf(b, sizeof(b), " c=%d", extraProps.batteryCurrentNow / 1000);
-            strlcat(dmesgline, b, sizeof(dmesgline));
         }
 
         KLOG_INFO(LOG_TAG, "%s chg=%s%s%s\n", dmesgline,
