@@ -68,6 +68,11 @@ int main(int argc, char *argv[])
         perror("reboot");
         exit(EXIT_FAILURE);
     }
+
+    // Don't return early. Give the reboot command time to take effect
+    // to avoid messing up scripts which do "adb shell reboot && adb wait-for-device"
+    while(1) { pause(); }
+
     fprintf(stderr, "Done\n");
     return 0;
 }
