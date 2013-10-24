@@ -144,7 +144,11 @@ void reboot_service(int fd, void *arg)
     if (ret < 0) {
         snprintf(buf, sizeof(buf), "reboot failed: %d\n", ret);
         writex(fd, buf, strlen(buf));
+        goto cleanup;
     }
+    // Don't return early. Give the reboot command time to take effect
+    // to avoid messing up scripts which do "adb reboot && adb wait-for-device"
+    while(1) { pause(); }
 cleanup:
     free(arg);
     adb_close(fd);
