@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-#include <stdbool.h>
-#include <unistd.h>
+#include <stdio.h>
 
 int test_level_four(int one, int two, int three, int four,
-                    bool (*callback_func)(pid_t)) {
+                    void (*callback_func)(void*), void* data) {
   if (callback_func != NULL) {
-    callback_func(-1);
+    callback_func(data);
   } else {
     while (1) {
     }
@@ -29,25 +28,25 @@ int test_level_four(int one, int two, int three, int four,
 }
 
 int test_level_three(int one, int two, int three, int four,
-                     bool (*callback_func)(pid_t)) {
-  return test_level_four(one+3, two+6, three+9, four+12, callback_func) + 3;
+                     void (*callback_func)(void*), void* data) {
+  return test_level_four(one+3, two+6, three+9, four+12, callback_func, data) + 3;
 }
 
 int test_level_two(int one, int two, int three, int four,
-                   bool (*callback_func)(pid_t)) {
-  return test_level_three(one+2, two+4, three+6, four+8, callback_func) + 2;
+                   void (*callback_func)(void*), void* data) {
+  return test_level_three(one+2, two+4, three+6, four+8, callback_func, data) + 2;
 }
 
 int test_level_one(int one, int two, int three, int four,
-                   bool (*callback_func)(pid_t)) {
-  return test_level_two(one+1, two+2, three+3, four+4, callback_func) + 1;
+                   void (*callback_func)(void*), void* data) {
+  return test_level_two(one+1, two+2, three+3, four+4, callback_func, data) + 1;
 }
 
-int test_recursive_call(int level, bool (*callback_func)(pid_t)) {
+int test_recursive_call(int level, void (*callback_func)(void*), void* data) {
   if (level > 0) {
-    return test_recursive_call(level - 1, callback_func) + level;
+    return test_recursive_call(level - 1, callback_func, data) + level;
   } else if (callback_func != NULL) {
-    callback_func(-1);
+    callback_func(data);
   } else {
     while (1) {
     }

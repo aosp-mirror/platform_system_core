@@ -14,21 +14,29 @@
  * limitations under the License.
  */
 
-#ifndef _UNWIND_H
-#define _UNWIND_H
+#include "thread_utils.h"
 
-bool local_get_data(backtrace_t* backtrace);
+#if defined(__APPLE__)
 
-void local_free_data(backtrace_t* backtrace);
+#include <sys/syscall.h>
 
-char* local_get_proc_name(const backtrace_t* backtrace, uintptr_t pc,
-                          uintptr_t* offset);
+// Mac OS >= 10.6 has a system call equivalent to Linux's gettid().
+pid_t gettid() {
+  return syscall(SYS_thread_selfid);
+}
 
-bool remote_get_data(backtrace_t* backtrace);
+#elif !defined(__BIONIC__)
 
-void remote_free_data(backtrace_t* backtrace);
+// glibc doesn't implement or export either gettid or tgkill.
+#include <unistd.h>
+#include <sys/syscall.h>
 
-char* remote_get_proc_name(const backtrace_t* backtrace, uintptr_t pc,
-                           uintptr_t* offset);
+pid_t gettid() {
+  return syscall(__NR_gettid);
+}
 
-#endif /* _UNWIND_H */
+int tgkill(int tgid, int tid, int sig) {
+  return syscall(__NR_tgkill, tgid, tid, sig);
+}
+
+#endif
