@@ -18,6 +18,7 @@
 
 #include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <malloc.h>
 #include <sys/time.h>
 #include <sys/socket.h>
@@ -138,4 +139,15 @@ void nl_socket_set_cb(struct nl_sock *sk, struct nl_cb *cb)
 struct nl_cb *nl_socket_get_cb(struct nl_sock *sk)
 {
 	return nl_cb_get(sk->s_cb);
+}
+
+int nl_socket_set_nonblocking(struct nl_sock *sk)
+{
+	if (sk->s_fd == -1)
+		return -NLE_BAD_SOCK;
+
+	if (fcntl(sk->s_fd, F_SETFL, O_NONBLOCK) < 0)
+		return -errno;
+
+	return 0;
 }
