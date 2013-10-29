@@ -14,12 +14,27 @@
  * limitations under the License.
  */
 
-#ifndef _COMMON_H
-#define _COMMON_H
+#ifndef _LIBBACKTRACE_UNWIND_PTRACE_H
+#define _LIBBACKTRACE_UNWIND_PTRACE_H
 
-#include <backtrace/backtrace.h>
+#include <string>
 
-/* Common routine to free any data allocated to store frame information. */
-void free_frame_data(backtrace_t* backtrace);
+#include "Backtrace.h"
 
-#endif /* _COMMON_H */
+#include <libunwind.h>
+
+class UnwindPtrace : public BacktraceImpl {
+public:
+  UnwindPtrace();
+  virtual ~UnwindPtrace();
+
+  virtual bool Unwind(size_t num_ignore_frames);
+
+  virtual std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
+
+private:
+  unw_addr_space_t addr_space_;
+  struct UPT_info* upt_info_;
+};
+
+#endif // _LIBBACKTRACE_UNWIND_PTRACE_H
