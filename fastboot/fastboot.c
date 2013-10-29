@@ -449,7 +449,13 @@ static int setup_requirement_line(char *name)
 
     for(n = 0; n < count; n++) {
         out[n] = strdup(strip(val[n]));
-        if (out[n] == 0) return -1;
+        if (out[n] == 0) {
+            for(size_t i = 0; i < n; ++i) {
+                free((char*) out[i]);
+            }
+            free(out);
+            return -1;
+        }
     }
 
     fb_queue_require(prod, name, invert, n, out);
