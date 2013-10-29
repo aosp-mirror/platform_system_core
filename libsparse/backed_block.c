@@ -370,7 +370,7 @@ int backed_block_split(struct backed_block_list *bbl, struct backed_block *bb,
 	}
 
 	new_bb = malloc(sizeof(struct backed_block));
-	if (bb == NULL) {
+	if (new_bb == NULL) {
 		return -ENOMEM;
 	}
 
