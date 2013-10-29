@@ -89,12 +89,12 @@ static void dump_thread(log_t* log, pid_t tid, bool attached,
 
     wait_for_stop(tid, total_sleep_time_usec);
 
-    backtrace_t backtrace;
-    if (!backtrace_get_data(&backtrace, tid)) {
+    backtrace_context_t context;
+    if (!backtrace_create_context(&context, tid, -1, 0)) {
         _LOG(log, SCOPE_AT_FAULT, "Could not create backtrace context.\n");
     } else {
-        dump_backtrace_to_log(&backtrace, log, SCOPE_AT_FAULT, "  ");
-        backtrace_free_data(&backtrace);
+        dump_backtrace_to_log(&context, log, SCOPE_AT_FAULT, "  ");
+        backtrace_destroy_context(&context);
     }
 
     if (!attached && ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
@@ -137,11 +137,11 @@ void dump_backtrace(int fd, int amfd, pid_t pid, pid_t tid, bool* detach_failed,
     dump_process_footer(&log, pid);
 }
 
-void dump_backtrace_to_log(const backtrace_t* backtrace, log_t* log,
+void dump_backtrace_to_log(const backtrace_context_t* context, log_t* log,
                            int scope_flags, const char* prefix) {
     char buf[512];
-    for (size_t i = 0; i < backtrace->num_frames; i++) {
-        backtrace_format_frame_data(&backtrace->frames[i], i, buf, sizeof(buf));
+    for (size_t i = 0; i < context->backtrace->num_frames; i++) {
+        backtrace_format_frame_data(context, i, buf, sizeof(buf));
         _LOG(log, scope_flags, "%s%s\n", prefix, buf);
     }
 }

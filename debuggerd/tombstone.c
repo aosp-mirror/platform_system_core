@@ -228,39 +228,39 @@ static void dump_thread_info(log_t* log, pid_t pid, pid_t tid, int scope_flags) 
     }
 }
 
-static void dump_stack_segment(const backtrace_t* backtrace, log_t* log,
+static void dump_stack_segment(const backtrace_context_t* context, log_t* log,
         int scope_flags, uintptr_t *sp, size_t words, int label) {
     for (size_t i = 0; i < words; i++) {
         uint32_t stack_content;
-        if (!backtrace_read_word(backtrace, *sp, &stack_content)) {
+        if (!backtrace_read_word(context, *sp, &stack_content)) {
             break;
         }
 
-        const char* map_name = backtrace_get_map_info(backtrace, stack_content, NULL);
+        const char* map_name = backtrace_get_map_name(context, stack_content, NULL);
         if (!map_name) {
             map_name = "";
         }
         uintptr_t offset = 0;
-        char* proc_name = backtrace_get_proc_name(backtrace, stack_content, &offset);
-        if (proc_name) {
+        char* func_name = backtrace_get_func_name(context, stack_content, &offset);
+        if (func_name) {
             if (!i && label >= 0) {
                 if (offset) {
                     _LOG(log, scope_flags, "    #%02d  %08x  %08x  %s (%s+%u)\n",
-                            label, *sp, stack_content, map_name, proc_name, offset);
+                            label, *sp, stack_content, map_name, func_name, offset);
                 } else {
                     _LOG(log, scope_flags, "    #%02d  %08x  %08x  %s (%s)\n",
-                            label, *sp, stack_content, map_name, proc_name);
+                            label, *sp, stack_content, map_name, func_name);
                 }
             } else {
                 if (offset) {
                     _LOG(log, scope_flags, "         %08x  %08x  %s (%s+%u)\n",
-                            *sp, stack_content, map_name, proc_name, offset);
+                            *sp, stack_content, map_name, func_name, offset);
                 } else {
                     _LOG(log, scope_flags, "         %08x  %08x  %s (%s)\n",
-                            *sp, stack_content, map_name, proc_name);
+                            *sp, stack_content, map_name, func_name);
                 }
             }
-            free(proc_name);
+            free(func_name);
         } else {
             if (!i && label >= 0) {
                 _LOG(log, scope_flags, "    #%02d  %08x  %08x  %s\n",
@@ -275,7 +275,8 @@ static void dump_stack_segment(const backtrace_t* backtrace, log_t* log,
     }
 }
 
-static void dump_stack(const backtrace_t* backtrace, log_t* log, int scope_flags) {
+static void dump_stack(const backtrace_context_t* context, log_t* log, int scope_flags) {
+    const backtrace_t* backtrace = context->backtrace;
     size_t first = 0, last;
     for (size_t i = 0; i < backtrace->num_frames; i++) {
         if (backtrace->frames[i].sp) {
@@ -294,7 +295,7 @@ static void dump_stack(const backtrace_t* backtrace, log_t* log, int scope_flags
 
     // Dump a few words before the first frame.
     uintptr_t sp = backtrace->frames[first].sp - STACK_WORDS * sizeof(uint32_t);
-    dump_stack_segment(backtrace, log, scope_flags, &sp, STACK_WORDS, -1);
+    dump_stack_segment(context, log, scope_flags, &sp, STACK_WORDS, -1);
 
     // Dump a few words from all successive frames.
     // Only log the first 3 frames, put the rest in the tombstone.
@@ -308,7 +309,7 @@ static void dump_stack(const backtrace_t* backtrace, log_t* log, int scope_flags
             scope_flags &= (~SCOPE_AT_FAULT);
         }
         if (i == last) {
-            dump_stack_segment(backtrace, log, scope_flags, &sp, STACK_WORDS, i);
+            dump_stack_segment(context, log, scope_flags, &sp, STACK_WORDS, i);
             if (sp < frame->sp + frame->stack_size) {
                 _LOG(log, scope_flags, "         ........  ........\n");
             }
@@ -319,19 +320,19 @@ static void dump_stack(const backtrace_t* backtrace, log_t* log, int scope_flags
             } else if (words > STACK_WORDS) {
                 words = STACK_WORDS;
             }
-            dump_stack_segment(backtrace, log, scope_flags, &sp, words, i);
+            dump_stack_segment(context, log, scope_flags, &sp, words, i);
         }
     }
 }
 
-static void dump_backtrace_and_stack(const backtrace_t* backtrace, log_t* log,
-        int scope_flags) {
-    if (backtrace->num_frames) {
+static void dump_backtrace_and_stack(const backtrace_context_t* context,
+        log_t* log, int scope_flags) {
+    if (context->backtrace->num_frames) {
         _LOG(log, scope_flags, "\nbacktrace:\n");
-        dump_backtrace_to_log(backtrace, log, scope_flags, "    ");
+        dump_backtrace_to_log(context, log, scope_flags, "    ");
 
         _LOG(log, scope_flags, "\nstack:\n");
-        dump_stack(backtrace, log, scope_flags);
+        dump_stack(context, log, scope_flags);
     }
 }
 
@@ -399,12 +400,13 @@ static void dump_nearby_maps(const backtrace_map_info_t* map_info_list, log_t* l
     dump_map(log, prev, "map above", scope_flags);
 }
 
-static void dump_thread(const backtrace_t* backtrace, log_t* log, int scope_flags,
-        int* total_sleep_time_usec) {
+static void dump_thread(const backtrace_context_t* context, log_t* log,
+        int scope_flags, int* total_sleep_time_usec) {
+    const backtrace_t* backtrace = context->backtrace;
     wait_for_stop(backtrace->tid, total_sleep_time_usec);
 
     dump_registers(log, backtrace->tid, scope_flags);
-    dump_backtrace_and_stack(backtrace, log, scope_flags);
+    dump_backtrace_and_stack(context, log, scope_flags);
     if (IS_AT_FAULT(scope_flags)) {
         dump_memory_and_code(log, backtrace->tid, scope_flags);
         dump_nearby_maps(backtrace->map_info_list, log, backtrace->tid, scope_flags);
@@ -446,11 +448,11 @@ static bool dump_sibling_thread_report(
 
         _LOG(log, 0, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
         dump_thread_info(log, pid, new_tid, 0);
-        backtrace_t new_backtrace;
-        if (backtrace_get_data(&new_backtrace, new_tid)) {
-            dump_thread(&new_backtrace, log, 0, total_sleep_time_usec);
+        backtrace_context_t new_context;
+        if (backtrace_create_context(&new_context, pid, new_tid, 0)) {
+            dump_thread(&new_context, log, 0, total_sleep_time_usec);
+            backtrace_destroy_context(&new_context);
         }
-        backtrace_free_data(&new_backtrace);
 
         if (ptrace(PTRACE_DETACH, new_tid, 0, 0) != 0) {
             LOG("ptrace detach from %d failed: %s\n", new_tid, strerror(errno));
@@ -606,7 +608,7 @@ static void dump_logs(log_t* log, pid_t pid, bool tailOnly)
     dump_log_file(log, pid, "/dev/log/main", tailOnly);
 }
 
-static void dump_abort_message(const backtrace_t* backtrace, log_t* log, uintptr_t address) {
+static void dump_abort_message(const backtrace_context_t* context, log_t* log, uintptr_t address) {
   if (address == 0) {
     return;
   }
@@ -618,7 +620,7 @@ static void dump_abort_message(const backtrace_t* backtrace, log_t* log, uintptr
   char* p = &msg[0];
   while (p < &msg[sizeof(msg)]) {
     uint32_t data;
-    if (!backtrace_read_word(backtrace, address, &data)) {
+    if (!backtrace_read_word(context, address, &data)) {
       break;
     }
     address += sizeof(uint32_t);
@@ -673,11 +675,11 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
         dump_fault_addr(log, tid, signal);
     }
 
-    backtrace_t backtrace;
-    if (backtrace_get_data(&backtrace, tid)) {
-        dump_abort_message(&backtrace, log, abort_msg_address);
-        dump_thread(&backtrace, log, SCOPE_AT_FAULT, total_sleep_time_usec);
-        backtrace_free_data(&backtrace);
+    backtrace_context_t context;
+    if (backtrace_create_context(&context, pid, tid, 0)) {
+        dump_abort_message(&context, log, abort_msg_address);
+        dump_thread(&context, log, SCOPE_AT_FAULT, total_sleep_time_usec);
+        backtrace_destroy_context(&context);
     }
 
     if (want_logs) {
