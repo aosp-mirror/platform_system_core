@@ -31,7 +31,7 @@ void dump_backtrace(int fd, int amfd, pid_t pid, pid_t tid, bool* detach_failed,
         int* total_sleep_time_usec);
 
 /* Dumps the backtrace in the backtrace data structure to the log. */
-void dump_backtrace_to_log(const backtrace_t* backtrace, log_t* log,
+void dump_backtrace_to_log(const backtrace_context_t* context, log_t* log,
         int scope_flags, const char* prefix);
 
 #endif // _DEBUGGERD_BACKTRACE_H
