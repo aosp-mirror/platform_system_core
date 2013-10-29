@@ -722,10 +722,12 @@ int write_fd_chunk(struct output_file *out, unsigned int len,
 	}
 	pos = lseek64(fd, offset, SEEK_SET);
 	if (pos < 0) {
+                free(data);
 		return -errno;
 	}
 	ret = read_all(fd, data, len);
 	if (ret < 0) {
+                free(data);
 		return ret;
 	}
 	ptr = data;
