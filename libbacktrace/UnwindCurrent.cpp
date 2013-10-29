@@ -27,9 +27,9 @@
 
 #include "UnwindCurrent.h"
 
+// Define the ucontext_t structures needed for each supported arch.
 #if defined(__arm__)
-  #if !defined(__BIONIC_HAVE_UCONTEXT_T)
-  // The Current version of the Android <signal.h> doesn't define ucontext_t.
+  // The current version of the <signal.h> doesn't define ucontext_t.
   #include <asm/sigcontext.h> // Ensure 'struct sigcontext' is defined.
 
   // Machine context at the time a signal was raised.
@@ -40,8 +40,19 @@
     struct sigcontext uc_mcontext;
     uint32_t uc_sigmask;
   } ucontext_t;
-  #endif // !__BIONIC_HAVE_UCONTEXT_T
-#endif // defined(__arm__)
+#elif defined(__mips__)
+  typedef struct ucontext {
+    uint32_t sp;
+    uint32_t ra;
+    uint32_t pc;
+  } ucontext_t;
+#elif defined(__i386__)
+  #include <asm/sigcontext.h>
+  #include <asm/ucontext.h>
+  typedef struct ucontext ucontext_t;
+#else
+  #error Unsupported architecture.
+#endif
 
 //-------------------------------------------------------------------------
 // UnwindCurrent functions.
@@ -55,7 +66,7 @@ UnwindCurrent::~UnwindCurrent() {
 bool UnwindCurrent::Unwind(size_t num_ignore_frames) {
   int ret = unw_getcontext(&context_);
   if (ret < 0) {
-    ALOGW("UnwindCurrent::Unwind: unw_getcontext failed %d\n", ret);
+    BACK_LOGW("unw_getcontext failed %d", ret);
     return false;
   }
   return UnwindFromContext(num_ignore_frames, true);
@@ -81,7 +92,7 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
   unw_cursor_t* cursor = new unw_cursor_t;
   int ret = unw_init_local(cursor, &context_);
   if (ret < 0) {
-    ALOGW("UnwindCurrent::UnwindWithContext: unw_init_local failed %d\n", ret);
+    BACK_LOGW("unw_init_local failed %d", ret);
     return false;
   }
 
@@ -89,13 +100,13 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
     unw_word_t pc;
     ret = unw_get_reg(cursor, UNW_REG_IP, &pc);
     if (ret < 0) {
-      ALOGW("UnwindCurrent::UnwindWithContext: Failed to read IP %d\n", ret);
+      BACK_LOGW("Failed to read IP %d", ret);
       break;
     }
     unw_word_t sp;
     ret = unw_get_reg(cursor, UNW_REG_SP, &sp);
     if (ret < 0) {
-      ALOGW("UnwindCurrent::UnwindWithContext: Failed to read SP %d\n", ret);
+      BACK_LOGW("Failed to read SP %d", ret);
       break;
     }
 
@@ -142,10 +153,9 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
 
 void UnwindCurrent::ExtractContext(void* sigcontext) {
   unw_tdep_context_t* context = reinterpret_cast<unw_tdep_context_t*>(&context_);
-
-#if defined(__arm__)
   const ucontext_t* uc = reinterpret_cast<const ucontext_t*>(sigcontext);
 
+#if defined(__arm__)
   context->regs[0] = uc->uc_mcontext.arm_r0;
   context->regs[1] = uc->uc_mcontext.arm_r1;
   context->regs[2] = uc->uc_mcontext.arm_r2;
@@ -162,28 +172,11 @@ void UnwindCurrent::ExtractContext(void* sigcontext) {
   context->regs[13] = uc->uc_mcontext.arm_sp;
   context->regs[14] = uc->uc_mcontext.arm_lr;
   context->regs[15] = uc->uc_mcontext.arm_pc;
-
 #elif defined(__mips__)
-
-  typedef struct ucontext {
-    uint32_t sp;
-    uint32_t ra;
-    uint32_t pc;
-  } ucontext_t;
-
-  const ucontext_t* uc = (const ucontext_t*)sigcontext;
-
   context->uc_mcontext.sp = uc->sp;
   context->uc_mcontext.pc = uc->pc;
   context->uc_mcontext.ra = uc->ra;
-#elif defined(__x86__)
-
-  #include <asm/sigcontext.h>
-  #include <asm/ucontext.h>
-  typedef struct ucontext ucontext_t;
-
-  const ucontext_t* uc = (const ucontext_t*)sigcontext;
-
+#elif defined(__i386__)
   context->uc_mcontext.gregs[REG_EBP] = uc->uc_mcontext.gregs[REG_EBP];
   context->uc_mcontext.gregs[REG_ESP] = uc->uc_mcontext.gregs[REG_ESP];
   context->uc_mcontext.gregs[REG_EIP] = uc->uc_mcontext.gregs[REG_EIP];

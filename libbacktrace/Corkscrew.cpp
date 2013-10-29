@@ -37,7 +37,7 @@
 bool CorkscrewCommon::GenerateFrameData(
     backtrace_frame_t* cork_frames, ssize_t num_frames) {
   if (num_frames < 0) {
-    ALOGW("CorkscrewCommon::GenerateFrameData: libcorkscrew unwind failed.\n");
+    BACK_LOGW("libcorkscrew unwind failed.");
     return false;
   }
 
@@ -184,7 +184,7 @@ std::string CorkscrewPtrace::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset)
 }
 
 //-------------------------------------------------------------------------
-// C++ object createion functions.
+// C++ object creation functions.
 //-------------------------------------------------------------------------
 Backtrace* CreateCurrentObj() {
   return new BacktraceCurrent(new CorkscrewCurrent());

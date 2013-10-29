@@ -32,26 +32,25 @@ typedef enum {
 
 class BacktraceThreadInterface;
 
-class ThreadEntry {
-public:
+struct ThreadEntry {
   ThreadEntry(
       BacktraceThreadInterface* impl, pid_t pid, pid_t tid,
       size_t num_ignore_frames);
   ~ThreadEntry();
 
-  bool Match(pid_t pid, pid_t tid) { return (pid == pid_ && tid == tid_); }
+  bool Match(pid_t chk_pid, pid_t chk_tid) { return (chk_pid == pid && chk_tid == tid); }
 
   static ThreadEntry* AddThreadToUnwind(
       BacktraceThreadInterface* thread_intf, pid_t pid, pid_t tid,
       size_t num_ignored_frames);
 
-  BacktraceThreadInterface* thread_intf_;
-  pid_t pid_;
-  pid_t tid_;
-  ThreadEntry* next_;
-  ThreadEntry* prev_;
-  int32_t state_;
-  int num_ignore_frames_;
+  BacktraceThreadInterface* thread_intf;
+  pid_t pid;
+  pid_t tid;
+  ThreadEntry* next;
+  ThreadEntry* prev;
+  int32_t state;
+  int num_ignore_frames;
 };
 
 // Interface class that does not contain any local storage, only defines

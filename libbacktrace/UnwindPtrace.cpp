@@ -45,13 +45,13 @@ UnwindPtrace::~UnwindPtrace() {
 bool UnwindPtrace::Unwind(size_t num_ignore_frames) {
   addr_space_ = unw_create_addr_space(&_UPT_accessors, 0);
   if (!addr_space_) {
-    ALOGW("UnwindPtrace::Unwind: unw_create_addr_space failed.\n");
+    BACK_LOGW("unw_create_addr_space failed.");
     return false;
   }
 
   upt_info_ = reinterpret_cast<struct UPT_info*>(_UPT_create(backtrace_obj_->Tid()));
   if (!upt_info_) {
-    ALOGW("UnwindPtrace::Unwind: Failed to create upt info.\n");
+    BACK_LOGW("Failed to create upt info.");
     return false;
   }
 
@@ -61,7 +61,7 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames) {
   unw_cursor_t cursor;
   int ret = unw_init_remote(&cursor, addr_space_, upt_info_);
   if (ret < 0) {
-    ALOGW("UnwindPtrace::Unwind: unw_init_remote failed %d\n", ret);
+    BACK_LOGW("unw_init_remote failed %d", ret);
     return false;
   }
 
@@ -69,13 +69,13 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames) {
     unw_word_t pc;
     ret = unw_get_reg(&cursor, UNW_REG_IP, &pc);
     if (ret < 0) {
-      ALOGW("UnwindPtrace::Unwind: Failed to read IP %d\n", ret);
+      BACK_LOGW("Failed to read IP %d", ret);
       break;
     }
     unw_word_t sp;
     ret = unw_get_reg(&cursor, UNW_REG_SP, &sp);
     if (ret < 0) {
-      ALOGW("UnwindPtrace::Unwind: Failed to read SP %d\n", ret);
+      BACK_LOGW("Failed to read SP %d", ret);
       break;
     }
 
