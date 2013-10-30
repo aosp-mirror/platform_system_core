@@ -161,7 +161,7 @@ void show(struct ptable *ptbl)
 {
 	struct efi_entry *entry = ptbl->entry;
 	unsigned n, m;
-	char name[EFI_NAMELEN];
+	char name[EFI_NAMELEN + 1];
 
 	fprintf(stderr,"ptn  start block   end block     name\n");
 	fprintf(stderr,"---- ------------- ------------- --------------------\n");

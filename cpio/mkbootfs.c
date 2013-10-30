@@ -220,6 +220,8 @@ static void _archive_dir(char *in, char *out, int ilen, int olen)
         free(names[i]);
     }
     free(names);
+
+    closedir(d);
 }
 
 static void _archive(char *in, char *out, int ilen, int olen)
