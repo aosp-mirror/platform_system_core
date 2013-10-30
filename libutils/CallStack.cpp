@@ -16,14 +16,12 @@
 
 #define LOG_TAG "CallStack"
 
-#include <string.h>
-
-#include <utils/Log.h>
-#include <utils/Errors.h>
 #include <utils/CallStack.h>
+#include <utils/Printer.h>
+#include <utils/Errors.h>
+#include <utils/Log.h>
 #include <corkscrew/backtrace.h>
 
-/*****************************************************************************/
 namespace android {
 
 CallStack::CallStack() :
@@ -31,8 +29,8 @@ CallStack::CallStack() :
 }
 
 CallStack::CallStack(const char* logtag, int32_t ignoreDepth, int32_t maxDepth) {
-    this->update(ignoreDepth+1, maxDepth);
-    this->dump(logtag);
+    this->update(ignoreDepth+1, maxDepth, CURRENT_THREAD);
+    this->log(logtag);
 }
 
 CallStack::CallStack(const CallStack& rhs) :
@@ -93,31 +91,44 @@ void CallStack::clear() {
     mCount = 0;
 }
 
-void CallStack::update(int32_t ignoreDepth, int32_t maxDepth) {
+void CallStack::update(int32_t ignoreDepth, int32_t maxDepth, pid_t tid) {
     if (maxDepth > MAX_DEPTH) {
         maxDepth = MAX_DEPTH;
     }
-    ssize_t count = unwind_backtrace(mStack, ignoreDepth + 1, maxDepth);
+    ssize_t count;
+
+    if (tid >= 0) {
+        count = unwind_backtrace_thread(tid, mStack, ignoreDepth + 1, maxDepth);
+    } else if (tid == CURRENT_THREAD) {
+        count = unwind_backtrace(mStack, ignoreDepth + 1, maxDepth);
+    } else {
+        ALOGE("%s: Invalid tid specified (%d)", __FUNCTION__, tid);
+        count = 0;
+    }
+
     mCount = count > 0 ? count : 0;
 }
 
-void CallStack::dump(const char* logtag, const char* prefix) const {
-    backtrace_symbol_t symbols[mCount];
+void CallStack::log(const char* logtag, android_LogPriority priority, const char* prefix) const {
+    LogPrinter printer(logtag, priority, prefix, /*ignoreBlankLines*/false);
+    print(printer);
+}
 
-    get_backtrace_symbols(mStack, mCount, symbols);
-    for (size_t i = 0; i < mCount; i++) {
-        char line[MAX_BACKTRACE_LINE_LENGTH];
-        format_backtrace_line(i, &mStack[i], &symbols[i],
-                line, MAX_BACKTRACE_LINE_LENGTH);
-        ALOG(LOG_DEBUG, logtag, "%s%s",
-                prefix ? prefix : "",
-                line);
-    }
-    free_backtrace_symbols(symbols, mCount);
+void CallStack::dump(int fd, int indent, const char* prefix) const {
+    FdPrinter printer(fd, indent, prefix);
+    print(printer);
 }
 
 String8 CallStack::toString(const char* prefix) const {
     String8 str;
+
+    String8Printer printer(&str, prefix);
+    print(printer);
+
+    return str;
+}
+
+void CallStack::print(Printer& printer) const {
     backtrace_symbol_t symbols[mCount];
 
     get_backtrace_symbols(mStack, mCount, symbols);
@@ -125,14 +136,9 @@ String8 CallStack::toString(const char* prefix) const {
         char line[MAX_BACKTRACE_LINE_LENGTH];
         format_backtrace_line(i, &mStack[i], &symbols[i],
                 line, MAX_BACKTRACE_LINE_LENGTH);
-        if (prefix) {
-            str.append(prefix);
-        }
-        str.append(line);
-        str.append("\n");
+        printer.printLine(line);
     }
     free_backtrace_symbols(symbols, mCount);
-    return str;
 }
 
 }; // namespace android
