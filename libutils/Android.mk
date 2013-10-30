@@ -26,6 +26,8 @@ commonSources:= \
 	LinearAllocator.cpp \
 	LinearTransform.cpp \
 	Log.cpp \
+	Printer.cpp \
+	ProcessCallStack.cpp \
 	PropertyMap.cpp \
 	RefBase.cpp \
 	SharedBuffer.cpp \
