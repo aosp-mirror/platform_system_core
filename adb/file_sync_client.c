@@ -642,8 +642,8 @@ static int local_build_list(copyinfo **filelist,
             ci = mkcopyinfo(lpath, rpath, name, 0);
             if(lstat(ci->src, &st)) {
                 fprintf(stderr,"cannot stat '%s': %s\n", ci->src, strerror(errno));
+                free(ci);
                 closedir(d);
-
                 return -1;
             }
             if(!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) {

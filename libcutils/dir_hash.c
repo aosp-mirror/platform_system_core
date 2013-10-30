@@ -159,6 +159,7 @@ static int recurse(HashAlgorithm algorithm, const char *directory_path,
 
             free(name);
             free(node);
+            closedir(d);
             return -1;
         }
 

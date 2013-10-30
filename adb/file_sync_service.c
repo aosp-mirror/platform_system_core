@@ -110,6 +110,7 @@ static int do_list(int s, const char *path)
 
             if(writex(s, &msg.dent, sizeof(msg.dent)) ||
                writex(s, de->d_name, len)) {
+                closedir(d);
                 return -1;
             }
         }
