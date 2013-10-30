@@ -21,6 +21,10 @@
 
 #include <sys/types.h>
 
+// Macro to log the function name along with the warning message.
+#define BACK_LOGW(format, ...) \
+  ALOGW("%s: " format, __PRETTY_FUNCTION__, ##__VA_ARGS__)
+
 class BacktraceImpl {
 public:
   virtual ~BacktraceImpl() { }

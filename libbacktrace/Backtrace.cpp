@@ -72,10 +72,8 @@ bool Backtrace::Unwind(size_t num_ignore_frames) {
   return impl_->Unwind(num_ignore_frames);
 }
 
-__BEGIN_DECLS
-extern char* __cxa_demangle (const char* mangled, char* buf, size_t* len,
-                             int* status);
-__END_DECLS
+extern "C" char* __cxa_demangle(const char* mangled, char* buf, size_t* len,
+                                int* status);
 
 std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset) {
   std::string func_name = impl_->GetFunctionNameRaw(pc, offset);
@@ -97,7 +95,7 @@ std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset) {
 
 bool Backtrace::VerifyReadWordArgs(uintptr_t ptr, uint32_t* out_value) {
   if (ptr & 3) {
-    ALOGW("Backtrace::verifyReadWordArgs: invalid pointer %p", (void*)ptr);
+    BACK_LOGW("invalid pointer %p", (void*)ptr);
     *out_value = (uint32_t)-1;
     return false;
   }
@@ -172,7 +170,7 @@ bool BacktraceCurrent::ReadWord(uintptr_t ptr, uint32_t* out_value) {
     *out_value = *reinterpret_cast<uint32_t*>(ptr);
     return true;
   } else {
-    ALOGW("BacktraceCurrent::readWord: pointer %p not in a readbale map", reinterpret_cast<void*>(ptr));
+    BACK_LOGW("pointer %p not in a readable map", reinterpret_cast<void*>(ptr));
     *out_value = static_cast<uint32_t>(-1);
     return false;
   }
@@ -198,7 +196,7 @@ bool BacktracePtrace::ReadWord(uintptr_t ptr, uint32_t* out_value) {
   }
 
 #if defined(__APPLE__)
-  ALOGW("BacktracePtrace::readWord: MacOS does not support reading from another pid.\n");
+  BACK_LOGW("MacOS does not support reading from another pid.");
   return false;
 #else
   // ptrace() returns -1 and sets errno when the operation fails.
@@ -206,8 +204,8 @@ bool BacktracePtrace::ReadWord(uintptr_t ptr, uint32_t* out_value) {
   errno = 0;
   *out_value = ptrace(PTRACE_PEEKTEXT, Tid(), reinterpret_cast<void*>(ptr), NULL);
   if (*out_value == static_cast<uint32_t>(-1) && errno) {
-    ALOGW("BacktracePtrace::readWord: invalid pointer 0x%08x reading from tid %d, "
-          "ptrace() errno=%d", ptr, Tid(), errno);
+    BACK_LOGW("invalid pointer %p reading from tid %d, ptrace() strerror(errno)=%s",
+              reinterpret_cast<void*>(ptr), Tid(), strerror(errno));
     return false;
   }
   return true;
@@ -295,11 +293,8 @@ void backtrace_format_frame_data(
     const backtrace_context_t* context, size_t frame_num, char* buf,
     size_t buf_size) {
   if (buf_size == 0 || buf == NULL) {
-    ALOGW("backtrace_format_frame_data: bad call buf %p buf_size %zu\n",
-          buf, buf_size);
-    return;
-  }
-  if (context->data) {
+    BACK_LOGW("bad call buf %p buf_size %zu", buf, buf_size);
+  } else if (context->data) {
     Backtrace* backtrace = reinterpret_cast<Backtrace*>(context->data);
     std::string line = backtrace->FormatFrameData(frame_num);
     if (line.size() > buf_size) {

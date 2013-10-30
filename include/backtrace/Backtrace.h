@@ -25,7 +25,16 @@ class BacktraceImpl;
 
 class Backtrace {
 public:
-  Backtrace(BacktraceImpl* impl);
+  // Create the correct Backtrace object based on what is to be unwound.
+  // If pid < 0 or equals the current pid, then the Backtrace object
+  // corresponds to the current process.
+  // If pid < 0 or equals the current pid and tid >= 0, then the Backtrace
+  // object corresponds to a thread in the current process.
+  // If pid >= 0 and tid < 0, then the Backtrace object corresponds to a
+  // different process.
+  // Tracing a thread in a different process is not supported.
+  static Backtrace* Create(pid_t pid, pid_t tid);
+
   virtual ~Backtrace();
 
   // Get the current stack trace and store in the backtrace_ structure.
@@ -60,17 +69,9 @@ public:
     return &backtrace_.frames[frame_num];
   }
 
-  // Create the correct Backtrace object based on what is to be unwound.
-  // If pid < 0 or equals the current pid, then the Backtrace object
-  // corresponds to the current process.
-  // If pid < 0 or equals the current pid and tid >= 0, then the Backtrace
-  // object corresponds to a thread in the current process.
-  // If pid >= 0 and tid < 0, then the Backtrace object corresponds to a
-  // different process.
-  // Tracing a thread in a different process is not supported.
-  static Backtrace* Create(pid_t pid, pid_t tid);
-
 protected:
+  Backtrace(BacktraceImpl* impl);
+
   virtual bool VerifyReadWordArgs(uintptr_t ptr, uint32_t* out_value);
 
   BacktraceImpl* impl_;
