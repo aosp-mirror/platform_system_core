@@ -26,6 +26,8 @@
 #include <utils/ProcessCallStack.h>
 #include <utils/Printer.h>
 
+#include <limits.h>
+
 namespace android {
 
 enum {
