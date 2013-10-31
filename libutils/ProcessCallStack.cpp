@@ -140,6 +140,7 @@ void ProcessCallStack::update(int32_t maxDepth) {
     clear();
 
     // Get current time.
+#ifndef USE_MINGW
     {
         time_t t = time(NULL);
         struct tm tm;
@@ -193,6 +194,7 @@ void ProcessCallStack::update(int32_t maxDepth) {
         ALOGE("%s: Failed to readdir from %s (errno = %d, '%s')",
               __FUNCTION__, PATH_SELF_TASK, -code, strerror(code));
     }
+#endif
 
     closedir(dp);
 }
