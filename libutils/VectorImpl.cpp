@@ -384,7 +384,11 @@ void* VectorImpl::_grow(size_t where, size_t amount)
         {
             const SharedBuffer* cur_sb = SharedBuffer::bufferFromData(mStorage);
             SharedBuffer* sb = cur_sb->editResize(new_capacity * mItemSize);
-            mStorage = sb->data();
+            if (sb) {
+                mStorage = sb->data();
+            } else {
+                return NULL;
+            }
         } else {
             SharedBuffer* sb = SharedBuffer::alloc(new_capacity * mItemSize);
             if (sb) {
@@ -399,6 +403,8 @@ void* VectorImpl::_grow(size_t where, size_t amount)
                 }
                 release_storage();
                 mStorage = const_cast<void*>(array);
+            } else {
+                return NULL;
             }
         }
     } else {
@@ -436,7 +442,11 @@ void VectorImpl::_shrink(size_t where, size_t amount)
         {
             const SharedBuffer* cur_sb = SharedBuffer::bufferFromData(mStorage);
             SharedBuffer* sb = cur_sb->editResize(new_capacity * mItemSize);
-            mStorage = sb->data();
+            if (sb) {
+                mStorage = sb->data();
+            } else {
+                return;
+            }
         } else {
             SharedBuffer* sb = SharedBuffer::alloc(new_capacity * mItemSize);
             if (sb) {
@@ -451,6 +461,8 @@ void VectorImpl::_shrink(size_t where, size_t amount)
                 }
                 release_storage();
                 mStorage = const_cast<void*>(array);
+            } else{
+                return;
             }
         }
     } else {
