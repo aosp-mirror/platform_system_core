@@ -86,15 +86,33 @@ bool CorkscrewCurrent::Unwind(size_t num_ignore_frames) {
 std::string CorkscrewCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
   *offset = 0;
 
-  // Get information about the current thread.
   Dl_info info;
   const backtrace_map_info_t* map_info = backtrace_obj_->FindMapInfo(pc);
-  const char* symbol_name = NULL;
-  if (map_info && dladdr((const void*)pc, &info) && info.dli_sname) {
-    *offset = pc - map_info->start - (uintptr_t)info.dli_saddr + (uintptr_t)info.dli_fbase;
-    symbol_name = info.dli_sname;
-
-    return symbol_name;
+  if (map_info) {
+    if (dladdr((const void*)pc, &info)) {
+      if (info.dli_sname) {
+        *offset = pc - map_info->start - (uintptr_t)info.dli_saddr + (uintptr_t)info.dli_fbase;
+        return info.dli_sname;
+      }
+    } else {
+      // dladdr(3) didn't find a symbol; maybe it's static? Look in the ELF file...
+      symbol_table_t* symbol_table = load_symbol_table(map_info->name);
+      if (symbol_table) {
+        // First check if we can find the symbol using a relative pc.
+        std::string name;
+        const symbol_t* elf_symbol = find_symbol(symbol_table, pc - map_info->start);
+        if (elf_symbol) {
+          name = elf_symbol->name;
+          *offset = pc - map_info->start - elf_symbol->start;
+        } else if ((elf_symbol = find_symbol(symbol_table, pc)) != NULL) {
+          // Found the symbol using the absolute pc.
+          name = elf_symbol->name;
+          *offset = pc - elf_symbol->start;
+        }
+        free_symbol_table(symbol_table);
+        return name;
+      }
+    }
   }
   return "";
 }
