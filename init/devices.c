@@ -458,7 +458,7 @@ static char **get_character_device_symlinks(struct uevent *uevent)
 
     /* skip "/devices/platform/<driver>" */
     parent = strchr(uevent->path + pdev->path_len, '/');
-    if (!*parent)
+    if (!parent)
         goto err;
 
     if (!strncmp(parent, "/usb", 4)) {
