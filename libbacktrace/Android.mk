@@ -137,6 +137,7 @@ LOCAL_SRC_FILES := \
 	thread_utils.c \
 
 LOCAL_CFLAGS += \
+	$(common_cflags) \
 	-fno-builtin \
 	-fstack-protector-all \
 	-O0 \
@@ -149,7 +150,6 @@ LOCAL_CONLYFLAGS += \
 
 LOCAL_CPPFLAGS += \
 	$(common_cppflags) \
-	-fpermissive \
 
 LOCAL_SHARED_LIBRARIES += \
 	libcutils \
@@ -241,6 +241,7 @@ LOCAL_SRC_FILES := \
 	thread_utils.c \
 
 LOCAL_CFLAGS += \
+	$(common_cflags) \
 	-fno-builtin \
 	-fstack-protector-all \
 	-O0 \
@@ -250,9 +251,6 @@ LOCAL_CFLAGS += \
 LOCAL_SHARED_LIBRARIES := \
 	libbacktrace_test \
 	libbacktrace \
-
-LOCAL_CPPFLAGS += \
-	-fpermissive \
 
 LOCAL_LDLIBS := \
 	-lpthread \
