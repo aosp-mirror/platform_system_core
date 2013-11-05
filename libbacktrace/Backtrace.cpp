@@ -213,13 +213,13 @@ bool BacktracePtrace::ReadWord(uintptr_t ptr, uint32_t* out_value) {
 }
 
 Backtrace* Backtrace::Create(pid_t pid, pid_t tid) {
-  if (pid < 0 || pid == getpid()) {
-    if (tid < 0 || tid == gettid()) {
+  if (pid == BACKTRACE_CURRENT_PROCESS || pid == getpid()) {
+    if (tid == BACKTRACE_NO_TID || tid == gettid()) {
       return CreateCurrentObj();
     } else {
       return CreateThreadObj(tid);
     }
-  } else if (tid < 0) {
+  } else if (tid == BACKTRACE_NO_TID) {
     return CreatePtraceObj(pid, pid);
   } else {
     return CreatePtraceObj(pid, tid);
