@@ -30,6 +30,9 @@
     {
       'target_name': 'libmetrics',
       'type': 'shared_library',
+      'cflags': [
+        '-fvisibility=default',
+      ],
       'sources': [
         'c_metrics_library.cc',
         'metrics_library.cc',
