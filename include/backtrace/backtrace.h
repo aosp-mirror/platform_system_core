@@ -23,6 +23,14 @@
 
 __BEGIN_DECLS
 
+// When the pid to be traced is set to this value, then trace the current
+// process. If the tid value is not BACKTRACE_NO_TID, then the specified
+// thread from the current process will be traced.
+#define BACKTRACE_CURRENT_PROCESS -1
+// When the tid to be traced is set to this value, then trace the specified
+// pid.
+#define BACKTRACE_NO_TID -1
+
 #define MAX_BACKTRACE_FRAMES 64
 
 typedef struct backtrace_map_info {
