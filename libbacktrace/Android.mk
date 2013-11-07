@@ -23,7 +23,7 @@ common_shared_libs := \
 	liblog \
 
 # To enable using libunwind on each arch, add it to the list below.
-ifeq ($(TARGET_ARCH),$(filter $(TARGET_ARCH),arm))
+ifeq ($(TARGET_ARCH),$(filter $(TARGET_ARCH),))
 
 #----------------------------------------------------------------------------
 # The native libbacktrace library with libunwind.
