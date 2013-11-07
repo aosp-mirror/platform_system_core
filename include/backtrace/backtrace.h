@@ -17,9 +17,9 @@
 #ifndef _BACKTRACE_H
 #define _BACKTRACE_H
 
-#include <sys/types.h>
+#include <stdint.h>
 #include <stdbool.h>
-#include <inttypes.h>
+#include <sys/types.h>
 
 __BEGIN_DECLS
 
