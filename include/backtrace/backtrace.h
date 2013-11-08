@@ -21,7 +21,13 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
+#ifdef USE_MINGW
+#if defined(__cplusplus)
+extern "C" {
+#endif  // defined(__cplusplus)
+#else
 __BEGIN_DECLS
+#endif  // USE_MINGW
 
 // When the pid to be traced is set to this value, then trace the current
 // process. If the tid value is not BACKTRACE_NO_TID, then the specified
@@ -117,6 +123,12 @@ void backtrace_format_frame_data(
 /* Get the backtrace data structure associated with the context. */
 const backtrace_t* backtrace_get_data(backtrace_context_t* context);
 
+#ifdef USE_MINGW
+#if defined(__cplusplus)
+}
+#endif  // defined(__cplusplus)
+#else
 __END_DECLS
+#endif  // USE_MINGW
 
 #endif /* _BACKTRACE_H */
