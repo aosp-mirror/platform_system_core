@@ -32,119 +32,119 @@
 
 int ion_open()
 {
-        int fd = open("/dev/ion", O_RDWR);
-        if (fd < 0)
-                ALOGE("open /dev/ion failed!\n");
-        return fd;
+    int fd = open("/dev/ion", O_RDWR);
+    if (fd < 0)
+        ALOGE("open /dev/ion failed!\n");
+    return fd;
 }
 
 int ion_close(int fd)
 {
-        return close(fd);
+    return close(fd);
 }
 
 static int ion_ioctl(int fd, int req, void *arg)
 {
-        int ret = ioctl(fd, req, arg);
-        if (ret < 0) {
-                ALOGE("ioctl %x failed with code %d: %s\n", req,
-                       ret, strerror(errno));
-                return -errno;
-        }
-        return ret;
+    int ret = ioctl(fd, req, arg);
+    if (ret < 0) {
+        ALOGE("ioctl %x failed with code %d: %s\n", req,
+              ret, strerror(errno));
+        return -errno;
+    }
+    return ret;
 }
 
 int ion_alloc(int fd, size_t len, size_t align, unsigned int heap_mask,
-	      unsigned int flags, ion_user_handle_t *handle)
+              unsigned int flags, ion_user_handle_t *handle)
 {
-        int ret;
-        struct ion_allocation_data data = {
-                .len = len,
-                .align = align,
-		.heap_id_mask = heap_mask,
-                .flags = flags,
-        };
+    int ret;
+    struct ion_allocation_data data = {
+        .len = len,
+        .align = align,
+        .heap_id_mask = heap_mask,
+        .flags = flags,
+    };
 
-        ret = ion_ioctl(fd, ION_IOC_ALLOC, &data);
-        if (ret < 0)
-                return ret;
-        *handle = data.handle;
+    ret = ion_ioctl(fd, ION_IOC_ALLOC, &data);
+    if (ret < 0)
         return ret;
+    *handle = data.handle;
+    return ret;
 }
 
 int ion_free(int fd, ion_user_handle_t handle)
 {
-        struct ion_handle_data data = {
-                .handle = handle,
-        };
-        return ion_ioctl(fd, ION_IOC_FREE, &data);
+    struct ion_handle_data data = {
+        .handle = handle,
+    };
+    return ion_ioctl(fd, ION_IOC_FREE, &data);
 }
 
 int ion_map(int fd, ion_user_handle_t handle, size_t length, int prot,
             int flags, off_t offset, unsigned char **ptr, int *map_fd)
 {
-        struct ion_fd_data data = {
-                .handle = handle,
-        };
+    struct ion_fd_data data = {
+        .handle = handle,
+    };
 
-        int ret = ion_ioctl(fd, ION_IOC_MAP, &data);
-        if (ret < 0)
-                return ret;
-        *map_fd = data.fd;
-        if (*map_fd < 0) {
-                ALOGE("map ioctl returned negative fd\n");
-                return -EINVAL;
-        }
-        *ptr = mmap(NULL, length, prot, flags, *map_fd, offset);
-        if (*ptr == MAP_FAILED) {
-                ALOGE("mmap failed: %s\n", strerror(errno));
-                return -errno;
-        }
+    int ret = ion_ioctl(fd, ION_IOC_MAP, &data);
+    if (ret < 0)
         return ret;
+    *map_fd = data.fd;
+    if (*map_fd < 0) {
+        ALOGE("map ioctl returned negative fd\n");
+        return -EINVAL;
+    }
+    *ptr = mmap(NULL, length, prot, flags, *map_fd, offset);
+    if (*ptr == MAP_FAILED) {
+        ALOGE("mmap failed: %s\n", strerror(errno));
+        return -errno;
+    }
+    return ret;
 }
 
 int ion_share(int fd, ion_user_handle_t handle, int *share_fd)
 {
-        int map_fd;
-        struct ion_fd_data data = {
-                .handle = handle,
-        };
+    int map_fd;
+    struct ion_fd_data data = {
+        .handle = handle,
+    };
 
-        int ret = ion_ioctl(fd, ION_IOC_SHARE, &data);
-        if (ret < 0)
-                return ret;
-        *share_fd = data.fd;
-        if (*share_fd < 0) {
-                ALOGE("share ioctl returned negative fd\n");
-                return -EINVAL;
-        }
+    int ret = ion_ioctl(fd, ION_IOC_SHARE, &data);
+    if (ret < 0)
         return ret;
+    *share_fd = data.fd;
+    if (*share_fd < 0) {
+        ALOGE("share ioctl returned negative fd\n");
+        return -EINVAL;
+    }
+    return ret;
 }
 
 int ion_alloc_fd(int fd, size_t len, size_t align, unsigned int heap_mask,
-		 unsigned int flags, int *handle_fd) {
-	ion_user_handle_t handle;
-	int ret;
+                 unsigned int flags, int *handle_fd) {
+    ion_user_handle_t handle;
+    int ret;
 
-	ret = ion_alloc(fd, len, align, heap_mask, flags, &handle);
-	if (ret < 0)
-		return ret;
-	ret = ion_share(fd, handle, handle_fd);
-	ion_free(fd, handle);
-	return ret;
+    ret = ion_alloc(fd, len, align, heap_mask, flags, &handle);
+    if (ret < 0)
+        return ret;
+    ret = ion_share(fd, handle, handle_fd);
+    ion_free(fd, handle);
+    return ret;
 }
 
 int ion_import(int fd, int share_fd, ion_user_handle_t *handle)
 {
-        struct ion_fd_data data = {
-                .fd = share_fd,
-        };
+    struct ion_fd_data data = {
+        .fd = share_fd,
+    };
 
-        int ret = ion_ioctl(fd, ION_IOC_IMPORT, &data);
-        if (ret < 0)
-                return ret;
-        *handle = data.handle;
+    int ret = ion_ioctl(fd, ION_IOC_IMPORT, &data);
+    if (ret < 0)
         return ret;
+    *handle = data.handle;
+    return ret;
 }
 
 int ion_sync_fd(int fd, int handle_fd)
