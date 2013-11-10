@@ -1044,7 +1044,7 @@ int main(int argc, char **argv)
             continue;
 
         for (i = 0; i < fd_count; i++) {
-            if (ufds[i].revents == POLLIN) {
+            if (ufds[i].revents & POLLIN) {
                 if (ufds[i].fd == get_property_set_fd())
                     handle_property_set_fd();
                 else if (ufds[i].fd == get_keychord_fd())

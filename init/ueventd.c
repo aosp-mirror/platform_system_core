@@ -94,7 +94,7 @@ int ueventd_main(int argc, char **argv)
         nr = poll(&ufd, 1, -1);
         if (nr <= 0)
             continue;
-        if (ufd.revents == POLLIN)
+        if (ufd.revents & POLLIN)
                handle_device_fd();
     }
 }
