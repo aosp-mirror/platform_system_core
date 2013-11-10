@@ -26,7 +26,7 @@
 
 int WarnStart(void);
 void WarnEnd(void);
-void WarnInput(char *buf, int *result, size_t max_size);
+void WarnInput(char *buf, yy_size_t *result, size_t max_size);
 
 #define YY_INPUT(buf, result, max_size) WarnInput(buf, &result, max_size)
 
@@ -174,11 +174,12 @@ static void WarnOpenInput(const char *path) {
  *
  * 3.  We want to detect log rotation, and reopen the input file as needed.
  */
-void WarnInput(char *buf, int *result, size_t max_size) {
+void WarnInput(char *buf, yy_size_t *result, size_t max_size) {
   while (1) {
-    *result = read(yyin_fd, buf, max_size);
-    if (*result < 0)
+    ssize_t ret = read(yyin_fd, buf, max_size);
+    if (ret < 0)
       Die("read: %s", strerror(errno));
+    *result = ret;
     if (*result > 0 || fifo || filter)
       return;
     if (draining) {
