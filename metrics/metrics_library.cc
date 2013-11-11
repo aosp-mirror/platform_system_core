@@ -41,6 +41,8 @@ static const char *kCrosEventNames[] = {
   "Chaps.DatabaseRepairFailure",  // 4
   "Chaps.DatabaseCreateFailure",  // 5
   "Attestation.OriginSpecificExhausted",  // 6
+  "SpringPowerSupply.Original.High",  // 7
+  "SpringPowerSupply.Other.High",  // 8
 };
 
 time_t MetricsLibrary::cached_enabled_time_ = 0;
