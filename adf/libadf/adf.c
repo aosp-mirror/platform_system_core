@@ -706,3 +706,105 @@ void adf_format_str(__u32 format, char buf[ADF_FORMAT_STR_SIZE])
     buf[3] = (format >> 24) & 0xFF;
     buf[4] = '\0';
 }
+
+static bool adf_find_simple_post_overlay_engine(struct adf_device *dev,
+        const __u32 *formats, size_t n_formats,
+        adf_id_t interface, adf_id_t *overlay_engine)
+{
+    adf_id_t *engs;
+    ssize_t n_engs = adf_overlay_engines_for_interface(dev, interface, &engs);
+
+    if (n_engs <= 0)
+        return false;
+
+    adf_id_t *filtered_engs;
+    ssize_t n_filtered_engs = adf_overlay_engines_filter_by_format(dev,
+            formats, n_formats, engs, n_engs, &filtered_engs);
+    free(engs);
+
+    if (n_filtered_engs <= 0)
+        return false;
+
+    *overlay_engine = filtered_engs[0];
+    free(filtered_engs);
+    return true;
+}
+
+static const __u32 any_rgb_format[] = {
+    DRM_FORMAT_C8,
+    DRM_FORMAT_RGB332,
+    DRM_FORMAT_BGR233,
+    DRM_FORMAT_XRGB1555,
+    DRM_FORMAT_XBGR1555,
+    DRM_FORMAT_RGBX5551,
+    DRM_FORMAT_BGRX5551,
+    DRM_FORMAT_ARGB1555,
+    DRM_FORMAT_ABGR1555,
+    DRM_FORMAT_RGBA5551,
+    DRM_FORMAT_BGRA5551,
+    DRM_FORMAT_RGB565,
+    DRM_FORMAT_BGR565,
+    DRM_FORMAT_RGB888,
+    DRM_FORMAT_BGR888,
+    DRM_FORMAT_XRGB8888,
+    DRM_FORMAT_XBGR8888,
+    DRM_FORMAT_RGBX8888,
+    DRM_FORMAT_BGRX8888,
+    DRM_FORMAT_XRGB2101010,
+    DRM_FORMAT_XBGR2101010,
+    DRM_FORMAT_RGBX1010102,
+    DRM_FORMAT_BGRX1010102,
+    DRM_FORMAT_ARGB2101010,
+    DRM_FORMAT_ABGR2101010,
+    DRM_FORMAT_RGBA1010102,
+    DRM_FORMAT_BGRA1010102,
+    DRM_FORMAT_ARGB8888,
+    DRM_FORMAT_ABGR8888,
+    DRM_FORMAT_RGBA8888,
+    DRM_FORMAT_BGRA8888,
+};
+
+int adf_find_simple_post_configuration(struct adf_device *dev,
+        const __u32 *formats, size_t n_formats,
+        adf_id_t *interface, adf_id_t *overlay_engine)
+{
+    adf_id_t *intfs;
+    ssize_t n_intfs = adf_interfaces(dev, &intfs);
+
+    if (n_intfs < 0)
+        return n_intfs;
+    else if (!n_intfs)
+        return -ENODEV;
+
+    adf_id_t *primary_intfs;
+    ssize_t n_primary_intfs = adf_interfaces_filter_by_flag(dev,
+            ADF_INTF_FLAG_PRIMARY, intfs, n_intfs, &primary_intfs);
+    free(intfs);
+
+    if (n_primary_intfs < 0)
+        return n_primary_intfs;
+    else if (!n_primary_intfs)
+        return -ENODEV;
+
+    if (!formats) {
+        formats = any_rgb_format;
+        n_formats = sizeof(any_rgb_format) / sizeof(any_rgb_format[0]);
+    }
+
+    bool found = false;
+    ssize_t i = 0;
+    for (i = 0; i < n_primary_intfs; i++) {
+        found = adf_find_simple_post_overlay_engine(dev, formats, n_formats,
+                primary_intfs[i], overlay_engine);
+        if (found) {
+            *interface = primary_intfs[i];
+            break;
+        }
+    }
+    free(primary_intfs);
+
+    if (!found)
+        return -ENODEV;
+
+    return 0;
+}
