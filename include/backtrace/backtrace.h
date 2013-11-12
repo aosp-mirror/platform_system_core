@@ -28,8 +28,8 @@ __BEGIN_DECLS
 // thread from the current process will be traced.
 #define BACKTRACE_CURRENT_PROCESS -1
 // When the tid to be traced is set to this value, then trace the specified
-// pid.
-#define BACKTRACE_NO_TID -1
+// current thread of the specified pid.
+#define BACKTRACE_CURRENT_THREAD -1
 
 #define MAX_BACKTRACE_FRAMES 64
 
