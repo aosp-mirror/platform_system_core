@@ -12,7 +12,7 @@
 static int test_empty(const char *buf, size_t size)
 {
     while(size--) {
-        if (*buf++ != 0xff)
+        if (*buf++ != (char) 0xff)
             return 0;
     }
     return 1;
@@ -44,7 +44,7 @@ int nandread_main(int argc, char **argv)
     struct mtd_info_user mtdinfo;
     struct mtd_ecc_stats initial_ecc, last_ecc, ecc;
     struct mtd_oob_buf oobbuf;
-    struct nand_ecclayout ecclayout;
+    nand_ecclayout_t ecclayout;
 
     do {
         c = getopt(argc, argv, "d:f:s:S:L:Rhv");
@@ -177,7 +177,11 @@ int nandread_main(int argc, char **argv)
 
     if (rawmode) {
         rawmode = mtdinfo.oobsize;
+#if !defined(MTD_STUPID_LOCK) /* using uapi kernel headers */
+        ret = ioctl(fd, MTDFILEMODE, MTD_FILE_MODE_RAW);
+#else /* still using old kernel headers */
         ret = ioctl(fd, MTDFILEMODE, MTD_MODE_RAW);
+#endif
         if (ret) {
             fprintf(stderr, "failed set raw mode for %s, %s\n",
                     devname, strerror(errno));
