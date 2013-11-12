@@ -50,6 +50,11 @@
 #define ALOGW printf
 #endif
 
+#ifdef HAVE_ANDROID_OS
+/* SIOCKILLADDR is an Android extension. */
+#define SIOCKILLADDR 0x8939
+#endif
+
 static int ifc_ctl_sock = -1;
 static int ifc_ctl_sock6 = -1;
 void printerr(char *fmt, ...);
