@@ -80,6 +80,11 @@ int32_t android_atomic_or(int32_t value, volatile int32_t* addr);
 int32_t android_atomic_acquire_load(volatile const int32_t* addr);
 int32_t android_atomic_release_load(volatile const int32_t* addr);
 
+#if defined (__LP64__)
+int64_t android_atomic_acquire_load64(volatile const int64_t* addr);
+int64_t android_atomic_release_load64(volatile const int64_t* addr);
+#endif
+
 /*
  * Perform an atomic store with "acquire" or "release" ordering.
  *
@@ -88,6 +93,11 @@ int32_t android_atomic_release_load(volatile const int32_t* addr);
  */
 void android_atomic_acquire_store(int32_t value, volatile int32_t* addr);
 void android_atomic_release_store(int32_t value, volatile int32_t* addr);
+
+#if defined (__LP64__)
+void android_atomic_acquire_store64(int64_t value, volatile int64_t* addr);
+void android_atomic_release_store64(int64_t value, volatile int64_t* addr);
+#endif
 
 /*
  * Compare-and-set operation with "acquire" or "release" ordering.
@@ -105,6 +115,13 @@ int android_atomic_acquire_cas(int32_t oldvalue, int32_t newvalue,
         volatile int32_t* addr);
 int android_atomic_release_cas(int32_t oldvalue, int32_t newvalue,
         volatile int32_t* addr);
+
+#if defined (__LP64__)
+int64_t android_atomic_acquire_cas64(int64_t old_value, int64_t new_value,
+        volatile int64_t *ptr);
+int64_t android_atomic_release_cas64(int64_t old_value, int64_t new_value,
+        volatile int64_t *ptr);
+#endif
 
 /*
  * Aliases for code using an older version of this header.  These are now
