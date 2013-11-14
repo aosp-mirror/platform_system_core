@@ -43,6 +43,8 @@ static const char *kCrosEventNames[] = {
   "Attestation.OriginSpecificExhausted",  // 6
   "SpringPowerSupply.Original.High",  // 7
   "SpringPowerSupply.Other.High",  // 8
+  "SpringPowerSupply.Original.Low",  // 9
+  "SpringPowerSupply.ChargerIdle",  // 10
 };
 
 time_t MetricsLibrary::cached_enabled_time_ = 0;
