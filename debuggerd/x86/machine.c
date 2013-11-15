@@ -1,5 +1,4 @@
-/* system/debuggerd/debuggerd.c
-**
+/*
 ** Copyright 2006, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,10 +23,6 @@
 #include <sys/types.h>
 #include <sys/ptrace.h>
 
-#include <corkscrew/ptrace.h>
-
-#include <linux/user.h>
-
 #include "../utility.h"
 #include "../machine.h"
 
@@ -35,20 +30,17 @@ void dump_memory_and_code(log_t* log, pid_t tid, int scope_flags) {
 }
 
 void dump_registers(log_t* log, pid_t tid, int scope_flags) {
-    struct pt_regs_x86 r;
-    if(ptrace(PTRACE_GETREGS, tid, 0, &r)) {
+    struct pt_regs r;
+    if (ptrace(PTRACE_GETREGS, tid, 0, &r) == -1) {
         _LOG(log, scope_flags, "cannot get registers: %s\n", strerror(errno));
         return;
     }
-    //if there is no stack, no print just like arm
-    if(!r.ebp)
-        return;
-    _LOG(log, scope_flags, "    eax %08x  ebx %08x  ecx %08x  edx %08x\n",
+    _LOG(log, scope_flags, "    eax %08lx  ebx %08lx  ecx %08lx  edx %08lx\n",
          r.eax, r.ebx, r.ecx, r.edx);
-    _LOG(log, scope_flags, "    esi %08x  edi %08x\n",
+    _LOG(log, scope_flags, "    esi %08lx  edi %08lx\n",
          r.esi, r.edi);
     _LOG(log, scope_flags, "    xcs %08x  xds %08x  xes %08x  xfs %08x  xss %08x\n",
          r.xcs, r.xds, r.xes, r.xfs, r.xss);
-    _LOG(log, scope_flags, "    eip %08x  ebp %08x  esp %08x  flags %08x\n",
+    _LOG(log, scope_flags, "    eip %08lx  ebp %08lx  esp %08lx  flags %08lx\n",
          r.eip, r.ebp, r.esp, r.eflags);
 }
