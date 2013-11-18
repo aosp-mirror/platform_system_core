@@ -53,11 +53,6 @@
       ]
     },
     {
-      'target_name': 'metrics_daemon',
-      'type': 'executable',
-      'dependencies': ['libmetrics_daemon'],
-    },
-    {
       'target_name': 'metrics_client',
       'type': 'executable',
       'dependencies': ['libmetrics'],
@@ -67,6 +62,15 @@
     },
   ],
   'conditions': [
+    ['USE_passive_metrics == 1', {
+      'targets': [
+        {
+          'target_name': 'metrics_daemon',
+          'type': 'executable',
+          'dependencies': ['libmetrics_daemon'],
+        },
+      ],
+    }],
     ['USE_test == 1', {
       'targets': [
         {
@@ -76,17 +80,6 @@
           'includes': ['../common-mk/common_test.gypi'],
           'sources': [
             'metrics_library_test.cc',
-          ]
-        },
-        {
-          'target_name': 'metrics_daemon_test',
-          'type': 'executable',
-          'dependencies': [
-            'libmetrics_daemon',
-          ],
-          'includes': ['../common-mk/common_test.gypi'],
-          'sources': [
-            'metrics_daemon_test.cc',
           ]
         },
         {
@@ -105,6 +98,21 @@
           'sources': [
             'timer.cc',
             'timer_test.cc',
+          ]
+        },
+      ],
+    }],
+    ['USE_passive_metrics == 1 and USE_test == 1', {
+      'targets': [
+        {
+          'target_name': 'metrics_daemon_test',
+          'type': 'executable',
+          'dependencies': [
+            'libmetrics_daemon',
+          ],
+          'includes': ['../common-mk/common_test.gypi'],
+          'sources': [
+            'metrics_daemon_test.cc',
           ]
         },
       ],
