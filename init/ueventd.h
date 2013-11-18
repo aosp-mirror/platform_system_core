@@ -17,6 +17,21 @@
 #ifndef _INIT_UEVENTD_H_
 #define _INIT_UEVENTD_H_
 
+#include <cutils/list.h>
+#include <sys/types.h>
+
+struct ueventd_subsystem {
+    struct listnode slist;
+
+    const char *name;
+    enum {
+        DEVNAME_UNKNOWN = 0,
+        DEVNAME_UEVENT_DEVNAME,
+        DEVNAME_UEVENT_DEVPATH,
+    } devname_src;
+    const char *dirname;
+};
+
 int ueventd_main(int argc, char **argv);
 
 #endif
