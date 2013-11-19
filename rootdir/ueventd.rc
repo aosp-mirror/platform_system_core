@@ -1,3 +1,6 @@
+subsystem adf
+	devname uevent_devname
+
 /dev/null                 0666   root       root
 /dev/zero                 0666   root       root
 /dev/full                 0666   root       root
