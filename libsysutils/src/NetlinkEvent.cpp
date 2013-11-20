@@ -78,7 +78,7 @@ void NetlinkEvent::dump() {
  */
 bool NetlinkEvent::parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr,
                                       int rtasize) {
-    struct rtattr *rta = IFA_RTA(ifaddr);
+    struct rtattr *rta;
     struct ifa_cacheinfo *cacheinfo = NULL;
     char addrstr[INET6_ADDRSTRLEN] = "";
 
@@ -91,7 +91,8 @@ bool NetlinkEvent::parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr,
     // For log messages.
     const char *msgtype = (type == RTM_NEWADDR) ? "RTM_NEWADDR" : "RTM_DELADDR";
 
-    while(RTA_OK(rta, rtasize)) {
+    for (rta = IFA_RTA(ifaddr); RTA_OK(rta, rtasize);
+         rta = RTA_NEXT(rta, rtasize)) {
         if (rta->rta_type == IFA_ADDRESS) {
             // Only look at the first address, because we only support notifying
             // one change at a time.
@@ -157,8 +158,6 @@ bool NetlinkEvent::parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr,
             asprintf(&mParams[6], "CSTAMP=%u", cacheinfo->cstamp);
             asprintf(&mParams[7], "TSTAMP=%u", cacheinfo->tstamp);
         }
-
-        rta = RTA_NEXT(rta, rtasize);
     }
 
     if (addrstr[0] == '\0') {
@@ -173,10 +172,11 @@ bool NetlinkEvent::parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr,
  * Parse an binary message from a NETLINK_ROUTE netlink socket.
  */
 bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
-    size_t sz = size;
-    const struct nlmsghdr *nh = (struct nlmsghdr *) buffer;
+    const struct nlmsghdr *nh;
 
-    while (NLMSG_OK(nh, sz) && (nh->nlmsg_type != NLMSG_DONE)) {
+    for (nh = (struct nlmsghdr *) buffer;
+         NLMSG_OK(nh, size) && (nh->nlmsg_type != NLMSG_DONE);
+         nh = NLMSG_NEXT(nh, size)) {
 
         if (nh->nlmsg_type == RTM_NEWLINK) {
             int len = nh->nlmsg_len - sizeof(*nh);
@@ -245,7 +245,6 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
         } else {
                 SLOGD("Unexpected netlink message. type=0x%x\n", nh->nlmsg_type);
         }
-        nh = NLMSG_NEXT(nh, size);
     }
 
     return true;
