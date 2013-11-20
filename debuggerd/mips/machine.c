@@ -26,7 +26,7 @@
 
 #include <corkscrew/ptrace.h>
 
-#include <linux/user.h>
+#include <sys/user.h>
 
 #include "../utility.h"
 #include "../machine.h"
