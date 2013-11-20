@@ -47,6 +47,7 @@ public:
     void dump();
 
  protected:
+    bool parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr, int rtasize);
     bool parseBinaryNetlinkMessage(char *buffer, int size);
     bool parseAsciiNetlinkMessage(char *buffer, int size);
 };
