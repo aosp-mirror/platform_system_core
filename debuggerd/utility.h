@@ -18,9 +18,8 @@
 #ifndef _DEBUGGERD_UTILITY_H
 #define _DEBUGGERD_UTILITY_H
 
-#include <inttypes.h>
 #include <stdbool.h>
-#include <stddef.h>
+#include <sys/types.h>
 
 typedef struct {
     /* tombstone file descriptor */
@@ -59,14 +58,6 @@ void _LOG(log_t* log, int scopeFlags, const char *fmt, ...)
 #define XLOG2(fmt...) _LOG(NULL, SCOPE_AT_FAULT, fmt)
 #else
 #define XLOG2(fmt...) do {} while(0)
-#endif
-
-#if __LP64__
-#define PRIPTR "016" PRIxPTR
-typedef uint64_t word_t;
-#else
-#define PRIPTR "08" PRIxPTR
-typedef uint32_t word_t;
 #endif
 
 int wait_for_signal(pid_t tid, int* total_sleep_time_usec);
