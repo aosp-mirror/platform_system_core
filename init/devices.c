@@ -530,8 +530,11 @@ static const char *parse_device_name(struct uevent *uevent, unsigned int len)
     name++;
 
     /* too-long names would overrun our buffer */
-    if(strlen(name) > len)
+    if(strlen(name) > len) {
+        ERROR("DEVPATH=%s exceeds %u-character limit on filename; ignoring event\n",
+                name, len);
         return NULL;
+    }
 
     return name;
 }
@@ -576,7 +579,18 @@ static void handle_generic_device_event(struct uevent *uevent)
                  * see drivers/base/core.c
                  */
                 char *p = devpath;
-                snprintf(devpath, sizeof(devpath), "/dev/%s", uevent->device_name);
+                int s = snprintf(devpath, sizeof(devpath), "/dev/%s",
+                        uevent->device_name);
+                if (s < 0) {
+                    ERROR("failed to assemble device path (%s); ignoring event\n",
+                            strerror(errno));
+                    return;
+                } else if ((size_t)s >= sizeof(devpath)) {
+                    ERROR("/dev/%s exceeds %u-character limit on path; ignoring event\n",
+                            uevent->device_name, sizeof(devpath));
+                    return;
+                }
+
                 /* skip leading /dev/ */
                 p += 5;
                 /* build directories */
