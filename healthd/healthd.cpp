@@ -342,7 +342,8 @@ int main(int argc, char **argv) {
                 break;
             case '?':
             default:
-                KLOG_ERROR(LOG_TAG, "Unrecognized healthd option: %c\n", ch);
+                KLOG_ERROR(LOG_TAG, "Unrecognized healthd option: %c\n",
+                           optopt);
                 exit(1);
             }
         }
