@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2013 The Android Open Source Project
+ * Copyright (C) 2005-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -563,4 +563,4 @@ int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fm
 }
 #endif
 
-#endif // _LIBS_CUTILS_LOG_H
+#endif /* _LIBS_LOG_LOG_H */
