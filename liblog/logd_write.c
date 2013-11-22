@@ -31,7 +31,7 @@
 #include <log/logd.h>
 #include <log/log.h>
 
-#define LOG_BUF_SIZE	1024
+#define LOG_BUF_SIZE 1024
 
 #if FAKE_LOG_DEVICE
 // This will be defined when building for the host.
@@ -240,7 +240,7 @@ int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fm
 }
 
 void __android_log_assert(const char *cond, const char *tag,
-			  const char *fmt, ...)
+                          const char *fmt, ...)
 {
     char buf[LOG_BUF_SIZE];
 
