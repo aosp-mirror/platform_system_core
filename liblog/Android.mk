@@ -35,6 +35,7 @@ endif
 ifndef WITH_MINGW
     liblog_sources += \
         logprint.c \
+        log_read.c \
         event_tag_map.c
 else
     liblog_sources += \
