@@ -25,6 +25,8 @@
 
 __BEGIN_DECLS
 
+struct ion_handle;
+
 int ion_open();
 int ion_close(int fd);
 int ion_alloc(int fd, size_t len, size_t align, unsigned int heap_mask,
