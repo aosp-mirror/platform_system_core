@@ -27,6 +27,8 @@
 
 static const int CMD_BUF_SIZE = 1024;
 
+#define UNUSED __attribute__((unused))
+
 FrameworkListener::FrameworkListener(const char *socketName, bool withSeq) :
                             SocketListener(socketName, true, withSeq) {
     init(socketName, withSeq);
@@ -37,7 +39,7 @@ FrameworkListener::FrameworkListener(const char *socketName) :
     init(socketName, false);
 }
 
-void FrameworkListener::init(const char *socketName, bool withSeq) {
+void FrameworkListener::init(const char *socketName UNUSED, bool withSeq) {
     mCommands = new FrameworkCommandCollection();
     errorRate = 0;
     mCommandCount = 0;
