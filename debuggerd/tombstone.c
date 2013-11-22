@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 The Android Open Source Project
+ * Copyright (C) 2012-2013 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@
 
 #include <private/android_filesystem_config.h>
 
+#include <log/log.h>
 #include <log/logger.h>
 #include <cutils/properties.h>
 
@@ -468,43 +469,38 @@ static bool dump_sibling_thread_report(
  * Reads the contents of the specified log device, filters out the entries
  * that don't match the specified pid, and writes them to the tombstone file.
  *
- * If "tailOnly" is set, we only print the last few lines.
+ * If "tail" is set, we only print the last few lines.
  */
 static void dump_log_file(log_t* log, pid_t pid, const char* filename,
-    bool tailOnly)
+    unsigned int tail)
 {
     bool first = true;
+    struct logger_list *logger_list;
 
-    /* circular buffer, for "tailOnly" mode */
-    const int kShortLogMaxLines = 5;
-    const int kShortLogLineLen = 256;
-    char shortLog[kShortLogMaxLines][kShortLogLineLen];
-    int shortLogCount = 0;
-    int shortLogNext = 0;
+    logger_list = android_logger_list_open(
+        android_name_to_log_id(filename), O_RDONLY | O_NONBLOCK, tail, pid);
 
-    int logfd = open(filename, O_RDONLY | O_NONBLOCK);
-    if (logfd < 0) {
+    if (!logger_list) {
         XLOG("Unable to open %s: %s\n", filename, strerror(errno));
         return;
     }
 
-    union {
-        unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
-        struct logger_entry entry;
-    } log_entry;
+    struct log_msg log_entry;
 
     while (true) {
-        ssize_t actual = read(logfd, log_entry.buf, LOGGER_ENTRY_MAX_LEN);
+        ssize_t actual = android_logger_list_read(logger_list, &log_entry);
+        struct logger_entry* entry;
+
         if (actual < 0) {
-            if (errno == EINTR) {
+            if (actual == -EINTR) {
                 /* interrupted by signal, retry */
                 continue;
-            } else if (errno == EAGAIN) {
+            } else if (actual == -EAGAIN) {
                 /* non-blocking EOF; we're done */
                 break;
             } else {
                 _LOG(log, 0, "Error while reading log: %s\n",
-                    strerror(errno));
+                    strerror(-actual));
                 break;
             }
         } else if (actual == 0) {
@@ -520,16 +516,11 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
          * the tombstone file.
          */
 
-        struct logger_entry* entry = &log_entry.entry;
-
-        if (entry->pid != (int32_t) pid) {
-            /* wrong pid, ignore */
-            continue;
-        }
+        entry = &log_entry.entry_v1;
 
         if (first) {
             _LOG(log, 0, "--------- %slog %s\n",
-                tailOnly ? "tail end of " : "", filename);
+                tail ? "tail end of " : "", filename);
             first = false;
         }
 
@@ -543,9 +534,14 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
          * on a separate line, prefixed with the header, like logcat does.
          */
         static const char* kPrioChars = "!.VDIWEFS";
-        unsigned char prio = entry->msg[0];
-        char* tag = entry->msg + 1;
-        char* msg = tag + strlen(tag) + 1;
+        unsigned hdr_size = log_entry.entry.hdr_size;
+        if (!hdr_size) {
+            hdr_size = sizeof(log_entry.entry_v1);
+        }
+        char* msg = (char *)log_entry.buf + hdr_size;
+        unsigned char prio = msg[0];
+        char* tag = msg + 1;
+        msg = tag + strlen(tag) + 1;
 
         /* consume any trailing newlines */
         char* eatnl = msg + strlen(msg) - 1;
@@ -562,50 +558,22 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
         ptm = localtime_r(&sec, &tmBuf);
         strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", ptm);
 
-        if (tailOnly) {
-            snprintf(shortLog[shortLogNext], kShortLogLineLen,
-                "%s.%03d %5d %5d %c %-8s: %s",
-                timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
-                prioChar, tag, msg);
-            shortLogNext = (shortLogNext + 1) % kShortLogMaxLines;
-            shortLogCount++;
-        } else {
-            _LOG(log, 0, "%s.%03d %5d %5d %c %-8s: %s\n",
-                timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
-                prioChar, tag, msg);
-        }
+        _LOG(log, 0, "%s.%03d %5d %5d %c %-8s: %s\n",
+             timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
+             prioChar, tag, msg);
     }
 
-    if (tailOnly) {
-        int i;
-
-        /*
-         * If we filled the buffer, we want to start at "next", which has
-         * the oldest entry.  If we didn't, we want to start at zero.
-         */
-        if (shortLogCount < kShortLogMaxLines) {
-            shortLogNext = 0;
-        } else {
-            shortLogCount = kShortLogMaxLines;  /* cap at window size */
-        }
-
-        for (i = 0; i < shortLogCount; i++) {
-            _LOG(log, 0, "%s\n", shortLog[shortLogNext]);
-            shortLogNext = (shortLogNext + 1) % kShortLogMaxLines;
-        }
-    }
-
-    close(logfd);
+    android_logger_list_free(logger_list);
 }
 
 /*
  * Dumps the logs generated by the specified pid to the tombstone, from both
  * "system" and "main" log devices.  Ideally we'd interleave the output.
  */
-static void dump_logs(log_t* log, pid_t pid, bool tailOnly)
+static void dump_logs(log_t* log, pid_t pid, unsigned tail)
 {
-    dump_log_file(log, pid, "/dev/log/system", tailOnly);
-    dump_log_file(log, pid, "/dev/log/main", tailOnly);
+    dump_log_file(log, pid, "system", tail);
+    dump_log_file(log, pid, "main", tail);
 }
 
 static void dump_abort_message(const backtrace_context_t* context, log_t* log, uintptr_t address) {
@@ -683,7 +651,7 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
     }
 
     if (want_logs) {
-        dump_logs(log, pid, true);
+        dump_logs(log, pid, 5);
     }
 
     bool detach_failed = false;
@@ -692,7 +660,7 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
     }
 
     if (want_logs) {
-        dump_logs(log, pid, false);
+        dump_logs(log, pid, 0);
     }
 
     /* send EOD to the Activity Manager, then wait for its ack to avoid racing ahead
