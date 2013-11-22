@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005 The Android Open Source Project
+ * Copyright (C) 2005-2013 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,21 +28,19 @@
 #ifndef _LIBS_LOG_LOG_H
 #define _LIBS_LOG_LOG_H
 
-#include <stdio.h>
-#include <time.h>
+#include <sys/cdefs.h>
 #include <sys/types.h>
-#include <unistd.h>
 #ifdef HAVE_PTHREADS
 #include <pthread.h>
 #endif
 #include <stdarg.h>
-
-#include <log/uio.h>
+#include <stdio.h>
+#include <time.h>
+#include <unistd.h>
 #include <log/logd.h>
+#include <log/uio.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+__BEGIN_DECLS
 
 // ---------------------------------------------------------------------
 
@@ -470,7 +468,8 @@ typedef enum {
     EVENT_TYPE_STRING   = 2,
     EVENT_TYPE_LIST     = 3,
 } AndroidEventLogType;
-
+#define sizeof_AndroidEventLogType sizeof(typeof_AndroidEventLogType)
+#define typeof_AndroidEventLogType unsigned char
 
 #ifndef LOG_EVENT_INT
 #define LOG_EVENT_INT(_tag, _value) {                                       \
@@ -540,7 +539,9 @@ typedef enum {
 #define android_logToFile(tag, file) (0)
 #define android_logToFd(tag, fd) (0)
 
-typedef enum {
+typedef enum log_id {
+    LOG_ID_MIN = 0,
+
     LOG_ID_MAIN = 0,
     LOG_ID_RADIO = 1,
     LOG_ID_EVENTS = 2,
@@ -548,6 +549,8 @@ typedef enum {
 
     LOG_ID_MAX
 } log_id_t;
+#define sizeof_log_id_t sizeof(typeof_log_id_t)
+#define typeof_log_id_t unsigned char
 
 /*
  * Send a simple string to the log.
@@ -555,9 +558,6 @@ typedef enum {
 int __android_log_buf_write(int bufID, int prio, const char *tag, const char *text);
 int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fmt, ...);
 
-
-#ifdef __cplusplus
-}
-#endif
+__END_DECLS
 
 #endif // _LIBS_CUTILS_LOG_H

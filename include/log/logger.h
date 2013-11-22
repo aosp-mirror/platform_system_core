@@ -1,5 +1,5 @@
-/* utils/logger.h
-** 
+/*
+**
 ** Copyright 2007, The Android Open Source Project
 **
 ** This file is dual licensed.  It may be redistributed and/or modified
@@ -10,7 +10,11 @@
 #ifndef _UTILS_LOGGER_H
 #define _UTILS_LOGGER_H
 
+#include <sys/cdefs.h>
 #include <stdint.h>
+#include <log/log.h>
+
+__BEGIN_DECLS
 
 /*
  * The userspace structure for version 1 of the logger_entry ABI.
@@ -63,6 +67,106 @@ struct logger_entry_v2 {
  */
 #define LOGGER_ENTRY_MAX_LEN		(5*1024)
 
+#define NS_PER_SEC 1000000000ULL
+
+struct log_msg {
+    union {
+        unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
+        struct logger_entry_v2 entry;
+        struct logger_entry_v2 entry_v2;
+        struct logger_entry    entry_v1;
+        struct {
+            unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
+            log_id_t id;
+        } extra;
+    } __attribute__((aligned(4)));
+#ifdef __cplusplus
+    /* Matching log_time_t operators */
+    bool operator== (log_msg &T)
+    {
+        return (entry.sec == T.entry.sec) && (entry.nsec == T.entry.nsec);
+    }
+    bool operator!= (log_msg &T)
+    {
+        return !(*this == T);
+    }
+    bool operator< (log_msg &T)
+    {
+        return (entry.sec < T.entry.sec)
+            || ((entry.sec == T.entry.sec)
+             && (entry.nsec < T.entry.nsec));
+    }
+    bool operator>= (log_msg &T)
+    {
+        return !(*this < T);
+    }
+    bool operator> (log_msg &T)
+    {
+        return (entry.sec > T.entry.sec)
+            || ((entry.sec == T.entry.sec)
+             && (entry.nsec > T.entry.nsec));
+    }
+    bool operator<= (log_msg &T)
+    {
+        return !(*this > T);
+    }
+    uint64_t nsec(void)
+    {
+        return static_cast<uint64_t>(entry.sec) * NS_PER_SEC + entry.nsec;
+    }
+
+    /* packet methods */
+    log_id_t id(void)
+    {
+        return extra.id;
+    }
+    char *msg(void)
+    {
+        return entry.hdr_size ? (char *) buf + entry.hdr_size : entry_v1.msg;
+    }
+    unsigned int len(void)
+    {
+        return (entry.hdr_size ? entry.hdr_size : sizeof(entry_v1)) + entry.len;
+    }
+#endif
+};
+
+struct logger;
+
+log_id_t android_logger_get_id(struct logger *logger);
+
+int android_logger_clear(struct logger *logger);
+int android_logger_get_log_size(struct logger *logger);
+int android_logger_get_log_readable_size(struct logger *logger);
+int android_logger_get_log_version(struct logger *logger);
+
+struct logger_list;
+
+struct logger_list *android_logger_list_alloc(int mode,
+                                              unsigned int tail,
+                                              pid_t pid);
+void android_logger_list_free(struct logger_list *logger_list);
+/* In the purest sense, the following two are orthogonal interfaces */
+int android_logger_list_read(struct logger_list *logger_list,
+                             struct log_msg *log_msg);
+
+/* Multiple log_id_t opens */
+struct logger *android_logger_open(struct logger_list *logger_list,
+                                   log_id_t id);
+#define android_logger_close android_logger_free
+/* Single log_id_t open */
+struct logger_list *android_logger_list_open(log_id_t id,
+                                             int mode,
+                                             unsigned int tail,
+                                             pid_t pid);
+#define android_logger_list_close android_logger_list_free
+
+/*
+ * log_id_t helpers
+ */
+log_id_t android_name_to_log_id(const char *logName);
+const char *android_log_id_to_name(log_id_t log_id);
+
 #ifdef HAVE_IOCTL
 
 #include <sys/ioctl.h>
@@ -77,5 +181,7 @@ struct logger_entry_v2 {
 #define LOGGER_SET_VERSION		_IO(__LOGGERIO, 6) /* abi version */
 
 #endif // HAVE_IOCTL
+
+__END_DECLS
 
 #endif /* _UTILS_LOGGER_H */
