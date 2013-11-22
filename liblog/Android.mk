@@ -80,3 +80,5 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_WHOLE_STATIC_LIBRARIES := liblog
 include $(BUILD_SHARED_LIBRARY)
+
+include $(call first-makefiles-under,$(LOCAL_PATH))

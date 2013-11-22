@@ -552,6 +552,55 @@ typedef enum log_id {
 #define sizeof_log_id_t sizeof(typeof_log_id_t)
 #define typeof_log_id_t unsigned char
 
+/* Currently helper to liblog unit tests, expect wider use. */
+#define NS_PER_SEC 1000000000ULL
+#ifdef __cplusplus
+typedef struct log_time : public timespec {
+public:
+    log_time(void)
+    {
+    }
+    log_time(const char *T)
+    {
+        const uint8_t *c = (const uint8_t *) T;
+        tv_sec = c[0] | (c[1] << 8) | (c[2] << 16) | (c[3] << 24);
+        tv_nsec = c[4] | (c[5] << 8) | (c[6] << 16) | (c[7] << 24);
+    }
+    bool operator== (log_time &T)
+    {
+        return (tv_sec == T.tv_sec) && (tv_nsec == T.tv_nsec);
+    }
+    bool operator!= (log_time &T)
+    {
+        return !(*this == T);
+    }
+    bool operator< (log_time &T)
+    {
+        return (tv_sec < T.tv_sec)
+            || ((tv_sec == T.tv_sec) && (tv_nsec < T.tv_nsec));
+    }
+    bool operator>= (log_time &T)
+    {
+        return !(*this < T);
+    }
+    bool operator> (log_time &T)
+    {
+        return (tv_sec > T.tv_sec)
+            || ((tv_sec == T.tv_sec) && (tv_nsec > T.tv_nsec));
+    }
+    bool operator<= (log_time &T)
+    {
+        return !(*this > T);
+    }
+    uint64_t nsec(void)
+    {
+        return static_cast<uint64_t>(tv_sec) * NS_PER_SEC + tv_nsec;
+    }
+} log_time_t;
+#else
+typedef struct timespec log_time_t;
+#endif
+
 /*
  * Send a simple string to the log.
  */
