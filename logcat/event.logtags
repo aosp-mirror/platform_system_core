@@ -90,10 +90,6 @@
 # Logged when the supplicant switches to a new state
 50023 wifi_supplicant_state_changed (supplicant_state|1|5)
 
-# Do not change these names without updating tag in:
-#//device/dalvik/libcore/luni/src/main/native/org_apache_harmony_luni_platform_OSNetworkSystem.c
-51000 socket_stats (send|1|2),(recv|1|2),(ip|1|5),(port|1|5),(close|1|5)
-
 # Database operation samples.
 # db: the filename of the database
 # sql: the executed query (without query args)
@@ -110,22 +106,7 @@
 60003 view_use_drawing_cache (View drawn using bitmap cache|1|5)
 
 # graphics timestamp
-60100 sf_app_dequeue_before (buffer|1),(identity|1),(time|2)
-60101 sf_app_dequeue_after (buffer|1),(identity|1),(time|2)
-60102 sf_app_lock_before (buffer|1),(identity|1),(time|2)
-60103 sf_app_lock_after (buffer|1),(identity|1),(time|2)
-60104 sf_app_queue (buffer|1),(identity|1),(time|2)
-60105 sf_repaint (buffer|1),(time|2)
-60106 sf_composition_complete (buffer|1),(time|2)
-60107 sf_unlock_clients (buffer|1),(time|2)
-60108 sf_swapbuffers (buffer|1),(time|2)
-60109 sf_repaint_done (buffer|1),(time|2)
-60110 sf_fb_post_before (buffer|1),(time|2)
-60111 sf_fb_post_after (buffer|1),(time|2)
-60112 sf_fb_dequeue_before (buffer|1),(time|2)
-60113 sf_fb_dequeue_after (buffer|1),(time|2)
-60114 sf_fb_lock_before (buffer|1),(time|2)
-60115 sf_fb_lock_after (buffer|1),(time|2)
+# 60100 - 60199 reserved for surfaceflinger
 
 # 0 for screen off, 1 for screen on, 2 for key-guard done
 70000 screen_toggled (screen_state|1|5)
@@ -151,7 +132,7 @@
 80310 bionic_event_resolver_wrong_query (uid|1)
 
 # libcore failure logging
-90100 cert_pin_failure (certs|4)
+90100 exp_det_cert_pin_failure (certs|4)
 
 # NOTE - the range 1000000-2000000 is reserved for partners and others who
 # want to define their own log tags without conflicting with the core platform.

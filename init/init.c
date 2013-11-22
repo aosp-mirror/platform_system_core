@@ -42,6 +42,7 @@
 #include <cutils/android_reboot.h>
 #include <cutils/sockets.h>
 #include <cutils/iosched_policy.h>
+#include <cutils/fs.h>
 #include <private/android_filesystem_config.h>
 #include <termios.h>
 
@@ -556,6 +557,84 @@ static int wait_for_coldboot_done_action(int nargs, char **args)
     return ret;
 }
 
+/*
+ * Writes 512 bytes of output from Hardware RNG (/dev/hw_random, backed
+ * by Linux kernel's hw_random framework) into Linux RNG's via /dev/urandom.
+ * Does nothing if Hardware RNG is not present.
+ *
+ * Since we don't yet trust the quality of Hardware RNG, these bytes are not
+ * mixed into the primary pool of Linux RNG and the entropy estimate is left
+ * unmodified.
+ *
+ * If the HW RNG device /dev/hw_random is present, we require that at least
+ * 512 bytes read from it are written into Linux RNG. QA is expected to catch
+ * devices/configurations where these I/O operations are blocking for a long
+ * time. We do not reboot or halt on failures, as this is a best-effort
+ * attempt.
+ */
+static int mix_hwrng_into_linux_rng_action(int nargs, char **args)
+{
+    int result = -1;
+    int hwrandom_fd = -1;
+    int urandom_fd = -1;
+    char buf[512];
+    ssize_t chunk_size;
+    size_t total_bytes_written = 0;
+
+    hwrandom_fd = TEMP_FAILURE_RETRY(
+            open("/dev/hw_random", O_RDONLY | O_NOFOLLOW));
+    if (hwrandom_fd == -1) {
+        if (errno == ENOENT) {
+          ERROR("/dev/hw_random not found\n");
+          /* It's not an error to not have a Hardware RNG. */
+          result = 0;
+        } else {
+          ERROR("Failed to open /dev/hw_random: %s\n", strerror(errno));
+        }
+        goto ret;
+    }
+
+    urandom_fd = TEMP_FAILURE_RETRY(
+            open("/dev/urandom", O_WRONLY | O_NOFOLLOW));
+    if (urandom_fd == -1) {
+        ERROR("Failed to open /dev/urandom: %s\n", strerror(errno));
+        goto ret;
+    }
+
+    while (total_bytes_written < sizeof(buf)) {
+        chunk_size = TEMP_FAILURE_RETRY(
+                read(hwrandom_fd, buf, sizeof(buf) - total_bytes_written));
+        if (chunk_size == -1) {
+            ERROR("Failed to read from /dev/hw_random: %s\n", strerror(errno));
+            goto ret;
+        } else if (chunk_size == 0) {
+            ERROR("Failed to read from /dev/hw_random: EOF\n");
+            goto ret;
+        }
+
+        chunk_size = TEMP_FAILURE_RETRY(write(urandom_fd, buf, chunk_size));
+        if (chunk_size == -1) {
+            ERROR("Failed to write to /dev/urandom: %s\n", strerror(errno));
+            goto ret;
+        }
+        total_bytes_written += chunk_size;
+    }
+
+    INFO("Mixed %d bytes from /dev/hw_random into /dev/urandom",
+                total_bytes_written);
+    result = 0;
+
+ret:
+    if (hwrandom_fd != -1) {
+        close(hwrandom_fd);
+    }
+    if (urandom_fd != -1) {
+        close(urandom_fd);
+    }
+    memset(buf, 0, sizeof(buf));
+    return result;
+}
+
 static int keychord_init_action(int nargs, char **args)
 {
     keychord_init();
@@ -958,6 +1037,7 @@ int main(int argc, char **argv)
     action_for_each_trigger("early-init", action_add_queue_tail);
 
     queue_builtin_action(wait_for_coldboot_done_action, "wait_for_coldboot_done");
+    queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
     queue_builtin_action(keychord_init_action, "keychord_init");
     queue_builtin_action(console_init_action, "console_init");
 
@@ -971,6 +1051,11 @@ int main(int argc, char **argv)
         action_for_each_trigger("post-fs", action_add_queue_tail);
         action_for_each_trigger("post-fs-data", action_add_queue_tail);
     }
+
+    /* Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
+     * wasn't ready immediately after wait_for_coldboot_done
+     */
+    queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
 
     queue_builtin_action(property_service_init_action, "property_service_init");
     queue_builtin_action(signal_init_action, "signal_init");

@@ -31,6 +31,9 @@ __BEGIN_DECLS
  * frameworks/base/include/media/AudioSystem.h
  */
 
+/* device address used to refer to the standard remote submix */
+#define AUDIO_REMOTE_SUBMIX_DEVICE_ADDRESS "0"
+
 typedef int audio_io_handle_t;
 
 /* Audio stream types */
@@ -69,6 +72,11 @@ typedef enum {
                                           /*  play the mix captured by this audio source.      */
     AUDIO_SOURCE_CNT,
     AUDIO_SOURCE_MAX                 = AUDIO_SOURCE_CNT - 1,
+    AUDIO_SOURCE_HOTWORD             = 1999, /* A low-priority, preemptible audio source for
+                                                for background software hotword detection.
+                                                Same tuning as AUDIO_SOURCE_VOICE_RECOGNITION.
+                                                Used only internally to the framework. Not exposed
+                                                at the audio HAL. */
 } audio_source_t;
 
 /* special audio session values
@@ -383,8 +391,50 @@ typedef enum {
                                         // controls related to voice calls.
     AUDIO_OUTPUT_FLAG_FAST = 0x4,       // output supports "fast tracks",
                                         // defined elsewhere
-    AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8 // use deep audio buffers
+    AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8, // use deep audio buffers
+    AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD = 0x10,  // offload playback of compressed
+                                                // streams to hardware codec
+    AUDIO_OUTPUT_FLAG_NON_BLOCKING = 0x20 // use non-blocking write
 } audio_output_flags_t;
+
+/* The audio input flags are analogous to audio output flags.
+ * Currently they are used only when an AudioRecord is created,
+ * to indicate a preference to be connected to an input stream with
+ * attributes corresponding to the specified flags.
+ */
+typedef enum {
+    AUDIO_INPUT_FLAG_NONE = 0x0,        // no attributes
+    AUDIO_INPUT_FLAG_FAST = 0x1,        // prefer an input that supports "fast tracks"
+} audio_input_flags_t;
+
+/* Additional information about compressed streams offloaded to
+ * hardware playback
+ * The version and size fields must be initialized by the caller by using
+ * one of the constants defined here.
+ */
+typedef struct {
+    uint16_t version;                   // version of the info structure
+    uint16_t size;                      // total size of the structure including version and size
+    uint32_t sample_rate;               // sample rate in Hz
+    audio_channel_mask_t channel_mask;  // channel mask
+    audio_format_t format;              // audio format
+    audio_stream_type_t stream_type;    // stream type
+    uint32_t bit_rate;                  // bit rate in bits per second
+    int64_t duration_us;                // duration in microseconds, -1 if unknown
+    bool has_video;                     // true if stream is tied to a video stream
+    bool is_streaming;                  // true if streaming, false if local playback
+} audio_offload_info_t;
+
+#define AUDIO_MAKE_OFFLOAD_INFO_VERSION(maj,min) \
+            ((((maj) & 0xff) << 8) | ((min) & 0xff))
+
+#define AUDIO_OFFLOAD_INFO_VERSION_0_1 AUDIO_MAKE_OFFLOAD_INFO_VERSION(0, 1)
+#define AUDIO_OFFLOAD_INFO_VERSION_CURRENT AUDIO_OFFLOAD_INFO_VERSION_0_1
+
+static const audio_offload_info_t AUDIO_INFO_INITIALIZER = {
+    version: AUDIO_OFFLOAD_INFO_VERSION_CURRENT,
+    size: sizeof(audio_offload_info_t),
+};
 
 static inline bool audio_is_output_device(audio_devices_t device)
 {
@@ -439,24 +489,25 @@ static inline bool audio_is_usb_device(audio_devices_t device)
 
 static inline bool audio_is_remote_submix_device(audio_devices_t device)
 {
-    if ((popcount(device) == 1) && (device & AUDIO_DEVICE_OUT_REMOTE_SUBMIX))
+    if ((device & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) == AUDIO_DEVICE_OUT_REMOTE_SUBMIX
+            || (device & AUDIO_DEVICE_IN_REMOTE_SUBMIX) == AUDIO_DEVICE_IN_REMOTE_SUBMIX)
         return true;
     else
         return false;
 }
 
-static inline bool audio_is_input_channel(uint32_t channel)
+static inline bool audio_is_input_channel(audio_channel_mask_t channel)
 {
     if ((channel & ~AUDIO_CHANNEL_IN_ALL) == 0)
-        return true;
+        return channel != 0;
     else
         return false;
 }
 
-static inline bool audio_is_output_channel(uint32_t channel)
+static inline bool audio_is_output_channel(audio_channel_mask_t channel)
 {
     if ((channel & ~AUDIO_CHANNEL_OUT_ALL) == 0)
-        return true;
+        return channel != 0;
     else
         return false;
 }

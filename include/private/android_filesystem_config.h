@@ -34,8 +34,8 @@
 #endif
 
 /* This is the master Users and Groups config for the platform.
-** DO NOT EVER RENUMBER.
-*/
+ * DO NOT EVER RENUMBER
+ */
 
 #define AID_ROOT             0  /* traditional unix root user */
 
@@ -72,6 +72,10 @@
 #define AID_CLAT          1029  /* clat part of nat464 */
 #define AID_LOOP_RADIO    1030  /* loop radio devices */
 #define AID_MEDIA_DRM     1031  /* MediaDrm plugins */
+#define AID_PACKAGE_INFO  1032  /* access to installed package details */
+#define AID_SDCARD_PICS   1033  /* external storage photos access */
+#define AID_SDCARD_AV     1034  /* external storage audio/video access */
+#define AID_SDCARD_ALL    1035  /* access all users external storage */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -108,50 +112,61 @@ struct android_id_info {
 };
 
 static const struct android_id_info android_ids[] = {
-    { "root",      AID_ROOT, },
-    { "system",    AID_SYSTEM, },
-    { "radio",     AID_RADIO, },
-    { "bluetooth", AID_BLUETOOTH, },
-    { "graphics",  AID_GRAPHICS, },
-    { "input",     AID_INPUT, },
-    { "audio",     AID_AUDIO, },
-    { "camera",    AID_CAMERA, },
-    { "log",       AID_LOG, },
-    { "compass",   AID_COMPASS, },
-    { "mount",     AID_MOUNT, },
-    { "wifi",      AID_WIFI, },
-    { "dhcp",      AID_DHCP, },
-    { "adb",       AID_ADB, },
-    { "install",   AID_INSTALL, },
-    { "media",     AID_MEDIA, },
-    { "drm",       AID_DRM, },
-    { "mdnsr",     AID_MDNSR, },
-    { "nfc",       AID_NFC, },
-    { "drmrpc",    AID_DRMRPC, },
-    { "shell",     AID_SHELL, },
-    { "cache",     AID_CACHE, },
-    { "diag",      AID_DIAG, },
-    { "net_bt_admin", AID_NET_BT_ADMIN, },
-    { "net_bt",    AID_NET_BT, },
-    { "net_bt_stack",    AID_NET_BT_STACK, },
-    { "sdcard_r",  AID_SDCARD_R, },
-    { "sdcard_rw", AID_SDCARD_RW, },
-    { "media_rw",  AID_MEDIA_RW, },
-    { "vpn",       AID_VPN, },
-    { "keystore",  AID_KEYSTORE, },
-    { "usb",       AID_USB, },
-    { "mtp",       AID_MTP, },
-    { "gps",       AID_GPS, },
-    { "inet",      AID_INET, },
-    { "net_raw",   AID_NET_RAW, },
-    { "net_admin", AID_NET_ADMIN, },
-    { "net_bw_stats", AID_NET_BW_STATS, },
-    { "net_bw_acct", AID_NET_BW_ACCT, },
-    { "loop_radio", AID_LOOP_RADIO, },
-    { "misc",      AID_MISC, },
-    { "nobody",    AID_NOBODY, },
-    { "clat",      AID_CLAT, },
-    { "mediadrm",  AID_MEDIA_DRM, },
+    { "root",          AID_ROOT, },
+
+    { "system",        AID_SYSTEM, },
+
+    { "radio",         AID_RADIO, },
+    { "bluetooth",     AID_BLUETOOTH, },
+    { "graphics",      AID_GRAPHICS, },
+    { "input",         AID_INPUT, },
+    { "audio",         AID_AUDIO, },
+    { "camera",        AID_CAMERA, },
+    { "log",           AID_LOG, },
+    { "compass",       AID_COMPASS, },
+    { "mount",         AID_MOUNT, },
+    { "wifi",          AID_WIFI, },
+    { "adb",           AID_ADB, },
+    { "install",       AID_INSTALL, },
+    { "media",         AID_MEDIA, },
+    { "dhcp",          AID_DHCP, },
+    { "sdcard_rw",     AID_SDCARD_RW, },
+    { "vpn",           AID_VPN, },
+    { "keystore",      AID_KEYSTORE, },
+    { "usb",           AID_USB, },
+    { "drm",           AID_DRM, },
+    { "mdnsr",         AID_MDNSR, },
+    { "gps",           AID_GPS, },
+    // AID_UNUSED1
+    { "media_rw",      AID_MEDIA_RW, },
+    { "mtp",           AID_MTP, },
+    // AID_UNUSED2
+    { "drmrpc",        AID_DRMRPC, },
+    { "nfc",           AID_NFC, },
+    { "sdcard_r",      AID_SDCARD_R, },
+    { "clat",          AID_CLAT, },
+    { "loop_radio",    AID_LOOP_RADIO, },
+    { "mediadrm",      AID_MEDIA_DRM, },
+    { "package_info",  AID_PACKAGE_INFO, },
+    { "sdcard_pics",   AID_SDCARD_PICS, },
+    { "sdcard_av",     AID_SDCARD_AV, },
+    { "sdcard_all",    AID_SDCARD_ALL, },
+
+    { "shell",         AID_SHELL, },
+    { "cache",         AID_CACHE, },
+    { "diag",          AID_DIAG, },
+
+    { "net_bt_admin",  AID_NET_BT_ADMIN, },
+    { "net_bt",        AID_NET_BT, },
+    { "inet",          AID_INET, },
+    { "net_raw",       AID_NET_RAW, },
+    { "net_admin",     AID_NET_ADMIN, },
+    { "net_bw_stats",  AID_NET_BW_STATS, },
+    { "net_bw_acct",   AID_NET_BW_ACCT, },
+    { "net_bt_stack",  AID_NET_BT_STACK, },
+
+    { "misc",          AID_MISC, },
+    { "nobody",        AID_NOBODY, },
 };
 
 #define android_id_count \
@@ -229,7 +244,7 @@ static const struct fs_path_config android_files[] = {
     { 06755, AID_ROOT,      AID_ROOT,      0, "system/xbin/tcpdump" },
     { 04770, AID_ROOT,      AID_RADIO,     0, "system/bin/pppd-ril" },
 
-    /* the following file has enhanced capabilities and IS included in user builds. */
+    /* the following files have enhanced capabilities and ARE included in user builds. */
     { 00750, AID_ROOT,      AID_SHELL,     (1 << CAP_SETUID) | (1 << CAP_SETGID), "system/bin/run-as" },
 
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },

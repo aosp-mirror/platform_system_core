@@ -16,6 +16,11 @@
 
 #define LOG_TAG "cutils"
 
+/* These defines are only needed because prebuilt headers are out of date */
+#define __USE_XOPEN2K8 1
+#define _ATFILE_SOURCE 1
+#define _GNU_SOURCE 1
+
 #include <cutils/fs.h>
 #include <cutils/log.h>
 
@@ -27,6 +32,7 @@
 #include <string.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <dirent.h>
 
 #define ALL_PERMS (S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IRWXG | S_IRWXO)
 #define BUF_SIZE 64
@@ -141,3 +147,91 @@ fail_closed:
     unlink(temp);
     return -1;
 }
+
+#ifndef __APPLE__
+
+int fs_mkdirs(const char* path, mode_t mode) {
+    int res = 0;
+    int fd = 0;
+    struct stat sb;
+    char* buf = strdup(path);
+
+    if (*buf != '/') {
+        ALOGE("Relative paths are not allowed: %s", buf);
+        res = -EINVAL;
+        goto done;
+    }
+
+    if ((fd = open("/", 0)) == -1) {
+        ALOGE("Failed to open(/): %s", strerror(errno));
+        res = -errno;
+        goto done;
+    }
+
+    char* segment = buf + 1;
+    char* p = segment;
+    while (*p != '\0') {
+        if (*p == '/') {
+            *p = '\0';
+
+            if (!strcmp(segment, "..") || !strcmp(segment, ".") || !strcmp(segment, "")) {
+                ALOGE("Invalid path: %s", buf);
+                res = -EINVAL;
+                goto done_close;
+            }
+
+            if (fstatat(fd, segment, &sb, AT_SYMLINK_NOFOLLOW) != 0) {
+                if (errno == ENOENT) {
+                    /* Nothing there yet; let's create it! */
+                    if (mkdirat(fd, segment, mode) != 0) {
+                        if (errno == EEXIST) {
+                            /* We raced with someone; ignore */
+                        } else {
+                            ALOGE("Failed to mkdirat(%s): %s", buf, strerror(errno));
+                            res = -errno;
+                            goto done_close;
+                        }
+                    }
+                } else {
+                    ALOGE("Failed to fstatat(%s): %s", buf, strerror(errno));
+                    res = -errno;
+                    goto done_close;
+                }
+            } else {
+                if (S_ISLNK(sb.st_mode)) {
+                    ALOGE("Symbolic links are not allowed: %s", buf);
+                    res = -ELOOP;
+                    goto done_close;
+                }
+                if (!S_ISDIR(sb.st_mode)) {
+                    ALOGE("Existing segment not a directory: %s", buf);
+                    res = -ENOTDIR;
+                    goto done_close;
+                }
+            }
+
+            /* Yay, segment is ready for us to step into */
+            int next_fd;
+            if ((next_fd = openat(fd, segment, 0)) == -1) {
+                ALOGE("Failed to openat(%s): %s", buf, strerror(errno));
+                res = -errno;
+                goto done_close;
+            }
+
+            close(fd);
+            fd = next_fd;
+
+            *p = '/';
+            segment = p + 1;
+        }
+        p++;
+    }
+
+done_close:
+    close(fd);
+done:
+    free(buf);
+    return res;
+}
+
+#endif

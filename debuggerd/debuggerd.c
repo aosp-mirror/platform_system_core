@@ -31,9 +31,10 @@
 #include <sys/stat.h>
 #include <sys/poll.h>
 
+#include <log/logd.h>
+#include <log/logger.h>
+
 #include <cutils/sockets.h>
-#include <cutils/logd.h>
-#include <cutils/logger.h>
 #include <cutils/properties.h>
 #include <cutils/debugger.h>
 
@@ -435,10 +436,12 @@ static int do_server() {
     signal(SIGBUS, SIG_DFL);
     signal(SIGFPE, SIG_DFL);
     signal(SIGSEGV, SIG_DFL);
-    signal(SIGPIPE, SIG_DFL);
 #ifdef SIGSTKFLT
     signal(SIGSTKFLT, SIG_DFL);
 #endif
+
+    // Ignore failed writes to closed sockets
+    signal(SIGPIPE, SIG_IGN);
 
     logsocket = socket_local_client("logd",
             ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_DGRAM);

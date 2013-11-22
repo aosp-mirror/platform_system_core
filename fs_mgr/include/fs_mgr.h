@@ -17,6 +17,9 @@
 #ifndef __CORE_FS_MGR_H
 #define __CORE_FS_MGR_H
 
+#include <stdint.h>
+#include <linux/dm-ioctl.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -35,9 +38,12 @@ struct fstab_rec {
     char *fs_options;
     int fs_mgr_flags;
     char *key_loc;
+    char *verity_loc;
     long long length;
     char *label;
     int partnum;
+    int swap_prio;
+    unsigned int zram_size;
 };
 
 struct fstab *fs_mgr_read_fstab(const char *fstab_path);
@@ -56,6 +62,8 @@ struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const ch
 int fs_mgr_is_voldmanaged(struct fstab_rec *fstab);
 int fs_mgr_is_nonremovable(struct fstab_rec *fstab);
 int fs_mgr_is_encryptable(struct fstab_rec *fstab);
+int fs_mgr_is_noemulatedsd(struct fstab_rec *fstab);
+int fs_mgr_swapon_all(struct fstab *fstab);
 #ifdef __cplusplus
 }
 #endif

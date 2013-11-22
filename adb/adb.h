@@ -128,10 +128,7 @@ struct asocket {
         */
     void (*close)(asocket *s);
 
-        /* socket-type-specific extradata */
-    void *extra;
-
-    	/* A socket is bound to atransport */
+        /* A socket is bound to atransport */
     atransport *transport;
 };
 
@@ -292,7 +289,7 @@ void init_usb_transport(atransport *t, usb_handle *usb, int state);
 void close_usb_devices();
 
 /* cause new transports to be init'd and added to the list */
-void register_socket_transport(int s, const char *serial, int port, int local);
+int register_socket_transport(int s, const char *serial, int port, int local);
 
 /* these should only be used for the "adb disconnect" command */
 void unregister_transport(atransport *t);

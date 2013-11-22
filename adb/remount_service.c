@@ -72,6 +72,8 @@ static char *find_mount(const char *dir)
 static int remount_system()
 {
     char *dev;
+    int fd;
+    int OFF = 0;
 
     if (system_ro == 0) {
         return 0;
@@ -81,6 +83,13 @@ static int remount_system()
 
     if (!dev)
         return -1;
+
+    fd = unix_open(dev, O_RDONLY);
+    if (fd < 0)
+        return -1;
+
+    ioctl(fd, BLKROSET, &OFF);
+    adb_close(fd);
 
     system_ro = mount(dev, "/system", "none", MS_REMOUNT, NULL);
 

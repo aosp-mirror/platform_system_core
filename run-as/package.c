@@ -90,7 +90,7 @@ map_file(const char* filename, size_t* filesize)
      */
 
     oldegid = getegid();
-    if (setegid(AID_SYSTEM) < 0) {
+    if (setegid(AID_PACKAGE_INFO) < 0) {
         return NULL;
     }
 
@@ -111,7 +111,7 @@ map_file(const char* filename, size_t* filesize)
         goto EXIT;
 
     /* Ensure that the file is owned by the system user */
-    if ((st.st_uid != AID_SYSTEM) || (st.st_gid != AID_SYSTEM)) {
+    if ((st.st_uid != AID_SYSTEM) || (st.st_gid != AID_PACKAGE_INFO)) {
         goto EXIT;
     }
 

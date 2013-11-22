@@ -30,7 +30,9 @@ extern int dhcp_do_request(const char *ifname,
                           char *dns[],
                           char *server,
                           uint32_t *lease,
-                          char *vendorInfo);
+                          char *vendorInfo,
+                          char *domain,
+                          char *mtu);
 extern int dhcp_do_request_renew(const char *ifname,
                                 char *ipaddr,
                                 char *gateway,
@@ -38,7 +40,9 @@ extern int dhcp_do_request_renew(const char *ifname,
                                 char *dns[],
                                 char *server,
                                 uint32_t *lease,
-                                char *vendorInfo);
+                                char *vendorInfo,
+                                char *domain,
+                                char *mtu);
 extern int dhcp_stop(const char *ifname);
 extern int dhcp_release_lease(const char *ifname);
 extern char *dhcp_get_errmsg();

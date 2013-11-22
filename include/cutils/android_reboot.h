@@ -24,9 +24,8 @@ __BEGIN_DECLS
 #define ANDROID_RB_POWEROFF 0xDEAD0002
 #define ANDROID_RB_RESTART2 0xDEAD0003
 
-/* Flags */
-#define ANDROID_RB_FLAG_NO_SYNC       0x1
-#define ANDROID_RB_FLAG_NO_REMOUNT_RO 0x2
+/* Properties */
+#define ANDROID_RB_PROPERTY "sys.powerctl"
 
 int android_reboot(int cmd, int flags, char *arg);
 
