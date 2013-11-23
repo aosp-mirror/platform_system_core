@@ -67,6 +67,7 @@
 #define BATTERY_FULL_THRESH     95
 
 #define LAST_KMSG_PATH          "/proc/last_kmsg"
+#define LAST_KMSG_PSTORE_PATH   "/sys/fs/pstore/console-ramoops"
 #define LAST_KMSG_MAX_SZ        (32 * 1024)
 
 #define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
@@ -211,10 +212,14 @@ static void dump_last_kmsg(void)
     LOGI("\n");
     LOGI("*************** LAST KMSG ***************\n");
     LOGI("\n");
-    buf = load_file(LAST_KMSG_PATH, &sz);
+    buf = load_file(LAST_KMSG_PSTORE_PATH, &sz);
+
     if (!buf || !sz) {
-        LOGI("last_kmsg not found. Cold reset?\n");
-        goto out;
+        buf = load_file(LAST_KMSG_PATH, &sz);
+        if (!buf || !sz) {
+            LOGI("last_kmsg not found. Cold reset?\n");
+            goto out;
+        }
     }
 
     len = min(sz, LAST_KMSG_MAX_SZ);
