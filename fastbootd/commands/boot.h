@@ -33,11 +33,9 @@
 #define __FASTBOOT_BOOT_H
 
 #include <sys/cdefs.h>
-#include <uapi/linux/kexec.h>
+#include <linux/kexec.h>
 
 #include "bootimg.h"
-
-#define KEXEC_SEGMENT_MAX 16
 
 #define KEXEC_TYPE_DEFAULT 0
 #define KEXEC_TYPE_CRASH   1
