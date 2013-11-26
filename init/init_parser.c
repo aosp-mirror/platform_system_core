@@ -60,7 +60,7 @@ static void parse_line_action(struct parse_state *state, int nargs, char **args)
 #define KEYWORD(symbol, flags, nargs, func) \
     [ K_##symbol ] = { #symbol, func, nargs + 1, flags, },
 
-struct {
+static struct {
     const char *name;
     int (*func)(int nargs, char **args);
     unsigned char nargs;
@@ -76,7 +76,7 @@ struct {
 #define kw_func(kw) (keyword_info[kw].func)
 #define kw_nargs(kw) (keyword_info[kw].nargs)
 
-int lookup_keyword(const char *s)
+static int lookup_keyword(const char *s)
 {
     switch (*s++) {
     case 'c':
@@ -170,7 +170,7 @@ int lookup_keyword(const char *s)
     return K_UNKNOWN;
 }
 
-void parse_line_no_op(struct parse_state *state, int nargs, char **args)
+static void parse_line_no_op(struct parse_state *state, int nargs, char **args)
 {
 }
 
@@ -293,7 +293,7 @@ err:
     return -1;
 }
 
-void parse_import(struct parse_state *state, int nargs, char **args)
+static void parse_import(struct parse_state *state, int nargs, char **args)
 {
     struct listnode *import_list = state->priv;
     struct import *import;
@@ -318,7 +318,7 @@ void parse_import(struct parse_state *state, int nargs, char **args)
     INFO("found import '%s', adding to import list", import->filename);
 }
 
-void parse_new_section(struct parse_state *state, int kw,
+static void parse_new_section(struct parse_state *state, int kw,
                        int nargs, char **args)
 {
     printf("[ %s %s ]\n", args[0],
