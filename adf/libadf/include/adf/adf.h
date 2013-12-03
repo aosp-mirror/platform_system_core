@@ -182,10 +182,12 @@ ssize_t adf_overlay_engines_for_interface(struct adf_device *dev,
 /**
  * Filters a list of overlay engines by supported buffer format.
  *
- * The caller must free() the returned list of overlay engine IDs.
+ * Returns the overlay engines which support at least one of the specified
+ * formats.  The caller must free() the returned list of overlay engine IDs.
  */
 ssize_t adf_overlay_engines_filter_by_format(struct adf_device *dev,
-        __u32 format, adf_id_t *in, size_t n_in, adf_id_t **out);
+        const __u32 *formats, size_t n_formats, adf_id_t *in, size_t n_in,
+        adf_id_t **out);
 
 /**
  * Opens an ADF overlay engine.
