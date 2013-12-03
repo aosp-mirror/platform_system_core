@@ -231,6 +231,20 @@ int adf_read_event(int fd, struct adf_event **event);
  */
 void adf_format_str(__u32 format, char buf[ADF_FORMAT_STR_SIZE]);
 
+/**
+ * Finds an appropriate interface and overlay engine for a simple post.
+ *
+ * Specifically, finds the primary interface, and an overlay engine
+ * that can be attached to the primary interface and supports one of the
+ * specified formats.  The caller may pass a NULL formats list, to indicate that
+ * any RGB format is acceptable.
+ *
+ * On error, returns -errno.
+ */
+int adf_find_simple_post_configuration(struct adf_device *dev,
+        const __u32 *formats, size_t n_formats,
+        adf_id_t *interface, adf_id_t *overlay_engine);
+
 __END_DECLS
 
 #endif /* _LIBADF_ADF_H_ */
