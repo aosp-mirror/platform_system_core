@@ -494,8 +494,8 @@ done:
 
 static ssize_t adf_overlay_engines_filter(struct adf_device *dev,
         adf_id_t *in, size_t n_in, adf_id_t **out,
-        bool (*filter)(struct adf_overlay_engine_data *data, __u32 match),
-        __u32 match)
+        bool (*filter)(struct adf_overlay_engine_data *data, void *cookie),
+        void *cookie)
 {
     size_t n = 0;
     ssize_t ret;
@@ -515,7 +515,7 @@ static ssize_t adf_overlay_engines_filter(struct adf_device *dev,
         if (ret < 0)
             goto done;
 
-        if (!filter(&data, match))
+        if (!filter(&data, cookie))
             continue;
 
         adf_id_t *new_ids = realloc(ids_ret, (n + 1) * sizeof(ids_ret[0]));
@@ -539,21 +539,32 @@ done:
     return ret;
 }
 
-static bool adf_overlay_engine_format_filter(struct adf_overlay_engine_data *data,
-        __u32 format)
+struct format_filter_cookie {
+    const __u32 *formats;
+    size_t n_formats;
+};
+
+static bool adf_overlay_engine_format_filter(
+        struct adf_overlay_engine_data *data, void *cookie)
 {
+    struct format_filter_cookie *c = cookie;
     size_t i;
-    for (i = 0; i < data->n_supported_formats; i++)
-        if (data->supported_formats[i] == format)
-            return true;
+    for (i = 0; i < data->n_supported_formats; i++) {
+        size_t j;
+        for (j = 0; j < c->n_formats; j++)
+            if (data->supported_formats[i] == c->formats[j])
+                return true;
+    }
     return false;
 }
 
 ssize_t adf_overlay_engines_filter_by_format(struct adf_device *dev,
-        __u32 format, adf_id_t *in, size_t n_in, adf_id_t **out)
+        const __u32 *formats, size_t n_formats, adf_id_t *in, size_t n_in,
+        adf_id_t **out)
 {
+    struct format_filter_cookie cookie = { formats, n_formats };
     return adf_overlay_engines_filter(dev, in, n_in, out,
-            adf_overlay_engine_format_filter, format);
+            adf_overlay_engine_format_filter, &cookie);
 }
 
 int adf_overlay_engine_open(struct adf_device *dev, adf_id_t id, int flags)
