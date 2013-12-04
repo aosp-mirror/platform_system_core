@@ -32,114 +32,304 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/reboot.h>
+#include <fcntl.h>
 
 #include "bootimg.h"
+#include "commands/boot.h"
+#include "commands/flash.h"
+#include "commands/partitions.h"
+#include "commands/virtual_partitions.h"
 #include "debug.h"
 #include "protocol.h"
+#include "trigger.h"
+#include "utils.h"
+
+#define ATAGS_LOCATION "/proc/atags"
 
 static void cmd_boot(struct protocol_handle *phandle, const char *arg)
 {
-#if 0
+    int sz, atags_sz, new_atags_sz;
+    int rv;
     unsigned kernel_actual;
     unsigned ramdisk_actual;
-    static struct boot_img_hdr hdr;
-    char *ptr = ((char*) data);
+    unsigned second_actual;
+    void *kernel_ptr;
+    void *ramdisk_ptr;
+    void *second_ptr;
+    struct boot_img_hdr *hdr;
+    char *ptr = NULL;
+    char *atags_ptr = NULL;
+    char *new_atags = NULL;
+    int data_fd = 0;
 
-    if (sz < sizeof(hdr)) {
+    D(DEBUG, "cmd_boot %s\n", arg);
+
+    if (phandle->download_fd < 0) {
+        fastboot_fail(phandle, "no kernel file");
+        return;
+    }
+
+    atags_ptr = read_atags(ATAGS_LOCATION, &atags_sz);
+    if (atags_ptr == NULL) {
+        fastboot_fail(phandle, "atags read error");
+        goto error;
+    }
+
+    // TODO: With cms we can also verify partition name included as
+    // cms signed attribute
+    if (flash_validate_certificate(phandle->download_fd, &data_fd) != 1) {
+        fastboot_fail(phandle, "Access forbiden you need the certificate");
+        return;
+    }
+
+    sz = get_file_size(data_fd);
+
+    ptr = (char *) mmap(NULL, sz, PROT_READ,
+                        MAP_POPULATE | MAP_PRIVATE, data_fd, 0);
+
+    hdr = (struct boot_img_hdr *) ptr;
+
+    if (ptr == MAP_FAILED) {
+        fastboot_fail(phandle, "internal fastbootd error");
+        goto error;
+    }
+
+    if ((size_t) sz < sizeof(*hdr)) {
         fastboot_fail(phandle, "invalid bootimage header");
-        return;
+        goto error;
     }
 
-    memcpy(&hdr, data, sizeof(hdr));
+    kernel_actual = ROUND_TO_PAGE(hdr->kernel_size, hdr->page_size);
+    ramdisk_actual = ROUND_TO_PAGE(hdr->ramdisk_size, hdr->page_size);
+    second_actual = ROUND_TO_PAGE(hdr->second_size, hdr->page_size);
 
-    /* ensure commandline is terminated */
-    hdr.cmdline[BOOT_ARGS_SIZE-1] = 0;
+    new_atags = (char *) create_atags((unsigned *) atags_ptr, atags_sz, hdr, &new_atags_sz);
 
-    kernel_actual = ROUND_TO_PAGE(hdr.kernel_size);
-    ramdisk_actual = ROUND_TO_PAGE(hdr.ramdisk_size);
+    if (new_atags == NULL) {
+        fastboot_fail(phandle, "atags generate error");
+        goto error;
+    }
+    if (new_atags_sz > 0x4000) {
+        fastboot_fail(phandle, "atags file to large");
+        goto error;
+    }
 
-    if (2048 + kernel_actual + ramdisk_actual < sz) {
+    if ((int) (hdr->page_size + kernel_actual + ramdisk_actual) < sz) {
         fastboot_fail(phandle, "incomplete bootimage");
-        return;
+        goto error;
     }
 
-    /*memmove((void*) KERNEL_ADDR, ptr + 2048, hdr.kernel_size);
-    memmove((void*) RAMDISK_ADDR, ptr + 2048 + kernel_actual, hdr.ramdisk_size);*/
+    kernel_ptr = (void *)((unsigned) ptr + hdr->page_size);
+    ramdisk_ptr = (void *)((unsigned) kernel_ptr + kernel_actual);
+    second_ptr = (void *)((unsigned) ramdisk_ptr + ramdisk_actual);
+
+    D(INFO, "preparing to boot");
+    // Prepares boot physical address. Addresses from header are ignored
+    rv = prepare_boot_linux(hdr->kernel_addr, kernel_ptr, kernel_actual,
+                            hdr->ramdisk_addr, ramdisk_ptr, ramdisk_actual,
+                            hdr->second_addr, second_ptr, second_actual,
+                            hdr->tags_addr, new_atags, ROUND_TO_PAGE(new_atags_sz, hdr->page_size));
+    if (rv < 0) {
+        fastboot_fail(phandle, "kexec prepare failed");
+        goto error;
+    }
 
     fastboot_okay(phandle, "");
-    udc_stop();
 
+    free(atags_ptr);
+    munmap(ptr, sz);
+    free(new_atags);
+    close(data_fd);
 
-    /*boot_linux((void*) KERNEL_ADDR, (void*) TAGS_ADDR,
-           (const char*) hdr.cmdline, LINUX_MACHTYPE,
-           (void*) RAMDISK_ADDR, hdr.ramdisk_size);*/
-#endif
+    D(INFO, "Kexec going to reboot");
+    reboot(LINUX_REBOOT_CMD_KEXEC);
+
+    fastboot_fail(phandle, "reboot error");
+
+    return;
+
+error:
+
+    if (atags_ptr != NULL)
+        free(atags_ptr);
+    if (ptr != NULL)
+        munmap(ptr, sz);
+
 }
 
 static void cmd_erase(struct protocol_handle *phandle, const char *arg)
 {
-#if 0
-    struct ptentry *ptn;
-    struct ptable *ptable;
+    int partition_fd;
+    char path[PATH_MAX];
+    D(DEBUG, "cmd_erase %s\n", arg);
 
-    ptable = flash_get_ptable();
-    if (ptable == NULL) {
+    if (flash_find_entry(arg, path, PATH_MAX)) {
         fastboot_fail(phandle, "partition table doesn't exist");
         return;
     }
 
-    ptn = ptable_find(ptable, arg);
-    if (ptn == NULL) {
-        fastboot_fail(phandle, "unknown partition name");
+    if (path == NULL) {
+        fastboot_fail(phandle, "Couldn't find partition");
         return;
     }
 
-    if (flash_erase(ptn)) {
+    partition_fd = flash_get_partiton(path);
+    if (partition_fd < 0) {
+        fastboot_fail(phandle, "partiton file does not exists");
+    }
+
+    if (flash_erase(partition_fd)) {
+        fastboot_fail(phandle, "failed to erase partition");
+        flash_close(partition_fd);
+        return;
+    }
+
+    if (flash_close(partition_fd) < 0) {
+        D(ERR, "could not close device %s", strerror(errno));
         fastboot_fail(phandle, "failed to erase partition");
         return;
     }
     fastboot_okay(phandle, "");
-#endif
+}
+
+static int GPT_header_location() {
+    const char *location_str = fastboot_getvar("gpt_sector");
+    char *str;
+    int location;
+
+    if (!strcmp("", location_str)) {
+        D(INFO, "GPT location not specified using second sector");
+        return 1;
+    }
+    else {
+        location = strtoul(location_str, &str, 10);
+        D(INFO, "GPT location specified as %d", location);
+
+        if (*str != '\0')
+            return -1;
+
+        return location - 1;
+    }
+}
+
+static void cmd_gpt_layout(struct protocol_handle *phandle, const char *arg) {
+    struct GPT_entry_table *oldtable;
+    int location;
+    struct GPT_content content;
+    const char *device;
+    device = fastboot_getvar("blockdev");
+
+    if (!strcmp(device, "")) {
+        fastboot_fail(phandle, "blockdev not defined in config file");
+        return;
+    }
+
+    //TODO: add same verification as in cmd_flash
+    if (phandle->download_fd < 0) {
+        fastboot_fail(phandle, "no layout file");
+        return;
+    }
+
+    location = GPT_header_location();
+    oldtable = GPT_get_device(device, location);
+
+    GPT_default_content(&content, oldtable);
+    if (oldtable == NULL)
+        D(WARN, "Could not get old gpt table");
+    else
+        GPT_release_device(oldtable);
+
+    if (!GPT_parse_file(phandle->download_fd, &content)) {
+        fastboot_fail(phandle, "Could not parse partition config file");
+        return;
+    }
+
+    if (trigger_gpt_layout(&content)) {
+        fastboot_fail(phandle, "Vendor forbids this opperation");
+        GPT_release_content(&content);
+        return;
+    }
+
+    if (!GPT_write_content(device, &content)) {
+        fastboot_fail(phandle, "Unable to write gpt file");
+        GPT_release_content(&content);
+        return;
+    }
+
+    GPT_release_content(&content);
+    fastboot_okay(phandle, "");
 }
 
 static void cmd_flash(struct protocol_handle *phandle, const char *arg)
 {
-#if 0
-    struct ptentry *ptn;
-    struct ptable *ptable;
-    unsigned extra = 0;
+    int partition;
+    uint64_t sz;
+    char data[BOOT_MAGIC_SIZE];
+    char path[PATH_MAX];
+    ssize_t header_sz = 0;
+    int data_fd = 0;
 
-    ptable = flash_get_ptable();
-    if (ptable == NULL) {
+    D(DEBUG, "cmd_flash %s\n", arg);
+
+    if (try_handle_virtual_partition(phandle, arg)) {
+        return;
+    }
+
+    if (phandle->download_fd < 0) {
+        fastboot_fail(phandle, "no kernel file");
+        return;
+    }
+
+    if (flash_find_entry(arg, path, PATH_MAX)) {
         fastboot_fail(phandle, "partition table doesn't exist");
         return;
     }
 
-    ptn = ptable_find(ptable, arg);
-    if (ptn == NULL) {
-        fastboot_fail(phandle, "unknown partition name");
+    if (flash_validate_certificate(phandle->download_fd, &data_fd) != 1) {
+        fastboot_fail(phandle, "Access forbiden you need certificate");
         return;
     }
 
-    if (!strcmp(ptn->name, "boot") || !strcmp(ptn->name, "recovery")) {
+    // TODO: Maybe its goot idea to check whether the partition is bootable
+    if (!strcmp(arg, "boot") || !strcmp(arg, "recovery")) {
+        if (read_data_once(data_fd, data, BOOT_MAGIC_SIZE) < BOOT_MAGIC_SIZE) {
+            fastboot_fail(phandle, "incoming data read error, cannot read boot header");
+            return;
+        }
         if (memcmp((void *)data, BOOT_MAGIC, BOOT_MAGIC_SIZE)) {
             fastboot_fail(phandle, "image is not a boot image");
             return;
         }
     }
 
-    if (!strcmp(ptn->name, "system") || !strcmp(ptn->name, "userdata"))
-        extra = 64;
-    else
-        sz = ROUND_TO_PAGE(sz);
+    partition = flash_get_partiton(path);
 
-    D(INFO, "writing %d bytes to '%s'\n", sz, ptn->name);
-    if (flash_write(ptn, extra, data, sz)) {
+    sz = get_file_size64(data_fd);
+
+    sz -= header_sz;
+
+    if (sz > get_file_size64(partition)) {
+        flash_close(partition);
+        D(WARN, "size of file too large");
+        fastboot_fail(phandle, "size of file too large");
+        return;
+    }
+
+    D(INFO, "writing %lld bytes to '%s'\n", sz, arg);
+
+    if (flash_write(partition, phandle->download_fd, sz, header_sz)) {
         fastboot_fail(phandle, "flash write failure");
         return;
     }
-    D(INFO, "partition '%s' updated\n", ptn->name);
-#endif
+    D(INFO, "partition '%s' updated\n", arg);
+
+    flash_close(partition);
+    close(data_fd);
+
     fastboot_okay(phandle, "");
 }
 
@@ -184,7 +374,6 @@ static void cmd_download(struct protocol_handle *phandle, const char *arg)
 
     phandle->download_fd = protocol_handle_download(phandle, len);
     if (phandle->download_fd < 0) {
-        //handle->state = STATE_ERROR;
         fastboot_fail(phandle, "download failed");
         return;
     }
@@ -192,14 +381,27 @@ static void cmd_download(struct protocol_handle *phandle, const char *arg)
     fastboot_okay(phandle, "");
 }
 
+static void cmd_oem(struct protocol_handle *phandle, const char *arg) {
+    const char *response = "";
+
+    //TODO: Maybe it should get download descriptor also
+    if (trigger_oem_cmd(arg, &response))
+        fastboot_fail(phandle, response);
+    else
+        fastboot_okay(phandle, response);
+}
+
 void commands_init()
 {
+    virtual_partition_register("partition-table", cmd_gpt_layout);
+
     fastboot_register("boot", cmd_boot);
     fastboot_register("erase:", cmd_erase);
     fastboot_register("flash:", cmd_flash);
     fastboot_register("continue", cmd_continue);
     fastboot_register("getvar:", cmd_getvar);
     fastboot_register("download:", cmd_download);
+    fastboot_register("oem", cmd_oem);
     //fastboot_publish("version", "0.5");
     //fastboot_publish("product", "swordfish");
     //fastboot_publish("kernel", "lk");
