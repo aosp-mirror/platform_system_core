@@ -30,6 +30,7 @@
 
 #include "debug.h"
 #include "transport.h"
+#include "utils.h"
 
 #define   TRACE_TAG  TRACE_USB
 
@@ -49,8 +50,6 @@
 #define USB_FFS_FASTBOOT_EP0   USB_FFS_FASTBOOT_EP(ep0)
 #define USB_FFS_FASTBOOT_OUT   USB_FFS_FASTBOOT_EP(ep1)
 #define USB_FFS_FASTBOOT_IN    USB_FFS_FASTBOOT_EP(ep2)
-
-#define READ_BUF_SIZE (16*1024)
 
 #define container_of(ptr, type, member) \
     ((type*)((char*)(ptr) - offsetof(type, member)))
@@ -212,26 +211,6 @@ err:
     return -1;
 }
 
-static ssize_t bulk_write(int bulk_in, const char *buf, size_t length)
-{
-    size_t count = 0;
-    ssize_t ret;
-
-    do {
-        ret = TEMP_FAILURE_RETRY(write(bulk_in, buf + count, length - count));
-        if (ret < 0) {
-            D(WARN, "[ bulk_read failed fd=%d length=%d errno=%d %s ]",
-                    bulk_in, length, errno, strerror(errno));
-            return -1;
-        } else {
-            count += ret;
-        }
-    } while (count < length);
-
-    D(VERBOSE, "[ bulk_write done fd=%d ]", bulk_in);
-    return count;
-}
-
 static ssize_t usb_write(struct transport_handle *thandle, const void *data, size_t len)
 {
     ssize_t ret;
@@ -246,30 +225,6 @@ static ssize_t usb_write(struct transport_handle *thandle, const void *data, siz
     }
     D(DEBUG, "[ usb_write done fd=%d ]", usb_transport->bulk_in);
     return ret;
-}
-
-static ssize_t bulk_read(int bulk_out, char *buf, size_t length)
-{
-    ssize_t ret;
-    size_t n = 0;
-
-    while (n < length) {
-        size_t to_read = (length - n > READ_BUF_SIZE) ? READ_BUF_SIZE : length - n;
-        ret = TEMP_FAILURE_RETRY(read(bulk_out, buf + n, to_read));
-        if (ret < 0) {
-            D(WARN, "[ bulk_read failed fd=%d length=%d errno=%d %s ]",
-                    bulk_out, length, errno, strerror(errno));
-            return ret;
-        }
-        n += ret;
-        if (ret < (ssize_t)to_read) {
-            D(VERBOSE, "bulk_read short read, ret=%zd to_read=%u n=%u length=%u",
-                    ret, to_read, n, length);
-            break;
-        }
-    }
-
-    return n;
 }
 
 ssize_t usb_read(struct transport_handle *thandle, void *data, size_t len)

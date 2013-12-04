@@ -35,28 +35,12 @@
 #include <sys/types.h>
 
 #include "protocol.h"
+#include "utils.h"
 
 #include "debug.h"
 
 // TODO: change config path
 #define CONFIG_PATH "/data/fastboot.cfg"
-
-static char *strip(char *str)
-{
-    int n;
-
-    n = strspn(str, " \t");
-    str += n;
-
-    for (n = strlen(str) - 1; n >= 0; n--) {
-        if (str[n] == ' ' || str[n] == '\t')
-            str[n] = '\0';
-        else
-            break;
-    }
-
-    return str;
-}
 
 static int config_parse_line(char *line)
 {
