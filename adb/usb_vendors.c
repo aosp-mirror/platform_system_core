@@ -155,6 +155,8 @@
 #define VENDOR_ID_QISDA         0x1D45
 // ECS's USB Vendor ID
 #define VENDOR_ID_ECS           0x03fc
+// MSI's USB Vendor ID
+#define VENDOR_ID_MSI           0x1462
 
 
 /** built-in vendor list */
@@ -219,6 +221,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_NOOK,
     VENDOR_ID_QISDA,
     VENDOR_ID_ECS,
+    VENDOR_ID_MSI,
 };
 
 #define BUILT_IN_VENDOR_COUNT    (sizeof(builtInVendorIds)/sizeof(builtInVendorIds[0]))
