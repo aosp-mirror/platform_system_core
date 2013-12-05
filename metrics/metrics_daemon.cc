@@ -180,7 +180,7 @@ MetricsDaemon::MetricsDaemon()
       user_active_(false),
       usemon_interval_(0),
       usemon_source_(NULL),
-      memuse_initial_time_(0),
+      memuse_final_time_(0),
       memuse_interval_index_(0),
       read_sectors_(0),
       write_sectors_(0),
@@ -305,7 +305,8 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
 
   // Start collecting meminfo stats.
   ScheduleMeminfoCallback(kMetricMeminfoInterval);
-  ScheduleMemuseCallback(true, 0);
+  memuse_final_time_ = GetActiveTime() + kMemuseIntervals[0];
+  ScheduleMemuseCallback(kMemuseIntervals[0]);
 
   // Don't setup D-Bus and GLib in test mode.
   if (testing)
@@ -1012,20 +1013,11 @@ bool MetricsDaemon::FillMeminfo(const string& meminfo_raw,
   return true;
 }
 
-void MetricsDaemon::ScheduleMemuseCallback(bool new_callback,
-                                           double time_elapsed) {
+void MetricsDaemon::ScheduleMemuseCallback(double interval) {
   if (testing_) {
     return;
   }
-  int interval = kMemuseIntervals[memuse_interval_index_];
-  int wait;
-  if (new_callback) {
-    memuse_initial_time_ = GetActiveTime();
-    wait = interval;
-  } else {
-    wait = ceil(interval - time_elapsed);  // round up
-  }
-  g_timeout_add_seconds(wait, MemuseCallbackStatic, this);
+  g_timeout_add_seconds(interval, MemuseCallbackStatic, this);
 }
 
 // static
@@ -1040,17 +1032,18 @@ void MetricsDaemon::MemuseCallback() {
   // the callbacks are driven by real time (uptime), we check if we should
   // reschedule this callback due to intervening sleep periods.
   double now = GetActiveTime();
-  double active_time = now - memuse_initial_time_;
-  if (active_time < kMemuseIntervals[memuse_interval_index_]) {
-    // Not enough active time has passed.  Reschedule the callback.
-    ScheduleMemuseCallback(false, active_time);
+  // Avoid intervals of less than one second.
+  double remaining_time = ceil(memuse_final_time_ - now);
+  if (remaining_time > 0) {
+    ScheduleMemuseCallback(remaining_time);
   } else {
-    // Enough active time has passed.  Do the work, and (if we succeed) see if
-    // we need to do more.
+    // Report stats and advance the measurement interval unless there are
+    // errors or we've completed the last interval.
     if (MemuseCallbackWork() &&
-        memuse_interval_index_ < arraysize(kMemuseIntervals) - 1) {
-      memuse_interval_index_++;
-      ScheduleMemuseCallback(true, 0);
+        memuse_interval_index_ < arraysize(kMemuseIntervals)) {
+      double interval = kMemuseIntervals[memuse_interval_index_++];
+      memuse_final_time_ = now + interval;
+      ScheduleMemuseCallback(interval);
     }
   }
 }

@@ -329,12 +329,8 @@ class MetricsDaemon {
   bool FillMeminfo(const std::string& meminfo_raw,
                    std::vector<MeminfoRecord>* fields);
 
-  // Schedule a memory use callback.  |new_callback| is true when this callback
-  // is scheduled for the first time.  When |new_callback| is false,
-  // |time_elapsed| is the active (non-sleep) time that has passed between now
-  // and the original callback scheduling time.  We use it to reschedule a
-  // callback that fired too early because we slept.
-  void ScheduleMemuseCallback(bool new_callback, double time_elapsed);
+  // Schedule a memory use callback in |interval| seconds.
+  void ScheduleMemuseCallback(double interval);
 
   // Static wrapper for MemuseCallback.  Always returns false.
   static gboolean MemuseCallbackStatic(void* handle);
@@ -405,8 +401,8 @@ class MetricsDaemon {
   // Scheduled daily use monitor source (see ScheduleUseMonitor).
   GSource* usemon_source_;
 
-  // Time of initial scheduling of memuse callback
-  double memuse_initial_time_;
+  // End time of current memuse stat collection interval.
+  double memuse_final_time_;
 
   // Selects the wait time for the next memory use callback.
   unsigned int memuse_interval_index_;
