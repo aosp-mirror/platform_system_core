@@ -1048,7 +1048,7 @@ void MetricsDaemon::MemuseCallback() {
     // Enough active time has passed.  Do the work, and (if we succeed) see if
     // we need to do more.
     if (MemuseCallbackWork() &&
-        memuse_interval_index_ < arraysize(kMemuseIntervals)) {
+        memuse_interval_index_ < arraysize(kMemuseIntervals) - 1) {
       memuse_interval_index_++;
       ScheduleMemuseCallback(true, 0);
     }
