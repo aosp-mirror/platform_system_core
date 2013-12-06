@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 The Android Open Source Project
+ * Copyright (C) 2011-2013 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -280,10 +280,11 @@ int str_parms_get_float(struct str_parms *str_parms, const char *key,
         return -ENOENT;
 
     out = strtof(value, &end);
-    if (*value != '\0' && *end == '\0')
-        return 0;
+    if (*value == '\0' || *end != '\0')
+        return -EINVAL;
 
-    return -EINVAL;
+    *val = out;
+    return 0;
 }
 
 static bool combine_strings(void *key, void *value, void *context)
