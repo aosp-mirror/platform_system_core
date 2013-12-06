@@ -29,8 +29,6 @@
 #include <sysutils/SocketListener.h>
 #include <sysutils/SocketClient.h>
 
-#define LOG_NDEBUG 0
-
 SocketListener::SocketListener(const char *socketName, bool listen) {
     init(socketName, -1, listen, false);
 }
