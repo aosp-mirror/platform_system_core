@@ -22,6 +22,7 @@
 
 #include <stdint.h>
 #include <sys/types.h>
+#include <utils/Compat.h>
 
 __BEGIN_DECLS
 
