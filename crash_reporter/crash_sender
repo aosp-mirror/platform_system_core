@@ -490,7 +490,7 @@ send_crashes() {
   done
 
   # Look through all metadata (*.meta) files, if any exist.
-  for meta_path in $(ls -1t "${dir}"/*.meta 2>/dev/null); do
+  for meta_path in $(ls -1tr "${dir}"/*.meta 2>/dev/null); do
     lecho "Considering metadata ${meta_path}."
     local kind=$(get_kind "${meta_path}")
 
