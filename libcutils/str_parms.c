@@ -30,6 +30,8 @@
 
 #include <cutils/str_parms.h>
 
+#define UNUSED __attribute__((unused))
+
 struct str_parms {
     Hashmap *map;
 };
@@ -318,7 +320,7 @@ char *str_parms_to_str(struct str_parms *str_parms)
     return str;
 }
 
-static bool dump_entry(void *key, void *value, void *context)
+static bool dump_entry(void *key, void *value, void *context UNUSED)
 {
     ALOGI("key: '%s' value: '%s'\n", (char *)key, (char *)value);
     return true;

@@ -25,6 +25,8 @@
 
 #include <cutils/android_reboot.h>
 
+#define UNUSED __attribute__((unused))
+
 /* Check to see if /proc/mounts contains any writeable filesystems
  * backed by a block device.
  * Return true if none found, else return false.
@@ -102,7 +104,7 @@ static void remount_ro(void)
 }
 
 
-int android_reboot(int cmd, int flags, char *arg)
+int android_reboot(int cmd, int flags UNUSED, char *arg)
 {
     int ret;
 
