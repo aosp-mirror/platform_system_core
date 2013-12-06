@@ -34,7 +34,7 @@ endif
 
 ifeq ($(HOST_OS),windows)
   USB_SRCS := usb_windows.c
-  EXTRA_SRCS := get_my_path_windows.c ../libcutils/list.c
+  EXTRA_SRCS := get_my_path_windows.c
   EXTRA_STATIC_LIBS := AdbWinApi
   ifneq ($(strip $(USE_CYGWIN)),)
     # Pure cygwin case
