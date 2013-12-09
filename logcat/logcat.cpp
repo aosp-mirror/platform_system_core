@@ -223,6 +223,7 @@ static void show_help(const char *cmd)
                     "  -c              clear (flush) the entire log and exit\n"
                     "  -d              dump the log and then exit (don't block)\n"
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
+                    "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
                     "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio'\n"
                     "                  or 'events'. Multiple -b parameters are allowed and the\n"
@@ -302,7 +303,7 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, "cdt:gsQf:r::n:v:b:B");
+        ret = getopt(argc, argv, "cdt:T:gsQf:r::n:v:b:B");
 
         if (ret < 0) {
             break;
@@ -325,6 +326,8 @@ int main(int argc, char **argv)
 
             case 't':
                 mode = O_RDONLY | O_NDELAY;
+                /* FALLTHRU */
+            case 'T':
                 tail_lines = atoi(optarg);
             break;
 
