@@ -86,7 +86,7 @@ static const uint32_t kMaxErrorLen = 1024;
 
 static const char* kErrorMessages[] = {
   "Unknown return code.",
-  "I/O Error",
+  "Iteration ended",
   "Zlib error",
   "Invalid file",
   "Invalid handle",
@@ -96,13 +96,12 @@ static const char* kErrorMessages[] = {
   "Invalid offset",
   "Inconsistent information",
   "Invalid entry name",
-  "Iteration ended",
+  "I/O Error",
 };
 
 static const int32_t kErrorMessageUpperBound = 0;
 
-// An I/O related system call (read, lseek, ftruncate, map) failed.
-static const int32_t kIoError = -1;
+static const int32_t kIterationEnd = -1;
 
 // We encountered a Zlib error when inflating a stream from this file.
 // Usually indicates file corruption.
@@ -138,9 +137,10 @@ static const int32_t kInconsistentInformation = -9;
 // An invalid entry name was encountered.
 static const int32_t kInvalidEntryName = -10;
 
-static const int32_t kIterationEnd = -12;
+// An I/O related system call (read, lseek, ftruncate, map) failed.
+static const int32_t kIoError = -11;
 
-static const int32_t kErrorMessageLowerBound = -13;
+static const int32_t kErrorMessageLowerBound = -12;
 
 
 #ifdef PAGE_SHIFT
