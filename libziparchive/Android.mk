@@ -51,3 +51,17 @@ LOCAL_SRC_FILES := zip_archive_test.cc
 LOCAL_LDFLAGS := -llog
 LOCAL_STATIC_LIBRARIES := libziparchive libz libgtest libgtest_main
 include $(BUILD_NATIVE_TEST)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := ziparchive-tests-host
+LOCAL_CPP_EXTENSION := .cc
+LOCAL_CFLAGS += \
+    -DGTEST_OS_LINUX \
+    -DGTEST_HAS_STD_STRING
+LOCAL_SRC_FILES := zip_archive_test.cc
+LOCAL_STATIC_LIBRARIES := libziparchive-host \
+	libz \
+	libgtest_host \
+	libgtest_main_host \
+	liblog
+include $(BUILD_HOST_NATIVE_TEST)
