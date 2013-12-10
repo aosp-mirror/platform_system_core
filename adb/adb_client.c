@@ -241,7 +241,7 @@ int adb_connect(const char *service)
     } else {
         // if server was running, check its version to make sure it is not out of date
         char buf[100];
-        int n;
+        size_t n;
         int version = ADB_SERVER_VERSION - 1;
 
         // if we have a file descriptor, then parse version result
@@ -250,7 +250,7 @@ int adb_connect(const char *service)
 
             buf[4] = 0;
             n = strtoul(buf, 0, 16);
-            if(n > (int)sizeof(buf)) goto error;
+            if(n > sizeof(buf)) goto error;
             if(readx(fd, buf, n)) goto error;
             adb_close(fd);
 
