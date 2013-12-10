@@ -243,7 +243,7 @@ static int32_t CopyFileToFile(int fd, uint8_t* begin, const uint32_t length, uin
 
   uint32_t count = 0;
   uint64_t crc = 0;
-  while (count <= length) {
+  while (count < length) {
     uint32_t remaining = length - count;
 
     // Safe conversion because kBufSize is narrow enough for a 32 bit signed
