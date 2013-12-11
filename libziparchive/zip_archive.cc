@@ -28,8 +28,8 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <unistd.h>
+#include <utils/FileMap.h>
 
 #include <JNIHelp.h>  // TEMP_FAILURE_RETRY may or may not be in unistd
 
@@ -97,6 +97,7 @@ static const char* kErrorMessages[] = {
   "Inconsistent information",
   "Invalid entry name",
   "I/O Error",
+  "File mapping failed"
 };
 
 static const int32_t kErrorMessageUpperBound = 0;
@@ -140,22 +141,12 @@ static const int32_t kInvalidEntryName = -10;
 // An I/O related system call (read, lseek, ftruncate, map) failed.
 static const int32_t kIoError = -11;
 
-static const int32_t kErrorMessageLowerBound = -12;
+// We were not able to mmap the central directory or entry contents.
+static const int32_t kMmapFailed = -12;
 
+static const int32_t kErrorMessageLowerBound = -13;
 
-#ifdef PAGE_SHIFT
-#define SYSTEM_PAGE_SIZE (1 << PAGE_SHIFT)
-#else
-#define SYSTEM_PAGE_SIZE 4096
-#endif
-
-struct MemMapping {
-  uint8_t* addr;  // Start of data
-  size_t length;  // Length of data
-
-  uint8_t* base_address;  // page-aligned base address
-  size_t base_length;  // length of mapping
-};
+static const char kTempMappingFileName[] = "zip: ExtractFileToFile";
 
 /*
  * A Read-only Zip archive.
@@ -182,7 +173,7 @@ struct ZipArchive {
 
   /* mapped central directory area */
   off64_t directory_offset;
-  MemMapping directory_map;
+  android::FileMap* directory_map;
 
   /* number of entries in the Zip archive */
   uint16_t num_entries;
@@ -198,43 +189,17 @@ struct ZipArchive {
 };
 
 // Returns 0 on success and negative values on failure.
-static int32_t MapFileSegment(const int fd, const off64_t start, const size_t length,
-                              const int prot, const int flags, MemMapping *mapping) {
-  /* adjust to be page-aligned */
-  const int adjust = start % SYSTEM_PAGE_SIZE;
-  const off64_t actual_start = start - adjust;
-  const off64_t actual_length = length + adjust;
-
-  void* map_addr = mmap(NULL, actual_length, prot, flags, fd, actual_start);
-  if (map_addr == MAP_FAILED) {
-    ALOGW("mmap(%llx, R, FILE|SHARED, %d, %llx) failed: %s",
-      actual_length, fd, actual_start, strerror(errno));
-    return kIoError;
+static android::FileMap* MapFileSegment(const int fd, const off64_t start,
+                                        const size_t length, const bool read_only,
+                                        const char* debug_file_name) {
+  android::FileMap* file_map = new android::FileMap;
+  const bool success = file_map->create(debug_file_name, fd, start, length, read_only);
+  if (!success) {
+    file_map->release();
+    return NULL;
   }
 
-  mapping->base_address = (uint8_t*) map_addr;
-  mapping->base_length = actual_length;
-  mapping->addr = (uint8_t*) map_addr + adjust;
-  mapping->length = length;
-
-  ALOGV("mmap seg (st=%d ln=%d): b=%p bl=%d ad=%p ln=%d",
-      start, length, mapping->base_address, mapping->base_length,
-      mapping->addr, mapping->length);
-
-  return 0;
-}
-
-static void ReleaseMappedSegment(MemMapping* map) {
-  if (map->base_address == 0 || map->base_length == 0) {
-    return;
-  }
-
-  if (munmap(map->base_address, map->base_length) < 0) {
-    ALOGW("munmap(%p, %d) failed: %s",
-        map->base_address, map->base_length, strerror(errno));
-  } else {
-    ALOGV("munmap(%p, %d) succeeded", map->base_address, map->base_length);
-  }
+  return file_map;
 }
 
 static int32_t CopyFileToFile(int fd, uint8_t* begin, const uint32_t length, uint64_t *crc_out) {
@@ -430,13 +395,14 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
    * It all looks good.  Create a mapping for the CD, and set the fields
    * in archive.
    */
-  const int32_t result = MapFileSegment(fd, dir_offset, dir_size,
-                                        PROT_READ, MAP_FILE | MAP_SHARED,
-                                        &(archive->directory_map));
-  if (result) {
-    return result;
+  android::FileMap* map = MapFileSegment(fd, dir_offset, dir_size,
+                                         true /* read only */, debug_file_name);
+  if (map == NULL) {
+    archive->directory_map = NULL;
+    return kMmapFailed;
   }
 
+  archive->directory_map = map;
   archive->num_entries = num_entries;
   archive->directory_offset = dir_offset;
 
@@ -506,8 +472,8 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
  */
 static int32_t ParseZipArchive(ZipArchive* archive) {
   int32_t result = -1;
-  const uint8_t* cd_ptr = (const uint8_t*) archive->directory_map.addr;
-  size_t cd_length = archive->directory_map.length;
+  const uint8_t* cd_ptr = (const uint8_t*) archive->directory_map->getDataPtr();
+  size_t cd_length = archive->directory_map->getDataLength();
   uint16_t num_entries = archive->num_entries;
 
   /*
@@ -621,7 +587,9 @@ void CloseArchive(ZipArchiveHandle handle) {
     close(archive->fd);
   }
 
-  ReleaseMappedSegment(&archive->directory_map);
+  if (archive->directory_map != NULL) {
+    archive->directory_map->release();
+  }
   free(archive->hash_table);
 
   /* ensure nobody tries to use the ZipArchive after it's closed */
@@ -668,7 +636,7 @@ static inline ssize_t ReadAtOffset(int fd, uint8_t* buf, size_t len,
   // is Windows. Only recent versions of windows support unix like forks,
   // and even there the semantics are quite different.
   if (lseek64(fd, off, SEEK_SET) != off) {
-    ALOGW("Zip: failed seek to offset %lld", name_offset);
+    ALOGW("Zip: failed seek to offset %lld", off);
     return kIoError;
   }
 
@@ -691,8 +659,8 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   // the name that's in the hash table is a pointer to a location within
   // this mapped region.
   const unsigned char* base_ptr = (const unsigned char*)
-    archive->directory_map.addr;
-  if (ptr < base_ptr || ptr > base_ptr + archive->directory_map.length) {
+    archive->directory_map->getDataPtr();
+  if (ptr < base_ptr || ptr > base_ptr + archive->directory_map->getDataLength()) {
     ALOGW("Zip: Invalid entry pointer");
     return kInvalidOffset;
   }
@@ -1045,18 +1013,16 @@ int32_t ExtractEntryToFile(ZipArchiveHandle handle,
     return kIoError;
   }
 
-  MemMapping mapping;
-  int32_t error = MapFileSegment(fd, 0, declared_length,
-                                 PROT_READ | PROT_WRITE,
-                                 MAP_FILE | MAP_SHARED,
-                                 &mapping);
-  if (error) {
-    return error;
+  android::FileMap* map  = MapFileSegment(fd, 0, declared_length,
+                                          false, kTempMappingFileName);
+  if (map == NULL) {
+    return kMmapFailed;
   }
 
-  error = ExtractToMemory(handle, entry, mapping.addr,
-                          mapping.length);
-  ReleaseMappedSegment(&mapping);
+  const int32_t error = ExtractToMemory(handle, entry,
+                                        reinterpret_cast<uint8_t*>(map->getDataPtr()),
+                                        map->getDataLength());
+  map->release();
   return error;
 }
 

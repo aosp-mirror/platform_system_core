@@ -26,6 +26,7 @@ LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
 
 LOCAL_STATIC_LIBRARIES := libz
+LOCAL_SHARED_LIBRARIES := libutils
 LOCAL_MODULE:= libziparchive
 
 LOCAL_C_INCLUDES += ${includes}
@@ -37,7 +38,7 @@ LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
 LOCAL_C_INCLUDES += ${includes}
 
-LOCAL_STATIC_LIBRARIES := libz
+LOCAL_STATIC_LIBRARIES := libz libutils
 LOCAL_MODULE:= libziparchive-host
 include $(BUILD_HOST_STATIC_LIBRARY)
 
@@ -49,7 +50,7 @@ LOCAL_CFLAGS += \
     -DGTEST_HAS_STD_STRING
 LOCAL_SRC_FILES := zip_archive_test.cc
 LOCAL_LDFLAGS := -llog
-LOCAL_STATIC_LIBRARIES := libziparchive libz libgtest libgtest_main
+LOCAL_STATIC_LIBRARIES := libziparchive libz libgtest libgtest_main libutils
 include $(BUILD_NATIVE_TEST)
 
 include $(CLEAR_VARS)
@@ -63,5 +64,6 @@ LOCAL_STATIC_LIBRARIES := libziparchive-host \
 	libz \
 	libgtest_host \
 	libgtest_main_host \
-	liblog
+	liblog \
+	libutils
 include $(BUILD_HOST_NATIVE_TEST)
