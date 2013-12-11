@@ -209,7 +209,7 @@ static int listfile_long(const char *path, struct stat *s, int flags)
         break;
     case S_IFLNK: {
         char linkto[256];
-        int len;
+        ssize_t len;
 
         len = readlink(path, linkto, 256);
         if(len < 0) return -1;
@@ -235,7 +235,7 @@ static int listfile_long(const char *path, struct stat *s, int flags)
     return 0;
 }
 
-static int listfile_maclabel(const char *path, struct stat *s, int flags)
+static int listfile_maclabel(const char *path, struct stat *s)
 {
     char mode[16];
     char user[32];
@@ -324,7 +324,7 @@ static int listfile(const char *dirname, const char *filename, int flags)
     }
 
     if ((flags & LIST_MACLABEL) != 0) {
-        return listfile_maclabel(pathname, &s, flags);
+        return listfile_maclabel(pathname, &s);
     } else if ((flags & LIST_LONG) != 0) {
         return listfile_long(pathname, &s, flags);
     } else /*((flags & LIST_SIZE) != 0)*/ {
