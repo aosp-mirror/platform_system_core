@@ -850,7 +850,7 @@ int32_t FindEntry(const ZipArchiveHandle handle, const char* entryName,
     archive->hash_table_size, entryName, nameLen);
 
   if (ent < 0) {
-    ALOGW("Zip: Could not find entry %.*s", nameLen, entryName);
+    ALOGD("Zip: Could not find entry %.*s", nameLen, entryName);
     return ent;
   }
 
