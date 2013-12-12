@@ -93,7 +93,7 @@ void ggl_pick_texture(context_t* c)
         gen.width   = s.width;
         gen.height  = s.height;
         gen.stride  = s.stride;
-        gen.data    = int32_t(s.data);
+        gen.data    = uintptr_t(s.data);
     }
 }
 
