@@ -22,17 +22,27 @@
 #include <utils/KeyedVector.h>
 #include <utils/Timers.h>
 
-#include <android/looper.h>
-
 #include <sys/epoll.h>
 
-/*
- * Declare a concrete type for the NDK's looper forward declaration.
- */
-struct ALooper {
-};
-
 namespace android {
+
+/*
+ * NOTE: Since Looper is used to implement the NDK ALooper, the Looper
+ * enums and the signature of Looper_callbackFunc need to align with
+ * that implementation.
+ */
+
+/**
+ * For callback-based event loops, this is the prototype of the function
+ * that is called when a file descriptor event occurs.
+ * It is given the file descriptor it is associated with,
+ * a bitmask of the poll events that were triggered (typically EVENT_INPUT),
+ * and the data pointer that was originally supplied.
+ *
+ * Implementations should return 1 to continue receiving callbacks, or 0
+ * to have this file descriptor and callback unregistered from the looper.
+ */
+typedef int (*Looper_callbackFunc)(int fd, int events, void* data);
 
 /**
  * A message that can be posted to a Looper.
@@ -93,7 +103,7 @@ public:
     /**
      * Handles a poll event for the given file descriptor.
      * It is given the file descriptor it is associated with,
-     * a bitmask of the poll events that were triggered (typically ALOOPER_EVENT_INPUT),
+     * a bitmask of the poll events that were triggered (typically EVENT_INPUT),
      * and the data pointer that was originally supplied.
      *
      * Implementations should return 1 to continue receiving callbacks, or 0
@@ -102,22 +112,20 @@ public:
     virtual int handleEvent(int fd, int events, void* data) = 0;
 };
 
-
 /**
- * Wraps a ALooper_callbackFunc function pointer.
+ * Wraps a Looper_callbackFunc function pointer.
  */
 class SimpleLooperCallback : public LooperCallback {
 protected:
     virtual ~SimpleLooperCallback();
 
 public:
-    SimpleLooperCallback(ALooper_callbackFunc callback);
+    SimpleLooperCallback(Looper_callbackFunc callback);
     virtual int handleEvent(int fd, int events, void* data);
 
 private:
-    ALooper_callbackFunc mCallback;
+    Looper_callbackFunc mCallback;
 };
-
 
 /**
  * A polling loop that supports monitoring file descriptor events, optionally
@@ -125,11 +133,92 @@ private:
  *
  * A looper can be associated with a thread although there is no requirement that it must be.
  */
-class Looper : public ALooper, public RefBase {
+class Looper : public RefBase {
 protected:
     virtual ~Looper();
 
 public:
+    enum {
+        /**
+         * Result from Looper_pollOnce() and Looper_pollAll():
+         * The poll was awoken using wake() before the timeout expired
+         * and no callbacks were executed and no other file descriptors were ready.
+         */
+        POLL_WAKE = -1,
+
+        /**
+         * Result from Looper_pollOnce() and Looper_pollAll():
+         * One or more callbacks were executed.
+         */
+        POLL_CALLBACK = -2,
+
+        /**
+         * Result from Looper_pollOnce() and Looper_pollAll():
+         * The timeout expired.
+         */
+        POLL_TIMEOUT = -3,
+
+        /**
+         * Result from Looper_pollOnce() and Looper_pollAll():
+         * An error occurred.
+         */
+        POLL_ERROR = -4,
+    };
+
+    /**
+     * Flags for file descriptor events that a looper can monitor.
+     *
+     * These flag bits can be combined to monitor multiple events at once.
+     */
+    enum {
+        /**
+         * The file descriptor is available for read operations.
+         */
+        EVENT_INPUT = 1 << 0,
+
+        /**
+         * The file descriptor is available for write operations.
+         */
+        EVENT_OUTPUT = 1 << 1,
+
+        /**
+         * The file descriptor has encountered an error condition.
+         *
+         * The looper always sends notifications about errors; it is not necessary
+         * to specify this event flag in the requested event set.
+         */
+        EVENT_ERROR = 1 << 2,
+
+        /**
+         * The file descriptor was hung up.
+         * For example, indicates that the remote end of a pipe or socket was closed.
+         *
+         * The looper always sends notifications about hangups; it is not necessary
+         * to specify this event flag in the requested event set.
+         */
+        EVENT_HANGUP = 1 << 3,
+
+        /**
+         * The file descriptor is invalid.
+         * For example, the file descriptor was closed prematurely.
+         *
+         * The looper always sends notifications about invalid file descriptors; it is not necessary
+         * to specify this event flag in the requested event set.
+         */
+        EVENT_INVALID = 1 << 4,
+    };
+
+    enum {
+        /**
+         * Option for Looper_prepare: this looper will accept calls to
+         * Looper_addFd() that do not have a callback (that is provide NULL
+         * for the callback).  In this case the caller of Looper_pollOnce()
+         * or Looper_pollAll() MUST check the return from these functions to
+         * discover when data is available on such fds and process it.
+         */
+        PREPARE_ALLOW_NON_CALLBACKS = 1<<0
+    };
+
     /**
      * Creates a looper.
      *
@@ -152,16 +241,16 @@ public:
      * If the timeout is zero, returns immediately without blocking.
      * If the timeout is negative, waits indefinitely until an event appears.
      *
-     * Returns ALOOPER_POLL_WAKE if the poll was awoken using wake() before
+     * Returns POLL_WAKE if the poll was awoken using wake() before
      * the timeout expired and no callbacks were invoked and no other file
      * descriptors were ready.
      *
-     * Returns ALOOPER_POLL_CALLBACK if one or more callbacks were invoked.
+     * Returns POLL_CALLBACK if one or more callbacks were invoked.
      *
-     * Returns ALOOPER_POLL_TIMEOUT if there was no data before the given
+     * Returns POLL_TIMEOUT if there was no data before the given
      * timeout expired.
      *
-     * Returns ALOOPER_POLL_ERROR if an error occurred.
+     * Returns POLL_ERROR if an error occurred.
      *
      * Returns a value >= 0 containing an identifier if its file descriptor has data
      * and it has no callback function (requiring the caller here to handle it).
@@ -179,7 +268,7 @@ public:
     /**
      * Like pollOnce(), but performs all pending callbacks until all
      * data has been consumed or a file descriptor is available with no callback.
-     * This function will never return ALOOPER_POLL_CALLBACK.
+     * This function will never return POLL_CALLBACK.
      */
     int pollAll(int timeoutMillis, int* outFd, int* outEvents, void** outData);
     inline int pollAll(int timeoutMillis) {
@@ -200,8 +289,8 @@ public:
      *
      * "fd" is the file descriptor to be added.
      * "ident" is an identifier for this event, which is returned from pollOnce().
-     * The identifier must be >= 0, or ALOOPER_POLL_CALLBACK if providing a non-NULL callback.
-     * "events" are the poll events to wake up on.  Typically this is ALOOPER_EVENT_INPUT.
+     * The identifier must be >= 0, or POLL_CALLBACK if providing a non-NULL callback.
+     * "events" are the poll events to wake up on.  Typically this is EVENT_INPUT.
      * "callback" is the function to call when there is an event on the file descriptor.
      * "data" is a private data pointer to supply to the callback.
      *
@@ -211,7 +300,7 @@ public:
      * data on the file descriptor.  It should execute any events it has pending,
      * appropriately reading from the file descriptor.  The 'ident' is ignored in this case.
      *
-     * (2) If "callback" is NULL, the 'ident' will be returned by ALooper_pollOnce
+     * (2) If "callback" is NULL, the 'ident' will be returned by Looper_pollOnce
      * when its file descriptor has data available, requiring the caller to take
      * care of processing it.
      *
@@ -225,7 +314,7 @@ public:
      * easier to avoid races when the callback is removed from a different thread.
      * See removeFd() for details.
      */
-    int addFd(int fd, int ident, int events, ALooper_callbackFunc callback, void* data);
+    int addFd(int fd, int ident, int events, Looper_callbackFunc callback, void* data);
     int addFd(int fd, int ident, int events, const sp<LooperCallback>& callback, void* data);
 
     /**
@@ -308,7 +397,7 @@ public:
      * If the thread already has a looper, it is returned.  Otherwise, a new
      * one is created, associated with the thread, and returned.
      *
-     * The opts may be ALOOPER_PREPARE_ALLOW_NON_CALLBACKS or 0.
+     * The opts may be PREPARE_ALLOW_NON_CALLBACKS or 0.
      */
     static sp<Looper> prepare(int opts);
 
