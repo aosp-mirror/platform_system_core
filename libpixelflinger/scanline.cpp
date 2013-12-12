@@ -1717,7 +1717,7 @@ void init_y(context_t* c, int32_t ys)
             gen.width   = t.surface.width;
             gen.height  = t.surface.height;
             gen.stride  = t.surface.stride;
-            gen.data    = int32_t(t.surface.data);
+            gen.data    = uintptr_t(t.surface.data);
             gen.dsdx = ti.dsdx;
             gen.dtdx = ti.dtdx;
         }
@@ -2125,7 +2125,7 @@ void scanline_t32cb16(context_t* c)
     int sR, sG, sB;
     uint32_t s, d;
 
-    if (ct==1 || uint32_t(dst)&2) {
+    if (ct==1 || uintptr_t(dst)&2) {
 last_one:
         s = GGL_RGBA_TO_HOST( *src++ );
         *dst++ = convertAbgr8888ToRgb565(s);

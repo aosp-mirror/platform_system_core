@@ -121,7 +121,7 @@ template<bool> struct CTA;
 template<> struct CTA<true> { };
 
 #define GGL_CONTEXT(con, c)         context_t *con = static_cast<context_t *>(c)
-#define GGL_OFFSETOF(field)         int(&(((context_t*)0)->field))
+#define GGL_OFFSETOF(field)         uintptr_t(&(((context_t*)0)->field))
 #define GGL_INIT_PROC(p, f)         p.f = ggl_ ## f;
 #define GGL_BETWEEN(x, L, H)        (uint32_t((x)-(L)) <= ((H)-(L)))
 
@@ -480,7 +480,7 @@ struct generated_tex_vars_t {
     uint32_t    width;
     uint32_t    height;
     uint32_t    stride;
-    int32_t     data;
+    uintptr_t   data;
     int32_t     dsdx;
     int32_t     dtdx;
     int32_t     spill[2];
