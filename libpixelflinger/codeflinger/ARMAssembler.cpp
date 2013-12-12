@@ -99,8 +99,8 @@ void ARMAssembler::disassemble(const char* name)
         if (comment >= 0) {
             printf("; %s\n", mComments.valueAt(comment));
         }
-        printf("%08x:    %08x    ", int(i), int(i[0]));
-        ::disassemble((u_int)i);
+        printf("%08x:    %08x    ", uintptr_t(i), int(i[0]));
+        ::disassemble((uintptr_t)i);
         i++;
     }
 }
@@ -186,7 +186,7 @@ int ARMAssembler::generate(const char* name)
 
 #if defined(WITH_LIB_HARDWARE)
     if (__builtin_expect(mQemuTracing, 0)) {
-        int err = qemu_add_mapping(int(base()), name);
+        int err = qemu_add_mapping(uintptr_t(base()), name);
         mQemuTracing = (err >= 0);
     }
 #endif
