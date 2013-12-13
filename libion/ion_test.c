@@ -73,7 +73,7 @@ void ion_map_test()
 	}
 	for (i = 0; i < len; i++)
 		if (ptr[i] != (unsigned char)i)
-			printf("%s failed wrote %d read %d from mapped "
+			printf("%s failed wrote %zu read %d from mapped "
 			       "memory\n", __func__, i, ptr[i]);
 	/* clean up properly */
 	ret = ion_free(fd, handle);
@@ -257,7 +257,7 @@ int main(int argc, char* argv[]) {
 			break;
 		}
 	}
-	printf("test %d, len %u, align %u, map_flags %d, prot %d, heap_mask %d,"
+	printf("test %d, len %zu, align %zu, map_flags %d, prot %d, heap_mask %d,"
 	       " alloc_flags %d\n", test, len, align, map_flags, prot,
 	       heap_mask, alloc_flags);
 	switch (test) {
