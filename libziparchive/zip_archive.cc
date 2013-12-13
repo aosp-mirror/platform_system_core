@@ -1007,13 +1007,21 @@ int32_t ExtractEntryToFile(ZipArchiveHandle handle,
                            ZipEntry* entry, int fd) {
   const int32_t declared_length = entry->uncompressed_length;
 
-  int result = TEMP_FAILURE_RETRY(ftruncate(fd, declared_length));
-  if (result == -1) {
-    ALOGW("Zip: unable to truncate file to %ud", declared_length);
+  const off64_t current_offset = lseek64(fd, 0, SEEK_CUR);
+  if (current_offset == -1) {
+    ALOGW("Zip: unable to seek to current location on fd %d: %s", fd,
+          strerror(errno));
     return kIoError;
   }
 
-  android::FileMap* map  = MapFileSegment(fd, 0, declared_length,
+  int result = TEMP_FAILURE_RETRY(ftruncate(fd, declared_length + current_offset));
+  if (result == -1) {
+    ALOGW("Zip: unable to truncate file to %lld: %s", declared_length + current_offset,
+          strerror(errno));
+    return kIoError;
+  }
+
+  android::FileMap* map  = MapFileSegment(fd, current_offset, declared_length,
                                           false, kTempMappingFileName);
   if (map == NULL) {
     return kMmapFailed;
