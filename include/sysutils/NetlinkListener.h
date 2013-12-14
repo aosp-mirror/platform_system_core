@@ -21,7 +21,7 @@
 class NetlinkEvent;
 
 class NetlinkListener : public SocketListener {
-    char mBuffer[64 * 1024];
+    char mBuffer[64 * 1024] __attribute__((aligned(4)));
     int mFormat;
 
 public:
