@@ -9,13 +9,11 @@ include $(CLEAR_VARS)
 PIXELFLINGER_SRC_FILES:= \
     codeflinger/ARMAssemblerInterface.cpp \
     codeflinger/ARMAssemblerProxy.cpp \
-    codeflinger/ARMAssembler.cpp \
     codeflinger/CodeCache.cpp \
     codeflinger/GGLAssembler.cpp \
     codeflinger/load_store.cpp \
     codeflinger/blending.cpp \
     codeflinger/texturing.cpp \
-    codeflinger/disassem.c \
 	codeflinger/tinyutils/SharedBuffer.cpp \
 	codeflinger/tinyutils/VectorImpl.cpp \
 	fixed.cpp.arm \
@@ -39,6 +37,8 @@ endif
 endif
 
 ifeq ($(TARGET_ARCH),arm)
+PIXELFLINGER_SRC_FILES += codeflinger/ARMAssembler.cpp
+PIXELFLINGER_SRC_FILES += codeflinger/disassem.c
 # special optimization flags for pixelflinger
 PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
 endif
@@ -51,6 +51,14 @@ PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
 endif
 
 LOCAL_SHARED_LIBRARIES := libcutils liblog
+
+ifeq ($(TARGET_ARCH),aarch64)
+PIXELFLINGER_SRC_FILES += arch-aarch64/t32cb16blend.S
+PIXELFLINGER_SRC_FILES += arch-aarch64/col32cb16blend.S
+PIXELFLINGER_SRC_FILES += codeflinger/Aarch64Assembler.cpp
+PIXELFLINGER_SRC_FILES += codeflinger/Aarch64Disassembler.cpp
+PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
+endif
 
 #
 # Shared library
