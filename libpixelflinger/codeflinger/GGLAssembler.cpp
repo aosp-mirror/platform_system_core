@@ -263,7 +263,7 @@ int GGLAssembler::scanline_core(const needs_t& needs, context_t const* c)
                 const int mask = GGL_DITHER_SIZE-1;
                 parts.dither = reg_t(regs.obtain());
                 AND(AL, 0, parts.dither.reg, parts.count.reg, imm(mask));
-                ADD(AL, 0, parts.dither.reg, parts.dither.reg, ctxtReg);
+                ADDR_ADD(AL, 0, parts.dither.reg, ctxtReg, parts.dither.reg);
                 LDRB(AL, parts.dither.reg, parts.dither.reg,
                         immed12_pre(GGL_OFFSETOF(ditherMatrix)));
             }
@@ -336,7 +336,7 @@ int GGLAssembler::scanline_core(const needs_t& needs, context_t const* c)
         build_iterate_z(parts);
         build_iterate_f(parts);
         if (!mAllMasked) {
-            ADD(AL, 0, parts.cbPtr.reg, parts.cbPtr.reg, imm(parts.cbPtr.size>>3));
+            ADDR_ADD(AL, 0, parts.cbPtr.reg, parts.cbPtr.reg, imm(parts.cbPtr.size>>3));
         }
         SUB(AL, S, parts.count.reg, parts.count.reg, imm(1<<16));
         B(PL, "fragment_loop");
@@ -392,7 +392,7 @@ void GGLAssembler::build_scanline_prolog(
         int Rs = scratches.obtain();
         parts.cbPtr.setTo(obtainReg(), cb_bits);
         CONTEXT_LOAD(Rs, state.buffers.color.stride);
-        CONTEXT_LOAD(parts.cbPtr.reg, state.buffers.color.data);
+        CONTEXT_ADDR_LOAD(parts.cbPtr.reg, state.buffers.color.data);
         SMLABB(AL, Rs, Ry, Rs, Rx);  // Rs = Rx + Ry*Rs
         base_offset(parts.cbPtr, parts.cbPtr, Rs);
         scratches.recycle(Rs);
@@ -428,11 +428,11 @@ void GGLAssembler::build_scanline_prolog(
         int Rs = dzdx;
         int zbase = scratches.obtain();
         CONTEXT_LOAD(Rs, state.buffers.depth.stride);
-        CONTEXT_LOAD(zbase, state.buffers.depth.data);
+        CONTEXT_ADDR_LOAD(zbase, state.buffers.depth.data);
         SMLABB(AL, Rs, Ry, Rs, Rx);
         ADD(AL, 0, Rs, Rs, reg_imm(parts.count.reg, LSR, 16));
-        ADD(AL, 0, zbase, zbase, reg_imm(Rs, LSL, 1));
-        CONTEXT_STORE(zbase, generated_vars.zbase);
+        ADDR_ADD(AL, 0, zbase, zbase, reg_imm(Rs, LSL, 1));
+        CONTEXT_ADDR_STORE(zbase, generated_vars.zbase);
     }
 
     // init texture coordinates
@@ -445,8 +445,8 @@ void GGLAssembler::build_scanline_prolog(
     // init coverage factor application (anti-aliasing)
     if (mAA) {
         parts.covPtr.setTo(obtainReg(), 16);
-        CONTEXT_LOAD(parts.covPtr.reg, state.buffers.coverage);
-        ADD(AL, 0, parts.covPtr.reg, parts.covPtr.reg, reg_imm(Rx, LSL, 1));
+        CONTEXT_ADDR_LOAD(parts.covPtr.reg, state.buffers.coverage);
+        ADDR_ADD(AL, 0, parts.covPtr.reg, parts.covPtr.reg, reg_imm(Rx, LSL, 1));
     }
 }
 
@@ -765,8 +765,8 @@ void GGLAssembler::build_depth_test(
         int depth = scratches.obtain();
         int z = parts.z.reg;
         
-        CONTEXT_LOAD(zbase, generated_vars.zbase);  // stall
-        SUB(AL, 0, zbase, zbase, reg_imm(parts.count.reg, LSR, 15));
+        CONTEXT_ADDR_LOAD(zbase, generated_vars.zbase);  // stall
+        ADDR_SUB(AL, 0, zbase, zbase, reg_imm(parts.count.reg, LSR, 15));
             // above does zbase = zbase + ((count >> 16) << 1)
 
         if (mask & Z_TEST) {
@@ -990,22 +990,22 @@ void GGLAssembler::base_offset(
 {
     switch (b.size) {
     case 32:
-        ADD(AL, 0, d.reg, b.reg, reg_imm(o.reg, LSL, 2));
+        ADDR_ADD(AL, 0, d.reg, b.reg, reg_imm(o.reg, LSL, 2));
         break;
     case 24:
         if (d.reg == b.reg) {
-            ADD(AL, 0, d.reg, b.reg, reg_imm(o.reg, LSL, 1));
-            ADD(AL, 0, d.reg, d.reg, o.reg);
+            ADDR_ADD(AL, 0, d.reg, b.reg, reg_imm(o.reg, LSL, 1));
+            ADDR_ADD(AL, 0, d.reg, d.reg, o.reg);
         } else {
-            ADD(AL, 0, d.reg, o.reg, reg_imm(o.reg, LSL, 1));
-            ADD(AL, 0, d.reg, d.reg, b.reg);
+            ADDR_ADD(AL, 0, d.reg, o.reg, reg_imm(o.reg, LSL, 1));
+            ADDR_ADD(AL, 0, d.reg, d.reg, b.reg);
         }
         break;
     case 16:
-        ADD(AL, 0, d.reg, b.reg, reg_imm(o.reg, LSL, 1));
+        ADDR_ADD(AL, 0, d.reg, b.reg, reg_imm(o.reg, LSL, 1));
         break;
     case 8:
-        ADD(AL, 0, d.reg, b.reg, o.reg);
+        ADDR_ADD(AL, 0, d.reg, b.reg, o.reg);
         break;
     }
 }
