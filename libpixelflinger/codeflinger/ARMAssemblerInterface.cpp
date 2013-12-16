@@ -61,6 +61,29 @@ uint32_t ARMAssemblerInterface::__immed8_pre(int32_t immed8, int W)
             ((W&1)<<21) | (((offset&0xF0)<<4)|(offset&0xF));
 }
 
+// The following four functions are required for address manipulation
+// These are virtual functions, which can be overridden by architectures
+// that need special handling of address values (e.g. 64-bit arch)
 
+void ARMAssemblerInterface::ADDR_LDR(int cc, int Rd,
+     int Rn, uint32_t offset)
+{
+    LDR(cc, Rd, Rn, offset);
+}
+void ARMAssemblerInterface::ADDR_STR(int cc, int Rd,
+     int Rn, uint32_t offset)
+{
+    STR(cc, Rd, Rn, offset);
+}
+void ARMAssemblerInterface::ADDR_ADD(int cc, int s,
+     int Rd, int Rn, uint32_t Op2)
+{
+    dataProcessing(opADD, cc, s, Rd, Rn, Op2);
+}
+void ARMAssemblerInterface::ADDR_SUB(int cc, int s,
+     int Rd, int Rn, uint32_t Op2)
+{
+    dataProcessing(opSUB, cc, s, Rd, Rn, Op2);
+}
 }; // namespace android
 
