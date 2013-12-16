@@ -457,6 +457,69 @@ inline int64_t gglMulii(int32_t x, int32_t y) {
     return u.res;
 }
 
+#elif defined(__aarch64__)
+
+// inline AArch64 implementations
+
+inline GGLfixed gglMulx(GGLfixed x, GGLfixed y, int shift) CONST;
+inline GGLfixed gglMulx(GGLfixed x, GGLfixed y, int shift)
+{
+    GGLfixed result;
+    GGLfixed round;
+
+    asm("mov    %x[round], #1                        \n"
+        "lsl    %x[round], %x[round], %x[shift]      \n"
+        "lsr    %x[round], %x[round], #1             \n"
+        "smaddl %x[result], %w[x], %w[y],%x[round]   \n"
+        "lsr    %x[result], %x[result], %x[shift]    \n"
+        : [round]"=&r"(round), [result]"=&r"(result) \
+        : [x]"r"(x), [y]"r"(y), [shift] "r"(shift)   \
+        :
+       );
+    return result;
+}
+inline GGLfixed gglMulAddx(GGLfixed x, GGLfixed y, GGLfixed a, int shift) CONST;
+inline GGLfixed gglMulAddx(GGLfixed x, GGLfixed y, GGLfixed a, int shift)
+{
+    GGLfixed result;
+    asm("smull  %x[result], %w[x], %w[y]                     \n"
+        "lsr    %x[result], %x[result], %x[shift]            \n"
+        "add    %w[result], %w[result], %w[a]                \n"
+        : [result]"=&r"(result)                               \
+        : [x]"r"(x), [y]"r"(y), [a]"r"(a), [shift] "r"(shift) \
+        :
+        );
+    return result;
+}
+
+inline GGLfixed gglMulSubx(GGLfixed x, GGLfixed y, GGLfixed a, int shift) CONST;
+inline GGLfixed gglMulSubx(GGLfixed x, GGLfixed y, GGLfixed a, int shift)
+{
+
+    GGLfixed result;
+    int rshift;
+
+    asm("smull  %x[result], %w[x], %w[y]                     \n"
+        "lsr    %x[result], %x[result], %x[shift]            \n"
+        "sub    %w[result], %w[result], %w[a]                \n"
+        : [result]"=&r"(result)                               \
+        : [x]"r"(x), [y]"r"(y), [a]"r"(a), [shift] "r"(shift) \
+        :
+        );
+    return result;
+}
+inline int64_t gglMulii(int32_t x, int32_t y) CONST;
+inline int64_t gglMulii(int32_t x, int32_t y)
+{
+    int64_t res;
+    asm("smull  %x0, %w1, %w2 \n"
+        : "=r"(res)
+        : "%r"(x), "r"(y)
+        :
+        );
+    return res;
+}
+
 #else // ----------------------------------------------------------------------
 
 inline GGLfixed gglMulx(GGLfixed a, GGLfixed b, int shift) CONST;
@@ -498,7 +561,7 @@ inline GGLfixed gglMulSubx(GGLfixed a, GGLfixed b, GGLfixed c) {
 inline int32_t gglClz(int32_t x) CONST;
 inline int32_t gglClz(int32_t x)
 {
-#if (defined(__arm__) && !defined(__thumb__)) || defined(__mips__)
+#if (defined(__arm__) && !defined(__thumb__)) || defined(__mips__) || defined(__aarch64__)
     return __builtin_clz(x);
 #else
     if (!x) return 32;
@@ -554,6 +617,8 @@ inline GGLfixed gglClampx(GGLfixed c)
     // clamps to zero in one instruction, but gcc won't generate it and
     // replace it by a cmp + movlt (it's quite amazing actually).
     asm("bic %0, %1, %1, asr #31\n" : "=r"(c) : "r"(c));
+#elif defined(__aarch64__)
+    asm("bic %w0, %w1, %w1, asr #31\n" : "=r"(c) : "r"(c));
 #else
     c &= ~(c>>31);
 #endif

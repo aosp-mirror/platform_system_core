@@ -31,8 +31,11 @@
 
 #include "codeflinger/CodeCache.h"
 #include "codeflinger/GGLAssembler.h"
+#if defined(__arm__)
 #include "codeflinger/ARMAssembler.h"
-#if defined(__mips__)
+#elif defined(__aarch64__)
+#include "codeflinger/Aarch64Assembler.h"
+#elif defined(__mips__)
 #include "codeflinger/MIPSAssembler.h"
 #endif
 //#include "codeflinger/ARMAssemblerOptimizer.h"
@@ -52,7 +55,7 @@
 #   define ANDROID_CODEGEN      ANDROID_CODEGEN_GENERATED
 #endif
 
-#if defined(__arm__) || defined(__mips__)
+#if defined(__arm__) || defined(__mips__) || defined(__aarch64__)
 #   define ANDROID_ARM_CODEGEN  1
 #else
 #   define ANDROID_ARM_CODEGEN  0
@@ -68,6 +71,8 @@
 
 #ifdef __mips__
 #define ASSEMBLY_SCRATCH_SIZE   4096
+#elif defined(__aarch64__)
+#define ASSEMBLY_SCRATCH_SIZE   8192
 #else
 #define ASSEMBLY_SCRATCH_SIZE   2048
 #endif
@@ -122,6 +127,9 @@ extern "C" void scanline_t32cb16blend_arm(uint16_t*, uint32_t*, size_t);
 extern "C" void scanline_t32cb16_arm(uint16_t *dst, uint32_t *src, size_t ct);
 extern "C" void scanline_col32cb16blend_neon(uint16_t *dst, uint32_t *col, size_t ct);
 extern "C" void scanline_col32cb16blend_arm(uint16_t *dst, uint32_t col, size_t ct);
+#elif defined(__aarch64__)
+extern "C" void scanline_t32cb16blend_aarch64(uint16_t*, uint32_t*, size_t);
+extern "C" void scanline_col32cb16blend_aarch64(uint16_t *dst, uint32_t col, size_t ct);
 #elif defined(__mips__)
 extern "C" void scanline_t32cb16blend_mips(uint16_t*, uint32_t*, size_t);
 #endif
@@ -276,6 +284,8 @@ static  const needs_filter_t fill16noblend = {
 
 #if defined(__mips__)
 static CodeCache gCodeCache(32 * 1024);
+#elif defined(__aarch64__)
+static CodeCache gCodeCache(48 * 1024);
 #else
 static CodeCache gCodeCache(12 * 1024);
 #endif
@@ -394,6 +404,8 @@ static void pick_scanline(context_t* c)
 #endif
 #if defined(__mips__)
         GGLAssembler assembler( new ArmToMipsAssembler(a) );
+#elif defined(__aarch64__)
+        GGLAssembler assembler( new ArmToAarch64Assembler(a) );
 #endif
         // generate the scanline code for the given needs
         int err = assembler.scanline(c->state.needs, c);
@@ -2085,6 +2097,8 @@ void scanline_col32cb16blend(context_t* c)
 #else  // defined(__ARM_HAVE_NEON) && BYTE_ORDER == LITTLE_ENDIAN
     scanline_col32cb16blend_arm(dst, GGL_RGBA_TO_HOST(c->packed8888), ct);
 #endif // defined(__ARM_HAVE_NEON) && BYTE_ORDER == LITTLE_ENDIAN
+#elif ((ANDROID_CODEGEN >= ANDROID_CODEGEN_ASM) && defined(__aarch64__))
+    scanline_col32cb16blend_aarch64(dst, GGL_RGBA_TO_HOST(c->packed8888), ct);
 #else
     uint32_t s = GGL_RGBA_TO_HOST(c->packed8888);
     int sA = (s>>24);
@@ -2157,7 +2171,7 @@ last_one:
 
 void scanline_t32cb16blend(context_t* c)
 {
-#if ((ANDROID_CODEGEN >= ANDROID_CODEGEN_ASM) && (defined(__arm__) || defined(__mips)))
+#if ((ANDROID_CODEGEN >= ANDROID_CODEGEN_ASM) && (defined(__arm__) || defined(__mips__) || defined(__aarch64__)))
     int32_t x = c->iterators.xl;
     size_t ct = c->iterators.xr - x;
     int32_t y = c->iterators.y;
@@ -2171,7 +2185,9 @@ void scanline_t32cb16blend(context_t* c)
 
 #ifdef __arm__
     scanline_t32cb16blend_arm(dst, src, ct);
-#else
+#elif defined(__aarch64__)
+    scanline_t32cb16blend_aarch64(dst, src, ct);
+#elif defined(__mips__)
     scanline_t32cb16blend_mips(dst, src, ct);
 #endif
 #else
