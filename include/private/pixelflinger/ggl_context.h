@@ -340,16 +340,18 @@ struct pixel_t {
 
 struct surface_t {
     union {
-        GGLSurface      s;
+        GGLSurface          s;
+        // Keep the following struct field types in line with the corresponding
+        // GGLSurface fields to avoid mismatches leading to errors.
         struct {
-        uint32_t            reserved;
-        uint32_t			width;
-        uint32_t			height;
-        int32_t             stride;
-        uint8_t*			data;	
-        uint8_t				format;
-        uint8_t				dirty;
-        uint8_t				pad[2];
+            GGLsizei        reserved;
+            GGLuint         width;
+            GGLuint         height;
+            GGLint          stride;
+            GGLubyte*       data;
+            GGLubyte        format;
+            GGLubyte        dirty;
+            GGLubyte        pad[2];
         };
     };
     void                (*read) (const surface_t* s, context_t* c,
