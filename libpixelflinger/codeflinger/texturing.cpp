@@ -356,7 +356,7 @@ void GGLAssembler::init_textures(
             // merge base & offset
             CONTEXT_LOAD(txPtr.reg, generated_vars.texture[i].stride);
             SMLABB(AL, Rx, Ry, txPtr.reg, Rx);               // x+y*stride
-            CONTEXT_LOAD(txPtr.reg, generated_vars.texture[i].data);
+            CONTEXT_ADDR_LOAD(txPtr.reg, generated_vars.texture[i].data);
             base_offset(txPtr, txPtr, Rx);
         } else {
             Scratch scratches(registerFile());
@@ -629,7 +629,7 @@ void GGLAssembler::build_textures(  fragment_parts_t& parts,
                 return;
 
             CONTEXT_LOAD(stride,    generated_vars.texture[i].stride);
-            CONTEXT_LOAD(txPtr.reg, generated_vars.texture[i].data);
+            CONTEXT_ADDR_LOAD(txPtr.reg, generated_vars.texture[i].data);
             SMLABB(AL, u, v, stride, u);    // u+v*stride 
             base_offset(txPtr, txPtr, u);
 

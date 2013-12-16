@@ -294,5 +294,18 @@ void ARMAssemblerProxy::UBFX(int cc, int Rd, int Rn, int lsb, int width) {
     mTarget->UBFX(cc, Rd, Rn, lsb, width);
 }
 
+void ARMAssemblerProxy::ADDR_LDR(int cc, int Rd, int Rn, uint32_t offset) {
+     mTarget->ADDR_LDR(cc, Rd, Rn, offset);
+}
+void ARMAssemblerProxy::ADDR_STR(int cc, int Rd, int Rn, uint32_t offset) {
+     mTarget->ADDR_STR(cc, Rd, Rn, offset);
+}
+void ARMAssemblerProxy::ADDR_ADD(int cc, int s, int Rd, int Rn, uint32_t Op2){
+     mTarget->ADDR_ADD(cc, s, Rd, Rn, Op2);
+}
+void ARMAssemblerProxy::ADDR_SUB(int cc, int s, int Rd, int Rn, uint32_t Op2){
+     mTarget->ADDR_SUB(cc, s, Rd, Rn, Op2);
+}
+
 }; // namespace android
 
