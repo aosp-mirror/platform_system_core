@@ -63,7 +63,7 @@ public:
     };
 
     enum {
-        CODEGEN_ARCH_ARM = 1, CODEGEN_ARCH_MIPS
+        CODEGEN_ARCH_ARM = 1, CODEGEN_ARCH_MIPS, CODEGEN_ARCH_AARCH64
     };
 
     // -----------------------------------------------------------------------
