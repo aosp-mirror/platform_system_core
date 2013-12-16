@@ -38,7 +38,7 @@ check_log() {
     fail "expected ${n_expected} lines in ${TESTLOG}, found this instead:
 $(<"${TESTLOG}")"
   fi
-  if egrep -qv '^[0-9a-f]{8}$' "${TESTLOG}"; then
+  if egrep -qv '^[0-9a-f]{8}' "${TESTLOG}"; then
     fail "found bad lines in ${TESTLOG}:
 $(<"${TESTLOG}")"
   fi

@@ -124,6 +124,7 @@ static void SetHashSeen(uint32_t hash) {
 
 int WarnStart(void) {
   uint32_t hash;
+  char *spacep;
 
   if (filter)
     return 1;
@@ -139,7 +140,10 @@ int WarnStart(void) {
   yyout = fopen(warn_dump_path, "w");
   if (yyout == NULL)
     Die("fopen %s failed: %s\n", warn_dump_path, strerror(errno));
-  fprintf(yyout, "%08x\n", hash);
+  spacep = index(yytext, ' ');
+  if (spacep == NULL || spacep[1] == '\0')
+    spacep = "unknown-function";
+  fprintf(yyout, "%08x-%s\n", hash, spacep + 1);
   return 1;
 }
 
