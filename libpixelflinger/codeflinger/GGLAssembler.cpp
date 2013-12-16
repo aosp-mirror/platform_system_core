@@ -901,6 +901,10 @@ void GGLAssembler::build_and_immediate(int d, int s, uint32_t mask, int bits)
         AND( AL, 0, d, s, imm(mask) );
         return;
     }
+    else if (getCodegenArch() == CODEGEN_ARCH_AARCH64) {
+        AND( AL, 0, d, s, imm(mask) );
+        return;
+    }
 
     int negative_logic = !isValidImmediate(mask);
     if (negative_logic) {

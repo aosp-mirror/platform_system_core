@@ -34,7 +34,7 @@ namespace android {
 
 // ----------------------------------------------------------------------------
 
-#if defined(__arm__)
+#if defined(__arm__) || defined(__aarch64__)
 #include <unistd.h>
 #include <errno.h>
 #endif
@@ -201,7 +201,7 @@ int CodeCache::cache(  const AssemblyKeyBase& keyBase,
         mCacheInUse += assemblySize;
         mWhen++;
         // synchronize caches...
-#if defined(__arm__) || defined(__mips__)
+#if defined(__arm__) || defined(__mips__) || defined(__aarch64__)
         const long base = long(assembly->base());
         const long curr = base + long(assembly->size());
         err = cacheflush(base, curr, 0);
