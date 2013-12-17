@@ -88,7 +88,7 @@ mk_pri_pentry(struct disk_info *dinfo, struct part_info *pinfo, int pnum,
         /* DO NOT DEREFERENCE */
         struct pc_boot_record *mbr = (void *)PC_MBR_DISK_OFFSET; 
         /* grab the offset in mbr where to write this partition entry. */
-        item->offset = (loff_t)((uint32_t)((uint8_t *)(&mbr->ptable[pnum])));
+        item->offset = (loff_t)((uintptr_t)((uint8_t *)(&mbr->ptable[pnum])));
     }
 
     pentry = (struct pc_partition *) &item->data;
