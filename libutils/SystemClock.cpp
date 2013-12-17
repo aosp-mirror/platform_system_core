@@ -119,22 +119,6 @@ int64_t elapsedRealtimeNano()
     static volatile int prevMethod;
 #endif
 
-#if 0
-    /*
-     * b/7100774
-     * clock_gettime appears to have clock skews and can sometimes return
-     * backwards values. Disable its use until we find out what's wrong.
-     */
-    result = clock_gettime(CLOCK_BOOTTIME, &ts);
-    if (result == 0) {
-        timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
-        checkTimeStamps(timestamp, &prevTimestamp, &prevMethod,
-                        METHOD_CLOCK_GETTIME);
-        return timestamp;
-    }
-#endif
-
-    // CLOCK_BOOTTIME doesn't exist, fallback to /dev/alarm
     static int s_fd = -1;
 
     if (s_fd == -1) {
@@ -150,6 +134,15 @@ int64_t elapsedRealtimeNano()
     if (result == 0) {
         timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
         checkTimeStamps(timestamp, &prevTimestamp, &prevMethod, METHOD_IOCTL);
+        return timestamp;
+    }
+
+    // /dev/alarm doesn't exist, fallback to CLOCK_BOOTTIME
+    result = clock_gettime(CLOCK_BOOTTIME, &ts);
+    if (result == 0) {
+        timestamp = seconds_to_nanoseconds(ts.tv_sec) + ts.tv_nsec;
+        checkTimeStamps(timestamp, &prevTimestamp, &prevMethod,
+                        METHOD_CLOCK_GETTIME);
         return timestamp;
     }
 
