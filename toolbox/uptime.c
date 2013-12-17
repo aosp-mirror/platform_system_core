@@ -54,17 +54,27 @@ static void format_time(int time, char* buffer) {
         sprintf(buffer, "%02d:%02d:%02d", hours, minutes, seconds);
 }
 
-int64_t elapsedRealtime()
+static int elapsedRealtimeAlarm(struct timespec *ts)
 {
-    struct timespec ts;
     int fd, result;
 
     fd = open("/dev/alarm", O_RDONLY);
     if (fd < 0)
         return fd;
 
-   result = ioctl(fd, ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), &ts);
-   close(fd);
+    result = ioctl(fd, ANDROID_ALARM_GET_TIME(ANDROID_ALARM_ELAPSED_REALTIME), ts);
+    close(fd);
+
+    return result;
+}
+
+int64_t elapsedRealtime()
+{
+    struct timespec ts;
+
+    int result = elapsedRealtimeAlarm(&ts);
+    if (result < 0)
+        result = clock_gettime(CLOCK_BOOTTIME, &ts);
 
     if (result == 0)
         return ts.tv_sec;
