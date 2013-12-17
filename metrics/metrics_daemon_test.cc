@@ -33,8 +33,6 @@ using ::testing::AtLeast;
 static const int kSecondsPerDay = 24 * 60 * 60;
 
 static const char kTestDir[] = "test";
-static const char kLastFile[] = "test/last";
-static const char kCurrentFile[] = "test/current";
 static const char kFakeDiskStatsPath[] = "fake-disk-stats";
 static const char kFakeDiskStatsFormat[] =
     "    1793     1788    %d   105580    "
