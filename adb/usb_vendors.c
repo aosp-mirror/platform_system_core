@@ -154,6 +154,8 @@
 #define VENDOR_ID_SONY_ERICSSON 0x0FCE
 // T & A Mobile Phones' USB Vendor ID
 #define VENDOR_ID_T_AND_A       0x1BBB
+// TechFaith's USB Vendor ID
+#define VENDOR_ID_TECHFAITH     0x1d09
 // Teleepoch's USB Vendor ID
 #define VENDOR_ID_TELEEPOCH     0x2340
 // Texas Instruments's USB Vendor ID
@@ -234,6 +236,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_SONY,
     VENDOR_ID_SONY_ERICSSON,
     VENDOR_ID_T_AND_A,
+    VENDOR_ID_TECHFAITH,
     VENDOR_ID_TELEEPOCH,
     VENDOR_ID_TI,
     VENDOR_ID_TOSHIBA,
