@@ -40,7 +40,10 @@ int ion_open()
 
 int ion_close(int fd)
 {
-    return close(fd);
+    int ret = close(fd);
+    if (ret < 0)
+        return -errno;
+    return ret;
 }
 
 static int ion_ioctl(int fd, int req, void *arg)
