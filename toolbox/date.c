@@ -114,7 +114,7 @@ int date_main(int argc, char *argv[])
         //tv.tv_sec = mktime(&tm);
         //tv.tv_usec = 0;
         strtotimeval(argv[optind], &tv);
-        printf("time %s -> %d.%d\n", argv[optind], tv.tv_sec, tv.tv_usec);
+        printf("time %s -> %lu.%lu\n", argv[optind], tv.tv_sec, tv.tv_usec);
         fd = open("/dev/alarm", O_RDWR);
         ts.tv_sec = tv.tv_sec;
         ts.tv_nsec = tv.tv_usec * 1000;
