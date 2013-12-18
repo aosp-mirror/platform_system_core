@@ -28,19 +28,19 @@ KernelWarningCollector::~KernelWarningCollector() {
 }
 
 bool KernelWarningCollector::LoadKernelWarning(std::string *content,
-                                               std::string *hash_string) {
+                                               std::string *signature) {
   FilePath kernel_warning_path(kKernelWarningPath);
   if (!base::ReadFileToString(kernel_warning_path, content)) {
     LOG(ERROR) << "Could not open " << kKernelWarningPath;
     return false;
   }
-  /* Verify that the first line contains an 8-digit hex hash. */
-  *hash_string = content->substr(0, 8);
-  std::vector<uint8> output;
-  if (!base::HexStringToBytes(*hash_string, &output)) {
-    LOG(ERROR) << "Bad hash " << *hash_string << " in " << kKernelWarningPath;
+  /* The signature is in the first line. */
+  std::string::size_type end_position = content->find('\n');
+  if (end_position == std::string::npos) {
+    LOG(ERROR) << "unexpected kernel warning format";
     return false;
   }
+  *signature = content->substr(0, end_position);
   return true;
 }
 
@@ -62,8 +62,8 @@ bool KernelWarningCollector::Collect() {
   }
 
   std::string kernel_warning;
-  std::string warning_hash;
-  if (!LoadKernelWarning(&kernel_warning, &warning_hash)) {
+  std::string warning_signature;
+  if (!LoadKernelWarning(&kernel_warning, &warning_signature)) {
     return true;
   }
 
@@ -89,7 +89,7 @@ bool KernelWarningCollector::Collect() {
     return true;
   }
 
-  AddCrashMetaData(kKernelWarningSignatureKey, warning_hash);
+  AddCrashMetaData(kKernelWarningSignatureKey, warning_signature);
   WriteCrashMetaData(
       root_crash_directory.Append(
           StringPrintf("%s.meta", dump_basename.c_str())),

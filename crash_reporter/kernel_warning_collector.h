@@ -24,8 +24,8 @@ class KernelWarningCollector : public CrashCollector {
   friend class KernelWarningCollectorTest;
   FRIEND_TEST(KernelWarningCollectorTest, CollectOK);
 
-  // Reads the full content of the kernel warn dump and the warning hash.
-  bool LoadKernelWarning(std::string *hash, std::string *content);
+  // Reads the full content of the kernel warn dump and its signature.
+  bool LoadKernelWarning(std::string *content, std::string *signature);
 };
 
 #endif  // _CRASH_REPORTER_KERNEL_WARNING_COLLECTOR_H_
