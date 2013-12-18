@@ -71,7 +71,8 @@ int64_t elapsedRealtime()
     return -1;
 }
 
-int uptime_main(int argc, char *argv[])
+int uptime_main(int argc __attribute__((unused)),
+        char *argv[] __attribute__((unused)))
 {
     float up_time, idle_time;
     char up_string[100], idle_string[100], sleep_string[100];
