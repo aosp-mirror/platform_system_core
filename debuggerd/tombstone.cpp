@@ -14,18 +14,20 @@
  * limitations under the License.
  */
 
-#include <stddef.h>
-#include <stdlib.h>
-#include <signal.h>
-#include <string.h>
-#include <stdio.h>
-#include <fcntl.h>
-#include <errno.h>
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <signal.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <sys/ptrace.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
-#include <inttypes.h>
+#include <sys/un.h>
 
 #include <private/android_filesystem_config.h>
 
@@ -35,9 +37,6 @@
 
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
-
-#include <sys/socket.h>
-#include <linux/un.h>
 
 #include <selinux/android.h>
 
@@ -51,6 +50,7 @@
 
 #define MAX_TOMBSTONES  10
 #define TOMBSTONE_DIR   "/data/tombstones"
+#define TOMBSTONE_TEMPLATE (TOMBSTONE_DIR"/tombstone_%02d")
 
 // Must match the path defined in NativeCrashListener.java
 #define NCRASH_SOCKET_PATH "/data/system/ndebugsocket"
@@ -59,7 +59,6 @@
   typeof(x) __dummy1;     \
   typeof(y) __dummy2;     \
   (void)(&__dummy1 == &__dummy2); }
-
 
 static bool signal_has_address(int sig) {
   switch (sig) {
@@ -675,7 +674,7 @@ static char* find_and_open_tombstone(int* fd) {
   char path[128];
   int oldest = 0;
   for (int i = 0; i < MAX_TOMBSTONES; i++) {
-    snprintf(path, sizeof(path), TOMBSTONE_DIR"/tombstone_%02d", i);
+    snprintf(path, sizeof(path), TOMBSTONE_TEMPLATE, i);
 
     if (!stat(path, &sb)) {
       if (sb.st_mtime < mtime) {
@@ -696,7 +695,7 @@ static char* find_and_open_tombstone(int* fd) {
   }
 
   // we didn't find an available file, so we clobber the oldest one
-  snprintf(path, sizeof(path), TOMBSTONE_DIR"/tombstone_%02d", oldest);
+  snprintf(path, sizeof(path), TOMBSTONE_TEMPLATE, oldest);
   *fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
   if (*fd < 0) {
     LOG("failed to open tombstone file '%s': %s\n", path, strerror(errno));
@@ -739,8 +738,13 @@ static int activity_manager_connect() {
 char* engrave_tombstone(
     pid_t pid, pid_t tid, int signal, uintptr_t abort_msg_address, bool dump_sibling_threads,
     bool quiet, bool* detach_failed, int* total_sleep_time_usec) {
-  mkdir(TOMBSTONE_DIR, 0755);
-  chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM);
+  if ((mkdir(TOMBSTONE_DIR, 0755) == -1) && (errno != EEXIST)) {
+      LOG("failed to create %s: %s\n", TOMBSTONE_DIR, strerror(errno));
+  }
+
+  if (chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM) == -1) {
+      LOG("failed to change ownership of %s: %s\n", TOMBSTONE_DIR, strerror(errno));
+  }
 
   if (selinux_android_restorecon(TOMBSTONE_DIR) == -1) {
     *detach_failed = false;
