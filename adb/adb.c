@@ -562,7 +562,7 @@ void handle_packet(apacket *p, atransport *t)
         break;
 
     case A_OPEN: /* OPEN(local-id, 0, "destination") */
-        if (t->online) {
+        if (t->online && p->msg.arg0 != 0 && p->msg.arg1 == 0) {
             char *name = (char*) p->data;
             name[p->msg.data_length > 0 ? p->msg.data_length - 1 : 0] = 0;
             s = create_local_service_socket(name);
@@ -578,28 +578,50 @@ void handle_packet(apacket *p, atransport *t)
         break;
 
     case A_OKAY: /* READY(local-id, remote-id, "") */
-        if (t->online) {
-            if((s = find_local_socket(p->msg.arg1))) {
+        if (t->online && p->msg.arg0 != 0 && p->msg.arg1 != 0) {
+            if((s = find_local_socket(p->msg.arg1, 0))) {
                 if(s->peer == 0) {
+                    /* On first READY message, create the connection. */
                     s->peer = create_remote_socket(p->msg.arg0, t);
                     s->peer->peer = s;
+                    s->ready(s);
+                } else if (s->peer->id == p->msg.arg0) {
+                    /* Other READY messages must use the same local-id */
+                    s->ready(s);
+                } else {
+                    D("Invalid A_OKAY(%d,%d), expected A_OKAY(%d,%d) on transport %s\n",
+                      p->msg.arg0, p->msg.arg1, s->peer->id, p->msg.arg1, t->serial);
                 }
-                s->ready(s);
             }
         }
         break;
 
-    case A_CLSE: /* CLOSE(local-id, remote-id, "") */
-        if (t->online) {
-            if((s = find_local_socket(p->msg.arg1))) {
-                s->close(s);
+    case A_CLSE: /* CLOSE(local-id, remote-id, "") or CLOSE(0, remote-id, "") */
+        if (t->online && p->msg.arg1 != 0) {
+            if((s = find_local_socket(p->msg.arg1, p->msg.arg0))) {
+                /* According to protocol.txt, p->msg.arg0 might be 0 to indicate
+                 * a failed OPEN only. However, due to a bug in previous ADB
+                 * versions, CLOSE(0, remote-id, "") was also used for normal
+                 * CLOSE() operations.
+                 *
+                 * This is bad because it means a compromised adbd could
+                 * send packets to close connections between the host and
+                 * other devices. To avoid this, only allow this if the local
+                 * socket has a peer on the same transport.
+                 */
+                if (p->msg.arg0 == 0 && s->peer && s->peer->transport != t) {
+                    D("Invalid A_CLSE(0, %u) from transport %s, expected transport %s\n",
+                      p->msg.arg1, t->serial, s->peer->transport->serial);
+                } else {
+                    s->close(s);
+                }
             }
         }
         break;
 
-    case A_WRTE:
-        if (t->online) {
-            if((s = find_local_socket(p->msg.arg1))) {
+    case A_WRTE: /* WRITE(local-id, remote-id, <data>) */
+        if (t->online && p->msg.arg0 != 0 && p->msg.arg1 != 0) {
+            if((s = find_local_socket(p->msg.arg1, p->msg.arg0))) {
                 unsigned rid = p->msg.arg0;
                 p->len = p->msg.data_length;
 
