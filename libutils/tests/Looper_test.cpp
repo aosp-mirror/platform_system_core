@@ -119,8 +119,8 @@ TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndNotAwoken_WaitsForTimeout) {
 
     EXPECT_NEAR(100, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. equal timeout";
-    EXPECT_EQ(ALOOPER_POLL_TIMEOUT, result)
-            << "pollOnce result should be ALOOPER_POLL_TIMEOUT";
+    EXPECT_EQ(Looper::POLL_TIMEOUT, result)
+            << "pollOnce result should be LOOPER_POLL_TIMEOUT";
 }
 
 TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndAwokenBeforeWaiting_ImmediatelyReturns) {
@@ -132,8 +132,8 @@ TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndAwokenBeforeWaiting_Immediately
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. zero because wake() was called before waiting";
-    EXPECT_EQ(ALOOPER_POLL_WAKE, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because loop was awoken";
+    EXPECT_EQ(Looper::POLL_WAKE, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because loop was awoken";
 }
 
 TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndAwokenWhileWaiting_PromptlyReturns) {
@@ -146,8 +146,8 @@ TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndAwokenWhileWaiting_PromptlyRetu
 
     EXPECT_NEAR(100, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. equal wake delay";
-    EXPECT_EQ(ALOOPER_POLL_WAKE, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because loop was awoken";
+    EXPECT_EQ(Looper::POLL_WAKE, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because loop was awoken";
 }
 
 TEST_F(LooperTest, PollOnce_WhenZeroTimeoutAndNoRegisteredFDs_ImmediatelyReturns) {
@@ -157,15 +157,15 @@ TEST_F(LooperTest, PollOnce_WhenZeroTimeoutAndNoRegisteredFDs_ImmediatelyReturns
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should be approx. zero";
-    EXPECT_EQ(ALOOPER_POLL_TIMEOUT, result)
-            << "pollOnce result should be ALOOPER_POLL_TIMEOUT";
+    EXPECT_EQ(Looper::POLL_TIMEOUT, result)
+            << "pollOnce result should be Looper::POLL_TIMEOUT";
 }
 
 TEST_F(LooperTest, PollOnce_WhenZeroTimeoutAndNoSignalledFDs_ImmediatelyReturns) {
     Pipe pipe;
     StubCallbackHandler handler(true);
 
-    handler.setCallback(mLooper, pipe.receiveFd, ALOOPER_EVENT_INPUT);
+    handler.setCallback(mLooper, pipe.receiveFd, Looper::EVENT_INPUT);
 
     StopWatch stopWatch("pollOnce");
     int result = mLooper->pollOnce(0);
@@ -173,8 +173,8 @@ TEST_F(LooperTest, PollOnce_WhenZeroTimeoutAndNoSignalledFDs_ImmediatelyReturns)
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should be approx. zero";
-    EXPECT_EQ(ALOOPER_POLL_TIMEOUT, result)
-            << "pollOnce result should be ALOOPER_POLL_TIMEOUT";
+    EXPECT_EQ(Looper::POLL_TIMEOUT, result)
+            << "pollOnce result should be Looper::POLL_TIMEOUT";
     EXPECT_EQ(0, handler.callbackCount)
             << "callback should not have been invoked because FD was not signalled";
 }
@@ -184,7 +184,7 @@ TEST_F(LooperTest, PollOnce_WhenZeroTimeoutAndSignalledFD_ImmediatelyInvokesCall
     StubCallbackHandler handler(true);
 
     ASSERT_EQ(OK, pipe.writeSignal());
-    handler.setCallback(mLooper, pipe.receiveFd, ALOOPER_EVENT_INPUT);
+    handler.setCallback(mLooper, pipe.receiveFd, Looper::EVENT_INPUT);
 
     StopWatch stopWatch("pollOnce");
     int result = mLooper->pollOnce(0);
@@ -192,21 +192,21 @@ TEST_F(LooperTest, PollOnce_WhenZeroTimeoutAndSignalledFD_ImmediatelyInvokesCall
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should be approx. zero";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because FD was signalled";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because FD was signalled";
     EXPECT_EQ(1, handler.callbackCount)
             << "callback should be invoked exactly once";
     EXPECT_EQ(pipe.receiveFd, handler.fd)
             << "callback should have received pipe fd as parameter";
-    EXPECT_EQ(ALOOPER_EVENT_INPUT, handler.events)
-            << "callback should have received ALOOPER_EVENT_INPUT as events";
+    EXPECT_EQ(Looper::EVENT_INPUT, handler.events)
+            << "callback should have received Looper::EVENT_INPUT as events";
 }
 
 TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndNoSignalledFDs_WaitsForTimeoutAndReturns) {
     Pipe pipe;
     StubCallbackHandler handler(true);
 
-    handler.setCallback(mLooper, pipe.receiveFd, ALOOPER_EVENT_INPUT);
+    handler.setCallback(mLooper, pipe.receiveFd, Looper::EVENT_INPUT);
 
     StopWatch stopWatch("pollOnce");
     int result = mLooper->pollOnce(100);
@@ -214,8 +214,8 @@ TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndNoSignalledFDs_WaitsForTimeoutA
 
     EXPECT_NEAR(100, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. equal timeout";
-    EXPECT_EQ(ALOOPER_POLL_TIMEOUT, result)
-            << "pollOnce result should be ALOOPER_POLL_TIMEOUT";
+    EXPECT_EQ(Looper::POLL_TIMEOUT, result)
+            << "pollOnce result should be Looper::POLL_TIMEOUT";
     EXPECT_EQ(0, handler.callbackCount)
             << "callback should not have been invoked because FD was not signalled";
 }
@@ -225,7 +225,7 @@ TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndSignalledFDBeforeWaiting_Immedi
     StubCallbackHandler handler(true);
 
     pipe.writeSignal();
-    handler.setCallback(mLooper, pipe.receiveFd, ALOOPER_EVENT_INPUT);
+    handler.setCallback(mLooper, pipe.receiveFd, Looper::EVENT_INPUT);
 
     StopWatch stopWatch("pollOnce");
     int result = mLooper->pollOnce(100);
@@ -235,14 +235,14 @@ TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndSignalledFDBeforeWaiting_Immedi
             << "signal should actually have been written";
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should be approx. zero";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because FD was signalled";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because FD was signalled";
     EXPECT_EQ(1, handler.callbackCount)
             << "callback should be invoked exactly once";
     EXPECT_EQ(pipe.receiveFd, handler.fd)
             << "callback should have received pipe fd as parameter";
-    EXPECT_EQ(ALOOPER_EVENT_INPUT, handler.events)
-            << "callback should have received ALOOPER_EVENT_INPUT as events";
+    EXPECT_EQ(Looper::EVENT_INPUT, handler.events)
+            << "callback should have received Looper::EVENT_INPUT as events";
 }
 
 TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndSignalledFDWhileWaiting_PromptlyInvokesCallbackAndReturns) {
@@ -250,7 +250,7 @@ TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndSignalledFDWhileWaiting_Promptl
     StubCallbackHandler handler(true);
     sp<DelayedWriteSignal> delayedWriteSignal = new DelayedWriteSignal(100, & pipe);
 
-    handler.setCallback(mLooper, pipe.receiveFd, ALOOPER_EVENT_INPUT);
+    handler.setCallback(mLooper, pipe.receiveFd, Looper::EVENT_INPUT);
     delayedWriteSignal->run();
 
     StopWatch stopWatch("pollOnce");
@@ -261,21 +261,21 @@ TEST_F(LooperTest, PollOnce_WhenNonZeroTimeoutAndSignalledFDWhileWaiting_Promptl
             << "signal should actually have been written";
     EXPECT_NEAR(100, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. equal signal delay";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because FD was signalled";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because FD was signalled";
     EXPECT_EQ(1, handler.callbackCount)
             << "callback should be invoked exactly once";
     EXPECT_EQ(pipe.receiveFd, handler.fd)
             << "callback should have received pipe fd as parameter";
-    EXPECT_EQ(ALOOPER_EVENT_INPUT, handler.events)
-            << "callback should have received ALOOPER_EVENT_INPUT as events";
+    EXPECT_EQ(Looper::EVENT_INPUT, handler.events)
+            << "callback should have received Looper::EVENT_INPUT as events";
 }
 
 TEST_F(LooperTest, PollOnce_WhenCallbackAddedThenRemoved_CallbackShouldNotBeInvoked) {
     Pipe pipe;
     StubCallbackHandler handler(true);
 
-    handler.setCallback(mLooper, pipe.receiveFd, ALOOPER_EVENT_INPUT);
+    handler.setCallback(mLooper, pipe.receiveFd, Looper::EVENT_INPUT);
     pipe.writeSignal(); // would cause FD to be considered signalled
     mLooper->removeFd(pipe.receiveFd);
 
@@ -287,8 +287,8 @@ TEST_F(LooperTest, PollOnce_WhenCallbackAddedThenRemoved_CallbackShouldNotBeInvo
             << "signal should actually have been written";
     EXPECT_NEAR(100, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. equal timeout because FD was no longer registered";
-    EXPECT_EQ(ALOOPER_POLL_TIMEOUT, result)
-            << "pollOnce result should be ALOOPER_POLL_TIMEOUT";
+    EXPECT_EQ(Looper::POLL_TIMEOUT, result)
+            << "pollOnce result should be Looper::POLL_TIMEOUT";
     EXPECT_EQ(0, handler.callbackCount)
             << "callback should not be invoked";
 }
@@ -297,7 +297,7 @@ TEST_F(LooperTest, PollOnce_WhenCallbackReturnsFalse_CallbackShouldNotBeInvokedA
     Pipe pipe;
     StubCallbackHandler handler(false);
 
-    handler.setCallback(mLooper, pipe.receiveFd, ALOOPER_EVENT_INPUT);
+    handler.setCallback(mLooper, pipe.receiveFd, Looper::EVENT_INPUT);
 
     // First loop: Callback is registered and FD is signalled.
     pipe.writeSignal();
@@ -310,8 +310,8 @@ TEST_F(LooperTest, PollOnce_WhenCallbackReturnsFalse_CallbackShouldNotBeInvokedA
             << "signal should actually have been written";
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. equal zero because FD was already signalled";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because FD was signalled";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because FD was signalled";
     EXPECT_EQ(1, handler.callbackCount)
             << "callback should be invoked";
 
@@ -326,8 +326,8 @@ TEST_F(LooperTest, PollOnce_WhenCallbackReturnsFalse_CallbackShouldNotBeInvokedA
             << "signal should actually have been written";
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. equal zero because timeout was zero";
-    EXPECT_EQ(ALOOPER_POLL_TIMEOUT, result)
-            << "pollOnce result should be ALOOPER_POLL_TIMEOUT";
+    EXPECT_EQ(Looper::POLL_TIMEOUT, result)
+            << "pollOnce result should be Looper::POLL_TIMEOUT";
     EXPECT_EQ(1, handler.callbackCount)
             << "callback should not be invoked this time";
 }
@@ -339,7 +339,7 @@ TEST_F(LooperTest, PollOnce_WhenNonCallbackFdIsSignalled_ReturnsIdent) {
     Pipe pipe;
 
     pipe.writeSignal();
-    mLooper->addFd(pipe.receiveFd, expectedIdent, ALOOPER_EVENT_INPUT, NULL, expectedData);
+    mLooper->addFd(pipe.receiveFd, expectedIdent, Looper::EVENT_INPUT, NULL, expectedData);
 
     StopWatch stopWatch("pollOnce");
     int fd;
@@ -356,15 +356,15 @@ TEST_F(LooperTest, PollOnce_WhenNonCallbackFdIsSignalled_ReturnsIdent) {
             << "pollOnce result should be the ident of the FD that was signalled";
     EXPECT_EQ(pipe.receiveFd, fd)
             << "pollOnce should have returned the received pipe fd";
-    EXPECT_EQ(ALOOPER_EVENT_INPUT, events)
-            << "pollOnce should have returned ALOOPER_EVENT_INPUT as events";
+    EXPECT_EQ(Looper::EVENT_INPUT, events)
+            << "pollOnce should have returned Looper::EVENT_INPUT as events";
     EXPECT_EQ(expectedData, data)
             << "pollOnce should have returned the data";
 }
 
 TEST_F(LooperTest, AddFd_WhenCallbackAdded_ReturnsOne) {
     Pipe pipe;
-    int result = mLooper->addFd(pipe.receiveFd, 0, ALOOPER_EVENT_INPUT, NULL, NULL);
+    int result = mLooper->addFd(pipe.receiveFd, 0, Looper::EVENT_INPUT, NULL, NULL);
 
     EXPECT_EQ(1, result)
             << "addFd should return 1 because FD was added";
@@ -372,7 +372,7 @@ TEST_F(LooperTest, AddFd_WhenCallbackAdded_ReturnsOne) {
 
 TEST_F(LooperTest, AddFd_WhenIdentIsNegativeAndCallbackIsNull_ReturnsError) {
     Pipe pipe;
-    int result = mLooper->addFd(pipe.receiveFd, -1, ALOOPER_EVENT_INPUT, NULL, NULL);
+    int result = mLooper->addFd(pipe.receiveFd, -1, Looper::EVENT_INPUT, NULL, NULL);
 
     EXPECT_EQ(-1, result)
             << "addFd should return -1 because arguments were invalid";
@@ -397,7 +397,7 @@ TEST_F(LooperTest, RemoveFd_WhenCallbackNotAdded_ReturnsZero) {
 TEST_F(LooperTest, RemoveFd_WhenCallbackAddedThenRemovedTwice_ReturnsOnceFirstTimeAndReturnsZeroSecondTime) {
     Pipe pipe;
     StubCallbackHandler handler(false);
-    handler.setCallback(mLooper, pipe.receiveFd, ALOOPER_EVENT_INPUT);
+    handler.setCallback(mLooper, pipe.receiveFd, Looper::EVENT_INPUT);
 
     // First time.
     int result = mLooper->removeFd(pipe.receiveFd);
@@ -417,8 +417,8 @@ TEST_F(LooperTest, PollOnce_WhenCallbackAddedTwice_OnlySecondCallbackShouldBeInv
     StubCallbackHandler handler1(true);
     StubCallbackHandler handler2(true);
 
-    handler1.setCallback(mLooper, pipe.receiveFd, ALOOPER_EVENT_INPUT);
-    handler2.setCallback(mLooper, pipe.receiveFd, ALOOPER_EVENT_INPUT); // replace it
+    handler1.setCallback(mLooper, pipe.receiveFd, Looper::EVENT_INPUT);
+    handler2.setCallback(mLooper, pipe.receiveFd, Looper::EVENT_INPUT); // replace it
     pipe.writeSignal(); // would cause FD to be considered signalled
 
     StopWatch stopWatch("pollOnce");
@@ -429,8 +429,8 @@ TEST_F(LooperTest, PollOnce_WhenCallbackAddedTwice_OnlySecondCallbackShouldBeInv
             << "signal should actually have been written";
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. zero because FD was already signalled";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because FD was signalled";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because FD was signalled";
     EXPECT_EQ(0, handler1.callbackCount)
             << "original handler callback should not be invoked because it was replaced";
     EXPECT_EQ(1, handler2.callbackCount)
@@ -447,8 +447,8 @@ TEST_F(LooperTest, SendMessage_WhenOneMessageIsEnqueue_ShouldInvokeHandlerDuring
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. zero because message was already sent";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because message was sent";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because message was sent";
     EXPECT_EQ(size_t(1), handler->messages.size())
             << "handled message";
     EXPECT_EQ(MSG_TEST1, handler->messages[0].what)
@@ -469,8 +469,8 @@ TEST_F(LooperTest, SendMessage_WhenMultipleMessagesAreEnqueued_ShouldInvokeHandl
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. zero because message was already sent";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because message was sent";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because message was sent";
     EXPECT_EQ(size_t(3), handler1->messages.size())
             << "handled message";
     EXPECT_EQ(MSG_TEST1, handler1->messages[0].what)
@@ -495,8 +495,8 @@ TEST_F(LooperTest, SendMessageDelayed_WhenSentToTheFuture_ShouldInvokeHandlerAft
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "first poll should end quickly because next message timeout was computed";
-    EXPECT_EQ(ALOOPER_POLL_WAKE, result)
-            << "pollOnce result should be ALOOPER_POLL_WAKE due to wakeup";
+    EXPECT_EQ(Looper::POLL_WAKE, result)
+            << "pollOnce result should be Looper::POLL_WAKE due to wakeup";
     EXPECT_EQ(size_t(0), handler->messages.size())
             << "no message handled yet";
 
@@ -509,16 +509,16 @@ TEST_F(LooperTest, SendMessageDelayed_WhenSentToTheFuture_ShouldInvokeHandlerAft
             << "handled message";
     EXPECT_NEAR(100, elapsedMillis, TIMING_TOLERANCE_MS)
             << "second poll should end around the time of the delayed message dispatch";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because message was sent";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because message was sent";
 
     result = mLooper->pollOnce(100);
     elapsedMillis = ns2ms(stopWatch.elapsedTime());
 
     EXPECT_NEAR(100 + 100, elapsedMillis, TIMING_TOLERANCE_MS)
             << "third poll should timeout";
-    EXPECT_EQ(ALOOPER_POLL_TIMEOUT, result)
-            << "pollOnce result should be ALOOPER_POLL_TIMEOUT because there were no messages left";
+    EXPECT_EQ(Looper::POLL_TIMEOUT, result)
+            << "pollOnce result should be Looper::POLL_TIMEOUT because there were no messages left";
 }
 
 TEST_F(LooperTest, SendMessageDelayed_WhenSentToThePast_ShouldInvokeHandlerDuringNextPoll) {
@@ -531,8 +531,8 @@ TEST_F(LooperTest, SendMessageDelayed_WhenSentToThePast_ShouldInvokeHandlerDurin
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. zero because message was already sent";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because message was sent";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because message was sent";
     EXPECT_EQ(size_t(1), handler->messages.size())
             << "handled message";
     EXPECT_EQ(MSG_TEST1, handler->messages[0].what)
@@ -549,8 +549,8 @@ TEST_F(LooperTest, SendMessageDelayed_WhenSentToThePresent_ShouldInvokeHandlerDu
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. zero because message was already sent";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because message was sent";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because message was sent";
     EXPECT_EQ(size_t(1), handler->messages.size())
             << "handled message";
     EXPECT_EQ(MSG_TEST1, handler->messages[0].what)
@@ -568,8 +568,8 @@ TEST_F(LooperTest, SendMessageAtTime_WhenSentToTheFuture_ShouldInvokeHandlerAfte
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "first poll should end quickly because next message timeout was computed";
-    EXPECT_EQ(ALOOPER_POLL_WAKE, result)
-            << "pollOnce result should be ALOOPER_POLL_WAKE due to wakeup";
+    EXPECT_EQ(Looper::POLL_WAKE, result)
+            << "pollOnce result should be Looper::POLL_WAKE due to wakeup";
     EXPECT_EQ(size_t(0), handler->messages.size())
             << "no message handled yet";
 
@@ -582,16 +582,16 @@ TEST_F(LooperTest, SendMessageAtTime_WhenSentToTheFuture_ShouldInvokeHandlerAfte
             << "handled message";
     EXPECT_NEAR(100, elapsedMillis, TIMING_TOLERANCE_MS)
             << "second poll should end around the time of the delayed message dispatch";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because message was sent";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because message was sent";
 
     result = mLooper->pollOnce(100);
     elapsedMillis = ns2ms(stopWatch.elapsedTime());
 
     EXPECT_NEAR(100 + 100, elapsedMillis, TIMING_TOLERANCE_MS)
             << "third poll should timeout";
-    EXPECT_EQ(ALOOPER_POLL_TIMEOUT, result)
-            << "pollOnce result should be ALOOPER_POLL_TIMEOUT because there were no messages left";
+    EXPECT_EQ(Looper::POLL_TIMEOUT, result)
+            << "pollOnce result should be Looper::POLL_TIMEOUT because there were no messages left";
 }
 
 TEST_F(LooperTest, SendMessageAtTime_WhenSentToThePast_ShouldInvokeHandlerDuringNextPoll) {
@@ -605,8 +605,8 @@ TEST_F(LooperTest, SendMessageAtTime_WhenSentToThePast_ShouldInvokeHandlerDuring
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. zero because message was already sent";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because message was sent";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because message was sent";
     EXPECT_EQ(size_t(1), handler->messages.size())
             << "handled message";
     EXPECT_EQ(MSG_TEST1, handler->messages[0].what)
@@ -624,8 +624,8 @@ TEST_F(LooperTest, SendMessageAtTime_WhenSentToThePresent_ShouldInvokeHandlerDur
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. zero because message was already sent";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because message was sent";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because message was sent";
     EXPECT_EQ(size_t(1), handler->messages.size())
             << "handled message";
     EXPECT_EQ(MSG_TEST1, handler->messages[0].what)
@@ -645,15 +645,15 @@ TEST_F(LooperTest, RemoveMessage_WhenRemovingAllMessagesForHandler_ShouldRemoveT
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. zero because message was sent so looper was awoken";
-    EXPECT_EQ(ALOOPER_POLL_WAKE, result)
-            << "pollOnce result should be ALOOPER_POLL_WAKE because looper was awoken";
+    EXPECT_EQ(Looper::POLL_WAKE, result)
+            << "pollOnce result should be Looper::POLL_WAKE because looper was awoken";
     EXPECT_EQ(size_t(0), handler->messages.size())
             << "no messages to handle";
 
     result = mLooper->pollOnce(0);
 
-    EXPECT_EQ(ALOOPER_POLL_TIMEOUT, result)
-            << "pollOnce result should be ALOOPER_POLL_TIMEOUT because there was nothing to do";
+    EXPECT_EQ(Looper::POLL_TIMEOUT, result)
+            << "pollOnce result should be Looper::POLL_TIMEOUT because there was nothing to do";
     EXPECT_EQ(size_t(0), handler->messages.size())
             << "no messages to handle";
 }
@@ -673,8 +673,8 @@ TEST_F(LooperTest, RemoveMessage_WhenRemovingSomeMessagesForHandler_ShouldRemove
 
     EXPECT_NEAR(0, elapsedMillis, TIMING_TOLERANCE_MS)
             << "elapsed time should approx. zero because message was sent so looper was awoken";
-    EXPECT_EQ(ALOOPER_POLL_CALLBACK, result)
-            << "pollOnce result should be ALOOPER_POLL_CALLBACK because two messages were sent";
+    EXPECT_EQ(Looper::POLL_CALLBACK, result)
+            << "pollOnce result should be Looper::POLL_CALLBACK because two messages were sent";
     EXPECT_EQ(size_t(2), handler->messages.size())
             << "no messages to handle";
     EXPECT_EQ(MSG_TEST2, handler->messages[0].what)
@@ -684,8 +684,8 @@ TEST_F(LooperTest, RemoveMessage_WhenRemovingSomeMessagesForHandler_ShouldRemove
 
     result = mLooper->pollOnce(0);
 
-    EXPECT_EQ(ALOOPER_POLL_TIMEOUT, result)
-            << "pollOnce result should be ALOOPER_POLL_TIMEOUT because there was nothing to do";
+    EXPECT_EQ(Looper::POLL_TIMEOUT, result)
+            << "pollOnce result should be Looper::POLL_TIMEOUT because there was nothing to do";
     EXPECT_EQ(size_t(2), handler->messages.size())
             << "no more messages to handle";
 }

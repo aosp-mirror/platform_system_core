@@ -43,7 +43,7 @@ void WeakMessageHandler::handleMessage(const Message& message) {
 
 // --- SimpleLooperCallback ---
 
-SimpleLooperCallback::SimpleLooperCallback(ALooper_callbackFunc callback) :
+SimpleLooperCallback::SimpleLooperCallback(Looper_callbackFunc callback) :
         mCallback(callback) {
 }
 
@@ -139,7 +139,7 @@ sp<Looper> Looper::getForThread() {
 }
 
 sp<Looper> Looper::prepare(int opts) {
-    bool allowNonCallbacks = opts & ALOOPER_PREPARE_ALLOW_NON_CALLBACKS;
+    bool allowNonCallbacks = opts & PREPARE_ALLOW_NON_CALLBACKS;
     sp<Looper> looper = Looper::getForThread();
     if (looper == NULL) {
         looper = new Looper(allowNonCallbacks);
@@ -147,7 +147,7 @@ sp<Looper> Looper::prepare(int opts) {
     }
     if (looper->getAllowNonCallbacks() != allowNonCallbacks) {
         ALOGW("Looper already prepared for this thread with a different value for the "
-                "ALOOPER_PREPARE_ALLOW_NON_CALLBACKS option.");
+                "LOOPER_PREPARE_ALLOW_NON_CALLBACKS option.");
     }
     return looper;
 }
@@ -212,7 +212,7 @@ int Looper::pollInner(int timeoutMillis) {
     }
 
     // Poll.
-    int result = ALOOPER_POLL_WAKE;
+    int result = POLL_WAKE;
     mResponses.clear();
     mResponseIndex = 0;
 
@@ -234,7 +234,7 @@ int Looper::pollInner(int timeoutMillis) {
             goto Done;
         }
         ALOGW("Poll failed with an unexpected error, errno=%d", errno);
-        result = ALOOPER_POLL_ERROR;
+        result = POLL_ERROR;
         goto Done;
     }
 
@@ -243,7 +243,7 @@ int Looper::pollInner(int timeoutMillis) {
 #if DEBUG_POLL_AND_WAKE
         ALOGD("%p ~ pollOnce - timeout", this);
 #endif
-        result = ALOOPER_POLL_TIMEOUT;
+        result = POLL_TIMEOUT;
         goto Done;
     }
 
@@ -265,10 +265,10 @@ int Looper::pollInner(int timeoutMillis) {
             ssize_t requestIndex = mRequests.indexOfKey(fd);
             if (requestIndex >= 0) {
                 int events = 0;
-                if (epollEvents & EPOLLIN) events |= ALOOPER_EVENT_INPUT;
-                if (epollEvents & EPOLLOUT) events |= ALOOPER_EVENT_OUTPUT;
-                if (epollEvents & EPOLLERR) events |= ALOOPER_EVENT_ERROR;
-                if (epollEvents & EPOLLHUP) events |= ALOOPER_EVENT_HANGUP;
+                if (epollEvents & EPOLLIN) events |= EVENT_INPUT;
+                if (epollEvents & EPOLLOUT) events |= EVENT_OUTPUT;
+                if (epollEvents & EPOLLERR) events |= EVENT_ERROR;
+                if (epollEvents & EPOLLHUP) events |= EVENT_HANGUP;
                 pushResponse(events, mRequests.valueAt(requestIndex));
             } else {
                 ALOGW("Ignoring unexpected epoll events 0x%x on fd %d that is "
@@ -304,7 +304,7 @@ Done: ;
 
             mLock.lock();
             mSendingMessage = false;
-            result = ALOOPER_POLL_CALLBACK;
+            result = POLL_CALLBACK;
         } else {
             // The last message left at the head of the queue determines the next wakeup time.
             mNextMessageUptime = messageEnvelope.uptime;
@@ -318,7 +318,7 @@ Done: ;
     // Invoke all response callbacks.
     for (size_t i = 0; i < mResponses.size(); i++) {
         Response& response = mResponses.editItemAt(i);
-        if (response.request.ident == ALOOPER_POLL_CALLBACK) {
+        if (response.request.ident == POLL_CALLBACK) {
             int fd = response.request.fd;
             int events = response.events;
             void* data = response.request.data;
@@ -333,7 +333,7 @@ Done: ;
             // Clear the callback reference in the response structure promptly because we
             // will not clear the response vector itself until the next poll.
             response.request.callback.clear();
-            result = ALOOPER_POLL_CALLBACK;
+            result = POLL_CALLBACK;
         }
     }
     return result;
@@ -344,7 +344,7 @@ int Looper::pollAll(int timeoutMillis, int* outFd, int* outEvents, void** outDat
         int result;
         do {
             result = pollOnce(timeoutMillis, outFd, outEvents, outData);
-        } while (result == ALOOPER_POLL_CALLBACK);
+        } while (result == POLL_CALLBACK);
         return result;
     } else {
         nsecs_t endTime = systemTime(SYSTEM_TIME_MONOTONIC)
@@ -352,14 +352,14 @@ int Looper::pollAll(int timeoutMillis, int* outFd, int* outEvents, void** outDat
 
         for (;;) {
             int result = pollOnce(timeoutMillis, outFd, outEvents, outData);
-            if (result != ALOOPER_POLL_CALLBACK) {
+            if (result != POLL_CALLBACK) {
                 return result;
             }
 
             nsecs_t now = systemTime(SYSTEM_TIME_MONOTONIC);
             timeoutMillis = toMillisecondTimeoutDelay(now, endTime);
             if (timeoutMillis == 0) {
-                return ALOOPER_POLL_TIMEOUT;
+                return POLL_TIMEOUT;
             }
         }
     }
@@ -401,7 +401,7 @@ void Looper::pushResponse(int events, const Request& request) {
     mResponses.push(response);
 }
 
-int Looper::addFd(int fd, int ident, int events, ALooper_callbackFunc callback, void* data) {
+int Looper::addFd(int fd, int ident, int events, Looper_callbackFunc callback, void* data) {
     return addFd(fd, ident, events, callback ? new SimpleLooperCallback(callback) : NULL, data);
 }
 
@@ -422,12 +422,12 @@ int Looper::addFd(int fd, int ident, int events, const sp<LooperCallback>& callb
             return -1;
         }
     } else {
-        ident = ALOOPER_POLL_CALLBACK;
+        ident = POLL_CALLBACK;
     }
 
     int epollEvents = 0;
-    if (events & ALOOPER_EVENT_INPUT) epollEvents |= EPOLLIN;
-    if (events & ALOOPER_EVENT_OUTPUT) epollEvents |= EPOLLOUT;
+    if (events & EVENT_INPUT) epollEvents |= EPOLLIN;
+    if (events & EVENT_OUTPUT) epollEvents |= EPOLLOUT;
 
     { // acquire lock
         AutoMutex _l(mLock);
