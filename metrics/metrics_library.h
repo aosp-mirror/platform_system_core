@@ -138,6 +138,10 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // The arbitrary |format| argument covers the non-LENGTH portion of the
   // message. The caller is responsible to store the \0 character
   // between NAME and VALUE (e.g. "%s%c%d", name, '\0', value).
+  //
+  // Ideally we'd use "3, 4" here instead of "4, 5", but it seems clang/gcc
+  // have an implicit first arg ("this").  http://crbug.com/329356
+  __attribute__((__format__(__printf__, 4, 5)))
   int32_t FormatChromeMessage(int32_t buffer_size, char* buffer,
                               const char* format, ...);
 
