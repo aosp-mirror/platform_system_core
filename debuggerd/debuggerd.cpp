@@ -205,7 +205,8 @@ static int read_request(int fd, debugger_request_t* out_request) {
     return -1;
   }
   if (status == sizeof(debugger_msg_t)) {
-    XLOG("crash request of size %d abort_msg_address=%#08x\n", status, msg.abort_msg_address);
+    XLOG("crash request of size %d abort_msg_address=0x%" PRIPTR "\n",
+         status, msg.abort_msg_address);
   } else {
     LOG("invalid crash request of size %d (from pid=%d uid=%d)\n", status, cr.pid, cr.uid);
     return -1;

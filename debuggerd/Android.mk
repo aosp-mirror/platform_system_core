@@ -1,7 +1,5 @@
 # Copyright 2005 The Android Open Source Project
 
-ifneq ($(filter arm mips x86 x86_64,$(TARGET_ARCH)),)
-
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -60,12 +58,10 @@ ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
 LOCAL_CFLAGS += -DWITH_VFP_D32
 endif # ARCH_ARM_HAVE_VFP_D32
 
-LOCAL_SRC_FILES := vfp-crasher.c vfp.S
+LOCAL_SRC_FILES := vfp-crasher.c $(TARGET_ARCH)/vfp.S
 LOCAL_MODULE := vfp-crasher
 LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
 LOCAL_MODULE_TAGS := optional
 LOCAL_SHARED_LIBRARIES := libcutils liblog libc
 include $(BUILD_EXECUTABLE)
 endif # ARCH_ARM_HAVE_VFP == true
-
-endif # arm or x86 in TARGET_ARCH
