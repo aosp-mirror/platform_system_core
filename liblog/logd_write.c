@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2007-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,11 @@
 #include <log/logger.h>
 #include <log/logd.h>
 #include <log/log.h>
+
+#define LOGGER_LOG_MAIN		"log/main"
+#define LOGGER_LOG_RADIO	"log/radio"
+#define LOGGER_LOG_EVENTS	"log/events"
+#define LOGGER_LOG_SYSTEM	"log/system"
 
 #define LOG_BUF_SIZE 1024
 
