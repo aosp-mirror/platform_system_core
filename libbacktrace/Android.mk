@@ -22,8 +22,11 @@ common_shared_libs := \
 	libgccdemangle \
 	liblog \
 
-# To enable using libunwind on each arch, add it to the list below.
-ifeq ($(TARGET_ARCH),$(filter $(TARGET_ARCH),arm))
+# To enable using libunwind on each arch, add it to this list.
+libunwind_architectures :=
+#libunwind_architectures := arm
+
+ifeq ($(TARGET_ARCH),$(filter $(TARGET_ARCH),$(libunwind_architectures)))
 
 #----------------------------------------------------------------------------
 # The native libbacktrace library with libunwind.
