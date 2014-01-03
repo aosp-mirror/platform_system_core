@@ -22,7 +22,6 @@
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
-#include <sync/sync.h>
 #include <sys/cdefs.h>
 #include <system/graphics.h>
 #include <unistd.h>
