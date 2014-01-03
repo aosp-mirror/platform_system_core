@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include <sync/sync.h>
+#include "sw_sync.h"
 
 pthread_mutex_t printf_mutex = PTHREAD_MUTEX_INITIALIZER;
 
