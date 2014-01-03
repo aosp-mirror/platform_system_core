@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005 The Android Open Source Project
+ * Copyright (C) 2005-2013 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,21 +28,19 @@
 #ifndef _LIBS_LOG_LOG_H
 #define _LIBS_LOG_LOG_H
 
-#include <stdio.h>
-#include <time.h>
+#include <sys/cdefs.h>
 #include <sys/types.h>
-#include <unistd.h>
 #ifdef HAVE_PTHREADS
 #include <pthread.h>
 #endif
 #include <stdarg.h>
-
-#include <log/uio.h>
+#include <stdio.h>
+#include <time.h>
+#include <unistd.h>
 #include <log/logd.h>
+#include <log/uio.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+__BEGIN_DECLS
 
 // ---------------------------------------------------------------------
 
@@ -470,7 +468,8 @@ typedef enum {
     EVENT_TYPE_STRING   = 2,
     EVENT_TYPE_LIST     = 3,
 } AndroidEventLogType;
-
+#define sizeof_AndroidEventLogType sizeof(typeof_AndroidEventLogType)
+#define typeof_AndroidEventLogType unsigned char
 
 #ifndef LOG_EVENT_INT
 #define LOG_EVENT_INT(_tag, _value) {                                       \
@@ -540,7 +539,9 @@ typedef enum {
 #define android_logToFile(tag, file) (0)
 #define android_logToFd(tag, fd) (0)
 
-typedef enum {
+typedef enum log_id {
+    LOG_ID_MIN = 0,
+
     LOG_ID_MAIN = 0,
     LOG_ID_RADIO = 1,
     LOG_ID_EVENTS = 2,
@@ -548,6 +549,57 @@ typedef enum {
 
     LOG_ID_MAX
 } log_id_t;
+#define sizeof_log_id_t sizeof(typeof_log_id_t)
+#define typeof_log_id_t unsigned char
+
+/* Currently helper to liblog unit tests, expect wider use. */
+#define NS_PER_SEC 1000000000ULL
+#ifdef __cplusplus
+typedef struct log_time : public timespec {
+public:
+    log_time(void)
+    {
+    }
+    log_time(const char *T)
+    {
+        const uint8_t *c = (const uint8_t *) T;
+        tv_sec = c[0] | (c[1] << 8) | (c[2] << 16) | (c[3] << 24);
+        tv_nsec = c[4] | (c[5] << 8) | (c[6] << 16) | (c[7] << 24);
+    }
+    bool operator== (log_time &T)
+    {
+        return (tv_sec == T.tv_sec) && (tv_nsec == T.tv_nsec);
+    }
+    bool operator!= (log_time &T)
+    {
+        return !(*this == T);
+    }
+    bool operator< (log_time &T)
+    {
+        return (tv_sec < T.tv_sec)
+            || ((tv_sec == T.tv_sec) && (tv_nsec < T.tv_nsec));
+    }
+    bool operator>= (log_time &T)
+    {
+        return !(*this < T);
+    }
+    bool operator> (log_time &T)
+    {
+        return (tv_sec > T.tv_sec)
+            || ((tv_sec == T.tv_sec) && (tv_nsec > T.tv_nsec));
+    }
+    bool operator<= (log_time &T)
+    {
+        return !(*this > T);
+    }
+    uint64_t nsec(void)
+    {
+        return static_cast<uint64_t>(tv_sec) * NS_PER_SEC + tv_nsec;
+    }
+} log_time_t;
+#else
+typedef struct timespec log_time_t;
+#endif
 
 /*
  * Send a simple string to the log.
@@ -555,9 +607,6 @@ typedef enum {
 int __android_log_buf_write(int bufID, int prio, const char *tag, const char *text);
 int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fmt, ...);
 
-
-#ifdef __cplusplus
-}
-#endif
+__END_DECLS
 
 #endif // _LIBS_CUTILS_LOG_H
