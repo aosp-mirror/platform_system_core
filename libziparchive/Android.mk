@@ -49,7 +49,7 @@ LOCAL_CFLAGS += \
     -DGTEST_OS_LINUX_ANDROID \
     -DGTEST_HAS_STD_STRING
 LOCAL_SRC_FILES := zip_archive_test.cc
-LOCAL_LDFLAGS := -llog
+LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_STATIC_LIBRARIES := libziparchive libz libgtest libgtest_main libutils
 include $(BUILD_NATIVE_TEST)
 
