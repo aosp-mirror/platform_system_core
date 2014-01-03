@@ -19,8 +19,6 @@
 #ifndef __SYS_CORE_SW_SYNC_H
 #define __SYS_CORE_SW_SYNC_H
 
-#include "sync.h"
-
 __BEGIN_DECLS
 
 /*
