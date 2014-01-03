@@ -316,6 +316,7 @@ static int listfile(const char *dirname, const char *filename, int flags)
     }
 
     if(lstat(pathname, &s) < 0) {
+        fprintf(stderr, "lstat '%s' failed: %s\n", pathname, strerror(errno));
         return -1;
     }
 
