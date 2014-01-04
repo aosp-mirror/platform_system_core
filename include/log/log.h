@@ -28,7 +28,6 @@
 #ifndef _LIBS_LOG_LOG_H
 #define _LIBS_LOG_LOG_H
 
-#include <sys/cdefs.h>
 #include <sys/types.h>
 #ifdef HAVE_PTHREADS
 #include <pthread.h>
@@ -40,7 +39,9 @@
 #include <log/logd.h>
 #include <log/uio.h>
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // ---------------------------------------------------------------------
 
@@ -558,6 +559,8 @@ typedef enum log_id {
 int __android_log_buf_write(int bufID, int prio, const char *tag, const char *text);
 int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fmt, ...);
 
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif // _LIBS_CUTILS_LOG_H
