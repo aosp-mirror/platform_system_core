@@ -36,17 +36,13 @@ ifndef WITH_MINGW
     liblog_sources += \
         logprint.c \
         event_tag_map.c
-ifneq ($(HOST_OS),darwin)
-    liblog_sources += \
-        log_read.c
-endif
 else
     liblog_sources += \
         uio.c
 endif
 
 liblog_host_sources := $(liblog_sources) fake_log_device.c
-
+liblog_target_sources = $(liblog_sources) log_read.c
 
 # Shared and static library for host
 # ========================================================
@@ -76,7 +72,7 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 # ========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
-LOCAL_SRC_FILES := $(liblog_sources)
+LOCAL_SRC_FILES := $(liblog_target_sources)
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
