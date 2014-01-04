@@ -10,11 +10,12 @@
 #ifndef _UTILS_LOGGER_H
 #define _UTILS_LOGGER_H
 
-#include <sys/cdefs.h>
 #include <stdint.h>
 #include <log/log.h>
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * The userspace structure for version 1 of the logger_entry ABI.
@@ -182,6 +183,8 @@ const char *android_log_id_to_name(log_id_t log_id);
 
 #endif // HAVE_IOCTL
 
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _UTILS_LOGGER_H */
