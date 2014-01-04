@@ -35,8 +35,11 @@ endif
 ifndef WITH_MINGW
     liblog_sources += \
         logprint.c \
-        log_read.c \
         event_tag_map.c
+ifneq ($(HOST_OS),darwin)
+    liblog_sources += \
+        log_read.c
+endif
 else
     liblog_sources += \
         uio.c
