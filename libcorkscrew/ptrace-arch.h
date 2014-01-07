@@ -33,6 +33,8 @@ typedef struct {
 #ifdef __arm__
     uintptr_t exidx_start;
     size_t exidx_size;
+#elif __mips__
+    uintptr_t eh_frame_hdr;
 #elif __i386__
     uintptr_t eh_frame_hdr;
 #endif
