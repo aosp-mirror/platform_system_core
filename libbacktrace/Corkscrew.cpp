@@ -204,15 +204,15 @@ std::string CorkscrewPtrace::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset)
 //-------------------------------------------------------------------------
 // C++ object creation functions.
 //-------------------------------------------------------------------------
-Backtrace* CreateCurrentObj() {
-  return new BacktraceCurrent(new CorkscrewCurrent());
+Backtrace* CreateCurrentObj(backtrace_map_info_t* map_info) {
+  return new BacktraceCurrent(new CorkscrewCurrent(), map_info);
 }
 
-Backtrace* CreatePtraceObj(pid_t pid, pid_t tid) {
-  return new BacktracePtrace(new CorkscrewPtrace(), pid, tid);
+Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, backtrace_map_info_t* map_info) {
+  return new BacktracePtrace(new CorkscrewPtrace(), pid, tid, map_info);
 }
 
-Backtrace* CreateThreadObj(pid_t tid) {
+Backtrace* CreateThreadObj(pid_t tid, backtrace_map_info_t* map_info) {
   CorkscrewThread* thread_obj = new CorkscrewThread();
-  return new BacktraceThread(thread_obj, thread_obj, tid);
+  return new BacktraceThread(thread_obj, thread_obj, tid, map_info);
 }

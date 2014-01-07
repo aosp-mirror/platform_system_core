@@ -71,7 +71,8 @@ public:
   // the compiler to catch if an implementation does not properly
   // subclass both.
   BacktraceThread(
-      BacktraceImpl* impl, BacktraceThreadInterface* thread_intf, pid_t tid);
+      BacktraceImpl* impl, BacktraceThreadInterface* thread_intf, pid_t tid,
+      backtrace_map_info_t* map_info);
   virtual ~BacktraceThread();
 
   virtual bool Unwind(size_t num_ignore_frames);
