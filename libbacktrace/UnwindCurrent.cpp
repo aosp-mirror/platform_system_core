@@ -40,17 +40,11 @@
     struct sigcontext uc_mcontext;
     uint32_t uc_sigmask;
   } ucontext_t;
-#elif defined(__mips__)
-  typedef struct ucontext {
-    uint32_t sp;
-    uint32_t ra;
-    uint32_t pc;
-  } ucontext_t;
 #elif defined(__i386__)
   #include <asm/sigcontext.h>
   #include <asm/ucontext.h>
   typedef struct ucontext ucontext_t;
-#else
+#elif !defined(__mips__)
   #error Unsupported architecture.
 #endif
 
@@ -93,6 +87,7 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
   int ret = unw_init_local(cursor, &context_);
   if (ret < 0) {
     BACK_LOGW("unw_init_local failed %d", ret);
+    delete cursor;
     return false;
   }
 
@@ -172,14 +167,8 @@ void UnwindCurrent::ExtractContext(void* sigcontext) {
   context->regs[13] = uc->uc_mcontext.arm_sp;
   context->regs[14] = uc->uc_mcontext.arm_lr;
   context->regs[15] = uc->uc_mcontext.arm_pc;
-#elif defined(__mips__)
-  context->uc_mcontext.sp = uc->sp;
-  context->uc_mcontext.pc = uc->pc;
-  context->uc_mcontext.ra = uc->ra;
-#elif defined(__i386__)
-  context->uc_mcontext.gregs[REG_EBP] = uc->uc_mcontext.gregs[REG_EBP];
-  context->uc_mcontext.gregs[REG_ESP] = uc->uc_mcontext.gregs[REG_ESP];
-  context->uc_mcontext.gregs[REG_EIP] = uc->uc_mcontext.gregs[REG_EIP];
+#elif defined(__mips__) || defined(__i386__)
+  context->uc_mcontext = uc->uc_mcontext;
 #endif
 }
 
