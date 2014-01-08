@@ -45,7 +45,7 @@ protected:
 
 class BacktraceCurrent : public Backtrace {
 public:
-  BacktraceCurrent(BacktraceImpl* impl);
+  BacktraceCurrent(BacktraceImpl* impl, backtrace_map_info_t* map_info);
   virtual ~BacktraceCurrent();
 
   bool ReadWord(uintptr_t ptr, uint32_t* out_value);
@@ -53,14 +53,14 @@ public:
 
 class BacktracePtrace : public Backtrace {
 public:
-  BacktracePtrace(BacktraceImpl* impl, pid_t pid, pid_t tid);
+  BacktracePtrace(BacktraceImpl* impl, pid_t pid, pid_t tid, backtrace_map_info_t* map_info);
   virtual ~BacktracePtrace();
 
   bool ReadWord(uintptr_t ptr, uint32_t* out_value);
 };
 
-Backtrace* CreateCurrentObj();
-Backtrace* CreatePtraceObj(pid_t pid, pid_t tid);
-Backtrace* CreateThreadObj(pid_t tid);
+Backtrace* CreateCurrentObj(backtrace_map_info_t* map_info);
+Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, backtrace_map_info_t* map_info);
+Backtrace* CreateThreadObj(pid_t tid, backtrace_map_info_t* map_info);
 
 #endif // _LIBBACKTRACE_BACKTRACE_H

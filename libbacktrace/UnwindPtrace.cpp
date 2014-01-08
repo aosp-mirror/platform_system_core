@@ -131,6 +131,6 @@ std::string UnwindPtrace::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
 //-------------------------------------------------------------------------
 // C++ object creation function.
 //-------------------------------------------------------------------------
-Backtrace* CreatePtraceObj(pid_t pid, pid_t tid) {
-  return new BacktracePtrace(new UnwindPtrace(), pid, tid);
+Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, backtrace_map_info_t* map_info) {
+  return new BacktracePtrace(new UnwindPtrace(), pid, tid, map_info);
 }
