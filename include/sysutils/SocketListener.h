@@ -44,10 +44,13 @@ public:
 
     void runOnEachSocket(SocketClientCommand *command);
 
+    bool release(SocketClient *c) { return release(c, true); }
+
 protected:
     virtual bool onDataAvailable(SocketClient *c) = 0;
 
 private:
+    bool release(SocketClient *c, bool wakeup);
     static void *threadStart(void *obj);
     void runListener();
     void init(const char *socketName, int socketFd, bool listen, bool useCmdNum);
