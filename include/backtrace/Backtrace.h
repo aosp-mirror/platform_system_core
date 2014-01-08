@@ -33,7 +33,9 @@ public:
   // If pid >= 0 and tid < 0, then the Backtrace object corresponds to a
   // different process.
   // Tracing a thread in a different process is not supported.
-  static Backtrace* Create(pid_t pid, pid_t tid);
+  // If map_info is NULL, then create the map and manage it internally.
+  // If map_info is not NULL, the map is still owned by the caller.
+  static Backtrace* Create(pid_t pid, pid_t tid, backtrace_map_info_t* map_info = NULL);
 
   virtual ~Backtrace();
 
@@ -70,13 +72,15 @@ public:
   }
 
 protected:
-  Backtrace(BacktraceImpl* impl);
+  Backtrace(BacktraceImpl* impl, pid_t pid, backtrace_map_info_t* map_info);
 
   virtual bool VerifyReadWordArgs(uintptr_t ptr, uint32_t* out_value);
 
   BacktraceImpl* impl_;
 
   backtrace_map_info_t* map_info_;
+
+  bool map_info_requires_delete_;
 
   backtrace_t backtrace_;
 
