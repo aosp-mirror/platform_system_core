@@ -114,8 +114,9 @@ static void SignalHandler(int n __attribute__((unused)), siginfo_t* siginfo,
 }
 
 BacktraceThread::BacktraceThread(
-    BacktraceImpl* impl, BacktraceThreadInterface* thread_intf, pid_t tid)
-    : BacktraceCurrent(impl), thread_intf_(thread_intf) {
+    BacktraceImpl* impl, BacktraceThreadInterface* thread_intf, pid_t tid,
+    backtrace_map_info_t* map_info)
+    : BacktraceCurrent(impl, map_info), thread_intf_(thread_intf) {
   backtrace_.tid = tid;
 }
 
