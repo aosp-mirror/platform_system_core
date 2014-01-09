@@ -15,10 +15,26 @@
  */
 
 #include <fcntl.h>
+#include <signal.h>
 #include <gtest/gtest.h>
 #include <log/log.h>
 #include <log/logger.h>
 #include <log/log_read.h>
+
+// enhanced version of LOG_FAILURE_RETRY to add support for EAGAIN and
+// non-syscall libs. Since we are only using this in the emergency of
+// a signal to stuff a terminating code into the logs, we will spin rather
+// than try a usleep.
+#define LOG_FAILURE_RETRY(exp) ({  \
+    typeof (exp) _rc;              \
+    do {                           \
+        _rc = (exp);               \
+    } while (((_rc == -1)          \
+           && ((errno == EINTR)    \
+            || (errno == EAGAIN))) \
+          || (_rc == -EINTR)       \
+          || (_rc == -EAGAIN));    \
+    _rc; })
 
 TEST(liblog, __android_log_buf_print) {
     ASSERT_LT(0, __android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO,
@@ -140,6 +156,146 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     ASSERT_EQ(1, count);
 
     android_logger_list_close(logger_list);
+}
+
+static unsigned signaled;
+log_time signal_time;
+
+static void caught_blocking(int signum)
+{
+    unsigned long long v = 0xDEADBEEFA55A0000ULL;
+
+    v += getpid() & 0xFFFF;
+
+    ++signaled;
+    if ((signal_time.tv_sec == 0) && (signal_time.tv_nsec == 0)) {
+        clock_gettime(CLOCK_MONOTONIC, &signal_time);
+        signal_time.tv_sec += 2;
+    }
+
+    LOG_FAILURE_RETRY(__android_log_btwrite(0, EVENT_TYPE_LONG, &v, sizeof(v)));
+}
+
+// Fill in current process user and system time in 10ms increments
+static void get_ticks(unsigned long long *uticks, unsigned long long *sticks)
+{
+    *uticks = *sticks = 0;
+
+    pid_t pid = getpid();
+
+    char buffer[512];
+    snprintf(buffer, sizeof(buffer), "/proc/%u/stat", pid);
+
+    FILE *fp = fopen(buffer, "r");
+    if (!fp) {
+        return;
+    }
+
+    char *cp = fgets(buffer, sizeof(buffer), fp);
+    fclose(fp);
+    if (!cp) {
+        return;
+    }
+
+    pid_t d;
+    char s[sizeof(buffer)];
+    char c;
+    long long ll;
+    unsigned long long ull;
+
+    if (15 != sscanf(buffer,
+      "%d %s %c %lld %lld %lld %lld %lld %llu %llu %llu %llu %llu %llu %llu ",
+      &d, s, &c, &ll, &ll, &ll, &ll, &ll, &ull, &ull, &ull, &ull, &ull,
+      uticks, sticks)) {
+        *uticks = *sticks = 0;
+    }
+}
+
+TEST(liblog, android_logger_list_read__cpu) {
+    struct logger_list *logger_list;
+    unsigned long long v = 0xDEADBEEFA55A0000ULL;
+
+    pid_t pid = getpid();
+
+    v += pid & 0xFFFF;
+
+    ASSERT_EQ(0, NULL == (logger_list = android_logger_list_open(
+        LOG_ID_EVENTS, O_RDONLY, 1000, pid)));
+
+    int count = 0;
+
+    int signals = 0;
+
+    unsigned long long uticks_start;
+    unsigned long long sticks_start;
+    get_ticks(&uticks_start, &sticks_start);
+
+    const unsigned alarm_time = 10;
+
+    memset(&signal_time, 0, sizeof(signal_time));
+
+    signal(SIGALRM, caught_blocking);
+    alarm(alarm_time);
+
+    signaled = 0;
+
+    do {
+        log_msg log_msg;
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
+            break;
+        }
+
+        alarm(alarm_time);
+
+        ++count;
+
+        ASSERT_EQ(log_msg.entry.pid, pid);
+
+        if ((log_msg.entry.len != (4 + 1 + 8))
+         || (log_msg.id() != LOG_ID_EVENTS)) {
+            continue;
+        }
+
+        char *eventData = log_msg.msg();
+
+        if (eventData[4] != EVENT_TYPE_LONG) {
+            continue;
+        }
+
+        unsigned long long l = eventData[4 + 1 + 0] & 0xFF;
+        l |= (unsigned long long) (eventData[4 + 1 + 1] & 0xFF) << 8;
+        l |= (unsigned long long) (eventData[4 + 1 + 2] & 0xFF) << 16;
+        l |= (unsigned long long) (eventData[4 + 1 + 3] & 0xFF) << 24;
+        l |= (unsigned long long) (eventData[4 + 1 + 4] & 0xFF) << 32;
+        l |= (unsigned long long) (eventData[4 + 1 + 5] & 0xFF) << 40;
+        l |= (unsigned long long) (eventData[4 + 1 + 6] & 0xFF) << 48;
+        l |= (unsigned long long) (eventData[4 + 1 + 7] & 0xFF) << 56;
+
+        if (l == v) {
+            ++signals;
+            break;
+        }
+    } while (!signaled || ({log_time t(CLOCK_MONOTONIC); t < signal_time;}));
+    alarm(0);
+    signal(SIGALRM, SIG_DFL);
+
+    ASSERT_LT(1, count);
+
+    ASSERT_EQ(1, signals);
+
+    android_logger_list_close(logger_list);
+
+    unsigned long long uticks_end;
+    unsigned long long sticks_end;
+    get_ticks(&uticks_end, &sticks_end);
+
+    // Less than 1% in either user or system time, or both
+    const unsigned long long one_percent_ticks = alarm_time;
+    unsigned long long user_ticks = uticks_end - uticks_start;
+    unsigned long long system_ticks = sticks_end - sticks_start;
+    ASSERT_GT(one_percent_ticks, user_ticks);
+    ASSERT_GT(one_percent_ticks, system_ticks);
+    ASSERT_GT(one_percent_ticks, user_ticks + system_ticks);
 }
 
 TEST(liblog, android_logger_get_) {
