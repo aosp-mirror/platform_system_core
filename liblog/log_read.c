@@ -1,5 +1,5 @@
 /*
-** Copyright 2013, The Android Open Source Project
+** Copyright 2013-2014, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -31,7 +31,9 @@ typedef char bool;
 
 #define LOG_FILE_DIR "/dev/log/"
 
-#define LOG_TIMEOUT_MS 5
+/* timeout in milliseconds */
+#define LOG_TIMEOUT_FLUSH 5
+#define LOG_TIMEOUT_NEVER -1
 
 #define logger_for_each(logger, logger_list) \
     for (logger = node_to_item((logger_list)->node.next, struct logger, node); \
@@ -291,7 +293,7 @@ struct logger *android_logger_open(struct logger_list *logger_list,
     list_init(&logger->log_list);
     list_add_tail(&logger_list->node, &logger->node);
     logger->top = logger_list;
-    logger_list->timeout_ms = LOG_TIMEOUT_MS;
+    logger_list->timeout_ms = LOG_TIMEOUT_FLUSH;
     goto ok;
 
 err_name:
@@ -494,14 +496,14 @@ int android_logger_list_read(struct logger_list *logger_list,
             } else if (logger_list->mode & O_NDELAY) {
                 error = EAGAIN;
             } else {
-                logger_list->timeout_ms = 0;
+                logger_list->timeout_ms = LOG_TIMEOUT_NEVER;
             }
 
             logger_list->flush = true;
             goto try_flush;
         }
 
-        logger_list->timeout_ms = LOG_TIMEOUT_MS;
+        logger_list->timeout_ms = LOG_TIMEOUT_FLUSH;
 
         /* Anti starvation */
         if (!logger_list->flush
