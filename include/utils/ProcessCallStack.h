@@ -39,7 +39,7 @@ public:
     ~ProcessCallStack();
 
     // Immediately collect the stack traces for all threads.
-    void update(int32_t maxDepth = CallStack::MAX_DEPTH);
+    void update();
 
     // Print all stack traces to the log using the supplied logtag.
     void log(const char* logtag, android_LogPriority priority = ANDROID_LOG_DEBUG,
