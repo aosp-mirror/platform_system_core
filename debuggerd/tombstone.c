@@ -416,7 +416,7 @@ static void dump_thread(const backtrace_context_t* context, log_t* log,
 
 /* Return true if some thread is not detached cleanly */
 static bool dump_sibling_thread_report(
-        log_t* log, pid_t pid, pid_t tid, int* total_sleep_time_usec) {
+        log_t* log, pid_t pid, pid_t tid, int* total_sleep_time_usec, backtrace_map_info_t* map_info) {
     char task_path[64];
     snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
 
@@ -450,7 +450,7 @@ static bool dump_sibling_thread_report(
         _LOG(log, 0, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
         dump_thread_info(log, pid, new_tid, 0);
         backtrace_context_t new_context;
-        if (backtrace_create_context(&new_context, pid, new_tid, 0)) {
+        if (backtrace_create_context_with_map(&new_context, pid, new_tid, 0, map_info)) {
             dump_thread(&new_context, log, 0, total_sleep_time_usec);
             backtrace_destroy_context(&new_context);
         }
@@ -644,7 +644,9 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
     }
 
     backtrace_context_t context;
-    if (backtrace_create_context(&context, pid, tid, 0)) {
+    /* Gather the map info once for all this process' threads. */
+    backtrace_map_info_t* map_info = backtrace_create_map_info_list(pid);
+    if (backtrace_create_context_with_map(&context, pid, tid, 0, map_info)) {
         dump_abort_message(&context, log, abort_msg_address);
         dump_thread(&context, log, SCOPE_AT_FAULT, total_sleep_time_usec);
         backtrace_destroy_context(&context);
@@ -656,8 +658,11 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
 
     bool detach_failed = false;
     if (dump_sibling_threads) {
-        detach_failed = dump_sibling_thread_report(log, pid, tid, total_sleep_time_usec);
+        detach_failed = dump_sibling_thread_report(log, pid, tid, total_sleep_time_usec, map_info);
     }
+
+    /* Destroy the previously created map info. */
+    backtrace_destroy_map_info_list(map_info);
 
     if (want_logs) {
         dump_logs(log, pid, 0);

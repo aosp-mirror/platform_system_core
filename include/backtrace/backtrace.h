@@ -73,6 +73,14 @@ typedef struct {
 bool backtrace_create_context(
     backtrace_context_t* context, pid_t pid, pid_t tid, size_t num_ignore_frames);
 
+/* The same as backtrace_create_context, except that it is assumed that
+ * the pid map has already been acquired and the caller will handle freeing
+ * the map data.
+ */
+bool backtrace_create_context_with_map(
+    backtrace_context_t* context, pid_t pid, pid_t tid, size_t num_ignore_frames,
+    backtrace_map_info_t* map_info);
+
 /* Gather the backtrace data for a pthread instead of a process. */
 bool backtrace_create_thread_context(
     backtrace_context_t* context, pid_t tid, size_t num_ignore_frames);
