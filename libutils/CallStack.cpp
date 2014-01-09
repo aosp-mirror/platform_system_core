@@ -20,93 +20,33 @@
 #include <utils/Printer.h>
 #include <utils/Errors.h>
 #include <utils/Log.h>
-#include <corkscrew/backtrace.h>
+#include <UniquePtr.h>
+
+#include <backtrace/Backtrace.h>
 
 namespace android {
 
-CallStack::CallStack() :
-        mCount(0) {
+CallStack::CallStack() {
 }
 
-CallStack::CallStack(const char* logtag, int32_t ignoreDepth, int32_t maxDepth) {
-    this->update(ignoreDepth+1, maxDepth, CURRENT_THREAD);
+CallStack::CallStack(const char* logtag, int32_t ignoreDepth) {
+    this->update(ignoreDepth+1);
     this->log(logtag);
-}
-
-CallStack::CallStack(const CallStack& rhs) :
-        mCount(rhs.mCount) {
-    if (mCount) {
-        memcpy(mStack, rhs.mStack, mCount * sizeof(backtrace_frame_t));
-    }
 }
 
 CallStack::~CallStack() {
 }
 
-CallStack& CallStack::operator = (const CallStack& rhs) {
-    mCount = rhs.mCount;
-    if (mCount) {
-        memcpy(mStack, rhs.mStack, mCount * sizeof(backtrace_frame_t));
+void CallStack::update(int32_t ignoreDepth, pid_t tid) {
+    mFrameLines.clear();
+
+    UniquePtr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS, tid));
+    if (!backtrace->Unwind(ignoreDepth)) {
+        ALOGW("%s: Failed to unwind callstack.", __FUNCTION__);
     }
-    return *this;
-}
-
-bool CallStack::operator == (const CallStack& rhs) const {
-    if (mCount != rhs.mCount)
-        return false;
-    return !mCount || memcmp(mStack, rhs.mStack, mCount * sizeof(backtrace_frame_t)) == 0;
-}
-
-bool CallStack::operator != (const CallStack& rhs) const {
-    return !operator == (rhs);
-}
-
-bool CallStack::operator < (const CallStack& rhs) const {
-    if (mCount != rhs.mCount)
-        return mCount < rhs.mCount;
-    return memcmp(mStack, rhs.mStack, mCount * sizeof(backtrace_frame_t)) < 0;
-}
-
-bool CallStack::operator >= (const CallStack& rhs) const {
-    return !operator < (rhs);
-}
-
-bool CallStack::operator > (const CallStack& rhs) const {
-    if (mCount != rhs.mCount)
-        return mCount > rhs.mCount;
-    return memcmp(mStack, rhs.mStack, mCount * sizeof(backtrace_frame_t)) > 0;
-}
-
-bool CallStack::operator <= (const CallStack& rhs) const {
-    return !operator > (rhs);
-}
-
-const void* CallStack::operator [] (int index) const {
-    if (index >= int(mCount))
-        return 0;
-    return reinterpret_cast<const void*>(mStack[index].absolute_pc);
-}
-
-void CallStack::clear() {
-    mCount = 0;
-}
-
-void CallStack::update(int32_t ignoreDepth, int32_t maxDepth, pid_t tid) {
-    if (maxDepth > MAX_DEPTH) {
-        maxDepth = MAX_DEPTH;
+    for (size_t i = 0; i < backtrace->NumFrames(); i++) {
+      mFrameLines.push_back(String8(backtrace->FormatFrameData(i).c_str()));
     }
-    ssize_t count;
-
-    if (tid >= 0) {
-        count = unwind_backtrace_thread(tid, mStack, ignoreDepth + 1, maxDepth);
-    } else if (tid == CURRENT_THREAD) {
-        count = unwind_backtrace(mStack, ignoreDepth + 1, maxDepth);
-    } else {
-        ALOGE("%s: Invalid tid specified (%d)", __FUNCTION__, tid);
-        count = 0;
-    }
-
-    mCount = count > 0 ? count : 0;
 }
 
 void CallStack::log(const char* logtag, android_LogPriority priority, const char* prefix) const {
@@ -129,16 +69,9 @@ String8 CallStack::toString(const char* prefix) const {
 }
 
 void CallStack::print(Printer& printer) const {
-    backtrace_symbol_t symbols[mCount];
-
-    get_backtrace_symbols(mStack, mCount, symbols);
-    for (size_t i = 0; i < mCount; i++) {
-        char line[MAX_BACKTRACE_LINE_LENGTH];
-        format_backtrace_line(i, &mStack[i], &symbols[i],
-                line, MAX_BACKTRACE_LINE_LENGTH);
-        printer.printLine(line);
+    for (size_t i = 0; i < mFrameLines.size(); i++) {
+        printer.printLine(mFrameLines[i]);
     }
-    free_backtrace_symbols(symbols, mCount);
 }
 
 }; // namespace android
