@@ -59,7 +59,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <sys/ptrace.h>
-#include <sys/exec_elf.h>
+#include <elf.h>
 #include <cutils/log.h>
 
 #if !defined(__BIONIC_HAVE_UCONTEXT_T)
