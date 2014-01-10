@@ -44,7 +44,7 @@ public:
 
     // Immediately collect the stack traces for the specified thread.
     // The default is to dump the stack of the current call.
-    void update(int32_t ignoreDepth=1, pid_t tid=BACKTRACE_NO_TID);
+    void update(int32_t ignoreDepth=1, pid_t tid=BACKTRACE_CURRENT_THREAD);
 
     // Dump a stack trace to the log using the supplied logtag.
     void log(const char* logtag,
