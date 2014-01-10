@@ -30,6 +30,7 @@ int dump_tombstone(pid_t tid, char* pathbuf, size_t pathlen) {
     debugger_msg_t msg;
     msg.tid = tid;
     msg.action = DEBUGGER_ACTION_DUMP_TOMBSTONE;
+    msg.abort_msg_address = 0;
 
     int result = 0;
     if (TEMP_FAILURE_RETRY(write(s, &msg, sizeof(msg))) != sizeof(msg)) {
@@ -63,6 +64,7 @@ int dump_backtrace_to_file(pid_t tid, int fd) {
     debugger_msg_t msg;
     msg.tid = tid;
     msg.action = DEBUGGER_ACTION_DUMP_BACKTRACE;
+    msg.abort_msg_address = 0;
 
     int result = 0;
     if (TEMP_FAILURE_RETRY(write(s, &msg, sizeof(msg))) != sizeof(msg)) {
