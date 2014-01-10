@@ -27,7 +27,7 @@
 
 #include <sys/ptrace.h>
 #include <sys/wait.h>
-#include <sys/exec_elf.h>
+#include <elf.h>
 #include <sys/stat.h>
 #include <sys/poll.h>
 
