@@ -16,7 +16,7 @@ static int settime_alarm(struct timespec *ts) {
     if (fd < 0)
         return fd;
 
-    ret = ioctl(fd, ANDROID_ALARM_SET_RTC, &ts);
+    ret = ioctl(fd, ANDROID_ALARM_SET_RTC, ts);
     close(fd);
     return ret;
 }
