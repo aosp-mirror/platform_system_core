@@ -219,12 +219,12 @@ bool BacktracePtrace::ReadWord(uintptr_t ptr, uint32_t* out_value) {
 
 Backtrace* Backtrace::Create(pid_t pid, pid_t tid, backtrace_map_info_t* map_info) {
   if (pid == BACKTRACE_CURRENT_PROCESS || pid == getpid()) {
-    if (tid == BACKTRACE_NO_TID || tid == gettid()) {
+    if (tid == BACKTRACE_CURRENT_THREAD || tid == gettid()) {
       return CreateCurrentObj(map_info);
     } else {
       return CreateThreadObj(tid, map_info);
     }
-  } else if (tid == BACKTRACE_NO_TID) {
+  } else if (tid == BACKTRACE_CURRENT_THREAD) {
     return CreatePtraceObj(pid, pid, map_info);
   } else {
     return CreatePtraceObj(pid, tid, map_info);
