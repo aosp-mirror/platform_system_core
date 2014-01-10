@@ -7,8 +7,8 @@
 ** General Public License.
 */
 
-#ifndef _UTILS_LOGGER_H
-#define _UTILS_LOGGER_H
+#ifndef _LIBS_LOG_LOGGER_H
+#define _LIBS_LOG_LOGGER_H
 
 #include <stdint.h>
 #include <log/log.h>
@@ -77,36 +77,36 @@ struct log_msg {
         } extra;
     } __attribute__((aligned(4)));
 #ifdef __cplusplus
-    /* Matching log_time_t operators */
-    bool operator== (log_msg &T)
+    /* Matching log_time operators */
+    bool operator== (const log_msg &T) const
     {
         return (entry.sec == T.entry.sec) && (entry.nsec == T.entry.nsec);
     }
-    bool operator!= (log_msg &T)
+    bool operator!= (const log_msg &T) const
     {
         return !(*this == T);
     }
-    bool operator< (log_msg &T)
+    bool operator< (const log_msg &T) const
     {
         return (entry.sec < T.entry.sec)
             || ((entry.sec == T.entry.sec)
              && (entry.nsec < T.entry.nsec));
     }
-    bool operator>= (log_msg &T)
+    bool operator>= (const log_msg &T) const
     {
         return !(*this < T);
     }
-    bool operator> (log_msg &T)
+    bool operator> (const log_msg &T) const
     {
         return (entry.sec > T.entry.sec)
             || ((entry.sec == T.entry.sec)
              && (entry.nsec > T.entry.nsec));
     }
-    bool operator<= (log_msg &T)
+    bool operator<= (const log_msg &T) const
     {
         return !(*this > T);
     }
-    uint64_t nsec(void)
+    uint64_t nsec(void) const
     {
         return static_cast<uint64_t>(entry.sec) * NS_PER_SEC + entry.nsec;
     }
@@ -167,4 +167,4 @@ const char *android_log_id_to_name(log_id_t log_id);
 }
 #endif
 
-#endif /* _UTILS_LOGGER_H */
+#endif /* _LIBS_LOG_LOGGER_H */
