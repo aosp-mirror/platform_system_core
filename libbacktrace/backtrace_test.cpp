@@ -143,7 +143,8 @@ void VerifyLevelDump(const backtrace_t* backtrace) {
 void VerifyLevelBacktrace(void*) {
   backtrace_context_t context;
 
-  ASSERT_TRUE(backtrace_create_context(&context, BACKTRACE_CURRENT_PROCESS, BACKTRACE_NO_TID, 0));
+  ASSERT_TRUE(backtrace_create_context(&context, BACKTRACE_CURRENT_PROCESS,
+                                       BACKTRACE_CURRENT_THREAD, 0));
 
   VerifyLevelDump(context.backtrace);
 
@@ -165,7 +166,8 @@ void VerifyMaxDump(const backtrace_t* backtrace) {
 void VerifyMaxBacktrace(void*) {
   backtrace_context_t context;
 
-  ASSERT_TRUE(backtrace_create_context(&context, BACKTRACE_CURRENT_PROCESS, BACKTRACE_NO_TID, 0));
+  ASSERT_TRUE(backtrace_create_context(&context, BACKTRACE_CURRENT_PROCESS,
+                                       BACKTRACE_CURRENT_THREAD, 0));
 
   VerifyMaxDump(context.backtrace);
 
@@ -232,15 +234,18 @@ void VerifyIgnoreFrames(
 
 void VerifyLevelIgnoreFrames(void*) {
   backtrace_context_t all;
-  ASSERT_TRUE(backtrace_create_context(&all, BACKTRACE_CURRENT_PROCESS, BACKTRACE_NO_TID, 0));
+  ASSERT_TRUE(backtrace_create_context(&all, BACKTRACE_CURRENT_PROCESS,
+                                       BACKTRACE_CURRENT_THREAD, 0));
   ASSERT_TRUE(all.backtrace != NULL);
 
   backtrace_context_t ign1;
-  ASSERT_TRUE(backtrace_create_context(&ign1, BACKTRACE_CURRENT_PROCESS, BACKTRACE_NO_TID, 1));
+  ASSERT_TRUE(backtrace_create_context(&ign1, BACKTRACE_CURRENT_PROCESS,
+                                       BACKTRACE_CURRENT_THREAD, 1));
   ASSERT_TRUE(ign1.backtrace != NULL);
 
   backtrace_context_t ign2;
-  ASSERT_TRUE(backtrace_create_context(&ign2, BACKTRACE_CURRENT_PROCESS, BACKTRACE_NO_TID, 2));
+  ASSERT_TRUE(backtrace_create_context(&ign2, BACKTRACE_CURRENT_PROCESS,
+                                       BACKTRACE_CURRENT_THREAD, 2));
   ASSERT_TRUE(ign2.backtrace != NULL);
 
   VerifyIgnoreFrames(all.backtrace, ign1.backtrace, ign2.backtrace,
@@ -296,7 +301,7 @@ TEST(libbacktrace, ptrace_trace) {
     ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
     exit(1);
   }
-  VerifyProcTest(pid, BACKTRACE_NO_TID, ReadyLevelBacktrace, VerifyLevelDump);
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyLevelDump);
 
   kill(pid, SIGKILL);
   int status;
@@ -309,7 +314,7 @@ TEST(libbacktrace, ptrace_max_trace) {
     ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, NULL, NULL), 0);
     exit(1);
   }
-  VerifyProcTest(pid, BACKTRACE_NO_TID, ReadyMaxBacktrace, VerifyMaxDump);
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyMaxBacktrace, VerifyMaxDump);
 
   kill(pid, SIGKILL);
   int status;
@@ -320,11 +325,11 @@ void VerifyProcessIgnoreFrames(const backtrace_t* bt_all) {
   pid_t pid = bt_all->pid;
 
   backtrace_context_t ign1;
-  ASSERT_TRUE(backtrace_create_context(&ign1, pid, BACKTRACE_NO_TID, 1));
+  ASSERT_TRUE(backtrace_create_context(&ign1, pid, BACKTRACE_CURRENT_THREAD, 1));
   ASSERT_TRUE(ign1.backtrace != NULL);
 
   backtrace_context_t ign2;
-  ASSERT_TRUE(backtrace_create_context(&ign2, pid, BACKTRACE_NO_TID, 2));
+  ASSERT_TRUE(backtrace_create_context(&ign2, pid, BACKTRACE_CURRENT_THREAD, 2));
   ASSERT_TRUE(ign2.backtrace != NULL);
 
   VerifyIgnoreFrames(bt_all, ign1.backtrace, ign2.backtrace, NULL);
@@ -339,7 +344,7 @@ TEST(libbacktrace, ptrace_ignore_frames) {
     ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
     exit(1);
   }
-  VerifyProcTest(pid, BACKTRACE_NO_TID, ReadyLevelBacktrace, VerifyProcessIgnoreFrames);
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyProcessIgnoreFrames);
 
   kill(pid, SIGKILL);
   int status;
@@ -614,10 +619,12 @@ TEST(libbacktrace, thread_multiple_dump) {
 TEST(libbacktrace, format_test) {
   backtrace_context_t context;
 
-  ASSERT_TRUE(backtrace_create_context(&context, BACKTRACE_CURRENT_PROCESS, BACKTRACE_NO_TID, 0));
+  ASSERT_TRUE(backtrace_create_context(&context, BACKTRACE_CURRENT_PROCESS,
+                                       BACKTRACE_CURRENT_THREAD, 0));
   ASSERT_TRUE(context.backtrace != NULL);
 
-  backtrace_frame_data_t* frame = const_cast<backtrace_frame_data_t*>(&context.backtrace->frames[1]);
+  backtrace_frame_data_t* frame =
+      const_cast<backtrace_frame_data_t*>(&context.backtrace->frames[1]);
   backtrace_frame_data_t save_frame = *frame;
 
   memset(frame, 0, sizeof(backtrace_frame_data_t));
