@@ -54,13 +54,13 @@ static int open_device(const char *device)
         idstr[0] = '\0';
     }
 
-    new_ufds = realloc(ufds, sizeof(ufds[0]) * (nfds + 1));
+    new_ufds = reinterpret_cast<pollfd*>(realloc(ufds, sizeof(ufds[0]) * (nfds + 1)));
     if(new_ufds == NULL) {
         fprintf(stderr, "out of memory\n");
         return -1;
     }
     ufds = new_ufds;
-    new_device_names = realloc(device_names, sizeof(device_names[0]) * (nfds + 1));
+    new_device_names = reinterpret_cast<char**>(realloc(device_names, sizeof(device_names[0]) * (nfds + 1)));
     if(new_device_names == NULL) {
         fprintf(stderr, "out of memory\n");
         return -1;
@@ -162,7 +162,7 @@ int init_getevent()
     const char *device_path = "/dev/input";
 
     nfds = 1;
-    ufds = calloc(1, sizeof(ufds[0]));
+    ufds = reinterpret_cast<pollfd*>(calloc(1, sizeof(ufds[0])));
     ufds[0].fd = inotify_init();
     ufds[0].events = POLLIN;
 
