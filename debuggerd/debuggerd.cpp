@@ -123,7 +123,7 @@ static void wait_for_user_action(pid_t pid) {
         int _       = -dit;
         int ___     = 3*_;
         int _______ = 7*_;
-        const signed char codes[] = {
+        const int codes[] = {
            dit,_,dit,_,dit,___,dah,_,dah,_,dah,___,dit,_,dit,_,dit,_______
         };
         size_t s = 0;
@@ -132,7 +132,7 @@ static void wait_for_user_action(pid_t pid) {
         init_debug_led();
         enable_debug_led();
         do {
-            int timeout = abs((int)(codes[s])) * ms;
+            int timeout = abs(codes[s]) * ms;
             int res = get_event(&e, timeout);
             if (res == 0) {
                 if (e.type == EV_KEY
