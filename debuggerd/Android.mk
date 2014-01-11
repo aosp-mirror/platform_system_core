@@ -6,14 +6,20 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
-	backtrace.c \
-	debuggerd.c \
-	getevent.c \
-	tombstone.c \
-	utility.c \
-	$(TARGET_ARCH)/machine.c
+	backtrace.cpp \
+	debuggerd.cpp \
+	getevent.cpp \
+	tombstone.cpp \
+	utility.cpp \
+	$(TARGET_ARCH)/machine.cpp \
 
-LOCAL_CFLAGS := -Wall -Wno-unused-parameter -std=gnu99
+LOCAL_CONLYFLAGS := -std=gnu99
+LOCAL_CPPFLAGS := -std=gnu++11
+LOCAL_CFLAGS := \
+	-Wall \
+	-Wno-array-bounds \
+	-Werror \
+
 LOCAL_MODULE := debuggerd
 
 ifeq ($(ARCH_ARM_HAVE_VFP),true)
@@ -30,6 +36,8 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libselinux \
 
+include external/stlport/libstlport.mk
+
 include $(BUILD_EXECUTABLE)
 
 include $(CLEAR_VARS)
@@ -38,7 +46,7 @@ LOCAL_SRC_FILES += $(TARGET_ARCH)/crashglue.S
 LOCAL_MODULE := crasher
 LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
 LOCAL_MODULE_TAGS := optional
-LOCAL_CFLAGS += -fstack-protector-all
+LOCAL_CFLAGS += -fstack-protector-all -Wno-unused-parameter -Wno-free-nonheap-object
 #LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_SHARED_LIBRARIES := libcutils liblog libc
 include $(BUILD_EXECUTABLE)
