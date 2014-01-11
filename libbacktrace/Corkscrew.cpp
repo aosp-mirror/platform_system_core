@@ -45,6 +45,7 @@ bool CorkscrewCommon::GenerateFrameData(
   data->num_frames = num_frames;
   for (size_t i = 0; i < data->num_frames; i++) {
     backtrace_frame_data_t* frame = &data->frames[i];
+    frame->num = i;
     frame->pc = cork_frames[i].absolute_pc;
     frame->sp = cork_frames[i].stack_top;
     frame->stack_size = cork_frames[i].stack_size;
@@ -146,6 +147,7 @@ void CorkscrewThread::ThreadUnwind(
     data->num_frames = num_frames;
     for (size_t i = 0; i < data->num_frames; i++) {
       backtrace_frame_data_t* frame = &data->frames[i];
+      frame->num = i;
       frame->pc = frames[i].absolute_pc;
       frame->sp = frames[i].stack_top;
       frame->stack_size = frames[i].stack_size;

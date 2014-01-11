@@ -82,6 +82,7 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames) {
     if (num_ignore_frames == 0) {
       size_t num_frames = backtrace->num_frames;
       backtrace_frame_data_t* frame = &backtrace->frames[num_frames];
+      frame->num = num_frames;
       frame->pc = static_cast<uintptr_t>(pc);
       frame->sp = static_cast<uintptr_t>(sp);
       frame->stack_size = 0;
