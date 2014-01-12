@@ -58,6 +58,8 @@
 #define VENDOR_ID_ECS           0x03fc
 // EMERGING_TECH's USB Vendor ID
 #define VENDOR_ID_EMERGING_TECH 0x297F
+// Emerson's USB Vendor ID
+#define VENDOR_ID_EMERSON       0x2207
 // Foxconn's USB Vendor ID
 #define VENDOR_ID_FOXCONN       0x0489
 // Fujitsu's USB Vendor ID
@@ -190,6 +192,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_DELL,
     VENDOR_ID_ECS,
     VENDOR_ID_EMERGING_TECH,
+    VENDOR_ID_EMERSON,
     VENDOR_ID_FOXCONN,
     VENDOR_ID_FUJITSU,
     VENDOR_ID_FUNAI,
