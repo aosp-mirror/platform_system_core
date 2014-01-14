@@ -44,6 +44,7 @@ typedef struct backtrace_map_info {
 } backtrace_map_info_t;
 
 typedef struct {
+  size_t num;             /* The current fame number. */
   uintptr_t pc;           /* The absolute pc. */
   uintptr_t sp;           /* The top of the stack. */
   size_t stack_size;      /* The size of the stack, zero indicate an unknown stack size. */
