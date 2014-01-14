@@ -125,7 +125,10 @@ const backtrace_map_info_t* Backtrace::FindMapInfo(uintptr_t ptr) {
 }
 
 std::string Backtrace::FormatFrameData(size_t frame_num) {
-  backtrace_frame_data_t* frame = &backtrace_.frames[frame_num];
+  return FormatFrameData(&backtrace_.frames[frame_num]);
+}
+
+std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
   const char* map_name;
   if (frame->map_name) {
     map_name = frame->map_name;
@@ -142,13 +145,13 @@ std::string Backtrace::FormatFrameData(size_t frame_num) {
   char buf[512];
   if (frame->func_name && frame->func_offset) {
     snprintf(buf, sizeof(buf), "#%02zu pc %0*" PRIxPTR "  %s (%s+%" PRIuPTR ")",
-             frame_num, (int)sizeof(uintptr_t)*2, relative_pc, map_name,
+             frame->num, (int)sizeof(uintptr_t)*2, relative_pc, map_name,
              frame->func_name, frame->func_offset);
   } else if (frame->func_name) {
-    snprintf(buf, sizeof(buf), "#%02zu pc %0*" PRIxPTR "  %s (%s)", frame_num,
+    snprintf(buf, sizeof(buf), "#%02zu pc %0*" PRIxPTR "  %s (%s)", frame->num,
              (int)sizeof(uintptr_t)*2, relative_pc, map_name, frame->func_name);
   } else {
-    snprintf(buf, sizeof(buf), "#%02zu pc %0*" PRIxPTR "  %s", frame_num,
+    snprintf(buf, sizeof(buf), "#%02zu pc %0*" PRIxPTR "  %s", frame->num,
              (int)sizeof(uintptr_t)*2, relative_pc, map_name);
   }
 
