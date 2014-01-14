@@ -28,7 +28,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <backtrace/backtrace.h>
+#include <backtrace/Backtrace.h>
+#include <UniquePtr.h>
 
 #include <cutils/atomic.h>
 #include <gtest/gtest.h>
@@ -57,7 +58,7 @@ typedef struct {
 
 typedef struct {
   thread_t thread;
-  backtrace_context_t context;
+  Backtrace* backtrace;
   int32_t* now;
   int32_t done;
 } dump_thread_t;
@@ -75,15 +76,14 @@ uint64_t NanoTime() {
   return static_cast<uint64_t>(t.tv_sec * NS_PER_SEC + t.tv_nsec);
 }
 
-void DumpFrames(const backtrace_context_t* context) {
-  if (context->backtrace->num_frames == 0) {
+void DumpFrames(Backtrace* backtrace) {
+  if (backtrace->NumFrames() == 0) {
     printf("    No frames to dump\n");
-  } else {
-    char line[512];
-    for (size_t i = 0; i < context->backtrace->num_frames; i++) {
-      backtrace_format_frame_data(context, i, line, sizeof(line));
-      printf("    %s\n", line);
-    }
+    return;
+  }
+
+  for (size_t i = 0; i < backtrace->NumFrames(); i++) {
+    printf("    %s\n", backtrace->FormatFrameData(i).c_str());
   }
 }
 
@@ -100,12 +100,12 @@ void WaitForStop(pid_t pid) {
   }
 }
 
-bool ReadyLevelBacktrace(const backtrace_t* backtrace) {
+bool ReadyLevelBacktrace(Backtrace* backtrace) {
   // See if test_level_four is in the backtrace.
   bool found = false;
-  for (size_t i = 0; i < backtrace->num_frames; i++) {
-    if (backtrace->frames[i].func_name != NULL &&
-        strcmp(backtrace->frames[i].func_name, "test_level_four") == 0) {
+  for (size_t i = 0; i < backtrace->NumFrames(); i++) {
+    const backtrace_frame_data_t* frame = backtrace->GetFrame(i);
+    if (frame->func_name != NULL && strcmp(frame->func_name, "test_level_four") == 0) {
       found = true;
       break;
     }
@@ -114,64 +114,61 @@ bool ReadyLevelBacktrace(const backtrace_t* backtrace) {
   return found;
 }
 
-void VerifyLevelDump(const backtrace_t* backtrace) {
-  ASSERT_GT(backtrace->num_frames, static_cast<size_t>(0));
-  ASSERT_LT(backtrace->num_frames, static_cast<size_t>(MAX_BACKTRACE_FRAMES));
+void VerifyLevelDump(Backtrace* backtrace) {
+  ASSERT_GT(backtrace->NumFrames(), static_cast<size_t>(0));
+  ASSERT_LT(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES));
 
   // Look through the frames starting at the highest to find the
   // frame we want.
   size_t frame_num = 0;
-  for (size_t i = backtrace->num_frames-1; i > 2; i--) {
-    if (backtrace->frames[i].func_name != NULL &&
-        strcmp(backtrace->frames[i].func_name, "test_level_one") == 0) {
+  for (size_t i = backtrace->NumFrames()-1; i > 2; i--) {
+    if (backtrace->GetFrame(i)->func_name != NULL &&
+        strcmp(backtrace->GetFrame(i)->func_name, "test_level_one") == 0) {
       frame_num = i;
       break;
     }
   }
-  ASSERT_GT(frame_num, static_cast<size_t>(0));
+  ASSERT_LT(static_cast<size_t>(0), frame_num);
+  ASSERT_LE(static_cast<size_t>(3), frame_num);
 
-  ASSERT_TRUE(NULL != backtrace->frames[frame_num].func_name);
-  ASSERT_STREQ(backtrace->frames[frame_num].func_name, "test_level_one");
-  ASSERT_TRUE(NULL != backtrace->frames[frame_num-1].func_name);
-  ASSERT_STREQ(backtrace->frames[frame_num-1].func_name, "test_level_two");
-  ASSERT_TRUE(NULL != backtrace->frames[frame_num-2].func_name);
-  ASSERT_STREQ(backtrace->frames[frame_num-2].func_name, "test_level_three");
-  ASSERT_TRUE(NULL != backtrace->frames[frame_num-3].func_name);
-  ASSERT_STREQ(backtrace->frames[frame_num-3].func_name, "test_level_four");
+  ASSERT_TRUE(NULL != backtrace->GetFrame(frame_num)->func_name);
+  ASSERT_STREQ(backtrace->GetFrame(frame_num)->func_name, "test_level_one");
+  ASSERT_TRUE(NULL != backtrace->GetFrame(frame_num-1)->func_name);
+  ASSERT_STREQ(backtrace->GetFrame(frame_num-1)->func_name, "test_level_two");
+  ASSERT_TRUE(NULL != backtrace->GetFrame(frame_num-2)->func_name);
+  ASSERT_STREQ(backtrace->GetFrame(frame_num-2)->func_name, "test_level_three");
+  ASSERT_TRUE(NULL != backtrace->GetFrame(frame_num-3)->func_name);
+  ASSERT_STREQ(backtrace->GetFrame(frame_num-3)->func_name, "test_level_four");
 }
 
 void VerifyLevelBacktrace(void*) {
-  backtrace_context_t context;
+  UniquePtr<Backtrace> backtrace(
+      Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(backtrace.get() != NULL);
+  ASSERT_TRUE(backtrace->Unwind(0));
 
-  ASSERT_TRUE(backtrace_create_context(&context, BACKTRACE_CURRENT_PROCESS,
-                                       BACKTRACE_CURRENT_THREAD, 0));
-
-  VerifyLevelDump(context.backtrace);
-
-  backtrace_destroy_context(&context);
+  VerifyLevelDump(backtrace.get());
 }
 
-bool ReadyMaxBacktrace(const backtrace_t* backtrace) {
-  return (backtrace->num_frames == MAX_BACKTRACE_FRAMES);
+bool ReadyMaxBacktrace(Backtrace* backtrace) {
+  return (backtrace->NumFrames() == MAX_BACKTRACE_FRAMES);
 }
 
-void VerifyMaxDump(const backtrace_t* backtrace) {
-  ASSERT_EQ(backtrace->num_frames, static_cast<size_t>(MAX_BACKTRACE_FRAMES));
+void VerifyMaxDump(Backtrace* backtrace) {
+  ASSERT_EQ(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES));
   // Verify that the last frame is our recursive call.
-  ASSERT_TRUE(NULL != backtrace->frames[MAX_BACKTRACE_FRAMES-1].func_name);
-  ASSERT_STREQ(backtrace->frames[MAX_BACKTRACE_FRAMES-1].func_name,
+  ASSERT_TRUE(NULL != backtrace->GetFrame(MAX_BACKTRACE_FRAMES-1)->func_name);
+  ASSERT_STREQ(backtrace->GetFrame(MAX_BACKTRACE_FRAMES-1)->func_name,
                "test_recursive_call");
 }
 
 void VerifyMaxBacktrace(void*) {
-  backtrace_context_t context;
+  UniquePtr<Backtrace> backtrace(
+      Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(backtrace.get() != NULL);
+  ASSERT_TRUE(backtrace->Unwind(0));
 
-  ASSERT_TRUE(backtrace_create_context(&context, BACKTRACE_CURRENT_PROCESS,
-                                       BACKTRACE_CURRENT_THREAD, 0));
-
-  VerifyMaxDump(context.backtrace);
-
-  backtrace_destroy_context(&context);
+  VerifyMaxDump(backtrace.get());
 }
 
 void ThreadSetState(void* data) {
@@ -183,14 +180,12 @@ void ThreadSetState(void* data) {
   }
 }
 
-void VerifyThreadTest(pid_t tid, void (*VerifyFunc)(const backtrace_t*)) {
-  backtrace_context_t context;
+void VerifyThreadTest(pid_t tid, void (*VerifyFunc)(Backtrace*)) {
+  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), tid));
+  ASSERT_TRUE(backtrace.get() != NULL);
+  ASSERT_TRUE(backtrace->Unwind(0));
 
-  backtrace_create_context(&context, getpid(), tid, 0);
-
-  VerifyFunc(context.backtrace);
-
-  backtrace_destroy_context(&context);
+  VerifyFunc(backtrace.get());
 }
 
 bool WaitForNonZero(int32_t* value, uint64_t seconds) {
@@ -208,52 +203,47 @@ TEST(libbacktrace, local_trace) {
 }
 
 void VerifyIgnoreFrames(
-    const backtrace_t* bt_all, const backtrace_t* bt_ign1,
-    const backtrace_t* bt_ign2, const char* cur_proc) {
-  EXPECT_EQ(bt_all->num_frames, bt_ign1->num_frames + 1);
-  EXPECT_EQ(bt_all->num_frames, bt_ign2->num_frames + 2);
+    Backtrace* bt_all, Backtrace* bt_ign1,
+    Backtrace* bt_ign2, const char* cur_proc) {
+  EXPECT_EQ(bt_all->NumFrames(), bt_ign1->NumFrames() + 1);
+  EXPECT_EQ(bt_all->NumFrames(), bt_ign2->NumFrames() + 2);
 
   // Check all of the frames are the same > the current frame.
   bool check = (cur_proc == NULL);
-  for (size_t i = 0; i < bt_ign2->num_frames; i++) {
+  for (size_t i = 0; i < bt_ign2->NumFrames(); i++) {
     if (check) {
-      EXPECT_EQ(bt_ign2->frames[i].pc, bt_ign1->frames[i+1].pc);
-      EXPECT_EQ(bt_ign2->frames[i].sp, bt_ign1->frames[i+1].sp);
-      EXPECT_EQ(bt_ign2->frames[i].stack_size, bt_ign1->frames[i+1].stack_size);
+      EXPECT_EQ(bt_ign2->GetFrame(i)->pc, bt_ign1->GetFrame(i+1)->pc);
+      EXPECT_EQ(bt_ign2->GetFrame(i)->sp, bt_ign1->GetFrame(i+1)->sp);
+      EXPECT_EQ(bt_ign2->GetFrame(i)->stack_size, bt_ign1->GetFrame(i+1)->stack_size);
 
-      EXPECT_EQ(bt_ign2->frames[i].pc, bt_all->frames[i+2].pc);
-      EXPECT_EQ(bt_ign2->frames[i].sp, bt_all->frames[i+2].sp);
-      EXPECT_EQ(bt_ign2->frames[i].stack_size, bt_all->frames[i+2].stack_size);
+      EXPECT_EQ(bt_ign2->GetFrame(i)->pc, bt_all->GetFrame(i+2)->pc);
+      EXPECT_EQ(bt_ign2->GetFrame(i)->sp, bt_all->GetFrame(i+2)->sp);
+      EXPECT_EQ(bt_ign2->GetFrame(i)->stack_size, bt_all->GetFrame(i+2)->stack_size);
     }
-    if (!check && bt_ign2->frames[i].func_name &&
-        strcmp(bt_ign2->frames[i].func_name, cur_proc) == 0) {
+    if (!check && bt_ign2->GetFrame(i)->func_name &&
+        strcmp(bt_ign2->GetFrame(i)->func_name, cur_proc) == 0) {
       check = true;
     }
   }
 }
 
 void VerifyLevelIgnoreFrames(void*) {
-  backtrace_context_t all;
-  ASSERT_TRUE(backtrace_create_context(&all, BACKTRACE_CURRENT_PROCESS,
-                                       BACKTRACE_CURRENT_THREAD, 0));
-  ASSERT_TRUE(all.backtrace != NULL);
+  UniquePtr<Backtrace> all(
+      Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(all.get() != NULL);
+  ASSERT_TRUE(all->Unwind(0));
 
-  backtrace_context_t ign1;
-  ASSERT_TRUE(backtrace_create_context(&ign1, BACKTRACE_CURRENT_PROCESS,
-                                       BACKTRACE_CURRENT_THREAD, 1));
-  ASSERT_TRUE(ign1.backtrace != NULL);
+  UniquePtr<Backtrace> ign1(
+      Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(ign1.get() != NULL);
+  ASSERT_TRUE(ign1->Unwind(1));
 
-  backtrace_context_t ign2;
-  ASSERT_TRUE(backtrace_create_context(&ign2, BACKTRACE_CURRENT_PROCESS,
-                                       BACKTRACE_CURRENT_THREAD, 2));
-  ASSERT_TRUE(ign2.backtrace != NULL);
+  UniquePtr<Backtrace> ign2(
+      Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(ign2.get() != NULL);
+  ASSERT_TRUE(ign2->Unwind(2));
 
-  VerifyIgnoreFrames(all.backtrace, ign1.backtrace, ign2.backtrace,
-                     "VerifyLevelIgnoreFrames");
-
-  backtrace_destroy_context(&all);
-  backtrace_destroy_context(&ign1);
-  backtrace_destroy_context(&ign2);
+  VerifyIgnoreFrames(all.get(), ign1.get(), ign2.get(), "VerifyLevelIgnoreFrames");
 }
 
 TEST(libbacktrace, local_trace_ignore_frames) {
@@ -265,8 +255,8 @@ TEST(libbacktrace, local_max_trace) {
 }
 
 void VerifyProcTest(pid_t pid, pid_t tid,
-                    bool (*ReadyFunc)(const backtrace_t*),
-                    void (*VerifyFunc)(const backtrace_t*)) {
+                    bool (*ReadyFunc)(Backtrace*),
+                    void (*VerifyFunc)(Backtrace*)) {
   pid_t ptrace_tid;
   if (tid < 0) {
     ptrace_tid = pid;
@@ -281,13 +271,14 @@ void VerifyProcTest(pid_t pid, pid_t tid,
       // Wait for the process to get to a stopping point.
       WaitForStop(ptrace_tid);
 
-      backtrace_context_t context;
-      ASSERT_TRUE(backtrace_create_context(&context, pid, tid, 0));
-      if (ReadyFunc(context.backtrace)) {
-        VerifyFunc(context.backtrace);
+      UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, tid));
+      ASSERT_TRUE(backtrace->Unwind(0));
+      ASSERT_TRUE(backtrace.get() != NULL);
+      if (ReadyFunc(backtrace.get())) {
+        VerifyFunc(backtrace.get());
         verified = true;
       }
-      backtrace_destroy_context(&context);
+
       ASSERT_TRUE(ptrace(PTRACE_DETACH, ptrace_tid, 0, 0) == 0);
     }
     // If 5 seconds have passed, then we are done.
@@ -321,21 +312,16 @@ TEST(libbacktrace, ptrace_max_trace) {
   ASSERT_EQ(waitpid(pid, &status, 0), pid);
 }
 
-void VerifyProcessIgnoreFrames(const backtrace_t* bt_all) {
-  pid_t pid = bt_all->pid;
+void VerifyProcessIgnoreFrames(Backtrace* bt_all) {
+  UniquePtr<Backtrace> ign1(Backtrace::Create(bt_all->Pid(), BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(ign1.get() != NULL);
+  ASSERT_TRUE(ign1->Unwind(1));
 
-  backtrace_context_t ign1;
-  ASSERT_TRUE(backtrace_create_context(&ign1, pid, BACKTRACE_CURRENT_THREAD, 1));
-  ASSERT_TRUE(ign1.backtrace != NULL);
+  UniquePtr<Backtrace> ign2(Backtrace::Create(bt_all->Pid(), BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(ign2.get() != NULL);
+  ASSERT_TRUE(ign2->Unwind(2));
 
-  backtrace_context_t ign2;
-  ASSERT_TRUE(backtrace_create_context(&ign2, pid, BACKTRACE_CURRENT_THREAD, 2));
-  ASSERT_TRUE(ign2.backtrace != NULL);
-
-  VerifyIgnoreFrames(bt_all, ign1.backtrace, ign2.backtrace, NULL);
-
-  backtrace_destroy_context(&ign1);
-  backtrace_destroy_context(&ign2);
+  VerifyIgnoreFrames(bt_all, ign1.get(), ign2.get(), NULL);
 }
 
 TEST(libbacktrace, ptrace_ignore_frames) {
@@ -418,13 +404,11 @@ TEST(libbacktrace, ptrace_threads) {
 }
 
 void VerifyLevelThread(void*) {
-  backtrace_context_t context;
+  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
+  ASSERT_TRUE(backtrace.get() != NULL);
+  ASSERT_TRUE(backtrace->Unwind(0));
 
-  ASSERT_TRUE(backtrace_create_context(&context, getpid(), gettid(), 0));
-
-  VerifyLevelDump(context.backtrace);
-
-  backtrace_destroy_context(&context);
+  VerifyLevelDump(backtrace.get());
 }
 
 TEST(libbacktrace, thread_current_level) {
@@ -432,13 +416,11 @@ TEST(libbacktrace, thread_current_level) {
 }
 
 void VerifyMaxThread(void*) {
-  backtrace_context_t context;
+  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
+  ASSERT_TRUE(backtrace.get() != NULL);
+  ASSERT_TRUE(backtrace->Unwind(0));
 
-  ASSERT_TRUE(backtrace_create_context(&context, getpid(), gettid(), 0));
-
-  VerifyMaxDump(context.backtrace);
-
-  backtrace_destroy_context(&context);
+  VerifyMaxDump(backtrace.get());
 }
 
 TEST(libbacktrace, thread_current_max) {
@@ -469,13 +451,11 @@ TEST(libbacktrace, thread_level_trace) {
   struct sigaction cur_action;
   ASSERT_TRUE(sigaction(SIGURG, NULL, &cur_action) == 0);
 
-  backtrace_context_t context;
+  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(backtrace.get() != NULL);
+  ASSERT_TRUE(backtrace->Unwind(0));
 
-  ASSERT_TRUE(backtrace_create_context(&context, getpid(), thread_data.tid,0));
-
-  VerifyLevelDump(context.backtrace);
-
-  backtrace_destroy_context(&context);
+  VerifyLevelDump(backtrace.get());
 
   // Tell the thread to exit its infinite loop.
   android_atomic_acquire_store(0, &thread_data.state);
@@ -499,20 +479,19 @@ TEST(libbacktrace, thread_ignore_frames) {
   // Wait up to 2 seconds for the tid to be set.
   ASSERT_TRUE(WaitForNonZero(&thread_data.state, 2));
 
-  backtrace_context_t all;
-  ASSERT_TRUE(backtrace_create_context(&all, getpid(), thread_data.tid, 0));
+  UniquePtr<Backtrace> all(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(all.get() != NULL);
+  ASSERT_TRUE(all->Unwind(0));
 
-  backtrace_context_t ign1;
-  ASSERT_TRUE(backtrace_create_context(&ign1, getpid(), thread_data.tid, 1));
+  UniquePtr<Backtrace> ign1(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(ign1.get() != NULL);
+  ASSERT_TRUE(ign1->Unwind(1));
 
-  backtrace_context_t ign2;
-  ASSERT_TRUE(backtrace_create_context(&ign2, getpid(), thread_data.tid, 2));
+  UniquePtr<Backtrace> ign2(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(ign2.get() != NULL);
+  ASSERT_TRUE(ign2->Unwind(2));
 
-  VerifyIgnoreFrames(all.backtrace, ign1.backtrace, ign2.backtrace, NULL);
-
-  backtrace_destroy_context(&all);
-  backtrace_destroy_context(&ign1);
-  backtrace_destroy_context(&ign2);
+  VerifyIgnoreFrames(all.get(), ign1.get(), ign2.get(), NULL);
 
   // Tell the thread to exit its infinite loop.
   android_atomic_acquire_store(0, &thread_data.state);
@@ -538,13 +517,11 @@ TEST(libbacktrace, thread_max_trace) {
   // Wait for the tid to be set.
   ASSERT_TRUE(WaitForNonZero(&thread_data.state, 2));
 
-  backtrace_context_t context;
+  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(backtrace.get() != NULL);
+  ASSERT_TRUE(backtrace->Unwind(0));
 
-  ASSERT_TRUE(backtrace_create_context(&context, getpid(), thread_data.tid, 0));
-
-  VerifyMaxDump(context.backtrace);
-
-  backtrace_destroy_context(&context);
+  VerifyMaxDump(backtrace.get());
 
   // Tell the thread to exit its infinite loop.
   android_atomic_acquire_store(0, &thread_data.state);
@@ -558,11 +535,9 @@ void* ThreadDump(void* data) {
     }
   }
 
-  dump->context.data = NULL;
-  dump->context.backtrace = NULL;
-
   // The status of the actual unwind will be checked elsewhere.
-  backtrace_create_context(&dump->context, getpid(), dump->thread.tid, 0);
+  dump->backtrace = Backtrace::Create(getpid(), dump->thread.tid);
+  dump->backtrace->Unwind(0);
 
   android_atomic_acquire_store(1, &dump->done);
 
@@ -610,58 +585,51 @@ TEST(libbacktrace, thread_multiple_dump) {
     // Tell the runner thread to exit its infinite loop.
     android_atomic_acquire_store(0, &runners[i].state);
 
-    ASSERT_TRUE(dumpers[i].context.backtrace != NULL);
-    VerifyMaxDump(dumpers[i].context.backtrace);
-    backtrace_destroy_context(&dumpers[i].context);
+    ASSERT_TRUE(dumpers[i].backtrace != NULL);
+    VerifyMaxDump(dumpers[i].backtrace);
+
+    delete dumpers[i].backtrace;
+    dumpers[i].backtrace = NULL;
   }
 }
 
 TEST(libbacktrace, format_test) {
-  backtrace_context_t context;
+  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(backtrace.get() != NULL);
 
-  ASSERT_TRUE(backtrace_create_context(&context, BACKTRACE_CURRENT_PROCESS,
-                                       BACKTRACE_CURRENT_THREAD, 0));
-  ASSERT_TRUE(context.backtrace != NULL);
+  backtrace_frame_data_t frame;
+  memset(&frame, 0, sizeof(backtrace_frame_data_t));
 
-  backtrace_frame_data_t* frame =
-      const_cast<backtrace_frame_data_t*>(&context.backtrace->frames[1]);
-  backtrace_frame_data_t save_frame = *frame;
-
-  memset(frame, 0, sizeof(backtrace_frame_data_t));
-  char buf[512];
-  backtrace_format_frame_data(&context, 1, buf, sizeof(buf));
+  frame.num = 1;
 #if defined(__LP64__)
-  EXPECT_STREQ(buf, "#01 pc 0000000000000000  <unknown>");
+  EXPECT_STREQ("#01 pc 0000000000000000  <unknown>",
 #else
-  EXPECT_STREQ(buf, "#01 pc 00000000  <unknown>");
+  EXPECT_STREQ("#01 pc 00000000  <unknown>",
 #endif
+               backtrace->FormatFrameData(&frame).c_str());
 
-  frame->pc = 0x12345678;
-  frame->map_name = "MapFake";
-  backtrace_format_frame_data(&context, 1, buf, sizeof(buf));
+  frame.pc = 0x12345678;
+  frame.map_name = "MapFake";
 #if defined(__LP64__)
-  EXPECT_STREQ(buf, "#01 pc 0000000012345678  MapFake");
+  EXPECT_STREQ("#01 pc 0000000012345678  MapFake",
 #else
-  EXPECT_STREQ(buf, "#01 pc 12345678  MapFake");
+  EXPECT_STREQ("#01 pc 12345678  MapFake",
 #endif
+               backtrace->FormatFrameData(&frame).c_str());
 
-  frame->func_name = const_cast<char*>("ProcFake");
-  backtrace_format_frame_data(&context, 1, buf, sizeof(buf));
+  frame.func_name = const_cast<char*>("ProcFake");
 #if defined(__LP64__)
-  EXPECT_STREQ(buf, "#01 pc 0000000012345678  MapFake (ProcFake)");
+  EXPECT_STREQ("#01 pc 0000000012345678  MapFake (ProcFake)",
 #else
-  EXPECT_STREQ(buf, "#01 pc 12345678  MapFake (ProcFake)");
+  EXPECT_STREQ("#01 pc 12345678  MapFake (ProcFake)",
 #endif
+               backtrace->FormatFrameData(&frame).c_str());
 
-  frame->func_offset = 645;
-  backtrace_format_frame_data(&context, 1, buf, sizeof(buf));
+  frame.func_offset = 645;
 #if defined(__LP64__)
-  EXPECT_STREQ(buf, "#01 pc 0000000012345678  MapFake (ProcFake+645)");
+  EXPECT_STREQ("#01 pc 0000000012345678  MapFake (ProcFake+645)",
 #else
-  EXPECT_STREQ(buf, "#01 pc 12345678  MapFake (ProcFake+645)");
+  EXPECT_STREQ("#01 pc 12345678  MapFake (ProcFake+645)",
 #endif
-
-  *frame = save_frame;
-
-  backtrace_destroy_context(&context);
+               backtrace->FormatFrameData(&frame).c_str());
 }
