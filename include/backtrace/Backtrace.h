@@ -60,6 +60,7 @@ public:
   // Create a string representing the formatted line of backtrace information
   // for a single frame.
   virtual std::string FormatFrameData(size_t frame_num);
+  virtual std::string FormatFrameData(const backtrace_frame_data_t* frame);
 
   pid_t Pid() { return backtrace_.pid; }
   pid_t Tid() { return backtrace_.tid; }
@@ -68,7 +69,14 @@ public:
   const backtrace_t* GetBacktrace() { return &backtrace_; }
 
   const backtrace_frame_data_t* GetFrame(size_t frame_num) {
+    if (frame_num > NumFrames()) {
+      return NULL;
+    }
     return &backtrace_.frames[frame_num];
+  }
+
+  const backtrace_map_info_t* GetMapList() {
+    return map_info_;
   }
 
 protected:
