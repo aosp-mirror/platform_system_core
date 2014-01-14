@@ -18,7 +18,6 @@
 #define _LIBBACKTRACE_BACKTRACE_THREAD_H
 
 #include <inttypes.h>
-#include <pthread.h>
 #include <sys/types.h>
 
 #include "Backtrace.h"

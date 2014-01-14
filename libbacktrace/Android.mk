@@ -168,18 +168,15 @@ LOCAL_ADDITIONAL_DEPENDENCIES := \
 include $(BUILD_NATIVE_TEST)
 
 #----------------------------------------------------------------------------
-# Only linux-x86 host versions of libbacktrace supported.
+# Only x86 host versions of libbacktrace supported.
 #----------------------------------------------------------------------------
-ifeq ($(HOST_OS)-$(HOST_ARCH),linux-x86)
+ifeq ($(HOST_ARCH),x86)
 
 #----------------------------------------------------------------------------
 # The host libbacktrace library using libcorkscrew
 #----------------------------------------------------------------------------
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES += \
-	$(common_src) \
-	Corkscrew.cpp \
 
 LOCAL_CFLAGS += \
 	$(common_cflags) \
@@ -187,21 +184,12 @@ LOCAL_CFLAGS += \
 LOCAL_CONLYFLAGS += \
 	$(common_conlyflags) \
 
-LOCAL_CPPFLAGS += \
-	$(common_cppflags) \
-
 LOCAL_C_INCLUDES := \
 	$(common_c_includes) \
-	system/core/libcorkscrew \
 
 LOCAL_SHARED_LIBRARIES := \
 	libgccdemangle \
 	liblog \
-	libcorkscrew \
-
-LOCAL_LDLIBS += \
-	-ldl \
-	-lrt \
 
 LOCAL_MODULE := libbacktrace
 LOCAL_MODULE_TAGS := optional
@@ -209,7 +197,36 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_ADDITIONAL_DEPENDENCIES := \
 	$(LOCAL_PATH)/Android.mk
 
+ifeq ($(HOST_OS),linux)
+LOCAL_SRC_FILES += \
+	$(common_src) \
+	Corkscrew.cpp \
+
+LOCAL_C_INCLUDES += \
+	system/core/libcorkscrew \
+
+LOCAL_SHARED_LIBRARIES := \
+	libcorkscrew \
+
+LOCAL_CPPFLAGS += \
+	$(common_cppflags) \
+
+LOCAL_LDLIBS += \
+	-ldl \
+	-lrt \
+
+else
+LOCAL_SRC_FILES += \
+	map_info.c \
+
+endif
+
 include $(BUILD_HOST_SHARED_LIBRARY)
+
+#----------------------------------------------------------------------------
+# The host test is only supported on linux.
+#----------------------------------------------------------------------------
+ifeq ($(HOST_OS),linux)
 
 #----------------------------------------------------------------------------
 # libbacktrace host test library, all optimizations turned off
@@ -263,4 +280,6 @@ LOCAL_ADDITIONAL_DEPENDENCIES := \
 
 include $(BUILD_HOST_NATIVE_TEST)
 
-endif # HOST_OS-HOST_ARCH == linux-x86
+endif # HOST_OS == linux
+
+endif # HOST_ARCH == x86
