@@ -29,9 +29,10 @@
  * SUCH DAMAGE.
  */
 
+#include <getopt.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <getopt.h>
 #include <unistd.h>
 
 #include <cutils/klog.h>
@@ -185,7 +186,7 @@ void printGPT(struct GPT_entry_table *table) {
             name[m] = entry->name[m] & 127;
         }
         name[m] = 0;
-        printf("#%03d %13lld %13lld %s\n",
+        printf("#%03d %13"PRId64" %13"PRId64" %s\n",
             n + 1, entry->first_lba, entry->last_lba, name);
     }
 }
@@ -197,11 +198,11 @@ void configPrintGPT(struct GPT_entry_table *table) {
     char temp_guid[17];
     temp_guid[16] = 0;
 
-    printf("header_lba %lld\n", table->header->current_lba);
-    printf("backup_lba %lld\n", table->header->backup_lba);
-    printf("first_lba %lld\n", table->header->first_usable_lba);
-    printf("last_lba %lld\n", table->header->last_usable_lba);
-    printf("entries_lba %lld\n", table->header->entries_lba);
+    printf("header_lba %"PRId64"\n", table->header->current_lba);
+    printf("backup_lba %"PRId64"\n", table->header->backup_lba);
+    printf("first_lba %"PRId64"\n", table->header->first_usable_lba);
+    printf("last_lba %"PRId64"\n", table->header->last_usable_lba);
+    printf("entries_lba %"PRId64"\n", table->header->entries_lba);
     snprintf(temp_guid, 17, "%s", table->header->disk_guid);
     printf("guid \"%s\"", temp_guid);
 
@@ -220,8 +221,8 @@ void configPrintGPT(struct GPT_entry_table *table) {
         printf("    %s {\n", name);
         snprintf(temp_guid, 17, "%s", entry->partition_guid);
         printf("        guid \"%s\"\n", temp_guid);
-        printf("        first_lba %lld\n", entry->first_lba);
-        printf("        partition_size %lld\n", size);
+        printf("        first_lba %"PRId64"\n", entry->first_lba);
+        printf("        partition_size %"PRId64"\n", size);
         if (entry->flags & GPT_FLAG_SYSTEM)
             printf("        system\n");
         if (entry->flags & GPT_FLAG_BOOTABLE)
