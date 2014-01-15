@@ -34,11 +34,17 @@ __BEGIN_DECLS
 /* device address used to refer to the standard remote submix */
 #define AUDIO_REMOTE_SUBMIX_DEVICE_ADDRESS "0"
 
+/* AudioFlinger and AudioPolicy services use I/O handles to identify audio sources and sinks */
 typedef int audio_io_handle_t;
+#define AUDIO_IO_HANDLE_NONE    0
 
 /* Audio stream types */
 typedef enum {
+    /* These values must kept in sync with
+     * frameworks/base/media/java/android/media/AudioSystem.java
+     */
     AUDIO_STREAM_DEFAULT          = -1,
+    AUDIO_STREAM_MIN              = 0,
     AUDIO_STREAM_VOICE_CALL       = 0,
     AUDIO_STREAM_SYSTEM           = 1,
     AUDIO_STREAM_RING             = 2,
@@ -55,7 +61,9 @@ typedef enum {
 } audio_stream_type_t;
 
 /* Do not change these values without updating their counterparts
- * in media/java/android/media/MediaRecorder.java!
+ * in frameworks/base/media/java/android/media/MediaRecorder.java,
+ * frameworks/av/services/audioflinger/AudioPolicyService.cpp,
+ * and system/media/audio_effects/include/audio_effects/audio_effects_conf.h!
  */
 typedef enum {
     AUDIO_SOURCE_DEFAULT             = 0,
@@ -110,7 +118,10 @@ typedef enum {
     AUDIO_FORMAT_PCM_SUB_8_BIT           = 0x2, /* DO NOT CHANGE - PCM unsigned 8 bits */
     AUDIO_FORMAT_PCM_SUB_32_BIT          = 0x3, /* PCM signed .31 fixed point */
     AUDIO_FORMAT_PCM_SUB_8_24_BIT        = 0x4, /* PCM signed 7.24 fixed point */
+    AUDIO_FORMAT_PCM_SUB_FLOAT           = 0x5, /* PCM single-precision floating point */
 } audio_format_pcm_sub_fmt_t;
+
+/* The audio_format_*_sub_fmt_t declarations are not currently used */
 
 /* MP3 sub format field definition : can use 11 LSBs in the same way as MP3
  * frame header to specify bit rate, stereo mode, version...
@@ -136,7 +147,7 @@ typedef enum {
     AUDIO_FORMAT_VORBIS_SUB_NONE         = 0x0,
 } audio_format_vorbis_sub_fmt_t;
 
-/* Audio format consists in a main format field (upper 8 bits) and a sub format
+/* Audio format consists of a main format field (upper 8 bits) and a sub format
  * field (lower 24 bits).
  *
  * The main format indicates the main codec type. The sub format field
@@ -160,14 +171,18 @@ typedef enum {
     AUDIO_FORMAT_SUB_MASK            = 0x00FFFFFFUL,
 
     /* Aliases */
+    /* note != AudioFormat.ENCODING_PCM_16BIT */
     AUDIO_FORMAT_PCM_16_BIT          = (AUDIO_FORMAT_PCM |
                                         AUDIO_FORMAT_PCM_SUB_16_BIT),
+    /* note != AudioFormat.ENCODING_PCM_8BIT */
     AUDIO_FORMAT_PCM_8_BIT           = (AUDIO_FORMAT_PCM |
                                         AUDIO_FORMAT_PCM_SUB_8_BIT),
     AUDIO_FORMAT_PCM_32_BIT          = (AUDIO_FORMAT_PCM |
                                         AUDIO_FORMAT_PCM_SUB_32_BIT),
     AUDIO_FORMAT_PCM_8_24_BIT        = (AUDIO_FORMAT_PCM |
                                         AUDIO_FORMAT_PCM_SUB_8_24_BIT),
+    AUDIO_FORMAT_PCM_FLOAT           = (AUDIO_FORMAT_PCM |
+                                        AUDIO_FORMAT_PCM_SUB_FLOAT),
 } audio_format_t;
 
 enum {
@@ -273,6 +288,15 @@ enum {
 
 typedef uint32_t audio_channel_mask_t;
 
+/* Expresses the convention when stereo audio samples are stored interleaved
+ * in an array.  This should improve readability by allowing code to use
+ * symbolic indices instead of hard-coded [0] and [1].
+ */
+enum {
+    AUDIO_INTERLEAVE_LEFT   = 0,
+    AUDIO_INTERLEAVE_RIGHT  = 1,
+};
+
 typedef enum {
     AUDIO_MODE_INVALID          = -2,
     AUDIO_MODE_CURRENT          = -1,
@@ -285,7 +309,9 @@ typedef enum {
     AUDIO_MODE_MAX              = AUDIO_MODE_CNT - 1,
 } audio_mode_t;
 
+/* This enum is deprecated */
 typedef enum {
+    AUDIO_IN_ACOUSTICS_NONE          = 0,
     AUDIO_IN_ACOUSTICS_AGC_ENABLE    = 0x0001,
     AUDIO_IN_ACOUSTICS_AGC_DISABLE   = 0,
     AUDIO_IN_ACOUSTICS_NS_ENABLE     = 0x0002,
@@ -311,9 +337,12 @@ enum {
     AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES = 0x100,
     AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER    = 0x200,
     AUDIO_DEVICE_OUT_AUX_DIGITAL               = 0x400,
+    /* uses an analog connection (multiplexed over the USB connector pins for instance) */
     AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET         = 0x800,
     AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET         = 0x1000,
+    /* USB accessory mode: your Android device is a USB device and the dock is a USB host */
     AUDIO_DEVICE_OUT_USB_ACCESSORY             = 0x2000,
+    /* USB host mode: your Android device is a USB host and the dock is a USB device */
     AUDIO_DEVICE_OUT_USB_DEVICE                = 0x4000,
     AUDIO_DEVICE_OUT_REMOTE_SUBMIX             = 0x8000,
     AUDIO_DEVICE_OUT_DEFAULT                   = AUDIO_DEVICE_BIT_DEFAULT,
@@ -529,7 +558,7 @@ static inline bool audio_is_output_channel(audio_channel_mask_t channel)
  */
 static inline audio_channel_mask_t audio_channel_out_mask_from_count(uint32_t channel_count)
 {
-    switch(channel_count) {
+    switch (channel_count) {
     case 1:
         return AUDIO_CHANNEL_OUT_MONO;
     case 2:
@@ -569,7 +598,7 @@ static inline bool audio_is_valid_format(audio_format_t format)
     switch (format & AUDIO_FORMAT_MAIN_MASK) {
     case AUDIO_FORMAT_PCM:
         if (format != AUDIO_FORMAT_PCM_16_BIT &&
-                format != AUDIO_FORMAT_PCM_8_BIT) {
+                format != AUDIO_FORMAT_PCM_8_BIT && format != AUDIO_FORMAT_PCM_FLOAT) {
             return false;
         }
     case AUDIO_FORMAT_MP3:
@@ -604,6 +633,9 @@ static inline size_t audio_bytes_per_sample(audio_format_t format)
         break;
     case AUDIO_FORMAT_PCM_8_BIT:
         size = sizeof(uint8_t);
+        break;
+    case AUDIO_FORMAT_PCM_FLOAT:
+        size = sizeof(float);
         break;
     default:
         break;
