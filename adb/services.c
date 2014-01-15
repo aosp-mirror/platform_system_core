@@ -116,22 +116,9 @@ void reboot_service(int fd, void *arg)
 {
     char buf[100];
     char property_val[PROPERTY_VALUE_MAX];
-    int pid, ret;
+    int ret;
 
     sync();
-
-    /* Attempt to unmount the SD card first.
-     * No need to bother checking for errors.
-     */
-    pid = fork();
-    if (pid == 0) {
-        /* ask vdc to unmount it */
-        execl("/system/bin/vdc", "/system/bin/vdc", "volume", "unmount",
-                getenv("EXTERNAL_STORAGE"), "force", NULL);
-    } else if (pid > 0) {
-        /* wait until vdc succeeds or fails */
-        waitpid(pid, &ret, 0);
-    }
 
     ret = snprintf(property_val, sizeof(property_val), "reboot,%s", (char *) arg);
     if (ret >= (int) sizeof(property_val)) {
