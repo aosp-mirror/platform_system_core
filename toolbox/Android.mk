@@ -70,6 +70,7 @@ TOOLS := \
 	swapoff \
 	mkswap \
 	readlink \
+	mknod \
 	nohup
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
