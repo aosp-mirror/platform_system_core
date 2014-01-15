@@ -22,7 +22,6 @@
 #include <sys/types.h>
 
 #include <cutils/atomic.h>
-#include <cutils/log.h>
 
 #include "BacktraceThread.h"
 #include "thread_utils.h"
@@ -115,30 +114,21 @@ static void SignalHandler(int n __attribute__((unused)), siginfo_t* siginfo,
 
 BacktraceThread::BacktraceThread(
     BacktraceImpl* impl, BacktraceThreadInterface* thread_intf, pid_t tid,
-    backtrace_map_info_t* map_info)
-    : BacktraceCurrent(impl, map_info), thread_intf_(thread_intf) {
-  backtrace_.tid = tid;
+    BacktraceMap* map)
+    : BacktraceCurrent(impl, map), thread_intf_(thread_intf) {
+  tid_ = tid;
 }
 
 BacktraceThread::~BacktraceThread() {
 }
 
 void BacktraceThread::FinishUnwind() {
-  for (size_t i = 0; i < NumFrames(); i++) {
-    backtrace_frame_data_t* frame = &backtrace_.frames[i];
+  for (std::vector<backtrace_frame_data_t>::iterator it = frames_.begin();
+       it != frames_.end(); ++it) {
+    it->map = FindMap(it->pc);
 
-    frame->map_offset = 0;
-    uintptr_t map_start;
-    frame->map_name = GetMapName(frame->pc, &map_start);
-    if (frame->map_name) {
-      frame->map_offset = frame->pc - map_start;
-    }
-
-    frame->func_offset = 0;
-    std::string func_name = GetFunctionName(frame->pc, &frame->func_offset);
-    if (!func_name.empty()) {
-      frame->func_name = strdup(func_name.c_str());
-    }
+    it->func_offset = 0;
+    it->func_name = GetFunctionName(it->pc, &it->func_offset);
   }
 }
 
