@@ -42,6 +42,7 @@
 #include <sys/ioctl.h>
 #include <stdlib.h>
 #include <cutils/config_utils.h>
+#include <inttypes.h>
 
 #include "partitions.h"
 #include "debug.h"
@@ -80,7 +81,7 @@ int gpt_mmap(struct GPT_mapping *mapping, uint64_t location, int size, int fd)
 
     uint64_t sz = get_file_size64(fd);
     if (sz < size + location) {
-        D(ERR, "the location of mapping area is outside of the device size %lld", sz);
+        D(ERR, "the location of mapping area is outside of the device size %" PRId64, sz);
         return 1;
     }
     location = ALIGN_DOWN(location, PAGE_SIZE);
@@ -89,7 +90,7 @@ int gpt_mmap(struct GPT_mapping *mapping, uint64_t location, int size, int fd)
 
     if (mapping->map_ptr == MAP_FAILED) {
         mapping->ptr = MAP_FAILED;
-        D(ERR, "map failed %d", (int) mapping->map_ptr);
+        D(ERR, "map failed: %s", strerror(errno));
         return 1;
     }
 
