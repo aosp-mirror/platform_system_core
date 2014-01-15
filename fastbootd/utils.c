@@ -169,7 +169,7 @@ ssize_t bulk_write(int bulk_in, const char *buf, size_t length)
     do {
         ret = TEMP_FAILURE_RETRY(write(bulk_in, buf + count, length - count));
         if (ret < 0) {
-            D(WARN, "[ bulk_write failed fd=%d length=%d errno=%d %s ]",
+            D(WARN, "[ bulk_write failed fd=%d length=%zu errno=%d %s ]",
                     bulk_in, length, errno, strerror(errno));
             return -1;
         } else {
@@ -190,13 +190,13 @@ ssize_t bulk_read(int bulk_out, char *buf, size_t length)
         size_t to_read = (length - n > READ_BUF_SIZE) ? READ_BUF_SIZE : length - n;
         ret = TEMP_FAILURE_RETRY(read(bulk_out, buf + n, to_read));
         if (ret < 0) {
-            D(WARN, "[ bulk_read failed fd=%d length=%d errno=%d %s ]",
+            D(WARN, "[ bulk_read failed fd=%d length=%zu errno=%d %s ]",
                     bulk_out, length, errno, strerror(errno));
             return ret;
         }
         n += ret;
         if (ret < (ssize_t)to_read) {
-            D(VERBOSE, "bulk_read short read, ret=%zd to_read=%u n=%u length=%u",
+            D(VERBOSE, "bulk_read short read, ret=%zd to_read=%zu n=%zu length=%zu",
                     ret, to_read, n, length);
             break;
         }
