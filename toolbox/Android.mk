@@ -33,6 +33,7 @@ TOOLS := \
 	lsof \
 	md5 \
 	mkdir \
+	mknod \
 	mkswap \
 	mount \
 	mv \
