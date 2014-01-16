@@ -212,7 +212,7 @@ static void update_table(DIR *d, uint32_t flags)
     }
     if (!(flags & FLAG_BATCH))
         printf("\e[H\e[0J");
-    printf("Processes: %d, Threads %d\n", processes.active, threads.active);
+    printf("Processes: %zu, Threads %zu\n", processes.active, threads.active);
     switch (time_dp) {
     case 3:
         printf("   TID --- SINCE LAST ---- ---------- TOTAL ----------\n");

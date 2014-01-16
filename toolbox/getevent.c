@@ -166,7 +166,7 @@ static int print_possible_events(int fd, int print_flags)
                     if(bit_labels && (print_flags & PRINT_LABELS)) {
                         bit_label = get_label(bit_labels, j * 8 + k);
                         if(bit_label)
-                            printf(" %.20s%c%*s", bit_label, down, 20 - strlen(bit_label), "");
+                            printf(" %.20s%c%*s", bit_label, down, (int) (20 - strlen(bit_label)), "");
                         else
                             printf(" %04x%c                ", j * 8 + k, down);
                     } else {

@@ -90,7 +90,8 @@ int main(int argc, char* argv[]) {
     }
 
     if (seg_fault_on_exit) {
-        *(int *)status = 0;  // causes SIGSEGV with fault_address = status
+        uintptr_t fault_address = (uintptr_t) status;
+        *(int *) fault_address = 0;  // causes SIGSEGV with fault_address = status
     }
 
     return rc;

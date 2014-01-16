@@ -151,7 +151,7 @@ int cert_verify(BIO *content, CMS_ContentInfo *content_info, X509_STORE *store, 
         char buf[256];
         unsigned long err = ERR_peek_last_error();
         D(ERR, "Verification failed with reason: %s, %s", ERR_lib_error_string(err),  ERR_error_string(err, buf));
-        D(ERR, "Data used: content %d", (int) content);
+        D(ERR, "Data used: content %p", content);
     }
 
     ERR_clear_error();
