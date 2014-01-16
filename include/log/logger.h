@@ -1,6 +1,6 @@
 /*
 **
-** Copyright 2007, The Android Open Source Project
+** Copyright 2007-2014, The Android Open Source Project
 **
 ** This file is dual licensed.  It may be redistributed and/or modified
 ** under the terms of the Apache 2.0 License OR version 2 of the GNU
@@ -47,11 +47,6 @@ struct logger_entry_v2 {
     uint32_t    euid;      /* effective UID of logger */
     char        msg[0];    /* the entry's payload */
 };
-
-#define LOGGER_LOG_MAIN		"log/main"
-#define LOGGER_LOG_RADIO	"log/radio"
-#define LOGGER_LOG_EVENTS	"log/events"
-#define LOGGER_LOG_SYSTEM	"log/system"
 
 /*
  * The maximum size of the log entry payload that can be
