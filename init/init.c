@@ -623,7 +623,7 @@ static int mix_hwrng_into_linux_rng_action(int nargs, char **args)
         total_bytes_written += chunk_size;
     }
 
-    INFO("Mixed %d bytes from /dev/hw_random into /dev/urandom",
+    INFO("Mixed %zu bytes from /dev/hw_random into /dev/urandom",
                 total_bytes_written);
     result = 0;
 

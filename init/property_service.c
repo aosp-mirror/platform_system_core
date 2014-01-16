@@ -169,7 +169,7 @@ static int check_mac_perms(const char *name, char *sctx)
     if (selabel_lookup(sehandle_prop, &tctx, name, 1) != 0)
         goto err;
 
-    if (selinux_check_access(sctx, tctx, class, perm, name) == 0)
+    if (selinux_check_access(sctx, tctx, class, perm, (void*) name) == 0)
         result = 1;
 
     freecon(tctx);
@@ -381,7 +381,7 @@ void handle_property_set_fd()
 
     r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), 0));
     if(r != sizeof(prop_msg)) {
-        ERROR("sys_prop: mis-match msg size received: %d expected: %d errno: %d\n",
+        ERROR("sys_prop: mis-match msg size received: %d expected: %zu errno: %d\n",
               r, sizeof(prop_msg), errno);
         close(s);
         return;
@@ -521,7 +521,7 @@ static void load_persistent_properties()
                     || (sb.st_uid != 0)
                     || (sb.st_gid != 0)
                     || (sb.st_nlink != 1)) {
-                ERROR("skipping insecure property file %s (uid=%lu gid=%lu nlink=%d mode=%o)\n",
+                ERROR("skipping insecure property file %s (uid=%u gid=%u nlink=%d mode=%o)\n",
                       entry->d_name, sb.st_uid, sb.st_gid, sb.st_nlink, sb.st_mode);
                 close(fd);
                 continue;
