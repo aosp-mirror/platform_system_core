@@ -12,12 +12,9 @@
 static int activate_thread_switch_vc;
 static void *activate_thread(void *arg)
 {
-    int res;
-    int fd = (int)arg;
+    int fd = (int) (uintptr_t) arg;
     while(activate_thread_switch_vc >= 0) {
-        do {
-            res = ioctl(fd, VT_ACTIVATE, (void*)activate_thread_switch_vc);
-        } while(res < 0 && errno == EINTR);
+        int res = TEMP_FAILURE_RETRY(ioctl(fd, VT_ACTIVATE, activate_thread_switch_vc));
         if (res < 0) {
             fprintf(stderr, "ioctl( vcfd, VT_ACTIVATE, vtnum) failed, %d %d %s for %d\n", res, errno, strerror(errno), activate_thread_switch_vc);
         }
@@ -131,11 +128,9 @@ int setconsole_main(int argc, char *argv[])
         activate_thread_switch_vc = switch_vc;
         pthread_attr_init(&attr);
         pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-        pthread_create(&thread, &attr, activate_thread, (void*)fd);
-        
-        do {
-            res = ioctl(fd, VT_WAITACTIVE, (void*)switch_vc);
-        } while(res < 0 && errno == EINTR);
+        pthread_create(&thread, &attr, activate_thread, (void*) (uintptr_t) fd);
+
+        res = TEMP_FAILURE_RETRY(ioctl(fd, VT_WAITACTIVE, switch_vc));
         activate_thread_switch_vc = -1;
         if (res < 0) {
             fprintf(stderr, "ioctl( vcfd, VT_WAITACTIVE, vtnum) failed, %d %d %s for %d\n", res, errno, strerror(errno), switch_vc);
@@ -157,7 +152,7 @@ int setconsole_main(int argc, char *argv[])
         }
     }
     if (mode != -1) {
-        if (ioctl(fd, KDSETMODE, (void*)mode) < 0) {
+        if (ioctl(fd, KDSETMODE, mode) < 0) {
             fprintf(stderr, "KDSETMODE %d failed\n", mode);
             return -1;
         }

@@ -182,8 +182,8 @@ static int listfile_long(const char *path, struct stat *s, int flags)
 
     mode2str(s->st_mode, mode);
     if (flags & LIST_LONG_NUMERIC) {
-        snprintf(user, sizeof(user), "%ld", s->st_uid);
-        snprintf(group, sizeof(group), "%ld", s->st_gid);
+        snprintf(user, sizeof(user), "%u", s->st_uid);
+        snprintf(group, sizeof(group), "%u", s->st_gid);
     } else {
         user2str(s->st_uid, user, sizeof(user));
         group2str(s->st_gid, group, sizeof(group));

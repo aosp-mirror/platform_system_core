@@ -1142,9 +1142,9 @@ int readx(int fd, void *ptr, size_t len)
     char *p = ptr;
     int r;
 #if ADB_TRACE
-    int  len0 = len;
+    size_t len0 = len;
 #endif
-    D("readx: fd=%d wanted=%d\n", fd, (int)len);
+    D("readx: fd=%d wanted=%zu\n", fd, len);
     while(len > 0) {
         r = adb_read(fd, p, len);
         if(r > 0) {
@@ -1163,7 +1163,7 @@ int readx(int fd, void *ptr, size_t len)
     }
 
 #if ADB_TRACE
-    D("readx: fd=%d wanted=%d got=%d\n", fd, len0, len0 - len);
+    D("readx: fd=%d wanted=%zu got=%zu\n", fd, len0, len0 - len);
     dump_hex( ptr, len0 );
 #endif
     return 0;
