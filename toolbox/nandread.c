@@ -158,7 +158,7 @@ int nandread_main(int argc, char **argv)
         printf("oobavail: %u\n", ecclayout.oobavail);
     }
     if (ecclayout.oobavail > spare_size)
-        printf("oobavail, %d > image spare size, %d\n", ecclayout.oobavail, spare_size);
+        printf("oobavail, %d > image spare size, %zu\n", ecclayout.oobavail, spare_size);
 
     ret = ioctl(fd, ECCGETSTATS, &initial_ecc);
     if (ret) {

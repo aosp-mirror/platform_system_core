@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -178,7 +179,7 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
         goto out;
     }
     if (magic_number != VERITY_METADATA_MAGIC_NUMBER) {
-        ERROR("Couldn't find verity metadata at offset %llu!\n", device_length);
+        ERROR("Couldn't find verity metadata at offset %"PRIu64"!\n", device_length);
         goto out;
     }
 
