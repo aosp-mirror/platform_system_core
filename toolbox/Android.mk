@@ -12,7 +12,6 @@ TOOLS := \
 	rmmod \
 	lsmod \
 	ifconfig \
-	setconsole \
 	rm \
 	mkdir \
 	rmdir \
