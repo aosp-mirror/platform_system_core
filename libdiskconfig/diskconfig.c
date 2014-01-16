@@ -19,6 +19,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -80,7 +81,7 @@ parse_len(const char *str, uint64_t *plen)
         *plen *= multiple;
 
         if (*plen > 0xffffffffULL) {
-            ALOGE("Length specified is too large!: %llu KB", *plen);
+            ALOGE("Length specified is too large!: %"PRIu64" KB", *plen);
             return 1;
         }
     }
@@ -371,8 +372,8 @@ validate(struct disk_info *dinfo)
 
     /* only matters for disks, not files */
     if (S_ISBLK(stat.st_mode) && total_size > disk_size) {
-        ALOGE("Total requested size of partitions (%llu) is greater than disk "
-             "size (%llu).", total_size, disk_size);
+        ALOGE("Total requested size of partitions (%"PRIu64") is greater than disk "
+             "size (%"PRIu64").", total_size, disk_size);
         goto fail;
     }
 

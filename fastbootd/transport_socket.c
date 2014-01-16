@@ -88,7 +88,7 @@ ssize_t socket_write(struct transport_handle *thandle, const void *data, size_t 
     ssize_t ret;
     struct socket_handle *handle = container_of(thandle, struct socket_handle, handle);
 
-    D(DEBUG, "about to write (fd=%d, len=%d)", handle->fd, len);
+    D(DEBUG, "about to write (fd=%d, len=%zu)", handle->fd, len);
     ret = bulk_write(handle->fd, data, len);
     if (ret < 0) {
         D(ERR, "ERROR: fd = %d, ret = %zd", handle->fd, ret);
@@ -103,7 +103,7 @@ ssize_t socket_read(struct transport_handle *thandle, void *data, size_t len)
     ssize_t ret;
     struct socket_handle *handle = container_of(thandle, struct socket_handle, handle);
 
-    D(DEBUG, "about to read (fd=%d, len=%d)", handle->fd, len);
+    D(DEBUG, "about to read (fd=%d, len=%zu)", handle->fd, len);
     ret = bulk_read(handle->fd, data, len);
     if (ret < 0) {
         D(ERR, "ERROR: fd = %d, ret = %zd", handle->fd, ret);

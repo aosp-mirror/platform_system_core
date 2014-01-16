@@ -89,6 +89,8 @@ LOCAL_SRC_FILES := \
 
 LOCAL_C_INCLUDES := bionic/libc/bionic
 
+LOCAL_CFLAGS += -Wno-unused-parameter
+
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
 	liblog \
