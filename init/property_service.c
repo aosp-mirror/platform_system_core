@@ -110,6 +110,7 @@ struct {
 } control_perms[] = {
     { "dumpstate",AID_SHELL, AID_LOG },
     { "ril-daemon",AID_RADIO, AID_RADIO },
+    { "pre-recovery", AID_SYSTEM, AID_SYSTEM },
      {NULL, 0, 0 }
 };
 

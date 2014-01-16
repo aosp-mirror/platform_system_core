@@ -578,3 +578,8 @@ service mdnsd /system/bin/mdnsd
     socket mdnsd stream 0660 mdnsr inet
     disabled
     oneshot
+
+service pre-recovery /system/bin/uncrypt
+    class main
+    disabled
+    oneshot
