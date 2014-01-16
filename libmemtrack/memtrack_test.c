@@ -35,7 +35,7 @@ static int getprocname(pid_t pid, char *buf, int len) {
         return -1;
     }
 
-    if (asprintf(&filename, "/proc/%zd/cmdline", pid) < 0) {
+    if (asprintf(&filename, "/proc/%d/cmdline", pid) < 0) {
         rc = 1;
         goto exit;
     }

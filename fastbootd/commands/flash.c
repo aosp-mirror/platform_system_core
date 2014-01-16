@@ -31,6 +31,7 @@
 
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <sys/mman.h>
 
 #include "flash.h"
@@ -82,7 +83,7 @@ int flash_erase(int fd)
 {
     int64_t size;
     size = get_block_device_size(fd);
-    D(DEBUG, "erase %llu data from %d\n", size, fd);
+    D(DEBUG, "erase %"PRId64" data from %d\n", size, fd);
 
     return wipe_block_device(fd, size);
 }
@@ -97,7 +98,7 @@ int flash_write(int partition_fd, int data_fd, ssize_t size, ssize_t skip)
         int current_size = MIN(size - written, BUFFER_SIZE);
 
         if (gpt_mmap(&input, written + skip, current_size, data_fd)) {
-            D(ERR, "Error in writing data, unable to map data file %d at %d size %d", size, skip, current_size);
+            D(ERR, "Error in writing data, unable to map data file %zd at %zd size %d", size, skip, current_size);
             return -1;
         }
         if (gpt_mmap(&output, written, current_size, partition_fd)) {

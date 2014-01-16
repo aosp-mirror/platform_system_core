@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 
+#include <inttypes.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -319,7 +320,7 @@ static void cmd_flash(struct protocol_handle *phandle, const char *arg)
         return;
     }
 
-    D(INFO, "writing %lld bytes to '%s'\n", sz, arg);
+    D(INFO, "writing %"PRId64" bytes to '%s'\n", sz, arg);
 
     if (flash_write(partition, phandle->download_fd, sz, header_sz)) {
         fastboot_fail(phandle, "flash write failure");

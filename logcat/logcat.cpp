@@ -298,7 +298,7 @@ static void readLogLines(log_device_t* devices)
                     }
                     else if (entry->entry.len != ret - sizeof(struct logger_entry)) {
                         fprintf(stderr, "read: unexpected length. Expected %d, got %d\n",
-                                entry->entry.len, ret - sizeof(struct logger_entry));
+                                entry->entry.len, ret - (int) sizeof(struct logger_entry));
                         exit(EXIT_FAILURE);
                     }
 

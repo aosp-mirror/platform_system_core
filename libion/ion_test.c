@@ -63,7 +63,7 @@ void ion_alloc_test()
 
     ret = ion_free(fd, handle);
     if (ret) {
-        printf("%s failed: %s %p\n", __func__, strerror(ret), handle);
+        printf("%s failed: %s %d\n", __func__, strerror(ret), handle);
         return;
     }
     ion_close(fd);

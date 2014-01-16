@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <malloc.h>
 #include <errno.h>
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -45,7 +46,6 @@ bail:
 	return buffer;
 }
 
-#define min(x,y) ((x) < (y) ? (x) : (y))
 int insmod_main(int argc, char **argv)
 {
 	void *file;
@@ -73,7 +73,7 @@ int insmod_main(int argc, char **argv)
 		char *ptr = opts;
 
 		for (i = 2; (i < argc) && (ptr < end); i++) {
-			len = min(strlen(argv[i]), end - ptr);
+			len = MIN(strlen(argv[i]), end - ptr);
 			memcpy(ptr, argv[i], len);
 			ptr += len;
 			*ptr++ = ' ';

@@ -217,7 +217,7 @@ static ssize_t usb_write(struct transport_handle *thandle, const void *data, siz
     struct transport *t = thandle->transport;
     struct usb_transport *usb_transport = container_of(t, struct usb_transport, transport);
 
-    D(DEBUG, "about to write (fd=%d, len=%d)", usb_transport->bulk_in, len);
+    D(DEBUG, "about to write (fd=%d, len=%zu)", usb_transport->bulk_in, len);
     ret = bulk_write(usb_transport->bulk_in, data, len);
     if (ret < 0) {
         D(ERR, "ERROR: fd = %d, ret = %zd", usb_transport->bulk_in, ret);
@@ -233,7 +233,7 @@ ssize_t usb_read(struct transport_handle *thandle, void *data, size_t len)
     struct transport *t = thandle->transport;
     struct usb_transport *usb_transport = container_of(t, struct usb_transport, transport);
 
-    D(DEBUG, "about to read (fd=%d, len=%d)", usb_transport->bulk_out, len);
+    D(DEBUG, "about to read (fd=%d, len=%zu)", usb_transport->bulk_out, len);
     ret = bulk_read(usb_transport->bulk_out, data, len);
     if (ret < 0) {
         D(ERR, "ERROR: fd = %d, ret = %zd", usb_transport->bulk_out, ret);

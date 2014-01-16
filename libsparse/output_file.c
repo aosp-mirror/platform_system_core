@@ -18,6 +18,7 @@
 #define _LARGEFILE64_SOURCE 1
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -342,7 +343,7 @@ static int write_sparse_skip_chunk(struct output_file *out, int64_t skip_len)
 	int ret, chunk;
 
 	if (skip_len % out->block_size) {
-		error("don't care size %llu is not a multiple of the block size %u",
+		error("don't care size %"PRIi64" is not a multiple of the block size %u",
 				skip_len, out->block_size);
 		return -1;
 	}

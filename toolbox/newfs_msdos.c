@@ -234,13 +234,6 @@ static void mklabel(u_int8_t *, const char *);
 static void setstr(u_int8_t *, const char *, size_t);
 static void usage(void);
 
-#ifdef ANDROID
-#define powerof2(x)     ((((x) - 1) & (x)) == 0)
-#define howmany(x, y)   (((x) + ((y) - 1)) / (y))
-#define MAX(x,y) ((x) > (y) ? (x) : (y))
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-
-#endif
 /*
  * Construct a FAT12, FAT16, or FAT32 file system.
  */
