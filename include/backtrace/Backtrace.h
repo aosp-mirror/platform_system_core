@@ -17,10 +17,25 @@
 #ifndef _BACKTRACE_BACKTRACE_H
 #define _BACKTRACE_BACKTRACE_H
 
-#include <backtrace/backtrace.h>
+#include <stdint.h>
 
 #include <string>
+#include <vector>
 
+#include <backtrace/backtrace_constants.h>
+#include <backtrace/BacktraceMap.h>
+
+struct backtrace_frame_data_t {
+  size_t num;             // The current fame number.
+  uintptr_t pc;           // The absolute pc.
+  uintptr_t sp;           // The top of the stack.
+  size_t stack_size;      // The size of the stack, zero indicate an unknown stack size.
+  const backtrace_map_t* map;   // The map associated with the given pc.
+  std::string func_name;  // The function name associated with this pc, NULL if not found.
+  uintptr_t func_offset;  // pc relative to the start of the function, only valid if func_name is not NULL.
+};
+
+// Forward declarations.
 class BacktraceImpl;
 
 class Backtrace {
@@ -33,9 +48,9 @@ public:
   // If pid >= 0 and tid < 0, then the Backtrace object corresponds to a
   // different process.
   // Tracing a thread in a different process is not supported.
-  // If map_info is NULL, then create the map and manage it internally.
-  // If map_info is not NULL, the map is still owned by the caller.
-  static Backtrace* Create(pid_t pid, pid_t tid, backtrace_map_info_t* map_info = NULL);
+  // If map is NULL, then create the map and manage it internally.
+  // If map is not NULL, the map is still owned by the caller.
+  static Backtrace* Create(pid_t pid, pid_t tid, BacktraceMap* map = NULL);
 
   virtual ~Backtrace();
 
@@ -46,13 +61,12 @@ public:
   // If the string is empty, then no valid function name was found.
   virtual std::string GetFunctionName(uintptr_t pc, uintptr_t* offset);
 
-  // Get the name of the map associated with the given pc. If NULL is returned,
-  // then map_start is not set. Otherwise, map_start is the beginning of this
-  // map.
-  virtual const char* GetMapName(uintptr_t pc, uintptr_t* map_start);
+  // Find the map associated with the given pc.
+  virtual const backtrace_map_t* FindMap(uintptr_t pc);
 
-  // Finds the memory map associated with the given ptr.
-  virtual const backtrace_map_info_t* FindMapInfo(uintptr_t ptr);
+  // Take ownership of the BacktraceMap object associated with the backtrace.
+  // If this is called, the caller must handle deleting the object themselves.
+  virtual BacktraceMap* TakeMapOwnership();
 
   // Read the data at a specific address.
   virtual bool ReadWord(uintptr_t ptr, uint32_t* out_value) = 0;
@@ -62,35 +76,43 @@ public:
   virtual std::string FormatFrameData(size_t frame_num);
   virtual std::string FormatFrameData(const backtrace_frame_data_t* frame);
 
-  pid_t Pid() { return backtrace_.pid; }
-  pid_t Tid() { return backtrace_.tid; }
-  size_t NumFrames() { return backtrace_.num_frames; }
-
-  const backtrace_t* GetBacktrace() { return &backtrace_; }
+  pid_t Pid() { return pid_; }
+  pid_t Tid() { return tid_; }
+  size_t NumFrames() { return frames_.size(); }
 
   const backtrace_frame_data_t* GetFrame(size_t frame_num) {
-    if (frame_num > NumFrames()) {
+    if (frame_num >= frames_.size()) {
       return NULL;
     }
-    return &backtrace_.frames[frame_num];
+    return &frames_[frame_num];
   }
 
-  const backtrace_map_info_t* GetMapList() {
-    return map_info_;
-  }
+  typedef std::vector<backtrace_frame_data_t>::iterator iterator;
+  iterator begin() { return frames_.begin(); }
+  iterator end() { return frames_.end(); }
+
+  typedef std::vector<backtrace_frame_data_t>::const_iterator const_iterator;
+  const_iterator begin() const { return frames_.begin(); }
+  const_iterator end() const { return frames_.end(); }
+
+  BacktraceMap* GetMap() { return map_; }
 
 protected:
-  Backtrace(BacktraceImpl* impl, pid_t pid, backtrace_map_info_t* map_info);
+  Backtrace(BacktraceImpl* impl, pid_t pid, BacktraceMap* map);
 
   virtual bool VerifyReadWordArgs(uintptr_t ptr, uint32_t* out_value);
 
+  bool BuildMap();
+
+  pid_t pid_;
+  pid_t tid_;
+
+  BacktraceMap* map_;
+  bool map_shared_;
+
+  std::vector<backtrace_frame_data_t> frames_;
+
   BacktraceImpl* impl_;
-
-  backtrace_map_info_t* map_info_;
-
-  bool map_info_requires_delete_;
-
-  backtrace_t backtrace_;
 
   friend class BacktraceImpl;
 };

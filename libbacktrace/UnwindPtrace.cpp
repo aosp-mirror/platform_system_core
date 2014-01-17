@@ -16,12 +16,11 @@
 
 #define LOG_TAG "libbacktrace"
 
-#include <backtrace/backtrace.h>
+#include <backtrace/Backtrace.h>
+#include <backtrace/BacktraceMap.h>
 
 #include <sys/types.h>
 #include <string.h>
-
-#include <cutils/log.h>
 
 #include <libunwind.h>
 #include <libunwind-ptrace.h>
@@ -55,9 +54,6 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames) {
     return false;
   }
 
-  backtrace_t* backtrace = GetBacktraceData();
-  backtrace->num_frames = 0;
-
   unw_cursor_t cursor;
   int ret = unw_init_remote(&cursor, addr_space_, upt_info_);
   if (ret < 0) {
@@ -65,6 +61,9 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames) {
     return false;
   }
 
+  std::vector<backtrace_frame_data_t>* frames = GetFrames();
+  frames->reserve(MAX_BACKTRACE_FRAMES);
+  size_t num_frames = 0;
   do {
     unw_word_t pc;
     ret = unw_get_reg(&cursor, UNW_REG_IP, &pc);
@@ -80,39 +79,28 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames) {
     }
 
     if (num_ignore_frames == 0) {
-      size_t num_frames = backtrace->num_frames;
-      backtrace_frame_data_t* frame = &backtrace->frames[num_frames];
+      frames->resize(num_frames+1);
+      backtrace_frame_data_t* frame = &frames->at(num_frames);
       frame->num = num_frames;
       frame->pc = static_cast<uintptr_t>(pc);
       frame->sp = static_cast<uintptr_t>(sp);
       frame->stack_size = 0;
-      frame->map_name = NULL;
-      frame->map_offset = 0;
-      frame->func_name = NULL;
-      frame->func_offset = 0;
 
       if (num_frames > 0) {
-        backtrace_frame_data_t* prev = &backtrace->frames[num_frames-1];
+        backtrace_frame_data_t* prev = &frames->at(num_frames-1);
         prev->stack_size = frame->sp - prev->sp;
       }
 
-      std::string func_name = backtrace_obj_->GetFunctionName(frame->pc, &frame->func_offset);
-      if (!func_name.empty()) {
-        frame->func_name = strdup(func_name.c_str());
-      }
+      frame->func_name = backtrace_obj_->GetFunctionName(frame->pc, &frame->func_offset);
 
-      uintptr_t map_start;
-      frame->map_name = backtrace_obj_->GetMapName(frame->pc, &map_start);
-      if (frame->map_name) {
-        frame->map_offset = frame->pc - map_start;
-      }
+      frame->map = backtrace_obj_->FindMap(frame->pc);
 
-      backtrace->num_frames++;
+      num_frames++;
     } else {
       num_ignore_frames--;
     }
     ret = unw_step (&cursor);
-  } while (ret > 0 && backtrace->num_frames < MAX_BACKTRACE_FRAMES);
+  } while (ret > 0 && num_frames < MAX_BACKTRACE_FRAMES);
 
   return true;
 }
@@ -132,6 +120,6 @@ std::string UnwindPtrace::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
 //-------------------------------------------------------------------------
 // C++ object creation function.
 //-------------------------------------------------------------------------
-Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, backtrace_map_info_t* map_info) {
-  return new BacktracePtrace(new UnwindPtrace(), pid, tid, map_info);
+Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, BacktraceMap* map) {
+  return new BacktracePtrace(new UnwindPtrace(), pid, tid, map);
 }

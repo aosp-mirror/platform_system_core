@@ -2,8 +2,8 @@ LOCAL_PATH:= $(call my-dir)
 
 common_src := \
 	Backtrace.cpp \
+	BacktraceMap.cpp \
 	BacktraceThread.cpp \
-	map_info.c \
 	thread_utils.c \
 
 common_cflags := \
@@ -222,7 +222,7 @@ LOCAL_LDLIBS += \
 
 else
 LOCAL_SRC_FILES += \
-	map_info.c \
+	BacktraceMap.cpp \
 
 endif
 
