@@ -32,6 +32,8 @@ public:
 
   virtual std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
 
+  virtual BacktraceMap* CreateBacktraceMap(pid_t pid) { return new BacktraceMap(pid); }
+
 private:
   unw_addr_space_t addr_space_;
   struct UPT_info* upt_info_;

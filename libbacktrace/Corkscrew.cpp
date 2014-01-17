@@ -16,12 +16,11 @@
 
 #define LOG_TAG "libbacktrace"
 
-#include <backtrace/backtrace.h>
+#include <backtrace/Backtrace.h>
 
 #include <string.h>
 
 #include <backtrace-arch.h>
-#include <cutils/log.h>
 #include <corkscrew/backtrace.h>
 
 #ifndef __USE_GNU
@@ -30,6 +29,48 @@
 #include <dlfcn.h>
 
 #include "Corkscrew.h"
+
+//-------------------------------------------------------------------------
+// CorkscrewMap functions.
+//-------------------------------------------------------------------------
+CorkscrewMap::CorkscrewMap(pid_t pid) : BacktraceMap(pid), map_info_(NULL) {
+}
+
+CorkscrewMap::~CorkscrewMap() {
+  if (map_info_) {
+    free_map_info_list(map_info_);
+    map_info_ = NULL;
+  }
+}
+
+bool CorkscrewMap::Build() {
+  map_info_ = load_map_info_list(pid_);
+
+  // Use the information in map_info_ to construct the BacktraceMap data
+  // rather than reparsing /proc/self/maps.
+  map_info_t* cur_map = map_info_;
+  while (cur_map) {
+    backtrace_map_t map;
+    map.start = cur_map->start;
+    map.end = cur_map->end;
+    map.flags = 0;
+    if (cur_map->is_readable) {
+      map.flags |= PROT_READ;
+    }
+    if (cur_map->is_writable) {
+      map.flags |= PROT_WRITE;
+    }
+    if (cur_map->is_executable) {
+      map.flags |= PROT_EXEC;
+    }
+    map.name = cur_map->name;
+
+    maps_.push_back(map);
+
+    cur_map = cur_map->next;
+  }
+  return map_info_ != NULL;
+}
 
 //-------------------------------------------------------------------------
 // CorkscrewCommon functions.
@@ -41,29 +82,19 @@ bool CorkscrewCommon::GenerateFrameData(
     return false;
   }
 
-  backtrace_t* data = GetBacktraceData();
-  data->num_frames = num_frames;
-  for (size_t i = 0; i < data->num_frames; i++) {
-    backtrace_frame_data_t* frame = &data->frames[i];
-    frame->num = i;
-    frame->pc = cork_frames[i].absolute_pc;
-    frame->sp = cork_frames[i].stack_top;
-    frame->stack_size = cork_frames[i].stack_size;
-    frame->map_name = NULL;
-    frame->map_offset = 0;
-    frame->func_name = NULL;
-    frame->func_offset = 0;
+  std::vector<backtrace_frame_data_t>* frames = GetFrames();
+  frames->resize(num_frames);
+  size_t i = 0;
+  for (std::vector<backtrace_frame_data_t>::iterator it = frames->begin();
+       it != frames->end(); ++it, ++i) {
+    it->num = i;
+    it->pc = cork_frames[i].absolute_pc;
+    it->sp = cork_frames[i].stack_top;
+    it->stack_size = cork_frames[i].stack_size;
+    it->func_offset = 0;
 
-    uintptr_t map_start;
-    frame->map_name = backtrace_obj_->GetMapName(frame->pc, &map_start);
-    if (frame->map_name) {
-      frame->map_offset = frame->pc - map_start;
-    }
-
-    std::string func_name = backtrace_obj_->GetFunctionName(frame->pc, &frame->func_offset);
-    if (!func_name.empty()) {
-      frame->func_name = strdup(func_name.c_str());
-    }
+    it->map = backtrace_obj_->FindMap(it->pc);
+    it->func_name = backtrace_obj_->GetFunctionName(it->pc, &it->func_offset);
   }
   return true;
 }
@@ -88,23 +119,23 @@ std::string CorkscrewCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset
   *offset = 0;
 
   Dl_info info;
-  const backtrace_map_info_t* map_info = backtrace_obj_->FindMapInfo(pc);
-  if (map_info) {
+  const backtrace_map_t* map = backtrace_obj_->FindMap(pc);
+  if (map) {
     if (dladdr((const void*)pc, &info)) {
       if (info.dli_sname) {
-        *offset = pc - map_info->start - (uintptr_t)info.dli_saddr + (uintptr_t)info.dli_fbase;
+        *offset = pc - map->start - (uintptr_t)info.dli_saddr + (uintptr_t)info.dli_fbase;
         return info.dli_sname;
       }
     } else {
       // dladdr(3) didn't find a symbol; maybe it's static? Look in the ELF file...
-      symbol_table_t* symbol_table = load_symbol_table(map_info->name);
+      symbol_table_t* symbol_table = load_symbol_table(map->name.c_str());
       if (symbol_table) {
         // First check if we can find the symbol using a relative pc.
         std::string name;
-        const symbol_t* elf_symbol = find_symbol(symbol_table, pc - map_info->start);
+        const symbol_t* elf_symbol = find_symbol(symbol_table, pc - map->start);
         if (elf_symbol) {
           name = elf_symbol->name;
-          *offset = pc - map_info->start - elf_symbol->start;
+          *offset = pc - map->start - elf_symbol->start;
         } else if ((elf_symbol = find_symbol(symbol_table, pc)) != NULL) {
           // Found the symbol using the absolute pc.
           name = elf_symbol->name;
@@ -125,39 +156,36 @@ CorkscrewThread::CorkscrewThread() {
 }
 
 CorkscrewThread::~CorkscrewThread() {
-  if (corkscrew_map_info_) {
-    free_map_info_list(corkscrew_map_info_);
-    corkscrew_map_info_ = NULL;
-  }
 }
 
 bool CorkscrewThread::Init() {
-  corkscrew_map_info_ = load_map_info_list(backtrace_obj_->Pid());
-  return corkscrew_map_info_ != NULL;
+  if (backtrace_obj_->GetMap() == NULL) {
+    // Trigger the map object creation, which will create the corkscrew
+    // map information.
+    return BuildMap();
+  }
+  return true;
 }
 
 void CorkscrewThread::ThreadUnwind(
     siginfo_t* siginfo, void* sigcontext, size_t num_ignore_frames) {
-  backtrace_frame_t frames[MAX_BACKTRACE_FRAMES];
+  backtrace_frame_t cork_frames[MAX_BACKTRACE_FRAMES];
+  CorkscrewMap* map = static_cast<CorkscrewMap*>(backtrace_obj_->GetMap());
   ssize_t num_frames = unwind_backtrace_signal_arch(
-      siginfo, sigcontext, corkscrew_map_info_, frames, num_ignore_frames,
-      MAX_BACKTRACE_FRAMES);
+      siginfo, sigcontext, map->GetMapInfo(), cork_frames,
+      num_ignore_frames, MAX_BACKTRACE_FRAMES);
   if (num_frames > 0) {
-    backtrace_t* data = GetBacktraceData();
-    data->num_frames = num_frames;
-    for (size_t i = 0; i < data->num_frames; i++) {
-      backtrace_frame_data_t* frame = &data->frames[i];
-      frame->num = i;
-      frame->pc = frames[i].absolute_pc;
-      frame->sp = frames[i].stack_top;
-      frame->stack_size = frames[i].stack_size;
-
-      frame->map_offset = 0;
-      frame->map_name = NULL;
-      frame->map_offset = 0;
-
-      frame->func_offset = 0;
-      frame->func_name = NULL;
+    std::vector<backtrace_frame_data_t>* frames = GetFrames();
+    frames->resize(num_frames);
+    size_t i = 0;
+    for (std::vector<backtrace_frame_data_t>::iterator it = frames->begin();
+         it != frames->end(); ++it, ++i) {
+      it->num = i;
+      it->pc = cork_frames[i].absolute_pc;
+      it->sp = cork_frames[i].stack_top;
+      it->stack_size = cork_frames[i].stack_size;
+      it->map = NULL;
+      it->func_offset = 0;
     }
   }
 }
@@ -206,15 +234,15 @@ std::string CorkscrewPtrace::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset)
 //-------------------------------------------------------------------------
 // C++ object creation functions.
 //-------------------------------------------------------------------------
-Backtrace* CreateCurrentObj(backtrace_map_info_t* map_info) {
-  return new BacktraceCurrent(new CorkscrewCurrent(), map_info);
+Backtrace* CreateCurrentObj(BacktraceMap* map) {
+  return new BacktraceCurrent(new CorkscrewCurrent(), map);
 }
 
-Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, backtrace_map_info_t* map_info) {
-  return new BacktracePtrace(new CorkscrewPtrace(), pid, tid, map_info);
+Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, BacktraceMap* map) {
+  return new BacktracePtrace(new CorkscrewPtrace(), pid, tid, map);
 }
 
-Backtrace* CreateThreadObj(pid_t tid, backtrace_map_info_t* map_info) {
+Backtrace* CreateThreadObj(pid_t tid, BacktraceMap* map) {
   CorkscrewThread* thread_obj = new CorkscrewThread();
-  return new BacktraceThread(thread_obj, thread_obj, tid, map_info);
+  return new BacktraceThread(thread_obj, thread_obj, tid, map);
 }
