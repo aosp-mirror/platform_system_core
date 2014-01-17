@@ -1,25 +1,26 @@
-// Copyright 2006-2013 The Android Open Source Project
+// Copyright 2006-2014 The Android Open Source Project
 
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
+#include <signal.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <arpa/inet.h>
+
+#include <cutils/sockets.h>
 #include <log/log.h>
 #include <log/logger.h>
 #include <log/logd.h>
 #include <log/logprint.h>
 #include <log/event_tag_map.h>
-#include <cutils/sockets.h>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <time.h>
-#include <errno.h>
-#include <assert.h>
-#include <ctype.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <arpa/inet.h>
 
 #define DEFAULT_LOG_ROTATE_SIZE_KBYTES 16
 #define DEFAULT_MAX_ROTATED_LOGS 4
@@ -283,6 +284,8 @@ int main(int argc, char **argv)
     bool needBinary = false;
     struct logger_list *logger_list;
     int tail_lines = 0;
+
+    signal(SIGPIPE, exit);
 
     g_logformat = android_log_format_new();
 
