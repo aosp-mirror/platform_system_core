@@ -1,8 +1,16 @@
+#include <fcntl.h>
+#include <inttypes.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/mman.h>
-#include <fcntl.h>
 #include <string.h>
+#include <sys/mman.h>
+
+#if __LP64__
+#define strtoptr strtoull
+#else
+#define strtoptr strtoul
+#endif
 
 static int usage()
 {
@@ -12,14 +20,9 @@ static int usage()
 
 int r_main(int argc, char *argv[])
 {
-    int width = 4, set = 0, fd;
-    unsigned addr, value, endaddr = 0;
-    unsigned long mmap_start, mmap_size;
-    void *page;
-    char *end;
-    
     if(argc < 2) return usage();
 
+    int width = 4;
     if(!strcmp(argv[1], "-b")) {
         width = 1;
         argc--;
@@ -31,37 +34,40 @@ int r_main(int argc, char *argv[])
     }
 
     if(argc < 2) return usage();
-    addr = strtoul(argv[1], 0, 16);
+    uintptr_t addr = strtoptr(argv[1], 0, 16);
 
-    end = strchr(argv[1], '-');
+    uintptr_t endaddr = 0;
+    char* end = strchr(argv[1], '-');
     if (end)
-        endaddr = strtoul(end + 1, 0, 16);
+        endaddr = strtoptr(end + 1, 0, 16);
 
     if (!endaddr)
         endaddr = addr + width - 1;
 
     if (endaddr <= addr) {
-        fprintf(stderr, "invalid end address\n");
+        fprintf(stderr, "end address <= start address\n");
         return -1;
     }
 
+    bool set = false;
+    uint32_t value = 0;
     if(argc > 2) {
-        set = 1;
+        set = true;
         value = strtoul(argv[2], 0, 16);
     }
 
-    fd = open("/dev/mem", O_RDWR | O_SYNC);
+    int fd = open("/dev/mem", O_RDWR | O_SYNC);
     if(fd < 0) {
         fprintf(stderr,"cannot open /dev/mem\n");
         return -1;
     }
-    
-    mmap_start = addr & ~(PAGE_SIZE - 1);
-    mmap_size = endaddr - mmap_start + 1;
+
+    off64_t mmap_start = addr & ~(PAGE_SIZE - 1);
+    size_t mmap_size = endaddr - mmap_start + 1;
     mmap_size = (mmap_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-    page = mmap(0, mmap_size, PROT_READ | PROT_WRITE,
-                MAP_SHARED, fd, mmap_start);
+    void* page = mmap64(0, mmap_size, PROT_READ | PROT_WRITE,
+                        MAP_SHARED, fd, mmap_start);
 
     if(page == MAP_FAILED){
         fprintf(stderr,"cannot mmap region\n");
@@ -71,21 +77,21 @@ int r_main(int argc, char *argv[])
     while (addr <= endaddr) {
         switch(width){
         case 4: {
-            unsigned *x = (unsigned*) (((unsigned) page) + (addr & 4095));
+            uint32_t* x = (uint32_t*) (((uintptr_t) page) + (addr & 4095));
             if(set) *x = value;
-            fprintf(stderr,"%08x: %08x\n", addr, *x);
+            fprintf(stderr,"%08"PRIxPTR": %08x\n", addr, *x);
             break;
         }
         case 2: {
-            unsigned short *x = (unsigned short*) (((unsigned) page) + (addr & 4095));
+            uint16_t* x = (uint16_t*) (((uintptr_t) page) + (addr & 4095));
             if(set) *x = value;
-            fprintf(stderr,"%08x: %04x\n", addr, *x);
+            fprintf(stderr,"%08"PRIxPTR": %04x\n", addr, *x);
             break;
         }
         case 1: {
-            unsigned char *x = (unsigned char*) (((unsigned) page) + (addr & 4095));
+            uint8_t* x = (uint8_t*) (((uintptr_t) page) + (addr & 4095));
             if(set) *x = value;
-            fprintf(stderr,"%08x: %02x\n", addr, *x);
+            fprintf(stderr,"%08"PRIxPTR": %02x\n", addr, *x);
             break;
         }
         }
