@@ -21,8 +21,8 @@
 
 #include <string>
 
-#include <backtrace/backtrace.h>
 #include <backtrace/Backtrace.h>
+#include <backtrace/BacktraceMap.h>
 
 #include <corkscrew/backtrace.h>
 
@@ -32,6 +32,8 @@
 class CorkscrewCommon : public BacktraceImpl {
 public:
   bool GenerateFrameData(backtrace_frame_t* cork_frames, ssize_t num_frames);
+
+  virtual BacktraceMap* CreateBacktraceMap(pid_t pid) { return new BacktraceMap(pid); }
 };
 
 class CorkscrewCurrent : public CorkscrewCommon {
@@ -44,6 +46,19 @@ public:
   virtual std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
 };
 
+class CorkscrewMap : public BacktraceMap {
+public:
+  CorkscrewMap(pid_t pid);
+  virtual ~CorkscrewMap();
+
+  virtual bool Build();
+
+  map_info_t* GetMapInfo() { return map_info_; }
+
+private:
+  map_info_t* map_info_;
+};
+
 class CorkscrewThread : public CorkscrewCurrent, public BacktraceThreadInterface {
 public:
   CorkscrewThread();
@@ -54,8 +69,7 @@ public:
   virtual void ThreadUnwind(
       siginfo_t* siginfo, void* sigcontext, size_t num_ignore_frames);
 
-private:
-  map_info_t* corkscrew_map_info_;
+  virtual BacktraceMap* CreateBacktraceMap(pid_t pid) { return new CorkscrewMap(pid); }
 };
 
 class CorkscrewPtrace : public CorkscrewCommon {
