@@ -33,6 +33,7 @@
 #include <cutils/properties.h>
 
 #include <backtrace/Backtrace.h>
+#include <backtrace/BacktraceMap.h>
 
 #include <sys/socket.h>
 #include <linux/un.h>
@@ -230,9 +231,12 @@ static void dump_stack_segment(
       break;
     }
 
-    const char* map_name = backtrace->GetMapName(stack_content, NULL);
-    if (!map_name) {
+    const backtrace_map_t* map = backtrace->FindMap(stack_content);
+    const char* map_name;
+    if (!map) {
       map_name = "";
+    } else {
+      map_name = map->name.c_str();
     }
     uintptr_t offset = 0;
     std::string func_name(backtrace->GetFunctionName(stack_content, &offset));
@@ -328,17 +332,17 @@ static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log, int scope
   }
 }
 
-static void dump_map(log_t* log, const backtrace_map_info_t* m, const char* what, int scope_flags) {
-  if (m != NULL) {
-    _LOG(log, scope_flags, "    %08x-%08x %c%c%c %s\n", m->start, m->end,
-         m->is_readable ? 'r' : '-', m->is_writable ? 'w' : '-',
-         m->is_executable ? 'x' : '-', m->name);
+static void dump_map(log_t* log, const backtrace_map_t* map, const char* what, int scope_flags) {
+  if (map != NULL) {
+    _LOG(log, scope_flags, "    %08x-%08x %c%c%c %s\n", map->start, map->end,
+         (map->flags & PROT_READ) ? 'r' : '-', (map->flags & PROT_WRITE) ? 'w' : '-',
+         (map->flags & PROT_EXEC) ? 'x' : '-', map->name.c_str());
   } else {
     _LOG(log, scope_flags, "    (no %s)\n", what);
   }
 }
 
-static void dump_nearby_maps(const backtrace_map_info_t* map_info_list, log_t* log, pid_t tid, int scope_flags) {
+static void dump_nearby_maps(BacktraceMap* map, log_t* log, pid_t tid, int scope_flags) {
   scope_flags |= SCOPE_SENSITIVE;
   siginfo_t si;
   memset(&si, 0, sizeof(si));
@@ -350,7 +354,7 @@ static void dump_nearby_maps(const backtrace_map_info_t* map_info_list, log_t* l
     return;
   }
 
-  uintptr_t addr = (uintptr_t) si.si_addr;
+  uintptr_t addr = reinterpret_cast<uintptr_t>(si.si_addr);
   addr &= ~0xfff;     // round to 4K page boundary
   if (addr == 0) {    // null-pointer deref
     return;
@@ -361,29 +365,26 @@ static void dump_nearby_maps(const backtrace_map_info_t* map_info_list, log_t* l
 
   // Search for a match, or for a hole where the match would be.  The list
   // is backward from the file content, so it starts at high addresses.
-  const backtrace_map_info_t* map = map_info_list;
-  const backtrace_map_info_t* next = NULL;
-  const backtrace_map_info_t* prev = NULL;
-  while (map != NULL) {
-    if (addr >= map->start && addr < map->end) {
-      next = map->next;
-      break;
-    } else if (addr >= map->end) {
-      // map would be between "prev" and this entry
-      next = map;
-      map = NULL;
+  const backtrace_map_t* cur_map = NULL;
+  const backtrace_map_t* next_map = NULL;
+  const backtrace_map_t* prev_map = NULL;
+  for (BacktraceMap::const_iterator it = map->begin(); it != map->end(); ++it) {
+    if (addr >= it->start && addr < it->end) {
+      cur_map = &*it;
+      if (it != map->begin()) {
+        prev_map = &*(it-1);
+      }
+      if (++it != map->end()) {
+        next_map = &*it;
+      }
       break;
     }
-
-    prev = map;
-    map = map->next;
   }
 
-  // Show "next" then "match" then "prev" so that the addresses appear in
-  // ascending order (like /proc/pid/maps).
-  dump_map(log, next, "map below", scope_flags);
-  dump_map(log, map, "map for address", scope_flags);
-  dump_map(log, prev, "map above", scope_flags);
+  // Show the map address in ascending order (like /proc/pid/maps).
+  dump_map(log, prev_map, "map below", scope_flags);
+  dump_map(log, cur_map, "map for address", scope_flags);
+  dump_map(log, next_map, "map above", scope_flags);
 }
 
 static void dump_thread(
@@ -394,13 +395,13 @@ static void dump_thread(
   dump_backtrace_and_stack(backtrace, log, scope_flags);
   if (IS_AT_FAULT(scope_flags)) {
     dump_memory_and_code(log, backtrace->Tid(), scope_flags);
-    dump_nearby_maps(backtrace->GetMapList(), log, backtrace->Tid(), scope_flags);
+    dump_nearby_maps(backtrace->GetMap(), log, backtrace->Tid(), scope_flags);
   }
 }
 
 // Return true if some thread is not detached cleanly
 static bool dump_sibling_thread_report(
-    log_t* log, pid_t pid, pid_t tid, int* total_sleep_time_usec, backtrace_map_info_t* map_info) {
+    log_t* log, pid_t pid, pid_t tid, int* total_sleep_time_usec, BacktraceMap* map) {
   char task_path[64];
   snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
 
@@ -434,7 +435,7 @@ static bool dump_sibling_thread_report(
     _LOG(log, 0, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
     dump_thread_info(log, pid, new_tid, 0);
 
-    UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, new_tid, map_info));
+    UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, new_tid, map));
     if (backtrace->Unwind(0)) {
       dump_thread(backtrace.get(), log, 0, total_sleep_time_usec);
     }
@@ -637,11 +638,12 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
     dump_fault_addr(log, tid, signal);
   }
 
-  // Gather the map info once for all this process' threads.
-  backtrace_map_info_t* map_info = backtrace_create_map_info_list(pid);
-
-  UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, tid, map_info));
+  BacktraceMap* map = NULL;
+  UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, tid));
   if (backtrace->Unwind(0)) {
+    // Grab the map that was created and share it with the siblings.
+    map = backtrace->TakeMapOwnership();
+
     dump_abort_message(backtrace.get(), log, abort_msg_address);
     dump_thread(backtrace.get(), log, SCOPE_AT_FAULT, total_sleep_time_usec);
   }
@@ -652,11 +654,11 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
 
   bool detach_failed = false;
   if (dump_sibling_threads) {
-    detach_failed = dump_sibling_thread_report(log, pid, tid, total_sleep_time_usec, map_info);
+    detach_failed = dump_sibling_thread_report(log, pid, tid, total_sleep_time_usec, map);
   }
 
-  // Destroy the previously created map info.
-  backtrace_destroy_map_info_list(map_info);
+  // Destroy the BacktraceMap object.
+  delete map;
 
   if (want_logs) {
     dump_logs(log, pid, false);

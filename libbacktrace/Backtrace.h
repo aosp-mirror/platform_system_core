@@ -18,8 +18,10 @@
 #define _LIBBACKTRACE_BACKTRACE_H
 
 #include <backtrace/Backtrace.h>
+#include <backtrace/BacktraceMap.h>
 
 #include <sys/types.h>
+#include <log/log.h>
 
 // Macro to log the function name along with the warning message.
 #define BACK_LOGW(format, ...) \
@@ -37,15 +39,19 @@ public:
 
   void SetParent(Backtrace* backtrace) { backtrace_obj_ = backtrace; }
 
+  virtual BacktraceMap* CreateBacktraceMap(pid_t pid) = 0;
+
 protected:
-  backtrace_t* GetBacktraceData();
+  inline std::vector<backtrace_frame_data_t>* GetFrames() { return &backtrace_obj_->frames_; }
+
+  inline bool BuildMap() { return backtrace_obj_->BuildMap(); }
 
   Backtrace* backtrace_obj_;
 };
 
 class BacktraceCurrent : public Backtrace {
 public:
-  BacktraceCurrent(BacktraceImpl* impl, backtrace_map_info_t* map_info);
+  BacktraceCurrent(BacktraceImpl* impl, BacktraceMap* map);
   virtual ~BacktraceCurrent();
 
   bool ReadWord(uintptr_t ptr, uint32_t* out_value);
@@ -53,14 +59,14 @@ public:
 
 class BacktracePtrace : public Backtrace {
 public:
-  BacktracePtrace(BacktraceImpl* impl, pid_t pid, pid_t tid, backtrace_map_info_t* map_info);
+  BacktracePtrace(BacktraceImpl* impl, pid_t pid, pid_t tid, BacktraceMap* map);
   virtual ~BacktracePtrace();
 
   bool ReadWord(uintptr_t ptr, uint32_t* out_value);
 };
 
-Backtrace* CreateCurrentObj(backtrace_map_info_t* map_info);
-Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, backtrace_map_info_t* map_info);
-Backtrace* CreateThreadObj(pid_t tid, backtrace_map_info_t* map_info);
+Backtrace* CreateCurrentObj(BacktraceMap* map);
+Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, BacktraceMap* map);
+Backtrace* CreateThreadObj(pid_t tid, BacktraceMap* map);
 
 #endif // _LIBBACKTRACE_BACKTRACE_H

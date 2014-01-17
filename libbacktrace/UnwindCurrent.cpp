@@ -18,9 +18,8 @@
 
 #include <sys/types.h>
 
-#include <cutils/log.h>
-
-#include <backtrace/backtrace.h>
+#include <backtrace/Backtrace.h>
+#include <backtrace/BacktraceMap.h>
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
@@ -79,9 +78,6 @@ std::string UnwindCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
 }
 
 bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
-  backtrace_t* backtrace = GetBacktraceData();
-  backtrace->num_frames = 0;
-
   // The cursor structure is pretty large, do not put it on the stack.
   unw_cursor_t* cursor = new unw_cursor_t;
   int ret = unw_init_local(cursor, &context_);
@@ -91,6 +87,9 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
     return false;
   }
 
+  std::vector<backtrace_frame_data_t>* frames = GetFrames();
+  frames->reserve(MAX_BACKTRACE_FRAMES);
+  size_t num_frames = 0;
   do {
     unw_word_t pc;
     ret = unw_get_reg(cursor, UNW_REG_IP, &pc);
@@ -106,42 +105,32 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
     }
 
     if (num_ignore_frames == 0) {
-      size_t num_frames = backtrace->num_frames;
-      backtrace_frame_data_t* frame = &backtrace->frames[num_frames];
+      frames->resize(num_frames+1);
+      backtrace_frame_data_t* frame = &frames->at(num_frames);
       frame->num = num_frames;
       frame->pc = static_cast<uintptr_t>(pc);
       frame->sp = static_cast<uintptr_t>(sp);
       frame->stack_size = 0;
-      frame->map_name = NULL;
-      frame->map_offset = 0;
-      frame->func_name = NULL;
-      frame->func_offset = 0;
 
       if (num_frames > 0) {
         // Set the stack size for the previous frame.
-        backtrace_frame_data_t* prev = &backtrace->frames[num_frames-1];
+        backtrace_frame_data_t* prev = &frames->at(num_frames-1);
         prev->stack_size = frame->sp - prev->sp;
       }
 
       if (resolve) {
-        std::string func_name = backtrace_obj_->GetFunctionName(frame->pc, &frame->func_offset);
-        if (!func_name.empty()) {
-          frame->func_name = strdup(func_name.c_str());
-        }
-
-        uintptr_t map_start;
-        frame->map_name = backtrace_obj_->GetMapName(frame->pc, &map_start);
-        if (frame->map_name) {
-          frame->map_offset = frame->pc - map_start;
-        }
+        frame->func_name = backtrace_obj_->GetFunctionName(frame->pc, &frame->func_offset);
+        frame->map = backtrace_obj_->FindMap(frame->pc);
+      } else {
+        frame->map = NULL;
+        frame->func_offset = 0;
       }
-
-      backtrace->num_frames++;
+      num_frames++;
     } else {
       num_ignore_frames--;
     }
     ret = unw_step (cursor);
-  } while (ret > 0 && backtrace->num_frames < MAX_BACKTRACE_FRAMES);
+  } while (ret > 0 && num_frames < MAX_BACKTRACE_FRAMES);
 
   delete cursor;
   return true;
@@ -195,11 +184,11 @@ void UnwindThread::ThreadUnwind(
 //-------------------------------------------------------------------------
 // C++ object creation function.
 //-------------------------------------------------------------------------
-Backtrace* CreateCurrentObj(backtrace_map_info_t* map_info) {
-  return new BacktraceCurrent(new UnwindCurrent(), map_info);
+Backtrace* CreateCurrentObj(BacktraceMap* map) {
+  return new BacktraceCurrent(new UnwindCurrent(), map);
 }
 
-Backtrace* CreateThreadObj(pid_t tid, backtrace_map_info_t* map_info) {
+Backtrace* CreateThreadObj(pid_t tid, BacktraceMap* map) {
   UnwindThread* thread_obj = new UnwindThread();
-  return new BacktraceThread(thread_obj, thread_obj, tid, map_info);
+  return new BacktraceThread(thread_obj, thread_obj, tid, map);
 }

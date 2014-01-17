@@ -38,6 +38,8 @@ public:
 
   void ExtractContext(void* sigcontext);
 
+  virtual BacktraceMap* CreateBacktraceMap(pid_t pid) { return new BacktraceMap(pid); }
+
 protected:
   unw_context_t context_;
 };

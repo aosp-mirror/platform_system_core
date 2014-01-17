@@ -18,7 +18,7 @@
 #define ANDROID_CALLSTACK_H
 
 #include <android/log.h>
-#include <backtrace/backtrace.h>
+#include <backtrace/backtrace_constants.h>
 #include <utils/String8.h>
 #include <utils/Vector.h>
 
