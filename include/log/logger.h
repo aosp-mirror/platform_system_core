@@ -163,21 +163,6 @@ struct logger_list *android_logger_list_open(log_id_t id,
 log_id_t android_name_to_log_id(const char *logName);
 const char *android_log_id_to_name(log_id_t log_id);
 
-#ifdef HAVE_IOCTL
-
-#include <sys/ioctl.h>
-
-#define __LOGGERIO	0xAE
-
-#define LOGGER_GET_LOG_BUF_SIZE		_IO(__LOGGERIO, 1) /* size of log */
-#define LOGGER_GET_LOG_LEN		_IO(__LOGGERIO, 2) /* used log len */
-#define LOGGER_GET_NEXT_ENTRY_LEN	_IO(__LOGGERIO, 3) /* next entry len */
-#define LOGGER_FLUSH_LOG		_IO(__LOGGERIO, 4) /* flush log */
-#define LOGGER_GET_VERSION		_IO(__LOGGERIO, 5) /* abi version */
-#define LOGGER_SET_VERSION		_IO(__LOGGERIO, 6) /* abi version */
-
-#endif // HAVE_IOCTL
-
 #ifdef __cplusplus
 }
 #endif
