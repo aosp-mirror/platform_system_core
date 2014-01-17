@@ -27,46 +27,28 @@
 #include <string>
 
 #include <backtrace/Backtrace.h>
-#include <cutils/log.h>
+#include <backtrace/BacktraceMap.h>
 
 #include "Backtrace.h"
 #include "thread_utils.h"
 
 //-------------------------------------------------------------------------
-// BacktraceImpl functions.
-//-------------------------------------------------------------------------
-backtrace_t* BacktraceImpl::GetBacktraceData() {
-  return &backtrace_obj_->backtrace_;
-}
-
-//-------------------------------------------------------------------------
 // Backtrace functions.
 //-------------------------------------------------------------------------
-Backtrace::Backtrace(BacktraceImpl* impl, pid_t pid, backtrace_map_info_t* map_info)
-    : impl_(impl), map_info_(map_info), map_info_requires_delete_(false) {
+Backtrace::Backtrace(BacktraceImpl* impl, pid_t pid, BacktraceMap* map)
+    : pid_(pid), tid_(-1), map_(map), map_shared_(true), impl_(impl) {
   impl_->SetParent(this);
-  backtrace_.num_frames = 0;
-  backtrace_.pid = pid;
-  backtrace_.tid = -1;
 
-  if (map_info_ == NULL) {
-    // Create the map and manage it internally.
-    map_info_ = backtrace_create_map_info_list(pid);
-    map_info_requires_delete_ = true;
+  if (map_ == NULL) {
+    // The map will be created when needed.
+    map_shared_ = false;
   }
 }
 
 Backtrace::~Backtrace() {
-  for (size_t i = 0; i < NumFrames(); i++) {
-    if (backtrace_.frames[i].func_name) {
-      free(backtrace_.frames[i].func_name);
-      backtrace_.frames[i].func_name = NULL;
-    }
-  }
-
-  if (map_info_ && map_info_requires_delete_) {
-    backtrace_destroy_map_info_list(map_info_);
-    map_info_ = NULL;
+  if (map_ && !map_shared_) {
+    delete map_;
+    map_ = NULL;
   }
 
   if (impl_) {
@@ -109,47 +91,36 @@ bool Backtrace::VerifyReadWordArgs(uintptr_t ptr, uint32_t* out_value) {
   return true;
 }
 
-const char* Backtrace::GetMapName(uintptr_t pc, uintptr_t* map_start) {
-  const backtrace_map_info_t* map_info = FindMapInfo(pc);
-  if (map_info) {
-    if (map_start) {
-      *map_start = map_info->start;
-    }
-    return map_info->name;
-  }
-  return NULL;
-}
-
-const backtrace_map_info_t* Backtrace::FindMapInfo(uintptr_t ptr) {
-  return backtrace_find_map_info(map_info_, ptr);
-}
-
 std::string Backtrace::FormatFrameData(size_t frame_num) {
-  return FormatFrameData(&backtrace_.frames[frame_num]);
+  if (frame_num >= frames_.size()) {
+    return "";
+  }
+  return FormatFrameData(&frames_[frame_num]);
 }
 
 std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
   const char* map_name;
-  if (frame->map_name) {
-    map_name = frame->map_name;
+  if (frame->map && !frame->map->name.empty()) {
+    map_name = frame->map->name.c_str();
   } else {
     map_name = "<unknown>";
   }
+
   uintptr_t relative_pc;
-  if (frame->map_offset) {
-    relative_pc = frame->map_offset;
+  if (frame->map) {
+    relative_pc = frame->pc - frame->map->start;
   } else {
     relative_pc = frame->pc;
   }
 
   char buf[512];
-  if (frame->func_name && frame->func_offset) {
+  if (!frame->func_name.empty() && frame->func_offset) {
     snprintf(buf, sizeof(buf), "#%02zu pc %0*" PRIxPTR "  %s (%s+%" PRIuPTR ")",
              frame->num, (int)sizeof(uintptr_t)*2, relative_pc, map_name,
-             frame->func_name, frame->func_offset);
-  } else if (frame->func_name) {
+             frame->func_name.c_str(), frame->func_offset);
+  } else if (!frame->func_name.empty()) {
     snprintf(buf, sizeof(buf), "#%02zu pc %0*" PRIxPTR "  %s (%s)", frame->num,
-             (int)sizeof(uintptr_t)*2, relative_pc, map_name, frame->func_name);
+             (int)sizeof(uintptr_t)*2, relative_pc, map_name, frame->func_name.c_str());
   } else {
     snprintf(buf, sizeof(buf), "#%02zu pc %0*" PRIxPTR "  %s", frame->num,
              (int)sizeof(uintptr_t)*2, relative_pc, map_name);
@@ -158,13 +129,35 @@ std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
   return buf;
 }
 
+bool Backtrace::BuildMap() {
+  map_ = impl_->CreateBacktraceMap(pid_);
+  if (!map_->Build()) {
+    BACK_LOGW("Failed to build map for process %d", pid_);
+    return false;
+  }
+  return true;
+}
+
+const backtrace_map_t* Backtrace::FindMap(uintptr_t pc) {
+  if (map_ == NULL) {
+    // Lazy eval, time to build the map.
+    if (!BuildMap()) {
+      return NULL;
+    }
+  }
+  return map_->Find(pc);
+}
+
+BacktraceMap* Backtrace::TakeMapOwnership() {
+  map_shared_ = true;
+  return map_;
+}
+
 //-------------------------------------------------------------------------
 // BacktraceCurrent functions.
 //-------------------------------------------------------------------------
 BacktraceCurrent::BacktraceCurrent(
-    BacktraceImpl* impl, backtrace_map_info_t *map_info) : Backtrace(impl, getpid(), map_info) {
-
-  backtrace_.pid = getpid();
+    BacktraceImpl* impl, BacktraceMap* map) : Backtrace(impl, getpid(), map) {
 }
 
 BacktraceCurrent::~BacktraceCurrent() {
@@ -175,8 +168,8 @@ bool BacktraceCurrent::ReadWord(uintptr_t ptr, uint32_t* out_value) {
     return false;
   }
 
-  const backtrace_map_info_t* map_info = FindMapInfo(ptr);
-  if (map_info && map_info->is_readable) {
+  const backtrace_map_t* map = FindMap(ptr);
+  if (map && map->flags & PROT_READ) {
     *out_value = *reinterpret_cast<uint32_t*>(ptr);
     return true;
   } else {
@@ -190,9 +183,9 @@ bool BacktraceCurrent::ReadWord(uintptr_t ptr, uint32_t* out_value) {
 // BacktracePtrace functions.
 //-------------------------------------------------------------------------
 BacktracePtrace::BacktracePtrace(
-    BacktraceImpl* impl, pid_t pid, pid_t tid, backtrace_map_info_t* map_info)
-    : Backtrace(impl, pid, map_info) {
-  backtrace_.tid = tid;
+    BacktraceImpl* impl, pid_t pid, pid_t tid, BacktraceMap* map)
+    : Backtrace(impl, pid, map) {
+  tid_ = tid;
 }
 
 BacktracePtrace::~BacktracePtrace() {
@@ -220,103 +213,16 @@ bool BacktracePtrace::ReadWord(uintptr_t ptr, uint32_t* out_value) {
 #endif
 }
 
-Backtrace* Backtrace::Create(pid_t pid, pid_t tid, backtrace_map_info_t* map_info) {
+Backtrace* Backtrace::Create(pid_t pid, pid_t tid, BacktraceMap* map) {
   if (pid == BACKTRACE_CURRENT_PROCESS || pid == getpid()) {
     if (tid == BACKTRACE_CURRENT_THREAD || tid == gettid()) {
-      return CreateCurrentObj(map_info);
+      return CreateCurrentObj(map);
     } else {
-      return CreateThreadObj(tid, map_info);
+      return CreateThreadObj(tid, map);
     }
   } else if (tid == BACKTRACE_CURRENT_THREAD) {
-    return CreatePtraceObj(pid, pid, map_info);
+    return CreatePtraceObj(pid, pid, map);
   } else {
-    return CreatePtraceObj(pid, tid, map_info);
-  }
-}
-
-//-------------------------------------------------------------------------
-// Common interface functions.
-//-------------------------------------------------------------------------
-bool backtrace_create_context_with_map(
-    backtrace_context_t* context, pid_t pid, pid_t tid, size_t num_ignore_frames,
-    backtrace_map_info_t* map_info) {
-  Backtrace* backtrace = Backtrace::Create(pid, tid, map_info);
-  if (!backtrace) {
-    return false;
-  }
-  if (!backtrace->Unwind(num_ignore_frames)) {
-    delete backtrace;
-    return false;
-  }
-
-  context->data = backtrace;
-  context->backtrace = backtrace->GetBacktrace();
-  return true;
-}
-
-bool backtrace_create_context(
-    backtrace_context_t* context, pid_t pid, pid_t tid, size_t num_ignore_frames) {
-  return backtrace_create_context_with_map(context, pid, tid, num_ignore_frames, NULL);
-}
-
-
-void backtrace_destroy_context(backtrace_context_t* context) {
-  if (context->data) {
-    Backtrace* backtrace = reinterpret_cast<Backtrace*>(context->data);
-    delete backtrace;
-    context->data = NULL;
-  }
-  context->backtrace = NULL;
-}
-
-const backtrace_t* backtrace_get_data(backtrace_context_t* context) {
-  if (context && context->data) {
-    Backtrace* backtrace = reinterpret_cast<Backtrace*>(context->data);
-    return backtrace->GetBacktrace();
-  }
-  return NULL;
-}
-
-bool backtrace_read_word(const backtrace_context_t* context, uintptr_t ptr, uint32_t* value) {
-  if (context->data) {
-    Backtrace* backtrace = reinterpret_cast<Backtrace*>(context->data);
-    return backtrace->ReadWord(ptr, value);
-  }
-  return true;
-}
-
-const char* backtrace_get_map_name(const backtrace_context_t* context, uintptr_t pc, uintptr_t* map_start) {
-  if (context->data) {
-    Backtrace* backtrace = reinterpret_cast<Backtrace*>(context->data);
-    return backtrace->GetMapName(pc, map_start);
-  }
-  return NULL;
-}
-
-char* backtrace_get_func_name(const backtrace_context_t* context, uintptr_t pc, uintptr_t* func_offset) {
-  if (context->data) {
-    Backtrace* backtrace = reinterpret_cast<Backtrace*>(context->data);
-    std::string func_name = backtrace->GetFunctionName(pc, func_offset);
-    if (!func_name.empty()) {
-      return strdup(func_name.c_str());
-    }
-  }
-  return NULL;
-}
-
-void backtrace_format_frame_data(
-    const backtrace_context_t* context, size_t frame_num, char* buf,
-    size_t buf_size) {
-  if (buf_size == 0 || buf == NULL) {
-    BACK_LOGW("bad call buf %p buf_size %zu", buf, buf_size);
-  } else if (context->data) {
-    Backtrace* backtrace = reinterpret_cast<Backtrace*>(context->data);
-    std::string line = backtrace->FormatFrameData(frame_num);
-    if (line.size() > buf_size) {
-      memcpy(buf, line.c_str(), buf_size-1);
-      buf[buf_size] = '\0';
-    } else {
-      memcpy(buf, line.c_str(), line.size()+1);
-    }
+    return CreatePtraceObj(pid, tid, map);
   }
 }
