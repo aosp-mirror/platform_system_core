@@ -18,7 +18,15 @@
 #define _BACKTRACE_BACKTRACE_MAP_H
 
 #include <stdint.h>
+#ifdef USE_MINGW
+// MINGW does not define these constants.
+#define PROT_NONE 0
+#define PROT_READ 0x1
+#define PROT_WRITE 0x2
+#define PROT_EXEC 0x4
+#else
 #include <sys/mman.h>
+#endif
 
 #include <string>
 #include <vector>
