@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 The Android Open Source Project
+ * Copyright (C) 2012-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -505,9 +505,6 @@ static void dump_log_file(
     //
     // We want to display it in the same format as "logcat -v threadtime"
     // (although in this case the pid is redundant).
-    //
-    // TODO: scan for line breaks ('\n') and display each text line
-    // on a separate line, prefixed with the header, like logcat does.
     static const char* kPrioChars = "!.VDIWEFS";
     unsigned hdr_size = log_entry.entry.hdr_size;
     if (!hdr_size) {
@@ -519,9 +516,9 @@ static void dump_log_file(
     msg = tag + strlen(tag) + 1;
 
     // consume any trailing newlines
-    char* eatnl = msg + strlen(msg) - 1;
-    while (eatnl >= msg && *eatnl == '\n') {
-      *eatnl-- = '\0';
+    char* nl = msg + strlen(msg) - 1;
+    while (nl >= msg && *nl == '\n') {
+        *nl-- = '\0';
     }
 
     char prioChar = (prio < strlen(kPrioChars) ? kPrioChars[prio] : '?');
@@ -533,8 +530,20 @@ static void dump_log_file(
     ptm = localtime_r(&sec, &tmBuf);
     strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", ptm);
 
-    _LOG(log, 0, "%s.%03d %5d %5d %c %-8s: %s\n",
-         timeBuf, entry->nsec / 1000000, entry->pid, entry->tid, prioChar, tag, msg);
+    // Look for line breaks ('\n') and display each text line
+    // on a separate line, prefixed with the header, like logcat does.
+    do {
+        nl = strchr(msg, '\n');
+        if (nl) {
+            *nl = '\0';
+            ++nl;
+        }
+
+        _LOG(log, 0, "%s.%03d %5d %5d %c %-8s: %s\n",
+             timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
+             prioChar, tag, msg);
+
+    } while ((msg = nl));
   }
 
   android_logger_list_free(logger_list);
