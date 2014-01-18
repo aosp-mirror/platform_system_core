@@ -43,11 +43,10 @@ static int mkdirs(char *name)
 {
     int ret;
     char *x = name + 1;
-    unsigned int uid, gid;
+    uid_t uid = -1;
+    gid_t gid = -1;
     unsigned int mode = 0775;
     uint64_t cap = 0;
-    uid = getuid();
-    gid = getgid();
 
     if(name[0] != '/') return -1;
 
@@ -172,8 +171,8 @@ static int fail_errno(int s)
     return fail_message(s, strerror(errno));
 }
 
-static int handle_send_file(int s, char *path, unsigned int uid,
-        unsigned int gid, mode_t mode, char *buffer)
+static int handle_send_file(int s, char *path, uid_t uid,
+        gid_t gid, mode_t mode, char *buffer)
 {
     syncmsg msg;
     unsigned int timestamp = 0;
@@ -201,11 +200,13 @@ static int handle_send_file(int s, char *path, unsigned int uid,
             fail_errno(s);
             errno = 0;
         }
-        /* fchown clears the setuid bit - restore it if present */
-        if(fchmod(fd, mode) != 0) {
-            fail_errno(s);
-            errno = 0;
-        }
+
+        /*
+         * fchown clears the setuid bit - restore it if present.
+         * Ignore the result of calling fchmod. It's not supported
+         * by all filesystems. b/12441485
+         */
+        fchmod(fd, mode);
     }
 
     for(;;) {
@@ -350,10 +351,9 @@ static int do_send(int s, char *path, char *buffer)
 #else
     {
 #endif
-        unsigned int uid, gid;
+        uid_t uid = -1;
+        gid_t gid = -1;
         uint64_t cap = 0;
-        uid = getuid();
-        gid = getgid();
 
         /* copy user permission bits to "group" and "other" permissions */
         mode |= ((mode >> 3) & 0070);
