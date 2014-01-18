@@ -843,7 +843,6 @@ static int bootchart_init_action(int nargs, char **args)
 #endif
 
 static const struct selinux_opt seopts_prop[] = {
-        { SELABEL_OPT_PATH, "/data/security/property_contexts" },
         { SELABEL_OPT_PATH, "/property_contexts" },
         { 0, NULL }
 };
