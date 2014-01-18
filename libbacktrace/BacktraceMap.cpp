@@ -103,7 +103,7 @@ bool BacktraceMap::Build() {
 
 #if defined(__APPLE__)
   // cmd is guaranteed to always be big enough to hold this string.
-  sprintf(cmd, "vmmap -w -resident -submap -allSplitLibs -interleaved %d", pid);
+  sprintf(cmd, "vmmap -w -resident -submap -allSplitLibs -interleaved %d", pid_);
   FILE* fp = popen(cmd, "r");
 #else
   // path is guaranteed to always be big enough to hold this string.
