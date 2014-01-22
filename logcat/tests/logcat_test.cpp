@@ -319,11 +319,15 @@ static void caught_blocking(int signum)
 
 TEST(logcat, blocking) {
     FILE *fp;
-    unsigned long long v = 0xDEADBEEFA55A0000ULL;
+    unsigned long long v = 0xDEADBEEFA55F0000ULL;
 
     pid_t pid = getpid();
 
     v += pid & 0xFFFF;
+
+    LOG_FAILURE_RETRY(__android_log_btwrite(0, EVENT_TYPE_LONG, &v, sizeof(v)));
+
+    v &= 0xFFFFFFFFFFFAFFFFULL;
 
     ASSERT_EQ(0, NULL == (fp = popen(
       "( trap exit HUP QUIT INT PIPE KILL ; sleep 6; echo DONE )&"
@@ -341,11 +345,11 @@ TEST(logcat, blocking) {
     while (fgets(buffer, sizeof(buffer), fp)) {
         alarm(2);
 
-        ++count;
-
         if (!strncmp(buffer, "DONE", 4)) {
             break;
         }
+
+        ++count;
 
         int p;
         unsigned long long l;
@@ -369,7 +373,7 @@ TEST(logcat, blocking) {
 
     pclose(fp);
 
-    ASSERT_LT(10, count);
+    ASSERT_LE(2, count);
 
     ASSERT_EQ(1, signals);
 }
@@ -385,11 +389,15 @@ static void caught_blocking_tail(int signum)
 
 TEST(logcat, blocking_tail) {
     FILE *fp;
-    unsigned long long v = 0xA55ADEADBEEF0000ULL;
+    unsigned long long v = 0xA55FDEADBEEF0000ULL;
 
     pid_t pid = getpid();
 
     v += pid & 0xFFFF;
+
+    LOG_FAILURE_RETRY(__android_log_btwrite(0, EVENT_TYPE_LONG, &v, sizeof(v)));
+
+    v &= 0xFFFAFFFFFFFFFFFFULL;
 
     ASSERT_EQ(0, NULL == (fp = popen(
       "( trap exit HUP QUIT INT PIPE KILL ; sleep 6; echo DONE )&"
@@ -407,11 +415,11 @@ TEST(logcat, blocking_tail) {
     while (fgets(buffer, sizeof(buffer), fp)) {
         alarm(2);
 
-        ++count;
-
         if (!strncmp(buffer, "DONE", 4)) {
             break;
         }
+
+        ++count;
 
         int p;
         unsigned long long l;
@@ -431,13 +439,91 @@ TEST(logcat, blocking_tail) {
     alarm(0);
     signal(SIGALRM, SIG_DFL);
 
-    /* Generate SIGPIPE */
+    // Generate SIGPIPE
     fclose(fp);
     caught_blocking_tail(0);
 
     pclose(fp);
 
-    ASSERT_LT(5, count);
+    ASSERT_LE(2, count);
+
+    ASSERT_EQ(1, signals);
+}
+
+static void caught_blocking_clear(int signum)
+{
+    unsigned long long v = 0xDEADBEEFA55C0000ULL;
+
+    v += getpid() & 0xFFFF;
+
+    LOG_FAILURE_RETRY(__android_log_btwrite(0, EVENT_TYPE_LONG, &v, sizeof(v)));
+}
+
+TEST(logcat, blocking_clear) {
+    FILE *fp;
+    unsigned long long v = 0xDEADBEEFA55C0000ULL;
+
+    pid_t pid = getpid();
+
+    v += pid & 0xFFFF;
+
+    // This test is racey; an event occurs between clear and dump.
+    // We accept that we will get a false positive, but never a false negative.
+    ASSERT_EQ(0, NULL == (fp = popen(
+      "( trap exit HUP QUIT INT PIPE KILL ; sleep 6; echo DONE )&"
+      " logcat -b events -c 2>&1 ;"
+      " logcat -b events 2>&1",
+      "r")));
+
+    char buffer[5120];
+
+    int count = 0;
+
+    int signals = 0;
+
+    signal(SIGALRM, caught_blocking_clear);
+    alarm(2);
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        alarm(2);
+
+        if (!strncmp(buffer, "clearLog: ", 10)) {
+            fprintf(stderr, "WARNING: Test lacks permission to run :-(\n");
+            count = signals = 1;
+            break;
+        }
+
+        if (!strncmp(buffer, "DONE", 4)) {
+            break;
+        }
+
+        ++count;
+
+        int p;
+        unsigned long long l;
+
+        if ((2 != sscanf(buffer, "I/[0] ( %u): %lld", &p, &l))
+         || (p != pid)) {
+            continue;
+        }
+
+        if (l == v) {
+            if (count > 1) {
+                fprintf(stderr, "WARNING: Possible false positive\n");
+            }
+            ++signals;
+            break;
+        }
+    }
+    alarm(0);
+    signal(SIGALRM, SIG_DFL);
+
+    // Generate SIGPIPE
+    fclose(fp);
+    caught_blocking_clear(0);
+
+    pclose(fp);
+
+    ASSERT_LE(1, count);
 
     ASSERT_EQ(1, signals);
 }
