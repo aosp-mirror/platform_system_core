@@ -148,10 +148,10 @@ LOCAL_CFLAGS += \
 	-DGTEST_OS_LINUX_ANDROID \
 	-DGTEST_HAS_STD_STRING \
 
-ifeq ($(TARGET_ARCH),aarch64)
+ifeq ($(TARGET_ARCH),arm64)
   $(info TODO: $(LOCAL_PATH)/Android.mk -fstack-protector not yet available for the AArch64 toolchain)
   LOCAL_CFLAGS += -fno-stack-protector
-endif # aarch64
+endif # arm64
 
 LOCAL_CONLYFLAGS += \
 	$(common_conlyflags) \

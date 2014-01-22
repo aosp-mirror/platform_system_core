@@ -267,7 +267,7 @@ static void decode_token(uint32_t code, char *token, char *instr_part)
     return;
 }
 
-int aarch64_disassemble(uint32_t code, char* instr)
+int arm64_disassemble(uint32_t code, char* instr)
 {
     uint32_t i;
     char token[256];
