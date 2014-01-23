@@ -16,7 +16,7 @@ LOCAL_SRC_FILES:=                             \
 
 LOCAL_MODULE:= libsysutils
 
-LOCAL_C_INCLUDES := $(KERNEL_HEADERS)
+LOCAL_C_INCLUDES :=
 
 LOCAL_CFLAGS :=
 

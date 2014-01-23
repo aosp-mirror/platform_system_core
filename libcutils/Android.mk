@@ -124,7 +124,7 @@ else  # !arm
     endif # !x86
 endif # !arm
 
-LOCAL_C_INCLUDES := $(libcutils_c_includes) $(KERNEL_HEADERS)
+LOCAL_C_INCLUDES := $(libcutils_c_includes)
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(targetSmpFlag)
 include $(BUILD_STATIC_LIBRARY)
