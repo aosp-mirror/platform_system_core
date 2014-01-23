@@ -180,10 +180,6 @@ bool BacktraceThread::TriggerUnwindOnThread(ThreadEntry* entry) {
 }
 
 bool BacktraceThread::Unwind(size_t num_ignore_frames) {
-  if (!thread_intf_->Init()) {
-    return false;
-  }
-
   ThreadEntry* entry = ThreadEntry::AddThreadToUnwind(
       thread_intf_, Pid(), Tid(), num_ignore_frames);
   if (!entry) {
