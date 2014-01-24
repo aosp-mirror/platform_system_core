@@ -13,7 +13,7 @@ int swapoff_main(int argc, char **argv)
 
     err = swapoff(argv[1]);
     if (err) {
-        fprintf(stderr, "swapoff failed for %s\n", argv[1]);
+        fprintf(stderr, "swapoff failed for %s: %s\n", argv[1], strerror(errno));
     }
 
     return err;
