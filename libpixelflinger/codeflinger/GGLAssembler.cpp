@@ -901,7 +901,7 @@ void GGLAssembler::build_and_immediate(int d, int s, uint32_t mask, int bits)
         AND( AL, 0, d, s, imm(mask) );
         return;
     }
-    else if (getCodegenArch() == CODEGEN_ARCH_AARCH64) {
+    else if (getCodegenArch() == CODEGEN_ARCH_ARM64) {
         AND( AL, 0, d, s, imm(mask) );
         return;
     }

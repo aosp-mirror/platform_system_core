@@ -61,7 +61,7 @@ struct test_t tests[] =
 
 };
 
-void scanline_t32cb16blend_aarch64(uint16_t*, uint32_t*, size_t);
+void scanline_t32cb16blend_arm64(uint16_t*, uint32_t*, size_t);
 void scanline_t32cb16blend_c(uint16_t * dst, uint32_t* src, size_t count)
 {
     while (count--)
@@ -112,7 +112,7 @@ void scanline_t32cb16blend_test()
         }
 
         scanline_t32cb16blend_c(dst_c,src,test.count);
-        scanline_t32cb16blend_aarch64(dst_asm,src,test.count);
+        scanline_t32cb16blend_arm64(dst_asm,src,test.count);
 
 
         if(memcmp(dst_c, dst_asm, sizeof(dst_c)) == 0)

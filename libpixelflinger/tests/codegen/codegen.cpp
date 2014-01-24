@@ -10,7 +10,7 @@
 #include "codeflinger/GGLAssembler.h"
 #include "codeflinger/ARMAssembler.h"
 #include "codeflinger/MIPSAssembler.h"
-#include "codeflinger/Aarch64Assembler.h"
+#include "codeflinger/Arm64Assembler.h"
 
 #if defined(__arm__) || defined(__mips__) || defined(__aarch64__)
 #   define ANDROID_ARM_CODEGEN  1
@@ -57,7 +57,7 @@ static void ggl_test_codegen(uint32_t n, uint32_t p, uint32_t t0, uint32_t t1)
 #endif
 
 #if defined(__aarch64__)
-    GGLAssembler assembler( new ArmToAarch64Assembler(a) );
+    GGLAssembler assembler( new ArmToArm64Assembler(a) );
 #endif
 
     int err = assembler.scanline(needs, (context_t*)c);
@@ -66,7 +66,7 @@ static void ggl_test_codegen(uint32_t n, uint32_t p, uint32_t t0, uint32_t t1)
     }
     gglUninit(c);
 #else
-    printf("This test runs only on ARM, Aarch64 or MIPS\n");
+    printf("This test runs only on ARM, Arm64 or MIPS\n");
 #endif
 }
 
