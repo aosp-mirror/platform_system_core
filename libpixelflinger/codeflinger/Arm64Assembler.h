@@ -26,8 +26,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef ANDROID_ARMTOAARCH64ASSEMBLER_H
-#define ANDROID_ARMTOAARCH64ASSEMBLER_H
+#ifndef ANDROID_ARMTOARM64ASSEMBLER_H
+#define ANDROID_ARMTOARM64ASSEMBLER_H
 
 #include <stdint.h>
 #include <sys/types.h>
@@ -44,12 +44,12 @@ namespace android {
 
 // ----------------------------------------------------------------------------
 
-class ArmToAarch64Assembler : public ARMAssemblerInterface
+class ArmToArm64Assembler : public ARMAssemblerInterface
 {
 public:
-                ArmToAarch64Assembler(const sp<Assembly>& assembly);
-                ArmToAarch64Assembler(void *base);
-    virtual     ~ArmToAarch64Assembler();
+                ArmToArm64Assembler(const sp<Assembly>& assembly);
+                ArmToArm64Assembler(void *base);
+    virtual     ~ArmToArm64Assembler();
 
     uint32_t*   base() const;
     uint32_t*   pc() const;
@@ -176,8 +176,8 @@ public:
     virtual void UBFX(int cc, int Rd, int Rn, int lsb, int width);
 
 private:
-    ArmToAarch64Assembler(const ArmToAarch64Assembler& rhs);
-    ArmToAarch64Assembler& operator = (const ArmToAarch64Assembler& rhs);
+    ArmToArm64Assembler(const ArmToArm64Assembler& rhs);
+    ArmToArm64Assembler& operator = (const ArmToArm64Assembler& rhs);
 
     // -----------------------------------------------------------------------
     // helper functions
@@ -189,7 +189,7 @@ private:
                       int Rd, int Rn, uint32_t Op2);
 
     // -----------------------------------------------------------------------
-    // Aarch64 instructions
+    // Arm64 instructions
     // -----------------------------------------------------------------------
     uint32_t A64_B_COND(uint32_t cc, uint32_t offset);
     uint32_t A64_RET(uint32_t Rn);
@@ -287,4 +287,4 @@ private:
 
 }; // namespace android
 
-#endif //ANDROID_AARCH64ASSEMBLER_H
+#endif //ANDROID_ARM64ASSEMBLER_H

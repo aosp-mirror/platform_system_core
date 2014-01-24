@@ -28,7 +28,7 @@
     .text
     .align
 
-    .global scanline_col32cb16blend_aarch64
+    .global scanline_col32cb16blend_arm64
 
 //
 // This function alpha blends a fixed color into a destination scanline, using
@@ -46,7 +46,7 @@
 // w2 = count
 
 
-scanline_col32cb16blend_aarch64:
+scanline_col32cb16blend_arm64:
 
     lsr         w5, w1, #24                     // shift down alpha
     mov         w9, #0xff                       // create mask

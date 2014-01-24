@@ -52,11 +52,11 @@ endif
 
 LOCAL_SHARED_LIBRARIES := libcutils liblog
 
-ifeq ($(TARGET_ARCH),aarch64)
-PIXELFLINGER_SRC_FILES += arch-aarch64/t32cb16blend.S
-PIXELFLINGER_SRC_FILES += arch-aarch64/col32cb16blend.S
-PIXELFLINGER_SRC_FILES += codeflinger/Aarch64Assembler.cpp
-PIXELFLINGER_SRC_FILES += codeflinger/Aarch64Disassembler.cpp
+ifeq ($(TARGET_ARCH),arm64)
+PIXELFLINGER_SRC_FILES += arch-arm64/t32cb16blend.S
+PIXELFLINGER_SRC_FILES += arch-arm64/col32cb16blend.S
+PIXELFLINGER_SRC_FILES += codeflinger/Arm64Assembler.cpp
+PIXELFLINGER_SRC_FILES += codeflinger/Arm64Disassembler.cpp
 PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
 endif
 
