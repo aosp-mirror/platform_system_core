@@ -66,7 +66,7 @@ void android_memory_barrier(void)
 extern ANDROID_ATOMIC_INLINE
 void android_memory_store_barrier(void)
 {
-    __asm__ __volatile__ ("dmb isht" : : : "memory");
+    __asm__ __volatile__ ("dmb ishst" : : : "memory");
 }
 #endif
 
