@@ -73,11 +73,6 @@
           'libchrome-<(libbase_ver)',
         ],
       },
-      'link_settings': {
-        'libraries': [
-          '-lgflags',
-        ],
-      },
       'dependencies': [
         '../libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
       ],

@@ -12,20 +12,12 @@
 
 #include "base/command_line.h"
 #include "base/file_util.h"
+#include "base/string_number_conversions.h"
 #include "base/string_util.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/values.h"
 #include "chromeos/dbus/dbus.h"
 #include "chromeos/syslog_logging.h"
-#include "gflags/gflags.h"
-
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
-DEFINE_bool(quiet, false, "Only print the proxies");
-// Number of seconds to wait for browser to send us a signal
-DEFINE_int32(timeout, 5, "Set timeout for browser resolving proxies");
-DEFINE_bool(verbose, false, "Print additional messages even "
-                            "when not run from a TTY");
-#pragma GCC diagnostic error "-Wstrict-aliasing"
 
 const char kLibCrosProxyResolveSignalInterface[] =
     "org.chromium.CrashReporterLibcrosProxyResolvedInterface";
@@ -36,6 +28,26 @@ const char kLibCrosServicePath[] = "/org/chromium/LibCrosService";
 const char kLibCrosServiceResolveNetworkProxyMethodName[] =
     "ResolveNetworkProxy";
 const char kNoProxy[] = "direct://";
+
+namespace switches {
+
+const unsigned kTimeoutDefault = 5;
+
+const char kHelp[] = "help";
+const char kQuiet[] = "quiet";
+const char kTimeout[] = "timeout";
+const char kVerbose[] = "verbose";
+// Help message to show when the --help command line switch is specified.
+const char kHelpMessage[] =
+    "Chromium OS Crash helper: proxy lister\n"
+    "\n"
+    "Available Switches:\n"
+    "  --quiet      Only print the proxies\n"
+    "  --verbose    Print additional messages even when not run from a TTY\n"
+    "  --timeout=N  Set timeout for browser resolving proxies (default is 5)\n"
+    "  --help       Show this help.\n";
+
+}  // namespace switches
 
 static const char *GetGErrorMessage(const GError *error) {
   if (!error)
@@ -138,7 +150,7 @@ static gboolean HandleBrowserTimeout(void *data) {
   return false;  // only call once
 }
 
-static bool ShowBrowserProxies(const char *url) {
+static bool ShowBrowserProxies(std::string url, unsigned timeout) {
   GMainLoop *main_loop = g_main_loop_new(NULL, false);
 
   chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
@@ -168,7 +180,7 @@ static bool ShowBrowserProxies(const char *url) {
   if (!dbus_g_proxy_call(browser_proxy.gproxy(),
                          kLibCrosServiceResolveNetworkProxyMethodName,
                          &gerror,
-                         G_TYPE_STRING, url,
+                         G_TYPE_STRING, url.c_str(),
                          G_TYPE_STRING, kLibCrosProxyResolveSignalInterface,
                          G_TYPE_STRING, kLibCrosProxyResolveName,
                          G_TYPE_INVALID, G_TYPE_INVALID)) {
@@ -179,7 +191,7 @@ static bool ShowBrowserProxies(const char *url) {
   }
 
   // Setup a timeout in case the browser doesn't respond with our signal
-  g_timeout_add_seconds(FLAGS_timeout, &HandleBrowserTimeout, main_loop);
+  g_timeout_add_seconds(timeout, &HandleBrowserTimeout, main_loop);
 
   // Loop until we either get the proxy-resolved signal, or until the
   // timeout is reached.
@@ -198,28 +210,45 @@ static bool ShowBrowserProxies(const char *url) {
 }
 
 int main(int argc, char *argv[]) {
-  google::ParseCommandLineFlags(&argc, &argv, true);
   CommandLine::Init(argc, argv);
+  CommandLine* cl = CommandLine::ForCurrentProcess();
+
+  if (cl->HasSwitch(switches::kHelp)) {
+    LOG(INFO) << switches::kHelpMessage;
+    return 0;
+  }
+
+  bool quiet = cl->HasSwitch(switches::kQuiet);
+  bool verbose = cl->HasSwitch(switches::kVerbose);
+
+  unsigned timeout = switches::kTimeoutDefault;
+  std::string str_timeout = cl->GetSwitchValueASCII(switches::kTimeout);
+  if (!str_timeout.empty() && !base::StringToUint(str_timeout, &timeout)) {
+    LOG(ERROR) << "Invalid timeout value: " << str_timeout;
+    return 1;
+  }
 
   // Default to logging to syslog.
   int init_flags = chromeos::kLogToSyslog;
   // Log to stderr if a TTY (and "-quiet" wasn't passed), or if "-verbose"
   // was passed.
-  if ((!FLAGS_quiet && isatty(STDERR_FILENO)) || FLAGS_verbose)
+
+  if ((!quiet && isatty(STDERR_FILENO)) || verbose)
     init_flags |= chromeos::kLogToStderr;
   chromeos::InitLog(init_flags);
 
   ::g_type_init();
 
-  const char *url = NULL;
-  if (argc >= 2) {
-    url = argv[1];
+  std::string url;
+  CommandLine::StringVector urls = cl->GetArgs();
+  if (!urls.empty()) {
+    url = urls[0];
     LOG(INFO) << "Resolving proxies for URL: " << url;
   } else {
     LOG(INFO) << "Resolving proxies without URL";
   }
 
-  if (!ShowBrowserProxies(url)) {
+  if (!ShowBrowserProxies(url, timeout)) {
     LOG(ERROR) << "Error resolving proxies via the browser";
     LOG(INFO) << "Assuming direct proxy";
     printf("%s\n", kNoProxy);
