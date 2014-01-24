@@ -10,7 +10,6 @@
 #include "chromeos/syslog_logging.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/kernel_collector.h"
-#include "gflags/gflags.h"
 #include "gtest/gtest.h"
 
 static int s_crashes = 0;

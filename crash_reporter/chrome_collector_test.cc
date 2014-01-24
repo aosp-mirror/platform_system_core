@@ -12,7 +12,6 @@
 #include "chromeos/syslog_logging.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/chrome_collector.h"
-#include "gflags/gflags.h"
 #include "gtest/gtest.h"
 
 using base::FilePath;
