@@ -29,7 +29,7 @@
 #include <inttypes.h>
 #include <string.h>
 
-int aarch64_disassemble(uint32_t code, char* instr);
+int arm64_disassemble(uint32_t code, char* instr);
 
 struct test_table_entry_t
 {
@@ -298,7 +298,7 @@ int main()
     {
         test_table_entry_t *test;
         test = &test_table[i];
-        aarch64_disassemble(test->code, instr);
+        arm64_disassemble(test->code, instr);
         if(strcmp(instr, test->instr) != 0)
         {
             printf("Test Failed \n"

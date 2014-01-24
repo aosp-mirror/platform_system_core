@@ -26,10 +26,10 @@
  * SUCH DAMAGE.
  */
 
-#ifndef ANDROID_AARCH64DISASSEMBLER_H
-#define ANDROID_AARCH64DISASSEMBLER_H
+#ifndef ANDROID_ARM64DISASSEMBLER_H
+#define ANDROID_ARM64DISASSEMBLER_H
 
 #include <inttypes.h>
-int aarch64_disassemble(uint32_t code, char* instr);
+int arm64_disassemble(uint32_t code, char* instr);
 
-#endif //ANDROID_AARCH64ASSEMBLER_H
+#endif //ANDROID_ARM64ASSEMBLER_H

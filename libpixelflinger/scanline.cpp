@@ -34,7 +34,7 @@
 #if defined(__arm__)
 #include "codeflinger/ARMAssembler.h"
 #elif defined(__aarch64__)
-#include "codeflinger/Aarch64Assembler.h"
+#include "codeflinger/Arm64Assembler.h"
 #elif defined(__mips__)
 #include "codeflinger/MIPSAssembler.h"
 #endif
@@ -128,8 +128,8 @@ extern "C" void scanline_t32cb16_arm(uint16_t *dst, uint32_t *src, size_t ct);
 extern "C" void scanline_col32cb16blend_neon(uint16_t *dst, uint32_t *col, size_t ct);
 extern "C" void scanline_col32cb16blend_arm(uint16_t *dst, uint32_t col, size_t ct);
 #elif defined(__aarch64__)
-extern "C" void scanline_t32cb16blend_aarch64(uint16_t*, uint32_t*, size_t);
-extern "C" void scanline_col32cb16blend_aarch64(uint16_t *dst, uint32_t col, size_t ct);
+extern "C" void scanline_t32cb16blend_arm64(uint16_t*, uint32_t*, size_t);
+extern "C" void scanline_col32cb16blend_arm64(uint16_t *dst, uint32_t col, size_t ct);
 #elif defined(__mips__)
 extern "C" void scanline_t32cb16blend_mips(uint16_t*, uint32_t*, size_t);
 #endif
@@ -405,7 +405,7 @@ static void pick_scanline(context_t* c)
 #if defined(__mips__)
         GGLAssembler assembler( new ArmToMipsAssembler(a) );
 #elif defined(__aarch64__)
-        GGLAssembler assembler( new ArmToAarch64Assembler(a) );
+        GGLAssembler assembler( new ArmToArm64Assembler(a) );
 #endif
         // generate the scanline code for the given needs
         int err = assembler.scanline(c->state.needs, c);
@@ -2098,7 +2098,7 @@ void scanline_col32cb16blend(context_t* c)
     scanline_col32cb16blend_arm(dst, GGL_RGBA_TO_HOST(c->packed8888), ct);
 #endif // defined(__ARM_HAVE_NEON) && BYTE_ORDER == LITTLE_ENDIAN
 #elif ((ANDROID_CODEGEN >= ANDROID_CODEGEN_ASM) && defined(__aarch64__))
-    scanline_col32cb16blend_aarch64(dst, GGL_RGBA_TO_HOST(c->packed8888), ct);
+    scanline_col32cb16blend_arm64(dst, GGL_RGBA_TO_HOST(c->packed8888), ct);
 #else
     uint32_t s = GGL_RGBA_TO_HOST(c->packed8888);
     int sA = (s>>24);
@@ -2186,7 +2186,7 @@ void scanline_t32cb16blend(context_t* c)
 #ifdef __arm__
     scanline_t32cb16blend_arm(dst, src, ct);
 #elif defined(__aarch64__)
-    scanline_t32cb16blend_aarch64(dst, src, ct);
+    scanline_t32cb16blend_arm64(dst, src, ct);
 #elif defined(__mips__)
     scanline_t32cb16blend_mips(dst, src, ct);
 #endif
