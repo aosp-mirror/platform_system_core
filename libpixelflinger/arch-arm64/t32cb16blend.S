@@ -28,7 +28,7 @@
     .text
     .align
 
-    .global scanline_t32cb16blend_aarch64
+    .global scanline_t32cb16blend_arm64
 
 /*
  * .macro pixel
@@ -155,7 +155,7 @@
 // w12: scratch
 // w14: pixel
 
-scanline_t32cb16blend_aarch64:
+scanline_t32cb16blend_arm64:
 
     // align DST to 32 bits
     tst     x0, #0x3
