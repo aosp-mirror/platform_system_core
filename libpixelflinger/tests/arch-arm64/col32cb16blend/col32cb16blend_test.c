@@ -60,7 +60,7 @@ struct test_t tests[] =
     {"Count 10, Src=Rand, Dst=Rand", 0x12345678, 0x9ABC, 10}
 };
 
-void scanline_col32cb16blend_aarch64(uint16_t *dst, int32_t src, size_t count);
+void scanline_col32cb16blend_arm64(uint16_t *dst, int32_t src, size_t count);
 void scanline_col32cb16blend_c(uint16_t * dst, int32_t src, size_t count)
 {
     int srcAlpha = (src>>24);
@@ -103,7 +103,7 @@ void scanline_col32cb16blend_test()
 
 
         scanline_col32cb16blend_c(dst_c, test.src_color, test.count);
-        scanline_col32cb16blend_aarch64(dst_asm, test.src_color, test.count);
+        scanline_col32cb16blend_arm64(dst_asm, test.src_color, test.count);
 
 
         if(memcmp(dst_c, dst_asm, sizeof(dst_c)) == 0)
