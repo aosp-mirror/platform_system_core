@@ -756,7 +756,7 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   }
 
   const off64_t data_offset = local_header_offset + kLFHLen + lfhNameLen + lfhExtraLen;
-  if (data_offset >= cd_offset) {
+  if (data_offset > cd_offset) {
     ALOGW("Zip: bad data offset %lld in zip", (off64_t) data_offset);
     return kInvalidOffset;
   }
@@ -1019,6 +1019,13 @@ int32_t ExtractEntryToFile(ZipArchiveHandle handle,
     ALOGW("Zip: unable to truncate file to %lld: %s", declared_length + current_offset,
           strerror(errno));
     return kIoError;
+  }
+
+  // Don't attempt to map a region of length 0. We still need the
+  // ftruncate() though, since the API guarantees that we will truncate
+  // the file to the end of the uncompressed output.
+  if (declared_length == 0) {
+      return 0;
   }
 
   android::FileMap* map  = MapFileSegment(fd, current_offset, declared_length,
