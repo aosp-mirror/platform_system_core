@@ -39,6 +39,8 @@
 #include <sys/capability.h>
 #include <linux/prctl.h>
 #include <sys/mount.h>
+#include <getopt.h>
+#include <selinux/selinux.h>
 #else
 #include "usb_vendors.h"
 #endif
@@ -54,6 +56,7 @@ static int auth_enabled = 0;
 
 #if !ADB_HOST
 static const char *adb_device_banner = "device";
+static const char *root_seclabel = NULL;
 #endif
 
 void fatal(const char *fmt, ...)
@@ -1356,6 +1359,12 @@ int adb_main(int is_daemon, int server_port)
         D("Local port disabled\n");
     } else {
         char local_name[30];
+        if ((root_seclabel != NULL) && (is_selinux_enabled() > 0)) {
+            // b/12587913: fix setcon to allow const pointers
+            if (setcon((char *)root_seclabel) < 0) {
+                exit(1);
+            }
+        }
         build_local_name(local_name, sizeof(local_name), server_port);
         if(install_listener(local_name, "*smartsocket*", NULL, 0)) {
             exit(1);
@@ -1642,10 +1651,6 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     return -1;
 }
 
-#if !ADB_HOST
-int recovery_mode = 0;
-#endif
-
 int main(int argc, char **argv)
 {
 #if ADB_HOST
@@ -1657,9 +1662,26 @@ int main(int argc, char **argv)
     /* If adbd runs inside the emulator this will enable adb tracing via
      * adb-debug qemud service in the emulator. */
     adb_qemu_trace_init();
-    if((argc > 1) && (!strcmp(argv[1],"recovery"))) {
-        adb_device_banner = "recovery";
-        recovery_mode = 1;
+    while(1) {
+        int c;
+        int option_index = 0;
+        static struct option opts[] = {
+            {"root_seclabel", required_argument, 0, 's' },
+            {"device_banner", required_argument, 0, 'b' }
+        };
+        c = getopt_long(argc, argv, "", opts, &option_index);
+        if (c == -1)
+            break;
+        switch (c) {
+        case 's':
+            root_seclabel = optarg;
+            break;
+        case 'b':
+            adb_device_banner = optarg;
+            break;
+        default:
+            break;
+        }
     }
 
     start_device_log();
