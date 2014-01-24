@@ -451,7 +451,7 @@ on property:ro.debuggable=1
     start console
 
 # adbd is controlled via property triggers in init.<platform>.usb.rc
-service adbd /sbin/adbd
+service adbd /sbin/adbd --root_seclabel=u:r:su:s0
     class core
     socket adbd stream 660 system system
     disabled
