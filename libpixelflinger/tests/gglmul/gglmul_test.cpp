@@ -225,8 +225,6 @@ void gglMulSubx_test()
 }
 
 // gglMulii() tests
-const int32_t INT32_MAX = 0x7FFFFFFF;
-const int32_t INT32_MIN = 0x80000000;
 
 struct gglMulii_test_t
 {
