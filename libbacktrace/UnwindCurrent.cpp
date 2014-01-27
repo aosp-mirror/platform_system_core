@@ -43,7 +43,7 @@
   #include <asm/sigcontext.h>
   #include <asm/ucontext.h>
   typedef struct ucontext ucontext_t;
-#elif !defined(__mips__)
+#elif !defined(__mips__) && !defined(__aarch64__)
   #error Unsupported architecture.
 #endif
 
