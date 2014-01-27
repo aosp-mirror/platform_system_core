@@ -23,8 +23,7 @@ common_shared_libs := \
 	liblog \
 
 # To enable using libunwind on each arch, add it to this list.
-libunwind_architectures :=
-#libunwind_architectures := arm
+libunwind_architectures := arm64
 
 ifeq ($(TARGET_ARCH),$(filter $(TARGET_ARCH),$(libunwind_architectures)))
 
