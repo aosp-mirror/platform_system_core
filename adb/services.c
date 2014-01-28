@@ -355,8 +355,6 @@ int service_to_fd(const char *name)
         ret = create_service_thread(framebuffer_service, 0);
     } else if (!strncmp(name, "jdwp:", 5)) {
         ret = create_jdwp_connection_fd(atoi(name+5));
-    } else if (!strncmp(name, "log:", 4)) {
-        ret = create_service_thread(log_service, get_log_file_path(name + 4));
     } else if(!HOST && !strncmp(name, "shell:", 6)) {
         if(name[6]) {
             ret = create_subproc_thread(name + 6);

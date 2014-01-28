@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 The Android Open Source Project
+ * Copyright (C) 2011-2013 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,8 @@
 #include <cutils/memory.h>
 
 #include <cutils/str_parms.h>
+
+#define UNUSED __attribute__((unused))
 
 struct str_parms {
     Hashmap *map;
@@ -278,10 +280,11 @@ int str_parms_get_float(struct str_parms *str_parms, const char *key,
         return -ENOENT;
 
     out = strtof(value, &end);
-    if (*value != '\0' && *end == '\0')
-        return 0;
+    if (*value == '\0' || *end != '\0')
+        return -EINVAL;
 
-    return -EINVAL;
+    *val = out;
+    return 0;
 }
 
 static bool combine_strings(void *key, void *value, void *context)
@@ -318,7 +321,7 @@ char *str_parms_to_str(struct str_parms *str_parms)
     return str;
 }
 
-static bool dump_entry(void *key, void *value, void *context)
+static bool dump_entry(void *key, void *value, void *context UNUSED)
 {
     ALOGI("key: '%s' value: '%s'\n", (char *)key, (char *)value);
     return true;
