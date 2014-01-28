@@ -35,6 +35,7 @@
 
 #if FAKE_LOG_DEVICE
 // This will be defined when building for the host.
+#include "fake_log_device.h"
 #define log_open(pathname, flags) fakeLogOpen(pathname, flags)
 #define log_writev(filedes, vector, count) fakeLogWritev(filedes, vector, count)
 #define log_close(filedes) fakeLogClose(filedes)
@@ -49,6 +50,8 @@ static int (*write_to_log)(log_id_t, struct iovec *vec, size_t nr) = __write_to_
 #ifdef HAVE_PTHREADS
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
+
+#define UNUSED  __attribute__((__unused__))
 
 static int log_fds[(int)LOG_ID_MAX] = { -1, -1, -1, -1 };
 
@@ -72,7 +75,8 @@ int __android_log_dev_available(void)
     return (g_log_status == kLogAvailable);
 }
 
-static int __write_to_log_null(log_id_t log_fd, struct iovec *vec, size_t nr)
+static int __write_to_log_null(UNUSED log_id_t log_fd, UNUSED struct iovec *vec,
+        UNUSED size_t nr)
 {
     return -1;
 }
