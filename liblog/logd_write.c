@@ -80,8 +80,8 @@ int __android_log_dev_available(void)
     return (g_log_status == kLogAvailable);
 }
 
-static int __write_to_log_null(UNUSED log_id_t log_fd, UNUSED struct iovec *vec,
-        UNUSED size_t nr)
+static int __write_to_log_null(log_id_t log_fd UNUSED, struct iovec *vec UNUSED,
+        size_t nr UNUSED)
 {
     return -1;
 }
