@@ -25,6 +25,7 @@
 #include <libunwind.h>
 
 #include "UnwindCurrent.h"
+#include "UnwindMap.h"
 
 // Define the ucontext_t structures needed for each supported arch.
 #if defined(__arm__)
@@ -119,8 +120,8 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
       }
 
       if (resolve) {
-        frame->func_name = backtrace_obj_->GetFunctionName(frame->pc, &frame->func_offset);
-        frame->map = backtrace_obj_->FindMap(frame->pc);
+        frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
+        frame->map = FindMap(frame->pc);
       } else {
         frame->map = NULL;
         frame->func_offset = 0;
@@ -169,10 +170,6 @@ UnwindThread::UnwindThread() {
 }
 
 UnwindThread::~UnwindThread() {
-}
-
-bool UnwindThread::Init() {
-  return true;
 }
 
 void UnwindThread::ThreadUnwind(
