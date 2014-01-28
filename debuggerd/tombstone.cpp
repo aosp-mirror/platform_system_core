@@ -486,7 +486,8 @@ static void dump_log_file(
         break;
       }
     } else if (actual == 0) {
-      _LOG(log, 0, "Got zero bytes while reading log: %s\n", strerror(errno));
+      _LOG(log, 0, "Got zero bytes while reading log: %s\n",
+        strerror(errno));
       break;
     }
 
@@ -519,7 +520,7 @@ static void dump_log_file(
     // consume any trailing newlines
     char* nl = msg + strlen(msg) - 1;
     while (nl >= msg && *nl == '\n') {
-        *nl-- = '\0';
+      *nl-- = '\0';
     }
 
     char prioChar = (prio < strlen(kPrioChars) ? kPrioChars[prio] : '?');
@@ -534,16 +535,15 @@ static void dump_log_file(
     // Look for line breaks ('\n') and display each text line
     // on a separate line, prefixed with the header, like logcat does.
     do {
-        nl = strchr(msg, '\n');
-        if (nl) {
-            *nl = '\0';
-            ++nl;
-        }
+      nl = strchr(msg, '\n');
+      if (nl) {
+        *nl = '\0';
+        ++nl;
+      }
 
-        _LOG(log, 0, "%s.%03d %5d %5d %c %-8s: %s\n",
-             timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
-             prioChar, tag, msg);
-
+      _LOG(log, 0, "%s.%03d %5d %5d %c %-8s: %s\n",
+         timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
+         prioChar, tag, msg);
     } while ((msg = nl));
   }
 
@@ -630,7 +630,6 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
   }
 
   if (want_logs) {
-    // Dump the last five lines of the logs for the given pid.
     dump_logs(log, pid, 5);
   }
 
@@ -643,7 +642,6 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
   delete map;
 
   if (want_logs) {
-    // Dump the logs for the given pid.
     dump_logs(log, pid, 0);
   }
 
