@@ -1,16 +1,21 @@
-/* utils/logger.h
-** 
-** Copyright 2007, The Android Open Source Project
+/*
+**
+** Copyright 2007-2014, The Android Open Source Project
 **
 ** This file is dual licensed.  It may be redistributed and/or modified
 ** under the terms of the Apache 2.0 License OR version 2 of the GNU
 ** General Public License.
 */
 
-#ifndef _UTILS_LOGGER_H
-#define _UTILS_LOGGER_H
+#ifndef _LIBS_LOG_LOGGER_H
+#define _LIBS_LOG_LOGGER_H
 
 #include <stdint.h>
+#include <log/log.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * The userspace structure for version 1 of the logger_entry ABI.
@@ -43,11 +48,6 @@ struct logger_entry_v2 {
     char        msg[0];    /* the entry's payload */
 };
 
-#define LOGGER_LOG_MAIN		"log/main"
-#define LOGGER_LOG_RADIO	"log/radio"
-#define LOGGER_LOG_EVENTS	"log/events"
-#define LOGGER_LOG_SYSTEM	"log/system"
-
 /*
  * The maximum size of the log entry payload that can be
  * written to the kernel logger driver. An attempt to write
@@ -63,19 +63,108 @@ struct logger_entry_v2 {
  */
 #define LOGGER_ENTRY_MAX_LEN		(5*1024)
 
-#ifdef HAVE_IOCTL
+#define NS_PER_SEC 1000000000ULL
 
-#include <sys/ioctl.h>
+struct log_msg {
+    union {
+        unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
+        struct logger_entry_v2 entry;
+        struct logger_entry_v2 entry_v2;
+        struct logger_entry    entry_v1;
+        struct {
+            unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
+            log_id_t id;
+        } extra;
+    } __attribute__((aligned(4)));
+#ifdef __cplusplus
+    /* Matching log_time operators */
+    bool operator== (const log_msg &T) const
+    {
+        return (entry.sec == T.entry.sec) && (entry.nsec == T.entry.nsec);
+    }
+    bool operator!= (const log_msg &T) const
+    {
+        return !(*this == T);
+    }
+    bool operator< (const log_msg &T) const
+    {
+        return (entry.sec < T.entry.sec)
+            || ((entry.sec == T.entry.sec)
+             && (entry.nsec < T.entry.nsec));
+    }
+    bool operator>= (const log_msg &T) const
+    {
+        return !(*this < T);
+    }
+    bool operator> (const log_msg &T) const
+    {
+        return (entry.sec > T.entry.sec)
+            || ((entry.sec == T.entry.sec)
+             && (entry.nsec > T.entry.nsec));
+    }
+    bool operator<= (const log_msg &T) const
+    {
+        return !(*this > T);
+    }
+    uint64_t nsec(void) const
+    {
+        return static_cast<uint64_t>(entry.sec) * NS_PER_SEC + entry.nsec;
+    }
 
-#define __LOGGERIO	0xAE
+    /* packet methods */
+    log_id_t id(void)
+    {
+        return extra.id;
+    }
+    char *msg(void)
+    {
+        return entry.hdr_size ? (char *) buf + entry.hdr_size : entry_v1.msg;
+    }
+    unsigned int len(void)
+    {
+        return (entry.hdr_size ? entry.hdr_size : sizeof(entry_v1)) + entry.len;
+    }
+#endif
+};
 
-#define LOGGER_GET_LOG_BUF_SIZE		_IO(__LOGGERIO, 1) /* size of log */
-#define LOGGER_GET_LOG_LEN		_IO(__LOGGERIO, 2) /* used log len */
-#define LOGGER_GET_NEXT_ENTRY_LEN	_IO(__LOGGERIO, 3) /* next entry len */
-#define LOGGER_FLUSH_LOG		_IO(__LOGGERIO, 4) /* flush log */
-#define LOGGER_GET_VERSION		_IO(__LOGGERIO, 5) /* abi version */
-#define LOGGER_SET_VERSION		_IO(__LOGGERIO, 6) /* abi version */
+struct logger;
 
-#endif // HAVE_IOCTL
+log_id_t android_logger_get_id(struct logger *logger);
 
-#endif /* _UTILS_LOGGER_H */
+int android_logger_clear(struct logger *logger);
+int android_logger_get_log_size(struct logger *logger);
+int android_logger_get_log_readable_size(struct logger *logger);
+int android_logger_get_log_version(struct logger *logger);
+
+struct logger_list;
+
+struct logger_list *android_logger_list_alloc(int mode,
+                                              unsigned int tail,
+                                              pid_t pid);
+void android_logger_list_free(struct logger_list *logger_list);
+/* In the purest sense, the following two are orthogonal interfaces */
+int android_logger_list_read(struct logger_list *logger_list,
+                             struct log_msg *log_msg);
+
+/* Multiple log_id_t opens */
+struct logger *android_logger_open(struct logger_list *logger_list,
+                                   log_id_t id);
+#define android_logger_close android_logger_free
+/* Single log_id_t open */
+struct logger_list *android_logger_list_open(log_id_t id,
+                                             int mode,
+                                             unsigned int tail,
+                                             pid_t pid);
+#define android_logger_list_close android_logger_list_free
+
+/*
+ * log_id_t helpers
+ */
+log_id_t android_name_to_log_id(const char *logName);
+const char *android_log_id_to_name(log_id_t log_id);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _LIBS_LOG_LOGGER_H */

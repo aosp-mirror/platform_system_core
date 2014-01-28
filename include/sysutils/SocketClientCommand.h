@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2012 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,25 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#ifndef _SOCKETCLIENTCOMMAND_H
+#define _SOCKETCLIENTCOMMAND_H
 
-#include <cutils/list.h>
+#include <sysutils/SocketClient.h>
 
-void list_init(struct listnode *node)
-{
-    node->next = node;
-    node->prev = node;
-}
+class SocketClientCommand {
+public:
+    virtual ~SocketClientCommand() { }
+    virtual void runSocketCommand(SocketClient *client) = 0;
+};
 
-void list_add_tail(struct listnode *head, struct listnode *item)
-{
-    item->next = head;
-    item->prev = head->prev;
-    head->prev->next = item;
-    head->prev = item;
-}
-
-void list_remove(struct listnode *item)
-{
-    item->next->prev = item->prev;
-    item->prev->next = item->next;
-}
+#endif

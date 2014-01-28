@@ -1,87 +1,51 @@
-// Copyright 2006 The Android Open Source Project
+// Copyright 2006-2014 The Android Open Source Project
 
-#include <log/logger.h>
-#include <log/logd.h>
-#include <log/logprint.h>
-#include <log/event_tag_map.h>
-#include <cutils/sockets.h>
-
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
+#include <signal.h>
 #include <time.h>
-#include <errno.h>
-#include <assert.h>
-#include <ctype.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <arpa/inet.h>
+
+#include <cutils/sockets.h>
+#include <log/log.h>
+#include <log/logger.h>
+#include <log/logd.h>
+#include <log/logprint.h>
+#include <log/event_tag_map.h>
 
 #define DEFAULT_LOG_ROTATE_SIZE_KBYTES 16
 #define DEFAULT_MAX_ROTATED_LOGS 4
 
 static AndroidLogFormat * g_logformat;
-static bool g_nonblock = false;
-static int g_tail_lines = 0;
 
 /* logd prefixes records with a length field */
 #define RECORD_LENGTH_FIELD_SIZE_BYTES sizeof(uint32_t)
 
-#define LOG_FILE_DIR    "/dev/log/"
-
-struct queued_entry_t {
-    union {
-        unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1] __attribute__((aligned(4)));
-        struct logger_entry entry __attribute__((aligned(4)));
-    };
-    queued_entry_t* next;
-
-    queued_entry_t() {
-        next = NULL;
-    }
-};
-
-static int cmp(queued_entry_t* a, queued_entry_t* b) {
-    int n = a->entry.sec - b->entry.sec;
-    if (n != 0) {
-        return n;
-    }
-    return a->entry.nsec - b->entry.nsec;
-}
-
 struct log_device_t {
-    char* device;
+    const char* device;
     bool binary;
-    int fd;
+    struct logger *logger;
+    struct logger_list *logger_list;
     bool printed;
     char label;
 
-    queued_entry_t* queue;
     log_device_t* next;
 
-    log_device_t(char* d, bool b, char l) {
+    log_device_t(const char* d, bool b, char l) {
         device = d;
         binary = b;
         label = l;
-        queue = NULL;
         next = NULL;
         printed = false;
-    }
-
-    void enqueue(queued_entry_t* entry) {
-        if (this->queue == NULL) {
-            this->queue = entry;
-        } else {
-            queued_entry_t** e = &this->queue;
-            while (*e && cmp(entry, *e) >= 0) {
-                e = &((*e)->next);
-            }
-            entry->next = *e;
-            *e = entry;
-        }
     }
 };
 
@@ -147,17 +111,14 @@ static void rotateLogs()
 
 }
 
-void printBinary(struct logger_entry *buf)
+void printBinary(struct log_msg *buf)
 {
-    size_t size = sizeof(logger_entry) + buf->len;
-    int ret;
-    
-    do {
-        ret = write(g_outFD, buf, size);
-    } while (ret < 0 && errno == EINTR);
+    size_t size = buf->len();
+
+    TEMP_FAILURE_RETRY(write(g_outFD, buf, size));
 }
 
-static void processBuffer(log_device_t* dev, struct logger_entry *buf)
+static void processBuffer(log_device_t* dev, struct log_msg *buf)
 {
     int bytesWritten = 0;
     int err;
@@ -165,12 +126,14 @@ static void processBuffer(log_device_t* dev, struct logger_entry *buf)
     char binaryMsgBuf[1024];
 
     if (dev->binary) {
-        err = android_log_processBinaryLogBuffer(buf, &entry, g_eventTagMap,
-                binaryMsgBuf, sizeof(binaryMsgBuf));
+        err = android_log_processBinaryLogBuffer(&buf->entry_v1, &entry,
+                                                 g_eventTagMap,
+                                                 binaryMsgBuf,
+                                                 sizeof(binaryMsgBuf));
         //printf(">>> pri=%d len=%d msg='%s'\n",
         //    entry.priority, entry.messageLen, entry.message);
     } else {
-        err = android_log_processLogBuffer(buf, &entry);
+        err = android_log_processLogBuffer(&buf->entry_v1, &entry);
     }
     if (err < 0) {
         goto error;
@@ -197,7 +160,7 @@ static void processBuffer(log_device_t* dev, struct logger_entry *buf)
 
     g_outByteCount += bytesWritten;
 
-    if (g_logRotateSizeKBytes > 0 
+    if (g_logRotateSizeKBytes > 0
         && (g_outByteCount / 1024) >= g_logRotateSizeKBytes
     ) {
         rotateLogs();
@@ -208,165 +171,19 @@ error:
     return;
 }
 
-static void chooseFirst(log_device_t* dev, log_device_t** firstdev) {
-    for (*firstdev = NULL; dev != NULL; dev = dev->next) {
-        if (dev->queue != NULL && (*firstdev == NULL || cmp(dev->queue, (*firstdev)->queue) < 0)) {
-            *firstdev = dev;
-        }
-    }
-}
-
 static void maybePrintStart(log_device_t* dev) {
     if (!dev->printed) {
         dev->printed = true;
         if (g_devCount > 1 && !g_printBinary) {
             char buf[1024];
-            snprintf(buf, sizeof(buf), "--------- beginning of %s\n", dev->device);
+            snprintf(buf, sizeof(buf), "--------- beginning of %s\n",
+                     dev->device);
             if (write(g_outFD, buf, strlen(buf)) < 0) {
                 perror("output error");
                 exit(-1);
             }
         }
     }
-}
-
-static void skipNextEntry(log_device_t* dev) {
-    maybePrintStart(dev);
-    queued_entry_t* entry = dev->queue;
-    dev->queue = entry->next;
-    delete entry;
-}
-
-static void printNextEntry(log_device_t* dev) {
-    maybePrintStart(dev);
-    if (g_printBinary) {
-        printBinary(&dev->queue->entry);
-    } else {
-        processBuffer(dev, &dev->queue->entry);
-    }
-    skipNextEntry(dev);
-}
-
-static void readLogLines(log_device_t* devices)
-{
-    log_device_t* dev;
-    int max = 0;
-    int ret;
-    int queued_lines = 0;
-    bool sleep = false;
-
-    int result;
-    fd_set readset;
-
-    for (dev=devices; dev; dev = dev->next) {
-        if (dev->fd > max) {
-            max = dev->fd;
-        }
-    }
-
-    while (1) {
-        do {
-            timeval timeout = { 0, 5000 /* 5ms */ }; // If we oversleep it's ok, i.e. ignore EINTR.
-            FD_ZERO(&readset);
-            for (dev=devices; dev; dev = dev->next) {
-                FD_SET(dev->fd, &readset);
-            }
-            result = select(max + 1, &readset, NULL, NULL, sleep ? NULL : &timeout);
-        } while (result == -1 && errno == EINTR);
-
-        if (result >= 0) {
-            for (dev=devices; dev; dev = dev->next) {
-                if (FD_ISSET(dev->fd, &readset)) {
-                    queued_entry_t* entry = new queued_entry_t();
-                    /* NOTE: driver guarantees we read exactly one full entry */
-                    ret = read(dev->fd, entry->buf, LOGGER_ENTRY_MAX_LEN);
-                    if (ret < 0) {
-                        if (errno == EINTR) {
-                            delete entry;
-                            goto next;
-                        }
-                        if (errno == EAGAIN) {
-                            delete entry;
-                            break;
-                        }
-                        perror("logcat read");
-                        exit(EXIT_FAILURE);
-                    }
-                    else if (!ret) {
-                        fprintf(stderr, "read: Unexpected EOF!\n");
-                        exit(EXIT_FAILURE);
-                    }
-                    else if (entry->entry.len != ret - sizeof(struct logger_entry)) {
-                        fprintf(stderr, "read: unexpected length. Expected %d, got %d\n",
-                                entry->entry.len, ret - (int) sizeof(struct logger_entry));
-                        exit(EXIT_FAILURE);
-                    }
-
-                    entry->entry.msg[entry->entry.len] = '\0';
-
-                    dev->enqueue(entry);
-                    ++queued_lines;
-                }
-            }
-
-            if (result == 0) {
-                // we did our short timeout trick and there's nothing new
-                // print everything we have and wait for more data
-                sleep = true;
-                while (true) {
-                    chooseFirst(devices, &dev);
-                    if (dev == NULL) {
-                        break;
-                    }
-                    if (g_tail_lines == 0 || queued_lines <= g_tail_lines) {
-                        printNextEntry(dev);
-                    } else {
-                        skipNextEntry(dev);
-                    }
-                    --queued_lines;
-                }
-
-                // the caller requested to just dump the log and exit
-                if (g_nonblock) {
-                    return;
-                }
-            } else {
-                // print all that aren't the last in their list
-                sleep = false;
-                while (g_tail_lines == 0 || queued_lines > g_tail_lines) {
-                    chooseFirst(devices, &dev);
-                    if (dev == NULL || dev->queue->next == NULL) {
-                        break;
-                    }
-                    if (g_tail_lines == 0) {
-                        printNextEntry(dev);
-                    } else {
-                        skipNextEntry(dev);
-                    }
-                    --queued_lines;
-                }
-            }
-        }
-next:
-        ;
-    }
-}
-
-static int clearLog(int logfd)
-{
-    return ioctl(logfd, LOGGER_FLUSH_LOG);
-}
-
-/* returns the total size of the log's ring buffer */
-static int getLogSize(int logfd)
-{
-    return ioctl(logfd, LOGGER_GET_LOG_BUF_SIZE);
-}
-
-/* returns the readable size of the log's ring buffer (that is, amount of the log consumed) */
-static int getLogReadableSize(int logfd)
-{
-    return ioctl(logfd, LOGGER_GET_LOG_LEN);
 }
 
 static void setupOutput()
@@ -406,6 +223,7 @@ static void show_help(const char *cmd)
                     "  -c              clear (flush) the entire log and exit\n"
                     "  -d              dump the log and then exit (don't block)\n"
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
+                    "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
                     "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio'\n"
                     "                  or 'events'. Multiple -b parameters are allowed and the\n"
@@ -465,6 +283,10 @@ int main(int argc, char **argv)
     log_device_t* devices = NULL;
     log_device_t* dev;
     bool needBinary = false;
+    struct logger_list *logger_list;
+    int tail_lines = 0;
+
+    signal(SIGPIPE, exit);
 
     g_logformat = android_log_format_new();
 
@@ -481,14 +303,14 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, "cdt:gsQf:r::n:v:b:B");
+        ret = getopt(argc, argv, "cdt:T:gsQf:r::n:v:b:B");
 
         if (ret < 0) {
             break;
         }
 
         switch(ret) {
-            case 's': 
+            case 's':
                 // default to all silent
                 android_log_addFilterRule(g_logformat, "*:s");
             break;
@@ -499,12 +321,14 @@ int main(int argc, char **argv)
             break;
 
             case 'd':
-                g_nonblock = true;
+                mode = O_RDONLY | O_NDELAY;
             break;
 
             case 't':
-                g_nonblock = true;
-                g_tail_lines = atoi(optarg);
+                mode = O_RDONLY | O_NDELAY;
+                /* FALLTHRU */
+            case 'T':
+                tail_lines = atoi(optarg);
             break;
 
             case 'g':
@@ -512,10 +336,6 @@ int main(int argc, char **argv)
             break;
 
             case 'b': {
-                char* buf = (char*) malloc(strlen(LOG_FILE_DIR) + strlen(optarg) + 1);
-                strcpy(buf, LOG_FILE_DIR);
-                strcat(buf, optarg);
-
                 bool binary = strcmp(optarg, "events") == 0;
                 if (binary) {
                     needBinary = true;
@@ -526,9 +346,9 @@ int main(int argc, char **argv)
                     while (dev->next) {
                         dev = dev->next;
                     }
-                    dev->next = new log_device_t(buf, binary, optarg[0]);
+                    dev->next = new log_device_t(optarg, binary, optarg[0]);
                 } else {
-                    devices = new log_device_t(buf, binary, optarg[0]);
+                    devices = new log_device_t(optarg, binary, optarg[0]);
                 }
                 android::g_devCount++;
             }
@@ -546,8 +366,8 @@ int main(int argc, char **argv)
             break;
 
             case 'r':
-                if (optarg == NULL) {                
-                    android::g_logRotateSizeKBytes 
+                if (optarg == NULL) {
+                    android::g_logRotateSizeKBytes
                                 = DEFAULT_LOG_ROTATE_SIZE_KBYTES;
                 } else {
                     long logRotateSize;
@@ -659,19 +479,15 @@ int main(int argc, char **argv)
     }
 
     if (!devices) {
-        devices = new log_device_t(strdup("/dev/"LOGGER_LOG_MAIN), false, 'm');
+        devices = new log_device_t("main", false, 'm');
         android::g_devCount = 1;
-        int accessmode =
-                  (mode & O_RDONLY) ? R_OK : 0
-                | (mode & O_WRONLY) ? W_OK : 0;
-        // only add this if it's available
-        if (0 == access("/dev/"LOGGER_LOG_SYSTEM, accessmode)) {
-            devices->next = new log_device_t(strdup("/dev/"LOGGER_LOG_SYSTEM), false, 's');
+        if (android_name_to_log_id("system") == LOG_ID_SYSTEM) {
+            devices->next = new log_device_t("system", false, 's');
             android::g_devCount++;
         }
     }
 
-    if (android::g_logRotateSizeKBytes != 0 
+    if (android::g_logRotateSizeKBytes != 0
         && android::g_outputFileName == NULL
     ) {
         fprintf(stderr,"-r requires -f as well\n");
@@ -688,7 +504,7 @@ int main(int argc, char **argv)
             err = setLogFormat(logFormat);
 
             if (err < 0) {
-                fprintf(stderr, "invalid format in ANDROID_PRINTF_LOG '%s'\n", 
+                fprintf(stderr, "invalid format in ANDROID_PRINTF_LOG '%s'\n",
                                     logFormat);
             }
         }
@@ -707,8 +523,8 @@ int main(int argc, char **argv)
         if (env_tags_orig != NULL) {
             err = android_log_addFilterString(g_logformat, env_tags_orig);
 
-            if (err < 0) { 
-                fprintf(stderr, "Invalid filter expression in" 
+            if (err < 0) {
+                fprintf(stderr, "Invalid filter expression in"
                                     " ANDROID_LOG_TAGS\n");
                 android::show_help(argv[0]);
                 exit(-1);
@@ -719,7 +535,7 @@ int main(int argc, char **argv)
         for (int i = optind ; i < argc ; i++) {
             err = android_log_addFilterString(g_logformat, argv[i]);
 
-            if (err < 0) { 
+            if (err < 0) {
                 fprintf (stderr, "Invalid filter expression '%s'\n", argv[i]);
                 android::show_help(argv[0]);
                 exit(-1);
@@ -728,19 +544,21 @@ int main(int argc, char **argv)
     }
 
     dev = devices;
+    logger_list = android_logger_list_alloc(mode, tail_lines, 0);
     while (dev) {
-        dev->fd = open(dev->device, mode);
-        if (dev->fd < 0) {
-            fprintf(stderr, "Unable to open log device '%s': %s\n",
-                dev->device, strerror(errno));
+        dev->logger_list = logger_list;
+        dev->logger = android_logger_open(logger_list,
+                                          android_name_to_log_id(dev->device));
+        if (!dev->logger) {
+            fprintf(stderr, "Unable to open log device '%s'\n", dev->device);
             exit(EXIT_FAILURE);
         }
 
         if (clearLog) {
             int ret;
-            ret = android::clearLog(dev->fd);
+            ret = android_logger_clear(dev->logger);
             if (ret) {
-                perror("ioctl");
+                perror("clearLog");
                 exit(EXIT_FAILURE);
             }
         }
@@ -748,15 +566,15 @@ int main(int argc, char **argv)
         if (getLogSize) {
             int size, readable;
 
-            size = android::getLogSize(dev->fd);
+            size = android_logger_get_log_size(dev->logger);
             if (size < 0) {
-                perror("ioctl");
+                perror("getLogSize");
                 exit(EXIT_FAILURE);
             }
 
-            readable = android::getLogReadableSize(dev->fd);
+            readable = android_logger_get_log_readable_size(dev->logger);
             if (readable < 0) {
-                perror("ioctl");
+                perror("getLogReadableSize");
                 exit(EXIT_FAILURE);
             }
 
@@ -783,7 +601,51 @@ int main(int argc, char **argv)
     if (needBinary)
         android::g_eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
 
-    android::readLogLines(devices);
+    while (1) {
+        struct log_msg log_msg;
+        int ret = android_logger_list_read(logger_list, &log_msg);
+
+        if (ret == 0) {
+            fprintf(stderr, "read: Unexpected EOF!\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if (ret < 0) {
+            if (ret == -EAGAIN) {
+                break;
+            }
+
+            if (ret == -EIO) {
+                fprintf(stderr, "read: Unexpected EOF!\n");
+                exit(EXIT_FAILURE);
+            }
+            if (ret == -EINVAL) {
+                fprintf(stderr, "read: unexpected length.\n");
+                exit(EXIT_FAILURE);
+            }
+            perror("logcat read");
+            exit(EXIT_FAILURE);
+        }
+
+        for(dev = devices; dev; dev = dev->next) {
+            if (android_name_to_log_id(dev->device) == log_msg.id()) {
+                break;
+            }
+        }
+        if (!dev) {
+            fprintf(stderr, "read: Unexpected log ID!\n");
+            exit(EXIT_FAILURE);
+        }
+
+        android::maybePrintStart(dev);
+        if (android::g_printBinary) {
+            android::printBinary(&log_msg);
+        } else {
+            android::processBuffer(dev, &log_msg);
+        }
+    }
+
+    android_logger_list_free(logger_list);
 
     return 0;
 }

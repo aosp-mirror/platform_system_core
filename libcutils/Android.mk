@@ -37,7 +37,6 @@ commonSources := \
 	config_utils.c \
 	cpu_info.c \
 	load_file.c \
-	list.c \
 	open_memstream.c \
 	strdup16to8.c \
 	strdup8to16.c \

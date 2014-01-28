@@ -1,7 +1,6 @@
-
-/* libs/cutils/iosched_policy.c
+/*
 **
-** Copyright 2007, The Android Open Source Project
+** Copyright 2007-2014, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License"); 
 ** you may not use this file except in compliance with the License. 
@@ -27,7 +26,11 @@
 
 #include <cutils/iosched_policy.h>
 
+#ifdef HAVE_ANDROID_OS
+/* #include <linux/ioprio.h> */
 extern int ioprio_set(int which, int who, int ioprio);
+extern int ioprio_get(int which, int who);
+#endif
 
 enum {
     WHO_PROCESS = 1,
