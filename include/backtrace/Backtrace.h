@@ -64,10 +64,6 @@ public:
   // Find the map associated with the given pc.
   virtual const backtrace_map_t* FindMap(uintptr_t pc);
 
-  // Take ownership of the BacktraceMap object associated with the backtrace.
-  // If this is called, the caller must handle deleting the object themselves.
-  virtual BacktraceMap* TakeMapOwnership();
-
   // Read the data at a specific address.
   virtual bool ReadWord(uintptr_t ptr, uint32_t* out_value) = 0;
 

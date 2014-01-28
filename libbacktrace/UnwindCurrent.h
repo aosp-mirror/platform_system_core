@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "Backtrace.h"
+#include "BacktraceImpl.h"
 #include "BacktraceThread.h"
 
 #define UNW_LOCAL_ONLY
@@ -38,8 +38,6 @@ public:
 
   void ExtractContext(void* sigcontext);
 
-  virtual BacktraceMap* CreateBacktraceMap(pid_t pid) { return new BacktraceMap(pid); }
-
 protected:
   unw_context_t context_;
 };
@@ -48,8 +46,6 @@ class UnwindThread : public UnwindCurrent, public BacktraceThreadInterface {
 public:
   UnwindThread();
   virtual ~UnwindThread();
-
-  virtual bool Init();
 
   virtual void ThreadUnwind(
       siginfo_t* siginfo, void* sigcontext, size_t num_ignore_frames);

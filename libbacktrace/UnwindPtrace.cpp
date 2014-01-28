@@ -25,6 +25,7 @@
 #include <libunwind.h>
 #include <libunwind-ptrace.h>
 
+#include "UnwindMap.h"
 #include "UnwindPtrace.h"
 
 UnwindPtrace::UnwindPtrace() : addr_space_(NULL), upt_info_(NULL) {
@@ -36,6 +37,10 @@ UnwindPtrace::~UnwindPtrace() {
     upt_info_ = NULL;
   }
   if (addr_space_) {
+    // Remove the map from the address space before destroying it.
+    // It will be freed in the UnwindMap destructor.
+    unw_map_set(addr_space_, NULL);
+
     unw_destroy_addr_space(addr_space_);
     addr_space_ = NULL;
   }
@@ -48,7 +53,10 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames) {
     return false;
   }
 
-  upt_info_ = reinterpret_cast<struct UPT_info*>(_UPT_create(backtrace_obj_->Tid()));
+  UnwindMap* map = static_cast<UnwindMap*>(GetMap());
+  unw_map_set(addr_space_, map->GetMapCursor());
+
+  upt_info_ = reinterpret_cast<struct UPT_info*>(_UPT_create(Tid()));
   if (!upt_info_) {
     BACK_LOGW("Failed to create upt info.");
     return false;
@@ -91,9 +99,9 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames) {
         prev->stack_size = frame->sp - prev->sp;
       }
 
-      frame->func_name = backtrace_obj_->GetFunctionName(frame->pc, &frame->func_offset);
+      frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
 
-      frame->map = backtrace_obj_->FindMap(frame->pc);
+      frame->map = FindMap(frame->pc);
 
       num_frames++;
     } else {

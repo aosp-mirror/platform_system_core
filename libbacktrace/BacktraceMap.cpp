@@ -21,8 +21,12 @@
 #include <string>
 #include <vector>
 
+#include <backtrace/backtrace_constants.h>
 #include <backtrace/BacktraceMap.h>
 #include <log/log.h>
+
+#include "thread_utils.h"
+#include "BacktraceImpl.h"
 
 BacktraceMap::BacktraceMap(pid_t pid) : pid_(pid) {
   if (pid_ < 0) {
@@ -128,3 +132,16 @@ bool BacktraceMap::Build() {
 
   return true;
 }
+
+#if defined(__APPLE__)
+// Corkscrew and libunwind don't compile on the mac, so create a generic
+// map object.
+BacktraceMap* BacktraceMap::Create(pid_t pid) {
+  BacktraceMap* map = new BacktraceMap(pid);
+  if (!map->Build()) {
+    delete map;
+    return NULL;
+  }
+  return map;
+}
+#endif
