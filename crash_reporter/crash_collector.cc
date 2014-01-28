@@ -316,9 +316,9 @@ FilePath CrashCollector::GetProcessPath(pid_t pid) {
 }
 
 bool CrashCollector::GetSymlinkTarget(const FilePath &symlink,
-                                     FilePath *target) {
+                                      FilePath *target) {
   int max_size = 32;
-  scoped_array<char> buffer;
+  scoped_ptr<char[]> buffer;
   while (true) {
     buffer.reset(new char[max_size + 1]);
     ssize_t size = readlink(symlink.value().c_str(), buffer.get(), max_size);
