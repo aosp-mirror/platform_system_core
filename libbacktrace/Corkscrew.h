@@ -26,25 +26,8 @@
 
 #include <corkscrew/backtrace.h>
 
-#include "Backtrace.h"
+#include "BacktraceImpl.h"
 #include "BacktraceThread.h"
-
-class CorkscrewCommon : public BacktraceImpl {
-public:
-  bool GenerateFrameData(backtrace_frame_t* cork_frames, ssize_t num_frames);
-
-  virtual BacktraceMap* CreateBacktraceMap(pid_t pid) { return new BacktraceMap(pid); }
-};
-
-class CorkscrewCurrent : public CorkscrewCommon {
-public:
-  CorkscrewCurrent();
-  virtual ~CorkscrewCurrent();
-
-  virtual bool Unwind(size_t num_ignore_threads);
-
-  virtual std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
-};
 
 class CorkscrewMap : public BacktraceMap {
 public:
@@ -59,17 +42,28 @@ private:
   map_info_t* map_info_;
 };
 
+class CorkscrewCommon : public BacktraceImpl {
+public:
+  bool GenerateFrameData(backtrace_frame_t* cork_frames, ssize_t num_frames);
+};
+
+class CorkscrewCurrent : public CorkscrewCommon {
+public:
+  CorkscrewCurrent();
+  virtual ~CorkscrewCurrent();
+
+  virtual bool Unwind(size_t num_ignore_threads);
+
+  virtual std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
+};
+
 class CorkscrewThread : public CorkscrewCurrent, public BacktraceThreadInterface {
 public:
   CorkscrewThread();
   virtual ~CorkscrewThread();
 
-  virtual bool Init();
-
   virtual void ThreadUnwind(
       siginfo_t* siginfo, void* sigcontext, size_t num_ignore_frames);
-
-  virtual BacktraceMap* CreateBacktraceMap(pid_t pid) { return new CorkscrewMap(pid); }
 };
 
 class CorkscrewPtrace : public CorkscrewCommon {

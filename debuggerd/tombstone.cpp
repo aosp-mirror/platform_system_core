@@ -625,12 +625,9 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
     dump_fault_addr(log, tid, signal);
   }
 
-  BacktraceMap* map = NULL;
-  UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, tid));
+  UniquePtr<BacktraceMap> map(BacktraceMap::Create(pid));
+  UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, tid, map.get()));
   if (backtrace->Unwind(0)) {
-    // Grab the map that was created and share it with the siblings.
-    map = backtrace->TakeMapOwnership();
-
     dump_abort_message(backtrace.get(), log, abort_msg_address);
     dump_thread(backtrace.get(), log, SCOPE_AT_FAULT, total_sleep_time_usec);
   }
@@ -641,11 +638,8 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
 
   bool detach_failed = false;
   if (dump_sibling_threads) {
-    detach_failed = dump_sibling_thread_report(log, pid, tid, total_sleep_time_usec, map);
+    detach_failed = dump_sibling_thread_report(log, pid, tid, total_sleep_time_usec, map.get());
   }
-
-  // Destroy the BacktraceMap object.
-  delete map;
 
   if (want_logs) {
     dump_logs(log, pid, 0);

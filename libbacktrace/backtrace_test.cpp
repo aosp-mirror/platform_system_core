@@ -247,7 +247,7 @@ TEST(libbacktrace, local_max_trace) {
   ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, VerifyMaxBacktrace, NULL), 0);
 }
 
-void VerifyProcTest(pid_t pid, pid_t tid,
+void VerifyProcTest(pid_t pid, pid_t tid, bool share_map,
                     bool (*ReadyFunc)(Backtrace*),
                     void (*VerifyFunc)(Backtrace*)) {
   pid_t ptrace_tid;
@@ -264,7 +264,11 @@ void VerifyProcTest(pid_t pid, pid_t tid,
       // Wait for the process to get to a stopping point.
       WaitForStop(ptrace_tid);
 
-      UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, tid));
+      UniquePtr<BacktraceMap> map;
+      if (share_map) {
+        map.reset(BacktraceMap::Create(pid));
+      }
+      UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, tid, map.get()));
       ASSERT_TRUE(backtrace->Unwind(0));
       ASSERT_TRUE(backtrace.get() != NULL);
       if (ReadyFunc(backtrace.get())) {
@@ -285,7 +289,21 @@ TEST(libbacktrace, ptrace_trace) {
     ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
     exit(1);
   }
-  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyLevelDump);
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyLevelBacktrace, VerifyLevelDump);
+
+  kill(pid, SIGKILL);
+  int status;
+  ASSERT_EQ(waitpid(pid, &status, 0), pid);
+}
+
+TEST(libbacktrace, ptrace_trace_shared_map) {
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
+    exit(1);
+  }
+
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, true, ReadyLevelBacktrace, VerifyLevelDump);
 
   kill(pid, SIGKILL);
   int status;
@@ -298,7 +316,7 @@ TEST(libbacktrace, ptrace_max_trace) {
     ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, NULL, NULL), 0);
     exit(1);
   }
-  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyMaxBacktrace, VerifyMaxDump);
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyMaxBacktrace, VerifyMaxDump);
 
   kill(pid, SIGKILL);
   int status;
@@ -323,7 +341,7 @@ TEST(libbacktrace, ptrace_ignore_frames) {
     ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
     exit(1);
   }
-  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, ReadyLevelBacktrace, VerifyProcessIgnoreFrames);
+  VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyLevelBacktrace, VerifyProcessIgnoreFrames);
 
   kill(pid, SIGKILL);
   int status;
@@ -387,7 +405,7 @@ TEST(libbacktrace, ptrace_threads) {
     if (pid == *it) {
       continue;
     }
-    VerifyProcTest(pid, *it, ReadyLevelBacktrace, VerifyLevelDump);
+    VerifyProcTest(pid, *it, false, ReadyLevelBacktrace, VerifyLevelDump);
   }
   ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
 
@@ -584,6 +602,29 @@ TEST(libbacktrace, thread_multiple_dump) {
     delete dumpers[i].backtrace;
     dumpers[i].backtrace = NULL;
   }
+}
+
+// This test is for UnwindMaps that should share the same map cursor when
+// multiple maps are created for the current process at the same time.
+TEST(libbacktrace, simultaneous_maps) {
+  BacktraceMap* map1 = BacktraceMap::Create(getpid());
+  BacktraceMap* map2 = BacktraceMap::Create(getpid());
+  BacktraceMap* map3 = BacktraceMap::Create(getpid());
+
+  Backtrace* back1 = Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD, map1);
+  EXPECT_TRUE(back1->Unwind(0));
+  delete back1;
+  delete map1;
+
+  Backtrace* back2 = Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD, map2);
+  EXPECT_TRUE(back2->Unwind(0));
+  delete back2;
+  delete map2;
+
+  Backtrace* back3 = Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD, map3);
+  EXPECT_TRUE(back3->Unwind(0));
+  delete back3;
+  delete map3;
 }
 
 TEST(libbacktrace, format_test) {
