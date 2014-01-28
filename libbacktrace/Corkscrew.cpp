@@ -65,7 +65,8 @@ bool CorkscrewMap::Build() {
     }
     map.name = cur_map->name;
 
-    maps_.push_back(map);
+    // The maps are in descending order, but we want them in ascending order.
+    maps_.push_front(map);
 
     cur_map = cur_map->next;
   }
@@ -93,8 +94,8 @@ bool CorkscrewCommon::GenerateFrameData(
     it->stack_size = cork_frames[i].stack_size;
     it->func_offset = 0;
 
-    it->map = backtrace_obj_->FindMap(it->pc);
-    it->func_name = backtrace_obj_->GetFunctionName(it->pc, &it->func_offset);
+    it->map = FindMap(it->pc);
+    it->func_name = GetFunctionName(it->pc, &it->func_offset);
   }
   return true;
 }
@@ -119,7 +120,7 @@ std::string CorkscrewCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset
   *offset = 0;
 
   Dl_info info;
-  const backtrace_map_t* map = backtrace_obj_->FindMap(pc);
+  const backtrace_map_t* map = FindMap(pc);
   if (map) {
     if (dladdr((const void*)pc, &info)) {
       if (info.dli_sname) {
@@ -158,19 +159,10 @@ CorkscrewThread::CorkscrewThread() {
 CorkscrewThread::~CorkscrewThread() {
 }
 
-bool CorkscrewThread::Init() {
-  if (backtrace_obj_->GetMap() == NULL) {
-    // Trigger the map object creation, which will create the corkscrew
-    // map information.
-    return BuildMap();
-  }
-  return true;
-}
-
 void CorkscrewThread::ThreadUnwind(
     siginfo_t* siginfo, void* sigcontext, size_t num_ignore_frames) {
   backtrace_frame_t cork_frames[MAX_BACKTRACE_FRAMES];
-  CorkscrewMap* map = static_cast<CorkscrewMap*>(backtrace_obj_->GetMap());
+  CorkscrewMap* map = static_cast<CorkscrewMap*>(GetMap());
   ssize_t num_frames = unwind_backtrace_signal_arch(
       siginfo, sigcontext, map->GetMapInfo(), cork_frames,
       num_ignore_frames, MAX_BACKTRACE_FRAMES);
@@ -204,12 +196,11 @@ CorkscrewPtrace::~CorkscrewPtrace() {
 }
 
 bool CorkscrewPtrace::Unwind(size_t num_ignore_frames) {
-  ptrace_context_ = load_ptrace_context(backtrace_obj_->Tid());
+  ptrace_context_ = load_ptrace_context(Tid());
 
   backtrace_frame_t frames[MAX_BACKTRACE_FRAMES];
   ssize_t num_frames = unwind_backtrace_ptrace(
-      backtrace_obj_->Tid(), ptrace_context_, frames, num_ignore_frames,
-      MAX_BACKTRACE_FRAMES);
+      Tid(), ptrace_context_, frames, num_ignore_frames, MAX_BACKTRACE_FRAMES);
 
   return GenerateFrameData(frames, num_frames);
 }
@@ -245,4 +236,16 @@ Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, BacktraceMap* map) {
 Backtrace* CreateThreadObj(pid_t tid, BacktraceMap* map) {
   CorkscrewThread* thread_obj = new CorkscrewThread();
   return new BacktraceThread(thread_obj, thread_obj, tid, map);
+}
+
+//-------------------------------------------------------------------------
+// BacktraceMap create function.
+//-------------------------------------------------------------------------
+BacktraceMap* BacktraceMap::Create(pid_t pid) {
+  BacktraceMap* map = new CorkscrewMap(pid);
+  if (!map->Build()) {
+    delete map;
+    return NULL;
+  }
+  return map;
 }

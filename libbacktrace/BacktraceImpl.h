@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef _LIBBACKTRACE_BACKTRACE_H
-#define _LIBBACKTRACE_BACKTRACE_H
+#ifndef _LIBBACKTRACE_BACKTRACE_IMPL_H
+#define _LIBBACKTRACE_BACKTRACE_IMPL_H
 
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
@@ -39,12 +39,19 @@ public:
 
   void SetParent(Backtrace* backtrace) { backtrace_obj_ = backtrace; }
 
-  virtual BacktraceMap* CreateBacktraceMap(pid_t pid) = 0;
+  inline pid_t Pid() { return backtrace_obj_->Pid(); }
+  inline pid_t Tid() { return backtrace_obj_->Tid(); }
+
+  inline const backtrace_map_t* FindMap(uintptr_t addr) {
+    return backtrace_obj_->FindMap(addr);
+  }
+  inline std::string GetFunctionName(uintptr_t pc, uintptr_t* offset) {
+    return backtrace_obj_->GetFunctionName(pc, offset);
+  }
+  inline BacktraceMap* GetMap() { return backtrace_obj_->GetMap(); }
 
 protected:
   inline std::vector<backtrace_frame_data_t>* GetFrames() { return &backtrace_obj_->frames_; }
-
-  inline bool BuildMap() { return backtrace_obj_->BuildMap(); }
 
   Backtrace* backtrace_obj_;
 };
@@ -69,4 +76,4 @@ Backtrace* CreateCurrentObj(BacktraceMap* map);
 Backtrace* CreatePtraceObj(pid_t pid, pid_t tid, BacktraceMap* map);
 Backtrace* CreateThreadObj(pid_t tid, BacktraceMap* map);
 
-#endif // _LIBBACKTRACE_BACKTRACE_H
+#endif // _LIBBACKTRACE_BACKTRACE_IMPL_H
