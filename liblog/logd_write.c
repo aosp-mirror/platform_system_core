@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2007-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,12 @@
 #include <log/logd.h>
 #include <log/log.h>
 
-#define LOG_BUF_SIZE	1024
+#define LOGGER_LOG_MAIN		"log/main"
+#define LOGGER_LOG_RADIO	"log/radio"
+#define LOGGER_LOG_EVENTS	"log/events"
+#define LOGGER_LOG_SYSTEM	"log/system"
+
+#define LOG_BUF_SIZE 1024
 
 #if FAKE_LOG_DEVICE
 // This will be defined when building for the host.
@@ -240,7 +245,7 @@ int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fm
 }
 
 void __android_log_assert(const char *cond, const char *tag,
-			  const char *fmt, ...)
+                          const char *fmt, ...)
 {
     char buf[LOG_BUF_SIZE];
 

@@ -6,22 +6,23 @@
 #include <pthread.h>
 #include <cutils/atomic.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 
 class SocketClient {
     int             mSocket;
     bool            mSocketOwned;
     pthread_mutex_t mWriteMutex;
 
-    /* Peer process ID */
+    // Peer process ID
     pid_t mPid;
 
-    /* Peer user ID */
+    // Peer user ID
     uid_t mUid;
 
-    /* Peer group ID */
+    // Peer group ID
     gid_t mGid;
 
-    /* Reference count (starts at 1) */
+    // Reference count (starts at 1)
     pthread_mutex_t mRefCountMutex;
     int mRefCount;
 
@@ -38,12 +39,15 @@ public:
     pid_t getPid() const { return mPid; }
     uid_t getUid() const { return mUid; }
     gid_t getGid() const { return mGid; }
-    void setCmdNum(int cmdNum) { android_atomic_release_store(cmdNum, &mCmdNum); }
+    void setCmdNum(int cmdNum) {
+        android_atomic_release_store(cmdNum, &mCmdNum);
+    }
     int getCmdNum() { return mCmdNum; }
 
     // Send null-terminated C strings:
     int sendMsg(int code, const char *msg, bool addErrno);
     int sendMsg(int code, const char *msg, bool addErrno, bool useCmdNum);
+    int sendMsg(const char *msg);
 
     // Provides a mechanism to send a response code to the client.
     // Sends the code and a null character.
@@ -56,6 +60,8 @@ public:
 
     // Sending binary data:
     int sendData(const void *data, int len);
+    // iovec contents not preserved through call
+    int sendDatav(struct iovec *iov, int iovcnt);
 
     // Optional reference counting.  Reference count starts at 1.  If
     // it's decremented to 0, it deletes itself.
@@ -64,19 +70,18 @@ public:
     void incRef();
     bool decRef(); // returns true at 0 (but note: SocketClient already deleted)
 
-    // return a new string in quotes with '\\' and '\"' escaped for "my arg" transmissions
+    // return a new string in quotes with '\\' and '\"' escaped for "my arg"
+    // transmissions
     static char *quoteArg(const char *arg);
 
 private:
-    // Send null-terminated C strings
-    int sendMsg(const char *msg);
     void init(int socket, bool owned, bool useCmdNum);
 
-    // Sending binary data. The caller should use make sure this is protected
+    // Sending binary data. The caller should make sure this is protected
     // from multiple threads entering simultaneously.
-    // returns 0 if successful, -1 if there is a 0 byte write and -2 if any other
-    // error occurred (use errno to get the error)
-    int sendDataLocked(const void *data, int len);
+    // returns 0 if successful, -1 if there is a 0 byte write or if any
+    // other error occurred (use errno to get the error)
+    int sendDataLockedv(struct iovec *iov, int iovcnt);
 };
 
 typedef android::sysutils::List<SocketClient *> SocketClientCollection;

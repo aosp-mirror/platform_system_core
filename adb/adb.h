@@ -330,9 +330,7 @@ typedef enum {
 } BackupOperation;
 int backup_service(BackupOperation operation, char* args);
 void framebuffer_service(int fd, void *cookie);
-void log_service(int fd, void *cookie);
 void remount_service(int fd, void *cookie);
-char * get_log_file_path(const char * log_name);
 #endif
 
 /* packet allocator */

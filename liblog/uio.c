@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2007-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,8 @@ int  readv( int  fd, struct iovec*  vecs, int  count )
     int   total = 0;
 
     for ( ; count > 0; count--, vecs++ ) {
-        const char*  buf = vecs->iov_base;
-        int          len = vecs->iov_len;
+        char*  buf = vecs->iov_base;
+        int    len = vecs->iov_len;
         
         while (len > 0) {
             int  ret = read( fd, buf, len );
@@ -51,8 +51,8 @@ int  writev( int  fd, const struct iovec*  vecs, int  count )
     int   total = 0;
 
     for ( ; count > 0; count--, vecs++ ) {
-        const char*  buf = (const char*)vecs->iov_base;
-        int          len = (int)vecs->iov_len;
+        const char*  buf = vecs->iov_base;
+        int          len = vecs->iov_len;
         
         while (len > 0) {
             int  ret = write( fd, buf, len );

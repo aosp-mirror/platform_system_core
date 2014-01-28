@@ -1,6 +1,6 @@
-/* //device/libs/cutils/logprint.c
+/*
 **
-** Copyright 2006, The Android Open Source Project
+** Copyright 2006-2014, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -377,8 +377,13 @@ int android_log_processLogBuffer(struct logger_entry *buf,
     int msgEnd = -1;
 
     int i;
+    char *msg = buf->msg;
+    struct logger_entry_v2 *buf2 = (struct logger_entry_v2 *)buf;
+    if (buf2->hdr_size) {
+        msg = ((char *)buf2) + buf2->hdr_size;
+    }
     for (i = 1; i < buf->len; i++) {
-        if (buf->msg[i] == '\0') {
+        if (msg[i] == '\0') {
             if (msgStart == -1) {
                 msgStart = i + 1;
             } else {
@@ -395,12 +400,12 @@ int android_log_processLogBuffer(struct logger_entry *buf,
     if (msgEnd == -1) {
         // incoming message not null-terminated; force it
         msgEnd = buf->len - 1;
-        buf->msg[msgEnd] = '\0';
+        msg[msgEnd] = '\0';
     }
 
-    entry->priority = buf->msg[0];
-    entry->tag = buf->msg + 1;
-    entry->message = buf->msg + msgStart;
+    entry->priority = msg[0];
+    entry->tag = msg + 1;
+    entry->message = msg + msgStart;
     entry->messageLen = msgEnd - msgStart;
 
     return 0;
@@ -614,6 +619,10 @@ int android_log_processBinaryLogBuffer(struct logger_entry *buf,
      * Pull the tag out.
      */
     eventData = (const unsigned char*) buf->msg;
+    struct logger_entry_v2 *buf2 = (struct logger_entry_v2 *)buf;
+    if (buf2->hdr_size) {
+        eventData = ((unsigned char *)buf2) + buf2->hdr_size;
+    }
     inCount = buf->len;
     if (inCount < 4)
         return -1;

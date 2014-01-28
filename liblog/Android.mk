@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2008 The Android Open Source Project
+# Copyright (C) 2008-2014 The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ else
 endif
 
 liblog_host_sources := $(liblog_sources) fake_log_device.c
-
+liblog_target_sources = $(liblog_sources) log_read.c
 
 # Shared and static library for host
 # ========================================================
@@ -67,15 +67,16 @@ LOCAL_LDLIBS := -lpthread
 LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1 -m64
 include $(BUILD_HOST_STATIC_LIBRARY)
 
-
 # Shared and static library for target
 # ========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
-LOCAL_SRC_FILES := $(liblog_sources)
+LOCAL_SRC_FILES := $(liblog_target_sources)
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_WHOLE_STATIC_LIBRARIES := liblog
 include $(BUILD_SHARED_LIBRARY)
+
+include $(call first-makefiles-under,$(LOCAL_PATH))

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2008-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include <pthread.h>
 
 #include <sysutils/SocketClient.h>
+#include "SocketClientCommand.h"
 
 class SocketListener {
     bool                    mListen;
@@ -41,10 +42,15 @@ public:
 
     void sendBroadcast(int code, const char *msg, bool addErrno);
 
+    void runOnEachSocket(SocketClientCommand *command);
+
+    bool release(SocketClient *c) { return release(c, true); }
+
 protected:
     virtual bool onDataAvailable(SocketClient *c) = 0;
 
 private:
+    bool release(SocketClient *c, bool wakeup);
     static void *threadStart(void *obj);
     void runListener();
     void init(const char *socketName, int socketFd, bool listen, bool useCmdNum);
