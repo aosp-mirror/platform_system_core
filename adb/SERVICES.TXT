@@ -198,11 +198,6 @@ localfilesystem:<path>
     Variants of local:<path> that are used to access other Android
     socket namespaces.
 
-log:<name>
-    Opens one of the system logs (/dev/log/<name>) and allows the client
-    to read them directly. Used to implement 'adb logcat'. The stream
-    will be read-only for the client.
-
 framebuffer:
     This service is used to send snapshots of the framebuffer to a client.
     It requires sufficient privileges but works as follow:

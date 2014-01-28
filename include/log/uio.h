@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2007-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,8 +31,8 @@ extern "C" {
 #include <stddef.h>
 
 struct iovec {
-    const void*  iov_base;
-    size_t       iov_len;
+    void*  iov_base;
+    size_t iov_len;
 };
 
 extern int  readv( int  fd, struct iovec*  vecs, int  count );
