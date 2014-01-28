@@ -19,6 +19,8 @@
  * passed on to the underlying (fake) log device.  When not in the
  * simulator, messages are printed to stderr.
  */
+#include "fake_log_device.h"
+
 #include <log/logd.h>
 
 #include <stdlib.h>
