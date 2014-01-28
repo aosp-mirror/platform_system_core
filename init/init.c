@@ -868,6 +868,7 @@ struct selabel_handle* selinux_android_prop_context_handle(void)
 void selinux_init_all_handles(void)
 {
     sehandle = selinux_android_file_context_handle();
+    selinux_android_set_sehandle(sehandle);
     sehandle_prop = selinux_android_prop_context_handle();
 }
 
