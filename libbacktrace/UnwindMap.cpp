@@ -33,7 +33,7 @@
 // of maps using the same map cursor.
 //-------------------------------------------------------------------------
 static pthread_mutex_t g_map_mutex = PTHREAD_MUTEX_INITIALIZER;
-static unw_map_cursor_t* g_map_cursor = NULL;
+static unw_map_cursor_t g_map_cursor;
 static int g_map_references = 0;
 
 UnwindMap::UnwindMap(pid_t pid) : BacktraceMap(pid) {
@@ -64,11 +64,11 @@ bool UnwindMap::Build() {
         // Set the local address space to this cursor map.
         unw_map_set(unw_local_addr_space, &map_cursor_);
         g_map_references = 1;
-        g_map_cursor = &map_cursor_;
+        g_map_cursor = map_cursor_;
       }
     } else {
       g_map_references++;
-      map_cursor_ = *g_map_cursor;
+      map_cursor_ = g_map_cursor;
     }
     pthread_mutex_unlock(&g_map_mutex);
   } else {
