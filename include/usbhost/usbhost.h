@@ -189,6 +189,13 @@ int usb_device_release_interface(struct usb_device *device, unsigned int interfa
 int usb_device_connect_kernel_driver(struct usb_device *device,
         unsigned int interface, int connect);
 
+/* Sets the current configuration for the device to the specified configuration */
+int usb_device_set_configuration(struct usb_device *device, int configuration);
+
+/* Sets the specified interface of a USB device */
+int usb_device_set_interface(struct usb_device *device, unsigned int interface,
+                            unsigned int alt_setting);
+
 /* Sends a control message to the specified device on endpoint zero */
 int usb_device_control_transfer(struct usb_device *device,
                             int requestType,
