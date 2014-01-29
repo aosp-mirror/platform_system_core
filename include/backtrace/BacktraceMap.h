@@ -28,8 +28,8 @@
 #include <sys/mman.h>
 #endif
 
+#include <deque>
 #include <string>
-#include <vector>
 
 struct backtrace_map_t {
   uintptr_t start;
@@ -40,7 +40,8 @@ struct backtrace_map_t {
 
 class BacktraceMap {
 public:
-  BacktraceMap(pid_t pid);
+  static BacktraceMap* Create(pid_t pid);
+
   virtual ~BacktraceMap();
 
   // Get the map data structure for the given address.
@@ -60,20 +61,22 @@ public:
   bool IsWritable(uintptr_t pc) { return GetFlags(pc) & PROT_WRITE; }
   bool IsExecutable(uintptr_t pc) { return GetFlags(pc) & PROT_EXEC; }
 
-  typedef std::vector<backtrace_map_t>::iterator iterator;
+  typedef std::deque<backtrace_map_t>::iterator iterator;
   iterator begin() { return maps_.begin(); }
   iterator end() { return maps_.end(); }
 
-  typedef std::vector<backtrace_map_t>::const_iterator const_iterator;
+  typedef std::deque<backtrace_map_t>::const_iterator const_iterator;
   const_iterator begin() const { return maps_.begin(); }
   const_iterator end() const { return maps_.end(); }
 
   virtual bool Build();
 
 protected:
+  BacktraceMap(pid_t pid);
+
   virtual bool ParseLine(const char* line, backtrace_map_t* map);
 
-  std::vector<backtrace_map_t> maps_;
+  std::deque<backtrace_map_t> maps_;
   pid_t pid_;
 };
 
