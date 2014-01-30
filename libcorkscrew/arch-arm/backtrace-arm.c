@@ -62,19 +62,7 @@
 #include <elf.h>
 #include <cutils/log.h>
 
-#if !defined(__BIONIC_HAVE_UCONTEXT_T)
-/* Old versions of the Android <signal.h> didn't define ucontext_t. */
-#include <asm/sigcontext.h> /* Ensure 'struct sigcontext' is defined. */
-
-/* Machine context at the time a signal was raised. */
-typedef struct ucontext {
-    uint32_t uc_flags;
-    struct ucontext* uc_link;
-    stack_t uc_stack;
-    struct sigcontext uc_mcontext;
-    uint32_t uc_sigmask;
-} ucontext_t;
-#endif /* !__BIONIC_HAVE_UCONTEXT_T */
+#include <ucontext.h>
 
 /* Unwind state. */
 typedef struct {
