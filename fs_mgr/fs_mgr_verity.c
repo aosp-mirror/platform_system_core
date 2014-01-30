@@ -36,8 +36,7 @@
 #include "mincrypt/sha.h"
 #include "mincrypt/sha256.h"
 
-#include "ext4_utils.h"
-#include "ext4.h"
+#include "ext4_sb.h"
 
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_verity.h"
@@ -122,6 +121,7 @@ static int get_target_device_size(char *blk_device, uint64_t *device_size)
 {
     int data_device;
     struct ext4_super_block sb;
+    struct fs_info info = {0};
 
     data_device = open(blk_device, O_RDONLY);
     if (data_device < 0) {
@@ -141,7 +141,7 @@ static int get_target_device_size(char *blk_device, uint64_t *device_size)
         return -1;
     }
 
-    ext4_parse_sb(&sb);
+    ext4_parse_sb(&sb, &info);
     *device_size = info.len;
 
     close(data_device);
