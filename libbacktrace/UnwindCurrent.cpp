@@ -27,26 +27,7 @@
 #include "UnwindCurrent.h"
 #include "UnwindMap.h"
 
-// Define the ucontext_t structures needed for each supported arch.
-#if defined(__arm__)
-  // The current version of the <signal.h> doesn't define ucontext_t.
-  #include <asm/sigcontext.h> // Ensure 'struct sigcontext' is defined.
-
-  // Machine context at the time a signal was raised.
-  typedef struct ucontext {
-    uint32_t uc_flags;
-    struct ucontext* uc_link;
-    stack_t uc_stack;
-    struct sigcontext uc_mcontext;
-    uint32_t uc_sigmask;
-  } ucontext_t;
-#elif defined(__i386__)
-  #include <asm/sigcontext.h>
-  #include <asm/ucontext.h>
-  typedef struct ucontext ucontext_t;
-#elif !defined(__mips__) && !defined(__aarch64__)
-  #error Unsupported architecture.
-#endif
+#include <ucontext.h>
 
 //-------------------------------------------------------------------------
 // UnwindCurrent functions.
@@ -158,7 +139,7 @@ void UnwindCurrent::ExtractContext(void* sigcontext) {
   context->regs[13] = uc->uc_mcontext.arm_sp;
   context->regs[14] = uc->uc_mcontext.arm_lr;
   context->regs[15] = uc->uc_mcontext.arm_pc;
-#elif defined(__mips__) || defined(__i386__)
+#else
   context->uc_mcontext = uc->uc_mcontext;
 #endif
 }
