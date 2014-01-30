@@ -391,10 +391,14 @@ on boot
     setprop net.tcp.buffersize.evdo     4094,87380,262144,4096,16384,262144
 
     class_start core
-    class_start main
 
 on nonencrypted
+    class_start main
     class_start late_start
+
+on property:vold.decrypt=trigger_default_encryption
+    start surfaceflinger
+    start defaultcrypto
 
 on charger
     class_start charger
@@ -528,6 +532,13 @@ service media /system/bin/mediaserver
     user media
     group audio camera inet net_bt net_bt_admin net_bw_acct drmrpc mediadrm
     ioprio rt 4
+
+# One shot invocation to deal with encrypted volume.
+service defaultcrypto /system/bin/vdc --wait cryptfs mountdefaultencrypted
+    disabled
+    oneshot
+    # vold will set vold.decrypt to trigger_restart_framework (default
+    # encryption) or trigger_restart_min_framework (other encryption)
 
 service bootanim /system/bin/bootanimation
     class main
