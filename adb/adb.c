@@ -318,6 +318,15 @@ static size_t fill_connect_data(char *buf, size_t bufsize)
 #endif
 }
 
+static void send_msg_with_okay(int fd, char* msg, size_t msglen) {
+    char header[9];
+    if (msglen > 0xffff)
+        msglen = 0xffff;
+    snprintf(header, sizeof(header), "OKAY%04x", (unsigned)msglen);
+    writex(fd, header, 8);
+    writex(fd, msg, msglen);
+}
+
 static void send_connect(atransport *t)
 {
     D("Calling send_connect \n");
@@ -1422,7 +1431,6 @@ int adb_main(int is_daemon, int server_port)
 int handle_host_request(char *service, transport_type ttype, char* serial, int reply_fd, asocket *s)
 {
     atransport *transport = NULL;
-    char buf[4096];
 
     if(!strcmp(service, "kill")) {
         fprintf(stderr,"adb server killed by remote request\n");
@@ -1468,13 +1476,11 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         char buffer[4096];
         int use_long = !strcmp(service+7, "-l");
         if (use_long || service[7] == 0) {
-            memset(buf, 0, sizeof(buf));
             memset(buffer, 0, sizeof(buffer));
             D("Getting device list \n");
             list_transports(buffer, sizeof(buffer), use_long);
-            snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer),buffer);
             D("Wrote device list \n");
-            writex(reply_fd, buf, strlen(buf));
+            send_msg_with_okay(reply_fd, buffer, strlen(buffer));
             return 0;
         }
     }
@@ -1503,8 +1509,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
             }
         }
 
-        snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer), buffer);
-        writex(reply_fd, buf, strlen(buf));
+        send_msg_with_okay(reply_fd, buffer, strlen(buffer));
         return 0;
     }
 
@@ -1512,8 +1517,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     if (!strcmp(service, "version")) {
         char version[12];
         snprintf(version, sizeof version, "%04x", ADB_SERVER_VERSION);
-        snprintf(buf, sizeof buf, "OKAY%04x%s", (unsigned)strlen(version), version);
-        writex(reply_fd, buf, strlen(buf));
+        send_msg_with_okay(reply_fd, version, strlen(version));
         return 0;
     }
 
@@ -1523,8 +1527,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
        if (transport && transport->serial) {
             out = transport->serial;
         }
-        snprintf(buf, sizeof buf, "OKAY%04x%s",(unsigned)strlen(out),out);
-        writex(reply_fd, buf, strlen(buf));
+        send_msg_with_okay(reply_fd, out, strlen(out));
         return 0;
     }
     if(!strncmp(service,"get-devpath",strlen("get-devpath"))) {
@@ -1533,8 +1536,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
        if (transport && transport->devpath) {
             out = transport->devpath;
         }
-        snprintf(buf, sizeof buf, "OKAY%04x%s",(unsigned)strlen(out),out);
-        writex(reply_fd, buf, strlen(buf));
+        send_msg_with_okay(reply_fd, out, strlen(out));
         return 0;
     }
     // indicates a new emulator instance has started
@@ -1548,14 +1550,11 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
 
     if(!strcmp(service,"list-forward")) {
         // Create the list of forward redirections.
-        char header[9];
         int buffer_size = format_listeners(NULL, 0);
         // Add one byte for the trailing zero.
         char* buffer = malloc(buffer_size+1);
         (void) format_listeners(buffer, buffer_size+1);
-        snprintf(header, sizeof header, "OKAY%04x", buffer_size);
-        writex(reply_fd, header, 8);
-        writex(reply_fd, buffer, buffer_size);
+        send_msg_with_okay(reply_fd, buffer, buffer_size);
         free(buffer);
         return 0;
     }
@@ -1644,8 +1643,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     if(!strncmp(service,"get-state",strlen("get-state"))) {
         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
         char *state = connection_state_name(transport);
-        snprintf(buf, sizeof buf, "OKAY%04x%s",(unsigned)strlen(state),state);
-        writex(reply_fd, buf, strlen(buf));
+        send_msg_with_okay(reply_fd, state, strlen(state));
         return 0;
     }
     return -1;
