@@ -179,9 +179,9 @@ static void dump_fault_addr(log_t* log, pid_t tid, int sig) {
   if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si)){
     _LOG(log, SCOPE_AT_FAULT, "cannot get siginfo: %s\n", strerror(errno));
   } else if (signal_has_address(sig)) {
-    _LOG(log, SCOPE_AT_FAULT, "signal %d (%s), code %d (%s), fault addr %0*" PRIxPTR "\n",
+    _LOG(log, SCOPE_AT_FAULT, "signal %d (%s), code %d (%s), fault addr %" PRIPTR "\n",
          sig, get_signame(sig), si.si_code, get_sigcode(sig, si.si_code),
-         sizeof(uintptr_t)*2, reinterpret_cast<uintptr_t>(si.si_addr));
+         reinterpret_cast<uintptr_t>(si.si_addr));
   } else {
     _LOG(log, SCOPE_AT_FAULT, "signal %d (%s), code %d (%s), fault addr --------\n",
          sig, get_signame(sig), si.si_code, get_sigcode(sig, si.si_code));
@@ -226,7 +226,7 @@ static void dump_thread_info(log_t* log, pid_t pid, pid_t tid, int scope_flags) 
 static void dump_stack_segment(
     Backtrace* backtrace, log_t* log, int scope_flags, uintptr_t* sp, size_t words, int label) {
   for (size_t i = 0; i < words; i++) {
-    uint32_t stack_content;
+    word_t stack_content;
     if (!backtrace->ReadWord(*sp, &stack_content)) {
       break;
     }
@@ -243,32 +243,32 @@ static void dump_stack_segment(
     if (!func_name.empty()) {
       if (!i && label >= 0) {
         if (offset) {
-          _LOG(log, scope_flags, "    #%02d  %08x  %08x  %s (%s+%u)\n",
+          _LOG(log, scope_flags, "    #%02d  %" PRIPTR "  %" PRIPTR "  %s (%s+%" PRIxPTR "u)\n",
                label, *sp, stack_content, map_name, func_name.c_str(), offset);
         } else {
-          _LOG(log, scope_flags, "    #%02d  %08x  %08x  %s (%s)\n",
+          _LOG(log, scope_flags, "    #%02d  %" PRIPTR "  %" PRIPTR "  %s (%s)\n",
                label, *sp, stack_content, map_name, func_name.c_str());
         }
       } else {
         if (offset) {
-          _LOG(log, scope_flags, "         %08x  %08x  %s (%s+%u)\n",
+          _LOG(log, scope_flags, "         %" PRIPTR "  %" PRIPTR "  %s (%s+%" PRIxPTR "u)\n",
                *sp, stack_content, map_name, func_name.c_str(), offset);
         } else {
-          _LOG(log, scope_flags, "         %08x  %08x  %s (%s)\n",
+          _LOG(log, scope_flags, "         %" PRIPTR "  %" PRIPTR "  %s (%s)\n",
                *sp, stack_content, map_name, func_name.c_str());
         }
       }
     } else {
       if (!i && label >= 0) {
-        _LOG(log, scope_flags, "    #%02d  %08x  %08x  %s\n",
+        _LOG(log, scope_flags, "    #%02d  %" PRIPTR "  %" PRIPTR "  %s\n",
              label, *sp, stack_content, map_name);
       } else {
-        _LOG(log, scope_flags, "         %08x  %08x  %s\n",
+        _LOG(log, scope_flags, "         %" PRIPTR "  %" PRIPTR "  %s\n",
              *sp, stack_content, map_name);
       }
     }
 
-    *sp += sizeof(uint32_t);
+    *sp += sizeof(word_t);
   }
 }
 
@@ -291,7 +291,7 @@ static void dump_stack(Backtrace* backtrace, log_t* log, int scope_flags) {
   scope_flags |= SCOPE_SENSITIVE;
 
   // Dump a few words before the first frame.
-  uintptr_t sp = backtrace->GetFrame(first)->sp - STACK_WORDS * sizeof(uint32_t);
+  word_t sp = backtrace->GetFrame(first)->sp - STACK_WORDS * sizeof(word_t);
   dump_stack_segment(backtrace, log, scope_flags, &sp, STACK_WORDS, -1);
 
   // Dump a few words from all successive frames.
@@ -311,7 +311,7 @@ static void dump_stack(Backtrace* backtrace, log_t* log, int scope_flags) {
         _LOG(log, scope_flags, "         ........  ........\n");
       }
     } else {
-      size_t words = frame->stack_size / sizeof(uint32_t);
+      size_t words = frame->stack_size / sizeof(word_t);
       if (words == 0) {
         words = 1;
       } else if (words > STACK_WORDS) {
@@ -334,7 +334,7 @@ static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log, int scope
 
 static void dump_map(log_t* log, const backtrace_map_t* map, const char* what, int scope_flags) {
   if (map != NULL) {
-    _LOG(log, scope_flags, "    %08x-%08x %c%c%c %s\n", map->start, map->end,
+    _LOG(log, scope_flags, "    %" PRIPTR "-%" PRIPTR " %c%c%c %s\n", map->start, map->end,
          (map->flags & PROT_READ) ? 'r' : '-', (map->flags & PROT_WRITE) ? 'w' : '-',
          (map->flags & PROT_EXEC) ? 'x' : '-', map->name.c_str());
   } else {
@@ -567,24 +567,15 @@ static void dump_abort_message(Backtrace* backtrace, log_t* log, uintptr_t addre
   memset(msg, 0, sizeof(msg));
   char* p = &msg[0];
   while (p < &msg[sizeof(msg)]) {
-    uint32_t data;
+    word_t data;
+    size_t len = sizeof(word_t);
     if (!backtrace->ReadWord(address, &data)) {
       break;
     }
-    address += sizeof(uint32_t);
+    address += sizeof(word_t);
 
-    if ((*p++ = (data >>  0) & 0xff) == 0) {
-      break;
-    }
-    if ((*p++ = (data >>  8) & 0xff) == 0) {
-      break;
-    }
-    if ((*p++ = (data >> 16) & 0xff) == 0) {
-      break;
-    }
-    if ((*p++ = (data >> 24) & 0xff) == 0) {
-      break;
-    }
+    while (len > 0 && (*p++ = (data >> (sizeof(word_t) - len) * 8) & 0xff) != 0)
+       len--;
   }
   msg[sizeof(msg) - 1] = '\0';
 
