@@ -36,18 +36,7 @@
 #include <sys/ptrace.h>
 #include <cutils/log.h>
 
-#if defined(__BIONIC__)
-
-#if defined(__BIONIC_HAVE_UCONTEXT_T)
-
-// Bionic offers the Linux kernel headers.
-#include <asm/sigcontext.h>
-#include <asm/ucontext.h>
-typedef struct ucontext ucontext_t;
-
-#else /* __BIONIC_HAVE_UCONTEXT_T */
-
-/* Old versions of the Android <signal.h> didn't define ucontext_t. */
+#include <sys/ucontext.h>
 
 /* For PTRACE_GETREGS */
 typedef struct {
@@ -71,30 +60,6 @@ enum {
     REG_GP, REG_SP, REG_S8, REG_RA,
 };
 
-/* Machine context at the time a signal was raised. */
-typedef struct ucontext {
-    unsigned int sc_regmask;
-    unsigned int sc_status;
-    unsigned long long sc_pc;
-    unsigned long long sc_regs[32];
-    unsigned long long sc_fpregs[32];
-    unsigned int sc_acx;
-    unsigned int sc_fpc_csr;
-    unsigned int sc_fpc_eir;
-    unsigned int sc_used_math;
-    unsigned int sc_dsp;
-    unsigned long long sc_mdhi;
-    unsigned long long sc_mdlo;
-    unsigned long sc_hi1;
-    unsigned long sc_lo1;
-    unsigned long sc_hi2;
-    unsigned long sc_lo2;
-    unsigned long sc_hi3;
-    unsigned long sc_lo3;
-} ucontext_t;
-
-#endif /* __BIONIC_HAVE_UCONTEXT_T */
-#endif
 
 /* Unwind state. */
 typedef struct {
@@ -896,10 +861,10 @@ ssize_t unwind_backtrace_signal_arch(siginfo_t* siginfo __attribute__((unused)),
     const ucontext_t* uc = (const ucontext_t*)sigcontext;
 
     unwind_state_t state;
-    state.reg[DWARF_PC] = uc->sc_pc;
-    state.reg[DWARF_RA] = uc->sc_regs[REG_RA];
-    state.reg[DWARF_FP] = uc->sc_regs[REG_S8];
-    state.reg[DWARF_SP] = uc->sc_regs[REG_SP];
+    state.reg[DWARF_PC] = uc->uc_mcontext.pc;
+    state.reg[DWARF_RA] = uc->uc_mcontext.gregs[REG_RA];
+    state.reg[DWARF_FP] = uc->uc_mcontext.gregs[REG_S8];
+    state.reg[DWARF_SP] = uc->uc_mcontext.gregs[REG_SP];
 
     ALOGV("unwind_backtrace_signal_arch: "
           "ignore_depth=%d max_depth=%d pc=0x%08x sp=0x%08x ra=0x%08x\n",
