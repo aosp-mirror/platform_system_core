@@ -16,6 +16,7 @@
 
 #define LOG_TAG "libbacktrace"
 
+#include <sys/ucontext.h>
 #include <sys/types.h>
 
 #include <backtrace/Backtrace.h>
@@ -26,8 +27,6 @@
 
 #include "UnwindCurrent.h"
 #include "UnwindMap.h"
-
-#include <ucontext.h>
 
 //-------------------------------------------------------------------------
 // UnwindCurrent functions.

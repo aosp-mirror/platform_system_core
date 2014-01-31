@@ -21,8 +21,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <inttypes.h>
-
 #include <string>
 
 #include <backtrace/Backtrace.h>
@@ -81,10 +79,10 @@ std::string Backtrace::GetFunctionName(uintptr_t pc, uintptr_t* offset) {
   return func_name;
 }
 
-bool Backtrace::VerifyReadWordArgs(uintptr_t ptr, uint32_t* out_value) {
-  if (ptr & 3) {
+bool Backtrace::VerifyReadWordArgs(uintptr_t ptr, word_t* out_value) {
+  if (ptr & (sizeof(word_t)-1)) {
     BACK_LOGW("invalid pointer %p", (void*)ptr);
-    *out_value = (uint32_t)-1;
+    *out_value = (word_t)-1;
     return false;
   }
   return true;
@@ -142,18 +140,18 @@ BacktraceCurrent::BacktraceCurrent(
 BacktraceCurrent::~BacktraceCurrent() {
 }
 
-bool BacktraceCurrent::ReadWord(uintptr_t ptr, uint32_t* out_value) {
+bool BacktraceCurrent::ReadWord(uintptr_t ptr, word_t* out_value) {
   if (!VerifyReadWordArgs(ptr, out_value)) {
     return false;
   }
 
   const backtrace_map_t* map = FindMap(ptr);
   if (map && map->flags & PROT_READ) {
-    *out_value = *reinterpret_cast<uint32_t*>(ptr);
+    *out_value = *reinterpret_cast<word_t*>(ptr);
     return true;
   } else {
     BACK_LOGW("pointer %p not in a readable map", reinterpret_cast<void*>(ptr));
-    *out_value = static_cast<uint32_t>(-1);
+    *out_value = static_cast<word_t>(-1);
     return false;
   }
 }
@@ -170,7 +168,7 @@ BacktracePtrace::BacktracePtrace(
 BacktracePtrace::~BacktracePtrace() {
 }
 
-bool BacktracePtrace::ReadWord(uintptr_t ptr, uint32_t* out_value) {
+bool BacktracePtrace::ReadWord(uintptr_t ptr, word_t* out_value) {
   if (!VerifyReadWordArgs(ptr, out_value)) {
     return false;
   }
@@ -183,7 +181,7 @@ bool BacktracePtrace::ReadWord(uintptr_t ptr, uint32_t* out_value) {
   // To disambiguate -1 from a valid result, we clear errno beforehand.
   errno = 0;
   *out_value = ptrace(PTRACE_PEEKTEXT, Tid(), reinterpret_cast<void*>(ptr), NULL);
-  if (*out_value == static_cast<uint32_t>(-1) && errno) {
+  if (*out_value == static_cast<word_t>(-1) && errno) {
     BACK_LOGW("invalid pointer %p reading from tid %d, ptrace() strerror(errno)=%s",
               reinterpret_cast<void*>(ptr), Tid(), strerror(errno));
     return false;
