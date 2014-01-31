@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ifeq ($(TARGET_IS_64_BIT), false)
-
 LOCAL_PATH:= $(call my-dir)
+
+ifeq ($(TARGET_IS_64_BIT), false)
 
 generic_src_files := \
 	backtrace.c \
@@ -70,8 +70,7 @@ include $(BUILD_EXECUTABLE)
 
 endif # TARGET_IS_64_BIT == false
 
-# TODO: reenable darwin-x86
-# ifeq ($(HOST_ARCH),x86)
+
 ifeq ($(HOST_OS)-$(HOST_ARCH),linux-x86)
 
 # Build libcorkscrew.
@@ -98,4 +97,4 @@ LOCAL_MODULE := libcorkscrew_test
 LOCAL_MODULE_TAGS := optional
 include $(BUILD_HOST_EXECUTABLE)
 
-endif # HOST_ARCH == x86
+endif # $(HOST_OS)-$(HOST_ARCH) == linux-x86
