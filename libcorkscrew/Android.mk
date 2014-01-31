@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ifeq ($(TARGET_IS_64_BIT), false)
+
 LOCAL_PATH:= $(call my-dir)
 
 generic_src_files := \
@@ -96,3 +98,5 @@ LOCAL_MODULE_TAGS := optional
 include $(BUILD_HOST_EXECUTABLE)
 
 endif # HOST_ARCH == x86
+
+endif # TARGET_IS_64_BIT == false
