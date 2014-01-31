@@ -360,7 +360,7 @@ static void dump_nearby_maps(BacktraceMap* map, log_t* log, pid_t tid, int scope
     return;
   }
 
-  _LOG(log, scope_flags, "\nmemory map around fault addr %" PRIxPTR ":\n",
+  _LOG(log, scope_flags, "\nmemory map around fault addr %" PRIPTR ":\n",
        reinterpret_cast<uintptr_t>(si.si_addr));
 
   // Search for a match, or for a hole where the match would be.  The list
@@ -653,7 +653,11 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
 //
 // Returns the path of the tombstone file, allocated using malloc().  Caller must free() it.
 static char* find_and_open_tombstone(int* fd) {
+#ifdef __aarch64__
+  long mtime = LONG_MAX;
+#else
   unsigned long mtime = ULONG_MAX;
+#endif
   struct stat sb;
 
   // XXX: Our stat.st_mtime isn't time_t. If it changes, as it probably ought
