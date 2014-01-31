@@ -68,6 +68,7 @@ LOCAL_MODULE := libcorkscrew_test
 LOCAL_MODULE_TAGS := optional
 include $(BUILD_EXECUTABLE)
 
+endif # TARGET_IS_64_BIT == false
 
 # TODO: reenable darwin-x86
 # ifeq ($(HOST_ARCH),x86)
@@ -98,5 +99,3 @@ LOCAL_MODULE_TAGS := optional
 include $(BUILD_HOST_EXECUTABLE)
 
 endif # HOST_ARCH == x86
-
-endif # TARGET_IS_64_BIT == false
