@@ -1,14 +1,23 @@
-LOCAL_PATH:= $(call my-dir)
+#
+# Copyright (C) 2014 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
-common_src := \
-	BacktraceImpl.cpp \
-	BacktraceMap.cpp \
-	BacktraceThread.cpp \
-	thread_utils.c \
+LOCAL_PATH:= $(call my-dir)
 
 common_cflags := \
 	-Wall \
-	-Wno-unused-parameter \
 	-Werror \
 
 common_conlyflags := \
@@ -17,274 +26,148 @@ common_conlyflags := \
 common_cppflags := \
 	-std=gnu++11 \
 
-common_shared_libs := \
+build_host := false
+ifeq ($(HOST_OS),linux)
+ifeq ($(HOST_ARCH),$(filter $(HOST_ARCH),x86 x86_64))
+build_host := true
+endif
+endif
+
+#-------------------------------------------------------------------------
+# The libbacktrace library.
+#-------------------------------------------------------------------------
+libbacktrace_src_files := \
+	BacktraceImpl.cpp \
+	BacktraceMap.cpp \
+	BacktraceThread.cpp \
+	thread_utils.c \
+
+libbacktrace_shared_libraries_target := \
 	libcutils \
 	libgccdemangle \
-	liblog \
 
 # To enable using libunwind on each arch, add it to this list.
 libunwind_architectures := arm arm64 x86 x86_64
 
 ifeq ($(TARGET_ARCH),$(filter $(TARGET_ARCH),$(libunwind_architectures)))
-
-#----------------------------------------------------------------------------
-# The native libbacktrace library with libunwind.
-#----------------------------------------------------------------------------
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:= \
-	$(common_src) \
+libbacktrace_src_files += \
 	UnwindCurrent.cpp \
 	UnwindMap.cpp \
 	UnwindPtrace.cpp \
 
-LOCAL_CFLAGS := \
-	$(common_cflags) \
-
-LOCAL_CONLYFLAGS += \
-	$(common_conlyflags) \
-
-LOCAL_CPPFLAGS += \
-	$(common_cppflags) \
-
-LOCAL_MODULE := libbacktrace
-LOCAL_MODULE_TAGS := optional
-
-LOCAL_C_INCLUDES := \
-	$(common_c_includes) \
+libbacktrace_c_includes := \
 	external/libunwind/include \
 
-LOCAL_SHARED_LIBRARIES := \
-	$(common_shared_libs) \
+libbacktrace_shared_libraries := \
 	libunwind \
 	libunwind-ptrace \
 
-LOCAL_ADDITIONAL_DEPENDENCIES := \
-	$(LOCAL_PATH)/Android.mk
-
-include external/stlport/libstlport.mk
-
-include $(BUILD_SHARED_LIBRARY)
-
-else
-
-#----------------------------------------------------------------------------
-# The native libbacktrace library with libcorkscrew.
-#----------------------------------------------------------------------------
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:= \
-	$(common_src) \
-	Corkscrew.cpp \
-
-LOCAL_CFLAGS := \
-	$(common_cflags) \
-
-LOCAL_CONLYFLAGS += \
-	$(common_conlyflags) \
-
-LOCAL_CPPFLAGS += \
-	$(common_cppflags) \
-
-LOCAL_MODULE := libbacktrace
-LOCAL_MODULE_TAGS := optional
-
-LOCAL_C_INCLUDES := \
-	$(common_c_includes) \
-	system/core/libcorkscrew \
-
-LOCAL_SHARED_LIBRARIES := \
-	$(common_shared_libs) \
-	libcorkscrew \
-	libdl \
-
-LOCAL_ADDITIONAL_DEPENDENCIES := \
-	$(LOCAL_PATH)/Android.mk
-
-include external/stlport/libstlport.mk
-
-include $(BUILD_SHARED_LIBRARY)
-
-endif
-
-#----------------------------------------------------------------------------
-# libbacktrace test library, all optimizations turned off
-#----------------------------------------------------------------------------
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := libbacktrace_test
-LOCAL_MODULE_FLAGS := debug
-
-LOCAL_SRC_FILES := \
-	backtrace_testlib.c
-
-LOCAL_CFLAGS += \
-	-std=gnu99 \
-	-O0 \
-
-LOCAL_ADDITIONAL_DEPENDENCIES := \
-	$(LOCAL_PATH)/Android.mk
-
-include $(BUILD_SHARED_LIBRARY)
-
-#----------------------------------------------------------------------------
-# libbacktrace test executable
-#----------------------------------------------------------------------------
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := backtrace_test
-LOCAL_MODULE_FLAGS := debug
-
-LOCAL_SRC_FILES := \
-	backtrace_test.cpp \
-	thread_utils.c \
-
-LOCAL_CFLAGS += \
-	$(common_cflags) \
-	-fno-builtin \
-	-fstack-protector-all \
-	-O0 \
-	-g \
-	-DGTEST_OS_LINUX_ANDROID \
-	-DGTEST_HAS_STD_STRING \
-
-ifeq ($(TARGET_ARCH),arm64)
-  $(info TODO: $(LOCAL_PATH)/Android.mk -fstack-protector not yet available for the AArch64 toolchain)
-  LOCAL_CFLAGS += -fno-stack-protector
-endif # arm64
-
-LOCAL_CONLYFLAGS += \
-	$(common_conlyflags) \
-
-LOCAL_CPPFLAGS += \
-	$(common_cppflags) \
-
-LOCAL_SHARED_LIBRARIES += \
-	libcutils \
-	libbacktrace_test \
-	libbacktrace \
-
-LOCAL_LDLIBS := \
-	-lpthread \
-
-LOCAL_ADDITIONAL_DEPENDENCIES := \
-	$(LOCAL_PATH)/Android.mk
-
-include $(BUILD_NATIVE_TEST)
-
-#----------------------------------------------------------------------------
-# Only x86 host versions of libbacktrace supported.
-#----------------------------------------------------------------------------
-ifeq ($(HOST_ARCH),x86)
-
-#----------------------------------------------------------------------------
-# The host libbacktrace library using libcorkscrew
-#----------------------------------------------------------------------------
-include $(CLEAR_VARS)
-
-
-LOCAL_CFLAGS += \
-	$(common_cflags) \
-
-LOCAL_CONLYFLAGS += \
-	$(common_conlyflags) \
-
-LOCAL_C_INCLUDES := \
-	$(common_c_includes) \
-
-LOCAL_SHARED_LIBRARIES := \
-	libgccdemangle \
+libbacktrace_shared_libraries_host := \
 	liblog \
 
-LOCAL_MODULE := libbacktrace
-LOCAL_MODULE_TAGS := optional
-
-LOCAL_ADDITIONAL_DEPENDENCIES := \
-	$(LOCAL_PATH)/Android.mk
-
-ifeq ($(HOST_OS),linux)
-LOCAL_SRC_FILES += \
-	$(common_src) \
-	Corkscrew.cpp \
-
-LOCAL_C_INCLUDES += \
-	system/core/libcorkscrew \
-
-LOCAL_SHARED_LIBRARIES := \
-	libcorkscrew \
-
-LOCAL_CPPFLAGS += \
-	$(common_cppflags) \
-
-LOCAL_LDLIBS += \
-	-ldl \
-	-lrt \
+libbacktrace_static_libraries_host := \
+	libcutils \
 
 else
-LOCAL_SRC_FILES += \
-	BacktraceMap.cpp \
+libbacktrace_src_files += \
+	Corkscrew.cpp \
+
+libbacktrace_c_includes := \
+	system/core/libcorkscrew \
+
+libbacktrace_shared_libraries := \
+	libcorkscrew \
+
+libbacktrace_shared_libraries_target += \
+	libdl \
+
+libbacktrace_ldlibs_host := \
+	-ldl \
 
 endif
 
-include $(BUILD_HOST_SHARED_LIBRARY)
+module := libbacktrace
+module_tag := optional
+build_type := target
+build_target := SHARED_LIBRARY
+include $(LOCAL_PATH)/Android.build.mk
+build_type := host
+include $(LOCAL_PATH)/Android.build.mk
 
-#----------------------------------------------------------------------------
-# The host test is only supported on linux.
-#----------------------------------------------------------------------------
-ifeq ($(HOST_OS),linux)
-
-#----------------------------------------------------------------------------
-# libbacktrace host test library, all optimizations turned off
-#----------------------------------------------------------------------------
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := libbacktrace_test
-LOCAL_MODULE_FLAGS := debug
-
-LOCAL_SRC_FILES := \
-	backtrace_testlib.c
-
-LOCAL_CFLAGS += \
-	-std=gnu99 \
+#-------------------------------------------------------------------------
+# The libbacktrace_test library needed by backtrace_test.
+#-------------------------------------------------------------------------
+libbacktrace_test_cflags := \
 	-O0 \
 
-LOCAL_ADDITIONAL_DEPENDENCIES := \
-	$(LOCAL_PATH)/Android.mk
+libbacktrace_test_src_files := \
+	backtrace_testlib.c \
 
-include $(BUILD_HOST_SHARED_LIBRARY)
+module := libbacktrace_test
+module_tag := debug
+build_type := target
+build_target := SHARED_LIBRARY
+include $(LOCAL_PATH)/Android.build.mk
+build_type := host
+include $(LOCAL_PATH)/Android.build.mk
 
-#----------------------------------------------------------------------------
-# libbacktrace host test executable
-#----------------------------------------------------------------------------
-include $(CLEAR_VARS)
-
-LOCAL_MODULE := backtrace_test
-LOCAL_MODULE_FLAGS := debug
-
-LOCAL_SRC_FILES := \
-	backtrace_test.cpp \
-	thread_utils.c \
-
-LOCAL_CFLAGS += \
-	$(common_cflags) \
+#-------------------------------------------------------------------------
+# The backtrace_test executable.
+#-------------------------------------------------------------------------
+backtrace_test_cflags := \
 	-fno-builtin \
-	-fstack-protector-all \
 	-O0 \
 	-g \
 	-DGTEST_HAS_STD_STRING \
 
-LOCAL_SHARED_LIBRARIES := \
+ifneq ($(TARGET_ARCH),arm64)
+backtrace_test_cflags += -fstack-protector-all
+else
+  $(info TODO: $(LOCAL_PATH)/Android.mk -fstack-protector not yet available for the AArch64 toolchain)
+  common_cflags += -fno-stack-protector
+endif # arm64
+
+backtrace_test_cflags_target := \
+	-DGTEST_OS_LINUX_ANDROID \
+
+backtrace_test_src_files := \
+	backtrace_test.cpp \
+	thread_utils.c \
+
+backtrace_test_ldlibs := \
+	-lpthread \
+
+backtrace_test_ldlibs_host := \
+	-lrt \
+
+backtrace_test_shared_libraries := \
 	libbacktrace_test \
 	libbacktrace \
 
-LOCAL_LDLIBS := \
-	-lpthread \
+backtrace_test_shared_libraries_target := \
+	libcutils \
 
-LOCAL_ADDITIONAL_DEPENDENCIES := \
-	$(LOCAL_PATH)/Android.mk
+module := backtrace_test
+module_tag := debug
+build_type := target
+build_target := NATIVE_TEST
+include $(LOCAL_PATH)/Android.build.mk
+build_type := host
+include $(LOCAL_PATH)/Android.build.mk
 
-include $(BUILD_HOST_NATIVE_TEST)
+#----------------------------------------------------------------------------
+# Special truncated libbacktrace library for mac.
+#----------------------------------------------------------------------------
+ifeq ($(HOST_OS),darwin)
 
-endif # HOST_OS == linux
+include $(CLEAR_VARS)
 
-endif # HOST_ARCH == x86
+LOCAL_MODULE := libbacktrace
+LOCAL_MODULE_TAGS := optional
+
+LOCAL_SRC_FILES := \
+	BacktraceMap.cpp \
+
+include $(BUILD_HOST_SHARED_LIBRARY)
+
+endif # HOST_OS-darwin
