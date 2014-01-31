@@ -28,13 +28,6 @@ extern "C" {
          */
 extern void *load_file(const char *fn, unsigned *sz);
 
-        /* Connects your process to the system debugger daemon
-         * so that on a crash it may be logged or interactively
-         * debugged (depending on system settings).
-         */
-extern void debuggerd_connect(void);
-
-
         /* This is the range of UIDs (and GIDs) that are reserved
          * for assigning to applications.
          */
