@@ -24,6 +24,7 @@
 #include <dirent.h>
 #include <limits.h>
 #include <errno.h>
+#include <sys/poll.h>
 
 #include <cutils/misc.h>
 #include <cutils/sockets.h>
@@ -367,6 +368,9 @@ void handle_property_set_fd()
     socklen_t addr_size = sizeof(addr);
     socklen_t cr_size = sizeof(cr);
     char * source_ctx = NULL;
+    struct pollfd ufds[1];
+    const int timeout_ms = 2 * 1000;  /* Default 2 sec timeout for caller to send property. */
+    int nr;
 
     if ((s = accept(property_set_fd, (struct sockaddr *) &addr, &addr_size)) < 0) {
         return;
@@ -379,7 +383,21 @@ void handle_property_set_fd()
         return;
     }
 
-    r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), 0));
+    ufds[0].fd = s;
+    ufds[0].events = POLLIN;
+    ufds[0].revents = 0;
+    nr = TEMP_FAILURE_RETRY(poll(ufds, 1, timeout_ms));
+    if (nr == 0) {
+        ERROR("sys_prop: timeout waiting for uid=%d to send property message.\n", cr.uid);
+        close(s);
+        return;
+    } else if (nr < 0) {
+        ERROR("sys_prop: error waiting for uid=%d to send property message. err=%d %s\n", cr.uid, errno, strerror(errno));
+        close(s);
+        return;
+    }
+
+    r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), MSG_DONTWAIT));
     if(r != sizeof(prop_msg)) {
         ERROR("sys_prop: mis-match msg size received: %d expected: %zu errno: %d\n",
               r, sizeof(prop_msg), errno);
@@ -521,7 +539,7 @@ static void load_persistent_properties()
                     || (sb.st_uid != 0)
                     || (sb.st_gid != 0)
                     || (sb.st_nlink != 1)) {
-                ERROR("skipping insecure property file %s (uid=%u gid=%u nlink=%d mode=%o)\n",
+                ERROR("skipping insecure property file %s (uid=%lu gid=%lu nlink=%d mode=%o)\n",
                       entry->d_name, sb.st_uid, sb.st_gid, sb.st_nlink, sb.st_mode);
                 close(fd);
                 continue;
