@@ -30,7 +30,7 @@ x86_src_files := \
 	arch-x86/backtrace-x86.c \
 	arch-x86/ptrace-x86.c
 
-ifeq ($(TARGET_IS_64_BIT), false)
+ifneq ($(TARGET_IS_64_BIT),true)
 
 include $(CLEAR_VARS)
 
