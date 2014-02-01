@@ -23,7 +23,11 @@
 extern "C" {
 #endif
 
+#if __LP64__
+#define DEBUGGER_SOCKET_NAME "android:debuggerd64"
+#else
 #define DEBUGGER_SOCKET_NAME "android:debuggerd"
+#endif
 
 typedef enum {
     // dump a crash
