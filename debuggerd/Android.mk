@@ -19,7 +19,11 @@ LOCAL_CFLAGS := \
 	-Werror \
 	-Wno-unused-parameter \
 
-LOCAL_MODULE := debuggerd
+ifeq ($(TARGET_IS_64_BIT),true)
+    LOCAL_MODULE := debuggerd64
+else
+    LOCAL_MODULE := debuggerd
+endif
 
 ifeq ($(ARCH_ARM_HAVE_VFP),true)
 LOCAL_CFLAGS += -DWITH_VFP
