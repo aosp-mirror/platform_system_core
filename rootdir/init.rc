@@ -399,6 +399,11 @@ on property:vold.decrypt=trigger_default_encryption
     start surfaceflinger
     start defaultcrypto
 
+on property:vold.decrypt=trigger_encryption
+    start surfaceflinger
+    start encrypt
+    class_start main
+
 on charger
     class_start charger
 
@@ -553,6 +558,13 @@ service defaultcrypto /system/bin/vdc --wait cryptfs mountdefaultencrypted
     oneshot
     # vold will set vold.decrypt to trigger_restart_framework (default
     # encryption) or trigger_restart_min_framework (other encryption)
+
+# One shot invocation to encrypt unencrypted volumes
+service encrypt /system/bin/vdc --wait cryptfs enablecrypto inplace
+    disabled
+    oneshot
+    # vold will set vold.decrypt to trigger_restart_framework (default
+    # encryption)
 
 service bootanim /system/bin/bootanimation
     class main

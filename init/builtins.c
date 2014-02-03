@@ -501,8 +501,12 @@ int do_mount_all(int nargs, char **args)
         return -1;
     }
 
-    /* ret is 1 if the device appears encrypted, 0 if not, and -1 on error */
-    if (ret == 1) {
+    /* ret is 2 if device needs encrypted, 1 if the device appears encrypted,
+     * 0 if not, and -1 on error */
+    if (ret == 2) {
+        property_set("ro.crypto.state", "unencrypted");
+        property_set("vold.decrypt", "trigger_encryption");
+    } else if (ret == 1) {
         property_set("ro.crypto.state", "encrypted");
         property_set("vold.decrypt", "trigger_default_encryption");
     } else if (ret == 0) {

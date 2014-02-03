@@ -54,6 +54,32 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
+/**
+ * TODO - Remove to enable always on encryption for all devices
+ * This limits the machines on which this feature is enabled
+ * Remove call from fs_mgr_mount_all as well
+ */
+static const char* serial_numbers[] = {
+  "039b83b8437e9637",
+  0
+};
+
+static int serial_matches()
+{
+    char tmp[PROP_VALUE_MAX];
+    *tmp = 0;
+    __system_property_get("ro.serialno", tmp);
+
+    const char** i;
+    for (i = serial_numbers; *i; ++i) {
+        if (!strcmp(*i, tmp)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 /*
  * gettime() - returns the time in seconds of the system's monotonic clock or
  * zero on error.
@@ -254,6 +280,22 @@ int fs_mgr_mount_all(struct fstab *fstab)
                        fstab->recs[i].fs_options);
 
         if (!mret) {
+            /* If this is encryptable, need to trigger encryption */
+            if ((fstab->recs[i].fs_mgr_flags & MF_CRYPT)) {
+                if (serial_matches() && umount(fstab->recs[i].mount_point) == 0) {
+                    if (!encryptable) {
+                        encryptable = 2;
+                    } else {
+                        ERROR("Only one encryptable/encrypted partition supported");
+                        encryptable = 1;
+                    }
+                } else {
+                    INFO("Could not umount %s - allow continue unencrypted",
+                         fstab->recs[i].mount_point);
+                    continue;
+                }
+            }
+
             /* Success!  Go get the next one */
             continue;
         }
@@ -287,12 +329,8 @@ int fs_mgr_mount_all(struct fstab *fstab)
 
     if (error_count) {
         return -1;
-    }
-
-    if (encryptable) {
-        return 1;
     } else {
-        return 0;
+        return encryptable;
     }
 }
 
