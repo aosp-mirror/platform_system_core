@@ -243,7 +243,7 @@ static void dump_stack_segment(
     if (!func_name.empty()) {
       if (!i && label >= 0) {
         if (offset) {
-          _LOG(log, scope_flags, "    #%02d  %" PRIPTR "  %" PRIPTR "  %s (%s+%" PRIxPTR "u)\n",
+          _LOG(log, scope_flags, "    #%02d  %" PRIPTR "  %" PRIPTR "  %s (%s+%" PRIuPTR ")\n",
                label, *sp, stack_content, map_name, func_name.c_str(), offset);
         } else {
           _LOG(log, scope_flags, "    #%02d  %" PRIPTR "  %" PRIPTR "  %s (%s)\n",
@@ -251,7 +251,7 @@ static void dump_stack_segment(
         }
       } else {
         if (offset) {
-          _LOG(log, scope_flags, "         %" PRIPTR "  %" PRIPTR "  %s (%s+%" PRIxPTR "u)\n",
+          _LOG(log, scope_flags, "         %" PRIPTR "  %" PRIPTR "  %s (%s+%" PRIuPTR ")\n",
                *sp, stack_content, map_name, func_name.c_str(), offset);
         } else {
           _LOG(log, scope_flags, "         %" PRIPTR "  %" PRIPTR "  %s (%s)\n",
