@@ -45,7 +45,7 @@ UnwindMap::~UnwindMap() {
     pthread_mutex_lock(&g_map_mutex);
     if (--g_map_references == 0) {
       // Clear the local address space map.
-      unw_map_set(unw_local_addr_space, NULL);
+      unw_map_local_set(NULL);
       unw_map_cursor_destroy(&map_cursor_);
     }
     pthread_mutex_unlock(&g_map_mutex);
@@ -61,8 +61,8 @@ bool UnwindMap::Build() {
     if (g_map_references == 0) {
       return_value = (unw_map_cursor_create(&map_cursor_, pid_) == 0);
       if (return_value) {
-        // Set the local address space to this cursor map.
-        unw_map_set(unw_local_addr_space, &map_cursor_);
+        // Set the local address space map to our new map.
+        unw_map_local_set(&map_cursor_);
         g_map_references = 1;
         g_map_cursor = map_cursor_;
       }
