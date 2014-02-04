@@ -1,10 +1,11 @@
 #include <alloca.h>
 #include <errno.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <pthread.h>
+#include <signal.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #define LOG_TAG "SocketClient"
 #include <cutils/log.h>
@@ -43,8 +44,7 @@ void SocketClient::init(int socket, bool owned, bool useCmdNum) {
     }
 }
 
-SocketClient::~SocketClient()
-{
+SocketClient::~SocketClient() {
     if (mSocketOwned) {
         close(mSocket);
     }
@@ -180,10 +180,19 @@ int SocketClient::sendDataLockedv(struct iovec *iov, int iovcnt) {
         return 0;
     }
 
+    int ret = 0;
+    int e = 0; // SLOGW and sigaction are not inert regarding errno
     int current = 0;
 
+    struct sigaction new_action, old_action;
+    memset(&new_action, 0, sizeof(new_action));
+    new_action.sa_handler = SIG_IGN;
+    sigaction(SIGPIPE, &new_action, &old_action);
+
     for (;;) {
-        ssize_t rc = writev(mSocket, iov + current, iovcnt - current);
+        ssize_t rc = TEMP_FAILURE_RETRY(
+            writev(mSocket, iov + current, iovcnt - current));
+
         if (rc > 0) {
             size_t written = rc;
             while ((current < iovcnt) && (written >= iov[current].iov_len)) {
@@ -198,18 +207,21 @@ int SocketClient::sendDataLockedv(struct iovec *iov, int iovcnt) {
             continue;
         }
 
-        if (rc < 0 && errno == EINTR)
-            continue;
-
         if (rc == 0) {
+            e = EIO;
             SLOGW("0 length write :(");
-            errno = EIO;
         } else {
-            SLOGW("write error (%s)", strerror(errno));
+            e = errno;
+            SLOGW("write error (%s)", strerror(e));
         }
-        return -1;
+        ret = -1;
+        break;
     }
-    return 0;
+
+    sigaction(SIGPIPE, &old_action, &new_action);
+
+    errno = e;
+    return ret;
 }
 
 void SocketClient::incRef() {
