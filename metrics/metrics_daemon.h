@@ -18,6 +18,7 @@
 
 namespace chromeos_metrics {
 class FrequencyCounter;
+class VersionCounter;
 class TaggedCounter;
 class TaggedCounterReporter;
 }
@@ -133,20 +134,25 @@ class MetricsDaemon {
   // Metric parameters.
   static const char kMetricAnyCrashesDailyName[];
   static const char kMetricAnyCrashesWeeklyName[];
-  static const char kMetricCrashFrequencyBuckets;
-  static const char kMetricCrashFrequencyMax;
-  static const char kMetricCrashFrequencyMin;
+  static const int  kMetricCrashFrequencyBuckets;
+  static const int  kMetricCrashFrequencyMax;
+  static const int  kMetricCrashFrequencyMin;
   static const int  kMetricCrashIntervalBuckets;
   static const int  kMetricCrashIntervalMax;
   static const int  kMetricCrashIntervalMin;
+  static const int  kMetricCumulativeCrashCountBuckets;
+  static const int  kMetricCumulativeCrashCountMax;
+  static const int  kMetricCumulativeCrashCountMin;
   static const int  kMetricDailyUseTimeBuckets;
   static const int  kMetricDailyUseTimeMax;
   static const int  kMetricDailyUseTimeMin;
   static const char kMetricDailyUseTimeName[];
   static const char kMetricKernelCrashesDailyName[];
   static const char kMetricKernelCrashesWeeklyName[];
+  static const char kMetricKernelCrashesVersionName[];
   static const char kMetricKernelCrashIntervalName[];
   static const char kMetricsPath[];
+  static const char kLsbReleasePath[];
   static const char kMetricUncleanShutdownIntervalName[];
   static const char kMetricUncleanShutdownsDailyName[];
   static const char kMetricUncleanShutdownsWeeklyName[];
@@ -193,6 +199,9 @@ class MetricsDaemon {
 
   // Configures the given frequency counter reporter.
   void ConfigureCrashFrequencyReporter(const char* histogram_name);
+
+  // Configures the given version counter reporter.
+  void ConfigureCrashVersionReporter(const char* histogram_name);
 
   // Returns file path to persistent file for generating given histogram.
   base::FilePath GetHistogramPath(const char* histogram_name);
@@ -271,7 +280,7 @@ class MetricsDaemon {
   void UnscheduleUseMonitor();
 
   // Report daily use through UMA.
-  static void ReportDailyUse(void* handle, int tag, int count);
+  static void ReportDailyUse(void* handle, int count);
 
   // Sends a regular (exponential) histogram sample to Chrome for
   // transport to UMA. See MetricsLibrary::SendToUMA in
@@ -352,6 +361,10 @@ class MetricsDaemon {
   // Reads an integer CPU frequency value from sysfs.
   bool ReadFreqToInt(const std::string& sysfs_file_name, int* value);
 
+  // Reads the current OS version from /etc/lsb-release and hashes it
+  // to a unsigned 32-bit int.
+  uint32 GetOsVersionHash();
+
   // Test mode.
   bool testing_;
 
@@ -393,6 +406,10 @@ class MetricsDaemon {
 
   // Map of all frequency counters, to simplify flushing them.
   FrequencyCounters frequency_counters_;
+
+  // This contains a cumulative number of kernel crashes since the latest
+  // version update.
+  chromeos_metrics::VersionCounter* kernel_crash_version_counter_;
 
   // Sleep period until the next daily usage aggregation performed by
   // the daily use monitor (see ScheduleUseMonitor).

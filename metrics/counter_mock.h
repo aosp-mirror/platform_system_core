@@ -17,7 +17,7 @@ class TaggedCounterMock : public TaggedCounter {
  public:
   MOCK_METHOD3(Init, void(const char* filename,
                           Reporter reporter, void* reporter_handle));
-  MOCK_METHOD2(Update, void(int tag, int count));
+  MOCK_METHOD3(Update, void(uint32 report_tag, uint32 reset_tag, int32 count));
   MOCK_METHOD0(Flush, void());
 };
 
@@ -28,7 +28,7 @@ class TaggedCounterReporterMock : public TaggedCounterReporter {
                           int min,
                           int max,
                           int nbuckets));
-  MOCK_METHOD2(Update, void(int32 tag, int32 count));
+  MOCK_METHOD3(Update, void(uint32 report_tag, uint32 reset_tag, int32 count));
   MOCK_METHOD0(Flush, void());
 };
 

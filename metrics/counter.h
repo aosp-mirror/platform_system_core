@@ -20,15 +20,14 @@ namespace chromeos_metrics {
 const int kSecondsPerDay = 60 * 60 * 24;
 const int kSecondsPerWeek = kSecondsPerDay * 7;
 
-// TaggedCounter maintains a persistent storage (i.e., a file)
-// aggregation counter for a given tag (e.g., day, hour) that survives
+// TaggedCounter maintains a persistent storage (i.e., a file) aggregation
+// counter for given tags (e.g., day, hour, version number) that survives
 // system shutdowns, reboots and crashes, as well as daemon process
-// restarts. The counter object is initialized by pointing to the
-// persistent storage file and providing a callback used for reporting
-// aggregated data.  The counter can then be updated with additional
-// event counts.  The aggregated count is reported through the
-// callback when the counter is explicitly flushed or when data for a
-// new tag arrives.
+// restarts. The counter object is initialized by pointing to the persistent
+// storage file and providing a callback used for reporting aggregated data.
+// The counter can then be updated with additional event counts.  The
+// aggregated count is reported through the callback when the counter is
+// explicitly flushed or when data for a new tag arrives.
 //
 // The primary reason for using an interface is to allow easier unit
 // testing in clients through mocking thus avoiding file access and
@@ -41,16 +40,16 @@ class TaggedCounterInterface {
   // aggregated data is discarded.
   //
   // |handle| is the |reporter_handle| pointer passed through Init.
-  // |tag| is the tag associated with the aggregated count.
   // |count| is aggregated count.
-  typedef void (*Reporter)(void* handle, int32 tag, int32 count);
+  typedef void (*Reporter)(void* handle, int32 count);
 
   virtual ~TaggedCounterInterface() {}
 
-  // Adds |count| of events for the given |tag|. If there's an
-  // existing aggregated count for a different tag, it's reported
-  // through the reporter callback and discarded.
-  virtual void Update(int32 tag, int32 count) = 0;
+  // Adds |count| of events for the given tags. If there's an existing
+  // aggregated count for different tags, it's reported through the reporter
+  // callback, and optionally discarded, depending on whether |report_tag|
+  // changed or |reset_tag| changed.
+  virtual void Update(uint32 report_tag, uint32 reset_tag, int32 count) = 0;
 
   // Reports the current aggregated count (if any) through the
   // reporter callback and discards it.
@@ -73,7 +72,7 @@ class TaggedCounter : public TaggedCounterInterface {
                     Reporter reporter, void* reporter_handle);
 
   // Implementation of interface methods.
-  virtual void Update(int32 tag, int32 count);
+  virtual void Update(uint32 report_tag, uint32 reset_tag, int32 count);
   virtual void Flush();
 
  private:
@@ -84,7 +83,7 @@ class TaggedCounter : public TaggedCounterInterface {
   FRIEND_TEST(TaggedCounterTest, InitFromFile);
   FRIEND_TEST(TaggedCounterTest, Update);
 
-  // The current tag/count record is cached by the counter object to
+  // The current record is cached by the counter object to
   // avoid potentially unnecessary I/O. The cached record can be in
   // one of the following states:
   enum RecordState {
@@ -95,34 +94,42 @@ class TaggedCounter : public TaggedCounterInterface {
     kRecordValidDirty  // Current record valid, persistent storage is invalid.
   };
 
-  // Defines the tag/count record. Objects of this class are synced
+  // Defines the record. Objects of this class are synced
   // with the persistent storage through binary reads/writes.
   class Record {
    public:
-    // Creates a new Record with |tag_| and |count_| reset to 0.
-    Record() : tag_(0), count_(0) {}
+    // Creates a new Record with all fields reset to 0.
+  Record() : report_tag_(0), reset_tag_(0), count_(0) {}
 
-    // Initializes with |tag| and |count|. If |count| is negative,
-    // |count_| is set to 0.
-    void Init(int32 tag, int32 count);
+    // Initializes with |report_tag|, |reset_tag| and |count|.
+    // If |count| is negative, |count_| is set to 0.
+    void Init(uint32 report_tag, uint32 reset_tag, int32 count);
 
     // Adds |count| to the current |count_|. Negative |count| is
     // ignored. In case of positive overflow, |count_| is saturated to
     // kint32max.
     void Add(int32 count);
 
-    int32 tag() const { return tag_; }
+    uint32 report_tag() const { return report_tag_; }
+    void set_report_tag(uint32 report_tag) { report_tag_ = report_tag; }
+    uint32 reset_tag() const { return reset_tag_; }
     int32 count() const { return count_; }
 
    private:
-    int32 tag_;
+    // When |report_tag_| changes, the counter is reported as a UMA sample.
+    // When |reset_tag_| changes, the counter is both reported and reset.
+    uint32 report_tag_;
+    uint32 reset_tag_;
     int32 count_;
   };
 
   // Implementation of the Update and Flush methods. Goes through the
   // necessary steps to read, report, update, and sync the aggregated
   // record.
-  void UpdateInternal(int32 tag, int32 count, bool flush);
+  void UpdateInternal(uint32 report_tag,
+                      uint32 reset_tag,
+                      int32 count,
+                      bool flush);
 
   // If the current cached record is invalid, reads it from persistent
   // storage specified through file descriptor |fd| and updates the
@@ -130,17 +137,19 @@ class TaggedCounter : public TaggedCounterInterface {
   // persistent storage contents.
   void ReadRecord(int fd);
 
-  // If there's an existing valid record and either |flush| is true,
-  // or the new |tag| is different than the old one, reports the
-  // aggregated data through the reporter callback and resets the
-  // cached record.
-  void ReportRecord(int32 tag, bool flush);
+  // If there's an existing valid record and either |flush| is true, or either
+  // new tag is different than the old one, reports the aggregated data through
+  // the reporter callback, and possibly resets the cached record.
+  void ReportRecord(uint32 report_tag, uint32 reset_tag, bool flush);
 
-  // Updates the cached record given the new |tag| and |count|. This
+  // Updates the cached record given the new tags and |count|. This
   // method expects either a null cached record, or a valid cached
-  // record with the same tag as |tag|. If |flush| is true, the method
+  // record with the same tags as given. If |flush| is true, the method
   // asserts that the cached record is null and returns.
-  void UpdateRecord(int32 tag, int32 count, bool flush);
+  void UpdateRecord(uint32 report_tag,
+                    uint32 reset_tag,
+                    int32 count,
+                    bool flush);
 
   // If the cached record state is dirty, updates the persistent
   // storage specified through file descriptor |fd| and switches the
@@ -187,8 +196,8 @@ class TaggedCounterReporter : public TaggedCounterInterface {
                     int buckets);
 
   // Implementation of interface method.
-  virtual void Update(int32 tag, int32 count) {
-    tagged_counter_->Update(tag, count);
+  virtual void Update(uint32 report_tag, uint32 reset_tag, int32 count) {
+    tagged_counter_->Update(report_tag, reset_tag, count);
   }
   // Implementation of interface method.
   virtual void Flush() {
@@ -216,7 +225,7 @@ class TaggedCounterReporter : public TaggedCounterInterface {
   friend class TaggedCounterReporterTest;
   FRIEND_TEST(TaggedCounterReporterTest, Report);
 
-  static void Report(void* handle, int32 tag, int32 count);
+  static void Report(void* handle, int32 count);
 
   static MetricsLibraryInterface* metrics_lib_;
   scoped_ptr<TaggedCounter> tagged_counter_;
@@ -279,6 +288,54 @@ class FrequencyCounter {
   void UpdateInternal(int32 count, time_t now);
   int32 GetCycleNumber(time_t now);
 
+  time_t cycle_duration_;
+  scoped_ptr<TaggedCounterInterface> tagged_counter_;
+};
+
+// VersionCounter is like a FrequencyCounter, but it exposes
+// separate "report" and "reset" tags, for counters that should
+// be reported more often than they are reset.
+class VersionCounter {
+ public:
+  VersionCounter();
+  virtual ~VersionCounter();
+
+  // Initialize a version counter, which is necessary before first use.
+  // |tagged_counter| is used to store the counts.  Its memory is managed
+  // by this FrequencyCounter.  |cycle_duration| is the number of seconds in a
+  // cycle.
+  virtual void Init(TaggedCounterInterface* tagged_counter,
+                    time_t cycle_duration);
+  // Record that |count| events have occurred. The
+  // time is implicitly assumed to be the time of the call.
+  // The version hash is passed.
+  virtual void Update(int32 count, uint32 version_hash) {
+    UpdateInternal(count, time(NULL), version_hash);
+  }
+
+  // Reports the counter if enough time has passed, and also resets it if the
+  // version number has changed.
+  virtual void FlushOnChange(uint32 version_hash) {
+    UpdateInternal(0, time(NULL), version_hash);
+  }
+
+  // Accessor function.
+  const TaggedCounterInterface& tagged_counter() const {
+    return *tagged_counter_;
+  }
+
+  time_t cycle_duration() const {
+    return cycle_duration_;
+  }
+
+ private:
+  friend class VersionCounterTest;
+  FRIEND_TEST(VersionCounterTest, UpdateInternal);
+
+  void UpdateInternal(int32 count, time_t now, uint32 version_hash);
+  // TODO(semenzato): it's generally better to use base::TimeTicks (for
+  // monotonically-increasing timestamps) or base::Time (for wall time)
+  int32 GetCycleNumber(time_t now);
   time_t cycle_duration_;
   scoped_ptr<TaggedCounterInterface> tagged_counter_;
 };

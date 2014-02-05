@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include <base/at_exit.h>
 #include <base/file_util.h>
 #include <base/strings/stringprintf.h>
 #include <chromeos/dbus/service_constants.h>
@@ -63,10 +64,12 @@ class MetricsDaemonTest : public testing::Test {
     EXPECT_EQ(NULL, daemon_.daily_use_.get());
     EXPECT_EQ(NULL, daemon_.kernel_crash_interval_.get());
     EXPECT_EQ(NULL, daemon_.user_crash_interval_.get());
-    kFakeDiskStats[0] = StringPrintf(kFakeDiskStatsFormat,
-                                     kFakeReadSectors[0], kFakeWriteSectors[0]);
-    kFakeDiskStats[1] = StringPrintf(kFakeDiskStatsFormat,
-                                     kFakeReadSectors[1], kFakeWriteSectors[1]);
+    kFakeDiskStats[0] = base::StringPrintf(kFakeDiskStatsFormat,
+                                           kFakeReadSectors[0],
+                                           kFakeWriteSectors[0]);
+    kFakeDiskStats[1] = base::StringPrintf(kFakeDiskStatsFormat,
+                                           kFakeReadSectors[1],
+                                           kFakeWriteSectors[1]);
     CreateFakeDiskStatsFile(kFakeDiskStats[0].c_str());
     CreateFakeCpuFrequencyFile(kFakeCpuinfoMaxFreqPath, 10000000);
     CreateFakeCpuFrequencyFile(kFakeScalingMaxFreqPath, 10000000);
@@ -163,13 +166,13 @@ class MetricsDaemonTest : public testing::Test {
   // Adds active use aggregation counters update expectations that the
   // specified tag/count update will be generated.
   void ExpectActiveUseUpdate(int daily_tag, int count) {
-    EXPECT_CALL(*daily_use_, Update(daily_tag, count))
+    EXPECT_CALL(*daily_use_, Update(daily_tag, count, 0))
         .Times(1)
         .RetiresOnSaturation();
-    EXPECT_CALL(*kernel_crash_interval_, Update(0, count))
+    EXPECT_CALL(*kernel_crash_interval_, Update(0, count, 0))
         .Times(1)
         .RetiresOnSaturation();
-    EXPECT_CALL(*user_crash_interval_, Update(0, count))
+    EXPECT_CALL(*user_crash_interval_, Update(0, count, 0))
         .Times(1)
         .RetiresOnSaturation();
     ExpectFrequencyFlushCalls();
@@ -178,13 +181,13 @@ class MetricsDaemonTest : public testing::Test {
   // Adds active use aggregation counters update expectations that
   // ignore the update arguments.
   void IgnoreActiveUseUpdate() {
-    EXPECT_CALL(*daily_use_, Update(_, _))
+    EXPECT_CALL(*daily_use_, Update(_, _, _))
         .Times(1)
         .RetiresOnSaturation();
-    EXPECT_CALL(*kernel_crash_interval_, Update(_, _))
+    EXPECT_CALL(*kernel_crash_interval_, Update(_, _, _))
         .Times(1)
         .RetiresOnSaturation();
-    EXPECT_CALL(*user_crash_interval_, Update(_, _))
+    EXPECT_CALL(*user_crash_interval_, Update(_, _, _))
         .Times(1)
         .RetiresOnSaturation();
     ExpectFrequencyFlushCalls();
@@ -291,7 +294,7 @@ TEST_F(MetricsDaemonTest, CheckSystemCrash) {
   static const char kKernelCrashDetected[] = "test-kernel-crash-detected";
   EXPECT_FALSE(daemon_.CheckSystemCrash(kKernelCrashDetected));
 
-  FilePath crash_detected(kKernelCrashDetected);
+  base::FilePath crash_detected(kKernelCrashDetected);
   file_util::WriteFile(crash_detected, "", 0);
   EXPECT_TRUE(base::PathExists(crash_detected));
   EXPECT_TRUE(daemon_.CheckSystemCrash(kKernelCrashDetected));
@@ -303,14 +306,14 @@ TEST_F(MetricsDaemonTest, CheckSystemCrash) {
 
 TEST_F(MetricsDaemonTest, ReportDailyUse) {
   ExpectDailyUseTimeMetric(/* sample */ 2);
-  MetricsDaemon::ReportDailyUse(&daemon_, /* tag */ 20, /* count */ 90);
+  MetricsDaemon::ReportDailyUse(&daemon_, /* count */ 90);
 
   ExpectDailyUseTimeMetric(/* sample */ 1);
-  MetricsDaemon::ReportDailyUse(&daemon_, /* tag */ 23, /* count */ 89);
+  MetricsDaemon::ReportDailyUse(&daemon_, /* count */ 89);
 
   // There should be no metrics generated for the calls below.
-  MetricsDaemon::ReportDailyUse(&daemon_, /* tag */ 50, /* count */ 0);
-  MetricsDaemon::ReportDailyUse(&daemon_, /* tag */ 60, /* count */ -5);
+  MetricsDaemon::ReportDailyUse(&daemon_, /* count */ 0);
+  MetricsDaemon::ReportDailyUse(&daemon_, /* count */ -5);
 }
 
 TEST_F(MetricsDaemonTest, LookupPowerState) {
@@ -698,5 +701,8 @@ TEST_F(MetricsDaemonTest, SendCpuThrottleMetrics) {
 
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
+  // Some libchrome calls need this.
+  base::AtExitManager at_exit_manager;
+
   return RUN_ALL_TESTS();
 }

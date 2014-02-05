@@ -9,12 +9,16 @@
 #include <string.h>
 #include <time.h>
 
+#include <base/at_exit.h>
 #include <base/file_util.h>
+#include <base/files/file_path.h>
+#include <base/hash.h>
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
+#include <base/sys_info.h>
 #include <chromeos/dbus/service_constants.h>
 #include <dbus/dbus-glib-lowlevel.h>
 
@@ -85,6 +89,12 @@ const char MetricsDaemon::kMetricKernelCrashesDailyName[] =
     "Logging.KernelCrashesDaily";
 const char MetricsDaemon::kMetricKernelCrashesWeeklyName[] =
     "Logging.KernelCrashesWeekly";
+const char MetricsDaemon::kMetricKernelCrashesVersionName[] =
+    "Logging.KernelCrashesSinceUpdate";
+const int MetricsDaemon::kMetricCumulativeCrashCountMin = 1;
+const int MetricsDaemon::kMetricCumulativeCrashCountMax = 500;
+const int MetricsDaemon::kMetricCumulativeCrashCountBuckets = 100;
+
 const char MetricsDaemon::kMetricUncleanShutdownsDailyName[] =
     "Logging.UncleanShutdownsDaily";
 const char MetricsDaemon::kMetricUncleanShutdownsWeeklyName[] =
@@ -93,9 +103,9 @@ const char MetricsDaemon::kMetricUserCrashesDailyName[] =
     "Logging.UserCrashesDaily";
 const char MetricsDaemon::kMetricUserCrashesWeeklyName[] =
     "Logging.UserCrashesWeekly";
-const char MetricsDaemon::kMetricCrashFrequencyMin = 1;
-const char MetricsDaemon::kMetricCrashFrequencyMax = 100;
-const char MetricsDaemon::kMetricCrashFrequencyBuckets = 50;
+const int MetricsDaemon::kMetricCrashFrequencyMin = 1;
+const int MetricsDaemon::kMetricCrashFrequencyMax = 100;
+const int MetricsDaemon::kMetricCrashFrequencyBuckets = 50;
 
 // disk stats metrics
 
@@ -151,6 +161,10 @@ const char MetricsDaemon::kMetricScaledCpuFrequencyName[] =
 
 // persistent metrics path
 const char MetricsDaemon::kMetricsPath[] = "/var/log/metrics";
+
+// file containing OS version string
+const char MetricsDaemon::kLsbReleasePath[] = "/etc/lsb-release";
+
 
 // static
 const char* MetricsDaemon::kPowerStates_[] = {
@@ -214,12 +228,15 @@ void MetricsDaemon::DeleteFrequencyCounters() {
 }
 
 void MetricsDaemon::Run(bool run_as_daemon) {
+  base::AtExitManager at_exit_manager;
+
   if (run_as_daemon && daemon(0, 0) != 0)
     return;
 
   if (CheckSystemCrash(kKernelCrashDetectedFile)) {
     ProcessKernelCrash();
   }
+  kernel_crash_version_counter_->FlushOnChange(GetOsVersionHash());
 
   if (CheckSystemCrash(kUncleanShutdownDetectedFile)) {
     ProcessUncleanShutdown();
@@ -266,6 +283,42 @@ void MetricsDaemon::ConfigureCrashFrequencyReporter(
   frequency_counters_[histogram_name] = new_counter.release();
 }
 
+void MetricsDaemon::ConfigureCrashVersionReporter(
+    const char* histogram_name) {
+  scoped_ptr<chromeos_metrics::TaggedCounterReporter> reporter(
+      new chromeos_metrics::TaggedCounterReporter());
+  FilePath file_path = GetHistogramPath(histogram_name);
+  reporter->Init(file_path.value().c_str(),
+                 histogram_name,
+                 kMetricCumulativeCrashCountMin,
+                 kMetricCumulativeCrashCountMax,
+                 kMetricCumulativeCrashCountBuckets);
+  scoped_ptr<chromeos_metrics::VersionCounter> new_counter(
+      new chromeos_metrics::VersionCounter());
+  new_counter->Init(
+      static_cast<chromeos_metrics::TaggedCounterInterface*>(
+          reporter.release()),
+      chromeos_metrics::kSecondsPerDay);
+  kernel_crash_version_counter_ = new_counter.release();
+}
+
+uint32 MetricsDaemon::GetOsVersionHash() {
+  static uint32 cached_version_hash = 0;
+  static bool version_hash_is_cached = false;
+  if (version_hash_is_cached)
+    return cached_version_hash;
+  version_hash_is_cached = true;
+  std::string version;
+  if (base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_VERSION", &version)) {
+    cached_version_hash = base::Hash(version);
+  } else if (testing_) {
+    cached_version_hash = 42;  // return any plausible value for the hash
+  } else {
+    LOG(FATAL) << "could not find CHROMEOS_RELEASE_VERSION";
+  }
+  return cached_version_hash;
+}
+
 void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
                          const string& diskstats_path,
                          const string& vmstats_path,
@@ -299,6 +352,8 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
   ConfigureCrashFrequencyReporter(kMetricUserCrashesDailyName);
   ConfigureCrashFrequencyReporter(kMetricUserCrashesWeeklyName);
 
+  ConfigureCrashVersionReporter(kMetricKernelCrashesVersionName);
+
   diskstats_path_ = diskstats_path;
   vmstats_path_ = vmstats_path;
   scaling_max_freq_path_ = scaling_max_freq_path;
@@ -328,19 +383,19 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
 
   vector<string> matches;
   matches.push_back(
-      StringPrintf("type='signal',interface='%s',path='/',member='%s'",
-                   kCrashReporterInterface,
-                   kCrashReporterUserCrashSignal));
+      base::StringPrintf("type='signal',interface='%s',path='/',member='%s'",
+                         kCrashReporterInterface,
+                         kCrashReporterUserCrashSignal));
   matches.push_back(
-      StringPrintf("type='signal',interface='%s',path='%s',member='%s'",
-                   power_manager::kPowerManagerInterface,
-                   power_manager::kPowerManagerServicePath,
-                   power_manager::kPowerStateChangedSignal));
+      base::StringPrintf("type='signal',interface='%s',path='%s',member='%s'",
+                         power_manager::kPowerManagerInterface,
+                         power_manager::kPowerManagerServicePath,
+                         power_manager::kPowerStateChangedSignal));
   matches.push_back(
-      StringPrintf("type='signal',sender='%s',interface='%s',path='%s'",
-                   login_manager::kSessionManagerServiceName,
-                   login_manager::kSessionManagerInterface,
-                   login_manager::kSessionManagerServicePath));
+      base::StringPrintf("type='signal',sender='%s',interface='%s',path='%s'",
+                         login_manager::kSessionManagerServiceName,
+                         login_manager::kSessionManagerInterface,
+                         login_manager::kSessionManagerServicePath));
 
   // Registers D-Bus matches for the signals we would like to catch.
   for (vector<string>::const_iterator it = matches.begin();
@@ -466,15 +521,19 @@ void MetricsDaemon::SetUserActiveState(bool active, Time now) {
   }
   TimeDelta since_epoch = now - Time();
   int day = since_epoch.InDays();
-  daily_use_->Update(day, seconds);
-  user_crash_interval_->Update(0, seconds);
-  kernel_crash_interval_->Update(0, seconds);
+  daily_use_->Update(day, seconds, 0);
+  user_crash_interval_->Update(0, seconds, 0);
+  kernel_crash_interval_->Update(0, seconds, 0);
 
   // Flush finished cycles of all frequency counters.
   for (FrequencyCounters::iterator i = frequency_counters_.begin();
        i != frequency_counters_.end(); ++i) {
     i->second->FlushFinishedCycles();
   }
+  // Report count if we're on a new cycle.  FlushOnChange can also reset the
+  // counter, but not when called from here, because any version change has
+  // already been processed during initialization.
+  kernel_crash_version_counter_->FlushOnChange(GetOsVersionHash());
 
   // Schedules a use monitor on inactive->active transitions and
   // unschedules it on active->inactive transitions.
@@ -513,6 +572,8 @@ void MetricsDaemon::ProcessKernelCrash() {
   frequency_counters_[kMetricKernelCrashesWeeklyName]->Update(1);
   frequency_counters_[kMetricAnyCrashesDailyName]->Update(1);
   frequency_counters_[kMetricAnyCrashesWeeklyName]->Update(1);
+
+  kernel_crash_version_counter_->Update(1, GetOsVersionHash());
 }
 
 void MetricsDaemon::ProcessUncleanShutdown() {
@@ -535,8 +596,7 @@ bool MetricsDaemon::CheckSystemCrash(const string& crash_file) {
 
   // Deletes the crash-detected file so that the daemon doesn't report
   // another kernel crash in case it's restarted.
-  base::DeleteFile(crash_detected,
-                   false);  // recursive
+  base::DeleteFile(crash_detected, false);  // not recursive
   return true;
 }
 
@@ -951,7 +1011,8 @@ bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
   int swap_free = 0;
   // Send all fields retrieved, except total memory.
   for (unsigned int i = 1; i < fields.size(); i++) {
-    string metrics_name = StringPrintf("Platform.Meminfo%s", fields[i].name);
+    string metrics_name = base::StringPrintf("Platform.Meminfo%s",
+                                             fields[i].name);
     int percent;
     switch (fields[i].op) {
       case kMeminfoOp_HistPercent:
@@ -1079,15 +1140,15 @@ bool MetricsDaemon::ProcessMemuse(const string& meminfo_raw) {
     LOG(WARNING) << "borked meminfo parser";
     return false;
   }
-  string metrics_name = StringPrintf("Platform.MemuseAnon%d",
-                                     memuse_interval_index_);
+  string metrics_name = base::StringPrintf("Platform.MemuseAnon%d",
+                                           memuse_interval_index_);
   SendLinearMetric(metrics_name, (active_anon + inactive_anon) * 100 / total,
                    100, 101);
   return true;
 }
 
 // static
-void MetricsDaemon::ReportDailyUse(void* handle, int tag, int count) {
+void MetricsDaemon::ReportDailyUse(void* handle, int count) {
   if (count <= 0)
     return;
 
