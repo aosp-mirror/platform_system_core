@@ -200,7 +200,7 @@ static bool str_icase_equals(void *keyA, void *keyB) {
 }
 
 static int int_hash(void *key) {
-    return (int) key;
+    return (int) (uintptr_t) key;
 }
 
 static bool int_equals(void *keyA, void *keyB) {
@@ -487,7 +487,7 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
         break;
     case PERM_ANDROID_DATA:
     case PERM_ANDROID_OBB:
-        appid = (appid_t) hashmapGet(fuse->package_to_appid, node->name);
+        appid = (appid_t) (uintptr_t) hashmapGet(fuse->package_to_appid, node->name);
         if (appid != 0) {
             node->uid = multiuser_get_uid(parent->userid, appid);
         }
@@ -511,7 +511,7 @@ static bool get_caller_has_rw_locked(struct fuse* fuse, const struct fuse_in_hea
     }
 
     appid_t appid = multiuser_get_app_id(hdr->uid);
-    return hashmapContainsKey(fuse->appid_with_rw, (void*) appid);
+    return hashmapContainsKey(fuse->appid_with_rw, (void*) (uintptr_t) appid);
 }
 
 /* Kernel has already enforced everything we returned through
@@ -1621,12 +1621,12 @@ static int read_package_list(struct fuse *fuse) {
 
         if (sscanf(buf, "%s %d %*d %*s %*s %s", package_name, &appid, gids) == 3) {
             char* package_name_dup = strdup(package_name);
-            hashmapPut(fuse->package_to_appid, package_name_dup, (void*) appid);
+            hashmapPut(fuse->package_to_appid, package_name_dup, (void*) (uintptr_t) appid);
 
             char* token = strtok(gids, ",");
             while (token != NULL) {
                 if (strtoul(token, NULL, 10) == fuse->write_gid) {
-                    hashmapPut(fuse->appid_with_rw, (void*) appid, (void*) 1);
+                    hashmapPut(fuse->appid_with_rw, (void*) (uintptr_t) appid, (void*) (uintptr_t) 1);
                     break;
                 }
                 token = strtok(NULL, ",");

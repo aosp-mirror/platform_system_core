@@ -15,6 +15,7 @@
  */
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <gtest/gtest.h>
 #include <log/log.h>
@@ -85,8 +86,8 @@ TEST(liblog, __android_log_btwrite) {
 
 static void* ConcurrentPrintFn(void *arg) {
     int ret = __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_INFO,
-                                  "TEST__android_log_print", "Concurrent %d",
-                                  reinterpret_cast<int>(arg));
+                                  "TEST__android_log_print", "Concurrent %" PRIuPTR,
+                                  reinterpret_cast<uintptr_t>(arg));
     return reinterpret_cast<void*>(ret);
 }
 
@@ -106,8 +107,9 @@ TEST(liblog, concurrent_name(__android_log_buf_print, NUM_CONCURRENT)) {
     for (i=0; i < NUM_CONCURRENT; i++) {
         void* result;
         ASSERT_EQ(0, pthread_join(t[i], &result));
-        if ((0 == ret) && (0 != reinterpret_cast<int>(result))) {
-            ret = reinterpret_cast<int>(result);
+        int this_result = reinterpret_cast<uintptr_t>(result);
+        if ((0 == ret) && (0 != this_result)) {
+            ret = this_result;
         }
     }
     ASSERT_LT(0, ret);
