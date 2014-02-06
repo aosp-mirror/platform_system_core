@@ -40,8 +40,8 @@
 #define KEXEC_TYPE_DEFAULT 0
 #define KEXEC_TYPE_CRASH   1
 
-int prepare_boot_linux(unsigned, void *, int, unsigned, void *, int,
-                       unsigned, void *, int, unsigned, void *, int);
+int prepare_boot_linux(uintptr_t, void *, int, uintptr_t, void *, int,
+                       uintptr_t, void *, int, uintptr_t, void *, int);
 unsigned *create_atags(unsigned *, int, const struct boot_img_hdr *, int *);
 long kexec_load(unsigned int, unsigned long, struct kexec_segment *, unsigned long);
 char *read_atags(const char *, int *);
