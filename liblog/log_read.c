@@ -357,6 +357,32 @@ int android_logger_get_log_version(struct logger *logger UNUSED)
     return 3;
 }
 
+/*
+ * returns statistics
+ */
+ssize_t android_logger_get_statistics(struct logger_list *logger_list,
+                                      char *buf, size_t len)
+{
+    struct listnode *node;
+    struct logger *logger;
+    char *cp = buf;
+    size_t remaining = len;
+    size_t n;
+
+    n = snprintf(cp, remaining, "getStatistics");
+    n = min(n, remaining);
+    remaining -= n;
+    cp += n;
+
+    logger_for_each(logger, logger_list) {
+        n = snprintf(cp, remaining, " %d", logger->id);
+        n = min(n, remaining);
+        remaining -= n;
+        cp += n;
+    }
+    return send_log_msg(NULL, NULL, buf, len);
+}
+
 struct logger_list *android_logger_list_alloc(int mode,
                                               unsigned int tail,
                                               pid_t pid)

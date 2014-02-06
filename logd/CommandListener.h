@@ -54,6 +54,7 @@ private:
     LogBufferCmd(Clear)
     LogBufferCmd(GetBufSize)
     LogBufferCmd(GetBufSizeUsed)
+    LogBufferCmd(GetStatistics)
 };
 
 #endif
