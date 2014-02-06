@@ -146,6 +146,9 @@ int android_logger_get_log_version(struct logger *logger);
 
 struct logger_list;
 
+ssize_t android_logger_get_statistics(struct logger_list *logger_list,
+                                      char *buf, size_t len);
+
 struct logger_list *android_logger_list_alloc(int mode,
                                               unsigned int tail,
                                               pid_t pid);

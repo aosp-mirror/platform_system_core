@@ -22,17 +22,13 @@
 #include <log/logger.h>
 
 #include "LogBuffer.h"
+#include "LogStatistics.h"
 #include "LogReader.h"
 
 #define LOG_BUFFER_SIZE (256 * 1024) // Tuned on a per-platform basis here?
 
 LogBuffer::LogBuffer(LastLogTimes *times)
         : mTimes(*times) {
-    int i;
-    for (i = 0; i < LOG_ID_MAX; i++) {
-        mSizes[i] = 0;
-        mElements[i] = 0;
-    }
     pthread_mutex_init(&mLogElementsLock, NULL);
 }
 
@@ -93,8 +89,7 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
         LogTimeEntry::unlock();
     }
 
-    mSizes[log_id] += len;
-    mElements[log_id]++;
+    stats.add(len, log_id, uid, pid);
     maybePrune(log_id);
     pthread_mutex_unlock(&mLogElementsLock);
 }
@@ -104,10 +99,10 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
 //
 // mLogElementsLock must be held when this function is called.
 void LogBuffer::maybePrune(log_id_t id) {
-    unsigned long sizes = mSizes[id];
+    size_t sizes = stats.sizes(id);
     if (sizes > LOG_BUFFER_SIZE) {
-        unsigned long sizeOver90Percent = sizes - ((LOG_BUFFER_SIZE * 9) / 10);
-        unsigned long elements = mElements[id];
+        size_t sizeOver90Percent = sizes - ((LOG_BUFFER_SIZE * 9) / 10);
+        size_t elements = stats.elements(id);
         unsigned long pruneRows = elements * sizeOver90Percent / sizes;
         elements /= 10;
         if (pruneRows <= elements) {
@@ -141,7 +136,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
         LogBufferElement *e = *it;
         if (e->getLogId() == id) {
             if (oldest && (oldest->mStart <= e->getMonotonicTime())) {
-                if (mSizes[id] > (2 * LOG_BUFFER_SIZE)) {
+                if (stats.sizes(id) > (2 * LOG_BUFFER_SIZE)) {
                     // kick a misbehaving log reader client off the island
                     oldest->release_Locked();
                 } else {
@@ -150,8 +145,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
                 break;
             }
             it = mLogElements.erase(it);
-            mSizes[id] -= e->getMsgLen();
-            mElements[id]--;
+            stats.subtract(e->getMsgLen(), id, e->getUid(), e->getPid());
             delete e;
             pruneRows--;
         } else {
@@ -172,7 +166,7 @@ void LogBuffer::clear(log_id_t id) {
 // get the used space associated with "id".
 unsigned long LogBuffer::getSizeUsed(log_id_t id) {
     pthread_mutex_lock(&mLogElementsLock);
-    unsigned long retval = mSizes[id];
+    size_t retval = stats.sizes(id);
     pthread_mutex_unlock(&mLogElementsLock);
     return retval;
 }
@@ -220,4 +214,27 @@ log_time LogBuffer::flushTo(
     pthread_mutex_unlock(&mLogElementsLock);
 
     return max;
+}
+
+size_t LogBuffer::formatStatistics(char **strp, uid_t uid, unsigned int logMask) {
+    log_time oldest(CLOCK_MONOTONIC);
+
+    pthread_mutex_lock(&mLogElementsLock);
+
+    // Find oldest element in the log(s)
+    LogBufferElementCollection::iterator it;
+    for (it = mLogElements.begin(); it != mLogElements.end(); ++it) {
+        LogBufferElement *element = *it;
+
+        if ((logMask & (1 << element->getLogId()))) {
+            oldest = element->getMonotonicTime();
+            break;
+        }
+    }
+
+    size_t ret = stats.format(strp, uid, logMask, oldest);
+
+    pthread_mutex_unlock(&mLogElementsLock);
+
+    return ret;
 }

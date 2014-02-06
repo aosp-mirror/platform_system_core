@@ -13,12 +13,14 @@ LOCAL_SRC_FILES := \
     FlushCommand.cpp \
     LogBuffer.cpp \
     LogBufferElement.cpp \
-    LogTimes.cpp
+    LogTimes.cpp \
+    LogStatistics.cpp
 
 LOCAL_SHARED_LIBRARIES := \
     libsysutils \
     liblog \
-    libcutils
+    libcutils \
+    libutils
 
 LOCAL_MODULE_TAGS := optional
 

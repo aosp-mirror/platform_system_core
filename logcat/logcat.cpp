@@ -225,10 +225,11 @@ static void show_help(const char *cmd)
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
                     "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
-                    "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio'\n"
-                    "                  or 'events'. Multiple -b parameters are allowed and the\n"
+                    "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio',\n"
+                    "                  'events' or 'all'. Multiple -b parameters are allowed and\n"
                     "                  results are interleaved. The default is -b main -b system.\n"
-                    "  -B              output the log in binary");
+                    "  -B              output the log in binary.\n"
+                    "  -S              output statistics");
 
 
     fprintf(stderr,"\nfilterspecs are a series of \n"
@@ -278,6 +279,7 @@ int main(int argc, char **argv)
     int hasSetLogFormat = 0;
     int clearLog = 0;
     int getLogSize = 0;
+    int printStatistics = 0;
     int mode = O_RDONLY;
     const char *forceFilters = NULL;
     log_device_t* devices = NULL;
@@ -303,7 +305,7 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, "cdt:T:gsQf:r::n:v:b:B");
+        ret = getopt(argc, argv, "cdt:T:gsQf:r::n:v:b:BS");
 
         if (ret < 0) {
             break;
@@ -336,6 +338,39 @@ int main(int argc, char **argv)
             break;
 
             case 'b': {
+                if (strcmp(optarg, "all") == 0) {
+                    while (devices) {
+                        dev = devices;
+                        devices = dev->next;
+                        delete dev;
+                    }
+
+                    dev = devices = new log_device_t("main", false, 'm');
+                    android::g_devCount = 1;
+                    if (android_name_to_log_id("system") == LOG_ID_SYSTEM) {
+                        dev->next = new log_device_t("system", false, 's');
+                        if (dev->next) {
+                            dev = dev->next;
+                            android::g_devCount++;
+                        }
+                    }
+                    if (android_name_to_log_id("radio") == LOG_ID_RADIO) {
+                        dev->next = new log_device_t("radio", false, 'r');
+                        if (dev->next) {
+                            dev = dev->next;
+                            android::g_devCount++;
+                        }
+                    }
+                    if (android_name_to_log_id("events") == LOG_ID_EVENTS) {
+                        dev->next = new log_device_t("events", true, 'e');
+                        if (dev->next) {
+                            android::g_devCount++;
+                            needBinary = true;
+                        }
+                    }
+                    break;
+                }
+
                 bool binary = strcmp(optarg, "events") == 0;
                 if (binary) {
                     needBinary = true;
@@ -470,6 +505,10 @@ int main(int argc, char **argv)
                 }
                 break;
 
+            case 'S':
+                printStatistics = 1;
+                break;
+
             default:
                 fprintf(stderr,"Unrecognized Option\n");
                 android::show_help(argv[0]);
@@ -586,6 +625,56 @@ int main(int argc, char **argv)
 
         dev = dev->next;
     }
+
+    if (printStatistics) {
+        size_t len = 8192;
+        char *buf;
+
+        for(int retry = 32;
+                (retry >= 0) && ((buf = new char [len]));
+                delete [] buf, --retry) {
+            android_logger_get_statistics(logger_list, buf, len);
+
+            buf[len-1] = '\0';
+            size_t ret = atol(buf) + 1;
+            if (ret < 4) {
+                delete [] buf;
+                buf = NULL;
+                break;
+            }
+            bool check = ret <= len;
+            len = ret;
+            if (check) {
+                break;
+            }
+        }
+
+        if (!buf) {
+            perror("statistics read");
+            exit(EXIT_FAILURE);
+        }
+
+        // remove trailing FF
+        char *cp = buf + len - 1;
+        *cp = '\0';
+        bool truncated = *--cp != '\f';
+        if (!truncated) {
+            *cp = '\0';
+        }
+
+        // squash out the byte count
+        cp = buf;
+        if (!truncated) {
+            while (isdigit(*cp) || (*cp == '\n')) {
+                ++cp;
+            }
+        }
+
+        printf("%s", cp);
+        delete [] buf;
+        exit(0);
+    }
+
 
     if (getLogSize) {
         exit(0);
