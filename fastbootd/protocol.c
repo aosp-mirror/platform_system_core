@@ -142,7 +142,7 @@ void fastboot_data(struct protocol_handle *phandle, size_t len)
     char response[64];
     ssize_t ret;
 
-    snprintf(response, 64, "DATA%08x", len);
+    snprintf(response, 64, "DATA%08zx", len);
     ret = protocol_handle_write(phandle, response, strlen(response));
     if (ret < 0)
         return;

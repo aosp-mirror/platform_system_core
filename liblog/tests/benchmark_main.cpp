@@ -16,6 +16,7 @@
 
 #include <benchmark.h>
 
+#include <inttypes.h>
 #include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -158,10 +159,10 @@ void Run(Benchmark* b) {
     sdev = (sqrt((double)nXvariance) / gBenchmarkNum / gBenchmarkNum) + 0.5;
   }
   if (mean > (10000 * sdev)) {
-    printf("%-25s %10llu %10llu%s\n", full_name,
+    printf("%-25s %10" PRIu64 " %10" PRIu64 "%s\n", full_name,
             static_cast<uint64_t>(iterations), mean, throughput);
   } else {
-    printf("%-25s %10llu %10llu(\317\203%llu)%s\n", full_name,
+    printf("%-25s %10" PRIu64 " %10" PRIu64 "(\317\203%" PRIu64 ")%s\n", full_name,
            static_cast<uint64_t>(iterations), mean, sdev, throughput);
   }
   fflush(stdout);
