@@ -89,10 +89,10 @@ long kexec_load(unsigned int entry, unsigned long nr_segments,
  * Kernel address is not set into kernel_phys
  * Ramdisk is set to position relative to kernel
  */
-int prepare_boot_linux(unsigned kernel_phys, void *kernel_addr, int kernel_size,
-                       unsigned ramdisk_phys, void *ramdisk_addr, int ramdisk_size,
-                       unsigned second_phys, void *second_addr, int second_size,
-                       unsigned atags_phys, void *atags_addr, int atags_size) {
+int prepare_boot_linux(uintptr_t kernel_phys, void *kernel_addr, int kernel_size,
+                       uintptr_t ramdisk_phys, void *ramdisk_addr, int ramdisk_size,
+                       uintptr_t second_phys, void *second_addr, int second_size,
+                       uintptr_t atags_phys, void *atags_addr, int atags_size) {
     struct kexec_segment segment[4];
     int segment_count = 2;
     unsigned entry = START_ADDRESS + KEXEC_ARM_ZIMAGE_OFFSET;

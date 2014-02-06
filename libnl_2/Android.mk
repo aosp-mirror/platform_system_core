@@ -26,6 +26,7 @@ LOCAL_C_INCLUDES += \
 # Static Library
 LOCAL_MODULE := libnl_2
 LOCAL_MODULE_TAGS := optional
+LOCAL_32_BIT_ONLY := true
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -34,4 +35,5 @@ LOCAL_WHOLE_STATIC_LIBRARIES:= libnl_2
 LOCAL_SHARED_LIBRARIES:= liblog
 LOCAL_MODULE := libnl_2
 LOCAL_MODULE_TAGS := optional
+LOCAL_32_BIT_ONLY := true
 include $(BUILD_SHARED_LIBRARY)
