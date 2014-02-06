@@ -8,7 +8,7 @@
 #include <vector>
 
 #include <base/file_util.h>
-#include <base/stringprintf.h>
+#include <base/strings/stringprintf.h>
 #include <chromeos/dbus/service_constants.h>
 #include <gtest/gtest.h>
 
@@ -16,6 +16,8 @@
 #include "metrics_daemon.h"
 #include "metrics_library_mock.h"
 
+using base::FilePath;
+using base::StringPrintf;
 using base::Time;
 using base::TimeTicks;
 using chromeos_metrics::FrequencyCounter;
@@ -132,8 +134,8 @@ class MetricsDaemonTest : public testing::Test {
     EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
     EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
 
-    file_util::Delete(FilePath(kTestDir), true);
-    file_util::CreateDirectory(FilePath(kTestDir));
+    base::DeleteFile(FilePath(kTestDir), true);
+    base::CreateDirectory(FilePath(kTestDir));
   }
 
   virtual void TearDown() {
@@ -261,7 +263,7 @@ class MetricsDaemonTest : public testing::Test {
   // Creates or overwrites an input file containing a fake CPU frequency.
   void CreateFakeCpuFrequencyFile(const char* filename, int frequency) {
     FilePath path(filename);
-    file_util::Delete(path, false);
+    base::DeleteFile(path, false);
     std::string frequency_string = StringPrintf("%d\n", frequency);
     int frequency_string_length = frequency_string.length();
     EXPECT_EQ(frequency_string.length(),
@@ -291,12 +293,12 @@ TEST_F(MetricsDaemonTest, CheckSystemCrash) {
 
   FilePath crash_detected(kKernelCrashDetected);
   file_util::WriteFile(crash_detected, "", 0);
-  EXPECT_TRUE(file_util::PathExists(crash_detected));
+  EXPECT_TRUE(base::PathExists(crash_detected));
   EXPECT_TRUE(daemon_.CheckSystemCrash(kKernelCrashDetected));
-  EXPECT_FALSE(file_util::PathExists(crash_detected));
+  EXPECT_FALSE(base::PathExists(crash_detected));
   EXPECT_FALSE(daemon_.CheckSystemCrash(kKernelCrashDetected));
-  EXPECT_FALSE(file_util::PathExists(crash_detected));
-  file_util::Delete(crash_detected, false);
+  EXPECT_FALSE(base::PathExists(crash_detected));
+  base::DeleteFile(crash_detected, false);
 }
 
 TEST_F(MetricsDaemonTest, ReportDailyUse) {

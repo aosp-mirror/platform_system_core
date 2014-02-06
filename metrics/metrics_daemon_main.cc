@@ -4,7 +4,7 @@
 
 
 #include <base/logging.h>
-#include <base/string_util.h>
+#include <base/strings/string_util.h>
 #include <gflags/gflags.h>
 #include <rootdev/rootdev.h>
 

@@ -86,8 +86,7 @@ static int WriteFileDescriptor(const int fd, const char* data, int size) {
 
 MetricsLibrary::MetricsLibrary()
     : uma_events_file_(NULL),
-      consent_file_(kConsentFile),
-      policy_provider_(NULL) {}
+      consent_file_(kConsentFile) {}
 
 // We take buffer and buffer_size as parameters in order to simplify testing
 // of various alignments of the |device_name| with |buffer_size|.

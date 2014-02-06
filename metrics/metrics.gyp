@@ -1,48 +1,32 @@
 {
+  'variables': {
+    'libbase_ver': 242728,
+  },
   'target_defaults': {
-      'dependencies': [
-        '../libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
-      ],
-      'variables': {
-        'deps': [
-          'dbus-1',
-          'dbus-glib-1',
-          'glib-2.0',
-          'gobject-2.0',
-          'gthread-2.0',
-          'libchrome-<(libbase_ver)',
-        ]
-      },
-      'cflags_cc': [
-        '-fno-exceptions',
-      ],
+    'dependencies': [
+      '../libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
+    ],
+    'variables': {
+      'deps': [
+        'dbus-1',
+        'dbus-glib-1',
+        'glib-2.0',
+        'gobject-2.0',
+        'gthread-2.0',
+        'libchrome-<(libbase_ver)',
+      ]
+    },
+    'cflags_cc': [
+      '-fno-exceptions',
+    ],
   },
   'targets': [
     {
-      'target_name': 'metrics',
-      'type': 'static_library',
-      'sources': [
-        'c_metrics_library.cc',
-        'metrics_library.cc',
-        'timer.cc',
-      ],
-    },
-    {
-      'target_name': 'libmetrics',
-      'type': 'shared_library',
-      'cflags': [
-        '-fvisibility=default',
-      ],
-      'sources': [
-        'c_metrics_library.cc',
-        'metrics_library.cc',
-        'timer.cc',
-      ],
-    },
-    {
       'target_name': 'libmetrics_daemon',
       'type': 'static_library',
-      'dependencies': ['libmetrics'],
+      'dependencies': [
+        '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
+      ],
       'link_settings': {
         'libraries': [
           '-lrootdev',
@@ -58,7 +42,9 @@
     {
       'target_name': 'metrics_client',
       'type': 'executable',
-      'dependencies': ['libmetrics'],
+      'dependencies': [
+        '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
+      ],
       'sources': [
         'metrics_client.cc',
       ]
@@ -79,7 +65,9 @@
         {
           'target_name': 'metrics_library_test',
           'type': 'executable',
-          'dependencies': ['libmetrics'],
+          'dependencies': [
+            '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
+          ],
           'includes': ['../common-mk/common_test.gypi'],
           'sources': [
             'metrics_library_test.cc',

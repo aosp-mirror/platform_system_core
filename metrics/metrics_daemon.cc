@@ -11,15 +11,17 @@
 
 #include <base/file_util.h>
 #include <base/logging.h>
-#include <base/string_number_conversions.h>
-#include <base/string_util.h>
-#include <base/string_split.h>
-#include <base/stringprintf.h>
+#include <base/strings/string_number_conversions.h>
+#include <base/strings/string_split.h>
+#include <base/strings/string_util.h>
+#include <base/strings/stringprintf.h>
 #include <chromeos/dbus/service_constants.h>
 #include <dbus/dbus-glib-lowlevel.h>
 
 #include "counter.h"
 
+using base::FilePath;
+using base::StringPrintf;
 using base::Time;
 using base::TimeDelta;
 using base::TimeTicks;
@@ -528,13 +530,13 @@ void MetricsDaemon::ProcessUncleanShutdown() {
 
 bool MetricsDaemon::CheckSystemCrash(const string& crash_file) {
   FilePath crash_detected(crash_file);
-  if (!file_util::PathExists(crash_detected))
+  if (!base::PathExists(crash_detected))
     return false;
 
   // Deletes the crash-detected file so that the daemon doesn't report
   // another kernel crash in case it's restarted.
-  file_util::Delete(crash_detected,
-                    false);  // recursive
+  base::DeleteFile(crash_detected,
+                   false);  // recursive
   return true;
 }
 
@@ -706,7 +708,7 @@ bool MetricsDaemon::VmStatsParseStats(const char* stats,
 bool MetricsDaemon::VmStatsReadStats(struct VmstatRecord* stats) {
   string value_string;
   FilePath* path = new FilePath(vmstats_path_);
-  if (!file_util::ReadFileToString(*path, &value_string)) {
+  if (!base::ReadFileToString(*path, &value_string)) {
     delete path;
     LOG(WARNING) << "cannot read " << vmstats_path_;
     return false;
@@ -718,11 +720,11 @@ bool MetricsDaemon::VmStatsReadStats(struct VmstatRecord* stats) {
 bool MetricsDaemon::ReadFreqToInt(const string& sysfs_file_name, int* value) {
   const FilePath sysfs_path(sysfs_file_name);
   string value_string;
-  if (!file_util::ReadFileToString(sysfs_path, &value_string)) {
+  if (!base::ReadFileToString(sysfs_path, &value_string)) {
     LOG(WARNING) << "cannot read " << sysfs_path.value().c_str();
     return false;
   }
-  if (!RemoveChars(value_string, "\n", &value_string)) {
+  if (!base::RemoveChars(value_string, "\n", &value_string)) {
     LOG(WARNING) << "no newline in " << value_string;
     // Continue even though the lack of newline is suspicious.
   }
@@ -901,7 +903,7 @@ gboolean MetricsDaemon::MeminfoCallbackStatic(void* handle) {
 bool MetricsDaemon::MeminfoCallback() {
   string meminfo_raw;
   const FilePath meminfo_path("/proc/meminfo");
-  if (!file_util::ReadFileToString(meminfo_path, &meminfo_raw)) {
+  if (!base::ReadFileToString(meminfo_path, &meminfo_raw)) {
     LOG(WARNING) << "cannot read " << meminfo_path.value().c_str();
     return false;
   }
@@ -1051,7 +1053,7 @@ void MetricsDaemon::MemuseCallback() {
 bool MetricsDaemon::MemuseCallbackWork() {
   string meminfo_raw;
   const FilePath meminfo_path("/proc/meminfo");
-  if (!file_util::ReadFileToString(meminfo_path, &meminfo_raw)) {
+  if (!base::ReadFileToString(meminfo_path, &meminfo_raw)) {
     LOG(WARNING) << "cannot read " << meminfo_path.value().c_str();
     return false;
   }

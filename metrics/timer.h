@@ -10,7 +10,11 @@
 #include <string>
 
 #include <base/memory/scoped_ptr.h>
+#if BASE_VER >= 242728
+#include <base/time/time.h>
+#else
 #include <base/time.h>
+#endif
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 class MetricsLibraryInterface;

@@ -7,7 +7,7 @@
 #include <base/file_util.h>
 #include <base/logging.h>
 #include <base/posix/eintr_wrapper.h>
-#include <base/string_util.h>
+#include <base/strings/string_util.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -15,6 +15,7 @@
 #include "counter_mock.h"  // For TaggedCounterMock.
 #include "metrics_library_mock.h"
 
+using base::FilePath;
 using ::testing::_;
 using ::testing::MockFunction;
 using ::testing::StrictMock;
@@ -58,7 +59,7 @@ class TaggedCounterTest : public testing::Test {
   virtual void TearDown() {
     logging::SetLogMessageHandler(NULL);
     test_ = NULL;
-    file_util::Delete(FilePath(kTestRecordFile), false);
+    base::DeleteFile(FilePath(kTestRecordFile), false);
   }
 
   // Asserts that the record file contains the specified contents.
@@ -74,8 +75,8 @@ class TaggedCounterTest : public testing::Test {
     }
 
     TaggedCounter::Record record;
-    if (!file_util::ReadFromFD(fd, reinterpret_cast<char*>(&record),
-                               sizeof(record))) {
+    if (!base::ReadFromFD(fd, reinterpret_cast<char*>(&record),
+                          sizeof(record))) {
       testing::Message msg;
       msg << "Unable to read " << sizeof(record) << " bytes from "
           << kTestRecordFile;
@@ -100,9 +101,9 @@ class TaggedCounterTest : public testing::Test {
   bool AssertNoOrEmptyRecordFile() {
     FilePath record_file(counter_.filename_);
     int64 record_file_size;
-    return !file_util::PathExists(record_file) ||
-        (file_util::GetFileSize(record_file, &record_file_size) &&
-         record_file_size == 0);
+    return !base::PathExists(record_file) ||
+           (base::GetFileSize(record_file, &record_file_size) &&
+            record_file_size == 0);
   }
 
   // Adds a reporter call expectation that the specified tag/count
@@ -196,7 +197,7 @@ TEST_F(TaggedCounterTest, BadFileLocation) {
   EXPECT_TRUE(LogContains("Unable to open the persistent counter file: "
                           "No such file or directory"));
   EXPECT_EQ(TaggedCounter::kRecordInvalid, counter_.record_state_);
-  file_util::Delete(FilePath(kDoesNotExistFile), false);
+  base::DeleteFile(FilePath(kDoesNotExistFile), false);
 }
 
 TEST_F(TaggedCounterTest, Flush) {

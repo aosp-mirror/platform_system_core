@@ -13,12 +13,13 @@
 #include "c_metrics_library.h"
 #include "metrics_library.h"
 
-static const FilePath kTestUMAEventsFile("test-uma-events");
-static const char kTestMounts[] = "test-mounts";
-
+using base::FilePath;
 using ::testing::_;
 using ::testing::Return;
 using ::testing::AnyNumber;
+
+static const FilePath kTestUMAEventsFile("test-uma-events");
+static const char kTestMounts[] = "test-mounts";
 
 ACTION_P(SetMetricsPolicy, enabled) {
   *arg0 = enabled;
@@ -46,8 +47,8 @@ class MetricsLibraryTest : public testing::Test {
   }
 
   virtual void TearDown() {
-    file_util::Delete(FilePath(kTestMounts), false);
-    file_util::Delete(kTestUMAEventsFile, false);
+    base::DeleteFile(FilePath(kTestMounts), false);
+    base::DeleteFile(kTestUMAEventsFile, false);
   }
 
   void VerifyEnabledCacheHit(bool to_value);
@@ -182,7 +183,7 @@ TEST_F(MetricsLibraryTest, SendEnumToUMA) {
   char buf[100];
   const int kLen = 40;
   EXPECT_TRUE(lib_.SendEnumToUMA("Test.EnumMetric", 1, 3));
-  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+  EXPECT_EQ(kLen, base::ReadFile(kTestUMAEventsFile, buf, 100));
 
   char exp[kLen];
   sprintf(exp, "%c%c%c%clinearhistogram%cTest.EnumMetric 1 3",
@@ -194,7 +195,7 @@ TEST_F(MetricsLibraryTest, SendMessageToChrome) {
   EXPECT_TRUE(lib_.SendMessageToChrome(4, "test"));
   EXPECT_TRUE(lib_.SendMessageToChrome(7, "content"));
   std::string uma_events;
-  EXPECT_TRUE(file_util::ReadFileToString(kTestUMAEventsFile, &uma_events));
+  EXPECT_TRUE(base::ReadFileToString(kTestUMAEventsFile, &uma_events));
   EXPECT_EQ("testcontent", uma_events);
 }
 
@@ -205,14 +206,14 @@ TEST_F(MetricsLibraryTest, SendMessageToChromeUMAEventsBadFileLocation) {
   lib_.uma_events_file_ = kDoesNotExistFile;
   static const char kDummyMessage[] = "Dummy Message";
   EXPECT_FALSE(lib_.SendMessageToChrome(strlen(kDummyMessage), kDummyMessage));
-  file_util::Delete(FilePath(kDoesNotExistFile), false);
+  base::DeleteFile(FilePath(kDoesNotExistFile), false);
 }
 
 TEST_F(MetricsLibraryTest, SendToUMA) {
   char buf[100];
   const int kLen = 37;
   EXPECT_TRUE(lib_.SendToUMA("Test.Metric", 2, 1, 100, 50));
-  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+  EXPECT_EQ(kLen, base::ReadFile(kTestUMAEventsFile, buf, 100));
 
   char exp[kLen];
   sprintf(exp, "%c%c%c%chistogram%cTest.Metric 2 1 100 50", kLen, 0, 0, 0, 0);
@@ -223,7 +224,7 @@ TEST_F(MetricsLibraryTest, SendUserActionToUMA) {
   char buf[100];
   const int kLen = 30;
   EXPECT_TRUE(lib_.SendUserActionToUMA("SomeKeyPressed"));
-  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+  EXPECT_EQ(kLen, base::ReadFile(kTestUMAEventsFile, buf, 100));
 
   char exp[kLen];
   sprintf(exp, "%c%c%c%cuseraction%cSomeKeyPressed", kLen, 0, 0, 0, 0);
@@ -234,7 +235,7 @@ TEST_F(MetricsLibraryTest, SendSparseToUMA) {
   char buf[100];
   const int kLen = 4 + sizeof("sparsehistogram") + sizeof("Test.Sparse 1234");
   EXPECT_TRUE(lib_.SendSparseToUMA("Test.Sparse", 1234));
-  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+  EXPECT_EQ(kLen, base::ReadFile(kTestUMAEventsFile, buf, 100));
 
   char exp[kLen];
   sprintf(exp, "%c%c%c%csparsehistogram%cTest.Sparse 1234", kLen, 0, 0, 0, 0);
@@ -248,7 +249,7 @@ TEST_F(MetricsLibraryTest, SendCrashToUMA) {
                     0, 0, 0, 0, 0) + 1;
   exp[0] = len;
   char buf[100];
-  EXPECT_EQ(len, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+  EXPECT_EQ(len, base::ReadFile(kTestUMAEventsFile, buf, 100));
   EXPECT_EQ(0, memcmp(exp, buf, len));
 }
 
@@ -275,7 +276,7 @@ class CMetricsLibraryTest : public testing::Test {
 
   virtual void TearDown() {
     CMetricsLibraryDelete(lib_);
-    file_util::Delete(kTestUMAEventsFile, false);
+    base::DeleteFile(kTestUMAEventsFile, false);
   }
 
   CMetricsLibrary lib_;
@@ -297,7 +298,7 @@ TEST_F(CMetricsLibraryTest, SendEnumToUMA) {
   char buf[100];
   const int kLen = 40;
   EXPECT_TRUE(CMetricsLibrarySendEnumToUMA(lib_, "Test.EnumMetric", 1, 3));
-  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+  EXPECT_EQ(kLen, base::ReadFile(kTestUMAEventsFile, buf, 100));
 
   char exp[kLen];
   sprintf(exp, "%c%c%c%clinearhistogram%cTest.EnumMetric 1 3",
@@ -309,7 +310,7 @@ TEST_F(CMetricsLibraryTest, SendToUMA) {
   char buf[100];
   const int kLen = 37;
   EXPECT_TRUE(CMetricsLibrarySendToUMA(lib_, "Test.Metric", 2, 1, 100, 50));
-  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+  EXPECT_EQ(kLen, base::ReadFile(kTestUMAEventsFile, buf, 100));
 
   char exp[kLen];
   sprintf(exp, "%c%c%c%chistogram%cTest.Metric 2 1 100 50", kLen, 0, 0, 0, 0);
@@ -320,7 +321,7 @@ TEST_F(CMetricsLibraryTest, SendUserActionToUMA) {
   char buf[100];
   const int kLen = 30;
   EXPECT_TRUE(CMetricsLibrarySendUserActionToUMA(lib_, "SomeKeyPressed"));
-  EXPECT_EQ(kLen, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+  EXPECT_EQ(kLen, base::ReadFile(kTestUMAEventsFile, buf, 100));
 
   char exp[kLen];
   sprintf(exp, "%c%c%c%cuseraction%cSomeKeyPressed", kLen, 0, 0, 0, 0);
@@ -333,7 +334,7 @@ TEST_F(CMetricsLibraryTest, SendCrashToUMA) {
   int len = sprintf(exp, "%c%c%c%ccrash%cuser", 0, 0, 0, 0, 0) + 1;
   exp[0] = len;
   EXPECT_TRUE(CMetricsLibrarySendCrashToUMA(lib_, "user"));
-  EXPECT_EQ(len, file_util::ReadFile(kTestUMAEventsFile, buf, 100));
+  EXPECT_EQ(len, base::ReadFile(kTestUMAEventsFile, buf, 100));
 
   EXPECT_EQ(0, memcmp(exp, buf, len));
 }

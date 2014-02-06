@@ -9,7 +9,6 @@
 #include <string>
 
 #include <base/basictypes.h>
-#include <base/time.h>
 #include <gmock/gmock.h>
 
 #include "timer.h"

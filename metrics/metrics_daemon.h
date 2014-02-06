@@ -9,9 +9,9 @@
 #include <glib.h>
 #include <map>
 
-#include <base/file_path.h>
+#include <base/files/file_path.h>
 #include <base/memory/scoped_ptr.h>
-#include <base/time.h>
+#include <base/time/time.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "metrics_library.h"
@@ -195,7 +195,7 @@ class MetricsDaemon {
   void ConfigureCrashFrequencyReporter(const char* histogram_name);
 
   // Returns file path to persistent file for generating given histogram.
-  FilePath GetHistogramPath(const char* histogram_name);
+  base::FilePath GetHistogramPath(const char* histogram_name);
 
   // Creates the event loop and enters it.
   void Loop();

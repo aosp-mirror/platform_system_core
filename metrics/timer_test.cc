@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include <base/memory/scoped_ptr.h>
-#include <base/time.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 

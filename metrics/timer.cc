@@ -7,7 +7,6 @@
 #include <string>
 
 #include <base/memory/scoped_ptr.h>
-#include <base/time.h>
 
 #include "metrics_library.h"
 
