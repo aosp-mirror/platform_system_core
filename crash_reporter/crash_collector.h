@@ -12,7 +12,7 @@
 
 #include <glib.h>
 
-#include "base/file_path.h"
+#include "base/files/file_path.h"
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
 // User crash collector.

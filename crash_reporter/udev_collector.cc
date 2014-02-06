@@ -7,8 +7,8 @@
 #include "base/basictypes.h"
 #include "base/file_util.h"
 #include "base/logging.h"
-#include "base/string_split.h"
-#include "base/string_util.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "chromeos/process.h"
 
 static const char kCollectUdevSignature[] = "crash_reporter-udev-collection";
@@ -77,7 +77,7 @@ bool UdevCollector::HandleCrash(const std::string &udev_event) {
   int process_result = gzip_process.Run();
   FilePath crash_path_zipped = FilePath(crash_path.value() + ".gz");
   // If the zip file was not created, use the uncompressed file.
-  if (process_result != 0 || !file_util::PathExists(crash_path_zipped))
+  if (process_result != 0 || !base::PathExists(crash_path_zipped))
     LOG(ERROR) << "Could not create zip file " << crash_path_zipped.value();
   else
     crash_path = crash_path_zipped;

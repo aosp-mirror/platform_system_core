@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/file_util.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/scoped_ptr.h"
 #include "chromeos/test_helpers.h"
@@ -32,9 +33,8 @@ bool IsMetrics() {
 
 // Returns the number of compressed crash log files found in the given path.
 int GetNumLogFiles(const FilePath& path) {
-  file_util::FileEnumerator enumerator(path, false,
-                                       file_util::FileEnumerator::FILES,
-                                       "*.log.gz");
+  base::FileEnumerator enumerator(path, false, base::FileEnumerator::FILES,
+                                  "*.log.gz");
   int num_files = 0;
   for (FilePath file_path = enumerator.Next();
        !file_path.value().empty();

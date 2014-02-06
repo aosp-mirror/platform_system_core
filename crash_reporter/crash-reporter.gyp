@@ -7,6 +7,9 @@
       ],
     },
   },
+  'variables': {
+    'libbase_ver': 242728,
+  },
   'targets': [
     {
       'target_name': 'libcrash',

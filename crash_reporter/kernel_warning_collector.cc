@@ -6,9 +6,9 @@
 
 #include "base/file_util.h"
 #include "base/logging.h"
-#include "base/string_number_conversions.h"
-#include "base/string_util.h"
-#include "base/stringprintf.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 
 namespace {
 const char kExecName[] = "kernel-warning";
@@ -17,6 +17,9 @@ const char kKernelWarningPath[] = "/var/run/kwarn/warning";
 const pid_t kKernelPid = 0;
 const uid_t kRootUid = 0;
 }  // namespace
+
+using base::FilePath;
+using base::StringPrintf;
 
 KernelWarningCollector::KernelWarningCollector() {
 }
@@ -27,7 +30,7 @@ KernelWarningCollector::~KernelWarningCollector() {
 bool KernelWarningCollector::LoadKernelWarning(std::string *content,
                                                std::string *hash_string) {
   FilePath kernel_warning_path(kKernelWarningPath);
-  if (!file_util::ReadFileToString(kernel_warning_path, content)) {
+  if (!base::ReadFileToString(kernel_warning_path, content)) {
     LOG(ERROR) << "Could not open " << kKernelWarningPath;
     return false;
   }

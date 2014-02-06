@@ -8,7 +8,7 @@
 
 #include "base/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/string_split.h"
+#include "base/strings/string_split.h"
 #include "chromeos/syslog_logging.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/user_collector.h"
@@ -42,7 +42,7 @@ class UserCollectorTest : public ::testing::Test {
                           kFilePath,
                           IsMetrics,
                           false);
-    file_util::Delete(FilePath("test"), true);
+    base::DeleteFile(FilePath("test"), true);
     mkdir("test", 0777);
     collector_.set_core_pattern_file("test/core_pattern");
     collector_.set_core_pipe_limit_file("test/core_pipe_limit");
@@ -54,7 +54,7 @@ class UserCollectorTest : public ::testing::Test {
   void ExpectFileEquals(const char *golden,
                         const char *file_path) {
     std::string contents;
-    EXPECT_TRUE(file_util::ReadFileToString(FilePath(file_path),
+    EXPECT_TRUE(base::ReadFileToString(FilePath(file_path),
                                             &contents));
     EXPECT_EQ(golden, contents);
   }
@@ -91,7 +91,7 @@ TEST_F(UserCollectorTest, EnableNoPipeLimitFileAccess) {
   ASSERT_EQ(s_crashes, 0);
   // Core pattern should not be written if we cannot access the pipe limit
   // or otherwise we may set a pattern that results in infinite recursion.
-  ASSERT_FALSE(file_util::PathExists(FilePath("test/core_pattern")));
+  ASSERT_FALSE(base::PathExists(FilePath("test/core_pattern")));
   EXPECT_TRUE(FindLog("Enabling user crash handling"));
   EXPECT_TRUE(FindLog("Unable to write /does_not_exist"));
 }
@@ -463,7 +463,7 @@ TEST_F(UserCollectorTest, CopyOffProcFilesOK) {
   };
   for (unsigned i = 0; i < sizeof(expectations)/sizeof(expectations[0]); ++i) {
     EXPECT_EQ(expectations[i].exists,
-              file_util::PathExists(
+              base::PathExists(
                   container_path.Append(expectations[i].name)));
   }
 }
@@ -479,13 +479,13 @@ TEST_F(UserCollectorTest, ValidateProcFiles) {
   // maps file is empty
   FilePath maps_file = container_dir.Append("maps");
   ASSERT_EQ(0, file_util::WriteFile(maps_file, NULL, 0));
-  ASSERT_TRUE(file_util::PathExists(maps_file));
+  ASSERT_TRUE(base::PathExists(maps_file));
   EXPECT_FALSE(collector_.ValidateProcFiles(container_dir));
 
   // maps file is not empty
   const char data[] = "test data";
   ASSERT_EQ(sizeof(data), file_util::WriteFile(maps_file, data, sizeof(data)));
-  ASSERT_TRUE(file_util::PathExists(maps_file));
+  ASSERT_TRUE(base::PathExists(maps_file));
   EXPECT_TRUE(collector_.ValidateProcFiles(container_dir));
 }
 

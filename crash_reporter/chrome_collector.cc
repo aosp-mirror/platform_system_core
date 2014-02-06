@@ -15,9 +15,9 @@
 #include <base/file_util.h>
 #include <base/logging.h>
 #include <base/rand_util.h>
-#include <base/string_number_conversions.h>
-#include <base/string_util.h>
-#include <base/stringprintf.h>
+#include <base/strings/string_number_conversions.h>
+#include <base/strings/string_util.h>
+#include <base/strings/stringprintf.h>
 #include "chromeos/process.h"
 #include "chromeos/syslog_logging.h"
 #include "chromeos/dbus/dbus.h"
@@ -54,6 +54,9 @@ const char kRunning64[] = " running task   ";
 // Sometimes the address is printed and not the symbol. Those are ignored too.
 const char kSymbolAndOffsetRE[] =
     "([[:alpha:]._$][[:alnum:]._$]*)\\+0x([[:xdigit:]]+)/0x([[:xdigit:]]+)";
+
+using base::FilePath;
+using base::StringPrintf;
 
 namespace {
 
@@ -108,7 +111,7 @@ bool GetDriErrorState(const chromeos::dbus::Proxy &proxy,
 
   if (written < 0 || (gsize)written != len) {
     LOG(ERROR) << "Could not write file " << error_state_path.value();
-    file_util::Delete(error_state_path, false);
+    base::DeleteFile(error_state_path, false);
     return false;
   }
 
@@ -312,7 +315,7 @@ bool WriteKernelTaskStates(const chromeos::dbus::Proxy &proxy,
 
   std::vector<std::string> task_sates;
   if (!GetKernelTaskStates(proxy, &task_sates)) {
-    file_util::Delete(task_states_path, false);
+    base::DeleteFile(task_states_path, false);
     return false;
   }
 
@@ -368,10 +371,10 @@ bool GetAdditionalLogs(const FilePath &log_path) {
     tar_process.AddArg(task_states_path.BaseName().value());
   int res = tar_process.Run();
 
-  file_util::Delete(error_state_path, false);
-  file_util::Delete(task_states_path, false);
+  base::DeleteFile(error_state_path, false);
+  base::DeleteFile(task_states_path, false);
 
-  if (res || !file_util::PathExists(log_path)) {
+  if (res || !base::PathExists(log_path)) {
     LOG(ERROR) << "Could not tar file " << log_path.value();
     return false;
   }
@@ -411,7 +414,7 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
   FilePath log_path = GetCrashPath(dir, dump_basename, "log.tar.xz");
 
   std::string data;
-  if (!file_util::ReadFileToString(FilePath(file_path), &data)) {
+  if (!base::ReadFileToString(FilePath(file_path), &data)) {
     LOG(ERROR) << "Can't read crash log: " << file_path.c_str();
     return false;
   }
@@ -424,15 +427,15 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
   if (GetAdditionalLogs(log_path)) {
     int64 minidump_size = 0;
     int64 log_size = 0;
-    if (file_util::GetFileSize(minidump_path, &minidump_size) &&
-        file_util::GetFileSize(log_path, &log_size) &&
+    if (base::GetFileSize(minidump_path, &minidump_size) &&
+        base::GetFileSize(log_path, &log_size) &&
         minidump_size > 0 && log_size > 0 &&
         minidump_size + log_size < kDefaultMaxUploadBytes) {
       AddCrashMetaData("log", log_path.value());
     } else {
       LOG(INFO) << "Skipping logs upload to prevent discarding minidump "
           "because of report size limit < " << minidump_size + log_size;
-      file_util::Delete(log_path, false);
+      base::DeleteFile(log_path, false);
     }
   }
 

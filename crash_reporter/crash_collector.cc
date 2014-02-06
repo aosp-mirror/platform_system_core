@@ -22,9 +22,9 @@
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/string_split.h"
-#include "base/string_util.h"
-#include "base/stringprintf.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "chromeos/cryptohome.h"
 #include "chromeos/dbus/dbus.h"
 #include "chromeos/dbus/service_constants.h"
@@ -73,6 +73,7 @@ static const uid_t kRootGroup = 0;
 const int CrashCollector::kMaxCrashDirectorySize = 32;
 
 using base::FilePath;
+using base::StringPrintf;
 
 CrashCollector::CrashCollector()
     : forced_crash_directory_(NULL),
@@ -283,7 +284,7 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
                             &directory_owner,
                             &directory_group);
 
-  if (!file_util::PathExists(*crash_directory)) {
+  if (!base::PathExists(*crash_directory)) {
     // Create the spool directory with the appropriate mode (regardless of
     // umask) and ownership.
     mode_t old_mask = umask(0);
@@ -297,7 +298,7 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
     umask(old_mask);
   }
 
-  if (!file_util::PathExists(*crash_directory)) {
+  if (!base::PathExists(*crash_directory)) {
     LOG(ERROR) << "Unable to create crash directory "
                << crash_directory->value().c_str();
     return false;
@@ -353,7 +354,7 @@ bool CrashCollector::GetExecutableBaseNameFromPid(pid_t pid,
   if (!GetSymlinkTarget(exe_path, &target)) {
     LOG(INFO) << "GetSymlinkTarget failed - Path " << process_path.value()
               << " DirectoryExists: "
-              << file_util::DirectoryExists(process_path);
+              << base::DirectoryExists(process_path);
     // Try to further diagnose exe readlink failure cause.
     struct stat buf;
     int stat_result = stat(exe_path.value().c_str(), &buf);
@@ -422,7 +423,7 @@ bool CrashCollector::ReadKeyValueFile(
     const char separator,
     std::map<std::string, std::string> *dictionary) {
   std::string contents;
-  if (!file_util::ReadFileToString(path, &contents)) {
+  if (!base::ReadFileToString(path, &contents)) {
     return false;
   }
   typedef std::vector<std::string> StringVector;
@@ -507,7 +508,7 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
     version = i->second;
   }
   int64 payload_size = -1;
-  file_util::GetFileSize(FilePath(payload_path), &payload_size);
+  base::GetFileSize(FilePath(payload_path), &payload_size);
   std::string meta_data = StringPrintf("%sexec_name=%s\n"
                                        "ver=%s\n"
                                        "payload=%s\n"
@@ -527,7 +528,7 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
 }
 
 bool CrashCollector::IsCrashTestInProgress() {
-  return file_util::PathExists(FilePath(kCrashTestInProgressPath));
+  return base::PathExists(FilePath(kCrashTestInProgressPath));
 }
 
 bool CrashCollector::IsDeveloperImage() {
@@ -535,7 +536,7 @@ bool CrashCollector::IsDeveloperImage() {
   // for developer images.
   if (IsCrashTestInProgress())
     return false;
-  return file_util::PathExists(FilePath(kLeaveCoreFile));
+  return base::PathExists(FilePath(kLeaveCoreFile));
 }
 
 bool CrashCollector::ShouldHandleChromeCrashes() {
@@ -546,7 +547,7 @@ bool CrashCollector::ShouldHandleChromeCrashes() {
     // Check if there's an override to indicate we should indeed collect
     // chrome crashes.  This allows the crashes to still be tracked when
     // they occur in autotests.  See "crosbug.com/17987".
-    if (file_util::PathExists(FilePath(kCollectChromeFile)))
+    if (base::PathExists(FilePath(kCollectChromeFile)))
       return true;
   }
   // We default to ignoring chrome crashes.

@@ -12,9 +12,9 @@
 #include <base/file_util.h>
 #include <base/command_line.h>
 #include <base/logging.h>
-#include <base/string_split.h>
-#include <base/string_util.h>
-#include <base/stringprintf.h>
+#include <base/strings/string_split.h>
+#include <base/strings/string_util.h>
+#include <base/strings/stringprintf.h>
 #include "chromeos/syslog_logging.h"
 #include "crash-reporter/chrome_collector.h"
 #include "crash-reporter/kernel_collector.h"
@@ -61,6 +61,7 @@ enum CrashKinds {
 static MetricsLibrary s_metrics_lib;
 
 using base::FilePath;
+using base::StringPrintf;
 
 static bool IsFeedbackAllowed() {
   return s_metrics_lib.AreMetricsEnabled();
@@ -221,8 +222,8 @@ static int HandleKernelWarning(KernelWarningCollector
 static int GenerateKernelSignature(KernelCollector *kernel_collector) {
   std::string kcrash_contents;
   std::string signature;
-  if (!file_util::ReadFileToString(FilePath(FLAGS_generate_kernel_signature),
-                                   &kcrash_contents)) {
+  if (!base::ReadFileToString(FilePath(FLAGS_generate_kernel_signature),
+                              &kcrash_contents)) {
     fprintf(stderr, "Could not read file.\n");
     return 1;
   }
@@ -259,8 +260,7 @@ static void OpenStandardFileDescriptors() {
 int main(int argc, char *argv[]) {
   OpenStandardFileDescriptors();
   google::ParseCommandLineFlags(&argc, &argv, true);
-  FilePath my_path(argv[0]);
-  file_util::AbsolutePath(&my_path);
+  FilePath my_path = base::MakeAbsoluteFilePath(FilePath(argv[0]));
   s_metrics_lib.Init();
   CommandLine::Init(argc, argv);
   chromeos::OpenLog(my_path.BaseName().value().c_str(), true);

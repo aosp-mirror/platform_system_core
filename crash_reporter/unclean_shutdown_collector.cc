@@ -28,7 +28,7 @@ UncleanShutdownCollector::~UncleanShutdownCollector() {
 
 bool UncleanShutdownCollector::Enable() {
   FilePath file_path(unclean_shutdown_file_);
-  file_util::CreateDirectory(file_path.DirName());
+  base::CreateDirectory(file_path.DirName());
   if (file_util::WriteFile(file_path, "", 0) != 0) {
     LOG(ERROR) << "Unable to create shutdown check file";
     return false;
@@ -37,19 +37,19 @@ bool UncleanShutdownCollector::Enable() {
 }
 
 bool UncleanShutdownCollector::DeleteUncleanShutdownFiles() {
-  if (!file_util::Delete(FilePath(unclean_shutdown_file_), false)) {
+  if (!base::DeleteFile(FilePath(unclean_shutdown_file_), false)) {
     LOG(ERROR) << "Failed to delete unclean shutdown file "
                << unclean_shutdown_file_;
     return false;
   }
   // Delete power manager state file if it exists.
-  file_util::Delete(powerd_suspended_file_, false);
+  base::DeleteFile(powerd_suspended_file_, false);
   return true;
 }
 
 bool UncleanShutdownCollector::Collect() {
   FilePath unclean_file_path(unclean_shutdown_file_);
-  if (!file_util::PathExists(unclean_file_path)) {
+  if (!base::PathExists(unclean_file_path)) {
     return false;
   }
   LOG(WARNING) << "Last shutdown was not clean";
@@ -72,7 +72,7 @@ bool UncleanShutdownCollector::Disable() {
 
 bool UncleanShutdownCollector::DeadBatteryCausedUncleanShutdown() {
   // Check for case of battery running out while suspended.
-  if (file_util::PathExists(powerd_suspended_file_)) {
+  if (base::PathExists(powerd_suspended_file_)) {
     LOG(INFO) << "Unclean shutdown occurred while suspended. Not counting "
               << "toward unclean shutdown statistic.";
     return true;

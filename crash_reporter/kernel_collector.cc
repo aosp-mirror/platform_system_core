@@ -6,8 +6,8 @@
 
 #include "base/file_util.h"
 #include "base/logging.h"
-#include "base/string_util.h"
-#include "base/stringprintf.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 
 static const char kDefaultKernelStackSignature[] =
     "kernel-UnspecifiedStackSignature";
@@ -46,6 +46,7 @@ static const char *s_pc_regex[] = {
 };
 
 using base::FilePath;
+using base::StringPrintf;
 
 COMPILE_ASSERT(arraysize(s_pc_regex) == KernelCollector::archCount,
                missing_arch_pc_regexp);
@@ -79,7 +80,7 @@ bool KernelCollector::ReadRecordToString(std::string *contents,
 
   FilePath ramoops_record;
   GetRamoopsRecordPath(&ramoops_record, current_record);
-  if (!file_util::ReadFileToString(ramoops_record, &record)) {
+  if (!base::ReadFileToString(ramoops_record, &record)) {
     LOG(ERROR) << "Unable to open " << ramoops_record.value();
     return false;
   }
@@ -87,7 +88,7 @@ bool KernelCollector::ReadRecordToString(std::string *contents,
   if (record_re.FullMatch(record, &captured)){
     // Found a match, append it to the content, and remove from pstore.
     contents->append(captured);
-    file_util::Delete(ramoops_record, false);
+    base::DeleteFile(ramoops_record, false);
     *record_found = true;
   } else {
     *record_found = false;
@@ -115,7 +116,7 @@ bool KernelCollector::LoadParameters() {
     FilePath ramoops_record;
     GetRamoopsRecordPath(&ramoops_record, count);
 
-    if (!file_util::PathExists(ramoops_record))
+    if (!base::PathExists(ramoops_record))
       break;
   }
 
@@ -234,7 +235,7 @@ bool KernelCollector::Enable() {
   else {
     FilePath ramoops_record;
     GetRamoopsRecordPath(&ramoops_record, 0);
-    if (!file_util::PathExists(ramoops_record)) {
+    if (!base::PathExists(ramoops_record)) {
       LOG(WARNING) << "Kernel does not support crash dumping";
       return false;
     }

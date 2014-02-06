@@ -5,8 +5,8 @@
 #include <unistd.h>
 
 #include "base/file_util.h"
-#include "base/string_util.h"
-#include "base/stringprintf.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "chromeos/syslog_logging.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/kernel_collector.h"
@@ -19,6 +19,7 @@ static const char kTestKCrash[] = "test/kcrash";
 static const char kTestCrashDirectory[] = "test/crash_directory";
 
 using base::FilePath;
+using base::StringPrintf;
 using chromeos::FindLog;
 using chromeos::GetLog;
 
@@ -69,7 +70,7 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignatureBase) {
 }
 
 TEST_F(KernelCollectorTest, LoadPreservedDump) {
-  ASSERT_FALSE(file_util::PathExists(test_kcrash_));
+  ASSERT_FALSE(base::PathExists(test_kcrash_));
   std::string dump;
   dump.clear();
 
@@ -272,9 +273,9 @@ TEST_F(KernelCollectorTest, CollectOK) {
   ASSERT_NE(std::string::npos, end_pos);
   filename = filename.substr(0, end_pos);
   ASSERT_EQ(0, filename.find(kTestCrashDirectory));
-  ASSERT_TRUE(file_util::PathExists(FilePath(filename)));
+  ASSERT_TRUE(base::PathExists(FilePath(filename)));
   std::string contents;
-  ASSERT_TRUE(file_util::ReadFileToString(FilePath(filename), &contents));
+  ASSERT_TRUE(base::ReadFileToString(FilePath(filename), &contents));
   ASSERT_EQ("something", contents);
 
 }

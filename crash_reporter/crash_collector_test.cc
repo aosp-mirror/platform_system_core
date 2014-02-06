@@ -10,14 +10,15 @@
 #include <glib.h>
 
 #include "base/file_util.h"
-#include "base/string_util.h"
-#include "base/stringprintf.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "chromeos/syslog_logging.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/crash_collector.h"
 #include "gtest/gtest.h"
 
 using base::FilePath;
+using base::StringPrintf;
 using chromeos::FindLog;
 using ::testing::Return;
 
@@ -36,12 +37,12 @@ class CrashCollectorTest : public ::testing::Test {
     collector_.Initialize(CountCrash,
                           IsMetrics);
     test_dir_ = FilePath("test");
-    file_util::CreateDirectory(test_dir_);
+    base::CreateDirectory(test_dir_);
     chromeos::ClearLog();
   }
 
   void TearDown() {
-    file_util::Delete(test_dir_, true);
+    base::DeleteFile(test_dir_, true);
   }
 
   bool CheckHasCapacity();
@@ -291,7 +292,7 @@ TEST_F(CrashCollectorTest, MetaData) {
                            kPayload, strlen(kPayload)));
   collector_.AddCrashMetaData("foo", "bar");
   collector_.WriteCrashMetaData(meta_file, "kernel", payload_file.value());
-  EXPECT_TRUE(file_util::ReadFileToString(meta_file, &contents));
+  EXPECT_TRUE(base::ReadFileToString(meta_file, &contents));
   const char kExpectedMeta[] =
       "foo=bar\n"
       "exec_name=kernel\n"
@@ -310,24 +311,24 @@ TEST_F(CrashCollectorTest, MetaData) {
   ASSERT_EQ(0,
             symlink(kMetaFileBasename,
                     meta_symlink_path.value().c_str()));
-  ASSERT_TRUE(file_util::PathExists(meta_symlink_path));
+  ASSERT_TRUE(base::PathExists(meta_symlink_path));
   chromeos::ClearLog();
   collector_.WriteCrashMetaData(meta_symlink_path,
                                 "kernel",
                                 payload_file.value());
   // Target metadata contents should have stayed the same.
   contents.clear();
-  EXPECT_TRUE(file_util::ReadFileToString(meta_file, &contents));
+  EXPECT_TRUE(base::ReadFileToString(meta_file, &contents));
   EXPECT_EQ(kExpectedMeta, contents);
   EXPECT_TRUE(FindLog("Unable to write"));
 
   // Test target of dangling symlink is not created.
-  file_util::Delete(meta_file, false);
-  ASSERT_FALSE(file_util::PathExists(meta_file));
+  base::DeleteFile(meta_file, false);
+  ASSERT_FALSE(base::PathExists(meta_file));
   chromeos::ClearLog();
   collector_.WriteCrashMetaData(meta_symlink_path, "kernel",
                                 payload_file.value());
-  EXPECT_FALSE(file_util::PathExists(meta_file));
+  EXPECT_FALSE(base::PathExists(meta_file));
   EXPECT_TRUE(FindLog("Unable to write"));
 }
 
@@ -339,18 +340,18 @@ TEST_F(CrashCollectorTest, GetLogContents) {
   ASSERT_TRUE(
       file_util::WriteFile(config_file,
                            kConfigContents, strlen(kConfigContents)));
-  file_util::Delete(FilePath(output_file), false);
+  base::DeleteFile(FilePath(output_file), false);
   EXPECT_FALSE(collector_.GetLogContents(config_file,
                                          "barfoo",
                                          output_file));
-  EXPECT_FALSE(file_util::PathExists(output_file));
-  file_util::Delete(FilePath(output_file), false);
+  EXPECT_FALSE(base::PathExists(output_file));
+  base::DeleteFile(FilePath(output_file), false);
   EXPECT_TRUE(collector_.GetLogContents(config_file,
                                         "foobar",
                                         output_file));
-  ASSERT_TRUE(file_util::PathExists(output_file));
+  ASSERT_TRUE(base::PathExists(output_file));
   std::string contents;
-  EXPECT_TRUE(file_util::ReadFileToString(output_file, &contents));
+  EXPECT_TRUE(base::ReadFileToString(output_file, &contents));
   EXPECT_EQ("hello world\n", contents);
 }
 

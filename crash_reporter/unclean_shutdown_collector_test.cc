@@ -5,7 +5,7 @@
 #include <unistd.h>
 
 #include "base/file_util.h"
-#include "base/string_util.h"
+#include "base/strings/string_util.h"
 #include "chromeos/syslog_logging.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/unclean_shutdown_collector.h"
@@ -37,7 +37,7 @@ class UncleanShutdownCollectorTest : public ::testing::Test {
     rmdir(kTestDirectory);
     test_unclean_ = FilePath(kTestUnclean);
     collector_.unclean_shutdown_file_ = kTestUnclean;
-    file_util::Delete(test_unclean_, true);
+    base::DeleteFile(test_unclean_, true);
     // Set up an alternate power manager state file as well
     collector_.powerd_suspended_file_ = FilePath(kTestSuspended);
     chromeos::ClearLog();
@@ -55,13 +55,13 @@ class UncleanShutdownCollectorTest : public ::testing::Test {
 
 TEST_F(UncleanShutdownCollectorTest, EnableWithoutParent) {
   ASSERT_TRUE(collector_.Enable());
-  ASSERT_TRUE(file_util::PathExists(test_unclean_));
+  ASSERT_TRUE(base::PathExists(test_unclean_));
 }
 
 TEST_F(UncleanShutdownCollectorTest, EnableWithParent) {
   mkdir(kTestDirectory, 0777);
   ASSERT_TRUE(collector_.Enable());
-  ASSERT_TRUE(file_util::PathExists(test_unclean_));
+  ASSERT_TRUE(base::PathExists(test_unclean_));
 }
 
 TEST_F(UncleanShutdownCollectorTest, EnableCannotWrite) {
@@ -72,9 +72,9 @@ TEST_F(UncleanShutdownCollectorTest, EnableCannotWrite) {
 
 TEST_F(UncleanShutdownCollectorTest, CollectTrue) {
   ASSERT_TRUE(collector_.Enable());
-  ASSERT_TRUE(file_util::PathExists(test_unclean_));
+  ASSERT_TRUE(base::PathExists(test_unclean_));
   ASSERT_TRUE(collector_.Collect());
-  ASSERT_FALSE(file_util::PathExists(test_unclean_));
+  ASSERT_FALSE(base::PathExists(test_unclean_));
   ASSERT_EQ(1, s_crashes);
   ASSERT_TRUE(FindLog("Last shutdown was not clean"));
 }
@@ -86,20 +86,20 @@ TEST_F(UncleanShutdownCollectorTest, CollectFalse) {
 
 TEST_F(UncleanShutdownCollectorTest, CollectDeadBatterySuspended) {
   ASSERT_TRUE(collector_.Enable());
-  ASSERT_TRUE(file_util::PathExists(test_unclean_));
+  ASSERT_TRUE(base::PathExists(test_unclean_));
   file_util::WriteFile(collector_.powerd_suspended_file_, "", 0);
   ASSERT_FALSE(collector_.Collect());
-  ASSERT_FALSE(file_util::PathExists(test_unclean_));
-  ASSERT_FALSE(file_util::PathExists(collector_.powerd_suspended_file_));
+  ASSERT_FALSE(base::PathExists(test_unclean_));
+  ASSERT_FALSE(base::PathExists(collector_.powerd_suspended_file_));
   ASSERT_EQ(0, s_crashes);
   ASSERT_TRUE(FindLog("Unclean shutdown occurred while suspended."));
 }
 
 TEST_F(UncleanShutdownCollectorTest, Disable) {
   ASSERT_TRUE(collector_.Enable());
-  ASSERT_TRUE(file_util::PathExists(test_unclean_));
+  ASSERT_TRUE(base::PathExists(test_unclean_));
   ASSERT_TRUE(collector_.Disable());
-  ASSERT_FALSE(file_util::PathExists(test_unclean_));
+  ASSERT_FALSE(base::PathExists(test_unclean_));
   ASSERT_FALSE(collector_.Collect());
 }
 

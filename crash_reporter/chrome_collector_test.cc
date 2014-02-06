@@ -8,7 +8,7 @@
 
 #include "base/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/string_split.h"
+#include "base/strings/string_split.h"
 #include "chromeos/syslog_logging.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/chrome_collector.h"
@@ -49,8 +49,7 @@ class ChromeCollectorTest : public ::testing::Test {
   void ExpectFileEquals(const char *golden,
                         const char *file_path) {
     std::string contents;
-    EXPECT_TRUE(file_util::ReadFileToString(FilePath(file_path),
-                                            &contents));
+    EXPECT_TRUE(base::ReadFileToString(FilePath(file_path), &contents));
     EXPECT_EQ(golden, contents);
   }
 
@@ -121,7 +120,7 @@ TEST_F(ChromeCollectorTest, File) {
   EXPECT_TRUE(meta.find("value3=ok") != std::string::npos);
   ExpectFileEquals("12345\n789\n12345",
                    dir.Append("base-foo.txt.other").value().c_str());
-  file_util::Delete(dir.Append("base-foo.txt.other"), false);
+  base::DeleteFile(dir.Append("base-foo.txt.other"), false);
 }
 
 int main(int argc, char **argv) {

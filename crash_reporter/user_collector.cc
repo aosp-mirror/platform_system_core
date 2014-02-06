@@ -19,9 +19,9 @@
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/stl_util.h"
-#include "base/string_split.h"
-#include "base/string_util.h"
-#include "base/stringprintf.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "chromeos/process.h"
 #include "chromeos/syslog_logging.h"
 #include "gflags/gflags.h"
@@ -54,6 +54,7 @@ const char *UserCollector::kUserId = "Uid:\t";
 const char *UserCollector::kGroupId = "Gid:\t";
 
 using base::FilePath;
+using base::StringPrintf;
 
 UserCollector::UserCollector()
     : generate_diagnostics_(false),
@@ -200,9 +201,9 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
     // the error log.  We cannot just append to files because we need
     // to always create new files to prevent attack.
     std::string diag_log_contents;
-    file_util::ReadFileToString(diag_log_path, &diag_log_contents);
+    base::ReadFileToString(diag_log_path, &diag_log_contents);
     error_log.append(diag_log_contents);
-    file_util::Delete(diag_log_path, false);
+    base::DeleteFile(diag_log_path, false);
   }
   FilePath log_path = GetCrashPath(crash_path, dump_basename, "log");
   FilePath meta_path = GetCrashPath(crash_path, dump_basename, "meta");
@@ -217,12 +218,12 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
 
 bool UserCollector::CopyOffProcFiles(pid_t pid,
                                      const FilePath &container_dir) {
-  if (!file_util::CreateDirectory(container_dir)) {
+  if (!base::CreateDirectory(container_dir)) {
     PLOG(ERROR) << "Could not create " << container_dir.value().c_str();
     return false;
   }
   FilePath process_path = GetProcessPath(pid);
-  if (!file_util::PathExists(process_path)) {
+  if (!base::PathExists(process_path)) {
     LOG(ERROR) << "Path " << process_path.value() << " does not exist";
     return false;
   }
@@ -234,8 +235,8 @@ bool UserCollector::CopyOffProcFiles(pid_t pid,
     "status"
   };
   for (unsigned i = 0; i < arraysize(proc_files); ++i) {
-    if (!file_util::CopyFile(process_path.Append(proc_files[i]),
-                             container_dir.Append(proc_files[i]))) {
+    if (!base::CopyFile(process_path.Append(proc_files[i]),
+                        container_dir.Append(proc_files[i]))) {
       LOG(ERROR) << "Could not copy " << proc_files[i] << " file";
       return false;
     }
@@ -247,7 +248,7 @@ bool UserCollector::ValidateProcFiles(const FilePath &container_dir) const {
   // Check if the maps file is empty, which could be due to the crashed
   // process being reaped by the kernel before finishing a core dump.
   int64 file_size = 0;
-  if (!file_util::GetFileSize(container_dir.Append("maps"), &file_size)) {
+  if (!base::GetFileSize(container_dir.Append("maps"), &file_size)) {
     LOG(ERROR) << "Could not get the size of maps file";
     return false;
   }
@@ -267,7 +268,7 @@ UserCollector::ErrorType UserCollector::ValidateCoreFile(
   }
 
   char e_ident[EI_NIDENT];
-  bool read_ok = file_util::ReadFromFD(fd, e_ident, sizeof(e_ident));
+  bool read_ok = base::ReadFromFD(fd, e_ident, sizeof(e_ident));
   HANDLE_EINTR(close(fd));
   if (!read_ok) {
     LOG(ERROR) << "Could not read header of core file";
@@ -304,7 +305,7 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid, uid_t supplied_ruid,
   }
 
   uid_t uid;
-  if (file_util::ReadFileToString(process_path.Append("status"), &status)) {
+  if (base::ReadFileToString(process_path.Append("status"), &status)) {
     std::vector<std::string> status_lines;
     base::SplitString(status, '\n', &status_lines);
 
@@ -330,7 +331,7 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid, uid_t supplied_ruid,
   } else {
     LOG(ERROR) << "Could not read status file and kernel did not supply UID";
     LOG(INFO) << "Path " << process_path.value() << " DirectoryExists: "
-              << file_util::DirectoryExists(process_path);
+              << base::DirectoryExists(process_path);
     return false;
   }
 
@@ -344,13 +345,13 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid, uid_t supplied_ruid,
 bool UserCollector::CopyStdinToCoreFile(const FilePath &core_path) {
   // Copy off all stdin to a core file.
   FilePath stdin_path("/dev/fd/0");
-  if (file_util::CopyFile(stdin_path, core_path)) {
+  if (base::CopyFile(stdin_path, core_path)) {
     return true;
   }
 
   PLOG(ERROR) << "Could not write core file";
   // If the file system was full, make sure we remove any remnants.
-  file_util::Delete(core_path, false);
+  base::DeleteFile(core_path, false);
   return false;
 }
 
@@ -375,14 +376,14 @@ bool UserCollector::RunCoreToMinidump(const FilePath &core_path,
   int errorlevel = core2md.Run();
 
   std::string output;
-  file_util::ReadFileToString(output_path, &output);
+  base::ReadFileToString(output_path, &output);
   if (errorlevel != 0) {
     LOG(ERROR) << "Problem during " << kCoreToMinidumpConverterPath
                << " [result=" << errorlevel << "]: " << output;
     return false;
   }
 
-  if (!file_util::PathExists(minidump_path)) {
+  if (!base::PathExists(minidump_path)) {
     LOG(ERROR) << "Minidump file " << minidump_path.value()
                << " was not created";
     return false;
@@ -443,7 +444,7 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
   // Delete a pre-existing directory from crash reporter that may have
   // been left around for diagnostics from a failed conversion attempt.
   // If we don't, existing files can cause forking to fail.
-  file_util::Delete(container_dir, true);
+  base::DeleteFile(container_dir, true);
   std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
   FilePath core_path = GetCrashPath(crash_path, dump_basename, "core");
   FilePath meta_path = GetCrashPath(crash_path, dump_basename, "meta");
@@ -469,13 +470,13 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
                      minidump_path.value());
 
   if (!IsDeveloperImage()) {
-    file_util::Delete(core_path, false);
+    base::DeleteFile(core_path, false);
   } else {
     LOG(INFO) << "Leaving core file at " << core_path.value()
               << " due to developer image";
   }
 
-  file_util::Delete(container_dir, true);
+  base::DeleteFile(container_dir, true);
   return kErrorNone;
 }
 
