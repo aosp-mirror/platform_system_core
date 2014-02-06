@@ -2,76 +2,41 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fts.h>
 #include <selinux/selinux.h>
-#include <selinux/label.h>
 #include <selinux/android.h>
 
-static struct selabel_handle *sehandle;
 static const char *progname;
-static int nochange;
-static int verbose;
 
 static void usage(void)
 {
-    fprintf(stderr, "usage:  %s [-nrRv] pathname...\n", progname);
+    fprintf(stderr, "usage:  %s [-FnrRv] pathname...\n", progname);
     exit(1);
-}
-
-static int restore(const char *pathname, const struct stat *sb)
-{
-    char *oldcontext, *newcontext;
-
-    if (lgetfilecon(pathname, &oldcontext) < 0) {
-        fprintf(stderr, "Could not get context of %s:  %s\n",
-                pathname, strerror(errno));
-        return -1;
-    }
-    if (selabel_lookup(sehandle, &newcontext, pathname, sb->st_mode) < 0) {
-        fprintf(stderr, "Could not lookup context for %s:  %s\n", pathname,
-                strerror(errno));
-        return -1;
-    }
-    if (strcmp(newcontext, "<<none>>") &&
-        strcmp(oldcontext, newcontext)) {
-        if (verbose)
-            printf("Relabeling %s from %s to %s.\n", pathname, oldcontext, newcontext);
-        if (!nochange) {
-            if (lsetfilecon(pathname, newcontext) < 0) {
-                fprintf(stderr, "Could not label %s with %s:  %s\n",
-                        pathname, newcontext, strerror(errno));
-                return -1;
-            }
-        }
-    }
-    freecon(oldcontext);
-    freecon(newcontext);
-    return 0;
 }
 
 int restorecon_main(int argc, char **argv)
 {
-    int ch, recurse = 0, ftsflags = FTS_PHYSICAL;
-    int i = 0;
+    int ch, i, rc;
+    unsigned int flags = 0;
 
     progname = argv[0];
 
     do {
-        ch = getopt(argc, argv, "nrRv");
+        ch = getopt(argc, argv, "FnrRv");
         if (ch == EOF)
             break;
         switch (ch) {
+        case 'F':
+            flags |= SELINUX_ANDROID_RESTORECON_FORCE;
+            break;
         case 'n':
-            nochange = 1;
+            flags |= SELINUX_ANDROID_RESTORECON_NOCHANGE;
             break;
         case 'r':
         case 'R':
-            recurse = 1;
+            flags |= SELINUX_ANDROID_RESTORECON_RECURSE;
             break;
         case 'v':
-            verbose = 1;
+            flags |= SELINUX_ANDROID_RESTORECON_VERBOSE;
             break;
         default:
             usage();
@@ -83,53 +48,11 @@ int restorecon_main(int argc, char **argv)
     if (!argc)
         usage();
 
-    sehandle = selinux_android_file_context_handle();
-
-    if (!sehandle) {
-        fprintf(stderr, "Could not load file_contexts:  %s\n",
-                strerror(errno));
-        return -1;
-    }
-
-    if (recurse) {
-        FTS *fts;
-        FTSENT *ftsent;
-        fts = fts_open(argv, ftsflags, NULL);
-        if (!fts) {
-            fprintf(stderr, "Could not traverse filesystems (first was %s):  %s\n",
-                    argv[0], strerror(errno));
-            return -1;
-        }
-        while ((ftsent = fts_read(fts))) {
-            switch (ftsent->fts_info) {
-            case FTS_DP:
-                break;
-            case FTS_DNR:
-            case FTS_ERR:
-            case FTS_NS:
-                fprintf(stderr, "Could not access %s:  %s\n", ftsent->fts_path,
-                        strerror(errno));
-                fts_set(fts, ftsent, FTS_SKIP);
-                break;
-            default:
-                if (restore(ftsent->fts_path, ftsent->fts_statp) < 0)
-                    fts_set(fts, ftsent, FTS_SKIP);
-                break;
-            }
-        }
-    } else {
-        int i, rc;
-        struct stat sb;
-
-        for (i = 0; i < argc; i++) {
-            rc = lstat(argv[i], &sb);
-            if (rc < 0) {
-                fprintf(stderr, "Could not stat %s:  %s\n", argv[i],
-                        strerror(errno));
-                continue;
-            }
-            restore(argv[i], &sb);
-        }
+    for (i = 0; i < argc; i++) {
+        rc = selinux_android_restorecon_flags(argv[i], flags);
+        if (rc < 0)
+            fprintf(stderr, "Could not restorecon %s:  %s\n", argv[i],
+                    strerror(errno));
     }
 
     return 0;
