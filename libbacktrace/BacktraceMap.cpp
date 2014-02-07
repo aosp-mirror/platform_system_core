@@ -93,7 +93,8 @@ bool BacktraceMap::ParseLine(const char* line, backtrace_map_t* map) {
   }
 
   ALOGV("Parsed map: start=%p, end=%p, flags=%x, name=%s",
-        map->start, map->end, map->flags, map->name.c_str());
+        reinterpret_cast<void*>(map->start), reinterpret_cast<void*>(map->end),
+        map->flags, map->name.c_str());
   return true;
 }
 
