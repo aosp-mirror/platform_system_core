@@ -73,10 +73,11 @@ extern "C" {
  * Simplified macro to send a verbose log message using the current LOG_TAG.
  */
 #ifndef ALOGV
+#define __ALOGV(...) ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #if LOG_NDEBUG
-#define ALOGV(...)   ((void)0)
+#define ALOGV(...) do { if (0) { __ALOGV(__VA_ARGS__); } } while (0)
 #else
-#define ALOGV(...) ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
+#define ALOGV(...) __ALOGV(__VA_ARGS__)
 #endif
 #endif
 
@@ -202,10 +203,11 @@ extern "C" {
  * Simplified macro to send a verbose system log message using the current LOG_TAG.
  */
 #ifndef SLOGV
+#define __SLOGV(...) ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #if LOG_NDEBUG
-#define SLOGV(...)   ((void)0)
+#define SLOGV(...) do { if (0) { __SLOGV(__VA_ARGS__); } } while (0)
 #else
-#define SLOGV(...) ((void)__android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
+#define SLOGV(...) __SLOGV(__VA_ARGS__)
 #endif
 #endif
 
@@ -284,10 +286,11 @@ extern "C" {
  * Simplified macro to send a verbose radio log message using the current LOG_TAG.
  */
 #ifndef RLOGV
+#define __RLOGV(...) ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #if LOG_NDEBUG
-#define RLOGV(...)   ((void)0)
+#define RLOGV(...) do { if (0) { __RLOGV(__VA_ARGS__); } } while (0)
 #else
-#define RLOGV(...) ((void)__android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
+#define RLOGV(...) __RLOGV(__VA_ARGS__)
 #endif
 #endif
 
@@ -557,7 +560,11 @@ typedef enum log_id {
  * Send a simple string to the log.
  */
 int __android_log_buf_write(int bufID, int prio, const char *tag, const char *text);
-int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fmt, ...);
+int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fmt, ...)
+#if defined(__GNUC__)
+    __attribute__((__format__(printf, 4, 5)))
+#endif
+    ;
 
 #ifdef __cplusplus
 }
