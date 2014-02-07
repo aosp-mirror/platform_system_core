@@ -165,24 +165,54 @@ enum {
     /*
      * Android RAW sensor format:
      *
-     * This format is exposed outside of the HAL to applications.
+     * This format is exposed outside of the camera HAL to applications.
      *
-     * RAW_SENSOR is a single-channel 16-bit format, typically representing raw
-     * Bayer-pattern images from an image sensor, with minimal processing.
+     * RAW_SENSOR is a single-channel, 16-bit, little endian  format, typically
+     * representing raw Bayer-pattern images from an image sensor, with minimal
+     * processing.
      *
      * The exact pixel layout of the data in the buffer is sensor-dependent, and
      * needs to be queried from the camera device.
      *
      * Generally, not all 16 bits are used; more common values are 10 or 12
-     * bits. All parameters to interpret the raw data (black and white points,
+     * bits. If not all bits are used, the lower-order bits are filled first.
+     * All parameters to interpret the raw data (black and white points,
      * color space, etc) must be queried from the camera device.
      *
      * This format assumes
      * - an even width
      * - an even height
-     * - a horizontal stride multiple of 16 pixels (32 bytes).
+     * - a horizontal stride multiple of 16 pixels
+     * - a vertical stride equal to the height
+     * - strides are specified in pixels, not in bytes
+     *
+     *   size = stride * height * 2
+     *
+     * This format must be accepted by the gralloc module when used with the
+     * following usage flags:
+     *    - GRALLOC_USAGE_HW_CAMERA_*
+     *    - GRALLOC_USAGE_SW_*
+     *    - GRALLOC_USAGE_RENDERSCRIPT
      */
-    HAL_PIXEL_FORMAT_RAW_SENSOR = 0x20,
+    HAL_PIXEL_FORMAT_RAW16 = 0x20,
+    HAL_PIXEL_FORMAT_RAW_SENSOR = 0x20, // TODO(rubenbrunk): Remove RAW_SENSOR.
+
+    /*
+     * Android opaque RAW format:
+     *
+     * This format is exposed outside of the camera HAL to applications.
+     *
+     * RAW_OPAQUE is a format for unprocessed raw image buffers coming from an
+     * image sensor. The actual structure of buffers of this format is
+     * implementation-dependent.
+     *
+     * This format must be accepted by the gralloc module when used with the
+     * following usage flags:
+     *    - GRALLOC_USAGE_HW_CAMERA_*
+     *    - GRALLOC_USAGE_SW_*
+     *    - GRALLOC_USAGE_RENDERSCRIPT
+     */
+    HAL_PIXEL_FORMAT_RAW_OPAQUE = 0x24,
 
     /*
      * Android binary blob graphics buffer format:
