@@ -131,7 +131,60 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
         t++;
     }
 
-    LogBufferElementCollection::iterator it = mLogElements.begin();
+    LogBufferElementCollection::iterator it;
+
+    // prune by worst offender by uid
+    while (pruneRows > 0) {
+        // recalculate the worst offender on every batched pass
+        uid_t worst = (uid_t) -1;
+        size_t worst_sizes = 0;
+        size_t second_worst_sizes = 0;
+
+        LidStatistics &l = stats.id(id);
+        UidStatisticsCollection::iterator iu;
+        for (iu = l.begin(); iu != l.end(); ++iu) {
+            UidStatistics *u = (*iu);
+            size_t sizes = u->sizes();
+            if (worst_sizes < sizes) {
+                second_worst_sizes = worst_sizes;
+                worst_sizes = sizes;
+                worst = u->getUid();
+            }
+            if ((second_worst_sizes < sizes) && (sizes < worst_sizes)) {
+                second_worst_sizes = sizes;
+            }
+        }
+
+        bool kick = false;
+        for(it = mLogElements.begin(); it != mLogElements.end();) {
+            LogBufferElement *e = *it;
+
+            if (oldest && (oldest->mStart <= e->getMonotonicTime())) {
+                break;
+            }
+
+            if ((e->getLogId() == id) && (e->getUid() == worst)) {
+                it = mLogElements.erase(it);
+                unsigned short len = e->getMsgLen();
+                stats.subtract(len, id, worst, e->getPid());
+                delete e;
+                kick = true;
+                pruneRows--;
+                if ((pruneRows == 0) || (worst_sizes < second_worst_sizes)) {
+                    break;
+                }
+                worst_sizes -= len;
+            } else {
+                ++it;
+            }
+        }
+
+        if (!kick) {
+            break; // the following loop will ask bad clients to skip/drop
+        }
+    }
+
+    it = mLogElements.begin();
     while((pruneRows > 0) && (it != mLogElements.end())) {
         LogBufferElement *e = *it;
         if (e->getLogId() == id) {
