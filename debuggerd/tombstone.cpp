@@ -55,11 +55,6 @@
 // Must match the path defined in NativeCrashListener.java
 #define NCRASH_SOCKET_PATH "/data/system/ndebugsocket"
 
-#define typecheck(x,y) {    \
-  typeof(x) __dummy1;     \
-  typeof(y) __dummy2;     \
-  (void)(&__dummy1 == &__dummy2); }
-
 static bool signal_has_address(int sig) {
   switch (sig) {
     case SIGILL:
@@ -653,28 +648,19 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
 //
 // Returns the path of the tombstone file, allocated using malloc().  Caller must free() it.
 static char* find_and_open_tombstone(int* fd) {
-#ifdef __aarch64__
-  long mtime = LONG_MAX;
-#else
-  unsigned long mtime = ULONG_MAX;
-#endif
-  struct stat sb;
-
-  // XXX: Our stat.st_mtime isn't time_t. If it changes, as it probably ought
-  // to, our logic breaks. This check will generate a warning if that happens.
-  typecheck(mtime, sb.st_mtime);
-
-  // In a single wolf-like pass, find an available slot and, in case none
+  // In a single pass, find an available slot and, in case none
   // exist, find and record the least-recently-modified file.
   char path[128];
-  int oldest = 0;
+  int oldest = -1;
+  struct stat oldest_sb;
   for (int i = 0; i < MAX_TOMBSTONES; i++) {
     snprintf(path, sizeof(path), TOMBSTONE_TEMPLATE, i);
 
+    struct stat sb;
     if (!stat(path, &sb)) {
-      if (sb.st_mtime < mtime) {
+      if (oldest < 0 || sb.st_mtime < oldest_sb.st_mtime) {
         oldest = i;
-        mtime = sb.st_mtime;
+        oldest_sb.st_mtime = sb.st_mtime;
       }
       continue;
     }
@@ -687,6 +673,11 @@ static char* find_and_open_tombstone(int* fd) {
 
     fchown(*fd, AID_SYSTEM, AID_SYSTEM);
     return strdup(path);
+  }
+
+  if (oldest < 0) {
+    LOG("Failed to find a valid tombstone, default to using tombstone 0.\n");
+    oldest = 0;
   }
 
   // we didn't find an available file, so we clobber the oldest one
