@@ -177,11 +177,7 @@ int nandread_main(int argc, char **argv)
 
     if (rawmode) {
         rawmode = mtdinfo.oobsize;
-#if !defined(MTD_STUPID_LOCK) /* using uapi kernel headers */
         ret = ioctl(fd, MTDFILEMODE, MTD_FILE_MODE_RAW);
-#else /* still using old kernel headers */
-        ret = ioctl(fd, MTDFILEMODE, MTD_MODE_RAW);
-#endif
         if (ret) {
             fprintf(stderr, "failed set raw mode for %s, %s\n",
                     devname, strerror(errno));
