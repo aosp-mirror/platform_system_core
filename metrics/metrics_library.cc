@@ -45,6 +45,7 @@ static const char *kCrosEventNames[] = {
   "SpringPowerSupply.Other.High",  // 8
   "SpringPowerSupply.Original.Low",  // 9
   "SpringPowerSupply.ChargerIdle",  // 10
+  "TPM.NonZeroDictionaryAttackCounter",  // 11
 };
 
 time_t MetricsLibrary::cached_enabled_time_ = 0;
