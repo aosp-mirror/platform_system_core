@@ -26,6 +26,7 @@
 #include "LogBufferElement.h"
 #include "LogTimes.h"
 #include "LogStatistics.h"
+#include "LogWhiteBlackList.h"
 
 typedef android::List<LogBufferElement *> LogBufferElementCollection;
 
@@ -34,6 +35,12 @@ class LogBuffer {
     pthread_mutex_t mLogElementsLock;
 
     LogStatistics stats;
+
+#ifdef USERDEBUG_BUILD
+    PruneList mPrune;
+
+    unsigned long mMaxSize[LOG_ID_MAX];
+#endif
 
 public:
     LastLogTimes &mTimes;
@@ -49,9 +56,18 @@ public:
 
     void clear(log_id_t id);
     unsigned long getSize(log_id_t id);
+#ifdef USERDEBUG_BUILD
+    int setSize(log_id_t id, unsigned long size);
+#endif
     unsigned long getSizeUsed(log_id_t id);
     // *strp uses malloc, use free to release.
-    size_t formatStatistics(char **strp, uid_t uid, unsigned int logMask);
+    void formatStatistics(char **strp, uid_t uid, unsigned int logMask);
+
+#ifdef USERDEBUG_BUILD
+    int initPrune(char *cp) { return mPrune.init(cp); }
+    // *strp uses malloc, use free to release.
+    void formatPrune(char **strp) { mPrune.format(strp); }
+#endif
 
 private:
     void maybePrune(log_id_t id);

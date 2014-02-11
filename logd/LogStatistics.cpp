@@ -335,8 +335,8 @@ size_t LogStatistics::elementsTotal(log_id_t log_id, uid_t uid, pid_t pid) {
     return elements;
 }
 
-size_t LogStatistics::format(char **buf,
-                             uid_t uid, unsigned int logMask, log_time oldest) {
+void LogStatistics::format(char **buf,
+                           uid_t uid, unsigned int logMask, log_time oldest) {
     const unsigned short spaces_current = 13;
     const unsigned short spaces_total = 19;
 
@@ -551,20 +551,5 @@ size_t LogStatistics::format(char **buf,
         }
     }
 
-    // Calculate total buffer size prefix
-    char re_fmt[32];
-    size_t ret;
-    for(size_t l = string.length(), y = 0, x = 6;
-           y != x;
-           y = x, x = strlen(re_fmt) - 2) {
-       snprintf(re_fmt, sizeof(re_fmt), "%zu\n%%s\n\f", l + x);
-       ret = l + x;
-    }
-
-    android::String8 intermediate = string.format(re_fmt, string.string());
-    string.clear();
-
-    *buf = strdup(intermediate.string());
-
-    return ret;
+    *buf = strdup(string.string());
 }

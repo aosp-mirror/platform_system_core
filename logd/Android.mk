@@ -4,6 +4,10 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE:= logd
 
+ifneq ($(filter userdebug eng,$(TARGET_BUILD_VARIANT)),)
+LOCAL_CFLAGS += -DUSERDEBUG_BUILD=1
+endif
+
 LOCAL_SRC_FILES := \
     main.cpp \
     LogCommand.cpp \
@@ -14,7 +18,8 @@ LOCAL_SRC_FILES := \
     LogBuffer.cpp \
     LogBufferElement.cpp \
     LogTimes.cpp \
-    LogStatistics.cpp
+    LogStatistics.cpp \
+    LogWhiteBlackList.cpp
 
 LOCAL_SHARED_LIBRARIES := \
     libsysutils \
