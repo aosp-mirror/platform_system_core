@@ -405,11 +405,11 @@ dataTransferTest_t dataTransferTests [] =
 };
 
 
-int flushcache()
+void flushcache()
 {
     const long base = long(instrMem);
     const long curr = base + long(instrMemSize);
-    return cacheflush(base, curr, 0);
+    __builtin___clear_cache((void*)base, (void*)curr);
 }
 void dataOpTest(dataOpTest_t test, ARMAssemblerInterface *a64asm, uint32_t Rd = 0,
                 uint32_t Rn = 1, uint32_t Rm = 2, uint32_t Rs = 3)
