@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-LOCAL_PATH := $(my-dir)
+LOCAL_PATH := $(call my-dir)
 
 # Static library for Linux host
 # ========================================================
