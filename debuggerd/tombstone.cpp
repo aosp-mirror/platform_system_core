@@ -726,7 +726,7 @@ char* engrave_tombstone(
       LOG("failed to change ownership of %s: %s\n", TOMBSTONE_DIR, strerror(errno));
   }
 
-  if (selinux_android_restorecon(TOMBSTONE_DIR) == -1) {
+  if (selinux_android_restorecon(TOMBSTONE_DIR, 0) == -1) {
     *detach_failed = false;
     return NULL;
   }
