@@ -47,6 +47,8 @@
 
 #include "minui/minui.h"
 
+char *locale;
+
 #ifndef max
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #endif
