@@ -52,9 +52,9 @@ static const int kSecondsPerWeek = kSecondsPerDay * kDaysPerWeek;
 static const int kUseMonitorIntervalInit = 1 * kSecondsPerMinute;
 static const int kUseMonitorIntervalMax = 10 * kSecondsPerMinute;
 
-const char kKernelCrashDetectedFile[] = "/tmp/kernel-crash-detected";
+const char kKernelCrashDetectedFile[] = "/var/run/kernel-crash-detected";
 static const char kUncleanShutdownDetectedFile[] =
-      "/tmp/unclean-shutdown-detected";
+      "/var/run/unclean-shutdown-detected";
 
 // static metrics parameters
 const char MetricsDaemon::kMetricDailyUseTimeName[] =
