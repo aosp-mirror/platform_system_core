@@ -160,6 +160,13 @@ static void WarnOpenInput(const char *path) {
   if (yyin_fd < 0)
     Die("could not open %s: %s\n", path, strerror(errno));
   if (!fifo) {
+    /* Go directly to the end of the file.  We don't want to parse the same
+     * warnings multiple times on reboot/restart.  We might miss some
+     * warnings, but so be it---it's too hard to keep track reliably of the
+     * last parsed position in the syslog.
+     */
+    if (lseek(yyin_fd, 0, SEEK_END) < 0)
+      Die("could not lseek %s: %s\n", path, strerror(errno));
     /* Set up notification of file growth and rename. */
     i_fd = inotify_init();
     if (i_fd < 0)
