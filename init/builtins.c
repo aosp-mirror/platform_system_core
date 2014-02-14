@@ -501,10 +501,10 @@ int do_mount_all(int nargs, char **args)
         return -1;
     }
 
-    /* ret is 1 if the device is encrypted, 0 if not, and -1 on error */
+    /* ret is 1 if the device appears encrypted, 0 if not, and -1 on error */
     if (ret == 1) {
         property_set("ro.crypto.state", "encrypted");
-        property_set("vold.decrypt", "1");
+        property_set("vold.decrypt", "trigger_default_encryption");
     } else if (ret == 0) {
         property_set("ro.crypto.state", "unencrypted");
         /* If fs_mgr determined this is an unencrypted device, then trigger
