@@ -308,6 +308,13 @@ struct logger_list *android_logger_list_alloc(int mode,
     return logger_list;
 }
 
+struct logger_list *android_logger_list_alloc_time(int mode,
+                                                   log_time start UNUSED,
+                                                   pid_t pid)
+{
+    return android_logger_list_alloc(mode, 0, pid);
+}
+
 /* android_logger_list_register unimplemented, no use case */
 /* android_logger_list_unregister unimplemented, no use case */
 

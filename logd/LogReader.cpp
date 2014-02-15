@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <cutils/sockets.h>
@@ -50,6 +51,14 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
         tail = atol(cp + sizeof(_tail) - 1);
     }
 
+    log_time start(log_time::EPOCH);
+    static const char _start[] = " start=";
+    cp = strstr(buffer, _start);
+    if (cp) {
+        // Parse errors will result in current time
+        start.strptime(cp + sizeof(_start) - 1, "%s.%q");
+    }
+
     unsigned int logMask = -1;
     static const char _logIds[] = " lids=";
     cp = strstr(buffer, _logIds);
@@ -58,9 +67,8 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
         cp += sizeof(_logIds) - 1;
         while (*cp && *cp != '\0') {
             int val = 0;
-            while (('0' <= *cp) && (*cp <= '9')) {
-                val *= 10;
-                val += *cp - '0';
+            while (isdigit(*cp)) {
+                val = val * 10 + *cp - '0';
                 ++cp;
             }
             logMask |= 1 << val;
@@ -83,7 +91,18 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
         nonBlock = true;
     }
 
-    FlushCommand command(*this, nonBlock, tail, logMask, pid);
+    // Convert realtime to monotonic time
+    if (start != log_time::EPOCH) {
+        log_time real(CLOCK_REALTIME);
+        log_time monotonic(CLOCK_MONOTONIC);
+        real -= monotonic; // I know this is not 100% accurate
+        start -= real;
+    }
+    if (start == log_time::EPOCH) {
+        start = LogTimeEntry::EPOCH;
+    }
+
+    FlushCommand command(*this, nonBlock, tail, logMask, pid, start);
     command.runSocketCommand(cli);
     return true;
 }

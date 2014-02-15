@@ -16,7 +16,12 @@
 #ifndef _FLUSH_COMMAND_H
 #define _FLUSH_COMMAND_H
 
+#include <log/log_read.h>
 #include <sysutils/SocketClientCommand.h>
+
+class LogBufferElement;
+
+#include "LogTimes.h"
 
 class LogReader;
 
@@ -26,13 +31,15 @@ class FlushCommand : public SocketClientCommand {
     unsigned long mTail;
     unsigned int mLogMask;
     pid_t mPid;
+    log_time mStart;
 
 public:
     FlushCommand(LogReader &mReader,
                  bool nonBlock = false,
                  unsigned long tail = -1,
                  unsigned int logMask = -1,
-                 pid_t pid = 0);
+                 pid_t pid = 0,
+                 log_time start = LogTimeEntry::EPOCH);
     virtual void runSocketCommand(SocketClient *client);
 
     static bool hasReadLogs(SocketClient *client);
