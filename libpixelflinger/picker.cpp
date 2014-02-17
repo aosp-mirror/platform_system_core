@@ -26,7 +26,7 @@ namespace android {
 
 // ----------------------------------------------------------------------------
 
-void ggl_init_picker(context_t* c)
+void ggl_init_picker(context_t* /*c*/)
 {
 }
 
