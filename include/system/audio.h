@@ -191,6 +191,7 @@ typedef enum {
 } audio_format_t;
 
 enum {
+    AUDIO_CHANNEL_NONE                      = 0x0,
     /* output channels */
     AUDIO_CHANNEL_OUT_FRONT_LEFT            = 0x1,
     AUDIO_CHANNEL_OUT_FRONT_RIGHT           = 0x2,
@@ -527,6 +528,225 @@ static const audio_offload_info_t AUDIO_INFO_INITIALIZER = {
     version: AUDIO_OFFLOAD_INFO_VERSION_CURRENT,
     size: sizeof(audio_offload_info_t),
 };
+
+
+/* audio hw module handle functions or structures referencing a module */
+typedef int audio_module_handle_t;
+
+/******************************
+ *  Volume control
+ *****************************/
+
+/* If the audio hardware supports gain control on some audio paths,
+ * the platform can expose them in the audio_policy.conf file. The audio HAL
+ * will then implement gain control functions that will use the following data
+ * structures. */
+
+/* Type of gain control exposed by an audio port */
+#define AUDIO_GAIN_MODE_JOINT     0x1 /* supports joint channel gain control */
+#define AUDIO_GAIN_MODE_CHANNELS  0x2 /* supports separate channel gain control */
+#define AUDIO_GAIN_MODE_RAMP      0x4 /* supports gain ramps */
+
+typedef uint32_t audio_gain_mode_t;
+
+
+/* An audio_gain struct is a representation of a gain stage.
+ * A gain stage is always attached to an audio port. */
+struct audio_gain  {
+    audio_gain_mode_t    mode;          /* e.g. AUDIO_GAIN_MODE_JOINT */
+    audio_channel_mask_t channel_mask;  /* channels which gain an be controlled.
+                                           N/A if AUDIO_GAIN_MODE_CHANNELS is not supported */
+    int                  min_value;     /* minimum gain value in millibels */
+    int                  max_value;     /* maximum gain value in millibels */
+    int                  default_value; /* default gain value in millibels */
+    unsigned int         step_value;    /* gain step in millibels */
+    unsigned int         min_ramp_ms;   /* minimum ramp duration in ms */
+    unsigned int         max_ramp_ms;   /* maximum ramp duration in ms */
+};
+
+/* The gain configuration structure is used to get or set the gain values of a
+ * given port */
+struct audio_gain_config  {
+    int                  index;             /* index of the corresponding audio_gain in the
+                                               audio_port gains[] table */
+    audio_gain_mode_t    mode;              /* mode requested for this command */
+    audio_channel_mask_t channel_mask;      /* channels which gain value follows.
+                                               N/A in joint mode */
+    int                  values[sizeof(audio_channel_mask_t)]; /* gain values in millibels for each
+                                               channel ordered from LSb to MSb in channel mask.
+                                               The number of values is 1 in joint mode or
+                                               popcount(channel_mask) */
+    unsigned int         ramp_duration_ms; /* ramp duration in ms */
+};
+
+/******************************
+ *  Routing control
+ *****************************/
+
+/* Types defined here are used to describe an audio source or sink at internal
+ * framework interfaces (audio policy, patch panel) or at the audio HAL.
+ * Sink and sources are grouped in a concept of “audio port” representing an
+ * audio end point at the edge of the system managed by the module exposing
+ * the interface. */
+
+/* Audio port role: either source or sink */
+typedef enum {
+    AUDIO_PORT_ROLE_NONE,
+    AUDIO_PORT_ROLE_SOURCE,
+    AUDIO_PORT_ROLE_SINK,
+} audio_port_role_t;
+
+/* Audio port type indicates if it is a session (e.g AudioTrack),
+ * a mix (e.g PlaybackThread output) or a physical device
+ * (e.g AUDIO_DEVICE_OUT_SPEAKER) */
+typedef enum {
+    AUDIO_PORT_TYPE_NONE,
+    AUDIO_PORT_TYPE_DEVICE,
+    AUDIO_PORT_TYPE_MIX,
+    AUDIO_PORT_TYPE_SESSION,
+} audio_port_type_t;
+
+/* Each port has a unique ID or handle allocated by policy manager */
+typedef int audio_port_handle_t;
+#define AUDIO_PORT_HANDLE_NONE 0
+
+
+/* maximum audio device address length */
+#define AUDIO_DEVICE_MAX_ADDRESS_LEN 32
+
+/* extension for audio port configuration structure when the audio port is a
+ * hardware device */
+struct audio_port_config_device_ext {
+    audio_module_handle_t hw_module;                /* module the device is attached to */
+    audio_devices_t       type;                     /* device type (e.g AUDIO_DEVICE_OUT_SPEAKER) */
+    char                  address[AUDIO_DEVICE_MAX_ADDRESS_LEN]; /* device address. "" if N/A */
+};
+
+/* extension for audio port configuration structure when the audio port is a
+ * sub mix */
+struct audio_port_config_mix_ext {
+    audio_module_handle_t hw_module;    /* module the stream is attached to */
+    audio_io_handle_t handle;           /* I/O handle of the input/output stream */
+    union {
+        //TODO: change use case for output streams: use strategy and mixer attributes
+        audio_stream_type_t stream;
+        audio_source_t      source;
+    } usecase;
+};
+
+/* extension for audio port configuration structure when the audio port is an
+ * audio session */
+struct audio_port_config_session_ext {
+    audio_session_t   session; /* audio session */
+};
+
+/* Flags indicating which fields are to be considered in struct audio_port_config */
+#define AUDIO_PORT_CONFIG_SAMPLE_RATE  0x1
+#define AUDIO_PORT_CONFIG_CHANNEL_MASK 0x2
+#define AUDIO_PORT_CONFIG_FORMAT       0x4
+#define AUDIO_PORT_CONFIG_GAIN         0x8
+#define AUDIO_PORT_CONFIG_ALL (AUDIO_PORT_CONFIG_SAMPLE_RATE | \
+                               AUDIO_PORT_CONFIG_CHANNEL_MASK | \
+                               AUDIO_PORT_CONFIG_FORMAT | \
+                               AUDIO_PORT_CONFIG_GAIN)
+
+/* audio port configuration structure used to specify a particular configuration of
+ * an audio port */
+struct audio_port_config {
+    audio_port_handle_t      id;           /* port unique ID */
+    audio_port_role_t        role;         /* sink or source */
+    audio_port_type_t        type;         /* device, mix ... */
+    unsigned int             config_mask;  /* e.g AUDIO_PORT_CONFIG_ALL */
+    unsigned int             sample_rate;  /* sampling rate in Hz */
+    audio_channel_mask_t     channel_mask; /* channel mask if applicable */
+    audio_format_t           format;       /* format if applicable */
+    struct audio_gain_config gain;         /* gain to apply if applicable */
+    union {
+        struct audio_port_config_device_ext  device;  /* device specific info */
+        struct audio_port_config_mix_ext     mix;     /* mix specific info */
+        struct audio_port_config_session_ext session; /* session specific info */
+    } ext;
+};
+
+
+/* max number of sampling rates in audio port */
+#define AUDIO_PORT_MAX_SAMPLING_RATES 16
+/* max number of channel masks in audio port */
+#define AUDIO_PORT_MAX_CHANNEL_MASKS 16
+/* max number of audio formats in audio port */
+#define AUDIO_PORT_MAX_FORMATS 16
+/* max number of gain controls in audio port */
+#define AUDIO_PORT_MAX_GAINS 16
+
+/* extension for audio port structure when the audio port is a hardware device */
+struct audio_port_device_ext {
+    audio_module_handle_t hw_module;    /* module the device is attached to */
+    audio_devices_t       type;         /* device type (e.g AUDIO_DEVICE_OUT_SPEAKER) */
+    char                  address[AUDIO_DEVICE_MAX_ADDRESS_LEN];
+};
+
+/* Latency class of the audio mix */
+typedef enum {
+    AUDIO_LATENCY_LOW,
+    AUDIO_LATENCY_NORMAL,
+} audio_mix_latency_class_t;
+
+/* extension for audio port structure when the audio port is a sub mix */
+struct audio_port_mix_ext {
+    audio_module_handle_t     hw_module;     /* module the stream is attached to */
+    audio_io_handle_t         handle;        /* I/O handle of the input.output stream */
+    audio_mix_latency_class_t latency_class; /* latency class */
+    // other attributes: routing strategies
+};
+
+/* extension for audio port structure when the audio port is an audio session */
+struct audio_port_session_ext {
+    audio_session_t   session; /* audio session */
+};
+
+
+struct audio_port {
+    audio_port_handle_t      id;                /* port unique ID */
+    audio_port_role_t        role;              /* sink or source */
+    audio_port_type_t        type;              /* device, mix ... */
+    unsigned int             num_sample_rates;  /* number of sampling rates in following array */
+    unsigned int             sample_rates[AUDIO_PORT_MAX_SAMPLING_RATES];
+    unsigned int             num_channel_masks; /* number of channel masks in following array */
+    audio_channel_mask_t     channel_masks[AUDIO_PORT_MAX_CHANNEL_MASKS];
+    unsigned int             num_formats;       /* number of formats in following array */
+    audio_format_t           formats[AUDIO_PORT_MAX_FORMATS];
+    unsigned int             num_gains;         /* number of gains in following array */
+    struct audio_gain        gains[AUDIO_PORT_MAX_GAINS];
+    struct audio_port_config active_config;     /* current audio port configuration */
+    union {
+        struct audio_port_device_ext  device;
+        struct audio_port_mix_ext     mix;
+        struct audio_port_session_ext session;
+    } ext;
+};
+
+/* An audio patch represents a connection between one or more source ports and
+ * one or more sink ports. Patches are connected and disconnected by audio policy manager or by
+ * applications via framework APIs.
+ * Each patch is identified by a handle at the interface used to create that patch. For instance,
+ * when a patch is created by the audio HAL, the HAL allocates and returns a handle.
+ * This handle is unique to a given audio HAL hardware module.
+ * But the same patch receives another system wide unique handle allocated by the framework.
+ * This unique handle is used for all transactions inside the framework.
+ */
+typedef int audio_patch_handle_t;
+#define AUDIO_PATCH_HANDLE_NONE 0
+
+#define AUDIO_PATCH_PORTS_MAX   16
+
+struct audio_patch {
+    audio_patch_handle_t id;            /* patch unique ID */
+    unsigned int      num_sources;      /* number of sources in following array */
+    struct audio_port_config sources[AUDIO_PATCH_PORTS_MAX];
+    unsigned int      num_sinks;        /* number of sinks in following array */
+    struct audio_port_config sinks[AUDIO_PATCH_PORTS_MAX];
+};
+
 
 static inline bool audio_is_output_device(audio_devices_t device)
 {
