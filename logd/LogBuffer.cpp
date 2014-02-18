@@ -52,11 +52,12 @@ void LogBuffer::log(log_id_t log_id, struct timespec realtime,
     LogBufferElementCollection::iterator it = mLogElements.end();
     LogBufferElementCollection::iterator last = it;
     while (--it != mLogElements.begin()) {
-        if ((*it)->getRealTime() <= elem->getRealTime()) {
+        if ((*it)->getRealTime() <= realtime) {
             break;
         }
         last = it;
     }
+
     if (last == mLogElements.end()) {
         mLogElements.push_back(elem);
     } else {
@@ -83,7 +84,7 @@ void LogBuffer::log(log_id_t log_id, struct timespec realtime,
         }
 
         if (end_always
-         || (end_set && (end >= (*last)->getMonotonicTime()))) {
+                || (end_set && (end >= (*last)->getMonotonicTime()))) {
             mLogElements.push_back(elem);
         } else {
             mLogElements.insert(last,elem);
