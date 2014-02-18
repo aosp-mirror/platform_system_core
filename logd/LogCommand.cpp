@@ -16,6 +16,6 @@
 
 #include "LogCommand.h"
 
-LogCommand::LogCommand(const char *cmd) :
-              FrameworkCommand(cmd)  {
+LogCommand::LogCommand(const char *cmd)
+        : FrameworkCommand(cmd) {
 }
