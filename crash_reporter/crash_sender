@@ -6,7 +6,7 @@
 
 set -e
 
-# Product ID in crash report
+# Default product ID in crash report (used if GOOGLE_CRASH_* is undefined).
 CHROMEOS_PRODUCT=ChromeOS
 
 # Should remove the run file when this process finishes.  We don't want
@@ -336,10 +336,31 @@ send_crash() {
   done
 
   # When uploading Chrome reports we need to report the right product and
-  # version, so allow the meta file to override these values.
+  # version. If the meta file does not specify it, use GOOGLE_CRASH_ID
+  # as the product and GOOGLE_CRASH_VERSION_ID as the version.
   if [ "${product}" = "undefined" ]; then
-    product=${CHROMEOS_PRODUCT}
-    version=${chromeos_version}
+    product="$(get_key_value /etc/os-release 'GOOGLE_CRASH_ID')"
+  fi
+  if [ "${version}" = "undefined" ]; then
+    version="$(get_key_value /etc/os-release 'GOOGLE_CRASH_VERSION_ID')"
+  fi
+
+  # If GOOGLE_CRASH_* is undefined, we look for ID and VERSION_ID in
+  # /etc/os-release.
+  if [ "${product}" = "undefined" ]; then
+    product="$(get_key_value /etc/os-release 'ID')"
+  fi
+  if [ "${version}" = "undefined" ]; then
+    version="$(get_key_value /etc/os-release 'VERSION_ID')"
+  fi
+
+  # If ID or VERSION_ID is undefined, we use the default product name
+  # and CHROMEOS_RELEASE_VERSION from /etc/lsb-release.
+  if [ "${product}" = "undefined" ]; then
+    product="${CHROMEOS_PRODUCT}"
+  fi
+  if [ "${version}" = "undefined" ]; then
+    version="${chromeos_version}"
   fi
 
   local image_type
