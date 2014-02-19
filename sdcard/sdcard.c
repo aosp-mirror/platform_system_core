@@ -1244,6 +1244,12 @@ static int handle_write(struct fuse* fuse, struct fuse_handler* handler,
     struct fuse_write_out out;
     struct handle *h = id_to_ptr(req->fh);
     int res;
+    __u8 aligned_buffer[req->size] __attribute__((__aligned__(PAGESIZE)));
+    
+    if (req->flags & O_DIRECT) {
+        memcpy(aligned_buffer, buffer, req->size);
+        buffer = (const __u8*) aligned_buffer;
+    }
 
     TRACE("[%d] WRITE %p(%d) %u@%llu\n", handler->token,
             h, h->fd, req->size, req->offset);
