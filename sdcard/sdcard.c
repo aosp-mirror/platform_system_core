@@ -1503,7 +1503,8 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
         return handle_release(fuse, handler, hdr, req);
     }
 
-    case FUSE_FSYNC: {
+    case FUSE_FSYNC:
+    case FUSE_FSYNCDIR: {
         const struct fuse_fsync_in *req = data;
         return handle_fsync(fuse, handler, hdr, req);
     }
@@ -1531,7 +1532,6 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
         return handle_releasedir(fuse, handler, hdr, req);
     }
 
-//    case FUSE_FSYNCDIR:
     case FUSE_INIT: { /* init_in -> init_out */
         const struct fuse_init_in *req = data;
         return handle_init(fuse, handler, hdr, req);
