@@ -92,14 +92,59 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
     }
 
     // Convert realtime to monotonic time
-    if (start != log_time::EPOCH) {
-        log_time real(CLOCK_REALTIME);
-        log_time monotonic(CLOCK_MONOTONIC);
-        real -= monotonic; // I know this is not 100% accurate
-        start -= real;
-    }
     if (start == log_time::EPOCH) {
         start = LogTimeEntry::EPOCH;
+    } else {
+        class LogFindStart {
+            const pid_t mPid;
+            const unsigned mLogMask;
+            bool startTimeSet;
+            log_time &start;
+            log_time last;
+
+        public:
+            LogFindStart(unsigned logMask, pid_t pid, log_time &start)
+                    : mPid(pid)
+                    , mLogMask(logMask)
+                    , startTimeSet(false)
+                    , start(start)
+                    , last(LogTimeEntry::EPOCH)
+            { }
+
+            static bool callback(const LogBufferElement *element, void *obj) {
+                LogFindStart *me = reinterpret_cast<LogFindStart *>(obj);
+                if (!me->startTimeSet
+                        && (!me->mPid || (me->mPid == element->getPid()))
+                        && (me->mLogMask & (1 << element->getLogId()))) {
+                    if (me->start == element->getRealTime()) {
+                        me->start = element->getMonotonicTime();
+                        me->startTimeSet = true;
+                    } else {
+                        if (me->start < element->getRealTime()) {
+                            me->start = me->last;
+                            me->startTimeSet = true;
+                        }
+                        me->last = element->getMonotonicTime();
+                    }
+                }
+                return false;
+            }
+
+            bool found() { return startTimeSet; }
+        } logFindStart(logMask, pid, start);
+
+        logbuf().flushTo(cli, LogTimeEntry::EPOCH,
+                         FlushCommand::hasReadLogs(cli),
+                         logFindStart.callback, &logFindStart);
+
+        if (!logFindStart.found()) {
+            if (nonBlock) {
+                doSocketDelete(cli);
+                return false;
+            }
+            log_time now(CLOCK_MONOTONIC);
+            start = now;
+        }
     }
 
     FlushCommand command(*this, nonBlock, tail, logMask, pid, start);
