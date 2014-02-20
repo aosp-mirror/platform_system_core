@@ -79,14 +79,10 @@ struct logger_entry_v3 {
 struct log_msg {
     union {
         unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
-        struct logger_entry_v2 entry;
+        struct logger_entry_v3 entry;
         struct logger_entry_v3 entry_v3;
         struct logger_entry_v2 entry_v2;
         struct logger_entry    entry_v1;
-        struct {
-            unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1];
-            log_id_t id;
-        } extra;
     } __attribute__((aligned(4)));
 #ifdef __cplusplus
     /* Matching log_time operators */
@@ -126,7 +122,7 @@ struct log_msg {
     /* packet methods */
     log_id_t id()
     {
-        return extra.id;
+        return (log_id_t) entry.lid;
     }
     char *msg()
     {
