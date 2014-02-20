@@ -130,7 +130,7 @@ void read_pixel(const surface_t* s, context_t* c,
     }
 }
 
-void readRGB565(const surface_t* s, context_t* c,
+void readRGB565(const surface_t* s, context_t* /*c*/,
         uint32_t x, uint32_t y, pixel_t* pixel)
 {
     uint16_t v = *(reinterpret_cast<uint16_t*>(s->data) + (x + (s->stride * y)));
@@ -144,7 +144,7 @@ void readRGB565(const surface_t* s, context_t* c,
     pixel->s[3] = 5;
 }
 
-void readABGR8888(const surface_t* s, context_t* c,
+void readABGR8888(const surface_t* s, context_t* /*c*/,
         uint32_t x, uint32_t y, pixel_t* pixel)
 {
     uint32_t v = *(reinterpret_cast<uint32_t*>(s->data) + (x + (s->stride * y)));

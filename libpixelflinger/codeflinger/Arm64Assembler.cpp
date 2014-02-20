@@ -273,7 +273,7 @@ void ArmToArm64Assembler::B(int cc, const char* label)
     *mPC++ = (0x54 << 24) | cc;
 }
 
-void ArmToArm64Assembler::BL(int cc, const char* label)
+void ArmToArm64Assembler::BL(int /*cc*/, const char* /*label*/)
 {
     NOT_IMPLEMENTED(); //Not Required
 }
@@ -289,7 +289,7 @@ void ArmToArm64Assembler::prolog()
     *mPC++ = A64_MOVZ_X(mZeroReg,0,0);
 }
 
-void ArmToArm64Assembler::epilog(uint32_t touched)
+void ArmToArm64Assembler::epilog(uint32_t /*touched*/)
 {
     // write epilog code
     static const int XLR = 30;
@@ -530,23 +530,23 @@ void ArmToArm64Assembler::MUL(int cc, int s, int Rd, int Rm, int Rs)
     if(s  != 0) { NOT_IMPLEMENTED(); return;} //Not required
     *mPC++ = A64_MADD_W(Rd, Rm, Rs, mZeroReg);
 }
-void ArmToArm64Assembler::UMULL(int cc, int s,
-        int RdLo, int RdHi, int Rm, int Rs)
+void ArmToArm64Assembler::UMULL(int /*cc*/, int /*s*/,
+        int /*RdLo*/, int /*RdHi*/, int /*Rm*/, int /*Rs*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
-void ArmToArm64Assembler::UMUAL(int cc, int s,
-        int RdLo, int RdHi, int Rm, int Rs)
+void ArmToArm64Assembler::UMUAL(int /*cc*/, int /*s*/,
+        int /*RdLo*/, int /*RdHi*/, int /*Rm*/, int /*Rs*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
-void ArmToArm64Assembler::SMULL(int cc, int s,
-        int RdLo, int RdHi, int Rm, int Rs)
+void ArmToArm64Assembler::SMULL(int /*cc*/, int /*s*/,
+        int /*RdLo*/, int /*RdHi*/, int /*Rm*/, int /*Rs*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
-void ArmToArm64Assembler::SMUAL(int cc, int s,
-        int RdLo, int RdHi, int Rm, int Rs)
+void ArmToArm64Assembler::SMUAL(int /*cc*/, int /*s*/,
+        int /*RdLo*/, int /*RdHi*/, int /*Rm*/, int /*Rs*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
@@ -554,15 +554,15 @@ void ArmToArm64Assembler::SMUAL(int cc, int s,
 // ----------------------------------------------------------------------------
 // branches relative to PC...
 // ----------------------------------------------------------------------------
-void ArmToArm64Assembler::B(int cc, uint32_t* pc){
+void ArmToArm64Assembler::B(int /*cc*/, uint32_t* /*pc*/){
     NOT_IMPLEMENTED(); //Not required
 }
 
-void ArmToArm64Assembler::BL(int cc, uint32_t* pc){
+void ArmToArm64Assembler::BL(int /*cc*/, uint32_t* /*pc*/){
     NOT_IMPLEMENTED(); //Not required
 }
 
-void ArmToArm64Assembler::BX(int cc, int Rn){
+void ArmToArm64Assembler::BX(int /*cc*/, int /*Rn*/){
     NOT_IMPLEMENTED(); //Not required
 }
 
@@ -661,11 +661,11 @@ void ArmToArm64Assembler::LDRH(int cc, int Rd, int Rn, uint32_t op_type)
 {
     return dataTransfer(opLDRH, cc, Rd, Rn, op_type);
 }
-void ArmToArm64Assembler::LDRSB(int cc, int Rd, int Rn, uint32_t offset)
+void ArmToArm64Assembler::LDRSB(int /*cc*/, int /*Rd*/, int /*Rn*/, uint32_t /*offset*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
-void ArmToArm64Assembler::LDRSH(int cc, int Rd, int Rn, uint32_t offset)
+void ArmToArm64Assembler::LDRSH(int /*cc*/, int /*Rd*/, int /*Rn*/, uint32_t /*offset*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
@@ -723,15 +723,15 @@ void ArmToArm64Assembler::STM(int cc, int dir,
 // ----------------------------------------------------------------------------
 // special...
 // ----------------------------------------------------------------------------
-void ArmToArm64Assembler::SWP(int cc, int Rn, int Rd, int Rm)
+void ArmToArm64Assembler::SWP(int /*cc*/, int /*Rn*/, int /*Rd*/, int /*Rm*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
-void ArmToArm64Assembler::SWPB(int cc, int Rn, int Rd, int Rm)
+void ArmToArm64Assembler::SWPB(int /*cc*/, int /*Rn*/, int /*Rd*/, int /*Rm*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
-void ArmToArm64Assembler::SWI(int cc, uint32_t comment)
+void ArmToArm64Assembler::SWI(int /*cc*/, uint32_t /*comment*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
@@ -739,31 +739,31 @@ void ArmToArm64Assembler::SWI(int cc, uint32_t comment)
 // ----------------------------------------------------------------------------
 // DSP instructions...
 // ----------------------------------------------------------------------------
-void ArmToArm64Assembler::PLD(int Rn, uint32_t offset) {
+void ArmToArm64Assembler::PLD(int /*Rn*/, uint32_t /*offset*/) {
     NOT_IMPLEMENTED(); //Not required
 }
 
-void ArmToArm64Assembler::CLZ(int cc, int Rd, int Rm)
+void ArmToArm64Assembler::CLZ(int /*cc*/, int /*Rd*/, int /*Rm*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
 
-void ArmToArm64Assembler::QADD(int cc,  int Rd, int Rm, int Rn)
+void ArmToArm64Assembler::QADD(int /*cc*/, int /*Rd*/, int /*Rm*/, int /*Rn*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
 
-void ArmToArm64Assembler::QDADD(int cc,  int Rd, int Rm, int Rn)
+void ArmToArm64Assembler::QDADD(int /*cc*/, int /*Rd*/, int /*Rm*/, int /*Rn*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
 
-void ArmToArm64Assembler::QSUB(int cc,  int Rd, int Rm, int Rn)
+void ArmToArm64Assembler::QSUB(int /*cc*/, int /*Rd*/, int /*Rm*/, int /*Rn*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
 
-void ArmToArm64Assembler::QDSUB(int cc,  int Rd, int Rm, int Rn)
+void ArmToArm64Assembler::QDSUB(int /*cc*/, int /*Rd*/, int /*Rm*/, int /*Rn*/)
 {
     NOT_IMPLEMENTED(); //Not required
 }
@@ -817,15 +817,15 @@ void ArmToArm64Assembler::SMLA(int cc, int xy, int Rd, int Rm, int Rs, int Rn)
     *mPC++ = A64_MADD_W(Rd, mTmpReg1, mTmpReg2, Rn);
 }
 
-void ArmToArm64Assembler::SMLAL(int cc, int xy,
-                int RdHi, int RdLo, int Rs, int Rm)
+void ArmToArm64Assembler::SMLAL(int /*cc*/, int /*xy*/,
+                int /*RdHi*/, int /*RdLo*/, int /*Rs*/, int /*Rm*/)
 {
     NOT_IMPLEMENTED(); //Not required
     return;
 }
 
-void ArmToArm64Assembler::SMLAW(int cc, int y,
-                int Rd, int Rm, int Rs, int Rn)
+void ArmToArm64Assembler::SMLAW(int /*cc*/, int /*y*/,
+                int /*Rd*/, int /*Rm*/, int /*Rs*/, int /*Rn*/)
 {
     NOT_IMPLEMENTED(); //Not required
     return;
@@ -890,13 +890,13 @@ uint32_t ArmToArm64Assembler::reg_imm(int Rm, int type, uint32_t shift)
     return OPERAND_REG_IMM;
 }
 
-uint32_t ArmToArm64Assembler::reg_rrx(int Rm)
+uint32_t ArmToArm64Assembler::reg_rrx(int /*Rm*/)
 {
     NOT_IMPLEMENTED();
     return OPERAND_UNSUPPORTED;
 }
 
-uint32_t ArmToArm64Assembler::reg_reg(int Rm, int type, int Rs)
+uint32_t ArmToArm64Assembler::reg_reg(int /*Rm*/, int /*type*/, int /*Rs*/)
 {
     NOT_IMPLEMENTED(); //Not required
     return OPERAND_UNSUPPORTED;
@@ -937,7 +937,7 @@ uint32_t ArmToArm64Assembler::reg_scale_pre(int Rm, int type,
     }
 }
 
-uint32_t ArmToArm64Assembler::reg_scale_post(int Rm, int type, uint32_t shift)
+uint32_t ArmToArm64Assembler::reg_scale_post(int /*Rm*/, int /*type*/, uint32_t /*shift*/)
 {
     NOT_IMPLEMENTED(); //Not required
     return OPERAND_UNSUPPORTED;
@@ -975,7 +975,7 @@ uint32_t ArmToArm64Assembler::reg_pre(int Rm, int W)
     }
 }
 
-uint32_t ArmToArm64Assembler::reg_post(int Rm)
+uint32_t ArmToArm64Assembler::reg_post(int /*Rm*/)
 {
     NOT_IMPLEMENTED(); //Not required
     return OPERAND_UNSUPPORTED;
