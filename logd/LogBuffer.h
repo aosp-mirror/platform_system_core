@@ -36,6 +36,8 @@ class LogBuffer {
 
     LogStatistics stats;
 
+    bool dgram_qlen_statistics;
+
 #ifdef USERDEBUG_BUILD
     PruneList mPrune;
 
@@ -63,6 +65,11 @@ public:
     unsigned long getSizeUsed(log_id_t id);
     // *strp uses malloc, use free to release.
     void formatStatistics(char **strp, uid_t uid, unsigned int logMask);
+
+    void enableDgramQlenStatistics() {
+        stats.enableDgramQlenStatistics();
+        dgram_qlen_statistics = true;
+    }
 
 #ifdef USERDEBUG_BUILD
     int initPrune(char *cp) { return mPrune.init(cp); }

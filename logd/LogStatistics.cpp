@@ -275,6 +275,66 @@ LogStatistics::LogStatistics()
         mSizes[i] = 0;
         mElements[i] = 0;
     }
+
+    dgram_qlen_statistics = false;
+    for(unsigned short bucket = 0; dgram_qlen(bucket); ++bucket) {
+        mMinimum[bucket].tv_sec = (uint32_t)-1;
+        mMinimum[bucket].tv_nsec = 999999999UL;
+    }
+}
+
+//   Each bucket below represents a dgram_qlen of log messages. By
+//   finding the minimum period of time from start to finish
+//   of each dgram_qlen, we can get a performance expectation for
+//   the user space logger. The net result is that the period
+//   of time divided by the dgram_qlen will give us the average time
+//   between log messages; at the point where the average time
+//   is greater than the throughput capability of the logger
+//   we will not longer require the benefits of the FIFO formed
+//   by max_dgram_qlen. We will also expect to see a very visible
+//   knee in the average time between log messages at this point,
+//   so we do not necessarily have to compare the rate against the
+//   measured performance (BM_log_maximum_retry) of the logger.
+//
+//   for example (reformatted):
+//
+//       Minimum time between log events per dgram_qlen:
+//       1   2   3   5   10  20  30  50  100  200 300 400 500 600
+//       5u2 12u 13u 15u 16u 27u 30u 36u 407u 3m1 3m3 3m9 3m9 5m5
+//
+//   demonstrates a clear knee rising at 100, so this means that for this
+//   case max_dgram_qlen = 100 would be more than sufficient to handle the
+//   worst that the system could stuff into the logger. The
+//   BM_log_maximum_retry performance (derated by the log collection) on the
+//   same system was 33.2us so we would almost be fine with max_dgram_qlen = 50.
+//   BM_log_maxumum_retry with statistics off is roughly 20us, so
+//   max_dgram_qlen = 20 would work. We will be more than willing to have
+//   a large engineering margin so the rule of thumb that lead us to 100 is
+//   fine.
+//
+// bucket dgram_qlen are tuned for /proc/sys/net/unix/max_dgram_qlen = 300
+const unsigned short LogStatistics::mBuckets[] = {
+    1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 400, 500, 600
+};
+
+unsigned short LogStatistics::dgram_qlen(unsigned short bucket) {
+    if (bucket >= sizeof(mBuckets) / sizeof(mBuckets[0])) {
+        return 0;
+    }
+    return mBuckets[bucket];
+}
+
+unsigned long long LogStatistics::minimum(unsigned short bucket) {
+    if (mMinimum[bucket].tv_sec == LONG_MAX) {
+        return 0;
+    }
+    return mMinimum[bucket].nsec();
+}
+
+void LogStatistics::recordDiff(log_time diff, unsigned short bucket) {
+    if ((diff.tv_sec || diff.tv_nsec) && (mMinimum[bucket] > diff)) {
+        mMinimum[bucket] = diff;
+    }
 }
 
 void LogStatistics::add(unsigned short size,
@@ -352,6 +412,9 @@ void LogStatistics::format(char **buf,
     log_id_for_each(i) {
         if (logMask & (1 << i)) {
             oldLength = string.length();
+            if (spaces < 0) {
+                spaces = 0;
+            }
             string.appendFormat("%*s%s", spaces, "", android_log_id_to_name(i));
             spaces += spaces_total + oldLength - string.length();
         }
@@ -369,6 +432,9 @@ void LogStatistics::format(char **buf,
             continue;
         }
         oldLength = string.length();
+        if (spaces < 0) {
+            spaces = 0;
+        }
         string.appendFormat("%*s%zu/%zu", spaces, "",
                             sizesTotal(i), elementsTotal(i));
         spaces += spaces_total + oldLength - string.length();
@@ -388,10 +454,62 @@ void LogStatistics::format(char **buf,
         size_t els = elements(i);
         if (els) {
             oldLength = string.length();
+            if (spaces < 0) {
+                spaces = 0;
+            }
             string.appendFormat("%*s%zu/%zu", spaces, "", sizes(i), els);
             spaces -= string.length() - oldLength;
         }
         spaces += spaces_total;
+    }
+
+    if (dgram_qlen_statistics) {
+        const unsigned short spaces_time = 6;
+        const unsigned long long max_seconds = 100000;
+        spaces = 0;
+        string.append("\n\nMinimum time between log events per dgram_qlen:\n");
+        for(unsigned short i = 0; dgram_qlen(i); ++i) {
+            oldLength = string.length();
+            if (spaces < 0) {
+                spaces = 0;
+            }
+            string.appendFormat("%*s%u", spaces, "", dgram_qlen(i));
+            spaces += spaces_time + oldLength - string.length();
+        }
+        string.append("\n");
+        spaces = 0;
+        unsigned short n;
+        for(unsigned short i = 0; (n = dgram_qlen(i)); ++i) {
+            unsigned long long duration = minimum(i);
+            if (duration) {
+                duration /= n;
+                if (duration >= (NS_PER_SEC * max_seconds)) {
+                    duration = NS_PER_SEC * (max_seconds - 1);
+                }
+                oldLength = string.length();
+                if (spaces < 0) {
+                    spaces = 0;
+                }
+                string.appendFormat("%*s", spaces, "");
+                if (duration >= (NS_PER_SEC * 10)) {
+                    string.appendFormat("%llu",
+                        (duration + (NS_PER_SEC / 2))
+                            / NS_PER_SEC);
+                } else if (duration >= (NS_PER_SEC / (1000 / 10))) {
+                    string.appendFormat("%llum",
+                        (duration + (NS_PER_SEC / 2 / 1000))
+                            / (NS_PER_SEC / 1000));
+                } else if (duration >= (NS_PER_SEC / (1000000 / 10))) {
+                    string.appendFormat("%lluu",
+                         (duration + (NS_PER_SEC / 2 / 1000000))
+                             / (NS_PER_SEC / 1000000));
+                } else {
+                    string.appendFormat("%llun", duration);
+                }
+                spaces -= string.length() - oldLength;
+            }
+            spaces += spaces_time;
+        }
     }
 
     log_id_for_each(i) {
@@ -433,7 +551,7 @@ void LogStatistics::format(char **buf,
 
             if (!oneline) {
                 first = true;
-            } else if (!first && spaces) {
+            } else if (!first && (spaces > 0)) {
                 string.appendFormat("%*s", spaces, "");
             }
             spaces = 0;
@@ -458,10 +576,16 @@ void LogStatistics::format(char **buf,
 
             size_t els = up->elements();
             if (els == elsTotal) {
+                if (spaces < 0) {
+                    spaces = 0;
+                }
                 string.appendFormat("%*s=", spaces, "");
                 spaces = -1;
             } else if (els) {
                 oldLength = string.length();
+                if (spaces < 0) {
+                    spaces = 0;
+                }
                 string.appendFormat("%*s%zu/%zu", spaces, "", up->sizes(), els);
                 spaces -= string.length() - oldLength;
             }
@@ -502,7 +626,7 @@ void LogStatistics::format(char **buf,
                     continue;
                 }
 
-                if (!first && spaces) {
+                if (!first && (spaces > 0)) {
                     string.appendFormat("%*s", spaces, "");
                 }
                 spaces = 0;
@@ -517,10 +641,16 @@ void LogStatistics::format(char **buf,
                 spaces += spaces_total + oldLength - string.length();
 
                 if (els == elsTotal) {
+                    if (spaces < 0) {
+                        spaces = 0;
+                    }
                     string.appendFormat("%*s=", spaces, "");
                     spaces = -1;
                 } else if (els) {
                     oldLength = string.length();
+                    if (spaces < 0) {
+                        spaces = 0;
+                    }
                     string.appendFormat("%*s%zu/%zu", spaces, "",
                                         pp->sizes(), els);
                     spaces -= string.length() - oldLength;
@@ -531,7 +661,7 @@ void LogStatistics::format(char **buf,
             }
 
             if (gone_els) {
-                if (!first && spaces) {
+                if (!first && (spaces > 0)) {
                     string.appendFormat("%*s", spaces, "");
                 }
 
