@@ -694,7 +694,7 @@ void GGLAssembler::build_coverage_application(component_t& fragment,
 // ---------------------------------------------------------------------------
 
 void GGLAssembler::build_alpha_test(component_t& fragment,
-                                    const fragment_parts_t& parts)
+                                    const fragment_parts_t& /*parts*/)
 {
     if (mAlphaTest != GGL_ALWAYS) {
         comment("Alpha Test");
@@ -796,7 +796,7 @@ void GGLAssembler::build_iterate_z(const fragment_parts_t& parts)
     }
 }
 
-void GGLAssembler::build_iterate_f(const fragment_parts_t& parts)
+void GGLAssembler::build_iterate_f(const fragment_parts_t& /*parts*/)
 {
     const needs_t& needs = mBuilderContext.needs;
     if (GGL_READ_NEEDS(P_FOG, needs.p)) {

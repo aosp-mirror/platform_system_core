@@ -534,7 +534,7 @@ static inline int blendfactor(uint32_t x, uint32_t size, uint32_t def = 0)
     return x;
 }
 
-void blend_factor(context_t* c, pixel_t* r, 
+void blend_factor(context_t* /*c*/, pixel_t* r, 
         uint32_t factor, const pixel_t* src, const pixel_t* dst)
 {
     switch (factor) {
@@ -1161,7 +1161,7 @@ protected:
  *   blender.blend(<32-bit-src-pixel-value>,<ptr-to-16-bit-dest-pixel>)
  */
 struct blender_32to16 {
-    blender_32to16(context_t* c) { }
+    blender_32to16(context_t* /*c*/) { }
     void write(uint32_t s, uint16_t* dst) {
         if (s == 0)
             return;
@@ -1218,7 +1218,7 @@ struct blender_32to16 {
  * where dstFactor=srcA*(1-srcA) srcFactor=srcA
  */
 struct blender_32to16_srcA {
-    blender_32to16_srcA(const context_t* c) { }
+    blender_32to16_srcA(const context_t* /*c*/) { }
     void write(uint32_t s, uint16_t* dst) {
         if (!s) {
             return;
@@ -2317,7 +2317,7 @@ void scanline_set(context_t* c)
     memset(dst, 0xFF, size);
 }
 
-void scanline_noop(context_t* c)
+void scanline_noop(context_t* /*c*/)
 {
 }
 
