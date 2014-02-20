@@ -9,7 +9,7 @@ static const char *progname;
 
 static void usage(void)
 {
-    fprintf(stderr, "usage:  %s [-FnrRv] pathname...\n", progname);
+    fprintf(stderr, "usage:  %s [-DFnrRv] pathname...\n", progname);
     exit(1);
 }
 
@@ -21,10 +21,13 @@ int restorecon_main(int argc, char **argv)
     progname = argv[0];
 
     do {
-        ch = getopt(argc, argv, "FnrRv");
+        ch = getopt(argc, argv, "DFnrRv");
         if (ch == EOF)
             break;
         switch (ch) {
+        case 'D':
+            flags |= SELINUX_ANDROID_RESTORECON_DATADATA;
+            break;
         case 'F':
             flags |= SELINUX_ANDROID_RESTORECON_FORCE;
             break;
