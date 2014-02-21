@@ -297,6 +297,136 @@ enum {
     HAL_TRANSFORM_RESERVED  = 0x08,
 };
 
+/**
+ * Colorspace Definitions
+ * ======================
+ *
+ * Colorspace is the definition of how pixel values should be interpreted.
+ * It includes primaries (including white point) and the transfer
+ * characteristic function, which describes both gamma curve and numeric
+ * range (within the bit depth).
+ */
+
+enum {
+    /*
+     * Arbitrary colorspace with manually defined characteristics.
+     * Colorspace definition must be communicated separately.
+     *
+     * This is used when specifying primaries, transfer characteristics,
+     * etc. separately.
+     *
+     * A typical use case is in video encoding parameters (e.g. for H.264),
+     * where a colorspace can have separately defined primaries, transfer
+     * characteristics, etc.
+     */
+    HAL_COLORSPACE_ARBITRARY = 0x1,
+
+    /*
+     * YCbCr Colorspaces
+     * -----------------
+     *
+     * Primaries are given using (x,y) coordinates in the CIE 1931 definition
+     * of x and y specified by ISO 11664-1.
+     *
+     * Transfer characteristics are the opto-electronic transfer characteristic
+     * at the source as a function of linear optical intensity (luminance).
+     */
+
+    /*
+     * JPEG File Interchange Format (JFIF)
+     *
+     * Same model as BT.601-625, but all values (Y, Cb, Cr) range from 0 to 255
+     *
+     * Transfer characteristic curve:
+     *  E = 1.099 * L ^ 0.45 - 0.099, 1.00 >= L >= 0.018
+     *  E = 4.500 L, 0.018 > L >= 0
+     *      L - luminance of image 0 <= L <= 1 for conventional colorimetry
+     *      E - corresponding electrical signal
+     *
+     * Primaries:       x       y
+     *  green           0.290   0.600
+     *  blue            0.150   0.060
+     *  red             0.640   0.330
+     *  white (D65)     0.3127  0.3290
+     */
+    HAL_COLORSPACE_JFIF = 0x101,
+
+    /*
+     * ITU-R Recommendation 601 (BT.601) - 625-line
+     *
+     * Standard-definition television, 625 Lines (PAL)
+     *
+     * For 8-bit-depth formats:
+     * Luma (Y) samples should range from 16 to 235, inclusive
+     * Chroma (Cb, Cr) samples should range from 16 to 240, inclusive
+     *
+     * For 10-bit-depth formats:
+     * Luma (Y) samples should range from 64 to 940, inclusive
+     * Chroma (Cb, Cr) samples should range from 64 to 960, inclusive
+     *
+     * Transfer characteristic curve:
+     *  E = 1.099 * L ^ 0.45 - 0.099, 1.00 >= L >= 0.018
+     *  E = 4.500 L, 0.018 > L >= 0
+     *      L - luminance of image 0 <= L <= 1 for conventional colorimetry
+     *      E - corresponding electrical signal
+     *
+     * Primaries:       x       y
+     *  green           0.290   0.600
+     *  blue            0.150   0.060
+     *  red             0.640   0.330
+     *  white (D65)     0.3127  0.3290
+     */
+    HAL_COLORSPACE_BT601_625 = 0x102,
+
+    /*
+     * ITU-R Recommendation 601 (BT.601) - 525-line
+     *
+     * Standard-definition television, 525 Lines (NTSC)
+     *
+     * For 8-bit-depth formats:
+     * Luma (Y) samples should range from 16 to 235, inclusive
+     * Chroma (Cb, Cr) samples should range from 16 to 240, inclusive
+     *
+     * For 10-bit-depth formats:
+     * Luma (Y) samples should range from 64 to 940, inclusive
+     * Chroma (Cb, Cr) samples should range from 64 to 960, inclusive
+     *
+     * Transfer characteristic curve:
+     *  E = 1.099 * L ^ 0.45 - 0.099, 1.00 >= L >= 0.018
+     *  E = 4.500 L, 0.018 > L >= 0
+     *      L - luminance of image 0 <= L <= 1 for conventional colorimetry
+     *      E - corresponding electrical signal
+     *
+     * Primaries:       x       y
+     *  green           0.310   0.595
+     *  blue            0.155   0.070
+     *  red             0.630   0.340
+     *  white (D65)     0.3127  0.3290
+     */
+    HAL_COLORSPACE_BT601_525 = 0x103,
+
+    /*
+     * ITU-R Recommendation 709 (BT.709)
+     *
+     * High-definition television
+     *
+     * For 8-bit-depth formats:
+     * Luma (Y) samples should range from 16 to 235, inclusive
+     * Chroma (Cb, Cr) samples should range from 16 to 240, inclusive
+     *
+     * For 10-bit-depth formats:
+     * Luma (Y) samples should range from 64 to 940, inclusive
+     * Chroma (Cb, Cr) samples should range from 64 to 960, inclusive
+     *
+     * Primaries:       x       y
+     *  green           0.300   0.600
+     *  blue            0.150   0.060
+     *  red             0.640   0.330
+     *  white (D65)     0.3127  0.3290
+     */
+    HAL_COLORSPACE_BT709 = 0x104,
+};
+
 #ifdef __cplusplus
 }
 #endif
