@@ -408,10 +408,10 @@ static void pick_scanline(context_t* c)
         GGLAssembler assembler( new ArmToArm64Assembler(a) );
 #endif
         // generate the scanline code for the given needs
-        int err = assembler.scanline(c->state.needs, c);
+        bool err = assembler.scanline(c->state.needs, c) != 0;
         if (ggl_likely(!err)) {
             // finally, cache this assembly
-            err = gCodeCache.cache(a->key(), a);
+            err = gCodeCache.cache(a->key(), a) < 0;
         }
         if (ggl_unlikely(err)) {
             ALOGE("error generating or caching assembly. Reverting to NOP.");
