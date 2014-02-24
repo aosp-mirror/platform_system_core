@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <getopt.h>
-#include <asm/page.h>
 #include <sys/swap.h>
 
 void usage(char *name)

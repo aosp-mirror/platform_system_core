@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <unistd.h>
-#include <asm/page.h>
 #include <sys/swap.h>
 
 int swapoff_main(int argc, char **argv)
