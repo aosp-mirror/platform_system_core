@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <unistd.h>
-#include <asm/page.h>
 #include <sys/swap.h>
 #include <sys/types.h>
 #include <sys/stat.h>
