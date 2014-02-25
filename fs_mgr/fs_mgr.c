@@ -116,15 +116,24 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
             umount(target);
         }
 
-        INFO("Running %s on %s\n", E2FSCK_BIN, blk_device);
+        /*
+         * Some system images do not have e2fsck for licensing reasons
+         * (e.g. recent SDK system images). Detect these and skip the check.
+         */
+        if (access(E2FSCK_BIN, X_OK)) {
+            INFO("Not running %s on %s (executable not in system image)\n",
+                 E2FSCK_BIN, blk_device);
+        } else {
+            INFO("Running %s on %s\n", E2FSCK_BIN, blk_device);
 
-        ret = android_fork_execvp_ext(ARRAY_SIZE(e2fsck_argv), e2fsck_argv,
-                                      &status, true, LOG_KLOG | LOG_FILE,
-                                      true, FSCK_LOG_FILE);
+            ret = android_fork_execvp_ext(ARRAY_SIZE(e2fsck_argv), e2fsck_argv,
+                                        &status, true, LOG_KLOG | LOG_FILE,
+                                        true, FSCK_LOG_FILE);
 
-        if (ret < 0) {
-            /* No need to check for error in fork, we can't really handle it now */
-            ERROR("Failed trying to run %s\n", E2FSCK_BIN);
+            if (ret < 0) {
+                /* No need to check for error in fork, we can't really handle it now */
+                ERROR("Failed trying to run %s\n", E2FSCK_BIN);
+            }
         }
     }
 
