@@ -323,8 +323,17 @@ status_t String8::appendFormat(const char* fmt, ...)
 
 status_t String8::appendFormatV(const char* fmt, va_list args)
 {
-    int result = NO_ERROR;
-    int n = vsnprintf(NULL, 0, fmt, args);
+    int n, result = NO_ERROR;
+    va_list tmp_args;
+
+    /* args is undefined after vsnprintf.
+     * So we need a copy here to avoid the
+     * second vsnprintf access undefined args.
+     */
+    va_copy(tmp_args, args);
+    n = vsnprintf(NULL, 0, fmt, tmp_args);
+    va_end(tmp_args);
+
     if (n != 0) {
         size_t oldLength = length();
         char* buf = lockBuffer(oldLength + n);
