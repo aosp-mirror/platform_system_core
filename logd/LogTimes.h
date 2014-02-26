@@ -59,16 +59,14 @@ public:
 
     void startReader_Locked(void);
 
-    bool runningReader_Locked(void) const
-    {
+    bool runningReader_Locked(void) const {
         return threadRunning || mRelease || mError || mNonBlock;
     }
     void triggerReader_Locked(void) { threadTriggered = true; }
     void triggerSkip_Locked(unsigned int skip) { skipAhead = skip; }
 
     // Called after LogTimeEntry removed from list, lock implicitly held
-    void release_Locked(void)
-    {
+    void release_Locked(void) {
         mRelease = true;
         if (mRefCount || threadRunning) {
             return;
@@ -89,8 +87,7 @@ public:
 
     bool owned_Locked(void) const { return mRefCount != 0; }
 
-    void decRef_Locked(void)
-    {
+    void decRef_Locked(void) {
         if ((mRefCount && --mRefCount) || !mRelease || threadRunning) {
             return;
         }
