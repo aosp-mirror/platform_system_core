@@ -43,6 +43,8 @@ int socket_local_server(const char *name, int namespaceId, int type)
 
 #define LISTEN_BACKLOG 4
 
+/* Only the bottom bits are really the socket type; there are flags too. */
+#define SOCK_TYPE_MASK 0xf
 
 /**
  * Binds a pre-created socket(AF_LOCAL) 's' to 'name'
@@ -107,7 +109,7 @@ int socket_local_server(const char *name, int namespace, int type)
         return -1;
     }
 
-    if (type == SOCK_STREAM) {
+    if ((type & SOCK_TYPE_MASK) == SOCK_STREAM) {
         int ret;
 
         ret = listen(s, LISTEN_BACKLOG);
