@@ -17,6 +17,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +33,13 @@
 #include "LogListener.h"
 
 static int drop_privs() {
+    struct sched_param param;
+    memset(&param, 0, sizeof(param));
+
+    if (sched_setscheduler((pid_t) 0, SCHED_BATCH, &param) < 0) {
+        return -1;
+    }
+
     if (prctl(PR_SET_KEEPCAPS, 1) < 0) {
         return -1;
     }
