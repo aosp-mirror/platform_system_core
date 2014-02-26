@@ -52,11 +52,12 @@ void LogBuffer::log(log_id_t log_id, struct timespec realtime,
     LogBufferElementCollection::iterator it = mLogElements.end();
     LogBufferElementCollection::iterator last = it;
     while (--it != mLogElements.begin()) {
-        if ((*it)->getRealTime() <= elem->getRealTime()) {
+        if ((*it)->getRealTime() <= realtime) {
             break;
         }
         last = it;
     }
+
     if (last == mLogElements.end()) {
         mLogElements.push_back(elem);
     } else {
@@ -83,7 +84,7 @@ void LogBuffer::log(log_id_t log_id, struct timespec realtime,
         }
 
         if (end_always
-         || (end_set && (end >= (*last)->getMonotonicTime()))) {
+                || (end_set && (end >= (*last)->getMonotonicTime()))) {
             mLogElements.push_back(elem);
         } else {
             mLogElements.insert(last,elem);
@@ -99,12 +100,20 @@ void LogBuffer::log(log_id_t log_id, struct timespec realtime,
 }
 
 // If we're using more than 256K of memory for log entries, prune
-// 10% of the log entries.
+// at least 10% of the log entries.
 //
 // mLogElementsLock must be held when this function is called.
 void LogBuffer::maybePrune(log_id_t id) {
-    if (mSizes[id] > LOG_BUFFER_SIZE) {
-        prune(id, mElements[id] / 10);
+    unsigned long sizes = mSizes[id];
+    if (sizes > LOG_BUFFER_SIZE) {
+        unsigned long sizeOver90Percent = sizes - ((LOG_BUFFER_SIZE * 9) / 10);
+        unsigned long elements = mElements[id];
+        unsigned long pruneRows = elements * sizeOver90Percent / sizes;
+        elements /= 10;
+        if (pruneRows <= elements) {
+            pruneRows = elements;
+        }
+        prune(id, pruneRows);
     }
 }
 
