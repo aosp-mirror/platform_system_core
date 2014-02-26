@@ -63,7 +63,7 @@ void FlushCommand::runSocketCommand(SocketClient *client) {
     }
 
     if (it == times.end()) {
-        /* Create LogTimeEntry in notifyNewLog() ? */
+        // Create LogTimeEntry in notifyNewLog() ?
         if (mTail == (unsigned long) -1) {
             LogTimeEntry::unlock();
             return;
@@ -74,7 +74,7 @@ void FlushCommand::runSocketCommand(SocketClient *client) {
 
     client->incRef();
 
-    /* release client and entry reference counts once done */
+    // release client and entry reference counts once done
     entry->startReader_Locked();
     LogTimeEntry::unlock();
 }

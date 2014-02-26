@@ -160,7 +160,7 @@ bool LogTimeEntry::FilterFirstPass(const LogBufferElement *element, void *obj) {
     }
 
     if ((!me->mPid || (me->mPid == element->getPid()))
-     && (me->mLogMask & (1 << element->getLogId()))) {
+            && (me->mLogMask & (1 << element->getLogId()))) {
         ++me->mCount;
     }
 
