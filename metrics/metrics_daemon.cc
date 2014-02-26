@@ -22,13 +22,12 @@
 #include <chromeos/dbus/service_constants.h>
 #include <dbus/dbus-glib-lowlevel.h>
 
-#include "counter.h"
-
 using base::FilePath;
 using base::StringPrintf;
 using base::Time;
 using base::TimeDelta;
 using base::TimeTicks;
+using chromeos_metrics::PersistentInteger;
 using std::map;
 using std::string;
 using std::vector;
@@ -58,54 +57,7 @@ static const int kUseMonitorIntervalMax = 10 * kSecondsPerMinute;
 
 const char kKernelCrashDetectedFile[] = "/var/run/kernel-crash-detected";
 static const char kUncleanShutdownDetectedFile[] =
-      "/var/run/unclean-shutdown-detected";
-
-// static metrics parameters
-const char MetricsDaemon::kMetricDailyUseTimeName[] =
-    "Logging.DailyUseTime";
-const int MetricsDaemon::kMetricDailyUseTimeMin = 1;
-const int MetricsDaemon::kMetricDailyUseTimeMax = kMinutesPerDay;
-const int MetricsDaemon::kMetricDailyUseTimeBuckets = 50;
-
-// crash interval metrics
-const char MetricsDaemon::kMetricKernelCrashIntervalName[] =
-    "Logging.KernelCrashInterval";
-const char MetricsDaemon::kMetricUncleanShutdownIntervalName[] =
-    "Logging.UncleanShutdownInterval";
-const char MetricsDaemon::kMetricUserCrashIntervalName[] =
-    "Logging.UserCrashInterval";
-
-const int MetricsDaemon::kMetricCrashIntervalMin = 1;
-const int MetricsDaemon::kMetricCrashIntervalMax =
-    4 * kSecondsPerWeek;
-const int MetricsDaemon::kMetricCrashIntervalBuckets = 50;
-
-// crash frequency metrics
-const char MetricsDaemon::kMetricAnyCrashesDailyName[] =
-    "Logging.AnyCrashesDaily";
-const char MetricsDaemon::kMetricAnyCrashesWeeklyName[] =
-    "Logging.AnyCrashesWeekly";
-const char MetricsDaemon::kMetricKernelCrashesDailyName[] =
-    "Logging.KernelCrashesDaily";
-const char MetricsDaemon::kMetricKernelCrashesWeeklyName[] =
-    "Logging.KernelCrashesWeekly";
-const char MetricsDaemon::kMetricKernelCrashesVersionName[] =
-    "Logging.KernelCrashesSinceUpdate";
-const int MetricsDaemon::kMetricCumulativeCrashCountMin = 1;
-const int MetricsDaemon::kMetricCumulativeCrashCountMax = 500;
-const int MetricsDaemon::kMetricCumulativeCrashCountBuckets = 100;
-
-const char MetricsDaemon::kMetricUncleanShutdownsDailyName[] =
-    "Logging.UncleanShutdownsDaily";
-const char MetricsDaemon::kMetricUncleanShutdownsWeeklyName[] =
-    "Logging.UncleanShutdownsWeekly";
-const char MetricsDaemon::kMetricUserCrashesDailyName[] =
-    "Logging.UserCrashesDaily";
-const char MetricsDaemon::kMetricUserCrashesWeeklyName[] =
-    "Logging.UserCrashesWeekly";
-const int MetricsDaemon::kMetricCrashFrequencyMin = 1;
-const int MetricsDaemon::kMetricCrashFrequencyMax = 100;
-const int MetricsDaemon::kMetricCrashFrequencyBuckets = 50;
+    "/var/run/unclean-shutdown-detected";
 
 // disk stats metrics
 
@@ -159,13 +111,6 @@ const char MetricsDaemon::kMetricSwapOutShortName[] =
 const char MetricsDaemon::kMetricScaledCpuFrequencyName[] =
     "Platform.CpuFrequencyThermalScaling";
 
-// persistent metrics path
-const char MetricsDaemon::kMetricsPath[] = "/var/log/metrics";
-
-// file containing OS version string
-const char MetricsDaemon::kLsbReleasePath[] = "/etc/lsb-release";
-
-
 // static
 const char* MetricsDaemon::kPowerStates_[] = {
 #define STATE(name, capname) #name,
@@ -205,7 +150,6 @@ MetricsDaemon::MetricsDaemon()
       stats_initial_time_(0) {}
 
 MetricsDaemon::~MetricsDaemon() {
-  DeleteFrequencyCounters();
 }
 
 double MetricsDaemon::GetActiveTime() {
@@ -219,14 +163,6 @@ double MetricsDaemon::GetActiveTime() {
   }
 }
 
-void MetricsDaemon::DeleteFrequencyCounters() {
-  for (FrequencyCounters::iterator i = frequency_counters_.begin();
-       i != frequency_counters_.end(); ++i) {
-    delete i->second;
-    i->second = NULL;
-  }
-}
-
 void MetricsDaemon::Run(bool run_as_daemon) {
   base::AtExitManager at_exit_manager;
 
@@ -236,70 +172,20 @@ void MetricsDaemon::Run(bool run_as_daemon) {
   if (CheckSystemCrash(kKernelCrashDetectedFile)) {
     ProcessKernelCrash();
   }
-  kernel_crash_version_counter_->FlushOnChange(GetOsVersionHash());
 
   if (CheckSystemCrash(kUncleanShutdownDetectedFile)) {
     ProcessUncleanShutdown();
   }
 
+  // On OS version change, clear version stats (which are reported daily).
+  int32 version = GetOsVersionHash();
+  if (version_cycle_->Get() != version) {
+    version_cycle_->Set(version);
+    SendKernelCrashesCumulativeCountSample();
+    kernel_crashes_version_count_->Set(0);
+  }
+
   Loop();
-}
-
-FilePath MetricsDaemon::GetHistogramPath(const char* histogram_name) {
-  return FilePath(kMetricsPath).Append(histogram_name);
-}
-
-void MetricsDaemon::ConfigureCrashIntervalReporter(
-    const char* histogram_name,
-    scoped_ptr<chromeos_metrics::TaggedCounterReporter>* reporter) {
-  reporter->reset(new chromeos_metrics::TaggedCounterReporter());
-  FilePath file_path = GetHistogramPath(histogram_name);
-  (*reporter)->Init(file_path.value().c_str(),
-                    histogram_name,
-                    kMetricCrashIntervalMin,
-                    kMetricCrashIntervalMax,
-                    kMetricCrashIntervalBuckets);
-}
-
-void MetricsDaemon::ConfigureCrashFrequencyReporter(
-    const char* histogram_name) {
-  scoped_ptr<chromeos_metrics::TaggedCounterReporter> reporter(
-      new chromeos_metrics::TaggedCounterReporter());
-  FilePath file_path = GetHistogramPath(histogram_name);
-  reporter->Init(file_path.value().c_str(),
-                 histogram_name,
-                 kMetricCrashFrequencyMin,
-                 kMetricCrashFrequencyMax,
-                 kMetricCrashFrequencyBuckets);
-  scoped_ptr<chromeos_metrics::FrequencyCounter> new_counter(
-      new chromeos_metrics::FrequencyCounter());
-  time_t cycle_duration = strstr(histogram_name, "Weekly") != NULL ?
-      chromeos_metrics::kSecondsPerWeek :
-      chromeos_metrics::kSecondsPerDay;
-  new_counter->Init(
-      static_cast<chromeos_metrics::TaggedCounterInterface*>(
-          reporter.release()),
-      cycle_duration);
-  frequency_counters_[histogram_name] = new_counter.release();
-}
-
-void MetricsDaemon::ConfigureCrashVersionReporter(
-    const char* histogram_name) {
-  scoped_ptr<chromeos_metrics::TaggedCounterReporter> reporter(
-      new chromeos_metrics::TaggedCounterReporter());
-  FilePath file_path = GetHistogramPath(histogram_name);
-  reporter->Init(file_path.value().c_str(),
-                 histogram_name,
-                 kMetricCumulativeCrashCountMin,
-                 kMetricCumulativeCrashCountMax,
-                 kMetricCumulativeCrashCountBuckets);
-  scoped_ptr<chromeos_metrics::VersionCounter> new_counter(
-      new chromeos_metrics::VersionCounter());
-  new_counter->Init(
-      static_cast<chromeos_metrics::TaggedCounterInterface*>(
-          reporter.release()),
-      chromeos_metrics::kSecondsPerDay);
-  kernel_crash_version_counter_ = new_counter.release();
 }
 
 uint32 MetricsDaemon::GetOsVersionHash() {
@@ -328,31 +214,39 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
   testing_ = testing;
   DCHECK(metrics_lib != NULL);
   metrics_lib_ = metrics_lib;
-  chromeos_metrics::TaggedCounterReporter::
-      SetMetricsLibraryInterface(metrics_lib);
 
-  static const char kDailyUseRecordFile[] = "/var/log/metrics/daily-usage";
-  daily_use_.reset(new chromeos_metrics::TaggedCounter());
-  daily_use_->Init(kDailyUseRecordFile, &ReportDailyUse, this);
+  daily_use_.reset(
+      new PersistentInteger("Logging.DailyUseTime"));
 
-  ConfigureCrashIntervalReporter(kMetricKernelCrashIntervalName,
-                                 &kernel_crash_interval_);
-  ConfigureCrashIntervalReporter(kMetricUncleanShutdownIntervalName,
-                                 &unclean_shutdown_interval_);
-  ConfigureCrashIntervalReporter(kMetricUserCrashIntervalName,
-                                 &user_crash_interval_);
+  kernel_crash_interval_.reset(
+      new PersistentInteger("Logging.KernelCrashInterval"));
+  unclean_shutdown_interval_.reset(
+      new PersistentInteger("Logging.UncleanShutdownInterval"));
+  user_crash_interval_.reset(
+      new PersistentInteger("Logging.UserCrashInterval"));
 
-  DeleteFrequencyCounters();
-  ConfigureCrashFrequencyReporter(kMetricAnyCrashesDailyName);
-  ConfigureCrashFrequencyReporter(kMetricAnyCrashesWeeklyName);
-  ConfigureCrashFrequencyReporter(kMetricKernelCrashesDailyName);
-  ConfigureCrashFrequencyReporter(kMetricKernelCrashesWeeklyName);
-  ConfigureCrashFrequencyReporter(kMetricUncleanShutdownsDailyName);
-  ConfigureCrashFrequencyReporter(kMetricUncleanShutdownsWeeklyName);
-  ConfigureCrashFrequencyReporter(kMetricUserCrashesDailyName);
-  ConfigureCrashFrequencyReporter(kMetricUserCrashesWeeklyName);
+  any_crashes_daily_count_.reset(
+      new PersistentInteger("Logging.AnyCrashesDaily"));
+  any_crashes_weekly_count_.reset(
+      new PersistentInteger("Logging.AnyCrashesWeekly"));
+  user_crashes_daily_count_.reset(
+      new PersistentInteger("Logging.UserCrashesDaily"));
+  user_crashes_weekly_count_.reset(
+      new PersistentInteger("Logging.UserCrashesWeekly"));
+  kernel_crashes_daily_count_.reset(
+      new PersistentInteger("Logging.KernelCrashesDaily"));
+  kernel_crashes_weekly_count_.reset(
+      new PersistentInteger("Logging.KernelCrashesWeekly"));
+  kernel_crashes_version_count_.reset(
+      new PersistentInteger("Logging.KernelCrashesSinceUpdate"));
+  unclean_shutdowns_daily_count_.reset(
+      new PersistentInteger("Logging.UncleanShutdownsDaily"));
+  unclean_shutdowns_weekly_count_.reset(
+      new PersistentInteger("Logging.UncleanShutdownsWeekly"));
 
-  ConfigureCrashVersionReporter(kMetricKernelCrashesVersionName);
+  daily_cycle_.reset(new PersistentInteger("daily.cycle"));
+  weekly_cycle_.reset(new PersistentInteger("weekly.cycle"));
+  version_cycle_.reset(new PersistentInteger("version.cycle"));
 
   diskstats_path_ = diskstats_path;
   vmstats_path_ = vmstats_path;
@@ -504,6 +398,37 @@ MetricsDaemon::LookupSessionState(const char* state_name) {
   return kUnknownSessionState;
 }
 
+void MetricsDaemon::ReportStats(Time now) {
+  TimeDelta since_epoch = now - Time::UnixEpoch();
+  int day = since_epoch.InDays();
+  int week = day / 7;
+
+  if (daily_cycle_->Get() == day) {
+    // We did today already.
+    return;
+  }
+  daily_cycle_->Set(day);
+
+  // Daily stats.
+  SendCrashFrequencySample(any_crashes_daily_count_);
+  SendCrashFrequencySample(user_crashes_daily_count_);
+  SendCrashFrequencySample(kernel_crashes_daily_count_);
+  SendCrashFrequencySample(unclean_shutdowns_daily_count_);
+  SendKernelCrashesCumulativeCountSample();
+
+  if (weekly_cycle_->Get() == week) {
+    // We did this week already.
+    return;
+  }
+  weekly_cycle_->Set(week);
+
+  // Weekly stats.
+  SendCrashFrequencySample(any_crashes_weekly_count_);
+  SendCrashFrequencySample(user_crashes_weekly_count_);
+  SendCrashFrequencySample(kernel_crashes_weekly_count_);
+  SendCrashFrequencySample(unclean_shutdowns_weekly_count_);
+}
+
 void MetricsDaemon::SetUserActiveState(bool active, Time now) {
   DLOG(INFO) << "user: " << (active ? "active" : "inactive");
 
@@ -519,21 +444,12 @@ void MetricsDaemon::SetUserActiveState(bool active, Time now) {
       seconds = static_cast<int>(since_active.InSeconds());
     }
   }
-  TimeDelta since_epoch = now - Time();
-  int day = since_epoch.InDays();
-  daily_use_->Update(day, seconds, 0);
-  user_crash_interval_->Update(0, seconds, 0);
-  kernel_crash_interval_->Update(0, seconds, 0);
+  daily_use_->Add(seconds);
+  user_crash_interval_->Add(seconds);
+  kernel_crash_interval_->Add(seconds);
 
-  // Flush finished cycles of all frequency counters.
-  for (FrequencyCounters::iterator i = frequency_counters_.begin();
-       i != frequency_counters_.end(); ++i) {
-    i->second->FlushFinishedCycles();
-  }
-  // Report count if we're on a new cycle.  FlushOnChange can also reset the
-  // counter, but not when called from here, because any version change has
-  // already been processed during initialization.
-  kernel_crash_version_counter_->FlushOnChange(GetOsVersionHash());
+  // Report daily and weekly stats as needed.
+  ReportStats(now);
 
   // Schedules a use monitor on inactive->active transitions and
   // unschedules it on active->inactive transitions.
@@ -553,12 +469,12 @@ void MetricsDaemon::ProcessUserCrash() {
   SetUserActiveState(user_active_, Time::Now());
 
   // Reports the active use time since the last crash and resets it.
-  user_crash_interval_->Flush();
+  SendCrashIntervalSample(user_crash_interval_);
 
-  frequency_counters_[kMetricUserCrashesDailyName]->Update(1);
-  frequency_counters_[kMetricUserCrashesWeeklyName]->Update(1);
-  frequency_counters_[kMetricAnyCrashesDailyName]->Update(1);
-  frequency_counters_[kMetricAnyCrashesWeeklyName]->Update(1);
+  any_crashes_daily_count_->Add(1);
+  any_crashes_weekly_count_->Add(1);
+  user_crashes_daily_count_->Add(1);
+  user_crashes_weekly_count_->Add(1);
 }
 
 void MetricsDaemon::ProcessKernelCrash() {
@@ -566,14 +482,14 @@ void MetricsDaemon::ProcessKernelCrash() {
   SetUserActiveState(user_active_, Time::Now());
 
   // Reports the active use time since the last crash and resets it.
-  kernel_crash_interval_->Flush();
+  SendCrashIntervalSample(kernel_crash_interval_);
 
-  frequency_counters_[kMetricKernelCrashesDailyName]->Update(1);
-  frequency_counters_[kMetricKernelCrashesWeeklyName]->Update(1);
-  frequency_counters_[kMetricAnyCrashesDailyName]->Update(1);
-  frequency_counters_[kMetricAnyCrashesWeeklyName]->Update(1);
+  any_crashes_daily_count_->Add(1);
+  any_crashes_weekly_count_->Add(1);
+  kernel_crashes_daily_count_->Add(1);
+  kernel_crashes_weekly_count_->Add(1);
 
-  kernel_crash_version_counter_->Update(1, GetOsVersionHash());
+  kernel_crashes_version_count_->Add(1);
 }
 
 void MetricsDaemon::ProcessUncleanShutdown() {
@@ -581,12 +497,12 @@ void MetricsDaemon::ProcessUncleanShutdown() {
   SetUserActiveState(user_active_, Time::Now());
 
   // Reports the active use time since the last crash and resets it.
-  unclean_shutdown_interval_->Flush();
+  SendCrashIntervalSample(unclean_shutdown_interval_);
 
-  frequency_counters_[kMetricUncleanShutdownsDailyName]->Update(1);
-  frequency_counters_[kMetricUncleanShutdownsWeeklyName]->Update(1);
-  frequency_counters_[kMetricAnyCrashesDailyName]->Update(1);
-  frequency_counters_[kMetricAnyCrashesWeeklyName]->Update(1);
+  unclean_shutdowns_daily_count_->Add(1);
+  unclean_shutdowns_weekly_count_->Add(1);
+  any_crashes_daily_count_->Add(1);
+  any_crashes_weekly_count_->Add(1);
 }
 
 bool MetricsDaemon::CheckSystemCrash(const string& crash_file) {
@@ -830,7 +746,7 @@ void MetricsDaemon::SendCpuThrottleMetrics() {
   // scaled_freq is not the actual turbo frequency.  We indicate this situation
   // with a 101% value.
   int percent = scaled_freq > max_freq ? 101 : scaled_freq / (max_freq / 100);
-  SendLinearMetric(kMetricScaledCpuFrequencyName, percent, 101, 102);
+  SendLinearSample(kMetricScaledCpuFrequencyName, percent, 101, 102);
 }
 
 // static
@@ -868,29 +784,29 @@ void MetricsDaemon::StatsCallback() {
   switch (stats_state_) {
     case kStatsShort:
       if (diskstats_success) {
-        SendMetric(kMetricReadSectorsShortName,
+        SendSample(kMetricReadSectorsShortName,
                    read_sectors_per_second,
                    1,
                    kMetricSectorsIOMax,
                    kMetricSectorsBuckets);
-        SendMetric(kMetricWriteSectorsShortName,
+        SendSample(kMetricWriteSectorsShortName,
                    write_sectors_per_second,
                    1,
                    kMetricSectorsIOMax,
                    kMetricSectorsBuckets);
       }
       if (vmstats_success) {
-        SendMetric(kMetricPageFaultsShortName,
+        SendSample(kMetricPageFaultsShortName,
                    page_faults_per_second,
                    1,
                    kMetricPageFaultsMax,
                    kMetricPageFaultsBuckets);
-        SendMetric(kMetricSwapInShortName,
+        SendSample(kMetricSwapInShortName,
                    swap_in_per_second,
                    1,
                    kMetricPageFaultsMax,
                    kMetricPageFaultsBuckets);
-        SendMetric(kMetricSwapOutShortName,
+        SendSample(kMetricSwapOutShortName,
                    swap_out_per_second,
                    1,
                    kMetricPageFaultsMax,
@@ -903,12 +819,12 @@ void MetricsDaemon::StatsCallback() {
       break;
     case kStatsLong:
       if (diskstats_success) {
-        SendMetric(kMetricReadSectorsLongName,
+        SendSample(kMetricReadSectorsLongName,
                    read_sectors_per_second,
                    1,
                    kMetricSectorsIOMax,
                    kMetricSectorsBuckets);
-        SendMetric(kMetricWriteSectorsLongName,
+        SendSample(kMetricWriteSectorsLongName,
                    write_sectors_per_second,
                    1,
                    kMetricSectorsIOMax,
@@ -918,17 +834,17 @@ void MetricsDaemon::StatsCallback() {
         write_sectors_ = write_sectors_now;
       }
       if (vmstats_success) {
-        SendMetric(kMetricPageFaultsLongName,
+        SendSample(kMetricPageFaultsLongName,
                    page_faults_per_second,
                    1,
                    kMetricPageFaultsMax,
                    kMetricPageFaultsBuckets);
-        SendMetric(kMetricSwapInLongName,
+        SendSample(kMetricSwapInLongName,
                    swap_in_per_second,
                    1,
                    kMetricPageFaultsMax,
                    kMetricPageFaultsBuckets);
-        SendMetric(kMetricSwapOutLongName,
+        SendSample(kMetricSwapOutLongName,
                    swap_out_per_second,
                    1,
                    kMetricPageFaultsMax,
@@ -1018,11 +934,11 @@ bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
       case kMeminfoOp_HistPercent:
         // report value as percent of total memory
         percent = fields[i].value * 100 / total_memory;
-        SendLinearMetric(metrics_name, percent, 100, 101);
+        SendLinearSample(metrics_name, percent, 100, 101);
         break;
       case kMeminfoOp_HistLog:
         // report value in kbytes, log scale, 4Gb max
-        SendMetric(metrics_name, fields[i].value, 1, 4 * 1000 * 1000, 100);
+        SendSample(metrics_name, fields[i].value, 1, 4 * 1000 * 1000, 100);
         break;
       case kMeminfoOp_SwapTotal:
         swap_total = fields[i].value;
@@ -1034,8 +950,8 @@ bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {
   if (swap_total > 0) {
     int swap_used = swap_total - swap_free;
     int swap_used_percent = swap_used * 100 / swap_total;
-    SendMetric("Platform.MeminfoSwapUsed", swap_used, 1, 8 * 1000 * 1000, 100);
-    SendLinearMetric("Platform.MeminfoSwapUsedPercent", swap_used_percent,
+    SendSample("Platform.MeminfoSwapUsed", swap_used, 1, 8 * 1000 * 1000, 100);
+    SendLinearSample("Platform.MeminfoSwapUsedPercent", swap_used_percent,
                      100, 101);
   }
   return true;
@@ -1142,7 +1058,7 @@ bool MetricsDaemon::ProcessMemuse(const string& meminfo_raw) {
   }
   string metrics_name = base::StringPrintf("Platform.MemuseAnon%d",
                                            memuse_interval_index_);
-  SendLinearMetric(metrics_name, (active_anon + inactive_anon) * 100 / total,
+  SendLinearSample(metrics_name, (active_anon + inactive_anon) * 100 / total,
                    100, 101);
   return true;
 }
@@ -1154,20 +1070,49 @@ void MetricsDaemon::ReportDailyUse(void* handle, int count) {
 
   MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
   int minutes = (count + kSecondsPerMinute / 2) / kSecondsPerMinute;
-  daemon->SendMetric(kMetricDailyUseTimeName, minutes,
-                     kMetricDailyUseTimeMin,
-                     kMetricDailyUseTimeMax,
-                     kMetricDailyUseTimeBuckets);
+  daemon->SendSample("Logging.DailyUseTime",
+                     minutes,
+                     1,
+                     kMinutesPerDay,
+                     50);
 }
 
-void MetricsDaemon::SendMetric(const string& name, int sample,
+void MetricsDaemon::SendSample(const string& name, int sample,
                                int min, int max, int nbuckets) {
   DLOG(INFO) << "received metric: " << name << " " << sample << " "
              << min << " " << max << " " << nbuckets;
   metrics_lib_->SendToUMA(name, sample, min, max, nbuckets);
 }
 
-void MetricsDaemon::SendLinearMetric(const string& name, int sample,
+void MetricsDaemon::SendKernelCrashesCumulativeCountSample() {
+  // Report the number of crashes for this OS version, but don't clear the
+  // counter.  It is cleared elsewhere on version change.
+  SendSample(kernel_crashes_version_count_->Name(),
+             kernel_crashes_version_count_->Get(),
+             1,                        // value of first bucket
+             500,                      // value of last bucket
+             100);                     // number of buckets
+}
+
+void MetricsDaemon::SendCrashIntervalSample(
+    const scoped_ptr<PersistentInteger>& interval) {
+  SendSample(interval->Name(),
+             interval->GetAndClear(),
+             1,                        // value of first bucket
+             4 * kSecondsPerWeek,      // value of last bucket
+             50);                      // number of buckets
+}
+
+void MetricsDaemon::SendCrashFrequencySample(
+    const scoped_ptr<PersistentInteger>& frequency) {
+  SendSample(frequency->Name(),
+             frequency->GetAndClear(),
+             1,                        // value of first bucket
+             100,                      // value of last bucket
+             50);                      // number of buckets
+}
+
+void MetricsDaemon::SendLinearSample(const string& name, int sample,
                                      int max, int nbuckets) {
   DLOG(INFO) << "received linear metric: " << name << " " << sample << " "
              << max << " " << nbuckets;

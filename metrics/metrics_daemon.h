@@ -15,13 +15,9 @@
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "metrics_library.h"
+#include "persistent_integer.h"
 
-namespace chromeos_metrics {
-class FrequencyCounter;
-class VersionCounter;
-class TaggedCounter;
-class TaggedCounterReporter;
-}
+using chromeos_metrics::PersistentInteger;
 
 class MetricsDaemon {
 
@@ -66,7 +62,7 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, ReportUncleanShutdownInterval);
   FRIEND_TEST(MetricsDaemonTest, ReportUserCrashInterval);
   FRIEND_TEST(MetricsDaemonTest, ScreenSaverStateChanged);
-  FRIEND_TEST(MetricsDaemonTest, SendMetric);
+  FRIEND_TEST(MetricsDaemonTest, SendSample);
   FRIEND_TEST(MetricsDaemonTest, SendCpuThrottleMetrics);
   FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SetUserActiveState);
@@ -128,37 +124,7 @@ class MetricsDaemon {
     uint64_t swap_out_;       // pages swapped out
   };
 
-  typedef std::map<std::string, chromeos_metrics::FrequencyCounter*>
-    FrequencyCounters;
-
   // Metric parameters.
-  static const char kMetricAnyCrashesDailyName[];
-  static const char kMetricAnyCrashesWeeklyName[];
-  static const int  kMetricCrashFrequencyBuckets;
-  static const int  kMetricCrashFrequencyMax;
-  static const int  kMetricCrashFrequencyMin;
-  static const int  kMetricCrashIntervalBuckets;
-  static const int  kMetricCrashIntervalMax;
-  static const int  kMetricCrashIntervalMin;
-  static const int  kMetricCumulativeCrashCountBuckets;
-  static const int  kMetricCumulativeCrashCountMax;
-  static const int  kMetricCumulativeCrashCountMin;
-  static const int  kMetricDailyUseTimeBuckets;
-  static const int  kMetricDailyUseTimeMax;
-  static const int  kMetricDailyUseTimeMin;
-  static const char kMetricDailyUseTimeName[];
-  static const char kMetricKernelCrashesDailyName[];
-  static const char kMetricKernelCrashesWeeklyName[];
-  static const char kMetricKernelCrashesVersionName[];
-  static const char kMetricKernelCrashIntervalName[];
-  static const char kMetricsPath[];
-  static const char kLsbReleasePath[];
-  static const char kMetricUncleanShutdownIntervalName[];
-  static const char kMetricUncleanShutdownsDailyName[];
-  static const char kMetricUncleanShutdownsWeeklyName[];
-  static const char kMetricUserCrashesDailyName[];
-  static const char kMetricUserCrashesWeeklyName[];
-  static const char kMetricUserCrashIntervalName[];
   static const char kMetricReadSectorsLongName[];
   static const char kMetricReadSectorsShortName[];
   static const char kMetricWriteSectorsLongName[];
@@ -188,23 +154,6 @@ class MetricsDaemon {
 
   // Returns the active time since boot (uptime minus sleep time) in seconds.
   double GetActiveTime();
-
-  // Clears and deletes the data contained in frequency_counters_.
-  void DeleteFrequencyCounters();
-
-  // Configures the given crash interval reporter.
-  void ConfigureCrashIntervalReporter(
-      const char* histogram_name,
-      scoped_ptr<chromeos_metrics::TaggedCounterReporter>* reporter);
-
-  // Configures the given frequency counter reporter.
-  void ConfigureCrashFrequencyReporter(const char* histogram_name);
-
-  // Configures the given version counter reporter.
-  void ConfigureCrashVersionReporter(const char* histogram_name);
-
-  // Returns file path to persistent file for generating given histogram.
-  base::FilePath GetHistogramPath(const char* histogram_name);
 
   // Creates the event loop and enters it.
   void Loop();
@@ -285,14 +234,25 @@ class MetricsDaemon {
   // Sends a regular (exponential) histogram sample to Chrome for
   // transport to UMA. See MetricsLibrary::SendToUMA in
   // metrics_library.h for a description of the arguments.
-  void SendMetric(const std::string& name, int sample,
+  void SendSample(const std::string& name, int sample,
                   int min, int max, int nbuckets);
 
   // Sends a linear histogram sample to Chrome for transport to UMA. See
   // MetricsLibrary::SendToUMA in metrics_library.h for a description of the
   // arguments.
-  void SendLinearMetric(const std::string& name, int sample,
+  void SendLinearSample(const std::string& name, int sample,
                         int max, int nbuckets);
+
+  // Sends a histogram sample with the total number of kernel crashes since the
+  // last version update.
+  void SendKernelCrashesCumulativeCountSample();
+
+  // Sends a sample representing a time interval between two crashes of the
+  // same type.
+  void SendCrashIntervalSample(const scoped_ptr<PersistentInteger>& interval);
+
+  // Sends a sample representing a frequency of crashes of some type.
+  void SendCrashFrequencySample(const scoped_ptr<PersistentInteger>& frequency);
 
   // Initializes vm and disk stats reporting.
   void StatsReporterInit();
@@ -361,6 +321,9 @@ class MetricsDaemon {
   // Reads an integer CPU frequency value from sysfs.
   bool ReadFreqToInt(const std::string& sysfs_file_name, int* value);
 
+  // Report UMA stats when cycles (daily or weekly) have changed.
+  void ReportStats(base::Time now);
+
   // Reads the current OS version from /etc/lsb-release and hashes it
   // to a unsigned 32-bit int.
   uint32 GetOsVersionHash();
@@ -391,26 +354,6 @@ class MetricsDaemon {
   // the timestamp.
   base::Time user_active_last_;
 
-  // Daily active use time in seconds.
-  scoped_ptr<chromeos_metrics::TaggedCounter> daily_use_;
-
-  // Active use time between user-space process crashes.
-  scoped_ptr<chromeos_metrics::TaggedCounterReporter> user_crash_interval_;
-
-  // Active use time between kernel crashes.
-  scoped_ptr<chromeos_metrics::TaggedCounterReporter> kernel_crash_interval_;
-
-  // Active use time between unclean shutdowns crashes.
-  scoped_ptr<chromeos_metrics::TaggedCounterReporter>
-      unclean_shutdown_interval_;
-
-  // Map of all frequency counters, to simplify flushing them.
-  FrequencyCounters frequency_counters_;
-
-  // This contains a cumulative number of kernel crashes since the latest
-  // version update.
-  chromeos_metrics::VersionCounter* kernel_crash_version_counter_;
-
   // Sleep period until the next daily usage aggregation performed by
   // the daily use monitor (see ScheduleUseMonitor).
   int usemon_interval_;
@@ -431,6 +374,27 @@ class MetricsDaemon {
 
   StatsState stats_state_;
   double stats_initial_time_;
+
+  // Persistent counters for crash statistics.
+  scoped_ptr<PersistentInteger> daily_cycle_;
+  scoped_ptr<PersistentInteger> weekly_cycle_;
+  scoped_ptr<PersistentInteger> version_cycle_;
+
+  scoped_ptr<PersistentInteger> daily_use_;
+
+  scoped_ptr<PersistentInteger> user_crash_interval_;
+  scoped_ptr<PersistentInteger> kernel_crash_interval_;
+  scoped_ptr<PersistentInteger> unclean_shutdown_interval_;
+
+  scoped_ptr<PersistentInteger> any_crashes_daily_count_;
+  scoped_ptr<PersistentInteger> any_crashes_weekly_count_;
+  scoped_ptr<PersistentInteger> user_crashes_daily_count_;
+  scoped_ptr<PersistentInteger> user_crashes_weekly_count_;
+  scoped_ptr<PersistentInteger> kernel_crashes_daily_count_;
+  scoped_ptr<PersistentInteger> kernel_crashes_weekly_count_;
+  scoped_ptr<PersistentInteger> kernel_crashes_version_count_;
+  scoped_ptr<PersistentInteger> unclean_shutdowns_daily_count_;
+  scoped_ptr<PersistentInteger> unclean_shutdowns_weekly_count_;
 
   std::string diskstats_path_;
   std::string vmstats_path_;

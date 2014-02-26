@@ -34,7 +34,7 @@
         ],
       },
       'sources': [
-        'counter.cc',
+        'persistent_integer.cc',
         'metrics_daemon.cc',
         'metrics_daemon_main.cc',
       ]
@@ -71,15 +71,6 @@
           'includes': ['../common-mk/common_test.gypi'],
           'sources': [
             'metrics_library_test.cc',
-          ]
-        },
-        {
-          'target_name': 'counter_test',
-          'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
-          'sources': [
-            'counter.cc',
-            'counter_test.cc',
           ]
         },
         {

@@ -13,25 +13,21 @@
 #include <chromeos/dbus/service_constants.h>
 #include <gtest/gtest.h>
 
-#include "counter_mock.h"
 #include "metrics_daemon.h"
 #include "metrics_library_mock.h"
+#include "persistent_integer_mock.h"
 
 using base::FilePath;
 using base::StringPrintf;
 using base::Time;
 using base::TimeTicks;
-using chromeos_metrics::FrequencyCounter;
-using chromeos_metrics::FrequencyCounterMock;
-using chromeos_metrics::TaggedCounterMock;
-using chromeos_metrics::TaggedCounterReporter;
-using chromeos_metrics::TaggedCounterReporterMock;
 using std::string;
 using std::vector;
 using ::testing::_;
 using ::testing::Return;
 using ::testing::StrictMock;
 using ::testing::AtLeast;
+using chromeos_metrics::PersistentIntegerMock;
 
 static const int kSecondsPerDay = 24 * 60 * 60;
 
@@ -61,9 +57,6 @@ class TestTicks : public TimeTicks {
 class MetricsDaemonTest : public testing::Test {
  protected:
   virtual void SetUp() {
-    EXPECT_EQ(NULL, daemon_.daily_use_.get());
-    EXPECT_EQ(NULL, daemon_.kernel_crash_interval_.get());
-    EXPECT_EQ(NULL, daemon_.user_crash_interval_.get());
     kFakeDiskStats[0] = base::StringPrintf(kFakeDiskStatsFormat,
                                            kFakeReadSectors[0],
                                            kFakeWriteSectors[0]);
@@ -74,63 +67,9 @@ class MetricsDaemonTest : public testing::Test {
     CreateFakeCpuFrequencyFile(kFakeCpuinfoMaxFreqPath, 10000000);
     CreateFakeCpuFrequencyFile(kFakeScalingMaxFreqPath, 10000000);
 
+    chromeos_metrics::PersistentInteger::SetTestingMode(true);
     daemon_.Init(true, &metrics_lib_, kFakeDiskStatsPath, kFakeVmStatsPath,
         kFakeScalingMaxFreqPath, kFakeCpuinfoMaxFreqPath);
-
-    // Check configuration of a few histograms.
-    FrequencyCounter* frequency_counter =
-        daemon_.frequency_counters_[MetricsDaemon::kMetricAnyCrashesDailyName];
-    const TaggedCounterReporter* reporter = GetReporter(frequency_counter);
-    EXPECT_EQ(MetricsDaemon::kMetricAnyCrashesDailyName,
-              reporter->histogram_name());
-    EXPECT_EQ(chromeos_metrics::kSecondsPerDay,
-              frequency_counter->cycle_duration());
-    EXPECT_EQ(MetricsDaemon::kMetricCrashFrequencyMin, reporter->min());
-    EXPECT_EQ(MetricsDaemon::kMetricCrashFrequencyMax, reporter->max());
-    EXPECT_EQ(MetricsDaemon::kMetricCrashFrequencyBuckets, reporter->buckets());
-
-    frequency_counter =
-        daemon_.frequency_counters_[MetricsDaemon::kMetricAnyCrashesWeeklyName];
-    reporter = GetReporter(frequency_counter);
-    EXPECT_EQ(MetricsDaemon::kMetricAnyCrashesWeeklyName,
-              reporter->histogram_name());
-    EXPECT_EQ(chromeos_metrics::kSecondsPerWeek,
-              frequency_counter->cycle_duration());
-
-    EXPECT_EQ(MetricsDaemon::kMetricKernelCrashIntervalName,
-              daemon_.kernel_crash_interval_->histogram_name());
-    EXPECT_EQ(MetricsDaemon::kMetricCrashIntervalMin,
-              daemon_.kernel_crash_interval_->min());
-    EXPECT_EQ(MetricsDaemon::kMetricCrashIntervalMax,
-              daemon_.kernel_crash_interval_->max());
-    EXPECT_EQ(MetricsDaemon::kMetricCrashIntervalBuckets,
-              daemon_.kernel_crash_interval_->buckets());
-
-    EXPECT_EQ(MetricsDaemon::kMetricUncleanShutdownIntervalName,
-              daemon_.unclean_shutdown_interval_->histogram_name());
-
-    // Tests constructor initialization. Switches to mock counters.
-    EXPECT_TRUE(NULL != daemon_.daily_use_.get());
-    EXPECT_TRUE(NULL != daemon_.kernel_crash_interval_.get());
-    EXPECT_TRUE(NULL != daemon_.user_crash_interval_.get());
-
-    // Allocates mock counter and transfers ownership.
-    daily_use_ = new StrictMock<TaggedCounterMock>();
-    daemon_.daily_use_.reset(daily_use_);
-    kernel_crash_interval_ = new StrictMock<TaggedCounterReporterMock>();
-    daemon_.kernel_crash_interval_.reset(kernel_crash_interval_);
-    user_crash_interval_ = new StrictMock<TaggedCounterReporterMock>();
-    daemon_.user_crash_interval_.reset(user_crash_interval_);
-    unclean_shutdown_interval_ = new StrictMock<TaggedCounterReporterMock>();
-    daemon_.unclean_shutdown_interval_.reset(unclean_shutdown_interval_);
-
-    // Reset all frequency counter reporters to mocks for further testing.
-    MetricsDaemon::FrequencyCounters::iterator i;
-    for (i = daemon_.frequency_counters_.begin();
-         i != daemon_.frequency_counters_.end(); ++i) {
-      delete i->second;
-      i->second = new StrictMock<FrequencyCounterMock>();
-    }
 
     EXPECT_FALSE(daemon_.user_active_);
     EXPECT_TRUE(daemon_.user_active_last_.is_null());
@@ -139,6 +78,24 @@ class MetricsDaemonTest : public testing::Test {
 
     base::DeleteFile(FilePath(kTestDir), true);
     base::CreateDirectory(FilePath(kTestDir));
+
+    // Replace original persistent values with mock ones.
+    daily_use_mock_ =
+        new StrictMock<PersistentIntegerMock>("1.mock");
+    daemon_.daily_use_.reset(daily_use_mock_);
+
+    kernel_crash_interval_mock_ =
+        new StrictMock<PersistentIntegerMock>("2.mock");
+    daemon_.kernel_crash_interval_.reset(kernel_crash_interval_mock_);
+
+    user_crash_interval_mock_ =
+        new StrictMock<PersistentIntegerMock>("3.mock");
+    daemon_.user_crash_interval_.reset(user_crash_interval_mock_);
+
+    unclean_shutdown_interval_mock_ =
+        new StrictMock<PersistentIntegerMock>("4.mock");
+    daemon_.unclean_shutdown_interval_.reset(unclean_shutdown_interval_mock_);
+
   }
 
   virtual void TearDown() {
@@ -147,57 +104,37 @@ class MetricsDaemonTest : public testing::Test {
     EXPECT_EQ(0, unlink(kFakeCpuinfoMaxFreqPath));
   }
 
-  const TaggedCounterReporter*
-  GetReporter(FrequencyCounter* frequency_counter) const {
-    return static_cast<const TaggedCounterReporter*>(
-        &frequency_counter->tagged_counter());
-  }
-
-  void ExpectFrequencyFlushCalls() {
-    MetricsDaemon::FrequencyCounters::iterator i;
-    for (i = daemon_.frequency_counters_.begin();
-         i != daemon_.frequency_counters_.end(); ++i) {
-      FrequencyCounterMock* mock =
-          static_cast<FrequencyCounterMock*>(i->second);
-      EXPECT_CALL(*mock, FlushFinishedCycles());
-    }
-  }
-
   // Adds active use aggregation counters update expectations that the
-  // specified tag/count update will be generated.
-  void ExpectActiveUseUpdate(int daily_tag, int count) {
-    EXPECT_CALL(*daily_use_, Update(daily_tag, count, 0))
+  // specified count will be added.
+  void ExpectActiveUseUpdate(int count) {
+    EXPECT_CALL(*daily_use_mock_, Add(count))
         .Times(1)
         .RetiresOnSaturation();
-    EXPECT_CALL(*kernel_crash_interval_, Update(0, count, 0))
+    EXPECT_CALL(*kernel_crash_interval_mock_, Add(count))
         .Times(1)
         .RetiresOnSaturation();
-    EXPECT_CALL(*user_crash_interval_, Update(0, count, 0))
+    EXPECT_CALL(*user_crash_interval_mock_, Add(count))
         .Times(1)
         .RetiresOnSaturation();
-    ExpectFrequencyFlushCalls();
   }
 
-  // Adds active use aggregation counters update expectations that
-  // ignore the update arguments.
+  // As above, but ignore values of counter updates.
   void IgnoreActiveUseUpdate() {
-    EXPECT_CALL(*daily_use_, Update(_, _, _))
+    EXPECT_CALL(*daily_use_mock_, Add(_))
         .Times(1)
         .RetiresOnSaturation();
-    EXPECT_CALL(*kernel_crash_interval_, Update(_, _, _))
+    EXPECT_CALL(*kernel_crash_interval_mock_, Add(_))
         .Times(1)
         .RetiresOnSaturation();
-    EXPECT_CALL(*user_crash_interval_, Update(_, _, _))
+    EXPECT_CALL(*user_crash_interval_mock_, Add(_))
         .Times(1)
         .RetiresOnSaturation();
-    ExpectFrequencyFlushCalls();
   }
 
   // Adds a metrics library mock expectation that the specified metric
   // will be generated.
-  void ExpectMetric(const string& name, int sample,
-                    int min, int max, int buckets) {
-    EXPECT_CALL(metrics_lib_, SendToUMA(name, sample, min, max, buckets))
+  void ExpectSample(int sample) {
+    EXPECT_CALL(metrics_lib_, SendToUMA(_, sample, _, _, _))
         .Times(1)
         .WillOnce(Return(true))
         .RetiresOnSaturation();
@@ -205,11 +142,8 @@ class MetricsDaemonTest : public testing::Test {
 
   // Adds a metrics library mock expectation that the specified daily
   // use time metric will be generated.
-  void ExpectDailyUseTimeMetric(int sample) {
-    ExpectMetric(MetricsDaemon::kMetricDailyUseTimeName, sample,
-                 MetricsDaemon::kMetricDailyUseTimeMin,
-                 MetricsDaemon::kMetricDailyUseTimeMax,
-                 MetricsDaemon::kMetricDailyUseTimeBuckets);
+  void ExpectDailyUseTimeSample(int sample) {
+    ExpectSample(sample);
   }
 
   // Converts from seconds to a Time object.
@@ -247,12 +181,6 @@ class MetricsDaemonTest : public testing::Test {
     dbus_message_unref(msg);
   }
 
-  // Gets the frequency counter for the given name.
-  FrequencyCounterMock& GetFrequencyMock(const char* histogram_name) {
-    return *static_cast<FrequencyCounterMock*>(
-        daemon_.frequency_counters_[histogram_name]);
-  }
-
   // Creates or overwrites an input file containing fake disk stats.
   void CreateFakeDiskStatsFile(const char* fake_stats) {
     if (unlink(kFakeDiskStatsPath) < 0) {
@@ -277,17 +205,13 @@ class MetricsDaemonTest : public testing::Test {
   // The MetricsDaemon under test.
   MetricsDaemon daemon_;
 
-  // Metrics library mock. It's a strict mock so that all unexpected
-  // metric generation calls are marked as failures.
+  // Mocks. They are strict mock so that all unexpected
+  // calls are marked as failures.
   StrictMock<MetricsLibraryMock> metrics_lib_;
-
-  // Counter mocks. They are strict mocks so that all unexpected
-  // update calls are marked as failures. They are pointers so that
-  // they can replace the scoped_ptr's allocated by the daemon.
-  StrictMock<TaggedCounterMock>* daily_use_;
-  StrictMock<TaggedCounterReporterMock>* kernel_crash_interval_;
-  StrictMock<TaggedCounterReporterMock>* user_crash_interval_;
-  StrictMock<TaggedCounterReporterMock>* unclean_shutdown_interval_;
+  StrictMock<PersistentIntegerMock>* daily_use_mock_;
+  StrictMock<PersistentIntegerMock>* kernel_crash_interval_mock_;
+  StrictMock<PersistentIntegerMock>* user_crash_interval_mock_;
+  StrictMock<PersistentIntegerMock>* unclean_shutdown_interval_mock_;
 };
 
 TEST_F(MetricsDaemonTest, CheckSystemCrash) {
@@ -305,10 +229,10 @@ TEST_F(MetricsDaemonTest, CheckSystemCrash) {
 }
 
 TEST_F(MetricsDaemonTest, ReportDailyUse) {
-  ExpectDailyUseTimeMetric(/* sample */ 2);
+  ExpectDailyUseTimeSample(/* sample */ 2);
   MetricsDaemon::ReportDailyUse(&daemon_, /* count */ 90);
 
-  ExpectDailyUseTimeMetric(/* sample */ 1);
+  ExpectDailyUseTimeSample(/* sample */ 1);
   MetricsDaemon::ReportDailyUse(&daemon_, /* count */ 89);
 
   // There should be no metrics generated for the calls below.
@@ -335,6 +259,9 @@ TEST_F(MetricsDaemonTest, LookupSessionState) {
 }
 
 TEST_F(MetricsDaemonTest, MessageFilter) {
+  // Ignore calls to SendToUMA.
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AtLeast(0));
+
   DBusMessage* msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_CALL);
   DBusHandlerResult res =
       MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
@@ -342,25 +269,6 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   DeleteDBusMessage(msg);
 
   IgnoreActiveUseUpdate();
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricAnyCrashesDailyName),
-      Update(1))
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricAnyCrashesWeeklyName),
-      Update(1))
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricUserCrashesDailyName),
-      Update(1))
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricUserCrashesWeeklyName),
-      Update(1))
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_CALL(*user_crash_interval_, Flush())
-      .Times(1)
-      .RetiresOnSaturation();
   vector<string> signal_args;
   msg = NewDBusSignalString("/",
                             "org.chromium.CrashReporter",
@@ -421,13 +329,16 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
 }
 
 TEST_F(MetricsDaemonTest, PowerStateChanged) {
-  ExpectActiveUseUpdate(7, 0);
+  // Ignore calls to SendToUMA.
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AtLeast(0));
+
+  ExpectActiveUseUpdate(0);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(7 * kSecondsPerDay + 15));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(7 * kSecondsPerDay + 15), daemon_.user_active_last_);
 
-  ExpectActiveUseUpdate(7, 30);
+  ExpectActiveUseUpdate(30);
   daemon_.PowerStateChanged("mem", TestTime(7 * kSecondsPerDay + 45));
   EXPECT_EQ(MetricsDaemon::kPowerStateMem, daemon_.power_state_);
   EXPECT_FALSE(daemon_.user_active_);
@@ -438,82 +349,36 @@ TEST_F(MetricsDaemonTest, PowerStateChanged) {
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(7 * kSecondsPerDay + 45), daemon_.user_active_last_);
 
-  ExpectActiveUseUpdate(7, 0);
+  ExpectActiveUseUpdate(0);
   daemon_.PowerStateChanged("otherstate", TestTime(7 * kSecondsPerDay + 185));
   EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(7 * kSecondsPerDay + 185), daemon_.user_active_last_);
 }
 
-TEST_F(MetricsDaemonTest, ProcessKernelCrash) {
-  IgnoreActiveUseUpdate();
-  EXPECT_CALL(*kernel_crash_interval_, Flush())
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricAnyCrashesDailyName),
-              Update(1));
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricAnyCrashesWeeklyName),
-              Update(1));
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricKernelCrashesDailyName),
-              Update(1));
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricKernelCrashesWeeklyName),
-              Update(1));
-  daemon_.ProcessKernelCrash();
-}
-
-TEST_F(MetricsDaemonTest, ProcessUncleanShutdown) {
-  IgnoreActiveUseUpdate();
-  EXPECT_CALL(*unclean_shutdown_interval_, Flush())
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricAnyCrashesDailyName),
-              Update(1));
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricAnyCrashesWeeklyName),
-              Update(1));
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricUncleanShutdownsDailyName),
-              Update(1));
-  EXPECT_CALL(
-      GetFrequencyMock(MetricsDaemon::kMetricUncleanShutdownsWeeklyName),
-      Update(1));
-  daemon_.ProcessUncleanShutdown();
-}
-
-TEST_F(MetricsDaemonTest, ProcessUserCrash) {
-  IgnoreActiveUseUpdate();
-  EXPECT_CALL(*user_crash_interval_, Flush())
-      .Times(1)
-      .RetiresOnSaturation();
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricAnyCrashesDailyName),
-              Update(1));
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricAnyCrashesWeeklyName),
-              Update(1));
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricUserCrashesDailyName),
-              Update(1));
-  EXPECT_CALL(GetFrequencyMock(MetricsDaemon::kMetricUserCrashesWeeklyName),
-              Update(1));
-  daemon_.ProcessUserCrash();
-}
-
-TEST_F(MetricsDaemonTest, SendMetric) {
-  ExpectMetric("Dummy.Metric", 3, 1, 100, 50);
-  daemon_.SendMetric("Dummy.Metric", /* sample */ 3,
+TEST_F(MetricsDaemonTest, SendSample) {
+  ExpectSample(3);
+  daemon_.SendSample("Dummy.Metric", /* sample */ 3,
                      /* min */ 1, /* max */ 100, /* buckets */ 50);
 }
 
 TEST_F(MetricsDaemonTest, SessionStateChanged) {
-  ExpectActiveUseUpdate(15, 0);
+  // Ignore calls to SendToUMA.
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AtLeast(0));
+
+  ExpectActiveUseUpdate(0);
   daemon_.SessionStateChanged("started", TestTime(15 * kSecondsPerDay + 20));
   EXPECT_EQ(MetricsDaemon::kSessionStateStarted, daemon_.session_state_);
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(15 * kSecondsPerDay + 20), daemon_.user_active_last_);
 
-  ExpectActiveUseUpdate(15, 130);
+  ExpectActiveUseUpdate(130);
   daemon_.SessionStateChanged("stopped", TestTime(15 * kSecondsPerDay + 150));
   EXPECT_EQ(MetricsDaemon::kSessionStateStopped, daemon_.session_state_);
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(15 * kSecondsPerDay + 150), daemon_.user_active_last_);
 
-  ExpectActiveUseUpdate(15, 0);
+  ExpectActiveUseUpdate(0);
   daemon_.SessionStateChanged("otherstate",
                               TestTime(15 * kSecondsPerDay + 300));
   EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
@@ -522,31 +387,34 @@ TEST_F(MetricsDaemonTest, SessionStateChanged) {
 }
 
 TEST_F(MetricsDaemonTest, SetUserActiveState) {
-  ExpectActiveUseUpdate(5, 0);
+  // Ignore calls to SendToUMA.
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AtLeast(0));
+
+  ExpectActiveUseUpdate(0);
   daemon_.SetUserActiveState(/* active */ false,
                              TestTime(5 * kSecondsPerDay + 10));
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(5 * kSecondsPerDay + 10), daemon_.user_active_last_);
 
-  ExpectActiveUseUpdate(6, 0);
+  ExpectActiveUseUpdate(0);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(6 * kSecondsPerDay + 20));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(6 * kSecondsPerDay + 20), daemon_.user_active_last_);
 
-  ExpectActiveUseUpdate(6, 100);
+  ExpectActiveUseUpdate(100);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(6 * kSecondsPerDay + 120));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(6 * kSecondsPerDay + 120), daemon_.user_active_last_);
 
-  ExpectActiveUseUpdate(6, 110);
+  ExpectActiveUseUpdate(110);
   daemon_.SetUserActiveState(/* active */ false,
                              TestTime(6 * kSecondsPerDay + 230));
   EXPECT_FALSE(daemon_.user_active_);
   EXPECT_EQ(TestTime(6 * kSecondsPerDay + 230), daemon_.user_active_last_);
 
-  ExpectActiveUseUpdate(6, 0);
+  ExpectActiveUseUpdate(0);
   daemon_.SetUserActiveState(/* active */ false,
                              TestTime(6 * kSecondsPerDay + 260));
   EXPECT_FALSE(daemon_.user_active_);
@@ -554,29 +422,26 @@ TEST_F(MetricsDaemonTest, SetUserActiveState) {
 }
 
 TEST_F(MetricsDaemonTest, SetUserActiveStateTimeJump) {
-  ExpectActiveUseUpdate(10, 0);
+  // Ignore calls to SendToUMA.
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AtLeast(0));
+
+  ExpectActiveUseUpdate(0);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(10 * kSecondsPerDay + 500));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(10 * kSecondsPerDay + 500), daemon_.user_active_last_);
 
-  ExpectActiveUseUpdate(10, 0);
+  ExpectActiveUseUpdate(0);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(10 * kSecondsPerDay + 300));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(10 * kSecondsPerDay + 300), daemon_.user_active_last_);
 
-  ExpectActiveUseUpdate(10, 0);
+  ExpectActiveUseUpdate(0);
   daemon_.SetUserActiveState(/* active */ true,
                              TestTime(10 * kSecondsPerDay + 1000));
   EXPECT_TRUE(daemon_.user_active_);
   EXPECT_EQ(TestTime(10 * kSecondsPerDay + 1000), daemon_.user_active_last_);
-}
-
-TEST_F(MetricsDaemonTest, GetHistogramPath) {
-  EXPECT_EQ("/var/log/metrics/Logging.AnyCrashesDaily",
-            daemon_.GetHistogramPath(
-                MetricsDaemon::kMetricAnyCrashesDailyName).value());
 }
 
 TEST_F(MetricsDaemonTest, ReportDiskStats) {
