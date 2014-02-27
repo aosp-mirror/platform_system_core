@@ -15,8 +15,6 @@ LOCAL_SRC_FILES := \
     LogBufferElement.cpp \
     LogTimes.cpp
 
-LOCAL_C_INCLUDES := $(KERNEL_HEADERS)
-
 LOCAL_SHARED_LIBRARIES := \
     libsysutils \
     liblog \
