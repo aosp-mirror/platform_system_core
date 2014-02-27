@@ -392,7 +392,8 @@ bool KernelCollector::FindCrashingFunction(
     return false;
   }
   if (stack_trace_timestamp != 0 &&
-      abs(stack_trace_timestamp - timestamp) > kSignatureTimestampWindow) {
+      abs(static_cast<int>(stack_trace_timestamp - timestamp))
+        > kSignatureTimestampWindow) {
     if (print_diagnostics) {
       printf("Found crashing function but not within window.\n");
     }
