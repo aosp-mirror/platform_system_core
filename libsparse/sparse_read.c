@@ -29,6 +29,8 @@
 
 #include <sparse/sparse.h>
 
+#include "defs.h"
+#include "output_file.h"
 #include "sparse_crc32.h"
 #include "sparse_file.h"
 #include "sparse_format.h"
@@ -175,7 +177,8 @@ static int process_fill_chunk(struct sparse_file *s, unsigned int chunk_size,
 }
 
 static int process_skip_chunk(struct sparse_file *s, unsigned int chunk_size,
-		int fd, unsigned int blocks, unsigned int block, uint32_t *crc32)
+		int fd __unused, unsigned int blocks,
+		unsigned int block __unused, uint32_t *crc32)
 {
 	int ret;
 	int chunk;
