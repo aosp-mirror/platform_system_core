@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 The Android Open Source Project
+ * Copyright (C) 2012-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 #ifndef _LOGD_COMMAND_H
 #define _LOGD_COMMAND_H
 
+#include <sysutils/SocketClient.h>
 #include <sysutils/FrameworkCommand.h>
 
 class LogCommand : public FrameworkCommand {
@@ -24,5 +25,7 @@ public:
     LogCommand(const char *cmd);
     virtual ~LogCommand() {}
 };
+
+bool clientHasLogCredentials(SocketClient * cli);
 
 #endif
