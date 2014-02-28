@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007 The Android Open Source Project
+ * Copyright (C) 2007-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,6 +46,8 @@
 #include "ueventd_parser.h"
 #include "util.h"
 #include "log.h"
+
+#define UNUSED __attribute__((__unused__))
 
 #define SYSFS_PREFIX    "/sys"
 #define FIRMWARE_DIR1   "/etc/firmware"
@@ -193,7 +195,7 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
 }
 
 static void make_device(const char *path,
-                        const char *upath,
+                        const char *upath UNUSED,
                         int block, int major, int minor)
 {
     unsigned uid;
@@ -589,6 +591,11 @@ static void mkdir_recursive_for_devpath(const char *devpath)
     mkdir_recursive(dir, 0755);
 }
 
+static inline void __attribute__((__deprecated__)) kernel_logger()
+{
+    INFO("kernel logger is deprecated\n");
+}
+
 static void handle_generic_device_event(struct uevent *uevent)
 {
     char *base;
@@ -675,6 +682,7 @@ static void handle_generic_device_event(struct uevent *uevent)
          make_dir(base, 0755);
      } else if(!strncmp(uevent->subsystem, "misc", 4) &&
                  !strncmp(name, "log_", 4)) {
+         kernel_logger();
          base = "/dev/log/";
          make_dir(base, 0755);
          name += 4;
