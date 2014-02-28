@@ -14,37 +14,176 @@
 ** limitations under the License.
 */
 
-#define _GNU_SOURCE /* asprintf for x86 host */
 #include <errno.h>
 #include <fcntl.h>
-#include <poll.h>
-#include <string.h>
-#include <stdio.h>
+#include <signal.h>
+#include <stddef.h>
+#define NOMINMAX /* for windows to suppress definition of min in stdlib.h */
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 #include <cutils/list.h>
+#include <cutils/sockets.h>
 #include <log/log.h>
 #include <log/logger.h>
 
-#include <sys/ioctl.h>
+/* branchless on many architectures. */
+#define min(x,y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
 
-#define __LOGGERIO     0xAE
+#define WEAK __attribute__((weak))
+#define UNUSED __attribute__((unused))
 
-#define LOGGER_GET_LOG_BUF_SIZE    _IO(__LOGGERIO, 1) /* size of log */
-#define LOGGER_GET_LOG_LEN         _IO(__LOGGERIO, 2) /* used log len */
-#define LOGGER_GET_NEXT_ENTRY_LEN  _IO(__LOGGERIO, 3) /* next entry len */
-#define LOGGER_FLUSH_LOG           _IO(__LOGGERIO, 4) /* flush log */
-#define LOGGER_GET_VERSION         _IO(__LOGGERIO, 5) /* abi version */
-#define LOGGER_SET_VERSION         _IO(__LOGGERIO, 6) /* abi version */
+/* Private copy of ../libcutils/socket_local_client.c prevent library loops */
 
-typedef char bool;
-#define false (const bool)0
-#define true (const bool)1
+#ifdef HAVE_WINSOCK
 
-#define LOG_FILE_DIR "/dev/log/"
+int WEAK socket_local_client(const char *name, int namespaceId, int type)
+{
+    errno = ENOSYS;
+    return -ENOSYS;
+}
 
-/* timeout in milliseconds */
-#define LOG_TIMEOUT_FLUSH 5
-#define LOG_TIMEOUT_NEVER -1
+#else /* !HAVE_WINSOCK */
+
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/select.h>
+#include <sys/types.h>
+
+/* Private copy of ../libcutils/socket_local.h prevent library loops */
+#define FILESYSTEM_SOCKET_PREFIX "/tmp/"
+#define ANDROID_RESERVED_SOCKET_PREFIX "/dev/socket/"
+/* End of ../libcutils/socket_local.h */
+
+#define LISTEN_BACKLOG 4
+
+/* Documented in header file. */
+int WEAK socket_make_sockaddr_un(const char *name, int namespaceId,
+                                 struct sockaddr_un *p_addr, socklen_t *alen)
+{
+    memset (p_addr, 0, sizeof (*p_addr));
+    size_t namelen;
+
+    switch (namespaceId) {
+    case ANDROID_SOCKET_NAMESPACE_ABSTRACT:
+#ifdef HAVE_LINUX_LOCAL_SOCKET_NAMESPACE
+        namelen  = strlen(name);
+
+        /* Test with length +1 for the *initial* '\0'. */
+        if ((namelen + 1) > sizeof(p_addr->sun_path)) {
+            goto error;
+        }
+
+        /*
+         * Note: The path in this case is *not* supposed to be
+         * '\0'-terminated. ("man 7 unix" for the gory details.)
+         */
+
+        p_addr->sun_path[0] = 0;
+        memcpy(p_addr->sun_path + 1, name, namelen);
+#else /*HAVE_LINUX_LOCAL_SOCKET_NAMESPACE*/
+        /* this OS doesn't have the Linux abstract namespace */
+
+        namelen = strlen(name) + strlen(FILESYSTEM_SOCKET_PREFIX);
+        /* unix_path_max appears to be missing on linux */
+        if (namelen > sizeof(*p_addr)
+                - offsetof(struct sockaddr_un, sun_path) - 1) {
+            goto error;
+        }
+
+        strcpy(p_addr->sun_path, FILESYSTEM_SOCKET_PREFIX);
+        strcat(p_addr->sun_path, name);
+#endif /*HAVE_LINUX_LOCAL_SOCKET_NAMESPACE*/
+        break;
+
+    case ANDROID_SOCKET_NAMESPACE_RESERVED:
+        namelen = strlen(name) + strlen(ANDROID_RESERVED_SOCKET_PREFIX);
+        /* unix_path_max appears to be missing on linux */
+        if (namelen > sizeof(*p_addr)
+                - offsetof(struct sockaddr_un, sun_path) - 1) {
+            goto error;
+        }
+
+        strcpy(p_addr->sun_path, ANDROID_RESERVED_SOCKET_PREFIX);
+        strcat(p_addr->sun_path, name);
+        break;
+
+    case ANDROID_SOCKET_NAMESPACE_FILESYSTEM:
+        namelen = strlen(name);
+        /* unix_path_max appears to be missing on linux */
+        if (namelen > sizeof(*p_addr)
+                - offsetof(struct sockaddr_un, sun_path) - 1) {
+            goto error;
+        }
+
+        strcpy(p_addr->sun_path, name);
+        break;
+
+    default:
+        /* invalid namespace id */
+        return -1;
+    }
+
+    p_addr->sun_family = AF_LOCAL;
+    *alen = namelen + offsetof(struct sockaddr_un, sun_path) + 1;
+    return 0;
+error:
+    return -1;
+}
+
+/**
+ * connect to peer named "name" on fd
+ * returns same fd or -1 on error.
+ * fd is not closed on error. that's your job.
+ *
+ * Used by AndroidSocketImpl
+ */
+int WEAK socket_local_client_connect(int fd, const char *name, int namespaceId,
+                                     int type UNUSED)
+{
+    struct sockaddr_un addr;
+    socklen_t alen;
+    size_t namelen;
+    int err;
+
+    err = socket_make_sockaddr_un(name, namespaceId, &addr, &alen);
+
+    if (err < 0) {
+        goto error;
+    }
+
+    if(connect(fd, (struct sockaddr *) &addr, alen) < 0) {
+        goto error;
+    }
+
+    return fd;
+
+error:
+    return -1;
+}
+
+/**
+ * connect to peer named "name"
+ * returns fd or -1 on error
+ */
+int WEAK socket_local_client(const char *name, int namespaceId, int type)
+{
+    int s;
+
+    s = socket(AF_LOCAL, type, 0);
+    if(s < 0) return -1;
+
+    if ( 0 > socket_local_client_connect(s, name, namespaceId, type)) {
+        close(s);
+        return -1;
+    }
+
+    return s;
+}
+
+#endif /* !HAVE_WINSOCK */
+/* End of ../libcutils/socket_local_client.c */
 
 #define logger_for_each(logger, logger_list) \
     for (logger = node_to_item((logger_list)->node.next, struct logger, node); \
@@ -59,44 +198,17 @@ static const char *LOG_NAME[LOG_ID_MAX] = {
     [LOG_ID_SYSTEM] = "system"
 };
 
-const char *android_log_id_to_name(log_id_t log_id) {
+const char *android_log_id_to_name(log_id_t log_id)
+{
     if (log_id >= LOG_ID_MAX) {
         log_id = LOG_ID_MAIN;
     }
     return LOG_NAME[log_id];
 }
 
-static int accessmode(int mode)
+log_id_t android_name_to_log_id(const char *logName)
 {
-    if ((mode & O_ACCMODE) == O_WRONLY) {
-        return W_OK;
-    }
-    if ((mode & O_ACCMODE) == O_RDWR) {
-        return R_OK | W_OK;
-    }
-    return R_OK;
-}
-
-/* repeated fragment */
-static int check_allocate_accessible(char **n, const char *b, int mode)
-{
-    *n = NULL;
-
-    if (!b) {
-        return -EINVAL;
-    }
-
-    asprintf(n, LOG_FILE_DIR "%s", b);
-    if (!*n) {
-        return -1;
-    }
-
-    return access(*n, accessmode(mode));
-}
-
-log_id_t android_name_to_log_id(const char *logName) {
     const char *b;
-    char *n;
     int ret;
 
     if (!logName) {
@@ -107,12 +219,6 @@ log_id_t android_name_to_log_id(const char *logName) {
         b = logName;
     } else {
         ++b;
-    }
-
-    ret = check_allocate_accessible(&n, b, O_RDONLY);
-    free(n);
-    if (ret) {
-        return ret;
     }
 
     for(ret = LOG_ID_MIN; ret < LOG_ID_MAX; ++ret) {
@@ -129,26 +235,13 @@ struct logger_list {
     int mode;
     unsigned int tail;
     pid_t pid;
-    unsigned int queued_lines;
-    int timeout_ms;
-    int error;
-    bool flush;
-    bool valid_entry; /* valiant(?) effort to deal with memory starvation */
-    struct log_msg entry;
-};
-
-struct log_list {
-    struct listnode node;
-    struct log_msg entry; /* Truncated to event->len() + 1 to save space */
+    int sock;
 };
 
 struct logger {
     struct listnode node;
     struct logger_list *top;
-    int fd;
     log_id_t id;
-    short *revents;
-    struct listnode log_list;
 };
 
 /* android_logger_alloc unimplemented, no use case */
@@ -159,73 +252,81 @@ static void android_logger_free(struct logger *logger)
         return;
     }
 
-    while (!list_empty(&logger->log_list)) {
-        struct log_list *entry = node_to_item(
-            list_head(&logger->log_list), struct log_list, node);
-        list_remove(&entry->node);
-        free(entry);
-        if (logger->top->queued_lines) {
-            logger->top->queued_lines--;
-        }
-    }
-
-    if (logger->fd >= 0) {
-        close(logger->fd);
-    }
-
     list_remove(&logger->node);
 
     free(logger);
 }
 
+/* android_logger_alloc unimplemented, no use case */
+
+/* method for getting the associated sublog id */
 log_id_t android_logger_get_id(struct logger *logger)
 {
     return logger->id;
 }
 
 /* worker for sending the command to the logger */
-static int logger_ioctl(struct logger *logger, int cmd, int mode)
+static ssize_t send_log_msg(struct logger *logger,
+                            const char *msg, char *buf, size_t buf_size)
 {
-    char *n;
-    int  f, ret;
-
-    if (!logger || !logger->top) {
-        return -EFAULT;
+    ssize_t ret;
+    int sock = socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                   SOCK_STREAM);
+    if (sock < 0) {
+        ret = sock;
+        goto done;
     }
 
-    if (((mode & O_ACCMODE) == O_RDWR)
-     || (((mode ^ logger->top->mode) & O_ACCMODE) == 0)) {
-        return ioctl(logger->fd, cmd);
+    if (msg) {
+        snprintf(buf, buf_size, msg, logger ? logger->id : (unsigned) -1);
     }
 
-    /* We go here if android_logger_list_open got mode wrong for this ioctl */
-    ret = check_allocate_accessible(&n, android_log_id_to_name(logger->id), mode);
-    if (ret) {
-        free(n);
-        return ret;
+    ret = write(sock, buf, strlen(buf) + 1);
+    if (ret <= 0) {
+        goto done;
     }
 
-    f = open(n, mode);
-    free(n);
-    if (f < 0) {
-        return f;
+    ret = read(sock, buf, buf_size);
+
+done:
+    if ((ret == -1) && errno) {
+        ret = -errno;
     }
-
-    ret = ioctl(f, cmd);
-    close (f);
-
+    close(sock);
     return ret;
 }
 
 int android_logger_clear(struct logger *logger)
 {
-    return logger_ioctl(logger, LOGGER_FLUSH_LOG, O_WRONLY);
+    char buf[512];
+
+    ssize_t ret = send_log_msg(logger, "clear %d", buf, sizeof(buf));
+    if (ret < 0) {
+        return ret;
+    }
+
+    if (strncmp(buf, "success", 7)) {
+        return -1;
+    }
+
+    return 0;
 }
 
 /* returns the total size of the log's ring buffer */
 int android_logger_get_log_size(struct logger *logger)
 {
-    return logger_ioctl(logger, LOGGER_GET_LOG_BUF_SIZE, O_RDWR);
+    char buf[512];
+
+    ssize_t ret = send_log_msg(logger, "getLogSize %d", buf, sizeof(buf));
+    if (ret < 0) {
+        return ret;
+    }
+
+    if ((buf[0] < '0') || ('9' < buf[0])) {
+        return -1;
+    }
+
+    return atoi(buf);
 }
 
 /*
@@ -234,16 +335,26 @@ int android_logger_get_log_size(struct logger *logger)
  */
 int android_logger_get_log_readable_size(struct logger *logger)
 {
-    return logger_ioctl(logger, LOGGER_GET_LOG_LEN, O_RDONLY);
+    char buf[512];
+
+    ssize_t ret = send_log_msg(logger, "getLogSizeUsed %d", buf, sizeof(buf));
+    if (ret < 0) {
+        return ret;
+    }
+
+    if ((buf[0] < '0') || ('9' < buf[0])) {
+        return -1;
+    }
+
+    return atoi(buf);
 }
 
 /*
  * returns the logger version
  */
-int android_logger_get_log_version(struct logger *logger)
+int android_logger_get_log_version(struct logger *logger UNUSED)
 {
-    int ret = logger_ioctl(logger, LOGGER_GET_VERSION, O_RDWR);
-    return (ret < 0) ? 1 : ret;
+    return 3;
 }
 
 struct logger_list *android_logger_list_alloc(int mode,
@@ -256,10 +367,13 @@ struct logger_list *android_logger_list_alloc(int mode,
     if (!logger_list) {
         return NULL;
     }
+
     list_init(&logger_list->node);
     logger_list->mode = mode;
     logger_list->tail = tail;
     logger_list->pid = pid;
+    logger_list->sock = -1;
+
     return logger_list;
 }
 
@@ -289,28 +403,11 @@ struct logger *android_logger_open(struct logger_list *logger_list,
         goto err;
     }
 
-    if (check_allocate_accessible(&n, android_log_id_to_name(id),
-                                  logger_list->mode)) {
-        goto err_name;
-    }
-
-    logger->fd = open(n, logger_list->mode);
-    if (logger->fd < 0) {
-        goto err_name;
-    }
-
-    free(n);
     logger->id = id;
-    list_init(&logger->log_list);
     list_add_tail(&logger_list->node, &logger->node);
     logger->top = logger_list;
-    logger_list->timeout_ms = LOG_TIMEOUT_FLUSH;
     goto ok;
 
-err_name:
-    free(n);
-err_logger:
-    free(logger);
 err:
     logger = NULL;
 ok:
@@ -336,315 +433,137 @@ struct logger_list *android_logger_list_open(log_id_t id,
     return logger_list;
 }
 
-/* prevent memory starvation when backfilling */
-static unsigned int queue_threshold(struct logger_list *logger_list)
+static void caught_signal(int signum UNUSED)
 {
-    return (logger_list->tail < 64) ? 64 : logger_list->tail;
-}
-
-static bool low_queue(struct listnode *node)
-{
-    /* low is considered less than 2 */
-    return list_head(node) == list_tail(node);
-}
-
-/* Flush queues in sequential order, one at a time */
-static int android_logger_list_flush(struct logger_list *logger_list,
-                                     struct log_msg *log_msg)
-{
-    int ret = 0;
-    struct log_list *firstentry = NULL;
-
-    while ((ret == 0)
-     && (logger_list->flush
-      || (logger_list->queued_lines > logger_list->tail))) {
-        struct logger *logger;
-
-        /* Merge sort */
-        bool at_least_one_is_low = false;
-        struct logger *firstlogger = NULL;
-        firstentry = NULL;
-
-        logger_for_each(logger, logger_list) {
-            struct listnode *node;
-            struct log_list *oldest = NULL;
-
-            /* kernel logger channels not necessarily time-sort order */
-            list_for_each(node, &logger->log_list) {
-                struct log_list *entry = node_to_item(node,
-                                                      struct log_list, node);
-                if (!oldest
-                 || (entry->entry.entry.sec < oldest->entry.entry.sec)
-                 || ((entry->entry.entry.sec == oldest->entry.entry.sec)
-                  && (entry->entry.entry.nsec < oldest->entry.entry.nsec))) {
-                     oldest = entry;
-                }
-            }
-
-            if (!oldest) {
-                at_least_one_is_low = true;
-                continue;
-            } else if (low_queue(&logger->log_list)) {
-                at_least_one_is_low = true;
-            }
-
-            if (!firstentry
-             || (oldest->entry.entry.sec < firstentry->entry.entry.sec)
-             || ((oldest->entry.entry.sec == firstentry->entry.entry.sec)
-              && (oldest->entry.entry.nsec < firstentry->entry.entry.nsec))) {
-                firstentry = oldest;
-                firstlogger = logger;
-            }
-        }
-
-        if (!firstentry) {
-            break;
-        }
-
-        /* when trimming list, tries to keep one entry behind in each bucket */
-        if (!logger_list->flush
-         && at_least_one_is_low
-         && (logger_list->queued_lines < queue_threshold(logger_list))) {
-            break;
-        }
-
-        /* within tail?, send! */
-        if ((logger_list->tail == 0)
-         || (logger_list->queued_lines <= logger_list->tail)) {
-            ret = firstentry->entry.entry.hdr_size;
-            if (!ret) {
-                ret = sizeof(firstentry->entry.entry_v1);
-            }
-            ret += firstentry->entry.entry.len;
-
-            memcpy(log_msg->buf, firstentry->entry.buf, ret + 1);
-            log_msg->extra.id = firstlogger->id;
-        }
-
-        /* next entry */
-        list_remove(&firstentry->node);
-        free(firstentry);
-        if (logger_list->queued_lines) {
-            logger_list->queued_lines--;
-        }
-    }
-
-    /* Flushed the list, no longer in tail mode for continuing content */
-    if (logger_list->flush && !firstentry) {
-        logger_list->tail = 0;
-    }
-    return ret;
 }
 
 /* Read from the selected logs */
 int android_logger_list_read(struct logger_list *logger_list,
                              struct log_msg *log_msg)
 {
+    int ret, e;
     struct logger *logger;
-    nfds_t nfds;
-    struct pollfd *p, *pollfds = NULL;
-    int error = 0, ret = 0;
-
-    memset(log_msg, 0, sizeof(struct log_msg));
+    struct sigaction ignore;
+    struct sigaction old_sigaction;
+    unsigned int old_alarm = 0;
 
     if (!logger_list) {
-        return -ENODEV;
+        return -EINVAL;
     }
 
-    if (!(accessmode(logger_list->mode) & R_OK)) {
-        logger_list->error = EPERM;
-        goto done;
+    if (logger_list->mode & O_NONBLOCK) {
+        memset(&ignore, 0, sizeof(ignore));
+        ignore.sa_handler = caught_signal;
+        sigemptyset(&ignore.sa_mask);
     }
 
-    nfds = 0;
-    logger_for_each(logger, logger_list) {
-        ++nfds;
-    }
-    if (nfds <= 0) {
-        error = ENODEV;
-        goto done;
-    }
+    if (logger_list->sock < 0) {
+        char buffer[256], *cp, c;
 
-    /* Do we have anything to offer from the buffer or state? */
-    if (logger_list->valid_entry) { /* implies we are also in a flush state */
-        goto flush;
-    }
-
-    ret = android_logger_list_flush(logger_list, log_msg);
-    if (ret) {
-        goto done;
-    }
-
-    if (logger_list->error) { /* implies we are also in a flush state */
-        goto done;
-    }
-
-    /* Lets start grinding on metal */
-    pollfds = calloc(nfds, sizeof(struct pollfd));
-    if (!pollfds) {
-        error = ENOMEM;
-        goto flush;
-    }
-
-    p = pollfds;
-    logger_for_each(logger, logger_list) {
-        p->fd = logger->fd;
-        p->events = POLLIN;
-        logger->revents = &p->revents;
-        ++p;
-    }
-
-    while (!ret && !error) {
-        int result;
-
-        /* If we oversleep it's ok, i.e. ignore EINTR. */
-        result = TEMP_FAILURE_RETRY(
-            poll(pollfds, nfds, logger_list->timeout_ms));
-
-        if (result <= 0) {
-            if (result) {
-                error = errno;
-            } else if (logger_list->mode & O_NDELAY) {
-                error = EAGAIN;
-            } else {
-                logger_list->timeout_ms = LOG_TIMEOUT_NEVER;
+        int sock = socket_local_client("logdr",
+                                       ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                       SOCK_SEQPACKET);
+        if (sock < 0) {
+            if ((sock == -1) && errno) {
+                return -errno;
             }
-
-            logger_list->flush = true;
-            goto try_flush;
+            return sock;
         }
 
-        logger_list->timeout_ms = LOG_TIMEOUT_FLUSH;
+        strcpy(buffer,
+               (logger_list->mode & O_NONBLOCK) ? "dumpAndClose" : "stream");
+        cp = buffer + strlen(buffer);
 
-        /* Anti starvation */
-        if (!logger_list->flush
-         && (logger_list->queued_lines > (queue_threshold(logger_list) / 2))) {
-            /* Any queues with input pending that is low? */
-            bool starving = false;
-            logger_for_each(logger, logger_list) {
-                if ((*(logger->revents) & POLLIN)
-                 && low_queue(&logger->log_list)) {
-                    starving = true;
-                    break;
-                }
-            }
-
-            /* pushback on any queues that are not low */
-            if (starving) {
-                logger_for_each(logger, logger_list) {
-                    if ((*(logger->revents) & POLLIN)
-                     && !low_queue(&logger->log_list)) {
-                        *(logger->revents) &= ~POLLIN;
-                    }
-                }
-            }
-        }
-
+        strcpy(cp, " lids");
+        cp += 5;
+        c = '=';
+        int remaining = sizeof(buffer) - (cp - buffer);
         logger_for_each(logger, logger_list) {
-            unsigned int hdr_size;
-            struct log_list *entry;
+            ret = snprintf(cp, remaining, "%c%u", c, logger->id);
+            ret = min(ret, remaining);
+            remaining -= ret;
+            cp += ret;
+            c = ',';
+        }
 
-            if (!(*(logger->revents) & POLLIN)) {
-                continue;
+        if (logger_list->tail) {
+            ret = snprintf(cp, remaining, " tail=%u", logger_list->tail);
+            ret = min(ret, remaining);
+            remaining -= ret;
+            cp += ret;
+        }
+
+        if (logger_list->pid) {
+            ret = snprintf(cp, remaining, " pid=%u", logger_list->pid);
+            ret = min(ret, remaining);
+            remaining -= ret;
+            cp += ret;
+        }
+
+        if (logger_list->mode & O_NONBLOCK) {
+            /* Deal with an unresponsive logd */
+            sigaction(SIGALRM, &ignore, &old_sigaction);
+            old_alarm = alarm(30);
+        }
+        ret = write(sock, buffer, cp - buffer);
+        e = errno;
+        if (logger_list->mode & O_NONBLOCK) {
+            if (e == EINTR) {
+                e = ETIMEDOUT;
             }
-
-            memset(logger_list->entry.buf, 0, sizeof(struct log_msg));
-            /* NOTE: driver guarantees we read exactly one full entry */
-            result = read(logger->fd, logger_list->entry.buf,
-                          LOGGER_ENTRY_MAX_LEN);
-            if (result <= 0) {
-                if (!result) {
-                    error = EIO;
-                } else if (errno != EINTR) {
-                    error = errno;
-                }
-                continue;
-            }
-
-            if (logger_list->pid
-             && (logger_list->pid != logger_list->entry.entry.pid)) {
-                continue;
-            }
-
-            hdr_size = logger_list->entry.entry.hdr_size;
-            if (!hdr_size) {
-                hdr_size = sizeof(logger_list->entry.entry_v1);
-            }
-
-            if ((hdr_size > sizeof(struct log_msg))
-             || (logger_list->entry.entry.len
-               > sizeof(logger_list->entry.buf) - hdr_size)
-             || (logger_list->entry.entry.len != result - hdr_size)) {
-                error = EINVAL;
-                continue;
-            }
-
-            logger_list->entry.extra.id = logger->id;
-
-            /* speedup: If not tail, and only one list, send directly */
-            if (!logger_list->tail
-             && (list_head(&logger_list->node)
-              == list_tail(&logger_list->node))) {
-                ret = result;
-                memcpy(log_msg->buf, logger_list->entry.buf, result + 1);
-                log_msg->extra.id = logger->id;
-                break;
-            }
-
-            entry = malloc(sizeof(*entry) - sizeof(entry->entry) + result + 1);
-
-            if (!entry) {
-                logger_list->valid_entry = true;
-                error = ENOMEM;
-                break;
-            }
-
-            logger_list->queued_lines++;
-
-            memcpy(entry->entry.buf, logger_list->entry.buf, result);
-            entry->entry.buf[result] = '\0';
-            list_add_tail(&logger->log_list, &entry->node);
+            alarm(old_alarm);
+            sigaction(SIGALRM, &old_sigaction, NULL);
         }
 
         if (ret <= 0) {
-try_flush:
-            ret = android_logger_list_flush(logger_list, log_msg);
-        }
-    }
-
-    free(pollfds);
-
-flush:
-    if (error) {
-        logger_list->flush = true;
-    }
-
-    if (ret <= 0) {
-        ret = android_logger_list_flush(logger_list, log_msg);
-
-        if (!ret && logger_list->valid_entry) {
-            ret = logger_list->entry.entry.hdr_size;
-            if (!ret) {
-                ret = sizeof(logger_list->entry.entry_v1);
+            close(sock);
+            if ((ret == -1) && e) {
+                return -e;
             }
-            ret += logger_list->entry.entry.len;
+            if (ret == 0) {
+                return -EIO;
+            }
+            return ret;
+        }
 
-            memcpy(log_msg->buf, logger_list->entry.buf,
-                   sizeof(struct log_msg));
-            logger_list->valid_entry = false;
+        logger_list->sock = sock;
+    }
+
+    ret = 0;
+    while(1) {
+        memset(log_msg, 0, sizeof(*log_msg));
+
+        if (logger_list->mode & O_NONBLOCK) {
+            /* particularily useful if tombstone is reporting for logd */
+            sigaction(SIGALRM, &ignore, &old_sigaction);
+            old_alarm = alarm(30);
+        }
+        /* NOTE: SOCK_SEQPACKET guarantees we read exactly one full entry */
+        ret = recv(logger_list->sock, log_msg, LOGGER_ENTRY_MAX_LEN, 0);
+        e = errno;
+        if (logger_list->mode & O_NONBLOCK) {
+            if ((ret == 0) || (e == EINTR)) {
+                e = EAGAIN;
+                ret = -1;
+            }
+            alarm(old_alarm);
+            sigaction(SIGALRM, &old_sigaction, NULL);
+        }
+
+        if (ret <= 0) {
+            if ((ret == -1) && e) {
+                return -e;
+            }
+            return ret;
+        }
+
+        logger_for_each(logger, logger_list) {
+            if (log_msg->entry.lid == logger->id) {
+                return ret;
+            }
         }
     }
-
-done:
-    if (logger_list->error) {
-        error = logger_list->error;
-    }
-    if (error) {
-        logger_list->error = error;
-        if (!ret) {
-            ret = -error;
-        }
-    }
+    /* NOTREACH */
     return ret;
 }
 
@@ -659,6 +578,10 @@ void android_logger_list_free(struct logger_list *logger_list)
         struct listnode *node = list_head(&logger_list->node);
         struct logger *logger = node_to_item(node, struct logger, node);
         android_logger_free(logger);
+    }
+
+    if (logger_list->sock >= 0) {
+        close (logger_list->sock);
     }
 
     free(logger_list);
