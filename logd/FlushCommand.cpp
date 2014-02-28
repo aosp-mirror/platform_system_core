@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 The Android Open Source Project
+ * Copyright (C) 2012-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,12 @@
  */
 
 #include <stdlib.h>
-#include <private/android_filesystem_config.h>
+
 #include "FlushCommand.h"
 #include "LogBufferElement.h"
-#include "LogTimes.h"
+#include "LogCommand.h"
 #include "LogReader.h"
+#include "LogTimes.h"
 
 FlushCommand::FlushCommand(LogReader &reader,
                            bool nonBlock,
@@ -80,7 +81,5 @@ void FlushCommand::runSocketCommand(SocketClient *client) {
 }
 
 bool FlushCommand::hasReadLogs(SocketClient *client) {
-    return (client->getUid() == AID_ROOT)
-            || (client->getGid() == AID_ROOT)
-            || (client->getGid() == AID_LOG);
+    return clientHasLogCredentials(client);
 }
