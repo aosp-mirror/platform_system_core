@@ -82,15 +82,23 @@ ALL_TOOLS += \
 	grep
 
 LOCAL_SRC_FILES := \
+	cp/cp.c \
+	cp/utils.c \
 	dynarray.c \
-	toolbox.c \
+	grep/fastgrep.c \
+	grep/file.c \
+	grep/grep.c \
+	grep/queue.c \
+	grep/util.c \
 	$(patsubst %,%.c,$(TOOLS)) \
-	cp/cp.c cp/utils.c \
-	grep/grep.c grep/fastgrep.c grep/file.c grep/queue.c grep/util.c
+	toolbox.c \
+	uid_from_user.c \
 
 LOCAL_C_INCLUDES := bionic/libc/bionic
 
-LOCAL_CFLAGS += -Wno-unused-parameter
+LOCAL_CFLAGS += \
+    -Wno-unused-parameter \
+    -DSUPPORT_DOT \
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
