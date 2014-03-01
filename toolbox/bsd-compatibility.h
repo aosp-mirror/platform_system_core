@@ -26,14 +26,13 @@
  * SUCH DAMAGE.
  */
 
-#include <pwd.h>
 #include <sys/types.h>
 
-int uid_from_user(const char* name, uid_t* uid) {
-  struct passwd* pw = getpwnam(name);
-  if (pw == NULL) {
-    return -1;
-  }
-  *uid = pw->pw_uid;
-  return 0;
-}
+/* We want chown to support user.group as well as user:group. */
+#define SUPPORT_DOT
+
+__BEGIN_DECLS
+
+extern int uid_from_user(const char* name, uid_t* uid);
+
+__END_DECLS
