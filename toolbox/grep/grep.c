@@ -294,10 +294,8 @@ read_patterns(const char *fn)
 		err(2, "%s", fn);
 	line = NULL;
 	len = 0;
-#ifndef ANDROID
 	while ((rlen = getline(&line, &len, f)) != -1)
 		add_pattern(line, *line == '\n' ? 0 : (size_t)rlen);
-#endif
 	free(line);
 	if (ferror(f))
 		err(2, "%s", fn);
