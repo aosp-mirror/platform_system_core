@@ -38,6 +38,7 @@ public:
 
     virtual ~SocketListener();
     int startListener();
+    int startListener(int backlog);
     int stopListener();
 
     void sendBroadcast(int code, const char *msg, bool addErrno);
