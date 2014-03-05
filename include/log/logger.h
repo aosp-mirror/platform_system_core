@@ -30,7 +30,7 @@ struct logger_entry {
     int32_t     sec;    /* seconds since Epoch */
     int32_t     nsec;   /* nanoseconds */
     char        msg[0]; /* the entry's payload */
-};
+} __attribute__((__packed__));
 
 /*
  * The userspace structure for version 2 of the logger_entry ABI.
@@ -46,18 +46,18 @@ struct logger_entry_v2 {
     int32_t     nsec;      /* nanoseconds */
     uint32_t    euid;      /* effective UID of logger */
     char        msg[0];    /* the entry's payload */
-};
+} __attribute__((__packed__));
 
 struct logger_entry_v3 {
     uint16_t    len;       /* length of the payload */
-    uint16_t    hdr_size;  /* sizeof(struct logger_entry_v2) */
+    uint16_t    hdr_size;  /* sizeof(struct logger_entry_v3) */
     int32_t     pid;       /* generating process's pid */
     int32_t     tid;       /* generating process's tid */
     int32_t     sec;       /* seconds since Epoch */
     int32_t     nsec;      /* nanoseconds */
     uint32_t    lid;       /* log id of the payload */
     char        msg[0];    /* the entry's payload */
-};
+} __attribute__((__packed__));
 
 /*
  * The maximum size of the log entry payload that can be

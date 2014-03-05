@@ -171,7 +171,7 @@ static void caught_blocking(int signum)
 
     ++signaled;
     if ((signal_time.tv_sec == 0) && (signal_time.tv_nsec == 0)) {
-        clock_gettime(CLOCK_MONOTONIC, &signal_time);
+        signal_time = log_time(CLOCK_MONOTONIC);
         signal_time.tv_sec += 2;
     }
 

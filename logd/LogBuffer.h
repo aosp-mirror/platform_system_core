@@ -40,12 +40,12 @@ public:
 
     LogBuffer(LastLogTimes *times);
 
-    void log(log_id_t log_id, struct timespec realtime,
+    void log(log_id_t log_id, log_time realtime,
              uid_t uid, pid_t pid, const char *msg, unsigned short len);
-    struct timespec flushTo(SocketClient *writer, const struct timespec start,
-                            bool privileged,
-                            bool (*filter)(const LogBufferElement *element, void *arg) = NULL,
-                            void *arg = NULL);
+    log_time flushTo(SocketClient *writer, const log_time start,
+                     bool privileged,
+                     bool (*filter)(const LogBufferElement *element, void *arg) = NULL,
+                     void *arg = NULL);
 
     void clear(log_id_t id);
     unsigned long getSize(log_id_t id);

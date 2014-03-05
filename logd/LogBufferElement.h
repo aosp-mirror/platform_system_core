@@ -32,7 +32,7 @@ class LogBufferElement {
     const log_time mRealTime;
 
 public:
-    LogBufferElement(log_id_t log_id, struct timespec realtime,
+    LogBufferElement(log_id_t log_id, log_time realtime,
                      uid_t uid, pid_t pid, const char *msg, unsigned short len);
     virtual ~LogBufferElement();
 
@@ -43,8 +43,8 @@ public:
     log_time getMonotonicTime(void) const { return mMonotonicTime; }
     log_time getRealTime(void) const { return mRealTime; }
 
-    static const struct timespec FLUSH_ERROR;
-    struct timespec flushTo(SocketClient *writer);
+    static const log_time FLUSH_ERROR;
+    log_time flushTo(SocketClient *writer);
 };
 
 #endif

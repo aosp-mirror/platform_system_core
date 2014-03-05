@@ -36,7 +36,7 @@ LogBuffer::LogBuffer(LastLogTimes *times)
     pthread_mutex_init(&mLogElementsLock, NULL);
 }
 
-void LogBuffer::log(log_id_t log_id, struct timespec realtime,
+void LogBuffer::log(log_id_t log_id, log_time realtime,
                     uid_t uid, pid_t pid, const char *msg,
                     unsigned short len) {
     if ((log_id >= LOG_ID_MAX) || (log_id < 0)) {
@@ -182,8 +182,8 @@ unsigned long LogBuffer::getSize(log_id_t /*id*/) {
     return LOG_BUFFER_SIZE;
 }
 
-struct timespec LogBuffer::flushTo(
-        SocketClient *reader, const struct timespec start, bool privileged,
+log_time LogBuffer::flushTo(
+        SocketClient *reader, const log_time start, bool privileged,
         bool (*filter)(const LogBufferElement *element, void *arg), void *arg) {
     LogBufferElementCollection::iterator it;
     log_time max = start;
