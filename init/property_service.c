@@ -439,40 +439,73 @@ void get_property_workspace(int *fd, int *sz)
     *sz = pa_workspace.size;
 }
 
-static void load_properties(char *data, char *prefix)
-{
-    char *key, *value, *eol, *sol, *tmp;
-    size_t plen;
+static void load_properties_from_file(const char *, const char *);
 
-    if (prefix)
-        plen = strlen(prefix);
+/*
+ * Filter is used to decide which properties to load: NULL loads all keys,
+ * "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
+ */
+static void load_properties(char *data, const char *filter)
+{
+    char *key, *value, *eol, *sol, *tmp, *fn;
+    size_t flen = 0;
+
+    if (filter) {
+        flen = strlen(filter);
+    }
+
     sol = data;
-    while((eol = strchr(sol, '\n'))) {
+    while ((eol = strchr(sol, '\n'))) {
         key = sol;
         *eol++ = 0;
         sol = eol;
 
-        value = strchr(key, '=');
-        if(value == 0) continue;
-        *value++ = 0;
+        while (isspace(*key)) key++;
+        if (*key == '#') continue;
 
-        while(isspace(*key)) key++;
-        if(*key == '#') continue;
-        tmp = value - 2;
-        while((tmp > key) && isspace(*tmp)) *tmp-- = 0;
-
-        if (prefix && strncmp(key, prefix, plen))
-            continue;
-
-        while(isspace(*value)) value++;
         tmp = eol - 2;
-        while((tmp > value) && isspace(*tmp)) *tmp-- = 0;
+        while ((tmp > key) && isspace(*tmp)) *tmp-- = 0;
 
-        property_set(key, value);
+        if (!strncmp(key, "import ", 7) && flen == 0) {
+            fn = key + 7;
+            while (isspace(*fn)) fn++;
+
+            key = strchr(fn, ' ');
+            if (key) {
+                *key++ = 0;
+                while (isspace(*key)) key++;
+            }
+
+            load_properties_from_file(fn, key);
+
+        } else {
+            value = strchr(key, '=');
+            if (!value) continue;
+            *value++ = 0;
+
+            tmp = value - 2;
+            while ((tmp > key) && isspace(*tmp)) *tmp-- = 0;
+
+            while (isspace(*value)) value++;
+
+            if (flen > 0) {
+                if (filter[flen - 1] == '*') {
+                    if (strncmp(key, filter, flen - 1)) continue;
+                } else {
+                    if (strcmp(key, filter)) continue;
+                }
+            }
+
+            property_set(key, value);
+        }
     }
 }
 
-static void load_properties_from_file(const char *fn, char *prefix)
+/*
+ * Filter is used to decide which properties to load: NULL loads all keys,
+ * "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
+ */
+static void load_properties_from_file(const char *fn, const char *filter)
 {
     char *data;
     unsigned sz;
@@ -480,7 +513,7 @@ static void load_properties_from_file(const char *fn, char *prefix)
     data = read_file(fn, &sz);
 
     if(data != 0) {
-        load_properties(data, prefix);
+        load_properties(data, filter);
         free(data);
     }
 }
@@ -592,8 +625,10 @@ void start_property_service(void)
 
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
     load_properties_from_file(PROP_PATH_SYSTEM_DEFAULT, NULL);
-    load_properties_from_file(PROP_PATH_FACTORY, "ro.");
+    load_properties_from_file(PROP_PATH_FACTORY, "ro.*");
+
     load_override_properties();
+
     /* Read persistent properties after all default values have been loaded. */
     load_persistent_properties();
 
