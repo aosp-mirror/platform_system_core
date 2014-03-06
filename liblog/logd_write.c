@@ -117,8 +117,11 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     newVec[0].iov_base   = (unsigned char *) &log_id_buf;
     newVec[0].iov_len    = sizeof_log_id_t;
 
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
     log_time realtime_ts;
-    clock_gettime(CLOCK_REALTIME, &realtime_ts);
+    realtime_ts.tv_sec = ts.tv_sec;
+    realtime_ts.tv_nsec = ts.tv_nsec;
 
     newVec[1].iov_base   = (unsigned char *) &realtime_ts;
     newVec[1].iov_len    = sizeof(log_time);
