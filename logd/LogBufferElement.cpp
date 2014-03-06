@@ -24,9 +24,11 @@
 #include "LogBufferElement.h"
 #include "LogReader.h"
 
-const struct timespec LogBufferElement::FLUSH_ERROR = { 0, 0 };
+const log_time LogBufferElement::FLUSH_ERROR(0, 0);
 
-LogBufferElement::LogBufferElement(log_id_t log_id, struct timespec realtime, uid_t uid, pid_t pid, const char *msg, unsigned short len)
+LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
+                                   uid_t uid, pid_t pid, const char *msg,
+                                   unsigned short len)
         : mLogId(log_id)
         , mUid(uid)
         , mPid(pid)
@@ -41,7 +43,7 @@ LogBufferElement::~LogBufferElement() {
     delete [] mMsg;
 }
 
-struct timespec LogBufferElement::flushTo(SocketClient *reader) {
+log_time LogBufferElement::flushTo(SocketClient *reader) {
     struct logger_entry_v3 entry;
     memset(&entry, 0, sizeof(struct logger_entry_v3));
     entry.hdr_size = sizeof(struct logger_entry_v3);
