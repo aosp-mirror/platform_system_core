@@ -34,7 +34,7 @@ PIXELFLINGER_SRC_FILES_arm := \
 	col32cb16blend.S \
 	t32cb16blend.S \
 
-ifeq ($(ARCH_ARM_HAVE_NEON),armv7-a)
+ifeq ($(ARCH_ARM_HAVE_NEON),true)
 PIXELFLINGER_SRC_FILES_arm += col32cb16blend_neon.S
 endif
 
