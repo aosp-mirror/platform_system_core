@@ -26,6 +26,7 @@ commonSources:= \
 	LinearAllocator.cpp \
 	LinearTransform.cpp \
 	Log.cpp \
+	NativeHandle.cpp \
 	Printer.cpp \
 	ProcessCallStack.cpp \
 	PropertyMap.cpp \
