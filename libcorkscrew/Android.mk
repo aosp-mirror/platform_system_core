@@ -14,8 +14,6 @@
 
 LOCAL_PATH:= $(call my-dir)
 
-ifeq ($(TARGET_IS_64_BIT), false)
-
 generic_src_files := \
 	backtrace.c \
 	backtrace-helper.c \
@@ -31,6 +29,8 @@ arm_src_files := \
 x86_src_files := \
 	arch-x86/backtrace-x86.c \
 	arch-x86/ptrace-x86.c
+
+ifeq ($(TARGET_IS_64_BIT), false)
 
 include $(CLEAR_VARS)
 
