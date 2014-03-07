@@ -23,19 +23,6 @@ void crash1(void);
 void crashnostack(void);
 static int do_action(const char* arg);
 
-static void debuggerd_connect()
-{
-    char tmp[1];
-    int s;
-    sprintf(tmp, "%d", gettid());
-    s = socket_local_client("android:debuggerd",
-            ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
-    if(s >= 0) {
-        read(s, tmp, 1);
-        close(s);
-    }
-}
-
 static void maybeabort() {
     if(time(0) != 42) {
         abort();
