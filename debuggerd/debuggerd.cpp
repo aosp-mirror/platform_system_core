@@ -46,12 +46,12 @@
 #include "tombstone.h"
 #include "utility.h"
 
-typedef struct {
+struct debugger_request_t {
   debugger_action_t action;
   pid_t pid, tid;
   uid_t uid, gid;
   uintptr_t abort_msg_address;
-} debugger_request_t;
+};
 
 static int write_string(const char* file, const char* string) {
   int len;
@@ -116,7 +116,7 @@ static void wait_for_user_action(pid_t pid) {
       dit,_,dit,_,dit,___,dah,_,dah,_,dah,___,dit,_,dit,_,dit,_______
     };
     size_t s = 0;
-    struct input_event e;
+    input_event e;
     bool done = false;
     init_debug_led();
     enable_debug_led();
@@ -176,8 +176,8 @@ static int get_process_info(pid_t tid, pid_t* out_pid, uid_t* out_uid, uid_t* ou
 }
 
 static int read_request(int fd, debugger_request_t* out_request) {
-  struct ucred cr;
-  int len = sizeof(cr);
+  ucred cr;
+  socklen_t len = sizeof(cr);
   int status = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cr, &len);
   if (status != 0) {
     LOG("cannot get credentials\n");
@@ -187,7 +187,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
   XLOG("reading tid\n");
   fcntl(fd, F_SETFL, O_NONBLOCK);
 
-  struct pollfd pollfds[1];
+  pollfd pollfds[1];
   pollfds[0].fd = fd;
   pollfds[0].events = POLLIN;
   pollfds[0].revents = 0;
@@ -441,13 +441,11 @@ static int do_server() {
   LOG("debuggerd: " __DATE__ " " __TIME__ "\n");
 
   for (;;) {
-    struct sockaddr addr;
-    socklen_t alen;
-    int fd;
+    sockaddr addr;
+    socklen_t alen = sizeof(addr);
 
-    alen = sizeof(addr);
     XLOG("waiting for connection\n");
-    fd = accept(s, &addr, &alen);
+    int fd = accept(s, &addr, &alen);
     if (fd < 0) {
       XLOG("accept failed: %s\n", strerror(errno));
       continue;
