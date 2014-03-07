@@ -662,7 +662,7 @@ void ggl_enable_dither(context_t* c, int enable)
     }
 }
 
-void ggl_enable_stencil_test(context_t* c, int enable)
+void ggl_enable_stencil_test(context_t* /*c*/, int /*enable*/)
 {
 }
 

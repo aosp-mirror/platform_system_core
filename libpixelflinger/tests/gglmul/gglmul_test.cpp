@@ -28,6 +28,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #include "private/pixelflinger/ggl_fixed.h"
 
@@ -260,12 +261,12 @@ void gglMulii_test()
         if(actual == expected)
             printf(" Passed\n");
         else
-            printf(" Failed Actual(%ld) Expected(%ld)\n",
+            printf(" Failed Actual(%" PRId64 ") Expected(%" PRId64 ")\n",
                     actual, expected);
     }
 }
 
-int main(int argc, char** argv)
+int main(int /*argc*/, char** /*argv*/)
 {
     gglClampx_test();
     gglClz_test();
