@@ -279,7 +279,7 @@ static int64_t EntryToIndex(const ZipEntryName* hash_table,
     ent = (ent + 1) & (hash_table_size - 1);
   }
 
-  ALOGV("Zip: Unable to find entry %.*s", name_length, name);
+  ALOGV("Zip: Unable to find entry %.*s", length, name);
   return kEntryNotFound;
 }
 
