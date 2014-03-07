@@ -25,6 +25,7 @@
 #include <unistd.h>
 
 #define LOG_TAG "libsuspend"
+//#define LOG_NDEBUG 0
 #include <cutils/log.h>
 
 #include "autosuspend_ops.h"
@@ -37,6 +38,7 @@ static int wakeup_count_fd;
 static pthread_t suspend_thread;
 static sem_t suspend_lockout;
 static const char *sleep_state = "mem";
+static void (*wakeup_func)(void) = NULL;
 
 static void *suspend_thread_func(void *arg __attribute__((unused)))
 {
@@ -80,6 +82,11 @@ static void *suspend_thread_func(void *arg __attribute__((unused)))
             if (ret < 0) {
                 strerror_r(errno, buf, sizeof(buf));
                 ALOGE("Error writing to %s: %s\n", SYS_POWER_STATE, buf);
+            } else {
+                void (*func)(void) = wakeup_func;
+                if (func != NULL) {
+                    (*func)();
+                }
             }
         }
 
@@ -129,6 +136,15 @@ static int autosuspend_wakeup_count_disable(void)
     ALOGV("autosuspend_wakeup_count_disable done\n");
 
     return ret;
+}
+
+void set_wakeup_callback(void (*func)(void))
+{
+    if (wakeup_func != NULL) {
+        ALOGE("Duplicate wakeup callback applied, keeping original");
+        return;
+    }
+    wakeup_func = func;
 }
 
 struct autosuspend_ops autosuspend_wakeup_count_ops = {
