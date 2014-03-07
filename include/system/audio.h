@@ -602,10 +602,18 @@ static inline bool audio_is_valid_format(audio_format_t format)
 {
     switch (format & AUDIO_FORMAT_MAIN_MASK) {
     case AUDIO_FORMAT_PCM:
-        if (format != AUDIO_FORMAT_PCM_16_BIT &&
-                format != AUDIO_FORMAT_PCM_8_BIT && format != AUDIO_FORMAT_PCM_FLOAT) {
+        switch (format) {
+        case AUDIO_FORMAT_PCM_16_BIT:
+        case AUDIO_FORMAT_PCM_8_BIT:
+        case AUDIO_FORMAT_PCM_32_BIT:
+        case AUDIO_FORMAT_PCM_8_24_BIT:
+        case AUDIO_FORMAT_PCM_FLOAT:
+        case AUDIO_FORMAT_PCM_24_BIT_PACKED:
+            return true;
+        default:
             return false;
         }
+        /* not reached */
     case AUDIO_FORMAT_MP3:
     case AUDIO_FORMAT_AMR_NB:
     case AUDIO_FORMAT_AMR_WB:
