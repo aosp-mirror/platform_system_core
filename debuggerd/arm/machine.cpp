@@ -38,65 +38,6 @@
 #endif
 #endif
 
-static void dump_memory(log_t* log, pid_t tid, uintptr_t addr, int scope_flags) {
-  char code_buffer[64];       // actual 8+1+((8+1)*4) + 1 == 45
-  char ascii_buffer[32];      // actual 16 + 1 == 17
-  uintptr_t p, end;
-
-  p = addr & ~3;
-  p -= 32;
-  if (p > addr) {
-    // catch underflow
-    p = 0;
-  }
-  // Dump more memory content for the crashing thread.
-  end = p + 256;
-  // catch overflow; 'end - p' has to be multiples of 16
-  while (end < p)
-    end -= 16;
-
-  // Dump the code around PC as:
-  //  addr     contents                             ascii
-  //  00008d34 ef000000 e8bd0090 e1b00000 512fff1e  ............../Q
-  //  00008d44 ea00b1f9 e92d0090 e3a070fc ef000000  ......-..p......
-  while (p < end) {
-    char* asc_out = ascii_buffer;
-
-    sprintf(code_buffer, "%08x ", p);
-
-    int i;
-    for (i = 0; i < 4; i++) {
-      // If we see (data == -1 && errno != 0), we know that the ptrace
-      // call failed, probably because we're dumping memory in an
-      // unmapped or inaccessible page.  I don't know if there's
-      // value in making that explicit in the output -- it likely
-      // just complicates parsing and clarifies nothing for the
-      // enlightened reader.
-      long data = ptrace(PTRACE_PEEKTEXT, tid, reinterpret_cast<void*>(p), NULL);
-      sprintf(code_buffer + strlen(code_buffer), "%08lx ", data);
-
-      // Enable the following code blob to dump ASCII values
-#if 0
-      int j;
-      for (j = 0; j < 4; j++) {
-        // Our isprint() allows high-ASCII characters that display
-        // differently (often badly) in different viewers, so we
-        // just use a simpler test.
-        char val = (data >> (j*8)) & 0xff;
-        if (val >= 0x20 && val < 0x7f) {
-          *asc_out++ = val;
-        } else {
-          *asc_out++ = '.';
-        }
-      }
-#endif
-      p += 4;
-    }
-    *asc_out = '\0';
-    _LOG(log, scope_flags, "    %s %s\n", code_buffer, ascii_buffer);
-  }
-}
-
 // If configured to do so, dump memory around *all* registers
 // for the crashing thread.
 void dump_memory_and_code(log_t* log, pid_t tid, int scope_flags) {
