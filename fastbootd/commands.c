@@ -124,9 +124,9 @@ static void cmd_boot(struct protocol_handle *phandle, const char *arg)
         goto error;
     }
 
-    kernel_ptr = (void *)((unsigned) ptr + hdr->page_size);
-    ramdisk_ptr = (void *)((unsigned) kernel_ptr + kernel_actual);
-    second_ptr = (void *)((unsigned) ramdisk_ptr + ramdisk_actual);
+    kernel_ptr = (void *)((uintptr_t) ptr + hdr->page_size);
+    ramdisk_ptr = (void *)((uintptr_t) kernel_ptr + kernel_actual);
+    second_ptr = (void *)((uintptr_t) ramdisk_ptr + ramdisk_actual);
 
     D(INFO, "preparing to boot");
     // Prepares boot physical address. Addresses from header are ignored

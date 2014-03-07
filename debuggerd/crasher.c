@@ -57,13 +57,13 @@ static void test_call1()
 
 static void *noisy(void *x)
 {
-    char c = (unsigned) x;
+    char c = (uintptr_t) x;
     for(;;) {
         usleep(250*1000);
         write(2, &c, 1);
         if(c == 'C') *((unsigned*) 0) = 42;
     }
-    return 0;
+    return NULL;
 }
 
 static int ctest()
@@ -81,7 +81,7 @@ static int ctest()
 
 static void* thread_callback(void* raw_arg)
 {
-    return (void*) do_action((const char*) raw_arg);
+    return (void*) (uintptr_t) do_action((const char*) raw_arg);
 }
 
 static int do_action_on_thread(const char* arg)
@@ -90,7 +90,7 @@ static int do_action_on_thread(const char* arg)
     pthread_create(&t, NULL, thread_callback, (void*) arg);
     void* result = NULL;
     pthread_join(t, &result);
-    return (int) result;
+    return (int) (uintptr_t) result;
 }
 
 __attribute__((noinline)) static int crash3(int a) {
