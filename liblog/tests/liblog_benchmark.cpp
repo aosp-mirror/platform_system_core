@@ -143,7 +143,7 @@ static void BM_log_latency(int iters) {
     for (int j = 0, i = 0; i < iters && j < 10*iters; ++i, ++j) {
         log_time ts;
         LOG_FAILURE_RETRY((
-            clock_gettime(CLOCK_REALTIME, &ts),
+            ts = log_time(CLOCK_REALTIME),
             android_btWriteLog(0, EVENT_TYPE_LONG, &ts, sizeof(ts))));
 
         for (;;) {
