@@ -324,7 +324,10 @@ char *adb_query(const char *service)
 
     buf[4] = 0;
     n = strtoul(buf, 0, 16);
-    if(n > 1024) goto oops;
+    if(n >= 0xffff) {
+        strcpy(__adb_error, "reply is too long (>= 64kB)");
+        goto oops;
+    }
 
     tmp = malloc(n + 1);
     if(tmp == 0) goto oops;
