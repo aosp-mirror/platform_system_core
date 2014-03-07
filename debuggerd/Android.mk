@@ -1,6 +1,6 @@
 # Copyright 2005 The Android Open Source Project
 
-ifneq ($(filter arm mips x86,$(TARGET_ARCH)),)
+ifneq ($(filter arm mips x86 x86_64,$(TARGET_ARCH)),)
 
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
@@ -19,6 +19,7 @@ LOCAL_CFLAGS := \
 	-Wall \
 	-Wno-array-bounds \
 	-Werror \
+	-Wno-unused-parameter \
 
 LOCAL_MODULE := debuggerd
 
