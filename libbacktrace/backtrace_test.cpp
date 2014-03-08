@@ -16,9 +16,10 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <pthread.h>
 #include <signal.h>
-#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,7 @@
 #include <cutils/atomic.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <vector>
 
 #include "thread_utils.h"
@@ -287,7 +289,7 @@ TEST(libbacktrace, ptrace_trace) {
   pid_t pid;
   if ((pid = fork()) == 0) {
     ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
-    exit(1);
+    _exit(1);
   }
   VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyLevelBacktrace, VerifyLevelDump);
 
@@ -300,7 +302,7 @@ TEST(libbacktrace, ptrace_trace_shared_map) {
   pid_t pid;
   if ((pid = fork()) == 0) {
     ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
-    exit(1);
+    _exit(1);
   }
 
   VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, true, ReadyLevelBacktrace, VerifyLevelDump);
@@ -314,7 +316,7 @@ TEST(libbacktrace, ptrace_max_trace) {
   pid_t pid;
   if ((pid = fork()) == 0) {
     ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, NULL, NULL), 0);
-    exit(1);
+    _exit(1);
   }
   VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyMaxBacktrace, VerifyMaxDump);
 
@@ -339,7 +341,7 @@ TEST(libbacktrace, ptrace_ignore_frames) {
   pid_t pid;
   if ((pid = fork()) == 0) {
     ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
-    exit(1);
+    _exit(1);
   }
   VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyLevelBacktrace, VerifyProcessIgnoreFrames);
 
@@ -384,7 +386,7 @@ TEST(libbacktrace, ptrace_threads) {
       ASSERT_TRUE(pthread_create(&thread, &attr, PtraceThreadLevelRun, NULL) == 0);
     }
     ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
-    exit(1);
+    _exit(1);
   }
 
   // Check to see that all of the threads are running before unwinding.
@@ -693,3 +695,136 @@ TEST(libbacktrace, format_test) {
 #endif
             backtrace->FormatFrameData(&frame));
 }
+
+struct map_test_t {
+  uintptr_t start;
+  uintptr_t end;
+};
+
+bool map_sort(map_test_t i, map_test_t j) {
+  return i.start < j.start;
+}
+
+static void VerifyMap(pid_t pid) {
+  char buffer[4096];
+  snprintf(buffer, sizeof(buffer), "/proc/%d/maps", pid);
+
+  FILE* map_file = fopen(buffer, "r");
+  ASSERT_TRUE(map_file != NULL);
+  std::vector<map_test_t> test_maps;
+  while (fgets(buffer, sizeof(buffer), map_file)) {
+    map_test_t map;
+    ASSERT_EQ(2, sscanf(buffer, "%" SCNxPTR "-%" SCNxPTR " ", &map.start, &map.end));
+    test_maps.push_back(map);
+  }
+  fclose(map_file);
+  std::sort(test_maps.begin(), test_maps.end(), map_sort);
+
+  UniquePtr<BacktraceMap> map(BacktraceMap::Create(pid));
+
+  // Basic test that verifies that the map is in the expected order.
+  std::vector<map_test_t>::const_iterator test_it = test_maps.begin();
+  for (BacktraceMap::const_iterator it = map->begin(); it != map->end(); ++it) {
+    ASSERT_TRUE(test_it != test_maps.end());
+    ASSERT_EQ(test_it->start, it->start);
+    ASSERT_EQ(test_it->end, it->end);
+    ++test_it;
+  }
+  ASSERT_TRUE(test_it == test_maps.end());
+}
+
+TEST(libbacktrace, verify_map_remote) {
+  pid_t pid;
+
+  if ((pid = fork()) == 0) {
+    while (true) {
+    }
+    _exit(0);
+  }
+  ASSERT_LT(0, pid);
+
+  ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) == 0);
+
+  // Wait for the process to get to a stopping point.
+  WaitForStop(pid);
+
+  // The maps should match exactly since the forked process has been paused.
+  VerifyMap(pid);
+
+  ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
+
+  kill(pid, SIGKILL);
+  ASSERT_EQ(waitpid(pid, NULL, 0), pid);
+}
+
+#if defined(ENABLE_PSS_TESTS)
+#include "GetPss.h"
+
+#define MAX_LEAK_BYTES 32*1024UL
+
+static void CheckForLeak(pid_t pid, pid_t tid) {
+  // Do a few runs to get the PSS stable.
+  for (size_t i = 0; i < 100; i++) {
+    Backtrace* backtrace = Backtrace::Create(pid, tid);
+    ASSERT_TRUE(backtrace != NULL);
+    ASSERT_TRUE(backtrace->Unwind(0));
+    delete backtrace;
+  }
+  size_t stable_pss = GetPssBytes();
+
+  // Loop enough that even a small leak should be detectable.
+  for (size_t i = 0; i < 4096; i++) {
+    Backtrace* backtrace = Backtrace::Create(pid, tid);
+    ASSERT_TRUE(backtrace != NULL);
+    ASSERT_TRUE(backtrace->Unwind(0));
+    delete backtrace;
+  }
+  size_t new_pss = GetPssBytes();
+  size_t abs_diff = (new_pss > stable_pss) ? new_pss - stable_pss : stable_pss - new_pss;
+  // As long as the new pss is within a certain amount, consider everything okay.
+  ASSERT_LE(abs_diff, MAX_LEAK_BYTES);
+}
+
+TEST(libbacktrace, check_for_leak_local) {
+  CheckForLeak(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD);
+}
+
+TEST(libbacktrace, check_for_leak_local_thread) {
+  thread_t thread_data = { 0, 0, 0 };
+  pthread_t thread;
+  ASSERT_TRUE(pthread_create(&thread, NULL, ThreadLevelRun, &thread_data) == 0);
+
+  // Wait up to 2 seconds for the tid to be set.
+  ASSERT_TRUE(WaitForNonZero(&thread_data.state, 2));
+
+  CheckForLeak(BACKTRACE_CURRENT_PROCESS, thread_data.tid);
+
+  // Tell the thread to exit its infinite loop.
+  android_atomic_acquire_store(0, &thread_data.state);
+
+  ASSERT_TRUE(pthread_join(thread, NULL) == 0);
+}
+
+TEST(libbacktrace, check_for_leak_remote) {
+  pid_t pid;
+
+  if ((pid = fork()) == 0) {
+    while (true) {
+    }
+    _exit(0);
+  }
+  ASSERT_LT(0, pid);
+
+  ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) == 0);
+
+  // Wait for the process to get to a stopping point.
+  WaitForStop(pid);
+
+  CheckForLeak(pid, BACKTRACE_CURRENT_THREAD);
+
+  ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
+
+  kill(pid, SIGKILL);
+  ASSERT_EQ(waitpid(pid, NULL, 0), pid);
+}
+#endif

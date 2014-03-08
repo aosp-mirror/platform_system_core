@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "libbacktrace"
-
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 
@@ -25,6 +23,7 @@
 #include <libunwind.h>
 #include <libunwind-ptrace.h>
 
+#include "BacktraceLog.h"
 #include "UnwindMap.h"
 #include "UnwindPtrace.h"
 

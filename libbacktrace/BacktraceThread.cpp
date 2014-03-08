@@ -23,6 +23,7 @@
 
 #include <cutils/atomic.h>
 
+#include "BacktraceLog.h"
 #include "BacktraceThread.h"
 #include "thread_utils.h"
 

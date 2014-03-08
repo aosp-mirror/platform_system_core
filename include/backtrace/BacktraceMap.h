@@ -45,7 +45,7 @@ public:
   virtual ~BacktraceMap();
 
   // Get the map data structure for the given address.
-  const backtrace_map_t* Find(uintptr_t addr);
+  virtual const backtrace_map_t* Find(uintptr_t addr);
 
   // The flags returned are the same flags as used by the mmap call.
   // The values are PROT_*.
