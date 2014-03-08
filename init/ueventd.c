@@ -69,6 +69,12 @@ int ueventd_main(int argc, char **argv)
 
     open_devnull_stdio();
     klog_init();
+#if LOG_UEVENTS
+    /* Ensure we're at a logging level that will show the events */
+    if (klog_get_level() < KLOG_LEVEL_INFO) {
+        klog_set_level(KLOG_LEVEL_INFO);
+    }
+#endif
 
     INFO("starting ueventd\n");
 
