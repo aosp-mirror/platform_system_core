@@ -26,6 +26,9 @@ ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_LOCAL_PROP_OVERRIDE=1
 endif
 
+# Enable ueventd logging
+#LOCAL_CFLAGS += -DLOG_UEVENTS=1
+
 LOCAL_MODULE:= init
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
@@ -41,6 +44,8 @@ LOCAL_STATIC_LIBRARIES := \
 	libselinux \
 	libmincrypt \
 	libext4_utils_static
+
+LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 
 include $(BUILD_EXECUTABLE)
 
