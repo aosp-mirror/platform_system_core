@@ -339,10 +339,13 @@ static int do_send(int s, char *path, char *buffer)
     if(!tmp || errno) {
         mode = 0644;
         is_link = 0;
+    } else {
+        struct stat st;
+        /* Don't delete files before copying if they are not "regular" */
+        if(lstat(path, &st) || S_ISREG(st.st_mode) || S_ISLNK(st.st_mode)) {
+            adb_unlink(path);
+        }
     }
-
-    adb_unlink(path);
-
 
 #ifdef HAVE_SYMLINKS
     if(is_link)
