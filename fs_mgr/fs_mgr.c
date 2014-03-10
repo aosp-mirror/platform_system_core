@@ -211,13 +211,13 @@ static int fs_match(char *in1, char *in2)
 int fs_mgr_mount_all(struct fstab *fstab)
 {
     int i = 0;
-    int encrypted = 0;
-    int ret = -1;
+    int encryptable = 0;
+    int error_count = 0;
     int mret;
     int mount_errno;
 
     if (!fstab) {
-        return ret;
+        return -1;
     }
 
     for (i = 0; i < fstab->num_entries; i++) {
@@ -250,8 +250,8 @@ int fs_mgr_mount_all(struct fstab *fstab)
         }
 
         mret = __mount(fstab->recs[i].blk_device, fstab->recs[i].mount_point,
-                     fstab->recs[i].fs_type, fstab->recs[i].flags,
-                     fstab->recs[i].fs_options);
+                       fstab->recs[i].fs_type, fstab->recs[i].flags,
+                       fstab->recs[i].fs_options);
 
         if (!mret) {
             /* Success!  Go get the next one */
@@ -261,36 +261,39 @@ int fs_mgr_mount_all(struct fstab *fstab)
         /* back up errno as partition_wipe clobbers the value */
         mount_errno = errno;
 
-        /* mount(2) returned an error, check if it's encrypted and deal with it */
+        /* mount(2) returned an error, check if it's encryptable and deal with it */
         if ((fstab->recs[i].fs_mgr_flags & MF_CRYPT) &&
             !partition_wiped(fstab->recs[i].blk_device)) {
             /* Need to mount a tmpfs at this mountpoint for now, and set
              * properties that vold will query later for decrypting
              */
             if (mount("tmpfs", fstab->recs[i].mount_point, "tmpfs",
-                  MS_NOATIME | MS_NOSUID | MS_NODEV, CRYPTO_TMPFS_OPTIONS) < 0) {
-                ERROR("Cannot mount tmpfs filesystem for encrypted fs at %s error: %s\n",
-                        fstab->recs[i].mount_point, strerror(errno));
-                goto out;
+                      MS_NOATIME | MS_NOSUID | MS_NODEV, CRYPTO_TMPFS_OPTIONS) < 0) {
+                ERROR("Cannot mount tmpfs filesystem for encryptable fs at %s error: %s\n",
+                       fstab->recs[i].mount_point, strerror(errno));
+                ++error_count;
+                continue;
             }
-            encrypted = 1;
+            encryptable = 1;
         } else {
             ERROR("Failed to mount an un-encryptable or wiped partition on"
-                    "%s at %s options: %s error: %s\n",
-                    fstab->recs[i].blk_device, fstab->recs[i].mount_point,
-                    fstab->recs[i].fs_options, strerror(mount_errno));
-            goto out;
+                   "%s at %s options: %s error: %s\n",
+                   fstab->recs[i].blk_device, fstab->recs[i].mount_point,
+                   fstab->recs[i].fs_options, strerror(mount_errno));
+            ++error_count;
+            continue;
         }
     }
 
-    if (encrypted) {
-        ret = 1;
-    } else {
-        ret = 0;
+    if (error_count) {
+        return -1;
     }
 
-out:
-    return ret;
+    if (encryptable) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 /* If tmp_mount_point is non-null, mount the filesystem there.  This is for the
