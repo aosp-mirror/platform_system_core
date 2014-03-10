@@ -9,6 +9,8 @@
 #include <string>
 #include <unistd.h>
 
+#include <base/basictypes.h>
+#include <base/compiler_specific.h>
 #include <base/memory/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
@@ -29,9 +31,10 @@ class MetricsLibraryInterface {
 class MetricsLibrary : public MetricsLibraryInterface {
  public:
   MetricsLibrary();
+  virtual ~MetricsLibrary();
 
   // Initializes the library.
-  void Init();
+  virtual void Init() OVERRIDE;
 
   // Returns whether or not the machine is running in guest mode.
   bool IsGuestMode();
@@ -68,18 +71,20 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // 0 is the implicit underflow bucket.
   // [|max|,infinity) is the implicit overflow bucket.
   //
-  // An enumaration histogram requires |max| + 1 number of
+  // An enumeration histogram requires |max| + 1 number of
   // buckets. Note that the memory allocated in Chrome for each
   // histogram is proportional to the number of buckets. Therefore, it
   // is strongly recommended to keep this number low (e.g., 50 is
   // normal, while 100 is high).
-  bool SendEnumToUMA(const std::string& name, int sample, int max);
+  virtual bool SendEnumToUMA(const std::string& name,
+                             int sample,
+                             int max) OVERRIDE;
 
   // Sends sparse histogram sample to Chrome for transport to UMA.  Returns
   // true on success.
   //
   // |sample| is the 32-bit integer value to be recorded.
-  bool SendSparseToUMA(const std::string& name, int sample);
+  virtual bool SendSparseToUMA(const std::string& name, int sample) OVERRIDE;
 
   // Sends a user action to Chrome for transport to UMA and returns true on
   // success. This method results in the equivalent of an asynchronous
@@ -91,7 +96,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // chrome/browser/chromeos/external_metrics.cc.
   //
   // |action| is the user-generated event (e.g., "MuteKeyPressed").
-  bool SendUserActionToUMA(const std::string& action);
+  virtual bool SendUserActionToUMA(const std::string& action) OVERRIDE;
 
   // Sends a signal to UMA that a crash of the given |crash_kind|
   // has occurred.  Used by UMA to generate stability statistics.
@@ -158,6 +163,8 @@ class MetricsLibrary : public MetricsLibraryInterface {
   const char* consent_file_;
 
   scoped_ptr<policy::PolicyProvider> policy_provider_;
+
+  DISALLOW_COPY_AND_ASSIGN(MetricsLibrary);
 };
 
 #endif  // METRICS_LIBRARY_H_

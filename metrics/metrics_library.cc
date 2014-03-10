@@ -88,6 +88,8 @@ MetricsLibrary::MetricsLibrary()
     : uma_events_file_(NULL),
       consent_file_(kConsentFile) {}
 
+MetricsLibrary::~MetricsLibrary() {}
+
 // We take buffer and buffer_size as parameters in order to simplify testing
 // of various alignments of the |device_name| with |buffer_size|.
 bool MetricsLibrary::IsDeviceMounted(const char* device_name,
