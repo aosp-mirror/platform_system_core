@@ -37,7 +37,6 @@
 
 #include <private/android_filesystem_config.h>
 #include <sys/time.h>
-#include <asm/page.h>
 #include <sys/wait.h>
 
 #include <cutils/list.h>
