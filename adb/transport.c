@@ -1188,7 +1188,7 @@ int writex(int fd, const void *ptr, size_t len)
                 D("writex: fd=%d error %d: %s\n", fd, errno, strerror(errno));
                 if (errno == EINTR)
                     continue;
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                if (errno == EAGAIN) {
                     adb_sleep_ms(1); // just yield some cpu time
                     continue;
                 }
