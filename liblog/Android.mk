@@ -16,7 +16,11 @@
 LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
+ifeq ($(TARGET_USES_LOGD),true)
 liblog_sources := logd_write.c
+else
+liblog_sources := logd_write_kern.c
+endif
 
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
@@ -42,7 +46,11 @@ else
 endif
 
 liblog_host_sources := $(liblog_sources) fake_log_device.c
+ifeq ($(TARGET_USES_LOGD),true)
 liblog_target_sources = $(liblog_sources) log_read.c
+else
+liblog_target_sources = $(liblog_sources) log_read_kern.c
+endif
 
 # Shared and static library for host
 # ========================================================
