@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 The Android Open Source Project
+ * Copyright (C) 2012-2014 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,10 +24,11 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <sysutils/SocketClient.h>
 #include <private/android_filesystem_config.h>
+#include <sysutils/SocketClient.h>
 
 #include "CommandListener.h"
+#include "LogCommand.h"
 
 CommandListener::CommandListener(LogBuffer *buf, LogReader * /*reader*/,
                                  LogListener * /*swl*/)
@@ -62,9 +63,7 @@ CommandListener::ClearCmd::ClearCmd(LogBuffer *buf)
 
 int CommandListener::ClearCmd::runCommand(SocketClient *cli,
                                          int argc, char **argv) {
-    if ((cli->getUid() != AID_ROOT)
-            && (cli->getGid() != AID_ROOT)
-            && (cli->getGid() != AID_LOG)) {
+    if (!clientHasLogCredentials(cli)) {
         cli->sendMsg("Permission Denied");
         return 0;
     }
@@ -75,7 +74,7 @@ int CommandListener::ClearCmd::runCommand(SocketClient *cli,
     }
 
     int id = atoi(argv[1]);
-    if ((id < LOG_ID_MIN) || (id >= LOG_ID_MAX)) {
+    if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
         cli->sendMsg("Range Error");
         return 0;
     }
@@ -84,7 +83,6 @@ int CommandListener::ClearCmd::runCommand(SocketClient *cli,
     cli->sendMsg("success");
     return 0;
 }
-
 
 CommandListener::GetBufSizeCmd::GetBufSizeCmd(LogBuffer *buf)
         : LogCommand("getLogSize")
@@ -99,7 +97,7 @@ int CommandListener::GetBufSizeCmd::runCommand(SocketClient *cli,
     }
 
     int id = atoi(argv[1]);
-    if ((id < LOG_ID_MIN) || (id >= LOG_ID_MAX)) {
+    if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
         cli->sendMsg("Range Error");
         return 0;
     }
@@ -124,7 +122,7 @@ int CommandListener::GetBufSizeUsedCmd::runCommand(SocketClient *cli,
     }
 
     int id = atoi(argv[1]);
-    if ((id < LOG_ID_MIN) || (id >= LOG_ID_MAX)) {
+    if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
         cli->sendMsg("Range Error");
         return 0;
     }
