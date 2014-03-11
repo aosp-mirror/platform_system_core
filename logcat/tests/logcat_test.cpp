@@ -527,3 +527,100 @@ TEST(logcat, blocking_clear) {
 
     ASSERT_EQ(1, signals);
 }
+
+#ifdef USERDEBUG_BUILD
+static bool get_white_black(char **list) {
+    FILE *fp;
+
+    fp = popen("logcat -p 2>/dev/null", "r");
+    if (fp == NULL) {
+        fprintf(stderr, "ERROR: logcat -p 2>/dev/null\n");
+        return false;
+    }
+
+    char buffer[5120];
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        char *hold = *list;
+        char *buf = buffer;
+	while (isspace(*buf)) {
+            ++buf;
+        }
+        char *end = buf + strlen(buf);
+        while (isspace(*--end) && (end >= buf)) {
+            *end = '\0';
+        }
+        if (end < buf) {
+            continue;
+        }
+        if (hold) {
+            asprintf(list, "%s %s", hold, buf);
+            free(hold);
+        } else {
+            asprintf(list, "%s", buf);
+        }
+    }
+    pclose(fp);
+    return *list != NULL;
+}
+
+static bool set_white_black(const char *list) {
+    FILE *fp;
+
+    char buffer[5120];
+
+    snprintf(buffer, sizeof(buffer), "logcat -P '%s' 2>&1", list);
+    fp = popen(buffer, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "ERROR: %s\n", buffer);
+        return false;
+    }
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        char *buf = buffer;
+	while (isspace(*buf)) {
+            ++buf;
+        }
+        char *end = buf + strlen(buf);
+        while (isspace(*--end) && (end >= buf)) {
+            *end = '\0';
+        }
+        if (end < buf) {
+            continue;
+        }
+        fprintf(stderr, "%s\n", buf);
+        pclose(fp);
+        return false;
+    }
+    return pclose(fp) == 0;
+}
+
+TEST(logcat, white_black_adjust) {
+    char *list = NULL;
+    char *adjust = NULL;
+
+    ASSERT_EQ(true, get_white_black(&list));
+
+    static const char adjustment[] = "~! ~1000";
+    ASSERT_EQ(true, set_white_black(adjustment));
+    ASSERT_EQ(true, get_white_black(&adjust));
+    if (strcmp(adjustment, adjust)) {
+        fprintf(stderr, "ERROR: '%s' != '%s'\n", adjustment, adjust);
+    }
+    ASSERT_STREQ(adjustment, adjust);
+    free(adjust);
+    adjust = NULL;
+
+    ASSERT_EQ(true, set_white_black(list));
+    ASSERT_EQ(true, get_white_black(&adjust));
+    if (strcmp(list, adjust)) {
+        fprintf(stderr, "ERROR: '%s' != '%s'\n", list, adjust);
+    }
+    ASSERT_STREQ(list, adjust);
+    free(adjust);
+    adjust = NULL;
+
+    free(list);
+    list = NULL;
+}
+#endif // USERDEBUG_BUILD
