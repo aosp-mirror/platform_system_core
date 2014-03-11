@@ -591,13 +591,7 @@ void CloseArchive(ZipArchiveHandle handle) {
     archive->directory_map->release();
   }
   free(archive->hash_table);
-
-  /* ensure nobody tries to use the ZipArchive after it's closed */
-  archive->directory_offset = -1;
-  archive->fd = -1;
-  archive->num_entries = -1;
-  archive->hash_table_size = -1;
-  archive->hash_table = NULL;
+  free(archive);
 }
 
 static int32_t UpdateEntryFromDataDescriptor(int fd,
