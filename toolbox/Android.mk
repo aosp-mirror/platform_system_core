@@ -96,7 +96,7 @@ LOCAL_C_INCLUDES := bionic/libc/bionic
 
 LOCAL_CFLAGS += \
     -Wno-unused-parameter \
-    -DSUPPORT_DOT \
+    -include bsd-compatibility.h \
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
