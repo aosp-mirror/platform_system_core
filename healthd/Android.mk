@@ -36,7 +36,7 @@ endif
 
 LOCAL_C_INCLUDES := bootable/recovery
 
-LOCAL_STATIC_LIBRARIES := libbatteryservice libbinder libminui libpixelflinger_static libpng libz libutils libstdc++ libcutils liblog libm libc
+LOCAL_STATIC_LIBRARIES := libbatteryservice libbinder libminui libpng libz libutils libstdc++ libcutils liblog libm libc
 
 ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
 LOCAL_STATIC_LIBRARIES += libsuspend
