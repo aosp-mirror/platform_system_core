@@ -23,12 +23,12 @@
 #ifdef __cplusplus
 struct log_time : public timespec {
 public:
-    log_time(timespec &T)
+    log_time(const timespec &T)
     {
         tv_sec = T.tv_sec;
         tv_nsec = T.tv_nsec;
     }
-    log_time(void)
+    log_time()
     {
     }
     log_time(clockid_t id)
@@ -67,7 +67,7 @@ public:
     {
         return !(*this > T);
     }
-    uint64_t nsec(void) const
+    uint64_t nsec() const
     {
         return static_cast<uint64_t>(tv_sec) * NS_PER_SEC + tv_nsec;
     }

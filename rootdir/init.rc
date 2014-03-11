@@ -461,6 +461,12 @@ service adbd /sbin/adbd --root_seclabel=u:r:su:s0
 on property:ro.kernel.qemu=1
     start adbd
 
+service logd /system/bin/logd
+    class main
+    socket logd stream 0666 logd logd
+    socket logdr seqpacket 0666 logd logd
+    socket logdw dgram 0222 logd logd
+
 service servicemanager /system/bin/servicemanager
     class core
     user system
