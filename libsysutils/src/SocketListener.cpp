@@ -70,6 +70,10 @@ SocketListener::~SocketListener() {
 }
 
 int SocketListener::startListener() {
+    return startListener(4);
+}
+
+int SocketListener::startListener(int backlog) {
 
     if (!mSocketName && mSock == -1) {
         SLOGE("Failed to start unbound listener");
@@ -84,7 +88,7 @@ int SocketListener::startListener() {
         SLOGV("got mSock = %d for %s", mSock, mSocketName);
     }
 
-    if (mListen && listen(mSock, 4) < 0) {
+    if (mListen && listen(mSock, backlog) < 0) {
         SLOGE("Unable to listen on socket (%s)", strerror(errno));
         return -1;
     } else if (!mListen)
