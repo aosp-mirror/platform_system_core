@@ -62,6 +62,22 @@ static void END()
             total_bytes, (t / 1000000LL), (t % 1000000LL) / 1000LL);
 }
 
+static const char* transfer_progress_format = "\rTransferring: %llu/%llu (%d%%)";
+
+static void print_transfer_progress(unsigned long long bytes_current,
+                                    unsigned long long bytes_total) {
+    if (bytes_total == 0) return;
+
+    fprintf(stderr, transfer_progress_format, bytes_current, bytes_total,
+            (int) (bytes_current * 100 / bytes_total));
+
+    if (bytes_current == bytes_total) {
+        fputc('\n', stderr);
+    }
+
+    fflush(stderr);
+}
+
 void sync_quit(int fd)
 {
     syncmsg msg;
@@ -207,14 +223,26 @@ int sync_readmode(int fd, const char *path, unsigned *mode)
     return 0;
 }
 
-static int write_data_file(int fd, const char *path, syncsendbuf *sbuf)
+static int write_data_file(int fd, const char *path, syncsendbuf *sbuf, int show_progress)
 {
     int lfd, err = 0;
+    unsigned long long size = 0;
 
     lfd = adb_open(path, O_RDONLY);
     if(lfd < 0) {
         fprintf(stderr,"cannot open '%s': %s\n", path, strerror(errno));
         return -1;
+    }
+
+    if (show_progress) {
+        // Determine local file size.
+        struct stat st;
+        if (lstat(path, &st)) {
+            fprintf(stderr,"cannot stat '%s': %s\n", path, strerror(errno));
+            return -1;
+        }
+
+        size = st.st_size;
     }
 
     sbuf->id = ID_DATA;
@@ -238,13 +266,18 @@ static int write_data_file(int fd, const char *path, syncsendbuf *sbuf)
             break;
         }
         total_bytes += ret;
+
+        if (show_progress) {
+            print_transfer_progress(total_bytes, size);
+        }
     }
 
     adb_close(lfd);
     return err;
 }
 
-static int write_data_buffer(int fd, char* file_buffer, int size, syncsendbuf *sbuf)
+static int write_data_buffer(int fd, char* file_buffer, int size, syncsendbuf *sbuf,
+                             int show_progress)
 {
     int err = 0;
     int total = 0;
@@ -264,6 +297,10 @@ static int write_data_buffer(int fd, char* file_buffer, int size, syncsendbuf *s
         }
         total += count;
         total_bytes += count;
+
+        if (show_progress) {
+            print_transfer_progress(total, size);
+        }
     }
 
     return err;
@@ -295,7 +332,7 @@ static int write_data_link(int fd, const char *path, syncsendbuf *sbuf)
 #endif
 
 static int sync_send(int fd, const char *lpath, const char *rpath,
-                     unsigned mtime, mode_t mode, int verifyApk)
+                     unsigned mtime, mode_t mode, int verifyApk, int show_progress)
 {
     syncmsg msg;
     int len, r;
@@ -377,10 +414,10 @@ static int sync_send(int fd, const char *lpath, const char *rpath,
     }
 
     if (file_buffer) {
-        write_data_buffer(fd, file_buffer, size, sbuf);
+        write_data_buffer(fd, file_buffer, size, sbuf, show_progress);
         free(file_buffer);
     } else if (S_ISREG(mode))
-        write_data_file(fd, lpath, sbuf);
+        write_data_file(fd, lpath, sbuf, show_progress);
 #ifdef HAVE_SYMLINKS
     else if (S_ISLNK(mode))
         write_data_link(fd, lpath, sbuf);
@@ -438,16 +475,37 @@ static int mkdirs(char *name)
     return 0;
 }
 
-int sync_recv(int fd, const char *rpath, const char *lpath)
+int sync_recv(int fd, const char *rpath, const char *lpath, int show_progress)
 {
     syncmsg msg;
     int len;
     int lfd = -1;
     char *buffer = send_buffer.data;
     unsigned id;
+    unsigned long long size = 0;
 
     len = strlen(rpath);
     if(len > 1024) return -1;
+
+    if (show_progress) {
+        // Determine remote file size.
+        syncmsg stat_msg;
+        stat_msg.req.id = ID_STAT;
+        stat_msg.req.namelen = htoll(len);
+
+        if (writex(fd, &stat_msg.req, sizeof(stat_msg.req)) ||
+            writex(fd, rpath, len)) {
+            return -1;
+        }
+
+        if (readx(fd, &stat_msg.stat, sizeof(stat_msg.stat))) {
+            return -1;
+        }
+
+        if (stat_msg.stat.id != ID_STAT) return -1;
+
+        size = ltohl(stat_msg.stat.size);
+    }
 
     msg.req.id = ID_RECV;
     msg.req.namelen = htoll(len);
@@ -502,6 +560,10 @@ int sync_recv(int fd, const char *rpath, const char *lpath)
         }
 
         total_bytes += len;
+
+        if (show_progress) {
+            print_transfer_progress(total_bytes, size);
+        }
     }
 
     adb_close(lfd);
@@ -721,7 +783,8 @@ static int copy_local_dir_remote(int fd, const char *lpath, const char *rpath, i
         if(ci->flag == 0) {
             fprintf(stderr,"%spush: %s -> %s\n", listonly ? "would " : "", ci->src, ci->dst);
             if(!listonly &&
-               sync_send(fd, ci->src, ci->dst, ci->time, ci->mode, 0 /* no verify APK */)){
+               sync_send(fd, ci->src, ci->dst, ci->time, ci->mode, 0 /* no verify APK */,
+                         0 /* no show progress */)) {
                 return 1;
             }
             pushed++;
@@ -739,7 +802,7 @@ static int copy_local_dir_remote(int fd, const char *lpath, const char *rpath, i
 }
 
 
-int do_sync_push(const char *lpath, const char *rpath, int verifyApk)
+int do_sync_push(const char *lpath, const char *rpath, int verifyApk, int show_progress)
 {
     struct stat st;
     unsigned mode;
@@ -786,7 +849,7 @@ int do_sync_push(const char *lpath, const char *rpath, int verifyApk)
             rpath = tmp;
         }
         BEGIN();
-        if(sync_send(fd, lpath, rpath, st.st_mtime, st.st_mode, verifyApk)) {
+        if(sync_send(fd, lpath, rpath, st.st_mtime, st.st_mode, verifyApk, show_progress)) {
             return 1;
         } else {
             END();
@@ -923,7 +986,7 @@ static int copy_remote_dir_local(int fd, const char *rpath, const char *lpath,
         next = ci->next;
         if (ci->flag == 0) {
             fprintf(stderr, "pull: %s -> %s\n", ci->src, ci->dst);
-            if (sync_recv(fd, ci->src, ci->dst)) {
+            if (sync_recv(fd, ci->src, ci->dst, 0 /* no show progress */)) {
                 return 1;
             }
             pulled++;
@@ -940,7 +1003,7 @@ static int copy_remote_dir_local(int fd, const char *rpath, const char *lpath,
     return 0;
 }
 
-int do_sync_pull(const char *rpath, const char *lpath)
+int do_sync_pull(const char *rpath, const char *lpath, int show_progress)
 {
     unsigned mode;
     struct stat st;
@@ -981,7 +1044,7 @@ int do_sync_pull(const char *rpath, const char *lpath)
             }
         }
         BEGIN();
-        if(sync_recv(fd, rpath, lpath)) {
+        if (sync_recv(fd, rpath, lpath, show_progress)) {
             return 1;
         } else {
             END();
