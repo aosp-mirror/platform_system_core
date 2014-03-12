@@ -260,9 +260,9 @@ int fs_mgr_mount_all(struct fstab *fstab)
 
         /* back up errno as partition_wipe clobbers the value */
         mount_errno = errno;
-
         /* mount(2) returned an error, check if it's encryptable and deal with it */
-        if ((fstab->recs[i].fs_mgr_flags & MF_CRYPT) &&
+        if (mount_errno != EBUSY && mount_errno != EACCES &&
+            (fstab->recs[i].fs_mgr_flags & MF_CRYPT) &&
             !partition_wiped(fstab->recs[i].blk_device)) {
             /* Need to mount a tmpfs at this mountpoint for now, and set
              * properties that vold will query later for decrypting
