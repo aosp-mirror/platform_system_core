@@ -49,6 +49,7 @@
 #include <zipfile/zipfile.h>
 
 #include "fastboot.h"
+#include "fs.h"
 
 #ifndef O_BINARY
 #define O_BINARY 0
@@ -622,10 +623,13 @@ static int load_buf_fd(usb_handle *usb, int fd,
     void *data;
     int64_t limit;
 
+
     sz64 = file_size(fd);
     if (sz64 < 0) {
         return -1;
     }
+
+    lseek(fd, 0, SEEK_SET);
     limit = get_sparse_limit(usb, sz64);
     if (limit) {
         struct sparse_file **s = load_sparse_files(fd, limit);
@@ -872,6 +876,73 @@ static int64_t parse_num(const char *arg)
     return num;
 }
 
+void fb_perform_format(const char *partition, int skip_if_not_supported)
+{
+    char pType[FB_RESPONSE_SZ + 1], pSize[FB_RESPONSE_SZ + 1];
+    unsigned int limit = INT_MAX;
+    struct fastboot_buffer buf;
+    const char *errMsg = NULL;
+    const struct fs_generator *gen;
+    uint64_t pSz;
+    int status;
+    int fd;
+
+    if (target_sparse_limit > 0 && target_sparse_limit < limit)
+        limit = target_sparse_limit;
+    if (sparse_limit > 0 && sparse_limit < limit)
+        limit = sparse_limit;
+
+    status = fb_getvar(usb, pType, "partition-type:%s", partition);
+    if (status) {
+        errMsg = "Can't determine partition type.\n";
+        goto failed;
+    }
+
+    status = fb_getvar(usb, pSize, "partition-size:%s", partition);
+    if (status) {
+        errMsg = "Unable to get partition size\n";
+        goto failed;
+    }
+
+    gen = fs_get_generator(pType);
+    if (!gen) {
+        if (skip_if_not_supported) {
+            fprintf(stderr, "Erase successful, but not automatically formatting.\n");
+            fprintf(stderr, "File system type %s not supported.\n", pType);
+            return;
+        }
+        fprintf(stderr, "Formatting is not supported for filesystem with type '%s'.\n", pType);
+        return;
+    }
+
+    pSz = strtoll(pSize, (char **)NULL, 16);
+
+    fd = fileno(tmpfile());
+    if (fs_generator_generate(gen, fd, pSz)) {
+        close(fd);
+        fprintf(stderr, "Cannot generate image.\n");
+        return;
+    }
+
+    if (load_buf_fd(usb, fd, &buf)) {
+        fprintf(stderr, "Cannot read image.\n");
+        close(fd);
+        return;
+    }
+    flash_buf(partition, &buf);
+
+    return;
+
+
+failed:
+    if (skip_if_not_supported) {
+        fprintf(stderr, "Erase successful, but not automatically formatting.\n");
+        if (errMsg)
+            fprintf(stderr, "%s", errMsg);
+    }
+    fprintf(stderr,"FAILED (%s)\n", fb_get_error());
+}
+
 int main(int argc, char **argv)
 {
     int wants_wipe = 0;
@@ -1004,7 +1075,7 @@ int main(int argc, char **argv)
             if (erase_first && needs_erase(argv[1])) {
                 fb_queue_erase(argv[1]);
             }
-            fb_queue_format(argv[1], 0);
+            fb_perform_format(argv[1], 0);
             skip(2);
         } else if(!strcmp(*argv, "signature")) {
             require(2);
@@ -1092,9 +1163,9 @@ int main(int argc, char **argv)
 
     if (wants_wipe) {
         fb_queue_erase("userdata");
-        fb_queue_format("userdata", 1);
+        fb_perform_format("userdata", 1);
         fb_queue_erase("cache");
-        fb_queue_format("cache", 1);
+        fb_perform_format("cache", 1);
     }
     if (wants_reboot) {
         fb_queue_reboot();
