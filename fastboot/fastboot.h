@@ -49,7 +49,7 @@ int fb_format_supported(usb_handle *usb, const char *partition);
 void fb_queue_flash(const char *ptn, void *data, unsigned sz);
 void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, unsigned sz);
 void fb_queue_erase(const char *ptn);
-void fb_queue_format(const char *ptn, int skip_if_not_supported);
+void fb_queue_format(const char *ptn, int skip_if_not_supported, unsigned int max_chunk_sz);
 void fb_queue_require(const char *prod, const char *var, int invert,
         unsigned nvalues, const char **value);
 void fb_queue_display(const char *var, const char *prettyname);
