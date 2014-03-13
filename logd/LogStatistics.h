@@ -146,7 +146,7 @@ public:
                          pid_t pid = pid_all);
 
     // *strp = malloc, balance with free
-    size_t format(char **strp, uid_t uid, unsigned int logMask, log_time oldest);
+    void format(char **strp, uid_t uid, unsigned int logMask, log_time oldest);
 };
 
 #endif // _LOGD_LOG_STATISTICS_H__
