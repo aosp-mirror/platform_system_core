@@ -25,6 +25,7 @@
 
 #include "LogBufferElement.h"
 #include "LogTimes.h"
+#include "LogStatistics.h"
 
 typedef android::List<LogBufferElement *> LogBufferElementCollection;
 
@@ -32,8 +33,7 @@ class LogBuffer {
     LogBufferElementCollection mLogElements;
     pthread_mutex_t mLogElementsLock;
 
-    unsigned long mSizes[LOG_ID_MAX];
-    unsigned long mElements[LOG_ID_MAX];
+    LogStatistics stats;
 
 public:
     LastLogTimes &mTimes;
@@ -50,6 +50,8 @@ public:
     void clear(log_id_t id);
     unsigned long getSize(log_id_t id);
     unsigned long getSizeUsed(log_id_t id);
+    // *strp uses malloc, use free to release.
+    size_t formatStatistics(char **strp, uid_t uid, unsigned int logMask);
 
 private:
     void maybePrune(log_id_t id);
@@ -57,4 +59,4 @@ private:
 
 };
 
-#endif
+#endif // _LOGD_LOG_BUFFER_H__

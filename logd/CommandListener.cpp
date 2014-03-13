@@ -38,6 +38,7 @@ CommandListener::CommandListener(LogBuffer *buf, LogReader * /*reader*/,
     registerCmd(new ClearCmd(buf));
     registerCmd(new GetBufSizeCmd(buf));
     registerCmd(new GetBufSizeUsedCmd(buf));
+    registerCmd(new GetStatisticsCmd(buf));
 }
 
 CommandListener::ShutdownCmd::ShutdownCmd(LogBuffer *buf, LogReader *reader,
@@ -131,5 +132,43 @@ int CommandListener::GetBufSizeUsedCmd::runCommand(SocketClient *cli,
     char buf[512];
     snprintf(buf, sizeof(buf), "%lu", size);
     cli->sendMsg(buf);
+    return 0;
+}
+
+CommandListener::GetStatisticsCmd::GetStatisticsCmd(LogBuffer *buf)
+        : LogCommand("getStatistics")
+        , mBuf(*buf)
+{ }
+
+int CommandListener::GetStatisticsCmd::runCommand(SocketClient *cli,
+                                         int argc, char **argv) {
+    uid_t uid = cli->getUid();
+    gid_t gid = cli->getGid();
+    if (clientHasLogCredentials(cli)) {
+        uid = AID_ROOT;
+    }
+
+    unsigned int logMask = -1;
+    if (argc > 1) {
+        logMask = 0;
+        for (int i = 1; i < argc; ++i) {
+            int id = atoi(argv[i]);
+            if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
+                cli->sendMsg("Range Error");
+                return 0;
+            }
+            logMask |= 1 << id;
+        }
+    }
+
+    char *buf = NULL;
+
+    mBuf.formatStatistics(&buf, uid, logMask);
+    if (!buf) {
+        cli->sendMsg("Failed");
+    } else {
+        cli->sendMsg(buf);
+        free(buf);
+    }
     return 0;
 }

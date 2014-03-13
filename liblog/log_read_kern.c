@@ -51,6 +51,8 @@ typedef char bool;
          logger != node_to_item(&(logger_list)->node, struct logger, node); \
          logger = node_to_item((logger)->node.next, struct logger, node))
 
+#define UNUSED __attribute__((unused))
+
 /* In the future, we would like to make this list extensible */
 static const char *LOG_NAME[LOG_ID_MAX] = {
     [LOG_ID_MAIN] = "main",
@@ -246,6 +248,18 @@ int android_logger_get_log_version(struct logger *logger)
 {
     int ret = logger_ioctl(logger, LOGGER_GET_VERSION, O_RDWR);
     return (ret < 0) ? 1 : ret;
+}
+
+/*
+ * returns statistics
+ */
+
+ssize_t android_logger_get_statistics(struct logger_list *logger_list UNUSED,
+                                      char *buf, size_t len)
+{
+    static const char unsupported[] = "18\nNot Supported\n\f";
+    strncpy(buf, unsupported, len);
+    return -ENOTSUP;
 }
 
 struct logger_list *android_logger_list_alloc(int mode,
