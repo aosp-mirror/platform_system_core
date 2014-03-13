@@ -225,11 +225,23 @@ static void show_help(const char *cmd)
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
                     "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
-                    "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio'\n"
-                    "                  or 'events'. Multiple -b parameters are allowed and the\n"
+                    "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio',\n"
+                    "                  'events' or 'all'. Multiple -b parameters are allowed and\n"
                     "                  results are interleaved. The default is -b main -b system.\n"
-                    "  -B              output the log in binary");
+                    "  -B              output the log in binary.\n"
+                    "  -S              output statistics.\n");
 
+#ifdef USERDEBUG_BUILD
+
+    fprintf(stderr, "--------------------- eng & userdebug builds only ---------------------------\n"
+                    "  -G <count>      set size of log's ring buffer and exit\n"
+                    "  -p              output prune white and ~black list\n"
+                    "  -P '<list> ...' set prune white and ~black list; UID, /PID or !(worst UID)\n"
+                    "                  default is ~!, prune worst UID.\n"
+                    "-----------------------------------------------------------------------------\n"
+    );
+
+#endif
 
     fprintf(stderr,"\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
@@ -278,6 +290,12 @@ int main(int argc, char **argv)
     int hasSetLogFormat = 0;
     int clearLog = 0;
     int getLogSize = 0;
+#ifdef USERDEBUG_BUILD
+    unsigned long setLogSize = 0;
+    int getPruneList = 0;
+    char *setPruneList = NULL;
+#endif
+    int printStatistics = 0;
     int mode = O_RDONLY;
     const char *forceFilters = NULL;
     log_device_t* devices = NULL;
@@ -303,7 +321,13 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, "cdt:T:gsQf:r::n:v:b:B");
+        ret = getopt(argc, argv,
+#ifdef USERDEBUG_BUILD
+            "cdt:T:gG:sQf:r::n:v:b:BSpP:"
+#else
+            "cdt:T:gsQf:r::n:v:b:BS"
+#endif
+        );
 
         if (ret < 0) {
             break;
@@ -335,7 +359,89 @@ int main(int argc, char **argv)
                 getLogSize = 1;
             break;
 
+#ifdef USERDEBUG_BUILD
+
+            case 'G': {
+                // would use atol if not for the multiplier
+                char *cp = optarg;
+                setLogSize = 0;
+                while (('0' <= *cp) && (*cp <= '9')) {
+                    setLogSize *= 10;
+                    setLogSize += *cp - '0';
+                    ++cp;
+                }
+
+                switch(*cp) {
+                case 'g':
+                case 'G':
+                    setLogSize *= 1024;
+                /* FALLTHRU */
+                case 'm':
+                case 'M':
+                    setLogSize *= 1024;
+                /* FALLTHRU */
+                case 'k':
+                case 'K':
+                    setLogSize *= 1024;
+                /* FALLTHRU */
+                case '\0':
+                break;
+
+                default:
+                    setLogSize = 0;
+                }
+
+                if (!setLogSize) {
+                    fprintf(stderr, "ERROR: -G <num><multiplier>\n");
+                    exit(1);
+                }
+            }
+            break;
+
+            case 'p':
+                getPruneList = 1;
+            break;
+
+            case 'P':
+                setPruneList = optarg;
+            break;
+
+#endif
+
             case 'b': {
+                if (strcmp(optarg, "all") == 0) {
+                    while (devices) {
+                        dev = devices;
+                        devices = dev->next;
+                        delete dev;
+                    }
+
+                    dev = devices = new log_device_t("main", false, 'm');
+                    android::g_devCount = 1;
+                    if (android_name_to_log_id("system") == LOG_ID_SYSTEM) {
+                        dev->next = new log_device_t("system", false, 's');
+                        if (dev->next) {
+                            dev = dev->next;
+                            android::g_devCount++;
+                        }
+                    }
+                    if (android_name_to_log_id("radio") == LOG_ID_RADIO) {
+                        dev->next = new log_device_t("radio", false, 'r');
+                        if (dev->next) {
+                            dev = dev->next;
+                            android::g_devCount++;
+                        }
+                    }
+                    if (android_name_to_log_id("events") == LOG_ID_EVENTS) {
+                        dev->next = new log_device_t("events", true, 'e');
+                        if (dev->next) {
+                            android::g_devCount++;
+                            needBinary = true;
+                        }
+                    }
+                    break;
+                }
+
                 bool binary = strcmp(optarg, "events") == 0;
                 if (binary) {
                     needBinary = true;
@@ -470,6 +576,10 @@ int main(int argc, char **argv)
                 }
                 break;
 
+            case 'S':
+                printStatistics = 1;
+                break;
+
             default:
                 fprintf(stderr,"Unrecognized Option\n");
                 android::show_help(argv[0]);
@@ -563,8 +673,17 @@ int main(int argc, char **argv)
             }
         }
 
+#ifdef USERDEBUG_BUILD
+
+        if (setLogSize && android_logger_set_log_size(dev->logger, setLogSize)) {
+            perror("setLogSize");
+            exit(EXIT_FAILURE);
+        }
+
+#endif
+
         if (getLogSize) {
-            int size, readable;
+            long size, readable;
 
             size = android_logger_get_log_size(dev->logger);
             if (size < 0) {
@@ -578,7 +697,7 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
 
-            printf("%s: ring buffer is %dKb (%dKb consumed), "
+            printf("%s: ring buffer is %ldKb (%ldKb consumed), "
                    "max entry is %db, max payload is %db\n", dev->device,
                    size / 1024, readable / 1024,
                    (int) LOGGER_ENTRY_MAX_LEN, (int) LOGGER_ENTRY_MAX_PAYLOAD);
@@ -587,9 +706,95 @@ int main(int argc, char **argv)
         dev = dev->next;
     }
 
+#ifdef USERDEBUG_BUILD
+
+    if (setPruneList) {
+        size_t len = strlen(setPruneList) + 32; // margin to allow rc
+        char *buf = (char *) malloc(len);
+
+        strcpy(buf, setPruneList);
+        int ret = android_logger_set_prune_list(logger_list, buf, len);
+        free(buf);
+
+        if (ret) {
+            perror("setPruneList");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+#endif
+
+    if (
+#ifdef USERDEBUG_BUILD
+        printStatistics || getPruneList
+#else
+        printStatistics
+#endif
+    ) {
+        size_t len = 8192;
+        char *buf;
+
+        for(int retry = 32;
+                (retry >= 0) && ((buf = new char [len]));
+                delete [] buf, --retry) {
+#ifdef USERDEBUG_BUILD
+            if (getPruneList) {
+                android_logger_get_prune_list(logger_list, buf, len);
+            } else {
+                android_logger_get_statistics(logger_list, buf, len);
+            }
+#else
+            android_logger_get_statistics(logger_list, buf, len);
+#endif
+            buf[len-1] = '\0';
+            size_t ret = atol(buf) + 1;
+            if (ret < 4) {
+                delete [] buf;
+                buf = NULL;
+                break;
+            }
+            bool check = ret <= len;
+            len = ret;
+            if (check) {
+                break;
+            }
+        }
+
+        if (!buf) {
+            perror("response read");
+            exit(EXIT_FAILURE);
+        }
+
+        // remove trailing FF
+        char *cp = buf + len - 1;
+        *cp = '\0';
+        bool truncated = *--cp != '\f';
+        if (!truncated) {
+            *cp = '\0';
+        }
+
+        // squash out the byte count
+        cp = buf;
+        if (!truncated) {
+            while (isdigit(*cp) || (*cp == '\n')) {
+                ++cp;
+            }
+        }
+
+        printf("%s", cp);
+        delete [] buf;
+        exit(0);
+    }
+
+
     if (getLogSize) {
         exit(0);
     }
+#ifdef USERDEBUG_BUILD
+    if (setLogSize || setPruneList) {
+        exit(0);
+    }
+#endif
     if (clearLog) {
         exit(0);
     }

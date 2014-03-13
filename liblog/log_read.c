@@ -296,11 +296,8 @@ done:
     return ret;
 }
 
-int android_logger_clear(struct logger *logger)
+static int check_log_success(char *buf, ssize_t ret)
 {
-    char buf[512];
-
-    ssize_t ret = send_log_msg(logger, "clear %d", buf, sizeof(buf));
     if (ret < 0) {
         return ret;
     }
@@ -312,8 +309,16 @@ int android_logger_clear(struct logger *logger)
     return 0;
 }
 
+int android_logger_clear(struct logger *logger)
+{
+    char buf[512];
+
+    return check_log_success(buf,
+        send_log_msg(logger, "clear %d", buf, sizeof(buf)));
+}
+
 /* returns the total size of the log's ring buffer */
-int android_logger_get_log_size(struct logger *logger)
+long android_logger_get_log_size(struct logger *logger)
 {
     char buf[512];
 
@@ -326,14 +331,28 @@ int android_logger_get_log_size(struct logger *logger)
         return -1;
     }
 
-    return atoi(buf);
+    return atol(buf);
 }
+
+#ifdef USERDEBUG_BUILD
+
+int android_logger_set_log_size(struct logger *logger, unsigned long size)
+{
+    char buf[512];
+
+    snprintf(buf, sizeof(buf), "setLogSize %d %lu",
+        logger ? logger->id : (unsigned) -1, size);
+
+    return check_log_success(buf, send_log_msg(NULL, NULL, buf, sizeof(buf)));
+}
+
+#endif /* USERDEBUG_BUILD */
 
 /*
  * returns the readable size of the log's ring buffer (that is, amount of the
  * log consumed)
  */
-int android_logger_get_log_readable_size(struct logger *logger)
+long android_logger_get_log_readable_size(struct logger *logger)
 {
     char buf[512];
 
@@ -346,7 +365,7 @@ int android_logger_get_log_readable_size(struct logger *logger)
         return -1;
     }
 
-    return atoi(buf);
+    return atol(buf);
 }
 
 /*
@@ -356,6 +375,58 @@ int android_logger_get_log_version(struct logger *logger UNUSED)
 {
     return 3;
 }
+
+/*
+ * returns statistics
+ */
+ssize_t android_logger_get_statistics(struct logger_list *logger_list,
+                                      char *buf, size_t len)
+{
+    struct listnode *node;
+    struct logger *logger;
+    char *cp = buf;
+    size_t remaining = len;
+    size_t n;
+
+    n = snprintf(cp, remaining, "getStatistics");
+    n = min(n, remaining);
+    remaining -= n;
+    cp += n;
+
+    logger_for_each(logger, logger_list) {
+        n = snprintf(cp, remaining, " %d", logger->id);
+        n = min(n, remaining);
+        remaining -= n;
+        cp += n;
+    }
+    return send_log_msg(NULL, NULL, buf, len);
+}
+
+#ifdef USERDEBUG_BUILD
+
+ssize_t android_logger_get_prune_list(struct logger_list *logger_list UNUSED,
+                                      char *buf, size_t len)
+{
+    return send_log_msg(NULL, "getPruneList", buf, len);
+}
+
+int android_logger_set_prune_list(struct logger_list *logger_list UNUSED,
+                                  char *buf, size_t len)
+{
+    const char cmd[] = "setPruneList ";
+    const size_t cmdlen = sizeof(cmd) - 1;
+
+    if (strlen(buf) > (len - cmdlen)) {
+        return -ENOMEM; /* KISS */
+    }
+    memmove(buf + cmdlen, buf, len - cmdlen);
+    buf[len - 1] = '\0';
+    memcpy(buf, cmd, cmdlen);
+
+    return check_log_success(buf, send_log_msg(NULL, NULL, buf, len));
+}
+
+#endif /* USERDEBUG_BUILD */
 
 struct logger_list *android_logger_list_alloc(int mode,
                                               unsigned int tail,

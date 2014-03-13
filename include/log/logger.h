@@ -140,11 +140,23 @@ struct logger;
 log_id_t android_logger_get_id(struct logger *logger);
 
 int android_logger_clear(struct logger *logger);
-int android_logger_get_log_size(struct logger *logger);
-int android_logger_get_log_readable_size(struct logger *logger);
+long android_logger_get_log_size(struct logger *logger);
+#ifdef USERDEBUG_BUILD
+int android_logger_set_log_size(struct logger *logger, unsigned long size);
+#endif
+long android_logger_get_log_readable_size(struct logger *logger);
 int android_logger_get_log_version(struct logger *logger);
 
 struct logger_list;
+
+ssize_t android_logger_get_statistics(struct logger_list *logger_list,
+                                      char *buf, size_t len);
+#ifdef USERDEBUG_BUILD
+ssize_t android_logger_get_prune_list(struct logger_list *logger_list,
+                                      char *buf, size_t len);
+int android_logger_set_prune_list(struct logger_list *logger_list,
+                                  char *buf, size_t len);
+#endif
 
 struct logger_list *android_logger_list_alloc(int mode,
                                               unsigned int tail,
