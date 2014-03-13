@@ -22,6 +22,10 @@ else
 liblog_sources := logd_write_kern.c
 endif
 
+ifneq ($(filter userdebug eng,$(TARGET_BUILD_VARIANT)),)
+liblog_cflags := -DUSERDEBUG_BUILD=1
+endif
+
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
 # which are also hard or even impossible to port to native Win32
@@ -80,11 +84,13 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_target_sources)
+LOCAL_CFLAGS := $(liblog_cflags)
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_WHOLE_STATIC_LIBRARIES := liblog
+LOCAL_CFLAGS := $(liblog_cflags)
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call first-makefiles-under,$(LOCAL_PATH))

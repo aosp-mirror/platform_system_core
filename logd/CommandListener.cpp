@@ -37,7 +37,15 @@ CommandListener::CommandListener(LogBuffer *buf, LogReader * /*reader*/,
     // registerCmd(new ShutdownCmd(buf, writer, swl));
     registerCmd(new ClearCmd(buf));
     registerCmd(new GetBufSizeCmd(buf));
+#ifdef USERDEBUG_BUILD
+    registerCmd(new SetBufSizeCmd(buf));
+#endif
     registerCmd(new GetBufSizeUsedCmd(buf));
+    registerCmd(new GetStatisticsCmd(buf));
+#ifdef USERDEBUG_BUILD
+    registerCmd(new SetPruneListCmd(buf));
+    registerCmd(new GetPruneListCmd(buf));
+#endif
 }
 
 CommandListener::ShutdownCmd::ShutdownCmd(LogBuffer *buf, LogReader *reader,
@@ -109,6 +117,43 @@ int CommandListener::GetBufSizeCmd::runCommand(SocketClient *cli,
     return 0;
 }
 
+#ifdef USERDEBUG_BUILD
+
+CommandListener::SetBufSizeCmd::SetBufSizeCmd(LogBuffer *buf)
+        : LogCommand("setLogSize")
+        , mBuf(*buf)
+{ }
+
+int CommandListener::SetBufSizeCmd::runCommand(SocketClient *cli,
+                                         int argc, char **argv) {
+    if (!clientHasLogCredentials(cli)) {
+        cli->sendMsg("Permission Denied");
+        return 0;
+    }
+
+    if (argc < 3) {
+        cli->sendMsg("Missing Argument");
+        return 0;
+    }
+
+    int id = atoi(argv[1]);
+    if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
+        cli->sendMsg("Range Error");
+        return 0;
+    }
+
+    unsigned long size = atol(argv[2]);
+    if (mBuf.setSize((log_id_t) id, size)) {
+        cli->sendMsg("Range Error");
+        return 0;
+    }
+
+    cli->sendMsg("success");
+    return 0;
+}
+
+#endif // USERDEBUG_BUILD
+
 CommandListener::GetBufSizeUsedCmd::GetBufSizeUsedCmd(LogBuffer *buf)
         : LogCommand("getLogSizeUsed")
         , mBuf(*buf)
@@ -133,3 +178,120 @@ int CommandListener::GetBufSizeUsedCmd::runCommand(SocketClient *cli,
     cli->sendMsg(buf);
     return 0;
 }
+
+CommandListener::GetStatisticsCmd::GetStatisticsCmd(LogBuffer *buf)
+        : LogCommand("getStatistics")
+        , mBuf(*buf)
+{ }
+
+static void package_string(char **strp) {
+    const char *a = *strp;
+    if (!a) {
+        a = "";
+    }
+
+    // Calculate total buffer size prefix, count is the string length w/o nul
+    char fmt[32];
+    for(size_t l = strlen(a), y = 0, x = 6; y != x; y = x, x = strlen(fmt) - 2) {
+        snprintf(fmt, sizeof(fmt), "%zu\n%%s\n\f", l + x);
+    }
+
+    char *b = *strp;
+    *strp = NULL;
+    asprintf(strp, fmt, a);
+    free(b);
+}
+
+int CommandListener::GetStatisticsCmd::runCommand(SocketClient *cli,
+                                         int argc, char **argv) {
+    uid_t uid = cli->getUid();
+    gid_t gid = cli->getGid();
+    if (clientHasLogCredentials(cli)) {
+        uid = AID_ROOT;
+    }
+
+    unsigned int logMask = -1;
+    if (argc > 1) {
+        logMask = 0;
+        for (int i = 1; i < argc; ++i) {
+            int id = atoi(argv[i]);
+            if ((id < LOG_ID_MIN) || (LOG_ID_MAX <= id)) {
+                cli->sendMsg("Range Error");
+                return 0;
+            }
+            logMask |= 1 << id;
+        }
+    }
+
+    char *buf = NULL;
+
+    mBuf.formatStatistics(&buf, uid, logMask);
+    if (!buf) {
+        cli->sendMsg("Failed");
+    } else {
+        package_string(&buf);
+        cli->sendMsg(buf);
+        free(buf);
+    }
+    return 0;
+}
+
+#ifdef USERDEBUG_BUILD
+
+CommandListener::GetPruneListCmd::GetPruneListCmd(LogBuffer *buf)
+        : LogCommand("getPruneList")
+        , mBuf(*buf)
+{ }
+
+int CommandListener::GetPruneListCmd::runCommand(SocketClient *cli,
+                                         int /*argc*/, char ** /*argv*/) {
+    char *buf = NULL;
+    mBuf.formatPrune(&buf);
+    if (!buf) {
+        cli->sendMsg("Failed");
+    } else {
+        package_string(&buf);
+        cli->sendMsg(buf);
+        free(buf);
+    }
+    return 0;
+}
+
+CommandListener::SetPruneListCmd::SetPruneListCmd(LogBuffer *buf)
+        : LogCommand("setPruneList")
+        , mBuf(*buf)
+{ }
+
+int CommandListener::SetPruneListCmd::runCommand(SocketClient *cli,
+                                         int argc, char **argv) {
+    if (!clientHasLogCredentials(cli)) {
+        cli->sendMsg("Permission Denied");
+        return 0;
+    }
+
+    char *cp = NULL;
+    for (int i = 1; i < argc; ++i) {
+        char *p = cp;
+        if (p) {
+            cp = NULL;
+            asprintf(&cp, "%s %s", p, argv[i]);
+            free(p);
+        } else {
+            asprintf(&cp, "%s", argv[i]);
+        }
+    }
+
+    int ret = mBuf.initPrune(cp);
+    free(cp);
+
+    if (ret) {
+        cli->sendMsg("Invalid");
+        return 0;
+    }
+
+    cli->sendMsg("success");
+
+    return 0;
+}
+
+#endif // USERDEBUG_BUILD
