@@ -257,7 +257,7 @@ int adf_hwc_open(int *intf_fds, size_t n_intfs,
 
         ret = adf_set_event(dup_intf_fd, ADF_EVENT_HOTPLUG, 1);
         if (ret < 0 && ret != -EINVAL) {
-            ALOGE("failed to enable hotplug event on display %u: %s",
+            ALOGE("failed to enable hotplug event on display %zu: %s",
                     i, strerror(errno));
             goto err;
         }
