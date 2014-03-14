@@ -45,7 +45,8 @@ class LogTimeEntry {
 
 public:
     LogTimeEntry(LogReader &reader, SocketClient *client, bool nonBlock,
-                 unsigned long tail, unsigned int logMask, pid_t pid);
+                 unsigned long tail, unsigned int logMask, pid_t pid,
+                 log_time start);
 
     SocketClient *mClient;
     static const struct timespec EPOCH;

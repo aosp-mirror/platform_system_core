@@ -25,7 +25,8 @@ const struct timespec LogTimeEntry::EPOCH = { 0, 1 };
 
 LogTimeEntry::LogTimeEntry(LogReader &reader, SocketClient *client,
                            bool nonBlock, unsigned long tail,
-                           unsigned int logMask, pid_t pid)
+                           unsigned int logMask, pid_t pid,
+                           log_time start)
         : mRefCount(1)
         , mRelease(false)
         , mError(false)
@@ -39,7 +40,7 @@ LogTimeEntry::LogTimeEntry(LogReader &reader, SocketClient *client,
         , mTail(tail)
         , mIndex(0)
         , mClient(client)
-        , mStart(EPOCH)
+        , mStart(start)
         , mNonBlock(nonBlock)
         , mEnd(CLOCK_MONOTONIC)
 { }

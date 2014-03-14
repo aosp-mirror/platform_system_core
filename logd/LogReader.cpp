@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <cutils/sockets.h>
@@ -50,6 +51,14 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
         tail = atol(cp + sizeof(_tail) - 1);
     }
 
+    log_time start(log_time::EPOCH);
+    static const char _start[] = " start=";
+    cp = strstr(buffer, _start);
+    if (cp) {
+        // Parse errors will result in current time
+        start.strptime(cp + sizeof(_start) - 1, "%s.%q");
+    }
+
     unsigned int logMask = -1;
     static const char _logIds[] = " lids=";
     cp = strstr(buffer, _logIds);
@@ -58,9 +67,8 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
         cp += sizeof(_logIds) - 1;
         while (*cp && *cp != '\0') {
             int val = 0;
-            while (('0' <= *cp) && (*cp <= '9')) {
-                val *= 10;
-                val += *cp - '0';
+            while (isdigit(*cp)) {
+                val = val * 10 + *cp - '0';
                 ++cp;
             }
             logMask |= 1 << val;
@@ -83,7 +91,63 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
         nonBlock = true;
     }
 
-    FlushCommand command(*this, nonBlock, tail, logMask, pid);
+    // Convert realtime to monotonic time
+    if (start == log_time::EPOCH) {
+        start = LogTimeEntry::EPOCH;
+    } else {
+        class LogFindStart {
+            const pid_t mPid;
+            const unsigned mLogMask;
+            bool startTimeSet;
+            log_time &start;
+            log_time last;
+
+        public:
+            LogFindStart(unsigned logMask, pid_t pid, log_time &start)
+                    : mPid(pid)
+                    , mLogMask(logMask)
+                    , startTimeSet(false)
+                    , start(start)
+                    , last(LogTimeEntry::EPOCH)
+            { }
+
+            static bool callback(const LogBufferElement *element, void *obj) {
+                LogFindStart *me = reinterpret_cast<LogFindStart *>(obj);
+                if (!me->startTimeSet
+                        && (!me->mPid || (me->mPid == element->getPid()))
+                        && (me->mLogMask & (1 << element->getLogId()))) {
+                    if (me->start == element->getRealTime()) {
+                        me->start = element->getMonotonicTime();
+                        me->startTimeSet = true;
+                    } else {
+                        if (me->start < element->getRealTime()) {
+                            me->start = me->last;
+                            me->startTimeSet = true;
+                        }
+                        me->last = element->getMonotonicTime();
+                    }
+                }
+                return false;
+            }
+
+            bool found() { return startTimeSet; }
+        } logFindStart(logMask, pid, start);
+
+        logbuf().flushTo(cli, LogTimeEntry::EPOCH,
+                         FlushCommand::hasReadLogs(cli),
+                         logFindStart.callback, &logFindStart);
+
+        if (!logFindStart.found()) {
+            if (nonBlock) {
+                doSocketDelete(cli);
+                return false;
+            }
+            log_time now(CLOCK_MONOTONIC);
+            start = now;
+        }
+    }
+
+    FlushCommand command(*this, nonBlock, tail, logMask, pid, start);
     command.runSocketCommand(cli);
     return true;
 }

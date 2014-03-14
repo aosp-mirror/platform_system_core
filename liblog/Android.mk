@@ -21,6 +21,7 @@ liblog_sources := logd_write.c
 else
 liblog_sources := logd_write_kern.c
 endif
+liblog_sources += log_time.cpp
 
 ifneq ($(filter userdebug eng,$(TARGET_BUILD_VARIANT)),)
 liblog_cflags := -DUSERDEBUG_BUILD=1
@@ -60,13 +61,14 @@ endif
 # ========================================================
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_host_sources)
-LOCAL_LDLIBS := -lpthread
+LOCAL_LDLIBS := -lpthread -lrt
 LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_WHOLE_STATIC_LIBRARIES := liblog
+LOCAL_LDLIBS := -lrt
 include $(BUILD_HOST_SHARED_LIBRARY)
 
 
@@ -75,7 +77,7 @@ include $(BUILD_HOST_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := lib64log
 LOCAL_SRC_FILES := $(liblog_host_sources)
-LOCAL_LDLIBS := -lpthread
+LOCAL_LDLIBS := -lpthread -lrt
 LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1 -m64
 include $(BUILD_HOST_STATIC_LIBRARY)
 

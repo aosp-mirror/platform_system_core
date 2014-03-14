@@ -17,11 +17,17 @@
 #ifndef _LIBS_LOG_LOG_READ_H
 #define _LIBS_LOG_LOG_READ_H
 
+#include <stdint.h>
 #include <time.h>
 
 /* struct log_time is a wire-format variant of struct timespec */
 #define NS_PER_SEC 1000000000ULL
+
 #ifdef __cplusplus
+
+// NB: do NOT define a copy constructor. This will result in structure
+// no longer being compatible with pass-by-value which is desired
+// efficient behavior. Also, pass-by-reference breaks C/C++ ABI.
 struct log_time {
 public:
     uint32_t tv_sec; // good to Feb 5 2106
@@ -32,16 +38,12 @@ public:
         tv_sec = T.tv_sec;
         tv_nsec = T.tv_nsec;
     }
-    log_time(const log_time &T)
-    {
-        tv_sec = T.tv_sec;
-        tv_nsec = T.tv_nsec;
-    }
     log_time(uint32_t sec, uint32_t nsec)
     {
         tv_sec = sec;
         tv_nsec = nsec;
     }
+    static const timespec EPOCH;
     log_time()
     {
     }
@@ -86,6 +88,12 @@ public:
     {
         return !(*this > T);
     }
+    log_time operator-= (const timespec &T);
+    log_time operator- (const timespec &T) const
+    {
+        log_time local(*this);
+        return local -= T;
+    }
 
     // log_time
     bool operator== (const log_time &T) const
@@ -114,17 +122,31 @@ public:
     {
         return !(*this > T);
     }
+    log_time operator-= (const log_time &T);
+    log_time operator- (const log_time &T) const
+    {
+        log_time local(*this);
+        return local -= T;
+    }
 
     uint64_t nsec() const
     {
         return static_cast<uint64_t>(tv_sec) * NS_PER_SEC + tv_nsec;
     }
+
+    static const char default_format[];
+
+    // Add %#q for the fraction of a second to the standard library functions
+    char *strptime(const char *s, const char *format = default_format);
 } __attribute__((__packed__));
+
 #else
+
 typedef struct log_time {
     uint32_t tv_sec;
     uint32_t tv_nsec;
 } __attribute__((__packed__)) log_time;
+
 #endif
 
 #endif /* define _LIBS_LOG_LOG_READ_H */
