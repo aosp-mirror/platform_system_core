@@ -24,7 +24,7 @@
 #include "LogBufferElement.h"
 #include "LogReader.h"
 
-const log_time LogBufferElement::FLUSH_ERROR(0, 0);
+const log_time LogBufferElement::FLUSH_ERROR((uint32_t)0, (uint32_t)0);
 
 LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
                                    uid_t uid, pid_t pid, const char *msg,
