@@ -48,7 +48,7 @@ static inline void fix_endians(apacket *p)
  * local transport it is connected. The list is used to detect when we're
  * trying to connect twice to a given local transport.
  */
-#define  ADB_LOCAL_TRANSPORT_MAX  16
+#define  ADB_LOCAL_TRANSPORT_MAX  64
 
 ADB_MUTEX_DEFINE( local_transports_lock );
 
