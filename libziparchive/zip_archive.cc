@@ -17,21 +17,22 @@
 /*
  * Read-only access to Zip archives, with minimal heap allocation.
  */
-#include "ziparchive/zip_archive.h"
-
-#include <zlib.h>
 
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <log/log.h>
-#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <utils/FileMap.h>
+#include <zlib.h>
 
 #include <JNIHelp.h>  // TEMP_FAILURE_RETRY may or may not be in unistd
+
+#include "ziparchive/zip_archive.h"
 
 // This is for windows. If we don't open a file in binary mode, weirds
 // things will happen.
@@ -217,8 +218,7 @@ static int32_t CopyFileToFile(int fd, uint8_t* begin, const uint32_t length, uin
     ssize_t actual = TEMP_FAILURE_RETRY(read(fd, buf, get_size));
 
     if (actual != get_size) {
-      ALOGW("CopyFileToFile: copy read failed (%d vs %zd)",
-          (int) actual, get_size);
+      ALOGW("CopyFileToFile: copy read failed (%zd vs %zd)", actual, get_size);
       return kIoError;
     }
 
@@ -337,12 +337,12 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
   const off64_t search_start = file_length - read_amount;
 
   if (lseek64(fd, search_start, SEEK_SET) != search_start) {
-    ALOGW("Zip: seek %lld failed: %s", search_start, strerror(errno));
+    ALOGW("Zip: seek %" PRId64 " failed: %s", search_start, strerror(errno));
     return kIoError;
   }
   ssize_t actual = TEMP_FAILURE_RETRY(read(fd, scan_buffer, read_amount));
   if (actual != (ssize_t) read_amount) {
-    ALOGW("Zip: read %zd failed: %s", read_amount, strerror(errno));
+    ALOGW("Zip: read %u failed: %s", read_amount, strerror(errno));
     return kIoError;
   }
 
@@ -379,7 +379,7 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
   const off64_t dir_offset = get4LE(eocd_ptr + kEOCDFileOffset);
 
   if (dir_offset + dir_size > eocd_offset) {
-    ALOGW("Zip: bad offsets (dir %lld, size %lld, eocd %lld)",
+    ALOGW("Zip: bad offsets (dir %" PRId64 ", size %" PRId64 ", eocd %" PRId64 ")",
         dir_offset, dir_size, eocd_offset);
     return kInvalidOffset;
   }
@@ -388,8 +388,8 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
     return kEmptyArchive;
   }
 
-  ALOGV("+++ num_entries=%d dir_size=%d dir_offset=%d", num_entries, dir_size,
-      dir_offset);
+  ALOGV("+++ num_entries=%d dir_size=%" PRId64 " dir_offset=%" PRId64,
+        num_entries, dir_size, dir_offset);
 
   /*
    * It all looks good.  Create a mapping for the CD, and set the fields
@@ -430,12 +430,12 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
   }
 
   if (file_length > (off64_t) 0xffffffff) {
-    ALOGV("Zip: zip file too long %d", file_length);
+    ALOGV("Zip: zip file too long %" PRId64, file_length);
     return kInvalidFile;
   }
 
   if (file_length < (int64_t) kEOCDLen) {
-    ALOGV("Zip: length %ld is too small to be zip", file_length);
+    ALOGV("Zip: length %" PRId64 " is too small to be zip", file_length);
     return kInvalidFile;
   }
 
@@ -503,7 +503,7 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
 
     const off64_t local_header_offset = get4LE(ptr + kCDELocalOffset);
     if (local_header_offset >= archive->directory_offset) {
-      ALOGW("Zip: bad LFH offset %lld at entry %d", local_header_offset, i);
+      ALOGW("Zip: bad LFH offset %" PRId64 " at entry %d", local_header_offset, i);
       goto bail;
     }
 
@@ -522,8 +522,8 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
 
     ptr += kCDELen + file_name_length + extra_length + comment_length;
     if ((size_t)(ptr - cd_ptr) > cd_length) {
-      ALOGW("Zip: bad CD advance (%d vs %zd) at entry %d",
-        (int) (ptr - cd_ptr), cd_length, i);
+      ALOGW("Zip: bad CD advance (%zu vs %zu) at entry %d",
+        (size_t) (ptr - cd_ptr), cd_length, i);
       goto bail;
     }
   }
@@ -630,7 +630,7 @@ static inline ssize_t ReadAtOffset(int fd, uint8_t* buf, size_t len,
   // is Windows. Only recent versions of windows support unix like forks,
   // and even there the semantics are quite different.
   if (lseek64(fd, off, SEEK_SET) != off) {
-    ALOGW("Zip: failed seek to offset %lld", off);
+    ALOGW("Zip: failed seek to offset %" PRId64, off);
     return kIoError;
   }
 
@@ -686,12 +686,12 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   ssize_t actual = ReadAtOffset(archive->fd, lfh_buf, sizeof(lfh_buf),
                                  local_header_offset);
   if (actual != sizeof(lfh_buf)) {
-    ALOGW("Zip: failed reading lfh name from offset %lld", local_header_offset);
+    ALOGW("Zip: failed reading lfh name from offset %" PRId64, local_header_offset);
     return kIoError;
   }
 
   if (get4LE(lfh_buf) != kLFHSignature) {
-    ALOGW("Zip: didn't find signature at start of lfh, offset=%lld",
+    ALOGW("Zip: didn't find signature at start of lfh, offset=%" PRId64,
         local_header_offset);
     return kInvalidOffset;
   }
@@ -733,7 +733,7 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
                                   name_offset);
 
     if (actual != nameLen) {
-      ALOGW("Zip: failed reading lfh name from offset %lld", name_offset);
+      ALOGW("Zip: failed reading lfh name from offset %" PRId64, name_offset);
       free(name_buf);
       return kIoError;
     }
@@ -751,19 +751,19 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
 
   const off64_t data_offset = local_header_offset + kLFHLen + lfhNameLen + lfhExtraLen;
   if (data_offset > cd_offset) {
-    ALOGW("Zip: bad data offset %lld in zip", (off64_t) data_offset);
+    ALOGW("Zip: bad data offset %" PRId64 " in zip", data_offset);
     return kInvalidOffset;
   }
 
   if ((off64_t)(data_offset + data->compressed_length) > cd_offset) {
-    ALOGW("Zip: bad compressed length in zip (%lld + %zd > %lld)",
+    ALOGW("Zip: bad compressed length in zip (%" PRId64 " + %zd > %" PRId64 ")",
       data_offset, data->compressed_length, cd_offset);
     return kInvalidOffset;
   }
 
   if (data->method == kCompressStored &&
     (off64_t)(data_offset + data->uncompressed_length) > cd_offset) {
-     ALOGW("Zip: bad uncompressed length in zip (%lld + %zd > %lld)",
+     ALOGW("Zip: bad uncompressed length in zip (%" PRId64 " + %d > %" PRId64 ")",
        data_offset, data->uncompressed_length, cd_offset);
      return kInvalidOffset;
   }
@@ -903,7 +903,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
       const ssize_t getSize = (compressed_length > kBufSize) ? kBufSize : compressed_length;
       const ssize_t actual = TEMP_FAILURE_RETRY(read(fd, read_buf, getSize));
       if (actual != getSize) {
-        ALOGW("Zip: inflate read failed (%d vs %zd)", actual, getSize);
+        ALOGW("Zip: inflate read failed (%zd vs %zd)", actual, getSize);
         result = kIoError;
         goto z_bail;
       }
@@ -946,7 +946,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
   *crc_out = zstream.adler;
 
   if (zstream.total_out != uncompressed_length || compressed_length != 0) {
-    ALOGW("Zip: size mismatch on inflated file (%ld vs %zd)",
+    ALOGW("Zip: size mismatch on inflated file (%ld vs %u)",
         zstream.total_out, uncompressed_length);
     result = kInconsistentInformation;
     goto z_bail;
@@ -967,7 +967,7 @@ int32_t ExtractToMemory(ZipArchiveHandle handle,
   off64_t data_offset = entry->offset;
 
   if (lseek64(archive->fd, data_offset, SEEK_SET) != data_offset) {
-    ALOGW("Zip: lseek to data at %lld failed", (off64_t) data_offset);
+    ALOGW("Zip: lseek to data at %" PRId64 " failed", data_offset);
     return kIoError;
   }
 
@@ -990,7 +990,7 @@ int32_t ExtractToMemory(ZipArchiveHandle handle,
   // TODO: Fix this check by passing the right flags to inflate2 so that
   // it calculates the CRC for us.
   if (entry->crc32 != crc && false) {
-    ALOGW("Zip: crc mismatch: expected %u, was %llu", entry->crc32, crc);
+    ALOGW("Zip: crc mismatch: expected %u, was %" PRIu64, entry->crc32, crc);
     return kInconsistentInformation;
   }
 
@@ -1010,8 +1010,8 @@ int32_t ExtractEntryToFile(ZipArchiveHandle handle,
 
   int result = TEMP_FAILURE_RETRY(ftruncate(fd, declared_length + current_offset));
   if (result == -1) {
-    ALOGW("Zip: unable to truncate file to %lld: %s", declared_length + current_offset,
-          strerror(errno));
+    ALOGW("Zip: unable to truncate file to %" PRId64 ": %s",
+          declared_length + current_offset, strerror(errno));
     return kIoError;
   }
 
