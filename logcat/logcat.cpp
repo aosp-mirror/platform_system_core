@@ -17,6 +17,7 @@
 
 #include <cutils/sockets.h>
 #include <log/log.h>
+#include <log/log_read.h>
 #include <log/logger.h>
 #include <log/logd.h>
 #include <log/logprint.h>
@@ -302,7 +303,8 @@ int main(int argc, char **argv)
     log_device_t* dev;
     bool needBinary = false;
     struct logger_list *logger_list;
-    int tail_lines = 0;
+    unsigned int tail_lines = 0;
+    log_time tail_time(log_time::EPOCH);
 
     signal(SIGPIPE, exit);
 
@@ -352,7 +354,32 @@ int main(int argc, char **argv)
                 mode = O_RDONLY | O_NDELAY;
                 /* FALLTHRU */
             case 'T':
-                tail_lines = atoi(optarg);
+                if (strspn(optarg, "0123456789") != strlen(optarg)) {
+                    char *cp = tail_time.strptime(optarg,
+                                                  log_time::default_format);
+                    if (!cp) {
+                        fprintf(stderr,
+                                "ERROR: -%c \"%s\" not in \"%s\" time format\n",
+                                ret, optarg, log_time::default_format);
+                        exit(1);
+                    }
+                    if (*cp) {
+                        char c = *cp;
+                        *cp = '\0';
+                        fprintf(stderr,
+                                "WARNING: -%c \"%s\"\"%c%s\" time truncated\n",
+                                ret, optarg, c, cp + 1);
+                        *cp = c;
+                    }
+                } else {
+                    tail_lines = atoi(optarg);
+                    if (!tail_lines) {
+                        fprintf(stderr,
+                                "WARNING: -%c %s invalid, setting to 1\n",
+                                ret, optarg);
+                        tail_lines = 1;
+                    }
+                }
             break;
 
             case 'g':
@@ -654,7 +681,11 @@ int main(int argc, char **argv)
     }
 
     dev = devices;
-    logger_list = android_logger_list_alloc(mode, tail_lines, 0);
+    if (tail_time != log_time::EPOCH) {
+        logger_list = android_logger_list_alloc_time(mode, tail_time, 0);
+    } else {
+        logger_list = android_logger_list_alloc(mode, tail_lines, 0);
+    }
     while (dev) {
         dev->logger_list = logger_list;
         dev->logger = android_logger_open(logger_list,

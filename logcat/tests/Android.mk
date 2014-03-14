@@ -28,7 +28,11 @@ test_c_flags := \
     -g \
     -Wall -Wextra \
     -Werror \
-    -fno-builtin \
+    -fno-builtin
+
+ifneq ($(filter userdebug eng,$(TARGET_BUILD_VARIANT)),)
+test_c_flags += -DUSERDEBUG_BUILD=1
+endif
 
 test_src_files := \
     logcat_test.cpp \
