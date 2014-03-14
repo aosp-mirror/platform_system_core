@@ -16,6 +16,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <stddef.h>
 #define NOMINMAX /* for windows to suppress definition of min in stdlib.h */
@@ -234,6 +235,7 @@ struct logger_list {
     struct listnode node;
     int mode;
     unsigned int tail;
+    log_time start;
     pid_t pid;
     int sock;
 };
@@ -441,7 +443,30 @@ struct logger_list *android_logger_list_alloc(int mode,
 
     list_init(&logger_list->node);
     logger_list->mode = mode;
+    logger_list->start.tv_sec = 0;
+    logger_list->start.tv_nsec = 0;
     logger_list->tail = tail;
+    logger_list->pid = pid;
+    logger_list->sock = -1;
+
+    return logger_list;
+}
+
+struct logger_list *android_logger_list_alloc_time(int mode,
+                                                   log_time start,
+                                                   pid_t pid)
+{
+    struct logger_list *logger_list;
+
+    logger_list = calloc(1, sizeof(*logger_list));
+    if (!logger_list) {
+        return NULL;
+    }
+
+    list_init(&logger_list->node);
+    logger_list->mode = mode;
+    logger_list->start = start;
+    logger_list->tail = 0;
     logger_list->pid = pid;
     logger_list->sock = -1;
 
@@ -559,6 +584,15 @@ int android_logger_list_read(struct logger_list *logger_list,
 
         if (logger_list->tail) {
             ret = snprintf(cp, remaining, " tail=%u", logger_list->tail);
+            ret = min(ret, remaining);
+            remaining -= ret;
+            cp += ret;
+        }
+
+        if (logger_list->start.tv_sec || logger_list->start.tv_nsec) {
+            ret = snprintf(cp, remaining, " start=%" PRIu32 ".%09" PRIu32,
+                           logger_list->start.tv_sec,
+                           logger_list->start.tv_nsec);
             ret = min(ret, remaining);
             remaining -= ret;
             cp += ret;

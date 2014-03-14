@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include <log/log.h>
+#include <log/log_read.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -161,6 +162,9 @@ int android_logger_set_prune_list(struct logger_list *logger_list,
 struct logger_list *android_logger_list_alloc(int mode,
                                               unsigned int tail,
                                               pid_t pid);
+struct logger_list *android_logger_list_alloc_time(int mode,
+                                                   log_time start,
+                                                   pid_t pid);
 void android_logger_list_free(struct logger_list *logger_list);
 /* In the purest sense, the following two are orthogonal interfaces */
 int android_logger_list_read(struct logger_list *logger_list,
