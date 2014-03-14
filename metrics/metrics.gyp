@@ -63,6 +63,15 @@
     ['USE_test == 1', {
       'targets': [
         {
+          'target_name': 'persistent_integer_test',
+          'type': 'executable',
+          'includes': ['../common-mk/common_test.gypi'],
+          'sources': [
+            'persistent_integer.cc',
+            'persistent_integer_test.cc',
+          ]
+        },
+        {
           'target_name': 'metrics_library_test',
           'type': 'executable',
           'dependencies': [
