@@ -30,7 +30,7 @@
 #include <linux/fs.h>
 
 #include <cutils/config_utils.h>
-#include <cutils/log.h>
+#include <log/log.h>
 
 #include <diskconfig/diskconfig.h>
 
@@ -337,7 +337,7 @@ validate(struct disk_info *dinfo)
     }
 
 #if 1
-    ALOGV("Device/file %s: size=%llu bytes, num_lba=%u, sect_size=%d",
+    ALOGV("Device/file %s: size=%" PRIu64 " bytes, num_lba=%u, sect_size=%d",
          dinfo->device, disk_size, dinfo->num_lba, dinfo->sect_size);
 #endif
 
