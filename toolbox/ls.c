@@ -137,7 +137,7 @@ static int listfile_size(const char *path, const char *filename, struct stat *s,
 
     /* blocks are 512 bytes, we want output to be KB */
     if ((flags & LIST_SIZE) != 0) {
-        printf("%lld ", s->st_blocks / 2);
+        printf("%lld ", (long long)s->st_blocks / 2);
     }
 
     if ((flags & LIST_CLASSIFY) != 0) {
@@ -205,7 +205,7 @@ static int listfile_long(const char *path, struct stat *s, int flags)
         break;
     case S_IFREG:
         printf("%s %-8s %-8s %8lld %s %s\n",
-               mode, user, group, s->st_size, date, name);
+               mode, user, group, (long long)s->st_size, date, name);
         break;
     case S_IFLNK: {
         char linkto[256];
@@ -321,7 +321,7 @@ static int listfile(const char *dirname, const char *filename, int flags)
     }
 
     if(flags & LIST_INODE) {
-        printf("%8llu ", s.st_ino);
+        printf("%8llu ", (unsigned long long)s.st_ino);
     }
 
     if ((flags & LIST_MACLABEL) != 0) {
