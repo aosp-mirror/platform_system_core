@@ -71,7 +71,9 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_WHOLE_STATIC_LIBRARIES := liblog
+ifeq ($(strip $(HOST_OS)),linux)
 LOCAL_LDLIBS := -lrt
+endif
 include $(BUILD_HOST_SHARED_LIBRARY)
 
 
