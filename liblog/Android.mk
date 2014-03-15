@@ -61,7 +61,10 @@ endif
 # ========================================================
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_host_sources)
-LOCAL_LDLIBS := -lpthread -lrt
+LOCAL_LDLIBS := -lpthread
+ifeq ($(strip $(HOST_OS)),linux)
+LOCAL_LDLIBS += -lrt
+endif
 LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1
 include $(BUILD_HOST_STATIC_LIBRARY)
 
@@ -77,7 +80,10 @@ include $(BUILD_HOST_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := lib64log
 LOCAL_SRC_FILES := $(liblog_host_sources)
-LOCAL_LDLIBS := -lpthread -lrt
+LOCAL_LDLIBS := -lpthread
+ifeq ($(strip $(HOST_OS)),linux)
+LOCAL_LDLIBS += -lrt
+endif
 LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1 -m64
 include $(BUILD_HOST_STATIC_LIBRARY)
 
