@@ -106,6 +106,9 @@ const char MetricsDaemon::kMetricSwapOutLongName[] =
 const char MetricsDaemon::kMetricSwapOutShortName[] =
     "Platform.SwapOutShort";
 
+const char MetricsDaemon::kMetricsProcStatFileName[] = "/proc/stat";
+const int MetricsDaemon::kMetricsProcStatFirstLineItemsCount = 11;
+
 // Thermal CPU throttling.
 
 const char MetricsDaemon::kMetricScaledCpuFrequencyName[] =
@@ -147,7 +150,9 @@ MetricsDaemon::MetricsDaemon()
       write_sectors_(0),
       vmstats_(),
       stats_state_(kStatsShort),
-      stats_initial_time_(0) {}
+      stats_initial_time_(0),
+      ticks_per_second_(0),
+      latest_cpu_use_ticks_(0) {}
 
 MetricsDaemon::~MetricsDaemon() {
 }
@@ -181,8 +186,8 @@ void MetricsDaemon::Run(bool run_as_daemon) {
   int32 version = GetOsVersionHash();
   if (version_cycle_->Get() != version) {
     version_cycle_->Set(version);
-    SendKernelCrashesCumulativeCountSample();
     kernel_crashes_version_count_->Set(0);
+    version_cumulative_cpu_use_->Set(0);
   }
 
   Loop();
@@ -215,8 +220,14 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
   DCHECK(metrics_lib != NULL);
   metrics_lib_ = metrics_lib;
 
+  // Get ticks per second (HZ) on this system.
+  // Sysconf cannot fail, so no sanity checks are needed.
+  ticks_per_second_ = sysconf(_SC_CLK_TCK);
+
   daily_use_.reset(
       new PersistentInteger("Logging.DailyUseTime"));
+  version_cumulative_cpu_use_.reset(
+      new PersistentInteger("Logging.CumulativeCpuTime"));
 
   kernel_crash_interval_.reset(
       new PersistentInteger("Logging.KernelCrashInterval"));
@@ -398,7 +409,7 @@ MetricsDaemon::LookupSessionState(const char* state_name) {
   return kUnknownSessionState;
 }
 
-void MetricsDaemon::ReportStats(Time now) {
+void MetricsDaemon::ReportStats(int64 active_use_seconds, Time now) {
   TimeDelta since_epoch = now - Time::UnixEpoch();
   int day = since_epoch.InDays();
   int week = day / 7;
@@ -414,7 +425,7 @@ void MetricsDaemon::ReportStats(Time now) {
   SendCrashFrequencySample(user_crashes_daily_count_);
   SendCrashFrequencySample(kernel_crashes_daily_count_);
   SendCrashFrequencySample(unclean_shutdowns_daily_count_);
-  SendKernelCrashesCumulativeCountSample();
+  SendKernelCrashesCumulativeCountStats(active_use_seconds);
 
   if (weekly_cycle_->Get() == week) {
     // We did this week already.
@@ -427,6 +438,54 @@ void MetricsDaemon::ReportStats(Time now) {
   SendCrashFrequencySample(user_crashes_weekly_count_);
   SendCrashFrequencySample(kernel_crashes_weekly_count_);
   SendCrashFrequencySample(unclean_shutdowns_weekly_count_);
+}
+
+// One might argue that parts of this should go into
+// chromium/src/base/sys_info_chromeos.c instead, but put it here for now.
+
+TimeDelta MetricsDaemon::GetIncrementalCpuUse() {
+
+  FilePath proc_stat_path = FilePath(kMetricsProcStatFileName);
+  std::string proc_stat_string;
+  if (!base::ReadFileToString(proc_stat_path, &proc_stat_string)) {
+    LOG(WARNING) << "cannot open " << kMetricsProcStatFileName;
+    return TimeDelta();
+  }
+
+  std::vector<std::string> proc_stat_lines;
+  base::SplitString(proc_stat_string, '\n', &proc_stat_lines);
+  if (proc_stat_lines.empty()) {
+    LOG(WARNING) << "cannot parse " << kMetricsProcStatFileName
+                 << ": " << proc_stat_string;
+    return TimeDelta();
+  }
+  std::vector<std::string> proc_stat_totals;
+  base::SplitStringAlongWhitespace(proc_stat_lines[0], &proc_stat_totals);
+
+  uint64 user_ticks, user_nice_ticks, system_ticks;
+  if (proc_stat_totals.size() != kMetricsProcStatFirstLineItemsCount ||
+      proc_stat_totals[0] != "cpu" ||
+      !base::StringToUint64(proc_stat_totals[1], &user_ticks) ||
+      !base::StringToUint64(proc_stat_totals[2], &user_nice_ticks) ||
+      !base::StringToUint64(proc_stat_totals[3], &system_ticks)) {
+    LOG(WARNING) << "cannot parse first line: " << proc_stat_lines[0];
+    return TimeDelta(base::TimeDelta::FromSeconds(0));
+  }
+
+  uint64 total_cpu_use_ticks = user_ticks + user_nice_ticks + system_ticks;
+
+  // Sanity check.
+  if (total_cpu_use_ticks < latest_cpu_use_ticks_) {
+    LOG(WARNING) << "CPU time decreasing from " << latest_cpu_use_ticks_
+                 << " to " << total_cpu_use_ticks;
+    return TimeDelta();
+  }
+
+  uint64 diff = total_cpu_use_ticks - latest_cpu_use_ticks_;
+  latest_cpu_use_ticks_ = total_cpu_use_ticks;
+  // Use microseconds to avoid significant truncations.
+  return base::TimeDelta::FromMicroseconds(
+      diff * 1000 * 1000 / ticks_per_second_);
 }
 
 void MetricsDaemon::SetUserActiveState(bool active, Time now) {
@@ -448,8 +507,11 @@ void MetricsDaemon::SetUserActiveState(bool active, Time now) {
   user_crash_interval_->Add(seconds);
   kernel_crash_interval_->Add(seconds);
 
+  // Updates the CPU time accumulator.
+  version_cumulative_cpu_use_->Add(GetIncrementalCpuUse().InMilliseconds());
+
   // Report daily and weekly stats as needed.
-  ReportStats(now);
+  ReportStats(daily_use_->Get(), now);
 
   // Schedules a use monitor on inactive->active transitions and
   // unschedules it on active->inactive transitions.
@@ -1084,14 +1146,44 @@ void MetricsDaemon::SendSample(const string& name, int sample,
   metrics_lib_->SendToUMA(name, sample, min, max, nbuckets);
 }
 
-void MetricsDaemon::SendKernelCrashesCumulativeCountSample() {
+void MetricsDaemon::SendKernelCrashesCumulativeCountStats(
+    int64 active_use_seconds) {
   // Report the number of crashes for this OS version, but don't clear the
   // counter.  It is cleared elsewhere on version change.
+  int64 crashes_count = kernel_crashes_version_count_->Get();
   SendSample(kernel_crashes_version_count_->Name(),
-             kernel_crashes_version_count_->Get(),
-             1,                        // value of first bucket
-             500,                      // value of last bucket
-             100);                     // number of buckets
+             crashes_count,
+             1,                         // value of first bucket
+             500,                       // value of last bucket
+             100);                      // number of buckets
+
+
+  int64 cpu_use_ms = version_cumulative_cpu_use_->Get();
+  SendSample(version_cumulative_cpu_use_->Name(),
+             cpu_use_ms / 1000,         // stat is in seconds
+             1,                         // device may be used very little...
+             8 * 1000 * 1000,           // ... or a lot (a little over 90 days)
+             100);
+
+  // On the first run after an autoupdate, cpu_use_ms and active_use_seconds
+  // can be zero.  Avoid division by zero.
+  if (cpu_use_ms > 0) {
+    // Send the crash frequency since update in number of crashes per CPU year.
+    SendSample("Logging.KernelCrashesPerCpuYear",
+               crashes_count * kSecondsPerDay * 365 * 1000 / cpu_use_ms,
+               1,
+               1000 * 1000,     // about one crash every 30s of CPU time
+               100);
+  }
+
+  if (active_use_seconds > 0) {
+    // Same as above, but per year of active time.
+    SendSample("Logging.KernelCrashesPerActiveYear",
+               crashes_count * kSecondsPerDay * 365 / active_use_seconds,
+               1,
+               1000 * 1000,     // about one crash every 30s of active time
+               100);
+  }
 }
 
 void MetricsDaemon::SendCrashIntervalSample(

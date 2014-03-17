@@ -145,6 +145,8 @@ class MetricsDaemon {
   static const int kMetricPageFaultsBuckets;
   static const char kMetricsDiskStatsPath[];
   static const char kMetricsVmStatsPath[];
+  static const char kMetricsProcStatFileName[];
+  static const int kMetricsProcStatFirstLineItemsCount;
 
   // Array of power states.
   static const char* kPowerStates_[kNumberPowerStates];
@@ -243,9 +245,13 @@ class MetricsDaemon {
   void SendLinearSample(const std::string& name, int sample,
                         int max, int nbuckets);
 
-  // Sends a histogram sample with the total number of kernel crashes since the
-  // last version update.
-  void SendKernelCrashesCumulativeCountSample();
+  // Sends various cumulative kernel crash-related stats, for instance the
+  // total number of kernel crashes since the last version update.
+  void SendKernelCrashesCumulativeCountStats(int64 active_time_seconds);
+
+  // Returns the total (system-wide) CPU usage between the time of the most
+  // recent call to this function and now.
+  base::TimeDelta GetIncrementalCpuUse();
 
   // Sends a sample representing a time interval between two crashes of the
   // same type.
@@ -322,7 +328,7 @@ class MetricsDaemon {
   bool ReadFreqToInt(const std::string& sysfs_file_name, int* value);
 
   // Report UMA stats when cycles (daily or weekly) have changed.
-  void ReportStats(base::Time now);
+  void ReportStats(int64 active_time_seconds, base::Time now);
 
   // Reads the current OS version from /etc/lsb-release and hashes it
   // to a unsigned 32-bit int.
@@ -375,12 +381,23 @@ class MetricsDaemon {
   StatsState stats_state_;
   double stats_initial_time_;
 
-  // Persistent counters for crash statistics.
+  // The system "HZ", or frequency of ticks.  Some system data uses ticks as a
+  // unit, and this is used to convert to standard time units.
+  uint32 ticks_per_second_;
+  // Used internally by GetIncrementalCpuUse() to return the CPU utilization
+  // between calls.
+  uint64 latest_cpu_use_ticks_;
+
+  // Persistent values and accumulators for crash statistics.
   scoped_ptr<PersistentInteger> daily_cycle_;
   scoped_ptr<PersistentInteger> weekly_cycle_;
   scoped_ptr<PersistentInteger> version_cycle_;
 
   scoped_ptr<PersistentInteger> daily_use_;
+
+  // The CPU time accumulator.  This contains the CPU time, in milliseconds,
+  // used by the system since the most recent OS version update.
+  scoped_ptr<PersistentInteger> version_cumulative_cpu_use_;
 
   scoped_ptr<PersistentInteger> user_crash_interval_;
   scoped_ptr<PersistentInteger> kernel_crash_interval_;
