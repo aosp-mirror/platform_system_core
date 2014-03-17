@@ -272,11 +272,11 @@ static ssize_t send_log_msg(struct logger *logger,
                             const char *msg, char *buf, size_t buf_size)
 {
     ssize_t ret;
+    int errno_save = 0;
     int sock = socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED,
                                    SOCK_STREAM);
     if (sock < 0) {
-        ret = sock;
-        goto done;
+        return sock;
     }
 
     if (msg) {
@@ -292,9 +292,12 @@ static ssize_t send_log_msg(struct logger *logger,
 
 done:
     if ((ret == -1) && errno) {
-        ret = -errno;
+        errno_save = errno;
     }
     close(sock);
+    if (errno_save) {
+        errno = errno_save;
+    }
     return ret;
 }
 
@@ -305,6 +308,7 @@ static int check_log_success(char *buf, ssize_t ret)
     }
 
     if (strncmp(buf, "success", 7)) {
+        errno = EINVAL;
         return -1;
     }
 
