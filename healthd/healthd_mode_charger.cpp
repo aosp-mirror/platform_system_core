@@ -646,7 +646,7 @@ void healthd_mode_charger_init(struct healthd_config *config)
         healthd_register_event(epollfd, charger_event_handler);
     }
 
-    ret = res_create_surface("charger/battery_fail", &charger->surf_unknown);
+    ret = res_create_display_surface("charger/battery_fail", &charger->surf_unknown);
     if (ret < 0) {
         LOGE("Cannot load battery_fail image\n");
         charger->surf_unknown = NULL;
@@ -656,7 +656,7 @@ void healthd_mode_charger_init(struct healthd_config *config)
 
     gr_surface* scale_frames;
     int scale_count;
-    ret = res_create_multi_surface("charger/battery_scale", &scale_count, &scale_frames);
+    ret = res_create_multi_display_surface("charger/battery_scale", &scale_count, &scale_frames);
     if (ret < 0) {
         LOGE("Cannot load battery_scale image\n");
         charger->batt_anim->num_frames = 0;
