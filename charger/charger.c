@@ -973,7 +973,7 @@ int main(int argc, char **argv)
     charger->uevent_fd = fd;
     coldboot(charger, "/sys/class/power_supply", "add");
 
-    ret = res_create_surface("charger/battery_fail", &charger->surf_unknown);
+    ret = res_create_display_surface("charger/battery_fail", &charger->surf_unknown);
     if (ret < 0) {
         LOGE("Cannot load battery_fail image\n");
         charger->surf_unknown = NULL;
@@ -983,7 +983,7 @@ int main(int argc, char **argv)
 
     gr_surface* scale_frames;
     int scale_count;
-    ret = res_create_multi_surface("charger/battery_scale", &scale_count, &scale_frames);
+    ret = res_create_multi_display_surface("charger/battery_scale", &scale_count, &scale_frames);
     if (ret < 0) {
         LOGE("Cannot load battery_scale image\n");
         charger->batt_anim->num_frames = 0;
