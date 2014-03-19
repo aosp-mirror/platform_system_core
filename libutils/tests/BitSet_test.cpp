@@ -85,6 +85,66 @@ TEST_F(BitSet32Test, BitWiseAnd_NonDisjoint) {
     EXPECT_TRUE(b2.hasBit(3) && b2.hasBit(6) && b2.hasBit(9));
 }
 
+TEST_F(BitSet32Test, MarkFirstUnmarkedBit) {
+    b1.markBit(1);
+
+    b1.markFirstUnmarkedBit();
+    EXPECT_EQ(b1.count(), 2u);
+    EXPECT_TRUE(b1.hasBit(0) && b1.hasBit(1));
+
+    b1.markFirstUnmarkedBit();
+    EXPECT_EQ(b1.count(), 3u);
+    EXPECT_TRUE(b1.hasBit(0) && b1.hasBit(1) && b1.hasBit(2));
+}
+
+TEST_F(BitSet32Test, ClearFirstMarkedBit) {
+    b1.markBit(0);
+    b1.markBit(10);
+
+    b1.clearFirstMarkedBit();
+    EXPECT_EQ(b1.count(), 1u);
+    EXPECT_TRUE(b1.hasBit(10));
+
+    b1.markBit(30);
+    b1.clearFirstMarkedBit();
+    EXPECT_EQ(b1.count(), 1u);
+    EXPECT_TRUE(b1.hasBit(30));
+}
+
+TEST_F(BitSet32Test, ClearLastMarkedBit) {
+    b1.markBit(10);
+    b1.markBit(31);
+
+    b1.clearLastMarkedBit();
+    EXPECT_EQ(b1.count(), 1u);
+    EXPECT_TRUE(b1.hasBit(10));
+
+    b1.markBit(5);
+    b1.clearLastMarkedBit();
+    EXPECT_EQ(b1.count(), 1u);
+    EXPECT_TRUE(b1.hasBit(5));
+}
+
+TEST_F(BitSet32Test, FillAndClear) {
+    EXPECT_TRUE(b1.isEmpty());
+    for (size_t i = 0; i < 32; i++) {
+        b1.markFirstUnmarkedBit();
+    }
+    EXPECT_TRUE(b1.isFull());
+    b1.clear();
+    EXPECT_TRUE(b1.isEmpty());
+}
+
+TEST_F(BitSet32Test, GetIndexOfBit) {
+    b1.markBit(1);
+    b1.markBit(4);
+    EXPECT_EQ(b1.getIndexOfBit(1), 0);
+    EXPECT_EQ(b1.getIndexOfBit(4), 1);
+    b1.markFirstUnmarkedBit();
+    EXPECT_EQ(b1.getIndexOfBit(1), 1);
+    EXPECT_EQ(b1.getIndexOfBit(4), 2);
+}
+
 class BitSet64Test : public testing::Test {
 protected:
     BitSet64 b1;
@@ -146,4 +206,65 @@ TEST_F(BitSet64Test, BitWiseAnd_NonDisjoint) {
     EXPECT_EQ(b2.count(), 3u);
     EXPECT_TRUE(b2.hasBit(30) && b2.hasBit(60) && b2.hasBit(63));
 }
+
+TEST_F(BitSet64Test, MarkFirstUnmarkedBit) {
+    b1.markBit(1);
+
+    b1.markFirstUnmarkedBit();
+    EXPECT_EQ(b1.count(), 2u);
+    EXPECT_TRUE(b1.hasBit(0) && b1.hasBit(1));
+
+    b1.markFirstUnmarkedBit();
+    EXPECT_EQ(b1.count(), 3u);
+    EXPECT_TRUE(b1.hasBit(0) && b1.hasBit(1) && b1.hasBit(2));
+}
+
+TEST_F(BitSet64Test, ClearFirstMarkedBit) {
+    b1.markBit(0);
+    b1.markBit(10);
+
+    b1.clearFirstMarkedBit();
+    EXPECT_EQ(b1.count(), 1u);
+    EXPECT_TRUE(b1.hasBit(10));
+
+    b1.markBit(50);
+    b1.clearFirstMarkedBit();
+    EXPECT_EQ(b1.count(), 1u);
+    EXPECT_TRUE(b1.hasBit(50));
+}
+
+TEST_F(BitSet64Test, ClearLastMarkedBit) {
+    b1.markBit(10);
+    b1.markBit(63);
+
+    b1.clearLastMarkedBit();
+    EXPECT_EQ(b1.count(), 1u);
+    EXPECT_TRUE(b1.hasBit(10));
+
+    b1.markBit(5);
+    b1.clearLastMarkedBit();
+    EXPECT_EQ(b1.count(), 1u);
+    EXPECT_TRUE(b1.hasBit(5));
+}
+
+TEST_F(BitSet64Test, FillAndClear) {
+    EXPECT_TRUE(b1.isEmpty());
+    for (size_t i = 0; i < 64; i++) {
+        b1.markFirstUnmarkedBit();
+    }
+    EXPECT_TRUE(b1.isFull());
+    b1.clear();
+    EXPECT_TRUE(b1.isEmpty());
+}
+
+TEST_F(BitSet64Test, GetIndexOfBit) {
+    b1.markBit(10);
+    b1.markBit(40);
+    EXPECT_EQ(b1.getIndexOfBit(10), 0);
+    EXPECT_EQ(b1.getIndexOfBit(40), 1);
+    b1.markFirstUnmarkedBit();
+    EXPECT_EQ(b1.getIndexOfBit(10), 1);
+    EXPECT_EQ(b1.getIndexOfBit(40), 2);
+}
+
 } // namespace android
