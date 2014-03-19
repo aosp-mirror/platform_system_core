@@ -210,7 +210,7 @@ struct BitSet64 {
     }
 };
 
-ANDROID_BASIC_TYPES_TRAITS(BitSet32)
+ANDROID_BASIC_TYPES_TRAITS(BitSet64)
 
 } // namespace android
 
