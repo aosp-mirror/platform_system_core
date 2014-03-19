@@ -302,6 +302,16 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         }
         break;
 
+    case BATTERY_PROP_CAPACITY:
+        if (!mHealthdConfig->batteryCapacityPath.isEmpty()) {
+            val->valueInt =
+                getIntField(mHealthdConfig->batteryCapacityPath);
+            ret = NO_ERROR;
+        } else {
+            ret = NAME_NOT_FOUND;
+        }
+        break;
+
     default:
         break;
     }
