@@ -19,17 +19,20 @@
 
 namespace android {
 
-sp<NativeHandle> NativeHandle::create(native_handle_t* handle) {
-    return handle ? new NativeHandle(handle) : NULL;
+sp<NativeHandle> NativeHandle::create(
+        native_handle_t* handle, bool ownsHandle) {
+    return handle ? new NativeHandle(handle, ownsHandle) : NULL;
 }
 
-NativeHandle::NativeHandle(native_handle_t* handle)
-:   mHandle(handle)
+NativeHandle::NativeHandle(native_handle_t* handle, bool ownsHandle)
+:   mHandle(handle), mOwnsHandle(ownsHandle)
 {}
 
 NativeHandle::~NativeHandle() {
-    native_handle_close(mHandle);
-    native_handle_delete(mHandle);
+    if (mOwnsHandle) {
+        native_handle_close(mHandle);
+        native_handle_delete(mHandle);
+    }
 }
 
 } // namespace android
