@@ -1,0 +1,84 @@
+This file tries to document file related requests a client can make
+to the ADB server of an adbd daemon. See the OVERVIEW.TXT document
+to understand what's going on here. See the SERVICES.TXT to learn more
+about the other requests that are possible.
+
+SYNC SERVICES:
+
+
+Requesting the sync service ("sync:") using the protocol as described in
+SERVICES.TXT sets the connection in sync mode. This mode is a binary mode that
+differ from the regular adb protocol. The connection stays in sync mode until
+explicitly terminated (see below).
+
+After the initial "sync:" command is sent the server must respond with either
+"OKAY" or "FAIL" as per usual. 
+
+In sync mode both the server and the client will frequently use eight-byte
+packets to communicate in this document called sync request and sync
+responses. The first four bytes is an id and specifies sync request is
+represented by four utf-8 characters. The last four bytes is a Little-Endian
+integer, with various uses. This number will be called "length" below. In fact
+all binary integers are Little-Endian in the sync mode. Sync mode is
+implicitly exited after each sync request, and normal adb communication
+follows as described in SERVICES.TXT.
+
+The following sync requests are accepted:
+LIST - List the files in a folder
+SEND - Send a file to device
+RECV - Retreive a file from device
+
+Not yet documented:
+STAT - Stat a file
+ULNK - Unlink (remove) a file. (Not currently supported)
+
+For all of the sync request above the must be followed by length number of
+bytes containing an utf-8 string with a remote filename.
+
+LIST:
+Lists files in the directory specified by the remote filename. The server will
+respond with zero or more directory entries or "dents".
+
+The directory entries will be returned in the following form
+1. A four-byte sync response id beeing "DENT"
+2. A four-byte integer representing file mode.
+3. A four-byte integer representing file size.
+4. A four-byte integer representing last modified time.
+5. A four-byte integer representing file name length.
+6. length number of bytes containing an utf-8 string representing the file
+   name.
+
+When an sync response "DONE" is received the listing is done.
+
+SEND:
+The remote file name is split into two parts separated by the last
+comma (","). The first part is the actual path, while the second is a decimal
+encoded file mode containing the permissions of the file on device.
+
+Note that some file types will be deleted before the copying starts, and if
+the transfer fails. Some file types will not be deleted, which allows
+  adb push disk_image /some_block_device
+to work.
+
+After this the actual file is sent in chunks. Each chucks has the following
+format.
+A sync request with id "DATA" and length equal to the chunk size. After
+follows chunk size number of bytes. This is repeated until the file is
+transfered. Each chunk must not be larger than 64k.
+
+When the file is tranfered a sync request "DONE" is sent, where length is set
+to the last modified time for the file. The server responds to this last
+request (but not to chuck requests) with an "OKAY" sync response (length can
+be ignored).
+
+
+RECV:
+Retrieves a file from device to a local file. The remote path is the path to
+the file that will be returned. Just as for the SEND sync request the file
+received is split up into chunks. The sync response id is "DATA" and length is
+the chuck size. After follows chunk size number of bytes. This is repeated
+until the file is transfered. Each chuck will not be larger than 64k.
+
+When the file is transfered a sync resopnse "DONE" is retrieved where the
+length can be ignored.
+
