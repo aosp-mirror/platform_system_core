@@ -29,68 +29,41 @@
  * SUCH DAMAGE.
  */
 
-#include <stdlib.h>
+#ifndef __VENDOR_TRIGGER_H_
+#define __VENDOR_TRIGGER_H_
 
-#include "vendor_trigger.h"
-#include "debug.h"
+__BEGIN_DECLS
 
-unsigned int debug_level = DEBUG;
+struct GPT_entry_raw;
+struct GPT_content;
 
-static const int version = 1;
+/*
+ * Implemented in libvendortrigger to handle platform-specific behavior.
+ */
 
-int check_version(const int fastboot_version, int *libversion) {
-    *libversion = version;
-    return !(fastboot_version == version);
-}
+/*
+ * trigger_init() is called once at startup time before calling any other method
+ *
+ * returns 0 on success and nonzero on error
+ */
+int trigger_init(void);
 
-int gpt_layout(struct GPT_content *table) {
-    D(DEBUG, "message from libvendor");
-    return 0;
-}
+/*
+ * This function runs once after trigger_init completes.
+ *
+ * version is number parameter indicating version on the fastbootd side
+ * libversion is version indicateing version of the library version
+ *
+ * returns 0 if it can cooperate with the current version and 1 in opposite
+ */
+int trigger_check_version(const int version, int *libversion);
 
-int oem_cmd(const char *arg, const char **response) {
-    D(DEBUG, "message from libvendor, oem catched request %s", arg);
-    return 0;
-}
+/*
+ * Return value -1 forbid the action from the vendor site and sets errno
+ */
+int trigger_gpt_layout(struct GPT_content *);
+int trigger_oem_cmd(const char *arg, const char **response);
 
-static int close_triggers(struct vendor_trigger_t *dev)
-{
-    if (dev)
-        free(dev);
+__END_DECLS
 
-    return 0;
-}
-
-static int open_triggers(const struct hw_module_t *module, char const *name,
-                         struct hw_device_t **device) {
-    struct vendor_trigger_t *dev = malloc(sizeof(struct vendor_trigger_t));
-    klog_init();
-    klog_set_level(6);
-
-    memset(dev, 0, sizeof(*dev));
-    dev->common.module = (struct hw_module_t *) module;
-    dev->common.close  = (int (*)(struct hw_device_t *)) close_triggers;
-
-    dev->gpt_layout = gpt_layout;
-    dev->oem_cmd = oem_cmd;
-
-    *device = (struct hw_device_t *) dev;
-
-    return 0;
-}
-
-
-static struct hw_module_methods_t trigger_module_methods = {
-    .open = open_triggers,
-};
-
-struct hw_module_t HAL_MODULE_INFO_SYM = {
-    .tag = HARDWARE_MODULE_TAG,
-    .version_major = 1,
-    .version_minor = 0,
-    .id = TRIGGER_MODULE_ID,
-    .name = "vendor trigger library for fastbootd",
-    .author = "Google, Inc.",
-    .methods = &trigger_module_methods,
-};
-
+#endif
