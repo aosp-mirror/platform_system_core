@@ -39,52 +39,19 @@
 
 static const int version = 1;
 
-static struct vendor_trigger_t *triggers = NULL;
-
 int load_trigger() {
-    int err;
-    hw_module_t* module;
-    hw_device_t* device;
     int libversion;
 
-    err = hw_get_module(TRIGGER_MODULE_ID, (hw_module_t const**)&module);
-
-    if (err == 0) {
-        err = module->methods->open(module, NULL, &device);
-
-        if (err == 0) {
-            triggers = (struct vendor_trigger_t *) device;
-        } else {
-            D(WARN, "Libvendor load error");
-            return 1;
-        }
-    }
-    else {
-        D(WARN, "Libvendor not load: %s", strerror(-err));
-        return 0;
+    if (trigger_init() != 0) {
+        D(ERR, "libvendortrigger failed to initialize");
+        return 1;
     }
 
-    if (triggers->check_version != NULL &&
-        triggers->check_version(version, &libversion)) {
-
-        triggers = NULL;
+    if (trigger_check_version(version, &libversion)) {
         D(ERR, "Library report incompability");
         return 1;
     }
+
     D(INFO, "libvendortrigger loaded");
-
     return 0;
 }
-
-int trigger_oem_cmd(const char *arg, const char **response) {
-    if (triggers != NULL && triggers->oem_cmd != NULL)
-        return triggers->oem_cmd(arg, response);
-    return 0;
-}
-
-int trigger_gpt_layout(struct GPT_content *table) {
-    if (triggers != NULL && triggers->gpt_layout != NULL)
-        return triggers->gpt_layout(table);
-    return 0;
-}
-
