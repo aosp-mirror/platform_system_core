@@ -17,13 +17,14 @@
 #ifndef _LIBS_CUTILS_TRACE_H
 #define _LIBS_CUTILS_TRACE_H
 
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>
-#include <stdint.h>
-#include <stdbool.h>
 #include <unistd.h>
-#include <cutils/compiler.h>
 
+#include <cutils/compiler.h>
 #ifdef ANDROID_SMP
 #include <cutils/atomic-inline.h>
 #else
@@ -217,8 +218,8 @@ static inline void atrace_async_begin(uint64_t tag, const char* name,
         char buf[ATRACE_MESSAGE_LENGTH];
         size_t len;
 
-        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "S|%d|%s|%d", getpid(),
-                name, cookie);
+        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "S|%d|%s|%" PRId32,
+                getpid(), name, cookie);
         write(atrace_marker_fd, buf, len);
     }
 }
@@ -235,8 +236,8 @@ static inline void atrace_async_end(uint64_t tag, const char* name,
         char buf[ATRACE_MESSAGE_LENGTH];
         size_t len;
 
-        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "F|%d|%s|%d", getpid(),
-                name, cookie);
+        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "F|%d|%s|%" PRId32,
+                getpid(), name, cookie);
         write(atrace_marker_fd, buf, len);
     }
 }
@@ -253,7 +254,7 @@ static inline void atrace_int(uint64_t tag, const char* name, int32_t value)
         char buf[ATRACE_MESSAGE_LENGTH];
         size_t len;
 
-        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "C|%d|%s|%d",
+        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "C|%d|%s|%" PRId32,
                 getpid(), name, value);
         write(atrace_marker_fd, buf, len);
     }
@@ -270,7 +271,7 @@ static inline void atrace_int64(uint64_t tag, const char* name, int64_t value)
         char buf[ATRACE_MESSAGE_LENGTH];
         size_t len;
 
-        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "C|%d|%s|%lld",
+        len = snprintf(buf, ATRACE_MESSAGE_LENGTH, "C|%d|%s|%" PRId64,
                 getpid(), name, value);
         write(atrace_marker_fd, buf, len);
     }
