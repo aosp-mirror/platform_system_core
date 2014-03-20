@@ -27,11 +27,12 @@
 const log_time LogBufferElement::FLUSH_ERROR((uint32_t)0, (uint32_t)0);
 
 LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
-                                   uid_t uid, pid_t pid, const char *msg,
-                                   unsigned short len)
+                                   uid_t uid, pid_t pid, pid_t tid,
+                                   const char *msg, unsigned short len)
         : mLogId(log_id)
         , mUid(uid)
         , mPid(pid)
+        , mTid(tid)
         , mMsgLen(len)
         , mMonotonicTime(CLOCK_MONOTONIC)
         , mRealTime(realtime) {
@@ -50,6 +51,7 @@ log_time LogBufferElement::flushTo(SocketClient *reader) {
     entry.len = mMsgLen;
     entry.lid = mLogId;
     entry.pid = mPid;
+    entry.tid = mTid;
     entry.sec = mRealTime.tv_sec;
     entry.nsec = mRealTime.tv_nsec;
 

@@ -48,7 +48,8 @@ public:
     LogBuffer(LastLogTimes *times);
 
     void log(log_id_t log_id, log_time realtime,
-             uid_t uid, pid_t pid, const char *msg, unsigned short len);
+             uid_t uid, pid_t pid, pid_t tid,
+             const char *msg, unsigned short len);
     log_time flushTo(SocketClient *writer, const log_time start,
                      bool privileged,
                      bool (*filter)(const LogBufferElement *element, void *arg) = NULL,
