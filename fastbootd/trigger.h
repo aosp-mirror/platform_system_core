@@ -37,9 +37,4 @@
 
 int load_trigger();
 
-/* same as in struct triggers */
-
-int trigger_gpt_layout(struct GPT_content *table);
-int trigger_oem_cmd(const char *arg, const char **response);
-
 #endif

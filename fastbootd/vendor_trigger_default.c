@@ -29,42 +29,30 @@
  * SUCH DAMAGE.
  */
 
-#ifndef __VENDOR_TRIGGER_H_
-#define __VENDOR_TRIGGER_H_
+#include <stdlib.h>
+#include <cutils/klog.h>
+#include <vendor_trigger.h>
 
-#define TRIGGER_MODULE_ID "fastbootd"
-#include <hardware/hardware.h>
+static const int version = 1;
 
-__BEGIN_DECLS
+int trigger_init(void) {
+    klog_init();
+    klog_set_level(7);
+    return 0;
+}
 
-struct GPT_entry_raw;
-struct GPT_content;
+int trigger_check_version(const int fastboot_version, int *libversion) {
+    KLOG_DEBUG("fastbootd", "%s: %d (%d)", __func__, fastboot_version, version);
+    *libversion = version;
+    return !(fastboot_version == version);
+}
 
-/*
- * Structer with function pointers may become longer in the future
- */
+int trigger_gpt_layout(struct GPT_content *table) {
+    KLOG_DEBUG("fastbootd", "%s: %p", __func__, table);
+    return 0;
+}
 
-struct vendor_trigger_t {
-    struct hw_device_t common;
-
-    /*
-     * This function runs at the beggining and shoud never be changed
-     *
-     * version is number parameter indicating version on the fastbootd side
-     * libversion is version indicateing version of the library version
-     *
-     * returns 0 if it can cooperate with the current version and 1 in opposite
-     */
-    int (*check_version)(const int version, int *libversion);
-
-
-    /*
-     * Return value -1 forbid the action from the vendor site and sets errno
-     */
-    int (* gpt_layout)(struct GPT_content *);
-    int (* oem_cmd)(const char *arg, const char **response);
-};
-
-__END_DECLS
-
-#endif
+int trigger_oem_cmd(const char *arg, const char **response) {
+    KLOG_DEBUG("fastbootd", "%s: %s", __func__, arg);
+    return 0;
+}
