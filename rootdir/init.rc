@@ -434,6 +434,13 @@ service ueventd /sbin/ueventd
     critical
     seclabel u:r:ueventd:s0
 
+service logd /system/bin/logd
+    class core
+    socket logd stream 0666 logd logd
+    socket logdr seqpacket 0666 logd logd
+    socket logdw dgram 0222 logd logd
+    seclabel u:r:logd:s0
+
 service healthd /sbin/healthd
     class core
     critical
@@ -465,12 +472,6 @@ service adbd /sbin/adbd --root_seclabel=u:r:su:s0
 # adbd on at boot in emulator
 on property:ro.kernel.qemu=1
     start adbd
-
-service logd /system/bin/logd
-    class main
-    socket logd stream 0666 logd logd
-    socket logdr seqpacket 0666 logd logd
-    socket logdw dgram 0222 logd logd
 
 service servicemanager /system/bin/servicemanager
     class core
