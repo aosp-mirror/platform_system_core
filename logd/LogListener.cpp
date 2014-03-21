@@ -50,7 +50,7 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
     int socket = cli->getSocket();
 
     ssize_t n = recvmsg(socket, &hdr, 0);
-    if (n <= (ssize_t) sizeof_log_id_t) {
+    if (n <= (sizeof_log_id_t + sizeof(uint16_t) + sizeof(log_time))) {
         return false;
     }
 
@@ -82,17 +82,22 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
     if (log_id < 0 || log_id >= LOG_ID_MAX) {
         return false;
     }
-
     char *msg = ((char *)buffer) + sizeof_log_id_t;
     n -= sizeof_log_id_t;
 
+    // second element is the thread id of the caller
+    pid_t tid = (pid_t) *((uint16_t *) msg);
+    msg += sizeof(uint16_t);
+    n -= sizeof(uint16_t);
+
+    // third element is the realtime at point of caller
     log_time realtime(msg);
     msg += sizeof(log_time);
     n -= sizeof(log_time);
 
     unsigned short len = n;
     if (len == n) {
-        logbuf->log(log_id, realtime, cred->uid, cred->pid, msg, len);
+        logbuf->log(log_id, realtime, cred->uid, cred->pid, tid, msg, len);
         reader->notifyNewLog();
     }
 

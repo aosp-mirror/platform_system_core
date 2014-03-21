@@ -26,6 +26,7 @@ class LogBufferElement {
     const log_id_t mLogId;
     const uid_t mUid;
     const pid_t mPid;
+    const pid_t mTid;
     char *mMsg;
     const unsigned short mMsgLen;
     const log_time mMonotonicTime;
@@ -33,12 +34,14 @@ class LogBufferElement {
 
 public:
     LogBufferElement(log_id_t log_id, log_time realtime,
-                     uid_t uid, pid_t pid, const char *msg, unsigned short len);
+                     uid_t uid, pid_t pid, pid_t tid,
+                     const char *msg, unsigned short len);
     virtual ~LogBufferElement();
 
     log_id_t getLogId() const { return mLogId; }
     uid_t getUid(void) const { return mUid; }
     pid_t getPid(void) const { return mPid; }
+    pid_t getTid(void) const { return mTid; }
     unsigned short getMsgLen() const { return mMsgLen; }
     log_time getMonotonicTime(void) const { return mMonotonicTime; }
     log_time getRealTime(void) const { return mRealTime; }
