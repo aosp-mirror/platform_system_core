@@ -111,11 +111,34 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
          */
         return 0;
     }
-    struct iovec newVec[nr + 2];
+    /*
+     *  struct {
+     *      // what we provide
+     *      typeof_log_id_t  log_id;
+     *      u16              tid;
+     *      log_time         realtime;
+     *      // caller provides
+     *      union {
+     *          struct {
+     *              char     prio;
+     *              char     payload[];
+     *          } string;
+     *          struct {
+     *              uint32_t tag
+     *              char     payload[];
+     *          } binary;
+     *      };
+     *  };
+     */
+    static const unsigned header_length = 3;
+    struct iovec newVec[nr + header_length];
     typeof_log_id_t log_id_buf = log_id;
+    uint16_t tid = gettid();
 
     newVec[0].iov_base   = (unsigned char *) &log_id_buf;
     newVec[0].iov_len    = sizeof_log_id_t;
+    newVec[1].iov_base   = (unsigned char *) &tid;
+    newVec[1].iov_len    = sizeof(tid);
 
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
@@ -123,17 +146,17 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     realtime_ts.tv_sec = ts.tv_sec;
     realtime_ts.tv_nsec = ts.tv_nsec;
 
-    newVec[1].iov_base   = (unsigned char *) &realtime_ts;
-    newVec[1].iov_len    = sizeof(log_time);
+    newVec[2].iov_base   = (unsigned char *) &realtime_ts;
+    newVec[2].iov_len    = sizeof(log_time);
 
     size_t i;
-    for (i = 2; i < nr + 2; i++) {
-        newVec[i].iov_base = vec[i-2].iov_base;
-        newVec[i].iov_len  = vec[i-2].iov_len;
+    for (i = header_length; i < nr + header_length; i++) {
+        newVec[i].iov_base = vec[i-header_length].iov_base;
+        newVec[i].iov_len  = vec[i-header_length].iov_len;
     }
 
     /* The write below could be lost, but will never block. */
-    return writev(logd_fd, newVec, nr + 2);
+    return writev(logd_fd, newVec, nr + header_length);
 #endif
 }
 
