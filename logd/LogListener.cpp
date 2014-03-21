@@ -50,7 +50,7 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
     int socket = cli->getSocket();
 
     ssize_t n = recvmsg(socket, &hdr, 0);
-    if (n <= (sizeof_log_id_t + sizeof(uint16_t) + sizeof(log_time))) {
+    if (n <= (ssize_t)(sizeof_log_id_t + sizeof(uint16_t) + sizeof(log_time))) {
         return false;
     }
 
