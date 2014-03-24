@@ -95,7 +95,9 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
     msg += sizeof(log_time);
     n -= sizeof(log_time);
 
-    unsigned short len = n;
+    // NB: hdr.msg_flags & MSG_TRUNC is not tested, silently passing a
+    // truncated message to the logs.
+    unsigned short len = n; // cap to internal maximum
     if (len == n) {
         logbuf->log(log_id, realtime, cred->uid, cred->pid, tid, msg, len);
         reader->notifyNewLog();

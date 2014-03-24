@@ -807,7 +807,10 @@ int main(int argc, char **argv)
         // squash out the byte count
         cp = buf;
         if (!truncated) {
-            while (isdigit(*cp) || (*cp == '\n')) {
+            while (isdigit(*cp)) {
+                ++cp;
+            }
+            if (*cp == '\n') {
                 ++cp;
             }
         }
