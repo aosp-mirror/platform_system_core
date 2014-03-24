@@ -154,8 +154,8 @@ int PruneList::init(char *str) {
                 }
                 m = pid - p->mPid;
             }
-            if (m >= 0) {
-                if (m > 0) {
+            if (m <= 0) {
+                if (m < 0) {
                     list->insert(it, new Prune(uid,pid));
                 }
                 break;
