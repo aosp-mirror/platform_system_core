@@ -601,13 +601,23 @@ TEST(logcat, white_black_adjust) {
 
     ASSERT_EQ(true, get_white_black(&list));
 
-    static const char adjustment[] = "~! ~1000";
+    static const char adjustment[] = "~! 300/20 300/25 2000 ~1000/5 ~1000/30";
     ASSERT_EQ(true, set_white_black(adjustment));
     ASSERT_EQ(true, get_white_black(&adjust));
     if (strcmp(adjustment, adjust)) {
         fprintf(stderr, "ERROR: '%s' != '%s'\n", adjustment, adjust);
     }
     ASSERT_STREQ(adjustment, adjust);
+    free(adjust);
+    adjust = NULL;
+
+    static const char adjustment2[] = "300/20 300/21 2000 ~1000";
+    ASSERT_EQ(true, set_white_black(adjustment2));
+    ASSERT_EQ(true, get_white_black(&adjust));
+    if (strcmp(adjustment2, adjust)) {
+        fprintf(stderr, "ERROR: '%s' != '%s'\n", adjustment2, adjust);
+    }
+    ASSERT_STREQ(adjustment2, adjust);
     free(adjust);
     adjust = NULL;
 
