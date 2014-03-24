@@ -343,7 +343,6 @@ TEST(logcat, blocking) {
     signal(SIGALRM, caught_blocking);
     alarm(2);
     while (fgets(buffer, sizeof(buffer), fp)) {
-        alarm(2);
 
         if (!strncmp(buffer, "DONE", 4)) {
             break;
@@ -413,7 +412,6 @@ TEST(logcat, blocking_tail) {
     signal(SIGALRM, caught_blocking_tail);
     alarm(2);
     while (fgets(buffer, sizeof(buffer), fp)) {
-        alarm(2);
 
         if (!strncmp(buffer, "DONE", 4)) {
             break;
@@ -484,7 +482,6 @@ TEST(logcat, blocking_clear) {
     signal(SIGALRM, caught_blocking_clear);
     alarm(2);
     while (fgets(buffer, sizeof(buffer), fp)) {
-        alarm(2);
 
         if (!strncmp(buffer, "clearLog: ", 10)) {
             fprintf(stderr, "WARNING: Test lacks permission to run :-(\n");
