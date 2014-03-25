@@ -77,32 +77,78 @@ int __android_log_dev_available(void)
     return (g_log_status == kLogAvailable);
 }
 
+/* give up, resources too limited */
 static int __write_to_log_null(log_id_t log_fd UNUSED, struct iovec *vec UNUSED,
                                size_t nr UNUSED)
 {
     return -1;
 }
 
+/* log_init_lock assumed */
+static int __write_to_log_initialize()
+{
+    int i, ret = 0;
+
+#if FAKE_LOG_DEVICE
+    for (i = 0; i < LOG_ID_MAX; i++) {
+        char buf[sizeof("/dev/log_system")];
+        snprintf(buf, sizeof(buf), "/dev/log_%s", android_log_id_to_name(i));
+        log_fds[i] = fakeLogOpen(buf, O_WRONLY);
+    }
+#else
+    if (logd_fd >= 0) {
+        i = logd_fd;
+        logd_fd = -1;
+        close(i);
+    }
+
+    i = socket(PF_UNIX, SOCK_DGRAM, 0);
+    if (i < 0) {
+        ret = -errno;
+        write_to_log = __write_to_log_null;
+    } else if (fcntl(i, F_SETFL, O_NONBLOCK) < 0) {
+        ret = -errno;
+        close(i);
+        i = -1;
+        write_to_log = __write_to_log_null;
+    } else {
+        struct sockaddr_un un;
+        memset(&un, 0, sizeof(struct sockaddr_un));
+        un.sun_family = AF_UNIX;
+        strcpy(un.sun_path, "/dev/socket/logdw");
+
+        if (connect(i, (struct sockaddr *)&un, sizeof(struct sockaddr_un)) < 0) {
+            ret = -errno;
+            close(i);
+            i = -1;
+        }
+    }
+    logd_fd = i;
+#endif
+
+    return ret;
+}
+
 static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
 {
-#if FAKE_LOG_DEVICE
     ssize_t ret;
+#if FAKE_LOG_DEVICE
     int log_fd;
 
     if (/*(int)log_id >= 0 &&*/ (int)log_id < (int)LOG_ID_MAX) {
         log_fd = log_fds[(int)log_id];
     } else {
-        return EBADF;
+        return -EBADF;
     }
     do {
         ret = fakeLogWritev(log_fd, vec, nr);
-    } while (ret < 0 && errno == EINTR);
+        if (ret < 0) {
+            ret = -errno;
+        }
+    } while (ret == -EINTR);
 
     return ret;
 #else
-    if (logd_fd == -1) {
-        return -1;
-    }
     if (getuid() == AID_LOGD) {
         /*
          * ignore log messages we send to ourself.
@@ -111,6 +157,11 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
          */
         return 0;
     }
+
+    if (logd_fd < 0) {
+        return -EBADF;
+    }
+
     /*
      *  struct {
      *      // what we provide
@@ -155,8 +206,35 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
         newVec[i].iov_len  = vec[i-header_length].iov_len;
     }
 
-    /* The write below could be lost, but will never block. */
-    return writev(logd_fd, newVec, nr + header_length);
+    /*
+     * The write below could be lost, but will never block.
+     *
+     * ENOTCONN occurs if logd dies.
+     * EAGAIN occurs if logd is overloaded.
+     */
+    ret = writev(logd_fd, newVec, nr + header_length);
+    if (ret < 0) {
+        ret = -errno;
+        if (ret == -ENOTCONN) {
+#ifdef HAVE_PTHREADS
+            pthread_mutex_lock(&log_init_lock);
+#endif
+            ret = __write_to_log_initialize();
+#ifdef HAVE_PTHREADS
+            pthread_mutex_unlock(&log_init_lock);
+#endif
+
+            if (ret < 0) {
+                return ret;
+            }
+
+            ret = writev(logd_fd, newVec, nr + header_length);
+            if (ret < 0) {
+                ret = -errno;
+            }
+        }
+    }
+    return ret;
 #endif
 }
 
@@ -184,35 +262,17 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 #endif
 
     if (write_to_log == __write_to_log_init) {
-        write_to_log = __write_to_log_kernel;
+        int ret;
 
-#if FAKE_LOG_DEVICE
-        int i;
-        for (i = 0; i < LOG_ID_MAX; i++) {
-            char buf[sizeof("/dev/log_system")];
-            snprintf(buf, sizeof(buf), "/dev/log_%s", android_log_id_to_name(i));
-            log_fds[i] = fakeLogOpen(buf, O_WRONLY);
-        }
-#else
-        int sock = socket(PF_UNIX, SOCK_DGRAM, 0);
-        if (sock != -1) {
-            if (fcntl(sock, F_SETFL, O_NONBLOCK) == -1) {
-                /* NB: Loss of content */
-                close(sock);
-                sock = -1;
-            } else {
-                struct sockaddr_un un;
-                memset(&un, 0, sizeof(struct sockaddr_un));
-                un.sun_family = AF_UNIX;
-                strcpy(un.sun_path, "/dev/socket/logdw");
-
-                connect(sock, (struct sockaddr *)&un, sizeof(struct sockaddr_un));
-            }
-        } else {
-            write_to_log = __write_to_log_null;
-        }
-        logd_fd = sock;
+        ret = __write_to_log_initialize();
+        if (ret < 0) {
+#ifdef HAVE_PTHREADS
+            pthread_mutex_unlock(&log_init_lock);
 #endif
+            return ret;
+        }
+
+        write_to_log = __write_to_log_kernel;
     }
 
 #ifdef HAVE_PTHREADS
@@ -242,7 +302,7 @@ int __android_log_write(int prio, const char *tag, const char *msg)
         !strcmp(tag, "PHONE") ||
         !strcmp(tag, "SMS")) {
             log_id = LOG_ID_RADIO;
-            // Inform third party apps/ril/radio.. to use Rlog or RLOG
+            /* Inform third party apps/ril/radio.. to use Rlog or RLOG */
             snprintf(tmp_tag, sizeof(tmp_tag), "use-Rlog/RLOG-%s", tag);
             tag = tmp_tag;
     }
@@ -277,7 +337,7 @@ int __android_log_buf_write(int bufID, int prio, const char *tag, const char *ms
         !strcmp(tag, "PHONE") ||
         !strcmp(tag, "SMS"))) {
             bufID = LOG_ID_RADIO;
-            // Inform third party apps/ril/radio.. to use Rlog or RLOG
+            /* Inform third party apps/ril/radio.. to use Rlog or RLOG */
             snprintf(tmp_tag, sizeof(tmp_tag), "use-Rlog/RLOG-%s", tag);
             tag = tmp_tag;
     }
