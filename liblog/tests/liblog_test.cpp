@@ -38,30 +38,30 @@
     _rc; })
 
 TEST(liblog, __android_log_buf_print) {
-    ASSERT_LT(0, __android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO,
+    EXPECT_LT(0, __android_log_buf_print(LOG_ID_RADIO, ANDROID_LOG_INFO,
                                          "TEST__android_log_buf_print",
                                          "radio"));
     usleep(1000);
-    ASSERT_LT(0, __android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_INFO,
+    EXPECT_LT(0, __android_log_buf_print(LOG_ID_SYSTEM, ANDROID_LOG_INFO,
                                          "TEST__android_log_buf_print",
                                          "system"));
     usleep(1000);
-    ASSERT_LT(0, __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_INFO,
+    EXPECT_LT(0, __android_log_buf_print(LOG_ID_MAIN, ANDROID_LOG_INFO,
                                          "TEST__android_log_buf_print",
                                          "main"));
     usleep(1000);
 }
 
 TEST(liblog, __android_log_buf_write) {
-    ASSERT_LT(0, __android_log_buf_write(LOG_ID_RADIO, ANDROID_LOG_INFO,
+    EXPECT_LT(0, __android_log_buf_write(LOG_ID_RADIO, ANDROID_LOG_INFO,
                                          "TEST__android_log_buf_write",
                                          "radio"));
     usleep(1000);
-    ASSERT_LT(0, __android_log_buf_write(LOG_ID_SYSTEM, ANDROID_LOG_INFO,
+    EXPECT_LT(0, __android_log_buf_write(LOG_ID_SYSTEM, ANDROID_LOG_INFO,
                                          "TEST__android_log_buf_write",
                                          "system"));
     usleep(1000);
-    ASSERT_LT(0, __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_INFO,
+    EXPECT_LT(0, __android_log_buf_write(LOG_ID_MAIN, ANDROID_LOG_INFO,
                                          "TEST__android_log_buf_write",
                                          "main"));
     usleep(1000);
@@ -69,16 +69,16 @@ TEST(liblog, __android_log_buf_write) {
 
 TEST(liblog, __android_log_btwrite) {
     int intBuf = 0xDEADBEEF;
-    ASSERT_LT(0, __android_log_btwrite(0,
+    EXPECT_LT(0, __android_log_btwrite(0,
                                       EVENT_TYPE_INT,
                                       &intBuf, sizeof(intBuf)));
     long long longBuf = 0xDEADBEEFA55A5AA5;
-    ASSERT_LT(0, __android_log_btwrite(0,
+    EXPECT_LT(0, __android_log_btwrite(0,
                                       EVENT_TYPE_LONG,
                                       &longBuf, sizeof(longBuf)));
     usleep(1000);
     char Buf[] = "\20\0\0\0DeAdBeEfA55a5aA5";
-    ASSERT_LT(0, __android_log_btwrite(0,
+    EXPECT_LT(0, __android_log_btwrite(0,
                                       EVENT_TYPE_STRING,
                                       Buf, sizeof(Buf) - 1));
     usleep(1000);
@@ -120,7 +120,7 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 
     pid_t pid = getpid();
 
-    ASSERT_EQ(0, NULL == (logger_list = android_logger_list_open(
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
         LOG_ID_EVENTS, O_RDONLY | O_NDELAY, 1000, pid)));
 
     log_time ts(CLOCK_MONOTONIC);
@@ -155,7 +155,7 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
         }
     }
 
-    ASSERT_EQ(1, count);
+    EXPECT_EQ(1, count);
 
     android_logger_list_close(logger_list);
 }
@@ -221,7 +221,7 @@ TEST(liblog, android_logger_list_read__cpu) {
 
     v += pid & 0xFFFF;
 
-    ASSERT_EQ(0, NULL == (logger_list = android_logger_list_open(
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
         LOG_ID_EVENTS, O_RDONLY, 1000, pid)));
 
     int count = 0;
@@ -277,13 +277,13 @@ TEST(liblog, android_logger_list_read__cpu) {
             ++signals;
             break;
         }
-    } while (!signaled || ({log_time t(CLOCK_MONOTONIC); t < signal_time;}));
+    } while (!signaled || (log_time(CLOCK_MONOTONIC) < signal_time));
     alarm(0);
     signal(SIGALRM, SIG_DFL);
 
-    ASSERT_LT(1, count);
+    EXPECT_LT(1, count);
 
-    ASSERT_EQ(1, signals);
+    EXPECT_EQ(1, signals);
 
     android_logger_list_close(logger_list);
 
@@ -295,9 +295,245 @@ TEST(liblog, android_logger_list_read__cpu) {
     const unsigned long long one_percent_ticks = alarm_time;
     unsigned long long user_ticks = uticks_end - uticks_start;
     unsigned long long system_ticks = sticks_end - sticks_start;
-    ASSERT_GT(one_percent_ticks, user_ticks);
-    ASSERT_GT(one_percent_ticks, system_ticks);
-    ASSERT_GT(one_percent_ticks, user_ticks + system_ticks);
+    EXPECT_GT(one_percent_ticks, user_ticks);
+    EXPECT_GT(one_percent_ticks, system_ticks);
+    EXPECT_GT(one_percent_ticks, user_ticks + system_ticks);
+}
+
+static const char max_payload_tag[] = "TEST_max_payload_XXXX";
+static const char max_payload_buf[LOGGER_ENTRY_MAX_PAYLOAD
+    - sizeof(max_payload_tag) - 1] = "LEONATO\n\
+I learn in this letter that Don Peter of Arragon\n\
+comes this night to Messina\n\
+MESSENGER\n\
+He is very near by this: he was not three leagues off\n\
+when I left him\n\
+LEONATO\n\
+How many gentlemen have you lost in this action?\n\
+MESSENGER\n\
+But few of any sort, and none of name\n\
+LEONATO\n\
+A victory is twice itself when the achiever brings\n\
+home full numbers. I find here that Don Peter hath\n\
+bestowed much honour on a young Florentine called Claudio\n\
+MESSENGER\n\
+Much deserved on his part and equally remembered by\n\
+Don Pedro: he hath borne himself beyond the\n\
+promise of his age, doing, in the figure of a lamb,\n\
+the feats of a lion: he hath indeed better\n\
+bettered expectation than you must expect of me to\n\
+tell you how\n\
+LEONATO\n\
+He hath an uncle here in Messina will be very much\n\
+glad of it.\n\
+MESSENGER\n\
+I have already delivered him letters, and there\n\
+appears much joy in him; even so much that joy could\n\
+not show itself modest enough without a badge of\n\
+bitterness.\n\
+LEONATO\n\
+Did he break out into tears?\n\
+MESSENGER\n\
+In great measure.\n\
+LEONATO\n\
+A kind overflow of kindness: there are no faces\n\
+truer than those that are so washed. How much\n\
+better is it to weep at joy than to joy at weeping!\n\
+BEATRICE\n\
+I pray you, is Signior Mountanto returned from the\n\
+wars or no?\n\
+MESSENGER\n\
+I know none of that name, lady: there was none such\n\
+in the army of any sort.\n\
+LEONATO\n\
+What is he that you ask for, niece?\n\
+HERO\n\
+My cousin means Signior Benedick of Padua.\n\
+MESSENGER\n\
+O, he's returned; and as pleasant as ever he was.\n\
+BEATRICE\n\
+He set up his bills here in Messina and challenged\n\
+Cupid at the flight; and my uncle's fool, reading\n\
+the challenge, subscribed for Cupid, and challenged\n\
+him at the bird-bolt. I pray you, how many hath he\n\
+killed and eaten in these wars? But how many hath\n\
+he killed? for indeed I promised to eat all of his killing.\n\
+LEONATO\n\
+Faith, niece, you tax Signior Benedick too much;\n\
+but he'll be meet with you, I doubt it not.\n\
+MESSENGER\n\
+He hath done good service, lady, in these wars.\n\
+BEATRICE\n\
+You had musty victual, and he hath holp to eat it:\n\
+he is a very valiant trencherman; he hath an\n\
+excellent stomach.\n\
+MESSENGER\n\
+And a good soldier too, lady.\n\
+BEATRICE\n\
+And a good soldier to a lady: but what is he to a lord?\n\
+MESSENGER\n\
+A lord to a lord, a man to a man; stuffed with all\n\
+honourable virtues.\n\
+BEATRICE\n\
+It is so, indeed; he is no less than a stuffed man:\n\
+but for the stuffing,--well, we are all mortal.\n\
+LEONATO\n\
+You must not, sir, mistake my niece. There is a\n\
+kind of merry war betwixt Signior Benedick and her:\n\
+they never meet but there's a skirmish of wit\n\
+between them.\n\
+BEATRICE\n\
+Alas! he gets nothing by that. In our last\n\
+conflict four of his five wits went halting off, and\n\
+now is the whole man governed with one: so that if\n\
+he have wit enough to keep himself warm, let him\n\
+bear it for a difference between himself and his\n\
+horse; for it is all the wealth that he hath left,\n\
+to be known a reasonable creature. Who is his\n\
+companion now? He hath every month a new sworn brother.\n\
+MESSENGER\n\
+Is't possible?\n\
+BEATRICE\n\
+Very easily possible: he wears his faith but as\n\
+the fashion of his hat; it ever changes with the\n\
+next block.\n\
+MESSENGER\n\
+I see, lady, the gentleman is not in your books.\n\
+BEATRICE\n\
+No; an he were, I would burn my study. But, I pray\n\
+you, who is his companion? Is there no young\n\
+squarer now that will make a voyage with him to the devil?\n\
+MESSENGER\n\
+He is most in the company of the right noble Claudio.\n\
+BEATRICE\n\
+O Lord, he will hang upon him like a disease: he\n\
+is sooner caught than the pestilence, and the taker\n\
+runs presently mad. God help the noble Claudio! if\n\
+he have caught the Benedick, it will cost him a\n\
+thousand pound ere a' be cured.\n\
+MESSENGER\n\
+I will hold friends with you, lady.\n\
+BEATRICE\n\
+Do, good friend.\n\
+LEONATO\n\
+You will never run mad, niece.\n\
+BEATRICE\n\
+No, not till a hot January.\n\
+MESSENGER\n\
+Don Pedro is approached.\n\
+Enter DON PEDRO, DON JOHN, CLAUDIO, BENEDICK, and BALTHASAR\n\
+\n\
+DON PEDRO\n\
+Good Signior Leonato, you are come to meet your\n\
+trouble: the fashion of the world is to avoid\n\
+cost, and you encounter it\n\
+LEONATO\n\
+Never came trouble to my house in the likeness";
+
+TEST(liblog, max_payload) {
+    pid_t pid = getpid();
+    char tag[sizeof(max_payload_tag)];
+    memcpy(tag, max_payload_tag, sizeof(tag));
+    snprintf(tag + sizeof(tag) - 5, 5, "%04X", pid & 0xFFFF);
+
+    LOG_FAILURE_RETRY(__android_log_buf_write(LOG_ID_SYSTEM, ANDROID_LOG_INFO,
+                                              tag, max_payload_buf));
+
+    struct logger_list *logger_list;
+
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
+        LOG_ID_SYSTEM, O_RDONLY, 100, 0)));
+
+    bool matches = false;
+    ssize_t max_len = 0;
+
+    for(;;) {
+        log_msg log_msg;
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
+            break;
+        }
+
+        if ((log_msg.entry.pid != pid) || (log_msg.id() != LOG_ID_SYSTEM)) {
+            continue;
+        }
+
+        char *data = log_msg.msg() + 1;
+
+        if (strcmp(data, tag)) {
+            continue;
+        }
+
+        data += strlen(data) + 1;
+
+        const char *left = data;
+        const char *right = max_payload_buf;
+        while (*left && *right && (*left == *right)) {
+            ++left;
+            ++right;
+        }
+
+        if (max_len <= (left - data)) {
+            max_len = left - data + 1;
+        }
+
+        if (max_len > 512) {
+            matches = true;
+            break;
+        }
+    }
+
+    EXPECT_EQ(true, matches);
+
+    EXPECT_LE(sizeof(max_payload_buf), max_len);
+
+    android_logger_list_close(logger_list);
+}
+
+TEST(liblog, dual_reader) {
+    struct logger_list *logger_list1;
+
+    // >25 messages due to liblog.__android_log_buf_print__concurrentXX above.
+    ASSERT_TRUE(NULL != (logger_list1 = android_logger_list_open(
+        LOG_ID_MAIN, O_RDONLY | O_NDELAY, 25, 0)));
+
+    struct logger_list *logger_list2;
+
+    if (NULL == (logger_list2 = android_logger_list_open(
+            LOG_ID_MAIN, O_RDONLY | O_NDELAY, 15, 0))) {
+        android_logger_list_close(logger_list1);
+        ASSERT_TRUE(NULL != logger_list2);
+    }
+
+    int count1 = 0;
+    bool done1 = false;
+    int count2 = 0;
+    bool done2 = false;
+
+    do {
+        log_msg log_msg;
+
+        if (!done1) {
+            if (android_logger_list_read(logger_list1, &log_msg) <= 0) {
+                done1 = true;
+            } else {
+                ++count1;
+            }
+        }
+
+        if (!done2) {
+            if (android_logger_list_read(logger_list2, &log_msg) <= 0) {
+                done2 = true;
+            } else {
+                ++count2;
+            }
+        }
+    } while ((!done1) || (!done2));
+
+    android_logger_list_close(logger_list1);
+    android_logger_list_close(logger_list2);
+
+    EXPECT_EQ(25, count1);
+    EXPECT_EQ(15, count2);
 }
 
 TEST(liblog, android_logger_get_) {
@@ -310,11 +546,11 @@ TEST(liblog, android_logger_get_) {
             continue;
         }
         struct logger * logger;
-        ASSERT_EQ(0, NULL == (logger = android_logger_open(logger_list, id)));
-        ASSERT_EQ(id, android_logger_get_id(logger));
-        ASSERT_LT(0, android_logger_get_log_size(logger));
-        ASSERT_LT(0, android_logger_get_log_readable_size(logger));
-        ASSERT_LT(0, android_logger_get_log_version(logger));
+        EXPECT_TRUE(NULL != (logger = android_logger_open(logger_list, id)));
+        EXPECT_EQ(id, android_logger_get_id(logger));
+        EXPECT_LT(0, android_logger_get_log_size(logger));
+        EXPECT_LT(0, android_logger_get_log_readable_size(logger));
+        EXPECT_LT(0, android_logger_get_log_version(logger));
     }
 
     android_logger_list_close(logger_list);
