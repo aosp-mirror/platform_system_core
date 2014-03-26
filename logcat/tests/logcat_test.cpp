@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <signal.h>
 #include <stdio.h>
+#include <string.h>
+
 #include <gtest/gtest.h>
 #include <log/log.h>
 #include <log/logger.h>
@@ -41,7 +44,7 @@ static const char begin[] = "--------- beginning of ";
 TEST(logcat, sorted_order) {
     FILE *fp;
 
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "logcat -v time -b radio -b events -b system -b main -d 2>/dev/null",
       "r")));
 
@@ -92,34 +95,49 @@ TEST(logcat, sorted_order) {
         }
     } last(NULL);
 
+    char *last_buffer = NULL;
     char buffer[5120];
 
     int count = 0;
+    int next_lt_last = 0;
 
     while (fgets(buffer, sizeof(buffer), fp)) {
         if (!strncmp(begin, buffer, sizeof(begin) - 1)) {
             continue;
         }
         if (!last.valid()) {
+            free(last_buffer);
+            last_buffer = strdup(buffer);
             last.init(buffer);
         }
         timestamp next(buffer);
-        ASSERT_EQ(0, next < last);
+        if (next < last) {
+            if (last_buffer) {
+                fprintf(stderr, "<%s", last_buffer);
+            }
+            fprintf(stderr, ">%s", buffer);
+            ++next_lt_last;
+        }
         if (next.valid()) {
+            free(last_buffer);
+            last_buffer = strdup(buffer);
             last.init(buffer);
         }
         ++count;
     }
+    free(last_buffer);
 
     pclose(fp);
 
-    ASSERT_LT(100, count);
+    EXPECT_EQ(0, next_lt_last);
+
+    EXPECT_LT(100, count);
 }
 
 TEST(logcat, buckets) {
     FILE *fp;
 
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "logcat -b radio -b events -b system -b main -d 2>/dev/null",
       "r")));
 
@@ -141,15 +159,15 @@ TEST(logcat, buckets) {
 
     pclose(fp);
 
-    ASSERT_EQ(15, ids);
+    EXPECT_EQ(15, ids);
 
-    ASSERT_EQ(4, count);
+    EXPECT_EQ(4, count);
 }
 
 TEST(logcat, tail_3) {
     FILE *fp;
 
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "logcat -v long -b radio -b events -b system -b main -t 3 2>/dev/null",
       "r")));
 
@@ -173,7 +191,7 @@ TEST(logcat, tail_3) {
 TEST(logcat, tail_10) {
     FILE *fp;
 
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "logcat -v long -b radio -b events -b system -b main -t 10 2>/dev/null",
       "r")));
 
@@ -197,7 +215,7 @@ TEST(logcat, tail_10) {
 TEST(logcat, tail_100) {
     FILE *fp;
 
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "logcat -v long -b radio -b events -b system -b main -t 100 2>/dev/null",
       "r")));
 
@@ -221,7 +239,7 @@ TEST(logcat, tail_100) {
 TEST(logcat, tail_1000) {
     FILE *fp;
 
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "logcat -v long -b radio -b events -b system -b main -t 1000 2>/dev/null",
       "r")));
 
@@ -242,6 +260,72 @@ TEST(logcat, tail_1000) {
     ASSERT_EQ(1000, count);
 }
 
+TEST(logcat, tail_time) {
+    FILE *fp;
+
+    ASSERT_TRUE(NULL != (fp = popen("logcat -v long -b all -t 10 2>&1", "r")));
+
+    char buffer[5120];
+    char *last_timestamp = NULL;
+    char *first_timestamp = NULL;
+    int count = 0;
+    const unsigned int time_length = 18;
+    const unsigned int time_offset = 2;
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        if ((buffer[0] == '[') && (buffer[1] == ' ')
+         && isdigit(buffer[time_offset]) && isdigit(buffer[time_offset + 1])
+         && (buffer[time_offset + 2] == '-')) {
+            ++count;
+            buffer[time_length + time_offset] = '\0';
+            if (!first_timestamp) {
+                first_timestamp = strdup(buffer + time_offset);
+            }
+            free(last_timestamp);
+            last_timestamp = strdup(buffer + time_offset);
+        }
+    }
+    pclose(fp);
+
+    EXPECT_EQ(10, count);
+    EXPECT_TRUE(last_timestamp != NULL);
+    EXPECT_TRUE(first_timestamp != NULL);
+
+    snprintf(buffer, sizeof(buffer), "logcat -v long -b all -t '%s' 2>&1",
+             first_timestamp);
+    ASSERT_TRUE(NULL != (fp = popen(buffer, "r")));
+
+    int second_count = 0;
+    int last_timestamp_count = -1;
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        if ((buffer[0] == '[') && (buffer[1] == ' ')
+         && isdigit(buffer[time_offset]) && isdigit(buffer[time_offset + 1])
+         && (buffer[time_offset + 2] == '-')) {
+            ++second_count;
+            buffer[time_length + time_offset] = '\0';
+            if (first_timestamp) {
+                // we can get a transitory *extremely* rare failure if hidden
+                // underneath the time is *exactly* XX-XX XX:XX:XX.XXX000000
+                EXPECT_STREQ(buffer + time_offset, first_timestamp);
+                free(first_timestamp);
+                first_timestamp = NULL;
+            }
+            if (!strcmp(buffer + time_offset, last_timestamp)) {
+                last_timestamp_count = second_count;
+            }
+        }
+    }
+    pclose(fp);
+
+    free(last_timestamp);
+    last_timestamp = NULL;
+
+    EXPECT_TRUE(first_timestamp == NULL);
+    EXPECT_LE(count, second_count);
+    EXPECT_LE(count, last_timestamp_count);
+}
+
 TEST(logcat, End_to_End) {
     pid_t pid = getpid();
 
@@ -250,7 +334,7 @@ TEST(logcat, End_to_End) {
     ASSERT_LT(0, __android_log_btwrite(0, EVENT_TYPE_LONG, &ts, sizeof(ts)));
 
     FILE *fp;
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "logcat -b events -t 100 2>/dev/null",
       "r")));
 
@@ -281,7 +365,7 @@ TEST(logcat, End_to_End) {
 TEST(logcat, get_) {
     FILE *fp;
 
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "logcat -b radio -b events -b system -b main -g 2>/dev/null",
       "r")));
 
@@ -329,7 +413,7 @@ TEST(logcat, blocking) {
 
     v &= 0xFFFFFFFFFFFAFFFFULL;
 
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "( trap exit HUP QUIT INT PIPE KILL ; sleep 6; echo DONE )&"
       " logcat -b events 2>&1",
       "r")));
@@ -372,9 +456,9 @@ TEST(logcat, blocking) {
 
     pclose(fp);
 
-    ASSERT_LE(2, count);
+    EXPECT_LE(2, count);
 
-    ASSERT_EQ(1, signals);
+    EXPECT_EQ(1, signals);
 }
 
 static void caught_blocking_tail(int signum)
@@ -398,7 +482,7 @@ TEST(logcat, blocking_tail) {
 
     v &= 0xFFFAFFFFFFFFFFFFULL;
 
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "( trap exit HUP QUIT INT PIPE KILL ; sleep 6; echo DONE )&"
       " logcat -b events -T 5 2>&1",
       "r")));
@@ -443,9 +527,9 @@ TEST(logcat, blocking_tail) {
 
     pclose(fp);
 
-    ASSERT_LE(2, count);
+    EXPECT_LE(2, count);
 
-    ASSERT_EQ(1, signals);
+    EXPECT_EQ(1, signals);
 }
 
 static void caught_blocking_clear(int signum)
@@ -467,7 +551,7 @@ TEST(logcat, blocking_clear) {
 
     // This test is racey; an event occurs between clear and dump.
     // We accept that we will get a false positive, but never a false negative.
-    ASSERT_EQ(0, NULL == (fp = popen(
+    ASSERT_TRUE(NULL != (fp = popen(
       "( trap exit HUP QUIT INT PIPE KILL ; sleep 6; echo DONE )&"
       " logcat -b events -c 2>&1 ;"
       " logcat -b events 2>&1",
@@ -520,9 +604,9 @@ TEST(logcat, blocking_clear) {
 
     pclose(fp);
 
-    ASSERT_LE(1, count);
+    EXPECT_LE(1, count);
 
-    ASSERT_EQ(1, signals);
+    EXPECT_EQ(1, signals);
 }
 
 #ifdef USERDEBUG_BUILD
@@ -601,29 +685,20 @@ TEST(logcat, white_black_adjust) {
     static const char adjustment[] = "~! 300/20 300/25 2000 ~1000/5 ~1000/30";
     ASSERT_EQ(true, set_white_black(adjustment));
     ASSERT_EQ(true, get_white_black(&adjust));
-    if (strcmp(adjustment, adjust)) {
-        fprintf(stderr, "ERROR: '%s' != '%s'\n", adjustment, adjust);
-    }
-    ASSERT_STREQ(adjustment, adjust);
+    EXPECT_STREQ(adjustment, adjust);
     free(adjust);
     adjust = NULL;
 
     static const char adjustment2[] = "300/20 300/21 2000 ~1000";
     ASSERT_EQ(true, set_white_black(adjustment2));
     ASSERT_EQ(true, get_white_black(&adjust));
-    if (strcmp(adjustment2, adjust)) {
-        fprintf(stderr, "ERROR: '%s' != '%s'\n", adjustment2, adjust);
-    }
-    ASSERT_STREQ(adjustment2, adjust);
+    EXPECT_STREQ(adjustment2, adjust);
     free(adjust);
     adjust = NULL;
 
     ASSERT_EQ(true, set_white_black(list));
     ASSERT_EQ(true, get_white_black(&adjust));
-    if (strcmp(list, adjust)) {
-        fprintf(stderr, "ERROR: '%s' != '%s'\n", list, adjust);
-    }
-    ASSERT_STREQ(list, adjust);
+    EXPECT_STREQ(list, adjust);
     free(adjust);
     adjust = NULL;
 
