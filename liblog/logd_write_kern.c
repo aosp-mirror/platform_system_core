@@ -95,12 +95,15 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     if (/*(int)log_id >= 0 &&*/ (int)log_id < (int)LOG_ID_MAX) {
         log_fd = log_fds[(int)log_id];
     } else {
-        return EBADF;
+        return -EBADF;
     }
 
     do {
         ret = log_writev(log_fd, vec, nr);
-    } while (ret < 0 && errno == EINTR);
+        if (ret < 0) {
+            ret = -errno;
+        }
+    } while (ret == -EINTR);
 
     return ret;
 }
