@@ -90,6 +90,8 @@
 #define VENDOR_ID_INQ_MOBILE    0x2314
 // Intel's USB Vendor ID
 #define VENDOR_ID_INTEL         0x8087
+// Intermec's USB Vendor ID
+#define VENDOR_ID_INTERMEC      0x067e
 // IRiver's USB Vendor ID
 #define VENDOR_ID_IRIVER        0x2420
 // K-Touch's USB Vendor ID
@@ -210,6 +212,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_HUAWEI,
     VENDOR_ID_INQ_MOBILE,
     VENDOR_ID_INTEL,
+    VENDOR_ID_INTERMEC,
     VENDOR_ID_IRIVER,
     VENDOR_ID_KOBO,
     VENDOR_ID_K_TOUCH,
