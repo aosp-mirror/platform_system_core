@@ -41,6 +41,26 @@ void ShowUsage() {
   exit(1);
 }
 
+static int ParseInt(const char *arg) {
+  char *endptr;
+  int value = strtol(arg, &endptr, 0);
+  if (*endptr != '\0') {
+    fprintf(stderr, "metrics client: bad integer \"%s\"\n", arg);
+    ShowUsage();
+  }
+  return value;
+}
+
+static double ParseDouble(const char *arg) {
+  char *endptr;
+  double value = strtod(arg, &endptr);
+  if (*endptr != '\0') {
+    fprintf(stderr, "metrics client: bad double \"%s\"\n", arg);
+    ShowUsage();
+  }
+  return value;
+}
+
 static int SendStats(char* argv[],
                      int name_index,
                      enum Mode mode,
@@ -50,9 +70,9 @@ static int SendStats(char* argv[],
   const char* name = argv[name_index];
   int sample;
   if (secs_to_msecs) {
-    sample = static_cast<int>(atof(argv[name_index + 1]) * 1000.0);
+    sample = static_cast<int>(ParseDouble(argv[name_index + 1]) * 1000.0);
   } else {
-    sample = atoi(argv[name_index + 1]);
+    sample = ParseInt(argv[name_index + 1]);
   }
 
   // Send metrics
@@ -66,12 +86,12 @@ static int SendStats(char* argv[],
     if (mode == kModeSendSparseSample) {
       metrics_lib.SendSparseToUMA(name, sample);
     } else if (mode == kModeSendEnumSample) {
-      int max = atoi(argv[name_index + 2]);
+      int max = ParseInt(argv[name_index + 2]);
       metrics_lib.SendEnumToUMA(name, sample, max);
     } else {
-      int min = atoi(argv[name_index + 2]);
-      int max = atoi(argv[name_index + 3]);
-      int nbuckets = atoi(argv[name_index + 4]);
+      int min = ParseInt(argv[name_index + 2]);
+      int max = ParseInt(argv[name_index + 3]);
+      int nbuckets = ParseInt(argv[name_index + 4]);
       metrics_lib.SendToUMA(name, sample, min, max, nbuckets);
     }
   }
