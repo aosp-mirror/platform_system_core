@@ -24,8 +24,11 @@
 #include <sys/capability.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <linux/prctl.h>
+
+#include <cutils/properties.h>
 
 #include "private/android_filesystem_config.h"
 #include "CommandListener.h"
@@ -91,6 +94,12 @@ int main() {
     // log entries.
 
     LogBuffer *logBuf = new LogBuffer(times);
+
+    char dgram_qlen_statistics[PROPERTY_VALUE_MAX];
+    property_get("logd.dgram_qlen.statistics", dgram_qlen_statistics, "");
+    if (atol(dgram_qlen_statistics)) {
+        logBuf->enableDgramQlenStatistics();
+    }
 
     // LogReader listens on /dev/socket/logdr. When a client
     // connects, log entries in the LogBuffer are written to the client.
