@@ -7,6 +7,7 @@
 import /init.environ.rc
 import /init.usb.rc
 import /init.${ro.hardware}.rc
+import /init.${ro.zygote}.rc
 import /init.trace.rc
 
 on early-init
@@ -533,14 +534,6 @@ service inputflinger /system/bin/inputflinger
     user system
     group input
     onrestart restart zygote
-
-service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
-    class main
-    socket zygote stream 660 root system
-    onrestart write /sys/android_power/request_state wake
-    onrestart write /sys/power/state on
-    onrestart restart media
-    onrestart restart netd
 
 service drm /system/bin/drmserver
     class main
