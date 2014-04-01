@@ -37,11 +37,11 @@
 LogBuffer::LogBuffer(LastLogTimes *times)
         : mTimes(*times) {
     pthread_mutex_init(&mLogElementsLock, NULL);
-#ifdef USERDEBUG_BUILD
+    dgram_qlen_statistics = false;
+
     log_id_for_each(i) {
         mMaxSize[i] = LOG_BUFFER_SIZE;
     }
-#endif
 }
 
 void LogBuffer::log(log_id_t log_id, log_time realtime,
@@ -61,6 +61,23 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
     LogBufferElementCollection::iterator last = it;
     while (--it != mLogElements.begin()) {
         if ((*it)->getRealTime() <= realtime) {
+            // halves the peak performance, use with caution
+            if (dgram_qlen_statistics) {
+                LogBufferElementCollection::iterator ib = it;
+                unsigned short buckets, num = 1;
+                for (unsigned short i = 0; (buckets = stats.dgram_qlen(i)); ++i) {
+                    buckets -= num;
+                    num += buckets;
+                    while (buckets && (--ib != mLogElements.begin())) {
+                        --buckets;
+                    }
+                    if (buckets) {
+                        break;
+                    }
+                    stats.recordDiff(
+                        elem->getRealTime() - (*ib)->getRealTime(), i);
+                }
+            }
             break;
         }
         last = it;
