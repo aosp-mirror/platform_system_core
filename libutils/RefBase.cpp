@@ -109,7 +109,7 @@ public:
                 char inc = refs->ref >= 0 ? '+' : '-';
                 ALOGD("\t%c ID %p (ref %d):", inc, refs->id, refs->ref);
 #if DEBUG_REFS_CALLSTACK_ENABLED
-                refs->stack.dump(LOG_TAG);
+                refs->stack.log(LOG_TAG);
 #endif
                 refs = refs->next;
             }
@@ -123,7 +123,7 @@ public:
                 char inc = refs->ref >= 0 ? '+' : '-';
                 ALOGD("\t%c ID %p (ref %d):", inc, refs->id, refs->ref);
 #if DEBUG_REFS_CALLSTACK_ENABLED
-                refs->stack.dump(LOG_TAG);
+                refs->stack.log(LOG_TAG);
 #endif
                 refs = refs->next;
             }
