@@ -26,9 +26,11 @@ namespace android {
 
 class NativeHandle: public LightRefBase<NativeHandle> {
 public:
-    // Create a refcounted wrapper around a native_handle_t.
+    // Create a refcounted wrapper around a native_handle_t, and declare
+    // whether the wrapper owns the handle (so that it should clean up the
+    // handle upon destruction) or not.
     // If handle is NULL, no NativeHandle will be created.
-    static sp<NativeHandle> create(native_handle_t* handle);
+    static sp<NativeHandle> create(native_handle_t* handle, bool ownsHandle);
 
     const native_handle_t* handle() const {
         return mHandle;
@@ -38,10 +40,11 @@ private:
     // for access to the destructor
     friend class LightRefBase<NativeHandle>;
 
-    NativeHandle(native_handle_t* handle);
+    NativeHandle(native_handle_t* handle, bool ownsHandle);
     virtual ~NativeHandle();
 
     native_handle_t* mHandle;
+    bool mOwnsHandle;
 
     // non-copyable
     NativeHandle(const NativeHandle&);
