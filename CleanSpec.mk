@@ -51,3 +51,5 @@
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/root/init.rc)
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/root/init.rc)
 $(call add-clean-step, rm -rf $(PRODUCT_OUT)/system/bin/reboot)
+$(call add-clean-step, rm -rf $(PRODUCT_OUT)/root/default.prop)
+$(call add-clean-step, rm -rf $(PRODUCT_OUT)/recovery/root/default.prop)
