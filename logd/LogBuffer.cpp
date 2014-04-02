@@ -39,9 +39,11 @@ LogBuffer::LogBuffer(LastLogTimes *times)
     pthread_mutex_init(&mLogElementsLock, NULL);
     dgram_qlen_statistics = false;
 
+#ifdef USERDEBUG_BUILD
     log_id_for_each(i) {
         mMaxSize[i] = LOG_BUFFER_SIZE;
     }
+#endif
 }
 
 void LogBuffer::log(log_id_t log_id, log_time realtime,
