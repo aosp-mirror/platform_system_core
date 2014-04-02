@@ -232,17 +232,10 @@ static void show_help(const char *cmd)
                     "  -B              output the log in binary.\n"
                     "  -S              output statistics.\n");
 
-#ifdef USERDEBUG_BUILD
-
-    fprintf(stderr, "--------------------- eng & userdebug builds only ---------------------------\n"
-                    "  -G <count>      set size of log's ring buffer and exit\n"
+    fprintf(stderr, "  -G <count>      set size of log's ring buffer and exit\n"
                     "  -p              output prune white and ~black list\n"
                     "  -P '<list> ...' set prune white and ~black list; UID, /PID or !(worst UID)\n"
-                    "                  default is ~!, prune worst UID.\n"
-                    "-----------------------------------------------------------------------------\n"
-    );
-
-#endif
+                    "                  default is ~!, prune worst UID.\n");
 
     fprintf(stderr,"\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
@@ -291,11 +284,9 @@ int main(int argc, char **argv)
     int hasSetLogFormat = 0;
     int clearLog = 0;
     int getLogSize = 0;
-#ifdef USERDEBUG_BUILD
     unsigned long setLogSize = 0;
     int getPruneList = 0;
     char *setPruneList = NULL;
-#endif
     int printStatistics = 0;
     int mode = O_RDONLY;
     const char *forceFilters = NULL;
@@ -323,13 +314,7 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv,
-#ifdef USERDEBUG_BUILD
-            "cdt:T:gG:sQf:r::n:v:b:BSpP:"
-#else
-            "cdt:T:gsQf:r::n:v:b:BS"
-#endif
-        );
+        ret = getopt(argc, argv, "cdt:T:gG:sQf:r::n:v:b:BSpP:");
 
         if (ret < 0) {
             break;
@@ -386,8 +371,6 @@ int main(int argc, char **argv)
                 getLogSize = 1;
             break;
 
-#ifdef USERDEBUG_BUILD
-
             case 'G': {
                 // would use atol if not for the multiplier
                 char *cp = optarg;
@@ -432,8 +415,6 @@ int main(int argc, char **argv)
             case 'P':
                 setPruneList = optarg;
             break;
-
-#endif
 
             case 'b': {
                 if (strcmp(optarg, "all") == 0) {
@@ -704,14 +685,10 @@ int main(int argc, char **argv)
             }
         }
 
-#ifdef USERDEBUG_BUILD
-
         if (setLogSize && android_logger_set_log_size(dev->logger, setLogSize)) {
             perror("failed to set the log size");
             exit(EXIT_FAILURE);
         }
-
-#endif
 
         if (getLogSize) {
             long size, readable;
@@ -737,8 +714,6 @@ int main(int argc, char **argv)
         dev = dev->next;
     }
 
-#ifdef USERDEBUG_BUILD
-
     if (setPruneList) {
         size_t len = strlen(setPruneList) + 32; // margin to allow rc
         char *buf = (char *) malloc(len);
@@ -753,30 +728,18 @@ int main(int argc, char **argv)
         }
     }
 
-#endif
-
-    if (
-#ifdef USERDEBUG_BUILD
-        printStatistics || getPruneList
-#else
-        printStatistics
-#endif
-    ) {
+    if (printStatistics || getPruneList) {
         size_t len = 8192;
         char *buf;
 
         for(int retry = 32;
                 (retry >= 0) && ((buf = new char [len]));
                 delete [] buf, --retry) {
-#ifdef USERDEBUG_BUILD
             if (getPruneList) {
                 android_logger_get_prune_list(logger_list, buf, len);
             } else {
                 android_logger_get_statistics(logger_list, buf, len);
             }
-#else
-            android_logger_get_statistics(logger_list, buf, len);
-#endif
             buf[len-1] = '\0';
             size_t ret = atol(buf) + 1;
             if (ret < 4) {
@@ -824,11 +787,9 @@ int main(int argc, char **argv)
     if (getLogSize) {
         exit(0);
     }
-#ifdef USERDEBUG_BUILD
     if (setLogSize || setPruneList) {
         exit(0);
     }
-#endif
     if (clearLog) {
         exit(0);
     }

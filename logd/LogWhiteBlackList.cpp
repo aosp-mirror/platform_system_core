@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#ifdef USERDEBUG_BUILD
-
 #include <ctype.h>
 
 #include <utils/String8.h>
@@ -239,5 +237,3 @@ bool PruneList::nice(LogBufferElement *element) {
     }
     return false;
 }
-
-#endif // USERDEBUG_BUILD

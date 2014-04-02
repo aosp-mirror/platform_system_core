@@ -37,15 +37,11 @@ CommandListener::CommandListener(LogBuffer *buf, LogReader * /*reader*/,
     // registerCmd(new ShutdownCmd(buf, writer, swl));
     registerCmd(new ClearCmd(buf));
     registerCmd(new GetBufSizeCmd(buf));
-#ifdef USERDEBUG_BUILD
     registerCmd(new SetBufSizeCmd(buf));
-#endif
     registerCmd(new GetBufSizeUsedCmd(buf));
     registerCmd(new GetStatisticsCmd(buf));
-#ifdef USERDEBUG_BUILD
     registerCmd(new SetPruneListCmd(buf));
     registerCmd(new GetPruneListCmd(buf));
-#endif
 }
 
 CommandListener::ShutdownCmd::ShutdownCmd(LogBuffer *buf, LogReader *reader,
@@ -117,8 +113,6 @@ int CommandListener::GetBufSizeCmd::runCommand(SocketClient *cli,
     return 0;
 }
 
-#ifdef USERDEBUG_BUILD
-
 CommandListener::SetBufSizeCmd::SetBufSizeCmd(LogBuffer *buf)
         : LogCommand("setLogSize")
         , mBuf(*buf)
@@ -151,8 +145,6 @@ int CommandListener::SetBufSizeCmd::runCommand(SocketClient *cli,
     cli->sendMsg("success");
     return 0;
 }
-
-#endif // USERDEBUG_BUILD
 
 CommandListener::GetBufSizeUsedCmd::GetBufSizeUsedCmd(LogBuffer *buf)
         : LogCommand("getLogSizeUsed")
@@ -236,8 +228,6 @@ int CommandListener::GetStatisticsCmd::runCommand(SocketClient *cli,
     return 0;
 }
 
-#ifdef USERDEBUG_BUILD
-
 CommandListener::GetPruneListCmd::GetPruneListCmd(LogBuffer *buf)
         : LogCommand("getPruneList")
         , mBuf(*buf)
@@ -293,5 +283,3 @@ int CommandListener::SetPruneListCmd::runCommand(SocketClient *cli,
 
     return 0;
 }
-
-#endif // USERDEBUG_BUILD
