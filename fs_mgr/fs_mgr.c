@@ -234,6 +234,15 @@ static int fs_match(char *in1, char *in2)
     return ret;
 }
 
+static int device_is_debuggable() {
+    int ret = -1;
+    char value[PROP_VALUE_MAX];
+    ret = __system_property_get("ro.debuggable", value);
+    if (ret < 0)
+        return ret;
+    return strcmp(value, "1") ? 0 : 1;
+}
+
 int fs_mgr_mount_all(struct fstab *fstab)
 {
     int i = 0;
@@ -268,7 +277,8 @@ int fs_mgr_mount_all(struct fstab *fstab)
                      fstab->recs[i].mount_point);
         }
 
-        if (fstab->recs[i].fs_mgr_flags & MF_VERIFY) {
+        if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) &&
+            !device_is_debuggable()) {
             if (fs_mgr_setup_verity(&fstab->recs[i]) < 0) {
                 ERROR("Could not set up verified partition, skipping!");
                 continue;
@@ -373,7 +383,8 @@ int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
                      fstab->recs[i].mount_point);
         }
 
-        if (fstab->recs[i].fs_mgr_flags & MF_VERIFY) {
+        if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) &&
+            !device_is_debuggable()) {
             if (fs_mgr_setup_verity(&fstab->recs[i]) < 0) {
                 ERROR("Could not set up verified partition, skipping!");
                 continue;
