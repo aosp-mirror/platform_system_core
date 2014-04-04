@@ -32,8 +32,25 @@ public:
 
   unw_map_cursor_t* GetMapCursor() { return &map_cursor_; }
 
-private:
+protected:
+  virtual bool GenerateMap();
+
   unw_map_cursor_t map_cursor_;
+};
+
+class UnwindMapLocal : public UnwindMap {
+public:
+  UnwindMapLocal();
+  virtual ~UnwindMapLocal();
+
+  virtual bool Build();
+
+  virtual const backtrace_map_t* Find(uintptr_t addr);
+
+protected:
+  virtual bool GenerateMap();
+
+  bool map_created_;
 };
 
 #endif // _LIBBACKTRACE_UNWIND_MAP_H
