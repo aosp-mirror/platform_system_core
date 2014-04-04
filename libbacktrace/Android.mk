@@ -129,9 +129,11 @@ endif # arm64
 
 backtrace_test_cflags_target := \
 	-DGTEST_OS_LINUX_ANDROID \
+	-DENABLE_PSS_TESTS \
 
 backtrace_test_src_files := \
 	backtrace_test.cpp \
+	GetPss.cpp \
 	thread_utils.c \
 
 backtrace_test_ldlibs := \
