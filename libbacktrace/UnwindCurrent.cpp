@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "libbacktrace"
-
 #include <sys/ucontext.h>
 #include <sys/types.h>
 
@@ -25,6 +23,7 @@
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 
+#include "BacktraceLog.h"
 #include "UnwindCurrent.h"
 #include "UnwindMap.h"
 

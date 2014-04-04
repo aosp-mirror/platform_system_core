@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "libbacktrace"
-
 #include <backtrace/Backtrace.h>
 
 #include <string.h>
@@ -28,6 +26,7 @@
 #endif
 #include <dlfcn.h>
 
+#include "BacktraceLog.h"
 #include "Corkscrew.h"
 
 //-------------------------------------------------------------------------
