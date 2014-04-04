@@ -54,32 +54,6 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
-/**
- * TODO - Remove to enable always on encryption for all devices
- * This limits the machines on which this feature is enabled
- * Remove call from fs_mgr_mount_all as well
- */
-static const char* serial_numbers[] = {
-  "039b83b8437e9637",
-  0
-};
-
-static int serial_matches()
-{
-    char tmp[PROP_VALUE_MAX];
-    *tmp = 0;
-    __system_property_get("ro.serialno", tmp);
-
-    const char** i;
-    for (i = serial_numbers; *i; ++i) {
-        if (!strcmp(*i, tmp)) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 /*
  * gettime() - returns the time in seconds of the system's monotonic clock or
  * zero on error.
@@ -291,8 +265,8 @@ int fs_mgr_mount_all(struct fstab *fstab)
 
         if (!mret) {
             /* If this is encryptable, need to trigger encryption */
-            if ((fstab->recs[i].fs_mgr_flags & MF_CRYPT)) {
-                if (serial_matches() && umount(fstab->recs[i].mount_point) == 0) {
+            if ((fstab->recs[i].fs_mgr_flags & MF_FORCECRYPT)) {
+                if (umount(fstab->recs[i].mount_point) == 0) {
                     if (!encryptable) {
                         encryptable = 2;
                     } else {
@@ -314,7 +288,7 @@ int fs_mgr_mount_all(struct fstab *fstab)
         mount_errno = errno;
         /* mount(2) returned an error, check if it's encryptable and deal with it */
         if (mount_errno != EBUSY && mount_errno != EACCES &&
-            (fstab->recs[i].fs_mgr_flags & MF_CRYPT) &&
+            (fstab->recs[i].fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT)) &&
             !partition_wiped(fstab->recs[i].blk_device)) {
             /* Need to mount a tmpfs at this mountpoint for now, and set
              * properties that vold will query later for decrypting
@@ -556,7 +530,7 @@ int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc, char *real_blk_dev
         if (fstab->recs[i].fs_mgr_flags & MF_VOLDMANAGED) {
             continue;
         }
-        if (!(fstab->recs[i].fs_mgr_flags & MF_CRYPT)) {
+        if (!(fstab->recs[i].fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT))) {
             continue;
         }
 

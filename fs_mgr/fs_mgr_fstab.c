@@ -59,6 +59,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "wait",        MF_WAIT },
     { "check",       MF_CHECK },
     { "encryptable=",MF_CRYPT },
+    { "forceencrypt=",MF_FORCECRYPT },
     { "nonremovable",MF_NONREMOVABLE },
     { "voldmanaged=",MF_VOLDMANAGED},
     { "length=",     MF_LENGTH },
@@ -103,6 +104,11 @@ static int parse_flags(char *flags, struct flag_list *fl,
                 f |= fl[i].flag;
                 if ((fl[i].flag == MF_CRYPT) && flag_vals) {
                     /* The encryptable flag is followed by an = and the
+                     * location of the keys.  Get it and return it.
+                     */
+                    flag_vals->key_loc = strdup(strchr(p, '=') + 1);
+                } else if ((fl[i].flag == MF_FORCECRYPT) && flag_vals) {
+                    /* The forceencrypt flag is followed by an = and the
                      * location of the keys.  Get it and return it.
                      */
                     flag_vals->key_loc = strdup(strchr(p, '=') + 1);
@@ -394,7 +400,7 @@ int fs_mgr_is_nonremovable(struct fstab_rec *fstab)
 
 int fs_mgr_is_encryptable(struct fstab_rec *fstab)
 {
-    return fstab->fs_mgr_flags & MF_CRYPT;
+    return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT);
 }
 
 int fs_mgr_is_noemulatedsd(struct fstab_rec *fstab)
