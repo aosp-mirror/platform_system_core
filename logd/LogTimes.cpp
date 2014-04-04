@@ -46,14 +46,25 @@ LogTimeEntry::LogTimeEntry(LogReader &reader, SocketClient *client,
 { }
 
 void LogTimeEntry::startReader_Locked(void) {
+    pthread_attr_t attr;
+
     threadRunning = true;
-    if (pthread_create(&mThread, NULL, LogTimeEntry::threadStart, this)) {
-        threadRunning = false;
-        if (mClient) {
-            mClient->decRef();
+
+    if (!pthread_attr_init(&attr)) {
+        if (!pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
+            if (!pthread_create(&mThread, &attr,
+                                LogTimeEntry::threadStart, this)) {
+                pthread_attr_destroy(&attr);
+                return;
+            }
         }
-        decRef_Locked();
+        pthread_attr_destroy(&attr);
     }
+    threadRunning = false;
+    if (mClient) {
+        mClient->decRef();
+    }
+    decRef_Locked();
 }
 
 void LogTimeEntry::threadStop(void *obj) {
