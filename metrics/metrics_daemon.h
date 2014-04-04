@@ -43,12 +43,8 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, ComputeEpochNoLast);
   FRIEND_TEST(MetricsDaemonTest, GetHistogramPath);
   FRIEND_TEST(MetricsDaemonTest, IsNewEpoch);
-  FRIEND_TEST(MetricsDaemonTest, LookupPowerState);
-  FRIEND_TEST(MetricsDaemonTest, LookupScreenSaverState);
-  FRIEND_TEST(MetricsDaemonTest, LookupSessionState);
   FRIEND_TEST(MetricsDaemonTest, MessageFilter);
   FRIEND_TEST(MetricsDaemonTest, ParseVmStats);
-  FRIEND_TEST(MetricsDaemonTest, PowerStateChanged);
   FRIEND_TEST(MetricsDaemonTest, ProcessKernelCrash);
   FRIEND_TEST(MetricsDaemonTest, ProcessMeminfo);
   FRIEND_TEST(MetricsDaemonTest, ProcessMeminfo2);
@@ -61,28 +57,8 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, ReportKernelCrashInterval);
   FRIEND_TEST(MetricsDaemonTest, ReportUncleanShutdownInterval);
   FRIEND_TEST(MetricsDaemonTest, ReportUserCrashInterval);
-  FRIEND_TEST(MetricsDaemonTest, ScreenSaverStateChanged);
   FRIEND_TEST(MetricsDaemonTest, SendSample);
   FRIEND_TEST(MetricsDaemonTest, SendCpuThrottleMetrics);
-  FRIEND_TEST(MetricsDaemonTest, SessionStateChanged);
-  FRIEND_TEST(MetricsDaemonTest, SetUserActiveState);
-  FRIEND_TEST(MetricsDaemonTest, SetUserActiveStateTimeJump);
-
-  // The power states (see power_states.h).
-  enum PowerState {
-    kUnknownPowerState = -1, // Initial/unknown power state.
-#define STATE(name, capname) kPowerState ## capname,
-#include "power_states.h"
-    kNumberPowerStates
-  };
-
-  // The user session states (see session_states.h).
-  enum SessionState {
-    kUnknownSessionState = -1, // Initial/unknown user session state.
-#define STATE(name, capname) kSessionState ## capname,
-#include "session_states.h"
-    kNumberSessionStates
-  };
 
   // State for disk stats collector callback.
   enum StatsState {
@@ -148,12 +124,6 @@ class MetricsDaemon {
   static const char kMetricsProcStatFileName[];
   static const int kMetricsProcStatFirstLineItemsCount;
 
-  // Array of power states.
-  static const char* kPowerStates_[kNumberPowerStates];
-
-  // Array of user session states.
-  static const char* kSessionStates_[kNumberSessionStates];
-
   // Returns the active time since boot (uptime minus sleep time) in seconds.
   double GetActiveTime();
 
@@ -164,27 +134,6 @@ class MetricsDaemon {
   static DBusHandlerResult MessageFilter(DBusConnection* connection,
                                          DBusMessage* message,
                                          void* user_data);
-
-  // Processes power state change.
-  void PowerStateChanged(const char* state_name, base::Time now);
-
-  // Given the state name, returns the state id.
-  PowerState LookupPowerState(const char* state_name);
-
-  // Processes user session state change.
-  void SessionStateChanged(const char* state_name, base::Time now);
-
-  // Given the state name, returns the state id.
-  SessionState LookupSessionState(const char* state_name);
-
-  // Updates the user-active state to |active| and logs the usage data
-  // since the last update. If the user has just become active,
-  // reschedule the daily use monitor for more frequent updates --
-  // this is followed by an exponential back-off (see UseMonitor).
-  // While in active use, this method should be called at intervals no
-  // longer than kUseMonitorIntervalMax otherwise new use time will be
-  // discarded.
-  void SetUserActiveState(bool active, base::Time now);
 
   // Updates the daily usage file, if necessary, by adding |seconds|
   // of active use to the |day| since Epoch. If there's usage data for
@@ -208,27 +157,6 @@ class MetricsDaemon {
   // |crash_file| exists.  It removes the file immediately if it
   // exists, so it must not be called more than once.
   bool CheckSystemCrash(const std::string& crash_file);
-
-  // Callbacks for the daily use monitor. The daily use monitor uses
-  // LogDailyUseRecord to aggregate current usage data and send it to
-  // UMA, if necessary. It also reschedules itself using an
-  // exponentially bigger interval (up to a certain maximum) -- so
-  // usage is monitored less frequently with longer active use.
-  static gboolean UseMonitorStatic(gpointer data);
-  bool UseMonitor();
-
-  // Schedules or reschedules a daily use monitor for |interval|
-  // seconds from now. |backoff| mode is used by the use monitor to
-  // reschedule itself. If there's a monitor scheduled already and
-  // |backoff| is false, unschedules it first. Doesn't schedule a
-  // monitor for more than kUseMonitorIntervalMax seconds in the
-  // future (see metrics_daemon.cc). Returns true if a new use monitor
-  // was scheduled, false otherwise (note that if |backoff| is false a
-  // new use monitor will always be scheduled).
-  bool ScheduleUseMonitor(int interval, bool backoff);
-
-  // Unschedules a scheduled use monitor, if any.
-  void UnscheduleUseMonitor();
 
   // Report daily use through UMA.
   void ReportDailyUse(int use_seconds);
@@ -327,12 +255,16 @@ class MetricsDaemon {
   // Reads an integer CPU frequency value from sysfs.
   bool ReadFreqToInt(const std::string& sysfs_file_name, int* value);
 
-  // Report UMA stats when cycles (daily or weekly) have changed.
-  void ReportStats(int64 active_time_seconds, base::Time now);
-
   // Reads the current OS version from /etc/lsb-release and hashes it
   // to a unsigned 32-bit int.
   uint32 GetOsVersionHash();
+
+  // Updates stats, additionally sending them to UMA if enough time has elapsed
+  // since the last report.
+  void UpdateStats(base::TimeTicks now_ticks, base::Time now_wall_time);
+
+  // Invoked periodically by |update_stats_timeout_id_| to call UpdateStats().
+  static gboolean HandleUpdateStatsTimeout(gpointer data);
 
   // Test mode.
   bool testing_;
@@ -345,20 +277,11 @@ class MetricsDaemon {
   // TimeTicks ensures a monotonically increasing TimeDelta.
   base::TimeTicks network_state_last_;
 
-  // Current power state.
-  PowerState power_state_;
+  // The last time that UpdateStats() was called.
+  base::TimeTicks last_update_stats_time_;
 
-  // Current user session state.
-  SessionState session_state_;
-
-  // Is the user currently active: power is on, user session has
-  // started, screen is not locked.
-  bool user_active_;
-
-  // Timestamps last user active update. Active use time is aggregated
-  // each day before sending to UMA so using time since the epoch as
-  // the timestamp.
-  base::Time user_active_last_;
+  // ID of a GLib timeout that repeatedly runs UpdateStats().
+  gint update_stats_timeout_id_;
 
   // Sleep period until the next daily usage aggregation performed by
   // the daily use monitor (see ScheduleUseMonitor).

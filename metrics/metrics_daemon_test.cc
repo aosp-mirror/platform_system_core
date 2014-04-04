@@ -20,13 +20,14 @@
 using base::FilePath;
 using base::StringPrintf;
 using base::Time;
+using base::TimeDelta;
 using base::TimeTicks;
 using std::string;
 using std::vector;
 using ::testing::_;
+using ::testing::AtLeast;
 using ::testing::Return;
 using ::testing::StrictMock;
-using ::testing::AtLeast;
 using chromeos_metrics::PersistentIntegerMock;
 
 static const int kSecondsPerDay = 24 * 60 * 60;
@@ -45,15 +46,6 @@ static const char kFakeVmStatsPath[] = "fake-vm-stats";
 static const char kFakeScalingMaxFreqPath[] = "fake-scaling-max-freq";
 static const char kFakeCpuinfoMaxFreqPath[] = "fake-cpuinfo-max-freq";
 
-// This class allows a TimeTicks object to be initialized with seconds
-// (rather than microseconds) through the protected TimeTicks(int64)
-// constructor.
-class TestTicks : public TimeTicks {
- public:
-  TestTicks(int64 seconds)
-      : TimeTicks(seconds * Time::kMicrosecondsPerSecond) {}
-};
-
 class MetricsDaemonTest : public testing::Test {
  protected:
   virtual void SetUp() {
@@ -70,11 +62,6 @@ class MetricsDaemonTest : public testing::Test {
     chromeos_metrics::PersistentInteger::SetTestingMode(true);
     daemon_.Init(true, &metrics_lib_, kFakeDiskStatsPath, kFakeVmStatsPath,
         kFakeScalingMaxFreqPath, kFakeCpuinfoMaxFreqPath);
-
-    EXPECT_FALSE(daemon_.user_active_);
-    EXPECT_TRUE(daemon_.user_active_last_.is_null());
-    EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
-    EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
 
     base::DeleteFile(FilePath(kTestDir), true);
     base::CreateDirectory(FilePath(kTestDir));
@@ -133,22 +120,11 @@ class MetricsDaemonTest : public testing::Test {
 
   // Adds a metrics library mock expectation that the specified metric
   // will be generated.
-  void ExpectSample(int sample) {
-    EXPECT_CALL(metrics_lib_, SendToUMA(_, sample, _, _, _))
+  void ExpectSample(const std::string& name, int sample) {
+    EXPECT_CALL(metrics_lib_, SendToUMA(name, sample, _, _, _))
         .Times(1)
         .WillOnce(Return(true))
         .RetiresOnSaturation();
-  }
-
-  // Adds a metrics library mock expectation that the specified daily
-  // use time metric will be generated.
-  void ExpectDailyUseTimeSample(int sample) {
-    ExpectSample(sample);
-  }
-
-  // Converts from seconds to a Time object.
-  Time TestTime(int64 seconds) {
-    return Time::FromInternalValue(seconds * Time::kMicrosecondsPerSecond);
   }
 
   // Creates a new DBus signal message with zero or more string arguments.
@@ -229,33 +205,15 @@ TEST_F(MetricsDaemonTest, CheckSystemCrash) {
 }
 
 TEST_F(MetricsDaemonTest, ReportDailyUse) {
-  ExpectDailyUseTimeSample(/* sample */ 2);
-  daemon_.ReportDailyUse(/* count */ 90);
+  ExpectSample("Logging.DailyUseTime", 2);
+  daemon_.ReportDailyUse(90);
 
-  ExpectDailyUseTimeSample(/* sample */ 1);
-  daemon_.ReportDailyUse(/* count */ 89);
+  ExpectSample("Logging.DailyUseTime", 1);
+  daemon_.ReportDailyUse(89);
 
   // There should be no metrics generated for the calls below.
-  daemon_.ReportDailyUse(/* count */ 0);
-  daemon_.ReportDailyUse(/* count */ -5);
-}
-
-TEST_F(MetricsDaemonTest, LookupPowerState) {
-  EXPECT_EQ(MetricsDaemon::kPowerStateOn,
-            daemon_.LookupPowerState("on"));
-  EXPECT_EQ(MetricsDaemon::kPowerStateMem,
-            daemon_.LookupPowerState("mem"));
-  EXPECT_EQ(MetricsDaemon::kUnknownPowerState,
-            daemon_.LookupPowerState("somestate"));
-}
-
-TEST_F(MetricsDaemonTest, LookupSessionState) {
-  EXPECT_EQ(MetricsDaemon::kSessionStateStarted,
-            daemon_.LookupSessionState("started"));
-  EXPECT_EQ(MetricsDaemon::kSessionStateStopped,
-            daemon_.LookupSessionState("stopped"));
-  EXPECT_EQ(MetricsDaemon::kUnknownSessionState,
-            daemon_.LookupSessionState("somestate"));
+  daemon_.ReportDailyUse(0);
+  daemon_.ReportDailyUse(-5);
 }
 
 TEST_F(MetricsDaemonTest, MessageFilter) {
@@ -279,44 +237,6 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   DeleteDBusMessage(msg);
 
   signal_args.clear();
-  signal_args.push_back("on");
-  msg = NewDBusSignalString(power_manager::kPowerManagerServicePath,
-                            power_manager::kPowerManagerInterface,
-                            power_manager::kPowerStateChangedSignal,
-                            signal_args);
-  EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
-  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
-  EXPECT_EQ(MetricsDaemon::kPowerStateOn, daemon_.power_state_);
-  EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
-  DeleteDBusMessage(msg);
-
-  signal_args.clear();
-  IgnoreActiveUseUpdate();
-  msg = NewDBusSignalString(login_manager::kSessionManagerServicePath,
-                            login_manager::kSessionManagerInterface,
-                            login_manager::kScreenIsUnlockedSignal,
-                            signal_args);
-  EXPECT_FALSE(daemon_.user_active_);
-  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
-  EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
-  DeleteDBusMessage(msg);
-
-  IgnoreActiveUseUpdate();
-  signal_args.clear();
-  signal_args.push_back("started");
-  signal_args.push_back("bob");  // arbitrary username
-  msg = NewDBusSignalString(login_manager::kSessionManagerServicePath,
-                            login_manager::kSessionManagerInterface,
-                            login_manager::kSessionStateChangedSignal,
-                            signal_args);
-  EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
-  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
-  EXPECT_EQ(MetricsDaemon::kSessionStateStarted, daemon_.session_state_);
-  EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
-  DeleteDBusMessage(msg);
-
-  signal_args.clear();
   signal_args.push_back("randomstate");
   signal_args.push_back("bob");  // arbitrary username
   msg = NewDBusSignalString("/",
@@ -328,120 +248,10 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
   DeleteDBusMessage(msg);
 }
 
-TEST_F(MetricsDaemonTest, PowerStateChanged) {
-  // Ignore calls to SendToUMA.
-  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AtLeast(0));
-
-  ExpectActiveUseUpdate(0);
-  daemon_.SetUserActiveState(/* active */ true,
-                             TestTime(7 * kSecondsPerDay + 15));
-  EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(7 * kSecondsPerDay + 15), daemon_.user_active_last_);
-
-  ExpectActiveUseUpdate(30);
-  daemon_.PowerStateChanged("mem", TestTime(7 * kSecondsPerDay + 45));
-  EXPECT_EQ(MetricsDaemon::kPowerStateMem, daemon_.power_state_);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(7 * kSecondsPerDay + 45), daemon_.user_active_last_);
-
-  daemon_.PowerStateChanged("on", TestTime(7 * kSecondsPerDay + 85));
-  EXPECT_EQ(MetricsDaemon::kPowerStateOn, daemon_.power_state_);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(7 * kSecondsPerDay + 45), daemon_.user_active_last_);
-
-  ExpectActiveUseUpdate(0);
-  daemon_.PowerStateChanged("otherstate", TestTime(7 * kSecondsPerDay + 185));
-  EXPECT_EQ(MetricsDaemon::kUnknownPowerState, daemon_.power_state_);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(7 * kSecondsPerDay + 185), daemon_.user_active_last_);
-}
-
 TEST_F(MetricsDaemonTest, SendSample) {
-  ExpectSample(3);
+  ExpectSample("Dummy.Metric", 3);
   daemon_.SendSample("Dummy.Metric", /* sample */ 3,
                      /* min */ 1, /* max */ 100, /* buckets */ 50);
-}
-
-TEST_F(MetricsDaemonTest, SessionStateChanged) {
-  // Ignore calls to SendToUMA.
-  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AtLeast(0));
-
-  ExpectActiveUseUpdate(0);
-  daemon_.SessionStateChanged("started", TestTime(15 * kSecondsPerDay + 20));
-  EXPECT_EQ(MetricsDaemon::kSessionStateStarted, daemon_.session_state_);
-  EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(15 * kSecondsPerDay + 20), daemon_.user_active_last_);
-
-  ExpectActiveUseUpdate(130);
-  daemon_.SessionStateChanged("stopped", TestTime(15 * kSecondsPerDay + 150));
-  EXPECT_EQ(MetricsDaemon::kSessionStateStopped, daemon_.session_state_);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(15 * kSecondsPerDay + 150), daemon_.user_active_last_);
-
-  ExpectActiveUseUpdate(0);
-  daemon_.SessionStateChanged("otherstate",
-                              TestTime(15 * kSecondsPerDay + 300));
-  EXPECT_EQ(MetricsDaemon::kUnknownSessionState, daemon_.session_state_);
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(15 * kSecondsPerDay + 300), daemon_.user_active_last_);
-}
-
-TEST_F(MetricsDaemonTest, SetUserActiveState) {
-  // Ignore calls to SendToUMA.
-  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AtLeast(0));
-
-  ExpectActiveUseUpdate(0);
-  daemon_.SetUserActiveState(/* active */ false,
-                             TestTime(5 * kSecondsPerDay + 10));
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(5 * kSecondsPerDay + 10), daemon_.user_active_last_);
-
-  ExpectActiveUseUpdate(0);
-  daemon_.SetUserActiveState(/* active */ true,
-                             TestTime(6 * kSecondsPerDay + 20));
-  EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(6 * kSecondsPerDay + 20), daemon_.user_active_last_);
-
-  ExpectActiveUseUpdate(100);
-  daemon_.SetUserActiveState(/* active */ true,
-                             TestTime(6 * kSecondsPerDay + 120));
-  EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(6 * kSecondsPerDay + 120), daemon_.user_active_last_);
-
-  ExpectActiveUseUpdate(110);
-  daemon_.SetUserActiveState(/* active */ false,
-                             TestTime(6 * kSecondsPerDay + 230));
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(6 * kSecondsPerDay + 230), daemon_.user_active_last_);
-
-  ExpectActiveUseUpdate(0);
-  daemon_.SetUserActiveState(/* active */ false,
-                             TestTime(6 * kSecondsPerDay + 260));
-  EXPECT_FALSE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(6 * kSecondsPerDay + 260), daemon_.user_active_last_);
-}
-
-TEST_F(MetricsDaemonTest, SetUserActiveStateTimeJump) {
-  // Ignore calls to SendToUMA.
-  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AtLeast(0));
-
-  ExpectActiveUseUpdate(0);
-  daemon_.SetUserActiveState(/* active */ true,
-                             TestTime(10 * kSecondsPerDay + 500));
-  EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(10 * kSecondsPerDay + 500), daemon_.user_active_last_);
-
-  ExpectActiveUseUpdate(0);
-  daemon_.SetUserActiveState(/* active */ true,
-                             TestTime(10 * kSecondsPerDay + 300));
-  EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(10 * kSecondsPerDay + 300), daemon_.user_active_last_);
-
-  ExpectActiveUseUpdate(0);
-  daemon_.SetUserActiveState(/* active */ true,
-                             TestTime(10 * kSecondsPerDay + 1000));
-  EXPECT_TRUE(daemon_.user_active_);
-  EXPECT_EQ(TestTime(10 * kSecondsPerDay + 1000), daemon_.user_active_last_);
 }
 
 TEST_F(MetricsDaemonTest, ReportDiskStats) {

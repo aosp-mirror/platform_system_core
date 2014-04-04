@@ -32,32 +32,29 @@ using std::map;
 using std::string;
 using std::vector;
 
+namespace {
 
 #define SAFE_MESSAGE(e) (e.message ? e.message : "unknown error")
 
-static const char kCrashReporterInterface[] = "org.chromium.CrashReporter";
-static const char kCrashReporterUserCrashSignal[] = "UserCrash";
+const char kCrashReporterInterface[] = "org.chromium.CrashReporter";
+const char kCrashReporterUserCrashSignal[] = "UserCrash";
 
-static const int kSecondsPerMinute = 60;
-static const int kMinutesPerHour = 60;
-static const int kHoursPerDay = 24;
-static const int kMinutesPerDay = kHoursPerDay * kMinutesPerHour;
-static const int kSecondsPerDay = kSecondsPerMinute * kMinutesPerDay;
-static const int kDaysPerWeek = 7;
-static const int kSecondsPerWeek = kSecondsPerDay * kDaysPerWeek;
+const int kSecondsPerMinute = 60;
+const int kMinutesPerHour = 60;
+const int kHoursPerDay = 24;
+const int kMinutesPerDay = kHoursPerDay * kMinutesPerHour;
+const int kSecondsPerDay = kSecondsPerMinute * kMinutesPerDay;
+const int kDaysPerWeek = 7;
+const int kSecondsPerWeek = kSecondsPerDay * kDaysPerWeek;
 
-// The daily use monitor is scheduled to a 1-minute interval after
-// initial user activity and then it's exponentially backed off to
-// 10-minute intervals. Although not required, the back off is
-// implemented because the histogram buckets are spaced exponentially
-// anyway and to avoid too frequent metrics daemon process wake-ups
-// and file I/O.
-static const int kUseMonitorIntervalInit = 1 * kSecondsPerMinute;
-static const int kUseMonitorIntervalMax = 10 * kSecondsPerMinute;
+// Interval between calls to UpdateStats().
+const guint kUpdateStatsIntervalMs = 300000;
 
 const char kKernelCrashDetectedFile[] = "/var/run/kernel-crash-detected";
-static const char kUncleanShutdownDetectedFile[] =
+const char kUncleanShutdownDetectedFile[] =
     "/var/run/unclean-shutdown-detected";
+
+}  // namespace
 
 // disk stats metrics
 
@@ -114,18 +111,6 @@ const int MetricsDaemon::kMetricsProcStatFirstLineItemsCount = 11;
 const char MetricsDaemon::kMetricScaledCpuFrequencyName[] =
     "Platform.CpuFrequencyThermalScaling";
 
-// static
-const char* MetricsDaemon::kPowerStates_[] = {
-#define STATE(name, capname) #name,
-#include "power_states.h"
-};
-
-// static
-const char* MetricsDaemon::kSessionStates_[] = {
-#define STATE(name, capname) #name,
-#include "session_states.h"
-};
-
 // Memory use stats collection intervals.  We collect some memory use interval
 // at these intervals after boot, and we stop collecting after the last one,
 // with the assumption that in most cases the memory use won't change much
@@ -139,11 +124,7 @@ static const int kMemuseIntervals[] = {
 };
 
 MetricsDaemon::MetricsDaemon()
-    : power_state_(kUnknownPowerState),
-      session_state_(kUnknownSessionState),
-      user_active_(false),
-      usemon_interval_(0),
-      usemon_source_(NULL),
+    : update_stats_timeout_id_(-1),
       memuse_final_time_(0),
       memuse_interval_index_(0),
       read_sectors_(0),
@@ -155,6 +136,8 @@ MetricsDaemon::MetricsDaemon()
       latest_cpu_use_ticks_(0) {}
 
 MetricsDaemon::~MetricsDaemon() {
+  if (update_stats_timeout_id_ > -1)
+    g_source_remove(update_stats_timeout_id_);
 }
 
 double MetricsDaemon::GetActiveTime() {
@@ -214,8 +197,7 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
                          const string& diskstats_path,
                          const string& vmstats_path,
                          const string& scaling_max_freq_path,
-                         const string& cpuinfo_max_freq_path
-                         ) {
+                         const string& cpuinfo_max_freq_path) {
   testing_ = testing;
   DCHECK(metrics_lib != NULL);
   metrics_lib_ = metrics_lib;
@@ -291,16 +273,6 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
       base::StringPrintf("type='signal',interface='%s',path='/',member='%s'",
                          kCrashReporterInterface,
                          kCrashReporterUserCrashSignal));
-  matches.push_back(
-      base::StringPrintf("type='signal',interface='%s',path='%s',member='%s'",
-                         power_manager::kPowerManagerInterface,
-                         power_manager::kPowerManagerServicePath,
-                         power_manager::kPowerStateChangedSignal));
-  matches.push_back(
-      base::StringPrintf("type='signal',sender='%s',interface='%s',path='%s'",
-                         login_manager::kSessionManagerServiceName,
-                         login_manager::kSessionManagerInterface,
-                         login_manager::kSessionManagerServicePath));
 
   // Registers D-Bus matches for the signals we would like to catch.
   for (vector<string>::const_iterator it = matches.begin();
@@ -316,6 +288,9 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
   // the registered D-Bus matches is successful. The daemon is not
   // activated for D-Bus messages that don't match.
   CHECK(dbus_connection_add_filter(connection, MessageFilter, this, NULL));
+
+  update_stats_timeout_id_ =
+      g_timeout_add(kUpdateStatsIntervalMs, &HandleUpdateStatsTimeout, this);
 }
 
 void MetricsDaemon::Loop() {
@@ -327,9 +302,6 @@ void MetricsDaemon::Loop() {
 DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
                                                DBusMessage* message,
                                                void* user_data) {
-  Time now = Time::Now();
-  DLOG(INFO) << "message intercepted @ " << now.ToInternalValue();
-
   int message_type = dbus_message_get_type(message);
   if (message_type != DBUS_MESSAGE_TYPE_SIGNAL) {
     DLOG(WARNING) << "unexpected message type " << message_type;
@@ -337,115 +309,29 @@ DBusHandlerResult MetricsDaemon::MessageFilter(DBusConnection* connection,
   }
 
   // Signal messages always have interfaces.
-  const char* interface = dbus_message_get_interface(message);
-  CHECK(interface != NULL);
+  const std::string interface(dbus_message_get_interface(message));
+  const std::string member(dbus_message_get_member(message));
+  DLOG(INFO) << "Got " << interface << "." << member << " D-Bus signal";
 
   MetricsDaemon* daemon = static_cast<MetricsDaemon*>(user_data);
 
   DBusMessageIter iter;
   dbus_message_iter_init(message, &iter);
-  if (strcmp(interface, kCrashReporterInterface) == 0) {
-    CHECK(strcmp(dbus_message_get_member(message),
-                 kCrashReporterUserCrashSignal) == 0);
+  if (interface == kCrashReporterInterface) {
+    CHECK_EQ(member, kCrashReporterUserCrashSignal);
     daemon->ProcessUserCrash();
-  } else if (strcmp(interface, power_manager::kPowerManagerInterface) == 0) {
-    CHECK(strcmp(dbus_message_get_member(message),
-                 power_manager::kPowerStateChangedSignal) == 0);
-    char* state_name;
-    dbus_message_iter_get_basic(&iter, &state_name);
-    daemon->PowerStateChanged(state_name, now);
-  } else if (strcmp(interface, login_manager::kSessionManagerInterface) == 0) {
-    const char* member = dbus_message_get_member(message);
-    if (strcmp(member, login_manager::kScreenIsLockedSignal) == 0) {
-      daemon->SetUserActiveState(false, now);
-    } else if (strcmp(member, login_manager::kScreenIsUnlockedSignal) == 0) {
-      daemon->SetUserActiveState(true, now);
-    } else if (strcmp(member, login_manager::kSessionStateChangedSignal) == 0) {
-      char* state_name;
-      dbus_message_iter_get_basic(&iter, &state_name);
-      daemon->SessionStateChanged(state_name, now);
-    }
   } else {
-    DLOG(WARNING) << "unexpected interface: " << interface;
+    // Ignore messages from the bus itself.
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
   }
 
   return DBUS_HANDLER_RESULT_HANDLED;
 }
 
-void MetricsDaemon::PowerStateChanged(const char* state_name, Time now) {
-  DLOG(INFO) << "power state: " << state_name;
-  power_state_ = LookupPowerState(state_name);
-
-  if (power_state_ != kPowerStateOn)
-    SetUserActiveState(false, now);
-}
-
-MetricsDaemon::PowerState
-MetricsDaemon::LookupPowerState(const char* state_name) {
-  for (int i = 0; i < kNumberPowerStates; i++) {
-    if (strcmp(state_name, kPowerStates_[i]) == 0) {
-      return static_cast<PowerState>(i);
-    }
-  }
-  DLOG(WARNING) << "unknown power state: " << state_name;
-  return kUnknownPowerState;
-}
-
-void MetricsDaemon::SessionStateChanged(const char* state_name, Time now) {
-  DLOG(INFO) << "user session state: " << state_name;
-  session_state_ = LookupSessionState(state_name);
-  SetUserActiveState(session_state_ == kSessionStateStarted, now);
-}
-
-MetricsDaemon::SessionState
-MetricsDaemon::LookupSessionState(const char* state_name) {
-  for (int i = 0; i < kNumberSessionStates; i++) {
-    if (strcmp(state_name, kSessionStates_[i]) == 0) {
-      return static_cast<SessionState>(i);
-    }
-  }
-  DLOG(WARNING) << "unknown user session state: " << state_name;
-  return kUnknownSessionState;
-}
-
-void MetricsDaemon::ReportStats(int64 active_use_seconds, Time now) {
-  TimeDelta since_epoch = now - Time::UnixEpoch();
-  int day = since_epoch.InDays();
-  int week = day / 7;
-
-  if (daily_cycle_->Get() == day) {
-    // We did today already.
-    return;
-  }
-  daily_cycle_->Set(day);
-
-  // Daily stats.
-  ReportDailyUse(active_use_seconds);
-  SendCrashFrequencySample(any_crashes_daily_count_);
-  SendCrashFrequencySample(user_crashes_daily_count_);
-  SendCrashFrequencySample(kernel_crashes_daily_count_);
-  SendCrashFrequencySample(unclean_shutdowns_daily_count_);
-  SendKernelCrashesCumulativeCountStats(active_use_seconds);
-
-  if (weekly_cycle_->Get() == week) {
-    // We did this week already.
-    return;
-  }
-  weekly_cycle_->Set(week);
-
-  // Weekly stats.
-  SendCrashFrequencySample(any_crashes_weekly_count_);
-  SendCrashFrequencySample(user_crashes_weekly_count_);
-  SendCrashFrequencySample(kernel_crashes_weekly_count_);
-  SendCrashFrequencySample(unclean_shutdowns_weekly_count_);
-}
-
 // One might argue that parts of this should go into
 // chromium/src/base/sys_info_chromeos.c instead, but put it here for now.
 
 TimeDelta MetricsDaemon::GetIncrementalCpuUse() {
-
   FilePath proc_stat_path = FilePath(kMetricsProcStatFileName);
   std::string proc_stat_string;
   if (!base::ReadFileToString(proc_stat_path, &proc_stat_string)) {
@@ -489,47 +375,9 @@ TimeDelta MetricsDaemon::GetIncrementalCpuUse() {
       diff * 1000 * 1000 / ticks_per_second_);
 }
 
-void MetricsDaemon::SetUserActiveState(bool active, Time now) {
-  DLOG(INFO) << "user: " << (active ? "active" : "inactive");
-
-  // Calculates the seconds of active use since the last update and
-  // the day since Epoch, and logs the usage data.  Guards against the
-  // time jumping back and forth due to the user changing it by
-  // discarding the new use time.
-  int seconds = 0;
-  if (user_active_ && now > user_active_last_) {
-    TimeDelta since_active = now - user_active_last_;
-    if (since_active < TimeDelta::FromSeconds(
-            kUseMonitorIntervalMax + kSecondsPerMinute)) {
-      seconds = static_cast<int>(since_active.InSeconds());
-    }
-  }
-  daily_use_->Add(seconds);
-  user_crash_interval_->Add(seconds);
-  kernel_crash_interval_->Add(seconds);
-
-  // Updates the CPU time accumulator.
-  version_cumulative_cpu_use_->Add(GetIncrementalCpuUse().InMilliseconds());
-
-  // Report daily and weekly stats as needed.
-  ReportStats(daily_use_->Get(), now);
-
-  // Schedules a use monitor on inactive->active transitions and
-  // unschedules it on active->inactive transitions.
-  if (!user_active_ && active)
-    ScheduleUseMonitor(kUseMonitorIntervalInit, /* backoff */ false);
-  else if (user_active_ && !active)
-    UnscheduleUseMonitor();
-
-  // Remembers the current active state and the time of the last
-  // activity update.
-  user_active_ = active;
-  user_active_last_ = now;
-}
-
 void MetricsDaemon::ProcessUserCrash() {
-  // Counts the active use time up to now.
-  SetUserActiveState(user_active_, Time::Now());
+  // Counts the active time up to now.
+  UpdateStats(TimeTicks::Now(), Time::Now());
 
   // Reports the active use time since the last crash and resets it.
   SendCrashIntervalSample(user_crash_interval_);
@@ -541,8 +389,8 @@ void MetricsDaemon::ProcessUserCrash() {
 }
 
 void MetricsDaemon::ProcessKernelCrash() {
-  // Counts the active use time up to now.
-  SetUserActiveState(user_active_, Time::Now());
+  // Counts the active time up to now.
+  UpdateStats(TimeTicks::Now(), Time::Now());
 
   // Reports the active use time since the last crash and resets it.
   SendCrashIntervalSample(kernel_crash_interval_);
@@ -556,8 +404,8 @@ void MetricsDaemon::ProcessKernelCrash() {
 }
 
 void MetricsDaemon::ProcessUncleanShutdown() {
-  // Counts the active use time up to now.
-  SetUserActiveState(user_active_, Time::Now());
+  // Counts the active time up to now.
+  UpdateStats(TimeTicks::Now(), Time::Now());
 
   // Reports the active use time since the last crash and resets it.
   SendCrashIntervalSample(unclean_shutdown_interval_);
@@ -577,66 +425,6 @@ bool MetricsDaemon::CheckSystemCrash(const string& crash_file) {
   // another kernel crash in case it's restarted.
   base::DeleteFile(crash_detected, false);  // not recursive
   return true;
-}
-
-// static
-gboolean MetricsDaemon::UseMonitorStatic(gpointer data) {
-  return static_cast<MetricsDaemon*>(data)->UseMonitor() ? TRUE : FALSE;
-}
-
-bool MetricsDaemon::UseMonitor() {
-  SetUserActiveState(user_active_, Time::Now());
-
-  // If a new monitor source/instance is scheduled, returns false to
-  // tell GLib to destroy this monitor source/instance. Returns true
-  // otherwise to keep calling back this monitor.
-  return !ScheduleUseMonitor(usemon_interval_ * 2, /* backoff */ true);
-}
-
-bool MetricsDaemon::ScheduleUseMonitor(int interval, bool backoff)
-{
-  if (testing_)
-    return false;
-
-  // Caps the interval -- the bigger the interval, the more active use
-  // time will be potentially dropped on system shutdown.
-  if (interval > kUseMonitorIntervalMax)
-    interval = kUseMonitorIntervalMax;
-
-  if (backoff) {
-    // Back-off mode is used by the use monitor to reschedule itself
-    // with exponential back-off in time. This mode doesn't create a
-    // new timeout source if the new interval is the same as the old
-    // one. Also, if a new timeout source is created, the old one is
-    // not destroyed explicitly here -- it will be destroyed by GLib
-    // when the monitor returns FALSE (see UseMonitor and
-    // UseMonitorStatic).
-    if (interval == usemon_interval_)
-      return false;
-  } else {
-    UnscheduleUseMonitor();
-  }
-
-  // Schedules a new use monitor for |interval| seconds from now.
-  DLOG(INFO) << "scheduling use monitor in " << interval << " seconds";
-  usemon_source_ = g_timeout_source_new_seconds(interval);
-  g_source_set_callback(usemon_source_, UseMonitorStatic, this,
-                        NULL); // No destroy notification.
-  g_source_attach(usemon_source_,
-                  NULL); // Default context.
-  usemon_interval_ = interval;
-  return true;
-}
-
-void MetricsDaemon::UnscheduleUseMonitor() {
-  // If there's a use monitor scheduled already, destroys it.
-  if (usemon_source_ == NULL)
-    return;
-
-  DLOG(INFO) << "destroying use monitor";
-  g_source_destroy(usemon_source_);
-  usemon_source_ = NULL;
-  usemon_interval_ = 0;
 }
 
 void MetricsDaemon::StatsReporterInit() {
@@ -1211,4 +999,41 @@ void MetricsDaemon::SendLinearSample(const string& name, int sample,
   // metrics API.
   LOG_IF(FATAL, nbuckets != max + 1) << "unsupported histogram scale";
   metrics_lib_->SendEnumToUMA(name, sample, max);
+}
+
+void MetricsDaemon::UpdateStats(TimeTicks now_ticks,
+                                Time now_wall_time) {
+  const int elapsed_seconds = (now_ticks - last_update_stats_time_).InSeconds();
+  daily_use_->Add(elapsed_seconds);
+  user_crash_interval_->Add(elapsed_seconds);
+  kernel_crash_interval_->Add(elapsed_seconds);
+  version_cumulative_cpu_use_->Add(GetIncrementalCpuUse().InMilliseconds());
+  last_update_stats_time_ = now_ticks;
+
+  const TimeDelta since_epoch = now_wall_time - Time::UnixEpoch();
+  const int day = since_epoch.InDays();
+  const int week = day / 7;
+
+  if (daily_cycle_->Get() != day) {
+    daily_cycle_->Set(day);
+    SendCrashFrequencySample(any_crashes_daily_count_);
+    SendCrashFrequencySample(user_crashes_daily_count_);
+    SendCrashFrequencySample(kernel_crashes_daily_count_);
+    SendCrashFrequencySample(unclean_shutdowns_daily_count_);
+    SendKernelCrashesCumulativeCountStats(daily_use_->Get());
+  }
+
+  if (weekly_cycle_->Get() != week) {
+    weekly_cycle_->Set(week);
+    SendCrashFrequencySample(any_crashes_weekly_count_);
+    SendCrashFrequencySample(user_crashes_weekly_count_);
+    SendCrashFrequencySample(kernel_crashes_weekly_count_);
+    SendCrashFrequencySample(unclean_shutdowns_weekly_count_);
+  }
+}
+
+// static
+gboolean MetricsDaemon::HandleUpdateStatsTimeout(gpointer data) {
+  static_cast<MetricsDaemon*>(data)->UpdateStats(TimeTicks::Now(), Time::Now());
+  return TRUE;
 }
