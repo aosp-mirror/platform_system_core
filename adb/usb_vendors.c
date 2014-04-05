@@ -76,6 +76,8 @@
 #define VENDOR_ID_GOOGLE        0x18d1
 // Haier's USB Vendor ID
 #define VENDOR_ID_HAIER         0x201E
+// Hannspree's USB Vendor ID
+#define VENDOR_ID_HANNSPREE     0x10d6
 // Harris's USB Vendor ID
 #define VENDOR_ID_HARRIS        0x19A5
 // Hisense's USB Vendor ID
@@ -205,6 +207,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_GIGASET,
     VENDOR_ID_GOOGLE,
     VENDOR_ID_HAIER,
+    VENDOR_ID_HANNSPREE,
     VENDOR_ID_HARRIS,
     VENDOR_ID_HISENSE,
     VENDOR_ID_HP,
