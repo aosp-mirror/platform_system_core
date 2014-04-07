@@ -49,7 +49,7 @@ void Prune::format(char **strp) {
 }
 
 PruneList::PruneList()
-        : mWorstUidEnabled(true) {
+        : mWorstUidEnabled(false) {
     mNaughty.clear();
     mNice.clear();
 }
