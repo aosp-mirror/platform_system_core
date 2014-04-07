@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fcntl.h>
 #include <stdarg.h>
 #include <time.h>
 
@@ -23,12 +24,34 @@
 
 #include "LogStatistics.h"
 
-PidStatistics::PidStatistics(pid_t pid)
+PidStatistics::PidStatistics(pid_t pid, char *name)
         : pid(pid)
         , mSizesTotal(0)
         , mElementsTotal(0)
         , mSizes(0)
-        , mElements(0) { }
+        , mElements(0)
+        , name(name)
+{ }
+
+#ifdef DO_NOT_ERROR_IF_PIDSTATISTICS_USES_A_COPY_CONSTRUCTOR
+PidStatistics::PidStatistics(const PidStatistics &copy)
+        : pid(copy->pid)
+        , name(copy->name ? strdup(copy->name) : NULL)
+        , mSizesTotal(copy->mSizesTotal)
+        , mElementsTotal(copy->mElementsTotal)
+        , mSizes(copy->mSizes)
+        , mElements(copy->mElements)
+{ }
+#endif
+
+PidStatistics::~PidStatistics() {
+    free(name);
+}
+
+void PidStatistics::setName(char *new_name) {
+    free(name);
+    name = new_name;
+}
 
 void PidStatistics::add(unsigned short size) {
     mSizesTotal += size;
@@ -48,6 +71,28 @@ void PidStatistics::addTotal(size_t size, size_t element) {
         mSizesTotal += size;
         mElementsTotal += element;
     }
+}
+
+// must call free to release return value
+char *PidStatistics::pidToName(pid_t pid) {
+    char *retval = NULL;
+    if (pid != PidStatistics::gone) {
+        char buffer[512];
+        snprintf(buffer, sizeof(buffer), "/proc/%u/cmdline", pid);
+        int fd = open(buffer, O_RDONLY);
+        if (fd >= 0) {
+            ssize_t ret = read(fd, buffer, sizeof(buffer));
+            if (ret > 0) {
+                buffer[sizeof(buffer)-1] = '\0';
+                // frameworks intermediate state
+                if (strcmp(buffer, "<pre-initialized>")) {
+                    retval = strdup(buffer);
+                }
+            }
+            close(fd);
+        }
+    }
+    return retval;
 }
 
 UidStatistics::UidStatistics(uid_t uid)
@@ -83,7 +128,7 @@ void UidStatistics::add(unsigned short size, pid_t pid) {
     bool insert = (last != it)
         && ((p->getPid() == p->gone)
             || ((*last)->sizesTotal() < (size_t) size));
-    p = new PidStatistics(pid);
+    p = new PidStatistics(pid, pidToName(pid));
     if (insert) {
         Pids.insert(last, p);
     } else {
@@ -397,8 +442,8 @@ size_t LogStatistics::elementsTotal(log_id_t log_id, uid_t uid, pid_t pid) {
 
 void LogStatistics::format(char **buf,
                            uid_t uid, unsigned int logMask, log_time oldest) {
-    const unsigned short spaces_current = 13;
-    const unsigned short spaces_total = 19;
+    static const unsigned short spaces_current = 13;
+    static const unsigned short spaces_total = 19;
 
     if (*buf) {
         free(buf);
