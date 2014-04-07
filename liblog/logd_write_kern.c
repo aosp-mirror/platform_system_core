@@ -93,6 +93,9 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     int log_fd;
 
     if (/*(int)log_id >= 0 &&*/ (int)log_id < (int)LOG_ID_MAX) {
+        if (log_id == LOG_ID_CRASH) {
+            log_id = LOG_ID_MAIN;
+        }
         log_fd = log_fds[(int)log_id];
     } else {
         return -EBADF;

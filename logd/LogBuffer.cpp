@@ -165,7 +165,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
         size_t worst_sizes = 0;
         size_t second_worst_sizes = 0;
 
-        if (mPrune.worstUidEnabled()) {
+        if ((id != LOG_ID_CRASH) && mPrune.worstUidEnabled()) {
             LidStatistics &l = stats.id(id);
             UidStatisticsCollection::iterator iu;
             for (iu = l.begin(); iu != l.end(); ++iu) {

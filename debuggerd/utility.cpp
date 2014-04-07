@@ -24,6 +24,7 @@
 #include <sys/wait.h>
 
 #include <backtrace/Backtrace.h>
+#include <log/log.h>
 #include <log/logd.h>
 
 const int sleep_time_usec = 50000;         // 0.05 seconds
@@ -64,7 +65,7 @@ void _LOG(log_t* log, int scopeFlags, const char* fmt, ...) {
   }
 
   if (want_log_write) {
-    __android_log_write(ANDROID_LOG_INFO, "DEBUG", buf);
+    __android_log_buf_write(LOG_ID_CRASH, ANDROID_LOG_INFO, "DEBUG", buf);
     if (want_amfd_write) {
       int written = write_to_am(log->amfd, buf, len);
       if (written <= 0) {
