@@ -22,8 +22,11 @@
 
 extern "C" {
 
+// Definitions exist in C++11
+#if defined __cplusplus && __cplusplus < 201103L
 typedef uint32_t char32_t;
 typedef uint16_t char16_t;
+#endif
 
 // Standard string functions on char16_t strings.
 int strcmp16(const char16_t *, const char16_t *);
