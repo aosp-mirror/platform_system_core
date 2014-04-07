@@ -446,7 +446,7 @@ void LogStatistics::format(char **buf,
     static const unsigned short spaces_total = 19;
 
     if (*buf) {
-        free(buf);
+        free(*buf);
         *buf = NULL;
     }
 
