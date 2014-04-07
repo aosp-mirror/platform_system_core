@@ -19,15 +19,18 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <sys/klog.h>
+#include <sys/uio.h>
 
 #include "libaudit.h"
 #include "LogAudit.h"
 
-LogAudit::LogAudit(LogBuffer *buf, LogReader *reader)
+LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmsg)
         : SocketListener(getLogSocket(), false)
         , logbuf(buf)
-        , reader(reader) {
-    logDmsg();
+        , reader(reader)
+        , fdDmesg(-1) {
+    logDmesg();
+    fdDmesg = fdDmsg;
 }
 
 bool LogAudit::onDataAvailable(SocketClient *cli) {
@@ -60,6 +63,17 @@ int LogAudit::logPrint(const char *fmt, ...) {
 
     if (rc < 0) {
         return rc;
+    }
+
+    if (fdDmesg >= 0) {
+        struct iovec iov[2];
+
+        iov[0].iov_base = str;
+        iov[0].iov_len = strlen(str);
+        iov[1].iov_base = const_cast<char *>("\n");
+        iov[1].iov_len = 1;
+
+        writev(fdDmesg, iov, sizeof(iov) / sizeof(iov[0]));
     }
 
     pid_t pid = getpid();
@@ -141,7 +155,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
     return rc;
 }
 
-void LogAudit::logDmsg() {
+void LogAudit::logDmesg() {
     int len = klogctl(KLOG_SIZE_BUFFER, NULL, 0);
     if (len <= 0) {
         return;

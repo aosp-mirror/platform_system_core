@@ -23,16 +23,17 @@
 class LogAudit : public SocketListener {
     LogBuffer *logbuf;
     LogReader *reader;
+    int fdDmesg;
 
 public:
-    LogAudit(LogBuffer *buf, LogReader *reader);
+    LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg);
 
 protected:
     virtual bool onDataAvailable(SocketClient *cli);
 
 private:
     static int getLogSocket();
-    void logDmsg();
+    void logDmesg();
     int logPrint(const char *fmt, ...)
         __attribute__ ((__format__ (__printf__, 2, 3)));
 };
