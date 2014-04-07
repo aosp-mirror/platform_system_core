@@ -84,6 +84,13 @@ static int drop_privs() {
 // space logger.  Additional transitory per-client threads are created
 // for each reader once they register.
 int main() {
+    int fdDmesg = -1;
+    char dmesg[PROPERTY_VALUE_MAX];
+    property_get("logd.auditd.dmesg", dmesg, "1");
+    if (atol(dmesg)) {
+        fdDmesg = open("/dev/kmsg", O_WRONLY);
+    }
+
     if (drop_privs() != 0) {
         return -1;
     }
@@ -136,9 +143,10 @@ int main() {
     // and LogReader is notified to send updates to connected clients.
 
     // failure is an option ... messages are in dmesg (required by standard)
-    LogAudit *al = new LogAudit(logBuf, reader);
+    LogAudit *al = new LogAudit(logBuf, reader, fdDmesg);
     if (al->startListener()) {
         delete al;
+        close(fdDmesg);
     }
 
     pause();
