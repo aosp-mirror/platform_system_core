@@ -36,12 +36,18 @@ class PidStatistics {
     size_t mSizes;
     size_t mElements;
 
+    char *name;
+
 public:
     static const pid_t gone = (pid_t) -1;
 
-    PidStatistics(pid_t pid);
+    PidStatistics(pid_t pid, char *name = NULL);
+    PidStatistics(const PidStatistics &copy);
+    ~PidStatistics();
 
     pid_t getPid() const { return pid; }
+    char *getName() const { return name; }
+    void setName(char *name);
 
     void add(unsigned short size);
     bool subtract(unsigned short size); // returns true if stats and PID gone
@@ -52,6 +58,9 @@ public:
 
     size_t sizesTotal() const { return mSizesTotal; }
     size_t elementsTotal() const { return mElementsTotal; }
+
+    // helper
+    static char *pidToName(pid_t pid);
 };
 
 typedef android::List<PidStatistics *> PidStatisticsCollection;
@@ -80,6 +89,9 @@ public:
 
     size_t sizesTotal(pid_t pid = pid_all);
     size_t elementsTotal(pid_t pid = pid_all);
+
+    // helper
+    static char *pidToName(pid_t pid) { return PidStatistics::pidToName(pid); }
 };
 
 typedef android::List<UidStatistics *> UidStatisticsCollection;
@@ -157,6 +169,9 @@ public:
 
     // *strp = malloc, balance with free
     void format(char **strp, uid_t uid, unsigned int logMask, log_time oldest);
+
+    // helper
+    static char *pidToName(pid_t pid) { return PidStatistics::pidToName(pid); }
 };
 
 #endif // _LOGD_LOG_STATISTICS_H__
