@@ -172,6 +172,7 @@ public:
 
     // helper
     static char *pidToName(pid_t pid) { return PidStatistics::pidToName(pid); }
+    uid_t pidToUid(pid_t pid);
 };
 
 #endif // _LOGD_LOG_STATISTICS_H__
