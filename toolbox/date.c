@@ -1,10 +1,13 @@
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <string.h>
-#include <errno.h>
 #include <time.h>
+#include <unistd.h>
+
 #include <linux/android_alarm.h>
 #include <linux/rtc.h>
 #include <sys/ioctl.h>
@@ -108,6 +111,33 @@ static void settime(char *s) {
         settime_rtc_tm(&tm);
 }
 
+static char *parse_time(const char *str, struct timeval *ts) {
+  char *s;
+  long fs = 0; /* fractional seconds */
+
+  ts->tv_sec = strtoumax(str, &s, 10);
+
+  if (*s == '.') {
+    s++;
+    int count = 0;
+
+    /* read up to 6 digits (microseconds) */
+    while (*s && isdigit(*s)) {
+      if (++count < 7) {
+        fs = fs*10 + (*s - '0');
+      }
+      s++;
+    }
+
+    for (; count < 6; count++) {
+      fs *= 10;
+    }
+  }
+
+  ts->tv_usec = fs;
+  return s;
+}
+
 int date_main(int argc, char *argv[])
 {
 	int c;
@@ -181,7 +211,7 @@ int date_main(int argc, char *argv[])
         //strptime(argv[optind], NULL, &tm);
         //tv.tv_sec = mktime(&tm);
         //tv.tv_usec = 0;
-        strtotimeval(argv[optind], &tv);
+        parse_time(argv[optind], &tv);
         printf("time %s -> %lu.%lu\n", argv[optind], tv.tv_sec, tv.tv_usec);
         res = settime_alarm_timeval(&tv);
         if (res < 0)
