@@ -460,14 +460,22 @@ send_crash() {
     local product_name
     local timestamp="$(date +%s)"
     case ${product} in
-      Chrome_ChromeOS)
+    Chrome_ChromeOS)
+      if is_official_image; then
         product_name="Chrome"
-        ;;
-      *)
+      else
+        product_name="Chromium"
+      fi
+      ;;
+    *)
+      if is_official_image; then
         product_name="ChromeOS"
-        ;;
+      else
+        product_name="ChromiumOS"
+      fi
+      ;;
     esac
-    /usr/bin/printf '%s,%s\u00A0(%s)\n' \
+    printf '%s,%s,%s\n' \
       "${timestamp}" "${id}" "${product_name}" >> "${CHROME_CRASH_LOG}"
     lecho "Crash report receipt ID ${id}"
   else
