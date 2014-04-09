@@ -609,7 +609,6 @@ TEST(logcat, blocking_clear) {
     EXPECT_EQ(1, signals);
 }
 
-#ifdef USERDEBUG_BUILD
 static bool get_white_black(char **list) {
     FILE *fp;
 
@@ -705,4 +704,3 @@ TEST(logcat, white_black_adjust) {
     free(list);
     list = NULL;
 }
-#endif // USERDEBUG_BUILD
