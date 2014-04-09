@@ -53,15 +53,11 @@ private:
 
     LogBufferCmd(Clear)
     LogBufferCmd(GetBufSize)
-#ifdef USERDEBUG_BUILD
     LogBufferCmd(SetBufSize)
-#endif
     LogBufferCmd(GetBufSizeUsed)
     LogBufferCmd(GetStatistics)
-#ifdef USERDEBUG_BUILD
     LogBufferCmd(GetPruneList)
     LogBufferCmd(SetPruneList)
-#endif
 };
 
 #endif
