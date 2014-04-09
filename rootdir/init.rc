@@ -186,6 +186,9 @@ on post-fs
     chown system log /proc/last_kmsg
     chmod 0440 /proc/last_kmsg
 
+    # make the selinux kernel policy world-readable
+    chmod 0444 /sys/fs/selinux/policy
+
     # create the lost+found directories, so as to enforce our permissions
     mkdir /cache/lost+found 0770 root root
 
