@@ -28,22 +28,16 @@
 
 // Default
 #define LOG_BUFFER_SIZE (256 * 1024) // Tuned on a per-platform basis here?
-#ifdef USERDEBUG_BUILD
 #define log_buffer_size(id) mMaxSize[id]
-#else
-#define log_buffer_size(id) LOG_BUFFER_SIZE
-#endif
 
 LogBuffer::LogBuffer(LastLogTimes *times)
         : mTimes(*times) {
     pthread_mutex_init(&mLogElementsLock, NULL);
     dgram_qlen_statistics = false;
 
-#ifdef USERDEBUG_BUILD
     log_id_for_each(i) {
         mMaxSize[i] = LOG_BUFFER_SIZE;
     }
-#endif
 }
 
 void LogBuffer::log(log_id_t log_id, log_time realtime,
@@ -171,10 +165,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
         size_t worst_sizes = 0;
         size_t second_worst_sizes = 0;
 
-#ifdef USERDEBUG_BUILD
-        if (mPrune.worstUidEnabled())
-#endif
-        {
+        if (mPrune.worstUidEnabled()) {
             LidStatistics &l = stats.id(id);
             UidStatisticsCollection::iterator iu;
             for (iu = l.begin(); iu != l.end(); ++iu) {
@@ -217,9 +208,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
                     break;
                 }
                 worst_sizes -= len;
-            }
-#ifdef USERDEBUG_BUILD
-            else if (mPrune.naughty(e)) { // BlackListed
+            } else if (mPrune.naughty(e)) { // BlackListed
                 it = mLogElements.erase(it);
                 stats.subtract(e->getMsgLen(), id, uid, e->getPid());
                 delete e;
@@ -227,34 +216,23 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
                 if (pruneRows == 0) {
                     break;
                 }
-            }
-#endif
-            else {
+            } else {
                 ++it;
             }
         }
 
-        if (!kick
-#ifdef USERDEBUG_BUILD
-                || !mPrune.worstUidEnabled()
-#endif
-        ) {
+        if (!kick || !mPrune.worstUidEnabled()) {
             break; // the following loop will ask bad clients to skip/drop
         }
     }
 
-#ifdef USERDEBUG_BUILD
     bool whitelist = false;
-#endif
     it = mLogElements.begin();
     while((pruneRows > 0) && (it != mLogElements.end())) {
         LogBufferElement *e = *it;
         if (e->getLogId() == id) {
             if (oldest && (oldest->mStart <= e->getMonotonicTime())) {
-#ifdef USERDEBUG_BUILD
-                if (!whitelist)
-#endif
-                {
+                if (!whitelist) {
                     if (stats.sizes(id) > (2 * log_buffer_size(id))) {
                         // kick a misbehaving log reader client off the island
                         oldest->release_Locked();
@@ -264,13 +242,13 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
                 }
                 break;
             }
-#ifdef USERDEBUG_BUILD
+
             if (mPrune.nice(e)) { // WhiteListed
                 whitelist = true;
                 it++;
                 continue;
             }
-#endif
+
             it = mLogElements.erase(it);
             stats.subtract(e->getMsgLen(), id, e->getUid(), e->getPid());
             delete e;
@@ -280,7 +258,6 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
         }
     }
 
-#ifdef USERDEBUG_BUILD
     if (whitelist && (pruneRows > 0)) {
         it = mLogElements.begin();
         while((it != mLogElements.end()) && (pruneRows > 0)) {
@@ -304,7 +281,6 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
             }
         }
     }
-#endif
 
     LogTimeEntry::unlock();
 }
@@ -323,8 +299,6 @@ unsigned long LogBuffer::getSizeUsed(log_id_t id) {
     pthread_mutex_unlock(&mLogElementsLock);
     return retval;
 }
-
-#ifdef USERDEBUG_BUILD
 
 // set the total space allocated to "id"
 int LogBuffer::setSize(log_id_t id, unsigned long size) {
@@ -345,15 +319,6 @@ unsigned long LogBuffer::getSize(log_id_t id) {
     pthread_mutex_unlock(&mLogElementsLock);
     return retval;
 }
-
-#else // ! USERDEBUG_BUILD
-
-// get the total space allocated to "id"
-unsigned long LogBuffer::getSize(log_id_t /*id*/) {
-    return log_buffer_size(id);
-}
-
-#endif
 
 log_time LogBuffer::flushTo(
         SocketClient *reader, const log_time start, bool privileged,

@@ -22,10 +22,6 @@ else
 liblog_sources := logd_write_kern.c
 endif
 
-ifneq ($(filter userdebug eng,$(TARGET_BUILD_VARIANT)),)
-liblog_cflags := -DUSERDEBUG_BUILD=1
-endif
-
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
 # which are also hard or even impossible to port to native Win32

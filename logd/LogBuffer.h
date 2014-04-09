@@ -38,11 +38,9 @@ class LogBuffer {
 
     bool dgram_qlen_statistics;
 
-#ifdef USERDEBUG_BUILD
     PruneList mPrune;
 
     unsigned long mMaxSize[LOG_ID_MAX];
-#endif
 
 public:
     LastLogTimes &mTimes;
@@ -59,9 +57,7 @@ public:
 
     void clear(log_id_t id);
     unsigned long getSize(log_id_t id);
-#ifdef USERDEBUG_BUILD
     int setSize(log_id_t id, unsigned long size);
-#endif
     unsigned long getSizeUsed(log_id_t id);
     // *strp uses malloc, use free to release.
     void formatStatistics(char **strp, uid_t uid, unsigned int logMask);
@@ -71,11 +67,9 @@ public:
         dgram_qlen_statistics = true;
     }
 
-#ifdef USERDEBUG_BUILD
     int initPrune(char *cp) { return mPrune.init(cp); }
     // *strp uses malloc, use free to release.
     void formatPrune(char **strp) { mPrune.format(strp); }
-#endif
 
     // helper
     char *pidToName(pid_t pid) { return stats.pidToName(pid); }

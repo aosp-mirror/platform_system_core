@@ -340,8 +340,6 @@ long android_logger_get_log_size(struct logger *logger)
     return atol(buf);
 }
 
-#ifdef USERDEBUG_BUILD
-
 int android_logger_set_log_size(struct logger *logger, unsigned long size)
 {
     char buf[512];
@@ -351,8 +349,6 @@ int android_logger_set_log_size(struct logger *logger, unsigned long size)
 
     return check_log_success(buf, send_log_msg(NULL, NULL, buf, sizeof(buf)));
 }
-
-#endif /* USERDEBUG_BUILD */
 
 /*
  * returns the readable size of the log's ring buffer (that is, amount of the
@@ -408,8 +404,6 @@ ssize_t android_logger_get_statistics(struct logger_list *logger_list,
     return send_log_msg(NULL, NULL, buf, len);
 }
 
-#ifdef USERDEBUG_BUILD
-
 ssize_t android_logger_get_prune_list(struct logger_list *logger_list UNUSED,
                                       char *buf, size_t len)
 {
@@ -431,8 +425,6 @@ int android_logger_set_prune_list(struct logger_list *logger_list UNUSED,
 
     return check_log_success(buf, send_log_msg(NULL, NULL, buf, len));
 }
-
-#endif /* USERDEBUG_BUILD */
 
 struct logger_list *android_logger_list_alloc(int mode,
                                               unsigned int tail,
