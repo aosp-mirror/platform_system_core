@@ -97,6 +97,7 @@ struct {
     { "persist.gps.",      AID_GPS,      0 },
     { "persist.service.bdroid.", AID_BLUETOOTH,   0 },
     { "selinux."         , AID_SYSTEM,   0 },
+    { "build.fingerprint", AID_SYSTEM,   0 },
     { "partition."        , AID_SYSTEM,   0},
     { NULL, 0, 0 }
 };
