@@ -301,19 +301,14 @@ static u_int disassemble_readword(u_int address);
 static void disassemble_printaddr(u_int address);
 
 u_int
-disasm(const disasm_interface_t *di, u_int loc, int altfmt)
+disasm(const disasm_interface_t *di, u_int loc, int __unused altfmt)
 {
 	const struct arm32_insn *i_ptr = &arm32_i[0];
-
-	u_int insn;
-	int matchp;
+	u_int insn = di->di_readword(loc);
+	int matchp = 0;
 	int branch;
 	char* f_ptr;
-	int fmt;
-
-	fmt = 0;
-	matchp = 0;
-	insn = di->di_readword(loc);
+	int fmt = 0;
 
 /*	di->di_printf("loc=%08x insn=%08x : ", loc, insn);*/
 
@@ -670,7 +665,7 @@ disasm_insn_ldrhstrh(const disasm_interface_t *di, u_int insn, u_int loc)
 }
 
 static void
-disasm_insn_ldcstc(const disasm_interface_t *di, u_int insn, u_int loc)
+disasm_insn_ldcstc(const disasm_interface_t *di, u_int insn, u_int __unused loc)
 {
 	if (((insn >> 8) & 0xf) == 1)
 		di->di_printf("f%d, ", (insn >> 12) & 0x07);

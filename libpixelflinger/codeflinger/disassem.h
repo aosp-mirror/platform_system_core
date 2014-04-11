@@ -49,8 +49,8 @@ extern "C" {
 
 typedef struct {
 	u_int	(*di_readword)(u_int);
-	void	(*di_printaddr)(u_int);	
-	void	(*di_printf)(const char *, ...);
+	void	(*di_printaddr)(u_int);
+	int	(*di_printf)(const char *, ...);
 } disasm_interface_t;
 
 /* Prototypes for callable functions */
