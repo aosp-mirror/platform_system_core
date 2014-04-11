@@ -230,12 +230,16 @@ static void show_help(const char *cmd)
                     "                  'events' or 'all'. Multiple -b parameters are allowed and\n"
                     "                  results are interleaved. The default is -b main -b system.\n"
                     "  -B              output the log in binary.\n"
-                    "  -S              output statistics.\n");
-
-    fprintf(stderr, "  -G <count>      set size of log's ring buffer and exit\n"
-                    "  -p              output prune white and ~black list\n"
-                    "  -P '<list> ...' set prune white and ~black list; UID, /PID or !(worst UID)\n"
-                    "                  default is ~!, prune worst UID.\n");
+                    "  -S              output statistics.\n"
+                    "  -G <size>       set size of log ring buffer, may suffix with K or M.\n"
+                    "  -p              print prune white and ~black list. Service is specified as\n"
+                    "                  UID, UID/PID or /PID. Weighed for quicker pruning if prefix\n"
+                    "                  with ~, otherwise weighed for longevity if unadorned. All\n"
+                    "                  other pruning activity is oldest first. Special case ~!\n"
+                    "                  represents an automatic quicker pruning for the noisiest\n"
+                    "                  UID as determined by the current statistics.\n"
+                    "  -P '<list> ...' set prune white and ~black list, using same format as\n"
+                    "                  printed above. Must be quoted.\n");
 
     fprintf(stderr,"\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
