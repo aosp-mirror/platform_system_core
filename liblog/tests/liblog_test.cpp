@@ -484,7 +484,7 @@ TEST(liblog, max_payload) {
 
     EXPECT_EQ(true, matches);
 
-    EXPECT_LE(sizeof(max_payload_buf), max_len);
+    EXPECT_LE(sizeof(max_payload_buf), static_cast<size_t>(max_len));
 
     android_logger_list_close(logger_list);
 }
