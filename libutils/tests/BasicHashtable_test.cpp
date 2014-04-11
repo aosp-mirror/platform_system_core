@@ -397,7 +397,7 @@ TEST_F(BasicHashtableTest, Next_WhenNonEmpty_IteratesOverAllEntries) {
         const SimpleEntry& entry = h.entryAt(index);
         ASSERT_GE(entry.key, 0);
         ASSERT_LT(entry.key, N);
-        ASSERT_EQ(false, set[entry.key]);
+        ASSERT_FALSE(set[entry.key]);
         ASSERT_EQ(entry.key * 10, entry.value);
 
         set[entry.key] = true;

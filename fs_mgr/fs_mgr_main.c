@@ -80,10 +80,10 @@ int main(int argc, char *argv[])
     int a_flag=0;
     int u_flag=0;
     int n_flag=0;
-    char *n_name;
-    char *n_blk_dev;
-    char *fstab_file;
-    struct fstab *fstab;
+    char *n_name=NULL;
+    char *n_blk_dev=NULL;
+    char *fstab_file=NULL;
+    struct fstab *fstab=NULL;
 
     klog_init();
     klog_set_level(6);
