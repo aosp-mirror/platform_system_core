@@ -57,7 +57,7 @@ int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc,
                           char *real_blk_device, int size);
 int fs_mgr_add_entry(struct fstab *fstab,
                      const char *mount_point, const char *fs_type,
-                     const char *blk_device, long long length);
+                     const char *blk_device);
 struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const char *path);
 int fs_mgr_is_voldmanaged(struct fstab_rec *fstab);
 int fs_mgr_is_nonremovable(struct fstab_rec *fstab);
