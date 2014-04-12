@@ -75,19 +75,19 @@ struct BitSet32 {
     // Result is undefined if all bits are unmarked.
     inline uint32_t firstMarkedBit() const { return firstMarkedBit(value); }
 
-    static uint32_t firstMarkedBit(uint32_t value) { return __builtin_clzl(value); }
+    static uint32_t firstMarkedBit(uint32_t value) { return clz_checked(value); }
 
     // Finds the first unmarked bit in the set.
     // Result is undefined if all bits are marked.
     inline uint32_t firstUnmarkedBit() const { return firstUnmarkedBit(value); }
 
-    static inline uint32_t firstUnmarkedBit(uint32_t value) { return __builtin_clzl(~ value); }
+    static inline uint32_t firstUnmarkedBit(uint32_t value) { return clz_checked(~ value); }
 
     // Finds the last marked bit in the set.
     // Result is undefined if all bits are unmarked.
     inline uint32_t lastMarkedBit() const { return lastMarkedBit(value); }
 
-    static inline uint32_t lastMarkedBit(uint32_t value) { return 31 - __builtin_ctzl(value); }
+    static inline uint32_t lastMarkedBit(uint32_t value) { return 31 - ctz_checked(value); }
 
     // Finds the first marked bit in the set and clears it.  Returns the bit index.
     // Result is undefined if all bits are unmarked.
@@ -144,6 +144,25 @@ struct BitSet32 {
     inline BitSet32& operator|= (const BitSet32& other) {
         value |= other.value;
         return *this;
+    }
+
+private:
+    // We use these helpers as the signature of __builtin_c{l,t}z has "unsigned int" for the
+    // input, which is only guaranteed to be 16b, not 32. The compiler should optimize this away.
+    static inline uint32_t clz_checked(uint32_t value) {
+        if (sizeof(unsigned int) == sizeof(uint32_t)) {
+            return __builtin_clz(value);
+        } else {
+            return __builtin_clzl(value);
+        }
+    }
+
+    static inline uint32_t ctz_checked(uint32_t value) {
+        if (sizeof(unsigned int) == sizeof(uint32_t)) {
+            return __builtin_ctz(value);
+        } else {
+            return __builtin_ctzl(value);
+        }
     }
 };
 
