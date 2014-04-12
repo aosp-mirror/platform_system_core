@@ -343,7 +343,7 @@ void fs_mgr_free_fstab(struct fstab *fstab)
 /* Add an entry to the fstab, and return 0 on success or -1 on error */
 int fs_mgr_add_entry(struct fstab *fstab,
                      const char *mount_point, const char *fs_type,
-                     const char *blk_device, long long length)
+                     const char *blk_device)
 {
     struct fstab_rec *new_fstab_recs;
     int n = fstab->num_entries;

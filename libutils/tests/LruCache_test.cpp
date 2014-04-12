@@ -184,7 +184,7 @@ TEST_F(LruCacheTest, StressTest) {
 
     for (size_t i = 0; i < kNumKeys; i++) {
         strings[i] = (char *)malloc(16);
-        sprintf(strings[i], "%d", i);
+        sprintf(strings[i], "%zu", i);
     }
 
     srandom(12345);
