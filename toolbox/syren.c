@@ -123,7 +123,11 @@ syren_main(int argc, char **argv)
 
 	r = find_reg(argv[2]);
 	if (r == NULL) {
-		strcpy(name, argv[2]);
+		if(strlen(argv[2]) >= sizeof(name)){
+			fprintf(stderr, "REGNAME too long\n");
+			return 0;
+		}
+		strlcpy(name, argv[2], sizeof(name));
 		char *addr_str = strchr(argv[2], ':');
 		if (addr_str == NULL)
 			return usage();
@@ -131,7 +135,7 @@ syren_main(int argc, char **argv)
 		sio.page = strtoul(argv[2], 0, 0);
 		sio.addr = strtoul(addr_str, 0, 0);
 	} else {
-		strcpy(name, r->name);
+		strlcpy(name, r->name, sizeof(name));
 		sio.page = r->page;
 		sio.addr = r->addr;
 	}
