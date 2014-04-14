@@ -48,6 +48,7 @@ public:
     bool remove(const TKey& key);
     bool removeOldest();
     void clear();
+    const TValue& peekOldestValue();
 
     class Iterator {
     public:
@@ -177,6 +178,14 @@ bool LruCache<TKey, TValue>::removeOldest() {
         // TODO: should probably abort if false
     }
     return false;
+}
+
+template <typename TKey, typename TValue>
+const TValue& LruCache<TKey, TValue>::peekOldestValue() {
+    if (mOldest) {
+        return mOldest->value;
+    }
+    return mNullValue;
 }
 
 template <typename TKey, typename TValue>
