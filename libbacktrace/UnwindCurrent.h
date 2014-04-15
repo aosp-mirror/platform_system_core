@@ -34,7 +34,7 @@ public:
 
   virtual std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
 
-  bool UnwindFromContext(size_t num_ignore_frames, bool resolve);
+  bool UnwindFromContext(size_t num_ignore_frames, bool within_handler);
 
   void ExtractContext(void* sigcontext);
 
