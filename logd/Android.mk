@@ -28,3 +28,5 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_EXECUTABLE)
+
+include $(call first-makefiles-under,$(LOCAL_PATH))
