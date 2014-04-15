@@ -231,7 +231,7 @@ class MetricsDaemon {
   void UnscheduleUseMonitor();
 
   // Report daily use through UMA.
-  static void ReportDailyUse(void* handle, int count);
+  void ReportDailyUse(int use_seconds);
 
   // Sends a regular (exponential) histogram sample to Chrome for
   // transport to UMA. See MetricsLibrary::SendToUMA in

@@ -230,14 +230,14 @@ TEST_F(MetricsDaemonTest, CheckSystemCrash) {
 
 TEST_F(MetricsDaemonTest, ReportDailyUse) {
   ExpectDailyUseTimeSample(/* sample */ 2);
-  MetricsDaemon::ReportDailyUse(&daemon_, /* count */ 90);
+  daemon_.ReportDailyUse(/* count */ 90);
 
   ExpectDailyUseTimeSample(/* sample */ 1);
-  MetricsDaemon::ReportDailyUse(&daemon_, /* count */ 89);
+  daemon_.ReportDailyUse(/* count */ 89);
 
   // There should be no metrics generated for the calls below.
-  MetricsDaemon::ReportDailyUse(&daemon_, /* count */ 0);
-  MetricsDaemon::ReportDailyUse(&daemon_, /* count */ -5);
+  daemon_.ReportDailyUse(/* count */ 0);
+  daemon_.ReportDailyUse(/* count */ -5);
 }
 
 TEST_F(MetricsDaemonTest, LookupPowerState) {

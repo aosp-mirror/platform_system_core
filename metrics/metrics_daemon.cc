@@ -421,6 +421,7 @@ void MetricsDaemon::ReportStats(int64 active_use_seconds, Time now) {
   daily_cycle_->Set(day);
 
   // Daily stats.
+  ReportDailyUse(active_use_seconds);
   SendCrashFrequencySample(any_crashes_daily_count_);
   SendCrashFrequencySample(user_crashes_daily_count_);
   SendCrashFrequencySample(kernel_crashes_daily_count_);
@@ -1125,18 +1126,16 @@ bool MetricsDaemon::ProcessMemuse(const string& meminfo_raw) {
   return true;
 }
 
-// static
-void MetricsDaemon::ReportDailyUse(void* handle, int count) {
-  if (count <= 0)
+void MetricsDaemon::ReportDailyUse(int use_seconds) {
+  if (use_seconds <= 0)
     return;
 
-  MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
-  int minutes = (count + kSecondsPerMinute / 2) / kSecondsPerMinute;
-  daemon->SendSample("Logging.DailyUseTime",
-                     minutes,
-                     1,
-                     kMinutesPerDay,
-                     50);
+  int minutes = (use_seconds + kSecondsPerMinute / 2) / kSecondsPerMinute;
+  SendSample("Logging.DailyUseTime",
+             minutes,
+             1,
+             kMinutesPerDay * 30 * 2,  // cumulative---two months worth
+             50);
 }
 
 void MetricsDaemon::SendSample(const string& name, int sample,
