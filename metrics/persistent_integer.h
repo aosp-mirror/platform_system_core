@@ -45,11 +45,12 @@ class PersistentInteger {
  private:
   static const int kVersion = 1001;
 
-  // Writes |value| to the backing file, creating it if necessary.
-  void Write(int64 value);
+  // Writes |value_| to the backing file, creating it if necessary.
+  void Write();
 
   // Reads the value from the backing file, stores it in |value_|, and returns
-  // true if the backing file is valid.  Returns false otherwise.
+  // true if the backing file is valid.  Returns false otherwise, and creates
+  // a valid backing file as a side effect.
   bool Read();
 
   int64 value_;

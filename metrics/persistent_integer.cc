@@ -35,13 +35,13 @@ PersistentInteger::~PersistentInteger() {}
 
 void PersistentInteger::Set(int64 value) {
   value_ = value;
-  Write(value);
+  Write();
 }
 
 int64 PersistentInteger::Get() {
   // If not synced, then read.  If the read fails, it's a good idea to write.
   if (!synced_ && !Read())
-    Write(value_);
+    Write();
   return value_;
 }
 
@@ -55,7 +55,7 @@ void PersistentInteger::Add(int64 x) {
   Set(Get() + x);
 }
 
-void PersistentInteger::Write(int64 value) {
+void PersistentInteger::Write() {
   int fd = HANDLE_EINTR(open(backing_file_name_.c_str(),
                              O_WRONLY | O_CREAT | O_TRUNC,
                              S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH));
