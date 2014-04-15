@@ -42,7 +42,7 @@ bool UnwindCurrent::Unwind(size_t num_ignore_frames) {
     BACK_LOGW("unw_getcontext failed %d", ret);
     return false;
   }
-  return UnwindFromContext(num_ignore_frames, true);
+  return UnwindFromContext(num_ignore_frames, false);
 }
 
 std::string UnwindCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
@@ -57,12 +57,14 @@ std::string UnwindCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
   return "";
 }
 
-bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
+bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool within_handler) {
   // The cursor structure is pretty large, do not put it on the stack.
   unw_cursor_t* cursor = new unw_cursor_t;
   int ret = unw_init_local(cursor, &context_);
   if (ret < 0) {
-    BACK_LOGW("unw_init_local failed %d", ret);
+    if (!within_handler) {
+      BACK_LOGW("unw_init_local failed %d", ret);
+    }
     delete cursor;
     return false;
   }
@@ -74,13 +76,17 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
     unw_word_t pc;
     ret = unw_get_reg(cursor, UNW_REG_IP, &pc);
     if (ret < 0) {
-      BACK_LOGW("Failed to read IP %d", ret);
+      if (!within_handler) {
+        BACK_LOGW("Failed to read IP %d", ret);
+      }
       break;
     }
     unw_word_t sp;
     ret = unw_get_reg(cursor, UNW_REG_SP, &sp);
     if (ret < 0) {
-      BACK_LOGW("Failed to read SP %d", ret);
+      if (!within_handler) {
+        BACK_LOGW("Failed to read SP %d", ret);
+      }
       break;
     }
 
@@ -98,7 +104,7 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool resolve) {
         prev->stack_size = frame->sp - prev->sp;
       }
 
-      if (resolve) {
+      if (!within_handler) {
         frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
         frame->map = FindMap(frame->pc);
       } else {
@@ -154,7 +160,7 @@ UnwindThread::~UnwindThread() {
 void UnwindThread::ThreadUnwind(
     siginfo_t* /*siginfo*/, void* sigcontext, size_t num_ignore_frames) {
   ExtractContext(sigcontext);
-  UnwindFromContext(num_ignore_frames, false);
+  UnwindFromContext(num_ignore_frames, true);
 }
 
 //-------------------------------------------------------------------------
