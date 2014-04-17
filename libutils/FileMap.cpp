@@ -40,19 +40,14 @@ using namespace android;
 
 /*static*/ long FileMap::mPageSize = -1;
 
-
-/*
- * Constructor.  Create an empty object.
- */
+// Constructor.  Create an empty object.
 FileMap::FileMap(void)
     : mRefCount(1), mFileName(NULL), mBasePtr(NULL), mBaseLength(0),
       mDataPtr(NULL), mDataLength(0)
 {
 }
 
-/*
- * Destructor.
- */
+// Destructor.
 FileMap::~FileMap(void)
 {
     assert(mRefCount == 0);
@@ -63,7 +58,7 @@ FileMap::~FileMap(void)
     if (mFileName != NULL) {
         free(mFileName);
     }
-#ifdef HAVE_POSIX_FILEMAP    
+#ifdef HAVE_POSIX_FILEMAP
     if (mBasePtr && munmap(mBasePtr, mBaseLength) != 0) {
         ALOGD("munmap(%p, %zu) failed\n", mBasePtr, mBaseLength);
     }
@@ -81,14 +76,12 @@ FileMap::~FileMap(void)
 }
 
 
-/*
- * Create a new mapping on an open file.
- *
- * Closing the file descriptor does not unmap the pages, so we don't
- * claim ownership of the fd.
- *
- * Returns "false" on failure.
- */
+// Create a new mapping on an open file.
+//
+// Closing the file descriptor does not unmap the pages, so we don't
+// claim ownership of the fd.
+//
+// Returns "false" on failure.
 bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t length,
         bool readOnly)
 {
@@ -99,13 +92,13 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
 
     if (mPageSize == -1) {
         SYSTEM_INFO  si;
-        
+
         GetSystemInfo( &si );
         mPageSize = si.dwAllocationGranularity;
     }
 
     DWORD  protect = readOnly ? PAGE_READONLY : PAGE_READWRITE;
-    
+
     mFileHandle  = (HANDLE) _get_osfhandle(fd);
     mFileMapping = CreateFileMapping( mFileHandle, NULL, protect, 0, 0, NULL);
     if (mFileMapping == NULL) {
@@ -113,12 +106,12 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
               mFileHandle, protect, GetLastError() );
         return false;
     }
-    
+
     adjust    = offset % mPageSize;
     adjOffset = offset - adjust;
     adjLength = length + adjust;
-    
-    mBasePtr = MapViewOfFile( mFileMapping, 
+
+    mBasePtr = MapViewOfFile( mFileMapping,
                               readOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS,
                               0,
                               (DWORD)(adjOffset),
@@ -143,7 +136,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
     assert(offset >= 0);
     assert(length > 0);
 
-    /* init on first use */
+    // init on first use
     if (mPageSize == -1) {
 #if NOT_USING_KLIBC
         mPageSize = sysconf(_SC_PAGESIZE);
@@ -152,7 +145,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
             return false;
         }
 #else
-        /* this holds for Linux, Darwin, Cygwin, and doesn't pain the ARM */
+        // this holds for Linux, Darwin, Cygwin, and doesn't pain the ARM
         mPageSize = 4096;
 #endif
     }
@@ -169,19 +162,19 @@ try_again:
 
     ptr = mmap(NULL, adjLength, prot, flags, fd, adjOffset);
     if (ptr == MAP_FAILED) {
-    	// Cygwin does not seem to like file mapping files from an offset.
-    	// So if we fail, try again with offset zero
-    	if (adjOffset > 0) {
-    		adjust = offset;
-    		goto try_again;
-    	}
-    
+        // Cygwin does not seem to like file mapping files from an offset.
+        // So if we fail, try again with offset zero
+        if (adjOffset > 0) {
+            adjust = offset;
+            goto try_again;
+        }
+
         ALOGE("mmap(%" PRId64 ",%zu) failed: %s\n",
             adjOffset, adjLength, strerror(errno));
         return false;
     }
     mBasePtr = ptr;
-#endif /* HAVE_POSIX_FILEMAP */
+#endif // HAVE_POSIX_FILEMAP
 
     mFileName = origFileName != NULL ? strdup(origFileName) : NULL;
     mBaseLength = adjLength;
@@ -197,9 +190,7 @@ try_again:
     return true;
 }
 
-/*
- * Provide guidance to the system.
- */
+// Provide guidance to the system.
 int FileMap::advise(MapAdvice advice)
 {
 #if HAVE_MADVISE
@@ -221,6 +212,6 @@ int FileMap::advise(MapAdvice advice)
         ALOGW("madvise(%d) failed: %s\n", sysAdvice, strerror(errno));
     return cc;
 #else
-	return -1;
+    return -1;
 #endif // HAVE_MADVISE
 }
