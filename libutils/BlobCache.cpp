@@ -17,6 +17,7 @@
 #define LOG_TAG "BlobCache"
 //#define LOG_NDEBUG 0
 
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -54,18 +55,18 @@ BlobCache::BlobCache(size_t maxKeySize, size_t maxValueSize, size_t maxTotalSize
 void BlobCache::set(const void* key, size_t keySize, const void* value,
         size_t valueSize) {
     if (mMaxKeySize < keySize) {
-        ALOGV("set: not caching because the key is too large: %d (limit: %d)",
+        ALOGV("set: not caching because the key is too large: %zu (limit: %zu)",
                 keySize, mMaxKeySize);
         return;
     }
     if (mMaxValueSize < valueSize) {
-        ALOGV("set: not caching because the value is too large: %d (limit: %d)",
+        ALOGV("set: not caching because the value is too large: %zu (limit: %zu)",
                 valueSize, mMaxValueSize);
         return;
     }
     if (mMaxTotalSize < keySize + valueSize) {
         ALOGV("set: not caching because the combined key/value size is too "
-                "large: %d (limit: %d)", keySize + valueSize, mMaxTotalSize);
+                "large: %zu (limit: %zu)", keySize + valueSize, mMaxTotalSize);
         return;
     }
     if (keySize == 0) {
@@ -94,15 +95,15 @@ void BlobCache::set(const void* key, size_t keySize, const void* value,
                     continue;
                 } else {
                     ALOGV("set: not caching new key/value pair because the "
-                            "total cache size limit would be exceeded: %d "
-                            "(limit: %d)",
+                            "total cache size limit would be exceeded: %zu "
+                            "(limit: %zu)",
                             keySize + valueSize, mMaxTotalSize);
                     break;
                 }
             }
             mCacheEntries.add(CacheEntry(keyBlob, valueBlob));
             mTotalSize = newTotalSize;
-            ALOGV("set: created new cache entry with %d byte key and %d byte value",
+            ALOGV("set: created new cache entry with %zu byte key and %zu byte value",
                     keySize, valueSize);
         } else {
             // Update the existing cache entry.
@@ -116,14 +117,14 @@ void BlobCache::set(const void* key, size_t keySize, const void* value,
                     continue;
                 } else {
                     ALOGV("set: not caching new value because the total cache "
-                            "size limit would be exceeded: %d (limit: %d)",
+                            "size limit would be exceeded: %zu (limit: %zu)",
                             keySize + valueSize, mMaxTotalSize);
                     break;
                 }
             }
             mCacheEntries.editItemAt(index).setValue(valueBlob);
             mTotalSize = newTotalSize;
-            ALOGV("set: updated existing cache entry with %d byte key and %d byte "
+            ALOGV("set: updated existing cache entry with %zu byte key and %zu byte "
                     "value", keySize, valueSize);
         }
         break;
@@ -133,7 +134,7 @@ void BlobCache::set(const void* key, size_t keySize, const void* value,
 size_t BlobCache::get(const void* key, size_t keySize, void* value,
         size_t valueSize) {
     if (mMaxKeySize < keySize) {
-        ALOGV("get: not searching because the key is too large: %d (limit %d)",
+        ALOGV("get: not searching because the key is too large: %zu (limit %zu)",
                 keySize, mMaxKeySize);
         return 0;
     }
@@ -141,7 +142,7 @@ size_t BlobCache::get(const void* key, size_t keySize, void* value,
     CacheEntry dummyEntry(dummyKey, NULL);
     ssize_t index = mCacheEntries.indexOf(dummyEntry);
     if (index < 0) {
-        ALOGV("get: no cache entry found for key of size %d", keySize);
+        ALOGV("get: no cache entry found for key of size %zu", keySize);
         return 0;
     }
 
@@ -150,10 +151,10 @@ size_t BlobCache::get(const void* key, size_t keySize, void* value,
     sp<Blob> valueBlob(mCacheEntries[index].getValue());
     size_t valueBlobSize = valueBlob->getSize();
     if (valueBlobSize <= valueSize) {
-        ALOGV("get: copying %d bytes to caller's buffer", valueBlobSize);
+        ALOGV("get: copying %zu bytes to caller's buffer", valueBlobSize);
         memcpy(value, valueBlob->getData(), valueBlobSize);
     } else {
-        ALOGV("get: caller's buffer is too small for value: %d (needs %d)",
+        ALOGV("get: caller's buffer is too small for value: %zu (needs %zu)",
                 valueSize, valueBlobSize);
     }
     return valueBlobSize;
@@ -229,7 +230,7 @@ status_t BlobCache::unflatten(void const* buffer, size_t size) {
     }
     const Header* header = reinterpret_cast<const Header*>(buffer);
     if (header->mMagicNumber != blobCacheMagic) {
-        ALOGE("unflatten: bad magic number: %d", header->mMagicNumber);
+        ALOGE("unflatten: bad magic number: %" PRIu32, header->mMagicNumber);
         return BAD_VALUE;
     }
     if (header->mBlobCacheVersion != blobCacheVersion ||
