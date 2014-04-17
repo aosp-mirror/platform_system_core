@@ -23,6 +23,7 @@
 #include <utils/FileMap.h>
 #include <utils/Log.h>
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -56,7 +57,7 @@ FileMap::~FileMap(void)
 {
     assert(mRefCount == 0);
 
-    //printf("+++ removing FileMap %p %u\n", mDataPtr, mDataLength);
+    //printf("+++ removing FileMap %p %zu\n", mDataPtr, mDataLength);
 
     mRefCount = -100;       // help catch double-free
     if (mFileName != NULL) {
@@ -64,12 +65,12 @@ FileMap::~FileMap(void)
     }
 #ifdef HAVE_POSIX_FILEMAP    
     if (mBasePtr && munmap(mBasePtr, mBaseLength) != 0) {
-        ALOGD("munmap(%p, %d) failed\n", mBasePtr, (int) mBaseLength);
+        ALOGD("munmap(%p, %zu) failed\n", mBasePtr, mBaseLength);
     }
 #endif
 #ifdef HAVE_WIN32_FILEMAP
     if (mBasePtr && UnmapViewOfFile(mBasePtr) == 0) {
-        ALOGD("UnmapViewOfFile(%p) failed, error = %ld\n", mBasePtr,
+        ALOGD("UnmapViewOfFile(%p) failed, error = %" PRId32 "\n", mBasePtr,
               GetLastError() );
     }
     if (mFileMapping != INVALID_HANDLE_VALUE) {
@@ -108,7 +109,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
     mFileHandle  = (HANDLE) _get_osfhandle(fd);
     mFileMapping = CreateFileMapping( mFileHandle, NULL, protect, 0, 0, NULL);
     if (mFileMapping == NULL) {
-        ALOGE("CreateFileMapping(%p, %lx) failed with error %ld\n",
+        ALOGE("CreateFileMapping(%p, %" PRIx32 ") failed with error %" PRId32 "\n",
               mFileHandle, protect, GetLastError() );
         return false;
     }
@@ -123,7 +124,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
                               (DWORD)(adjOffset),
                               adjLength );
     if (mBasePtr == NULL) {
-        ALOGE("MapViewOfFile(%ld, %ld) failed with error %ld\n",
+        ALOGE("MapViewOfFile(%" PRId64 ", %zu) failed with error %" PRId32 "\n",
               adjOffset, adjLength, GetLastError() );
         CloseHandle(mFileMapping);
         mFileMapping = INVALID_HANDLE_VALUE;
@@ -175,8 +176,8 @@ try_again:
     		goto try_again;
     	}
     
-        ALOGE("mmap(%ld,%ld) failed: %s\n",
-            (long) adjOffset, (long) adjLength, strerror(errno));
+        ALOGE("mmap(%" PRId64 ",%zu) failed: %s\n",
+            adjOffset, adjLength, strerror(errno));
         return false;
     }
     mBasePtr = ptr;
@@ -190,8 +191,8 @@ try_again:
 
     assert(mBasePtr != NULL);
 
-    ALOGV("MAP: base %p/%d data %p/%d\n",
-        mBasePtr, (int) mBaseLength, mDataPtr, (int) mDataLength);
+    ALOGV("MAP: base %p/%zu data %p/%zu\n",
+        mBasePtr, mBaseLength, mDataPtr, mDataLength);
 
     return true;
 }
