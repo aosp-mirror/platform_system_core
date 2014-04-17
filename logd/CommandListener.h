@@ -31,6 +31,8 @@ public:
     virtual ~CommandListener() {}
 
 private:
+    static int getLogSocket();
+
     class ShutdownCmd : public LogCommand {
         LogBuffer &mBuf;
         LogReader &mReader;
