@@ -227,8 +227,9 @@ static void show_help(const char *cmd)
                     "  -T <count>      print only the most recent <count> lines (does not imply -d)\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
                     "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio',\n"
-                    "                  'events' or 'all'. Multiple -b parameters are allowed and\n"
-                    "                  results are interleaved. The default is -b main -b system.\n"
+                    "                  'events', 'crash' or 'all'. Multiple -b parameters are\n"
+                    "                  allowed and results are interleaved. The default is\n"
+                    "                  -b main -b system -b crash.\n"
                     "  -B              output the log in binary.\n"
                     "  -S              output statistics.\n"
                     "  -G <size>       set size of log ring buffer, may suffix with K or M.\n"
@@ -447,8 +448,15 @@ int main(int argc, char **argv)
                     if (android_name_to_log_id("events") == LOG_ID_EVENTS) {
                         dev->next = new log_device_t("events", true, 'e');
                         if (dev->next) {
+                            dev = dev->next;
                             android::g_devCount++;
                             needBinary = true;
+                        }
+                    }
+                    if (android_name_to_log_id("crash") == LOG_ID_CRASH) {
+                        dev->next = new log_device_t("crash", false, 'c');
+                        if (dev->next) {
+                            android::g_devCount++;
                         }
                     }
                     break;
@@ -605,6 +613,14 @@ int main(int argc, char **argv)
         android::g_devCount = 1;
         if (android_name_to_log_id("system") == LOG_ID_SYSTEM) {
             devices->next = new log_device_t("system", false, 's');
+            android::g_devCount++;
+        }
+        if (android_name_to_log_id("crash") == LOG_ID_CRASH) {
+            if (devices->next) {
+                devices->next->next = new log_device_t("crash", false, 'c');
+            } else {
+                devices->next = new log_device_t("crash", false, 'c');
+            }
             android::g_devCount++;
         }
     }
