@@ -39,6 +39,11 @@ FrameworkListener::FrameworkListener(const char *socketName) :
     init(socketName, false);
 }
 
+FrameworkListener::FrameworkListener(int sock) :
+                            SocketListener(sock, true) {
+    init(NULL, false);
+}
+
 void FrameworkListener::init(const char *socketName UNUSED, bool withSeq) {
     mCommands = new FrameworkCommandCollection();
     errorRate = 0;
