@@ -11,10 +11,14 @@
 
 #include "metrics_library.h"
 
-namespace chromeos_metrics {
+namespace {
 
 // The directory for the persistent storage.
-const char* const kBackingFilesDirectory = "/var/log/metrics/";
+const char kBackingFilesDirectory[] = "/var/lib/metrics/";
+
+}
+
+namespace chromeos_metrics {
 
 // Static class member instantiation.
 bool PersistentInteger::testing_ = false;
