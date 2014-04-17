@@ -24,6 +24,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
 #include <sysutils/SocketClient.h>
 
@@ -32,7 +33,7 @@
 
 CommandListener::CommandListener(LogBuffer *buf, LogReader * /*reader*/,
                                  LogListener * /*swl*/)
-        : FrameworkListener("logd")
+        : FrameworkListener(getLogSocket())
         , mBuf(*buf) {
     // registerCmd(new ShutdownCmd(buf, writer, swl));
     registerCmd(new ClearCmd(buf));
@@ -282,4 +283,17 @@ int CommandListener::SetPruneListCmd::runCommand(SocketClient *cli,
     cli->sendMsg("success");
 
     return 0;
+}
+
+int CommandListener::getLogSocket() {
+    static const char socketName[] = "logd";
+    int sock = android_get_control_socket(socketName);
+
+    if (sock < 0) {
+        sock = socket_local_server(socketName,
+                                   ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                   SOCK_STREAM);
+    }
+
+    return sock;
 }

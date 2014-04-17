@@ -34,6 +34,8 @@ protected:
     virtual bool onDataAvailable(SocketClient *cli);
 
 private:
+    static int getLogSocket();
+
     void doSocketDelete(SocketClient *cli);
 
 };

@@ -36,6 +36,35 @@
 #include "LogListener.h"
 #include "LogAudit.h"
 
+//
+//  The service is designed to be run by init, it does not respond well
+// to starting up manually. When starting up manually the sockets will
+// fail to open typically for one of the following reasons:
+//     EADDRINUSE if logger is running.
+//     EACCESS if started without precautions (below)
+//
+// Here is a cookbook procedure for starting up logd manually assuming
+// init is out of the way, pedantically all permissions and selinux
+// security is put back in place:
+//
+//    setenforce 0
+//    rm /dev/socket/logd*
+//    chmod 777 /dev/socket
+//        # here is where you would attach the debugger or valgrind for example
+//    runcon u:r:logd:s0 /system/bin/logd </dev/null >/dev/null 2>&1 &
+//    sleep 1
+//    chmod 755 /dev/socket
+//    chown logd.logd /dev/socket/logd*
+//    restorecon /dev/socket/logd*
+//    setenforce 1
+//
+// If minimalism prevails, typical for debugging and security is not a concern:
+//
+//    setenforce 0
+//    chmod 777 /dev/socket
+//    logd
+//
+
 static int drop_privs() {
     struct sched_param param;
     memset(&param, 0, sizeof(param));
