@@ -31,7 +31,7 @@
  */
 static void my_android_logger_get_statistics(char *buf, size_t len)
 {
-    snprintf(buf, len, "getStatistics 0 1 2 3");
+    snprintf(buf, len, "getStatistics 0 1 2 3 4");
     int sock = socket_local_client("logd",
                                    ANDROID_SOCKET_NAMESPACE_RESERVED,
                                    SOCK_STREAM);
