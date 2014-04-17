@@ -23,6 +23,7 @@
 #include <utils/FileMap.h>
 #include <utils/Log.h>
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -39,37 +40,32 @@ using namespace android;
 
 /*static*/ long FileMap::mPageSize = -1;
 
-
-/*
- * Constructor.  Create an empty object.
- */
+// Constructor.  Create an empty object.
 FileMap::FileMap(void)
     : mRefCount(1), mFileName(NULL), mBasePtr(NULL), mBaseLength(0),
       mDataPtr(NULL), mDataLength(0)
 {
 }
 
-/*
- * Destructor.
- */
+// Destructor.
 FileMap::~FileMap(void)
 {
     assert(mRefCount == 0);
 
-    //printf("+++ removing FileMap %p %u\n", mDataPtr, mDataLength);
+    //printf("+++ removing FileMap %p %zu\n", mDataPtr, mDataLength);
 
     mRefCount = -100;       // help catch double-free
     if (mFileName != NULL) {
         free(mFileName);
     }
-#ifdef HAVE_POSIX_FILEMAP    
+#ifdef HAVE_POSIX_FILEMAP
     if (mBasePtr && munmap(mBasePtr, mBaseLength) != 0) {
-        ALOGD("munmap(%p, %d) failed\n", mBasePtr, (int) mBaseLength);
+        ALOGD("munmap(%p, %zu) failed\n", mBasePtr, mBaseLength);
     }
 #endif
 #ifdef HAVE_WIN32_FILEMAP
     if (mBasePtr && UnmapViewOfFile(mBasePtr) == 0) {
-        ALOGD("UnmapViewOfFile(%p) failed, error = %ld\n", mBasePtr,
+        ALOGD("UnmapViewOfFile(%p) failed, error = %" PRId32 "\n", mBasePtr,
               GetLastError() );
     }
     if (mFileMapping != INVALID_HANDLE_VALUE) {
@@ -80,14 +76,12 @@ FileMap::~FileMap(void)
 }
 
 
-/*
- * Create a new mapping on an open file.
- *
- * Closing the file descriptor does not unmap the pages, so we don't
- * claim ownership of the fd.
- *
- * Returns "false" on failure.
- */
+// Create a new mapping on an open file.
+//
+// Closing the file descriptor does not unmap the pages, so we don't
+// claim ownership of the fd.
+//
+// Returns "false" on failure.
 bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t length,
         bool readOnly)
 {
@@ -98,32 +92,32 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
 
     if (mPageSize == -1) {
         SYSTEM_INFO  si;
-        
+
         GetSystemInfo( &si );
         mPageSize = si.dwAllocationGranularity;
     }
 
     DWORD  protect = readOnly ? PAGE_READONLY : PAGE_READWRITE;
-    
+
     mFileHandle  = (HANDLE) _get_osfhandle(fd);
     mFileMapping = CreateFileMapping( mFileHandle, NULL, protect, 0, 0, NULL);
     if (mFileMapping == NULL) {
-        ALOGE("CreateFileMapping(%p, %lx) failed with error %ld\n",
+        ALOGE("CreateFileMapping(%p, %" PRIx32 ") failed with error %" PRId32 "\n",
               mFileHandle, protect, GetLastError() );
         return false;
     }
-    
+
     adjust    = offset % mPageSize;
     adjOffset = offset - adjust;
     adjLength = length + adjust;
-    
-    mBasePtr = MapViewOfFile( mFileMapping, 
+
+    mBasePtr = MapViewOfFile( mFileMapping,
                               readOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS,
                               0,
                               (DWORD)(adjOffset),
                               adjLength );
     if (mBasePtr == NULL) {
-        ALOGE("MapViewOfFile(%ld, %ld) failed with error %ld\n",
+        ALOGE("MapViewOfFile(%" PRId64 ", %zu) failed with error %" PRId32 "\n",
               adjOffset, adjLength, GetLastError() );
         CloseHandle(mFileMapping);
         mFileMapping = INVALID_HANDLE_VALUE;
@@ -142,7 +136,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
     assert(offset >= 0);
     assert(length > 0);
 
-    /* init on first use */
+    // init on first use
     if (mPageSize == -1) {
 #if NOT_USING_KLIBC
         mPageSize = sysconf(_SC_PAGESIZE);
@@ -151,7 +145,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
             return false;
         }
 #else
-        /* this holds for Linux, Darwin, Cygwin, and doesn't pain the ARM */
+        // this holds for Linux, Darwin, Cygwin, and doesn't pain the ARM
         mPageSize = 4096;
 #endif
     }
@@ -168,19 +162,19 @@ try_again:
 
     ptr = mmap(NULL, adjLength, prot, flags, fd, adjOffset);
     if (ptr == MAP_FAILED) {
-    	// Cygwin does not seem to like file mapping files from an offset.
-    	// So if we fail, try again with offset zero
-    	if (adjOffset > 0) {
-    		adjust = offset;
-    		goto try_again;
-    	}
-    
-        ALOGE("mmap(%ld,%ld) failed: %s\n",
-            (long) adjOffset, (long) adjLength, strerror(errno));
+        // Cygwin does not seem to like file mapping files from an offset.
+        // So if we fail, try again with offset zero
+        if (adjOffset > 0) {
+            adjust = offset;
+            goto try_again;
+        }
+
+        ALOGE("mmap(%" PRId64 ",%zu) failed: %s\n",
+            adjOffset, adjLength, strerror(errno));
         return false;
     }
     mBasePtr = ptr;
-#endif /* HAVE_POSIX_FILEMAP */
+#endif // HAVE_POSIX_FILEMAP
 
     mFileName = origFileName != NULL ? strdup(origFileName) : NULL;
     mBaseLength = adjLength;
@@ -190,15 +184,13 @@ try_again:
 
     assert(mBasePtr != NULL);
 
-    ALOGV("MAP: base %p/%d data %p/%d\n",
-        mBasePtr, (int) mBaseLength, mDataPtr, (int) mDataLength);
+    ALOGV("MAP: base %p/%zu data %p/%zu\n",
+        mBasePtr, mBaseLength, mDataPtr, mDataLength);
 
     return true;
 }
 
-/*
- * Provide guidance to the system.
- */
+// Provide guidance to the system.
 int FileMap::advise(MapAdvice advice)
 {
 #if HAVE_MADVISE
@@ -220,6 +212,6 @@ int FileMap::advise(MapAdvice advice)
         ALOGW("madvise(%d) failed: %s\n", sysAdvice, strerror(errno));
     return cc;
 #else
-	return -1;
+    return -1;
 #endif // HAVE_MADVISE
 }
