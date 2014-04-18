@@ -30,8 +30,6 @@ using ::testing::Return;
 using ::testing::StrictMock;
 using chromeos_metrics::PersistentIntegerMock;
 
-static const int kSecondsPerDay = 24 * 60 * 60;
-
 static const char kTestDir[] = "test";
 static const char kFakeDiskStatsPath[] = "fake-disk-stats";
 static const char kFakeDiskStatsFormat[] =
