@@ -272,6 +272,7 @@ static void write_persistent_property(const char *name, const char *value)
         return;
     }
     write(fd, value, strlen(value));
+    fsync(fd);
     close(fd);
 
     snprintf(path, sizeof(path), "%s/%s", PERSISTENT_PROPERTY_DIR, name);
