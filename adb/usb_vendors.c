@@ -140,6 +140,8 @@
 #define VENDOR_ID_PMC           0x04DA
 // Positivo's USB Vendor ID
 #define VENDOR_ID_POSITIVO      0x1662
+// Prestigio's USB Vendor ID
+#define VENDOR_ID_PRESTIGIO     0x29e4
 // Qisda's USB Vendor ID
 #define VENDOR_ID_QISDA         0x1D45
 // Qualcomm's USB Vendor ID
@@ -237,6 +239,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_PHILIPS,
     VENDOR_ID_PMC,
     VENDOR_ID_POSITIVO,
+    VENDOR_ID_PRESTIGIO,
     VENDOR_ID_QISDA,
     VENDOR_ID_QUALCOMM,
     VENDOR_ID_QUANTA,
