@@ -408,6 +408,8 @@ enum {
                                AUDIO_DEVICE_IN_USB_DEVICE |
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
+    AUDIO_DEVICE_IN_ALL_USB  = (AUDIO_DEVICE_IN_USB_ACCESSORY |
+                                AUDIO_DEVICE_IN_USB_DEVICE),
 };
 
 typedef uint32_t audio_devices_t;
@@ -520,12 +522,25 @@ static inline bool audio_is_bluetooth_sco_device(audio_devices_t device)
         return false;
 }
 
+static inline bool audio_is_usb_out_device(audio_devices_t device)
+{
+    return ((popcount(device) == 1) && (device & AUDIO_DEVICE_OUT_ALL_USB));
+}
+
+static inline bool audio_is_usb_in_device(audio_devices_t device)
+{
+    if ((device & AUDIO_DEVICE_BIT_IN) != 0) {
+        device &= ~AUDIO_DEVICE_BIT_IN;
+        if (popcount(device) == 1 && (device & AUDIO_DEVICE_IN_ALL_USB) != 0)
+            return true;
+    }
+    return false;
+}
+
+/* OBSOLETE - use audio_is_usb_out_device() instead. */
 static inline bool audio_is_usb_device(audio_devices_t device)
 {
-    if ((popcount(device) == 1) && (device & AUDIO_DEVICE_OUT_ALL_USB))
-        return true;
-    else
-        return false;
+    return audio_is_usb_out_device(device);
 }
 
 static inline bool audio_is_remote_submix_device(audio_devices_t device)
