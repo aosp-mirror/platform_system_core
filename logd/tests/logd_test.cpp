@@ -15,6 +15,7 @@
  */
 
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -37,7 +38,25 @@ static void my_android_logger_get_statistics(char *buf, size_t len)
                                    SOCK_STREAM);
     if (sock >= 0) {
         if (write(sock, buf, strlen(buf) + 1) > 0) {
-            read(sock, buf, len);
+            ssize_t ret;
+            while ((ret = read(sock, buf, len)) > 0) {
+                if ((size_t)ret == len) {
+                    break;
+                }
+                len -= ret;
+                buf += ret;
+
+                struct pollfd p = {
+                    .fd = sock,
+                    .events = POLLIN,
+                    .revents = 0
+                };
+
+                ret = poll(&p, 1, 20);
+                if ((ret <= 0) || !(p.revents & POLLIN)) {
+                    break;
+                }
+            }
         }
         close(sock);
     }
