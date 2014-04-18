@@ -20,6 +20,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef	__cplusplus
+extern "C" {
+#endif
+
 struct sparse_file;
 
 /**
@@ -272,5 +276,9 @@ void sparse_file_verbose(struct sparse_file *s);
  *
  */
 extern void (*sparse_print_verbose)(const char *fmt, ...);
+
+#ifdef	__cplusplus
+}
+#endif
 
 #endif
