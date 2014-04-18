@@ -119,13 +119,7 @@ backtrace_test_cflags := \
 	-O0 \
 	-g \
 	-DGTEST_HAS_STD_STRING \
-
-ifneq ($(TARGET_ARCH),arm64)
-backtrace_test_cflags += -fstack-protector-all
-else
-  $(info TODO: $(LOCAL_PATH)/Android.mk -fstack-protector not yet available for the AArch64 toolchain)
-  common_cflags += -fno-stack-protector
-endif # arm64
+	-fstack-protector-all \
 
 backtrace_test_cflags_target := \
 	-DGTEST_OS_LINUX_ANDROID \
