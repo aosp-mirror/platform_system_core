@@ -170,6 +170,7 @@ void MetricsDaemon::Run(bool run_as_daemon) {
   if (version_cycle_->Get() != version) {
     version_cycle_->Set(version);
     kernel_crashes_version_count_->Set(0);
+    version_cumulative_active_use_->Set(0);
     version_cumulative_cpu_use_->Set(0);
   }
 
@@ -206,8 +207,10 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
   // Sysconf cannot fail, so no sanity checks are needed.
   ticks_per_second_ = sysconf(_SC_CLK_TCK);
 
-  daily_use_.reset(
+  daily_active_use_.reset(
       new PersistentInteger("Logging.DailyUseTime"));
+  version_cumulative_active_use_.reset(
+      new PersistentInteger("Logging.CumulativeDailyUseTime"));
   version_cumulative_cpu_use_.reset(
       new PersistentInteger("Logging.CumulativeCpuTime"));
 
@@ -931,8 +934,7 @@ void MetricsDaemon::SendSample(const string& name, int sample,
   metrics_lib_->SendToUMA(name, sample, min, max, nbuckets);
 }
 
-void MetricsDaemon::SendKernelCrashesCumulativeCountStats(
-    int64 active_use_seconds) {
+void MetricsDaemon::SendKernelCrashesCumulativeCountStats() {
   // Report the number of crashes for this OS version, but don't clear the
   // counter.  It is cleared elsewhere on version change.
   int64 crashes_count = kernel_crashes_version_count_->Get();
@@ -961,7 +963,13 @@ void MetricsDaemon::SendKernelCrashesCumulativeCountStats(
                100);
   }
 
+  int64 active_use_seconds = version_cumulative_active_use_->Get();
   if (active_use_seconds > 0) {
+    SendSample(version_cumulative_active_use_->Name(),
+               active_use_seconds / 1000,  // stat is in seconds
+               1,                          // device may be used very little...
+               8 * 1000 * 1000,            // ... or a lot (about 90 days)
+               100);
     // Same as above, but per year of active time.
     SendSample("Logging.KernelCrashesPerActiveYear",
                crashes_count * kSecondsPerDay * 365 / active_use_seconds,
@@ -969,6 +977,15 @@ void MetricsDaemon::SendKernelCrashesCumulativeCountStats(
                1000 * 1000,     // about one crash every 30s of active time
                100);
   }
+}
+
+void MetricsDaemon::SendDailyUseSample(
+    const scoped_ptr<PersistentInteger>& use) {
+  SendSample(use->Name(),
+             use->GetAndClear(),
+             1,                        // value of first bucket
+             kSecondsPerDay,           // value of last bucket
+             50);                      // number of buckets
 }
 
 void MetricsDaemon::SendCrashIntervalSample(
@@ -1000,7 +1017,8 @@ void MetricsDaemon::SendLinearSample(const string& name, int sample,
 void MetricsDaemon::UpdateStats(TimeTicks now_ticks,
                                 Time now_wall_time) {
   const int elapsed_seconds = (now_ticks - last_update_stats_time_).InSeconds();
-  daily_use_->Add(elapsed_seconds);
+  daily_active_use_->Add(elapsed_seconds);
+  version_cumulative_active_use_->Add(elapsed_seconds);
   user_crash_interval_->Add(elapsed_seconds);
   kernel_crash_interval_->Add(elapsed_seconds);
   version_cumulative_cpu_use_->Add(GetIncrementalCpuUse().InMilliseconds());
@@ -1012,11 +1030,13 @@ void MetricsDaemon::UpdateStats(TimeTicks now_ticks,
 
   if (daily_cycle_->Get() != day) {
     daily_cycle_->Set(day);
+    SendDailyUseSample(daily_active_use_);
+    SendDailyUseSample(version_cumulative_active_use_);
     SendCrashFrequencySample(any_crashes_daily_count_);
     SendCrashFrequencySample(user_crashes_daily_count_);
     SendCrashFrequencySample(kernel_crashes_daily_count_);
     SendCrashFrequencySample(unclean_shutdowns_daily_count_);
-    SendKernelCrashesCumulativeCountStats(daily_use_->Get());
+    SendKernelCrashesCumulativeCountStats();
   }
 
   if (weekly_cycle_->Get() != week) {

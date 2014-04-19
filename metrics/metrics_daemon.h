@@ -175,11 +175,15 @@ class MetricsDaemon {
 
   // Sends various cumulative kernel crash-related stats, for instance the
   // total number of kernel crashes since the last version update.
-  void SendKernelCrashesCumulativeCountStats(int64 active_time_seconds);
+  void SendKernelCrashesCumulativeCountStats();
 
   // Returns the total (system-wide) CPU usage between the time of the most
   // recent call to this function and now.
   base::TimeDelta GetIncrementalCpuUse();
+
+  // Sends a sample representing the number of seconds of active use
+  // for a 24-hour period.
+  void SendDailyUseSample(const scoped_ptr<PersistentInteger>& use);
 
   // Sends a sample representing a time interval between two crashes of the
   // same type.
@@ -316,7 +320,10 @@ class MetricsDaemon {
   scoped_ptr<PersistentInteger> weekly_cycle_;
   scoped_ptr<PersistentInteger> version_cycle_;
 
-  scoped_ptr<PersistentInteger> daily_use_;
+  // Active use accumulated in a day.
+  scoped_ptr<PersistentInteger> daily_active_use_;
+  // Active use accumulated since the latest version update.
+  scoped_ptr<PersistentInteger> version_cumulative_active_use_;
 
   // The CPU time accumulator.  This contains the CPU time, in milliseconds,
   // used by the system since the most recent OS version update.

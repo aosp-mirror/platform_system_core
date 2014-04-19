@@ -65,9 +65,9 @@ class MetricsDaemonTest : public testing::Test {
     base::CreateDirectory(FilePath(kTestDir));
 
     // Replace original persistent values with mock ones.
-    daily_use_mock_ =
+    daily_active_use_mock_ =
         new StrictMock<PersistentIntegerMock>("1.mock");
-    daemon_.daily_use_.reset(daily_use_mock_);
+    daemon_.daily_active_use_.reset(daily_active_use_mock_);
 
     kernel_crash_interval_mock_ =
         new StrictMock<PersistentIntegerMock>("2.mock");
@@ -92,7 +92,7 @@ class MetricsDaemonTest : public testing::Test {
   // Adds active use aggregation counters update expectations that the
   // specified count will be added.
   void ExpectActiveUseUpdate(int count) {
-    EXPECT_CALL(*daily_use_mock_, Add(count))
+    EXPECT_CALL(*daily_active_use_mock_, Add(count))
         .Times(1)
         .RetiresOnSaturation();
     EXPECT_CALL(*kernel_crash_interval_mock_, Add(count))
@@ -105,7 +105,7 @@ class MetricsDaemonTest : public testing::Test {
 
   // As above, but ignore values of counter updates.
   void IgnoreActiveUseUpdate() {
-    EXPECT_CALL(*daily_use_mock_, Add(_))
+    EXPECT_CALL(*daily_active_use_mock_, Add(_))
         .Times(1)
         .RetiresOnSaturation();
     EXPECT_CALL(*kernel_crash_interval_mock_, Add(_))
@@ -182,7 +182,7 @@ class MetricsDaemonTest : public testing::Test {
   // Mocks. They are strict mock so that all unexpected
   // calls are marked as failures.
   StrictMock<MetricsLibraryMock> metrics_lib_;
-  StrictMock<PersistentIntegerMock>* daily_use_mock_;
+  StrictMock<PersistentIntegerMock>* daily_active_use_mock_;
   StrictMock<PersistentIntegerMock>* kernel_crash_interval_mock_;
   StrictMock<PersistentIntegerMock>* user_crash_interval_mock_;
   StrictMock<PersistentIntegerMock>* unclean_shutdown_interval_mock_;
