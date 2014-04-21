@@ -9,7 +9,7 @@
  *    notice, this list of conditions and the following disclaimer.
  *  * Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the 
+ *    the documentation and/or other materials provided with the
  *    distribution.
  *  * Neither the name of Google, Inc. nor the names of its contributors
  *    may be used to endorse or promote products derived from this
@@ -22,7 +22,7 @@
  * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
  * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
@@ -108,16 +108,20 @@ static int proc_thr_cmp(const void *a, const void *b);
 static int numcmp(long long a, long long b);
 static void usage(char *cmd);
 
-int top_main(int argc, char *argv[]) {
-    int i;
+static void exit_top(int signal) {
+  exit(EXIT_FAILURE);
+}
 
+int top_main(int argc, char *argv[]) {
     num_used_procs = num_free_procs = 0;
+
+    signal(SIGPIPE, exit_top);
 
     max_procs = 0;
     delay = 3;
     iterations = -1;
     proc_cmp = &proc_cpu_cmp;
-    for (i = 1; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-m")) {
             if (i + 1 >= argc) {
                 fprintf(stderr, "Option -m expects an argument.\n");
@@ -249,9 +253,9 @@ static void read_procs(void) {
             continue;
 
         pid = atoi(pid_dir->d_name);
-        
+
         struct proc_info cur_proc;
-        
+
         if (!threads) {
             proc = alloc_proc();
 
@@ -275,7 +279,7 @@ static void read_procs(void) {
 
             sprintf(filename, "/proc/%d/status", pid);
             read_status(filename, &cur_proc);
-            
+
             proc = NULL;
         }
 
@@ -310,7 +314,7 @@ static void read_procs(void) {
         }
 
         closedir(task_dir);
-        
+
         if (!threads)
             add_proc(proc_num++, proc);
     }
@@ -339,7 +343,7 @@ static int read_stat(char *filename, struct proc_info *proc) {
     *open_paren = *close_paren = '\0';
     strncpy(proc->tname, open_paren + 1, THREAD_NAME_LEN);
     proc->tname[THREAD_NAME_LEN-1] = 0;
-    
+
     /* Scan rest of string. */
     sscanf(close_paren + 1, " %c %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d "
                  "%lu %lu %*d %*d %*d %*d %*d %*d %*d %lu %ld "
@@ -452,7 +456,7 @@ static void print_procs(void) {
             new_cpu.sirqtime - old_cpu.sirqtime,
             total_delta_time);
     printf("\n");
-    if (!threads) 
+    if (!threads)
         printf("%5s %2s %4s %1s %5s %7s %7s %3s %-8s %s\n", "PID", "PR", "CPU%", "S", "#THR", "VSS", "RSS", "PCY", "UID", "Name");
     else
         printf("%5s %5s %2s %4s %1s %7s %7s %3s %-8s %-15s %s\n", "PID", "TID", "PR", "CPU%", "S", "VSS", "RSS", "PCY", "UID", "Thread", "Proc");
@@ -476,7 +480,7 @@ static void print_procs(void) {
             snprintf(group_buf, 20, "%d", proc->gid);
             group_str = group_buf;
         }
-        if (!threads) 
+        if (!threads)
             printf("%5d %2d %3ld%% %c %5d %6ldK %6ldK %3s %-8.8s %s\n", proc->pid, proc->prs, proc->delta_time * 100 / total_delta_time, proc->state, proc->num_threads,
                 proc->vss / 1024, proc->rss * getpagesize() / 1024, proc->policy, user_str, proc->name[0] != 0 ? proc->name : proc->tname);
         else
