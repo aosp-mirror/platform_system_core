@@ -928,8 +928,6 @@ void MetricsDaemon::ReportDailyUse(int use_seconds) {
 
 void MetricsDaemon::SendSample(const string& name, int sample,
                                int min, int max, int nbuckets) {
-  DLOG(INFO) << "received metric: " << name << " " << sample << " "
-             << min << " " << max << " " << nbuckets;
   metrics_lib_->SendToUMA(name, sample, min, max, nbuckets);
 }
 
@@ -993,8 +991,6 @@ void MetricsDaemon::SendCrashFrequencySample(
 
 void MetricsDaemon::SendLinearSample(const string& name, int sample,
                                      int max, int nbuckets) {
-  DLOG(INFO) << "received linear metric: " << name << " " << sample << " "
-             << max << " " << nbuckets;
   // TODO(semenzato): add a proper linear histogram to the Chrome external
   // metrics API.
   LOG_IF(FATAL, nbuckets != max + 1) << "unsupported histogram scale";

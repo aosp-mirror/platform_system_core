@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 
 
+#include <base/command_line.h>
 #include <base/logging.h>
 #include <base/strings/string_util.h>
+#include <chromeos/syslog_logging.h>
 #include <gflags/gflags.h>
 #include <rootdev/rootdev.h>
 
@@ -43,7 +45,13 @@ const std::string MetricsMainDiskStatsPath() {
 }
 
 int main(int argc, char** argv) {
+  CommandLine::Init(argc, argv);
   google::ParseCommandLineFlags(&argc, &argv, true);
+
+  // Also log to stderr when not running as daemon.
+  chromeos::InitLog(chromeos::kLogToSyslog | chromeos::kLogHeader |
+                    (FLAGS_daemon ? 0 : chromeos::kLogToStderr));
+
   MetricsLibrary metrics_lib;
   metrics_lib.Init();
   MetricsDaemon daemon;
