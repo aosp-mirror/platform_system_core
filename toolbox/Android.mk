@@ -95,6 +95,7 @@ LOCAL_SRC_FILES := \
 LOCAL_C_INCLUDES := bionic/libc/bionic
 
 LOCAL_CFLAGS += \
+    -std=gnu99 \
     -Wno-unused-parameter \
     -include bsd-compatibility.h \
 
