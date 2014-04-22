@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <poll.h>
 #include <signal.h>
 #include <stddef.h>
 #define NOMINMAX /* for windows to suppress definition of min in stdlib.h */
@@ -273,6 +274,8 @@ static ssize_t send_log_msg(struct logger *logger,
                             const char *msg, char *buf, size_t buf_size)
 {
     ssize_t ret;
+    size_t len;
+    char *cp;
     int errno_save = 0;
     int sock = socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_RESERVED,
                                    SOCK_STREAM);
@@ -284,12 +287,44 @@ static ssize_t send_log_msg(struct logger *logger,
         snprintf(buf, buf_size, msg, logger ? logger->id : (unsigned) -1);
     }
 
-    ret = write(sock, buf, strlen(buf) + 1);
+    len = strlen(buf) + 1;
+    ret = TEMP_FAILURE_RETRY(write(sock, buf, len));
     if (ret <= 0) {
         goto done;
     }
 
-    ret = read(sock, buf, buf_size);
+    len = buf_size;
+    cp = buf;
+    while ((ret = TEMP_FAILURE_RETRY(read(sock, cp, len))) > 0) {
+        struct pollfd p;
+
+        if (((size_t)ret == len) || (buf_size < PAGE_SIZE)) {
+            break;
+        }
+
+        len -= ret;
+        cp += ret;
+
+        memset(&p, 0, sizeof(p));
+        p.fd = sock;
+        p.events = POLLIN;
+
+        /* Give other side 20ms to refill pipe */
+        ret = TEMP_FAILURE_RETRY(poll(&p, 1, 20));
+
+        if (ret <= 0) {
+            break;
+        }
+
+        if (!(p.revents & POLLIN)) {
+            ret = 0;
+            break;
+        }
+    }
+
+    if (ret >= 0) {
+        ret += buf_size - len;
+    }
 
 done:
     if ((ret == -1) && errno) {
