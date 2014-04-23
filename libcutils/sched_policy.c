@@ -26,6 +26,7 @@
 #include <fcntl.h>
 #include <cutils/sched_policy.h>
 #include <cutils/log.h>
+#include <linux/prctl.h>
 
 /* Re-map SP_DEFAULT to the system default policy, and leave other values unchanged.
  * Call this any place a SchedPolicy is used as an input parameter.
@@ -52,6 +53,9 @@ static inline SchedPolicy _policy(SchedPolicy p)
 #define POLICY_DEBUG 0
 
 #define CAN_SET_SP_SYSTEM 0 // non-zero means to implement set_sched_policy(tid, SP_SYSTEM)
+
+// timer slack value in nS enforced when the thread moves to background
+#define TIMER_SLACK_BG 40000000
 
 static pthread_once_t the_once = PTHREAD_ONCE_INIT;
 
@@ -323,6 +327,8 @@ int set_sched_policy(int tid, SchedPolicy policy)
                             SCHED_BATCH : SCHED_NORMAL,
                            &param);
     }
+
+    prctl(PR_SET_TIMERSLACK_PID, policy == SP_BACKGROUND ? TIMER_SLACK_BG : 0, tid);
 
     return 0;
 }
