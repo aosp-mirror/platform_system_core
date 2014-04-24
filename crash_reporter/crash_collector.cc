@@ -76,8 +76,7 @@ using base::FilePath;
 using base::StringPrintf;
 
 CrashCollector::CrashCollector()
-    : forced_crash_directory_(NULL),
-      lsb_release_(kLsbRelease),
+    : lsb_release_(kLsbRelease),
       log_config_path_(kDefaultLogConfig) {
 }
 
@@ -262,8 +261,8 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
   if (out_of_capacity != NULL) *out_of_capacity = false;
 
   // For testing.
-  if (forced_crash_directory_ != NULL) {
-    *crash_directory = FilePath(forced_crash_directory_);
+  if (!forced_crash_directory_.empty()) {
+    *crash_directory = forced_crash_directory_;
     return true;
   }
 
@@ -498,7 +497,7 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
                                         const std::string &exec_name,
                                         const std::string &payload_path) {
   std::map<std::string, std::string> contents;
-  if (!ReadKeyValueFile(FilePath(std::string(lsb_release_)), '=', &contents)) {
+  if (!ReadKeyValueFile(FilePath(lsb_release_), '=', &contents)) {
     LOG(ERROR) << "Problem parsing " << lsb_release_;
     // Even though there was some failure, take as much as we could read.
   }

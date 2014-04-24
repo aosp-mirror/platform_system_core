@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <bits/wordsize.h>
-#include <elf.h>
-#include <unistd.h>
+#include <stdio.h>
 
+#include <dbus/dbus-glib-lowlevel.h>
+
+#include "base/auto_reset.h"
 #include "base/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/strings/string_split.h"
 #include "chromeos/syslog_logging.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/chrome_collector.h"
@@ -30,37 +30,30 @@ static const char kCrashFormatWithFile[] =
     "value3:2:ok";
 
 void CountCrash() {
-  static int s_crashes = 0;
-  ++s_crashes;
 }
 
+static bool s_allow_crash = false;
+
 bool IsMetrics() {
-  return false;
+  return s_allow_crash;
 }
 
 class ChromeCollectorTest : public ::testing::Test {
-  void SetUp() {
-    collector_.Initialize(CountCrash, IsMetrics);
-    pid_ = getpid();
-    chromeos::ClearLog();
-  }
-
  protected:
   void ExpectFileEquals(const char *golden,
-                        const char *file_path) {
+                        const FilePath &file_path) {
     std::string contents;
-    EXPECT_TRUE(base::ReadFileToString(FilePath(file_path), &contents));
+    EXPECT_TRUE(base::ReadFileToString(file_path, &contents));
     EXPECT_EQ(golden, contents);
   }
 
-  std::vector<std::string> SplitLines(const std::string &lines) const {
-    std::vector<std::string> result;
-    base::SplitString(lines, '\n', &result);
-    return result;
-  }
-
   ChromeCollector collector_;
-  pid_t pid_;
+
+ private:
+  void SetUp() OVERRIDE {
+    collector_.Initialize(CountCrash, IsMetrics);
+    chromeos::ClearLog();
+  }
 };
 
 TEST_F(ChromeCollectorTest, GoodValues) {
@@ -107,7 +100,9 @@ TEST_F(ChromeCollectorTest, BadValues) {
 }
 
 TEST_F(ChromeCollectorTest, File) {
-  FilePath dir(".");
+  base::ScopedTempDir scoped_temp_dir;
+  ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
+  const FilePath& dir = scoped_temp_dir.path();
   EXPECT_TRUE(collector_.ParseCrashLog(kCrashFormatWithFile,
                                        dir, dir.Append("minidump.dmp"),
                                        "base"));
@@ -118,12 +113,34 @@ TEST_F(ChromeCollectorTest, File) {
   EXPECT_TRUE(meta.find("value1=abcdefghij") != std::string::npos);
   EXPECT_TRUE(meta.find("value2=12345") != std::string::npos);
   EXPECT_TRUE(meta.find("value3=ok") != std::string::npos);
-  ExpectFileEquals("12345\n789\n12345",
-                   dir.Append("base-foo.txt.other").value().c_str());
-  base::DeleteFile(dir.Append("base-foo.txt.other"), false);
+  ExpectFileEquals("12345\n789\n12345", dir.Append("base-foo.txt.other"));
+}
+
+TEST_F(ChromeCollectorTest, HandleCrash) {
+  base::AutoReset<bool> auto_reset(&s_allow_crash, true);
+  base::ScopedTempDir scoped_temp_dir;
+  ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
+  const FilePath& dir = scoped_temp_dir.path();
+  FilePath dump_file = dir.Append("test.dmp");
+  ASSERT_EQ(strlen(kCrashFormatWithFile),
+            file_util::WriteFile(dump_file, kCrashFormatWithFile,
+                                 strlen(kCrashFormatWithFile)));
+  collector_.ForceCrashDirectory(dir);
+
+  FilePath log_file;
+  {
+    file_util::ScopedFILE output(
+        base::CreateAndOpenTemporaryFileInDir(dir, &log_file));
+    ASSERT_TRUE(output.get());
+    base::AutoReset<FILE*> auto_reset_file_ptr(&collector_.output_file_ptr_,
+                                               output.get());
+    EXPECT_TRUE(collector_.HandleCrash(dump_file, "123", "456", "chrome_test"));
+  }
+  ExpectFileEquals(ChromeCollector::kSuccessMagic, log_file);
 }
 
 int main(int argc, char **argv) {
+  ::g_type_init();
   SetUpTests(&argc, argv, false);
   return RUN_ALL_TESTS();
 }

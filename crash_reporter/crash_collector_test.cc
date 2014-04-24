@@ -34,8 +34,7 @@ bool IsMetrics() {
 class CrashCollectorTest : public ::testing::Test {
  public:
   void SetUp() {
-    collector_.Initialize(CountCrash,
-                          IsMetrics);
+    collector_.Initialize(CountCrash, IsMetrics);
     test_dir_ = FilePath("test");
     base::CreateDirectory(test_dir_);
     chromeos::ClearLog();
@@ -281,7 +280,7 @@ TEST_F(CrashCollectorTest, MetaData) {
   FilePath lsb_release = test_dir_.Append("lsb-release");
   FilePath payload_file = test_dir_.Append("payload-file");
   std::string contents;
-  collector_.lsb_release_ = lsb_release.value().c_str();
+  collector_.lsb_release_ = lsb_release.value();
   const char kLsbContents[] = "CHROMEOS_RELEASE_VERSION=version\n";
   ASSERT_TRUE(
       file_util::WriteFile(lsb_release,

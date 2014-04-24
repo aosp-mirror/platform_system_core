@@ -128,11 +128,11 @@ bool GetAdditionalLogs(const FilePath &log_path) {
 } //namespace
 
 
-ChromeCollector::ChromeCollector() {}
+ChromeCollector::ChromeCollector() : output_file_ptr_(stdout) {}
 
 ChromeCollector::~ChromeCollector() {}
 
-bool ChromeCollector::HandleCrash(const std::string &file_path,
+bool ChromeCollector::HandleCrash(const FilePath &file_path,
                                   const std::string &pid_string,
                                   const std::string &uid_string,
                                   const std::string &exe_name) {
@@ -158,8 +158,8 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
   FilePath log_path = GetCrashPath(dir, dump_basename, "log.tar.xz");
 
   std::string data;
-  if (!base::ReadFileToString(FilePath(file_path), &data)) {
-    LOG(ERROR) << "Can't read crash log: " << file_path.c_str();
+  if (!base::ReadFileToString(file_path, &data)) {
+    LOG(ERROR) << "Can't read crash log: " << file_path.value();
     return false;
   }
 
@@ -185,6 +185,9 @@ bool ChromeCollector::HandleCrash(const std::string &file_path,
 
   // We're done.
   WriteCrashMetaData(meta_path, exe_name, minidump_path.value());
+
+  fprintf(output_file_ptr_, "%s", kSuccessMagic);
+  fflush(output_file_ptr_);
 
   return true;
 }
@@ -288,3 +291,6 @@ bool ChromeCollector::ParseCrashLog(const std::string &data,
 
   return at == data.size();
 }
+
+// static
+const char ChromeCollector::kSuccessMagic[] = "_sys_cr_finished";

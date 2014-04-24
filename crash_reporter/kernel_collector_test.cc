@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "base/file_util.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "chromeos/syslog_logging.h"
@@ -14,9 +15,6 @@
 
 static int s_crashes = 0;
 static bool s_metrics = false;
-
-static const char kTestKCrash[] = "test/kcrash";
-static const char kTestCrashDirectory[] = "test/crash_directory";
 
 using base::FilePath;
 using base::StringPrintf;
@@ -32,24 +30,6 @@ bool IsMetrics() {
 }
 
 class KernelCollectorTest : public ::testing::Test {
-  void SetUp() {
-    s_crashes = 0;
-    s_metrics = true;
-    collector_.Initialize(CountCrash,
-                          IsMetrics);
-    mkdir("test", 0777);
-    mkdir(kTestKCrash, 0777);
-    test_kcrash_ = FilePath(kTestKCrash);
-    collector_.OverridePreservedDumpPath(test_kcrash_);
-    test_kcrash_ = test_kcrash_.Append("dmesg-ramoops-0");
-    unlink(test_kcrash_.value().c_str());
-    if (mkdir(kTestCrashDirectory, 0777)) {
-      ASSERT_EQ(EEXIST, errno)
-          << "Error while creating directory '" << kTestCrashDirectory
-          << "': " << strerror(errno);
-    }
-    chromeos::ClearLog();
-  }
  protected:
   void WriteStringToFile(const FilePath &file_path,
                          const char *data) {
@@ -60,8 +40,32 @@ class KernelCollectorTest : public ::testing::Test {
   void SetUpSuccessfulCollect();
   void ComputeKernelStackSignatureCommon();
 
+  const FilePath &kcrash_file() const { return test_kcrash_; }
+  const FilePath &test_crash_directory() const { return test_crash_directory_; }
+
   KernelCollector collector_;
+
+ private:
+  void SetUp() OVERRIDE {
+    s_crashes = 0;
+    s_metrics = true;
+    collector_.Initialize(CountCrash, IsMetrics);
+    ASSERT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
+    test_kcrash_ = scoped_temp_dir_.path().Append("kcrash");
+    ASSERT_TRUE(base::CreateDirectory(test_kcrash_));
+    collector_.OverridePreservedDumpPath(test_kcrash_);
+
+    test_kcrash_ = test_kcrash_.Append("dmesg-ramoops-0");
+    ASSERT_FALSE(base::PathExists(test_kcrash_));
+
+    test_crash_directory_ = scoped_temp_dir_.path().Append("crash_directory");
+    ASSERT_TRUE(base::CreateDirectory(test_crash_directory_));
+    chromeos::ClearLog();
+  }
+
   FilePath test_kcrash_;
+  FilePath test_crash_directory_;
+  base::ScopedTempDir scoped_temp_dir_;
 };
 
 TEST_F(KernelCollectorTest, ComputeKernelStackSignatureBase) {
@@ -70,16 +74,16 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignatureBase) {
 }
 
 TEST_F(KernelCollectorTest, LoadPreservedDump) {
-  ASSERT_FALSE(base::PathExists(test_kcrash_));
+  ASSERT_FALSE(base::PathExists(kcrash_file()));
   std::string dump;
   dump.clear();
 
-  WriteStringToFile(test_kcrash_, "emptydata");
+  WriteStringToFile(kcrash_file(), "emptydata");
   ASSERT_TRUE(collector_.LoadParameters());
   ASSERT_FALSE(collector_.LoadPreservedDump(&dump));
   ASSERT_EQ("", dump);
 
-  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
+  WriteStringToFile(kcrash_file(), "====1.1\nsomething");
   ASSERT_TRUE(collector_.LoadParameters());
   ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
   ASSERT_EQ("something", dump);
@@ -94,7 +98,7 @@ TEST_F(KernelCollectorTest, EnableMissingKernel) {
 }
 
 TEST_F(KernelCollectorTest, EnableOK) {
-  WriteStringToFile(test_kcrash_, "");
+  WriteStringToFile(kcrash_file(), "");
   ASSERT_TRUE(collector_.Enable());
   ASSERT_TRUE(collector_.IsEnabled());
   ASSERT_TRUE(FindLog("Enabling kernel crash handling"));
@@ -225,7 +229,7 @@ TEST_F(KernelCollectorTest, CollectPreservedFileMissing) {
 }
 
 TEST_F(KernelCollectorTest, CollectNoCrash) {
-  WriteStringToFile(test_kcrash_, "");
+  WriteStringToFile(kcrash_file(), "");
   ASSERT_FALSE(collector_.Collect());
   ASSERT_TRUE(FindLog("No valid records found"));
   ASSERT_FALSE(FindLog("Stored kcrash to "));
@@ -233,7 +237,7 @@ TEST_F(KernelCollectorTest, CollectNoCrash) {
 }
 
 TEST_F(KernelCollectorTest, CollectBadDirectory) {
-  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
+  WriteStringToFile(kcrash_file(), "====1.1\nsomething");
   ASSERT_TRUE(collector_.Collect());
   ASSERT_TRUE(FindLog("Unable to create appropriate crash directory"))
       << "Did not find expected error string in log: {\n"
@@ -242,8 +246,8 @@ TEST_F(KernelCollectorTest, CollectBadDirectory) {
 }
 
 void KernelCollectorTest::SetUpSuccessfulCollect() {
-  collector_.ForceCrashDirectory(kTestCrashDirectory);
-  WriteStringToFile(test_kcrash_, "====1.1\nsomething");
+  collector_.ForceCrashDirectory(test_crash_directory());
+  WriteStringToFile(kcrash_file(), "====1.1\nsomething");
   ASSERT_EQ(0, s_crashes);
 }
 
@@ -272,7 +276,7 @@ TEST_F(KernelCollectorTest, CollectOK) {
   size_t end_pos = filename.find_first_of("\n");
   ASSERT_NE(std::string::npos, end_pos);
   filename = filename.substr(0, end_pos);
-  ASSERT_EQ(0, filename.find(kTestCrashDirectory));
+  ASSERT_EQ(0, filename.find(test_crash_directory().value()));
   ASSERT_TRUE(base::PathExists(FilePath(filename)));
   std::string contents;
   ASSERT_TRUE(base::ReadFileToString(FilePath(filename), &contents));

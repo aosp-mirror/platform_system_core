@@ -186,8 +186,8 @@ static int HandleChromeCrash(ChromeCollector *chrome_collector) {
   CHECK(!FLAGS_exe.empty()) << "--exe= must be set";
 
   chromeos::LogToString(true);
-  bool handled = chrome_collector->HandleCrash(FLAGS_chrome, FLAGS_pid,
-                                               FLAGS_uid, FLAGS_exe);
+  bool handled = chrome_collector->HandleCrash(FilePath(FLAGS_chrome),
+                                               FLAGS_pid, FLAGS_uid, FLAGS_exe);
   chromeos::LogToString(false);
   if (!handled)
     return 1;
@@ -269,8 +269,7 @@ int main(int argc, char *argv[]) {
   ::g_type_init();
 
   KernelCollector kernel_collector;
-  kernel_collector.Initialize(CountKernelCrash,
-                              IsFeedbackAllowed);
+  kernel_collector.Initialize(CountKernelCrash, IsFeedbackAllowed);
   UserCollector user_collector;
   user_collector.Initialize(CountUserCrash,
                             my_path.value(),

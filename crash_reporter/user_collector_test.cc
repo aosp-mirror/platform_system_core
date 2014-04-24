@@ -52,10 +52,9 @@ class UserCollectorTest : public ::testing::Test {
 
  protected:
   void ExpectFileEquals(const char *golden,
-                        const char *file_path) {
+                        const FilePath &file_path) {
     std::string contents;
-    EXPECT_TRUE(base::ReadFileToString(FilePath(file_path),
-                                            &contents));
+    EXPECT_TRUE(base::ReadFileToString(file_path, &contents));
     EXPECT_EQ(golden, contents);
   }
 
@@ -71,8 +70,9 @@ class UserCollectorTest : public ::testing::Test {
 
 TEST_F(UserCollectorTest, EnableOK) {
   ASSERT_TRUE(collector_.Enable());
-  ExpectFileEquals("|/my/path --user=%P:%s:%u:%e", "test/core_pattern");
-  ExpectFileEquals("4", "test/core_pipe_limit");
+  ExpectFileEquals("|/my/path --user=%P:%s:%u:%e",
+                   FilePath("test/core_pattern"));
+  ExpectFileEquals("4", FilePath("test/core_pipe_limit"));
   ASSERT_EQ(s_crashes, 0);
   EXPECT_TRUE(FindLog("Enabling user crash handling"));
 }
@@ -98,7 +98,7 @@ TEST_F(UserCollectorTest, EnableNoPipeLimitFileAccess) {
 
 TEST_F(UserCollectorTest, DisableOK) {
   ASSERT_TRUE(collector_.Disable());
-  ExpectFileEquals("core", "test/core_pattern");
+  ExpectFileEquals("core", FilePath("test/core_pattern"));
   ASSERT_EQ(s_crashes, 0);
   EXPECT_TRUE(FindLog("Disabling user crash handling"));
 }

@@ -19,9 +19,14 @@ class ChromeCollector : public CrashCollector {
   ChromeCollector();
   virtual ~ChromeCollector();
 
+  // Magic string to let Chrome know the crash report succeeded.
+  static const char kSuccessMagic[];
+
   // Handle a specific chrome crash.  Returns true on success.
-  bool HandleCrash(const std::string &file_path, const std::string &pid_string,
-                   const std::string &uid_string, const std::string &exe_name);
+  bool HandleCrash(const base::FilePath &file_path,
+                   const std::string &pid_string,
+                   const std::string &uid_string,
+                   const std::string &exe_name);
 
  private:
   friend class ChromeCollectorTest;
@@ -29,6 +34,7 @@ class ChromeCollector : public CrashCollector {
   FRIEND_TEST(ChromeCollectorTest, BadValues);
   FRIEND_TEST(ChromeCollectorTest, Newlines);
   FRIEND_TEST(ChromeCollectorTest, File);
+  FRIEND_TEST(ChromeCollectorTest, HandleCrash);
 
   // Crashes are expected to be in a TLV-style format of:
   // <name>:<length>:<value>
@@ -39,6 +45,8 @@ class ChromeCollector : public CrashCollector {
   bool ParseCrashLog(const std::string &data, const base::FilePath &dir,
                      const base::FilePath &minidump,
                      const std::string &basename);
+
+  FILE *output_file_ptr_;
 };
 
 #endif

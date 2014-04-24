@@ -5,7 +5,6 @@
 #include "base/file_util.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/scoped_ptr.h"
 #include "chromeos/test_helpers.h"
 #include "crash-reporter/udev_collector.h"
 #include "gtest/gtest.h"
@@ -47,21 +46,25 @@ int GetNumLogFiles(const FilePath& path) {
 }  // namespace
 
 class UdevCollectorTest : public ::testing::Test {
-  void SetUp() {
+ protected:
+  base::ScopedTempDir temp_dir_generator_;
+
+  void HandleCrash(const std::string &udev_event) {
+    collector_.HandleCrash(udev_event);
+  }
+
+ private:
+  void SetUp() OVERRIDE {
     s_consent_given = true;
 
-    collector_.reset(new UdevCollector);
-    collector_->Initialize(CountCrash, IsMetrics);
+    collector_.Initialize(CountCrash, IsMetrics);
 
-    temp_dir_generator_.reset(new base::ScopedTempDir());
-    ASSERT_TRUE(temp_dir_generator_->CreateUniqueTempDir());
-    EXPECT_TRUE(temp_dir_generator_->IsValid());
+    ASSERT_TRUE(temp_dir_generator_.CreateUniqueTempDir());
 
     FilePath log_config_path =
-        temp_dir_generator_->path().Append(kLogConfigFileName);
-    collector_->log_config_path_ = log_config_path;
-    collector_->ForceCrashDirectory(
-        temp_dir_generator_->path().value().c_str());
+        temp_dir_generator_.path().Append(kLogConfigFileName);
+    collector_.log_config_path_ = log_config_path;
+    collector_.ForceCrashDirectory(temp_dir_generator_.path());
 
     // Write to a dummy log config file.
     ASSERT_EQ(strlen(kLogConfigFileContents),
@@ -72,30 +75,28 @@ class UdevCollectorTest : public ::testing::Test {
     chromeos::ClearLog();
   }
 
- protected:
-  scoped_ptr<UdevCollector> collector_;
-  scoped_ptr<base::ScopedTempDir> temp_dir_generator_;
+  UdevCollector collector_;
 };
 
 TEST_F(UdevCollectorTest, TestNoConsent) {
   s_consent_given = false;
-  collector_->HandleCrash("ACTION=change:KERNEL=card0:SUBSYSTEM=drm");
-  EXPECT_EQ(0, GetNumLogFiles(temp_dir_generator_->path()));
+  HandleCrash("ACTION=change:KERNEL=card0:SUBSYSTEM=drm");
+  EXPECT_EQ(0, GetNumLogFiles(temp_dir_generator_.path()));
 }
 
 TEST_F(UdevCollectorTest, TestNoMatch) {
   // No rule should match this.
-  collector_->HandleCrash("ACTION=change:KERNEL=foo:SUBSYSTEM=bar");
-  EXPECT_EQ(0, GetNumLogFiles(temp_dir_generator_->path()));
+  HandleCrash("ACTION=change:KERNEL=foo:SUBSYSTEM=bar");
+  EXPECT_EQ(0, GetNumLogFiles(temp_dir_generator_.path()));
 }
 
 TEST_F(UdevCollectorTest, TestMatches) {
   // Try multiple udev events in sequence.  The number of log files generated
   // should increase.
-  collector_->HandleCrash("ACTION=change:KERNEL=card0:SUBSYSTEM=drm");
-  EXPECT_EQ(1, GetNumLogFiles(temp_dir_generator_->path()));
-  collector_->HandleCrash("ACTION=add:KERNEL=state0:SUBSYSTEM=cpu");
-  EXPECT_EQ(2, GetNumLogFiles(temp_dir_generator_->path()));
+  HandleCrash("ACTION=change:KERNEL=card0:SUBSYSTEM=drm");
+  EXPECT_EQ(1, GetNumLogFiles(temp_dir_generator_.path()));
+  HandleCrash("ACTION=add:KERNEL=state0:SUBSYSTEM=cpu");
+  EXPECT_EQ(2, GetNumLogFiles(temp_dir_generator_.path()));
 }
 
 // TODO(sque, crosbug.com/32238) - test wildcard cases, multiple identical udev

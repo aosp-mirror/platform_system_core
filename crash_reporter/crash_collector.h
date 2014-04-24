@@ -32,6 +32,7 @@ class CrashCollector {
 
  protected:
   friend class CrashCollectorTest;
+  FRIEND_TEST(ChromeCollectorTest, HandleCrash);
   FRIEND_TEST(CrashCollectorTest, CheckHasCapacityCorrectBasename);
   FRIEND_TEST(CrashCollectorTest, CheckHasCapacityStrangeNames);
   FRIEND_TEST(CrashCollectorTest, CheckHasCapacityUsual);
@@ -71,7 +72,7 @@ class CrashCollector {
 
   // For testing, set the directory always returned by
   // GetCreatedCrashDirectoryByEuid.
-  void ForceCrashDirectory(const char *forced_directory) {
+  void ForceCrashDirectory(const base::FilePath &forced_directory) {
     forced_crash_directory_ = forced_directory;
   }
 
@@ -86,7 +87,8 @@ class CrashCollector {
   bool GetUserInfoFromName(const std::string &name,
                            uid_t *uid,
                            gid_t *gid);
-  // Determines the crash directory for given eud, and creates the
+
+  // Determines the crash directory for given euid, and creates the
   // directory if necessary with appropriate permissions.  If
   // |out_of_capacity| is not NULL, it is set to indicate if the call
   // failed due to not having capacity in the crash directory. Returns
@@ -165,8 +167,8 @@ class CrashCollector {
   CountCrashFunction count_crash_function_;
   IsFeedbackAllowedFunction is_feedback_allowed_function_;
   std::string extra_metadata_;
-  const char *forced_crash_directory_;
-  const char *lsb_release_;
+  base::FilePath forced_crash_directory_;
+  std::string lsb_release_;
   base::FilePath log_config_path_;
 };
 
