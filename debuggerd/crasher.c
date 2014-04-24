@@ -1,20 +1,17 @@
-
-//#include <cutils/misc.h>
-
-#include <unistd.h>
+#include <assert.h>
+#include <errno.h>
+#include <pthread.h>
+#include <sched.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sched.h>
-#include <errno.h>
-
-#include <signal.h>
 #include <sys/ptrace.h>
-#include <sys/wait.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
-#include <pthread.h>
-
+#include <cutils/log.h>
 #include <cutils/sockets.h>
 
 extern const char* __progname;
@@ -23,8 +20,8 @@ void crash1(void);
 void crashnostack(void);
 static int do_action(const char* arg);
 
-static void maybeabort() {
-    if(time(0) != 42) {
+static void maybe_abort() {
+    if (time(0) != 42) {
         abort();
     }
 }
@@ -119,20 +116,28 @@ static int do_action(const char* arg)
 
     if (!strncmp(arg, "thread-", strlen("thread-"))) {
         return do_action_on_thread(arg + strlen("thread-"));
-    } else if (!strcmp(arg,"smash-stack")) {
+    } else if (!strcmp(arg, "smash-stack")) {
         return smash_stack(42);
-    } else if (!strcmp(arg,"stack-overflow")) {
+    } else if (!strcmp(arg, "stack-overflow")) {
         overflow_stack(NULL);
-    } else if (!strcmp(arg,"nostack")) {
+    } else if (!strcmp(arg, "nostack")) {
         crashnostack();
-    } else if (!strcmp(arg,"ctest")) {
+    } else if (!strcmp(arg, "ctest")) {
         return ctest();
-    } else if (!strcmp(arg,"exit")) {
+    } else if (!strcmp(arg, "exit")) {
         exit(1);
-    } else if (!strcmp(arg,"crash")) {
+    } else if (!strcmp(arg, "crash")) {
         return crash(42);
-    } else if (!strcmp(arg,"abort")) {
-        maybeabort();
+    } else if (!strcmp(arg, "abort")) {
+        maybe_abort();
+    } else if (!strcmp(arg, "assert")) {
+        __assert("some_file.c", 123, "false");
+    } else if (!strcmp(arg, "assert2")) {
+      __assert2("some_file.c", 123, "some_function", "false");
+    } else if (!strcmp(arg, "LOG_ALWAYS_FATAL")) {
+        LOG_ALWAYS_FATAL("hello %s", "world");
+    } else if (!strcmp(arg, "LOG_ALWAYS_FATAL_IF")) {
+        LOG_ALWAYS_FATAL_IF(true, "hello %s", "world");
     } else if (!strcmp(arg, "heap-usage")) {
         abuse_heap();
     }
@@ -148,6 +153,8 @@ static int do_action(const char* arg)
     fprintf(stderr, "  exit            call exit(1)\n");
     fprintf(stderr, "  crash           cause a SIGSEGV\n");
     fprintf(stderr, "  abort           call abort()\n");
+    fprintf(stderr, "  assert          call assert() without a function\n");
+    fprintf(stderr, "  assert2         call assert() with a function\n");
     fprintf(stderr, "prefix any of the above with 'thread-' to not run\n");
     fprintf(stderr, "on the process' main thread.\n");
     return EXIT_SUCCESS;
