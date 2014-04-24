@@ -97,13 +97,17 @@ static const char* get_sigcode(int signo, int code) {
         case ILL_COPROC: return "ILL_COPROC";
         case ILL_BADSTK: return "ILL_BADSTK";
       }
+      static_assert(NSIGILL == ILL_BADSTK, "missing ILL_* si_code");
       break;
     case SIGBUS:
       switch (code) {
         case BUS_ADRALN: return "BUS_ADRALN";
         case BUS_ADRERR: return "BUS_ADRERR";
         case BUS_OBJERR: return "BUS_OBJERR";
+        case BUS_MCEERR_AR: return "BUS_MCEERR_AR";
+        case BUS_MCEERR_AO: return "BUS_MCEERR_AO";
       }
+      static_assert(NSIGBUS == BUS_MCEERR_AO, "missing BUS_* si_code");
       break;
     case SIGFPE:
       switch (code) {
@@ -116,36 +120,36 @@ static const char* get_sigcode(int signo, int code) {
         case FPE_FLTINV: return "FPE_FLTINV";
         case FPE_FLTSUB: return "FPE_FLTSUB";
       }
+      static_assert(NSIGFPE == FPE_FLTSUB, "missing FPE_* si_code");
       break;
     case SIGSEGV:
       switch (code) {
         case SEGV_MAPERR: return "SEGV_MAPERR";
         case SEGV_ACCERR: return "SEGV_ACCERR";
       }
+      static_assert(NSIGSEGV == SEGV_ACCERR, "missing SEGV_* si_code");
       break;
     case SIGTRAP:
       switch (code) {
         case TRAP_BRKPT: return "TRAP_BRKPT";
         case TRAP_TRACE: return "TRAP_TRACE";
+        case TRAP_BRANCH: return "TRAP_BRANCH";
+        case TRAP_HWBKPT: return "TRAP_HWBKPT";
       }
+      static_assert(NSIGTRAP == TRAP_HWBKPT, "missing TRAP_* si_code");
       break;
   }
   // Then the other codes...
   switch (code) {
     case SI_USER: return "SI_USER";
-#if defined(SI_KERNEL)
     case SI_KERNEL: return "SI_KERNEL";
-#endif
     case SI_QUEUE: return "SI_QUEUE";
     case SI_TIMER: return "SI_TIMER";
     case SI_MESGQ: return "SI_MESGQ";
     case SI_ASYNCIO: return "SI_ASYNCIO";
-#if defined(SI_SIGIO)
     case SI_SIGIO: return "SI_SIGIO";
-#endif
-#if defined(SI_TKILL)
     case SI_TKILL: return "SI_TKILL";
-#endif
+    case SI_DETHREAD: return "SI_DETHREAD";
   }
   // Then give up...
   return "?";
