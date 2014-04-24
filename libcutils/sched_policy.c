@@ -26,7 +26,6 @@
 #include <fcntl.h>
 #include <cutils/sched_policy.h>
 #include <cutils/log.h>
-#include <linux/prctl.h>
 
 /* Re-map SP_DEFAULT to the system default policy, and leave other values unchanged.
  * Call this any place a SchedPolicy is used as an input parameter.
@@ -39,6 +38,7 @@ static inline SchedPolicy _policy(SchedPolicy p)
 
 #if defined(HAVE_ANDROID_OS) && defined(HAVE_SCHED_H) && defined(HAVE_PTHREADS)
 
+#include <linux/prctl.h>
 #include <sched.h>
 #include <pthread.h>
 
