@@ -31,7 +31,7 @@ LogListener::LogListener(LogBuffer *buf, LogReader *reader)
 {  }
 
 bool LogListener::onDataAvailable(SocketClient *cli) {
-    char buffer[sizeof_log_id_t + sizeof(log_time) + sizeof(char)
+    char buffer[sizeof_log_id_t + sizeof(uint16_t) + sizeof(log_time)
         + LOGGER_ENTRY_MAX_PAYLOAD];
     struct iovec iov = { buffer, sizeof(buffer) };
     memset(buffer, 0, sizeof(buffer));
