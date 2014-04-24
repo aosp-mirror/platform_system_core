@@ -471,12 +471,16 @@ static inline bool audio_is_a2dp_device(audio_devices_t device)
 
 static inline bool audio_is_bluetooth_sco_device(audio_devices_t device)
 {
-    device &= ~AUDIO_DEVICE_BIT_IN;
-    if ((popcount(device) == 1) && (device & (AUDIO_DEVICE_OUT_ALL_SCO |
-                   AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET)))
-        return true;
-    else
-        return false;
+    if ((device & AUDIO_DEVICE_BIT_IN) == 0) {
+        if ((popcount(device) == 1) && ((device & ~AUDIO_DEVICE_OUT_ALL_SCO) == 0))
+            return true;
+    } else {
+        device &= ~AUDIO_DEVICE_BIT_IN;
+        if ((popcount(device) == 1) && ((device & ~AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET) == 0))
+            return true;
+    }
+
+    return false;
 }
 
 static inline bool audio_is_usb_device(audio_devices_t device)
