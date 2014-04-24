@@ -146,9 +146,15 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
             ret = -errno;
         }
     } while (ret == -EINTR);
-
-    return ret;
 #else
+    static const unsigned header_length = 3;
+    struct iovec newVec[nr + header_length];
+    typeof_log_id_t log_id_buf;
+    uint16_t tid;
+    struct timespec ts;
+    log_time realtime_ts;
+    size_t i, payload_size;
+
     if (getuid() == AID_LOGD) {
         /*
          * ignore log messages we send to ourself.
@@ -181,29 +187,33 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
      *      };
      *  };
      */
-    static const unsigned header_length = 3;
-    struct iovec newVec[nr + header_length];
-    typeof_log_id_t log_id_buf = log_id;
-    uint16_t tid = gettid();
+
+    log_id_buf = log_id;
+    tid = gettid();
 
     newVec[0].iov_base   = (unsigned char *) &log_id_buf;
     newVec[0].iov_len    = sizeof_log_id_t;
     newVec[1].iov_base   = (unsigned char *) &tid;
     newVec[1].iov_len    = sizeof(tid);
 
-    struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
-    log_time realtime_ts;
     realtime_ts.tv_sec = ts.tv_sec;
     realtime_ts.tv_nsec = ts.tv_nsec;
 
     newVec[2].iov_base   = (unsigned char *) &realtime_ts;
     newVec[2].iov_len    = sizeof(log_time);
 
-    size_t i;
-    for (i = header_length; i < nr + header_length; i++) {
-        newVec[i].iov_base = vec[i-header_length].iov_base;
-        newVec[i].iov_len  = vec[i-header_length].iov_len;
+    for (payload_size = 0, i = header_length; i < nr + header_length; i++) {
+        newVec[i].iov_base = vec[i - header_length].iov_base;
+        payload_size += newVec[i].iov_len = vec[i - header_length].iov_len;
+
+        if (payload_size > LOGGER_ENTRY_MAX_PAYLOAD) {
+            newVec[i].iov_len -= payload_size - LOGGER_ENTRY_MAX_PAYLOAD;
+            if (newVec[i].iov_len) {
+                ++i;
+            }
+            break;
+        }
     }
 
     /*
@@ -212,7 +222,7 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
      * ENOTCONN occurs if logd dies.
      * EAGAIN occurs if logd is overloaded.
      */
-    ret = writev(logd_fd, newVec, nr + header_length);
+    ret = writev(logd_fd, newVec, i);
     if (ret < 0) {
         ret = -errno;
         if (ret == -ENOTCONN) {
@@ -234,8 +244,13 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
             }
         }
     }
-    return ret;
+
+    if (ret > (ssize_t)(sizeof_log_id_t + sizeof(tid) + sizeof(log_time))) {
+        ret -= sizeof_log_id_t + sizeof(tid) + sizeof(log_time);
+    }
 #endif
+
+    return ret;
 }
 
 #if FAKE_LOG_DEVICE
