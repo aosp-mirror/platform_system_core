@@ -482,11 +482,68 @@ TEST(liblog, max_payload) {
         }
     }
 
+    android_logger_list_close(logger_list);
+
     EXPECT_EQ(true, matches);
 
     EXPECT_LE(sizeof(max_payload_buf), static_cast<size_t>(max_len));
+}
+
+TEST(liblog, too_big_payload) {
+    pid_t pid = getpid();
+    static const char big_payload_tag[] = "TEST_big_payload_XXXX";
+    char tag[sizeof(big_payload_tag)];
+    memcpy(tag, big_payload_tag, sizeof(tag));
+    snprintf(tag + sizeof(tag) - 5, 5, "%04X", pid & 0xFFFF);
+
+    std::string longString(3266519, 'x');
+
+    ssize_t ret = LOG_FAILURE_RETRY(__android_log_buf_write(LOG_ID_SYSTEM,
+                                    ANDROID_LOG_INFO, tag, longString.c_str()));
+
+    struct logger_list *logger_list;
+
+    ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
+        LOG_ID_SYSTEM, O_RDONLY | O_NDELAY, 100, 0)));
+
+    ssize_t max_len = 0;
+
+    for(;;) {
+        log_msg log_msg;
+        if (android_logger_list_read(logger_list, &log_msg) <= 0) {
+            break;
+        }
+
+        if ((log_msg.entry.pid != pid) || (log_msg.id() != LOG_ID_SYSTEM)) {
+            continue;
+        }
+
+        char *data = log_msg.msg() + 1;
+
+        if (strcmp(data, tag)) {
+            continue;
+        }
+
+        data += strlen(data) + 1;
+
+        const char *left = data;
+        const char *right = longString.c_str();
+        while (*left && *right && (*left == *right)) {
+            ++left;
+            ++right;
+        }
+
+        if (max_len <= (left - data)) {
+            max_len = left - data + 1;
+        }
+    }
 
     android_logger_list_close(logger_list);
+
+    EXPECT_LE(LOGGER_ENTRY_MAX_PAYLOAD - sizeof(big_payload_tag),
+              static_cast<size_t>(max_len));
+
+    EXPECT_EQ(ret, max_len + sizeof(big_payload_tag));
 }
 
 TEST(liblog, dual_reader) {
