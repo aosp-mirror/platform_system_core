@@ -1,0 +1,11 @@
+The properties that logd responds to are:
+
+name                       type default  description
+logd.auditd.dmesg           bool  true   selinux audit messages duplicated and
+                                         sent on to dmesg log
+logd.dgram_qlen.statistics  bool  false  Record dgram_qlen statistics. This
+                                         represents a performance impact and
+                                         is used to determine the platform's
+                                         minimum domain socket network FIFO
+                                         size (see source for details) based
+                                         on typical load (logcat -S)
