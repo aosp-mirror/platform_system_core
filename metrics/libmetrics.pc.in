@@ -1,0 +1,7 @@
+bslot=@BSLOT@
+
+Name: libmetrics
+Description: Chrome OS metrics library
+Version: ${bslot}
+Requires.private: libchrome-${bslot}
+Libs: -lmetrics-${bslot}
