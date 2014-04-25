@@ -81,6 +81,8 @@ LOCAL_STATIC_LIBRARIES := \
 include $(BUILD_EXECUTABLE)
 
 
+ifneq ($(HOST_OS),windows)
+
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := append2simg.c
 LOCAL_MODULE := append2simg
@@ -89,6 +91,7 @@ LOCAL_STATIC_LIBRARIES := \
     libz
 include $(BUILD_HOST_EXECUTABLE)
 
+endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := simg_dump.py

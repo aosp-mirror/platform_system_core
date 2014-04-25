@@ -16,6 +16,7 @@
 
 #define _FILE_OFFSET_BITS 64
 #define _LARGEFILE64_SOURCE 1
+#define _GNU_SOURCE
 
 #include <errno.h>
 #include <fcntl.h>
@@ -56,11 +57,22 @@ int main(int argc, char *argv[])
     char *input_path;
     off64_t input_len;
 
+    int tmp_fd;
+    char *tmp_path;
+
+    int ret;
+
     if (argc == 3) {
         output_path = argv[1];
         input_path = argv[2];
     } else {
         usage();
+        exit(-1);
+    }
+
+    ret = asprintf(&tmp_path, "%s.append2simg", output_path);
+    if (ret < 0) {
+        fprintf(stderr, "Couldn't allocate filename\n");
         exit(-1);
     }
 
@@ -99,14 +111,30 @@ int main(int argc, char *argv[])
     }
     sparse_output->len += input_len;
 
+    tmp_fd = open(tmp_path, O_WRONLY | O_CREAT | O_BINARY, 0664);
+    if (tmp_fd < 0) {
+        fprintf(stderr, "Couldn't open temporary file (%s)\n", strerror(errno));
+        exit(-1);
+    }
+
     lseek64(output, 0, SEEK_SET);
-    if (sparse_file_write(sparse_output, output, false, true, false) < 0) {
+    if (sparse_file_write(sparse_output, tmp_fd, false, true, false) < 0) {
         fprintf(stderr, "Failed to write sparse file\n");
         exit(-1);
     }
 
     sparse_file_destroy(sparse_output);
+    close(tmp_fd);
     close(output);
     close(input);
+
+    ret = rename(tmp_path, output_path);
+    if (ret < 0) {
+        fprintf(stderr, "Failed to rename temporary file (%s)\n", strerror(errno));
+        exit(-1);
+    }
+
+    free(tmp_path);
+
     exit(0);
 }
