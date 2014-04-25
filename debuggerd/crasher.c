@@ -126,7 +126,7 @@ static int do_action(const char* arg)
         return ctest();
     } else if (!strcmp(arg, "exit")) {
         exit(1);
-    } else if (!strcmp(arg, "crash")) {
+    } else if (!strcmp(arg, "crash") || !strcmp(arg, "SIGSEGV")) {
         return crash(42);
     } else if (!strcmp(arg, "abort")) {
         maybe_abort();
@@ -138,23 +138,32 @@ static int do_action(const char* arg)
         LOG_ALWAYS_FATAL("hello %s", "world");
     } else if (!strcmp(arg, "LOG_ALWAYS_FATAL_IF")) {
         LOG_ALWAYS_FATAL_IF(true, "hello %s", "world");
+    } else if (!strcmp(arg, "SIGPIPE")) {
+        int pipe_fds[2];
+        pipe(pipe_fds);
+        close(pipe_fds[0]);
+        write(pipe_fds[1], "oops", 4);
+        return EXIT_SUCCESS;
     } else if (!strcmp(arg, "heap-usage")) {
         abuse_heap();
     }
 
     fprintf(stderr, "%s OP\n", __progname);
     fprintf(stderr, "where OP is:\n");
-    fprintf(stderr, "  smash-stack     overwrite a stack-guard canary\n");
-    fprintf(stderr, "  stack-overflow  recurse until the stack overflows\n");
-    fprintf(stderr, "  heap-corruption cause a libc abort by corrupting the heap\n");
-    fprintf(stderr, "  heap-usage      cause a libc abort by abusing a heap function\n");
-    fprintf(stderr, "  nostack         crash with a NULL stack pointer\n");
-    fprintf(stderr, "  ctest           (obsoleted by thread-crash?)\n");
-    fprintf(stderr, "  exit            call exit(1)\n");
-    fprintf(stderr, "  crash           cause a SIGSEGV\n");
-    fprintf(stderr, "  abort           call abort()\n");
-    fprintf(stderr, "  assert          call assert() without a function\n");
-    fprintf(stderr, "  assert2         call assert() with a function\n");
+    fprintf(stderr, "  smash-stack           overwrite a stack-guard canary\n");
+    fprintf(stderr, "  stack-overflow        recurse until the stack overflows\n");
+    fprintf(stderr, "  heap-corruption       cause a libc abort by corrupting the heap\n");
+    fprintf(stderr, "  heap-usage            cause a libc abort by abusing a heap function\n");
+    fprintf(stderr, "  nostack               crash with a NULL stack pointer\n");
+    fprintf(stderr, "  ctest                 (obsoleted by thread-crash?)\n");
+    fprintf(stderr, "  exit                  call exit(1)\n");
+    fprintf(stderr, "  abort                 call abort()\n");
+    fprintf(stderr, "  assert                call assert() without a function\n");
+    fprintf(stderr, "  assert2               call assert() with a function\n");
+    fprintf(stderr, "  LOG_ALWAYS_FATAL      call LOG_ALWAYS_FATAL\n");
+    fprintf(stderr, "  LOG_ALWAYS_FATAL_IF   call LOG_ALWAYS_FATAL\n");
+    fprintf(stderr, "  SIGPIPE               cause a SIGPIPE\n");
+    fprintf(stderr, "  SIGSEGV               cause a SIGSEGV (synonym: crash)\n");
     fprintf(stderr, "prefix any of the above with 'thread-' to not run\n");
     fprintf(stderr, "on the process' main thread.\n");
     return EXIT_SUCCESS;
