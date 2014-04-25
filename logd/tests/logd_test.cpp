@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 
 #include "cutils/sockets.h"
+#include "log/log.h"
 #include "log/logger.h"
 
 #define __unused __attribute__((__unused__))
@@ -96,8 +97,9 @@ static char *find_benchmark_spam(char *cp)
     //
     // main: UID/PID Total size/num   Now          UID/PID[?]  Total
     // 0           7500306/304207     71608/3183   0/4225?     7454388/303656
+    //    <wrap>                                                     93432/1012
     // -or-
-    // 0/gone      7454388/303656
+    // 0/gone      7454388/303656     93432/1012
     //
     // basically if we see a *large* number of 0/????? entries
     unsigned long value;
@@ -125,6 +127,15 @@ static char *find_benchmark_spam(char *cp)
             while (isdigit(*cp)) {
                 value = value * 10ULL + *cp - '0';
                 ++cp;
+            }
+            if (*cp != '/') {
+                value = 0;
+                continue;
+            }
+            while (isdigit(*++cp));
+            while (*cp == ' ') ++cp;
+            if (!isdigit(*cp)) {
+                value = 0;
             }
         }
     } while ((value < 900000ULL) && *cp);
@@ -624,7 +635,45 @@ TEST(logd, benchmark) {
 #endif
 
     ASSERT_TRUE(NULL != buf);
-    EXPECT_TRUE(find_benchmark_spam(buf) != NULL);
+
+    char *benchmark_statistics_found = find_benchmark_spam(buf);
+    ASSERT_TRUE(benchmark_statistics_found != NULL);
+
+    // Check how effective the SPAM filter is, parse out Now size.
+    //             Total               Now
+    // 0/4225?     7454388/303656      31488/755
+    //                                 ^-- benchmark_statistics_found
+
+    unsigned long nowSize = atol(benchmark_statistics_found);
 
     delete [] buf;
+
+    ASSERT_NE(0UL, nowSize);
+
+    int sock = socket_local_client("logd",
+                                   ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                   SOCK_STREAM);
+    static const unsigned long expected_absolute_minimum_log_size = 65536UL;
+    unsigned long totalSize = expected_absolute_minimum_log_size;
+    if (sock >= 0) {
+        static const char getSize[] = {
+            'g', 'e', 't', 'L', 'o', 'g', 'S', 'i', 'z', 'e', ' ',
+            LOG_ID_MAIN + '0', '\0'
+        };
+        if (write(sock, getSize, sizeof(getSize)) > 0) {
+            char buffer[80];
+            memset(buffer, 0, sizeof(buffer));
+            read(sock, buffer, sizeof(buffer));
+            totalSize = atol(buffer);
+            if (totalSize < expected_absolute_minimum_log_size) {
+                totalSize = expected_absolute_minimum_log_size;
+            }
+        }
+        close(sock);
+    }
+    // logd allows excursions to 110% of total size
+    totalSize = (totalSize * 11 ) / 10;
+
+    // 50% threshold for SPAM filter (<20% typical, lots of engineering margin)
+    ASSERT_GT(totalSize, nowSize * 2);
 }
