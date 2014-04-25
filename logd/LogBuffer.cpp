@@ -167,17 +167,14 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
 
         if ((id != LOG_ID_CRASH) && mPrune.worstUidEnabled()) {
             LidStatistics &l = stats.id(id);
-            UidStatisticsCollection::iterator iu;
-            for (iu = l.begin(); iu != l.end(); ++iu) {
-                UidStatistics *u = (*iu);
-                size_t sizes = u->sizes();
-                if (worst_sizes < sizes) {
-                    second_worst_sizes = worst_sizes;
-                    worst_sizes = sizes;
-                    worst = u->getUid();
-                }
-                if ((second_worst_sizes < sizes) && (sizes < worst_sizes)) {
-                    second_worst_sizes = sizes;
+            l.sort();
+            UidStatisticsCollection::iterator iu = l.begin();
+            if (iu != l.end()) {
+                UidStatistics *u = *iu;
+                worst = u->getUid();
+                worst_sizes = u->sizes();
+                if (++iu != l.end()) {
+                    second_worst_sizes = (*iu)->sizes();
                 }
             }
         }

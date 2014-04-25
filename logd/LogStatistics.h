@@ -70,6 +70,9 @@ class UidStatistics {
 
     PidStatisticsCollection Pids;
 
+    size_t mSizes;
+    size_t mElements;
+
 public:
     UidStatistics(uid_t uid);
     ~UidStatistics();
@@ -81,11 +84,17 @@ public:
 
     void add(unsigned short size, pid_t pid);
     void subtract(unsigned short size, pid_t pid);
+    void sort();
 
     static const pid_t pid_all = (pid_t) -1;
 
-    size_t sizes(pid_t pid = pid_all);
-    size_t elements(pid_t pid = pid_all);
+    // fast track current value
+    size_t sizes() const { return mSizes; };
+    size_t elements() const { return mElements; };
+
+    // statistical track
+    size_t sizes(pid_t pid);
+    size_t elements(pid_t pid);
 
     size_t sizesTotal(pid_t pid = pid_all);
     size_t elementsTotal(pid_t pid = pid_all);
@@ -108,6 +117,7 @@ public:
 
     void add(unsigned short size, uid_t uid, pid_t pid);
     void subtract(unsigned short size, uid_t uid, pid_t pid);
+    void sort();
 
     static const pid_t pid_all = (pid_t) -1;
     static const uid_t uid_all = (uid_t) -1;
@@ -145,6 +155,7 @@ public:
 
     void add(unsigned short size, log_id_t log_id, uid_t uid, pid_t pid);
     void subtract(unsigned short size, log_id_t log_id, uid_t uid, pid_t pid);
+    void sort();
 
     // fast track current value by id only
     size_t sizes(log_id_t id) const { return mSizes[id]; }
