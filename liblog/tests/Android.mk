@@ -32,7 +32,7 @@ benchmark_c_flags := \
 
 benchmark_src_files := \
     benchmark_main.cpp \
-    liblog_benchmark.cpp \
+    liblog_benchmark.cpp
 
 # Build benchmarks for the device. Run with:
 #   adb shell liblog-benchmarks
@@ -59,10 +59,22 @@ test_c_flags := \
     -g \
     -Wall -Wextra \
     -Werror \
-    -fno-builtin \
+    -fno-builtin
 
 test_src_files := \
-    liblog_test.cpp \
+    liblog_test.cpp
+
+# to prevent breaking the build if bionic not relatively visible to us
+ifneq ($(wildcard $(LOCAL_PATH)/../../../../bionic/libc/bionic/libc_logging.cpp),)
+
+test_src_files += \
+    libc_test.cpp
+
+ifndef ($(TARGET_USES_LOGD),false)
+test_c_flags += -DTARGET_USES_LOGD
+endif
+
+endif
 
 # Build tests for the device (with .so). Run with:
 #   adb shell /data/nativetest/liblog-unit-tests/liblog-unit-tests
