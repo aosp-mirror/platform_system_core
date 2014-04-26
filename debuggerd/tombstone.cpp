@@ -55,7 +55,7 @@
 // Must match the path defined in NativeCrashListener.java
 #define NCRASH_SOCKET_PATH "/data/system/ndebugsocket"
 
-static bool signal_has_address(int sig) {
+static bool signal_has_si_addr(int sig) {
   switch (sig) {
     case SIGILL:
     case SIGFPE:
@@ -75,7 +75,7 @@ static const char* get_signame(int sig) {
     case SIGFPE: return "SIGFPE";
     case SIGSEGV: return "SIGSEGV";
     case SIGPIPE: return "SIGPIPE";
-#ifdef SIGSTKFLT
+#if defined(SIGSTKFLT)
     case SIGSTKFLT: return "SIGSTKFLT";
 #endif
     case SIGSTOP: return "SIGSTOP";
@@ -171,20 +171,26 @@ static void dump_build_info(log_t* log) {
   _LOG(log, SCOPE_AT_FAULT, "Build fingerprint: '%s'\n", fingerprint);
 }
 
-static void dump_fault_addr(log_t* log, pid_t tid, int sig) {
+static void dump_signal_info(log_t* log, pid_t tid, int signal, int si_code) {
   siginfo_t si;
-
   memset(&si, 0, sizeof(si));
-  if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si)){
+  if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si) == -1) {
     _LOG(log, SCOPE_AT_FAULT, "cannot get siginfo: %s\n", strerror(errno));
-  } else if (signal_has_address(sig)) {
-    _LOG(log, SCOPE_AT_FAULT, "signal %d (%s), code %d (%s), fault addr %" PRIPTR "\n",
-         sig, get_signame(sig), si.si_code, get_sigcode(sig, si.si_code),
-         reinterpret_cast<uintptr_t>(si.si_addr));
-  } else {
-    _LOG(log, SCOPE_AT_FAULT, "signal %d (%s), code %d (%s), fault addr --------\n",
-         sig, get_signame(sig), si.si_code, get_sigcode(sig, si.si_code));
+    return;
   }
+
+  // bionic has to re-raise some signals, which overwrites the si_code with SI_TKILL.
+  si.si_code = si_code;
+
+  char addr_desc[32]; // ", fault addr 0x1234"
+  if (signal_has_si_addr(signal)) {
+    snprintf(addr_desc, sizeof(addr_desc), "%p", si.si_addr);
+  } else {
+    snprintf(addr_desc, sizeof(addr_desc), "--------");
+  }
+
+  _LOG(log, SCOPE_AT_FAULT, "signal %d (%s), code %d (%s), fault addr %s\n",
+       signal, get_signame(signal), si.si_code, get_sigcode(signal, si.si_code), addr_desc);
 }
 
 static void dump_thread_info(log_t* log, pid_t pid, pid_t tid, int scope_flags) {
@@ -349,7 +355,7 @@ static void dump_nearby_maps(BacktraceMap* map, log_t* log, pid_t tid, int scope
     _LOG(log, scope_flags, "cannot get siginfo for %d: %s\n", tid, strerror(errno));
     return;
   }
-  if (!signal_has_address(si.si_signo)) {
+  if (!signal_has_si_addr(si.si_signo)) {
     return;
   }
 
@@ -582,8 +588,9 @@ static void dump_abort_message(Backtrace* backtrace, log_t* log, uintptr_t addre
 }
 
 // Dumps all information about the specified pid to the tombstone.
-static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t abort_msg_address,
-                       bool dump_sibling_threads, int* total_sleep_time_usec) {
+static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code,
+                       uintptr_t abort_msg_address, bool dump_sibling_threads,
+                       int* total_sleep_time_usec) {
   // don't copy log messages to tombstone unless this is a dev device
   char value[PROPERTY_VALUE_MAX];
   property_get("ro.debuggable", value, "0");
@@ -605,7 +612,7 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, uintptr_t a
   dump_revision_info(log);
   dump_thread_info(log, pid, tid, SCOPE_AT_FAULT);
   if (signal) {
-    dump_fault_addr(log, tid, signal);
+    dump_signal_info(log, tid, signal, si_code);
   }
 
   UniquePtr<BacktraceMap> map(BacktraceMap::Create(pid));
@@ -719,9 +726,9 @@ static int activity_manager_connect() {
   return amfd;
 }
 
-char* engrave_tombstone(
-    pid_t pid, pid_t tid, int signal, uintptr_t abort_msg_address, bool dump_sibling_threads,
-    bool quiet, bool* detach_failed, int* total_sleep_time_usec) {
+char* engrave_tombstone(pid_t pid, pid_t tid, int signal, int original_si_code,
+                        uintptr_t abort_msg_address, bool dump_sibling_threads, bool quiet,
+                        bool* detach_failed, int* total_sleep_time_usec) {
   if ((mkdir(TOMBSTONE_DIR, 0755) == -1) && (errno != EEXIST)) {
       LOG("failed to create %s: %s\n", TOMBSTONE_DIR, strerror(errno));
   }
@@ -746,8 +753,8 @@ char* engrave_tombstone(
   log.tfd = fd;
   log.amfd = activity_manager_connect();
   log.quiet = quiet;
-  *detach_failed = dump_crash(
-      &log, pid, tid, signal, abort_msg_address, dump_sibling_threads, total_sleep_time_usec);
+  *detach_failed = dump_crash(&log, pid, tid, signal, original_si_code, abort_msg_address,
+                              dump_sibling_threads, total_sleep_time_usec);
 
   close(log.amfd);
   close(fd);
