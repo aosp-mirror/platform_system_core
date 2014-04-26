@@ -42,6 +42,7 @@ typedef struct {
     debugger_action_t action;
     pid_t tid;
     uintptr_t abort_msg_address;
+    int32_t original_si_code;
 } debugger_msg_t;
 
 /* Dumps a process backtrace, registers, and stack to a tombstone file (requires root).
