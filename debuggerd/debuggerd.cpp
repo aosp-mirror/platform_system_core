@@ -51,6 +51,7 @@ struct debugger_request_t {
   pid_t pid, tid;
   uid_t uid, gid;
   uintptr_t abort_msg_address;
+  int32_t original_si_code;
 };
 
 static int write_string(const char* file, const char* string) {
@@ -218,6 +219,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
   out_request->uid = cr.uid;
   out_request->gid = cr.gid;
   out_request->abort_msg_address = msg.abort_msg_address;
+  out_request->original_si_code = msg.original_si_code;
 
   if (msg.action == DEBUGGER_ACTION_CRASH) {
     // Ensure that the tid reported by the crashing process is valid.
@@ -302,9 +304,10 @@ static void handle_request(int fd) {
             case SIGSTOP:
               if (request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
                 XLOG("stopped -- dumping to tombstone\n");
-                tombstone_path = engrave_tombstone(
-                    request.pid, request.tid, signal, request.abort_msg_address, true, true,
-                    &detach_failed, &total_sleep_time_usec);
+                tombstone_path = engrave_tombstone(request.pid, request.tid,
+                                                   signal, request.original_si_code,
+                                                   request.abort_msg_address, true, true,
+                                                   &detach_failed, &total_sleep_time_usec);
               } else if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE) {
                 XLOG("stopped -- dumping to fd\n");
                 dump_backtrace(fd, -1, request.pid, request.tid, &detach_failed,
@@ -336,9 +339,10 @@ static void handle_request(int fd) {
               kill(request.pid, SIGSTOP);
               // don't dump sibling threads when attaching to GDB because it
               // makes the process less reliable, apparently...
-              tombstone_path = engrave_tombstone(
-                  request.pid, request.tid, signal, request.abort_msg_address, !attach_gdb,
-                  false, &detach_failed, &total_sleep_time_usec);
+              tombstone_path = engrave_tombstone(request.pid, request.tid,
+                                                 signal, request.original_si_code,
+                                                 request.abort_msg_address, !attach_gdb, false,
+                                                 &detach_failed, &total_sleep_time_usec);
               break;
 
             default:
