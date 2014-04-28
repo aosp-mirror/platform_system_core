@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <limits.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -100,11 +101,10 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
 
     // NB: hdr.msg_flags & MSG_TRUNC is not tested, silently passing a
     // truncated message to the logs.
-    unsigned short len = n; // cap to internal maximum
-    if (len == n) {
-        logbuf->log(log_id, realtime, cred->uid, cred->pid, tid, msg, len);
-        reader->notifyNewLog();
-    }
+
+    logbuf->log(log_id, realtime, cred->uid, cred->pid, tid, msg,
+        (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
+    reader->notifyNewLog();
 
     return true;
 }
