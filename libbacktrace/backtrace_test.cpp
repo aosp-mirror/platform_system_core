@@ -33,6 +33,9 @@
 #include <backtrace/BacktraceMap.h>
 #include <UniquePtr.h>
 
+// For the THREAD_SIGNAL definition.
+#include "BacktraceThread.h"
+
 #include <cutils/atomic.h>
 #include <gtest/gtest.h>
 
@@ -460,9 +463,15 @@ TEST(libbacktrace, thread_level_trace) {
   // Wait up to 2 seconds for the tid to be set.
   ASSERT_TRUE(WaitForNonZero(&thread_data.state, 2));
 
+  // Make sure that the thread signal used is not visible when compiled for
+  // the target.
+#if !defined(__GLIBC__)
+  ASSERT_LT(THREAD_SIGNAL, SIGRTMIN);
+#endif
+
   // Save the current signal action and make sure it is restored afterwards.
   struct sigaction cur_action;
-  ASSERT_TRUE(sigaction(SIGURG, NULL, &cur_action) == 0);
+  ASSERT_TRUE(sigaction(THREAD_SIGNAL, NULL, &cur_action) == 0);
 
   UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
   ASSERT_TRUE(backtrace.get() != NULL);
@@ -475,7 +484,7 @@ TEST(libbacktrace, thread_level_trace) {
 
   // Verify that the old action was restored.
   struct sigaction new_action;
-  ASSERT_TRUE(sigaction(SIGURG, NULL, &new_action) == 0);
+  ASSERT_TRUE(sigaction(THREAD_SIGNAL, NULL, &new_action) == 0);
   EXPECT_EQ(cur_action.sa_sigaction, new_action.sa_sigaction);
   EXPECT_EQ(cur_action.sa_flags, new_action.sa_flags);
 }
