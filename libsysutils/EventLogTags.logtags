@@ -1,5 +1,5 @@
 # See system/core/logcat/event.logtags for a description of the format of this file.
 
 # FrameworkListener dispatchCommand overflow
-78001 dispatchCommand_overflow
-65537 netlink_failure (uid|1)
+78001 exp_det_dispatchCommand_overflow
+65537 exp_det_netlink_failure (uid|1)
