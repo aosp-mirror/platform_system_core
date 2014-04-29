@@ -19,6 +19,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <sys/klog.h>
+#include <sys/prctl.h>
 #include <sys/uio.h>
 
 #include "libaudit.h"
@@ -34,6 +35,8 @@ LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmsg)
 }
 
 bool LogAudit::onDataAvailable(SocketClient *cli) {
+    prctl(PR_SET_NAME, "logd.auditd");
+
     struct audit_message rep;
 
     if (audit_get_reply(cli->getSocket(), &rep, GET_REPLY_BLOCKING, 0) < 0) {
