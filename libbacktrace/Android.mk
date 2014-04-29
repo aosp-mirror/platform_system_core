@@ -96,11 +96,8 @@ backtrace_test_cflags := \
 	-fno-builtin \
 	-O0 \
 	-g \
-	-DGTEST_HAS_STD_STRING \
-	-fstack-protector-all \
 
 backtrace_test_cflags_target := \
-	-DGTEST_OS_LINUX_ANDROID \
 	-DENABLE_PSS_TESTS \
 
 backtrace_test_src_files := \
