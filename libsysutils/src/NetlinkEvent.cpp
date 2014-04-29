@@ -399,7 +399,6 @@ bool NetlinkEvent::parseAsciiNetlinkMessage(char *buffer, int size) {
     const char *s = buffer;
     const char *end;
     int param_idx = 0;
-    int i;
     int first = 1;
 
     if (size == 0)
