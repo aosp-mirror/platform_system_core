@@ -144,6 +144,11 @@ loglevel 3
 # checker programs.
     mkdir /dev/fscklogs 0770 root system
 
+# pstore/ramoops previous console log
+    mount pstore pstore /sys/fs/pstore
+    chown system log /sys/fs/pstore/console-ramoops
+    chmod 0440 /sys/fs/pstore/console-ramoops
+
 on post-fs
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
@@ -381,6 +386,9 @@ on boot
     setprop net.tcp.buffersize.gprs     4092,8760,48000,4096,8760,48000
     setprop net.tcp.buffersize.evdo     4094,87380,262144,4096,16384,262144
 
+# Define default initial receive window size in segments.
+    setprop net.tcp.default_init_rwnd 60
+
     class_start core
     class_start main
 
@@ -413,9 +421,15 @@ on property:vold.decrypt=trigger_shutdown_framework
 on property:sys.powerctl=*
     powerctl ${sys.powerctl}
 
-# system server cannot write to /proc/sys files, so proxy it through init
+# system server cannot write to /proc/sys files,
+# and chown/chmod does not work for /proc/sys/ entries.
+# So proxy writes through init.
 on property:sys.sysctl.extra_free_kbytes=*
     write /proc/sys/vm/extra_free_kbytes ${sys.sysctl.extra_free_kbytes}
+# "tcp_default_init_rwnd" Is too long!
+on property:sys.sysctl.tcp_def_init_rwnd=*
+    write /proc/sys/net/ipv4/tcp_default_init_rwnd ${sys.sysctl.tcp_def_init_rwnd}
+
 
 ## Daemon processes to be run by init.
 ##
