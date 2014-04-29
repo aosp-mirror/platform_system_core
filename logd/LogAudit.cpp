@@ -16,6 +16,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <sys/klog.h>
@@ -38,6 +39,10 @@ bool LogAudit::onDataAvailable(SocketClient *cli) {
     prctl(PR_SET_NAME, "logd.auditd");
 
     struct audit_message rep;
+
+    rep.nlh.nlmsg_type = 0;
+    rep.nlh.nlmsg_len = 0;
+    rep.data[0] = '\0';
 
     if (audit_get_reply(cli->getSocket(), &rep, GET_REPLY_BLOCKING, 0) < 0) {
         SLOGE("Failed on audit_get_reply with error: %s", strerror(errno));
@@ -146,11 +151,8 @@ int LogAudit::logPrint(const char *fmt, ...) {
     strcpy(newstr + 1 + l, str);
     free(str);
 
-    unsigned short len = n; // cap to internal maximum
-    if (len != n) {
-        len = -1;
-    }
-    logbuf->log(AUDIT_LOG_ID, now, uid, pid, tid, newstr, len);
+    logbuf->log(AUDIT_LOG_ID, now, uid, pid, tid, newstr,
+                (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
     reader->notifyNewLog();
 
     free(newstr);
