@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <sys/prctl.h>
+
 #include "FlushCommand.h"
 #include "LogBuffer.h"
 #include "LogTimes.h"
@@ -107,6 +109,8 @@ void LogTimeEntry::threadStop(void *obj) {
 }
 
 void *LogTimeEntry::threadStart(void *obj) {
+    prctl(PR_SET_NAME, "logd.reader.per");
+
     LogTimeEntry *me = reinterpret_cast<LogTimeEntry *>(obj);
 
     pthread_cleanup_push(threadStop, obj);

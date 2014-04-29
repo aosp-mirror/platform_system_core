@@ -21,6 +21,7 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -66,8 +67,13 @@ CommandListener::ClearCmd::ClearCmd(LogBuffer *buf)
         , mBuf(*buf)
 { }
 
+static void setname() {
+    prctl(PR_SET_NAME, "logd.control");
+}
+
 int CommandListener::ClearCmd::runCommand(SocketClient *cli,
                                          int argc, char **argv) {
+    setname();
     if (!clientHasLogCredentials(cli)) {
         cli->sendMsg("Permission Denied");
         return 0;
@@ -96,6 +102,7 @@ CommandListener::GetBufSizeCmd::GetBufSizeCmd(LogBuffer *buf)
 
 int CommandListener::GetBufSizeCmd::runCommand(SocketClient *cli,
                                          int argc, char **argv) {
+    setname();
     if (argc < 2) {
         cli->sendMsg("Missing Argument");
         return 0;
@@ -121,6 +128,7 @@ CommandListener::SetBufSizeCmd::SetBufSizeCmd(LogBuffer *buf)
 
 int CommandListener::SetBufSizeCmd::runCommand(SocketClient *cli,
                                          int argc, char **argv) {
+    setname();
     if (!clientHasLogCredentials(cli)) {
         cli->sendMsg("Permission Denied");
         return 0;
@@ -154,6 +162,7 @@ CommandListener::GetBufSizeUsedCmd::GetBufSizeUsedCmd(LogBuffer *buf)
 
 int CommandListener::GetBufSizeUsedCmd::runCommand(SocketClient *cli,
                                          int argc, char **argv) {
+    setname();
     if (argc < 2) {
         cli->sendMsg("Missing Argument");
         return 0;
@@ -197,6 +206,7 @@ static void package_string(char **strp) {
 
 int CommandListener::GetStatisticsCmd::runCommand(SocketClient *cli,
                                          int argc, char **argv) {
+    setname();
     uid_t uid = cli->getUid();
     gid_t gid = cli->getGid();
     if (clientHasLogCredentials(cli)) {
@@ -236,6 +246,7 @@ CommandListener::GetPruneListCmd::GetPruneListCmd(LogBuffer *buf)
 
 int CommandListener::GetPruneListCmd::runCommand(SocketClient *cli,
                                          int /*argc*/, char ** /*argv*/) {
+    setname();
     char *buf = NULL;
     mBuf.formatPrune(&buf);
     if (!buf) {
@@ -255,6 +266,7 @@ CommandListener::SetPruneListCmd::SetPruneListCmd(LogBuffer *buf)
 
 int CommandListener::SetPruneListCmd::runCommand(SocketClient *cli,
                                          int argc, char **argv) {
+    setname();
     if (!clientHasLogCredentials(cli)) {
         cli->sendMsg("Permission Denied");
         return 0;
