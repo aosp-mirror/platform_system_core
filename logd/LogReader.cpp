@@ -16,6 +16,7 @@
 
 #include <ctype.h>
 #include <poll.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 
 #include <cutils/sockets.h>
@@ -36,6 +37,8 @@ void LogReader::notifyNewLog() {
 }
 
 bool LogReader::onDataAvailable(SocketClient *cli) {
+    prctl(PR_SET_NAME, "logd.reader");
+
     char buffer[255];
 
     int len = read(cli->getSocket(), buffer, sizeof(buffer) - 1);

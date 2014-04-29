@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -31,6 +32,8 @@ LogListener::LogListener(LogBuffer *buf, LogReader *reader)
 {  }
 
 bool LogListener::onDataAvailable(SocketClient *cli) {
+    prctl(PR_SET_NAME, "logd.writer");
+
     char buffer[sizeof_log_id_t + sizeof(uint16_t) + sizeof(log_time)
         + LOGGER_ENTRY_MAX_PAYLOAD];
     struct iovec iov = { buffer, sizeof(buffer) };
