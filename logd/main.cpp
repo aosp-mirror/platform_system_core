@@ -107,16 +107,31 @@ static int drop_privs() {
     return 0;
 }
 
+// Property helper
+static bool property_get_bool(const char *key, bool def) {
+    char property[PROPERTY_VALUE_MAX];
+    property_get(key, property, "");
+
+    if (!strcasecmp(property, "true")) {
+        return true;
+    }
+    if (!strcasecmp(property, "false")) {
+        return false;
+    }
+
+    return def;
+}
+
 // Foreground waits for exit of the three main persistent threads that
 // are started here.  The three threads are created to manage UNIX
 // domain client sockets for writing, reading and controlling the user
 // space logger.  Additional transitory per-client threads are created
 // for each reader once they register.
 int main() {
+    bool auditd = property_get_bool("logd.auditd", true);
+
     int fdDmesg = -1;
-    char dmesg[PROPERTY_VALUE_MAX];
-    property_get("logd.auditd.dmesg", dmesg, "1");
-    if (atol(dmesg)) {
+    if (auditd && property_get_bool("logd.auditd.dmesg", true)) {
         fdDmesg = open("/dev/kmsg", O_WRONLY);
     }
 
@@ -135,9 +150,7 @@ int main() {
 
     LogBuffer *logBuf = new LogBuffer(times);
 
-    char dgram_qlen_statistics[PROPERTY_VALUE_MAX];
-    property_get("logd.dgram_qlen.statistics", dgram_qlen_statistics, "");
-    if (atol(dgram_qlen_statistics)) {
+    if (property_get_bool("logd.statistics.dgram_qlen", false)) {
         logBuf->enableDgramQlenStatistics();
     }
 
@@ -171,11 +184,13 @@ int main() {
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
 
-    // failure is an option ... messages are in dmesg (required by standard)
-    LogAudit *al = new LogAudit(logBuf, reader, fdDmesg);
-    if (al->startListener()) {
-        delete al;
-        close(fdDmesg);
+    if (auditd) {
+        // failure is an option ... messages are in dmesg (required by standard)
+        LogAudit *al = new LogAudit(logBuf, reader, fdDmesg);
+        if (al->startListener()) {
+            delete al;
+            close(fdDmesg);
+        }
     }
 
     pause();
