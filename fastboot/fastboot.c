@@ -657,7 +657,7 @@ static int load_buf(usb_handle *usb, const char *fname,
 
     fd = open(fname, O_RDONLY | O_BINARY);
     if (fd < 0) {
-        die("cannot open '%s'\n", fname);
+        return -1;
     }
 
     return load_buf_fd(usb, fd, buf);
