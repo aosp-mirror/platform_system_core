@@ -224,10 +224,6 @@ enum {
                                   AUDIO_CHANNEL_OUT_FRONT_RIGHT |
                                   AUDIO_CHANNEL_OUT_SIDE_LEFT |
                                   AUDIO_CHANNEL_OUT_SIDE_RIGHT),
-    AUDIO_CHANNEL_OUT_SURROUND = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
-                                  AUDIO_CHANNEL_OUT_FRONT_RIGHT |
-                                  AUDIO_CHANNEL_OUT_FRONT_CENTER |
-                                  AUDIO_CHANNEL_OUT_BACK_CENTER),
     AUDIO_CHANNEL_OUT_5POINT1  = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
                                   AUDIO_CHANNEL_OUT_FRONT_RIGHT |
                                   AUDIO_CHANNEL_OUT_FRONT_CENTER |
