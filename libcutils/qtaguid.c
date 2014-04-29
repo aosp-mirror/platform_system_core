@@ -1,5 +1,4 @@
-/* libcutils/qtaguid.c
-**
+/*
 ** Copyright 2011, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -146,7 +145,7 @@ int qtaguid_setCounterSet(int counterSetNum, uid_t uid) {
 
 int qtaguid_deleteTagData(int tag, uid_t uid) {
     char lineBuf[CTRL_MAX_INPUT_LEN];
-    int fd, cnt = 0, res = 0;
+    int cnt = 0, res = 0;
     uint64_t kTag = (uint64_t)tag << 32;
 
     ALOGV("Deleting tag data with tag %" PRIx64 "{%d,0} for uid %d", kTag, tag, uid);
@@ -164,8 +163,6 @@ int qtaguid_deleteTagData(int tag, uid_t uid) {
 }
 
 int qtaguid_setPacifier(int on) {
-    int param_fd;
-    int res;
     const char *value;
 
     value = on ? "Y" : "N";
