@@ -100,10 +100,11 @@ static struct {
     char sig_name[13];
     char part_name[9];
     bool is_optional;
-} images[3] = {
+} images[4] = {
     {"boot.img", "boot.sig", "boot", false},
     {"recovery.img", "recovery.sig", "recovery", true},
     {"system.img", "system.sig", "system", false},
+    {"tos.img", "tos.sig", "tos", true},
 };
 
 void get_my_path(char *path);
@@ -120,6 +121,8 @@ char *find_item(const char *item, const char *product)
         fn = "recovery.img";
     } else if(!strcmp(item,"system")) {
         fn = "system.img";
+    } else if(!strcmp(item,"tos")) {
+        fn = "tos.img";
     } else if(!strcmp(item,"userdata")) {
         fn = "userdata.img";
     } else if(!strcmp(item,"cache")) {
@@ -285,7 +288,7 @@ void usage(void)
             "\n"
             "commands:\n"
             "  update <filename>                        reflash device from update.zip\n"
-            "  flashall                                 flash boot + recovery + system\n"
+            "  flashall                                 flash boot, system, and if found, recovery, tos\n"
             "  flash <partition> [ <filename> ]         write a file to a flash partition\n"
             "  erase <partition>                        erase a flash partition\n"
             "  format <partition>                       format a flash partition \n"
