@@ -43,6 +43,8 @@ void BatteryPropertiesRegistrar::notifyListeners(struct BatteryProperties props)
 
 void BatteryPropertiesRegistrar::registerListener(const sp<IBatteryPropertiesListener>& listener) {
     {
+        if (listener == NULL)
+            return;
         Mutex::Autolock _l(mRegistrationLock);
         // check whether this is a duplicate
         for (size_t i = 0; i < mListeners.size(); i++) {
@@ -58,6 +60,8 @@ void BatteryPropertiesRegistrar::registerListener(const sp<IBatteryPropertiesLis
 }
 
 void BatteryPropertiesRegistrar::unregisterListener(const sp<IBatteryPropertiesListener>& listener) {
+    if (listener == NULL)
+        return;
     Mutex::Autolock _l(mRegistrationLock);
     for (size_t i = 0; i < mListeners.size(); i++) {
         if (mListeners[i]->asBinder() == listener->asBinder()) {
