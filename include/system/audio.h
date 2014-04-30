@@ -218,16 +218,26 @@ enum {
                                   AUDIO_CHANNEL_OUT_FRONT_RIGHT |
                                   AUDIO_CHANNEL_OUT_BACK_LEFT |
                                   AUDIO_CHANNEL_OUT_BACK_RIGHT),
-    AUDIO_CHANNEL_OUT_SURROUND = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
+    AUDIO_CHANNEL_OUT_QUAD_BACK = AUDIO_CHANNEL_OUT_QUAD,
+    /* like AUDIO_CHANNEL_OUT_QUAD_BACK with *_SIDE_* instead of *_BACK_* */
+    AUDIO_CHANNEL_OUT_QUAD_SIDE = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
                                   AUDIO_CHANNEL_OUT_FRONT_RIGHT |
-                                  AUDIO_CHANNEL_OUT_FRONT_CENTER |
-                                  AUDIO_CHANNEL_OUT_BACK_CENTER),
+                                  AUDIO_CHANNEL_OUT_SIDE_LEFT |
+                                  AUDIO_CHANNEL_OUT_SIDE_RIGHT),
     AUDIO_CHANNEL_OUT_5POINT1  = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
                                   AUDIO_CHANNEL_OUT_FRONT_RIGHT |
                                   AUDIO_CHANNEL_OUT_FRONT_CENTER |
                                   AUDIO_CHANNEL_OUT_LOW_FREQUENCY |
                                   AUDIO_CHANNEL_OUT_BACK_LEFT |
                                   AUDIO_CHANNEL_OUT_BACK_RIGHT),
+    AUDIO_CHANNEL_OUT_5POINT1_BACK = AUDIO_CHANNEL_OUT_5POINT1,
+    /* like AUDIO_CHANNEL_OUT_5POINT1_BACK with *_SIDE_* instead of *_BACK_* */
+    AUDIO_CHANNEL_OUT_5POINT1_SIDE = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
+                                  AUDIO_CHANNEL_OUT_FRONT_RIGHT |
+                                  AUDIO_CHANNEL_OUT_FRONT_CENTER |
+                                  AUDIO_CHANNEL_OUT_LOW_FREQUENCY |
+                                  AUDIO_CHANNEL_OUT_SIDE_LEFT |
+                                  AUDIO_CHANNEL_OUT_SIDE_RIGHT),
     // matches the correct AudioFormat.CHANNEL_OUT_7POINT1_SURROUND definition for 7.1
     AUDIO_CHANNEL_OUT_7POINT1  = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
                                   AUDIO_CHANNEL_OUT_FRONT_RIGHT |
@@ -291,11 +301,19 @@ enum {
                                AUDIO_CHANNEL_IN_VOICE_DNLINK),
 };
 
+/* A channel mask per se only defines the presence or absence of a channel, not the order.
+ * But see AUDIO_INTERLEAVE_* below for the platform convention of order.
+ */
 typedef uint32_t audio_channel_mask_t;
 
 /* Expresses the convention when stereo audio samples are stored interleaved
  * in an array.  This should improve readability by allowing code to use
  * symbolic indices instead of hard-coded [0] and [1].
+ *
+ * For multi-channel beyond stereo, the platform convention is that channels
+ * are interleaved in order from least significant channel mask bit
+ * to most significant channel mask bit, with unused bits skipped.
+ * Any exceptions to this convention will be noted at the appropriate API.
  */
 enum {
     AUDIO_INTERLEAVE_LEFT   = 0,
