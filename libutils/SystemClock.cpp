@@ -68,13 +68,7 @@ int64_t elapsedRealtime()
  */
 #define DEBUG_TIMESTAMP         0
 
-static const char *gettime_method_names[] = {
-    "clock_gettime",
-    "ioctl",
-    "systemTime",
-};
-
-#if DEBUG_TIMESTAMP
+#if DEBUG_TIMESTAMP && defined(ARCH_ARM)
 static inline void checkTimeStamps(int64_t timestamp,
                                    int64_t volatile *prevTimestampPtr,
                                    int volatile *prevMethodPtr,
@@ -85,11 +79,16 @@ static inline void checkTimeStamps(int64_t timestamp,
      * gettid, and int64_t is different on the ARM platform
      * (ie long vs long long).
      */
-#ifdef ARCH_ARM
     int64_t prevTimestamp = *prevTimestampPtr;
     int prevMethod = *prevMethodPtr;
 
     if (timestamp < prevTimestamp) {
+        static const char *gettime_method_names[] = {
+            "clock_gettime",
+            "ioctl",
+            "systemTime",
+        };
+
         ALOGW("time going backwards: prev %lld(%s) vs now %lld(%s), tid=%d",
               prevTimestamp, gettime_method_names[prevMethod],
               timestamp, gettime_method_names[curMethod],
@@ -99,7 +98,6 @@ static inline void checkTimeStamps(int64_t timestamp,
     // write is interrupted or not observed as a whole.
     *prevTimestampPtr = timestamp;
     *prevMethodPtr = curMethod;
-#endif
 }
 #else
 #define checkTimeStamps(timestamp, prevTimestampPtr, prevMethodPtr, curMethod)

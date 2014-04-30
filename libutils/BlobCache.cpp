@@ -28,7 +28,7 @@
 namespace android {
 
 // BlobCache::Header::mMagicNumber value
-static const uint32_t blobCacheMagic = '_Bb$';
+static const uint32_t blobCacheMagic = ('_' << 24) + ('B' << 16) + ('b' << 8) + '$';
 
 // BlobCache::Header::mBlobCacheVersion value
 static const uint32_t blobCacheVersion = 1;
@@ -49,7 +49,7 @@ BlobCache::BlobCache(size_t maxKeySize, size_t maxValueSize, size_t maxTotalSize
     mRandState[1] = (now >> 16) & 0xFFFF;
     mRandState[2] = (now >> 32) & 0xFFFF;
 #endif
-    ALOGV("initializing random seed using %lld", now);
+    ALOGV("initializing random seed using %lld", (unsigned long long)now);
 }
 
 void BlobCache::set(const void* key, size_t keySize, const void* value,
