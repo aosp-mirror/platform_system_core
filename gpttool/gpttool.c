@@ -1,5 +1,4 @@
-/* system/core/gpttool/gpttool.c
-**
+/*
 ** Copyright 2011, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +14,17 @@
 ** limitations under the License.
 */
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <zlib.h>
 
 #include <linux/fs.h>
-
-#include <sys/stat.h>
 
 typedef unsigned char u8;
 typedef unsigned short u16;
@@ -252,11 +251,9 @@ int parse_ptn(struct ptable *ptbl, char *x)
 int main(int argc, char **argv)
 {
 	struct ptable ptbl;
-	struct efi_entry *entry;
 	struct efi_header *hdr = &ptbl.header;
-	struct stat s;
 	u32 n;
-	u64 sz, blk;
+	u64 sz;
 	int fd;
 	const char *device;
 	int real_disk = 0;
