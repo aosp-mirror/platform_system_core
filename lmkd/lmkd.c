@@ -16,20 +16,26 @@
 
 #define LOG_TAG "lowmemorykiller"
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
-#include <arpa/inet.h>
+#include <sys/cdefs.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <cutils/log.h>
+#include <unistd.h>
+
 #include <cutils/sockets.h>
+#include <log/log.h>
+
+#ifndef __unused
+#define __unused __attribute__((__unused__))
+#endif
 
 #define MEMCG_SYSFS_PATH "/dev/memcg/"
 #define MEMPRESSURE_WATCH_LEVEL "medium"
@@ -257,8 +263,6 @@ static void cmd_procprio(int pid, int oomadj) {
 }
 
 static void cmd_procremove(int pid) {
-    struct proc *procp;
-
     if (use_inkernel_interface)
         return;
 
@@ -382,7 +386,7 @@ static void ctrl_data_handler(uint32_t events) {
     }
 }
 
-static void ctrl_connect_handler(uint32_t events) {
+static void ctrl_connect_handler(uint32_t events __unused) {
     struct sockaddr addr;
     socklen_t alen;
     struct epoll_event epev;
@@ -424,7 +428,7 @@ static int zoneinfo_parse_protection(char *cp) {
             return 0;
         if (zoneval > max)
             max = zoneval;
-    } while (cp = strtok(NULL, " "));
+    } while ((cp = strtok(NULL, " ")));
 
     return max;
 }
@@ -455,7 +459,6 @@ static void zoneinfo_parse_line(char *line, struct sysmeminfo *mip) {
 
 static int zoneinfo_parse(struct sysmeminfo *mip) {
     FILE *f;
-    char *cp;
     char line[LINE_MAX];
 
     memset(mip, 0, sizeof(struct sysmeminfo));
@@ -519,7 +522,7 @@ static struct proc *proc_adj_lru(int oomadj) {
     return (struct proc *)adjslot_tail(&procadjslot_list[ADJTOSLOT(oomadj)]);
 }
 
-static void mp_event(uint32_t events) {
+static void mp_event(uint32_t events __unused) {
     int i;
     int ret;
     unsigned long long evcount;
@@ -738,7 +741,7 @@ static void mainloop(void) {
     }
 }
 
-int main(int argc, char **argv) {
+int main(int argc __unused, char **argv __unused) {
     if (!init())
         mainloop();
 
