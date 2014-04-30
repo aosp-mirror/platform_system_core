@@ -7,7 +7,9 @@ LOCAL_SRC_FILES:= logcat.cpp event.logtags
 
 LOCAL_SHARED_LIBRARIES := liblog
 
-LOCAL_MODULE:= logcat
+LOCAL_MODULE := logcat
+
+LOCAL_CFLAGS := -Werror
 
 include $(BUILD_EXECUTABLE)
 
