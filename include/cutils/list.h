@@ -44,10 +44,10 @@ struct listnode
 #define list_for_each_reverse(node, list) \
     for (node = (list)->prev; node != (list); node = node->prev)
 
-#define list_for_each_safe(node, next, list) \
-    for (node = (list)->next, next = node->next; \
+#define list_for_each_safe(node, n, list) \
+    for (node = (list)->next, n = node->next; \
          node != (list); \
-         node = next, next = node->next)
+         node = n, n = node->next)
 
 static inline void list_init(struct listnode *node)
 {
