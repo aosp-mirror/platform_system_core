@@ -21,16 +21,20 @@
  */
 #include "fake_log_device.h"
 
-#include <log/logd.h>
-
-#include <stdlib.h>
-#include <string.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <log/logd.h>
 
 #ifdef HAVE_PTHREADS
 #include <pthread.h>
+#endif
+
+#ifndef __unused
+#define __unused __attribute__((__unused__))
 #endif
 
 #define kMaxTagLen  16      /* from the long-dead utils/Log.cpp */
@@ -613,7 +617,7 @@ static int logClose(int fd)
 /*
  * Open a log output device and return a fake fd.
  */
-static int logOpen(const char* pathName, int flags)
+static int logOpen(const char* pathName, int flags __unused)
 {
     LogState *logState;
     int fd = -1;
