@@ -956,7 +956,7 @@ bip_buffer_write( BipBuffer  bip, const void* src, int  len )
             avail = len;
 
         memcpy( bip->buff + bip->a_end, src, avail );
-        src   += avail;
+        src   = (const char *)src + avail;
         count += avail;
         len   -= avail;
 
@@ -1049,7 +1049,7 @@ bip_buffer_read( BipBuffer  bip, void*  dst, int  len )
         avail = len;
 
     memcpy( dst, bip->buff + bip->a_start, avail );
-    dst   += avail;
+    dst   = (char *)dst + avail;
     count += avail;
     len   -= avail;
 

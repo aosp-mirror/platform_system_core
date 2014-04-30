@@ -74,7 +74,7 @@ else
   LOCAL_SRC_FILES += fdevent.c
 endif
 
-LOCAL_CFLAGS += -O2 -g -DADB_HOST=1  -Wall -Wno-unused-parameter
+LOCAL_CFLAGS += -O2 -g -DADB_HOST=1 -Wall -Wno-unused-parameter -Werror
 LOCAL_CFLAGS += -D_XOPEN_SOURCE -D_GNU_SOURCE
 LOCAL_MODULE := adb
 LOCAL_MODULE_TAGS := debug
@@ -116,7 +116,7 @@ LOCAL_SRC_FILES := \
 	remount_service.c \
 	usb_linux_client.c
 
-LOCAL_CFLAGS := -O2 -g -DADB_HOST=0 -Wall -Wno-unused-parameter
+LOCAL_CFLAGS := -O2 -g -DADB_HOST=0 -Wall -Wno-unused-parameter -Werror
 LOCAL_CFLAGS += -D_XOPEN_SOURCE -D_GNU_SOURCE
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
@@ -162,8 +162,7 @@ LOCAL_CFLAGS := \
 	-g \
 	-DADB_HOST=1 \
 	-DADB_HOST_ON_TARGET=1 \
-	-Wall \
-	-Wno-unused-parameter \
+	-Wall -Wno-unused-parameter -Werror \
 	-D_XOPEN_SOURCE \
 	-D_GNU_SOURCE
 
