@@ -162,7 +162,6 @@ static int parse_flags(char *flags, struct flag_list *fl,
         p = strtok_r(NULL, ",", &savep);
     }
 
-out:
     if (fs_options && fs_options[0]) {
         /* remove the last trailing comma from the list of options */
         fs_options[strlen(fs_options) - 1] = '\0';
@@ -181,7 +180,6 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
     const char *delim = " \t";
     char *save_ptr, *p;
     struct fstab *fstab = NULL;
-    struct fstab_rec *recs;
     struct fs_mgr_flag_values flag_vals;
 #define FS_OPTIONS_LEN 1024
     char tmp_fs_options[FS_OPTIONS_LEN];
