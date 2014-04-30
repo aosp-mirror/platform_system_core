@@ -92,7 +92,6 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
     char *qlimit = tmp + sizeof(tmp) - 1;
     bool esc = false;
     bool quote = false;
-    int k;
     bool haveCmdNum = !mWithSeq;
 
     memset(argv, 0, sizeof(argv));
@@ -166,7 +165,7 @@ void FrameworkListener::dispatchCommand(SocketClient *cli, char *data) {
         goto overflow;
     argv[argc++] = strdup(tmp);
 #if 0
-    for (k = 0; k < argc; k++) {
+    for (int k = 0; k < argc; k++) {
         SLOGD("arg[%d] = '%s'", k, argv[k]);
     }
 #endif
