@@ -11,6 +11,7 @@ LOCAL_MODULE:= netcfg
 #LOCAL_STATIC_LIBRARIES := libcutils libc
 
 LOCAL_SHARED_LIBRARIES := libc libnetutils
+LOCAL_CFLAGS := -Werror
 
 include $(BUILD_EXECUTABLE)
 endif
