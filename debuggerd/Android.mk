@@ -20,8 +20,7 @@ LOCAL_CPPFLAGS := -std=gnu++11
 LOCAL_CFLAGS := \
 	-Wall \
 	-Wno-array-bounds \
-	-Werror \
-	-Wno-unused-parameter \
+	-Werror
 
 ifeq ($(ARCH_ARM_HAVE_VFP),true)
 LOCAL_CFLAGS_arm += -DWITH_VFP
@@ -55,7 +54,7 @@ LOCAL_SRC_FILES_x86    := x86/crashglue.S
 LOCAL_SRC_FILES_x86_64 := x86_64/crashglue.S
 LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
 LOCAL_MODULE_TAGS := optional
-LOCAL_CFLAGS += -fstack-protector-all -Wno-unused-parameter -Wno-free-nonheap-object
+LOCAL_CFLAGS += -fstack-protector-all -Werror -Wno-free-nonheap-object
 #LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_SHARED_LIBRARIES := libcutils liblog libc
 
@@ -76,6 +75,7 @@ ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
 LOCAL_CFLAGS_arm += -DWITH_VFP_D32
 endif # ARCH_ARM_HAVE_VFP_D32
 endif # ARCH_ARM_HAVE_VFP == true
+LOCAL_CFLAGS += -Werror
 
 LOCAL_SRC_FILES_arm64 := arm64/vfp.S
 LOCAL_MODULE_TARGET_ARCH += arm64

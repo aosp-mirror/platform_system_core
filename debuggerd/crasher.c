@@ -6,13 +6,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/cdefs.h>
 #include <sys/ptrace.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <cutils/log.h>
 #include <cutils/sockets.h>
+#include <log/log.h>
+
+#ifndef __unused
+#define __unused __attribute__((__unused__))
+#endif
 
 extern const char* __progname;
 
@@ -26,7 +31,7 @@ static void maybe_abort() {
     }
 }
 
-static int smash_stack(int i) {
+static int smash_stack(int i __unused) {
     printf("crasher: deliberately corrupting stack...\n");
     // Unless there's a "big enough" buffer on the stack, gcc
     // doesn't bother inserting checks.
@@ -45,11 +50,6 @@ __attribute__((noinline)) static void overflow_stack(void* p) {
     buf[0] = p;
     global = buf;
     overflow_stack(&buf);
-}
-
-static void test_call1()
-{
-    *((int*) 32) = 1;
 }
 
 static void *noisy(void *x)
