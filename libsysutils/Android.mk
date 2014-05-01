@@ -18,7 +18,7 @@ LOCAL_MODULE:= libsysutils
 
 LOCAL_C_INCLUDES :=
 
-LOCAL_CFLAGS := -Werror
+LOCAL_CFLAGS :=
 
 LOCAL_SHARED_LIBRARIES := libcutils liblog
 
