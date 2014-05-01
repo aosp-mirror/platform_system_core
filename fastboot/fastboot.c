@@ -960,6 +960,7 @@ int main(int argc, char **argv)
         {"kernel_offset", required_argument, 0, 'k'},
         {"page_size", required_argument, 0, 'n'},
         {"ramdisk_offset", required_argument, 0, 'r'},
+        {"tags_offset", required_argument, 0, 't'},
         {"help", 0, 0, 'h'},
         {0, 0, 0, 0}
     };
@@ -968,7 +969,7 @@ int main(int argc, char **argv)
 
     while (1) {
         int option_index = 0;
-        c = getopt_long(argc, argv, "wub:k:n:r:s:S:lp:c:i:m:h", longopts, NULL);
+        c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lp:c:i:m:h", longopts, NULL);
         if (c < 0) {
             break;
         }
@@ -1008,6 +1009,9 @@ int main(int argc, char **argv)
             break;
         case 'r':
             ramdisk_offset = strtoul(optarg, 0, 16);
+            break;
+        case 't':
+            tags_offset = strtoul(optarg, 0, 16);
             break;
         case 's':
             serial = optarg;
