@@ -47,7 +47,6 @@ int main(int argc, char *argv[])
 {
 	int in;
 	int out;
-	unsigned int i;
 	int ret;
 	struct sparse_file *s;
 	unsigned int block_size = 4096;
