@@ -37,6 +37,7 @@ class PidStatistics {
     size_t mElements;
 
     char *name;
+    bool mGone;
 
 public:
     static const pid_t gone = (pid_t) -1;
@@ -46,6 +47,7 @@ public:
     ~PidStatistics();
 
     pid_t getPid() const { return pid; }
+    bool pidGone();
     char *getName() const { return name; }
     void setName(char *name);
 

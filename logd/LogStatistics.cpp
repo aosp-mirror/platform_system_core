@@ -31,6 +31,7 @@ PidStatistics::PidStatistics(pid_t pid, char *name)
         , mSizes(0)
         , mElements(0)
         , name(name)
+        , mGone(false)
 { }
 
 #ifdef DO_NOT_ERROR_IF_PIDSTATISTICS_USES_A_COPY_CONSTRUCTOR
@@ -41,11 +42,26 @@ PidStatistics::PidStatistics(const PidStatistics &copy)
         , mElementsTotal(copy->mElementsTotal)
         , mSizes(copy->mSizes)
         , mElements(copy->mElements)
+        , mGone(copy->mGone)
 { }
 #endif
 
 PidStatistics::~PidStatistics() {
     free(name);
+}
+
+bool PidStatistics::pidGone() {
+    if (mGone) {
+        return true;
+    }
+    if (pid == gone) {
+        return true;
+    }
+    if (kill(pid, 0) && (errno != EPERM)) {
+        mGone = true;
+        return true;
+    }
+    return false;
 }
 
 void PidStatistics::setName(char *new_name) {
@@ -63,7 +79,7 @@ void PidStatistics::add(unsigned short size) {
 bool PidStatistics::subtract(unsigned short size) {
     mSizes -= size;
     --mElements;
-    return (mElements == 0) && kill(pid, 0) && (errno != EPERM);
+    return (mElements == 0) && pidGone();
 }
 
 void PidStatistics::addTotal(size_t size, size_t element) {
@@ -76,7 +92,7 @@ void PidStatistics::addTotal(size_t size, size_t element) {
 // must call free to release return value
 char *PidStatistics::pidToName(pid_t pid) {
     char *retval = NULL;
-    if (pid != PidStatistics::gone) {
+    if (pid != gone) {
         char buffer[512];
         snprintf(buffer, sizeof(buffer), "/proc/%u/cmdline", pid);
         int fd = open(buffer, O_RDONLY);
@@ -659,8 +675,7 @@ void LogStatistics::format(char **buf,
                             sizes, sizesTotal);
 
             android::String8 pd("");
-            pd.appendFormat("%u%c", pid,
-                            (kill(pid, 0) && (errno != EPERM)) ? '?' : ' ');
+            pd.appendFormat("%u%c", pid, p->pidGone() ? '?' : ' ');
 
             string.appendFormat("\n%-7s%-*s %-7s%s",
                                 line ? "" : android_log_id_to_name(i),
@@ -765,14 +780,15 @@ void LogStatistics::format(char **buf,
             spaces = 0;
 
             uid_t u = up->getUid();
-            pid_t p = (*pt)->getPid();
+            PidStatistics *pp = *pt;
+            pid_t p = pp->getPid();
 
             intermediate = string.format(oneline
                                              ? ((p == PidStatistics::gone)
                                                  ? "%d/?"
-                                                 : "%d/%d")
+                                                 : "%d/%d%c")
                                              : "%d",
-                                         u, p);
+                                         u, p, pp->pidGone() ? '?' : '\0');
             string.appendFormat(first ? "\n%-12s" : "%-12s",
                                 intermediate.string());
             intermediate.clear();
@@ -809,8 +825,8 @@ void LogStatistics::format(char **buf,
             size_t gone_els = 0;
 
             for(; pt != up->end(); ++pt) {
-                PidStatistics *pp = *pt;
-                pid_t p = pp->getPid();
+                pp = *pt;
+                p = pp->getPid();
 
                 // If a PID no longer has any current logs, and is not
                 // active anymore, skip & report totals for gone.
@@ -822,7 +838,7 @@ void LogStatistics::format(char **buf,
                     continue;
                 }
                 els = pp->elements();
-                bool gone = kill(p, 0) && (errno != EPERM);
+                bool gone = pp->pidGone();
                 if (gone && (els == 0)) {
                     // ToDo: garbage collection: move this statistical bucket
                     //       from its current UID/PID to UID/? (races and
