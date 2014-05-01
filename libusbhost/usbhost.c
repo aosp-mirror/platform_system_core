@@ -263,11 +263,12 @@ int usb_host_read_event(struct usb_host_context *context)
                 D("%s subdirectory %s: index: %d\n", (event->mask & IN_CREATE) ?
                         "new" : "gone", path, i);
                 if (i > 0 && i < MAX_USBFS_WD_COUNT) {
+                    int local_ret = 0;
                     if (event->mask & IN_CREATE) {
-                        ret = inotify_add_watch(context->fd, path,
+                        local_ret = inotify_add_watch(context->fd, path,
                                 IN_CREATE | IN_DELETE);
-                        if (ret >= 0)
-                            context->wds[i] = ret;
+                        if (local_ret >= 0)
+                            context->wds[i] = local_ret;
                         done = find_existing_devices_bus(path, context->cb_added,
                                 context->data);
                     } else if (event->mask & IN_DELETE) {
