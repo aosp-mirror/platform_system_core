@@ -136,7 +136,7 @@ void BacktraceThread::FinishUnwind() {
 bool BacktraceThread::TriggerUnwindOnThread(ThreadEntry* entry) {
   entry->state = STATE_WAITING;
 
-  if (tgkill(Pid(), Tid(), SIGURG) != 0) {
+  if (tgkill(Pid(), Tid(), THREAD_SIGNAL) != 0) {
     BACK_LOGW("tgkill failed %s", strerror(errno));
     return false;
   }
@@ -196,9 +196,9 @@ bool BacktraceThread::Unwind(size_t num_ignore_frames) {
     act.sa_sigaction = SignalHandler;
     act.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
     sigemptyset(&act.sa_mask);
-    if (sigaction(SIGURG, &act, &oldact) == 0) {
+    if (sigaction(THREAD_SIGNAL, &act, &oldact) == 0) {
       retval = TriggerUnwindOnThread(entry);
-      sigaction(SIGURG, &oldact, NULL);
+      sigaction(THREAD_SIGNAL, &oldact, NULL);
     } else {
       BACK_LOGW("sigaction failed %s", strerror(errno));
     }
