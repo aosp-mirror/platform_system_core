@@ -104,8 +104,6 @@ static void add_line_to_abbr_buf(struct abbr_buf *a_buf, char *linebuf, int line
 static int add_line_to_linear_buf(struct beginning_buf *b_buf,
                                    char *line, ssize_t line_len)
 {
-    size_t new_len;
-    char *new_buf;
     int full = 0;
 
     if ((line_len + b_buf->used_len) > b_buf->buf_size) {
@@ -124,7 +122,6 @@ static void add_line_to_circular_buf(struct ending_buf *e_buf,
 {
     ssize_t free_len;
     ssize_t needed_space;
-    char *new_buf;
     int cnt;
 
     if (e_buf->buf == NULL) {
@@ -192,7 +189,6 @@ static void print_buf_lines(struct log_info *log_info, char *buf, int buf_size)
 {
     char *line_start;
     char c;
-    int line_len;
     int i;
 
     line_start = buf;

@@ -11,6 +11,7 @@ LOCAL_SRC_FILES := logwrap.c
 LOCAL_SHARED_LIBRARIES := libcutils liblog
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+LOCAL_CFLAGS := -Werror
 include $(BUILD_STATIC_LIBRARY)
 
 # ========================================================
@@ -22,6 +23,7 @@ LOCAL_SHARED_LIBRARIES := libcutils liblog
 LOCAL_WHOLE_STATIC_LIBRARIES := liblogwrap
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
+LOCAL_CFLAGS := -Werror
 include $(BUILD_SHARED_LIBRARY)
 
 # ========================================================
@@ -31,4 +33,5 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= logwrapper.c
 LOCAL_MODULE := logwrapper
 LOCAL_STATIC_LIBRARIES := liblog liblogwrap libcutils
+LOCAL_CFLAGS := -Werror
 include $(BUILD_EXECUTABLE)
