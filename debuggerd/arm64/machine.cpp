@@ -82,8 +82,6 @@ void dump_registers(log_t* log, pid_t tid, int scope_flags)
   io.iov_base = &r;
   io.iov_len = sizeof(r);
 
-  bool only_in_tombstone = !IS_AT_FAULT(scope_flags);
-
   if (ptrace(PTRACE_GETREGSET, tid, (void*) NT_PRSTATUS, (void*) &io) == -1) {
     _LOG(log, scope_flags, "ptrace error: %s\n", strerror(errno));
     return;
