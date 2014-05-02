@@ -33,6 +33,9 @@ public:
     uint32_t tv_sec; // good to Feb 5 2106
     uint32_t tv_nsec;
 
+    static const uint32_t tv_sec_max = 0xFFFFFFFFUL;
+    static const uint32_t tv_nsec_max = 999999999UL;
+
     log_time(const timespec &T)
     {
         tv_sec = T.tv_sec;
