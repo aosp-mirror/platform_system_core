@@ -281,8 +281,6 @@ static int setLogFormat(const char * formatString)
     return 0;
 }
 
-extern "C" void logprint_run_tests(void);
-
 int main(int argc, char **argv)
 {
     int err;
@@ -305,11 +303,6 @@ int main(int argc, char **argv)
     signal(SIGPIPE, exit);
 
     g_logformat = android_log_format_new();
-
-    if (argc == 2 && 0 == strcmp(argv[1], "--test")) {
-        logprint_run_tests();
-        exit(0);
-    }
 
     if (argc == 2 && 0 == strcmp(argv[1], "--help")) {
         android::show_help(argv[0]);
