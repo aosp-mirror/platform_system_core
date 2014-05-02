@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-#include <sys/types.h>
-#include <unistd.h>
 #include <fcntl.h>
-#include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h> /* for BLKGETSIZE */
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <cutils/properties.h>
 
 static int only_one_char(char *buf, int len, char c)
@@ -39,7 +40,7 @@ static int only_one_char(char *buf, int len, char c)
 int partition_wiped(char *source)
 {
     char buf[4096];
-    int fd, ret, wiped;
+    int fd, ret;
 
     if ((fd = open(source, O_RDONLY)) < 0) {
         return 0;
