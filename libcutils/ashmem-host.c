@@ -32,7 +32,9 @@
 
 #include <cutils/ashmem.h>
 
+#ifndef __unused
 #define __unused __attribute__((__unused__))
+#endif
 
 int ashmem_create_region(const char *ignored __unused, size_t size)
 {
