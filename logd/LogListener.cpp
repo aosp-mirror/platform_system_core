@@ -103,7 +103,7 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
     // truncated message to the logs.
 
     logbuf->log(log_id, realtime, cred->uid, cred->pid, tid, msg,
-        (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
+        ((size_t) n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
     reader->notifyNewLog();
 
     return true;
