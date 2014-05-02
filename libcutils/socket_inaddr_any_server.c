@@ -1,5 +1,4 @@
-/* libs/cutils/socket_inaddr_any_server.c
-**
+/*
 ** Copyright 2006, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License"); 
@@ -15,13 +14,11 @@
 ** limitations under the License.
 */
 
-#include <cutils/sockets.h>
-
+#include <errno.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
-#include <stddef.h>
 
 #ifndef HAVE_WINSOCK
 #include <sys/socket.h>
@@ -30,13 +27,14 @@
 #include <netinet/in.h>
 #endif
 
+#include <cutils/sockets.h>
+
 #define LISTEN_BACKLOG 4
 
 /* open listen() port on any interface */
 int socket_inaddr_any_server(int port, int type)
 {
     struct sockaddr_in addr;
-    size_t alen;
     int s, n;
 
     memset(&addr, 0, sizeof(addr));

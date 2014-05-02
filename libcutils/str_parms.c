@@ -25,10 +25,9 @@
 #include <string.h>
 
 #include <cutils/hashmap.h>
-#include <cutils/log.h>
 #include <cutils/memory.h>
-
 #include <cutils/str_parms.h>
+#include <log/log.h>
 
 #define UNUSED __attribute__((unused))
 
@@ -374,8 +373,6 @@ static void test_str_parms_str(const char *str)
 
 int main(void)
 {
-    struct str_parms *str_parms;
-
     test_str_parms_str("");
     test_str_parms_str(";");
     test_str_parms_str("=");

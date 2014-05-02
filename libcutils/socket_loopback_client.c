@@ -1,5 +1,4 @@
-/* libs/cutils/socket_loopback_client.c
-**
+/*
 ** Copyright 2006, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License"); 
@@ -15,13 +14,11 @@
 ** limitations under the License.
 */
 
-#include <cutils/sockets.h>
-
+#include <errno.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
-#include <stddef.h>
 
 #ifndef HAVE_WINSOCK
 #include <sys/socket.h>
@@ -30,6 +27,8 @@
 #include <netinet/in.h>
 #endif
 
+#include <cutils/sockets.h>
+
 /* Connect to port on the loopback IP interface. type is
  * SOCK_STREAM or SOCK_DGRAM. 
  * return is a file descriptor or -1 on error
@@ -37,7 +36,6 @@
 int socket_loopback_client(int port, int type)
 {
     struct sockaddr_in addr;
-    socklen_t alen;
     int s;
 
     memset(&addr, 0, sizeof(addr));

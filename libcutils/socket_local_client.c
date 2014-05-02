@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#include <cutils/sockets.h>
-
+#include <errno.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
-#include <stddef.h>
+
+#include <cutils/sockets.h>
 
 #ifdef HAVE_WINSOCK
 
@@ -128,7 +128,6 @@ int socket_local_client_connect(int fd, const char *name, int namespaceId,
 {
     struct sockaddr_un addr;
     socklen_t alen;
-    size_t namelen;
     int err;
 
     err = socket_make_sockaddr_un(name, namespaceId, &addr, &alen);
