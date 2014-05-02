@@ -19,20 +19,22 @@
  * an ashmem-enabled kernel. See ashmem-dev.c for the real ashmem-based version.
  */
 
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <stdio.h>
 #include <errno.h>
-#include <time.h>
+#include <fcntl.h>
 #include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <cutils/ashmem.h>
 
-int ashmem_create_region(const char *ignored, size_t size)
+#define __unused __attribute__((__unused__))
+
+int ashmem_create_region(const char *ignored __unused, size_t size)
 {
 	static const char txt[] = "abcdefghijklmnopqrstuvwxyz"
 				  "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -78,17 +80,17 @@ error:
 	return -1;
 }
 
-int ashmem_set_prot_region(int fd, int prot)
+int ashmem_set_prot_region(int fd __unused, int prot __unused)
 {
 	return 0;
 }
 
-int ashmem_pin_region(int fd, size_t offset, size_t len)
+int ashmem_pin_region(int fd __unused, size_t offset __unused, size_t len __unused)
 {
 	return ASHMEM_NOT_PURGED;
 }
 
-int ashmem_unpin_region(int fd, size_t offset, size_t len)
+int ashmem_unpin_region(int fd __unused, size_t offset __unused, size_t len __unused)
 {
 	return ASHMEM_IS_UNPINNED;
 }

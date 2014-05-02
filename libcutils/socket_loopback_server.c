@@ -1,5 +1,4 @@
-/* libs/cutils/socket_loopback_server.c
-**
+/*
 ** Copyright 2006, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License"); 
@@ -15,13 +14,11 @@
 ** limitations under the License.
 */
 
-#include <cutils/sockets.h>
-
+#include <errno.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
-#include <stddef.h>
 
 #define LISTEN_BACKLOG 4
 
@@ -32,11 +29,12 @@
 #include <netinet/in.h>
 #endif
 
+#include <cutils/sockets.h>
+
 /* open listen() port on loopback interface */
 int socket_loopback_server(int port, int type)
 {
     struct sockaddr_in addr;
-    size_t alen;
     int s, n;
 
     memset(&addr, 0, sizeof(addr));

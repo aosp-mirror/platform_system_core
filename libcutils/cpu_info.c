@@ -1,5 +1,4 @@
-/* libs/cutils/cpu_info.c
-**
+/*
 ** Copyright 2007, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License"); 
@@ -15,10 +14,11 @@
 ** limitations under the License.
 */
 
-#include <cutils/cpu_info.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include <cutils/cpu_info.h>
 
 // we cache the serial number here.
 // this is also used as a fgets() line buffer when we are reading /proc/cpuinfo
@@ -31,7 +31,6 @@ extern const char* get_cpu_serial_number(void)
         FILE* file;
         char* chp, *end;
         char* whitespace;
-        int length;
         
         // read serial number from /proc/cpuinfo
         file = fopen("proc/cpuinfo", "r");
