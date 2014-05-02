@@ -21,6 +21,7 @@
 #include <log/log.h>
 #include <log/logger.h>
 #include <log/log_read.h>
+#include <log/logprint.h>
 
 // enhanced version of LOG_FAILURE_RETRY to add support for EAGAIN and
 // non-syscall libs. Since we are only using this in the emergency of
@@ -611,4 +612,73 @@ TEST(liblog, android_logger_get_) {
     }
 
     android_logger_list_close(logger_list);
+}
+
+static bool checkPriForTag(AndroidLogFormat *p_format, const char *tag, android_LogPriority pri) {
+    return android_log_shouldPrintLine(p_format, tag, pri)
+        && !android_log_shouldPrintLine(p_format, tag, (android_LogPriority)(pri - 1));
+}
+
+TEST(liblog, filterRule) {
+    static const char tag[] = "random";
+
+    AndroidLogFormat *p_format = android_log_format_new();
+
+    android_log_addFilterRule(p_format,"*:i");
+
+    EXPECT_TRUE(checkPriForTag(p_format, tag, ANDROID_LOG_INFO));
+    EXPECT_TRUE(android_log_shouldPrintLine(p_format, tag, ANDROID_LOG_DEBUG) == 0);
+    android_log_addFilterRule(p_format, "*");
+    EXPECT_TRUE (checkPriForTag(p_format, tag, ANDROID_LOG_DEBUG));
+    EXPECT_TRUE(android_log_shouldPrintLine(p_format, tag, ANDROID_LOG_DEBUG) > 0);
+    android_log_addFilterRule(p_format, "*:v");
+    EXPECT_TRUE (checkPriForTag(p_format, tag, ANDROID_LOG_VERBOSE));
+    EXPECT_TRUE(android_log_shouldPrintLine(p_format, tag, ANDROID_LOG_DEBUG) > 0);
+    android_log_addFilterRule(p_format, "*:i");
+    EXPECT_TRUE (checkPriForTag(p_format, tag, ANDROID_LOG_INFO));
+    EXPECT_TRUE(android_log_shouldPrintLine(p_format, tag, ANDROID_LOG_DEBUG) == 0);
+
+    android_log_addFilterRule(p_format, tag);
+    EXPECT_TRUE (checkPriForTag(p_format, tag, ANDROID_LOG_VERBOSE));
+    EXPECT_TRUE(android_log_shouldPrintLine(p_format, tag, ANDROID_LOG_DEBUG) > 0);
+    android_log_addFilterRule(p_format, "random:v");
+    EXPECT_TRUE (checkPriForTag(p_format, tag, ANDROID_LOG_VERBOSE));
+    EXPECT_TRUE(android_log_shouldPrintLine(p_format, tag, ANDROID_LOG_DEBUG) > 0);
+    android_log_addFilterRule(p_format, "random:d");
+    EXPECT_TRUE (checkPriForTag(p_format, tag, ANDROID_LOG_DEBUG));
+    EXPECT_TRUE(android_log_shouldPrintLine(p_format, tag, ANDROID_LOG_DEBUG) > 0);
+    android_log_addFilterRule(p_format, "random:w");
+    EXPECT_TRUE (checkPriForTag(p_format, tag, ANDROID_LOG_WARN));
+    EXPECT_TRUE(android_log_shouldPrintLine(p_format, tag, ANDROID_LOG_DEBUG) == 0);
+
+    android_log_addFilterRule(p_format, "crap:*");
+    EXPECT_TRUE (checkPriForTag(p_format, "crap", ANDROID_LOG_VERBOSE));
+    EXPECT_TRUE(android_log_shouldPrintLine(p_format, "crap", ANDROID_LOG_VERBOSE) > 0);
+
+    // invalid expression
+    EXPECT_TRUE (android_log_addFilterRule(p_format, "random:z") < 0);
+    EXPECT_TRUE (checkPriForTag(p_format, tag, ANDROID_LOG_WARN));
+    EXPECT_TRUE(android_log_shouldPrintLine(p_format, tag, ANDROID_LOG_DEBUG) == 0);
+
+    // Issue #550946
+    EXPECT_TRUE(android_log_addFilterString(p_format, " ") == 0);
+    EXPECT_TRUE(checkPriForTag(p_format, tag, ANDROID_LOG_WARN));
+
+    // note trailing space
+    EXPECT_TRUE(android_log_addFilterString(p_format, "*:s random:d ") == 0);
+    EXPECT_TRUE(checkPriForTag(p_format, tag, ANDROID_LOG_DEBUG));
+
+    EXPECT_TRUE(android_log_addFilterString(p_format, "*:s random:z") < 0);
+
+#if 0 // bitrot, seek update
+    char defaultBuffer[512];
+
+    android_log_formatLogLine(p_format,
+        defaultBuffer, sizeof(defaultBuffer), 0, ANDROID_LOG_ERROR, 123,
+        123, 123, tag, "nofile", strlen("Hello"), "Hello", NULL);
+
+    fprintf(stderr, "%s\n", defaultBuffer);
+#endif
+
+    android_log_format_free(p_format);
 }
