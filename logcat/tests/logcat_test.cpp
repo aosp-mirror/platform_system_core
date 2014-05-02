@@ -392,7 +392,7 @@ TEST(logcat, get_) {
     ASSERT_EQ(4, count);
 }
 
-static void caught_blocking(int signum)
+static void caught_blocking(int /*signum*/)
 {
     unsigned long long v = 0xDEADBEEFA55A0000ULL;
 
@@ -461,7 +461,7 @@ TEST(logcat, blocking) {
     EXPECT_EQ(1, signals);
 }
 
-static void caught_blocking_tail(int signum)
+static void caught_blocking_tail(int /*signum*/)
 {
     unsigned long long v = 0xA55ADEADBEEF0000ULL;
 
@@ -532,7 +532,7 @@ TEST(logcat, blocking_tail) {
     EXPECT_EQ(1, signals);
 }
 
-static void caught_blocking_clear(int signum)
+static void caught_blocking_clear(int /*signum*/)
 {
     unsigned long long v = 0xDEADBEEFA55C0000ULL;
 

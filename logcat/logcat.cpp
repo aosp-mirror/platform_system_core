@@ -496,9 +496,6 @@ int main(int argc, char **argv)
                     android::g_logRotateSizeKBytes
                                 = DEFAULT_LOG_ROTATE_SIZE_KBYTES;
                 } else {
-                    long logRotateSize;
-                    char *lastDigit;
-
                     if (!isdigit(optarg[0])) {
                         fprintf(stderr,"Invalid parameter to -r\n");
                         android::show_help(argv[0]);
