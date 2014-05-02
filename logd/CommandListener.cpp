@@ -208,7 +208,6 @@ int CommandListener::GetStatisticsCmd::runCommand(SocketClient *cli,
                                          int argc, char **argv) {
     setname();
     uid_t uid = cli->getUid();
-    gid_t gid = cli->getGid();
     if (clientHasLogCredentials(cli)) {
         uid = AID_ROOT;
     }

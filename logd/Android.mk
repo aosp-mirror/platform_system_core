@@ -25,7 +25,7 @@ LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils
 
-LOCAL_MODULE_TAGS := optional
+LOCAL_CFLAGS := -Werror
 
 include $(BUILD_EXECUTABLE)
 
