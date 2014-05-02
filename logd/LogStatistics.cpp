@@ -392,8 +392,8 @@ LogStatistics::LogStatistics()
 
     dgram_qlen_statistics = false;
     for(unsigned short bucket = 0; dgram_qlen(bucket); ++bucket) {
-        mMinimum[bucket].tv_sec = (uint32_t)-1;
-        mMinimum[bucket].tv_nsec = 999999999UL;
+        mMinimum[bucket].tv_sec = mMinimum[bucket].tv_sec_max;
+        mMinimum[bucket].tv_nsec = mMinimum[bucket].tv_nsec_max;
     }
 }
 
@@ -439,7 +439,7 @@ unsigned short LogStatistics::dgram_qlen(unsigned short bucket) {
 }
 
 unsigned long long LogStatistics::minimum(unsigned short bucket) {
-    if (mMinimum[bucket].tv_sec == LONG_MAX) {
+    if (mMinimum[bucket].tv_sec == mMinimum[bucket].tv_sec_max) {
         return 0;
     }
     return mMinimum[bucket].nsec();
