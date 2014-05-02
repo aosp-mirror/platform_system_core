@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
-#include <cutils/log.h>
 #include <cutils/sockets.h>
+#include <log/log.h>
 
 #ifdef HAVE_ANDROID_OS
 /* For the socket trust (credentials) check */
 #include <private/android_filesystem_config.h>
+#define __android_unused
+#else
+#define __android_unused __attribute__((__unused__))
 #endif
 
-bool socket_peer_is_trusted(int fd)
+bool socket_peer_is_trusted(int fd __android_unused)
 {
 #ifdef HAVE_ANDROID_OS
     struct ucred cr;

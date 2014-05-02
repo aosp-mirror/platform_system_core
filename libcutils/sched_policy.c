@@ -1,6 +1,4 @@
-
-/* libs/cutils/sched_policy.c
-**
+/*
 ** Copyright 2007, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License"); 
@@ -18,14 +16,17 @@
 
 #define LOG_TAG "SchedPolicy"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 #include <cutils/sched_policy.h>
-#include <cutils/log.h>
+#include <log/log.h>
+
+#define UNUSED __attribute__((__unused__))
 
 /* Re-map SP_DEFAULT to the system default policy, and leave other values unchanged.
  * Call this any place a SchedPolicy is used as an input parameter.
@@ -331,12 +332,12 @@ int set_sched_policy(int tid, SchedPolicy policy)
 
 /* Stubs for non-Android targets. */
 
-int set_sched_policy(int tid, SchedPolicy policy)
+int set_sched_policy(int tid UNUSED, SchedPolicy policy UNUSED)
 {
     return 0;
 }
 
-int get_sched_policy(int tid, SchedPolicy *policy)
+int get_sched_policy(int tid UNUSED, SchedPolicy *policy)
 {
     *policy = SP_SYSTEM_DEFAULT;
     return 0;

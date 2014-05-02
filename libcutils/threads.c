@@ -1,5 +1,4 @@
-/* libs/cutils/threads.c
-**
+/*
 ** Copyright (C) 2007, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License"); 
@@ -14,13 +13,12 @@
 ** See the License for the specific language governing permissions and 
 ** limitations under the License.
 */
+
 #include <cutils/threads.h>
 
 #ifdef HAVE_PTHREADS
 void*  thread_store_get( thread_store_t*  store )
 {
-    const pthread_key_t  k = store->tls;
-
     if (!store->has_tls)
         return NULL;
 

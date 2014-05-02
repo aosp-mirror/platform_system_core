@@ -1,5 +1,4 @@
 /*
-**
 ** Copyright 2007-2014, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License"); 
@@ -15,12 +14,12 @@
 ** limitations under the License.
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #ifdef HAVE_SCHED_H
 
@@ -30,6 +29,9 @@
 /* #include <linux/ioprio.h> */
 extern int ioprio_set(int which, int who, int ioprio);
 extern int ioprio_get(int which, int who);
+#define __android_unused
+#else
+#define __android_unused __attribute__((__unused__))
 #endif
 
 enum {
@@ -41,7 +43,7 @@ enum {
 #define CLASS_SHIFT 13
 #define IOPRIO_NORM 4
 
-int android_set_ioprio(int pid, IoSchedClass clazz, int ioprio) {
+int android_set_ioprio(int pid __android_unused, IoSchedClass clazz __android_unused, int ioprio __android_unused) {
 #ifdef HAVE_ANDROID_OS
     if (ioprio_set(WHO_PROCESS, pid, ioprio | (clazz << CLASS_SHIFT))) {
         return -1;
@@ -50,7 +52,7 @@ int android_set_ioprio(int pid, IoSchedClass clazz, int ioprio) {
     return 0;
 }
 
-int android_get_ioprio(int pid, IoSchedClass *clazz, int *ioprio) {
+int android_get_ioprio(int pid __android_unused, IoSchedClass *clazz, int *ioprio) {
 #ifdef HAVE_ANDROID_OS
     int rc;
 
