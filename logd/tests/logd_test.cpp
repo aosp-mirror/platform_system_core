@@ -196,8 +196,6 @@ TEST(logd, statistics) {
 
     cp = strstr(cp, "Minimum time between log events per dgram_qlen:");
 
-    char *log_events_per_span = cp;
-
     if (cp) {
         while (*cp && (*cp != '\n')) {
             ++cp;
@@ -462,7 +460,7 @@ TEST(logd, both) {
             dump_log_msg("user", &msg, 3, -1);
         }
 
-        alarm(0);
+        alarm(old_alarm);
         sigaction(SIGALRM, &old_sigaction, NULL);
 
         close(fd);
