@@ -164,7 +164,7 @@ void service_start(struct service *svc, const char *dynamic_args)
          * state and immediately takes it out of the restarting
          * state if it was in there
          */
-    svc->flags &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET|SVC_RESTART));
+    svc->flags &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET|SVC_RESTART|SVC_DISABLED_START));
     svc->time_started = 0;
 
         /* running processes require no additional work -- if
@@ -364,7 +364,7 @@ static void service_stop_or_reset(struct service *svc, int how)
 {
     /* The service is still SVC_RUNNING until its process exits, but if it has
      * already exited it shoudn't attempt a restart yet. */
-    svc->flags &= (~SVC_RESTARTING);
+    svc->flags &= ~(SVC_RESTARTING | SVC_DISABLED_START);
 
     if ((how != SVC_DISABLED) && (how != SVC_RESET) && (how != SVC_RESTART)) {
         /* Hrm, an illegal flag.  Default to SVC_DISABLED */
