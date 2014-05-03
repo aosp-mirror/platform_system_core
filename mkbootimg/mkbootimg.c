@@ -263,7 +263,7 @@ int main(int argc, char **argv)
 
     if(second_data) {
         if(write(fd, second_data, hdr.second_size) != hdr.second_size) goto fail;
-        if(write_padding(fd, pagesize, hdr.ramdisk_size)) goto fail;
+        if(write_padding(fd, pagesize, hdr.second_size)) goto fail;
     }
 
     return 0;
