@@ -178,6 +178,16 @@ class_stop <serviceclass>
 domainname <name>
    Set the domain name.
 
+enable <servicename>
+   Turns a disabled service into an enabled one as if the service did not
+   specify disabled.
+   If the service is supposed to be running, it will be started now.
+   Typically used when the bootloader sets a variable that indicates a specific
+   service should be started when needed. E.g.
+     on property:ro.boot.myfancyhardware=1
+        enable my_fancy_service_for_my_fancy_hardware
+
+
 insmod <path>
    Install the module at <path>
 

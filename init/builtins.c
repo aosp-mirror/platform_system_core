@@ -196,6 +196,8 @@ static void service_start_if_not_disabled(struct service *svc)
 {
     if (!(svc->flags & SVC_DISABLED)) {
         service_start(svc, NULL);
+    } else {
+        svc->flags |= SVC_DISABLED_START;
     }
 }
 
@@ -236,6 +238,21 @@ int do_class_reset(int nargs, char **args)
 int do_domainname(int nargs, char **args)
 {
     return write_file("/proc/sys/kernel/domainname", args[1]);
+}
+
+int do_enable(int nargs, char **args)
+{
+    struct service *svc;
+    svc = service_find_by_name(args[1]);
+    if (svc) {
+        svc->flags &= ~(SVC_DISABLED | SVC_RC_DISABLED);
+        if (svc->flags & SVC_DISABLED_START) {
+            service_start(svc, NULL);
+        }
+    } else {
+        return -1;
+    }
+    return 0;
 }
 
 int do_exec(int nargs, char **args)
