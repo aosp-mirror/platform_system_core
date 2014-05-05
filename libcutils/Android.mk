@@ -77,7 +77,10 @@ LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
 LOCAL_LDLIBS := -lpthread
 LOCAL_STATIC_LIBRARIES := liblog
-LOCAL_CFLAGS += $(hostSmpFlag) -Werror
+LOCAL_CFLAGS += $(hostSmpFlag)
+ifneq ($(HOST_OS),windows)
+LOCAL_CFLAGS += -Werror
+endif
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
@@ -88,14 +91,20 @@ LOCAL_MODULE := lib64cutils
 LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
 LOCAL_LDLIBS := -lpthread
 LOCAL_STATIC_LIBRARIES := lib64log
-LOCAL_CFLAGS += $(hostSmpFlag) -m64 -Werror
+LOCAL_CFLAGS += $(hostSmpFlag) -m64
+ifneq ($(HOST_OS),windows)
+LOCAL_CFLAGS += -Werror
+endif
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 # Tests for host
 # ========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := tst_str_parms
-LOCAL_CFLAGS += -DTEST_STR_PARMS -Werror
+LOCAL_CFLAGS += -DTEST_STR_PARMS
+ifneq ($(HOST_OS),windows)
+LOCAL_CFLAGS += -Werror
+endif
 LOCAL_SRC_FILES := str_parms.c hashmap.c memory.c
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_MODULE_TAGS := optional

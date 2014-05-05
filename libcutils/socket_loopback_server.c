@@ -46,7 +46,7 @@ int socket_loopback_server(int port, int type)
     if(s < 0) return -1;
 
     n = 1;
-    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n));
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *) &n, sizeof(n));
 
     if(bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         close(s);
