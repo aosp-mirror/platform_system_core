@@ -742,26 +742,33 @@ char* engrave_tombstone(
   mkdir(TOMBSTONE_DIR, 0755);
   chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM);
 
-  if (selinux_android_restorecon(TOMBSTONE_DIR) == -1) {
-    *detach_failed = false;
-    return NULL;
+  int fd = -1;
+  char* path = NULL;
+  if (selinux_android_restorecon(TOMBSTONE_DIR) == 0) {
+    path = find_and_open_tombstone(&fd);
+  } else {
+    LOG("Failed to restore security context, not writing tombstone.\n");
   }
 
-  int fd;
-  char* path = find_and_open_tombstone(&fd);
-  if (!path) {
+  if (fd < 0 && quiet) {
+    LOG("Skipping tombstone write, nothing to do.\n");
     *detach_failed = false;
     return NULL;
   }
 
   log_t log;
   log.tfd = fd;
-  log.amfd = activity_manager_connect();
+  // Preserve amfd since it can be modified through the calls below without
+  // being closed.
+  int amfd = activity_manager_connect();
+  log.amfd = amfd;
   log.quiet = quiet;
   *detach_failed = dump_crash(
       &log, pid, tid, signal, abort_msg_address, dump_sibling_threads, total_sleep_time_usec);
 
-  close(log.amfd);
+  // Either of these file descriptors can be -1, any error is ignored.
+  close(amfd);
   close(fd);
+
   return path;
 }
