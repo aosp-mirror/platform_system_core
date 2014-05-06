@@ -52,7 +52,7 @@ void Prune::format(char **strp) {
 }
 
 PruneList::PruneList()
-        : mWorstUidEnabled(false) {
+        : mWorstUidEnabled(true) {
     mNaughty.clear();
     mNice.clear();
 }
@@ -70,7 +70,7 @@ PruneList::~PruneList() {
 }
 
 int PruneList::init(char *str) {
-    mWorstUidEnabled = false;
+    mWorstUidEnabled = true;
     PruneCollection::iterator it;
     for (it = mNice.begin(); it != mNice.end();) {
         delete (*it);
