@@ -14,29 +14,68 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 
+#include <cutils/properties.h>
 #include <log/logger.h>
 
 #include "LogBuffer.h"
+#include "LogReader.h"
 #include "LogStatistics.h"
 #include "LogWhiteBlackList.h"
-#include "LogReader.h"
 
 // Default
 #define LOG_BUFFER_SIZE (256 * 1024) // Tuned on a per-platform basis here?
 #define log_buffer_size(id) mMaxSize[id]
+
+static unsigned long property_get_size(const char *key) {
+    char property[PROPERTY_VALUE_MAX];
+    property_get(key, property, "");
+
+    char *cp;
+    unsigned long value = strtoul(property, &cp, 10);
+
+    switch(*cp) {
+    case 'm':
+    case 'M':
+        value *= 1024;
+    /* FALLTHRU */
+    case 'k':
+    case 'K':
+        value *= 1024;
+    /* FALLTHRU */
+    case '\0':
+        break;
+
+    default:
+        value = 0;
+    }
+
+    return value;
+}
 
 LogBuffer::LogBuffer(LastLogTimes *times)
         : mTimes(*times) {
     pthread_mutex_init(&mLogElementsLock, NULL);
     dgram_qlen_statistics = false;
 
+    static const char global_default[] = "persist.logd.size";
+    unsigned long default_size = property_get_size(global_default);
+
     log_id_for_each(i) {
-        mMaxSize[i] = LOG_BUFFER_SIZE;
+        setSize(i, LOG_BUFFER_SIZE);
+        setSize(i, default_size);
+
+        char key[PROP_NAME_MAX];
+        snprintf(key, sizeof(key), "%s.%s",
+                 global_default, android_log_id_to_name(i));
+
+        setSize(i, property_get_size(key));
     }
 }
 
