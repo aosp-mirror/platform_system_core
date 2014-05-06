@@ -281,6 +281,30 @@ static int setLogFormat(const char * formatString)
     return 0;
 }
 
+static const char multipliers[][2] = {
+    { "" },
+    { "K" },
+    { "M" },
+    { "G" }
+};
+
+static unsigned long value_of_size(unsigned long value)
+{
+    for (unsigned i = 0;
+            (i < sizeof(multipliers)/sizeof(multipliers[0])) && (value >= 1024);
+            value /= 1024, ++i) ;
+    return value;
+}
+
+static const char *multiplier_of_size(unsigned long value)
+{
+    unsigned i;
+    for (i = 0;
+            (i < sizeof(multipliers)/sizeof(multipliers[0])) && (value >= 1024);
+            value /= 1024, ++i) ;
+    return multipliers[i];
+}
+
 int main(int argc, char **argv)
 {
     int err;
@@ -715,9 +739,10 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
 
-            printf("%s: ring buffer is %ldKb (%ldKb consumed), "
+            printf("%s: ring buffer is %ld%sb (%ld%sb consumed), "
                    "max entry is %db, max payload is %db\n", dev->device,
-                   size / 1024, readable / 1024,
+                   value_of_size(size), multiplier_of_size(size),
+                   value_of_size(readable), multiplier_of_size(readable),
                    (int) LOGGER_ENTRY_MAX_LEN, (int) LOGGER_ENTRY_MAX_PAYLOAD);
         }
 
