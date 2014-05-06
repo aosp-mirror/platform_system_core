@@ -118,6 +118,9 @@ backtrace_test_shared_libraries := \
 backtrace_test_shared_libraries_target := \
 	libcutils \
 
+backtrace_test_static_libraries_host := \
+	libcutils \
+
 module := backtrace_test
 module_tag := debug
 build_type := target
