@@ -102,18 +102,20 @@ int fb_getvar(struct usb_handle *usb, char *response, const char *fmt, ...)
  * Not all devices report the filesystem type, so don't report any errors,
  * just return false.
  */
-int fb_format_supported(usb_handle *usb, const char *partition)
+int fb_format_supported(usb_handle *usb, const char *partition, const char *type_override)
 {
-    char response[FB_RESPONSE_SZ + 1] = {0,};
+    char fs_type[FB_RESPONSE_SZ + 1] = {0,};
     int status;
     unsigned int i;
 
-    status = fb_getvar(usb, response, "partition-type:%s", partition);
+    if (type_override) {
+        return !!fs_get_generator(type_override);
+    }
+    status = fb_getvar(usb, fs_type, "partition-type:%s", partition);
     if (status) {
         return 0;
     }
-
-    return !!fs_get_generator(response);
+    return !!fs_get_generator(fs_type);
 }
 
 static int cb_default(Action *a, int status, char *resp)
