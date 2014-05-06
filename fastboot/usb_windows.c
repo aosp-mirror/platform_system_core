@@ -152,7 +152,7 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
 }
 
 int usb_write(usb_handle* handle, const void* data, int len) {
-    unsigned long time_out = 500 + len * 8;
+    unsigned long time_out = 5000;
     unsigned long written = 0;
     unsigned count = 0;
     int ret;
@@ -194,7 +194,7 @@ int usb_write(usb_handle* handle, const void* data, int len) {
 }
 
 int usb_read(usb_handle *handle, void* data, int len) {
-    unsigned long time_out = 500 + len * 8;
+    unsigned long time_out = 0;
     unsigned long read = 0;
     int ret;
 
@@ -212,7 +212,7 @@ int usb_read(usb_handle *handle, void* data, int len) {
             DBG("usb_read got: %ld, expected: %d, errno: %d\n", read, xfer, errno);
             if (ret) {
                 return read;
-            } else if (errno != ERROR_SEM_TIMEOUT) {
+            } else {
                 // assume ERROR_INVALID_HANDLE indicates we are disconnected
                 if (errno == ERROR_INVALID_HANDLE)
                     usb_kick(handle);
