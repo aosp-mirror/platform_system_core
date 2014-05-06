@@ -25,6 +25,7 @@
 #include <limits.h>
 #include <sys/types.h>
 #include <zipfile/zipfile.h>
+#include <utime.h>
 
 #include "sysdeps.h"
 #include "adb.h"
@@ -935,8 +936,8 @@ static int remote_build_list(int syncfd, copyinfo **filelist,
 
 static int set_time_and_mode(const char *lpath, unsigned int time, unsigned int mode)
 {
-    struct timeval times[2] = { {time, 0}, {time, 0} };
-    int r1 = utimes(lpath, times);
+    struct utimbuf times = { time, time };
+    int r1 = utime(lpath, &times);
 
     /* use umask for permissions */
     mode_t mask=umask(0000);
