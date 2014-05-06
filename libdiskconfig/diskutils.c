@@ -41,7 +41,7 @@ write_raw_image(const char *dst, const char *src, loff_t offset, int test)
     int done = 0;
     uint64_t total = 0;
 
-    ALOGI("Writing RAW image '%s' to '%s' (offset=%llu)", src, dst, offset);
+    ALOGI("Writing RAW image '%s' to '%s' (offset=%llu)", src, dst, (unsigned long long)offset);
     if ((src_fd = open(src, O_RDONLY)) < 0) {
         ALOGE("Could not open %s for reading (errno=%d).", src, errno);
         goto fail;
@@ -54,7 +54,7 @@ write_raw_image(const char *dst, const char *src, loff_t offset, int test)
         }
 
         if (lseek64(dst_fd, offset, SEEK_SET) != offset) {
-            ALOGE("Could not seek to offset %lld in %s.", offset, dst);
+            ALOGE("Could not seek to offset %lld in %s.", (long long)offset, dst);
             goto fail;
         }
     }
@@ -102,7 +102,7 @@ write_raw_image(const char *dst, const char *src, loff_t offset, int test)
     if (dst_fd >= 0)
         fsync(dst_fd);
 
-    ALOGI("Wrote %" PRIu64 " bytes to %s @ %lld", total, dst, offset);
+    ALOGI("Wrote %" PRIu64 " bytes to %s @ %lld", total, dst, (long long)offset);
 
     close(src_fd);
     if (dst_fd >= 0)
