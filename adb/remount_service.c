@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <string.h>
-#include <fcntl.h>
-#include <sys/mount.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mount.h>
+#include <unistd.h>
 
 #include "sysdeps.h"
 
@@ -35,7 +35,6 @@ static char *find_mount(const char *dir)
 {
     int fd;
     int res;
-    int size;
     char *token = NULL;
     const char delims[] = "\n";
     char buf[4096];
@@ -45,7 +44,7 @@ static char *find_mount(const char *dir)
         return NULL;
 
     buf[sizeof(buf) - 1] = '\0';
-    size = adb_read(fd, buf, sizeof(buf) - 1);
+    adb_read(fd, buf, sizeof(buf) - 1);
     adb_close(fd);
 
     token = strtok(buf, delims);
