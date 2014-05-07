@@ -138,8 +138,6 @@ include $(BUILD_EXECUTABLE)
 ifneq ($(SDK_ONLY),true)
 include $(CLEAR_VARS)
 
-LOCAL_LDLIBS := -lrt -ldl -lpthread
-
 LOCAL_SRC_FILES := \
 	adb.c \
 	console.c \
