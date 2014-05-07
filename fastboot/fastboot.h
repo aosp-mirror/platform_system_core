@@ -45,7 +45,7 @@ char *fb_get_error(void);
 
 /* engine.c - high level command queue engine */
 int fb_getvar(struct usb_handle *usb, char *response, const char *fmt, ...);
-int fb_format_supported(usb_handle *usb, const char *partition);
+int fb_format_supported(usb_handle *usb, const char *partition, const char *type_override);
 void fb_queue_flash(const char *ptn, void *data, unsigned sz);
 void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, unsigned sz);
 void fb_queue_erase(const char *ptn);
