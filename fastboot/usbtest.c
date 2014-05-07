@@ -35,8 +35,8 @@
 
 #include "usb.h"
 
-static unsigned arg_size = 4096;
-static unsigned arg_count = 4096;
+static int arg_size = 4096;
+static int arg_count = 4096;
 
 long long NOW(void)
 {
@@ -134,7 +134,7 @@ struct
     { "send", match_null, test_null, "send to null interface" },
     { "recv", match_zero, test_zero, "recv from zero interface" },
     { "loop", match_loop, 0,         "exercise loopback interface" },
-    {},
+    { NULL, NULL, NULL, NULL },
 };
 
 int usage(void)
