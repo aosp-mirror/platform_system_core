@@ -14,23 +14,24 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <linux/fuse.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <fcntl.h>
+#include <sys/inotify.h>
 #include <sys/mount.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>
-#include <sys/uio.h>
-#include <dirent.h>
-#include <limits.h>
-#include <ctype.h>
-#include <pthread.h>
 #include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/inotify.h>
+#include <sys/uio.h>
+#include <unistd.h>
 
 #include <cutils/fs.h>
 #include <cutils/hashmap.h>
@@ -38,15 +39,13 @@
 
 #include <private/android_filesystem_config.h>
 
-#include "fuse.h"
-
 /* README
  *
  * What is this?
- * 
+ *
  * sdcard is a program that uses FUSE to emulate FAT-on-sdcard style
- * directory permissions (all files are given fixed owner, group, and 
- * permissions at creation, owner, group, and permissions are not 
+ * directory permissions (all files are given fixed owner, group, and
+ * permissions at creation, owner, group, and permissions are not
  * changeable, symlinks and hardlinks are not createable, etc.
  *
  * See usage() for command line options.
@@ -1245,7 +1244,7 @@ static int handle_write(struct fuse* fuse, struct fuse_handler* handler,
     struct handle *h = id_to_ptr(req->fh);
     int res;
     __u8 aligned_buffer[req->size] __attribute__((__aligned__(PAGESIZE)));
-    
+
     if (req->flags & O_DIRECT) {
         memcpy(aligned_buffer, buffer, req->size);
         buffer = (const __u8*) aligned_buffer;
