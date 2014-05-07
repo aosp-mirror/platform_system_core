@@ -75,7 +75,6 @@ endif
 # ========================================================
 LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
-LOCAL_LDLIBS := -lpthread
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(hostSmpFlag)
 ifneq ($(HOST_OS),windows)
@@ -89,7 +88,6 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := lib64cutils
 LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
-LOCAL_LDLIBS := -lpthread
 LOCAL_STATIC_LIBRARIES := lib64log
 LOCAL_CFLAGS += $(hostSmpFlag) -m64
 ifneq ($(HOST_OS),windows)
