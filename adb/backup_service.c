@@ -52,15 +52,12 @@ int backup_service(BackupOperation op, char* args) {
     pid_t pid;
     int s[2];
     char* operation;
-    int socketnum;
 
-    // Command string and choice of stdin/stdout for the pipe depend on our invocation
+    // Command string depends on our invocation
     if (op == BACKUP) {
         operation = "backup";
-        socketnum = STDOUT_FILENO;
     } else {
         operation = "restore";
-        socketnum = STDIN_FILENO;
     }
 
     D("backup_service(%s, %s)\n", operation, args);
