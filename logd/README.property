@@ -10,3 +10,16 @@ logd.statistics.dgram_qlen  bool  false  Record dgram_qlen statistics. This
                                          minimum domain socket network FIFO
                                          size (see source for details) based
                                          on typical load (logcat -S to view)
+persist.logd.size          number 256K   default size of the buffer for all
+                                         log ids at initial startup, at runtime
+                                         use: logcat -b all -G <value>
+persist.logd.size.main     number 256K   Size of the buffer for the main log
+persist.logd.size.system   number 256K   Size of the buffer for the system log
+persist.logd.size.radio    number 256K   Size of the buffer for the radio log
+persist.logd.size.event    number 256K   Size of the buffer for the event log
+persist.logd.size.crash    number 256K   Size of the buffer for the crash log
+
+NB:
+- number support multipliers (K or M) for convenience. Range is limited
+  to between 64K and 256M for log buffer sizes. Individual logs override the
+  global default.
