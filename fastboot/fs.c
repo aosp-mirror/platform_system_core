@@ -39,12 +39,12 @@ static const struct fs_generator {
 
 };
 
-const struct fs_generator* fs_get_generator(const char* name)
+const struct fs_generator* fs_get_generator(const char *fs_type)
 {
     unsigned i;
 
     for (i = 0; i < sizeof(generators) / sizeof(*generators); i++)
-        if (!strcmp(generators[i].fs_type, name))
+        if (!strcmp(generators[i].fs_type, fs_type))
             return generators + i;
 
     return NULL;
