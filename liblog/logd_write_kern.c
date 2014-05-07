@@ -173,6 +173,13 @@ int __android_log_write(int prio, const char *tag, const char *msg)
             tag = tmp_tag;
     }
 
+#if __BIONIC__
+    if (prio == ANDROID_LOG_FATAL) {
+        extern void __android_set_abort_message(const char*);
+        __android_set_abort_message(msg);
+    }
+#endif
+
     vec[0].iov_base   = (unsigned char *) &prio;
     vec[0].iov_len    = 1;
     vec[1].iov_base   = (void *) tag;
@@ -272,14 +279,8 @@ void __android_log_assert(const char *cond, const char *tag,
             strcpy(buf, "Unspecified assertion failed");
     }
 
-#if __BIONIC__
-    // Ensure debuggerd gets to see what went wrong by keeping the C library in the loop.
-    extern __noreturn void __android_fatal(const char* tag, const char* format, ...) __printflike(2, 3);
-    __android_fatal(tag ? tag : "", "%s", buf);
-#else
     __android_log_write(ANDROID_LOG_FATAL, tag, buf);
     __builtin_trap(); /* trap so we have a chance to debug the situation */
-#endif
     /* NOTREACHED */
 }
 
