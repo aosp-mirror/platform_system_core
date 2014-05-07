@@ -22,8 +22,6 @@
 #include <sys/types.h>
 #include <sys/ptrace.h>
 
-#include <corkscrew/ptrace.h>
-
 #include <sys/user.h>
 
 #include "../utility.h"
@@ -37,7 +35,7 @@
 // If configured to do so, dump memory around *all* registers
 // for the crashing thread.
 void dump_memory_and_code(log_t* log, pid_t tid, int scope_flags) {
-  pt_regs_mips_t r;
+  pt_regs r;
   if (ptrace(PTRACE_GETREGS, tid, 0, &r)) {
     return;
   }
@@ -80,7 +78,7 @@ void dump_memory_and_code(log_t* log, pid_t tid, int scope_flags) {
 }
 
 void dump_registers(log_t* log, pid_t tid, int scope_flags) {
-  pt_regs_mips_t r;
+  pt_regs r;
   if(ptrace(PTRACE_GETREGS, tid, 0, &r)) {
     _LOG(log, scope_flags, "cannot get registers: %s\n", strerror(errno));
     return;
