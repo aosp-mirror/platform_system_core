@@ -343,7 +343,7 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
   }
   ssize_t actual = TEMP_FAILURE_RETRY(read(fd, scan_buffer, read_amount));
   if (actual != (ssize_t) read_amount) {
-    ALOGW("Zip: read %u failed: %s", read_amount, strerror(errno));
+    ALOGW("Zip: read %" PRIu32 " failed: %s", read_amount, strerror(errno));
     return kIoError;
   }
 
@@ -493,18 +493,18 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
   const uint8_t* ptr = cd_ptr;
   for (uint16_t i = 0; i < num_entries; i++) {
     if (get4LE(ptr) != kCDESignature) {
-      ALOGW("Zip: missed a central dir sig (at %d)", i);
+      ALOGW("Zip: missed a central dir sig (at %" PRIu16 ")", i);
       goto bail;
     }
 
     if (ptr + kCDELen > cd_ptr + cd_length) {
-      ALOGW("Zip: ran off the end (at %d)", i);
+      ALOGW("Zip: ran off the end (at %" PRIu16 ")", i);
       goto bail;
     }
 
     const off64_t local_header_offset = get4LE(ptr + kCDELocalOffset);
     if (local_header_offset >= archive->directory_offset) {
-      ALOGW("Zip: bad LFH offset %" PRId64 " at entry %d", local_header_offset, i);
+      ALOGW("Zip: bad LFH offset %" PRId64 " at entry %" PRIu16, local_header_offset, i);
       goto bail;
     }
 
@@ -523,12 +523,12 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
 
     ptr += kCDELen + file_name_length + extra_length + comment_length;
     if ((size_t)(ptr - cd_ptr) > cd_length) {
-      ALOGW("Zip: bad CD advance (%zu vs %zu) at entry %d",
-        (size_t) (ptr - cd_ptr), cd_length, i);
+      ALOGW("Zip: bad CD advance (%tu vs %zu) at entry %" PRIu16,
+          ptr - cd_ptr, cd_length, i);
       goto bail;
     }
   }
-  ALOGV("+++ zip good scan %d entries", num_entries);
+  ALOGV("+++ zip good scan %" PRIu16 " entries", num_entries);
 
   result = 0;
 
@@ -711,7 +711,8 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
     data->has_data_descriptor = 0;
     if (data->compressed_length != lfhCompLen || data->uncompressed_length != lfhUncompLen
         || data->crc32 != lfhCrc) {
-      ALOGW("Zip: size/crc32 mismatch. expected {%d, %d, %x}, was {%d, %d, %x}",
+      ALOGW("Zip: size/crc32 mismatch. expected {%" PRIu32 ", %" PRIu32
+        ", %" PRIx32 "}, was {%" PRIu32 ", %" PRIu32 ", %" PRIx32 "}",
         data->compressed_length, data->uncompressed_length, data->crc32,
         lfhCompLen, lfhUncompLen, lfhCrc);
       return kInconsistentInformation;
@@ -757,14 +758,14 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   }
 
   if ((off64_t)(data_offset + data->compressed_length) > cd_offset) {
-    ALOGW("Zip: bad compressed length in zip (%" PRId64 " + %zd > %" PRId64 ")",
+    ALOGW("Zip: bad compressed length in zip (%" PRId64 " + %" PRIu32 " > %" PRId64 ")",
       data_offset, data->compressed_length, cd_offset);
     return kInvalidOffset;
   }
 
   if (data->method == kCompressStored &&
     (off64_t)(data_offset + data->uncompressed_length) > cd_offset) {
-     ALOGW("Zip: bad uncompressed length in zip (%" PRId64 " + %d > %" PRId64 ")",
+     ALOGW("Zip: bad uncompressed length in zip (%" PRId64 " + %" PRIu32 " > %" PRId64 ")",
        data_offset, data->uncompressed_length, cd_offset);
      return kInvalidOffset;
   }
@@ -947,7 +948,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
   *crc_out = zstream.adler;
 
   if (zstream.total_out != uncompressed_length || compressed_length != 0) {
-    ALOGW("Zip: size mismatch on inflated file (%ld vs %u)",
+    ALOGW("Zip: size mismatch on inflated file (%lu vs %" PRIu32 ")",
         zstream.total_out, uncompressed_length);
     result = kInconsistentInformation;
     goto z_bail;
@@ -991,7 +992,7 @@ int32_t ExtractToMemory(ZipArchiveHandle handle,
   // TODO: Fix this check by passing the right flags to inflate2 so that
   // it calculates the CRC for us.
   if (entry->crc32 != crc && false) {
-    ALOGW("Zip: crc mismatch: expected %u, was %" PRIu64, entry->crc32, crc);
+    ALOGW("Zip: crc mismatch: expected %" PRIu32 ", was %" PRIu64, entry->crc32, crc);
     return kInconsistentInformation;
   }
 
