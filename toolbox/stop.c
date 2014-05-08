@@ -5,8 +5,6 @@
 
 int stop_main(int argc, char *argv[])
 {
-    char buf[1024];
-
     if(argc > 1) {
         property_set("ctl.stop", argv[1]);
     } else{

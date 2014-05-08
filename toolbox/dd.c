@@ -356,7 +356,7 @@ dd_in(void)
 			++st.in_full;
 
 		/* Handle full input blocks. */
-		} else if (n == in.dbsz) {
+		} else if (n == (int64_t)in.dbsz) {
 			in.dbcnt += in.dbrcnt = n;
 			++st.in_full;
 
@@ -521,7 +521,7 @@ dd_out(int force)
 			outp += nw;
 			st.bytes += nw;
 			if (nw == n) {
-				if (n != out.dbsz)
+				if (n != (int64_t)out.dbsz)
 					++st.out_part;
 				else
 					++st.out_full;
@@ -649,8 +649,8 @@ pos_in(void)
 void
 pos_out(void)
 {
-//	struct mtop t_op;
-	int cnt, n;
+/*	struct mtop t_op;        */
+	int64_t cnt, n;
 
 	/*
 	 * If not a tape, try seeking on the file.  Seeking on a pipe is
@@ -681,7 +681,7 @@ pos_out(void)
 	}
 
 	/* Read it. */
-	for (cnt = 0; cnt < out.offset; ++cnt) {
+	for (cnt = 0; cnt < (int64_t)out.offset; ++cnt) {
 		if ((n = read(out.fd, out.db, out.dbsz)) > 0)
 			continue;
 
@@ -705,8 +705,8 @@ pos_out(void)
 			/* NOTREACHED */
 		}
 
-		while (cnt++ < out.offset)
-			if ((n = bwrite(out.fd, out.db, out.dbsz)) != out.dbsz) {
+		while (cnt++ < (int64_t)out.offset)
+			if ((n = bwrite(out.fd, out.db, out.dbsz)) != (int64_t)out.dbsz) {
 				fprintf(stderr, "%s: cannot position "
 					"by writing: %s\n",
 					out.name, strerror(errno));
@@ -1153,7 +1153,7 @@ c_arg(const void *a, const void *b)
 	    ((const struct arg *)b)->name));
 }
 
-static long long strsuftoll(const char* name, const char* arg, int def, unsigned int max)
+static long long strsuftoll(const char* name, const char* arg, int def, unsigned long long max)
 {
 	long long result;
 	
@@ -1180,7 +1180,7 @@ static void
 f_count(char *arg)
 {
 
-	cpy_cnt = strsuftoll("block count", arg, 0, LLONG_MAX);
+	cpy_cnt = (uint64_t)strsuftoll("block count", arg, 0, 0xFFFFFFFFFFFFFFFFULL);
 	if (!cpy_cnt)
 		terminate(0);
 }
@@ -1228,14 +1228,14 @@ static void
 f_seek(char *arg)
 {
 
-	out.offset = strsuftoll("seek blocks", arg, 0, LLONG_MAX);
+	out.offset = (uint64_t)strsuftoll("seek blocks", arg, 0, 0xFFFFFFFFFFFFFFFFULL);
 }
 
 static void
 f_skip(char *arg)
 {
 
-	in.offset = strsuftoll("skip blocks", arg, 0, LLONG_MAX);
+	in.offset = (uint64_t)strsuftoll("skip blocks", arg, 0, 0xFFFFFFFFFFFFFFFFULL);
 }
 
 static void
