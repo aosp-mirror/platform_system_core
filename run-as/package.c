@@ -128,7 +128,9 @@ map_file(const char* filename, size_t* filesize)
     }
 
     /* Memory-map the file now */
-    address = TEMP_FAILURE_RETRY(mmap(NULL, length, PROT_READ, MAP_PRIVATE, fd, 0));
+    do {
+        address = mmap(NULL, length, PROT_READ, MAP_PRIVATE, fd, 0);
+    } while (address == MAP_FAILED && errno == EINTR);
     if (address == MAP_FAILED) {
         address = NULL;
         goto EXIT;
