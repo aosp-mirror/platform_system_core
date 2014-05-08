@@ -437,7 +437,7 @@ send_crash() {
   local curl_stderr="${TMP_DIR}/curl_stderr"
 
   set +e
-  curl "${url}" ${proxy:+--proxy "$proxy"} \
+  curl "${url}" -v ${proxy:+--proxy "$proxy"} \
     --capath "${RESTRICTED_CERTIFICATES_PATH}" --ciphers HIGH \
     -F "prod=${product}" \
     -F "ver=${version}" \
@@ -456,7 +456,7 @@ send_crash() {
   set -e
 
   if [ ${curl_result} -eq 0 ]; then
-    local id="$(cat ${report_id})"
+    local id="$(cat "${report_id}")"
     local product_name
     local timestamp="$(date +%s)"
     case ${product} in
@@ -479,7 +479,8 @@ send_crash() {
       "${timestamp}" "${id}" "${product_name}" >> "${CHROME_CRASH_LOG}"
     lecho "Crash report receipt ID ${id}"
   else
-    lecho "Crash sending failed with: $(cat ${curl_stderr})"
+    lecho "Crash sending failed with exit code ${curl_result}: " \
+      "$(cat "${curl_stderr}")"
   fi
 
   rm -f "${report_id}"
