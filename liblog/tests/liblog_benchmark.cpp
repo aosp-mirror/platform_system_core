@@ -99,7 +99,7 @@ static void BM_log_overhead(int iters) {
 }
 BENCHMARK(BM_log_overhead);
 
-static void caught_latency(int signum)
+static void caught_latency(int /*signum*/)
 {
     unsigned long long v = 0xDEADBEEFA55A5AA5ULL;
 
@@ -193,7 +193,7 @@ static void BM_log_latency(int iters) {
 }
 BENCHMARK(BM_log_latency);
 
-static void caught_delay(int signum)
+static void caught_delay(int /*signum*/)
 {
     unsigned long long v = 0xDEADBEEFA55A5AA6ULL;
 
