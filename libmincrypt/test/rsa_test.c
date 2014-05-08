@@ -1,5 +1,4 @@
-/* rsa_test.c
-**
+/*
 ** Copyright 2013, The Android Open Source Project
 **
 ** Redistribution and use in source and binary forms, with or without
@@ -25,13 +24,18 @@
 ** ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <stdio.h>
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/cdefs.h>
 
 #include "mincrypt/rsa.h"
 #include "mincrypt/sha.h"
+
+#ifndef __unused
+#define __unused __attribute__((unused))
+#endif
 
 // RSA test data taken from:
 //
@@ -791,7 +795,7 @@ unsigned char* parsehex(char* str, int* len) {
 }
 
 
-int main(int arg, char** argv) {
+int main(int arg __unused, char** argv __unused) {
 
     unsigned char hash[SHA_DIGEST_SIZE];
 

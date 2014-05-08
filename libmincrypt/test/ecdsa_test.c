@@ -24,14 +24,20 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h>
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/cdefs.h>
 
+#include "mincrypt/dsa_sig.h"
 #include "mincrypt/p256.h"
 #include "mincrypt/p256_ecdsa.h"
 #include "mincrypt/sha256.h"
+
+#ifndef __unused
+#define __unused __attribute__((__unused__))
+#endif
 
 /**
  * Messages signed using:
@@ -209,7 +215,7 @@ unsigned char* parsehex(char* str, int* len) {
     return result;
 }
 
-int main(int arg, char** argv) {
+int main(int arg __unused, char** argv __unused) {
 
     unsigned char hash_buf[SHA256_DIGEST_SIZE];
 
