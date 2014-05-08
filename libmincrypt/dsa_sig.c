@@ -26,6 +26,7 @@
 
 #include <string.h>
 
+#include "mincrypt/dsa_sig.h"
 #include "mincrypt/p256.h"
 
 /**
