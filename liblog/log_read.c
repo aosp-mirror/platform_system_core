@@ -23,6 +23,7 @@
 #define NOMINMAX /* for windows to suppress definition of min in stdlib.h */
 #include <stdlib.h>
 #include <string.h>
+#include <sys/cdefs.h>
 #include <unistd.h>
 
 #include <cutils/list.h>
@@ -34,7 +35,9 @@
 #define min(x,y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
 
 #define WEAK __attribute__((weak))
-#define UNUSED __attribute__((unused))
+#ifndef __unused
+#define __unused __attribute__((unused))
+#endif
 
 /* Private copy of ../libcutils/socket_local_client.c prevent library loops */
 
@@ -142,11 +145,10 @@ error:
  * Used by AndroidSocketImpl
  */
 int WEAK socket_local_client_connect(int fd, const char *name, int namespaceId,
-                                     int type UNUSED)
+                                     int type __unused)
 {
     struct sockaddr_un addr;
     socklen_t alen;
-    size_t namelen;
     int err;
 
     err = socket_make_sockaddr_un(name, namespaceId, &addr, &alen);
@@ -409,7 +411,7 @@ long android_logger_get_log_readable_size(struct logger *logger)
 /*
  * returns the logger version
  */
-int android_logger_get_log_version(struct logger *logger UNUSED)
+int android_logger_get_log_version(struct logger *logger __unused)
 {
     return 3;
 }
@@ -420,7 +422,6 @@ int android_logger_get_log_version(struct logger *logger UNUSED)
 ssize_t android_logger_get_statistics(struct logger_list *logger_list,
                                       char *buf, size_t len)
 {
-    struct listnode *node;
     struct logger *logger;
     char *cp = buf;
     size_t remaining = len;
@@ -440,13 +441,13 @@ ssize_t android_logger_get_statistics(struct logger_list *logger_list,
     return send_log_msg(NULL, NULL, buf, len);
 }
 
-ssize_t android_logger_get_prune_list(struct logger_list *logger_list UNUSED,
+ssize_t android_logger_get_prune_list(struct logger_list *logger_list __unused,
                                       char *buf, size_t len)
 {
     return send_log_msg(NULL, "getPruneList", buf, len);
 }
 
-int android_logger_set_prune_list(struct logger_list *logger_list UNUSED,
+int android_logger_set_prune_list(struct logger_list *logger_list __unused,
                                   char *buf, size_t len)
 {
     const char cmd[] = "setPruneList ";
@@ -512,9 +513,7 @@ struct logger_list *android_logger_list_alloc_time(int mode,
 struct logger *android_logger_open(struct logger_list *logger_list,
                                    log_id_t id)
 {
-    struct listnode *node;
     struct logger *logger;
-    char *n;
 
     if (!logger_list || (id >= LOG_ID_MAX)) {
         goto err;
@@ -561,7 +560,7 @@ struct logger_list *android_logger_list_open(log_id_t id,
     return logger_list;
 }
 
-static void caught_signal(int signum UNUSED)
+static void caught_signal(int signum __unused)
 {
 }
 

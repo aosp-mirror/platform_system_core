@@ -21,11 +21,12 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/cdefs.h>
+#include <sys/ioctl.h>
+
 #include <cutils/list.h>
 #include <log/log.h>
 #include <log/logger.h>
-
-#include <sys/ioctl.h>
 
 #define __LOGGERIO     0xAE
 
@@ -51,7 +52,9 @@ typedef char bool;
          logger != node_to_item(&(logger_list)->node, struct logger, node); \
          logger = node_to_item((logger)->node.next, struct logger, node))
 
-#define UNUSED __attribute__((unused))
+#ifndef __unused
+#define __unused __attribute__((unused))
+#endif
 
 /* In the future, we would like to make this list extensible */
 static const char *LOG_NAME[LOG_ID_MAX] = {
@@ -233,8 +236,8 @@ long android_logger_get_log_size(struct logger *logger)
     return logger_ioctl(logger, LOGGER_GET_LOG_BUF_SIZE, O_RDWR);
 }
 
-int android_logger_set_log_size(struct logger *logger UNUSED,
-                                unsigned long size UNUSED)
+int android_logger_set_log_size(struct logger *logger __unused,
+                                unsigned long size __unused)
 {
     return -ENOTSUP;
 }
@@ -262,21 +265,21 @@ int android_logger_get_log_version(struct logger *logger)
  */
 static const char unsupported[] = "18\nNot Supported\n\f";
 
-ssize_t android_logger_get_statistics(struct logger_list *logger_list UNUSED,
+ssize_t android_logger_get_statistics(struct logger_list *logger_list __unused,
                                       char *buf, size_t len)
 {
     strncpy(buf, unsupported, len);
     return -ENOTSUP;
 }
 
-ssize_t android_logger_get_prune_list(struct logger_list *logger_list UNUSED,
+ssize_t android_logger_get_prune_list(struct logger_list *logger_list __unused,
                                       char *buf, size_t len)
 {
     strncpy(buf, unsupported, len);
     return -ENOTSUP;
 }
 
-int android_logger_set_prune_list(struct logger_list *logger_list UNUSED,
+int android_logger_set_prune_list(struct logger_list *logger_list __unused,
                                   char *buf, size_t len)
 {
     static const char unsupported_error[] = "Unsupported";
@@ -302,7 +305,7 @@ struct logger_list *android_logger_list_alloc(int mode,
 }
 
 struct logger_list *android_logger_list_alloc_time(int mode,
-                                                   log_time start UNUSED,
+                                                   log_time start __unused,
                                                    pid_t pid)
 {
     return android_logger_list_alloc(mode, 0, pid);
