@@ -85,7 +85,6 @@ static RSAPublicKey *load_key(char *path)
 
 static int verify_table(char *signature, char *table, int table_length)
 {
-    int fd;
     RSAPublicKey *key;
     uint8_t hash_buf[SHA_DIGEST_SIZE];
     int retval = -1;
