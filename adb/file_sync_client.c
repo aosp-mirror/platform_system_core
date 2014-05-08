@@ -459,10 +459,10 @@ fail:
     return -1;
 }
 
-static int mkdirs(char *name)
+static int mkdirs(const char *name)
 {
     int ret;
-    char *x = name + 1;
+    char *x = (char *)name + 1;
 
     for(;;) {
         x = adb_dirstart(x);
@@ -524,7 +524,7 @@ int sync_recv(int fd, const char *rpath, const char *lpath, int show_progress)
 
     if((id == ID_DATA) || (id == ID_DONE)) {
         adb_unlink(lpath);
-        mkdirs((char *)lpath);
+        mkdirs(lpath);
         lfd = adb_creat(lpath, 0644);
         if(lfd < 0) {
             fprintf(stderr,"cannot create '%s': %s\n", lpath, strerror(errno));

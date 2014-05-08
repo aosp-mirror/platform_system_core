@@ -408,7 +408,7 @@ int adb_download_buffer(const char *service, const char *fn, const void* data, i
     }
 
     int opt = CHUNK_SIZE;
-    opt = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &opt, sizeof(opt));
+    opt = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
 
     total = sz;
     ptr = data;
@@ -683,10 +683,10 @@ static int logcat(transport_type transport, char* serial, int argc, char **argv)
     return 0;
 }
 
-static int mkdirs(char *path)
+static int mkdirs(const char *path)
 {
     int ret;
-    char *x = path + 1;
+    char *x = (char *)path + 1;
 
     for(;;) {
         x = adb_dirstart(x);
@@ -729,7 +729,7 @@ static int backup(int argc, char** argv) {
     if (argc < 2) return usage();
 
     adb_unlink(filename);
-    mkdirs((char *)filename);
+    mkdirs(filename);
     outFd = adb_creat(filename, 0640);
     if (outFd < 0) {
         fprintf(stderr, "adb: unable to open file %s\n", filename);
