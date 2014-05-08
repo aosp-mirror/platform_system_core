@@ -164,7 +164,7 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
 static unsigned signaled;
 log_time signal_time;
 
-static void caught_blocking(int signum)
+static void caught_blocking(int /*signum*/)
 {
     unsigned long long v = 0xDEADBEEFA55A0000ULL;
 
