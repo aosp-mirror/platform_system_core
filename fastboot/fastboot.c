@@ -92,8 +92,8 @@ enum fb_buffer_type {
 
 struct fastboot_buffer {
     enum fb_buffer_type type;
-    size_t sz;
     void *data;
+    unsigned int sz;
 };
 
 static struct {
@@ -152,7 +152,7 @@ char *find_item(const char *item, const char *product)
     return strdup(path);
 }
 
-static ssize_t file_size(int fd)
+static int64_t file_size(int fd)
 {
     struct stat st;
     int ret;
@@ -162,12 +162,15 @@ static ssize_t file_size(int fd)
     return ret ? -1 : st.st_size;
 }
 
-static void *load_fd(int fd, size_t *_sz)
+static void *load_fd(int fd, unsigned *_sz)
 {
-    char *data = NULL;
-    ssize_t sz = file_size(fd);
+    char *data;
+    int sz;
     int errno_tmp;
 
+    data = 0;
+
+    sz = file_size(fd);
     if (sz < 0) {
         goto oops;
     }
@@ -189,7 +192,7 @@ oops:
     return 0;
 }
 
-static void *load_file(const char *fn, size_t *_sz)
+static void *load_file(const char *fn, unsigned *_sz)
 {
     int fd;
 
@@ -378,34 +381,34 @@ void *load_bootable_image(const char *kernel, const char *ramdisk,
     return bdata;
 }
 
-void *unzip_file(zipfile_t zip, const char *name, size_t *sz)
+void *unzip_file(zipfile_t zip, const char *name, unsigned *sz)
 {
     void *data;
-    zipentry_t entry = lookup_zipentry(zip, name);
-    size_t zentrysz;
-    size_t datasz;
+    zipentry_t entry;
+    unsigned datasz;
 
+    entry = lookup_zipentry(zip, name);
     if (entry == NULL) {
         fprintf(stderr, "archive does not contain '%s'\n", name);
-        return NULL;
+        return 0;
     }
 
-    zentrysz = get_zipentry_size(entry);
+    *sz = get_zipentry_size(entry);
 
-    datasz = zentrysz * 1.001;
+    datasz = *sz * 1.001;
     data = malloc(datasz);
 
-    if(data == NULL) {
-        fprintf(stderr, "failed to allocate %zu bytes\n", datasz);
-        return NULL;
+    if(data == 0) {
+        fprintf(stderr, "failed to allocate %d bytes\n", *sz);
+        return 0;
     }
 
     if (decompress_zipentry(entry, data, datasz)) {
         fprintf(stderr, "failed to unzip '%s' from archive\n", name);
         free(data);
-        return NULL;
+        return 0;
     }
-    *sz = zentrysz;
+
     return data;
 }
 
@@ -413,25 +416,24 @@ static int unzip_to_file(zipfile_t zip, char *name)
 {
     int fd;
     char *data;
-    size_t sz;
+    unsigned sz;
 
     fd = fileno(tmpfile());
     if (fd < 0) {
-        return fd;
-    }
-
-    data = unzip_file(zip, name, &sz);
-    if (data == NULL) {
         return -1;
     }
 
-    if (write(fd, data, sz) != (ssize_t)sz) {
+    data = unzip_file(zip, name, &sz);
+    if (data == 0) {
+        return -1;
+    }
+
+    if (write(fd, data, sz) != sz) {
         fd = -1;
-    } else {
-        lseek(fd, 0, SEEK_SET);
     }
 
     free(data);
+    lseek(fd, 0, SEEK_SET);
     return fd;
 }
 
@@ -512,10 +514,11 @@ static int setup_requirement_line(char *name)
     return 0;
 }
 
-static void setup_requirements(char *data, size_t sz)
+static void setup_requirements(char *data, unsigned sz)
 {
-    char *s = data;
+    char *s;
 
+    s = data;
     while (sz-- > 0) {
         if(*s == '\n') {
             *s++ = 0;
@@ -625,15 +628,14 @@ static int needs_erase(const char *part)
 static int load_buf_fd(usb_handle *usb, int fd,
         struct fastboot_buffer *buf)
 {
-    ssize_t f_size = file_size(fd);
-    void *data = NULL;
-    int64_t limit;
     int64_t sz64;
+    void *data;
+    int64_t limit;
 
-    if (f_size < 0) {
-        return f_size;
-    } else {
-        sz64 = f_size;
+
+    sz64 = file_size(fd);
+    if (sz64 < 0) {
+        return -1;
     }
 
     lseek(fd, 0, SEEK_SET);
@@ -646,12 +648,12 @@ static int load_buf_fd(usb_handle *usb, int fd,
         buf->type = FB_BUFFER_SPARSE;
         buf->data = s;
     } else {
-        size_t sz;
+        unsigned int sz;
         data = load_fd(fd, &sz);
-        if (data == NULL) return -1;
+        if (data == 0) return -1;
         buf->type = FB_BUFFER;
-        buf->sz = sz;
         buf->data = data;
+        buf->sz = sz;
     }
 
     return 0;
@@ -702,11 +704,10 @@ void do_flash(usb_handle *usb, const char *pname, const char *fname)
 
 void do_update_signature(zipfile_t zip, char *fn)
 {
-    size_t sz;
-    void *data = unzip_file(zip, fn, &sz);
-    if (data == NULL) {
-        die("can't unzip '%s'", fn);
-    }
+    void *data;
+    unsigned sz;
+    data = unzip_file(zip, fn, &sz);
+    if (data == 0) return;
     fb_queue_download("signature", data, sz);
     fb_queue_command("signature", "installing signature");
 }
@@ -716,12 +717,12 @@ void do_update(usb_handle *usb, char *fn, int erase_first)
     void *zdata;
     unsigned zsize;
     void *data;
-    size_t sz = 0;
+    unsigned sz;
     zipfile_t zip;
     int fd;
     int rc;
     struct fastboot_buffer buf;
-    size_t i;
+    int i;
 
     queue_info_dump();
 
@@ -734,11 +735,11 @@ void do_update(usb_handle *usb, char *fn, int erase_first)
     if(zip == 0) die("failed to access zipdata in '%s'");
 
     data = unzip_file(zip, "android-info.txt", &sz);
-    if (data == NULL) {
+    if (data == 0) {
         char *tmp;
             /* fallback for older zipfiles */
         data = unzip_file(zip, "android-product.txt", &sz);
-        if ((data == NULL) || (sz < 1)) {
+        if ((data == 0) || (sz < 1)) {
             die("update package has no android-info.txt or android-product.txt");
         }
         tmp = malloc(sz + 128);
@@ -774,7 +775,7 @@ void do_update(usb_handle *usb, char *fn, int erase_first)
 void do_send_signature(char *fn)
 {
     void *data;
-    size_t sz;
+    unsigned sz;
     char *xtn;
 
     xtn = strrchr(fn, '.');
@@ -793,9 +794,9 @@ void do_flashall(usb_handle *usb, int erase_first)
 {
     char *fname;
     void *data;
-    size_t sz;
+    unsigned sz;
     struct fastboot_buffer buf;
-    size_t i;
+    int i;
 
     queue_info_dump();
 
@@ -977,7 +978,7 @@ int main(int argc, char **argv)
     int wants_reboot_bootloader = 0;
     int erase_first = 1;
     void *data;
-    size_t sz;
+    unsigned sz;
     int status;
     int c;
     int r;

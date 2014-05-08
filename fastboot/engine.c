@@ -66,7 +66,7 @@ struct Action
     char cmd[CMD_SIZE];
     const char *prod;
     void *data;
-    size_t size;
+    unsigned size;
 
     const char *msg;
     int (*func)(Action *a, int status, char *resp);
@@ -169,7 +169,7 @@ void fb_queue_erase(const char *ptn)
     a->msg = mkmsg("erasing '%s'", ptn);
 }
 
-void fb_queue_flash(const char *ptn, void *data, size_t sz)
+void fb_queue_flash(const char *ptn, void *data, unsigned sz)
 {
     Action *a;
 
@@ -182,7 +182,7 @@ void fb_queue_flash(const char *ptn, void *data, size_t sz)
     a->msg = mkmsg("writing '%s'", ptn);
 }
 
-void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, size_t sz)
+void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, unsigned sz)
 {
     Action *a;
 
