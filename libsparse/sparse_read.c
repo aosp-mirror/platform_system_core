@@ -180,22 +180,16 @@ static int process_skip_chunk(struct sparse_file *s, unsigned int chunk_size,
 		int fd __unused, unsigned int blocks,
 		unsigned int block __unused, uint32_t *crc32)
 {
-	int ret;
-	int chunk;
-	int64_t len = (int64_t)blocks * s->block_size;
-	uint32_t fill_val;
-	uint32_t *fillbuf;
-	unsigned int i;
-
 	if (chunk_size != 0) {
 		return -EINVAL;
 	}
 
 	if (crc32) {
+	        int64_t len = (int64_t)blocks * s->block_size;
 		memset(copybuf, 0, COPY_BUF_SIZE);
 
 		while (len) {
-			chunk = min(len, COPY_BUF_SIZE);
+			int chunk = min(len, COPY_BUF_SIZE);
 			*crc32 = sparse_crc32(*crc32, copybuf, chunk);
 			len -= chunk;
 		}
@@ -367,7 +361,6 @@ static int sparse_file_read_normal(struct sparse_file *s, int fd)
 	int64_t remain = s->len;
 	int64_t offset = 0;
 	unsigned int to_read;
-	char *ptr;
 	unsigned int i;
 	bool sparse_block;
 

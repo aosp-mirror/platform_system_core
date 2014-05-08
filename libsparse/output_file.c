@@ -31,8 +31,8 @@
 
 #include "defs.h"
 #include "output_file.h"
-#include "sparse_format.h"
 #include "sparse_crc32.h"
+#include "sparse_format.h"
 
 #ifndef USE_MINGW
 #include <sys/mman.h>
@@ -295,7 +295,6 @@ static int callback_file_pad(struct output_file *out __unused, int64_t len __unu
 
 static int callback_file_write(struct output_file *out, void *data, int len)
 {
-	int ret;
 	struct output_file_callback *outc = to_output_file_callback(out);
 
 	return outc->write(outc->priv, data, len);
@@ -341,7 +340,7 @@ int read_all(int fd, void *buf, size_t len)
 static int write_sparse_skip_chunk(struct output_file *out, int64_t skip_len)
 {
 	chunk_header_t chunk_header;
-	int ret, chunk;
+	int ret;
 
 	if (skip_len % out->block_size) {
 		error("don't care size %"PRIi64" is not a multiple of the block size %u",
@@ -368,9 +367,8 @@ static int write_sparse_fill_chunk(struct output_file *out, unsigned int len,
 		uint32_t fill_val)
 {
 	chunk_header_t chunk_header;
-	int rnd_up_len, zero_len, count;
+	int rnd_up_len, count;
 	int ret;
-	unsigned int i;
 
 	/* Round up the fill length to a multiple of the block size */
 	rnd_up_len = ALIGN(len, out->block_size);
@@ -536,8 +534,6 @@ static struct sparse_file_ops normal_file_ops = {
 
 void output_file_close(struct output_file *out)
 {
-	int ret;
-
 	out->sparse_ops->write_end_chunk(out);
 	out->ops->close(out);
 }
