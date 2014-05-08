@@ -408,10 +408,6 @@ parse_positive_decimal(const char** pp, const char* end)
         value = -1;
     }
     return value;
-
-BAD:
-    *pp = p;
-    return -1;
 }
 
 /* Read the system's package database and extract information about
