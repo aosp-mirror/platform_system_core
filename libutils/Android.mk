@@ -70,7 +70,6 @@ endif
 LOCAL_MODULE:= libutils
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(host_commonCflags)
-LOCAL_LDLIBS += $(host_commonLdlibs)
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
@@ -84,7 +83,6 @@ endif
 LOCAL_MODULE:= lib64utils
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(host_commonCflags) -m64
-LOCAL_LDLIBS += $(host_commonLdlibs)
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
@@ -99,10 +97,6 @@ LOCAL_SRC_FILES:= \
 	Looper.cpp \
 	Trace.cpp
 
-ifeq ($(TARGET_OS),linux)
-LOCAL_LDLIBS += -lrt -ldl
-endif
-
 ifeq ($(TARGET_ARCH),mips)
 LOCAL_CFLAGS += -DALIGN_DOUBLE
 endif
@@ -110,8 +104,6 @@ endif
 LOCAL_C_INCLUDES += \
 		bionic/libc/private \
 		external/zlib
-
-LOCAL_LDLIBS += -lpthread
 
 LOCAL_STATIC_LIBRARIES := \
 	libcutils

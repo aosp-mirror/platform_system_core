@@ -105,10 +105,8 @@ backtrace_test_src_files := \
 	GetPss.cpp \
 	thread_utils.c \
 
-backtrace_test_ldlibs := \
-	-lpthread \
-
 backtrace_test_ldlibs_host := \
+	-lpthread \
 	-lrt \
 
 backtrace_test_shared_libraries := \
