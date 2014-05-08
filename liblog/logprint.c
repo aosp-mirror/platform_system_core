@@ -17,14 +17,14 @@
 
 #define _GNU_SOURCE /* for asprintf */
 
-#include <ctype.h>
-#include <stdio.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-#include <assert.h>
 #include <arpa/inet.h>
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <log/logd.h>
 #include <log/logprint.h>
@@ -52,15 +52,7 @@ static FilterInfo * filterinfo_new(const char * tag, android_LogPriority pri)
     return p_ret;
 }
 
-static void filterinfo_free(FilterInfo *p_info)
-{
-    if (p_info == NULL) {
-        return;
-    }
-
-    free(p_info->mTag);
-    p_info->mTag = NULL;
-}
+/* balance to above, filterinfo_free left unimplemented */
 
 /*
  * Note: also accepts 0-9 priorities
@@ -137,23 +129,6 @@ static android_LogPriority filterPriForTag(
     }
 
     return p_format->global_pri;
-}
-
-/** for debugging */
-static void dumpFilters(AndroidLogFormat *p_format)
-{
-    FilterInfo *p_fi;
-
-    for (p_fi = p_format->filters ; p_fi != NULL ; p_fi = p_fi->p_next) {
-        char cPri = filterPriToChar(p_fi->mPri);
-        if (p_fi->mPri == ANDROID_LOG_DEFAULT) {
-            cPri = filterPriToChar(p_format->global_pri);
-        }
-        fprintf(stderr,"%s:%c\n", p_fi->mTag, cPri);
-    }
-
-    fprintf(stderr,"*:%c\n", filterPriToChar(p_format->global_pri));
-
 }
 
 /**
@@ -234,7 +209,6 @@ AndroidLogPrintFormat android_log_formatFromString(const char * formatString)
 int android_log_addFilterRule(AndroidLogFormat *p_format,
         const char *filterExpression)
 {
-    size_t i=0;
     size_t tagNameLength;
     android_LogPriority pri = ANDROID_LOG_DEFAULT;
 
@@ -718,7 +692,6 @@ char *android_log_formatLogLine (
 #endif
     struct tm* ptm;
     char timeBuf[32];
-    char headerBuf[128];
     char prefixBuf[128], suffixBuf[128];
     char priChar;
     int prefixSuffixIsHeaderFooter = 0;
@@ -817,7 +790,6 @@ char *android_log_formatLogLine (
     /* the following code is tragically unreadable */
 
     size_t numLines;
-    size_t i;
     char *p;
     size_t bufferSize;
     const char *pm;
