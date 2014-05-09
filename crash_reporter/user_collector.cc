@@ -192,6 +192,8 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
     LOG(ERROR) << "Could not even get log directory; out of space?";
     return;
   }
+  AddCrashMetaData("sig", kCollectionErrorSignature);
+  AddCrashMetaData("error_type", GetErrorTypeSignature(error_type));
   std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
   std::string error_log = chromeos::GetLog();
   FilePath diag_log_path = GetCrashPath(crash_path, dump_basename, "diaglog");
@@ -210,9 +212,10 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
   // We must use WriteNewFile instead of file_util::WriteFile as we do
   // not want to write with root access to a symlink that an attacker
   // might have created.
-  WriteNewFile(log_path, error_log.data(), error_log.length());
-  AddCrashMetaData("sig", kCollectionErrorSignature);
-  AddCrashMetaData("error_type", GetErrorTypeSignature(error_type));
+  if (WriteNewFile(log_path, error_log.data(), error_log.length()) < 0) {
+    LOG(ERROR) << "Error writing new file " << log_path.value();
+    return;
+  }
   WriteCrashMetaData(meta_path, exec, log_path.value());
 }
 
