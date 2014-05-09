@@ -338,7 +338,7 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
   const off64_t search_start = file_length - read_amount;
 
   if (lseek64(fd, search_start, SEEK_SET) != search_start) {
-    ALOGW("Zip: seek %" PRId64 " failed: %s", search_start, strerror(errno));
+    ALOGW("Zip: seek %" PRId64 " failed: %s", (int64_t)search_start, strerror(errno));
     return kIoError;
   }
   ssize_t actual = TEMP_FAILURE_RETRY(read(fd, scan_buffer, read_amount));
@@ -381,7 +381,7 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
 
   if (dir_offset + dir_size > eocd_offset) {
     ALOGW("Zip: bad offsets (dir %" PRId64 ", size %" PRId64 ", eocd %" PRId64 ")",
-        dir_offset, dir_size, eocd_offset);
+        (int64_t)dir_offset, (int64_t)dir_size, (int64_t)eocd_offset);
     return kInvalidOffset;
   }
   if (num_entries == 0) {
@@ -390,7 +390,7 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
   }
 
   ALOGV("+++ num_entries=%d dir_size=%" PRId64 " dir_offset=%" PRId64,
-        num_entries, dir_size, dir_offset);
+        num_entries, (int64_t)dir_size, (int64_t)dir_offset);
 
   /*
    * It all looks good.  Create a mapping for the CD, and set the fields
@@ -766,7 +766,7 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   if (data->method == kCompressStored &&
     (off64_t)(data_offset + data->uncompressed_length) > cd_offset) {
      ALOGW("Zip: bad uncompressed length in zip (%" PRId64 " + %" PRIu32 " > %" PRId64 ")",
-       data_offset, data->uncompressed_length, cd_offset);
+       (int64_t)data_offset, data->uncompressed_length, (int64_t)cd_offset);
      return kInvalidOffset;
   }
 
