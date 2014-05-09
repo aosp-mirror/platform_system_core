@@ -19,7 +19,6 @@
 
 #include <inttypes.h>
 #include <stdint.h>
-#include <ucontext.h>
 
 #include <string>
 #include <vector>
@@ -47,6 +46,9 @@ struct backtrace_frame_data_t {
 
 // Forward declarations.
 class BacktraceImpl;
+
+struct ucontext;
+typedef ucontext ucontext_t;
 
 class Backtrace {
 public:
