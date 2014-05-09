@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <sys/ucontext.h>
 #include <sys/types.h>
+#include <ucontext.h>
 
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>

@@ -21,7 +21,6 @@
 #include <backtrace/BacktraceMap.h>
 
 #include <sys/types.h>
-#include <ucontext.h>
 
 class BacktraceImpl {
 public:

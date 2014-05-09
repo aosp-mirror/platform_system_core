@@ -19,6 +19,7 @@
 
 #include <sys/types.h>
 #include <string.h>
+#include <ucontext.h>
 
 #include <libunwind.h>
 #include <libunwind-ptrace.h>
