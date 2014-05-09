@@ -308,7 +308,11 @@ send_crash() {
       -F "sig=${sig}" \
       -F "sig2=${sig}"
   fi
-  if [ "${log}" != "undefined" ]; then
+  if [ -r "${report_payload}" ]; then
+    set -- "$@" \
+      -F "upload_file_${kind}=@${report_payload}"
+  fi
+  if [ "${log}" != "undefined" -a -r "${log}" ]; then
     set -- "$@" \
       -F "log=@${log}"
   fi
@@ -325,8 +329,14 @@ send_crash() {
       # Product & version are handled separately.
       upload_var_prod) ;;
       upload_var_ver) ;;
-      upload_var_*) set -- "$@" -F "${upload_prefix}${k#upload_var_}=${v}" ;;
-      upload_file_*) set -- "$@" -F "${upload_prefix}${k#upload_file_}=@${v}" ;;
+      upload_var_*)
+        set -- "$@" -F "${upload_prefix}${k#upload_var_}=${v}"
+        ;;
+      upload_file_*)
+        if [ -r "${v}" ]; then
+          set -- "$@" -F "${upload_prefix}${k#upload_file_}=@${v}"
+        fi
+        ;;
     esac
   done
 
@@ -430,7 +440,6 @@ send_crash() {
     --capath "${RESTRICTED_CERTIFICATES_PATH}" --ciphers HIGH \
     -F "prod=${product}" \
     -F "ver=${version}" \
-    -F "upload_file_${kind}=@${report_payload}" \
     -F "board=${board}" \
     -F "hwclass=${hwclass}" \
     -F "exec_name=${exec_name}" \
