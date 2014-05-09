@@ -45,7 +45,12 @@ UnwindPtrace::~UnwindPtrace() {
   }
 }
 
-bool UnwindPtrace::Unwind(size_t num_ignore_frames) {
+bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
+  if (ucontext) {
+    BACK_LOGW("Unwinding from a specified context not supported yet.");
+    return false;
+  }
+
   addr_space_ = unw_create_addr_space(&_UPT_accessors, 0);
   if (!addr_space_) {
     BACK_LOGW("unw_create_addr_space failed.");

@@ -16,10 +16,15 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <limits.h>
+#include <linux/futex.h>
 #include <pthread.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/syscall.h>
+#include <sys/time.h>
 #include <sys/types.h>
+#include <ucontext.h>
 
 #include <cutils/atomic.h>
 
@@ -27,190 +32,173 @@
 #include "BacktraceThread.h"
 #include "thread_utils.h"
 
+static inline int futex(volatile int* uaddr, int op, int val, const struct timespec* ts, volatile int* uaddr2, int val3) {
+  return syscall(__NR_futex, uaddr, op, val, ts, uaddr2, val3);
+}
+
 //-------------------------------------------------------------------------
 // ThreadEntry implementation.
 //-------------------------------------------------------------------------
-static ThreadEntry* g_list = NULL;
-static pthread_mutex_t g_entry_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t g_sigaction_mutex = PTHREAD_MUTEX_INITIALIZER;
+ThreadEntry* ThreadEntry::list_ = NULL;
+pthread_mutex_t ThreadEntry::list_mutex_ = PTHREAD_MUTEX_INITIALIZER;
 
-ThreadEntry::ThreadEntry(
-    BacktraceThreadInterface* intf, pid_t pid, pid_t tid, size_t num_ignore_frames)
-    : thread_intf(intf), pid(pid), tid(tid), next(NULL), prev(NULL),
-      state(STATE_WAITING), num_ignore_frames(num_ignore_frames) {
+// Assumes that ThreadEntry::list_mutex_ has already been locked before
+// creating a ThreadEntry object.
+ThreadEntry::ThreadEntry(pid_t pid, pid_t tid)
+    : pid_(pid), tid_(tid), futex_(0), ref_count_(1), mutex_(PTHREAD_MUTEX_INITIALIZER), next_(ThreadEntry::list_), prev_(NULL) {
+  // Add ourselves to the list.
+  if (ThreadEntry::list_) {
+    ThreadEntry::list_->prev_ = this;
+  }
+  ThreadEntry::list_ = this;
 }
 
-ThreadEntry::~ThreadEntry() {
-  pthread_mutex_lock(&g_entry_mutex);
-  if (g_list == this) {
-    g_list = next;
+ThreadEntry* ThreadEntry::Get(pid_t pid, pid_t tid, bool create) {
+  pthread_mutex_lock(&ThreadEntry::list_mutex_);
+  ThreadEntry* entry = list_;
+  while (entry != NULL) {
+    if (entry->Match(pid, tid)) {
+      break;
+    }
+    entry = entry->next_;
+  }
+
+  if (!entry) {
+    if (create) {
+      entry = new ThreadEntry(pid, tid);
+    }
   } else {
-    if (next) {
-      next->prev = prev;
-    }
-    prev->next = next;
+    entry->ref_count_++;
   }
-  pthread_mutex_unlock(&g_entry_mutex);
-
-  next = NULL;
-  prev = NULL;
-}
-
-ThreadEntry* ThreadEntry::AddThreadToUnwind(
-    BacktraceThreadInterface* intf, pid_t pid, pid_t tid, size_t num_ignore_frames) {
-  ThreadEntry* entry = new ThreadEntry(intf, pid, tid, num_ignore_frames);
-
-  pthread_mutex_lock(&g_entry_mutex);
-  ThreadEntry* cur_entry = g_list;
-  while (cur_entry != NULL) {
-    if (cur_entry->Match(pid, tid)) {
-      // There is already an entry for this pid/tid, this is bad.
-      BACK_LOGW("Entry for pid %d tid %d already exists.", pid, tid);
-
-      pthread_mutex_unlock(&g_entry_mutex);
-      return NULL;
-    }
-    cur_entry = cur_entry->next;
-  }
-
-  // Add the entry to the list.
-  entry->next = g_list;
-  if (g_list) {
-    g_list->prev = entry;
-  }
-  g_list = entry;
-  pthread_mutex_unlock(&g_entry_mutex);
+  pthread_mutex_unlock(&ThreadEntry::list_mutex_);
 
   return entry;
+}
+
+void ThreadEntry::Remove(ThreadEntry* entry) {
+  pthread_mutex_unlock(&entry->mutex_);
+
+  pthread_mutex_lock(&ThreadEntry::list_mutex_);
+  if (--entry->ref_count_ == 0) {
+    delete entry;
+  }
+  pthread_mutex_unlock(&ThreadEntry::list_mutex_);
+}
+
+// Assumes that ThreadEntry::list_mutex_ has already been locked before
+// deleting a ThreadEntry object.
+ThreadEntry::~ThreadEntry() {
+  if (list_ == this) {
+    list_ = next_;
+  } else {
+    if (next_) {
+      next_->prev_ = prev_;
+    }
+    prev_->next_ = next_;
+  }
+
+  next_ = NULL;
+  prev_ = NULL;
+}
+
+void ThreadEntry::Wait(int value) {
+  timespec ts;
+  ts.tv_sec = 10;
+  ts.tv_nsec = 0;
+  errno = 0;
+  futex(&futex_, FUTEX_WAIT, value, &ts, NULL, 0);
+  if (errno != 0 && errno != EWOULDBLOCK) {
+    BACK_LOGW("futex wait failed, futex = %d: %s", futex_, strerror(errno));
+  }
+}
+
+void ThreadEntry::Wake() {
+  futex_++;
+  futex(&futex_, FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
 }
 
 //-------------------------------------------------------------------------
 // BacktraceThread functions.
 //-------------------------------------------------------------------------
-static void SignalHandler(int n __attribute__((unused)), siginfo_t* siginfo,
-                          void* sigcontext) {
-  if (pthread_mutex_lock(&g_entry_mutex) == 0) {
-    pid_t pid = getpid();
-    pid_t tid = gettid();
-    ThreadEntry* cur_entry = g_list;
-    while (cur_entry) {
-      if (cur_entry->Match(pid, tid)) {
-        break;
-      }
-      cur_entry = cur_entry->next;
-    }
-    pthread_mutex_unlock(&g_entry_mutex);
-    if (!cur_entry) {
-      BACK_LOGW("Unable to find pid %d tid %d information", pid, tid);
-      return;
-    }
+static pthread_mutex_t g_sigaction_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-    if (android_atomic_acquire_cas(STATE_WAITING, STATE_DUMPING, &cur_entry->state) == 0) {
-      cur_entry->thread_intf->ThreadUnwind(siginfo, sigcontext,
-                                           cur_entry->num_ignore_frames);
-    }
-    android_atomic_release_store(STATE_DONE, &cur_entry->state);
+static void SignalHandler(int, siginfo_t*, void* sigcontext) {
+  ThreadEntry* entry = ThreadEntry::Get(getpid(), gettid(), false);
+  if (!entry) {
+    BACK_LOGW("Unable to find pid %d tid %d information", getpid(), gettid());
+    return;
   }
+
+  entry->CopyUcontext(reinterpret_cast<ucontext_t*>(sigcontext));
+
+  // Indicate the ucontext is now valid.
+  entry->Wake();
+
+  // Pause the thread until the unwind is complete. This avoids having
+  // the thread run ahead causing problems.
+  entry->Wait(1);
+
+  ThreadEntry::Remove(entry);
 }
 
-BacktraceThread::BacktraceThread(
-    BacktraceImpl* impl, BacktraceThreadInterface* thread_intf, pid_t tid,
-    BacktraceMap* map)
-    : BacktraceCurrent(impl, map), thread_intf_(thread_intf) {
+BacktraceThread::BacktraceThread(BacktraceImpl* impl, pid_t tid, BacktraceMap* map)
+    : BacktraceCurrent(impl, map) {
   tid_ = tid;
 }
 
 BacktraceThread::~BacktraceThread() {
 }
 
-void BacktraceThread::FinishUnwind() {
-  for (std::vector<backtrace_frame_data_t>::iterator it = frames_.begin();
-       it != frames_.end(); ++it) {
-    it->map = FindMap(it->pc);
-
-    it->func_offset = 0;
-    it->func_name = GetFunctionName(it->pc, &it->func_offset);
-  }
-}
-
-bool BacktraceThread::TriggerUnwindOnThread(ThreadEntry* entry) {
-  entry->state = STATE_WAITING;
-
-  if (tgkill(Pid(), Tid(), THREAD_SIGNAL) != 0) {
-    BACK_LOGW("tgkill failed %s", strerror(errno));
-    return false;
-  }
-
-  // Allow up to ten seconds for the dump to start.
-  int wait_millis = 10000;
-  int32_t state;
-  while (true) {
-    state = android_atomic_acquire_load(&entry->state);
-    if (state != STATE_WAITING) {
-      break;
-    }
-    if (wait_millis--) {
-      usleep(1000);
-    } else {
-      break;
-    }
-  }
-
-  bool cancelled = false;
-  if (state == STATE_WAITING) {
-    if (android_atomic_acquire_cas(state, STATE_CANCEL, &entry->state) == 0) {
-      BACK_LOGW("Cancelled dump of thread %d", entry->tid);
-      state = STATE_CANCEL;
-      cancelled = true;
-    } else {
-      state = android_atomic_acquire_load(&entry->state);
-    }
-  }
-
-  // Wait for at most ten seconds for the cancel or dump to finish.
-  wait_millis = 10000;
-  while (android_atomic_acquire_load(&entry->state) != STATE_DONE) {
-    if (wait_millis--) {
-      usleep(1000);
-    } else {
-      BACK_LOGW("Didn't finish thread unwind in 60 seconds.");
-      break;
-    }
-  }
-  return !cancelled;
-}
-
-bool BacktraceThread::Unwind(size_t num_ignore_frames) {
-  ThreadEntry* entry = ThreadEntry::AddThreadToUnwind(
-      thread_intf_, Pid(), Tid(), num_ignore_frames);
-  if (!entry) {
-    return false;
+bool BacktraceThread::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
+  if (ucontext) {
+    // Unwind using an already existing ucontext.
+    return impl_->Unwind(num_ignore_frames, ucontext);
   }
 
   // Prevent multiple threads trying to set the trigger action on different
   // threads at the same time.
-  bool retval = false;
-  if (pthread_mutex_lock(&g_sigaction_mutex) == 0) {
-    struct sigaction act, oldact;
-    memset(&act, 0, sizeof(act));
-    act.sa_sigaction = SignalHandler;
-    act.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
-    sigemptyset(&act.sa_mask);
-    if (sigaction(THREAD_SIGNAL, &act, &oldact) == 0) {
-      retval = TriggerUnwindOnThread(entry);
-      sigaction(THREAD_SIGNAL, &oldact, NULL);
-    } else {
-      BACK_LOGW("sigaction failed %s", strerror(errno));
-    }
+  if (pthread_mutex_lock(&g_sigaction_mutex) < 0) {
+    BACK_LOGW("sigaction failed: %s", strerror(errno));
+    return false;
+  }
+
+  ThreadEntry* entry = ThreadEntry::Get(Pid(), Tid());
+  entry->Lock();
+
+  struct sigaction act, oldact;
+  memset(&act, 0, sizeof(act));
+  act.sa_sigaction = SignalHandler;
+  act.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
+  sigemptyset(&act.sa_mask);
+  if (sigaction(THREAD_SIGNAL, &act, &oldact) != 0) {
+    BACK_LOGW("sigaction failed %s", strerror(errno));
+    entry->Unlock();
+    ThreadEntry::Remove(entry);
     pthread_mutex_unlock(&g_sigaction_mutex);
-  } else {
-    BACK_LOGW("unable to acquire sigaction mutex.");
+    return false;
   }
 
-  if (retval) {
-    FinishUnwind();
+  if (tgkill(Pid(), Tid(), THREAD_SIGNAL) != 0) {
+    BACK_LOGW("tgkill %d failed: %s", Tid(), strerror(errno));
+    sigaction(THREAD_SIGNAL, &oldact, NULL);
+    entry->Unlock();
+    ThreadEntry::Remove(entry);
+    pthread_mutex_unlock(&g_sigaction_mutex);
+    return false;
   }
-  delete entry;
 
-  return retval;
+  // Wait for the thread to get the ucontext.
+  entry->Wait(0);
+
+  // After the thread has received the signal, allow other unwinders to
+  // continue.
+  sigaction(THREAD_SIGNAL, &oldact, NULL);
+  pthread_mutex_unlock(&g_sigaction_mutex);
+
+  bool unwind_done = impl_->Unwind(num_ignore_frames, entry->GetUcontext());
+
+  // Tell the signal handler to exit and release the entry.
+  entry->Wake();
+
+  return unwind_done;
 }
