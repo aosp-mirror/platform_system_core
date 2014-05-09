@@ -18,17 +18,13 @@
 #define _LIBBACKTRACE_BACKTRACE_THREAD_H
 
 #include <inttypes.h>
+#include <pthread.h>
 #include <signal.h>
+#include <string.h>
 #include <sys/types.h>
+#include <ucontext.h>
 
 #include "BacktraceImpl.h"
-
-enum state_e {
-  STATE_WAITING = 0,
-  STATE_DUMPING,
-  STATE_DONE,
-  STATE_CANCEL,
-};
 
 // The signal used to cause a thread to dump the stack.
 #if defined(__GLIBC__)
@@ -38,62 +34,57 @@ enum state_e {
 #define THREAD_SIGNAL (__SIGRTMIN+1)
 #endif
 
-class BacktraceThreadInterface;
+class ThreadEntry {
+public:
+  static ThreadEntry* Get(pid_t pid, pid_t tid, bool create = true);
 
-struct ThreadEntry {
-  ThreadEntry(
-      BacktraceThreadInterface* impl, pid_t pid, pid_t tid,
-      size_t num_ignore_frames);
+  static void Remove(ThreadEntry* entry);
+
+  inline void CopyUcontext(ucontext_t* ucontext) {
+    memcpy(&ucontext_, ucontext, sizeof(ucontext_));
+  }
+
+  void Wake();
+
+  void Wait(int);
+
+  inline void Lock() {
+    pthread_mutex_lock(&mutex_);
+    // Reset the futex value in case of multiple unwinds of the same thread.
+    futex_ = 0;
+  }
+
+  inline void Unlock() {
+    pthread_mutex_unlock(&mutex_);
+  }
+
+  inline ucontext_t* GetUcontext() { return &ucontext_; }
+
+private:
+  ThreadEntry(pid_t pid, pid_t tid);
   ~ThreadEntry();
 
-  bool Match(pid_t chk_pid, pid_t chk_tid) { return (chk_pid == pid && chk_tid == tid); }
+  bool Match(pid_t chk_pid, pid_t chk_tid) { return (chk_pid == pid_ && chk_tid == tid_); }
 
-  static ThreadEntry* AddThreadToUnwind(
-      BacktraceThreadInterface* thread_intf, pid_t pid, pid_t tid,
-      size_t num_ignored_frames);
+  pid_t pid_;
+  pid_t tid_;
+  int futex_;
+  int ref_count_;
+  pthread_mutex_t mutex_;
+  ThreadEntry* next_;
+  ThreadEntry* prev_;
+  ucontext_t ucontext_;
 
-  BacktraceThreadInterface* thread_intf;
-  pid_t pid;
-  pid_t tid;
-  ThreadEntry* next;
-  ThreadEntry* prev;
-  int32_t state;
-  int num_ignore_frames;
-};
-
-// Interface class that does not contain any local storage, only defines
-// virtual functions to be defined by subclasses.
-class BacktraceThreadInterface {
-public:
-  virtual ~BacktraceThreadInterface() { }
-
-  virtual void ThreadUnwind(
-      siginfo_t* siginfo, void* sigcontext, size_t num_ignore_frames) = 0;
+  static ThreadEntry* list_;
+  static pthread_mutex_t list_mutex_;
 };
 
 class BacktraceThread : public BacktraceCurrent {
 public:
-  // impl and thread_intf should point to the same object, this allows
-  // the compiler to catch if an implementation does not properly
-  // subclass both.
-  BacktraceThread(
-      BacktraceImpl* impl, BacktraceThreadInterface* thread_intf, pid_t tid,
-      BacktraceMap* map);
+  BacktraceThread(BacktraceImpl* impl, pid_t tid, BacktraceMap* map);
   virtual ~BacktraceThread();
 
-  virtual bool Unwind(size_t num_ignore_frames);
-
-  virtual void ThreadUnwind(
-      siginfo_t* siginfo, void* sigcontext, size_t num_ignore_frames) {
-    thread_intf_->ThreadUnwind(siginfo, sigcontext, num_ignore_frames);
-  }
-
-private:
-  virtual bool TriggerUnwindOnThread(ThreadEntry* entry);
-
-  virtual void FinishUnwind();
-
-  BacktraceThreadInterface* thread_intf_;
+  virtual bool Unwind(size_t num_ignore_frames, ucontext_t* ucontext);
 };
 
 #endif // _LIBBACKTRACE_BACKTRACE_THREAD_H

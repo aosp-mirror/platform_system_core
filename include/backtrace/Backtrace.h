@@ -19,6 +19,7 @@
 
 #include <inttypes.h>
 #include <stdint.h>
+#include <ucontext.h>
 
 #include <string>
 #include <vector>
@@ -64,7 +65,7 @@ public:
   virtual ~Backtrace();
 
   // Get the current stack trace and store in the backtrace_ structure.
-  virtual bool Unwind(size_t num_ignore_frames);
+  virtual bool Unwind(size_t num_ignore_frames, ucontext_t* context = NULL);
 
   // Get the function name and offset into the function given the pc.
   // If the string is empty, then no valid function name was found.
