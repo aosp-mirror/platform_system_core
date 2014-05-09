@@ -271,10 +271,12 @@ bool BatteryMonitor::update(void) {
 status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
     status_t ret = BAD_VALUE;
 
+    val->valueInt64 = LONG_MIN;
+
     switch(id) {
     case BATTERY_PROP_CHARGE_COUNTER:
         if (!mHealthdConfig->batteryChargeCounterPath.isEmpty()) {
-            val->valueInt =
+            val->valueInt64 =
                 getIntField(mHealthdConfig->batteryChargeCounterPath);
             ret = NO_ERROR;
         } else {
@@ -284,7 +286,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
 
     case BATTERY_PROP_CURRENT_NOW:
         if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
-            val->valueInt =
+            val->valueInt64 =
                 getIntField(mHealthdConfig->batteryCurrentNowPath);
             ret = NO_ERROR;
         } else {
@@ -294,7 +296,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
 
     case BATTERY_PROP_CURRENT_AVG:
         if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
-            val->valueInt =
+            val->valueInt64 =
                 getIntField(mHealthdConfig->batteryCurrentAvgPath);
             ret = NO_ERROR;
         } else {
@@ -304,7 +306,7 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
 
     case BATTERY_PROP_CAPACITY:
         if (!mHealthdConfig->batteryCapacityPath.isEmpty()) {
-            val->valueInt =
+            val->valueInt64 =
                 getIntField(mHealthdConfig->batteryCapacityPath);
             ret = NO_ERROR;
         } else {
@@ -312,12 +314,13 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         }
         break;
 
+    case BATTERY_PROP_ENERGY_COUNTER:
+        ret = NAME_NOT_FOUND;
+        break;
+
     default:
         break;
     }
-
-    if (ret != NO_ERROR)
-        val->valueInt = INT_MIN;
 
     return ret;
 }
