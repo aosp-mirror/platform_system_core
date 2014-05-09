@@ -28,7 +28,7 @@ public:
   UnwindPtrace();
   virtual ~UnwindPtrace();
 
-  virtual bool Unwind(size_t num_ignore_frames);
+  virtual bool Unwind(size_t num_ignore_frames, ucontext_t* ucontext);
 
   virtual std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
 

@@ -20,7 +20,6 @@
 #include <string>
 
 #include "BacktraceImpl.h"
-#include "BacktraceThread.h"
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
@@ -30,25 +29,16 @@ public:
   UnwindCurrent();
   virtual ~UnwindCurrent();
 
-  virtual bool Unwind(size_t num_ignore_frames);
+  virtual bool Unwind(size_t num_ignore_frames, ucontext_t* ucontext);
 
   virtual std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset);
 
   bool UnwindFromContext(size_t num_ignore_frames, bool within_handler);
 
-  void ExtractContext(void* sigcontext);
+  void GetUnwContextFromUcontext(const ucontext_t* context);
 
 protected:
   unw_context_t context_;
-};
-
-class UnwindThread : public UnwindCurrent, public BacktraceThreadInterface {
-public:
-  UnwindThread();
-  virtual ~UnwindThread();
-
-  virtual void ThreadUnwind(
-      siginfo_t* siginfo, void* sigcontext, size_t num_ignore_frames);
 };
 
 #endif // _LIBBACKTRACE_UNWIND_CURRENT_H

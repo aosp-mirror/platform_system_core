@@ -21,12 +21,13 @@
 #include <backtrace/BacktraceMap.h>
 
 #include <sys/types.h>
+#include <ucontext.h>
 
 class BacktraceImpl {
 public:
   virtual ~BacktraceImpl() { }
 
-  virtual bool Unwind(size_t num_ignore_frames) = 0;
+  virtual bool Unwind(size_t num_ignore_frames, ucontext_t* ucontext) = 0;
 
   // The name returned is not demangled, Backtrace::GetFunctionName()
   // takes care of demangling the name.
