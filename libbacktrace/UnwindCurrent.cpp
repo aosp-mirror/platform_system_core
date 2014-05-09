@@ -24,6 +24,7 @@
 #include <libunwind.h>
 
 #include "BacktraceLog.h"
+#include "BacktraceThread.h"
 #include "UnwindCurrent.h"
 #include "UnwindMap.h"
 
@@ -36,13 +37,43 @@ UnwindCurrent::UnwindCurrent() {
 UnwindCurrent::~UnwindCurrent() {
 }
 
-bool UnwindCurrent::Unwind(size_t num_ignore_frames) {
-  int ret = unw_getcontext(&context_);
-  if (ret < 0) {
-    BACK_LOGW("unw_getcontext failed %d", ret);
-    return false;
+bool UnwindCurrent::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
+  if (!ucontext) {
+    int ret = unw_getcontext(&context_);
+    if (ret < 0) {
+      BACK_LOGW("unw_getcontext failed %d", ret);
+      return false;
+    }
+  }
+  else {
+    GetUnwContextFromUcontext(ucontext);
   }
   return UnwindFromContext(num_ignore_frames, false);
+}
+
+void UnwindCurrent::GetUnwContextFromUcontext(const ucontext_t* ucontext) {
+  unw_tdep_context_t* unw_context = reinterpret_cast<unw_tdep_context_t*>(&context_);
+
+#if defined(__arm__)
+  unw_context->regs[0] = ucontext->uc_mcontext.arm_r0;
+  unw_context->regs[1] = ucontext->uc_mcontext.arm_r1;
+  unw_context->regs[2] = ucontext->uc_mcontext.arm_r2;
+  unw_context->regs[3] = ucontext->uc_mcontext.arm_r3;
+  unw_context->regs[4] = ucontext->uc_mcontext.arm_r4;
+  unw_context->regs[5] = ucontext->uc_mcontext.arm_r5;
+  unw_context->regs[6] = ucontext->uc_mcontext.arm_r6;
+  unw_context->regs[7] = ucontext->uc_mcontext.arm_r7;
+  unw_context->regs[8] = ucontext->uc_mcontext.arm_r8;
+  unw_context->regs[9] = ucontext->uc_mcontext.arm_r9;
+  unw_context->regs[10] = ucontext->uc_mcontext.arm_r10;
+  unw_context->regs[11] = ucontext->uc_mcontext.arm_fp;
+  unw_context->regs[12] = ucontext->uc_mcontext.arm_ip;
+  unw_context->regs[13] = ucontext->uc_mcontext.arm_sp;
+  unw_context->regs[14] = ucontext->uc_mcontext.arm_lr;
+  unw_context->regs[15] = ucontext->uc_mcontext.arm_pc;
+#else
+  unw_context->uc_mcontext = ucontext->uc_mcontext;
+#endif
 }
 
 std::string UnwindCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
@@ -122,47 +153,6 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool within_hand
   return true;
 }
 
-void UnwindCurrent::ExtractContext(void* sigcontext) {
-  unw_tdep_context_t* context = reinterpret_cast<unw_tdep_context_t*>(&context_);
-  const ucontext_t* uc = reinterpret_cast<const ucontext_t*>(sigcontext);
-
-#if defined(__arm__)
-  context->regs[0] = uc->uc_mcontext.arm_r0;
-  context->regs[1] = uc->uc_mcontext.arm_r1;
-  context->regs[2] = uc->uc_mcontext.arm_r2;
-  context->regs[3] = uc->uc_mcontext.arm_r3;
-  context->regs[4] = uc->uc_mcontext.arm_r4;
-  context->regs[5] = uc->uc_mcontext.arm_r5;
-  context->regs[6] = uc->uc_mcontext.arm_r6;
-  context->regs[7] = uc->uc_mcontext.arm_r7;
-  context->regs[8] = uc->uc_mcontext.arm_r8;
-  context->regs[9] = uc->uc_mcontext.arm_r9;
-  context->regs[10] = uc->uc_mcontext.arm_r10;
-  context->regs[11] = uc->uc_mcontext.arm_fp;
-  context->regs[12] = uc->uc_mcontext.arm_ip;
-  context->regs[13] = uc->uc_mcontext.arm_sp;
-  context->regs[14] = uc->uc_mcontext.arm_lr;
-  context->regs[15] = uc->uc_mcontext.arm_pc;
-#else
-  context->uc_mcontext = uc->uc_mcontext;
-#endif
-}
-
-//-------------------------------------------------------------------------
-// UnwindThread functions.
-//-------------------------------------------------------------------------
-UnwindThread::UnwindThread() {
-}
-
-UnwindThread::~UnwindThread() {
-}
-
-void UnwindThread::ThreadUnwind(
-    siginfo_t* /*siginfo*/, void* sigcontext, size_t num_ignore_frames) {
-  ExtractContext(sigcontext);
-  UnwindFromContext(num_ignore_frames, true);
-}
-
 //-------------------------------------------------------------------------
 // C++ object creation function.
 //-------------------------------------------------------------------------
@@ -171,6 +161,5 @@ Backtrace* CreateCurrentObj(BacktraceMap* map) {
 }
 
 Backtrace* CreateThreadObj(pid_t tid, BacktraceMap* map) {
-  UnwindThread* thread_obj = new UnwindThread();
-  return new BacktraceThread(thread_obj, thread_obj, tid, map);
+  return new BacktraceThread(new UnwindCurrent(), tid, map);
 }
