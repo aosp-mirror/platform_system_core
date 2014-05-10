@@ -64,7 +64,7 @@ bool clientHasLogCredentials(SocketClient * cli) {
     }
 
     gid_t gid = cli->getGid();
-    if ((gid == AID_ROOT) || (gid == AID_LOG)) {
+    if ((gid == AID_ROOT) || (gid == AID_SYSTEM) || (gid == AID_LOG)) {
         return true;
     }
 
