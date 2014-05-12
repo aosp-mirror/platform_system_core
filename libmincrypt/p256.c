@@ -49,8 +49,6 @@ const p256_int SECP256r1_b =  // curve b
   {{0x27d2604b, 0x3bce3c3e, 0xcc53b0f6, 0x651d06b0,
     0x769886bc, 0xb3ebbd55, 0xaa3a93e7, 0x5ac635d8}};
 
-static const p256_int p256_one = P256_ONE;
-
 void p256_init(p256_int* a) {
   memset(a, 0, sizeof(*a));
 }
