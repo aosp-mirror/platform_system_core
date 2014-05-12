@@ -62,7 +62,7 @@ typedef enum {
 
 /* Do not change these values without updating their counterparts
  * in frameworks/base/media/java/android/media/MediaRecorder.java,
- * frameworks/av/services/audioflinger/AudioPolicyService.cpp,
+ * frameworks/av/services/audiopolicy/AudioPolicyService.cpp,
  * and system/media/audio_effects/include/audio_effects/audio_effects_conf.h!
  */
 typedef enum {
@@ -437,6 +437,7 @@ enum {
     AUDIO_DEVICE_IN_LINE                  = AUDIO_DEVICE_BIT_IN | 0x8000,
     /* S/PDIF in */
     AUDIO_DEVICE_IN_SPDIF                 = AUDIO_DEVICE_BIT_IN | 0x10000,
+    AUDIO_DEVICE_IN_BLUETOOTH_A2DP        = AUDIO_DEVICE_BIT_IN | 0x20000,
     AUDIO_DEVICE_IN_DEFAULT               = AUDIO_DEVICE_BIT_IN | AUDIO_DEVICE_BIT_DEFAULT,
 
     AUDIO_DEVICE_IN_ALL     = (AUDIO_DEVICE_IN_COMMUNICATION |
@@ -456,6 +457,7 @@ enum {
                                AUDIO_DEVICE_IN_TV_TUNER |
                                AUDIO_DEVICE_IN_LINE |
                                AUDIO_DEVICE_IN_SPDIF |
+                               AUDIO_DEVICE_IN_BLUETOOTH_A2DP |
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
     AUDIO_DEVICE_IN_ALL_USB  = (AUDIO_DEVICE_IN_USB_ACCESSORY |
@@ -780,13 +782,28 @@ static inline bool audio_is_output_devices(audio_devices_t device)
     return (device & AUDIO_DEVICE_BIT_IN) == 0;
 }
 
+static inline bool audio_is_a2dp_in_device(audio_devices_t device)
+{
+    if ((device & AUDIO_DEVICE_BIT_IN) != 0) {
+        device &= ~AUDIO_DEVICE_BIT_IN;
+        if ((popcount(device) == 1) && (device & AUDIO_DEVICE_IN_BLUETOOTH_A2DP))
+            return true;
+    }
+    return false;
+}
 
-static inline bool audio_is_a2dp_device(audio_devices_t device)
+static inline bool audio_is_a2dp_out_device(audio_devices_t device)
 {
     if ((popcount(device) == 1) && (device & AUDIO_DEVICE_OUT_ALL_A2DP))
         return true;
     else
         return false;
+}
+
+// Deprecated - use audio_is_a2dp_out_device() instead
+static inline bool audio_is_a2dp_device(audio_devices_t device)
+{
+    return audio_is_a2dp_out_device(device);
 }
 
 static inline bool audio_is_bluetooth_sco_device(audio_devices_t device)
