@@ -159,13 +159,13 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
 
     bio = BIO_push(b64, bfile);
     BIO_write(bio, &pkey, sizeof(pkey));
-    BIO_flush(bio);
+    (void) BIO_flush(bio);
     BIO_pop(b64);
     BIO_free(b64);
 
     get_user_info(info, sizeof(info));
     BIO_write(bfile, info, strlen(info));
-    BIO_flush(bfile);
+    (void) BIO_flush(bfile);
     BIO_free_all(bfile);
 
     return 1;
