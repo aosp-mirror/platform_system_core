@@ -212,10 +212,11 @@ check_rate() {
   return 0
 }
 
-# Gets the base part of a crash report file, such as
-# name.01234.5678.9012 from name.01234.5678.9012.meta
+# Gets the base part of a crash report file, such as name.01234.5678.9012 from
+# name.01234.5678.9012.meta or name.01234.5678.9012.log.tar.xz.  We make sure
+# "name" is sanitized in CrashCollector::Sanitize to not include any periods.
 get_base() {
-  echo "${1%.*}"
+  echo "$1" | cut -d. -f-4
 }
 
 get_extension() {

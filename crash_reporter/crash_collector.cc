@@ -108,6 +108,8 @@ int CrashCollector::WriteNewFile(const FilePath &filename,
 }
 
 std::string CrashCollector::Sanitize(const std::string &name) {
+  // Make sure the sanitized name does not include any periods.
+  // The logic in crash_sender relies on this.
   std::string result = name;
   for (size_t i = 0; i < name.size(); ++i) {
     if (!isalnum(result[i]) && result[i] != '_')
