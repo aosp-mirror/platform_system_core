@@ -29,10 +29,10 @@ ACTION_P(SetMetricsPolicy, enabled) {
 class MetricsLibraryTest : public testing::Test {
  protected:
   virtual void SetUp() {
-    EXPECT_EQ(NULL, lib_.uma_events_file_);
+    EXPECT_TRUE(lib_.uma_events_file_.empty());
     lib_.Init();
-    EXPECT_TRUE(NULL != lib_.uma_events_file_);
-    lib_.uma_events_file_ = kTestUMAEventsFile.value().c_str();
+    EXPECT_FALSE(lib_.uma_events_file_.empty());
+    lib_.uma_events_file_ = kTestUMAEventsFile.value();
     device_policy_ = new policy::MockDevicePolicy();
     EXPECT_CALL(*device_policy_, LoadPolicy())
         .Times(AnyNumber())
@@ -165,18 +165,12 @@ TEST_F(MetricsLibraryTest, AreMetricsEnabledCaching) {
 }
 
 TEST_F(MetricsLibraryTest, FormatChromeMessage) {
-  char buf[7];
-  const int kLen = 6;
-  EXPECT_EQ(kLen, lib_.FormatChromeMessage(7, buf, "%d", 1));
-
-  char exp[kLen];
-  sprintf(exp, "%c%c%c%c1", kLen, 0, 0, 0);
-  EXPECT_EQ(0, memcmp(exp, buf, kLen));
-}
-
-TEST_F(MetricsLibraryTest, FormatChromeMessageTooLong) {
-  char buf[7];
-  EXPECT_EQ(-1, lib_.FormatChromeMessage(7, buf, "test"));
+  char kLen = 10;
+  char exp[] = { kLen, 0, 0, 0, 'f', 'o', 'o', 0, '1', 0 };
+  // The message is composed by a 4-byte length field, followed
+  // by two null-terminated strings (name/value).
+  EXPECT_EQ(sizeof(exp), kLen);
+  EXPECT_EQ(std::string(exp, kLen), lib_.FormatChromeMessage("foo", "1"));
 }
 
 TEST_F(MetricsLibraryTest, SendEnumToUMA) {
@@ -192,8 +186,8 @@ TEST_F(MetricsLibraryTest, SendEnumToUMA) {
 }
 
 TEST_F(MetricsLibraryTest, SendMessageToChrome) {
-  EXPECT_TRUE(lib_.SendMessageToChrome(4, "test"));
-  EXPECT_TRUE(lib_.SendMessageToChrome(7, "content"));
+  EXPECT_TRUE(lib_.SendMessageToChrome(std::string("test")));
+  EXPECT_TRUE(lib_.SendMessageToChrome(std::string("content")));
   std::string uma_events;
   EXPECT_TRUE(base::ReadFileToString(kTestUMAEventsFile, &uma_events));
   EXPECT_EQ("testcontent", uma_events);
@@ -204,8 +198,8 @@ TEST_F(MetricsLibraryTest, SendMessageToChromeUMAEventsBadFileLocation) {
   // created.
   static const char kDoesNotExistFile[] = "/does/not/exist";
   lib_.uma_events_file_ = kDoesNotExistFile;
-  static const char kDummyMessage[] = "Dummy Message";
-  EXPECT_FALSE(lib_.SendMessageToChrome(strlen(kDummyMessage), kDummyMessage));
+  const std::string kDummyMessage = "Dummy Message";
+  EXPECT_FALSE(lib_.SendMessageToChrome(kDummyMessage));
   base::DeleteFile(FilePath(kDoesNotExistFile), false);
 }
 
@@ -258,10 +252,10 @@ class CMetricsLibraryTest : public testing::Test {
   virtual void SetUp() {
     lib_ = CMetricsLibraryNew();
     MetricsLibrary& ml = *reinterpret_cast<MetricsLibrary*>(lib_);
-    EXPECT_EQ(NULL, ml.uma_events_file_);
+    EXPECT_TRUE(ml.uma_events_file_.empty());
     CMetricsLibraryInit(lib_);
-    EXPECT_TRUE(NULL != ml.uma_events_file_);
-    ml.uma_events_file_ = kTestUMAEventsFile.value().c_str();
+    EXPECT_FALSE(ml.uma_events_file_.empty());
+    ml.uma_events_file_ = kTestUMAEventsFile.value();
     device_policy_ = new policy::MockDevicePolicy();
     EXPECT_CALL(*device_policy_, LoadPolicy())
         .Times(AnyNumber())

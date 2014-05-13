@@ -133,22 +133,16 @@ class MetricsLibrary : public MetricsLibraryInterface {
 
   // Sends message of size |length| to Chrome for transport to UMA and
   // returns true on success.
-  bool SendMessageToChrome(int32_t length, const char* message);
+  bool SendMessageToChrome(const std::string& message);
 
-  // Formats a name/value message for Chrome in |buffer| and returns the
-  // length of the message or a negative value on error.
+  // Serializes a name/value pair into a message buffer.
   //
-  // Message format is: | LENGTH(binary) | NAME | \0 | VALUE | \0 |
+  // The serialized format is: | LENGTH | NAME | \0 | VALUE | \0 |
   //
-  // The arbitrary |format| argument covers the non-LENGTH portion of the
-  // message. The caller is responsible to store the \0 character
-  // between NAME and VALUE (e.g. "%s%c%d", name, '\0', value).
-  //
-  // Ideally we'd use "3, 4" here instead of "4, 5", but it seems clang/gcc
-  // have an implicit first arg ("this").  http://crbug.com/329356
-  __attribute__((__format__(__printf__, 4, 5)))
-  int32_t FormatChromeMessage(int32_t buffer_size, char* buffer,
-                              const char* format, ...);
+  // where LENGTH is a 32-bit integer in native endianness, and NAME and VALUE
+  // are null-terminated strings (the zero bytes are explicitly shown above).
+  const std::string FormatChromeMessage(const std::string& name,
+                                        const std::string& value);
 
   // This function is used by tests only to mock the device policies.
   void SetPolicyProvider(policy::PolicyProvider* provider);
@@ -159,8 +153,8 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // Cached state of whether or not metrics were enabled.
   static bool cached_enabled_;
 
-  const char* uma_events_file_;
-  const char* consent_file_;
+  std::string uma_events_file_;
+  std::string consent_file_;
 
   scoped_ptr<policy::PolicyProvider> policy_provider_;
 
