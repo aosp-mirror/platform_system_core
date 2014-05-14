@@ -103,7 +103,7 @@ int CrashCollector::WriteNewFile(const FilePath &filename,
   }
 
   int rv = file_util::WriteFileDescriptor(fd, data, size);
-  HANDLE_EINTR(close(fd));
+  IGNORE_EINTR(close(fd));
   return rv;
 }
 

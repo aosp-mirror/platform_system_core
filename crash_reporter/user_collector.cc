@@ -272,7 +272,7 @@ UserCollector::ErrorType UserCollector::ValidateCoreFile(
 
   char e_ident[EI_NIDENT];
   bool read_ok = base::ReadFromFD(fd, e_ident, sizeof(e_ident));
-  HANDLE_EINTR(close(fd));
+  IGNORE_EINTR(close(fd));
   if (!read_ok) {
     LOG(ERROR) << "Could not read header of core file";
     return kErrorInvalidCoreFile;
