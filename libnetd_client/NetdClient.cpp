@@ -20,14 +20,14 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define CLOSE_FD_AND_RESTORE_ERRNO(fd) \
-    do { \
-        int error = errno; \
-        close(fd); \
-        errno = error; \
-    } while (0)
-
 namespace {
+
+int closeFdAndRestoreErrno(int fd) {
+    int error = errno;
+    close(fd);
+    errno = error;
+    return -1;
+}
 
 typedef int (*ConnectFunctionType)(int, const sockaddr*, socklen_t);
 typedef int (*AcceptFunctionType)(int, sockaddr*, socklen_t*);
@@ -54,16 +54,14 @@ int netdClientAccept(int sockfd, sockaddr* addr, socklen_t* addrlen) {
     if (!addr) {
         socklen_t socketAddressLen = sizeof(socketAddress);
         if (getsockname(acceptedSocket, &socketAddress, &socketAddressLen) == -1) {
-            CLOSE_FD_AND_RESTORE_ERRNO(acceptedSocket);
-            return -1;
+            return closeFdAndRestoreErrno(acceptedSocket);
         }
         addr = &socketAddress;
     }
     if (FwmarkClient::shouldSetFwmark(acceptedSocket, addr)) {
         char data[] = {FWMARK_COMMAND_ON_ACCEPT};
         if (!FwmarkClient().send(data, sizeof(data), acceptedSocket)) {
-            CLOSE_FD_AND_RESTORE_ERRNO(acceptedSocket);
-            return -1;
+            return closeFdAndRestoreErrno(acceptedSocket);
         }
     }
     return acceptedSocket;
