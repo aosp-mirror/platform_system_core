@@ -30,10 +30,10 @@
 #include "fs.h"
 
 #include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -43,6 +43,10 @@
 #include <fcntl.h>
 #else
 #include <sys/mman.h>
+#endif
+
+#ifndef __unused
+#define __unused __attribute__((__unused__))
 #endif
 
 #define ARRAY_SIZE(x)           (sizeof(x)/sizeof(x[0]))
@@ -106,7 +110,6 @@ int fb_format_supported(usb_handle *usb, const char *partition, const char *type
 {
     char fs_type[FB_RESPONSE_SZ + 1] = {0,};
     int status;
-    unsigned int i;
 
     if (type_override) {
         return !!fs_get_generator(type_override);
@@ -197,9 +200,7 @@ void fb_queue_flash_sparse(const char *ptn, struct sparse_file *s, unsigned sz)
 
 static int match(char *str, const char **value, unsigned count)
 {
-    const char *val;
     unsigned n;
-    int len;
 
     for (n = 0; n < count; n++) {
         const char *val = value[n];
@@ -325,7 +326,7 @@ void fb_queue_query_save(const char *var, char *dest, unsigned dest_size)
     a->func = cb_save;
 }
 
-static int cb_do_nothing(Action *a, int status, char *resp)
+static int cb_do_nothing(Action *a __unused, int status __unused, char *resp __unused)
 {
     fprintf(stderr,"\n");
     return 0;

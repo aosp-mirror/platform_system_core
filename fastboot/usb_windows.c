@@ -178,7 +178,7 @@ int usb_write(usb_handle* handle, const void* data, int len) {
 
             count += written;
             len -= written;
-            data += written;
+            data = (const char *)data + written;
 
             if (len == 0)
                 return count;

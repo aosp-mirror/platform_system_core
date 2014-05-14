@@ -28,22 +28,20 @@
 
 #define _LARGEFILE64_SOURCE
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
-
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
-#include <limits.h>
-#include <ctype.h>
 #include <getopt.h>
-
+#include <limits.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/stat.h>
+#include <unistd.h>
 
 #include <bootimg.h>
 #include <sparse/sparse.h>
@@ -72,7 +70,6 @@ static usb_handle *usb = 0;
 static const char *serial = 0;
 static const char *product = 0;
 static const char *cmdline = 0;
-static int wipe_data = 0;
 static unsigned short vendor_id = 0;
 static int long_listing = 0;
 static int64_t sparse_limit = -1;
@@ -270,7 +267,7 @@ usb_handle *open_device(void)
             announce = 0;
             fprintf(stderr,"< waiting for device >\n");
         }
-        sleep(1);
+        usleep(1000);
     }
 }
 
@@ -428,7 +425,7 @@ static int unzip_to_file(zipfile_t zip, char *name)
         return -1;
     }
 
-    if (write(fd, data, sz) != sz) {
+    if (write(fd, data, sz) != (ssize_t)sz) {
         fd = -1;
     }
 
@@ -722,7 +719,7 @@ void do_update(usb_handle *usb, char *fn, int erase_first)
     int fd;
     int rc;
     struct fastboot_buffer buf;
-    int i;
+    size_t i;
 
     queue_info_dump();
 
@@ -796,7 +793,7 @@ void do_flashall(usb_handle *usb, int erase_first)
     void *data;
     unsigned sz;
     struct fastboot_buffer buf;
-    int i;
+    size_t i;
 
     queue_info_dump();
 
@@ -828,7 +825,6 @@ void do_flashall(usb_handle *usb, int erase_first)
 
 int do_oem_command(int argc, char **argv)
 {
-    int i;
     char command[256];
     if (argc <= 1) return 0;
 
@@ -915,7 +911,7 @@ void fb_perform_format(const char *partition, int skip_if_not_supported,
                     "Warning: %s type is %s, but %s was requested for formating.\n",
                     partition, pType, type_override);
         }
-        pType = type_override;
+        pType = (char *)type_override;
     }
 
     status = fb_getvar(usb, pSize, "partition-size:%s", partition);
@@ -929,7 +925,7 @@ void fb_perform_format(const char *partition, int skip_if_not_supported,
                     "Warning: %s size is %s, but %s was requested for formating.\n",
                     partition, pSize, size_override);
         }
-        pSize = size_override;
+        pSize = (char *)size_override;
     }
 
     gen = fs_get_generator(pType);
@@ -981,7 +977,6 @@ int main(int argc, char **argv)
     unsigned sz;
     int status;
     int c;
-    int r;
 
     const struct option longopts[] = {
         {"base", required_argument, 0, 'b'},
@@ -996,7 +991,6 @@ int main(int argc, char **argv)
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        int option_index = 0;
         c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lp:c:i:m:h", longopts, NULL);
         if (c < 0) {
             break;
