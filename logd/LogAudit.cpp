@@ -54,9 +54,6 @@ bool LogAudit::onDataAvailable(SocketClient *cli) {
     return true;
 }
 
-#define AUDIT_LOG_ID   LOG_ID_MAIN
-#define AUDIT_LOG_PRIO ANDROID_LOG_WARN
-
 int LogAudit::logPrint(const char *fmt, ...) {
     if (fmt == NULL) {
         return -EINVAL;
@@ -115,43 +112,30 @@ int LogAudit::logPrint(const char *fmt, ...) {
         strcpy(pidptr, cp);
     }
 
-    static const char comm_str[] = " comm=\"";
-    char *comm = strstr(str, comm_str);
-    if (comm) {
-        cp = comm;
-        comm += sizeof(comm_str) - 1;
-        char *ecomm = strchr(comm, '"');
-        if (ecomm) {
-            *ecomm = '\0';
-        }
-        comm = strdup(comm);
-        if (ecomm) {
-            strcpy(cp, ecomm + 1);
-        }
-    } else if (pid == getpid()) {
-        pid = tid;
-        comm = strdup("auditd");
-    } else if (!(comm = logbuf->pidToName(pid))) {
-        comm = strdup("unknown");
-    }
-
-    size_t l = strlen(comm) + 1;
-    size_t n = l + strlen(str) + 2;
+    size_t n = strlen(str);
+    n += sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint32_t);
 
     char *newstr = reinterpret_cast<char *>(malloc(n));
     if (!newstr) {
-        free(comm);
         free(str);
         return -ENOMEM;
     }
 
-    *newstr = AUDIT_LOG_PRIO;
-    strcpy(newstr + 1, comm);
-    free(comm);
-    strcpy(newstr + 1 + l, str);
+    char *msg = newstr;
+    *msg++ = AUDITD_LOG_TAG & 0xFF;
+    *msg++ = (AUDITD_LOG_TAG >> 8) & 0xFF;
+    *msg++ = (AUDITD_LOG_TAG >> 16) & 0xFF;
+    *msg++ = (AUDITD_LOG_TAG >> 24) & 0xFF;
+    *msg++ = EVENT_TYPE_STRING;
+    size_t l = n - sizeof(uint32_t) - sizeof(uint8_t) - sizeof(uint32_t);
+    *msg++ = l & 0xFF;
+    *msg++ = (l >> 8) & 0xFF;
+    *msg++ = (l >> 16) & 0xFF;
+    *msg++ = (l >> 24) & 0xFF;
+    memcpy(msg, str, l);
     free(str);
 
-    logbuf->log(AUDIT_LOG_ID, now, uid, pid, tid, newstr,
+    logbuf->log(LOG_ID_EVENTS, now, uid, pid, tid, newstr,
                 (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
     reader->notifyNewLog();
 
