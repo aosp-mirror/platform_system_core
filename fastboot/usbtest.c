@@ -88,14 +88,14 @@ int match_loop(usb_ifc_info *info)
 
 int test_null(usb_handle *usb)
 {
-    int i;
+    unsigned i;
     unsigned char buf[4096];
     memset(buf, 0xee, 4096);
     long long t0, t1;
 
     t0 = NOW();
     for(i = 0; i < arg_count; i++) {
-        if(usb_write(usb, buf, arg_size) != arg_size) {
+        if(usb_write(usb, buf, arg_size) != (int)arg_size) {
             fprintf(stderr,"write failed (%s)\n", strerror(errno));
             return -1;
         }
@@ -107,13 +107,13 @@ int test_null(usb_handle *usb)
 
 int test_zero(usb_handle *usb)
 {
-    int i;
+    unsigned i;
     unsigned char buf[4096];
     long long t0, t1;
 
     t0 = NOW();
     for(i = 0; i < arg_count; i++) {
-        if(usb_read(usb, buf, arg_size) != arg_size) {
+        if(usb_read(usb, buf, arg_size) != (int)arg_size) {
             fprintf(stderr,"read failed (%s)\n", strerror(errno));
             return -1;
         }
@@ -130,11 +130,11 @@ struct
     int (*test)(usb_handle *usb);
     const char *help;
 } tests[] = {
-    { "list", printifc,   0,         "list interfaces" },
+    { "list", printifc,   NULL,      "list interfaces" },
     { "send", match_null, test_null, "send to null interface" },
     { "recv", match_zero, test_zero, "recv from zero interface" },
-    { "loop", match_loop, 0,         "exercise loopback interface" },
-    {},
+    { "loop", match_loop, NULL,      "exercise loopback interface" },
+    { NULL, NULL, NULL, NULL },
 };
 
 int usage(void)
