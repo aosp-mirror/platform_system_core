@@ -110,7 +110,6 @@ static int _command_start(usb_handle *usb, const char *cmd, unsigned size,
                           char *response)
 {
     int cmdsize = strlen(cmd);
-    int r;
 
     if(response) {
         response[0] = 0;
@@ -189,8 +188,6 @@ static int _command_send(usb_handle *usb, const char *cmd,
 static int _command_send_no_data(usb_handle *usb, const char *cmd,
                                  char *response)
 {
-    int r;
-
     return _command_start(usb, cmd, 0, response);
 }
 

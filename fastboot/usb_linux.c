@@ -125,9 +125,6 @@ static int filter_usb_device(char* sysfs_name,
     unsigned i;
     unsigned e;
     
-    struct stat st;
-    int result;
-
     if(check(ptr, len, USB_DT_DEVICE, USB_DT_DEVICE_SIZE))
         return -1;
     dev = (void*) ptr;
