@@ -481,7 +481,7 @@ bool MetricsDaemon::DiskStatsReadStats(long int* read_sectors,
                    << diskstats_path_ << ", expected 2";
     }
   }
-  HANDLE_EINTR(close(file));
+  IGNORE_EINTR(close(file));
   return success;
 }
 

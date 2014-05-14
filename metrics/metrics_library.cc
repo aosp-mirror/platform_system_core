@@ -209,7 +209,7 @@ bool MetricsLibrary::SendMessageToChrome(int32_t length, const char* message) {
   // underneath us. Keep the file locked as briefly as possible.
   if (HANDLE_EINTR(flock(chrome_fd, LOCK_EX)) < 0) {
     PrintError("flock", uma_events_file_, errno);
-    HANDLE_EINTR(close(chrome_fd));
+    IGNORE_EINTR(close(chrome_fd));
     return false;
   }
 
@@ -220,7 +220,7 @@ bool MetricsLibrary::SendMessageToChrome(int32_t length, const char* message) {
   }
 
   // Close the file and release the lock.
-  HANDLE_EINTR(close(chrome_fd));
+  IGNORE_EINTR(close(chrome_fd));
   return success;
 }
 
