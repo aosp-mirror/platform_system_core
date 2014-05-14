@@ -79,7 +79,6 @@ static int
 uninflate(unsigned char* out, int unlen, const unsigned char* in, int clen)
 {
     z_stream zstream;
-    unsigned long crc;
     int err = 0;
     int zerr;
 

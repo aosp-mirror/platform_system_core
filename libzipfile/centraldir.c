@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include <utils/Compat.h>
+
 enum {
     // finding the directory
     CD_SIGNATURE = 0x06054b50,
@@ -66,24 +68,10 @@ read_central_directory_entry(Zipfile* file, Zipentry* entry,
 {
     const unsigned char* p;
 
-    unsigned short  versionMadeBy;
-    unsigned short  versionToExtract;
-    unsigned short  gpBitFlag;
-    unsigned short  compressionMethod;
-    unsigned short  lastModFileTime;
-    unsigned short  lastModFileDate;
-    unsigned long   crc32;
     unsigned short  extraFieldLength;
     unsigned short  fileCommentLength;
-    unsigned short  diskNumberStart;
-    unsigned short  internalAttrs;
-    unsigned long   externalAttrs;
     unsigned long   localHeaderRelOffset;
-    const unsigned char*  extraField;
-    const unsigned char*  fileComment;
     unsigned int dataOffset;
-    unsigned short lfhExtraFieldSize;
-
 
     p = *buf;
 
@@ -97,21 +85,12 @@ read_central_directory_entry(Zipfile* file, Zipentry* entry,
         return -1;
     }
 
-    versionMadeBy = read_le_short(&p[0x04]);
-    versionToExtract = read_le_short(&p[0x06]);
-    gpBitFlag = read_le_short(&p[0x08]);
     entry->compressionMethod = read_le_short(&p[0x0a]);
-    lastModFileTime = read_le_short(&p[0x0c]);
-    lastModFileDate = read_le_short(&p[0x0e]);
-    crc32 = read_le_int(&p[0x10]);
     entry->compressedSize = read_le_int(&p[0x14]);
     entry->uncompressedSize = read_le_int(&p[0x18]);
     entry->fileNameLength = read_le_short(&p[0x1c]);
     extraFieldLength = read_le_short(&p[0x1e]);
     fileCommentLength = read_le_short(&p[0x20]);
-    diskNumberStart = read_le_short(&p[0x22]);
-    internalAttrs = read_le_short(&p[0x24]);
-    externalAttrs = read_le_int(&p[0x26]);
     localHeaderRelOffset = read_le_int(&p[0x2a]);
 
     p += ENTRY_LEN;
@@ -125,19 +104,9 @@ read_central_directory_entry(Zipfile* file, Zipentry* entry,
     p += entry->fileNameLength;
 
     // extra field
-    if (extraFieldLength != 0) {
-        extraField = p;
-    } else {
-        extraField = NULL;
-    }
     p += extraFieldLength;
 
     // comment, if any
-    if (fileCommentLength != 0) {
-        fileComment = p;
-    } else {
-        fileComment = NULL;
-    }
     p += fileCommentLength;
 
     *buf = p;
@@ -183,7 +152,7 @@ read_central_dir(Zipfile *file)
     int err;
 
     const unsigned char* buf = file->buf;
-    ssize_t bufsize = file->bufsize;
+    ZD_TYPE bufsize = file->bufsize;
     const unsigned char* eocd;
     const unsigned char* p;
     const unsigned char* start;
@@ -192,7 +161,7 @@ read_central_dir(Zipfile *file)
 
     // too small to be a ZIP archive?
     if (bufsize < EOCD_LEN) {
-        fprintf(stderr, "Length is %zd -- too small\n", bufsize);
+        fprintf(stderr, "Length is " ZD " -- too small\n", bufsize);
         goto bail;
     }
 

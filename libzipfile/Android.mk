@@ -14,6 +14,8 @@ LOCAL_MODULE:= libzipfile
 
 LOCAL_C_INCLUDES += external/zlib
 
+LOCAL_CFLAGS := -Werror
+
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 # build device static library
@@ -30,6 +32,8 @@ LOCAL_MODULE:= libzipfile
 
 LOCAL_C_INCLUDES += external/zlib
 
+LOCAL_CFLAGS := -Werror
+
 include $(BUILD_STATIC_LIBRARY)
 
 
@@ -44,5 +48,7 @@ LOCAL_STATIC_LIBRARIES := libzipfile libunz
 LOCAL_MODULE := test_zipfile
 
 LOCAL_C_INCLUDES += external/zlib
+
+LOCAL_CFLAGS := -Werror
 
 include $(BUILD_HOST_EXECUTABLE)
