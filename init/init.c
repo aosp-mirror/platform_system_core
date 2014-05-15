@@ -46,8 +46,6 @@
 #include <private/android_filesystem_config.h>
 #include <termios.h>
 
-#include <sys/system_properties.h>
-
 #include "devices.h"
 #include "init.h"
 #include "log.h"
