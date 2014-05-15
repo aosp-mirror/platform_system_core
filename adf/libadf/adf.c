@@ -768,7 +768,7 @@ int adf_find_simple_post_configuration(struct adf_device *dev,
         const __u32 *formats, size_t n_formats,
         adf_id_t *interface, adf_id_t *overlay_engine)
 {
-    adf_id_t *intfs;
+    adf_id_t *intfs = NULL;
     ssize_t n_intfs = adf_interfaces(dev, &intfs);
 
     if (n_intfs < 0)
