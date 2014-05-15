@@ -3,7 +3,6 @@
 
 #include <cutils/properties.h>
 
-#include <sys/system_properties.h>
 #include "dynarray.h"
 
 static void record_prop(const char* key, const char* name, void* opaque)
@@ -30,8 +29,6 @@ static void list_properties(void)
     /* voila */
     strlist_done(list);
 }
-
-int __system_property_wait(prop_info *pi);
 
 int getprop_main(int argc, char *argv[])
 {
