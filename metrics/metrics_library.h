@@ -131,8 +131,12 @@ class MetricsLibrary : public MetricsLibraryInterface {
                        char* buffer, int buffer_size,
                        bool* result);
 
-  // Sends message of size |length| to Chrome for transport to UMA and
-  // returns true on success.
+  // TEMPORARY (see crbug.com/373833).  Stores a message to Chrome in the
+  // events file.
+  bool StoreMessageInFile(const std::string& message,
+                          const std::string& events_file);
+
+  // Sends message to Chrome for transport to UMA and returns true on success.
   bool SendMessageToChrome(const std::string& message);
 
   // Serializes a name/value pair into a message buffer.
@@ -154,6 +158,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
   static bool cached_enabled_;
 
   std::string uma_events_file_;
+  std::string new_uma_events_file_;  // TEMPORARY see crbug.com/373833.
   std::string consent_file_;
 
   scoped_ptr<policy::PolicyProvider> policy_provider_;
