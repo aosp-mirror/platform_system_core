@@ -221,7 +221,7 @@ mk_mbr_sig()
         /* DO NOT DEREFERENCE */
         struct pc_boot_record *mbr = (void *)PC_MBR_DISK_OFFSET;
         /* grab the offset in mbr where to write mbr signature. */
-        item->offset = (loff_t)((uint32_t)((uint8_t *)(&mbr->mbr_sig)));
+        item->offset = (loff_t)((uintptr_t)((uint8_t *)(&mbr->mbr_sig)));
     }
 
     *((uint16_t*)item->data) = PC_BIOS_BOOT_SIG;
