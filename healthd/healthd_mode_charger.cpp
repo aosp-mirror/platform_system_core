@@ -249,7 +249,7 @@ static int request_suspend(bool enable)
         return autosuspend_disable();
 }
 #else
-static int request_suspend(bool enable)
+static int request_suspend(bool /*enable*/)
 {
     return 0;
 }
@@ -274,7 +274,7 @@ static void android_green(void)
 }
 
 /* returns the last y-offset of where the surface ends */
-static int draw_surface_centered(struct charger *charger, gr_surface surface)
+static int draw_surface_centered(struct charger* /*charger*/, gr_surface surface)
 {
     int w;
     int h;
@@ -617,7 +617,7 @@ static int input_callback(int fd, unsigned int epevents, void *data)
     return 0;
 }
 
-static void charger_event_handler(uint32_t epevents)
+static void charger_event_handler(uint32_t /*epevents*/)
 {
     int ret;
 
@@ -626,7 +626,7 @@ static void charger_event_handler(uint32_t epevents)
         ev_dispatch();
 }
 
-void healthd_mode_charger_init(struct healthd_config *config)
+void healthd_mode_charger_init(struct healthd_config* /*config*/)
 {
     int ret;
     struct charger *charger = &charger_state;

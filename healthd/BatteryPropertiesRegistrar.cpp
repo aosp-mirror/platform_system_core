@@ -76,7 +76,7 @@ status_t BatteryPropertiesRegistrar::getProperty(int id, struct BatteryProperty 
     return healthd_get_property(id, val);
 }
 
-status_t BatteryPropertiesRegistrar::dump(int fd, const Vector<String16>& args) {
+status_t BatteryPropertiesRegistrar::dump(int fd, const Vector<String16>& /*args*/) {
     IPCThreadState* self = IPCThreadState::self();
     const int pid = self->getCallingPid();
     const int uid = self->getCallingUid();

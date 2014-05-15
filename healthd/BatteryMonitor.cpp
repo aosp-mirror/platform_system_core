@@ -37,7 +37,7 @@
 namespace android {
 
 struct sysfsStringEnumMap {
-    char* s;
+    const char* s;
     int val;
 };
 

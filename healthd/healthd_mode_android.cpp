@@ -42,11 +42,11 @@ int healthd_mode_android_preparetowait(void) {
     return -1;
 }
 
-static void binder_event(uint32_t epevents) {
+static void binder_event(uint32_t /*epevents*/) {
     IPCThreadState::self()->handlePolledCommands();
 }
 
-void healthd_mode_android_init(struct healthd_config *config) {
+void healthd_mode_android_init(struct healthd_config* /*config*/) {
     ProcessState::self()->setThreadPoolMaxThreadCount(0);
     IPCThreadState::self()->disableBackgroundScheduling(true);
     IPCThreadState::self()->setupPolling(&gBinderFd);
