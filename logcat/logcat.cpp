@@ -623,19 +623,20 @@ int main(int argc, char **argv)
     }
 
     if (!devices) {
-        devices = new log_device_t("main", false, 'm');
+        dev = devices = new log_device_t("main", false, 'm');
         android::g_devCount = 1;
         if (android_name_to_log_id("system") == LOG_ID_SYSTEM) {
-            devices->next = new log_device_t("system", false, 's');
+            dev = dev->next = new log_device_t("system", false, 's');
             android::g_devCount++;
         }
         if (android_name_to_log_id("crash") == LOG_ID_CRASH) {
-            if (devices->next) {
-                devices->next->next = new log_device_t("crash", false, 'c');
-            } else {
-                devices->next = new log_device_t("crash", false, 'c');
-            }
+            dev = dev->next = new log_device_t("crash", false, 'c');
             android::g_devCount++;
+        }
+        if (android_name_to_log_id("events") == LOG_ID_EVENTS) {
+            dev = dev->next = new log_device_t("events", true, 'e');
+            android::g_devCount++;
+            needBinary = true;
         }
     }
 
