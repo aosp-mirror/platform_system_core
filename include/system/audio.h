@@ -590,6 +590,22 @@ static inline bool audio_is_output_channel(audio_channel_mask_t channel)
         return false;
 }
 
+/* Returns the number of channels from an input channel mask,
+ * used in the context of audio input or recording.
+ */
+static inline uint32_t audio_channel_count_from_in_mask(audio_channel_mask_t channel)
+{
+    return popcount(channel & AUDIO_CHANNEL_IN_ALL);
+}
+
+/* Returns the number of channels from an output channel mask,
+ * used in the context of audio output or playback.
+ */
+static inline uint32_t audio_channel_count_from_out_mask(audio_channel_mask_t channel)
+{
+    return popcount(channel & AUDIO_CHANNEL_OUT_ALL);
+}
+
 /* Derive an output channel mask from a channel count.
  * This is to be used when the content channel mask is unknown. The 1, 2, 4, 5, 6, 7 and 8 channel
  * cases are mapped to the standard game/home-theater layouts, but note that 4 is mapped to quad,
