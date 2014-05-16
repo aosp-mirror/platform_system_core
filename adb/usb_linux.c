@@ -237,8 +237,20 @@ static void find_usb_device(const char *base,
                             // looks like ADB...
                         ep1 = (struct usb_endpoint_descriptor *)bufptr;
                         bufptr += USB_DT_ENDPOINT_SIZE;
+                            // For USB 3.0 SuperSpeed devices, skip potential
+                            // USB 3.0 SuperSpeed Endpoint Companion descriptor
+                        if (bufptr+2 <= devdesc + desclength &&
+                            bufptr[0] == USB_DT_SS_EP_COMP_SIZE &&
+                            bufptr[1] == USB_DT_SS_ENDPOINT_COMP) {
+                            bufptr += USB_DT_SS_EP_COMP_SIZE;
+                        }
                         ep2 = (struct usb_endpoint_descriptor *)bufptr;
                         bufptr += USB_DT_ENDPOINT_SIZE;
+                        if (bufptr+2 <= devdesc + desclength &&
+                            bufptr[0] == USB_DT_SS_EP_COMP_SIZE &&
+                            bufptr[1] == USB_DT_SS_ENDPOINT_COMP) {
+                            bufptr += USB_DT_SS_EP_COMP_SIZE;
+                        }
 
                         if (bufptr > devdesc + desclength ||
                             ep1->bLength != USB_DT_ENDPOINT_SIZE ||
