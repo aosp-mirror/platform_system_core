@@ -118,7 +118,7 @@ static struct healthd_mode_ops recovery_ops = {
     .battery_update = healthd_mode_nop_battery_update,
 };
 
-static void healthd_mode_nop_init(struct healthd_config *config) {
+static void healthd_mode_nop_init(struct healthd_config* /*config*/) {
 }
 
 static int healthd_mode_nop_preparetowait(void) {
@@ -129,7 +129,7 @@ static void healthd_mode_nop_heartbeat(void) {
 }
 
 static void healthd_mode_nop_battery_update(
-    struct android::BatteryProperties *props) {
+    struct android::BatteryProperties* /*props*/) {
 }
 
 int healthd_register_event(int fd, void (*handler)(uint32_t)) {
@@ -205,7 +205,7 @@ static void periodic_chores() {
 }
 
 #define UEVENT_MSG_LEN 1024
-static void uevent_event(uint32_t epevents) {
+static void uevent_event(uint32_t /*epevents*/) {
     char msg[UEVENT_MSG_LEN+2];
     char *cp;
     int n;
@@ -246,7 +246,7 @@ static void uevent_init(void) {
                    "register for uevent events failed\n");
 }
 
-static void wakealarm_event(uint32_t epevents) {
+static void wakealarm_event(uint32_t /*epevents*/) {
     unsigned long long wakeups;
 
     if (read(wakealarm_fd, &wakeups, sizeof(wakeups)) == -1) {
