@@ -17,6 +17,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <linux/input.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -356,7 +357,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
         reset_animation(batt_anim);
         charger->next_screen_transition = -1;
         gr_fb_blank(true);
-        LOGV("[%lld] animation done\n", now);
+        LOGV("[%" PRId64 "] animation done\n", now);
         if (!charger->charger_connected)
             request_suspend(true);
         return;
@@ -369,7 +370,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
         int batt_cap;
         int ret;
 
-        LOGV("[%lld] animation starting\n", now);
+        LOGV("[%" PRId64 "] animation starting\n", now);
         batt_cap = get_battery_capacity();
         if (batt_cap >= 0 && batt_anim->num_frames != 0) {
             int i;
@@ -399,7 +400,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
      * the cycle counter and exit
      */
     if (batt_anim->num_frames == 0 || batt_anim->capacity < 0) {
-        LOGV("[%lld] animation missing or unknown battery status\n", now);
+        LOGV("[%" PRId64 "] animation missing or unknown battery status\n", now);
         charger->next_screen_transition = now + BATTERY_UNKNOWN_TIME;
         batt_anim->cur_cycle++;
         return;
@@ -449,13 +450,13 @@ static int set_key_callback(int code, int value, void *data)
     charger->keys[code].down = down;
     charger->keys[code].pending = true;
     if (down) {
-        LOGV("[%lld] key[%d] down\n", now, code);
+        LOGV("[%" PRId64 "] key[%d] down\n", now, code);
     } else {
         int64_t duration = now - charger->keys[code].timestamp;
         int64_t secs = duration / 1000;
         int64_t msecs = duration - secs * 1000;
-        LOGV("[%lld] key[%d] up (was down for %lld.%lldsec)\n", now,
-            code, secs, msecs);
+        LOGV("[%" PRId64 "] key[%d] up (was down for %" PRId64 ".%" PRId64 "sec)\n",
+             now, code, secs, msecs);
     }
 
     return 0;
@@ -488,7 +489,7 @@ static void process_key(struct charger *charger, int code, int64_t now)
         if (key->down) {
             int64_t reboot_timeout = key->timestamp + POWER_ON_KEY_TIME;
             if (now >= reboot_timeout) {
-                LOGI("[%lld] rebooting\n", now);
+                LOGI("[%" PRId64 "] rebooting\n", now);
                 android_reboot(ANDROID_RB_RESTART, 0, 0);
             } else {
                 /* if the key is pressed but timeout hasn't expired,
@@ -525,10 +526,10 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
         request_suspend(false);
         if (charger->next_pwr_check == -1) {
             charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
-            LOGI("[%lld] device unplugged: shutting down in %lld (@ %lld)\n",
-                 now, UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
+            LOGI("[%" PRId64 "] device unplugged: shutting down in %" PRId64 " (@ %" PRId64 ")\n",
+                 now, (int64_t)UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
         } else if (now >= charger->next_pwr_check) {
-            LOGI("[%lld] shutting down\n", now);
+            LOGI("[%" PRId64 "] shutting down\n", now);
             android_reboot(ANDROID_RB_POWEROFF, 0, 0);
         } else {
             /* otherwise we already have a shutdown timer scheduled */
@@ -536,7 +537,7 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
     } else {
         /* online supply present, reset shutdown timer if set */
         if (charger->next_pwr_check != -1) {
-            LOGI("[%lld] device plugged in: shutdown cancelled\n", now);
+            LOGI("[%" PRId64 "] device plugged in: shutdown cancelled\n", now);
             kick_animation(charger->batt_anim);
         }
         charger->next_pwr_check = -1;
@@ -585,7 +586,7 @@ int healthd_mode_charger_preparetowait(void)
     struct input_event ev;
     int ret;
 
-    LOGV("[%lld] next screen: %lld next key: %lld next pwr: %lld\n", now,
+    LOGV("[%" PRId64 "] next screen: %" PRId64 " next key: %" PRId64 " next pwr: %" PRId64 "\n", now,
          charger->next_screen_transition, charger->next_key_check,
          charger->next_pwr_check);
 
