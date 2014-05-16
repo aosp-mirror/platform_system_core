@@ -760,7 +760,7 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
         break;
     case K_setenv: { /* name value */
         struct svcenvinfo *ei;
-        if (nargs < 2) {
+        if (nargs < 3) {
             parse_error(state, "setenv option requires name and value arguments\n");
             break;
         }
