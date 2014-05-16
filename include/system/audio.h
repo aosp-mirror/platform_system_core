@@ -360,6 +360,7 @@ enum {
     AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES = 0x100,
     AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER    = 0x200,
     AUDIO_DEVICE_OUT_AUX_DIGITAL               = 0x400,
+    AUDIO_DEVICE_OUT_HDMI                      = AUDIO_DEVICE_OUT_AUX_DIGITAL,
     /* uses an analog connection (multiplexed over the USB connector pins for instance) */
     AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET         = 0x800,
     AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET         = 0x1000,
@@ -368,6 +369,16 @@ enum {
     /* USB host mode: your Android device is a USB host and the dock is a USB device */
     AUDIO_DEVICE_OUT_USB_DEVICE                = 0x4000,
     AUDIO_DEVICE_OUT_REMOTE_SUBMIX             = 0x8000,
+    /* Telephony voice TX path */
+    AUDIO_DEVICE_OUT_TELEPHONY_TX              = 0x10000,
+    /* Analog jack with line impedance detected */
+    AUDIO_DEVICE_OUT_LINE                      = 0x20000,
+    /* HDMI Audio Return Channel */
+    AUDIO_DEVICE_OUT_HDMI_ARC                  = 0x40000,
+    /* S/PDIF out */
+    AUDIO_DEVICE_OUT_SPDIF                     = 0x80000,
+    /* FM transmitter out */
+    AUDIO_DEVICE_OUT_FM                        = 0x100000,
     AUDIO_DEVICE_OUT_DEFAULT                   = AUDIO_DEVICE_BIT_DEFAULT,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
@@ -379,12 +390,17 @@ enum {
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER |
-                                 AUDIO_DEVICE_OUT_AUX_DIGITAL |
+                                 AUDIO_DEVICE_OUT_HDMI |
                                  AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET |
                                  AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET |
                                  AUDIO_DEVICE_OUT_USB_ACCESSORY |
                                  AUDIO_DEVICE_OUT_USB_DEVICE |
                                  AUDIO_DEVICE_OUT_REMOTE_SUBMIX |
+                                 AUDIO_DEVICE_OUT_TELEPHONY_TX |
+                                 AUDIO_DEVICE_OUT_LINE |
+                                 AUDIO_DEVICE_OUT_HDMI_ARC |
+                                 AUDIO_DEVICE_OUT_SPDIF |
+                                 AUDIO_DEVICE_OUT_FM |
                                  AUDIO_DEVICE_OUT_DEFAULT),
     AUDIO_DEVICE_OUT_ALL_A2DP = (AUDIO_DEVICE_OUT_BLUETOOTH_A2DP |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
@@ -402,13 +418,24 @@ enum {
     AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET = AUDIO_DEVICE_BIT_IN | 0x8,
     AUDIO_DEVICE_IN_WIRED_HEADSET         = AUDIO_DEVICE_BIT_IN | 0x10,
     AUDIO_DEVICE_IN_AUX_DIGITAL           = AUDIO_DEVICE_BIT_IN | 0x20,
+    AUDIO_DEVICE_IN_HDMI                  = AUDIO_DEVICE_IN_AUX_DIGITAL,
+    /* Telephony voice RX path */
     AUDIO_DEVICE_IN_VOICE_CALL            = AUDIO_DEVICE_BIT_IN | 0x40,
+    AUDIO_DEVICE_IN_TELEPHONY_RX          = AUDIO_DEVICE_IN_VOICE_CALL,
     AUDIO_DEVICE_IN_BACK_MIC              = AUDIO_DEVICE_BIT_IN | 0x80,
     AUDIO_DEVICE_IN_REMOTE_SUBMIX         = AUDIO_DEVICE_BIT_IN | 0x100,
     AUDIO_DEVICE_IN_ANLG_DOCK_HEADSET     = AUDIO_DEVICE_BIT_IN | 0x200,
     AUDIO_DEVICE_IN_DGTL_DOCK_HEADSET     = AUDIO_DEVICE_BIT_IN | 0x400,
     AUDIO_DEVICE_IN_USB_ACCESSORY         = AUDIO_DEVICE_BIT_IN | 0x800,
     AUDIO_DEVICE_IN_USB_DEVICE            = AUDIO_DEVICE_BIT_IN | 0x1000,
+    /* FM tuner input */
+    AUDIO_DEVICE_IN_FM_TUNER              = AUDIO_DEVICE_BIT_IN | 0x2000,
+    /* TV tuner input */
+    AUDIO_DEVICE_IN_TV_TUNER              = AUDIO_DEVICE_BIT_IN | 0x4000,
+    /* Analog jack with line impedance detected */
+    AUDIO_DEVICE_IN_LINE                  = AUDIO_DEVICE_BIT_IN | 0x8000,
+    /* S/PDIF in */
+    AUDIO_DEVICE_IN_SPDIF                 = AUDIO_DEVICE_BIT_IN | 0x10000,
     AUDIO_DEVICE_IN_DEFAULT               = AUDIO_DEVICE_BIT_IN | AUDIO_DEVICE_BIT_DEFAULT,
 
     AUDIO_DEVICE_IN_ALL     = (AUDIO_DEVICE_IN_COMMUNICATION |
@@ -416,14 +443,18 @@ enum {
                                AUDIO_DEVICE_IN_BUILTIN_MIC |
                                AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET |
                                AUDIO_DEVICE_IN_WIRED_HEADSET |
-                               AUDIO_DEVICE_IN_AUX_DIGITAL |
-                               AUDIO_DEVICE_IN_VOICE_CALL |
+                               AUDIO_DEVICE_IN_HDMI |
+                               AUDIO_DEVICE_IN_TELEPHONY_RX |
                                AUDIO_DEVICE_IN_BACK_MIC |
                                AUDIO_DEVICE_IN_REMOTE_SUBMIX |
                                AUDIO_DEVICE_IN_ANLG_DOCK_HEADSET |
                                AUDIO_DEVICE_IN_DGTL_DOCK_HEADSET |
                                AUDIO_DEVICE_IN_USB_ACCESSORY |
                                AUDIO_DEVICE_IN_USB_DEVICE |
+                               AUDIO_DEVICE_IN_FM_TUNER |
+                               AUDIO_DEVICE_IN_TV_TUNER |
+                               AUDIO_DEVICE_IN_LINE |
+                               AUDIO_DEVICE_IN_SPDIF |
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
     AUDIO_DEVICE_IN_ALL_USB  = (AUDIO_DEVICE_IN_USB_ACCESSORY |
