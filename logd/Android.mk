@@ -17,7 +17,8 @@ LOCAL_SRC_FILES := \
     LogStatistics.cpp \
     LogWhiteBlackList.cpp \
     libaudit.c \
-    LogAudit.cpp
+    LogAudit.cpp \
+    event.logtags
 
 LOCAL_SHARED_LIBRARIES := \
     libsysutils \
@@ -25,7 +26,7 @@ LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils
 
-LOCAL_CFLAGS := -Werror
+LOCAL_CFLAGS := -Werror $(shell sed -n 's/^\([0-9]*\)[ \t]*auditd[ \t].*/-DAUDITD_LOG_TAG=\1/p' $(LOCAL_PATH)/event.logtags)
 
 include $(BUILD_EXECUTABLE)
 

@@ -31,9 +31,10 @@
 
 #include <private/android_filesystem_config.h>
 
+#include <cutils/properties.h>
 #include <log/log.h>
 #include <log/logger.h>
-#include <cutils/properties.h>
+#include <log/logprint.h>
 
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
@@ -459,6 +460,8 @@ static bool dump_sibling_thread_report(
 // that don't match the specified pid, and writes them to the tombstone file.
 //
 // If "tail" is set, we only print the last few lines.
+static EventTagMap* g_eventTagMap = NULL;
+
 static void dump_log_file(log_t* log, pid_t pid, const char* filename,
   unsigned int tail) {
   bool first = true;
@@ -521,7 +524,28 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
     if (!hdr_size) {
       hdr_size = sizeof(log_entry.entry_v1);
     }
-    char* msg = (char *)log_entry.buf + hdr_size;
+    char* msg = reinterpret_cast<char*>(log_entry.buf) + hdr_size;
+
+    char timeBuf[32];
+    time_t sec = static_cast<time_t>(entry->sec);
+    struct tm tmBuf;
+    struct tm* ptm;
+    ptm = localtime_r(&sec, &tmBuf);
+    strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", ptm);
+
+    if (log_entry.id() == LOG_ID_EVENTS) {
+      if (!g_eventTagMap) {
+        g_eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+      }
+      AndroidLogEntry e;
+      char buf[512];
+      android_log_processBinaryLogBuffer(entry, &e, g_eventTagMap, buf, sizeof(buf));
+      _LOG(log, 0, "%s.%03d %5d %5d %c %-8s: %s\n",
+         timeBuf, entry->nsec / 1000000, entry->pid, entry->tid,
+         'I', e.tag, e.message);
+      continue;
+    }
+
     unsigned char prio = msg[0];
     char* tag = msg + 1;
     msg = tag + strlen(tag) + 1;
@@ -533,13 +557,6 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
     }
 
     char prioChar = (prio < strlen(kPrioChars) ? kPrioChars[prio] : '?');
-
-    char timeBuf[32];
-    time_t sec = static_cast<time_t>(entry->sec);
-    struct tm tmBuf;
-    struct tm* ptm;
-    ptm = localtime_r(&sec, &tmBuf);
-    strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", ptm);
 
     // Look for line breaks ('\n') and display each text line
     // on a separate line, prefixed with the header, like logcat does.
@@ -565,6 +582,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
 static void dump_logs(log_t* log, pid_t pid, unsigned tail) {
   dump_log_file(log, pid, "system", tail);
   dump_log_file(log, pid, "main", tail);
+  dump_log_file(log, pid, "events", tail);
 }
 
 static void dump_abort_message(Backtrace* backtrace, log_t* log, uintptr_t address) {
