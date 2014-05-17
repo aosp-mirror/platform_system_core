@@ -209,7 +209,8 @@ TEST(ziparchive, ExtractToFile) {
                       sizeof(kATxtContents)));
 
   // Assert that the total length of the file is sane
-  ASSERT_EQ(data_size + sizeof(kATxtContents), lseek64(fd, 0, SEEK_END));
+  ASSERT_EQ(data_size + static_cast<ssize_t>(sizeof(kATxtContents)),
+            lseek64(fd, 0, SEEK_END));
 
   close(fd);
 }
@@ -247,4 +248,3 @@ int main(int argc, char** argv) {
 
   return RUN_ALL_TESTS();
 }
-
