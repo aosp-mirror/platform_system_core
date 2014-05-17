@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -576,7 +577,7 @@ static int64_t get_target_sparse_limit(struct usb_handle *usb)
     if (!status) {
         limit = strtoul(response, NULL, 0);
         if (limit > 0) {
-            fprintf(stderr, "target reported max download size of %lld bytes\n",
+            fprintf(stderr, "target reported max download size of %" PRId64 " bytes\n",
                     limit);
         }
     }
