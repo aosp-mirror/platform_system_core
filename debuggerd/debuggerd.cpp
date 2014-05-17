@@ -322,15 +322,16 @@ static void handle_request(int fd) {
               }
               break;
 
-            case SIGILL:
             case SIGABRT:
             case SIGBUS:
             case SIGFPE:
-            case SIGSEGV:
+            case SIGILL:
             case SIGPIPE:
+            case SIGSEGV:
 #ifdef SIGSTKFLT
             case SIGSTKFLT:
 #endif
+            case SIGTRAP:
               XLOG("stopped -- fatal signal\n");
               // Send a SIGSTOP to the process to make all of
               // the non-signaled threads stop moving.  Without
