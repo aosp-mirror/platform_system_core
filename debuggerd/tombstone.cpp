@@ -58,10 +58,10 @@
 
 static bool signal_has_si_addr(int sig) {
   switch (sig) {
-    case SIGILL:
-    case SIGFPE:
-    case SIGSEGV:
     case SIGBUS:
+    case SIGFPE:
+    case SIGILL:
+    case SIGSEGV:
       return true;
     default:
       return false;
@@ -70,16 +70,17 @@ static bool signal_has_si_addr(int sig) {
 
 static const char* get_signame(int sig) {
   switch(sig) {
-    case SIGILL: return "SIGILL";
     case SIGABRT: return "SIGABRT";
     case SIGBUS: return "SIGBUS";
     case SIGFPE: return "SIGFPE";
-    case SIGSEGV: return "SIGSEGV";
+    case SIGILL: return "SIGILL";
     case SIGPIPE: return "SIGPIPE";
+    case SIGSEGV: return "SIGSEGV";
 #if defined(SIGSTKFLT)
     case SIGSTKFLT: return "SIGSTKFLT";
 #endif
     case SIGSTOP: return "SIGSTOP";
+    case SIGTRAP: return "SIGTRAP";
     default: return "?";
   }
 }
