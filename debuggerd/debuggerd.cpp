@@ -366,38 +366,36 @@ static void handle_request(int fd) {
 }
 
 static int do_server() {
-  int s;
-  struct sigaction act;
-  int logsocket = -1;
-
-  // debuggerd crashes can't be reported to debuggerd.  Reset all of the
-  // crash handlers.
-  signal(SIGILL, SIG_DFL);
+  // debuggerd crashes can't be reported to debuggerd.
+  // Reset all of the crash handlers.
   signal(SIGABRT, SIG_DFL);
   signal(SIGBUS, SIG_DFL);
   signal(SIGFPE, SIG_DFL);
+  signal(SIGILL, SIG_DFL);
   signal(SIGSEGV, SIG_DFL);
 #ifdef SIGSTKFLT
   signal(SIGSTKFLT, SIG_DFL);
 #endif
+  signal(SIGTRAP, SIG_DFL);
 
   // Ignore failed writes to closed sockets
   signal(SIGPIPE, SIG_IGN);
 
-  logsocket = socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_DGRAM);
+  int logsocket = socket_local_client("logd", ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_DGRAM);
   if (logsocket < 0) {
     logsocket = -1;
   } else {
     fcntl(logsocket, F_SETFD, FD_CLOEXEC);
   }
 
+  struct sigaction act;
   act.sa_handler = SIG_DFL;
   sigemptyset(&act.sa_mask);
   sigaddset(&act.sa_mask,SIGCHLD);
   act.sa_flags = SA_NOCLDWAIT;
   sigaction(SIGCHLD, &act, 0);
 
-  s = socket_local_server(DEBUGGER_SOCKET_NAME, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
+  int s = socket_local_server(DEBUGGER_SOCKET_NAME, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
   if (s < 0)
     return 1;
   fcntl(s, F_SETFD, FD_CLOEXEC);
