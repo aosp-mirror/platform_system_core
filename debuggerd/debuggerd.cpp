@@ -54,43 +54,6 @@ struct debugger_request_t {
   int32_t original_si_code;
 };
 
-static int write_string(const char* file, const char* string) {
-  int len;
-  int fd;
-  ssize_t amt;
-  fd = open(file, O_RDWR);
-  len = strlen(string);
-  if (fd < 0)
-    return -errno;
-  amt = write(fd, string, len);
-  close(fd);
-  return amt >= 0 ? 0 : -errno;
-}
-
-static void init_debug_led() {
-  // trout leds
-  write_string("/sys/class/leds/red/brightness", "0");
-  write_string("/sys/class/leds/green/brightness", "0");
-  write_string("/sys/class/leds/blue/brightness", "0");
-  write_string("/sys/class/leds/red/device/blink", "0");
-  // sardine leds
-  write_string("/sys/class/leds/left/cadence", "0,0");
-}
-
-static void enable_debug_led() {
-  // trout leds
-  write_string("/sys/class/leds/red/brightness", "255");
-  // sardine leds
-  write_string("/sys/class/leds/left/cadence", "1,0");
-}
-
-static void disable_debug_led() {
-  // trout leds
-  write_string("/sys/class/leds/red/brightness", "0");
-  // sardine leds
-  write_string("/sys/class/leds/left/cadence", "0,0");
-}
-
 static void wait_for_user_action(pid_t pid) {
   // Find out the name of the process that crashed.
   char path[64];
@@ -130,41 +93,17 @@ static void wait_for_user_action(pid_t pid) {
 
   // Wait for VOLUME DOWN.
   if (init_getevent() == 0) {
-    int ms = 1200 / 10;
-    int dit = 1;
-    int dah = 3*dit;
-    int _       = -dit;
-    int ___     = 3*_;
-    int _______ = 7*_;
-    const int codes[] = {
-      dit,_,dit,_,dit,___,dah,_,dah,_,dah,___,dit,_,dit,_,dit,_______
-    };
-    size_t s = 0;
-    input_event e;
-    init_debug_led();
-    enable_debug_led();
     while (true) {
-      int timeout = abs(codes[s]) * ms;
-      int res = get_event(&e, timeout);
-      if (res == 0) {
+      input_event e;
+      if (get_event(&e, -1) == 0) {
         if (e.type == EV_KEY && e.code == KEY_VOLUMEDOWN && e.value == 0) {
           break;
-        }
-      } else if (res == 1) {
-        if (++s >= sizeof(codes)/sizeof(*codes))
-          s = 0;
-        if (codes[s] > 0) {
-          enable_debug_led();
-        } else {
-          disable_debug_led();
         }
       }
     }
     uninit_getevent();
   }
 
-  // don't forget to turn debug led off
-  disable_debug_led();
   LOG("debuggerd resuming process %d", pid);
 }
 
