@@ -68,6 +68,13 @@ int socket_network_client_timeout(const char *host, int port, int type, int time
     s = socket(hp->h_addrtype, type, 0);
     if (s < 0) return -1;
 
+#ifdef HAVE_WINSOCK
+    if (connect(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+        close(s);
+        return -1;
+    }
+    return s;
+#else
     if ((flags = fcntl(s, F_GETFL, 0)) < 0) {
         close(s);
         return -1;
@@ -125,5 +132,5 @@ done:
     }
 
     return s;
+#endif
 }
-
