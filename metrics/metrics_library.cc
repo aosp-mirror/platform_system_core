@@ -24,8 +24,7 @@
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 static const char kAutotestPath[] = "/var/log/metrics/autotest-events";
-static const char kUMAEventsPath[] = "/var/log/metrics/uma-events";
-static const char kNewUMAEventsPath[] = "/var/run/metrics/uma-events";
+static const char kUMAEventsPath[] = "/var/run/metrics/uma-events";
 static const char kConsentFile[] = "/home/chronos/Consent To Send Stats";
 static const int32_t kBufferSize = 1024;
 static const char kCrosEventHistogramName[] = "Platform.CrOSEvent";
@@ -172,8 +171,7 @@ bool MetricsLibrary::AreMetricsEnabled() {
   return cached_enabled_;
 }
 
-bool MetricsLibrary::StoreMessageInFile(const std::string& message,
-                                        const std::string& events_file) {
+bool MetricsLibrary::SendMessageToChrome(const std::string& message) {
   int size = static_cast<int>(message.size());
   if (size > kBufferSize) {
     LOG(ERROR) << "chrome message too big (" << size << " bytes)";
@@ -181,12 +179,12 @@ bool MetricsLibrary::StoreMessageInFile(const std::string& message,
   }
   // Use libc here instead of chromium base classes because we need a UNIX fd
   // for flock.
-  int chrome_fd = HANDLE_EINTR(open(events_file.c_str(),
+  int chrome_fd = HANDLE_EINTR(open(uma_events_file_.c_str(),
                                     O_WRONLY | O_APPEND | O_CREAT,
                                     READ_WRITE_ALL_FILE_FLAGS));
   // If we failed to open it, return.
   if (chrome_fd < 0) {
-    PLOG(ERROR) << events_file << ": open";
+    PLOG(ERROR) << uma_events_file_ << ": open";
     return false;
   }
 
@@ -198,30 +196,19 @@ bool MetricsLibrary::StoreMessageInFile(const std::string& message,
   // Grab an exclusive lock to protect Chrome from truncating
   // underneath us.
   if (HANDLE_EINTR(flock(chrome_fd, LOCK_EX)) < 0) {
-    PLOG(ERROR) << events_file << ": flock";
+    PLOG(ERROR) << uma_events_file_ << ": flock";
     IGNORE_EINTR(close(chrome_fd));
     return false;
   }
 
   bool success = true;
   if (WriteFileDescriptor(chrome_fd, message.c_str(), size) != size) {
-    PLOG(ERROR) << events_file << ": write";
+    PLOG(ERROR) << uma_events_file_ << ": write";
     success = false;
   }
 
   // Close the file and release the lock.
   IGNORE_EINTR(close(chrome_fd));
-  return success;
-}
-
-bool MetricsLibrary::SendMessageToChrome(const std::string& message) {
-  // TEMPORARY: store to both new and old file, to facilitate change if the
-  // Chrome side is out of sync with this.  See crbug.com/373833.
-
-  // If one store fails, we'll be cool... hey man it's OK, you know, whatever.
-  // If both stores fail, then definitely something is wrong.
-  bool success = StoreMessageInFile(message, uma_events_file_);
-  success |= StoreMessageInFile(message, new_uma_events_file_);
   return success;
 }
 
@@ -241,7 +228,6 @@ const std::string MetricsLibrary::FormatChromeMessage(
 
 void MetricsLibrary::Init() {
   uma_events_file_ = kUMAEventsPath;
-  new_uma_events_file_ = kNewUMAEventsPath;
 }
 
 bool MetricsLibrary::SendToAutotest(const std::string& name, int value) {
