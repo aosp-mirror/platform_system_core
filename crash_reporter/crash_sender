@@ -288,7 +288,6 @@ send_crash() {
   local report_payload="$(get_key_value "${meta_path}" "payload")"
   local kind="$(get_kind "${meta_path}")"
   local exec_name="$(get_key_value "${meta_path}" "exec_name")"
-  local sleep_time=$(generate_uniform_random $SECONDS_SEND_SPREAD)
   local url="${REPORT_UPLOAD_PROD_URL}"
   local chromeos_version="$(get_key_value "${meta_path}" "ver")"
   local board="$(get_board)"
@@ -386,7 +385,6 @@ send_crash() {
   if [ "${product}" != "${CHROMEOS_PRODUCT}" ]; then
     lecho "  Sending crash report on behalf of ${product}"
   fi
-  lecho "  Scheduled to send in ${sleep_time}s"
   lecho "  Metadata: ${meta_path} (${kind})"
   lecho "  Payload: ${report_payload}"
   lecho "  Version: ${version}"
@@ -415,11 +413,6 @@ send_crash() {
     fi
     lecho "Mocking successful send"
     return 0
-  fi
-
-  if ! sleep ${sleep_time}; then
-    lecho "Sleep failed"
-    return 1
   fi
 
   # Read in the first proxy, if any, for a given URL.  NOTE: The
@@ -564,6 +557,27 @@ send_crashes() {
       return 0
     fi
 
+    # The .meta file should be written *after* all to-be-uploaded files that it
+    # references.  Nevertheless, as a safeguard, a hold-off time of thirty
+    # seconds after writing the .meta file is ensured.  Also, sending of crash
+    # reports is spread out randomly by up to SECONDS_SEND_SPREAD.  Thus, for
+    # the sleep call the greater of the two delays is used.
+    local now=$(date +%s)
+    local holdoff_time=$(($(stat --format=%Y "${meta_path}") + 30 - ${now}))
+    local spread_time=$(generate_uniform_random "${SECONDS_SEND_SPREAD}")
+    local sleep_time
+    if [ ${spread_time} -gt ${holdoff_time} ]; then
+      sleep_time="${spread_time}"
+    else
+      sleep_time="${holdoff_time}"
+    fi
+    lecho "Scheduled to send in ${sleep_time}s."
+    if ! is_mock; then
+      if ! sleep "${sleep_time}"; then
+          lecho "Sleep failed"
+          return 1
+      fi
+    fi
     if ! send_crash "${meta_path}"; then
       lecho "Problem sending ${meta_path}, not removing."
       continue
@@ -609,7 +623,7 @@ parseargs() {
       usage 0
       ;;
     *)
-      lecho "Uknown options: $*"
+      lecho "Unknown options: $*"
       exit 1
       ;;
     esac
