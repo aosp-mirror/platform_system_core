@@ -460,7 +460,7 @@ static void connect_device(char* host, char* buffer, int buffer_size)
 
     snprintf(serial, sizeof(serial), "%s:%d", hostbuf, port);
 
-    fd = socket_network_client(hostbuf, port, SOCK_STREAM);
+    fd = socket_network_client_timeout(hostbuf, port, SOCK_STREAM, 10);
     if (fd < 0) {
         snprintf(buffer, buffer_size, "unable to connect to %s:%d", host, port);
         return;
