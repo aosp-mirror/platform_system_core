@@ -519,10 +519,13 @@ send_crashes() {
   # Look through all metadata (*.meta) files, oldest first.  That way, the rate
   # limit does not stall old crashes if there's a high amount of new crashes
   # coming in.
+  # For each crash report, first evaluate conditions that might lead to its
+  # removal to honor user choice and to free disk space as soon as possible,
+  # then decide whether it should be sent right now or kept for later sending.
   for meta_path in $(ls -1tr "${dir}"/*.meta 2>/dev/null); do
     lecho "Considering metadata ${meta_path}."
-    local kind=$(get_kind "${meta_path}")
 
+    local kind=$(get_kind "${meta_path}")
     if [ "${kind}" != "minidump" ] && \
        [ "${kind}" != "kcrash" ] && \
        [ "${kind}" != "log" ]; then
@@ -531,13 +534,10 @@ send_crashes() {
       continue
     fi
 
-    if ${METRICS_CLIENT} -g; then
-      lecho "Guest mode has been entered.  Delaying crash sending until exited."
-      return 0
-    fi
-
+    # Remove existing crashes in case user consent has not (yet) been given or
+    # has been revoked.
     if ! ${METRICS_CLIENT} -c; then
-      lecho "Uploading is disabled.  Removing crash."
+      lecho "Crash reporting is disabled.  Removing crash."
       remove_report "${meta_path}"
       continue
     fi
@@ -561,9 +561,20 @@ send_crashes() {
       continue
     fi
 
+    # Don't send crash reports from previous sessions while we're in guest mode
+    # to avoid the impression that crash reporting was enabled, which it isn't.
+    # (Don't exit right now because subsequent reports may be candidates for
+    # deletion.)
+    if ${METRICS_CLIENT} -g; then
+      lecho "Guest mode has been entered.  Delaying crash sending until exited."
+      continue
+    fi
+
+    # Skip report if the upload rate is exceeded.  (Don't exit right now because
+    # subsequent reports may be candidates for deletion.)
     if ! check_rate; then
       lecho "Sending ${meta_path} would exceed rate.  Leaving for later."
-      return 0
+      continue
     fi
 
     # The .meta file should be written *after* all to-be-uploaded files that it
@@ -587,6 +598,8 @@ send_crashes() {
           return 1
       fi
     fi
+
+    # Try to upload.
     if ! send_crash "${meta_path}"; then
       lecho "Problem sending ${meta_path}, not removing."
       continue
