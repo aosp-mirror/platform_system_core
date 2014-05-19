@@ -72,6 +72,8 @@ include $(LOCAL_PATH)/Android.build.mk
 build_type := host
 include $(LOCAL_PATH)/Android.build.mk
 
+# Don't build for unbundled branches
+ifeq (,$(TARGET_BUILD_APPS))
 #-------------------------------------------------------------------------
 # The libbacktrace library (libc++)
 #-------------------------------------------------------------------------
@@ -112,6 +114,7 @@ build_target := SHARED_LIBRARY
 include $(LOCAL_PATH)/Android.build.mk
 build_type := host
 include $(LOCAL_PATH)/Android.build.mk
+endif
 
 #-------------------------------------------------------------------------
 # The libbacktrace_test library needed by backtrace_test.
