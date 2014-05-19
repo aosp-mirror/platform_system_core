@@ -73,6 +73,47 @@ build_type := host
 include $(LOCAL_PATH)/Android.build.mk
 
 #-------------------------------------------------------------------------
+# The libbacktrace library (libc++)
+#-------------------------------------------------------------------------
+libbacktrace_libc++_src_files := \
+	BacktraceImpl.cpp \
+	BacktraceMap.cpp \
+	BacktraceThread.cpp \
+	thread_utils.c \
+
+libbacktrace_libc++_shared_libraries_target := \
+	libcutils \
+	libgccdemangle \
+
+libbacktrace_libc++_src_files += \
+	UnwindCurrent.cpp \
+	UnwindMap.cpp \
+	UnwindPtrace.cpp \
+
+libbacktrace_libc++_c_includes := \
+	external/libunwind/include \
+
+libbacktrace_libc++_shared_libraries := \
+	libunwind \
+	libunwind-ptrace \
+
+libbacktrace_libc++_shared_libraries_host := \
+	liblog \
+
+libbacktrace_libc++_static_libraries_host := \
+	libcutils \
+
+libbacktrace_libc++_libc++ := true
+
+module := libbacktrace_libc++
+module_tag := optional
+build_type := target
+build_target := SHARED_LIBRARY
+include $(LOCAL_PATH)/Android.build.mk
+build_type := host
+include $(LOCAL_PATH)/Android.build.mk
+
+#-------------------------------------------------------------------------
 # The libbacktrace_test library needed by backtrace_test.
 #-------------------------------------------------------------------------
 libbacktrace_test_cflags := \
