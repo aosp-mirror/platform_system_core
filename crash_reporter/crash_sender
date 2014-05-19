@@ -188,11 +188,6 @@ generate_uniform_random() {
   echo $((random % max))
 }
 
-is_on_3g() {
-  # See crosbug.com/3304.
-  return 1
-}
-
 # Check if sending a crash now does not exceed the maximum 24hr rate and
 # commit to doing so, if not.
 check_rate() {
@@ -500,12 +495,11 @@ remove_report() {
   rm -f -- "${base}".*
 }
 
-# Send all crashes from the given directory.
+# Send all crashes from the given directory.  This applies even when we're on a
+# 3G connection (see crosbug.com/3304 for discussion).
 send_crashes() {
   local dir="$1"
 
-  # Cycle through minidumps, most recent first.  That way if we're about
-  # to exceed the daily rate, we send the most recent minidumps.
   if [ ! -d "${dir}" ]; then
     return
   fi
@@ -520,7 +514,9 @@ send_crashes() {
     fi
   done
 
-  # Look through all metadata (*.meta) files, if any exist.
+  # Look through all metadata (*.meta) files, oldest first.  That way, the rate
+  # limit does not stall old crashes if there's a high amount of new crashes
+  # coming in.
   for meta_path in $(ls -1tr "${dir}"/*.meta 2>/dev/null); do
     lecho "Considering metadata ${meta_path}."
     local kind=$(get_kind "${meta_path}")
@@ -548,11 +544,6 @@ send_crashes() {
       lecho "Not an official OS version.  Removing crash."
       remove_report "${meta_path}"
       continue
-    fi
-
-    if is_on_3g; then
-      lecho "Not sending crash reports while on 3G, saving for later."
-      return 0
     fi
 
     if ! is_complete_metadata "${meta_path}"; then
