@@ -86,6 +86,8 @@ static inline int android_get_control_socket(const char *name)
 
 extern int socket_loopback_client(int port, int type);
 extern int socket_network_client(const char *host, int port, int type);
+extern int socket_network_client_timeout(const char *host, int port, int type,
+                                         int timeout);
 extern int socket_loopback_server(int port, int type);
 extern int socket_local_server(const char *name, int namespaceId, int type);
 extern int socket_local_server_bind(int s, const char *name, int namespaceId);
