@@ -60,7 +60,7 @@ LOCAL_LDLIBS := \
     $($(module)_ldlibs_$(build_type)) \
 
 ifeq ($(build_type),target)
-  ifneq ($(module)_libc++,)
+  ifneq ($($(module)_libc++),)
     include external/libcxx/libcxx.mk
   else
     include external/stlport/libstlport.mk
