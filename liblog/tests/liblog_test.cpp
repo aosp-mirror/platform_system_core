@@ -544,7 +544,7 @@ TEST(liblog, too_big_payload) {
     EXPECT_LE(LOGGER_ENTRY_MAX_PAYLOAD - sizeof(big_payload_tag),
               static_cast<size_t>(max_len));
 
-    EXPECT_EQ(ret, max_len + sizeof(big_payload_tag));
+    EXPECT_EQ(ret, max_len + static_cast<ssize_t>(sizeof(big_payload_tag)));
 }
 
 TEST(liblog, dual_reader) {
