@@ -18,6 +18,7 @@
 #define _HEALTHD_H_
 
 #include <batteryservice/BatteryService.h>
+#include <sys/types.h>
 #include <utils/Errors.h>
 #include <utils/String8.h>
 
@@ -64,6 +65,8 @@ struct healthd_config {
     android::String8 batteryCurrentNowPath;
     android::String8 batteryCurrentAvgPath;
     android::String8 batteryChargeCounterPath;
+
+    int (*energyCounter)(int64_t *);
 };
 
 // Global helper functions

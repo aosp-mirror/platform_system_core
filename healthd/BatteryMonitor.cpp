@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
+#include <sys/types.h>
 #include <utils/Errors.h>
 #include <utils/String8.h>
 #include <utils/Vector.h>
@@ -315,7 +316,11 @@ status_t BatteryMonitor::getProperty(int id, struct BatteryProperty *val) {
         break;
 
     case BATTERY_PROP_ENERGY_COUNTER:
-        ret = NAME_NOT_FOUND;
+        if (mHealthdConfig->energyCounter) {
+            ret = mHealthdConfig->energyCounter(&val->valueInt64);
+        } else {
+            ret = NAME_NOT_FOUND;
+        }
         break;
 
     default:
