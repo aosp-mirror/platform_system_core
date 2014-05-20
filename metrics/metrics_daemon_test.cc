@@ -172,8 +172,8 @@ class MetricsDaemonTest : public testing::Test {
     std::string frequency_string = StringPrintf("%d\n", frequency);
     int frequency_string_length = frequency_string.length();
     EXPECT_EQ(frequency_string.length(),
-        file_util::WriteFile(path, frequency_string.c_str(),
-            frequency_string_length));
+              base::WriteFile(path, frequency_string.c_str(),
+                              frequency_string_length));
   }
 
   // The MetricsDaemon under test.
@@ -193,7 +193,7 @@ TEST_F(MetricsDaemonTest, CheckSystemCrash) {
   EXPECT_FALSE(daemon_.CheckSystemCrash(kKernelCrashDetected));
 
   base::FilePath crash_detected(kKernelCrashDetected);
-  file_util::WriteFile(crash_detected, "", 0);
+  base::WriteFile(crash_detected, "", 0);
   EXPECT_TRUE(base::PathExists(crash_detected));
   EXPECT_TRUE(daemon_.CheckSystemCrash(kKernelCrashDetected));
   EXPECT_FALSE(base::PathExists(crash_detected));

@@ -70,9 +70,9 @@ TEST_F(MetricsLibraryTest, IsDeviceMounted) {
                                     buffer,
                                     1,
                                     &result));
-  ASSERT_TRUE(file_util::WriteFile(base::FilePath(kTestMounts),
-                                   kTestContents,
-                                   strlen(kTestContents)));
+  ASSERT_TRUE(base::WriteFile(base::FilePath(kTestMounts),
+                              kTestContents,
+                              strlen(kTestContents)));
   EXPECT_FALSE(lib_.IsDeviceMounted("guestfs",
                                     kTestMounts,
                                     buffer,
