@@ -701,6 +701,13 @@ int socket_network_client(const char *host, int port, int type)
 }
 
 
+int socket_network_client_timeout(const char *host, int port, int type, int timeout)
+{
+    // TODO: implement timeouts for Windows.
+    return socket_network_client(host, port, type);
+}
+
+
 int socket_inaddr_any_server(int port, int type)
 {
     FH  f = _fh_alloc( &_fh_socket_class );
