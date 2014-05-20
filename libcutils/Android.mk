@@ -27,13 +27,6 @@ commonSources := \
 	hashmap.c \
 	atomic.c.arm \
 	native_handle.c \
-	socket_inaddr_any_server.c \
-	socket_local_client.c \
-	socket_local_server.c \
-	socket_loopback_client.c \
-	socket_loopback_server.c \
-	socket_network_client.c \
-	sockets.c \
 	config_utils.c \
 	cpu_info.c \
 	load_file.c \
@@ -67,7 +60,15 @@ endif
 ifneq ($(WINDOWS_HOST_ONLY),1)
     commonSources += \
         fs.c \
-        multiuser.c
+        multiuser.c \
+	socket_inaddr_any_server.c \
+	socket_local_client.c \
+	socket_local_server.c \
+	socket_loopback_client.c \
+	socket_loopback_server.c \
+	socket_network_client.c \
+	sockets.c \
+
 endif
 
 
