@@ -652,6 +652,7 @@ static struct label snd_labels[] = {
         LABEL_END,
 };
 
+#if 0
 static struct label id_labels[] = {
         LABEL(ID_BUS),
         LABEL(ID_VENDOR),
@@ -682,6 +683,7 @@ static struct label bus_labels[] = {
         LABEL(BUS_SPI),
         LABEL_END,
 };
+#endif
 
 static struct label mt_tool_labels[] = {
         LABEL(MT_TOOL_FINGER),

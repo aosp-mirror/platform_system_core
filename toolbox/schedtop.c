@@ -227,7 +227,6 @@ static void update_table(DIR *d, uint32_t flags)
     }
     for (i = 0; i < last_processes.active; i++) {
         int pid = last_processes.data[i].pid;
-        int tid = last_processes.data[i].tid;
         for (j = 0; j < processes.active; j++)
             if (pid == processes.data[j].pid)
                 break;
@@ -270,9 +269,6 @@ int schedtop_main(int argc, char **argv)
 {
     int c;
     DIR *d;
-    struct dirent *de;
-    char *namefilter = 0;
-    int pidfilter = 0;
     uint32_t flags = 0;    
     int delay = 3000000;
     float delay_f;

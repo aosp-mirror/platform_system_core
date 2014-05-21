@@ -33,7 +33,6 @@ static int is_loop_mount(const char* path, char *loopdev)
     char mount_path[256];
     char rest[256];
     int result = 0;
-    int path_length = strlen(path);
     
     f = fopen("/proc/mounts", "r");
     if (!f) {

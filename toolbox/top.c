@@ -328,7 +328,6 @@ static void read_procs(void) {
 static int read_stat(char *filename, struct proc_info *proc) {
     FILE *file;
     char buf[MAX_LINE], *open_paren, *close_paren;
-    int res, idx;
 
     file = fopen(filename, "r");
     if (!file) return 1;
@@ -414,9 +413,7 @@ static void print_procs(void) {
     struct proc_info *old_proc, *proc;
     long unsigned total_delta_time;
     struct passwd *user;
-    struct group *group;
     char *user_str, user_buf[20];
-    char *group_str, group_buf[20];
 
     for (i = 0; i < num_new_procs; i++) {
         if (new_procs[i]) {
@@ -467,18 +464,11 @@ static void print_procs(void) {
         if (!proc || (max_procs && (i >= max_procs)))
             break;
         user  = getpwuid(proc->uid);
-        group = getgrgid(proc->gid);
         if (user && user->pw_name) {
             user_str = user->pw_name;
         } else {
             snprintf(user_buf, 20, "%d", proc->uid);
             user_str = user_buf;
-        }
-        if (group && group->gr_name) {
-            group_str = group->gr_name;
-        } else {
-            snprintf(group_buf, 20, "%d", proc->gid);
-            group_str = group_buf;
         }
         if (!threads)
             printf("%5d %2d %3ld%% %c %5d %6ldK %6ldK %3s %-8.8s %s\n", proc->pid, proc->prs, proc->delta_time * 100 / total_delta_time, proc->state, proc->num_threads,

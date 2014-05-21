@@ -99,10 +99,7 @@ out:
 static void print_maps(struct pid_info_t* info)
 {
     FILE *maps;
-    char buffer[PATH_MAX + 100];
-
     size_t offset;
-    int major, minor;
     char device[10];
     long int inode;
     char file[PATH_MAX];
