@@ -14,7 +14,6 @@ int hd_main(int argc, char *argv[])
 	unsigned char buf[4096];
     int res;
 	int read_len;
-	int rv = 0;
 	int i;
 	int filepos = 0;
 	int sum;

@@ -15,7 +15,6 @@ static int usage()
 
 int mkdir_main(int argc, char *argv[])
 {
-    int symbolic = 0;
     int ret;
     if(argc < 2 || strcmp(argv[1], "--help") == 0) {
         return usage();

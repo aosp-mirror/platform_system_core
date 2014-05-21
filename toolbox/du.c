@@ -76,7 +76,7 @@ du_main(int argc, char *argv[])
 	int64_t totalblocks;
 	int ftsoptions, listfiles;
 	int depth;
-	int Hflag, Lflag, aflag, ch, cflag, dflag, gkmflag, nflag, rval, sflag;
+	int Hflag, Lflag, aflag, ch, cflag, dflag, gkmflag, rval, sflag;
 	const char *noargv[2];
 
 	Hflag = Lflag = aflag = cflag = dflag = gkmflag = sflag = 0;
