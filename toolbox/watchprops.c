@@ -23,9 +23,9 @@ static bool str_equals(void *keyA, void *keyB)
 
 static void announce(char *name, char *value)
 {
-    char *x;
+    unsigned char *x;
     
-    for(x = value; *x; x++) {
+    for(x = (unsigned char *)value; *x; x++) {
         if((*x < 32) || (*x > 127)) *x = '.';
     }
 

@@ -73,7 +73,7 @@ int insmod_main(int argc, char **argv)
 		char *ptr = opts;
 
 		for (i = 2; (i < argc) && (ptr < end); i++) {
-			len = MIN(strlen(argv[i]), end - ptr);
+			len = MIN(strlen(argv[i]), (size_t)(end - ptr));
 			memcpy(ptr, argv[i], len);
 			ptr += len;
 			*ptr++ = ' ';
