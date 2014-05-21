@@ -12,6 +12,7 @@ LOCAL_SRC_FILES := $(commonSources)
 LOCAL_MODULE := libdiskconfig
 LOCAL_MODULE_TAGS := optional
 LOCAL_SYSTEM_SHARED_LIBRARIES := libcutils liblog libc
+LOCAL_CFLAGS := -Werror
 include $(BUILD_SHARED_LIBRARY)
 
 ifeq ($(HOST_OS),linux)
