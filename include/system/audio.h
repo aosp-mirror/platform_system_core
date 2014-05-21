@@ -61,6 +61,55 @@ typedef enum {
 } audio_stream_type_t;
 
 /* Do not change these values without updating their counterparts
+ * in frameworks/base/media/java/android/media/AudioAttributes.java
+ */
+typedef enum {
+    AUDIO_CONTENT_TYPE_UNKNOWN      = 0,
+    AUDIO_CONTENT_TYPE_SPEECH       = 1,
+    AUDIO_CONTENT_TYPE_MUSIC        = 2,
+    AUDIO_CONTENT_TYPE_MOVIE        = 3,
+    AUDIO_CONTENT_TYPE_SONIFICATION = 4,
+
+    AUDIO_CONTENT_TYPE_CNT,
+    AUDIO_CONTENT_TYPE_MAX          = AUDIO_CONTENT_TYPE_CNT - 1,
+} audio_content_type_t;
+
+/* Do not change these values without updating their counterparts
+ * in frameworks/base/media/java/android/media/AudioAttributes.java
+ */
+typedef enum {
+    AUDIO_USAGE_UNKNOWN                            = 0,
+    AUDIO_USAGE_MEDIA                              = 1,
+    AUDIO_USAGE_VOICE_COMMUNICATION                = 2,
+    AUDIO_USAGE_VOICE_COMMUNICATION_SIGNALLING     = 3,
+    AUDIO_USAGE_ALARM                              = 4,
+    AUDIO_USAGE_NOTIFICATION                       = 5,
+    AUDIO_USAGE_NOTIFICATION_TELEPHONY_RINGTONE    = 6,
+    AUDIO_USAGE_NOTIFICATION_COMMUNICATION_REQUEST = 7,
+    AUDIO_USAGE_NOTIFICATION_COMMUNICATION_INSTANT = 8,
+    AUDIO_USAGE_NOTIFICATION_COMMUNICATION_DELAYED = 9,
+    AUDIO_USAGE_NOTIFICATION_EVENT                 = 10,
+    AUDIO_USAGE_ASSISTANCE_ACCESSIBILITY           = 11,
+    AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE     = 12,
+    AUDIO_USAGE_ASSISTANCE_SONIFICATION            = 13,
+    AUDIO_USAGE_GAME                               = 14,
+
+    AUDIO_USAGE_CNT,
+    AUDIO_USAGE_MAX                                = AUDIO_USAGE_CNT - 1,
+} audio_usage_t;
+
+typedef uint32_t audio_flags_mask_t;
+
+/* Do not change these values without updating their counterparts
+ * in frameworks/base/media/java/android/media/AudioAttributes.java
+ */
+enum {
+    AUDIO_FLAG_AUDIBILITY_ENFORCED = 0x1,
+    AUDIO_FLAG_SECURE              = 0x2,
+    AUDIO_FLAG_SCO                 = 0x4,
+};
+
+/* Do not change these values without updating their counterparts
  * in frameworks/base/media/java/android/media/MediaRecorder.java,
  * frameworks/av/services/audiopolicy/AudioPolicyService.cpp,
  * and system/media/audio_effects/include/audio_effects/audio_effects_conf.h!
@@ -86,6 +135,16 @@ typedef enum {
                                                 Used only internally to the framework. Not exposed
                                                 at the audio HAL. */
 } audio_source_t;
+
+/* Audio attributes */
+#define AUDIO_ATTRIBUTES_TAGS_MAX_SIZE 256
+typedef struct {
+    audio_content_type_t content_type;
+    audio_usage_t        usage;
+    audio_source_t       source;
+    audio_flags_mask_t   flags;
+    char                 tags[AUDIO_ATTRIBUTES_TAGS_MAX_SIZE]; /* UTF8 */
+} audio_attributes_t;
 
 /* special audio session values
  * (XXX: should this be living in the audio effects land?)
