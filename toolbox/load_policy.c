@@ -10,7 +10,7 @@
 
 int load_policy_main(int argc, char **argv)
 {
-    int fd, rc, vers;
+    int fd, rc;
     struct stat sb;
     void *map;
     const char *path;

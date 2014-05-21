@@ -360,7 +360,7 @@ newfs_msdos_main(int argc, char *argv[])
     if (!opt_create && !strchr(fname, '/')) {
 	snprintf(buf, sizeof(buf), "%s%s", _PATH_DEV, fname);
 	if (!(fname = strdup(buf)))
-	    err(1, NULL);
+	    err(1, "%s", buf);
     }
     dtype = *argv;
     if (opt_create) {
@@ -493,7 +493,7 @@ newfs_msdos_main(int argc, char *argv[])
 	if (!strchr(bname, '/')) {
 	    snprintf(buf, sizeof(buf), "/boot/%s", bname);
 	    if (!(bname = strdup(buf)))
-		err(1, NULL);
+		err(1, "%s", buf);
 	}
 	if ((fd1 = open(bname, O_RDONLY)) == -1 || fstat(fd1, &sb))
 	    err(1, "%s", bname);
@@ -611,7 +611,7 @@ newfs_msdos_main(int argc, char *argv[])
 	now = tv.tv_sec;
 	tm = localtime(&now);
 	if (!(img = malloc(bpb.bps)))
-	    err(1, NULL);
+	    err(1, "%u", bpb.bps);
 	dir = bpb.res + (bpb.spf ? bpb.spf : bpb.bspf) * bpb.nft;
 	for (lsn = 0; lsn < dir + (fat == 32 ? bpb.spc : rds); lsn++) {
 	    x = lsn;
@@ -728,14 +728,14 @@ newfs_msdos_main(int argc, char *argv[])
 static void
 check_mounted(const char *fname, mode_t mode)
 {
+#ifdef ANDROID
+    warnx("Skipping mount checks");
+#else
     struct statfs *mp;
     const char *s1, *s2;
     size_t len;
     int n, r;
 
-#ifdef ANDROID
-    warnx("Skipping mount checks");
-#else
     if (!(n = getmntinfo(&mp, MNT_NOWAIT)))
 	err(1, "getmntinfo");
     len = strlen(_PATH_DEV);

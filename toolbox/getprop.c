@@ -32,8 +32,6 @@ static void list_properties(void)
 
 int getprop_main(int argc, char *argv[])
 {
-    int n = 0;
-
     if (argc == 1) {
         list_properties();
     } else {

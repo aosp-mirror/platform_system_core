@@ -47,9 +47,8 @@ struct input_event {
 
 int sendevent_main(int argc, char *argv[])
 {
-    int i;
     int fd;
-    int ret;
+    ssize_t ret;
     int version;
     struct input_event event;
 
@@ -72,7 +71,7 @@ int sendevent_main(int argc, char *argv[])
     event.code = atoi(argv[3]);
     event.value = atoi(argv[4]);
     ret = write(fd, &event, sizeof(event));
-    if(ret < sizeof(event)) {
+    if(ret < (ssize_t) sizeof(event)) {
         fprintf(stderr, "write event failed, %s\n", strerror(errno));
         return -1;
     }
