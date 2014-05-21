@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <batteryservice/BatteryService.h>
 #include <cutils/klog.h>
+#include <cutils/properties.h>
 #include <sys/types.h>
 #include <utils/Errors.h>
 #include <utils/String8.h>
@@ -184,10 +185,14 @@ bool BatteryMonitor::update(void) {
     else
         props.batteryPresent = mBatteryDevicePresent;
 
-    props.batteryLevel = getIntField(mHealthdConfig->batteryCapacityPath);
+    props.batteryLevel = mBatteryFixedCapacity ?
+        mBatteryFixedCapacity :
+        getIntField(mHealthdConfig->batteryCapacityPath);
     props.batteryVoltage = getIntField(mHealthdConfig->batteryVoltagePath) / 1000;
 
-    props.batteryTemperature = getIntField(mHealthdConfig->batteryTemperaturePath);
+    props.batteryTemperature = mBatteryFixedTemperature ?
+        mBatteryFixedTemperature :
+        getIntField(mHealthdConfig->batteryTemperaturePath);
 
     const int SIZE = 128;
     char buf[SIZE];
@@ -367,6 +372,7 @@ void BatteryMonitor::dumpState(int fd) {
 
 void BatteryMonitor::init(struct healthd_config *hc) {
     String8 path;
+    char pval[PROPERTY_VALUE_MAX];
 
     mHealthdConfig = hc;
     DIR* dir = opendir(POWER_SUPPLY_SYSFS_PATH);
@@ -523,6 +529,12 @@ void BatteryMonitor::init(struct healthd_config *hc) {
         if (mHealthdConfig->batteryTechnologyPath.isEmpty())
             KLOG_WARNING(LOG_TAG, "BatteryTechnologyPath not found\n");
     }
+
+    if (property_get("persist.sys.battery.capacity", pval, NULL) > 0)
+        mBatteryFixedCapacity = (int) strtol(pval, NULL, 10);
+
+    if (property_get("persist.sys.battery.temperature", pval, NULL) > 0)
+        mBatteryFixedTemperature = (int) strtol(pval, NULL, 10);
 }
 
 }; // namespace android
