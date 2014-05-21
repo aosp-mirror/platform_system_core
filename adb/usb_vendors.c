@@ -51,7 +51,9 @@
 // BYD's USB Vendor ID
 #define VENDOR_ID_BYD           0x1D91
 // Compal's USB Vendor ID
-#define VENDOR_ID_COMPAL        0x1219
+#define VENDOR_ID_COMPAL        0x04B7
+// Compalcomm's USB Vendor ID
+#define VENDOR_ID_COMPALCOMM    0x1219
 // Dell's USB Vendor ID
 #define VENDOR_ID_DELL          0x413c
 // ECS's USB Vendor ID
@@ -195,6 +197,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_ASUS,
     VENDOR_ID_BYD,
     VENDOR_ID_COMPAL,
+    VENDOR_ID_COMPALCOMM,
     VENDOR_ID_DELL,
     VENDOR_ID_ECS,
     VENDOR_ID_EMERGING_TECH,
