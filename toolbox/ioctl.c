@@ -21,9 +21,9 @@ int ioctl_main(int argc, char *argv[])
     int arg_size = 4;
     int direct_arg = 0;
     uint32_t ioctl_nr;
-    void *ioctl_args;
+    void *ioctl_args = NULL;
     uint8_t *ioctl_argp;
-    uint8_t *ioctl_argp_save;
+    uint8_t *ioctl_argp_save = NULL;
     int rem;
 
     do {
@@ -116,6 +116,7 @@ int ioctl_main(int argc, char *argv[])
     else
         res = ioctl(fd, ioctl_nr, 0);
     if (res < 0) {
+        free(ioctl_args);
         fprintf(stderr, "ioctl 0x%x failed, %d\n", ioctl_nr, res);
         return 1;
     }
@@ -128,5 +129,6 @@ int ioctl_main(int argc, char *argv[])
         }
         printf("\n");
     }
+    free(ioctl_args);
     return 0;
 }

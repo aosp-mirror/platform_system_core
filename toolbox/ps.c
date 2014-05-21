@@ -44,7 +44,7 @@ static int ps_line(int pid, int tid, char *namefilter)
     struct stat stats;
     int fd, r;
     char *ptr, *name, *state;
-    int ppid, tty;
+    int ppid;
     unsigned wchan, rss, vss, eip;
     unsigned utime, stime;
     int prio, nice, rtprio, sched, psr;
@@ -92,8 +92,7 @@ static int ps_line(int pid, int tid, char *namefilter)
     ppid = atoi(nexttok(&ptr));
     nexttok(&ptr); // pgrp
     nexttok(&ptr); // sid
-    tty = atoi(nexttok(&ptr));
-
+    nexttok(&ptr); // tty
     nexttok(&ptr); // tpgid
     nexttok(&ptr); // flags
     nexttok(&ptr); // minflt
@@ -134,7 +133,7 @@ static int ps_line(int pid, int tid, char *namefilter)
     rtprio = atoi(nexttok(&ptr)); // rt_priority
     sched = atoi(nexttok(&ptr)); // scheduling policy
 
-    tty = atoi(nexttok(&ptr));
+    nexttok(&ptr); // tty
 
     if(tid != 0) {
         ppid = pid;

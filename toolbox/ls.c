@@ -443,7 +443,6 @@ static int listpath(const char *name, int flags)
 int ls_main(int argc, char **argv)
 {
     int flags = 0;
-    int listed = 0;
 
     if(argc > 1) {
         int i;

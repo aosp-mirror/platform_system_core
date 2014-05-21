@@ -140,14 +140,12 @@ static char *parse_time(const char *str, struct timeval *ts) {
 
 int date_main(int argc, char *argv[])
 {
-	int c;
+    int c;
     int res;
-	struct tm tm;
-	time_t t;
-	struct timeval tv;
-    struct timespec ts;
-	char strbuf[260];
-    int fd;
+    struct tm tm;
+    time_t t;
+    struct timeval tv;
+    char strbuf[260];
 
     int useutc = 0;
 
@@ -177,7 +175,6 @@ int date_main(int argc, char *argv[])
 
     int hasfmt = argc == optind + 1 && argv[optind][0] == '+';
     if(optind == argc || hasfmt) {
-        char buf[2000];
         time(&t);
         if (useutc) {
             gmtime_r(&t, &tm);

@@ -77,9 +77,7 @@ static void update_watchlist(const prop_info *pi, void *cookie)
 
 int watchprops_main(int argc, char *argv[])
 {
-    unsigned serial = 0;
-    unsigned count = 0;
-    unsigned n;
+    unsigned serial;
     
     Hashmap *watchlist = hashmapCreate(1024, str_hash, str_equals);
     if (!watchlist)
@@ -87,7 +85,7 @@ int watchprops_main(int argc, char *argv[])
 
     __system_property_foreach(populate_watchlist, watchlist);
 
-    for(;;) {
+    for(serial = 0;;) {
         serial = __system_property_wait_any(serial);
         __system_property_foreach(update_watchlist, watchlist);
     }

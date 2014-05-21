@@ -498,13 +498,11 @@ int getevent_main(int argc, char *argv[])
     int c;
     int i;
     int res;
-    int pollres;
     int get_time = 0;
     int print_device = 0;
     char *newline = "\n";
     uint16_t get_switch = 0;
     struct input_event event;
-    int version;
     int print_flags = 0;
     int print_flags_set = 0;
     int dont_block = -1;
@@ -635,7 +633,8 @@ int getevent_main(int argc, char *argv[])
         return 0;
 
     while(1) {
-        pollres = poll(ufds, nfds, -1);
+        //int pollres =
+        poll(ufds, nfds, -1);
         //printf("poll %d, returned %d\n", nfds, pollres);
         if(ufds[0].revents & POLLIN) {
             read_notify(device_path, ufds[0].fd, print_flags);
