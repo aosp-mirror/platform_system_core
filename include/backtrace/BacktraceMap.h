@@ -18,6 +18,7 @@
 #define _BACKTRACE_BACKTRACE_MAP_H
 
 #include <stdint.h>
+#include <sys/types.h>
 #ifdef USE_MINGW
 // MINGW does not define these constants.
 #define PROT_NONE 0
