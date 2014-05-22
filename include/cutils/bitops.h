@@ -59,7 +59,7 @@ static inline void bitmask_init(unsigned int *bitmask, int num_bits)
 static inline int bitmask_ffz(unsigned int *bitmask, int num_bits)
 {
     int bit, result;
-    unsigned int i;
+    size_t i;
 
     for (i = 0; i < BITS_TO_WORDS(num_bits); i++) {
         bit = ffs(~bitmask[i]);
@@ -77,7 +77,7 @@ static inline int bitmask_ffz(unsigned int *bitmask, int num_bits)
 
 static inline int bitmask_weight(unsigned int *bitmask, int num_bits)
 {
-    int i;
+    size_t i;
     int weight = 0;
 
     for (i = 0; i < BITS_TO_WORDS(num_bits); i++)
