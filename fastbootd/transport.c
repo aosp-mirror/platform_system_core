@@ -55,7 +55,7 @@ int transport_handle_download(struct transport_handle *thandle, size_t len)
     ftruncate(fd, len);
 
     buffer = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (buffer == NULL) {
+    if (buffer == MAP_FAILED) {
         D(ERR, "mmap(%zu) failed: %d %s", len, errno, strerror(errno));
         goto err;
     }
