@@ -174,7 +174,7 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
     if (last == mLogElements.end()) {
         mLogElements.push_back(elem);
     } else {
-        log_time end;
+        log_time end = log_time::EPOCH;
         bool end_set = false;
         bool end_always = false;
 
