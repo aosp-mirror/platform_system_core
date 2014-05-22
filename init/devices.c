@@ -298,6 +298,37 @@ static void remove_platform_device(const char *path)
     }
 }
 
+/* Given a path that may start with a PCI device, populate the supplied buffer
+ * with the PCI domain/bus number and the peripheral ID and return 0.
+ * If it doesn't start with a PCI device, or there is some error, return -1 */
+static int find_pci_device_prefix(const char *path, char *buf, ssize_t buf_sz)
+{
+    const char *start, *end;
+
+    if (strncmp(path, "/devices/pci", 12))
+        return -1;
+
+    /* Beginning of the prefix is the initial "pci" after "/devices/" */
+    start = path + 9;
+
+    /* End of the prefix is two path '/' later, capturing the domain/bus number
+     * and the peripheral ID. Example: pci0000:00/0000:00:1f.2 */
+    end = strchr(start, '/');
+    if (!end)
+        return -1;
+    end = strchr(end + 1, '/');
+    if (!end)
+        return -1;
+
+    /* Make sure we have enough room for the string plus null terminator */
+    if (end - start + 1 > buf_sz)
+        return -1;
+
+    strncpy(buf, start, end - start);
+    buf[end - start] = '\0';
+    return 0;
+}
+
 #if LOG_UEVENTS
 
 static inline suseconds_t get_usecs(void)
@@ -422,11 +453,12 @@ err:
     return NULL;
 }
 
-static char **parse_platform_block_device(struct uevent *uevent)
+static char **get_block_device_symlinks(struct uevent *uevent)
 {
     const char *device;
     struct platform_node *pdev;
     char *slash;
+    const char *type;
     int width;
     char buf[256];
     char link_path[256];
@@ -438,18 +470,24 @@ static char **parse_platform_block_device(struct uevent *uevent)
     struct stat info;
 
     pdev = find_platform_device(uevent->path);
-    if (!pdev)
+    if (pdev) {
+        device = pdev->name;
+        type = "platform";
+    } else if (!find_pci_device_prefix(uevent->path, buf, sizeof(buf))) {
+        device = buf;
+        type = "pci";
+    } else {
         return NULL;
-    device = pdev->name;
+    }
 
     char **links = malloc(sizeof(char *) * 4);
     if (!links)
         return NULL;
     memset(links, 0, sizeof(char *) * 4);
 
-    INFO("found platform device %s\n", device);
+    INFO("found %s device %s\n", type, device);
 
-    snprintf(link_path, sizeof(link_path), "/dev/block/platform/%s", device);
+    snprintf(link_path, sizeof(link_path), "/dev/block/%s/%s", type, device);
 
     if (uevent->partition_name) {
         p = strdup(uevent->partition_name);
@@ -556,7 +594,7 @@ static void handle_block_device_event(struct uevent *uevent)
     make_dir(base, 0755);
 
     if (!strncmp(uevent->path, "/devices/", 9))
-        links = parse_platform_block_device(uevent);
+        links = get_block_device_symlinks(uevent);
 
     handle_device(uevent->action, devpath, uevent->path, 1,
             uevent->major, uevent->minor, links);
