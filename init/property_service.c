@@ -38,7 +38,6 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/mman.h>
-#include <sys/atomics.h>
 #include <private/android_filesystem_config.h>
 
 #include <selinux/selinux.h>
