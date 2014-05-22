@@ -89,7 +89,7 @@ static mspace getMspace()
         gExecutableStore = mmap(NULL, kMaxCodeCacheCapacity,
                                 PROT_READ | PROT_WRITE | PROT_EXEC,
                                 MAP_PRIVATE, fd, 0);
-        LOG_ALWAYS_FATAL_IF(gExecutableStore == NULL,
+        LOG_ALWAYS_FATAL_IF(gExecutableStore == MAP_FAILED,
                             "Creating code cache, mmap failed with error "
                             "'%s'", strerror(errno));
         close(fd);
