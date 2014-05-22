@@ -25,10 +25,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef __BIONIC__
-#define fdprintf dprintf
-#endif
-
 namespace android {
 
 /*
@@ -120,7 +116,7 @@ void FdPrinter::printLine(const char* string) {
     }
 
 #ifndef USE_MINGW
-    fdprintf(mFd, mFormatString, mPrefix, string);
+    dprintf(mFd, mFormatString, mPrefix, string);
 #endif
 }
 
