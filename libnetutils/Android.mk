@@ -1,7 +1,7 @@
-LOCAL_PATH:= $(call my-dir)
+LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:= \
+LOCAL_SRC_FILES := \
         dhcpclient.c \
         dhcpmsg.c \
         dhcp_utils.c \
@@ -12,6 +12,8 @@ LOCAL_SHARED_LIBRARIES := \
         libcutils \
         liblog
 
-LOCAL_MODULE:= libnetutils
+LOCAL_MODULE := libnetutils
+
+LOCAL_CFLAGS := -Werror
 
 include $(BUILD_SHARED_LIBRARY)
