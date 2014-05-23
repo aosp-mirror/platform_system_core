@@ -40,13 +40,11 @@ public:
 
   static void Remove(ThreadEntry* entry);
 
-  inline void CopyUcontext(ucontext_t* ucontext) {
-    memcpy(&ucontext_, ucontext, sizeof(ucontext_));
-  }
-
   void Wake();
 
   void Wait(int);
+
+  void CopyUcontextFromSigcontext(void*);
 
   inline void Lock() {
     pthread_mutex_lock(&mutex_);
