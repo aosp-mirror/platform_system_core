@@ -67,7 +67,8 @@ public:
     // timespec
     bool operator== (const timespec &T) const
     {
-        return (tv_sec == T.tv_sec) && (tv_nsec == T.tv_nsec);
+        return (tv_sec == static_cast<uint32_t>(T.tv_sec))
+            && (tv_nsec == static_cast<uint32_t>(T.tv_nsec));
     }
     bool operator!= (const timespec &T) const
     {
@@ -75,8 +76,9 @@ public:
     }
     bool operator< (const timespec &T) const
     {
-        return (tv_sec < T.tv_sec)
-            || ((tv_sec == T.tv_sec) && (tv_nsec < T.tv_nsec));
+        return (tv_sec < static_cast<uint32_t>(T.tv_sec))
+            || ((tv_sec == static_cast<uint32_t>(T.tv_sec))
+                && (tv_nsec < static_cast<uint32_t>(T.tv_nsec)));
     }
     bool operator>= (const timespec &T) const
     {
@@ -84,8 +86,9 @@ public:
     }
     bool operator> (const timespec &T) const
     {
-        return (tv_sec > T.tv_sec)
-            || ((tv_sec == T.tv_sec) && (tv_nsec > T.tv_nsec));
+        return (tv_sec > static_cast<uint32_t>(T.tv_sec))
+            || ((tv_sec == static_cast<uint32_t>(T.tv_sec))
+                && (tv_nsec > static_cast<uint32_t>(T.tv_nsec)));
     }
     bool operator<= (const timespec &T) const
     {
