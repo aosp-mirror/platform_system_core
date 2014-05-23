@@ -117,6 +117,12 @@ void ThreadEntry::Wake() {
   futex(&futex_, FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
 }
 
+void ThreadEntry::CopyUcontextFromSigcontext(void* sigcontext) {
+  ucontext_t* ucontext = reinterpret_cast<ucontext_t*>(sigcontext);
+  // The only thing the unwinder cares about is the mcontext data.
+  memcpy(&ucontext_.uc_mcontext, &ucontext->uc_mcontext, sizeof(ucontext->uc_mcontext));
+}
+
 //-------------------------------------------------------------------------
 // BacktraceThread functions.
 //-------------------------------------------------------------------------
@@ -129,7 +135,7 @@ static void SignalHandler(int, siginfo_t*, void* sigcontext) {
     return;
   }
 
-  entry->CopyUcontext(reinterpret_cast<ucontext_t*>(sigcontext));
+  entry->CopyUcontextFromSigcontext(sigcontext);
 
   // Indicate the ucontext is now valid.
   entry->Wake();
