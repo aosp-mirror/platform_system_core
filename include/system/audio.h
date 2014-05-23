@@ -434,6 +434,14 @@ typedef struct {
 static const audio_offload_info_t AUDIO_INFO_INITIALIZER = {
     version: AUDIO_OFFLOAD_INFO_VERSION_CURRENT,
     size: sizeof(audio_offload_info_t),
+    sample_rate: 0,
+    channel_mask: 0,
+    format: AUDIO_FORMAT_DEFAULT,
+    stream_type: AUDIO_STREAM_VOICE_CALL,
+    bit_rate: 0,
+    duration_us: 0,
+    has_video: false,
+    is_streaming: false
 };
 
 static inline bool audio_is_output_device(audio_devices_t device)

@@ -18,6 +18,7 @@
 #define __CUTILS_FS_H
 
 #include <sys/types.h>
+#include <unistd.h>
 
 /*
  * TEMP_FAILURE_RETRY is defined by some, but not all, versions of
