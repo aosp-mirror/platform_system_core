@@ -175,22 +175,19 @@ bool CrashCollectorTest::CheckHasCapacity() {
 TEST_F(CrashCollectorTest, CheckHasCapacityUsual) {
   // Test kMaxCrashDirectorySize - 1 non-meta files can be added.
   for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 1; ++i) {
-    file_util::WriteFile(test_dir_.Append(StringPrintf("file%d.core", i)),
-                         "", 0);
+    base::WriteFile(test_dir_.Append(StringPrintf("file%d.core", i)), "", 0);
     EXPECT_TRUE(CheckHasCapacity());
   }
 
   // Test an additional kMaxCrashDirectorySize - 1 meta files fit.
   for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 1; ++i) {
-    file_util::WriteFile(test_dir_.Append(StringPrintf("file%d.meta", i)),
-                         "", 0);
+    base::WriteFile(test_dir_.Append(StringPrintf("file%d.meta", i)), "", 0);
     EXPECT_TRUE(CheckHasCapacity());
   }
 
   // Test an additional kMaxCrashDirectorySize meta files don't fit.
   for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize; ++i) {
-    file_util::WriteFile(test_dir_.Append(StringPrintf("overage%d.meta", i)),
-                         "", 0);
+    base::WriteFile(test_dir_.Append(StringPrintf("overage%d.meta", i)), "", 0);
     EXPECT_FALSE(CheckHasCapacity());
   }
 }
@@ -198,26 +195,25 @@ TEST_F(CrashCollectorTest, CheckHasCapacityUsual) {
 TEST_F(CrashCollectorTest, CheckHasCapacityCorrectBasename) {
   // Test kMaxCrashDirectorySize - 1 files can be added.
   for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 1; ++i) {
-    file_util::WriteFile(test_dir_.Append(StringPrintf("file.%d.core", i)),
-                         "", 0);
+    base::WriteFile(test_dir_.Append(StringPrintf("file.%d.core", i)), "", 0);
     EXPECT_TRUE(CheckHasCapacity());
   }
-  file_util::WriteFile(test_dir_.Append("file.last.core"), "", 0);
+  base::WriteFile(test_dir_.Append("file.last.core"), "", 0);
   EXPECT_FALSE(CheckHasCapacity());
 }
 
 TEST_F(CrashCollectorTest, CheckHasCapacityStrangeNames) {
   // Test many files with different extensions and same base fit.
   for (int i = 0; i < 5 * CrashCollector::kMaxCrashDirectorySize; ++i) {
-    file_util::WriteFile(test_dir_.Append(StringPrintf("a.%d", i)), "", 0);
+    base::WriteFile(test_dir_.Append(StringPrintf("a.%d", i)), "", 0);
     EXPECT_TRUE(CheckHasCapacity());
   }
   // Test dot files are treated as individual files.
   for (int i = 0; i < CrashCollector::kMaxCrashDirectorySize - 2; ++i) {
-    file_util::WriteFile(test_dir_.Append(StringPrintf(".file%d", i)), "", 0);
+    base::WriteFile(test_dir_.Append(StringPrintf(".file%d", i)), "", 0);
     EXPECT_TRUE(CheckHasCapacity());
   }
-  file_util::WriteFile(test_dir_.Append("normal.meta"), "", 0);
+  base::WriteFile(test_dir_.Append("normal.meta"), "", 0);
   EXPECT_FALSE(CheckHasCapacity());
 }
 
@@ -238,7 +234,7 @@ TEST_F(CrashCollectorTest, ReadKeyValueFile) {
   std::map<std::string, std::string> dictionary;
   std::map<std::string, std::string>::iterator i;
 
-  file_util::WriteFile(path, contents, strlen(contents));
+  base::WriteFile(path, contents, strlen(contents));
 
   EXPECT_TRUE(collector_.ReadKeyValueFile(path, '=', &dictionary));
   i = dictionary.find("a");
@@ -255,7 +251,7 @@ TEST_F(CrashCollectorTest, ReadKeyValueFile) {
               "=k\n"
               "#comment=0\n"
               "l=\n");
-  file_util::WriteFile(path, contents, strlen(contents));
+  base::WriteFile(path, contents, strlen(contents));
 
   EXPECT_FALSE(collector_.ReadKeyValueFile(path, '=', &dictionary));
   EXPECT_EQ(5, dictionary.size());
@@ -282,13 +278,9 @@ TEST_F(CrashCollectorTest, MetaData) {
   std::string contents;
   collector_.lsb_release_ = lsb_release.value();
   const char kLsbContents[] = "CHROMEOS_RELEASE_VERSION=version\n";
-  ASSERT_TRUE(
-      file_util::WriteFile(lsb_release,
-                           kLsbContents, strlen(kLsbContents)));
+  ASSERT_TRUE(base::WriteFile(lsb_release, kLsbContents, strlen(kLsbContents)));
   const char kPayload[] = "foo";
-  ASSERT_TRUE(
-      file_util::WriteFile(payload_file,
-                           kPayload, strlen(kPayload)));
+  ASSERT_TRUE(base::WriteFile(payload_file, kPayload, strlen(kPayload)));
   collector_.AddCrashMetaData("foo", "bar");
   collector_.WriteCrashMetaData(meta_file, "kernel", payload_file.value());
   EXPECT_TRUE(base::ReadFileToString(meta_file, &contents));
@@ -303,9 +295,7 @@ TEST_F(CrashCollectorTest, MetaData) {
 
   // Test target of symlink is not overwritten.
   payload_file = test_dir_.Append("payload2-file");
-  ASSERT_TRUE(
-      file_util::WriteFile(payload_file,
-                           kPayload, strlen(kPayload)));
+  ASSERT_TRUE(base::WriteFile(payload_file, kPayload, strlen(kPayload)));
   FilePath meta_symlink_path = test_dir_.Append("symlink.meta");
   ASSERT_EQ(0,
             symlink(kMetaFileBasename,
@@ -337,8 +327,7 @@ TEST_F(CrashCollectorTest, GetLogContents) {
   const char kConfigContents[] =
       "foobar:echo hello there | sed -e \"s/there/world/\"";
   ASSERT_TRUE(
-      file_util::WriteFile(config_file,
-                           kConfigContents, strlen(kConfigContents)));
+      base::WriteFile(config_file, kConfigContents, strlen(kConfigContents)));
   base::DeleteFile(FilePath(output_file), false);
   EXPECT_FALSE(collector_.GetLogContents(config_file,
                                          "barfoo",

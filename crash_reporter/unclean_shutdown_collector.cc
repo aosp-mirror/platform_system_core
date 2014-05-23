@@ -29,7 +29,7 @@ UncleanShutdownCollector::~UncleanShutdownCollector() {
 bool UncleanShutdownCollector::Enable() {
   FilePath file_path(unclean_shutdown_file_);
   base::CreateDirectory(file_path.DirName());
-  if (file_util::WriteFile(file_path, "", 0) != 0) {
+  if (base::WriteFile(file_path, "", 0) != 0) {
     LOG(ERROR) << "Unable to create shutdown check file";
     return false;
   }

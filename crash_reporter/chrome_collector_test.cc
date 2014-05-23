@@ -123,13 +123,13 @@ TEST_F(ChromeCollectorTest, HandleCrash) {
   const FilePath& dir = scoped_temp_dir.path();
   FilePath dump_file = dir.Append("test.dmp");
   ASSERT_EQ(strlen(kCrashFormatWithFile),
-            file_util::WriteFile(dump_file, kCrashFormatWithFile,
-                                 strlen(kCrashFormatWithFile)));
+            base::WriteFile(dump_file, kCrashFormatWithFile,
+                            strlen(kCrashFormatWithFile)));
   collector_.ForceCrashDirectory(dir);
 
   FilePath log_file;
   {
-    file_util::ScopedFILE output(
+    base::ScopedFILE output(
         base::CreateAndOpenTemporaryFileInDir(dir, &log_file));
     ASSERT_TRUE(output.get());
     base::AutoReset<FILE*> auto_reset_file_ptr(&collector_.output_file_ptr_,

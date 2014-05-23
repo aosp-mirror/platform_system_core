@@ -45,8 +45,7 @@ class UncleanShutdownCollectorTest : public ::testing::Test {
  protected:
   void WriteStringToFile(const FilePath &file_path,
                          const char *data) {
-    ASSERT_EQ(strlen(data),
-              file_util::WriteFile(file_path, data, strlen(data)));
+    ASSERT_EQ(strlen(data), base::WriteFile(file_path, data, strlen(data)));
   }
 
   UncleanShutdownCollector collector_;
@@ -87,7 +86,7 @@ TEST_F(UncleanShutdownCollectorTest, CollectFalse) {
 TEST_F(UncleanShutdownCollectorTest, CollectDeadBatterySuspended) {
   ASSERT_TRUE(collector_.Enable());
   ASSERT_TRUE(base::PathExists(test_unclean_));
-  file_util::WriteFile(collector_.powerd_suspended_file_, "", 0);
+  base::WriteFile(collector_.powerd_suspended_file_, "", 0);
   ASSERT_FALSE(collector_.Collect());
   ASSERT_FALSE(base::PathExists(test_unclean_));
   ASSERT_FALSE(base::PathExists(collector_.powerd_suspended_file_));
@@ -114,7 +113,7 @@ TEST_F(UncleanShutdownCollectorTest, CantDisable) {
         << "Error while creating directory '" << kTestUnclean
         << "': " << strerror(errno);
   }
-  ASSERT_EQ(0, file_util::WriteFile(test_unclean_.Append("foo"), "", 0))
+  ASSERT_EQ(0, base::WriteFile(test_unclean_.Append("foo"), "", 0))
       << "Error while creating empty file '"
       << test_unclean_.Append("foo").value() << "': " << strerror(errno);
   ASSERT_FALSE(collector_.Disable());

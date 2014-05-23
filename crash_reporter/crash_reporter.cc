@@ -68,7 +68,7 @@ static bool IsFeedbackAllowed() {
 }
 
 static bool TouchFile(const FilePath &file_path) {
-  return file_util::WriteFile(file_path, "", 0) == 0;
+  return base::WriteFile(file_path, "", 0) == 0;
 }
 
 static void SendCrashMetrics(CrashKinds type, const char* name) {

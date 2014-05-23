@@ -66,7 +66,7 @@ std::deque<std::string> ParseProxyString(const std::string &input) {
   base::StringTokenizer entry_tok(input, ";");
   while (entry_tok.GetNext()) {
     std::string token = entry_tok.token();
-    TrimWhitespaceASCII(token, TRIM_ALL, &token);
+    base::TrimWhitespaceASCII(token, base::TRIM_ALL, &token);
 
     // Start by finding the first space (if any).
     std::string::iterator space;
@@ -90,7 +90,7 @@ std::deque<std::string> ParseProxyString(const std::string &input) {
       continue;  // Invalid proxy scheme
 
     std::string host_and_port = std::string(space, token.end());
-    TrimWhitespaceASCII(host_and_port, TRIM_ALL, &host_and_port);
+    base::TrimWhitespaceASCII(host_and_port, base::TRIM_ALL, &host_and_port);
     if (scheme != "direct" && host_and_port.empty())
       continue;  // Must supply host/port when non-direct proxy used.
     ret.push_back(scheme + "://" + host_and_port);

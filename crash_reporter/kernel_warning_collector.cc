@@ -77,7 +77,7 @@ bool KernelWarningCollector::Collect() {
   FilePath kernel_crash_path = root_crash_directory.Append(
       StringPrintf("%s.kcrash", dump_basename.c_str()));
 
-  // We must use WriteNewFile instead of file_util::WriteFile as we
+  // We must use WriteNewFile instead of base::WriteFile as we
   // do not want to write with root access to a symlink that an attacker
   // might have created.
   if (WriteNewFile(kernel_crash_path,

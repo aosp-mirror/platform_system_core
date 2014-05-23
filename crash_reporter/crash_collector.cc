@@ -102,7 +102,7 @@ int CrashCollector::WriteNewFile(const FilePath &filename,
     return -1;
   }
 
-  int rv = file_util::WriteFileDescriptor(fd, data, size);
+  int rv = base::WriteFileDescriptor(fd, data, size);
   IGNORE_EINTR(close(fd));
   return rv;
 }
@@ -520,7 +520,7 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
                                        version.c_str(),
                                        payload_path.c_str(),
                                        payload_size);
-  // We must use WriteNewFile instead of file_util::WriteFile as we
+  // We must use WriteNewFile instead of base::WriteFile as we
   // do not want to write with root access to a symlink that an attacker
   // might have created.
   if (WriteNewFile(meta_path, meta_data.c_str(), meta_data.size()) < 0) {

@@ -68,9 +68,9 @@ class UdevCollectorTest : public ::testing::Test {
 
     // Write to a dummy log config file.
     ASSERT_EQ(strlen(kLogConfigFileContents),
-              file_util::WriteFile(log_config_path,
-                                   kLogConfigFileContents,
-                                   strlen(kLogConfigFileContents)));
+              base::WriteFile(log_config_path,
+                              kLogConfigFileContents,
+                              strlen(kLogConfigFileContents)));
 
     chromeos::ClearLog();
   }

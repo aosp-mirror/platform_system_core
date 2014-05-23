@@ -72,9 +72,9 @@ bool GetDriErrorState(const chromeos::dbus::Proxy &proxy,
   guchar *decoded_error_state =
       g_base64_decode(error_state_str.c_str() + kBase64HeaderLength, &len);
 
-  int written;
-  written = file_util::WriteFile(error_state_path,
-      reinterpret_cast<const char*>(decoded_error_state), len);
+  int written =
+      base::WriteFile(error_state_path,
+                      reinterpret_cast<const char *>(decoded_error_state), len);
   g_free(decoded_error_state);
 
   if (written < 0 || (gsize)written != len) {

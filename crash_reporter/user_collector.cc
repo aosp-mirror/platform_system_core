@@ -117,18 +117,15 @@ bool UserCollector::SetUpInternal(bool enabled) {
   CHECK(initialized_);
   LOG(INFO) << (enabled ? "Enabling" : "Disabling") << " user crash handling";
 
-  if (file_util::WriteFile(FilePath(core_pipe_limit_file_),
-                           kCorePipeLimit,
-                           strlen(kCorePipeLimit)) !=
+  if (base::WriteFile(FilePath(core_pipe_limit_file_), kCorePipeLimit,
+                      strlen(kCorePipeLimit)) !=
       static_cast<int>(strlen(kCorePipeLimit))) {
     PLOG(ERROR) << "Unable to write " << core_pipe_limit_file_;
     return false;
   }
   std::string pattern = GetPattern(enabled);
-  if (file_util::WriteFile(FilePath(core_pattern_file_),
-                           pattern.c_str(),
-                           pattern.length()) !=
-      static_cast<int>(pattern.length())) {
+  if (base::WriteFile(FilePath(core_pattern_file_), pattern.c_str(),
+                      pattern.length()) != static_cast<int>(pattern.length())) {
     PLOG(ERROR) << "Unable to write " << core_pattern_file_;
     return false;
   }
@@ -209,7 +206,7 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
   }
   FilePath log_path = GetCrashPath(crash_path, dump_basename, "log");
   FilePath meta_path = GetCrashPath(crash_path, dump_basename, "meta");
-  // We must use WriteNewFile instead of file_util::WriteFile as we do
+  // We must use WriteNewFile instead of base::WriteFile as we do
   // not want to write with root access to a symlink that an attacker
   // might have created.
   if (WriteNewFile(log_path, error_log.data(), error_log.length()) < 0) {

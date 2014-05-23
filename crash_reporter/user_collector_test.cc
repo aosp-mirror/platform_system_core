@@ -478,13 +478,13 @@ TEST_F(UserCollectorTest, ValidateProcFiles) {
 
   // maps file is empty
   FilePath maps_file = container_dir.Append("maps");
-  ASSERT_EQ(0, file_util::WriteFile(maps_file, NULL, 0));
+  ASSERT_EQ(0, base::WriteFile(maps_file, NULL, 0));
   ASSERT_TRUE(base::PathExists(maps_file));
   EXPECT_FALSE(collector_.ValidateProcFiles(container_dir));
 
   // maps file is not empty
   const char data[] = "test data";
-  ASSERT_EQ(sizeof(data), file_util::WriteFile(maps_file, data, sizeof(data)));
+  ASSERT_EQ(sizeof(data), base::WriteFile(maps_file, data, sizeof(data)));
   ASSERT_TRUE(base::PathExists(maps_file));
   EXPECT_TRUE(collector_.ValidateProcFiles(container_dir));
 }
@@ -512,26 +512,26 @@ TEST_F(UserCollectorTest, ValidateCoreFile) {
 #endif
 
   // Core file has the expected header
-  ASSERT_TRUE(file_util::WriteFile(core_file, e_ident, sizeof(e_ident)));
+  ASSERT_TRUE(base::WriteFile(core_file, e_ident, sizeof(e_ident)));
   EXPECT_EQ(UserCollector::kErrorNone,
             collector_.ValidateCoreFile(core_file));
 
 #if __WORDSIZE == 64
   // 32-bit core file on 64-bit platform
   e_ident[EI_CLASS] = ELFCLASS32;
-  ASSERT_TRUE(file_util::WriteFile(core_file, e_ident, sizeof(e_ident)));
+  ASSERT_TRUE(base::WriteFile(core_file, e_ident, sizeof(e_ident)));
   EXPECT_EQ(UserCollector::kErrorUnsupported32BitCoreFile,
             collector_.ValidateCoreFile(core_file));
   e_ident[EI_CLASS] = ELFCLASS64;
 #endif
 
   // Invalid core files
-  ASSERT_TRUE(file_util::WriteFile(core_file, e_ident, sizeof(e_ident) - 1));
+  ASSERT_TRUE(base::WriteFile(core_file, e_ident, sizeof(e_ident) - 1));
   EXPECT_EQ(UserCollector::kErrorInvalidCoreFile,
             collector_.ValidateCoreFile(core_file));
 
   e_ident[EI_MAG0] = 0;
-  ASSERT_TRUE(file_util::WriteFile(core_file, e_ident, sizeof(e_ident)));
+  ASSERT_TRUE(base::WriteFile(core_file, e_ident, sizeof(e_ident)));
   EXPECT_EQ(UserCollector::kErrorInvalidCoreFile,
             collector_.ValidateCoreFile(core_file));
 }
