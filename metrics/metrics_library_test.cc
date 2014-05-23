@@ -33,6 +33,7 @@ class MetricsLibraryTest : public testing::Test {
     lib_.Init();
     EXPECT_FALSE(lib_.uma_events_file_.empty());
     lib_.uma_events_file_ = kTestUMAEventsFile.value();
+    EXPECT_EQ(0, WriteFile(kTestUMAEventsFile, "", 0));
     device_policy_ = new policy::MockDevicePolicy();
     EXPECT_CALL(*device_policy_, LoadPolicy())
         .Times(AnyNumber())
@@ -256,6 +257,7 @@ class CMetricsLibraryTest : public testing::Test {
     CMetricsLibraryInit(lib_);
     EXPECT_FALSE(ml.uma_events_file_.empty());
     ml.uma_events_file_ = kTestUMAEventsFile.value();
+    EXPECT_EQ(0, WriteFile(kTestUMAEventsFile, "", 0));
     device_policy_ = new policy::MockDevicePolicy();
     EXPECT_CALL(*device_policy_, LoadPolicy())
         .Times(AnyNumber())

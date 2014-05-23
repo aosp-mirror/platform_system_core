@@ -19,8 +19,6 @@
 
 #include "policy/device_policy.h"
 
-#define READ_WRITE_ALL_FILE_FLAGS \
-  (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 static const char kAutotestPath[] = "/var/log/metrics/autotest-events";
@@ -178,20 +176,14 @@ bool MetricsLibrary::SendMessageToChrome(const std::string& message) {
     return false;
   }
   // Use libc here instead of chromium base classes because we need a UNIX fd
-  // for flock.
+  // for flock. |uma_events_file_| must exist already.
   int chrome_fd = HANDLE_EINTR(open(uma_events_file_.c_str(),
-                                    O_WRONLY | O_APPEND | O_CREAT,
-                                    READ_WRITE_ALL_FILE_FLAGS));
+                                    O_WRONLY | O_APPEND));
   // If we failed to open it, return.
   if (chrome_fd < 0) {
     PLOG(ERROR) << uma_events_file_ << ": open";
     return false;
   }
-
-  // Need to chmod because open flags are anded with umask. Ignore the
-  // exit code -- a chronos process may fail chmoding because the file
-  // has been created by a root process but that should be OK.
-  fchmod(chrome_fd, READ_WRITE_ALL_FILE_FLAGS);
 
   // Grab an exclusive lock to protect Chrome from truncating
   // underneath us.
