@@ -57,7 +57,7 @@ public:
 
         bool next() {
             mIndex = mCache.mTable->next(mIndex);
-            return mIndex != -1;
+            return (ssize_t)mIndex != -1;
         }
 
         size_t index() const {
@@ -104,9 +104,13 @@ private:
 
 // Implementation is here, because it's fully templated
 template <typename TKey, typename TValue>
-LruCache<TKey, TValue>::LruCache(uint32_t maxCapacity): mMaxCapacity(maxCapacity),
-    mNullValue(NULL), mTable(new BasicHashtable<TKey, Entry>), mYoungest(NULL), mOldest(NULL),
-    mListener(NULL) {
+LruCache<TKey, TValue>::LruCache(uint32_t maxCapacity)
+    : mTable(new BasicHashtable<TKey, Entry>)
+    , mListener(NULL)
+    , mOldest(NULL)
+    , mYoungest(NULL)
+    , mMaxCapacity(maxCapacity)
+    , mNullValue(NULL) {
 };
 
 template<typename K, typename V>
