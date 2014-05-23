@@ -26,6 +26,10 @@
 #include <system/graphics.h>
 #include <unistd.h>
 
+#ifndef __unused
+#define __unused __attribute__((__unused__))
+#endif
+
 __BEGIN_DECLS
 
 /*****************************************************************************/
@@ -89,10 +93,10 @@ typedef struct ANativeWindowBuffer
 
     // Implement the methods that sp<ANativeWindowBuffer> expects so that it
     // can be used to automatically refcount ANativeWindowBuffer's.
-    void incStrong(const void* id) const {
+    void incStrong(const void* /*id*/) const {
         common.incRef(const_cast<android_native_base_t*>(&common));
     }
-    void decStrong(const void* id) const {
+    void decStrong(const void* /*id*/) const {
         common.decRef(const_cast<android_native_base_t*>(&common));
     }
 #endif
@@ -352,10 +356,10 @@ struct ANativeWindow
 
     /* Implement the methods that sp<ANativeWindow> expects so that it
        can be used to automatically refcount ANativeWindow's. */
-    void incStrong(const void* id) const {
+    void incStrong(const void* /*id*/) const {
         common.incRef(const_cast<android_native_base_t*>(&common));
     }
-    void decStrong(const void* id) const {
+    void decStrong(const void* /*id*/) const {
         common.decRef(const_cast<android_native_base_t*>(&common));
     }
 #endif
@@ -603,13 +607,13 @@ static inline int native_window_set_usage(
 
 /* deprecated. Always returns 0. Don't call. */
 static inline int native_window_connect(
-        struct ANativeWindow* window, int api) {
+        struct ANativeWindow* window __unused, int api __unused) {
     return 0;
 }
 
 /* deprecated. Always returns 0. Don't call. */
 static inline int native_window_disconnect(
-        struct ANativeWindow* window, int api) {
+        struct ANativeWindow* window __unused, int api __unused) {
     return 0;
 }
 

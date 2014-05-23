@@ -20,6 +20,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>
 #include <unistd.h>
