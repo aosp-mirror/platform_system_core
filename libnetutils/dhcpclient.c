@@ -282,16 +282,18 @@ void dump_dhcp_msg(dhcp_msg *msg, int len)
     ALOGD("chaddr = {%s}", buf);
 
     for (n = 0; n < 64; n++) {
-        if ((msg->sname[n] < ' ') || (msg->sname[n] > 127)) {
-            if (msg->sname[n] == 0) break;
+        unsigned char x = msg->sname[n];
+        if ((x < ' ') || (x > 127)) {
+            if (x == 0) break;
             msg->sname[n] = '.';
         }
     }
     msg->sname[63] = 0;
 
     for (n = 0; n < 128; n++) {
-        if ((msg->file[n] < ' ') || (msg->file[n] > 127)) {
-            if (msg->file[n] == 0) break;
+        unsigned char x = msg->file[n];
+        if ((x < ' ') || (x > 127)) {
+            if (x == 0) break;
             msg->file[n] = '.';
         }
     }
