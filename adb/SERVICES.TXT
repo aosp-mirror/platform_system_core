@@ -240,3 +240,20 @@ sync:
     This starts the file synchronisation service, used to implement "adb push"
     and "adb pull". Since this service is pretty complex, it will be detailed
     in a companion document named SYNC.TXT
+
+reverse:<forward-command>
+    This implements the 'adb reverse' feature, i.e. the ability to reverse
+    socket connections from a device to the host. <forward-command> is one
+    of the forwarding commands that are described above, as in:
+
+      list-forward
+      forward:<local>;<remote>
+      forward:norebind:<local>;<remote>
+      killforward-all
+      killforward:<local>
+
+    Note that in this case, <local> corresponds to the socket on the device
+    and <remote> corresponds to the socket on the host.
+
+    The output of reverse:list-forward is the same as host:list-forward
+    except that <serial> will be just 'host'.

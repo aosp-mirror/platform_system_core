@@ -141,6 +141,17 @@ cleanup:
     adb_close(fd);
 }
 
+void reverse_service(int fd, void* arg)
+{
+    const char* command = arg;
+
+    if (handle_forward_request(command, kTransportAny, NULL, fd) < 0) {
+        sendfailmsg(fd, "not a reverse forwarding command");
+    }
+    free(arg);
+    adb_close(fd);
+}
+
 #endif
 
 static int create_service_thread(void (*func)(int, void *), void *cookie)
@@ -385,6 +396,16 @@ int service_to_fd(const char *name)
         ret = create_service_thread(restart_tcp_service, (void *) (uintptr_t) port);
     } else if(!strncmp(name, "usb:", 4)) {
         ret = create_service_thread(restart_usb_service, NULL);
+    } else if (!strncmp(name, "reverse:", 8)) {
+        char* cookie = strdup(name + 8);
+        if (cookie == NULL) {
+            ret = -1;
+        } else {
+            ret = create_service_thread(reverse_service, cookie);
+            if (ret < 0) {
+                free(cookie);
+            }
+        }
 #endif
     }
     if (ret >= 0) {
