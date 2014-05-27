@@ -184,11 +184,26 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
 }
 
 #if !ADB_HOST
-static int create_subprocess(const char *cmd, const char *arg0, const char *arg1, pid_t *pid)
+
+static void init_subproc_child()
 {
+    setsid();
+
+    // Set OOM adjustment to prevent killing
+    int fd = adb_open("/proc/self/oom_adj", O_WRONLY);
+    if (fd >= 0) {
+        adb_write(fd, "0", 1);
+        adb_close(fd);
+    } else {
+       D("adb: unable to update oom_adj\n");
+    }
+}
+
+static int create_subproc_pty(const char *cmd, const char *arg0, const char *arg1, pid_t *pid)
+{
+    D("create_subproc_pty(cmd=%s, arg0=%s, arg1=%s)\n", cmd, arg0, arg1);
 #ifdef HAVE_WIN32_PROC
-    D("create_subprocess(cmd=%s, arg0=%s, arg1=%s)\n", cmd, arg0, arg1);
-    fprintf(stderr, "error: create_subprocess not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
+    fprintf(stderr, "error: create_subproc_pty not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
     return -1;
 #else /* !HAVE_WIN32_PROC */
     char *devname;
@@ -215,44 +230,71 @@ static int create_subprocess(const char *cmd, const char *arg0, const char *arg1
         return -1;
     }
 
-    if(*pid == 0){
-        int pts;
+    if (*pid == 0) {
+        init_subproc_child();
 
-        setsid();
-
-        pts = unix_open(devname, O_RDWR);
-        if(pts < 0) {
+        int pts = unix_open(devname, O_RDWR);
+        if (pts < 0) {
             fprintf(stderr, "child failed to open pseudo-term slave: %s\n", devname);
             exit(-1);
         }
 
-        dup2(pts, 0);
-        dup2(pts, 1);
-        dup2(pts, 2);
+        dup2(pts, STDIN_FILENO);
+        dup2(pts, STDOUT_FILENO);
+        dup2(pts, STDERR_FILENO);
 
         adb_close(pts);
         adb_close(ptm);
 
-        // set OOM adjustment to zero
-        char text[64];
-        snprintf(text, sizeof text, "/proc/%d/oom_adj", getpid());
-        int fd = adb_open(text, O_WRONLY);
-        if (fd >= 0) {
-            adb_write(fd, "0", 1);
-            adb_close(fd);
-        } else {
-           D("adb: unable to open %s\n", text);
-        }
         execl(cmd, cmd, arg0, arg1, NULL);
         fprintf(stderr, "- exec '%s' failed: %s (%d) -\n",
                 cmd, strerror(errno), errno);
         exit(-1);
     } else {
-        // Don't set child's OOM adjustment to zero.
-        // Let the child do it itself, as sometimes the parent starts
-        // running before the child has a /proc/pid/oom_adj.
-        // """adb: unable to open /proc/644/oom_adj""" seen in some logs.
         return ptm;
+    }
+#endif /* !HAVE_WIN32_PROC */
+}
+
+static int create_subproc_raw(const char *cmd, const char *arg0, const char *arg1, pid_t *pid)
+{
+    D("create_subproc_raw(cmd=%s, arg0=%s, arg1=%s)\n", cmd, arg0, arg1);
+#ifdef HAVE_WIN32_PROC
+    fprintf(stderr, "error: create_subproc_raw not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
+    return -1;
+#else /* !HAVE_WIN32_PROC */
+
+    // 0 is parent socket, 1 is child socket
+    int sv[2];
+    if (unix_socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0) {
+        printf("[ cannot create socket pair - %s ]\n", strerror(errno));
+        return -1;
+    }
+
+    *pid = fork();
+    if (*pid < 0) {
+        printf("- fork failed: %s -\n", strerror(errno));
+        adb_close(sv[0]);
+        adb_close(sv[1]);
+        return -1;
+    }
+
+    if (*pid == 0) {
+        adb_close(sv[0]);
+        init_subproc_child();
+
+        // Only hook up stdin/stdout; drop stderr
+        dup2(sv[1], STDIN_FILENO);
+        dup2(sv[1], STDOUT_FILENO);
+        adb_close(sv[1]);
+
+        execl(cmd, cmd, arg0, arg1, NULL);
+        fprintf(stderr, "- exec '%s' failed: %s (%d) -\n",
+                cmd, strerror(errno), errno);
+        exit(-1);
+    } else {
+        adb_close(sv[1]);
+        return sv[0];
     }
 #endif /* !HAVE_WIN32_PROC */
 }
@@ -296,18 +338,32 @@ static void subproc_waiter_service(int fd, void *cookie)
     }
 }
 
-static int create_subproc_thread(const char *name)
+static int create_subproc_thread(const char *name, const subproc_mode mode)
 {
     stinfo *sti;
     adb_thread_t t;
     int ret_fd;
-    pid_t pid;
-    if(name) {
-        ret_fd = create_subprocess(SHELL_COMMAND, "-c", name, &pid);
+    pid_t pid = -1;
+
+    const char *arg0, *arg1;
+    if (name == 0 || *name == 0) {
+        arg0 = "-"; arg1 = 0;
     } else {
-        ret_fd = create_subprocess(SHELL_COMMAND, "-", 0, &pid);
+        arg0 = "-c"; arg1 = name;
     }
-    D("create_subprocess() ret_fd=%d pid=%d\n", ret_fd, pid);
+
+    switch (mode) {
+    case SUBPROC_PTY:
+        ret_fd = create_subproc_pty(SHELL_COMMAND, arg0, arg1, &pid);
+        break;
+    case SUBPROC_RAW:
+        ret_fd = create_subproc_raw(SHELL_COMMAND, arg0, arg1, &pid);
+        break;
+    default:
+        fprintf(stderr, "invalid subproc_mode %d\n", mode);
+        return -1;
+    }
+    D("create_subproc ret_fd=%d pid=%d\n", ret_fd, pid);
 
     sti = malloc(sizeof(stinfo));
     if(sti == 0) fatal("cannot allocate stinfo");
@@ -315,14 +371,14 @@ static int create_subproc_thread(const char *name)
     sti->cookie = (void*) (uintptr_t) pid;
     sti->fd = ret_fd;
 
-    if(adb_thread_create( &t, service_bootstrap_func, sti)){
+    if (adb_thread_create(&t, service_bootstrap_func, sti)) {
         free(sti);
         adb_close(ret_fd);
-        printf("cannot create service thread\n");
+        fprintf(stderr, "cannot create service thread\n");
         return -1;
     }
 
-    D("service thread started, fd=%d pid=%d\n",ret_fd, pid);
+    D("service thread started, fd=%d pid=%d\n", ret_fd, pid);
     return ret_fd;
 }
 #endif
@@ -367,27 +423,35 @@ int service_to_fd(const char *name)
     } else if (!strncmp(name, "jdwp:", 5)) {
         ret = create_jdwp_connection_fd(atoi(name+5));
     } else if(!HOST && !strncmp(name, "shell:", 6)) {
-        if(name[6]) {
-            ret = create_subproc_thread(name + 6);
-        } else {
-            ret = create_subproc_thread(0);
-        }
+        ret = create_subproc_thread(name + 6, SUBPROC_PTY);
+    } else if(!HOST && !strncmp(name, "exec:", 5)) {
+        ret = create_subproc_thread(name + 5, SUBPROC_RAW);
     } else if(!strncmp(name, "sync:", 5)) {
         ret = create_service_thread(file_sync_service, NULL);
     } else if(!strncmp(name, "remount:", 8)) {
         ret = create_service_thread(remount_service, NULL);
     } else if(!strncmp(name, "reboot:", 7)) {
         void* arg = strdup(name + 7);
-        if(arg == 0) return -1;
+        if (arg == NULL) return -1;
         ret = create_service_thread(reboot_service, arg);
     } else if(!strncmp(name, "root:", 5)) {
         ret = create_service_thread(restart_root_service, NULL);
     } else if(!strncmp(name, "backup:", 7)) {
-        char* arg = strdup(name+7);
+        char* arg = strdup(name + 7);
         if (arg == NULL) return -1;
-        ret = backup_service(BACKUP, arg);
+        char* c = arg;
+        for (; *c != '\0'; c++) {
+            if (*c == ':')
+                *c = ' ';
+        }
+        char* cmd;
+        if (asprintf(&cmd, "/system/bin/bu backup %s", arg) != -1) {
+            ret = create_subproc_thread(cmd, SUBPROC_RAW);
+            free(cmd);
+        }
+        free(arg);
     } else if(!strncmp(name, "restore:", 8)) {
-        ret = backup_service(RESTORE, NULL);
+        ret = create_subproc_thread("/system/bin/bu restore", SUBPROC_RAW);
     } else if(!strncmp(name, "tcpip:", 6)) {
         int port;
         if (sscanf(name + 6, "%d", &port) == 0) {
