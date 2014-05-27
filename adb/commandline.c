@@ -136,6 +136,19 @@ void help()
         "                                 if <local> is already forwarded\n"
         "  adb forward --remove <local> - remove a specific forward socket connection\n"
         "  adb forward --remove-all     - remove all forward socket connections\n"
+        "  adb reverse --list           - list all reverse socket connections from device\n"
+        "  adb reverse <remote> <local> - reverse socket connections\n"
+        "                                 reverse specs are one of:\n"
+        "                                   tcp:<port>\n"
+        "                                   localabstract:<unix domain socket name>\n"
+        "                                   localreserved:<unix domain socket name>\n"
+        "                                   localfilesystem:<unix domain socket name>\n"
+        "  adb reverse --norebind <remote> <local>\n"
+        "                               - same as 'adb reverse <remote> <local>' but fails\n"
+        "                                 if <remote> is already reversed.\n"
+        "  adb reverse --remove <remote>\n"
+        "                               - remove a specific reversed socket connection\n"
+        "  adb reverse --remove-all     - remove all reversed socket connections from device\n"
         "  adb jdwp                     - list PIDs of processes hosting a JDWP transport\n"
         "  adb install [-l] [-r] [-d] [-s] [--algo <algorithm name> --key <hex-encoded key> --iv <hex-encoded iv>] <file>\n"
         "                               - push this package file to the device and install it\n"
@@ -1300,8 +1313,11 @@ top:
         return 0;
     }
 
-    if(!strcmp(argv[0], "forward")) {
+    if(!strcmp(argv[0], "forward") ||
+       !strcmp(argv[0], "reverse"))
+    {
         char host_prefix[64];
+        char reverse = (char) !strcmp(argv[0], "reverse");
         char remove = 0;
         char remove_all = 0;
         char list = 0;
@@ -1330,15 +1346,19 @@ top:
         }
 
         // Determine the <host-prefix> for this command.
-        if (serial) {
-            snprintf(host_prefix, sizeof host_prefix, "host-serial:%s",
-                    serial);
-        } else if (ttype == kTransportUsb) {
-            snprintf(host_prefix, sizeof host_prefix, "host-usb");
-        } else if (ttype == kTransportLocal) {
-            snprintf(host_prefix, sizeof host_prefix, "host-local");
+        if (reverse) {
+            snprintf(host_prefix, sizeof host_prefix, "reverse");
         } else {
-            snprintf(host_prefix, sizeof host_prefix, "host");
+            if (serial) {
+                snprintf(host_prefix, sizeof host_prefix, "host-serial:%s",
+                        serial);
+            } else if (ttype == kTransportUsb) {
+                snprintf(host_prefix, sizeof host_prefix, "host-usb");
+            } else if (ttype == kTransportLocal) {
+                snprintf(host_prefix, sizeof host_prefix, "host-local");
+            } else {
+                snprintf(host_prefix, sizeof host_prefix, "host");
+            }
         }
 
         // Implement forward --list
