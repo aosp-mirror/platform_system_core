@@ -324,11 +324,6 @@ int       create_jdwp_connection_fd(int  jdwp_pid);
 #endif
 
 #if !ADB_HOST
-typedef enum {
-    BACKUP,
-    RESTORE
-} BackupOperation;
-int backup_service(BackupOperation operation, char* args);
 void framebuffer_service(int fd, void *cookie);
 void remount_service(int fd, void *cookie);
 #endif
@@ -416,7 +411,7 @@ void adb_qemu_trace(const char* fmt, ...);
 #  define  D(...)          ((void)0)
 #  define  DR(...)         ((void)0)
 #  define  ADB_TRACING     0
-#endif
+#endif /* ADB_TRACE */
 
 
 #if !DEBUG_PACKETS
@@ -473,6 +468,11 @@ int connection_state(atransport *t);
 
 extern int HOST;
 extern int SHELL_EXIT_NOTIFY_FD;
+
+typedef enum {
+    SUBPROC_PTY = 0,
+    SUBPROC_RAW = 1,
+} subproc_mode;
 
 #define CHUNK_SIZE (64*1024)
 
