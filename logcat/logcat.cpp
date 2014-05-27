@@ -633,11 +633,6 @@ int main(int argc, char **argv)
             dev = dev->next = new log_device_t("crash", false, 'c');
             android::g_devCount++;
         }
-        if (android_name_to_log_id("events") == LOG_ID_EVENTS) {
-            dev = dev->next = new log_device_t("events", true, 'e');
-            android::g_devCount++;
-            needBinary = true;
-        }
     }
 
     if (android::g_logRotateSizeKBytes != 0

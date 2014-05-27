@@ -70,6 +70,11 @@ int LogAudit::logPrint(const char *fmt, ...) {
         return rc;
     }
 
+    char *cp;
+    while ((cp = strstr(str, "  "))) {
+        memmove(cp, cp + 1, strlen(cp + 1) + 1);
+    }
+
     if (fdDmesg >= 0) {
         struct iovec iov[2];
 
@@ -88,12 +93,11 @@ int LogAudit::logPrint(const char *fmt, ...) {
 
     static const char audit_str[] = " audit(";
     char *timeptr = strstr(str, audit_str);
-    char *cp;
     if (timeptr
             && ((cp = now.strptime(timeptr + sizeof(audit_str) - 1, "%s.%q")))
             && (*cp == ':')) {
         memcpy(timeptr + sizeof(audit_str) - 1, "0.0", 3);
-        strcpy(timeptr + sizeof(audit_str) - 1 + 3, cp);
+        memmove(timeptr + sizeof(audit_str) - 1 + 3, cp, strlen(cp) + 1);
     } else {
         now.strptime("", ""); // side effect of setting CLOCK_REALTIME
     }
@@ -109,37 +113,88 @@ int LogAudit::logPrint(const char *fmt, ...) {
         }
         tid = pid;
         uid = logbuf->pidToUid(pid);
-        strcpy(pidptr, cp);
+        memmove(pidptr, cp, strlen(cp) + 1);
     }
 
-    size_t n = strlen(str);
-    n += sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint32_t);
+    // log to events
+
+    size_t l = strlen(str);
+    size_t n = l + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint32_t);
+
+    bool notify = false;
 
     char *newstr = reinterpret_cast<char *>(malloc(n));
     if (!newstr) {
-        free(str);
-        return -ENOMEM;
+        rc = -ENOMEM;
+    } else {
+        cp = newstr;
+        *cp++ = AUDITD_LOG_TAG & 0xFF;
+        *cp++ = (AUDITD_LOG_TAG >> 8) & 0xFF;
+        *cp++ = (AUDITD_LOG_TAG >> 16) & 0xFF;
+        *cp++ = (AUDITD_LOG_TAG >> 24) & 0xFF;
+        *cp++ = EVENT_TYPE_STRING;
+        *cp++ = l & 0xFF;
+        *cp++ = (l >> 8) & 0xFF;
+        *cp++ = (l >> 16) & 0xFF;
+        *cp++ = (l >> 24) & 0xFF;
+        memcpy(cp, str, l);
+
+        logbuf->log(LOG_ID_EVENTS, now, uid, pid, tid, newstr,
+                    (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
+        free(newstr);
+
+        notify = true;
     }
 
-    char *msg = newstr;
-    *msg++ = AUDITD_LOG_TAG & 0xFF;
-    *msg++ = (AUDITD_LOG_TAG >> 8) & 0xFF;
-    *msg++ = (AUDITD_LOG_TAG >> 16) & 0xFF;
-    *msg++ = (AUDITD_LOG_TAG >> 24) & 0xFF;
-    *msg++ = EVENT_TYPE_STRING;
-    size_t l = n - sizeof(uint32_t) - sizeof(uint8_t) - sizeof(uint32_t);
-    *msg++ = l & 0xFF;
-    *msg++ = (l >> 8) & 0xFF;
-    *msg++ = (l >> 16) & 0xFF;
-    *msg++ = (l >> 24) & 0xFF;
-    memcpy(msg, str, l);
+    // log to main
+
+    static const char comm_str[] = " comm=\"";
+    const char *comm = strstr(str, comm_str);
+    const char *estr = str + strlen(str);
+    if (comm) {
+        estr = comm;
+        comm += sizeof(comm_str) - 1;
+    } else if (pid == getpid()) {
+        pid = tid;
+        comm = "auditd";
+    } else if (!(comm = logbuf->pidToName(pid))) {
+        comm = "unknown";
+    }
+
+    const char *ecomm = strchr(comm, '"');
+    if (ecomm) {
+        ++ecomm;
+        l = ecomm - comm;
+    } else {
+        l = strlen(comm) + 1;
+        ecomm = "";
+    }
+    n = (estr - str) + strlen(ecomm) + l + 2;
+
+    newstr = reinterpret_cast<char *>(malloc(n));
+    if (!newstr) {
+        rc = -ENOMEM;
+    } else {
+        *newstr = (strstr(str, " permissive=1")
+                || strstr(str, " policy loaded "))
+                    ? ANDROID_LOG_INFO
+                    : ANDROID_LOG_WARN;
+        strlcpy(newstr + 1, comm, l);
+        strncpy(newstr + 1 + l, str, estr - str);
+        strcpy(newstr + 1 + l + (estr - str), ecomm);
+
+        logbuf->log(LOG_ID_MAIN, now, uid, pid, tid, newstr,
+                    (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
+        free(newstr);
+
+        notify = true;
+    }
+
     free(str);
 
-    logbuf->log(LOG_ID_EVENTS, now, uid, pid, tid, newstr,
-                (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
-    reader->notifyNewLog();
-
-    free(newstr);
+    if (notify) {
+        reader->notifyNewLog();
+    }
 
     return rc;
 }
