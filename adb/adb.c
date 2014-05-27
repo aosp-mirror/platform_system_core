@@ -318,7 +318,18 @@ static size_t fill_connect_data(char *buf, size_t bufsize)
 #endif
 }
 
-static void send_msg_with_okay(int fd, char* msg, size_t msglen) {
+#if !ADB_HOST
+static void send_msg_with_header(int fd, const char* msg, size_t msglen) {
+    char header[5];
+    if (msglen > 0xffff)
+        msglen = 0xffff;
+    snprintf(header, sizeof(header), "%04x", (unsigned)msglen);
+    writex(fd, header, 4);
+    writex(fd, msg, msglen);
+}
+#endif
+
+static void send_msg_with_okay(int fd, const char* msg, size_t msglen) {
     char header[9];
     if (msglen > 0xffff)
         msglen = 0xffff;
@@ -1428,6 +1439,120 @@ int adb_main(int is_daemon, int server_port)
     return 0;
 }
 
+// Try to handle a network forwarding request.
+// This returns 1 on success, 0 on failure, and -1 to indicate this is not
+// a forwarding-related request.
+int handle_forward_request(const char* service, transport_type ttype, char* serial, int reply_fd)
+{
+    if (!strcmp(service, "list-forward")) {
+        // Create the list of forward redirections.
+        int buffer_size = format_listeners(NULL, 0);
+        // Add one byte for the trailing zero.
+        char* buffer = malloc(buffer_size + 1);
+        if (buffer == NULL) {
+            sendfailmsg(reply_fd, "not enough memory");
+            return 1;
+        }
+        (void) format_listeners(buffer, buffer_size + 1);
+#if ADB_HOST
+        send_msg_with_okay(reply_fd, buffer, buffer_size);
+#else
+        send_msg_with_header(reply_fd, buffer, buffer_size);
+#endif
+        free(buffer);
+        return 1;
+    }
+
+    if (!strcmp(service, "killforward-all")) {
+        remove_all_listeners();
+#if ADB_HOST
+        /* On the host: 1st OKAY is connect, 2nd OKAY is status */
+        adb_write(reply_fd, "OKAY", 4);
+#endif
+        adb_write(reply_fd, "OKAY", 4);
+        return 1;
+    }
+
+    if (!strncmp(service, "forward:",8) ||
+        !strncmp(service, "killforward:",12)) {
+        char *local, *remote, *err;
+        int r;
+        atransport *transport;
+
+        int createForward = strncmp(service, "kill", 4);
+        int no_rebind = 0;
+
+        local = strchr(service, ':') + 1;
+
+        // Handle forward:norebind:<local>... here
+        if (createForward && !strncmp(local, "norebind:", 9)) {
+            no_rebind = 1;
+            local = strchr(local, ':') + 1;
+        }
+
+        remote = strchr(local,';');
+
+        if (createForward) {
+            // Check forward: parameter format: '<local>;<remote>'
+            if(remote == 0) {
+                sendfailmsg(reply_fd, "malformed forward spec");
+                return 1;
+            }
+
+            *remote++ = 0;
+            if((local[0] == 0) || (remote[0] == 0) || (remote[0] == '*')) {
+                sendfailmsg(reply_fd, "malformed forward spec");
+                return 1;
+            }
+        } else {
+            // Check killforward: parameter format: '<local>'
+            if (local[0] == 0) {
+                sendfailmsg(reply_fd, "malformed forward spec");
+                return 1;
+            }
+        }
+
+        transport = acquire_one_transport(CS_ANY, ttype, serial, &err);
+        if (!transport) {
+            sendfailmsg(reply_fd, err);
+            return 1;
+        }
+
+        if (createForward) {
+            r = install_listener(local, remote, transport, no_rebind);
+        } else {
+            r = remove_listener(local, transport);
+        }
+        if(r == 0) {
+#if ADB_HOST
+            /* On the host: 1st OKAY is connect, 2nd OKAY is status */
+            writex(reply_fd, "OKAY", 4);
+#endif
+            writex(reply_fd, "OKAY", 4);
+            return 1;
+        }
+
+        if (createForward) {
+            const char* message;
+            switch (r) {
+              case INSTALL_STATUS_CANNOT_BIND:
+                message = "cannot bind to socket";
+                break;
+              case INSTALL_STATUS_CANNOT_REBIND:
+                message = "cannot rebind existing socket";
+                break;
+              default:
+                message = "internal error";
+            }
+            sendfailmsg(reply_fd, message);
+        } else {
+            sendfailmsg(reply_fd, "cannot remove listener");
+        }
+        return 1;
+    }
+    return 0;
+}
+
 int handle_host_request(char *service, transport_type ttype, char* serial, int reply_fd, asocket *s)
 {
     atransport *transport = NULL;
@@ -1548,97 +1673,9 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     }
 #endif // ADB_HOST
 
-    if(!strcmp(service,"list-forward")) {
-        // Create the list of forward redirections.
-        int buffer_size = format_listeners(NULL, 0);
-        // Add one byte for the trailing zero.
-        char* buffer = malloc(buffer_size+1);
-        (void) format_listeners(buffer, buffer_size+1);
-        send_msg_with_okay(reply_fd, buffer, buffer_size);
-        free(buffer);
-        return 0;
-    }
-
-    if (!strcmp(service,"killforward-all")) {
-        remove_all_listeners();
-        adb_write(reply_fd, "OKAYOKAY", 8);
-        return 0;
-    }
-
-    if(!strncmp(service,"forward:",8) ||
-       !strncmp(service,"killforward:",12)) {
-        char *local, *remote, *err;
-        int r;
-        atransport *transport;
-
-        int createForward = strncmp(service,"kill",4);
-        int no_rebind = 0;
-
-        local = strchr(service, ':') + 1;
-
-        // Handle forward:norebind:<local>... here
-        if (createForward && !strncmp(local, "norebind:", 9)) {
-            no_rebind = 1;
-            local = strchr(local, ':') + 1;
-        }
-
-        remote = strchr(local,';');
-
-        if (createForward) {
-            // Check forward: parameter format: '<local>;<remote>'
-            if(remote == 0) {
-                sendfailmsg(reply_fd, "malformed forward spec");
-                return 0;
-            }
-
-            *remote++ = 0;
-            if((local[0] == 0) || (remote[0] == 0) || (remote[0] == '*')){
-                sendfailmsg(reply_fd, "malformed forward spec");
-                return 0;
-            }
-        } else {
-            // Check killforward: parameter format: '<local>'
-            if (local[0] == 0) {
-                sendfailmsg(reply_fd, "malformed forward spec");
-                return 0;
-            }
-        }
-
-        transport = acquire_one_transport(CS_ANY, ttype, serial, &err);
-        if (!transport) {
-            sendfailmsg(reply_fd, err);
-            return 0;
-        }
-
-        if (createForward) {
-            r = install_listener(local, remote, transport, no_rebind);
-        } else {
-            r = remove_listener(local, transport);
-        }
-        if(r == 0) {
-                /* 1st OKAY is connect, 2nd OKAY is status */
-            writex(reply_fd, "OKAYOKAY", 8);
-            return 0;
-        }
-
-        if (createForward) {
-            const char* message;
-            switch (r) {
-              case INSTALL_STATUS_CANNOT_BIND:
-                message = "cannot bind to socket";
-                break;
-              case INSTALL_STATUS_CANNOT_REBIND:
-                message = "cannot rebind existing socket";
-                break;
-              default:
-                message = "internal error";
-            }
-            sendfailmsg(reply_fd, message);
-        } else {
-            sendfailmsg(reply_fd, "cannot remove listener");
-        }
-        return 0;
-    }
+    int ret = handle_forward_request(service, ttype, serial, reply_fd);
+    if (ret >= 0)
+      return ret - 1;
 
     if(!strncmp(service,"get-state",strlen("get-state"))) {
         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
