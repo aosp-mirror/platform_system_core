@@ -29,6 +29,9 @@
 #ifndef __unused
 #define __unused __attribute__((__unused__))
 #endif
+#ifndef __deprecated
+#define __deprecated __attribute__((__deprecated__))
+#endif
 
 __BEGIN_DECLS
 
@@ -586,7 +589,7 @@ struct ANativeWindow
   * android_native_window_t is deprecated.
   */
 typedef struct ANativeWindow ANativeWindow;
-typedef struct ANativeWindow android_native_window_t;
+typedef struct ANativeWindow android_native_window_t __deprecated;
 
 /*
  *  native_window_set_usage(..., usage)
@@ -607,11 +610,17 @@ static inline int native_window_set_usage(
 
 /* deprecated. Always returns 0. Don't call. */
 static inline int native_window_connect(
+        struct ANativeWindow* window __unused, int api __unused) __deprecated;
+
+static inline int native_window_connect(
         struct ANativeWindow* window __unused, int api __unused) {
     return 0;
 }
 
 /* deprecated. Always returns 0. Don't call. */
+static inline int native_window_disconnect(
+        struct ANativeWindow* window __unused, int api __unused) __deprecated;
+
 static inline int native_window_disconnect(
         struct ANativeWindow* window __unused, int api __unused) {
     return 0;
@@ -668,6 +677,10 @@ static inline int native_window_set_post_transform_crop(
  */
 static inline int native_window_set_active_rect(
         struct ANativeWindow* window,
+        android_native_rect_t const * active_rect) __deprecated;
+
+static inline int native_window_set_active_rect(
+        struct ANativeWindow* window,
         android_native_rect_t const * active_rect)
 {
     return native_window_set_post_transform_crop(window, active_rect);
@@ -693,6 +706,10 @@ static inline int native_window_set_buffer_count(
  * XXX: This function is deprecated.  The native_window_set_buffers_dimensions
  * and native_window_set_buffers_format functions should be used instead.
  */
+static inline int native_window_set_buffers_geometry(
+        struct ANativeWindow* window,
+        int w, int h, int format) __deprecated;
+
 static inline int native_window_set_buffers_geometry(
         struct ANativeWindow* window,
         int w, int h, int format)
