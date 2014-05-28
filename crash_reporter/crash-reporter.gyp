@@ -97,7 +97,7 @@
       'sources': [
         'warn_collector.l',
       ],
-      'includes': ['../common-mk/lex.gypi'],
+      'includes': ['../../platform2/common-mk/lex.gypi'],
     },
   ],
   'conditions': [
@@ -106,7 +106,7 @@
         {
           'target_name': 'chrome_collector_test',
           'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
+          'includes': ['../../platform2/common-mk/common_test.gypi'],
           'dependencies': ['libcrash'],
           'sources': [
             'chrome_collector_test.cc',
@@ -115,7 +115,7 @@
         {
           'target_name': 'crash_collector_test',
           'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
+          'includes': ['../../platform2/common-mk/common_test.gypi'],
           'dependencies': ['libcrash'],
           'sources': [
             'crash_collector_test.cc',
@@ -124,7 +124,7 @@
         {
           'target_name': 'kernel_collector_test',
           'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
+          'includes': ['../../platform2/common-mk/common_test.gypi'],
           'dependencies': ['libcrash'],
           'sources': [
             'kernel_collector_test.cc',
@@ -133,7 +133,7 @@
         {
           'target_name': 'udev_collector_test',
           'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
+          'includes': ['../../platform2/common-mk/common_test.gypi'],
           'dependencies': ['libcrash'],
           'sources': [
             'udev_collector_test.cc',
@@ -142,7 +142,7 @@
         {
           'target_name': 'unclean_shutdown_collector_test',
           'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
+          'includes': ['../../platform2/common-mk/common_test.gypi'],
           'dependencies': ['libcrash'],
           'sources': [
             'unclean_shutdown_collector_test.cc',
@@ -151,7 +151,7 @@
         {
           'target_name': 'user_collector_test',
           'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
+          'includes': ['../../platform2/common-mk/common_test.gypi'],
           'dependencies': ['libcrash'],
           'sources': [
             'user_collector_test.cc',
