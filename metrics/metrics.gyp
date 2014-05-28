@@ -65,7 +65,7 @@
         {
           'target_name': 'persistent_integer_test',
           'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
+          'includes': ['../../platform2/common-mk/common_test.gypi'],
           'sources': [
             'persistent_integer.cc',
             'persistent_integer_test.cc',
@@ -77,7 +77,7 @@
           'dependencies': [
             '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
           ],
-          'includes': ['../common-mk/common_test.gypi'],
+          'includes': ['../../platform2/common-mk/common_test.gypi'],
           'sources': [
             'metrics_library_test.cc',
           ]
@@ -85,7 +85,7 @@
         {
           'target_name': 'timer_test',
           'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
+          'includes': ['../../platform2/common-mk/common_test.gypi'],
           'sources': [
             'timer.cc',
             'timer_test.cc',
@@ -101,7 +101,7 @@
           'dependencies': [
             'libmetrics_daemon',
           ],
-          'includes': ['../common-mk/common_test.gypi'],
+          'includes': ['../../platform2/common-mk/common_test.gypi'],
           'sources': [
             'metrics_daemon_test.cc',
           ]
