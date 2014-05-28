@@ -197,7 +197,8 @@ static int __mount(const char *source, const char *target, const struct fstab_re
     unsigned long mountflags = rec->flags;
     int ret;
     int save_errno;
-
+    
+    mkdir(target, 0755);
     ret = mount(source, target, rec->fs_type, mountflags, rec->fs_options);
     save_errno = errno;
     INFO("%s(source=%s,target=%s,type=%s)=%d\n", __func__, source, target, rec->fs_type, ret);
