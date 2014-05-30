@@ -108,11 +108,11 @@ LOCAL_STATIC_LIBRARIES := \
 	libcutils
 
 LOCAL_SHARED_LIBRARIES := \
-        libbacktrace \
+        libbacktrace_libc++ \
         liblog \
         libdl
 
-include external/stlport/libstlport.mk
+include external/libcxx/libcxx.mk
 
 LOCAL_MODULE:= libutils
 include $(BUILD_STATIC_LIBRARY)
@@ -123,12 +123,12 @@ include $(CLEAR_VARS)
 LOCAL_MODULE:= libutils
 LOCAL_WHOLE_STATIC_LIBRARIES := libutils
 LOCAL_SHARED_LIBRARIES := \
-        libbacktrace \
+        libbacktrace_libc++ \
         libcutils \
         libdl \
         liblog \
 
-include external/stlport/libstlport.mk
+include external/libcxx/libcxx.mk
 
 include $(BUILD_SHARED_LIBRARY)
 
