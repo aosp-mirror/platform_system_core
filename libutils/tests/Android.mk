@@ -18,6 +18,11 @@ shared_libraries := \
     liblog \
     libcutils \
     libutils \
+    libstlport
+
+static_libraries := \
+    libgtest \
+    libgtest_main
 
 $(foreach file,$(test_src_files), \
     $(eval include $(CLEAR_VARS)) \
