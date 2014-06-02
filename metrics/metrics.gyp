@@ -4,7 +4,7 @@
   },
   'target_defaults': {
     'dependencies': [
-      '../libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
+      '../../platform2/libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
     ],
     'variables': {
       'deps': [
