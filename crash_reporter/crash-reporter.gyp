@@ -33,7 +33,7 @@
         },
       },
       'dependencies': [
-        '../libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
+        '../../platform2/libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
       ],
       'sources': [
         'chrome_collector.cc',
@@ -56,7 +56,7 @@
       },
       'dependencies': [
         'libcrash',
-        '../libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
+        '../../platform2/libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
         '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
       ],
       'sources': [
@@ -74,7 +74,7 @@
         ],
       },
       'dependencies': [
-        '../libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
+        '../../platform2/libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
       ],
       'sources': [
         'list_proxies.cc',
