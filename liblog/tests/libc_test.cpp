@@ -99,7 +99,7 @@ TEST(libc, __libc_fatal_no_abort) {
     pid_t pid = getpid();
 
     ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        (log_id_t)LOG_ID_MAIN, O_RDONLY | O_NDELAY, 1000, pid)));
+        (log_id_t)LOG_ID_CRASH, O_RDONLY | O_NDELAY, 1000, pid)));
 
     char b[80];
     struct timespec ts;
@@ -119,7 +119,7 @@ TEST(libc, __libc_fatal_no_abort) {
 
         ASSERT_EQ(log_msg.entry.pid, pid);
 
-        if ((int)log_msg.id() != LOG_ID_MAIN) {
+        if ((int)log_msg.id() != LOG_ID_CRASH) {
             continue;
         }
 
