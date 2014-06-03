@@ -868,6 +868,7 @@ void selinux_init_all_handles(void)
 
 static bool selinux_is_disabled(void)
 {
+#ifdef ALLOW_DISABLE_SELINUX
     char tmp[PROP_VALUE_MAX];
 
     if (access("/sys/fs/selinux", F_OK) != 0) {
@@ -881,12 +882,14 @@ static bool selinux_is_disabled(void)
         /* SELinux is compiled into the kernel, but we've been told to disable it. */
         return true;
     }
+#endif
 
     return false;
 }
 
 static bool selinux_is_enforcing(void)
 {
+#ifdef ALLOW_DISABLE_SELINUX
     char tmp[PROP_VALUE_MAX];
 
     if (property_get("ro.boot.selinux", tmp) == 0) {
@@ -903,6 +906,7 @@ static bool selinux_is_enforcing(void)
         ERROR("SELinux: Unknown value of ro.boot.selinux. Got: \"%s\". Assuming enforcing.\n", tmp);
     }
 
+#endif
     return true;
 }
 
