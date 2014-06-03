@@ -17,6 +17,7 @@
 #include <ctype.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <gtest/gtest.h>
@@ -40,99 +41,6 @@
     _rc; })
 
 static const char begin[] = "--------- beginning of ";
-
-TEST(logcat, sorted_order) {
-    FILE *fp;
-
-    ASSERT_TRUE(NULL != (fp = popen(
-      "logcat -v time -b radio -b events -b system -b main -d 2>/dev/null",
-      "r")));
-
-    class timestamp {
-    private:
-        int month;
-        int day;
-        int hour;
-        int minute;
-        int second;
-        int millisecond;
-        bool ok;
-
-    public:
-        void init(const char *buffer)
-        {
-            ok = false;
-            if (buffer != NULL) {
-                ok = sscanf(buffer, "%d-%d %d:%d:%d.%d ",
-                    &month, &day, &hour, &minute, &second, &millisecond) == 6;
-            }
-        }
-
-        timestamp(const char *buffer)
-        {
-            init(buffer);
-        }
-
-        bool operator< (timestamp &T)
-        {
-            return !ok || !T.ok
-             || (month < T.month)
-             || ((month == T.month)
-              && ((day < T.day)
-               || ((day == T.day)
-                && ((hour < T.hour)
-                 || ((hour == T.hour)
-                  && ((minute < T.minute)
-                   || ((minute == T.minute)
-                    && ((second < T.second)
-                     || ((second == T.second)
-                      && (millisecond < T.millisecond))))))))));
-        }
-
-        bool valid(void)
-        {
-            return ok;
-        }
-    } last(NULL);
-
-    char *last_buffer = NULL;
-    char buffer[5120];
-
-    int count = 0;
-    int next_lt_last = 0;
-
-    while (fgets(buffer, sizeof(buffer), fp)) {
-        if (!strncmp(begin, buffer, sizeof(begin) - 1)) {
-            continue;
-        }
-        if (!last.valid()) {
-            free(last_buffer);
-            last_buffer = strdup(buffer);
-            last.init(buffer);
-        }
-        timestamp next(buffer);
-        if (next < last) {
-            if (last_buffer) {
-                fprintf(stderr, "<%s", last_buffer);
-            }
-            fprintf(stderr, ">%s", buffer);
-            ++next_lt_last;
-        }
-        if (next.valid()) {
-            free(last_buffer);
-            last_buffer = strdup(buffer);
-            last.init(buffer);
-        }
-        ++count;
-    }
-    free(last_buffer);
-
-    pclose(fp);
-
-    EXPECT_EQ(0, next_lt_last);
-
-    EXPECT_LT(100, count);
-}
 
 TEST(logcat, buckets) {
     FILE *fp;
@@ -362,9 +270,10 @@ TEST(logcat, End_to_End) {
     ASSERT_EQ(1, count);
 }
 
-TEST(logcat, get_) {
+TEST(logcat, get_size) {
     FILE *fp;
 
+    // NB: crash log only available in user space
     ASSERT_TRUE(NULL != (fp = popen(
       "logcat -b radio -b events -b system -b main -g 2>/dev/null",
       "r")));
@@ -375,13 +284,49 @@ TEST(logcat, get_) {
 
     while (fgets(buffer, sizeof(buffer), fp)) {
         int size, consumed, max, payload;
+        char size_mult, consumed_mult;
+        long full_size, full_consumed;
 
         size = consumed = max = payload = 0;
-        if ((4 == sscanf(buffer, "%*s ring buffer is %dKb (%dKb consumed),"
-                                 " max entry is %db, max payload is %db",
-                                 &size, &consumed, &max, &payload))
-         && ((size * 3) >= consumed)
-         && ((size * 1024) > max)
+        // NB: crash log can be very small, not hit a Kb of consumed space
+        //     doubly lucky we are not including it.
+        if (6 != sscanf(buffer, "%*s ring buffer is %d%cb (%d%cb consumed),"
+                                " max entry is %db, max payload is %db",
+                                &size, &size_mult, &consumed, &consumed_mult,
+                                &max, &payload)) {
+            fprintf(stderr, "WARNING: Parse error: %s", buffer);
+            continue;
+        }
+        full_size = size;
+        switch(size_mult) {
+        case 'G':
+            full_size *= 1024;
+            /* FALLTHRU */
+        case 'M':
+            full_size *= 1024;
+            /* FALLTHRU */
+        case 'K':
+            full_size *= 1024;
+            break;
+        }
+        full_consumed = consumed;
+        switch(consumed_mult) {
+        case 'G':
+            full_consumed *= 1024;
+            /* FALLTHRU */
+        case 'M':
+            full_consumed *= 1024;
+            /* FALLTHRU */
+        case 'K':
+            full_consumed *= 1024;
+            break;
+        }
+        EXPECT_GT((full_size * 9) / 4, full_consumed);
+        EXPECT_GT(full_size, max);
+        EXPECT_GT(max, payload);
+
+        if ((((full_size * 9) / 4) >= full_consumed)
+         && (full_size > max)
          && (max > payload)) {
             ++count;
         }
@@ -649,7 +594,7 @@ static bool set_white_black(const char *list) {
 
     char buffer[5120];
 
-    snprintf(buffer, sizeof(buffer), "logcat -P '%s' 2>&1", list);
+    snprintf(buffer, sizeof(buffer), "logcat -P '%s' 2>&1", list ? list : "");
     fp = popen(buffer, "r");
     if (fp == NULL) {
         fprintf(stderr, "ERROR: %s\n", buffer);
@@ -662,10 +607,10 @@ static bool set_white_black(const char *list) {
             ++buf;
         }
         char *end = buf + strlen(buf);
-        while (isspace(*--end) && (end >= buf)) {
+        while ((end > buf) && isspace(*--end)) {
             *end = '\0';
         }
-        if (end < buf) {
+        if (end <= buf) {
             continue;
         }
         fprintf(stderr, "%s\n", buf);
@@ -679,7 +624,7 @@ TEST(logcat, white_black_adjust) {
     char *list = NULL;
     char *adjust = NULL;
 
-    ASSERT_EQ(true, get_white_black(&list));
+    get_white_black(&list);
 
     static const char adjustment[] = "~! 300/20 300/25 2000 ~1000/5 ~1000/30";
     ASSERT_EQ(true, set_white_black(adjustment));
@@ -696,8 +641,8 @@ TEST(logcat, white_black_adjust) {
     adjust = NULL;
 
     ASSERT_EQ(true, set_white_black(list));
-    ASSERT_EQ(true, get_white_black(&adjust));
-    EXPECT_STREQ(list, adjust);
+    get_white_black(&adjust);
+    EXPECT_STREQ(list ? list : "", adjust ? adjust : "");
     free(adjust);
     adjust = NULL;
 
