@@ -57,7 +57,7 @@ static int remount_ro_done(void)
         mount_dir[255] = 0;
         mount_type[255] = 0;
         mount_opts[255] = 0;
-        if ((match == 6) && !strncmp(mount_dev, "/dev/block", 10) && strstr(mount_opts, "rw")) {
+        if ((match == 6) && !strncmp(mount_dev, "/dev/block", 10) && strstr(mount_opts, "rw,")) {
             found_rw_fs = 1;
             break;
         }
