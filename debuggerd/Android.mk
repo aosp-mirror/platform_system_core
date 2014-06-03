@@ -3,11 +3,11 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
-	backtrace.cpp \
-	debuggerd.cpp \
-	getevent.cpp \
-	tombstone.cpp \
-	utility.cpp \
+    backtrace.cpp \
+    debuggerd.cpp \
+    getevent.cpp \
+    tombstone.cpp \
+    utility.cpp \
 
 LOCAL_SRC_FILES_arm    := arm/machine.cpp
 LOCAL_SRC_FILES_arm64  := arm64/machine.cpp
@@ -15,12 +15,11 @@ LOCAL_SRC_FILES_mips   := mips/machine.cpp
 LOCAL_SRC_FILES_x86    := x86/machine.cpp
 LOCAL_SRC_FILES_x86_64 := x86_64/machine.cpp
 
-LOCAL_CONLYFLAGS := -std=gnu99
-LOCAL_CPPFLAGS := -std=gnu++11
-LOCAL_CFLAGS := \
-	-Wall \
-	-Wno-array-bounds \
-	-Werror
+LOCAL_CPPFLAGS := \
+    -std=gnu++11 \
+    -W -Wall -Wextra \
+    -Wunused \
+    -Werror \
 
 ifeq ($(ARCH_ARM_HAVE_VFP),true)
 LOCAL_CFLAGS_arm += -DWITH_VFP
@@ -30,11 +29,10 @@ LOCAL_CFLAGS_arm += -DWITH_VFP_D32
 endif # ARCH_ARM_HAVE_VFP_D32
 
 LOCAL_SHARED_LIBRARIES := \
-	libbacktrace \
-	libc \
-	libcutils \
-	liblog \
-	libselinux \
+    libbacktrace \
+    libcutils \
+    liblog \
+    libselinux \
 
 include external/stlport/libstlport.mk
 
@@ -42,6 +40,7 @@ LOCAL_MODULE := debuggerd
 LOCAL_MODULE_STEM_32 := debuggerd
 LOCAL_MODULE_STEM_64 := debuggerd64
 LOCAL_MULTILIB := both
+LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 
 include $(BUILD_EXECUTABLE)
 
