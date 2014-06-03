@@ -1796,6 +1796,8 @@ int install_app(transport_type transport, char* serial, int argc, char** argv)
         } else if (!strcmp(argv[i], "--key")) {
             verify_apk = 0;
             i++;
+        } else if (!strcmp(argv[i], "--abi")) {
+            i++;
         }
     }
 
