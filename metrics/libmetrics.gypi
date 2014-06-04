@@ -1,11 +1,9 @@
 {
   'target_defaults': {
-    'dependencies': [
-      '../../platform2/libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
-    ],
     'variables': {
       'deps': [
         'libchrome-<(libbase_ver)',
+        'libchromeos-<(libbase_ver)',
       ]
     },
     'cflags_cc': [
@@ -18,6 +16,9 @@
       'type': 'shared_library',
       'cflags': [
         '-fvisibility=default',
+      ],
+      'libraries+': [
+        '-lpolicy-<(libbase_ver)',
       ],
       'sources': [
         'c_metrics_library.cc',

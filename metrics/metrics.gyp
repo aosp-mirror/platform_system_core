@@ -3,9 +3,6 @@
     'libbase_ver': 271506,
   },
   'target_defaults': {
-    'dependencies': [
-      '../../platform2/libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
-    ],
     'variables': {
       'deps': [
         'dbus-1',
@@ -14,6 +11,7 @@
         'gobject-2.0',
         'gthread-2.0',
         'libchrome-<(libbase_ver)',
+        'libchromeos-<(libbase_ver)',
       ]
     },
     'cflags_cc': [
@@ -26,6 +24,7 @@
       'type': 'static_library',
       'dependencies': [
         '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
+        '<(platform_root)/system_api/system_api.gyp:system_api-headers',
       ],
       'link_settings': {
         'libraries': [
@@ -80,7 +79,12 @@
           'includes': ['../../platform2/common-mk/common_test.gypi'],
           'sources': [
             'metrics_library_test.cc',
-          ]
+          ],
+          'link_settings': {
+            'libraries': [
+              '-lpolicy-<(libbase_ver)',
+            ]
+          }
         },
         {
           'target_name': 'timer_test',
