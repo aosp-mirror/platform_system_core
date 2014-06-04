@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "../../../bionic/libc/bionic/dlmalloc.h"
 #include "log/log.h"
 
 #define UNUSED __attribute__((__unused__))
