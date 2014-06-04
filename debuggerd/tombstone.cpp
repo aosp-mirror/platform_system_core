@@ -56,6 +56,21 @@
 // Must match the path defined in NativeCrashListener.java
 #define NCRASH_SOCKET_PATH "/data/system/ndebugsocket"
 
+// Figure out the abi based on defined macros.
+#if defined(__arm__)
+#define ABI_STRING "arm"
+#elif defined(__aarch64__)
+#define ABI_STRING "arm64"
+#elif defined(__mips__)
+#define ABI_STRING "mips"
+#elif defined(__i386__)
+#define ABI_STRING "x86"
+#elif defined(__x86_64__)
+#define ABI_STRING "x86_64"
+#else
+#error "Unsupported ABI"
+#endif
+
 static bool signal_has_si_addr(int sig) {
   switch (sig) {
     case SIGBUS:
@@ -157,20 +172,16 @@ static const char* get_sigcode(int signo, int code) {
   return "?";
 }
 
-static void dump_revision_info(log_t* log) {
+static void dump_header_info(log_t* log) {
+  char fingerprint[PROPERTY_VALUE_MAX];
   char revision[PROPERTY_VALUE_MAX];
 
+  property_get("ro.build.fingerprint", fingerprint, "unknown");
   property_get("ro.revision", revision, "unknown");
 
-  _LOG(log, SCOPE_AT_FAULT, "Revision: '%s'\n", revision);
-}
-
-static void dump_build_info(log_t* log) {
-  char fingerprint[PROPERTY_VALUE_MAX];
-
-  property_get("ro.build.fingerprint", fingerprint, "unknown");
-
   _LOG(log, SCOPE_AT_FAULT, "Build fingerprint: '%s'\n", fingerprint);
+  _LOG(log, SCOPE_AT_FAULT, "Revision: '%s'\n", revision);
+  _LOG(log, SCOPE_AT_FAULT, "ABI: '%s'\n", ABI_STRING);
 }
 
 static void dump_signal_info(log_t* log, pid_t tid, int signal, int si_code) {
@@ -632,8 +643,7 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code
 
   _LOG(log, SCOPE_AT_FAULT,
        "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
-  dump_build_info(log);
-  dump_revision_info(log);
+  dump_header_info(log);
   dump_thread_info(log, pid, tid, SCOPE_AT_FAULT);
   if (signal) {
     dump_signal_info(log, tid, signal, si_code);
