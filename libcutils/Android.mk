@@ -56,7 +56,6 @@ endif
 
 ifneq ($(WINDOWS_HOST_ONLY),1)
     commonSources += \
-        ashmem-host.cc \
         fs.c \
         multiuser.c \
         socket_inaddr_any_server.c \
@@ -66,6 +65,9 @@ ifneq ($(WINDOWS_HOST_ONLY),1)
         socket_loopback_server.c \
         socket_network_client.c \
         sockets.c \
+
+    commonHostSources += \
+        ashmem-host.c
 
 endif
 
