@@ -66,8 +66,6 @@ static char16_t* allocFromUTF8(const char* u8str, size_t u8len)
         return getEmptyString();
     }
 
-    const uint8_t* const u8end = u8cur + u8len;
-
     SharedBuffer* buf = SharedBuffer::alloc(sizeof(char16_t)*(u16len+1));
     if (buf) {
         u8cur = (const uint8_t*) u8str;
