@@ -43,7 +43,7 @@ commonSources:= \
 	VectorImpl.cpp \
 	misc.cpp
 
-host_commonCflags := -DLIBUTILS_NATIVE=1 $(TOOL_CFLAGS)
+host_commonCflags := -DLIBUTILS_NATIVE=1 $(TOOL_CFLAGS) -Werror
 
 ifeq ($(HOST_OS),windows)
 ifeq ($(strip $(USE_CYGWIN),),)
@@ -99,6 +99,7 @@ LOCAL_SRC_FILES:= \
 ifeq ($(TARGET_ARCH),mips)
 LOCAL_CFLAGS += -DALIGN_DOUBLE
 endif
+LOCAL_CFLAGS += -Werror
 
 LOCAL_C_INCLUDES += \
 		bionic/libc/private \
@@ -126,7 +127,8 @@ LOCAL_SHARED_LIBRARIES := \
         libbacktrace \
         libcutils \
         libdl \
-        liblog \
+        liblog
+LOCAL_CFLAGS := -Werror
 
 include external/stlport/libstlport.mk
 
