@@ -1,9 +1,12 @@
 {
   # Shouldn't need this, but doesn't work otherwise.
-  # http://crbug.com/340086
+  # http://crbug.com/340086 and http://crbug.com/385186
+  # Note: the unused dependencies are optimized out by the compiler.
   'target_defaults': {
     'variables': {
       'deps': [
+        'libchromeos-<(libbase_ver)',
+        'dbus-glib-1',
       ],
     },
   },
@@ -33,7 +36,7 @@
         },
       },
       'dependencies': [
-        '../../platform2/libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
+        '<(platform_root)/system_api/system_api.gyp:system_api-headers',
       ],
       'sources': [
         'chrome_collector.cc',
@@ -56,7 +59,6 @@
       },
       'dependencies': [
         'libcrash',
-        '../../platform2/libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
         '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
       ],
       'sources': [
@@ -73,9 +75,6 @@
           'libchrome-<(libbase_ver)',
         ],
       },
-      'dependencies': [
-        '../../platform2/libchromeos/libchromeos-<(libbase_ver).gyp:libchromeos-<(libbase_ver)',
-      ],
       'sources': [
         'list_proxies.cc',
       ],
