@@ -27,7 +27,7 @@
 #include "../utility.h"
 #include "../machine.h"
 
-void dump_memory_and_code(log_t* log, pid_t tid, int scope_flags) {
+void dump_memory_and_code(log_t*, pid_t, int) {
 }
 
 void dump_registers(log_t* log, pid_t tid, int scope_flags) {
