@@ -36,6 +36,12 @@ class MetricsDaemon {
   // forking.
   void Run(bool run_as_daemon);
 
+ protected:
+  // Used also by the unit tests.
+  static const char kComprDataSizeName[];
+  static const char kOrigDataSizeName[];
+  static const char kZeroPagesName[];
+
  private:
   friend class MetricsDaemonTest;
   FRIEND_TEST(MetricsDaemonTest, CheckSystemCrash);
@@ -59,6 +65,7 @@ class MetricsDaemon {
   FRIEND_TEST(MetricsDaemonTest, ReportUserCrashInterval);
   FRIEND_TEST(MetricsDaemonTest, SendSample);
   FRIEND_TEST(MetricsDaemonTest, SendCpuThrottleMetrics);
+  FRIEND_TEST(MetricsDaemonTest, SendZramMetrics);
 
   // State for disk stats collector callback.
   enum StatsState {
@@ -269,6 +276,14 @@ class MetricsDaemon {
 
   // Invoked periodically by |update_stats_timeout_id_| to call UpdateStats().
   static gboolean HandleUpdateStatsTimeout(gpointer data);
+
+  // Reports zram statistics.
+  bool ReportZram(const base::FilePath& zram_dir);
+
+  // Reads a string from a file and converts it to uint64.
+  static bool ReadFileToUint64(const base::FilePath& path, uint64* value);
+
+  // VARIABLES
 
   // Test mode.
   bool testing_;

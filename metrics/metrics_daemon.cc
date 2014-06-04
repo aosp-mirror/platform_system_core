@@ -111,6 +111,12 @@ const int MetricsDaemon::kMetricsProcStatFirstLineItemsCount = 11;
 const char MetricsDaemon::kMetricScaledCpuFrequencyName[] =
     "Platform.CpuFrequencyThermalScaling";
 
+// Zram sysfs entries.
+
+const char MetricsDaemon::kComprDataSizeName[] = "compr_data_size";
+const char MetricsDaemon::kOrigDataSizeName[] = "orig_data_size";
+const char MetricsDaemon::kZeroPagesName[] = "zero_pages";
+
 // Memory use stats collection intervals.  We collect some memory use interval
 // at these intervals after boot, and we stop collecting after the last one,
 // with the assumption that in most cases the memory use won't change much
@@ -737,7 +743,62 @@ bool MetricsDaemon::MeminfoCallback() {
     LOG(WARNING) << "cannot read " << meminfo_path.value().c_str();
     return false;
   }
-  return ProcessMeminfo(meminfo_raw);
+  // Make both calls even if the first one fails.
+  bool success = ProcessMeminfo(meminfo_raw);
+  return ReportZram(base::FilePath(FILE_PATH_LITERAL("/sys/block/zram0"))) &&
+      success;
+}
+
+// static
+bool MetricsDaemon::ReadFileToUint64(const base::FilePath& path,
+                                     uint64* value) {
+  std::string content;
+  if (!base::ReadFileToString(path, &content)) {
+    PLOG(WARNING) << "cannot read " << path.MaybeAsASCII();
+    return false;
+  }
+  if (!base::StringToUint64(content, value)) {
+    LOG(WARNING) << "invalid integer: " << content;
+    return false;
+  }
+  return true;
+}
+
+bool MetricsDaemon::ReportZram(const base::FilePath& zram_dir) {
+  // Data sizes are in bytes.  |zero_pages| is in number of pages.
+  uint64 compr_data_size, orig_data_size, zero_pages;
+  const size_t page_size = 4096;
+
+  if (!ReadFileToUint64(zram_dir.Append(kComprDataSizeName),
+                        &compr_data_size) ||
+      !ReadFileToUint64(zram_dir.Append(kOrigDataSizeName), &orig_data_size) ||
+      !ReadFileToUint64(zram_dir.Append(kZeroPagesName), &zero_pages)) {
+    return false;
+  }
+
+  // |orig_data_size| does not include zero-filled pages.
+  orig_data_size += zero_pages * page_size;
+
+  const int compr_data_size_mb = compr_data_size >> 20;
+  const int savings_mb = (orig_data_size - compr_data_size) >> 20;
+  const int zero_ratio_percent = zero_pages * page_size * 100 / orig_data_size;
+
+  // Report compressed size in megabytes.  100 MB or less has little impact.
+  SendSample("Platform.ZramCompressedSize", compr_data_size_mb, 100, 4000, 50);
+  SendSample("Platform.ZramSavings", savings_mb, 100, 4000, 50);
+  // The compression ratio is multiplied by 100 for better resolution.  The
+  // ratios of interest are between 1 and 6 (100% and 600% as reported).  We
+  // don't want samples when very little memory is being compressed.
+  if (compr_data_size_mb >= 1) {
+    SendSample("Platform.ZramCompressionRatioPercent",
+               orig_data_size * 100 / compr_data_size, 100, 600, 50);
+  }
+  // The values of interest for zero_pages are between 1MB and 1GB.  The units
+  // are number of pages.
+  SendSample("Platform.ZramZeroPages", zero_pages, 256, 256 * 1024, 50);
+  SendSample("Platform.ZramZeroRatioPercent", zero_ratio_percent, 1, 50, 50);
+
+  return true;
 }
 
 bool MetricsDaemon::ProcessMeminfo(const string& meminfo_raw) {

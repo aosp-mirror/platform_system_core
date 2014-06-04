@@ -9,6 +9,7 @@
 
 #include <base/at_exit.h>
 #include <base/file_util.h>
+#include <base/strings/string_number_conversions.h>
 #include <base/strings/stringprintf.h>
 #include <chromeos/dbus/service_constants.h>
 #include <gtest/gtest.h>
@@ -30,8 +31,7 @@ using ::testing::Return;
 using ::testing::StrictMock;
 using chromeos_metrics::PersistentIntegerMock;
 
-static const char kTestDir[] = "test";
-static const char kFakeDiskStatsPath[] = "fake-disk-stats";
+static const char kFakeDiskStatsName[] = "fake-disk-stats";
 static const char kFakeDiskStatsFormat[] =
     "    1793     1788    %d   105580    "
     "    196      175     %d    30290    "
@@ -40,7 +40,7 @@ static string kFakeDiskStats[2];
 static const int kFakeReadSectors[] = {80000, 100000};
 static const int kFakeWriteSectors[] = {3000, 4000};
 
-static const char kFakeVmStatsPath[] = "fake-vm-stats";
+static const char kFakeVmStatsName[] = "fake-vm-stats";
 static const char kFakeScalingMaxFreqPath[] = "fake-scaling-max-freq";
 static const char kFakeCpuinfoMaxFreqPath[] = "fake-cpuinfo-max-freq";
 
@@ -54,15 +54,12 @@ class MetricsDaemonTest : public testing::Test {
                                            kFakeReadSectors[1],
                                            kFakeWriteSectors[1]);
     CreateFakeDiskStatsFile(kFakeDiskStats[0].c_str());
-    CreateFakeCpuFrequencyFile(kFakeCpuinfoMaxFreqPath, 10000000);
-    CreateFakeCpuFrequencyFile(kFakeScalingMaxFreqPath, 10000000);
+    CreateUint64ValueFile(base::FilePath(kFakeCpuinfoMaxFreqPath), 10000000);
+    CreateUint64ValueFile(base::FilePath(kFakeScalingMaxFreqPath), 10000000);
 
     chromeos_metrics::PersistentInteger::SetTestingMode(true);
-    daemon_.Init(true, &metrics_lib_, kFakeDiskStatsPath, kFakeVmStatsPath,
+    daemon_.Init(true, &metrics_lib_, kFakeDiskStatsName, kFakeVmStatsName,
         kFakeScalingMaxFreqPath, kFakeCpuinfoMaxFreqPath);
-
-    base::DeleteFile(FilePath(kTestDir), true);
-    base::CreateDirectory(FilePath(kTestDir));
 
     // Replace original persistent values with mock ones.
     daily_active_use_mock_ =
@@ -84,7 +81,7 @@ class MetricsDaemonTest : public testing::Test {
   }
 
   virtual void TearDown() {
-    EXPECT_EQ(0, unlink(kFakeDiskStatsPath));
+    EXPECT_EQ(0, unlink(kFakeDiskStatsName));
     EXPECT_EQ(0, unlink(kFakeScalingMaxFreqPath));
     EXPECT_EQ(0, unlink(kFakeCpuinfoMaxFreqPath));
   }
@@ -157,23 +154,22 @@ class MetricsDaemonTest : public testing::Test {
 
   // Creates or overwrites an input file containing fake disk stats.
   void CreateFakeDiskStatsFile(const char* fake_stats) {
-    if (unlink(kFakeDiskStatsPath) < 0) {
+    if (unlink(kFakeDiskStatsName) < 0) {
       EXPECT_EQ(errno, ENOENT);
     }
-    FILE* f = fopen(kFakeDiskStatsPath, "w");
+    FILE* f = fopen(kFakeDiskStatsName, "w");
     EXPECT_EQ(1, fwrite(fake_stats, strlen(fake_stats), 1, f));
     EXPECT_EQ(0, fclose(f));
   }
 
-  // Creates or overwrites an input file containing a fake CPU frequency.
-  void CreateFakeCpuFrequencyFile(const char* filename, int frequency) {
-    FilePath path(filename);
+  // Creates or overwrites the file in |path| so that it contains the printable
+  // representation of |value|.
+  void CreateUint64ValueFile(const base::FilePath& path, uint64 value) {
     base::DeleteFile(path, false);
-    std::string frequency_string = StringPrintf("%d\n", frequency);
-    int frequency_string_length = frequency_string.length();
-    EXPECT_EQ(frequency_string.length(),
-              base::WriteFile(path, frequency_string.c_str(),
-                              frequency_string_length));
+    std::string value_string = base::Uint64ToString(value);
+    ASSERT_EQ(value_string.length(),
+              base::WriteFile(path, value_string.c_str(),
+                              value_string.length()));
   }
 
   // The MetricsDaemon under test.
@@ -351,8 +347,9 @@ TEST_F(MetricsDaemonTest, ReadFreqToInt) {
   const int fake_max_freq = 2000000;
   int scaled_freq = 0;
   int max_freq = 0;
-  CreateFakeCpuFrequencyFile(kFakeScalingMaxFreqPath, fake_scaled_freq);
-  CreateFakeCpuFrequencyFile(kFakeCpuinfoMaxFreqPath, fake_max_freq);
+  CreateUint64ValueFile(base::FilePath(kFakeScalingMaxFreqPath),
+                        fake_scaled_freq);
+  CreateUint64ValueFile(base::FilePath(kFakeCpuinfoMaxFreqPath), fake_max_freq);
   EXPECT_TRUE(daemon_.testing_);
   EXPECT_TRUE(daemon_.ReadFreqToInt(kFakeScalingMaxFreqPath, &scaled_freq));
   EXPECT_TRUE(daemon_.ReadFreqToInt(kFakeCpuinfoMaxFreqPath, &max_freq));
@@ -361,15 +358,49 @@ TEST_F(MetricsDaemonTest, ReadFreqToInt) {
 }
 
 TEST_F(MetricsDaemonTest, SendCpuThrottleMetrics) {
-  CreateFakeCpuFrequencyFile(kFakeCpuinfoMaxFreqPath, 2001000);
+  CreateUint64ValueFile(base::FilePath(kFakeCpuinfoMaxFreqPath), 2001000);
   // Test the 101% and 100% cases.
-  CreateFakeCpuFrequencyFile(kFakeScalingMaxFreqPath, 2001000);
+  CreateUint64ValueFile(base::FilePath(kFakeScalingMaxFreqPath), 2001000);
   EXPECT_TRUE(daemon_.testing_);
   EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, 101, 101));
   daemon_.SendCpuThrottleMetrics();
-  CreateFakeCpuFrequencyFile(kFakeScalingMaxFreqPath, 2000000);
+  CreateUint64ValueFile(base::FilePath(kFakeScalingMaxFreqPath), 2000000);
   EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, 100, 101));
   daemon_.SendCpuThrottleMetrics();
+}
+
+TEST_F(MetricsDaemonTest, SendZramMetrics) {
+  EXPECT_TRUE(daemon_.testing_);
+
+  // |compr_data_size| is the size in bytes of compressed data.
+  const uint64 compr_data_size = 50 * 1000 * 1000;
+  // The constant '3' is a realistic but random choice.
+  // |orig_data_size| does not include zero pages.
+  const uint64 orig_data_size = compr_data_size * 3;
+  const uint64 page_size = 4096;
+  const uint64 zero_pages = 10 * 1000 * 1000 / page_size;
+
+  CreateUint64ValueFile(base::FilePath(MetricsDaemon::kComprDataSizeName),
+                        compr_data_size);
+  CreateUint64ValueFile(base::FilePath(MetricsDaemon::kOrigDataSizeName),
+                        orig_data_size);
+  CreateUint64ValueFile(base::FilePath(MetricsDaemon::kZeroPagesName),
+                        zero_pages);
+
+  const uint64 real_orig_size = orig_data_size + zero_pages * page_size;
+  const uint64 zero_ratio_percent =
+      zero_pages * page_size * 100 / real_orig_size;
+  // Ratio samples are in percents.
+  const uint64 actual_ratio_sample = real_orig_size * 100 / compr_data_size;
+
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, compr_data_size >> 20, _, _, _));
+  EXPECT_CALL(metrics_lib_,
+              SendToUMA(_, (real_orig_size - compr_data_size) >> 20, _, _, _));
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, actual_ratio_sample, _, _, _));
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, zero_pages, _, _, _));
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, zero_ratio_percent, _, _, _));
+
+  EXPECT_TRUE(daemon_.ReportZram(base::FilePath(".")));
 }
 
 int main(int argc, char** argv) {
