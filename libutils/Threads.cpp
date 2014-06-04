@@ -17,16 +17,11 @@
 // #define LOG_NDEBUG 0
 #define LOG_TAG "libutils.threads"
 
-#include <utils/threads.h>
-#include <utils/Log.h>
-
-#include <cutils/sched_policy.h>
-
+#include <assert.h>
+#include <errno.h>
+#include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <memory.h>
-#include <errno.h>
-#include <assert.h>
 #include <unistd.h>
 
 #if defined(HAVE_PTHREADS)
@@ -45,6 +40,17 @@
 
 #if defined(HAVE_PRCTL)
 #include <sys/prctl.h>
+#endif
+
+#include <utils/threads.h>
+#include <utils/Log.h>
+
+#include <cutils/sched_policy.h>
+
+#ifdef HAVE_ANDROID_OS
+# define __android_unused
+#else
+# define __android_unused __attribute__((__unused__))
 #endif
 
 /*
@@ -119,7 +125,7 @@ void androidSetThreadName(const char* name) {
 
 int androidCreateRawThreadEtc(android_thread_func_t entryFunction,
                                void *userData,
-                               const char* threadName,
+                               const char* threadName __android_unused,
                                int32_t threadPriority,
                                size_t threadStackSize,
                                android_thread_id_t *threadId)
@@ -251,9 +257,9 @@ static bool doCreateThread(android_thread_func_t fn, void* arg, android_thread_i
 
 int androidCreateRawThreadEtc(android_thread_func_t fn,
                                void *userData,
-                               const char* threadName,
-                               int32_t threadPriority,
-                               size_t threadStackSize,
+                               const char* /*threadName*/,
+                               int32_t /*threadPriority*/,
+                               size_t /*threadStackSize*/,
                                android_thread_id_t *threadId)
 {
     return doCreateThread(  fn, userData, threadId);

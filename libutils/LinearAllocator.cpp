@@ -92,7 +92,7 @@ public:
         : mNextPage(0)
     {}
 
-    void* operator new(size_t size, void* buf) { return buf; }
+    void* operator new(size_t /*size*/, void* buf) { return buf; }
 
     void* start() {
         return (void*) (((size_t)this) + sizeof(Page));
@@ -103,7 +103,7 @@ public:
     }
 
 private:
-    Page(const Page& other) {}
+    Page(const Page& /*other*/) {}
     Page* mNextPage;
 };
 

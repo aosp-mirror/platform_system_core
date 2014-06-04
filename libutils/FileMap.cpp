@@ -23,7 +23,13 @@
 #include <utils/FileMap.h>
 #include <utils/Log.h>
 
+#if defined(HAVE_WIN32_FILEMAP) && !defined(__USE_MINGW_ANSI_STDIO)
+# define PRId32 "I32d"
+# define PRIx32 "I32x"
+# define PRId64 "I64d"
+#else
 #include <inttypes.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -169,8 +175,8 @@ try_again:
             goto try_again;
         }
 
-        ALOGE("mmap(%" PRId64 ",%zu) failed: %s\n",
-            adjOffset, adjLength, strerror(errno));
+        ALOGE("mmap(%lld,%zu) failed: %s\n",
+            (long long)adjOffset, adjLength, strerror(errno));
         return false;
     }
     mBasePtr = ptr;
