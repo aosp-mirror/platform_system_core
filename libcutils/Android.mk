@@ -81,6 +81,7 @@ LOCAL_CFLAGS += $(hostSmpFlag)
 ifneq ($(HOST_OS),windows)
 LOCAL_CFLAGS += -Werror
 endif
+LOCAL_MULTILIB := both
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
