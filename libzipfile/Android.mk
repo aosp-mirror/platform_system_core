@@ -16,6 +16,8 @@ LOCAL_C_INCLUDES += external/zlib
 
 LOCAL_CFLAGS := -Werror
 
+LOCAL_MULTILIB := both
+
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 # build device static library
