@@ -52,7 +52,7 @@ static void ggl_test_codegen(uint32_t n, uint32_t p, uint32_t t0, uint32_t t1)
     GGLAssembler assembler( new ARMAssembler(a) );
 #endif
 
-#if defined(__mips__)
+#if defined(__mips__) && !defined(__LP64__)
     GGLAssembler assembler( new ArmToMipsAssembler(a) );
 #endif
 
