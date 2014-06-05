@@ -70,6 +70,7 @@ endif
 LOCAL_MODULE:= libutils
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(host_commonCflags)
+LOCAL_MULTILIB := both
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
