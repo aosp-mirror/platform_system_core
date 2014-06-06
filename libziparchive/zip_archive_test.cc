@@ -140,11 +140,7 @@ TEST(ziparchive, ExtractToMemory) {
   CloseArchive(handle);
 }
 
-TEST(ziparchive, EmptyEntries) {
-  char temp_file_pattern[] = "empty_entries_test_XXXXXX";
-  int fd = mkstemp(temp_file_pattern);
-  ASSERT_NE(-1, fd);
-  const uint32_t data[] = {
+static const uint32_t kEmptyEntriesZip[] = {
       0x04034b50, 0x0000000a, 0x63600000, 0x00004438, 0x00000000, 0x00000000,
       0x00090000, 0x6d65001c, 0x2e797470, 0x55747874, 0x03000954, 0x52e25c13,
       0x52e25c24, 0x000b7875, 0x42890401, 0x88040000, 0x50000013, 0x1e02014b,
@@ -152,8 +148,13 @@ TEST(ziparchive, EmptyEntries) {
       0x00001800, 0x00000000, 0xa0000000, 0x00000081, 0x706d6500, 0x742e7974,
       0x54557478, 0x13030005, 0x7552e25c, 0x01000b78, 0x00428904, 0x13880400,
       0x4b500000, 0x00000605, 0x00010000, 0x004f0001, 0x00430000, 0x00000000 };
-  const ssize_t file_size = 168;
-  ASSERT_EQ(file_size, TEMP_FAILURE_RETRY(write(fd, data, file_size)));
+
+TEST(ziparchive, EmptyEntries) {
+  char temp_file_pattern[] = "empty_entries_test_XXXXXX";
+  int fd = mkstemp(temp_file_pattern);
+  ASSERT_NE(-1, fd);
+  const ssize_t file_size = sizeof(kEmptyEntriesZip);
+  ASSERT_EQ(file_size, TEMP_FAILURE_RETRY(write(fd, kEmptyEntriesZip, file_size)));
 
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveFd(fd, "EmptyEntriesTest", &handle));
@@ -175,6 +176,22 @@ TEST(ziparchive, EmptyEntries) {
 
   close(fd);
   close(output_fd);
+}
+
+TEST(ziparchive, TrailerAfterEOCD) {
+  char temp_file_pattern[] = "trailer_after_eocd_test_XXXXXX";
+  int fd = mkstemp(temp_file_pattern);
+  ASSERT_NE(-1, fd);
+
+  // Create a file with 8 bytes of random garbage.
+  static const uint8_t trailer[] = { 'A' ,'n', 'd', 'r', 'o', 'i', 'd', 'z' };
+  const ssize_t file_size = sizeof(kEmptyEntriesZip);
+  const ssize_t trailer_size = sizeof(trailer);
+  ASSERT_EQ(file_size, TEMP_FAILURE_RETRY(write(fd, kEmptyEntriesZip, file_size)));
+  ASSERT_EQ(trailer_size, TEMP_FAILURE_RETRY(write(fd, trailer, trailer_size)));
+
+  ZipArchiveHandle handle;
+  ASSERT_GT(0, OpenArchiveFd(fd, "EmptyEntriesTest", &handle));
 }
 
 TEST(ziparchive, ExtractToFile) {
