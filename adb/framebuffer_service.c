@@ -61,7 +61,7 @@ void framebuffer_service(int fd, void *cookie)
     int w, h, f;
     int fds[2];
 
-    if (pipe(fds) < 0) goto pipefail;
+    if (pipe2(fds, O_CLOEXEC) < 0) goto pipefail;
 
     pid_t pid = fork();
     if (pid < 0) goto done;
