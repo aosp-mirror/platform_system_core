@@ -44,11 +44,13 @@
 /*
  * Zip file constants.
  */
-static const uint32_t kEOCDSignature    = 0x06054b50;
-static const uint32_t kEOCDLen          = 2;
-static const uint32_t kEOCDNumEntries   = 8;              // offset to #of entries in file
-static const uint32_t kEOCDSize         = 12;             // size of the central directory
-static const uint32_t kEOCDFileOffset   = 16;             // offset to central directory
+static const uint32_t kEOCDSignature     = 0x06054b50;
+static const uint32_t kEOCDLen           = 2;
+static const uint32_t kEOCDNumEntries    = 8;             // number of entries in the archive
+static const uint32_t kEOCDSize          = 12;            // size of the central directory
+static const uint32_t kEOCDFileOffset    = 16;            // offset to central directory
+static const uint32_t kEOCDCommentLen    = 20;            // length of the EOCD comment
+static const uint32_t kEOCDComment       = 22;            // offset of the EOCD comment
 
 static const uint32_t kMaxCommentLen    = 65535;          // longest possible in ushort
 static const uint32_t kMaxEOCDSearch    = (kMaxCommentLen + kEOCDLen);
@@ -378,6 +380,13 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
   const uint16_t num_entries = get2LE(eocd_ptr + kEOCDNumEntries);
   const off64_t dir_size = get4LE(eocd_ptr + kEOCDSize);
   const off64_t dir_offset = get4LE(eocd_ptr + kEOCDFileOffset);
+  const uint16_t comment_length = get2LE(eocd_ptr + kEOCDCommentLen);
+
+  if (eocd_offset + comment_length + kEOCDCommentOffset != file_length) {
+    ALOGW("Zip: %" PRId64 " extraneous bytes at the end of the central directory",
+          (int64_t) (file_length - (eocd_offset + comment_length + kEOCDCommentOffset)));
+    return kInvalidFile;
+  }
 
   if (dir_offset + dir_size > eocd_offset) {
     ALOGW("Zip: bad offsets (dir %" PRId64 ", size %" PRId64 ", eocd %" PRId64 ")",
