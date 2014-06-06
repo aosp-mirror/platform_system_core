@@ -382,9 +382,9 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
   const off64_t dir_offset = get4LE(eocd_ptr + kEOCDFileOffset);
   const uint16_t comment_length = get2LE(eocd_ptr + kEOCDCommentLen);
 
-  if (eocd_offset + comment_length + kEOCDCommentOffset != file_length) {
+  if (eocd_offset + comment_length + kEOCDComment != file_length) {
     ALOGW("Zip: %" PRId64 " extraneous bytes at the end of the central directory",
-          (int64_t) (file_length - (eocd_offset + comment_length + kEOCDCommentOffset)));
+          (int64_t) (file_length - (eocd_offset + comment_length + kEOCDComment)));
     return kInvalidFile;
   }
 
