@@ -193,6 +193,7 @@ bool LogTimeEntry::FilterSecondPass(const LogBufferElement *element, void *obj) 
 
     if (me->skipAhead) {
         me->skipAhead--;
+        goto skip;
     }
 
     me->mStart = element->getMonotonicTime();
