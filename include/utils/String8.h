@@ -130,10 +130,18 @@ public:
             // start, or -1 if not found
             ssize_t             find(const char* other, size_t start = 0) const;
 
+            // return true if this string contains the specified substring
+    inline  bool                contains(const char* other) const;
+
+            // removes all occurrence of the specified substring
+            // returns true if any were found and removed
+            bool                removeAll(const char* other);
+
             void                toLower();
             void                toLower(size_t start, size_t numChars);
             void                toUpper();
             void                toUpper(size_t start, size_t numChars);
+
 
     /*
      * These methods operate on the string as if it were a path name.
@@ -278,6 +286,11 @@ inline size_t String8::bytes() const
 inline const SharedBuffer* String8::sharedBuffer() const
 {
     return SharedBuffer::bufferFromData(mString);
+}
+
+inline bool String8::contains(const char* other) const
+{
+    return find(other) >= 0;
 }
 
 inline String8& String8::operator=(const String8& other)
