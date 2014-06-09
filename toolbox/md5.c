@@ -4,12 +4,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <md5.h>
-
-/* When this was written, bionic's md5.h did not define this. */
-#ifndef MD5_DIGEST_LENGTH
-#define MD5_DIGEST_LENGTH 16
-#endif
+#include <openssl/md5.h>
 
 static int usage()
 {
@@ -30,7 +25,6 @@ static int do_md5(const char *path)
         return -1;
     }
 
-    /* Note that bionic's MD5_* functions return void. */
     MD5_Init(&md5_ctx);
 
     while (1) {
