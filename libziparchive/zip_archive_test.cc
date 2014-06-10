@@ -149,9 +149,24 @@ static const uint32_t kEmptyEntriesZip[] = {
       0x54557478, 0x13030005, 0x7552e25c, 0x01000b78, 0x00428904, 0x13880400,
       0x4b500000, 0x00000605, 0x00010000, 0x004f0001, 0x00430000, 0x00000000 };
 
+static int make_temporary_file(const char* file_name_pattern) {
+  char full_path[1024];
+  // Account for differences between the host and the target.
+  //
+  // TODO: Maybe reuse bionic/tests/TemporaryFile.h.
+  snprintf(full_path, sizeof(full_path), "/data/local/tmp/%s", file_name_pattern);
+  int fd = mkstemp(full_path);
+  if (fd == -1) {
+    snprintf(full_path, sizeof(full_path), "/tmp/%s", file_name_pattern);
+    fd = mkstemp(full_path);
+  }
+
+  return fd;
+}
+
 TEST(ziparchive, EmptyEntries) {
   char temp_file_pattern[] = "empty_entries_test_XXXXXX";
-  int fd = mkstemp(temp_file_pattern);
+  int fd = make_temporary_file(temp_file_pattern);
   ASSERT_NE(-1, fd);
   const ssize_t file_size = sizeof(kEmptyEntriesZip);
   ASSERT_EQ(file_size, TEMP_FAILURE_RETRY(write(fd, kEmptyEntriesZip, file_size)));
@@ -166,7 +181,7 @@ TEST(ziparchive, EmptyEntries) {
   ASSERT_EQ(0, ExtractToMemory(handle, &entry, buffer, 1));
 
   char output_file_pattern[] = "empty_entries_output_XXXXXX";
-  int output_fd = mkstemp(output_file_pattern);
+  int output_fd = make_temporary_file(output_file_pattern);
   ASSERT_NE(-1, output_fd);
   ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, output_fd));
 
@@ -180,7 +195,7 @@ TEST(ziparchive, EmptyEntries) {
 
 TEST(ziparchive, TrailerAfterEOCD) {
   char temp_file_pattern[] = "trailer_after_eocd_test_XXXXXX";
-  int fd = mkstemp(temp_file_pattern);
+  int fd = make_temporary_file(temp_file_pattern);
   ASSERT_NE(-1, fd);
 
   // Create a file with 8 bytes of random garbage.
@@ -196,7 +211,7 @@ TEST(ziparchive, TrailerAfterEOCD) {
 
 TEST(ziparchive, ExtractToFile) {
   char kTempFilePattern[] = "zip_archive_input_XXXXXX";
-  int fd = mkstemp(kTempFilePattern);
+  int fd = make_temporary_file(kTempFilePattern);
   ASSERT_NE(-1, fd);
   const uint8_t data[8] = { '1', '2', '3', '4', '5', '6', '7', '8' };
   const ssize_t data_size = sizeof(data);
