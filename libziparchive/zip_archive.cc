@@ -35,58 +35,172 @@
 
 #include "ziparchive/zip_archive.h"
 
-// This is for windows. If we don't open a file in binary mode, weirds
+// This is for windows. If we don't open a file in binary mode, weird
 // things will happen.
 #ifndef O_BINARY
 #define O_BINARY 0
 #endif
 
-/*
- * Zip file constants.
- */
-static const uint32_t kEOCDSignature     = 0x06054b50;
-static const uint32_t kEOCDLen           = 2;
-static const uint32_t kEOCDNumEntries    = 8;             // number of entries in the archive
-static const uint32_t kEOCDSize          = 12;            // size of the central directory
-static const uint32_t kEOCDFileOffset    = 16;            // offset to central directory
-static const uint32_t kEOCDCommentLen    = 20;            // length of the EOCD comment
-static const uint32_t kEOCDComment       = 22;            // offset of the EOCD comment
+#define DISALLOW_IMPLICIT_CONSTRUCTORS(TypeName) \
+    TypeName(); \
+    TypeName(const TypeName&); \
+    void operator=(const TypeName&)
 
-static const uint32_t kMaxCommentLen    = 65535;          // longest possible in ushort
-static const uint32_t kMaxEOCDSearch    = (kMaxCommentLen + kEOCDLen);
+// The "end of central directory" (EOCD) record. Each archive
+// contains exactly once such record which appears at the end of
+// the archive. It contains archive wide information like the
+// number of entries in the archive and the offset to the central
+// directory of the offset.
+struct EocdRecord {
+  static const uint32_t kSignature = 0x06054b50;
 
-static const uint32_t kLFHSignature     = 0x04034b50;
-static const uint32_t kLFHLen           = 30;             // excluding variable-len fields
-static const uint32_t kLFHGPBFlags      = 6;              // general purpose bit flags
-static const uint32_t kLFHCRC           = 14;             // offset to CRC
-static const uint32_t kLFHCompLen       = 18;             // offset to compressed length
-static const uint32_t kLFHUncompLen     = 22;             // offset to uncompressed length
-static const uint32_t kLFHNameLen       = 26;             // offset to filename length
-static const uint32_t kLFHExtraLen      = 28;             // offset to extra length
+  // End of central directory signature, should always be
+  // |kSignature|.
+  uint32_t eocd_signature;
+  // The number of the current "disk", i.e, the "disk" that this
+  // central directory is on.
+  //
+  // This implementation assumes that each archive spans a single
+  // disk only. i.e, that disk_num == 1.
+  uint16_t disk_num;
+  // The disk where the central directory starts.
+  //
+  // This implementation assumes that each archive spans a single
+  // disk only. i.e, that cd_start_disk == 1.
+  uint16_t cd_start_disk;
+  // The number of central directory records on this disk.
+  //
+  // This implementation assumes that each archive spans a single
+  // disk only. i.e, that num_records_on_disk == num_records.
+  uint16_t num_records_on_disk;
+  // The total number of central directory records.
+  uint16_t num_records;
+  // The size of the central directory (in bytes).
+  uint32_t cd_size;
+  // The offset of the start of the central directory, relative
+  // to the start of the file.
+  uint32_t cd_start_offset;
+  // Length of the central directory comment.
+  uint16_t comment_length;
+ private:
+  DISALLOW_IMPLICIT_CONSTRUCTORS(EocdRecord);
+} __attribute__((packed));
 
-static const uint32_t kCDESignature     = 0x02014b50;
-static const uint32_t kCDELen           = 46;             // excluding variable-len fields
-static const uint32_t kCDEMethod        = 10;             // offset to compression method
-static const uint32_t kCDEModWhen       = 12;             // offset to modification timestamp
-static const uint32_t kCDECRC           = 16;             // offset to entry CRC
-static const uint32_t kCDECompLen       = 20;             // offset to compressed length
-static const uint32_t kCDEUncompLen     = 24;             // offset to uncompressed length
-static const uint32_t kCDENameLen       = 28;             // offset to filename length
-static const uint32_t kCDEExtraLen      = 30;             // offset to extra length
-static const uint32_t kCDECommentLen    = 32;             // offset to comment length
-static const uint32_t kCDELocalOffset   = 42;             // offset to local hdr
+// A structure representing the fixed length fields for a single
+// record in the central directory of the archive. In addition to
+// the fixed length fields listed here, each central directory
+// record contains a variable length "file_name" and "extra_field"
+// whose lengths are given by |file_name_length| and |extra_field_length|
+// respectively.
+struct CentralDirectoryRecord {
+  static const uint32_t kSignature = 0x02014b50;
 
-static const uint32_t kDDOptSignature   = 0x08074b50;     // *OPTIONAL* data descriptor signature
-static const uint32_t kDDSignatureLen   = 4;
-static const uint32_t kDDLen            = 12;
-static const uint32_t kDDMaxLen         = 16;             // max of 16 bytes with a signature, 12 bytes without
-static const uint32_t kDDCrc32          = 0;              // offset to crc32
-static const uint32_t kDDCompLen        = 4;              // offset to compressed length
-static const uint32_t kDDUncompLen      = 8;              // offset to uncompressed length
+  // The start of record signature. Must be |kSignature|.
+  uint32_t record_signature;
+  // Tool version. Ignored by this implementation.
+  uint16_t version_made_by;
+  // Tool version. Ignored by this implementation.
+  uint16_t version_needed;
+  // The "general purpose bit flags" for this entry. The only
+  // flag value that we currently check for is the "data descriptor"
+  // flag.
+  uint16_t gpb_flags;
+  // The compression method for this entry, one of |kCompressStored|
+  // and |kCompressDeflated|.
+  uint16_t compression_method;
+  // The file modification time and date for this entry.
+  uint16_t last_mod_time;
+  uint16_t last_mod_date;
+  // The CRC-32 checksum for this entry.
+  uint32_t crc32;
+  // The compressed size (in bytes) of this entry.
+  uint32_t compressed_size;
+  // The uncompressed size (in bytes) of this entry.
+  uint32_t uncompressed_size;
+  // The length of the entry file name in bytes. The file name
+  // will appear immediately after this record.
+  uint16_t file_name_length;
+  // The length of the extra field info (in bytes). This data
+  // will appear immediately after the entry file name.
+  uint16_t extra_field_length;
+  // The length of the entry comment (in bytes). This data will
+  // appear immediately after the extra field.
+  uint16_t comment_length;
+  // The start disk for this entry. Ignored by this implementation).
+  uint16_t file_start_disk;
+  // File attributes. Ignored by this implementation.
+  uint16_t internal_file_attributes;
+  // File attributes. Ignored by this implementation.
+  uint32_t external_file_attributes;
+  // The offset to the local file header for this entry, from the
+  // beginning of this archive.
+  uint32_t local_file_header_offset;
+ private:
+  DISALLOW_IMPLICIT_CONSTRUCTORS(CentralDirectoryRecord);
+} __attribute__((packed));
 
-static const uint32_t kGPBDDFlagMask    = 0x0008;         // mask value that signifies that the entry has a DD
+// The local file header for a given entry. This duplicates information
+// present in the central directory of the archive. It is an error for
+// the information here to be different from the central directory
+// information for a given entry.
+struct LocalFileHeader {
+  static const uint32_t kSignature = 0x04034b50;
 
+  // The local file header signature, must be |kSignature|.
+  uint32_t lfh_signature;
+  // Tool version. Ignored by this implementation.
+  uint16_t version_needed;
+  // The "general purpose bit flags" for this entry. The only
+  // flag value that we currently check for is the "data descriptor"
+  // flag.
+  uint16_t gpb_flags;
+  // The compression method for this entry, one of |kCompressStored|
+  // and |kCompressDeflated|.
+  uint16_t compression_method;
+  // The file modification time and date for this entry.
+  uint16_t last_mod_time;
+  uint16_t last_mod_date;
+  // The CRC-32 checksum for this entry.
+  uint32_t crc32;
+  // The compressed size (in bytes) of this entry.
+  uint32_t compressed_size;
+  // The uncompressed size (in bytes) of this entry.
+  uint32_t uncompressed_size;
+  // The length of the entry file name in bytes. The file name
+  // will appear immediately after this record.
+  uint16_t file_name_length;
+  // The length of the extra field info (in bytes). This data
+  // will appear immediately after the entry file name.
+  uint16_t extra_field_length;
+ private:
+  DISALLOW_IMPLICIT_CONSTRUCTORS(LocalFileHeader);
+} __attribute__((packed));
+
+struct DataDescriptor {
+  // The *optional* data descriptor start signature.
+  static const uint32_t kOptSignature = 0x08074b50;
+
+  // CRC-32 checksum of the entry.
+  uint32_t crc32;
+  // Compressed size of the entry.
+  uint32_t compressed_size;
+  // Uncompressed size of the entry.
+  uint32_t uncompressed_size;
+ private:
+  DISALLOW_IMPLICIT_CONSTRUCTORS(DataDescriptor);
+} __attribute__((packed));
+
+#undef DISALLOW_IMPLICIT_CONSTRUCTORS
+
+static const uint32_t kGPBDDFlagMask = 0x0008;         // mask value that signifies that the entry has a DD
 static const uint32_t kMaxErrorLen = 1024;
+
+// The maximum size of a central directory or a file
+// comment in bytes.
+static const uint32_t kMaxCommentLen = 65535;
+
+// The maximum number of bytes to scan backwards for the EOCD start.
+static const uint32_t kMaxEOCDSearch = kMaxCommentLen + sizeof(EocdRecord);
 
 static const char* kErrorMessages[] = {
   "Unknown return code.",
@@ -313,39 +427,21 @@ static int32_t AddToHash(ZipEntryName *hash_table, const uint64_t hash_table_siz
   return 0;
 }
 
-/*
- * Get 2 little-endian bytes.
- */
-static uint16_t get2LE(const uint8_t* src) {
-  return src[0] | (src[1] << 8);
-}
-
-/*
- * Get 4 little-endian bytes.
- */
-static uint32_t get4LE(const uint8_t* src) {
-  uint32_t result;
-
-  result = src[0];
-  result |= src[1] << 8;
-  result |= src[2] << 16;
-  result |= src[3] << 24;
-
-  return result;
-}
-
 static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
                                     ZipArchive* archive, off64_t file_length,
-                                    uint32_t read_amount, uint8_t* scan_buffer) {
+                                    off64_t read_amount, uint8_t* scan_buffer) {
   const off64_t search_start = file_length - read_amount;
 
   if (lseek64(fd, search_start, SEEK_SET) != search_start) {
-    ALOGW("Zip: seek %" PRId64 " failed: %s", (int64_t)search_start, strerror(errno));
+    ALOGW("Zip: seek %" PRId64 " failed: %s", static_cast<int64_t>(search_start),
+          strerror(errno));
     return kIoError;
   }
-  ssize_t actual = TEMP_FAILURE_RETRY(read(fd, scan_buffer, read_amount));
-  if (actual != (ssize_t) read_amount) {
-    ALOGW("Zip: read %" PRIu32 " failed: %s", read_amount, strerror(errno));
+  ssize_t actual = TEMP_FAILURE_RETRY(
+      read(fd, scan_buffer, static_cast<size_t>(read_amount)));
+  if (actual != static_cast<ssize_t>(read_amount)) {
+    ALOGW("Zip: read %" PRId64 " failed: %s", static_cast<int64_t>(read_amount),
+          strerror(errno));
     return kIoError;
   }
 
@@ -355,9 +451,10 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
    * doing an initial minimal read; if we don't find it, retry with a
    * second read as above.)
    */
-  int i;
-  for (i = read_amount - kEOCDLen; i >= 0; i--) {
-    if (scan_buffer[i] == 0x50 && get4LE(&scan_buffer[i]) == kEOCDSignature) {
+  int i = read_amount - sizeof(EocdRecord);
+  for (; i >= 0; i--) {
+    if (scan_buffer[i] == 0x50 &&
+        ((*reinterpret_cast<uint32_t*>(&scan_buffer[i])) == EocdRecord::kSignature)) {
       ALOGV("+++ Found EOCD at buf+%d", i);
       break;
     }
@@ -368,53 +465,52 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
   }
 
   const off64_t eocd_offset = search_start + i;
-  const uint8_t* eocd_ptr = scan_buffer + i;
-
-  assert(eocd_offset < file_length);
-
+  const EocdRecord* eocd = reinterpret_cast<const EocdRecord*>(scan_buffer + i);
   /*
-   * Grab the CD offset and size, and the number of entries in the
-   * archive.  Verify that they look reasonable. Widen dir_size and
-   * dir_offset to the file offset type.
+   * Verify that there's no trailing space at the end of the central directory
+   * and its comment.
    */
-  const uint16_t num_entries = get2LE(eocd_ptr + kEOCDNumEntries);
-  const off64_t dir_size = get4LE(eocd_ptr + kEOCDSize);
-  const off64_t dir_offset = get4LE(eocd_ptr + kEOCDFileOffset);
-  const uint16_t comment_length = get2LE(eocd_ptr + kEOCDCommentLen);
-
-  if (eocd_offset + comment_length + kEOCDComment != file_length) {
+  const off64_t calculated_length = eocd_offset + sizeof(EocdRecord)
+      + eocd->comment_length;
+  if (calculated_length != file_length) {
     ALOGW("Zip: %" PRId64 " extraneous bytes at the end of the central directory",
-          (int64_t) (file_length - (eocd_offset + comment_length + kEOCDComment)));
+          static_cast<int64_t>(file_length - calculated_length));
     return kInvalidFile;
   }
 
-  if (dir_offset + dir_size > eocd_offset) {
-    ALOGW("Zip: bad offsets (dir %" PRId64 ", size %" PRId64 ", eocd %" PRId64 ")",
-        (int64_t)dir_offset, (int64_t)dir_size, (int64_t)eocd_offset);
+  /*
+   * Grab the CD offset and size, and the number of entries in the
+   * archive and verify that they look reasonable.
+   */
+  if (eocd->cd_start_offset + eocd->cd_size > eocd_offset) {
+    ALOGW("Zip: bad offsets (dir %" PRIu32 ", size %" PRIu32 ", eocd %" PRId64 ")",
+        eocd->cd_start_offset, eocd->cd_size, static_cast<int64_t>(eocd_offset));
     return kInvalidOffset;
   }
-  if (num_entries == 0) {
+  if (eocd->num_records == 0) {
     ALOGW("Zip: empty archive?");
     return kEmptyArchive;
   }
 
-  ALOGV("+++ num_entries=%d dir_size=%" PRId64 " dir_offset=%" PRId64,
-        num_entries, (int64_t)dir_size, (int64_t)dir_offset);
+  ALOGV("+++ num_entries=%" PRIu32 "dir_size=%" PRIu32 " dir_offset=%" PRIu32,
+        eocd->num_records, eocd->cd_size, eocd->cd_start_offset);
 
   /*
    * It all looks good.  Create a mapping for the CD, and set the fields
    * in archive.
    */
-  android::FileMap* map = MapFileSegment(fd, dir_offset, dir_size,
-                                         true /* read only */, debug_file_name);
+  android::FileMap* map = MapFileSegment(fd,
+      static_cast<off64_t>(eocd->cd_start_offset),
+      static_cast<size_t>(eocd->cd_size),
+      true /* read only */, debug_file_name);
   if (map == NULL) {
     archive->directory_map = NULL;
     return kMmapFailed;
   }
 
   archive->directory_map = map;
-  archive->num_entries = num_entries;
-  archive->directory_offset = dir_offset;
+  archive->num_entries = eocd->num_records;
+  archive->directory_offset = eocd->cd_start_offset;
 
   return 0;
 }
@@ -440,12 +536,12 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
   }
 
   if (file_length > (off64_t) 0xffffffff) {
-    ALOGV("Zip: zip file too long %" PRId64, (int64_t)file_length);
+    ALOGV("Zip: zip file too long %" PRId64, static_cast<int64_t>(file_length));
     return kInvalidFile;
   }
 
-  if (file_length < (int64_t) kEOCDLen) {
-    ALOGV("Zip: length %" PRId64 " is too small to be zip", (int64_t)file_length);
+  if (file_length < static_cast<off64_t>(sizeof(EocdRecord))) {
+    ALOGV("Zip: length %" PRId64 " is too small to be zip", static_cast<int64_t>(file_length));
     return kInvalidFile;
   }
 
@@ -461,12 +557,12 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
    *
    * We start by pulling in the last part of the file.
    */
-  uint32_t read_amount = kMaxEOCDSearch;
-  if (file_length < (off64_t) read_amount) {
+  off64_t read_amount = kMaxEOCDSearch;
+  if (file_length < read_amount) {
     read_amount = file_length;
   }
 
-  uint8_t* scan_buffer = (uint8_t*) malloc(read_amount);
+  uint8_t* scan_buffer = reinterpret_cast<uint8_t*>(malloc(read_amount));
   int32_t result = MapCentralDirectory0(fd, debug_file_name, archive,
                                         file_length, read_amount, scan_buffer);
 
@@ -482,9 +578,9 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
  */
 static int32_t ParseZipArchive(ZipArchive* archive) {
   int32_t result = -1;
-  const uint8_t* cd_ptr = (const uint8_t*) archive->directory_map->getDataPtr();
-  size_t cd_length = archive->directory_map->getDataLength();
-  uint16_t num_entries = archive->num_entries;
+  const uint8_t* const cd_ptr = (const uint8_t*) archive->directory_map->getDataPtr();
+  const size_t cd_length = archive->directory_map->getDataLength();
+  const uint16_t num_entries = archive->num_entries;
 
   /*
    * Create hash table.  We have a minimum 75% load factor, possibly as
@@ -499,39 +595,43 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
    * Walk through the central directory, adding entries to the hash
    * table and verifying values.
    */
+  const uint8_t* const cd_end = cd_ptr + cd_length;
   const uint8_t* ptr = cd_ptr;
   for (uint16_t i = 0; i < num_entries; i++) {
-    if (get4LE(ptr) != kCDESignature) {
+    const CentralDirectoryRecord* cdr =
+        reinterpret_cast<const CentralDirectoryRecord*>(ptr);
+    if (cdr->record_signature != CentralDirectoryRecord::kSignature) {
       ALOGW("Zip: missed a central dir sig (at %" PRIu16 ")", i);
       goto bail;
     }
 
-    if (ptr + kCDELen > cd_ptr + cd_length) {
+    if (ptr + sizeof(CentralDirectoryRecord) > cd_end) {
       ALOGW("Zip: ran off the end (at %" PRIu16 ")", i);
       goto bail;
     }
 
-    const off64_t local_header_offset = get4LE(ptr + kCDELocalOffset);
+    const off64_t local_header_offset = cdr->local_file_header_offset;
     if (local_header_offset >= archive->directory_offset) {
       ALOGW("Zip: bad LFH offset %" PRId64 " at entry %" PRIu16, (int64_t)local_header_offset, i);
       goto bail;
     }
 
-    const uint16_t file_name_length = get2LE(ptr + kCDENameLen);
-    const uint16_t extra_length = get2LE(ptr + kCDEExtraLen);
-    const uint16_t comment_length = get2LE(ptr + kCDECommentLen);
+    const uint16_t file_name_length = cdr->file_name_length;
+    const uint16_t extra_length = cdr->extra_field_length;
+    const uint16_t comment_length = cdr->comment_length;
 
     /* add the CDE filename to the hash table */
+    const char* file_name = reinterpret_cast<const char *>(ptr + sizeof(CentralDirectoryRecord));
     const int add_result = AddToHash(archive->hash_table,
-        archive->hash_table_size, (const char*) ptr + kCDELen, file_name_length);
+        archive->hash_table_size, file_name, file_name_length);
     if (add_result) {
       ALOGW("Zip: Error adding entry to hash table %d", add_result);
       result = add_result;
       goto bail;
     }
 
-    ptr += kCDELen + file_name_length + extra_length + comment_length;
-    if ((size_t)(ptr - cd_ptr) > cd_length) {
+    ptr += sizeof(CentralDirectoryRecord) + file_name_length + extra_length + comment_length;
+    if ((ptr - cd_ptr) > static_cast<int64_t>(cd_length)) {
       ALOGW("Zip: bad CD advance (%tu vs %zu) at entry %" PRIu16,
           ptr - cd_ptr, cd_length, i);
       goto bail;
@@ -606,21 +706,19 @@ void CloseArchive(ZipArchiveHandle handle) {
 
 static int32_t UpdateEntryFromDataDescriptor(int fd,
                                              ZipEntry *entry) {
-  uint8_t ddBuf[kDDMaxLen];
+  uint8_t ddBuf[sizeof(DataDescriptor) + sizeof(DataDescriptor::kOptSignature)];
   ssize_t actual = TEMP_FAILURE_RETRY(read(fd, ddBuf, sizeof(ddBuf)));
   if (actual != sizeof(ddBuf)) {
     return kIoError;
   }
 
-  const uint32_t ddSignature = get4LE(ddBuf);
-  uint16_t ddOffset = 0;
-  if (ddSignature == kDDOptSignature) {
-    ddOffset = 4;
-  }
+  const uint32_t ddSignature = *(reinterpret_cast<const uint32_t*>(ddBuf));
+  const uint16_t offset = (ddSignature == DataDescriptor::kOptSignature) ? 4 : 0;
+  const DataDescriptor* descriptor = reinterpret_cast<const DataDescriptor*>(ddBuf + offset);
 
-  entry->crc32 = get4LE(ddBuf + ddOffset + kDDCrc32);
-  entry->compressed_length = get4LE(ddBuf + ddOffset + kDDCompLen);
-  entry->uncompressed_length = get4LE(ddBuf + ddOffset + kDDUncompLen);
+  entry->crc32 = descriptor->crc32;
+  entry->compressed_length = descriptor->compressed_size;
+  entry->uncompressed_length = descriptor->uncompressed_size;
 
   return 0;
 }
@@ -656,18 +754,21 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   // Recover the start of the central directory entry from the filename
   // pointer.  The filename is the first entry past the fixed-size data,
   // so we can just subtract back from that.
-  const unsigned char* ptr = (const unsigned char*) name;
-  ptr -= kCDELen;
+  const uint8_t* ptr = reinterpret_cast<const uint8_t*>(name);
+  ptr -= sizeof(CentralDirectoryRecord);
 
   // This is the base of our mmapped region, we have to sanity check that
   // the name that's in the hash table is a pointer to a location within
   // this mapped region.
-  const unsigned char* base_ptr = (const unsigned char*)
-    archive->directory_map->getDataPtr();
+  const uint8_t* base_ptr = reinterpret_cast<const uint8_t*>(
+    archive->directory_map->getDataPtr());
   if (ptr < base_ptr || ptr > base_ptr + archive->directory_map->getDataLength()) {
     ALOGW("Zip: Invalid entry pointer");
     return kInvalidOffset;
   }
+
+  const CentralDirectoryRecord *cdr =
+      reinterpret_cast<const CentralDirectoryRecord*>(ptr);
 
   // The offset of the start of the central directory in the zipfile.
   // We keep this lying around so that we can sanity check all our lengths
@@ -677,22 +778,22 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   // Fill out the compression method, modification time, crc32
   // and other interesting attributes from the central directory. These
   // will later be compared against values from the local file header.
-  data->method = get2LE(ptr + kCDEMethod);
-  data->mod_time = get4LE(ptr + kCDEModWhen);
-  data->crc32 = get4LE(ptr + kCDECRC);
-  data->compressed_length = get4LE(ptr + kCDECompLen);
-  data->uncompressed_length = get4LE(ptr + kCDEUncompLen);
+  data->method = cdr->compression_method;
+  data->mod_time = cdr->last_mod_time;
+  data->crc32 = cdr->crc32;
+  data->compressed_length = cdr->compressed_size;
+  data->uncompressed_length = cdr->uncompressed_size;
 
   // Figure out the local header offset from the central directory. The
   // actual file data will begin after the local header and the name /
   // extra comments.
-  const off64_t local_header_offset = get4LE(ptr + kCDELocalOffset);
-  if (local_header_offset + (off64_t) kLFHLen >= cd_offset) {
+  const off64_t local_header_offset = cdr->local_file_header_offset;
+  if (local_header_offset + static_cast<off64_t>(sizeof(LocalFileHeader)) >= cd_offset) {
     ALOGW("Zip: bad local hdr offset in zip");
     return kInvalidOffset;
   }
 
-  uint8_t lfh_buf[kLFHLen];
+  uint8_t lfh_buf[sizeof(LocalFileHeader)];
   ssize_t actual = ReadAtOffset(archive->fd, lfh_buf, sizeof(lfh_buf),
                                  local_header_offset);
   if (actual != sizeof(lfh_buf)) {
@@ -700,30 +801,25 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
     return kIoError;
   }
 
-  if (get4LE(lfh_buf) != kLFHSignature) {
+  const LocalFileHeader *lfh = reinterpret_cast<const LocalFileHeader*>(lfh_buf);
+
+  if (lfh->lfh_signature != LocalFileHeader::kSignature) {
     ALOGW("Zip: didn't find signature at start of lfh, offset=%" PRId64,
-        (int64_t)local_header_offset);
+        static_cast<int64_t>(local_header_offset));
     return kInvalidOffset;
   }
 
   // Paranoia: Match the values specified in the local file header
   // to those specified in the central directory.
-  const uint16_t lfhGpbFlags = get2LE(lfh_buf + kLFHGPBFlags);
-  const uint16_t lfhNameLen = get2LE(lfh_buf + kLFHNameLen);
-  const uint16_t lfhExtraLen = get2LE(lfh_buf + kLFHExtraLen);
-
-  if ((lfhGpbFlags & kGPBDDFlagMask) == 0) {
-    const uint32_t lfhCrc = get4LE(lfh_buf + kLFHCRC);
-    const uint32_t lfhCompLen = get4LE(lfh_buf + kLFHCompLen);
-    const uint32_t lfhUncompLen = get4LE(lfh_buf + kLFHUncompLen);
-
+  if ((lfh->gpb_flags & kGPBDDFlagMask) == 0) {
     data->has_data_descriptor = 0;
-    if (data->compressed_length != lfhCompLen || data->uncompressed_length != lfhUncompLen
-        || data->crc32 != lfhCrc) {
+    if (data->compressed_length != lfh->compressed_size
+        || data->uncompressed_length != lfh->uncompressed_size
+        || data->crc32 != lfh->crc32) {
       ALOGW("Zip: size/crc32 mismatch. expected {%" PRIu32 ", %" PRIu32
         ", %" PRIx32 "}, was {%" PRIu32 ", %" PRIu32 ", %" PRIx32 "}",
         data->compressed_length, data->uncompressed_length, data->crc32,
-        lfhCompLen, lfhUncompLen, lfhCrc);
+        lfh->compressed_size, lfh->uncompressed_size, lfh->crc32);
       return kInconsistentInformation;
     }
   } else {
@@ -732,9 +828,9 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
 
   // Check that the local file header name matches the declared
   // name in the central directory.
-  if (lfhNameLen == nameLen) {
-    const off64_t name_offset = local_header_offset + kLFHLen;
-    if (name_offset + lfhNameLen >= cd_offset) {
+  if (lfh->file_name_length == nameLen) {
+    const off64_t name_offset = local_header_offset + sizeof(LocalFileHeader);
+    if (name_offset + lfh->file_name_length >= cd_offset) {
       ALOGW("Zip: Invalid declared length");
       return kInvalidOffset;
     }
@@ -760,7 +856,8 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
     return kInconsistentInformation;
   }
 
-  const off64_t data_offset = local_header_offset + kLFHLen + lfhNameLen + lfhExtraLen;
+  const off64_t data_offset = local_header_offset + sizeof(LocalFileHeader)
+      + lfh->file_name_length + lfh->extra_field_length;
   if (data_offset > cd_offset) {
     ALOGW("Zip: bad data offset %" PRId64 " in zip", (int64_t)data_offset);
     return kInvalidOffset;
