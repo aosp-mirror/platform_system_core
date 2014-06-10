@@ -229,6 +229,8 @@ typedef enum {
     AUDIO_FORMAT_HE_AAC_V2           = 0x06000000UL,
     AUDIO_FORMAT_VORBIS              = 0x07000000UL,
     AUDIO_FORMAT_OPUS                = 0x08000000UL,
+    AUDIO_FORMAT_AC3                 = 0x09000000UL,
+    AUDIO_FORMAT_E_AC3               = 0x0A000000UL,
     AUDIO_FORMAT_MAIN_MASK           = 0xFF000000UL,
     AUDIO_FORMAT_SUB_MASK            = 0x00FFFFFFUL,
 
@@ -1009,6 +1011,9 @@ static inline bool audio_is_valid_format(audio_format_t format)
     case AUDIO_FORMAT_HE_AAC_V1:
     case AUDIO_FORMAT_HE_AAC_V2:
     case AUDIO_FORMAT_VORBIS:
+    case AUDIO_FORMAT_OPUS:
+    case AUDIO_FORMAT_AC3:
+    case AUDIO_FORMAT_E_AC3:
         return true;
     default:
         return false;
