@@ -335,7 +335,7 @@ static int write_data_link(int fd, const char *path, syncsendbuf *sbuf)
 #endif
 
 static int sync_send(int fd, const char *lpath, const char *rpath,
-                     unsigned mtime, mode_t mode, int verifyApk, int show_progress)
+                     unsigned mtime, mode_t mode, int show_progress)
 {
     syncmsg msg;
     int len, r;
@@ -349,63 +349,6 @@ static int sync_send(int fd, const char *lpath, const char *rpath,
 
     snprintf(tmp, sizeof(tmp), ",%d", mode);
     r = strlen(tmp);
-
-    if (verifyApk) {
-        int lfd;
-        zipfile_t zip;
-        zipentry_t entry;
-        int amt;
-
-        // if we are transferring an APK file, then sanity check to make sure
-        // we have a real zip file that contains an AndroidManifest.xml
-        // this requires that we read the entire file into memory.
-        lfd = adb_open(lpath, O_RDONLY);
-        if(lfd < 0) {
-            fprintf(stderr,"cannot open '%s': %s\n", lpath, strerror(errno));
-            return -1;
-        }
-
-        size = adb_lseek(lfd, 0, SEEK_END);
-        if (size == -1 || -1 == adb_lseek(lfd, 0, SEEK_SET)) {
-            fprintf(stderr, "error seeking in file '%s'\n", lpath);
-            adb_close(lfd);
-            return 1;
-        }
-
-        file_buffer = (char *)malloc(size);
-        if (file_buffer == NULL) {
-            fprintf(stderr, "could not allocate buffer for '%s'\n",
-                    lpath);
-            adb_close(lfd);
-            return 1;
-        }
-        amt = adb_read(lfd, file_buffer, size);
-        if (amt != size) {
-            fprintf(stderr, "error reading from file: '%s'\n", lpath);
-            adb_close(lfd);
-            free(file_buffer);
-            return 1;
-        }
-
-        adb_close(lfd);
-
-        zip = init_zipfile(file_buffer, size);
-        if (zip == NULL) {
-            fprintf(stderr, "file '%s' is not a valid zip file\n",
-                    lpath);
-            free(file_buffer);
-            return 1;
-        }
-
-        entry = lookup_zipentry(zip, "AndroidManifest.xml");
-        release_zipfile(zip);
-        if (entry == NULL) {
-            fprintf(stderr, "file '%s' does not contain AndroidManifest.xml\n",
-                    lpath);
-            free(file_buffer);
-            return 1;
-        }
-    }
 
     msg.req.id = ID_SEND;
     msg.req.namelen = htoll(len + r);
@@ -789,7 +732,7 @@ static int copy_local_dir_remote(int fd, const char *lpath, const char *rpath, i
         if(ci->flag == 0) {
             fprintf(stderr,"%spush: %s -> %s\n", listonly ? "would " : "", ci->src, ci->dst);
             if(!listonly &&
-               sync_send(fd, ci->src, ci->dst, ci->time, ci->mode, 0 /* no verify APK */,
+               sync_send(fd, ci->src, ci->dst, ci->time, ci->mode,
                          0 /* no show progress */)) {
                 return 1;
             }
@@ -808,7 +751,7 @@ static int copy_local_dir_remote(int fd, const char *lpath, const char *rpath, i
 }
 
 
-int do_sync_push(const char *lpath, const char *rpath, int verifyApk, int show_progress)
+int do_sync_push(const char *lpath, const char *rpath, int show_progress)
 {
     struct stat st;
     unsigned mode;
@@ -855,7 +798,7 @@ int do_sync_push(const char *lpath, const char *rpath, int verifyApk, int show_p
             rpath = tmp;
         }
         BEGIN();
-        if(sync_send(fd, lpath, rpath, st.st_mtime, st.st_mode, verifyApk, show_progress)) {
+        if(sync_send(fd, lpath, rpath, st.st_mtime, st.st_mode, show_progress)) {
             return 1;
         } else {
             END();
