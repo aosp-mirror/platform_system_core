@@ -2,75 +2,75 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 TOOLS := \
-	ls \
-	mount \
 	cat \
-	ps \
-	kill \
-	ln \
-	insmod \
-	rmmod \
-	lsmod \
-	ifconfig \
-	rm \
-	mkdir \
-	rmdir \
-	getevent \
-	sendevent \
-	date \
-	wipe \
-	sync \
-	umount \
-	start \
-	stop \
-	notify \
-	cmp \
-	dmesg \
-	route \
-	hd \
-	dd \
-	df \
-	getprop \
-	setprop \
-	watchprops \
-	log \
-	sleep \
-	renice \
-	printenv \
-	smd \
+	chcon \
 	chmod \
 	chown \
-	newfs_msdos \
-	netstat \
-	ioctl \
-	mv \
-	schedtop \
-	top \
-	iftop \
+	clear \
+	cmp \
+	date \
+	dd \
+	df \
+	dmesg \
+	du \
+	getenforce \
+	getevent \
+	getprop \
+	getsebool \
+	hd \
 	id \
+	ifconfig \
+	iftop \
+	insmod \
+	ioctl \
+	ionice \
+	kill \
+	ln \
+	load_policy \
+	log \
+	ls \
+	lsmod \
+	lsof \
+	md5 \
+	mkdir \
+	mknod \
+	mkswap \
+	mount \
+	mv \
+	nandread \
+	netstat \
+	newfs_msdos \
+	nohup \
+	notify \
+	printenv \
+	ps \
+	readlink \
+	renice \
+	restorecon \
+	rm \
+	rmdir \
+	rmmod \
+	route \
+	runcon \
+	schedtop \
+	sendevent \
+	setenforce \
+	setprop \
+	setsebool \
+	sleep \
+	smd \
+	start \
+	stop \
+	swapoff \
+	swapon \
+	sync \
+	top \
+	touch \
+	umount \
 	uptime \
 	vmstat \
-	nandread \
-	ionice \
-	touch \
-	lsof \
-	du \
-	md5 \
-	clear \
-	getenforce \
-	setenforce \
-	chcon \
-	restorecon \
-	runcon \
-	getsebool \
-	setsebool \
-	load_policy \
-	swapon \
-	swapoff \
-	mkswap \
-	readlink \
-	mknod \
-	nohup
+	watchprops \
+	wipe \
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 TOOLS += r
@@ -94,21 +94,25 @@ LOCAL_SRC_FILES := \
 	toolbox.c \
 	uid_from_user.c \
 
-LOCAL_C_INCLUDES := bionic/libc/bionic
-
 LOCAL_CFLAGS += \
     -std=gnu99 \
     -Werror -Wno-unused-parameter \
     -include bsd-compatibility.h \
 
+LOCAL_C_INCLUDES += external/openssl/include
+
 LOCAL_SHARED_LIBRARIES := \
-	libcutils \
-	liblog \
-	libc \
-	libusbhost \
-	libselinux
+    libcrypto \
+    libcutils \
+    libselinux \
+
+# libusbhost is only used by lsusb, and that isn't usually included in toolbox.
+# The linker strips out all the unused library code in the normal case.
+LOCAL_STATIC_LIBRARIES := \
+    libusbhost \
 
 LOCAL_MODULE := toolbox
+LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 
 # Including this will define $(intermediates).
 #
