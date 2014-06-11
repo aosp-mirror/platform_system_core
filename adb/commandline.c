@@ -546,32 +546,39 @@ static void status_window(transport_type ttype, const char* serial)
 }
 
 /** Duplicate and escape given argument. */
-static char *escape_argv(const char *s)
+static char *escape_arg(const char *s)
 {
     const char *ts;
     size_t alloc_len;
     char *ret;
     char *dest;
 
-    alloc_len = 2;
+    alloc_len = 0;
     for (ts = s; *ts != '\0'; ts++) {
         alloc_len++;
-        if (*ts == '"' || *ts == '\\') {
+        if (*ts == ' ' || *ts == '"' || *ts == '\\' || *ts == '(' || *ts == ')') {
             alloc_len++;
         }
+    }
+
+    if (alloc_len == 0) {
+        // Preserve empty arguments
+        ret = (char *) malloc(3);
+        ret[0] = '\"';
+        ret[1] = '\"';
+        ret[2] = '\0';
+        return ret;
     }
 
     ret = (char *) malloc(alloc_len + 1);
     dest = ret;
 
-    *dest++ = '"';
     for (ts = s; *ts != '\0'; ts++) {
-        if (*ts == '"' || *ts == '\\') {
+        if (*ts == ' ' || *ts == '"' || *ts == '\\' || *ts == '(' || *ts == ')') {
             *dest++ = '\\';
         }
         *dest++ = *ts;
     }
-    *dest++ = '"';
     *dest++ = '\0';
 
     return ret;
@@ -681,9 +688,9 @@ static int logcat(transport_type transport, char* serial, int argc, char **argv)
     char *quoted;
 
     log_tags = getenv("ANDROID_LOG_TAGS");
-    quoted = escape_argv(log_tags == NULL ? "" : log_tags);
+    quoted = escape_arg(log_tags == NULL ? "" : log_tags);
     snprintf(buf, sizeof(buf),
-            "shell:export ANDROID_LOG_TAGS=%s ; exec logcat", quoted);
+            "shell:export ANDROID_LOG_TAGS=\"%s\"; exec logcat", quoted);
     free(quoted);
 
     if (!strcmp(argv[0], "longcat")) {
@@ -693,7 +700,7 @@ static int logcat(transport_type transport, char* serial, int argc, char **argv)
     argc -= 1;
     argv += 1;
     while(argc-- > 0) {
-        quoted = escape_argv(*argv++);
+        quoted = escape_arg(*argv++);
         strncat(buf, " ", sizeof(buf) - 1);
         strncat(buf, quoted, sizeof(buf) - 1);
         free(quoted);
@@ -1207,7 +1214,7 @@ top:
         argc -= 2;
         argv += 2;
         while (argc-- > 0) {
-            char *quoted = escape_argv(*argv++);
+            char *quoted = escape_arg(*argv++);
             strncat(buf, " ", sizeof(buf) - 1);
             strncat(buf, quoted, sizeof(buf) - 1);
             free(quoted);
@@ -1250,7 +1257,7 @@ top:
         argc -= 2;
         argv += 2;
         while (argc-- > 0) {
-            char *quoted = escape_argv(*argv++);
+            char *quoted = escape_arg(*argv++);
             strncat(buf, " ", sizeof(buf) - 1);
             strncat(buf, quoted, sizeof(buf) - 1);
             free(quoted);
@@ -1675,7 +1682,7 @@ static int pm_command(transport_type transport, char* serial,
     snprintf(buf, sizeof(buf), "shell:pm");
 
     while(argc-- > 0) {
-        char *quoted = escape_argv(*argv++);
+        char *quoted = escape_arg(*argv++);
         strncat(buf, " ", sizeof(buf) - 1);
         strncat(buf, quoted, sizeof(buf) - 1);
         free(quoted);
@@ -1709,7 +1716,7 @@ static int delete_file(transport_type transport, char* serial, char* filename)
     char* quoted;
 
     snprintf(buf, sizeof(buf), "shell:rm ");
-    quoted = escape_argv(filename);
+    quoted = escape_arg(filename);
     strncat(buf, quoted, sizeof(buf)-1);
     free(quoted);
 
