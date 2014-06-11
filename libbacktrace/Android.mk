@@ -186,4 +186,21 @@ LOCAL_SRC_FILES := \
 
 include $(BUILD_HOST_SHARED_LIBRARY)
 
+# Don't build for unbundled branches
+ifeq (,$(TARGET_BUILD_APPS))
+#-------------------------------------------------------------------------
+# The libbacktrace library (libc++)
+#-------------------------------------------------------------------------
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := libbacktrace_libc++
+LOCAL_MODULE_TAGS := optional
+
+LOCAL_SRC_FILES := \
+	BacktraceMap.cpp \
+
+include $(BUILD_HOST_SHARED_LIBRARY)
+
+endif # TARGET_BUILD_APPS
+
 endif # HOST_OS-darwin
