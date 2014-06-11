@@ -33,12 +33,14 @@ TOOLS := \
 	lsof \
 	md5 \
 	mkdir \
+	mknod \
 	mkswap \
 	mount \
 	mv \
 	nandread \
 	netstat \
 	newfs_msdos \
+	nohup \
 	notify \
 	printenv \
 	ps \
