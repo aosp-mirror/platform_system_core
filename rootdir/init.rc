@@ -476,7 +476,7 @@ service console /system/bin/sh
     console
     disabled
     user shell
-    group log
+    group shell log
     seclabel u:r:shell:s0
 
 on property:ro.debuggable=1
