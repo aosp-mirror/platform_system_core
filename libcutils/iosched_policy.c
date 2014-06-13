@@ -19,13 +19,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/syscall.h>
 #include <unistd.h>
 
 #include <cutils/iosched_policy.h>
 
 #ifdef HAVE_ANDROID_OS
 #include <linux/ioprio.h>
+#include <sys/syscall.h>
 #define __android_unused
 #else
 #define __android_unused __attribute__((__unused__))
