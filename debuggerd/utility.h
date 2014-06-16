@@ -28,41 +28,36 @@ typedef struct {
     int amfd;
     /* if true, does not log anything to the Android logcat or Activity Manager */
     bool quiet;
+    // The tid of the thread that crashed.
+    pid_t crashed_tid;
+    // The tid of the thread we are currently working with.
+    pid_t current_tid;
 } log_t;
 
-/* Log information onto the tombstone.  scopeFlags is a bitmask of the flags defined
- * here. */
-void _LOG(log_t* log, int scopeFlags, const char *fmt, ...)
+// List of types of logs to simplify the logging decision in _LOG
+enum logtype {
+  ERROR,
+  HEADER,
+  THREAD,
+  REGISTERS,
+  BACKTRACE,
+  MAPS,
+  MEMORY,
+  STACK,
+  LOGS
+};
+
+/* Log information onto the tombstone. */
+void _LOG(log_t* log, logtype ltype, const char *fmt, ...)
         __attribute__ ((format(printf, 3, 4)));
 
-/* The message pertains specifically to the faulting thread / process */
-#define SCOPE_AT_FAULT (1 << 0)
-/* The message contains sensitive information such as RAM contents */
-#define SCOPE_SENSITIVE  (1 << 1)
-
-#define IS_AT_FAULT(x)    (((x) & SCOPE_AT_FAULT) != 0)
-#define IS_SENSITIVE(x)    (((x) & SCOPE_SENSITIVE) != 0)
-
 /* Further helpful macros */
-#define LOG(fmt...) _LOG(NULL, SCOPE_AT_FAULT, fmt)
-
-/* Set to 1 for normal debug traces */
-#if 0
-#define XLOG(fmt...) _LOG(NULL, SCOPE_AT_FAULT, fmt)
-#else
+#define LOG_ERROR(fmt...) _LOG(NULL, logtype::ERROR, fmt)
 #define XLOG(fmt...) do {} while(0)
-#endif
-
-/* Set to 1 for chatty debug traces. Includes all resolved dynamic symbols */
-#if 0
-#define XLOG2(fmt...) _LOG(NULL, SCOPE_AT_FAULT, fmt)
-#else
-#define XLOG2(fmt...) do {} while(0)
-#endif
 
 int wait_for_signal(pid_t tid, int* total_sleep_time_usec);
 void wait_for_stop(pid_t tid, int* total_sleep_time_usec);
 
-void dump_memory(log_t* log, pid_t tid, uintptr_t addr, int scope_flags);
+void dump_memory(log_t* log, pid_t tid, uintptr_t addr);
 
 #endif // _DEBUGGERD_UTILITY_H
