@@ -30,7 +30,6 @@
 #include <sys/stat.h>
 #include <sys/poll.h>
 
-#include <log/logd.h>
 #include <log/logger.h>
 
 #include <cutils/sockets.h>
@@ -62,7 +61,7 @@ static void wait_for_user_action(pid_t pid) {
   char exe[PATH_MAX];
   int count;
   if ((count = readlink(path, exe, sizeof(exe) - 1)) == -1) {
-    LOG("readlink('%s') failed: %s", path, strerror(errno));
+    LOG_ERROR("readlink('%s') failed: %s", path, strerror(errno));
     strlcpy(exe, "unknown", sizeof(exe));
   } else {
     exe[count] = '\0';
@@ -79,7 +78,7 @@ static void wait_for_user_action(pid_t pid) {
   }
 
   // Explain how to attach the debugger.
-  LOG(    "********************************************************\n"
+  LOG_ERROR(    "********************************************************\n"
           "* Process %d has been suspended while crashing.\n"
           "* To attach gdbserver for a gdb connection on port 5039\n"
           "* and start gdbclient:\n"
@@ -104,7 +103,7 @@ static void wait_for_user_action(pid_t pid) {
     uninit_getevent();
   }
 
-  LOG("debuggerd resuming process %d", pid);
+  LOG_ERROR("debuggerd resuming process %d", pid);
 }
 
 static int get_process_info(pid_t tid, pid_t* out_pid, uid_t* out_uid, uid_t* out_gid) {
@@ -140,7 +139,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
   socklen_t len = sizeof(cr);
   int status = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cr, &len);
   if (status != 0) {
-    LOG("cannot get credentials\n");
+    LOG_ERROR("cannot get credentials\n");
     return -1;
   }
 
@@ -153,7 +152,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
   pollfds[0].revents = 0;
   status = TEMP_FAILURE_RETRY(poll(pollfds, 1, 3000));
   if (status != 1) {
-    LOG("timed out reading tid (from pid=%d uid=%d)\n", cr.pid, cr.uid);
+    LOG_ERROR("timed out reading tid (from pid=%d uid=%d)\n", cr.pid, cr.uid);
     return -1;
   }
 
@@ -161,14 +160,14 @@ static int read_request(int fd, debugger_request_t* out_request) {
   memset(&msg, 0, sizeof(msg));
   status = TEMP_FAILURE_RETRY(read(fd, &msg, sizeof(msg)));
   if (status < 0) {
-    LOG("read failure? %s (pid=%d uid=%d)\n", strerror(errno), cr.pid, cr.uid);
+    LOG_ERROR("read failure? %s (pid=%d uid=%d)\n", strerror(errno), cr.pid, cr.uid);
     return -1;
   }
   if (status == sizeof(debugger_msg_t)) {
     XLOG("crash request of size %d abort_msg_address=0x%" PRIPTR "\n",
          status, msg.abort_msg_address);
   } else {
-    LOG("invalid crash request of size %d (from pid=%d uid=%d)\n", status, cr.pid, cr.uid);
+    LOG_ERROR("invalid crash request of size %d (from pid=%d uid=%d)\n", status, cr.pid, cr.uid);
     return -1;
   }
 
@@ -186,7 +185,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
     struct stat s;
     snprintf(buf, sizeof buf, "/proc/%d/task/%d", out_request->pid, out_request->tid);
     if (stat(buf, &s)) {
-      LOG("tid %d does not exist in pid %d. ignoring debug request\n",
+      LOG_ERROR("tid %d does not exist in pid %d. ignoring debug request\n",
           out_request->tid, out_request->pid);
       return -1;
     }
@@ -197,7 +196,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
     status = get_process_info(out_request->tid, &out_request->pid,
                               &out_request->uid, &out_request->gid);
     if (status < 0) {
-      LOG("tid %d does not exist. ignoring explicit dump request\n", out_request->tid);
+      LOG_ERROR("tid %d does not exist. ignoring explicit dump request\n", out_request->tid);
       return -1;
     }
   } else {
@@ -238,12 +237,12 @@ static void handle_request(int fd) {
     // See details in bionic/libc/linker/debugger.c, in function
     // debugger_signal_handler().
     if (ptrace(PTRACE_ATTACH, request.tid, 0, 0)) {
-      LOG("ptrace attach failed: %s\n", strerror(errno));
+      LOG_ERROR("ptrace attach failed: %s\n", strerror(errno));
     } else {
       bool detach_failed = false;
       bool attach_gdb = should_attach_gdb(&request);
       if (TEMP_FAILURE_RETRY(write(fd, "\0", 1)) != 1) {
-        LOG("failed responding to client: %s\n", strerror(errno));
+        LOG_ERROR("failed responding to client: %s\n", strerror(errno));
       } else {
         char* tombstone_path = NULL;
 
@@ -275,7 +274,7 @@ static void handle_request(int fd) {
                 XLOG("stopped -- continuing\n");
                 status = ptrace(PTRACE_CONT, request.tid, 0, 0);
                 if (status) {
-                  LOG("ptrace continue failed: %s\n", strerror(errno));
+                  LOG_ERROR("ptrace continue failed: %s\n", strerror(errno));
                 }
                 continue; // loop again
               }
@@ -307,7 +306,7 @@ static void handle_request(int fd) {
 
             default:
               XLOG("stopped -- unexpected signal\n");
-              LOG("process stopped due to unexpected signal %d\n", signal);
+              LOG_ERROR("process stopped due to unexpected signal %d\n", signal);
               break;
           }
           break;
@@ -330,7 +329,7 @@ static void handle_request(int fd) {
 
         // detach so we can attach gdbserver
         if (ptrace(PTRACE_DETACH, request.tid, 0, 0)) {
-          LOG("ptrace detach from %d failed: %s\n", request.tid, strerror(errno));
+          LOG_ERROR("ptrace detach from %d failed: %s\n", request.tid, strerror(errno));
           detach_failed = true;
         }
 
@@ -342,7 +341,7 @@ static void handle_request(int fd) {
       } else {
         // just detach
         if (ptrace(PTRACE_DETACH, request.tid, 0, 0)) {
-          LOG("ptrace detach from %d failed: %s\n", request.tid, strerror(errno));
+          LOG_ERROR("ptrace detach from %d failed: %s\n", request.tid, strerror(errno));
           detach_failed = true;
         }
       }
@@ -354,7 +353,7 @@ static void handle_request(int fd) {
       // actual parent won't receive a death notification via wait(2).  At this point
       // there's not much we can do about that.
       if (detach_failed) {
-        LOG("debuggerd committing suicide to free the zombie!\n");
+        LOG_ERROR("debuggerd committing suicide to free the zombie!\n");
         kill(getpid(), SIGKILL);
       }
     }
@@ -400,7 +399,7 @@ static int do_server() {
     return 1;
   fcntl(s, F_SETFD, FD_CLOEXEC);
 
-  LOG("debuggerd: " __DATE__ " " __TIME__ "\n");
+  LOG_ERROR("debuggerd: " __DATE__ " " __TIME__ "\n");
 
   for (;;) {
     sockaddr addr;

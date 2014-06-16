@@ -40,57 +40,55 @@
 
 // If configured to do so, dump memory around *all* registers
 // for the crashing thread.
-void dump_memory_and_code(log_t* log, pid_t tid, int scope_flags) {
+void dump_memory_and_code(log_t* log, pid_t tid) {
   struct pt_regs regs;
   if (ptrace(PTRACE_GETREGS, tid, 0, &regs)) {
     return;
   }
 
-  if (IS_AT_FAULT(scope_flags) && DUMP_MEMORY_FOR_ALL_REGISTERS) {
-    static const char REG_NAMES[] = "r0r1r2r3r4r5r6r7r8r9slfpipsp";
+  static const char REG_NAMES[] = "r0r1r2r3r4r5r6r7r8r9slfpipsp";
 
-    for (int reg = 0; reg < 14; reg++) {
-      // this may not be a valid way to access, but it'll do for now
-      uintptr_t addr = regs.uregs[reg];
+  for (int reg = 0; reg < 14; reg++) {
+    // this may not be a valid way to access, but it'll do for now
+    uintptr_t addr = regs.uregs[reg];
 
-      // Don't bother if it looks like a small int or ~= null, or if
-      // it's in the kernel area.
-      if (addr < 4096 || addr >= 0xc0000000) {
-        continue;
-      }
-
-      _LOG(log, scope_flags | SCOPE_SENSITIVE, "\nmemory near %.2s:\n", &REG_NAMES[reg * 2]);
-      dump_memory(log, tid, addr, scope_flags | SCOPE_SENSITIVE);
+    // Don't bother if it looks like a small int or ~= null, or if
+    // it's in the kernel area.
+    if (addr < 4096 || addr >= 0xc0000000) {
+      continue;
     }
+
+    _LOG(log, logtype::MEMORY, "\nmemory near %.2s:\n", &REG_NAMES[reg * 2]);
+    dump_memory(log, tid, addr);
   }
 
   // explicitly allow upload of code dump logging
-  _LOG(log, scope_flags, "\ncode around pc:\n");
-  dump_memory(log, tid, static_cast<uintptr_t>(regs.ARM_pc), scope_flags);
+  _LOG(log, logtype::MEMORY, "\ncode around pc:\n");
+  dump_memory(log, tid, static_cast<uintptr_t>(regs.ARM_pc));
 
   if (regs.ARM_pc != regs.ARM_lr) {
-    _LOG(log, scope_flags, "\ncode around lr:\n");
-    dump_memory(log, tid, static_cast<uintptr_t>(regs.ARM_lr), scope_flags);
+    _LOG(log, logtype::MEMORY, "\ncode around lr:\n");
+    dump_memory(log, tid, static_cast<uintptr_t>(regs.ARM_lr));
   }
 }
 
-void dump_registers(log_t* log, pid_t tid, int scope_flags) {
+void dump_registers(log_t* log, pid_t tid) {
   struct pt_regs r;
   if (ptrace(PTRACE_GETREGS, tid, 0, &r)) {
-    _LOG(log, scope_flags, "cannot get registers: %s\n", strerror(errno));
+    _LOG(log, logtype::REGISTERS, "cannot get registers: %s\n", strerror(errno));
     return;
   }
 
-  _LOG(log, scope_flags, "    r0 %08x  r1 %08x  r2 %08x  r3 %08x\n",
+  _LOG(log, logtype::REGISTERS, "    r0 %08x  r1 %08x  r2 %08x  r3 %08x\n",
        static_cast<uint32_t>(r.ARM_r0), static_cast<uint32_t>(r.ARM_r1),
        static_cast<uint32_t>(r.ARM_r2), static_cast<uint32_t>(r.ARM_r3));
-  _LOG(log, scope_flags, "    r4 %08x  r5 %08x  r6 %08x  r7 %08x\n",
+  _LOG(log, logtype::REGISTERS, "    r4 %08x  r5 %08x  r6 %08x  r7 %08x\n",
        static_cast<uint32_t>(r.ARM_r4), static_cast<uint32_t>(r.ARM_r5),
        static_cast<uint32_t>(r.ARM_r6), static_cast<uint32_t>(r.ARM_r7));
-  _LOG(log, scope_flags, "    r8 %08x  r9 %08x  sl %08x  fp %08x\n",
+  _LOG(log, logtype::REGISTERS, "    r8 %08x  r9 %08x  sl %08x  fp %08x\n",
        static_cast<uint32_t>(r.ARM_r8), static_cast<uint32_t>(r.ARM_r9),
        static_cast<uint32_t>(r.ARM_r10), static_cast<uint32_t>(r.ARM_fp));
-  _LOG(log, scope_flags, "    ip %08x  sp %08x  lr %08x  pc %08x  cpsr %08x\n",
+  _LOG(log, logtype::REGISTERS, "    ip %08x  sp %08x  lr %08x  pc %08x  cpsr %08x\n",
        static_cast<uint32_t>(r.ARM_ip), static_cast<uint32_t>(r.ARM_sp),
        static_cast<uint32_t>(r.ARM_lr), static_cast<uint32_t>(r.ARM_pc),
        static_cast<uint32_t>(r.ARM_cpsr));
@@ -100,14 +98,14 @@ void dump_registers(log_t* log, pid_t tid, int scope_flags) {
   int i;
 
   if (ptrace(PTRACE_GETVFPREGS, tid, 0, &vfp_regs)) {
-    _LOG(log, scope_flags, "cannot get registers: %s\n", strerror(errno));
+    _LOG(log, logtype::REGISTERS, "cannot get registers: %s\n", strerror(errno));
     return;
   }
 
   for (i = 0; i < NUM_VFP_REGS; i += 2) {
-    _LOG(log, scope_flags, "    d%-2d %016llx  d%-2d %016llx\n",
+    _LOG(log, logtype::REGISTERS, "    d%-2d %016llx  d%-2d %016llx\n",
          i, vfp_regs.fpregs[i], i+1, vfp_regs.fpregs[i+1]);
   }
-  _LOG(log, scope_flags, "    scr %08lx\n", vfp_regs.fpscr);
+  _LOG(log, logtype::REGISTERS, "    scr %08lx\n", vfp_regs.fpscr);
 #endif
 }
