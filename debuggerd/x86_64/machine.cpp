@@ -27,25 +27,25 @@
 #include "../utility.h"
 #include "../machine.h"
 
-void dump_memory_and_code(log_t*, pid_t, int) {
+void dump_memory_and_code(log_t*, pid_t) {
 }
 
-void dump_registers(log_t* log, pid_t tid, int scope_flags) {
+void dump_registers(log_t* log, pid_t tid) {
     struct user_regs_struct r;
     if (ptrace(PTRACE_GETREGS, tid, 0, &r) == -1) {
-        _LOG(log, scope_flags, "cannot get registers: %s\n", strerror(errno));
+        LOG_ERROR("cannot get registers: %s\n", strerror(errno));
         return;
     }
-    _LOG(log, scope_flags, "    rax %016lx  rbx %016lx  rcx %016lx  rdx %016lx\n",
+    _LOG(log, logtype::REGISTERS, "    rax %016lx  rbx %016lx  rcx %016lx  rdx %016lx\n",
          r.rax, r.rbx, r.rcx, r.rdx);
-    _LOG(log, scope_flags, "    rsi %016lx  rdi %016lx\n",
+    _LOG(log, logtype::REGISTERS, "    rsi %016lx  rdi %016lx\n",
          r.rsi, r.rdi);
-    _LOG(log, scope_flags, "    r8  %016lx  r9  %016lx  r10 %016lx  r11 %016lx\n",
+    _LOG(log, logtype::REGISTERS, "    r8  %016lx  r9  %016lx  r10 %016lx  r11 %016lx\n",
          r.r8, r.r9, r.r10, r.r11);
-    _LOG(log, scope_flags, "    r12 %016lx  r13 %016lx  r14 %016lx  r15 %016lx\n",
+    _LOG(log, logtype::REGISTERS, "    r12 %016lx  r13 %016lx  r14 %016lx  r15 %016lx\n",
          r.r12, r.r13, r.r14, r.r15);
-    _LOG(log, scope_flags, "    cs  %016lx  ss  %016lx\n",
+    _LOG(log, logtype::REGISTERS, "    cs  %016lx  ss  %016lx\n",
          r.cs, r.ss);
-    _LOG(log, scope_flags, "    rip %016lx  rbp %016lx  rsp %016lx  eflags %016lx\n",
+    _LOG(log, logtype::REGISTERS, "    rip %016lx  rbp %016lx  rsp %016lx  eflags %016lx\n",
          r.rip, r.rbp, r.rsp, r.eflags);
 }
