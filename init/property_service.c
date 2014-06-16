@@ -621,10 +621,8 @@ void load_persist_props(void)
     load_persistent_properties();
 }
 
-void start_property_service(void)
+void load_all_props(void)
 {
-    int fd;
-
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
     load_properties_from_file(PROP_PATH_SYSTEM_DEFAULT, NULL);
     load_properties_from_file(PROP_PATH_FACTORY, "ro.*");
@@ -633,6 +631,11 @@ void start_property_service(void)
 
     /* Read persistent properties after all default values have been loaded. */
     load_persistent_properties();
+}
+
+void start_property_service(void)
+{
+    int fd;
 
     fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM, 0666, 0, 0, NULL);
     if(fd < 0) return;

@@ -120,6 +120,7 @@ static int lookup_keyword(const char *s)
     case 'l':
         if (!strcmp(s, "oglevel")) return K_loglevel;
         if (!strcmp(s, "oad_persist_props")) return K_load_persist_props;
+        if (!strcmp(s, "oad_all_props")) return K_load_all_props;
         break;
     case 'm':
         if (!strcmp(s, "kdir")) return K_mkdir;
