@@ -74,6 +74,8 @@
 #define VENDOR_ID_GIGABYTE      0x0414
 // Gigaset's USB Vendor ID
 #define VENDOR_ID_GIGASET       0x1E85
+// GIONEE's USB Vendor ID
+#define VENDOR_ID_GIONEE        0x271D
 // Google's USB Vendor ID
 #define VENDOR_ID_GOOGLE        0x18d1
 // Haier's USB Vendor ID
@@ -210,6 +212,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_GARMIN_ASUS,
     VENDOR_ID_GIGABYTE,
     VENDOR_ID_GIGASET,
+    VENDOR_ID_GIONEE,
     VENDOR_ID_GOOGLE,
     VENDOR_ID_HAIER,
     VENDOR_ID_HARRIS,
