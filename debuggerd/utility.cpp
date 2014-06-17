@@ -58,8 +58,10 @@ bool is_allowed_in_logcat(enum logtype ltype) {
 
 void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   bool write_to_tombstone = log && log->tfd;
-  bool write_to_logcat = (!log || !log->quiet) && is_allowed_in_logcat(ltype)
-                        && (log && log->crashed_tid == log->current_tid);
+  bool write_to_logcat = (!log || !log->quiet) && is_allowed_in_logcat(ltype);
+  if (log != NULL) {
+    write_to_logcat &= (log->crashed_tid == log->current_tid);
+  }
   bool write_to_activitymanager = log && log->amfd >= 0 && is_allowed_in_logcat(ltype);
 
   char buf[512];
