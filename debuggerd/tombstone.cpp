@@ -343,14 +343,10 @@ static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log) {
   }
 }
 
-static void dump_map(log_t* log, const backtrace_map_t* map, const char* what) {
-  if (map != NULL) {
-    _LOG(log, logtype::MAPS, "    %" PRIPTR "-%" PRIPTR " %c%c%c %s\n", map->start, map->end,
+static void dump_map(log_t* log, const backtrace_map_t* map) {
+  _LOG(log, logtype::MAPS, "    %" PRIPTR "-%" PRIPTR " %c%c%c %s\n", map->start, map->end,
          (map->flags & PROT_READ) ? 'r' : '-', (map->flags & PROT_WRITE) ? 'w' : '-',
          (map->flags & PROT_EXEC) ? 'x' : '-', map->name.c_str());
-  } else {
-    _LOG(log, logtype::MAPS, "    (no %s)\n", what);
-  }
 }
 
 static void dump_nearby_maps(BacktraceMap* map, log_t* log, pid_t tid) {
@@ -370,31 +366,11 @@ static void dump_nearby_maps(BacktraceMap* map, log_t* log, pid_t tid) {
     return;
   }
 
-  _LOG(log, logtype::MAPS, "\nmemory map around fault addr %" PRIPTR ":\n",
-       reinterpret_cast<uintptr_t>(si.si_addr));
+  _LOG(log, logtype::MAPS, "\nmemory map:\n");
 
-  // Search for a match, or for a hole where the match would be.  The list
-  // is backward from the file content, so it starts at high addresses.
-  const backtrace_map_t* cur_map = NULL;
-  const backtrace_map_t* next_map = NULL;
-  const backtrace_map_t* prev_map = NULL;
   for (BacktraceMap::const_iterator it = map->begin(); it != map->end(); ++it) {
-    if (addr >= it->start && addr < it->end) {
-      cur_map = &*it;
-      if (it != map->begin()) {
-        prev_map = &*(it-1);
-      }
-      if (++it != map->end()) {
-        next_map = &*it;
-      }
-      break;
-    }
+    dump_map(log, &*it);
   }
-
-  // Show the map address in ascending order (like /proc/pid/maps).
-  dump_map(log, prev_map, "map below");
-  dump_map(log, cur_map, "map for address");
-  dump_map(log, next_map, "map above");
 }
 
 static void dump_thread(
