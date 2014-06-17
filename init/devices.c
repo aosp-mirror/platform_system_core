@@ -196,7 +196,8 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
 
 static void make_device(const char *path,
                         const char *upath UNUSED,
-                        int block, int major, int minor)
+                        int block, int major, int minor,
+                        const char **links)
 {
     unsigned uid;
     unsigned gid;
@@ -207,7 +208,7 @@ static void make_device(const char *path,
     mode = get_device_perm(path, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
 
     if (sehandle) {
-        selabel_lookup(sehandle, &secontext, path, mode);
+        selabel_lookup_best_match(sehandle, &secontext, path, links, mode);
         setfscreatecon(secontext);
     }
 
@@ -523,7 +524,7 @@ static void handle_device(const char *action, const char *devpath,
     int i;
 
     if(!strcmp(action, "add")) {
-        make_device(devpath, path, block, major, minor);
+        make_device(devpath, path, block, major, minor, (const char **)links);
         if (links) {
             for (i = 0; links[i]; i++)
                 make_link(devpath, links[i]);
