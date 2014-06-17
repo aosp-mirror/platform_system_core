@@ -18,6 +18,7 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE := $(module)
 LOCAL_MODULE_TAGS := $(module_tag)
+LOCAL_MULTILIB := $($(module)_multilib)
 
 LOCAL_ADDITIONAL_DEPENDENCIES := \
     $(LOCAL_PATH)/Android.mk \

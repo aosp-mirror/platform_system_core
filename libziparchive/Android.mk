@@ -42,6 +42,7 @@ LOCAL_C_INCLUDES += ${includes}
 LOCAL_STATIC_LIBRARIES := libz libutils
 LOCAL_MODULE:= libziparchive-host
 LOCAL_CFLAGS := -Werror
+LOCAL_MULTILIB := both
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
