@@ -113,7 +113,9 @@ build_type := target
 build_target := SHARED_LIBRARY
 include $(LOCAL_PATH)/Android.build.mk
 build_type := host
+libbacktrace_libc++_multilib := both
 include $(LOCAL_PATH)/Android.build.mk
+libbacktrace_libc++_multilib :=
 endif
 
 #-------------------------------------------------------------------------
