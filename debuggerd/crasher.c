@@ -110,12 +110,19 @@ static void abuse_heap() {
     free((void*) buf); // GCC is smart enough to warn about this, but we're doing it deliberately.
 }
 
+static void sigsegv_non_null() {
+    int* a = (int *)(&do_action);
+    *a = 42;
+}
+
 static int do_action(const char* arg)
 {
     fprintf(stderr,"crasher: init pid=%d tid=%d\n", getpid(), gettid());
 
     if (!strncmp(arg, "thread-", strlen("thread-"))) {
         return do_action_on_thread(arg + strlen("thread-"));
+    } else if (!strcmp(arg, "SIGSEGV-non-null")) {
+        sigsegv_non_null();
     } else if (!strcmp(arg, "smash-stack")) {
         return smash_stack(42);
     } else if (!strcmp(arg, "stack-overflow")) {
@@ -166,7 +173,8 @@ static int do_action(const char* arg)
     fprintf(stderr, "  LOG_ALWAYS_FATAL      call LOG_ALWAYS_FATAL\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL_IF   call LOG_ALWAYS_FATAL\n");
     fprintf(stderr, "  SIGPIPE               cause a SIGPIPE\n");
-    fprintf(stderr, "  SIGSEGV               cause a SIGSEGV (synonym: crash)\n");
+    fprintf(stderr, "  SIGSEGV               cause a SIGSEGV at address 0x0 (synonym: crash)\n");
+    fprintf(stderr, "  SIGSEGV-non-null      cause a SIGSEGV at a non-zero address\n");
     fprintf(stderr, "  SIGTRAP               cause a SIGTRAP\n");
     fprintf(stderr, "prefix any of the above with 'thread-' to not run\n");
     fprintf(stderr, "on the process' main thread.\n");
