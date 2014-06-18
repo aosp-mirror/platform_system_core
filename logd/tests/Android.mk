@@ -34,7 +34,7 @@ test_c_flags := \
     -Werror \
     -fno-builtin \
 
-ifeq ($(TARGET_USES_LOGD),true)
+ifneq ($(TARGET_USES_LOGD),false)
 test_c_flags += -DTARGET_USES_LOGD=1
 endif
 
