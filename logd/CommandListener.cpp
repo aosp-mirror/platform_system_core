@@ -74,9 +74,9 @@ static void setname() {
 int CommandListener::ClearCmd::runCommand(SocketClient *cli,
                                          int argc, char **argv) {
     setname();
-    if (!clientHasLogCredentials(cli)) {
-        cli->sendMsg("Permission Denied");
-        return 0;
+    uid_t uid = cli->getUid();
+    if (clientHasLogCredentials(cli)) {
+        uid = AID_ROOT;
     }
 
     if (argc < 2) {
@@ -90,7 +90,7 @@ int CommandListener::ClearCmd::runCommand(SocketClient *cli,
         return 0;
     }
 
-    mBuf.clear((log_id_t) id);
+    mBuf.clear((log_id_t) id, uid);
     cli->sendMsg("success");
     return 0;
 }
