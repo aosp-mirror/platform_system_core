@@ -367,45 +367,23 @@ int fs_mgr_add_entry(struct fstab *fstab,
      return 0;
 }
 
-/*
- * Returns the 1st matching fstab_rec that follows the start_rec.
- * start_rec is the result of a previous search or NULL.
- */
-struct fstab_rec *fs_mgr_get_entry_for_mount_point_after(struct fstab_rec *start_rec, struct fstab *fstab, const char *path)
+struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const char *path)
 {
     int i;
+
     if (!fstab) {
         return NULL;
     }
 
-    if (start_rec) {
-        for (i = 0; i < fstab->num_entries; i++) {
-            if (&fstab->recs[i] == start_rec) {
-                i++;
-                break;
-            }
-        }
-    } else {
-        i = 0;
-    }
-    for (; i < fstab->num_entries; i++) {
+    for (i = 0; i < fstab->num_entries; i++) {
         int len = strlen(fstab->recs[i].mount_point);
         if (strncmp(path, fstab->recs[i].mount_point, len) == 0 &&
             (path[len] == '\0' || path[len] == '/')) {
             return &fstab->recs[i];
         }
     }
-    return NULL;
-}
 
-/*
- * Returns the 1st matching mount point.
- * There might be more. To look for others, use fs_mgr_get_entry_for_mount_point_after()
- * and give the fstab_rec from the previous search.
- */
-struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const char *path)
-{
-    return fs_mgr_get_entry_for_mount_point_after(NULL, fstab, path);
+    return NULL;
 }
 
 int fs_mgr_is_voldmanaged(struct fstab_rec *fstab)

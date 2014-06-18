@@ -24,11 +24,6 @@
 extern "C" {
 #endif
 
-/*
- * The entries must be kept in the same order as they were seen in the fstab.
- * Unless explicitly requested, a lookup on mount point should always
- * return the 1st one.
- */
 struct fstab {
     int num_entries;
     struct fstab_rec *recs;
