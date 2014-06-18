@@ -35,9 +35,6 @@
           ],
         },
       },
-      'dependencies': [
-        '<(platform_root)/system_api/system_api.gyp:system_api-headers',
-      ],
       'sources': [
         'chrome_collector.cc',
         'crash_collector.cc',
