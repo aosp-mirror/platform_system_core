@@ -568,10 +568,11 @@ TEST(logd, benchmark) {
 
     while (fgets(buffer, sizeof(buffer), fp)) {
         for (unsigned i = 0; i < sizeof(ns) / sizeof(ns[0]); ++i) {
-            if (strncmp(benchmarks[i], buffer, strlen(benchmarks[i]))) {
+            char *cp = strstr(buffer, benchmarks[i]);
+            if (!cp) {
                 continue;
             }
-            sscanf(buffer, "%*s %lu %lu", &ns[i], &ns[i]);
+            sscanf(cp, "%*s %lu %lu", &ns[i], &ns[i]);
             fprintf(stderr, "%-22s%8lu\n", benchmarks[i], ns[i]);
         }
     }
@@ -592,15 +593,15 @@ TEST(logd, benchmark) {
 #endif
 
 #ifdef TARGET_USES_LOGD
-    EXPECT_GE(25000UL, ns[log_maximum]); // 14055 user
+    EXPECT_GE(30000UL, ns[log_maximum]); // 27305 user
 #else
     EXPECT_GE(10000UL, ns[log_maximum]); // 5637 kernel
 #endif
 
-    EXPECT_GE(4000UL, ns[clock_overhead]); // 2008
+    EXPECT_GE(4096UL, ns[clock_overhead]); // 4095
 
 #ifdef TARGET_USES_LOGD
-    EXPECT_GE(250000UL, ns[log_overhead]); // 113219 user
+    EXPECT_GE(250000UL, ns[log_overhead]); // 121876 user
 #else
     EXPECT_GE(100000UL, ns[log_overhead]); // 50945 kernel
 #endif
@@ -612,7 +613,7 @@ TEST(logd, benchmark) {
 #endif
 
 #ifdef TARGET_USES_LOGD
-    EXPECT_GE(20000000UL, ns[log_delay]); // 9542541 user
+    EXPECT_GE(20000000UL, ns[log_delay]); // 10500289 user
 #else
     EXPECT_GE(55000UL, ns[log_delay]); // 27341 kernel
 #endif
@@ -642,36 +643,61 @@ TEST(logd, benchmark) {
     // 0/4225?     7454388/303656      31488/755
     //                                 ^-- benchmark_statistics_found
 
-    unsigned long nowSize = atol(benchmark_statistics_found);
+    unsigned long nowSpamSize = atol(benchmark_statistics_found);
 
     delete [] buf;
 
-    ASSERT_NE(0UL, nowSize);
+    ASSERT_NE(0UL, nowSpamSize);
 
+    // Determine if we have the spam filter enabled
     int sock = socket_local_client("logd",
                                    ANDROID_SOCKET_NAMESPACE_RESERVED,
                                    SOCK_STREAM);
+
+    ASSERT_TRUE(sock >= 0);
+
+    static const char getPruneList[] = "getPruneList";
+    if (write(sock, getPruneList, sizeof(getPruneList)) > 0) {
+        char buffer[80];
+        memset(buffer, 0, sizeof(buffer));
+        read(sock, buffer, sizeof(buffer));
+        char *cp = strchr(buffer, '\n');
+        if (!cp || (cp[1] != '~') || (cp[2] != '!')) {
+            close(sock);
+            fprintf(stderr,
+                    "WARNING: "
+                    "Logger has SPAM filtration turned off \"%s\"\n", buffer);
+            return;
+        }
+    } else {
+        int save_errno = errno;
+        close(sock);
+        FAIL() << "Can not send " << getPruneList << " to logger -- " << strerror(save_errno);
+    }
+
     static const unsigned long expected_absolute_minimum_log_size = 65536UL;
     unsigned long totalSize = expected_absolute_minimum_log_size;
-    if (sock >= 0) {
-        static const char getSize[] = {
-            'g', 'e', 't', 'L', 'o', 'g', 'S', 'i', 'z', 'e', ' ',
-            LOG_ID_MAIN + '0', '\0'
-        };
-        if (write(sock, getSize, sizeof(getSize)) > 0) {
-            char buffer[80];
-            memset(buffer, 0, sizeof(buffer));
-            read(sock, buffer, sizeof(buffer));
-            totalSize = atol(buffer);
-            if (totalSize < expected_absolute_minimum_log_size) {
-                totalSize = expected_absolute_minimum_log_size;
-            }
+    static const char getSize[] = {
+        'g', 'e', 't', 'L', 'o', 'g', 'S', 'i', 'z', 'e', ' ',
+        LOG_ID_MAIN + '0', '\0'
+    };
+    if (write(sock, getSize, sizeof(getSize)) > 0) {
+        char buffer[80];
+        memset(buffer, 0, sizeof(buffer));
+        read(sock, buffer, sizeof(buffer));
+        totalSize = atol(buffer);
+        if (totalSize < expected_absolute_minimum_log_size) {
+            fprintf(stderr,
+                    "WARNING: "
+                    "Logger had unexpected referenced size \"%s\"\n", buffer);
+            totalSize = expected_absolute_minimum_log_size;
         }
-        close(sock);
     }
+    close(sock);
+
     // logd allows excursions to 110% of total size
     totalSize = (totalSize * 11 ) / 10;
 
     // 50% threshold for SPAM filter (<20% typical, lots of engineering margin)
-    ASSERT_GT(totalSize, nowSize * 2);
+    ASSERT_GT(totalSize, nowSpamSize * 2);
 }
