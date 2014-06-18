@@ -66,11 +66,11 @@ endif # HOST_OS != windows
 ifeq ($(HOST_OS),linux)
 # libf2fs_dlutils_host will dlopen("libf2fs_fmt_host_dyn")
 LOCAL_CFLAGS += -DUSE_F2FS
-LOCAL_LDLIBS += -ldl
-LOCAL_SHARED_LIBRARIES := libf2fs_fmt_host_dyn
+LOCAL_LDFLAGS += -ldl -rdynamic
+LOCAL_REQUIRED_MODULES := libf2fs_fmt_host_dyn
 # The following libf2fs_* are from system/extras/f2fs_utils,
 # and do not use code in external/f2fs-tools.
-LOCAL_STATIC_LIBRARIES += libf2fs_utils_host libf2fs_dlutils_host
+LOCAL_STATIC_LIBRARIES += libf2fs_utils_host libf2fs_ioutils_host libf2fs_dlutils_host
 endif
 
 include $(BUILD_HOST_EXECUTABLE)
