@@ -29,11 +29,12 @@ static int generate_ext4_image(int fd, long long partSize)
     return 0;
 }
 
-int generate_f2fs_image(int fd, long long partSize)
+#ifdef USE_F2FS
+static int generate_f2fs_image(int fd, long long partSize)
 {
-    make_f2fs_sparse_fd(fd, partSize, NULL, NULL);
-    return 0;
+    return make_f2fs_sparse_fd(fd, partSize, NULL, NULL);
 }
+#endif
 
 static const struct fs_generator {
 
@@ -42,7 +43,9 @@ static const struct fs_generator {
 
 } generators[] = {
     { "ext4", generate_ext4_image},
+#ifdef USE_F2FS
     { "f2fs", generate_f2fs_image},
+#endif
 };
 
 const struct fs_generator* fs_get_generator(const char *fs_type)
