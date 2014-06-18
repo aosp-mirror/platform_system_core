@@ -30,9 +30,17 @@ LOCAL_POST_INSTALL_CMD := mkdir -p $(addprefix $(TARGET_ROOT_OUT)/, \
 
 include $(BUILD_SYSTEM)/base_rules.mk
 
-$(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in
+# Regenerate init.environ.rc if PRODUCT_BOOTCLASSPATH has changed.
+bcp_md5 := $(word 1, $(shell echo $(PRODUCT_BOOTCLASSPATH) | $(MD5SUM)))
+bcp_dep := $(intermediates)/$(bcp_md5).bcp.dep
+$(bcp_dep) :
+	$(hide) mkdir -p $(dir $@) && rm -rf $(dir $@)*.bcp.dep && touch $@
+
+$(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/init.environ.rc.in $(bcp_dep)
 	@echo "Generate: $< -> $@"
 	@mkdir -p $(dir $@)
 	$(hide) sed -e 's?%BOOTCLASSPATH%?$(PRODUCT_BOOTCLASSPATH)?g' $< >$@
 
+bcp_md5 :=
+bcp_dep :=
 #######################################
