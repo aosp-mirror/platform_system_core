@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef _CRASH_REPORTER_KERNEL_WARNING_COLLECTOR_H_
-#define _CRASH_REPORTER_KERNEL_WARNING_COLLECTOR_H_
+#ifndef CRASH_REPORTER_KERNEL_WARNING_COLLECTOR_H_
+#define CRASH_REPORTER_KERNEL_WARNING_COLLECTOR_H_
+
+#include <string>
 
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
-#include <string>
 
 #include "crash-reporter/crash_collector.h"
 
@@ -28,4 +29,4 @@ class KernelWarningCollector : public CrashCollector {
   bool LoadKernelWarning(std::string *content, std::string *signature);
 };
 
-#endif  // _CRASH_REPORTER_KERNEL_WARNING_COLLECTOR_H_
+#endif  // CRASH_REPORTER_KERNEL_WARNING_COLLECTOR_H_

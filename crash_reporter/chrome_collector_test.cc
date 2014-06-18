@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "crash-reporter/chrome_collector.h"
+
 #include <stdio.h>
 
 #include <dbus/dbus-glib-lowlevel.h>
 
-#include "base/auto_reset.h"
-#include "base/file_util.h"
-#include "base/files/scoped_temp_dir.h"
-#include "chromeos/syslog_logging.h"
-#include "chromeos/test_helpers.h"
-#include "crash-reporter/chrome_collector.h"
-#include "gtest/gtest.h"
+#include <base/auto_reset.h>
+#include <base/file_util.h>
+#include <base/files/scoped_temp_dir.h>
+#include <chromeos/syslog_logging.h>
+#include <chromeos/test_helpers.h>
+#include <gtest/gtest.h>
 
 using base::FilePath;
 

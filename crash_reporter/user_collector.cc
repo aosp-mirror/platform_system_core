@@ -12,19 +12,20 @@
 #include <pwd.h>  // For struct passwd.
 #include <sys/types.h>  // For getpwuid_r, getgrnam_r, WEXITSTATUS.
 
+#include <set>
 #include <string>
 #include <vector>
 
-#include "base/file_util.h"
-#include "base/logging.h"
-#include "base/posix/eintr_wrapper.h"
-#include "base/stl_util.h"
-#include "base/strings/string_split.h"
-#include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
-#include "chromeos/process.h"
-#include "chromeos/syslog_logging.h"
-#include "gflags/gflags.h"
+#include <base/file_util.h>
+#include <base/logging.h>
+#include <base/posix/eintr_wrapper.h>
+#include <base/stl_util.h>
+#include <base/strings/string_split.h>
+#include <base/strings/string_util.h>
+#include <base/strings/stringprintf.h>
+#include <chromeos/process.h>
+#include <chromeos/syslog_logging.h>
+#include <gflags/gflags.h>
 
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 DEFINE_bool(core2md_failure, false, "Core2md failure test");
@@ -440,7 +441,7 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
 
   // Directory like /tmp/crash_reporter/1234 which contains the
   // procfs entries and other temporary files used during conversion.
-  FilePath container_dir(StringPrintf("/tmp/crash_reporter/%d", (int)pid));
+  FilePath container_dir(StringPrintf("/tmp/crash_reporter/%d", pid));
   // Delete a pre-existing directory from crash reporter that may have
   // been left around for diagnostics from a failed conversion attempt.
   // If we don't, existing files can cause forking to fail.
@@ -495,19 +496,19 @@ bool UserCollector::ParseCrashAttributes(const std::string &crash_attributes,
       kernel_supplied_name);
 }
 
-/* Returns true if the given executable name matches that of Chrome.  This
- * includes checks for threads that Chrome has renamed. */
+// Returns true if the given executable name matches that of Chrome.  This
+// includes checks for threads that Chrome has renamed.
 static bool IsChromeExecName(const std::string &exec) {
   static const char *kChromeNames[] = {
     "chrome",
-    /* These are additional thread names seen in http://crash/ */
+    // These are additional thread names seen in http://crash/
     "MediaPipeline",
-    /* These come from the use of base::PlatformThread::SetName() directly */
+    // These come from the use of base::PlatformThread::SetName() directly
     "CrBrowserMain", "CrRendererMain", "CrUtilityMain", "CrPPAPIMain",
     "CrPPAPIBrokerMain", "CrPluginMain", "CrWorkerMain", "CrGpuMain",
     "BrokerEvent", "CrVideoRenderer", "CrShutdownDetector",
     "UsbEventHandler", "CrNaClMain", "CrServiceMain",
-    /* These thread names come from the use of base::Thread */
+    // These thread names come from the use of base::Thread
     "Gamepad polling thread", "Chrome_InProcGpuThread",
     "Chrome_DragDropThread", "Renderer::FILE", "VC manager",
     "VideoCaptureModuleImpl", "JavaBridge", "VideoCaptureManagerThread",
@@ -536,29 +537,29 @@ static bool IsChromeExecName(const std::string &exec) {
     "ServiceProcess_IO", "ServiceProcess_File",
     "extension_crash_uploader", "gpu-process_crash_uploader",
     "plugin_crash_uploader", "renderer_crash_uploader",
-    /* These come from the use of webkit_glue::WebThreadImpl */
+    // These come from the use of webkit_glue::WebThreadImpl
     "Compositor", "Browser Compositor",
     // "WorkerPool/%d",  // not easy to check because of "%d"
-    /* These come from the use of base::Watchdog */
+    // These come from the use of base::Watchdog
     "Startup watchdog thread Watchdog", "Shutdown watchdog thread Watchdog",
-    /* These come from the use of AudioDeviceThread::Start */
+    // These come from the use of AudioDeviceThread::Start
     "AudioDevice", "AudioInputDevice", "AudioOutputDevice",
-    /* These come from the use of MessageLoopFactory::GetMessageLoop */
+    // These come from the use of MessageLoopFactory::GetMessageLoop
     "GpuVideoDecoder", "RtcVideoDecoderThread", "PipelineThread",
     "AudioDecoderThread", "VideoDecoderThread",
-    /* These come from the use of MessageLoopFactory::GetMessageLoopProxy */
+    // These come from the use of MessageLoopFactory::GetMessageLoopProxy
     "CaptureVideoDecoderThread", "CaptureVideoDecoder",
-    /* These come from the use of base::SimpleThread */
+    // These come from the use of base::SimpleThread
     "LocalInputMonitor/%d",  // "%d" gets lopped off for kernel-supplied
-    /* These come from the use of base::DelegateSimpleThread */
+    // These come from the use of base::DelegateSimpleThread
     "ipc_channel_nacl reader thread/%d", "plugin_audio_input_thread/%d",
     "plugin_audio_thread/%d",
-    /* These come from the use of base::SequencedWorkerPool */
+    // These come from the use of base::SequencedWorkerPool
     "BrowserBlockingWorker%d/%d",  // "%d" gets lopped off for kernel-supplied
   };
   static std::set<std::string> chrome_names;
 
-  /* Initialize a set of chrome names, for efficient lookup */
+  // Initialize a set of chrome names, for efficient lookup
   if (chrome_names.empty()) {
     for (size_t i = 0; i < arraysize(kChromeNames); i++) {
       std::string check_name(kChromeNames[i]);

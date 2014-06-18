@@ -8,8 +8,7 @@
  */
 #include <stdlib.h>
 
-int main(int ac, char **av)
-{
+int main(int ac, char **av) {
   int status = system("exec \"${SRC}\"/warn_collector_test.sh");
   return status < 0 ? EXIT_FAILURE : WEXITSTATUS(status);
 }

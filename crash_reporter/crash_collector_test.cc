@@ -9,13 +9,14 @@
 #include <dbus/dbus-glib-lowlevel.h>
 #include <glib.h>
 
-#include "base/file_util.h"
-#include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
-#include "chromeos/syslog_logging.h"
-#include "chromeos/test_helpers.h"
+#include <base/file_util.h>
+#include <base/strings/string_util.h>
+#include <base/strings/stringprintf.h>
+#include <chromeos/syslog_logging.h>
+#include <chromeos/test_helpers.h>
+#include <gtest/gtest.h>
+
 #include "crash-reporter/crash_collector.h"
-#include "gtest/gtest.h"
 
 using base::FilePath;
 using base::StringPrintf;
@@ -115,12 +116,12 @@ TEST_F(CrashCollectorTest, GetCrashDirectoryInfo) {
   EXPECT_EQ(kRootGid, directory_group);
 
   // No need to destroy the hash as GetCrashDirectoryInfo() will do it for us.
-  GHashTable *active_sessions = g_hash_table_new (g_str_hash, g_str_equal);
+  GHashTable *active_sessions = g_hash_table_new(g_str_hash, g_str_equal);
   char kUser[] = "chicken@butt.com";
   char kHash[] = "hashcakes";
-  g_hash_table_insert (active_sessions,
-                       static_cast<gpointer>(kUser),
-                       static_cast<gpointer>(kHash));
+  g_hash_table_insert(active_sessions,
+                      static_cast<gpointer>(kUser),
+                      static_cast<gpointer>(kHash));
   EXPECT_CALL(collector_, GetActiveUserSessions())
       .WillOnce(Return(active_sessions));
 

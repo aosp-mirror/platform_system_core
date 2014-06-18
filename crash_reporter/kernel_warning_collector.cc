@@ -4,11 +4,11 @@
 
 #include "crash-reporter/kernel_warning_collector.h"
 
-#include "base/file_util.h"
-#include "base/logging.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
+#include <base/file_util.h>
+#include <base/logging.h>
+#include <base/strings/string_number_conversions.h>
+#include <base/strings/string_util.h>
+#include <base/strings/stringprintf.h>
 
 namespace {
 const char kExecName[] = "kernel-warning";
@@ -34,7 +34,7 @@ bool KernelWarningCollector::LoadKernelWarning(std::string *content,
     LOG(ERROR) << "Could not open " << kKernelWarningPath;
     return false;
   }
-  /* The signature is in the first line. */
+  // The signature is in the first line.
   std::string::size_type end_position = content->find('\n');
   if (end_position == std::string::npos) {
     LOG(ERROR) << "unexpected kernel warning format";

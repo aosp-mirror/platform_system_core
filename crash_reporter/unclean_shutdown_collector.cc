@@ -4,8 +4,8 @@
 
 #include "crash-reporter/unclean_shutdown_collector.h"
 
-#include "base/file_util.h"
-#include "base/logging.h"
+#include <base/file_util.h>
+#include <base/logging.h>
 
 static const char kUncleanShutdownFile[] =
     "/var/lib/crash_reporter/pending_clean_shutdown";

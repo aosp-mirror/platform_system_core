@@ -4,12 +4,16 @@
 
 #include "crash-reporter/udev_collector.h"
 
-#include "base/basictypes.h"
-#include "base/file_util.h"
-#include "base/logging.h"
-#include "base/strings/string_split.h"
-#include "base/strings/string_util.h"
-#include "chromeos/process.h"
+#include <map>
+#include <utility>
+#include <vector>
+
+#include <base/basictypes.h>
+#include <base/file_util.h>
+#include <base/logging.h>
+#include <base/strings/string_split.h>
+#include <base/strings/string_util.h>
+#include <chromeos/process.h>
 
 static const char kCollectUdevSignature[] = "crash_reporter-udev-collection";
 static const char kGzipPath[] = "/bin/gzip";

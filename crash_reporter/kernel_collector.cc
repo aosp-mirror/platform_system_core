@@ -4,10 +4,12 @@
 
 #include "crash-reporter/kernel_collector.h"
 
-#include "base/file_util.h"
-#include "base/logging.h"
-#include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
+#include <map>
+
+#include <base/file_util.h>
+#include <base/logging.h>
+#include <base/strings/string_util.h>
+#include <base/strings/stringprintf.h>
 
 static const char kDefaultKernelStackSignature[] =
     "kernel-UnspecifiedStackSignature";
@@ -27,17 +29,17 @@ static const int kSignatureTimestampWindow = 2;
 // Kernel log timestamp regular expression.
 static const std::string kTimestampRegex("^<.*>\\[\\s*(\\d+\\.\\d+)\\]");
 
-/*
- * These regular expressions enable to us capture the PC in a backtrace.
- * The backtrace is obtained through dmesg or the kernel's preserved/kcrashmem
- * feature.
- *
- * For ARM we see:
- *   "<5>[   39.458982] PC is at write_breakme+0xd0/0x1b4"
- * For x86:
- *   "<0>[   37.474699] EIP: [<790ed488>] write_breakme+0x80/0x108 \
- *    SS:ESP 0068:e9dd3efc
- */
+//
+// These regular expressions enable to us capture the PC in a backtrace.
+// The backtrace is obtained through dmesg or the kernel's preserved/kcrashmem
+// feature.
+//
+// For ARM we see:
+//   "<5>[   39.458982] PC is at write_breakme+0xd0/0x1b4"
+// For x86:
+//   "<0>[   37.474699] EIP: [<790ed488>] write_breakme+0x80/0x108
+//    SS:ESP 0068:e9dd3efc"
+//
 static const char *s_pc_regex[] = {
   0,
   " PC is at ([^\\+ ]+).*",
@@ -85,7 +87,7 @@ bool KernelCollector::ReadRecordToString(std::string *contents,
     return false;
   }
 
-  if (record_re.FullMatch(record, &captured)){
+  if (record_re.FullMatch(record, &captured)) {
     // Found a match, append it to the content, and remove from pstore.
     contents->append(captured);
     base::DeleteFile(ramoops_record, false);
@@ -231,8 +233,7 @@ bool KernelCollector::Enable() {
       s_pc_regex[arch_] == NULL) {
     LOG(WARNING) << "KernelCollector does not understand this architecture";
     return false;
-  }
-  else {
+  } else {
     FilePath ramoops_record;
     GetRamoopsRecordPath(&ramoops_record, 0);
     if (!base::PathExists(ramoops_record)) {
@@ -349,8 +350,7 @@ void KernelCollector::ProcessStackTrace(
   }
 }
 
-enum KernelCollector::ArchKind KernelCollector::GetCompilerArch(void)
-{
+enum KernelCollector::ArchKind KernelCollector::GetCompilerArch(void) {
 #if defined(COMPILER_GCC) && defined(ARCH_CPU_ARM_FAMILY)
   return archArm;
 #elif defined(COMPILER_GCC) && defined(ARCH_CPU_X86_64)
@@ -362,8 +362,7 @@ enum KernelCollector::ArchKind KernelCollector::GetCompilerArch(void)
 #endif
 }
 
-void KernelCollector::SetArch(enum ArchKind arch)
-{
+void KernelCollector::SetArch(enum ArchKind arch) {
   arch_ = arch;
 }
 

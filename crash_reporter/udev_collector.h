@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef _CRASH_REPORTER_UDEV_COLLECTOR_H_
-#define _CRASH_REPORTER_UDEV_COLLECTOR_H_
+#ifndef CRASH_REPORTER_UDEV_COLLECTOR_H_
+#define CRASH_REPORTER_UDEV_COLLECTOR_H_
 
 #include <string>
 
-#include "base/files/file_path.h"
+#include <base/files/file_path.h>
+#include <gtest/gtest_prod.h>  // for FRIEND_TEST
+
 #include "crash-reporter/crash_collector.h"
-#include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
 // Udev crash collector.
 class UdevCollector : public CrashCollector {
@@ -22,7 +23,7 @@ class UdevCollector : public CrashCollector {
   //   "ACTION=[action]:KERNEL=[name]:SUBSYSTEM=[subsystem]"
   // The values don't have to be in any particular order. One or more of them
   // could be omitted, in which case it would be treated as a wildcard (*).
-  bool HandleCrash(const std::string &udev_event);
+  bool HandleCrash(const std::string& udev_event);
 
  private:
   friend class UdevCollectorTest;
@@ -33,4 +34,4 @@ class UdevCollector : public CrashCollector {
   }
 };
 
-#endif  // _CRASH_REPORTER_UDEV_COLLECTOR_H_
+#endif  // CRASH_REPORTER_UDEV_COLLECTOR_H_

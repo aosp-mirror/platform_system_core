@@ -3,21 +3,20 @@
 // found in the LICENSE file.
 
 #include <unistd.h>  // for isatty()
+#include <dbus/dbus-glib-lowlevel.h>
+#include <glib.h>
 
 #include <deque>
 #include <string>
 
-#include <dbus/dbus-glib-lowlevel.h>
-#include <glib.h>
-
-#include "base/command_line.h"
-#include "base/file_util.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
-#include "base/strings/string_tokenizer.h"
-#include "base/values.h"
-#include "chromeos/dbus/dbus.h"
-#include "chromeos/syslog_logging.h"
+#include <base/command_line.h>
+#include <base/file_util.h>
+#include <base/strings/string_number_conversions.h>
+#include <base/strings/string_tokenizer.h>
+#include <base/strings/string_util.h>
+#include <base/values.h>
+#include <chromeos/dbus/dbus.h>
+#include <chromeos/syslog_logging.h>
 
 const char kLibCrosProxyResolveSignalInterface[] =
     "org.chromium.CrashReporterLibcrosProxyResolvedInterface";

@@ -3,27 +3,27 @@
 // found in the LICENSE file.
 
 #include <fcntl.h>  // for open
+#include <glib-object.h>
 
 #include <string>
 #include <vector>
 
-#include <glib-object.h>
-
-#include <base/file_util.h>
 #include <base/command_line.h>
+#include <base/file_util.h>
 #include <base/logging.h>
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
-#include "chromeos/syslog_logging.h"
+#include <chromeos/syslog_logging.h>
+#include <gflags/gflags.h>
+#include <metrics/metrics_library.h>
+
 #include "crash-reporter/chrome_collector.h"
 #include "crash-reporter/kernel_collector.h"
 #include "crash-reporter/kernel_warning_collector.h"
 #include "crash-reporter/udev_collector.h"
 #include "crash-reporter/unclean_shutdown_collector.h"
 #include "crash-reporter/user_collector.h"
-#include "gflags/gflags.h"
-#include "metrics/metrics_library.h"
 
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 DEFINE_bool(init, false, "Initialize crash logging");
@@ -252,7 +252,7 @@ static void OpenStandardFileDescriptors() {
   // invalid fd.
   do {
     new_fd = open("/dev/null", 0);
-    CHECK(new_fd >= 0) << "Unable to open /dev/null";
+    CHECK_GE(new_fd, 0) << "Unable to open /dev/null";
   } while (new_fd >= 0 && new_fd <= 2);
   close(new_fd);
 }

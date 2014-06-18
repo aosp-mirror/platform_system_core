@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "crash-reporter/user_collector.h"
+
 #include <bits/wordsize.h>
 #include <elf.h>
 #include <unistd.h>
 
-#include "base/file_util.h"
-#include "base/files/scoped_temp_dir.h"
-#include "base/strings/string_split.h"
-#include "chromeos/syslog_logging.h"
-#include "chromeos/test_helpers.h"
-#include "crash-reporter/user_collector.h"
-#include "gtest/gtest.h"
+#include <base/file_util.h>
+#include <base/files/scoped_temp_dir.h>
+#include <base/strings/string_split.h>
+#include <chromeos/syslog_logging.h>
+#include <chromeos/test_helpers.h>
+#include <gtest/gtest.h>
 
 static int s_crashes = 0;
 static bool s_metrics = false;

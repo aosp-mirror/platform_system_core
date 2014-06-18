@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef _CRASH_REPORTER_CRASH_COLLECTOR_H_
-#define _CRASH_REPORTER_CRASH_COLLECTOR_H_
+#ifndef CRASH_REPORTER_CRASH_COLLECTOR_H_
+#define CRASH_REPORTER_CRASH_COLLECTOR_H_
 
 #include <sys/stat.h>
 
@@ -12,8 +12,8 @@
 
 #include <glib.h>
 
-#include "base/files/file_path.h"
-#include "gtest/gtest_prod.h"  // for FRIEND_TEST
+#include <base/files/file_path.h>
+#include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 // User crash collector.
 class CrashCollector {
@@ -172,4 +172,4 @@ class CrashCollector {
   base::FilePath log_config_path_;
 };
 
-#endif  // _CRASH_REPORTER_CRASH_COLLECTOR_H_
+#endif  // CRASH_REPORTER_CRASH_COLLECTOR_H_

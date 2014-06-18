@@ -10,25 +10,26 @@
 #include <sys/types.h>  // for mode_t.
 #include <sys/wait.h>  // For waitpid.
 #include <unistd.h>  // For execv and fork.
-#define __STDC_FORMAT_MACROS // PRId64
+#define __STDC_FORMAT_MACROS  // PRId64
 #include <inttypes.h>
 
 #include <set>
+#include <utility>
 #include <vector>
 
 #include <dbus/dbus-glib-lowlevel.h>
 #include <glib.h>
 
-#include "base/file_util.h"
-#include "base/logging.h"
-#include "base/posix/eintr_wrapper.h"
-#include "base/strings/string_split.h"
-#include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
-#include "chromeos/cryptohome.h"
-#include "chromeos/dbus/dbus.h"
-#include "chromeos/dbus/service_constants.h"
-#include "chromeos/process.h"
+#include <base/file_util.h>
+#include <base/logging.h>
+#include <base/posix/eintr_wrapper.h>
+#include <base/strings/string_split.h>
+#include <base/strings/string_util.h>
+#include <base/strings/stringprintf.h>
+#include <chromeos/cryptohome.h>
+#include <chromeos/dbus/dbus.h>
+#include <chromeos/dbus/service_constants.h>
+#include <chromeos/process.h>
 
 static const char kCollectChromeFile[] =
     "/mnt/stateful_partition/etc/collect_chrome_crashes";

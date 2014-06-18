@@ -6,6 +6,7 @@
 
 #include <glib.h>
 #include <pcrecpp.h>
+
 #include <string>
 #include <vector>
 
@@ -13,10 +14,10 @@
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/string_util.h>
-#include "chromeos/process.h"
-#include "chromeos/syslog_logging.h"
-#include "chromeos/dbus/dbus.h"
-#include "chromeos/dbus/service_constants.h"
+#include <chromeos/dbus/dbus.h>
+#include <chromeos/dbus/service_constants.h>
+#include <chromeos/process.h>
+#include <chromeos/syslog_logging.h>
 
 const char kDefaultMinidumpName[] = "upload_file_minidump";
 const char kTarPath[] = "/bin/tar";
@@ -125,7 +126,8 @@ bool GetAdditionalLogs(const FilePath &log_path) {
 
   return true;
 }
-} //namespace
+
+}  // namespace
 
 
 ChromeCollector::ChromeCollector() : output_file_ptr_(stdout) {}
@@ -205,13 +207,13 @@ bool ChromeCollector::ParseCrashLog(const std::string &data,
       LOG(ERROR) << "Can't find : after name @ offset " << at;
       break;
     }
-    at += name.size() + 1; // Skip the name & : delimiter.
+    at += name.size() + 1;  // Skip the name & : delimiter.
 
     if (!GetDelimitedString(data, ':', at, &size_string)) {
       LOG(ERROR) << "Can't find : after size @ offset " << at;
       break;
     }
-    at += size_string.size() + 1; // Skip the size & : delimiter.
+    at += size_string.size() + 1;  // Skip the size & : delimiter.
 
     size_t size;
     if (!base::StringToSizeT(size_string, &size)) {

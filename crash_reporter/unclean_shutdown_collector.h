@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef _CRASH_REPORTER_UNCLEAN_SHUTDOWN_COLLECTOR_H_
-#define _CRASH_REPORTER_UNCLEAN_SHUTDOWN_COLLECTOR_H_
+#ifndef CRASH_REPORTER_UNCLEAN_SHUTDOWN_COLLECTOR_H_
+#define CRASH_REPORTER_UNCLEAN_SHUTDOWN_COLLECTOR_H_
 
 #include <string>
 
-#include "base/files/file_path.h"
+#include <base/files/file_path.h>
+#include <gtest/gtest_prod.h>  // for FRIEND_TEST
+
 #include "crash-reporter/crash_collector.h"
-#include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
 // Unclean shutdown collector.
 class UncleanShutdownCollector : public CrashCollector {
@@ -43,4 +44,4 @@ class UncleanShutdownCollector : public CrashCollector {
   base::FilePath powerd_suspended_file_;
 };
 
-#endif  // _CRASH_REPORTER_UNCLEAN_SHUTDOWN_COLLECTOR_H_
+#endif  // CRASH_REPORTER_UNCLEAN_SHUTDOWN_COLLECTOR_H_

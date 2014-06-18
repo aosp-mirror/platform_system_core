@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "crash-reporter/unclean_shutdown_collector.h"
+
 #include <unistd.h>
 
-#include "base/file_util.h"
-#include "base/strings/string_util.h"
-#include "chromeos/syslog_logging.h"
-#include "chromeos/test_helpers.h"
-#include "crash-reporter/unclean_shutdown_collector.h"
-#include "gtest/gtest.h"
+#include <base/file_util.h>
+#include <base/strings/string_util.h>
+#include <chromeos/syslog_logging.h>
+#include <chromeos/test_helpers.h>
+#include <gtest/gtest.h>
 
 static int s_crashes = 0;
 static bool s_metrics = true;

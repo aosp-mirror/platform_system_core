@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef _CRASH_REPORTER_KERNEL_COLLECTOR_H_
-#define _CRASH_REPORTER_KERNEL_COLLECTOR_H_
+#ifndef CRASH_REPORTER_KERNEL_COLLECTOR_H_
+#define CRASH_REPORTER_KERNEL_COLLECTOR_H_
 
 #include <pcrecpp.h>
 
 #include <string>
 
-#include "base/files/file_path.h"
+#include <base/files/file_path.h>
+#include <gtest/gtest_prod.h>  // for FRIEND_TEST
+
 #include "crash-reporter/crash_collector.h"
-#include "gtest/gtest_prod.h"  // for FRIEND_TEST
 
 // Kernel crash collector.
 class KernelCollector : public CrashCollector {
@@ -103,4 +104,4 @@ class KernelCollector : public CrashCollector {
   enum ArchKind arch_;
 };
 
-#endif  // _CRASH_REPORTER_KERNEL_COLLECTOR_H_
+#endif  // CRASH_REPORTER_KERNEL_COLLECTOR_H_
