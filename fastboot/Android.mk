@@ -63,7 +63,7 @@ ifneq ($(HOST_OS),windows)
 LOCAL_STATIC_LIBRARIES += libselinux
 endif # HOST_OS != windows
 
-ifneq ($(HOST_OS),windows)
+ifeq ($(HOST_OS),linux)
 # libf2fs_dlutils_host will dlopen("libf2fs_fmt_host_dyn")
 LOCAL_CFLAGS += -DUSE_F2FS
 LOCAL_LDLIBS += -ldl
