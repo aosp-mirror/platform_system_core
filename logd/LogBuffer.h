@@ -23,6 +23,8 @@
 #include <sysutils/SocketClient.h>
 #include <utils/List.h>
 
+#include <private/android_filesystem_config.h>
+
 #include "LogBufferElement.h"
 #include "LogTimes.h"
 #include "LogStatistics.h"
@@ -55,7 +57,7 @@ public:
                      bool (*filter)(const LogBufferElement *element, void *arg) = NULL,
                      void *arg = NULL);
 
-    void clear(log_id_t id);
+    void clear(log_id_t id, uid_t uid = AID_ROOT);
     unsigned long getSize(log_id_t id);
     int setSize(log_id_t id, unsigned long size);
     unsigned long getSizeUsed(log_id_t id);
@@ -77,7 +79,7 @@ public:
 
 private:
     void maybePrune(log_id_t id);
-    void prune(log_id_t id, unsigned long pruneRows);
+    void prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
 
 };
 

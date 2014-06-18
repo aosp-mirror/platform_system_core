@@ -232,7 +232,7 @@ void LogBuffer::maybePrune(log_id_t id) {
 // prune "pruneRows" of type "id" from the buffer.
 //
 // mLogElementsLock must be held when this function is called.
-void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
+void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     LogTimeEntry *oldest = NULL;
 
     LogTimeEntry::lock();
@@ -249,6 +249,38 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
     }
 
     LogBufferElementCollection::iterator it;
+
+    if (caller_uid != AID_ROOT) {
+        for(it = mLogElements.begin(); it != mLogElements.end();) {
+            LogBufferElement *e = *it;
+
+            if (oldest && (oldest->mStart <= e->getMonotonicTime())) {
+                break;
+            }
+
+            if (e->getLogId() != id) {
+                ++it;
+                continue;
+            }
+
+            uid_t uid = e->getUid();
+
+            if (uid == caller_uid) {
+                it = mLogElements.erase(it);
+                unsigned short len = e->getMsgLen();
+                stats.subtract(len, id, uid, e->getPid());
+                delete e;
+                pruneRows--;
+                if (pruneRows == 0) {
+                    break;
+                }
+            } else {
+                ++it;
+            }
+        }
+        LogTimeEntry::unlock();
+        return;
+    }
 
     // prune by worst offender by uid
     while (pruneRows > 0) {
@@ -375,9 +407,9 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows) {
 }
 
 // clear all rows of type "id" from the buffer.
-void LogBuffer::clear(log_id_t id) {
+void LogBuffer::clear(log_id_t id, uid_t uid) {
     pthread_mutex_lock(&mLogElementsLock);
-    prune(id, ULONG_MAX);
+    prune(id, ULONG_MAX, uid);
     pthread_mutex_unlock(&mLogElementsLock);
 }
 
