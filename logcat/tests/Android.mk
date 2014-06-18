@@ -16,11 +16,7 @@
 
 LOCAL_PATH := $(call my-dir)
 
-# -----------------------------------------------------------------------------
-# Unit tests.
-# -----------------------------------------------------------------------------
-
-test_module := logcat-unit-tests
+test_module_prefix := logcat-
 test_tags := tests
 
 test_c_flags := \
@@ -28,7 +24,29 @@ test_c_flags := \
     -g \
     -Wall -Wextra \
     -Werror \
-    -fno-builtin
+    -fno-builtin \
+    -std=gnu++11
+
+# -----------------------------------------------------------------------------
+# Benchmarks (actually a gTest where the result code does not matter)
+# ----------------------------------------------------------------------------
+
+benchmark_src_files := \
+    logcat_benchmark.cpp
+
+# Build benchmarks for the device. Run with:
+#   adb shell /data/nativetest/logcat-benchmarks/logcat-benchmarks
+include $(CLEAR_VARS)
+LOCAL_MODULE := $(test_module_prefix)benchmarks
+LOCAL_MODULE_TAGS := $(test_tags)
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
+LOCAL_CFLAGS += $(test_c_flags)
+LOCAL_SRC_FILES := $(benchmark_src_files)
+include $(BUILD_NATIVE_TEST)
+
+# -----------------------------------------------------------------------------
+# Unit tests.
+# -----------------------------------------------------------------------------
 
 test_src_files := \
     logcat_test.cpp \
@@ -36,7 +54,7 @@ test_src_files := \
 # Build tests for the device (with .so). Run with:
 #   adb shell /data/nativetest/logcat-unit-tests/logcat-unit-tests
 include $(CLEAR_VARS)
-LOCAL_MODULE := $(test_module)
+LOCAL_MODULE := $(test_module_prefix)unit-tests
 LOCAL_MODULE_TAGS := $(test_tags)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CFLAGS += $(test_c_flags)
