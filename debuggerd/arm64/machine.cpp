@@ -44,7 +44,7 @@ void dump_memory_and_code(log_t* log, pid_t tid) {
     io.iov_len = sizeof(regs);
 
     if (ptrace(PTRACE_GETREGSET, tid, (void*)NT_PRSTATUS, &io) == -1) {
-        LOG_ERROR("%s: ptrace failed to get registers: %s\n",
+        _LOG(log, logtype::ERROR, "%s: ptrace failed to get registers: %s\n",
              __func__, strerror(errno));
         return;
     }
@@ -80,7 +80,7 @@ void dump_registers(log_t* log, pid_t tid) {
   io.iov_len = sizeof(r);
 
   if (ptrace(PTRACE_GETREGSET, tid, (void*) NT_PRSTATUS, (void*) &io) == -1) {
-    LOG_ERROR("ptrace error: %s\n", strerror(errno));
+    _LOG(log, logtype::ERROR, "ptrace error: %s\n", strerror(errno));
     return;
   }
 
@@ -105,7 +105,7 @@ void dump_registers(log_t* log, pid_t tid) {
   io.iov_len = sizeof(f);
 
   if (ptrace(PTRACE_GETREGSET, tid, (void*) NT_PRFPREG, (void*) &io) == -1) {
-    LOG_ERROR("ptrace error: %s\n", strerror(errno));
+    _LOG(log, logtype::ERROR, "ptrace error: %s\n", strerror(errno));
     return;
   }
 
