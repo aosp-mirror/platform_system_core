@@ -31,7 +31,7 @@ void dump_memory_and_code(log_t*, pid_t) {
 void dump_registers(log_t* log, pid_t tid) {
   struct pt_regs r;
   if (ptrace(PTRACE_GETREGS, tid, 0, &r) == -1) {
-    LOG_ERROR("cannot get registers: %s\n", strerror(errno));
+    _LOG(log, logtype::ERROR, "cannot get registers: %s\n", strerror(errno));
     return;
   }
   _LOG(log, logtype::REGISTERS, "    eax %08lx  ebx %08lx  ecx %08lx  edx %08lx\n",
