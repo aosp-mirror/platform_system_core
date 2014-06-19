@@ -395,7 +395,7 @@ static bool dump_sibling_thread_report(
   DIR* d = opendir(task_path);
   // Bail early if the task directory cannot be opened
   if (d == NULL) {
-    XLOG("Cannot open /proc/%d/task\n", pid);
+    ALOGE("Cannot open /proc/%d/task\n", pid);
     return false;
   }
 
@@ -416,7 +416,7 @@ static bool dump_sibling_thread_report(
 
     // Skip this thread if cannot ptrace it
     if (ptrace(PTRACE_ATTACH, new_tid, 0, 0) < 0) {
-      LOG_ERROR("ptrace attach to %d failed: %s\n", new_tid, strerror(errno));
+      _LOG(log, logtype::ERROR, "ptrace attach to %d failed: %s\n", new_tid, strerror(errno));
       continue;
     }
 
@@ -433,7 +433,7 @@ static bool dump_sibling_thread_report(
     log->current_tid = log->crashed_tid;
 
     if (ptrace(PTRACE_DETACH, new_tid, 0, 0) != 0) {
-      LOG_ERROR("ptrace detach from %d failed: %s\n", new_tid, strerror(errno));
+      _LOG(log, logtype::ERROR, "ptrace detach from %d failed: %s\n", new_tid, strerror(errno));
       detach_failed = true;
     }
   }
@@ -457,7 +457,7 @@ static void dump_log_file(
       android_name_to_log_id(filename), O_RDONLY | O_NONBLOCK, tail, pid);
 
   if (!logger_list) {
-    XLOG("Unable to open %s: %s\n", filename, strerror(errno));
+    ALOGE("Unable to open %s: %s\n", filename, strerror(errno));
     return;
   }
 
@@ -475,16 +475,17 @@ static void dump_log_file(
         // non-blocking EOF; we're done
         break;
       } else {
-        LOG_ERROR("Error while reading log: %s\n", strerror(-actual));
+        _LOG(log, logtype::ERROR, "Error while reading log: %s\n",
+          strerror(-actual));
         break;
       }
     } else if (actual == 0) {
-      LOG_ERROR("Got zero bytes while reading log: %s\n",
+      _LOG(log, logtype::ERROR, "Got zero bytes while reading log: %s\n",
         strerror(errno));
       break;
     }
 
-    // NOTE: if you XLOG something here, this will spin forever,
+    // NOTE: if you ALOGV something here, this will spin forever,
     // because you will be writing as fast as you're reading.  Any
     // high-frequency debug diagnostics should just be written to
     // the tombstone file.
@@ -684,7 +685,7 @@ static char* find_and_open_tombstone(int* fd) {
   }
 
   if (oldest < 0) {
-    LOG_ERROR("Failed to find a valid tombstone, default to using tombstone 0.\n");
+    ALOGE("Failed to find a valid tombstone, default to using tombstone 0.\n");
     oldest = 0;
   }
 
@@ -692,7 +693,7 @@ static char* find_and_open_tombstone(int* fd) {
   snprintf(path, sizeof(path), TOMBSTONE_TEMPLATE, oldest);
   *fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0600);
   if (*fd < 0) {
-    LOG_ERROR("failed to open tombstone file '%s': %s\n", path, strerror(errno));
+    ALOGE("failed to open tombstone file '%s': %s\n", path, strerror(errno));
     return NULL;
   }
   fchown(*fd, AID_SYSTEM, AID_SYSTEM);
@@ -730,7 +731,7 @@ static int activity_manager_connect() {
 }
 
 char* engrave_tombstone(pid_t pid, pid_t tid, int signal, int original_si_code,
-                        uintptr_t abort_msg_address, bool dump_sibling_threads, bool quiet,
+                        uintptr_t abort_msg_address, bool dump_sibling_threads,
                         bool* detach_failed, int* total_sleep_time_usec) {
 
   log_t log;
@@ -738,11 +739,11 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal, int original_si_code,
   log.crashed_tid = tid;
 
   if ((mkdir(TOMBSTONE_DIR, 0755) == -1) && (errno != EEXIST)) {
-    LOG_ERROR("failed to create %s: %s\n", TOMBSTONE_DIR, strerror(errno));
+    _LOG(&log, logtype::ERROR, "failed to create %s: %s\n", TOMBSTONE_DIR, strerror(errno));
   }
 
   if (chown(TOMBSTONE_DIR, AID_SYSTEM, AID_SYSTEM) == -1) {
-    LOG_ERROR("failed to change ownership of %s: %s\n", TOMBSTONE_DIR, strerror(errno));
+    _LOG(&log, logtype::ERROR, "failed to change ownership of %s: %s\n", TOMBSTONE_DIR, strerror(errno));
   }
 
   int fd = -1;
@@ -750,11 +751,11 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal, int original_si_code,
   if (selinux_android_restorecon(TOMBSTONE_DIR, 0) == 0) {
     path = find_and_open_tombstone(&fd);
   } else {
-    LOG_ERROR("Failed to restore security context, not writing tombstone.\n");
+    _LOG(&log, logtype::ERROR, "Failed to restore security context, not writing tombstone.\n");
   }
 
-  if (fd < 0 && quiet) {
-    LOG_ERROR("Skipping tombstone write, nothing to do.\n");
+  if (fd < 0) {
+    _LOG(&log, logtype::ERROR, "Skipping tombstone write, nothing to do.\n");
     *detach_failed = false;
     return NULL;
   }
@@ -764,7 +765,6 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal, int original_si_code,
   // being closed.
   int amfd = activity_manager_connect();
   log.amfd = amfd;
-  log.quiet = quiet;
   *detach_failed = dump_crash(&log, pid, tid, signal, original_si_code, abort_msg_address,
                               dump_sibling_threads, total_sleep_time_usec);
 
