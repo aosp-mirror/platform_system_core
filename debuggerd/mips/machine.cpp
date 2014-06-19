@@ -87,7 +87,7 @@ void dump_memory_and_code(log_t* log, pid_t tid) {
 void dump_registers(log_t* log, pid_t tid) {
   pt_regs_mips_t r;
   if(ptrace(PTRACE_GETREGS, tid, 0, &r)) {
-    LOG_ERROR("cannot get registers: %s\n", strerror(errno));
+    _LOG(log, logtype::ERROR, "cannot get registers: %s\n", strerror(errno));
     return;
   }
 
