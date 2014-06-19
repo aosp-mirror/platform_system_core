@@ -61,11 +61,11 @@ int ifconfig_main(int argc, char *argv[])
 {
     struct ifreq ifr;
     int s;
-    unsigned int addr, mask, flags;
+    unsigned int flags;
     char astring[20];
     char mstring[20];
     char *updown, *brdcst, *loopbk, *ppp, *running, *multi;
-    
+
     argc--;
     argv++;
 
@@ -85,13 +85,17 @@ int ifconfig_main(int argc, char *argv[])
             perror(ifr.ifr_name);
             return -1;
         } else
-            addr = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr;
+            strlcpy(astring,
+                   inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr),
+                   sizeof(astring));
 
         if (ioctl(s, SIOCGIFNETMASK, &ifr) < 0) {
             perror(ifr.ifr_name);
             return -1;
         } else
-            mask = ((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr;
+            strlcpy(mstring,
+                   inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr),
+                   sizeof(mstring));
 
         if (ioctl(s, SIOCGIFFLAGS, &ifr) < 0) {
             perror(ifr.ifr_name);
@@ -99,16 +103,6 @@ int ifconfig_main(int argc, char *argv[])
         } else
             flags = ifr.ifr_flags;
 
-        sprintf(astring, "%d.%d.%d.%d",
-                addr & 0xff,
-                ((addr >> 8) & 0xff),
-                ((addr >> 16) & 0xff),
-                ((addr >> 24) & 0xff));
-        sprintf(mstring, "%d.%d.%d.%d",
-                mask & 0xff,
-                ((mask >> 8) & 0xff),
-                ((mask >> 16) & 0xff),
-                ((mask >> 24) & 0xff));
         printf("%s: ip %s mask %s flags [", ifr.ifr_name,
                astring,
                mstring
