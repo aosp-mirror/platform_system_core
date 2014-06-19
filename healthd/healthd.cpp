@@ -126,7 +126,7 @@ static void uevent_init(void) {
         KLOG_ERROR(LOG_TAG, "uevent_init: uevent_open_socket failed\n");
 }
 
-#define UEVENT_MSG_LEN 1024
+#define UEVENT_MSG_LEN 2048
 static void uevent_event(void) {
     char msg[UEVENT_MSG_LEN+2];
     char *cp;
