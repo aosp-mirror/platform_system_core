@@ -37,7 +37,7 @@ static int write_to_am(int fd, const char* buf, int len) {
     int written = TEMP_FAILURE_RETRY(write(fd, buf + len - to_write, to_write));
     if (written < 0) {
       // hard failure
-      LOG_ERROR("AM write failure (%d / %s)\n", errno, strerror(errno));
+      ALOGE("AM write failure (%d / %s)\n", errno, strerror(errno));
       return -1;
     }
     to_write -= written;
@@ -57,12 +57,10 @@ bool is_allowed_in_logcat(enum logtype ltype) {
 }
 
 void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
-  bool write_to_tombstone = log && log->tfd;
-  bool write_to_logcat = (!log || !log->quiet) && is_allowed_in_logcat(ltype);
-  if (log != NULL) {
-    write_to_logcat &= (log->crashed_tid == log->current_tid);
-  }
-  bool write_to_activitymanager = log && log->amfd >= 0 && is_allowed_in_logcat(ltype);
+  bool write_to_tombstone = (log->tfd != -1);
+  bool write_to_logcat = is_allowed_in_logcat(ltype)
+                      && (log->crashed_tid == log->current_tid);
+  bool write_to_activitymanager = (log->amfd != -1);
 
   char buf[512];
   va_list ap;
@@ -98,25 +96,25 @@ int wait_for_signal(pid_t tid, int* total_sleep_time_usec) {
     if (n < 0) {
       if (errno == EAGAIN)
         continue;
-      LOG_ERROR("waitpid failed: %s\n", strerror(errno));
+      ALOGE("waitpid failed: %s\n", strerror(errno));
       return -1;
     } else if (n > 0) {
-      XLOG("waitpid: n=%d status=%08x\n", n, status);
+      ALOGV("waitpid: n=%d status=%08x\n", n, status);
       if (WIFSTOPPED(status)) {
         return WSTOPSIG(status);
       } else {
-        LOG_ERROR("unexpected waitpid response: n=%d, status=%08x\n", n, status);
+        ALOGE("unexpected waitpid response: n=%d, status=%08x\n", n, status);
         return -1;
       }
     }
 
     if (*total_sleep_time_usec > max_total_sleep_usec) {
-      LOG_ERROR("timed out waiting for tid=%d to die\n", tid);
+      ALOGE("timed out waiting for tid=%d to die\n", tid);
       return -1;
     }
 
     // not ready yet
-    XLOG("not ready yet\n");
+    ALOGV("not ready yet\n");
     usleep(sleep_time_usec);
     *total_sleep_time_usec += sleep_time_usec;
   }
@@ -126,7 +124,7 @@ void wait_for_stop(pid_t tid, int* total_sleep_time_usec) {
   siginfo_t si;
   while (TEMP_FAILURE_RETRY(ptrace(PTRACE_GETSIGINFO, tid, 0, &si)) < 0 && errno == ESRCH) {
     if (*total_sleep_time_usec > max_total_sleep_usec) {
-      LOG_ERROR("timed out waiting for tid=%d to stop\n", tid);
+      ALOGE("timed out waiting for tid=%d to stop\n", tid);
       break;
     }
 

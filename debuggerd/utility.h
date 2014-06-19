@@ -26,8 +26,6 @@ typedef struct {
     int tfd;
     /* Activity Manager socket file descriptor */
     int amfd;
-    /* if true, does not log anything to the Android logcat or Activity Manager */
-    bool quiet;
     // The tid of the thread that crashed.
     pid_t crashed_tid;
     // The tid of the thread we are currently working with.
@@ -50,10 +48,6 @@ enum logtype {
 /* Log information onto the tombstone. */
 void _LOG(log_t* log, logtype ltype, const char *fmt, ...)
         __attribute__ ((format(printf, 3, 4)));
-
-/* Further helpful macros */
-#define LOG_ERROR(fmt...) _LOG(NULL, logtype::ERROR, fmt)
-#define XLOG(fmt...) do {} while(0)
 
 int wait_for_signal(pid_t tid, int* total_sleep_time_usec);
 void wait_for_stop(pid_t tid, int* total_sleep_time_usec);

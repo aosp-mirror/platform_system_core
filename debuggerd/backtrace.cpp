@@ -95,7 +95,7 @@ static void dump_thread(
   }
 
   if (!attached && ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
-    LOG_ERROR("ptrace detach from %d failed: %s\n", tid, strerror(errno));
+    _LOG(log, logtype::ERROR, "ptrace detach from %d failed: %s\n", tid, strerror(errno));
     *detach_failed = true;
   }
 }
@@ -105,7 +105,6 @@ void dump_backtrace(int fd, int amfd, pid_t pid, pid_t tid, bool* detach_failed,
   log_t log;
   log.tfd = fd;
   log.amfd = amfd;
-  log.quiet = true;
 
   dump_process_header(&log, pid);
   dump_thread(&log, tid, true, detach_failed, total_sleep_time_usec);
