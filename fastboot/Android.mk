@@ -75,8 +75,12 @@ endif
 
 include $(BUILD_HOST_EXECUTABLE)
 
-
-$(call dist-for-goals,dist_files sdk,$(LOCAL_BUILT_MODULE))
+my_dist_files := $(LOCAL_BUILT_MODULE)
+ifeq ($(HOST_OS),linux)
+my_dist_files += $(HOST_LIBRARY_PATH)/libf2fs_fmt_host_dyn$(HOST_SHLIB_SUFFIX)
+endif
+$(call dist-for-goals,dist_files sdk,$(my_dist_files))
+my_dist_files :=
 
 
 ifeq ($(HOST_OS),linux)
