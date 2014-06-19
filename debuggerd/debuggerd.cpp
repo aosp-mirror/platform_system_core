@@ -163,9 +163,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
     ALOGE("read failure? %s (pid=%d uid=%d)\n", strerror(errno), cr.pid, cr.uid);
     return -1;
   }
-  if (status == sizeof(debugger_msg_t)) {
-    ALOGV("crash request of size %d abort_msg_address=%p\n", status, msg.abort_msg_address);
-  } else {
+  if (status != sizeof(debugger_msg_t)) {
     ALOGE("invalid crash request of size %d (from pid=%d uid=%d)\n", status, cr.pid, cr.uid);
     return -1;
   }
