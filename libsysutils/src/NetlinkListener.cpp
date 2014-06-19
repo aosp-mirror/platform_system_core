@@ -57,10 +57,12 @@ bool NetlinkListener::onDataAvailable(SocketClient *cli)
     }
 
     NetlinkEvent *evt = new NetlinkEvent();
-    if (!evt->decode(mBuffer, count, mFormat)) {
-        SLOGE("Error decoding NetlinkEvent");
-    } else {
+    if (evt->decode(mBuffer, count, mFormat)) {
         onEvent(evt);
+    } else if (mFormat != NETLINK_FORMAT_BINARY) {
+        // Don't complain if parseBinaryNetlinkMessage returns false. That can
+        // just mean that the buffer contained no messages we're interested in.
+        SLOGE("Error decoding NetlinkEvent");
     }
 
     delete evt;
