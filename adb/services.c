@@ -189,13 +189,13 @@ static void init_subproc_child()
 {
     setsid();
 
-    // Set OOM adjustment to prevent killing
-    int fd = adb_open("/proc/self/oom_adj", O_WRONLY);
+    // Set OOM score adjustment to prevent killing
+    int fd = adb_open("/proc/self/oom_score_adj", O_WRONLY);
     if (fd >= 0) {
         adb_write(fd, "0", 1);
         adb_close(fd);
     } else {
-       D("adb: unable to update oom_adj\n");
+       D("adb: unable to update oom_score_adj\n");
     }
 }
 
