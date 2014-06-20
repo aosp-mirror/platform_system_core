@@ -31,6 +31,7 @@
 
 #include <linux/loop.h>
 #include <private/android_filesystem_config.h>
+#include <cutils/android_reboot.h>
 #include <cutils/partition_utils.h>
 #include <cutils/properties.h>
 #include <logwrap/logwrap.h>
@@ -236,6 +237,19 @@ static int device_is_debuggable() {
     return strcmp(value, "1") ? 0 : 1;
 }
 
+void wipe_data_via_recovery()
+{
+    mkdir("/cache/recovery", 0700);
+    int fd = open("/cache/recovery/command", O_RDWR|O_CREAT|O_TRUNC, 0600);
+    if (fd >= 0) {
+        write(fd, "--wipe_data", strlen("--wipe_data") + 1);
+        close(fd);
+    } else {
+        ERROR("could not open /cache/recovery/command\n");
+    }
+    property_set(ANDROID_RB_PROPERTY, "reboot,recovery");
+}
+
 /* When multiple fstab records share the same mount_point, it will
  * try to mount each one in turn, and ignore any duplicates after a
  * first successful mount.
@@ -273,7 +287,7 @@ int fs_mgr_mount_all(struct fstab *fstab)
         if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) &&
             !device_is_debuggable()) {
             if (fs_mgr_setup_verity(&fstab->recs[i]) < 0) {
-                ERROR("Could not set up verified partition, skipping!");
+                ERROR("Could not set up verified partition, skipping!\n");
                 continue;
             }
         }
@@ -320,11 +334,11 @@ int fs_mgr_mount_all(struct fstab *fstab)
                     if (!encryptable) {
                         encryptable = 2;
                     } else {
-                        ERROR("Only one encryptable/encrypted partition supported");
+                        ERROR("Only one encryptable/encrypted partition supported\n");
                         encryptable = 1;
                     }
                 } else {
-                    INFO("Could not umount %s - allow continue unencrypted",
+                    INFO("Could not umount %s - allow continue unencrypted\n",
                          fstab->recs[i].mount_point);
                     continue;
                 }
@@ -335,14 +349,20 @@ int fs_mgr_mount_all(struct fstab *fstab)
 
         /* mount(2) returned an error, check if it's encryptable and deal with it */
         if (mret && mount_errno != EBUSY && mount_errno != EACCES &&
-            (fstab->recs[i].fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT)) &&
-            !partition_wiped(fstab->recs[i].blk_device)) {
-            /* Need to mount a tmpfs at this mountpoint for now, and set
-             * properties that vold will query later for decrypting
-             */
-            if (fs_mgr_do_tmpfs_mount(fstab->recs[i].mount_point) < 0) {
+            fs_mgr_is_encryptable(&fstab->recs[i])) {
+            if(partition_wiped(fstab->recs[i].blk_device) && fstab->recs[i].fs_mgr_flags & MF_FORCECRYPT) {
+                ERROR("Found an encryptable wiped partition with force encrypt. Formating via recovery.\n");
+                wipe_data_via_recovery();  /* This is queue up a reboot */
                 ++error_count;
                 continue;
+            } else {
+                /* Need to mount a tmpfs at this mountpoint for now, and set
+                 * properties that vold will query later for decrypting
+                 */
+                if (fs_mgr_do_tmpfs_mount(fstab->recs[i].mount_point) < 0) {
+                    ++error_count;
+                    continue;
+                }
             }
             encryptable = 1;
         } else {
@@ -408,7 +428,7 @@ int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
         if ((fstab->recs[i].fs_mgr_flags & MF_VERIFY) &&
             !device_is_debuggable()) {
             if (fs_mgr_setup_verity(&fstab->recs[i]) < 0) {
-                ERROR("Could not set up verified partition, skipping!");
+                ERROR("Could not set up verified partition, skipping!\n");
                 continue;
             }
         }
@@ -515,7 +535,7 @@ int fs_mgr_swapon_all(struct fstab *fstab)
 
             zram_fp = fopen(ZRAM_CONF_DEV, "r+");
             if (zram_fp == NULL) {
-                ERROR("Unable to open zram conf device " ZRAM_CONF_DEV);
+                ERROR("Unable to open zram conf device %s\n", ZRAM_CONF_DEV);
                 ret = -1;
                 continue;
             }
