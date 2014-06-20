@@ -205,7 +205,7 @@ static void periodic_chores() {
     healthd_battery_update();
 }
 
-#define UEVENT_MSG_LEN 1024
+#define UEVENT_MSG_LEN 2048
 static void uevent_event(uint32_t /*epevents*/) {
     char msg[UEVENT_MSG_LEN+2];
     char *cp;
