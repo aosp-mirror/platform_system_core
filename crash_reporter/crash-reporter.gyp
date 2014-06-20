@@ -52,11 +52,11 @@
         'deps': [
           'dbus-1',
           'dbus-glib-1',
+          'libmetrics-<(libbase_ver)',
         ],
       },
       'dependencies': [
         'libcrash',
-        '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
       ],
       'sources': [
         'crash_reporter.cc',
@@ -81,15 +81,15 @@
       'type': 'executable',
       'variables': {
         'lexer_out_dir': 'crash-reporter',
+        'deps': [
+          'libmetrics-<(libbase_ver)',
+        ],
       },
       'link_settings': {
         'libraries': [
           '-lfl',
         ],
       },
-      'dependencies': [
-        '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
-      ],
       'sources': [
         'warn_collector.l',
       ],
