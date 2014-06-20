@@ -78,15 +78,16 @@ static intmax_t property_get_imax(const char *key, intmax_t lower_bound, intmax_
         if ((result == INTMAX_MIN || result == INTMAX_MAX) && errno == ERANGE) {
             // Over or underflow
             result = default_value;
-            ALOGV("%s(%s,%lld) - overflow", __FUNCTION__, key, default_value);
+            ALOGV("%s(%s,%" PRIdMAX ") - overflow", __FUNCTION__, key, default_value);
         } else if (result < lower_bound || result > upper_bound) {
             // Out of range of requested bounds
             result = default_value;
-            ALOGV("%s(%s,%lld) - out of range", __FUNCTION__, key, default_value);
+            ALOGV("%s(%s,%" PRIdMAX ") - out of range", __FUNCTION__, key, default_value);
         } else if (end == buf) {
             // Numeric conversion failed
             result = default_value;
-            ALOGV("%s(%s,%lld) - numeric conversion failed", __FUNCTION__, key, default_value);
+            ALOGV("%s(%s,%" PRIdMAX ") - numeric conversion failed",
+                    __FUNCTION__, key, default_value);
         }
 
         errno = tmp;

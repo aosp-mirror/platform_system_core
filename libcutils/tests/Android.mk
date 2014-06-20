@@ -19,7 +19,8 @@ test_src_files := \
     PropertiesTest.cpp \
 
 shared_libraries := \
-    libutils
+    libutils \
+    liblog
 
 static_libraries := \
     libcutils
