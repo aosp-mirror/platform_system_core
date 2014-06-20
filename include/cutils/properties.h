@@ -20,6 +20,7 @@
 #include <sys/cdefs.h>
 #include <stddef.h>
 #include <sys/system_properties.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,6 +44,64 @@ extern "C" {
 ** value is used (if nonnull).
 */
 int property_get(const char *key, char *value, const char *default_value);
+
+/* property_get_bool: returns the value of key coerced into a
+** boolean. If the property is not set, then the default value is returned.
+**
+* The following is considered to be true (1):
+**   "1", "true", "y", "yes", "on"
+**
+** The following is considered to be false (0):
+**   "0", "false", "n", "no", "off"
+**
+** The conversion is whitespace-sensitive (e.g. " off" will not be false).
+**
+** If no property with this key is set (or the key is NULL) or the boolean
+** conversion fails, the default value is returned.
+**/
+int8_t property_get_bool(const char *key, int8_t default_value);
+
+/* property_get_int64: returns the value of key truncated and coerced into a
+** int64_t. If the property is not set, then the default value is used.
+**
+** The numeric conversion is identical to strtoimax with the base inferred:
+** - All digits up to the first non-digit characters are read
+** - The longest consecutive prefix of digits is converted to a long
+**
+** Valid strings of digits are:
+** - An optional sign character + or -
+** - An optional prefix indicating the base (otherwise base 10 is assumed)
+**   -- 0 prefix is octal
+**   -- 0x / 0X prefix is hex
+**
+** Leading/trailing whitespace is ignored. Overflow/underflow will cause
+** numeric conversion to fail.
+**
+** If no property with this key is set (or the key is NULL) or the numeric
+** conversion fails, the default value is returned.
+**/
+int64_t property_get_int64(const char *key, int64_t default_value);
+
+/* property_get_int32: returns the value of key truncated and coerced into an
+** int32_t. If the property is not set, then the default value is used.
+**
+** The numeric conversion is identical to strtoimax with the base inferred:
+** - All digits up to the first non-digit characters are read
+** - The longest consecutive prefix of digits is converted to a long
+**
+** Valid strings of digits are:
+** - An optional sign character + or -
+** - An optional prefix indicating the base (otherwise base 10 is assumed)
+**   -- 0 prefix is octal
+**   -- 0x / 0X prefix is hex
+**
+** Leading/trailing whitespace is ignored. Overflow/underflow will cause
+** numeric conversion to fail.
+**
+** If no property with this key is set (or the key is NULL) or the numeric
+** conversion fails, the default value is returned.
+**/
+int32_t property_get_int32(const char *key, int32_t default_value);
 
 /* property_set: returns 0 on success, < 0 on failure
 */
