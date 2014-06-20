@@ -134,6 +134,9 @@ LOCAL_SRC_FILES := $(commonSources) \
 LOCAL_SRC_FILES_arm += \
         arch-arm/memset32.S \
 
+LOCAL_SRC_FILES_arm64 += \
+        arch-arm64/android_memset.S \
+
 LOCAL_SRC_FILES_mips += \
         arch-mips/android_memset.c \
 
@@ -146,6 +149,7 @@ LOCAL_SRC_FILES_x86_64 += \
         arch-x86_64/android_memset32_SSE2-atom.S \
 
 LOCAL_CFLAGS_arm += -DHAVE_MEMSET16 -DHAVE_MEMSET32
+LOCAL_CFLAGS_arm64 += -DHAVE_MEMSET16 -DHAVE_MEMSET32
 LOCAL_CFLAGS_mips += -DHAVE_MEMSET16 -DHAVE_MEMSET32
 LOCAL_CFLAGS_x86 += -DHAVE_MEMSET16 -DHAVE_MEMSET32
 LOCAL_CFLAGS_x86_64 += -DHAVE_MEMSET16 -DHAVE_MEMSET32
