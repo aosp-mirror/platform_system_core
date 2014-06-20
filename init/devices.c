@@ -15,6 +15,7 @@
  */
 
 #include <errno.h>
+#include <fnmatch.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,6 +78,7 @@ struct perms_ {
     unsigned int uid;
     unsigned int gid;
     unsigned short prefix;
+    unsigned short wildcard;
 };
 
 struct perm_node {
@@ -97,7 +99,8 @@ static list_declare(platform_names);
 
 int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
-                  unsigned short prefix) {
+                  unsigned short prefix,
+                  unsigned short wildcard) {
     struct perm_node *node = calloc(1, sizeof(*node));
     if (!node)
         return -ENOMEM;
@@ -116,6 +119,7 @@ int add_dev_perms(const char *name, const char *attr,
     node->dp.uid = uid;
     node->dp.gid = gid;
     node->dp.prefix = prefix;
+    node->dp.wildcard = wildcard;
 
     if (attr)
         list_add_tail(&sys_perms, &node->plist);
@@ -139,6 +143,9 @@ void fixup_sys_perms(const char *upath)
         dp = &(node_to_item(node, struct perm_node, plist))->dp;
         if (dp->prefix) {
             if (strncmp(upath, dp->name + 4, strlen(dp->name + 4)))
+                continue;
+        } else if (dp->wildcard) {
+            if (fnmatch(dp->name + 4, upath, FNM_PATHNAME) != 0)
                 continue;
         } else {
             if (strcmp(upath, dp->name + 4))
@@ -179,6 +186,9 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
 
         if (dp->prefix) {
             if (strncmp(path, dp->name, strlen(dp->name)))
+                continue;
+        } else if (dp->wildcard) {
+            if (fnmatch(dp->name, path, FNM_PATHNAME) != 0)
                 continue;
         } else {
             if (strcmp(path, dp->name))
