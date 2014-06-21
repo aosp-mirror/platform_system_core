@@ -48,6 +48,8 @@ const int NetlinkEvent::NlActionLinkDown = 5;
 const int NetlinkEvent::NlActionAddressUpdated = 6;
 const int NetlinkEvent::NlActionAddressRemoved = 7;
 const int NetlinkEvent::NlActionRdnss = 8;
+const int NetlinkEvent::NlActionRouteUpdated = 9;
+const int NetlinkEvent::NlActionRouteRemoved = 10;
 
 NetlinkEvent::NetlinkEvent() {
     mAction = NlActionUnknown;
@@ -270,6 +272,98 @@ bool NetlinkEvent::parseUlogPacketMessage(const struct nlmsghdr *nh) {
 }
 
 /*
+ * Parse a RTM_NEWROUTE or RTM_DELROUTE message.
+ */
+bool NetlinkEvent::parseRtMessage(const struct nlmsghdr *nh) {
+    uint8_t type = nh->nlmsg_type;
+    const char *msgname = rtMessageName(type);
+
+    // Sanity check.
+    if (type != RTM_NEWROUTE && type != RTM_DELROUTE) {
+        SLOGE("%s: incorrect message type %d (%s)\n", __func__, type, msgname);
+        return false;
+    }
+
+    struct rtmsg *rtm = (struct rtmsg *) NLMSG_DATA(nh);
+    if (!checkRtNetlinkLength(nh, sizeof(*rtm)))
+        return false;
+
+    if (// Ignore static routes we've set up ourselves.
+        (rtm->rtm_protocol != RTPROT_KERNEL &&
+         rtm->rtm_protocol != RTPROT_RA) ||
+        // We're only interested in global unicast routes.
+        (rtm->rtm_scope != RT_SCOPE_UNIVERSE) ||
+        (rtm->rtm_type != RTN_UNICAST) ||
+        // We don't support source routing.
+        (rtm->rtm_src_len != 0) ||
+        // Cloned routes aren't real routes.
+        (rtm->rtm_flags & RTM_F_CLONED)) {
+        return false;
+    }
+
+    int family = rtm->rtm_family;
+    int prefixLength = rtm->rtm_dst_len;
+
+    // Currently we only support: destination, (one) next hop, ifindex.
+    char dst[INET6_ADDRSTRLEN] = "";
+    char gw[INET6_ADDRSTRLEN] = "";
+    char dev[IFNAMSIZ] = "";
+
+    size_t len = RTM_PAYLOAD(nh);
+    struct rtattr *rta;
+    for (rta = RTM_RTA(rtm); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+        switch (rta->rta_type) {
+            case RTA_DST:
+                if (maybeLogDuplicateAttribute(*dst, "RTA_DST", msgname))
+                    continue;
+                if (!inet_ntop(family, RTA_DATA(rta), dst, sizeof(dst)))
+                    return false;
+                continue;
+            case RTA_GATEWAY:
+                if (maybeLogDuplicateAttribute(*gw, "RTA_GATEWAY", msgname))
+                    continue;
+                if (!inet_ntop(family, RTA_DATA(rta), gw, sizeof(gw)))
+                    return false;
+                continue;
+            case RTA_OIF:
+                if (maybeLogDuplicateAttribute(*dev, "RTA_OIF", msgname))
+                    continue;
+                if (!if_indextoname(* (int *) RTA_DATA(rta), dev))
+                    return false;
+            default:
+                continue;
+        }
+    }
+
+   // If there's no RTA_DST attribute, then:
+   // - If the prefix length is zero, it's the default route.
+   // - If the prefix length is nonzero, there's something we don't understand.
+   //   Ignore the event.
+   if (!*dst && !prefixLength) {
+        if (family == AF_INET) {
+            strncpy(dst, "0.0.0.0", sizeof(dst));
+        } else if (family == AF_INET6) {
+            strncpy(dst, "::", sizeof(dst));
+        }
+    }
+
+    // A useful route must have a destination and at least either a gateway or
+    // an interface.
+    if (!*dst || (!*gw && !*dev))
+        return false;
+
+    // Fill in netlink event information.
+    mAction = (type == RTM_NEWROUTE) ? NlActionRouteUpdated :
+                                       NlActionRouteRemoved;
+    mSubsystem = strdup("net");
+    asprintf(&mParams[0], "ROUTE=%s/%d", dst, prefixLength);
+    asprintf(&mParams[1], "GATEWAY=%s", (*gw) ? gw : "");
+    asprintf(&mParams[2], "INTERFACE=%s", (*dev) ? dev : "");
+
+    return true;
+}
+
+/*
  * Parse a RTM_NEWNDUSEROPT message.
  */
 bool NetlinkEvent::parseNdUserOptMessage(const struct nlmsghdr *nh) {
@@ -406,6 +500,11 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
         } else if (nh->nlmsg_type == RTM_NEWADDR ||
                    nh->nlmsg_type == RTM_DELADDR) {
             if (parseIfAddrMessage(nh))
+                return true;
+
+        } else if (nh->nlmsg_type == RTM_NEWROUTE ||
+                   nh->nlmsg_type == RTM_DELROUTE) {
+            if (parseRtMessage(nh))
                 return true;
 
         } else if (nh->nlmsg_type == RTM_NEWNDUSEROPT) {
