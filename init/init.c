@@ -1051,8 +1051,7 @@ int main(int argc, char **argv)
     is_charger = !strcmp(bootmode, "charger");
 
     INFO("property init\n");
-    if (!is_charger)
-        property_load_boot_defaults();
+    property_load_boot_defaults();
 
     INFO("reading config file\n");
     init_parse_config_file("/init.rc");
@@ -1067,28 +1066,19 @@ int main(int argc, char **argv)
     /* execute all the boot actions to get us started */
     action_for_each_trigger("init", action_add_queue_tail);
 
-    /* skip mounting filesystems in charger mode */
-    if (!is_charger) {
-        action_for_each_trigger("early-fs", action_add_queue_tail);
-        action_for_each_trigger("fs", action_add_queue_tail);
-        action_for_each_trigger("post-fs", action_add_queue_tail);
-        action_for_each_trigger("post-fs-data", action_add_queue_tail);
-    }
-
     /* Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
      * wasn't ready immediately after wait_for_coldboot_done
      */
     queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
-
     queue_builtin_action(property_service_init_action, "property_service_init");
     queue_builtin_action(signal_init_action, "signal_init");
     queue_builtin_action(check_startup_action, "check_startup");
 
+    /* Don't mount filesystems or start core system services if in charger mode. */
     if (is_charger) {
         action_for_each_trigger("charger", action_add_queue_tail);
     } else {
-        action_for_each_trigger("early-boot", action_add_queue_tail);
-        action_for_each_trigger("boot", action_add_queue_tail);
+        action_for_each_trigger("late-init", action_add_queue_tail);
     }
 
         /* run all property triggers based on current state of the properties */

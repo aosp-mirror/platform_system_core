@@ -37,6 +37,8 @@
 #include <cutils/android_reboot.h>
 #include <cutils/klog.h>
 #include <cutils/misc.h>
+#include <cutils/uevent.h>
+#include <cutils/properties.h>
 
 #ifdef CHARGER_ENABLE_SUSPEND
 #include <suspend/autosuspend.h>
@@ -498,8 +500,16 @@ static void process_key(struct charger *charger, int code, int64_t now)
         if (key->down) {
             int64_t reboot_timeout = key->timestamp + POWER_ON_KEY_TIME;
             if (now >= reboot_timeout) {
-                LOGI("[%" PRId64 "] rebooting\n", now);
-                android_reboot(ANDROID_RB_RESTART, 0, 0);
+                /* We do not currently support booting from charger mode on
+                   all devices. Check the property and continue booting or reboot
+                   accordingly. */
+                if (property_get_bool("ro.enable_boot_charger_mode", false)) {
+                    LOGI("[%" PRId64 "] booting from charger mode\n", now);
+                    property_set("sys.boot_from_charger_mode", "1");
+                } else {
+                    LOGI("[%" PRId64 "] rebooting\n", now);
+                    android_reboot(ANDROID_RB_RESTART, 0, 0);
+                }
             } else {
                 /* if the key is pressed but timeout hasn't expired,
                  * make sure we wake up at the right-ish time to check
