@@ -51,6 +51,8 @@ extern "C" {
 #include <cutils/atomic-x86.h>
 #elif defined(__x86_64__)
 #include <cutils/atomic-x86_64.h>
+#elif defined(__mips64)
+#include <cutils/atomic-mips64.h>
 #elif defined(__mips__)
 #include <cutils/atomic-mips.h>
 #else
