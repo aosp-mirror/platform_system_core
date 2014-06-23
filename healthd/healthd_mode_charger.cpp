@@ -409,24 +409,33 @@ static void update_screen_state(struct charger *charger, int64_t now)
     /* schedule next screen transition */
     charger->next_screen_transition = now + disp_time;
 
-    /* advance frame cntr to the next valid frame
+    /* advance frame cntr to the next valid frame only if we are charging
      * if necessary, advance cycle cntr, and reset frame cntr
      */
-    batt_anim->cur_frame++;
-
-    /* if the frame is used for level-only, that is only show it when it's
-     * the current level, skip it during the animation.
-     */
-    while (batt_anim->cur_frame < batt_anim->num_frames &&
-           batt_anim->frames[batt_anim->cur_frame].level_only)
+    if (charger->charger_connected) {
         batt_anim->cur_frame++;
-    if (batt_anim->cur_frame >= batt_anim->num_frames) {
-        batt_anim->cur_cycle++;
-        batt_anim->cur_frame = 0;
 
-        /* don't reset the cycle counter, since we use that as a signal
-         * in a test above to check if animation is over
+        /* if the frame is used for level-only, that is only show it when it's
+         * the current level, skip it during the animation.
          */
+        while (batt_anim->cur_frame < batt_anim->num_frames &&
+               batt_anim->frames[batt_anim->cur_frame].level_only)
+            batt_anim->cur_frame++;
+        if (batt_anim->cur_frame >= batt_anim->num_frames) {
+            batt_anim->cur_cycle++;
+            batt_anim->cur_frame = 0;
+
+            /* don't reset the cycle counter, since we use that as a signal
+             * in a test above to check if animation is over
+             */
+        }
+    } else {
+        /* Stop animating if we're not charging.
+         * If we stop it immediately instead of going through this loop, then
+         * the animation would stop somewhere in the middle.
+         */
+        batt_anim->cur_frame = 0;
+        batt_anim->cur_cycle++;
     }
 }
 
