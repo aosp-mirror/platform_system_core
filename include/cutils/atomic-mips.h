@@ -117,23 +117,6 @@ android_atomic_release_cas(int32_t old_value,
 
 
 extern ANDROID_ATOMIC_INLINE int32_t
-android_atomic_swap(int32_t new_value, volatile int32_t *ptr)
-{
-    int32_t prev, status;
-    do {
-    __asm__ __volatile__ (
-        "    move %[status], %[new_value]\n"
-        "    ll %[prev], (%[ptr])\n"
-        "    sc %[status], (%[ptr])\n"
-        : [prev] "=&r" (prev), [status] "=&r" (status)
-        : [ptr] "r" (ptr), [new_value] "r" (new_value)
-        );
-    } while (__builtin_expect(status == 0, 0));
-    android_memory_barrier();
-    return prev;
-}
-
-extern ANDROID_ATOMIC_INLINE int32_t
 android_atomic_add(int32_t increment, volatile int32_t *ptr)
 {
     int32_t prev, status;
