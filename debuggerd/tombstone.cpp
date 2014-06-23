@@ -235,7 +235,7 @@ static void dump_thread_info(log_t* log, pid_t pid, pid_t tid) {
     fclose(fp);
   }
 
-  _LOG(log, logtype::THREAD, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", pid, tid,
+  _LOG(log, logtype::HEADER, "pid: %d, tid: %d, name: %s  >>> %s <<<\n", pid, tid,
        threadname ? threadname : "UNKNOWN", procname ? procname : "UNKNOWN");
 }
 
@@ -429,10 +429,9 @@ static bool dump_sibling_thread_report(
       continue;
     }
 
+    log->current_tid = new_tid;
     _LOG(log, logtype::THREAD, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
     dump_thread_info(log, pid, new_tid);
-
-    log->current_tid = new_tid;
 
     UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, new_tid, map));
     if (backtrace->Unwind(0)) {
