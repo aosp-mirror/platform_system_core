@@ -51,8 +51,10 @@ android_memset16:
 
 android_memset32:
         .fnstart
-        .save       {lr}
+        .cfi_startproc
         str         lr, [sp, #-4]!
+        .cfi_def_cfa_offset 4
+        .cfi_rel_offset lr, 0
 
         /* align the destination to a cache-line */
         mov         r12, r1
@@ -89,5 +91,8 @@ android_memset32:
         strmih      lr, [r0], #2
 
         ldr         lr, [sp], #4
+        .cfi_def_cfa_offset 0
+        .cfi_restore lr
         bx          lr
+        .cfi_endproc
         .fnend
