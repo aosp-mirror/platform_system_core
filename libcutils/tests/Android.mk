@@ -13,20 +13,36 @@
 # limitations under the License.
 
 LOCAL_PATH := $(call my-dir)
-include $(CLEAR_VARS)
 
 test_src_files := \
+    MemsetTest.cpp \
     PropertiesTest.cpp \
 
-shared_libraries := \
-    libutils \
-    liblog
-
-static_libraries := \
-    libcutils
-
-LOCAL_SHARED_LIBRARIES := $(shared_libraries)
-LOCAL_STATIC_LIBRARIES := $(static_libraries)
-LOCAL_SRC_FILES := $(test_src_files)
+include $(CLEAR_VARS)
 LOCAL_MODULE := libcutils_test
+LOCAL_SRC_FILES := $(test_src_files)
+LOCAL_SHARED_LIBRARIES := \
+    libcutils \
+    liblog \
+    libutils \
+
+LOCAL_MULTILIB := both
+LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
+LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
+include $(BUILD_NATIVE_TEST)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libcutils_test_static
+LOCAL_FORCE_STATIC_EXECUTABLE := true
+LOCAL_SRC_FILES := $(test_src_files)
+LOCAL_STATIC_LIBRARIES := \
+    libc \
+    libcutils \
+    liblog \
+    libstlport_static \
+    libutils \
+
+LOCAL_MULTILIB := both
+LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
+LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
 include $(BUILD_NATIVE_TEST)
