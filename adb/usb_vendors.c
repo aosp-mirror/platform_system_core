@@ -162,6 +162,8 @@
 #define VENDOR_ID_SHARP         0x04dd
 // SK Telesys's USB Vendor ID
 #define VENDOR_ID_SK_TELESYS    0x1F53
+// Smartisan's USB Vendor ID
+#define VENDOR_ID_SMARTISAN     0x29a9
 // Sony's USB Vendor ID
 #define VENDOR_ID_SONY          0x054C
 // Sony Ericsson's USB Vendor ID
@@ -258,6 +260,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_SAMSUNG,
     VENDOR_ID_SHARP,
     VENDOR_ID_SK_TELESYS,
+    VENDOR_ID_SMARTISAN,
     VENDOR_ID_SONY,
     VENDOR_ID_SONY_ERICSSON,
     VENDOR_ID_T_AND_A,
