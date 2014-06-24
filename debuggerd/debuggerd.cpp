@@ -67,16 +67,6 @@ static void wait_for_user_action(pid_t pid) {
     exe[count] = '\0';
   }
 
-  // Turn "/system/bin/app_process" into "app_process".
-  // gdbserver doesn't cope with full paths (though we should fix that
-  // and remove this).
-  char* name = strrchr(exe, '/');
-  if (name == NULL) {
-    name = exe; // No '/' found.
-  } else {
-    ++name; // Skip the '/'.
-  }
-
   // Explain how to attach the debugger.
   ALOGI("********************************************************\n"
         "* Process %d has been suspended while crashing.\n"
@@ -88,7 +78,7 @@ static void wait_for_user_action(pid_t pid) {
         "* Wait for gdb to start, then press the VOLUME DOWN key\n"
         "* to let the process continue crashing.\n"
         "********************************************************\n",
-        pid, name, pid);
+        pid, exe, pid);
 
   // Wait for VOLUME DOWN.
   if (init_getevent() == 0) {
