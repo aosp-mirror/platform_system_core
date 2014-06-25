@@ -1219,6 +1219,7 @@ int main(int argc, char **argv)
     }
     if (wants_reboot) {
         fb_queue_reboot();
+        fb_queue_wait_for_disconnect();
     } else if (wants_reboot_bootloader) {
         fb_queue_command("reboot-bootloader", "rebooting into bootloader");
         fb_queue_wait_for_disconnect();
