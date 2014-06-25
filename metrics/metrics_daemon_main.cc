@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-
+#include <base/at_exit.h>
 #include <base/command_line.h>
 #include <base/logging.h>
 #include <base/strings/string_util.h>
@@ -17,7 +17,18 @@ const char kScalingMaxFreqPath[] =
 const char kCpuinfoMaxFreqPath[] =
     "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq";
 
+// TODO(bsimonnet): Change this to use base::CommandLine (crbug.com/375017)
 DEFINE_bool(daemon, true, "run as daemon (use -nodaemon for debugging)");
+
+// The uploader is disabled by default on ChromeOS as Chrome is responsible for
+// sending the metrics.
+DEFINE_bool(uploader, false, "activate the uploader");
+
+// Upload the metrics once and exit. (used for testing)
+DEFINE_bool(
+    uploader_test,
+    false,
+    "run the uploader once and exit");
 
 // Returns the path to the disk stats in the sysfs.  Returns the null string if
 // it cannot find the disk stats file.
@@ -51,11 +62,23 @@ int main(int argc, char** argv) {
   // Also log to stderr when not running as daemon.
   chromeos::InitLog(chromeos::kLogToSyslog | chromeos::kLogHeader |
                     (FLAGS_daemon ? 0 : chromeos::kLogToStderr));
-
   MetricsLibrary metrics_lib;
   metrics_lib.Init();
   MetricsDaemon daemon;
-  daemon.Init(false, &metrics_lib, MetricsMainDiskStatsPath(),
-      "/proc/vmstat", kScalingMaxFreqPath, kCpuinfoMaxFreqPath);
+  daemon.Init(false,
+              FLAGS_uploader | FLAGS_uploader_test,
+              &metrics_lib,
+              MetricsMainDiskStatsPath(),
+              "/proc/vmstat",
+              kScalingMaxFreqPath,
+              kCpuinfoMaxFreqPath);
+
+
+  base::AtExitManager at_exit_manager;
+  if (FLAGS_uploader_test) {
+    daemon.RunUploaderTest();
+    return 0;
+  }
+
   daemon.Run(FLAGS_daemon);
 }

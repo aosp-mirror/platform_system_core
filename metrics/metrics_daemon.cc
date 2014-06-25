@@ -14,7 +14,6 @@
 #include <string.h>
 #include <time.h>
 
-#include <base/at_exit.h>
 #include <base/file_util.h>
 #include <base/files/file_path.h>
 #include <base/hash.h>
@@ -26,6 +25,7 @@
 #include <base/sys_info.h>
 #include <chromeos/dbus/service_constants.h>
 #include <dbus/dbus-glib-lowlevel.h>
+#include "uploader/upload_service.h"
 
 using base::FilePath;
 using base::StringPrintf;
@@ -163,8 +163,6 @@ double MetricsDaemon::GetActiveTime() {
 }
 
 void MetricsDaemon::Run(bool run_as_daemon) {
-  base::AtExitManager at_exit_manager;
-
   if (run_as_daemon && daemon(0, 0) != 0)
     return;
 
@@ -188,6 +186,10 @@ void MetricsDaemon::Run(bool run_as_daemon) {
   Loop();
 }
 
+void MetricsDaemon::RunUploaderTest() {
+  upload_service_->UploadEvent();
+}
+
 uint32 MetricsDaemon::GetOsVersionHash() {
   static uint32 cached_version_hash = 0;
   static bool version_hash_is_cached = false;
@@ -205,7 +207,9 @@ uint32 MetricsDaemon::GetOsVersionHash() {
   return cached_version_hash;
 }
 
-void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
+void MetricsDaemon::Init(bool testing,
+                         bool uploader_active,
+                         MetricsLibraryInterface* metrics_lib,
                          const string& diskstats_path,
                          const string& vmstats_path,
                          const string& scaling_max_freq_path,
@@ -305,6 +309,11 @@ void MetricsDaemon::Init(bool testing, MetricsLibraryInterface* metrics_lib,
 
   update_stats_timeout_id_ =
       g_timeout_add(kUpdateStatsIntervalMs, &HandleUpdateStatsTimeout, this);
+
+  if (uploader_active) {
+    upload_service_.reset(new UploadService());
+    upload_service_->Init();
+  }
 }
 
 void MetricsDaemon::Loop() {

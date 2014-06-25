@@ -58,8 +58,13 @@ class MetricsDaemonTest : public testing::Test {
     CreateUint64ValueFile(base::FilePath(kFakeScalingMaxFreqPath), 10000000);
 
     chromeos_metrics::PersistentInteger::SetTestingMode(true);
-    daemon_.Init(true, &metrics_lib_, kFakeDiskStatsName, kFakeVmStatsName,
-        kFakeScalingMaxFreqPath, kFakeCpuinfoMaxFreqPath);
+    daemon_.Init(true,
+                 false,
+                 &metrics_lib_,
+                 kFakeDiskStatsName,
+                 kFakeVmStatsName,
+                 kFakeScalingMaxFreqPath,
+                 kFakeCpuinfoMaxFreqPath);
 
     // Replace original persistent values with mock ones.
     daily_active_use_mock_ =

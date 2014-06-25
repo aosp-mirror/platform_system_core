@@ -18,6 +18,7 @@
 
 #include "metrics/metrics_library.h"
 #include "metrics/persistent_integer.h"
+#include "uploader/upload_service.h"
 
 using chromeos_metrics::PersistentInteger;
 
@@ -27,7 +28,9 @@ class MetricsDaemon {
   ~MetricsDaemon();
 
   // Initializes.
-  void Init(bool testing, MetricsLibraryInterface* metrics_lib,
+  void Init(bool testing,
+            bool uploader_active,
+            MetricsLibraryInterface* metrics_lib,
             const std::string& diskstats_path,
             const std::string& vmstats_path,
             const std::string& cpuinfo_max_freq_path,
@@ -36,6 +39,9 @@ class MetricsDaemon {
   // Does all the work. If |run_as_daemon| is true, daemonizes by
   // forking.
   void Run(bool run_as_daemon);
+
+  // Triggers an upload event and exit. (Used to test UploadService)
+  void RunUploaderTest();
 
  protected:
   // Used also by the unit tests.
@@ -363,6 +369,8 @@ class MetricsDaemon {
   std::string vmstats_path_;
   std::string scaling_max_freq_path_;
   std::string cpuinfo_max_freq_path_;
+
+  scoped_ptr<UploadService> upload_service_;
 };
 
 #endif  // METRICS_METRICS_DAEMON_H_
