@@ -58,21 +58,6 @@
 // Must match the path defined in NativeCrashListener.java
 #define NCRASH_SOCKET_PATH "/data/system/ndebugsocket"
 
-// Figure out the abi based on defined macros.
-#if defined(__arm__)
-#define ABI_STRING "arm"
-#elif defined(__aarch64__)
-#define ABI_STRING "arm64"
-#elif defined(__mips__)
-#define ABI_STRING "mips"
-#elif defined(__i386__)
-#define ABI_STRING "x86"
-#elif defined(__x86_64__)
-#define ABI_STRING "x86_64"
-#else
-#error "Unsupported ABI"
-#endif
-
 static bool signal_has_si_addr(int sig) {
   switch (sig) {
     case SIGBUS:
