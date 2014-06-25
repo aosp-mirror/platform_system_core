@@ -938,7 +938,7 @@ static int audit_callback(void *data, security_class_t cls __attribute__((unused
     return 0;
 }
 
-static int log_callback(int type, const char *fmt, ...)
+int log_callback(int type, const char *fmt, ...)
 {
     int level;
     va_list ap;
