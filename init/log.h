@@ -23,4 +23,6 @@
 #define NOTICE(x...)  KLOG_NOTICE("init", x)
 #define INFO(x...)    KLOG_INFO("init", x)
 
+extern int log_callback(int type, const char *fmt, ...);
+
 #endif
