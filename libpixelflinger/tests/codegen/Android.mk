@@ -15,4 +15,4 @@ LOCAL_MODULE:= test-opengl-codegen
 
 LOCAL_MODULE_TAGS := tests
 
-include $(BUILD_EXECUTABLE)
+include $(BUILD_NATIVE_TEST)

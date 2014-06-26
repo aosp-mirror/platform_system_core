@@ -13,4 +13,6 @@ LOCAL_MODULE:= test-pixelflinger-arm64-col32cb16blend
 
 LOCAL_MODULE_TAGS := tests
 
-include $(BUILD_EXECUTABLE)
+LOCAL_MULTILIB := 64
+
+include $(BUILD_NATIVE_TEST)
