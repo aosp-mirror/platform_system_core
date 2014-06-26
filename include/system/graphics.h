@@ -198,6 +198,51 @@ enum {
     HAL_PIXEL_FORMAT_RAW_SENSOR = 0x20, // TODO(rubenbrunk): Remove RAW_SENSOR.
 
     /*
+     * Android RAW10 format:
+     *
+     * This format is exposed outside of the camera HAL to applications.
+     *
+     * RAW10 is a single-channel, 10-bit per pixel, densely packed, unprocessed
+     * format, representing raw Bayer-pattern images coming from an image sensor.
+     *
+     * In an image buffer with this format, starting from the first pixel, each 4
+     * consecutive pixels are packed into 5 bytes (40 bits). Each one of the first
+     * 4 bytes contains the top 8 bits of each pixel, The fifth byte contains the
+     * 2 least significant bits of the 4 pixels, the exact layout data for each 4
+     * consecutive pixels is illustrated below (Pi[j] stands for the jth bit of
+     * the ith pixel):
+     *
+     *          bit 7                                     bit 0
+     *          =====|=====|=====|=====|=====|=====|=====|=====|
+     * Byte 0: |P0[9]|P0[8]|P0[7]|P0[6]|P0[5]|P0[4]|P0[3]|P0[2]|
+     *         |-----|-----|-----|-----|-----|-----|-----|-----|
+     * Byte 1: |P1[9]|P1[8]|P1[7]|P1[6]|P1[5]|P1[4]|P1[3]|P1[2]|
+     *         |-----|-----|-----|-----|-----|-----|-----|-----|
+     * Byte 2: |P2[9]|P2[8]|P2[7]|P2[6]|P2[5]|P2[4]|P2[3]|P2[2]|
+     *         |-----|-----|-----|-----|-----|-----|-----|-----|
+     * Byte 3: |P3[9]|P3[8]|P3[7]|P3[6]|P3[5]|P3[4]|P3[3]|P3[2]|
+     *         |-----|-----|-----|-----|-----|-----|-----|-----|
+     * Byte 4: |P3[1]|P3[0]|P2[1]|P2[0]|P1[1]|P1[0]|P0[1]|P0[0]|
+     *          ===============================================
+     *
+     * This format assumes
+     * - a width multiple of 4 pixels
+     * - an even height
+     * - a horizontal stride equal to the width
+     * - a vertical stride equal to the height
+     * - strides are specified in pixels, not in bytes
+     *
+     *   size = stride * height * 10 / 8
+     *
+     * This format must be accepted by the gralloc module when used with the
+     * following usage flags:
+     *    - GRALLOC_USAGE_HW_CAMERA_*
+     *    - GRALLOC_USAGE_SW_*
+     *    - GRALLOC_USAGE_RENDERSCRIPT
+     */
+    HAL_PIXEL_FORMAT_RAW10 = 0x25,
+
+    /*
      * Android opaque RAW format:
      *
      * This format is exposed outside of the camera HAL to applications.
