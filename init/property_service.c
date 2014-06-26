@@ -56,67 +56,6 @@ static int property_area_inited = 0;
 
 static int property_set_fd = -1;
 
-/* White list of permissions for setting property services. */
-struct {
-    const char *prefix;
-    unsigned int uid;
-    unsigned int gid;
-} property_perms[] = {
-    { "net.rmnet0.",      AID_RADIO,    0 },
-    { "net.gprs.",        AID_RADIO,    0 },
-    { "net.ppp",          AID_RADIO,    0 },
-    { "net.qmi",          AID_RADIO,    0 },
-    { "net.lte",          AID_RADIO,    0 },
-    { "net.cdma",         AID_RADIO,    0 },
-    { "ril.",             AID_RADIO,    0 },
-    { "gsm.",             AID_RADIO,    0 },
-    { "persist.radio",    AID_RADIO,    0 },
-    { "net.dns",          AID_RADIO,    0 },
-    { "sys.usb.config",   AID_RADIO,    0 },
-    { "net.",             AID_SYSTEM,   0 },
-    { "dev.",             AID_SYSTEM,   0 },
-    { "runtime.",         AID_SYSTEM,   0 },
-    { "hw.",              AID_SYSTEM,   0 },
-    { "sys.",             AID_SYSTEM,   0 },
-    { "sys.powerctl",     AID_SHELL,    0 },
-    { "service.",         AID_SYSTEM,   0 },
-    { "wlan.",            AID_SYSTEM,   0 },
-    { "gps.",             AID_GPS,      0 },
-    { "bluetooth.",       AID_BLUETOOTH,   0 },
-    { "dhcp.",            AID_SYSTEM,   0 },
-    { "dhcp.",            AID_DHCP,     0 },
-    { "debug.",           AID_SYSTEM,   0 },
-    { "debug.",           AID_SHELL,    0 },
-    { "log.",             AID_SHELL,    0 },
-    { "service.adb.root", AID_SHELL,    0 },
-    { "service.adb.tcp.port", AID_SHELL,    0 },
-    { "persist.logd.size",AID_SYSTEM,   0 },
-    { "persist.sys.",     AID_SYSTEM,   0 },
-    { "persist.service.", AID_SYSTEM,   0 },
-    { "persist.security.", AID_SYSTEM,   0 },
-    { "persist.gps.",      AID_GPS,      0 },
-    { "persist.service.bdroid.", AID_BLUETOOTH,   0 },
-    { "selinux."         , AID_SYSTEM,   0 },
-    { "build.fingerprint", AID_SYSTEM,   0 },
-    { "partition."        , AID_SYSTEM,   0},
-    { NULL, 0, 0 }
-};
-
-/*
- * White list of UID that are allowed to start/stop services.
- * Currently there are no user apps that require.
- */
-struct {
-    const char *service;
-    unsigned int uid;
-    unsigned int gid;
-} control_perms[] = {
-    { "dumpstate",AID_SHELL, AID_LOG },
-    { "ril-daemon",AID_RADIO, AID_RADIO },
-    { "pre-recovery", AID_SYSTEM, AID_SYSTEM },
-     {NULL, 0, 0 }
-};
-
 typedef struct {
     size_t size;
     int fd;
@@ -198,34 +137,10 @@ static int check_control_mac_perms(const char *name, char *sctx)
 }
 
 /*
- * Checks permissions for starting/stoping system services.
- * AID_SYSTEM and AID_ROOT are always allowed.
- *
- * Returns 1 if uid allowed, 0 otherwise.
- */
-static int check_control_perms(const char *name, unsigned int uid, unsigned int gid, char *sctx) {
-
-    int i;
-    if (uid == AID_SYSTEM || uid == AID_ROOT)
-      return check_control_mac_perms(name, sctx);
-
-    /* Search the ACL */
-    for (i = 0; control_perms[i].service; i++) {
-        if (strcmp(control_perms[i].service, name) == 0) {
-            if ((uid && control_perms[i].uid == uid) ||
-                (gid && control_perms[i].gid == gid)) {
-                return check_control_mac_perms(name, sctx);
-            }
-        }
-    }
-    return 0;
-}
-
-/*
  * Checks permissions for setting system properties.
  * Returns 1 if uid allowed, 0 otherwise.
  */
-static int check_perms(const char *name, unsigned int uid, unsigned int gid, char *sctx)
+static int check_perms(const char *name, char *sctx)
 {
     int i;
     unsigned int app_id;
@@ -233,26 +148,7 @@ static int check_perms(const char *name, unsigned int uid, unsigned int gid, cha
     if(!strncmp(name, "ro.", 3))
         name +=3;
 
-    if (uid == 0)
-        return check_mac_perms(name, sctx);
-
-    app_id = multiuser_get_app_id(uid);
-    if (app_id == AID_BLUETOOTH) {
-        uid = app_id;
-    }
-
-    for (i = 0; property_perms[i].prefix; i++) {
-        if (strncmp(property_perms[i].prefix, name,
-                    strlen(property_perms[i].prefix)) == 0) {
-            if ((uid && property_perms[i].uid == uid) ||
-                (gid && property_perms[i].gid == gid)) {
-
-                return check_mac_perms(name, sctx);
-            }
-        }
-    }
-
-    return 0;
+    return check_mac_perms(name, sctx);
 }
 
 int __property_get(const char *name, char *value)
@@ -425,14 +321,14 @@ void handle_property_set_fd()
             // Keep the old close-socket-early behavior when handling
             // ctl.* properties.
             close(s);
-            if (check_control_perms(msg.value, cr.uid, cr.gid, source_ctx)) {
+            if (check_control_mac_perms(msg.value, source_ctx)) {
                 handle_control_message((char*) msg.name + 4, (char*) msg.value);
             } else {
                 ERROR("sys_prop: Unable to %s service ctl [%s] uid:%d gid:%d pid:%d\n",
                         msg.name + 4, msg.value, cr.uid, cr.gid, cr.pid);
             }
         } else {
-            if (check_perms(msg.name, cr.uid, cr.gid, source_ctx)) {
+            if (check_perms(msg.name, source_ctx)) {
                 property_set((char*) msg.name, (char*) msg.value);
             } else {
                 ERROR("sys_prop: permission denied uid:%d  name:%s\n",
