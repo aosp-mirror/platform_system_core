@@ -201,9 +201,9 @@ int CodeCache::cache(  const AssemblyKeyBase& keyBase,
         mCacheInUse += assemblySize;
         mWhen++;
         // synchronize caches...
-        const long base = long(assembly->base());
-        const long curr = base + long(assembly->size());
-        __builtin___clear_cache((void*)base, (void*)curr);
+        void* base = assembly->base();
+        void* curr = (uint8_t*)base + assembly->size();
+        __builtin___clear_cache(base, curr);
     }
 
     pthread_mutex_unlock(&mLock);
