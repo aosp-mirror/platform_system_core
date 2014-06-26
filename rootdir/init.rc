@@ -38,6 +38,10 @@ on init
     symlink /system/etc /etc
     symlink /sys/kernel/debug /d
 
+    # Right now vendor lives on the same filesystem as system,
+    # but someday that may change.
+    symlink /system/vendor /vendor
+
     # Create cgroup mount point for cpu accounting
     mkdir /acct
     mount cgroup none /acct cpuacct
@@ -180,10 +184,6 @@ on late-init
     trigger boot
 
 on post-fs
-    # Right now vendor lives on the same filesystem as system,
-    # but someday that may change. If it has, this symlink will fail.
-    symlink /system/vendor /vendor
-
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
     # mount shared so changes propagate into child namespaces

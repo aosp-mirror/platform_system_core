@@ -197,7 +197,14 @@ static int __mount(const char *source, const char *target, const struct fstab_re
     unsigned long mountflags = rec->flags;
     int ret;
     int save_errno;
-    
+
+    /* We need this because sometimes we have legacy symlinks
+     * that are lingering around and need cleaning up.
+     */
+    struct stat info;
+    if (!lstat(target, &info))
+        if ((info.st_mode & S_IFMT) == S_IFLNK)
+            unlink(target);
     mkdir(target, 0755);
     ret = mount(source, target, rec->fs_type, mountflags, rec->fs_options);
     save_errno = errno;
