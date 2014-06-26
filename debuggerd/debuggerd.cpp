@@ -53,10 +53,10 @@ struct debugger_request_t {
   int32_t original_si_code;
 };
 
-static void wait_for_user_action(pid_t pid) {
+static void wait_for_user_action(const debugger_request_t &request) {
   // Find out the name of the process that crashed.
   char path[64];
-  snprintf(path, sizeof(path), "/proc/%d/exe", pid);
+  snprintf(path, sizeof(path), "/proc/%d/exe", request.pid);
 
   char exe[PATH_MAX];
   int count;
@@ -78,7 +78,7 @@ static void wait_for_user_action(pid_t pid) {
         "* Wait for gdb to start, then press the VOLUME DOWN key\n"
         "* to let the process continue crashing.\n"
         "********************************************************\n",
-        pid, exe, pid);
+        request.pid, exe, request.tid);
 
   // Wait for VOLUME DOWN.
   if (init_getevent() == 0) {
@@ -93,7 +93,7 @@ static void wait_for_user_action(pid_t pid) {
     uninit_getevent();
   }
 
-  ALOGI("debuggerd resuming process %d", pid);
+  ALOGI("debuggerd resuming process %d", request.pid);
 }
 
 static int get_process_info(pid_t tid, pid_t* out_pid, uid_t* out_uid, uid_t* out_gid) {
@@ -323,7 +323,7 @@ static void handle_request(int fd) {
         // for user action for the crashing process.
         // in this case, we log a message and turn the debug LED on
         // waiting for a gdb connection (for instance)
-        wait_for_user_action(request.pid);
+        wait_for_user_action(request);
       } else {
         // just detach
         if (ptrace(PTRACE_DETACH, request.tid, 0, 0)) {
