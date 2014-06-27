@@ -862,11 +862,24 @@ int do_setsebool(int nargs, char **args) {
 }
 
 int do_loglevel(int nargs, char **args) {
-    if (nargs == 2) {
-        klog_set_level(atoi(args[1]));
-        return 0;
+    int log_level;
+    char log_level_str[PROP_VALUE_MAX] = "";
+    if (nargs != 2) {
+        ERROR("loglevel: missing argument\n");
+        return -EINVAL;
     }
-    return -1;
+
+    if (expand_props(log_level_str, args[1], sizeof(log_level_str))) {
+        ERROR("loglevel: cannot expand '%s'\n", args[1]);
+        return -EINVAL;
+    }
+    log_level = atoi(log_level_str);
+    if (log_level < KLOG_ERROR_LEVEL || log_level > KLOG_DEBUG_LEVEL) {
+        ERROR("loglevel: invalid log level'%d'\n", log_level);
+        return -EINVAL;
+    }
+    klog_set_level(log_level);
+    return 0;
 }
 
 int do_load_persist_props(int nargs, char **args) {
