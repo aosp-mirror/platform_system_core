@@ -584,6 +584,7 @@ void queue_builtin_action(int (*func)(int nargs, char **args), char *name)
     cmd = calloc(1, sizeof(*cmd));
     cmd->func = func;
     cmd->args[0] = name;
+    cmd->nargs = 1;
     list_add_tail(&act->commands, &cmd->clist);
 
     list_add_tail(&action_list, &act->alist);
@@ -870,6 +871,8 @@ static void parse_line_action(struct parse_state* state, int nargs, char **args)
     }
     cmd = malloc(sizeof(*cmd) + sizeof(char*) * nargs);
     cmd->func = kw_func(kw);
+    cmd->line = state->line;
+    cmd->filename = state->filename;
     cmd->nargs = nargs;
     memcpy(cmd->args, args, sizeof(char*) * nargs);
     list_add_tail(&act->commands, &cmd->clist);
