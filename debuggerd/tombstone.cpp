@@ -489,7 +489,7 @@ static void dump_log_file(log_t* log, pid_t pid, const char* filename,
     }
 
     if (first) {
-      _LOG(log, logtype::HEADER, "--------- %slog %s\n",
+      _LOG(log, logtype::LOGS, "--------- %slog %s\n",
         tail ? "tail end of " : "", filename);
       first = false;
     }
