@@ -23,7 +23,7 @@
 #define INFO(x...)    KLOG_INFO("fs_mgr", x)
 #define ERROR(x...)   KLOG_ERROR("fs_mgr", x)
 
-#define CRYPTO_TMPFS_OPTIONS "size=128m,mode=0771,uid=1000,gid=1000"
+#define CRYPTO_TMPFS_OPTIONS "size=256m,mode=0771,uid=1000,gid=1000"
 
 #define WAIT_TIMEOUT 20
 
