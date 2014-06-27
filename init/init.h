@@ -29,10 +29,14 @@ struct command
     struct listnode clist;
 
     int (*func)(int nargs, char **args);
+
+    int line;
+    const char *filename;
+
     int nargs;
     char *args[1];
 };
-    
+
 struct action {
         /* node in list of all actions */
     struct listnode alist;
@@ -43,7 +47,7 @@ struct action {
 
     unsigned hash;
     const char *name;
-    
+
     struct listnode commands;
     struct command *current;
 };
