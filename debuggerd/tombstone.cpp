@@ -486,7 +486,8 @@ static void dump_log_file(
     entry = &log_entry.entry_v1;
 
     if (first) {
-      _LOG(log, logtype::HEADER, "--------- %slog %s\n", tail ? "tail end of " : "", filename);
+      _LOG(log, logtype::LOGS, "--------- %slog %s\n",
+        tail ? "tail end of " : "", filename);
       first = false;
     }
 
