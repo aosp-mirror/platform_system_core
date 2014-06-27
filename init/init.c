@@ -528,7 +528,8 @@ static int is_last_command(struct action *act, struct command *cmd)
 
 void execute_one_command(void)
 {
-    int ret;
+    int ret, i;
+    char cmd_str[256] = "";
 
     if (!cur_action || !cur_command || is_last_command(cur_action, cur_command)) {
         cur_action = action_remove_queue_head();
@@ -545,7 +546,17 @@ void execute_one_command(void)
         return;
 
     ret = cur_command->func(cur_command->nargs, cur_command->args);
-    INFO("command '%s' r=%d\n", cur_command->args[0], ret);
+    if (klog_get_level() >= KLOG_INFO_LEVEL) {
+        for (i = 0; i < cur_command->nargs; i++) {
+            strlcat(cmd_str, cur_command->args[i], sizeof(cmd_str));
+            if (i < cur_command->nargs - 1) {
+                strlcat(cmd_str, " ", sizeof(cmd_str));
+            }
+        }
+        INFO("command '%s' action=%s status=%d (%s:%d)\n",
+             cmd_str, cur_action ? cur_action->name : "", ret, cur_command->filename,
+             cur_command->line);
+    }
 }
 
 static int wait_for_coldboot_done_action(int nargs, char **args)

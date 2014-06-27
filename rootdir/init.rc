@@ -441,6 +441,9 @@ on property:vold.decrypt=trigger_encryption
     start encrypt
     class_start main
 
+on property:sys.init_log_level=*
+    loglevel ${sys.init_log_level}
+
 on charger
     class_start charger
 
