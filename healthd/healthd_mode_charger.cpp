@@ -68,6 +68,7 @@ char *locale;
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
 #define BATTERY_FULL_THRESH     95
+#define SCREEN_ON_BATTERY_THRESH 1
 
 #define LAST_KMSG_PATH          "/proc/last_kmsg"
 #define LAST_KMSG_PSTORE_PATH   "/sys/fs/pstore/console-ramoops"
@@ -172,6 +173,7 @@ static struct charger charger_state;
 
 static int char_width;
 static int char_height;
+static bool minui_inited;
 
 /* current time in milliseconds */
 static int64_t curr_time_ms(void)
@@ -353,6 +355,27 @@ static void update_screen_state(struct charger *charger, int64_t now)
 
     if (!batt_anim->run || now < charger->next_screen_transition)
         return;
+
+    if (!minui_inited) {
+        int batt_cap = get_battery_capacity();
+
+        if (batt_cap < SCREEN_ON_BATTERY_THRESH) {
+            LOGV("[%lld] level %d, leave screen off\n", now, batt_cap);
+            batt_anim->run = false;
+            charger->next_screen_transition = -1;
+            if (charger->charger_connected)
+                request_suspend(true);
+            return;
+        }
+
+        gr_init();
+        gr_font_size(&char_width, &char_height);
+
+#ifndef CHARGER_DISABLE_INIT_BLANK
+        gr_fb_blank(true);
+#endif
+        minui_inited = true;
+    }
 
     /* animation is over, blank screen and leave */
     if (batt_anim->cur_cycle == batt_anim->num_cycles) {
@@ -657,9 +680,6 @@ void healthd_mode_charger_init(struct healthd_config* /*config*/)
 
     LOGI("--------------- STARTING CHARGER MODE ---------------\n");
 
-    gr_init();
-    gr_font_size(&char_width, &char_height);
-
     ret = ev_init(input_callback, charger);
     if (!ret) {
         epollfd = ev_get_epollfd();
@@ -693,10 +713,6 @@ void healthd_mode_charger_init(struct healthd_config* /*config*/)
     }
 
     ev_sync_key_state(set_key_callback, charger);
-
-#ifndef CHARGER_DISABLE_INIT_BLANK
-    gr_fb_blank(true);
-#endif
 
     charger->next_screen_transition = -1;
     charger->next_key_check = -1;
