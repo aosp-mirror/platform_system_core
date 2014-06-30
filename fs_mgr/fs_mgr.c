@@ -371,7 +371,7 @@ int fs_mgr_mount_all(struct fstab *fstab)
                     ++error_count;
                     continue;
                 }
-                last_ok_mount_point = fstab->recs[j].mount_point;
+                last_ok_mount_point = fstab->recs[i].mount_point;
             }
             encryptable = 1;
         } else {
