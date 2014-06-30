@@ -13,4 +13,4 @@ LOCAL_MODULE:= test-pixelflinger-gglmul
 
 LOCAL_MODULE_TAGS := tests
 
-include $(BUILD_EXECUTABLE)
+include $(BUILD_NATIVE_TEST)
