@@ -41,7 +41,7 @@ static int do_cmd(transport_type ttype, char* serial, char *cmd, ...);
 
 void get_my_path(char *s, size_t maxLen);
 int find_sync_dirs(const char *srcarg,
-        char **android_srcdir_out, char **data_srcdir_out);
+        char **android_srcdir_out, char **data_srcdir_out, char **vendor_srcdir_out);
 int install_app(transport_type transport, char* serial, int argc, char** argv);
 int uninstall_app(transport_type transport, char* serial, int argc, char** argv);
 
@@ -196,7 +196,7 @@ void help()
         "  adb get-serialno             - prints: <serial-number>\n"
         "  adb get-devpath              - prints: <device-path>\n"
         "  adb status-window            - continuously print device status for a specified device\n"
-        "  adb remount                  - remounts the /system partition on the device read-write\n"
+        "  adb remount                  - remounts the /system and /vendor (if present) partitions on the device read-write\n"
         "  adb reboot [bootloader|recovery] - reboots the device, optionally into the bootloader or recovery program\n"
         "  adb reboot-bootloader        - reboots the device into the bootloader\n"
         "  adb root                     - restarts the adbd daemon with root permissions\n"
@@ -212,9 +212,9 @@ void help()
         "adb sync notes: adb sync [ <directory> ]\n"
         "  <localdir> can be interpreted in several ways:\n"
         "\n"
-        "  - If <directory> is not specified, both /system and /data partitions will be updated.\n"
+        "  - If <directory> is not specified, /system, /vendor (if present), and /data partitions will be updated.\n"
         "\n"
-        "  - If it is \"system\" or \"data\", only the corresponding partition\n"
+        "  - If it is \"system\", \"vendor\" or \"data\", only the corresponding partition\n"
         "    is updated.\n"
         "\n"
         "environmental variables:\n"
@@ -1498,7 +1498,7 @@ top:
     }
 
     if(!strcmp(argv[0], "sync")) {
-        char *srcarg, *android_srcpath, *data_srcpath;
+        char *srcarg, *android_srcpath, *data_srcpath, *vendor_srcpath;
         int listonly = 0;
 
         int ret;
@@ -1518,15 +1518,18 @@ top:
         } else {
             return usage();
         }
-        ret = find_sync_dirs(srcarg, &android_srcpath, &data_srcpath);
+        ret = find_sync_dirs(srcarg, &android_srcpath, &data_srcpath, &vendor_srcpath);
         if(ret != 0) return usage();
 
         if(android_srcpath != NULL)
             ret = do_sync_sync(android_srcpath, "/system", listonly);
+        if(ret == 0 && vendor_srcpath != NULL)
+            ret = do_sync_sync(vendor_srcpath, "/vendor", listonly);
         if(ret == 0 && data_srcpath != NULL)
             ret = do_sync_sync(data_srcpath, "/data", listonly);
 
         free(android_srcpath);
+        free(vendor_srcpath);
         free(data_srcpath);
         return ret;
     }
@@ -1637,25 +1640,30 @@ static int do_cmd(transport_type ttype, char* serial, char *cmd, ...)
 }
 
 int find_sync_dirs(const char *srcarg,
-        char **android_srcdir_out, char **data_srcdir_out)
+        char **android_srcdir_out, char **data_srcdir_out, char **vendor_srcdir_out)
 {
-    char *android_srcdir, *data_srcdir;
+    char *android_srcdir = NULL, *data_srcdir = NULL, *vendor_srcdir = NULL;
+    struct stat st;
 
     if(srcarg == NULL) {
         android_srcdir = product_file("system");
         data_srcdir = product_file("data");
+        vendor_srcdir = product_file("vendor");
+        /* Check if vendor partition exists */
+        if (lstat(vendor_srcdir, &st) || !S_ISDIR(st.st_mode))
+            vendor_srcdir = NULL;
     } else {
         /* srcarg may be "data", "system" or NULL.
          * if srcarg is NULL, then both data and system are synced
          */
         if(strcmp(srcarg, "system") == 0) {
             android_srcdir = product_file("system");
-            data_srcdir = NULL;
         } else if(strcmp(srcarg, "data") == 0) {
-            android_srcdir = NULL;
             data_srcdir = product_file("data");
+        } else if(strcmp(srcarg, "vendor") == 0) {
+            vendor_srcdir = product_file("vendor");
         } else {
-            /* It's not "system" or "data".
+            /* It's not "system", "vendor", or "data".
              */
             return 1;
         }
@@ -1666,11 +1674,15 @@ int find_sync_dirs(const char *srcarg,
     else
         free(android_srcdir);
 
-    if(data_srcdir_out != NULL)
-        *data_srcdir_out = data_srcdir;
+    if(vendor_srcdir_out != NULL)
+        *vendor_srcdir_out = vendor_srcdir;
     else
-        free(data_srcdir);
+        free(vendor_srcdir);
 
+    if(data_srcdir_out != NULL)
+            *data_srcdir_out = data_srcdir;
+        else
+            free(data_srcdir);
     return 0;
 }
 

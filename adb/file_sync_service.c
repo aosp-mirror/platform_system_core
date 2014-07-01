@@ -39,6 +39,11 @@ static bool is_on_system(const char *name) {
     return (strncmp(SYSTEM, name, strlen(SYSTEM)) == 0);
 }
 
+static bool is_on_vendor(const char *name) {
+    const char *VENDOR = "/vendor/";
+    return (strncmp(VENDOR, name, strlen(VENDOR)) == 0);
+}
+
 static int mkdirs(char *name)
 {
     int ret;
@@ -54,7 +59,7 @@ static int mkdirs(char *name)
         x = adb_dirstart(x);
         if(x == 0) return 0;
         *x = 0;
-        if (is_on_system(name)) {
+        if (is_on_system(name) || is_on_vendor(name)) {
             fs_config(name, 1, &uid, &gid, &mode, &cap);
         }
         ret = adb_mkdir(name, mode);
@@ -369,7 +374,7 @@ static int do_send(int s, char *path, char *buffer)
         if(*tmp == '/') {
             tmp++;
         }
-        if (is_on_system(path)) {
+        if (is_on_system(path) || is_on_vendor(path)) {
             fs_config(tmp, 0, &uid, &gid, &mode, &cap);
         }
         ret = handle_send_file(s, path, uid, gid, mode, buffer, do_unlink);
