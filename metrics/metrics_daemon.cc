@@ -2,9 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics_daemon.h"
+// For PRIu64 in inttypes.h, used by scanf.  TODO(semenzato): replace
+// with libchromeos methods.
+#define __STDC_FORMAT_MACROS
+
+#include "metrics/metrics_daemon.h"
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <math.h>
 #include <string.h>
 #include <time.h>
@@ -153,7 +158,7 @@ double MetricsDaemon::GetActiveTime() {
     PLOG(WARNING) << "clock_gettime(CLOCK_MONOTONIC) failed";
     return 0;
   } else {
-    return ts.tv_sec + ((double) ts.tv_nsec) / (1000 * 1000 * 1000);
+    return ts.tv_sec + static_cast<double>(ts.tv_nsec) / (1000 * 1000 * 1000);
   }
 }
 
@@ -456,8 +461,8 @@ void MetricsDaemon::ScheduleStatsCallback(int wait) {
   g_timeout_add_seconds(wait, StatsCallbackStatic, this);
 }
 
-bool MetricsDaemon::DiskStatsReadStats(long int* read_sectors,
-                                       long int* write_sectors) {
+bool MetricsDaemon::DiskStatsReadStats(uint64* read_sectors,
+                                       uint64* write_sectors) {
   int nchars;
   int nitems;
   bool success = false;
@@ -478,7 +483,7 @@ bool MetricsDaemon::DiskStatsReadStats(long int* read_sectors,
     LOG_IF(WARNING, nchars == sizeof(line))
         << "line too long in " << diskstats_path_;
     line[nchars] = '\0';
-    nitems = sscanf(line, "%*d %*d %ld %*d %*d %*d %ld",
+    nitems = sscanf(line, "%*d %*d %" PRIu64 "d %*d %*d %*d %" PRIu64 "d",
                     read_sectors, write_sectors);
     if (nitems == 2) {
       success = true;
@@ -618,7 +623,7 @@ gboolean MetricsDaemon::StatsCallbackStatic(void* handle) {
 // Collects disk and vm stats alternating over a short and a long interval.
 
 void MetricsDaemon::StatsCallback() {
-  long int read_sectors_now, write_sectors_now;
+  uint64 read_sectors_now, write_sectors_now;
   struct VmstatRecord vmstats_now;
   double time_now = GetActiveTime();
   double delta_time = time_now - stats_initial_time_;
@@ -757,6 +762,8 @@ bool MetricsDaemon::ReadFileToUint64(const base::FilePath& path,
     PLOG(WARNING) << "cannot read " << path.MaybeAsASCII();
     return false;
   }
+  // Remove final newline.
+  base::TrimWhitespaceASCII(content, base::TRIM_TRAILING, &content);
   if (!base::StringToUint64(content, value)) {
     LOG(WARNING) << "invalid integer: " << content;
     return false;

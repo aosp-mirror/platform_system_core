@@ -2,25 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef METRICS_DAEMON_H_
-#define METRICS_DAEMON_H_
+#ifndef METRICS_METRICS_DAEMON_H_
+#define METRICS_METRICS_DAEMON_H_
 
 #include <dbus/dbus.h>
 #include <glib.h>
 #include <map>
+#include <string>
+#include <vector>
 
 #include <base/files/file_path.h>
 #include <base/memory/scoped_ptr.h>
 #include <base/time/time.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
-#include "metrics_library.h"
-#include "persistent_integer.h"
+#include "metrics/metrics_library.h"
+#include "metrics/persistent_integer.h"
 
 using chromeos_metrics::PersistentInteger;
 
 class MetricsDaemon {
-
  public:
   MetricsDaemon();
   ~MetricsDaemon();
@@ -206,7 +207,7 @@ class MetricsDaemon {
   void ScheduleStatsCallback(int wait);
 
   // Reads cumulative disk statistics from sysfs.  Returns true for success.
-  bool DiskStatsReadStats(long int* read_sectors, long int* write_sectors);
+  bool DiskStatsReadStats(uint64* read_sectors, uint64* write_sectors);
 
   // Reads cumulative vm statistics from procfs.  Returns true for success.
   bool VmStatsReadStats(struct VmstatRecord* stats);
@@ -316,8 +317,8 @@ class MetricsDaemon {
   unsigned int memuse_interval_index_;
 
   // Contain the most recent disk and vm cumulative stats.
-  long int read_sectors_;
-  long int write_sectors_;
+  uint64 read_sectors_;
+  uint64 write_sectors_;
   struct VmstatRecord vmstats_;
 
   StatsState stats_state_;
@@ -364,4 +365,4 @@ class MetricsDaemon {
   std::string cpuinfo_max_freq_path_;
 };
 
-#endif  // METRICS_DAEMON_H_
+#endif  // METRICS_METRICS_DAEMON_H_
