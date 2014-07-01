@@ -360,7 +360,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
         int batt_cap = get_battery_capacity();
 
         if (batt_cap < SCREEN_ON_BATTERY_THRESH) {
-            LOGV("[%lld] level %d, leave screen off\n", now, batt_cap);
+            LOGV("[%" PRId64 "] level %d, leave screen off\n", now, batt_cap);
             batt_anim->run = false;
             charger->next_screen_transition = -1;
             if (charger->charger_connected)
