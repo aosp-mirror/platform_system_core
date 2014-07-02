@@ -511,27 +511,26 @@ int do_mount_all(int nargs, char **args)
         if (child_ret == -1) {
             ERROR("fs_mgr_mount_all returned an error\n");
         }
-        exit(child_ret);
+        _exit(child_ret);
     } else {
         /* fork failed, return an error */
         return -1;
     }
 
-    /* ret is 2 if device needs encrypted, 1 if the device appears encrypted,
-     * 0 if not, and -1 on error */
-    if (ret == 2) {
+    if (ret == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
         property_set("ro.crypto.state", "unencrypted");
         property_set("vold.decrypt", "trigger_encryption");
-    } else if (ret == 1) {
+    } else if (ret == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
         property_set("ro.crypto.state", "encrypted");
         property_set("vold.decrypt", "trigger_default_encryption");
-    } else if (ret == 0) {
+    } else if (ret == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
         property_set("ro.crypto.state", "unencrypted");
         /* If fs_mgr determined this is an unencrypted device, then trigger
          * that action.
          */
         action_for_each_trigger("nonencrypted", action_add_queue_tail);
     }
+    /* else ... < 0: error */
 
     return ret;
 }

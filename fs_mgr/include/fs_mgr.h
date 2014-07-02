@@ -53,6 +53,10 @@ struct fstab_rec {
 
 struct fstab *fs_mgr_read_fstab(const char *fstab_path);
 void fs_mgr_free_fstab(struct fstab *fstab);
+
+#define FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION 2
+#define FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED 1
+#define FS_MGR_MNTALL_DEV_NOT_ENCRYPTED 0
 int fs_mgr_mount_all(struct fstab *fstab);
 int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
                     char *tmp_mount_point);
