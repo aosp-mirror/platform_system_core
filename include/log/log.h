@@ -491,7 +491,7 @@ typedef enum {
 #endif
 #ifndef LOG_EVENT_STRING
 #define LOG_EVENT_STRING(_tag, _value)                                      \
-    ((void) 0)  /* not implemented -- must combine len with string */
+        (void) __android_log_bswrite(_tag, _value);
 #endif
 /* TODO: something for LIST */
 
