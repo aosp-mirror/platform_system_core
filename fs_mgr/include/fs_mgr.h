@@ -54,6 +54,7 @@ struct fstab_rec {
 struct fstab *fs_mgr_read_fstab(const char *fstab_path);
 void fs_mgr_free_fstab(struct fstab *fstab);
 
+#define FS_MGR_MNTALL_DEV_NEEDS_RECOVERY 3
 #define FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION 2
 #define FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED 1
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTED 0

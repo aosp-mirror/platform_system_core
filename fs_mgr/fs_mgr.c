@@ -387,10 +387,12 @@ int fs_mgr_mount_all(struct fstab *fstab)
 
         /* mount(2) returned an error, check if it's encryptable and deal with it */
         if (mret && mount_errno != EBUSY && mount_errno != EACCES &&
-            fs_mgr_is_encryptable(&fstab->recs[i])) {
-            if (partition_wiped(fstab->recs[i].blk_device)) {
-                ERROR("%s(): Encryptable wiped partition %s. Recommend wiping via recovery. Fail for now.\n", __func__, fstab->recs[i].mount_point);
-                ++error_count;
+            fs_mgr_is_encryptable(&fstab->recs[attempted_idx])) {
+            if(partition_wiped(fstab->recs[attempted_idx].blk_device)) {
+                ERROR("%s(): %s is wiped and %s %s is encryptable. Suggest recovery...\n", __func__,
+                      fstab->recs[attempted_idx].blk_device, fstab->recs[attempted_idx].mount_point,
+                      fstab->recs[attempted_idx].fs_type);
+                encryptable = FS_MGR_MNTALL_DEV_NEEDS_RECOVERY;
                 continue;
             } else {
                 /* Need to mount a tmpfs at this mountpoint for now, and set

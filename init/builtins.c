@@ -474,6 +474,26 @@ exit_success:
 
 }
 
+static int wipe_data_via_recovery()
+{
+    mkdir("/cache/recovery", 0700);
+    int fd = open("/cache/recovery/command", O_RDWR|O_CREAT|O_TRUNC, 0600);
+    if (fd >= 0) {
+        write(fd, "--wipe_data", strlen("--wipe_data") + 1);
+        close(fd);
+    } else {
+        ERROR("could not open /cache/recovery/command\n");
+        return -1;
+    }
+    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
+    while (1) { pause(); }  // never reached
+}
+
+
+/*
+ * This function might request a reboot, in which case it will
+ * not return.
+ */
 int do_mount_all(int nargs, char **args)
 {
     pid_t pid;
@@ -529,6 +549,13 @@ int do_mount_all(int nargs, char **args)
          * that action.
          */
         action_for_each_trigger("nonencrypted", action_add_queue_tail);
+    } else if (ret == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
+        /* Setup a wipe via recovery, and reboot into recovery */
+        ERROR("fs_mgr_mount_all suggested recovery, so wiping data via recovery.\n");
+        ret = wipe_data_via_recovery();
+        /* If reboot worked, there is no return. */
+    } else if (ret > 0) {
+        ERROR("fs_mgr_mount_all returned unexpected error %d\n", ret);
     }
     /* else ... < 0: error */
 
