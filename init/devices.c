@@ -170,7 +170,24 @@ void fixup_sys_perms(const char *upath)
     }
 }
 
-static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
+static bool perm_path_matches(const char *path, struct perms_ *dp)
+{
+    if (dp->prefix) {
+        if (strncmp(path, dp->name, strlen(dp->name)) == 0)
+            return true;
+    } else if (dp->wildcard) {
+        if (fnmatch(dp->name, path, FNM_PATHNAME) == 0)
+            return true;
+    } else {
+        if (strcmp(path, dp->name) == 0)
+            return true;
+    }
+
+    return false;
+}
+
+static mode_t get_device_perm(const char *path, const char **links,
+                unsigned *uid, unsigned *gid)
 {
     mode_t perm;
     struct listnode *node;
@@ -181,22 +198,30 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
      * override ueventd.rc
      */
     list_for_each_reverse(node, &dev_perms) {
+        bool match = false;
+
         perm_node = node_to_item(node, struct perm_node, plist);
         dp = &perm_node->dp;
 
-        if (dp->prefix) {
-            if (strncmp(path, dp->name, strlen(dp->name)))
-                continue;
-        } else if (dp->wildcard) {
-            if (fnmatch(dp->name, path, FNM_PATHNAME) != 0)
-                continue;
+        if (perm_path_matches(path, dp)) {
+            match = true;
         } else {
-            if (strcmp(path, dp->name))
-                continue;
+            if (links) {
+                int i;
+                for (i = 0; links[i]; i++) {
+                    if (perm_path_matches(links[i], dp)) {
+                        match = true;
+                        break;
+                    }
+                }
+            }
         }
-        *uid = dp->uid;
-        *gid = dp->gid;
-        return dp->perm;
+
+        if (match) {
+            *uid = dp->uid;
+            *gid = dp->gid;
+            return dp->perm;
+        }
     }
     /* Default if nothing found. */
     *uid = 0;
@@ -215,7 +240,7 @@ static void make_device(const char *path,
     dev_t dev;
     char *secontext = NULL;
 
-    mode = get_device_perm(path, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
+    mode = get_device_perm(path, links, &uid, &gid) | (block ? S_IFBLK : S_IFCHR);
 
     if (sehandle) {
         selabel_lookup_best_match(sehandle, &secontext, path, links, mode);
