@@ -107,7 +107,7 @@ static int __write_to_log_initialize()
         close(i);
     }
 
-    i = socket(PF_UNIX, SOCK_DGRAM, 0);
+    i = socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
     if (i < 0) {
         ret = -errno;
         write_to_log = __write_to_log_null;
