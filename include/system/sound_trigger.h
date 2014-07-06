@@ -92,6 +92,7 @@ typedef int sound_model_handle_t;
  */
 struct sound_trigger_sound_model {
     sound_trigger_sound_model_type_t type;        /* model type. e.g. SOUND_MODEL_TYPE_KEYPHRASE */
+    sound_trigger_uuid_t             uuid;        /* unique sound model ID. */
     unsigned int                     data_size;   /* size of opaque model data */
     unsigned int                     data_offset; /* offset of opaque data start from head of struct
                                                     (e.g sizeof struct sound_trigger_sound_model) */
@@ -99,6 +100,7 @@ struct sound_trigger_sound_model {
 
 /* key phrase descriptor */
 struct sound_trigger_phrase {
+    unsigned int id;                /* keyphrase ID */
     unsigned int recognition_mode;  /* recognition modes supported by this key phrase */
     unsigned int num_users;         /* number of users in the key phrase */
     char         locale[SOUND_TRIGGER_MAX_LOCALE_LEN]; /* locale - JAVA Locale style (e.g. en_US) */
