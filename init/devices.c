@@ -134,11 +134,10 @@ void fixup_sys_perms(const char *upath)
     char buf[512];
     struct listnode *node;
     struct perms_ *dp;
-    char *secontext;
 
-        /* upaths omit the "/sys" that paths in this list
-         * contain, so we add 4 when comparing...
-         */
+    /* upaths omit the "/sys" that paths in this list
+     * contain, so we add 4 when comparing...
+     */
     list_for_each(node, &sys_perms) {
         dp = &(node_to_item(node, struct perm_node, plist))->dp;
         if (dp->prefix) {
@@ -153,20 +152,23 @@ void fixup_sys_perms(const char *upath)
         }
 
         if ((strlen(upath) + strlen(dp->attr) + 6) > sizeof(buf))
-            return;
+            break;
 
         sprintf(buf,"/sys%s/%s", upath, dp->attr);
         INFO("fixup %s %d %d 0%o\n", buf, dp->uid, dp->gid, dp->perm);
         chown(buf, dp->uid, dp->gid);
         chmod(buf, dp->perm);
-        if (sehandle) {
-            secontext = NULL;
-            selabel_lookup(sehandle, &secontext, buf, 0);
-            if (secontext) {
-                setfilecon(buf, secontext);
-                freecon(secontext);
-           }
-        }
+    }
+
+    // Now fixup SELinux file labels
+    int len = snprintf(buf, sizeof(buf), "/sys%s", upath);
+    if ((len < 0) || ((size_t) len >= sizeof(buf))) {
+        // Overflow
+        return;
+    }
+    if (access(buf, F_OK) == 0) {
+        INFO("restorecon_recursive: %s\n", buf);
+        restorecon_recursive(buf);
     }
 }
 
