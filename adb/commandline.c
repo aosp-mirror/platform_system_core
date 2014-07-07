@@ -601,7 +601,7 @@ int adb_sideload_host(const char* fn) {
         }
     }
 
-    printf("\rTotal xfer: %.2fx%*s\n", (double)xfer / (sz ? sz : 1), strlen(fn)+10, "");
+    printf("\rTotal xfer: %.2fx%*s\n", (double)xfer / (sz ? sz : 1), (int)strlen(fn)+10, "");
 
   done:
     if (fd >= 0) adb_close(fd);
