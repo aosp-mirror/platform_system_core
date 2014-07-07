@@ -501,6 +501,115 @@ int adb_download(const char *service, const char *fn, unsigned progress)
     return status;
 }
 
+#define SIDELOAD_HOST_BLOCK_SIZE (CHUNK_SIZE)
+
+/*
+ * The sideload-host protocol serves the data in a file (given on the
+ * command line) to the client, using a simple protocol:
+ *
+ * - The connect message includes the total number of bytes in the
+ *   file and a block size chosen by us.
+ *
+ * - The other side sends the desired block number as eight decimal
+ *   digits (eg "00000023" for block 23).  Blocks are numbered from
+ *   zero.
+ *
+ * - We send back the data of the requested block.  The last block is
+ *   likely to be partial; when the last block is requested we only
+ *   send the part of the block that exists, it's not padded up to the
+ *   block size.
+ *
+ * - When the other side sends "DONEDONE" instead of a block number,
+ *   we hang up.
+ */
+int adb_sideload_host(const char* fn) {
+    uint8_t* data;
+    unsigned sz;
+    size_t xfer = 0;
+    int status;
+
+    printf("loading: '%s'", fn);
+    fflush(stdout);
+    data = load_file(fn, &sz);
+    if (data == 0) {
+        printf("\n");
+        fprintf(stderr, "* cannot read '%s' *\n", fn);
+        return -1;
+    }
+
+    char buf[100];
+    sprintf(buf, "sideload-host:%d:%d", sz, SIDELOAD_HOST_BLOCK_SIZE);
+    int fd = adb_connect(buf);
+    if (fd < 0) {
+        // Try falling back to the older sideload method.  Maybe this
+        // is an older device that doesn't support sideload-host.
+        printf("\n");
+        status = adb_download_buffer("sideload", fn, data, sz, 1);
+        goto done;
+    }
+
+    int opt = SIDELOAD_HOST_BLOCK_SIZE;
+    opt = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
+
+    int last_percent = -1;
+    while (true) {
+        if (readx(fd, buf, 8)) {
+            fprintf(stderr, "* failed to read command: %s\n", adb_error());
+            status = -1;
+            goto done;
+        }
+
+        if (strncmp("DONEDONE", buf, 8) == 0) {
+            status = 0;
+            break;
+        }
+
+        buf[8] = '\0';
+        int block = strtol(buf, NULL, 10);
+
+        size_t offset = block * SIDELOAD_HOST_BLOCK_SIZE;
+        if (offset >= sz) {
+            fprintf(stderr, "* attempt to read past end: %s\n", adb_error());
+            status = -1;
+            goto done;
+        }
+        uint8_t* start = data + offset;
+        size_t offset_end = offset + SIDELOAD_HOST_BLOCK_SIZE;
+        size_t to_write = SIDELOAD_HOST_BLOCK_SIZE;
+        if (offset_end > sz) {
+            to_write = sz - offset;
+        }
+
+        if(writex(fd, start, to_write)) {
+            adb_status(fd);
+            fprintf(stderr,"* failed to write data '%s' *\n", adb_error());
+            status = -1;
+            goto done;
+        }
+        xfer += to_write;
+
+        // For normal OTA packages, we expect to transfer every byte
+        // twice, plus a bit of overhead (one read during
+        // verification, one read of each byte for installation, plus
+        // extra access to things like the zip central directory).
+        // This estimate of the completion becomes 100% when we've
+        // transferred ~2.13 (=100/47) times the package size.
+        int percent = (int)(xfer * 47LL / (sz ? sz : 1));
+        if (percent != last_percent) {
+            printf("\rserving: '%s'  (~%d%%)    ", fn, percent);
+            fflush(stdout);
+            last_percent = percent;
+        }
+    }
+
+    printf("\rTotal xfer: %.2fx%*s\n", (double)xfer / (sz ? sz : 1), strlen(fn)+10, "");
+
+  done:
+    if (fd >= 0) adb_close(fd);
+    free(data);
+    return status;
+}
+
 static void status_window(transport_type ttype, const char* serial)
 {
     char command[4096];
@@ -1291,7 +1400,7 @@ top:
 
     if(!strcmp(argv[0], "sideload")) {
         if(argc != 2) return usage();
-        if(adb_download("sideload", argv[1], 1)) {
+        if (adb_sideload_host(argv[1])) {
             return 1;
         } else {
             return 0;
