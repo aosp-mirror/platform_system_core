@@ -336,7 +336,7 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, "cdt:T:gG:sQf:r::n:v:b:BSpP:");
+        ret = getopt(argc, argv, "cdt:T:gG:sQf:r:n:v:b:BSpP:");
 
         if (ret < 0) {
             break;
