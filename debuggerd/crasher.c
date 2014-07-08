@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/cdefs.h>
+#include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -156,6 +157,10 @@ static int do_action(const char* arg)
         return EXIT_SUCCESS;
     } else if (!strcmp(arg, "heap-usage")) {
         abuse_heap();
+    } else if (!strcmp(arg, "SIGSEGV-unmapped")) {
+        char* map = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+        munmap(map, sizeof(int));
+        map[0] = '8';
     }
 
     fprintf(stderr, "%s OP\n", __progname);
@@ -175,6 +180,7 @@ static int do_action(const char* arg)
     fprintf(stderr, "  SIGPIPE               cause a SIGPIPE\n");
     fprintf(stderr, "  SIGSEGV               cause a SIGSEGV at address 0x0 (synonym: crash)\n");
     fprintf(stderr, "  SIGSEGV-non-null      cause a SIGSEGV at a non-zero address\n");
+    fprintf(stderr, "  SIGSEGV-unmapped      mmap/munmap a region of memory and then attempt to access it\n");
     fprintf(stderr, "  SIGTRAP               cause a SIGTRAP\n");
     fprintf(stderr, "prefix any of the above with 'thread-' to not run\n");
     fprintf(stderr, "on the process' main thread.\n");
