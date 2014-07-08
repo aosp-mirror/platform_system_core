@@ -329,7 +329,7 @@ static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log) {
 }
 
 static void dump_map(log_t* log, const backtrace_map_t* map, bool fault_addr) {
-  _LOG(log, logtype::MAPS, "%s%" PRIPTR "-%" PRIPTR " %c%c%c  %7d  %s\n",
+  _LOG(log, logtype::MAPS, "%s%" PRIPTR "-%" PRIPTR " %c%c%c  %7" PRIdPTR "  %s\n",
          (fault_addr? "--->" : "    "), map->start, map->end - 1,
          (map->flags & PROT_READ) ? 'r' : '-', (map->flags & PROT_WRITE) ? 'w' : '-',
          (map->flags & PROT_EXEC) ? 'x' : '-',
