@@ -78,10 +78,10 @@ TEST_F(KernelCollectorTest, LoadPreservedDump) {
   std::string dump;
   dump.clear();
 
-  WriteStringToFile(kcrash_file(), "emptydata");
+  WriteStringToFile(kcrash_file(), "CrashRecordWithoutRamoopsHeader");
   ASSERT_TRUE(collector_.LoadParameters());
-  ASSERT_FALSE(collector_.LoadPreservedDump(&dump));
-  ASSERT_EQ("", dump);
+  ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
+  ASSERT_EQ("CrashRecordWithoutRamoopsHeader", dump);
 
   WriteStringToFile(kcrash_file(), "====1.1\nsomething");
   ASSERT_TRUE(collector_.LoadParameters());
@@ -225,14 +225,6 @@ TEST_F(KernelCollectorTest, StripSensitiveDataSample) {
 
 TEST_F(KernelCollectorTest, CollectPreservedFileMissing) {
   ASSERT_FALSE(collector_.Collect());
-  ASSERT_FALSE(FindLog("Stored kcrash to "));
-  ASSERT_EQ(0, s_crashes);
-}
-
-TEST_F(KernelCollectorTest, CollectNoCrash) {
-  WriteStringToFile(kcrash_file(), "");
-  ASSERT_FALSE(collector_.Collect());
-  ASSERT_TRUE(FindLog("No valid records found"));
   ASSERT_FALSE(FindLog("Stored kcrash to "));
   ASSERT_EQ(0, s_crashes);
 }

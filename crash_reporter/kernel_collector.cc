@@ -96,14 +96,18 @@ bool KernelCollector::ReadRecordToString(std::string *contents,
     return false;
   }
 
+  *record_found = true;
   if (record_re.FullMatch(record, &captured)) {
     // Found a match, append it to the content, and remove from pstore.
     contents->append(captured);
-    base::DeleteFile(ramoops_record, false);
-    *record_found = true;
   } else {
-    *record_found = false;
+    // pstore compression has been added since kernel 3.12. In order to
+    // decompress dmesg correctly, ramoops driver has to strip the header
+    // before handing over the record to the pstore driver, so we don't
+    // need to do it here anymore.
+    contents->append(record);
   }
+  base::DeleteFile(ramoops_record, false);
 
   return true;
 }
