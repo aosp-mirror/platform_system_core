@@ -18,6 +18,7 @@
 #define ANDROID_SOUND_TRIGGER_H
 
 #include <stdbool.h>
+#include <system/audio.h>
 
 #define SOUND_TRIGGER_MAX_STRING_LEN 64 /* max length of strings in properties or
                                            descriptor structs */
@@ -34,6 +35,7 @@
 #define RECOGNITION_STATUS_ABORT 1
 #define RECOGNITION_STATUS_FAILURE 2
 
+#define SOUND_MODEL_STATUS_UPDATED 0
 
 typedef enum {
     SOUND_MODEL_TYPE_UNKNOWN = -1,    /* use for unspecified sound model type */
@@ -93,6 +95,8 @@ typedef int sound_model_handle_t;
 struct sound_trigger_sound_model {
     sound_trigger_sound_model_type_t type;        /* model type. e.g. SOUND_MODEL_TYPE_KEYPHRASE */
     sound_trigger_uuid_t             uuid;        /* unique sound model ID. */
+    sound_trigger_uuid_t             vendor_uuid; /* unique vendor ID. Identifies the engine the
+                                                  sound model was build for */
     unsigned int                     data_size;   /* size of opaque model data */
     unsigned int                     data_offset; /* offset of opaque data start from head of struct
                                                     (e.g sizeof struct sound_trigger_sound_model) */
@@ -103,6 +107,8 @@ struct sound_trigger_phrase {
     unsigned int id;                /* keyphrase ID */
     unsigned int recognition_mode;  /* recognition modes supported by this key phrase */
     unsigned int num_users;         /* number of users in the key phrase */
+    unsigned int users[SOUND_TRIGGER_MAX_USERS]; /* users ids: (not uid_t but sound trigger
+                                                 specific IDs */
     char         locale[SOUND_TRIGGER_MAX_LOCALE_LEN]; /* locale - JAVA Locale style (e.g. en_US) */
     char         text[SOUND_TRIGGER_MAX_STRING_LEN];   /* phrase text in UTF-8 format. */
 };
@@ -138,6 +144,9 @@ struct sound_trigger_recognition_event {
                                                            for capture. A negative value is possible
                                                            (e.g. if key phrase is also available for
                                                            capture */
+    int                              capture_preamble_ms;  /* duration in ms of audio captured
+                                                            before the start of the trigger.
+                                                            0 if none. */
     unsigned int                     data_size;         /* size of opaque event data */
     unsigned int                     data_offset;       /* offset of opaque data start from start of
                                                           this struct (e.g sizeof struct
@@ -145,12 +154,23 @@ struct sound_trigger_recognition_event {
 };
 
 /*
+ * Confidence level for each user in struct sound_trigger_phrase_recognition_extra
+ */
+struct sound_trigger_confidence_level {
+    unsigned int user_id;   /* user ID */
+    unsigned int level;     /* confidence level in percent (0 - 100).
+                               - min level for recognition configuration
+                               - detected level for recognition event */
+};
+
+/*
  * Specialized recognition event for key phrase detection
  */
 struct sound_trigger_phrase_recognition_extra {
-    unsigned int recognition_modes;
-    unsigned int num_users;
-    unsigned int confidence_levels[SOUND_TRIGGER_MAX_USERS];
+    unsigned int id;                /* keyphrase ID */
+    unsigned int recognition_modes; /* recognition modes used for this keyphrase */
+    unsigned int num_levels;        /* number of user confidence levels */
+    struct sound_trigger_confidence_level levels[SOUND_TRIGGER_MAX_USERS];
 };
 
 struct sound_trigger_phrase_recognition_event {
@@ -161,6 +181,34 @@ struct sound_trigger_phrase_recognition_event {
                                                                      event is fired */
     unsigned int                           num_phrases;
     struct sound_trigger_phrase_recognition_extra phrase_extras[SOUND_TRIGGER_MAX_PHRASES];
+};
+
+/*
+ * configuration for sound trigger capture session passed to start_recognition()
+ */
+struct sound_trigger_recognition_config {
+    audio_io_handle_t    capture_handle;    /* IO handle that will be used for capture.
+                                            N/A if capture_requested is false */
+    audio_devices_t      capture_device;    /* input device requested for detection capture */
+    bool                 capture_requested; /* capture and buffer audio for this recognition
+                                            instance */
+    unsigned int         num_phrases;   /* number of key phrases recognition extras */
+    struct sound_trigger_phrase_recognition_extra phrases[SOUND_TRIGGER_MAX_PHRASES];
+                                           /* configuration for each key phrase */
+    unsigned int        data_size;         /* size of opaque capture configuration data */
+    unsigned int        data_offset;       /* offset of opaque data start from start of this struct
+                                           (e.g sizeof struct sound_trigger_recognition_config) */
+};
+
+/*
+ * Event sent via load sound model callback
+ */
+struct sound_trigger_model_event {
+    int             status;         /* sound model status e.g. SOUND_MODEL_STATUS_UPDATED */
+    unsigned int    data_size;      /* size of event data if any. Size of updated sound model if
+                                       status is SOUND_MODEL_STATUS_UPDATED */
+    unsigned int    data_offset;    /* offset of data start from start of this struct
+                                       (e.g sizeof struct sound_trigger_model_event) */
 };
 
 
