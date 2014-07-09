@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "metrics_library.h"
+#include "metrics/metrics_library.h"
 
 #include <base/logging.h>
 #include <base/strings/stringprintf.h>
@@ -10,12 +10,11 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 
-#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 
-// HANDLE_EINTR macro, no libbase required.
-#include <base/posix/eintr_wrapper.h>
+#include "components/metrics/chromeos/metric_sample.h"
+#include "components/metrics/chromeos/serialization_utils.h"
 
 #include "policy/device_policy.h"
 
@@ -50,22 +49,6 @@ static const char *kCrosEventNames[] = {
 
 time_t MetricsLibrary::cached_enabled_time_ = 0;
 bool MetricsLibrary::cached_enabled_ = false;
-
-// Copied from libbase to avoid pulling in all of libbase just for libmetrics.
-static int WriteFileDescriptor(const int fd, const char* data, int size) {
-  // Allow for partial writes.
-  ssize_t bytes_written_total = 0;
-  for (ssize_t bytes_written_partial = 0; bytes_written_total < size;
-       bytes_written_total += bytes_written_partial) {
-    bytes_written_partial =
-        HANDLE_EINTR(write(fd, data + bytes_written_total,
-                           size - bytes_written_total));
-    if (bytes_written_partial < 0)
-      return -1;
-  }
-
-  return bytes_written_total;
-}
 
 MetricsLibrary::MetricsLibrary() : consent_file_(kConsentFile) {}
 MetricsLibrary::~MetricsLibrary() {}
@@ -169,55 +152,6 @@ bool MetricsLibrary::AreMetricsEnabled() {
   return cached_enabled_;
 }
 
-bool MetricsLibrary::SendMessageToChrome(const std::string& message) {
-  int size = static_cast<int>(message.size());
-  if (size > kBufferSize) {
-    LOG(ERROR) << "chrome message too big (" << size << " bytes)";
-    return false;
-  }
-  // Use libc here instead of chromium base classes because we need a UNIX fd
-  // for flock. |uma_events_file_| must exist already.
-  int chrome_fd = HANDLE_EINTR(open(uma_events_file_.c_str(),
-                                    O_WRONLY | O_APPEND));
-  // If we failed to open it, return.
-  if (chrome_fd < 0) {
-    PLOG(ERROR) << uma_events_file_ << ": open";
-    return false;
-  }
-
-  // Grab an exclusive lock to protect Chrome from truncating
-  // underneath us.
-  if (HANDLE_EINTR(flock(chrome_fd, LOCK_EX)) < 0) {
-    PLOG(ERROR) << uma_events_file_ << ": flock";
-    IGNORE_EINTR(close(chrome_fd));
-    return false;
-  }
-
-  bool success = true;
-  if (WriteFileDescriptor(chrome_fd, message.c_str(), size) != size) {
-    PLOG(ERROR) << uma_events_file_ << ": write";
-    success = false;
-  }
-
-  // Close the file and release the lock.
-  IGNORE_EINTR(close(chrome_fd));
-  return success;
-}
-
-const std::string MetricsLibrary::FormatChromeMessage(
-    const std::string& name,
-    const std::string& value) {
-  uint32 message_length =
-      sizeof(message_length) + name.size() + 1 + value.size() + 1;
-  std::string result;
-  result.reserve(message_length);
-  // Marshal the total message length in the native byte order.
-  result.assign(reinterpret_cast<char*>(&message_length),
-                sizeof(message_length));
-  result += name + '\0' + value + '\0';
-  return result;
-}
-
 void MetricsLibrary::Init() {
   uma_events_file_ = kUMAEventsPath;
 }
@@ -239,43 +173,33 @@ bool MetricsLibrary::SendToUMA(const std::string& name,
                                int min,
                                int max,
                                int nbuckets) {
-  // Format the message.
-  std::string value = base::StringPrintf("%s %d %d %d %d",
-      name.c_str(), sample, min, max, nbuckets);
-  std::string message = FormatChromeMessage("histogram", value);
-  // Send the message.
-  return SendMessageToChrome(message);
+  return metrics::SerializationUtils::WriteMetricToFile(
+      *metrics::MetricSample::HistogramSample(name, sample, min, max, nbuckets)
+           .get(),
+      kUMAEventsPath);
 }
 
 bool MetricsLibrary::SendEnumToUMA(const std::string& name, int sample,
                                    int max) {
-  // Format the message.
-  std::string value = base::StringPrintf("%s %d %d", name.c_str(), sample, max);
-  std::string message = FormatChromeMessage("linearhistogram", value);
-  // Send the message.
-  return SendMessageToChrome(message);
+  return metrics::SerializationUtils::WriteMetricToFile(
+      *metrics::MetricSample::LinearHistogramSample(name, sample, max).get(),
+      kUMAEventsPath);
 }
 
 bool MetricsLibrary::SendSparseToUMA(const std::string& name, int sample) {
-  // Format the message.
-  std::string value = base::StringPrintf("%s %d", name.c_str(), sample);
-  std::string message = FormatChromeMessage("sparsehistogram", value);
-  // Send the message.
-  return SendMessageToChrome(message);
+  return metrics::SerializationUtils::WriteMetricToFile(
+      *metrics::MetricSample::SparseHistogramSample(name, sample).get(),
+      kUMAEventsPath);
 }
 
 bool MetricsLibrary::SendUserActionToUMA(const std::string& action) {
-  // Format the message.
-  std::string message = FormatChromeMessage("useraction", action);
-  // Send the message.
-  return SendMessageToChrome(message);
+  return metrics::SerializationUtils::WriteMetricToFile(
+      *metrics::MetricSample::UserActionSample(action).get(), kUMAEventsPath);
 }
 
 bool MetricsLibrary::SendCrashToUMA(const char *crash_kind) {
-  // Format the message.
-  std::string message = FormatChromeMessage("crash", crash_kind);
-  // Send the message.
-  return SendMessageToChrome(message);
+  return metrics::SerializationUtils::WriteMetricToFile(
+      *metrics::MetricSample::CrashSample(crash_kind).get(), kUMAEventsPath);
 }
 
 void MetricsLibrary::SetPolicyProvider(policy::PolicyProvider* provider) {

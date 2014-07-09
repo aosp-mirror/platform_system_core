@@ -24,7 +24,10 @@
         'c_metrics_library.cc',
         'metrics_library.cc',
         'timer.cc',
+        'components/metrics/chromeos/metric_sample.cc',
+        'components/metrics/chromeos/serialization_utils.cc',
       ],
+      'include_dirs': ['.'],
     },
   ],
 }

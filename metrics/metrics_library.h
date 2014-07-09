@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef METRICS_LIBRARY_H_
-#define METRICS_LIBRARY_H_
+#ifndef METRICS_METRICS_LIBRARY_H_
+#define METRICS_METRICS_LIBRARY_H_
 
 #include <sys/types.h>
 #include <string>
@@ -131,18 +131,6 @@ class MetricsLibrary : public MetricsLibraryInterface {
                        char* buffer, int buffer_size,
                        bool* result);
 
-  // Sends message to Chrome for transport to UMA and returns true on success.
-  bool SendMessageToChrome(const std::string& message);
-
-  // Serializes a name/value pair into a message buffer.
-  //
-  // The serialized format is: | LENGTH | NAME | \0 | VALUE | \0 |
-  //
-  // where LENGTH is a 32-bit integer in native endianness, and NAME and VALUE
-  // are null-terminated strings (the zero bytes are explicitly shown above).
-  const std::string FormatChromeMessage(const std::string& name,
-                                        const std::string& value);
-
   // This function is used by tests only to mock the device policies.
   void SetPolicyProvider(policy::PolicyProvider* provider);
 
@@ -160,4 +148,4 @@ class MetricsLibrary : public MetricsLibraryInterface {
   DISALLOW_COPY_AND_ASSIGN(MetricsLibrary);
 };
 
-#endif  // METRICS_LIBRARY_H_
+#endif  // METRICS_METRICS_LIBRARY_H_

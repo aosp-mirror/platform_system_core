@@ -55,7 +55,8 @@
       'target_name': 'libupload_service',
       'type': 'static_library',
       'dependencies': [
-        'metrics_proto'
+        'metrics_proto',
+        '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
       ],
       'link_settings': {
         'libraries': [
@@ -83,8 +84,6 @@
         'uploader/metrics_log.cc',
         'uploader/system_profile_cache.cc',
         'uploader/curl_sender.cc',
-        'components/metrics/chromeos/metric_sample.cc',
-        'components/metrics/chromeos/serialization_utils.cc',
         'components/metrics/metrics_log_base.cc',
         'components/metrics/metrics_log_manager.cc',
         'components/metrics/metrics_hashes.cc',
