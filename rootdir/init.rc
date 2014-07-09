@@ -189,13 +189,11 @@ on post-fs
     chown system cache /cache
     chmod 0770 /cache
     # We restorecon /cache in case the cache partition has been reset.
-    restorecon /cache
+    restorecon_recursive /cache
 
     # This may have been created by the recovery system with odd permissions
     chown system cache /cache/recovery
     chmod 0770 /cache/recovery
-    # This may have been created by the recovery system with the wrong context.
-    restorecon /cache/recovery
 
     #change permissions on vmallocinfo so we can grab it from bugreports
     chown root log /proc/vmallocinfo
