@@ -63,17 +63,51 @@
       ],
     },
     {
-      'target_name': 'list_proxies',
+      'target_name': 'libproxies',
+      'type': 'static_library',
+      'variables': {
+        'exported_deps': [
+          'libchrome-<(libbase_ver)',
+        ],
+        'deps': ['<@(exported_deps)'],
+      },
+      'all_dependent_settings': {
+        'variables': {
+          'deps': [
+            '<@(exported_deps)',
+          ],
+        },
+      },
+      'sources': [
+        'libproxies.cc',
+        'libproxies.h',
+      ],
+    },
+    {
+      'target_name': 'crash_sender',
       'type': 'executable',
       'variables': {
         'deps': [
           'dbus-1',
-          'dbus-glib-1',
           'libchrome-<(libbase_ver)',
+          'libchromeos-<(libbase_ver)',
+          'libcurl',
+          'libmetrics-<(libbase_ver)',
         ],
       },
+      'dependencies': [
+        'libproxies',
+      ],
+      'libraries': [
+        '-lvboot_host',
+      ],
       'sources': [
-        'list_proxies.cc',
+        'crash_sender_daemon.cc',
+        'crash_sender_daemon.h',
+        'crash_sender_service.cc',
+        'crash_sender_service.h',
+        'proxy_resolver.cc',
+        'proxy_resolver.h',
       ],
     },
     {
