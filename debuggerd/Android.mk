@@ -22,13 +22,6 @@ LOCAL_CPPFLAGS := \
     -Wunused \
     -Werror \
 
-ifeq ($(ARCH_ARM_HAVE_VFP),true)
-LOCAL_CFLAGS_arm += -DWITH_VFP
-endif # ARCH_ARM_HAVE_VFP
-ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
-LOCAL_CFLAGS_arm += -DWITH_VFP_D32
-endif # ARCH_ARM_HAVE_VFP_D32
-
 LOCAL_SHARED_LIBRARIES := \
     libbacktrace \
     libcutils \
@@ -62,33 +55,6 @@ LOCAL_SHARED_LIBRARIES := libcutils liblog libc
 LOCAL_MODULE := crasher
 LOCAL_MODULE_STEM_32 := crasher
 LOCAL_MODULE_STEM_64 := crasher64
-LOCAL_MULTILIB := both
-
-include $(BUILD_EXECUTABLE)
-
-include $(CLEAR_VARS)
-
-ifeq ($(ARCH_ARM_HAVE_VFP),true)
-LOCAL_MODULE_TARGET_ARCH += arm
-LOCAL_SRC_FILES_arm := arm/vfp.S
-LOCAL_CFLAGS_arm += -DWITH_VFP
-ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
-LOCAL_CFLAGS_arm += -DWITH_VFP_D32
-endif # ARCH_ARM_HAVE_VFP_D32
-endif # ARCH_ARM_HAVE_VFP == true
-LOCAL_CFLAGS += -Werror
-
-LOCAL_SRC_FILES_arm64 := arm64/vfp.S
-LOCAL_MODULE_TARGET_ARCH += arm64
-
-LOCAL_SRC_FILES := vfp-crasher.c
-LOCAL_MODULE := vfp-crasher
-LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
-LOCAL_MODULE_TAGS := optional
-LOCAL_SHARED_LIBRARIES := libcutils liblog libc
-
-LOCAL_MODULE_STEM_32 := vfp-crasher
-LOCAL_MODULE_STEM_64 := vfp-crasher64
 LOCAL_MULTILIB := both
 
 include $(BUILD_EXECUTABLE)
