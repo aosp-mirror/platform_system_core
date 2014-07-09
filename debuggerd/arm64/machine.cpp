@@ -30,13 +30,6 @@
 #include "../utility.h"
 #include "../machine.h"
 
-/* enable to dump memory pointed to by every register */
-#define DUMP_MEMORY_FOR_ALL_REGISTERS 1
-
-/*
- * If configured to do so, dump memory around *all* registers
- * for the crashing thread.
- */
 void dump_memory_and_code(log_t* log, pid_t tid) {
     struct user_pt_regs regs;
     struct iovec io;

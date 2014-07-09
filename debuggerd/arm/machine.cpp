@@ -27,21 +27,8 @@
 #include "../utility.h"
 #include "../machine.h"
 
-// enable to dump memory pointed to by every register
-#define DUMP_MEMORY_FOR_ALL_REGISTERS 1
-
-#ifdef WITH_VFP
-#ifdef WITH_VFP_D32
-#define NUM_VFP_REGS 32
-#else
-#define NUM_VFP_REGS 16
-#endif
-#endif
-
-// If configured to do so, dump memory around *all* registers
-// for the crashing thread.
 void dump_memory_and_code(log_t* log, pid_t tid) {
-  struct pt_regs regs;
+  pt_regs regs;
   if (ptrace(PTRACE_GETREGS, tid, 0, &regs)) {
     return;
   }
@@ -73,7 +60,7 @@ void dump_memory_and_code(log_t* log, pid_t tid) {
 }
 
 void dump_registers(log_t* log, pid_t tid) {
-  struct pt_regs r;
+  pt_regs r;
   if (ptrace(PTRACE_GETREGS, tid, 0, &r)) {
     _LOG(log, logtype::REGISTERS, "cannot get registers: %s\n", strerror(errno));
     return;
@@ -93,19 +80,15 @@ void dump_registers(log_t* log, pid_t tid) {
        static_cast<uint32_t>(r.ARM_lr), static_cast<uint32_t>(r.ARM_pc),
        static_cast<uint32_t>(r.ARM_cpsr));
 
-#ifdef WITH_VFP
-  struct user_vfp vfp_regs;
-  int i;
-
+  user_vfp vfp_regs;
   if (ptrace(PTRACE_GETVFPREGS, tid, 0, &vfp_regs)) {
     _LOG(log, logtype::REGISTERS, "cannot get registers: %s\n", strerror(errno));
     return;
   }
 
-  for (i = 0; i < NUM_VFP_REGS; i += 2) {
+  for (size_t i = 0; i < 32; i += 2) {
     _LOG(log, logtype::REGISTERS, "    d%-2d %016llx  d%-2d %016llx\n",
          i, vfp_regs.fpregs[i], i+1, vfp_regs.fpregs[i+1]);
   }
   _LOG(log, logtype::REGISTERS, "    scr %08lx\n", vfp_regs.fpscr);
-#endif
 }
