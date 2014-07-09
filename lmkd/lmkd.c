@@ -104,6 +104,7 @@ struct adjslot_list {
 struct proc {
     struct adjslot_list asl;
     int pid;
+    uid_t uid;
     int oomadj;
     struct proc *pidhash_next;
 };
@@ -227,7 +228,7 @@ static void writefilestring(char *path, char *s) {
     close(fd);
 }
 
-static void cmd_procprio(int pid, int oomadj) {
+static void cmd_procprio(int pid, int uid, int oomadj) {
     struct proc *procp;
     char path[80];
     char val[20];
@@ -253,6 +254,7 @@ static void cmd_procprio(int pid, int oomadj) {
             }
 
             procp->pid = pid;
+            procp->uid = uid;
             procp->oomadj = oomadj;
             proc_insert(procp);
     } else {
@@ -356,9 +358,9 @@ static void ctrl_command_handler(void) {
         cmd_target(targets, &ibuf[1]);
         break;
     case LMK_PROCPRIO:
-        if (nargs != 2)
+        if (nargs != 3)
             goto wronglen;
-        cmd_procprio(ntohl(ibuf[1]), ntohl(ibuf[2]));
+        cmd_procprio(ntohl(ibuf[1]), ntohl(ibuf[2]), ntohl(ibuf[3]));
         break;
     case LMK_PROCREMOVE:
         if (nargs != 1)
@@ -565,6 +567,7 @@ static void mp_event(uint32_t events __unused) {
 
         if (procp) {
             int pid = procp->pid;
+            uid_t uid = procp->uid;
             char *taskname;
             int tasksize;
             int r;
@@ -581,10 +584,10 @@ static void mp_event(uint32_t events __unused) {
                 goto retry;
             }
 
-            ALOGI("Killing '%s' (%d), adj %d\n"
+            ALOGI("Killing '%s' (%d), uid %d, adj %d\n"
                   "   to free %ldkB because cache %ldkB is below limit %ldkB for oom_adj %d\n"
                   "   Free memory is %ldkB %s reserved",
-                  taskname, pid, procp->oomadj, tasksize * page_k,
+                  taskname, pid, uid, procp->oomadj, tasksize * page_k,
                   other_file * page_k, minfree * page_k, min_score_adj,
                   other_free * page_k, other_free >= 0 ? "above" : "below");
             r = kill(pid, SIGKILL);
