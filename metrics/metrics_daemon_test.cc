@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#define __STDC_FORMAT_MACROS
+
+#include <inttypes.h>
 #include <utime.h>
 
 #include <string>
@@ -33,12 +36,12 @@ using chromeos_metrics::PersistentIntegerMock;
 
 static const char kFakeDiskStatsName[] = "fake-disk-stats";
 static const char kFakeDiskStatsFormat[] =
-    "    1793     1788    %d   105580    "
-    "    196      175     %d    30290    "
+    "    1793     1788    %" PRIu64 "d   105580    "
+    "    196      175     %" PRIu64 "d    30290    "
     "    0    44060   135850\n";
 static string kFakeDiskStats[2];
-static const int kFakeReadSectors[] = {80000, 100000};
-static const int kFakeWriteSectors[] = {3000, 4000};
+static const uint64 kFakeReadSectors[] = {80000, 100000};
+static const uint64 kFakeWriteSectors[] = {3000, 4000};
 
 static const char kFakeVmStatsName[] = "fake-vm-stats";
 static const char kFakeScalingMaxFreqPath[] = "fake-scaling-max-freq";
@@ -254,7 +257,7 @@ TEST_F(MetricsDaemonTest, SendSample) {
 }
 
 TEST_F(MetricsDaemonTest, ReportDiskStats) {
-  long int read_sectors_now, write_sectors_now;
+  uint64 read_sectors_now, write_sectors_now;
 
   CreateFakeDiskStatsFile(kFakeDiskStats[1].c_str());
   daemon_.DiskStatsReadStats(&read_sectors_now, &write_sectors_now);
