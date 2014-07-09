@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "persistent_integer.h"
+#include "metrics/persistent_integer.h"
 
 #include <fcntl.h>
 
 #include <base/logging.h>
 #include <base/posix/eintr_wrapper.h>
 
-#include "metrics_library.h"
+#include "metrics/metrics_library.h"
 
 namespace {
 

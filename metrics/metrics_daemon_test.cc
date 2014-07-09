@@ -17,9 +17,9 @@
 #include <chromeos/dbus/service_constants.h>
 #include <gtest/gtest.h>
 
-#include "metrics_daemon.h"
-#include "metrics_library_mock.h"
-#include "persistent_integer_mock.h"
+#include "metrics/metrics_daemon.h"
+#include "metrics/metrics_library_mock.h"
+#include "metrics/persistent_integer_mock.h"
 
 using base::FilePath;
 using base::StringPrintf;
@@ -39,7 +39,6 @@ static const char kFakeDiskStatsFormat[] =
     "    1793     1788    %" PRIu64 "d   105580    "
     "    196      175     %" PRIu64 "d    30290    "
     "    0    44060   135850\n";
-static string kFakeDiskStats[2];
 static const uint64 kFakeReadSectors[] = {80000, 100000};
 static const uint64 kFakeWriteSectors[] = {3000, 4000};
 
@@ -49,14 +48,17 @@ static const char kFakeCpuinfoMaxFreqPath[] = "fake-cpuinfo-max-freq";
 
 class MetricsDaemonTest : public testing::Test {
  protected:
+  std::string kFakeDiskStats0;
+  std::string kFakeDiskStats1;
+
   virtual void SetUp() {
-    kFakeDiskStats[0] = base::StringPrintf(kFakeDiskStatsFormat,
+    kFakeDiskStats0 = base::StringPrintf(kFakeDiskStatsFormat,
                                            kFakeReadSectors[0],
                                            kFakeWriteSectors[0]);
-    kFakeDiskStats[1] = base::StringPrintf(kFakeDiskStatsFormat,
+    kFakeDiskStats1 = base::StringPrintf(kFakeDiskStatsFormat,
                                            kFakeReadSectors[1],
                                            kFakeWriteSectors[1]);
-    CreateFakeDiskStatsFile(kFakeDiskStats[0].c_str());
+    CreateFakeDiskStatsFile(kFakeDiskStats0.c_str());
     CreateUint64ValueFile(base::FilePath(kFakeCpuinfoMaxFreqPath), 10000000);
     CreateUint64ValueFile(base::FilePath(kFakeScalingMaxFreqPath), 10000000);
 
@@ -85,7 +87,6 @@ class MetricsDaemonTest : public testing::Test {
     unclean_shutdown_interval_mock_ =
         new StrictMock<PersistentIntegerMock>("4.mock");
     daemon_.unclean_shutdown_interval_.reset(unclean_shutdown_interval_mock_);
-
   }
 
   virtual void TearDown() {
@@ -259,7 +260,7 @@ TEST_F(MetricsDaemonTest, SendSample) {
 TEST_F(MetricsDaemonTest, ReportDiskStats) {
   uint64 read_sectors_now, write_sectors_now;
 
-  CreateFakeDiskStatsFile(kFakeDiskStats[1].c_str());
+  CreateFakeDiskStatsFile(kFakeDiskStats1.c_str());
   daemon_.DiskStatsReadStats(&read_sectors_now, &write_sectors_now);
   EXPECT_EQ(read_sectors_now, kFakeReadSectors[1]);
   EXPECT_EQ(write_sectors_now, kFakeWriteSectors[1]);
@@ -277,46 +278,28 @@ TEST_F(MetricsDaemonTest, ReportDiskStats) {
 }
 
 TEST_F(MetricsDaemonTest, ProcessMeminfo) {
-  string meminfo = "\
-MemTotal:        2000000 kB\n\
-MemFree:          500000 kB\n\
-Buffers:         1000000 kB\n\
-Cached:           213652 kB\n\
-SwapCached:            0 kB\n\
-Active:           133400 kB\n\
-Inactive:         183396 kB\n\
-Active(anon):      92984 kB\n\
-Inactive(anon):    58860 kB\n\
-Active(file):      40416 kB\n\
-Inactive(file):   124536 kB\n\
-Unevictable:           0 kB\n\
-Mlocked:               0 kB\n\
-SwapTotal:             0 kB\n\
-SwapFree:              0 kB\n\
-Dirty:                40 kB\n\
-Writeback:             0 kB\n\
-AnonPages:         92652 kB\n\
-Mapped:            59716 kB\n\
-Shmem:             59196 kB\n\
-Slab:              16656 kB\n\
-SReclaimable:       6132 kB\n\
-SUnreclaim:        10524 kB\n\
-KernelStack:        1648 kB\n\
-PageTables:         2780 kB\n\
-NFS_Unstable:          0 kB\n\
-Bounce:                0 kB\n\
-WritebackTmp:          0 kB\n\
-CommitLimit:      970656 kB\n\
-Committed_AS:    1260528 kB\n\
-VmallocTotal:     122880 kB\n\
-VmallocUsed:       12144 kB\n\
-VmallocChunk:     103824 kB\n\
-DirectMap4k:        9636 kB\n\
-DirectMap2M:     1955840 kB\n\
-";
+  string meminfo =
+      "MemTotal:        2000000 kB\nMemFree:          500000 kB\n"
+      "Buffers:         1000000 kB\nCached:           213652 kB\n"
+      "SwapCached:            0 kB\nActive:           133400 kB\n"
+      "Inactive:         183396 kB\nActive(anon):      92984 kB\n"
+      "Inactive(anon):    58860 kB\nActive(file):      40416 kB\n"
+      "Inactive(file):   124536 kB\nUnevictable:           0 kB\n"
+      "Mlocked:               0 kB\nSwapTotal:             0 kB\n"
+      "SwapFree:              0 kB\nDirty:                40 kB\n"
+      "Writeback:             0 kB\nAnonPages:         92652 kB\n"
+      "Mapped:            59716 kB\nShmem:             59196 kB\n"
+      "Slab:              16656 kB\nSReclaimable:       6132 kB\n"
+      "SUnreclaim:        10524 kB\nKernelStack:        1648 kB\n"
+      "PageTables:         2780 kB\nNFS_Unstable:          0 kB\n"
+      "Bounce:                0 kB\nWritebackTmp:          0 kB\n"
+      "CommitLimit:      970656 kB\nCommitted_AS:    1260528 kB\n"
+      "VmallocTotal:     122880 kB\nVmallocUsed:       12144 kB\n"
+      "VmallocChunk:     103824 kB\nDirectMap4k:        9636 kB\n"
+      "DirectMap2M:     1955840 kB\n";
+
   // All enum calls must report percents.
-  EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, _, 100))
-      .Times(AtLeast(1));
+  EXPECT_CALL(metrics_lib_, SendEnumToUMA(_, _, 100)).Times(AtLeast(1));
   // Check that MemFree is correctly computed at 25%.
   EXPECT_CALL(metrics_lib_, SendEnumToUMA("Platform.MeminfoMemFree", 25, 100))
       .Times(AtLeast(1));
@@ -332,10 +315,7 @@ DirectMap2M:     1955840 kB\n\
 }
 
 TEST_F(MetricsDaemonTest, ProcessMeminfo2) {
-  string meminfo = "\
-MemTotal:        2000000 kB\n\
-MemFree:         1000000 kB\n\
-";
+  string meminfo = "MemTotal:        2000000 kB\nMemFree:         1000000 kB\n";
   // Not enough fields.
   EXPECT_FALSE(daemon_.ProcessMeminfo(meminfo));
 }

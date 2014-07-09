@@ -6,8 +6,10 @@
 // C wrapper to libmetrics
 //
 
-#include "c_metrics_library.h"
-#include "metrics_library.h"
+#include <string>
+
+#include "metrics/c_metrics_library.h"
+#include "metrics/metrics_library.h"
 
 extern "C" CMetricsLibrary CMetricsLibraryNew(void) {
   MetricsLibrary* lib = new MetricsLibrary;

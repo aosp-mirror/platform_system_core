@@ -9,13 +9,14 @@
 
 #include <gmock/gmock.h>
 
-#include "persistent_integer.h"
+#include "metrics/persistent_integer.h"
 
 namespace chromeos_metrics {
 
 class PersistentIntegerMock : public PersistentInteger {
  public:
-    PersistentIntegerMock(const std::string& name) : PersistentInteger(name) {}
+  explicit PersistentIntegerMock(const std::string& name)
+      : PersistentInteger(name) {}
     MOCK_METHOD1(Add, void(int64 count));
 };
 

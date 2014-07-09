@@ -16,7 +16,6 @@ const char kBackingFilePattern[] = "*.pibakf";
 using chromeos_metrics::PersistentInteger;
 
 class PersistentIntegerTest : public testing::Test {
-
   virtual void SetUp() OVERRIDE {
     // Set testing mode.
     chromeos_metrics::PersistentInteger::SetTestingMode(true);

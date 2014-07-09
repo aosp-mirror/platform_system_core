@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "metrics_library.h"
+#include "metrics/metrics_library.h"
 
 enum Mode {
     kModeSendSample,
@@ -36,8 +36,7 @@ void ShowUsage() {
           "  -s: send a sparse histogram sample\n"
           "  -t: convert sample from double seconds to int milliseconds\n"
           "  -u: send a user action to Chrome\n"
-          "  -v: send a Platform.CrOSEvent enum histogram sample\n"
-          );
+          "  -v: send a Platform.CrOSEvent enum histogram sample\n");
   exit(1);
 }
 
@@ -193,7 +192,7 @@ int main(int argc, char** argv) {
     ShowUsage();
   }
 
-  switch(mode) {
+  switch (mode) {
     case kModeSendSample:
     case kModeSendEnumSample:
     case kModeSendSparseSample:

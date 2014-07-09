@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef METRICS_LIBRARY_MOCK_H_
-#define METRICS_LIBRARY_MOCK_H_
+#ifndef METRICS_METRICS_LIBRARY_MOCK_H_
+#define METRICS_METRICS_LIBRARY_MOCK_H_
 
 #include <string>
 
-#include "metrics_library.h"
+#include "metrics/metrics_library.h"
 
 #include <gmock/gmock.h>
 
@@ -22,4 +22,4 @@ class MetricsLibraryMock : public MetricsLibraryInterface {
   MOCK_METHOD1(SendUserActionToUMA, bool(const std::string& action));
 };
 
-#endif  // METRICS_LIBRARY_MOCK_H_
+#endif  // METRICS_METRICS_LIBRARY_MOCK_H_

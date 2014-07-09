@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef C_METRICS_LIBRARY_H_
-#define C_METRICS_LIBRARY_H_
+#ifndef METRICS_C_METRICS_LIBRARY_H_
+#define METRICS_C_METRICS_LIBRARY_H_
 
 #if defined(__cplusplus)
 extern "C" {
@@ -46,4 +46,4 @@ int CMetricsLibraryAreMetricsEnabled(CMetricsLibrary handle);
 #if defined(__cplusplus)
 }
 #endif
-#endif  // C_METRICS_LIBRARY_H_
+#endif  // METRICS_C_METRICS_LIBRARY_H_

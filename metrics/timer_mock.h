@@ -11,7 +11,7 @@
 #include <base/basictypes.h>
 #include <gmock/gmock.h>
 
-#include "timer.h"
+#include "metrics/timer.h"
 
 namespace chromeos_metrics {
 
@@ -26,7 +26,7 @@ class TimerMock : public Timer {
 
 class TimerReporterMock : public TimerReporter {
  public:
-  TimerReporterMock() : TimerReporter("",0,0,0) {}
+  TimerReporterMock() : TimerReporter("", 0, 0, 0) {}
   MOCK_METHOD0(Start, bool());
   MOCK_METHOD0(Stop, bool());
   MOCK_METHOD0(Reset, bool());

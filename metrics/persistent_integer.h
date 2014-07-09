@@ -16,7 +16,7 @@ namespace chromeos_metrics {
 
 class PersistentInteger {
  public:
-  PersistentInteger(const std::string& name);
+  explicit PersistentInteger(const std::string& name);
 
   // Virtual only because of mock.
   virtual ~PersistentInteger();
@@ -61,6 +61,6 @@ class PersistentInteger {
   static bool testing_;
 };
 
-}
+}  // namespace chromeos_metrics
 
 #endif  // METRICS_PERSISTENT_INTEGER_H_
