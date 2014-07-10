@@ -35,6 +35,8 @@
 
 #define POWER_SUPPLY_SUBSYSTEM "power_supply"
 #define POWER_SUPPLY_SYSFS_PATH "/sys/class/" POWER_SUPPLY_SUBSYSTEM
+#define FAKE_BATTERY_CAPACITY 42
+#define FAKE_BATTERY_TEMPERATURE 424
 
 namespace android {
 
@@ -530,11 +532,11 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             KLOG_WARNING(LOG_TAG, "BatteryTechnologyPath not found\n");
     }
 
-    if (property_get("persist.sys.battery.capacity", pval, NULL) > 0)
-        mBatteryFixedCapacity = (int) strtol(pval, NULL, 10);
-
-    if (property_get("persist.sys.battery.temperature", pval, NULL) > 0)
-        mBatteryFixedTemperature = (int) strtol(pval, NULL, 10);
+    if (property_get("ro.boot.fake_battery", pval, NULL) > 0
+                                               && strtol(pval, NULL, 10) != 0) {
+        mBatteryFixedCapacity = FAKE_BATTERY_CAPACITY;
+        mBatteryFixedTemperature = FAKE_BATTERY_TEMPERATURE;
+    }
 }
 
 }; // namespace android
