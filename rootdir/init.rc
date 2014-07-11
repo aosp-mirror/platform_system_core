@@ -168,6 +168,10 @@ on property:sys.boot_from_charger_mode=1
 on load_all_props_action
     load_all_props
 
+# Indicate to fw loaders that the relevant mounts are up.
+on firmware_mounts_complete
+    rm /dev/.booting
+
 # Mount filesystems and start core system services.
 on late-init
     trigger early-fs
@@ -182,6 +186,9 @@ on late-init
 
     trigger early-boot
     trigger boot
+
+    # Remove a file to wake up anything waiting for firmware
+    trigger firmware_mounts_complete
 
 on post-fs
     # once everything is setup, no need to modify /
