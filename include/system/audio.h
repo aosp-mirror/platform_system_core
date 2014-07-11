@@ -645,10 +645,10 @@ struct audio_gain_config  {
     audio_gain_mode_t    mode;              /* mode requested for this command */
     audio_channel_mask_t channel_mask;      /* channels which gain value follows.
                                                N/A in joint mode */
-    int                  values[sizeof(audio_channel_mask_t)]; /* gain values in millibels for each
-                                               channel ordered from LSb to MSb in channel mask.
-                                               The number of values is 1 in joint mode or
-                                               popcount(channel_mask) */
+    int                  values[sizeof(audio_channel_mask_t) * 8]; /* gain values in millibels
+                                               for each channel ordered from LSb to MSb in
+                                               channel mask. The number of values is 1 in joint
+                                               mode or popcount(channel_mask) */
     unsigned int         ramp_duration_ms; /* ramp duration in ms */
 };
 
