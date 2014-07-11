@@ -29,10 +29,6 @@
  * SUCH DAMAGE.
  */
 
-#ifdef ANDROID
-#define WITHOUT_NLS
-#endif
-
 #ifndef ANDROID
 #include <bzlib.h>
 #endif
