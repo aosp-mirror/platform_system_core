@@ -159,7 +159,6 @@ usage(void)
 {
 	fprintf(stderr, getstr(4), __progname);
 	fprintf(stderr, "%s", getstr(5));
-	fprintf(stderr, "%s", getstr(5));
 	fprintf(stderr, "%s", getstr(6));
 	fprintf(stderr, "%s", getstr(7));
 	exit(2);
