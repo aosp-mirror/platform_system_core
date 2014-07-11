@@ -324,7 +324,7 @@ procline(struct str *l, int nottext)
 				continue;
 			/* Check for whole word match */
 			if (fg_pattern[i].word && pmatch.rm_so != 0) {
-				wint_t wbegin, wend;
+				wchar_t wbegin, wend;
 
 				wbegin = wend = L' ';
 				if (pmatch.rm_so != 0 &&
