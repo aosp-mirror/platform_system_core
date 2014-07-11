@@ -23,7 +23,6 @@
 static const char kAutotestPath[] = "/var/log/metrics/autotest-events";
 static const char kUMAEventsPath[] = "/var/run/metrics/uma-events";
 static const char kConsentFile[] = "/home/chronos/Consent To Send Stats";
-static const int32_t kBufferSize = 1024;
 static const char kCrosEventHistogramName[] = "Platform.CrOSEvent";
 static const int kCrosEventHistogramMax = 100;
 
