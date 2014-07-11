@@ -329,10 +329,11 @@ static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log) {
 }
 
 static void dump_map(log_t* log, const backtrace_map_t* map, bool fault_addr) {
-  _LOG(log, logtype::MAPS, "%s%" PRIPTR "-%" PRIPTR " %c%c%c %s\n",
-         (fault_addr? "--->" : "    "), map->start, map->end,
+  _LOG(log, logtype::MAPS, "%s%" PRIPTR "-%" PRIPTR " %c%c%c  %7d  %s\n",
+         (fault_addr? "--->" : "    "), map->start, map->end - 1,
          (map->flags & PROT_READ) ? 'r' : '-', (map->flags & PROT_WRITE) ? 'w' : '-',
-         (map->flags & PROT_EXEC) ? 'x' : '-', map->name.c_str());
+         (map->flags & PROT_EXEC) ? 'x' : '-',
+         (map->end - map->start), map->name.c_str());
 }
 
 static void dump_nearby_maps(BacktraceMap* map, log_t* log, pid_t tid) {
@@ -342,28 +343,31 @@ static void dump_nearby_maps(BacktraceMap* map, log_t* log, pid_t tid) {
     _LOG(log, logtype::MAPS, "cannot get siginfo for %d: %s\n", tid, strerror(errno));
     return;
   }
-  if (!signal_has_si_addr(si.si_signo)) {
-    return;
-  }
 
+  bool is_running = (si.si_code == SI_USER);
   uintptr_t addr = reinterpret_cast<uintptr_t>(si.si_addr);
   addr &= ~0xfff;     // round to 4K page boundary
-  if (addr == 0) {    // null-pointer deref
+  if (!is_running && addr == 0) {    // null-pointer deref
     return;
   }
 
-  _LOG(log, logtype::MAPS, "\nmemory map: (fault address prefixed with --->)\n");
+  _LOG(log, logtype::MAPS, "\nmemory map: %s\n", is_running? "" : "(fault address prefixed with --->)");
 
-  bool found_map = false;
-  for (BacktraceMap::const_iterator it = map->begin(); it != map->end(); ++it) {
-    bool in_map = addr >= (*it).start && addr < (*it).end;
-    dump_map(log, &*it, in_map);
-    if(in_map) {
-      found_map = true;
-    }
+  if(!is_running && (addr < map->begin()->start)) {
+    _LOG(log, logtype::MAPS, "--->Fault address falls at %" PRIPTR " before any mapped regions\n", addr);
   }
-  if(!found_map) {
-    _LOG(log, logtype::ERROR, "\nFault address was not in any map!");
+
+  BacktraceMap::const_iterator prev = map->begin();
+  for (BacktraceMap::const_iterator it = map->begin(); it != map->end(); ++it) {
+    if (addr >= (*prev).end && addr < (*it).start) {
+      _LOG(log, logtype::MAPS, "--->Fault address falls at %" PRIPTR " between mapped regions\n", addr);
+    }
+    prev = it;
+    bool in_map = !is_running && (addr >= (*it).start) && (addr < (*it).end);
+    dump_map(log, &*it, in_map);
+  }
+  if (!is_running && (addr >= (*prev).end)) {
+    _LOG(log, logtype::MAPS, "--->Fault address falls at %" PRIPTR " after any mapped regions\n", addr);
   }
 }
 
