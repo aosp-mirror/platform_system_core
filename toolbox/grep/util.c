@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.16 2012/05/06 22:32:05 joerg Exp $	*/
+/*	$NetBSD: util.c,v 1.17 2013/01/21 03:24:43 msaitoh Exp $	*/
 /*	$FreeBSD: head/usr.bin/grep/util.c 211496 2010-08-19 09:28:59Z des $	*/
 /*	$OpenBSD: util.c,v 1.39 2010/07/02 22:18:03 tedu Exp $	*/
 
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: util.c,v 1.16 2012/05/06 22:32:05 joerg Exp $");
+__RCSID("$NetBSD: util.c,v 1.17 2013/01/21 03:24:43 msaitoh Exp $");
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -74,9 +74,10 @@ file_matching(const char *fname)
 	for (i = 0; i < fpatterns; ++i) {
 		if (fnmatch(fpattern[i].pat, fname, 0) == 0 ||
 		    fnmatch(fpattern[i].pat, fname_base, 0) == 0) {
-			if (fpattern[i].mode == EXCL_PAT)
+			if (fpattern[i].mode == EXCL_PAT) {
+				free(fname_copy);
 				return (false);
-			else
+			} else
 				ret = true;
 		}
 	}
@@ -128,7 +129,7 @@ grep_tree(char **argv)
 		break;
 	default:
 		fts_flags = FTS_LOGICAL;
-
+			
 	}
 
 	fts_flags |= FTS_NOSTAT | FTS_NOCHDIR;
@@ -273,7 +274,7 @@ procfile(const char *fn)
 	return (c);
 }
 
-#define iswword(x)	(iswalnum((wint_t)(x)) || (x) == L'_')
+#define iswword(x)	(iswalnum((x)) || (x) == L'_')
 
 /*
  * Processes a line comparing it with the specified patterns.  Each pattern
@@ -323,7 +324,7 @@ procline(struct str *l, int nottext)
 				continue;
 			/* Check for whole word match */
 			if (fg_pattern[i].word && pmatch.rm_so != 0) {
-				wchar_t wbegin, wend;
+				wint_t wbegin, wend;
 
 				wbegin = wend = L' ';
 				if (pmatch.rm_so != 0 &&
@@ -474,13 +475,13 @@ printline(struct str *line, int sep, regmatch_t *matches, int m)
 			if (!oflag)
 				fwrite(line->dat + a, matches[i].rm_so - a, 1,
 				    stdout);
-			if (color)
+			if (color) 
 				fprintf(stdout, "\33[%sm\33[K", color);
 
-				fwrite(line->dat + matches[i].rm_so,
+				fwrite(line->dat + matches[i].rm_so, 
 				    matches[i].rm_eo - matches[i].rm_so, 1,
 				    stdout);
-			if (color)
+			if (color) 
 				fprintf(stdout, "\33[m\33[K");
 			a = matches[i].rm_eo;
 			if (oflag)
