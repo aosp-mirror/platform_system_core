@@ -402,7 +402,7 @@ grep_main(int argc, char *argv[])
 				Aflag = 0;
 			else if (Aflag > LLONG_MAX / 10) {
 				errno = ERANGE;
-				err(2, "%llu", Aflag);
+				err(2, NULL);
 			}
 			Aflag = Bflag = (Aflag * 10) + (c - '0');
 			break;
@@ -419,10 +419,10 @@ grep_main(int argc, char *argv[])
 			l = strtoull(optarg, &ep, 10);
 			if (((errno == ERANGE) && (l == ULLONG_MAX)) ||
 			    ((errno == EINVAL) && (l == 0)))
-				err(2, "strtoull");
+				err(2, NULL);
 			else if (ep[0] != '\0') {
 				errno = EINVAL;
-				err(2, "empty");
+				err(2, NULL);
 			}
 			if (c == 'A')
 				Aflag = l;
@@ -508,10 +508,10 @@ grep_main(int argc, char *argv[])
 			mcount = strtoull(optarg, &ep, 10);
 			if (((errno == ERANGE) && (mcount == ULLONG_MAX)) ||
 			    ((errno == EINVAL) && (mcount == 0)))
-				err(2, "strtoull");
+				err(2, NULL);
 			else if (ep[0] != '\0') {
 				errno = EINVAL;
-				err(2, "empty");
+				err(2, NULL);
 			}
 			break;
 		case 'n':

@@ -31,6 +31,9 @@
 /* We want chown to support user.group as well as user:group. */
 #define SUPPORT_DOT
 
+/* We don't localize /system/bin! */
+#define WITHOUT_NLS
+
 __BEGIN_DECLS
 
 extern int uid_from_user(const char* name, uid_t* uid);
