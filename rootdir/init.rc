@@ -281,8 +281,6 @@ on post-fs-data
     mkdir /data/app-lib 0771 system system
     mkdir /data/app 0771 system system
     mkdir /data/property 0700 root root
-    mkdir /data/ssh 0750 root shell
-    mkdir /data/ssh/empty 0700 root root
 
     # create dalvik-cache, so as to enforce our permissions
     mkdir /data/dalvik-cache 0771 system system
@@ -642,10 +640,6 @@ service dumpstate /system/bin/dumpstate -s
     socket dumpstate stream 0660 shell log
     disabled
     oneshot
-
-service sshd /system/bin/start-ssh
-    class main
-    disabled
 
 service mdnsd /system/bin/mdnsd
     class main
