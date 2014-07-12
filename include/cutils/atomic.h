@@ -25,8 +25,20 @@ extern "C" {
 #endif
 
 /*
- * A handful of basic atomic operations.  The appropriate pthread
- * functions should be used instead of these whenever possible.
+ * A handful of basic atomic operations.
+ * THESE ARE HERE FOR LEGACY REASONS ONLY.  AVOID.
+ *
+ * PREFERRED ALTERNATIVES:
+ * - Use C++/C/pthread locks/mutexes whenever there is not a
+ *   convincing reason to do otherwise.  Note that very clever and
+ *   complicated, but correct, lock-free code is often slower than
+ *   using locks, especially where nontrivial data structures
+ *   are involved.
+ * - C11 stdatomic.h.
+ * - Where supported, C++11 std::atomic<T> .
+ *
+ * PLEASE STOP READING HERE UNLESS YOU ARE TRYING TO UNDERSTAND
+ * OR UPDATE OLD CODE.
  *
  * The "acquire" and "release" terms can be defined intuitively in terms
  * of the placement of memory barriers in a simple lock implementation:
@@ -74,6 +86,17 @@ int32_t android_atomic_or(int32_t value, volatile int32_t* addr);
 /*
  * Perform an atomic load with "acquire" or "release" ordering.
  *
+ * Note that the notion of a "release" ordering for a load does not
+ * really fit into the C11 or C++11 memory model.  The extra ordering
+ * is normally observable only by code using memory_order_relaxed
+ * atomics, or data races.  In the rare cases in which such ordering
+ * is called for, use memory_order_relaxed atomics and a leading
+ * atomic_thread_fence (typically with memory_order_acquire,
+ * not memory_order_release!) instead.  If you do not understand
+ * this comment, you are in the vast majority, and should not be
+ * using release loads or replacing them with anything other than
+ * locks or default sequentially consistent atomics.
+ *
  * This is only necessary if you need the memory barrier.  A 32-bit read
  * from a 32-bit aligned address is atomic on all supported platforms.
  */
@@ -87,6 +110,14 @@ int64_t android_atomic_release_load64(volatile const int64_t* addr);
 
 /*
  * Perform an atomic store with "acquire" or "release" ordering.
+ *
+ * Note that the notion of a "acquire" ordering for a store does not
+ * really fit into the C11 or C++11 memory model.  The extra ordering
+ * is normally observable only by code using memory_order_relaxed
+ * atomics, or data races.  In the rare cases in which such ordering
+ * is called for, use memory_order_relaxed atomics and a trailing
+ * atomic_thread_fence (typically with memory_order_release,
+ * not memory_order_acquire!) instead.
  *
  * This is only necessary if you need the memory barrier.  A 32-bit write
  * to a 32-bit aligned address is atomic on all supported platforms.
