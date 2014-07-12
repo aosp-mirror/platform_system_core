@@ -26,6 +26,7 @@
 #include <sys/cdefs.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -747,6 +748,7 @@ static void mainloop(void) {
 }
 
 int main(int argc __unused, char **argv __unused) {
+    mlockall(MCL_FUTURE);
     if (!init())
         mainloop();
 
