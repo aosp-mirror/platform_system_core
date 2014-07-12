@@ -48,7 +48,7 @@
 
 #include <private/android_filesystem_config.h>
 
-void add_environment(const char *name, const char *value);
+int add_environment(const char *name, const char *value);
 
 extern int init_module(void *, unsigned long, const char *);
 
@@ -261,8 +261,7 @@ int do_exec(int nargs, char **args)
 
 int do_export(int nargs, char **args)
 {
-    add_environment(args[1], args[2]);
-    return 0;
+    return add_environment(args[1], args[2]);
 }
 
 int do_hostname(int nargs, char **args)
