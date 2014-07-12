@@ -19,7 +19,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -128,6 +127,26 @@ static time_t kill_lasttime;
 
 /* PAGE_SIZE / 1024 */
 static long page_k;
+
+static ssize_t read_all(int fd, char *buf, size_t max_len)
+{
+    ssize_t ret = 0;
+
+    while (max_len > 0) {
+        ssize_t r = read(fd, buf, max_len);
+        if (r == 0) {
+            break;
+        }
+        if (r == -1) {
+            return -1;
+        }
+        ret += r;
+        buf += r;
+        max_len -= r;
+    }
+
+    return ret;
+}
 
 static int lowmem_oom_adj_to_oom_score_adj(int oom_adj)
 {
@@ -422,17 +441,13 @@ static void ctrl_connect_handler(uint32_t events __unused) {
 static int zoneinfo_parse_protection(char *cp) {
     int max = 0;
     int zoneval;
+    char *save_ptr;
 
-    if (*cp++ != '(')
-        return 0;
-
-    do {
+    for (cp = strtok_r(cp, "(), ", &save_ptr); cp; cp = strtok_r(NULL, "), ", &save_ptr)) {
         zoneval = strtol(cp, &cp, 0);
-        if ((*cp != ',') && (*cp != ')'))
-            return 0;
         if (zoneval > max)
             max = zoneval;
-    } while ((cp = strtok(NULL, " ")));
+    }
 
     return max;
 }
@@ -440,12 +455,13 @@ static int zoneinfo_parse_protection(char *cp) {
 static void zoneinfo_parse_line(char *line, struct sysmeminfo *mip) {
     char *cp = line;
     char *ap;
+    char *save_ptr;
 
-    cp = strtok(line, " ");
+    cp = strtok_r(line, " ", &save_ptr);
     if (!cp)
         return;
 
-    ap = strtok(NULL, " ");
+    ap = strtok_r(NULL, " ", &save_ptr);
     if (!ap)
         return;
 
@@ -462,56 +478,74 @@ static void zoneinfo_parse_line(char *line, struct sysmeminfo *mip) {
 }
 
 static int zoneinfo_parse(struct sysmeminfo *mip) {
-    FILE *f;
-    char line[LINE_MAX];
+    int fd;
+    ssize_t size;
+    char buf[PAGE_SIZE];
+    char *save_ptr;
+    char *line;
 
     memset(mip, 0, sizeof(struct sysmeminfo));
-    f = fopen(ZONEINFO_PATH, "r");
-    if (!f) {
+
+    fd = open(ZONEINFO_PATH, O_RDONLY);
+    if (fd == -1) {
         ALOGE("%s open: errno=%d", ZONEINFO_PATH, errno);
         return -1;
     }
 
-    while (fgets(line, LINE_MAX, f))
+    size = read_all(fd, buf, sizeof(buf) - 1);
+    if (size < 0) {
+        ALOGE("%s read: errno=%d", ZONEINFO_PATH, errno);
+        close(fd);
+        return -1;
+    }
+    ALOG_ASSERT((size_t)size < sizeof(buf) - 1, "/proc/zoneinfo too large");
+    buf[size] = 0;
+
+    for (line = strtok_r(buf, "\n", &save_ptr); line; line = strtok_r(NULL, "\n", &save_ptr))
             zoneinfo_parse_line(line, mip);
 
-    fclose(f);
+    close(fd);
     return 0;
 }
 
 static int proc_get_size(int pid) {
     char path[PATH_MAX];
     char line[LINE_MAX];
-    FILE *f;
+    int fd;
     int rss = 0;
     int total;
+    ssize_t ret;
 
     snprintf(path, PATH_MAX, "/proc/%d/statm", pid);
-    f = fopen(path, "r");
-    if (!f)
+    fd = open(path, O_RDONLY);
+    if (fd == -1)
         return -1;
-    if (!fgets(line, LINE_MAX, f)) {
-        fclose(f);
+
+    ret = read_all(fd, line, sizeof(line) - 1);
+    if (ret < 0) {
+        close(fd);
         return -1;
     }
 
     sscanf(line, "%d %d ", &total, &rss);
-    fclose(f);
+    close(fd);
     return rss;
 }
 
 static char *proc_get_name(int pid) {
     char path[PATH_MAX];
     static char line[LINE_MAX];
-    FILE *f;
+    int fd;
     char *cp;
+    ssize_t ret;
 
     snprintf(path, PATH_MAX, "/proc/%d/cmdline", pid);
-    f = fopen(path, "r");
-    if (!f)
+    fd = open(path, O_RDONLY);
+    if (fd == -1)
         return NULL;
-    if (!fgets(line, LINE_MAX, f)) {
-        fclose(f);
+    ret = read_all(fd, line, sizeof(line) - 1);
+    close(fd);
+    if (ret < 0) {
         return NULL;
     }
 
