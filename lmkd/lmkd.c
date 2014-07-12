@@ -660,8 +660,10 @@ static void mp_event(uint32_t events __unused) {
     if (time(NULL) - kill_lasttime < KILL_TIMEOUT)
         return;
 
-    if (zoneinfo_parse(&mi) < 0)
-        return;
+    while (zoneinfo_parse(&mi) < 0) {
+        // Failed to read /proc/zoneinfo, assume ENOMEM and kill something
+        find_and_kill_process(0, 0, true);
+    }
 
     other_free = mi.nr_free_pages - mi.totalreserve_pages;
     other_file = mi.nr_file_pages - mi.nr_shmem;
