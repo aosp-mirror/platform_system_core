@@ -503,13 +503,11 @@ TEST(logd, both) {
             (user_logger_content)     ? yes : no,
             (kernel_logger_available) ? yes : no,
             (kernel_logger_content)   ? yes : no,
-            (user_logger_available && kernel_logger_available) ? "WARNING" : "ok",
+            (user_logger_available && kernel_logger_available) ? "ERROR" : "ok",
             (user_logger_content && kernel_logger_content) ? "ERROR" : "ok");
 
-    if (user_logger_available && kernel_logger_available) {
-        printf("WARNING: kernel & user logger; both consuming resources!!!\n");
-    }
-
+    EXPECT_EQ(0, user_logger_available && kernel_logger_available);
+    EXPECT_EQ(0, !user_logger_available && !kernel_logger_available);
     EXPECT_EQ(0, user_logger_content && kernel_logger_content);
     EXPECT_EQ(0, !user_logger_content && !kernel_logger_content);
 }
