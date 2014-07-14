@@ -2009,7 +2009,7 @@ int install_multiple_app(transport_type transport, char* serial, int argc, char*
         }
 
         snprintf(buf, sizeof(buf), "exec:pm install-write -S %lld %d %d_%s -",
-                sb.st_size, session_id, i, get_basename(file));
+                (long long int) sb.st_size, session_id, i, get_basename(file));
 
         int localFd = adb_open(file, O_RDONLY);
         if (localFd < 0) {
