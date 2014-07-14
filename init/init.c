@@ -817,27 +817,21 @@ static int property_service_init_action(int nargs, char **args)
      * that /data/local.prop cannot interfere with them.
      */
     start_property_service();
+    if (get_property_set_fd() < 0) {
+        ERROR("start_property_service() failed\n");
+        exit(1);
+    }
+
     return 0;
 }
 
 static int signal_init_action(int nargs, char **args)
 {
     signal_init();
-    return 0;
-}
-
-static int check_startup_action(int nargs, char **args)
-{
-    /* make sure we actually have all the pieces we need */
-    if ((get_property_set_fd() < 0) ||
-        (get_signal_fd() < 0)) {
-        ERROR("init startup failure\n");
+    if (get_signal_fd() < 0) {
+        ERROR("signal_init() failed\n");
         exit(1);
     }
-
-        /* signal that we hit this point */
-    unlink("/dev/.booting");
-
     return 0;
 }
 
@@ -1098,7 +1092,6 @@ int main(int argc, char **argv)
     queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
     queue_builtin_action(property_service_init_action, "property_service_init");
     queue_builtin_action(signal_init_action, "signal_init");
-    queue_builtin_action(check_startup_action, "check_startup");
 
     /* Don't mount filesystems or start core system services if in charger mode. */
     if (is_charger) {
@@ -1107,7 +1100,7 @@ int main(int argc, char **argv)
         action_for_each_trigger("late-init", action_add_queue_tail);
     }
 
-        /* run all property triggers based on current state of the properties */
+    /* run all property triggers based on current state of the properties */
     queue_builtin_action(queue_property_triggers_action, "queue_property_triggers");
 
 
