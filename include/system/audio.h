@@ -200,7 +200,16 @@ typedef enum {
 
 /* AAC sub format field definition: specify profile or bitrate for recording... */
 typedef enum {
-    AUDIO_FORMAT_AAC_SUB_NONE            = 0x0,
+    AUDIO_FORMAT_AAC_SUB_MAIN            = 0x1,
+    AUDIO_FORMAT_AAC_SUB_LC              = 0x2,
+    AUDIO_FORMAT_AAC_SUB_SSR             = 0x4,
+    AUDIO_FORMAT_AAC_SUB_LTP             = 0x8,
+    AUDIO_FORMAT_AAC_SUB_HE_V1           = 0x10,
+    AUDIO_FORMAT_AAC_SUB_SCALABLE        = 0x20,
+    AUDIO_FORMAT_AAC_SUB_ERLC            = 0x40,
+    AUDIO_FORMAT_AAC_SUB_LD              = 0x80,
+    AUDIO_FORMAT_AAC_SUB_HE_V2           = 0x100,
+    AUDIO_FORMAT_AAC_SUB_ELD             = 0x200,
 } audio_format_aac_sub_fmt_t;
 
 /* VORBIS sub format field definition: specify quality for recording... */
@@ -225,8 +234,8 @@ typedef enum {
     AUDIO_FORMAT_AMR_NB              = 0x02000000UL,
     AUDIO_FORMAT_AMR_WB              = 0x03000000UL,
     AUDIO_FORMAT_AAC                 = 0x04000000UL,
-    AUDIO_FORMAT_HE_AAC_V1           = 0x05000000UL,
-    AUDIO_FORMAT_HE_AAC_V2           = 0x06000000UL,
+    AUDIO_FORMAT_HE_AAC_V1           = 0x05000000UL, /* Deprecated, Use AUDIO_FORMAT_AAC_HE_V1*/
+    AUDIO_FORMAT_HE_AAC_V2           = 0x06000000UL, /* Deprecated, Use AUDIO_FORMAT_AAC_HE_V2*/
     AUDIO_FORMAT_VORBIS              = 0x07000000UL,
     AUDIO_FORMAT_OPUS                = 0x08000000UL,
     AUDIO_FORMAT_AC3                 = 0x09000000UL,
@@ -249,6 +258,26 @@ typedef enum {
                                         AUDIO_FORMAT_PCM_SUB_FLOAT),
     AUDIO_FORMAT_PCM_24_BIT_PACKED   = (AUDIO_FORMAT_PCM |
                                         AUDIO_FORMAT_PCM_SUB_24_BIT_PACKED),
+    AUDIO_FORMAT_AAC_MAIN            = (AUDIO_FORMAT_AAC |
+                                        AUDIO_FORMAT_AAC_SUB_MAIN),
+    AUDIO_FORMAT_AAC_LC              = (AUDIO_FORMAT_AAC |
+                                        AUDIO_FORMAT_AAC_SUB_LC),
+    AUDIO_FORMAT_AAC_SSR             = (AUDIO_FORMAT_AAC |
+                                        AUDIO_FORMAT_AAC_SUB_SSR),
+    AUDIO_FORMAT_AAC_LTP             = (AUDIO_FORMAT_AAC |
+                                        AUDIO_FORMAT_AAC_SUB_LTP),
+    AUDIO_FORMAT_AAC_HE_V1           = (AUDIO_FORMAT_AAC |
+                                        AUDIO_FORMAT_AAC_SUB_HE_V1),
+    AUDIO_FORMAT_AAC_SCALABLE        = (AUDIO_FORMAT_AAC |
+                                        AUDIO_FORMAT_AAC_SUB_SCALABLE),
+    AUDIO_FORMAT_AAC_ERLC            = (AUDIO_FORMAT_AAC |
+                                        AUDIO_FORMAT_AAC_SUB_ERLC),
+    AUDIO_FORMAT_AAC_LD              = (AUDIO_FORMAT_AAC |
+                                        AUDIO_FORMAT_AAC_SUB_LD),
+    AUDIO_FORMAT_AAC_HE_V2           = (AUDIO_FORMAT_AAC |
+                                        AUDIO_FORMAT_AAC_SUB_HE_V2),
+    AUDIO_FORMAT_AAC_ELD             = (AUDIO_FORMAT_AAC |
+                                        AUDIO_FORMAT_AAC_SUB_ELD),
 } audio_format_t;
 
 enum {
