@@ -32,6 +32,7 @@
 
 #include <cutils/sockets.h>
 #include <log/log.h>
+#include <processgroup/processgroup.h>
 
 #ifndef __unused
 #define __unused __attribute__((__unused__))
@@ -591,6 +592,7 @@ static void mp_event(uint32_t events __unused) {
                   other_file * page_k, minfree * page_k, min_score_adj,
                   other_free * page_k, other_free >= 0 ? "above" : "below");
             r = kill(pid, SIGKILL);
+            killProcessGroup(uid, pid, SIGKILL);
             pid_remove(pid);
 
             if (r) {
