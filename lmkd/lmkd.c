@@ -560,6 +560,88 @@ static struct proc *proc_adj_lru(int oomadj) {
     return (struct proc *)adjslot_tail(&procadjslot_list[ADJTOSLOT(oomadj)]);
 }
 
+/* Kill one process specified by procp.  Returns the size of the process killed */
+static int kill_one_process(struct proc *procp, int other_free, int other_file,
+        int minfree, int min_score_adj, bool first)
+{
+    int pid = procp->pid;
+    uid_t uid = procp->uid;
+    char *taskname;
+    int tasksize;
+    int r;
+
+    taskname = proc_get_name(pid);
+    if (!taskname) {
+        pid_remove(pid);
+        return -1;
+    }
+
+    tasksize = proc_get_size(pid);
+    if (tasksize <= 0) {
+        pid_remove(pid);
+        return -1;
+    }
+
+    ALOGI("Killing '%s' (%d), uid %d, adj %d\n"
+          "   to free %ldkB because cache %s%ldkB is below limit %ldkB for oom_adj %d\n"
+          "   Free memory is %s%ldkB %s reserved",
+          taskname, pid, uid, procp->oomadj, tasksize * page_k,
+          first ? "" : "~", other_file * page_k, minfree * page_k, min_score_adj,
+          first ? "" : "~", other_free * page_k, other_free >= 0 ? "above" : "below");
+    r = kill(pid, SIGKILL);
+    killProcessGroup(uid, pid, SIGKILL);
+    pid_remove(pid);
+
+    if (r) {
+        ALOGE("kill(%d): errno=%d", procp->pid, errno);
+        return -1;
+    } else {
+        return tasksize;
+    }
+}
+
+/*
+ * Find a process to kill based on the current (possibly estimated) free memory
+ * and cached memory sizes.  Returns the size of the killed processes.
+ */
+static int find_and_kill_process(int other_free, int other_file, bool first)
+{
+    int i;
+    int r;
+    int min_score_adj = OOM_ADJUST_MAX + 1;
+    int minfree = 0;
+    int killed_size = 0;
+
+    for (i = 0; i < lowmem_targets_size; i++) {
+        minfree = lowmem_minfree[i];
+        if (other_free < minfree && other_file < minfree) {
+            min_score_adj = lowmem_adj[i];
+            break;
+        }
+    }
+
+    if (min_score_adj == OOM_ADJUST_MAX + 1)
+        return 0;
+
+    for (i = OOM_ADJUST_MAX; i >= min_score_adj; i--) {
+        struct proc *procp;
+
+retry:
+        procp = proc_adj_lru(i);
+
+        if (procp) {
+            killed_size = kill_one_process(procp, other_free, other_file, minfree, min_score_adj, first);
+            if (killed_size < 0) {
+                goto retry;
+            } else {
+                return killed_size;
+            }
+        }
+    }
+
+    return 0;
+}
+
 static void mp_event(uint32_t events __unused) {
     int i;
     int ret;
@@ -567,8 +649,8 @@ static void mp_event(uint32_t events __unused) {
     struct sysmeminfo mi;
     int other_free;
     int other_file;
-    int minfree = 0;
-    int min_score_adj = OOM_ADJUST_MAX + 1;
+    int killed_size;
+    bool first = true;
 
     ret = read(mpevfd, &evcount, sizeof(evcount));
     if (ret < 0)
@@ -584,61 +666,14 @@ static void mp_event(uint32_t events __unused) {
     other_free = mi.nr_free_pages - mi.totalreserve_pages;
     other_file = mi.nr_file_pages - mi.nr_shmem;
 
-    for (i = 0; i < lowmem_targets_size; i++) {
-        minfree = lowmem_minfree[i];
-        if (other_free < minfree && other_file < minfree) {
-            min_score_adj = lowmem_adj[i];
-            break;
+    do {
+        killed_size = find_and_kill_process(other_free, other_file, first);
+        if (killed_size > 0) {
+            first = false;
+            other_free += killed_size;
+            other_file += killed_size;
         }
-    }
-
-    if (min_score_adj == OOM_ADJUST_MAX + 1)
-        return;
-
-    for (i = OOM_ADJUST_MAX; i >= min_score_adj; i--) {
-        struct proc *procp;
-
-    retry:
-        procp = proc_adj_lru(i);
-
-        if (procp) {
-            int pid = procp->pid;
-            uid_t uid = procp->uid;
-            char *taskname;
-            int tasksize;
-            int r;
-
-            taskname = proc_get_name(pid);
-            if (!taskname) {
-                pid_remove(pid);
-                goto retry;
-            }
-
-            tasksize = proc_get_size(pid);
-            if (tasksize < 0) {
-                pid_remove(pid);
-                goto retry;
-            }
-
-            ALOGI("Killing '%s' (%d), uid %d, adj %d\n"
-                  "   to free %ldkB because cache %ldkB is below limit %ldkB for oom_adj %d\n"
-                  "   Free memory is %ldkB %s reserved",
-                  taskname, pid, uid, procp->oomadj, tasksize * page_k,
-                  other_file * page_k, minfree * page_k, min_score_adj,
-                  other_free * page_k, other_free >= 0 ? "above" : "below");
-            r = kill(pid, SIGKILL);
-            killProcessGroup(uid, pid, SIGKILL);
-            pid_remove(pid);
-
-            if (r) {
-                ALOGE("kill(%d): errno=%d", procp->pid, errno);
-                goto retry;
-            } else {
-                time(&kill_lasttime);
-                break;
-            }
-        }
-    }
+    } while (killed_size > 0);
 }
 
 static int init_mp(char *levelstr, void *event_handler)
