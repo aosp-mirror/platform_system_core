@@ -38,6 +38,8 @@ LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 
 include $(BUILD_EXECUTABLE)
 
+
+
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := crasher.c
 LOCAL_SRC_FILES_arm    := arm/crashglue.S
@@ -51,6 +53,11 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_CFLAGS += -fstack-protector-all -Werror -Wno-free-nonheap-object
 #LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_SHARED_LIBRARIES := libcutils liblog libc
+
+# The arm emulator has VFP but not VFPv3-D32.
+ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
+LOCAL_ASFLAGS_arm += -DHAS_VFP_D32
+endif
 
 LOCAL_MODULE := crasher
 LOCAL_MODULE_STEM_32 := crasher
