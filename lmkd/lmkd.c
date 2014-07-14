@@ -748,7 +748,12 @@ static void mainloop(void) {
 }
 
 int main(int argc __unused, char **argv __unused) {
+    struct sched_param param = {
+            .sched_priority = 1,
+    };
+
     mlockall(MCL_FUTURE);
+    sched_setscheduler(0, SCHED_FIFO, &param);
     if (!init())
         mainloop();
 
