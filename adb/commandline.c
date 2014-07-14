@@ -1994,7 +1994,7 @@ int install_multiple_app(transport_type transport, char* serial, int argc, char*
     }
     if (session_id < 0) {
         fprintf(stderr, "Failed to create session\n");
-        fprintf(stderr, buf);
+        fputs(buf, stderr);
         return -1;
     }
 
@@ -2034,7 +2034,7 @@ int install_multiple_app(transport_type transport, char* serial, int argc, char*
 
         if (strncmp("Success", buf, 7)) {
             fprintf(stderr, "Failed to write %s\n", file);
-            fprintf(stderr, buf);
+            fputs(buf, stderr);
             success = 0;
             goto finalize_session;
         }
@@ -2057,11 +2057,11 @@ finalize_session:
     adb_close(fd);
 
     if (!strncmp("Success", buf, 7)) {
-        fprintf(stderr, buf);
+        fputs(buf, stderr);
         return 0;
     } else {
         fprintf(stderr, "Failed to finalize session\n");
-        fprintf(stderr, buf);
+        fputs(buf, stderr);
         return -1;
     }
 }
