@@ -52,7 +52,9 @@ typedef enum {
     AUDIO_STREAM_ALARM            = 4,
     AUDIO_STREAM_NOTIFICATION     = 5,
     AUDIO_STREAM_BLUETOOTH_SCO    = 6,
-    AUDIO_STREAM_ENFORCED_AUDIBLE = 7, /* Sounds that cannot be muted by user and must be routed to speaker */
+    AUDIO_STREAM_ENFORCED_AUDIBLE = 7, /* Sounds that cannot be muted by user
+                                        * and must be routed to speaker
+                                        */
     AUDIO_STREAM_DTMF             = 8,
     AUDIO_STREAM_TTS              = 9,
 
@@ -280,8 +282,19 @@ typedef enum {
                                         AUDIO_FORMAT_AAC_SUB_ELD),
 } audio_format_t;
 
+/* For the channel mask for position assignment representation */
 enum {
+
+/* These can be a complete audio_channel_mask_t. */
+
     AUDIO_CHANNEL_NONE                      = 0x0,
+    AUDIO_CHANNEL_INVALID                   = 0xC0000000,
+
+/* These can be the bits portion of an audio_channel_mask_t
+ * with representation AUDIO_CHANNEL_REPRESENTATION_POSITION.
+ * Using these bits as a complete audio_channel_mask_t is deprecated.
+ */
+
     /* output channels */
     AUDIO_CHANNEL_OUT_FRONT_LEFT            = 0x1,
     AUDIO_CHANNEL_OUT_FRONT_RIGHT           = 0x2,
@@ -301,6 +314,8 @@ enum {
     AUDIO_CHANNEL_OUT_TOP_BACK_LEFT         = 0x8000,
     AUDIO_CHANNEL_OUT_TOP_BACK_CENTER       = 0x10000,
     AUDIO_CHANNEL_OUT_TOP_BACK_RIGHT        = 0x20000,
+
+/* TODO: should these be considered complete channel masks, or only bits? */
 
     AUDIO_CHANNEL_OUT_MONO     = AUDIO_CHANNEL_OUT_FRONT_LEFT,
     AUDIO_CHANNEL_OUT_STEREO   = (AUDIO_CHANNEL_OUT_FRONT_LEFT |
@@ -357,6 +372,8 @@ enum {
                                   AUDIO_CHANNEL_OUT_TOP_BACK_CENTER|
                                   AUDIO_CHANNEL_OUT_TOP_BACK_RIGHT),
 
+/* These are bits only, not complete values */
+
     /* input channels */
     AUDIO_CHANNEL_IN_LEFT            = 0x4,
     AUDIO_CHANNEL_IN_RIGHT           = 0x8,
@@ -372,6 +389,8 @@ enum {
     AUDIO_CHANNEL_IN_Z_AXIS          = 0x2000,
     AUDIO_CHANNEL_IN_VOICE_UPLINK    = 0x4000,
     AUDIO_CHANNEL_IN_VOICE_DNLINK    = 0x8000,
+
+/* TODO: should these be considered complete channel masks, or only bits, or deprecated? */
 
     AUDIO_CHANNEL_IN_MONO   = AUDIO_CHANNEL_IN_FRONT,
     AUDIO_CHANNEL_IN_STEREO = (AUDIO_CHANNEL_IN_LEFT | AUDIO_CHANNEL_IN_RIGHT),
@@ -394,8 +413,94 @@ enum {
 
 /* A channel mask per se only defines the presence or absence of a channel, not the order.
  * But see AUDIO_INTERLEAVE_* below for the platform convention of order.
+ *
+ * audio_channel_mask_t is an opaque type and its internal layout should not
+ * be assumed as it may change in the future.
+ * Instead, always use the functions declared in this header to examine.
+ *
+ * These are the current representations:
+ *
+ *   AUDIO_CHANNEL_REPRESENTATION_POSITION
+ *     is a channel mask representation for position assignment.
+ *     Each low-order bit corresponds to the spatial position of a transducer (output),
+ *     or interpretation of channel (input).
+ *     The user of a channel mask needs to know the context of whether it is for output or input.
+ *     The constants AUDIO_CHANNEL_OUT_* or AUDIO_CHANNEL_IN_* apply to the bits portion.
+ *     It is not permitted for no bits to be set.
+ *
+ *   AUDIO_CHANNEL_REPRESENTATION_INDEX
+ *     is a channel mask representation for index assignment.
+ *     Each low-order bit corresponds to a selected channel.
+ *     There is no platform interpretation of the various bits.
+ *     There is no concept of output or input.
+ *     It is not permitted for no bits to be set.
+ *
+ * All other representations are reserved for future use.
+ *
+ * Warning: current representation distinguishes between input and output, but this will not the be
+ * case in future revisions of the platform. Wherever there is an ambiguity between input and output
+ * that is currently resolved by checking the channel mask, the implementer should look for ways to
+ * fix it with additional information outside of the mask.
  */
 typedef uint32_t audio_channel_mask_t;
+
+/* Maximum number of channels for all representations */
+#define AUDIO_CHANNEL_COUNT_MAX             30
+
+/* log(2) of maximum number of representations, not part of public API */
+#define AUDIO_CHANNEL_REPRESENTATION_LOG2   2
+
+/* Representations */
+typedef enum {
+    AUDIO_CHANNEL_REPRESENTATION_POSITION    = 0,    // must be zero for compatibility
+    // 1 is reserved for future use
+    AUDIO_CHANNEL_REPRESENTATION_INDEX       = 2,
+    // 3 is reserved for future use
+} audio_channel_representation_t;
+
+/* The return value is undefined if the channel mask is invalid. */
+static inline uint32_t audio_channel_mask_get_bits(audio_channel_mask_t channel)
+{
+    return channel & ((1 << AUDIO_CHANNEL_COUNT_MAX) - 1);
+}
+
+/* The return value is undefined if the channel mask is invalid. */
+static inline audio_channel_representation_t audio_channel_mask_get_representation(
+        audio_channel_mask_t channel)
+{
+    // The right shift should be sufficient, but also "and" for safety in case mask is not 32 bits
+    return (audio_channel_representation_t)
+            ((channel >> AUDIO_CHANNEL_COUNT_MAX) & ((1 << AUDIO_CHANNEL_REPRESENTATION_LOG2) - 1));
+}
+
+/* Returns true if the channel mask is valid,
+ * or returns false for AUDIO_CHANNEL_NONE, AUDIO_CHANNEL_INVALID, and other invalid values.
+ * This function is unable to determine whether a channel mask for position assignment
+ * is invalid because an output mask has an invalid output bit set,
+ * or because an input mask has an invalid input bit set.
+ * All other APIs that take a channel mask assume that it is valid.
+ */
+static inline bool audio_channel_mask_is_valid(audio_channel_mask_t channel)
+{
+    uint32_t bits = audio_channel_mask_get_bits(channel);
+    audio_channel_representation_t representation = audio_channel_mask_get_representation(channel);
+    switch (representation) {
+    case AUDIO_CHANNEL_REPRESENTATION_POSITION:
+    case AUDIO_CHANNEL_REPRESENTATION_INDEX:
+        break;
+    default:
+        bits = 0;
+        break;
+    }
+    return bits != 0;
+}
+
+/* Not part of public API */
+static inline audio_channel_mask_t audio_channel_mask_from_representation_and_bits(
+        audio_channel_representation_t representation, uint32_t bits)
+{
+    return (audio_channel_mask_t) ((representation << AUDIO_CHANNEL_COUNT_MAX) | bits);
+}
 
 /* Expresses the convention when stereo audio samples are stored interleaved
  * in an array.  This should improve readability by allowing code to use
@@ -942,81 +1047,182 @@ static inline bool audio_is_remote_submix_device(audio_devices_t device)
         return false;
 }
 
+/* Returns true if:
+ *  representation is valid, and
+ *  there is at least one channel bit set which _could_ correspond to an input channel, and
+ *  there are no channel bits set which could _not_ correspond to an input channel.
+ * Otherwise returns false.
+ */
 static inline bool audio_is_input_channel(audio_channel_mask_t channel)
 {
-    if ((channel & ~AUDIO_CHANNEL_IN_ALL) == 0)
-        return channel != 0;
-    else
+    uint32_t bits = audio_channel_mask_get_bits(channel);
+    switch (audio_channel_mask_get_representation(channel)) {
+    case AUDIO_CHANNEL_REPRESENTATION_POSITION:
+        if (bits & ~AUDIO_CHANNEL_IN_ALL) {
+            bits = 0;
+        }
+        // fall through
+    case AUDIO_CHANNEL_REPRESENTATION_INDEX:
+        return bits != 0;
+    default:
         return false;
+    }
 }
 
+/* Returns true if:
+ *  representation is valid, and
+ *  there is at least one channel bit set which _could_ correspond to an output channel, and
+ *  there are no channel bits set which could _not_ correspond to an output channel.
+ * Otherwise returns false.
+ */
 static inline bool audio_is_output_channel(audio_channel_mask_t channel)
 {
-    if ((channel & ~AUDIO_CHANNEL_OUT_ALL) == 0)
-        return channel != 0;
-    else
+    uint32_t bits = audio_channel_mask_get_bits(channel);
+    switch (audio_channel_mask_get_representation(channel)) {
+    case AUDIO_CHANNEL_REPRESENTATION_POSITION:
+        if (bits & ~AUDIO_CHANNEL_OUT_ALL) {
+            bits = 0;
+        }
+        // fall through
+    case AUDIO_CHANNEL_REPRESENTATION_INDEX:
+        return bits != 0;
+    default:
         return false;
+    }
 }
 
 /* Returns the number of channels from an input channel mask,
  * used in the context of audio input or recording.
+ * If a channel bit is set which could _not_ correspond to an input channel,
+ * it is excluded from the count.
+ * Returns zero if the representation is invalid.
  */
 static inline uint32_t audio_channel_count_from_in_mask(audio_channel_mask_t channel)
 {
-    return popcount(channel & AUDIO_CHANNEL_IN_ALL);
+    uint32_t bits = audio_channel_mask_get_bits(channel);
+    switch (audio_channel_mask_get_representation(channel)) {
+    case AUDIO_CHANNEL_REPRESENTATION_POSITION:
+        // TODO: We can now merge with from_out_mask and remove anding
+        bits &= AUDIO_CHANNEL_IN_ALL;
+        // fall through
+    case AUDIO_CHANNEL_REPRESENTATION_INDEX:
+        return popcount(bits);
+    default:
+        return 0;
+    }
 }
 
 /* Returns the number of channels from an output channel mask,
  * used in the context of audio output or playback.
+ * If a channel bit is set which could _not_ correspond to an output channel,
+ * it is excluded from the count.
+ * Returns zero if the representation is invalid.
  */
 static inline uint32_t audio_channel_count_from_out_mask(audio_channel_mask_t channel)
 {
-    return popcount(channel & AUDIO_CHANNEL_OUT_ALL);
+    uint32_t bits = audio_channel_mask_get_bits(channel);
+    switch (audio_channel_mask_get_representation(channel)) {
+    case AUDIO_CHANNEL_REPRESENTATION_POSITION:
+        // TODO: We can now merge with from_in_mask and remove anding
+        bits &= AUDIO_CHANNEL_OUT_ALL;
+        // fall through
+    case AUDIO_CHANNEL_REPRESENTATION_INDEX:
+        return popcount(bits);
+    default:
+        return 0;
+    }
 }
 
-/* Derive an output channel mask from a channel count.
+/* Derive an output channel mask for position assignment from a channel count.
  * This is to be used when the content channel mask is unknown. The 1, 2, 4, 5, 6, 7 and 8 channel
  * cases are mapped to the standard game/home-theater layouts, but note that 4 is mapped to quad,
  * and not stereo + FC + mono surround. A channel count of 3 is arbitrarily mapped to stereo + FC
  * for continuity with stereo.
- * Returns the matching channel mask, or 0 if the number of channels exceeds that of the
- * configurations for which a default channel mask is defined.
+ * Returns the matching channel mask,
+ * or AUDIO_CHANNEL_NONE if the channel count is zero,
+ * or AUDIO_CHANNEL_INVALID if the channel count exceeds that of the
+ * configurations for which a default output channel mask is defined.
  */
 static inline audio_channel_mask_t audio_channel_out_mask_from_count(uint32_t channel_count)
 {
+    uint32_t bits;
     switch (channel_count) {
+    case 0:
+        return AUDIO_CHANNEL_NONE;
     case 1:
-        return AUDIO_CHANNEL_OUT_MONO;
+        bits = AUDIO_CHANNEL_OUT_MONO;
+        break;
     case 2:
-        return AUDIO_CHANNEL_OUT_STEREO;
+        bits = AUDIO_CHANNEL_OUT_STEREO;
+        break;
     case 3:
-        return (AUDIO_CHANNEL_OUT_STEREO | AUDIO_CHANNEL_OUT_FRONT_CENTER);
+        bits = AUDIO_CHANNEL_OUT_STEREO | AUDIO_CHANNEL_OUT_FRONT_CENTER;
+        break;
     case 4: // 4.0
-        return AUDIO_CHANNEL_OUT_QUAD;
+        bits = AUDIO_CHANNEL_OUT_QUAD;
+        break;
     case 5: // 5.0
-        return (AUDIO_CHANNEL_OUT_QUAD | AUDIO_CHANNEL_OUT_FRONT_CENTER);
+        bits = AUDIO_CHANNEL_OUT_QUAD | AUDIO_CHANNEL_OUT_FRONT_CENTER;
+        break;
     case 6: // 5.1
-        return AUDIO_CHANNEL_OUT_5POINT1;
+        bits = AUDIO_CHANNEL_OUT_5POINT1;
+        break;
     case 7: // 6.1
-        return (AUDIO_CHANNEL_OUT_5POINT1 | AUDIO_CHANNEL_OUT_BACK_CENTER);
+        bits = AUDIO_CHANNEL_OUT_5POINT1 | AUDIO_CHANNEL_OUT_BACK_CENTER;
+        break;
     case 8:
-        return AUDIO_CHANNEL_OUT_7POINT1;
+        bits = AUDIO_CHANNEL_OUT_7POINT1;
+        break;
     default:
-        return 0;
+        return AUDIO_CHANNEL_INVALID;
     }
+    return audio_channel_mask_from_representation_and_bits(
+            AUDIO_CHANNEL_REPRESENTATION_POSITION, bits);
 }
 
-/* Similar to above, but for input.  Currently handles only mono and stereo. */
+/* Derive an input channel mask for position assignment from a channel count.
+ * Currently handles only mono and stereo.
+ * Returns the matching channel mask,
+ * or AUDIO_CHANNEL_NONE if the channel count is zero,
+ * or AUDIO_CHANNEL_INVALID if the channel count exceeds that of the
+ * configurations for which a default input channel mask is defined.
+ */
 static inline audio_channel_mask_t audio_channel_in_mask_from_count(uint32_t channel_count)
 {
+    uint32_t bits;
     switch (channel_count) {
+    case 0:
+        return AUDIO_CHANNEL_NONE;
     case 1:
-        return AUDIO_CHANNEL_IN_MONO;
+        bits = AUDIO_CHANNEL_IN_MONO;
+        break;
     case 2:
-        return AUDIO_CHANNEL_IN_STEREO;
+        bits = AUDIO_CHANNEL_IN_STEREO;
+        break;
     default:
-        return 0;
+        return AUDIO_CHANNEL_INVALID;
     }
+    return audio_channel_mask_from_representation_and_bits(
+            AUDIO_CHANNEL_REPRESENTATION_POSITION, bits);
+}
+
+/* Derive a channel mask for index assignment from a channel count.
+ * Returns the matching channel mask,
+ * or AUDIO_CHANNEL_NONE if the channel count is zero,
+ * or AUDIO_CHANNEL_INVALID if the channel count exceeds AUDIO_CHANNEL_COUNT_MAX.
+ */
+static inline audio_channel_mask_t audio_channel_mask_for_index_assignment_from_count(
+        uint32_t channel_count)
+{
+    if (channel_count == 0) {
+        return AUDIO_CHANNEL_NONE;
+    }
+    if (channel_count > AUDIO_CHANNEL_COUNT_MAX) {
+        return AUDIO_CHANNEL_INVALID;
+    }
+    uint32_t bits = (1 << channel_count) - 1;
+    return audio_channel_mask_from_representation_and_bits(
+            AUDIO_CHANNEL_REPRESENTATION_INDEX, bits);
 }
 
 static inline bool audio_is_valid_format(audio_format_t format)
