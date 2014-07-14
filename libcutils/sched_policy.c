@@ -39,17 +39,9 @@ static inline SchedPolicy _policy(SchedPolicy p)
 
 #if defined(HAVE_ANDROID_OS) && defined(HAVE_SCHED_H) && defined(HAVE_PTHREADS)
 
-#include <linux/prctl.h>
-#include <sched.h>
 #include <pthread.h>
-
-#ifndef SCHED_NORMAL
-  #define SCHED_NORMAL 0
-#endif
-
-#ifndef SCHED_BATCH
-  #define SCHED_BATCH 3
-#endif
+#include <sched.h>
+#include <sys/prctl.h>
 
 #define POLICY_DEBUG 0
 
