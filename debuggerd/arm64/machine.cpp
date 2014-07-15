@@ -15,17 +15,14 @@
  * limitations under the License.
  */
 
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <stdio.h>
+#include <elf.h>
 #include <errno.h>
+#include <inttypes.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/ptrace.h>
 #include <sys/user.h>
 #include <sys/uio.h>
-#include <linux/elf.h>
 
 #include "../utility.h"
 #include "../machine.h"
@@ -79,19 +76,18 @@ void dump_registers(log_t* log, pid_t tid) {
 
   for (int i = 0; i < 28; i += 4) {
     _LOG(log, logtype::REGISTERS,
-         "    x%-2d  %016lx  x%-2d  %016lx  x%-2d  %016lx  x%-2d  %016lx\n",
-         i, (uint64_t)r.regs[i],
-         i+1, (uint64_t)r.regs[i+1],
-         i+2, (uint64_t)r.regs[i+2],
-         i+3, (uint64_t)r.regs[i+3]);
+         "    x%-2d  %016llx  x%-2d  %016llx  x%-2d  %016llx  x%-2d  %016llx\n",
+         i, r.regs[i],
+         i+1, r.regs[i+1],
+         i+2, r.regs[i+2],
+         i+3, r.regs[i+3]);
   }
 
-  _LOG(log, logtype::REGISTERS, "    x28  %016lx  x29  %016lx  x30  %016lx\n",
-       (uint64_t)r.regs[28], (uint64_t)r.regs[29], (uint64_t)r.regs[30]);
+  _LOG(log, logtype::REGISTERS, "    x28  %016llx  x29  %016llx  x30  %016llx\n",
+       r.regs[28], r.regs[29], r.regs[30]);
 
-  _LOG(log, logtype::REGISTERS, "    sp   %016lx  pc   %016lx\n",
-       (uint64_t)r.sp, (uint64_t)r.pc);
-
+  _LOG(log, logtype::REGISTERS, "    sp   %016llx  pc   %016llx  pstate %016llx\n",
+       r.sp, r.pc, r.pstate);
 
   struct user_fpsimd_state f;
   io.iov_base = &f;
@@ -102,11 +98,15 @@ void dump_registers(log_t* log, pid_t tid) {
     return;
   }
 
-  for (int i = 0; i < 32; i += 4) {
-    _LOG(log, logtype::REGISTERS, "    v%-2d  %016lx  v%-2d  %016lx  v%-2d  %016lx  v%-2d  %016lx\n",
-         i, (uint64_t)f.vregs[i],
-         i+1, (uint64_t)f.vregs[i+1],
-         i+2, (uint64_t)f.vregs[i+2],
-         i+3, (uint64_t)f.vregs[i+3]);
+  for (int i = 0; i < 32; i += 2) {
+    _LOG(log, logtype::FP_REGISTERS,
+         "    v%-2d  %016" PRIx64 "%016" PRIx64 "  v%-2d  %016" PRIx64 "%016" PRIx64 "\n",
+         i,
+         static_cast<uint64_t>(f.vregs[i] >> 64),
+         static_cast<uint64_t>(f.vregs[i]),
+         i+1,
+         static_cast<uint64_t>(f.vregs[i+1] >> 64),
+         static_cast<uint64_t>(f.vregs[i+1]));
   }
+  _LOG(log, logtype::FP_REGISTERS, "    fpsr %08x  fpcr %08x\n", f.fpsr, f.fpcr);
 }
