@@ -82,13 +82,13 @@ void dump_registers(log_t* log, pid_t tid) {
 
   user_vfp vfp_regs;
   if (ptrace(PTRACE_GETVFPREGS, tid, 0, &vfp_regs)) {
-    _LOG(log, logtype::REGISTERS, "cannot get registers: %s\n", strerror(errno));
+    _LOG(log, logtype::FP_REGISTERS, "cannot get FP registers: %s\n", strerror(errno));
     return;
   }
 
   for (size_t i = 0; i < 32; i += 2) {
-    _LOG(log, logtype::REGISTERS, "    d%-2d %016llx  d%-2d %016llx\n",
+    _LOG(log, logtype::FP_REGISTERS, "    d%-2d %016llx  d%-2d %016llx\n",
          i, vfp_regs.fpregs[i], i+1, vfp_regs.fpregs[i+1]);
   }
-  _LOG(log, logtype::REGISTERS, "    scr %08lx\n", vfp_regs.fpscr);
+  _LOG(log, logtype::FP_REGISTERS, "    scr %08lx\n", vfp_regs.fpscr);
 }
