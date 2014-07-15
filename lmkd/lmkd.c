@@ -19,13 +19,13 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <sys/cdefs.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -127,6 +127,26 @@ static time_t kill_lasttime;
 
 /* PAGE_SIZE / 1024 */
 static long page_k;
+
+static ssize_t read_all(int fd, char *buf, size_t max_len)
+{
+    ssize_t ret = 0;
+
+    while (max_len > 0) {
+        ssize_t r = read(fd, buf, max_len);
+        if (r == 0) {
+            break;
+        }
+        if (r == -1) {
+            return -1;
+        }
+        ret += r;
+        buf += r;
+        max_len -= r;
+    }
+
+    return ret;
+}
 
 static int lowmem_oom_adj_to_oom_score_adj(int oom_adj)
 {
@@ -421,17 +441,13 @@ static void ctrl_connect_handler(uint32_t events __unused) {
 static int zoneinfo_parse_protection(char *cp) {
     int max = 0;
     int zoneval;
+    char *save_ptr;
 
-    if (*cp++ != '(')
-        return 0;
-
-    do {
+    for (cp = strtok_r(cp, "(), ", &save_ptr); cp; cp = strtok_r(NULL, "), ", &save_ptr)) {
         zoneval = strtol(cp, &cp, 0);
-        if ((*cp != ',') && (*cp != ')'))
-            return 0;
         if (zoneval > max)
             max = zoneval;
-    } while ((cp = strtok(NULL, " ")));
+    }
 
     return max;
 }
@@ -439,12 +455,13 @@ static int zoneinfo_parse_protection(char *cp) {
 static void zoneinfo_parse_line(char *line, struct sysmeminfo *mip) {
     char *cp = line;
     char *ap;
+    char *save_ptr;
 
-    cp = strtok(line, " ");
+    cp = strtok_r(line, " ", &save_ptr);
     if (!cp)
         return;
 
-    ap = strtok(NULL, " ");
+    ap = strtok_r(NULL, " ", &save_ptr);
     if (!ap)
         return;
 
@@ -461,56 +478,74 @@ static void zoneinfo_parse_line(char *line, struct sysmeminfo *mip) {
 }
 
 static int zoneinfo_parse(struct sysmeminfo *mip) {
-    FILE *f;
-    char line[LINE_MAX];
+    int fd;
+    ssize_t size;
+    char buf[PAGE_SIZE];
+    char *save_ptr;
+    char *line;
 
     memset(mip, 0, sizeof(struct sysmeminfo));
-    f = fopen(ZONEINFO_PATH, "r");
-    if (!f) {
+
+    fd = open(ZONEINFO_PATH, O_RDONLY);
+    if (fd == -1) {
         ALOGE("%s open: errno=%d", ZONEINFO_PATH, errno);
         return -1;
     }
 
-    while (fgets(line, LINE_MAX, f))
+    size = read_all(fd, buf, sizeof(buf) - 1);
+    if (size < 0) {
+        ALOGE("%s read: errno=%d", ZONEINFO_PATH, errno);
+        close(fd);
+        return -1;
+    }
+    ALOG_ASSERT((size_t)size < sizeof(buf) - 1, "/proc/zoneinfo too large");
+    buf[size] = 0;
+
+    for (line = strtok_r(buf, "\n", &save_ptr); line; line = strtok_r(NULL, "\n", &save_ptr))
             zoneinfo_parse_line(line, mip);
 
-    fclose(f);
+    close(fd);
     return 0;
 }
 
 static int proc_get_size(int pid) {
     char path[PATH_MAX];
     char line[LINE_MAX];
-    FILE *f;
+    int fd;
     int rss = 0;
     int total;
+    ssize_t ret;
 
     snprintf(path, PATH_MAX, "/proc/%d/statm", pid);
-    f = fopen(path, "r");
-    if (!f)
+    fd = open(path, O_RDONLY);
+    if (fd == -1)
         return -1;
-    if (!fgets(line, LINE_MAX, f)) {
-        fclose(f);
+
+    ret = read_all(fd, line, sizeof(line) - 1);
+    if (ret < 0) {
+        close(fd);
         return -1;
     }
 
     sscanf(line, "%d %d ", &total, &rss);
-    fclose(f);
+    close(fd);
     return rss;
 }
 
 static char *proc_get_name(int pid) {
     char path[PATH_MAX];
     static char line[LINE_MAX];
-    FILE *f;
+    int fd;
     char *cp;
+    ssize_t ret;
 
     snprintf(path, PATH_MAX, "/proc/%d/cmdline", pid);
-    f = fopen(path, "r");
-    if (!f)
+    fd = open(path, O_RDONLY);
+    if (fd == -1)
         return NULL;
-    if (!fgets(line, LINE_MAX, f)) {
-        fclose(f);
+    ret = read_all(fd, line, sizeof(line) - 1);
+    close(fd);
+    if (ret < 0) {
         return NULL;
     }
 
@@ -525,29 +560,57 @@ static struct proc *proc_adj_lru(int oomadj) {
     return (struct proc *)adjslot_tail(&procadjslot_list[ADJTOSLOT(oomadj)]);
 }
 
-static void mp_event(uint32_t events __unused) {
+/* Kill one process specified by procp.  Returns the size of the process killed */
+static int kill_one_process(struct proc *procp, int other_free, int other_file,
+        int minfree, int min_score_adj, bool first)
+{
+    int pid = procp->pid;
+    uid_t uid = procp->uid;
+    char *taskname;
+    int tasksize;
+    int r;
+
+    taskname = proc_get_name(pid);
+    if (!taskname) {
+        pid_remove(pid);
+        return -1;
+    }
+
+    tasksize = proc_get_size(pid);
+    if (tasksize <= 0) {
+        pid_remove(pid);
+        return -1;
+    }
+
+    ALOGI("Killing '%s' (%d), uid %d, adj %d\n"
+          "   to free %ldkB because cache %s%ldkB is below limit %ldkB for oom_adj %d\n"
+          "   Free memory is %s%ldkB %s reserved",
+          taskname, pid, uid, procp->oomadj, tasksize * page_k,
+          first ? "" : "~", other_file * page_k, minfree * page_k, min_score_adj,
+          first ? "" : "~", other_free * page_k, other_free >= 0 ? "above" : "below");
+    r = kill(pid, SIGKILL);
+    killProcessGroup(uid, pid, SIGKILL);
+    pid_remove(pid);
+
+    if (r) {
+        ALOGE("kill(%d): errno=%d", procp->pid, errno);
+        return -1;
+    } else {
+        return tasksize;
+    }
+}
+
+/*
+ * Find a process to kill based on the current (possibly estimated) free memory
+ * and cached memory sizes.  Returns the size of the killed processes.
+ */
+static int find_and_kill_process(int other_free, int other_file, bool first)
+{
     int i;
-    int ret;
-    unsigned long long evcount;
-    struct sysmeminfo mi;
-    int other_free;
-    int other_file;
-    int minfree = 0;
+    int r;
     int min_score_adj = OOM_ADJUST_MAX + 1;
-
-    ret = read(mpevfd, &evcount, sizeof(evcount));
-    if (ret < 0)
-        ALOGE("Error reading memory pressure event fd; errno=%d",
-              errno);
-
-    if (time(NULL) - kill_lasttime < KILL_TIMEOUT)
-        return;
-
-    if (zoneinfo_parse(&mi) < 0)
-        return;
-
-    other_free = mi.nr_free_pages - mi.totalreserve_pages;
-    other_file = mi.nr_file_pages - mi.nr_shmem;
+    int minfree = 0;
+    int killed_size = 0;
 
     for (i = 0; i < lowmem_targets_size; i++) {
         minfree = lowmem_minfree[i];
@@ -558,52 +621,61 @@ static void mp_event(uint32_t events __unused) {
     }
 
     if (min_score_adj == OOM_ADJUST_MAX + 1)
-        return;
+        return 0;
 
     for (i = OOM_ADJUST_MAX; i >= min_score_adj; i--) {
         struct proc *procp;
 
-    retry:
+retry:
         procp = proc_adj_lru(i);
 
         if (procp) {
-            int pid = procp->pid;
-            uid_t uid = procp->uid;
-            char *taskname;
-            int tasksize;
-            int r;
-
-            taskname = proc_get_name(pid);
-            if (!taskname) {
-                pid_remove(pid);
-                goto retry;
-            }
-
-            tasksize = proc_get_size(pid);
-            if (tasksize < 0) {
-                pid_remove(pid);
-                goto retry;
-            }
-
-            ALOGI("Killing '%s' (%d), uid %d, adj %d\n"
-                  "   to free %ldkB because cache %ldkB is below limit %ldkB for oom_adj %d\n"
-                  "   Free memory is %ldkB %s reserved",
-                  taskname, pid, uid, procp->oomadj, tasksize * page_k,
-                  other_file * page_k, minfree * page_k, min_score_adj,
-                  other_free * page_k, other_free >= 0 ? "above" : "below");
-            r = kill(pid, SIGKILL);
-            killProcessGroup(uid, pid, SIGKILL);
-            pid_remove(pid);
-
-            if (r) {
-                ALOGE("kill(%d): errno=%d", procp->pid, errno);
+            killed_size = kill_one_process(procp, other_free, other_file, minfree, min_score_adj, first);
+            if (killed_size < 0) {
                 goto retry;
             } else {
-                time(&kill_lasttime);
-                break;
+                return killed_size;
             }
         }
     }
+
+    return 0;
+}
+
+static void mp_event(uint32_t events __unused) {
+    int i;
+    int ret;
+    unsigned long long evcount;
+    struct sysmeminfo mi;
+    int other_free;
+    int other_file;
+    int killed_size;
+    bool first = true;
+
+    ret = read(mpevfd, &evcount, sizeof(evcount));
+    if (ret < 0)
+        ALOGE("Error reading memory pressure event fd; errno=%d",
+              errno);
+
+    if (time(NULL) - kill_lasttime < KILL_TIMEOUT)
+        return;
+
+    while (zoneinfo_parse(&mi) < 0) {
+        // Failed to read /proc/zoneinfo, assume ENOMEM and kill something
+        find_and_kill_process(0, 0, true);
+    }
+
+    other_free = mi.nr_free_pages - mi.totalreserve_pages;
+    other_file = mi.nr_file_pages - mi.nr_shmem;
+
+    do {
+        killed_size = find_and_kill_process(other_free, other_file, first);
+        if (killed_size > 0) {
+            first = false;
+            other_free += killed_size;
+            other_file += killed_size;
+        }
+    } while (killed_size > 0);
 }
 
 static int init_mp(char *levelstr, void *event_handler)
@@ -747,6 +819,12 @@ static void mainloop(void) {
 }
 
 int main(int argc __unused, char **argv __unused) {
+    struct sched_param param = {
+            .sched_priority = 1,
+    };
+
+    mlockall(MCL_FUTURE);
+    sched_setscheduler(0, SCHED_FIFO, &param);
     if (!init())
         mainloop();
 
