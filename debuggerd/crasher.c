@@ -141,11 +141,14 @@ static int do_action(const char* arg)
     } else if (!strcmp(arg, "assert")) {
         __assert("some_file.c", 123, "false");
     } else if (!strcmp(arg, "assert2")) {
-      __assert2("some_file.c", 123, "some_function", "false");
+        __assert2("some_file.c", 123, "some_function", "false");
     } else if (!strcmp(arg, "LOG_ALWAYS_FATAL")) {
         LOG_ALWAYS_FATAL("hello %s", "world");
     } else if (!strcmp(arg, "LOG_ALWAYS_FATAL_IF")) {
         LOG_ALWAYS_FATAL_IF(true, "hello %s", "world");
+    } else if (!strcmp(arg, "SIGFPE")) {
+        raise(SIGFPE);
+        return EXIT_SUCCESS;
     } else if (!strcmp(arg, "SIGPIPE")) {
         int pipe_fds[2];
         pipe(pipe_fds);
@@ -177,6 +180,7 @@ static int do_action(const char* arg)
     fprintf(stderr, "  assert2               call assert() with a function\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL      call LOG_ALWAYS_FATAL\n");
     fprintf(stderr, "  LOG_ALWAYS_FATAL_IF   call LOG_ALWAYS_FATAL\n");
+    fprintf(stderr, "  SIGFPE                cause a SIGFPE\n");
     fprintf(stderr, "  SIGPIPE               cause a SIGPIPE\n");
     fprintf(stderr, "  SIGSEGV               cause a SIGSEGV at address 0x0 (synonym: crash)\n");
     fprintf(stderr, "  SIGSEGV-non-null      cause a SIGSEGV at a non-zero address\n");
