@@ -575,6 +575,8 @@ enum {
     AUDIO_DEVICE_OUT_SPDIF                     = 0x80000,
     /* FM transmitter out */
     AUDIO_DEVICE_OUT_FM                        = 0x100000,
+    /* Line out for av devices */
+    AUDIO_DEVICE_OUT_AUX_LINE                  = 0x200000,
     AUDIO_DEVICE_OUT_DEFAULT                   = AUDIO_DEVICE_BIT_DEFAULT,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
@@ -597,6 +599,7 @@ enum {
                                  AUDIO_DEVICE_OUT_HDMI_ARC |
                                  AUDIO_DEVICE_OUT_SPDIF |
                                  AUDIO_DEVICE_OUT_FM |
+                                 AUDIO_DEVICE_OUT_AUX_LINE |
                                  AUDIO_DEVICE_OUT_DEFAULT),
     AUDIO_DEVICE_OUT_ALL_A2DP = (AUDIO_DEVICE_OUT_BLUETOOTH_A2DP |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
