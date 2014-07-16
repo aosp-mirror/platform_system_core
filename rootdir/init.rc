@@ -184,11 +184,12 @@ on late-init
     # issued fs triggers have completed.
     trigger load_all_props_action
 
+    # Remove a file to wake up anything waiting for firmware.
+    trigger firmware_mounts_complete
+
     trigger early-boot
     trigger boot
 
-    # Remove a file to wake up anything waiting for firmware
-    trigger firmware_mounts_complete
 
 on post-fs
     # once everything is setup, no need to modify /
