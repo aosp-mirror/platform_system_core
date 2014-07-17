@@ -100,12 +100,12 @@ static inline int badname(const char *name)
 
 static int check(void *_desc, int len, unsigned type, int size)
 {
-    unsigned char *desc = _desc;
+    struct usb_descriptor_header *hdr = (struct usb_descriptor_header *)_desc;
 
     if(len < size) return -1;
-    if(desc[0] < size) return -1;
-    if(desc[0] > len) return -1;
-    if(desc[1] != type) return -1;
+    if(hdr->bLength < size) return -1;
+    if(hdr->bLength > len) return -1;
+    if(hdr->bDescriptorType != type) return -1;
 
     return 0;
 }
@@ -125,15 +125,15 @@ static int filter_usb_device(char* sysfs_name,
     unsigned i;
     unsigned e;
     
-    if(check(ptr, len, USB_DT_DEVICE, USB_DT_DEVICE_SIZE))
+    if (check(ptr, len, USB_DT_DEVICE, USB_DT_DEVICE_SIZE))
         return -1;
-    dev = (void*) ptr;
+    dev = (struct usb_device_descriptor *)ptr;
     len -= dev->bLength;
     ptr += dev->bLength;
 
-    if(check(ptr, len, USB_DT_CONFIG, USB_DT_CONFIG_SIZE))
+    if (check(ptr, len, USB_DT_CONFIG, USB_DT_CONFIG_SIZE))
         return -1;
-    cfg = (void*) ptr;
+    cfg = (struct usb_config_descriptor *)ptr;
     len -= cfg->bLength;
     ptr += cfg->bLength;
 
@@ -177,9 +177,19 @@ static int filter_usb_device(char* sysfs_name,
     }
 
     for(i = 0; i < cfg->bNumInterfaces; i++) {
-        if(check(ptr, len, USB_DT_INTERFACE, USB_DT_INTERFACE_SIZE))
+
+        while (len > 0) {
+	        struct usb_descriptor_header *hdr = (struct usb_descriptor_header *)ptr;
+            if (check(hdr, len, USB_DT_INTERFACE, USB_DT_INTERFACE_SIZE) == 0)
+                break;
+            len -= hdr->bLength;
+            ptr += hdr->bLength;
+        }
+
+        if (len <= 0)
             return -1;
-        ifc = (void*) ptr;
+
+        ifc = (struct usb_interface_descriptor *)ptr;
         len -= ifc->bLength;
         ptr += ifc->bLength;
 
@@ -190,16 +200,25 @@ static int filter_usb_device(char* sysfs_name,
         info.ifc_protocol = ifc->bInterfaceProtocol;
 
         for(e = 0; e < ifc->bNumEndpoints; e++) {
-            if(check(ptr, len, USB_DT_ENDPOINT, USB_DT_ENDPOINT_SIZE))
-                return -1;
-            ept = (void*) ptr;
+            while (len > 0) {
+	            struct usb_descriptor_header *hdr = (struct usb_descriptor_header *)ptr;
+                if (check(hdr, len, USB_DT_ENDPOINT, USB_DT_ENDPOINT_SIZE) == 0)
+                    break;
+                len -= hdr->bLength;
+                ptr += hdr->bLength;
+            }
+            if (len < 0) {
+                break;
+            }
+
+            ept = (struct usb_endpoint_descriptor *)ptr;
             len -= ept->bLength;
             ptr += ept->bLength;
 
-            if((ept->bmAttributes & 0x03) != 0x02)
+            if((ept->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) != USB_ENDPOINT_XFER_BULK)
                 continue;
 
-            if(ept->bEndpointAddress & 0x80) {
+            if(ept->bEndpointAddress & USB_ENDPOINT_DIR_MASK) {
                 in = ept->bEndpointAddress;
             } else {
                 out = ept->bEndpointAddress;
