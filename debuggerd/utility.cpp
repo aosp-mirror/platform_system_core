@@ -59,6 +59,8 @@ bool is_allowed_in_logcat(enum logtype ltype) {
 void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   bool write_to_tombstone = (log->tfd != -1);
   bool write_to_logcat = is_allowed_in_logcat(ltype)
+                      && log->crashed_tid != -1
+                      && log->current_tid != -1
                       && (log->crashed_tid == log->current_tid);
   bool write_to_activitymanager = (log->amfd != -1);
 
