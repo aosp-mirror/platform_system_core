@@ -37,7 +37,7 @@
 #endif
 
 
-typedef struct {
+struct log_t{
     /* tombstone file descriptor */
     int tfd;
     /* Activity Manager socket file descriptor */
@@ -46,7 +46,10 @@ typedef struct {
     pid_t crashed_tid;
     // The tid of the thread we are currently working with.
     pid_t current_tid;
-} log_t;
+
+    log_t()
+        : tfd(-1), amfd(-1), crashed_tid(-1), current_tid(-1) {}
+};
 
 // List of types of logs to simplify the logging decision in _LOG
 enum logtype {
