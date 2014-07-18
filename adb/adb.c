@@ -37,8 +37,8 @@
 #include <cutils/properties.h>
 #include <private/android_filesystem_config.h>
 #include <sys/capability.h>
-#include <linux/prctl.h>
 #include <sys/mount.h>
+#include <sys/prctl.h>
 #include <getopt.h>
 #include <selinux/selinux.h>
 #else
