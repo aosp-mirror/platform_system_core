@@ -238,11 +238,12 @@ static void usage(void);
  */
 int newfs_msdos_main(int argc, char *argv[])
 {
-    static const char opts[] = "@:NB:C:F:I:L:O:S:a:b:c:e:f:h:i:k:m:n:o:r:s:u:";
+    static const char opts[] = "@:NAB:C:F:I:L:O:S:a:b:c:e:f:h:i:k:m:n:o:r:s:u:";
     const char *opt_B = NULL, *opt_L = NULL, *opt_O = NULL, *opt_f = NULL;
     u_int opt_F = 0, opt_I = 0, opt_S = 0, opt_a = 0, opt_b = 0, opt_c = 0;
     u_int opt_e = 0, opt_h = 0, opt_i = 0, opt_k = 0, opt_m = 0, opt_n = 0;
     u_int opt_o = 0, opt_r = 0, opt_s = 0, opt_u = 0;
+    u_int opt_A = 0;
     int opt_N = 0;
     int Iflag = 0, mflag = 0, oflag = 0;
     char buf[MAXPATHLEN];
@@ -260,6 +261,7 @@ int newfs_msdos_main(int argc, char *argv[])
     ssize_t n;
     time_t now;
     u_int fat, bss, rds, cls, dir, lsn, x, x1, x2;
+    u_int extra_res, alignment=0, set_res, set_spf, set_spc, tempx, attempts=0;
     int ch, fd, fd1;
     off_t opt_create = 0, opt_ofs = 0;
 
@@ -270,6 +272,9 @@ int newfs_msdos_main(int argc, char *argv[])
             break;
         case 'N':
             opt_N = 1;
+            break;
+        case 'A':
+            opt_A = 1;
             break;
         case 'B':
             opt_B = optarg;
@@ -359,6 +364,12 @@ int newfs_msdos_main(int argc, char *argv[])
             err(1, "%s", buf);
     }
     dtype = *argv;
+    if (opt_A) {
+        if (opt_r)
+            errx(1, "align (-A) is incompatible with -r");
+        if (opt_N)
+            errx(1, "align (-A) is incompatible with -N");
+    }
     if (opt_create) {
         if (opt_N)
             errx(1, "create (-C) is incompatible with -N");
@@ -536,36 +547,62 @@ int newfs_msdos_main(int argc, char *argv[])
         if (bpb.bkbs != MAXU16 && x <= bpb.bkbs)
             x = bpb.bkbs + 1;
     }
-    if (!bpb.res)
-        bpb.res = fat == 32 ? MAX(x, MAX(16384 / bpb.bps, 4)) : x;
-    else if (bpb.res < x)
-        errx(1, "too few reserved sectors");
-    if (fat != 32 && !bpb.rde)
-        bpb.rde = DEFRDE;
-    rds = howmany(bpb.rde, bpb.bps / sizeof(struct de));
-    if (!bpb.spc)
-        for (bpb.spc = howmany(fat == 16 ? DEFBLK16 : DEFBLK, bpb.bps);
-                bpb.spc < MAXSPC &&
-                bpb.res +
-                howmany((RESFTE + maxcls(fat)) * (fat / BPN),
-                        bpb.bps * NPB) * bpb.nft +
-                        rds +
-                        (u_int64_t)(maxcls(fat) + 1) * bpb.spc <= bpb.bsec;
-                bpb.spc <<= 1);
-    if (fat != 32 && bpb.bspf > MAXU16)
-        errx(1, "too many sectors/FAT for FAT12/16");
-    x1 = bpb.res + rds;
-    x = bpb.bspf ? bpb.bspf : 1;
-    if (x1 + (u_int64_t)x * bpb.nft > bpb.bsec)
-        errx(1, "meta data exceeds file system size");
-    x1 += x * bpb.nft;
-    x = (u_int64_t)(bpb.bsec - x1) * bpb.bps * NPB /
-            (bpb.spc * bpb.bps * NPB + fat / BPN * bpb.nft);
-    x2 = howmany((RESFTE + MIN(x, maxcls(fat))) * (fat / BPN), bpb.bps * NPB);
-    if (!bpb.bspf) {
-        bpb.bspf = x2;
-        x1 += (bpb.bspf - 1) * bpb.nft;
-    }
+
+    extra_res = 0;
+    set_res = !bpb.res;
+    set_spf = !bpb.bspf;
+    set_spc = !bpb.spc;
+    tempx = x;
+    /*
+     * Attempt to align if opt_A is set. This is done by increasing the number
+     * of reserved blocks. This can cause other factors to change, which can in
+     * turn change the alignment. This should take at most 2 iterations, as
+     * increasing the reserved amount may cause the FAT size to decrease by 1,
+     * requiring another nft reserved blocks. If spc changes, it will
+     * be half of its previous size, and thus will not throw off alignment.
+     */
+    do {
+        x = tempx;
+        if (set_res)
+            bpb.res = (fat == 32 ? MAX(x, MAX(16384 / bpb.bps, 4)) : x) + extra_res;
+        else if (bpb.res < x)
+            errx(1, "too few reserved sectors");
+        if (fat != 32 && !bpb.rde)
+            bpb.rde = DEFRDE;
+        rds = howmany(bpb.rde, bpb.bps / sizeof(struct de));
+        if (set_spc)
+            for (bpb.spc = howmany(fat == 16 ? DEFBLK16 : DEFBLK, bpb.bps);
+                    bpb.spc < MAXSPC &&
+                    bpb.res +
+                    howmany((RESFTE + maxcls(fat)) * (fat / BPN),
+                            bpb.bps * NPB) * bpb.nft +
+                            rds +
+                            (u_int64_t)(maxcls(fat) + 1) * bpb.spc <= bpb.bsec;
+                    bpb.spc <<= 1);
+        if (fat != 32 && bpb.bspf > MAXU16)
+            errx(1, "too many sectors/FAT for FAT12/16");
+        x1 = bpb.res + rds;
+        x = bpb.bspf ? bpb.bspf : 1;
+        if (x1 + (u_int64_t)x * bpb.nft > bpb.bsec)
+            errx(1, "meta data exceeds file system size");
+        x1 += x * bpb.nft;
+        x = (u_int64_t)(bpb.bsec - x1) * bpb.bps * NPB /
+                (bpb.spc * bpb.bps * NPB + fat / BPN * bpb.nft);
+        x2 = howmany((RESFTE + MIN(x, maxcls(fat))) * (fat / BPN), bpb.bps * NPB);
+        if (set_spf) {
+            bpb.bspf = x2;
+            x1 += (bpb.bspf - 1) * bpb.nft;
+        }
+        if(set_res) {
+            /* attempt to align root directory */
+            alignment = (bpb.res + bpb.bspf * bpb.nft) % bpb.spc;
+            extra_res += bpb.spc - alignment;
+        }
+        attempts++;
+    } while(opt_A && alignment != 0 && attempts < 2);
+    if (alignment != 0)
+        warnx("warning: Alignment failed.");
+
     cls = (bpb.bsec - x1) / bpb.spc;
     x = (u_int64_t)bpb.bspf * bpb.bps * NPB / (fat / BPN) - RESFTE;
     if (cls > x)
@@ -1024,6 +1061,7 @@ static void usage(void)
             "usage: newfs_msdos [ -options ] special [disktype]\n"
             "where the options are:\n"
             "\t-@ create file system at specified offset\n"
+            "\t-A Attempt to cluster align root directory\n"
             "\t-B get bootstrap from file\n"
             "\t-C create image file with specified size\n"
             "\t-F FAT type (12, 16, or 32)\n"
