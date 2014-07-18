@@ -47,6 +47,9 @@ static inline SchedPolicy _policy(SchedPolicy p)
 
 #define CAN_SET_SP_SYSTEM 0 // non-zero means to implement set_sched_policy(tid, SP_SYSTEM)
 
+// This prctl is only available in Android kernels.
+#define PR_SET_TIMERSLACK_PID 41
+
 // timer slack value in nS enforced when the thread moves to background
 #define TIMER_SLACK_BG 40000000
 
