@@ -22,11 +22,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/capability.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-#include <linux/prctl.h>
 
 #include <cutils/properties.h>
 
