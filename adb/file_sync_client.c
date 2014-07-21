@@ -139,7 +139,8 @@ struct syncsendbuf {
 
 static syncsendbuf send_buffer;
 
-int sync_readtime(int fd, const char *path, unsigned *timestamp)
+int sync_readtime(int fd, const char *path, unsigned int *timestamp,
+                  unsigned int *mode)
 {
     syncmsg msg;
     int len = strlen(path);
@@ -161,6 +162,7 @@ int sync_readtime(int fd, const char *path, unsigned *timestamp)
     }
 
     *timestamp = ltohl(msg.stat.time);
+    *mode = ltohl(msg.stat.mode);
     return 0;
 }
 
@@ -237,7 +239,7 @@ static int write_data_file(int fd, const char *path, syncsendbuf *sbuf, int show
     if (show_progress) {
         // Determine local file size.
         struct stat st;
-        if (lstat(path, &st)) {
+        if (fstat(lfd, &st)) {
             fprintf(stderr,"cannot stat '%s': %s\n", path, strerror(errno));
             return -1;
         }
@@ -931,8 +933,21 @@ static int remote_build_list(int syncfd, copyinfo **filelist,
     return 0;
 }
 
+static int set_time_and_mode(const char *lpath, unsigned int time, unsigned int mode)
+{
+    struct timeval times[2] = { {time, 0}, {time, 0} };
+    int r1 = utimes(lpath, times);
+
+    /* use umask for permissions */
+    mode_t mask=umask(0000);
+    umask(mask);
+    int r2 = chmod(lpath, mode & ~mask);
+
+    return r1 ? : r2;
+}
+
 static int copy_remote_dir_local(int fd, const char *rpath, const char *lpath,
-                                 int checktimestamps)
+                                 int copy_attrs)
 {
     copyinfo *filelist = 0;
     copyinfo *ci, *next;
@@ -962,32 +977,16 @@ static int copy_remote_dir_local(int fd, const char *rpath, const char *lpath,
         return -1;
     }
 
-#if 0
-    if (checktimestamps) {
-        for (ci = filelist; ci != 0; ci = ci->next) {
-            if (sync_start_readtime(fd, ci->dst)) {
-                return 1;
-            }
-        }
-        for (ci = filelist; ci != 0; ci = ci->next) {
-            unsigned int timestamp, mode, size;
-            if (sync_finish_readtime(fd, &timestamp, &mode, &size))
-                return 1;
-            if (size == ci->size) {
-                /* for links, we cannot update the atime/mtime */
-                if ((S_ISREG(ci->mode & mode) && timestamp == ci->time) ||
-                    (S_ISLNK(ci->mode & mode) && timestamp >= ci->time))
-                    ci->flag = 1;
-            }
-        }
-    }
-#endif
     for (ci = filelist; ci != 0; ci = next) {
         next = ci->next;
         if (ci->flag == 0) {
             fprintf(stderr, "pull: %s -> %s\n", ci->src, ci->dst);
             if (sync_recv(fd, ci->src, ci->dst, 0 /* no show progress */)) {
                 return 1;
+            }
+
+            if (copy_attrs && set_time_and_mode(ci->dst, ci->time, ci->mode)) {
+               return 1;
             }
             pulled++;
         } else {
@@ -1003,9 +1002,9 @@ static int copy_remote_dir_local(int fd, const char *rpath, const char *lpath,
     return 0;
 }
 
-int do_sync_pull(const char *rpath, const char *lpath, int show_progress)
+int do_sync_pull(const char *rpath, const char *lpath, int show_progress, int copy_attrs)
 {
-    unsigned mode;
+    unsigned mode, time;
     struct stat st;
 
     int fd;
@@ -1016,7 +1015,7 @@ int do_sync_pull(const char *rpath, const char *lpath, int show_progress)
         return 1;
     }
 
-    if(sync_readmode(fd, rpath, &mode)) {
+    if(sync_readtime(fd, rpath, &time, &mode)) {
         return 1;
     }
     if(mode == 0) {
@@ -1047,13 +1046,15 @@ int do_sync_pull(const char *rpath, const char *lpath, int show_progress)
         if (sync_recv(fd, rpath, lpath, show_progress)) {
             return 1;
         } else {
+            if (copy_attrs && set_time_and_mode(lpath, time, mode))
+                return 1;
             END();
             sync_quit(fd);
             return 0;
         }
     } else if(S_ISDIR(mode)) {
         BEGIN();
-        if (copy_remote_dir_local(fd, rpath, lpath, 0)) {
+        if (copy_remote_dir_local(fd, rpath, lpath, copy_attrs)) {
             return 1;
         } else {
             END();
