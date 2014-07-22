@@ -95,7 +95,7 @@ enum op { FILE_TO_FILE, FILE_TO_DIR, DIR_TO_DNE };
 
 static int copy(char *[], enum op, int);
 
-#ifndef ANDROID
+#ifndef __ANDROID__
 static void
 progress(int sig __unused)
 {
@@ -112,9 +112,7 @@ cp_main(int argc, char *argv[])
 	int ch, fts_options, r, have_trailing_slash;
 	char *target, **src;
 
-#ifndef ANDROID
 	setprogname(argv[0]);
-#endif
 	(void)setlocale(LC_ALL, "");
 
 	Hflag = Lflag = Pflag = Rflag = 0;
@@ -222,7 +220,7 @@ cp_main(int argc, char *argv[])
 	/* Set end of argument list for fts(3). */
 	argv[argc] = NULL;
 
-#ifndef ANDROID
+#ifndef __ANDROID__
 	(void)signal(SIGINFO, progress);
 #endif
 
