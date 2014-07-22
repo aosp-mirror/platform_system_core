@@ -42,7 +42,7 @@ __RCSID("$NetBSD: utils.c,v 1.41 2012/01/04 15:58:37 christos Exp $");
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#ifndef ANDROID
+#ifndef __ANDROID__
 #include <sys/extattr.h>
 #endif
 
@@ -58,7 +58,7 @@ __RCSID("$NetBSD: utils.c,v 1.41 2012/01/04 15:58:37 christos Exp $");
 
 #include "extern.h"
 
-#ifdef ANDROID
+#ifdef __ANDROID__
 #define MAXBSIZE 65536
 #endif
 
@@ -70,7 +70,7 @@ set_utimes(const char *file, struct stat *fs)
 {
     static struct timeval tv[2];
 
-#ifdef ANDROID
+#ifdef __ANDROID__
     tv[0].tv_sec = fs->st_atime;
     tv[0].tv_usec = 0;
     tv[1].tv_sec = fs->st_mtime;
@@ -198,7 +198,9 @@ copy_file(FTSENT *entp, int dne)
 	 * There's no reason to do anything other than close the file
 	 * now if it's empty, so let's not bother.
 	 */
+#ifndef __ANDROID__ // Files in /proc report length 0. mmap will fail but we'll fall back to read.
 	if (fs->st_size > 0) {
+#endif
 		struct finfo fi;
 
 		fi.from = entp->fts_path;
@@ -273,9 +275,11 @@ copy_file(FTSENT *entp, int dne)
 				rval = 1;
 			}
 		}
+#ifndef __ANDROID__
 	}
+#endif
 
-#ifndef ANDROID
+#ifndef __ANDROID__
 	if (pflag && (fcpxattr(from_fd, to_fd) != 0))
 		warn("%s: error copying extended attributes", to.p_path);
 #endif
@@ -381,9 +385,7 @@ int
 setfile(struct stat *fs, int fd)
 {
 	int rval = 0;
-#ifndef ANDROID
 	int islink = S_ISLNK(fs->st_mode);
-#endif
 
 	fs->st_mode &= S_ISUID | S_ISGID | S_IRWXU | S_IRWXG | S_IRWXO;
 
@@ -401,7 +403,7 @@ setfile(struct stat *fs, int fd)
 		}
 		fs->st_mode &= ~(S_ISUID | S_ISGID);
 	}
-#ifdef ANDROID
+#ifdef __ANDROID__
         if (fd ? fchmod(fd, fs->st_mode) : chmod(to.p_path, fs->st_mode)) {
 #else
         if (fd ? fchmod(fd, fs->st_mode) : lchmod(to.p_path, fs->st_mode)) {
@@ -410,7 +412,7 @@ setfile(struct stat *fs, int fd)
                 rval = 1;
         }
 
-#ifndef ANDROID
+#ifndef __ANDROID__
 	if (!islink && !Nflag) {
 		unsigned long fflags = fs->st_flags;
 		/*
