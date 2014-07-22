@@ -57,7 +57,7 @@ static void read_keys(const char *file, struct listnode *list)
     char *sep;
     int ret;
 
-    f = fopen(file, "r");
+    f = fopen(file, "re");
     if (!f) {
         D("Can't open '%s'\n", file);
         return;
@@ -126,7 +126,7 @@ int adb_auth_generate_token(void *token, size_t token_size)
     FILE *f;
     int ret;
 
-    f = fopen("/dev/urandom", "r");
+    f = fopen("/dev/urandom", "re");
     if (!f)
         return 0;
 
@@ -257,6 +257,7 @@ void adb_auth_init(void)
         D("Failed to get adbd socket\n");
         return;
     }
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
 
     ret = listen(fd, 4);
     if (ret < 0) {

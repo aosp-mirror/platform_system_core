@@ -183,18 +183,18 @@ static int handle_send_file(int s, char *path, uid_t uid,
     unsigned int timestamp = 0;
     int fd;
 
-    fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL, mode);
+    fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
     if(fd < 0 && errno == ENOENT) {
         if(mkdirs(path) != 0) {
             if(fail_errno(s))
                 return -1;
             fd = -1;
         } else {
-            fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL, mode);
+            fd = adb_open_mode(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
         }
     }
     if(fd < 0 && errno == EEXIST) {
-        fd = adb_open_mode(path, O_WRONLY, mode);
+        fd = adb_open_mode(path, O_WRONLY | O_CLOEXEC, mode);
     }
     if(fd < 0) {
         if(fail_errno(s))
@@ -388,7 +388,7 @@ static int do_recv(int s, const char *path, char *buffer)
     syncmsg msg;
     int fd, r;
 
-    fd = adb_open(path, O_RDONLY);
+    fd = adb_open(path, O_RDONLY | O_CLOEXEC);
     if(fd < 0) {
         if(fail_errno(s)) return -1;
         return 0;
