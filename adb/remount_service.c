@@ -39,7 +39,7 @@ static char *find_mount(const char *dir)
     const char delims[] = "\n";
     char buf[4096];
 
-    fd = unix_open("/proc/mounts", O_RDONLY);
+    fd = unix_open("/proc/mounts", O_RDONLY | O_CLOEXEC);
     if (fd < 0)
         return NULL;
 
@@ -83,7 +83,7 @@ static int remount_system()
     if (!dev)
         return -1;
 
-    fd = unix_open(dev, O_RDONLY);
+    fd = unix_open(dev, O_RDONLY | O_CLOEXEC);
     if (fd < 0)
         return -1;
 

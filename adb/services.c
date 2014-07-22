@@ -190,7 +190,7 @@ static void init_subproc_child()
     setsid();
 
     // Set OOM score adjustment to prevent killing
-    int fd = adb_open("/proc/self/oom_score_adj", O_WRONLY);
+    int fd = adb_open("/proc/self/oom_score_adj", O_WRONLY | O_CLOEXEC);
     if (fd >= 0) {
         adb_write(fd, "0", 1);
         adb_close(fd);
@@ -209,12 +209,11 @@ static int create_subproc_pty(const char *cmd, const char *arg0, const char *arg
     char *devname;
     int ptm;
 
-    ptm = unix_open("/dev/ptmx", O_RDWR); // | O_NOCTTY);
+    ptm = unix_open("/dev/ptmx", O_RDWR | O_CLOEXEC); // | O_NOCTTY);
     if(ptm < 0){
         printf("[ cannot open /dev/ptmx - %s ]\n",strerror(errno));
         return -1;
     }
-    fcntl(ptm, F_SETFD, FD_CLOEXEC);
 
     if(grantpt(ptm) || unlockpt(ptm) ||
        ((devname = (char*) ptsname(ptm)) == 0)){
@@ -233,7 +232,7 @@ static int create_subproc_pty(const char *cmd, const char *arg0, const char *arg
     if (*pid == 0) {
         init_subproc_child();
 
-        int pts = unix_open(devname, O_RDWR);
+        int pts = unix_open(devname, O_RDWR | O_CLOEXEC);
         if (pts < 0) {
             fprintf(stderr, "child failed to open pseudo-term slave: %s\n", devname);
             exit(-1);
@@ -417,7 +416,7 @@ int service_to_fd(const char *name)
 #endif
 #if !ADB_HOST
     } else if(!strncmp("dev:", name, 4)) {
-        ret = unix_open(name + 4, O_RDWR);
+        ret = unix_open(name + 4, O_RDWR | O_CLOEXEC);
     } else if(!strncmp(name, "framebuffer:", 12)) {
         ret = create_service_thread(framebuffer_service, 0);
     } else if (!strncmp(name, "jdwp:", 5)) {
