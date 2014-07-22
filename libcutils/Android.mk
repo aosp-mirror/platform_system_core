@@ -86,19 +86,6 @@ LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
-# Static library for host, 64-bit
-# ========================================================
-include $(CLEAR_VARS)
-LOCAL_MODULE := lib64cutils
-LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
-LOCAL_STATIC_LIBRARIES := lib64log
-LOCAL_CFLAGS += $(hostSmpFlag) -m64
-ifneq ($(HOST_OS),windows)
-LOCAL_CFLAGS += -Werror
-endif
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
-include $(BUILD_HOST_STATIC_LIBRARY)
-
 # Tests for host
 # ========================================================
 include $(CLEAR_VARS)
