@@ -1,4 +1,17 @@
 LOCAL_PATH:= $(call my-dir)
+
+common_cflags := \
+    -std=gnu99 \
+    -Werror -Wno-unused-parameter \
+    -include bsd-compatibility.h \
+
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := upstream-netbsd/bin/kill/kill.c
+LOCAL_CFLAGS += $(common_cflags) -Dmain=kill_main
+LOCAL_MODULE := libtoolbox_kill
+LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
+include $(BUILD_STATIC_LIBRARY)
+
 include $(CLEAR_VARS)
 
 TOOLS := \
@@ -24,7 +37,6 @@ TOOLS := \
 	insmod \
 	ioctl \
 	ionice \
-	kill \
 	ln \
 	load_policy \
 	log \
@@ -79,7 +91,8 @@ endif
 ALL_TOOLS = $(TOOLS)
 ALL_TOOLS += \
 	cp \
-	grep
+	grep \
+	kill \
 
 LOCAL_SRC_FILES := \
 	cp/cp.c \
@@ -94,10 +107,7 @@ LOCAL_SRC_FILES := \
 	toolbox.c \
 	uid_from_user.c \
 
-LOCAL_CFLAGS += \
-    -std=gnu99 \
-    -Werror -Wno-unused-parameter \
-    -include bsd-compatibility.h \
+LOCAL_CFLAGS += $(common_cflags)
 
 LOCAL_C_INCLUDES += external/openssl/include
 
@@ -110,6 +120,9 @@ LOCAL_SHARED_LIBRARIES := \
 # The linker strips out all the unused library code in the normal case.
 LOCAL_STATIC_LIBRARIES := \
     libusbhost \
+
+LOCAL_WHOLE_STATIC_LIBRARIES := \
+    libtoolbox_kill \
 
 LOCAL_MODULE := toolbox
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
