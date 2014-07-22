@@ -170,7 +170,7 @@ static void find_usb_device(const char *base,
             }
 
 //            DBGX("[ scanning %s ]\n", devname);
-            if((fd = unix_open(devname, O_RDONLY)) < 0) {
+            if((fd = unix_open(devname, O_RDONLY | O_CLOEXEC)) < 0) {
                 continue;
             }
 
@@ -597,10 +597,10 @@ static void register_device(const char *dev_name, const char *devpath,
     usb->mark = 1;
     usb->reaper_thread = 0;
 
-    usb->desc = unix_open(usb->fname, O_RDWR);
+    usb->desc = unix_open(usb->fname, O_RDWR | O_CLOEXEC);
     if(usb->desc < 0) {
         /* if we fail, see if have read-only access */
-        usb->desc = unix_open(usb->fname, O_RDONLY);
+        usb->desc = unix_open(usb->fname, O_RDONLY | O_CLOEXEC);
         if(usb->desc < 0) goto fail;
         usb->writeable = 0;
         D("[ usb open read-only %s fd = %d]\n", usb->fname, usb->desc);
