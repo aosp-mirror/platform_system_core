@@ -74,19 +74,6 @@ LOCAL_MULTILIB := both
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 
-# For the host, 64-bit
-# =====================================================
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES:= $(commonSources)
-ifeq ($(HOST_OS), linux)
-LOCAL_SRC_FILES += Looper.cpp
-endif
-LOCAL_MODULE:= lib64utils
-LOCAL_STATIC_LIBRARIES := liblog
-LOCAL_CFLAGS += $(host_commonCflags) -m64
-include $(BUILD_HOST_STATIC_LIBRARY)
-
-
 # For the device, static
 # =====================================================
 include $(CLEAR_VARS)
