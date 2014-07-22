@@ -71,14 +71,6 @@ LOCAL_MULTILIB := both
 include $(BUILD_HOST_SHARED_LIBRARY)
 
 
-# Static library for host, 64-bit
-# ========================================================
-include $(CLEAR_VARS)
-LOCAL_MODULE := lib64log
-LOCAL_SRC_FILES := $(liblog_host_sources)
-LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1 -m64 -Werror
-include $(BUILD_HOST_STATIC_LIBRARY)
-
 # Shared and static library for target
 # ========================================================
 include $(CLEAR_VARS)
