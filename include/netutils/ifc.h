@@ -31,6 +31,9 @@ extern int ifc_get_hwaddr(const char *name, void *ptr);
 extern int ifc_up(const char *name);
 extern int ifc_down(const char *name);
 
+extern int ifc_enable(const char *ifname);
+extern int ifc_disable(const char *ifname);
+
 #define RESET_IPV4_ADDRESSES 0x01
 #define RESET_IPV6_ADDRESSES 0x02
 #define RESET_ALL_ADDRESSES  (RESET_IPV4_ADDRESSES | RESET_IPV6_ADDRESSES)
