@@ -11,23 +11,27 @@
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
 
-static const char kDefaultKernelStackSignature[] =
-    "kernel-UnspecifiedStackSignature";
-static const char kDumpPath[] = "/dev/pstore";
-static const char kDumpFormat[] = "dmesg-ramoops-%zu";
-static const char kKernelExecName[] = "kernel";
+using base::FilePath;
+using base::StringPrintf;
+
+namespace {
+
+const char kDefaultKernelStackSignature[] = "kernel-UnspecifiedStackSignature";
+const char kDumpPath[] = "/dev/pstore";
+const char kDumpFormat[] = "dmesg-ramoops-%zu";
+const char kKernelExecName[] = "kernel";
 // Maximum number of records to examine in the kDumpPath.
-static const size_t kMaxDumpRecords = 100;
+const size_t kMaxDumpRecords = 100;
 const pid_t kKernelPid = 0;
-static const char kKernelSignatureKey[] = "sig";
+const char kKernelSignatureKey[] = "sig";
 // Byte length of maximum human readable portion of a kernel crash signature.
-static const int kMaxHumanStringLength = 40;
+const int kMaxHumanStringLength = 40;
 const uid_t kRootUid = 0;
 // Time in seconds from the final kernel log message for a call stack
 // to count towards the signature of the kcrash.
-static const int kSignatureTimestampWindow = 2;
+const int kSignatureTimestampWindow = 2;
 // Kernel log timestamp regular expression.
-static const std::string kTimestampRegex("^<.*>\\[\\s*(\\d+\\.\\d+)\\]");
+const char kTimestampRegex[] = "^<.*>\\[\\s*(\\d+\\.\\d+)\\]";
 
 //
 // These regular expressions enable to us capture the PC in a backtrace.
@@ -42,7 +46,7 @@ static const std::string kTimestampRegex("^<.*>\\[\\s*(\\d+\\.\\d+)\\]");
 //   "<0>[   37.474699] EIP: [<790ed488>] write_breakme+0x80/0x108
 //    SS:ESP 0068:e9dd3efc"
 //
-static const char *s_pc_regex[] = {
+const char* const kPCRegex[] = {
   0,
   " PC is at ([^\\+ ]+).*",
   " epc\\s+:\\s+\\S+\\s+([^\\+ ]+).*",  // MIPS has an exception program counter
@@ -50,18 +54,17 @@ static const char *s_pc_regex[] = {
   " RIP  \\[<.*>\\] ([^\\+ ]+).*",  // X86_64 uses RIP for the program counter
 };
 
-using base::FilePath;
-using base::StringPrintf;
-
-COMPILE_ASSERT(arraysize(s_pc_regex) == KernelCollector::archCount,
+COMPILE_ASSERT(arraysize(kPCRegex) == KernelCollector::kArchCount,
                missing_arch_pc_regexp);
+
+}  // namespace
 
 KernelCollector::KernelCollector()
     : is_enabled_(false),
       ramoops_dump_path_(kDumpPath),
-      records_(0) {
-  // We expect crash dumps in the format of the architecture we are built for.
-  arch_ = GetCompilerArch();
+      records_(0),
+      // We expect crash dumps in the format of architecture we are built for.
+      arch_(GetCompilerArch()) {
 }
 
 KernelCollector::~KernelCollector() {
@@ -80,8 +83,9 @@ bool KernelCollector::ReadRecordToString(std::string *contents,
 
   // Ramoops appends a header to a crash which contains ==== followed by a
   // timestamp. Ignore the header.
-  pcrecpp::RE record_re("====\\d+\\.\\d+\n(.*)",
-                  pcrecpp::RE_Options().set_multiline(true).set_dotall(true));
+  pcrecpp::RE record_re(
+      "====\\d+\\.\\d+\n(.*)",
+      pcrecpp::RE_Options().set_multiline(true).set_dotall(true));
 
   FilePath ramoops_record;
   GetRamoopsRecordPath(&ramoops_record, current_record);
@@ -232,17 +236,16 @@ void KernelCollector::StripSensitiveData(std::string *kernel_dump) {
 }
 
 bool KernelCollector::Enable() {
-  if (arch_ == archUnknown || arch_ >= archCount ||
-      s_pc_regex[arch_] == NULL) {
+  if (arch_ == kArchUnknown || arch_ >= kArchCount || kPCRegex[arch_] == NULL) {
     LOG(WARNING) << "KernelCollector does not understand this architecture";
     return false;
-  } else {
-    FilePath ramoops_record;
-    GetRamoopsRecordPath(&ramoops_record, 0);
-    if (!base::PathExists(ramoops_record)) {
-      LOG(WARNING) << "Kernel does not support crash dumping";
-      return false;
-    }
+  }
+
+  FilePath ramoops_record;
+  GetRamoopsRecordPath(&ramoops_record, 0);
+  if (!base::PathExists(ramoops_record)) {
+    LOG(WARNING) << "Kernel does not support crash dumping";
+    return false;
   }
 
   // To enable crashes, we will eventually need to set
@@ -270,7 +273,7 @@ void KernelCollector::ProcessStackTrace(
     float *last_stack_timestamp,
     bool *is_watchdog_crash) {
   pcrecpp::RE line_re("(.+)", pcrecpp::MULTILINE());
-  pcrecpp::RE stack_trace_start_re(kTimestampRegex +
+  pcrecpp::RE stack_trace_start_re(std::string(kTimestampRegex) +
         " (Call Trace|Backtrace):$");
 
   // Match lines such as the following and grab out "function_name".
@@ -286,7 +289,7 @@ void KernelCollector::ProcessStackTrace(
   // For X86:
   // <4>[ 6066.849504]  [<7937bcee>] ? function_name+0x66/0x6c
   //
-  pcrecpp::RE stack_entry_re(kTimestampRegex +
+  pcrecpp::RE stack_entry_re(std::string(kTimestampRegex) +
     "\\s+\\[<[[:xdigit:]]+>\\]"      // Matches "  [<7937bcee>]"
     "([\\s\\?(]+)"                   // Matches " ? (" (ARM) or " ? " (X86)
     "([^\\+ )]+)");                  // Matches until delimiter reached
@@ -356,22 +359,19 @@ void KernelCollector::ProcessStackTrace(
   }
 }
 
-enum KernelCollector::ArchKind KernelCollector::GetCompilerArch(void) {
+// static
+KernelCollector::ArchKind KernelCollector::GetCompilerArch() {
 #if defined(COMPILER_GCC) && defined(ARCH_CPU_ARM_FAMILY)
-  return archArm;
+  return kArchArm;
 #elif defined(COMPILER_GCC) && defined(ARCH_CPU_MIPS_FAMILY)
-  return archMips;
+  return kArchMips;
 #elif defined(COMPILER_GCC) && defined(ARCH_CPU_X86_64)
-  return archX86_64;
+  return kArchX86_64;
 #elif defined(COMPILER_GCC) && defined(ARCH_CPU_X86_FAMILY)
-  return archX86;
+  return kArchX86;
 #else
-  return archUnknown;
+  return kArchUnknown;
 #endif
-}
-
-void KernelCollector::SetArch(enum ArchKind arch) {
-  arch_ = arch;
 }
 
 bool KernelCollector::FindCrashingFunction(
@@ -382,7 +382,7 @@ bool KernelCollector::FindCrashingFunction(
   float timestamp = 0;
 
   // Use the correct regex for this architecture.
-  pcrecpp::RE eip_re(kTimestampRegex + s_pc_regex[arch_],
+  pcrecpp::RE eip_re(std::string(kTimestampRegex) + kPCRegex[arch_],
                      pcrecpp::MULTILINE());
 
   while (eip_re.FindAndConsume(&kernel_dump, &timestamp, crashing_function)) {
@@ -417,7 +417,7 @@ bool KernelCollector::FindPanicMessage(pcrecpp::StringPiece kernel_dump,
                                        std::string *panic_message) {
   // Match lines such as the following and grab out "Fatal exception"
   // <0>[  342.841135] Kernel panic - not syncing: Fatal exception
-  pcrecpp::RE kernel_panic_re(kTimestampRegex +
+  pcrecpp::RE kernel_panic_re(std::string(kTimestampRegex) +
                               " Kernel panic[^\\:]*\\:\\s*(.*)",
                               pcrecpp::MULTILINE());
   float timestamp = 0;
@@ -524,9 +524,7 @@ bool KernelCollector::Collect() {
     }
 
     std::string dump_basename =
-        FormatDumpBasename(kKernelExecName,
-                           time(NULL),
-                           kKernelPid);
+        FormatDumpBasename(kKernelExecName, time(NULL), kKernelPid);
     FilePath kernel_crash_path = root_crash_directory.Append(
         StringPrintf("%s.kcrash", dump_basename.c_str()));
 

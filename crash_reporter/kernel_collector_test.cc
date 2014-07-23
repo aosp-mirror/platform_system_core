@@ -70,7 +70,7 @@ class KernelCollectorTest : public ::testing::Test {
 
 TEST_F(KernelCollectorTest, ComputeKernelStackSignatureBase) {
   // Make sure the normal build architecture is detected
-  EXPECT_TRUE(collector_.GetArch() != KernelCollector::archUnknown);
+  EXPECT_NE(KernelCollector::kArchUnknown, collector_.arch());
 }
 
 TEST_F(KernelCollectorTest, LoadPreservedDump) {
@@ -91,7 +91,7 @@ TEST_F(KernelCollectorTest, LoadPreservedDump) {
 
 TEST_F(KernelCollectorTest, EnableMissingKernel) {
   ASSERT_FALSE(collector_.Enable());
-  ASSERT_FALSE(collector_.IsEnabled());
+  ASSERT_FALSE(collector_.is_enabled());
   ASSERT_TRUE(FindLog(
       "Kernel does not support crash dumping"));
   ASSERT_EQ(s_crashes, 0);
@@ -100,7 +100,7 @@ TEST_F(KernelCollectorTest, EnableMissingKernel) {
 TEST_F(KernelCollectorTest, EnableOK) {
   WriteStringToFile(kcrash_file(), "");
   ASSERT_TRUE(collector_.Enable());
-  ASSERT_TRUE(collector_.IsEnabled());
+  ASSERT_TRUE(collector_.is_enabled());
   ASSERT_TRUE(FindLog("Enabling kernel crash handling"));
   ASSERT_EQ(s_crashes, 0);
 }
@@ -359,7 +359,7 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignatureARM) {
           "[<c017bfe0>] (proc_reg_write+0x88/0x9c)\n";
   std::string signature;
 
-  collector_.SetArch(KernelCollector::archArm);
+  collector_.set_arch(KernelCollector::kArchArm);
   EXPECT_TRUE(
       collector_.ComputeKernelStackSignature(kBugToPanic, &signature, false));
   EXPECT_EQ("kernel-write_breakme-97D3E92F", signature);
@@ -418,7 +418,7 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignatureMIPS) {
       "<5>[ 3378.696000] ---[ end trace 75067432f24bbc93 ]---\n";
   std::string signature;
 
-  collector_.SetArch(KernelCollector::archMips);
+  collector_.set_arch(KernelCollector::kArchMips);
   EXPECT_TRUE(
       collector_.ComputeKernelStackSignature(kBugToPanic, &signature, false));
   EXPECT_EQ("kernel-lkdtm_do_action-5E600A6B", signature);
@@ -443,7 +443,7 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignatureX86) {
       "<4>[ 6066.950208]  [<7901b260>] no_context+0x10d/0x117\n";
   std::string signature;
 
-  collector_.SetArch(KernelCollector::archX86);
+  collector_.set_arch(KernelCollector::kArchX86);
   EXPECT_TRUE(
       collector_.ComputeKernelStackSignature(kBugToPanic, &signature, false));
   EXPECT_EQ("kernel-ieee80211_stop_tx_ba_session-DE253569", signature);

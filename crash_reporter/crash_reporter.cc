@@ -130,7 +130,7 @@ static int Initialize(KernelCollector *kernel_collector,
   bool was_kernel_crash = false;
   bool was_unclean_shutdown = false;
   kernel_collector->Enable();
-  if (kernel_collector->IsEnabled()) {
+  if (kernel_collector->is_enabled()) {
     was_kernel_crash = kernel_collector->Collect();
   }
 

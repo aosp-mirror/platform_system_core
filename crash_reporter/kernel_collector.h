@@ -19,13 +19,13 @@ class KernelCollector : public CrashCollector {
  public:
   // Enumeration to specify architecture type.
   enum ArchKind {
-    archUnknown,
-    archArm,
-    archMips,
-    archX86,
-    archX86_64,
+    kArchUnknown,
+    kArchArm,
+    kArchMips,
+    kArchX86,
+    kArchX86_64,
 
-    archCount  // Number of architectures.
+    kArchCount  // Number of architectures.
   };
 
   KernelCollector();
@@ -38,9 +38,7 @@ class KernelCollector : public CrashCollector {
   bool Enable();
 
   // Returns true if the kernel collection currently enabled.
-  bool IsEnabled() {
-    return is_enabled_;
-  }
+  bool is_enabled() const { return is_enabled_; }
 
   // Collect any preserved kernel crash dump. Returns true if there was
   // a dump (even if there were problems storing the dump), false otherwise.
@@ -52,8 +50,8 @@ class KernelCollector : public CrashCollector {
                                    bool print_diagnostics);
 
   // Set the architecture of the crash dumps we are looking at.
-  void SetArch(enum ArchKind arch);
-  enum ArchKind GetArch() { return arch_; }
+  void set_arch(ArchKind arch) { arch_ = arch; }
+  ArchKind arch() const { return arch_; }
 
  private:
   friend class KernelCollectorTest;
@@ -94,15 +92,17 @@ class KernelCollector : public CrashCollector {
                         bool print_diagnostics,
                         std::string *panic_message);
 
-  // Returns the architecture kind for which we are built - enum ArchKind.
-  enum ArchKind GetCompilerArch(void);
+  // Returns the architecture kind for which we are built.
+  static ArchKind GetCompilerArch();
 
   bool is_enabled_;
   base::FilePath ramoops_dump_path_;
   size_t records_;
 
   // The architecture of kernel dump strings we are working with.
-  enum ArchKind arch_;
+  ArchKind arch_;
+
+  DISALLOW_COPY_AND_ASSIGN(KernelCollector);
 };
 
 #endif  // CRASH_REPORTER_KERNEL_COLLECTOR_H_
