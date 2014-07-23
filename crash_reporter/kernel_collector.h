@@ -21,6 +21,7 @@ class KernelCollector : public CrashCollector {
   enum ArchKind {
     archUnknown,
     archArm,
+    archMips,
     archX86,
     archX86_64,
 

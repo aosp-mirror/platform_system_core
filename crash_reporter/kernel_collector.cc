@@ -36,6 +36,8 @@ static const std::string kTimestampRegex("^<.*>\\[\\s*(\\d+\\.\\d+)\\]");
 //
 // For ARM we see:
 //   "<5>[   39.458982] PC is at write_breakme+0xd0/0x1b4"
+// For MIPS we see:
+//   "<5>[ 3378.552000] epc   : 804010f0 lkdtm_do_action+0x68/0x3f8"
 // For x86:
 //   "<0>[   37.474699] EIP: [<790ed488>] write_breakme+0x80/0x108
 //    SS:ESP 0068:e9dd3efc"
@@ -43,6 +45,7 @@ static const std::string kTimestampRegex("^<.*>\\[\\s*(\\d+\\.\\d+)\\]");
 static const char *s_pc_regex[] = {
   0,
   " PC is at ([^\\+ ]+).*",
+  " epc\\s+:\\s+\\S+\\s+([^\\+ ]+).*",  // MIPS has an exception program counter
   " EIP: \\[<.*>\\] ([^\\+ ]+).*",  // X86 uses EIP for the program counter
   " RIP  \\[<.*>\\] ([^\\+ ]+).*",  // X86_64 uses RIP for the program counter
 };
@@ -277,6 +280,9 @@ void KernelCollector::ProcessStackTrace(
   // <4>[ 3498.731164] [<c0057220>] ? (function_name+0x20/0x2c) from
   // [<c018062c>] (foo_bar+0xdc/0x1bc)
   //
+  // For MIPS:
+  // <5>[ 3378.656000] [<804010f0>] lkdtm_do_action+0x68/0x3f8
+  //
   // For X86:
   // <4>[ 6066.849504]  [<7937bcee>] ? function_name+0x66/0x6c
   //
@@ -353,6 +359,8 @@ void KernelCollector::ProcessStackTrace(
 enum KernelCollector::ArchKind KernelCollector::GetCompilerArch(void) {
 #if defined(COMPILER_GCC) && defined(ARCH_CPU_ARM_FAMILY)
   return archArm;
+#elif defined(COMPILER_GCC) && defined(ARCH_CPU_MIPS_FAMILY)
+  return archMips;
 #elif defined(COMPILER_GCC) && defined(ARCH_CPU_X86_64)
   return archX86_64;
 #elif defined(COMPILER_GCC) && defined(ARCH_CPU_X86_FAMILY)

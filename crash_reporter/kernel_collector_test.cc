@@ -367,6 +367,64 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignatureARM) {
   ComputeKernelStackSignatureCommon();
 }
 
+TEST_F(KernelCollectorTest, ComputeKernelStackSignatureMIPS) {
+  const char kBugToPanic[] =
+      "<5>[ 3378.472000] lkdtm: Performing direct entry BUG\n"
+      "<5>[ 3378.476000] Kernel bug detected[#1]:\n"
+      "<5>[ 3378.484000] CPU: 0 PID: 185 Comm: dash Not tainted 3.14.0 #1\n"
+      "<5>[ 3378.488000] task: 8fed5220 ti: 8ec4a000 task.ti: 8ec4a000\n"
+      "<5>[ 3378.496000] $ 0   : 00000000 804018b8 804010f0 7785b507\n"
+      "<5>[ 3378.500000] $ 4   : 8061ab64 81204478 81205b20 00000000\n"
+      "<5>[ 3378.508000] $ 8   : 80830000 20746365 72746e65 55422079\n"
+      "<5>[ 3378.512000] $12   : 8ec4be94 000000fc 00000000 00000048\n"
+      "<5>[ 3378.520000] $16   : 00000004 8ef54000 80710000 00000002\n"
+      "<5>[ 3378.528000] $20   : 7765b6d4 00000004 7fffffff 00000002\n"
+      "<5>[ 3378.532000] $24   : 00000001 803dc0dc                  \n"
+      "<5>[ 3378.540000] $28   : 8ec4a000 8ec4be20 7775438d 804018b8\n"
+      "<5>[ 3378.544000] Hi    : 00000000\n"
+      "<5>[ 3378.548000] Lo    : 49bf8080\n"
+      "<5>[ 3378.552000] epc   : 804010f0 lkdtm_do_action+0x68/0x3f8\n"
+      "<5>[ 3378.560000]     Not tainted\n"
+      "<5>[ 3378.564000] ra    : 804018b8 direct_entry+0x110/0x154\n"
+      "<5>[ 3378.568000] Status: 3100dc03 KERNEL EXL IE \n"
+      "<5>[ 3378.572000] Cause : 10800024\n"
+      "<5>[ 3378.576000] PrId  : 0001a120 (MIPS interAptiv (multi))\n"
+      "<5>[ 3378.580000] Modules linked in: uinput cfg80211 nf_conntrack_ipv6 "
+          "nf_defrag_ipv6 ip6table_filter ip6_tables pcnet32 mii fuse "
+          "ppp_async ppp_generic slhc tun\n"
+      "<5>[ 3378.600000] Process dash (pid: 185, threadinfo=8ec4a000, "
+          "task=8fed5220, tls=77632490)\n"
+      "<5>[ 3378.608000] Stack : 00000006 ffffff9c 00000000 00000000 00000000 "
+          "00000000 8083454a 00000022\n"
+      "<5>          7765baa1 00001fee 80710000 8ef54000 8ec4bf08 00000002 "
+          "7765b6d4 00000004\n"
+      "<5>          7fffffff 00000002 7775438d 805e5158 7fffffff 00000002 "
+          "00000000 7785b507\n"
+      "<5>          806a96bc 00000004 8ef54000 8ec4bf08 00000002 804018b8 "
+          "80710000 806a98bc\n"
+      "<5>          00000002 00000020 00000004 8d515600 77756450 00000004 "
+          "8ec4bf08 802377e4\n"
+      "<5>          ...\n"
+      "<5>[ 3378.652000] Call Trace:\n"
+      "<5>[ 3378.656000] [<804010f0>] lkdtm_do_action+0x68/0x3f8\n"
+      "<5>[ 3378.660000] [<804018b8>] direct_entry+0x110/0x154\n"
+      "<5>[ 3378.664000] [<802377e4>] vfs_write+0xe0/0x1bc\n"
+      "<5>[ 3378.672000] [<80237f90>] SyS_write+0x78/0xf8\n"
+      "<5>[ 3378.676000] [<80111888>] handle_sys+0x128/0x14c\n"
+      "<5>[ 3378.680000] \n"
+      "<5>[ 3378.684000] \n"
+      "<5>Code: 3c04806b  0c1793aa  248494f0 <000c000d> 3c04806b  248494fc  "
+          "0c04cc7f  2405017a  08100514 \n"
+      "<5>[ 3378.696000] ---[ end trace 75067432f24bbc93 ]---\n";
+  std::string signature;
+
+  collector_.SetArch(KernelCollector::archMips);
+  EXPECT_TRUE(
+      collector_.ComputeKernelStackSignature(kBugToPanic, &signature, false));
+  EXPECT_EQ("kernel-lkdtm_do_action-5E600A6B", signature);
+
+  ComputeKernelStackSignatureCommon();
+}
 
 TEST_F(KernelCollectorTest, ComputeKernelStackSignatureX86) {
   const char kBugToPanic[] =
