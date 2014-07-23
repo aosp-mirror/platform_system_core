@@ -574,6 +574,7 @@ int ifc_enable(const char *ifname)
     return result;
 }
 
+// Needed by code in hidden partner repositories / branches, so don't delete.
 int ifc_disable(const char *ifname)
 {
     unsigned addr, count;
