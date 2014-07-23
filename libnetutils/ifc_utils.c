@@ -563,6 +563,37 @@ int ifc_create_default_route(const char *name, in_addr_t gw)
     return ret;
 }
 
+// Needed by code in hidden partner repositories / branches, so don't delete.
+int ifc_enable(const char *ifname)
+{
+    int result;
+
+    ifc_init();
+    result = ifc_up(ifname);
+    ifc_close();
+    return result;
+}
+
+int ifc_disable(const char *ifname)
+{
+    unsigned addr, count;
+    int result;
+
+    ifc_init();
+    result = ifc_down(ifname);
+
+    ifc_set_addr(ifname, 0);
+    for (count=0, addr=1;((addr != 0) && (count < 255)); count++) {
+       if (ifc_get_addr(ifname, &addr) < 0)
+            break;
+       if (addr)
+          ifc_set_addr(ifname, 0);
+    }
+
+    ifc_close();
+    return result;
+}
+
 int ifc_reset_connections(const char *ifname, const int reset_mask)
 {
 #ifdef HAVE_ANDROID_OS
