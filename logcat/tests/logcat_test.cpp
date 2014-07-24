@@ -284,21 +284,21 @@ TEST(logcat, get_size) {
 
     while (fgets(buffer, sizeof(buffer), fp)) {
         int size, consumed, max, payload;
-        char size_mult, consumed_mult;
+        char size_mult[2], consumed_mult[2];
         long full_size, full_consumed;
 
         size = consumed = max = payload = 0;
         // NB: crash log can be very small, not hit a Kb of consumed space
         //     doubly lucky we are not including it.
-        if (6 != sscanf(buffer, "%*s ring buffer is %d%cb (%d%cb consumed),"
+        if (6 != sscanf(buffer, "%*s ring buffer is %d%2s (%d%2s consumed),"
                                 " max entry is %db, max payload is %db",
-                                &size, &size_mult, &consumed, &consumed_mult,
+                                &size, size_mult, &consumed, consumed_mult,
                                 &max, &payload)) {
             fprintf(stderr, "WARNING: Parse error: %s", buffer);
             continue;
         }
         full_size = size;
-        switch(size_mult) {
+        switch(size_mult[0]) {
         case 'G':
             full_size *= 1024;
             /* FALLTHRU */
@@ -307,10 +307,12 @@ TEST(logcat, get_size) {
             /* FALLTHRU */
         case 'K':
             full_size *= 1024;
+            /* FALLTHRU */
+        case 'b':
             break;
         }
         full_consumed = consumed;
-        switch(consumed_mult) {
+        switch(consumed_mult[0]) {
         case 'G':
             full_consumed *= 1024;
             /* FALLTHRU */
@@ -319,6 +321,8 @@ TEST(logcat, get_size) {
             /* FALLTHRU */
         case 'K':
             full_consumed *= 1024;
+            /* FALLTHRU */
+        case 'b':
             break;
         }
         EXPECT_GT((full_size * 9) / 4, full_consumed);
@@ -475,6 +479,45 @@ TEST(logcat, blocking_tail) {
     EXPECT_LE(2, count);
 
     EXPECT_EQ(1, signals);
+}
+
+TEST(logcat, logrotate) {
+    static const char form[] = "/data/local/tmp/logcat.logrotate.XXXXXX";
+    char buf[sizeof(form)];
+    ASSERT_TRUE(NULL != mkdtemp(strcpy(buf, form)));
+
+    static const char comm[] = "logcat -b radio -b events -b system -b main"
+                                     " -d -f %s/log.txt -n 7 -r 1";
+    char command[sizeof(buf) + sizeof(comm)];
+    sprintf(command, comm, buf);
+
+    int ret;
+    EXPECT_FALSE((ret = system(command)));
+    if (!ret) {
+        sprintf(command, "ls -s %s 2>/dev/null", buf);
+
+        FILE *fp;
+        EXPECT_TRUE(NULL != (fp = popen(command, "r")));
+        if (fp) {
+            char buffer[5120];
+            int count = 0;
+
+            while (fgets(buffer, sizeof(buffer), fp)) {
+                static const char match[] = "4 log.txt";
+                static const char total[] = "total ";
+
+                if (!strncmp(buffer, match, sizeof(match) - 1)) {
+                    ++count;
+                } else if (strncmp(buffer, total, sizeof(total) - 1)) {
+                    fprintf(stderr, "WARNING: Parse error: %s", buffer);
+                }
+            }
+            pclose(fp);
+            EXPECT_TRUE(count == 7 || count == 8);
+        }
+    }
+    sprintf(command, "rm -rf %s", buf);
+    EXPECT_FALSE(system(command));
 }
 
 static void caught_blocking_clear(int /*signum*/)
