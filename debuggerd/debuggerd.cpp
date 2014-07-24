@@ -30,6 +30,8 @@
 #include <sys/stat.h>
 #include <sys/poll.h>
 
+#include <selinux/android.h>
+
 #include <log/logger.h>
 
 #include <cutils/sockets.h>
@@ -124,6 +126,53 @@ static int get_process_info(pid_t tid, pid_t* out_pid, uid_t* out_uid, uid_t* ou
   return fields == 7 ? 0 : -1;
 }
 
+static int selinux_enabled;
+
+/*
+ * Corresponds with debugger_action_t enum type in
+ * include/cutils/debugger.h.
+ */
+static const char *debuggerd_perms[] = {
+  NULL, /* crash is only used on self, no check applied */
+  "dump_tombstone",
+  "dump_backtrace"
+};
+
+static bool selinux_action_allowed(int s, pid_t tid, debugger_action_t action)
+{
+  char *scon = NULL, *tcon = NULL;
+  const char *tclass = "debuggerd";
+  const char *perm;
+  bool allowed = false;
+
+  if (selinux_enabled <= 0)
+    return true;
+
+  if (action <= 0 || action >= (sizeof(debuggerd_perms)/sizeof(debuggerd_perms[0]))) {
+    ALOGE("SELinux:  No permission defined for debugger action %d", action);
+    return false;
+  }
+
+  perm = debuggerd_perms[action];
+
+  if (getpeercon(s, &scon) < 0) {
+    ALOGE("Cannot get peer context from socket\n");
+    goto out;
+  }
+
+  if (getpidcon(tid, &tcon) < 0) {
+    ALOGE("Cannot get context for tid %d\n", tid);
+    goto out;
+  }
+
+  allowed = (selinux_check_access(scon, tcon, tclass, perm, NULL) == 0);
+
+out:
+   freecon(scon);
+   freecon(tcon);
+   return allowed;
+}
+
 static int read_request(int fd, debugger_request_t* out_request) {
   ucred cr;
   socklen_t len = sizeof(cr);
@@ -186,6 +235,9 @@ static int read_request(int fd, debugger_request_t* out_request) {
       ALOGE("tid %d does not exist. ignoring explicit dump request\n", out_request->tid);
       return -1;
     }
+
+    if (!selinux_action_allowed(fd, out_request->tid, out_request->action))
+      return -1;
   } else {
     // No one else is allowed to dump arbitrary processes.
     return -1;
@@ -434,7 +486,11 @@ static void usage() {
 }
 
 int main(int argc, char** argv) {
+  union selinux_callback cb;
   if (argc == 1) {
+    selinux_enabled = is_selinux_enabled();
+    cb.func_log = selinux_log_callback;
+    selinux_set_callback(SELINUX_CB_LOG, cb);
     return do_server();
   }
 
