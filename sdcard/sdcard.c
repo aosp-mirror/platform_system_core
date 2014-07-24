@@ -20,6 +20,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <linux/fuse.h>
 #include <pthread.h>
@@ -828,7 +829,7 @@ static int handle_lookup(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->lock);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] LOOKUP %s @ %llx (%s)\n", handler->token, name, hdr->nodeid,
+    TRACE("[%d] LOOKUP %s @ %"PRIx64" (%s)\n", handler->token, name, hdr->nodeid,
         parent_node ? parent_node->name : "?");
     pthread_mutex_unlock(&fuse->lock);
 
@@ -850,7 +851,7 @@ static int handle_forget(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->lock);
     node = lookup_node_by_id_locked(fuse, hdr->nodeid);
-    TRACE("[%d] FORGET #%lld @ %llx (%s)\n", handler->token, req->nlookup,
+    TRACE("[%d] FORGET #%"PRIu64" @ %"PRIx64" (%s)\n", handler->token, req->nlookup,
             hdr->nodeid, node ? node->name : "?");
     if (node) {
         __u64 n = req->nlookup;
@@ -870,7 +871,7 @@ static int handle_getattr(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] GETATTR flags=%x fh=%llx @ %llx (%s)\n", handler->token,
+    TRACE("[%d] GETATTR flags=%x fh=%"PRIx64" @ %"PRIx64" (%s)\n", handler->token,
             req->getattr_flags, req->fh, hdr->nodeid, node ? node->name : "?");
     pthread_mutex_unlock(&fuse->lock);
 
@@ -895,7 +896,7 @@ static int handle_setattr(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->lock);
     has_rw = get_caller_has_rw_locked(fuse, hdr);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] SETATTR fh=%llx valid=%x @ %llx (%s)\n", handler->token,
+    TRACE("[%d] SETATTR fh=%"PRIx64" valid=%x @ %"PRIx64" (%s)\n", handler->token,
             req->fh, req->valid, hdr->nodeid, node ? node->name : "?");
     pthread_mutex_unlock(&fuse->lock);
 
@@ -960,7 +961,7 @@ static int handle_mknod(struct fuse* fuse, struct fuse_handler* handler,
     has_rw = get_caller_has_rw_locked(fuse, hdr);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] MKNOD %s 0%o @ %llx (%s)\n", handler->token,
+    TRACE("[%d] MKNOD %s 0%o @ %"PRIx64" (%s)\n", handler->token,
             name, req->mode, hdr->nodeid, parent_node ? parent_node->name : "?");
     pthread_mutex_unlock(&fuse->lock);
 
@@ -991,7 +992,7 @@ static int handle_mkdir(struct fuse* fuse, struct fuse_handler* handler,
     has_rw = get_caller_has_rw_locked(fuse, hdr);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] MKDIR %s 0%o @ %llx (%s)\n", handler->token,
+    TRACE("[%d] MKDIR %s 0%o @ %"PRIx64" (%s)\n", handler->token,
             name, req->mode, hdr->nodeid, parent_node ? parent_node->name : "?");
     pthread_mutex_unlock(&fuse->lock);
 
@@ -1040,7 +1041,7 @@ static int handle_unlink(struct fuse* fuse, struct fuse_handler* handler,
     has_rw = get_caller_has_rw_locked(fuse, hdr);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] UNLINK %s @ %llx (%s)\n", handler->token,
+    TRACE("[%d] UNLINK %s @ %"PRIx64" (%s)\n", handler->token,
             name, hdr->nodeid, parent_node ? parent_node->name : "?");
     pthread_mutex_unlock(&fuse->lock);
 
@@ -1069,7 +1070,7 @@ static int handle_rmdir(struct fuse* fuse, struct fuse_handler* handler,
     has_rw = get_caller_has_rw_locked(fuse, hdr);
     parent_node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid,
             parent_path, sizeof(parent_path));
-    TRACE("[%d] RMDIR %s @ %llx (%s)\n", handler->token,
+    TRACE("[%d] RMDIR %s @ %"PRIx64" (%s)\n", handler->token,
             name, hdr->nodeid, parent_node ? parent_node->name : "?");
     pthread_mutex_unlock(&fuse->lock);
 
@@ -1107,7 +1108,7 @@ static int handle_rename(struct fuse* fuse, struct fuse_handler* handler,
             old_parent_path, sizeof(old_parent_path));
     new_parent_node = lookup_node_and_path_by_id_locked(fuse, req->newdir,
             new_parent_path, sizeof(new_parent_path));
-    TRACE("[%d] RENAME %s->%s @ %llx (%s) -> %llx (%s)\n", handler->token,
+    TRACE("[%d] RENAME %s->%s @ %"PRIx64" (%s) -> %"PRIx64" (%s)\n", handler->token,
             old_name, new_name,
             hdr->nodeid, old_parent_node ? old_parent_node->name : "?",
             req->newdir, new_parent_node ? new_parent_node->name : "?");
@@ -1191,7 +1192,7 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
     pthread_mutex_lock(&fuse->lock);
     has_rw = get_caller_has_rw_locked(fuse, hdr);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] OPEN 0%o @ %llx (%s)\n", handler->token,
+    TRACE("[%d] OPEN 0%o @ %"PRIx64" (%s)\n", handler->token,
             req->flags, hdr->nodeid, node ? node->name : "?");
     pthread_mutex_unlock(&fuse->lock);
 
@@ -1233,8 +1234,8 @@ static int handle_read(struct fuse* fuse, struct fuse_handler* handler,
      * overlaps the request buffer and will clobber data in the request.  This
      * saves us 128KB per request handler thread at the cost of this scary comment. */
 
-    TRACE("[%d] READ %p(%d) %u@%llu\n", handler->token,
-            h, h->fd, size, offset);
+    TRACE("[%d] READ %p(%d) %u@%"PRIu64"\n", handler->token,
+            h, h->fd, size, (uint64_t) offset);
     if (size > MAX_READ) {
         return -EINVAL;
     }
@@ -1260,7 +1261,7 @@ static int handle_write(struct fuse* fuse, struct fuse_handler* handler,
         buffer = (const __u8*) aligned_buffer;
     }
 
-    TRACE("[%d] WRITE %p(%d) %u@%llu\n", handler->token,
+    TRACE("[%d] WRITE %p(%d) %u@%"PRIu64"\n", handler->token,
             h, h->fd, req->size, req->offset);
     res = pwrite64(h->fd, buffer, req->size, req->offset);
     if (res < 0) {
@@ -1355,7 +1356,7 @@ static int handle_opendir(struct fuse* fuse, struct fuse_handler* handler,
 
     pthread_mutex_lock(&fuse->lock);
     node = lookup_node_and_path_by_id_locked(fuse, hdr->nodeid, path, sizeof(path));
-    TRACE("[%d] OPENDIR @ %llx (%s)\n", handler->token,
+    TRACE("[%d] OPENDIR @ %"PRIx64" (%s)\n", handler->token,
             hdr->nodeid, node ? node->name : "?");
     pthread_mutex_unlock(&fuse->lock);
 
@@ -1556,7 +1557,7 @@ static int handle_fuse_request(struct fuse *fuse, struct fuse_handler* handler,
     }
 
     default: {
-        TRACE("[%d] NOTIMPL op=%d uniq=%llx nid=%llx\n",
+        TRACE("[%d] NOTIMPL op=%d uniq=%"PRIx64" nid=%"PRIx64"\n",
                 handler->token, hdr->opcode, hdr->unique, hdr->nodeid);
         return -ENOSYS;
     }
@@ -1659,7 +1660,7 @@ static int read_package_list(struct fuse *fuse) {
         }
     }
 
-    TRACE("read_package_list: found %d packages, %d with write_gid\n",
+    TRACE("read_package_list: found %zu packages, %zu with write_gid\n",
             hashmapSize(fuse->package_to_appid),
             hashmapSize(fuse->appid_with_rw));
     fclose(file);
