@@ -167,7 +167,7 @@ LOCAL_C_INCLUDES += external/openssl/include
 
 LOCAL_MODULE := adb
 
-LOCAL_STATIC_LIBRARIES := libzipfile libunz libcutils
+LOCAL_STATIC_LIBRARIES := libzipfile libunz libcutils liblog
 
 LOCAL_SHARED_LIBRARIES := libcrypto
 
