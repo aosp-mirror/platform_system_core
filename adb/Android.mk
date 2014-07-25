@@ -24,6 +24,7 @@ ifeq ($(HOST_OS),darwin)
   USB_SRCS := usb_osx.c
   EXTRA_SRCS := get_my_path_darwin.c
   LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
+  LOCAL_CFLAGS += -Wno-sizeof-pointer-memaccess -Wno-unused-parameter
 endif
 
 ifeq ($(HOST_OS),freebsd)
