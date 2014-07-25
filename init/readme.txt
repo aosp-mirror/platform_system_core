@@ -257,9 +257,9 @@ wait <path> [ <timeout> ]
   or the timeout has been reached. If timeout is not specified it
   currently defaults to five seconds.
 
-write <path> <string> [ <string> ]*
-   Open the file at <path> and write one or more strings
-   to it with write(2)
+write <path> <string>
+   Open the file at <path> and write a string to it with write(2)
+   without appending.
 
 
 Properties
