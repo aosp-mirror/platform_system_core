@@ -63,7 +63,8 @@ LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS += \
     -DGTEST_OS_LINUX \
     -DGTEST_HAS_STD_STRING \
-    -Werror
+    -Werror \
+    -Wno-unnamed-type-template-args
 LOCAL_SRC_FILES := zip_archive_test.cc
 LOCAL_STATIC_LIBRARIES := libziparchive-host \
 	libz \
