@@ -202,15 +202,16 @@ enum {
      *
      * This format is exposed outside of the camera HAL to applications.
      *
-     * RAW10 is a single-channel, 10-bit per pixel, densely packed, unprocessed
-     * format, representing raw Bayer-pattern images coming from an image sensor.
+     * RAW10 is a single-channel, 10-bit per pixel, densely packed in each row,
+     * unprocessed format, usually representing raw Bayer-pattern images coming from
+     * an image sensor.
      *
-     * In an image buffer with this format, starting from the first pixel, each 4
-     * consecutive pixels are packed into 5 bytes (40 bits). Each one of the first
-     * 4 bytes contains the top 8 bits of each pixel, The fifth byte contains the
-     * 2 least significant bits of the 4 pixels, the exact layout data for each 4
-     * consecutive pixels is illustrated below (Pi[j] stands for the jth bit of
-     * the ith pixel):
+     * In an image buffer with this format, starting from the first pixel of each
+     * row, each 4 consecutive pixels are packed into 5 bytes (40 bits). Each one
+     * of the first 4 bytes contains the top 8 bits of each pixel, The fifth byte
+     * contains the 2 least significant bits of the 4 pixels, the exact layout data
+     * for each 4 consecutive pixels is illustrated below (Pi[j] stands for the jth
+     * bit of the ith pixel):
      *
      *          bit 7                                     bit 0
      *          =====|=====|=====|=====|=====|=====|=====|=====|
@@ -228,11 +229,15 @@ enum {
      * This format assumes
      * - a width multiple of 4 pixels
      * - an even height
-     * - a horizontal stride equal to the width
      * - a vertical stride equal to the height
-     * - strides are specified in pixels, not in bytes
+     * - strides are specified in bytes, not in pixels
      *
-     *   size = stride * height * 10 / 8
+     *   size = stride * height
+     *
+     * When stride is equal to width * (10 / 8), there will be no padding bytes at
+     * the end of each row, the entire image data is densely packed. When stride is
+     * larger than width * (10 / 8), padding bytes will be present at the end of each
+     * row (including the last row).
      *
      * This format must be accepted by the gralloc module when used with the
      * following usage flags:
