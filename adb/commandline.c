@@ -2041,11 +2041,11 @@ int install_multiple_app(transport_type transport, char* serial, int argc, char*
     }
 
 finalize_session:
-    // Commit session if we streamed everything okay; otherwise destroy
+    // Commit session if we streamed everything okay; otherwise abandon
     if (success) {
         snprintf(buf, sizeof(buf), "exec:pm install-commit %d", session_id);
     } else {
-        snprintf(buf, sizeof(buf), "exec:pm install-destroy %d", session_id);
+        snprintf(buf, sizeof(buf), "exec:pm install-abandon %d", session_id);
     }
 
     fd = adb_connect(buf);
