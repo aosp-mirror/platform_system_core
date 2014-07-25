@@ -4,13 +4,13 @@
 #include <getopt.h>
 #include <sys/swap.h>
 
-void usage(char *name)
+static void usage(char *name)
 {
     fprintf(stderr, "Usage: %s [-p prio] <filename>\n"
         "        prio must be between 0 and %d\n", name, SWAP_FLAG_PRIO_MASK);
 }
 
-int parse_prio(char *prio_str)
+static int parse_prio(char *prio_str)
 {
     unsigned long p = strtoul(prio_str, NULL, 10);
 
