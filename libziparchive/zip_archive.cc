@@ -287,7 +287,7 @@ static const char kTempMappingFileName[] = "zip: ExtractFileToFile";
  */
 struct ZipArchive {
   /* open Zip archive */
-  int fd;
+  const int fd;
 
   /* mapped central directory area */
   off64_t directory_offset;
@@ -304,6 +304,25 @@ struct ZipArchive {
    */
   uint32_t hash_table_size;
   ZipEntryName* hash_table;
+
+  ZipArchive(const int fd) :
+      fd(fd),
+      directory_offset(0),
+      directory_map(NULL),
+      num_entries(0),
+      hash_table_size(0),
+      hash_table(NULL) {}
+
+  ~ZipArchive() {
+    if (fd >= 0) {
+      close(fd);
+    }
+
+    if (directory_map != NULL) {
+      directory_map->release();
+    }
+    free(hash_table);
+  }
 };
 
 // Returns 0 on success and negative values on failure.
@@ -661,28 +680,20 @@ static int32_t OpenArchiveInternal(ZipArchive* archive,
 
 int32_t OpenArchiveFd(int fd, const char* debug_file_name,
                       ZipArchiveHandle* handle) {
-  ZipArchive* archive = (ZipArchive*) malloc(sizeof(ZipArchive));
-  memset(archive, 0, sizeof(*archive));
+  ZipArchive* archive = new ZipArchive(fd);
   *handle = archive;
-
-  archive->fd = fd;
-
   return OpenArchiveInternal(archive, debug_file_name);
 }
 
 int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle) {
-  ZipArchive* archive = (ZipArchive*) malloc(sizeof(ZipArchive));
-  memset(archive, 0, sizeof(*archive));
+  const int fd = open(fileName, O_RDONLY | O_BINARY, 0);
+  ZipArchive* archive = new ZipArchive(fd);
   *handle = archive;
 
-  const int fd = open(fileName, O_RDONLY | O_BINARY, 0);
   if (fd < 0) {
     ALOGW("Unable to open '%s': %s", fileName, strerror(errno));
     return kIoError;
-  } else {
-    archive->fd = fd;
   }
-
   return OpenArchiveInternal(archive, fileName);
 }
 
@@ -692,16 +703,7 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle) {
 void CloseArchive(ZipArchiveHandle handle) {
   ZipArchive* archive = (ZipArchive*) handle;
   ALOGV("Closing archive %p", archive);
-
-  if (archive->fd >= 0) {
-    close(archive->fd);
-  }
-
-  if (archive->directory_map != NULL) {
-    archive->directory_map->release();
-  }
-  free(archive->hash_table);
-  free(archive);
+  delete archive;
 }
 
 static int32_t UpdateEntryFromDataDescriptor(int fd,
