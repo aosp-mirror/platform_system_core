@@ -67,6 +67,9 @@ LOCAL_SRC_FILES:= $(commonSources)
 ifeq ($(HOST_OS), linux)
 LOCAL_SRC_FILES += Looper.cpp
 endif
+ifeq ($(HOST_OS),darwin)
+LOCAL_CFLAGS += -Wno-unused-parameter
+endif
 LOCAL_MODULE:= libutils
 LOCAL_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS += $(host_commonCflags)
