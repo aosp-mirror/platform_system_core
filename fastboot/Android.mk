@@ -32,6 +32,7 @@ ifeq ($(HOST_OS),darwin)
   LOCAL_SRC_FILES += usb_osx.c util_osx.c
   LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit \
 	-framework Carbon
+  LOCAL_CFLAGS += -Wno-unused-parameter
 endif
 
 ifeq ($(HOST_OS),windows)
