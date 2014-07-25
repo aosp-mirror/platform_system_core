@@ -26,6 +26,7 @@
 
 static std::string test_data_dir;
 
+static const std::string kMissingZip = "missing.zip";
 static const std::string kValidZip = "valid.zip";
 
 static const uint8_t kATxtContents[] = {
@@ -56,6 +57,14 @@ TEST(ziparchive, Open) {
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
 
   CloseArchive(handle);
+}
+
+TEST(ziparchive, OpenMissing) {
+  ZipArchiveHandle handle;
+  ASSERT_NE(0, OpenArchiveWrapper(kMissingZip, &handle));
+
+  // Confirm the file descriptor is not going to be mistaken for a valid one.
+  ASSERT_EQ(-1, GetFileDescriptor(handle));
 }
 
 TEST(ziparchive, Iteration) {
