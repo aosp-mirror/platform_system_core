@@ -17,6 +17,9 @@
 #ifndef __ADB_H
 #define __ADB_H
 
+#if !ADB_HOST
+#include <android/log.h>
+#endif
 #include <limits.h>
 
 #include "transport.h"  /* readx(), writex() */
@@ -382,7 +385,27 @@ void adb_qemu_trace(const char* fmt, ...);
 
 #  define ADB_TRACING  ((adb_trace_mask & (1 << TRACE_TAG)) != 0)
 
-  /* you must define TRACE_TAG before using this macro */
+/* you must define TRACE_TAG before using this macro */
+#if !ADB_HOST
+#  define  D(...)                                      \
+        do {                                           \
+            if (ADB_TRACING) {                         \
+                __android_log_print(                   \
+                    ANDROID_LOG_INFO,                  \
+                    __FUNCTION__,                      \
+                    __VA_ARGS__ );                     \
+            }                                          \
+        } while (0)
+#  define  DR(...)                                     \
+        do {                                           \
+            if (ADB_TRACING) {                         \
+                __android_log_print(                   \
+                    ANDROID_LOG_INFO,                  \
+                    __FUNCTION__,                      \
+                    __VA_ARGS__ );                     \
+            }                                          \
+        } while (0)
+#else
 #  define  D(...)                                      \
         do {                                           \
             if (ADB_TRACING) {                         \
@@ -409,6 +432,7 @@ void adb_qemu_trace(const char* fmt, ...);
                 errno = save_errno;                    \
            }                                           \
         } while (0)
+#endif
 #else
 #  define  D(...)          ((void)0)
 #  define  DR(...)         ((void)0)
