@@ -33,7 +33,7 @@
 // fwd
 static int listpath(const char *name, int flags);
 
-static char mode2kind(unsigned mode)
+static char mode2kind(mode_t mode)
 {
     switch(mode & S_IFMT){
     case S_IFSOCK: return 's';
@@ -47,7 +47,7 @@ static char mode2kind(unsigned mode)
     }
 }
 
-static void mode2str(unsigned mode, char *out)
+void strmode(mode_t mode, char *out)
 {
     *out++ = mode2kind(mode);
 
@@ -180,7 +180,7 @@ static int listfile_long(const char *path, struct stat *s, int flags)
         name++;
     }
 
-    mode2str(s->st_mode, mode);
+    strmode(s->st_mode, mode);
     if (flags & LIST_LONG_NUMERIC) {
         snprintf(user, sizeof(user), "%u", s->st_uid);
         snprintf(group, sizeof(group), "%u", s->st_gid);
@@ -260,7 +260,7 @@ static int listfile_maclabel(const char *path, struct stat *s)
         return -1;
     }
 
-    mode2str(s->st_mode, mode);
+    strmode(s->st_mode, mode);
     user2str(s->st_uid, user, sizeof(user));
     group2str(s->st_gid, group, sizeof(group));
 
