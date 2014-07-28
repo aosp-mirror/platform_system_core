@@ -173,6 +173,11 @@ typedef enum {
     AUDIO_SESSION_ALLOCATE = 0,
 } audio_session_t;
 
+/* a unique ID allocated by AudioFlinger for use as a audio_io_handle_t or audio_session_t */
+typedef int audio_unique_id_t;
+
+#define AUDIO_UNIQUE_ID_ALLOCATE AUDIO_SESSION_ALLOCATE
+
 /* Audio sub formats (see enum audio_format). */
 
 /* PCM sub formats */
