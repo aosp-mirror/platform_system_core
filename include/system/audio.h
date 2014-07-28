@@ -20,6 +20,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
@@ -1324,6 +1325,23 @@ static inline size_t audio_bytes_per_sample(audio_format_t format)
     }
     return size;
 }
+
+/* converts device address to string sent to audio HAL via set_parameters */
+static char *audio_device_address_to_parameter(audio_devices_t device, const char *address)
+{
+    const size_t kSize = AUDIO_DEVICE_MAX_ADDRESS_LEN + sizeof("a2dp_sink_address=");
+    char param[kSize];
+
+    if (device & AUDIO_DEVICE_OUT_ALL_A2DP)
+        snprintf(param, kSize, "%s=%s", "a2dp_sink_address", address);
+    else if (device & AUDIO_DEVICE_OUT_REMOTE_SUBMIX)
+        snprintf(param, kSize, "%s=%s", "mix", address);
+    else
+        snprintf(param, kSize, "%s", address);
+
+    return strdup(param);
+}
+
 
 __END_DECLS
 
