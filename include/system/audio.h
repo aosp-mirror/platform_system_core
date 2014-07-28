@@ -109,6 +109,7 @@ enum {
     AUDIO_FLAG_AUDIBILITY_ENFORCED = 0x1,
     AUDIO_FLAG_SECURE              = 0x2,
     AUDIO_FLAG_SCO                 = 0x4,
+    AUDIO_FLAG_BEACON              = 0x8
 };
 
 /* Do not change these values without updating their counterparts
