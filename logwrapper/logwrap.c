@@ -477,7 +477,6 @@ int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int
     pid_t pid;
     int parent_ptty;
     int child_ptty;
-    char *child_devname = NULL;
     struct sigaction intact;
     struct sigaction quitact;
     sigset_t blockset;
@@ -498,8 +497,9 @@ int android_fork_execvp_ext(int argc, char* argv[], int *status, bool ignore_int
         goto err_open;
     }
 
+    char child_devname[64];
     if (grantpt(parent_ptty) || unlockpt(parent_ptty) ||
-            ((child_devname = (char*)ptsname(parent_ptty)) == 0)) {
+            ptsname_r(parent_ptty, child_devname, sizeof(child_devname)) != 0) {
         ERROR("Problem with /dev/ptmx\n");
         rc = -1;
         goto err_ptty;
