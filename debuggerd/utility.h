@@ -46,9 +46,11 @@ struct log_t{
     pid_t crashed_tid;
     // The tid of the thread we are currently working with.
     pid_t current_tid;
+    // logd daemon crash, can block asking for logcat data, allow suppression.
+    bool should_retrieve_logcat;
 
     log_t()
-        : tfd(-1), amfd(-1), crashed_tid(-1), current_tid(-1) {}
+        : tfd(-1), amfd(-1), crashed_tid(-1), current_tid(-1), should_retrieve_logcat(true) {}
 };
 
 // List of types of logs to simplify the logging decision in _LOG
