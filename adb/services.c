@@ -206,7 +206,6 @@ static int create_subproc_pty(const char *cmd, const char *arg0, const char *arg
     fprintf(stderr, "error: create_subproc_pty not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
     return -1;
 #else /* !HAVE_WIN32_PROC */
-    char *devname;
     int ptm;
 
     ptm = unix_open("/dev/ptmx", O_RDWR | O_CLOEXEC); // | O_NOCTTY);
@@ -215,8 +214,8 @@ static int create_subproc_pty(const char *cmd, const char *arg0, const char *arg
         return -1;
     }
 
-    if(grantpt(ptm) || unlockpt(ptm) ||
-       ((devname = (char*) ptsname(ptm)) == 0)){
+    char devname[64];
+    if(grantpt(ptm) || unlockpt(ptm) || ptsname_r(ptm, devname, sizeof(devname)) != 0) {
         printf("[ trouble with /dev/ptmx - %s ]\n", strerror(errno));
         adb_close(ptm);
         return -1;
