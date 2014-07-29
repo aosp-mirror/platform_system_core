@@ -210,6 +210,12 @@ static void dump_thread_info(log_t* log, pid_t pid, pid_t tid) {
       }
     }
   }
+  // Blacklist logd, logd.reader, logd.writer, logd.auditd, logd.control ...
+  static const char logd[] = "logd";
+  if (!strncmp(threadname, logd, sizeof(logd) - 1)
+      && (!threadname[sizeof(logd) - 1] || (threadname[sizeof(logd) - 1] == '.'))) {
+    log->should_retrieve_logcat = false;
+  }
 
   char procnamebuf[1024];
   char* procname = NULL;
@@ -449,6 +455,10 @@ static void dump_log_file(
     log_t* log, pid_t pid, const char* filename, unsigned int tail) {
   bool first = true;
   struct logger_list* logger_list;
+
+  if (!log->should_retrieve_logcat) {
+    return;
+  }
 
   logger_list = android_logger_list_open(
       android_name_to_log_id(filename), O_RDONLY | O_NONBLOCK, tail, pid);
