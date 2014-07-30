@@ -6,12 +6,12 @@
 
 #include <dirent.h>
 #include <fcntl.h>  // For file creation modes.
+#define __STDC_FORMAT_MACROS  // PRId64
+#include <inttypes.h>
 #include <pwd.h>  // For struct passwd.
 #include <sys/types.h>  // for mode_t.
 #include <sys/wait.h>  // For waitpid.
 #include <unistd.h>  // For execv and fork.
-#define __STDC_FORMAT_MACROS  // PRId64
-#include <inttypes.h>
 
 #include <set>
 #include <utility>

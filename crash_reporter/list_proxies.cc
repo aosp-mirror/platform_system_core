@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <unistd.h>  // for isatty()
 #include <dbus/dbus-glib-lowlevel.h>
 #include <glib.h>
+#include <unistd.h>  // for isatty()
 
 #include <deque>
 #include <string>
