@@ -12,8 +12,8 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/sys_info.h"
-#include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
 #include "components/metrics/metrics_log_base.h"
+#include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
 #include "metrics/persistent_integer.h"
 #include "vboot/crossystem.h"
 

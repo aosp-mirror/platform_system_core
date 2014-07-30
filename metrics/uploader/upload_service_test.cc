@@ -5,19 +5,19 @@
 #include <gtest/gtest.h>
 
 #include "base/at_exit.h"
-#include "base/logging.h"
 #include "base/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/logging.h"
 #include "base/sys_info.h"
 #include "components/metrics/chromeos/metric_sample.h"
 #include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
-#include "components/metrics/proto/system_profile.pb.h"
 #include "components/metrics/proto/histogram_event.pb.h"
+#include "components/metrics/proto/system_profile.pb.h"
 #include "uploader/metrics_log.h"
-#include "uploader/upload_service.h"
-#include "uploader/mock/sender_mock.h"
 #include "uploader/mock/mock_system_profile_setter.h"
+#include "uploader/mock/sender_mock.h"
 #include "uploader/system_profile_cache.h"
+#include "uploader/upload_service.h"
 
 class UploadServiceTest : public testing::Test {
  protected:
