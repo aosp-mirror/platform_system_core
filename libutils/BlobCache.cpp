@@ -213,7 +213,14 @@ status_t BlobCache::flatten(void* buffer, size_t size) const {
         memcpy(eheader->mData, keyBlob->getData(), keySize);
         memcpy(eheader->mData + keySize, valueBlob->getData(), valueSize);
 
-        byteOffset += align4(entrySize);
+        size_t totalSize = align4(entrySize);
+        if (totalSize > entrySize) {
+            // We have padding bytes. Those will get written to storage, and contribute to the CRC,
+            // so make sure we zero-them to have reproducible results.
+            memset(eheader->mData + keySize + valueSize, 0, totalSize - entrySize);
+        }
+
+        byteOffset += totalSize;
     }
 
     return OK;
