@@ -910,7 +910,7 @@ static int handle_setattr(struct fuse* fuse, struct fuse_handler* handler,
     /* XXX: incomplete implementation on purpose.
      * chmod/chown should NEVER be implemented.*/
 
-    if ((req->valid & FATTR_SIZE) && truncate(path, req->size) < 0) {
+    if ((req->valid & FATTR_SIZE) && truncate64(path, req->size) < 0) {
         return -errno;
     }
 
