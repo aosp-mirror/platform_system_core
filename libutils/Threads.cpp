@@ -29,7 +29,7 @@
 # include <sched.h>
 # include <sys/resource.h>
 #ifdef HAVE_ANDROID_OS
-# include <bionic_pthread.h>
+# include <private/bionic_pthread.h>
 #endif
 #elif defined(HAVE_WIN32_THREADS)
 # include <windows.h>
