@@ -37,15 +37,6 @@ extern ANDROID_ATOMIC_INLINE void android_memory_barrier()
 #endif
 }
 
-extern ANDROID_ATOMIC_INLINE void android_memory_store_barrier()
-{
-#if ANDROID_SMP == 0
-    android_compiler_barrier();
-#else
-    __asm__ __volatile__ ("dmb st" : : : "memory");
-#endif
-}
-
 extern ANDROID_ATOMIC_INLINE
 int32_t android_atomic_acquire_load(volatile const int32_t *ptr)
 {

@@ -65,12 +65,6 @@ extern "C" {
 #define ANDROID_MEMBAR_FULL android_memory_barrier
 #endif
 
-#if ANDROID_SMP == 0
-#define ANDROID_MEMBAR_STORE android_compiler_barrier
-#else
-#define ANDROID_MEMBAR_STORE android_memory_store_barrier
-#endif
-
 #ifdef __cplusplus
 }
 #endif
