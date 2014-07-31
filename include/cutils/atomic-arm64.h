@@ -46,29 +46,11 @@ void android_compiler_barrier(void)
     __asm__ __volatile__ ("" : : : "memory");
 }
 
-#if ANDROID_SMP == 0
-extern ANDROID_ATOMIC_INLINE
-void android_memory_barrier(void)
-{
-    android_compiler_barrier();
-}
-extern ANDROID_ATOMIC_INLINE
-void android_memory_store_barrier(void)
-{
-    android_compiler_barrier();
-}
-#else
 extern ANDROID_ATOMIC_INLINE
 void android_memory_barrier(void)
 {
     __asm__ __volatile__ ("dmb ish" : : : "memory");
 }
-extern ANDROID_ATOMIC_INLINE
-void android_memory_store_barrier(void)
-{
-    __asm__ __volatile__ ("dmb ishst" : : : "memory");
-}
-#endif
 
 extern ANDROID_ATOMIC_INLINE
 int32_t android_atomic_acquire_load(volatile const int32_t *ptr)
@@ -79,22 +61,7 @@ int32_t android_atomic_acquire_load(volatile const int32_t *ptr)
 }
 
 extern ANDROID_ATOMIC_INLINE
-int64_t android_atomic_acquire_load64(volatile const int64_t *ptr)
-{
-    int64_t value = *ptr;
-    android_memory_barrier();
-    return value;
-}
-
-extern ANDROID_ATOMIC_INLINE
 int32_t android_atomic_release_load(volatile const int32_t *ptr)
-{
-    android_memory_barrier();
-    return *ptr;
-}
-
-extern ANDROID_ATOMIC_INLINE
-int64_t android_atomic_release_load64(volatile const int64_t *ptr)
 {
     android_memory_barrier();
     return *ptr;
@@ -108,21 +75,7 @@ void android_atomic_acquire_store(int32_t value, volatile int32_t *ptr)
 }
 
 extern ANDROID_ATOMIC_INLINE
-void android_atomic_acquire_store64(int64_t value, volatile int64_t *ptr)
-{
-    *ptr = value;
-    android_memory_barrier();
-}
-
-extern ANDROID_ATOMIC_INLINE
 void android_atomic_release_store(int32_t value, volatile int32_t *ptr)
-{
-    android_memory_barrier();
-    *ptr = value;
-}
-
-extern ANDROID_ATOMIC_INLINE
-void android_atomic_release_store64(int64_t value, volatile int64_t *ptr)
 {
     android_memory_barrier();
     *ptr = value;
@@ -131,13 +84,6 @@ void android_atomic_release_store64(int64_t value, volatile int64_t *ptr)
 extern ANDROID_ATOMIC_INLINE
 int android_atomic_cas(int32_t old_value, int32_t new_value,
                        volatile int32_t *ptr)
-{
-    return __sync_val_compare_and_swap(ptr, old_value, new_value) != old_value;
-}
-
-extern ANDROID_ATOMIC_INLINE
-int64_t android_atomic_cas64(int64_t old_value, int64_t new_value,
-                             volatile int64_t *ptr)
 {
     return __sync_val_compare_and_swap(ptr, old_value, new_value) != old_value;
 }
@@ -152,28 +98,11 @@ int android_atomic_acquire_cas(int32_t old_value, int32_t new_value,
 }
 
 extern ANDROID_ATOMIC_INLINE
-int64_t android_atomic_acquire_cas64(int64_t old_value, int64_t new_value,
-                                     volatile int64_t *ptr)
-{
-    int status = android_atomic_cas64(old_value, new_value, ptr);
-    android_memory_barrier();
-    return status;
-}
-
-extern ANDROID_ATOMIC_INLINE
 int android_atomic_release_cas(int32_t old_value, int32_t new_value,
                                volatile int32_t *ptr)
 {
     android_memory_barrier();
     return android_atomic_cas(old_value, new_value, ptr);
-}
-
-extern ANDROID_ATOMIC_INLINE
-int64_t android_atomic_release_cas64(int64_t old_value, int64_t new_value,
-                                     volatile int64_t *ptr)
-{
-    android_memory_barrier();
-    return android_atomic_cas64(old_value, new_value, ptr);
 }
 
 extern ANDROID_ATOMIC_INLINE
