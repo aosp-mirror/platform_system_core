@@ -197,7 +197,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         kr = (*dev)->GetDeviceProduct(dev, &product);
         kr = (*dev)->GetLocationID(dev, &locationId);
         if (kr == 0) {
-            snprintf(devpathBuf, sizeof(devpathBuf), "usb:%dX", locationId);
+            snprintf(devpathBuf, sizeof(devpathBuf), "usb:%lX", locationId);
             devpath = devpathBuf;
         }
         kr = (*dev)->USBGetSerialNumberStringIndex(dev, &serialIndex);

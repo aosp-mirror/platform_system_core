@@ -328,7 +328,7 @@ static int try_device(io_service_t device, usb_handle *handle) {
         ERR("GetLocationId");
         goto error;
     }
-    snprintf(handle->info.device_path, sizeof(handle->info.device_path), "usb:%dX", locationId);
+    snprintf(handle->info.device_path, sizeof(handle->info.device_path), "usb:%lX", locationId);
 
     kr = (*dev)->USBGetSerialNumberStringIndex(dev, &serialIndex);
 
