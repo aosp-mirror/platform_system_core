@@ -44,11 +44,13 @@ PIXELFLINGER_SRC_FILES_arm64 := \
 	arch-arm64/col32cb16blend.S \
 	arch-arm64/t32cb16blend.S \
 
+ifndef ARCH_MIPS_REV6
 PIXELFLINGER_SRC_FILES_mips := \
 	codeflinger/MIPSAssembler.cpp \
 	codeflinger/mips_disassem.c \
 	arch-mips/t32cb16blend.S \
 
+endif
 #
 # Shared library
 #

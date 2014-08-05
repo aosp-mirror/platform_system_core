@@ -190,7 +190,7 @@ inline int64_t gglMulii(int32_t x, int32_t y)
         );
     return res;
 }
-#elif defined(__mips__)
+#elif defined(__mips__) && __mips_isa_rev < 6
 
 /*inline MIPS implementations*/
 inline GGLfixed gglMulx(GGLfixed a, GGLfixed b, int shift) CONST;
