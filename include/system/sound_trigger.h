@@ -26,11 +26,16 @@
 #define SOUND_TRIGGER_MAX_USERS 10      /* max number of concurrent users */
 #define SOUND_TRIGGER_MAX_PHRASES 10    /* max number of concurrent phrases */
 
+typedef enum {
+    SOUND_TRIGGER_STATE_NO_INIT = -1,   /* The sound trigger service is not initialized */
+    SOUND_TRIGGER_STATE_ENABLED = 0,    /* The sound trigger service is enabled */
+    SOUND_TRIGGER_STATE_DISABLED = 1    /* The sound trigger service is disabled */
+} sound_trigger_service_state_t;
+
 #define RECOGNITION_MODE_VOICE_TRIGGER 0x1       /* simple voice trigger */
 #define RECOGNITION_MODE_USER_IDENTIFICATION 0x2 /* trigger only if one user in model identified */
 #define RECOGNITION_MODE_USER_AUTHENTICATION 0x4 /* trigger only if one user in mode
                                                     authenticated */
-
 #define RECOGNITION_STATUS_SUCCESS 0
 #define RECOGNITION_STATUS_ABORT 1
 #define RECOGNITION_STATUS_FAILURE 2
@@ -41,7 +46,6 @@ typedef enum {
     SOUND_MODEL_TYPE_UNKNOWN = -1,    /* use for unspecified sound model type */
     SOUND_MODEL_TYPE_KEYPHRASE = 0    /* use for key phrase sound models */
 } sound_trigger_sound_model_type_t;
-
 
 typedef struct sound_trigger_uuid_s {
     unsigned int   timeLow;
@@ -73,6 +77,7 @@ struct sound_trigger_properties {
                                                    capture_transition is true*/
     bool                 concurrent_capture;    /* supports capture by other use cases while
                                                    detection is active */
+    bool                 trigger_in_event;      /* returns the trigger capture in event */
     unsigned int         power_consumption_mw;  /* Rated power consumption when detection is active
                                                    with TDB silence/sound/speech ratio */
 };
@@ -144,9 +149,14 @@ struct sound_trigger_recognition_event {
                                                            for capture. A negative value is possible
                                                            (e.g. if key phrase is also available for
                                                            capture */
-    int                              capture_preamble_ms;  /* duration in ms of audio captured
+    int                              capture_preamble_ms; /* duration in ms of audio captured
                                                             before the start of the trigger.
                                                             0 if none. */
+    bool                             trigger_in_data; /* the opaque data is the capture of
+                                                            the trigger sound */
+    audio_config_t                   audio_config;        /* audio format of either the trigger in
+                                                             event data or to use for capture of the
+                                                             rest of the utterance */
     unsigned int                     data_size;         /* size of opaque event data */
     unsigned int                     data_offset;       /* offset of opaque data start from start of
                                                           this struct (e.g sizeof struct
@@ -169,16 +179,13 @@ struct sound_trigger_confidence_level {
 struct sound_trigger_phrase_recognition_extra {
     unsigned int id;                /* keyphrase ID */
     unsigned int recognition_modes; /* recognition modes used for this keyphrase */
+    unsigned int confidence_level;  /* confidence level for mode RECOGNITION_MODE_VOICE_TRIGGER */
     unsigned int num_levels;        /* number of user confidence levels */
     struct sound_trigger_confidence_level levels[SOUND_TRIGGER_MAX_USERS];
 };
 
 struct sound_trigger_phrase_recognition_event {
     struct sound_trigger_recognition_event common;
-    bool                                   key_phrase_in_capture; /* true if the key phrase is
-                                                                     present in audio data available
-                                                                     for capture after recognition
-                                                                     event is fired */
     unsigned int                           num_phrases;
     struct sound_trigger_phrase_recognition_extra phrase_extras[SOUND_TRIGGER_MAX_PHRASES];
 };
@@ -204,10 +211,11 @@ struct sound_trigger_recognition_config {
  * Event sent via load sound model callback
  */
 struct sound_trigger_model_event {
-    int             status;         /* sound model status e.g. SOUND_MODEL_STATUS_UPDATED */
-    unsigned int    data_size;      /* size of event data if any. Size of updated sound model if
+    int                  status;      /* sound model status e.g. SOUND_MODEL_STATUS_UPDATED */
+    sound_model_handle_t model;       /* loaded sound model that triggered the event */
+    unsigned int         data_size;   /* size of event data if any. Size of updated sound model if
                                        status is SOUND_MODEL_STATUS_UPDATED */
-    unsigned int    data_offset;    /* offset of data start from start of this struct
+    unsigned int         data_offset; /* offset of data start from start of this struct
                                        (e.g sizeof struct sound_trigger_model_event) */
 };
 
