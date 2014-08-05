@@ -41,7 +41,10 @@ struct backtrace_map_t {
 
 class BacktraceMap {
 public:
-  static BacktraceMap* Create(pid_t pid);
+  // If uncached is true, then parse the current process map as of the call.
+  // Passing a map created with uncached set to true to Backtrace::Create()
+  // is unsupported.
+  static BacktraceMap* Create(pid_t pid, bool uncached = false);
 
   virtual ~BacktraceMap();
 

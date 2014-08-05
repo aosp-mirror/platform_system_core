@@ -130,9 +130,13 @@ const backtrace_map_t* UnwindMapLocal::Find(uintptr_t addr) {
 //-------------------------------------------------------------------------
 // BacktraceMap create function.
 //-------------------------------------------------------------------------
-BacktraceMap* BacktraceMap::Create(pid_t pid) {
+BacktraceMap* BacktraceMap::Create(pid_t pid, bool uncached) {
   BacktraceMap* map;
-  if (pid == getpid()) {
+
+  if (uncached) {
+    // Force use of the base class to parse the maps when this call is made.
+    map = new BacktraceMap(pid);
+  } else if (pid == getpid()) {
     map = new UnwindMapLocal();
   } else {
     map = new UnwindMap(pid);
