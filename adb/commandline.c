@@ -675,7 +675,7 @@ static void status_window(transport_type ttype, const char* serial)
     }
 }
 
-static bool should_escape(const char c)
+static int should_escape(const char c)
 {
     return (c == ' ' || c == '\'' || c == '"' || c == '\\' || c == '(' || c == ')');
 }
