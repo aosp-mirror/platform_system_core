@@ -110,7 +110,8 @@ enum {
     AUDIO_FLAG_AUDIBILITY_ENFORCED = 0x1,
     AUDIO_FLAG_SECURE              = 0x2,
     AUDIO_FLAG_SCO                 = 0x4,
-    AUDIO_FLAG_BEACON              = 0x8
+    AUDIO_FLAG_BEACON              = 0x8,
+    AUDIO_FLAG_HW_AV_SYNC          = 0x10
 };
 
 /* Do not change these values without updating their counterparts
@@ -696,7 +697,8 @@ typedef enum {
     AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8, // use deep audio buffers
     AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD = 0x10,  // offload playback of compressed
                                                 // streams to hardware codec
-    AUDIO_OUTPUT_FLAG_NON_BLOCKING = 0x20 // use non-blocking write
+    AUDIO_OUTPUT_FLAG_NON_BLOCKING = 0x20, // use non-blocking write
+    AUDIO_OUTPUT_FLAG_HW_AV_SYNC = 0x40 // output uses a hardware A/V synchronization source
 } audio_output_flags_t;
 
 /* The audio input flags are analogous to audio output flags.
@@ -996,6 +998,13 @@ struct audio_patch {
     struct audio_port_config sinks[AUDIO_PATCH_PORTS_MAX];
 };
 
+
+
+/* a HW synchronization source returned by the audio HAL */
+typedef uint32_t audio_hw_sync_t;
+
+/* an invalid HW synchronization source indicating an error */
+#define AUDIO_HW_SYNC_INVALID 0
 
 static inline bool audio_is_output_device(audio_devices_t device)
 {
