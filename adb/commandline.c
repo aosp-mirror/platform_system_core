@@ -1602,9 +1602,10 @@ top:
     return 1;
 }
 
+#define MAX_ARGV_LENGTH 16
 static int do_cmd(transport_type ttype, char* serial, char *cmd, ...)
 {
-    char *argv[16];
+    char *argv[MAX_ARGV_LENGTH];
     int argc;
     va_list ap;
 
@@ -1621,7 +1622,9 @@ static int do_cmd(transport_type ttype, char* serial, char *cmd, ...)
     }
 
     argv[argc++] = cmd;
-    while((argv[argc] = va_arg(ap, char*)) != 0) argc++;
+    while(argc < MAX_ARGV_LENGTH &&
+        (argv[argc] = va_arg(ap, char*)) != 0) argc++;
+    assert(argc < MAX_ARGV_LENGTH);
     va_end(ap);
 
 #if 0
