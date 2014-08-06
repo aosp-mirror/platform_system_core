@@ -695,6 +695,6 @@ struct usb_request *usb_request_wait(struct usb_device *dev)
 int usb_request_cancel(struct usb_request *req)
 {
     struct usbdevfs_urb *urb = ((struct usbdevfs_urb*)req->private_data);
-    return ioctl(req->dev->fd, USBDEVFS_DISCARDURB, &urb);
+    return ioctl(req->dev->fd, USBDEVFS_DISCARDURB, urb);
 }
 
