@@ -1670,11 +1670,6 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         /* we don't even need to send a reply */
         return 0;
     }
-#endif // ADB_HOST
-
-    int ret = handle_forward_request(service, ttype, serial, reply_fd);
-    if (ret >= 0)
-      return ret - 1;
 
     if(!strncmp(service,"get-state",strlen("get-state"))) {
         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
@@ -1682,6 +1677,11 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         send_msg_with_okay(reply_fd, state, strlen(state));
         return 0;
     }
+#endif // ADB_HOST
+
+    int ret = handle_forward_request(service, ttype, serial, reply_fd);
+    if (ret >= 0)
+      return ret - 1;
     return -1;
 }
 
