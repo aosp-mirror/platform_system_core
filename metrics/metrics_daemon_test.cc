@@ -39,8 +39,8 @@ static const char kFakeDiskStatsFormat[] =
     "    1793     1788    %" PRIu64 "d   105580    "
     "    196      175     %" PRIu64 "d    30290    "
     "    0    44060   135850\n";
-static const uint64 kFakeReadSectors[] = {80000, 100000};
-static const uint64 kFakeWriteSectors[] = {3000, 4000};
+static const uint64_t kFakeReadSectors[] = {80000, 100000};
+static const uint64_t kFakeWriteSectors[] = {3000, 4000};
 
 static const char kFakeVmStatsName[] = "fake-vm-stats";
 static const char kFakeScalingMaxFreqPath[] = "fake-scaling-max-freq";
@@ -173,7 +173,7 @@ class MetricsDaemonTest : public testing::Test {
 
   // Creates or overwrites the file in |path| so that it contains the printable
   // representation of |value|.
-  void CreateUint64ValueFile(const base::FilePath& path, uint64 value) {
+  void CreateUint64ValueFile(const base::FilePath& path, uint64_t value) {
     base::DeleteFile(path, false);
     std::string value_string = base::Uint64ToString(value);
     ASSERT_EQ(value_string.length(),
@@ -258,7 +258,7 @@ TEST_F(MetricsDaemonTest, SendSample) {
 }
 
 TEST_F(MetricsDaemonTest, ReportDiskStats) {
-  uint64 read_sectors_now, write_sectors_now;
+  uint64_t read_sectors_now, write_sectors_now;
 
   CreateFakeDiskStatsFile(kFakeDiskStats1.c_str());
   daemon_.DiskStatsReadStats(&read_sectors_now, &write_sectors_now);
@@ -361,12 +361,12 @@ TEST_F(MetricsDaemonTest, SendZramMetrics) {
   EXPECT_TRUE(daemon_.testing_);
 
   // |compr_data_size| is the size in bytes of compressed data.
-  const uint64 compr_data_size = 50 * 1000 * 1000;
+  const uint64_t compr_data_size = 50 * 1000 * 1000;
   // The constant '3' is a realistic but random choice.
   // |orig_data_size| does not include zero pages.
-  const uint64 orig_data_size = compr_data_size * 3;
-  const uint64 page_size = 4096;
-  const uint64 zero_pages = 10 * 1000 * 1000 / page_size;
+  const uint64_t orig_data_size = compr_data_size * 3;
+  const uint64_t page_size = 4096;
+  const uint64_t zero_pages = 10 * 1000 * 1000 / page_size;
 
   CreateUint64ValueFile(base::FilePath(MetricsDaemon::kComprDataSizeName),
                         compr_data_size);
@@ -375,11 +375,11 @@ TEST_F(MetricsDaemonTest, SendZramMetrics) {
   CreateUint64ValueFile(base::FilePath(MetricsDaemon::kZeroPagesName),
                         zero_pages);
 
-  const uint64 real_orig_size = orig_data_size + zero_pages * page_size;
-  const uint64 zero_ratio_percent =
+  const uint64_t real_orig_size = orig_data_size + zero_pages * page_size;
+  const uint64_t zero_ratio_percent =
       zero_pages * page_size * 100 / real_orig_size;
   // Ratio samples are in percents.
-  const uint64 actual_ratio_sample = real_orig_size * 100 / compr_data_size;
+  const uint64_t actual_ratio_sample = real_orig_size * 100 / compr_data_size;
 
   EXPECT_CALL(metrics_lib_, SendToUMA(_, compr_data_size >> 20, _, _, _));
   EXPECT_CALL(metrics_lib_,

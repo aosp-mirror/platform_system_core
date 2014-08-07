@@ -5,6 +5,8 @@
 #ifndef METRICS_METRICS_DAEMON_H_
 #define METRICS_METRICS_DAEMON_H_
 
+#include <stdint.h>
+
 #include <dbus/dbus.h>
 #include <glib.h>
 #include <map>
@@ -213,7 +215,7 @@ class MetricsDaemon {
   void ScheduleStatsCallback(int wait);
 
   // Reads cumulative disk statistics from sysfs.  Returns true for success.
-  bool DiskStatsReadStats(uint64* read_sectors, uint64* write_sectors);
+  bool DiskStatsReadStats(uint64_t* read_sectors, uint64_t* write_sectors);
 
   // Reads cumulative vm statistics from procfs.  Returns true for success.
   bool VmStatsReadStats(struct VmstatRecord* stats);
@@ -275,7 +277,7 @@ class MetricsDaemon {
 
   // Reads the current OS version from /etc/lsb-release and hashes it
   // to a unsigned 32-bit int.
-  uint32 GetOsVersionHash();
+  uint32_t GetOsVersionHash();
 
   // Updates stats, additionally sending them to UMA if enough time has elapsed
   // since the last report.
@@ -287,8 +289,8 @@ class MetricsDaemon {
   // Reports zram statistics.
   bool ReportZram(const base::FilePath& zram_dir);
 
-  // Reads a string from a file and converts it to uint64.
-  static bool ReadFileToUint64(const base::FilePath& path, uint64* value);
+  // Reads a string from a file and converts it to uint64_t.
+  static bool ReadFileToUint64(const base::FilePath& path, uint64_t* value);
 
   // VARIABLES
 
@@ -323,8 +325,8 @@ class MetricsDaemon {
   unsigned int memuse_interval_index_;
 
   // Contain the most recent disk and vm cumulative stats.
-  uint64 read_sectors_;
-  uint64 write_sectors_;
+  uint64_t read_sectors_;
+  uint64_t write_sectors_;
   struct VmstatRecord vmstats_;
 
   StatsState stats_state_;
@@ -332,10 +334,10 @@ class MetricsDaemon {
 
   // The system "HZ", or frequency of ticks.  Some system data uses ticks as a
   // unit, and this is used to convert to standard time units.
-  uint32 ticks_per_second_;
+  uint32_t ticks_per_second_;
   // Used internally by GetIncrementalCpuUse() to return the CPU utilization
   // between calls.
-  uint64 latest_cpu_use_ticks_;
+  uint64_t latest_cpu_use_ticks_;
 
   // Persistent values and accumulators for crash statistics.
   scoped_ptr<PersistentInteger> daily_cycle_;

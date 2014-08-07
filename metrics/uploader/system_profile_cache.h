@@ -5,9 +5,10 @@
 #ifndef METRICS_UPLOADER_SYSTEM_PROFILE_CACHE_H_
 #define METRICS_UPLOADER_SYSTEM_PROFILE_CACHE_H_
 
+#include <stdint.h>
+
 #include <string>
 
-#include "base/basictypes.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_ptr.h"
@@ -26,7 +27,7 @@ struct SystemProfile {
   std::string app_version;
   std::string hardware_class;
   std::string client_id;
-  int32 session_id;
+  int32_t session_id;
 };
 
 // Retrieves general system informations needed by the protobuf for context and

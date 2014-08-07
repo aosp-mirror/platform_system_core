@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdint.h>
+
 #include <base/memory/scoped_ptr.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -16,17 +18,17 @@ using ::testing::Return;
 namespace chromeos_metrics {
 
 namespace {
-const int64 kStime1MSec = 1400;
-const int64 kEtime1MSec = 3000;
-const int64 kDelta1MSec = 1600;
+const int64_t kStime1MSec = 1400;
+const int64_t kEtime1MSec = 3000;
+const int64_t kDelta1MSec = 1600;
 
-const int64 kStime2MSec = 4200;
-const int64 kEtime2MSec = 5000;
-const int64 kDelta2MSec = 800;
+const int64_t kStime2MSec = 4200;
+const int64_t kEtime2MSec = 5000;
+const int64_t kDelta2MSec = 800;
 
-const int64 kStime3MSec = 6600;
-const int64 kEtime3MSec = 6800;
-const int64 kDelta3MSec = 200;
+const int64_t kStime3MSec = 6600;
+const int64_t kEtime3MSec = 6800;
+const int64_t kDelta3MSec = 200;
 }  // namespace
 
 class TimerTest : public testing::Test {

@@ -57,7 +57,7 @@ bool SystemProfileCache::Initialize() {
   // TODO(bsimonnet): Change this to map to the number of time system-services
   // is started.
   session_id_->Add(1);
-  profile_.session_id = static_cast<int32>(session_id_->Get());
+  profile_.session_id = static_cast<int32_t>(session_id_->Get());
 
   initialized_ = true;
   return initialized_;

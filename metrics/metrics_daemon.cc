@@ -175,7 +175,7 @@ void MetricsDaemon::Run(bool run_as_daemon) {
   }
 
   // On OS version change, clear version stats (which are reported daily).
-  int32 version = GetOsVersionHash();
+  int32_t version = GetOsVersionHash();
   if (version_cycle_->Get() != version) {
     version_cycle_->Set(version);
     kernel_crashes_version_count_->Set(0);
@@ -190,8 +190,8 @@ void MetricsDaemon::RunUploaderTest() {
   upload_service_->UploadEvent();
 }
 
-uint32 MetricsDaemon::GetOsVersionHash() {
-  static uint32 cached_version_hash = 0;
+uint32_t MetricsDaemon::GetOsVersionHash() {
+  static uint32_t cached_version_hash = 0;
   static bool version_hash_is_cached = false;
   if (version_hash_is_cached)
     return cached_version_hash;
@@ -372,7 +372,7 @@ TimeDelta MetricsDaemon::GetIncrementalCpuUse() {
   std::vector<std::string> proc_stat_totals;
   base::SplitStringAlongWhitespace(proc_stat_lines[0], &proc_stat_totals);
 
-  uint64 user_ticks, user_nice_ticks, system_ticks;
+  uint64_t user_ticks, user_nice_ticks, system_ticks;
   if (proc_stat_totals.size() != kMetricsProcStatFirstLineItemsCount ||
       proc_stat_totals[0] != "cpu" ||
       !base::StringToUint64(proc_stat_totals[1], &user_ticks) ||
@@ -382,7 +382,7 @@ TimeDelta MetricsDaemon::GetIncrementalCpuUse() {
     return TimeDelta(base::TimeDelta::FromSeconds(0));
   }
 
-  uint64 total_cpu_use_ticks = user_ticks + user_nice_ticks + system_ticks;
+  uint64_t total_cpu_use_ticks = user_ticks + user_nice_ticks + system_ticks;
 
   // Sanity check.
   if (total_cpu_use_ticks < latest_cpu_use_ticks_) {
@@ -391,7 +391,7 @@ TimeDelta MetricsDaemon::GetIncrementalCpuUse() {
     return TimeDelta();
   }
 
-  uint64 diff = total_cpu_use_ticks - latest_cpu_use_ticks_;
+  uint64_t diff = total_cpu_use_ticks - latest_cpu_use_ticks_;
   latest_cpu_use_ticks_ = total_cpu_use_ticks;
   // Use microseconds to avoid significant truncations.
   return base::TimeDelta::FromMicroseconds(
@@ -470,8 +470,8 @@ void MetricsDaemon::ScheduleStatsCallback(int wait) {
   g_timeout_add_seconds(wait, StatsCallbackStatic, this);
 }
 
-bool MetricsDaemon::DiskStatsReadStats(uint64* read_sectors,
-                                       uint64* write_sectors) {
+bool MetricsDaemon::DiskStatsReadStats(uint64_t* read_sectors,
+                                       uint64_t* write_sectors) {
   int nchars;
   int nitems;
   bool success = false;
@@ -632,7 +632,7 @@ gboolean MetricsDaemon::StatsCallbackStatic(void* handle) {
 // Collects disk and vm stats alternating over a short and a long interval.
 
 void MetricsDaemon::StatsCallback() {
-  uint64 read_sectors_now, write_sectors_now;
+  uint64_t read_sectors_now, write_sectors_now;
   struct VmstatRecord vmstats_now;
   double time_now = GetActiveTime();
   double delta_time = time_now - stats_initial_time_;
@@ -765,7 +765,7 @@ bool MetricsDaemon::MeminfoCallback() {
 
 // static
 bool MetricsDaemon::ReadFileToUint64(const base::FilePath& path,
-                                     uint64* value) {
+                                     uint64_t* value) {
   std::string content;
   if (!base::ReadFileToString(path, &content)) {
     PLOG(WARNING) << "cannot read " << path.MaybeAsASCII();
@@ -782,7 +782,7 @@ bool MetricsDaemon::ReadFileToUint64(const base::FilePath& path,
 
 bool MetricsDaemon::ReportZram(const base::FilePath& zram_dir) {
   // Data sizes are in bytes.  |zero_pages| is in number of pages.
-  uint64 compr_data_size, orig_data_size, zero_pages;
+  uint64_t compr_data_size, orig_data_size, zero_pages;
   const size_t page_size = 4096;
 
   if (!ReadFileToUint64(zram_dir.Append(kComprDataSizeName),
@@ -1014,7 +1014,7 @@ void MetricsDaemon::SendSample(const string& name, int sample,
 void MetricsDaemon::SendKernelCrashesCumulativeCountStats() {
   // Report the number of crashes for this OS version, but don't clear the
   // counter.  It is cleared elsewhere on version change.
-  int64 crashes_count = kernel_crashes_version_count_->Get();
+  int64_t crashes_count = kernel_crashes_version_count_->Get();
   SendSample(kernel_crashes_version_count_->Name(),
              crashes_count,
              1,                         // value of first bucket
@@ -1022,7 +1022,7 @@ void MetricsDaemon::SendKernelCrashesCumulativeCountStats() {
              100);                      // number of buckets
 
 
-  int64 cpu_use_ms = version_cumulative_cpu_use_->Get();
+  int64_t cpu_use_ms = version_cumulative_cpu_use_->Get();
   SendSample(version_cumulative_cpu_use_->Name(),
              cpu_use_ms / 1000,         // stat is in seconds
              1,                         // device may be used very little...
@@ -1040,7 +1040,7 @@ void MetricsDaemon::SendKernelCrashesCumulativeCountStats() {
                100);
   }
 
-  int64 active_use_seconds = version_cumulative_active_use_->Get();
+  int64_t active_use_seconds = version_cumulative_active_use_->Get();
   if (active_use_seconds > 0) {
     SendSample(version_cumulative_active_use_->Name(),
                active_use_seconds / 1000,  // stat is in seconds

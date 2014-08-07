@@ -17,7 +17,7 @@ class PersistentIntegerMock : public PersistentInteger {
  public:
   explicit PersistentIntegerMock(const std::string& name)
       : PersistentInteger(name) {}
-    MOCK_METHOD1(Add, void(int64 count));
+    MOCK_METHOD1(Add, void(int64_t count));
 };
 
 }  // namespace chromeos_metrics

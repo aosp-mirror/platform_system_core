@@ -37,25 +37,25 @@ PersistentInteger::PersistentInteger(const std::string& name) :
 
 PersistentInteger::~PersistentInteger() {}
 
-void PersistentInteger::Set(int64 value) {
+void PersistentInteger::Set(int64_t value) {
   value_ = value;
   Write();
 }
 
-int64 PersistentInteger::Get() {
+int64_t PersistentInteger::Get() {
   // If not synced, then read.  If the read fails, it's a good idea to write.
   if (!synced_ && !Read())
     Write();
   return value_;
 }
 
-int64 PersistentInteger::GetAndClear() {
-  int64 v = Get();
+int64_t PersistentInteger::GetAndClear() {
+  int64_t v = Get();
   Set(0);
   return v;
 }
 
-void PersistentInteger::Add(int64 x) {
+void PersistentInteger::Add(int64_t x) {
   Set(Get() + x);
 }
 
@@ -79,8 +79,8 @@ bool PersistentInteger::Read() {
     PLOG(WARNING) << "cannot open " << backing_file_name_ << " for reading";
     return false;
   }
-  int32 version;
-  int64 value;
+  int32_t version;
+  int64_t value;
   bool read_succeeded = false;
   if (HANDLE_EINTR(read(fd, &version, sizeof(version))) == sizeof(version) &&
       version == version_ &&

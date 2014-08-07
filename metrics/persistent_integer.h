@@ -5,7 +5,8 @@
 #ifndef METRICS_PERSISTENT_INTEGER_H_
 #define METRICS_PERSISTENT_INTEGER_H_
 
-#include <base/basictypes.h>
+#include <stdint.h>
+
 #include <string>
 
 namespace chromeos_metrics {
@@ -22,20 +23,20 @@ class PersistentInteger {
   virtual ~PersistentInteger();
 
   // Sets the value.  This writes through to the backing file.
-  void Set(int64 v);
+  void Set(int64_t v);
 
   // Gets the value.  May sync from backing file first.
-  int64 Get();
+  int64_t Get();
 
   // Returns the name of the object.
   std::string Name() { return name_; }
 
   // Convenience function for Get() followed by Set(0).
-  int64 GetAndClear();
+  int64_t GetAndClear();
 
   // Convenience function for v = Get, Set(v + x).
   // Virtual only because of mock.
-  virtual void Add(int64 x);
+  virtual void Add(int64_t x);
 
   // After calling with |testing| = true, changes some behavior for the purpose
   // of testing.  For instance: instances created while testing use the current
@@ -53,8 +54,8 @@ class PersistentInteger {
   // a valid backing file as a side effect.
   bool Read();
 
-  int64 value_;
-  int32 version_;
+  int64_t value_;
+  int32_t version_;
   std::string name_;
   std::string backing_file_name_;
   bool synced_;
