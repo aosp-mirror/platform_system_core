@@ -33,7 +33,6 @@ LogTimeEntry::LogTimeEntry(LogReader &reader, SocketClient *client,
         , mRelease(false)
         , mError(false)
         , threadRunning(false)
-        , threadTriggered(true)
         , mReader(reader)
         , mLogMask(logMask)
         , mPid(pid)
@@ -45,7 +44,9 @@ LogTimeEntry::LogTimeEntry(LogReader &reader, SocketClient *client,
         , mStart(start)
         , mNonBlock(nonBlock)
         , mEnd(CLOCK_MONOTONIC)
-{ }
+{
+        pthread_cond_init(&threadTriggeredCondition, NULL);
+}
 
 void LogTimeEntry::startReader_Locked(void) {
     pthread_attr_t attr;
@@ -74,7 +75,6 @@ void LogTimeEntry::threadStop(void *obj) {
 
     lock();
 
-    me->threadRunning = false;
     if (me->mNonBlock) {
         me->error_Locked();
     }
@@ -103,6 +103,7 @@ void LogTimeEntry::threadStop(void *obj) {
         client->decRef();
     }
 
+    me->threadRunning = false;
     me->decRef_Locked();
 
     unlock();
@@ -119,6 +120,7 @@ void *LogTimeEntry::threadStart(void *obj) {
     if (!client) {
         me->error();
         pthread_exit(NULL);
+        // NOTREACH
     }
 
     LogBuffer &logbuf = me->mReader.logbuf();
@@ -127,12 +129,7 @@ void *LogTimeEntry::threadStart(void *obj) {
 
     lock();
 
-    me->threadTriggered = true;
-
-    while(me->threadTriggered && !me->isError_Locked()) {
-
-        me->threadTriggered = false;
-
+    while (me->threadRunning && !me->isError_Locked()) {
         log_time start = me->mStart;
 
         unlock();
@@ -142,24 +139,24 @@ void *LogTimeEntry::threadStart(void *obj) {
         }
         start = logbuf.flushTo(client, start, privileged, FilterSecondPass, me);
 
+        lock();
+
         if (start == LogBufferElement::FLUSH_ERROR) {
-            me->error();
+            me->error_Locked();
         }
 
-        if (me->mNonBlock) {
-            lock();
+        if (me->mNonBlock || !me->threadRunning || me->isError_Locked()) {
             break;
         }
 
-        sched_yield();
-
-        lock();
+        pthread_cond_wait(&me->threadTriggeredCondition, &timesLock);
     }
 
     unlock();
 
     pthread_exit(NULL);
 
+    // NOTREACH
     pthread_cleanup_pop(true);
 
     return NULL;
