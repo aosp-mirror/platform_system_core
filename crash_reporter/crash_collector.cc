@@ -509,7 +509,7 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
   if ((i = contents.find("CHROMEOS_RELEASE_VERSION")) != contents.end()) {
     version = i->second;
   }
-  int64 payload_size = -1;
+  int64_t payload_size = -1;
   base::GetFileSize(FilePath(payload_path), &payload_size);
   std::string meta_data = StringPrintf("%sexec_name=%s\n"
                                        "ver=%s\n"

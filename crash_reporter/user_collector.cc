@@ -10,6 +10,7 @@
 #include <grp.h>  // For struct group.
 #include <pcrecpp.h>
 #include <pwd.h>  // For struct passwd.
+#include <stdint.h>
 #include <sys/types.h>  // For getpwuid_r, getgrnam_r, WEXITSTATUS.
 
 #include <set>
@@ -248,7 +249,7 @@ bool UserCollector::CopyOffProcFiles(pid_t pid,
 bool UserCollector::ValidateProcFiles(const FilePath &container_dir) const {
   // Check if the maps file is empty, which could be due to the crashed
   // process being reaped by the kernel before finishing a core dump.
-  int64 file_size = 0;
+  int64_t file_size = 0;
   if (!base::GetFileSize(container_dir.Append("maps"), &file_size)) {
     LOG(ERROR) << "Could not get the size of maps file";
     return false;

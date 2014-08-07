@@ -6,6 +6,7 @@
 
 #include <glib.h>
 #include <pcrecpp.h>
+#include <stdint.h>
 
 #include <string>
 #include <vector>
@@ -171,8 +172,8 @@ bool ChromeCollector::HandleCrash(const FilePath &file_path,
   }
 
   if (GetAdditionalLogs(log_path)) {
-    int64 minidump_size = 0;
-    int64 log_size = 0;
+    int64_t minidump_size = 0;
+    int64_t log_size = 0;
     if (base::GetFileSize(minidump_path, &minidump_size) &&
         base::GetFileSize(log_path, &log_size) &&
         minidump_size > 0 && log_size > 0 &&
