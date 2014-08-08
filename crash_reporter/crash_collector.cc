@@ -514,7 +514,7 @@ void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
   std::string meta_data = StringPrintf("%sexec_name=%s\n"
                                        "ver=%s\n"
                                        "payload=%s\n"
-                                       "payload_size=%"PRId64"\n"
+                                       "payload_size=%" PRId64 "\n"
                                        "done=1\n",
                                        extra_metadata_.c_str(),
                                        exec_name.c_str(),
