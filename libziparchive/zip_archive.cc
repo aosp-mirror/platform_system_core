@@ -899,10 +899,12 @@ int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr, const char* p
 
   IterationHandle* cookie = (IterationHandle*) malloc(sizeof(IterationHandle));
   cookie->position = 0;
-  cookie->prefix = prefix;
   cookie->archive = archive;
   if (prefix != NULL) {
+    cookie->prefix = strdup(prefix);
     cookie->prefix_len = strlen(prefix);
+  } else {
+    cookie->prefix = NULL;
   }
 
   *cookie_ptr = cookie ;
@@ -911,6 +913,10 @@ int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr, const char* p
 
 void EndIteration(void* cookie) {
   if (cookie != NULL) {
+    IterationHandle* handle = reinterpret_cast<IterationHandle*>(cookie);
+    if (handle->prefix != NULL) {
+      free(const_cast<char*>(handle->prefix));
+    }
     free(cookie);
   }
 }
