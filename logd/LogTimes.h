@@ -31,7 +31,7 @@ class LogTimeEntry {
     bool mRelease;
     bool mError;
     bool threadRunning;
-    bool threadTriggered;
+    pthread_cond_t threadTriggeredCondition;
     pthread_t mThread;
     LogReader &mReader;
     static void *threadStart(void *me);
@@ -63,12 +63,16 @@ public:
     bool runningReader_Locked(void) const {
         return threadRunning || mRelease || mError || mNonBlock;
     }
-    void triggerReader_Locked(void) { threadTriggered = true; }
+    void triggerReader_Locked(void) {
+        pthread_cond_signal(&threadTriggeredCondition);
+    }
+
     void triggerSkip_Locked(unsigned int skip) { skipAhead = skip; }
 
     // Called after LogTimeEntry removed from list, lock implicitly held
     void release_Locked(void) {
         mRelease = true;
+        pthread_cond_signal(&threadTriggeredCondition);
         if (mRefCount || threadRunning) {
             return;
         }
@@ -78,7 +82,7 @@ public:
 
     // Called to mark socket in jeopardy
     void error_Locked(void) { mError = true; }
-    void error(void) { lock(); mError = true; unlock(); }
+    void error(void) { lock(); error_Locked(); unlock(); }
 
     bool isError_Locked(void) const { return mRelease || mError; }
 
