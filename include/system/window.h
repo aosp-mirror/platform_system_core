@@ -293,6 +293,7 @@ enum {
     NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS = 15, /* private */
     NATIVE_WINDOW_SET_POST_TRANSFORM_CROP   = 16,   /* private */
     NATIVE_WINDOW_SET_BUFFERS_STICKY_TRANSFORM = 17,/* private */
+    NATIVE_WINDOW_SET_SIDEBAND_STREAM       = 18,
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -893,6 +894,17 @@ static inline int native_window_dequeue_buffer_and_wait(ANativeWindow *anw,
     return anw->dequeueBuffer_DEPRECATED(anw, anb);
 }
 
+/*
+ * native_window_set_sideband_stream(..., native_handle_t*)
+ * Attach a sideband buffer stream to a native window.
+ */
+static inline int native_window_set_sideband_stream(
+        struct ANativeWindow* window,
+        native_handle_t* sidebandHandle)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_SIDEBAND_STREAM,
+            sidebandHandle);
+}
 
 __END_DECLS
 
