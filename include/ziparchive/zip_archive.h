@@ -130,10 +130,10 @@ int32_t FindEntry(const ZipArchiveHandle handle, const char* entryName,
 /*
  * Start iterating over all entries of a zip file. The order of iteration
  * is not guaranteed to be the same as the order of elements
- * in the central directory but is stable for a given zip file. |cookie|
- * must point to a writeable memory location, and will be set to the value
- * of an opaque cookie which can be used to make one or more calls to
- * Next.
+ * in the central directory but is stable for a given zip file. |cookie| will
+ * contain the value of an opaque cookie which can be used to make one or more
+ * calls to Next. All calls to StartIteration must be matched by a call to
+ * EndIteration to free any allocated memory.
  *
  * This method also accepts an optional prefix to restrict iteration to
  * entry names that start with |prefix|.
@@ -150,6 +150,12 @@ int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr,
  * archive and lower negative values on failure.
  */
 int32_t Next(void* cookie, ZipEntry* data, ZipEntryName *name);
+
+/*
+ * End iteration over all entries of a zip file and frees the memory allocated
+ * in StartIteration.
+ */
+void EndIteration(void* cookie);
 
 /*
  * Uncompress and write an entry to an open file identified by |fd|.
