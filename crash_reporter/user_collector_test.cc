@@ -42,7 +42,10 @@ class UserCollectorTest : public ::testing::Test {
     collector_.Initialize(CountCrash,
                           kFilePath,
                           IsMetrics,
-                          false);
+                          false,
+                          false,
+                          false,
+                          "");
     base::DeleteFile(FilePath("test"), true);
     mkdir("test", 0777);
     collector_.set_core_pattern_file("test/core_pattern");

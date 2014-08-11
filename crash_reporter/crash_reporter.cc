@@ -8,14 +8,13 @@
 #include <string>
 #include <vector>
 
-#include <base/command_line.h>
 #include <base/files/file_util.h>
 #include <base/logging.h>
 #include <base/strings/string_split.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
+#include <chromeos/flag_helper.h>
 #include <chromeos/syslog_logging.h>
-#include <gflags/gflags.h>
 #include <metrics/metrics_library.h>
 
 #include "crash-reporter/chrome_collector.h"
@@ -24,22 +23,6 @@
 #include "crash-reporter/udev_collector.h"
 #include "crash-reporter/unclean_shutdown_collector.h"
 #include "crash-reporter/user_collector.h"
-
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
-DEFINE_bool(init, false, "Initialize crash logging");
-DEFINE_bool(clean_shutdown, false, "Signal clean shutdown");
-DEFINE_string(generate_kernel_signature, "",
-              "Generate signature from given kcrash file");
-DEFINE_bool(crash_test, false, "Crash test");
-DEFINE_string(user, "", "User crash info (pid:signal:exec_name)");
-DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
-DEFINE_string(udev, "", "Udev event description (type:device:subsystem)");
-DEFINE_bool(kernel_warning, false, "Report collected kernel warning");
-DEFINE_string(chrome, "", "Chrome crash dump file");
-DEFINE_string(pid, "", "PID of crashing process");
-DEFINE_string(uid, "", "UID of crashing process");
-DEFINE_string(exe, "", "Executable name of crashing process");
-#pragma GCC diagnostic error "-Wstrict-aliasing"
 
 static const char kCrashCounterHistogram[] = "Logging.CrashCounter";
 static const char kUserCrashSignal[] =
@@ -124,8 +107,10 @@ static void CountChromeCrash() {
 
 static int Initialize(KernelCollector *kernel_collector,
                       UserCollector *user_collector,
-                      UncleanShutdownCollector *unclean_shutdown_collector) {
-  CHECK(!FLAGS_clean_shutdown) << "Incompatible options";
+                      UncleanShutdownCollector *unclean_shutdown_collector,
+                      const bool unclean_check,
+                      const bool clean_shutdown) {
+  CHECK(!clean_shutdown) << "Incompatible options";
 
   bool was_kernel_crash = false;
   bool was_unclean_shutdown = false;
@@ -134,7 +119,7 @@ static int Initialize(KernelCollector *kernel_collector,
     was_kernel_crash = kernel_collector->Collect();
   }
 
-  if (FLAGS_unclean_check) {
+  if (unclean_check) {
     was_unclean_shutdown = unclean_shutdown_collector->Collect();
   }
 
@@ -158,13 +143,14 @@ static int Initialize(KernelCollector *kernel_collector,
   return 0;
 }
 
-static int HandleUserCrash(UserCollector *user_collector) {
+static int HandleUserCrash(UserCollector *user_collector,
+                           const std::string& user, const bool crash_test) {
   // Handle a specific user space crash.
-  CHECK(!FLAGS_user.empty()) << "--user= must be set";
+  CHECK(!user.empty()) << "--user= must be set";
 
   // Make it possible to test what happens when we crash while
   // handling a crash.
-  if (FLAGS_crash_test) {
+  if (crash_test) {
     *(volatile char *)0 = 0;
     return 0;
   }
@@ -172,35 +158,40 @@ static int HandleUserCrash(UserCollector *user_collector) {
   // Accumulate logs to help in diagnosing failures during user collection.
   chromeos::LogToString(true);
   // Handle the crash, get the name of the process from procfs.
-  bool handled = user_collector->HandleCrash(FLAGS_user, nullptr);
+  bool handled = user_collector->HandleCrash(user, nullptr);
   chromeos::LogToString(false);
   if (!handled)
     return 1;
   return 0;
 }
 
-static int HandleChromeCrash(ChromeCollector *chrome_collector) {
-  CHECK(!FLAGS_chrome.empty()) << "--chrome= must be set";
-  CHECK(!FLAGS_pid.empty()) << "--pid= must be set";
-  CHECK(!FLAGS_uid.empty()) << "--uid= must be set";
-  CHECK(!FLAGS_exe.empty()) << "--exe= must be set";
+static int HandleChromeCrash(ChromeCollector *chrome_collector,
+                             const std::string& chrome_dump_file,
+                             const std::string& pid,
+                             const std::string& uid,
+                             const std::string& exe) {
+  CHECK(!chrome_dump_file.empty()) << "--chrome= must be set";
+  CHECK(!pid.empty()) << "--pid= must be set";
+  CHECK(!uid.empty()) << "--uid= must be set";
+  CHECK(!exe.empty()) << "--exe= must be set";
 
   chromeos::LogToString(true);
-  bool handled = chrome_collector->HandleCrash(FilePath(FLAGS_chrome),
-                                               FLAGS_pid, FLAGS_uid, FLAGS_exe);
+  bool handled = chrome_collector->HandleCrash(FilePath(chrome_dump_file),
+                                               pid, uid, exe);
   chromeos::LogToString(false);
   if (!handled)
     return 1;
   return 0;
 }
 
-static int HandleUdevCrash(UdevCollector *udev_collector) {
+static int HandleUdevCrash(UdevCollector *udev_collector,
+                           const std::string& udev_event) {
   // Handle a crash indicated by a udev event.
-  CHECK(!FLAGS_udev.empty()) << "--udev= must be set";
+  CHECK(!udev_event.empty()) << "--udev= must be set";
 
   // Accumulate logs to help in diagnosing failures during user collection.
   chromeos::LogToString(true);
-  bool handled = udev_collector->HandleCrash(FLAGS_udev);
+  bool handled = udev_collector->HandleCrash(udev_event);
   chromeos::LogToString(false);
   if (!handled)
     return 1;
@@ -219,10 +210,11 @@ static int HandleKernelWarning(KernelWarningCollector
 }
 
 // Interactive/diagnostics mode for generating kernel crash signatures.
-static int GenerateKernelSignature(KernelCollector *kernel_collector) {
+static int GenerateKernelSignature(KernelCollector *kernel_collector,
+                                   const std::string& kernel_signature_file) {
   std::string kcrash_contents;
   std::string signature;
-  if (!base::ReadFileToString(FilePath(FLAGS_generate_kernel_signature),
+  if (!base::ReadFileToString(FilePath(kernel_signature_file),
                               &kcrash_contents)) {
     fprintf(stderr, "Could not read file.\n");
     return 1;
@@ -258,11 +250,28 @@ static void OpenStandardFileDescriptors() {
 }
 
 int main(int argc, char *argv[]) {
+  DEFINE_bool(init, false, "Initialize crash logging");
+  DEFINE_bool(clean_shutdown, false, "Signal clean shutdown");
+  DEFINE_string(generate_kernel_signature, "",
+                "Generate signature from given kcrash file");
+  DEFINE_bool(crash_test, false, "Crash test");
+  DEFINE_string(user, "", "User crash info (pid:signal:exec_name)");
+  DEFINE_bool(unclean_check, true, "Check for unclean shutdown");
+  DEFINE_string(udev, "", "Udev event description (type:device:subsystem)");
+  DEFINE_bool(kernel_warning, false, "Report collected kernel warning");
+  DEFINE_string(chrome, "", "Chrome crash dump file");
+  DEFINE_string(pid, "", "PID of crashing process");
+  DEFINE_string(uid, "", "UID of crashing process");
+  DEFINE_string(exe, "", "Executable name of crashing process");
+  DEFINE_bool(core2md_failure, false, "Core2md failure test");
+  DEFINE_bool(directory_failure, false, "Spool directory failure test");
+  DEFINE_string(filter_in, "",
+                "Ignore all crashes but this for testing");
+
   OpenStandardFileDescriptors();
-  google::ParseCommandLineFlags(&argc, &argv, true);
   FilePath my_path = base::MakeAbsoluteFilePath(FilePath(argv[0]));
   s_metrics_lib.Init();
-  CommandLine::Init(argc, argv);
+  chromeos::FlagHelper::Init(argc, argv, "Chromium OS Crash Reporter");
   chromeos::OpenLog(my_path.BaseName().value().c_str(), true);
   chromeos::InitLog(chromeos::kLogToSyslog);
 
@@ -274,7 +283,10 @@ int main(int argc, char *argv[]) {
   user_collector.Initialize(CountUserCrash,
                             my_path.value(),
                             IsFeedbackAllowed,
-                            true);  // generate_diagnostics
+                            true,  // generate_diagnostics
+                            FLAGS_core2md_failure,
+                            FLAGS_directory_failure,
+                            FLAGS_filter_in);
   UncleanShutdownCollector unclean_shutdown_collector;
   unclean_shutdown_collector.Initialize(CountUncleanShutdown,
                                         IsFeedbackAllowed);
@@ -289,7 +301,9 @@ int main(int argc, char *argv[]) {
   if (FLAGS_init) {
     return Initialize(&kernel_collector,
                       &user_collector,
-                      &unclean_shutdown_collector);
+                      &unclean_shutdown_collector,
+                      FLAGS_unclean_check,
+                      FLAGS_clean_shutdown);
   }
 
   if (FLAGS_clean_shutdown) {
@@ -299,11 +313,12 @@ int main(int argc, char *argv[]) {
   }
 
   if (!FLAGS_generate_kernel_signature.empty()) {
-    return GenerateKernelSignature(&kernel_collector);
+    return GenerateKernelSignature(&kernel_collector,
+                                   FLAGS_generate_kernel_signature);
   }
 
   if (!FLAGS_udev.empty()) {
-    return HandleUdevCrash(&udev_collector);
+    return HandleUdevCrash(&udev_collector, FLAGS_udev);
   }
 
   if (FLAGS_kernel_warning) {
@@ -311,8 +326,12 @@ int main(int argc, char *argv[]) {
   }
 
   if (!FLAGS_chrome.empty()) {
-    return HandleChromeCrash(&chrome_collector);
+    return HandleChromeCrash(&chrome_collector,
+                             FLAGS_chrome,
+                             FLAGS_pid,
+                             FLAGS_uid,
+                             FLAGS_exe);
   }
 
-  return HandleUserCrash(&user_collector);
+  return HandleUserCrash(&user_collector, FLAGS_user, FLAGS_crash_test);
 }

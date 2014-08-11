@@ -29,11 +29,6 @@
             '<@(exported_deps)',
           ],
         },
-        'link_settings': {
-          'libraries': [
-            '-lgflags',
-          ],
-        },
       },
       'sources': [
         'chrome_collector.cc',

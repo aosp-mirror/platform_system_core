@@ -30,7 +30,10 @@ class UserCollector : public CrashCollector {
   void Initialize(CountCrashFunction count_crash,
                   const std::string &our_path,
                   IsFeedbackAllowedFunction is_metrics_allowed,
-                  bool generate_diagnostics);
+                  bool generate_diagnostics,
+                  bool core2md_failure,
+                  bool directory_failure,
+                  const std::string &filter_in);
 
   ~UserCollector() override;
 
@@ -175,6 +178,10 @@ class UserCollector : public CrashCollector {
   std::string core_pipe_limit_file_;
   std::string our_path_;
   bool initialized_;
+
+  bool core2md_failure_;
+  bool directory_failure_;
+  std::string filter_in_;
 
   static const char *kUserId;
   static const char *kGroupId;

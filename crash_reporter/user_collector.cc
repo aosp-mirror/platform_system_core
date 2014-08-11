@@ -26,14 +26,6 @@
 #include <base/strings/stringprintf.h>
 #include <chromeos/process.h>
 #include <chromeos/syslog_logging.h>
-#include <gflags/gflags.h>
-
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
-DEFINE_bool(core2md_failure, false, "Core2md failure test");
-DEFINE_bool(directory_failure, false, "Spool directory failure test");
-DEFINE_string(filter_in, "",
-              "Ignore all crashes but this for testing");
-#pragma GCC diagnostic error "-Wstrict-aliasing"
 
 static const char kCollectionErrorSignature[] =
     "crash_reporter-user-collection";
@@ -69,12 +61,18 @@ void UserCollector::Initialize(
     UserCollector::CountCrashFunction count_crash_function,
     const std::string &our_path,
     UserCollector::IsFeedbackAllowedFunction is_feedback_allowed_function,
-    bool generate_diagnostics) {
+    bool generate_diagnostics,
+    bool core2md_failure,
+    bool directory_failure,
+    const std::string &filter_in) {
   CrashCollector::Initialize(count_crash_function,
                              is_feedback_allowed_function);
   our_path_ = our_path;
   initialized_ = true;
   generate_diagnostics_ = generate_diagnostics;
+  core2md_failure_ = core2md_failure;
+  directory_failure_ = directory_failure;
+  filter_in_ = filter_in;
 }
 
 UserCollector::~UserCollector() {
@@ -301,7 +299,7 @@ bool UserCollector::GetCreatedCrashDirectory(pid_t pid, uid_t supplied_ruid,
                                              bool *out_of_capacity) {
   FilePath process_path = GetProcessPath(pid);
   std::string status;
-  if (FLAGS_directory_failure) {
+  if (directory_failure_) {
     LOG(ERROR) << "Purposefully failing to create spool directory";
     return false;
   }
@@ -368,7 +366,7 @@ bool UserCollector::RunCoreToMinidump(const FilePath &core_path,
   core2md.AddArg(core_path.value());
   core2md.AddArg(procfs_directory.value());
 
-  if (!FLAGS_core2md_failure) {
+  if (!core2md_failure_) {
     core2md.AddArg(minidump_path.value());
   } else {
     // To test how core2md errors are propagaged, cause an error
@@ -635,13 +633,13 @@ bool UserCollector::HandleCrash(const std::string &crash_attributes,
 
   // Allow us to test the crash reporting mechanism successfully even if
   // other parts of the system crash.
-  if (!FLAGS_filter_in.empty() &&
-      (FLAGS_filter_in == "none" ||
-       FLAGS_filter_in != exec)) {
+  if (!filter_in_.empty() &&
+      (filter_in_ == "none" ||
+       filter_in_ != exec)) {
     // We use a different format message to make it more obvious in tests
     // which crashes are test generated and which are real.
     LOG(WARNING) << "Ignoring crash from " << exec << "[" << pid << "] while "
-                 << "filter_in=" << FLAGS_filter_in << ".";
+                 << "filter_in=" << filter_in_ << ".";
     return true;
   }
 
