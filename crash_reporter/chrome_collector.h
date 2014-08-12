@@ -18,7 +18,7 @@ class SystemLogging;
 class ChromeCollector : public CrashCollector {
  public:
   ChromeCollector();
-  virtual ~ChromeCollector();
+  ~ChromeCollector() override;
 
   // Magic string to let Chrome know the crash report succeeded.
   static const char kSuccessMagic[];

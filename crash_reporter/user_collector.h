@@ -31,7 +31,7 @@ class UserCollector : public CrashCollector {
                   IsFeedbackAllowedFunction is_metrics_allowed,
                   bool generate_diagnostics);
 
-  virtual ~UserCollector();
+  ~UserCollector() override;
 
   // Enable collection.
   bool Enable() { return SetUpInternal(true); }

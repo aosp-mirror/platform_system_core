@@ -17,7 +17,7 @@ class UdevCollector : public CrashCollector {
  public:
   UdevCollector();
 
-  virtual ~UdevCollector();
+  ~UdevCollector() override;
 
   // The udev event string should be formatted as follows:
   //   "ACTION=[action]:KERNEL=[name]:SUBSYSTEM=[subsystem]"

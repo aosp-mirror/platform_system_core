@@ -16,7 +16,7 @@
 class UncleanShutdownCollector : public CrashCollector {
  public:
   UncleanShutdownCollector();
-  virtual ~UncleanShutdownCollector();
+  ~UncleanShutdownCollector() override;
 
   // Enable collection - signal that a boot has started.
   bool Enable();

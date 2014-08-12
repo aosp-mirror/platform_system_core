@@ -76,8 +76,8 @@ class CrashCollector {
     forced_crash_directory_ = forced_directory;
   }
 
-  virtual GHashTable *GetActiveUserSessions(void);
-  base::FilePath GetUserCrashPath(void);
+  virtual GHashTable *GetActiveUserSessions();
+  base::FilePath GetUserCrashPath();
   base::FilePath GetCrashDirectoryInfo(uid_t process_euid,
                                  uid_t default_user_id,
                                  gid_t default_user_group,

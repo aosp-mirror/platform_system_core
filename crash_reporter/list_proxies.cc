@@ -107,7 +107,7 @@ class BrowserProxyResolvedSignalWatcher : public chromeos::dbus::SignalWatcher {
                                              std::deque<std::string> *proxies)
       : main_loop_(main_loop), proxies_(proxies) { }
 
-  virtual void OnSignal(DBusMessage *message) {
+  void OnSignal(DBusMessage *message) override {
     // Get args
     char *source_url = NULL;
     char *proxy_list = NULL;

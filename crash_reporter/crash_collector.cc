@@ -154,7 +154,7 @@ const char *GetGErrorMessage(const GError *error) {
 
 }
 
-GHashTable *CrashCollector::GetActiveUserSessions(void) {
+GHashTable *CrashCollector::GetActiveUserSessions() {
   GHashTable *active_sessions = NULL;
 
   chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
@@ -189,7 +189,7 @@ GHashTable *CrashCollector::GetActiveUserSessions(void) {
   return active_sessions;
 }
 
-FilePath CrashCollector::GetUserCrashPath(void) {
+FilePath CrashCollector::GetUserCrashPath() {
   // In this multiprofile world, there is no one-specific user dir anymore.
   // Ask the session manager for the active ones, then just run with the
   // first result we get back.

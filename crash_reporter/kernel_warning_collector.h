@@ -16,7 +16,7 @@ class KernelWarningCollector : public CrashCollector {
  public:
   KernelWarningCollector();
 
-  virtual ~KernelWarningCollector();
+  ~KernelWarningCollector() override;
 
   // Collects warning.
   bool Collect();

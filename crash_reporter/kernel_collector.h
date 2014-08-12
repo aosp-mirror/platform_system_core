@@ -30,7 +30,7 @@ class KernelCollector : public CrashCollector {
 
   KernelCollector();
 
-  virtual ~KernelCollector();
+  ~KernelCollector() override;
 
   void OverridePreservedDumpPath(const base::FilePath &file_path);
 
@@ -65,7 +65,7 @@ class KernelCollector : public CrashCollector {
   void StripSensitiveData(std::string *kernel_dump);
 
   void GetRamoopsRecordPath(base::FilePath *path, size_t record);
-  virtual bool LoadParameters();
+  bool LoadParameters();
   bool HasMoreRecords();
 
   // Read a record to string, modified from file_utils since that didn't
