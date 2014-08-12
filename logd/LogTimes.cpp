@@ -119,8 +119,7 @@ void *LogTimeEntry::threadStart(void *obj) {
     SocketClient *client = me->mClient;
     if (!client) {
         me->error();
-        pthread_exit(NULL);
-        // NOTREACH
+        return NULL;
     }
 
     LogBuffer &logbuf = me->mReader.logbuf();
@@ -154,9 +153,6 @@ void *LogTimeEntry::threadStart(void *obj) {
 
     unlock();
 
-    pthread_exit(NULL);
-
-    // NOTREACH
     pthread_cleanup_pop(true);
 
     return NULL;
