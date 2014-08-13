@@ -192,11 +192,8 @@ struct DataDescriptor {
 
 #undef DISALLOW_IMPLICIT_CONSTRUCTORS
 
-// mask value that signifies that the entry has a DD
-static const uint32_t kGPBDDFlagMask = 0x0008;
+static const uint32_t kGPBDDFlagMask = 0x0008;         // mask value that signifies that the entry has a DD
 static const uint32_t kMaxErrorLen = 1024;
-// mask value that signifies that the entry names are encoded in UTF-8
-static const uint32_t kGPBEFSFlagMask = 0x0800;
 
 // The maximum size of a central directory or a file
 // comment in bytes.
@@ -298,7 +295,6 @@ struct ZipArchive {
 
   /* number of entries in the Zip archive */
   uint16_t num_entries;
-  bool utf8_names_encoding;
 
   /*
    * We know how many entries are in the Zip archive, so we can have a
@@ -314,7 +310,6 @@ struct ZipArchive {
       directory_offset(0),
       directory_map(NULL),
       num_entries(0),
-      utf8_names_encoding(false),
       hash_table_size(0),
       hash_table(NULL) {}
 
@@ -660,15 +655,6 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
           ptr - cd_ptr, cd_length, i);
       goto bail;
     }
-    if (i == 0) {
-      archive->utf8_names_encoding = cdr->gpb_flags & kGPBEFSFlagMask;
-    } else {
-      bool has_utf8_name_encoding = cdr->gpb_flags & kGPBEFSFlagMask;
-      if (archive->utf8_names_encoding != has_utf8_name_encoding) {
-        ALOGW("Zip: Entry names encoded with different encoding");
-        goto bail;
-      }
-    }
   }
   ALOGV("+++ zip good scan %" PRIu16 " entries", num_entries);
 
@@ -988,11 +974,6 @@ int32_t Next(void* cookie, ZipEntry* data, ZipEntryName* name) {
 
   handle->position = 0;
   return kIterationEnd;
-}
-
-bool HasUTF8Names(const ZipArchiveHandle handle) {
-  const ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
-  return archive->utf8_names_encoding;
 }
 
 static int32_t InflateToFile(int fd, const ZipEntry* entry,
