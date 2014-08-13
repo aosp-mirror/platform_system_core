@@ -158,6 +158,11 @@ int32_t Next(void* cookie, ZipEntry* data, ZipEntryName *name);
 void EndIteration(void* cookie);
 
 /*
+ * Whether entry names in an archive are encoded in UTF-8.
+ */
+bool HasUTF8Names(const ZipArchiveHandle handle);
+
+/*
  * Uncompress and write an entry to an open file identified by |fd|.
  * |entry->uncompressed_length| bytes will be written to the file at
  * its current offset, and the file will be truncated at the end of
