@@ -274,6 +274,7 @@ send_crash() {
   local product="$(get_key_value "${meta_path}" "upload_var_prod")"
   local version="$(get_key_value "${meta_path}" "upload_var_ver")"
   local upload_prefix="$(get_key_value "${meta_path}" "upload_prefix")"
+  local guid
 
   set -- \
     -F "write_payload_size=${write_payload_size}" \
@@ -363,6 +364,10 @@ send_crash() {
     boot_mode="dev"
   fi
 
+  # Need to strip dashes ourselves as Chrome preserves it in the file
+  # nowadays.  This is also what the Chrome breakpad client does.
+  guid=$(tr -d '-' < "${CONSENT_ID}")
+
   local error_type="$(get_key_value "${meta_path}" "error_type")"
   [ "${error_type}" = "undefined" ] && error_type=
 
@@ -421,7 +426,7 @@ send_crash() {
     ${image_type:+-F "image_type=${image_type}"} \
     ${boot_mode:+-F "boot_mode=${boot_mode}"} \
     ${error_type:+-F "error_type=${error_type}"} \
-    -F "guid=<${CONSENT_ID}" \
+    -F "guid=${guid}" \
     -o "${report_id}" \
     "$@" \
     2>"${curl_stderr}"
