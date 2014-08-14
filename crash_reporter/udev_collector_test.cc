@@ -55,7 +55,7 @@ class UdevCollectorTest : public ::testing::Test {
   }
 
  private:
-  void SetUp() OVERRIDE {
+  void SetUp() override {
     s_consent_given = true;
 
     collector_.Initialize(CountCrash, IsMetrics);

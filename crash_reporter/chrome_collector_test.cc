@@ -51,7 +51,7 @@ class ChromeCollectorTest : public ::testing::Test {
   ChromeCollector collector_;
 
  private:
-  void SetUp() OVERRIDE {
+  void SetUp() override {
     collector_.Initialize(CountCrash, IsMetrics);
     chromeos::ClearLog();
   }

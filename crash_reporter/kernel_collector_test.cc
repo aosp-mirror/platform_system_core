@@ -46,7 +46,7 @@ class KernelCollectorTest : public ::testing::Test {
   KernelCollector collector_;
 
  private:
-  void SetUp() OVERRIDE {
+  void SetUp() override {
     s_crashes = 0;
     s_metrics = true;
     collector_.Initialize(CountCrash, IsMetrics);
