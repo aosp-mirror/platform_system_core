@@ -39,7 +39,7 @@ class SystemProfileCache : public SystemProfileSetter {
   SystemProfileCache();
 
   // Populates the ProfileSystem protobuf with system information.
-  void Populate(metrics::ChromeUserMetricsExtension* profile_proto) OVERRIDE;
+  void Populate(metrics::ChromeUserMetricsExtension* profile_proto) override;
 
   // Converts a string representation of the channel (|channel|-channel) to a
   // SystemProfileProto_Channel

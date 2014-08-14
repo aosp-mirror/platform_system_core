@@ -16,12 +16,12 @@ const char kBackingFilePattern[] = "*.pibakf";
 using chromeos_metrics::PersistentInteger;
 
 class PersistentIntegerTest : public testing::Test {
-  virtual void SetUp() OVERRIDE {
+  void SetUp() override {
     // Set testing mode.
     chromeos_metrics::PersistentInteger::SetTestingMode(true);
   }
 
-  virtual void TearDown() OVERRIDE {
+  void TearDown() override {
     // Remove backing files.  The convention is that they all end in ".pibakf".
     base::FileEnumerator f_enum(base::FilePath("."),
                                 false,

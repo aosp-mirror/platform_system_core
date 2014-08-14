@@ -14,7 +14,7 @@ class ChromeUserMetricsExtension;
 // Mock profile setter used for testing.
 class MockSystemProfileSetter : public SystemProfileSetter {
  public:
-  void Populate(metrics::ChromeUserMetricsExtension* profile_proto) OVERRIDE {}
+  void Populate(metrics::ChromeUserMetricsExtension* profile_proto) override {}
 };
 
 #endif  // METRICS_UPLOADER_MOCK_MOCK_SYSTEM_PROFILE_SETTER_H_

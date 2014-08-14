@@ -15,7 +15,7 @@ class SenderMock : public Sender {
  public:
   SenderMock();
 
-  bool Send(const std::string& content, const std::string& hash) OVERRIDE;
+  bool Send(const std::string& content, const std::string& hash) override;
   void Reset();
 
   bool is_good_proto() { return is_good_proto_; }

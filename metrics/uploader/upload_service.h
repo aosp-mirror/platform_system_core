@@ -74,10 +74,10 @@ class UploadService : public base::HistogramFlattener {
   // Implements inconsistency detection to match HistogramFlattener's
   // interface.
   void InconsistencyDetected(
-      base::HistogramBase::Inconsistency problem) OVERRIDE {}
+      base::HistogramBase::Inconsistency problem) override {}
   void UniqueInconsistencyDetected(
-      base::HistogramBase::Inconsistency problem) OVERRIDE {}
-  void InconsistencyDetectedInLoggedCount(int amount) OVERRIDE {}
+      base::HistogramBase::Inconsistency problem) override {}
+  void InconsistencyDetectedInLoggedCount(int amount) override {}
 
  private:
   friend class UploadServiceTest;
@@ -117,7 +117,7 @@ class UploadService : public base::HistogramFlattener {
 
   // Callback for HistogramSnapshotManager to store the histograms.
   void RecordDelta(const base::HistogramBase& histogram,
-                   const base::HistogramSamples& snapshot) OVERRIDE;
+                   const base::HistogramSamples& snapshot) override;
 
   // Compiles all the samples received into a single protobuf and adds all
   // system information.

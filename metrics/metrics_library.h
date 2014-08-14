@@ -34,7 +34,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
   virtual ~MetricsLibrary();
 
   // Initializes the library.
-  virtual void Init() OVERRIDE;
+  void Init() override;
 
   // Returns whether or not the machine is running in guest mode.
   bool IsGuestMode();
@@ -76,15 +76,13 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // histogram is proportional to the number of buckets. Therefore, it
   // is strongly recommended to keep this number low (e.g., 50 is
   // normal, while 100 is high).
-  virtual bool SendEnumToUMA(const std::string& name,
-                             int sample,
-                             int max) OVERRIDE;
+  bool SendEnumToUMA(const std::string& name, int sample, int max) override;
 
   // Sends sparse histogram sample to Chrome for transport to UMA.  Returns
   // true on success.
   //
   // |sample| is the 32-bit integer value to be recorded.
-  virtual bool SendSparseToUMA(const std::string& name, int sample) OVERRIDE;
+  bool SendSparseToUMA(const std::string& name, int sample) override;
 
   // Sends a user action to Chrome for transport to UMA and returns true on
   // success. This method results in the equivalent of an asynchronous
@@ -96,7 +94,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // chrome/browser/chromeos/external_metrics.cc.
   //
   // |action| is the user-generated event (e.g., "MuteKeyPressed").
-  virtual bool SendUserActionToUMA(const std::string& action) OVERRIDE;
+  bool SendUserActionToUMA(const std::string& action) override;
 
   // Sends a signal to UMA that a crash of the given |crash_kind|
   // has occurred.  Used by UMA to generate stability statistics.
