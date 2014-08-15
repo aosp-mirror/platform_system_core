@@ -164,7 +164,6 @@ static int create_service_thread(void (*func)(int, void *), void *cookie)
         printf("cannot create service socket pair\n");
         return -1;
     }
-    D("socketpair: (%d,%d)", s[0], s[1]);
 
     sti = malloc(sizeof(stinfo));
     if(sti == 0) fatal("cannot allocate stinfo");
@@ -265,11 +264,10 @@ static int create_subproc_raw(const char *cmd, const char *arg0, const char *arg
 
     // 0 is parent socket, 1 is child socket
     int sv[2];
-    if (adb_socketpair(sv) < 0) {
+    if (unix_socketpair(AF_UNIX, SOCK_STREAM, 0, sv) < 0) {
         printf("[ cannot create socket pair - %s ]\n", strerror(errno));
         return -1;
     }
-    D("socketpair: (%d,%d)", sv[0], sv[1]);
 
     *pid = fork();
     if (*pid < 0) {
