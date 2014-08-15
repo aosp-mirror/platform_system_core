@@ -77,6 +77,11 @@ static __inline__ int  adb_thread_create( adb_thread_t  *thread, adb_thread_func
     return 0;
 }
 
+static __inline__  unsigned long adb_thread_id()
+{
+    return GetCurrentThreadId();
+}
+
 static __inline__ void  close_on_exec(int  fd)
 {
     /* nothing really */
@@ -516,6 +521,12 @@ static __inline__ char*  adb_strtok_r(char *str, const char *delim, char **savep
 {
     return strtok_r(str, delim, saveptr);
 }
+
+static __inline__ unsigned long adb_thread_id()
+{
+    return pthread_self();
+}
+
 #undef   strtok_r
 #define  strtok_r  ___xxx_strtok_r
 
