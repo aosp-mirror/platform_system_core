@@ -338,9 +338,6 @@ void put_apacket(apacket *p);
 int check_header(apacket *p);
 int check_data(apacket *p);
 
-// Define it if you want to dump packets.
-#define DEBUG_PACKETS 0
-
 #if !DEBUG_PACKETS
 #define print_packet(tag,p) do {} while (0)
 #endif
