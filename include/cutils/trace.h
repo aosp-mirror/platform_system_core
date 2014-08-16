@@ -70,7 +70,8 @@ __BEGIN_DECLS
 #define ATRACE_TAG_DALVIK           (1<<14)
 #define ATRACE_TAG_RS               (1<<15)
 #define ATRACE_TAG_BIONIC           (1<<16)
-#define ATRACE_TAG_LAST             ATRACE_TAG_BIONIC
+#define ATRACE_TAG_POWER            (1<<17)
+#define ATRACE_TAG_LAST             ATRACE_TAG_POWER
 
 // Reserved for initialization.
 #define ATRACE_TAG_NOT_READY        (1LL<<63)
