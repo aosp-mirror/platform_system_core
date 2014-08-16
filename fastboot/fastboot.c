@@ -295,8 +295,9 @@ void usage(void)
             "                                           Can override the fs type and/or\n"
             "                                           size the bootloader reports.\n"
             "  getvar <variable>                        display a bootloader variable\n"
-            "  boot <kernel> [ <ramdisk> ]              download and boot kernel\n"
-            "  flash:raw boot <kernel> [ <ramdisk> ]    create bootimage and flash it\n"
+            "  boot <kernel> [ <ramdisk> [ <second> ] ] download and boot kernel\n"
+            "  flash:raw boot <kernel> [ <ramdisk> [ <second> ] ] create bootimage and \n"
+            "                                           flash it\n"
             "  devices                                  list all connected devices\n"
             "  continue                                 continue with autoboot\n"
             "  reboot                                   reboot device normally\n"
@@ -324,10 +325,11 @@ void usage(void)
 }
 
 void *load_bootable_image(const char *kernel, const char *ramdisk,
-                          unsigned *sz, const char *cmdline)
+                          const char *secondstage, unsigned *sz,
+                          const char *cmdline)
 {
-    void *kdata = 0, *rdata = 0;
-    unsigned ksize = 0, rsize = 0;
+    void *kdata = 0, *rdata = 0, *sdata = 0;
+    unsigned ksize = 0, rsize = 0, ssize = 0;
     void *bdata;
     unsigned bsize;
 
@@ -363,10 +365,18 @@ void *load_bootable_image(const char *kernel, const char *ramdisk,
         }
     }
 
+    if (secondstage) {
+        sdata = load_file(secondstage, &ssize);
+        if(sdata == 0) {
+            fprintf(stderr,"cannot load '%s': %s\n", secondstage, strerror(errno));
+            return  0;
+        }
+    }
+
     fprintf(stderr,"creating boot image...\n");
     bdata = mkbootimg(kdata, ksize, kernel_offset,
                       rdata, rsize, ramdisk_offset,
-                      0, 0, second_offset,
+                      sdata, ssize, second_offset,
                       page_size, base_addr, tags_offset, &bsize);
     if(bdata == 0) {
         fprintf(stderr,"failed to create boot.img\n");
@@ -1144,6 +1154,7 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "boot")) {
             char *kname = 0;
             char *rname = 0;
+            char *sname = 0;
             skip(1);
             if (argc > 0) {
                 kname = argv[0];
@@ -1153,7 +1164,11 @@ int main(int argc, char **argv)
                 rname = argv[0];
                 skip(1);
             }
-            data = load_bootable_image(kname, rname, &sz, cmdline);
+            if (argc > 0) {
+                sname = argv[0];
+                skip(1);
+            }
+            data = load_bootable_image(kname, rname, sname, &sz, cmdline);
             if (data == 0) return 1;
             fb_queue_download("boot.img", data, sz);
             fb_queue_command("boot", "booting");
@@ -1177,14 +1192,18 @@ int main(int argc, char **argv)
             char *pname = argv[1];
             char *kname = argv[2];
             char *rname = 0;
+            char *sname = 0;
             require(3);
-            if(argc > 3) {
-                rname = argv[3];
-                skip(4);
-            } else {
-                skip(3);
+            skip(3);
+            if (argc > 0) {
+                rname = argv[0];
+                skip(1);
             }
-            data = load_bootable_image(kname, rname, &sz, cmdline);
+            if (argc > 0) {
+                sname = argv[0];
+                skip(1);
+            }
+            data = load_bootable_image(kname, rname, sname, &sz, cmdline);
             if (data == 0) die("cannot load bootable image");
             fb_queue_flash(pname, data, sz);
         } else if(!strcmp(*argv, "flashall")) {
