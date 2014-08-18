@@ -429,7 +429,6 @@ on property:vold.decrypt=trigger_default_encryption
 on property:vold.decrypt=trigger_encryption
     start surfaceflinger
     start encrypt
-    class_start main
 
 on property:sys.init_log_level=*
     loglevel ${sys.init_log_level}
