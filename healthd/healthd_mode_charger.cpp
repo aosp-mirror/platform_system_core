@@ -383,7 +383,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
         charger->next_screen_transition = -1;
         gr_fb_blank(true);
         LOGV("[%" PRId64 "] animation done\n", now);
-        if (!charger->charger_connected)
+        if (charger->charger_connected)
             request_suspend(true);
         return;
     }
