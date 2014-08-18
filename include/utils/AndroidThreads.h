@@ -73,9 +73,6 @@ extern void androidSetCreateThreadFunc(android_create_thread_fn func);
 // ------------------------------------------------------------------
 // Extra functions working with raw pids.
 
-// Get pid for the current thread.
-extern pid_t androidGetTid();
-
 #ifdef HAVE_ANDROID_OS
 // Change the priority AND scheduling group of a particular thread.  The priority
 // should be one of the ANDROID_PRIORITY constants.  Returns INVALID_OPERATION
