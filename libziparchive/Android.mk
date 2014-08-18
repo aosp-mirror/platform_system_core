@@ -31,7 +31,6 @@ LOCAL_MODULE:= libziparchive
 
 LOCAL_C_INCLUDES += ${includes}
 LOCAL_CFLAGS := -Werror
-include external/libcxx/libcxx.mk
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -44,7 +43,6 @@ LOCAL_STATIC_LIBRARIES := libz libutils
 LOCAL_MODULE:= libziparchive-host
 LOCAL_CFLAGS := -Werror
 LOCAL_MULTILIB := both
-include external/libcxx/libcxx.mk
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
