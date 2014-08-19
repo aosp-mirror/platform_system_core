@@ -90,6 +90,11 @@ static String8 getThreadName(pid_t tid) {
         ALOGE("%s: Failed to open %s", __FUNCTION__, path);
     }
 
+    if (procName == NULL) {
+        // Reading /proc/self/task/%d/comm failed due to a race
+        return String8::format("[err-unknown-tid-%d]", tid);
+    }
+
     // Strip ending newline
     strtok(procName, "\n");
 
