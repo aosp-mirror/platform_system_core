@@ -31,6 +31,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __BIONIC__
+#include <android/set_abort_message.h>
+#endif
+
 #include <log/logd.h>
 #include <log/logger.h>
 #include <log/log_read.h>
@@ -333,8 +337,7 @@ int __android_log_write(int prio, const char *tag, const char *msg)
 
 #if __BIONIC__
     if (prio == ANDROID_LOG_FATAL) {
-        extern void __android_set_abort_message(const char*);
-        __android_set_abort_message(msg);
+        android_set_abort_message(msg);
     }
 #endif
 
