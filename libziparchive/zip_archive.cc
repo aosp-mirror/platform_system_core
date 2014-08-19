@@ -888,6 +888,8 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
 
 struct IterationHandle {
   uint32_t position;
+  // We're not using vector here because this code is used in the Windows SDK
+  // where the STL is not available.
   const uint8_t* prefix;
   uint16_t prefix_len;
   ZipArchive* archive;
@@ -897,13 +899,12 @@ struct IterationHandle {
   IterationHandle(const ZipEntryName& prefix_name)
       : prefix_len(prefix_name.name_length) {
     uint8_t* prefix_copy = new uint8_t[prefix_len];
-    memcpy(reinterpret_cast<void*>(prefix_copy), prefix_name.name,
-           prefix_len * sizeof(uint8_t));
+    memcpy(prefix_copy, prefix_name.name, prefix_len);
     prefix = prefix_copy;
   }
 
   ~IterationHandle() {
-    delete [] prefix;
+    delete[] prefix;
   }
 };
 
