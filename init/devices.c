@@ -938,7 +938,9 @@ static void handle_firmware_event(struct uevent *uevent)
     pid = fork();
     if (!pid) {
         process_firmware_event(uevent);
-        exit(EXIT_SUCCESS);
+        _exit(EXIT_SUCCESS);
+    } else if (pid < 0) {
+        log_event_print("could not fork to process firmware event: %s\n", strerror(errno));
     }
 }
 
