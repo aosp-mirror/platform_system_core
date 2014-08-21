@@ -171,6 +171,7 @@ static void removeUidProcessGroups(const char *uid_path)
             SLOGV("removing %s\n", path);
             rmdir(path);
         }
+        closedir(uid);
     }
 }
 
@@ -180,8 +181,7 @@ void removeAllProcessGroups()
     DIR *root = opendir(PROCESSGROUP_CGROUP_PATH);
     if (root == NULL) {
         SLOGE("failed to open %s: %s", PROCESSGROUP_CGROUP_PATH, strerror(errno));
-    }
-    if (root != NULL) {
+    } else {
         struct dirent cur;
         struct dirent *dir;
         while ((readdir_r(root, &cur, &dir) == 0) && dir) {
@@ -199,6 +199,7 @@ void removeAllProcessGroups()
             SLOGV("removing %s\n", path);
             rmdir(path);
         }
+        closedir(root);
     }
 }
 
