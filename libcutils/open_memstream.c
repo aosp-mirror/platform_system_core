@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef HAVE_OPEN_MEMSTREAM
+#if defined(__APPLE__)
 
 /*
  * Implementation of the POSIX open_memstream() function, which Linux has
@@ -378,4 +378,4 @@ DONE
 
 #endif
 
-#endif /*!HAVE_OPEN_MEMSTREAM*/
+#endif /* __APPLE__ */
