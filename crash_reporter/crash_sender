@@ -514,20 +514,6 @@ send_crashes() {
       continue
     fi
 
-    # Remove existing crashes in case user consent has not (yet) been given or
-    # has been revoked.
-    if ! ${METRICS_CLIENT} -c; then
-      lecho "Crash reporting is disabled.  Removing crash."
-      remove_report "${meta_path}"
-      continue
-    fi
-
-    if ! is_mock && ! is_official_image; then
-      lecho "Not an official OS version.  Removing crash."
-      remove_report "${meta_path}"
-      continue
-    fi
-
     if ! is_complete_metadata "${meta_path}"; then
       # This report is incomplete, so if it's old, just remove it.
       local old_meta=$(${FIND} "${dir}" -mindepth 1 -name \
@@ -541,12 +527,27 @@ send_crashes() {
       continue
     fi
 
+    if ! is_mock && ! is_official_image; then
+      lecho "Not an official OS version.  Removing crash."
+      remove_report "${meta_path}"
+      continue
+    fi
+
     # Don't send crash reports from previous sessions while we're in guest mode
     # to avoid the impression that crash reporting was enabled, which it isn't.
     # (Don't exit right now because subsequent reports may be candidates for
     # deletion.)
     if ${METRICS_CLIENT} -g; then
       lecho "Guest mode has been entered.  Delaying crash sending until exited."
+      continue
+    fi
+
+    # Remove existing crashes in case user consent has not (yet) been given or
+    # has been revoked.  This must come after the guest mode check because
+    # ${METRICS_CLIENT} always returns "not consented" in guest mode.
+    if ! ${METRICS_CLIENT} -c; then
+      lecho "Crash reporting is disabled.  Removing crash."
+      remove_report "${meta_path}"
       continue
     fi
 
