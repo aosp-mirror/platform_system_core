@@ -523,7 +523,7 @@ static __inline__ char*  adb_strtok_r(char *str, const char *delim, char **savep
 
 static __inline__ unsigned long adb_thread_id()
 {
-    return pthread_self();
+    return (unsigned long)pthread_self();
 }
 
 #undef   strtok_r
