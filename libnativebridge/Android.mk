@@ -10,10 +10,11 @@ include $(CLEAR_VARS)
 LOCAL_MODULE:= libnativebridge
 
 LOCAL_SRC_FILES:= $(NATIVE_BRIDGE_COMMON_SRC_FILES)
+LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS := -Werror
-LOCAL_CPPFLAGS := -std=gnu++11
+LOCAL_CPPFLAGS := -std=gnu++11 -fvisibility=protected
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
 
@@ -26,10 +27,11 @@ include $(CLEAR_VARS)
 LOCAL_MODULE:= libnativebridge
 
 LOCAL_SRC_FILES:= $(NATIVE_BRIDGE_COMMON_SRC_FILES)
+LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_CLANG := true
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS := -Werror
-LOCAL_CPPFLAGS := -std=gnu++11
+LOCAL_CPPFLAGS := -std=gnu++11 -fvisibility=protected
 LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
 

@@ -29,6 +29,10 @@ struct NativeBridgeRuntimeCallbacks;
 void SetupNativeBridge(const char* native_bridge_library_filename,
                        const NativeBridgeRuntimeCallbacks* runtime_callbacks);
 
+// Check whether a native bridge is available (initialized). Requires a prior call to
+// SetupNativeBridge to make sense.
+bool NativeBridgeAvailable();
+
 // Load a shared library that is supported by the native bridge.
 void* NativeBridgeLoadLibrary(const char* libpath, int flag);
 
@@ -37,6 +41,17 @@ void* NativeBridgeGetTrampoline(void* handle, const char* name, const char* shor
 
 // True if native library is valid and is for an ABI that is supported by native bridge.
 bool NativeBridgeIsSupported(const char* libpath);
+
+// Returns whether we have seen a native bridge error. This could happen because the library
+// was not found, rejected, could not be initialized and so on.
+//
+// This functionality is mainly for testing.
+bool NativeBridgeError();
+
+// Returns whether a given string is acceptable as a native bridge library filename.
+//
+// This functionality is exposed mainly for testing.
+bool NativeBridgeNameAcceptable(const char* native_bridge_library_filename);
 
 // Native bridge interfaces to runtime.
 struct NativeBridgeCallbacks {
