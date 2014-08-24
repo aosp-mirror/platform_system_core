@@ -52,6 +52,13 @@ LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+LOCAL_SRC_FILES := upstream-freebsd/usr.bin/false/false.c
+LOCAL_CFLAGS += $(common_cflags) -Dmain=false_main
+LOCAL_MODULE := libtoolbox_false
+LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
     upstream-netbsd/usr.bin/grep/fastgrep.c \
     upstream-netbsd/usr.bin/grep/file.c \
@@ -119,6 +126,13 @@ LOCAL_MODULE := libtoolbox_sync
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := upstream-freebsd/usr.bin/true/true.c
+LOCAL_CFLAGS += $(common_cflags) -Dmain=true_main
+LOCAL_MODULE := libtoolbox_true
+LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
+include $(BUILD_STATIC_LIBRARY)
+
 
 include $(CLEAR_VARS)
 
@@ -128,6 +142,7 @@ BSD_TOOLS := \
     cp \
     dd \
     du \
+    false \
     grep \
     kill \
     ln \
@@ -137,6 +152,7 @@ BSD_TOOLS := \
     rmdir \
     sleep \
     sync \
+    true \
 
 OUR_TOOLS := \
     chcon \
@@ -246,8 +262,7 @@ $(TOOLS_H): $(LOCAL_PATH)/Android.mk
 $(TOOLS_H):
 	$(transform-generated-source)
 
-# Make #!/system/bin/toolbox launchers for each tool.
-#
+# Make symbolic link launchers for each tool.
 SYMLINKS := $(addprefix $(TARGET_OUT)/bin/,$(ALL_TOOLS))
 $(SYMLINKS): TOOLBOX_BINARY := $(LOCAL_MODULE)
 $(SYMLINKS): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk
