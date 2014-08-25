@@ -70,7 +70,7 @@ ifneq ($(wildcard $(LOCAL_PATH)/../../../../bionic/libc/bionic/libc_logging.cpp)
 test_src_files += \
     libc_test.cpp
 
-ifndef ($(TARGET_USES_LOGD),false)
+ifneq ($(TARGET_USES_LOGD),false)
 test_c_flags += -DTARGET_USES_LOGD
 endif
 
