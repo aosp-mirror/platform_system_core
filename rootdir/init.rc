@@ -553,7 +553,7 @@ service ril-daemon /system/bin/rild
     group radio cache inet misc audio log
 
 service surfaceflinger /system/bin/surfaceflinger
-    class main
+    class core
     user system
     group graphics drmrpc
     onrestart restart zygote
@@ -584,7 +584,7 @@ service encrypt /system/bin/vdc --wait cryptfs enablecrypto inplace default
     # encryption)
 
 service bootanim /system/bin/bootanimation
-    class main
+    class core
     user graphics
     group graphics
     disabled
