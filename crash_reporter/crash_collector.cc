@@ -8,6 +8,7 @@
 #include <fcntl.h>  // For file creation modes.
 #define __STDC_FORMAT_MACROS  // PRId64
 #include <inttypes.h>
+#include <linux/limits.h>  // PATH_MAX
 #include <pwd.h>  // For struct passwd.
 #include <sys/types.h>  // for mode_t.
 #include <sys/wait.h>  // For waitpid.
@@ -320,31 +321,31 @@ FilePath CrashCollector::GetProcessPath(pid_t pid) {
 
 bool CrashCollector::GetSymlinkTarget(const FilePath &symlink,
                                       FilePath *target) {
-  int max_size = 32;
-  scoped_ptr<char[]> buffer;
+  ssize_t max_size = 64;
+  std::vector<char> buffer;
+
   while (true) {
-    buffer.reset(new char[max_size + 1]);
-    ssize_t size = readlink(symlink.value().c_str(), buffer.get(), max_size);
+    buffer.resize(max_size + 1);
+    ssize_t size = readlink(symlink.value().c_str(), buffer.data(), max_size);
     if (size < 0) {
       int saved_errno = errno;
       LOG(ERROR) << "Readlink failed on " << symlink.value() << " with "
                  << saved_errno;
       return false;
     }
+
     buffer[size] = 0;
     if (size == max_size) {
-      // Avoid overflow when doubling.
-      if (max_size * 2 > max_size) {
-        max_size *= 2;
-        continue;
-      } else {
+      max_size *= 2;
+      if (max_size > PATH_MAX) {
         return false;
       }
+      continue;
     }
     break;
   }
 
-  *target = FilePath(buffer.get());
+  *target = FilePath(buffer.data());
   return true;
 }
 
