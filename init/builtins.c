@@ -537,7 +537,6 @@ int do_mount_all(int nargs, char **args)
     }
 
     if (ret == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
-        property_set("ro.crypto.state", "unencrypted");
         property_set("vold.decrypt", "trigger_encryption");
     } else if (ret == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
         property_set("ro.crypto.state", "encrypted");
