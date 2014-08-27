@@ -33,18 +33,10 @@ extern ANDROID_ATOMIC_INLINE void android_memory_barrier(void)
 {
     android_compiler_barrier();
 }
-extern ANDROID_ATOMIC_INLINE void android_memory_store_barrier(void)
-{
-    android_compiler_barrier();
-}
 #else
 extern ANDROID_ATOMIC_INLINE void android_memory_barrier(void)
 {
     __asm__ __volatile__ ("mfence" : : : "memory");
-}
-extern ANDROID_ATOMIC_INLINE void android_memory_store_barrier(void)
-{
-    android_compiler_barrier();
 }
 #endif
 
