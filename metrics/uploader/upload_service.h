@@ -128,7 +128,7 @@ class UploadService : public base::HistogramFlattener {
 
   SystemProfileSetter* system_profile_setter_;
   base::HistogramSnapshotManager histogram_snapshot_manager_;
-  Sender* sender_;
+  scoped_ptr<Sender> sender_;
   int failed_upload_count_;
   scoped_ptr<MetricsLog> current_log_;
   scoped_ptr<MetricsLog> staged_log_;

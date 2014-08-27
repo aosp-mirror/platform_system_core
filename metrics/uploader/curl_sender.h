@@ -14,7 +14,7 @@
 class CurlSender : public Sender {
  public:
   explicit CurlSender(std::string server_url);
-
+  virtual ~CurlSender() {}
   // Sends |content| whose SHA1 hash is |hash| to server_url with a synchronous
   // POST request to server_url.
   bool Send(const std::string& content, const std::string& hash) override;

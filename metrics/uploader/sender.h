@@ -10,6 +10,7 @@
 // Abstract class for a Sender that uploads a metrics message.
 class Sender {
  public:
+  virtual ~Sender() {}
   // Sends a message |content| with its sha1 hash |hash|
   virtual bool Send(const std::string& content, const std::string& hash) = 0;
 };

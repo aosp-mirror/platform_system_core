@@ -23,7 +23,8 @@ class UploadServiceTest : public testing::Test {
  protected:
   UploadServiceTest()
       : upload_service_(), exit_manager_(new base::AtExitManager()) {
-    upload_service_.sender_ = &sender_;
+    sender_ = new SenderMock;
+    upload_service_.sender_.reset(sender_);
     upload_service_.system_profile_setter_ = new MockSystemProfileSetter();
     upload_service_.Init();
   }
@@ -32,7 +33,7 @@ class UploadServiceTest : public testing::Test {
     CHECK(dir_.CreateUniqueTempDir());
     upload_service_.GatherHistograms();
     upload_service_.Reset();
-    sender_.Reset();
+    sender_->Reset();
     cache_.is_testing_ = true;
 
     chromeos_metrics::PersistentInteger::SetTestingMode(true);
@@ -45,7 +46,7 @@ class UploadServiceTest : public testing::Test {
   }
 
   base::ScopedTempDir dir_;
-  SenderMock sender_;
+  SenderMock *sender_;
   SystemProfileCache cache_;
   UploadService upload_service_;
 
@@ -90,20 +91,20 @@ TEST_F(UploadServiceTest, UnknownCrashIgnored) {
 }
 
 TEST_F(UploadServiceTest, FailedSendAreRetried) {
-  sender_.set_should_succeed(false);
+  sender_->set_should_succeed(false);
 
   upload_service_.AddSample(*Crash("user"));
   upload_service_.UploadEvent();
-  EXPECT_EQ(1, sender_.send_call_count());
-  std::string sent_string = sender_.last_message();
+  EXPECT_EQ(1, sender_->send_call_count());
+  std::string sent_string = sender_->last_message();
 
   upload_service_.UploadEvent();
-  EXPECT_EQ(2, sender_.send_call_count());
-  EXPECT_EQ(sent_string, sender_.last_message());
+  EXPECT_EQ(2, sender_->send_call_count());
+  EXPECT_EQ(sent_string, sender_->last_message());
 }
 
 TEST_F(UploadServiceTest, DiscardLogsAfterTooManyFailedUpload) {
-  sender_.set_should_succeed(false);
+  sender_->set_should_succeed(false);
   upload_service_.AddSample(*Crash("user"));
 
   for (int i = 0; i < UploadService::kMaxFailedUpload; i++) {
@@ -118,7 +119,7 @@ TEST_F(UploadServiceTest, DiscardLogsAfterTooManyFailedUpload) {
 TEST_F(UploadServiceTest, EmptyLogsAreNotSent) {
   upload_service_.UploadEvent();
   EXPECT_FALSE(upload_service_.current_log_);
-  EXPECT_EQ(0, sender_.send_call_count());
+  EXPECT_EQ(0, sender_->send_call_count());
 }
 
 TEST_F(UploadServiceTest, LogEmptyByDefault) {
@@ -133,12 +134,12 @@ TEST_F(UploadServiceTest, CanSendMultipleTimes) {
   upload_service_.AddSample(*Crash("user"));
   upload_service_.UploadEvent();
 
-  std::string first_message = sender_.last_message();
+  std::string first_message = sender_->last_message();
 
   upload_service_.AddSample(*Crash("kernel"));
   upload_service_.UploadEvent();
 
-  EXPECT_NE(first_message, sender_.last_message());
+  EXPECT_NE(first_message, sender_->last_message());
 }
 
 TEST_F(UploadServiceTest, LogEmptyAfterUpload) {
@@ -197,16 +198,17 @@ TEST_F(UploadServiceTest, ValuesInConfigFileAreSent) {
   upload_service_.AddSample(*histogram.get());
   upload_service_.UploadEvent();
 
-  EXPECT_EQ(1, sender_.send_call_count());
-  EXPECT_TRUE(sender_.is_good_proto());
-  EXPECT_EQ(1, sender_.last_message_proto().histogram_event().size());
+  EXPECT_EQ(1, sender_->send_call_count());
+  EXPECT_TRUE(sender_->is_good_proto());
+  EXPECT_EQ(1, sender_->last_message_proto().histogram_event().size());
 
-  EXPECT_EQ(name, sender_.last_message_proto().system_profile().os().name());
+  EXPECT_EQ(name, sender_->last_message_proto().system_profile().os().name());
   EXPECT_EQ(metrics::SystemProfileProto::CHANNEL_BETA,
-            sender_.last_message_proto().system_profile().channel());
-  EXPECT_NE(0, sender_.last_message_proto().client_id());
-  EXPECT_NE(0, sender_.last_message_proto().system_profile().build_timestamp());
-  EXPECT_NE(0, sender_.last_message_proto().session_id());
+            sender_->last_message_proto().system_profile().channel());
+  EXPECT_NE(0, sender_->last_message_proto().client_id());
+  EXPECT_NE(0,
+            sender_->last_message_proto().system_profile().build_timestamp());
+  EXPECT_NE(0, sender_->last_message_proto().session_id());
 }
 
 TEST_F(UploadServiceTest, PersistentGUID) {
