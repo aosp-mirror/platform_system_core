@@ -123,15 +123,6 @@ boot
    Triggers of this form occur when the property <name> is set
    to the specific value <value>.
 
-device-added-<path>
-device-removed-<path>
-   Triggers of these forms occur when a device node is added
-   or removed.
-
-service-exited-<name>
-   Triggers of this form occur when the specified service exits.
-
-
 Commands
 --------
 
