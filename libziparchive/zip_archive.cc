@@ -638,9 +638,15 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
     const uint16_t file_name_length = cdr->file_name_length;
     const uint16_t extra_length = cdr->extra_field_length;
     const uint16_t comment_length = cdr->comment_length;
+    const char* file_name = reinterpret_cast<const char*>(ptr + sizeof(CentralDirectoryRecord));
+
+    /* check that file name doesn't contain \0 character */
+    if (memchr(file_name, 0, file_name_length) != NULL) {
+      ALOGW("Zip: entry name can't contain \\0 character");
+      goto bail;
+    }
 
     /* add the CDE filename to the hash table */
-    const char* file_name = reinterpret_cast<const char *>(ptr + sizeof(CentralDirectoryRecord));
     const int add_result = AddToHash(archive->hash_table,
         archive->hash_table_size, file_name, file_name_length);
     if (add_result) {
