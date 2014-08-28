@@ -29,7 +29,7 @@ bool CurlSender::Send(const std::string& content,
       base::HexEncode(content_hash.data(), content_hash.size());
 
   curl_slist* headers =
-      curl_slist_append(NULL, ("X-Chrome-UMA-Log-SHA1: " + hash).c_str());
+      curl_slist_append(nullptr, ("X-Chrome-UMA-Log-SHA1: " + hash).c_str());
   if (!headers) {
     DLOG(ERROR) << "failed setting the headers";
     curl_easy_cleanup(postrequest);

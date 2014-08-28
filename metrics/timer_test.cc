@@ -419,7 +419,7 @@ class TimerReporterTest : public testing::Test {
   }
 
   virtual void TearDown() {
-    timer_reporter_.set_metrics_lib(NULL);
+    timer_reporter_.set_metrics_lib(nullptr);
   }
 
   TimerReporter timer_reporter_;

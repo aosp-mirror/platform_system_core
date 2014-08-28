@@ -225,7 +225,7 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
 
   DBusMessage* msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_CALL);
   DBusHandlerResult res =
-      MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
+      MetricsDaemon::MessageFilter(/* connection */ nullptr, msg, &daemon_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
   DeleteDBusMessage(msg);
 
@@ -235,7 +235,7 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
                             "org.chromium.CrashReporter",
                             "UserCrash",
                             signal_args);
-  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
+  res = MetricsDaemon::MessageFilter(/* connection */ nullptr, msg, &daemon_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_HANDLED, res);
   DeleteDBusMessage(msg);
 
@@ -246,7 +246,7 @@ TEST_F(MetricsDaemonTest, MessageFilter) {
                             "org.chromium.UnknownService.Manager",
                             "StateChanged",
                             signal_args);
-  res = MetricsDaemon::MessageFilter(/* connection */ NULL, msg, &daemon_);
+  res = MetricsDaemon::MessageFilter(/* connection */ nullptr, msg, &daemon_);
   EXPECT_EQ(DBUS_HANDLER_RESULT_NOT_YET_HANDLED, res);
   DeleteDBusMessage(msg);
 }

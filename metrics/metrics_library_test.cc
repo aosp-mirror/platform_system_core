@@ -152,7 +152,8 @@ void MetricsLibraryTest::VerifyEnabledCacheEviction(bool to_value) {
   ASSERT_EQ(!to_value, lib_.AreMetricsEnabled());
   EXPECT_CALL(*device_policy_, GetMetricsEnabled(_))
       .WillOnce(SetMetricsPolicy(to_value));
-  ASSERT_LT(abs(static_cast<int>(time(NULL) - lib_.cached_enabled_time_)), 5);
+  ASSERT_LT(abs(static_cast<int>(time(nullptr) - lib_.cached_enabled_time_)),
+            5);
   // Sleep one second (or cheat to be faster).
   --lib_.cached_enabled_time_;
   ASSERT_EQ(to_value, lib_.AreMetricsEnabled());

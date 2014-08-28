@@ -215,7 +215,7 @@ void MetricsDaemon::Init(bool testing,
                          const string& scaling_max_freq_path,
                          const string& cpuinfo_max_freq_path) {
   testing_ = testing;
-  DCHECK(metrics_lib != NULL);
+  DCHECK(metrics_lib != nullptr);
   metrics_lib_ = metrics_lib;
 
   // Get ticks per second (HZ) on this system.
@@ -284,7 +284,7 @@ void MetricsDaemon::Init(bool testing,
   LOG_IF(FATAL, dbus_error_is_set(&error)) <<
       "No D-Bus connection: " << SAFE_MESSAGE(error);
 
-  dbus_connection_setup_with_g_main(connection, NULL);
+  dbus_connection_setup_with_g_main(connection, nullptr);
 
   vector<string> matches;
   matches.push_back(
@@ -305,7 +305,7 @@ void MetricsDaemon::Init(bool testing,
   // Adds the D-Bus filter routine to be called back whenever one of
   // the registered D-Bus matches is successful. The daemon is not
   // activated for D-Bus messages that don't match.
-  CHECK(dbus_connection_add_filter(connection, MessageFilter, this, NULL));
+  CHECK(dbus_connection_add_filter(connection, MessageFilter, this, nullptr));
 
   update_stats_timeout_id_ =
       g_timeout_add(kUpdateStatsIntervalMs, &HandleUpdateStatsTimeout, this);
@@ -317,7 +317,7 @@ void MetricsDaemon::Init(bool testing,
 }
 
 void MetricsDaemon::Loop() {
-  GMainLoop* loop = g_main_loop_new(NULL, false);
+  GMainLoop* loop = g_main_loop_new(nullptr, false);
   g_main_loop_run(loop);
 }
 

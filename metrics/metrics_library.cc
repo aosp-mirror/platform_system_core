@@ -59,7 +59,7 @@ bool MetricsLibrary::IsDeviceMounted(const char* device_name,
                                      char* buffer,
                                      int buffer_size,
                                      bool* result) {
-  if (buffer == NULL || buffer_size < 1)
+  if (buffer == nullptr || buffer_size < 1)
     return false;
   int mounts_fd = open(mounts_file, O_RDONLY);
   if (mounts_fd < 0)
@@ -121,7 +121,7 @@ bool MetricsLibrary::IsGuestMode() {
 
 bool MetricsLibrary::AreMetricsEnabled() {
   static struct stat stat_buffer;
-  time_t this_check_time = time(NULL);
+  time_t this_check_time = time(nullptr);
   if (this_check_time != cached_enabled_time_) {
     cached_enabled_time_ = this_check_time;
 
@@ -157,7 +157,7 @@ void MetricsLibrary::Init() {
 
 bool MetricsLibrary::SendToAutotest(const std::string& name, int value) {
   FILE* autotest_file = fopen(kAutotestPath, "a+");
-  if (autotest_file == NULL) {
+  if (autotest_file == nullptr) {
     PLOG(ERROR) << kAutotestPath << ": fopen";
     return false;
   }

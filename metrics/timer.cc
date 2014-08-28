@@ -86,7 +86,7 @@ bool Timer::GetElapsedTime(base::TimeDelta* elapsed_time) const {
 }
 
 // static
-MetricsLibraryInterface* TimerReporter::metrics_lib_ = NULL;
+MetricsLibraryInterface* TimerReporter::metrics_lib_ = nullptr;
 
 TimerReporter::TimerReporter(const std::string& histogram_name, int min,
                              int max, int num_buckets)
