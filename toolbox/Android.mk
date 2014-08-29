@@ -213,10 +213,6 @@ OUR_TOOLS := \
     watchprops \
     wipe \
 
-ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
-OUR_TOOLS += r
-endif
-
 ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
 
 LOCAL_SRC_FILES := \
@@ -277,3 +273,13 @@ ALL_DEFAULT_INSTALLED_MODULES += $(SYMLINKS)
 # local module name
 ALL_MODULES.$(LOCAL_MODULE).INSTALLED := \
     $(ALL_MODULES.$(LOCAL_MODULE).INSTALLED) $(SYMLINKS)
+
+
+# We only want 'r' on userdebug and eng builds.
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := r.c
+LOCAL_CFLAGS += $(common_cflags)
+LOCAL_MODULE := r
+LOCAL_MODULE_TAGS := debug
+LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
+include $(BUILD_EXECUTABLE)
