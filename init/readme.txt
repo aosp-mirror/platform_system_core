@@ -318,12 +318,6 @@ service runtime /system/bin/runtime
    user system
    group system
 
-on device-added-/dev/compass
-   start akmd
-
-on device-removed-/dev/compass
-   stop akmd
-
 service akmd /sbin/akmd
    disabled
    user akmd
