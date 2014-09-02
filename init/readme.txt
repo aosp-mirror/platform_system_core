@@ -202,8 +202,6 @@ restorecon <path> [ <path> ]*
 restorecon_recursive <path> [ <path> ]*
    Recursively restore the directory tree named by <path> to the
    security contexts specified in the file_contexts configuration.
-   Do NOT use this with paths leading to shell-writable or app-writable
-   directories, e.g. /data/local/tmp, /data/data or any prefix thereof.
 
 setcon <securitycontext>
    Set the current process security context to the specified string.
