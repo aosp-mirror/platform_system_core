@@ -53,7 +53,7 @@ void UploadService::StartNewLog() {
   CHECK(!staged_log_) << "the staged log should be discarded before starting "
                          "a new metrics log";
   MetricsLog* log = new MetricsLog();
-  log->PopulateSystemProfile(system_profile_setter_);
+  log->PopulateSystemProfile(system_profile_setter_.get());
   current_log_.reset(log);
 }
 

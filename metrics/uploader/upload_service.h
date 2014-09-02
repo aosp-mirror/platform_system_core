@@ -12,6 +12,7 @@
 #include "base/metrics/histogram_snapshot_manager.h"
 #include "uploader/metrics_log.h"
 #include "uploader/sender.h"
+#include "uploader/system_profile_cache.h"
 
 namespace metrics {
 class ChromeUserMetricsExtension;
@@ -126,7 +127,7 @@ class UploadService : public base::HistogramFlattener {
   // Returns the current log. If there is no current log, creates it first.
   MetricsLog* GetOrCreateCurrentLog();
 
-  SystemProfileSetter* system_profile_setter_;
+  scoped_ptr<SystemProfileSetter> system_profile_setter_;
   base::HistogramSnapshotManager histogram_snapshot_manager_;
   scoped_ptr<Sender> sender_;
   int failed_upload_count_;

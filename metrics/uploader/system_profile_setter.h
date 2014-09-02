@@ -13,6 +13,7 @@ class ChromeUserMetricsExtension;
 // information to simplify testing.
 class SystemProfileSetter {
  public:
+  virtual ~SystemProfileSetter() {}
   // Populates the protobuf with system informations.
   virtual void Populate(metrics::ChromeUserMetricsExtension* profile_proto) = 0;
 };

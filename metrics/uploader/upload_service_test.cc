@@ -25,7 +25,7 @@ class UploadServiceTest : public testing::Test {
       : upload_service_(), exit_manager_(new base::AtExitManager()) {
     sender_ = new SenderMock;
     upload_service_.sender_.reset(sender_);
-    upload_service_.system_profile_setter_ = new MockSystemProfileSetter();
+    upload_service_.system_profile_setter_.reset(new MockSystemProfileSetter());
     upload_service_.Init();
   }
 
@@ -46,7 +46,7 @@ class UploadServiceTest : public testing::Test {
   }
 
   base::ScopedTempDir dir_;
-  SenderMock *sender_;
+  SenderMock* sender_;
   SystemProfileCache cache_;
   UploadService upload_service_;
 
@@ -191,8 +191,12 @@ TEST_F(UploadServiceTest, ValuesInConfigFileAreSent) {
   base::SysInfo::SetChromeOSVersionInfoForTest(content, base::Time());
   scoped_ptr<metrics::MetricSample> histogram =
       metrics::MetricSample::SparseHistogramSample("myhistogram", 1);
+  SystemProfileCache* local_cache_ = new SystemProfileCache;
+  local_cache_->is_testing_ = true;
+  local_cache_->session_id_.reset(new chromeos_metrics::PersistentInteger(
+        dir_.path().Append("session_id").value()));
 
-  upload_service_.system_profile_setter_ = &cache_;
+  upload_service_.system_profile_setter_.reset(local_cache_);
   // Reset to create the new log with the profile setter.
   upload_service_.Reset();
   upload_service_.AddSample(*histogram.get());
