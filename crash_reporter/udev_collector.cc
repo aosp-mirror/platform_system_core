@@ -8,7 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include <base/basictypes.h>
 #include <base/file_util.h>
 #include <base/logging.h>
 #include <base/strings/string_split.h>

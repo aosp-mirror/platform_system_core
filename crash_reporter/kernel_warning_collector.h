@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include <base/macros.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "crash-reporter/crash_collector.h"
@@ -27,6 +28,8 @@ class KernelWarningCollector : public CrashCollector {
 
   // Reads the full content of the kernel warn dump and its signature.
   bool LoadKernelWarning(std::string *content, std::string *signature);
+
+  DISALLOW_COPY_AND_ASSIGN(KernelWarningCollector);
 };
 
 #endif  // CRASH_REPORTER_KERNEL_WARNING_COLLECTOR_H_

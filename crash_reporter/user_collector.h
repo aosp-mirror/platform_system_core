@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <base/files/file_path.h>
+#include <base/macros.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "crash-reporter/crash_collector.h"
@@ -177,6 +178,8 @@ class UserCollector : public CrashCollector {
 
   static const char *kUserId;
   static const char *kGroupId;
+
+  DISALLOW_COPY_AND_ASSIGN(UserCollector);
 };
 
 #endif  // CRASH_REPORTER_USER_COLLECTOR_H_

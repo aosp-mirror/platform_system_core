@@ -8,6 +8,7 @@
 #include <string>
 
 #include <base/files/file_path.h>
+#include <base/macros.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "crash-reporter/crash_collector.h"
@@ -32,6 +33,8 @@ class UdevCollector : public CrashCollector {
   void set_log_config_path(const std::string& path) {
     log_config_path_ = base::FilePath(path);
   }
+
+  DISALLOW_COPY_AND_ASSIGN(UdevCollector);
 };
 
 #endif  // CRASH_REPORTER_UDEV_COLLECTOR_H_

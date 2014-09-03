@@ -13,6 +13,7 @@
 #include <glib.h>
 
 #include <base/files/file_path.h>
+#include <base/macros.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 // User crash collector.
@@ -170,6 +171,9 @@ class CrashCollector {
   base::FilePath forced_crash_directory_;
   std::string lsb_release_;
   base::FilePath log_config_path_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CrashCollector);
 };
 
 #endif  // CRASH_REPORTER_CRASH_COLLECTOR_H_

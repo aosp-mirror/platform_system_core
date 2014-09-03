@@ -8,6 +8,7 @@
 #include <string>
 
 #include <base/files/file_path.h>
+#include <base/macros.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "crash-reporter/crash_collector.h"
@@ -48,6 +49,8 @@ class ChromeCollector : public CrashCollector {
                      const std::string &basename);
 
   FILE *output_file_ptr_;
+
+  DISALLOW_COPY_AND_ASSIGN(ChromeCollector);
 };
 
 #endif  // CRASH_REPORTER_CHROME_COLLECTOR_H_
