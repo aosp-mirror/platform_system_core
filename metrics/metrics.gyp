@@ -12,7 +12,6 @@
         'gthread-2.0',
         'libchrome-<(libbase_ver)',
         'libchromeos-<(libbase_ver)',
-        'libcurl',
       ]
     },
     'cflags_cc': [
@@ -83,7 +82,7 @@
         'uploader/upload_service.cc',
         'uploader/metrics_log.cc',
         'uploader/system_profile_cache.cc',
-        'uploader/curl_sender.cc',
+        'uploader/sender_http.cc',
         'components/metrics/metrics_log_base.cc',
         'components/metrics/metrics_log_manager.cc',
         'components/metrics/metrics_hashes.cc',

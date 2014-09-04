@@ -2,26 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "uploader/upload_service.h"
+#include "metrics/uploader/upload_service.h"
 
-#include <curl/curl.h>
 #include <glib.h>
 #include <string>
 
-#include "base/logging.h"
-#include "base/memory/scoped_vector.h"
-#include "base/metrics/histogram.h"
-#include "base/metrics/histogram_base.h"
-#include "base/metrics/histogram_snapshot_manager.h"
-#include "base/metrics/sparse_histogram.h"
-#include "base/metrics/statistics_recorder.h"
-#include "base/sha1.h"
-#include "components/metrics/chromeos/metric_sample.h"
-#include "components/metrics/chromeos/serialization_utils.h"
-#include "gflags/gflags.h"
-#include "uploader/curl_sender.h"
-#include "uploader/metrics_log.h"
-#include "uploader/system_profile_cache.h"
+#include <base/logging.h>
+#include <base/memory/scoped_vector.h>
+#include <base/metrics/histogram.h>
+#include <base/metrics/histogram_base.h>
+#include <base/metrics/histogram_snapshot_manager.h>
+#include <base/metrics/sparse_histogram.h>
+#include <base/metrics/statistics_recorder.h>
+#include <base/sha1.h>
+#include <components/metrics/chromeos/metric_sample.h>
+#include <components/metrics/chromeos/serialization_utils.h>
+#include <gflags/gflags.h>
+
+#include "metrics/uploader/metrics_log.h"
+#include "metrics/uploader/sender_http.h"
+#include "metrics/uploader/system_profile_cache.h"
 
 DEFINE_int32(
     upload_interval_secs,
@@ -41,7 +41,7 @@ const int UploadService::kMaxFailedUpload = 10;
 UploadService::UploadService()
     : system_profile_setter_(new SystemProfileCache()),
       histogram_snapshot_manager_(this),
-      sender_(new CurlSender(FLAGS_server)) {
+      sender_(new HttpSender(FLAGS_server)) {
 }
 
 void UploadService::Init() {

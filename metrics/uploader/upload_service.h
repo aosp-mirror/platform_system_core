@@ -10,9 +10,9 @@
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_flattener.h"
 #include "base/metrics/histogram_snapshot_manager.h"
-#include "uploader/metrics_log.h"
-#include "uploader/sender.h"
-#include "uploader/system_profile_cache.h"
+#include "metrics/uploader/metrics_log.h"
+#include "metrics/uploader/sender.h"
+#include "metrics/uploader/system_profile_cache.h"
 
 namespace metrics {
 class ChromeUserMetricsExtension;
