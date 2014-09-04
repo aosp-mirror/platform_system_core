@@ -18,13 +18,11 @@
 
 namespace android {
 
-static const char* kTestName = "librandom-bridge_not.existing.so";
-
 TEST_F(NativeBridgeTest, ReSetup) {
     EXPECT_EQ(false, NativeBridgeError());
-    SetupNativeBridge(kTestName, nullptr);
+    LoadNativeBridge("", nullptr);
     EXPECT_EQ(false, NativeBridgeError());
-    SetupNativeBridge(kTestName, nullptr);
+    LoadNativeBridge("", nullptr);
     // This should lead to an error for trying to re-setup a native bridge.
     EXPECT_EQ(true, NativeBridgeError());
 }
