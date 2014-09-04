@@ -5,10 +5,8 @@
 #ifndef METRICS_TIMER_MOCK_H_
 #define METRICS_TIMER_MOCK_H_
 
-
 #include <string>
 
-#include <base/basictypes.h>
 #include <gmock/gmock.h>
 
 #include "metrics/timer.h"

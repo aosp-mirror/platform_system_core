@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include <base/macros.h>
+
 #include "components/metrics/metrics_log_base.h"
 
 // This file defines a set of user experience metrics data recorded by

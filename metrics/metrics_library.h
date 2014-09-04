@@ -9,8 +9,8 @@
 #include <string>
 #include <unistd.h>
 
-#include <base/basictypes.h>
 #include <base/compiler_specific.h>
+#include <base/macros.h>
 #include <base/memory/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
