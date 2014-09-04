@@ -23,7 +23,7 @@ static const char* kTestName = "../librandom$@-bridge_not.existing.so";
 TEST_F(NativeBridgeTest, InvalidChars) {
     // Do one test actually calling setup.
     EXPECT_EQ(false, NativeBridgeError());
-    SetupNativeBridge(kTestName, nullptr);
+    LoadNativeBridge(kTestName, nullptr);
     // This should lead to an error for invalid characters.
     EXPECT_EQ(true, NativeBridgeError());
 
