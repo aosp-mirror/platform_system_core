@@ -524,7 +524,7 @@ void LogStatistics::format(char **buf,
     short spaces = 2;
 
     log_id_for_each(i) {
-        if (!logMask & (1 << i)) {
+        if (!(logMask & (1 << i))) {
             continue;
         }
         oldLength = string.length();
