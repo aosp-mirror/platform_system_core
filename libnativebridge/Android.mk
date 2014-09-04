@@ -36,3 +36,5 @@ LOCAL_LDFLAGS := -ldl
 LOCAL_MULTILIB := both
 
 include $(BUILD_HOST_SHARED_LIBRARY)
+
+include $(LOCAL_PATH)/tests/Android.mk
