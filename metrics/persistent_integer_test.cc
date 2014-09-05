@@ -5,8 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <base/compiler_specific.h>
-#include <base/file_util.h>
 #include <base/files/file_enumerator.h>
+#include <base/files/file_util.h>
 
 #include "metrics/persistent_integer.h"
 

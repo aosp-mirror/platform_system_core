@@ -4,7 +4,7 @@
 
 #include <cstring>
 
-#include <base/file_util.h>
+#include <base/files/file_util.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <policy/mock_device_policy.h>
