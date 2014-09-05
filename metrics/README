@@ -3,8 +3,11 @@ Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 
 The Chrome OS "metrics" package contains utilities for client-side user metric
-collection. The collected data is sent to Chrome for transport to the UMA
-server.
+collection.
+When Chrome is installed, Chrome will take care of aggregating and uploading the
+metrics to the UMA server.
+When Chrome is not installed (embedded build) and the metrics_uploader USE flag
+is set, metrics_daemon will aggregate and upload the metrics itself.
 
 
 ================================================================================
@@ -36,8 +39,8 @@ UMA. In order to use the library in a module, you need to do the following:
   For more information on the C API see c_metrics_library.h.
 
 - Samples are sent to Chrome only if the "/home/chronos/Consent To Send Stats"
-  file exists (see the AreMetricsEnabled API method). Normally, this file is
-  created when the user opts into metrics collection.
+  file exists or the metrics are declared enabled in the policy file (see the
+  AreMetricsEnabled API method).
 
 - On the target platform, shortly after the sample is sent, it should be visible
   in Chrome through "about:histograms".
