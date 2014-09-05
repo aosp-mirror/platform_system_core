@@ -118,6 +118,8 @@
 #define VENDOR_ID_LGE           0x1004
 // Lumigon's USB Vendor ID
 #define VENDOR_ID_LUMIGON       0x25E3
+// Micromax's USB Vendor ID
+#define VENDOR_ID_MICROMAX      0x2A96
 // Motorola's USB Vendor ID
 #define VENDOR_ID_MOTOROLA      0x22b8
 // MSI's USB Vendor ID
@@ -240,6 +242,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_LENOVOMOBILE,
     VENDOR_ID_LGE,
     VENDOR_ID_LUMIGON,
+    VENDOR_ID_MICROMAX,
     VENDOR_ID_MOTOROLA,
     VENDOR_ID_MSI,
     VENDOR_ID_MTK,
