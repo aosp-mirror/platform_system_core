@@ -329,6 +329,7 @@ static void send_msg_with_header(int fd, const char* msg, size_t msglen) {
 }
 #endif
 
+#if ADB_HOST
 static void send_msg_with_okay(int fd, const char* msg, size_t msglen) {
     char header[9];
     if (msglen > 0xffff)
@@ -337,6 +338,7 @@ static void send_msg_with_okay(int fd, const char* msg, size_t msglen) {
     writex(fd, header, 8);
     writex(fd, msg, msglen);
 }
+#endif // ADB_HOST
 
 static void send_connect(atransport *t)
 {
@@ -414,6 +416,7 @@ void adb_auth_verified(atransport *t)
     send_connect(t);
 }
 
+#if ADB_HOST
 static char *connection_state_name(atransport *t)
 {
     if (t == NULL) {
@@ -437,6 +440,7 @@ static char *connection_state_name(atransport *t)
         return "unknown";
     }
 }
+#endif // ADB_HOST
 
 /* qual_overwrite is used to overwrite a qualifier string.  dst is a
  * pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
@@ -1554,8 +1558,6 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
 
 int handle_host_request(char *service, transport_type ttype, char* serial, int reply_fd, asocket *s)
 {
-    atransport *transport = NULL;
-
     if(!strcmp(service, "kill")) {
         fprintf(stderr,"adb server killed by remote request\n");
         fflush(stdout);
@@ -1565,6 +1567,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     }
 
 #if ADB_HOST
+    atransport *transport = NULL;
     // "transport:" is used for switching transport with a specified serial number
     // "transport-usb:" is used for switching transport to the only USB transport
     // "transport-local:" is used for switching transport to the only local transport
