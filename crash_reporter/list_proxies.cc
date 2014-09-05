@@ -76,7 +76,7 @@ std::deque<std::string> ParseProxyString(const std::string &input) {
     }
 
     std::string scheme = std::string(token.begin(), space);
-    StringToLowerASCII(&scheme);
+    base::StringToLowerASCII(&scheme);
     // Chrome uses "socks" to mean socks4 and "proxy" to mean http.
     if (scheme == "socks")
       scheme += "4";
