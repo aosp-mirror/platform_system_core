@@ -21,7 +21,7 @@
 #include <dbus/dbus-glib-lowlevel.h>
 #include <glib.h>
 
-#include <base/file_util.h>
+#include <base/files/file_util.h>
 #include <base/logging.h>
 #include <base/posix/eintr_wrapper.h>
 #include <base/strings/string_split.h>

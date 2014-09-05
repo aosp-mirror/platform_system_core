@@ -6,7 +6,7 @@
 
 #include <unistd.h>
 
-#include <base/file_util.h>
+#include <base/files/file_util.h>
 #include <base/strings/string_util.h>
 #include <chromeos/syslog_logging.h>
 #include <chromeos/test_helpers.h>

@@ -9,7 +9,7 @@
 #include <dbus/dbus-glib-lowlevel.h>
 #include <glib.h>
 
-#include <base/file_util.h>
+#include <base/files/file_util.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
 #include <chromeos/syslog_logging.h>

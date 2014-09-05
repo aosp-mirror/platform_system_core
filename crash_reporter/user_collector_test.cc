@@ -8,7 +8,7 @@
 #include <elf.h>
 #include <unistd.h>
 
-#include <base/file_util.h>
+#include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
 #include <base/strings/string_split.h>
 #include <chromeos/syslog_logging.h>

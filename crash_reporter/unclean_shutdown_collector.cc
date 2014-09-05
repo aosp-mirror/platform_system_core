@@ -4,7 +4,7 @@
 
 #include "crash-reporter/unclean_shutdown_collector.h"
 
-#include <base/file_util.h>
+#include <base/files/file_util.h>
 #include <base/logging.h>
 
 static const char kUncleanShutdownFile[] =
