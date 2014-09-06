@@ -85,6 +85,7 @@ ifeq ($(USE_SYSDEPS_WIN32),)
 	LOCAL_STATIC_LIBRARIES += libcutils
 endif
 
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_HOST_EXECUTABLE)
 
 $(call dist-for-goals,dist_files sdk,$(LOCAL_BUILT_MODULE))
@@ -116,8 +117,13 @@ LOCAL_SRC_FILES := \
 	remount_service.c \
 	usb_linux_client.c
 
-LOCAL_CFLAGS := -O2 -g -DADB_HOST=0 -Wall -Wno-unused-parameter -Werror
-LOCAL_CFLAGS += -D_XOPEN_SOURCE -D_GNU_SOURCE
+LOCAL_CFLAGS := \
+	-O2 \
+	-g \
+	-DADB_HOST=0 \
+	-D_XOPEN_SOURCE \
+	-D_GNU_SOURCE \
+	-Wall -Wno-unused-parameter -Werror -Wno-deprecated-declarations \
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_ADBD_ROOT=1
@@ -130,6 +136,7 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 
 LOCAL_STATIC_LIBRARIES := liblog libcutils libc libmincrypt libselinux
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_EXECUTABLE)
 
 
@@ -172,5 +179,6 @@ LOCAL_STATIC_LIBRARIES := libzipfile libunz libcutils
 
 LOCAL_SHARED_LIBRARIES := libcrypto
 
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_EXECUTABLE)
 endif
