@@ -599,14 +599,16 @@ int ifc_reset_connections(const char *ifname, const int reset_mask)
 {
 #ifdef HAVE_ANDROID_OS
     int result, success;
-    in_addr_t myaddr;
+    in_addr_t myaddr = 0;
     struct ifreq ifr;
     struct in6_ifreq ifr6;
 
     if (reset_mask & RESET_IPV4_ADDRESSES) {
         /* IPv4. Clear connections on the IP address. */
         ifc_init();
-        ifc_get_info(ifname, &myaddr, NULL, NULL);
+        if (!(reset_mask & RESET_IGNORE_INTERFACE_ADDRESS)) {
+            ifc_get_info(ifname, &myaddr, NULL, NULL);
+        }
         ifc_init_ifr(ifname, &ifr);
         init_sockaddr_in(&ifr.ifr_addr, myaddr);
         result = ioctl(ifc_ctl_sock, SIOCKILLADDR,  &ifr);
