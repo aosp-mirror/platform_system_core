@@ -171,6 +171,22 @@ TEST(ziparchive, FindEntry) {
   CloseArchive(handle);
 }
 
+TEST(ziparchive, TestInvalidDeclaredLength) {
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveWrapper("declaredlength.zip", &handle));
+
+  void* iteration_cookie;
+  ASSERT_EQ(0, StartIteration(handle, &iteration_cookie, NULL));
+
+  ZipEntryName name;
+  ZipEntry data;
+
+  ASSERT_EQ(Next(iteration_cookie, &data, &name), 0);
+  ASSERT_EQ(Next(iteration_cookie, &data, &name), 0);
+
+  CloseArchive(handle);
+}
+
 TEST(ziparchive, ExtractToMemory) {
   ZipArchiveHandle handle;
   ASSERT_EQ(0, OpenArchiveWrapper(kValidZip, &handle));
