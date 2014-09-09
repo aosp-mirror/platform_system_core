@@ -1870,7 +1870,7 @@ static int delete_file(transport_type transport, char* serial, char* filename)
     char buf[4096];
     char* quoted;
 
-    snprintf(buf, sizeof(buf), "shell:rm ");
+    snprintf(buf, sizeof(buf), "shell:rm -f ");
     quoted = escape_arg(filename);
     strncat(buf, quoted, sizeof(buf)-1);
     free(quoted);
