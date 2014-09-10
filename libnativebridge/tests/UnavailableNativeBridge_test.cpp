@@ -21,7 +21,7 @@ namespace android {
 TEST_F(NativeBridgeTest, NoNativeBridge) {
     EXPECT_EQ(false, NativeBridgeAvailable());
     // Try to initialize. This should fail as we are not set up.
-    EXPECT_EQ(false, InitializeNativeBridge());
+    EXPECT_EQ(false, InitializeNativeBridge(nullptr, nullptr));
     EXPECT_EQ(true, NativeBridgeError());
     EXPECT_EQ(false, NativeBridgeAvailable());
 }

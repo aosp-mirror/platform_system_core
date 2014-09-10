@@ -19,18 +19,29 @@
 
 #include "jni.h"
 #include <stdint.h>
+#include <sys/types.h>
 
 namespace android {
 
 struct NativeBridgeRuntimeCallbacks;
+struct NativeBridgeRuntimeValues;
 
 // Open the native bridge, if any. Should be called by Runtime::Init(). A null library filename
 // signals that we do not want to load a native bridge.
 bool LoadNativeBridge(const char* native_bridge_library_filename,
                       const NativeBridgeRuntimeCallbacks* runtime_callbacks);
 
-// Initialize the native bridge, if any. Should be called by Runtime::DidForkFromZygote.
-bool InitializeNativeBridge();
+// Quick check whether a native bridge will be needed. This is based off of the instruction set
+// of the process.
+bool NeedsNativeBridge(const char* instruction_set);
+
+// Do the early initialization part of the native bridge, if necessary. This should be done under
+// high privileges.
+void PreInitializeNativeBridge(const char* app_data_dir, const char* instruction_set);
+
+// Initialize the native bridge, if any. Should be called by Runtime::DidForkFromZygote. The JNIEnv*
+// will be used to modify the app environment for the bridge.
+bool InitializeNativeBridge(JNIEnv* env, const char* instruction_set);
 
 // Unload the native bridge, if any. Should be called by Runtime::DidForkFromZygote.
 void UnloadNativeBridge();
@@ -65,6 +76,9 @@ bool NativeBridgeNameAcceptable(const char* native_bridge_library_filename);
 
 // Native bridge interfaces to runtime.
 struct NativeBridgeCallbacks {
+  // Version number of the interface.
+  uint32_t version;
+
   // Initialize native bridge. Native bridge's internal implementation must ensure MT safety and
   // that the native bridge is initialized only once. Thus it is OK to call this interface for an
   // already initialized native bridge.
@@ -73,7 +87,8 @@ struct NativeBridgeCallbacks {
   //   runtime_cbs [IN] the pointer to NativeBridgeRuntimeCallbacks.
   // Returns:
   //   true iff initialization was successful.
-  bool (*initialize)(const NativeBridgeRuntimeCallbacks* runtime_cbs);
+  bool (*initialize)(const NativeBridgeRuntimeCallbacks* runtime_cbs, const char* private_dir,
+                     const char* instruction_set);
 
   // Load a shared library that is supported by the native bridge.
   //
@@ -102,6 +117,16 @@ struct NativeBridgeCallbacks {
   // Returns:
   //   TRUE if library is supported by native bridge, FALSE otherwise
   bool (*isSupported)(const char* libpath);
+
+  // Provide environment values required by the app running with native bridge according to the
+  // instruction set.
+  //
+  // Parameters:
+  //    instruction_set [IN] the instruction set of the app
+  // Returns:
+  //    NULL if not supported by native bridge.
+  //    Otherwise, return all environment values to be set after fork.
+  const struct NativeBridgeRuntimeValues* (*getAppEnv)(const char* instruction_set);
 };
 
 // Runtime interfaces to native bridge.
