@@ -121,7 +121,9 @@ static int get_target_device_size(char *blk_device, uint64_t *device_size)
 {
     int data_device;
     struct ext4_super_block sb;
-    struct fs_info info = {0};
+    struct fs_info info;
+
+    info.len = 0;  /* Only len is set to 0 to ask the device for real size. */
 
     data_device = open(blk_device, O_RDONLY);
     if (data_device < 0) {
