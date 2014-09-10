@@ -49,13 +49,13 @@ static void dump_process_header(log_t* log, pid_t pid) {
   struct tm tm;
   localtime_r(&t, &tm);
   char timestr[64];
-  _LOG(log, logtype::BACKTRACE, "\n\nABI: '%s'\n", ABI_STRING);
   strftime(timestr, sizeof(timestr), "%F %T", &tm);
-  _LOG(log, logtype::BACKTRACE, "\n----- pid %d at %s -----\n", pid, timestr);
+  _LOG(log, logtype::BACKTRACE, "\n\n----- pid %d at %s -----\n", pid, timestr);
 
   if (procname) {
     _LOG(log, logtype::BACKTRACE, "Cmd line: %s\n", procname);
   }
+  _LOG(log, logtype::BACKTRACE, "ABI: '%s'\n", ABI_STRING);
 }
 
 static void dump_process_footer(log_t* log, pid_t pid) {
