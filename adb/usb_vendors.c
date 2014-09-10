@@ -38,6 +38,8 @@
 /* Keep the list below sorted alphabetically by #define name */
 // Acer's USB Vendor ID
 #define VENDOR_ID_ACER          0x0502
+// Alco's  USB Vendor ID
+#define VENDOR_ID_ALCO          0x1914
 // Allwinner's USB Vendor ID
 #define VENDOR_ID_ALLWINNER     0x1F3A
 // Amlogic's USB Vendor ID
@@ -202,6 +204,7 @@
 /* Keep the list below sorted alphabetically */
 int builtInVendorIds[] = {
     VENDOR_ID_ACER,
+    VENDOR_ID_ALCO,
     VENDOR_ID_ALLWINNER,
     VENDOR_ID_AMLOGIC,
     VENDOR_ID_ANYDATA,
