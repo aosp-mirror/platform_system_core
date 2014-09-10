@@ -29,6 +29,7 @@ static constexpr const char* kNativeBridgeInterfaceSymbol = "NativeBridgeItf";
 enum class NativeBridgeState {
   kNotSetup,                        // Initial state.
   kOpened,                          // After successful dlopen.
+                                    // Temporary meaning: string copied. TODO: remove. b/17440362
   kInitialized,                     // After successful initialization.
   kClosed                           // Closed or errors.
 };
@@ -59,6 +60,9 @@ static NativeBridgeState state = NativeBridgeState::kNotSetup;
 
 // Whether we had an error at some point.
 static bool had_error = false;
+
+// Native bridge filename. TODO: Temporary, remove. b/17440362
+static const char* native_bridge_filename;
 
 // Handle of the loaded library.
 static void* native_bridge_handle = nullptr;
@@ -131,28 +135,32 @@ bool LoadNativeBridge(const char* nb_library_filename,
       state = NativeBridgeState::kClosed;
       had_error = true;
     } else {
-      // Try to open the library.
-      void* handle = dlopen(nb_library_filename, RTLD_LAZY);
-      if (handle != nullptr) {
-        callbacks = reinterpret_cast<NativeBridgeCallbacks*>(dlsym(handle,
-                                                                   kNativeBridgeInterfaceSymbol));
-        if (callbacks != nullptr) {
-          // Store the handle for later.
-          native_bridge_handle = handle;
-        } else {
-          dlclose(handle);
-        }
-      }
-
-      // Two failure conditions: could not find library (dlopen failed), or could not find native
-      // bridge interface (dlsym failed). Both are an error and close the native bridge.
-      if (callbacks == nullptr) {
-        had_error = true;
-        state = NativeBridgeState::kClosed;
-      } else {
-        runtime_callbacks = runtime_cbs;
-        state = NativeBridgeState::kOpened;
-      }
+      // Save the name. TODO: Remove this, return to old flow. b/17440362
+      native_bridge_filename = nb_library_filename;
+      runtime_callbacks = runtime_cbs;
+      state = NativeBridgeState::kOpened;
+//       // Try to open the library.
+//       void* handle = dlopen(nb_library_filename, RTLD_LAZY);
+//       if (handle != nullptr) {
+//         callbacks = reinterpret_cast<NativeBridgeCallbacks*>(dlsym(handle,
+//                                                                    kNativeBridgeInterfaceSymbol));
+//         if (callbacks != nullptr) {
+//           // Store the handle for later.
+//           native_bridge_handle = handle;
+//         } else {
+//           dlclose(handle);
+//         }
+//       }
+//
+//       // Two failure conditions: could not find library (dlopen failed), or could not find native
+//       // bridge interface (dlsym failed). Both are an error and close the native bridge.
+//       if (callbacks == nullptr) {
+//         had_error = true;
+//         state = NativeBridgeState::kClosed;
+//       } else {
+//         runtime_callbacks = runtime_cbs;
+//         state = NativeBridgeState::kOpened;
+//       }
     }
     return state == NativeBridgeState::kOpened;
   }
@@ -163,15 +171,38 @@ bool InitializeNativeBridge() {
   // point we are not multi-threaded, so we do not need locking here.
 
   if (state == NativeBridgeState::kOpened) {
-    // Try to initialize.
-    if (callbacks->initialize(runtime_callbacks)) {
-      state = NativeBridgeState::kInitialized;
+    // Open and initialize. TODO: Temporary, remove. b/17440362
+    void* handle = dlopen(native_bridge_filename, RTLD_LAZY);
+    if (handle != nullptr) {
+      callbacks = reinterpret_cast<NativeBridgeCallbacks*>(dlsym(handle,
+                                                                 kNativeBridgeInterfaceSymbol));
+      if (callbacks != nullptr) {
+        if (callbacks->initialize(runtime_callbacks)) {
+          state = NativeBridgeState::kInitialized;
+          native_bridge_handle = handle;
+        } else {
+          callbacks = nullptr;
+        }
+      }
+
+      if (callbacks == nullptr) {
+        state = NativeBridgeState::kClosed;
+        had_error = true;
+        dlclose(handle);
+      }
     } else {
-      // Unload the library.
-      dlclose(native_bridge_handle);
-      had_error = true;
       state = NativeBridgeState::kClosed;
+      had_error = true;
     }
+//     // Try to initialize.
+//     if (callbacks->initialize(runtime_callbacks)) {
+//       state = NativeBridgeState::kInitialized;
+//     } else {
+//       // Unload the library.
+//       dlclose(native_bridge_handle);
+//       had_error = true;
+//       state = NativeBridgeState::kClosed;
+//     }
   } else {
     had_error = true;
     state = NativeBridgeState::kClosed;
@@ -185,7 +216,7 @@ void UnloadNativeBridge() {
   // point we are not multi-threaded, so we do not need locking here.
 
   switch(state) {
-    case NativeBridgeState::kOpened:
+    // case NativeBridgeState::kOpened:  // TODO: Re-add this. b/17440362
     case NativeBridgeState::kInitialized:
       // Unload.
       dlclose(native_bridge_handle);
@@ -196,6 +227,7 @@ void UnloadNativeBridge() {
       had_error = true;
       break;
 
+    case NativeBridgeState::kOpened:  // TODO: Remove this. b/17440362
     case NativeBridgeState::kClosed:
       // Ignore.
       break;
