@@ -52,7 +52,7 @@ int trigger_gpt_layout(struct GPT_content *table) {
     return 0;
 }
 
-int trigger_oem_cmd(const char *arg, const char **response) {
+int trigger_oem_cmd(const char *arg, const char **response __unused) {
     KLOG_DEBUG("fastbootd", "%s: %s", __func__, arg);
     return 0;
 }
