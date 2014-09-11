@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
   MetricsLibrary metrics_lib;
   metrics_lib.Init();
   MetricsDaemon daemon;
-  daemon.Init(false,
+  daemon.Init(FLAGS_uploader_test,
               FLAGS_uploader | FLAGS_uploader_test,
               &metrics_lib,
               MetricsMainDiskStatsPath(),

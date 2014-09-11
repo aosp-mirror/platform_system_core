@@ -54,7 +54,7 @@ class SystemProfileSetter;
 //
 class UploadService : public base::HistogramFlattener {
  public:
-  UploadService();
+  explicit UploadService(bool testing);
 
   void Init();
 

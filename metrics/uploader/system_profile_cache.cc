@@ -22,9 +22,9 @@ const char* SystemProfileCache::kPersistentGUIDFile =
 const char* SystemProfileCache::kPersistentSessionIdFilename =
     "Sysinfo.SessionId";
 
-SystemProfileCache::SystemProfileCache()
+SystemProfileCache::SystemProfileCache(bool testing)
     : initialized_(false),
-      is_testing_(false),
+      testing_(testing),
       session_id_(new chromeos_metrics::PersistentInteger(
           kPersistentSessionIdFilename)) {
 }
@@ -49,7 +49,7 @@ bool SystemProfileCache::Initialize() {
   profile_.channel = ProtoChannelFromString(channel_string);
 
   profile_.client_id =
-      is_testing_ ? "client_id_test" : GetPersistentGUID(kPersistentGUIDFile);
+      testing_ ? "client_id_test" : GetPersistentGUID(kPersistentGUIDFile);
 
   // Increment the session_id everytime we initialize this. If metrics_daemon
   // does not crash, this should correspond to the number of reboots of the
@@ -105,7 +105,7 @@ std::string SystemProfileCache::GetPersistentGUID(const std::string& filename) {
 bool SystemProfileCache::GetHardwareId(std::string* hwid) {
   CHECK(hwid);
 
-  if (is_testing_) {
+  if (testing_) {
     // if we are in test mode, we do not call crossystem directly.
     DLOG(INFO) << "skipping hardware id";
     *hwid = "";

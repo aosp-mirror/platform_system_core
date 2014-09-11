@@ -36,7 +36,7 @@ struct SystemProfile {
 // The cache is populated lazily. The only method needed is Populate.
 class SystemProfileCache : public SystemProfileSetter {
  public:
-  SystemProfileCache();
+  explicit SystemProfileCache(bool testing);
 
   // Populates the ProfileSystem protobuf with system information.
   void Populate(metrics::ChromeUserMetricsExtension* profile_proto) override;
@@ -69,7 +69,7 @@ class SystemProfileCache : public SystemProfileSetter {
   bool GetHardwareId(std::string* hwid);
 
   bool initialized_;
-  bool is_testing_;
+  bool testing_;
   scoped_ptr<chromeos_metrics::PersistentInteger> session_id_;
   SystemProfile profile_;
 };

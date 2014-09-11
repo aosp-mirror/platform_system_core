@@ -22,7 +22,9 @@
 class UploadServiceTest : public testing::Test {
  protected:
   UploadServiceTest()
-      : upload_service_(), exit_manager_(new base::AtExitManager()) {
+      : cache_(true),
+        upload_service_(true),
+        exit_manager_(new base::AtExitManager()) {
     sender_ = new SenderMock;
     upload_service_.sender_.reset(sender_);
     upload_service_.system_profile_setter_.reset(new MockSystemProfileSetter());
@@ -34,7 +36,6 @@ class UploadServiceTest : public testing::Test {
     upload_service_.GatherHistograms();
     upload_service_.Reset();
     sender_->Reset();
-    cache_.is_testing_ = true;
 
     chromeos_metrics::PersistentInteger::SetTestingMode(true);
     cache_.session_id_.reset(new chromeos_metrics::PersistentInteger(
@@ -123,7 +124,7 @@ TEST_F(UploadServiceTest, EmptyLogsAreNotSent) {
 }
 
 TEST_F(UploadServiceTest, LogEmptyByDefault) {
-  UploadService upload_service;
+  UploadService upload_service(true);
 
   // current_log_ should be initialized later as it needs AtExitManager to exit
   // in order to gather system information from SysInfo.
@@ -191,8 +192,7 @@ TEST_F(UploadServiceTest, ValuesInConfigFileAreSent) {
   base::SysInfo::SetChromeOSVersionInfoForTest(content, base::Time());
   scoped_ptr<metrics::MetricSample> histogram =
       metrics::MetricSample::SparseHistogramSample("myhistogram", 1);
-  SystemProfileCache* local_cache_ = new SystemProfileCache;
-  local_cache_->is_testing_ = true;
+  SystemProfileCache* local_cache_ = new SystemProfileCache(true);
   local_cache_->session_id_.reset(new chromeos_metrics::PersistentInteger(
         dir_.path().Append("session_id").value()));
 

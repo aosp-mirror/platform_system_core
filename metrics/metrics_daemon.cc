@@ -187,6 +187,8 @@ void MetricsDaemon::Run(bool run_as_daemon) {
 }
 
 void MetricsDaemon::RunUploaderTest() {
+  upload_service_.reset(new UploadService(testing_));
+  upload_service_->Init();
   upload_service_->UploadEvent();
 }
 
@@ -311,7 +313,7 @@ void MetricsDaemon::Init(bool testing,
       g_timeout_add(kUpdateStatsIntervalMs, &HandleUpdateStatsTimeout, this);
 
   if (uploader_active) {
-    upload_service_.reset(new UploadService());
+    upload_service_.reset(new UploadService(testing_));
     upload_service_->Init();
   }
 }

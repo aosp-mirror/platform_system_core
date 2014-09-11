@@ -38,8 +38,8 @@ DEFINE_string(metrics_file,
 
 const int UploadService::kMaxFailedUpload = 10;
 
-UploadService::UploadService()
-    : system_profile_setter_(new SystemProfileCache()),
+UploadService::UploadService(bool testing)
+    : system_profile_setter_(new SystemProfileCache(testing)),
       histogram_snapshot_manager_(this),
       sender_(new HttpSender(FLAGS_server)) {
 }
