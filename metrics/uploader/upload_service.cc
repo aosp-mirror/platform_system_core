@@ -97,6 +97,8 @@ void UploadService::SendStagedLog() {
       return;
     }
     LOG(WARNING) << "log failed more than " << kMaxFailedUpload << " times.";
+  } else {
+    LOG(INFO) << "uploaded " << log_text.length() << " bytes";
   }
   // Discard staged log.
   staged_log_.reset();

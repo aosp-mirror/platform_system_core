@@ -313,6 +313,7 @@ void MetricsDaemon::Init(bool testing,
       g_timeout_add(kUpdateStatsIntervalMs, &HandleUpdateStatsTimeout, this);
 
   if (uploader_active) {
+    LOG(INFO) << "uploader enabled";
     upload_service_.reset(new UploadService(testing_));
     upload_service_->Init();
   }
