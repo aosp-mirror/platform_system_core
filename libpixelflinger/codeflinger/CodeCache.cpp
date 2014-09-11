@@ -201,8 +201,8 @@ int CodeCache::cache(  const AssemblyKeyBase& keyBase,
         mCacheInUse += assemblySize;
         mWhen++;
         // synchronize caches...
-        void* base = assembly->base();
-        void* curr = (uint8_t*)base + assembly->size();
+        char* base = reinterpret_cast<char*>(assembly->base());
+        char* curr = reinterpret_cast<char*>(base + assembly->size());
         __builtin___clear_cache(base, curr);
     }
 
