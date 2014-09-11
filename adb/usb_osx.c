@@ -512,14 +512,18 @@ int usb_read(usb_handle *handle, void *buf, int len)
         return -1;
     }
 
-    result =
-      (*handle->interface)->ReadPipe(handle->interface,
-                                    handle->bulkIn, buf, &numBytes);
+    result = (*handle->interface)->ReadPipe(handle->interface, handle->bulkIn, buf, &numBytes);
 
-    if (0 == result)
+    if (kIOUSBPipeStalled == result) {
+        DBG(" Pipe stalled, clearing stall.\n");
+        (*handle->interface)->ClearPipeStall(handle->interface, handle->bulkIn);
+        result = (*handle->interface)->ReadPipe(handle->interface, handle->bulkIn, buf, &numBytes);
+    }
+
+    if (kIOReturnSuccess == result)
         return 0;
     else {
-        DBG("ERR: usb_read failed with status %d\n", result);
+        DBG("ERR: usb_read failed with status %x\n", result);
     }
 
     return -1;
