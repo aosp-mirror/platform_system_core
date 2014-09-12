@@ -43,11 +43,8 @@ LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CFLAGS += $(benchmark_c_flags)
 LOCAL_SHARED_LIBRARIES += liblog libm
 LOCAL_SRC_FILES := $(benchmark_src_files)
-ifndef LOCAL_SDK_VERSION
-LOCAL_C_INCLUDES += bionic bionic/libstdc++/include external/stlport/stlport
-LOCAL_SHARED_LIBRARIES += libstlport
-endif
 LOCAL_MODULE_PATH := $(TARGET_OUT_DATA_NATIVE_TESTS)/$(LOCAL_MODULE)
+include external/stlport/libstlport.mk
 include $(BUILD_EXECUTABLE)
 
 # -----------------------------------------------------------------------------
