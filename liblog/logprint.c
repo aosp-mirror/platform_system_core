@@ -21,10 +21,12 @@
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/param.h>
 
 #include <log/logd.h>
 #include <log/logprint.h>
@@ -39,7 +41,22 @@ struct AndroidLogFormat_t {
     android_LogPriority global_pri;
     FilterInfo *filters;
     AndroidLogPrintFormat format;
+    bool colored_output;
 };
+
+/*
+ *  gnome-terminal color tags
+ *    See http://misc.flogisoft.com/bash/tip_colors_and_formatting
+ *    for ideas on how to set the forground color of the text for xterm.
+ *    The color manipulation character stream is defined as:
+ *      ESC [ 3 8 ; 5 ; <color#> m
+ */
+#define ANDROID_COLOR_BLUE     75
+#define ANDROID_COLOR_DEFAULT 231
+#define ANDROID_COLOR_GREEN    40
+#define ANDROID_COLOR_ORANGE  166
+#define ANDROID_COLOR_RED     196
+#define ANDROID_COLOR_YELLOW  226
 
 static FilterInfo * filterinfo_new(const char * tag, android_LogPriority pri)
 {
@@ -110,6 +127,23 @@ static char filterPriToChar (android_LogPriority pri)
     }
 }
 
+static int colorFromPri (android_LogPriority pri)
+{
+    switch (pri) {
+        case ANDROID_LOG_VERBOSE:       return ANDROID_COLOR_DEFAULT;
+        case ANDROID_LOG_DEBUG:         return ANDROID_COLOR_BLUE;
+        case ANDROID_LOG_INFO:          return ANDROID_COLOR_GREEN;
+        case ANDROID_LOG_WARN:          return ANDROID_COLOR_ORANGE;
+        case ANDROID_LOG_ERROR:         return ANDROID_COLOR_RED;
+        case ANDROID_LOG_FATAL:         return ANDROID_COLOR_RED;
+        case ANDROID_LOG_SILENT:        return ANDROID_COLOR_DEFAULT;
+
+        case ANDROID_LOG_DEFAULT:
+        case ANDROID_LOG_UNKNOWN:
+        default:                        return ANDROID_COLOR_DEFAULT;
+    }
+}
+
 static android_LogPriority filterPriForTag(
         AndroidLogFormat *p_format, const char *tag)
 {
@@ -149,6 +183,7 @@ AndroidLogFormat *android_log_format_new()
 
     p_ret->global_pri = ANDROID_LOG_VERBOSE;
     p_ret->format = FORMAT_BRIEF;
+    p_ret->colored_output = false;
 
     return p_ret;
 }
@@ -174,7 +209,10 @@ void android_log_format_free(AndroidLogFormat *p_format)
 void android_log_setPrintFormat(AndroidLogFormat *p_format,
         AndroidLogPrintFormat format)
 {
-    p_format->format=format;
+    if (format == FORMAT_COLOR)
+        p_format->colored_output = true;
+    else
+        p_format->format = format;
 }
 
 /**
@@ -192,6 +230,7 @@ AndroidLogPrintFormat android_log_formatFromString(const char * formatString)
     else if (strcmp(formatString, "time") == 0) format = FORMAT_TIME;
     else if (strcmp(formatString, "threadtime") == 0) format = FORMAT_THREADTIME;
     else if (strcmp(formatString, "long") == 0) format = FORMAT_LONG;
+    else if (strcmp(formatString, "color") == 0) format = FORMAT_COLOR;
     else format = FORMAT_OFF;
 
     return format;
@@ -698,6 +737,8 @@ char *android_log_formatLogLine (
     char * ret = NULL;
 
     priChar = filterPriToChar(entry->priority);
+    size_t prefixLen = 0, suffixLen = 0;
+    size_t len;
 
     /*
      * Get the current date/time in pretty form
@@ -719,73 +760,80 @@ char *android_log_formatLogLine (
     /*
      * Construct a buffer containing the log header and log message.
      */
-    size_t prefixLen, suffixLen;
+    if (p_format->colored_output) {
+        prefixLen = snprintf(prefixBuf, sizeof(prefixBuf), "\x1B[38;5;%dm",
+                             colorFromPri(entry->priority));
+        prefixLen = MIN(prefixLen, sizeof(prefixBuf));
+        suffixLen = snprintf(suffixBuf, sizeof(suffixBuf), "\x1B[0m");
+        suffixLen = MIN(suffixLen, sizeof(suffixBuf));
+    }
 
     switch (p_format->format) {
         case FORMAT_TAG:
-            prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
+            len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
                 "%c/%-8s: ", priChar, entry->tag);
-            strcpy(suffixBuf, "\n"); suffixLen = 1;
+            strcpy(suffixBuf + suffixLen, "\n");
+            ++suffixLen;
             break;
         case FORMAT_PROCESS:
-            prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
-                "%c(%5d) ", priChar, entry->pid);
-            suffixLen = snprintf(suffixBuf, sizeof(suffixBuf),
+            len = snprintf(suffixBuf + suffixLen, sizeof(suffixBuf) - suffixLen,
                 "  (%s)\n", entry->tag);
+            suffixLen += MIN(len, sizeof(suffixBuf) - suffixLen);
+            len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
+                "%c(%5d) ", priChar, entry->pid);
             break;
         case FORMAT_THREAD:
-            prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
+            len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
                 "%c(%5d:%5d) ", priChar, entry->pid, entry->tid);
-            strcpy(suffixBuf, "\n");
-            suffixLen = 1;
+            strcpy(suffixBuf + suffixLen, "\n");
+            ++suffixLen;
             break;
         case FORMAT_RAW:
-            prefixBuf[0] = 0;
-            prefixLen = 0;
-            strcpy(suffixBuf, "\n");
-            suffixLen = 1;
+            prefixBuf[prefixLen] = 0;
+            len = 0;
+            strcpy(suffixBuf + suffixLen, "\n");
+            ++suffixLen;
             break;
         case FORMAT_TIME:
-            prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
+            len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
                 "%s.%03ld %c/%-8s(%5d): ", timeBuf, entry->tv_nsec / 1000000,
                 priChar, entry->tag, entry->pid);
-            strcpy(suffixBuf, "\n");
-            suffixLen = 1;
+            strcpy(suffixBuf + suffixLen, "\n");
+            ++suffixLen;
             break;
         case FORMAT_THREADTIME:
-            prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
+            len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
                 "%s.%03ld %5d %5d %c %-8s: ", timeBuf, entry->tv_nsec / 1000000,
                 entry->pid, entry->tid, priChar, entry->tag);
-            strcpy(suffixBuf, "\n");
-            suffixLen = 1;
+            strcpy(suffixBuf + suffixLen, "\n");
+            ++suffixLen;
             break;
         case FORMAT_LONG:
-            prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
+            len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
                 "[ %s.%03ld %5d:%5d %c/%-8s ]\n",
                 timeBuf, entry->tv_nsec / 1000000, entry->pid,
                 entry->tid, priChar, entry->tag);
-            strcpy(suffixBuf, "\n\n");
-            suffixLen = 2;
+            strcpy(suffixBuf + suffixLen, "\n\n");
+            suffixLen += 2;
             prefixSuffixIsHeaderFooter = 1;
             break;
         case FORMAT_BRIEF:
         default:
-            prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
+            len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
                 "%c/%-8s(%5d): ", priChar, entry->tag, entry->pid);
-            strcpy(suffixBuf, "\n");
-            suffixLen = 1;
+            strcpy(suffixBuf + suffixLen, "\n");
+            ++suffixLen;
             break;
     }
+
     /* snprintf has a weird return value.   It returns what would have been
      * written given a large enough buffer.  In the case that the prefix is
      * longer then our buffer(128), it messes up the calculations below
      * possibly causing heap corruption.  To avoid this we double check and
      * set the length at the maximum (size minus null byte)
      */
-    if(prefixLen >= sizeof(prefixBuf))
-        prefixLen = sizeof(prefixBuf) - 1;
-    if(suffixLen >= sizeof(suffixBuf))
-        suffixLen = sizeof(suffixBuf) - 1;
+    prefixLen += MIN(len, sizeof(prefixBuf) - prefixLen);
+    suffixLen = MIN(suffixLen, sizeof(suffixLen));
 
     /* the following code is tragically unreadable */
 
