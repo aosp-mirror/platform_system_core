@@ -28,9 +28,6 @@
 # include <pthread.h>
 # include <sched.h>
 # include <sys/resource.h>
-#ifdef HAVE_ANDROID_OS
-# include <private/bionic_pthread.h>
-#endif
 #elif defined(HAVE_WIN32_THREADS)
 # include <windows.h>
 # include <stdint.h>
@@ -855,7 +852,7 @@ pid_t Thread::getTid() const
     pid_t tid;
     if (mRunning) {
         pthread_t pthread = android_thread_id_t_to_pthread(mThread);
-        tid = __pthread_gettid(pthread);
+        tid = pthread_gettid_np(pthread);
     } else {
         ALOGW("Thread (this=%p): getTid() is undefined before run()", this);
         tid = -1;
