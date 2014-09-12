@@ -59,7 +59,8 @@ test_c_flags := \
     -g \
     -Wall -Wextra \
     -Werror \
-    -fno-builtin
+    -fno-builtin \
+    -std=gnu++11
 
 test_src_files := \
     liblog_test.cpp
