@@ -433,7 +433,7 @@ int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
                     char *tmp_mount_point)
 {
     int i = 0;
-    int ret = -1;
+    int ret = FS_MGR_DOMNT_FAILED;
     int mount_errors = 0;
     int first_mount_errno = 0;
     char *m;
@@ -493,7 +493,11 @@ int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
     if (mount_errors) {
         ERROR("Cannot mount filesystem on %s at %s. error: %s\n",
             n_blk_device, m, strerror(first_mount_errno));
-        ret = -1;
+        if (first_mount_errno == EBUSY) {
+            ret = FS_MGR_DOMNT_BUSY;
+        } else {
+            ret = FS_MGR_DOMNT_FAILED;
+        }
     } else {
         /* We didn't find a match, say so and return an error */
         ERROR("Cannot find mount point %s in fstab\n", fstab->recs[i].mount_point);
