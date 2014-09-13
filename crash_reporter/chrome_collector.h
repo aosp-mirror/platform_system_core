@@ -48,12 +48,6 @@ class ChromeCollector : public CrashCollector {
                      const base::FilePath &minidump,
                      const std::string &basename);
 
-  // Gathers additional logs for |exe_name| and compresses them into a .tar.gz
-  // archive at |log_path|. Returns true if the log archive was created
-  // successfully.
-  bool GetAdditionalLogs(const base::FilePath &log_path,
-                         const std::string &exe_name);
-
   FILE *output_file_ptr_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeCollector);

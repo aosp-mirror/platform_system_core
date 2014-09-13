@@ -42,25 +42,8 @@ bool GetDelimitedString(const std::string &str, char ch, size_t offset,
   return true;
 }
 
-// Gets the GPU's error state from debugd and writes it to |error_state_path|.
-// Returns true on success.
-bool GetDriErrorState(const FilePath &error_state_path) {
-  chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
-  if (!dbus.HasConnection()) {
-    LOG(ERROR) << "Error connecting to system D-Bus";
-    return false;
-  }
-
-  chromeos::dbus::Proxy proxy(dbus,
-                              debugd::kDebugdServiceName,
-                              debugd::kDebugdServicePath,
-                              debugd::kDebugdInterface);
-  if (!proxy) {
-    LOG(ERROR) << "Error creating D-Bus proxy to interface "
-               << "'" << debugd::kDebugdServiceName << "'";
-    return false;
-  }
-
+bool GetDriErrorState(const chromeos::dbus::Proxy &proxy,
+                      const FilePath &error_state_path) {
   chromeos::glib::ScopedError error;
   gchar *error_state = NULL;
   if (!dbus_g_proxy_call(proxy.gproxy(), debugd::kGetLog,
@@ -105,6 +88,46 @@ bool GetDriErrorState(const FilePath &error_state_path) {
   return true;
 }
 
+bool GetAdditionalLogs(const FilePath &log_path) {
+  chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
+  if (!dbus.HasConnection()) {
+    LOG(ERROR) << "Error connecting to system D-Bus";
+    return false;
+  }
+
+  chromeos::dbus::Proxy proxy(dbus,
+                              debugd::kDebugdServiceName,
+                              debugd::kDebugdServicePath,
+                              debugd::kDebugdInterface);
+  if (!proxy) {
+    LOG(ERROR) << "Error creating D-Bus proxy to interface "
+               << "'" << debugd::kDebugdServiceName << "'";
+    return false;
+  }
+
+  FilePath error_state_path =
+      log_path.DirName().Append("i915_error_state.log.xz");
+  if (!GetDriErrorState(proxy, error_state_path))
+    return false;
+
+  chromeos::ProcessImpl tar_process;
+  tar_process.AddArg(kTarPath);
+  tar_process.AddArg("cfJ");
+  tar_process.AddArg(log_path.value());
+  tar_process.AddStringOption("-C", log_path.DirName().value());
+  tar_process.AddArg(error_state_path.BaseName().value());
+  int res = tar_process.Run();
+
+  base::DeleteFile(error_state_path, false);
+
+  if (res || !base::PathExists(log_path)) {
+    LOG(ERROR) << "Could not tar file " << log_path.value();
+    return false;
+  }
+
+  return true;
+}
+
 }  // namespace
 
 
@@ -135,7 +158,7 @@ bool ChromeCollector::HandleCrash(const FilePath &file_path,
   std::string dump_basename = FormatDumpBasename(exe_name, time(NULL), pid);
   FilePath meta_path = GetCrashPath(dir, dump_basename, "meta");
   FilePath minidump_path = GetCrashPath(dir, dump_basename, "dmp");
-  FilePath log_path = GetCrashPath(dir, dump_basename, "log.tar.gz");
+  FilePath log_path = GetCrashPath(dir, dump_basename, "log.tar.xz");
 
   std::string data;
   if (!base::ReadFileToString(file_path, &data)) {
@@ -148,7 +171,7 @@ bool ChromeCollector::HandleCrash(const FilePath &file_path,
     return false;
   }
 
-  if (GetAdditionalLogs(log_path, exe_name)) {
+  if (GetAdditionalLogs(log_path)) {
     int64_t minidump_size = 0;
     int64_t log_size = 0;
     if (base::GetFileSize(minidump_path, &minidump_size) &&
@@ -270,45 +293,6 @@ bool ChromeCollector::ParseCrashLog(const std::string &data,
   }
 
   return at == data.size();
-}
-
-bool ChromeCollector::GetAdditionalLogs(const FilePath &log_path,
-                                        const std::string &exe_name) {
-  std::vector<base::FilePath> logs_to_compress;
-
-  // Run the command specified by the config file to gather logs.
-  const FilePath gathered_logs_path =
-      log_path.DirName().Append("gathered_logs.txt");
-  if (GetLogContents(log_config_path_, exe_name, gathered_logs_path))
-    logs_to_compress.push_back(gathered_logs_path);
-
-  // Now get the GPU state from debugd.
-  const FilePath dri_error_state_path =
-      log_path.DirName().Append("i915_error_state.log.xz");
-  if (GetDriErrorState(dri_error_state_path))
-    logs_to_compress.push_back(dri_error_state_path);
-
-  if (logs_to_compress.empty())
-    return false;
-
-  chromeos::ProcessImpl tar_process;
-  tar_process.AddArg(kTarPath);
-  tar_process.AddArg("cfz");
-  tar_process.AddArg(log_path.value());
-  tar_process.AddStringOption("-C", log_path.DirName().value());
-  for (size_t i = 0; i < logs_to_compress.size(); ++i)
-    tar_process.AddArg(logs_to_compress[i].BaseName().value());
-
-  int res = tar_process.Run();
-
-  for (size_t i = 0; i < logs_to_compress.size(); ++i)
-    base::DeleteFile(logs_to_compress[i], false);
-
-  if (res || !base::PathExists(log_path)) {
-    LOG(ERROR) << "Could not create tar archive " << log_path.value();
-    return false;
-  }
-  return true;
 }
 
 // static
