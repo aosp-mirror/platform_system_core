@@ -671,8 +671,11 @@ void LogStatistics::format(char **buf,
             size_t sizesTotal = p->sizesTotal();
 
             android::String8 sz("");
-            sz.appendFormat((sizes != sizesTotal) ? "%zu/%zu" : "%zu",
-                            sizes, sizesTotal);
+            if (sizes == sizesTotal) {
+                sz.appendFormat("%zu", sizes);
+            } else {
+                sz.appendFormat("%zu/%zu", sizes, sizesTotal);
+            }
 
             android::String8 pd("");
             pd.appendFormat("%u%c", pid, p->pidGone() ? '?' : ' ');
@@ -783,12 +786,15 @@ void LogStatistics::format(char **buf,
             PidStatistics *pp = *pt;
             pid_t p = pp->getPid();
 
-            intermediate = string.format(oneline
-                                             ? ((p == PidStatistics::gone)
-                                                 ? "%d/?"
-                                                 : "%d/%d%c")
-                                             : "%d",
-                                         u, p, pp->pidGone() ? '?' : '\0');
+            if (!oneline) {
+                intermediate = string.format("%d", u);
+            } else if (p == PidStatistics::gone) {
+                intermediate = string.format("%d/?", u);
+            } else if (pp->pidGone()) {
+                intermediate = string.format("%d/%d?", u, p);
+            } else {
+                intermediate = string.format("%d/%d", u, p);
+            }
             string.appendFormat(first ? "\n%-12s" : "%-12s",
                                 intermediate.string());
             intermediate.clear();
