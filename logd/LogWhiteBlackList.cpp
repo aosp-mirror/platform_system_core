@@ -39,10 +39,15 @@ int Prune::cmp(uid_t uid, pid_t pid) const {
 
 void Prune::format(char **strp) {
     if (mUid != uid_all) {
-        asprintf(strp, (mPid != pid_all) ? "%u/%u" : "%u", mUid, mPid);
-    } else {
-        // NB: mPid == pid_all can not happen if mUid == uid_all
-        asprintf(strp, (mPid != pid_all) ? "/%u" : "/", mPid);
+        if (mPid != pid_all) {
+            asprintf(strp, "%u/%u", mUid, mPid);
+        } else {
+            asprintf(strp, "%u", mUid);
+        }
+    } else if (mPid != pid_all) {
+        asprintf(strp, "/%u", mPid);
+    } else { // NB: mPid == pid_all can not happen if mUid == uid_all
+        asprintf(strp, "/");
     }
 }
 
