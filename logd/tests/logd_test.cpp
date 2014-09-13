@@ -417,7 +417,11 @@ static void dump_log_msg(const char *prefix,
         if (((p - cp) > 3) && !*p && ((unsigned int)(p - cp) < len)) {
             fprintf(stderr, "\"");
             while (*cp) {
-                fprintf(stderr, (*cp != '\n') ? "%c" : "\\n", *cp);
+                if (*cp != '\n') {
+                    fprintf(stderr, "%c", *cp);
+                } else {
+                    fprintf(stderr, "\\n");
+                }
                 ++cp;
                 --len;
             }
