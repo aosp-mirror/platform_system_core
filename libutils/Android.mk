@@ -94,8 +94,7 @@ endif
 LOCAL_CFLAGS += -Werror
 
 LOCAL_C_INCLUDES += \
-		bionic/libc \
-		external/zlib
+	external/zlib
 
 LOCAL_STATIC_LIBRARIES := \
 	libcutils
