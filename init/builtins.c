@@ -515,7 +515,12 @@ int do_mount_all(int nargs, char **args)
     pid = fork();
     if (pid > 0) {
         /* Parent.  Wait for the child to return */
-        waitpid(pid, &status, 0);
+        int wp_ret = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
+        if (wp_ret < 0) {
+            /* Unexpected error code. We will continue anyway. */
+            NOTICE("waitpid failed rc=%d, errno=%d\n", wp_ret, errno);
+        }
+
         if (WIFEXITED(status)) {
             ret = WEXITSTATUS(status);
         } else {
