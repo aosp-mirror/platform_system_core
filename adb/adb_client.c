@@ -279,7 +279,7 @@ int adb_connect(const char *service)
 
     fd = _adb_connect(service);
     if(fd == -1) {
-        fprintf(stderr,"error: %s\n", __adb_error);
+        D("_adb_connect error: %s\n", __adb_error);
     } else if(fd == -2) {
         fprintf(stderr,"** daemon still not running\n");
     }
@@ -296,6 +296,7 @@ int adb_command(const char *service)
 {
     int fd = adb_connect(service);
     if(fd < 0) {
+        fprintf(stderr, "error: %s\n", adb_error());
         return -1;
     }
 
