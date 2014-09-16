@@ -551,7 +551,7 @@ int adb_sideload_host(const char* fn) {
     opt = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
 
     int last_percent = -1;
-    while (true) {
+    for (;;) {
         if (readx(fd, buf, 8)) {
             fprintf(stderr, "* failed to read command: %s\n", adb_error());
             status = -1;
