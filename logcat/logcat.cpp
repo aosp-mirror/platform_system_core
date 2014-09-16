@@ -259,7 +259,7 @@ static void show_help(const char *cmd)
                    "\nIf not specified on the commandline, filterspec is set from ANDROID_LOG_TAGS.\n"
                    "If no filterspec is found, filter defaults to '*:I'\n"
                    "\nIf not specified with -v, format is set from ANDROID_PRINTF_LOG\n"
-                   "or defaults to \"brief\"\n\n");
+                   "or defaults to \"threadtime\"\n\n");
 
 
 
@@ -543,7 +543,9 @@ int main(int argc, char **argv)
                     exit(-1);
                 }
 
-                hasSetLogFormat = 1;
+                if (strcmp("color", optarg)) { // exception for modifiers
+                    hasSetLogFormat = 1;
+                }
             break;
 
             case 'Q':
@@ -653,11 +655,12 @@ int main(int argc, char **argv)
 
         if (logFormat != NULL) {
             err = setLogFormat(logFormat);
-
             if (err < 0) {
                 fprintf(stderr, "invalid format in ANDROID_PRINTF_LOG '%s'\n",
                                     logFormat);
             }
+        } else {
+            setLogFormat("threadtime");
         }
     }
 
