@@ -495,7 +495,7 @@ bool MetricsDaemon::DiskStatsReadStats(uint64_t* read_sectors,
     LOG_IF(WARNING, nchars == sizeof(line))
         << "line too long in " << diskstats_path_;
     line[nchars] = '\0';
-    nitems = sscanf(line, "%*d %*d %" PRIu64 "d %*d %*d %*d %" PRIu64 "d",
+    nitems = sscanf(line, "%*d %*d %" PRIu64 " %*d %*d %*d %" PRIu64,
                     read_sectors, write_sectors);
     if (nitems == 2) {
       success = true;

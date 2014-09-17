@@ -36,8 +36,8 @@ using chromeos_metrics::PersistentIntegerMock;
 
 static const char kFakeDiskStatsName[] = "fake-disk-stats";
 static const char kFakeDiskStatsFormat[] =
-    "    1793     1788    %" PRIu64 "d   105580    "
-    "    196      175     %" PRIu64 "d    30290    "
+    "    1793     1788    %" PRIu64 "   105580    "
+    "    196      175     %" PRIu64 "    30290    "
     "    0    44060   135850\n";
 static const uint64_t kFakeReadSectors[] = {80000, 100000};
 static const uint64_t kFakeWriteSectors[] = {3000, 4000};
