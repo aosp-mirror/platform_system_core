@@ -142,6 +142,9 @@ bool ChromeCollector::HandleCrash(const FilePath &file_path,
   if (!is_feedback_allowed_function_())
     return true;
 
+  LOG(WARNING) << "Received crash notification for " << exe_name << "["
+               << pid_string << "] user " << uid_string << " (called directly)";
+
   if (exe_name.find('/') != std::string::npos) {
     LOG(ERROR) << "exe_name contains illegal characters: " << exe_name;
     return false;
