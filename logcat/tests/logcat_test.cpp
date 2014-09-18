@@ -243,7 +243,7 @@ TEST(logcat, End_to_End) {
 
     FILE *fp;
     ASSERT_TRUE(NULL != (fp = popen(
-      "logcat -b events -t 100 2>/dev/null",
+      "logcat -v brief -b events -t 100 2>/dev/null",
       "r")));
 
     char buffer[5120];
@@ -275,7 +275,7 @@ TEST(logcat, get_size) {
 
     // NB: crash log only available in user space
     ASSERT_TRUE(NULL != (fp = popen(
-      "logcat -b radio -b events -b system -b main -g 2>/dev/null",
+      "logcat -v brief -b radio -b events -b system -b main -g 2>/dev/null",
       "r")));
 
     char buffer[5120];
@@ -364,7 +364,7 @@ TEST(logcat, blocking) {
 
     ASSERT_TRUE(NULL != (fp = popen(
       "( trap exit HUP QUIT INT PIPE KILL ; sleep 6; echo DONE )&"
-      " logcat -b events 2>&1",
+      " logcat -v brief -b events 2>&1",
       "r")));
 
     char buffer[5120];
@@ -433,7 +433,7 @@ TEST(logcat, blocking_tail) {
 
     ASSERT_TRUE(NULL != (fp = popen(
       "( trap exit HUP QUIT INT PIPE KILL ; sleep 6; echo DONE )&"
-      " logcat -b events -T 5 2>&1",
+      " logcat -v brief -b events -T 5 2>&1",
       "r")));
 
     char buffer[5120];
@@ -503,10 +503,14 @@ TEST(logcat, logrotate) {
             int count = 0;
 
             while (fgets(buffer, sizeof(buffer), fp)) {
-                static const char match[] = "4 log.txt";
+                static const char match_1[] = "4 log.txt";
+                static const char match_2[] = "8 log.txt";
+                static const char match_3[] = "16 log.txt";
                 static const char total[] = "total ";
 
-                if (!strncmp(buffer, match, sizeof(match) - 1)) {
+                if (!strncmp(buffer, match_1, sizeof(match_1) - 1)
+                 || !strncmp(buffer, match_2, sizeof(match_2) - 1)
+                 || !strncmp(buffer, match_3, sizeof(match_3) - 1)) {
                     ++count;
                 } else if (strncmp(buffer, total, sizeof(total) - 1)) {
                     fprintf(stderr, "WARNING: Parse error: %s", buffer);
@@ -542,7 +546,7 @@ TEST(logcat, blocking_clear) {
     ASSERT_TRUE(NULL != (fp = popen(
       "( trap exit HUP QUIT INT PIPE KILL ; sleep 6; echo DONE )&"
       " logcat -b events -c 2>&1 ;"
-      " logcat -b events 2>&1",
+      " logcat -v brief -b events 2>&1",
       "r")));
 
     char buffer[5120];
