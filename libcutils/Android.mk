@@ -140,8 +140,8 @@ LOCAL_SRC_FILES_x86 += \
         arch-x86/android_memset32.S \
 
 LOCAL_SRC_FILES_x86_64 += \
-        arch-x86_64/android_memset16_SSE2-atom.S \
-        arch-x86_64/android_memset32_SSE2-atom.S \
+        arch-x86_64/android_memset16.S \
+        arch-x86_64/android_memset32.S \
 
 LOCAL_CFLAGS_arm += -DHAVE_MEMSET16 -DHAVE_MEMSET32
 LOCAL_CFLAGS_arm64 += -DHAVE_MEMSET16 -DHAVE_MEMSET32

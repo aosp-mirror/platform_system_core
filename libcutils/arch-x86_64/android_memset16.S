@@ -13,11 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/*
- * Contributed by: Intel Corporation
- */
 
 #include "cache.h"
+
+#ifndef MEMSET
+# define MEMSET		android_memset16
+#endif
 
 #ifndef L
 # define L(label)	.L##label
@@ -63,7 +64,7 @@ name:					\
 
 	.section .text.sse2,"ax",@progbits
 	ALIGN (4)
-ENTRY (android_memset16)	// Address in rdi
+ENTRY (MEMSET)	// Address in rdi
 	shr    $1, %rdx			// Count in rdx
 	movzwl %si, %ecx
 	/* Fill the whole ECX with pattern.  */
@@ -561,4 +562,4 @@ L(aligned_16_14bytes):
 	movw   %cx, -2(%rdi)
 	ret
 
-END (android_memset16)
+END (MEMSET)
