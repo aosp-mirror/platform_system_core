@@ -13,9 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/*
- * Contributed by: Intel Corporation
- */
 
 #if defined(__slm__)
 /* Values are optimized for Silvermont */
