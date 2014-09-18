@@ -13,19 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/*
- * Contributed by: Intel Corporation
- */
 
-#if defined(__slm__)
 /* Values are optimized for Silvermont */
 #define SHARED_CACHE_SIZE	(1024*1024)			/* Silvermont L2 Cache */
 #define DATA_CACHE_SIZE		(24*1024)			/* Silvermont L1 Data Cache */
-#else
-/* Values are optimized for Atom */
-#define SHARED_CACHE_SIZE	(512*1024)			/* Atom L2 Cache */
-#define DATA_CACHE_SIZE		(24*1024)			/* Atom L1 Data Cache */
-#endif
 
 #define SHARED_CACHE_SIZE_HALF	(SHARED_CACHE_SIZE / 2)
 #define DATA_CACHE_SIZE_HALF	(DATA_CACHE_SIZE / 2)
