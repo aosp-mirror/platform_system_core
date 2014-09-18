@@ -91,7 +91,7 @@ class CrashCollector {
 
   // Determines the crash directory for given euid, and creates the
   // directory if necessary with appropriate permissions.  If
-  // |out_of_capacity| is not NULL, it is set to indicate if the call
+  // |out_of_capacity| is not nullptr, it is set to indicate if the call
   // failed due to not having capacity in the crash directory. Returns
   // true whether or not directory needed to be created, false on any
   // failure.  If the crash directory is at capacity, returns false.

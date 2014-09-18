@@ -254,7 +254,7 @@ TEST_F(UserCollectorTest, HandleChromeCrashWithConsent) {
 
 TEST_F(UserCollectorTest, HandleSuppliedChromeCrashWithConsent) {
   s_metrics = true;
-  collector_.HandleCrash("0:2:chrome", NULL);
+  collector_.HandleCrash("0:2:chrome", nullptr);
   EXPECT_TRUE(FindLog(
       "Received crash notification for supplied_chrome[0] sig 2"));
   EXPECT_TRUE(FindLog(kChromeIgnoreMsg));
@@ -479,7 +479,7 @@ TEST_F(UserCollectorTest, ValidateProcFiles) {
 
   // maps file is empty
   FilePath maps_file = container_dir.Append("maps");
-  ASSERT_EQ(0, base::WriteFile(maps_file, NULL, 0));
+  ASSERT_EQ(0, base::WriteFile(maps_file, nullptr, 0));
   ASSERT_TRUE(base::PathExists(maps_file));
   EXPECT_FALSE(collector_.ValidateProcFiles(container_dir));
 

@@ -236,7 +236,8 @@ void KernelCollector::StripSensitiveData(std::string *kernel_dump) {
 }
 
 bool KernelCollector::Enable() {
-  if (arch_ == kArchUnknown || arch_ >= kArchCount || kPCRegex[arch_] == NULL) {
+  if (arch_ == kArchUnknown || arch_ >= kArchCount ||
+      kPCRegex[arch_] == nullptr) {
     LOG(WARNING) << "KernelCollector does not understand this architecture";
     return false;
   }
@@ -519,12 +520,12 @@ bool KernelCollector::Collect() {
 
     if (!GetCreatedCrashDirectoryByEuid(kRootUid,
                                         &root_crash_directory,
-                                        NULL)) {
+                                        nullptr)) {
       return true;
     }
 
     std::string dump_basename =
-        FormatDumpBasename(kKernelExecName, time(NULL), kKernelPid);
+        FormatDumpBasename(kKernelExecName, time(nullptr), kKernelPid);
     FilePath kernel_crash_path = root_crash_directory.Append(
         StringPrintf("%s.kcrash", dump_basename.c_str()));
 

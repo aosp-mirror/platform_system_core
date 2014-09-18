@@ -172,7 +172,7 @@ static int HandleUserCrash(UserCollector *user_collector) {
   // Accumulate logs to help in diagnosing failures during user collection.
   chromeos::LogToString(true);
   // Handle the crash, get the name of the process from procfs.
-  bool handled = user_collector->HandleCrash(FLAGS_user, NULL);
+  bool handled = user_collector->HandleCrash(FLAGS_user, nullptr);
   chromeos::LogToString(false);
   if (!handled)
     return 1;

@@ -164,7 +164,7 @@ bool UserCollector::GetIdFromStatus(
     return false;
   }
   const char *number = ids[kind].c_str();
-  char *end_number = NULL;
+  char *end_number = nullptr;
   *id = strtol(number, &end_number, 10);
   if (*end_number != '\0') {
     return false;
@@ -187,13 +187,13 @@ void UserCollector::EnqueueCollectionErrorLog(pid_t pid,
                                               const std::string &exec) {
   FilePath crash_path;
   LOG(INFO) << "Writing conversion problems as separate crash report.";
-  if (!GetCreatedCrashDirectoryByEuid(0, &crash_path, NULL)) {
+  if (!GetCreatedCrashDirectoryByEuid(0, &crash_path, nullptr)) {
     LOG(ERROR) << "Could not even get log directory; out of space?";
     return;
   }
   AddCrashMetaData("sig", kCollectionErrorSignature);
   AddCrashMetaData("error_type", GetErrorTypeSignature(error_type));
-  std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
+  std::string dump_basename = FormatDumpBasename(exec, time(nullptr), pid);
   std::string error_log = chromeos::GetLog();
   FilePath diag_log_path = GetCrashPath(crash_path, dump_basename, "diaglog");
   if (GetLogContents(FilePath(log_config_path_), kCollectionErrorSignature,
@@ -447,7 +447,7 @@ UserCollector::ErrorType UserCollector::ConvertAndEnqueueCrash(
   // been left around for diagnostics from a failed conversion attempt.
   // If we don't, existing files can cause forking to fail.
   base::DeleteFile(container_dir, true);
-  std::string dump_basename = FormatDumpBasename(exec, time(NULL), pid);
+  std::string dump_basename = FormatDumpBasename(exec, time(nullptr), pid);
   FilePath core_path = GetCrashPath(crash_path, dump_basename, "core");
   FilePath meta_path = GetCrashPath(crash_path, dump_basename, "meta");
   FilePath minidump_path = GetCrashPath(crash_path, dump_basename, "dmp");

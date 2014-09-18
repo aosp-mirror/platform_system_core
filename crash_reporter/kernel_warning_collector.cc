@@ -68,12 +68,13 @@ bool KernelWarningCollector::Collect() {
   }
 
   FilePath root_crash_directory;
-  if (!GetCreatedCrashDirectoryByEuid(kRootUid, &root_crash_directory, NULL)) {
+  if (!GetCreatedCrashDirectoryByEuid(kRootUid, &root_crash_directory,
+                                      nullptr)) {
     return true;
   }
 
   std::string dump_basename =
-      FormatDumpBasename(kExecName, time(NULL), kKernelPid);
+      FormatDumpBasename(kExecName, time(nullptr), kKernelPid);
   FilePath kernel_crash_path = root_crash_directory.Append(
       StringPrintf("%s.kcrash", dump_basename.c_str()));
 

@@ -109,9 +109,9 @@ class BrowserProxyResolvedSignalWatcher : public chromeos::dbus::SignalWatcher {
 
   void OnSignal(DBusMessage *message) override {
     // Get args
-    char *source_url = NULL;
-    char *proxy_list = NULL;
-    char *error = NULL;
+    char *source_url = nullptr;
+    char *proxy_list = nullptr;
+    char *error = nullptr;
     DBusError arg_error;
     dbus_error_init(&arg_error);
     if (!dbus_message_get_args(message, &arg_error,
@@ -150,7 +150,7 @@ static gboolean HandleBrowserTimeout(void *data) {
 }
 
 static bool ShowBrowserProxies(std::string url, unsigned timeout) {
-  GMainLoop *main_loop = g_main_loop_new(NULL, false);
+  GMainLoop *main_loop = g_main_loop_new(nullptr, false);
 
   chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
   if (!dbus.HasConnection()) {
@@ -175,7 +175,7 @@ static bool ShowBrowserProxies(std::string url, unsigned timeout) {
 
   // Request the proxies for our URL.  The answer is sent to us via a
   // proxy-resolved signal.
-  GError *gerror = NULL;
+  GError *gerror = nullptr;
   if (!dbus_g_proxy_call(browser_proxy.gproxy(),
                          kLibCrosServiceResolveNetworkProxyMethodName,
                          &gerror,

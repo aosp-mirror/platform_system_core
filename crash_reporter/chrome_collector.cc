@@ -45,7 +45,7 @@ bool GetDelimitedString(const std::string &str, char ch, size_t offset,
 bool GetDriErrorState(const chromeos::dbus::Proxy &proxy,
                       const FilePath &error_state_path) {
   chromeos::glib::ScopedError error;
-  gchar *error_state = NULL;
+  gchar *error_state = nullptr;
   if (!dbus_g_proxy_call(proxy.gproxy(), debugd::kGetLog,
                          &chromeos::Resetter(&error).lvalue(),
                          G_TYPE_STRING, "i915_error_state", G_TYPE_INVALID,
@@ -150,12 +150,12 @@ bool ChromeCollector::HandleCrash(const FilePath &file_path,
   FilePath dir;
   uid_t uid = atoi(uid_string.c_str());
   pid_t pid = atoi(pid_string.c_str());
-  if (!GetCreatedCrashDirectoryByEuid(uid, &dir, NULL)) {
+  if (!GetCreatedCrashDirectoryByEuid(uid, &dir, nullptr)) {
     LOG(ERROR) << "Can't create crash directory for uid " << uid;
     return false;
   }
 
-  std::string dump_basename = FormatDumpBasename(exe_name, time(NULL), pid);
+  std::string dump_basename = FormatDumpBasename(exe_name, time(nullptr), pid);
   FilePath meta_path = GetCrashPath(dir, dump_basename, "meta");
   FilePath minidump_path = GetCrashPath(dir, dump_basename, "dmp");
   FilePath log_path = GetCrashPath(dir, dump_basename, "log.tar.xz");

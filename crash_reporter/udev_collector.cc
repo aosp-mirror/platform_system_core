@@ -57,13 +57,13 @@ bool UdevCollector::HandleCrash(const std::string &udev_event) {
 
   // Make sure the crash directory exists, or create it if it doesn't.
   FilePath crash_directory;
-  if (!GetCreatedCrashDirectoryByEuid(0, &crash_directory, NULL)) {
+  if (!GetCreatedCrashDirectoryByEuid(0, &crash_directory, nullptr)) {
     LOG(ERROR) << "Could not get crash directory.";
     return false;
   }
   // Create the destination path.
   std::string log_file_name =
-      FormatDumpBasename(basename, time(NULL), 0);
+      FormatDumpBasename(basename, time(nullptr), 0);
   FilePath crash_path = GetCrashPath(crash_directory, log_file_name, "log");
 
   // Handle the crash.

@@ -88,8 +88,8 @@ CrashCollector::~CrashCollector() {
 void CrashCollector::Initialize(
     CrashCollector::CountCrashFunction count_crash_function,
     CrashCollector::IsFeedbackAllowedFunction is_feedback_allowed_function) {
-  CHECK(count_crash_function != NULL);
-  CHECK(is_feedback_allowed_function != NULL);
+  CHECK(count_crash_function);
+  CHECK(is_feedback_allowed_function);
 
   count_crash_function_ = count_crash_function;
   is_feedback_allowed_function_ = is_feedback_allowed_function;
@@ -156,7 +156,7 @@ const char *GetGErrorMessage(const GError *error) {
 }
 
 GHashTable *CrashCollector::GetActiveUserSessions() {
-  GHashTable *active_sessions = NULL;
+  GHashTable *active_sessions = nullptr;
 
   chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
   if (!dbus.HasConnection()) {
@@ -174,7 +174,7 @@ GHashTable *CrashCollector::GetActiveUserSessions() {
   }
 
   // Request all the active sessions.
-  GError *gerror = NULL;
+  GError *gerror = nullptr;
   if (!dbus_g_proxy_call(proxy.gproxy(),
                          login_manager::kSessionManagerRetrieveActiveSessions,
                          &gerror, G_TYPE_INVALID,
@@ -243,10 +243,10 @@ bool CrashCollector::GetUserInfoFromName(const std::string &name,
                                          gid_t *gid) {
   char storage[256];
   struct passwd passwd_storage;
-  struct passwd *passwd_result = NULL;
+  struct passwd *passwd_result = nullptr;
 
   if (getpwnam_r(name.c_str(), &passwd_storage, storage, sizeof(storage),
-                 &passwd_result) != 0 || passwd_result == NULL) {
+                 &passwd_result) != 0 || passwd_result == nullptr) {
     LOG(ERROR) << "Cannot find user named " << name;
     return false;
   }
@@ -262,7 +262,7 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
   uid_t default_user_id;
   gid_t default_user_group;
 
-  if (out_of_capacity != NULL) *out_of_capacity = false;
+  if (out_of_capacity) *out_of_capacity = false;
 
   // For testing.
   if (!forced_crash_directory_.empty()) {
@@ -308,7 +308,7 @@ bool CrashCollector::GetCreatedCrashDirectoryByEuid(uid_t euid,
   }
 
   if (!CheckHasCapacity(*crash_directory)) {
-    if (out_of_capacity != NULL) *out_of_capacity = true;
+    if (out_of_capacity) *out_of_capacity = true;
     return false;
   }
 
@@ -386,7 +386,7 @@ bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {
   struct dirent* ent;
   bool full = false;
   std::set<std::string> basenames;
-  while (readdir_r(dir, &ent_buf, &ent) == 0 && ent != NULL) {
+  while (readdir_r(dir, &ent_buf, &ent) == 0 && ent) {
     if ((strcmp(ent->d_name, ".") == 0) ||
         (strcmp(ent->d_name, "..") == 0))
       continue;
