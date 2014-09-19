@@ -16,9 +16,9 @@ a device or emulator that is connected to the bridge.
 
 The protocol is designed to be straightforward and well-defined enough 
 that if it needs to be reimplemented in another environment (Java 
-perhaps), there should not problems ensuring perfect interoperability.
+perhaps), there should not be problems ensuring perfect interoperability.
 
-The protocol discards the layering aproto has and should allow the 
+The protocol discards the layering which aproto has and should allow the 
 implementation to be much more robust.
 
 
