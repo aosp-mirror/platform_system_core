@@ -31,6 +31,8 @@ LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmsg)
         , logbuf(buf)
         , reader(reader)
         , fdDmesg(-1) {
+    static const char auditd_message[] = "<6>logd.auditd: start\n";
+    write(fdDmsg, auditd_message, sizeof(auditd_message));
     logDmesg();
     fdDmesg = fdDmsg;
 }
@@ -75,13 +77,17 @@ int LogAudit::logPrint(const char *fmt, ...) {
         memmove(cp, cp + 1, strlen(cp + 1) + 1);
     }
 
+    bool info = strstr(str, " permissive=1") || strstr(str, " policy loaded ");
     if (fdDmesg >= 0) {
-        struct iovec iov[2];
+        struct iovec iov[3];
 
-        iov[0].iov_base = str;
-        iov[0].iov_len = strlen(str);
-        iov[1].iov_base = const_cast<char *>("\n");
-        iov[1].iov_len = 1;
+        iov[0].iov_base = info ? const_cast<char *>("<6>")
+                               : const_cast<char *>("<4>");
+        iov[0].iov_len = 3;
+        iov[1].iov_base = str;
+        iov[1].iov_len = strlen(str);
+        iov[2].iov_base = const_cast<char *>("\n");
+        iov[2].iov_len = 1;
 
         writev(fdDmesg, iov, sizeof(iov) / sizeof(iov[0]));
     }
@@ -175,10 +181,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
     if (!newstr) {
         rc = -ENOMEM;
     } else {
-        *newstr = (strstr(str, " permissive=1")
-                || strstr(str, " policy loaded "))
-                    ? ANDROID_LOG_INFO
-                    : ANDROID_LOG_WARN;
+        *newstr = info ? ANDROID_LOG_INFO : ANDROID_LOG_WARN;
         strlcpy(newstr + 1, comm, l);
         strncpy(newstr + 1 + l, str, estr - str);
         strcpy(newstr + 1 + l + (estr - str), ecomm);
