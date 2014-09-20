@@ -111,7 +111,8 @@ enum {
     AUDIO_FLAG_SECURE              = 0x2,
     AUDIO_FLAG_SCO                 = 0x4,
     AUDIO_FLAG_BEACON              = 0x8,
-    AUDIO_FLAG_HW_AV_SYNC          = 0x10
+    AUDIO_FLAG_HW_AV_SYNC          = 0x10,
+    AUDIO_FLAG_HW_HOTWORD          = 0x20,
 };
 
 /* Do not change these values without updating their counterparts
@@ -710,8 +711,9 @@ typedef enum {
  * attributes corresponding to the specified flags.
  */
 typedef enum {
-    AUDIO_INPUT_FLAG_NONE = 0x0,        // no attributes
-    AUDIO_INPUT_FLAG_FAST = 0x1,        // prefer an input that supports "fast tracks"
+    AUDIO_INPUT_FLAG_NONE       = 0x0,  // no attributes
+    AUDIO_INPUT_FLAG_FAST       = 0x1,  // prefer an input that supports "fast tracks"
+    AUDIO_INPUT_FLAG_HW_HOTWORD = 0x2,  // prefer an input that captures from hw hotword source
 } audio_input_flags_t;
 
 /* Additional information about compressed streams offloaded to
