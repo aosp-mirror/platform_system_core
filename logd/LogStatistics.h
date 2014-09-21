@@ -144,6 +144,7 @@ class LogStatistics {
     size_t mSizes[LOG_ID_MAX];
     size_t mElements[LOG_ID_MAX];
 
+    bool mStatistics;
     bool dgramQlenStatistics;
 
     static const unsigned short mBuckets[14];
@@ -157,6 +158,7 @@ public:
     LidStatistics &id(log_id_t log_id) { return LogIds[log_id]; }
 
     void enableDgramQlenStatistics() { dgramQlenStatistics = true; }
+    void enableStatistics() { mStatistics = true; }
     static unsigned short dgramQlen(unsigned short bucket);
     unsigned long long minimum(unsigned short bucket);
     void recordDiff(log_time diff, unsigned short bucket);

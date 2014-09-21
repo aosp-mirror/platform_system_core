@@ -68,6 +68,10 @@ public:
         dgramQlenStatistics = true;
     }
 
+    void enableStatistics() {
+        stats.enableStatistics();
+    }
+
     int initPrune(char *cp) { return mPrune.init(cp); }
     // *strp uses malloc, use free to release.
     void formatPrune(char **strp) { mPrune.format(strp); }

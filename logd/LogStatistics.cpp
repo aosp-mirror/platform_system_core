@@ -384,7 +384,8 @@ size_t LidStatistics::elementsTotal(uid_t uid, pid_t pid) {
 }
 
 LogStatistics::LogStatistics()
-        : dgramQlenStatistics(false)
+        : mStatistics(false)
+        , dgramQlenStatistics(false)
         , start(CLOCK_MONOTONIC) {
     log_id_for_each(i) {
         mSizes[i] = 0;
@@ -455,6 +456,9 @@ void LogStatistics::add(unsigned short size,
                         log_id_t log_id, uid_t uid, pid_t pid) {
     mSizes[log_id] += size;
     ++mElements[log_id];
+    if (!mStatistics) {
+        return;
+    }
     id(log_id).add(size, uid, pid);
 }
 
@@ -462,6 +466,9 @@ void LogStatistics::subtract(unsigned short size,
                              log_id_t log_id, uid_t uid, pid_t pid) {
     mSizes[log_id] -= size;
     --mElements[log_id];
+    if (!mStatistics) {
+        return;
+    }
     id(log_id).subtract(size, uid, pid);
 }
 
@@ -545,25 +552,28 @@ void LogStatistics::format(char **buf,
 
     spaces = 1;
     log_time t(CLOCK_MONOTONIC);
-    unsigned long long d = t.nsec() - start.nsec();
-    string.appendFormat("\nTotal%4llu:%02llu:%02llu.%09llu",
+    unsigned long long d;
+    if (mStatistics) {
+        d = t.nsec() - start.nsec();
+        string.appendFormat("\nTotal%4llu:%02llu:%02llu.%09llu",
                   d / NS_PER_SEC / 60 / 60, (d / NS_PER_SEC / 60) % 60,
                   (d / NS_PER_SEC) % 60, d % NS_PER_SEC);
 
-    log_id_for_each(i) {
-        if (!(logMask & (1 << i))) {
-            continue;
+        log_id_for_each(i) {
+            if (!(logMask & (1 << i))) {
+                continue;
+            }
+            oldLength = string.length();
+            if (spaces < 0) {
+                spaces = 0;
+            }
+            string.appendFormat("%*s%zu/%zu", spaces, "",
+                                sizesTotal(i), elementsTotal(i));
+            spaces += spaces_total + oldLength - string.length();
         }
-        oldLength = string.length();
-        if (spaces < 0) {
-            spaces = 0;
-        }
-        string.appendFormat("%*s%zu/%zu", spaces, "",
-                            sizesTotal(i), elementsTotal(i));
-        spaces += spaces_total + oldLength - string.length();
+        spaces = 1;
     }
 
-    spaces = 1;
     d = t.nsec() - oldest.nsec();
     string.appendFormat("\nNow%6llu:%02llu:%02llu.%09llu",
                   d / NS_PER_SEC / 60 / 60, (d / NS_PER_SEC / 60) % 60,
