@@ -93,9 +93,9 @@ static unsigned long property_get_size(const char *key) {
 }
 
 LogBuffer::LogBuffer(LastLogTimes *times)
-        : mTimes(*times) {
+        : dgramQlenStatistics(false)
+        , mTimes(*times) {
     pthread_mutex_init(&mLogElementsLock, NULL);
-    dgram_qlen_statistics = false;
 
     static const char global_tuneable[] = "persist.logd.size"; // Settings App
     static const char global_default[] = "ro.logd.size";       // BoardConfig.mk
@@ -150,10 +150,10 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
     while (--it != mLogElements.begin()) {
         if ((*it)->getRealTime() <= realtime) {
             // halves the peak performance, use with caution
-            if (dgram_qlen_statistics) {
+            if (dgramQlenStatistics) {
                 LogBufferElementCollection::iterator ib = it;
                 unsigned short buckets, num = 1;
-                for (unsigned short i = 0; (buckets = stats.dgram_qlen(i)); ++i) {
+                for (unsigned short i = 0; (buckets = stats.dgramQlen(i)); ++i) {
                     buckets -= num;
                     num += buckets;
                     while (buckets && (--ib != mLogElements.begin())) {
@@ -267,8 +267,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
             if (uid == caller_uid) {
                 it = mLogElements.erase(it);
-                unsigned short len = e->getMsgLen();
-                stats.subtract(len, id, uid, e->getPid());
+                stats.subtract(e->getMsgLen(), id, uid, e->getPid());
                 delete e;
                 pruneRows--;
                 if (pruneRows == 0) {
@@ -318,23 +317,19 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
             uid_t uid = e->getUid();
 
-            if (uid == worst) {
+            if ((uid == worst) || mPrune.naughty(e)) { // Worst or BlackListed
                 it = mLogElements.erase(it);
                 unsigned short len = e->getMsgLen();
-                stats.subtract(len, id, worst, e->getPid());
-                delete e;
-                kick = true;
-                pruneRows--;
-                if ((pruneRows == 0) || (worst_sizes < second_worst_sizes)) {
-                    break;
-                }
-                worst_sizes -= len;
-            } else if (mPrune.naughty(e)) { // BlackListed
-                it = mLogElements.erase(it);
-                stats.subtract(e->getMsgLen(), id, uid, e->getPid());
+                stats.subtract(len, id, uid, e->getPid());
                 delete e;
                 pruneRows--;
-                if (pruneRows == 0) {
+                if (uid == worst) {
+                    kick = true;
+                    if ((pruneRows == 0) || (worst_sizes < second_worst_sizes)) {
+                        break;
+                    }
+                    worst_sizes -= len;
+                } else if (pruneRows == 0) {
                     break;
                 }
             } else {
