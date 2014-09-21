@@ -54,6 +54,9 @@ bool PidStatistics::pidGone() {
     if (mGone || (pid == gone)) {
         return true;
     }
+    if (pid == 0) {
+        return false;
+    }
     if (kill(pid, 0) && (errno != EPERM)) {
         mGone = true;
         return true;
@@ -92,7 +95,9 @@ void PidStatistics::addTotal(size_t size, size_t element) {
 //  which debuggerd prints as a process is crashing.
 char *PidStatistics::pidToName(pid_t pid) {
     char *retval = NULL;
-    if (pid != gone) {
+    if (pid == 0) { // special case from auditd for kernel
+        retval = strdup("logd.auditd");
+    } else if (pid != gone) {
         char buffer[512];
         snprintf(buffer, sizeof(buffer), "/proc/%u/cmdline", pid);
         int fd = open(buffer, O_RDONLY);
