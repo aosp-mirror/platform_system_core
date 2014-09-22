@@ -547,7 +547,8 @@ error:
 int GPT_parse_entry(char *string, struct GPT_entry_raw *entry)
 {
     char *ptr = string;
-    char *key, *value;
+    char *key = NULL;
+    char *value = NULL;
 
     while ((ptr = get_key_value(ptr, &key, &value)) != NULL) {
         if (add_key_value(key, value, entry)) {
