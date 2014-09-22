@@ -329,9 +329,9 @@ void sanitize(char *s)
     if (!s)
         return;
 
-    for (; *s; s++) {
+    while (*s) {
         s += strspn(s, accept);
-        if (*s) *s = '_';
+        if (*s) *s++ = '_';
     }
 }
 
