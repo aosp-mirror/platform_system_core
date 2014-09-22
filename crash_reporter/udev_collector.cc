@@ -33,9 +33,9 @@ bool UdevCollector::HandleCrash(const std::string &udev_event) {
 
   // Process the udev event string.
   // First get all the key-value pairs.
-  std::vector<std::pair<std::string, std::string> > udev_event_keyval;
+  std::vector<std::pair<std::string, std::string>> udev_event_keyval;
   base::SplitStringIntoKeyValuePairs(udev_event, '=', ':', &udev_event_keyval);
-  std::vector<std::pair<std::string, std::string> >::const_iterator iter;
+  std::vector<std::pair<std::string, std::string>>::const_iterator iter;
   std::map<std::string, std::string> udev_event_map;
   for (iter = udev_event_keyval.begin();
        iter != udev_event_keyval.end();
