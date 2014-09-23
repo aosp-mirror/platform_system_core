@@ -136,10 +136,14 @@ Commands
 --------
 
 exec <path> [ <argument> ]*
+   This command is not implemented.
+
+execonce <path> [ <argument> ]*
    Fork and execute a program (<path>).  This will block until
-   the program completes execution.  It is best to avoid exec
-   as unlike the builtin commands, it runs the risk of getting
-   init "stuck". (??? maybe there should be a timeout?)
+   the program completes execution.  This command can be run at most
+   once during init's lifetime. Subsequent invocations are ignored.
+   It is best to avoid exec as unlike the builtin commands, it runs
+   the risk of getting init "stuck".
 
 export <name> <value>
    Set the environment variable <name> equal to <value> in the
