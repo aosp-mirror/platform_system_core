@@ -75,7 +75,7 @@ char *locale;
 #define LAST_KMSG_MAX_SZ        (32 * 1024)
 
 #define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
-#define LOGI(x...) do { KLOG_INFO("charger", x); } while (0)
+#define LOGW(x...) do { KLOG_WARNING("charger", x); } while (0)
 #define LOGV(x...) do { KLOG_DEBUG("charger", x); } while (0)
 
 struct key_state {
@@ -198,15 +198,15 @@ static void dump_last_kmsg(void)
     unsigned sz = 0;
     int len;
 
-    LOGI("\n");
-    LOGI("*************** LAST KMSG ***************\n");
-    LOGI("\n");
+    LOGW("\n");
+    LOGW("*************** LAST KMSG ***************\n");
+    LOGW("\n");
     buf = (char *)load_file(LAST_KMSG_PSTORE_PATH, &sz);
 
     if (!buf || !sz) {
         buf = (char *)load_file(LAST_KMSG_PATH, &sz);
         if (!buf || !sz) {
-            LOGI("last_kmsg not found. Cold reset?\n");
+            LOGW("last_kmsg not found. Cold reset?\n");
             goto out;
         }
     }
@@ -225,7 +225,7 @@ static void dump_last_kmsg(void)
 
         yoink = ptr[cnt];
         ptr[cnt] = '\0';
-        klog_write(6, "<6>%s", ptr);
+        klog_write(6, "<4>%s", ptr);
         ptr[cnt] = yoink;
 
         len -= cnt;
@@ -235,9 +235,9 @@ static void dump_last_kmsg(void)
     free(buf);
 
 out:
-    LOGI("\n");
-    LOGI("************* END LAST KMSG *************\n");
-    LOGI("\n");
+    LOGW("\n");
+    LOGW("************* END LAST KMSG *************\n");
+    LOGW("\n");
 }
 
 static int get_battery_capacity()
@@ -527,10 +527,10 @@ static void process_key(struct charger *charger, int code, int64_t now)
                    all devices. Check the property and continue booting or reboot
                    accordingly. */
                 if (property_get_bool("ro.enable_boot_charger_mode", false)) {
-                    LOGI("[%" PRId64 "] booting from charger mode\n", now);
+                    LOGW("[%" PRId64 "] booting from charger mode\n", now);
                     property_set("sys.boot_from_charger_mode", "1");
                 } else {
-                    LOGI("[%" PRId64 "] rebooting\n", now);
+                    LOGW("[%" PRId64 "] rebooting\n", now);
                     android_reboot(ANDROID_RB_RESTART, 0, 0);
                 }
             } else {
@@ -568,10 +568,10 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
         request_suspend(false);
         if (charger->next_pwr_check == -1) {
             charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
-            LOGI("[%" PRId64 "] device unplugged: shutting down in %" PRId64 " (@ %" PRId64 ")\n",
+            LOGW("[%" PRId64 "] device unplugged: shutting down in %" PRId64 " (@ %" PRId64 ")\n",
                  now, (int64_t)UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
         } else if (now >= charger->next_pwr_check) {
-            LOGI("[%" PRId64 "] shutting down\n", now);
+            LOGW("[%" PRId64 "] shutting down\n", now);
             android_reboot(ANDROID_RB_POWEROFF, 0, 0);
         } else {
             /* otherwise we already have a shutdown timer scheduled */
@@ -579,7 +579,7 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
     } else {
         /* online supply present, reset shutdown timer if set */
         if (charger->next_pwr_check != -1) {
-            LOGI("[%" PRId64 "] device plugged in: shutdown cancelled\n", now);
+            LOGW("[%" PRId64 "] device plugged in: shutdown cancelled\n", now);
             kick_animation(charger->batt_anim);
         }
         charger->next_pwr_check = -1;
@@ -678,7 +678,7 @@ void healthd_mode_charger_init(struct healthd_config* /*config*/)
 
     dump_last_kmsg();
 
-    LOGI("--------------- STARTING CHARGER MODE ---------------\n");
+    LOGW("--------------- STARTING CHARGER MODE ---------------\n");
 
     ret = ev_init(input_callback, charger);
     if (!ret) {
