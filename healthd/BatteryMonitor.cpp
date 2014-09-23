@@ -265,10 +265,10 @@ bool BatteryMonitor::update(void) {
                  "battery none");
         }
 
-        KLOG_INFO(LOG_TAG, "%s chg=%s%s%s\n", dmesgline,
-                  props.chargerAcOnline ? "a" : "",
-                  props.chargerUsbOnline ? "u" : "",
-                  props.chargerWirelessOnline ? "w" : "");
+        KLOG_WARNING(LOG_TAG, "%s chg=%s%s%s\n", dmesgline,
+                     props.chargerAcOnline ? "a" : "",
+                     props.chargerUsbOnline ? "u" : "",
+                     props.chargerWirelessOnline ? "w" : "");
     }
 
     healthd_mode_ops->battery_update(&props);
@@ -512,7 +512,7 @@ void BatteryMonitor::init(struct healthd_config *hc) {
     if (!mChargerNames.size())
         KLOG_ERROR(LOG_TAG, "No charger supplies found\n");
     if (!mBatteryDevicePresent) {
-        KLOG_INFO(LOG_TAG, "No battery devices found\n");
+        KLOG_WARNING(LOG_TAG, "No battery devices found\n");
         hc->periodic_chores_interval_fast = -1;
         hc->periodic_chores_interval_slow = -1;
     } else {
