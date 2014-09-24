@@ -62,6 +62,8 @@ class KernelCollector : public CrashCollector {
   FRIEND_TEST(KernelCollectorTest, StripSensitiveDataSample);
   FRIEND_TEST(KernelCollectorTest, CollectOK);
 
+  virtual bool DumpDirMounted();
+
   bool LoadPreservedDump(std::string *contents);
   void StripSensitiveData(std::string *kernel_dump);
 

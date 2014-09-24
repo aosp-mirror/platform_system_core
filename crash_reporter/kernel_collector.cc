@@ -5,6 +5,7 @@
 #include "crash-reporter/kernel_collector.h"
 
 #include <map>
+#include <sys/stat.h>
 
 #include <base/files/file_util.h>
 #include <base/logging.h>
@@ -17,6 +18,7 @@ using base::StringPrintf;
 namespace {
 
 const char kDefaultKernelStackSignature[] = "kernel-UnspecifiedStackSignature";
+const char kDumpParentPath[] = "/dev";
 const char kDumpPath[] = "/dev/pstore";
 const char kDumpFormat[] = "dmesg-ramoops-%zu";
 const char kKernelExecName[] = "kernel";
@@ -235,6 +237,27 @@ void KernelCollector::StripSensitiveData(std::string *kernel_dump) {
   *kernel_dump = result.str();
 }
 
+bool KernelCollector::DumpDirMounted() {
+  struct stat st_parent;
+  if (stat(kDumpParentPath, &st_parent)) {
+    PLOG(WARNING) << "Could not stat " << kDumpParentPath;
+    return false;
+  }
+
+  struct stat st_dump;
+  if (stat(kDumpPath, &st_dump)) {
+    PLOG(WARNING) << "Could not stat " << kDumpPath;
+    return false;
+  }
+
+  if (st_parent.st_dev == st_dump.st_dev) {
+    LOG(WARNING) << "Dump dir " << kDumpPath << " not mounted";
+    return false;
+  }
+
+  return true;
+}
+
 bool KernelCollector::Enable() {
   if (arch_ == kArchUnknown || arch_ >= kArchCount ||
       kPCRegex[arch_] == nullptr) {
@@ -242,9 +265,7 @@ bool KernelCollector::Enable() {
     return false;
   }
 
-  FilePath ramoops_record;
-  GetRamoopsRecordPath(&ramoops_record, 0);
-  if (!base::PathExists(ramoops_record)) {
+  if (!DumpDirMounted()) {
     LOG(WARNING) << "Kernel does not support crash dumping";
     return false;
   }

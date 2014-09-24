@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "crash-reporter/kernel_collector.h"
+#include "crash-reporter/kernel_collector_test.h"
 
 #include <unistd.h>
 
@@ -43,7 +43,7 @@ class KernelCollectorTest : public ::testing::Test {
   const FilePath &kcrash_file() const { return test_kcrash_; }
   const FilePath &test_crash_directory() const { return test_crash_directory_; }
 
-  KernelCollector collector_;
+  KernelCollectorMock collector_;
 
  private:
   void SetUp() override {
@@ -99,6 +99,7 @@ TEST_F(KernelCollectorTest, EnableMissingKernel) {
 
 TEST_F(KernelCollectorTest, EnableOK) {
   WriteStringToFile(kcrash_file(), "");
+  EXPECT_CALL(collector_, DumpDirMounted()).WillOnce(::testing::Return(true));
   ASSERT_TRUE(collector_.Enable());
   ASSERT_TRUE(collector_.is_enabled());
   ASSERT_TRUE(FindLog("Enabling kernel crash handling"));
