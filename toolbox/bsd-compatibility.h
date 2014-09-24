@@ -50,9 +50,6 @@
 
 #define S_ISWHT(x) false
 
-// TODO: should this be in bionic? (glibc does this, even though it's not quite right.)
-#define O_RSYNC O_SYNC
-
 __BEGIN_DECLS
 
 /* From NetBSD <grp.h> and <pwd.h>. */
