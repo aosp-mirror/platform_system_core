@@ -218,6 +218,7 @@ void PreInitializeNativeBridge(const char* app_data_dir_in, const char* instruct
   app_data_dir = new char[len];
   strncpy(app_data_dir, app_data_dir_in, len);
 
+#ifndef __APPLE__
   if (instruction_set == nullptr) {
     return;
   }
@@ -244,6 +245,9 @@ void PreInitializeNativeBridge(const char* app_data_dir_in, const char* instruct
   if (TEMP_FAILURE_RETRY(mount("/proc/cpuinfo", cpuinfo_path, nullptr, MS_BIND, nullptr)) == -1) {
     ALOGW("Failed to bind-mount %s as /proc/cpuinfo: %d", cpuinfo_path, errno);
   }
+#else
+  ALOGW("Mac OS does not support bind-mounting. Host simulation of native bridge impossible.");
+#endif
 }
 
 static void SetCpuAbi(JNIEnv* env, jclass build_class, const char* field, const char* value) {
