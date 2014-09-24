@@ -104,7 +104,7 @@
         '<(proto_in_dir)/user_action_event.proto',
       ],
       'includes': [
-        '../../platform2/common-mk/protoc.gypi'
+        '../common-mk/protoc.gypi'
       ],
     },
   ],
@@ -123,7 +123,7 @@
         {
           'target_name': 'persistent_integer_test',
           'type': 'executable',
-          'includes': ['../../platform2/common-mk/common_test.gypi'],
+          'includes': ['../common-mk/common_test.gypi'],
           'sources': [
             'persistent_integer.cc',
             'persistent_integer_test.cc',
@@ -135,7 +135,7 @@
           'dependencies': [
             '../metrics/libmetrics-<(libbase_ver).gyp:libmetrics-<(libbase_ver)',
           ],
-          'includes': ['../../platform2/common-mk/common_test.gypi'],
+          'includes': ['../common-mk/common_test.gypi'],
           'sources': [
             'metrics_library_test.cc',
           ],
@@ -148,7 +148,7 @@
         {
           'target_name': 'timer_test',
           'type': 'executable',
-          'includes': ['../../platform2/common-mk/common_test.gypi'],
+          'includes': ['../common-mk/common_test.gypi'],
           'sources': [
             'timer.cc',
             'timer_test.cc',
@@ -166,7 +166,7 @@
             'libupload_service',
           ],
           'includes':[
-            '../../platform2/common-mk/common_test.gypi',
+            '../common-mk/common_test.gypi',
           ],
           'include_dirs': ['.']
         },
@@ -180,7 +180,7 @@
           'dependencies': [
             'libmetrics_daemon',
           ],
-          'includes': ['../../platform2/common-mk/common_test.gypi'],
+          'includes': ['../common-mk/common_test.gypi'],
           'sources': [
             'metrics_daemon_test.cc',
           ],
