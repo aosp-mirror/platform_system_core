@@ -68,7 +68,7 @@ char *locale;
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
 #define BATTERY_FULL_THRESH     95
-#define SCREEN_ON_BATTERY_THRESH 1
+#define SCREEN_ON_BATTERY_THRESH 0
 
 #define LAST_KMSG_PATH          "/proc/last_kmsg"
 #define LAST_KMSG_PSTORE_PATH   "/sys/fs/pstore/console-ramoops"
