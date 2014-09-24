@@ -478,7 +478,8 @@ static int wipe_data_via_recovery()
     mkdir("/cache/recovery", 0700);
     int fd = open("/cache/recovery/command", O_RDWR|O_CREAT|O_TRUNC, 0600);
     if (fd >= 0) {
-        write(fd, "--wipe_data", strlen("--wipe_data") + 1);
+        write(fd, "--wipe_data\n", strlen("--wipe_data\n") + 1);
+        write(fd, "--reason=wipe_data_via_recovery\n", strlen("--reason=wipe_data_via_recovery\n") + 1);
         close(fd);
     } else {
         ERROR("could not open /cache/recovery/command\n");
