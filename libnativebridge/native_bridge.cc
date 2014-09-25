@@ -208,6 +208,10 @@ bool NeedsNativeBridge(const char* instruction_set) {
   return strncmp(instruction_set, kRuntimeISA, strlen(kRuntimeISA)) != 0;
 }
 
+#ifdef __APPLE__
+template<typename T> void UNUSED(const T&) {}
+#endif
+
 void PreInitializeNativeBridge(const char* app_data_dir_in, const char* instruction_set) {
   if (app_data_dir_in == nullptr) {
     return;
@@ -246,6 +250,7 @@ void PreInitializeNativeBridge(const char* app_data_dir_in, const char* instruct
     ALOGW("Failed to bind-mount %s as /proc/cpuinfo: %d", cpuinfo_path, errno);
   }
 #else
+  UNUSED(instruction_set);
   ALOGW("Mac OS does not support bind-mounting. Host simulation of native bridge impossible.");
 #endif
 }
