@@ -205,7 +205,7 @@ static const char* kRuntimeISA = "unknown";
 
 
 bool NeedsNativeBridge(const char* instruction_set) {
-  return strncmp(instruction_set, kRuntimeISA, strlen(kRuntimeISA)) != 0;
+  return strncmp(instruction_set, kRuntimeISA, strlen(kRuntimeISA) + 1) != 0;
 }
 
 #ifdef __APPLE__
@@ -231,7 +231,8 @@ void PreInitializeNativeBridge(const char* app_data_dir_in, const char* instruct
     // 10 is a loose upper bound on the currently known instruction sets (a tight bound is 7 for
     // x86_64 [including the trailing \0]). This is so we don't have to change here if there will
     // be another instruction set in the future.
-    ALOGW("Instruction set %s is malformed, must be less than 10 characters.", instruction_set);
+    ALOGW("Instruction set %s is malformed, must be less than or equal to 10 characters.",
+          instruction_set);
     return;
   }
 
@@ -246,7 +247,11 @@ void PreInitializeNativeBridge(const char* app_data_dir_in, const char* instruct
     "/%s/cpuinfo", instruction_set);
 
   // Bind-mount.
-  if (TEMP_FAILURE_RETRY(mount("/proc/cpuinfo", cpuinfo_path, nullptr, MS_BIND, nullptr)) == -1) {
+  if (TEMP_FAILURE_RETRY(mount(cpuinfo_path,        // Source.
+                               "/proc/cpuinfo",     // Target.
+                               nullptr,             // FS type.
+                               MS_BIND,             // Mount flags: bind mount.
+                               nullptr)) == -1) {   // "Data."
     ALOGW("Failed to bind-mount %s as /proc/cpuinfo: %d", cpuinfo_path, errno);
   }
 #else
