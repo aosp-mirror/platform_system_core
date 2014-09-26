@@ -45,6 +45,10 @@
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 
+#if defined(OPENSSL_IS_BORINGSSL)
+#include <openssl/base64.h>
+#endif
+
 #define TRACE_TAG TRACE_AUTH
 
 #define ANDROID_PATH   ".android"
@@ -132,43 +136,67 @@ static void get_user_info(char *buf, size_t len)
 static int write_public_keyfile(RSA *private_key, const char *private_key_path)
 {
     RSAPublicKey pkey;
-    BIO *bio, *b64, *bfile;
+    FILE *outfile = NULL;
     char path[PATH_MAX], info[MAX_PAYLOAD];
-    int ret;
+    uint8_t *encoded = NULL;
+    size_t encoded_length;
+    int ret = 0;
 
-    ret = snprintf(path, sizeof(path), "%s.pub", private_key_path);
-    if (ret >= (signed)sizeof(path))
+    if (snprintf(path, sizeof(path), "%s.pub", private_key_path) >=
+        (int)sizeof(path)) {
+        D("Path too long while writing public key\n");
         return 0;
+    }
 
-    ret = RSA_to_RSAPublicKey(private_key, &pkey);
-    if (!ret) {
+    if (!RSA_to_RSAPublicKey(private_key, &pkey)) {
         D("Failed to convert to publickey\n");
         return 0;
     }
 
-    bfile = BIO_new_file(path, "w");
-    if (!bfile) {
+    outfile = fopen(path, "w");
+    if (!outfile) {
         D("Failed to open '%s'\n", path);
         return 0;
     }
 
     D("Writing public key to '%s'\n", path);
 
-    b64 = BIO_new(BIO_f_base64());
-    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+#if defined(OPENSSL_IS_BORINGSSL)
+    if (!EVP_EncodedLength(&encoded_length, sizeof(pkey))) {
+        D("Public key too large to base64 encode");
+        goto out;
+    }
+#else
+    /* While we switch from OpenSSL to BoringSSL we have to implement
+     * |EVP_EncodedLength| here. */
+    encoded_length = 1 + ((sizeof(pkey) + 2) / 3 * 4);
+#endif
 
-    bio = BIO_push(b64, bfile);
-    BIO_write(bio, &pkey, sizeof(pkey));
-    (void) BIO_flush(bio);
-    BIO_pop(b64);
-    BIO_free(b64);
+    encoded = malloc(encoded_length);
+    if (encoded == NULL) {
+        D("Allocation failure");
+        goto out;
+    }
 
+    encoded_length = EVP_EncodeBlock(encoded, (uint8_t*) &pkey, sizeof(pkey));
     get_user_info(info, sizeof(info));
-    BIO_write(bfile, info, strlen(info));
-    (void) BIO_flush(bfile);
-    BIO_free_all(bfile);
 
-    return 1;
+    if (fwrite(encoded, encoded_length, 1, outfile) != 1 ||
+        fwrite(info, strlen(info), 1, outfile) != 1) {
+        D("Write error while writing public key");
+        goto out;
+    }
+
+    ret = 1;
+
+ out:
+    if (outfile != NULL) {
+        fclose(outfile);
+    }
+    if (encoded != NULL) {
+        free(encoded);
+    }
+    return ret;
 }
 
 static int generate_key(const char *file)
