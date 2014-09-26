@@ -5,6 +5,8 @@ include $(CLEAR_VARS)
 # Build the unit tests.
 test_src_files := \
     InvalidCharsNativeBridge_test.cpp \
+    NeedsNativeBridge_test.cpp \
+    PreInitializeNativeBridge_test.cpp \
     ReSetupNativeBridge_test.cpp \
     UnavailableNativeBridge_test.cpp \
     ValidNameNativeBridge_test.cpp
