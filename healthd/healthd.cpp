@@ -53,6 +53,7 @@ static struct healthd_config healthd_config = {
     .batteryCurrentAvgPath = String8(String8::kEmptyString),
     .batteryChargeCounterPath = String8(String8::kEmptyString),
     .energyCounter = NULL,
+    .screen_on = NULL,
 };
 
 static int eventct;
@@ -314,8 +315,8 @@ static int healthd_init() {
         return -1;
     }
 
-    healthd_mode_ops->init(&healthd_config);
     healthd_board_init(&healthd_config);
+    healthd_mode_ops->init(&healthd_config);
     wakealarm_init();
     uevent_init();
     gBatteryMonitor = new BatteryMonitor();
