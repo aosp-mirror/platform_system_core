@@ -68,7 +68,6 @@ char *locale;
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
 #define BATTERY_FULL_THRESH     95
-#define SCREEN_ON_BATTERY_THRESH 0
 
 #define LAST_KMSG_PATH          "/proc/last_kmsg"
 #define LAST_KMSG_PSTORE_PATH   "/sys/fs/pstore/console-ramoops"
@@ -109,7 +108,6 @@ struct animation {
 struct charger {
     bool have_battery_state;
     bool charger_connected;
-    int capacity;
     int64_t next_screen_transition;
     int64_t next_key_check;
     int64_t next_pwr_check;
@@ -170,7 +168,8 @@ static struct animation battery_animation = {
 };
 
 static struct charger charger_state;
-
+static struct healthd_config *healthd_config;
+static struct android::BatteryProperties *batt_prop;
 static int char_width;
 static int char_height;
 static bool minui_inited;
@@ -238,11 +237,6 @@ out:
     LOGW("\n");
     LOGW("************* END LAST KMSG *************\n");
     LOGW("\n");
-}
-
-static int get_battery_capacity()
-{
-    return charger_state.capacity;
 }
 
 #ifdef CHARGER_ENABLE_SUSPEND
@@ -357,15 +351,16 @@ static void update_screen_state(struct charger *charger, int64_t now)
         return;
 
     if (!minui_inited) {
-        int batt_cap = get_battery_capacity();
 
-        if (batt_cap < SCREEN_ON_BATTERY_THRESH) {
-            LOGV("[%" PRId64 "] level %d, leave screen off\n", now, batt_cap);
-            batt_anim->run = false;
-            charger->next_screen_transition = -1;
-            if (charger->charger_connected)
-                request_suspend(true);
-            return;
+        if (healthd_config && healthd_config->screen_on) {
+            if (!healthd_config->screen_on(batt_prop)) {
+                LOGV("[%" PRId64 "] leave screen off\n", now);
+                batt_anim->run = false;
+                charger->next_screen_transition = -1;
+                if (charger->charger_connected)
+                    request_suspend(true);
+                return;
+            }
         }
 
         gr_init();
@@ -392,17 +387,15 @@ static void update_screen_state(struct charger *charger, int64_t now)
 
     /* animation starting, set up the animation */
     if (batt_anim->cur_frame == 0) {
-        int batt_cap;
         int ret;
 
         LOGV("[%" PRId64 "] animation starting\n", now);
-        batt_cap = get_battery_capacity();
-        if (batt_cap >= 0 && batt_anim->num_frames != 0) {
+        if (batt_prop && batt_prop->batteryLevel >= 0 && batt_anim->num_frames != 0) {
             int i;
 
             /* find first frame given current capacity */
             for (i = 1; i < batt_anim->num_frames; i++) {
-                if (batt_cap < batt_anim->frames[i].min_capacity)
+                if (batt_prop->batteryLevel < batt_anim->frames[i].min_capacity)
                     break;
             }
             batt_anim->cur_frame = i - 1;
@@ -410,8 +403,8 @@ static void update_screen_state(struct charger *charger, int64_t now)
             /* show the first frame for twice as long */
             disp_time = batt_anim->frames[batt_anim->cur_frame].disp_time * 2;
         }
-
-        batt_anim->capacity = batt_cap;
+        if (batt_prop)
+            batt_anim->capacity = batt_prop->batteryLevel;
     }
 
     /* unblank the screen  on first cycle */
@@ -609,7 +602,6 @@ void healthd_mode_charger_battery_update(
     charger->charger_connected =
         props->chargerAcOnline || props->chargerUsbOnline ||
         props->chargerWirelessOnline;
-    charger->capacity = props->batteryLevel;
 
     if (!charger->have_battery_state) {
         charger->have_battery_state = true;
@@ -617,6 +609,7 @@ void healthd_mode_charger_battery_update(
         reset_animation(charger->batt_anim);
         kick_animation(charger->batt_anim);
     }
+    batt_prop = props;
 }
 
 int healthd_mode_charger_preparetowait(void)
@@ -669,7 +662,7 @@ static void charger_event_handler(uint32_t /*epevents*/)
         ev_dispatch();
 }
 
-void healthd_mode_charger_init(struct healthd_config* /*config*/)
+void healthd_mode_charger_init(struct healthd_config* config)
 {
     int ret;
     struct charger *charger = &charger_state;
@@ -717,4 +710,5 @@ void healthd_mode_charger_init(struct healthd_config* /*config*/)
     charger->next_screen_transition = -1;
     charger->next_key_check = -1;
     charger->next_pwr_check = -1;
+    healthd_config = config;
 }
