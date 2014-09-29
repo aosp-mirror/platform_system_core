@@ -22,16 +22,25 @@
 #include <sys/klog.h>
 #include <sys/prctl.h>
 #include <sys/uio.h>
+#include <syslog.h>
 
 #include "libaudit.h"
 #include "LogAudit.h"
+
+#define KMSG_PRIORITY(PRI)         \
+    '<',                           \
+    '0' + (LOG_AUTH | (PRI)) / 10, \
+    '0' + (LOG_AUTH | (PRI)) % 10, \
+    '>'
 
 LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmsg)
         : SocketListener(getLogSocket(), false)
         , logbuf(buf)
         , reader(reader)
         , fdDmesg(-1) {
-    static const char auditd_message[] = "<6>logd.auditd: start\n";
+    static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
+        'l', 'o', 'g', 'd', '.', 'a', 'u', 'd', 'i', 't', 'd', ':',
+        ' ', 's', 't', 'a', 'r', 't', '\n' };
     write(fdDmsg, auditd_message, sizeof(auditd_message));
     logDmesg();
     fdDmesg = fdDmsg;
@@ -80,10 +89,12 @@ int LogAudit::logPrint(const char *fmt, ...) {
     bool info = strstr(str, " permissive=1") || strstr(str, " policy loaded ");
     if (fdDmesg >= 0) {
         struct iovec iov[3];
+        static const char log_info[] = { KMSG_PRIORITY(LOG_INFO) };
+        static const char log_warning[] = { KMSG_PRIORITY(LOG_WARNING) };
 
-        iov[0].iov_base = info ? const_cast<char *>("<6>")
-                               : const_cast<char *>("<4>");
-        iov[0].iov_len = 3;
+        iov[0].iov_base = info ? const_cast<char *>(log_info)
+                               : const_cast<char *>(log_warning);
+        iov[0].iov_len = info ? sizeof(log_info) : sizeof(log_warning);
         iov[1].iov_base = str;
         iov[1].iov_len = strlen(str);
         iov[2].iov_base = const_cast<char *>("\n");
