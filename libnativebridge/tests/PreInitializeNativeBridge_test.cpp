@@ -31,8 +31,8 @@ namespace android {
 static constexpr const char* kTestData = "PreInitializeNativeBridge test.";
 
 TEST_F(NativeBridgeTest, PreInitializeNativeBridge) {
-#ifndef __APPLE_         // Mac OS does not support bind-mount.
-#ifndef HAVE_ANDROID_OS  // Cannot write into the hard-wired location.
+#ifndef __APPLE__         // Mac OS does not support bind-mount.
+#ifndef HAVE_ANDROID_OS   // Cannot write into the hard-wired location.
     // Try to create our mount namespace.
     if (unshare(CLONE_NEWNS) != -1) {
         // Create a dummy file.
