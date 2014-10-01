@@ -29,7 +29,9 @@ bool HttpSender::Send(const std::string& content,
       chromeos::http::Transport::CreateDefault(),
       &error);
   if (!response || response->GetDataAsString() != "OK") {
-    DLOG(ERROR) << "Failed to send data: " << error->GetMessage();
+    if (error) {
+      DLOG(ERROR) << "Failed to send data: " << error->GetMessage();
+    }
     return false;
   }
   return true;
