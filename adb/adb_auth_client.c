@@ -175,7 +175,7 @@ static void adb_auth_event(int fd, unsigned events, void *data)
 
     if (events & FDE_READ) {
         ret = unix_read(fd, response, sizeof(response));
-        if (ret < 0) {
+        if (ret <= 0) {
             D("Framework disconnect\n");
             if (usb_transport)
                 fdevent_remove(&usb_transport->auth_fde);
