@@ -1549,7 +1549,7 @@ _wait_for_all(HANDLE* handles, int handles_count)
      * reset" event that will remain set once it was set. */
     main_event = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (main_event == NULL) {
-        D("Unable to create main event. Error: %d", GetLastError());
+        D("Unable to create main event. Error: %d", (int)GetLastError());
         free(threads);
         return (int)WAIT_FAILED;
     }
