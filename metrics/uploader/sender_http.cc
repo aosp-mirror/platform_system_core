@@ -21,9 +21,10 @@ bool HttpSender::Send(const std::string& content,
 
   chromeos::http::HeaderList headers = {{"X-Chrome-UMA-Log-SHA1", hash}};
   chromeos::ErrorPtr error;
-  auto response = chromeos::http::PostText(
+  auto response = chromeos::http::PostBinary(
       server_url_,
       content.c_str(),
+      content.size(),
       chromeos::mime::application::kWwwFormUrlEncoded,
       headers,
       chromeos::http::Transport::CreateDefault(),
