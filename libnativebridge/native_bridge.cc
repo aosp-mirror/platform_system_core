@@ -372,15 +372,15 @@ static void SetupEnvironment(NativeBridgeCallbacks* callbacks, JNIEnv* env, cons
   if (env_values->os_arch != nullptr) {
     jclass sclass_id = env->FindClass("java/lang/System");
     if (sclass_id != nullptr) {
-      jmethodID set_prop_id = env->GetStaticMethodID(sclass_id, "setProperty",
-          "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+      jmethodID set_prop_id = env->GetStaticMethodID(sclass_id, "initUnchangeableSystemProperty",
+          "(Ljava/lang/String;Ljava/lang/String;)V");
       if (set_prop_id != nullptr) {
-        // Reset os.arch to the value reqired by the apps running with native bridge.
-        env->CallStaticObjectMethod(sclass_id, set_prop_id, env->NewStringUTF("os.arch"),
+        // Init os.arch to the value reqired by the apps running with native bridge.
+        env->CallStaticVoidMethod(sclass_id, set_prop_id, env->NewStringUTF("os.arch"),
             env->NewStringUTF(env_values->os_arch));
       } else {
         env->ExceptionClear();
-        ALOGW("Could not find setProperty method.");
+        ALOGW("Could not find initUnchangeableSystemProperty method.");
       }
     } else {
       env->ExceptionClear();
