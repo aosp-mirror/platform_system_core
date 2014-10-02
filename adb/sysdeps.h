@@ -35,6 +35,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <ctype.h>
+#include <direct.h>
 
 #define OS_PATH_SEPARATOR '\\'
 #define OS_PATH_SEPARATOR_STR "\\"
