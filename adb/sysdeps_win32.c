@@ -1,6 +1,6 @@
 #include "sysdeps.h"
-#include <windows.h>
 #include <winsock2.h>
+#include <windows.h>
 #include <stdio.h>
 #include <errno.h>
 #define  TRACE_TAG  TRACE_SYSDEPS

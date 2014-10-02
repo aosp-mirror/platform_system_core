@@ -26,8 +26,8 @@
 
 #ifdef _WIN32
 
-#include <windows.h>
 #include <winsock2.h>
+#include <windows.h>
 #include <ws2tcpip.h>
 #include <process.h>
 #include <fcntl.h>
