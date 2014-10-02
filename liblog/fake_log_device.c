@@ -689,3 +689,9 @@ ssize_t fakeLogWritev(int fd, const struct iovec* vector, int count)
     /* Assume that open() was called first. */
     return redirectWritev(fd, vector, count);
 }
+
+int __android_log_is_loggable(int prio, const char *tag __unused, int def)
+{
+    int logLevel = def;
+    return logLevel >= 0 && prio >= logLevel;
+}

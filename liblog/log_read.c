@@ -34,7 +34,11 @@
 /* branchless on many architectures. */
 #define min(x,y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
 
+#if (defined(USE_MINGW) || defined(HAVE_WINSOCK))
+#define WEAK static
+#else
 #define WEAK __attribute__((weak))
+#endif
 #ifndef __unused
 #define __unused __attribute__((unused))
 #endif
