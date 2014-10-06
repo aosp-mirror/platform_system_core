@@ -54,9 +54,10 @@ class SystemProfileSetter;
 //
 class UploadService : public base::HistogramFlattener {
  public:
-  explicit UploadService(bool testing);
+  explicit UploadService(bool testing, const std::string& server);
 
-  void Init();
+  void Init(int upload_interval_secs,
+            const std::string& metrics_file);
 
   // Starts a new log. The log needs to be regenerated after each successful
   // launch as it is destroyed when staging the log.
@@ -133,6 +134,8 @@ class UploadService : public base::HistogramFlattener {
   int failed_upload_count_;
   scoped_ptr<MetricsLog> current_log_;
   scoped_ptr<MetricsLog> staged_log_;
+
+  std::string metrics_file_;
 };
 
 #endif  // METRICS_UPLOADER_UPLOAD_SERVICE_H_

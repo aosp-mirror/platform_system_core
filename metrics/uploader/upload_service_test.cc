@@ -19,16 +19,19 @@
 #include "uploader/system_profile_cache.h"
 #include "uploader/upload_service.h"
 
+static const char kMetricsServer[] = "https://clients4.google.com/uma/v2";
+static const char kMetricsFilePath[] = "/var/run/metrics/uma-events";
+
 class UploadServiceTest : public testing::Test {
  protected:
   UploadServiceTest()
       : cache_(true),
-        upload_service_(true),
+        upload_service_(true, kMetricsServer),
         exit_manager_(new base::AtExitManager()) {
     sender_ = new SenderMock;
     upload_service_.sender_.reset(sender_);
     upload_service_.system_profile_setter_.reset(new MockSystemProfileSetter());
-    upload_service_.Init();
+    upload_service_.Init(1800, kMetricsFilePath);
   }
 
   virtual void SetUp() {
@@ -124,7 +127,7 @@ TEST_F(UploadServiceTest, EmptyLogsAreNotSent) {
 }
 
 TEST_F(UploadServiceTest, LogEmptyByDefault) {
-  UploadService upload_service(true);
+  UploadService upload_service(true, kMetricsServer);
 
   // current_log_ should be initialized later as it needs AtExitManager to exit
   // in order to gather system information from SysInfo.

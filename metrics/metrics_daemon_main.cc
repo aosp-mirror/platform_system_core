@@ -6,8 +6,8 @@
 #include <base/command_line.h>
 #include <base/logging.h>
 #include <base/strings/string_util.h>
+#include <chromeos/flag_helper.h>
 #include <chromeos/syslog_logging.h>
-#include <gflags/gflags.h>
 #include <rootdev/rootdev.h>
 
 #include "metrics/metrics_daemon.h"
@@ -16,19 +16,6 @@ const char kScalingMaxFreqPath[] =
     "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq";
 const char kCpuinfoMaxFreqPath[] =
     "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq";
-
-// TODO(bsimonnet): Change this to use base::CommandLine (crbug.com/375017)
-DEFINE_bool(daemon, true, "run as daemon (use -nodaemon for debugging)");
-
-// The uploader is disabled by default on ChromeOS as Chrome is responsible for
-// sending the metrics.
-DEFINE_bool(uploader, false, "activate the uploader");
-
-// Upload the metrics once and exit. (used for testing)
-DEFINE_bool(
-    uploader_test,
-    false,
-    "run the uploader once and exit");
 
 // Returns the path to the disk stats in the sysfs.  Returns the null string if
 // it cannot find the disk stats file.
@@ -56,8 +43,30 @@ const std::string MetricsMainDiskStatsPath() {
 }
 
 int main(int argc, char** argv) {
-  CommandLine::Init(argc, argv);
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  DEFINE_bool(daemon, true, "run as daemon (use -nodaemon for debugging)");
+
+  // The uploader is disabled by default on ChromeOS as Chrome is responsible
+  // for sending the metrics.
+  DEFINE_bool(uploader, false, "activate the uploader");
+
+  // Upload the metrics once and exit. (used for testing)
+  DEFINE_bool(uploader_test,
+              false,
+              "run the uploader once and exit");
+
+  // Upload Service flags.
+  DEFINE_int32(upload_interval_secs,
+               1800,
+               "Interval at which metrics_daemon sends the metrics. (needs "
+               "-uploader)");
+  DEFINE_string(server,
+                "https://clients4.google.com/uma/v2",
+                "Server to upload the metrics to. (needs -uploader)");
+  DEFINE_string(metrics_file,
+                "/var/run/metrics/uma-events",
+                "File to use as a proxy for uploading the metrics");
+
+  chromeos::FlagHelper::Init(argc, argv, "Chromium OS Metrics Daemon");
 
   // Also log to stderr when not running as daemon.
   chromeos::InitLog(chromeos::kLogToSyslog | chromeos::kLogHeader |
@@ -71,7 +80,10 @@ int main(int argc, char** argv) {
               MetricsMainDiskStatsPath(),
               "/proc/vmstat",
               kScalingMaxFreqPath,
-              kCpuinfoMaxFreqPath);
+              kCpuinfoMaxFreqPath,
+              FLAGS_upload_interval_secs,
+              FLAGS_server,
+              FLAGS_metrics_file);
 
 
   base::AtExitManager at_exit_manager;

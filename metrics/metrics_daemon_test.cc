@@ -45,6 +45,8 @@ static const uint64_t kFakeWriteSectors[] = {3000, 4000};
 static const char kFakeVmStatsName[] = "fake-vm-stats";
 static const char kFakeScalingMaxFreqPath[] = "fake-scaling-max-freq";
 static const char kFakeCpuinfoMaxFreqPath[] = "fake-cpuinfo-max-freq";
+static const char kMetricsServer[] = "https://clients4.google.com/uma/v2";
+static const char kMetricsFilePath[] = "/var/run/metrics/uma-events";
 
 class MetricsDaemonTest : public testing::Test {
  protected:
@@ -69,7 +71,10 @@ class MetricsDaemonTest : public testing::Test {
                  kFakeDiskStatsName,
                  kFakeVmStatsName,
                  kFakeScalingMaxFreqPath,
-                 kFakeCpuinfoMaxFreqPath);
+                 kFakeCpuinfoMaxFreqPath,
+                 1800,
+                 kMetricsServer,
+                 kMetricsFilePath);
 
     // Replace original persistent values with mock ones.
     daily_active_use_mock_ =

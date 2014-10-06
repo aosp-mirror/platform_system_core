@@ -36,7 +36,10 @@ class MetricsDaemon {
             const std::string& diskstats_path,
             const std::string& vmstats_path,
             const std::string& cpuinfo_max_freq_path,
-            const std::string& scaling_max_freq_path);
+            const std::string& scaling_max_freq_path,
+            int upload_interval_secs,
+            const std::string& server,
+            const std::string& metrics_file);
 
   // Does all the work. If |run_as_daemon| is true, daemonizes by
   // forking.
@@ -371,6 +374,10 @@ class MetricsDaemon {
   std::string vmstats_path_;
   std::string scaling_max_freq_path_;
   std::string cpuinfo_max_freq_path_;
+
+  int upload_interval_secs_;
+  std::string server_;
+  std::string metrics_file_;
 
   scoped_ptr<UploadService> upload_service_;
 };

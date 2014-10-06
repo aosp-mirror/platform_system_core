@@ -27,7 +27,6 @@
       'link_settings': {
         'libraries': [
           '-lrootdev',
-          '-lgflags',
         ],
       },
       'sources': [
@@ -56,7 +55,6 @@
       ],
       'link_settings': {
         'libraries': [
-          '-lgflags',
           '-lvboot_host',
         ],
       },

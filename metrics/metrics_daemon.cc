@@ -187,8 +187,8 @@ void MetricsDaemon::Run(bool run_as_daemon) {
 }
 
 void MetricsDaemon::RunUploaderTest() {
-  upload_service_.reset(new UploadService(testing_));
-  upload_service_->Init();
+  upload_service_.reset(new UploadService(testing_, server_));
+  upload_service_->Init(upload_interval_secs_, metrics_file_);
   upload_service_->UploadEvent();
 }
 
@@ -215,10 +215,17 @@ void MetricsDaemon::Init(bool testing,
                          const string& diskstats_path,
                          const string& vmstats_path,
                          const string& scaling_max_freq_path,
-                         const string& cpuinfo_max_freq_path) {
+                         const string& cpuinfo_max_freq_path,
+                         int upload_interval_secs,
+                         const string& server,
+                         const string& metrics_file) {
   testing_ = testing;
   DCHECK(metrics_lib != nullptr);
   metrics_lib_ = metrics_lib;
+
+  upload_interval_secs_ = upload_interval_secs;
+  server_ = server;
+  metrics_file_ = metrics_file;
 
   // Get ticks per second (HZ) on this system.
   // Sysconf cannot fail, so no sanity checks are needed.
@@ -314,8 +321,8 @@ void MetricsDaemon::Init(bool testing,
 
   if (uploader_active) {
     LOG(INFO) << "uploader enabled";
-    upload_service_.reset(new UploadService(testing_));
-    upload_service_->Init();
+    upload_service_.reset(new UploadService(testing_, server_));
+    upload_service_->Init(upload_interval_secs_, metrics_file_);
   }
 }
 

@@ -17,36 +17,24 @@
 #include <base/sha1.h>
 #include <components/metrics/chromeos/metric_sample.h>
 #include <components/metrics/chromeos/serialization_utils.h>
-#include <gflags/gflags.h>
 
 #include "metrics/uploader/metrics_log.h"
 #include "metrics/uploader/sender_http.h"
 #include "metrics/uploader/system_profile_cache.h"
 
-DEFINE_int32(
-    upload_interval_secs,
-    1800,
-    "Interval at which metrics_daemon sends the metrics. (needs -uploader)");
-
-DEFINE_string(server,
-              "https://clients4.google.com/uma/v2",
-              "Server to upload the metrics to. (needs -uploader)");
-
-DEFINE_string(metrics_file,
-              "/var/run/metrics/uma-events",
-              "File to use as a proxy for uploading the metrics");
-
 const int UploadService::kMaxFailedUpload = 10;
 
-UploadService::UploadService(bool testing)
+UploadService::UploadService(bool testing, const std::string& server)
     : system_profile_setter_(new SystemProfileCache(testing)),
       histogram_snapshot_manager_(this),
-      sender_(new HttpSender(FLAGS_server)) {
+      sender_(new HttpSender(server)) {
 }
 
-void UploadService::Init() {
+void UploadService::Init(int upload_interval_secs,
+                         const std::string& metrics_file) {
   base::StatisticsRecorder::Initialize();
-  g_timeout_add_seconds(FLAGS_upload_interval_secs, &UploadEventStatic, this);
+  metrics_file_ = metrics_file;
+  g_timeout_add_seconds(upload_interval_secs, &UploadEventStatic, this);
 }
 
 void UploadService::StartNewLog() {
@@ -116,7 +104,7 @@ void UploadService::ReadMetrics() {
 
   ScopedVector<metrics::MetricSample> vector;
   metrics::SerializationUtils::ReadAndTruncateMetricsFromFile(
-      FLAGS_metrics_file, &vector);
+      metrics_file_, &vector);
 
   int i = 0;
   for (ScopedVector<metrics::MetricSample>::iterator it = vector.begin();
