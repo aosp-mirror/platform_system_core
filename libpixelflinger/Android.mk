@@ -69,6 +69,10 @@ ifneq ($(BUILD_TINY_ANDROID),true)
 LOCAL_SHARED_LIBRARIES += libhardware_legacy
 LOCAL_CFLAGS += -DWITH_LIB_HARDWARE
 endif
+# t32cb16blend.S does not compile with Clang.
+LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
+# arch-arm64/col32cb16blend.S does not compile with Clang.
+LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
 include $(BUILD_SHARED_LIBRARY)
 
 #
@@ -82,6 +86,10 @@ LOCAL_SRC_FILES_arm := $(PIXELFLINGER_SRC_FILES_arm)
 LOCAL_SRC_FILES_arm64 := $(PIXELFLINGER_SRC_FILES_arm64)
 LOCAL_SRC_FILES_mips := $(PIXELFLINGER_SRC_FILES_mips)
 LOCAL_CFLAGS := $(PIXELFLINGER_CFLAGS)
+# t32cb16blend.S does not compile with Clang.
+LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
+# arch-arm64/col32cb16blend.S does not compile with Clang.
+LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
 include $(BUILD_STATIC_LIBRARY)
 
 

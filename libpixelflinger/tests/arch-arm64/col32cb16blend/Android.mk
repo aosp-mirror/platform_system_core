@@ -5,6 +5,8 @@ LOCAL_SRC_FILES:= \
     col32cb16blend_test.c \
     ../../../arch-arm64/col32cb16blend.S
 
+LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
+
 LOCAL_SHARED_LIBRARIES :=
 
 LOCAL_C_INCLUDES :=
