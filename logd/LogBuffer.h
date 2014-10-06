@@ -37,8 +37,7 @@ class LogBuffer {
     pthread_mutex_t mLogElementsLock;
 
     LogStatistics stats;
-
-    bool dgram_qlen_statistics;
+    bool dgramQlenStatistics;
 
     PruneList mPrune;
 
@@ -66,7 +65,11 @@ public:
 
     void enableDgramQlenStatistics() {
         stats.enableDgramQlenStatistics();
-        dgram_qlen_statistics = true;
+        dgramQlenStatistics = true;
+    }
+
+    void enableStatistics() {
+        stats.enableStatistics();
     }
 
     int initPrune(char *cp) { return mPrune.init(cp); }
