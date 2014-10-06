@@ -8,11 +8,11 @@ import hashlib
 import os
 import random
 import re
+import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
-import sys
-import shlex
 
 
 def trace(cmd):
@@ -181,6 +181,12 @@ class AdbWrapper(object):
     def usb(self):
         return call_checked(self.adb_cmd + "usb")
 
+    def root(self):
+        return call_checked(self.adb_cmd + "root")
+
+    def unroot(self):
+        return call_checked(self.adb_cmd + "unroot")
+
     def forward_remove(self, local):
         return call_checked(self.adb_cmd + "forward --remove {}".format(local))
 
@@ -232,6 +238,17 @@ class AdbBasic(unittest.TestCase):
             if re.match(r"[\d+\.]*\d", item):
                 version_num = True
         self.assertTrue(version_num)
+
+    def test_root_unroot(self):
+        """Make sure that adb root and adb unroot work, using id(1)."""
+        for device in get_device_list():
+            adb = AdbWrapper(device)
+            adb.root()
+            adb.wait()
+            self.assertEqual("root", adb.shell("id -un").strip())
+            adb.unroot()
+            adb.wait()
+            self.assertEqual("shell", adb.shell("id -un").strip())
 
 
 class AdbFile(unittest.TestCase):

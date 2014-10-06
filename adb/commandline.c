@@ -210,6 +210,7 @@ void help()
         "  adb reboot [bootloader|recovery] - reboots the device, optionally into the bootloader or recovery program\n"
         "  adb reboot-bootloader        - reboots the device into the bootloader\n"
         "  adb root                     - restarts the adbd daemon with root permissions\n"
+        "  adb unroot                   - restarts the adbd daemon without root permissions\n"
         "  adb usb                      - restarts the adbd daemon listening on USB\n"
         "  adb tcpip <port>             - restarts the adbd daemon listening on TCP on the specified port\n"
         "networking:\n"
@@ -1473,6 +1474,7 @@ int adb_commandline(int argc, char **argv)
              !strcmp(argv[0], "tcpip") ||
              !strcmp(argv[0], "usb") ||
              !strcmp(argv[0], "root") ||
+             !strcmp(argv[0], "unroot") ||
              !strcmp(argv[0], "disable-verity") ||
              !strcmp(argv[0], "enable-verity")) {
         char command[100];
