@@ -72,6 +72,10 @@ class UidStatistics {
 
     PidStatisticsCollection Pids;
 
+    void insert(PidStatisticsCollection::iterator i, PidStatistics *p)
+        { Pids.insert(i, p); }
+    void push_back(PidStatistics *p) { Pids.push_back(p); }
+
     size_t mSizes;
     size_t mElements;
 
@@ -81,6 +85,8 @@ public:
 
     PidStatisticsCollection::iterator begin() { return Pids.begin(); }
     PidStatisticsCollection::iterator end() { return Pids.end(); }
+    PidStatisticsCollection::iterator erase(PidStatisticsCollection::iterator i)
+        { return Pids.erase(i); }
 
     uid_t getUid() { return uid; }
 
@@ -138,7 +144,8 @@ class LogStatistics {
     size_t mSizes[LOG_ID_MAX];
     size_t mElements[LOG_ID_MAX];
 
-    bool dgram_qlen_statistics;
+    bool mStatistics;
+    bool dgramQlenStatistics;
 
     static const unsigned short mBuckets[14];
     log_time mMinimum[sizeof(mBuckets) / sizeof(mBuckets[0])];
@@ -150,8 +157,9 @@ public:
 
     LidStatistics &id(log_id_t log_id) { return LogIds[log_id]; }
 
-    void enableDgramQlenStatistics() { dgram_qlen_statistics = true; }
-    static unsigned short dgram_qlen(unsigned short bucket);
+    void enableDgramQlenStatistics() { dgramQlenStatistics = true; }
+    void enableStatistics() { mStatistics = true; }
+    static unsigned short dgramQlen(unsigned short bucket);
     unsigned long long minimum(unsigned short bucket);
     void recordDiff(log_time diff, unsigned short bucket);
 

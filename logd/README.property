@@ -4,6 +4,9 @@ name                       type default  description
 logd.auditd                 bool  true   Enable selinux audit daemon
 logd.auditd.dmesg           bool  true   selinux audit messages duplicated and
                                          sent on to dmesg log
+logd.statistics             bool depends Enable logcat -S statistics.
+ro.config.low_ram           bool  false  if true, logd.statistics default false
+ro.build.type               string       if user, logd.statistics default false
 logd.statistics.dgram_qlen  bool  false  Record dgram_qlen statistics. This
                                          represents a performance impact and
                                          is used to determine the platform's
