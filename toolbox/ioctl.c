@@ -45,7 +45,7 @@ int ioctl_main(int argc, char *argv[])
             break;
         case 'h':
             fprintf(stderr, "%s [-l <length>] [-a <argsize>] [-rdh] <device> <ioctlnr>\n"
-                    "  -l <lenght>   Length of io buffer\n"
+                    "  -l <length>   Length of io buffer\n"
                     "  -a <argsize>  Size of each argument (1-8)\n"
                     "  -r            Open device in read only mode\n"
                     "  -d            Direct argument (no iobuffer)\n"
