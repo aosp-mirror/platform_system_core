@@ -12,6 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_ptr.h"
+#include "chromeos/osrelease_reader.h"
 #include "components/metrics/proto/system_profile.pb.h"
 #include "metrics/persistent_integer.h"
 #include "metrics/uploader/system_profile_setter.h"
@@ -28,6 +29,7 @@ struct SystemProfile {
   std::string hardware_class;
   std::string client_id;
   int32_t session_id;
+  int32_t product_id;
 };
 
 // Retrieves general system informations needed by the protobuf for context and
@@ -36,7 +38,9 @@ struct SystemProfile {
 // The cache is populated lazily. The only method needed is Populate.
 class SystemProfileCache : public SystemProfileSetter {
  public:
-  explicit SystemProfileCache(bool testing);
+  SystemProfileCache();
+
+  SystemProfileCache(bool testing, const std::string& config_root);
 
   // Populates the ProfileSystem protobuf with system information.
   void Populate(metrics::ChromeUserMetricsExtension* profile_proto) override;
@@ -56,9 +60,6 @@ class SystemProfileCache : public SystemProfileSetter {
   FRIEND_TEST(UploadServiceTest, SessionIdIncrementedAtInitialization);
   FRIEND_TEST(UploadServiceTest, ValuesInConfigFileAreSent);
 
-  static const char* kPersistentGUIDFile;
-  static const char* kPersistentSessionIdFilename;
-
   // Fetches all informations and populates |profile_|
   bool Initialize();
 
@@ -68,8 +69,12 @@ class SystemProfileCache : public SystemProfileSetter {
   // Gets the hardware ID using crossystem
   bool GetHardwareId(std::string* hwid);
 
+  // Gets the product ID from the GOOGLE_METRICS_PRODUCT_ID field.
+  bool GetProductId(int* product_id) const;
+
   bool initialized_;
   bool testing_;
+  std::string config_root_;
   scoped_ptr<chromeos_metrics::PersistentInteger> session_id_;
   SystemProfile profile_;
 };

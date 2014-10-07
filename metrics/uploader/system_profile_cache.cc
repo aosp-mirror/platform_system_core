@@ -11,20 +11,35 @@
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
 #include "components/metrics/metrics_log_base.h"
 #include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
 #include "metrics/persistent_integer.h"
 #include "vboot/crossystem.h"
 
-const char* SystemProfileCache::kPersistentGUIDFile =
-    "/var/lib/metrics/Sysinfo.GUID";
-const char* SystemProfileCache::kPersistentSessionIdFilename =
-    "Sysinfo.SessionId";
+namespace {
 
-SystemProfileCache::SystemProfileCache(bool testing)
+const char kPersistentGUIDFile[] = "/var/lib/metrics/Sysinfo.GUID";
+const char kPersistentSessionIdFilename[] = "Sysinfo.SessionId";
+const char kProductIdFieldName[] = "GOOGLE_METRICS_PRODUCT_ID";
+
+}  // namespace
+
+
+SystemProfileCache::SystemProfileCache()
+    : initialized_(false),
+    testing_(false),
+    config_root_("/"),
+    session_id_(new chromeos_metrics::PersistentInteger(
+        kPersistentSessionIdFilename)) {
+}
+
+SystemProfileCache::SystemProfileCache(bool testing,
+                                       const std::string& config_root)
     : initialized_(false),
       testing_(testing),
+      config_root_(config_root),
       session_id_(new chromeos_metrics::PersistentInteger(
           kPersistentSessionIdFilename)) {
 }
@@ -47,6 +62,12 @@ bool SystemProfileCache::Initialize() {
   std::string channel_string;
   base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_TRACK", &channel_string);
   profile_.channel = ProtoChannelFromString(channel_string);
+
+  // If the product id is not defined, use the default one from the protobuf.
+  profile_.product_id = metrics::ChromeUserMetricsExtension::CHROME;
+  if (GetProductId(&profile_.product_id)) {
+    DLOG(INFO) << "Set the product id to " << profile_.product_id;
+  }
 
   profile_.client_id =
       testing_ ? "client_id_test" : GetPersistentGUID(kPersistentGUIDFile);
@@ -77,6 +98,9 @@ void SystemProfileCache::Populate(
   metrics_proto->set_client_id(
       metrics::MetricsLogBase::Hash(profile_.client_id));
   metrics_proto->set_session_id(profile_.session_id);
+
+  // Sets the product id.
+  metrics_proto->set_product(profile_.product_id);
 
   metrics::SystemProfileProto* profile_proto =
       metrics_proto->mutable_system_profile();
@@ -120,6 +144,25 @@ bool SystemProfileCache::GetHardwareId(std::string* hwid) {
 
   *hwid = std::string(buffer);
   return true;
+}
+
+bool SystemProfileCache::GetProductId(int* product_id) const {
+  chromeos::OsReleaseReader reader;
+  if (testing_) {
+    base::FilePath root(config_root_);
+    CHECK(reader.LoadTestingOnly(root)) << "Failed to load os-release fields "
+                                        "from" << root.value();
+  } else {
+    CHECK(reader.Load()) << "Failed to load os-release fields.";
+  }
+
+  std::string id;
+  if (reader.GetString(kProductIdFieldName, &id)) {
+    CHECK(base::StringToInt(id, product_id)) << "Failed to convert product_id "
+                                             << id << " to int.";
+    return true;
+  }
+  return false;
 }
 
 metrics::SystemProfileProto_Channel SystemProfileCache::ProtoChannelFromString(

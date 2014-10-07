@@ -24,8 +24,9 @@
 
 const int UploadService::kMaxFailedUpload = 10;
 
-UploadService::UploadService(bool testing, const std::string& server)
-    : system_profile_setter_(new SystemProfileCache(testing)),
+UploadService::UploadService(SystemProfileSetter* setter,
+                             const std::string& server)
+    : system_profile_setter_(setter),
       histogram_snapshot_manager_(this),
       sender_(new HttpSender(server)) {
 }

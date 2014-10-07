@@ -65,6 +65,8 @@ int main(int argc, char** argv) {
   DEFINE_string(metrics_file,
                 "/var/run/metrics/uma-events",
                 "File to use as a proxy for uploading the metrics");
+  DEFINE_string(config_root,
+                "/", "Root of the configuration files (testing only)");
 
   chromeos::FlagHelper::Init(argc, argv, "Chromium OS Metrics Daemon");
 
@@ -83,7 +85,8 @@ int main(int argc, char** argv) {
               kCpuinfoMaxFreqPath,
               FLAGS_upload_interval_secs,
               FLAGS_server,
-              FLAGS_metrics_file);
+              FLAGS_metrics_file,
+              FLAGS_config_root);
 
 
   base::AtExitManager at_exit_manager;

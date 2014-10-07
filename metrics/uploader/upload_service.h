@@ -54,7 +54,8 @@ class SystemProfileSetter;
 //
 class UploadService : public base::HistogramFlattener {
  public:
-  explicit UploadService(bool testing, const std::string& server);
+  explicit UploadService(SystemProfileSetter* setter,
+                         const std::string& server);
 
   void Init(int upload_interval_secs,
             const std::string& metrics_file);

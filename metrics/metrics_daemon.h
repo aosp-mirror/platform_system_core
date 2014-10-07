@@ -39,7 +39,8 @@ class MetricsDaemon {
             const std::string& scaling_max_freq_path,
             int upload_interval_secs,
             const std::string& server,
-            const std::string& metrics_file);
+            const std::string& metrics_file,
+            const std::string& config_root);
 
   // Does all the work. If |run_as_daemon| is true, daemonizes by
   // forking.
@@ -299,6 +300,9 @@ class MetricsDaemon {
 
   // Test mode.
   bool testing_;
+
+  // Root of the configuration files to use.
+  std::string config_root_;
 
   // The metrics library handle.
   MetricsLibraryInterface* metrics_lib_;

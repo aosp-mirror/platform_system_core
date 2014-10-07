@@ -74,7 +74,8 @@ class MetricsDaemonTest : public testing::Test {
                  kFakeCpuinfoMaxFreqPath,
                  1800,
                  kMetricsServer,
-                 kMetricsFilePath);
+                 kMetricsFilePath,
+                 "/");
 
     // Replace original persistent values with mock ones.
     daily_active_use_mock_ =

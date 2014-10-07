@@ -187,7 +187,9 @@ void MetricsDaemon::Run(bool run_as_daemon) {
 }
 
 void MetricsDaemon::RunUploaderTest() {
-  upload_service_.reset(new UploadService(testing_, server_));
+  upload_service_.reset(new UploadService(new SystemProfileCache(true,
+                                                                 config_root_),
+                                          server_));
   upload_service_->Init(upload_interval_secs_, metrics_file_);
   upload_service_->UploadEvent();
 }
@@ -218,8 +220,10 @@ void MetricsDaemon::Init(bool testing,
                          const string& cpuinfo_max_freq_path,
                          int upload_interval_secs,
                          const string& server,
-                         const string& metrics_file) {
+                         const string& metrics_file,
+                         const string& config_root) {
   testing_ = testing;
+  config_root_ = config_root;
   DCHECK(metrics_lib != nullptr);
   metrics_lib_ = metrics_lib;
 
@@ -321,7 +325,7 @@ void MetricsDaemon::Init(bool testing,
 
   if (uploader_active) {
     LOG(INFO) << "uploader enabled";
-    upload_service_.reset(new UploadService(testing_, server_));
+    upload_service_.reset(new UploadService(new SystemProfileCache(), server_));
     upload_service_->Init(upload_interval_secs_, metrics_file_);
   }
 }
