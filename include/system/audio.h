@@ -133,9 +133,9 @@ typedef enum {
                                           /* An example of remote presentation is Wifi Display */
                                           /*  where a dongle attached to a TV can be used to   */
                                           /*  play the mix captured by this audio source.      */
-    AUDIO_SOURCE_FM_TUNER            = 9,
     AUDIO_SOURCE_CNT,
     AUDIO_SOURCE_MAX                 = AUDIO_SOURCE_CNT - 1,
+    AUDIO_SOURCE_FM_TUNER            = 1998,
     AUDIO_SOURCE_HOTWORD             = 1999, /* A low-priority, preemptible audio source for
                                                 for background software hotword detection.
                                                 Same tuning as AUDIO_SOURCE_VOICE_RECOGNITION.
