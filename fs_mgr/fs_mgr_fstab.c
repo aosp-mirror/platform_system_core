@@ -418,6 +418,11 @@ int fs_mgr_is_nonremovable(struct fstab_rec *fstab)
     return fstab->fs_mgr_flags & MF_NONREMOVABLE;
 }
 
+int fs_mgr_is_verified(struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_VERIFY;
+}
+
 int fs_mgr_is_encryptable(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT);
