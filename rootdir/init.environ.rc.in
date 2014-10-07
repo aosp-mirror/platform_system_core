@@ -10,4 +10,3 @@ on init
     export LOOP_MOUNTPOINT /mnt/obb
     export BOOTCLASSPATH %BOOTCLASSPATH%
     export SYSTEMSERVERCLASSPATH %SYSTEMSERVERCLASSPATH%
-    export LD_PRELOAD libsigchain.so
