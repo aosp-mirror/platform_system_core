@@ -32,6 +32,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <grp.h>
+#include <inttypes.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,13 +60,13 @@ struct proc_info {
     char name[PROC_NAME_LEN];
     char tname[THREAD_NAME_LEN];
     char state;
-    long unsigned utime;
-    long unsigned stime;
-    long unsigned delta_utime;
-    long unsigned delta_stime;
-    long unsigned delta_time;
-    long vss;
-    long rss;
+    uint64_t utime;
+    uint64_t stime;
+    uint64_t delta_utime;
+    uint64_t delta_stime;
+    uint64_t delta_time;
+    uint64_t vss;
+    uint64_t rss;
     int prs;
     int num_threads;
     char policy[POLICY_NAME_LEN];
@@ -344,10 +345,19 @@ static int read_stat(char *filename, struct proc_info *proc) {
     proc->tname[THREAD_NAME_LEN-1] = 0;
 
     /* Scan rest of string. */
-    sscanf(close_paren + 1, " %c %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d "
-                 "%lu %lu %*d %*d %*d %*d %*d %*d %*d %lu %ld "
-                 "%*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %d",
-                 &proc->state, &proc->utime, &proc->stime, &proc->vss, &proc->rss, &proc->prs);
+    sscanf(close_paren + 1,
+           " %c " "%*d %*d %*d %*d %*d %*d %*d %*d %*d %*d "
+           "%" SCNu64
+           "%" SCNu64 "%*d %*d %*d %*d %*d %*d %*d "
+           "%" SCNu64
+           "%" SCNu64 "%*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d %*d "
+           "%d",
+           &proc->state,
+           &proc->utime,
+           &proc->stime,
+           &proc->vss,
+           &proc->rss,
+           &proc->prs);
 
     return 0;
 }
@@ -470,12 +480,15 @@ static void print_procs(void) {
             snprintf(user_buf, 20, "%d", proc->uid);
             user_str = user_buf;
         }
-        if (!threads)
-            printf("%5d %2d %3ld%% %c %5d %6ldK %6ldK %3s %-8.8s %s\n", proc->pid, proc->prs, proc->delta_time * 100 / total_delta_time, proc->state, proc->num_threads,
-                proc->vss / 1024, proc->rss * getpagesize() / 1024, proc->policy, user_str, proc->name[0] != 0 ? proc->name : proc->tname);
-        else
-            printf("%5d %5d %2d %3ld%% %c %6ldK %6ldK %3s %-8.8s %-15s %s\n", proc->pid, proc->tid, proc->prs, proc->delta_time * 100 / total_delta_time, proc->state,
-                proc->vss / 1024, proc->rss * getpagesize() / 1024, proc->policy, user_str, proc->tname, proc->name);
+        if (!threads) {
+            printf("%5d %2d %3" PRIu64 "%% %c %5d %6" PRIu64 "K %6" PRIu64 "K %3s %-8.8s %s\n",
+                   proc->pid, proc->prs, proc->delta_time * 100 / total_delta_time, proc->state, proc->num_threads,
+                   proc->vss / 1024, proc->rss * getpagesize() / 1024, proc->policy, user_str, proc->name[0] != 0 ? proc->name : proc->tname);
+        } else {
+            printf("%5d %5d %2d %3" PRIu64 "%% %c %6" PRIu64 "K %6" PRIu64 "K %3s %-8.8s %-15s %s\n",
+                   proc->pid, proc->tid, proc->prs, proc->delta_time * 100 / total_delta_time, proc->state,
+                   proc->vss / 1024, proc->rss * getpagesize() / 1024, proc->policy, user_str, proc->tname, proc->name);
+        }
     }
 }
 
