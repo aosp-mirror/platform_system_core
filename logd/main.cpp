@@ -152,6 +152,15 @@ int main() {
     if (property_get_bool("logd.statistics.dgram_qlen", false)) {
         logBuf->enableDgramQlenStatistics();
     }
+    {
+        char property[PROPERTY_VALUE_MAX];
+        property_get("ro.build.type", property, "");
+        if (property_get_bool("logd.statistics",
+                   !!strcmp(property, "user")
+                && !property_get_bool("ro.config.low_ram", false))) {
+            logBuf->enableStatistics();
+        }
+    }
 
     // LogReader listens on /dev/socket/logdr. When a client
     // connects, log entries in the LogBuffer are written to the client.

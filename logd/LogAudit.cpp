@@ -22,15 +22,26 @@
 #include <sys/klog.h>
 #include <sys/prctl.h>
 #include <sys/uio.h>
+#include <syslog.h>
 
 #include "libaudit.h"
 #include "LogAudit.h"
+
+#define KMSG_PRIORITY(PRI)         \
+    '<',                           \
+    '0' + (LOG_AUTH | (PRI)) / 10, \
+    '0' + (LOG_AUTH | (PRI)) % 10, \
+    '>'
 
 LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmsg)
         : SocketListener(getLogSocket(), false)
         , logbuf(buf)
         , reader(reader)
         , fdDmesg(-1) {
+    static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
+        'l', 'o', 'g', 'd', '.', 'a', 'u', 'd', 'i', 't', 'd', ':',
+        ' ', 's', 't', 'a', 'r', 't', '\n' };
+    write(fdDmsg, auditd_message, sizeof(auditd_message));
     logDmesg();
     fdDmesg = fdDmsg;
 }
@@ -75,13 +86,19 @@ int LogAudit::logPrint(const char *fmt, ...) {
         memmove(cp, cp + 1, strlen(cp + 1) + 1);
     }
 
+    bool info = strstr(str, " permissive=1") || strstr(str, " policy loaded ");
     if (fdDmesg >= 0) {
-        struct iovec iov[2];
+        struct iovec iov[3];
+        static const char log_info[] = { KMSG_PRIORITY(LOG_INFO) };
+        static const char log_warning[] = { KMSG_PRIORITY(LOG_WARNING) };
 
-        iov[0].iov_base = str;
-        iov[0].iov_len = strlen(str);
-        iov[1].iov_base = const_cast<char *>("\n");
-        iov[1].iov_len = 1;
+        iov[0].iov_base = info ? const_cast<char *>(log_info)
+                               : const_cast<char *>(log_warning);
+        iov[0].iov_len = info ? sizeof(log_info) : sizeof(log_warning);
+        iov[1].iov_base = str;
+        iov[1].iov_len = strlen(str);
+        iov[2].iov_base = const_cast<char *>("\n");
+        iov[2].iov_len = 1;
 
         writev(fdDmesg, iov, sizeof(iov) / sizeof(iov[0]));
     }
@@ -175,10 +192,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
     if (!newstr) {
         rc = -ENOMEM;
     } else {
-        *newstr = (strstr(str, " permissive=1")
-                || strstr(str, " policy loaded "))
-                    ? ANDROID_LOG_INFO
-                    : ANDROID_LOG_WARN;
+        *newstr = info ? ANDROID_LOG_INFO : ANDROID_LOG_WARN;
         strlcpy(newstr + 1, comm, l);
         strncpy(newstr + 1 + l, str, estr - str);
         strcpy(newstr + 1 + l + (estr - str), ecomm);
