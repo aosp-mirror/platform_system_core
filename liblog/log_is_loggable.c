@@ -28,13 +28,16 @@ static int __android_log_level(const char *tag, int def)
         return def;
     }
     {
-        static const char log_namespace[] = "log.tag.";
+        static const char log_namespace[] = "persist.log.tag.";
         char key[sizeof(log_namespace) + strlen(tag)];
 
         strcpy(key, log_namespace);
         strcpy(key + sizeof(log_namespace) - 1, tag);
 
         if (__system_property_get(key + 8, buf) <= 0) {
+            buf[0] = '\0';
+        }
+        if (!buf[0] && __system_property_get(key, buf) <= 0) {
             buf[0] = '\0';
         }
     }
@@ -53,17 +56,6 @@ static int __android_log_level(const char *tag, int def)
 
 int __android_log_is_loggable(int prio, const char *tag, int def)
 {
-    static char user;
-    int logLevel;
-
-    if (user == 0) {
-        char buf[PROP_VALUE_MAX];
-        if (__system_property_get("ro.build.type", buf) <= 0) {
-            buf[0] = '\0';
-        }
-        user = strcmp(buf, "user") ? -1 : 1;
-    }
-
-    logLevel = (user == 1) ? def : __android_log_level(tag, def);
+    int logLevel = __android_log_level(tag, def);
     return logLevel >= 0 && prio >= logLevel;
 }
