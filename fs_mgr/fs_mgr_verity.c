@@ -406,7 +406,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     // get the device mapper fd
     if ((fd = open("/dev/device-mapper", O_RDWR)) < 0) {
         ERROR("Error opening device mapper (%s)", strerror(errno));
-        goto out;;
+        goto out;
     }
 
     // create the device
@@ -456,9 +456,9 @@ out:
         close(fd);
     }
 
-    free (verity_table);
-    free (verity_table_signature);
-    free (verity_blk_name);
+    free(verity_table);
+    free(verity_table_signature);
+    free(verity_blk_name);
 
     return retval;
 }
