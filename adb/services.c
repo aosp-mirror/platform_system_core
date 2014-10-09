@@ -469,6 +469,8 @@ int service_to_fd(const char *name)
                 free(cookie);
             }
         }
+    } else if(!strncmp(name, "disable-verity:", 15)) {
+        ret = create_service_thread(disable_verity_service, NULL);
 #endif
     }
     if (ret >= 0) {
