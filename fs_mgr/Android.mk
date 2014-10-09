@@ -13,6 +13,10 @@ LOCAL_C_INCLUDES += system/extras/ext4_utils
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_CFLAGS := -Werror
 
+ifneq (,$(filter userdebug,$(TARGET_BUILD_VARIANT)))
+LOCAL_CFLAGS += -DALLOW_ADBD_DISABLE_VERITY=1
+endif
+
 include $(BUILD_STATIC_LIBRARY)
 
 
