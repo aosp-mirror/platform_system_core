@@ -371,6 +371,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
         goto out;
     }
 
+    verity_table = verity_table_signature = NULL;
     // read the verity block at the end of the block device
     if (read_verity_metadata(fstab->blk_device,
                                     &verity_table_signature,
