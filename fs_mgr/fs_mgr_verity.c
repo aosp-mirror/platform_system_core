@@ -43,7 +43,6 @@
 #include "fs_mgr_priv_verity.h"
 
 #define VERITY_METADATA_SIZE 32768
-#define VERITY_METADATA_MAGIC_NUMBER 0xb001b001
 #define VERITY_TABLE_RSA_KEY "/verity_key"
 
 extern struct fs_info info;
@@ -157,7 +156,7 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
     uint64_t device_length;
     int protocol_version;
     FILE *device;
-    int retval = -1;
+    int retval = FS_MGR_SETUP_VERITY_FAIL;
 
     device = fopen(block_device, "r");
     if (!device) {
@@ -180,8 +179,18 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
         ERROR("Couldn't read magic number!\n");
         goto out;
     }
+
+#ifdef ALLOW_ADBD_DISABLE_VERITY
+    if (magic_number == VERITY_METADATA_MAGIC_DISABLE) {
+        retval = FS_MGR_SETUP_VERITY_DISABLED;
+        INFO("Attempt to cleanly disable verity - only works in USERDEBUG");
+        goto out;
+    }
+#endif
+
     if (magic_number != VERITY_METADATA_MAGIC_NUMBER) {
-        ERROR("Couldn't find verity metadata at offset %"PRIu64"!\n", device_length);
+        ERROR("Couldn't find verity metadata at offset %"PRIu64"!\n",
+              device_length);
         goto out;
     }
 
@@ -228,7 +237,7 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
         goto out;
     }
 
-    retval = 0;
+    retval = FS_MGR_SETUP_VERITY_SUCCESS;
 
 out:
     if (device)
@@ -360,6 +369,7 @@ static int set_verified_property(char *name) {
 int fs_mgr_setup_verity(struct fstab_rec *fstab) {
 
     int retval = -1;
+    int fd = -1;
 
     char *verity_blk_name;
     char *verity_table;
@@ -380,8 +390,16 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
         return retval;
     }
 
+    // read the verity block at the end of the block device
+    // send error code up the chain so we can detect attempts to disable verity
+    retval = read_verity_metadata(fstab->blk_device,
+                                  &verity_table_signature,
+                                  &verity_table);
+    if (retval< 0) {
+        goto out;
+    }
+
     // get the device mapper fd
-    int fd;
     if ((fd = open("/dev/device-mapper", O_RDWR)) < 0) {
         ERROR("Error opening device mapper (%s)", strerror(errno));
         return retval;
@@ -396,14 +414,6 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     // get the name of the device file
     if (get_verity_device_name(io, mount_point, fd, &verity_blk_name) < 0) {
         ERROR("Couldn't get verity device number!");
-        goto out;
-    }
-
-    verity_table = verity_table_signature = NULL;
-    // read the verity block at the end of the block device
-    if (read_verity_metadata(fstab->blk_device,
-                                    &verity_table_signature,
-                                    &verity_table) < 0) {
         goto out;
     }
 
@@ -437,6 +447,8 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     retval = set_verified_property(mount_point);
 
 out:
-    close(fd);
+    if (fd != -1) {
+        close(fd);
+    }
     return retval;
 }
