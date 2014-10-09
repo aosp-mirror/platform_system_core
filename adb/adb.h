@@ -329,7 +329,6 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
 #if !ADB_HOST
 void framebuffer_service(int fd, void *cookie);
 void remount_service(int fd, void *cookie);
-void disable_verity_service(int fd, void* cookie);
 #endif
 
 /* packet allocator */
