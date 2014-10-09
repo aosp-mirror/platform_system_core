@@ -72,7 +72,7 @@ class MetricsDaemonTest : public testing::Test {
                  kFakeVmStatsName,
                  kFakeScalingMaxFreqPath,
                  kFakeCpuinfoMaxFreqPath,
-                 1800,
+                 base::TimeDelta::FromMinutes(30),
                  kMetricsServer,
                  kMetricsFilePath,
                  "/");

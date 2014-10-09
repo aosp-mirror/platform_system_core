@@ -31,11 +31,11 @@ UploadService::UploadService(SystemProfileSetter* setter,
       sender_(new HttpSender(server)) {
 }
 
-void UploadService::Init(int upload_interval_secs,
+void UploadService::Init(const base::TimeDelta& upload_interval,
                          const std::string& metrics_file) {
   base::StatisticsRecorder::Initialize();
   metrics_file_ = metrics_file;
-  g_timeout_add_seconds(upload_interval_secs, &UploadEventStatic, this);
+  g_timeout_add_seconds(upload_interval.InSeconds(), &UploadEventStatic, this);
 }
 
 void UploadService::StartNewLog() {

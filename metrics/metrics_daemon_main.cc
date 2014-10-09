@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
               "/proc/vmstat",
               kScalingMaxFreqPath,
               kCpuinfoMaxFreqPath,
-              FLAGS_upload_interval_secs,
+              base::TimeDelta::FromSeconds(FLAGS_upload_interval_secs),
               FLAGS_server,
               FLAGS_metrics_file,
               FLAGS_config_root);

@@ -57,7 +57,7 @@ class UploadService : public base::HistogramFlattener {
   explicit UploadService(SystemProfileSetter* setter,
                          const std::string& server);
 
-  void Init(int upload_interval_secs,
+  void Init(const base::TimeDelta& upload_interval,
             const std::string& metrics_file);
 
   // Starts a new log. The log needs to be regenerated after each successful

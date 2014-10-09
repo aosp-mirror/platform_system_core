@@ -37,7 +37,7 @@ class MetricsDaemon {
             const std::string& vmstats_path,
             const std::string& cpuinfo_max_freq_path,
             const std::string& scaling_max_freq_path,
-            int upload_interval_secs,
+            const base::TimeDelta& upload_interval,
             const std::string& server,
             const std::string& metrics_file,
             const std::string& config_root);
@@ -379,7 +379,7 @@ class MetricsDaemon {
   std::string scaling_max_freq_path_;
   std::string cpuinfo_max_freq_path_;
 
-  int upload_interval_secs_;
+  base::TimeDelta upload_interval_;
   std::string server_;
   std::string metrics_file_;
 
