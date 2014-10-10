@@ -113,6 +113,7 @@ LOCAL_SRC_FILES := \
 	jdwp_service.c \
 	framebuffer_service.c \
 	remount_service.c \
+	disable_verity_service.c \
 	usb_linux_client.c
 
 LOCAL_CFLAGS := \
@@ -127,14 +128,26 @@ ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_ADBD_ROOT=1
 endif
 
+ifneq (,$(filter userdebug,$(TARGET_BUILD_VARIANT)))
+LOCAL_CFLAGS += -DALLOW_ADBD_DISABLE_VERITY=1
+endif
+
 LOCAL_MODULE := adbd
 
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
+LOCAL_C_INCLUDES += system/extras/ext4_utils system/core/fs_mgr/include
+
+LOCAL_STATIC_LIBRARIES := liblog \
+	libfs_mgr \
+	libcutils \
+	libc \
+	libmincrypt \
+	libselinux \
+	libext4_utils_static
 
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
-LOCAL_STATIC_LIBRARIES := liblog libcutils libc libmincrypt libselinux
 
 include $(BUILD_EXECUTABLE)
 
