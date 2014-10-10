@@ -20,6 +20,13 @@
 #include <stdint.h>
 #include <linux/dm-ioctl.h>
 
+// Magic number at start of verity metadata
+#define VERITY_METADATA_MAGIC_NUMBER 0xb001b001
+
+// Replacement magic number at start of verity metadata to cleanly
+// turn verity off in userdebug builds.
+#define VERITY_METADATA_MAGIC_DISABLE 0x46464f56 // "VOFF"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -74,6 +81,7 @@ int fs_mgr_add_entry(struct fstab *fstab,
 struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const char *path);
 int fs_mgr_is_voldmanaged(struct fstab_rec *fstab);
 int fs_mgr_is_nonremovable(struct fstab_rec *fstab);
+int fs_mgr_is_verified(struct fstab_rec *fstab);
 int fs_mgr_is_encryptable(struct fstab_rec *fstab);
 int fs_mgr_is_noemulatedsd(struct fstab_rec *fstab);
 int fs_mgr_swapon_all(struct fstab *fstab);

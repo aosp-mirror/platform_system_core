@@ -189,6 +189,7 @@ void help()
         "\n"
         "  adb restore <file>           - restore device contents from the <file> backup archive\n"
         "\n"
+        "  adb disable-verity           - disable dm-verity checking on USERDEBUG builds\n"
         "  adb help                     - show this help message\n"
         "  adb version                  - show version num\n"
         "\n"
@@ -205,8 +206,7 @@ void help()
         "  adb reboot-bootloader        - reboots the device into the bootloader\n"
         "  adb root                     - restarts the adbd daemon with root permissions\n"
         "  adb usb                      - restarts the adbd daemon listening on USB\n"
-        "  adb tcpip <port>             - restarts the adbd daemon listening on TCP on the specified port"
-        "\n"
+        "  adb tcpip <port>             - restarts the adbd daemon listening on TCP on the specified port\n"
         "networking:\n"
         "  adb ppp <tty> [parameters]   - Run PPP over USB.\n"
         " Note: you should not automatically start a PPP connection.\n"
@@ -1437,7 +1437,7 @@ top:
     if(!strcmp(argv[0], "remount") || !strcmp(argv[0], "reboot")
             || !strcmp(argv[0], "reboot-bootloader")
             || !strcmp(argv[0], "tcpip") || !strcmp(argv[0], "usb")
-            || !strcmp(argv[0], "root")) {
+            || !strcmp(argv[0], "root") || !strcmp(argv[0], "disable-verity")) {
         char command[100];
         if (!strcmp(argv[0], "reboot-bootloader"))
             snprintf(command, sizeof(command), "reboot:bootloader");
