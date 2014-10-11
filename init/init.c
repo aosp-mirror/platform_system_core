@@ -542,17 +542,35 @@ static int is_last_command(struct action *act, struct command *cmd)
     return (list_tail(&act->commands) == &cmd->clist);
 }
 
+
+void build_triggers_string(char *name_str, int length, struct action *cur_action) {
+    struct listnode *node;
+    struct trigger *cur_trigger;
+
+    list_for_each(node, &cur_action->triggers) {
+        cur_trigger = node_to_item(node, struct trigger, nlist);
+        if (node != cur_action->triggers.next) {
+            strlcat(name_str, " " , length);
+        }
+        strlcat(name_str, cur_trigger->name , length);
+    }
+}
+
 void execute_one_command(void)
 {
     int ret, i;
     char cmd_str[256] = "";
+    char name_str[256] = "";
 
     if (!cur_action || !cur_command || is_last_command(cur_action, cur_command)) {
         cur_action = action_remove_queue_head();
         cur_command = NULL;
         if (!cur_action)
             return;
-        INFO("processing action %p (%s)\n", cur_action, cur_action->name);
+
+        build_triggers_string(name_str, sizeof(name_str), cur_action);
+
+        INFO("processing action %p (%s)\n", cur_action, name_str);
         cur_command = get_first_command(cur_action);
     } else {
         cur_command = get_next_command(cur_action, cur_command);
@@ -570,7 +588,7 @@ void execute_one_command(void)
             }
         }
         INFO("command '%s' action=%s status=%d (%s:%d)\n",
-             cmd_str, cur_action ? cur_action->name : "", ret, cur_command->filename,
+             cmd_str, cur_action ? name_str : "", ret, cur_command->filename,
              cur_command->line);
     }
 }

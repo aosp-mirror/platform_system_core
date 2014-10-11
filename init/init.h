@@ -37,6 +37,11 @@ struct command
     char *args[1];
 };
 
+struct trigger {
+    struct listnode nlist;
+    const char *name;
+};
+
 struct action {
         /* node in list of all actions */
     struct listnode alist;
@@ -46,11 +51,14 @@ struct action {
     struct listnode tlist;
 
     unsigned hash;
-    const char *name;
 
+        /* list of actions which triggers the commands*/
+    struct listnode triggers;
     struct listnode commands;
     struct command *current;
 };
+
+void build_triggers_string(char *name_str, int length, struct action *cur_action);
 
 struct socketinfo {
     struct socketinfo *next;

@@ -504,77 +504,92 @@ void service_for_each_flags(unsigned matchflags,
 void action_for_each_trigger(const char *trigger,
                              void (*func)(struct action *act))
 {
-    struct listnode *node;
+    struct listnode *node, *node2;
     struct action *act;
+    struct trigger *cur_trigger;
+
     list_for_each(node, &action_list) {
         act = node_to_item(node, struct action, alist);
-        if (!strcmp(act->name, trigger)) {
-            func(act);
+        list_for_each(node2, &act->triggers) {
+            cur_trigger = node_to_item(node2, struct trigger, nlist);
+            if (!strcmp(cur_trigger->name, trigger)) {
+                func(act);
+            }
         }
     }
 }
 
+
 void queue_property_triggers(const char *name, const char *value)
 {
-    struct listnode *node;
+    struct listnode *node, *node2;
     struct action *act;
+    struct trigger *cur_trigger;
+    bool match;
+    int name_length;
+
     list_for_each(node, &action_list) {
         act = node_to_item(node, struct action, alist);
-        if (!strncmp(act->name, "property:", strlen("property:"))) {
-            const char *test = act->name + strlen("property:");
-            int name_length = strlen(name);
+            match = !name;
+        list_for_each(node2, &act->triggers) {
+            cur_trigger = node_to_item(node2, struct trigger, nlist);
+            if (!strncmp(cur_trigger->name, "property:", strlen("property:"))) {
+                const char *test = cur_trigger->name + strlen("property:");
+                if (!match) {
+                    name_length = strlen(name);
+                    if (!strncmp(name, test, name_length) &&
+                        test[name_length] == '=' &&
+                        (!strcmp(test + name_length + 1, value) ||
+                        !strcmp(test + name_length + 1, "*"))) {
+                        match = true;
+                        continue;
+                    }
+                } else {
+                     const char* equals = strchr(test, '=');
+                     if (equals) {
+                         char prop_name[PROP_NAME_MAX + 1];
+                         char value[PROP_VALUE_MAX];
+                         int length = equals - test;
+                         if (length <= PROP_NAME_MAX) {
+                             int ret;
+                             memcpy(prop_name, test, length);
+                             prop_name[length] = 0;
 
-            if (!strncmp(name, test, name_length) &&
-                    test[name_length] == '=' &&
-                    (!strcmp(test + name_length + 1, value) ||
-                     !strcmp(test + name_length + 1, "*"))) {
-                action_add_queue_tail(act);
-            }
+                             /* does the property exist, and match the trigger value? */
+                             ret = property_get(prop_name, value);
+                             if (ret > 0 && (!strcmp(equals + 1, value) ||
+                                !strcmp(equals + 1, "*"))) {
+                                 continue;
+                             }
+                         }
+                     }
+                 }
+             }
+             match = false;
+             break;
+        }
+        if (match) {
+            action_add_queue_tail(act);
         }
     }
 }
 
 void queue_all_property_triggers()
 {
-    struct listnode *node;
-    struct action *act;
-    list_for_each(node, &action_list) {
-        act = node_to_item(node, struct action, alist);
-        if (!strncmp(act->name, "property:", strlen("property:"))) {
-            /* parse property name and value
-               syntax is property:<name>=<value> */
-            const char* name = act->name + strlen("property:");
-            const char* equals = strchr(name, '=');
-            if (equals) {
-                char prop_name[PROP_NAME_MAX + 1];
-                char value[PROP_VALUE_MAX];
-                int length = equals - name;
-                if (length > PROP_NAME_MAX) {
-                    ERROR("property name too long in trigger %s", act->name);
-                } else {
-                    int ret;
-                    memcpy(prop_name, name, length);
-                    prop_name[length] = 0;
-
-                    /* does the property exist, and match the trigger value? */
-                    ret = property_get(prop_name, value);
-                    if (ret > 0 && (!strcmp(equals + 1, value) ||
-                                    !strcmp(equals + 1, "*"))) {
-                        action_add_queue_tail(act);
-                    }
-                }
-            }
-        }
-    }
+    queue_property_triggers(NULL, NULL);
 }
 
 void queue_builtin_action(int (*func)(int nargs, char **args), char *name)
 {
     struct action *act;
     struct command *cmd;
+    struct trigger *cur_trigger;
 
     act = calloc(1, sizeof(*act));
-    act->name = name;
+    cur_trigger = calloc(1, sizeof(*cur_trigger));
+    cur_trigger->name = name;
+    list_init(&act->triggers);
+    list_add_tail(&act->triggers, &cur_trigger->nlist);
     list_init(&act->commands);
     list_init(&act->qlist);
 
@@ -616,6 +631,7 @@ int action_queue_empty()
 static void *parse_service(struct parse_state *state, int nargs, char **args)
 {
     struct service *svc;
+    struct trigger *cur_trigger;
     if (nargs < 3) {
         parse_error(state, "services must have a name and a program\n");
         return 0;
@@ -640,9 +656,12 @@ static void *parse_service(struct parse_state *state, int nargs, char **args)
     svc->name = args[1];
     svc->classname = "default";
     memcpy(svc->args, args + 2, sizeof(char*) * nargs);
+    cur_trigger = calloc(1, sizeof(*cur_trigger));
     svc->args[nargs] = 0;
     svc->nargs = nargs;
-    svc->onrestart.name = "onrestart";
+    list_init(&svc->onrestart.triggers);
+    cur_trigger->name = "onrestart";
+    list_add_tail(&svc->onrestart.triggers, &cur_trigger->nlist);
     list_init(&svc->onrestart.commands);
     list_add_tail(&service_list, &svc->slist);
     return svc;
@@ -826,16 +845,29 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
 static void *parse_action(struct parse_state *state, int nargs, char **args)
 {
     struct action *act;
+    struct trigger *cur_trigger;
+    int i;
     if (nargs < 2) {
         parse_error(state, "actions must have a trigger\n");
         return 0;
     }
-    if (nargs > 2) {
-        parse_error(state, "actions may not have extra parameters\n");
-        return 0;
-    }
+
     act = calloc(1, sizeof(*act));
-    act->name = args[1];
+    list_init(&act->triggers);
+
+    for (i = 1; i < nargs; i++) {
+        if (!(i % 2)) {
+            if (strcmp(args[i], "&&")) {
+                parse_error(state, "& is the only symbol allowed to concatenate actions\n");
+                return 0;
+            } else
+                continue;
+        }
+        cur_trigger = calloc(1, sizeof(*cur_trigger));
+        cur_trigger->name = args[i];
+        list_add_tail(&act->triggers, &cur_trigger->nlist);
+    }
+
     list_init(&act->commands);
     list_init(&act->qlist);
     list_add_tail(&action_list, &act->alist);
