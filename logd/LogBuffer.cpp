@@ -147,7 +147,8 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
     //  NB: if end is region locked, place element at end of list
     LogBufferElementCollection::iterator it = mLogElements.end();
     LogBufferElementCollection::iterator last = it;
-    while (--it != mLogElements.begin()) {
+    while (last != mLogElements.begin()) {
+        --it;
         if ((*it)->getRealTime() <= realtime) {
             // halves the peak performance, use with caution
             if (dgramQlenStatistics) {
