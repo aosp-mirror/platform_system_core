@@ -100,6 +100,12 @@ public:
         log_time local(*this);
         return local -= T;
     }
+    log_time operator+= (const timespec &T);
+    log_time operator+ (const timespec &T) const
+    {
+        log_time local(*this);
+        return local += T;
+    }
 
     // log_time
     bool operator== (const log_time &T) const
@@ -133,6 +139,12 @@ public:
     {
         log_time local(*this);
         return local -= T;
+    }
+    log_time operator+= (const log_time &T);
+    log_time operator+ (const log_time &T) const
+    {
+        log_time local(*this);
+        return local += T;
     }
 
     uint64_t nsec() const
