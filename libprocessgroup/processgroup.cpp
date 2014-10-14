@@ -30,6 +30,8 @@
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
 
+#include <utils/SystemClock.h>
+
 #include <processgroup/processgroup.h>
 #include "processgroup_priv.h"
 
@@ -69,7 +71,7 @@ static int initCtx(uid_t uid, int pid, struct ctx *ctx)
     int fd = open(path, O_RDONLY);
     if (fd < 0) {
         ret = -errno;
-        SLOGV("failed to open %s: %s", path, strerror(errno));
+        SLOGW("failed to open %s: %s", path, strerror(errno));
         return ret;
     }
 
@@ -77,6 +79,8 @@ static int initCtx(uid_t uid, int pid, struct ctx *ctx)
     ctx->buf_ptr = ctx->buf;
     ctx->buf_len = 0;
     ctx->initialized = true;
+
+    SLOGV("Initialized context for %s", path);
 
     return 0;
 }
@@ -87,7 +91,7 @@ static int refillBuffer(struct ctx *ctx)
     ctx->buf_ptr = ctx->buf;
 
     ssize_t ret = read(ctx->fd, ctx->buf_ptr + ctx->buf_len,
-                sizeof(ctx->buf) - ctx->buf_len);
+                sizeof(ctx->buf) - ctx->buf_len - 1);
     if (ret < 0) {
         return -errno;
     } else if (ret == 0) {
@@ -95,6 +99,9 @@ static int refillBuffer(struct ctx *ctx)
     }
 
     ctx->buf_len += ret;
+    ctx->buf[ctx->buf_len-1] = 0;
+    SLOGV("Read %d to buffer: %s", ret, ctx->buf);
+
     assert(ctx->buf_len <= sizeof(ctx->buf));
 
     return ret;
@@ -131,6 +138,7 @@ static pid_t getOneAppProcess(uid_t uid, int appProcessPid, struct ctx *ctx)
         return -EINVAL;
     }
 
+    ctx->buf_len -= (eptr - ctx->buf_ptr) + 1;
     ctx->buf_ptr = eptr + 1;
 
     return (pid_t)pid;
@@ -213,10 +221,22 @@ static int killProcessGroupOnce(uid_t uid, int initialPid, int signal)
 
     while ((pid = getOneAppProcess(uid, initialPid, &ctx)) >= 0) {
         processes++;
-        SLOGV("sending processgroup kill to pid %d\n", pid);
+        if (pid == 0) {
+            // Should never happen...  but if it does, trying to kill this
+            // will boomerang right back and kill us!  Let's not let that happen.
+            SLOGW("Yikes, we've been told to kill pid 0!  How about we don't do that.");
+            continue;
+        }
+        if (pid != initialPid) {
+            // We want to be noisy about killing processes so we can understand
+            // what is going on in the log; however, don't be noisy about the base
+            // process, since that it something we always kill, and we have already
+            // logged elsewhere about killing it.
+            SLOGI("Killing pid %d in uid %d as part of process group %d", pid, uid, initialPid);
+        }
         int ret = kill(pid, signal);
         if (ret == -1) {
-            SLOGV("failed to kill pid %d: %s", pid, strerror(errno));
+            SLOGW("failed to kill pid %d: %s", pid, strerror(errno));
         }
     }
 
@@ -231,6 +251,7 @@ int killProcessGroup(uid_t uid, int initialPid, int signal)
 {
     int processes;
     int sleep_us = 100;
+    long startTime = android::uptimeMillis();
 
     while ((processes = killProcessGroupOnce(uid, initialPid, signal)) > 0) {
         SLOGV("killed %d processes for processgroup %d\n", processes, initialPid);
@@ -243,6 +264,9 @@ int killProcessGroup(uid_t uid, int initialPid, int signal)
             break;
         }
     }
+
+    SLOGV("Killed process group uid %d pid %d in %ldms, %d procs remain", uid, initialPid,
+            android::uptimeMillis()-startTime, processes);
 
     if (processes == 0) {
         return removeProcessGroup(uid, initialPid);
