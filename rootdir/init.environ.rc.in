@@ -9,4 +9,3 @@ on init
     export ASEC_MOUNTPOINT /mnt/asec
     export LOOP_MOUNTPOINT /mnt/obb
     export BOOTCLASSPATH %BOOTCLASSPATH%
-    export LD_PRELOAD libsigchain.so
