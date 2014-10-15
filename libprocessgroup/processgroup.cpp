@@ -99,7 +99,7 @@ static int refillBuffer(struct ctx *ctx)
     }
 
     ctx->buf_len += ret;
-    ctx->buf[ctx->buf_len-1] = 0;
+    ctx->buf[ctx->buf_len] = 0;
     SLOGV("Read %d to buffer: %s", ret, ctx->buf);
 
     assert(ctx->buf_len <= sizeof(ctx->buf));
