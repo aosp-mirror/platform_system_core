@@ -77,7 +77,6 @@ FileMap::~FileMap(void)
     if (mFileMapping != INVALID_HANDLE_VALUE) {
         CloseHandle(mFileMapping);
     }
-    CloseHandle(mFileHandle);
 #endif
 }
 
