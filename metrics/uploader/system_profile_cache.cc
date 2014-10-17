@@ -150,10 +150,9 @@ bool SystemProfileCache::GetProductId(int* product_id) const {
   chromeos::OsReleaseReader reader;
   if (testing_) {
     base::FilePath root(config_root_);
-    CHECK(reader.LoadTestingOnly(root)) << "Failed to load os-release fields "
-                                        "from" << root.value();
+    reader.LoadTestingOnly(root);
   } else {
-    CHECK(reader.Load()) << "Failed to load os-release fields.";
+    reader.Load();
   }
 
   std::string id;
