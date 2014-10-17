@@ -1,18 +1,26 @@
 # Build the unit tests.
 LOCAL_PATH := $(call my-dir)
+
+include $(LOCAL_PATH)/Android.nativebridge-dummy.mk
+
 include $(CLEAR_VARS)
 
 # Build the unit tests.
 test_src_files := \
+    CompleteFlow_test.cpp \
     InvalidCharsNativeBridge_test.cpp \
     NeedsNativeBridge_test.cpp \
     PreInitializeNativeBridge_test.cpp \
+    PreInitializeNativeBridgeFail1_test.cpp \
+    PreInitializeNativeBridgeFail2_test.cpp \
     ReSetupNativeBridge_test.cpp \
     UnavailableNativeBridge_test.cpp \
     ValidNameNativeBridge_test.cpp
 
+
 shared_libraries := \
-    libnativebridge
+    libnativebridge \
+    libnativebridge-dummy
 
 $(foreach file,$(test_src_files), \
     $(eval include $(CLEAR_VARS)) \
