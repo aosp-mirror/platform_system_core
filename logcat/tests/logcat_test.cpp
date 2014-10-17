@@ -524,6 +524,60 @@ TEST(logcat, logrotate) {
     EXPECT_FALSE(system(command));
 }
 
+TEST(logcat, logrotate_suffix) {
+    static const char tmp_out_dir_form[] = "/data/local/tmp/logcat.logrotate.XXXXXX";
+    char tmp_out_dir[sizeof(tmp_out_dir_form)];
+    ASSERT_TRUE(NULL != mkdtemp(strcpy(tmp_out_dir, tmp_out_dir_form)));
+
+    static const char logcat_cmd[] = "logcat -b radio -b events -b system -b main"
+                                     " -d -f %s/log.txt -n 10 -r 1";
+    char command[sizeof(tmp_out_dir) + sizeof(logcat_cmd)];
+    sprintf(command, logcat_cmd, tmp_out_dir);
+
+    int ret;
+    EXPECT_FALSE((ret = system(command)));
+    if (!ret) {
+        sprintf(command, "ls %s 2>/dev/null", tmp_out_dir);
+
+        FILE *fp;
+        EXPECT_TRUE(NULL != (fp = popen(command, "r")));
+        char buffer[5120];
+        int log_file_count = 0;
+
+        while (fgets(buffer, sizeof(buffer), fp)) {
+            static const char rotated_log_filename_prefix[] = "log.txt.";
+            static const size_t rotated_log_filename_prefix_len =
+                strlen(rotated_log_filename_prefix);
+            static const char total[] = "total ";
+            static const char log_filename[] = "log.txt";
+
+            if (!strncmp(buffer, rotated_log_filename_prefix, rotated_log_filename_prefix_len)) {
+              // Rotated file should have form log.txt.##
+              char* rotated_log_filename_suffix = buffer + rotated_log_filename_prefix_len;
+              char* endptr;
+              const long int suffix_value = strtol(rotated_log_filename_suffix, &endptr, 10);
+              EXPECT_EQ(rotated_log_filename_suffix + 2, endptr);
+              EXPECT_LE(suffix_value, 10);
+              EXPECT_GT(suffix_value, 0);
+              ++log_file_count;
+              continue;
+            }
+
+            if (!strncmp(buffer, log_filename, strlen(log_filename))) {
+              ++log_file_count;
+              continue;
+            }
+
+            fprintf(stderr, "ERROR: Unexpected file: %s", buffer);
+            ADD_FAILURE();
+        }
+        pclose(fp);
+        EXPECT_EQ(11, log_file_count);
+    }
+    sprintf(command, "rm -rf %s", tmp_out_dir);
+    EXPECT_FALSE(system(command));
+}
+
 static void caught_blocking_clear(int /*signum*/)
 {
     unsigned long long v = 0xDEADBEEFA55C0000ULL;

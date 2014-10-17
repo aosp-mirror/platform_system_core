@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -80,15 +81,20 @@ static void rotateLogs()
 
     close(g_outFD);
 
+    // Compute the maximum number of digits needed to count up to g_maxRotatedLogs in decimal.
+    // eg: g_maxRotatedLogs == 30 -> log10(30) == 1.477 -> maxRotationCountDigits == 2
+    int maxRotationCountDigits =
+            (g_maxRotatedLogs > 0) ? (int) (floor(log10(g_maxRotatedLogs) + 1)) : 0;
+
     for (int i = g_maxRotatedLogs ; i > 0 ; i--) {
         char *file0, *file1;
 
-        asprintf(&file1, "%s.%d", g_outputFileName, i);
+        asprintf(&file1, "%s.%.*d", g_outputFileName, maxRotationCountDigits, i);
 
         if (i - 1 == 0) {
             asprintf(&file0, "%s", g_outputFileName);
         } else {
-            asprintf(&file0, "%s.%d", g_outputFileName, i - 1);
+            asprintf(&file0, "%s.%.*d", g_outputFileName, maxRotationCountDigits, i - 1);
         }
 
         err = rename (file0, file1);
