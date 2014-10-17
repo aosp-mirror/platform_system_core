@@ -14,31 +14,27 @@
 # limitations under the License.
 
 LOCAL_PATH := $(call my-dir)
-include $(CLEAR_VARS)
 
-source_files := \
-	zip_archive.h \
-	zip_archive.cc
-
+source_files := zip_archive.cc
 includes := external/zlib
 
+include $(CLEAR_VARS)
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
-
 LOCAL_STATIC_LIBRARIES := libz
 LOCAL_SHARED_LIBRARIES := libutils
 LOCAL_MODULE:= libziparchive
-
 LOCAL_C_INCLUDES += ${includes}
 LOCAL_CFLAGS := -Werror
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_MODULE := libziparchive
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
 LOCAL_C_INCLUDES += ${includes}
-
 LOCAL_STATIC_LIBRARIES := libz libutils
 LOCAL_MODULE:= libziparchive-host
 LOCAL_CFLAGS := -Werror
@@ -46,11 +42,11 @@ LOCAL_MULTILIB := both
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_MODULE := libziparchive
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
 LOCAL_C_INCLUDES += ${includes}
-
 LOCAL_STATIC_LIBRARIES := libz libutils
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_MODULE:= libziparchive-host
@@ -58,31 +54,27 @@ LOCAL_CFLAGS := -Werror
 LOCAL_MULTILIB := both
 include $(BUILD_HOST_SHARED_LIBRARY)
 
+# Tests.
 include $(CLEAR_VARS)
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_MODULE := ziparchive-tests
 LOCAL_CPP_EXTENSION := .cc
-LOCAL_CFLAGS += \
-    -DGTEST_OS_LINUX_ANDROID \
-    -DGTEST_HAS_STD_STRING \
-    -Werror
+LOCAL_CFLAGS := -Werror
 LOCAL_SRC_FILES := zip_archive_test.cc
 LOCAL_SHARED_LIBRARIES := liblog
-LOCAL_STATIC_LIBRARIES := libziparchive libz libgtest libgtest_main libutils
+LOCAL_STATIC_LIBRARIES := libziparchive libz libutils
 include $(BUILD_NATIVE_TEST)
 
 include $(CLEAR_VARS)
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_MODULE := ziparchive-tests-host
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS += \
-    -DGTEST_OS_LINUX \
-    -DGTEST_HAS_STD_STRING \
     -Werror \
     -Wno-unnamed-type-template-args
 LOCAL_SRC_FILES := zip_archive_test.cc
 LOCAL_SHARED_LIBRARIES := libziparchive-host liblog
 LOCAL_STATIC_LIBRARIES := \
-	libz \
-	libgtest_host \
-	libgtest_main_host \
-	libutils
+    libz \
+    libutils
 include $(BUILD_HOST_NATIVE_TEST)
