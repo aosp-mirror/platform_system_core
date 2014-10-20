@@ -184,6 +184,8 @@
 #define VENDOR_ID_TI            0x0451
 // Toshiba's USB Vendor ID
 #define VENDOR_ID_TOSHIBA       0x0930
+// TrekStor's USB Vendor ID
+#define VENDOR_ID_TREKSTOR      0x1E68
 // Unowhy's USB Vendor ID
 #define VENDOR_ID_UNOWHY        0x2A49
 // Vizio's USB Vendor ID
@@ -277,6 +279,7 @@ int builtInVendorIds[] = {
     VENDOR_ID_TELEEPOCH,
     VENDOR_ID_TI,
     VENDOR_ID_TOSHIBA,
+    VENDOR_ID_TREKSTOR,
     VENDOR_ID_UNOWHY,
     VENDOR_ID_VIZIO,
     VENDOR_ID_WACOM,
