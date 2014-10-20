@@ -58,7 +58,6 @@ static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
 #if FAKE_LOG_DEVICE
-#define WEAK __attribute__((weak))
 static int log_fds[(int)LOG_ID_MAX] = { -1, -1, -1, -1, -1 };
 #else
 static int logd_fd = -1;
@@ -274,7 +273,7 @@ static const char *LOG_NAME[LOG_ID_MAX] = {
     [LOG_ID_CRASH] = "crash"
 };
 
-const WEAK char *android_log_id_to_name(log_id_t log_id)
+const char *android_log_id_to_name(log_id_t log_id)
 {
     if (log_id >= LOG_ID_MAX) {
         log_id = LOG_ID_MAIN;
