@@ -944,7 +944,7 @@ static void handle_firmware_event(struct uevent *uevent)
     }
 }
 
-#define UEVENT_MSG_LEN  1024
+#define UEVENT_MSG_LEN  2048
 void handle_device_fd()
 {
     char msg[UEVENT_MSG_LEN+2];

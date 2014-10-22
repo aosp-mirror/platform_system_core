@@ -29,6 +29,8 @@
 #include <net/if.h>
 
 #include <linux/if.h>
+#include <linux/if_addr.h>
+#include <linux/if_link.h>
 #include <linux/netfilter/nfnetlink.h>
 #include <linux/netfilter_ipv4/ipt_ULOG.h>
 /* From kernel's net/netfilter/xt_quota2.c */
@@ -46,6 +48,8 @@ const int NetlinkEvent::NlActionLinkDown = 5;
 const int NetlinkEvent::NlActionAddressUpdated = 6;
 const int NetlinkEvent::NlActionAddressRemoved = 7;
 const int NetlinkEvent::NlActionRdnss = 8;
+const int NetlinkEvent::NlActionRouteUpdated = 9;
+const int NetlinkEvent::NlActionRouteRemoved = 10;
 
 NetlinkEvent::NetlinkEvent() {
     mAction = NlActionUnknown;
@@ -78,32 +82,109 @@ void NetlinkEvent::dump() {
 }
 
 /*
+ * Returns the message name for a message in the NETLINK_ROUTE family, or NULL
+ * if parsing that message is not supported.
+ */
+static const char *rtMessageName(int type) {
+#define NL_EVENT_RTM_NAME(rtm) case rtm: return #rtm;
+    switch (type) {
+        NL_EVENT_RTM_NAME(RTM_NEWLINK);
+        NL_EVENT_RTM_NAME(RTM_DELLINK);
+        NL_EVENT_RTM_NAME(RTM_NEWADDR);
+        NL_EVENT_RTM_NAME(RTM_DELADDR);
+        NL_EVENT_RTM_NAME(RTM_NEWROUTE);
+        NL_EVENT_RTM_NAME(RTM_DELROUTE);
+        NL_EVENT_RTM_NAME(RTM_NEWNDUSEROPT);
+        NL_EVENT_RTM_NAME(QLOG_NL_EVENT);
+        default:
+            return NULL;
+    }
+#undef NL_EVENT_RTM_NAME
+}
+
+/*
+ * Checks that a binary NETLINK_ROUTE message is long enough for a payload of
+ * size bytes.
+ */
+static bool checkRtNetlinkLength(const struct nlmsghdr *nh, size_t size) {
+    if (nh->nlmsg_len < NLMSG_LENGTH(size)) {
+        SLOGE("Got a short %s message\n", rtMessageName(nh->nlmsg_type));
+        return false;
+    }
+    return true;
+}
+
+/*
+ * Utility function to log errors.
+ */
+static bool maybeLogDuplicateAttribute(bool isDup,
+                                       const char *attributeName,
+                                       const char *messageName) {
+    if (isDup) {
+        SLOGE("Multiple %s attributes in %s, ignoring\n", attributeName, messageName);
+        return true;
+    }
+    return false;
+}
+
+/*
+ * Parse a RTM_NEWLINK message.
+ */
+bool NetlinkEvent::parseIfInfoMessage(const struct nlmsghdr *nh) {
+    struct ifinfomsg *ifi = (struct ifinfomsg *) NLMSG_DATA(nh);
+    if (!checkRtNetlinkLength(nh, sizeof(*ifi)))
+        return false;
+
+    if ((ifi->ifi_flags & IFF_LOOPBACK) != 0) {
+        return false;
+    }
+
+    int len = IFLA_PAYLOAD(nh);
+    struct rtattr *rta;
+    for (rta = IFLA_RTA(ifi); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+        switch(rta->rta_type) {
+            case IFLA_IFNAME:
+                asprintf(&mParams[0], "INTERFACE=%s", (char *) RTA_DATA(rta));
+                mAction = (ifi->ifi_flags & IFF_LOWER_UP) ?  NlActionLinkUp :
+                                                             NlActionLinkDown;
+                mSubsystem = strdup("net");
+                return true;
+        }
+    }
+
+    return false;
+}
+
+/*
  * Parse a RTM_NEWADDR or RTM_DELADDR message.
  */
-bool NetlinkEvent::parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr,
-                                      int rtasize) {
-    struct rtattr *rta;
+bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
+    struct ifaddrmsg *ifaddr = (struct ifaddrmsg *) NLMSG_DATA(nh);
     struct ifa_cacheinfo *cacheinfo = NULL;
     char addrstr[INET6_ADDRSTRLEN] = "";
+    char ifname[IFNAMSIZ];
+
+    if (!checkRtNetlinkLength(nh, sizeof(*ifaddr)))
+        return false;
 
     // Sanity check.
+    int type = nh->nlmsg_type;
     if (type != RTM_NEWADDR && type != RTM_DELADDR) {
         SLOGE("parseIfAddrMessage on incorrect message type 0x%x\n", type);
         return false;
     }
 
     // For log messages.
-    const char *msgtype = (type == RTM_NEWADDR) ? "RTM_NEWADDR" : "RTM_DELADDR";
+    const char *msgtype = rtMessageName(type);
 
-    for (rta = IFA_RTA(ifaddr); RTA_OK(rta, rtasize);
-         rta = RTA_NEXT(rta, rtasize)) {
+    struct rtattr *rta;
+    int len = IFA_PAYLOAD(nh);
+    for (rta = IFA_RTA(ifaddr); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
         if (rta->rta_type == IFA_ADDRESS) {
             // Only look at the first address, because we only support notifying
             // one change at a time.
-            if (*addrstr != '\0') {
-                SLOGE("Multiple IFA_ADDRESSes in %s, ignoring\n", msgtype);
+            if (maybeLogDuplicateAttribute(*addrstr != '\0', "IFA_ADDRESS", msgtype))
                 continue;
-            }
 
             // Convert the IP address to a string.
             if (ifaddr->ifa_family == AF_INET) {
@@ -128,28 +209,15 @@ bool NetlinkEvent::parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr,
             }
 
             // Find the interface name.
-            char ifname[IFNAMSIZ + 1];
             if (!if_indextoname(ifaddr->ifa_index, ifname)) {
                 SLOGE("Unknown ifindex %d in %s", ifaddr->ifa_index, msgtype);
                 return false;
             }
 
-            // Fill in interface information.
-            mAction = (type == RTM_NEWADDR) ? NlActionAddressUpdated :
-                                              NlActionAddressRemoved;
-            mSubsystem = strdup("net");
-            asprintf(&mParams[0], "ADDRESS=%s/%d", addrstr,
-                     ifaddr->ifa_prefixlen);
-            asprintf(&mParams[1], "INTERFACE=%s", ifname);
-            asprintf(&mParams[2], "FLAGS=%u", ifaddr->ifa_flags);
-            asprintf(&mParams[3], "SCOPE=%u", ifaddr->ifa_scope);
         } else if (rta->rta_type == IFA_CACHEINFO) {
             // Address lifetime information.
-            if (cacheinfo) {
-                // We only support one address.
-                SLOGE("Multiple IFA_CACHEINFOs in %s, ignoring\n", msgtype);
+            if (maybeLogDuplicateAttribute(cacheinfo, "IFA_CACHEINFO", msgtype))
                 continue;
-            }
 
             if (RTA_PAYLOAD(rta) < sizeof(*cacheinfo)) {
                 SLOGE("Short IFA_CACHEINFO (%zu vs. %zu bytes) in %s",
@@ -158,10 +226,6 @@ bool NetlinkEvent::parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr,
             }
 
             cacheinfo = (struct ifa_cacheinfo *) RTA_DATA(rta);
-            asprintf(&mParams[4], "PREFERRED=%u", cacheinfo->ifa_prefered);
-            asprintf(&mParams[5], "VALID=%u", cacheinfo->ifa_valid);
-            asprintf(&mParams[6], "CSTAMP=%u", cacheinfo->cstamp);
-            asprintf(&mParams[7], "TSTAMP=%u", cacheinfo->tstamp);
         }
     }
 
@@ -170,14 +234,145 @@ bool NetlinkEvent::parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr,
         return false;
     }
 
+    // Fill in netlink event information.
+    mAction = (type == RTM_NEWADDR) ? NlActionAddressUpdated :
+                                      NlActionAddressRemoved;
+    mSubsystem = strdup("net");
+    asprintf(&mParams[0], "ADDRESS=%s/%d", addrstr,
+             ifaddr->ifa_prefixlen);
+    asprintf(&mParams[1], "INTERFACE=%s", ifname);
+    asprintf(&mParams[2], "FLAGS=%u", ifaddr->ifa_flags);
+    asprintf(&mParams[3], "SCOPE=%u", ifaddr->ifa_scope);
+
+    if (cacheinfo) {
+        asprintf(&mParams[4], "PREFERRED=%u", cacheinfo->ifa_prefered);
+        asprintf(&mParams[5], "VALID=%u", cacheinfo->ifa_valid);
+        asprintf(&mParams[6], "CSTAMP=%u", cacheinfo->cstamp);
+        asprintf(&mParams[7], "TSTAMP=%u", cacheinfo->tstamp);
+    }
+
+    return true;
+}
+
+/*
+ * Parse a QLOG_NL_EVENT message.
+ */
+bool NetlinkEvent::parseUlogPacketMessage(const struct nlmsghdr *nh) {
+    const char *devname;
+    ulog_packet_msg_t *pm = (ulog_packet_msg_t *) NLMSG_DATA(nh);
+    if (!checkRtNetlinkLength(nh, sizeof(*pm)))
+        return false;
+
+    devname = pm->indev_name[0] ? pm->indev_name : pm->outdev_name;
+    asprintf(&mParams[0], "ALERT_NAME=%s", pm->prefix);
+    asprintf(&mParams[1], "INTERFACE=%s", devname);
+    mSubsystem = strdup("qlog");
+    mAction = NlActionChange;
+    return true;
+}
+
+/*
+ * Parse a RTM_NEWROUTE or RTM_DELROUTE message.
+ */
+bool NetlinkEvent::parseRtMessage(const struct nlmsghdr *nh) {
+    uint8_t type = nh->nlmsg_type;
+    const char *msgname = rtMessageName(type);
+
+    // Sanity check.
+    if (type != RTM_NEWROUTE && type != RTM_DELROUTE) {
+        SLOGE("%s: incorrect message type %d (%s)\n", __func__, type, msgname);
+        return false;
+    }
+
+    struct rtmsg *rtm = (struct rtmsg *) NLMSG_DATA(nh);
+    if (!checkRtNetlinkLength(nh, sizeof(*rtm)))
+        return false;
+
+    if (// Ignore static routes we've set up ourselves.
+        (rtm->rtm_protocol != RTPROT_KERNEL &&
+         rtm->rtm_protocol != RTPROT_RA) ||
+        // We're only interested in global unicast routes.
+        (rtm->rtm_scope != RT_SCOPE_UNIVERSE) ||
+        (rtm->rtm_type != RTN_UNICAST) ||
+        // We don't support source routing.
+        (rtm->rtm_src_len != 0) ||
+        // Cloned routes aren't real routes.
+        (rtm->rtm_flags & RTM_F_CLONED)) {
+        return false;
+    }
+
+    int family = rtm->rtm_family;
+    int prefixLength = rtm->rtm_dst_len;
+
+    // Currently we only support: destination, (one) next hop, ifindex.
+    char dst[INET6_ADDRSTRLEN] = "";
+    char gw[INET6_ADDRSTRLEN] = "";
+    char dev[IFNAMSIZ] = "";
+
+    size_t len = RTM_PAYLOAD(nh);
+    struct rtattr *rta;
+    for (rta = RTM_RTA(rtm); RTA_OK(rta, len); rta = RTA_NEXT(rta, len)) {
+        switch (rta->rta_type) {
+            case RTA_DST:
+                if (maybeLogDuplicateAttribute(*dst, "RTA_DST", msgname))
+                    continue;
+                if (!inet_ntop(family, RTA_DATA(rta), dst, sizeof(dst)))
+                    return false;
+                continue;
+            case RTA_GATEWAY:
+                if (maybeLogDuplicateAttribute(*gw, "RTA_GATEWAY", msgname))
+                    continue;
+                if (!inet_ntop(family, RTA_DATA(rta), gw, sizeof(gw)))
+                    return false;
+                continue;
+            case RTA_OIF:
+                if (maybeLogDuplicateAttribute(*dev, "RTA_OIF", msgname))
+                    continue;
+                if (!if_indextoname(* (int *) RTA_DATA(rta), dev))
+                    return false;
+            default:
+                continue;
+        }
+    }
+
+   // If there's no RTA_DST attribute, then:
+   // - If the prefix length is zero, it's the default route.
+   // - If the prefix length is nonzero, there's something we don't understand.
+   //   Ignore the event.
+   if (!*dst && !prefixLength) {
+        if (family == AF_INET) {
+            strncpy(dst, "0.0.0.0", sizeof(dst));
+        } else if (family == AF_INET6) {
+            strncpy(dst, "::", sizeof(dst));
+        }
+    }
+
+    // A useful route must have a destination and at least either a gateway or
+    // an interface.
+    if (!*dst || (!*gw && !*dev))
+        return false;
+
+    // Fill in netlink event information.
+    mAction = (type == RTM_NEWROUTE) ? NlActionRouteUpdated :
+                                       NlActionRouteRemoved;
+    mSubsystem = strdup("net");
+    asprintf(&mParams[0], "ROUTE=%s/%d", dst, prefixLength);
+    asprintf(&mParams[1], "GATEWAY=%s", (*gw) ? gw : "");
+    asprintf(&mParams[2], "INTERFACE=%s", (*dev) ? dev : "");
+
     return true;
 }
 
 /*
  * Parse a RTM_NEWNDUSEROPT message.
  */
-bool NetlinkEvent::parseNdUserOptMessage(struct nduseroptmsg *msg, int len) {
+bool NetlinkEvent::parseNdUserOptMessage(const struct nlmsghdr *nh) {
+    struct nduseroptmsg *msg = (struct nduseroptmsg *) NLMSG_DATA(nh);
+    if (!checkRtNetlinkLength(nh, sizeof(*msg)))
+        return false;
+
     // Check the length is valid.
+    int len = NLMSG_PAYLOAD(nh, sizeof(*msg));
     if (msg->nduseropt_opts_len > len) {
         SLOGE("RTM_NEWNDUSEROPT invalid length %d > %d\n",
               msg->nduseropt_opts_len, len);
@@ -200,7 +395,7 @@ bool NetlinkEvent::parseNdUserOptMessage(struct nduseroptmsg *msg, int len) {
     }
 
     // Find the interface name.
-    char ifname[IFNAMSIZ + 1];
+    char ifname[IFNAMSIZ];
     if (!if_indextoname(msg->nduseropt_ifindex, ifname)) {
         SLOGE("RTM_NEWNDUSEROPT on unknown ifindex %d\n",
               msg->nduseropt_ifindex);
@@ -273,6 +468,14 @@ bool NetlinkEvent::parseNdUserOptMessage(struct nduseroptmsg *msg, int len) {
 
 /*
  * Parse a binary message from a NETLINK_ROUTE netlink socket.
+ *
+ * Note that this function can only parse one message, because the message's
+ * content has to be stored in the class's member variables (mAction,
+ * mSubsystem, etc.). Invalid or unrecognized messages are skipped, but if
+ * there are multiple valid messages in the buffer, only the first one will be
+ * returned.
+ *
+ * TODO: consider only ever looking at the first message.
  */
 bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
     const struct nlmsghdr *nh;
@@ -281,93 +484,37 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
          NLMSG_OK(nh, (unsigned) size) && (nh->nlmsg_type != NLMSG_DONE);
          nh = NLMSG_NEXT(nh, size)) {
 
+        if (!rtMessageName(nh->nlmsg_type)) {
+            SLOGD("Unexpected netlink message type %d\n", nh->nlmsg_type);
+            continue;
+        }
+
         if (nh->nlmsg_type == RTM_NEWLINK) {
-            int len = nh->nlmsg_len - sizeof(*nh);
-            struct ifinfomsg *ifi;
-
-            if (sizeof(*ifi) > (size_t) len) {
-                SLOGE("Got a short RTM_NEWLINK message\n");
-                continue;
-            }
-
-            ifi = (ifinfomsg *)NLMSG_DATA(nh);
-            if ((ifi->ifi_flags & IFF_LOOPBACK) != 0) {
-                continue;
-            }
-
-            struct rtattr *rta = (struct rtattr *)
-              ((char *) ifi + NLMSG_ALIGN(sizeof(*ifi)));
-            len = NLMSG_PAYLOAD(nh, sizeof(*ifi));
-
-            while(RTA_OK(rta, len)) {
-                switch(rta->rta_type) {
-                case IFLA_IFNAME:
-                    char buffer[16 + IFNAMSIZ];
-                    snprintf(buffer, sizeof(buffer), "INTERFACE=%s",
-                             (char *) RTA_DATA(rta));
-                    mParams[0] = strdup(buffer);
-                    mAction = (ifi->ifi_flags & IFF_LOWER_UP) ?
-                      NlActionLinkUp : NlActionLinkDown;
-                    mSubsystem = strdup("net");
-                    break;
-                }
-
-                rta = RTA_NEXT(rta, len);
-            }
+            if (parseIfInfoMessage(nh))
+                return true;
 
         } else if (nh->nlmsg_type == QLOG_NL_EVENT) {
-            char *devname;
-            ulog_packet_msg_t *pm;
-            size_t len = nh->nlmsg_len - sizeof(*nh);
-            if (sizeof(*pm) > len) {
-                SLOGE("Got a short QLOG message\n");
-                continue;
-            }
-            pm = (ulog_packet_msg_t *)NLMSG_DATA(nh);
-            devname = pm->indev_name[0] ? pm->indev_name : pm->outdev_name;
-            asprintf(&mParams[0], "ALERT_NAME=%s", pm->prefix);
-            asprintf(&mParams[1], "INTERFACE=%s", devname);
-            mSubsystem = strdup("qlog");
-            mAction = NlActionChange;
+            if (parseUlogPacketMessage(nh))
+                return true;
 
         } else if (nh->nlmsg_type == RTM_NEWADDR ||
                    nh->nlmsg_type == RTM_DELADDR) {
-            int len = nh->nlmsg_len - sizeof(*nh);
-            struct ifaddrmsg *ifa;
+            if (parseIfAddrMessage(nh))
+                return true;
 
-            if (sizeof(*ifa) > (size_t) len) {
-                SLOGE("Got a short RTM_xxxADDR message\n");
-                continue;
-            }
-
-            ifa = (ifaddrmsg *)NLMSG_DATA(nh);
-            size_t rtasize = IFA_PAYLOAD(nh);
-            if (!parseIfAddrMessage(nh->nlmsg_type, ifa, rtasize)) {
-                continue;
-            }
+        } else if (nh->nlmsg_type == RTM_NEWROUTE ||
+                   nh->nlmsg_type == RTM_DELROUTE) {
+            if (parseRtMessage(nh))
+                return true;
 
         } else if (nh->nlmsg_type == RTM_NEWNDUSEROPT) {
-            int len = nh->nlmsg_len - sizeof(*nh);
-            struct nduseroptmsg *ndmsg = (struct nduseroptmsg *) NLMSG_DATA(nh);
+            if (parseNdUserOptMessage(nh))
+                return true;
 
-            if (sizeof(*ndmsg) > (size_t) len) {
-                SLOGE("Got a short RTM_NEWNDUSEROPT message\n");
-                continue;
-            }
-
-            size_t optsize = NLMSG_PAYLOAD(nh, sizeof(*ndmsg));
-            if (!parseNdUserOptMessage(ndmsg, optsize)) {
-                continue;
-            }
-
-
-        } else {
-                SLOGD("Unexpected netlink message. type=0x%x\n",
-                      nh->nlmsg_type);
         }
     }
 
-    return true;
+    return false;
 }
 
 /* If the string between 'str' and 'end' begins with 'prefixlen' characters

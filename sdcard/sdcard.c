@@ -144,6 +144,8 @@ typedef enum {
     PERM_ANDROID_DATA,
     /* This node is "/Android/obb" */
     PERM_ANDROID_OBB,
+    /* This node is "/Android/media" */
+    PERM_ANDROID_MEDIA,
     /* This node is "/Android/user" */
     PERM_ANDROID_USER,
 } perm_t;
@@ -480,6 +482,10 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
             /* Single OBB directory is always shared */
             node->graft_path = fuse->obbpath;
             node->graft_pathlen = strlen(fuse->obbpath);
+        } else if (!strcasecmp(node->name, "media")) {
+            /* App-specific directories inside; let anyone traverse */
+            node->perm = PERM_ANDROID_MEDIA;
+            node->mode = 0771;
         } else if (!strcasecmp(node->name, "user")) {
             /* User directories must only be accessible to system, protected
              * by sdcard_all. Zygote will bind mount the appropriate user-
@@ -491,6 +497,7 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
         break;
     case PERM_ANDROID_DATA:
     case PERM_ANDROID_OBB:
+    case PERM_ANDROID_MEDIA:
         appid = (appid_t) (uintptr_t) hashmapGet(fuse->package_to_appid, node->name);
         if (appid != 0) {
             node->uid = multiuser_get_uid(parent->userid, appid);

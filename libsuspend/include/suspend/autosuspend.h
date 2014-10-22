@@ -43,6 +43,13 @@ int autosuspend_enable(void);
  */
 int autosuspend_disable(void);
 
+/*
+ * set_wakeup_callback
+ *
+ * Set a function to be called each time the device wakes up from suspend.
+ */
+void set_wakeup_callback(void (*func)(void));
+
 __END_DECLS
 
 #endif

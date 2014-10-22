@@ -12,6 +12,7 @@ test_src_files := \
     ValidNameNativeBridge_test.cpp
 
 shared_libraries := \
+    liblog \
     libnativebridge
 
 $(foreach file,$(test_src_files), \

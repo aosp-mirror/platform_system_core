@@ -165,24 +165,104 @@ enum {
     /*
      * Android RAW sensor format:
      *
-     * This format is exposed outside of the HAL to applications.
+     * This format is exposed outside of the camera HAL to applications.
      *
-     * RAW_SENSOR is a single-channel 16-bit format, typically representing raw
-     * Bayer-pattern images from an image sensor, with minimal processing.
+     * RAW_SENSOR is a single-channel, 16-bit, little endian  format, typically
+     * representing raw Bayer-pattern images from an image sensor, with minimal
+     * processing.
      *
      * The exact pixel layout of the data in the buffer is sensor-dependent, and
      * needs to be queried from the camera device.
      *
      * Generally, not all 16 bits are used; more common values are 10 or 12
-     * bits. All parameters to interpret the raw data (black and white points,
+     * bits. If not all bits are used, the lower-order bits are filled first.
+     * All parameters to interpret the raw data (black and white points,
      * color space, etc) must be queried from the camera device.
      *
      * This format assumes
      * - an even width
      * - an even height
-     * - a horizontal stride multiple of 16 pixels (32 bytes).
+     * - a horizontal stride multiple of 16 pixels
+     * - a vertical stride equal to the height
+     * - strides are specified in pixels, not in bytes
+     *
+     *   size = stride * height * 2
+     *
+     * This format must be accepted by the gralloc module when used with the
+     * following usage flags:
+     *    - GRALLOC_USAGE_HW_CAMERA_*
+     *    - GRALLOC_USAGE_SW_*
+     *    - GRALLOC_USAGE_RENDERSCRIPT
      */
-    HAL_PIXEL_FORMAT_RAW_SENSOR = 0x20,
+    HAL_PIXEL_FORMAT_RAW16 = 0x20,
+    HAL_PIXEL_FORMAT_RAW_SENSOR = 0x20, // TODO(rubenbrunk): Remove RAW_SENSOR.
+
+    /*
+     * Android RAW10 format:
+     *
+     * This format is exposed outside of the camera HAL to applications.
+     *
+     * RAW10 is a single-channel, 10-bit per pixel, densely packed in each row,
+     * unprocessed format, usually representing raw Bayer-pattern images coming from
+     * an image sensor.
+     *
+     * In an image buffer with this format, starting from the first pixel of each
+     * row, each 4 consecutive pixels are packed into 5 bytes (40 bits). Each one
+     * of the first 4 bytes contains the top 8 bits of each pixel, The fifth byte
+     * contains the 2 least significant bits of the 4 pixels, the exact layout data
+     * for each 4 consecutive pixels is illustrated below (Pi[j] stands for the jth
+     * bit of the ith pixel):
+     *
+     *          bit 7                                     bit 0
+     *          =====|=====|=====|=====|=====|=====|=====|=====|
+     * Byte 0: |P0[9]|P0[8]|P0[7]|P0[6]|P0[5]|P0[4]|P0[3]|P0[2]|
+     *         |-----|-----|-----|-----|-----|-----|-----|-----|
+     * Byte 1: |P1[9]|P1[8]|P1[7]|P1[6]|P1[5]|P1[4]|P1[3]|P1[2]|
+     *         |-----|-----|-----|-----|-----|-----|-----|-----|
+     * Byte 2: |P2[9]|P2[8]|P2[7]|P2[6]|P2[5]|P2[4]|P2[3]|P2[2]|
+     *         |-----|-----|-----|-----|-----|-----|-----|-----|
+     * Byte 3: |P3[9]|P3[8]|P3[7]|P3[6]|P3[5]|P3[4]|P3[3]|P3[2]|
+     *         |-----|-----|-----|-----|-----|-----|-----|-----|
+     * Byte 4: |P3[1]|P3[0]|P2[1]|P2[0]|P1[1]|P1[0]|P0[1]|P0[0]|
+     *          ===============================================
+     *
+     * This format assumes
+     * - a width multiple of 4 pixels
+     * - an even height
+     * - a vertical stride equal to the height
+     * - strides are specified in bytes, not in pixels
+     *
+     *   size = stride * height
+     *
+     * When stride is equal to width * (10 / 8), there will be no padding bytes at
+     * the end of each row, the entire image data is densely packed. When stride is
+     * larger than width * (10 / 8), padding bytes will be present at the end of each
+     * row (including the last row).
+     *
+     * This format must be accepted by the gralloc module when used with the
+     * following usage flags:
+     *    - GRALLOC_USAGE_HW_CAMERA_*
+     *    - GRALLOC_USAGE_SW_*
+     *    - GRALLOC_USAGE_RENDERSCRIPT
+     */
+    HAL_PIXEL_FORMAT_RAW10 = 0x25,
+
+    /*
+     * Android opaque RAW format:
+     *
+     * This format is exposed outside of the camera HAL to applications.
+     *
+     * RAW_OPAQUE is a format for unprocessed raw image buffers coming from an
+     * image sensor. The actual structure of buffers of this format is
+     * implementation-dependent.
+     *
+     * This format must be accepted by the gralloc module when used with the
+     * following usage flags:
+     *    - GRALLOC_USAGE_HW_CAMERA_*
+     *    - GRALLOC_USAGE_SW_*
+     *    - GRALLOC_USAGE_RENDERSCRIPT
+     */
+    HAL_PIXEL_FORMAT_RAW_OPAQUE = 0x24,
 
     /*
      * Android binary blob graphics buffer format:
@@ -295,6 +375,136 @@ enum {
     HAL_TRANSFORM_ROT_270   = 0x07,
     /* don't use. see system/window.h */
     HAL_TRANSFORM_RESERVED  = 0x08,
+};
+
+/**
+ * Colorspace Definitions
+ * ======================
+ *
+ * Colorspace is the definition of how pixel values should be interpreted.
+ * It includes primaries (including white point) and the transfer
+ * characteristic function, which describes both gamma curve and numeric
+ * range (within the bit depth).
+ */
+
+enum {
+    /*
+     * Arbitrary colorspace with manually defined characteristics.
+     * Colorspace definition must be communicated separately.
+     *
+     * This is used when specifying primaries, transfer characteristics,
+     * etc. separately.
+     *
+     * A typical use case is in video encoding parameters (e.g. for H.264),
+     * where a colorspace can have separately defined primaries, transfer
+     * characteristics, etc.
+     */
+    HAL_COLORSPACE_ARBITRARY = 0x1,
+
+    /*
+     * YCbCr Colorspaces
+     * -----------------
+     *
+     * Primaries are given using (x,y) coordinates in the CIE 1931 definition
+     * of x and y specified by ISO 11664-1.
+     *
+     * Transfer characteristics are the opto-electronic transfer characteristic
+     * at the source as a function of linear optical intensity (luminance).
+     */
+
+    /*
+     * JPEG File Interchange Format (JFIF)
+     *
+     * Same model as BT.601-625, but all values (Y, Cb, Cr) range from 0 to 255
+     *
+     * Transfer characteristic curve:
+     *  E = 1.099 * L ^ 0.45 - 0.099, 1.00 >= L >= 0.018
+     *  E = 4.500 L, 0.018 > L >= 0
+     *      L - luminance of image 0 <= L <= 1 for conventional colorimetry
+     *      E - corresponding electrical signal
+     *
+     * Primaries:       x       y
+     *  green           0.290   0.600
+     *  blue            0.150   0.060
+     *  red             0.640   0.330
+     *  white (D65)     0.3127  0.3290
+     */
+    HAL_COLORSPACE_JFIF = 0x101,
+
+    /*
+     * ITU-R Recommendation 601 (BT.601) - 625-line
+     *
+     * Standard-definition television, 625 Lines (PAL)
+     *
+     * For 8-bit-depth formats:
+     * Luma (Y) samples should range from 16 to 235, inclusive
+     * Chroma (Cb, Cr) samples should range from 16 to 240, inclusive
+     *
+     * For 10-bit-depth formats:
+     * Luma (Y) samples should range from 64 to 940, inclusive
+     * Chroma (Cb, Cr) samples should range from 64 to 960, inclusive
+     *
+     * Transfer characteristic curve:
+     *  E = 1.099 * L ^ 0.45 - 0.099, 1.00 >= L >= 0.018
+     *  E = 4.500 L, 0.018 > L >= 0
+     *      L - luminance of image 0 <= L <= 1 for conventional colorimetry
+     *      E - corresponding electrical signal
+     *
+     * Primaries:       x       y
+     *  green           0.290   0.600
+     *  blue            0.150   0.060
+     *  red             0.640   0.330
+     *  white (D65)     0.3127  0.3290
+     */
+    HAL_COLORSPACE_BT601_625 = 0x102,
+
+    /*
+     * ITU-R Recommendation 601 (BT.601) - 525-line
+     *
+     * Standard-definition television, 525 Lines (NTSC)
+     *
+     * For 8-bit-depth formats:
+     * Luma (Y) samples should range from 16 to 235, inclusive
+     * Chroma (Cb, Cr) samples should range from 16 to 240, inclusive
+     *
+     * For 10-bit-depth formats:
+     * Luma (Y) samples should range from 64 to 940, inclusive
+     * Chroma (Cb, Cr) samples should range from 64 to 960, inclusive
+     *
+     * Transfer characteristic curve:
+     *  E = 1.099 * L ^ 0.45 - 0.099, 1.00 >= L >= 0.018
+     *  E = 4.500 L, 0.018 > L >= 0
+     *      L - luminance of image 0 <= L <= 1 for conventional colorimetry
+     *      E - corresponding electrical signal
+     *
+     * Primaries:       x       y
+     *  green           0.310   0.595
+     *  blue            0.155   0.070
+     *  red             0.630   0.340
+     *  white (D65)     0.3127  0.3290
+     */
+    HAL_COLORSPACE_BT601_525 = 0x103,
+
+    /*
+     * ITU-R Recommendation 709 (BT.709)
+     *
+     * High-definition television
+     *
+     * For 8-bit-depth formats:
+     * Luma (Y) samples should range from 16 to 235, inclusive
+     * Chroma (Cb, Cr) samples should range from 16 to 240, inclusive
+     *
+     * For 10-bit-depth formats:
+     * Luma (Y) samples should range from 64 to 940, inclusive
+     * Chroma (Cb, Cr) samples should range from 64 to 960, inclusive
+     *
+     * Primaries:       x       y
+     *  green           0.300   0.600
+     *  blue            0.150   0.060
+     *  red             0.640   0.330
+     *  white (D65)     0.3127  0.3290
+     */
+    HAL_COLORSPACE_BT709 = 0x104,
 };
 
 #ifdef __cplusplus

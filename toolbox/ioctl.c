@@ -63,10 +63,14 @@ int ioctl_main(int argc, char *argv[])
         exit(1);
     }
 
-    fd = open(argv[optind], O_RDWR | O_SYNC);
-    if (fd < 0) {
-        fprintf(stderr, "cannot open %s\n", argv[optind]);
-        return 1;
+    if (!strcmp(argv[optind], "-")) {
+        fd = STDIN_FILENO;
+    } else {
+        fd = open(argv[optind], read_only ? O_RDONLY : (O_RDWR | O_SYNC));
+        if (fd < 0) {
+            fprintf(stderr, "cannot open %s\n", argv[optind]);
+            return 1;
+        }
     }
     optind++;
     

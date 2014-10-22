@@ -473,6 +473,27 @@ exit_success:
 
 }
 
+static int wipe_data_via_recovery()
+{
+    mkdir("/cache/recovery", 0700);
+    int fd = open("/cache/recovery/command", O_RDWR|O_CREAT|O_TRUNC, 0600);
+    if (fd >= 0) {
+        write(fd, "--wipe_data\n", strlen("--wipe_data\n") + 1);
+        write(fd, "--reason=wipe_data_via_recovery\n", strlen("--reason=wipe_data_via_recovery\n") + 1);
+        close(fd);
+    } else {
+        ERROR("could not open /cache/recovery/command\n");
+        return -1;
+    }
+    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
+    while (1) { pause(); }  // never reached
+}
+
+
+/*
+ * This function might request a reboot, in which case it will
+ * not return.
+ */
 int do_mount_all(int nargs, char **args)
 {
     pid_t pid;
@@ -495,7 +516,12 @@ int do_mount_all(int nargs, char **args)
     pid = fork();
     if (pid > 0) {
         /* Parent.  Wait for the child to return */
-        waitpid(pid, &status, 0);
+        int wp_ret = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
+        if (wp_ret < 0) {
+            /* Unexpected error code. We will continue anyway. */
+            NOTICE("waitpid failed rc=%d, errno=%d\n", wp_ret, errno);
+        }
+
         if (WIFEXITED(status)) {
             ret = WEXITSTATUS(status);
         } else {
@@ -510,23 +536,32 @@ int do_mount_all(int nargs, char **args)
         if (child_ret == -1) {
             ERROR("fs_mgr_mount_all returned an error\n");
         }
-        exit(child_ret);
+        _exit(child_ret);
     } else {
         /* fork failed, return an error */
         return -1;
     }
 
-    /* ret is 1 if the device is encrypted, 0 if not, and -1 on error */
-    if (ret == 1) {
+    if (ret == FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION) {
+        property_set("vold.decrypt", "trigger_encryption");
+    } else if (ret == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
         property_set("ro.crypto.state", "encrypted");
-        property_set("vold.decrypt", "1");
-    } else if (ret == 0) {
+        property_set("vold.decrypt", "trigger_default_encryption");
+    } else if (ret == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
         property_set("ro.crypto.state", "unencrypted");
         /* If fs_mgr determined this is an unencrypted device, then trigger
          * that action.
          */
         action_for_each_trigger("nonencrypted", action_add_queue_tail);
+    } else if (ret == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
+        /* Setup a wipe via recovery, and reboot into recovery */
+        ERROR("fs_mgr_mount_all suggested recovery, so wiping data via recovery.\n");
+        ret = wipe_data_via_recovery();
+        /* If reboot worked, there is no return. */
+    } else if (ret > 0) {
+        ERROR("fs_mgr_mount_all returned unexpected error %d\n", ret);
     }
+    /* else ... < 0: error */
 
     return ret;
 }

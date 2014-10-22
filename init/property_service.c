@@ -24,6 +24,7 @@
 #include <dirent.h>
 #include <limits.h>
 #include <errno.h>
+#include <sys/poll.h>
 
 #include <cutils/misc.h>
 #include <cutils/sockets.h>
@@ -181,7 +182,6 @@ static void write_persistent_property(const char *name, const char *value)
 static bool is_legal_property_name(const char* name, size_t namelen)
 {
     size_t i;
-    bool previous_was_dot = false;
     if (namelen >= PROP_NAME_MAX) return false;
     if (namelen < 1) return false;
     if (name[0] == '.') return false;
@@ -191,11 +191,10 @@ static bool is_legal_property_name(const char* name, size_t namelen)
     /* Don't allow ".." to appear in a property name */
     for (i = 0; i < namelen; i++) {
         if (name[i] == '.') {
-            if (previous_was_dot == true) return false;
-            previous_was_dot = true;
+            // i=0 is guaranteed to never have a dot. See above.
+            if (name[i-1] == '.') return false;
             continue;
         }
-        previous_was_dot = false;
         if (name[i] == '_' || name[i] == '-') continue;
         if (name[i] >= 'a' && name[i] <= 'z') continue;
         if (name[i] >= 'A' && name[i] <= 'Z') continue;
@@ -268,6 +267,9 @@ void handle_property_set_fd()
     socklen_t addr_size = sizeof(addr);
     socklen_t cr_size = sizeof(cr);
     char * source_ctx = NULL;
+    struct pollfd ufds[1];
+    const int timeout_ms = 2 * 1000;  /* Default 2 sec timeout for caller to send property. */
+    int nr;
 
     if ((s = accept(property_set_fd, (struct sockaddr *) &addr, &addr_size)) < 0) {
         return;
@@ -280,7 +282,21 @@ void handle_property_set_fd()
         return;
     }
 
-    r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), 0));
+    ufds[0].fd = s;
+    ufds[0].events = POLLIN;
+    ufds[0].revents = 0;
+    nr = TEMP_FAILURE_RETRY(poll(ufds, 1, timeout_ms));
+    if (nr == 0) {
+        ERROR("sys_prop: timeout waiting for uid=%d to send property message.\n", cr.uid);
+        close(s);
+        return;
+    } else if (nr < 0) {
+        ERROR("sys_prop: error waiting for uid=%d to send property message. err=%d %s\n", cr.uid, errno, strerror(errno));
+        close(s);
+        return;
+    }
+
+    r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), MSG_DONTWAIT));
     if(r != sizeof(prop_msg)) {
         ERROR("sys_prop: mis-match msg size received: %d expected: %zu errno: %d\n",
               r, sizeof(prop_msg), errno);

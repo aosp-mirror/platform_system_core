@@ -203,6 +203,13 @@ private:
     mutable volatile int32_t mCount;
 };
 
+// This is a wrapper around LightRefBase that simply enforces a virtual
+// destructor to eliminate the template requirement of LightRefBase
+class VirtualLightRefBase : public LightRefBase<VirtualLightRefBase> {
+public:
+    virtual ~VirtualLightRefBase() {}
+};
+
 // ---------------------------------------------------------------------------
 
 template <typename T>

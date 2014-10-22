@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <winsock2.h>
 #include <windows.h>
 #include <winerror.h>
 #include <errno.h>

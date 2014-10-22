@@ -18,19 +18,20 @@
 #include <batteryservice/BatteryService.h>
 #include <batteryservice/IBatteryPropertiesListener.h>
 #include <batteryservice/IBatteryPropertiesRegistrar.h>
+#include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
+#include <binder/PermissionCache.h>
+#include <private/android_filesystem_config.h>
 #include <utils/Errors.h>
 #include <utils/Mutex.h>
 #include <utils/String16.h>
 
+#include "healthd.h"
+
 namespace android {
 
-BatteryPropertiesRegistrar::BatteryPropertiesRegistrar(BatteryMonitor* monitor) {
-    mBatteryMonitor = monitor;
-}
-
 void BatteryPropertiesRegistrar::publish() {
-    defaultServiceManager()->addService(String16("batterypropreg"), this);
+    defaultServiceManager()->addService(String16("batteryproperties"), this);
 }
 
 void BatteryPropertiesRegistrar::notifyListeners(struct BatteryProperties props) {
@@ -42,6 +43,8 @@ void BatteryPropertiesRegistrar::notifyListeners(struct BatteryProperties props)
 
 void BatteryPropertiesRegistrar::registerListener(const sp<IBatteryPropertiesListener>& listener) {
     {
+        if (listener == NULL)
+            return;
         Mutex::Autolock _l(mRegistrationLock);
         // check whether this is a duplicate
         for (size_t i = 0; i < mListeners.size(); i++) {
@@ -53,10 +56,12 @@ void BatteryPropertiesRegistrar::registerListener(const sp<IBatteryPropertiesLis
         mListeners.add(listener);
         listener->asBinder()->linkToDeath(this);
     }
-    mBatteryMonitor->update();
+    healthd_battery_update();
 }
 
 void BatteryPropertiesRegistrar::unregisterListener(const sp<IBatteryPropertiesListener>& listener) {
+    if (listener == NULL)
+        return;
     Mutex::Autolock _l(mRegistrationLock);
     for (size_t i = 0; i < mListeners.size(); i++) {
         if (mListeners[i]->asBinder() == listener->asBinder()) {
@@ -65,6 +70,23 @@ void BatteryPropertiesRegistrar::unregisterListener(const sp<IBatteryPropertiesL
             break;
         }
     }
+}
+
+status_t BatteryPropertiesRegistrar::getProperty(int id, struct BatteryProperty *val) {
+    return healthd_get_property(id, val);
+}
+
+status_t BatteryPropertiesRegistrar::dump(int fd, const Vector<String16>& /*args*/) {
+    IPCThreadState* self = IPCThreadState::self();
+    const int pid = self->getCallingPid();
+    const int uid = self->getCallingUid();
+    if ((uid != AID_SHELL) &&
+        !PermissionCache::checkPermission(
+                String16("android.permission.DUMP"), pid, uid))
+        return PERMISSION_DENIED;
+
+    healthd_dump_battery_state(fd);
+    return OK;
 }
 
 void BatteryPropertiesRegistrar::binderDied(const wp<IBinder>& who) {

@@ -23,7 +23,7 @@
 #define INFO(x...)    KLOG_INFO("fs_mgr", x)
 #define ERROR(x...)   KLOG_ERROR("fs_mgr", x)
 
-#define CRYPTO_TMPFS_OPTIONS "size=128m,mode=0771,uid=1000,gid=1000"
+#define CRYPTO_TMPFS_OPTIONS "size=256m,mode=0771,uid=1000,gid=1000"
 
 #define WAIT_TIMEOUT 20
 
@@ -72,12 +72,9 @@
 #define MF_SWAPPRIO     0x80
 #define MF_ZRAMSIZE     0x100
 #define MF_VERIFY       0x200
-/*
- * There is no emulated sdcard daemon running on /data/media on this device,
- * so treat the physical SD card as the only external storage device,
- * a la the Nexus One.
- */
-#define MF_NOEMULATEDSD 0x400
+#define MF_FORCECRYPT   0x400
+#define MF_NOEMULATEDSD 0x800 /* no emulated sdcard daemon, sd card is the only
+                                 external storage */
 
 #define DM_BUF_SIZE 4096
 

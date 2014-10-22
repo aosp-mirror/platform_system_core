@@ -30,6 +30,7 @@
 #include <time.h>
 
 #include <private/android_filesystem_config.h>
+#include <cutils/properties.h>
 #include <logwrap/logwrap.h>
 
 #include "mincrypt/rsa.h"
@@ -336,6 +337,26 @@ static int test_access(char *device) {
     return -1;
 }
 
+static int set_verified_property(char *name) {
+    int ret;
+    char *key;
+    ret = asprintf(&key, "partition.%s.verified", name);
+    if (ret < 0) {
+        ERROR("Error formatting verified property");
+        return ret;
+    }
+    ret = PROP_NAME_MAX - strlen(key);
+    if (ret < 0) {
+        ERROR("Verified property name is too long");
+        return -1;
+    }
+    ret = property_set(key, "1");
+    if (ret < 0)
+        ERROR("Error setting verified property %s: %d", key, ret);
+    free(key);
+    return ret;
+}
+
 int fs_mgr_setup_verity(struct fstab_rec *fstab) {
 
     int retval = -1;
@@ -351,6 +372,13 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     // set the dm_ioctl flags
     io->flags |= 1;
     io->target_count = 1;
+
+    // check to ensure that the verity device is ext4
+    // TODO: support non-ext4 filesystems
+    if (strcmp(fstab->fs_type, "ext4")) {
+        ERROR("Cannot verify non-ext4 device (%s)", fstab->fs_type);
+        return retval;
+    }
 
     // get the device mapper fd
     int fd;
@@ -405,7 +433,8 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
         goto out;
     }
 
-    retval = 0;
+    // set the property indicating that the partition is verified
+    retval = set_verified_property(mount_point);
 
 out:
     close(fd);

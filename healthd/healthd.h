@@ -18,6 +18,8 @@
 #define _HEALTHD_H_
 
 #include <batteryservice/BatteryService.h>
+#include <sys/types.h>
+#include <utils/Errors.h>
 #include <utils/String8.h>
 
 // periodic_chores_interval_fast, periodic_chores_interval_slow: intervals at
@@ -61,8 +63,36 @@ struct healthd_config {
     android::String8 batteryTemperaturePath;
     android::String8 batteryTechnologyPath;
     android::String8 batteryCurrentNowPath;
+    android::String8 batteryCurrentAvgPath;
     android::String8 batteryChargeCounterPath;
+
+    int (*energyCounter)(int64_t *);
 };
+
+// Global helper functions
+
+int healthd_register_event(int fd, void (*handler)(uint32_t));
+void healthd_battery_update();
+android::status_t healthd_get_property(int id,
+    struct android::BatteryProperty *val);
+void healthd_dump_battery_state(int fd);
+
+struct healthd_mode_ops {
+    void (*init)(struct healthd_config *config);
+    int (*preparetowait)(void);
+    void (*heartbeat)(void);
+    void (*battery_update)(struct android::BatteryProperties *props);
+};
+
+extern struct healthd_mode_ops *healthd_mode_ops;
+
+// Charger mode
+
+void healthd_mode_charger_init(struct healthd_config *config);
+int healthd_mode_charger_preparetowait(void);
+void healthd_mode_charger_heartbeat(void);
+void healthd_mode_charger_battery_update(
+    struct android::BatteryProperties *props);
 
 // The following are implemented in libhealthd_board to handle board-specific
 // behavior.

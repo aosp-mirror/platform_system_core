@@ -281,9 +281,10 @@ static int create_subproc_raw(const char *cmd, const char *arg0, const char *arg
         adb_close(sv[0]);
         init_subproc_child();
 
-        // Only hook up stdin/stdout; drop stderr
         dup2(sv[1], STDIN_FILENO);
         dup2(sv[1], STDOUT_FILENO);
+        dup2(sv[1], STDERR_FILENO);
+
         adb_close(sv[1]);
 
         execl(cmd, cmd, arg0, arg1, NULL);

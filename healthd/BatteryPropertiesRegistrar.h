@@ -17,10 +17,9 @@
 #ifndef HEALTHD_BATTERYPROPERTIES_REGISTRAR_H
 #define HEALTHD_BATTERYPROPERTIES_REGISTRAR_H
 
-#include "BatteryMonitor.h"
-
 #include <binder/IBinder.h>
 #include <utils/Mutex.h>
+#include <utils/String16.h>
 #include <utils/Vector.h>
 #include <batteryservice/BatteryService.h>
 #include <batteryservice/IBatteryPropertiesListener.h>
@@ -28,22 +27,20 @@
 
 namespace android {
 
-class BatteryMonitor;
-
 class BatteryPropertiesRegistrar : public BnBatteryPropertiesRegistrar,
                                    public IBinder::DeathRecipient {
 public:
-    BatteryPropertiesRegistrar(BatteryMonitor* monitor);
     void publish();
     void notifyListeners(struct BatteryProperties props);
 
 private:
-    BatteryMonitor* mBatteryMonitor;
     Mutex mRegistrationLock;
     Vector<sp<IBatteryPropertiesListener> > mListeners;
 
     void registerListener(const sp<IBatteryPropertiesListener>& listener);
     void unregisterListener(const sp<IBatteryPropertiesListener>& listener);
+    status_t getProperty(int id, struct BatteryProperty *val);
+    status_t dump(int fd, const Vector<String16>& args);
     void binderDied(const wp<IBinder>& who);
 };
 

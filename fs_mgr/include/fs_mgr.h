@@ -24,6 +24,11 @@
 extern "C" {
 #endif
 
+/*
+ * The entries must be kept in the same order as they were seen in the fstab.
+ * Unless explicitly requested, a lookup on mount point should always
+ * return the 1st one.
+ */
 struct fstab {
     int num_entries;
     struct fstab_rec *recs;
@@ -48,7 +53,15 @@ struct fstab_rec {
 
 struct fstab *fs_mgr_read_fstab(const char *fstab_path);
 void fs_mgr_free_fstab(struct fstab *fstab);
+
+#define FS_MGR_MNTALL_DEV_NEEDS_RECOVERY 3
+#define FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION 2
+#define FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED 1
+#define FS_MGR_MNTALL_DEV_NOT_ENCRYPTED 0
 int fs_mgr_mount_all(struct fstab *fstab);
+
+#define FS_MGR_DOMNT_FAILED -1
+#define FS_MGR_DOMNT_BUSY -2
 int fs_mgr_do_mount(struct fstab *fstab, char *n_name, char *n_blk_device,
                     char *tmp_mount_point);
 int fs_mgr_do_tmpfs_mount(char *n_name);

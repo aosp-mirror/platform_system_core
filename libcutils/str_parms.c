@@ -262,6 +262,10 @@ int str_parms_add_float(struct str_parms *str_parms, const char *key,
     return ret;
 }
 
+int str_parms_has_key(struct str_parms *str_parms, const char *key) {
+    return hashmapGet(str_parms->map, (void *)key) != NULL;
+}
+
 int str_parms_get_str(struct str_parms *str_parms, const char *key, char *val,
                       int len)
 {

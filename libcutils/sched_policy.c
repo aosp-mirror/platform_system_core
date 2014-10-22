@@ -39,20 +39,19 @@ static inline SchedPolicy _policy(SchedPolicy p)
 
 #if defined(HAVE_ANDROID_OS) && defined(HAVE_SCHED_H) && defined(HAVE_PTHREADS)
 
-#include <sched.h>
 #include <pthread.h>
-
-#ifndef SCHED_NORMAL
-  #define SCHED_NORMAL 0
-#endif
-
-#ifndef SCHED_BATCH
-  #define SCHED_BATCH 3
-#endif
+#include <sched.h>
+#include <sys/prctl.h>
 
 #define POLICY_DEBUG 0
 
 #define CAN_SET_SP_SYSTEM 0 // non-zero means to implement set_sched_policy(tid, SP_SYSTEM)
+
+// This prctl is only available in Android kernels.
+#define PR_SET_TIMERSLACK_PID 41
+
+// timer slack value in nS enforced when the thread moves to background
+#define TIMER_SLACK_BG 40000000
 
 static pthread_once_t the_once = PTHREAD_ONCE_INIT;
 
@@ -320,6 +319,8 @@ int set_sched_policy(int tid, SchedPolicy policy)
                             SCHED_BATCH : SCHED_NORMAL,
                            &param);
     }
+
+    prctl(PR_SET_TIMERSLACK_PID, policy == SP_BACKGROUND ? TIMER_SLACK_BG : 0, tid);
 
     return 0;
 }

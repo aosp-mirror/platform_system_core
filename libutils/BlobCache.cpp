@@ -31,7 +31,7 @@ namespace android {
 static const uint32_t blobCacheMagic = ('_' << 24) + ('B' << 16) + ('b' << 8) + '$';
 
 // BlobCache::Header::mBlobCacheVersion value
-static const uint32_t blobCacheVersion = 1;
+static const uint32_t blobCacheVersion = 2;
 
 // BlobCache::Header::mDeviceVersion value
 static const uint32_t blobCacheDeviceVersion = 1;
@@ -165,14 +165,13 @@ static inline size_t align4(size_t size) {
 }
 
 size_t BlobCache::getFlattenedSize() const {
-    size_t size = sizeof(Header);
+    size_t size = align4(sizeof(Header));
     for (size_t i = 0; i < mCacheEntries.size(); i++) {
         const CacheEntry& e(mCacheEntries[i]);
         sp<Blob> keyBlob = e.getKey();
         sp<Blob> valueBlob = e.getValue();
-        size = align4(size);
-        size += sizeof(EntryHeader) + keyBlob->getSize() +
-                valueBlob->getSize();
+        size += align4(sizeof(EntryHeader) + keyBlob->getSize() +
+                       valueBlob->getSize());
     }
     return size;
 }
@@ -200,7 +199,8 @@ status_t BlobCache::flatten(void* buffer, size_t size) const {
         size_t valueSize = valueBlob->getSize();
 
         size_t entrySize = sizeof(EntryHeader) + keySize + valueSize;
-        if (byteOffset + entrySize > size) {
+        size_t totalSize = align4(entrySize);
+        if (byteOffset + totalSize > size) {
             ALOGE("flatten: not enough room for cache entries");
             return BAD_VALUE;
         }
@@ -213,7 +213,13 @@ status_t BlobCache::flatten(void* buffer, size_t size) const {
         memcpy(eheader->mData, keyBlob->getData(), keySize);
         memcpy(eheader->mData + keySize, valueBlob->getData(), valueSize);
 
-        byteOffset += align4(entrySize);
+        if (totalSize > entrySize) {
+            // We have padding bytes. Those will get written to storage, and contribute to the CRC,
+            // so make sure we zero-them to have reproducible results.
+            memset(eheader->mData + keySize + valueSize, 0, totalSize - entrySize);
+        }
+
+        byteOffset += totalSize;
     }
 
     return OK;
@@ -256,7 +262,8 @@ status_t BlobCache::unflatten(void const* buffer, size_t size) {
         size_t valueSize = eheader->mValueSize;
         size_t entrySize = sizeof(EntryHeader) + keySize + valueSize;
 
-        if (byteOffset + entrySize > size) {
+        size_t totalSize = align4(entrySize);
+        if (byteOffset + totalSize > size) {
             mCacheEntries.clear();
             ALOGE("unflatten: not enough room for cache entry headers");
             return BAD_VALUE;
@@ -265,7 +272,7 @@ status_t BlobCache::unflatten(void const* buffer, size_t size) {
         const uint8_t* data = eheader->mData;
         set(data, keySize, data + keySize, valueSize);
 
-        byteOffset += align4(entrySize);
+        byteOffset += totalSize;
     }
 
     return OK;

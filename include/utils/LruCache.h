@@ -17,8 +17,8 @@
 #ifndef ANDROID_UTILS_LRU_CACHE_H
 #define ANDROID_UTILS_LRU_CACHE_H
 
+#include <UniquePtr.h>
 #include <utils/BasicHashtable.h>
-#include <utils/UniquePtr.h>
 
 namespace android {
 
@@ -48,6 +48,7 @@ public:
     bool remove(const TKey& key);
     bool removeOldest();
     void clear();
+    const TValue& peekOldestValue();
 
     class Iterator {
     public:
@@ -181,6 +182,14 @@ bool LruCache<TKey, TValue>::removeOldest() {
         // TODO: should probably abort if false
     }
     return false;
+}
+
+template <typename TKey, typename TValue>
+const TValue& LruCache<TKey, TValue>::peekOldestValue() {
+    if (mOldest) {
+        return mOldest->value;
+    }
+    return mNullValue;
 }
 
 template <typename TKey, typename TValue>

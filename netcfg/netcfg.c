@@ -102,7 +102,6 @@ struct
     { "dhcp",   1, do_dhcp },
     { "up",     1, ifc_up },
     { "down",   1, ifc_down },
-    { "flhosts",  1, ifc_remove_host_routes },
     { "deldefault", 1, ifc_remove_default_route },
     { "hwaddr", 2, set_hwaddr },
     { 0, 0, 0 },

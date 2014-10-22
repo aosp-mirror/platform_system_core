@@ -59,6 +59,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "wait",        MF_WAIT },
     { "check",       MF_CHECK },
     { "encryptable=",MF_CRYPT },
+    { "forceencrypt=",MF_FORCECRYPT },
     { "nonremovable",MF_NONREMOVABLE },
     { "voldmanaged=",MF_VOLDMANAGED},
     { "length=",     MF_LENGTH },
@@ -103,6 +104,11 @@ static int parse_flags(char *flags, struct flag_list *fl,
                 f |= fl[i].flag;
                 if ((fl[i].flag == MF_CRYPT) && flag_vals) {
                     /* The encryptable flag is followed by an = and the
+                     * location of the keys.  Get it and return it.
+                     */
+                    flag_vals->key_loc = strdup(strchr(p, '=') + 1);
+                } else if ((fl[i].flag == MF_FORCECRYPT) && flag_vals) {
+                    /* The forceencrypt flag is followed by an = and the
                      * location of the keys.  Get it and return it.
                      */
                     flag_vals->key_loc = strdup(strchr(p, '=') + 1);
@@ -361,23 +367,45 @@ int fs_mgr_add_entry(struct fstab *fstab,
      return 0;
 }
 
-struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const char *path)
+/*
+ * Returns the 1st matching fstab_rec that follows the start_rec.
+ * start_rec is the result of a previous search or NULL.
+ */
+struct fstab_rec *fs_mgr_get_entry_for_mount_point_after(struct fstab_rec *start_rec, struct fstab *fstab, const char *path)
 {
     int i;
-
     if (!fstab) {
         return NULL;
     }
 
-    for (i = 0; i < fstab->num_entries; i++) {
+    if (start_rec) {
+        for (i = 0; i < fstab->num_entries; i++) {
+            if (&fstab->recs[i] == start_rec) {
+                i++;
+                break;
+            }
+        }
+    } else {
+        i = 0;
+    }
+    for (; i < fstab->num_entries; i++) {
         int len = strlen(fstab->recs[i].mount_point);
         if (strncmp(path, fstab->recs[i].mount_point, len) == 0 &&
             (path[len] == '\0' || path[len] == '/')) {
             return &fstab->recs[i];
         }
     }
-
     return NULL;
+}
+
+/*
+ * Returns the 1st matching mount point.
+ * There might be more. To look for others, use fs_mgr_get_entry_for_mount_point_after()
+ * and give the fstab_rec from the previous search.
+ */
+struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const char *path)
+{
+    return fs_mgr_get_entry_for_mount_point_after(NULL, fstab, path);
 }
 
 int fs_mgr_is_voldmanaged(struct fstab_rec *fstab)
@@ -392,7 +420,7 @@ int fs_mgr_is_nonremovable(struct fstab_rec *fstab)
 
 int fs_mgr_is_encryptable(struct fstab_rec *fstab)
 {
-    return fstab->fs_mgr_flags & MF_CRYPT;
+    return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT);
 }
 
 int fs_mgr_is_noemulatedsd(struct fstab_rec *fstab)

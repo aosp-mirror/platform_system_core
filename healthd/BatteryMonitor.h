@@ -17,16 +17,14 @@
 #ifndef HEALTHD_BATTERYMONITOR_H
 #define HEALTHD_BATTERYMONITOR_H
 
+#include <batteryservice/BatteryService.h>
 #include <binder/IInterface.h>
 #include <utils/String8.h>
 #include <utils/Vector.h>
 
 #include "healthd.h"
-#include "BatteryPropertiesRegistrar.h"
 
 namespace android {
-
-class BatteryPropertiesRegistrar;
 
 class BatteryMonitor {
   public:
@@ -39,14 +37,18 @@ class BatteryMonitor {
         ANDROID_POWER_SUPPLY_TYPE_BATTERY
     };
 
-    void init(struct healthd_config *hc, bool nosvcmgr);
+    void init(struct healthd_config *hc);
     bool update(void);
+    status_t getProperty(int id, struct BatteryProperty *val);
+    void dumpState(int fd);
 
   private:
     struct healthd_config *mHealthdConfig;
     Vector<String8> mChargerNames;
-
-    sp<BatteryPropertiesRegistrar> mBatteryPropertiesRegistrar;
+    bool mBatteryDevicePresent;
+    int mBatteryFixedCapacity;
+    int mBatteryFixedTemperature;
+    struct BatteryProperties props;
 
     int getBatteryStatus(const char* status);
     int getBatteryHealth(const char* status);

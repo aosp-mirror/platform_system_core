@@ -242,7 +242,26 @@ enum {
      * The consumer gralloc usage bits currently set by the consumer.
      * The values are defined in hardware/libhardware/include/gralloc.h.
      */
-    NATIVE_WINDOW_CONSUMER_USAGE_BITS = 10
+    NATIVE_WINDOW_CONSUMER_USAGE_BITS = 10,
+
+    /**
+     * Transformation that will by applied to buffers by the hwcomposer.
+     * This must not be set or checked by producer endpoints, and will
+     * disable the transform hint set in SurfaceFlinger (see
+     * NATIVE_WINDOW_TRANSFORM_HINT).
+     *
+     * INTENDED USE:
+     * Temporary - Please do not use this.  This is intended only to be used
+     * by the camera's LEGACY mode.
+     *
+     * In situations where a SurfaceFlinger client wishes to set a transform
+     * that is not visible to the producer, and will always be applied in the
+     * hardware composer, the client can set this flag with
+     * native_window_set_buffers_sticky_transform.  This can be used to rotate
+     * and flip buffers consumed by hardware composer without actually changing
+     * the aspect ratio of the buffers produced.
+     */
+    NATIVE_WINDOW_STICKY_TRANSFORM = 11,
 };
 
 /* Valid operations for the (*perform)() hook.
@@ -273,6 +292,8 @@ enum {
     NATIVE_WINDOW_API_DISCONNECT            = 14,   /* private */
     NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS = 15, /* private */
     NATIVE_WINDOW_SET_POST_TRANSFORM_CROP   = 16,   /* private */
+    NATIVE_WINDOW_SET_BUFFERS_STICKY_TRANSFORM = 17,/* private */
+    NATIVE_WINDOW_SET_SIDEBAND_STREAM       = 18,
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -791,6 +812,23 @@ static inline int native_window_set_buffers_transform(
 }
 
 /*
+ * native_window_set_buffers_sticky_transform(..., int transform)
+ * All buffers queued after this call will be displayed transformed according
+ * to the transform parameter specified applied on top of the regular buffer
+ * transform.  Setting this transform will disable the transform hint.
+ *
+ * Temporary - This is only intended to be used by the LEGACY camera mode, do
+ *   not use this for anything else.
+ */
+static inline int native_window_set_buffers_sticky_transform(
+        struct ANativeWindow* window,
+        int transform)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_BUFFERS_STICKY_TRANSFORM,
+            transform);
+}
+
+/*
  * native_window_set_buffers_timestamp(..., int64_t timestamp)
  * All buffers queued after this call will be associated with the timestamp
  * parameter specified. If the timestamp is set to NATIVE_WINDOW_TIMESTAMP_AUTO
@@ -856,6 +894,17 @@ static inline int native_window_dequeue_buffer_and_wait(ANativeWindow *anw,
     return anw->dequeueBuffer_DEPRECATED(anw, anb);
 }
 
+/*
+ * native_window_set_sideband_stream(..., native_handle_t*)
+ * Attach a sideband buffer stream to a native window.
+ */
+static inline int native_window_set_sideband_stream(
+        struct ANativeWindow* window,
+        native_handle_t* sidebandHandle)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_SIDEBAND_STREAM,
+            sidebandHandle);
+}
 
 __END_DECLS
 

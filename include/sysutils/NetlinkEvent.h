@@ -37,6 +37,8 @@ public:
     const static int NlActionAddressUpdated;
     const static int NlActionAddressRemoved;
     const static int NlActionRdnss;
+    const static int NlActionRouteUpdated;
+    const static int NlActionRouteRemoved;
 
     NetlinkEvent();
     virtual ~NetlinkEvent();
@@ -52,8 +54,11 @@ public:
  protected:
     bool parseBinaryNetlinkMessage(char *buffer, int size);
     bool parseAsciiNetlinkMessage(char *buffer, int size);
-    bool parseIfAddrMessage(int type, struct ifaddrmsg *ifaddr, int rtasize);
-    bool parseNdUserOptMessage(struct nduseroptmsg *msg, int optsize);
+    bool parseIfInfoMessage(const struct nlmsghdr *nh);
+    bool parseIfAddrMessage(const struct nlmsghdr *nh);
+    bool parseUlogPacketMessage(const struct nlmsghdr *nh);
+    bool parseRtMessage(const struct nlmsghdr *nh);
+    bool parseNdUserOptMessage(const struct nlmsghdr *nh);
 };
 
 #endif
