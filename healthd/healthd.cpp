@@ -53,6 +53,7 @@ static struct healthd_config healthd_config = {
     .batteryCurrentAvgPath = String8(String8::kEmptyString),
     .batteryChargeCounterPath = String8(String8::kEmptyString),
     .energyCounter = NULL,
+    .boot_min_cap = 0,
     .screen_on = NULL,
 };
 

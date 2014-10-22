@@ -116,6 +116,7 @@ struct charger {
 
     struct animation *batt_anim;
     gr_surface surf_unknown;
+    int boot_min_cap;
 };
 
 static struct frame batt_anim_frames[] = {
@@ -523,8 +524,13 @@ static void process_key(struct charger *charger, int code, int64_t now)
                     LOGW("[%" PRId64 "] booting from charger mode\n", now);
                     property_set("sys.boot_from_charger_mode", "1");
                 } else {
-                    LOGW("[%" PRId64 "] rebooting\n", now);
-                    android_reboot(ANDROID_RB_RESTART, 0, 0);
+                    if (charger->batt_anim->capacity >= charger->boot_min_cap) {
+                        LOGW("[%" PRId64 "] rebooting\n", now);
+                        android_reboot(ANDROID_RB_RESTART, 0, 0);
+                    } else {
+                        LOGV("[%lld] ignore power-button press, battery level "
+                            "less than minimum\n", now);
+                    }
                 }
             } else {
                 /* if the key is pressed but timeout hasn't expired,
@@ -711,4 +717,5 @@ void healthd_mode_charger_init(struct healthd_config* config)
     charger->next_key_check = -1;
     charger->next_pwr_check = -1;
     healthd_config = config;
+    charger->boot_min_cap = config->boot_min_cap;
 }
