@@ -122,28 +122,28 @@ static int get_target_device_size(char *blk_device, uint64_t *device_size)
     struct ext4_super_block sb;
     struct fs_info info = {0};
 
-    data_device = open(blk_device, O_RDONLY);
-    if (data_device < 0) {
+    data_device = TEMP_FAILURE_RETRY(open(blk_device, O_RDONLY | O_CLOEXEC));
+    if (data_device == -1) {
         ERROR("Error opening block device (%s)", strerror(errno));
         return -1;
     }
 
-    if (lseek64(data_device, 1024, SEEK_SET) < 0) {
+    if (TEMP_FAILURE_RETRY(lseek64(data_device, 1024, SEEK_SET)) < 0) {
         ERROR("Error seeking to superblock");
-        close(data_device);
+        TEMP_FAILURE_RETRY(close(data_device));
         return -1;
     }
 
-    if (read(data_device, &sb, sizeof(sb)) != sizeof(sb)) {
+    if (TEMP_FAILURE_RETRY(read(data_device, &sb, sizeof(sb))) != sizeof(sb)) {
         ERROR("Error reading superblock");
-        close(data_device);
+        TEMP_FAILURE_RETRY(close(data_device));
         return -1;
     }
 
     ext4_parse_sb(&sb, &info);
     *device_size = info.len;
 
-    close(data_device);
+    TEMP_FAILURE_RETRY(close(data_device));
     return 0;
 }
 
@@ -153,13 +153,13 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
     unsigned table_length;
     uint64_t device_length;
     int protocol_version;
-    FILE *device;
+    int device;
     int retval = FS_MGR_SETUP_VERITY_FAIL;
     *signature = 0;
     *table = 0;
 
-    device = fopen(block_device, "r");
-    if (!device) {
+    device = TEMP_FAILURE_RETRY(open(block_device, O_RDONLY | O_CLOEXEC));
+    if (device == -1) {
         ERROR("Could not open block device %s (%s).\n", block_device, strerror(errno));
         goto out;
     }
@@ -169,13 +169,14 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
         ERROR("Could not get target device size.\n");
         goto out;
     }
-    if (fseek(device, device_length, SEEK_SET) < 0) {
+    if (TEMP_FAILURE_RETRY(lseek64(device, device_length, SEEK_SET)) < 0) {
         ERROR("Could not seek to start of verity metadata block.\n");
         goto out;
     }
 
     // check the magic number
-    if (!fread(&magic_number, sizeof(int), 1, device)) {
+    if (TEMP_FAILURE_RETRY(read(device, &magic_number, sizeof(magic_number))) !=
+            sizeof(magic_number)) {
         ERROR("Couldn't read magic number!\n");
         goto out;
     }
@@ -195,7 +196,8 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
     }
 
     // check the protocol version
-    if (!fread(&protocol_version, sizeof(int), 1, device)) {
+    if (TEMP_FAILURE_RETRY(read(device, &protocol_version,
+            sizeof(protocol_version))) != sizeof(protocol_version)) {
         ERROR("Couldn't read verity metadata protocol version!\n");
         goto out;
     }
@@ -205,39 +207,41 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
     }
 
     // get the signature
-    *signature = (char*) malloc(RSANUMBYTES * sizeof(char));
+    *signature = (char*) malloc(RSANUMBYTES);
     if (!*signature) {
         ERROR("Couldn't allocate memory for signature!\n");
         goto out;
     }
-    if (!fread(*signature, RSANUMBYTES, 1, device)) {
+    if (TEMP_FAILURE_RETRY(read(device, *signature, RSANUMBYTES)) != RSANUMBYTES) {
         ERROR("Couldn't read signature from verity metadata!\n");
         goto out;
     }
 
     // get the size of the table
-    if (!fread(&table_length, sizeof(int), 1, device)) {
+    if (TEMP_FAILURE_RETRY(read(device, &table_length, sizeof(table_length))) !=
+            sizeof(table_length)) {
         ERROR("Couldn't get the size of the verity table from metadata!\n");
         goto out;
     }
 
     // get the table + null terminator
-    table_length += 1;
-    *table = malloc(table_length);
-    if(!*table) {
+    *table = malloc(table_length + 1);
+    if (!*table) {
         ERROR("Couldn't allocate memory for verity table!\n");
         goto out;
     }
-    if (!fgets(*table, table_length, device)) {
+    if (TEMP_FAILURE_RETRY(read(device, *table, table_length)) !=
+            (ssize_t)table_length) {
         ERROR("Couldn't read the verity table from metadata!\n");
         goto out;
     }
 
+    (*table)[table_length] = 0;
     retval = FS_MGR_SETUP_VERITY_SUCCESS;
 
 out:
-    if (device)
-        fclose(device);
+    if (device != -1)
+        TEMP_FAILURE_RETRY(close(device));
 
     if (retval != FS_MGR_SETUP_VERITY_SUCCESS) {
         free(*table);
