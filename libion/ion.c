@@ -90,6 +90,7 @@ int ion_map(int fd, ion_user_handle_t handle, size_t length, int prot,
             int flags, off_t offset, unsigned char **ptr, int *map_fd)
 {
     int ret;
+    unsigned char *tmp_ptr;
     struct ion_fd_data data = {
         .handle = handle,
     };
@@ -102,16 +103,17 @@ int ion_map(int fd, ion_user_handle_t handle, size_t length, int prot,
     ret = ion_ioctl(fd, ION_IOC_MAP, &data);
     if (ret < 0)
         return ret;
-    *map_fd = data.fd;
-    if (*map_fd < 0) {
+    if (data.fd < 0) {
         ALOGE("map ioctl returned negative fd\n");
         return -EINVAL;
     }
-    *ptr = mmap(NULL, length, prot, flags, *map_fd, offset);
-    if (*ptr == MAP_FAILED) {
+    tmp_ptr = mmap(NULL, length, prot, flags, data.fd, offset);
+    if (tmp_ptr == MAP_FAILED) {
         ALOGE("mmap failed: %s\n", strerror(errno));
         return -errno;
     }
+    *map_fd = data.fd;
+    *ptr = tmp_ptr;
     return ret;
 }
 
@@ -129,11 +131,11 @@ int ion_share(int fd, ion_user_handle_t handle, int *share_fd)
     ret = ion_ioctl(fd, ION_IOC_SHARE, &data);
     if (ret < 0)
         return ret;
-    *share_fd = data.fd;
-    if (*share_fd < 0) {
+    if (data.fd < 0) {
         ALOGE("share ioctl returned negative fd\n");
         return -EINVAL;
     }
+    *share_fd = data.fd;
     return ret;
 }
 
