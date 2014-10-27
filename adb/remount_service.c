@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "sysdeps.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -22,7 +24,7 @@
 #include <sys/mount.h>
 #include <unistd.h>
 
-#include "sysdeps.h"
+#include "cutils/properties.h"
 
 #define  TRACE_TAG  TRACE_ADB
 #include "adb.h"
@@ -115,6 +117,36 @@ static void write_string(int fd, const char* str)
 void remount_service(int fd, void *cookie)
 {
     char buffer[200];
+    char prop_buf[PROPERTY_VALUE_MAX];
+
+    bool system_verified = false, vendor_verified = false;
+    property_get("partition.system.verified", prop_buf, "0");
+    if (!strcmp(prop_buf, "1")) {
+        system_verified = true;
+    }
+
+    property_get("partition.vendor.verified", prop_buf, "0");
+    if (!strcmp(prop_buf, "1")) {
+        vendor_verified = true;
+    }
+
+    if (system_verified || vendor_verified) {
+        // Allow remount but warn of likely bad effects
+        bool both = system_verified && vendor_verified;
+        snprintf(buffer, sizeof(buffer),
+                 "dm_verity is enabled on the %s%s%s partition%s.\n",
+                 system_verified ? "system" : "",
+                 both ? " and " : "",
+                 vendor_verified ? "vendor" : "",
+                 both ? "s" : "");
+        write_string(fd, buffer);
+        snprintf(buffer, sizeof(buffer),
+                 "Use \"adb disable-verity\" to disable verity.\n"
+                 "If you do not, remount may succeed, however, you will still "
+                 "not be able to write to these volumes.\n");
+        write_string(fd, buffer);
+    }
+
     if (remount("/system", &system_ro)) {
         snprintf(buffer, sizeof(buffer), "remount of system failed: %s\n",strerror(errno));
         write_string(fd, buffer);
