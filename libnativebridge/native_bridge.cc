@@ -320,46 +320,6 @@ static void SetCpuAbi(JNIEnv* env, jclass build_class, const char* field, const 
   }
 }
 
-static void SetSupportedAbis(JNIEnv* env, jclass build_class, const char* field,
-                             const char* *values, int32_t value_count) {
-  if (value_count < 0) {
-    return;
-  }
-  if (values == nullptr && value_count > 0) {
-    ALOGW("More than zero values expected: %d.", value_count);
-    return;
-  }
-
-  jfieldID field_id = env->GetStaticFieldID(build_class, field, "[Ljava/lang/String;");
-  if (field_id != nullptr) {
-    // Create the array.
-    jobjectArray array = env->NewObjectArray(value_count, env->FindClass("java/lang/String"),
-                                             nullptr);
-    if (array == nullptr) {
-      env->ExceptionClear();
-      ALOGW("Could not create array.");
-      return;
-    }
-
-    // Fill the array.
-    for (int32_t i = 0; i < value_count; i++) {
-      jstring str = env->NewStringUTF(values[i]);
-      if (str == nullptr) {
-        env->ExceptionClear();
-        ALOGW("Could not create string %s.", values[i]);
-        return;
-      }
-
-      env->SetObjectArrayElement(array, i, str);
-    }
-
-    env->SetStaticObjectField(build_class, field_id, array);
-  } else {
-    env->ExceptionClear();
-    ALOGW("Could not find %s field.", field);
-  }
-}
-
 // Set up the environment for the bridged app.
 static void SetupEnvironment(NativeBridgeCallbacks* callbacks, JNIEnv* env, const char* isa) {
   // Need a JNIEnv* to do anything.
@@ -390,9 +350,6 @@ static void SetupEnvironment(NativeBridgeCallbacks* callbacks, JNIEnv* env, cons
     if (bclass_id != nullptr) {
       SetCpuAbi(env, bclass_id, "CPU_ABI", env_values->cpu_abi);
       SetCpuAbi(env, bclass_id, "CPU_ABI2", env_values->cpu_abi2);
-
-      SetSupportedAbis(env, bclass_id, "SUPPORTED_ABIS", env_values->supported_abis,
-                       env_values->abi_count);
     } else {
       // For example in a host test environment.
       env->ExceptionClear();
