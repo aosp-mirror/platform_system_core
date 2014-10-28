@@ -192,6 +192,7 @@ OUR_TOOLS := \
     readlink \
     renice \
     restorecon \
+    prlimit \
     rmmod \
     route \
     runcon \
