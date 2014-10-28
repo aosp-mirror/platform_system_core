@@ -37,7 +37,7 @@ bool NeedsNativeBridge(const char* instruction_set);
 
 // Do the early initialization part of the native bridge, if necessary. This should be done under
 // high privileges.
-void PreInitializeNativeBridge(const char* app_data_dir, const char* instruction_set);
+bool PreInitializeNativeBridge(const char* app_data_dir, const char* instruction_set);
 
 // Initialize the native bridge, if any. Should be called by Runtime::DidForkFromZygote. The JNIEnv*
 // will be used to modify the app environment for the bridge.
