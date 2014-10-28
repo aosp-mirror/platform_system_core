@@ -14,22 +14,25 @@
  * limitations under the License.
  */
 
-#ifndef NATIVE_BRIDGE_TEST_H_
-#define NATIVE_BRIDGE_TEST_H_
+#include "NativeBridgeTest.h"
 
-#define LOG_TAG "NativeBridge_test"
-
-#include <nativebridge/native_bridge.h>
-#include <gtest/gtest.h>
-
-constexpr const char* kNativeBridgeLibrary = "libnativebridge-dummy.so";
+#include <cstdio>
+#include <cstring>
+#include <cutils/log.h>
+#include <dlfcn.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <sys/mount.h>
+#include <sys/stat.h>
 
 namespace android {
 
-class NativeBridgeTest : public testing::Test {
-};
+TEST_F(NativeBridgeTest, PreInitializeNativeBridgeFail1) {
+  // Needs a valid application directory.
+  ASSERT_TRUE(LoadNativeBridge(kNativeBridgeLibrary, nullptr));
+  ASSERT_FALSE(PreInitializeNativeBridge(nullptr, "isa"));
+  ASSERT_TRUE(NativeBridgeError());
+}
 
-};  // namespace android
-
-#endif  // NATIVE_BRIDGE_H_
-
+}  // namespace android
