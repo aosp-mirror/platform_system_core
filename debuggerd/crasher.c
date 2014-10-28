@@ -59,7 +59,7 @@ static void *noisy(void *x)
     for(;;) {
         usleep(250*1000);
         write(2, &c, 1);
-        if(c == 'C') *((unsigned*) 0) = 42;
+        if(c == 'C') *((volatile unsigned*) 0) = 42;
     }
     return NULL;
 }
