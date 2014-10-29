@@ -36,11 +36,14 @@ TEST_F(NativeBridgeTest, CompleteFlow) {
 
     // Unload
     UnloadNativeBridge();
+
     ASSERT_FALSE(NativeBridgeAvailable());
     ASSERT_FALSE(NativeBridgeError());
 
     // Clean-up code_cache
     ASSERT_EQ(0, rmdir(kCodeCache));
+
+    ASSERT_FALSE(NativeBridgeError());
 }
 
 }  // namespace android
