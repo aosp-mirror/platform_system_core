@@ -16,31 +16,35 @@
 
 #include "NativeBridgeTest.h"
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace android {
 
-TEST_F(NativeBridgeTest, CompleteFlow) {
+// Tests that the bridge initialization creates the code_cache if it doesn't
+// exists.
+TEST_F(NativeBridgeTest, CodeCacheCreate) {
+    // Make sure that code_cache does not exists
+    struct stat st;
+    ASSERT_EQ(-1, stat(kCodeCache, &st));
+    ASSERT_EQ(ENOENT, errno);
+
     // Init
     ASSERT_TRUE(LoadNativeBridge(kNativeBridgeLibrary, nullptr));
-    ASSERT_TRUE(NativeBridgeAvailable());
     ASSERT_TRUE(PreInitializeNativeBridge(".", "isa"));
-    ASSERT_TRUE(NativeBridgeAvailable());
     ASSERT_TRUE(InitializeNativeBridge(nullptr, nullptr));
     ASSERT_TRUE(NativeBridgeAvailable());
-
-    // Basic calls to check that nothing crashes
-    ASSERT_FALSE(NativeBridgeIsSupported(nullptr));
-    ASSERT_EQ(nullptr, NativeBridgeLoadLibrary(nullptr, 0));
-    ASSERT_EQ(nullptr, NativeBridgeGetTrampoline(nullptr, nullptr, nullptr, 0));
-
-    // Unload
-    UnloadNativeBridge();
-    ASSERT_FALSE(NativeBridgeAvailable());
     ASSERT_FALSE(NativeBridgeError());
 
-    // Clean-up code_cache
+    // Check that code_cache was created
+    ASSERT_EQ(0, stat(kCodeCache, &st));
+    ASSERT_TRUE(S_ISDIR(st.st_mode));
+
+    // Clean up
+    UnloadNativeBridge();
     ASSERT_EQ(0, rmdir(kCodeCache));
+
+    ASSERT_FALSE(NativeBridgeError());
 }
 
 }  // namespace android

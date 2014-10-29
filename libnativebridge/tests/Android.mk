@@ -7,6 +7,8 @@ include $(CLEAR_VARS)
 
 # Build the unit tests.
 test_src_files := \
+    CodeCacheCreate_test.cpp \
+    CodeCacheExists_test.cpp \
     CompleteFlow_test.cpp \
     InvalidCharsNativeBridge_test.cpp \
     NeedsNativeBridge_test.cpp \
