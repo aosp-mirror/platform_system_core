@@ -57,6 +57,7 @@ public:
     bool parseIfInfoMessage(const struct nlmsghdr *nh);
     bool parseIfAddrMessage(const struct nlmsghdr *nh);
     bool parseUlogPacketMessage(const struct nlmsghdr *nh);
+    bool parseNfPacketMessage(struct nlmsghdr *nh);
     bool parseRtMessage(const struct nlmsghdr *nh);
     bool parseNdUserOptMessage(const struct nlmsghdr *nh);
 };

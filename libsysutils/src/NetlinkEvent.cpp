@@ -32,12 +32,20 @@
 #include <linux/if_addr.h>
 #include <linux/if_link.h>
 #include <linux/netfilter/nfnetlink.h>
+#include <linux/netfilter/nfnetlink_log.h>
 #include <linux/netfilter_ipv4/ipt_ULOG.h>
+
 /* From kernel's net/netfilter/xt_quota2.c */
-const int QLOG_NL_EVENT  = 112;
+const int LOCAL_QLOG_NL_EVENT = 112;
+const int LOCAL_NFLOG_PACKET = NFNL_SUBSYS_ULOG << 8 | NFULNL_MSG_PACKET;
 
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+
+#include <netlink/attr.h>
+#include <netlink/genl/genl.h>
+#include <netlink/handlers.h>
+#include <netlink/msg.h>
 
 const int NetlinkEvent::NlActionUnknown = 0;
 const int NetlinkEvent::NlActionAdd = 1;
@@ -95,7 +103,8 @@ static const char *rtMessageName(int type) {
         NL_EVENT_RTM_NAME(RTM_NEWROUTE);
         NL_EVENT_RTM_NAME(RTM_DELROUTE);
         NL_EVENT_RTM_NAME(RTM_NEWNDUSEROPT);
-        NL_EVENT_RTM_NAME(QLOG_NL_EVENT);
+        NL_EVENT_RTM_NAME(LOCAL_QLOG_NL_EVENT);
+        NL_EVENT_RTM_NAME(LOCAL_NFLOG_PACKET);
         default:
             return NULL;
     }
@@ -267,6 +276,41 @@ bool NetlinkEvent::parseUlogPacketMessage(const struct nlmsghdr *nh) {
     asprintf(&mParams[0], "ALERT_NAME=%s", pm->prefix);
     asprintf(&mParams[1], "INTERFACE=%s", devname);
     mSubsystem = strdup("qlog");
+    mAction = NlActionChange;
+    return true;
+}
+
+/*
+ * Parse a LOCAL_NFLOG_PACKET message.
+ */
+bool NetlinkEvent::parseNfPacketMessage(struct nlmsghdr *nh) {
+    int uid = -1;
+    int len = 0;
+    char* raw = NULL;
+
+    struct nlattr *uid_attr = nlmsg_find_attr(nh, sizeof(struct genlmsghdr), NFULA_UID);
+    if (uid_attr) {
+        uid = ntohl(nla_get_u32(uid_attr));
+    }
+
+    struct nlattr *payload = nlmsg_find_attr(nh, sizeof(struct genlmsghdr), NFULA_PAYLOAD);
+    if (payload) {
+        /* First 256 bytes is plenty */
+        len = nla_len(payload);
+        if (len > 256) len = 256;
+        raw = (char*) nla_data(payload);
+    }
+
+    char* hex = (char*) calloc(1, 5 + (len * 2));
+    strcpy(hex, "HEX=");
+    for (int i = 0; i < len; i++) {
+        hex[4 + (i * 2)] = "0123456789abcdef"[(raw[i] >> 4) & 0xf];
+        hex[5 + (i * 2)] = "0123456789abcdef"[raw[i] & 0xf];
+    }
+
+    asprintf(&mParams[0], "UID=%d", uid);
+    mParams[1] = hex;
+    mSubsystem = strdup("strict");
     mAction = NlActionChange;
     return true;
 }
@@ -478,7 +522,7 @@ bool NetlinkEvent::parseNdUserOptMessage(const struct nlmsghdr *nh) {
  * TODO: consider only ever looking at the first message.
  */
 bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
-    const struct nlmsghdr *nh;
+    struct nlmsghdr *nh;
 
     for (nh = (struct nlmsghdr *) buffer;
          NLMSG_OK(nh, (unsigned) size) && (nh->nlmsg_type != NLMSG_DONE);
@@ -493,7 +537,7 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
             if (parseIfInfoMessage(nh))
                 return true;
 
-        } else if (nh->nlmsg_type == QLOG_NL_EVENT) {
+        } else if (nh->nlmsg_type == LOCAL_QLOG_NL_EVENT) {
             if (parseUlogPacketMessage(nh))
                 return true;
 
@@ -509,6 +553,10 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
 
         } else if (nh->nlmsg_type == RTM_NEWNDUSEROPT) {
             if (parseNdUserOptMessage(nh))
+                return true;
+
+        } else if (nh->nlmsg_type == LOCAL_NFLOG_PACKET) {
+            if (parseNfPacketMessage(nh))
                 return true;
 
         }
@@ -588,7 +636,8 @@ bool NetlinkEvent::parseAsciiNetlinkMessage(char *buffer, int size) {
 }
 
 bool NetlinkEvent::decode(char *buffer, int size, int format) {
-    if (format == NetlinkListener::NETLINK_FORMAT_BINARY) {
+    if (format == NetlinkListener::NETLINK_FORMAT_BINARY
+            || format == NetlinkListener::NETLINK_FORMAT_BINARY_UNICAST) {
         return parseBinaryNetlinkMessage(buffer, size);
     } else {
         return parseAsciiNetlinkMessage(buffer, size);
