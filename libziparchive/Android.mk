@@ -49,6 +49,19 @@ LOCAL_MULTILIB := both
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+LOCAL_MODULE := libziparchive
+LOCAL_CPP_EXTENSION := .cc
+LOCAL_SRC_FILES := ${source_files}
+LOCAL_C_INCLUDES += ${includes}
+
+LOCAL_STATIC_LIBRARIES := libz libutils
+LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_MODULE:= libziparchive-host
+LOCAL_CFLAGS := -Werror
+LOCAL_MULTILIB := both
+include $(BUILD_HOST_SHARED_LIBRARY)
+
+include $(CLEAR_VARS)
 LOCAL_MODULE := ziparchive-tests
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS += \
@@ -69,10 +82,10 @@ LOCAL_CFLAGS += \
     -Werror \
     -Wno-unnamed-type-template-args
 LOCAL_SRC_FILES := zip_archive_test.cc
-LOCAL_STATIC_LIBRARIES := libziparchive-host \
+LOCAL_SHARED_LIBRARIES := libziparchive-host liblog
+LOCAL_STATIC_LIBRARIES := \
 	libz \
 	libgtest_host \
 	libgtest_main_host \
-	liblog \
 	libutils
 include $(BUILD_HOST_NATIVE_TEST)
