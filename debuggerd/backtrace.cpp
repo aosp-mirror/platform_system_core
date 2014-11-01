@@ -88,7 +88,9 @@ static void dump_thread(
     return;
   }
 
-  wait_for_stop(tid, total_sleep_time_usec);
+  if (!attached && wait_for_sigstop(tid, total_sleep_time_usec, detach_failed) == -1) {
+    return;
+  }
 
   UniquePtr<Backtrace> backtrace(Backtrace::Create(tid, BACKTRACE_CURRENT_THREAD));
   if (backtrace->Unwind(0)) {

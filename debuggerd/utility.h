@@ -67,12 +67,11 @@ enum logtype {
   LOGS
 };
 
-/* Log information onto the tombstone. */
+// Log information onto the tombstone.
 void _LOG(log_t* log, logtype ltype, const char *fmt, ...)
         __attribute__ ((format(printf, 3, 4)));
 
-int wait_for_signal(pid_t tid, int* total_sleep_time_usec);
-void wait_for_stop(pid_t tid, int* total_sleep_time_usec);
+int wait_for_sigstop(pid_t, int*, bool*);
 
 void dump_memory(log_t* log, pid_t tid, uintptr_t addr);
 
