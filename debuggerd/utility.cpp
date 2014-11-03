@@ -28,8 +28,8 @@
 #include <backtrace/Backtrace.h>
 #include <log/log.h>
 
-const int sleep_time_usec = 50000;         // 0.05 seconds
-const int max_total_sleep_usec = 10000000; // 10 seconds
+const int SLEEP_TIME_USEC = 50000;         // 0.05 seconds
+const int MAX_TOTAL_SLEEP_USEC = 10000000; // 10 seconds
 
 static int write_to_am(int fd, const char* buf, int len) {
   int to_write = len;
@@ -91,48 +91,44 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   }
 }
 
-int wait_for_signal(pid_t tid, int* total_sleep_time_usec) {
+int wait_for_sigstop(pid_t tid, int* total_sleep_time_usec, bool* detach_failed) {
+  bool allow_dead_tid = false;
   for (;;) {
     int status;
-    pid_t n = waitpid(tid, &status, __WALL | WNOHANG);
-    if (n < 0) {
-      if (errno == EAGAIN)
-        continue;
-      ALOGE("waitpid failed: %s\n", strerror(errno));
-      return -1;
-    } else if (n > 0) {
-      ALOGV("waitpid: n=%d status=%08x\n", n, status);
+    pid_t n = TEMP_FAILURE_RETRY(waitpid(tid, &status, __WALL | WNOHANG));
+    if (n == -1) {
+      ALOGE("waitpid failed: tid %d, %s", tid, strerror(errno));
+      break;
+    } else if (n == tid) {
       if (WIFSTOPPED(status)) {
         return WSTOPSIG(status);
       } else {
         ALOGE("unexpected waitpid response: n=%d, status=%08x\n", n, status);
-        return -1;
+        // This is the only circumstance under which we can allow a detach
+        // to fail with ESRCH, which indicates the tid has exited.
+        allow_dead_tid = true;
+        break;
       }
     }
 
-    if (*total_sleep_time_usec > max_total_sleep_usec) {
-      ALOGE("timed out waiting for tid=%d to die\n", tid);
-      return -1;
-    }
-
-    // not ready yet
-    ALOGV("not ready yet\n");
-    usleep(sleep_time_usec);
-    *total_sleep_time_usec += sleep_time_usec;
-  }
-}
-
-void wait_for_stop(pid_t tid, int* total_sleep_time_usec) {
-  siginfo_t si;
-  while (TEMP_FAILURE_RETRY(ptrace(PTRACE_GETSIGINFO, tid, 0, &si)) < 0 && errno == ESRCH) {
-    if (*total_sleep_time_usec > max_total_sleep_usec) {
-      ALOGE("timed out waiting for tid=%d to stop\n", tid);
+    if (*total_sleep_time_usec > MAX_TOTAL_SLEEP_USEC) {
+      ALOGE("timed out waiting for stop signal: tid=%d", tid);
       break;
     }
 
-    usleep(sleep_time_usec);
-    *total_sleep_time_usec += sleep_time_usec;
+    usleep(SLEEP_TIME_USEC);
+    *total_sleep_time_usec += SLEEP_TIME_USEC;
   }
+
+  if (ptrace(PTRACE_DETACH, tid, 0, 0) != 0) {
+    if (allow_dead_tid && errno == ESRCH) {
+      ALOGE("tid exited before attach completed: tid %d", tid);
+    } else {
+      *detach_failed = true;
+      ALOGE("detach failed: tid %d, %s", tid, strerror(errno));
+    }
+  }
+  return -1;
 }
 
 #if defined (__mips__)
