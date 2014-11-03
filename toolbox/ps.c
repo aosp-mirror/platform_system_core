@@ -147,7 +147,7 @@ static int ps_line(int pid, int tid, char *namefilter)
         strcpy(user,pw->pw_name);
     }
     
-    if(!namefilter || !strncmp(name, namefilter, strlen(namefilter))) {
+    if(!namefilter || !strncmp(cmdline[0] ? cmdline : name, namefilter, strlen(namefilter))) {
         if (display_flags & SHOW_MACLABEL) {
             fd = open(macline, O_RDONLY);
             strcpy(macline, "-");
