@@ -77,7 +77,7 @@ static void wait_for_user_action(const debugger_request_t &request) {
         "*\n"
         "* Wait for gdb to start, then press the VOLUME DOWN key\n"
         "* to let the process continue crashing.\n"
-        "********************************************************\n",
+        "********************************************************",
         request.pid, exe, request.tid);
 
   // Wait for VOLUME DOWN.
@@ -129,11 +129,11 @@ static int read_request(int fd, debugger_request_t* out_request) {
   socklen_t len = sizeof(cr);
   int status = getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cr, &len);
   if (status != 0) {
-    ALOGE("cannot get credentials\n");
+    ALOGE("cannot get credentials");
     return -1;
   }
 
-  ALOGV("reading tid\n");
+  ALOGV("reading tid");
   fcntl(fd, F_SETFL, O_NONBLOCK);
 
   pollfd pollfds[1];
@@ -227,6 +227,7 @@ static void handle_request(int fd) {
       ALOGE("ptrace attach failed: %s\n", strerror(errno));
     } else {
       bool detach_failed = false;
+      bool tid_unresponsive = false;
       bool attach_gdb = should_attach_gdb(&request);
       if (TEMP_FAILURE_RETRY(write(fd, "\0", 1)) != 1) {
         ALOGE("failed responding to client: %s\n", strerror(errno));
@@ -240,8 +241,9 @@ static void handle_request(int fd) {
 
         int total_sleep_time_usec = 0;
         for (;;) {
-          int signal = wait_for_signal(request.tid, &total_sleep_time_usec);
-          if (signal < 0) {
+          int signal = wait_for_sigstop(request.tid, &total_sleep_time_usec, &detach_failed);
+          if (signal == -1) {
+            tid_unresponsive = true;
             break;
           }
 
@@ -308,27 +310,21 @@ static void handle_request(int fd) {
         free(tombstone_path);
       }
 
-      ALOGV("detaching\n");
-      if (attach_gdb) {
-        // stop the process so we can debug
-        kill(request.pid, SIGSTOP);
-
-        // detach so we can attach gdbserver
-        if (ptrace(PTRACE_DETACH, request.tid, 0, 0)) {
-          ALOGE("ptrace detach from %d failed: %s\n", request.tid, strerror(errno));
-          detach_failed = true;
+      if (!tid_unresponsive) {
+        ALOGV("detaching");
+        if (attach_gdb) {
+          // stop the process so we can debug
+          kill(request.pid, SIGSTOP);
         }
-
-        // if debug.db.uid is set, its value indicates if we should wait
-        // for user action for the crashing process.
-        // in this case, we log a message and turn the debug LED on
-        // waiting for a gdb connection (for instance)
-        wait_for_user_action(request);
-      } else {
-        // just detach
         if (ptrace(PTRACE_DETACH, request.tid, 0, 0)) {
-          ALOGE("ptrace detach from %d failed: %s\n", request.tid, strerror(errno));
+          ALOGE("ptrace detach from %d failed: %s", request.tid, strerror(errno));
           detach_failed = true;
+        } else if (attach_gdb) {
+          // if debug.db.uid is set, its value indicates if we should wait
+          // for user action for the crashing process.
+          // in this case, we log a message and turn the debug LED on
+          // waiting for a gdb connection (for instance)
+          wait_for_user_action(request);
         }
       }
 
