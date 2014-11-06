@@ -32,6 +32,7 @@
 #include <usb100.h>
 #include <adb_api.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "usb.h"
 
