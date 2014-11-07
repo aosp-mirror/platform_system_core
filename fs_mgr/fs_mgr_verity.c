@@ -86,11 +86,11 @@ static RSAPublicKey *load_key(char *path)
 static int verify_table(char *signature, char *table, int table_length)
 {
     RSAPublicKey *key;
-    uint8_t hash_buf[SHA_DIGEST_SIZE];
+    uint8_t hash_buf[SHA256_DIGEST_SIZE];
     int retval = -1;
 
     // Hash the table
-    SHA_hash((uint8_t*)table, table_length, hash_buf);
+    SHA256_hash((uint8_t*)table, table_length, hash_buf);
 
     // Now get the public key from the keyfile
     key = load_key(VERITY_TABLE_RSA_KEY);
@@ -104,7 +104,7 @@ static int verify_table(char *signature, char *table, int table_length)
                     (uint8_t*) signature,
                     RSANUMBYTES,
                     (uint8_t*) hash_buf,
-                    SHA_DIGEST_SIZE)) {
+                    SHA256_DIGEST_SIZE)) {
         ERROR("Couldn't verify table.");
         goto out;
     }
