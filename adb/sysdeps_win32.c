@@ -2,6 +2,7 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #define  TRACE_TAG  TRACE_SYSDEPS
 #include "adb.h"
