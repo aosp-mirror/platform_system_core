@@ -59,8 +59,6 @@
 # define DBUG(x) ((void)0)
 #endif
 
-#ifdef HAVE_FUNOPEN
-
 /*
  * Definition of a seekable, write-only memory stream.
  */
@@ -251,12 +249,6 @@ FILE* open_memstream(char** bufp, size_t* sizep)
     return fp;
 }
 
-#else /*not HAVE_FUNOPEN*/
-FILE* open_memstream(char** bufp, size_t* sizep)
-{
-    abort();
-}
-#endif /*HAVE_FUNOPEN*/
 
 
 
