@@ -25,6 +25,10 @@
 #include <utils/Compat.h>
 
 #ifdef HAVE_WIN32_FILEMAP
+// Ensure that we always pull in winsock2.h before windows.h
+#ifdef HAVE_WINSOCK
+#include <winsock2.h>
+#endif
 #include <windows.h>
 #endif
 
