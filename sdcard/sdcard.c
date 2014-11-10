@@ -391,12 +391,12 @@ static void attr_from_stat(struct fuse_attr *attr, const struct stat *s, const s
     attr->ino = node->nid;
     attr->size = s->st_size;
     attr->blocks = s->st_blocks;
-    attr->atime = s->st_atime;
-    attr->mtime = s->st_mtime;
-    attr->ctime = s->st_ctime;
-    attr->atimensec = s->st_atime_nsec;
-    attr->mtimensec = s->st_mtime_nsec;
-    attr->ctimensec = s->st_ctime_nsec;
+    attr->atime = s->st_atim.tv_sec;
+    attr->mtime = s->st_mtim.tv_sec;
+    attr->ctime = s->st_ctim.tv_sec;
+    attr->atimensec = s->st_atim.tv_nsec;
+    attr->mtimensec = s->st_mtim.tv_nsec;
+    attr->ctimensec = s->st_ctim.tv_nsec;
     attr->mode = s->st_mode;
     attr->nlink = s->st_nlink;
 
