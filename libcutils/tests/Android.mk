@@ -42,8 +42,10 @@ LOCAL_STATIC_LIBRARIES := \
     libcutils \
     liblog \
     libutils \
+    libc++abi \
+    libdl \
 
-LOCAL_CXX_STL := stlport_static
+LOCAL_CXX_STL := libc++_static
 LOCAL_MULTILIB := both
 LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
 LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
