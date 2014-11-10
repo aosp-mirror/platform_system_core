@@ -448,10 +448,8 @@ static void load_persistent_properties()
         while ((entry = readdir(dir)) != NULL) {
             if (strncmp("persist.", entry->d_name, strlen("persist.")))
                 continue;
-#if HAVE_DIRENT_D_TYPE
             if (entry->d_type != DT_REG)
                 continue;
-#endif
             /* open the file and read the property value */
             fd = openat(dir_fd, entry->d_name, O_RDONLY | O_NOFOLLOW);
             if (fd < 0) {
