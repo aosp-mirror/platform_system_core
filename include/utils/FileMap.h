@@ -24,7 +24,7 @@
 
 #include <utils/Compat.h>
 
-#ifdef HAVE_WIN32_FILEMAP
+#if defined(__MINGW32__)
 // Ensure that we always pull in winsock2.h before windows.h
 #ifdef HAVE_WINSOCK
 #include <winsock2.h>
@@ -127,7 +127,7 @@ private:
     off64_t     mDataOffset;    // offset used when map was created
     void*       mDataPtr;       // start of requested data, offset from base
     size_t      mDataLength;    // length, measured from "mDataPtr"
-#ifdef HAVE_WIN32_FILEMAP
+#if defined(__MINGW32__)
     HANDLE      mFileHandle;    // Win32 file handle
     HANDLE      mFileMapping;   // Win32 file mapping handle
 #endif

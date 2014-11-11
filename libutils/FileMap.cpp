@@ -23,7 +23,7 @@
 #include <utils/FileMap.h>
 #include <utils/Log.h>
 
-#if defined(HAVE_WIN32_FILEMAP) && !defined(__USE_MINGW_ANSI_STDIO)
+#if defined(__MINGW32__) && !defined(__USE_MINGW_ANSI_STDIO)
 # define PRId32 "I32d"
 # define PRIx32 "I32x"
 # define PRId64 "I64d"
@@ -33,7 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef HAVE_POSIX_FILEMAP
+#if !defined(__MINGW32__)
 #include <sys/mman.h>
 #endif
 
@@ -64,18 +64,17 @@ FileMap::~FileMap(void)
     if (mFileName != NULL) {
         free(mFileName);
     }
-#ifdef HAVE_POSIX_FILEMAP
-    if (mBasePtr && munmap(mBasePtr, mBaseLength) != 0) {
-        ALOGD("munmap(%p, %zu) failed\n", mBasePtr, mBaseLength);
-    }
-#endif
-#ifdef HAVE_WIN32_FILEMAP
+#if defined(__MINGW32__)
     if (mBasePtr && UnmapViewOfFile(mBasePtr) == 0) {
         ALOGD("UnmapViewOfFile(%p) failed, error = %" PRId32 "\n", mBasePtr,
               GetLastError() );
     }
     if (mFileMapping != INVALID_HANDLE_VALUE) {
         CloseHandle(mFileMapping);
+    }
+#else
+    if (mBasePtr && munmap(mBasePtr, mBaseLength) != 0) {
+        ALOGD("munmap(%p, %zu) failed\n", mBasePtr, mBaseLength);
     }
 #endif
 }
@@ -90,7 +89,7 @@ FileMap::~FileMap(void)
 bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t length,
         bool readOnly)
 {
-#ifdef HAVE_WIN32_FILEMAP
+#if defined(__MINGW32__)
     int     adjust;
     off64_t adjOffset;
     size_t  adjLength;
@@ -128,8 +127,7 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
         mFileMapping = INVALID_HANDLE_VALUE;
         return false;
     }
-#endif
-#ifdef HAVE_POSIX_FILEMAP
+#else // !defined(__MINGW32__)
     int     prot, flags, adjust;
     off64_t adjOffset;
     size_t  adjLength;
@@ -179,7 +177,7 @@ try_again:
         return false;
     }
     mBasePtr = ptr;
-#endif // HAVE_POSIX_FILEMAP
+#endif // !defined(__MINGW32__)
 
     mFileName = origFileName != NULL ? strdup(origFileName) : NULL;
     mBaseLength = adjLength;
