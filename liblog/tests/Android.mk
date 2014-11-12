@@ -44,7 +44,6 @@ LOCAL_CFLAGS += $(benchmark_c_flags)
 LOCAL_SHARED_LIBRARIES += liblog libm
 LOCAL_SRC_FILES := $(benchmark_src_files)
 LOCAL_MODULE_PATH := $(TARGET_OUT_DATA_NATIVE_TESTS)/$(LOCAL_MODULE)
-include external/stlport/libstlport.mk
 include $(BUILD_EXECUTABLE)
 
 # -----------------------------------------------------------------------------

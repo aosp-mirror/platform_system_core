@@ -17,6 +17,7 @@
 #include <benchmark.h>
 
 #include <inttypes.h>
+#include <math.h>
 #include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
