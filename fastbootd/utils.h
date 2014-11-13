@@ -29,7 +29,7 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _FASTBOOT_UTLIS_H
+#ifndef _FASTBOOT_UTILS_H
 #define _FASTBOOT_UTILS_H
 
 #include <stdio.h>
