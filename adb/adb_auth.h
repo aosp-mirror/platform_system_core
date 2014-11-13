@@ -18,6 +18,7 @@
 #define __ADB_AUTH_H
 
 void adb_auth_init(void);
+int adb_auth_keygen(const char* filename);
 void adb_auth_verified(atransport *t);
 
 void send_auth_request(atransport *t);
