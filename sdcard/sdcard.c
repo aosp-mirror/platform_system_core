@@ -1269,6 +1269,7 @@ static int handle_write(struct fuse* fuse, struct fuse_handler* handler,
         return -errno;
     }
     out.size = res;
+    out.padding = 0;
     fuse_reply(fuse, hdr->unique, &out, sizeof(out));
     return NO_STATUS;
 }
