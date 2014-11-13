@@ -141,6 +141,8 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_SRC_FILES := \
 	BacktraceMap.cpp \
 
+LOCAL_MULTILIB := both
+
 include $(BUILD_HOST_SHARED_LIBRARY)
 
 endif # HOST_OS-darwin
