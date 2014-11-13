@@ -202,10 +202,10 @@ static void init_subproc_child()
 static int create_subproc_pty(const char *cmd, const char *arg0, const char *arg1, pid_t *pid)
 {
     D("create_subproc_pty(cmd=%s, arg0=%s, arg1=%s)\n", cmd, arg0, arg1);
-#ifdef HAVE_WIN32_PROC
+#if defined(_WIN32)
     fprintf(stderr, "error: create_subproc_pty not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
     return -1;
-#else /* !HAVE_WIN32_PROC */
+#else
     int ptm;
 
     ptm = unix_open("/dev/ptmx", O_RDWR | O_CLOEXEC); // | O_NOCTTY);
@@ -251,16 +251,16 @@ static int create_subproc_pty(const char *cmd, const char *arg0, const char *arg
     } else {
         return ptm;
     }
-#endif /* !HAVE_WIN32_PROC */
+#endif /* !defined(_WIN32) */
 }
 
 static int create_subproc_raw(const char *cmd, const char *arg0, const char *arg1, pid_t *pid)
 {
     D("create_subproc_raw(cmd=%s, arg0=%s, arg1=%s)\n", cmd, arg0, arg1);
-#ifdef HAVE_WIN32_PROC
+#if defined(_WIN32)
     fprintf(stderr, "error: create_subproc_raw not implemented on Win32 (%s %s %s)\n", cmd, arg0, arg1);
     return -1;
-#else /* !HAVE_WIN32_PROC */
+#else
 
     // 0 is parent socket, 1 is child socket
     int sv[2];
@@ -295,7 +295,7 @@ static int create_subproc_raw(const char *cmd, const char *arg0, const char *arg
         adb_close(sv[1]);
         return sv[0];
     }
-#endif /* !HAVE_WIN32_PROC */
+#endif /* !defined(_WIN32) */
 }
 #endif  /* !ABD_HOST */
 
