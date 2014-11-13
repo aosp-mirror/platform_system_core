@@ -114,18 +114,34 @@ out:
 static void get_user_info(char *buf, size_t len)
 {
     char hostname[1024], username[1024];
-    int ret;
+    int ret = -1;
+
+    if (getenv("HOSTNAME") != NULL) {
+        strncpy(hostname, getenv("HOSTNAME"), sizeof(hostname));
+        hostname[sizeof(hostname)-1] = '\0';
+        ret = 0;
+    }
 
 #ifndef _WIN32
-    ret = gethostname(hostname, sizeof(hostname));
     if (ret < 0)
+        ret = gethostname(hostname, sizeof(hostname));
 #endif
+    if (ret < 0)
         strcpy(hostname, "unknown");
 
+    ret = -1;
+
+    if (getenv("LOGNAME") != NULL) {
+        strncpy(username, getenv("LOGNAME"), sizeof(username));
+        username[sizeof(username)-1] = '\0';
+        ret = 0;
+    }
+
 #if !defined _WIN32 && !defined ADB_HOST_ON_TARGET
-    ret = getlogin_r(username, sizeof(username));
     if (ret < 0)
+        ret = getlogin_r(username, sizeof(username));
 #endif
+    if (ret < 0)
         strcpy(username, "unknown");
 
     ret = snprintf(buf, len, " %s@%s", username, hostname);
@@ -434,6 +450,11 @@ int adb_auth_get_userkey(unsigned char *data, size_t len)
     data[ret] = '\0';
 
     return ret + 1;
+}
+
+int adb_auth_keygen(const char* filename) {
+    adb_trace_mask |= (1 << TRACE_AUTH);
+    return (generate_key(filename) == 0);
 }
 
 void adb_auth_init(void)
