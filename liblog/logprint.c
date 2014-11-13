@@ -726,7 +726,7 @@ char *android_log_formatLogLine (
     const AndroidLogEntry *entry,
     size_t *p_outLength)
 {
-#if defined(HAVE_LOCALTIME_R)
+#if !defined(_WIN32)
     struct tm tmBuf;
 #endif
     struct tm* ptm;
@@ -749,7 +749,7 @@ char *android_log_formatLogLine (
      * in the time stamp.  Don't use forward slashes, parenthesis,
      * brackets, asterisks, or other special chars here.
      */
-#if defined(HAVE_LOCALTIME_R)
+#if !defined(_WIN32)
     ptm = localtime_r(&(entry->tv_sec), &tmBuf);
 #else
     ptm = localtime(&(entry->tv_sec));
