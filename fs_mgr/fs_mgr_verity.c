@@ -378,7 +378,7 @@ static int set_verified_property(char *name) {
 
 int fs_mgr_setup_verity(struct fstab_rec *fstab) {
 
-    int retval = -1;
+    int retval = FS_MGR_SETUP_VERITY_FAIL;
     int fd = -1;
 
     char *verity_blk_name = 0;
@@ -408,6 +408,8 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     if (retval < 0) {
         goto out;
     }
+
+    retval = FS_MGR_SETUP_VERITY_FAIL;
 
     // get the device mapper fd
     if ((fd = open("/dev/device-mapper", O_RDWR)) < 0) {
