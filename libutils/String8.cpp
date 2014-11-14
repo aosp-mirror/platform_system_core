@@ -424,7 +424,7 @@ bool String8::removeAll(const char* other) {
             next = len;
         }
 
-        memcpy(buf + tail, buf + index + skip, next - index - skip);
+        memmove(buf + tail, buf + index + skip, next - index - skip);
         tail += next - index - skip;
         index = next;
     }
