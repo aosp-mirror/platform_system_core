@@ -64,6 +64,10 @@ libbacktrace_shared_libraries_host := \
 libbacktrace_static_libraries_host := \
 	libcutils \
 
+libbacktrace_ldlibs_host := \
+	-lpthread \
+	-lrt \
+
 module := libbacktrace
 module_tag := optional
 build_type := target

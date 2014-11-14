@@ -17,24 +17,21 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
-#include <linux/futex.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <ucontext.h>
+#include <unistd.h>
 
 #include <cutils/atomic.h>
 
 #include "BacktraceLog.h"
 #include "BacktraceThread.h"
 #include "thread_utils.h"
-
-static inline int futex(volatile int* uaddr, int op, int val, const struct timespec* ts, volatile int* uaddr2, int val3) {
-  return syscall(__NR_futex, uaddr, op, val, ts, uaddr2, val3);
-}
 
 //-------------------------------------------------------------------------
 // ThreadEntry implementation.
@@ -45,7 +42,14 @@ pthread_mutex_t ThreadEntry::list_mutex_ = PTHREAD_MUTEX_INITIALIZER;
 // Assumes that ThreadEntry::list_mutex_ has already been locked before
 // creating a ThreadEntry object.
 ThreadEntry::ThreadEntry(pid_t pid, pid_t tid)
-    : pid_(pid), tid_(tid), futex_(0), ref_count_(1), mutex_(PTHREAD_MUTEX_INITIALIZER), next_(ThreadEntry::list_), prev_(NULL) {
+    : pid_(pid), tid_(tid), ref_count_(1), mutex_(PTHREAD_MUTEX_INITIALIZER),
+      wait_mutex_(PTHREAD_MUTEX_INITIALIZER), wait_value_(0),
+      next_(ThreadEntry::list_), prev_(NULL) {
+  pthread_condattr_t attr;
+  pthread_condattr_init(&attr);
+  pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+  pthread_cond_init(&wait_cond_, &attr);
+
   // Add ourselves to the list.
   if (ThreadEntry::list_) {
     ThreadEntry::list_->prev_ = this;
@@ -99,22 +103,35 @@ ThreadEntry::~ThreadEntry() {
 
   next_ = NULL;
   prev_ = NULL;
+
+  pthread_cond_destroy(&wait_cond_);
 }
 
 void ThreadEntry::Wait(int value) {
   timespec ts;
-  ts.tv_sec = 10;
-  ts.tv_nsec = 0;
-  errno = 0;
-  futex(&futex_, FUTEX_WAIT, value, &ts, NULL, 0);
-  if (errno != 0 && errno != EWOULDBLOCK) {
-    BACK_LOGW("futex wait failed, futex = %d: %s", futex_, strerror(errno));
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) == -1) {
+    BACK_LOGW("clock_gettime failed: %s", strerror(errno));
+    abort();
   }
+  ts.tv_sec += 10;
+
+  pthread_mutex_lock(&wait_mutex_);
+  while (wait_value_ != value) {
+    int ret = pthread_cond_timedwait(&wait_cond_, &wait_mutex_, &ts);
+    if (ret != 0) {
+      BACK_LOGW("pthread_cond_timedwait failed: %s", strerror(ret));
+      break;
+    }
+  }
+  pthread_mutex_unlock(&wait_mutex_);
 }
 
 void ThreadEntry::Wake() {
-  futex_++;
-  futex(&futex_, FUTEX_WAKE, INT_MAX, NULL, NULL, 0);
+  pthread_mutex_lock(&wait_mutex_);
+  wait_value_++;
+  pthread_mutex_unlock(&wait_mutex_);
+
+  pthread_cond_signal(&wait_cond_);
 }
 
 void ThreadEntry::CopyUcontextFromSigcontext(void* sigcontext) {
@@ -142,7 +159,7 @@ static void SignalHandler(int, siginfo_t*, void* sigcontext) {
 
   // Pause the thread until the unwind is complete. This avoids having
   // the thread run ahead causing problems.
-  entry->Wait(1);
+  entry->Wait(2);
 
   ThreadEntry::Remove(entry);
 }
@@ -194,7 +211,7 @@ bool BacktraceThread::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
   }
 
   // Wait for the thread to get the ucontext.
-  entry->Wait(0);
+  entry->Wait(1);
 
   // After the thread has received the signal, allow other unwinders to
   // continue.
