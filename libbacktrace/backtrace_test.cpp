@@ -51,7 +51,7 @@
 #define NS_PER_SEC              1000000000ULL
 
 // Number of simultaneous dumping operations to perform.
-#define NUM_THREADS  20
+#define NUM_THREADS  40
 
 // Number of simultaneous threads running in our forked process.
 #define NUM_PTRACE_THREADS 5
@@ -486,6 +486,13 @@ TEST(libbacktrace, thread_level_trace) {
   struct sigaction new_action;
   ASSERT_TRUE(sigaction(THREAD_SIGNAL, NULL, &new_action) == 0);
   EXPECT_EQ(cur_action.sa_sigaction, new_action.sa_sigaction);
+  // The SA_RESTORER flag gets set behind our back, so a direct comparison
+  // doesn't work unless we mask the value off. Mips doesn't have this
+  // flag, so skip this on that platform.
+#ifdef SA_RESTORER
+  cur_action.sa_flags &= ~SA_RESTORER;
+  new_action.sa_flags &= ~SA_RESTORER;
+#endif
   EXPECT_EQ(cur_action.sa_flags, new_action.sa_flags);
 }
 
@@ -583,7 +590,7 @@ TEST(libbacktrace, thread_multiple_dump) {
 
   // Wait for tids to be set.
   for (std::vector<thread_t>::iterator it = runners.begin(); it != runners.end(); ++it) {
-    ASSERT_TRUE(WaitForNonZero(&it->state, 10));
+    ASSERT_TRUE(WaitForNonZero(&it->state, 30));
   }
 
   // Start all of the dumpers at once, they will spin until they are signalled
@@ -602,7 +609,7 @@ TEST(libbacktrace, thread_multiple_dump) {
   android_atomic_acquire_store(1, &dump_now);
 
   for (size_t i = 0; i < NUM_THREADS; i++) {
-    ASSERT_TRUE(WaitForNonZero(&dumpers[i].done, 10));
+    ASSERT_TRUE(WaitForNonZero(&dumpers[i].done, 30));
 
     // Tell the runner thread to exit its infinite loop.
     android_atomic_acquire_store(0, &runners[i].state);
@@ -625,7 +632,7 @@ TEST(libbacktrace, thread_multiple_dump_same_thread) {
   ASSERT_TRUE(pthread_create(&runner.threadId, &attr, ThreadMaxRun, &runner) == 0);
 
   // Wait for tids to be set.
-  ASSERT_TRUE(WaitForNonZero(&runner.state, 10));
+  ASSERT_TRUE(WaitForNonZero(&runner.state, 30));
 
   // Start all of the dumpers at once, they will spin until they are signalled
   // to begin their dump run.
@@ -645,7 +652,7 @@ TEST(libbacktrace, thread_multiple_dump_same_thread) {
   android_atomic_acquire_store(1, &dump_now);
 
   for (size_t i = 0; i < NUM_THREADS; i++) {
-    ASSERT_TRUE(WaitForNonZero(&dumpers[i].done, 100));
+    ASSERT_TRUE(WaitForNonZero(&dumpers[i].done, 30));
 
     ASSERT_TRUE(dumpers[i].backtrace != NULL);
     VerifyMaxDump(dumpers[i].backtrace);
