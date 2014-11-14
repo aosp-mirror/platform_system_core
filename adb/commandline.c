@@ -36,6 +36,7 @@
 #define  TRACE_TAG  TRACE_ADB
 #include "adb.h"
 #include "adb_client.h"
+#include "adb_auth.h"
 #include "file_sync_service.h"
 
 static int do_cmd(transport_type ttype, char* serial, char *cmd, ...);
@@ -190,6 +191,9 @@ void help()
         "  adb restore <file>           - restore device contents from the <file> backup archive\n"
         "\n"
         "  adb disable-verity           - disable dm-verity checking on USERDEBUG builds\n"
+        "  adb keygen <file>            - generate adb public/private key. The private key is stored in <file>,\n"
+        "                                 and the public key is stored in <file>.pub. Any existing files\n"
+        "                                 are overwritten.\n"
         "  adb help                     - show this help message\n"
         "  adb version                  - show version num\n"
         "\n"
@@ -1718,6 +1722,11 @@ top:
 
     if (!strcmp(argv[0], "restore")) {
         return restore(argc, argv);
+    }
+
+    if (!strcmp(argv[0], "keygen")) {
+        if (argc < 2) return usage();
+        return adb_auth_keygen(argv[1]);
     }
 
     if (!strcmp(argv[0], "jdwp")) {
