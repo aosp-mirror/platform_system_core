@@ -39,7 +39,7 @@ char *log_time::strptime(const char *s, const char *format) {
 #endif
 
     struct tm *ptm;
-#if (defined(HAVE_LOCALTIME_R))
+#if !defined(_WIN32)
     struct tm tmBuf;
     ptm = localtime_r(&now, &tmBuf);
 #else
@@ -78,7 +78,7 @@ char *log_time::strptime(const char *s, const char *format) {
                 ++ret;
             }
             now = tv_sec;
-#if (defined(HAVE_LOCALTIME_R))
+#if !defined(_WIN32)
             ptm = localtime_r(&now, &tmBuf);
 #else
             ptm = localtime(&now);
