@@ -104,8 +104,6 @@ LOCAL_SHARED_LIBRARIES := \
         liblog \
         libdl
 
-include external/stlport/libstlport.mk
-
 LOCAL_MODULE:= libutils
 include $(BUILD_STATIC_LIBRARY)
 
@@ -120,8 +118,6 @@ LOCAL_SHARED_LIBRARIES := \
         libdl \
         liblog
 LOCAL_CFLAGS := -Werror
-
-include external/stlport/libstlport.mk
 
 include $(BUILD_SHARED_LIBRARY)
 
