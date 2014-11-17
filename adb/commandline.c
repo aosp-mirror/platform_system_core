@@ -29,7 +29,7 @@
 
 #include "sysdeps.h"
 
-#ifdef HAVE_TERMIO_H
+#if !defined(_WIN32)
 #include <termios.h>
 #endif
 
@@ -235,7 +235,18 @@ int usage()
     return 1;
 }
 
-#ifdef HAVE_TERMIO_H
+#if defined(_WIN32)
+
+// Windows does not have <termio.h>.
+static void stdin_raw_init(int fd) {
+
+}
+
+static void stdin_raw_restore(int fd) {
+
+}
+
+#else
 static struct termios tio_save;
 
 static void stdin_raw_init(int fd)
@@ -309,11 +320,11 @@ static void copy_to_file(int inFd, int outFd) {
     long total = 0;
 
     D("copy_to_file(%d -> %d)\n", inFd, outFd);
-#ifdef HAVE_TERMIO_H
+
     if (inFd == STDIN_FILENO) {
         stdin_raw_init(STDIN_FILENO);
     }
-#endif
+
     for (;;) {
         if (inFd == STDIN_FILENO) {
             len = unix_read(inFd, buf, BUFSIZE);
@@ -340,11 +351,11 @@ static void copy_to_file(int inFd, int outFd) {
         }
         total += len;
     }
-#ifdef HAVE_TERMIO_H
+
     if (inFd == STDIN_FILENO) {
         stdin_raw_restore(STDIN_FILENO);
     }
-#endif
+
     D("copy_to_file() finished after %lu bytes\n", total);
     free(buf);
 }
@@ -385,9 +396,7 @@ static void *stdin_read_thread(void *x)
             case '.':
                 if(state == 2) {
                     fprintf(stderr,"\n* disconnect *\n");
-#ifdef HAVE_TERMIO_H
                     stdin_raw_restore(fdi);
-#endif
                     exit(0);
                 }
             default:
@@ -419,14 +428,10 @@ int interactive_shell(void)
     fds[0] = fd;
     fds[1] = fdi;
 
-#ifdef HAVE_TERMIO_H
     stdin_raw_init(fdi);
-#endif
     adb_thread_create(&thr, stdin_read_thread, fds);
     read_and_dump(fd);
-#ifdef HAVE_TERMIO_H
     stdin_raw_restore(fdi);
-#endif
     return 0;
 }
 
