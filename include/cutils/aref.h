@@ -20,11 +20,7 @@
 #include <stddef.h>
 #include <sys/cdefs.h>
 
-#ifdef ANDROID_SMP
 #include <cutils/atomic-inline.h>
-#else
-#include <cutils/atomic.h>
-#endif
 
 __BEGIN_DECLS
 
