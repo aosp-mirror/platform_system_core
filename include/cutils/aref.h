@@ -20,7 +20,7 @@
 #include <stddef.h>
 #include <sys/cdefs.h>
 
-#include <cutils/atomic-inline.h>
+#include <cutils/atomic.h>
 
 __BEGIN_DECLS
 
