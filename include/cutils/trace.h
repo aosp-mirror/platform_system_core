@@ -25,8 +25,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cutils/atomic.h>
 #include <cutils/compiler.h>
-#include <cutils/atomic-inline.h>
 
 __BEGIN_DECLS
 
