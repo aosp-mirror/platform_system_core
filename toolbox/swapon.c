@@ -59,7 +59,7 @@ int swapon_main(int argc, char **argv)
 
     err = swapon(argv[argc - 1], flags);
     if (err) {
-        fprintf(stderr, "swapon failed for %s\n", argv[argc - 1]);
+        fprintf(stderr, "swapon failed for %s: %s\n", argv[argc - 1], strerror(errno));
     }
 
     return err;
