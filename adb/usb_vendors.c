@@ -86,8 +86,6 @@
 #define VENDOR_ID_HARRIS        0x19A5
 // Hisense's USB Vendor ID
 #define VENDOR_ID_HISENSE       0x109b
-// Honeywell's USB Vendor ID
-#define VENDOR_ID_HONEYWELL     0x0c2e
 // HP's USB Vendor ID
 #define VENDOR_ID_HP            0x03f0
 // HTC's USB Vendor ID
@@ -232,7 +230,6 @@ int builtInVendorIds[] = {
     VENDOR_ID_HAIER,
     VENDOR_ID_HARRIS,
     VENDOR_ID_HISENSE,
-    VENDOR_ID_HONEYWELL,
     VENDOR_ID_HP,
     VENDOR_ID_HTC,
     VENDOR_ID_HUAWEI,
