@@ -162,7 +162,7 @@ out:
     return rc;
 }
 
-int audit_set_pid(int fd, uint32_t pid, rep_wait_t wmode)
+int audit_setup(int fd, uint32_t pid)
 {
     int rc;
     struct audit_message rep;
@@ -176,7 +176,8 @@ int audit_set_pid(int fd, uint32_t pid, rep_wait_t wmode)
      * and the the mask set to AUDIT_STATUS_PID
      */
     status.pid = pid;
-    status.mask = AUDIT_STATUS_PID;
+    status.mask = AUDIT_STATUS_PID | AUDIT_STATUS_RATE_LIMIT;
+    status.rate_limit = 20; // audit entries per second
 
     /* Let the kernel know this pid will be registering for audit events */
     rc = audit_send(fd, AUDIT_SET, &status, sizeof(status));
@@ -188,24 +189,21 @@ int audit_set_pid(int fd, uint32_t pid, rep_wait_t wmode)
     /*
      * In a request where we need to wait for a response, wait for the message
      * and discard it. This message confirms and sync's us with the kernel.
-     * This daemon is now registered as the audit logger. Only wait if the
-     * wmode is != WAIT_NO
+     * This daemon is now registered as the audit logger.
+     *
+     * TODO
+     * If the daemon dies and restarts the message didn't come back,
+     * so I went to non-blocking and it seemed to fix the bug.
+     * Need to investigate further.
      */
-    if (wmode != WAIT_NO) {
-        /* TODO
-         * If the daemon dies and restarts the message didn't come back,
-         * so I went to non-blocking and it seemed to fix the bug.
-         * Need to investigate further.
-         */
-        audit_get_reply(fd, &rep, GET_REPLY_NONBLOCKING, 0);
-    }
+    audit_get_reply(fd, &rep, GET_REPLY_NONBLOCKING, 0);
 
     return 0;
 }
 
 int audit_open()
 {
-    return socket(PF_NETLINK, SOCK_RAW, NETLINK_AUDIT);
+    return socket(PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_AUDIT);
 }
 
 int audit_get_reply(int fd, struct audit_message *rep, reply_t block, int peek)
