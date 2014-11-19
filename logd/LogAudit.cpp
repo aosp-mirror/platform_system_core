@@ -248,7 +248,7 @@ int LogAudit::getLogSocket() {
     if (fd < 0) {
         return fd;
     }
-    if (audit_set_pid(fd, getpid(), WAIT_YES) < 0) {
+    if (audit_setup(fd, getpid()) < 0) {
         audit_close(fd);
         fd = -1;
     }
