@@ -194,9 +194,9 @@ try_again:
 }
 
 // Provide guidance to the system.
+#if !defined(_WIN32)
 int FileMap::advise(MapAdvice advice)
 {
-#if !defined(_WIN32)
     int cc, sysAdvice;
 
     switch (advice) {
@@ -214,7 +214,11 @@ int FileMap::advise(MapAdvice advice)
     if (cc != 0)
         ALOGW("madvise(%d) failed: %s\n", sysAdvice, strerror(errno));
     return cc;
-#else
-    return -1;
-#endif
 }
+
+#else
+int FileMap::advise(MapAdvice /* advice */)
+{
+    return -1;
+}
+#endif
