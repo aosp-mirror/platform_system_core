@@ -19,12 +19,12 @@
 
 void get_my_path(char *s, size_t maxLen)
 {
-    ProcessSerialNumber psn;
-    GetCurrentProcess(&psn);
-    CFDictionaryRef dict;
-    dict = ProcessInformationCopyDictionary(&psn, 0xffffffff);
-    CFStringRef value = (CFStringRef)CFDictionaryGetValue(dict,
-                CFSTR("CFBundleExecutable"));
-    CFStringGetCString(value, s, maxLen, kCFStringEncodingUTF8);
+    CFBundleRef mainBundle = CFBundleGetMainBundle();
+    CFURLRef bundleURL = CFBundleCopyBundleURL(mainBundle);
+    CFStringRef bundlePathString = CFURLCopyFileSystemPath(bundleURL, kCFURLPOSIXPathStyle);
+    CFRelease(bundleURL);
+
+    CFStringGetCString(bundlePathString, s, maxLen, kCFStringEncodingASCII);
+    CFRelease(bundlePathString);
 }
 
