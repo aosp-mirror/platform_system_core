@@ -301,7 +301,7 @@ int builtInVendorIds[] = {
 int vendorIds[VENDOR_COUNT_MAX];
 unsigned vendorIdCount = 0;
 
-int get_adb_usb_ini(char* buff, size_t len);
+static int get_adb_usb_ini(char* buff, size_t len);
 
 void usb_vendors_init(void)
 {
@@ -351,7 +351,7 @@ void usb_vendors_init(void)
 /* Utils methods */
 
 /* builds the path to the adb vendor id file. returns 0 if success */
-int build_path(char* buff, size_t len, const char* format, const char* home)
+static int build_path(char* buff, size_t len, const char* format, const char* home)
 {
     if (snprintf(buff, len, format, home, ANDROID_PATH, ANDROID_ADB_INI) >= (signed)len) {
         return 1;
@@ -361,7 +361,7 @@ int build_path(char* buff, size_t len, const char* format, const char* home)
 }
 
 /* fills buff with the path to the adb vendor id file. returns 0 if success */
-int get_adb_usb_ini(char* buff, size_t len)
+static int get_adb_usb_ini(char* buff, size_t len)
 {
 #ifdef _WIN32
     const char* home = getenv("ANDROID_SDK_HOME");
