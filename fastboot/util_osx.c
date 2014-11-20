@@ -32,12 +32,12 @@
 void get_my_path(char s[PATH_MAX])
 {
     CFBundleRef mainBundle = CFBundleGetMainBundle();
-    CFURLRef bundleURL = CFBundleCopyBundleURL(mainBundle);
-    CFStringRef bundlePathString = CFURLCopyFileSystemPath(bundleURL, kCFURLPOSIXPathStyle);
-    CFRelease(bundleURL);
+    CFURLRef executableURL = CFBundleCopyExecutableURL(mainBundle);
+    CFStringRef executablePathString = CFURLCopyFileSystemPath(executableURL, kCFURLPOSIXPathStyle);
+    CFRelease(executableURL);
 
-    CFStringGetCString(bundlePathString, s, PATH_MAX - 1, kCFStringEncodingASCII);
-    CFRelease(bundlePathString);
+    CFStringGetCString(executablePathString, s, PATH_MAX-1, kCFStringEncodingASCII);
+    CFRelease(executablePathString);
 
 	char *x;
     x = strrchr(s, '/');
