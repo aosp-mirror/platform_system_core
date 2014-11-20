@@ -744,7 +744,7 @@ static int32_t UpdateEntryFromDataDescriptor(int fd,
 // as a side effect of this call.
 static inline ssize_t ReadAtOffset(int fd, uint8_t* buf, size_t len,
                                    off64_t off) {
-#ifdef HAVE_PREAD
+#if !defined(_WIN32)
   return TEMP_FAILURE_RETRY(pread64(fd, buf, len, off));
 #else
   // The only supported platform that doesn't support pread at the moment
@@ -756,7 +756,7 @@ static inline ssize_t ReadAtOffset(int fd, uint8_t* buf, size_t len,
   }
 
   return TEMP_FAILURE_RETRY(read(fd, buf, len));
-#endif  // HAVE_PREAD
+#endif
 }
 
 static int32_t FindEntry(const ZipArchive* archive, const int ent,
