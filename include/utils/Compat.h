@@ -44,6 +44,17 @@ static inline ssize_t pread64(int fd, void* buf, size_t nbytes, off64_t offset) 
 #endif
 
 /*
+ * Needed for cases where something should be constexpr if possible, but not
+ * being constexpr is fine if in pre-C++11 code (such as a const static float
+ * member variable).
+ */
+#if __cplusplus >= 201103L
+#define CONSTEXPR constexpr
+#else
+#define CONSTEXPR
+#endif
+
+/*
  * TEMP_FAILURE_RETRY is defined by some, but not all, versions of
  * <unistd.h>. (Alas, it is not as standard as we'd hoped!) So, if it's
  * not already defined, then define it here.
