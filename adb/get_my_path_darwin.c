@@ -20,11 +20,11 @@
 void get_my_path(char *s, size_t maxLen)
 {
     CFBundleRef mainBundle = CFBundleGetMainBundle();
-    CFURLRef bundleURL = CFBundleCopyBundleURL(mainBundle);
-    CFStringRef bundlePathString = CFURLCopyFileSystemPath(bundleURL, kCFURLPOSIXPathStyle);
-    CFRelease(bundleURL);
+    CFURLRef executableURL = CFBundleCopyExecutableURL(mainBundle);
+    CFStringRef executablePathString = CFURLCopyFileSystemPath(executableURL, kCFURLPOSIXPathStyle);
+    CFRelease(executableURL);
 
-    CFStringGetCString(bundlePathString, s, maxLen, kCFStringEncodingASCII);
-    CFRelease(bundlePathString);
+    CFStringGetCString(executablePathString, s, maxLen, kCFStringEncodingASCII);
+    CFRelease(executablePathString);
 }
 
