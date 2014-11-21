@@ -30,6 +30,9 @@
  */
 
 #include "commands/virtual_partitions.h"
+
+#include <string.h>
+
 #include "debug.h"
 
 static struct virtual_partition *partitions = NULL;
