@@ -279,12 +279,12 @@ static int mkdirAndChown(const char *path, mode_t mode, uid_t uid, gid_t gid)
 {
     int ret;
 
-    ret = mkdir(path, 0750);
+    ret = mkdir(path, mode);
     if (ret < 0 && errno != EEXIST) {
         return -errno;
     }
 
-    ret = chown(path, AID_SYSTEM, AID_SYSTEM);
+    ret = chown(path, uid, gid);
     if (ret < 0) {
         ret = -errno;
         rmdir(path);
