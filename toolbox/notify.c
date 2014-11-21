@@ -101,14 +101,17 @@ int notify_main(int argc, char *argv[])
 			else if(verbose >= 1)
 		        printf("%d: %08x \"%s\"\n", event->wd, event->mask, event->len ? event->name : "");
 			if(print_files && (event->mask & IN_MODIFY)) {
-				char filename[512];
+				char* filename = file_names[event->wd + id_offset];
+				char* alloc_buf = NULL;
 				ssize_t read_len;
 				char *display_name;
 				int buflen;
-				strcpy(filename, file_names[event->wd + id_offset]);
 				if(event->len) {
-					strcat(filename, "/");
-					strcat(filename, event->name);
+					if(asprintf(&alloc_buf, "%s/%s", filename, event->name) < 0) {
+						fprintf(stderr, "asprintf failed, %s\n", strerror(errno));
+						return 1;
+					}
+					filename = alloc_buf;
 				}
 				ffd = open(filename, O_RDONLY);
 				display_name = (verbose >= 2 || event->len == 0) ? filename : event->name;
@@ -132,6 +135,7 @@ int notify_main(int argc, char *argv[])
 					printf("%s: %s", display_name, buf);
 				}
 				close(ffd);
+				free(alloc_buf);
 			}
 	        if(event_count && --event_count == 0)
 	            return 0;
