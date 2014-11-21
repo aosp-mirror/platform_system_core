@@ -24,7 +24,7 @@ void get_my_path(char *s, size_t maxLen)
     CFStringRef executablePathString = CFURLCopyFileSystemPath(executableURL, kCFURLPOSIXPathStyle);
     CFRelease(executableURL);
 
-    CFStringGetCString(executablePathString, s, maxLen, kCFStringEncodingASCII);
+    CFStringGetFileSystemRepresentation(executablePathString, s, maxLen);
     CFRelease(executablePathString);
 }
 
