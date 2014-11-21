@@ -28,12 +28,11 @@
 
 #define TRACE_TAG   TRACE_USB
 #include "adb.h"
-#include "usb_vendors.h"
 
 #define  DBG   D
 
 static IONotificationPortRef    notificationPort = 0;
-static io_iterator_t*           notificationIterators;
+static io_iterator_t            notificationIterator;
 
 struct usb_handle
 {
@@ -61,8 +60,6 @@ InitUSB()
 {
     CFMutableDictionaryRef  matchingDict;
     CFRunLoopSourceRef      runLoopSource;
-    SInt32                  vendor, if_subclass, if_protocol;
-    unsigned                i;
 
     //* To set up asynchronous notifications, create a notification port and
     //* add its run loop event source to the program's run loop
@@ -70,46 +67,32 @@ InitUSB()
     runLoopSource = IONotificationPortGetRunLoopSource(notificationPort);
     CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, kCFRunLoopDefaultMode);
 
-    memset(notificationIterators, 0, sizeof(notificationIterators));
+    //* Create our matching dictionary to find the Android device's
+    //* adb interface
+    //* IOServiceAddMatchingNotification consumes the reference, so we do
+    //* not need to release this
+    matchingDict = IOServiceMatching(kIOUSBInterfaceClassName);
 
-    //* loop through all supported vendors
-    for (i = 0; i < vendorIdCount; i++) {
-        //* Create our matching dictionary to find the Android device's
-        //* adb interface
-        //* IOServiceAddMatchingNotification consumes the reference, so we do
-        //* not need to release this
-        matchingDict = IOServiceMatching(kIOUSBInterfaceClassName);
-
-        if (!matchingDict) {
-            DBG("ERR: Couldn't create USB matching dictionary.\n");
-            return -1;
-        }
-
-        //* Match based on vendor id, interface subclass and protocol
-        vendor = vendorIds[i];
-        if_subclass = ADB_SUBCLASS;
-        if_protocol = ADB_PROTOCOL;
-        CFDictionarySetValue(matchingDict, CFSTR(kUSBVendorID),
-                             CFNumberCreate(kCFAllocatorDefault,
-                                            kCFNumberSInt32Type, &vendor));
-        CFDictionarySetValue(matchingDict, CFSTR(kUSBInterfaceSubClass),
-                             CFNumberCreate(kCFAllocatorDefault,
-                                            kCFNumberSInt32Type, &if_subclass));
-        CFDictionarySetValue(matchingDict, CFSTR(kUSBInterfaceProtocol),
-                             CFNumberCreate(kCFAllocatorDefault,
-                                            kCFNumberSInt32Type, &if_protocol));
-        IOServiceAddMatchingNotification(
-                notificationPort,
-                kIOFirstMatchNotification,
-                matchingDict,
-                AndroidInterfaceAdded,
-                NULL,
-                &notificationIterators[i]);
-
-        //* Iterate over set of matching interfaces to access already-present
-        //* devices and to arm the notification
-        AndroidInterfaceAdded(NULL, notificationIterators[i]);
+    if (!matchingDict) {
+        DBG("ERR: Couldn't create USB matching dictionary.\n");
+        return -1;
     }
+
+    //* We have to get notifications for all potential candidates and test them
+    //* at connection time because the matching rules don't allow for a
+    //* USB interface class of 0xff for class+subclass+protocol matches
+    //* See https://developer.apple.com/library/mac/qa/qa1076/_index.html
+    IOServiceAddMatchingNotification(
+            notificationPort,
+            kIOFirstMatchNotification,
+            matchingDict,
+            AndroidInterfaceAdded,
+            NULL,
+            &notificationIterator);
+
+    //* Iterate over set of matching interfaces to access already-present
+    //* devices and to arm the notification
+    AndroidInterfaceAdded(NULL, notificationIterator);
 
     return 0;
 }
@@ -126,6 +109,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
     HRESULT                  result;
     SInt32                   score;
     UInt32                   locationId;
+    UInt8                    class, subclass, protocol;
     UInt16                   vendor;
     UInt16                   product;
     UInt8                    serialIndex;
@@ -153,6 +137,16 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         (*plugInInterface)->Release(plugInInterface);
         if (result || !iface) {
             DBG("ERR: Couldn't query the interface (%08x)\n", (int) result);
+            continue;
+        }
+
+        kr = (*iface)->GetInterfaceClass(iface, &class);
+        kr = (*iface)->GetInterfaceSubClass(iface, &subclass);
+        kr = (*iface)->GetInterfaceProtocol(iface, &protocol);
+        if(class != ADB_CLASS || subclass != ADB_SUBCLASS || protocol != ADB_PROTOCOL) {
+            // Ignore non-ADB devices.
+            DBG("Ignoring interface with incorrect class/subclass/protocol - %d, %d, %d\n", class, subclass, protocol);
+            (*iface)->Release(iface);
             continue;
         }
 
@@ -192,7 +186,6 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
 
         //* Now after all that, we actually have a ref to the device and
         //* the interface that matched our criteria
-
         kr = (*dev)->GetDeviceVendor(dev, &vendor);
         kr = (*dev)->GetDeviceProduct(dev, &product);
         kr = (*dev)->GetLocationID(dev, &locationId);
@@ -385,8 +378,6 @@ err_get_num_ep:
 
 void* RunLoopThread(void* unused)
 {
-    unsigned i;
-
     InitUSB();
 
     currentRunLoop = CFRunLoopGetCurrent();
@@ -399,9 +390,7 @@ void* RunLoopThread(void* unused)
     CFRunLoopRun();
     currentRunLoop = 0;
 
-    for (i = 0; i < vendorIdCount; i++) {
-        IOObjectRelease(notificationIterators[i]);
-    }
+    IOObjectRelease(notificationIterator);
     IONotificationPortDestroy(notificationPort);
 
     DBG("RunLoopThread done\n");
@@ -415,9 +404,6 @@ void usb_init()
     if (!initialized)
     {
         adb_thread_t    tid;
-
-        notificationIterators = (io_iterator_t*)malloc(
-            vendorIdCount * sizeof(io_iterator_t));
 
         adb_mutex_init(&start_lock, NULL);
         adb_cond_init(&start_cond, NULL);
@@ -443,11 +429,6 @@ void usb_cleanup()
     close_usb_devices();
     if (currentRunLoop)
         CFRunLoopStop(currentRunLoop);
-
-    if (notificationIterators != NULL) {
-        free(notificationIterators);
-        notificationIterators = NULL;
-    }
 }
 
 int usb_write(usb_handle *handle, const void *buf, int len)
