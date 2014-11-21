@@ -41,8 +41,6 @@
 #include <sys/prctl.h>
 #include <getopt.h>
 #include <selinux/selinux.h>
-#else
-#include "usb_vendors.h"
 #endif
 
 #if ADB_TRACE
@@ -1320,7 +1318,6 @@ int adb_main(int is_daemon, int server_port)
 #ifdef WORKAROUND_BUG6558362
     if(is_daemon) adb_set_affinity();
 #endif
-    usb_vendors_init();
     usb_init();
     local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
     adb_auth_init();
