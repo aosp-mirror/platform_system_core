@@ -24,17 +24,10 @@
 # undef  nhtos
 # undef  htons
 
-# ifdef HAVE_LITTLE_ENDIAN
-#  define ntohl(x)    ( ((x) << 24) | (((x) >> 24) & 255) | (((x) << 8) & 0xff0000) | (((x) >> 8) & 0xff00) )
-#  define htonl(x)    ntohl(x)
-#  define ntohs(x)    ( (((x) << 8) & 0xff00) | (((x) >> 8) & 255) )
-#  define htons(x)    ntohs(x)
-# else
-#  define ntohl(x)    (x)
-#  define htonl(x)    (x)
-#  define ntohs(x)    (x)
-#  define htons(x)    (x)
-# endif
+# define ntohl(x)    ( ((x) << 24) | (((x) >> 24) & 255) | (((x) << 8) & 0xff0000) | (((x) >> 8) & 0xff00) )
+# define htonl(x)    ntohl(x)
+# define ntohs(x)    ( (((x) << 8) & 0xff00) | (((x) >> 8) & 255) )
+# define htons(x)    ntohs(x)
 #else
 # include <netinet/in.h>
 #endif
