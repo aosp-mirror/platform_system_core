@@ -66,7 +66,7 @@ int socket_local_server_bind(int s, const char *name, int namespaceId)
     }
 
     /* basically: if this is a filesystem path, unlink first */
-#ifndef HAVE_LINUX_LOCAL_SOCKET_NAMESPACE
+#if !defined(__linux__)
     if (1) {
 #else
     if (namespaceId == ANDROID_SOCKET_NAMESPACE_RESERVED
