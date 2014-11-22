@@ -17,22 +17,10 @@
 #ifndef _FILE_SYNC_SERVICE_H_
 #define _FILE_SYNC_SERVICE_H_
 
-#ifdef HAVE_BIG_ENDIAN
-static inline unsigned __swap_uint32(unsigned x) 
-{
-    return (((x) & 0xFF000000) >> 24)
-        | (((x) & 0x00FF0000) >> 8)
-        | (((x) & 0x0000FF00) << 8)
-        | (((x) & 0x000000FF) << 24);
-}
-#define htoll(x) __swap_uint32(x)
-#define ltohl(x) __swap_uint32(x)
-#define MKID(a,b,c,d) ((d) | ((c) << 8) | ((b) << 16) | ((a) << 24))
-#else
 #define htoll(x) (x)
 #define ltohl(x) (x)
+
 #define MKID(a,b,c,d) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
-#endif
 
 #define ID_STAT MKID('S','T','A','T')
 #define ID_LIST MKID('L','I','S','T')
