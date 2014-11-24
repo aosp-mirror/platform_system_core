@@ -421,7 +421,6 @@ int ifc_clear_addresses(const char *name) {
 
 int ifc_set_hwaddr(const char *name, const void *ptr)
 {
-    int r;
     struct ifreq ifr;
     ifc_init_ifr(name, &ifr);
 
