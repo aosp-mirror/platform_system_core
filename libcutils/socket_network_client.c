@@ -45,7 +45,6 @@ int socket_network_client_timeout(const char *host, int port, int type, int time
 {
     struct hostent *hp;
     struct sockaddr_in addr;
-    socklen_t alen;
     int s;
     int flags = 0, error = 0, ret = 0;
     fd_set rset, wset;
