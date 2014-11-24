@@ -52,7 +52,7 @@ public:
         adf_device_close(&dev);
     }
 
-    void get8888Format(uint32_t &fmt) {
+    void get8888Format(uint32_t &fmt, char fmt_str[ADF_FORMAT_STR_SIZE]) {
         adf_overlay_engine_data data;
         int err = adf_get_overlay_engine_data(eng, &data);
         ASSERT_GE(err, 0) << "getting ADF overlay engine data failed: " <<
@@ -62,6 +62,7 @@ public:
             for (size_t j = 0; j < n_fmt8888; j++) {
                 if (data.supported_formats[i] == fmt8888[j]) {
                     fmt = data.supported_formats[i];
+                    adf_format_str(fmt, fmt_str);
                     adf_free_overlay_engine_data(&data);
                     return;
                 }
@@ -98,10 +99,32 @@ public:
                  strerror(-err);
     }
 
+    void getCurrentMode(uint32_t &w, uint32_t &h) {
+        adf_interface_data data;
+        ASSERT_NO_FATAL_FAILURE(getInterfaceData(data));
+        w = data.current_mode.hdisplay;
+        h = data.current_mode.vdisplay;
+        adf_free_interface_data(&data);
+    }
+
     void blank(uint8_t mode) {
         int err = adf_interface_blank(intf, mode);
         ASSERT_FALSE(err < 0 && err != -EBUSY) <<
                 "unblanking interface failed: " << strerror(-err);
+    }
+
+    void attach() {
+        int err = adf_device_attach(&dev, eng_id, intf_id);
+        ASSERT_FALSE(err < 0 && err != -EALREADY) <<
+                "attaching overlay engine " << eng_id << " to interface " <<
+                intf_id << " failed: " << strerror(-err);
+    }
+
+    void detach() {
+        int err = adf_device_detach(&dev, eng_id, intf_id);
+        ASSERT_FALSE(err < 0 && err != -EINVAL) <<
+                "detaching overlay engine " << eng_id << " from interface " <<
+                intf_id << " failed: " << strerror(-err);
     }
 
     void readVsyncTimestamp(uint64_t &timestamp) {
@@ -190,8 +213,19 @@ TEST_F(AdfTest, overlay_engine_data) {
 }
 
 TEST_F(AdfTest, blank) {
+    int err = adf_interface_blank(intf, (uint8_t)-1);
+    EXPECT_EQ(-EINVAL, err) << "setting bogus DPMS mode should have failed";
+
+    err = adf_interface_blank(eng, DRM_MODE_DPMS_OFF);
+    EXPECT_EQ(-EINVAL, err) << "blanking overlay engine should have failed";
+
     ASSERT_NO_FATAL_FAILURE(blank(DRM_MODE_DPMS_OFF));
+    err = adf_interface_blank(intf, DRM_MODE_DPMS_OFF);
+    EXPECT_EQ(-EBUSY, err) << "blanking interface twice should have failed";
+
     ASSERT_NO_FATAL_FAILURE(blank(DRM_MODE_DPMS_ON));
+    err = adf_interface_blank(intf, DRM_MODE_DPMS_ON);
+    EXPECT_EQ(-EBUSY, err) << "unblanking interface twice should have failed";
 
     adf_interface_data data;
     ASSERT_NO_FATAL_FAILURE(getInterfaceData(data));
@@ -200,8 +234,18 @@ TEST_F(AdfTest, blank) {
 }
 
 TEST_F(AdfTest, event) {
-    int err = adf_set_event(intf, ADF_EVENT_VSYNC, true);
+    int err = adf_set_event(intf, ADF_EVENT_TYPE_MAX, true);
+    EXPECT_EQ(-EINVAL, err) << "enabling bogus ADF event should have failed";
+
+    err = adf_set_event(intf, ADF_EVENT_TYPE_MAX, false);
+    EXPECT_EQ(-EINVAL, err) << "disabling bogus ADF event should have failed";
+
+    err = adf_set_event(intf, ADF_EVENT_VSYNC, true);
     ASSERT_GE(err, 0) << "enabling vsync event failed: " << strerror(-err);
+
+    err = adf_set_event(intf, ADF_EVENT_VSYNC, true);
+    EXPECT_EQ(-EALREADY, err) <<
+            "enabling vsync event twice should have failed";
 
     ASSERT_NO_FATAL_FAILURE(blank(DRM_MODE_DPMS_ON));
 
@@ -212,19 +256,64 @@ TEST_F(AdfTest, event) {
 
     err = adf_set_event(intf, ADF_EVENT_VSYNC, false);
     EXPECT_GE(err, 0) << "disabling vsync event failed: " << strerror(-err);
+
+    err = adf_set_event(intf, ADF_EVENT_VSYNC, false);
+    EXPECT_EQ(-EALREADY, err) <<
+            "disabling vsync event twice should have failed";
+}
+
+TEST_F(AdfTest, attach) {
+    ASSERT_NO_FATAL_FAILURE(attach());
+    int err = adf_device_attach(&dev, eng_id, intf_id);
+    EXPECT_EQ(-EALREADY, err) << "attaching overlay engine " << eng_id <<
+            " to interface " << intf_id << " twice should have failed";
+
+    ASSERT_NO_FATAL_FAILURE(detach());
+    err = adf_device_detach(&dev, eng_id, intf_id);
+    EXPECT_EQ(-EINVAL, err) << "detaching overlay engine " << eng_id <<
+            " from interface " << intf_id << " twice should have failed";
+
+    err = adf_device_attach(&dev, eng_id, ADF_MAX_INTERFACES);
+    EXPECT_EQ(-EINVAL, err) << "attaching overlay engine " << eng_id <<
+            " to bogus interface should have failed";
+
+    err = adf_device_detach(&dev, eng_id, ADF_MAX_INTERFACES);
+    EXPECT_EQ(-EINVAL, err) << "detaching overlay engine " << eng_id <<
+            " from bogus interface should have failed";
+}
+
+TEST_F(AdfTest, simple_buffer_alloc) {
+    uint32_t w = 0, h = 0;
+    ASSERT_NO_FATAL_FAILURE(getCurrentMode(w, h));
+
+    uint32_t format;
+    char format_str[ADF_FORMAT_STR_SIZE];
+    ASSERT_NO_FATAL_FAILURE(get8888Format(format, format_str));
+
+    uint32_t offset;
+    uint32_t pitch;
+    int buf_fd = adf_interface_simple_buffer_alloc(intf, w, h, format, &offset,
+            &pitch);
+    EXPECT_GE(buf_fd, 0) << "allocating " << w << "x" << h << " " <<
+            format_str << " buffer failed: " << strerror(-buf_fd);
+    EXPECT_GE(pitch, w * 4);
+    close(buf_fd);
+
+    buf_fd = adf_interface_simple_buffer_alloc(intf, w, h, 0xDEADBEEF, &offset,
+            &pitch);
+    /* n.b.: ADF only allows simple buffers with built-in RGB formats,
+       so this should fail even if a driver supports custom format 0xDEADBEEF */
+    EXPECT_EQ(-EINVAL, buf_fd) <<
+            "allocating buffer with bogus format should have failed";
 }
 
 TEST_F(AdfTest, simple_buffer) {
-    adf_interface_data data;
-    ASSERT_NO_FATAL_FAILURE(getInterfaceData(data));
-    uint32_t w = data.current_mode.hdisplay;
-    uint32_t h = data.current_mode.vdisplay;
-    adf_free_interface_data(&data);
+    uint32_t w = 0, h = 0;
+    ASSERT_NO_FATAL_FAILURE(getCurrentMode(w, h));
 
     uint32_t format = 0;
-    ASSERT_NO_FATAL_FAILURE(get8888Format(format));
     char format_str[ADF_FORMAT_STR_SIZE];
-    adf_format_str(format, format_str);
+    ASSERT_NO_FATAL_FAILURE(get8888Format(format, format_str));
 
     uint32_t offset;
     uint32_t pitch;
@@ -241,11 +330,7 @@ TEST_F(AdfTest, simple_buffer) {
     drawCheckerboard(mapped, w, h, pitch);
     munmap(mapped, pitch * h);
 
-    int err = adf_device_attach(&dev, eng_id, intf_id);
-    ASSERT_FALSE(err < 0 && err != -EALREADY) << "attaching overlay engine " <<
-            eng_id << " to interface " << intf_id << " failed: " <<
-            strerror(-err);
-
+    ASSERT_NO_FATAL_FAILURE(attach());
     ASSERT_NO_FATAL_FAILURE(blank(DRM_MODE_DPMS_ON));
 
     int release_fence = adf_interface_simple_post(intf, eng_id, w, h, format,
