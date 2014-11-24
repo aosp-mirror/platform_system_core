@@ -153,13 +153,11 @@ OUR_TOOLS := \
     id \
     ifconfig \
     iftop \
-    insmod \
     ioctl \
     ionice \
     load_policy \
     log \
     ls \
-    lsmod \
     lsof \
     md5 \
     mkdir \
@@ -175,7 +173,6 @@ OUR_TOOLS := \
     readlink \
     renice \
     restorecon \
-    rmmod \
     route \
     runcon \
     schedtop \
