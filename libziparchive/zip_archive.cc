@@ -193,7 +193,6 @@ struct DataDescriptor {
 #undef DISALLOW_IMPLICIT_CONSTRUCTORS
 
 static const uint32_t kGPBDDFlagMask = 0x0008;         // mask value that signifies that the entry has a DD
-static const uint32_t kMaxErrorLen = 1024;
 
 // The maximum size of a central directory or a file
 // comment in bytes.
