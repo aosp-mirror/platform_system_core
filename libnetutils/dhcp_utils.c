@@ -166,14 +166,6 @@ static int fill_ip_info(const char *interface,
     return 0;
 }
 
-static const char *ipaddr_to_string(in_addr_t addr)
-{
-    struct in_addr in_addr;
-
-    in_addr.s_addr = addr;
-    return inet_ntoa(in_addr);
-}
-
 /*
  * Start the dhcp client daemon, and wait for it to finish
  * configuring the interface.
@@ -242,7 +234,6 @@ int dhcp_do_request(const char *interface,
         return -1;
     }
     if (strcmp(prop_value, "ok") == 0) {
-        char dns_prop_name[PROPERTY_KEY_MAX];
         if (fill_ip_info(interface, ipaddr, gateway, prefixLength, dns,
                 server, lease, vendorInfo, domain, mtu) == -1) {
             return -1;
