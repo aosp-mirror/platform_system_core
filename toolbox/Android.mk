@@ -215,11 +215,6 @@ LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libselinux \
 
-# libusbhost is only used by lsusb, and that isn't usually included in toolbox.
-# The linker strips out all the unused library code in the normal case.
-LOCAL_STATIC_LIBRARIES := \
-    libusbhost \
-
 LOCAL_WHOLE_STATIC_LIBRARIES := $(patsubst %,libtoolbox_%,$(BSD_TOOLS))
 
 LOCAL_MODULE := toolbox
