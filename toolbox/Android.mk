@@ -112,13 +112,6 @@ LOCAL_MODULE := libtoolbox_sleep
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := upstream-netbsd/bin/sync/sync.c
-LOCAL_CFLAGS += $(common_cflags) -Dmain=sync_main
-LOCAL_MODULE := libtoolbox_sync
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
-include $(BUILD_STATIC_LIBRARY)
-
 
 include $(CLEAR_VARS)
 
@@ -136,7 +129,6 @@ BSD_TOOLS := \
     rm \
     rmdir \
     sleep \
-    sync \
 
 OUR_TOOLS := \
     chcon \
