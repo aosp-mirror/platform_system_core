@@ -138,7 +138,6 @@ OUR_TOOLS := \
     md5 \
     mkdir \
     mknod \
-    mkswap \
     mount \
     nandread \
     netstat \
@@ -160,8 +159,6 @@ OUR_TOOLS := \
     smd \
     start \
     stop \
-    swapoff \
-    swapon \
     top \
     touch \
     umount \
