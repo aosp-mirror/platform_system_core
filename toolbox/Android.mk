@@ -153,13 +153,11 @@ OUR_TOOLS := \
     id \
     ifconfig \
     iftop \
-    insmod \
     ioctl \
     ionice \
     load_policy \
     log \
     ls \
-    lsmod \
     lsof \
     md5 \
     mkdir \
@@ -172,11 +170,10 @@ OUR_TOOLS := \
     nohup \
     notify \
     ps \
+    prlimit \
     readlink \
     renice \
     restorecon \
-    prlimit \
-    rmmod \
     route \
     runcon \
     schedtop \
