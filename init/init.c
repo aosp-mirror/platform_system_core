@@ -76,7 +76,6 @@ static char qemu[32];
 
 static struct action *cur_action = NULL;
 static struct command *cur_command = NULL;
-static struct listnode *command_queue = NULL;
 
 void notify_service_state(const char *name, const char *state)
 {
@@ -170,7 +169,6 @@ void service_start(struct service *svc, const char *dynamic_args)
     struct stat s;
     pid_t pid;
     int needs_console;
-    int n;
     char *scon = NULL;
     int rc;
 
@@ -596,10 +594,10 @@ void execute_one_command(void)
 static int wait_for_coldboot_done_action(int nargs, char **args)
 {
     int ret;
-    INFO("wait for %s\n", coldboot_done);
-    ret = wait_for_file(coldboot_done, COMMAND_RETRY_TIMEOUT);
+    INFO("wait for %s\n", COLDBOOT_DONE);
+    ret = wait_for_file(COLDBOOT_DONE, COMMAND_RETRY_TIMEOUT);
     if (ret)
-        ERROR("Timed out waiting for %s\n", coldboot_done);
+        ERROR("Timed out waiting for %s\n", COLDBOOT_DONE);
     return ret;
 }
 
@@ -1021,9 +1019,6 @@ int main(int argc, char **argv)
 {
     int fd_count = 0;
     struct pollfd ufds[4];
-    char *tmpdev;
-    char* debuggable;
-    char tmp[32];
     int property_set_fd_init = 0;
     int signal_fd_init = 0;
     int keychord_fd_init = 0;

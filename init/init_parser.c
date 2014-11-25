@@ -187,18 +187,13 @@ static int push_chars(char **dst, int *len, const char *chars, int cnt)
 
 int expand_props(char *dst, const char *src, int dst_size)
 {
-    int cnt = 0;
     char *dst_ptr = dst;
     const char *src_ptr = src;
-    int src_len;
-    int idx = 0;
     int ret = 0;
     int left = dst_size - 1;
 
     if (!src || !dst || dst_size == 0)
         return -1;
-
-    src_len = strlen(src);
 
     /* - variables can either be $x.y or ${x.y}, in case they are only part
      *   of the string.
@@ -879,7 +874,6 @@ static void parse_line_action(struct parse_state* state, int nargs, char **args)
 {
     struct command *cmd;
     struct action *act = state->context;
-    int (*func)(int nargs, char **args);
     int kw, n;
 
     if (nargs == 0) {
