@@ -19,6 +19,10 @@
 
 #include <stdint.h>  /* for int64_t */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* events that may be observed */
 #define FDE_READ              0x0001
 #define FDE_WRITE             0x0002
@@ -64,20 +68,22 @@ void fdevent_set_timeout(fdevent *fde, int64_t  timeout_ms);
 */
 void fdevent_loop();
 
-struct fdevent 
-{
+struct fdevent {
     fdevent *next;
     fdevent *prev;
 
     int fd;
     int force_eof;
 
-    unsigned short state;
-    unsigned short events;
+    uint16_t state;
+    uint16_t events;
 
     fd_func func;
     void *arg;
 };
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif
