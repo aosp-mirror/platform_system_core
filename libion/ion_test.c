@@ -164,8 +164,9 @@ void ion_share_test()
         printf("master->master? [%10s]\n", ptr);
         if (recvmsg(sd[0], &msg, 0) < 0)
             perror("master recv 1");
+        close(fd);
+        _exit(0);
     } else {
-        struct msghdr msg;
         struct cmsghdr *cmsg;
         char* ptr;
         int fd, recv_fd;
@@ -205,6 +206,7 @@ void ion_share_test()
         strcpy(ptr, "child");
         printf("child sending msg 2\n");
         sendmsg(sd[1], &child_msg, 0);
+        close(fd);
     }
 }
 
