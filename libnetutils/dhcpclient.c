@@ -150,7 +150,7 @@ static const char *dhcp_type_to_name(uint32_t type)
 
 void dump_dhcp_info(dhcp_info *info)
 {
-    char addr[20], gway[20], mask[20];
+    char addr[20], gway[20];
     ALOGD("--- dhcp %s (%d) ---",
             dhcp_type_to_name(info->type), info->type);
     strcpy(addr, ipaddr(info->ipaddr));
