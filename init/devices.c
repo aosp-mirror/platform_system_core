@@ -191,7 +191,6 @@ static bool perm_path_matches(const char *path, struct perms_ *dp)
 static mode_t get_device_perm(const char *path, const char **links,
                 unsigned *uid, unsigned *gid)
 {
-    mode_t perm;
     struct listnode *node;
     struct perm_node *perm_node;
     struct perms_ *dp;
@@ -497,15 +496,10 @@ static char **get_block_device_symlinks(struct uevent *uevent)
     struct platform_node *pdev;
     char *slash;
     const char *type;
-    int width;
     char buf[256];
     char link_path[256];
-    int fd;
     int link_num = 0;
-    int ret;
     char *p;
-    unsigned int size;
-    struct stat info;
 
     pdev = find_platform_device(uevent->path);
     if (pdev) {
@@ -926,7 +920,6 @@ root_free_out:
 static void handle_firmware_event(struct uevent *uevent)
 {
     pid_t pid;
-    int ret;
 
     if(strcmp(uevent->subsystem, "firmware"))
         return;
@@ -1045,15 +1038,18 @@ void device_init(void)
     fcntl(device_fd, F_SETFD, FD_CLOEXEC);
     fcntl(device_fd, F_SETFL, O_NONBLOCK);
 
-    if (stat(coldboot_done, &info) < 0) {
+    if (stat(COLDBOOT_DONE, &info) < 0) {
         t0 = get_usecs();
         coldboot("/sys/class");
         coldboot("/sys/block");
         coldboot("/sys/devices");
         t1 = get_usecs();
-        fd = open(coldboot_done, O_WRONLY|O_CREAT, 0000);
+        fd = open(COLDBOOT_DONE, O_WRONLY|O_CREAT, 0000);
         close(fd);
         log_event_print("coldboot %ld uS\n", ((long) (t1 - t0)));
+        // t0 & t1 are unused if the log isn't doing anything.
+        (void)t0;
+        (void)t1;
     } else {
         log_event_print("skipping coldboot, already done\n");
     }

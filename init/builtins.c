@@ -501,7 +501,6 @@ int do_mount_all(int nargs, char **args)
     int ret = -1;
     int child_ret = -1;
     int status;
-    const char *prop;
     struct fstab *fstab;
 
     if (nargs != 2) {
