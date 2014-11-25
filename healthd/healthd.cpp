@@ -66,7 +66,6 @@ static int epollfd;
 #define MAX_EPOLL_EVENTS 40
 static int uevent_fd;
 static int wakealarm_fd;
-static int binder_fd;
 
 // -1 for no epoll timeout
 static int awake_poll_interval = -1;
