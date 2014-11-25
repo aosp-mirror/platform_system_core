@@ -344,7 +344,6 @@ static void reset_animation(struct animation *anim)
 static void update_screen_state(struct charger *charger, int64_t now)
 {
     struct animation *batt_anim = charger->batt_anim;
-    int cur_frame;
     int disp_time;
 
     if (!batt_anim->run || now < charger->next_screen_transition)
@@ -387,7 +386,6 @@ static void update_screen_state(struct charger *charger, int64_t now)
 
     /* animation starting, set up the animation */
     if (batt_anim->cur_frame == 0) {
-        int ret;
 
         LOGV("[%" PRId64 "] animation starting\n", now);
         if (batt_prop && batt_prop->batteryLevel >= 0 && batt_anim->num_frames != 0) {
@@ -510,7 +508,6 @@ static void set_next_key_check(struct charger *charger,
 static void process_key(struct charger *charger, int code, int64_t now)
 {
     struct key_state *key = &charger->keys[code];
-    int64_t next_key_check;
 
     if (code == KEY_POWER) {
         if (key->down) {
@@ -583,7 +580,6 @@ void healthd_mode_charger_heartbeat()
 {
     struct charger *charger = &charger_state;
     int64_t now = curr_time_ms();
-    int ret;
 
     handle_input_state(charger, now);
     handle_power_supply_state(charger, now);
@@ -618,8 +614,6 @@ int healthd_mode_charger_preparetowait(void)
     int64_t now = curr_time_ms();
     int64_t next_event = INT64_MAX;
     int64_t timeout;
-    struct input_event ev;
-    int ret;
 
     LOGV("[%" PRId64 "] next screen: %" PRId64 " next key: %" PRId64 " next pwr: %" PRId64 "\n", now,
          charger->next_screen_transition, charger->next_key_check,
