@@ -221,6 +221,9 @@ LOCAL_WHOLE_STATIC_LIBRARIES := $(patsubst %,libtoolbox_%,$(BSD_TOOLS))
 LOCAL_MODULE := toolbox
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 
+# Install the symlinks.
+LOCAL_POST_INSTALL_CMD := $(hide) $(foreach t,$(ALL_TOOLS),ln -sf toolbox $(TARGET_OUT)/bin/$(t);)
+
 # Including this will define $(intermediates).
 #
 include $(BUILD_EXECUTABLE)
@@ -233,22 +236,6 @@ $(TOOLS_H): PRIVATE_CUSTOM_TOOL = echo "/* file generated automatically */" > $@
 $(TOOLS_H): $(LOCAL_PATH)/Android.mk
 $(TOOLS_H):
 	$(transform-generated-source)
-
-# Make symbolic link launchers for each tool.
-SYMLINKS := $(addprefix $(TARGET_OUT)/bin/,$(ALL_TOOLS))
-$(SYMLINKS): TOOLBOX_BINARY := $(LOCAL_MODULE)
-$(SYMLINKS): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk
-	@echo "Symlink: $@ -> $(TOOLBOX_BINARY)"
-	@mkdir -p $(dir $@)
-	@rm -rf $@
-	$(hide) ln -sf $(TOOLBOX_BINARY) $@
-
-ALL_DEFAULT_INSTALLED_MODULES += $(SYMLINKS)
-
-# We need this so that the installed files could be picked up based on the
-# local module name
-ALL_MODULES.$(LOCAL_MODULE).INSTALLED := \
-    $(ALL_MODULES.$(LOCAL_MODULE).INSTALLED) $(SYMLINKS)
 
 
 # We only want 'r' on userdebug and eng builds.
