@@ -389,7 +389,6 @@ void BatteryMonitor::init(struct healthd_config *hc) {
             if (!strcmp(name, ".") || !strcmp(name, ".."))
                 continue;
 
-            char buf[20];
             // Look for "type" file in each subdirectory
             path.clear();
             path.appendFormat("%s/%s/type", POWER_SUPPLY_SYSFS_PATH, name);
