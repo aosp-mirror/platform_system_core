@@ -978,6 +978,7 @@ int main(int argc, char **argv)
     unsigned sz;
     int status;
     int c;
+    int longindex;
 
     const struct option longopts[] = {
         {"base", required_argument, 0, 'b'},
@@ -986,13 +987,14 @@ int main(int argc, char **argv)
         {"ramdisk_offset", required_argument, 0, 'r'},
         {"tags_offset", required_argument, 0, 't'},
         {"help", 0, 0, 'h'},
+        {"unbuffered", 0, 0, 0},
         {0, 0, 0, 0}
     };
 
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lp:c:i:m:h", longopts, NULL);
+        c = getopt_long(argc, argv, "wub:k:n:r:t:s:S:lp:c:i:m:h", longopts, &longindex);
         if (c < 0) {
             break;
         }
@@ -1053,6 +1055,12 @@ int main(int argc, char **argv)
             break;
         case '?':
             return 1;
+        case 0:
+            if (strcmp("unbuffered", longopts[longindex].name) == 0) {
+                setvbuf(stdout, NULL, _IONBF, 0);
+                setvbuf(stderr, NULL, _IONBF, 0);
+            }
+            break;
         default:
             abort();
         }
