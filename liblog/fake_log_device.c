@@ -320,9 +320,9 @@ static const char* getPriorityString(int priority)
     return priorityStrings[idx];
 }
 
-#ifndef HAVE_WRITEV
+#if defined(_WIN32)
 /*
- * Some platforms like WIN32 do not have writev().
+ * WIN32 does not have writev().
  * Make up something to replace it.
  */
 static ssize_t fake_writev(int fd, const struct iovec *iov, int iovcnt) {
