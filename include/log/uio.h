@@ -14,19 +14,22 @@
  * limitations under the License.
  */
 
-//
-// implementation of sys/uio.h for platforms that don't have it (Win32)
-//
 #ifndef _LIBS_CUTILS_UIO_H
 #define _LIBS_CUTILS_UIO_H
 
-#ifdef HAVE_SYS_UIO_H
+#if !defined(_WIN32)
+
 #include <sys/uio.h>
+
 #else
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+//
+// Implementation of sys/uio.h for Win32.
+//
 
 #include <stddef.h>
 
@@ -42,7 +45,7 @@ extern int  writev( int  fd, const struct iovec*  vecs, int  count );
 }
 #endif
 
-#endif /* !HAVE_SYS_UIO_H */
+#endif
 
 #endif /* _LIBS_UTILS_UIO_H */
 
