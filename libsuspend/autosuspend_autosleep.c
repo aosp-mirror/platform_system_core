@@ -84,7 +84,6 @@ struct autosuspend_ops autosuspend_autosleep_ops = {
 
 struct autosuspend_ops *autosuspend_autosleep_init(void)
 {
-    int ret;
     char buf[80];
 
     autosleep_fd = open(SYS_POWER_AUTOSLEEP, O_WRONLY);
