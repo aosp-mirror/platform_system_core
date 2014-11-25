@@ -63,7 +63,6 @@ typedef struct {
 
 static int init_workspace(workspace *w, size_t size)
 {
-    void *data;
     int fd = open(PROP_FILENAME, O_RDONLY | O_NOFOLLOW);
     if (fd < 0)
         return -1;
@@ -142,9 +141,6 @@ static int check_control_mac_perms(const char *name, char *sctx)
  */
 static int check_perms(const char *name, char *sctx)
 {
-    int i;
-    unsigned int app_id;
-
     if(!strncmp(name, "ro.", 3))
         name +=3;
 
@@ -261,7 +257,6 @@ void handle_property_set_fd()
     prop_msg msg;
     int s;
     int r;
-    int res;
     struct ucred cr;
     struct sockaddr_un addr;
     socklen_t addr_size = sizeof(addr);
