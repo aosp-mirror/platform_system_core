@@ -607,7 +607,6 @@ static int kill_one_process(struct proc *procp, int other_free, int other_file,
 static int find_and_kill_process(int other_free, int other_file, bool first)
 {
     int i;
-    int r;
     int min_score_adj = OOM_ADJUST_MAX + 1;
     int minfree = 0;
     int killed_size = 0;
@@ -643,7 +642,6 @@ retry:
 }
 
 static void mp_event(uint32_t events __unused) {
-    int i;
     int ret;
     unsigned long long evcount;
     struct sysmeminfo mi;
