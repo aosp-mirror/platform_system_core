@@ -85,13 +85,6 @@ LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := upstream-netbsd/usr.bin/printenv/printenv.c
-LOCAL_CFLAGS += $(common_cflags) -Dmain=printenv_main
-LOCAL_MODULE := libtoolbox_printenv
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
-include $(BUILD_STATIC_LIBRARY)
-
-include $(CLEAR_VARS)
 LOCAL_SRC_FILES := upstream-netbsd/bin/rm/rm.c
 LOCAL_CFLAGS += $(common_cflags) -Dmain=rm_main
 LOCAL_MODULE := libtoolbox_rm
@@ -118,7 +111,6 @@ BSD_TOOLS := \
     kill \
     ln \
     mv \
-    printenv \
     rm \
     rmdir \
 
