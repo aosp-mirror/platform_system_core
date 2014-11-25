@@ -344,15 +344,6 @@ error:
     return -1;
 }
 
-static inline char * strip_end(char *str)
-{
-    char *end = str + strlen(str) - 1;
-
-    while (end >= str && isspace(*end))
-        *end-- = '\0';
-    return str;
-}
-
 /**
  * Splits a wire-format buffer into an AndroidLogEntry
  * entry allocated by caller. Pointers will point directly into buf
