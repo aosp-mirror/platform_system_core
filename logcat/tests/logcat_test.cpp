@@ -548,7 +548,6 @@ TEST(logcat, logrotate_suffix) {
             static const char rotated_log_filename_prefix[] = "log.txt.";
             static const size_t rotated_log_filename_prefix_len =
                 strlen(rotated_log_filename_prefix);
-            static const char total[] = "total ";
             static const char log_filename[] = "log.txt";
 
             if (!strncmp(buffer, rotated_log_filename_prefix, rotated_log_filename_prefix_len)) {
