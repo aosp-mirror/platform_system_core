@@ -105,13 +105,6 @@ LOCAL_MODULE := libtoolbox_rmdir
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := upstream-netbsd/bin/sleep/sleep.c
-LOCAL_CFLAGS += $(common_cflags) -Dmain=sleep_main
-LOCAL_MODULE := libtoolbox_sleep
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
-include $(BUILD_STATIC_LIBRARY)
-
 
 include $(CLEAR_VARS)
 
@@ -128,7 +121,6 @@ BSD_TOOLS := \
     printenv \
     rm \
     rmdir \
-    sleep \
 
 OUR_TOOLS := \
     chcon \
