@@ -40,8 +40,9 @@ static const char32_t kByteMark = 0x00000080;
 // Surrogates aren't valid for UTF-32 characters, so define some
 // constants that will let us screen them out.
 static const char32_t kUnicodeSurrogateHighStart  = 0x0000D800;
-static const char32_t kUnicodeSurrogateHighEnd    = 0x0000DBFF;
-static const char32_t kUnicodeSurrogateLowStart   = 0x0000DC00;
+// Unused, here for completeness:
+// static const char32_t kUnicodeSurrogateHighEnd = 0x0000DBFF;
+// static const char32_t kUnicodeSurrogateLowStart = 0x0000DC00;
 static const char32_t kUnicodeSurrogateLowEnd     = 0x0000DFFF;
 static const char32_t kUnicodeSurrogateStart      = kUnicodeSurrogateHighStart;
 static const char32_t kUnicodeSurrogateEnd        = kUnicodeSurrogateLowEnd;
