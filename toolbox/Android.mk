@@ -143,7 +143,6 @@ OUR_TOOLS := \
     newfs_msdos \
     notify \
     ps \
-    readlink \
     renice \
     restorecon \
     route \
