@@ -142,7 +142,6 @@ OUR_TOOLS := \
     nandread \
     netstat \
     newfs_msdos \
-    nohup \
     notify \
     ps \
     readlink \
