@@ -120,7 +120,6 @@ OUR_TOOLS := \
     cmp \
     date \
     df \
-    dmesg \
     getenforce \
     getevent \
     getprop \
