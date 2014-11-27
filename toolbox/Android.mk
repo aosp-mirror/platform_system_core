@@ -144,7 +144,6 @@ OUR_TOOLS := \
     notify \
     ps \
     prlimit \
-    readlink \
     renice \
     restorecon \
     route \
