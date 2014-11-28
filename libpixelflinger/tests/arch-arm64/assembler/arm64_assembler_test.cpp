@@ -493,16 +493,17 @@ void dataOpTest(dataOpTest_t test, ARMAssemblerInterface *a64asm, uint32_t Rd = 
         if(i == Rd) continue;
         if(regs[i] != savedRegs[i])
         {
-            printf("Test %x failed Reg(%d) tampered Expected(0x%"PRIx64"),"
-                   "Actual(0x%"PRIx64") t\n", test.id, i, savedRegs[i], regs[i]);
+            printf("Test %x failed Reg(%d) tampered Expected(0x%" PRIx64 "),"
+                   "Actual(0x%" PRIx64 ") t\n", test.id, i, savedRegs[i],
+                   regs[i]);
             return;
         }
     }
 
     if(test.checkRd == 1 && (uint64_t)regs[Rd] != test.postRdValue)
     {
-        printf("Test %x failed, Expected(%"PRIx64"), Actual(%"PRIx64")\n",
-                test.id, test.postRdValue, regs[Rd]);
+        printf("Test %x failed, Expected(%" PRIx64 "), Actual(%" PRIx64 ")\n",
+               test.id, test.postRdValue, regs[Rd]);
     }
     else if(test.checkFlag == 1 && flags[test.postFlag] == 0)
     {
@@ -610,7 +611,7 @@ void dataTransferTest(dataTransferTest_t test, ARMAssemblerInterface *a64asm,
         if(regs[i] != savedRegs[i])
         {
             printf("Test %x failed Reg(%d) tampered"
-                   " Expected(0x%"PRIx64"), Actual(0x%"PRIx64") t\n",
+                   " Expected(0x%" PRIx64 "), Actual(0x%" PRIx64 ") t\n",
                    test.id, i, savedRegs[i], regs[i]);
             return;
         }
@@ -619,13 +620,13 @@ void dataTransferTest(dataTransferTest_t test, ARMAssemblerInterface *a64asm,
     if((uint64_t)regs[Rd] != test.postRdValue)
     {
         printf("Test %x failed, "
-               "Expected in Rd(0x%"PRIx64"), Actual(0x%"PRIx64")\n",
+               "Expected in Rd(0x%" PRIx64 "), Actual(0x%" PRIx64 ")\n",
                test.id, test.postRdValue, regs[Rd]);
     }
     else if((uint64_t)regs[Rn] != (uint64_t)(&dataMem[test.postRnValue]))
     {
         printf("Test %x failed, "
-               "Expected in Rn(0x%"PRIx64"), Actual(0x%"PRIx64")\n",
+               "Expected in Rn(0x%" PRIx64 "), Actual(0x%" PRIx64 ")\n",
                test.id, test.postRnValue, regs[Rn] - (uint64_t)dataMem);
     }
     else if(test.checkMem == true)
@@ -638,7 +639,7 @@ void dataTransferTest(dataTransferTest_t test, ARMAssemblerInterface *a64asm,
         if(value != test.postMemValue)
         {
             printf("Test %x failed, "
-                   "Expected in Mem(0x%"PRIx64"), Actual(0x%"PRIx64")\n",
+                   "Expected in Mem(0x%" PRIx64 "), Actual(0x%" PRIx64 ")\n",
                    test.id, test.postMemValue, value);
         }
         else
@@ -697,8 +698,8 @@ void dataTransferLDMSTM(ARMAssemblerInterface *a64asm)
                 if(regs[j] != j)
                 {
                     printf("LDM/STM Test %x failed "
-                           "Reg%d expected(0x%x) Actual(0x%"PRIx64") \n",
-                            patterns[i],j,j,regs[j]);
+                           "Reg%d expected(0x%x) Actual(0x%" PRIx64 ") \n",
+                           patterns[i], j, j, regs[j]);
                     break;
                 }
             }
