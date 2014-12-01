@@ -7,8 +7,6 @@
 
 #include <stdint.h>
 
-#include <dbus/dbus.h>
-#include <glib.h>
 #include <map>
 #include <string>
 #include <vector>
@@ -16,6 +14,7 @@
 #include <base/files/file_path.h>
 #include <base/memory/scoped_ptr.h>
 #include <base/time/time.h>
+#include <chromeos/daemons/dbus_daemon.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "metrics/metrics_library.h"
@@ -24,12 +23,12 @@
 
 using chromeos_metrics::PersistentInteger;
 
-class MetricsDaemon {
+class MetricsDaemon : public chromeos::DBusDaemon {
  public:
   MetricsDaemon();
   ~MetricsDaemon();
 
-  // Initializes.
+  // Initializes metrics class variables.
   void Init(bool testing,
             bool uploader_active,
             MetricsLibraryInterface* metrics_lib,
@@ -42,9 +41,14 @@ class MetricsDaemon {
             const std::string& metrics_file,
             const std::string& config_root);
 
-  // Does all the work. If |run_as_daemon| is true, daemonizes by
-  // forking.
-  void Run(bool run_as_daemon);
+  // Initializes DBus and MessageLoop variables before running the MessageLoop.
+  int OnInit() override;
+
+  // Clean up data set up in OnInit before shutting down message loop.
+  void OnShutdown(int* return_code) override;
+
+  // Does all the work.
+  int Run() override;
 
   // Triggers an upload event and exit. (Used to test UploadService)
   void RunUploaderTest();
@@ -147,9 +151,6 @@ class MetricsDaemon {
   // Returns the active time since boot (uptime minus sleep time) in seconds.
   double GetActiveTime();
 
-  // Creates the event loop and enters it.
-  void Loop();
-
   // D-Bus filter callback.
   static DBusHandlerResult MessageFilter(DBusConnection* connection,
                                          DBusMessage* message,
@@ -227,22 +228,14 @@ class MetricsDaemon {
   // Parse cumulative vm statistics from a C string.  Returns true for success.
   bool VmStatsParseStats(const char* stats, struct VmstatRecord* record);
 
-  // Reports disk and vm statistics (static version for glib).  Arguments are a
-  // glib artifact.
-  static gboolean StatsCallbackStatic(void* handle);
-
   // Reports disk and vm statistics.
   void StatsCallback();
 
   // Schedules meminfo collection callback.
   void ScheduleMeminfoCallback(int wait);
 
-  // Reports memory statistics (static version for glib).  Argument is a glib
-  // artifact.
-  static gboolean MeminfoCallbackStatic(void* handle);
-
-  // Reports memory statistics.  Returns false on failure.
-  bool MeminfoCallback();
+  // Reports memory statistics.  Reschedules callback on success.
+  void MeminfoCallback(base::TimeDelta wait);
 
   // Parses content of /proc/meminfo and sends fields of interest to UMA.
   // Returns false on errors.  |meminfo_raw| contains the content of
@@ -258,9 +251,6 @@ class MetricsDaemon {
 
   // Schedule a memory use callback in |interval| seconds.
   void ScheduleMemuseCallback(double interval);
-
-  // Static wrapper for MemuseCallback.  Always returns false.
-  static gboolean MemuseCallbackStatic(void* handle);
 
   // Calls MemuseCallbackWork, and possibly schedules next callback, if enough
   // active time has passed.  Otherwise reschedules itself to simulate active
@@ -288,7 +278,7 @@ class MetricsDaemon {
   void UpdateStats(base::TimeTicks now_ticks, base::Time now_wall_time);
 
   // Invoked periodically by |update_stats_timeout_id_| to call UpdateStats().
-  static gboolean HandleUpdateStatsTimeout(gpointer data);
+  void HandleUpdateStatsTimeout();
 
   // Reports zram statistics.
   bool ReportZram(const base::FilePath& zram_dir);
@@ -300,6 +290,9 @@ class MetricsDaemon {
 
   // Test mode.
   bool testing_;
+
+  // Whether the uploader is enabled or disabled.
+  bool uploader_active_;
 
   // Root of the configuration files to use.
   std::string config_root_;
@@ -314,16 +307,6 @@ class MetricsDaemon {
 
   // The last time that UpdateStats() was called.
   base::TimeTicks last_update_stats_time_;
-
-  // ID of a GLib timeout that repeatedly runs UpdateStats().
-  gint update_stats_timeout_id_;
-
-  // Sleep period until the next daily usage aggregation performed by
-  // the daily use monitor (see ScheduleUseMonitor).
-  int usemon_interval_;
-
-  // Scheduled daily use monitor source (see ScheduleUseMonitor).
-  GSource* usemon_source_;
 
   // End time of current memuse stat collection interval.
   double memuse_final_time_;

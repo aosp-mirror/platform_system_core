@@ -73,6 +73,11 @@ int main(int argc, char** argv) {
   // Also log to stderr when not running as daemon.
   chromeos::InitLog(chromeos::kLogToSyslog | chromeos::kLogHeader |
                     (FLAGS_daemon ? 0 : chromeos::kLogToStderr));
+
+  if (FLAGS_daemon && daemon(0, 0) != 0) {
+    return errno;
+  }
+
   MetricsLibrary metrics_lib;
   metrics_lib.Init();
   MetricsDaemon daemon;
@@ -88,12 +93,10 @@ int main(int argc, char** argv) {
               FLAGS_metrics_file,
               FLAGS_config_root);
 
-
-  base::AtExitManager at_exit_manager;
   if (FLAGS_uploader_test) {
     daemon.RunUploaderTest();
     return 0;
   }
 
-  daemon.Run(FLAGS_daemon);
+  daemon.Run();
 }

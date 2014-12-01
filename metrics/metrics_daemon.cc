@@ -12,6 +12,7 @@
 #include <inttypes.h>
 #include <math.h>
 #include <string.h>
+#include <sysexits.h>
 #include <time.h>
 
 #include <base/files/file_path.h>
@@ -24,7 +25,8 @@
 #include <base/strings/stringprintf.h>
 #include <base/sys_info.h>
 #include <chromeos/dbus/service_constants.h>
-#include <dbus/dbus-glib-lowlevel.h>
+#include <dbus/dbus.h>
+#include <dbus/message.h>
 #include "uploader/upload_service.h"
 
 using base::FilePath;
@@ -43,6 +45,8 @@ namespace {
 
 const char kCrashReporterInterface[] = "org.chromium.CrashReporter";
 const char kCrashReporterUserCrashSignal[] = "UserCrash";
+const char kCrashReporterMatchRule[] =
+    "type='signal',interface='%s',path='/',member='%s'";
 
 const int kSecondsPerMinute = 60;
 const int kMinutesPerHour = 60;
@@ -53,7 +57,7 @@ const int kDaysPerWeek = 7;
 const int kSecondsPerWeek = kSecondsPerDay * kDaysPerWeek;
 
 // Interval between calls to UpdateStats().
-const guint kUpdateStatsIntervalMs = 300000;
+const uint32_t kUpdateStatsIntervalMs = 300000;
 
 const char kKernelCrashDetectedFile[] = "/var/run/kernel-crash-detected";
 const char kUncleanShutdownDetectedFile[] =
@@ -135,8 +139,7 @@ static const int kMemuseIntervals[] = {
 };
 
 MetricsDaemon::MetricsDaemon()
-    : update_stats_timeout_id_(-1),
-      memuse_final_time_(0),
+    : memuse_final_time_(0),
       memuse_interval_index_(0),
       read_sectors_(0),
       write_sectors_(0),
@@ -147,8 +150,6 @@ MetricsDaemon::MetricsDaemon()
       latest_cpu_use_ticks_(0) {}
 
 MetricsDaemon::~MetricsDaemon() {
-  if (update_stats_timeout_id_ > -1)
-    g_source_remove(update_stats_timeout_id_);
 }
 
 double MetricsDaemon::GetActiveTime() {
@@ -162,10 +163,7 @@ double MetricsDaemon::GetActiveTime() {
   }
 }
 
-void MetricsDaemon::Run(bool run_as_daemon) {
-  if (run_as_daemon && daemon(0, 0) != 0)
-    return;
-
+int MetricsDaemon::Run() {
   if (CheckSystemCrash(kKernelCrashDetectedFile)) {
     ProcessKernelCrash();
   }
@@ -183,7 +181,7 @@ void MetricsDaemon::Run(bool run_as_daemon) {
     version_cumulative_cpu_use_->Set(0);
   }
 
-  Loop();
+  return chromeos::DBusDaemon::Run();
 }
 
 void MetricsDaemon::RunUploaderTest() {
@@ -223,6 +221,7 @@ void MetricsDaemon::Init(bool testing,
                          const string& metrics_file,
                          const string& config_root) {
   testing_ = testing;
+  uploader_active_ = uploader_active;
   config_root_ = config_root;
   DCHECK(metrics_lib != nullptr);
   metrics_lib_ = metrics_lib;
@@ -276,6 +275,17 @@ void MetricsDaemon::Init(bool testing,
   vmstats_path_ = vmstats_path;
   scaling_max_freq_path_ = scaling_max_freq_path;
   cpuinfo_max_freq_path_ = cpuinfo_max_freq_path;
+
+  // If testing, initialize Stats Reporter without connecting DBus
+  if (testing_)
+    StatsReporterInit();
+}
+
+int MetricsDaemon::OnInit() {
+  int return_code = chromeos::DBusDaemon::OnInit();
+  if (return_code != EX_OK)
+    return return_code;
+
   StatsReporterInit();
 
   // Start collecting meminfo stats.
@@ -283,56 +293,67 @@ void MetricsDaemon::Init(bool testing,
   memuse_final_time_ = GetActiveTime() + kMemuseIntervals[0];
   ScheduleMemuseCallback(kMemuseIntervals[0]);
 
-  // Don't setup D-Bus and GLib in test mode.
-  if (testing)
-    return;
+  if (testing_)
+    return EX_OK;
 
-  g_type_init();
-  dbus_threads_init_default();
+  bus_->AssertOnDBusThread();
+  CHECK(bus_->SetUpAsyncOperations());
 
-  DBusError error;
-  dbus_error_init(&error);
+  if (bus_->is_connected()) {
+    const std::string match_rule =
+        base::StringPrintf(kCrashReporterMatchRule,
+                           kCrashReporterInterface,
+                           kCrashReporterUserCrashSignal);
 
-  DBusConnection* connection = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
-  LOG_IF(FATAL, dbus_error_is_set(&error)) <<
-      "No D-Bus connection: " << SAFE_MESSAGE(error);
+    bus_->AddFilterFunction(&MetricsDaemon::MessageFilter, this);
 
-  dbus_connection_setup_with_g_main(connection, nullptr);
+    DBusError error;
+    dbus_error_init(&error);
+    bus_->AddMatch(match_rule, &error);
 
-  vector<string> matches;
-  matches.push_back(
-      base::StringPrintf("type='signal',interface='%s',path='/',member='%s'",
-                         kCrashReporterInterface,
-                         kCrashReporterUserCrashSignal));
-
-  // Registers D-Bus matches for the signals we would like to catch.
-  for (vector<string>::const_iterator it = matches.begin();
-       it != matches.end(); ++it) {
-    const char* match = it->c_str();
-    DLOG(INFO) << "adding dbus match: " << match;
-    dbus_bus_add_match(connection, match, &error);
-    LOG_IF(FATAL, dbus_error_is_set(&error)) <<
-        "unable to add a match: " << SAFE_MESSAGE(error);
+    if (dbus_error_is_set(&error)) {
+      LOG(ERROR) << "Failed to add match rule \"" << match_rule << "\". Got "
+          << error.name << ": " << error.message;
+      return EX_SOFTWARE;
+    }
+  } else {
+    LOG(ERROR) << "DBus isn't connected.";
+    return EX_UNAVAILABLE;
   }
 
-  // Adds the D-Bus filter routine to be called back whenever one of
-  // the registered D-Bus matches is successful. The daemon is not
-  // activated for D-Bus messages that don't match.
-  CHECK(dbus_connection_add_filter(connection, MessageFilter, this, nullptr));
+  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+      base::Bind(&MetricsDaemon::HandleUpdateStatsTimeout,
+                 base::Unretained(this)),
+      base::TimeDelta::FromMilliseconds(kUpdateStatsIntervalMs));
 
-  update_stats_timeout_id_ =
-      g_timeout_add(kUpdateStatsIntervalMs, &HandleUpdateStatsTimeout, this);
-
-  if (uploader_active) {
+  if (uploader_active_) {
     LOG(INFO) << "uploader enabled";
     upload_service_.reset(new UploadService(new SystemProfileCache(), server_));
     upload_service_->Init(upload_interval_, metrics_file_);
   }
+
+  return EX_OK;
 }
 
-void MetricsDaemon::Loop() {
-  GMainLoop* loop = g_main_loop_new(nullptr, false);
-  g_main_loop_run(loop);
+void MetricsDaemon::OnShutdown(int* return_code) {
+  if (!testing_ && bus_->is_connected()) {
+    const std::string match_rule =
+        base::StringPrintf(kCrashReporterMatchRule,
+                           kCrashReporterInterface,
+                           kCrashReporterUserCrashSignal);
+
+    bus_->RemoveFilterFunction(&MetricsDaemon::MessageFilter, this);
+
+    DBusError error;
+    dbus_error_init(&error);
+    bus_->RemoveMatch(match_rule, &error);
+
+    if (dbus_error_is_set(&error)) {
+      LOG(ERROR) << "Failed to remove match rule \"" << match_rule << "\". Got "
+          << error.name << ": " << error.message;
+    }
+  }
+  chromeos::DBusDaemon::OnShutdown(return_code);
 }
 
 // static
@@ -481,7 +502,9 @@ void MetricsDaemon::ScheduleStatsCallback(int wait) {
   if (testing_) {
     return;
   }
-  g_timeout_add_seconds(wait, StatsCallbackStatic, this);
+  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+      base::Bind(&MetricsDaemon::StatsCallback, base::Unretained(this)),
+      base::TimeDelta::FromSeconds(wait));
 }
 
 bool MetricsDaemon::DiskStatsReadStats(uint64_t* read_sectors,
@@ -637,12 +660,6 @@ void MetricsDaemon::SendCpuThrottleMetrics() {
   SendLinearSample(kMetricScaledCpuFrequencyName, percent, 101, 102);
 }
 
-// static
-gboolean MetricsDaemon::StatsCallbackStatic(void* handle) {
-  (static_cast<MetricsDaemon*>(handle))->StatsCallback();
-  return false;  // one-time callback
-}
-
 // Collects disk and vm stats alternating over a short and a long interval.
 
 void MetricsDaemon::StatsCallback() {
@@ -756,25 +773,31 @@ void MetricsDaemon::ScheduleMeminfoCallback(int wait) {
   if (testing_) {
     return;
   }
-  g_timeout_add_seconds(wait, MeminfoCallbackStatic, this);
+  base::TimeDelta waitDelta = base::TimeDelta::FromSeconds(wait);
+  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+      base::Bind(&MetricsDaemon::MeminfoCallback, base::Unretained(this),
+                 base::TimeDelta::FromMilliseconds(kMetricMeminfoInterval)),
+      waitDelta);
 }
 
-// static
-gboolean MetricsDaemon::MeminfoCallbackStatic(void* handle) {
-  return (static_cast<MetricsDaemon*>(handle))->MeminfoCallback();
-}
-
-bool MetricsDaemon::MeminfoCallback() {
+void MetricsDaemon::MeminfoCallback(base::TimeDelta wait) {
   string meminfo_raw;
   const FilePath meminfo_path("/proc/meminfo");
   if (!base::ReadFileToString(meminfo_path, &meminfo_raw)) {
     LOG(WARNING) << "cannot read " << meminfo_path.value().c_str();
-    return false;
+    return;
   }
   // Make both calls even if the first one fails.
   bool success = ProcessMeminfo(meminfo_raw);
-  return ReportZram(base::FilePath(FILE_PATH_LITERAL("/sys/block/zram0"))) &&
+  bool reschedule =
+      ReportZram(base::FilePath(FILE_PATH_LITERAL("/sys/block/zram0"))) &&
       success;
+  if (reschedule) {
+    base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+        base::Bind(&MetricsDaemon::MeminfoCallback, base::Unretained(this),
+                   base::TimeDelta::FromMilliseconds(kMetricMeminfoInterval)),
+        wait);
+  }
 }
 
 // static
@@ -941,14 +964,9 @@ void MetricsDaemon::ScheduleMemuseCallback(double interval) {
   if (testing_) {
     return;
   }
-  g_timeout_add_seconds(interval, MemuseCallbackStatic, this);
-}
-
-// static
-gboolean MetricsDaemon::MemuseCallbackStatic(void* handle) {
-  MetricsDaemon* daemon = static_cast<MetricsDaemon*>(handle);
-  daemon->MemuseCallback();
-  return false;
+  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+      base::Bind(&MetricsDaemon::MemuseCallback, base::Unretained(this)),
+      base::TimeDelta::FromSeconds(interval));
 }
 
 void MetricsDaemon::MemuseCallback() {
@@ -1139,8 +1157,10 @@ void MetricsDaemon::UpdateStats(TimeTicks now_ticks,
   }
 }
 
-// static
-gboolean MetricsDaemon::HandleUpdateStatsTimeout(gpointer data) {
-  static_cast<MetricsDaemon*>(data)->UpdateStats(TimeTicks::Now(), Time::Now());
-  return TRUE;
+void MetricsDaemon::HandleUpdateStatsTimeout() {
+  UpdateStats(TimeTicks::Now(), Time::Now());
+  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+      base::Bind(&MetricsDaemon::HandleUpdateStatsTimeout,
+                 base::Unretained(this)),
+      base::TimeDelta::FromMilliseconds(kUpdateStatsIntervalMs));
 }

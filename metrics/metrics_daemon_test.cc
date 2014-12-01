@@ -29,6 +29,7 @@ using base::TimeTicks;
 using std::string;
 using std::vector;
 using ::testing::_;
+using ::testing::AnyNumber;
 using ::testing::AtLeast;
 using ::testing::Return;
 using ::testing::StrictMock;
@@ -227,7 +228,7 @@ TEST_F(MetricsDaemonTest, ReportDailyUse) {
 
 TEST_F(MetricsDaemonTest, MessageFilter) {
   // Ignore calls to SendToUMA.
-  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AtLeast(0));
+  EXPECT_CALL(metrics_lib_, SendToUMA(_, _, _, _, _)).Times(AnyNumber());
 
   DBusMessage* msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_CALL);
   DBusHandlerResult res =
@@ -265,7 +266,6 @@ TEST_F(MetricsDaemonTest, SendSample) {
 
 TEST_F(MetricsDaemonTest, ReportDiskStats) {
   uint64_t read_sectors_now, write_sectors_now;
-
   CreateFakeDiskStatsFile(kFakeDiskStats1.c_str());
   daemon_.DiskStatsReadStats(&read_sectors_now, &write_sectors_now);
   EXPECT_EQ(read_sectors_now, kFakeReadSectors[1]);
@@ -399,8 +399,6 @@ TEST_F(MetricsDaemonTest, SendZramMetrics) {
 
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
-  // Some libchrome calls need this.
-  base::AtExitManager at_exit_manager;
 
   return RUN_ALL_TESTS();
 }
