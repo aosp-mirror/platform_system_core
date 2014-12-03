@@ -78,11 +78,13 @@ static int get_target_device_size(int fd, const char *blk_device,
     return 0;
 }
 
-static int disable_verity(int fd, const char *block_device,
-                          const char* mount_point)
+/* Turn verity on/off */
+static int set_verity_enabled_state(int fd, const char *block_device,
+                                    const char* mount_point, bool enable)
 {
     uint32_t magic_number;
-    const uint32_t voff = VERITY_METADATA_MAGIC_DISABLE;
+    const uint32_t new_magic = enable ? VERITY_METADATA_MAGIC_NUMBER
+                                      : VERITY_METADATA_MAGIC_DISABLE;
     uint64_t device_length;
     int device;
     int retval = -1;
@@ -114,12 +116,18 @@ static int disable_verity(int fd, const char *block_device,
         goto errout;
     }
 
-    if (magic_number == VERITY_METADATA_MAGIC_DISABLE) {
+    if (!enable && magic_number == VERITY_METADATA_MAGIC_DISABLE) {
         write_console(fd, "Verity already disabled on %s\n", mount_point);
         goto errout;
     }
 
-    if (magic_number != VERITY_METADATA_MAGIC_NUMBER) {
+    if (enable && magic_number == VERITY_METADATA_MAGIC_NUMBER) {
+        write_console(fd, "Verity already enabled on %s\n", mount_point);
+        goto errout;
+    }
+
+    if (magic_number != VERITY_METADATA_MAGIC_NUMBER
+            && magic_number != VERITY_METADATA_MAGIC_DISABLE) {
         write_console(fd,
                       "Couldn't find verity metadata at offset %"PRIu64"!\n",
                       device_length);
@@ -132,13 +140,17 @@ static int disable_verity(int fd, const char *block_device,
         goto errout;
     }
 
-    if (adb_write(device, &voff, sizeof(voff)) != sizeof(voff)) {
-        write_console(fd, "Could not set verity disabled flag on device %s\n",
-                      block_device);
+    if (adb_write(device, &new_magic, sizeof(new_magic)) != sizeof(new_magic)) {
+        write_console(fd, "Could not set verity %s flag on device %s with error %s\n",
+                      enable ? "enabled" : "disabled",
+                      block_device,
+                      strerror(errno));
         goto errout;
     }
 
-    write_console(fd, "Verity disabled on %s\n", mount_point);
+    write_console(fd, "Verity %s on %s\n",
+                  enable ? "enabled" : "disabled",
+                  mount_point);
     retval = 0;
 errout:
     if (device != -1)
@@ -146,13 +158,14 @@ errout:
     return retval;
 }
 
-void disable_verity_service(int fd, void* cookie)
+void set_verity_enabled_state_service(int fd, void* cookie)
 {
+    bool enable = (cookie != NULL);
 #ifdef ALLOW_ADBD_DISABLE_VERITY
     char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
     char propbuf[PROPERTY_VALUE_MAX];
     int i;
-    bool any_disabled = false;
+    bool any_changed = false;
 
     property_get("ro.secure", propbuf, "0");
     if (strcmp(propbuf, "1")) {
@@ -162,7 +175,7 @@ void disable_verity_service(int fd, void* cookie)
 
     property_get("ro.debuggable", propbuf, "0");
     if (strcmp(propbuf, "1")) {
-        write_console(fd, "verity cannot be disabled - USER build\n");
+        write_console(fd, "verity cannot be disabled/enabled - USER build\n");
         goto errout;
     }
 
@@ -176,22 +189,27 @@ void disable_verity_service(int fd, void* cookie)
         goto errout;
     }
 
+    if (enable && make_system_and_vendor_block_devices_writable(fd)) {
+        goto errout;
+    }
+
     /* Loop through entries looking for ones that vold manages */
     for (i = 0; i < fstab->num_entries; i++) {
         if(fs_mgr_is_verified(&fstab->recs[i])) {
-            if (!disable_verity(fd, fstab->recs[i].blk_device,
-                                fstab->recs[i].mount_point)) {
-                any_disabled = true;
+            if (!set_verity_enabled_state(fd, fstab->recs[i].blk_device,
+                                          fstab->recs[i].mount_point, enable)) {
+                any_changed = true;
             }
        }
     }
 
-    if (any_disabled) {
+    if (any_changed) {
         write_console(fd,
                       "Now reboot your device for settings to take effect\n");
     }
 #else
-    write_console(fd, "disable-verity only works for userdebug builds\n");
+    write_console(fd, "%s-verity only works for userdebug builds\n",
+                  disabling ? "disable" : "enable");
 #endif
 
 errout:
