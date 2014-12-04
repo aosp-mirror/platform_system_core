@@ -12,8 +12,8 @@ Basic Requirements
 ------------------
 
 * Two bulk endpoints (in, out) are required
-* Max packet size must be 64 bytes for full-speed and 512 bytes for 
-  high-speed USB
+* Max packet size must be 64 bytes for full-speed, 512 bytes for
+  high-speed and 1024 bytes for Super Speed USB.
 * The protocol is entirely host-driven and synchronous (unlike the
   multi-channel, bi-directional, asynchronous ADB protocol)
 
