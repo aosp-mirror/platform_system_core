@@ -79,28 +79,56 @@ static int hasVendorPartition()
     return false;
 }
 
+static int make_block_device_writable(const char* dir)
+{
+    char *dev = 0;
+    int fd = -1;
+    int OFF = 0;
+    int rc = -1;
+
+    dev = find_mount(dir);
+    if (!dev)
+        goto errout;
+
+    fd = unix_open(dev, O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        goto errout;
+
+    if (ioctl(fd, BLKROSET, &OFF)) {
+        goto errout;
+    }
+
+    rc = 0;
+
+errout:
+    if (fd >= 0) {
+        adb_close(fd);
+    }
+
+    if (dev) {
+        free(dev);
+    }
+    return rc;
+}
+
 /* Init mounts /system as read only, remount to enable writes. */
 static int remount(const char* dir, int* dir_ro)
 {
     char *dev;
-    int fd;
     int OFF = 0;
 
     if (dir_ro == 0) {
         return 0;
     }
 
+    if (make_block_device_writable(dir)) {
+        return -1;
+    }
+
     dev = find_mount(dir);
 
     if (!dev)
         return -1;
-
-    fd = unix_open(dev, O_RDONLY | O_CLOEXEC);
-    if (fd < 0)
-        return -1;
-
-    ioctl(fd, BLKROSET, &OFF);
-    adb_close(fd);
 
     *dir_ro = mount(dev, dir, "none", MS_REMOUNT, NULL);
 
@@ -112,6 +140,28 @@ static int remount(const char* dir, int* dir_ro)
 static void write_string(int fd, const char* str)
 {
     writex(fd, str, strlen(str));
+}
+
+int make_system_and_vendor_block_devices_writable(int fd)
+{
+    char buffer[200];
+    if (make_block_device_writable("/system")) {
+        snprintf(buffer, sizeof(buffer),
+                 "Failed to make system block device writable %s\n",
+                 strerror(errno));
+        write_string(fd, buffer);
+        return -1;
+    }
+
+    if (hasVendorPartition() && make_block_device_writable("/vendor")) {
+        snprintf(buffer, sizeof(buffer),
+                 "Failed to make vendor block device writable: %s\n",
+                 strerror(errno));
+        write_string(fd, buffer);
+        return -1;
+    }
+
+    return 0;
 }
 
 void remount_service(int fd, void *cookie)
@@ -167,4 +217,3 @@ void remount_service(int fd, void *cookie)
 
     adb_close(fd);
 }
-
