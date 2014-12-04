@@ -209,7 +209,7 @@ void set_verity_enabled_state_service(int fd, void* cookie)
     }
 #else
     write_console(fd, "%s-verity only works for userdebug builds\n",
-                  disabling ? "disable" : "enable");
+                  enable ? "enable" : "disable");
 #endif
 
 errout:
