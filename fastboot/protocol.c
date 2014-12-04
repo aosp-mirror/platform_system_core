@@ -216,7 +216,7 @@ int fb_download_data(usb_handle *usb, const void *data, unsigned size)
     }
 }
 
-#define USB_BUF_SIZE 512
+#define USB_BUF_SIZE 1024
 static char usb_buf[USB_BUF_SIZE];
 static int usb_buf_len;
 
