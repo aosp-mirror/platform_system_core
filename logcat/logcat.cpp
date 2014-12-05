@@ -455,34 +455,29 @@ int main(int argc, char **argv)
                         delete dev;
                     }
 
-                    dev = devices = new log_device_t("main", false, 'm');
-                    android::g_devCount = 1;
-                    if (android_name_to_log_id("system") == LOG_ID_SYSTEM) {
-                        dev->next = new log_device_t("system", false, 's');
-                        if (dev->next) {
-                            dev = dev->next;
-                            android::g_devCount++;
+                    devices = dev = NULL;
+                    android::g_devCount = 0;
+                    needBinary = false;
+                    for(int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
+                        const char *name = android_log_id_to_name((log_id_t)i);
+                        log_id_t log_id = android_name_to_log_id(name);
+
+                        if (log_id != (log_id_t)i) {
+                            continue;
                         }
-                    }
-                    if (android_name_to_log_id("radio") == LOG_ID_RADIO) {
-                        dev->next = new log_device_t("radio", false, 'r');
-                        if (dev->next) {
-                            dev = dev->next;
-                            android::g_devCount++;
+
+                        bool binary = strcmp(name, "events") == 0;
+                        log_device_t* d = new log_device_t(name, binary, *name);
+
+                        if (dev) {
+                            dev->next = d;
+                            dev = d;
+                        } else {
+                            devices = dev = d;
                         }
-                    }
-                    if (android_name_to_log_id("events") == LOG_ID_EVENTS) {
-                        dev->next = new log_device_t("events", true, 'e');
-                        if (dev->next) {
-                            dev = dev->next;
-                            android::g_devCount++;
+                        android::g_devCount++;
+                        if (binary) {
                             needBinary = true;
-                        }
-                    }
-                    if (android_name_to_log_id("crash") == LOG_ID_CRASH) {
-                        dev->next = new log_device_t("crash", false, 'c');
-                        if (dev->next) {
-                            android::g_devCount++;
                         }
                     }
                     break;
