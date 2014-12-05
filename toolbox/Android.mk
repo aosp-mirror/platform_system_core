@@ -68,13 +68,6 @@ LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := upstream-netbsd/bin/kill/kill.c
-LOCAL_CFLAGS += $(common_cflags) -Dmain=kill_main
-LOCAL_MODULE := libtoolbox_kill
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
-include $(BUILD_STATIC_LIBRARY)
-
-include $(CLEAR_VARS)
 LOCAL_SRC_FILES := upstream-netbsd/bin/ln/ln.c
 LOCAL_CFLAGS += $(common_cflags) -Dmain=ln_main
 LOCAL_MODULE := libtoolbox_ln
@@ -112,7 +105,6 @@ BSD_TOOLS := \
     dd \
     du \
     grep \
-    kill \
     ln \
     mv \
     rm \
