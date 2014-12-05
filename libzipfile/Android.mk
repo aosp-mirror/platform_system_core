@@ -7,12 +7,9 @@ LOCAL_SRC_FILES:= \
 	centraldir.c \
 	zipfile.c
 
-LOCAL_STATIC_LIBRARIES := \
-	libunz
+LOCAL_STATIC_LIBRARIES := libz
 
 LOCAL_MODULE:= libzipfile
-
-LOCAL_C_INCLUDES += external/zlib
 
 LOCAL_CFLAGS := -Werror
 
@@ -27,12 +24,9 @@ LOCAL_SRC_FILES:= \
 	centraldir.c \
 	zipfile.c
 
-LOCAL_STATIC_LIBRARIES := \
-	libunz
+LOCAL_STATIC_LIBRARIES := libz
 
 LOCAL_MODULE:= libzipfile
-
-LOCAL_C_INCLUDES += external/zlib
 
 LOCAL_CFLAGS := -Werror
 
@@ -45,11 +39,9 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= \
 	test_zipfile.c
 
-LOCAL_STATIC_LIBRARIES := libzipfile libunz
+LOCAL_STATIC_LIBRARIES := libzipfile libz
 
 LOCAL_MODULE := test_zipfile
-
-LOCAL_C_INCLUDES += external/zlib
 
 LOCAL_CFLAGS := -Werror
 
