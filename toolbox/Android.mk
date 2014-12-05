@@ -7,6 +7,10 @@ common_cflags := \
     -I$(LOCAL_PATH)/upstream-netbsd/include/ \
     -include bsd-compatibility.h \
 
+# Temporary, remove after cleanup. b/18632512
+common_cflags += -Wno-unused-variable \
+                 -Wno-unused-but-set-variable
+
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := upstream-netbsd/bin/cat/cat.c
