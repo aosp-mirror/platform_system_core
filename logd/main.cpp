@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/capability.h>
+#include <sys/klog.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -195,6 +196,23 @@ int main() {
     if (auditd) {
         // failure is an option ... messages are in dmesg (required by standard)
         LogAudit *al = new LogAudit(logBuf, reader, fdDmesg);
+
+        int len = klogctl(KLOG_SIZE_BUFFER, NULL, 0);
+        if (len > 0) {
+            len++;
+            char buf[len];
+
+            int rc = klogctl(KLOG_READ_ALL, buf, len);
+
+            buf[len - 1] = '\0';
+
+            for(char *ptr, *tok = buf;
+                    (rc >= 0) && ((tok = strtok_r(tok, "\r\n", &ptr)));
+                    tok = NULL) {
+                rc = al->log(tok);
+            }
+        }
+
         if (al->startListener()) {
             delete al;
             close(fdDmesg);
