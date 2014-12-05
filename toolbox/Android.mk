@@ -160,7 +160,6 @@ OUR_TOOLS := \
     touch \
     umount \
     uptime \
-    vmstat \
     watchprops \
     wipe \
 
