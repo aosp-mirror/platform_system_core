@@ -19,7 +19,6 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <sys/klog.h>
 #include <sys/prctl.h>
 #include <sys/uio.h>
 #include <syslog.h>
@@ -33,21 +32,23 @@
     '0' + (LOG_AUTH | (PRI)) % 10, \
     '>'
 
-LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmsg)
+LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg)
         : SocketListener(getLogSocket(), false)
         , logbuf(buf)
         , reader(reader)
-        , fdDmesg(-1) {
+        , fdDmesg(fdDmesg)
+        , initialized(false) {
     static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
         'l', 'o', 'g', 'd', '.', 'a', 'u', 'd', 'i', 't', 'd', ':',
         ' ', 's', 't', 'a', 'r', 't', '\n' };
-    write(fdDmsg, auditd_message, sizeof(auditd_message));
-    logDmesg();
-    fdDmesg = fdDmsg;
+    write(fdDmesg, auditd_message, sizeof(auditd_message));
 }
 
 bool LogAudit::onDataAvailable(SocketClient *cli) {
-    prctl(PR_SET_NAME, "logd.auditd");
+    if (!initialized) {
+        prctl(PR_SET_NAME, "logd.auditd");
+        initialized = true;
+    }
 
     struct audit_message rep;
 
@@ -60,7 +61,8 @@ bool LogAudit::onDataAvailable(SocketClient *cli) {
         return false;
     }
 
-    logPrint("type=%d %.*s", rep.nlh.nlmsg_type, rep.nlh.nlmsg_len, rep.data);
+    logPrint("type=%d %.*s",
+        rep.nlh.nlmsg_type, rep.nlh.nlmsg_len, rep.data);
 
     return true;
 }
@@ -87,7 +89,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
     }
 
     bool info = strstr(str, " permissive=1") || strstr(str, " policy loaded ");
-    if (fdDmesg >= 0) {
+    if ((fdDmesg >= 0) && initialized) {
         struct iovec iov[3];
         static const char log_info[] = { KMSG_PRIORITY(LOG_INFO) };
         static const char log_warning[] = { KMSG_PRIORITY(LOG_WARNING) };
@@ -213,34 +215,23 @@ int LogAudit::logPrint(const char *fmt, ...) {
     return rc;
 }
 
-void LogAudit::logDmesg() {
-    int len = klogctl(KLOG_SIZE_BUFFER, NULL, 0);
-    if (len <= 0) {
-        return;
+int LogAudit::log(char *buf) {
+    char *audit = strstr(buf, " audit(");
+    if (!audit) {
+        return 0;
     }
 
-    len++;
-    char buf[len];
+    *audit = '\0';
 
-    int rc = klogctl(KLOG_READ_ALL, buf, len);
-
-    buf[len - 1] = '\0';
-
-    for(char *tok = buf; (rc >= 0) && ((tok = strtok(tok, "\r\n"))); tok = NULL) {
-        char *audit = strstr(tok, " audit(");
-        if (!audit) {
-            continue;
-        }
-
-        *audit++ = '\0';
-
-        char *type = strstr(tok, "type=");
-        if (type) {
-            rc = logPrint("%s %s", type, audit);
-        } else {
-            rc = logPrint("%s", audit);
-        }
+    int rc;
+    char *type = strstr(buf, "type=");
+    if (type) {
+        rc = logPrint("%s %s", type, audit + 1);
+    } else {
+        rc = logPrint("%s", audit + 1);
     }
+    *audit = ' ';
+    return rc;
 }
 
 int LogAudit::getLogSocket() {
