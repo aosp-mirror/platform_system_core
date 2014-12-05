@@ -68,7 +68,7 @@ int64_t elapsedRealtime()
  */
 #define DEBUG_TIMESTAMP         0
 
-#if DEBUG_TIMESTAMP && defined(ARCH_ARM)
+#if DEBUG_TIMESTAMP && defined(__arm__)
 static inline void checkTimeStamps(int64_t timestamp,
                                    int64_t volatile *prevTimestampPtr,
                                    int volatile *prevMethodPtr,
