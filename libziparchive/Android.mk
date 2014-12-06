@@ -16,7 +16,6 @@
 LOCAL_PATH := $(call my-dir)
 
 source_files := zip_archive.cc
-includes := external/zlib
 
 include $(CLEAR_VARS)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
@@ -25,16 +24,13 @@ LOCAL_SRC_FILES := ${source_files}
 LOCAL_STATIC_LIBRARIES := libz
 LOCAL_SHARED_LIBRARIES := libutils
 LOCAL_MODULE:= libziparchive
-LOCAL_C_INCLUDES += ${includes}
 LOCAL_CFLAGS := -Werror
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
-LOCAL_MODULE := libziparchive
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
-LOCAL_C_INCLUDES += ${includes}
 LOCAL_STATIC_LIBRARIES := libz libutils
 LOCAL_MODULE:= libziparchive-host
 LOCAL_CFLAGS := -Werror
@@ -46,10 +42,8 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
-LOCAL_MODULE := libziparchive
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
-LOCAL_C_INCLUDES += ${includes}
 LOCAL_STATIC_LIBRARIES := libz libutils
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_MODULE:= libziparchive-host
