@@ -53,13 +53,6 @@ host_commonCflags += -DMB_CUR_MAX=1
 endif
 endif
 
-host_commonLdlibs :=
-
-ifeq ($(TARGET_OS),linux)
-host_commonLdlibs += -lrt -ldl
-endif
-
-
 # For the host
 # =====================================================
 include $(CLEAR_VARS)
@@ -92,9 +85,6 @@ ifeq ($(TARGET_ARCH),mips)
 LOCAL_CFLAGS += -DALIGN_DOUBLE
 endif
 LOCAL_CFLAGS += -Werror
-
-LOCAL_C_INCLUDES += \
-	external/zlib
 
 LOCAL_STATIC_LIBRARIES := \
 	libcutils
