@@ -57,7 +57,7 @@ LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_MODULE := ziparchive-tests
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS := -Werror
-LOCAL_SRC_FILES := zip_archive_test.cc
+LOCAL_SRC_FILES := zip_archive_test.cc entry_name_utils_test.cc
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_STATIC_LIBRARIES := libziparchive libz libutils
 include $(BUILD_NATIVE_TEST)
@@ -69,7 +69,7 @@ LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS += \
     -Werror \
     -Wno-unnamed-type-template-args
-LOCAL_SRC_FILES := zip_archive_test.cc
+LOCAL_SRC_FILES := zip_archive_test.cc entry_name_utils_test.cc
 LOCAL_SHARED_LIBRARIES := libziparchive-host liblog
 LOCAL_STATIC_LIBRARIES := \
     libz \
