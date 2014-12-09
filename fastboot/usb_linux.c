@@ -223,6 +223,13 @@ static int filter_usb_device(char* sysfs_name,
             } else {
                 out = ept->bEndpointAddress;
             }
+
+            // For USB 3.0 devices skip the SS Endpoint Companion descriptor
+            if (check((struct usb_descriptor_hdr *)ptr, len,
+                      USB_DT_SS_ENDPOINT_COMP, USB_DT_SS_EP_COMP_SIZE) == 0) {
+                len -= USB_DT_SS_EP_COMP_SIZE;
+                ptr += USB_DT_SS_EP_COMP_SIZE;
+            }
         }
 
         info.has_bulk_in = (in != -1);
