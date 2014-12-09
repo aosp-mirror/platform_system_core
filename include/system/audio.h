@@ -100,6 +100,7 @@ typedef enum {
     AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE     = 12,
     AUDIO_USAGE_ASSISTANCE_SONIFICATION            = 13,
     AUDIO_USAGE_GAME                               = 14,
+    AUDIO_USAGE_VIRTUAL_SOURCE                     = 15,
 
     AUDIO_USAGE_CNT,
     AUDIO_USAGE_MAX                                = AUDIO_USAGE_CNT - 1,
