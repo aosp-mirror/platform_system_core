@@ -33,7 +33,9 @@
 
 #include <JNIHelp.h>  // TEMP_FAILURE_RETRY may or may not be in unistd
 
+#include "entry_name_utils-inl.h"
 #include "ziparchive/zip_archive.h"
+
 
 // This is for windows. If we don't open a file in binary mode, weird
 // things will happen.
@@ -641,9 +643,8 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
     const uint16_t comment_length = cdr->comment_length;
     const uint8_t* file_name = ptr + sizeof(CentralDirectoryRecord);
 
-    /* check that file name doesn't contain \0 character */
-    if (memchr(file_name, 0, file_name_length) != NULL) {
-      ALOGW("Zip: entry name can't contain \\0 character");
+    /* check that file name is valid UTF-8 and doesn't contain NUL (U+0000) characters */
+    if (!IsValidEntryName(file_name, file_name_length)) {
       goto bail;
     }
 
