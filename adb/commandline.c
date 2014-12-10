@@ -1266,13 +1266,44 @@ int adb_commandline(int argc, char **argv)
         return r;
     }
 
-top:
     if(argc == 0) {
         return usage();
     }
 
-    /* adb_connect() commands */
+    /* handle wait-for-* prefix */
+    if (!strncmp(argv[0], "wait-for-", strlen("wait-for-"))) {
+        char* service = argv[0];
+        if (!strncmp(service, "wait-for-device", strlen("wait-for-device"))) {
+            if (ttype == kTransportUsb) {
+                service = "wait-for-usb";
+            } else if (ttype == kTransportLocal) {
+                service = "wait-for-local";
+            } else {
+                service = "wait-for-any";
+            }
+        }
 
+        format_host_command(buf, sizeof buf, service, ttype, serial);
+
+        if (adb_command(buf)) {
+            D("failure: %s *\n",adb_error());
+            fprintf(stderr,"error: %s\n", adb_error());
+            return 1;
+        }
+
+        /* Allow a command to be run after wait-for-device,
+            * e.g. 'adb wait-for-device shell'.
+            */
+        if (argc == 1) {
+            return 0;
+        }
+
+        /* Fall through */
+        argc--;
+        argv++;
+    }
+
+    /* adb_connect() commands */
     if(!strcmp(argv[0], "devices")) {
         char *tmp;
         char *listopt;
@@ -1294,8 +1325,7 @@ top:
             return 1;
         }
     }
-
-    if(!strcmp(argv[0], "connect")) {
+    else if (!strcmp(argv[0], "connect")) {
         char *tmp;
         if (argc != 2) {
             fprintf(stderr, "Usage: adb connect <host>[:<port>]\n");
@@ -1310,8 +1340,7 @@ top:
             return 1;
         }
     }
-
-    if(!strcmp(argv[0], "disconnect")) {
+    else if (!strcmp(argv[0], "disconnect")) {
         char *tmp;
         if (argc > 2) {
             fprintf(stderr, "Usage: adb disconnect [<host>[:<port>]]\n");
@@ -1330,12 +1359,10 @@ top:
             return 1;
         }
     }
-
-    if (!strcmp(argv[0], "emu")) {
+    else if (!strcmp(argv[0], "emu")) {
         return adb_send_emulator_command(argc, argv);
     }
-
-    if(!strcmp(argv[0], "shell") || !strcmp(argv[0], "hell")) {
+    else if (!strcmp(argv[0], "shell") || !strcmp(argv[0], "hell")) {
         int r;
         int fd;
 
@@ -1394,8 +1421,7 @@ top:
             }
         }
     }
-
-    if (!strcmp(argv[0], "exec-in") || !strcmp(argv[0], "exec-out")) {
+    else if (!strcmp(argv[0], "exec-in") || !strcmp(argv[0], "exec-out")) {
         int exec_in = !strcmp(argv[0], "exec-in");
         int fd;
 
@@ -1424,8 +1450,7 @@ top:
         adb_close(fd);
         return 0;
     }
-
-    if(!strcmp(argv[0], "kill-server")) {
+    else if (!strcmp(argv[0], "kill-server")) {
         int fd;
         fd = _adb_connect("host:kill");
         if(fd == -1) {
@@ -1434,21 +1459,22 @@ top:
         }
         return 0;
     }
-
-    if(!strcmp(argv[0], "sideload")) {
-        if(argc != 2) return usage();
+    else if (!strcmp(argv[0], "sideload")) {
+        if (argc != 2) return usage();
         if (adb_sideload_host(argv[1])) {
             return 1;
         } else {
             return 0;
         }
     }
-
-    if(!strcmp(argv[0], "remount") || !strcmp(argv[0], "reboot")
-            || !strcmp(argv[0], "reboot-bootloader")
-            || !strcmp(argv[0], "tcpip") || !strcmp(argv[0], "usb")
-            || !strcmp(argv[0], "root") || !strcmp(argv[0], "disable-verity")
-            || !strcmp(argv[0], "enable-verity")) {
+    else if (!strcmp(argv[0], "remount") ||
+             !strcmp(argv[0], "reboot") ||
+             !strcmp(argv[0], "reboot-bootloader") ||
+             !strcmp(argv[0], "tcpip") ||
+             !strcmp(argv[0], "usb") ||
+             !strcmp(argv[0], "root") ||
+             !strcmp(argv[0], "disable-verity") ||
+             !strcmp(argv[0], "enable-verity")) {
         char command[100];
         if (!strcmp(argv[0], "reboot-bootloader"))
             snprintf(command, sizeof(command), "reboot:bootloader");
@@ -1465,49 +1491,13 @@ top:
         fprintf(stderr,"error: %s\n", adb_error());
         return 1;
     }
-
-    if(!strcmp(argv[0], "bugreport")) {
+    else if (!strcmp(argv[0], "bugreport")) {
         if (argc != 1) return usage();
         do_cmd(ttype, serial, "shell", "bugreport", 0);
         return 0;
     }
-
     /* adb_command() wrapper commands */
-
-    if(!strncmp(argv[0], "wait-for-", strlen("wait-for-"))) {
-        char* service = argv[0];
-        if (!strncmp(service, "wait-for-device", strlen("wait-for-device"))) {
-            if (ttype == kTransportUsb) {
-                service = "wait-for-usb";
-            } else if (ttype == kTransportLocal) {
-                service = "wait-for-local";
-            } else {
-                service = "wait-for-any";
-            }
-        }
-
-        format_host_command(buf, sizeof buf, service, ttype, serial);
-
-        if (adb_command(buf)) {
-            D("failure: %s *\n",adb_error());
-            fprintf(stderr,"error: %s\n", adb_error());
-            return 1;
-        }
-
-        /* Allow a command to be run after wait-for-device,
-            * e.g. 'adb wait-for-device shell'.
-            */
-        if(argc > 1) {
-            argc--;
-            argv++;
-            goto top;
-        }
-        return 0;
-    }
-
-    if(!strcmp(argv[0], "forward") ||
-       !strcmp(argv[0], "reverse"))
-    {
+    else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
         char host_prefix[64];
         char reverse = (char) !strcmp(argv[0], "reverse");
         char remove = 0;
@@ -1598,15 +1588,12 @@ top:
         }
         return 0;
     }
-
     /* do_sync_*() commands */
-
-    if(!strcmp(argv[0], "ls")) {
-        if(argc != 2) return usage();
+    else if (!strcmp(argv[0], "ls")) {
+        if (argc != 2) return usage();
         return do_sync_ls(argv[1]);
     }
-
-    if(!strcmp(argv[0], "push")) {
+    else if (!strcmp(argv[0], "push")) {
         int show_progress = 0;
         int copy_attrs = 0; // unused
         const char* lpath = NULL, *rpath = NULL;
@@ -1619,8 +1606,7 @@ top:
 
         return usage();
     }
-
-    if(!strcmp(argv[0], "pull")) {
+    else if (!strcmp(argv[0], "pull")) {
         int show_progress = 0;
         int copy_attrs = 0;
         const char* rpath = NULL, *lpath = ".";
@@ -1633,23 +1619,19 @@ top:
 
         return usage();
     }
-
-    if (!strcmp(argv[0], "install")) {
+    else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return usage();
         return install_app(ttype, serial, argc, argv);
     }
-
-    if (!strcmp(argv[0], "install-multiple")) {
+    else if (!strcmp(argv[0], "install-multiple")) {
         if (argc < 2) return usage();
         return install_multiple_app(ttype, serial, argc, argv);
     }
-
-    if (!strcmp(argv[0], "uninstall")) {
+    else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) return usage();
         return uninstall_app(ttype, serial, argc, argv);
     }
-
-    if(!strcmp(argv[0], "sync")) {
+    else if (!strcmp(argv[0], "sync")) {
         char *srcarg, *android_srcpath, *data_srcpath, *vendor_srcpath;
         int listonly = 0;
 
@@ -1685,10 +1667,8 @@ top:
         free(data_srcpath);
         return ret;
     }
-
     /* passthrough commands */
-
-    if(!strcmp(argv[0],"get-state") ||
+    else if (!strcmp(argv[0],"get-state") ||
         !strcmp(argv[0],"get-serialno") ||
         !strcmp(argv[0],"get-devpath"))
     {
@@ -1703,40 +1683,31 @@ top:
             return 1;
         }
     }
-
     /* other commands */
-
-    if(!strcmp(argv[0],"status-window")) {
+    else if (!strcmp(argv[0],"status-window")) {
         status_window(ttype, serial);
         return 0;
     }
-
-    if(!strcmp(argv[0],"logcat") || !strcmp(argv[0],"lolcat") || !strcmp(argv[0],"longcat")) {
+    else if (!strcmp(argv[0],"logcat") || !strcmp(argv[0],"lolcat") || !strcmp(argv[0],"longcat")) {
         return logcat(ttype, serial, argc, argv);
     }
-
-    if(!strcmp(argv[0],"ppp")) {
+    else if (!strcmp(argv[0],"ppp")) {
         return ppp(argc, argv);
     }
-
-    if (!strcmp(argv[0], "start-server")) {
+    else if (!strcmp(argv[0], "start-server")) {
         return adb_connect("host:start-server");
     }
-
-    if (!strcmp(argv[0], "backup")) {
+    else if (!strcmp(argv[0], "backup")) {
         return backup(argc, argv);
     }
-
-    if (!strcmp(argv[0], "restore")) {
+    else if (!strcmp(argv[0], "restore")) {
         return restore(argc, argv);
     }
-
-    if (!strcmp(argv[0], "keygen")) {
+    else if (!strcmp(argv[0], "keygen")) {
         if (argc < 2) return usage();
         return adb_auth_keygen(argv[1]);
     }
-
-    if (!strcmp(argv[0], "jdwp")) {
+    else if (!strcmp(argv[0], "jdwp")) {
         int  fd = adb_connect("jdwp");
         if (fd >= 0) {
             read_and_dump(fd);
@@ -1747,14 +1718,12 @@ top:
             return -1;
         }
     }
-
     /* "adb /?" is a common idiom under Windows */
-    if(!strcmp(argv[0], "help") || !strcmp(argv[0], "/?")) {
+    else if (!strcmp(argv[0], "help") || !strcmp(argv[0], "/?")) {
         help();
         return 0;
     }
-
-    if(!strcmp(argv[0], "version")) {
+    else if (!strcmp(argv[0], "version")) {
         version(stdout);
         return 0;
     }
