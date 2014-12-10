@@ -103,9 +103,9 @@ struct func_desc fs_descriptors = {
         .bDescriptorType = USB_DT_INTERFACE,
         .bInterfaceNumber = 0,
         .bNumEndpoints = 2,
-        .bInterfaceClass = ADB_CLASS,
-        .bInterfaceSubClass = ADB_SUBCLASS,
-        .bInterfaceProtocol = ADB_PROTOCOL,
+        .bInterfaceClass = FASTBOOT_CLASS,
+        .bInterfaceSubClass = FASTBOOT_SUBCLASS,
+        .bInterfaceProtocol = FASTBOOT_PROTOCOL,
         .iInterface = 1, /* first string from the provided table */
     },
     .source = {
@@ -130,9 +130,9 @@ struct func_desc hs_descriptors = {
         .bDescriptorType = USB_DT_INTERFACE,
         .bInterfaceNumber = 0,
         .bNumEndpoints = 2,
-        .bInterfaceClass = ADB_CLASS,
-        .bInterfaceSubClass = ADB_SUBCLASS,
-        .bInterfaceProtocol = ADB_PROTOCOL,
+        .bInterfaceClass = FASTBOOT_CLASS,
+        .bInterfaceSubClass = FASTBOOT_SUBCLASS,
+        .bInterfaceProtocol = FASTBOOT_PROTOCOL,
         .iInterface = 1, /* first string from the provided table */
     },
     .source = {
@@ -202,7 +202,7 @@ static int init_functionfs(struct usb_transport *usb_transport)
         v1_descriptor.header.hs_count = 3;
         v1_descriptor.fs_descs = fs_descriptors;
         v1_descriptor.hs_descs = hs_descriptors;
-        D("[ %s: Switching to V1_descriptor format errno=%d ]\n", USB_FFS_FASTBOOT_EP0, errno);
+        D(ERR, "[ %s: Switching to V1_descriptor format errno=%d ]\n", USB_FFS_FASTBOOT_EP0, errno);
         ret = write(usb_transport->control, &v1_descriptor, sizeof(v1_descriptor));
         if (ret < 0) {
             D(ERR, "[ %s: write descriptors failed: errno=%d ]", USB_FFS_FASTBOOT_EP0, errno);
