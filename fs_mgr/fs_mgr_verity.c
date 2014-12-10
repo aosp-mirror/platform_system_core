@@ -155,7 +155,7 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
     unsigned table_length;
     uint64_t device_length;
     int protocol_version;
-    int device;
+    FILE *device;
     int retval = FS_MGR_SETUP_VERITY_FAIL;
     *signature = 0;
     *table = 0;
@@ -238,12 +238,11 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
         goto out;
     }
 
-    (*table)[table_length] = 0;
     retval = FS_MGR_SETUP_VERITY_SUCCESS;
 
 out:
-    if (device != -1)
-        TEMP_FAILURE_RETRY(close(device));
+    if (device)
+        fclose(device);
 
     if (retval != FS_MGR_SETUP_VERITY_SUCCESS) {
         free(*table);
@@ -378,7 +377,7 @@ static int set_verified_property(char *name) {
 
 int fs_mgr_setup_verity(struct fstab_rec *fstab) {
 
-    int retval = FS_MGR_SETUP_VERITY_FAIL;
+    int retval = -1;
     int fd = -1;
 
     char *verity_blk_name = 0;
@@ -409,12 +408,10 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
         goto out;
     }
 
-    retval = FS_MGR_SETUP_VERITY_FAIL;
-
     // get the device mapper fd
     if ((fd = open("/dev/device-mapper", O_RDWR)) < 0) {
         ERROR("Error opening device mapper (%s)", strerror(errno));
-        goto out;
+        goto out;;
     }
 
     // create the device
@@ -464,9 +461,9 @@ out:
         close(fd);
     }
 
-    free(verity_table);
-    free(verity_table_signature);
-    free(verity_blk_name);
+    free (verity_table);
+    free (verity_table_signature);
+    free (verity_blk_name);
 
     return retval;
 }
