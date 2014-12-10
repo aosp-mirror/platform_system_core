@@ -904,7 +904,9 @@ static int handle_setattr(struct fuse* fuse, struct fuse_handler* handler,
     if (!node) {
         return -ENOENT;
     }
-    if (!check_caller_access_to_node(fuse, hdr, node, W_OK, has_rw)) {
+
+    if (!(req->valid & FATTR_FH) &&
+            !check_caller_access_to_node(fuse, hdr, node, W_OK, has_rw)) {
         return -EACCES;
     }
 
