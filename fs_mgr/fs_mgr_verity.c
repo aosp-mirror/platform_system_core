@@ -155,7 +155,7 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
     unsigned table_length;
     uint64_t device_length;
     int protocol_version;
-    FILE *device;
+    int device;
     int retval = FS_MGR_SETUP_VERITY_FAIL;
     *signature = 0;
     *table = 0;
@@ -238,11 +238,12 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
         goto out;
     }
 
+    (*table)[table_length] = 0;
     retval = FS_MGR_SETUP_VERITY_SUCCESS;
 
 out:
-    if (device)
-        fclose(device);
+    if (device != -1)
+        TEMP_FAILURE_RETRY(close(device));
 
     if (retval != FS_MGR_SETUP_VERITY_SUCCESS) {
         free(*table);
