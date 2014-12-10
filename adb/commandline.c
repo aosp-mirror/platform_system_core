@@ -190,10 +190,11 @@ void help()
         "\n"
         "  adb restore <file>           - restore device contents from the <file> backup archive\n"
         "\n"
+        "  adb disable-verity           - disable dm-verity checking on USERDEBUG builds\n"
+        "  adb enable-verity            - re-enable dm-verity checking on USERDEBUG builds\n"
         "  adb keygen <file>            - generate adb public/private key. The private key is stored in <file>,\n"
         "                                 and the public key is stored in <file>.pub. Any existing files\n"
         "                                 are overwritten.\n"
-        "  adb disable-verity           - disable dm-verity checking on USERDEBUG builds\n"
         "  adb help                     - show this help message\n"
         "  adb version                  - show version num\n"
         "\n"
@@ -1446,7 +1447,8 @@ top:
     if(!strcmp(argv[0], "remount") || !strcmp(argv[0], "reboot")
             || !strcmp(argv[0], "reboot-bootloader")
             || !strcmp(argv[0], "tcpip") || !strcmp(argv[0], "usb")
-            || !strcmp(argv[0], "root") || !strcmp(argv[0], "disable-verity")) {
+            || !strcmp(argv[0], "root") || !strcmp(argv[0], "disable-verity")
+            || !strcmp(argv[0], "enable-verity")) {
         char command[100];
         if (!strcmp(argv[0], "reboot-bootloader"))
             snprintf(command, sizeof(command), "reboot:bootloader");
