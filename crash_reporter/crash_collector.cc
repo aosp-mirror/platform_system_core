@@ -104,7 +104,7 @@ int CrashCollector::WriteNewFile(const FilePath &filename,
     return -1;
   }
 
-  int rv = base::WriteFileDescriptor(fd, data, size);
+  int rv = base::WriteFileDescriptor(fd, data, size) ? size : -1;
   IGNORE_EINTR(close(fd));
   return rv;
 }
