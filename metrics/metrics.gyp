@@ -94,6 +94,7 @@
         '<(proto_in_dir)/chrome_user_metrics_extension.proto',
         '<(proto_in_dir)/histogram_event.proto',
         '<(proto_in_dir)/omnibox_event.proto',
+        '<(proto_in_dir)/omnibox_input_type.proto',
         '<(proto_in_dir)/perf_data.proto',
         '<(proto_in_dir)/profiler_event.proto',
         '<(proto_in_dir)/sampled_profile.proto',

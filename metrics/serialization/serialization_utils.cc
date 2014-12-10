@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/file_util.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/memory/scoped_ptr.h"
@@ -174,7 +174,7 @@ bool SerializationUtils::WriteMetricToFile(const MetricSample& sample,
                                       READ_WRITE_ALL_FILE_FLAGS));
 
   if (file_descriptor.get() < 0) {
-    DLOG(ERROR) << "error openning the file";
+    DLOG(ERROR) << "error opening the file";
     return false;
   }
 
@@ -196,16 +196,15 @@ bool SerializationUtils::WriteMetricToFile(const MetricSample& sample,
 
   // The file containing the metrics samples will only be read by programs on
   // the same device so we do not check endianness.
-  if (base::WriteFileDescriptor(file_descriptor.get(),
+  if (!base::WriteFileDescriptor(file_descriptor.get(),
                                  reinterpret_cast<char*>(&size),
-                                 sizeof(size)) != sizeof(size)) {
+                                 sizeof(size))) {
     DPLOG(ERROR) << "error writing message length";
     return false;
   }
 
-  if (base::WriteFileDescriptor(
-          file_descriptor.get(), msg.c_str(), msg.size()) !=
-      static_cast<int>(msg.size())) {
+  if (!base::WriteFileDescriptor(
+          file_descriptor.get(), msg.c_str(), msg.size())) {
     DPLOG(ERROR) << "error writing message";
     return false;
   }
