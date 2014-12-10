@@ -14,4 +14,7 @@
  * limitations under the License.
  */
 
+#define FS_MGR_SETUP_VERITY_DISABLED -2
+#define FS_MGR_SETUP_VERITY_FAIL -1
+#define FS_MGR_SETUP_VERITY_SUCCESS 0
 int fs_mgr_setup_verity(struct fstab_rec *fstab);
