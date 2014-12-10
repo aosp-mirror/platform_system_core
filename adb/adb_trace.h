@@ -73,8 +73,9 @@ void    adb_trace_init(void);
             if (ADB_TRACING) {                         \
                 int save_errno = errno;                \
                 adb_mutex_lock(&D_lock);               \
-                fprintf(stderr, "%s::%s():",           \
-                        __FILE__, __FUNCTION__);       \
+                fprintf(stderr, "%16s: %5d:%5lu | ",   \
+                        __FUNCTION__,                  \
+                        getpid(), adb_thread_id());    \
                 errno = save_errno;                    \
                 fprintf(stderr, __VA_ARGS__ );         \
                 fflush(stderr);                        \
@@ -96,15 +97,16 @@ void    adb_trace_init(void);
         } while (0)
 #  define  DD(...)                                     \
         do {                                           \
-          int save_errno = errno;                      \
-          adb_mutex_lock(&D_lock);                     \
-          fprintf(stderr, "%s::%s():",                 \
-                  __FILE__, __FUNCTION__);             \
-          errno = save_errno;                          \
-          fprintf(stderr, __VA_ARGS__ );               \
-          fflush(stderr);                              \
-          adb_mutex_unlock(&D_lock);                   \
-          errno = save_errno;                          \
+            int save_errno = errno;                    \
+            adb_mutex_lock(&D_lock);                   \
+            fprintf(stderr, "%16s: %5d:%5lu | ",       \
+                    __FUNCTION__,                      \
+                    getpid(), adb_thread_id());        \
+            errno = save_errno;                        \
+            fprintf(stderr, __VA_ARGS__ );             \
+            fflush(stderr);                            \
+            adb_mutex_unlock(&D_lock);                 \
+            errno = save_errno;                        \
         } while (0)
 #else
 #  define  D(...)                                      \
