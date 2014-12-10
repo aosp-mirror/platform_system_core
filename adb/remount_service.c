@@ -115,7 +115,6 @@ errout:
 static int remount(const char* dir, int* dir_ro)
 {
     char *dev;
-    int OFF = 0;
 
     if (dir_ro == 0) {
         return 0;
