@@ -53,7 +53,6 @@ endif
 LOCAL_STATIC_LIBRARIES := \
     $(EXTRA_STATIC_LIBS) \
     libzipfile \
-    libunz \
     libext4_utils_host \
     libsparse_host \
     libz
