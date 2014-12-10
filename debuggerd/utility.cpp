@@ -131,12 +131,6 @@ int wait_for_sigstop(pid_t tid, int* total_sleep_time_usec, bool* detach_failed)
   return -1;
 }
 
-#if defined (__mips__)
-#define DUMP_MEMORY_AS_ASCII 1
-#else
-#define DUMP_MEMORY_AS_ASCII 0
-#endif
-
 void dump_memory(log_t* log, pid_t tid, uintptr_t addr) {
     char code_buffer[64];
     char ascii_buffer[32];
@@ -183,7 +177,6 @@ void dump_memory(log_t* log, pid_t tid, uintptr_t addr) {
                                static_cast<uintptr_t>(data));
             }
 
-#if DUMP_MEMORY_AS_ASCII
             for (size_t j = 0; j < sizeof(long); j++) {
                 /*
                  * Our isprint() allows high-ASCII characters that display
@@ -197,7 +190,6 @@ void dump_memory(log_t* log, pid_t tid, uintptr_t addr) {
                     *asc_out++ = '.';
                 }
             }
-#endif
             p += sizeof(long);
         }
         *asc_out = '\0';
