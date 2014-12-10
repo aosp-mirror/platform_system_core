@@ -136,40 +136,6 @@ struct func_desc hs_descriptors = {
         .bmAttributes = USB_ENDPOINT_XFER_BULK,
         .wMaxPacketSize = MAX_PACKET_SIZE_HS,
     },
-    .ss_descs = {
-        .intf = {
-            .bLength = sizeof(descriptors.ss_descs.intf),
-            .bDescriptorType = USB_DT_INTERFACE,
-            .bInterfaceNumber = 0,
-            .bNumEndpoints = 2,
-            .bInterfaceClass = ADB_CLASS,
-            .bInterfaceSubClass = ADB_SUBCLASS,
-            .bInterfaceProtocol = ADB_PROTOCOL,
-            .iInterface = 1, /* first string from the provided table */
-        },
-        .source = {
-            .bLength = sizeof(descriptors.ss_descs.source),
-            .bDescriptorType = USB_DT_ENDPOINT,
-            .bEndpointAddress = 1 | USB_DIR_OUT,
-            .bmAttributes = USB_ENDPOINT_XFER_BULK,
-            .wMaxPacketSize = MAX_PACKET_SIZE_SS,
-        },
-        .source_comp = {
-            .bLength = sizeof(descriptors.ss_descs.source_comp),
-            .bDescriptorType = USB_DT_SS_ENDPOINT_COMP,
-        },
-        .sink = {
-            .bLength = sizeof(descriptors.ss_descs.sink),
-            .bDescriptorType = USB_DT_ENDPOINT,
-            .bEndpointAddress = 2 | USB_DIR_IN,
-            .bmAttributes = USB_ENDPOINT_XFER_BULK,
-            .wMaxPacketSize = MAX_PACKET_SIZE_SS,
-        },
-        .sink_comp = {
-            .bLength = sizeof(descriptors.ss_descs.sink_comp),
-            .bDescriptorType = USB_DT_SS_ENDPOINT_COMP,
-        },
-    },
 };
 
 #define STR_INTERFACE_ "ADB Interface"
