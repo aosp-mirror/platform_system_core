@@ -415,6 +415,7 @@ FoundIt:
               __FUNCTION__, strerror(errno));
             return -1;
         }
+        D("socketpair: (%d,%d)", fds[0], fds[1]);
 
         proc->out_fds[ proc->out_count ] = fds[1];
         if (++proc->out_count == 1)
