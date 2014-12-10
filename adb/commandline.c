@@ -190,7 +190,6 @@ void help()
         "\n"
         "  adb restore <file>           - restore device contents from the <file> backup archive\n"
         "\n"
-        "  adb disable-verity           - disable dm-verity checking on USERDEBUG builds\n"
         "  adb keygen <file>            - generate adb public/private key. The private key is stored in <file>,\n"
         "                                 and the public key is stored in <file>.pub. Any existing files\n"
         "                                 are overwritten.\n"
