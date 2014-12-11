@@ -173,7 +173,7 @@ static void cmd_erase(struct protocol_handle *phandle, const char *arg)
         return;
     }
 
-    if (path == NULL) {
+    if (!path[0]) {
         fastboot_fail(phandle, "Couldn't find partition");
         return;
     }
