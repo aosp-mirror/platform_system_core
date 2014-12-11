@@ -112,7 +112,6 @@ BSD_TOOLS := \
 
 OUR_TOOLS := \
     chcon \
-    chmod \
     cmp \
     date \
     df \
