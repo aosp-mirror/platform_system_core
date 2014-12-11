@@ -23,9 +23,9 @@
       'sources': [
         'c_metrics_library.cc',
         'metrics_library.cc',
+        'serialization/metric_sample.cc',
+        'serialization/serialization_utils.cc',
         'timer.cc',
-        'components/metrics/chromeos/metric_sample.cc',
-        'components/metrics/chromeos/serialization_utils.cc',
       ],
       'include_dirs': ['.'],
     },

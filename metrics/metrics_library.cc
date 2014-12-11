@@ -13,12 +13,10 @@
 #include <cstdio>
 #include <cstring>
 
-#include "components/metrics/chromeos/metric_sample.h"
-#include "components/metrics/chromeos/serialization_utils.h"
+#include "metrics/serialization/metric_sample.h"
+#include "metrics/serialization/serialization_utils.h"
 
 #include "policy/device_policy.h"
-
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 static const char kAutotestPath[] = "/var/log/metrics/autotest-events";
 static const char kUMAEventsPath[] = "/var/run/metrics/uma-events";
@@ -206,7 +204,7 @@ void MetricsLibrary::SetPolicyProvider(policy::PolicyProvider* provider) {
 }
 
 bool MetricsLibrary::SendCrosEventToUMA(const std::string& event) {
-  for (size_t i = 0; i < ARRAY_SIZE(kCrosEventNames); i++) {
+  for (size_t i = 0; i < arraysize(kCrosEventNames); i++) {
     if (strcmp(event.c_str(), kCrosEventNames[i]) == 0) {
       return SendEnumToUMA(kCrosEventHistogramName, i, kCrosEventHistogramMax);
     }

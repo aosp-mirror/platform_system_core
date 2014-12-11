@@ -9,15 +9,15 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/sys_info.h"
-#include "components/metrics/chromeos/metric_sample.h"
 #include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
 #include "components/metrics/proto/histogram_event.pb.h"
 #include "components/metrics/proto/system_profile.pb.h"
-#include "uploader/metrics_log.h"
-#include "uploader/mock/mock_system_profile_setter.h"
-#include "uploader/mock/sender_mock.h"
-#include "uploader/system_profile_cache.h"
-#include "uploader/upload_service.h"
+#include "metrics/serialization/metric_sample.h"
+#include "metrics/uploader/metrics_log.h"
+#include "metrics/uploader/mock/mock_system_profile_setter.h"
+#include "metrics/uploader/mock/sender_mock.h"
+#include "metrics/uploader/system_profile_cache.h"
+#include "metrics/uploader/upload_service.h"
 
 static const char kMetricsServer[] = "https://clients4.google.com/uma/v2";
 static const char kMetricsFilePath[] = "/var/run/metrics/uma-events";

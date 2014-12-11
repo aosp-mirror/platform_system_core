@@ -75,12 +75,11 @@
       },
       'sources': [
         'uploader/upload_service.cc',
+        'uploader/metrics_hashes.cc',
         'uploader/metrics_log.cc',
+        'uploader/metrics_log_base.cc',
         'uploader/system_profile_cache.cc',
         'uploader/sender_http.cc',
-        'components/metrics/metrics_log_base.cc',
-        'components/metrics/metrics_log_manager.cc',
-        'components/metrics/metrics_hashes.cc',
       ],
       'include_dirs': ['.']
     },
@@ -136,6 +135,7 @@
           'includes': ['../common-mk/common_test.gypi'],
           'sources': [
             'metrics_library_test.cc',
+            'serialization/serialization_utils_unittest.cc',
           ],
           'link_settings': {
             'libraries': [
@@ -157,6 +157,8 @@
           'type': 'executable',
           'sources': [
             'persistent_integer.cc',
+            'uploader/metrics_hashes_unittest.cc',
+            'uploader/metrics_log_base_unittest.cc',
             'uploader/mock/sender_mock.cc',
             'uploader/upload_service_test.cc',
           ],

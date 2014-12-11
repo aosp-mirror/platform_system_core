@@ -15,9 +15,9 @@
 #include <base/metrics/sparse_histogram.h>
 #include <base/metrics/statistics_recorder.h>
 #include <base/sha1.h>
-#include <components/metrics/chromeos/metric_sample.h>
-#include <components/metrics/chromeos/serialization_utils.h>
 
+#include "metrics/serialization/metric_sample.h"
+#include "metrics/serialization/serialization_utils.h"
 #include "metrics/uploader/metrics_log.h"
 #include "metrics/uploader/sender_http.h"
 #include "metrics/uploader/system_profile_cache.h"
