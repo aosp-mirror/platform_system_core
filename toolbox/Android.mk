@@ -119,7 +119,6 @@ OUR_TOOLS := \
     getevent \
     getprop \
     getsebool \
-    hd \
     id \
     ifconfig \
     iftop \
