@@ -51,9 +51,6 @@ libbacktrace_src_files += \
 	UnwindMap.cpp \
 	UnwindPtrace.cpp \
 
-libbacktrace_c_includes := \
-	external/libunwind/include \
-
 libbacktrace_shared_libraries := \
 	libunwind \
 	libunwind-ptrace \
