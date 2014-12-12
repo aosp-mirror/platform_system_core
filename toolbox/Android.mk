@@ -130,7 +130,6 @@ OUR_TOOLS := \
     lsof \
     md5 \
     mkdir \
-    mknod \
     mount \
     nandread \
     netstat \
