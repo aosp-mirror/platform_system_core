@@ -32,16 +32,23 @@ static void maybe_abort() {
     }
 }
 
-static int smash_stack(int i __unused) {
+static char* smash_stack_dummy_buf;
+__attribute__ ((noinline)) static void smash_stack_dummy_function(volatile int* plen) {
+  smash_stack_dummy_buf[*plen] = 0;
+}
+
+// This must be marked with "__attribute__ ((noinline))", to ensure the
+// compiler generates the proper stack guards around this function.
+// Assign local array address to global variable to force stack guards.
+// Use another noinline function to corrupt the stack.
+__attribute__ ((noinline)) static int smash_stack(volatile int* plen) {
     printf("crasher: deliberately corrupting stack...\n");
-    // Unless there's a "big enough" buffer on the stack, gcc
-    // doesn't bother inserting checks.
-    char buf[8];
-    // If we don't write something relatively unpredictable
-    // into the buffer and then do something with it, gcc
-    // optimizes everything away and just returns a constant.
-    *(int*)(&buf[7]) = (uintptr_t) &buf[0];
-    return *(int*)(&buf[0]);
+
+    char buf[128];
+    smash_stack_dummy_buf = buf;
+    // This should corrupt stack guards and make process abort.
+    smash_stack_dummy_function(plen);
+    return 0;
 }
 
 static void* global = 0; // So GCC doesn't optimize the tail recursion out of overflow_stack.
@@ -125,7 +132,8 @@ static int do_action(const char* arg)
     } else if (!strcmp(arg, "SIGSEGV-non-null")) {
         sigsegv_non_null();
     } else if (!strcmp(arg, "smash-stack")) {
-        return smash_stack(42);
+        volatile int len = 128;
+        return smash_stack(&len);
     } else if (!strcmp(arg, "stack-overflow")) {
         overflow_stack(NULL);
     } else if (!strcmp(arg, "nostack")) {
