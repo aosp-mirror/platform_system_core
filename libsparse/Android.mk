@@ -16,7 +16,7 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_SRC_FILES := $(libsparse_src_files)
 LOCAL_MODULE := libsparse_host
 LOCAL_STATIC_LIBRARIES := libz
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/include external/zlib
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_CFLAGS := -Werror
 include $(BUILD_HOST_STATIC_LIBRARY)
 
@@ -25,7 +25,7 @@ include $(CLEAR_VARS)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_SRC_FILES := $(libsparse_src_files)
 LOCAL_MODULE := libsparse
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/include external/zlib
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/include
 LOCAL_SHARED_LIBRARIES := \
     libz
 LOCAL_CFLAGS := -Werror
@@ -36,7 +36,7 @@ include $(CLEAR_VARS)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_SRC_FILES := $(libsparse_src_files)
 LOCAL_MODULE := libsparse_static
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/include external/zlib
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/include
 LOCAL_STATIC_LIBRARIES := libz
 LOCAL_CFLAGS := -Werror
 include $(BUILD_STATIC_LIBRARY)
