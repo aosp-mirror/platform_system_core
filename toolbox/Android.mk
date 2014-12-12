@@ -128,7 +128,6 @@ OUR_TOOLS := \
     log \
     ls \
     lsof \
-    md5 \
     mkdir \
     mount \
     nandread \
@@ -171,10 +170,7 @@ LOCAL_SRC_FILES := \
 
 LOCAL_CFLAGS += $(common_cflags)
 
-LOCAL_C_INCLUDES += external/openssl/include
-
 LOCAL_SHARED_LIBRARIES := \
-    libcrypto \
     libcutils \
     libselinux \
 
