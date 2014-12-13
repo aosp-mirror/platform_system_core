@@ -44,6 +44,7 @@ static void write_console(int fd, const char* format, ...)
     adb_write(fd, buffer, strnlen(buffer, sizeof(buffer)));
 }
 
+#ifdef ALLOW_ADBD_DISABLE_VERITY
 static int get_target_device_size(int fd, const char *blk_device,
                                   uint64_t *device_size)
 {
@@ -157,6 +158,7 @@ errout:
         adb_close(device);
     return retval;
 }
+#endif
 
 void set_verity_enabled_state_service(int fd, void* cookie)
 {
@@ -207,11 +209,11 @@ void set_verity_enabled_state_service(int fd, void* cookie)
         write_console(fd,
                       "Now reboot your device for settings to take effect\n");
     }
+errout:
 #else
     write_console(fd, "%s-verity only works for userdebug builds\n",
                   enable ? "enable" : "disable");
 #endif
 
-errout:
     adb_close(fd);
 }
