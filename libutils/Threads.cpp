@@ -35,7 +35,7 @@
 # define HAVE_CREATETHREAD  // Cygwin, vs. HAVE__BEGINTHREADEX for MinGW
 #endif
 
-#if defined(HAVE_PRCTL)
+#if defined(__linux__)
 #include <sys/prctl.h>
 #endif
 
@@ -100,7 +100,7 @@ struct thread_data_t {
 };
 
 void androidSetThreadName(const char* name) {
-#if defined(HAVE_PRCTL)
+#if defined(__linux__)
     // Mac OS doesn't have this, and we build libutil for the host too
     int hasAt = 0;
     int hasDot = 0;
