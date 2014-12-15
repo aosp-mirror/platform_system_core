@@ -17,7 +17,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#if defined(HAVE_PRCTL)
+#if defined(__linux__)
 #include <sys/prctl.h>
 #endif
 #include <sys/stat.h>
@@ -51,7 +51,7 @@ void set_process_name(const char* new_name) {
     strcpy(copy, new_name);
     process_name = (const char*) copy;
 
-#if defined(HAVE_PRCTL)
+#if defined(__linux__)
     if (len < 16) {
         prctl(PR_SET_NAME, (unsigned long) new_name, 0, 0, 0);
     } else {
