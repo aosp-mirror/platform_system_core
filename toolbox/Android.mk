@@ -127,7 +127,6 @@ OUR_TOOLS := \
     log \
     ls \
     lsof \
-    mkdir \
     mount \
     nandread \
     netstat \
