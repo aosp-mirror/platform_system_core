@@ -111,7 +111,6 @@ BSD_TOOLS := \
     rmdir \
 
 OUR_TOOLS := \
-    chcon \
     cmp \
     date \
     df \
