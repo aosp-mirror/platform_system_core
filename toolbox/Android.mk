@@ -28,15 +28,6 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
-    upstream-netbsd/bin/cp/cp.c \
-    upstream-netbsd/bin/cp/utils.c
-LOCAL_CFLAGS += $(common_cflags) -Dmain=cp_main
-LOCAL_MODULE := libtoolbox_cp
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
-include $(BUILD_STATIC_LIBRARY)
-
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := \
     upstream-netbsd/bin/dd/args.c \
     upstream-netbsd/bin/dd/conv.c \
     upstream-netbsd/bin/dd/dd.c \
@@ -87,7 +78,6 @@ include $(CLEAR_VARS)
 BSD_TOOLS := \
     cat \
     chown \
-    cp \
     dd \
     du \
     grep \
