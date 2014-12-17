@@ -28,6 +28,9 @@
 #include <libgen.h>
 #include <time.h>
 #include <sys/swap.h>
+#include <dirent.h>
+#include <ext4.h>
+#include <ext4_sb.h>
 
 #include <linux/loop.h>
 #include <private/android_filesystem_config.h>
@@ -315,6 +318,83 @@ static int mount_with_alternatives(struct fstab *fstab, int start_idx, int *end_
     return 0;
 }
 
+static int translate_ext_labels(struct fstab_rec *rec)
+{
+    DIR *blockdir = NULL;
+    struct dirent *ent;
+    char *label;
+    size_t label_len;
+    int ret = -1;
+
+    if (strncmp(rec->blk_device, "LABEL=", 6))
+        return 0;
+
+    label = rec->blk_device + 6;
+    label_len = strlen(label);
+
+    if (label_len > 16) {
+        ERROR("FS label is longer than allowed by filesystem\n");
+        goto out;
+    }
+
+
+    blockdir = opendir("/dev/block");
+    if (!blockdir) {
+        ERROR("couldn't open /dev/block\n");
+        goto out;
+    }
+
+    while ((ent = readdir(blockdir))) {
+        int fd;
+        char super_buf[1024];
+        struct ext4_super_block *sb;
+
+        if (!ent->d_type == DT_BLK)
+            continue;
+
+        fd = openat(dirfd(blockdir), ent->d_name, O_RDONLY);
+        if (fd < 0) {
+            ERROR("Cannot open block device /dev/block/%s\n", ent->d_name);
+            goto out;
+        }
+
+        if (TEMP_FAILURE_RETRY(lseek(fd, 1024, SEEK_SET)) < 0 ||
+            TEMP_FAILURE_RETRY(read(fd, super_buf, 1024)) != 1024) {
+            /* Probably a loopback device or something else without a readable
+             * superblock.
+             */
+            close(fd);
+            continue;
+        }
+
+        sb = (struct ext4_super_block *)super_buf;
+        if (sb->s_magic != EXT4_SUPER_MAGIC) {
+            INFO("/dev/block/%s not ext{234}\n", ent->d_name);
+            continue;
+        }
+
+        if (!strncmp(label, sb->s_volume_name, label_len)) {
+            char *new_blk_device;
+
+            if (asprintf(&new_blk_device, "/dev/block/%s", ent->d_name) < 0) {
+                ERROR("Could not allocate block device string\n");
+                goto out;
+            }
+
+            INFO("resolved label %s to %s\n", rec->blk_device, new_blk_device);
+
+            free(rec->blk_device);
+            rec->blk_device = new_blk_device;
+            ret = 0;
+            break;
+        }
+    }
+
+out:
+    closedir(blockdir);
+    return ret;
+}
+
 /* When multiple fstab records share the same mount_point, it will
  * try to mount each one in turn, and ignore any duplicates after a
  * first successful mount.
@@ -344,6 +424,17 @@ int fs_mgr_mount_all(struct fstab *fstab)
             !strcmp(fstab->recs[i].fs_type, "emmc") ||
             !strcmp(fstab->recs[i].fs_type, "mtd")) {
             continue;
+        }
+
+        /* Translate LABEL= file system labels into block devices */
+        if (!strcmp(fstab->recs[i].fs_type, "ext2") ||
+            !strcmp(fstab->recs[i].fs_type, "ext3") ||
+            !strcmp(fstab->recs[i].fs_type, "ext4")) {
+            int tret = translate_ext_labels(&fstab->recs[i]);
+            if (tret < 0) {
+                ERROR("Could not translate label to block device\n");
+                continue;
+            }
         }
 
         if (fstab->recs[i].fs_mgr_flags & MF_WAIT) {
