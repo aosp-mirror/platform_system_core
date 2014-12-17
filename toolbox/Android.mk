@@ -58,13 +58,6 @@ LOCAL_MODULE := libtoolbox_grep
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := upstream-netbsd/bin/mv/mv.c
-LOCAL_CFLAGS += $(common_cflags) -Dmain=mv_main -D__SVR4
-LOCAL_MODULE := libtoolbox_mv
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
-include $(BUILD_STATIC_LIBRARY)
-
 
 include $(CLEAR_VARS)
 
@@ -74,7 +67,6 @@ BSD_TOOLS := \
     dd \
     du \
     grep \
-    mv \
 
 OUR_TOOLS := \
     cmp \
