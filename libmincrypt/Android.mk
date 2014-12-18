@@ -6,6 +6,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libmincrypt
 LOCAL_SRC_FILES := dsa_sig.c p256.c p256_ec.c p256_ecdsa.c rsa.c sha.c sha256.c
 LOCAL_CFLAGS := -Wall -Werror
+# Clang's slp-vectorize phase has segmentation fault when compiling p256_ec.c.
+LOCAL_CLANG_CFLAGS += -fno-slp-vectorize
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
