@@ -16,6 +16,7 @@
 
 #define LOG_TAG "DEBUG"
 
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
