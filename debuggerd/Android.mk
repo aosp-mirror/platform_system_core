@@ -28,6 +28,8 @@ LOCAL_SHARED_LIBRARIES := \
     liblog \
     libselinux \
 
+LOCAL_CLANG := true
+
 LOCAL_MODULE := debuggerd
 LOCAL_MODULE_STEM_32 := debuggerd
 LOCAL_MODULE_STEM_64 := debuggerd64
