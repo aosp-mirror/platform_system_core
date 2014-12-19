@@ -189,7 +189,9 @@ TEST_F(UploadServiceTest, ValuesInConfigFileAreSent) {
       "CHROMEOS_RELEASE_NAME=" + name +
       "\nCHROMEOS_RELEASE_VERSION=version\n"
       "CHROMEOS_RELEASE_DESCRIPTION=description beta-channel test\n"
-      "CHROMEOS_RELEASE_TRACK=beta-channel");
+      "CHROMEOS_RELEASE_TRACK=beta-channel\n"
+      "CHROMEOS_RELEASE_BUILD_TYPE=developer build\n"
+      "CHROMEOS_RELEASE_BOARD=myboard");
 
   base::SysInfo::SetChromeOSVersionInfoForTest(content, base::Time());
   scoped_ptr<metrics::MetricSample> histogram =

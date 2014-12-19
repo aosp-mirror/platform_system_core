@@ -12,6 +12,7 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
 #include "metrics/persistent_integer.h"
@@ -26,6 +27,21 @@ const char kProductIdFieldName[] = "GOOGLE_METRICS_PRODUCT_ID";
 
 }  // namespace
 
+std::string ChannelToString(
+    const metrics::SystemProfileProto_Channel& channel) {
+  switch (channel) {
+    case metrics::SystemProfileProto::CHANNEL_STABLE:
+    return "STABLE";
+  case metrics::SystemProfileProto::CHANNEL_DEV:
+    return "DEV";
+  case metrics::SystemProfileProto::CHANNEL_BETA:
+    return "BETA";
+  case metrics::SystemProfileProto::CHANNEL_CANARY:
+    return "CANARY";
+  default:
+    return "UNKNOWN";
+  }
+}
 
 SystemProfileCache::SystemProfileCache()
     : initialized_(false),
@@ -48,12 +64,17 @@ bool SystemProfileCache::Initialize() {
   CHECK(!initialized_)
       << "this should be called only once in the metrics_daemon lifetime.";
 
+  std::string chromeos_version;
+  std::string board;
+  std::string build_type;
   if (!base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_NAME",
                                          &profile_.os_name) ||
       !base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_VERSION",
                                          &profile_.os_version) ||
-      !base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_DESCRIPTION",
-                                         &profile_.app_version) ||
+      !base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_BOARD", &board) ||
+      !base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_BUILD_TYPE",
+                                         &build_type) ||
+      !GetChromeOSVersion(&chromeos_version) ||
       !GetHardwareId(&profile_.hardware_class)) {
     DLOG(ERROR) << "failing to initialize profile cache";
     return false;
@@ -62,6 +83,9 @@ bool SystemProfileCache::Initialize() {
   std::string channel_string;
   base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_TRACK", &channel_string);
   profile_.channel = ProtoChannelFromString(channel_string);
+
+  profile_.app_version = chromeos_version + " (" + build_type + ")" +
+      ChannelToString(profile_.channel) + " " + board;
 
   // If the product id is not defined, use the default one from the protobuf.
   profile_.product_id = metrics::ChromeUserMetricsExtension::CHROME;
@@ -124,6 +148,39 @@ std::string SystemProfileCache::GetPersistentGUID(const std::string& filename) {
     CHECK(base::WriteFile(filepath, guid.c_str(), guid.size()));
   }
   return guid;
+}
+
+bool SystemProfileCache::GetChromeOSVersion(std::string* version) {
+  if (testing_) {
+    *version = "0.0.0.0";
+    return true;
+  }
+
+  std::string milestone, build, branch, patch;
+  unsigned tmp;
+  if (base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_CHROME_MILESTONE",
+                                        &milestone) &&
+      base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_BUILD_NUMBER",
+                                        &build) &&
+      base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_BRANCH_NUMBER",
+                                        &branch) &&
+      base::SysInfo::GetLsbReleaseValue("CHROMEOS_RELEASE_PATCH_NUMBER",
+                                        &patch)) {
+    // Convert to uint to ensure those fields are positive numbers.
+    if (base::StringToUint(milestone, &tmp) &&
+        base::StringToUint(build, &tmp) &&
+        base::StringToUint(branch, &tmp) &&
+        base::StringToUint(patch, &tmp)) {
+      std::vector<std::string> parts = {milestone, build, branch, patch};
+      *version = JoinString(parts, '.');
+      return true;
+    }
+    DLOG(INFO) << "The milestone, build, branch or patch is not a positive "
+               << "number.";
+    return false;
+  }
+  DLOG(INFO) << "Field missing from /etc/lsb-release";
+  return false;
 }
 
 bool SystemProfileCache::GetHardwareId(std::string* hwid) {

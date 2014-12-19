@@ -72,6 +72,15 @@ class SystemProfileCache : public SystemProfileSetter {
   // Gets the product ID from the GOOGLE_METRICS_PRODUCT_ID field.
   bool GetProductId(int* product_id) const;
 
+  // Generate the formatted chromeos version from the fields in
+  // /etc/lsb-release. The format is A.B.C.D where A, B, C and D are positive
+  // integer representing:
+  // * the chrome milestone
+  // * the build number
+  // * the branch number
+  // * the patch number
+  bool GetChromeOSVersion(std::string* version);
+
   bool initialized_;
   bool testing_;
   std::string config_root_;
