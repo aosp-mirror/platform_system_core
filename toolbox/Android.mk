@@ -87,7 +87,6 @@ OUR_TOOLS := \
     lsof \
     mount \
     nandread \
-    netstat \
     newfs_msdos \
     notify \
     ps \
