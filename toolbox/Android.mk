@@ -72,7 +72,6 @@ OUR_TOOLS := \
     cmp \
     date \
     df \
-    getenforce \
     getevent \
     getprop \
     getsebool \
@@ -97,7 +96,6 @@ OUR_TOOLS := \
     runcon \
     schedtop \
     sendevent \
-    setenforce \
     setprop \
     setsebool \
     smd \
