@@ -10,6 +10,7 @@
 #include <sys/poll.h>
 #include <linux/input.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "getevent.h"
 
