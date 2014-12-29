@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 
 int ioctl_main(int argc, char *argv[])
 {

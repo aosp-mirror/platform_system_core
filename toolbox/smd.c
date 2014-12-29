@@ -3,6 +3,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <unistd.h>
 
 int smd_main(int argc, char **argv)
 {
