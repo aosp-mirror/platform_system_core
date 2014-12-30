@@ -36,7 +36,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <time.h>
-
+#include <unistd.h>
 
 static void format_time(int time, char* buffer) {
     int seconds, minutes, hours, days;
