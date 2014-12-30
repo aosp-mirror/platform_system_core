@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <time.h>
+#include <unistd.h>
 
 static void usage(void)
 {

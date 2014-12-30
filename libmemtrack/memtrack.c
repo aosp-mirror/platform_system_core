@@ -20,6 +20,7 @@
 
 #include <log/log.h>
 
+#include <errno.h>
 #include <hardware/memtrack.h>
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
