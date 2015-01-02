@@ -329,7 +329,7 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
 #if !ADB_HOST
 void framebuffer_service(int fd, void *cookie);
 // Allow enable-verity to write to system and vendor block devices
-int make_system_and_vendor_block_devices_writable();
+int make_block_device_writable(const char* dev);
 void remount_service(int fd, void *cookie);
 void set_verity_enabled_state_service(int fd, void* cookie);
 #endif
