@@ -18,6 +18,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <mntent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,38 +37,21 @@ static int vendor_ro = 1;
 /* Returns the device used to mount a directory in /proc/mounts */
 static char *find_mount(const char *dir)
 {
-    int fd;
-    int res;
-    char *token = NULL;
-    const char delims[] = "\n";
-    char buf[4096];
+    FILE* fp;
+    struct mntent* mentry;
+    char* device = NULL;
 
-    fd = unix_open("/proc/mounts", O_RDONLY | O_CLOEXEC);
-    if (fd < 0)
+    if ((fp = setmntent("/proc/mounts", "r")) == NULL) {
         return NULL;
-
-    buf[sizeof(buf) - 1] = '\0';
-    adb_read(fd, buf, sizeof(buf) - 1);
-    adb_close(fd);
-
-    token = strtok(buf, delims);
-
-    while (token) {
-        char mount_dev[256];
-        char mount_dir[256];
-        int mount_freq;
-        int mount_passno;
-
-        res = sscanf(token, "%255s %255s %*s %*s %d %d\n",
-                     mount_dev, mount_dir, &mount_freq, &mount_passno);
-        mount_dev[255] = 0;
-        mount_dir[255] = 0;
-        if (res == 4 && (strcmp(dir, mount_dir) == 0))
-            return strdup(mount_dev);
-
-        token = strtok(NULL, delims);
     }
-    return NULL;
+    while ((mentry = getmntent(fp)) != NULL) {
+        if (strcmp(dir, mentry->mnt_dir) == 0) {
+            device = strdup(mentry->mnt_fsname);
+            break;
+        }
+    }
+    endmntent(fp);
+    return device;
 }
 
 static int hasVendorPartition()
