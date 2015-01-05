@@ -776,7 +776,7 @@ void MetricsDaemon::ScheduleMeminfoCallback(int wait) {
   base::TimeDelta waitDelta = base::TimeDelta::FromSeconds(wait);
   base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
       base::Bind(&MetricsDaemon::MeminfoCallback, base::Unretained(this),
-                 base::TimeDelta::FromMilliseconds(kMetricMeminfoInterval)),
+                 waitDelta),
       waitDelta);
 }
 
@@ -795,7 +795,7 @@ void MetricsDaemon::MeminfoCallback(base::TimeDelta wait) {
   if (reschedule) {
     base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
         base::Bind(&MetricsDaemon::MeminfoCallback, base::Unretained(this),
-                   base::TimeDelta::FromMilliseconds(kMetricMeminfoInterval)),
+                   wait),
         wait);
   }
 }
