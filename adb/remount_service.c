@@ -79,14 +79,12 @@ static int hasVendorPartition()
     return false;
 }
 
-static int make_block_device_writable(const char* dir)
+int make_block_device_writable(const char* dev)
 {
-    char *dev = 0;
     int fd = -1;
     int OFF = 0;
     int rc = -1;
 
-    dev = find_mount(dir);
     if (!dev)
         goto errout;
 
@@ -104,63 +102,32 @@ errout:
     if (fd >= 0) {
         adb_close(fd);
     }
-
-    if (dev) {
-        free(dev);
-    }
     return rc;
 }
 
 /* Init mounts /system as read only, remount to enable writes. */
 static int remount(const char* dir, int* dir_ro)
 {
-    char *dev;
-
-    if (dir_ro == 0) {
-        return 0;
-    }
-
-    if (make_block_device_writable(dir)) {
-        return -1;
-    }
+    char *dev = 0;
+    int rc = -1;
 
     dev = find_mount(dir);
 
-    if (!dev)
-        return -1;
+    if (!dev || make_block_device_writable(dev)) {
+        goto errout;
+    }
 
-    *dir_ro = mount(dev, dir, "none", MS_REMOUNT, NULL);
+    rc = mount(dev, dir, "none", MS_REMOUNT, NULL);
+    *dir_ro = rc;
 
+errout:
     free(dev);
-
-    return *dir_ro;
+    return rc;
 }
 
 static void write_string(int fd, const char* str)
 {
     writex(fd, str, strlen(str));
-}
-
-int make_system_and_vendor_block_devices_writable(int fd)
-{
-    char buffer[200];
-    if (make_block_device_writable("/system")) {
-        snprintf(buffer, sizeof(buffer),
-                 "Failed to make system block device writable %s\n",
-                 strerror(errno));
-        write_string(fd, buffer);
-        return -1;
-    }
-
-    if (hasVendorPartition() && make_block_device_writable("/vendor")) {
-        snprintf(buffer, sizeof(buffer),
-                 "Failed to make vendor block device writable: %s\n",
-                 strerror(errno));
-        write_string(fd, buffer);
-        return -1;
-    }
-
-    return 0;
 }
 
 void remount_service(int fd, void *cookie)
