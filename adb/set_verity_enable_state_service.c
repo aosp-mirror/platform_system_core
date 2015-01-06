@@ -87,8 +87,14 @@ static int set_verity_enabled_state(int fd, const char *block_device,
     const uint32_t new_magic = enable ? VERITY_METADATA_MAGIC_NUMBER
                                       : VERITY_METADATA_MAGIC_DISABLE;
     uint64_t device_length;
-    int device;
+    int device = -1;
     int retval = -1;
+
+    if (make_block_device_writable(block_device)) {
+        write_console(fd, "Could not make block device %s writable (%s).\n",
+                      block_device, strerror(errno));
+        goto errout;
+    }
 
     device = adb_open(block_device, O_RDWR | O_CLOEXEC);
     if (device == -1) {
@@ -188,10 +194,6 @@ void set_verity_enabled_state_service(int fd, void* cookie)
     if (!fstab) {
         write_console(fd, "Failed to open %s\nMaybe run adb root?\n",
                       fstab_filename);
-        goto errout;
-    }
-
-    if (enable && make_system_and_vendor_block_devices_writable(fd)) {
         goto errout;
     }
 
