@@ -25,7 +25,7 @@
 #ifdef HAVE_WINSOCK
 #include <winsock2.h>
 typedef int  socklen_t;
-#elif HAVE_SYS_SOCKET_H
+#else
 #include <sys/socket.h>
 #endif
 
