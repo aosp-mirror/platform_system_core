@@ -113,15 +113,15 @@ inline status_t Condition::waitRelative(Mutex& mutex, nsecs_t reltime) {
     return -pthread_cond_timedwait_relative_np(&mCond, &mutex.mMutex, &ts);
 #else // HAVE_PTHREAD_COND_TIMEDWAIT_RELATIVE
     struct timespec ts;
-#if defined(HAVE_POSIX_CLOCKS)
+#if defined(__linux__)
     clock_gettime(CLOCK_REALTIME, &ts);
-#else // HAVE_POSIX_CLOCKS
+#else // __APPLE__
     // we don't support the clocks here.
     struct timeval t;
     gettimeofday(&t, NULL);
     ts.tv_sec = t.tv_sec;
     ts.tv_nsec= t.tv_usec*1000;
-#endif // HAVE_POSIX_CLOCKS
+#endif
     ts.tv_sec += reltime/1000000000;
     ts.tv_nsec+= reltime%1000000000;
     if (ts.tv_nsec >= 1000000000) {
