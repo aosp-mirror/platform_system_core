@@ -727,18 +727,10 @@ void ggl_enable_texture2d(context_t* c, int enable)
 
 int64_t ggl_system_time()
 {
-#if defined(HAVE_POSIX_CLOCKS)
     struct timespec t;
     t.tv_sec = t.tv_nsec = 0;
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
     return int64_t(t.tv_sec)*1000000000LL + t.tv_nsec;
-#else
-    // we don't support the clocks here.
-    struct timeval t;
-    t.tv_sec = t.tv_usec = 0;
-    gettimeofday(&t, NULL);
-    return int64_t(t.tv_sec)*1000000000LL + int64_t(t.tv_usec)*1000LL;
-#endif
 }
 
 // ----------------------------------------------------------------------------
