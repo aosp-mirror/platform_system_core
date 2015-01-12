@@ -270,7 +270,9 @@ fail:
     return -1;
 }
 
-#ifdef HAVE_SYMLINKS
+#if defined(_WIN32)
+extern int handle_send_link(int s, char *path, char *buffer) __attribute__((error("no symlinks on Windows")));
+#else
 static int handle_send_link(int s, char *path, char *buffer)
 {
     syncmsg msg;
@@ -321,25 +323,20 @@ static int handle_send_link(int s, char *path, char *buffer)
 
     return 0;
 }
-#endif /* HAVE_SYMLINKS */
+#endif
 
 static int do_send(int s, char *path, char *buffer)
 {
-    char *tmp;
     unsigned int mode;
-    int is_link, ret;
+    bool is_link = false;
     bool do_unlink;
 
-    tmp = strrchr(path,',');
+    char* tmp = strrchr(path,',');
     if(tmp) {
         *tmp = 0;
         errno = 0;
         mode = strtoul(tmp + 1, NULL, 0);
-#ifndef HAVE_SYMLINKS
-        is_link = 0;
-#else
         is_link = S_ISLNK((mode_t) mode);
-#endif
         mode &= 0777;
     }
     if(!tmp || errno) {
@@ -355,32 +352,26 @@ static int do_send(int s, char *path, char *buffer)
         }
     }
 
-#ifdef HAVE_SYMLINKS
-    if(is_link)
-        ret = handle_send_link(s, path, buffer);
-    else {
-#else
-    {
-#endif
-        uid_t uid = -1;
-        gid_t gid = -1;
-        uint64_t cap = 0;
-
-        /* copy user permission bits to "group" and "other" permissions */
-        mode |= ((mode >> 3) & 0070);
-        mode |= ((mode >> 3) & 0007);
-
-        tmp = path;
-        if(*tmp == '/') {
-            tmp++;
-        }
-        if (is_on_system(path) || is_on_vendor(path)) {
-            fs_config(tmp, 0, &uid, &gid, &mode, &cap);
-        }
-        ret = handle_send_file(s, path, uid, gid, mode, buffer, do_unlink);
+    if (is_link) {
+        return handle_send_link(s, path, buffer);
     }
 
-    return ret;
+    uid_t uid = -1;
+    gid_t gid = -1;
+    uint64_t cap = 0;
+
+    /* copy user permission bits to "group" and "other" permissions */
+    mode |= ((mode >> 3) & 0070);
+    mode |= ((mode >> 3) & 0007);
+
+    tmp = path;
+    if(*tmp == '/') {
+        tmp++;
+    }
+    if (is_on_system(path) || is_on_vendor(path)) {
+        fs_config(tmp, 0, &uid, &gid, &mode, &cap);
+    }
+    return handle_send_file(s, path, uid, gid, mode, buffer, do_unlink);
 }
 
 static int do_recv(int s, const char *path, char *buffer)

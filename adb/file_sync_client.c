@@ -309,7 +309,9 @@ static int write_data_buffer(int fd, char* file_buffer, int size, syncsendbuf *s
     return err;
 }
 
-#ifdef HAVE_SYMLINKS
+#if defined(_WIN32)
+extern int write_data_link(int fd, const char *path, syncsendbuf *sbuf) __attribute__((error("no symlinks on Windows")));
+#else
 static int write_data_link(int fd, const char *path, syncsendbuf *sbuf)
 {
     int len, ret;
@@ -364,10 +366,8 @@ static int sync_send(int fd, const char *lpath, const char *rpath,
         free(file_buffer);
     } else if (S_ISREG(mode))
         write_data_file(fd, lpath, sbuf, show_progress);
-#ifdef HAVE_SYMLINKS
     else if (S_ISLNK(mode))
         write_data_link(fd, lpath, sbuf);
-#endif
     else
         goto fail;
 
