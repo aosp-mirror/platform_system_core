@@ -131,8 +131,8 @@ inline status_t Mutex::tryLock() {
 #if HAVE_ANDROID_OS
 inline status_t Mutex::timedLock(nsecs_t timeoutNs) {
     const struct timespec ts = {
-        /* .tv_sec = */ timeoutNs / 1000000000,
-        /* .tv_nsec = */ timeoutNs % 1000000000,
+        /* .tv_sec = */ static_cast<time_t>(timeoutNs / 1000000000),
+        /* .tv_nsec = */ static_cast<long>(timeoutNs % 1000000000),
     };
     return -pthread_mutex_timedlock(&mMutex, &ts);
 }
