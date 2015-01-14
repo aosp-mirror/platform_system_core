@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <sysutils/SocketClient.h>
 #include <utils/List.h>
+#include <log/log.h>
 
 class LogReader;
 
@@ -38,7 +39,7 @@ class LogTimeEntry {
     static void threadStop(void *me);
     const unsigned int mLogMask;
     const pid_t mPid;
-    unsigned int skipAhead;
+    unsigned int skipAhead[LOG_ID_MAX];
     unsigned long mCount;
     unsigned long mTail;
     unsigned long mIndex;
@@ -67,7 +68,8 @@ public:
         pthread_cond_signal(&threadTriggeredCondition);
     }
 
-    void triggerSkip_Locked(unsigned int skip) { skipAhead = skip; }
+    void triggerSkip_Locked(log_id_t id, unsigned int skip) { skipAhead[id] = skip; }
+    void cleanSkip_Locked(void);
 
     // Called after LogTimeEntry removed from list, lock implicitly held
     void release_Locked(void) {
@@ -99,7 +101,7 @@ public:
         // No one else is holding a reference to this
         delete this;
     }
-
+    bool isWatching(log_id_t id) { return (mLogMask & (1<<id)) != 0; }
     // flushTo filter callbacks
     static bool FilterFirstPass(const LogBufferElement *element, void *me);
     static bool FilterSecondPass(const LogBufferElement *element, void *me);
