@@ -62,7 +62,6 @@ BSD_TOOLS := \
 
 OUR_TOOLS := \
     cmp \
-    date \
     df \
     getevent \
     getprop \
