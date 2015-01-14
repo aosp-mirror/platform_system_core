@@ -136,3 +136,12 @@ TEST(libc, __libc_fatal_no_abort) {
 
     android_logger_list_close(logger_list);
 }
+
+TEST(libc, __pstore_append) {
+    FILE *fp;
+    ASSERT_TRUE(NULL != (fp = fopen("/dev/pmsg0", "a")));
+    static const char message[] = "libc.__pstore_append\n";
+    ASSERT_EQ((size_t)1, fwrite(message, sizeof(message), 1, fp));
+    ASSERT_EQ(0, fclose(fp));
+    fprintf(stderr, "Reboot, ensure string libc.__pstore_append is in /sys/fs/pstore/pmsg-ramoops-0\n");
+}
