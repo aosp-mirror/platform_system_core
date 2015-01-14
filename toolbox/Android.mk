@@ -79,7 +79,6 @@ OUR_TOOLS := \
     mount \
     nandread \
     newfs_msdos \
-    notify \
     ps \
     renice \
     restorecon \
