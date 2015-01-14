@@ -64,10 +64,25 @@ typedef struct {
  */
 int dump_tombstone(pid_t tid, char* pathbuf, size_t pathlen);
 
+/* Dumps a process backtrace, registers, and stack to a tombstone file (requires root).
+ * Stores the tombstone path in the provided buffer.
+ * If reading debugger data from debuggerd ever takes longer than timeout_secs
+ * seconds, then stop and return an error.
+ * Returns 0 on success, -1 on error.
+ */
+int dump_tombstone_timeout(pid_t tid, char* pathbuf, size_t pathlen, int timeout_secs);
+
 /* Dumps a process backtrace only to the specified file (requires root).
  * Returns 0 on success, -1 on error.
  */
 int dump_backtrace_to_file(pid_t tid, int fd);
+
+/* Dumps a process backtrace only to the specified file (requires root).
+ * If reading debugger data from debuggerd ever takes longer than timeout_secs
+ * seconds, then stop and return an error.
+ * Returns 0 on success, -1 on error.
+ */
+int dump_backtrace_to_file_timeout(pid_t tid, int fd, int timeout_secs);
 
 #ifdef __cplusplus
 }
