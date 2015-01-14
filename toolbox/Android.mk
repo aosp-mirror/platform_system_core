@@ -68,7 +68,6 @@ OUR_TOOLS := \
     getprop \
     getsebool \
     id \
-    ifconfig \
     iftop \
     ioctl \
     ionice \
