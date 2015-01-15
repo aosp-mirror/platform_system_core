@@ -445,7 +445,24 @@ log_time LogBuffer::flushTo(
     uid_t uid = reader->getUid();
 
     pthread_mutex_lock(&mLogElementsLock);
-    for (it = mLogElements.begin(); it != mLogElements.end(); ++it) {
+
+    if (start == LogTimeEntry::EPOCH) {
+        // client wants to start from the beginning
+        it = mLogElements.begin();
+    } else {
+        // Client wants to start from some specified time. Chances are
+        // we are better off starting from the end of the time sorted list.
+        for (it = mLogElements.end(); it != mLogElements.begin(); /* do nothing */) {
+            --it;
+            LogBufferElement *element = *it;
+            if (element->getMonotonicTime() <= start) {
+                it++;
+                break;
+            }
+        }
+    }
+
+    for (; it != mLogElements.end(); ++it) {
         LogBufferElement *element = *it;
 
         if (!privileged && (element->getUid() != uid)) {
