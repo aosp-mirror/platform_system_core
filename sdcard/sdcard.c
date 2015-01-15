@@ -169,6 +169,11 @@ struct node {
     __u32 refcount;
     __u64 nid;
     __u64 gen;
+    /*
+     * The inode number for this FUSE node. Note that this isn't stable across
+     * multiple invocations of the FUSE daemon.
+     */
+    __u32 ino;
 
     /* State derived based on current position in hierarchy. */
     perm_t perm;
@@ -224,6 +229,25 @@ struct fuse {
     gid_t write_gid;
     struct node root;
     char obbpath[PATH_MAX];
+
+    /* Used to allocate unique inode numbers for fuse nodes. We use
+     * a simple counter based scheme where inode numbers from deleted
+     * nodes aren't reused. Note that inode allocations are not stable
+     * across multiple invocation of the sdcard daemon, but that shouldn't
+     * be a huge problem in practice.
+     *
+     * Note that we restrict inodes to 32 bit unsigned integers to prevent
+     * truncation on 32 bit processes when unsigned long long stat.st_ino is
+     * assigned to an unsigned long ino_t type in an LP32 process.
+     *
+     * Also note that fuse_attr and fuse_dirent inode values are 64 bits wide
+     * on both LP32 and LP64, but the fuse kernel code doesn't squash 64 bit
+     * inode numbers into 32 bit values on 64 bit kernels (see fuse_squash_ino
+     * in fs/fuse/inode.c).
+     *
+     * Accesses must be guarded by |lock|.
+     */
+    __u32 inode_ctr;
 
     Hashmap* package_to_appid;
     Hashmap* appid_with_rw;
@@ -388,7 +412,7 @@ static char* find_file_within(const char* path, const char* name,
 
 static void attr_from_stat(struct fuse_attr *attr, const struct stat *s, const struct node* node)
 {
-    attr->ino = node->nid;
+    attr->ino = node->ino;
     attr->size = s->st_size;
     attr->blocks = s->st_blocks;
     attr->atime = s->st_atim.tv_sec;
@@ -576,6 +600,13 @@ struct node *create_node_locked(struct fuse* fuse,
     struct node *node;
     size_t namelen = strlen(name);
 
+    // Detect overflows in the inode counter. "4 billion nodes should be enough
+    // for everybody".
+    if (fuse->inode_ctr == 0) {
+        ERROR("No more inode numbers available");
+        return NULL;
+    }
+
     node = calloc(1, sizeof(struct node));
     if (!node) {
         return NULL;
@@ -597,6 +628,7 @@ struct node *create_node_locked(struct fuse* fuse,
     }
     node->namelen = namelen;
     node->nid = ptr_to_id(node);
+    node->ino = fuse->inode_ctr++;
     node->gen = fuse->next_generation++;
 
     derive_permissions_locked(fuse, parent, node);
@@ -701,6 +733,7 @@ static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
     fuse->derive = derive;
     fuse->split_perms = split_perms;
     fuse->write_gid = write_gid;
+    fuse->inode_ctr = 1;
 
     memset(&fuse->root, 0, sizeof(fuse->root));
     fuse->root.nid = FUSE_ROOT_ID; /* 1 */
