@@ -13,13 +13,6 @@ common_cflags += -Wno-unused-variable \
 
 
 include $(CLEAR_VARS)
-LOCAL_SRC_FILES := upstream-netbsd/bin/cat/cat.c
-LOCAL_CFLAGS += $(common_cflags) -Dmain=cat_main
-LOCAL_MODULE := libtoolbox_cat
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
-include $(BUILD_STATIC_LIBRARY)
-
-include $(CLEAR_VARS)
 LOCAL_SRC_FILES := upstream-netbsd/sbin/chown/chown.c
 LOCAL_CFLAGS += $(common_cflags) -Dmain=chown_main
 LOCAL_MODULE := libtoolbox_chown
@@ -62,7 +55,6 @@ include $(BUILD_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 
 BSD_TOOLS := \
-    cat \
     chown \
     dd \
     du \
