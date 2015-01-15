@@ -19,10 +19,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include <cutils/debugger.h>
 #include <cutils/sockets.h>
+
+#define LOG_TAG "DEBUG"
+#include <log/log.h>
 
 #if defined(__LP64__)
 #include <elf.h>
@@ -64,7 +69,7 @@ static int send_request(int sock_fd, void* msg_ptr, size_t msg_len) {
   return result;
 }
 
-static int make_dump_request(debugger_action_t action, pid_t tid) {
+static int make_dump_request(debugger_action_t action, pid_t tid, int timeout_secs) {
   const char* socket_name;
   debugger_msg_t msg;
   size_t msg_len;
@@ -98,6 +103,19 @@ static int make_dump_request(debugger_action_t action, pid_t tid) {
     return -1;
   }
 
+  if (timeout_secs > 0) {
+    struct timeval tm;
+    tm.tv_sec = timeout_secs;
+    tm.tv_usec = 0;
+    if (setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tm, sizeof(tm)) == -1) {
+      ALOGE("WARNING: Cannot set receive timeout value on socket: %s", strerror(errno));
+    }
+
+    if (setsockopt(sock_fd, SOL_SOCKET, SO_SNDTIMEO, &tm, sizeof(tm)) == -1) {
+      ALOGE("WARNING: Cannot set send timeout value on socket: %s", strerror(errno));
+    }
+  }
+
   if (send_request(sock_fd, msg_ptr, msg_len) < 0) {
     TEMP_FAILURE_RETRY(close(sock_fd));
     return -1;
@@ -107,7 +125,11 @@ static int make_dump_request(debugger_action_t action, pid_t tid) {
 }
 
 int dump_backtrace_to_file(pid_t tid, int fd) {
-  int sock_fd = make_dump_request(DEBUGGER_ACTION_DUMP_BACKTRACE, tid);
+  return dump_backtrace_to_file_timeout(tid, fd, 0);
+}
+
+int dump_backtrace_to_file_timeout(pid_t tid, int fd, int timeout_secs) {
+  int sock_fd = make_dump_request(DEBUGGER_ACTION_DUMP_BACKTRACE, tid, timeout_secs);
   if (sock_fd < 0) {
     return -1;
   }
@@ -127,7 +149,11 @@ int dump_backtrace_to_file(pid_t tid, int fd) {
 }
 
 int dump_tombstone(pid_t tid, char* pathbuf, size_t pathlen) {
-  int sock_fd = make_dump_request(DEBUGGER_ACTION_DUMP_TOMBSTONE, tid);
+  return dump_tombstone_timeout(tid, pathbuf, pathlen, 0);
+}
+
+int dump_tombstone_timeout(pid_t tid, char* pathbuf, size_t pathlen, int timeout_secs) {
+  int sock_fd = make_dump_request(DEBUGGER_ACTION_DUMP_TOMBSTONE, tid, timeout_secs);
   if (sock_fd < 0) {
     return -1;
   }
