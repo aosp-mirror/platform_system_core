@@ -31,14 +31,15 @@
 
 void get_my_path(char s[PATH_MAX])
 {
-    char *x;
-    ProcessSerialNumber psn;
-    GetCurrentProcess(&psn);
-    CFDictionaryRef dict;
-    dict = ProcessInformationCopyDictionary(&psn, 0xffffffff);
-    CFStringRef value = (CFStringRef)CFDictionaryGetValue(dict,
-                CFSTR("CFBundleExecutable"));
-    CFStringGetCString(value, s, PATH_MAX - 1, kCFStringEncodingUTF8);
+    CFBundleRef mainBundle = CFBundleGetMainBundle();
+    CFURLRef bundleURL = CFBundleCopyBundleURL(mainBundle);
+    CFStringRef bundlePathString = CFURLCopyFileSystemPath(bundleURL, kCFURLPOSIXPathStyle);
+    CFRelease(bundleURL);
+
+    CFStringGetCString(bundlePathString, s, PATH_MAX - 1, kCFStringEncodingASCII);
+    CFRelease(bundlePathString);
+
+	char *x;
     x = strrchr(s, '/');
     if(x) x[1] = 0;
 }
