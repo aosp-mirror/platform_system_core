@@ -53,7 +53,6 @@ BSD_TOOLS := \
     grep \
 
 OUR_TOOLS := \
-    cmp \
     df \
     getevent \
     getprop \
