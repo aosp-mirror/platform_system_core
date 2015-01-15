@@ -154,6 +154,8 @@ on init
     mount pstore pstore /sys/fs/pstore
     chown system log /sys/fs/pstore/console-ramoops
     chmod 0440 /sys/fs/pstore/console-ramoops
+    chown system log /sys/fs/pstore/pmsg-ramoops-0
+    chmod 0440 /sys/fs/pstore/pmsg-ramoops-0
 
 # Healthd can trigger a full boot from charger mode by signaling this
 # property when the power button is held.
