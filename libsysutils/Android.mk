@@ -16,11 +16,12 @@ LOCAL_SRC_FILES:=                             \
 
 LOCAL_MODULE:= libsysutils
 
-LOCAL_C_INCLUDES :=
-
 LOCAL_CFLAGS := -Werror
 
-LOCAL_SHARED_LIBRARIES := libcutils liblog
+LOCAL_SHARED_LIBRARIES := \
+        libcutils \
+        liblog \
+        libnl
 
 include $(BUILD_SHARED_LIBRARY)
 

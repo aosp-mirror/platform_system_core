@@ -27,6 +27,7 @@ class NetlinkListener : public SocketListener {
 public:
     static const int NETLINK_FORMAT_ASCII = 0;
     static const int NETLINK_FORMAT_BINARY = 1;
+    static const int NETLINK_FORMAT_BINARY_UNICAST = 2;
 
 #if 1
     /* temporary version until we can get Motorola to update their
