@@ -39,6 +39,7 @@
 #include <log/logger.h>
 #include <log/log_read.h>
 #include <private/android_filesystem_config.h>
+#include <private/android_logger.h>
 
 #define LOG_BUF_SIZE 1024
 
@@ -155,12 +156,10 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
         }
     } while (ret == -EINTR);
 #else
-    static const unsigned header_length = 3;
+    static const unsigned header_length = 1;
     struct iovec newVec[nr + header_length];
-    typeof_log_id_t log_id_buf;
-    uint16_t tid;
+    struct android_log_header_t header;
     struct timespec ts;
-    log_time realtime_ts;
     size_t i, payload_size;
     static uid_t last_uid = AID_ROOT; /* logd *always* starts up as AID_ROOT */
 
@@ -183,9 +182,7 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     /*
      *  struct {
      *      // what we provide
-     *      typeof_log_id_t  log_id;
-     *      u16              tid;
-     *      log_time         realtime;
+     *      android_log_header_t header;
      *      // caller provides
      *      union {
      *          struct {
@@ -201,18 +198,14 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
      */
 
     clock_gettime(CLOCK_REALTIME, &ts);
-    realtime_ts.tv_sec = ts.tv_sec;
-    realtime_ts.tv_nsec = ts.tv_nsec;
 
-    log_id_buf = log_id;
-    tid = gettid();
+    header.id = log_id;
+    header.tid = gettid();
+    header.realtime.tv_sec = ts.tv_sec;
+    header.realtime.tv_nsec = ts.tv_nsec;
 
-    newVec[0].iov_base   = (unsigned char *) &log_id_buf;
-    newVec[0].iov_len    = sizeof_log_id_t;
-    newVec[1].iov_base   = (unsigned char *) &tid;
-    newVec[1].iov_len    = sizeof(tid);
-    newVec[2].iov_base   = (unsigned char *) &realtime_ts;
-    newVec[2].iov_len    = sizeof(log_time);
+    newVec[0].iov_base   = (unsigned char *) &header;
+    newVec[0].iov_len    = sizeof(header);
 
     for (payload_size = 0, i = header_length; i < nr + header_length; i++) {
         newVec[i].iov_base = vec[i - header_length].iov_base;
@@ -249,15 +242,15 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
                 return ret;
             }
 
-            ret = writev(logd_fd, newVec, nr + header_length);
+            ret = writev(logd_fd, newVec, i);
             if (ret < 0) {
                 ret = -errno;
             }
         }
     }
 
-    if (ret > (ssize_t)(sizeof_log_id_t + sizeof(tid) + sizeof(log_time))) {
-        ret -= sizeof_log_id_t + sizeof(tid) + sizeof(log_time);
+    if (ret > (ssize_t)sizeof(header)) {
+        ret -= sizeof(header);
     }
 #endif
 
