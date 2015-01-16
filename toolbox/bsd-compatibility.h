@@ -52,11 +52,6 @@
 
 __BEGIN_DECLS
 
-/* From NetBSD <grp.h> and <pwd.h>. */
-char* group_from_gid(gid_t gid, int noname);
-int uid_from_user(const char* name, uid_t* uid);
-char* user_from_uid(uid_t uid, int noname);
-
 /* From NetBSD <stdlib.h>. */
 #define HN_DECIMAL              0x01
 #define HN_NOSPACE              0x02
