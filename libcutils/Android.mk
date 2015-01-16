@@ -21,7 +21,6 @@ commonSources := \
 	atomic.c.arm \
 	native_handle.c \
 	config_utils.c \
-	cpu_info.c \
 	load_file.c \
 	open_memstream.c \
 	strdup16to8.c \
