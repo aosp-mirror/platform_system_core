@@ -23,6 +23,7 @@
 
 #include <cutils/sockets.h>
 #include <log/logger.h>
+#include <private/android_logger.h>
 
 #include "LogListener.h"
 
@@ -54,7 +55,7 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
     int socket = cli->getSocket();
 
     ssize_t n = recvmsg(socket, &hdr, 0);
-    if (n <= (ssize_t)(sizeof_log_id_t + sizeof(uint16_t) + sizeof(log_time))) {
+    if (n <= (ssize_t)(sizeof(android_log_header_t))) {
         return false;
     }
 
@@ -81,28 +82,19 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
         return false;
     }
 
-    // First log element is always log_id.
-    log_id_t log_id = (log_id_t) *((typeof_log_id_t *) buffer);
-    if (log_id < 0 || log_id >= LOG_ID_MAX) {
+    android_log_header_t *header = reinterpret_cast<android_log_header_t *>(buffer);
+    if (/* header->id < LOG_ID_MIN || */ header->id >= LOG_ID_MAX) {
         return false;
     }
-    char *msg = ((char *)buffer) + sizeof_log_id_t;
-    n -= sizeof_log_id_t;
 
-    // second element is the thread id of the caller
-    pid_t tid = (pid_t) *((uint16_t *) msg);
-    msg += sizeof(uint16_t);
-    n -= sizeof(uint16_t);
-
-    // third element is the realtime at point of caller
-    log_time realtime(msg);
-    msg += sizeof(log_time);
-    n -= sizeof(log_time);
+    char *msg = ((char *)buffer) + sizeof(android_log_header_t);
+    n -= sizeof(android_log_header_t);
 
     // NB: hdr.msg_flags & MSG_TRUNC is not tested, silently passing a
     // truncated message to the logs.
 
-    logbuf->log(log_id, realtime, cred->uid, cred->pid, tid, msg,
+    logbuf->log((log_id_t)header->id, header->realtime,
+        cred->uid, cred->pid, header->tid, msg,
         ((size_t) n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
     reader->notifyNewLog();
 
