@@ -57,7 +57,6 @@ OUR_TOOLS := \
     getevent \
     getprop \
     getsebool \
-    id \
     iftop \
     ioctl \
     ionice \
