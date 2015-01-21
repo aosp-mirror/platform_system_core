@@ -89,6 +89,8 @@ bool KernelCollector::ReadRecordToString(std::string *contents,
       "====\\d+\\.\\d+\n(.*)",
       pcrecpp::RE_Options().set_multiline(true).set_dotall(true));
 
+  pcrecpp::RE sanity_check_re("\n<\\d+>\\[\\s*(\\d+\\.\\d+)\\]");
+
   FilePath ramoops_record;
   GetRamoopsRecordPath(&ramoops_record, current_record);
   if (!base::ReadFileToString(ramoops_record, &record)) {
@@ -96,18 +98,27 @@ bool KernelCollector::ReadRecordToString(std::string *contents,
     return false;
   }
 
-  *record_found = true;
+  *record_found = false;
   if (record_re.FullMatch(record, &captured)) {
-    // Found a match, append it to the content, and remove from pstore.
+    // Found a ramoops header, so strip the header and append the rest.
     contents->append(captured);
-  } else {
+    *record_found = true;
+  } else if (sanity_check_re.PartialMatch(record.substr(0, 1024))) {
     // pstore compression has been added since kernel 3.12. In order to
     // decompress dmesg correctly, ramoops driver has to strip the header
     // before handing over the record to the pstore driver, so we don't
-    // need to do it here anymore.
+    // need to do it here anymore. However, the sanity check is needed because
+    // sometimes a pstore record is just a chunk of uninitialized memory which
+    // is not the result of a kernel crash. See crbug.com/443764
     contents->append(record);
+    *record_found = true;
+  } else {
+    LOG(WARNING) << "Found invalid record at " << ramoops_record.value();
   }
-  base::DeleteFile(ramoops_record, false);
+
+  // Remove the record from pstore after it's found.
+  if (*record_found)
+    base::DeleteFile(ramoops_record, false);
 
   return true;
 }

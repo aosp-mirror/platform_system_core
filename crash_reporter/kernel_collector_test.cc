@@ -78,15 +78,21 @@ TEST_F(KernelCollectorTest, LoadPreservedDump) {
   std::string dump;
   dump.clear();
 
-  WriteStringToFile(kcrash_file(), "CrashRecordWithoutRamoopsHeader");
+  WriteStringToFile(kcrash_file(),
+      "CrashRecordWithoutRamoopsHeader\n<6>[    0.078852]");
   ASSERT_TRUE(collector_.LoadParameters());
   ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
-  ASSERT_EQ("CrashRecordWithoutRamoopsHeader", dump);
+  ASSERT_EQ("CrashRecordWithoutRamoopsHeader\n<6>[    0.078852]", dump);
 
   WriteStringToFile(kcrash_file(), "====1.1\nsomething");
   ASSERT_TRUE(collector_.LoadParameters());
   ASSERT_TRUE(collector_.LoadPreservedDump(&dump));
   ASSERT_EQ("something", dump);
+
+  WriteStringToFile(kcrash_file(), "\x01\x02\xfe\xff random blob");
+  ASSERT_TRUE(collector_.LoadParameters());
+  ASSERT_FALSE(collector_.LoadPreservedDump(&dump));
+  ASSERT_EQ("", dump);
 }
 
 TEST_F(KernelCollectorTest, EnableMissingKernel) {
