@@ -20,15 +20,22 @@
 #include <chromeos/process.h>
 #include <chromeos/syslog_logging.h>
 
-const char kDefaultMinidumpName[] = "upload_file_minidump";
-const char kTarPath[] = "/bin/tar";
-// From //net/crash/collector/collector.h
-const int kDefaultMaxUploadBytes = 1024 * 1024;
-
 using base::FilePath;
 using base::StringPrintf;
 
 namespace {
+
+const char kDefaultMinidumpName[] = "upload_file_minidump";
+
+// Path to the gzip binary.
+const char kGzipPath[] = "/bin/gzip";
+
+// Filenames for logs attached to crash reports. Also used as metadata keys.
+const char kChromeLogFilename[] = "chrome.txt";
+const char kGpuStateFilename[] = "i915_error_state.log.xz";
+
+// From //net/crash/collector/collector.h
+const int kDefaultMaxUploadBytes = 1024 * 1024;
 
 // Extract a string delimited by the given character, from the given offset
 // into a source string. Returns false if the string is zero-sized or no
@@ -42,8 +49,25 @@ bool GetDelimitedString(const std::string &str, char ch, size_t offset,
   return true;
 }
 
-bool GetDriErrorState(const chromeos::dbus::Proxy &proxy,
-                      const FilePath &error_state_path) {
+// Gets the GPU's error state from debugd and writes it to |error_state_path|.
+// Returns true on success.
+bool GetDriErrorState(const FilePath &error_state_path) {
+  chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
+  if (!dbus.HasConnection()) {
+    LOG(ERROR) << "Error connecting to system D-Bus";
+    return false;
+  }
+
+  chromeos::dbus::Proxy proxy(dbus,
+                              debugd::kDebugdServiceName,
+                              debugd::kDebugdServicePath,
+                              debugd::kDebugdInterface);
+  if (!proxy) {
+    LOG(ERROR) << "Error creating D-Bus proxy to interface "
+               << "'" << debugd::kDebugdServiceName << "'";
+    return false;
+  }
+
   chromeos::glib::ScopedError error;
   gchar *error_state = nullptr;
   if (!dbus_g_proxy_call(proxy.gproxy(), debugd::kGetLog,
@@ -88,44 +112,19 @@ bool GetDriErrorState(const chromeos::dbus::Proxy &proxy,
   return true;
 }
 
-bool GetAdditionalLogs(const FilePath &log_path) {
-  chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
-  if (!dbus.HasConnection()) {
-    LOG(ERROR) << "Error connecting to system D-Bus";
-    return false;
+// Gzip-compresses |path|, removes the original file, and returns the path of
+// the new file. On failure, the original file is left alone and an empty path
+// is returned.
+FilePath GzipFile(const FilePath& path) {
+  chromeos::ProcessImpl proc;
+  proc.AddArg(kGzipPath);
+  proc.AddArg(path.value());
+  const int res = proc.Run();
+  if (res != 0) {
+    LOG(ERROR) << "Failed to gzip " << path.value();
+    return FilePath();
   }
-
-  chromeos::dbus::Proxy proxy(dbus,
-                              debugd::kDebugdServiceName,
-                              debugd::kDebugdServicePath,
-                              debugd::kDebugdInterface);
-  if (!proxy) {
-    LOG(ERROR) << "Error creating D-Bus proxy to interface "
-               << "'" << debugd::kDebugdServiceName << "'";
-    return false;
-  }
-
-  FilePath error_state_path =
-      log_path.DirName().Append("i915_error_state.log.xz");
-  if (!GetDriErrorState(proxy, error_state_path))
-    return false;
-
-  chromeos::ProcessImpl tar_process;
-  tar_process.AddArg(kTarPath);
-  tar_process.AddArg("cfJ");
-  tar_process.AddArg(log_path.value());
-  tar_process.AddStringOption("-C", log_path.DirName().value());
-  tar_process.AddArg(error_state_path.BaseName().value());
-  int res = tar_process.Run();
-
-  base::DeleteFile(error_state_path, false);
-
-  if (res || !base::PathExists(log_path)) {
-    LOG(ERROR) << "Could not tar file " << log_path.value();
-    return false;
-  }
-
-  return true;
+  return path.AddExtension(".gz");
 }
 
 }  // namespace
@@ -161,7 +160,6 @@ bool ChromeCollector::HandleCrash(const FilePath &file_path,
   std::string dump_basename = FormatDumpBasename(exe_name, time(nullptr), pid);
   FilePath meta_path = GetCrashPath(dir, dump_basename, "meta");
   FilePath minidump_path = GetCrashPath(dir, dump_basename, "dmp");
-  FilePath log_path = GetCrashPath(dir, dump_basename, "log.tar.xz");
 
   std::string data;
   if (!base::ReadFileToString(file_path, &data)) {
@@ -174,19 +172,31 @@ bool ChromeCollector::HandleCrash(const FilePath &file_path,
     return false;
   }
 
-  if (GetAdditionalLogs(log_path)) {
-    int64_t minidump_size = 0;
-    int64_t log_size = 0;
-    if (base::GetFileSize(minidump_path, &minidump_size) &&
-        base::GetFileSize(log_path, &log_size) &&
-        minidump_size > 0 && log_size > 0 &&
-        minidump_size + log_size < kDefaultMaxUploadBytes) {
-      AddCrashMetaData("log", log_path.value());
-    } else {
-      LOG(INFO) << "Skipping logs upload to prevent discarding minidump "
-          "because of report size limit < " << minidump_size + log_size;
-      base::DeleteFile(log_path, false);
+
+  int64_t report_size = 0;
+  base::GetFileSize(minidump_path, &report_size);
+
+  // Keyed by crash metadata key name.
+  const std::map<std::string, base::FilePath> additional_logs =
+      GetAdditionalLogs(dir, dump_basename, exe_name);
+  for (auto it : additional_logs) {
+    int64_t file_size = 0;
+    if (!base::GetFileSize(it.second, &file_size)) {
+      PLOG(WARNING) << "Unable to get size of " << it.second.value();
+      continue;
     }
+    if (report_size + file_size > kDefaultMaxUploadBytes) {
+      LOG(INFO) << "Skipping upload of " << it.second.value() << "("
+                << file_size << "B) because report size would exceed limit ("
+                << kDefaultMaxUploadBytes << "B)";
+      continue;
+    }
+    VLOG(1) << "Adding metadata: " << it.first << " -> " << it.second.value();
+    // Call AddCrashMetaUploadFile() rather than AddCrashMetaData() here. The
+    // former adds a prefix to the key name; without the prefix, only the key
+    // "logs" appears to be displayed on the crash server.
+    AddCrashMetaUploadFile(it.first, it.second.value());
+    report_size += file_size;
   }
 
   // We're done.
@@ -296,6 +306,32 @@ bool ChromeCollector::ParseCrashLog(const std::string &data,
   }
 
   return at == data.size();
+}
+
+std::map<std::string, base::FilePath> ChromeCollector::GetAdditionalLogs(
+    const FilePath &dir,
+    const std::string &basename,
+    const std::string &exe_name) {
+  std::map<std::string, base::FilePath> logs;
+
+  // Run the command specified by the config file to gather logs.
+  const FilePath chrome_log_path =
+      GetCrashPath(dir, basename, kChromeLogFilename);
+  if (GetLogContents(log_config_path_, exe_name, chrome_log_path)) {
+    const FilePath compressed_path = GzipFile(chrome_log_path);
+    if (!compressed_path.empty())
+      logs[kChromeLogFilename] = compressed_path;
+    else
+      base::DeleteFile(chrome_log_path, false /* recursive */);
+  }
+
+  // Now get the GPU state from debugd.
+  const FilePath dri_error_state_path =
+      GetCrashPath(dir, basename, kGpuStateFilename);
+  if (GetDriErrorState(dri_error_state_path))
+    logs[kGpuStateFilename] = dri_error_state_path;
+
+  return logs;
 }
 
 // static

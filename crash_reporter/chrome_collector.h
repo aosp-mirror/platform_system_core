@@ -48,6 +48,14 @@ class ChromeCollector : public CrashCollector {
                      const base::FilePath &minidump,
                      const std::string &basename);
 
+  // Writes additional logs for |exe_name| to files based on |basename| within
+  // |dir|. Crash report metadata key names and the corresponding file paths are
+  // returned.
+  std::map<std::string, base::FilePath> GetAdditionalLogs(
+      const base::FilePath &dir,
+      const std::string &basename,
+      const std::string &exe_name);
+
   FILE *output_file_ptr_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeCollector);
