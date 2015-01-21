@@ -29,33 +29,6 @@
 #define LOG_TAG "DEBUG"
 #include <log/log.h>
 
-#if defined(__LP64__)
-#include <elf.h>
-
-static bool is32bit(pid_t tid) {
-  char* exeline;
-  if (asprintf(&exeline, "/proc/%d/exe", tid) == -1) {
-    return false;
-  }
-  int fd = open(exeline, O_RDONLY | O_CLOEXEC);
-  free(exeline);
-  if (fd == -1) {
-    return false;
-  }
-
-  char ehdr[EI_NIDENT];
-  ssize_t bytes = read(fd, &ehdr, sizeof(ehdr));
-  close(fd);
-  if (bytes != (ssize_t) sizeof(ehdr) || memcmp(ELFMAG, ehdr, SELFMAG) != 0) {
-    return false;
-  }
-  if (ehdr[EI_CLASS] == ELFCLASS32) {
-    return true;
-  }
-  return false;
-}
-#endif
-
 static int send_request(int sock_fd, void* msg_ptr, size_t msg_len) {
   int result = 0;
   if (TEMP_FAILURE_RETRY(write(sock_fd, msg_ptr, msg_len)) != (ssize_t) msg_len) {
@@ -72,32 +45,11 @@ static int send_request(int sock_fd, void* msg_ptr, size_t msg_len) {
 static int make_dump_request(debugger_action_t action, pid_t tid, int timeout_secs) {
   const char* socket_name;
   debugger_msg_t msg;
-  size_t msg_len;
-  void* msg_ptr;
+  memset(&msg, 0, sizeof(msg));
+  msg.tid = tid;
+  msg.action = action;
 
-#if defined(__LP64__)
-  debugger32_msg_t msg32;
-  if (is32bit(tid)) {
-    msg_len = sizeof(debugger32_msg_t);
-    memset(&msg32, 0, msg_len);
-    msg32.tid = tid;
-    msg32.action = action;
-    msg_ptr = &msg32;
-
-    socket_name = DEBUGGER32_SOCKET_NAME;
-  } else
-#endif
-  {
-    msg_len = sizeof(debugger_msg_t);
-    memset(&msg, 0, msg_len);
-    msg.tid = tid;
-    msg.action = action;
-    msg_ptr = &msg;
-
-    socket_name = DEBUGGER_SOCKET_NAME;
-  }
-
-  int sock_fd = socket_local_client(socket_name, ANDROID_SOCKET_NAMESPACE_ABSTRACT,
+  int sock_fd = socket_local_client(DEBUGGER_SOCKET_NAME, ANDROID_SOCKET_NAMESPACE_ABSTRACT,
       SOCK_STREAM | SOCK_CLOEXEC);
   if (sock_fd < 0) {
     return -1;
@@ -116,7 +68,7 @@ static int make_dump_request(debugger_action_t action, pid_t tid, int timeout_se
     }
   }
 
-  if (send_request(sock_fd, msg_ptr, msg_len) < 0) {
+  if (send_request(sock_fd, &msg, sizeof(msg)) < 0) {
     TEMP_FAILURE_RETRY(close(sock_fd));
     return -1;
   }
