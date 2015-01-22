@@ -824,7 +824,7 @@ char *android_log_formatLogLine (
      * set the length at the maximum (size minus null byte)
      */
     prefixLen += MIN(len, sizeof(prefixBuf) - prefixLen);
-    suffixLen = MIN(suffixLen, sizeof(suffixLen));
+    suffixLen = MIN(suffixLen, sizeof(suffixBuf));
 
     /* the following code is tragically unreadable */
 
