@@ -47,6 +47,14 @@
 #include "tombstone.h"
 #include "utility.h"
 
+// If the 32 bit executable is compiled on a 64 bit system,
+// use the 32 bit socket name.
+#if defined(TARGET_IS_64_BIT) && !defined(__LP64__)
+#define SOCKET_NAME DEBUGGER32_SOCKET_NAME
+#else
+#define SOCKET_NAME DEBUGGER_SOCKET_NAME
+#endif
+
 struct debugger_request_t {
   debugger_action_t action;
   pid_t pid, tid;
@@ -207,7 +215,7 @@ static int read_request(int fd, debugger_request_t* out_request) {
     return -1;
   }
 
-  out_request->action = msg.action;
+  out_request->action = static_cast<debugger_action_t>(msg.action);
   out_request->tid = msg.tid;
   out_request->pid = cr.pid;
   out_request->uid = cr.uid;
@@ -255,6 +263,85 @@ static bool should_attach_gdb(debugger_request_t* request) {
   return false;
 }
 
+#if defined(__LP64__)
+static bool is32bit(pid_t tid) {
+  char* exeline;
+  if (asprintf(&exeline, "/proc/%d/exe", tid) == -1) {
+    return false;
+  }
+  int fd = TEMP_FAILURE_RETRY(open(exeline, O_RDONLY | O_CLOEXEC));
+  int saved_errno = errno;
+  free(exeline);
+  if (fd == -1) {
+    ALOGW("Failed to open /proc/%d/exe %s", tid, strerror(saved_errno));
+    return false;
+  }
+
+  char ehdr[EI_NIDENT];
+  ssize_t bytes = TEMP_FAILURE_RETRY(read(fd, &ehdr, sizeof(ehdr)));
+  TEMP_FAILURE_RETRY(close(fd));
+  if (bytes != (ssize_t) sizeof(ehdr) || memcmp(ELFMAG, ehdr, SELFMAG) != 0) {
+    return false;
+  }
+  if (ehdr[EI_CLASS] == ELFCLASS32) {
+    return true;
+  }
+  return false;
+}
+
+static void redirect_to_32(int fd, debugger_request_t* request) {
+  debugger_msg_t msg;
+  memset(&msg, 0, sizeof(msg));
+  msg.tid = request->tid;
+  msg.action = request->action;
+
+  int sock_fd = socket_local_client(DEBUGGER32_SOCKET_NAME, ANDROID_SOCKET_NAMESPACE_ABSTRACT,
+                                    SOCK_STREAM | SOCK_CLOEXEC);
+  if (sock_fd < 0) {
+    ALOGE("Failed to connect to debuggerd32: %s", strerror(errno));
+    return;
+  }
+
+  if (TEMP_FAILURE_RETRY(write(sock_fd, &msg, sizeof(msg))) != (ssize_t) sizeof(msg)) {
+    ALOGE("Failed to write request to debuggerd32 socket: %s", strerror(errno));
+    TEMP_FAILURE_RETRY(close(sock_fd));
+    return;
+  }
+
+  char ack;
+  if (TEMP_FAILURE_RETRY(read(sock_fd, &ack, 1)) == -1) {
+    ALOGE("Failed to read ack from debuggerd32 socket: %s", strerror(errno));
+    TEMP_FAILURE_RETRY(close(sock_fd));
+    return;
+  }
+
+  char buffer[1024];
+  ssize_t bytes_read;
+  while ((bytes_read = TEMP_FAILURE_RETRY(read(sock_fd, buffer, sizeof(buffer)))) > 0) {
+    ssize_t bytes_to_send = bytes_read;
+    ssize_t bytes_written;
+    do {
+      bytes_written = TEMP_FAILURE_RETRY(write(fd, buffer + bytes_read - bytes_to_send,
+                                               bytes_to_send));
+      if (bytes_written == -1) {
+        if (errno == EAGAIN) {
+          // Retry the write.
+          continue;
+        }
+        ALOGE("Error while writing data to fd: %s", strerror(errno));
+        break;
+      }
+      bytes_to_send -= bytes_written;
+    } while (bytes_written != 0 && bytes_to_send > 0);
+    if (bytes_to_send != 0) {
+        ALOGE("Failed to write all data to fd: read %zd, sent %zd", bytes_read, bytes_to_send);
+        break;
+    }
+  }
+  TEMP_FAILURE_RETRY(close(sock_fd));
+}
+#endif
+
 static void handle_request(int fd) {
   ALOGV("handle_request(%d)\n", fd);
 
@@ -264,6 +351,24 @@ static void handle_request(int fd) {
   if (!status) {
     ALOGV("BOOM: pid=%d uid=%d gid=%d tid=%d\n",
          request.pid, request.uid, request.gid, request.tid);
+
+#if defined(__LP64__)
+    // On 64 bit systems, requests to dump 32 bit and 64 bit tids come
+    // to the 64 bit debuggerd. If the process is a 32 bit executable,
+    // redirect the request to the 32 bit debuggerd.
+    if (is32bit(request.tid)) {
+      // Only dump backtrace and dump tombstone requests can be redirected.
+      if (request.action == DEBUGGER_ACTION_DUMP_BACKTRACE
+          || request.action == DEBUGGER_ACTION_DUMP_TOMBSTONE) {
+        redirect_to_32(fd, &request);
+      } else {
+        ALOGE("debuggerd: Not allowed to redirect action %d to 32 bit debuggerd\n",
+              request.action);
+      }
+      TEMP_FAILURE_RETRY(close(fd));
+      return;
+    }
+#endif
 
     // At this point, the thread that made the request is blocked in
     // a read() call.  If the thread has crashed, then this gives us
@@ -428,7 +533,7 @@ static int do_server() {
   act.sa_flags = SA_NOCLDWAIT;
   sigaction(SIGCHLD, &act, 0);
 
-  int s = socket_local_server(DEBUGGER_SOCKET_NAME, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
+  int s = socket_local_server(SOCKET_NAME, ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
   if (s < 0)
     return 1;
   fcntl(s, F_SETFD, FD_CLOEXEC);
