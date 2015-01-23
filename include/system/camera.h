@@ -194,7 +194,12 @@ enum {
     /** The facing of the camera is opposite to that of the screen. */
     CAMERA_FACING_BACK = 0,
     /** The facing of the camera is the same as that of the screen. */
-    CAMERA_FACING_FRONT = 1
+    CAMERA_FACING_FRONT = 1,
+    /**
+     * The facing of the camera is not fixed relative to the screen.
+     * The cameras with this facing are external cameras, e.g. USB cameras.
+     */
+    CAMERA_FACING_EXTERNAL = 2
 };
 
 enum {
