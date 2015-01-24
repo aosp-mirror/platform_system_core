@@ -24,7 +24,17 @@
 #include <log/log.h>
 #include <log/log_read.h>
 
-/* Header Structure to logd */
+#define LOGGER_MAGIC 'l'
+
+/* Header Structure to pstore */
+typedef struct __attribute__((__packed__)) {
+    uint8_t magic;
+    uint16_t len;
+    uint16_t uid;
+    uint16_t pid;
+} android_pmsg_log_header_t;
+
+/* Header Structure to logd, and second header for pstore */
 typedef struct __attribute__((__packed__)) {
     typeof_log_id_t id;
     uint16_t tid;
