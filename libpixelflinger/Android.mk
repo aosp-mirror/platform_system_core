@@ -64,12 +64,10 @@ LOCAL_SRC_FILES_mips := $(PIXELFLINGER_SRC_FILES_mips)
 LOCAL_CFLAGS := $(PIXELFLINGER_CFLAGS)
 LOCAL_SHARED_LIBRARIES := libcutils liblog
 
-ifneq ($(BUILD_TINY_ANDROID),true)
 # Really this should go away entirely or at least not depend on
 # libhardware, but this at least gets us built.
 LOCAL_SHARED_LIBRARIES += libhardware_legacy
 LOCAL_CFLAGS += -DWITH_LIB_HARDWARE
-endif
 # t32cb16blend.S does not compile with Clang.
 LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
 # arch-arm64/col32cb16blend.S does not compile with Clang.
