@@ -1,6 +1,7 @@
 #include "dynarray.h"
-#include <stdlib.h>
 #include <limits.h>
+#include <stdlib.h>
+#include <string.h>
 
 void
 dynarray_init( dynarray_t *a )
