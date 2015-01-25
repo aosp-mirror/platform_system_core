@@ -440,7 +440,8 @@ int  adb_shutdown(int  fd)
 {
     FH   f = _fh_from_int(fd);
 
-    if (!f) {
+    if (!f || f->clazz != &_fh_socket_class) {
+        D("adb_shutdown: invalid fd %d\n", fd);
         return -1;
     }
 
@@ -470,6 +471,8 @@ int  adb_close(int  fd)
 /*****                                                                *****/
 /**************************************************************************/
 /**************************************************************************/
+
+#undef setsockopt
 
 static void
 _socket_set_errno( void )
@@ -786,15 +789,16 @@ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  *addrle
 }
 
 
-void  disable_tcp_nagle(int fd)
+int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, socklen_t  optlen )
 {
     FH   fh = _fh_from_int(fd);
-    int  on = 1;
 
-    if ( !fh || fh->clazz != &_fh_socket_class )
-        return;
+    if ( !fh || fh->clazz != &_fh_socket_class ) {
+        D("adb_setsockopt: invalid fd %d\n", fd);
+        return -1;
+    }
 
-    setsockopt( fh->fh_socket, IPPROTO_TCP, TCP_NODELAY, (const char*)&on, sizeof(on) );
+    return setsockopt( fh->fh_socket, level, optname, optval, optlen );
 }
 
 /**************************************************************************/
