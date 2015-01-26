@@ -455,7 +455,7 @@ int service_to_fd(const char *name)
         ret = create_subproc_thread("/system/bin/bu restore", SUBPROC_RAW);
     } else if(!strncmp(name, "tcpip:", 6)) {
         int port;
-        if (sscanf(name + 6, "%d", &port) == 0) {
+        if (sscanf(name + 6, "%d", &port) != 1) {
             port = 0;
         }
         ret = create_service_thread(restart_tcp_service, (void *) (uintptr_t) port);
@@ -527,7 +527,7 @@ static void connect_device(char* host, char* buffer, int buffer_size)
         }
         // zero terminate the host at the point we found the colon
         hostbuf[portstr - host] = 0;
-        if (sscanf(portstr + 1, "%d", &port) == 0) {
+        if (sscanf(portstr + 1, "%d", &port) != 1) {
             snprintf(buffer, buffer_size, "bad port number %s", portstr);
             return;
         }
