@@ -75,10 +75,10 @@ const char *android_log_id_to_name(log_id_t log_id)
 
 static int accessmode(int mode)
 {
-    if ((mode & O_ACCMODE) == O_WRONLY) {
+    if ((mode & ANDROID_LOG_ACCMODE) == ANDROID_LOG_WRONLY) {
         return W_OK;
     }
-    if ((mode & O_ACCMODE) == O_RDWR) {
+    if ((mode & ANDROID_LOG_ACCMODE) == ANDROID_LOG_RDWR) {
         return R_OK | W_OK;
     }
     return R_OK;
@@ -117,7 +117,7 @@ log_id_t android_name_to_log_id(const char *logName)
         ++b;
     }
 
-    ret = check_allocate_accessible(&n, b, O_RDONLY);
+    ret = check_allocate_accessible(&n, b, ANDROID_LOG_RDONLY);
     free(n);
     if (ret) {
         return ret;
@@ -201,8 +201,8 @@ static int logger_ioctl(struct logger *logger, int cmd, int mode)
         return -EFAULT;
     }
 
-    if (((mode & O_ACCMODE) == O_RDWR)
-            || (((mode ^ logger->top->mode) & O_ACCMODE) == 0)) {
+    if (((mode & ANDROID_LOG_ACCMODE) == ANDROID_LOG_RDWR)
+            || (((mode ^ logger->top->mode) & ANDROID_LOG_ACCMODE) == 0)) {
         return ioctl(logger->fd, cmd);
     }
 
@@ -227,13 +227,13 @@ static int logger_ioctl(struct logger *logger, int cmd, int mode)
 
 int android_logger_clear(struct logger *logger)
 {
-    return logger_ioctl(logger, LOGGER_FLUSH_LOG, O_WRONLY);
+    return logger_ioctl(logger, LOGGER_FLUSH_LOG, ANDROID_LOG_WRONLY);
 }
 
 /* returns the total size of the log's ring buffer */
 long android_logger_get_log_size(struct logger *logger)
 {
-    return logger_ioctl(logger, LOGGER_GET_LOG_BUF_SIZE, O_RDWR);
+    return logger_ioctl(logger, LOGGER_GET_LOG_BUF_SIZE, ANDROID_LOG_RDWR);
 }
 
 int android_logger_set_log_size(struct logger *logger __unused,
@@ -248,7 +248,7 @@ int android_logger_set_log_size(struct logger *logger __unused,
  */
 long android_logger_get_log_readable_size(struct logger *logger)
 {
-    return logger_ioctl(logger, LOGGER_GET_LOG_LEN, O_RDONLY);
+    return logger_ioctl(logger, LOGGER_GET_LOG_LEN, ANDROID_LOG_RDONLY);
 }
 
 /*
@@ -256,7 +256,7 @@ long android_logger_get_log_readable_size(struct logger *logger)
  */
 int android_logger_get_log_version(struct logger *logger)
 {
-    int ret = logger_ioctl(logger, LOGGER_GET_VERSION, O_RDWR);
+    int ret = logger_ioctl(logger, LOGGER_GET_VERSION, ANDROID_LOG_RDWR);
     return (ret < 0) ? 1 : ret;
 }
 
@@ -342,7 +342,7 @@ struct logger *android_logger_open(struct logger_list *logger_list,
         goto err_name;
     }
 
-    logger->fd = open(n, logger_list->mode);
+    logger->fd = open(n, logger_list->mode & (ANDROID_LOG_ACCMODE | ANDROID_LOG_NONBLOCK));
     if (logger->fd < 0) {
         goto err_name;
     }
@@ -565,7 +565,7 @@ int android_logger_list_read(struct logger_list *logger_list,
         if (result <= 0) {
             if (result) {
                 error = errno;
-            } else if (logger_list->mode & O_NDELAY) {
+            } else if (logger_list->mode & ANDROID_LOG_NONBLOCK) {
                 error = EAGAIN;
             } else {
                 logger_list->timeout_ms = LOG_TIMEOUT_NEVER;

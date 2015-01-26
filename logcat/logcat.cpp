@@ -324,7 +324,7 @@ int main(int argc, char **argv)
     int getPruneList = 0;
     char *setPruneList = NULL;
     int printStatistics = 0;
-    int mode = O_RDONLY;
+    int mode = ANDROID_LOG_RDONLY;
     const char *forceFilters = NULL;
     log_device_t* devices = NULL;
     log_device_t* dev;
@@ -359,15 +359,15 @@ int main(int argc, char **argv)
 
             case 'c':
                 clearLog = 1;
-                mode = O_WRONLY;
+                mode |= ANDROID_LOG_WRONLY;
             break;
 
             case 'd':
-                mode = O_RDONLY | O_NDELAY;
+                mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
             break;
 
             case 't':
-                mode = O_RDONLY | O_NDELAY;
+                mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
                 /* FALLTHRU */
             case 'T':
                 if (strspn(optarg, "0123456789") != strlen(optarg)) {

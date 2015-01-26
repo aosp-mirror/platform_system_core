@@ -111,20 +111,21 @@ DESCRIPTION
        ger_list_alloc,  calling  in  turn the android_logger_open for each log
        id.  Each entry can be retrieved  with  android_logger_list_read.   The
        log(s) can be closed with android_logger_list_free.  The logs should be
-       opened with an O_RDONLY mode.  O_NDELAY mode will report when  the  log
-       reading  is  done  with  an  EAGAIN  error  return  code, otherwise the
-       android_logger_list_read call will block for new entries.
+       opened  with an  ANDROID_LOG_RDONLY  mode.   ANDROID_LOG_NONBLOCK  mode
+       will report when the  log reading is done with an  EAGAIN  error return
+       code,  otherwise the  android_logger_list_read  call will block for new
+       entries.
 
        The value returned by android_logger_open can be used as a parameter to
        the  android_logger_clear  function to empty the sub-log.  It is recom‐
-       mended to only open log O_WRONLY.
+       mended to only open log ANDROID_LOG_WRONLY in that case.
 
        The value returned by android_logger_open can be used as a parameter to
        the android_logger_get_log_(size|readable_size|version) to retrieve the
        sub-log maximum size, readable size and log buffer format protocol ver‐
        sion  respectively.  android_logger_get_id returns the id that was used
-       when opening the sub-log.  It is recommended to open the  log  O_RDONLY
-       in these cases.
+       when  opening  the  sub-log.    It  is  recommended  to  open  the  log
+       ANDROID_LOG_RDONLY in these cases.
 
 SEE ALSO
        syslogd(8)
