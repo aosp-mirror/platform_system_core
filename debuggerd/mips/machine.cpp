@@ -29,22 +29,10 @@
 
 #define R(x) (static_cast<unsigned int>(x))
 
-// The MIPS uapi ptrace.h has the wrong definition for pt_regs. PTRACE_GETREGS
-// writes 64-bit quantities even though the public struct uses 32-bit ones.
-struct pt_regs_mips_t {
-  uint64_t regs[32];
-  uint64_t lo;
-  uint64_t hi;
-  uint64_t cp0_epc;
-  uint64_t cp0_badvaddr;
-  uint64_t cp0_status;
-  uint64_t cp0_cause;
-};
-
 // If configured to do so, dump memory around *all* registers
 // for the crashing thread.
 void dump_memory_and_code(log_t* log, pid_t tid) {
-  pt_regs_mips_t r;
+  pt_regs r;
   if (ptrace(PTRACE_GETREGS, tid, 0, &r)) {
     return;
   }
@@ -85,7 +73,7 @@ void dump_memory_and_code(log_t* log, pid_t tid) {
 }
 
 void dump_registers(log_t* log, pid_t tid) {
-  pt_regs_mips_t r;
+  pt_regs r;
   if(ptrace(PTRACE_GETREGS, tid, 0, &r)) {
     _LOG(log, logtype::ERROR, "cannot get registers: %s\n", strerror(errno));
     return;
