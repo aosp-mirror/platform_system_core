@@ -15,7 +15,7 @@
  */
 #include <errno.h>
 #include <fcntl.h>
-#ifdef HAVE_PTHREADS
+#if !defined(_WIN32)
 #include <pthread.h>
 #endif
 #include <stdarg.h>
@@ -50,7 +50,7 @@
 
 static int __write_to_log_init(log_id_t, struct iovec *vec, size_t nr);
 static int (*write_to_log)(log_id_t, struct iovec *vec, size_t nr) = __write_to_log_init;
-#ifdef HAVE_PTHREADS
+#if !defined(_WIN32)
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
@@ -259,11 +259,11 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     if (ret < 0) {
         ret = -errno;
         if (ret == -ENOTCONN) {
-#ifdef HAVE_PTHREADS
+#if !defined(_WIN32)
             pthread_mutex_lock(&log_init_lock);
 #endif
             ret = __write_to_log_initialize();
-#ifdef HAVE_PTHREADS
+#if !defined(_WIN32)
             pthread_mutex_unlock(&log_init_lock);
 #endif
 
@@ -306,7 +306,7 @@ const char *android_log_id_to_name(log_id_t log_id)
 
 static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 {
-#ifdef HAVE_PTHREADS
+#if !defined(_WIN32)
     pthread_mutex_lock(&log_init_lock);
 #endif
 
@@ -315,7 +315,7 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 
         ret = __write_to_log_initialize();
         if (ret < 0) {
-#ifdef HAVE_PTHREADS
+#if !defined(_WIN32)
             pthread_mutex_unlock(&log_init_lock);
 #endif
             return ret;
@@ -324,7 +324,7 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
         write_to_log = __write_to_log_kernel;
     }
 
-#ifdef HAVE_PTHREADS
+#if !defined(_WIN32)
     pthread_mutex_unlock(&log_init_lock);
 #endif
 
