@@ -88,6 +88,12 @@ static void fdevent_subproc_event_func(int fd, unsigned events, void *userdata);
 static fdevent list_pending = {
     .next = &list_pending,
     .prev = &list_pending,
+    .fd = -1,
+    .force_eof = 0,
+    .state = 0,
+    .events = 0,
+    .func = nullptr,
+    .arg = nullptr,
 };
 
 static fdevent **fd_table = 0;
@@ -312,7 +318,7 @@ static int fdevent_fd_check(fd_set *fds)
 }
 
 #if !DEBUG
-static inline void dump_all_fds(const char *extra_msg) {}
+static inline void dump_all_fds(const char* /* extra_msg */) {}
 #else
 static void dump_all_fds(const char *extra_msg)
 {
@@ -434,7 +440,8 @@ static void fdevent_register(fdevent *fde)
         while(fd_table_max <= fde->fd) {
             fd_table_max *= 2;
         }
-        fd_table = realloc(fd_table, sizeof(fdevent*) * fd_table_max);
+        fd_table = reinterpret_cast<fdevent**>(
+            realloc(fd_table, sizeof(fdevent*) * fd_table_max));
         if(fd_table == 0) {
             FATAL("could not expand fd_table to %d entries\n", fd_table_max);
         }
@@ -505,7 +512,8 @@ static void fdevent_call_fdfunc(fdevent* fde)
     fde->func(fde->fd, events, fde->arg);
 }
 
-static void fdevent_subproc_event_func(int fd, unsigned ev, void *userdata)
+static void fdevent_subproc_event_func(int fd, unsigned ev,
+                                       void* /* userdata */)
 {
 
     D("subproc handling on fd=%d ev=%04x\n", fd, ev);

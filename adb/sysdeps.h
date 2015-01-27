@@ -26,16 +26,18 @@
 
 #ifdef _WIN32
 
+#include <ctype.h>
+#include <direct.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <io.h>
+#include <process.h>
+#include <sys/stat.h>
 #include <winsock2.h>
 #include <windows.h>
 #include <ws2tcpip.h>
-#include <process.h>
-#include <fcntl.h>
-#include <io.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <ctype.h>
-#include <direct.h>
+
+#include "fdevent.h"
 
 #define OS_PATH_SEPARATOR '\\'
 #define OS_PATH_SEPARATOR_STR "\\"
@@ -187,8 +189,6 @@ extern int socket_inaddr_any_server(int port, int type);
 #define FDE_ERROR             0x0004
 #define FDE_DONT_CLOSE        0x0080
 
-typedef struct fdevent fdevent;
-
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
 
 fdevent *fdevent_create(int fd, fd_func func, void *arg);
@@ -199,20 +199,6 @@ void     fdevent_set(fdevent *fde, unsigned events);
 void     fdevent_add(fdevent *fde, unsigned events);
 void     fdevent_del(fdevent *fde, unsigned events);
 void     fdevent_loop();
-
-struct fdevent {
-    fdevent *next;
-    fdevent *prev;
-
-    int fd;
-    int force_eof;
-
-    unsigned short state;
-    unsigned short events;
-
-    fd_func func;
-    void *arg;
-};
 
 static __inline__ void  adb_sleep_ms( int  mseconds )
 {

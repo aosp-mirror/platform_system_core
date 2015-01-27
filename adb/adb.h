@@ -20,6 +20,7 @@
 #include <limits.h>
 
 #include "adb_trace.h"
+#include "fdevent.h"
 #include "transport.h"  /* readx(), writex() */
 
 #define MAX_PAYLOAD 4096
