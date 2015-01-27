@@ -89,8 +89,6 @@ static __inline__ void  close_on_exec(int  fd)
     /* nothing really */
 }
 
-extern void  disable_tcp_nagle(int  fd);
-
 #define  lstat    stat   /* no symlinks on Win32 */
 
 #define  S_ISLNK(m)   0   /* no symlinks on Win32 */
@@ -210,10 +208,21 @@ extern int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, socklen_t  
 #undef   accept
 #define  accept  ___xxx_accept
 
+extern int  adb_setsockopt(int  fd, int  level, int  optname, const void*  optval, socklen_t  optlen);
+
+#undef   setsockopt
+#define  setsockopt  ___xxx_setsockopt
+
 static __inline__  int  adb_socket_setbufsize( int   fd, int  bufsize )
 {
     int opt = bufsize;
-    return setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (const char*)&opt, sizeof(opt));
+    return adb_setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (const void*)&opt, sizeof(opt));
+}
+
+static __inline__ void  disable_tcp_nagle( int  fd )
+{
+    int  on = 1;
+    adb_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const void*)&on, sizeof(on));
 }
 
 extern int  adb_socketpair( int  sv[2] );
@@ -450,6 +459,13 @@ static __inline__ void  disable_tcp_nagle(int fd)
     setsockopt( fd, IPPROTO_TCP, TCP_NODELAY, (void*)&on, sizeof(on) );
 }
 
+static __inline__ int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, socklen_t  optlen )
+{
+    return setsockopt( fd, level, optname, optval, optlen );
+}
+
+#undef   setsockopt
+#define  setsockopt  ___xxx_setsockopt
 
 static __inline__ int  unix_socketpair( int  d, int  type, int  protocol, int sv[2] )
 {

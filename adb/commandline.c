@@ -472,7 +472,7 @@ int adb_download_buffer(const char *service, const char *fn, const void* data, i
     }
 
     int opt = CHUNK_SIZE;
-    opt = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
+    opt = adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
 
     total = sz;
     ptr = data;
@@ -581,7 +581,7 @@ int adb_sideload_host(const char* fn) {
     }
 
     int opt = SIDELOAD_HOST_BLOCK_SIZE;
-    opt = setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
+    opt = adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
 
     int last_percent = -1;
     for (;;) {
