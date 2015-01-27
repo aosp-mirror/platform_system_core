@@ -28,7 +28,7 @@ LOCAL_MODULE := libadb
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
 LOCAL_SRC_FILES := $(LIBADB_SRC_FILES)
 ifeq ($(HOST_OS),windows)
-    LOCAL_SRC_FILES += sysdeps_wind32.c
+    LOCAL_SRC_FILES += sysdeps_win32.c
 else
     LOCAL_SRC_FILES += fdevent.cpp
 endif
@@ -101,7 +101,6 @@ LOCAL_MODULE_TAGS := debug
 LOCAL_STATIC_LIBRARIES := \
     libadb \
     libzipfile \
-    libz \
     libcrypto_static \
     $(EXTRA_STATIC_LIBS) \
 
@@ -174,43 +173,3 @@ LOCAL_STATIC_LIBRARIES := \
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 
 include $(BUILD_EXECUTABLE)
-
-
-# adb host tool for device-as-host
-# =========================================================
-ifneq ($(SDK_ONLY),true)
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES := \
-	adb.c \
-	console.c \
-	transport.c \
-	transport_local.c \
-	transport_usb.c \
-	commandline.c \
-	adb_client.c \
-	adb_auth_host.c \
-	sockets.c \
-	services.c \
-	file_sync_client.c \
-	get_my_path_linux.c \
-	usb_linux.c \
-
-LOCAL_CFLAGS := \
-	-O2 \
-	-g \
-	-DADB_HOST=1 \
-	-DADB_HOST_ON_TARGET=1 \
-	-Wall -Wno-unused-parameter -Werror \
-	-D_XOPEN_SOURCE \
-	-D_GNU_SOURCE
-
-LOCAL_MODULE := adb
-
-LOCAL_STATIC_LIBRARIES := libadb libzipfile libz libcutils liblog
-
-LOCAL_SHARED_LIBRARIES := libcrypto
-
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
-include $(BUILD_EXECUTABLE)
-endif
