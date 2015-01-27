@@ -14,23 +14,28 @@
  * limitations under the License.
  */
 
-#include "sysdeps.h"
+#include <fcntl.h>
+#include <inttypes.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <sys/stat.h>
 
 #define  TRACE_TAG  TRACE_ADB
 #include "adb.h"
-
-#include <stdio.h>
-#include <stdarg.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <inttypes.h>
-
 #include "cutils/properties.h"
 #include "ext4_sb.h"
-#include <fs_mgr.h>
+#include "fs_mgr.h"
+#include "sysdeps.h"
 
 #define FSTAB_PREFIX "/fstab."
 struct fstab *fstab;
+
+#ifdef ALLOW_ADBD_DISABLE_VERITY
+static const bool kAllowDisableVerity = true;
+#else
+static const bool kAllowDisableVerity = false;
+#endif
 
 __attribute__((__format__(printf, 2, 3))) __nonnull((2))
 static void write_console(int fd, const char* format, ...)
@@ -44,7 +49,6 @@ static void write_console(int fd, const char* format, ...)
     adb_write(fd, buffer, strnlen(buffer, sizeof(buffer)));
 }
 
-#ifdef ALLOW_ADBD_DISABLE_VERITY
 static int get_target_device_size(int fd, const char *blk_device,
                                   uint64_t *device_size)
 {
@@ -148,10 +152,10 @@ static int set_verity_enabled_state(int fd, const char *block_device,
     }
 
     if (adb_write(device, &new_magic, sizeof(new_magic)) != sizeof(new_magic)) {
-        write_console(fd, "Could not set verity %s flag on device %s with error %s\n",
-                      enable ? "enabled" : "disabled",
-                      block_device,
-                      strerror(errno));
+        write_console(
+            fd, "Could not set verity %s flag on device %s with error %s\n",
+            enable ? "enabled" : "disabled",
+            block_device, strerror(errno));
         goto errout;
     }
 
@@ -164,58 +168,60 @@ errout:
         adb_close(device);
     return retval;
 }
-#endif
 
 void set_verity_enabled_state_service(int fd, void* cookie)
 {
     bool enable = (cookie != NULL);
-#ifdef ALLOW_ADBD_DISABLE_VERITY
-    char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
-    char propbuf[PROPERTY_VALUE_MAX];
-    int i;
-    bool any_changed = false;
+    if (kAllowDisableVerity) {
+        char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
+        char propbuf[PROPERTY_VALUE_MAX];
+        int i;
+        bool any_changed = false;
 
-    property_get("ro.secure", propbuf, "0");
-    if (strcmp(propbuf, "1")) {
-        write_console(fd, "verity not enabled - ENG build\n");
-        goto errout;
+        property_get("ro.secure", propbuf, "0");
+        if (strcmp(propbuf, "1")) {
+            write_console(fd, "verity not enabled - ENG build\n");
+            goto errout;
+        }
+
+        property_get("ro.debuggable", propbuf, "0");
+        if (strcmp(propbuf, "1")) {
+            write_console(
+                fd, "verity cannot be disabled/enabled - USER build\n");
+            goto errout;
+        }
+
+        property_get("ro.hardware", propbuf, "");
+        snprintf(fstab_filename, sizeof(fstab_filename), FSTAB_PREFIX"%s",
+                 propbuf);
+
+        fstab = fs_mgr_read_fstab(fstab_filename);
+        if (!fstab) {
+            write_console(fd, "Failed to open %s\nMaybe run adb root?\n",
+                          fstab_filename);
+            goto errout;
+        }
+
+        /* Loop through entries looking for ones that vold manages */
+        for (i = 0; i < fstab->num_entries; i++) {
+            if(fs_mgr_is_verified(&fstab->recs[i])) {
+                if (!set_verity_enabled_state(fd, fstab->recs[i].blk_device,
+                                              fstab->recs[i].mount_point,
+                                              enable)) {
+                    any_changed = true;
+                }
+           }
+        }
+
+        if (any_changed) {
+            write_console(
+                fd, "Now reboot your device for settings to take effect\n");
+        }
+    } else {
+        write_console(fd, "%s-verity only works for userdebug builds\n",
+                      enable ? "enable" : "disable");
     }
 
-    property_get("ro.debuggable", propbuf, "0");
-    if (strcmp(propbuf, "1")) {
-        write_console(fd, "verity cannot be disabled/enabled - USER build\n");
-        goto errout;
-    }
-
-    property_get("ro.hardware", propbuf, "");
-    snprintf(fstab_filename, sizeof(fstab_filename), FSTAB_PREFIX"%s", propbuf);
-
-    fstab = fs_mgr_read_fstab(fstab_filename);
-    if (!fstab) {
-        write_console(fd, "Failed to open %s\nMaybe run adb root?\n",
-                      fstab_filename);
-        goto errout;
-    }
-
-    /* Loop through entries looking for ones that vold manages */
-    for (i = 0; i < fstab->num_entries; i++) {
-        if(fs_mgr_is_verified(&fstab->recs[i])) {
-            if (!set_verity_enabled_state(fd, fstab->recs[i].blk_device,
-                                          fstab->recs[i].mount_point, enable)) {
-                any_changed = true;
-            }
-       }
-    }
-
-    if (any_changed) {
-        write_console(fd,
-                      "Now reboot your device for settings to take effect\n");
-    }
 errout:
-#else
-    write_console(fd, "%s-verity only works for userdebug builds\n",
-                  enable ? "enable" : "disable");
-#endif
-
     adb_close(fd);
 }
