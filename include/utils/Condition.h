@@ -21,7 +21,7 @@
 #include <sys/types.h>
 #include <time.h>
 
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
 # include <pthread.h>
 #endif
 
@@ -74,7 +74,7 @@ public:
     void broadcast();
 
 private:
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
     pthread_cond_t mCond;
 #else
     void*   mState;
@@ -83,7 +83,7 @@ private:
 
 // ---------------------------------------------------------------------------
 
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
 
 inline Condition::Condition() {
     pthread_cond_init(&mCond, NULL);
@@ -149,7 +149,7 @@ inline void Condition::broadcast() {
     pthread_cond_broadcast(&mCond);
 }
 
-#endif // HAVE_PTHREADS
+#endif // !defined(_WIN32)
 
 // ---------------------------------------------------------------------------
 }; // namespace android
