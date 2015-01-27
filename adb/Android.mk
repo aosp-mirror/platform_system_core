@@ -162,14 +162,17 @@ LOCAL_MODULE := adbd
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
+LOCAL_C_INCLUDES += system/extras/ext4_utils system/core/fs_mgr/include
 
 LOCAL_STATIC_LIBRARIES := \
     libadb \
+    libfs_mgr \
     liblog \
     libcutils \
     libc \
     libmincrypt \
     libselinux \
+    libext4_utils_static \
 
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 

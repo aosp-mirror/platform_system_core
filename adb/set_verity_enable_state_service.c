@@ -26,6 +26,8 @@
 #include <inttypes.h>
 
 #include "cutils/properties.h"
+#include "ext4_sb.h"
+#include <fs_mgr.h>
 
 #define FSTAB_PREFIX "/fstab."
 struct fstab *fstab;
