@@ -21,7 +21,7 @@
 #include <sys/types.h>
 #include <time.h>
 
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
 # include <pthread.h>
 #endif
 
@@ -87,7 +87,7 @@ private:
                 Mutex(const Mutex&);
     Mutex&      operator = (const Mutex&);
 
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
     pthread_mutex_t mMutex;
 #else
     void    _init();
@@ -97,7 +97,7 @@ private:
 
 // ---------------------------------------------------------------------------
 
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
 
 inline Mutex::Mutex() {
     pthread_mutex_init(&mMutex, NULL);
@@ -138,7 +138,7 @@ inline status_t Mutex::timedLock(nsecs_t timeoutNs) {
 }
 #endif
 
-#endif // HAVE_PTHREADS
+#endif // !defined(_WIN32)
 
 // ---------------------------------------------------------------------------
 

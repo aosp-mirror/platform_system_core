@@ -18,19 +18,10 @@
 // Timer functions.
 //
 #include <utils/Timers.h>
-#include <utils/Log.h>
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
+#include <limits.h>
 #include <sys/time.h>
 #include <time.h>
-#include <errno.h>
-#include <limits.h>
-
-#ifdef HAVE_WIN32_THREADS
-#include <windows.h>
-#endif
 
 #if defined(HAVE_ANDROID_OS)
 nsecs_t systemTime(int clock)
