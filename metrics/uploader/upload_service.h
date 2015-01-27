@@ -64,9 +64,8 @@ class UploadService : public base::HistogramFlattener {
   // launch as it is destroyed when staging the log.
   void StartNewLog();
 
-  // Glib takes a function pointer and passes the object as a void*.
-  // Uploader is expected to be an UploaderService.
-  static int UploadEventStatic(void* uploader);
+  // Event callback for handling MessageLoop events.
+  void UploadEventCallback(const base::TimeDelta& interval);
 
   // Triggers an upload event.
   void UploadEvent();
@@ -97,6 +96,11 @@ class UploadService : public base::HistogramFlattener {
   FRIEND_TEST(UploadServiceTest, LogUserCrash);
   FRIEND_TEST(UploadServiceTest, UnknownCrashIgnored);
   FRIEND_TEST(UploadServiceTest, ValuesInConfigFileAreSent);
+
+  // Private constructor for use in unit testing.
+  UploadService(SystemProfileSetter* setter,
+                const std::string& server,
+                bool testing);
 
   // If a staged log fails to upload more than kMaxFailedUpload times, it
   // will be discarded.
@@ -137,6 +141,8 @@ class UploadService : public base::HistogramFlattener {
   scoped_ptr<MetricsLog> staged_log_;
 
   std::string metrics_file_;
+
+  bool testing_;
 };
 
 #endif  // METRICS_UPLOADER_UPLOAD_SERVICE_H_

@@ -4,11 +4,12 @@
 
 #include "metrics/uploader/upload_service.h"
 
-#include <glib.h>
 #include <string>
 
+#include <base/bind.h>
 #include <base/logging.h>
 #include <base/memory/scoped_vector.h>
+#include <base/message_loop/message_loop.h>
 #include <base/metrics/histogram.h>
 #include <base/metrics/histogram_base.h>
 #include <base/metrics/histogram_snapshot_manager.h>
@@ -28,14 +29,29 @@ UploadService::UploadService(SystemProfileSetter* setter,
                              const std::string& server)
     : system_profile_setter_(setter),
       histogram_snapshot_manager_(this),
-      sender_(new HttpSender(server)) {
+      sender_(new HttpSender(server)),
+      testing_(false) {
+}
+
+UploadService::UploadService(SystemProfileSetter* setter,
+                             const std::string& server,
+                             bool testing)
+    : UploadService(setter, server) {
+  testing_ = testing;
 }
 
 void UploadService::Init(const base::TimeDelta& upload_interval,
                          const std::string& metrics_file) {
   base::StatisticsRecorder::Initialize();
   metrics_file_ = metrics_file;
-  g_timeout_add_seconds(upload_interval.InSeconds(), &UploadEventStatic, this);
+
+  if (!testing_) {
+    base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+        base::Bind(&UploadService::UploadEventCallback,
+                   base::Unretained(this),
+                   upload_interval),
+        upload_interval);
+  }
 }
 
 void UploadService::StartNewLog() {
@@ -46,12 +62,14 @@ void UploadService::StartNewLog() {
   current_log_.reset(log);
 }
 
-// static
-int UploadService::UploadEventStatic(void* uploader) {
-  CHECK(uploader);
-  // This is called by glib with a pointer to an UploadEvent object.
-  static_cast<UploadService*>(uploader)->UploadEvent();
-  return 1;
+void UploadService::UploadEventCallback(const base::TimeDelta& interval) {
+  UploadEvent();
+
+  base::MessageLoop::current()->PostDelayedTask(FROM_HERE,
+      base::Bind(&UploadService::UploadEventCallback,
+                 base::Unretained(this),
+                 interval),
+      interval);
 }
 
 void UploadService::UploadEvent() {

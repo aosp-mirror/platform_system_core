@@ -3,10 +3,6 @@
     'variables': {
       'deps': [
         'dbus-1',
-        'dbus-glib-1',
-        'glib-2.0',
-        'gobject-2.0',
-        'gthread-2.0',
         'libchrome-<(libbase_ver)',
         'libchromeos-<(libbase_ver)',
       ]

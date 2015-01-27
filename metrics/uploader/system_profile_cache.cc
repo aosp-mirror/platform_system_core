@@ -4,7 +4,6 @@
 
 #include "metrics/uploader/system_profile_cache.h"
 
-#include <glib.h>
 #include <string>
 #include <vector>
 

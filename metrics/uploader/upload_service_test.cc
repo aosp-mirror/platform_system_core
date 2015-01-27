@@ -26,7 +26,7 @@ class UploadServiceTest : public testing::Test {
  protected:
   UploadServiceTest()
       : cache_(true, "/"),
-        upload_service_(new MockSystemProfileSetter(), kMetricsServer),
+        upload_service_(new MockSystemProfileSetter(), kMetricsServer, true),
         exit_manager_(new base::AtExitManager()) {
     sender_ = new SenderMock;
     upload_service_.sender_.reset(sender_);
