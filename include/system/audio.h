@@ -872,6 +872,8 @@ typedef enum {
 typedef int audio_port_handle_t;
 #define AUDIO_PORT_HANDLE_NONE 0
 
+/* the maximum length for the human-readable device name. i.e. "Alesis iO4"*/
+#define AUDIO_PORT_MAX_NAME_LEN 128
 
 /* maximum audio device address length */
 #define AUDIO_DEVICE_MAX_ADDRESS_LEN 32
@@ -966,11 +968,11 @@ struct audio_port_session_ext {
     audio_session_t   session; /* audio session */
 };
 
-
 struct audio_port {
     audio_port_handle_t      id;                /* port unique ID */
     audio_port_role_t        role;              /* sink or source */
     audio_port_type_t        type;              /* device, mix ... */
+    char                     name[AUDIO_PORT_MAX_NAME_LEN];
     unsigned int             num_sample_rates;  /* number of sampling rates in following array */
     unsigned int             sample_rates[AUDIO_PORT_MAX_SAMPLING_RATES];
     unsigned int             num_channel_masks; /* number of channel masks in following array */
