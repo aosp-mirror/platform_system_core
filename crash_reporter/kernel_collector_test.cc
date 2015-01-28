@@ -11,16 +11,17 @@
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
 #include <chromeos/syslog_logging.h>
-#include <chromeos/test_helpers.h>
 #include <gtest/gtest.h>
-
-static int s_crashes = 0;
-static bool s_metrics = false;
 
 using base::FilePath;
 using base::StringPrintf;
 using chromeos::FindLog;
 using chromeos::GetLog;
+
+namespace {
+
+int s_crashes = 0;
+bool s_metrics = false;
 
 void CountCrash() {
   ++s_crashes;
@@ -29,6 +30,8 @@ void CountCrash() {
 bool IsMetrics() {
   return s_metrics;
 }
+
+}  // namespace
 
 class KernelCollectorTest : public ::testing::Test {
  protected:
@@ -665,9 +668,4 @@ TEST_F(KernelCollectorTest, ComputeKernelStackSignatureX86) {
   EXPECT_EQ("kernel-add_timer-B5178878", signature);
 
   ComputeKernelStackSignatureCommon();
-}
-
-int main(int argc, char **argv) {
-  SetUpTests(&argc, argv, false);
-  return RUN_ALL_TESTS();
 }

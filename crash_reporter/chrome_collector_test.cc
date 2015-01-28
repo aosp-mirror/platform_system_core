@@ -6,26 +6,25 @@
 
 #include <stdio.h>
 
-#include <dbus/dbus-glib-lowlevel.h>
-
 #include <base/auto_reset.h>
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
 #include <chromeos/syslog_logging.h>
-#include <chromeos/test_helpers.h>
 #include <gtest/gtest.h>
 
 using base::FilePath;
 
-static const char kCrashFormatGood[] = "value1:10:abcdefghijvalue2:5:12345";
-static const char kCrashFormatEmbeddedNewline[] =
-    "value1:10:abcd\r\nghijvalue2:5:12\n34";
-static const char kCrashFormatBad1[] = "value1:10:abcdefghijvalue2:6=12345";
-static const char kCrashFormatBad2[] = "value1:10:abcdefghijvalue2:512345";
-static const char kCrashFormatBad3[] = "value1:10::abcdefghijvalue2:5=12345";
-static const char kCrashFormatBad4[] = "value1:10:abcdefghijvalue2:4=12345";
+namespace {
 
-static const char kCrashFormatWithFile[] =
+const char kCrashFormatGood[] = "value1:10:abcdefghijvalue2:5:12345";
+const char kCrashFormatEmbeddedNewline[] =
+    "value1:10:abcd\r\nghijvalue2:5:12\n34";
+const char kCrashFormatBad1[] = "value1:10:abcdefghijvalue2:6=12345";
+const char kCrashFormatBad2[] = "value1:10:abcdefghijvalue2:512345";
+const char kCrashFormatBad3[] = "value1:10::abcdefghijvalue2:5=12345";
+const char kCrashFormatBad4[] = "value1:10:abcdefghijvalue2:4=12345";
+
+const char kCrashFormatWithFile[] =
     "value1:10:abcdefghijvalue2:5:12345"
     "some_file\"; filename=\"foo.txt\":15:12345\n789\n12345"
     "value3:2:ok";
@@ -33,11 +32,13 @@ static const char kCrashFormatWithFile[] =
 void CountCrash() {
 }
 
-static bool s_allow_crash = false;
+bool s_allow_crash = false;
 
 bool IsMetrics() {
   return s_allow_crash;
 }
+
+}  // namespace
 
 class ChromeCollectorTest : public ::testing::Test {
  protected:
@@ -138,10 +139,4 @@ TEST_F(ChromeCollectorTest, HandleCrash) {
     EXPECT_TRUE(collector_.HandleCrash(dump_file, "123", "456", "chrome_test"));
   }
   ExpectFileEquals(ChromeCollector::kSuccessMagic, log_file);
-}
-
-int main(int argc, char **argv) {
-  ::g_type_init();
-  SetUpTests(&argc, argv, false);
-  return RUN_ALL_TESTS();
 }

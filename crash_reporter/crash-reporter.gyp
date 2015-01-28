@@ -95,58 +95,21 @@
     ['USE_test == 1', {
       'targets': [
         {
-          'target_name': 'chrome_collector_test',
+          'target_name': 'crash_reporter_test',
           'type': 'executable',
           'includes': ['../common-mk/common_test.gypi'],
           'dependencies': ['libcrash'],
           'sources': [
             'chrome_collector_test.cc',
-          ]
-        },
-        {
-          'target_name': 'crash_collector_test',
-          'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
-          'dependencies': ['libcrash'],
-          'sources': [
             'crash_collector_test.cc',
-          ]
-        },
-        {
-          'target_name': 'kernel_collector_test',
-          'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
-          'dependencies': ['libcrash'],
-          'sources': [
+            'crash_collector_test.h',
             'kernel_collector_test.cc',
-          ]
-        },
-        {
-          'target_name': 'udev_collector_test',
-          'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
-          'dependencies': ['libcrash'],
-          'sources': [
+            'kernel_collector_test.h',
+            'testrunner.cc',
             'udev_collector_test.cc',
-          ]
-        },
-        {
-          'target_name': 'unclean_shutdown_collector_test',
-          'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
-          'dependencies': ['libcrash'],
-          'sources': [
             'unclean_shutdown_collector_test.cc',
-          ]
-        },
-        {
-          'target_name': 'user_collector_test',
-          'type': 'executable',
-          'includes': ['../common-mk/common_test.gypi'],
-          'dependencies': ['libcrash'],
-          'sources': [
             'user_collector_test.cc',
-          ]
+          ],
         },
       ],
     }],

@@ -9,18 +9,19 @@
 #include <base/files/file_util.h>
 #include <base/strings/string_util.h>
 #include <chromeos/syslog_logging.h>
-#include <chromeos/test_helpers.h>
 #include <gtest/gtest.h>
-
-static int s_crashes = 0;
-static bool s_metrics = true;
-
-static const char kTestDirectory[] = "test";
-static const char kTestSuspended[] = "test/suspended";
-static const char kTestUnclean[] = "test/unclean";
 
 using base::FilePath;
 using ::chromeos::FindLog;
+
+namespace {
+
+int s_crashes = 0;
+bool s_metrics = true;
+
+const char kTestDirectory[] = "test";
+const char kTestSuspended[] = "test/suspended";
+const char kTestUnclean[] = "test/unclean";
 
 void CountCrash() {
   ++s_crashes;
@@ -29,6 +30,8 @@ void CountCrash() {
 bool IsMetrics() {
   return s_metrics;
 }
+
+}  // namespace
 
 class UncleanShutdownCollectorTest : public ::testing::Test {
   void SetUp() {
@@ -119,9 +122,4 @@ TEST_F(UncleanShutdownCollectorTest, CantDisable) {
       << test_unclean_.Append("foo").value() << "': " << strerror(errno);
   ASSERT_FALSE(collector_.Disable());
   rmdir(kTestUnclean);
-}
-
-int main(int argc, char **argv) {
-  SetUpTests(&argc, argv, false);
-  return RUN_ALL_TESTS();
 }

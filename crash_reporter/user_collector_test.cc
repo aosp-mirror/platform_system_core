@@ -12,21 +12,22 @@
 #include <base/files/scoped_temp_dir.h>
 #include <base/strings/string_split.h>
 #include <chromeos/syslog_logging.h>
-#include <chromeos/test_helpers.h>
 #include <gtest/gtest.h>
-
-static int s_crashes = 0;
-static bool s_metrics = false;
-
-static const char kFilePath[] = "/my/path";
-
-// Keep in sync with UserCollector::ShouldDump.
-static const char kChromeIgnoreMsg[] =
-  "ignoring call by kernel - chrome crash; "
-  "waiting for chrome to call us directly";
 
 using base::FilePath;
 using chromeos::FindLog;
+
+namespace {
+
+int s_crashes = 0;
+bool s_metrics = false;
+
+const char kFilePath[] = "/my/path";
+
+// Keep in sync with UserCollector::ShouldDump.
+const char kChromeIgnoreMsg[] =
+    "ignoring call by kernel - chrome crash; "
+    "waiting for chrome to call us directly";
 
 void CountCrash() {
   ++s_crashes;
@@ -35,6 +36,8 @@ void CountCrash() {
 bool IsMetrics() {
   return s_metrics;
 }
+
+}  // namespace
 
 class UserCollectorTest : public ::testing::Test {
   void SetUp() {
@@ -305,7 +308,7 @@ TEST_F(UserCollectorTest, GetExecutableBaseNameFromPid) {
   pid_t my_pid = getpid();
   EXPECT_TRUE(collector_.GetExecutableBaseNameFromPid(my_pid, &base_name));
   EXPECT_FALSE(FindLog("Readlink failed"));
-  EXPECT_EQ("user_collector_test", base_name);
+  EXPECT_EQ("crash_reporter_test", base_name);
 }
 
 TEST_F(UserCollectorTest, GetFirstLineWithPrefix) {
@@ -538,9 +541,4 @@ TEST_F(UserCollectorTest, ValidateCoreFile) {
   ASSERT_TRUE(base::WriteFile(core_file, e_ident, sizeof(e_ident)));
   EXPECT_EQ(UserCollector::kErrorInvalidCoreFile,
             collector_.ValidateCoreFile(core_file));
-}
-
-int main(int argc, char **argv) {
-  SetUpTests(&argc, argv, false);
-  return RUN_ALL_TESTS();
 }

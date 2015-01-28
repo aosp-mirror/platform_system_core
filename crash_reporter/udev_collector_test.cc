@@ -5,7 +5,7 @@
 #include <base/files/file_enumerator.h>
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
-#include <chromeos/test_helpers.h>
+#include <chromeos/syslog_logging.h>
 #include <gtest/gtest.h>
 
 #include "crash-reporter/udev_collector.h"
@@ -102,8 +102,3 @@ TEST_F(UdevCollectorTest, TestMatches) {
 
 // TODO(sque, crosbug.com/32238) - test wildcard cases, multiple identical udev
 // events.
-
-int main(int argc, char **argv) {
-  SetUpTests(&argc, argv, false);
-  return RUN_ALL_TESTS();
-}

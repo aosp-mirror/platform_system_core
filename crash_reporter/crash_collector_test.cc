@@ -6,14 +6,12 @@
 
 #include <unistd.h>
 
-#include <dbus/dbus-glib-lowlevel.h>
 #include <glib.h>
 
 #include <base/files/file_util.h>
 #include <base/strings/string_util.h>
 #include <base/strings/stringprintf.h>
 #include <chromeos/syslog_logging.h>
-#include <chromeos/test_helpers.h>
 #include <gtest/gtest.h>
 
 #include "crash-reporter/crash_collector.h"
@@ -23,6 +21,8 @@ using base::StringPrintf;
 using chromeos::FindLog;
 using ::testing::Return;
 
+namespace {
+
 void CountCrash() {
   ADD_FAILURE();
 }
@@ -31,6 +31,8 @@ bool IsMetrics() {
   ADD_FAILURE();
   return false;
 }
+
+}  // namespace
 
 class CrashCollectorTest : public ::testing::Test {
  public:
@@ -342,10 +344,4 @@ TEST_F(CrashCollectorTest, GetLogContents) {
   std::string contents;
   EXPECT_TRUE(base::ReadFileToString(output_file, &contents));
   EXPECT_EQ("hello world\n", contents);
-}
-
-int main(int argc, char **argv) {
-  ::g_type_init();
-  SetUpTests(&argc, argv, false);
-  return RUN_ALL_TESTS();
 }
