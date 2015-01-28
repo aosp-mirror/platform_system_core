@@ -16,9 +16,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#ifdef HAVE_PTHREADS
 #include <pthread.h>
-#endif
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,9 +26,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#ifdef __BIONIC__
 #include <android/set_abort_message.h>
-#endif
 
 #include <log/log.h>
 #include <log/logd.h>
@@ -43,23 +39,14 @@
 
 #define LOG_BUF_SIZE 1024
 
-#if FAKE_LOG_DEVICE
-/* This will be defined when building for the host. */
-#include "fake_log_device.h"
-#define log_open(pathname, flags) fakeLogOpen(pathname, flags)
-#define log_writev(filedes, vector, count) fakeLogWritev(filedes, vector, count)
-#define log_close(filedes) fakeLogClose(filedes)
-#else
 #define log_open(pathname, flags) open(pathname, (flags) | O_CLOEXEC)
 #define log_writev(filedes, vector, count) writev(filedes, vector, count)
 #define log_close(filedes) close(filedes)
-#endif
 
 static int __write_to_log_init(log_id_t, struct iovec *vec, size_t nr);
 static int (*write_to_log)(log_id_t, struct iovec *vec, size_t nr) = __write_to_log_init;
-#ifdef HAVE_PTHREADS
+
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
-#endif
 
 #ifndef __unused
 #define __unused  __attribute__((__unused__))
@@ -119,9 +106,7 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
 
 static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 {
-#ifdef HAVE_PTHREADS
     pthread_mutex_lock(&log_init_lock);
-#endif
 
     if (write_to_log == __write_to_log_init) {
         log_fds[LOG_ID_MAIN] = log_open("/dev/"LOGGER_LOG_MAIN, O_WRONLY);
@@ -147,9 +132,7 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
         }
     }
 
-#ifdef HAVE_PTHREADS
     pthread_mutex_unlock(&log_init_lock);
-#endif
 
     return write_to_log(log_id, vec, nr);
 }
@@ -179,11 +162,9 @@ int __android_log_write(int prio, const char *tag, const char *msg)
             tag = tmp_tag;
     }
 
-#if __BIONIC__
     if (prio == ANDROID_LOG_FATAL) {
         android_set_abort_message(msg);
     }
-#endif
 
     vec[0].iov_base   = (unsigned char *) &prio;
     vec[0].iov_len    = 1;

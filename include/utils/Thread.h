@@ -21,7 +21,7 @@
 #include <sys/types.h>
 #include <time.h>
 
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
 # include <pthread.h>
 #endif
 

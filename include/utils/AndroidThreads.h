@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
 # include <pthread.h>
 #endif
 

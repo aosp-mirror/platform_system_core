@@ -27,7 +27,7 @@
 #include <errno.h>
 #include <stdio.h>
 
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
 # include <pthread.h>
 #endif
 
@@ -42,13 +42,13 @@ struct sysprop_change_callback_info {
     int priority;
 };
 
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
 static pthread_mutex_t gSyspropMutex = PTHREAD_MUTEX_INITIALIZER;
 static Vector<sysprop_change_callback_info>* gSyspropList = NULL;
 #endif
 
 void add_sysprop_change_callback(sysprop_change_callback cb, int priority) {
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
     pthread_mutex_lock(&gSyspropMutex);
     if (gSyspropList == NULL) {
         gSyspropList = new Vector<sysprop_change_callback_info>();
@@ -72,7 +72,7 @@ void add_sysprop_change_callback(sysprop_change_callback cb, int priority) {
 }
 
 void report_sysprop_change() {
-#if defined(HAVE_PTHREADS)
+#if !defined(_WIN32)
     pthread_mutex_lock(&gSyspropMutex);
     Vector<sysprop_change_callback_info> listeners;
     if (gSyspropList != NULL) {

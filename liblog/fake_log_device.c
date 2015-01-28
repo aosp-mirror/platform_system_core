@@ -29,7 +29,7 @@
 
 #include <log/logd.h>
 
-#ifdef HAVE_PTHREADS
+#if !defined(_WIN32)
 #include <pthread.h>
 #endif
 
@@ -88,7 +88,7 @@ typedef struct LogState {
 } LogState;
 
 
-#ifdef HAVE_PTHREADS
+#if !defined(_WIN32)
 /*
  * Locking.  Since we're emulating a device, we need to be prepared
  * to have multiple callers at the same time.  This lock is used
@@ -106,10 +106,10 @@ static void unlock()
 {
     pthread_mutex_unlock(&fakeLogDeviceLock);
 }
-#else   // !HAVE_PTHREADS
+#else   // !defined(_WIN32)
 #define lock() ((void)0)
 #define unlock() ((void)0)
-#endif  // !HAVE_PTHREADS
+#endif  // !defined(_WIN32)
 
 
 /*
