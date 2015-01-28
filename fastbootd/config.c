@@ -31,6 +31,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <malloc.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>

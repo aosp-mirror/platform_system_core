@@ -31,6 +31,7 @@
 
 #include "commands/virtual_partitions.h"
 
+#include <malloc.h>
 #include <string.h>
 
 #include "debug.h"
