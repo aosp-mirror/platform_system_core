@@ -59,7 +59,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
   // recommended to keep this number low (e.g., 50 is normal, while
   // 100 is high).
   bool SendToUMA(const std::string& name, int sample,
-                 int min, int max, int nbuckets);
+                 int min, int max, int nbuckets) override;
 
   // Sends linear histogram data to Chrome for transport to UMA and
   // returns true on success. This method results in the equivalent of
