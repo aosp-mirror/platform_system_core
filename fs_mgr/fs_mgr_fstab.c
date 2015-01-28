@@ -428,6 +428,11 @@ int fs_mgr_is_encryptable(struct fstab_rec *fstab)
     return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT);
 }
 
+int fs_mgr_is_force_encrypted(struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_FORCECRYPT;
+}
+
 int fs_mgr_is_noemulatedsd(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_NOEMULATEDSD;

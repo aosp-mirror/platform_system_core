@@ -258,6 +258,15 @@ static int device_is_secure() {
     return strcmp(value, "0") ? 1 : 0;
 }
 
+static int device_is_force_encrypted() {
+    int ret = -1;
+    char value[PROP_VALUE_MAX];
+    ret = __system_property_get("ro.vold.forceencryption", value);
+    if (ret < 0)
+        return 0;
+    return strcmp(value, "1") ? 0 : 1;
+}
+
 /*
  * Tries to mount any of the consecutive fstab entries that match
  * the mountpoint of the one given by fstab->recs[start_idx].
@@ -468,7 +477,7 @@ int fs_mgr_mount_all(struct fstab *fstab)
         /* Deal with encryptability. */
         if (!mret) {
             /* If this is encryptable, need to trigger encryption */
-            if ((fstab->recs[attempted_idx].fs_mgr_flags & MF_FORCECRYPT)) {
+          if (fs_mgr_is_encryptable(&fstab->recs[attempted_idx])) {
                 if (umount(fstab->recs[attempted_idx].mount_point) == 0) {
                     if (encryptable == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
                         ERROR("Will try to encrypt %s %s\n", fstab->recs[attempted_idx].mount_point,
