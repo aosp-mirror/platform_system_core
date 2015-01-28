@@ -395,6 +395,11 @@ int adb_auth_sign(void *node, void *token, size_t token_size, void *sig)
     unsigned int len;
     struct adb_private_key *key = node_to_item(node, struct adb_private_key, node);
 
+    if (token_size != TOKEN_SIZE) {
+        D("Unexpected token size %zd\n", token_size);
+        return 0;
+    }
+
     if (!RSA_sign(NID_sha1, token, token_size, sig, &len, key->rsa)) {
         return 0;
     }
