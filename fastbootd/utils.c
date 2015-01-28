@@ -36,6 +36,7 @@
 #include <sys/ioctl.h>
 #include <linux/fs.h>
 #include <stdlib.h>
+#include <string.h>
 #include <cutils/properties.h>
 
 #include "utils.h"

@@ -15,6 +15,7 @@
  */
 
 #include <fcntl.h>
+#include <malloc.h>
 #include <stdarg.h>
 #include <time.h>
 

@@ -42,6 +42,7 @@
 #include <linux/hdreg.h>
 #include <sys/ioctl.h>
 #include <stdlib.h>
+#include <string.h>
 #include <cutils/config_utils.h>
 #include <inttypes.h>
 
