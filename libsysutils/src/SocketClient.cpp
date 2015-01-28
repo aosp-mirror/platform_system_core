@@ -1,5 +1,6 @@
 #include <alloca.h>
 #include <errno.h>
+#include <malloc.h>
 #include <pthread.h>
 #include <signal.h>
 #include <string.h>
