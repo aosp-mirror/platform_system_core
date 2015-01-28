@@ -30,19 +30,26 @@
 #include <chromeos/cryptohome.h>
 #include <chromeos/dbus/dbus.h>
 #include <chromeos/dbus/service_constants.h>
+#include <chromeos/key_value_store.h>
 #include <chromeos/process.h>
 
-static const char kCollectChromeFile[] =
+namespace {
+
+const char kCollectChromeFile[] =
     "/mnt/stateful_partition/etc/collect_chrome_crashes";
-static const char kCrashTestInProgressPath[] = "/tmp/crash-test-in-progress";
-static const char kDefaultLogConfig[] = "/etc/crash_reporter_logs.conf";
-static const char kDefaultUserName[] = "chronos";
-static const char kLeaveCoreFile[] = "/root/.leave_core";
-static const char kLsbRelease[] = "/etc/lsb-release";
-static const char kShellPath[] = "/bin/sh";
-static const char kSystemCrashPath[] = "/var/spool/crash";
-static const char kUploadVarPrefix[] = "upload_var_";
-static const char kUploadFilePrefix[] = "upload_file_";
+const char kCrashTestInProgressPath[] = "/tmp/crash-test-in-progress";
+const char kDefaultLogConfig[] = "/etc/crash_reporter_logs.conf";
+const char kDefaultUserName[] = "chronos";
+const char kLeaveCoreFile[] = "/root/.leave_core";
+const char kLsbRelease[] = "/etc/lsb-release";
+const char kShellPath[] = "/bin/sh";
+const char kSystemCrashPath[] = "/var/spool/crash";
+const char kUploadVarPrefix[] = "upload_var_";
+const char kUploadFilePrefix[] = "upload_file_";
+
+// Key of the lsb-release entry containing the OS version.
+const char kLsbVersionKey[] = "CHROMEOS_RELEASE_VERSION";
+
 // Normally this path is not used.  Unfortunately, there are a few edge cases
 // where we need this.  Any process that runs as kDefaultUserName that crashes
 // is consider a "user crash".  That includes the initial Chrome browser that
@@ -53,16 +60,18 @@ static const char kUploadFilePrefix[] = "upload_file_";
 // This also comes up when running autotests.  The GUI is sitting at the login
 // screen while tests are sshing in, changing users, and triggering crashes as
 // the user (purposefully).
-static const char kFallbackUserCrashPath[] = "/home/chronos/crash";
+const char kFallbackUserCrashPath[] = "/home/chronos/crash";
 
 // Directory mode of the user crash spool directory.
-static const mode_t kUserCrashPathMode = 0755;
+const mode_t kUserCrashPathMode = 0755;
 
 // Directory mode of the system crash spool directory.
-static const mode_t kSystemCrashPathMode = 01755;
+const mode_t kSystemCrashPathMode = 01755;
 
-static const uid_t kRootOwner = 0;
-static const uid_t kRootGroup = 0;
+const uid_t kRootOwner = 0;
+const uid_t kRootGroup = 0;
+
+}  // namespace
 
 // Maximum crash reports per crash spool directory.  Note that this is
 // a separate maximum from the maximum rate at which we upload these
@@ -416,65 +425,28 @@ bool CrashCollector::CheckHasCapacity(const FilePath &crash_directory) {
   return !full;
 }
 
-bool CrashCollector::IsCommentLine(const std::string &line) {
-  size_t found = line.find_first_not_of(" ");
-  return found != std::string::npos && line[found] == '#';
-}
-
-bool CrashCollector::ReadKeyValueFile(
-    const FilePath &path,
-    const char separator,
-    std::map<std::string, std::string> *dictionary) {
-  std::string contents;
-  if (!base::ReadFileToString(path, &contents)) {
-    return false;
-  }
-  typedef std::vector<std::string> StringVector;
-  StringVector lines;
-  base::SplitString(contents, '\n', &lines);
-  bool any_errors = false;
-  for (StringVector::iterator line = lines.begin(); line != lines.end();
-       ++line) {
-    // Allow empty strings.
-    if (line->empty())
-      continue;
-    // Allow comment lines.
-    if (IsCommentLine(*line))
-      continue;
-    StringVector sides;
-    base::SplitString(*line, separator, &sides);
-    if (sides.size() != 2) {
-      any_errors = true;
-      continue;
-    }
-    dictionary->insert(std::pair<std::string, std::string>(sides[0], sides[1]));
-  }
-  return !any_errors;
-}
-
 bool CrashCollector::GetLogContents(const FilePath &config_path,
                                     const std::string &exec_name,
                                     const FilePath &output_file) {
-  std::map<std::string, std::string> log_commands;
-  if (!ReadKeyValueFile(config_path, ':', &log_commands)) {
+  chromeos::KeyValueStore store;
+  if (!store.Load(config_path)) {
     LOG(INFO) << "Unable to read log configuration file "
               << config_path.value();
     return false;
   }
 
-  if (log_commands.find(exec_name) == log_commands.end())
+  std::string command;
+  if (!store.GetString(exec_name, &command))
     return false;
 
   chromeos::ProcessImpl diag_process;
   diag_process.AddArg(kShellPath);
-  std::string shell_command = log_commands[exec_name];
-  diag_process.AddStringOption("-c", shell_command);
+  diag_process.AddStringOption("-c", command);
   diag_process.RedirectOutput(output_file.value());
 
-  int result = diag_process.Run();
+  const int result = diag_process.Run();
   if (result != 0) {
-    LOG(INFO) << "Running shell command " << shell_command << "failed with: "
-              << result;
+    LOG(INFO) << "Log command \"" << command << "\" exited with " << result;
     return false;
   }
   return true;
@@ -500,15 +472,16 @@ void CrashCollector::AddCrashMetaUploadData(const std::string &key,
 void CrashCollector::WriteCrashMetaData(const FilePath &meta_path,
                                         const std::string &exec_name,
                                         const std::string &payload_path) {
-  std::map<std::string, std::string> contents;
-  if (!ReadKeyValueFile(FilePath(lsb_release_), '=', &contents)) {
+  chromeos::KeyValueStore store;
+  if (!store.Load(FilePath(lsb_release_))) {
     LOG(ERROR) << "Problem parsing " << lsb_release_;
     // Even though there was some failure, take as much as we could read.
   }
+
   std::string version("unknown");
-  std::map<std::string, std::string>::iterator i;
-  if ((i = contents.find("CHROMEOS_RELEASE_VERSION")) != contents.end()) {
-    version = i->second;
+  if (!store.GetString(kLsbVersionKey, &version)) {
+    LOG(ERROR) << "Unable to read " << kLsbVersionKey << " from "
+               << lsb_release_;
   }
   int64_t payload_size = -1;
   base::GetFileSize(FilePath(payload_path), &payload_size);

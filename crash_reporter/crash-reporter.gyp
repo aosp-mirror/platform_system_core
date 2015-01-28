@@ -103,6 +103,7 @@
             'chrome_collector_test.cc',
             'crash_collector_test.cc',
             'crash_collector_test.h',
+            'crash_reporter_logs_test.cc',
             'kernel_collector_test.cc',
             'kernel_collector_test.h',
             'testrunner.cc',

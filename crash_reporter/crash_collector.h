@@ -43,10 +43,8 @@ class CrashCollector {
   FRIEND_TEST(CrashCollectorTest, ForkExecAndPipe);
   FRIEND_TEST(CrashCollectorTest, FormatDumpBasename);
   FRIEND_TEST(CrashCollectorTest, Initialize);
-  FRIEND_TEST(CrashCollectorTest, IsCommentLine);
   FRIEND_TEST(CrashCollectorTest, IsUserSpecificDirectoryEnabled);
   FRIEND_TEST(CrashCollectorTest, MetaData);
-  FRIEND_TEST(CrashCollectorTest, ReadKeyValueFile);
   FRIEND_TEST(CrashCollectorTest, Sanitize);
   FRIEND_TEST(CrashCollectorTest, WriteNewFile);
   FRIEND_TEST(ForkExecAndPipeTest, Basic);
@@ -119,15 +117,6 @@ class CrashCollector {
   // Check given crash directory still has remaining capacity for another
   // crash.
   bool CheckHasCapacity(const base::FilePath &crash_directory);
-
-  // Checks if the line starts with '#' after optional whitespace.
-  static bool IsCommentLine(const std::string &line);
-
-  // Read the given file of form [<key><separator><value>\n...] and return
-  // a map of its contents.
-  bool ReadKeyValueFile(const base::FilePath &file,
-                        char separator,
-                        std::map<std::string, std::string> *dictionary);
 
   // Write a log applicable to |exec_name| to |output_file| based on the
   // log configuration file at |config_path|.

@@ -19,9 +19,9 @@ const char kLogConfigFileName[] = "log_config_file";
 
 // A bunch of random rules to put into the dummy log config file.
 const char kLogConfigFileContents[] =
-    "crash_reporter-udev-collection-change-card0-drm:echo change card0 drm\n"
-    "crash_reporter-udev-collection-add-state0-cpu:echo change state0 cpu\n"
-    "cros_installer:echo not for udev";
+    "crash_reporter-udev-collection-change-card0-drm=echo change card0 drm\n"
+    "crash_reporter-udev-collection-add-state0-cpu=echo change state0 cpu\n"
+    "cros_installer=echo not for udev";
 
 void CountCrash() {}
 

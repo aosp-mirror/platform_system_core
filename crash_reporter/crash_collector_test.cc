@@ -220,59 +220,6 @@ TEST_F(CrashCollectorTest, CheckHasCapacityStrangeNames) {
   EXPECT_FALSE(CheckHasCapacity());
 }
 
-TEST_F(CrashCollectorTest, IsCommentLine) {
-  EXPECT_FALSE(CrashCollector::IsCommentLine(""));
-  EXPECT_TRUE(CrashCollector::IsCommentLine("#"));
-  EXPECT_TRUE(CrashCollector::IsCommentLine("#real comment"));
-  EXPECT_TRUE(CrashCollector::IsCommentLine(" # real comment"));
-  EXPECT_FALSE(CrashCollector::IsCommentLine("not comment"));
-  EXPECT_FALSE(CrashCollector::IsCommentLine(" not comment"));
-}
-
-TEST_F(CrashCollectorTest, ReadKeyValueFile) {
-  const char *contents = ("a=b\n"
-                          "\n"
-                          " c=d \n");
-  FilePath path(test_dir_.Append("keyval"));
-  std::map<std::string, std::string> dictionary;
-  std::map<std::string, std::string>::iterator i;
-
-  base::WriteFile(path, contents, strlen(contents));
-
-  EXPECT_TRUE(collector_.ReadKeyValueFile(path, '=', &dictionary));
-  i = dictionary.find("a");
-  EXPECT_TRUE(i != dictionary.end() && i->second == "b");
-  i = dictionary.find("c");
-  EXPECT_TRUE(i != dictionary.end() && i->second == "d");
-
-  dictionary.clear();
-
-  contents = ("a=b c d\n"
-              "e\n"
-              " f g = h\n"
-              "i=j\n"
-              "=k\n"
-              "#comment=0\n"
-              "l=\n");
-  base::WriteFile(path, contents, strlen(contents));
-
-  EXPECT_FALSE(collector_.ReadKeyValueFile(path, '=', &dictionary));
-  EXPECT_EQ(5, dictionary.size());
-
-  i = dictionary.find("a");
-  EXPECT_TRUE(i != dictionary.end() && i->second == "b c d");
-  i = dictionary.find("e");
-  EXPECT_TRUE(i == dictionary.end());
-  i = dictionary.find("f g");
-  EXPECT_TRUE(i != dictionary.end() && i->second == "h");
-  i = dictionary.find("i");
-  EXPECT_TRUE(i != dictionary.end() && i->second == "j");
-  i = dictionary.find("");
-  EXPECT_TRUE(i != dictionary.end() && i->second == "k");
-  i = dictionary.find("l");
-  EXPECT_TRUE(i != dictionary.end() && i->second == "");
-}
-
 TEST_F(CrashCollectorTest, MetaData) {
   const char kMetaFileBasename[] = "generated.meta";
   FilePath meta_file = test_dir_.Append(kMetaFileBasename);
@@ -280,7 +227,10 @@ TEST_F(CrashCollectorTest, MetaData) {
   FilePath payload_file = test_dir_.Append("payload-file");
   std::string contents;
   collector_.lsb_release_ = lsb_release.value();
-  const char kLsbContents[] = "CHROMEOS_RELEASE_VERSION=version\n";
+  const char kLsbContents[] =
+      "CHROMEOS_RELEASE_BOARD=lumpy\n"
+      "CHROMEOS_RELEASE_VERSION=6727.0.2015_01_26_0853\n"
+      "CHROMEOS_RELEASE_NAME=Chromium OS\n";
   ASSERT_TRUE(base::WriteFile(lsb_release, kLsbContents, strlen(kLsbContents)));
   const char kPayload[] = "foo";
   ASSERT_TRUE(base::WriteFile(payload_file, kPayload, strlen(kPayload)));
@@ -290,7 +240,7 @@ TEST_F(CrashCollectorTest, MetaData) {
   const char kExpectedMeta[] =
       "foo=bar\n"
       "exec_name=kernel\n"
-      "ver=version\n"
+      "ver=6727.0.2015_01_26_0853\n"
       "payload=test/payload-file\n"
       "payload_size=3\n"
       "done=1\n";
@@ -328,7 +278,7 @@ TEST_F(CrashCollectorTest, GetLogContents) {
   FilePath config_file = test_dir_.Append("crash_config");
   FilePath output_file = test_dir_.Append("crash_log");
   const char kConfigContents[] =
-      "foobar:echo hello there | sed -e \"s/there/world/\"";
+      "foobar=echo hello there | \\\n  sed -e \"s/there/world/\"";
   ASSERT_TRUE(
       base::WriteFile(config_file, kConfigContents, strlen(kConfigContents)));
   base::DeleteFile(FilePath(output_file), false);
