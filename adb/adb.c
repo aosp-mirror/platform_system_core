@@ -1125,10 +1125,11 @@ int launch_server(int server_port)
 
     /* get path of current program */
     GetModuleFileName( NULL, program_path, sizeof(program_path) );
-
+    char args[64];
+    snprintf(args, sizeof(args), "adb -P %d fork-server server",  server_port);
     ret = CreateProcess(
             program_path,                              /* program path  */
-            "adb fork-server server",
+            args,
                                     /* the fork-server argument will set the
                                        debug = 2 in the child           */
             NULL,                   /* process handle is not inheritable */
