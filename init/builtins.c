@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <sys/mount.h>
 #include <sys/resource.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <linux/loop.h>
 #include <cutils/partition_utils.h>
