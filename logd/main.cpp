@@ -29,6 +29,7 @@
 #include <unistd.h>
 
 #include <cutils/properties.h>
+#include <cutils/sched_policy.h>
 
 #include "private/android_filesystem_config.h"
 #include "CommandListener.h"
@@ -68,6 +69,10 @@
 static int drop_privs() {
     struct sched_param param;
     memset(&param, 0, sizeof(param));
+
+    if (set_sched_policy(0, SP_BACKGROUND) < 0) {
+        return -1;
+    }
 
     if (sched_setscheduler((pid_t) 0, SCHED_BATCH, &param) < 0) {
         return -1;
