@@ -30,6 +30,7 @@ static char *nexttok(char **strp)
 #define SHOW_ABI 64
 
 static int display_flags = 0;
+static int ppid_filter = 0;
 
 static void print_exe_abi(int pid);
 
@@ -143,6 +144,10 @@ static int ps_line(int pid, int tid, char *namefilter)
         sprintf(user,"%d",(int)stats.st_uid);
     } else {
         strcpy(user,pw->pw_name);
+    }
+
+    if(ppid_filter != 0 && ppid != ppid_filter) {
+        return 0;
     }
 
     if(!namefilter || !strncmp(cmdline[0] ? cmdline : name, namefilter, strlen(namefilter))) {
@@ -266,6 +271,10 @@ int ps_main(int argc, char **argv)
             display_flags |= SHOW_CPU;
         } else if(!strcmp(argv[1],"--abi")) {
             display_flags |= SHOW_ABI;
+        } else if(!strcmp(argv[1],"--ppid")) {
+            ppid_filter = atoi(argv[2]);
+            argc--;
+            argv++;
         } else if(isdigit(argv[1][0])){
             pidfilter = atoi(argv[1]);
         } else {
