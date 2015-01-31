@@ -56,12 +56,6 @@ ifeq ($(HOST_OS),darwin)
   LOCAL_CFLAGS += -Wno-sizeof-pointer-memaccess -Wno-unused-parameter
 endif
 
-ifeq ($(HOST_OS),freebsd)
-  USB_SRCS := usb_libusb.c
-  EXTRA_SRCS := get_my_path_freebsd.c
-  LOCAL_LDLIBS += -lpthread -lusb
-endif
-
 ifeq ($(HOST_OS),windows)
   USB_SRCS := usb_windows.c
   EXTRA_SRCS := get_my_path_windows.c
