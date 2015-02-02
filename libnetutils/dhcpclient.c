@@ -353,28 +353,28 @@ static int send_message(int sock, int if_index, dhcp_msg  *msg, int size)
 static int is_valid_reply(dhcp_msg *msg, dhcp_msg *reply, int sz)
 {
     if (sz < DHCP_MSG_FIXED_SIZE) {
-        if (verbose) ALOGD("netcfg: Wrong size %d != %d\n", sz, DHCP_MSG_FIXED_SIZE);
+        if (verbose) ALOGD("dhcp: Wrong size %d != %d\n", sz, DHCP_MSG_FIXED_SIZE);
         return 0;
     }
     if (reply->op != OP_BOOTREPLY) {
-        if (verbose) ALOGD("netcfg: Wrong Op %d != %d\n", reply->op, OP_BOOTREPLY);
+        if (verbose) ALOGD("dhcp: Wrong Op %d != %d\n", reply->op, OP_BOOTREPLY);
         return 0;
     }
     if (reply->xid != msg->xid) {
-        if (verbose) ALOGD("netcfg: Wrong Xid 0x%x != 0x%x\n", ntohl(reply->xid),
-                          ntohl(msg->xid));
+        if (verbose) ALOGD("dhcp: Wrong Xid 0x%x != 0x%x\n", ntohl(reply->xid),
+                           ntohl(msg->xid));
         return 0;
     }
     if (reply->htype != msg->htype) {
-        if (verbose) ALOGD("netcfg: Wrong Htype %d != %d\n", reply->htype, msg->htype);
+        if (verbose) ALOGD("dhcp: Wrong Htype %d != %d\n", reply->htype, msg->htype);
         return 0;
     }
     if (reply->hlen != msg->hlen) {
-        if (verbose) ALOGD("netcfg: Wrong Hlen %d != %d\n", reply->hlen, msg->hlen);
+        if (verbose) ALOGD("dhcp: Wrong Hlen %d != %d\n", reply->hlen, msg->hlen);
         return 0;
     }
     if (memcmp(msg->chaddr, reply->chaddr, msg->hlen)) {
-        if (verbose) ALOGD("netcfg: Wrong chaddr %x != %x\n", *(reply->chaddr),*(msg->chaddr));
+        if (verbose) ALOGD("dhcp: Wrong chaddr %x != %x\n", *(reply->chaddr),*(msg->chaddr));
         return 0;
     }
     return 1;
