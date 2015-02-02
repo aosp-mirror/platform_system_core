@@ -289,6 +289,7 @@ static const char kTempMappingFileName[] = "zip: ExtractFileToFile";
 struct ZipArchive {
   /* open Zip archive */
   const int fd;
+  const bool close_file;
 
   /* mapped central directory area */
   off64_t directory_offset;
@@ -306,8 +307,9 @@ struct ZipArchive {
   uint32_t hash_table_size;
   ZipEntryName* hash_table;
 
-  ZipArchive(const int fd) :
+  ZipArchive(const int fd, bool assume_ownership) :
       fd(fd),
+      close_file(assume_ownership),
       directory_offset(0),
       directory_map(NULL),
       num_entries(0),
@@ -315,7 +317,7 @@ struct ZipArchive {
       hash_table(NULL) {}
 
   ~ZipArchive() {
-    if (fd >= 0) {
+    if (close_file && fd >= 0) {
       close(fd);
     }
 
@@ -690,21 +692,22 @@ static int32_t OpenArchiveInternal(ZipArchive* archive,
 }
 
 int32_t OpenArchiveFd(int fd, const char* debug_file_name,
-                      ZipArchiveHandle* handle) {
-  ZipArchive* archive = new ZipArchive(fd);
+                      ZipArchiveHandle* handle, bool assume_ownership) {
+  ZipArchive* archive = new ZipArchive(fd, assume_ownership);
   *handle = archive;
   return OpenArchiveInternal(archive, debug_file_name);
 }
 
 int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle) {
   const int fd = open(fileName, O_RDONLY | O_BINARY, 0);
-  ZipArchive* archive = new ZipArchive(fd);
+  ZipArchive* archive = new ZipArchive(fd, true);
   *handle = archive;
 
   if (fd < 0) {
     ALOGW("Unable to open '%s': %s", fileName, strerror(errno));
     return kIoError;
   }
+
   return OpenArchiveInternal(archive, fileName);
 }
 

@@ -101,6 +101,9 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle);
  * Sets handle to the value of the opaque handle for this file descriptor.
  * This handle must be released by calling CloseArchive with this handle.
  *
+ * If assume_ownership parameter is 'true' calling CloseArchive will close
+ * the file.
+ *
  * This function maps and scans the central directory and builds a table
  * of entries for future lookups.
  *
@@ -109,7 +112,7 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle);
  * Returns 0 on success, and negative values on failure.
  */
 int32_t OpenArchiveFd(const int fd, const char* debugFileName,
-                      ZipArchiveHandle *handle);
+                      ZipArchiveHandle *handle, bool assume_ownership = true);
 
 /*
  * Close archive, releasing resources associated with it. This will
