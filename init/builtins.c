@@ -59,7 +59,7 @@ static int write_file(const char *path, const char *value)
 {
     int fd, ret, len;
 
-    fd = open(path, O_WRONLY|O_CREAT|O_NOFOLLOW, 0600);
+    fd = open(path, O_WRONLY|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600);
 
     if (fd < 0)
         return -errno;
@@ -99,7 +99,7 @@ static int setkey(struct kbentry *kbe)
 {
     int fd, ret;
 
-    fd = open("/dev/tty0", O_RDWR | O_SYNC);
+    fd = open("/dev/tty0", O_RDWR | O_SYNC | O_CLOEXEC);
     if (fd < 0)
         return -1;
 
@@ -370,14 +370,14 @@ int do_mount(int nargs, char **args)
         struct loop_info info;
 
         mode = (flags & MS_RDONLY) ? O_RDONLY : O_RDWR;
-        fd = open(source + 5, mode);
+        fd = open(source + 5, mode | O_CLOEXEC);
         if (fd < 0) {
             return -1;
         }
 
         for (n = 0; ; n++) {
             sprintf(tmp, "/dev/block/loop%d", n);
-            loop = open(tmp, mode);
+            loop = open(tmp, mode | O_CLOEXEC);
             if (loop < 0) {
                 close(fd);
                 return -1;
@@ -423,7 +423,7 @@ exit_success:
 static int wipe_data_via_recovery()
 {
     mkdir("/cache/recovery", 0700);
-    int fd = open("/cache/recovery/command", O_RDWR|O_CREAT|O_TRUNC, 0600);
+    int fd = open("/cache/recovery/command", O_RDWR|O_CREAT|O_TRUNC|O_CLOEXEC, 0600);
     if (fd >= 0) {
         write(fd, "--wipe_data\n", strlen("--wipe_data\n") + 1);
         write(fd, "--reason=wipe_data_via_recovery\n", strlen("--reason=wipe_data_via_recovery\n") + 1);
@@ -709,10 +709,10 @@ int do_copy(int nargs, char **args)
     if (stat(args[1], &info) < 0) 
         return -1;
 
-    if ((fd1 = open(args[1], O_RDONLY)) < 0) 
+    if ((fd1 = open(args[1], O_RDONLY|O_CLOEXEC)) < 0)
         goto out_err;
 
-    if ((fd2 = open(args[2], O_WRONLY|O_CREAT|O_TRUNC, 0660)) < 0)
+    if ((fd2 = open(args[2], O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0660)) < 0)
         goto out_err;
 
     if (!(buffer = malloc(info.st_size)))

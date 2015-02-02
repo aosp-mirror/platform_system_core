@@ -147,13 +147,9 @@ void signal_init(void)
     sigaction(SIGCHLD, &act, 0);
 
     /* create a signalling mechanism for the sigchld handler */
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, s) == 0) {
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, s) == 0) {
         signal_fd = s[0];
         signal_recv_fd = s[1];
-        fcntl(s[0], F_SETFD, FD_CLOEXEC);
-        fcntl(s[0], F_SETFL, O_NONBLOCK);
-        fcntl(s[1], F_SETFD, FD_CLOEXEC);
-        fcntl(s[1], F_SETFL, O_NONBLOCK);
     }
 
     handle_signal();

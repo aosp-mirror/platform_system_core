@@ -48,7 +48,7 @@ int watchdogd_main(int argc, char **argv)
 
     timeout = interval + margin;
 
-    fd = open(DEV_NAME, O_RDWR);
+    fd = open(DEV_NAME, O_RDWR|O_CLOEXEC);
     if (fd < 0) {
         ERROR("watchdogd: Failed to open %s: %s\n", DEV_NAME, strerror(errno));
         return 1;

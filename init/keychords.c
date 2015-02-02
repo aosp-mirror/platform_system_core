@@ -72,12 +72,11 @@ void keychord_init()
     if (!keychords)
         return;
 
-    fd = open("/dev/keychord", O_RDWR);
+    fd = open("/dev/keychord", O_RDWR | O_CLOEXEC);
     if (fd < 0) {
         ERROR("could not open /dev/keychord\n");
         return;
     }
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
 
     ret = write(fd, keychords, keychords_length);
     if (ret != keychords_length) {

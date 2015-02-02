@@ -155,7 +155,7 @@ void *read_file(const char *fn, unsigned *_sz)
     struct stat sb;
 
     data = 0;
-    fd = open(fn, O_RDONLY);
+    fd = open(fn, O_RDONLY|O_CLOEXEC);
     if(fd < 0) return 0;
 
     // for security reasons, disallow world-writable
@@ -207,7 +207,7 @@ static void find_mtd_partitions(void)
     ssize_t pmtdsize;
     int r;
 
-    fd = open("/proc/mtd", O_RDONLY);
+    fd = open("/proc/mtd", O_RDONLY|O_CLOEXEC);
     if (fd < 0)
         return;
 
@@ -416,7 +416,7 @@ void get_hardware_name(char *hardware, unsigned int *revision)
     if (hardware[0])
         return;
 
-    fd = open(cpuinfo, O_RDONLY);
+    fd = open(cpuinfo, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return;
 
     for (;;) {
@@ -479,7 +479,7 @@ void import_kernel_cmdline(int in_qemu,
     char *ptr;
     int fd;
 
-    fd = open("/proc/cmdline", O_RDONLY);
+    fd = open("/proc/cmdline", O_RDONLY | O_CLOEXEC);
     if (fd >= 0) {
         int n = read(fd, cmdline, sizeof(cmdline) - 1);
         if (n < 0) n = 0;
