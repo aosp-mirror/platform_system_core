@@ -865,20 +865,20 @@ static void process_firmware_event(struct uevent *uevent)
     if (l == -1)
         goto data_free_out;
 
-    loading_fd = open(loading, O_WRONLY);
+    loading_fd = open(loading, O_WRONLY|O_CLOEXEC);
     if(loading_fd < 0)
         goto file_free_out;
 
-    data_fd = open(data, O_WRONLY);
+    data_fd = open(data, O_WRONLY|O_CLOEXEC);
     if(data_fd < 0)
         goto loading_close_out;
 
 try_loading_again:
-    fw_fd = open(file1, O_RDONLY);
+    fw_fd = open(file1, O_RDONLY|O_CLOEXEC);
     if(fw_fd < 0) {
-        fw_fd = open(file2, O_RDONLY);
+        fw_fd = open(file2, O_RDONLY|O_CLOEXEC);
         if (fw_fd < 0) {
-            fw_fd = open(file3, O_RDONLY);
+            fw_fd = open(file3, O_RDONLY|O_CLOEXEC);
             if (fw_fd < 0) {
                 if (booting) {
                         /* If we're not fully booted, we may be missing
@@ -1044,7 +1044,7 @@ void device_init(void)
         coldboot("/sys/block");
         coldboot("/sys/devices");
         t1 = get_usecs();
-        fd = open(COLDBOOT_DONE, O_WRONLY|O_CREAT, 0000);
+        fd = open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000);
         close(fd);
         log_event_print("coldboot %ld uS\n", ((long) (t1 - t0)));
         // t0 & t1 are unused if the log isn't doing anything.

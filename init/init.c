@@ -608,7 +608,7 @@ static int mix_hwrng_into_linux_rng_action(int nargs, char **args)
     size_t total_bytes_written = 0;
 
     hwrandom_fd = TEMP_FAILURE_RETRY(
-            open("/dev/hw_random", O_RDONLY | O_NOFOLLOW));
+            open("/dev/hw_random", O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
     if (hwrandom_fd == -1) {
         if (errno == ENOENT) {
           ERROR("/dev/hw_random not found\n");
@@ -621,7 +621,7 @@ static int mix_hwrng_into_linux_rng_action(int nargs, char **args)
     }
 
     urandom_fd = TEMP_FAILURE_RETRY(
-            open("/dev/urandom", O_WRONLY | O_NOFOLLOW));
+            open("/dev/urandom", O_WRONLY | O_NOFOLLOW | O_CLOEXEC));
     if (urandom_fd == -1) {
         ERROR("Failed to open /dev/urandom: %s\n", strerror(errno));
         goto ret;
@@ -675,12 +675,12 @@ static int console_init_action(int nargs, char **args)
         snprintf(console_name, sizeof(console_name), "/dev/%s", console);
     }
 
-    fd = open(console_name, O_RDWR);
+    fd = open(console_name, O_RDWR | O_CLOEXEC);
     if (fd >= 0)
         have_console = 1;
     close(fd);
 
-    fd = open("/dev/tty0", O_WRONLY);
+    fd = open("/dev/tty0", O_WRONLY | O_CLOEXEC);
     if (fd >= 0) {
         const char *msg;
             msg = "\n"
@@ -1011,7 +1011,7 @@ int main(int argc, char **argv)
     mount("sysfs", "/sys", "sysfs", 0, NULL);
 
         /* indicate that booting is in progress to background fw loaders, etc */
-    close(open("/dev/.booting", O_WRONLY | O_CREAT, 0000));
+    close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
 
         /* We must have some place other than / to create the
          * device nodes for kmsg and null, otherwise we won't

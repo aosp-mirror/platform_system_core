@@ -66,7 +66,7 @@ static int
 proc_read(const char*  filename, char* buff, size_t  buffsize)
 {
     int  len = 0;
-    int  fd  = open(filename, O_RDONLY);
+    int  fd  = open(filename, O_RDONLY | O_CLOEXEC);
     if (fd >= 0) {
         len = unix_read(fd, buff, buffsize-1);
         close(fd);
@@ -144,7 +144,7 @@ log_header(void)
     struct tm  now = *localtime(&now_t);
     strftime(date, sizeof(date), "%x %X", &now);
 
-    out = fopen( LOG_HEADER, "w" );
+    out = fopen( LOG_HEADER, "we" );
     if (out == NULL)
         return;
 
@@ -170,12 +170,6 @@ log_header(void)
 }
 
 static void
-close_on_exec(int  fd)
-{
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
-}
-
-static void
 open_log_file(int*  plogfd, const char*  logfile)
 {
     int    logfd = *plogfd;
@@ -183,12 +177,11 @@ open_log_file(int*  plogfd, const char*  logfile)
     /* create log file if needed */
     if (logfd < 0) 
     {
-        logfd = open(logfile,O_WRONLY|O_CREAT|O_TRUNC,0755);
+        logfd = open(logfile,O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC,0755);
         if (logfd < 0) {
             *plogfd = -2;
             return;
         }
-        close_on_exec(logfd);
         *plogfd = logfd;
     }
 }
@@ -220,9 +213,8 @@ do_log_file(FileBuff  log, const char*  procfile)
     do_log_uptime(log);
 
     /* append file content */
-    fd = open(procfile,O_RDONLY);
+    fd = open(procfile,O_RDONLY|O_CLOEXEC);
     if (fd >= 0) {
-        close_on_exec(fd);
         for (;;) {
             int  ret;
             ret = unix_read(fd, buff, sizeof(buff));
@@ -264,7 +256,7 @@ do_log_procs(FileBuff  log)
 
             /* read process stat line */
             snprintf(filename,sizeof(filename),"/proc/%d/stat",pid);
-            fd = open(filename,O_RDONLY);
+            fd = open(filename,O_RDONLY|O_CLOEXEC);
             if (fd >= 0) {
                len = unix_read(fd, buff, sizeof(buff)-1);
                close(fd);
@@ -340,7 +332,7 @@ int   bootchart_init( void )
 
     /* create kernel process accounting file */
     {
-        int  fd = open( LOG_ACCT, O_WRONLY|O_CREAT|O_TRUNC,0644);
+        int  fd = open( LOG_ACCT, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC,0644);
         if (fd >= 0) {
             close(fd);
             acct( LOG_ACCT );
