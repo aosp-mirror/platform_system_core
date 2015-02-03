@@ -126,7 +126,7 @@ int add_environment(const char *key, const char *val)
     return -1;
 }
 
-static void zap_stdio(void)
+void zap_stdio(void)
 {
     int fd;
     fd = open("/dev/null", O_RDWR);
