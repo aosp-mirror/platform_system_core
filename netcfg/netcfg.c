@@ -24,7 +24,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const char *ipaddr(in_addr_t addr)
+void die(const char *reason)
+{
+    perror(reason);
+    exit(1);
+}
+
+const char *ipaddr(in_addr_t addr)
 {
     struct in_addr in_addr;
 
@@ -32,13 +38,13 @@ static const char *ipaddr(in_addr_t addr)
     return inet_ntoa(in_addr);
 }
 
-static void usage(void)
+void usage(void)
 {
-    fprintf(stderr,"usage: netcfg [<interface> dhcp]\n");
+    fprintf(stderr,"usage: netcfg [<interface> {dhcp|up|down}]\n");
     exit(1);
 }
 
-static int dump_interface(const char *name)
+int dump_interface(const char *name)
 {
     unsigned addr, flags;
     unsigned char hwbuf[ETH_ALEN];
@@ -63,7 +69,7 @@ static int dump_interface(const char *name)
     return 0;
 }
 
-static int dump_interfaces(void)
+int dump_interfaces(void)
 {
     DIR *d;
     struct dirent *de;
@@ -79,11 +85,56 @@ static int dump_interfaces(void)
     return 0;
 }
 
+int set_hwaddr(const char *name, const char *asc) {
+    struct ether_addr *addr = ether_aton(asc);
+    if (!addr) {
+        printf("Failed to parse '%s'\n", asc);
+        return -1;
+    }
+    return ifc_set_hwaddr(name, addr->ether_addr_octet);
+}
+
+struct 
+{
+    const char *name;
+    int nargs;
+    void *func;
+} CMDS[] = {
+    { "dhcp",   1, do_dhcp },
+    { "up",     1, ifc_up },
+    { "down",   1, ifc_down },
+    { "deldefault", 1, ifc_remove_default_route },
+    { "hwaddr", 2, set_hwaddr },
+    { 0, 0, 0 },
+};
+
+static int call_func(void *_func, unsigned nargs, char **args)
+{
+    switch(nargs){
+    case 1: {
+        int (*func)(char *a0) = _func;
+        return func(args[0]);
+    }
+    case 2: {
+        int (*func)(char *a0, char *a1) = _func;
+        return func(args[0], args[1]);
+    }
+    case 3: {
+        int (*func)(char *a0, char *a1, char *a2) = _func;
+        return func(args[0], args[1], args[2]);
+    }
+    default:
+        return -1;
+    }
+}
+
 int main(int argc, char **argv)
 {
+    char *iname;
+    int n;
+    
     if(ifc_init()) {
-        perror("Cannot perform requested operation");
-        exit(1);
+        die("Cannot perform requested operation");
     }
 
     if(argc == 1) {
@@ -92,23 +143,41 @@ int main(int argc, char **argv)
         return result;
     }
 
-    if(argc != 3) usage();
+    if(argc < 3) usage();
 
-    char* iname = argv[1];
-    char* action = argv[2];
+    iname = argv[1];
     if(strlen(iname) > 16) usage();
 
-    if (!strcmp(action, "dhcp")) {
-        if (do_dhcp(iname)) {
-            fprintf(stderr, "dhcp failed: %s\n", strerror(errno));
-            ifc_close();
-            exit(1);
+    argc -= 2;
+    argv += 2;
+    while(argc > 0) {
+        for(n = 0; CMDS[n].name; n++){
+            if(!strcmp(argv[0], CMDS[n].name)) {
+                char *cmdname = argv[0];
+                int nargs = CMDS[n].nargs;
+                
+                argv[0] = iname;
+                if(argc < nargs) {
+                    fprintf(stderr, "not enough arguments for '%s'\n", cmdname);
+                    ifc_close();
+                    exit(1);
+                }
+                if(call_func(CMDS[n].func, nargs, argv)) {
+                    fprintf(stderr, "action '%s' failed (%s)\n", cmdname, strerror(errno));
+                    ifc_close();
+                    exit(1);
+                }
+                argc -= nargs;
+                argv += nargs;
+                goto done;
+            }
         }
-    } else {
-        fprintf(stderr,"no such action '%s'\n", action);
+        fprintf(stderr,"no such action '%s'\n", argv[0]);
         usage();
+    done:
+        ;
     }
-
     ifc_close();
+
     return 0;
 }
