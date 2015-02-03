@@ -51,6 +51,7 @@ extern int ifc_set_hwaddr(const char *name, const void *ptr);
 extern int ifc_clear_addresses(const char *name);
 
 extern int ifc_create_default_route(const char *name, in_addr_t addr);
+extern int ifc_remove_default_route(const char *ifname);
 extern int ifc_get_info(const char *name, in_addr_t *addr, int *prefixLength,
                         unsigned *flags);
 
