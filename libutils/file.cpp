@@ -21,6 +21,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <utils/Compat.h> // For TEMP_FAILURE_RETRY on Darwin.
+
 bool android::ReadFileToString(const std::string& path, std::string* content) {
   content->clear();
 
