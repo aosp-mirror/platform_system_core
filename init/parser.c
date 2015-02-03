@@ -15,9 +15,10 @@ void DUMP(void)
     struct command *cmd;
     struct listnode *node;
     struct listnode *node2;
+    char name_str[256] = "";
     struct socketinfo *si;
     int n;
-    
+
     list_for_each(node, &service_list) {
         svc = node_to_item(node, struct service, slist);
         RAW("service %s\n", svc->name);
@@ -34,7 +35,11 @@ void DUMP(void)
 
     list_for_each(node, &action_list) {
         act = node_to_item(node, struct action, alist);
-        RAW("on %s\n", act->name);
+        RAW("on ");
+        build_triggers_string(name_str, sizeof(name_str), act);
+        RAW("%s", name_str);
+        RAW("\n");
+
         list_for_each(node2, &act->commands) {
             cmd = node_to_item(node2, struct command, clist);
             RAW("  %p", cmd->func);
