@@ -349,7 +349,7 @@ void service_start(struct service *svc, const char *dynamic_args)
                 if (arg_idx == INIT_PARSER_MAXARGS)
                     break;
             }
-            arg_ptrs[arg_idx] = '\0';
+            arg_ptrs[arg_idx] = NULL;
             execve(svc->args[0], (char**) arg_ptrs, (char**) ENV);
         }
         _exit(127);
