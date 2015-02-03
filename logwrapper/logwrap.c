@@ -325,7 +325,7 @@ static int parent(const char *tag, int parent_read, pid_t pid,
 
     if (log_target & LOG_KLOG) {
         snprintf(log_info.klog_fmt, sizeof(log_info.klog_fmt),
-                 "<6>%.*s: %%s", MAX_KLOG_TAG, log_info.btag);
+                 "<6>%.*s: %%s\n", MAX_KLOG_TAG, log_info.btag);
     }
 
     if ((log_target & LOG_FILE) && !file_path) {
