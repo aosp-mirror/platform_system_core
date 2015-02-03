@@ -221,16 +221,15 @@ int do_execonce(int nargs, char **args)
          */
         zap_stdio();
         char *exec_args[100];
-        int i;
-        int num_process_args = nargs;
+        size_t num_process_args = nargs;
 
         memset(exec_args, 0, sizeof(exec_args));
         if (num_process_args > ARRAY_SIZE(exec_args) - 1) {
-            ERROR("exec called with %d args, limit is %d", num_process_args,
+            ERROR("exec called with %zu args, limit is %zu", num_process_args,
                   ARRAY_SIZE(exec_args) - 1);
             _exit(1);
         }
-        for (i = 1; i < num_process_args; i++)
+        for (size_t i = 1; i < num_process_args; i++)
             exec_args[i - 1] = args[i];
 
         if (execv(exec_args[0], exec_args) == -1) {
