@@ -30,6 +30,7 @@ LOCAL_SRC_FILES := \
     Looper_test.cpp \
     LruCache_test.cpp \
     String8_test.cpp \
+    stringprintf_test.cpp \
     Unicode_test.cpp \
     Vector_test.cpp \
 
