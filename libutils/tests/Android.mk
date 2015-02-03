@@ -26,6 +26,7 @@ LOCAL_SRC_FILES := \
     BasicHashtable_test.cpp \
     BlobCache_test.cpp \
     BitSet_test.cpp \
+    file_test.cpp \
     Looper_test.cpp \
     LruCache_test.cpp \
     String8_test.cpp \
