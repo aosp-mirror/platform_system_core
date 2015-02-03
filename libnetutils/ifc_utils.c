@@ -639,6 +639,26 @@ int ifc_reset_connections(const char *ifname, const int reset_mask)
 #endif
 }
 
+/*
+ * Removes the default route for the named interface.
+ */
+int ifc_remove_default_route(const char *ifname)
+{
+    struct rtentry rt;
+    int result;
+
+    ifc_init();
+    memset(&rt, 0, sizeof(rt));
+    rt.rt_dev = (void *)ifname;
+    rt.rt_flags = RTF_UP|RTF_GATEWAY;
+    init_sockaddr_in(&rt.rt_dst, 0);
+    if ((result = ioctl(ifc_ctl_sock, SIOCDELRT, &rt)) < 0) {
+        ALOGD("failed to remove default route for %s: %s", ifname, strerror(errno));
+    }
+    ifc_close();
+    return result;
+}
+
 int
 ifc_configure(const char *ifname,
         in_addr_t address,
