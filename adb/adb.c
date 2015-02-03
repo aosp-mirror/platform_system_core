@@ -1348,7 +1348,7 @@ int adb_main(int is_daemon, int server_port)
     ** AID_ADB to access the USB driver
     ** AID_LOG to read system logs (adb logcat)
     ** AID_INPUT to diagnose input issues (getevent)
-    ** AID_INET to diagnose network issues (netcfg, ping)
+    ** AID_INET to diagnose network issues (ping)
     ** AID_NET_BT and AID_NET_BT_ADMIN to diagnose bluetooth (hcidump)
     ** AID_SDCARD_R to allow reading from the SD card
     ** AID_SDCARD_RW to allow writing to the SD card
