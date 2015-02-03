@@ -97,6 +97,7 @@ static int lookup_keyword(const char *s)
     case 'e':
         if (!strcmp(s, "nable")) return K_enable;
         if (!strcmp(s, "xec")) return K_exec;
+        if (!strcmp(s, "xeconce")) return K_execonce;
         if (!strcmp(s, "xport")) return K_export;
         break;
     case 'g':
