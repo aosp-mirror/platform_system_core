@@ -123,7 +123,7 @@ boot
    Triggers of this form occur when the property <name> is set
    to the specific value <value>.
 
-   One can also test Mutliple properties to execute a group
+   One can also test multiple properties to execute a group
    of commands. For example:
 
    on property:test.a=1 && property:test.b=1
