@@ -14,9 +14,6 @@
 
 LOCAL_PATH:= $(call my-dir)
 
-# libutils is a little unique: It's built twice, once for the host
-# and once for the device.
-
 commonSources:= \
 	BasicHashtable.cpp \
 	BlobCache.cpp \
@@ -42,7 +39,8 @@ commonSources:= \
 	Tokenizer.cpp \
 	Unicode.cpp \
 	VectorImpl.cpp \
-	misc.cpp
+	file.cpp \
+	misc.cpp \
 
 host_commonCflags := -DLIBUTILS_NATIVE=1 $(TOOL_CFLAGS) -Werror
 
@@ -111,11 +109,6 @@ LOCAL_CFLAGS := -Werror
 
 include $(BUILD_SHARED_LIBRARY)
 
-# Include subdirectory makefiles
-# ============================================================
 
-# If we're building with ONE_SHOT_MAKEFILE (mm, mmm), then what the framework
-# team really wants is to build the stuff defined by this makefile.
-ifeq (,$(ONE_SHOT_MAKEFILE))
+# Build the tests in the tests/ subdirectory.
 include $(call first-makefiles-under,$(LOCAL_PATH))
-endif
