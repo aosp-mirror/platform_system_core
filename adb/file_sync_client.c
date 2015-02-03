@@ -240,7 +240,7 @@ static int write_data_file(int fd, const char *path, syncsendbuf *sbuf, int show
     if (show_progress) {
         // Determine local file size.
         struct stat st;
-        if (fstat(lfd, &st)) {
+        if (stat(path, &st)) {
             fprintf(stderr,"cannot stat '%s': %s\n", path, strerror(errno));
             return -1;
         }
