@@ -17,7 +17,11 @@ LOCAL_SRC_FILES:= \
 	ueventd_parser.c \
 	watchdogd.c
 
-LOCAL_CFLAGS    += -Wno-unused-parameter
+LOCAL_CFLAGS += \
+    -std=gnu11 \
+    -Wall \
+    -Werror -Wno-error=deprecated-declarations \
+    -Wno-unused-parameter \
 
 ifeq ($(strip $(INIT_BOOTCHART)),true)
 LOCAL_SRC_FILES += bootchart.c
