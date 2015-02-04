@@ -73,6 +73,7 @@ static int pstore_fd = -1;
 static enum {
     kLogUninitialized, kLogNotAvailable, kLogAvailable
 } g_log_status = kLogUninitialized;
+
 int __android_log_dev_available(void)
 {
     if (g_log_status == kLogUninitialized) {
@@ -145,7 +146,7 @@ static int __write_to_log_initialize()
     return ret;
 }
 
-static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
+static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
 {
     ssize_t ret;
 #if FAKE_LOG_DEVICE
@@ -180,7 +181,7 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     }
     /*
      *  struct {
-     *      // whate we provire to pstore
+     *      // what we provide to pstore
      *      android_pmsg_log_header_t pmsg_header;
      *      // what we provide to socket
      *      android_log_header_t header;
@@ -321,7 +322,7 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
             return ret;
         }
 
-        write_to_log = __write_to_log_kernel;
+        write_to_log = __write_to_log_daemon;
     }
 
 #if !defined(_WIN32)
