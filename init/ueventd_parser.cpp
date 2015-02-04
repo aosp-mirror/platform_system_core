@@ -100,21 +100,19 @@ struct ueventd_subsystem *ueventd_subsystem_find_by_name(const char *name)
 static void *parse_subsystem(struct parse_state *state,
         int nargs __attribute__((unused)), char **args)
 {
-    struct ueventd_subsystem *s;
-
     if (!valid_name(args[1])) {
         parse_error(state, "invalid subsystem name '%s'\n", args[1]);
         return 0;
     }
 
-    s = ueventd_subsystem_find_by_name(args[1]);
+    ueventd_subsystem* s = ueventd_subsystem_find_by_name(args[1]);
     if (s) {
         parse_error(state, "ignored duplicate definition of subsystem '%s'\n",
                 args[1]);
         return 0;
     }
 
-    s = calloc(1, sizeof(*s));
+    s = (ueventd_subsystem*) calloc(1, sizeof(*s));
     if (!s) {
         parse_error(state, "out of memory\n");
         return 0;
@@ -128,7 +126,7 @@ static void *parse_subsystem(struct parse_state *state,
 static void parse_line_subsystem(struct parse_state *state, int nargs,
         char **args)
 {
-    struct ueventd_subsystem *s = state->context;
+    struct ueventd_subsystem *s = (ueventd_subsystem*) state->context;
     int kw;
 
     if (nargs == 0) {

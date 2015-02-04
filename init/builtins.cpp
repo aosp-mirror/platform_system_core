@@ -53,7 +53,8 @@
 
 int add_environment(const char *name, const char *value);
 
-extern int init_module(void *, unsigned long, const char *);
+// System call provided by bionic but not in any header file.
+extern "C" int init_module(void *, unsigned long, const char *);
 
 static int write_file(const char *path, const char *value)
 {
@@ -674,7 +675,7 @@ int do_powerctl(int nargs, char **args)
     int res;
     int len = 0;
     int cmd = 0;
-    char *reboot_target;
+    const char *reboot_target;
 
     res = expand_props(command, args[1], sizeof(command));
     if (res) {
@@ -776,7 +777,7 @@ int do_copy(int nargs, char **args)
     if ((fd2 = open(args[2], O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0660)) < 0)
         goto out_err;
 
-    if (!(buffer = malloc(info.st_size)))
+    if (!(buffer = (char*) malloc(info.st_size)))
         goto out_err;
 
     p = buffer;

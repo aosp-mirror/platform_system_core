@@ -290,8 +290,7 @@ err:
 
 static void parse_import(struct parse_state *state, int nargs, char **args)
 {
-    struct listnode *import_list = state->priv;
-    struct import *import;
+    struct listnode *import_list = (listnode*) state->priv;
     char conf_file[PATH_MAX];
     int ret;
 
@@ -307,7 +306,7 @@ static void parse_import(struct parse_state *state, int nargs, char **args)
         return;
     }
 
-    import = calloc(1, sizeof(struct import));
+    struct import* import = (struct import*) calloc(1, sizeof(struct import));
     import->filename = strdup(conf_file);
     list_add_tail(import_list, &import->list);
     INFO("found import '%s', adding to import list", import->filename);
@@ -575,23 +574,19 @@ void queue_all_property_triggers()
     queue_property_triggers(NULL, NULL);
 }
 
-void queue_builtin_action(int (*func)(int nargs, char **args), char *name)
+void queue_builtin_action(int (*func)(int nargs, char **args), const char *name)
 {
-    struct action *act;
-    struct command *cmd;
-    struct trigger *cur_trigger;
-
-    act = calloc(1, sizeof(*act));
-    cur_trigger = calloc(1, sizeof(*cur_trigger));
+    action* act = (action*) calloc(1, sizeof(*act));
+    trigger* cur_trigger = (trigger*) calloc(1, sizeof(*cur_trigger));
     cur_trigger->name = name;
     list_init(&act->triggers);
     list_add_tail(&act->triggers, &cur_trigger->nlist);
     list_init(&act->commands);
     list_init(&act->qlist);
 
-    cmd = calloc(1, sizeof(*cmd));
+    command* cmd = (command*) calloc(1, sizeof(*cmd));
     cmd->func = func;
-    cmd->args[0] = name;
+    cmd->args[0] = const_cast<char*>(name);
     cmd->nargs = 1;
     list_add_tail(&act->commands, &cmd->clist);
 
@@ -626,8 +621,6 @@ int action_queue_empty()
 
 static void *parse_service(struct parse_state *state, int nargs, char **args)
 {
-    struct service *svc;
-    struct trigger *cur_trigger;
     if (nargs < 3) {
         parse_error(state, "services must have a name and a program\n");
         return 0;
@@ -637,14 +630,14 @@ static void *parse_service(struct parse_state *state, int nargs, char **args)
         return 0;
     }
 
-    svc = service_find_by_name(args[1]);
+    service* svc = (service*) service_find_by_name(args[1]);
     if (svc) {
         parse_error(state, "ignored duplicate definition of service '%s'\n", args[1]);
         return 0;
     }
 
     nargs -= 2;
-    svc = calloc(1, sizeof(*svc) + sizeof(char*) * nargs);
+    svc = (service*) calloc(1, sizeof(*svc) + sizeof(char*) * nargs);
     if (!svc) {
         parse_error(state, "out of memory\n");
         return 0;
@@ -652,7 +645,7 @@ static void *parse_service(struct parse_state *state, int nargs, char **args)
     svc->name = args[1];
     svc->classname = "default";
     memcpy(svc->args, args + 2, sizeof(char*) * nargs);
-    cur_trigger = calloc(1, sizeof(*cur_trigger));
+    trigger* cur_trigger = (trigger*) calloc(1, sizeof(*cur_trigger));
     svc->args[nargs] = 0;
     svc->nargs = nargs;
     list_init(&svc->onrestart.triggers);
@@ -665,7 +658,7 @@ static void *parse_service(struct parse_state *state, int nargs, char **args)
 
 static void parse_line_service(struct parse_state *state, int nargs, char **args)
 {
-    struct service *svc = state->context;
+    struct service *svc = (service*) state->context;
     struct command *cmd;
     int i, kw, kw_nargs;
 
@@ -734,7 +727,7 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
         if (nargs < 2) {
             parse_error(state, "keycodes option requires atleast one keycode\n");
         } else {
-            svc->keycodes = malloc((nargs - 1) * sizeof(svc->keycodes[0]));
+            svc->keycodes = (int*) malloc((nargs - 1) * sizeof(svc->keycodes[0]));
             if (!svc->keycodes) {
                 parse_error(state, "could not allocate keycodes\n");
             } else {
@@ -763,7 +756,7 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
             break;
         }
 
-        cmd = malloc(sizeof(*cmd) + sizeof(char*) * nargs);
+        cmd = (command*) malloc(sizeof(*cmd) + sizeof(char*) * nargs);
         cmd->func = kw_func(kw);
         cmd->nargs = nargs;
         memcpy(cmd->args, args, sizeof(char*) * nargs);
@@ -773,12 +766,11 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
         svc->flags |= SVC_CRITICAL;
         break;
     case K_setenv: { /* name value */
-        struct svcenvinfo *ei;
         if (nargs < 3) {
             parse_error(state, "setenv option requires name and value arguments\n");
             break;
         }
-        ei = calloc(1, sizeof(*ei));
+        svcenvinfo* ei = (svcenvinfo*) calloc(1, sizeof(*ei));
         if (!ei) {
             parse_error(state, "out of memory\n");
             break;
@@ -790,7 +782,6 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
         break;
     }
     case K_socket: {/* name type perm [ uid gid context ] */
-        struct socketinfo *si;
         if (nargs < 4) {
             parse_error(state, "socket option requires name, type, perm arguments\n");
             break;
@@ -800,7 +791,7 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
             parse_error(state, "socket type must be 'dgram', 'stream' or 'seqpacket'\n");
             break;
         }
-        si = calloc(1, sizeof(*si));
+        socketinfo* si = (socketinfo*) calloc(1, sizeof(*si));
         if (!si) {
             parse_error(state, "out of memory\n");
             break;
@@ -840,7 +831,6 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
 
 static void *parse_action(struct parse_state *state, int nargs, char **args)
 {
-    struct action *act;
     struct trigger *cur_trigger;
     int i;
     if (nargs < 2) {
@@ -848,7 +838,7 @@ static void *parse_action(struct parse_state *state, int nargs, char **args)
         return 0;
     }
 
-    act = calloc(1, sizeof(*act));
+    action* act = (action*) calloc(1, sizeof(*act));
     list_init(&act->triggers);
 
     for (i = 1; i < nargs; i++) {
@@ -859,7 +849,7 @@ static void *parse_action(struct parse_state *state, int nargs, char **args)
             } else
                 continue;
         }
-        cur_trigger = calloc(1, sizeof(*cur_trigger));
+        cur_trigger = (trigger*) calloc(1, sizeof(*cur_trigger));
         cur_trigger->name = args[i];
         list_add_tail(&act->triggers, &cur_trigger->nlist);
     }
@@ -873,8 +863,7 @@ static void *parse_action(struct parse_state *state, int nargs, char **args)
 
 static void parse_line_action(struct parse_state* state, int nargs, char **args)
 {
-    struct command *cmd;
-    struct action *act = state->context;
+    struct action *act = (action*) state->context;
     int kw, n;
 
     if (nargs == 0) {
@@ -893,7 +882,7 @@ static void parse_line_action(struct parse_state* state, int nargs, char **args)
             n > 2 ? "arguments" : "argument");
         return;
     }
-    cmd = malloc(sizeof(*cmd) + sizeof(char*) * nargs);
+    command* cmd = (command*) malloc(sizeof(*cmd) + sizeof(char*) * nargs);
     cmd->func = kw_func(kw);
     cmd->line = state->line;
     cmd->filename = state->filename;

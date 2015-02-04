@@ -101,7 +101,7 @@ int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
                   unsigned short prefix,
                   unsigned short wildcard) {
-    struct perm_node *node = calloc(1, sizeof(*node));
+    struct perm_node *node = (perm_node*) calloc(1, sizeof(*node));
     if (!node)
         return -ENOMEM;
 
@@ -289,7 +289,7 @@ static void add_platform_device(const char *path)
 
     INFO("adding platform device %s (%s)\n", name, path);
 
-    bus = calloc(1, sizeof(struct platform_node));
+    bus = (platform_node*) calloc(1, sizeof(struct platform_node));
     bus->path = strdup(path);
     bus->path_len = path_len;
     bus->name = bus->path + (name - path);
@@ -450,7 +450,7 @@ static char **get_character_device_symlinks(struct uevent *uevent)
     if (!pdev)
         return NULL;
 
-    links = malloc(sizeof(char *) * 2);
+    links = (char**) malloc(sizeof(char *) * 2);
     if (!links)
         return NULL;
     memset(links, 0, sizeof(char *) * 2);
@@ -512,7 +512,7 @@ static char **get_block_device_symlinks(struct uevent *uevent)
         return NULL;
     }
 
-    char **links = malloc(sizeof(char *) * 4);
+    char **links = (char**) malloc(sizeof(char *) * 4);
     if (!links)
         return NULL;
     memset(links, 0, sizeof(char *) * 4);
@@ -668,7 +668,7 @@ static inline void __attribute__((__deprecated__)) kernel_logger()
 
 static void handle_generic_device_event(struct uevent *uevent)
 {
-    char *base;
+    const char *base;
     const char *name;
     char devpath[DEVPATH_LEN] = {0};
     char **links = NULL;

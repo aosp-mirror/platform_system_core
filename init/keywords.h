@@ -1,4 +1,3 @@
-
 #ifndef KEYWORD
 int do_chroot(int nargs, char **args);
 int do_chdir(int nargs, char **args);
@@ -112,4 +111,3 @@ enum {
 #undef __MAKE_KEYWORD_ENUM__
 #undef KEYWORD
 #endif
-
