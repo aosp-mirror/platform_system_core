@@ -108,6 +108,8 @@ int ueventd_main(int argc, char **argv)
         if (ufd.revents & POLLIN)
                handle_device_fd();
     }
+
+    return 0;
 }
 
 static int get_android_id(const char *id)
