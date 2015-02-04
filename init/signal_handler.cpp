@@ -43,7 +43,6 @@ static void sigchld_handler(int s)
 
 static int wait_for_one_process(int block)
 {
-    pid_t pid;
     int status;
     struct service *svc;
     struct socketinfo *si;
@@ -51,7 +50,7 @@ static int wait_for_one_process(int block)
     struct listnode *node;
     struct command *cmd;
 
-    while ( (pid = waitpid(-1, &status, block ? 0 : WNOHANG)) == -1 && errno == EINTR );
+    pid_t pid = TEMP_FAILURE_RETRY(waitpid(-1, &status, block ? 0 : WNOHANG));
     if (pid <= 0) return -1;
     INFO("waitpid returned pid %d, status = %08x\n", pid, status);
 
