@@ -26,4 +26,5 @@ extern int add_dev_perms(const char *name, const char *attr,
                          unsigned int gid, unsigned short prefix,
                          unsigned short wildcard);
 int get_device_fd();
+
 #endif	/* _INIT_DEVICES_H */
