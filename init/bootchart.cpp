@@ -20,20 +20,17 @@
  * some C code that is run right from the init script.
  */
 
-#include <stdio.h>
-#include <time.h>
+#include "bootchart.h"
+
 #include <dirent.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include "bootchart.h"
+#include <time.h>
+#include <unistd.h>
 
 #define VERSION         "0.8"
 #define SAMPLE_PERIOD   0.2
@@ -48,28 +45,12 @@
 #define LOG_STOPFILE    "/data/bootchart-stop"
 
 static int
-unix_read(int  fd, void*  buff, int  len)
-{
-    int  ret;
-    do { ret = read(fd, buff, len); } while (ret < 0 && errno == EINTR);
-    return ret;
-}
-
-static int
-unix_write(int  fd, const void*  buff, int  len)
-{
-    int  ret;
-    do { ret = write(fd, buff, len); } while (ret < 0 && errno == EINTR);
-    return ret;
-}
-
-static int
 proc_read(const char*  filename, char* buff, size_t  buffsize)
 {
     int  len = 0;
     int  fd  = open(filename, O_RDONLY | O_CLOEXEC);
     if (fd >= 0) {
-        len = unix_read(fd, buff, buffsize-1);
+        len = TEMP_FAILURE_RETRY(read(fd, buff, buffsize-1));
         close(fd);
     }
     buff[len > 0 ? len : 0] = 0;
@@ -105,7 +86,7 @@ file_buff_write( FileBuff  buff, const void*  src, int  len )
 
         buff->count += avail;
         if (buff->count == FILE_BUFF_SIZE) {
-            unix_write( buff->fd, buff->data, buff->count );
+            TEMP_FAILURE_RETRY(write(buff->fd, buff->data, buff->count));
             buff->count = 0;
         }
     }
@@ -115,7 +96,7 @@ static void
 file_buff_done( FileBuff  buff )
 {
     if (buff->count > 0) {
-        unix_write( buff->fd, buff->data, buff->count );
+        TEMP_FAILURE_RETRY(write(buff->fd, buff->data, buff->count));
         buff->count = 0;
     }
 }
@@ -171,23 +152,6 @@ log_header(void)
 }
 
 static void
-open_log_file(int*  plogfd, const char*  logfile)
-{
-    int    logfd = *plogfd;
-
-    /* create log file if needed */
-    if (logfd < 0) 
-    {
-        logfd = open(logfile,O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC,0755);
-        if (logfd < 0) {
-            *plogfd = -2;
-            return;
-        }
-        *plogfd = logfd;
-    }
-}
-
-static void
 do_log_uptime(FileBuff  log)
 {
     char  buff[65];
@@ -217,8 +181,7 @@ do_log_file(FileBuff  log, const char*  procfile)
     fd = open(procfile,O_RDONLY|O_CLOEXEC);
     if (fd >= 0) {
         for (;;) {
-            int  ret;
-            ret = unix_read(fd, buff, sizeof(buff));
+            int ret = TEMP_FAILURE_RETRY(read(fd, buff, sizeof(buff)));
             if (ret <= 0)
                 break;
 
@@ -259,7 +222,7 @@ do_log_procs(FileBuff  log)
             snprintf(filename,sizeof(filename),"/proc/%d/stat",pid);
             fd = open(filename,O_RDONLY|O_CLOEXEC);
             if (fd >= 0) {
-               len = unix_read(fd, buff, sizeof(buff)-1);
+               len = TEMP_FAILURE_RETRY(read(fd, buff, sizeof(buff)-1));
                close(fd);
                if (len > 0) {
                     int  len2 = strlen(cmdline);
@@ -325,7 +288,7 @@ int   bootchart_init( void )
 
     count = (timeout*1000 + BOOTCHART_POLLING_MS-1)/BOOTCHART_POLLING_MS;
 
-    do {ret=mkdir(LOG_ROOT,0755);}while (ret < 0 && errno == EINTR);
+    ret = TEMP_FAILURE_RETRY(mkdir(LOG_ROOT,0755));
 
     file_buff_open(log_stat,  LOG_STAT);
     file_buff_open(log_procs, LOG_PROCS);

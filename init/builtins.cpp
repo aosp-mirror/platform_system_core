@@ -67,9 +67,7 @@ static int write_file(const char *path, const char *value)
 
     len = strlen(value);
 
-    do {
-        ret = write(fd, value, len);
-    } while (ret < 0 && errno == EINTR);
+    ret = TEMP_FAILURE_RETRY(write(fd, value, len));
 
     close(fd);
     if (ret < 0) {
@@ -132,7 +130,7 @@ static int __ifupdown(const char *interface, int up)
         ifr.ifr_flags &= ~IFF_UP;
 
     ret = ioctl(s, SIOCSIFFLAGS, &ifr);
-    
+
 done:
     close(s);
     return ret;
@@ -735,7 +733,7 @@ int do_sysclktz(int nargs, char **args)
         return -1;
 
     memset(&tz, 0, sizeof(tz));
-    tz.tz_minuteswest = atoi(args[1]);   
+    tz.tz_minuteswest = atoi(args[1]);
     if (settimeofday(NULL, &tz))
         return -1;
     return 0;
@@ -768,7 +766,7 @@ int do_copy(int nargs, char **args)
     if (nargs != 3)
         return -1;
 
-    if (stat(args[1], &info) < 0) 
+    if (stat(args[1], &info) < 0)
         return -1;
 
     if ((fd1 = open(args[1], O_RDONLY|O_CLOEXEC)) < 0)
