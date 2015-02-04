@@ -17,10 +17,6 @@
 #ifndef _BOOTCHART_H
 #define _BOOTCHART_H
 
-#ifndef BOOTCHART
-# define  BOOTCHART  0
-#endif
-
 extern int   bootchart_init(void);
 extern int   bootchart_step(void);
 extern void  bootchart_finish(void);

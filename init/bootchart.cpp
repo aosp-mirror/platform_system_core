@@ -59,21 +59,21 @@ proc_read(const char*  filename, char* buff, size_t  buffsize)
 
 #define FILE_BUFF_SIZE    65536
 
-typedef struct {
+struct FileBuff {
     int   count;
     int   fd;
     char  data[FILE_BUFF_SIZE];
-} FileBuffRec, *FileBuff;
+};
 
 static void
-file_buff_open( FileBuff  buff, const char*  path )
+file_buff_open( FileBuff*  buff, const char*  path )
 {
     buff->count = 0;
     buff->fd    = open(path, O_WRONLY|O_CREAT|O_TRUNC, 0755);
 }
 
 static void
-file_buff_write( FileBuff  buff, const void*  src, int  len )
+file_buff_write( FileBuff*  buff, const void*  src, int  len )
 {
     while (len > 0) {
         int  avail = sizeof(buff->data) - buff->count;
@@ -93,7 +93,7 @@ file_buff_write( FileBuff  buff, const void*  src, int  len )
 }
 
 static void
-file_buff_done( FileBuff  buff )
+file_buff_done( FileBuff*  buff )
 {
     if (buff->count > 0) {
         TEMP_FAILURE_RETRY(write(buff->fd, buff->data, buff->count));
@@ -152,7 +152,7 @@ log_header(void)
 }
 
 static void
-do_log_uptime(FileBuff  log)
+do_log_uptime(FileBuff*  log)
 {
     char  buff[65];
     int   len;
@@ -163,14 +163,14 @@ do_log_uptime(FileBuff  log)
 }
 
 static void
-do_log_ln(FileBuff  log)
+do_log_ln(FileBuff*  log)
 {
     file_buff_write(log, "\n", 1);
 }
 
 
 static void
-do_log_file(FileBuff  log, const char*  procfile)
+do_log_file(FileBuff*  log, const char*  procfile)
 {
     char   buff[1024];
     int    fd;
@@ -196,7 +196,7 @@ do_log_file(FileBuff  log, const char*  procfile)
 }
 
 static void
-do_log_procs(FileBuff  log)
+do_log_procs(FileBuff*  log)
 {
     DIR*  dir = opendir("/proc");
     struct dirent*  entry;
@@ -248,9 +248,9 @@ do_log_procs(FileBuff  log)
     do_log_ln(log);
 }
 
-static FileBuffRec  log_stat[1];
-static FileBuffRec  log_procs[1];
-static FileBuffRec  log_disks[1];
+static FileBuff  log_stat[1];
+static FileBuff  log_procs[1];
+static FileBuff  log_disks[1];
 
 /* called to setup bootcharting */
 int   bootchart_init( void )

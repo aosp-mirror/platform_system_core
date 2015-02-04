@@ -56,10 +56,10 @@ static int property_area_inited = 0;
 
 static int property_set_fd = -1;
 
-typedef struct {
+struct workspace {
     size_t size;
     int fd;
-} workspace;
+};
 
 static int init_workspace(workspace *w, size_t size)
 {
@@ -503,15 +503,13 @@ int properties_inited(void)
 }
 
 static void load_override_properties() {
-#ifdef ALLOW_LOCAL_PROP_OVERRIDE
-    char debuggable[PROP_VALUE_MAX];
-    int ret;
-
-    ret = property_get("ro.debuggable", debuggable);
-    if (ret && (strcmp(debuggable, "1") == 0)) {
-        load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE, NULL);
+    if (ALLOW_LOCAL_PROP_OVERRIDE) {
+        char debuggable[PROP_VALUE_MAX];
+        int ret = property_get("ro.debuggable", debuggable);
+        if (ret && (strcmp(debuggable, "1") == 0)) {
+            load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE, NULL);
+        }
     }
-#endif /* ALLOW_LOCAL_PROP_OVERRIDE */
 }
 
 

@@ -1,64 +1,17 @@
-#include <stdio.h>
+#include "parser.h"
+
 #include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 
-#include "parser.h"
 #include "log.h"
-
-#define RAW(x...) log_write(6, x)
-
-void DUMP(void)
-{
-#if 0
-    struct service *svc;
-    struct action *act;
-    struct command *cmd;
-    struct listnode *node;
-    struct listnode *node2;
-    char name_str[256] = "";
-    struct socketinfo *si;
-    int n;
-
-    list_for_each(node, &service_list) {
-        svc = node_to_item(node, struct service, slist);
-        RAW("service %s\n", svc->name);
-        RAW("  class '%s'\n", svc->classname);
-        RAW("  exec");
-        for (n = 0; n < svc->nargs; n++) {
-            RAW(" '%s'", svc->args[n]);
-        }
-        RAW("\n");
-        for (si = svc->sockets; si; si = si->next) {
-            RAW("  socket %s %s 0%o\n", si->name, si->type, si->perm);
-        }
-    }
-
-    list_for_each(node, &action_list) {
-        act = node_to_item(node, struct action, alist);
-        RAW("on ");
-        build_triggers_string(name_str, sizeof(name_str), act);
-        RAW("%s", name_str);
-        RAW("\n");
-
-        list_for_each(node2, &act->commands) {
-            cmd = node_to_item(node2, struct command, clist);
-            RAW("  %p", cmd->func);
-            for (n = 0; n < cmd->nargs; n++) {
-                RAW(" %s", cmd->args[n]);
-            }
-            RAW("\n");
-        }
-        RAW("\n");
-    }
-#endif       
-}
 
 void parse_error(struct parse_state *state, const char *fmt, ...)
 {
     va_list ap;
     char buf[128];
     int off;
-    
+
     snprintf(buf, 128, "%s: %d: ", state->filename, state->line);
     buf[127] = 0;
     off = strlen(buf);
