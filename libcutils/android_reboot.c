@@ -89,7 +89,7 @@ static void remount_ro(void)
 }
 
 
-int android_reboot(int cmd, int flags UNUSED, char *arg)
+int android_reboot(int cmd, int flags UNUSED, const char *arg)
 {
     int ret;
 
