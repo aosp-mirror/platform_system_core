@@ -431,10 +431,7 @@ void get_hardware_name(char *hardware, unsigned int *revision) {
         hardware[n] = 0;
       }
     } else if (strncmp(buf, "Revision", 8) == 0) {
-      const char* rev = strstr(buf, ": ");
-      if (rev) {
-        *revision = strtoul(rev + 2, 0, 16);
-      }
+      sscanf(buf, "Revision : %ux", revision);
     }
   }
   fclose(fp);

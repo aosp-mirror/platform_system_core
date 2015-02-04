@@ -4,6 +4,7 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
+    bootchart.cpp \
     builtins.cpp \
     devices.cpp \
     init.cpp \
@@ -17,13 +18,14 @@ LOCAL_SRC_FILES:= \
     util.cpp \
     watchdogd.cpp \
 
+#LOCAL_CLANG := true
+
 LOCAL_CPPFLAGS += \
-    -Wall \
+    -Wall -Wextra \
     -Werror -Wno-error=deprecated-declarations \
     -Wno-unused-parameter \
 
 ifeq ($(strip $(INIT_BOOTCHART)),true)
-LOCAL_SRC_FILES += bootchart.cpp
 LOCAL_CPPFLAGS  += -DBOOTCHART=1
 endif
 
