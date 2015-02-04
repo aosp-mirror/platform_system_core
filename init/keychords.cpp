@@ -40,7 +40,7 @@ void add_service_keycodes(struct service *svc)
     if (svc->keycodes) {
         /* add a new keychord to the list */
         size = sizeof(*keychord) + svc->nkeycodes * sizeof(keychord->keycodes[0]);
-        keychords = realloc(keychords, keychords_length + size);
+        keychords = (input_keychord*) realloc(keychords, keychords_length + size);
         if (!keychords) {
             ERROR("could not allocate keychords\n");
             keychords_length = 0;

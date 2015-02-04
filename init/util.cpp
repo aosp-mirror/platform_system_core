@@ -147,9 +147,9 @@ out_close:
 }
 
 /* reads a file, making sure it is terminated with \n \0 */
-void *read_file(const char *fn, unsigned *_sz)
+char *read_file(const char *fn, unsigned *_sz)
 {
-    char *data;
+    char *data = NULL;
     int sz;
     int fd;
     struct stat sb;
@@ -186,7 +186,7 @@ void *read_file(const char *fn, unsigned *_sz)
 
 oops:
     close(fd);
-    if(data != 0) free(data);
+    free(data);
     return 0;
 }
 
@@ -404,72 +404,40 @@ void open_devnull_stdio(void)
     exit(1);
 }
 
-void get_hardware_name(char *hardware, unsigned int *revision)
-{
-    const char *cpuinfo = "/proc/cpuinfo";
-    char *data = NULL;
-    size_t len = 0, limit = 1024;
-    int fd, n;
-    char *x, *hw, *rev;
+void get_hardware_name(char *hardware, unsigned int *revision) {
+  // Hardware string was provided on kernel command line.
+  if (hardware[0]) {
+    return;
+  }
 
-    /* Hardware string was provided on kernel command line */
-    if (hardware[0])
-        return;
-
-    fd = open(cpuinfo, O_RDONLY | O_CLOEXEC);
-    if (fd < 0) return;
-
-    for (;;) {
-        x = realloc(data, limit);
-        if (!x) {
-            ERROR("Failed to allocate memory to read %s\n", cpuinfo);
-            goto done;
+  FILE* fp = fopen("/proc/cpuinfo", "re");
+  if (fp == NULL) {
+    return;
+  }
+  char buf[1024];
+  while (fgets(buf, sizeof(buf), fp) != NULL) {
+    if (strncmp(buf, "Hardware", 8) == 0) {
+      const char* hw = strstr(buf, ": ");
+      if (hw) {
+        hw += 2;
+        size_t n = 0;
+        while (*hw) {
+          if (!isspace(*hw)) {
+            hardware[n++] = tolower(*hw);
+          }
+          hw++;
+          if (n == 31) break;
         }
-        data = x;
-
-        n = read(fd, data + len, limit - len);
-        if (n < 0) {
-            ERROR("Failed reading %s: %s (%d)\n", cpuinfo, strerror(errno), errno);
-            goto done;
-        }
-        len += n;
-
-        if (len < limit)
-            break;
-
-        /* We filled the buffer, so increase size and loop to read more */
-        limit *= 2;
+        hardware[n] = 0;
+      }
+    } else if (strncmp(buf, "Revision", 8) == 0) {
+      const char* rev = strstr(buf, ": ");
+      if (rev) {
+        *revision = strtoul(rev + 2, 0, 16);
+      }
     }
-
-    data[len] = 0;
-    hw = strstr(data, "\nHardware");
-    rev = strstr(data, "\nRevision");
-
-    if (hw) {
-        x = strstr(hw, ": ");
-        if (x) {
-            x += 2;
-            n = 0;
-            while (*x && *x != '\n') {
-                if (!isspace(*x))
-                    hardware[n++] = tolower(*x);
-                x++;
-                if (n == 31) break;
-            }
-            hardware[n] = 0;
-        }
-    }
-
-    if (rev) {
-        x = strstr(rev, ": ");
-        if (x) {
-            *revision = strtoul(x + 2, 0, 16);
-        }
-    }
-
-done:
-    close(fd);
-    free(data);
+  }
+  fclose(fp);
 }
 
 void import_kernel_cmdline(int in_qemu,
