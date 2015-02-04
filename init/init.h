@@ -18,6 +18,7 @@
 #define _INIT_INIT_H
 
 #include <cutils/list.h>
+#include <cutils/iosched_policy.h>
 
 #include <sys/stat.h>
 
@@ -122,7 +123,7 @@ struct service {
     int nkeycodes;
     int keychord_id;
 
-    int ioprio_class;
+    IoSchedClass ioprio_class;
     int ioprio_pri;
 
     int nargs;

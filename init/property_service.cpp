@@ -97,8 +97,6 @@ static int check_mac_perms(const char *name, char *sctx)
         return 1;
 
     char *tctx = NULL;
-    const char *class = "property_service";
-    const char *perm = "set";
     int result = 0;
 
     if (!sctx)
@@ -110,7 +108,7 @@ static int check_mac_perms(const char *name, char *sctx)
     if (selabel_lookup(sehandle_prop, &tctx, name, 1) != 0)
         goto err;
 
-    if (selinux_check_access(sctx, tctx, class, perm, (void*) name) == 0)
+    if (selinux_check_access(sctx, tctx, "property_service", "set", (void*) name) == 0)
         result = 1;
 
     freecon(tctx);

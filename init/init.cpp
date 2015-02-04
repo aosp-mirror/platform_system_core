@@ -113,9 +113,8 @@ int add_environment(const char *key, const char *val)
 
         /* Add entry if a free slot is available */
         if (ENV[n] == NULL) {
-            size_t len = key_len + strlen(val) + 2;
-            char *entry = malloc(len);
-            snprintf(entry, len, "%s=%s", key, val);
+            char* entry;
+            asprintf(&entry, "%s=%s", key, val);
             ENV[n] = entry;
             return 0;
         }
