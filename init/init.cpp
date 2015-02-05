@@ -63,10 +63,8 @@ struct selabel_handle *sehandle_prop;
 
 static int property_triggers_enabled = 0;
 
-#if BOOTCHART
 static int   bootchart_count;
 static long long bootchart_time = 0;
-#endif
 
 static char console[32];
 static char bootmode[32];
@@ -292,14 +290,14 @@ void service_start(struct service *svc, const char *dynamic_args)
             zap_stdio();
         }
 
-#if 0
-        for (n = 0; svc->args[n]; n++) {
-            INFO("args[%d] = '%s'\n", n, svc->args[n]);
+        if (false) {
+            for (size_t n = 0; svc->args[n]; n++) {
+                INFO("args[%zu] = '%s'\n", n, svc->args[n]);
+            }
+            for (size_t n = 0; ENV[n]; n++) {
+                INFO("env[%zu] = '%s'\n", n, ENV[n]);
+            }
         }
-        for (n = 0; ENV[n]; n++) {
-            INFO("env[%d] = '%s'\n", n, ENV[n]);
-        }
-#endif
 
         setpgid(0, getpid());
 
@@ -859,7 +857,6 @@ static int queue_property_triggers_action(int nargs, char **args)
     return 0;
 }
 
-#if BOOTCHART
 static int bootchart_init_action(int nargs, char **args)
 {
     bootchart_count = bootchart_init();
@@ -873,7 +870,6 @@ static int bootchart_init_action(int nargs, char **args)
 
     return 0;
 }
-#endif
 
 void selinux_init_all_handles(void)
 {
@@ -884,45 +880,41 @@ void selinux_init_all_handles(void)
 
 static bool selinux_is_disabled(void)
 {
-#ifdef ALLOW_DISABLE_SELINUX
-    char tmp[PROP_VALUE_MAX];
+    if (ALLOW_DISABLE_SELINUX) {
+        if (access("/sys/fs/selinux", F_OK) != 0) {
+            // SELinux is not compiled into the kernel, or has been disabled
+            // via the kernel command line "selinux=0".
+            return true;
+        }
 
-    if (access("/sys/fs/selinux", F_OK) != 0) {
-        /* SELinux is not compiled into the kernel, or has been disabled
-         * via the kernel command line "selinux=0".
-         */
-        return true;
+        char tmp[PROP_VALUE_MAX];
+        if ((property_get("ro.boot.selinux", tmp) != 0) && (strcmp(tmp, "disabled") == 0)) {
+            // SELinux is compiled into the kernel, but we've been told to disable it.
+            return true;
+        }
     }
-
-    if ((property_get("ro.boot.selinux", tmp) != 0) && (strcmp(tmp, "disabled") == 0)) {
-        /* SELinux is compiled into the kernel, but we've been told to disable it. */
-        return true;
-    }
-#endif
 
     return false;
 }
 
 static bool selinux_is_enforcing(void)
 {
-#ifdef ALLOW_DISABLE_SELINUX
-    char tmp[PROP_VALUE_MAX];
+    if (ALLOW_DISABLE_SELINUX) {
+        char tmp[PROP_VALUE_MAX];
+        if (property_get("ro.boot.selinux", tmp) == 0) {
+            // Property is not set.  Assume enforcing.
+            return true;
+        }
 
-    if (property_get("ro.boot.selinux", tmp) == 0) {
-        /* Property is not set.  Assume enforcing */
-        return true;
+        if (strcmp(tmp, "permissive") == 0) {
+            // SELinux is in the kernel, but we've been told to go into permissive mode.
+            return false;
+        }
+
+        if (strcmp(tmp, "enforcing") != 0) {
+            ERROR("SELinux: Unknown value of ro.boot.selinux. Got: \"%s\". Assuming enforcing.\n", tmp);
+        }
     }
-
-    if (strcmp(tmp, "permissive") == 0) {
-        /* SELinux is in the kernel, but we've been told to go into permissive mode */
-        return false;
-    }
-
-    if (strcmp(tmp, "enforcing") != 0) {
-        ERROR("SELinux: Unknown value of ro.boot.selinux. Got: \"%s\". Assuming enforcing.\n", tmp);
-    }
-
-#endif
     return true;
 }
 
@@ -1097,9 +1089,9 @@ int main(int argc, char **argv)
     queue_builtin_action(queue_property_triggers_action, "queue_property_triggers");
 
 
-#if BOOTCHART
-    queue_builtin_action(bootchart_init_action, "bootchart_init");
-#endif
+    if (BOOTCHART) {
+        queue_builtin_action(bootchart_init_action, "bootchart_init");
+    }
 
     for(;;) {
         int nr, i, timeout = -1;
@@ -1135,37 +1127,39 @@ int main(int argc, char **argv)
                 timeout = 0;
         }
 
-        if (!action_queue_empty() || cur_action)
+        if (!action_queue_empty() || cur_action) {
             timeout = 0;
+        }
 
-#if BOOTCHART
-        if (bootchart_count > 0) {
-            long long current_time;
-            int elapsed_time, remaining_time;
-
-            current_time = bootchart_gettime();
-            elapsed_time = current_time - bootchart_time;
-
-            if (elapsed_time >= BOOTCHART_POLLING_MS) {
-                /* count missed samples */
-                while (elapsed_time >= BOOTCHART_POLLING_MS) {
-                    elapsed_time -= BOOTCHART_POLLING_MS;
-                    bootchart_count--;
-                }
-                /* count may be negative, take a sample anyway */
-                bootchart_time = current_time;
-                if (bootchart_step() < 0 || bootchart_count <= 0) {
-                    bootchart_finish();
-                    bootchart_count = 0;
-                }
-            }
+        if (BOOTCHART) {
             if (bootchart_count > 0) {
-                remaining_time = BOOTCHART_POLLING_MS - elapsed_time;
-                if (timeout < 0 || timeout > remaining_time)
-                    timeout = remaining_time;
+                long long current_time;
+                int elapsed_time, remaining_time;
+
+                current_time = bootchart_gettime();
+                elapsed_time = current_time - bootchart_time;
+
+                if (elapsed_time >= BOOTCHART_POLLING_MS) {
+                    /* count missed samples */
+                    while (elapsed_time >= BOOTCHART_POLLING_MS) {
+                        elapsed_time -= BOOTCHART_POLLING_MS;
+                        bootchart_count--;
+                    }
+                    /* count may be negative, take a sample anyway */
+                    bootchart_time = current_time;
+                    if (bootchart_step() < 0 || bootchart_count <= 0) {
+                        bootchart_finish();
+                        bootchart_count = 0;
+                    }
+                }
+                if (bootchart_count > 0) {
+                    remaining_time = BOOTCHART_POLLING_MS - elapsed_time;
+                    if (timeout < 0 || timeout > remaining_time) {
+                        timeout = remaining_time;
+                    }
+                }
             }
         }
-#endif
 
         nr = poll(ufds, fd_count, timeout);
         if (nr <= 0)

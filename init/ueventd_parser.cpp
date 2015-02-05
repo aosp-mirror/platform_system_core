@@ -235,7 +235,7 @@ int ueventd_parse_config_file(const char *fn)
     if (!data) return -1;
 
     parse_config(fn, data);
-    DUMP();
+    dump_parser_state();
     return 0;
 }
 

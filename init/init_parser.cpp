@@ -73,6 +73,45 @@ static struct {
 #define kw_func(kw) (keyword_info[kw].func)
 #define kw_nargs(kw) (keyword_info[kw].nargs)
 
+void dump_parser_state() {
+    if (false) {
+        struct listnode* node;
+        list_for_each(node, &service_list) {
+            service* svc = node_to_item(node, struct service, slist);
+            INFO("service %s\n", svc->name);
+            INFO("  class '%s'\n", svc->classname);
+            INFO("  exec");
+            for (int n = 0; n < svc->nargs; n++) {
+                INFO(" '%s'", svc->args[n]);
+            }
+            INFO("\n");
+            for (socketinfo* si = svc->sockets; si; si = si->next) {
+                INFO("  socket %s %s 0%o\n", si->name, si->type, si->perm);
+            }
+        }
+
+        list_for_each(node, &action_list) {
+            action* act = node_to_item(node, struct action, alist);
+            INFO("on ");
+            char name_str[256] = "";
+            build_triggers_string(name_str, sizeof(name_str), act);
+            INFO("%s", name_str);
+            INFO("\n");
+
+            struct listnode* node2;
+            list_for_each(node2, &act->commands) {
+                command* cmd = node_to_item(node2, struct command, clist);
+                INFO("  %p", cmd->func);
+                for (int n = 0; n < cmd->nargs; n++) {
+                    INFO(" %s", cmd->args[n]);
+                }
+                INFO("\n");
+            }
+            INFO("\n");
+        }
+    }
+}
+
 static int lookup_keyword(const char *s)
 {
     switch (*s++) {
@@ -403,7 +442,7 @@ int init_parse_config_file(const char *fn)
     if (!data) return -1;
 
     parse_config(fn, data);
-    DUMP();
+    dump_parser_state();
     return 0;
 }
 

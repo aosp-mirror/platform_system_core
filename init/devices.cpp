@@ -366,23 +366,12 @@ static int find_pci_device_prefix(const char *path, char *buf, ssize_t buf_sz)
     return 0;
 }
 
-#if LOG_UEVENTS
-
 static inline suseconds_t get_usecs(void)
 {
     struct timeval tv;
     gettimeofday(&tv, 0);
     return tv.tv_sec * (suseconds_t) 1000000 + tv.tv_usec;
 }
-
-#define log_event_print(x...) INFO(x)
-
-#else
-
-#define log_event_print(fmt, args...)   do { } while (0)
-#define get_usecs()                     0
-
-#endif
 
 static void parse_event(const char *msg, struct uevent *uevent)
 {
@@ -432,9 +421,11 @@ static void parse_event(const char *msg, struct uevent *uevent)
             ;
     }
 
-    log_event_print("event { '%s', '%s', '%s', '%s', %d, %d }\n",
-                    uevent->action, uevent->path, uevent->subsystem,
-                    uevent->firmware, uevent->major, uevent->minor);
+    if (LOG_UEVENTS) {
+        INFO("event { '%s', '%s', '%s', '%s', %d, %d }\n",
+             uevent->action, uevent->path, uevent->subsystem,
+             uevent->firmware, uevent->major, uevent->minor);
+    }
 }
 
 static char **get_character_device_symlinks(struct uevent *uevent)
@@ -933,7 +924,7 @@ static void handle_firmware_event(struct uevent *uevent)
         process_firmware_event(uevent);
         _exit(EXIT_SUCCESS);
     } else if (pid < 0) {
-        log_event_print("could not fork to process firmware event: %s\n", strerror(errno));
+        ERROR("could not fork to process firmware event: %s\n", strerror(errno));
     }
 }
 
@@ -972,7 +963,7 @@ void handle_device_fd()
 **
 ** We drain any pending events from the netlink socket every time
 ** we poke another uevent file to make sure we don't overrun the
-** socket's buffer.  
+** socket's buffer.
 */
 
 static void do_coldboot(DIR *d)
@@ -1046,12 +1037,11 @@ void device_init(void)
         t1 = get_usecs();
         fd = open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000);
         close(fd);
-        log_event_print("coldboot %ld uS\n", ((long) (t1 - t0)));
-        // t0 & t1 are unused if the log isn't doing anything.
-        (void)t0;
-        (void)t1;
-    } else {
-        log_event_print("skipping coldboot, already done\n");
+        if (LOG_UEVENTS) {
+            INFO("coldboot %ld uS\n", ((long) (t1 - t0)));
+        }
+    } else if (LOG_UEVENTS) {
+        INFO("skipping coldboot, already done\n");
     }
 }
 
