@@ -24,8 +24,11 @@ namespace android {
 
 bool ReadFileToString(const std::string& path, std::string* content);
 bool WriteStringToFile(const std::string& content, const std::string& path);
+
+#if !defined(_WIN32)
 bool WriteStringToFile(const std::string& content, const std::string& path,
                        mode_t mode, uid_t owner, gid_t group);
+#endif
 
 } // namespace android
 
