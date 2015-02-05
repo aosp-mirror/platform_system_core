@@ -4,10 +4,10 @@
 
 #include "crash-reporter/chrome_collector.h"
 
-#include <glib.h>
 #include <pcrecpp.h>
 #include <stdint.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -15,6 +15,7 @@
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
 #include <base/strings/string_util.h>
+#include <chromeos/data_encoding.h>
 #include <chromeos/dbus/dbus.h>
 #include <chromeos/dbus/service_constants.h>
 #include <chromeos/process.h>
@@ -51,38 +52,19 @@ bool GetDelimitedString(const std::string &str, char ch, size_t offset,
 
 // Gets the GPU's error state from debugd and writes it to |error_state_path|.
 // Returns true on success.
-bool GetDriErrorState(const FilePath &error_state_path) {
-  chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
-  if (!dbus.HasConnection()) {
-    LOG(ERROR) << "Error connecting to system D-Bus";
+bool GetDriErrorState(const FilePath &error_state_path,
+                      org::chromium::debugdProxy *proxy) {
+  chromeos::ErrorPtr error;
+  std::string error_state_str;
+
+  proxy->GetLog("i915_error_state", &error_state_str, &error);
+
+  if (error) {
+    LOG(ERROR) << "Error calling D-Bus proxy call to interface "
+               << "'" << proxy->GetObjectPath().value() << "':"
+               << error->GetMessage();
     return false;
   }
-
-  chromeos::dbus::Proxy proxy(dbus,
-                              debugd::kDebugdServiceName,
-                              debugd::kDebugdServicePath,
-                              debugd::kDebugdInterface);
-  if (!proxy) {
-    LOG(ERROR) << "Error creating D-Bus proxy to interface "
-               << "'" << debugd::kDebugdServiceName << "'";
-    return false;
-  }
-
-  chromeos::glib::ScopedError error;
-  gchar *error_state = nullptr;
-  if (!dbus_g_proxy_call(proxy.gproxy(), debugd::kGetLog,
-                         &chromeos::Resetter(&error).lvalue(),
-                         G_TYPE_STRING, "i915_error_state", G_TYPE_INVALID,
-                         G_TYPE_STRING, &error_state, G_TYPE_INVALID)) {
-    LOG(ERROR) << "Error performing D-Bus proxy call "
-               << "'" << debugd::kGetLog << "'"
-               << ": " << (error ? error->message : "");
-    g_free(error_state);
-    return false;
-  }
-
-  std::string error_state_str(error_state);
-  g_free(error_state);
 
   if (error_state_str == "<empty>")
     return false;
@@ -94,17 +76,23 @@ bool GetDriErrorState(const FilePath &error_state_path) {
     return false;
   }
 
-  gsize len;
-  guchar *decoded_error_state =
-      g_base64_decode(error_state_str.c_str() + kBase64HeaderLength, &len);
+  std::string decoded_error_state;
 
-  int written =
-      base::WriteFile(error_state_path,
-                      reinterpret_cast<const char *>(decoded_error_state), len);
-  g_free(decoded_error_state);
+  if (!chromeos::data_encoding::Base64Decode(
+      error_state_str.c_str() + kBase64HeaderLength,
+      &decoded_error_state)) {
+    LOG(ERROR) << "Could not decode i915_error_state";
+    return false;
+  }
 
-  if (written < 0 || (gsize)written != len) {
-    LOG(ERROR) << "Could not write file " << error_state_path.value();
+  int written = base::WriteFile(error_state_path,
+                                decoded_error_state.c_str(),
+                                decoded_error_state.length());
+  if (written < 0 ||
+      static_cast<size_t>(written) != decoded_error_state.length()) {
+    LOG(ERROR) << "Could not write file " << error_state_path.value()
+               << " Written: " << written << " Len: "
+               << decoded_error_state.length();
     base::DeleteFile(error_state_path, false);
     return false;
   }
@@ -206,6 +194,13 @@ bool ChromeCollector::HandleCrash(const FilePath &file_path,
   fflush(output_file_ptr_);
 
   return true;
+}
+
+void ChromeCollector::SetUpDBus() {
+  CrashCollector::SetUpDBus();
+
+  debugd_proxy_.reset(
+      new org::chromium::debugdProxy(bus_, debugd::kDebugdServiceName));
 }
 
 bool ChromeCollector::ParseCrashLog(const std::string &data,
@@ -325,11 +320,14 @@ std::map<std::string, base::FilePath> ChromeCollector::GetAdditionalLogs(
       base::DeleteFile(chrome_log_path, false /* recursive */);
   }
 
-  // Now get the GPU state from debugd.
-  const FilePath dri_error_state_path =
-      GetCrashPath(dir, basename, kGpuStateFilename);
-  if (GetDriErrorState(dri_error_state_path))
-    logs[kGpuStateFilename] = dri_error_state_path;
+  // For unit testing, debugd_proxy_ isn't initialized, so skip attempting to
+  // get the GPU error state from debugd.
+  if (debugd_proxy_) {
+    const FilePath dri_error_state_path =
+        GetCrashPath(dir, basename, kGpuStateFilename);
+    if (GetDriErrorState(dri_error_state_path, debugd_proxy_.get()))
+      logs[kGpuStateFilename] = dri_error_state_path;
+  }
 
   return logs;
 }

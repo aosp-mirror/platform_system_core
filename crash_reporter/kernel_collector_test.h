@@ -13,6 +13,7 @@
 class KernelCollectorMock : public KernelCollector {
  public:
   MOCK_METHOD0(DumpDirMounted, bool());
+  MOCK_METHOD0(SetUpDBus, void());
 };
 
 #endif  // CRASH_REPORTER_KERNEL_COLLECTOR_TEST_H_

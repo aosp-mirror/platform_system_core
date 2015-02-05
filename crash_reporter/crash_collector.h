@@ -10,11 +10,12 @@
 #include <map>
 #include <string>
 
-#include <glib.h>
-
 #include <base/files/file_path.h>
 #include <base/macros.h>
+#include <base/memory/scoped_ptr.h>
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
+
+#include "session_manager/dbus-proxies.h"
 
 // User crash collector.
 class CrashCollector {
@@ -60,6 +61,9 @@ class CrashCollector {
   // Set maximum enqueued crashes in a crash directory.
   static const int kMaxCrashDirectorySize;
 
+  // Set up D-Bus.
+  virtual void SetUpDBus();
+
   // Writes |data| of |size| to |filename|, which must be a new file.
   // If the file already exists or writing fails, return a negative value.
   // Otherwise returns the number of bytes written.
@@ -75,7 +79,8 @@ class CrashCollector {
     forced_crash_directory_ = forced_directory;
   }
 
-  virtual GHashTable *GetActiveUserSessions();
+  virtual bool GetActiveUserSessions(
+      std::map<std::string, std::string> *sessions);
   base::FilePath GetUserCrashPath();
   base::FilePath GetCrashDirectoryInfo(uid_t process_euid,
                                  uid_t default_user_id,
@@ -161,7 +166,13 @@ class CrashCollector {
   std::string lsb_release_;
   base::FilePath log_config_path_;
 
+  scoped_refptr<dbus::Bus> bus_;
+
  private:
+  // D-Bus proxy for session manager interface.
+  std::unique_ptr<org::chromium::SessionManagerInterfaceProxy>
+      session_manager_proxy_;
+
   DISALLOW_COPY_AND_ASSIGN(CrashCollector);
 };
 

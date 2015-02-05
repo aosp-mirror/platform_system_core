@@ -18,9 +18,6 @@
 #include <utility>
 #include <vector>
 
-#include <dbus/dbus-glib-lowlevel.h>
-#include <glib.h>
-
 #include <base/files/file_util.h>
 #include <base/logging.h>
 #include <base/posix/eintr_wrapper.h>
@@ -92,6 +89,8 @@ CrashCollector::CrashCollector()
 }
 
 CrashCollector::~CrashCollector() {
+  if (bus_)
+    bus_->ShutdownAndBlock();
 }
 
 void CrashCollector::Initialize(
@@ -102,6 +101,21 @@ void CrashCollector::Initialize(
 
   count_crash_function_ = count_crash_function;
   is_feedback_allowed_function_ = is_feedback_allowed_function;
+
+  SetUpDBus();
+}
+
+void CrashCollector::SetUpDBus() {
+  dbus::Bus::Options options;
+  options.bus_type = dbus::Bus::SYSTEM;
+
+  bus_ = new dbus::Bus(options);
+  CHECK(bus_->Connect());
+
+  session_manager_proxy_.reset(
+      new org::chromium::SessionManagerInterfaceProxy(
+          bus_,
+          login_manager::kSessionManagerInterface));
 }
 
 int CrashCollector::WriteNewFile(const FilePath &filename,
@@ -154,49 +168,19 @@ FilePath CrashCollector::GetCrashPath(const FilePath &crash_directory,
                                              extension.c_str()));
 }
 
-namespace {
+bool CrashCollector::GetActiveUserSessions(
+    std::map<std::string, std::string> *sessions) {
+  chromeos::ErrorPtr error;
+  session_manager_proxy_->RetrieveActiveSessions(sessions, &error);
 
-const char *GetGErrorMessage(const GError *error) {
-  if (!error)
-    return "Unknown error.";
-  return error->message;
-}
-
-}
-
-GHashTable *CrashCollector::GetActiveUserSessions() {
-  GHashTable *active_sessions = nullptr;
-
-  chromeos::dbus::BusConnection dbus = chromeos::dbus::GetSystemBusConnection();
-  if (!dbus.HasConnection()) {
-    LOG(ERROR) << "Error connecting to system D-Bus";
-    return active_sessions;
-  }
-  chromeos::dbus::Proxy proxy(dbus,
-                              login_manager::kSessionManagerServiceName,
-                              login_manager::kSessionManagerServicePath,
-                              login_manager::kSessionManagerInterface);
-  if (!proxy) {
-    LOG(ERROR) << "Error creating D-Bus proxy to interface "
-               << "'" << login_manager::kSessionManagerServiceName << "'";
-    return active_sessions;
+  if (error) {
+    LOG(ERROR) << "Error calling D-Bus proxy call to interface "
+               << "'" << session_manager_proxy_->GetObjectPath().value() << "':"
+               << error->GetMessage();
+    return false;
   }
 
-  // Request all the active sessions.
-  GError *gerror = nullptr;
-  if (!dbus_g_proxy_call(proxy.gproxy(),
-                         login_manager::kSessionManagerRetrieveActiveSessions,
-                         &gerror, G_TYPE_INVALID,
-                         DBUS_TYPE_G_STRING_STRING_HASHTABLE, &active_sessions,
-                         G_TYPE_INVALID)) {
-    LOG(ERROR) << "Error performing D-Bus proxy call "
-               << "'"
-               << login_manager::kSessionManagerRetrieveActiveSessions << "'"
-               << ": " << GetGErrorMessage(gerror);
-    return active_sessions;
-  }
-
-  return active_sessions;
+  return true;
 }
 
 FilePath CrashCollector::GetUserCrashPath() {
@@ -204,19 +188,14 @@ FilePath CrashCollector::GetUserCrashPath() {
   // Ask the session manager for the active ones, then just run with the
   // first result we get back.
   FilePath user_path = FilePath(kFallbackUserCrashPath);
-  GHashTable *active_sessions = GetActiveUserSessions();
-  if (!active_sessions)
+  std::map<std::string, std::string> active_sessions;
+  if (!GetActiveUserSessions(&active_sessions)) {
+    LOG(ERROR) << "Could not get active user sessions, using default.";
     return user_path;
-
-  GList *list = g_hash_table_get_values(active_sessions);
-  if (list) {
-    const char *salted_path = static_cast<const char *>(list->data);
-    user_path = chromeos::cryptohome::home::GetHashedUserPath(salted_path)
-        .Append("crash");
-    g_list_free(list);
   }
 
-  g_hash_table_destroy(active_sessions);
+  user_path = chromeos::cryptohome::home::GetHashedUserPath(
+      active_sessions.begin()->second).Append("crash");
 
   return user_path;
 }

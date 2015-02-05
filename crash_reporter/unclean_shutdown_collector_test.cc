@@ -9,6 +9,7 @@
 #include <base/files/file_util.h>
 #include <base/strings/string_util.h>
 #include <chromeos/syslog_logging.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using base::FilePath;
@@ -33,9 +34,17 @@ bool IsMetrics() {
 
 }  // namespace
 
+class UncleanShutdownCollectorMock : public UncleanShutdownCollector {
+ public:
+  MOCK_METHOD0(SetUpDBus, void());
+};
+
 class UncleanShutdownCollectorTest : public ::testing::Test {
   void SetUp() {
     s_crashes = 0;
+
+    EXPECT_CALL(collector_, SetUpDBus()).WillRepeatedly(testing::Return());
+
     collector_.Initialize(CountCrash,
                           IsMetrics);
     rmdir(kTestDirectory);
@@ -46,13 +55,14 @@ class UncleanShutdownCollectorTest : public ::testing::Test {
     collector_.powerd_suspended_file_ = FilePath(kTestSuspended);
     chromeos::ClearLog();
   }
+
  protected:
   void WriteStringToFile(const FilePath &file_path,
                          const char *data) {
     ASSERT_EQ(strlen(data), base::WriteFile(file_path, data, strlen(data)));
   }
 
-  UncleanShutdownCollector collector_;
+  UncleanShutdownCollectorMock collector_;
   FilePath test_unclean_;
 };
 

@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include <fcntl.h>  // for open
-#include <glib-object.h>
 
 #include <string>
 #include <vector>
@@ -274,8 +273,6 @@ int main(int argc, char *argv[]) {
   chromeos::FlagHelper::Init(argc, argv, "Chromium OS Crash Reporter");
   chromeos::OpenLog(my_path.BaseName().value().c_str(), true);
   chromeos::InitLog(chromeos::kLogToSyslog);
-
-  ::g_type_init();
 
   KernelCollector kernel_collector;
   kernel_collector.Initialize(CountKernelCrash, IsFeedbackAllowed);

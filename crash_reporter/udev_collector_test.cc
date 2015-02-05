@@ -6,6 +6,7 @@
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
 #include <chromeos/syslog_logging.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "crash-reporter/udev_collector.h"
@@ -46,6 +47,11 @@ int GetNumLogFiles(const FilePath& path) {
 
 }  // namespace
 
+class UdevCollectorMock : public UdevCollector {
+ public:
+  MOCK_METHOD0(SetUpDBus, void());
+};
+
 class UdevCollectorTest : public ::testing::Test {
  protected:
   base::ScopedTempDir temp_dir_generator_;
@@ -57,6 +63,8 @@ class UdevCollectorTest : public ::testing::Test {
  private:
   void SetUp() override {
     s_consent_given = true;
+
+    EXPECT_CALL(collector_, SetUpDBus()).WillRepeatedly(testing::Return());
 
     collector_.Initialize(CountCrash, IsMetrics);
 
@@ -76,7 +84,7 @@ class UdevCollectorTest : public ::testing::Test {
     chromeos::ClearLog();
   }
 
-  UdevCollector collector_;
+  UdevCollectorMock collector_;
 };
 
 TEST_F(UdevCollectorTest, TestNoConsent) {

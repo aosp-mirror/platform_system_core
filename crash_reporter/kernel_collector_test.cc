@@ -52,6 +52,9 @@ class KernelCollectorTest : public ::testing::Test {
   void SetUp() override {
     s_crashes = 0;
     s_metrics = true;
+
+    EXPECT_CALL(collector_, SetUpDBus()).WillRepeatedly(testing::Return());
+
     collector_.Initialize(CountCrash, IsMetrics);
     ASSERT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
     test_kcrash_ = scoped_temp_dir_.path().Append("kcrash");

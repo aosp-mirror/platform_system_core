@@ -3,11 +3,9 @@
 // found in the LICENSE file.
 
 #include <chromeos/test_helpers.h>
-#include <glib-object.h>
 #include <gtest/gtest.h>
 
 int main(int argc, char** argv) {
-  ::g_type_init();
   SetUpTests(&argc, argv, true);
   return RUN_ALL_TESTS();
 }

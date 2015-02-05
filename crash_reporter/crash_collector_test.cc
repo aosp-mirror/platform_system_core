@@ -5,8 +5,7 @@
 #include "crash-reporter/crash_collector_test.h"
 
 #include <unistd.h>
-
-#include <glib.h>
+#include <utility>
 
 #include <base/files/file_util.h>
 #include <base/strings/string_util.h>
@@ -19,6 +18,7 @@
 using base::FilePath;
 using base::StringPrintf;
 using chromeos::FindLog;
+using ::testing::Invoke;
 using ::testing::Return;
 
 namespace {
@@ -32,11 +32,20 @@ bool IsMetrics() {
   return false;
 }
 
+bool GetActiveUserSessionsImpl(std::map<std::string, std::string> *sessions) {
+  char kUser[] = "chicken@butt.com";
+  char kHash[] = "hashcakes";
+  sessions->insert(std::pair<std::string, std::string>(kUser, kHash));
+  return true;
+}
+
 }  // namespace
 
 class CrashCollectorTest : public ::testing::Test {
  public:
   void SetUp() {
+    EXPECT_CALL(collector_, SetUpDBus()).WillRepeatedly(Return());
+
     collector_.Initialize(CountCrash, IsMetrics);
     test_dir_ = FilePath("test");
     base::CreateDirectory(test_dir_);
@@ -117,15 +126,8 @@ TEST_F(CrashCollectorTest, GetCrashDirectoryInfo) {
   EXPECT_EQ(kRootUid, directory_owner);
   EXPECT_EQ(kRootGid, directory_group);
 
-  // No need to destroy the hash as GetCrashDirectoryInfo() will do it for us.
-  GHashTable *active_sessions = g_hash_table_new(g_str_hash, g_str_equal);
-  char kUser[] = "chicken@butt.com";
-  char kHash[] = "hashcakes";
-  g_hash_table_insert(active_sessions,
-                      static_cast<gpointer>(kUser),
-                      static_cast<gpointer>(kHash));
-  EXPECT_CALL(collector_, GetActiveUserSessions())
-      .WillOnce(Return(active_sessions));
+  EXPECT_CALL(collector_, GetActiveUserSessions(testing::_))
+      .WillOnce(Invoke(&GetActiveUserSessionsImpl));
 
   EXPECT_EQ(collector_.IsUserSpecificDirectoryEnabled(), true);
 

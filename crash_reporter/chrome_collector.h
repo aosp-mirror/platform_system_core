@@ -5,6 +5,7 @@
 #ifndef CRASH_REPORTER_CHROME_COLLECTOR_H_
 #define CRASH_REPORTER_CHROME_COLLECTOR_H_
 
+#include <map>
 #include <string>
 
 #include <base/files/file_path.h>
@@ -12,6 +13,7 @@
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
 
 #include "crash-reporter/crash_collector.h"
+#include "debugd/dbus-proxies.h"
 
 class SystemLogging;
 
@@ -29,6 +31,9 @@ class ChromeCollector : public CrashCollector {
                    const std::string &pid_string,
                    const std::string &uid_string,
                    const std::string &exe_name);
+
+ protected:
+  void SetUpDBus() override;
 
  private:
   friend class ChromeCollectorTest;
@@ -57,6 +62,9 @@ class ChromeCollector : public CrashCollector {
       const std::string &exe_name);
 
   FILE *output_file_ptr_;
+
+  // D-Bus proxy for debugd interface.  Unset in unit tests.
+  std::unique_ptr<org::chromium::debugdProxy> debugd_proxy_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeCollector);
 };

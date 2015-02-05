@@ -12,6 +12,7 @@
 #include <base/files/scoped_temp_dir.h>
 #include <base/strings/string_split.h>
 #include <chromeos/syslog_logging.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using base::FilePath;
@@ -39,9 +40,17 @@ bool IsMetrics() {
 
 }  // namespace
 
+class UserCollectorMock : public UserCollector {
+ public:
+  MOCK_METHOD0(SetUpDBus, void());
+};
+
 class UserCollectorTest : public ::testing::Test {
   void SetUp() {
     s_crashes = 0;
+
+    EXPECT_CALL(collector_, SetUpDBus()).WillRepeatedly(testing::Return());
+
     collector_.Initialize(CountCrash,
                           kFilePath,
                           IsMetrics,
@@ -71,7 +80,7 @@ class UserCollectorTest : public ::testing::Test {
     return result;
   }
 
-  UserCollector collector_;
+  UserCollectorMock collector_;
   pid_t pid_;
 };
 

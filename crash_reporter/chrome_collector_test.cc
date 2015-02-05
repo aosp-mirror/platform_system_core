@@ -10,6 +10,7 @@
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
 #include <chromeos/syslog_logging.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using base::FilePath;
@@ -40,6 +41,11 @@ bool IsMetrics() {
 
 }  // namespace
 
+class ChromeCollectorMock : public ChromeCollector {
+ public:
+  MOCK_METHOD0(SetUpDBus, void());
+};
+
 class ChromeCollectorTest : public ::testing::Test {
  protected:
   void ExpectFileEquals(const char *golden,
@@ -49,10 +55,12 @@ class ChromeCollectorTest : public ::testing::Test {
     EXPECT_EQ(golden, contents);
   }
 
-  ChromeCollector collector_;
+  ChromeCollectorMock collector_;
 
  private:
   void SetUp() override {
+    EXPECT_CALL(collector_, SetUpDBus()).WillRepeatedly(testing::Return());
+
     collector_.Initialize(CountCrash, IsMetrics);
     chromeos::ClearLog();
   }
