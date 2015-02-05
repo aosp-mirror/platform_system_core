@@ -70,6 +70,7 @@ static bool CleanUpAfterFailedWrite(const std::string& path) {
   return false;
 }
 
+#if !defined(_WIN32)
 bool android::WriteStringToFile(const std::string& content, const std::string& path,
                                 mode_t mode, uid_t owner, gid_t group) {
   int fd = TEMP_FAILURE_RETRY(open(path.c_str(),
@@ -85,6 +86,7 @@ bool android::WriteStringToFile(const std::string& content, const std::string& p
   }
   return CleanUpAfterFailedWrite(path);
 }
+#endif
 
 bool android::WriteStringToFile(const std::string& content, const std::string& path) {
   int fd = TEMP_FAILURE_RETRY(open(path.c_str(),
