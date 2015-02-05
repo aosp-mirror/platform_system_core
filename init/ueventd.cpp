@@ -70,12 +70,12 @@ int ueventd_main(int argc, char **argv)
 
     open_devnull_stdio();
     klog_init();
-#if LOG_UEVENTS
-    /* Ensure we're at a logging level that will show the events */
-    if (klog_get_level() < KLOG_INFO_LEVEL) {
-        klog_set_level(KLOG_INFO_LEVEL);
+    if (LOG_UEVENTS) {
+        /* Ensure we're at a logging level that will show the events */
+        if (klog_get_level() < KLOG_INFO_LEVEL) {
+            klog_set_level(KLOG_INFO_LEVEL);
+        }
     }
-#endif
 
     union selinux_callback cb;
     cb.func_log = log_callback;

@@ -3,6 +3,24 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
+# --
+
+ifeq ($(strip $(INIT_BOOTCHART)),true)
+LOCAL_CPPFLAGS  += -DBOOTCHART=1
+else
+LOCAL_CPPFLAGS  += -DBOOTCHART=0
+endif
+
+ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
+LOCAL_CPPFLAGS += -DALLOW_LOCAL_PROP_OVERRIDE=1 -DALLOW_DISABLE_SELINUX=1
+else
+LOCAL_CPPFLAGS += -DALLOW_LOCAL_PROP_OVERRIDE=0 -DALLOW_DISABLE_SELINUX=0
+endif
+
+LOCAL_CPPFLAGS += -DLOG_UEVENTS=0
+
+# --
+
 LOCAL_SRC_FILES:= \
     bootchart.cpp \
     builtins.cpp \
@@ -24,17 +42,6 @@ LOCAL_CPPFLAGS += \
     -Wall -Wextra \
     -Werror -Wno-error=deprecated-declarations \
     -Wno-unused-parameter \
-
-ifeq ($(strip $(INIT_BOOTCHART)),true)
-LOCAL_CPPFLAGS  += -DBOOTCHART=1
-endif
-
-ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
-LOCAL_CPPFLAGS += -DALLOW_LOCAL_PROP_OVERRIDE=1 -DALLOW_DISABLE_SELINUX=1
-endif
-
-# Enable ueventd logging
-#LOCAL_CPPFLAGS += -DLOG_UEVENTS=1
 
 LOCAL_MODULE:= init
 
