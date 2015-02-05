@@ -46,14 +46,7 @@ bool android::ReadFileToString(const std::string& path, std::string* content) {
   }
 }
 
-bool android::WriteStringToFile(const std::string& content, const std::string& path) {
-  int fd = TEMP_FAILURE_RETRY(open(path.c_str(),
-                                   O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW,
-                                   DEFFILEMODE));
-  if (fd == -1) {
-    return false;
-  }
-
+static bool WriteStringToFd(const std::string& content, int fd) {
   const char* p = content.data();
   size_t left = content.size();
   while (left > 0) {
@@ -67,4 +60,38 @@ bool android::WriteStringToFile(const std::string& content, const std::string& p
   }
   TEMP_FAILURE_RETRY(close(fd));
   return true;
+}
+
+static bool CleanUpAfterFailedWrite(const std::string& path) {
+  // Something went wrong. Let's not leave a corrupt file lying around.
+  int saved_errno = errno;
+  unlink(path.c_str());
+  errno = saved_errno;
+  return false;
+}
+
+bool android::WriteStringToFile(const std::string& content, const std::string& path,
+                                mode_t mode, uid_t owner, gid_t group) {
+  int fd = TEMP_FAILURE_RETRY(open(path.c_str(),
+                                   O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW,
+                                   mode));
+  if (fd == -1) {
+    return false;
+  }
+  // We do an explicit fchmod here because we assume that the caller really meant what they
+  // said and doesn't want the umask-influenced mode.
+  if (fchmod(fd, mode) != -1 && fchown(fd, owner, group) == -1 && WriteStringToFd(content, fd)) {
+    return true;
+  }
+  return CleanUpAfterFailedWrite(path);
+}
+
+bool android::WriteStringToFile(const std::string& content, const std::string& path) {
+  int fd = TEMP_FAILURE_RETRY(open(path.c_str(),
+                                   O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW,
+                                   DEFFILEMODE));
+  if (fd == -1) {
+    return false;
+  }
+  return WriteStringToFd(content, fd) || CleanUpAfterFailedWrite(path);
 }
