@@ -33,7 +33,7 @@ struct parse_state
     void *priv;
 };
 
-void DUMP(void);
+void dump_parser_state(void);
 int next_token(struct parse_state *state);
 void parse_error(struct parse_state *state, const char *fmt, ...);
 
