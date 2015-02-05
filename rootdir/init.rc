@@ -160,6 +160,9 @@ on init
     chown system log /sys/fs/pstore/pmsg-ramoops-0
     chmod 0440 /sys/fs/pstore/pmsg-ramoops-0
 
+    # enable armv8_deprecated instruction hooks
+    write /proc/sys/abi/swp 1
+
 # Healthd can trigger a full boot from charger mode by signaling this
 # property when the power button is held.
 on property:sys.boot_from_charger_mode=1
