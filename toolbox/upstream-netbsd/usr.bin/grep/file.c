@@ -78,7 +78,9 @@ static inline int
 grep_refill(struct file *f)
 {
 	ssize_t nr;
+#ifndef __ANDROID__
 	int bzerr;
+#endif
 
 	bufpos = buffer;
 	bufrem = 0;

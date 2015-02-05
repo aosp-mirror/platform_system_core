@@ -7,10 +7,6 @@ common_cflags := \
     -I$(LOCAL_PATH)/upstream-netbsd/include/ \
     -include bsd-compatibility.h \
 
-# Temporary, remove after cleanup. b/18632512
-common_cflags += -Wno-unused-variable \
-                 -Wno-unused-but-set-variable
-
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
@@ -19,7 +15,12 @@ LOCAL_SRC_FILES := \
     upstream-netbsd/bin/dd/dd.c \
     upstream-netbsd/bin/dd/dd_hostops.c \
     upstream-netbsd/bin/dd/misc.c \
-    upstream-netbsd/bin/dd/position.c
+    upstream-netbsd/bin/dd/position.c \
+    upstream-netbsd/lib/libc/gen/getbsize.c \
+    upstream-netbsd/lib/libc/gen/humanize_number.c \
+    upstream-netbsd/lib/libc/stdlib/strsuftoll.c \
+    upstream-netbsd/lib/libc/string/swab.c \
+    upstream-netbsd/lib/libutil/raise_default_signal.c
 LOCAL_CFLAGS += $(common_cflags) -Dmain=dd_main -DNO_CONV
 LOCAL_MODULE := libtoolbox_dd
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
@@ -32,25 +33,12 @@ LOCAL_MODULE := libtoolbox_du
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES := \
-    upstream-netbsd/usr.bin/grep/fastgrep.c \
-    upstream-netbsd/usr.bin/grep/file.c \
-    upstream-netbsd/usr.bin/grep/grep.c \
-    upstream-netbsd/usr.bin/grep/queue.c \
-    upstream-netbsd/usr.bin/grep/util.c
-LOCAL_CFLAGS += $(common_cflags) -Dmain=grep_main
-LOCAL_MODULE := libtoolbox_grep
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
-include $(BUILD_STATIC_LIBRARY)
-
 
 include $(CLEAR_VARS)
 
 BSD_TOOLS := \
     dd \
     du \
-    grep \
 
 OUR_TOOLS := \
     df \
@@ -90,14 +78,9 @@ OUR_TOOLS := \
 ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
 
 LOCAL_SRC_FILES := \
-    upstream-netbsd/lib/libc/gen/getbsize.c \
-    upstream-netbsd/lib/libc/gen/humanize_number.c \
-    upstream-netbsd/lib/libc/stdlib/strsuftoll.c \
-    upstream-netbsd/lib/libc/string/swab.c \
-    upstream-netbsd/lib/libutil/raise_default_signal.c \
     dynarray.c \
-    $(patsubst %,%.c,$(OUR_TOOLS)) \
     toolbox.c \
+    $(patsubst %,%.c,$(OUR_TOOLS)) \
 
 LOCAL_CFLAGS += $(common_cflags)
 
@@ -134,4 +117,18 @@ LOCAL_CFLAGS += $(common_cflags)
 LOCAL_MODULE := r
 LOCAL_MODULE_TAGS := debug
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
+include $(BUILD_EXECUTABLE)
+
+
+# We build BSD grep separately, so it can provide egrep and fgrep too.
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := \
+    upstream-netbsd/usr.bin/grep/fastgrep.c \
+    upstream-netbsd/usr.bin/grep/file.c \
+    upstream-netbsd/usr.bin/grep/grep.c \
+    upstream-netbsd/usr.bin/grep/queue.c \
+    upstream-netbsd/usr.bin/grep/util.c
+LOCAL_CFLAGS += $(common_cflags)
+LOCAL_MODULE := grep
+LOCAL_POST_INSTALL_CMD := $(hide) $(foreach t,egrep fgrep,ln -sf grep $(TARGET_OUT)/bin/$(t);)
 include $(BUILD_EXECUTABLE)
