@@ -18,11 +18,14 @@
 #define UTILS_FILE_H
 
 #include <string>
+#include <sys/stat.h>
 
 namespace android {
 
 bool ReadFileToString(const std::string& path, std::string* content);
 bool WriteStringToFile(const std::string& content, const std::string& path);
+bool WriteStringToFile(const std::string& content, const std::string& path,
+                       mode_t mode, uid_t owner, gid_t group);
 
 } // namespace android
 
