@@ -119,7 +119,17 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
         ret = mount(blk_device, target, fs_type, tmpmnt_flags, tmpmnt_opts);
         INFO("%s(): mount(%s,%s,%s)=%d\n", __func__, blk_device, target, fs_type, ret);
         if (!ret) {
-            umount(target);
+            int i;
+            for (i = 0; i < 5; i++) {
+                // Try to umount 5 times before continuing on.
+                // Should we try rebooting if all attempts fail?
+                int result = umount(target);
+                if (result == 0) {
+                    break;
+                }
+                ERROR("%s(): umount(%s)=%d: %s\n", __func__, target, result, strerror(errno));
+                sleep(1);
+            }
         }
 
         /*
@@ -489,8 +499,8 @@ int fs_mgr_mount_all(struct fstab *fstab)
                         encryptable = FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED;
                     }
                 } else {
-                    INFO("Could not umount %s - allow continue unencrypted\n",
-                         fstab->recs[attempted_idx].mount_point);
+                    WARNING("Could not umount %s (%s) - allow continue unencrypted\n",
+                            fstab->recs[attempted_idx].mount_point, strerror(errno));
                     continue;
                 }
             }
