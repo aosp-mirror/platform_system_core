@@ -39,7 +39,7 @@ struct backtrace_frame_data_t {
   uintptr_t pc;           // The absolute pc.
   uintptr_t sp;           // The top of the stack.
   size_t stack_size;      // The size of the stack, zero indicate an unknown stack size.
-  const backtrace_map_t* map;   // The map associated with the given pc.
+  backtrace_map_t map;    // The map associated with the given pc.
   std::string func_name;  // The function name associated with this pc, NULL if not found.
   uintptr_t func_offset;  // pc relative to the start of the function, only valid if func_name is not NULL.
 };
@@ -78,8 +78,8 @@ public:
   // If the string is empty, then no valid function name was found.
   virtual std::string GetFunctionName(uintptr_t pc, uintptr_t* offset);
 
-  // Find the map associated with the given pc.
-  virtual const backtrace_map_t* FindMap(uintptr_t pc);
+  // Fill in the map data associated with the given pc.
+  virtual void FillInMap(uintptr_t pc, backtrace_map_t* map);
 
   // Read the data at a specific address.
   virtual bool ReadWord(uintptr_t ptr, word_t* out_value) = 0;
