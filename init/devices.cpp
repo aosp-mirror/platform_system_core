@@ -48,8 +48,6 @@
 #include "util.h"
 #include "log.h"
 
-#define UNUSED __attribute__((__unused__))
-
 #define SYSFS_PREFIX    "/sys"
 #define FIRMWARE_DIR1   "/etc/firmware"
 #define FIRMWARE_DIR2   "/vendor/firmware"
@@ -231,7 +229,7 @@ static mode_t get_device_perm(const char *path, const char **links,
 }
 
 static void make_device(const char *path,
-                        const char *upath UNUSED,
+                        const char */*upath*/,
                         int block, int major, int minor,
                         const char **links)
 {
@@ -652,11 +650,6 @@ static void mkdir_recursive_for_devpath(const char *devpath)
     mkdir_recursive(dir, 0755);
 }
 
-static inline void __attribute__((__deprecated__)) kernel_logger()
-{
-    INFO("kernel logger is deprecated\n");
-}
-
 static void handle_generic_device_event(struct uevent *uevent)
 {
     const char *base;
@@ -743,7 +736,7 @@ static void handle_generic_device_event(struct uevent *uevent)
          make_dir(base, 0755);
      } else if(!strncmp(uevent->subsystem, "misc", 4) &&
                  !strncmp(name, "log_", 4)) {
-         kernel_logger();
+         INFO("kernel logger is deprecated\n");
          base = "/dev/log/";
          make_dir(base, 0755);
          name += 4;

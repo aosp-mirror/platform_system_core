@@ -116,7 +116,7 @@ static int lookup_keyword(const char *s)
 {
     switch (*s++) {
     case 'c':
-    if (!strcmp(s, "opy")) return K_copy;
+        if (!strcmp(s, "opy")) return K_copy;
         if (!strcmp(s, "apability")) return K_capability;
         if (!strcmp(s, "hdir")) return K_chdir;
         if (!strcmp(s, "hroot")) return K_chroot;
@@ -171,6 +171,7 @@ static int lookup_keyword(const char *s)
         break;
     case 'p':
         if (!strcmp(s, "owerctl")) return K_powerctl;
+        break;
     case 'r':
         if (!strcmp(s, "estart")) return K_restart;
         if (!strcmp(s, "estorecon")) return K_restorecon;
@@ -209,8 +210,7 @@ static int lookup_keyword(const char *s)
     return K_UNKNOWN;
 }
 
-static void parse_line_no_op(struct parse_state *state, int nargs, char **args)
-{
+static void parse_line_no_op(struct parse_state*, int, char**) {
 }
 
 static int push_chars(char **dst, int *len, const char *chars, int cnt)
@@ -378,7 +378,7 @@ static void parse_new_section(struct parse_state *state, int kw,
     state->parse_line = parse_line_no_op;
 }
 
-static void parse_config(const char *fn, char *s)
+static void parse_config(const char *fn, const std::string& data)
 {
     struct parse_state state;
     struct listnode import_list;
@@ -389,7 +389,7 @@ static void parse_config(const char *fn, char *s)
     nargs = 0;
     state.filename = fn;
     state.line = 0;
-    state.ptr = s;
+    state.ptr = strdup(data.c_str());  // TODO: fix this code!
     state.nexttoken = 0;
     state.parse_line = parse_line_no_op;
 
@@ -427,7 +427,6 @@ parser_done:
          struct import *import = node_to_item(node, struct import, list);
          int ret;
 
-         INFO("importing '%s'", import->filename);
          ret = init_parse_config_file(import->filename);
          if (ret)
              ERROR("could not import file '%s' from '%s'\n",
@@ -435,13 +434,14 @@ parser_done:
     }
 }
 
-int init_parse_config_file(const char *fn)
-{
-    char *data;
-    data = read_file(fn, 0);
-    if (!data) return -1;
+int init_parse_config_file(const char* path) {
+    INFO("Parsing %s...", path);
+    std::string data;
+    if (!read_file(path, &data)) {
+        return -1;
+    }
 
-    parse_config(fn, data);
+    parse_config(path, data);
     dump_parser_state();
     return 0;
 }

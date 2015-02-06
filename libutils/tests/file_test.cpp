@@ -17,21 +17,68 @@
 #include "utils/file.h"
 
 #include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <gtest/gtest.h>
+
+class TemporaryFile {
+ public:
+  TemporaryFile() {
+    init("/data/local/tmp");
+    if (fd == -1) {
+      init("/tmp");
+    }
+  }
+
+  ~TemporaryFile() {
+    close(fd);
+    unlink(filename);
+  }
+
+  int fd;
+  char filename[1024];
+
+ private:
+  void init(const char* tmp_dir) {
+    snprintf(filename, sizeof(filename), "%s/TemporaryFile-XXXXXX", tmp_dir);
+    fd = mkstemp(filename);
+  }
+};
 
 TEST(file, ReadFileToString_ENOENT) {
   std::string s("hello");
   errno = 0;
-  EXPECT_FALSE(android::ReadFileToString("/proc/does-not-exist", &s));
+  ASSERT_FALSE(android::ReadFileToString("/proc/does-not-exist", &s));
   EXPECT_EQ(ENOENT, errno);
   EXPECT_EQ("", s); // s was cleared.
 }
 
 TEST(file, ReadFileToString_success) {
   std::string s("hello");
-  EXPECT_TRUE(android::ReadFileToString("/proc/version", &s));
+  ASSERT_TRUE(android::ReadFileToString("/proc/version", &s)) << errno;
   EXPECT_GT(s.length(), 6U);
   EXPECT_EQ('\n', s[s.length() - 1]);
   s[5] = 0;
   EXPECT_STREQ("Linux", s.c_str());
+}
+
+TEST(file, WriteStringToFile) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_TRUE(android::WriteStringToFile("abc", tf.filename)) << errno;
+  std::string s;
+  ASSERT_TRUE(android::ReadFileToString(tf.filename, &s)) << errno;
+  EXPECT_EQ("abc", s);
+}
+
+TEST(file, WriteStringToFd) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_TRUE(android::WriteStringToFd("abc", tf.fd));
+
+  ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET)) << errno;
+
+  std::string s;
+  ASSERT_TRUE(android::ReadFdToString(tf.fd, &s)) << errno;
+  EXPECT_EQ("abc", s);
 }
