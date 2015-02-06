@@ -56,42 +56,15 @@ int add_environment(const char *name, const char *value);
 // System call provided by bionic but not in any header file.
 extern "C" int init_module(void *, unsigned long, const char *);
 
-static int write_file(const char *path, const char *value)
-{
-    int fd, ret, len;
-
-    fd = open(path, O_WRONLY|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600);
-
-    if (fd < 0)
-        return -errno;
-
-    len = strlen(value);
-
-    ret = TEMP_FAILURE_RETRY(write(fd, value, len));
-
-    close(fd);
-    if (ret < 0) {
-        return -errno;
-    } else {
-        return 0;
-    }
-}
-
 static int insmod(const char *filename, char *options)
 {
-    void *module;
-    unsigned size;
-    int ret;
-
-    module = read_file(filename, &size);
-    if (!module)
+    std::string module;
+    if (!read_file(filename, &module)) {
         return -1;
+    }
 
-    ret = init_module(module, size, options);
-
-    free(module);
-
-    return ret;
+    // TODO: use finit_module for >= 3.8 kernels.
+    return init_module(&module[0], module.size(), options);
 }
 
 static int setkey(struct kbentry *kbe)
@@ -743,15 +716,13 @@ int do_write(int nargs, char **args)
 {
     const char *path = args[1];
     const char *value = args[2];
-    char prop_val[PROP_VALUE_MAX];
-    int ret;
 
-    ret = expand_props(prop_val, value, sizeof(prop_val));
-    if (ret) {
+    char expanded_value[PROP_VALUE_MAX];
+    if (expand_props(expanded_value, value, sizeof(expanded_value))) {
         ERROR("cannot expand '%s' while writing to '%s'\n", value, path);
         return -EINVAL;
     }
-    return write_file(path, prop_val);
+    return write_file(path, expanded_value);
 }
 
 int do_copy(int nargs, char **args)

@@ -67,9 +67,7 @@ static int lookup_keyword(const char *s)
     return K_UNKNOWN;
 }
 
-static void parse_line_no_op(struct parse_state *state __attribute__((unused)),
-        int nargs __attribute__((unused)), char **args  __attribute__((unused)))
-{
+static void parse_line_no_op(struct parse_state*, int, char**) {
 }
 
 static int valid_name(const char *name)
@@ -97,9 +95,7 @@ struct ueventd_subsystem *ueventd_subsystem_find_by_name(const char *name)
     return 0;
 }
 
-static void *parse_subsystem(struct parse_state *state,
-        int nargs __attribute__((unused)), char **args)
-{
+static void *parse_subsystem(parse_state* state, int /*nargs*/, char** args) {
     if (!valid_name(args[1])) {
         parse_error(state, "invalid subsystem name '%s'\n", args[1]);
         return 0;
@@ -195,7 +191,7 @@ static void parse_line(struct parse_state *state, char **args, int nargs)
     }
 }
 
-static void parse_config(const char *fn, char *s)
+static void parse_config(const char *fn, const std::string& data)
 {
     struct parse_state state;
     char *args[UEVENTD_PARSER_MAXARGS];
@@ -203,7 +199,7 @@ static void parse_config(const char *fn, char *s)
     nargs = 0;
     state.filename = fn;
     state.line = 1;
-    state.ptr = s;
+    state.ptr = strdup(data.c_str());  // TODO: fix this code!
     state.nexttoken = 0;
     state.parse_line = parse_line_no_op;
     for (;;) {
@@ -230,17 +226,16 @@ static void parse_config(const char *fn, char *s)
 
 int ueventd_parse_config_file(const char *fn)
 {
-    char *data;
-    data = read_file(fn, 0);
-    if (!data) return -1;
+    std::string data;
+    if (!read_file(fn, &data)) {
+        return -1;
+    }
 
     parse_config(fn, data);
     dump_parser_state();
     return 0;
 }
 
-static void parse_line_device(struct parse_state *state __attribute__((unused)),
-        int nargs, char **args)
-{
+static void parse_line_device(parse_state*, int nargs, char** args) {
     set_device_permission(nargs, args);
 }
