@@ -44,7 +44,6 @@ libbacktrace_src_files := \
 
 libbacktrace_shared_libraries_target := \
 	libcutils \
-	libgccdemangle \
 
 libbacktrace_src_files += \
 	UnwindCurrent.cpp \
