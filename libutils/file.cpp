@@ -23,6 +23,17 @@
 
 #include <utils/Compat.h> // For TEMP_FAILURE_RETRY on Darwin.
 
+bool android::ReadFdToString(int fd, std::string* content) {
+  content->clear();
+
+  char buf[BUFSIZ];
+  ssize_t n;
+  while ((n = TEMP_FAILURE_RETRY(read(fd, &buf[0], sizeof(buf)))) > 0) {
+    content->append(buf, n);
+  }
+  return (n == 0) ? true : false;
+}
+
 bool android::ReadFileToString(const std::string& path, std::string* content) {
   content->clear();
 
@@ -30,35 +41,22 @@ bool android::ReadFileToString(const std::string& path, std::string* content) {
   if (fd == -1) {
     return false;
   }
-
-  while (true) {
-    char buf[BUFSIZ];
-    ssize_t n = TEMP_FAILURE_RETRY(read(fd, &buf[0], sizeof(buf)));
-    if (n == -1) {
-      TEMP_FAILURE_RETRY(close(fd));
-      return false;
-    }
-    if (n == 0) {
-      TEMP_FAILURE_RETRY(close(fd));
-      return true;
-    }
-    content->append(buf, n);
-  }
+  bool result = ReadFdToString(fd, content);
+  TEMP_FAILURE_RETRY(close(fd));
+  return result;
 }
 
-static bool WriteStringToFd(const std::string& content, int fd) {
+bool android::WriteStringToFd(const std::string& content, int fd) {
   const char* p = content.data();
   size_t left = content.size();
   while (left > 0) {
     ssize_t n = TEMP_FAILURE_RETRY(write(fd, p, left));
     if (n == -1) {
-      TEMP_FAILURE_RETRY(close(fd));
       return false;
     }
     p += n;
     left -= n;
   }
-  TEMP_FAILURE_RETRY(close(fd));
   return true;
 }
 
@@ -79,12 +77,12 @@ bool android::WriteStringToFile(const std::string& content, const std::string& p
   if (fd == -1) {
     return false;
   }
+
   // We do an explicit fchmod here because we assume that the caller really meant what they
   // said and doesn't want the umask-influenced mode.
-  if (fchmod(fd, mode) != -1 && fchown(fd, owner, group) == -1 && WriteStringToFd(content, fd)) {
-    return true;
-  }
-  return CleanUpAfterFailedWrite(path);
+  bool result = (fchmod(fd, mode) != -1 && fchown(fd, owner, group) == -1 && WriteStringToFd(content, fd));
+  TEMP_FAILURE_RETRY(close(fd));
+  return result || CleanUpAfterFailedWrite(path);
 }
 #endif
 
@@ -95,5 +93,8 @@ bool android::WriteStringToFile(const std::string& content, const std::string& p
   if (fd == -1) {
     return false;
   }
-  return WriteStringToFd(content, fd) || CleanUpAfterFailedWrite(path);
+
+  bool result = WriteStringToFd(content, fd);
+  TEMP_FAILURE_RETRY(close(fd));
+  return result || CleanUpAfterFailedWrite(path);
 }

@@ -20,6 +20,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <string>
+
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
 
 #define COLDBOOT_DONE "/dev/.coldboot_done"
@@ -27,7 +29,10 @@
 int mtd_name_to_number(const char *name);
 int create_socket(const char *name, int type, mode_t perm,
                   uid_t uid, gid_t gid, const char *socketcon);
-char *read_file(const char *fn, unsigned *_sz);
+
+bool read_file(const char* path, std::string* content);
+int write_file(const char* path, const char* content);
+
 time_t gettime(void);
 unsigned int decode_uid(const char *s);
 
