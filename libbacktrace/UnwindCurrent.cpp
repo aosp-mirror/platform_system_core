@@ -137,9 +137,8 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool within_hand
 
       if (!within_handler) {
         frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
-        frame->map = FindMap(frame->pc);
+        FillInMap(frame->pc, &frame->map);
       } else {
-        frame->map = NULL;
         frame->func_offset = 0;
       }
       num_frames++;
