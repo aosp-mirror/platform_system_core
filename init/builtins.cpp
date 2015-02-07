@@ -717,7 +717,7 @@ int do_write(int nargs, char **args)
     const char *path = args[1];
     const char *value = args[2];
 
-    char expanded_value[PROP_VALUE_MAX];
+    char expanded_value[256];
     if (expand_props(expanded_value, value, sizeof(expanded_value))) {
         ERROR("cannot expand '%s' while writing to '%s'\n", value, path);
         return -EINVAL;
