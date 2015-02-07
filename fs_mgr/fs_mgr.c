@@ -488,7 +488,9 @@ int fs_mgr_mount_all(struct fstab *fstab)
         /* Deal with encryptability. */
         if (!mret) {
             /* If this is encryptable, need to trigger encryption */
-          if (fs_mgr_is_encryptable(&fstab->recs[attempted_idx])) {
+            if (   (fstab->recs[attempted_idx].fs_mgr_flags & MF_FORCECRYPT)
+                || (device_is_force_encrypted()
+                    && fs_mgr_is_encryptable(&fstab->recs[attempted_idx]))) {
                 if (umount(fstab->recs[attempted_idx].mount_point) == 0) {
                     if (encryptable == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
                         ERROR("Will try to encrypt %s %s\n", fstab->recs[attempted_idx].mount_point,
