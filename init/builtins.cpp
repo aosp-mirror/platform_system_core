@@ -172,11 +172,16 @@ int do_enable(int nargs, char **args)
     return 0;
 }
 
-int do_exec(int nargs, char **args)
-{
-    return -1;
+int do_exec(int nargs, char** args) {
+    service* svc = make_exec_oneshot_service(nargs, args);
+    if (svc == NULL) {
+        return -1;
+    }
+    service_start(svc, NULL);
+    return 0;
 }
 
+// TODO: remove execonce when exec is available.
 int do_execonce(int nargs, char **args)
 {
     pid_t child;

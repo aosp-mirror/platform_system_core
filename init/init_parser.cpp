@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -437,7 +438,7 @@ parser_done:
 }
 
 int init_parse_config_file(const char* path) {
-    INFO("Parsing %s...", path);
+    INFO("Parsing %s...\n", path);
     std::string data;
     if (!read_file(path, &data)) {
         return -1;
@@ -660,6 +661,65 @@ int action_queue_empty()
     return list_empty(&action_queue);
 }
 
+service* make_exec_oneshot_service(int nargs, char** args) {
+    // Parse the arguments: exec [SECLABEL [UID [GID]*] --] COMMAND ARGS...
+    int command_arg = 1;
+    for (int i = 1; i < nargs; ++i) {
+        if (strcmp(args[i], "--") == 0) {
+            command_arg = i + 1;
+            break;
+        }
+    }
+    if (command_arg > 4 + NR_SVC_SUPP_GIDS) {
+        ERROR("exec called with too many supplementary group ids\n");
+        return NULL;
+    }
+
+    int argc = nargs - command_arg;
+    char** argv = (args + command_arg);
+    if (argc < 1) {
+        ERROR("exec called without command\n");
+        return NULL;
+    }
+
+    service* svc = (service*) calloc(1, sizeof(*svc) + sizeof(char*) * argc);
+    if (svc == NULL) {
+        ERROR("Couldn't allocate service for exec of '%s': %s", argv[0], strerror(errno));
+        return NULL;
+    }
+
+    if (command_arg > 2) {
+        svc->seclabel = args[1];
+    }
+    if (command_arg > 3) {
+        svc->uid = decode_uid(args[2]);
+    }
+    if (command_arg > 4) {
+        svc->gid = decode_uid(args[3]);
+        svc->nr_supp_gids = command_arg - 1 /* -- */ - 4 /* exec SECLABEL UID GID */;
+        for (size_t i = 0; i < svc->nr_supp_gids; ++i) {
+            svc->supp_gids[i] = decode_uid(args[4 + i]);
+        }
+    }
+
+    static int exec_count; // Every service needs a unique name.
+    char* name = NULL;
+    asprintf(&name, "exec %d (%s)", exec_count++, argv[0]);
+    if (name == NULL) {
+        ERROR("Couldn't allocate name for exec service '%s'\n", argv[0]);
+        free(svc);
+        return NULL;
+    }
+    svc->name = name;
+    svc->classname = "default";
+    svc->flags = SVC_EXEC | SVC_ONESHOT;
+    svc->nargs = argc;
+    memcpy(svc->args, argv, sizeof(char*) * svc->nargs);
+    svc->args[argc] = NULL;
+    list_add_tail(&service_list, &svc->slist);
+    return svc;
+}
+
 static void *parse_service(struct parse_state *state, int nargs, char **args)
 {
     if (nargs < 3) {
@@ -683,7 +743,7 @@ static void *parse_service(struct parse_state *state, int nargs, char **args)
         parse_error(state, "out of memory\n");
         return 0;
     }
-    svc->name = args[1];
+    svc->name = strdup(args[1]);
     svc->classname = "default";
     memcpy(svc->args, args + 2, sizeof(char*) * nargs);
     trigger* cur_trigger = (trigger*) calloc(1, sizeof(*cur_trigger));
