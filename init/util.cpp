@@ -35,6 +35,8 @@
 /* for ANDROID_SOCKET_* */
 #include <cutils/sockets.h>
 
+#include <utils/file.h>
+
 #include <private/android_filesystem_config.h>
 
 #include "init.h"
@@ -146,48 +148,42 @@ out_close:
     return -1;
 }
 
-/* reads a file, making sure it is terminated with \n \0 */
-char *read_file(const char *fn, unsigned *_sz)
-{
-    char *data = NULL;
-    int sz;
-    int fd;
+bool read_file(const char* path, std::string* content) {
+    content->clear();
+
+    int fd = TEMP_FAILURE_RETRY(open(path, O_RDONLY|O_NOFOLLOW|O_CLOEXEC));
+    if (fd == -1) {
+        return false;
+    }
+
+    // For security reasons, disallow world-writable
+    // or group-writable files.
     struct stat sb;
-
-    data = 0;
-    fd = open(fn, O_RDONLY|O_CLOEXEC);
-    if(fd < 0) return 0;
-
-    // for security reasons, disallow world-writable
-    // or group-writable files
-    if (fstat(fd, &sb) < 0) {
-        ERROR("fstat failed for '%s'\n", fn);
-        goto oops;
+    if (fstat(fd, &sb) == -1) {
+        ERROR("fstat failed for '%s': %s\n", path, strerror(errno));
+        return false;
     }
     if ((sb.st_mode & (S_IWGRP | S_IWOTH)) != 0) {
-        ERROR("skipping insecure file '%s'\n", fn);
-        goto oops;
+        ERROR("skipping insecure file '%s'\n", path);
+        return false;
     }
 
-    sz = lseek(fd, 0, SEEK_END);
-    if(sz < 0) goto oops;
+    bool okay = android::ReadFdToString(fd, content);
+    TEMP_FAILURE_RETRY(close(fd));
+    if (okay) {
+        content->append("\n", 1);
+    }
+    return okay;
+}
 
-    if(lseek(fd, 0, SEEK_SET) != 0) goto oops;
-
-    data = (char*) malloc(sz + 2);
-    if(data == 0) goto oops;
-
-    if(read(fd, data, sz) != sz) goto oops;
-    close(fd);
-    data[sz] = '\n';
-    data[sz+1] = 0;
-    if(_sz) *_sz = sz;
-    return data;
-
-oops:
-    close(fd);
-    free(data);
-    return 0;
+int write_file(const char* path, const char* content) {
+    int fd = TEMP_FAILURE_RETRY(open(path, O_WRONLY|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600));
+    if (fd == -1) {
+        return -errno;
+    }
+    int result = android::WriteStringToFd(content, fd) ? 0 : -errno;
+    TEMP_FAILURE_RETRY(close(fd));
+    return result;
 }
 
 #define MAX_MTD_PARTITIONS 16

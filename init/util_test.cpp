@@ -14,25 +14,24 @@
  * limitations under the License.
  */
 
-#ifndef UTILS_FILE_H
-#define UTILS_FILE_H
+#include "util.h"
 
-#include <string>
-#include <sys/stat.h>
+#include <errno.h>
+#include <gtest/gtest.h>
 
-namespace android {
+TEST(util, read_file_ENOENT) {
+  std::string s("hello");
+  errno = 0;
+  EXPECT_FALSE(read_file("/proc/does-not-exist", &s));
+  EXPECT_EQ(ENOENT, errno);
+  EXPECT_EQ("", s); // s was cleared.
+}
 
-bool ReadFdToString(int fd, std::string* content);
-bool ReadFileToString(const std::string& path, std::string* content);
-
-bool WriteStringToFile(const std::string& content, const std::string& path);
-bool WriteStringToFd(const std::string& content, int fd);
-
-#if !defined(_WIN32)
-bool WriteStringToFile(const std::string& content, const std::string& path,
-                       mode_t mode, uid_t owner, gid_t group);
-#endif
-
-} // namespace android
-
-#endif
+TEST(util, read_file_success) {
+  std::string s("hello");
+  EXPECT_TRUE(read_file("/proc/version", &s));
+  EXPECT_GT(s.length(), 6U);
+  EXPECT_EQ('\n', s[s.length() - 1]);
+  s[5] = 0;
+  EXPECT_STREQ("Linux", s.c_str());
+}

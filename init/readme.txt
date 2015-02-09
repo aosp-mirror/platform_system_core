@@ -191,9 +191,11 @@ enable <servicename>
      on property:ro.boot.myfancyhardware=1
         enable my_fancy_service_for_my_fancy_hardware
 
-
 insmod <path>
    Install the module at <path>
+
+loglevel <level>
+   Sets the kernel log level to level. Properties are expanded within <level>.
 
 mkdir <path> [mode] [owner] [group]
    Create a directory at <path>, optionally with the given mode, owner, and
@@ -229,7 +231,8 @@ setkey
    TBD
 
 setprop <name> <value>
-   Set system property <name> to <value>.
+   Set system property <name> to <value>. Properties are expanded
+   within <value>.
 
 setrlimit <resource> <cur> <max>
    Set the rlimit for a resource.
@@ -259,9 +262,10 @@ wait <path> [ <timeout> ]
   or the timeout has been reached. If timeout is not specified it
   currently defaults to five seconds.
 
-write <path> <string>
-   Open the file at <path> and write a string to it with write(2)
-   without appending.
+write <path> <content>
+   Open the file at <path> and write a string to it with write(2).
+   If the file does not exist, it will be created. If it does exist,
+   it will be truncated. Properties are expanded within <content>.
 
 
 Properties
@@ -338,8 +342,23 @@ Debugging notes
 ---------------
 By default, programs executed by init will drop stdout and stderr into
 /dev/null. To help with debugging, you can execute your program via the
-Andoird program logwrapper. This will redirect stdout/stderr into the
+Android program logwrapper. This will redirect stdout/stderr into the
 Android logging system (accessed via logcat).
 
 For example
 service akmd /system/bin/logwrapper /sbin/akmd
+
+For quicker turnaround when working on init itself, use:
+
+  mm
+  m ramdisk-nodeps
+  m bootimage-nodeps
+  adb reboot bootloader
+  fastboot boot $ANDROID_PRODUCT_OUT/boot.img
+
+Alternatively, use the emulator:
+
+  emulator -partition-size 1024 -verbose -show-kernel -no-window
+
+You might want to call klog_set_level(6) after the klog_init() call
+so you see the kernel logging in dmesg (or the emulator output).

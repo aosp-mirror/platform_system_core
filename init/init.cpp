@@ -940,7 +940,7 @@ int selinux_reload_policy(void)
     return 0;
 }
 
-static int audit_callback(void *data, security_class_t cls __attribute__((unused)), char *buf, size_t len)
+static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_t len)
 {
     snprintf(buf, len, "property=%s", !data ? "NULL" : (char *)data);
     return 0;
@@ -1058,7 +1058,6 @@ int main(int argc, char **argv)
     INFO("property init\n");
     property_load_boot_defaults();
 
-    INFO("reading config file\n");
     init_parse_config_file("/init.rc");
 
     action_for_each_trigger("early-init", action_add_queue_tail);
@@ -1087,7 +1086,6 @@ int main(int argc, char **argv)
 
     /* run all property triggers based on current state of the properties */
     queue_builtin_action(queue_property_triggers_action, "queue_property_triggers");
-
 
     if (BOOTCHART) {
         queue_builtin_action(bootchart_init_action, "bootchart_init");

@@ -30,6 +30,8 @@
 #include <cutils/sockets.h>
 #include <cutils/multiuser.h>
 
+#include <utils/file.h>
+
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
@@ -416,14 +418,9 @@ static void load_properties(char *data, const char *filter)
  */
 static void load_properties_from_file(const char *fn, const char *filter)
 {
-    char *data;
-    unsigned sz;
-
-    data = read_file(fn, &sz);
-
-    if(data != 0) {
-        load_properties(data, filter);
-        free(data);
+    std::string data;
+    if (read_file(fn, &data)) {
+        load_properties(&data[0], filter);
     }
 }
 
