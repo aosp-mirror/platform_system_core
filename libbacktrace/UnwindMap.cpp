@@ -113,18 +113,17 @@ bool UnwindMapLocal::Build() {
   return (map_created_ = (unw_map_local_create() == 0)) && GenerateMap();;
 }
 
-const backtrace_map_t* UnwindMapLocal::Find(uintptr_t addr) {
-  const backtrace_map_t* map = BacktraceMap::Find(addr);
-  if (!map) {
+void UnwindMapLocal::FillIn(uintptr_t addr, backtrace_map_t* map) {
+  BacktraceMap::FillIn(addr, map);
+  if (!IsValid(*map)) {
     // Check to see if the underlying map changed and regenerate the map
     // if it did.
     if (unw_map_local_cursor_valid(&map_cursor_) < 0) {
       if (GenerateMap()) {
-        map = BacktraceMap::Find(addr);
+        BacktraceMap::FillIn(addr, map);
       }
     }
   }
-  return map;
 }
 
 //-------------------------------------------------------------------------

@@ -106,7 +106,7 @@ bool UnwindPtrace::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
 
       frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
 
-      frame->map = FindMap(frame->pc);
+      FillInMap(frame->pc, &frame->map);
 
       num_frames++;
     } else {

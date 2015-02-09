@@ -33,6 +33,8 @@
 #include <string>
 
 struct backtrace_map_t {
+  backtrace_map_t(): start(0), end(0), flags(0) {}
+
   uintptr_t start;
   uintptr_t end;
   int flags;
@@ -48,15 +50,16 @@ public:
 
   virtual ~BacktraceMap();
 
-  // Get the map data structure for the given address.
-  virtual const backtrace_map_t* Find(uintptr_t addr);
+  // Fill in the map data structure for the given address.
+  virtual void FillIn(uintptr_t addr, backtrace_map_t* map);
 
   // The flags returned are the same flags as used by the mmap call.
   // The values are PROT_*.
   int GetFlags(uintptr_t pc) {
-    const backtrace_map_t* map = Find(pc);
-    if (map) {
-      return map->flags;
+    backtrace_map_t map;
+    FillIn(pc, &map);
+    if (IsValid(map)) {
+      return map.flags;
     }
     return PROT_NONE;
   }
@@ -74,6 +77,10 @@ public:
   const_iterator end() const { return maps_.end(); }
 
   virtual bool Build();
+
+  static inline bool IsValid(const backtrace_map_t& map) {
+    return map.end > 0;
+  }
 
 protected:
   BacktraceMap(pid_t pid);
