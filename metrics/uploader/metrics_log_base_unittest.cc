@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include <base/base64.h>
 #include <base/metrics/bucket_ranges.h>
 #include <base/metrics/sample_vector.h>
 #include <gtest/gtest.h>
