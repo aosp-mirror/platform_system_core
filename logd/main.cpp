@@ -367,12 +367,12 @@ int main(int argc, char *argv[]) {
 
             int rc = klogctl(KLOG_READ_ALL, buf, len);
 
-            buf[len - 1] = '\0';
+            if (rc >= 0) {
+                buf[len - 1] = '\0';
 
-            for(char *ptr, *tok = buf;
-                    (rc >= 0) && ((tok = strtok_r(tok, "\r\n", &ptr)));
-                    tok = NULL) {
-                rc = al->log(tok);
+                for (char *ptr, *tok = buf; (tok = strtok_r(tok, "\r\n", &ptr)); tok = NULL) {
+                    al->log(tok);
+                }
             }
         }
 
