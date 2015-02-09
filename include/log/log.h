@@ -540,8 +540,23 @@ typedef enum {
 #define android_btWriteLog(tag, type, payload, len) \
     __android_log_btwrite(tag, type, payload, len)
 
+/*
+ *    IF_ALOG uses android_testLog, but IF_ALOG can be overridden.
+ *    android_testLog will remain constant in its purpose as a wrapper
+ *        for Android logging filter policy, and can be subject to
+ *        change. It can be reused by the developers that override
+ *        IF_ALOG as a convenient means to reimplement their policy
+ *        over Android.
+ */
+#if LOG_NDEBUG /* Production *?
+#define android_testLog(prio, tag) \
+    (__android_log_is_loggable(prio, tag, ANDROID_LOG_DEBUG) != 0)
+#else
+#define android_testLog(prio, tag) \
+    (__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE) != 0)
+#endif
+
 // TODO: remove these prototypes and their users
-#define android_testLog(prio, tag) (1)
 #define android_writevLog(vec,num) do{}while(0)
 #define android_write1Log(str,len) do{}while (0)
 #define android_setMinPriority(tag, prio) do{}while(0)
