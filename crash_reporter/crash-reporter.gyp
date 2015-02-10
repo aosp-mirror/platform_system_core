@@ -6,7 +6,6 @@
     'variables': {
       'deps': [
         'libchromeos-<(libbase_ver)',
-        'dbus-glib-1',
       ],
     },
   },
@@ -16,8 +15,6 @@
       'type': 'static_library',
       'variables': {
         'exported_deps': [
-          'glib-2.0',
-          'gobject-2.0',
           'libchrome-<(libbase_ver)',
           'libpcrecpp',
         ],
@@ -68,7 +65,6 @@
       'variables': {
         'deps': [
           'dbus-1',
-          'dbus-glib-1',
           'libmetrics-<(libbase_ver)',
         ],
       },
@@ -85,12 +81,23 @@
       'variables': {
         'deps': [
           'dbus-1',
-          'dbus-glib-1',
           'libchrome-<(libbase_ver)',
         ],
       },
       'sources': [
         'list_proxies.cc',
+      ],
+      'actions': [
+        {
+          'action_name': 'generate-lib-cros-service-proxies',
+          'variables': {
+            'proxy_output_file': 'include/libcrosservice/dbus-proxies.h'
+          },
+          'sources': [
+            './dbus_bindings/org.chromium.LibCrosService.xml',
+          ],
+          'includes': ['../common-mk/generate-dbus-proxies.gypi'],
+        },
       ],
     },
     {

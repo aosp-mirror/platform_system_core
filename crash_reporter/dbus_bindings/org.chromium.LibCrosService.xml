@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<node name="/org/chromium/LibCrosService"
+      xmlns:tp="http://telepathy.freedesktop.org/wiki/DbusSpec#extensions-v0">
+  <interface name="org.chromium.LibCrosServiceInterface">
+    <method name="ResolveNetworkProxy">
+      <arg name="source_url" type="s" direction="in"/>
+      <arg name="signal_interface" type="s" direction="in"/>
+      <arg name="signal_name" type="s" direction="in"/>
+      <annotation name="org.chromium.DBus.Method.Kind" value="simple"/>
+    </method>
+  </interface>
+  <interface name="org.chromium.CrashReporterLibcrosProxyResolvedInterface">
+    <signal name="ProxyResolved">
+      <arg name="source_url" type="s" direction="out"/>
+      <arg name="proxy_info" type="s" direction="out"/>
+      <arg name="error_message" type="s" direction="out"/>
+    </signal>
+  </interface>
+</node>
