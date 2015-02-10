@@ -556,6 +556,12 @@ typedef enum log_id {
 #define typeof_log_id_t unsigned char
 
 /*
+ * Use the per-tag properties "log.tag.<tagname>" to generate a runtime
+ * result of non-zero to expose a log.
+ */
+int __android_log_is_loggable(int prio, const char *tag, int def);
+
+/*
  * Send a simple string to the log.
  */
 int __android_log_buf_write(int bufID, int prio, const char *tag, const char *text);
