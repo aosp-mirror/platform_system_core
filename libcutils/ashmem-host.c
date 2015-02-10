@@ -22,7 +22,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
-#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,51 +32,18 @@
 #include <unistd.h>
 
 #include <cutils/ashmem.h>
+#include <utils/Compat.h>
 
 #ifndef __unused
 #define __unused __attribute__((__unused__))
 #endif
 
-static pthread_once_t seed_initialized = PTHREAD_ONCE_INIT;
-static void initialize_random() {
-    srand(time(NULL) + getpid());
-}
-
 int ashmem_create_region(const char *ignored __unused, size_t size)
 {
-    static const char txt[] = "abcdefghijklmnopqrstuvwxyz"
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    char name[64];
-    unsigned int retries = 0;
-    pid_t pid = getpid();
-    int fd;
-    if (pthread_once(&seed_initialized, &initialize_random) != 0) {
-        return -1;
-    }
-    do {
-        /* not beautiful, its just wolf-like loop unrolling */
-        snprintf(name, sizeof(name), "/tmp/android-ashmem-%d-%c%c%c%c%c%c%c%c",
-        pid,
-        txt[(int) ((sizeof(txt) - 1) * (rand() / (RAND_MAX + 1.0)))],
-        txt[(int) ((sizeof(txt) - 1) * (rand() / (RAND_MAX + 1.0)))],
-        txt[(int) ((sizeof(txt) - 1) * (rand() / (RAND_MAX + 1.0)))],
-        txt[(int) ((sizeof(txt) - 1) * (rand() / (RAND_MAX + 1.0)))],
-        txt[(int) ((sizeof(txt) - 1) * (rand() / (RAND_MAX + 1.0)))],
-        txt[(int) ((sizeof(txt) - 1) * (rand() / (RAND_MAX + 1.0)))],
-        txt[(int) ((sizeof(txt) - 1) * (rand() / (RAND_MAX + 1.0)))],
-        txt[(int) ((sizeof(txt) - 1) * (rand() / (RAND_MAX + 1.0)))]);
-
-        /* open O_EXCL & O_CREAT: we are either the sole owner or we fail */
-        fd = open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
-        if (fd == -1) {
-            /* unlikely, but if we failed because `name' exists, retry */
-            if (errno != EEXIST || ++retries >= 6) {
-                return -1;
-            }
-        }
-    } while (fd == -1);
-    /* truncate the file to `len' bytes */
-    if (ftruncate(fd, size) != -1 && unlink(name) != -1) {
+    char template[PATH_MAX];
+    snprintf(template, sizeof(template), "/tmp/android-ashmem-%d-XXXXXXXXX", getpid());
+    int fd = mkstemp(template);
+    if (fd != -1 && TEMP_FAILURE_RETRY(ftruncate(fd, size)) != -1 && unlink(template) != -1) {
         return fd;
     }
     close(fd);
@@ -102,9 +68,7 @@ int ashmem_unpin_region(int fd __unused, size_t offset __unused, size_t len __un
 int ashmem_get_size_region(int fd)
 {
     struct stat buf;
-    int result;
-
-    result = fstat(fd, &buf);
+    int result = fstat(fd, &buf);
     if (result == -1) {
         return -1;
     }
@@ -116,5 +80,5 @@ int ashmem_get_size_region(int fd)
         return -1;
     }
 
-    return (int)buf.st_size;    // TODO: care about overflow (> 2GB file)?
+    return buf.st_size;
 }
