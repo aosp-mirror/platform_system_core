@@ -548,7 +548,7 @@ typedef enum {
  *        IF_ALOG as a convenient means to reimplement their policy
  *        over Android.
  */
-#if LOG_NDEBUG /* Production *?
+#if LOG_NDEBUG /* Production */
 #define android_testLog(prio, tag) \
     (__android_log_is_loggable(prio, tag, ANDROID_LOG_DEBUG) != 0)
 #else
