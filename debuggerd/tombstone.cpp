@@ -242,39 +242,37 @@ static void dump_stack_segment(
 
     backtrace_map_t map;
     backtrace->FillInMap(stack_content, &map);
-    const char* map_name;
-    if (BacktraceMap::IsValid(map)) {
-      map_name = "";
-    } else {
-      map_name = map.name.c_str();
+    std::string map_name;
+    if (BacktraceMap::IsValid(map) && map.name.length() > 0) {
+      map_name = "  " + map.name;
     }
     uintptr_t offset = 0;
     std::string func_name(backtrace->GetFunctionName(stack_content, &offset));
     if (!func_name.empty()) {
       if (!i && label >= 0) {
         if (offset) {
-          _LOG(log, logtype::STACK, "    #%02d  %" PRIPTR "  %" PRIPTR "  %s (%s+%" PRIuPTR ")\n",
-               label, *sp, stack_content, map_name, func_name.c_str(), offset);
+          _LOG(log, logtype::STACK, "    #%02d  %" PRIPTR "  %" PRIPTR "%s (%s+%" PRIuPTR ")\n",
+               label, *sp, stack_content, map_name.c_str(), func_name.c_str(), offset);
         } else {
-          _LOG(log, logtype::STACK, "    #%02d  %" PRIPTR "  %" PRIPTR "  %s (%s)\n",
-               label, *sp, stack_content, map_name, func_name.c_str());
+          _LOG(log, logtype::STACK, "    #%02d  %" PRIPTR "  %" PRIPTR "%s (%s)\n",
+               label, *sp, stack_content, map_name.c_str(), func_name.c_str());
         }
       } else {
         if (offset) {
-          _LOG(log, logtype::STACK, "         %" PRIPTR "  %" PRIPTR "  %s (%s+%" PRIuPTR ")\n",
-               *sp, stack_content, map_name, func_name.c_str(), offset);
+          _LOG(log, logtype::STACK, "         %" PRIPTR "  %" PRIPTR "%s (%s+%" PRIuPTR ")\n",
+               *sp, stack_content, map_name.c_str(), func_name.c_str(), offset);
         } else {
-          _LOG(log, logtype::STACK, "         %" PRIPTR "  %" PRIPTR "  %s (%s)\n",
-               *sp, stack_content, map_name, func_name.c_str());
+          _LOG(log, logtype::STACK, "         %" PRIPTR "  %" PRIPTR "%s (%s)\n",
+               *sp, stack_content, map_name.c_str(), func_name.c_str());
         }
       }
     } else {
       if (!i && label >= 0) {
-        _LOG(log, logtype::STACK, "    #%02d  %" PRIPTR "  %" PRIPTR "  %s\n",
-             label, *sp, stack_content, map_name);
+        _LOG(log, logtype::STACK, "    #%02d  %" PRIPTR "  %" PRIPTR "%s\n",
+             label, *sp, stack_content, map_name.c_str());
       } else {
-        _LOG(log, logtype::STACK, "         %" PRIPTR "  %" PRIPTR "  %s\n",
-             *sp, stack_content, map_name);
+        _LOG(log, logtype::STACK, "         %" PRIPTR "  %" PRIPTR "%s\n",
+             *sp, stack_content, map_name.c_str());
       }
     }
 
@@ -327,36 +325,28 @@ static void dump_stack(Backtrace* backtrace, log_t* log) {
   }
 }
 
-static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log) {
-  if (backtrace->NumFrames()) {
-    _LOG(log, logtype::BACKTRACE, "\nbacktrace:\n");
-    dump_backtrace_to_log(backtrace, log, "    ");
-
-    _LOG(log, logtype::STACK, "\nstack:\n");
-    dump_stack(backtrace, log);
-  }
-}
-
 static void dump_map(log_t* log, const backtrace_map_t* map, bool fault_addr) {
-  _LOG(log, logtype::MAPS, "%s%" PRIPTR "-%" PRIPTR " %c%c%c  %7" PRIdPTR "  %s\n",
+  _LOG(log, logtype::MAPS, "%s%" PRIPTR "-%" PRIPTR " %c%c%c  %7" PRIdPTR "%s\n",
          (fault_addr? "--->" : "    "), map->start, map->end - 1,
          (map->flags & PROT_READ) ? 'r' : '-', (map->flags & PROT_WRITE) ? 'w' : '-',
          (map->flags & PROT_EXEC) ? 'x' : '-',
-         (map->end - map->start), map->name.c_str());
+         (map->end - map->start),
+         (map->name.length() > 0) ? ("  " + map->name).c_str() : "");
 }
 
-static void dump_nearby_maps(BacktraceMap* map, log_t* log, pid_t tid) {
+static void dump_all_maps(BacktraceMap* map, log_t* log, pid_t tid) {
+  bool has_fault_address = false;
+  uintptr_t addr = 0;
   siginfo_t si;
   memset(&si, 0, sizeof(si));
   if (ptrace(PTRACE_GETSIGINFO, tid, 0, &si)) {
     _LOG(log, logtype::MAPS, "cannot get siginfo for %d: %s\n", tid, strerror(errno));
-    return;
+  } else {
+    has_fault_address = signal_has_si_addr(si.si_signo);
+    addr = reinterpret_cast<uintptr_t>(si.si_addr);
   }
 
-  bool has_fault_address = signal_has_si_addr(si.si_signo);
-  uintptr_t addr = reinterpret_cast<uintptr_t>(si.si_addr);
-
-  _LOG(log, logtype::MAPS, "\nmemory map: %s\n", has_fault_address ? "(fault address prefixed with --->)" : "");
+  _LOG(log, logtype::MAPS, "\nmemory map:%s\n", has_fault_address ? " (fault address prefixed with --->)" : "");
 
   if (has_fault_address && (addr < map->begin()->start)) {
     _LOG(log, logtype::MAPS, "--->Fault address falls at %" PRIPTR " before any mapped regions\n", addr);
@@ -376,12 +366,14 @@ static void dump_nearby_maps(BacktraceMap* map, log_t* log, pid_t tid) {
   }
 }
 
-static void dump_thread(Backtrace* backtrace, log_t* log) {
-  dump_registers(log, backtrace->Tid());
-  dump_backtrace_and_stack(backtrace, log);
+static void dump_backtrace_and_stack(Backtrace* backtrace, log_t* log) {
+  if (backtrace->NumFrames()) {
+    _LOG(log, logtype::BACKTRACE, "\nbacktrace:\n");
+    dump_backtrace_to_log(backtrace, log, "    ");
 
-  dump_memory_and_code(log, backtrace->Tid());
-  dump_nearby_maps(backtrace->GetMap(), log, backtrace->Tid());
+    _LOG(log, logtype::STACK, "\nstack:\n");
+    dump_stack(backtrace, log);
+  }
 }
 
 // Return true if some thread is not detached cleanly
@@ -427,9 +419,10 @@ static bool dump_sibling_thread_report(
     _LOG(log, logtype::THREAD, "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
     dump_thread_info(log, pid, new_tid);
 
+    dump_registers(log, new_tid);
     UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, new_tid, map));
     if (backtrace->Unwind(0)) {
-      dump_thread(backtrace.get(), log);
+      dump_backtrace_and_stack(backtrace.get(), log);
     }
 
     log->current_tid = log->crashed_tid;
@@ -628,10 +621,13 @@ static bool dump_crash(log_t* log, pid_t pid, pid_t tid, int signal, int si_code
 
   UniquePtr<BacktraceMap> map(BacktraceMap::Create(pid));
   UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, tid, map.get()));
+  dump_abort_message(backtrace.get(), log, abort_msg_address);
+  dump_registers(log, tid);
   if (backtrace->Unwind(0)) {
-    dump_abort_message(backtrace.get(), log, abort_msg_address);
-    dump_thread(backtrace.get(), log);
+    dump_backtrace_and_stack(backtrace.get(), log);
   }
+  dump_memory_and_code(log, tid);
+  dump_all_maps(map.get(), log, tid);
 
   if (want_logs) {
     dump_logs(log, pid, 5);
