@@ -115,6 +115,8 @@ void dump_parser_state() {
 static int lookup_keyword(const char *s)
 {
     switch (*s++) {
+    case 'b':
+        if (!strcmp(s, "ootchart_init")) return K_bootchart_init;
     case 'c':
         if (!strcmp(s, "opy")) return K_copy;
         if (!strcmp(s, "apability")) return K_capability;
