@@ -63,9 +63,6 @@ struct selabel_handle *sehandle_prop;
 
 static int property_triggers_enabled = 0;
 
-static int   bootchart_count;
-static long long bootchart_time = 0;
-
 static char console[32];
 static char bootmode[32];
 static char hardware[32];
@@ -857,20 +854,6 @@ static int queue_property_triggers_action(int nargs, char **args)
     return 0;
 }
 
-static int bootchart_init_action(int nargs, char **args)
-{
-    bootchart_count = bootchart_init();
-    if (bootchart_count < 0) {
-        ERROR("bootcharting init failure\n");
-    } else if (bootchart_count > 0) {
-        NOTICE("bootcharting started (period=%d ms)\n", bootchart_count*BOOTCHART_POLLING_MS);
-    } else {
-        NOTICE("bootcharting ignored\n");
-    }
-
-    return 0;
-}
-
 void selinux_init_all_handles(void)
 {
     sehandle = selinux_android_file_context_handle();
@@ -988,7 +971,7 @@ static void selinux_initialize(void)
 
 int main(int argc, char **argv)
 {
-    int fd_count = 0;
+    size_t fd_count = 0;
     struct pollfd ufds[4];
     int property_set_fd_init = 0;
     int signal_fd_init = 0;
@@ -1087,13 +1070,7 @@ int main(int argc, char **argv)
     /* run all property triggers based on current state of the properties */
     queue_builtin_action(queue_property_triggers_action, "queue_property_triggers");
 
-    if (BOOTCHART) {
-        queue_builtin_action(bootchart_init_action, "bootchart_init");
-    }
-
-    for(;;) {
-        int nr, i, timeout = -1;
-
+    for (;;) {
         execute_one_command();
         restart_processes();
 
@@ -1119,6 +1096,7 @@ int main(int argc, char **argv)
             keychord_fd_init = 1;
         }
 
+        int timeout = -1;
         if (process_needs_restart) {
             timeout = (process_needs_restart - gettime()) * 1000;
             if (timeout < 0)
@@ -1129,48 +1107,22 @@ int main(int argc, char **argv)
             timeout = 0;
         }
 
-        if (BOOTCHART) {
-            if (bootchart_count > 0) {
-                long long current_time;
-                int elapsed_time, remaining_time;
+        bootchart_sample(&timeout);
 
-                current_time = bootchart_gettime();
-                elapsed_time = current_time - bootchart_time;
-
-                if (elapsed_time >= BOOTCHART_POLLING_MS) {
-                    /* count missed samples */
-                    while (elapsed_time >= BOOTCHART_POLLING_MS) {
-                        elapsed_time -= BOOTCHART_POLLING_MS;
-                        bootchart_count--;
-                    }
-                    /* count may be negative, take a sample anyway */
-                    bootchart_time = current_time;
-                    if (bootchart_step() < 0 || bootchart_count <= 0) {
-                        bootchart_finish();
-                        bootchart_count = 0;
-                    }
-                }
-                if (bootchart_count > 0) {
-                    remaining_time = BOOTCHART_POLLING_MS - elapsed_time;
-                    if (timeout < 0 || timeout > remaining_time) {
-                        timeout = remaining_time;
-                    }
-                }
-            }
+        int nr = poll(ufds, fd_count, timeout);
+        if (nr <= 0) {
+            continue;
         }
 
-        nr = poll(ufds, fd_count, timeout);
-        if (nr <= 0)
-            continue;
-
-        for (i = 0; i < fd_count; i++) {
+        for (size_t i = 0; i < fd_count; i++) {
             if (ufds[i].revents & POLLIN) {
-                if (ufds[i].fd == get_property_set_fd())
+                if (ufds[i].fd == get_property_set_fd()) {
                     handle_property_set_fd();
-                else if (ufds[i].fd == get_keychord_fd())
+                } else if (ufds[i].fd == get_keychord_fd()) {
                     handle_keychord();
-                else if (ufds[i].fd == get_signal_fd())
+                } else if (ufds[i].fd == get_signal_fd()) {
                     handle_signal();
+                }
             }
         }
     }

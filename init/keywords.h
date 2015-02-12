@@ -1,4 +1,5 @@
 #ifndef KEYWORD
+int do_bootchart_init(int nargs, char **args);
 int do_chroot(int nargs, char **args);
 int do_chdir(int nargs, char **args);
 int do_class_start(int nargs, char **args);
@@ -105,6 +106,7 @@ enum {
     KEYWORD(load_persist_props,    COMMAND, 0, do_load_persist_props)
     KEYWORD(load_all_props,        COMMAND, 0, do_load_all_props)
     KEYWORD(ioprio,      OPTION,  0, 0)
+    KEYWORD(bootchart_init,        COMMAND, 0, do_bootchart_init)
 #ifdef __MAKE_KEYWORD_ENUM__
     KEYWORD_COUNT,
 };

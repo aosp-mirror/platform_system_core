@@ -4,12 +4,6 @@ LOCAL_PATH:= $(call my-dir)
 
 # --
 
-ifeq ($(strip $(INIT_BOOTCHART)),true)
-init_options += -DBOOTCHART=1
-else
-init_options  += -DBOOTCHART=0
-endif
-
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 init_options += -DALLOW_LOCAL_PROP_OVERRIDE=1 -DALLOW_DISABLE_SELINUX=1
 else
