@@ -110,6 +110,7 @@ class <name>
 onrestart
     Execute a Command (see below) when service restarts.
 
+
 Triggers
 --------
    Triggers are strings which can be used to match certain kinds
@@ -131,6 +132,7 @@ boot
 
    The above stub sets test.c to 1 only when
    both test.a=1 and test.b=1
+
 
 Commands
 --------
@@ -283,63 +285,41 @@ init.svc.<name>
    State of a named service ("stopped", "running", "restarting")
 
 
-Example init.conf
------------------
+Bootcharting
+------------
 
-# not complete -- just providing some examples of usage
-#
-on boot
-   export PATH /sbin:/system/sbin:/system/bin
-   export LD_LIBRARY_PATH /system/lib
+This version of init contains code to perform "bootcharting": generating log
+files that can be later processed by the tools provided by www.bootchart.org.
 
-   mkdir /dev
-   mkdir /proc
-   mkdir /sys
+On the emulator, use the new -bootchart <timeout> option to boot with
+bootcharting activated for <timeout> seconds.
 
-   mount tmpfs tmpfs /dev
-   mkdir /dev/pts
-   mkdir /dev/socket
-   mount devpts devpts /dev/pts
-   mount proc proc /proc
-   mount sysfs sysfs /sys
+On a device, create /data/bootchart/start with a command like the following:
 
-   write /proc/cpu/alignment 4
+  adb shell 'echo $TIMEOUT > /data/bootchart/start'
 
-   ifup lo
+Where the value of $TIMEOUT corresponds to the desired bootcharted period in
+seconds. Bootcharting will stop after that many seconds have elapsed.
+You can also stop the bootcharting at any moment by doing the following:
 
-   hostname localhost
-   domainname localhost
+  adb shell 'echo 1 > /data/bootchart/stop'
 
-   mount yaffs2 mtd@system /system
-   mount yaffs2 mtd@userdata /data
+Note that /data/bootchart/stop is deleted automatically by init at the end of
+the bootcharting. This is not the case with /data/bootchart/start, so don't
+forget to delete it when you're done collecting data.
 
-   import /system/etc/init.conf
+The log files are written to /data/bootchart/. A script is provided to
+retrieve them and create a bootchart.tgz file that can be used with the
+bootchart command-line utility:
 
-   class_start default
+  sudo apt-get install pybootchartgui
+  $ANDROID_BUILD_TOP/system/core/init/grab-bootchart.sh
+  bootchart ./bootchart.tgz
+  gnome-open bootchart.png
 
-service adbd /sbin/adbd
-   user adb
-   group adb
 
-service usbd /system/bin/usbd -r
-   user usbd
-   group usbd
-   socket usbd 666
-
-service zygote /system/bin/app_process -Xzygote /system/bin --zygote
-   socket zygote 666
-
-service runtime /system/bin/runtime
-   user system
-   group system
-
-service akmd /sbin/akmd
-   disabled
-   user akmd
-   group akmd
-
-Debugging notes
----------------
+Debugging init
+--------------
 By default, programs executed by init will drop stdout and stderr into
 /dev/null. To help with debugging, you can execute your program via the
 Android program logwrapper. This will redirect stdout/stderr into the
@@ -350,7 +330,7 @@ service akmd /system/bin/logwrapper /sbin/akmd
 
 For quicker turnaround when working on init itself, use:
 
-  mm
+  mm -j
   m ramdisk-nodeps
   m bootimage-nodeps
   adb reboot bootloader
