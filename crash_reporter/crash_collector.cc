@@ -115,7 +115,7 @@ void CrashCollector::SetUpDBus() {
   session_manager_proxy_.reset(
       new org::chromium::SessionManagerInterfaceProxy(
           bus_,
-          login_manager::kSessionManagerInterface));
+          login_manager::kSessionManagerServiceName));
 }
 
 int CrashCollector::WriteNewFile(const FilePath &filename,
@@ -189,7 +189,7 @@ FilePath CrashCollector::GetUserCrashPath() {
   // first result we get back.
   FilePath user_path = FilePath(kFallbackUserCrashPath);
   std::map<std::string, std::string> active_sessions;
-  if (!GetActiveUserSessions(&active_sessions)) {
+  if (!GetActiveUserSessions(&active_sessions) || active_sessions.empty()) {
     LOG(ERROR) << "Could not get active user sessions, using default.";
     return user_path;
   }
