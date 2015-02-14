@@ -34,12 +34,11 @@ on init
 
     loglevel 3
 
-    # Backward compatibility
+    # Backward compatibility.
     symlink /system/etc /etc
     symlink /sys/kernel/debug /d
 
-    # Right now vendor lives on the same filesystem as system,
-    # but someday that may change.
+    # Link /vendor to /system/vendor for devices without a vendor partition.
     symlink /system/vendor /vendor
 
     # Create cgroup mount point for cpu accounting
