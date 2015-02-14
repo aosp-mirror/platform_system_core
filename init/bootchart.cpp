@@ -47,9 +47,6 @@
 // Polling period in ms.
 static const int BOOTCHART_POLLING_MS = 200;
 
-// Default polling time in seconds.
-static const int BOOTCHART_DEFAULT_TIME_SEC = 2*60;
-
 // Max polling time in seconds.
 static const int BOOTCHART_MAX_TIME_SEC = 10*60;
 
