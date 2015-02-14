@@ -17,7 +17,7 @@
 #ifndef _INIT_PROPERTY_H
 #define _INIT_PROPERTY_H
 
-#include <stdbool.h>
+#include <stddef.h>
 #include <sys/system_properties.h>
 
 extern void handle_property_set_fd(void);

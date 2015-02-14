@@ -17,8 +17,6 @@
 #ifndef _BOOTCHART_H
 #define _BOOTCHART_H
 
-int bootchart_init();
 void bootchart_sample(int* timeout);
-void bootchart_finish();
 
 #endif /* _BOOTCHART_H */
