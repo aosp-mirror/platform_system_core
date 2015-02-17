@@ -273,6 +273,9 @@ class MetricsDaemon : public chromeos::DBusDaemon {
   // to a unsigned 32-bit int.
   uint32_t GetOsVersionHash();
 
+  // Returns true if the system is using an official build.
+  bool IsOnOfficialBuild() const;
+
   // Updates stats, additionally sending them to UMA if enough time has elapsed
   // since the last report.
   void UpdateStats(base::TimeTicks now_ticks, base::Time now_wall_time);
