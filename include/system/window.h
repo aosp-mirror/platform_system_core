@@ -262,6 +262,12 @@ enum {
      * the aspect ratio of the buffers produced.
      */
     NATIVE_WINDOW_STICKY_TRANSFORM = 11,
+
+    /**
+     * The default data space for the buffers as set by the consumer.
+     * The values are defined in graphics.h.
+     */
+    NATIVE_WINDOW_DEFAULT_DATASPACE = 12
 };
 
 /* Valid operations for the (*perform)() hook.
@@ -294,6 +300,7 @@ enum {
     NATIVE_WINDOW_SET_POST_TRANSFORM_CROP   = 16,   /* private */
     NATIVE_WINDOW_SET_BUFFERS_STICKY_TRANSFORM = 17,/* private */
     NATIVE_WINDOW_SET_SIDEBAND_STREAM       = 18,
+    NATIVE_WINDOW_SET_BUFFERS_DATASPACE     = 19
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -498,6 +505,7 @@ struct ANativeWindow
      *     NATIVE_WINDOW_SET_BUFFERS_GEOMETRY  (deprecated)
      *     NATIVE_WINDOW_SET_BUFFERS_TRANSFORM
      *     NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP
+     *     NATIVE_WINDOW_SET_BUFFERS_DATASPACE
      *     NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS
      *     NATIVE_WINDOW_SET_BUFFERS_FORMAT
      *     NATIVE_WINDOW_SET_SCALING_MODE       (private)
@@ -796,6 +804,26 @@ static inline int native_window_set_buffers_format(
         int format)
 {
     return window->perform(window, NATIVE_WINDOW_SET_BUFFERS_FORMAT, format);
+}
+
+/*
+ * native_window_set_buffers_data_space(..., int dataSpace)
+ * All buffers queued after this call will be associated with the dataSpace
+ * parameter specified.
+ *
+ * dataSpace specifies additional information about the buffer that's dependent
+ * on the buffer format and the endpoints. For example, it can be used to convey
+ * the color space of the image data in the buffer, or it can be used to
+ * indicate that the buffers contain depth measurement data instead of color
+ * images.  The default dataSpace is 0, HAL_DATASPACE_UNKNOWN, unless it has been
+ * overridden by the consumer.
+ */
+static inline int native_window_set_buffers_data_space(
+        struct ANativeWindow* window,
+        android_dataspace_t dataSpace)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_BUFFERS_DATASPACE,
+            dataSpace);
 }
 
 /*
