@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "utils.file"
+#include <cutils/log.h>
+
 #include "utils/file.h"
 
 #include <errno.h>
@@ -75,14 +78,26 @@ bool android::WriteStringToFile(const std::string& content, const std::string& p
                                    O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW,
                                    mode));
   if (fd == -1) {
+    ALOGE("android::WriteStringToFile open failed: %s", strerror(errno));
     return false;
   }
 
   // We do an explicit fchmod here because we assume that the caller really meant what they
   // said and doesn't want the umask-influenced mode.
-  bool result = (fchmod(fd, mode) != -1 && fchown(fd, owner, group) == -1 && WriteStringToFd(content, fd));
+  if (fchmod(fd, mode) == -1) {
+    ALOGE("android::WriteStringToFile fchmod failed: %s", strerror(errno));
+    return CleanUpAfterFailedWrite(path);
+  }
+  if (fchown(fd, owner, group) == -1) {
+    ALOGE("android::WriteStringToFile fchown failed: %s", strerror(errno));
+    return CleanUpAfterFailedWrite(path);
+  }
+  if (!WriteStringToFd(content, fd)) {
+    ALOGE("android::WriteStringToFile write failed: %s", strerror(errno));
+    return CleanUpAfterFailedWrite(path);
+  }
   TEMP_FAILURE_RETRY(close(fd));
-  return result || CleanUpAfterFailedWrite(path);
+  return true;
 }
 #endif
 
