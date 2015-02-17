@@ -71,6 +71,20 @@ TEST(file, WriteStringToFile) {
   EXPECT_EQ("abc", s);
 }
 
+TEST(file, WriteStringToFile2) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_TRUE(android::WriteStringToFile("abc", tf.filename, 0660, getuid(), getgid())) << errno;
+  struct stat sb;
+  ASSERT_EQ(0, stat(tf.filename, &sb));
+  ASSERT_EQ(0660U, (sb.st_mode & ~S_IFMT));
+  ASSERT_EQ(getuid(), sb.st_uid);
+  ASSERT_EQ(getgid(), sb.st_gid);
+  std::string s;
+  ASSERT_TRUE(android::ReadFileToString(tf.filename, &s)) << errno;
+  EXPECT_EQ("abc", s);
+}
+
 TEST(file, WriteStringToFd) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
