@@ -317,9 +317,7 @@ static int load_verity_table(struct dm_ioctl *io, char *name, char *blockdev, in
 
     // build the verity params here
     verity_params = buffer + sizeof(struct dm_ioctl) + sizeof(struct dm_target_spec);
-    if (sprintf(verity_params, "%s", table) < 0) {
-        return -1;
-    }
+    strcpy(verity_params, table);
 
     // set next target boundary
     verity_params += strlen(verity_params) + 1;
