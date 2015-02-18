@@ -14,13 +14,22 @@ LOCAL_PATH:= $(call my-dir)
 # divergence makes this difficult to do all at once. For now, we will start
 # small by moving common files into a static library. Hopefully some day we can
 # get enough of adb in here that we no longer need minadb. https://b/17626262
-LIBADB_SRC_FILES :=
+LIBADB_SRC_FILES := transport.c transport_usb.c
 LIBADB_C_FLAGS := -Wall -Werror -D_XOPEN_SOURCE -D_GNU_SOURCE
+
+LIBADB_LINUX_SRC_FILES := fdevent.cpp
+LIBADB_WINDOWS_SRC_FILES := sysdeps_win32.c
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libadbd
+LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
+LOCAL_SRC_FILES := $(LIBADB_SRC_FILES) $(LIBADB_LINUX_SRC_FILES) usb_linux_client.c
+include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libadb
-LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
-LOCAL_SRC_FILES := $(LIBADB_SRC_FILES) fdevent.cpp
+LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
+LOCAL_SRC_FILES := $(LIBADB_SRC_FILES) $(LIBADB_LINUX_SRC_FILES)
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -28,9 +37,9 @@ LOCAL_MODULE := libadb
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
 LOCAL_SRC_FILES := $(LIBADB_SRC_FILES)
 ifeq ($(HOST_OS),windows)
-    LOCAL_SRC_FILES += sysdeps_win32.c
+    LOCAL_SRC_FILES += $(LIBADB_WINDOWS_SRC_FILES)
 else
-    LOCAL_SRC_FILES += fdevent.cpp
+    LOCAL_SRC_FILES += $(LIBADB_LINUX_SRC_FILES)
 endif
 include $(BUILD_HOST_STATIC_LIBRARY)
 
@@ -71,9 +80,7 @@ endif
 LOCAL_SRC_FILES := \
 	adb.c \
 	console.c \
-	transport.c \
 	transport_local.c \
-	transport_usb.c \
 	commandline.c \
 	adb_client.c \
 	adb_auth_host.c \
@@ -121,9 +128,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	adb.c \
-	transport.c \
 	transport_local.c \
-	transport_usb.c \
 	adb_auth_client.c \
 	sockets.c \
 	services.c \
@@ -158,7 +163,7 @@ LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
 LOCAL_C_INCLUDES += system/extras/ext4_utils system/core/fs_mgr/include
 
 LOCAL_STATIC_LIBRARIES := \
-    libadb \
+    libadbd \
     libfs_mgr \
     liblog \
     libcutils \
