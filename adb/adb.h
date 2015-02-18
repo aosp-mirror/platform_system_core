@@ -23,6 +23,10 @@
 #include "fdevent.h"
 #include "transport.h"  /* readx(), writex() */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MAX_PAYLOAD 4096
 
 #define A_SYNC 0x434e5953
@@ -419,5 +423,9 @@ typedef enum {
 
 int sendfailmsg(int fd, const char *reason);
 int handle_host_request(char *service, transport_type ttype, char* serial, int reply_fd, asocket *s);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
