@@ -236,13 +236,13 @@ int decode_dhcp_msg(dhcp_msg *msg, int len, dhcp_info *info)
 
 #if VERBOSE
 
-static void hex2str(char *buf, const unsigned char *array, int len)
+static void hex2str(char *buf, size_t buf_size, const unsigned char *array, int len)
 {
     int i;
     char *cp = buf;
-
+    char *buf_end = buf + buf_size;
     for (i = 0; i < len; i++) {
-        cp += sprintf(cp, " %02x ", array[i]);
+        cp += snprintf(cp, buf_end - cp, " %02x ", array[i]);
     }
 }
 
@@ -278,7 +278,7 @@ void dump_dhcp_msg(dhcp_msg *msg, int len)
     ALOGD("giaddr = %s", ipaddr(msg->giaddr));
 
     c = msg->hlen > 16 ? 16 : msg->hlen;
-    hex2str(buf, msg->chaddr, c);
+    hex2str(buf, sizeof(buf), msg->chaddr, c);
     ALOGD("chaddr = {%s}", buf);
 
     for (n = 0; n < 64; n++) {
@@ -327,7 +327,7 @@ void dump_dhcp_msg(dhcp_msg *msg, int len)
             memcpy(buf, &x[2], n);
             buf[n] = '\0';
         } else {
-            hex2str(buf, &x[2], optsz);
+            hex2str(buf, sizeof(buf), &x[2], optsz);
         }
         if (x[0] == OPT_MESSAGE_TYPE)
             name = dhcp_type_to_name(x[2]);
