@@ -191,6 +191,7 @@ int MetricsDaemon::Run() {
 void MetricsDaemon::RunUploaderTest() {
   upload_service_.reset(new UploadService(new SystemProfileCache(true,
                                                                  config_root_),
+                                          metrics_lib_,
                                           server_));
   upload_service_->Init(upload_interval_, metrics_file_);
   upload_service_->UploadEvent();
@@ -341,7 +342,7 @@ int MetricsDaemon::OnInit() {
     if (IsOnOfficialBuild()) {
       LOG(INFO) << "uploader enabled";
       upload_service_.reset(
-          new UploadService(new SystemProfileCache(), server_));
+          new UploadService(new SystemProfileCache(), metrics_lib_, server_));
       upload_service_->Init(upload_interval_, metrics_file_);
     } else {
       LOG(INFO) << "uploader disabled on non-official build";

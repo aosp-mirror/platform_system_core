@@ -19,6 +19,7 @@
 class MetricsLibraryInterface {
  public:
   virtual void Init() = 0;
+  virtual bool AreMetricsEnabled() = 0;
   virtual bool SendToUMA(const std::string& name, int sample,
                          int min, int max, int nbuckets) = 0;
   virtual bool SendEnumToUMA(const std::string& name, int sample, int max) = 0;
@@ -40,7 +41,7 @@ class MetricsLibrary : public MetricsLibraryInterface {
   bool IsGuestMode();
 
   // Returns whether or not metrics collection is enabled.
-  bool AreMetricsEnabled();
+  bool AreMetricsEnabled() override;
 
   // Sends histogram data to Chrome for transport to UMA and returns
   // true on success. This method results in the equivalent of an

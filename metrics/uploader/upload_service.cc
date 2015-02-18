@@ -26,17 +26,20 @@
 const int UploadService::kMaxFailedUpload = 10;
 
 UploadService::UploadService(SystemProfileSetter* setter,
+                             MetricsLibraryInterface* metrics_lib,
                              const std::string& server)
     : system_profile_setter_(setter),
+      metrics_lib_(metrics_lib),
       histogram_snapshot_manager_(this),
       sender_(new HttpSender(server)),
       testing_(false) {
 }
 
 UploadService::UploadService(SystemProfileSetter* setter,
+                             MetricsLibraryInterface* metrics_lib,
                              const std::string& server,
                              bool testing)
-    : UploadService(setter, server) {
+    : UploadService(setter, metrics_lib, server) {
   testing_ = testing;
 }
 
@@ -93,6 +96,13 @@ void UploadService::UploadEvent() {
 
 void UploadService::SendStagedLog() {
   CHECK(staged_log_) << "staged_log_ must exist to be sent";
+
+  // If metrics are not enabled, discard the log and exit.
+  if (!metrics_lib_->AreMetricsEnabled()) {
+    LOG(INFO) << "Metrics disabled. Don't upload metrics samples.";
+    staged_log_.reset();
+    return;
+  }
 
   std::string log_text;
   staged_log_->GetEncodedLog(&log_text);

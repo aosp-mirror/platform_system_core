@@ -10,6 +10,8 @@
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_flattener.h"
 #include "base/metrics/histogram_snapshot_manager.h"
+
+#include "metrics/metrics_library.h"
 #include "metrics/uploader/metrics_log.h"
 #include "metrics/uploader/sender.h"
 #include "metrics/uploader/system_profile_cache.h"
@@ -55,6 +57,7 @@ class SystemProfileSetter;
 class UploadService : public base::HistogramFlattener {
  public:
   explicit UploadService(SystemProfileSetter* setter,
+                         MetricsLibraryInterface* metrics_lib,
                          const std::string& server);
 
   void Init(const base::TimeDelta& upload_interval,
@@ -99,6 +102,7 @@ class UploadService : public base::HistogramFlattener {
 
   // Private constructor for use in unit testing.
   UploadService(SystemProfileSetter* setter,
+                MetricsLibraryInterface* metrics_lib,
                 const std::string& server,
                 bool testing);
 
@@ -134,6 +138,7 @@ class UploadService : public base::HistogramFlattener {
   MetricsLog* GetOrCreateCurrentLog();
 
   scoped_ptr<SystemProfileSetter> system_profile_setter_;
+  MetricsLibraryInterface* metrics_lib_;
   base::HistogramSnapshotManager histogram_snapshot_manager_;
   scoped_ptr<Sender> sender_;
   int failed_upload_count_;

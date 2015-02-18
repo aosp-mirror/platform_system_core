@@ -12,6 +12,7 @@
 #include "components/metrics/proto/chrome_user_metrics_extension.pb.h"
 #include "components/metrics/proto/histogram_event.pb.h"
 #include "components/metrics/proto/system_profile.pb.h"
+#include "metrics/metrics_library_mock.h"
 #include "metrics/serialization/metric_sample.h"
 #include "metrics/uploader/metrics_log.h"
 #include "metrics/uploader/mock/mock_system_profile_setter.h"
@@ -26,7 +27,8 @@ class UploadServiceTest : public testing::Test {
  protected:
   UploadServiceTest()
       : cache_(true, "/"),
-        upload_service_(new MockSystemProfileSetter(), kMetricsServer, true),
+        upload_service_(new MockSystemProfileSetter(), &metrics_lib_,
+                        kMetricsServer, true),
         exit_manager_(new base::AtExitManager()) {
     sender_ = new SenderMock;
     upload_service_.sender_.reset(sender_);
@@ -52,6 +54,7 @@ class UploadServiceTest : public testing::Test {
   SenderMock* sender_;
   SystemProfileCache cache_;
   UploadService upload_service_;
+  MetricsLibraryMock metrics_lib_;
 
   scoped_ptr<base::AtExitManager> exit_manager_;
 };
@@ -126,7 +129,8 @@ TEST_F(UploadServiceTest, EmptyLogsAreNotSent) {
 }
 
 TEST_F(UploadServiceTest, LogEmptyByDefault) {
-  UploadService upload_service(new MockSystemProfileSetter(), kMetricsServer);
+  UploadService upload_service(new MockSystemProfileSetter(), &metrics_lib_,
+                               kMetricsServer);
 
   // current_log_ should be initialized later as it needs AtExitManager to exit
   // in order to gather system information from SysInfo.
