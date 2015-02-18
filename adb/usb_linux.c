@@ -379,6 +379,7 @@ static int usb_bulk_read(usb_handle *h, void *data, int len)
     struct usbdevfs_urb *out = NULL;
     int res;
 
+    D("++ usb_bulk_read ++\n");
     memset(urb, 0, sizeof(*urb));
     urb->type = USBDEVFS_URB_TYPE_BULK;
     urb->endpoint = h->ep_in;
@@ -441,6 +442,7 @@ static int usb_bulk_read(usb_handle *h, void *data, int len)
     }
 fail:
     adb_mutex_unlock(&h->lock);
+    D("-- usb_bulk_read --\n");
     return res;
 }
 
@@ -451,6 +453,7 @@ int usb_write(usb_handle *h, const void *_data, int len)
     int n;
     int need_zero = 0;
 
+    D("++ usb_write ++\n");
     if(h->zero_mask) {
             /* if we need 0-markers and our transfer
             ** is an even multiple of the packet size,
@@ -480,6 +483,7 @@ int usb_write(usb_handle *h, const void *_data, int len)
         return n;
     }
 
+    D("-- usb_write --\n");
     return 0;
 }
 
@@ -554,7 +558,7 @@ void usb_kick(usb_handle *h)
 
 int usb_close(usb_handle *h)
 {
-    D("[ usb close ... ]\n");
+    D("++ usb close ++\n");
     adb_mutex_lock(&usb_lock);
     h->next->prev = h->prev;
     h->prev->next = h->next;
@@ -562,7 +566,7 @@ int usb_close(usb_handle *h)
     h->next = 0;
 
     adb_close(h->desc);
-    D("[ usb closed %p (fd = %d) ]\n", h, h->desc);
+    D("-- usb closed %p (fd = %d) --\n", h, h->desc);
     adb_mutex_unlock(&usb_lock);
 
     free(h);
