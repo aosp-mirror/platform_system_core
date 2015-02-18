@@ -389,7 +389,7 @@ int do_mount(int nargs, char **args)
             return -1;
         }
 
-        sprintf(tmp, "/dev/block/mtdblock%d", n);
+        snprintf(tmp, sizeof(tmp), "/dev/block/mtdblock%d", n);
 
         if (wait)
             wait_for_file(tmp, COMMAND_RETRY_TIMEOUT);
@@ -409,7 +409,7 @@ int do_mount(int nargs, char **args)
         }
 
         for (n = 0; ; n++) {
-            sprintf(tmp, "/dev/block/loop%d", n);
+            snprintf(tmp, sizeof(tmp), "/dev/block/loop%d", n);
             loop = open(tmp, mode | O_CLOEXEC);
             if (loop < 0) {
                 close(fd);
