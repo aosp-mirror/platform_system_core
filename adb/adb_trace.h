@@ -21,6 +21,10 @@
 #include <android/log.h>
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* define ADB_TRACE to 1 to enable tracing support, or 0 to disable it */
 #define  ADB_TRACE    1
 
@@ -141,5 +145,9 @@ void    adb_trace_init(void);
 #  define  DD(...)         ((void)0)
 #  define  ADB_TRACING     0
 #endif /* ADB_TRACE */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __ADB_TRACE_H */

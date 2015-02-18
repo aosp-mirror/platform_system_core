@@ -17,6 +17,10 @@
 #ifndef _FILE_SYNC_SERVICE_H_
 #define _FILE_SYNC_SERVICE_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define htoll(x) (x)
 #define ltohl(x) (x)
 
@@ -71,5 +75,9 @@ int do_sync_sync(const char *lpath, const char *rpath, int listonly);
 int do_sync_pull(const char *rpath, const char *lpath, int show_progress, int pullTime);
 
 #define SYNC_DATA_MAX (64*1024)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
