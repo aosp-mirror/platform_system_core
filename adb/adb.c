@@ -542,14 +542,6 @@ void handle_packet(apacket *p, atransport *t)
     put_apacket(p);
 }
 
-#if defined(_WIN32)
-static BOOL WINAPI ctrlc_handler(DWORD type)
-{
-    exit(STATUS_CONTROL_C_EXIT);
-    return TRUE;
-}
-#endif
-
 #if ADB_HOST
 
 int launch_server(int server_port)
