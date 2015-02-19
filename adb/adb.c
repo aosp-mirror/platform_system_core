@@ -286,7 +286,7 @@ static void send_msg_with_okay(int fd, const char* msg, size_t msglen) {
 }
 #endif // ADB_HOST
 
-static void send_connect(atransport *t)
+void send_connect(atransport *t)
 {
     D("Calling send_connect \n");
     apacket *cp = get_apacket();
@@ -296,70 +296,6 @@ static void send_connect(atransport *t)
     cp->msg.data_length = fill_connect_data((char *)cp->data,
                                             sizeof(cp->data));
     send_packet(cp, t);
-}
-
-void send_auth_request(atransport *t)
-{
-    D("Calling send_auth_request\n");
-    apacket *p;
-    int ret;
-
-    ret = adb_auth_generate_token(t->token, sizeof(t->token));
-    if (ret != sizeof(t->token)) {
-        D("Error generating token ret=%d\n", ret);
-        return;
-    }
-
-    p = get_apacket();
-    memcpy(p->data, t->token, ret);
-    p->msg.command = A_AUTH;
-    p->msg.arg0 = ADB_AUTH_TOKEN;
-    p->msg.data_length = ret;
-    send_packet(p, t);
-}
-
-static void send_auth_response(uint8_t *token, size_t token_size, atransport *t)
-{
-    D("Calling send_auth_response\n");
-    apacket *p = get_apacket();
-    int ret;
-
-    ret = adb_auth_sign(t->key, token, token_size, p->data);
-    if (!ret) {
-        D("Error signing the token\n");
-        put_apacket(p);
-        return;
-    }
-
-    p->msg.command = A_AUTH;
-    p->msg.arg0 = ADB_AUTH_SIGNATURE;
-    p->msg.data_length = ret;
-    send_packet(p, t);
-}
-
-static void send_auth_publickey(atransport *t)
-{
-    D("Calling send_auth_publickey\n");
-    apacket *p = get_apacket();
-    int ret;
-
-    ret = adb_auth_get_userkey(p->data, sizeof(p->data));
-    if (!ret) {
-        D("Failed to get user public key\n");
-        put_apacket(p);
-        return;
-    }
-
-    p->msg.command = A_AUTH;
-    p->msg.arg0 = ADB_AUTH_RSAPUBLICKEY;
-    p->msg.data_length = ret;
-    send_packet(p, t);
-}
-
-void adb_auth_verified(atransport *t)
-{
-    handle_online(t);
-    send_connect(t);
 }
 
 #if ADB_HOST

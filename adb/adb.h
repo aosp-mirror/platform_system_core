@@ -424,6 +424,11 @@ typedef enum {
 int sendfailmsg(int fd, const char *reason);
 int handle_host_request(char *service, transport_type ttype, char* serial, int reply_fd, asocket *s);
 
+void handle_online(atransport *t);
+void handle_offline(atransport *t);
+
+void send_connect(atransport *t);
+
 #ifdef __cplusplus
 }
 #endif

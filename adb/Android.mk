@@ -14,8 +14,15 @@ LOCAL_PATH:= $(call my-dir)
 # divergence makes this difficult to do all at once. For now, we will start
 # small by moving common files into a static library. Hopefully some day we can
 # get enough of adb in here that we no longer need minadb. https://b/17626262
-LIBADB_SRC_FILES := transport.c transport_usb.c
-LIBADB_C_FLAGS := -Wall -Werror -D_XOPEN_SOURCE -D_GNU_SOURCE
+LIBADB_SRC_FILES := \
+    adb_auth.c \
+    transport.c \
+    transport_usb.c \
+
+LIBADB_C_FLAGS := \
+    -Wall -Werror \
+    -D_XOPEN_SOURCE -D_GNU_SOURCE \
+    -fvisibility=hidden \
 
 LIBADB_LINUX_SRC_FILES := fdevent.cpp
 LIBADB_WINDOWS_SRC_FILES := sysdeps_win32.c
