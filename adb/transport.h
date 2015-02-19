@@ -17,6 +17,8 @@
 #ifndef __TRANSPORT_H
 #define __TRANSPORT_H
 
+#include <sys/types.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
