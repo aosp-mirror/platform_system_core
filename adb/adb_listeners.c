@@ -16,8 +16,6 @@
 
 #include "adb_listeners.h"
 
-#include <sys/socket.h>
-
 #include "sysdeps.h"
 
 int gListenAll = 0; /* Not static because it is used in commandline.c. */
