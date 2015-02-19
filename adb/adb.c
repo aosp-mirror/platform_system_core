@@ -1272,23 +1272,29 @@ static bool should_drop_privileges() {
         return false;
     }
 
-    // Don't run as root if ro.secure is set...
     property_get("ro.secure", value, "1");
     bool ro_secure = (strcmp(value, "1") == 0);
 
-    // ... except we allow running as root in userdebug builds if the
-    // service.adb.root property has been set by the "adb root" command
+    // Drop privileges if ro.secure is set...
+    bool drop = ro_secure;
+
     property_get("ro.debuggable", value, "");
     bool ro_debuggable = (strcmp(value, "1") == 0);
-
     property_get("service.adb.root", value, "");
     bool adb_root = (strcmp(value, "1") == 0);
     bool adb_unroot = (strcmp(value, "0") == 0);
-    if (adb_unroot) {
-        return true; // The user explicitly wants us to drop privileges.
+
+    // ...except "adb root" lets you keep privileges in a debuggable build.
+    if (ro_debuggable && adb_root) {
+        drop = false;
     }
 
-    return ro_secure || !ro_debuggable;
+    // ...and "adb unroot" lets you explicitly drop privileges.
+    if (adb_unroot) {
+        drop = true;
+    }
+
+    return drop;
 #else
     return true; // "adb root" not allowed, always drop privileges.
 #endif /* ALLOW_ADBD_ROOT */
