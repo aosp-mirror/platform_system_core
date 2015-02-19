@@ -92,6 +92,7 @@ endif
 
 LOCAL_SRC_FILES := \
 	adb.c \
+	adb_main.c \
 	console.c \
 	transport_local.c \
 	commandline.c \
@@ -141,6 +142,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	adb.c \
+	adb_main.c \
 	transport_local.c \
 	adb_auth_client.c \
 	sockets.c \
