@@ -1261,35 +1261,36 @@ static void drop_capabilities_bounding_set_if_needed() {
     }
 }
 
-static int should_drop_privileges() {
-#ifndef ALLOW_ADBD_ROOT
-    return 1;
-#else /* ALLOW_ADBD_ROOT */
-    int secure = 0;
+static bool should_drop_privileges() {
+#if defined(ALLOW_ADBD_ROOT)
     char value[PROPERTY_VALUE_MAX];
 
-   /* run adbd in secure mode if ro.secure is set and
-    ** we are not in the emulator
-    */
+    // The emulator is never secure, so don't drop privileges there.
+    // TODO: this seems like a bug --- shouldn't the emulator behave like a device?
     property_get("ro.kernel.qemu", value, "");
-    if (strcmp(value, "1") != 0) {
-        property_get("ro.secure", value, "1");
-        if (strcmp(value, "1") == 0) {
-            // don't run as root if ro.secure is set...
-            secure = 1;
-
-            // ... except we allow running as root in userdebug builds if the
-            // service.adb.root property has been set by the "adb root" command
-            property_get("ro.debuggable", value, "");
-            if (strcmp(value, "1") == 0) {
-                property_get("service.adb.root", value, "");
-                if (strcmp(value, "1") == 0) {
-                    secure = 0;
-                }
-            }
-        }
+    if (strcmp(value, "1") == 0) {
+        return false;
     }
-    return secure;
+
+    // Don't run as root if ro.secure is set...
+    property_get("ro.secure", value, "1");
+    bool ro_secure = (strcmp(value, "1") == 0);
+
+    // ... except we allow running as root in userdebug builds if the
+    // service.adb.root property has been set by the "adb root" command
+    property_get("ro.debuggable", value, "");
+    bool ro_debuggable = (strcmp(value, "1") == 0);
+
+    property_get("service.adb.root", value, "");
+    bool adb_root = (strcmp(value, "1") == 0);
+    bool adb_unroot = (strcmp(value, "0") == 0);
+    if (adb_unroot) {
+        return true; // The user explicitly wants us to drop privileges.
+    }
+
+    return ro_secure || !ro_debuggable;
+#else
+    return true; // "adb root" not allowed, always drop privileges.
 #endif /* ALLOW_ADBD_ROOT */
 }
 #endif /* !ADB_HOST */
