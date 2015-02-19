@@ -26,6 +26,8 @@ int adb_auth_keygen(const char* filename);
 void adb_auth_verified(atransport *t);
 
 void send_auth_request(atransport *t);
+void send_auth_response(uint8_t *token, size_t token_size, atransport *t);
+void send_auth_publickey(atransport *t);
 
 /* AUTH packets first argument */
 /* Request */
