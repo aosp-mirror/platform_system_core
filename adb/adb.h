@@ -400,6 +400,7 @@ int connection_state(atransport *t);
 #define CS_SIDELOAD   6
 #define CS_UNAUTHORIZED 7
 
+extern const char *adb_device_banner;
 extern int HOST;
 extern int SHELL_EXIT_NOTIFY_FD;
 
