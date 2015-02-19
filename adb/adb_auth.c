@@ -26,6 +26,8 @@
 #include "adb_auth.h"
 #include "sysdeps.h"
 
+int auth_enabled = 0;
+
 void send_auth_request(atransport *t)
 {
     D("Calling send_auth_request\n");
