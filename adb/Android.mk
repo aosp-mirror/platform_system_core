@@ -15,8 +15,10 @@ LOCAL_PATH:= $(call my-dir)
 # small by moving common files into a static library. Hopefully some day we can
 # get enough of adb in here that we no longer need minadb. https://b/17626262
 LIBADB_SRC_FILES := \
+    adb.c \
     adb_auth.c \
     adb_listeners.c \
+    sockets.c \
     transport.c \
     transport_usb.c \
 
@@ -34,6 +36,8 @@ LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
     $(LIBADB_LINUX_SRC_FILES) \
+    adb_auth_client.c \
+    jdwp_service.c \
     qemu_tracing.c \
     usb_linux_client.c \
 
@@ -42,13 +46,14 @@ include $(BUILD_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libadb
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
-LOCAL_SRC_FILES := $(LIBADB_SRC_FILES) $(LIBADB_LINUX_SRC_FILES)
-include $(BUILD_STATIC_LIBRARY)
+LOCAL_SRC_FILES := \
+    $(LIBADB_SRC_FILES) \
+    adb_auth_host.c \
 
-include $(CLEAR_VARS)
-LOCAL_MODULE := libadb
-LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
-LOCAL_SRC_FILES := $(LIBADB_SRC_FILES)
+# Even though we're building a static library (and thus there's no link step for
+# this to take effect), this adds the SSL includes to our path.
+LOCAL_STATIC_LIBRARIES := libcrypto_static
+
 ifeq ($(HOST_OS),windows)
     LOCAL_SRC_FILES += $(LIBADB_WINDOWS_SRC_FILES)
 else
@@ -91,14 +96,11 @@ ifeq ($(HOST_OS),windows)
 endif
 
 LOCAL_SRC_FILES := \
-	adb.c \
 	adb_main.c \
 	console.c \
 	transport_local.c \
 	commandline.c \
 	adb_client.c \
-	adb_auth_host.c \
-	sockets.c \
 	services.c \
 	file_sync_client.c \
 	$(EXTRA_SRCS) \
@@ -141,14 +143,10 @@ endif
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
-	adb.c \
 	adb_main.c \
 	transport_local.c \
-	adb_auth_client.c \
-	sockets.c \
 	services.c \
 	file_sync_service.c \
-	jdwp_service.c \
 	framebuffer_service.c \
 	remount_service.c \
 	set_verity_enable_state_service.c \
