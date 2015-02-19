@@ -20,7 +20,6 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/prctl.h>
 
 #include "adb.h"
 #include "adb_auth.h"
@@ -29,6 +28,7 @@
 
 #if !ADB_HOST
 #include <getopt.h>
+#include <sys/prctl.h>
 
 #include "cutils/properties.h"
 #include "private/android_filesystem_config.h"
@@ -41,6 +41,14 @@ static void adb_cleanup(void)
 {
     usb_cleanup();
 }
+
+#if defined(_WIN32)
+static BOOL WINAPI ctrlc_handler(DWORD type)
+{
+    exit(STATUS_CONTROL_C_EXIT);
+    return TRUE;
+}
+#endif
 
 #if ADB_HOST
 #ifdef WORKAROUND_BUG6558362
