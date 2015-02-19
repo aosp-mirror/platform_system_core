@@ -23,7 +23,12 @@ LIBADB_WINDOWS_SRC_FILES := sysdeps_win32.c
 include $(CLEAR_VARS)
 LOCAL_MODULE := libadbd
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
-LOCAL_SRC_FILES := $(LIBADB_SRC_FILES) $(LIBADB_LINUX_SRC_FILES) usb_linux_client.c
+LOCAL_SRC_FILES := \
+    $(LIBADB_SRC_FILES) \
+    $(LIBADB_LINUX_SRC_FILES) \
+    qemu_tracing.c \
+    usb_linux_client.c \
+
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)

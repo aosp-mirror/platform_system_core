@@ -30,6 +30,7 @@
 #include "sysdeps.h"
 #include "adb.h"
 #include "adb_auth.h"
+#include "qemu_tracing.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -144,59 +145,6 @@ void  adb_trace_init(void)
             p++;
     }
 }
-
-#if !ADB_HOST
-/*
- * Implements ADB tracing inside the emulator.
- */
-
-#include <stdarg.h>
-
-/*
- * Redefine open and write for qemu_pipe.h that contains inlined references
- * to those routines. We will redifine them back after qemu_pipe.h inclusion.
- */
-
-#undef open
-#undef write
-#define open    adb_open
-#define write   adb_write
-#include <hardware/qemu_pipe.h>
-#undef open
-#undef write
-#define open    ___xxx_open
-#define write   ___xxx_write
-
-/* A handle to adb-debug qemud service in the emulator. */
-int   adb_debug_qemu = -1;
-
-/* Initializes connection with the adb-debug qemud service in the emulator. */
-static int adb_qemu_trace_init(void)
-{
-    char con_name[32];
-
-    if (adb_debug_qemu >= 0) {
-        return 0;
-    }
-
-    /* adb debugging QEMUD service connection request. */
-    snprintf(con_name, sizeof(con_name), "qemud:adb-debug");
-    adb_debug_qemu = qemu_pipe_open(con_name);
-    return (adb_debug_qemu >= 0) ? 0 : -1;
-}
-
-void adb_qemu_trace(const char* fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    char msg[1024];
-
-    if (adb_debug_qemu >= 0) {
-        vsnprintf(msg, sizeof(msg), fmt, args);
-        adb_write(adb_debug_qemu, msg, strlen(msg));
-    }
-}
-#endif  /* !ADB_HOST */
 
 apacket *get_apacket(void)
 {
