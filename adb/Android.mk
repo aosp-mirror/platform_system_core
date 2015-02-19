@@ -16,6 +16,7 @@ LOCAL_PATH:= $(call my-dir)
 # get enough of adb in here that we no longer need minadb. https://b/17626262
 LIBADB_SRC_FILES := \
     adb_auth.c \
+    adb_listeners.c \
     transport.c \
     transport_usb.c \
 
