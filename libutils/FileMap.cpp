@@ -141,20 +141,14 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
 
     // init on first use
     if (mPageSize == -1) {
-#if NOT_USING_KLIBC
         mPageSize = sysconf(_SC_PAGESIZE);
         if (mPageSize == -1) {
             ALOGE("could not get _SC_PAGESIZE\n");
             return false;
         }
-#else
-        // this holds for Linux, Darwin, Cygwin, and doesn't pain the ARM
-        mPageSize = 4096;
-#endif
     }
 
-    adjust   = offset % mPageSize;
-try_again:
+    adjust = offset % mPageSize;
     adjOffset = offset - adjust;
     adjLength = length + adjust;
 
@@ -165,13 +159,6 @@ try_again:
 
     ptr = mmap(NULL, adjLength, prot, flags, fd, adjOffset);
     if (ptr == MAP_FAILED) {
-        // Cygwin does not seem to like file mapping files from an offset.
-        // So if we fail, try again with offset zero
-        if (adjOffset > 0) {
-            adjust = offset;
-            goto try_again;
-        }
-
         ALOGE("mmap(%lld,%zu) failed: %s\n",
             (long long)adjOffset, adjLength, strerror(errno));
         return false;
