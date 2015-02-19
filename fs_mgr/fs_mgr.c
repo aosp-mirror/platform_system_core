@@ -154,9 +154,10 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
     } else if (!strcmp(fs_type, "f2fs")) {
             char *f2fs_fsck_argv[] = {
                     F2FS_FSCK_BIN,
+                    "-f",
                     blk_device
             };
-        INFO("Running %s on %s\n", F2FS_FSCK_BIN, blk_device);
+        INFO("Running %s -f %s\n", F2FS_FSCK_BIN, blk_device);
 
         ret = android_fork_execvp_ext(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv,
                                       &status, true, LOG_KLOG | LOG_FILE,
@@ -487,7 +488,9 @@ int fs_mgr_mount_all(struct fstab *fstab)
         /* Deal with encryptability. */
         if (!mret) {
             /* If this is encryptable, need to trigger encryption */
-          if (fs_mgr_is_encryptable(&fstab->recs[attempted_idx])) {
+            if (   (fstab->recs[attempted_idx].fs_mgr_flags & MF_FORCECRYPT)
+                || (device_is_force_encrypted()
+                    && fs_mgr_is_encryptable(&fstab->recs[attempted_idx]))) {
                 if (umount(fstab->recs[attempted_idx].mount_point) == 0) {
                     if (encryptable == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
                         ERROR("Will try to encrypt %s %s\n", fstab->recs[attempted_idx].mount_point,

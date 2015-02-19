@@ -57,10 +57,14 @@ typedef enum {
                                         * and must be routed to speaker
                                         */
     AUDIO_STREAM_DTMF             = 8,
-    AUDIO_STREAM_TTS              = 9,
-
-    AUDIO_STREAM_CNT,
-    AUDIO_STREAM_MAX              = AUDIO_STREAM_CNT - 1,
+    AUDIO_STREAM_TTS              = 9,  /* Transmitted Through Speaker.
+                                         * Plays over speaker only, silent on other devices.
+                                         */
+    AUDIO_STREAM_ACCESSIBILITY    = 10, /* For accessibility talk back prompts */
+    AUDIO_STREAM_REROUTING        = 11, /* For dynamic policy output mixes */
+    AUDIO_STREAM_PATCH            = 12, /* For internal audio flinger tracks. Fixed volume */
+    AUDIO_STREAM_PUBLIC_CNT       = AUDIO_STREAM_TTS + 1,
+    AUDIO_STREAM_CNT              = AUDIO_STREAM_PATCH + 1,
 } audio_stream_type_t;
 
 /* Do not change these values without updating their counterparts
@@ -96,6 +100,7 @@ typedef enum {
     AUDIO_USAGE_ASSISTANCE_NAVIGATION_GUIDANCE     = 12,
     AUDIO_USAGE_ASSISTANCE_SONIFICATION            = 13,
     AUDIO_USAGE_GAME                               = 14,
+    AUDIO_USAGE_VIRTUAL_SOURCE                     = 15,
 
     AUDIO_USAGE_CNT,
     AUDIO_USAGE_MAX                                = AUDIO_USAGE_CNT - 1,
@@ -135,6 +140,7 @@ typedef enum {
                                           /*  play the mix captured by this audio source.      */
     AUDIO_SOURCE_CNT,
     AUDIO_SOURCE_MAX                 = AUDIO_SOURCE_CNT - 1,
+    AUDIO_SOURCE_FM_TUNER            = 1998,
     AUDIO_SOURCE_HOTWORD             = 1999, /* A low-priority, preemptible audio source for
                                                 for background software hotword detection.
                                                 Same tuning as AUDIO_SOURCE_VOICE_RECOGNITION.

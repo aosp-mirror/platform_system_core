@@ -56,6 +56,7 @@ OUR_TOOLS := \
     nandread \
     newfs_msdos \
     ps \
+    prlimit \
     renice \
     restorecon \
     route \
