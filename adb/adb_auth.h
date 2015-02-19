@@ -21,6 +21,8 @@
 extern "C" {
 #endif
 
+extern int auth_enabled;
+
 void adb_auth_init(void);
 int adb_auth_keygen(const char* filename);
 void adb_auth_verified(atransport *t);
