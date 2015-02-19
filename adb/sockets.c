@@ -430,12 +430,6 @@ asocket *create_local_socket(int fd)
 
 asocket *create_local_service_socket(const char *name)
 {
-    asocket *s;
-    int fd;
-#if !ADB_HOST
-    char debug[PROPERTY_VALUE_MAX];
-#endif
-
 #if !ADB_HOST
     if (!strcmp(name,"jdwp")) {
         return create_jdwp_service_socket();
@@ -444,18 +438,19 @@ asocket *create_local_service_socket(const char *name)
         return create_jdwp_tracker_service_socket();
     }
 #endif
-    fd = service_to_fd(name);
+    int fd = service_to_fd(name);
     if(fd < 0) return 0;
 
-    s = create_local_socket(fd);
+    asocket* s = create_local_socket(fd);
     D("LS(%d): bound to '%s' via %d\n", s->id, name, fd);
 
 #if !ADB_HOST
+    char debug[PROPERTY_VALUE_MAX];
     if (!strncmp(name, "root:", 5))
         property_get("ro.debuggable", debug, "");
 
-    if ((!strncmp(name, "root:", 5) && getuid() != 0
-        && strcmp(debug, "1") == 0)
+    if ((!strncmp(name, "root:", 5) && getuid() != 0 && strcmp(debug, "1") == 0)
+        || (!strncmp(name, "unroot:", 7) && getuid() == 0)
         || !strncmp(name, "usb:", 4)
         || !strncmp(name, "tcpip:", 6)) {
         D("LS(%d): enabling exit_on_close\n", s->id);
