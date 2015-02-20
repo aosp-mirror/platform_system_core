@@ -43,7 +43,6 @@ static int send_request(int sock_fd, void* msg_ptr, size_t msg_len) {
 }
 
 static int make_dump_request(debugger_action_t action, pid_t tid, int timeout_secs) {
-  const char* socket_name;
   debugger_msg_t msg;
   memset(&msg, 0, sizeof(msg));
   msg.tid = tid;
