@@ -18,6 +18,7 @@
 
 #include "transport.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,8 +70,7 @@ static void  dump_hex( const unsigned char*  ptr, size_t  len )
 }
 #endif
 
-void
-kick_transport(atransport*  t)
+void kick_transport(atransport* t)
 {
     if (t && !t->kicked)
     {
@@ -87,8 +87,25 @@ kick_transport(atransport*  t)
     }
 }
 
-void
-run_transport_disconnects(atransport*  t)
+// Each atransport contains a list of adisconnects (t->disconnects).
+// An adisconnect contains a link to the next/prev adisconnect, a function
+// pointer to a disconnect callback which takes a void* piece of user data and
+// the atransport, and some user data for the callback (helpfully named
+// "opaque").
+//
+// The list is circular. New items are added to the entry member of the list
+// (t->disconnects) by add_transport_disconnect.
+//
+// run_transport_disconnects invokes each function in the list.
+//
+// Gotchas:
+//   * run_transport_disconnects assumes that t->disconnects is non-null, so
+//     this can't be run on a zeroed atransport.
+//   * The callbacks in this list are not removed when called, and this function
+//     is not guarded against running more than once. As such, ensure that this
+//     function is not called multiple times on the same atransport.
+//     TODO(danalbert): Just fix this so that it is guarded once you have tests.
+void run_transport_disconnects(atransport* t)
 {
     adisconnect*  dis = t->disconnects.next;
 
@@ -753,17 +770,6 @@ void remove_transport_disconnect(atransport*  t, adisconnect*  dis)
     dis->next = dis->prev = dis;
 }
 
-static int qual_char_is_invalid(char ch)
-{
-    if ('A' <= ch && ch <= 'Z')
-        return 0;
-    if ('a' <= ch && ch <= 'z')
-        return 0;
-    if ('0' <= ch && ch <= '9')
-        return 0;
-    return 1;
-}
-
 static int qual_match(const char *to_test,
                       const char *prefix, const char *qual, int sanitize_qual)
 {
@@ -783,7 +789,7 @@ static int qual_match(const char *to_test,
 
     while (*qual) {
         char ch = *qual++;
-        if (sanitize_qual && qual_char_is_invalid(ch))
+        if (sanitize_qual && isalnum(ch))
             ch = '_';
         if (ch != *to_test++)
             return 0;
@@ -923,7 +929,7 @@ static void add_qual(char **buf, size_t *buf_size,
     if (sanitize_qual) {
         char *cp;
         for (cp = *buf + prefix_len; cp < *buf + len; cp++) {
-            if (qual_char_is_invalid(*cp))
+            if (isalnum(*cp))
                 *cp = '_';
         }
     }
