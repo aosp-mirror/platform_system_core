@@ -22,8 +22,8 @@ LIBADB_SRC_FILES := \
     transport.c \
     transport_usb.c \
 
-LIBADB_C_FLAGS := \
-    -Wall -Werror \
+LIBADB_CFLAGS := \
+    -Wall -Werror -Wno-unused-parameter \
     -D_XOPEN_SOURCE -D_GNU_SOURCE \
     -fvisibility=hidden \
 
