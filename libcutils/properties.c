@@ -28,7 +28,7 @@
 #include <cutils/properties.h>
 #include <stdbool.h>
 #include <inttypes.h>
-#include "loghack.h"
+#include <log/log.h>
 
 int8_t property_get_bool(const char *key, int8_t default_value) {
     if (!key) {
@@ -104,8 +104,6 @@ int32_t property_get_int32(const char *key, int32_t default_value) {
     return (int32_t)property_get_imax(key, INT32_MIN, INT32_MAX, default_value);
 }
 
-#ifdef __BIONIC__
-
 #define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
 #include <sys/_system_properties.h>
 
@@ -156,83 +154,3 @@ int property_list(
     struct property_list_callback_data data = { propfn, cookie };
     return __system_property_foreach(property_list_callback, &data);
 }
-
-#else
-
-/* SUPER-cheesy place-holder implementation for glibc/Mac OS/Windows. */
-
-#include <cutils/threads.h>
-
-static mutex_t  env_lock = MUTEX_INITIALIZER;
-
-int property_get(const char *key, char *value, const char *default_value)
-{
-    char ename[PROPERTY_KEY_MAX + 6];
-    char *p;
-    int len;
-    
-    len = strlen(key);
-    if(len >= PROPERTY_KEY_MAX) return -1;
-    memcpy(ename, "PROP_", 5);
-    memcpy(ename + 5, key, len + 1);
-    
-    mutex_lock(&env_lock);
-
-    p = getenv(ename);
-    if(p == 0) p = "";
-    len = strlen(p);
-    if(len >= PROPERTY_VALUE_MAX) {
-        len = PROPERTY_VALUE_MAX - 1;
-    }
-    
-    if((len == 0) && default_value) {
-        len = strlen(default_value);
-        memcpy(value, default_value, len + 1);
-    } else {
-        memcpy(value, p, len);
-        value[len] = 0;
-    }
-
-    mutex_unlock(&env_lock);
-    
-    return len;
-}
-
-
-int property_set(const char *key, const char *value)
-{
-    char ename[PROPERTY_KEY_MAX + 6];
-    char *p;
-    int len;
-    int r;
-
-    if(strlen(value) >= PROPERTY_VALUE_MAX) return -1;
-    
-    len = strlen(key);
-    if(len >= PROPERTY_KEY_MAX) return -1;
-    memcpy(ename, "PROP_", 5);
-    memcpy(ename + 5, key, len + 1);
-
-    mutex_lock(&env_lock);
-#ifdef HAVE_MS_C_RUNTIME
-    {
-        char  temp[256];
-        snprintf( temp, sizeof(temp), "%s=%s", ename, value);
-        putenv(temp);
-        r = 0;
-    }
-#else    
-    r = setenv(ename, value, 1);
-#endif    
-    mutex_unlock(&env_lock);
-    
-    return r;
-}
-
-int property_list(void (*propfn)(const char *key, const char *value, void *cookie), 
-                  void *cookie)
-{
-    return 0;
-}
-
-#endif
