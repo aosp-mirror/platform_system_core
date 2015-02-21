@@ -20,6 +20,7 @@ LIBADB_SRC_FILES := \
     adb_listeners.c \
     sockets.c \
     transport.c \
+    transport_local.c \
     transport_usb.c \
 
 LIBADB_CFLAGS := \
@@ -27,16 +28,17 @@ LIBADB_CFLAGS := \
     -D_XOPEN_SOURCE -D_GNU_SOURCE \
     -fvisibility=hidden \
 
-LIBADB_LINUX_SRC_FILES := fdevent.cpp
-LIBADB_WINDOWS_SRC_FILES := sysdeps_win32.c
+LIBADB_darwin_SRC_FILES := get_my_path_darwin.c usb_osx.c
+LIBADB_linux_SRC_FILES := fdevent.cpp get_my_path_linux.c usb_linux.c
+LIBADB_windows_SRC_FILES := get_my_path_windows.c sysdeps_win32.c usb_windows.c
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libadbd
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
-    $(LIBADB_LINUX_SRC_FILES) \
     adb_auth_client.c \
+    fdevent.cpp \
     jdwp_service.c \
     qemu_tracing.c \
     usb_linux_client.c \
@@ -48,44 +50,30 @@ LOCAL_MODULE := libadb
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
+    $(LIBADB_$(HOST_OS)_SRC_FILES) \
     adb_auth_host.c \
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the SSL includes to our path.
 LOCAL_STATIC_LIBRARIES := libcrypto_static
 
-ifeq ($(HOST_OS),windows)
-    LOCAL_SRC_FILES += $(LIBADB_WINDOWS_SRC_FILES)
-else
-    LOCAL_SRC_FILES += $(LIBADB_LINUX_SRC_FILES)
-endif
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 # adb host tool
 # =========================================================
 include $(CLEAR_VARS)
 
-# Default to a virtual (sockets) usb interface
-USB_SRCS :=
-EXTRA_SRCS :=
-
 ifeq ($(HOST_OS),linux)
-  USB_SRCS := usb_linux.c
-  EXTRA_SRCS := get_my_path_linux.c
   LOCAL_LDLIBS += -lrt -ldl -lpthread
   LOCAL_CFLAGS += -DWORKAROUND_BUG6558362
 endif
 
 ifeq ($(HOST_OS),darwin)
-  USB_SRCS := usb_osx.c
-  EXTRA_SRCS := get_my_path_darwin.c
   LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
   LOCAL_CFLAGS += -Wno-sizeof-pointer-memaccess -Wno-unused-parameter
 endif
 
 ifeq ($(HOST_OS),windows)
-  USB_SRCS := usb_windows.c
-  EXTRA_SRCS := get_my_path_windows.c
   EXTRA_STATIC_LIBS := AdbWinApi
   ifneq ($(strip $(USE_MINGW)),)
     # MinGW under Linux case
@@ -98,13 +86,10 @@ endif
 LOCAL_SRC_FILES := \
 	adb_main.c \
 	console.c \
-	transport_local.c \
 	commandline.c \
 	adb_client.c \
 	services.c \
 	file_sync_client.c \
-	$(EXTRA_SRCS) \
-	$(USB_SRCS) \
 
 ifneq ($(USE_SYSDEPS_WIN32),)
   LOCAL_SRC_FILES += sysdeps_win32.c
@@ -144,13 +129,11 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	adb_main.c \
-	transport_local.c \
 	services.c \
 	file_sync_service.c \
 	framebuffer_service.c \
 	remount_service.c \
 	set_verity_enable_state_service.c \
-	usb_linux_client.c
 
 LOCAL_CFLAGS := \
 	-O2 \
