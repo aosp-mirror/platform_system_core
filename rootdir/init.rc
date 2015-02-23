@@ -494,7 +494,6 @@ service logd /system/bin/logd
     socket logd stream 0666 logd logd
     socket logdr seqpacket 0666 logd logd
     socket logdw dgram 0222 logd logd
-    seclabel u:r:logd:s0
 
 service healthd /sbin/healthd
     class core
@@ -608,7 +607,6 @@ service installd /system/bin/installd
 
 service flash_recovery /system/bin/install-recovery.sh
     class main
-    seclabel u:r:install_recovery:s0
     oneshot
 
 service racoon /system/bin/racoon
