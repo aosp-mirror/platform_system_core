@@ -48,7 +48,7 @@ using namespace android;
 
 // Constructor.  Create an empty object.
 FileMap::FileMap(void)
-    : mRefCount(1), mFileName(NULL), mBasePtr(NULL), mBaseLength(0),
+    : mFileName(NULL), mBasePtr(NULL), mBaseLength(0),
       mDataPtr(NULL), mDataLength(0)
 {
 }
@@ -56,11 +56,6 @@ FileMap::FileMap(void)
 // Destructor.
 FileMap::~FileMap(void)
 {
-    assert(mRefCount == 0);
-
-    //printf("+++ removing FileMap %p %zu\n", mDataPtr, mDataLength);
-
-    mRefCount = -100;       // help catch double-free
     if (mFileName != NULL) {
         free(mFileName);
     }
@@ -134,7 +129,6 @@ bool FileMap::create(const char* origFileName, int fd, off64_t offset, size_t le
 
     void* ptr;
 
-    assert(mRefCount == 1);
     assert(fd >= 0);
     assert(offset >= 0);
     assert(length > 0);
