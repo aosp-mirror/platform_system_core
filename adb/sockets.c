@@ -45,8 +45,6 @@ int sendfailmsg(int fd, const char *reason)
     return writex(fd, reason, len);
 }
 
-//extern int online;
-
 static unsigned local_socket_next_id = 1;
 
 static asocket local_socket_list = {
@@ -196,10 +194,9 @@ enqueue:
 
 static void local_socket_ready(asocket *s)
 {
-        /* far side is ready for data, pay attention to
-           readable events */
+    /* far side is ready for data, pay attention to
+       readable events */
     fdevent_add(&s->fde, FDE_READ);
-//    D("LS(%d): ready()\n", s->id);
 }
 
 static void local_socket_close(asocket *s)
@@ -240,7 +237,7 @@ static void local_socket_destroy(asocket  *s)
 
 static void local_socket_close_locked(asocket *s)
 {
-    D("entered. LS(%d) fd=%d\n", s->id, s->fd);
+    D("entered local_socket_close_locked. LS(%d) fd=%d\n", s->id, s->fd);
     if(s->peer) {
         D("LS(%d): closing peer. peer->id=%d peer->fd=%d\n",
           s->id, s->peer->id, s->peer->fd);
@@ -403,7 +400,6 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
             ** catching it here means we may skip the last few
             ** bytes of readable data.
             */
-//        s->close(s);
         D("LS(%d): FDE_ERROR (fd=%d)\n", s->id, s->fd);
 
         return;
@@ -422,8 +418,6 @@ asocket *create_local_socket(int fd)
     install_local_socket(s);
 
     fdevent_install(&s->fde, fd, local_socket_event_func, s);
-/*    fdevent_add(&s->fde, FDE_ERROR); */
-    //fprintf(stderr, "Created local socket in create_local_socket \n");
     D("LS(%d): created (fd=%d)\n", s->id, s->fd);
     return s;
 }
