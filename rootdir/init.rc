@@ -534,7 +534,6 @@ service servicemanager /system/bin/servicemanager
     onrestart restart zygote
     onrestart restart media
     onrestart restart surfaceflinger
-    onrestart restart inputflinger
     onrestart restart drm
 
 service vold /system/bin/vold
@@ -566,12 +565,6 @@ service surfaceflinger /system/bin/surfaceflinger
     class core
     user system
     group graphics drmrpc
-    onrestart restart zygote
-
-service inputflinger /system/bin/inputflinger
-    class main
-    user system
-    group input
     onrestart restart zygote
 
 service drm /system/bin/drmserver
