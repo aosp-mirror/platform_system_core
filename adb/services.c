@@ -14,29 +14,30 @@
  * limitations under the License.
  */
 
-#include <stddef.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <string.h>
 #include <errno.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifndef _WIN32
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+#endif
+
+#if !ADB_HOST
+#include "cutils/android_reboot.h"
+#include "cutils/properties.h"
+#endif
 
 #include "sysdeps.h"
 
 #define  TRACE_TAG  TRACE_SERVICES
 #include "adb.h"
 #include "file_sync_service.h"
-
-#if ADB_HOST
-#  ifndef HAVE_WINSOCK
-#    include <netinet/in.h>
-#    include <netdb.h>
-#    include <sys/ioctl.h>
-#  endif
-#else
-#  include <cutils/android_reboot.h>
-#  include <cutils/properties.h>
-#endif
+#include "transport.h"
 
 typedef struct stinfo stinfo;
 

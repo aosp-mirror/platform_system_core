@@ -14,19 +14,20 @@
  * limitations under the License.
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
+#include <sys/types.h>
 
 #include "sysdeps.h"
-#include <sys/types.h>
-#if !ADB_HOST
-#include <cutils/properties.h>
-#endif
 
 #define  TRACE_TAG  TRACE_TRANSPORT
 #include "adb.h"
+#if !ADB_HOST
+#include "cutils/properties.h"
+#endif
+#include "transport.h"
 
 #if ADB_HOST
 /* we keep a list of opened transports. The atransport struct knows to which

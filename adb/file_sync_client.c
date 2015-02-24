@@ -14,24 +14,25 @@
  * limitations under the License.
  */
 
+#include <dirent.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <time.h>
-#include <dirent.h>
-#include <limits.h>
 #include <sys/types.h>
-#include <zipfile/zipfile.h>
+#include <time.h>
 #include <utime.h>
 
 #include "sysdeps.h"
+
 #include "adb.h"
 #include "adb_client.h"
 #include "file_sync_service.h"
-
+#include "transport.h"
+#include "zipfile/zipfile.h"
 
 static unsigned long long total_bytes;
 static long long start_time;

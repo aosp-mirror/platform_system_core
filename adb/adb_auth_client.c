@@ -14,18 +14,20 @@
  * limitations under the License.
  */
 
+#include <resolv.h>
 #include <stdio.h>
 #include <string.h>
-#include <resolv.h>
-#include <cutils/list.h>
-#include <cutils/sockets.h>
 
 #include "sysdeps.h"
+
 #include "adb.h"
 #include "adb_auth.h"
+#include "cutils/list.h"
+#include "cutils/sockets.h"
 #include "fdevent.h"
 #include "mincrypt/rsa.h"
 #include "mincrypt/sha.h"
+#include "transport.h"
 
 #define TRACE_TAG TRACE_AUTH
 
