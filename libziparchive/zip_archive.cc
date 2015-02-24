@@ -321,9 +321,7 @@ struct ZipArchive {
       close(fd);
     }
 
-    if (directory_map != NULL) {
-      directory_map->release();
-    }
+    delete directory_map;
     free(hash_table);
   }
 };
@@ -335,7 +333,7 @@ static android::FileMap* MapFileSegment(const int fd, const off64_t start,
   android::FileMap* file_map = new android::FileMap;
   const bool success = file_map->create(debug_file_name, fd, start, length, read_only);
   if (!success) {
-    file_map->release();
+    delete file_map;
     return NULL;
   }
 
@@ -1170,7 +1168,7 @@ int32_t ExtractEntryToFile(ZipArchiveHandle handle,
   const int32_t error = ExtractToMemory(handle, entry,
                                         reinterpret_cast<uint8_t*>(map->getDataPtr()),
                                         map->getDataLength());
-  map->release();
+  delete map;
   return error;
 }
 
