@@ -63,6 +63,8 @@ public:
     bool create(const char* origFileName, int fd,
                 off64_t offset, size_t length, bool readOnly);
 
+    ~FileMap(void);
+
     /*
      * Return the name of the file this map came from, if known.
      */
@@ -84,19 +86,6 @@ public:
     off64_t getDataOffset(void) const { return mDataOffset; }
 
     /*
-     * Get a "copy" of the object.
-     */
-    FileMap* acquire(void) { mRefCount++; return this; }
-
-    /*
-     * Call this when mapping is no longer needed.
-     */
-    void release(void) {
-        if (--mRefCount <= 0)
-            delete this;
-    }
-
-    /*
      * This maps directly to madvise() values, but allows us to avoid
      * including <sys/mman.h> everywhere.
      */
@@ -112,15 +101,12 @@ public:
     int advise(MapAdvice advice);
 
 protected:
-    // don't delete objects; call release()
-    ~FileMap(void);
 
 private:
     // these are not implemented
     FileMap(const FileMap& src);
     const FileMap& operator=(const FileMap& src);
 
-    int         mRefCount;      // reference count
     char*       mFileName;      // original file name, if known
     void*       mBasePtr;       // base of mmap area; page aligned
     size_t      mBaseLength;    // length, measured from "mBasePtr"
