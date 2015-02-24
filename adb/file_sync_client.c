@@ -529,17 +529,12 @@ remote_error:
     } else {
         memcpy(buffer, &id, 4);
         buffer[4] = 0;
-//        strcpy(buffer,"unknown reason");
     }
     fprintf(stderr,"failed to copy '%s' to '%s': %s\n", rpath, lpath, buffer);
     return 0;
 }
 
-
-
 /* --- */
-
-
 static void do_sync_ls_cb(unsigned mode, unsigned size, unsigned time,
                           const char *name, void *cookie)
 {
@@ -573,7 +568,6 @@ struct copyinfo
     unsigned int mode;
     unsigned int size;
     int flag;
-    //char data[0];
 };
 
 copyinfo *mkcopyinfo(const char *spath, const char *dpath,
@@ -601,7 +595,6 @@ copyinfo *mkcopyinfo(const char *spath, const char *dpath,
     snprintf((char*) ci->src, ssize, isdir ? "%s%s/" : "%s%s", spath, name);
     snprintf((char*) ci->dst, dsize, isdir ? "%s%s/" : "%s%s", dpath, name);
 
-//    fprintf(stderr,"mkcopyinfo('%s','%s')\n", ci->src, ci->dst);
     return ci;
 }
 
@@ -614,8 +607,6 @@ static int local_build_list(copyinfo **filelist,
     struct stat st;
     copyinfo *dirlist = 0;
     copyinfo *ci, *next;
-
-//    fprintf(stderr,"local_build_list('%s','%s')\n", lpath, rpath);
 
     d = opendir(lpath);
     if(d == 0) {
