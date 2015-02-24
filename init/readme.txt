@@ -313,9 +313,8 @@ retrieve them and create a bootchart.tgz file that can be used with the
 bootchart command-line utility:
 
   sudo apt-get install pybootchartgui
+  ANDROID_SERIAL=<device serial number>
   $ANDROID_BUILD_TOP/system/core/init/grab-bootchart.sh
-  bootchart ./bootchart.tgz
-  gnome-open bootchart.png
 
 
 Debugging init
