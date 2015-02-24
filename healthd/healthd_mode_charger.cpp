@@ -525,7 +525,7 @@ static void process_key(struct charger *charger, int code, int64_t now)
                         LOGW("[%" PRId64 "] rebooting\n", now);
                         android_reboot(ANDROID_RB_RESTART, 0, 0);
                     } else {
-                        LOGV("[%lld] ignore power-button press, battery level "
+                        LOGV("[%" PRId64 "] ignore power-button press, battery level "
                             "less than minimum\n", now);
                     }
                 }
