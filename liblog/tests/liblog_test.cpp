@@ -122,7 +122,7 @@ TEST(liblog, __android_log_btwrite__android_logger_list_read) {
     pid_t pid = getpid();
 
     ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_EVENTS, O_RDONLY | O_NDELAY, 1000, pid)));
+        LOG_ID_EVENTS, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 1000, pid)));
 
     log_time ts(CLOCK_MONOTONIC);
 
@@ -223,7 +223,7 @@ TEST(liblog, android_logger_list_read__cpu) {
     v += pid & 0xFFFF;
 
     ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_EVENTS, O_RDONLY, 1000, pid)));
+        LOG_ID_EVENTS, ANDROID_LOG_RDONLY, 1000, pid)));
 
     int count = 0;
 
@@ -443,7 +443,7 @@ TEST(liblog, max_payload) {
     struct logger_list *logger_list;
 
     ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_SYSTEM, O_RDONLY, 100, 0)));
+        LOG_ID_SYSTEM, ANDROID_LOG_RDONLY, 100, 0)));
 
     bool matches = false;
     ssize_t max_len = 0;
@@ -505,7 +505,7 @@ TEST(liblog, too_big_payload) {
     struct logger_list *logger_list;
 
     ASSERT_TRUE(NULL != (logger_list = android_logger_list_open(
-        LOG_ID_SYSTEM, O_RDONLY | O_NDELAY, 100, 0)));
+        LOG_ID_SYSTEM, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 100, 0)));
 
     ssize_t max_len = 0;
 
@@ -552,12 +552,12 @@ TEST(liblog, dual_reader) {
 
     // >25 messages due to liblog.__android_log_buf_print__concurrentXX above.
     ASSERT_TRUE(NULL != (logger_list1 = android_logger_list_open(
-        LOG_ID_MAIN, O_RDONLY | O_NDELAY, 25, 0)));
+        LOG_ID_MAIN, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 25, 0)));
 
     struct logger_list *logger_list2;
 
     if (NULL == (logger_list2 = android_logger_list_open(
-            LOG_ID_MAIN, O_RDONLY | O_NDELAY, 15, 0))) {
+            LOG_ID_MAIN, ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK, 15, 0))) {
         android_logger_list_close(logger_list1);
         ASSERT_TRUE(NULL != logger_list2);
     }
@@ -595,7 +595,7 @@ TEST(liblog, dual_reader) {
 }
 
 TEST(liblog, android_logger_get_) {
-    struct logger_list * logger_list = android_logger_list_alloc(O_WRONLY, 0, 0);
+    struct logger_list * logger_list = android_logger_list_alloc(ANDROID_LOG_WRONLY, 0, 0);
 
     for(int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
         log_id_t id = static_cast<log_id_t>(i);
