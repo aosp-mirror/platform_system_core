@@ -29,7 +29,6 @@ LIBADB_CFLAGS := \
     -Wall -Werror \
     -Wno-unused-parameter \
     -Wno-missing-field-initializers \
-    -D_XOPEN_SOURCE -D_GNU_SOURCE \
     -fvisibility=hidden \
 
 LIBADB_darwin_SRC_FILES := fdevent.cpp get_my_path_darwin.c usb_osx.c
@@ -134,8 +133,12 @@ ifneq ($(USE_SYSDEPS_WIN32),)
   LOCAL_SRC_FILES += sysdeps_win32.c
 endif
 
-LOCAL_CFLAGS += -O2 -g -DADB_HOST=1 -Wall -Wno-unused-parameter -Werror
-LOCAL_CFLAGS += -D_XOPEN_SOURCE -D_GNU_SOURCE
+LOCAL_CFLAGS += \
+    -Wall -Werror \
+    -Wno-unused-parameter \
+    -D_GNU_SOURCE \
+    -DADB_HOST=1 \
+
 LOCAL_MODULE := adb
 LOCAL_MODULE_TAGS := debug
 
@@ -180,7 +183,6 @@ LOCAL_CFLAGS := \
 	-O2 \
 	-g \
 	-DADB_HOST=0 \
-	-D_XOPEN_SOURCE \
 	-D_GNU_SOURCE \
 	-Wall -Wno-unused-parameter -Werror -Wno-deprecated-declarations \
 
