@@ -28,7 +28,7 @@ LIBADB_CFLAGS := \
     -D_XOPEN_SOURCE -D_GNU_SOURCE \
     -fvisibility=hidden \
 
-LIBADB_darwin_SRC_FILES := get_my_path_darwin.c usb_osx.c
+LIBADB_darwin_SRC_FILES := fdevent.cpp get_my_path_darwin.c usb_osx.c
 LIBADB_linux_SRC_FILES := fdevent.cpp get_my_path_linux.c usb_linux.c
 LIBADB_windows_SRC_FILES := get_my_path_windows.c sysdeps_win32.c usb_windows.c
 
