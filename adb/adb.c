@@ -31,6 +31,7 @@
 #include "adb.h"
 #include "adb_auth.h"
 #include "adb_listeners.h"
+#include "transport.h"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 

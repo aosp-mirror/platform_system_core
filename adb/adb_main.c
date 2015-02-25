@@ -21,10 +21,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "sysdeps.h"
+
 #include "adb.h"
 #include "adb_auth.h"
 #include "adb_listeners.h"
-#include "sysdeps.h"
+#include "transport.h"
 
 #if !ADB_HOST
 #include <getopt.h>
