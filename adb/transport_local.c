@@ -24,6 +24,7 @@
 
 #define  TRACE_TAG  TRACE_TRANSPORT
 #include "adb.h"
+#include "adb_io.h"
 #if !ADB_HOST
 #include "cutils/properties.h"
 #endif
@@ -43,7 +44,7 @@ static atransport*  local_transports[ ADB_LOCAL_TRANSPORT_MAX ];
 
 static int remote_read(apacket *p, atransport *t)
 {
-    if(readx(t->sfd, &p->msg, sizeof(amessage))){
+    if(!ReadFdExactly(t->sfd, &p->msg, sizeof(amessage))){
         D("remote local: read terminated (message)\n");
         return -1;
     }
@@ -53,7 +54,7 @@ static int remote_read(apacket *p, atransport *t)
         return -1;
     }
 
-    if(readx(t->sfd, p->data, p->msg.data_length)){
+    if(!ReadFdExactly(t->sfd, p->data, p->msg.data_length)){
         D("remote local: terminated (data)\n");
         return -1;
     }
@@ -70,7 +71,7 @@ static int remote_write(apacket *p, atransport *t)
 {
     int   length = p->msg.data_length;
 
-    if(writex(t->sfd, &p->msg, sizeof(amessage) + length)) {
+    if(!WriteFdExactly(t->sfd, &p->msg, sizeof(amessage) + length)) {
         D("remote local: write terminated\n");
         return -1;
     }

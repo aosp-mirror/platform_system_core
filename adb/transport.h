@@ -17,6 +17,7 @@
 #ifndef __TRANSPORT_H
 #define __TRANSPORT_H
 
+#include <stdbool.h>
 #include <sys/types.h>
 
 #include "adb.h"
@@ -25,13 +26,9 @@
 extern "C" {
 #endif
 
-/*
- * Convenience wrappers around read/write that will retry on
- * EINTR and/or short read/write.  Returns 0 on success, -1
- * on error or EOF.
- */
-int readx(int fd, void *ptr, size_t len);
-int writex(int fd, const void *ptr, size_t len);
+#if ADB_TRACE
+void dump_hex(const unsigned char* ptr, size_t  len);
+#endif
 
 /*
  * Obtain a transport from the available transports.
