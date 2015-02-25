@@ -26,7 +26,9 @@ LIBADB_SRC_FILES := \
     transport_usb.c \
 
 LIBADB_CFLAGS := \
-    -Wall -Werror -Wno-unused-parameter \
+    -Wall -Werror \
+    -Wno-unused-parameter \
+    -Wno-missing-field-initializers \
     -D_XOPEN_SOURCE -D_GNU_SOURCE \
     -fvisibility=hidden \
 
@@ -66,6 +68,34 @@ ifeq ($(HOST_OS),windows)
 endif
 
 include $(BUILD_HOST_STATIC_LIBRARY)
+
+LIBADB_TEST_SRCS := \
+    transport_test.cpp \
+
+include $(CLEAR_VARS)
+LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_MODULE := adbd_test
+LOCAL_CFLAGS := -DADB_HOST=0 $(LIBADB_CFLAGS)
+LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS)
+LOCAL_STATIC_LIBRARIES := libadbd
+LOCAL_SHARED_LIBRARIES := liblog
+include $(BUILD_NATIVE_TEST)
+
+include $(CLEAR_VARS)
+LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_MODULE := adb_test
+LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
+LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS) services.c
+LOCAL_STATIC_LIBRARIES := \
+    libadb \
+    libcrypto_static \
+    libcutils \
+
+ifeq ($(HOST_OS),linux)
+  LOCAL_LDLIBS += -lrt -ldl -lpthread
+endif
+
+include $(BUILD_HOST_NATIVE_TEST)
 
 # adb host tool
 # =========================================================
