@@ -19,6 +19,8 @@
 
 #if !ADB_HOST
 #include <android/log.h>
+#else
+#include <stdio.h>
 #endif
 
 #ifdef __cplusplus

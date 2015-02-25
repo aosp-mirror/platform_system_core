@@ -30,8 +30,8 @@
 
 #include "adb.h"
 #include "adb_client.h"
+#include "adb_io.h"
 #include "file_sync_service.h"
-#include "transport.h"
 #include "zipfile/zipfile.h"
 
 static unsigned long long total_bytes;
@@ -87,7 +87,7 @@ void sync_quit(int fd)
     msg.req.id = ID_QUIT;
     msg.req.namelen = 0;
 
-    writex(fd, &msg.req, sizeof(msg.req));
+    WriteFdExactly(fd, &msg.req, sizeof(msg.req));
 }
 
 typedef void (*sync_ls_cb)(unsigned mode, unsigned size, unsigned time, const char *name, void *cookie);
@@ -104,20 +104,20 @@ int sync_ls(int fd, const char *path, sync_ls_cb func, void *cookie)
     msg.req.id = ID_LIST;
     msg.req.namelen = htoll(len);
 
-    if(writex(fd, &msg.req, sizeof(msg.req)) ||
-       writex(fd, path, len)) {
+    if(!WriteFdExactly(fd, &msg.req, sizeof(msg.req)) ||
+       !WriteFdExactly(fd, path, len)) {
         goto fail;
     }
 
     for(;;) {
-        if(readx(fd, &msg.dent, sizeof(msg.dent))) break;
+        if(!ReadFdExactly(fd, &msg.dent, sizeof(msg.dent))) break;
         if(msg.dent.id == ID_DONE) return 0;
         if(msg.dent.id != ID_DENT) break;
 
         len = ltohl(msg.dent.namelen);
         if(len > 256) break;
 
-        if(readx(fd, buf, len)) break;
+        if(!ReadFdExactly(fd, buf, len)) break;
         buf[len] = 0;
 
         func(ltohl(msg.dent.mode),
@@ -150,12 +150,12 @@ int sync_readtime(int fd, const char *path, unsigned int *timestamp,
     msg.req.id = ID_STAT;
     msg.req.namelen = htoll(len);
 
-    if(writex(fd, &msg.req, sizeof(msg.req)) ||
-       writex(fd, path, len)) {
+    if(!WriteFdExactly(fd, &msg.req, sizeof(msg.req)) ||
+       !WriteFdExactly(fd, path, len)) {
         return -1;
     }
 
-    if(readx(fd, &msg.stat, sizeof(msg.stat))) {
+    if(!ReadFdExactly(fd, &msg.stat, sizeof(msg.stat))) {
         return -1;
     }
 
@@ -176,8 +176,8 @@ static int sync_start_readtime(int fd, const char *path)
     msg.req.id = ID_STAT;
     msg.req.namelen = htoll(len);
 
-    if(writex(fd, &msg.req, sizeof(msg.req)) ||
-       writex(fd, path, len)) {
+    if(!WriteFdExactly(fd, &msg.req, sizeof(msg.req)) ||
+       !WriteFdExactly(fd, path, len)) {
         return -1;
     }
 
@@ -189,7 +189,7 @@ static int sync_finish_readtime(int fd, unsigned int *timestamp,
 {
     syncmsg msg;
 
-    if(readx(fd, &msg.stat, sizeof(msg.stat)))
+    if(!ReadFdExactly(fd, &msg.stat, sizeof(msg.stat)))
         return -1;
 
     if(msg.stat.id != ID_STAT)
@@ -210,12 +210,12 @@ int sync_readmode(int fd, const char *path, unsigned *mode)
     msg.req.id = ID_STAT;
     msg.req.namelen = htoll(len);
 
-    if(writex(fd, &msg.req, sizeof(msg.req)) ||
-       writex(fd, path, len)) {
+    if(!WriteFdExactly(fd, &msg.req, sizeof(msg.req)) ||
+       !WriteFdExactly(fd, path, len)) {
         return -1;
     }
 
-    if(readx(fd, &msg.stat, sizeof(msg.stat))) {
+    if(!ReadFdExactly(fd, &msg.stat, sizeof(msg.stat))) {
         return -1;
     }
 
@@ -265,7 +265,7 @@ static int write_data_file(int fd, const char *path, syncsendbuf *sbuf, int show
         }
 
         sbuf->size = htoll(ret);
-        if(writex(fd, sbuf, sizeof(unsigned) * 2 + ret)){
+        if(!WriteFdExactly(fd, sbuf, sizeof(unsigned) * 2 + ret)){
             err = -1;
             break;
         }
@@ -295,7 +295,7 @@ static int write_data_buffer(int fd, char* file_buffer, int size, syncsendbuf *s
 
         memcpy(sbuf->data, &file_buffer[total], count);
         sbuf->size = htoll(count);
-        if(writex(fd, sbuf, sizeof(unsigned) * 2 + count)){
+        if(!WriteFdExactly(fd, sbuf, sizeof(unsigned) * 2 + count)){
             err = -1;
             break;
         }
@@ -327,7 +327,7 @@ static int write_data_link(int fd, const char *path, syncsendbuf *sbuf)
     sbuf->size = htoll(len + 1);
     sbuf->id = ID_DATA;
 
-    ret = writex(fd, sbuf, sizeof(unsigned) * 2 + len + 1);
+    ret = !WriteFdExactly(fd, sbuf, sizeof(unsigned) * 2 + len + 1);
     if(ret)
         return -1;
 
@@ -356,8 +356,8 @@ static int sync_send(int fd, const char *lpath, const char *rpath,
     msg.req.id = ID_SEND;
     msg.req.namelen = htoll(len + r);
 
-    if(writex(fd, &msg.req, sizeof(msg.req)) ||
-       writex(fd, rpath, len) || writex(fd, tmp, r)) {
+    if(!WriteFdExactly(fd, &msg.req, sizeof(msg.req)) ||
+       !WriteFdExactly(fd, rpath, len) || !WriteFdExactly(fd, tmp, r)) {
         free(file_buffer);
         goto fail;
     }
@@ -374,17 +374,17 @@ static int sync_send(int fd, const char *lpath, const char *rpath,
 
     msg.data.id = ID_DONE;
     msg.data.size = htoll(mtime);
-    if(writex(fd, &msg.data, sizeof(msg.data)))
+    if(!WriteFdExactly(fd, &msg.data, sizeof(msg.data)))
         goto fail;
 
-    if(readx(fd, &msg.status, sizeof(msg.status)))
+    if(!ReadFdExactly(fd, &msg.status, sizeof(msg.status)))
         return -1;
 
     if(msg.status.id != ID_OKAY) {
         if(msg.status.id == ID_FAIL) {
             len = ltohl(msg.status.msglen);
             if(len > 256) len = 256;
-            if(readx(fd, sbuf->data, len)) {
+            if(!ReadFdExactly(fd, sbuf->data, len)) {
                 return -1;
             }
             sbuf->data[len] = 0;
@@ -440,12 +440,12 @@ int sync_recv(int fd, const char *rpath, const char *lpath, int show_progress)
         stat_msg.req.id = ID_STAT;
         stat_msg.req.namelen = htoll(len);
 
-        if (writex(fd, &stat_msg.req, sizeof(stat_msg.req)) ||
-            writex(fd, rpath, len)) {
+        if (!WriteFdExactly(fd, &stat_msg.req, sizeof(stat_msg.req)) ||
+            !WriteFdExactly(fd, rpath, len)) {
             return -1;
         }
 
-        if (readx(fd, &stat_msg.stat, sizeof(stat_msg.stat))) {
+        if (!ReadFdExactly(fd, &stat_msg.stat, sizeof(stat_msg.stat))) {
             return -1;
         }
 
@@ -456,12 +456,12 @@ int sync_recv(int fd, const char *rpath, const char *lpath, int show_progress)
 
     msg.req.id = ID_RECV;
     msg.req.namelen = htoll(len);
-    if(writex(fd, &msg.req, sizeof(msg.req)) ||
-       writex(fd, rpath, len)) {
+    if(!WriteFdExactly(fd, &msg.req, sizeof(msg.req)) ||
+       !WriteFdExactly(fd, rpath, len)) {
         return -1;
     }
 
-    if(readx(fd, &msg.data, sizeof(msg.data))) {
+    if(!ReadFdExactly(fd, &msg.data, sizeof(msg.data))) {
         return -1;
     }
     id = msg.data.id;
@@ -480,7 +480,7 @@ int sync_recv(int fd, const char *rpath, const char *lpath, int show_progress)
     }
 
     for(;;) {
-        if(readx(fd, &msg.data, sizeof(msg.data))) {
+        if(!ReadFdExactly(fd, &msg.data, sizeof(msg.data))) {
             return -1;
         }
         id = msg.data.id;
@@ -495,12 +495,12 @@ int sync_recv(int fd, const char *rpath, const char *lpath, int show_progress)
             return -1;
         }
 
-        if(readx(fd, buffer, len)) {
+        if(!ReadFdExactly(fd, buffer, len)) {
             adb_close(lfd);
             return -1;
         }
 
-        if(writex(lfd, buffer, len)) {
+        if(!WriteFdExactly(lfd, buffer, len)) {
             fprintf(stderr,"cannot write '%s': %s\n", rpath, strerror(errno));
             adb_close(lfd);
             return -1;
@@ -523,7 +523,7 @@ remote_error:
     if(id == ID_FAIL) {
         len = ltohl(msg.data.size);
         if(len > 256) len = 256;
-        if(readx(fd, buffer, len)) {
+        if(!ReadFdExactly(fd, buffer, len)) {
             return -1;
         }
         buffer[len] = 0;
