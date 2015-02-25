@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include "sysdeps.h"
-
 #include <errno.h>
 #include <fcntl.h>
 #include <mntent.h>
@@ -25,11 +23,12 @@
 #include <sys/mount.h>
 #include <unistd.h>
 
-#include "cutils/properties.h"
+#include "sysdeps.h"
 
 #define  TRACE_TAG  TRACE_ADB
 #include "adb.h"
-
+#include "cutils/properties.h"
+#include "transport.h"
 
 static int system_ro = 1;
 static int vendor_ro = 1;
