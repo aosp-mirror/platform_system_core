@@ -22,12 +22,13 @@
 #include <IOKit/IOMessage.h>
 #include <mach/mach_port.h>
 
-#include "sysdeps.h"
-
 #include <stdio.h>
+
+#include "sysdeps.h"
 
 #define TRACE_TAG   TRACE_USB
 #include "adb.h"
+#include "transport.h"
 
 #define  DBG   D
 
