@@ -299,7 +299,7 @@ void usage(void)
             "  flash:raw boot <kernel> [ <ramdisk> ]    create bootimage and flash it\n"
             "  devices                                  list all connected devices\n"
             "  continue                                 continue with autoboot\n"
-            "  reboot                                   reboot device normally\n"
+            "  reboot [bootloader]                      reboot device, optionally into bootloader\n"
             "  reboot-bootloader                        reboot device into bootloader\n"
             "  help                                     show this help message\n"
             "\n"
@@ -1143,6 +1143,14 @@ int main(int argc, char **argv)
         } else if(!strcmp(*argv, "reboot")) {
             wants_reboot = 1;
             skip(1);
+            if (argc > 0) {
+                if (!strcmp(*argv, "bootloader")) {
+                    wants_reboot = 0;
+                    wants_reboot_bootloader = 1;
+                    skip(1);
+                }
+            }
+            require(0);
         } else if(!strcmp(*argv, "reboot-bootloader")) {
             wants_reboot_bootloader = 1;
             skip(1);
