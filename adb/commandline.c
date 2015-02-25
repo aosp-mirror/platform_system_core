@@ -14,30 +14,31 @@
  * limitations under the License.
  */
 
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include <assert.h>
+#include <ctype.h>
 #include <errno.h>
-#include <unistd.h>
 #include <limits.h>
 #include <stdarg.h>
-#include <sys/types.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
-#include <ctype.h>
-#include <assert.h>
-
-#include "sysdeps.h"
+#include <sys/types.h>
 
 #if !defined(_WIN32)
 #include <termios.h>
+#include <unistd.h>
 #endif
+
+#include "sysdeps.h"
 
 #define  TRACE_TAG  TRACE_ADB
 #include "adb.h"
 #include "adb_client.h"
 #include "adb_auth.h"
 #include "file_sync_service.h"
+#include "transport.h"
 
 static int do_cmd(transport_type ttype, char* serial, char *cmd, ...);
 

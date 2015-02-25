@@ -22,6 +22,7 @@
 
 #define  TRACE_TAG  TRACE_TRANSPORT
 #include "adb.h"
+#include "transport.h"
 
 static int remote_read(apacket *p, atransport *t)
 {

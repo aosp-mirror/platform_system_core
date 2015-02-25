@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-
-#include <linux/usb/ch9.h>
-#include <linux/usb/functionfs.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
+#include <linux/usb/ch9.h>
+#include <linux/usb/functionfs.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "sysdeps.h"
 
 #define   TRACE_TAG  TRACE_USB
 #include "adb.h"
+#include "transport.h"
 
 #define MAX_PACKET_SIZE_FS	64
 #define MAX_PACKET_SIZE_HS	512

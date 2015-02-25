@@ -14,21 +14,23 @@
  * limitations under the License.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <string.h>
-#include <fcntl.h>
 #include <errno.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-
-#include "fdevent.h"
-#include "adb.h"
-
+#include <fcntl.h>
 #include <linux/fb.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "sysdeps.h"
+
+#include "adb.h"
+#include "fdevent.h"
+#include "transport.h"
 
 /* TODO:
 ** - sync with vsync to avoid tearing
@@ -68,15 +70,15 @@ void framebuffer_service(int fd, void *cookie)
 
     if (pid == 0) {
         dup2(fds[1], STDOUT_FILENO);
-        close(fds[0]);
-        close(fds[1]);
+        adb_close(fds[0]);
+        adb_close(fds[1]);
         const char* command = "screencap";
         const char *args[2] = {command, NULL};
         execvp(command, (char**)args);
         exit(1);
     }
 
-    close(fds[1]);
+    adb_close(fds[1]);
     fd_screencap = fds[0];
 
     /* read w, h & format */
@@ -174,9 +176,9 @@ void framebuffer_service(int fd, void *cookie)
     }
 
 done:
-    close(fds[0]);
+    adb_close(fds[0]);
 
     TEMP_FAILURE_RETRY(waitpid(pid, NULL, 0));
 pipefail:
-    close(fd);
+    adb_close(fd);
 }

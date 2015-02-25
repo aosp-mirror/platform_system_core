@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
+#include "sysdeps.h"
+
+#include "transport.h"
+
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <errno.h>
-
-#include "sysdeps.h"
+#include <unistd.h>
 
 #define   TRACE_TAG  TRACE_TRANSPORT
 #include "adb.h"
@@ -494,8 +496,7 @@ create_device_tracker(void)
 
 
 /* call this function each time the transport list has changed */
-void  update_transports(void)
-{
+void update_transports(void) {
     char             buffer[1024];
     int              len;
     device_tracker*  tracker;

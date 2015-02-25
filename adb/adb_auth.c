@@ -24,6 +24,7 @@
 
 #include "adb.h"
 #include "adb_auth.h"
+#include "transport.h"
 #include "sysdeps.h"
 
 int auth_enabled = 0;

@@ -20,6 +20,7 @@
 #include <stdlib.h>
 
 #include "sysdeps.h"
+#include "transport.h"
 
 int gListenAll = 0; /* Not static because it is used in commandline.c. */
 
