@@ -17,6 +17,7 @@
 #include "adb_listeners.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "sysdeps.h"
 
