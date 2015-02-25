@@ -27,7 +27,7 @@
 
 #define  TRACE_TAG  TRACE_ADB
 #include "adb_client.h"
-#include "transport.h"
+#include "adb_io.h"
 #include "zipfile/zipfile.h"
 
 static transport_type __adb_transport = kTransportAny;
@@ -138,7 +138,7 @@ static int switch_socket_transport(int fd)
     len = strlen(service);
     snprintf(tmp, sizeof tmp, "%04x", len);
 
-    if(writex(fd, tmp, 4) || writex(fd, service, len)) {
+    if(!WriteFdExactly(fd, tmp, 4) || !WriteFdExactly(fd, service, len)) {
         strcpy(__adb_error, "write failure during connection");
         adb_close(fd);
         return -1;
@@ -159,7 +159,7 @@ int adb_status(int fd)
     unsigned char buf[5];
     unsigned len;
 
-    if(readx(fd, buf, 4)) {
+    if(!ReadFdExactly(fd, buf, 4)) {
         strcpy(__adb_error, "protocol fault (no status)");
         return -1;
     }
@@ -175,14 +175,14 @@ int adb_status(int fd)
         return -1;
     }
 
-    if(readx(fd, buf, 4)) {
+    if(!ReadFdExactly(fd, buf, 4)) {
         strcpy(__adb_error, "protocol fault (status len)");
         return -1;
     }
     buf[4] = 0;
     len = strtoul((char*)buf, 0, 16);
     if(len > 255) len = 255;
-    if(readx(fd, __adb_error, len)) {
+    if(!ReadFdExactly(fd, __adb_error, len)) {
         strcpy(__adb_error, "protocol fault (status read)");
         return -1;
     }
@@ -218,7 +218,7 @@ int _adb_connect(const char *service)
         return -1;
     }
 
-    if(writex(fd, tmp, 4) || writex(fd, service, len)) {
+    if(!WriteFdExactly(fd, tmp, 4) || !WriteFdExactly(fd, service, len)) {
         strcpy(__adb_error, "write failure during connection");
         adb_close(fd);
         return -1;
@@ -263,12 +263,12 @@ int adb_connect(const char *service)
 
         // if we have a file descriptor, then parse version result
         if(fd >= 0) {
-            if(readx(fd, buf, 4)) goto error;
+            if(!ReadFdExactly(fd, buf, 4)) goto error;
 
             buf[4] = 0;
             n = strtoul(buf, 0, 16);
             if(n > sizeof(buf)) goto error;
-            if(readx(fd, buf, n)) goto error;
+            if(!ReadFdExactly(fd, buf, n)) goto error;
             adb_close(fd);
 
             if (sscanf(buf, "%04x", &version) != 1) goto error;
@@ -338,7 +338,7 @@ char *adb_query(const char *service)
         return 0;
     }
 
-    if(readx(fd, buf, 4)) goto oops;
+    if(!ReadFdExactly(fd, buf, 4)) goto oops;
 
     buf[4] = 0;
     n = strtoul(buf, 0, 16);
@@ -350,7 +350,7 @@ char *adb_query(const char *service)
     tmp = malloc(n + 1);
     if(tmp == 0) goto oops;
 
-    if(readx(fd, tmp, n) == 0) {
+    if(!ReadFdExactly(fd, tmp, n) == 0) {
         tmp[n] = 0;
         adb_close(fd);
         return tmp;

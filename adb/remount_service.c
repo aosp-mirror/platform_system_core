@@ -27,8 +27,8 @@
 
 #define  TRACE_TAG  TRACE_ADB
 #include "adb.h"
+#include "adb_io.h"
 #include "cutils/properties.h"
-#include "transport.h"
 
 static int system_ro = 1;
 static int vendor_ro = 1;
@@ -108,11 +108,6 @@ errout:
     return rc;
 }
 
-static void write_string(int fd, const char* str)
-{
-    writex(fd, str, strlen(str));
-}
-
 void remount_service(int fd, void *cookie)
 {
     char buffer[200];
@@ -138,30 +133,30 @@ void remount_service(int fd, void *cookie)
                  both ? " and " : "",
                  vendor_verified ? "vendor" : "",
                  both ? "s" : "");
-        write_string(fd, buffer);
+        WriteStringFully(fd, buffer);
         snprintf(buffer, sizeof(buffer),
                  "Use \"adb disable-verity\" to disable verity.\n"
                  "If you do not, remount may succeed, however, you will still "
                  "not be able to write to these volumes.\n");
-        write_string(fd, buffer);
+        WriteStringFully(fd, buffer);
     }
 
     if (remount("/system", &system_ro)) {
         snprintf(buffer, sizeof(buffer), "remount of system failed: %s\n",strerror(errno));
-        write_string(fd, buffer);
+        WriteStringFully(fd, buffer);
     }
 
     if (hasVendorPartition()) {
         if (remount("/vendor", &vendor_ro)) {
             snprintf(buffer, sizeof(buffer), "remount of vendor failed: %s\n",strerror(errno));
-            write_string(fd, buffer);
+            WriteStringFully(fd, buffer);
         }
     }
 
     if (!system_ro && (!vendor_ro || !hasVendorPartition()))
-        write_string(fd, "remount succeeded\n");
+        WriteStringFully(fd, "remount succeeded\n");
     else {
-        write_string(fd, "remount failed\n");
+        WriteStringFully(fd, "remount failed\n");
     }
 
     adb_close(fd);
