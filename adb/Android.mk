@@ -57,6 +57,10 @@ LOCAL_SRC_FILES := \
 # this to take effect), this adds the SSL includes to our path.
 LOCAL_STATIC_LIBRARIES := libcrypto_static
 
+ifeq ($(HOST_OS),windows)
+    LOCAL_C_INCLUDES += development/host/windows/usb/api/
+endif
+
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 # adb host tool
@@ -80,7 +84,6 @@ ifeq ($(HOST_OS),windows)
     LOCAL_LDLIBS += -lws2_32 -lgdi32
     USE_SYSDEPS_WIN32 := 1
   endif
-  LOCAL_C_INCLUDES += development/host/windows/usb/api/
 endif
 
 LOCAL_SRC_FILES := \
