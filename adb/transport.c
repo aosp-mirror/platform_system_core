@@ -44,7 +44,7 @@ ADB_MUTEX_DEFINE( transport_lock );
 
 #if ADB_TRACE
 #define MAX_DUMP_HEX_LEN 16
-static void  dump_hex( const unsigned char*  ptr, size_t  len )
+void dump_hex(const unsigned char* ptr, size_t  len)
 {
     int  nn, len2 = len;
     // Build a string instead of logging each character.
@@ -1144,74 +1144,6 @@ void unregister_usb_transport(usb_handle *usb)
 
 #undef TRACE_TAG
 #define TRACE_TAG  TRACE_RWX
-
-int readx(int fd, void *ptr, size_t len)
-{
-    char *p = ptr;
-    int r;
-#if ADB_TRACE
-    size_t len0 = len;
-#endif
-    D("readx: fd=%d wanted=%zu\n", fd, len);
-    while(len > 0) {
-        r = adb_read(fd, p, len);
-        if(r > 0) {
-            len -= r;
-            p += r;
-        } else {
-            if (r < 0) {
-                D("readx: fd=%d error %d: %s\n", fd, errno, strerror(errno));
-                if (errno == EINTR)
-                    continue;
-            } else {
-                D("readx: fd=%d disconnected\n", fd);
-            }
-            return -1;
-        }
-    }
-
-#if ADB_TRACE
-    D("readx: fd=%d wanted=%zu got=%zu\n", fd, len0, len0 - len);
-    if (ADB_TRACING) {
-        dump_hex( ptr, len0 );
-    }
-#endif
-    return 0;
-}
-
-int writex(int fd, const void *ptr, size_t len)
-{
-    char *p = (char*) ptr;
-    int r;
-
-#if ADB_TRACE
-    D("writex: fd=%d len=%d: ", fd, (int)len);
-    if (ADB_TRACING) {
-        dump_hex( ptr, len );
-    }
-#endif
-    while(len > 0) {
-        r = adb_write(fd, p, len);
-        if(r > 0) {
-            len -= r;
-            p += r;
-        } else {
-            if (r < 0) {
-                D("writex: fd=%d error %d: %s\n", fd, errno, strerror(errno));
-                if (errno == EINTR)
-                    continue;
-                if (errno == EAGAIN) {
-                    adb_sleep_ms(1); // just yield some cpu time
-                    continue;
-                }
-            } else {
-                D("writex: fd=%d disconnected\n", fd);
-            }
-            return -1;
-        }
-    }
-    return 0;
-}
 
 int check_header(apacket *p)
 {

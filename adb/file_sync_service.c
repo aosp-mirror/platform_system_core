@@ -29,9 +29,9 @@
 
 #define TRACE_TAG  TRACE_SYNC
 #include "adb.h"
+#include "adb_io.h"
 #include "file_sync_service.h"
 #include "private/android_filesystem_config.h"
-#include "transport.h"
 
 /* TODO: use fs_config to configure permissions on /data */
 static bool is_on_system(const char *name) {
@@ -97,7 +97,7 @@ static int do_stat(int s, const char *path)
         msg.stat.time = htoll(st.st_mtime);
     }
 
-    return writex(s, &msg.stat, sizeof(msg.stat));
+    return WriteFdExactly(s, &msg.stat, sizeof(msg.stat)) ? 0 : -1;
 }
 
 static int do_list(int s, const char *path)
@@ -135,8 +135,8 @@ static int do_list(int s, const char *path)
             msg.dent.time = htoll(st.st_mtime);
             msg.dent.namelen = htoll(len);
 
-            if(writex(s, &msg.dent, sizeof(msg.dent)) ||
-               writex(s, de->d_name, len)) {
+            if(!WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ||
+               !WriteFdExactly(s, de->d_name, len)) {
                 closedir(d);
                 return -1;
             }
@@ -151,7 +151,7 @@ done:
     msg.dent.size = 0;
     msg.dent.time = 0;
     msg.dent.namelen = 0;
-    return writex(s, &msg.dent, sizeof(msg.dent));
+    return !WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ? 0 : -1;
 }
 
 static int fail_message(int s, const char *reason)
@@ -163,8 +163,8 @@ static int fail_message(int s, const char *reason)
 
     msg.data.id = ID_FAIL;
     msg.data.size = htoll(len);
-    if(writex(s, &msg.data, sizeof(msg.data)) ||
-       writex(s, reason, len)) {
+    if(!WriteFdExactly(s, &msg.data, sizeof(msg.data)) ||
+       !WriteFdExactly(s, reason, len)) {
         return -1;
     } else {
         return 0;
@@ -217,7 +217,7 @@ static int handle_send_file(int s, char *path, uid_t uid,
     for(;;) {
         unsigned int len;
 
-        if(readx(s, &msg.data, sizeof(msg.data)))
+        if(!ReadFdExactly(s, &msg.data, sizeof(msg.data)))
             goto fail;
 
         if(msg.data.id != ID_DATA) {
@@ -233,12 +233,12 @@ static int handle_send_file(int s, char *path, uid_t uid,
             fail_message(s, "oversize data message");
             goto fail;
         }
-        if(readx(s, buffer, len))
+        if(!ReadFdExactly(s, buffer, len))
             goto fail;
 
         if(fd < 0)
             continue;
-        if(writex(fd, buffer, len)) {
+        if(!WriteFdExactly(fd, buffer, len)) {
             int saved_errno = errno;
             adb_close(fd);
             if (do_unlink) adb_unlink(path);
@@ -258,7 +258,7 @@ static int handle_send_file(int s, char *path, uid_t uid,
 
         msg.status.id = ID_OKAY;
         msg.status.msglen = 0;
-        if(writex(s, &msg.status, sizeof(msg.status)))
+        if(!WriteFdExactly(s, &msg.status, sizeof(msg.status)))
             return -1;
     }
     return 0;
@@ -279,7 +279,7 @@ static int handle_send_link(int s, char *path, char *buffer)
     unsigned int len;
     int ret;
 
-    if(readx(s, &msg.data, sizeof(msg.data)))
+    if(!ReadFdExactly(s, &msg.data, sizeof(msg.data)))
         return -1;
 
     if(msg.data.id != ID_DATA) {
@@ -292,7 +292,7 @@ static int handle_send_link(int s, char *path, char *buffer)
         fail_message(s, "oversize data message");
         return -1;
     }
-    if(readx(s, buffer, len))
+    if(!ReadFdExactly(s, buffer, len))
         return -1;
 
     ret = symlink(buffer, path);
@@ -308,13 +308,13 @@ static int handle_send_link(int s, char *path, char *buffer)
         return -1;
     }
 
-    if(readx(s, &msg.data, sizeof(msg.data)))
+    if(!ReadFdExactly(s, &msg.data, sizeof(msg.data)))
         return -1;
 
     if(msg.data.id == ID_DONE) {
         msg.status.id = ID_OKAY;
         msg.status.msglen = 0;
-        if(writex(s, &msg.status, sizeof(msg.status)))
+        if(!WriteFdExactly(s, &msg.status, sizeof(msg.status)))
             return -1;
     } else {
         fail_message(s, "invalid data message: expected ID_DONE");
@@ -396,8 +396,8 @@ static int do_recv(int s, const char *path, char *buffer)
             return r;
         }
         msg.data.size = htoll(r);
-        if(writex(s, &msg.data, sizeof(msg.data)) ||
-           writex(s, buffer, r)) {
+        if(!WriteFdExactly(s, &msg.data, sizeof(msg.data)) ||
+           !WriteFdExactly(s, buffer, r)) {
             adb_close(fd);
             return -1;
         }
@@ -407,7 +407,7 @@ static int do_recv(int s, const char *path, char *buffer)
 
     msg.data.id = ID_DONE;
     msg.data.size = 0;
-    if(writex(s, &msg.data, sizeof(msg.data))) {
+    if(!WriteFdExactly(s, &msg.data, sizeof(msg.data))) {
         return -1;
     }
 
@@ -426,7 +426,7 @@ void file_sync_service(int fd, void *cookie)
     for(;;) {
         D("sync: waiting for command\n");
 
-        if(readx(fd, &msg.req, sizeof(msg.req))) {
+        if(!ReadFdExactly(fd, &msg.req, sizeof(msg.req))) {
             fail_message(fd, "command read failure");
             break;
         }
@@ -435,7 +435,7 @@ void file_sync_service(int fd, void *cookie)
             fail_message(fd, "invalid namelen");
             break;
         }
-        if(readx(fd, name, namelen)) {
+        if(!ReadFdExactly(fd, name, namelen)) {
             fail_message(fd, "filename read failure");
             break;
         }

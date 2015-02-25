@@ -30,6 +30,7 @@
 #include "sysdeps.h"
 #include "adb.h"
 #include "adb_auth.h"
+#include "adb_io.h"
 #include "adb_listeners.h"
 #include "transport.h"
 
@@ -263,8 +264,8 @@ static void send_msg_with_header(int fd, const char* msg, size_t msglen) {
     if (msglen > 0xffff)
         msglen = 0xffff;
     snprintf(header, sizeof(header), "%04x", (unsigned)msglen);
-    writex(fd, header, 4);
-    writex(fd, msg, msglen);
+    WriteFdExactly(fd, header, 4);
+    WriteFdExactly(fd, msg, msglen);
 }
 #endif
 
@@ -274,8 +275,8 @@ static void send_msg_with_okay(int fd, const char* msg, size_t msglen) {
     if (msglen > 0xffff)
         msglen = 0xffff;
     snprintf(header, sizeof(header), "OKAY%04x", (unsigned)msglen);
-    writex(fd, header, 8);
-    writex(fd, msg, msglen);
+    WriteFdExactly(fd, header, 8);
+    WriteFdExactly(fd, msg, msglen);
 }
 #endif // ADB_HOST
 
@@ -790,9 +791,9 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
         if(r == 0) {
 #if ADB_HOST
             /* On the host: 1st OKAY is connect, 2nd OKAY is status */
-            writex(reply_fd, "OKAY", 4);
+            WriteFdExactly(reply_fd, "OKAY", 4);
 #endif
-            writex(reply_fd, "OKAY", 4);
+            WriteFdExactly(reply_fd, "OKAY", 4);
             return 1;
         }
 
