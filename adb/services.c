@@ -36,6 +36,7 @@
 
 #define  TRACE_TAG  TRACE_SERVICES
 #include "adb.h"
+#include "adb_io.h"
 #include "file_sync_service.h"
 #include "transport.h"
 
@@ -65,20 +66,20 @@ void restart_root_service(int fd, void *cookie)
 
     if (getuid() == 0) {
         snprintf(buf, sizeof(buf), "adbd is already running as root\n");
-        writex(fd, buf, strlen(buf));
+        WriteFdExactly(fd, buf, strlen(buf));
         adb_close(fd);
     } else {
         property_get("ro.debuggable", value, "");
         if (strcmp(value, "1") != 0) {
             snprintf(buf, sizeof(buf), "adbd cannot run as root in production builds\n");
-            writex(fd, buf, strlen(buf));
+            WriteFdExactly(fd, buf, strlen(buf));
             adb_close(fd);
             return;
         }
 
         property_set("service.adb.root", "1");
         snprintf(buf, sizeof(buf), "restarting adbd as root\n");
-        writex(fd, buf, strlen(buf));
+        WriteFdExactly(fd, buf, strlen(buf));
         adb_close(fd);
     }
 }
@@ -89,12 +90,12 @@ void restart_unroot_service(int fd, void *cookie)
 
     if (getuid() != 0) {
         snprintf(buf, sizeof(buf), "adbd not running as root\n");
-        writex(fd, buf, strlen(buf));
+        WriteFdExactly(fd, buf, strlen(buf));
         adb_close(fd);
     } else {
         property_set("service.adb.root", "0");
         snprintf(buf, sizeof(buf), "restarting adbd as non root\n");
-        writex(fd, buf, strlen(buf));
+        WriteFdExactly(fd, buf, strlen(buf));
         adb_close(fd);
     }
 }
@@ -107,7 +108,7 @@ void restart_tcp_service(int fd, void *cookie)
 
     if (port <= 0) {
         snprintf(buf, sizeof(buf), "invalid port\n");
-        writex(fd, buf, strlen(buf));
+        WriteFdExactly(fd, buf, strlen(buf));
         adb_close(fd);
         return;
     }
@@ -115,7 +116,7 @@ void restart_tcp_service(int fd, void *cookie)
     snprintf(value, sizeof(value), "%d", port);
     property_set("service.adb.tcp.port", value);
     snprintf(buf, sizeof(buf), "restarting in TCP mode port: %d\n", port);
-    writex(fd, buf, strlen(buf));
+    WriteFdExactly(fd, buf, strlen(buf));
     adb_close(fd);
 }
 
@@ -125,7 +126,7 @@ void restart_usb_service(int fd, void *cookie)
 
     property_set("service.adb.tcp.port", "0");
     snprintf(buf, sizeof(buf), "restarting in USB mode\n");
-    writex(fd, buf, strlen(buf));
+    WriteFdExactly(fd, buf, strlen(buf));
     adb_close(fd);
 }
 
@@ -140,14 +141,14 @@ void reboot_service(int fd, void *arg)
     ret = snprintf(property_val, sizeof(property_val), "reboot,%s", (char *) arg);
     if (ret >= (int) sizeof(property_val)) {
         snprintf(buf, sizeof(buf), "reboot string too long. length=%d\n", ret);
-        writex(fd, buf, strlen(buf));
+        WriteFdExactly(fd, buf, strlen(buf));
         goto cleanup;
     }
 
     ret = property_set(ANDROID_RB_PROPERTY, property_val);
     if (ret < 0) {
         snprintf(buf, sizeof(buf), "reboot failed: %d\n", ret);
-        writex(fd, buf, strlen(buf));
+        WriteFdExactly(fd, buf, strlen(buf));
         goto cleanup;
     }
     // Don't return early. Give the reboot command time to take effect
@@ -350,7 +351,7 @@ static void subproc_waiter_service(int fd, void *cookie)
     D("shell exited fd=%d of pid=%d err=%d\n", fd, pid, errno);
     if (SHELL_EXIT_NOTIFY_FD >=0) {
       int res;
-      res = writex(SHELL_EXIT_NOTIFY_FD, &fd, sizeof(fd));
+      res = WriteFdExactly(SHELL_EXIT_NOTIFY_FD, &fd, sizeof(fd)) ? 0 : -1;
       D("notified shell exit via fd=%d for pid=%d res=%d errno=%d\n",
         SHELL_EXIT_NOTIFY_FD, pid, res, errno);
     }
@@ -518,7 +519,7 @@ static void wait_for_state(int fd, void* cookie)
 
     atransport *t = acquire_one_transport(sinfo->state, sinfo->transport, sinfo->serial, &err);
     if(t != 0) {
-        writex(fd, "OKAY", 4);
+        WriteFdExactly(fd, "OKAY", 4);
     } else {
         sendfailmsg(fd, err);
     }
@@ -644,7 +645,7 @@ static void connect_service(int fd, void* cookie)
 
     // Send response for emulator and device
     snprintf(resp, sizeof(resp), "%04x%s",(unsigned)strlen(buf), buf);
-    writex(fd, resp, strlen(resp));
+    WriteFdExactly(fd, resp, strlen(resp));
     adb_close(fd);
 }
 #endif

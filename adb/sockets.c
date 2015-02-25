@@ -25,6 +25,7 @@
 
 #define  TRACE_TAG  TRACE_SOCKETS
 #include "adb.h"
+#include "adb_io.h"
 #if !ADB_HOST
 #include "cutils/properties.h"
 #endif
@@ -39,10 +40,16 @@ int sendfailmsg(int fd, const char *reason)
     char buf[9];
     int len;
     len = strlen(reason);
-    if(len > 0xffff) len = 0xffff;
+    if (len > 0xffff) {
+        len = 0xffff;
+    }
+
     snprintf(buf, sizeof buf, "FAIL%04x", len);
-    if(writex(fd, buf, 8)) return -1;
-    return writex(fd, reason, len);
+    if (!WriteFdExactly(fd, buf, 8)) {
+        return -1;
+    }
+
+    return WriteFdExactly(fd, reason, len) ? 0 : -1;
 }
 
 static unsigned local_socket_next_id = 1;

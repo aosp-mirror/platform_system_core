@@ -28,9 +28,9 @@
 #include <stdarg.h>
 #include <stddef.h>
 
+#include "adb_io.h"
 #include "adb_trace.h"
 #include "fdevent.h"
-#include "transport.h"
 #include "sysdeps.h"
 
 #define TRACE_TAG  TRACE_FDEVENT
@@ -528,7 +528,7 @@ static void fdevent_subproc_event_func(int fd, unsigned ev,
     if(ev & FDE_READ){
       int subproc_fd;
 
-      if(readx(fd, &subproc_fd, sizeof(subproc_fd))) {
+      if(!ReadFdExactly(fd, &subproc_fd, sizeof(subproc_fd))) {
           FATAL("Failed to read the subproc's fd from fd=%d\n", fd);
       }
       if((subproc_fd < 0) || (subproc_fd >= fd_table_max)) {

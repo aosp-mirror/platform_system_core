@@ -29,8 +29,8 @@
 #include "sysdeps.h"
 
 #include "adb.h"
+#include "adb_io.h"
 #include "fdevent.h"
-#include "transport.h"
 
 /* TODO:
 ** - sync with vsync to avoid tearing
@@ -82,9 +82,9 @@ void framebuffer_service(int fd, void *cookie)
     fd_screencap = fds[0];
 
     /* read w, h & format */
-    if(readx(fd_screencap, &w, 4)) goto done;
-    if(readx(fd_screencap, &h, 4)) goto done;
-    if(readx(fd_screencap, &f, 4)) goto done;
+    if(!ReadFdExactly(fd_screencap, &w, 4)) goto done;
+    if(!ReadFdExactly(fd_screencap, &h, 4)) goto done;
+    if(!ReadFdExactly(fd_screencap, &f, 4)) goto done;
 
     fbinfo.version = DDMS_RAWIMAGE_VERSION;
     /* see hardware/hardware.h */
@@ -164,15 +164,15 @@ void framebuffer_service(int fd, void *cookie)
     }
 
     /* write header */
-    if(writex(fd, &fbinfo, sizeof(fbinfo))) goto done;
+    if(!WriteFdExactly(fd, &fbinfo, sizeof(fbinfo))) goto done;
 
     /* write data */
     for(i = 0; i < fbinfo.size; i += bsize) {
       bsize = sizeof(buf);
       if (i + bsize > fbinfo.size)
         bsize = fbinfo.size - i;
-      if(readx(fd_screencap, buf, bsize)) goto done;
-      if(writex(fd, buf, bsize)) goto done;
+      if(!ReadFdExactly(fd_screencap, buf, bsize)) goto done;
+      if(!WriteFdExactly(fd, buf, bsize)) goto done;
     }
 
 done:

@@ -19,6 +19,7 @@ ADB_CLANG :=
 LIBADB_SRC_FILES := \
     adb.c \
     adb_auth.c \
+    adb_io.cpp \
     adb_listeners.c \
     sockets.c \
     transport.c \
@@ -69,6 +70,7 @@ endif
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 LIBADB_TEST_SRCS := \
+    adb_io_test.cpp \
     transport_test.cpp \
 
 include $(CLEAR_VARS)
@@ -77,7 +79,7 @@ LOCAL_MODULE := adbd_test
 LOCAL_CFLAGS := -DADB_HOST=0 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS)
 LOCAL_STATIC_LIBRARIES := libadbd
-LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_SHARED_LIBRARIES := liblog libcutils libutils
 include $(BUILD_NATIVE_TEST)
 
 include $(CLEAR_VARS)
@@ -85,10 +87,12 @@ LOCAL_CLANG := $(ADB_CLANG)
 LOCAL_MODULE := adb_test
 LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS) services.c
+LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_STATIC_LIBRARIES := \
     libadb \
     libcrypto_static \
     libcutils \
+    libutils \
 
 ifeq ($(HOST_OS),linux)
   LOCAL_LDLIBS += -lrt -ldl -lpthread
