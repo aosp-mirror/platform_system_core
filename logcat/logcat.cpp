@@ -1,4 +1,4 @@
-// Copyright 2006-2014 The Android Open Source Project
+// Copyright 2006-2015 The Android Open Source Project
 
 #include <assert.h>
 #include <ctype.h>
@@ -178,18 +178,19 @@ error:
     return;
 }
 
-static void maybePrintStart(log_device_t* dev) {
-    if (!dev->printed) {
-        dev->printed = true;
+static void maybePrintStart(log_device_t* dev, bool printDividers) {
+    if (!dev->printed || printDividers) {
         if (g_devCount > 1 && !g_printBinary) {
             char buf[1024];
-            snprintf(buf, sizeof(buf), "--------- beginning of %s\n",
+            snprintf(buf, sizeof(buf), "--------- %s %s\n",
+                     dev->printed ? "switch to" : "beginning of",
                      dev->device);
             if (write(g_outFD, buf, strlen(buf)) < 0) {
                 perror("output error");
                 exit(-1);
             }
         }
+        dev->printed = true;
     }
 }
 
@@ -227,6 +228,7 @@ static void show_help(const char *cmd)
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
                     "  -v <format>     Sets the log print format, where <format> is:\n\n"
                     "                  brief color long process raw tag thread threadtime time\n\n"
+                    "  -D              print dividers between each log buffer\n"
                     "  -c              clear (flush) the entire log and exit\n"
                     "  -d              dump the log and then exit (don't block)\n"
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
@@ -329,6 +331,7 @@ int main(int argc, char **argv)
     log_device_t* devices = NULL;
     log_device_t* dev;
     bool needBinary = false;
+    bool printDividers = false;
     struct logger_list *logger_list;
     unsigned int tail_lines = 0;
     log_time tail_time(log_time::EPOCH);
@@ -345,7 +348,7 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, "cdt:T:gG:sQf:r:n:v:b:BSpP:");
+        ret = getopt(argc, argv, "cdDt:T:gG:sQf:r:n:v:b:BSpP:");
 
         if (ret < 0) {
             break;
@@ -396,6 +399,10 @@ int main(int argc, char **argv)
                         tail_lines = 1;
                     }
                 }
+            break;
+
+            case 'D':
+                printDividers = true;
             break;
 
             case 'g':
@@ -839,8 +846,10 @@ int main(int argc, char **argv)
     if (needBinary)
         android::g_eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
 
+    dev = NULL;
     while (1) {
         struct log_msg log_msg;
+        log_device_t* d;
         int ret = android_logger_list_read(logger_list, &log_msg);
 
         if (ret == 0) {
@@ -865,17 +874,20 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        for(dev = devices; dev; dev = dev->next) {
-            if (android_name_to_log_id(dev->device) == log_msg.id()) {
+        for(d = devices; d; d = d->next) {
+            if (android_name_to_log_id(d->device) == log_msg.id()) {
                 break;
             }
         }
-        if (!dev) {
+        if (!d) {
             fprintf(stderr, "read: Unexpected log ID!\n");
             exit(EXIT_FAILURE);
         }
 
-        android::maybePrintStart(dev);
+        if (dev != d) {
+            dev = d;
+            android::maybePrintStart(dev, printDividers);
+        }
         if (android::g_printBinary) {
             android::printBinary(&log_msg);
         } else {
