@@ -5,6 +5,8 @@
 
 LOCAL_PATH:= $(call my-dir)
 
+ADB_CLANG :=
+
 # libadb
 # =========================================================
 
@@ -33,6 +35,7 @@ LIBADB_linux_SRC_FILES := fdevent.cpp get_my_path_linux.c usb_linux.c
 LIBADB_windows_SRC_FILES := get_my_path_windows.c sysdeps_win32.c usb_windows.c
 
 include $(CLEAR_VARS)
+LOCAL_CLANG := $(ADB_CLANG)
 LOCAL_MODULE := libadbd
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := \
@@ -46,6 +49,7 @@ LOCAL_SRC_FILES := \
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+LOCAL_CLANG := $(ADB_CLANG)
 LOCAL_MODULE := libadb
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
 LOCAL_SRC_FILES := \
@@ -85,6 +89,8 @@ ifeq ($(HOST_OS),windows)
     USE_SYSDEPS_WIN32 := 1
   endif
 endif
+
+LOCAL_CLANG := $(ADB_CLANG)
 
 LOCAL_SRC_FILES := \
 	adb_main.c \
@@ -129,6 +135,8 @@ endif
 # =========================================================
 
 include $(CLEAR_VARS)
+
+LOCAL_CLANG := $(ADB_CLANG)
 
 LOCAL_SRC_FILES := \
 	adb_main.c \
