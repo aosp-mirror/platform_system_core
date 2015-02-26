@@ -113,6 +113,12 @@ void remount_service(int fd, void *cookie)
     char buffer[200];
     char prop_buf[PROPERTY_VALUE_MAX];
 
+    if (getuid() != 0) {
+        WriteStringFully(fd, "Not running as root. Try \"adb root\" first.\n");
+        adb_close(fd);
+        return;
+    }
+
     bool system_verified = false, vendor_verified = false;
     property_get("partition.system.verified", prop_buf, "0");
     if (!strcmp(prop_buf, "1")) {
