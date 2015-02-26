@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-#include <limits.h>
 #include <assert.h>
+#include <limits.h>
 #include <windows.h>
+
+#include "adb.h"
 
 void get_my_path(char *exe, size_t maxLen)
 {

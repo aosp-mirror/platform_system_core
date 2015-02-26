@@ -40,31 +40,30 @@
 #include "adb_io.h"
 #include "file_sync_service.h"
 
-static int do_cmd(transport_type ttype, char* serial, char *cmd, ...);
+static int do_cmd(transport_type ttype, const char* serial, const char *cmd, ...);
 
-void get_my_path(char *s, size_t maxLen);
 int find_sync_dirs(const char *srcarg,
         char **android_srcdir_out, char **data_srcdir_out, char **vendor_srcdir_out);
-int install_app(transport_type transport, char* serial, int argc, char** argv);
-int install_multiple_app(transport_type transport, char* serial, int argc, char** argv);
-int uninstall_app(transport_type transport, char* serial, int argc, char** argv);
+int install_app(transport_type transport, const char* serial, int argc,
+                const char** argv);
+int install_multiple_app(transport_type transport, const char* serial, int argc,
+                         const char** argv);
+int uninstall_app(transport_type transport, const char* serial, int argc,
+                  const char** argv);
 
 static const char *gProductOutPath = NULL;
 extern int gListenAll;
 
 static char *product_file(const char *extra)
 {
-    int n;
-    char *x;
-
     if (gProductOutPath == NULL) {
         fprintf(stderr, "adb: Product directory not specified; "
                 "use -p or define ANDROID_PRODUCT_OUT\n");
         exit(1);
     }
 
-    n = strlen(gProductOutPath) + strlen(extra) + 2;
-    x = malloc(n);
+    int n = strlen(gProductOutPath) + strlen(extra) + 2;
+    char* x = reinterpret_cast<char*>(malloc(n));
     if (x == 0) {
         fprintf(stderr, "adb: Out of memory (product_file())\n");
         exit(1);
@@ -422,7 +421,6 @@ int interactive_shell(void)
 {
     adb_thread_t thr;
     int fdi, fd;
-    int *fds;
 
     fd = adb_connect("shell:");
     if(fd < 0) {
@@ -431,7 +429,7 @@ int interactive_shell(void)
     }
     fdi = 0; //dup(0);
 
-    fds = malloc(sizeof(int) * 2);
+    int* fds = reinterpret_cast<int*>(malloc(sizeof(int) * 2));
     fds[0] = fd;
     fds[1] = fdi;
 
@@ -464,7 +462,6 @@ int adb_download_buffer(const char *service, const char *fn, const void* data, i
     char buf[4096];
     unsigned total;
     int fd;
-    const unsigned char *ptr;
 
     sprintf(buf,"%s:%d", service, sz);
     fd = adb_connect(buf);
@@ -477,7 +474,7 @@ int adb_download_buffer(const char *service, const char *fn, const void* data, i
     opt = adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
 
     total = sz;
-    ptr = data;
+    const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
 
     if(progress) {
         char *x = strrchr(service, ':');
@@ -557,14 +554,15 @@ int adb_download(const char *service, const char *fn, unsigned progress)
  *   we hang up.
  */
 int adb_sideload_host(const char* fn) {
-    uint8_t* data;
     unsigned sz;
     size_t xfer = 0;
     int status;
+    int last_percent = -1;
+    int opt = SIDELOAD_HOST_BLOCK_SIZE;
 
     printf("loading: '%s'", fn);
     fflush(stdout);
-    data = load_file(fn, &sz);
+    uint8_t* data = reinterpret_cast<uint8_t*>(load_file(fn, &sz));
     if (data == 0) {
         printf("\n");
         fprintf(stderr, "* cannot read '%s' *\n", fn);
@@ -582,10 +580,8 @@ int adb_sideload_host(const char* fn) {
         goto done;
     }
 
-    int opt = SIDELOAD_HOST_BLOCK_SIZE;
     opt = adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
 
-    int last_percent = -1;
     for (;;) {
         if (!ReadFdExactly(fd, buf, 8)) {
             fprintf(stderr, "* failed to read command: %s\n", adb_error());
@@ -739,13 +735,12 @@ static char *escape_arg(const char *s)
  * ppp dev:/dev/omap_csmi_tty0 <ppp options>
  *
  */
-int ppp(int argc, char **argv)
+int ppp(int argc, const char **argv)
 {
 #if defined(_WIN32)
     fprintf(stderr, "error: adb %s not implemented on Win32\n", argv[0]);
     return -1;
 #else
-    char *adb_service_name;
     pid_t pid;
     int fd;
 
@@ -756,8 +751,7 @@ int ppp(int argc, char **argv)
         return 1;
     }
 
-    adb_service_name = argv[1];
-
+    const char* adb_service_name = argv[1];
     fd = adb_connect(adb_service_name);
 
     if(fd < 0) {
@@ -807,7 +801,8 @@ int ppp(int argc, char **argv)
 #endif /* !defined(_WIN32) */
 }
 
-static int send_shellcommand(transport_type transport, char* serial, char* buf)
+static int send_shellcommand(transport_type transport, const char* serial,
+                             char* buf)
 {
     int fd, ret;
 
@@ -828,7 +823,8 @@ static int send_shellcommand(transport_type transport, char* serial, char* buf)
     return ret;
 }
 
-static int logcat(transport_type transport, char* serial, int argc, char **argv)
+static int logcat(transport_type transport, const char* serial, int argc,
+                  const char** argv)
 {
     char buf[4096];
 
@@ -877,7 +873,7 @@ static int mkdirs(const char *path)
     return 0;
 }
 
-static int backup(int argc, char** argv) {
+static int backup(int argc, const char** argv) {
     char buf[4096];
     char default_name[32];
     const char* filename = strcpy(default_name, "./backup.ab");
@@ -933,7 +929,7 @@ static int backup(int argc, char** argv) {
     return 0;
 }
 
-static int restore(int argc, char** argv) {
+static int restore(int argc, const char** argv) {
     const char* filename;
     int fd, tarFd;
 
@@ -1102,8 +1098,9 @@ static const char *find_product_out_path(const char *hint)
     return path_buf;
 }
 
-static void parse_push_pull_args(char **arg, int narg, char const **path1, char const **path2,
-                                 int *show_progress, int *copy_attrs) {
+static void parse_push_pull_args(const char **arg, int narg, char const **path1,
+                                 char const **path2, int *show_progress,
+                                 int *copy_attrs) {
     *show_progress = 0;
     *copy_attrs = 0;
 
@@ -1130,7 +1127,7 @@ static void parse_push_pull_args(char **arg, int narg, char const **path1, char 
     }
 }
 
-int adb_commandline(int argc, char **argv)
+int adb_commandline(int argc, const char **argv)
 {
     char buf[4096];
     int no_daemon = 0;
@@ -1139,8 +1136,8 @@ int adb_commandline(int argc, char **argv)
     int persist = 0;
     int r;
     transport_type ttype = kTransportAny;
-    char* serial = NULL;
-    char* server_port_str = NULL;
+    const char* serial = NULL;
+    const char* server_port_str = NULL;
 
         /* If defined, this should be an absolute path to
          * the directory containing all of the various system images
@@ -1274,7 +1271,7 @@ int adb_commandline(int argc, char **argv)
 
     /* handle wait-for-* prefix */
     if (!strncmp(argv[0], "wait-for-", strlen("wait-for-"))) {
-        char* service = argv[0];
+        const char* service = argv[0];
         if (!strncmp(service, "wait-for-device", strlen("wait-for-device"))) {
             if (ttype == kTransportUsb) {
                 service = "wait-for-usb";
@@ -1308,7 +1305,7 @@ int adb_commandline(int argc, char **argv)
     /* adb_connect() commands */
     if (!strcmp(argv[0], "devices")) {
         char *tmp;
-        char *listopt;
+        const char *listopt;
         if (argc < 2)
             listopt = "";
         else if (argc == 2 && !strcmp(argv[1], "-l"))
@@ -1635,7 +1632,8 @@ int adb_commandline(int argc, char **argv)
         return uninstall_app(ttype, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "sync")) {
-        char *srcarg, *android_srcpath, *data_srcpath, *vendor_srcpath;
+        const char* srcarg;
+        char *android_srcpath, *data_srcpath, *vendor_srcpath;
         int listonly = 0;
 
         int ret;
@@ -1736,9 +1734,9 @@ int adb_commandline(int argc, char **argv)
 }
 
 #define MAX_ARGV_LENGTH 16
-static int do_cmd(transport_type ttype, char* serial, char *cmd, ...)
+static int do_cmd(transport_type ttype, const char* serial, const char *cmd, ...)
 {
-    char *argv[MAX_ARGV_LENGTH];
+    const char *argv[MAX_ARGV_LENGTH];
     int argc;
     va_list ap;
 
@@ -1818,8 +1816,8 @@ int find_sync_dirs(const char *srcarg,
     return 0;
 }
 
-static int pm_command(transport_type transport, char* serial,
-                      int argc, char** argv)
+static int pm_command(transport_type transport, const char* serial,
+                      int argc, const char** argv)
 {
     char buf[4096];
 
@@ -1836,7 +1834,8 @@ static int pm_command(transport_type transport, char* serial,
     return 0;
 }
 
-int uninstall_app(transport_type transport, char* serial, int argc, char** argv)
+int uninstall_app(transport_type transport, const char* serial, int argc,
+                  const char** argv)
 {
     /* if the user choose the -k option, we refuse to do it until devices are
        out with the option to uninstall the remaining data somehow (adb/ui) */
@@ -1854,7 +1853,7 @@ int uninstall_app(transport_type transport, char* serial, int argc, char** argv)
     return pm_command(transport, serial, argc, argv);
 }
 
-static int delete_file(transport_type transport, char* serial, char* filename)
+static int delete_file(transport_type transport, const char* serial, char* filename)
 {
     char buf[4096];
     char* quoted;
@@ -1879,7 +1878,8 @@ static const char* get_basename(const char* filename)
     }
 }
 
-int install_app(transport_type transport, char* serial, int argc, char** argv)
+int install_app(transport_type transport, const char* serial, int argc,
+                const char** argv)
 {
     static const char *const DATA_DEST = "/data/local/tmp/%s";
     static const char *const SD_DEST = "/sdcard/tmp/%s";
@@ -1897,7 +1897,7 @@ int install_app(transport_type transport, char* serial, int argc, char** argv)
     // All other arguments passed through verbatim.
     int last_apk = -1;
     for (i = argc - 1; i >= 0; i--) {
-        char* file = argv[i];
+        const char* file = argv[i];
         char* dot = strrchr(file, '.');
         if (dot && !strcasecmp(dot, ".apk")) {
             if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
@@ -1915,7 +1915,7 @@ int install_app(transport_type transport, char* serial, int argc, char** argv)
         return -1;
     }
 
-    char* apk_file = argv[last_apk];
+    const char* apk_file = argv[last_apk];
     char apk_dest[PATH_MAX];
     snprintf(apk_dest, sizeof apk_dest, where, get_basename(apk_file));
     int err = do_sync_push(apk_file, apk_dest, 0 /* no show progress */);
@@ -1932,7 +1932,8 @@ cleanup_apk:
     return err;
 }
 
-int install_multiple_app(transport_type transport, char* serial, int argc, char** argv)
+int install_multiple_app(transport_type transport, const char* serial, int argc,
+                         const char** argv)
 {
     char buf[1024];
     int i;
@@ -1943,7 +1944,7 @@ int install_multiple_app(transport_type transport, char* serial, int argc, char*
     // All other arguments passed through verbatim.
     int first_apk = -1;
     for (i = argc - 1; i >= 0; i--) {
-        char* file = argv[i];
+        const char* file = argv[i];
         char* dot = strrchr(file, '.');
         if (dot && !strcasecmp(dot, ".apk")) {
             if (stat(file, &sb) == -1 || !S_ISREG(sb.st_mode)) {
@@ -1998,7 +1999,7 @@ int install_multiple_app(transport_type transport, char* serial, int argc, char*
     // Valid session, now stream the APKs
     int success = 1;
     for (i = first_apk; i < argc; i++) {
-        char* file = argv[i];
+        const char* file = argv[i];
         if (stat(file, &sb) == -1) {
             fprintf(stderr, "Failed to stat %s\n", file);
             success = 0;
