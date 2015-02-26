@@ -123,7 +123,7 @@ int ifc_init(void)
 {
     int ret;
     if (ifc_ctl_sock == -1) {
-        ifc_ctl_sock = socket(AF_INET, SOCK_DGRAM, 0);
+        ifc_ctl_sock = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
         if (ifc_ctl_sock < 0) {
             printerr("socket() failed: %s\n", strerror(errno));
         }
@@ -137,7 +137,7 @@ int ifc_init(void)
 int ifc_init6(void)
 {
     if (ifc_ctl_sock6 == -1) {
-        ifc_ctl_sock6 = socket(AF_INET6, SOCK_DGRAM, 0);
+        ifc_ctl_sock6 = socket(AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, 0);
         if (ifc_ctl_sock6 < 0) {
             printerr("socket() failed: %s\n", strerror(errno));
         }
@@ -316,7 +316,7 @@ int ifc_act_on_address(int action, const char *name, const char *address,
     req.n.nlmsg_len = NLMSG_ALIGN(req.n.nlmsg_len) + RTA_LENGTH(addrlen);
     memcpy(RTA_DATA(rta), addr, addrlen);
 
-    s = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    s = socket(PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
     if (send(s, &req, req.n.nlmsg_len, 0) < 0) {
         close(s);
         return -errno;
