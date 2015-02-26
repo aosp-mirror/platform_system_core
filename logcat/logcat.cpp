@@ -61,9 +61,7 @@ static int g_maxRotatedLogs = DEFAULT_MAX_ROTATED_LOGS; // 0 means "unbounded"
 static int g_outFD = -1;
 static off_t g_outByteCount = 0;
 static int g_printBinary = 0;
-static int g_devCount = 0;
-
-static EventTagMap* g_eventTagMap = NULL;
+static int g_devCount = 0;                              // >1 means multiple
 
 static int openLogFile (const char *pathname)
 {
@@ -133,8 +131,15 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
     char binaryMsgBuf[1024];
 
     if (dev->binary) {
+        static bool hasOpenedEventTagMap = false;
+        static EventTagMap *eventTagMap = NULL;
+
+        if (!eventTagMap && !hasOpenedEventTagMap) {
+            eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+            hasOpenedEventTagMap = true;
+        }
         err = android_log_processBinaryLogBuffer(&buf->entry_v1, &entry,
-                                                 g_eventTagMap,
+                                                 eventTagMap,
                                                  binaryMsgBuf,
                                                  sizeof(binaryMsgBuf));
         //printf(">>> pri=%d len=%d msg='%s'\n",
@@ -331,7 +336,6 @@ int main(int argc, char **argv)
     const char *forceFilters = NULL;
     log_device_t* devices = NULL;
     log_device_t* dev;
-    bool needBinary = false;
     bool printDividers = false;
     struct logger_list *logger_list;
     unsigned int tail_lines = 0;
@@ -469,7 +473,6 @@ int main(int argc, char **argv)
 
                     devices = dev = NULL;
                     android::g_devCount = 0;
-                    needBinary = false;
                     for(int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
                         const char *name = android_log_id_to_name((log_id_t)i);
                         log_id_t log_id = android_name_to_log_id(name);
@@ -488,17 +491,11 @@ int main(int argc, char **argv)
                             devices = dev = d;
                         }
                         android::g_devCount++;
-                        if (binary) {
-                            needBinary = true;
-                        }
                     }
                     break;
                 }
 
                 bool binary = strcmp(optarg, "events") == 0;
-                if (binary) {
-                    needBinary = true;
-                }
 
                 if (devices) {
                     dev = devices;
@@ -848,17 +845,15 @@ int main(int argc, char **argv)
     //LOG_EVENT_LONG(11, 0x1122334455667788LL);
     //LOG_EVENT_STRING(0, "whassup, doc?");
 
-    if (needBinary)
-        android::g_eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
-
     dev = NULL;
+    log_device_t unexpected("unexpected", false, '?');
     while (1) {
         struct log_msg log_msg;
         log_device_t* d;
         int ret = android_logger_list_read(logger_list, &log_msg);
 
         if (ret == 0) {
-            fprintf(stderr, "read: Unexpected EOF!\n");
+            fprintf(stderr, "read: unexpected EOF!\n");
             exit(EXIT_FAILURE);
         }
 
@@ -868,7 +863,7 @@ int main(int argc, char **argv)
             }
 
             if (ret == -EIO) {
-                fprintf(stderr, "read: Unexpected EOF!\n");
+                fprintf(stderr, "read: unexpected EOF!\n");
                 exit(EXIT_FAILURE);
             }
             if (ret == -EINVAL) {
@@ -885,8 +880,9 @@ int main(int argc, char **argv)
             }
         }
         if (!d) {
-            fprintf(stderr, "read: Unexpected log ID!\n");
-            exit(EXIT_FAILURE);
+            android::g_devCount = 2; // set to Multiple
+            d = &unexpected;
+            d->binary = log_msg.id() == LOG_ID_EVENTS;
         }
 
         if (dev != d) {
