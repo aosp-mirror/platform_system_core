@@ -19,6 +19,7 @@
 #include <inttypes.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stddef.h>
 #define NOMINMAX /* for windows to suppress definition of min in stdlib.h */
 #include <stdlib.h>
@@ -30,6 +31,8 @@
 #include <cutils/sockets.h>
 #include <log/log.h>
 #include <log/logger.h>
+#include <private/android_filesystem_config.h>
+#include <private/android_logger.h>
 
 /* branchless on many architectures. */
 #define min(x,y) ((y) ^ (((x) ^ (y)) & -((x) < (y))))
@@ -357,10 +360,64 @@ static int check_log_success(char *buf, ssize_t ret)
     return 0;
 }
 
+/* Determine the credentials of the caller */
+static bool uid_has_log_permission(uid_t uid)
+{
+    return (uid == AID_SYSTEM) || (uid == AID_LOG) || (uid == AID_ROOT);
+}
+
+static uid_t get_best_effective_uid()
+{
+    uid_t euid;
+    uid_t uid;
+    gid_t gid;
+    ssize_t i;
+    static uid_t last_uid = (uid_t) -1;
+
+    if (last_uid != (uid_t) -1) {
+        return last_uid;
+    }
+    uid = getuid();
+    if (uid_has_log_permission(uid)) {
+        return last_uid = uid;
+    }
+    euid = geteuid();
+    if (uid_has_log_permission(euid)) {
+        return last_uid = euid;
+    }
+    gid = getgid();
+    if (uid_has_log_permission(gid)) {
+        return last_uid = gid;
+    }
+    gid = getegid();
+    if (uid_has_log_permission(gid)) {
+        return last_uid = gid;
+    }
+    i = getgroups((size_t) 0, NULL);
+    if (i > 0) {
+        gid_t list[i];
+
+        getgroups(i, list);
+        while (--i >= 0) {
+            if (uid_has_log_permission(list[i])) {
+                return last_uid = list[i];
+            }
+        }
+    }
+    return last_uid = uid;
+}
+
 int android_logger_clear(struct logger *logger)
 {
     char buf[512];
 
+    if (logger->top->mode & ANDROID_LOG_PSTORE) {
+        if (uid_has_log_permission(get_best_effective_uid())) {
+            return unlink("/sys/fs/pstore/pmsg-ramoops-0");
+        }
+        errno = EPERM;
+        return -1;
+    }
     return check_log_success(buf,
         send_log_msg(logger, "clear %d", buf, sizeof(buf)));
 }
@@ -564,6 +621,116 @@ struct logger_list *android_logger_list_open(log_id_t id,
     return logger_list;
 }
 
+static int android_logger_list_read_pstore(struct logger_list *logger_list,
+                                           struct log_msg *log_msg)
+{
+    ssize_t ret;
+    off_t current, next;
+    uid_t uid;
+    struct logger *logger;
+    struct __attribute__((__packed__)) {
+        android_pmsg_log_header_t p;
+        android_log_header_t l;
+    } buf;
+    static uint8_t preread_count;
+
+    memset(log_msg, 0, sizeof(*log_msg));
+
+    if (logger_list->sock < 0) {
+        int fd = open("/sys/fs/pstore/pmsg-ramoops-0", O_RDONLY);
+
+        if (fd < 0) {
+            return -errno;
+        }
+        logger_list->sock = fd;
+        preread_count = 0;
+    }
+
+    ret = 0;
+    while(1) {
+        if (preread_count < sizeof(buf)) {
+            ret = TEMP_FAILURE_RETRY(read(logger_list->sock,
+                                          &buf.p.magic + preread_count,
+                                          sizeof(buf) - preread_count));
+            if (ret < 0) {
+                return -errno;
+            }
+            preread_count += ret;
+        }
+        if (preread_count != sizeof(buf)) {
+            return preread_count ? -EIO : -EAGAIN;
+        }
+        if ((buf.p.magic != LOGGER_MAGIC)
+         || (buf.p.len <= sizeof(buf))
+         || (buf.p.len > (sizeof(buf) + LOGGER_ENTRY_MAX_PAYLOAD))
+         || (buf.l.id >= LOG_ID_MAX)
+         || (buf.l.realtime.tv_nsec >= NS_PER_SEC)) {
+            do {
+                memmove(&buf.p.magic, &buf.p.magic + 1, --preread_count);
+            } while (preread_count && (buf.p.magic != LOGGER_MAGIC));
+            continue;
+        }
+        preread_count = 0;
+
+        logger_for_each(logger, logger_list) {
+            if (buf.l.id != logger->id) {
+                continue;
+            }
+
+            if ((logger_list->start.tv_sec || logger_list->start.tv_nsec)
+             && ((logger_list->start.tv_sec > buf.l.realtime.tv_sec)
+              || ((logger_list->start.tv_sec == buf.l.realtime.tv_sec)
+               && (logger_list->start.tv_nsec > buf.l.realtime.tv_nsec)))) {
+                break;
+            }
+
+            if (logger_list->pid && (logger_list->pid != buf.p.pid)) {
+                break;
+            }
+
+            uid = get_best_effective_uid();
+            if (!uid_has_log_permission(uid) && (uid != buf.p.uid)) {
+                break;
+            }
+
+            ret = TEMP_FAILURE_RETRY(read(logger_list->sock,
+                                          log_msg->entry_v3.msg,
+                                          buf.p.len - sizeof(buf)));
+            if (ret < 0) {
+                return -errno;
+            }
+            if (ret != (ssize_t)(buf.p.len - sizeof(buf))) {
+                return -EIO;
+            }
+
+            log_msg->entry_v3.len = buf.p.len - sizeof(buf);
+            log_msg->entry_v3.hdr_size = sizeof(log_msg->entry_v3);
+            log_msg->entry_v3.pid = buf.p.pid;
+            log_msg->entry_v3.tid = buf.l.tid;
+            log_msg->entry_v3.sec = buf.l.realtime.tv_sec;
+            log_msg->entry_v3.nsec = buf.l.realtime.tv_nsec;
+            log_msg->entry_v3.lid = buf.l.id;
+
+            return ret;
+        }
+
+        current = TEMP_FAILURE_RETRY(lseek(logger_list->sock,
+                                           (off_t)0, SEEK_CUR));
+        if (current < 0) {
+            return -errno;
+        }
+        next = TEMP_FAILURE_RETRY(lseek(logger_list->sock,
+                                        (off_t)(buf.p.len - sizeof(buf)),
+                                        SEEK_CUR));
+        if (next < 0) {
+            return -errno;
+        }
+        if ((next - current) != (ssize_t)(buf.p.len - sizeof(buf))) {
+            return -EIO;
+        }
+    }
+}
+
 static void caught_signal(int signum __unused)
 {
 }
@@ -580,6 +747,10 @@ int android_logger_list_read(struct logger_list *logger_list,
 
     if (!logger_list) {
         return -EINVAL;
+    }
+
+    if (logger_list->mode & ANDROID_LOG_PSTORE) {
+        return android_logger_list_read_pstore(logger_list, log_msg);
     }
 
     if (logger_list->mode & ANDROID_LOG_NONBLOCK) {

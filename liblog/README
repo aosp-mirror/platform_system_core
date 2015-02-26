@@ -116,6 +116,10 @@ DESCRIPTION
        code,  otherwise the  android_logger_list_read  call will block for new
        entries.
 
+       The  ANDROID_LOG_PSTORE mode flag to the android_logger_open is used to
+       switch from the active logs to the persistent logs from before the last
+       reboot.
+
        The value returned by android_logger_open can be used as a parameter to
        the  android_logger_clear  function to empty the sub-log.  It is recom‐
        mended to only open log ANDROID_LOG_WRONLY in that case.
@@ -132,4 +136,4 @@ SEE ALSO
 
 
 
-                                  17 Dec 2013                        LIBLOG(3)
+                                  24 Jan 2014                        LIBLOG(3)
