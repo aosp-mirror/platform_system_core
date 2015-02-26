@@ -386,11 +386,12 @@ public:
     void removeMessages(const sp<MessageHandler>& handler, int what);
 
     /**
-     * Return whether this looper's thread is currently idling -- that is, whether it
-     * stopped waiting for more work to do.  Note that this is intrinsically racy, since
-     * its state can change before you get the result back.
+     * Returns whether this looper's thread is currently polling for more work to do.
+     * This is a good signal that the loop is still alive rather than being stuck
+     * handling a callback.  Note that this method is intrinsically racy, since the
+     * state of the loop can change before you get the result back.
      */
-    bool isIdling() const;
+    bool isPolling() const;
 
     /**
      * Prepares a looper associated with the calling thread, and returns it.
@@ -451,7 +452,7 @@ private:
 
     // Whether we are currently waiting for work.  Not protected by a lock,
     // any use of it is racy anyway.
-    volatile bool mIdling;
+    volatile bool mPolling;
 
     int mEpollFd; // immutable
 
