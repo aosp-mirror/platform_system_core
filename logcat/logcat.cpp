@@ -38,14 +38,12 @@ struct log_device_t {
     struct logger *logger;
     struct logger_list *logger_list;
     bool printed;
-    char label;
 
     log_device_t* next;
 
-    log_device_t(const char* d, bool b, char l) {
+    log_device_t(const char* d, bool b) {
         device = d;
         binary = b;
-        label = l;
         next = NULL;
         printed = false;
     }
@@ -152,16 +150,6 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
     }
 
     if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority)) {
-        if (false && g_devCount > 1) {
-            binaryMsgBuf[0] = dev->label;
-            binaryMsgBuf[1] = ' ';
-            bytesWritten = write(g_outFD, binaryMsgBuf, 2);
-            if (bytesWritten < 0) {
-                perror("output error");
-                exit(-1);
-            }
-        }
-
         bytesWritten = android_log_printLogLine(g_logformat, g_outFD, &entry);
 
         if (bytesWritten < 0) {
@@ -482,7 +470,7 @@ int main(int argc, char **argv)
                         }
 
                         bool binary = strcmp(name, "events") == 0;
-                        log_device_t* d = new log_device_t(name, binary, *name);
+                        log_device_t* d = new log_device_t(name, binary);
 
                         if (dev) {
                             dev->next = d;
@@ -502,9 +490,9 @@ int main(int argc, char **argv)
                     while (dev->next) {
                         dev = dev->next;
                     }
-                    dev->next = new log_device_t(optarg, binary, optarg[0]);
+                    dev->next = new log_device_t(optarg, binary);
                 } else {
-                    devices = new log_device_t(optarg, binary, optarg[0]);
+                    devices = new log_device_t(optarg, binary);
                 }
                 android::g_devCount++;
             }
@@ -638,14 +626,14 @@ int main(int argc, char **argv)
     }
 
     if (!devices) {
-        dev = devices = new log_device_t("main", false, 'm');
+        dev = devices = new log_device_t("main", false);
         android::g_devCount = 1;
         if (android_name_to_log_id("system") == LOG_ID_SYSTEM) {
-            dev = dev->next = new log_device_t("system", false, 's');
+            dev = dev->next = new log_device_t("system", false);
             android::g_devCount++;
         }
         if (android_name_to_log_id("crash") == LOG_ID_CRASH) {
-            dev = dev->next = new log_device_t("crash", false, 'c');
+            dev = dev->next = new log_device_t("crash", false);
             android::g_devCount++;
         }
     }
@@ -846,7 +834,7 @@ int main(int argc, char **argv)
     //LOG_EVENT_STRING(0, "whassup, doc?");
 
     dev = NULL;
-    log_device_t unexpected("unexpected", false, '?');
+    log_device_t unexpected("unexpected", false);
     while (1) {
         struct log_msg log_msg;
         log_device_t* d;
