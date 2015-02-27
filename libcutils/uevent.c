@@ -112,7 +112,7 @@ int uevent_open_socket(int buf_sz, bool passcred)
     addr.nl_pid = getpid();
     addr.nl_groups = 0xffffffff;
 
-    s = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT);
+    s = socket(PF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC, NETLINK_KOBJECT_UEVENT);
     if(s < 0)
         return -1;
 
