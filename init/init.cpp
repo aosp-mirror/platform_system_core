@@ -65,8 +65,6 @@ static int property_triggers_enabled = 0;
 
 static char console[32];
 static char bootmode[32];
-static char hardware[32];
-static unsigned revision = 0;
 static char qemu[32];
 
 static struct action *cur_action = NULL;
@@ -773,6 +771,8 @@ static void export_kernel_boot_props(void)
         { "ro.boot.mode", "ro.bootmode", "unknown", },
         { "ro.boot.baseband", "ro.baseband", "unknown", },
         { "ro.boot.bootloader", "ro.bootloader", "unknown", },
+        { "ro.boot.hardware", "ro.hardware", "unknown", },
+        { "ro.boot.revision", "ro.revision", "0", },
     };
 
     for (i = 0; i < ARRAY_SIZE(prop_map); i++) {
@@ -790,16 +790,6 @@ static void export_kernel_boot_props(void)
     /* save a copy for init's usage during boot */
     property_get("ro.bootmode", tmp);
     strlcpy(bootmode, tmp, sizeof(bootmode));
-
-    /* if this was given on kernel command line, override what we read
-     * before (e.g. from /proc/cpuinfo), if anything */
-    ret = property_get("ro.boot.hardware", tmp);
-    if (ret)
-        strlcpy(hardware, tmp, sizeof(hardware));
-    property_set("ro.hardware", hardware);
-
-    snprintf(tmp, PROP_VALUE_MAX, "%d", revision);
-    property_set("ro.revision", tmp);
 
     /* TODO: these are obsolete. We should delete them */
     if (!strcmp(bootmode,"factory"))
@@ -1011,8 +1001,6 @@ int main(int argc, char** argv) {
     open_devnull_stdio();
     klog_init();
     property_init();
-
-    get_hardware_name(hardware, &revision);
 
     process_kernel_cmdline();
 
