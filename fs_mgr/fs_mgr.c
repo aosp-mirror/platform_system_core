@@ -186,19 +186,22 @@ static void remove_trailing_slashes(char *n)
  * Mark the given block device as read-only, using the BLKROSET ioctl.
  * Return 0 on success, and -1 on error.
  */
-static void fs_set_blk_ro(const char *blockdev)
+int fs_mgr_set_blk_ro(const char *blockdev)
 {
     int fd;
+    int rc = -1;
     int ON = 1;
 
-    fd = open(blockdev, O_RDONLY);
+    fd = TEMP_FAILURE_RETRY(open(blockdev, O_RDONLY | O_CLOEXEC));
     if (fd < 0) {
         // should never happen
-        return;
+        return rc;
     }
 
-    ioctl(fd, BLKROSET, &ON);
-    close(fd);
+    rc = ioctl(fd, BLKROSET, &ON);
+    TEMP_FAILURE_RETRY(close(fd));
+
+    return rc;
 }
 
 /*
@@ -224,7 +227,7 @@ static int __mount(const char *source, const char *target, const struct fstab_re
     save_errno = errno;
     INFO("%s(source=%s,target=%s,type=%s)=%d\n", __func__, source, target, rec->fs_type, ret);
     if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
-        fs_set_blk_ro(source);
+        fs_mgr_set_blk_ro(source);
     }
     errno = save_errno;
     return ret;
