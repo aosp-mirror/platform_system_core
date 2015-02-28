@@ -442,6 +442,9 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
         goto out;
     }
 
+    // mark the underlying block device as read-only
+    fs_mgr_set_blk_ro(fstab->blk_device);
+
     // assign the new verity block device as the block device
     free(fstab->blk_device);
     fstab->blk_device = verity_blk_name;
