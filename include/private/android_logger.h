@@ -41,4 +41,46 @@ typedef struct __attribute__((__packed__)) {
     log_time realtime;
 } android_log_header_t;
 
+/* Event Header Structure to logd */
+typedef struct __attribute__((__packed__)) {
+    int32_t tag;  // Little Endian Order
+} android_event_header_t;
+
+/* Event payload EVENT_TYPE_INT */
+typedef struct __attribute__((__packed__)) {
+    int8_t type;  // EVENT_TYPE_INT
+    int32_t data; // Little Endian Order
+} android_event_int_t;
+
+/* Event with single EVENT_TYPE_INT */
+typedef struct __attribute__((__packed__)) {
+    android_event_header_t header;
+    android_event_int_t payload;
+} android_log_event_int_t;
+
+/* Event payload EVENT_TYPE_LONG */
+typedef struct __attribute__((__packed__)) {
+    int8_t type;  // EVENT_TYPE_LONG
+    int64_t data; // Little Endian Order
+} android_event_long_t;
+
+/* Event with single EVENT_TYPE_LONG */
+typedef struct __attribute__((__packed__)) {
+    android_event_header_t header;
+    android_event_long_t payload;
+} android_log_event_long_t;
+
+/* Event payload EVENT_TYPE_STRING */
+typedef struct __attribute__((__packed__)) {
+    int8_t type;    // EVENT_TYPE_STRING;
+    int32_t length; // Little Endian Order
+    char data[];
+} android_event_string_t;
+
+/* Event with single EVENT_TYPE_STRING */
+typedef struct __attribute__((__packed__)) {
+    android_event_header_t header;
+    android_event_string_t payload;
+} android_log_event_string_t;
+
 #endif
