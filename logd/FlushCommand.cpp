@@ -27,7 +27,7 @@ FlushCommand::FlushCommand(LogReader &reader,
                            unsigned long tail,
                            unsigned int logMask,
                            pid_t pid,
-                           log_time start)
+                           uint64_t start)
         : mReader(reader)
         , mNonBlock(nonBlock)
         , mTail(tail)

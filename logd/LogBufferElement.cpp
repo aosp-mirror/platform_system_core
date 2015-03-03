@@ -24,7 +24,8 @@
 #include "LogBufferElement.h"
 #include "LogReader.h"
 
-const log_time LogBufferElement::FLUSH_ERROR((uint32_t)0, (uint32_t)0);
+const uint64_t LogBufferElement::FLUSH_ERROR(0);
+atomic_int_fast64_t LogBufferElement::sequence;
 
 LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
                                    uid_t uid, pid_t pid, pid_t tid,
@@ -34,7 +35,7 @@ LogBufferElement::LogBufferElement(log_id_t log_id, log_time realtime,
         , mPid(pid)
         , mTid(tid)
         , mMsgLen(len)
-        , mMonotonicTime(CLOCK_MONOTONIC)
+        , mSequence(sequence.fetch_add(1, memory_order_relaxed))
         , mRealTime(realtime) {
     mMsg = new char[len];
     memcpy(mMsg, msg, len);
@@ -44,7 +45,7 @@ LogBufferElement::~LogBufferElement() {
     delete [] mMsg;
 }
 
-log_time LogBufferElement::flushTo(SocketClient *reader) {
+uint64_t LogBufferElement::flushTo(SocketClient *reader) {
     struct logger_entry_v3 entry;
     memset(&entry, 0, sizeof(struct logger_entry_v3));
     entry.hdr_size = sizeof(struct logger_entry_v3);
@@ -64,5 +65,5 @@ log_time LogBufferElement::flushTo(SocketClient *reader) {
         return FLUSH_ERROR;
     }
 
-    return mMonotonicTime;
+    return mSequence;
 }

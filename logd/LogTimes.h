@@ -47,13 +47,12 @@ class LogTimeEntry {
 public:
     LogTimeEntry(LogReader &reader, SocketClient *client, bool nonBlock,
                  unsigned long tail, unsigned int logMask, pid_t pid,
-                 log_time start);
+                 uint64_t start);
 
     SocketClient *mClient;
-    static const struct timespec EPOCH;
-    log_time mStart;
+    uint64_t mStart;
     const bool mNonBlock;
-    const log_time mEnd; // only relevant if mNonBlock
+    const uint64_t mEnd; // only relevant if mNonBlock
 
     // Protect List manipulations
     static void lock(void) { pthread_mutex_lock(&timesLock); }
@@ -103,8 +102,8 @@ public:
     }
     bool isWatching(log_id_t id) { return (mLogMask & (1<<id)) != 0; }
     // flushTo filter callbacks
-    static bool FilterFirstPass(const LogBufferElement *element, void *me);
-    static bool FilterSecondPass(const LogBufferElement *element, void *me);
+    static int FilterFirstPass(const LogBufferElement *element, void *me);
+    static int FilterSecondPass(const LogBufferElement *element, void *me);
 };
 
 typedef android::List<LogTimeEntry *> LastLogTimes;

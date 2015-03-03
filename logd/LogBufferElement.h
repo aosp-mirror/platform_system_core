@@ -18,6 +18,7 @@
 #define _LOGD_LOG_BUFFER_ELEMENT_H__
 
 #include <sys/types.h>
+#include <stdatomic.h>
 #include <sysutils/SocketClient.h>
 #include <log/log.h>
 #include <log/log_read.h>
@@ -29,8 +30,9 @@ class LogBufferElement {
     const pid_t mTid;
     char *mMsg;
     const unsigned short mMsgLen;
-    const log_time mMonotonicTime;
+    const uint64_t mSequence;
     const log_time mRealTime;
+    static atomic_int_fast64_t sequence;
 
 public:
     LogBufferElement(log_id_t log_id, log_time realtime,
@@ -43,11 +45,12 @@ public:
     pid_t getPid(void) const { return mPid; }
     pid_t getTid(void) const { return mTid; }
     unsigned short getMsgLen() const { return mMsgLen; }
-    log_time getMonotonicTime(void) const { return mMonotonicTime; }
+    uint64_t getSequence(void) const { return mSequence; }
+    static uint64_t getCurrentSequence(void) { return sequence.load(memory_order_relaxed); }
     log_time getRealTime(void) const { return mRealTime; }
 
-    static const log_time FLUSH_ERROR;
-    log_time flushTo(SocketClient *writer);
+    static const uint64_t FLUSH_ERROR;
+    uint64_t flushTo(SocketClient *writer);
 };
 
 #endif
