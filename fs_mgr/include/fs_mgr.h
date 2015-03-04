@@ -27,6 +27,14 @@
 // turn verity off in userdebug builds.
 #define VERITY_METADATA_MAGIC_DISABLE 0x46464f56 // "VOFF"
 
+// Verity modes
+enum verity_mode {
+    VERITY_MODE_EIO = 0,
+    VERITY_MODE_LOGGING = 1,
+    VERITY_MODE_RESTART = 2,
+    VERITY_MODE_LAST = VERITY_MODE_RESTART
+};
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -75,6 +83,8 @@ int fs_mgr_do_tmpfs_mount(char *n_name);
 int fs_mgr_unmount_all(struct fstab *fstab);
 int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc,
                           char *real_blk_device, int size);
+int fs_mgr_load_verity_state(int *mode);
+int fs_mgr_update_verity_state();
 int fs_mgr_add_entry(struct fstab *fstab,
                      const char *mount_point, const char *fs_type,
                      const char *blk_device);
