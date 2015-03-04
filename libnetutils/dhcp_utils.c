@@ -1,16 +1,16 @@
 /*
  * Copyright 2008, The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -33,7 +33,7 @@ static const char DHCP_CONFIG_PATH[]   = "/system/etc/dhcpcd/dhcpcd.conf";
 static const int NAP_TIME = 200;   /* wait for 200ms at a time */
                                   /* when polling for property values */
 static const char DAEMON_NAME_RENEW[]  = "iprenew";
-static char errmsg[100] = "";
+static char errmsg[100] = "\0";
 /* interface length for dhcpcd daemon start (dhcpcd_<interface> as defined in init.rc file)
  * or for filling up system properties dhcpcd.<interface>.ipaddress, dhcpcd.<interface>.dns1
  * and other properties on a successful bind
@@ -75,7 +75,7 @@ static int wait_for_property(const char *name, const char *desired_value, int ma
     while (maxnaps-- > 0) {
         usleep(NAP_TIME * 1000);
         if (property_get(name, value, NULL)) {
-            if (desired_value == NULL || 
+            if (desired_value == NULL ||
                     strcmp(value, desired_value) == 0) {
                 return 0;
             }
