@@ -204,6 +204,9 @@ static int lookup_keyword(const char *s)
     case 'u':
         if (!strcmp(s, "ser")) return K_user;
         break;
+    case 'v':
+        if (!strcmp(s, "erity_load_state")) return K_verity_load_state;
+        break;
     case 'w':
         if (!strcmp(s, "rite")) return K_write;
         if (!strcmp(s, "ait")) return K_wait;
