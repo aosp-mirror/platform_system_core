@@ -15,6 +15,7 @@
  */
 
 #include <ctype.h>
+#include <endian.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -22,6 +23,8 @@
 #include <sys/prctl.h>
 #include <sys/uio.h>
 #include <syslog.h>
+
+#include <private/android_logger.h>
 
 #include "libaudit.h"
 #include "LogAudit.h"
@@ -138,29 +141,23 @@ int LogAudit::logPrint(const char *fmt, ...) {
     // log to events
 
     size_t l = strlen(str);
-    size_t n = l + sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint32_t);
+    size_t n = l + sizeof(android_log_event_string_t);
 
     bool notify = false;
 
-    char *newstr = reinterpret_cast<char *>(malloc(n));
-    if (!newstr) {
+    android_log_event_string_t *event = static_cast<android_log_event_string_t *>(malloc(n));
+    if (!event) {
         rc = -ENOMEM;
     } else {
-        cp = newstr;
-        *cp++ = AUDITD_LOG_TAG & 0xFF;
-        *cp++ = (AUDITD_LOG_TAG >> 8) & 0xFF;
-        *cp++ = (AUDITD_LOG_TAG >> 16) & 0xFF;
-        *cp++ = (AUDITD_LOG_TAG >> 24) & 0xFF;
-        *cp++ = EVENT_TYPE_STRING;
-        *cp++ = l & 0xFF;
-        *cp++ = (l >> 8) & 0xFF;
-        *cp++ = (l >> 16) & 0xFF;
-        *cp++ = (l >> 24) & 0xFF;
-        memcpy(cp, str, l);
+        event->header.tag = htole32(AUDITD_LOG_TAG);
+        event->payload.type = EVENT_TYPE_STRING;
+        event->payload.length = htole32(l);
+        memcpy(event->payload.data, str, l);
 
-        logbuf->log(LOG_ID_EVENTS, now, uid, pid, tid, newstr,
+        logbuf->log(LOG_ID_EVENTS, now, uid, pid, tid,
+                    reinterpret_cast<char *>(event),
                     (n <= USHRT_MAX) ? (unsigned short) n : USHRT_MAX);
-        free(newstr);
+        free(event);
 
         notify = true;
     }
@@ -190,7 +187,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
     }
     n = (estr - str) + strlen(ecomm) + l + 2;
 
-    newstr = reinterpret_cast<char *>(malloc(n));
+    char *newstr = static_cast<char *>(malloc(n));
     if (!newstr) {
         rc = -ENOMEM;
     } else {
