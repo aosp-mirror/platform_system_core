@@ -431,7 +431,7 @@ static int check_verity_restart(const char *fname)
     }
 
     if (lseek(fd, s.st_size - size, SEEK_SET) == -1) {
-        ERROR("Failed to lseek %zu %s (%s)\n", s.st_size - size, fname,
+        ERROR("Failed to lseek %jd %s (%s)\n", (intmax_t)(s.st_size - size), fname,
             strerror(errno));
         goto out;
     }
