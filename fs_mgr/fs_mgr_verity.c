@@ -42,8 +42,23 @@
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_verity.h"
 
+#define FSTAB_PREFIX "/fstab."
+
 #define VERITY_METADATA_SIZE 32768
 #define VERITY_TABLE_RSA_KEY "/verity_key"
+
+#define VERITY_STATE_HEADER 0x83c0ae9d
+#define VERITY_STATE_VERSION 1
+
+#define VERITY_KMSG_RESTART "dm-verity device corrupted"
+#define VERITY_KMSG_BUFSIZE 1024
+
+struct verity_state {
+    uint32_t header;
+    uint32_t version;
+    uint32_t size;
+    int32_t mode;
+};
 
 extern struct fs_info info;
 
@@ -294,10 +309,12 @@ static int get_verity_device_name(struct dm_ioctl *io, char *name, int fd, char 
     return 0;
 }
 
-static int load_verity_table(struct dm_ioctl *io, char *name, char *blockdev, int fd, char *table)
+static int load_verity_table(struct dm_ioctl *io, char *name, char *blockdev, int fd, char *table,
+        int mode)
 {
     char *verity_params;
     char *buffer = (char*) io;
+    size_t bufsize;
     uint64_t device_size = 0;
 
     if (get_target_device_size(blockdev, &device_size) < 0) {
@@ -317,7 +334,17 @@ static int load_verity_table(struct dm_ioctl *io, char *name, char *blockdev, in
 
     // build the verity params here
     verity_params = buffer + sizeof(struct dm_ioctl) + sizeof(struct dm_target_spec);
-    strcpy(verity_params, table);
+    bufsize = DM_BUF_SIZE - (verity_params - buffer);
+
+    if (mode == VERITY_MODE_EIO) {
+        // allow operation with older dm-verity drivers that are unaware
+        // of the mode parameter by omitting it; this also means that we
+        // cannot use logging mode with these drivers, they always cause
+        // an I/O error for corrupted blocks
+        strcpy(verity_params, table);
+    } else if (snprintf(verity_params, bufsize, "%s %d", table, mode) < 0) {
+        return -1;
+    }
 
     // set next target boundary
     verity_params += strlen(verity_params) + 1;
@@ -359,31 +386,316 @@ static int set_verified_property(char *name) {
     char *key;
     ret = asprintf(&key, "partition.%s.verified", name);
     if (ret < 0) {
-        ERROR("Error formatting verified property");
+        ERROR("Error formatting verified property\n");
         return ret;
     }
     ret = PROP_NAME_MAX - strlen(key);
     if (ret < 0) {
-        ERROR("Verified property name is too long");
+        ERROR("Verified property name is too long\n");
+        free(key);
         return -1;
     }
     ret = property_set(key, "1");
     if (ret < 0)
-        ERROR("Error setting verified property %s: %d", key, ret);
+        ERROR("Error setting verified property %s: %d\n", key, ret);
     free(key);
     return ret;
 }
 
+static int check_verity_restart(const char *fname)
+{
+    char buffer[VERITY_KMSG_BUFSIZE + 1];
+    int fd;
+    int rc = 0;
+    ssize_t size;
+    struct stat s;
+
+    fd = TEMP_FAILURE_RETRY(open(fname, O_RDONLY | O_CLOEXEC));
+
+    if (fd == -1) {
+        if (errno != ENOENT) {
+            ERROR("Failed to open %s (%s)\n", fname, strerror(errno));
+        }
+        goto out;
+    }
+
+    if (fstat(fd, &s) == -1) {
+        ERROR("Failed to fstat %s (%s)\n", fname, strerror(errno));
+        goto out;
+    }
+
+    size = VERITY_KMSG_BUFSIZE;
+
+    if (size > s.st_size) {
+        size = s.st_size;
+    }
+
+    if (lseek(fd, s.st_size - size, SEEK_SET) == -1) {
+        ERROR("Failed to lseek %zu %s (%s)\n", s.st_size - size, fname,
+            strerror(errno));
+        goto out;
+    }
+
+    if (TEMP_FAILURE_RETRY(read(fd, buffer, size)) != size) {
+        ERROR("Failed to read %zd bytes from %s (%s)\n", size, fname,
+            strerror(errno));
+        goto out;
+    }
+
+    buffer[size] = '\0';
+
+    if (strstr(buffer, VERITY_KMSG_RESTART) != NULL) {
+        rc = 1;
+    }
+
+out:
+    if (fd != -1) {
+        TEMP_FAILURE_RETRY(close(fd));
+    }
+
+    return rc;
+}
+
+static int was_verity_restart()
+{
+    static const char *files[] = {
+        "/sys/fs/pstore/console-ramoops",
+        "/proc/last_kmsg",
+        NULL
+    };
+    int i;
+
+    for (i = 0; files[i]; ++i) {
+        if (check_verity_restart(files[i])) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int write_verity_state(const char *fname, off64_t offset, int32_t mode)
+{
+    int fd;
+    int rc = -1;
+
+    struct verity_state s = {
+        VERITY_STATE_HEADER,
+        VERITY_STATE_VERSION,
+        sizeof(struct verity_state),
+        mode
+    };
+
+    fd = TEMP_FAILURE_RETRY(open(fname, O_WRONLY | O_SYNC | O_CLOEXEC));
+
+    if (fd == -1) {
+        ERROR("Failed to open %s (%s)\n", fname, strerror(errno));
+        goto out;
+    }
+
+    if (TEMP_FAILURE_RETRY(lseek64(fd, offset, SEEK_SET)) < 0) {
+        ERROR("Failed to seek %s to %" PRIu64 " (%s)\n", fname, offset, strerror(errno));
+        goto out;
+    }
+
+    if (TEMP_FAILURE_RETRY(write(fd, &s, sizeof(s))) != sizeof(s)) {
+        ERROR("Failed to write %zu bytes to %s (%s)\n", sizeof(s), fname, strerror(errno));
+        goto out;
+    }
+
+    rc = 0;
+
+out:
+    if (fd != -1) {
+        TEMP_FAILURE_RETRY(close(fd));
+    }
+
+    return rc;
+}
+
+static int get_verity_state_location(char *location, off64_t *offset)
+{
+    char state_off[PROPERTY_VALUE_MAX];
+
+    if (property_get("ro.verity.state.location", location, NULL) <= 0) {
+        return -1;
+    }
+
+    if (*location != '/' || access(location, R_OK | W_OK) == -1) {
+        ERROR("Failed to access verity state %s (%s)\n", location, strerror(errno));
+        return -1;
+    }
+
+    *offset = 0;
+
+    if (property_get("ro.verity.state.offset", state_off, NULL) > 0) {
+        *offset = strtoll(state_off, NULL, 0);
+
+        if (errno == ERANGE || errno == EINVAL) {
+            ERROR("Invalid value in ro.verity.state.offset (%s)\n", state_off);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int fs_mgr_load_verity_state(int *mode)
+{
+    char fname[PROPERTY_VALUE_MAX];
+    int fd = -1;
+    int rc = -1;
+    off64_t offset = 0;
+    struct verity_state s;
+
+    if (get_verity_state_location(fname, &offset) < 0) {
+        /* location for dm-verity state is not specified, fall back to
+         * default behavior: return -EIO for corrupted blocks */
+        *mode = VERITY_MODE_EIO;
+        rc = 0;
+        goto out;
+    }
+
+    if (was_verity_restart()) {
+        /* device was restarted after dm-verity detected a corrupted
+         * block, so switch to logging mode */
+        *mode = VERITY_MODE_LOGGING;
+        rc = write_verity_state(fname, offset, *mode);
+        goto out;
+    }
+
+    fd = TEMP_FAILURE_RETRY(open(fname, O_RDONLY | O_CLOEXEC));
+
+    if (fd == -1) {
+        ERROR("Failed to open %s (%s)\n", fname, strerror(errno));
+        goto out;
+    }
+
+    if (TEMP_FAILURE_RETRY(lseek64(fd, offset, SEEK_SET)) < 0) {
+        ERROR("Failed to seek %s to %" PRIu64 " (%s)\n", fname, offset, strerror(errno));
+        goto out;
+    }
+
+    if (TEMP_FAILURE_RETRY(read(fd, &s, sizeof(s))) != sizeof(s)) {
+        ERROR("Failed to read %zu bytes from %s (%s)\n", sizeof(s), fname, strerror(errno));
+        goto out;
+    }
+
+    if (s.header != VERITY_STATE_HEADER) {
+        goto out;
+    }
+
+    if (s.version != VERITY_STATE_VERSION) {
+        ERROR("Unsupported verity state version (%u)\n", s.version);
+        goto out;
+    }
+
+    if (s.size != sizeof(s)) {
+        ERROR("Unexpected verity state size (%u)\n", s.size);
+        goto out;
+    }
+
+    if (s.mode < VERITY_MODE_EIO ||
+        s.mode > VERITY_MODE_LAST) {
+        ERROR("Unsupported verity mode (%u)\n", s.mode);
+        goto out;
+    }
+
+    *mode = s.mode;
+    rc = 0;
+
+out:
+    if (fd != -1) {
+        TEMP_FAILURE_RETRY(close(fd));
+    }
+
+    return rc;
+}
+
+int fs_mgr_update_verity_state()
+{
+    _Alignas(struct dm_ioctl) char buffer[DM_BUF_SIZE];
+    char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
+    char *mount_point;
+    char propbuf[PROPERTY_VALUE_MAX];
+    char state_loc[PROPERTY_VALUE_MAX];
+    char *status;
+    int fd = -1;
+    int i;
+    int rc = -1;
+    off64_t offset = 0;
+    struct dm_ioctl *io = (struct dm_ioctl *) buffer;
+    struct fstab *fstab = NULL;
+
+    if (get_verity_state_location(state_loc, &offset) < 0) {
+        goto out;
+    }
+
+    fd = TEMP_FAILURE_RETRY(open("/dev/device-mapper", O_RDWR | O_CLOEXEC));
+
+    if (fd == -1) {
+        ERROR("Error opening device mapper (%s)\n", strerror(errno));
+        goto out;
+    }
+
+    property_get("ro.hardware", propbuf, "");
+    snprintf(fstab_filename, sizeof(fstab_filename), FSTAB_PREFIX"%s", propbuf);
+
+    fstab = fs_mgr_read_fstab(fstab_filename);
+
+    if (!fstab) {
+        ERROR("Failed to read %s\n", fstab_filename);
+        goto out;
+    }
+
+    for (i = 0; i < fstab->num_entries; i++) {
+        if (!fs_mgr_is_verified(&fstab->recs[i])) {
+            continue;
+        }
+
+        mount_point = basename(fstab->recs[i].mount_point);
+        verity_ioctl_init(io, mount_point, 0);
+
+        if (ioctl(fd, DM_TABLE_STATUS, io)) {
+            ERROR("Failed to query DM_TABLE_STATUS for %s (%s)\n", mount_point,
+                strerror(errno));
+            goto out;
+        }
+
+        status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
+
+        if (*status == 'C') {
+            rc = write_verity_state(state_loc, offset, VERITY_MODE_LOGGING);
+            goto out;
+        }
+    }
+
+    /* Don't overwrite possible previous state if there's no corruption. */
+    rc = 0;
+
+out:
+    if (fstab) {
+        fs_mgr_free_fstab(fstab);
+    }
+
+    if (fd) {
+        TEMP_FAILURE_RETRY(close(fd));
+    }
+
+    return rc;
+}
+
 int fs_mgr_setup_verity(struct fstab_rec *fstab) {
 
-    int retval = -1;
+    int retval = FS_MGR_SETUP_VERITY_FAIL;
     int fd = -1;
+    int mode;
 
     char *verity_blk_name = 0;
     char *verity_table = 0;
     char *verity_table_signature = 0;
 
-    char buffer[DM_BUF_SIZE];
+    _Alignas(struct dm_ioctl) char buffer[DM_BUF_SIZE];
     struct dm_ioctl *io = (struct dm_ioctl *) buffer;
     char *mount_point = basename(fstab->mount_point);
 
@@ -406,6 +718,8 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     if (retval < 0) {
         goto out;
     }
+
+    retval = FS_MGR_SETUP_VERITY_FAIL;
 
     // get the device mapper fd
     if ((fd = open("/dev/device-mapper", O_RDWR)) < 0) {
@@ -432,8 +746,13 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
         goto out;
     }
 
+    if (fs_mgr_load_verity_state(&mode) < 0) {
+        mode = VERITY_MODE_RESTART; /* default dm-verity mode */
+    }
+
     // load the verity mapping table
-    if (load_verity_table(io, mount_point, fstab->blk_device, fd, verity_table) < 0) {
+    if (load_verity_table(io, mount_point, fstab->blk_device, fd, verity_table,
+            mode) < 0) {
         goto out;
     }
 
@@ -455,8 +774,12 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
         goto out;
     }
 
-    // set the property indicating that the partition is verified
-    retval = set_verified_property(mount_point);
+    if (mode == VERITY_MODE_LOGGING) {
+        retval = FS_MGR_SETUP_VERITY_SUCCESS;
+    } else {
+        // set the property indicating that the partition is verified
+        retval = set_verified_property(mount_point);
+    }
 
 out:
     if (fd != -1) {
