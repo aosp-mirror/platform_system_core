@@ -1,0 +1,187 @@
+//
+// Copyright (C) 2008 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+commonSources = [
+    "hashmap.c",
+    "atomic.c",
+    // TODO: "atomic.c.arm",
+    "native_handle.c",
+    "config_utils.c",
+    "load_file.c",
+    "open_memstream.c",
+    "strdup16to8.c",
+    "strdup8to16.c",
+    "record_stream.c",
+    "process_name.c",
+    "threads.c",
+    "sched_policy.c",
+    "iosched_policy.c",
+    "str_parms.c",
+]
+
+// some files must not be compiled when building against Mingw
+// they correspond to features not used by our host development tools
+// which are also hard or even impossible to port to native Win32
+commonNonWindowsSources = [
+    "fs.c",
+    "multiuser.c",
+    "socket_inaddr_any_server.c",
+    "socket_local_client.c",
+    "socket_local_server.c",
+    "socket_loopback_client.c",
+    "socket_loopback_server.c",
+    "socket_network_client.c",
+    "sockets.c",
+]
+
+commonNonWindowsHostSources = ["ashmem-host.c"]
+
+// Shared and static library for host and device
+// ========================================================
+cc_library {
+    name: "libcutils",
+    host_supported: true,
+    srcs: commonSources,
+
+    target: {
+        android: {
+            srcs: commonNonWindowsSources + [
+                "android_reboot.c",
+                "ashmem-dev.c",
+                "debugger.c",
+                "klog.c",
+                "memory.c",
+                "partition_utils.c",
+                "properties.c",
+                "qtaguid.c",
+                "trace.c",
+                "uevent.c",
+            ],
+        },
+        host: {
+            srcs: ["dlmalloc_stubs.c"],
+        },
+        not_windows: {
+            srcs: commonNonWindowsSources + commonNonWindowsHostSources,
+            cflags: ["-Werror"],
+        },
+    },
+
+    arch: {
+        arm: {
+            srcs: ["arch-arm/memset32.S"],
+
+            // arch-arm/memset32.S does not compile with Clang.
+            clang_cflags: ["-no-integrated-as"],
+
+            cflags: [
+                "-DHAVE_MEMSET16",
+                "-DHAVE_MEMSET32",
+            ],
+        },
+        arm64: {
+            srcs: ["arch-arm64/android_memset.S"],
+
+            cflags: [
+                "-DHAVE_MEMSET16",
+                "-DHAVE_MEMSET32",
+            ],
+        },
+        mips: {
+            // ANDROIDMK TRANSLATION ERROR: unsupported directive
+            // ifndef ARCH_MIPS_REV6
+            srcs: ["arch-mips/android_memset.c"],
+
+            cflags: [
+                "-DHAVE_MEMSET16",
+                "-DHAVE_MEMSET32",
+            ],
+            // ANDROIDMK TRANSLATION ERROR: missing if before endif
+            // endif
+        },
+
+        mips64: {
+            // TODO: switch mips64 back to using arch-mips/android_memset.c
+            //srcs: ["arch-mips/android_memset.c"],
+            //cflags: [
+            //    "-DHAVE_MEMSET16",
+            //    "-DHAVE_MEMSET32",
+            //],
+        },
+
+        x86: {
+            srcs: [
+                "arch-x86/android_memset16.S",
+                "arch-x86/android_memset32.S",
+            ],
+
+            cflags: [
+                "-DHAVE_MEMSET16",
+                "-DHAVE_MEMSET32",
+            ],
+        },
+        x86_64: {
+            srcs: [
+                "arch-x86_64/android_memset16.S",
+                "arch-x86_64/android_memset32.S",
+            ],
+
+            cflags: [
+                "-DHAVE_MEMSET16",
+                "-DHAVE_MEMSET32",
+            ],
+        },
+    },
+
+    static_libs: ["liblog"],
+    cflags: [
+        "-Werror",
+        "-std=gnu90",
+    ],
+
+    shared: {
+        // TODO: remove liblog as whole static library, once we don't have prebuilt that requires
+        // liblog symbols present in libcutils.
+        //whole_static_libs: [
+        //    "liblog",
+        //],
+    },
+}
+
+cc_binary {
+    name: "tst_str_parms",
+    host_supported: true,
+    cflags: ["-DTEST_STR_PARMS"],
+    target: {
+        android: {
+            cflags: ["-Werror"],
+        },
+        not_windows: {
+            cflags: ["-Werror"],
+        },
+    },
+
+    srcs: [
+        "str_parms.c",
+        "hashmap.c",
+        "memory.c",
+    ],
+    shared_libs: ["liblog"],
+    tags: ["optional"],
+
+}
+
+subdirs = ["tests"]
