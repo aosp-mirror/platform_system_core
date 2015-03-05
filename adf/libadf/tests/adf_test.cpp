@@ -182,9 +182,9 @@ TEST_F(AdfTest, device_data) {
     ASSERT_GE(err, 0) << "getting ADF device data failed: " << strerror(-err);
 
     EXPECT_LT(data.n_attachments, ADF_MAX_ATTACHMENTS);
-    EXPECT_GT(data.n_allowed_attachments, 0);
+    EXPECT_GT(data.n_allowed_attachments, 0U);
     EXPECT_LT(data.n_allowed_attachments, ADF_MAX_ATTACHMENTS);
-    EXPECT_LT(data.custom_data_size, ADF_MAX_CUSTOM_DATA_SIZE);
+    EXPECT_LT(data.custom_data_size, (size_t)ADF_MAX_CUSTOM_DATA_SIZE);
     adf_free_device_data(&data);
 }
 
@@ -195,8 +195,8 @@ TEST_F(AdfTest, interface_data) {
     EXPECT_LT(data.type, ADF_INTF_TYPE_MAX);
     EXPECT_LE(data.dpms_state, DRM_MODE_DPMS_OFF);
     EXPECT_EQ(1, data.hotplug_detect);
-    EXPECT_GT(data.n_available_modes, 0);
-    EXPECT_LT(data.custom_data_size, ADF_MAX_CUSTOM_DATA_SIZE);
+    EXPECT_GT(data.n_available_modes, 0U);
+    EXPECT_LT(data.custom_data_size, (size_t)ADF_MAX_CUSTOM_DATA_SIZE);
     adf_free_interface_data(&data);
 }
 
@@ -206,9 +206,9 @@ TEST_F(AdfTest, overlay_engine_data) {
     ASSERT_GE(err, 0) << "getting ADF overlay engine failed: " <<
             strerror(-err);
 
-    EXPECT_GT(data.n_supported_formats, 0);
+    EXPECT_GT(data.n_supported_formats, 0U);
     EXPECT_LT(data.n_supported_formats, ADF_MAX_SUPPORTED_FORMATS);
-    EXPECT_LT(data.custom_data_size, ADF_MAX_CUSTOM_DATA_SIZE);
+    EXPECT_LT(data.custom_data_size, (size_t)ADF_MAX_CUSTOM_DATA_SIZE);
     adf_free_overlay_engine_data(&data);
 }
 
