@@ -13,7 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#if (FAKE_LOG_DEVICE == 0)
 #include <endian.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #if !defined(_WIN32)
