@@ -37,7 +37,6 @@ class LogBuffer {
     pthread_mutex_t mLogElementsLock;
 
     LogStatistics stats;
-    bool dgramQlenStatistics;
 
     PruneList mPrune;
 
@@ -62,11 +61,6 @@ public:
     unsigned long getSizeUsed(log_id_t id);
     // *strp uses malloc, use free to release.
     void formatStatistics(char **strp, uid_t uid, unsigned int logMask);
-
-    void enableDgramQlenStatistics() {
-        stats.enableDgramQlenStatistics();
-        dgramQlenStatistics = true;
-    }
 
     void enableStatistics() {
         stats.enableStatistics();
