@@ -20,6 +20,7 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <ctype.h>
+#include <endian.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
