@@ -16,7 +16,13 @@
 LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
-liblog_cflags := $(shell sed -n 's/^\([0-9]*\)[ \t]*liblog[ \t].*/-DLIBLOG_LOG_TAG=\1/p' $(LOCAL_PATH)/event.logtags)
+# This is what we want to do:
+#  liblog_cflags := $(shell \
+#   sed -n \
+#       's/^\([0-9]*\)[ \t]*liblog[ \t].*/-DLIBLOG_LOG_TAG=\1/p' \
+#       $(LOCAL_PATH)/event.logtags)
+# so make sure we do not regret hard-coding it as follows:
+liblog_cflags := -DLIBLOG_LOG_TAG=1005
 
 ifneq ($(TARGET_USES_LOGD),false)
 liblog_sources := logd_write.c
@@ -27,18 +33,8 @@ endif
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
 # which are also hard or even impossible to port to native Win32
-WITH_MINGW :=
-ifeq ($(HOST_OS),windows)
-    ifeq ($(strip $(USE_CYGWIN)),)
-        WITH_MINGW := true
-    endif
-endif
-# USE_MINGW is defined when we build against Mingw on Linux
-ifneq ($(strip $(USE_MINGW)),)
-    WITH_MINGW := true
-endif
 
-ifndef WITH_MINGW
+ifeq ($(strip $(USE_MINGW)),)
     liblog_sources += \
         event_tag_map.c
 else
@@ -48,7 +44,7 @@ endif
 
 liblog_host_sources := $(liblog_sources) fake_log_device.c event.logtags
 liblog_target_sources := $(liblog_sources) log_time.cpp log_is_loggable.c
-ifndef WITH_MINGW
+ifeq ($(strip $(USE_MINGW)),)
 liblog_target_sources += logprint.c
 endif
 ifneq ($(TARGET_USES_LOGD),false)
