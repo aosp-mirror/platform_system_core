@@ -7,12 +7,6 @@ logd.auditd.dmesg           bool  true   selinux audit messages duplicated and
 logd.statistics             bool depends Enable logcat -S statistics.
 ro.config.low_ram           bool  false  if true, logd.statistics default false
 ro.build.type               string       if user, logd.statistics default false
-logd.statistics.dgram_qlen  bool  false  Record dgram_qlen statistics. This
-                                         represents a performance impact and
-                                         is used to determine the platform's
-                                         minimum domain socket network FIFO
-                                         size (see source for details) based
-                                         on typical load (logcat -S to view)
 persist.logd.size          number 256K   default size of the buffer for all
                                          log ids at initial startup, at runtime
                                          use: logcat -b all -G <value>

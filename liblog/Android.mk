@@ -16,6 +16,8 @@
 LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
+liblog_cflags := $(shell sed -n 's/^\([0-9]*\)[ \t]*liblog[ \t].*/-DLIBLOG_LOG_TAG=\1/p' $(LOCAL_PATH)/event.logtags)
+
 ifneq ($(TARGET_USES_LOGD),false)
 liblog_sources := logd_write.c
 else
@@ -45,7 +47,7 @@ else
         uio.c
 endif
 
-liblog_host_sources := $(liblog_sources) fake_log_device.c
+liblog_host_sources := $(liblog_sources) fake_log_device.c event.logtags
 liblog_target_sources := $(liblog_sources) log_time.cpp log_is_loggable.c
 ifneq ($(TARGET_USES_LOGD),false)
 liblog_target_sources += log_read.c
@@ -57,7 +59,7 @@ endif
 # ========================================================
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_host_sources)
-LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1 -Werror
+LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1 -Werror $(liblog_cflags)
 LOCAL_MULTILIB := both
 include $(BUILD_HOST_STATIC_LIBRARY)
 
@@ -76,13 +78,13 @@ include $(BUILD_HOST_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_target_sources)
-LOCAL_CFLAGS := -Werror
+LOCAL_CFLAGS := -Werror $(liblog_cflags)
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_WHOLE_STATIC_LIBRARIES := liblog
-LOCAL_CFLAGS := -Werror
+LOCAL_CFLAGS := -Werror $(liblog_cflags)
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call first-makefiles-under,$(LOCAL_PATH))

@@ -395,70 +395,10 @@ size_t LidStatistics::elementsTotal(uid_t uid, pid_t pid) {
 
 LogStatistics::LogStatistics()
         : mStatistics(false)
-        , dgramQlenStatistics(false)
         , start(CLOCK_MONOTONIC) {
     log_id_for_each(i) {
         mSizes[i] = 0;
         mElements[i] = 0;
-    }
-
-    for(unsigned short bucket = 0; dgramQlen(bucket); ++bucket) {
-        mMinimum[bucket].tv_sec = mMinimum[bucket].tv_sec_max;
-        mMinimum[bucket].tv_nsec = mMinimum[bucket].tv_nsec_max;
-    }
-}
-
-//   Each bucket below represents a dgramQlen of log messages. By
-//   finding the minimum period of time from start to finish
-//   of each dgramQlen, we can get a performance expectation for
-//   the user space logger. The net result is that the period
-//   of time divided by the dgramQlen will give us the average time
-//   between log messages; at the point where the average time
-//   is greater than the throughput capability of the logger
-//   we will not longer require the benefits of the FIFO formed
-//   by max_dgram_qlen. We will also expect to see a very visible
-//   knee in the average time between log messages at this point,
-//   so we do not necessarily have to compare the rate against the
-//   measured performance (BM_log_maximum_retry) of the logger.
-//
-//   for example (reformatted):
-//
-//       Minimum time between log events per dgramQlen:
-//       1   2   3   5   10  20  30  50  100  200 300 400 500 600
-//       5u2 12u 13u 15u 16u 27u 30u 36u 407u 3m1 3m3 3m9 3m9 5m5
-//
-//   demonstrates a clear knee rising at 100, so this means that for this
-//   case max_dgram_qlen = 100 would be more than sufficient to handle the
-//   worst that the system could stuff into the logger. The
-//   BM_log_maximum_retry performance (derated by the log collection) on the
-//   same system was 33.2us so we would almost be fine with max_dgram_qlen = 50.
-//   BM_log_maxumum_retry with statistics off is roughly 20us, so
-//   max_dgram_qlen = 20 would work. We will be more than willing to have
-//   a large engineering margin so the rule of thumb that lead us to 100 is
-//   fine.
-//
-// bucket dgramQlen are tuned for /proc/sys/net/unix/max_dgram_qlen = 300
-const unsigned short LogStatistics::mBuckets[] = {
-    1, 2, 3, 5, 10, 20, 30, 50, 100, 200, 300, 400, 500, 600
-};
-
-unsigned short LogStatistics::dgramQlen(unsigned short bucket) {
-    if (bucket >= sizeof(mBuckets) / sizeof(mBuckets[0])) {
-        return 0;
-    }
-    return mBuckets[bucket];
-}
-
-unsigned long long LogStatistics::minimum(unsigned short bucket) {
-    if (mMinimum[bucket].tv_sec == mMinimum[bucket].tv_sec_max) {
-        return 0;
-    }
-    return mMinimum[bucket].nsec();
-}
-
-void LogStatistics::recordDiff(log_time diff, unsigned short bucket) {
-    if ((diff.tv_sec || diff.tv_nsec) && (mMinimum[bucket] > diff)) {
-        mMinimum[bucket] = diff;
     }
 }
 
@@ -707,55 +647,6 @@ void LogStatistics::format(char **buf,
         }
 
         pids.clear();
-    }
-
-    if (dgramQlenStatistics) {
-        const unsigned short spaces_time = 6;
-        const unsigned long long max_seconds = 100000;
-        spaces = 0;
-        string.append("\n\nMinimum time between log events per max_dgram_qlen:\n");
-        for(unsigned short i = 0; dgramQlen(i); ++i) {
-            oldLength = string.length();
-            if (spaces < 0) {
-                spaces = 0;
-            }
-            string.appendFormat("%*s%u", spaces, "", dgramQlen(i));
-            spaces += spaces_time + oldLength - string.length();
-        }
-        string.append("\n");
-        spaces = 0;
-        unsigned short n;
-        for(unsigned short i = 0; (n = dgramQlen(i)); ++i) {
-            unsigned long long duration = minimum(i);
-            if (duration) {
-                duration /= n;
-                if (duration >= (NS_PER_SEC * max_seconds)) {
-                    duration = NS_PER_SEC * (max_seconds - 1);
-                }
-                oldLength = string.length();
-                if (spaces < 0) {
-                    spaces = 0;
-                }
-                string.appendFormat("%*s", spaces, "");
-                if (duration >= (NS_PER_SEC * 10)) {
-                    string.appendFormat("%llu",
-                        (duration + (NS_PER_SEC / 2))
-                            / NS_PER_SEC);
-                } else if (duration >= (NS_PER_SEC / (1000 / 10))) {
-                    string.appendFormat("%llum",
-                        (duration + (NS_PER_SEC / 2 / 1000))
-                            / (NS_PER_SEC / 1000));
-                } else if (duration >= (NS_PER_SEC / (1000000 / 10))) {
-                    string.appendFormat("%lluu",
-                        (duration + (NS_PER_SEC / 2 / 1000000))
-                            / (NS_PER_SEC / 1000000));
-                } else {
-                    string.appendFormat("%llun", duration);
-                }
-                spaces -= string.length() - oldLength;
-            }
-            spaces += spaces_time;
-        }
     }
 
     log_id_for_each(i) {
