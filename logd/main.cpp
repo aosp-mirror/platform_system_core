@@ -155,9 +155,6 @@ int main() {
 
     LogBuffer *logBuf = new LogBuffer(times);
 
-    if (property_get_bool("logd.statistics.dgram_qlen", false)) {
-        logBuf->enableDgramQlenStatistics();
-    }
     {
         char property[PROPERTY_VALUE_MAX];
         property_get("ro.build.type", property, "");
