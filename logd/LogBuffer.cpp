@@ -93,8 +93,7 @@ static unsigned long property_get_size(const char *key) {
 }
 
 LogBuffer::LogBuffer(LastLogTimes *times)
-        : dgramQlenStatistics(false)
-        , mTimes(*times) {
+        : mTimes(*times) {
     pthread_mutex_init(&mLogElementsLock, NULL);
 
     static const char global_tuneable[] = "persist.logd.size"; // Settings App
@@ -150,23 +149,6 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
     while (last != mLogElements.begin()) {
         --it;
         if ((*it)->getRealTime() <= realtime) {
-            // halves the peak performance, use with caution
-            if (dgramQlenStatistics) {
-                LogBufferElementCollection::iterator ib = it;
-                unsigned short buckets, num = 1;
-                for (unsigned short i = 0; (buckets = stats.dgramQlen(i)); ++i) {
-                    buckets -= num;
-                    num += buckets;
-                    while (buckets && (--ib != mLogElements.begin())) {
-                        --buckets;
-                    }
-                    if (buckets) {
-                        break;
-                    }
-                    stats.recordDiff(
-                        elem->getRealTime() - (*ib)->getRealTime(), i);
-                }
-            }
             break;
         }
         last = it;
