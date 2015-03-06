@@ -26,7 +26,16 @@ LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils
 
-LOCAL_CFLAGS := -Werror $(shell sed -n 's/^\([0-9]*\)[ \t]*auditd[ \t].*/-DAUDITD_LOG_TAG=\1/p' $(LOCAL_PATH)/event.logtags)
+# This is what we want to do:
+#  event_logtags = $(shell \
+#    sed -n \
+#        "s/^\([0-9]*\)[ \t]*$1[ \t].*/-D`echo $1 | tr a-z A-Z`_LOG_TAG=\1/p" \
+#        $(LOCAL_PATH)/$2/event.logtags)
+#  event_flag := $(call event_logtags,auditd)
+# so make sure we do not regret hard-coding it as follows:
+event_flag := -DAUDITD_LOG_TAG=1003
+
+LOCAL_CFLAGS := -Werror $(event_flag)
 
 include $(BUILD_EXECUTABLE)
 
