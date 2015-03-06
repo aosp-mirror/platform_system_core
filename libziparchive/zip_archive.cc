@@ -18,6 +18,8 @@
  * Read-only access to Zip archives, with minimal heap allocation.
  */
 
+#include <memory>
+
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -981,7 +983,6 @@ static inline int zlib_inflateInit2(z_stream* stream, int window_bits) {
 static int32_t InflateToFile(int fd, const ZipEntry* entry,
                              uint8_t* begin, uint32_t length,
                              uint64_t* crc_out) {
-  int32_t result = -1;
   const uint32_t kBufSize = 32768;
   uint8_t read_buf[kBufSize];
   uint8_t write_buf[kBufSize];
@@ -1017,6 +1018,12 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
     return kZlibError;
   }
 
+  auto zstream_deleter = [](z_stream* stream) {
+    inflateEnd(stream);  /* free up any allocated structures */
+  };
+
+  std::unique_ptr<z_stream, decltype(zstream_deleter)> zstream_guard(&zstream, zstream_deleter);
+
   const uint32_t uncompressed_length = entry->uncompressed_length;
 
   uint32_t compressed_length = entry->compressed_length;
@@ -1028,8 +1035,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
       const ZD_TYPE actual = TEMP_FAILURE_RETRY(read(fd, read_buf, getSize));
       if (actual != getSize) {
         ALOGW("Zip: inflate read failed (" ZD " vs " ZD ")", actual, getSize);
-        result = kIoError;
-        goto z_bail;
+        return kIoError;
       }
 
       compressed_length -= getSize;
@@ -1044,8 +1050,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
       ALOGW("Zip: inflate zerr=%d (nIn=%p aIn=%u nOut=%p aOut=%u)",
           zerr, zstream.next_in, zstream.avail_in,
           zstream.next_out, zstream.avail_out);
-      result = kZlibError;
-      goto z_bail;
+      return kZlibError;
     }
 
     /* write when we're full or when we're done */
@@ -1054,7 +1059,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
       const size_t write_size = zstream.next_out - write_buf;
       // The file might have declared a bogus length.
       if (write_size + write_count > length) {
-        goto z_bail;
+        return -1;
       }
       memcpy(begin + write_count, write_buf, write_size);
       write_count += write_size;
@@ -1072,16 +1077,10 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
   if (zstream.total_out != uncompressed_length || compressed_length != 0) {
     ALOGW("Zip: size mismatch on inflated file (%lu vs %" PRIu32 ")",
         zstream.total_out, uncompressed_length);
-    result = kInconsistentInformation;
-    goto z_bail;
+    return kInconsistentInformation;
   }
 
-  result = 0;
-
-z_bail:
-  inflateEnd(&zstream);    /* free up any allocated structures */
-
-  return result;
+  return 0;
 }
 
 int32_t ExtractToMemory(ZipArchiveHandle handle,
