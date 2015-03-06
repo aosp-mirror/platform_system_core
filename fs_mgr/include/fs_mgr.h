@@ -94,6 +94,7 @@ int fs_mgr_is_nonremovable(struct fstab_rec *fstab);
 int fs_mgr_is_verified(struct fstab_rec *fstab);
 int fs_mgr_is_encryptable(struct fstab_rec *fstab);
 int fs_mgr_is_noemulatedsd(struct fstab_rec *fstab);
+int fs_mgr_is_notrim(struct fstab_rec *fstab);
 int fs_mgr_swapon_all(struct fstab *fstab);
 #ifdef __cplusplus
 }
