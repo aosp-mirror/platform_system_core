@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
                 "https://clients4.google.com/uma/v2",
                 "Server to upload the metrics to. (needs -uploader)");
   DEFINE_string(metrics_file,
-                "/var/run/metrics/uma-events",
+                "/var/lib/metrics/uma-events",
                 "File to use as a proxy for uploading the metrics");
   DEFINE_string(config_root,
                 "/", "Root of the configuration files (testing only)");
