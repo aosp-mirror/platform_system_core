@@ -24,7 +24,8 @@ LOCAL_SRC_FILES := ${source_files}
 LOCAL_STATIC_LIBRARIES := libz
 LOCAL_SHARED_LIBRARIES := libutils
 LOCAL_MODULE:= libziparchive
-LOCAL_CFLAGS := -Werror
+LOCAL_CFLAGS := -Werror -Wall
+LOCAL_CPPFLAGS := -Wold-style-cast
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
