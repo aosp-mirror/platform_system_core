@@ -69,6 +69,10 @@ RUN_FILE="/var/run/crash_sender.pid"
 # Maximum time to sleep between sends.
 SECONDS_SEND_SPREAD=${SECONDS_SEND_SPREAD:-600}
 
+# Set this to 1 to allow uploading of device coredumps.
+DEVCOREDUMP_UPLOAD_FLAG_FILE=\
+"/var/lib/crash_reporter/device_coredump_upload_allowed"
+
 # The syslog tag for all logging we emit.
 TAG="$(basename $0)[$$]"
 
@@ -154,6 +158,12 @@ is_developer_mode() {
   # for developer mode.
   is_crash_test_in_progress && return 1
   crossystem "devsw_boot?1"  # exit status will be accurate
+}
+
+# Return 0 if the uploading of device coredumps is allowed.
+is_device_coredump_upload_allowed() {
+  [ -f "${DEVCOREDUMP_UPLOAD_FLAG_FILE}" ] && return 0
+  return 1
 }
 
 # Generate a uniform random number in 0..max-1.
@@ -508,7 +518,8 @@ send_crashes() {
     local kind=$(get_kind "${meta_path}")
     if [ "${kind}" != "minidump" ] && \
        [ "${kind}" != "kcrash" ] && \
-       [ "${kind}" != "log" ]; then
+       [ "${kind}" != "log" ] &&
+       [ "${kind}" != "devcore" ]; then
       lecho "Unknown report kind ${kind}.  Removing report."
       remove_report "${meta_path}"
       continue
@@ -524,6 +535,12 @@ send_crashes() {
       else
         lecho "Ignoring recent incomplete metadata."
       fi
+      continue
+    fi
+
+    # Ignore device coredump if device coredump uploading is not allowed.
+    if [ "${kind}" = "devcore" ] && ! is_device_coredump_upload_allowed; then
+      lecho "Ignoring device coredump. Device coredump upload not allowed."
       continue
     fi
 

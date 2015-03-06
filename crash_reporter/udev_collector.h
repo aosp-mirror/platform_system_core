@@ -26,8 +26,32 @@ class UdevCollector : public CrashCollector {
   // could be omitted, in which case it would be treated as a wildcard (*).
   bool HandleCrash(const std::string& udev_event);
 
+ protected:
+  std::string dev_coredump_directory_;
+
  private:
   friend class UdevCollectorTest;
+
+  // Process udev crash logs, collecting log files according to the config
+  // file (crash_reporter_logs.conf).
+  bool ProcessUdevCrashLogs(const base::FilePath& crash_directory,
+                            const std::string& action,
+                            const std::string& kernel,
+                            const std::string& subsystem);
+  // Process device coredump, collecting device coredump file.
+  // |instance_number| is the kernel number of the virtual device for the device
+  // coredump instance.
+  bool ProcessDevCoredump(const base::FilePath& crash_directory,
+                          int instance_number);
+  // Copy device coredump file to crash directory, and perform necessary
+  // coredump file management.
+  bool AppendDevCoredump(const base::FilePath& crash_directory,
+                         const base::FilePath& coredump_path,
+                         int instance_number);
+  // Clear the device coredump file by performing a dummy write to it.
+  bool ClearDevCoredump(const base::FilePath& coredump_path);
+  // Return the driver name of the device that generates the coredump.
+  std::string GetFailingDeviceDriverName(int instance_number);
 
   // Mutator for unit testing.
   void set_log_config_path(const std::string& path) {

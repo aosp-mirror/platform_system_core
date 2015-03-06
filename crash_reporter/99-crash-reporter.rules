@@ -3,3 +3,4 @@ ACTION=="change", SUBSYSTEM=="drm", KERNEL=="card0", ENV{ERROR}=="1", RUN+="/sbi
 ACTION=="change", SUBSYSTEM=="i2c", DRIVER=="cyapa", ENV{ERROR}=="1", RUN+="/sbin/crash_reporter --udev=SUBSYSTEM=i2c-cyapa:ACTION=change"
 # For detecting Atmel trackpad/touchscreen issue. Passing into crash_reporter SUBSYSTEM=i2c-atmel_mxt_ts since crash_reporter does not handle DRIVER string.
 ACTION=="change", SUBSYSTEM=="i2c", DRIVER=="atmel_mxt_ts", ENV{ERROR}=="1", RUN+="/sbin/crash_reporter --udev=SUBSYSTEM=i2c-atmel_mxt_ts:ACTION=change"
+ACTION=="add", SUBSYSTEM=="devcoredump", RUN+="/sbin/crash_reporter --udev=SUBSYSTEM=devcoredump:ACTION=add:KERNEL_NUMBER=%n"

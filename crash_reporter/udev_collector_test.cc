@@ -5,6 +5,7 @@
 #include <base/files/file_enumerator.h>
 #include <base/files/file_util.h>
 #include <base/files/scoped_temp_dir.h>
+#include <base/strings/stringprintf.h>
 #include <chromeos/syslog_logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -18,11 +19,24 @@ namespace {
 // Dummy log config file name.
 const char kLogConfigFileName[] = "log_config_file";
 
+// Dummy directory for storing device coredumps.
+const char kDevCoredumpDirectory[] = "devcoredump";
+
 // A bunch of random rules to put into the dummy log config file.
 const char kLogConfigFileContents[] =
     "crash_reporter-udev-collection-change-card0-drm=echo change card0 drm\n"
     "crash_reporter-udev-collection-add-state0-cpu=echo change state0 cpu\n"
+    "crash_reporter-udev-collection-devcoredump-iwlwifi=echo devcoredump\n"
     "cros_installer=echo not for udev";
+
+const char kCrashLogFilePattern[] = "*.log.gz";
+const char kDevCoredumpFilePattern[] = "*.devcore";
+
+// Dummy content for device coredump data file.
+const char kDevCoredumpDataContents[] = "coredump";
+
+// Content for failing device's uevent file.
+const char kFailingDeviceUeventContents[] = "DRIVER=iwlwifi\n";
 
 void CountCrash() {}
 
@@ -32,10 +46,11 @@ bool IsMetrics() {
   return s_consent_given;
 }
 
-// Returns the number of compressed crash log files found in the given path.
-int GetNumLogFiles(const FilePath& path) {
+// Returns the number of files found in the given path that matches the
+// specified file name pattern.
+int GetNumFiles(const FilePath& path, const std::string& file_pattern) {
   base::FileEnumerator enumerator(path, false, base::FileEnumerator::FILES,
-                                  "*.log.gz");
+                                  file_pattern);
   int num_files = 0;
   for (FilePath file_path = enumerator.Next();
        !file_path.value().empty();
@@ -60,6 +75,35 @@ class UdevCollectorTest : public ::testing::Test {
     collector_.HandleCrash(udev_event);
   }
 
+  void GenerateDevCoredump(const std::string& device_name) {
+    // Generate coredump data file.
+    ASSERT_TRUE(CreateDirectory(
+        FilePath(base::StringPrintf("%s/%s",
+                                    collector_.dev_coredump_directory_.c_str(),
+                                    device_name.c_str()))));
+    FilePath data_path =
+        FilePath(base::StringPrintf("%s/%s/data",
+                                    collector_.dev_coredump_directory_.c_str(),
+                                    device_name.c_str()));
+    ASSERT_EQ(strlen(kDevCoredumpDataContents),
+              base::WriteFile(data_path,
+                              kDevCoredumpDataContents,
+                              strlen(kDevCoredumpDataContents)));
+    // Generate uevent file for failing device.
+    ASSERT_TRUE(CreateDirectory(
+        FilePath(base::StringPrintf("%s/%s/failing_device",
+                                    collector_.dev_coredump_directory_.c_str(),
+                                    device_name.c_str()))));
+    FilePath uevent_path =
+        FilePath(base::StringPrintf("%s/%s/failing_device/uevent",
+                                    collector_.dev_coredump_directory_.c_str(),
+                                    device_name.c_str()));
+    ASSERT_EQ(strlen(kFailingDeviceUeventContents),
+              base::WriteFile(uevent_path,
+                              kFailingDeviceUeventContents,
+                              strlen(kFailingDeviceUeventContents)));
+  }
+
  private:
   void SetUp() override {
     s_consent_given = true;
@@ -74,6 +118,10 @@ class UdevCollectorTest : public ::testing::Test {
         temp_dir_generator_.path().Append(kLogConfigFileName);
     collector_.log_config_path_ = log_config_path;
     collector_.ForceCrashDirectory(temp_dir_generator_.path());
+
+    FilePath dev_coredump_path =
+        temp_dir_generator_.path().Append(kDevCoredumpDirectory);
+    collector_.dev_coredump_directory_ = dev_coredump_path.value();
 
     // Write to a dummy log config file.
     ASSERT_EQ(strlen(kLogConfigFileContents),
@@ -90,22 +138,33 @@ class UdevCollectorTest : public ::testing::Test {
 TEST_F(UdevCollectorTest, TestNoConsent) {
   s_consent_given = false;
   HandleCrash("ACTION=change:KERNEL=card0:SUBSYSTEM=drm");
-  EXPECT_EQ(0, GetNumLogFiles(temp_dir_generator_.path()));
+  EXPECT_EQ(0, GetNumFiles(temp_dir_generator_.path(), kCrashLogFilePattern));
 }
 
 TEST_F(UdevCollectorTest, TestNoMatch) {
   // No rule should match this.
   HandleCrash("ACTION=change:KERNEL=foo:SUBSYSTEM=bar");
-  EXPECT_EQ(0, GetNumLogFiles(temp_dir_generator_.path()));
+  EXPECT_EQ(0, GetNumFiles(temp_dir_generator_.path(), kCrashLogFilePattern));
 }
 
 TEST_F(UdevCollectorTest, TestMatches) {
   // Try multiple udev events in sequence.  The number of log files generated
   // should increase.
   HandleCrash("ACTION=change:KERNEL=card0:SUBSYSTEM=drm");
-  EXPECT_EQ(1, GetNumLogFiles(temp_dir_generator_.path()));
+  EXPECT_EQ(1, GetNumFiles(temp_dir_generator_.path(), kCrashLogFilePattern));
   HandleCrash("ACTION=add:KERNEL=state0:SUBSYSTEM=cpu");
-  EXPECT_EQ(2, GetNumLogFiles(temp_dir_generator_.path()));
+  EXPECT_EQ(2, GetNumFiles(temp_dir_generator_.path(), kCrashLogFilePattern));
+}
+
+TEST_F(UdevCollectorTest, TestDevCoredump) {
+  GenerateDevCoredump("devcd0");
+  HandleCrash("ACTION=add:KERNEL_NUMBER=0:SUBSYSTEM=devcoredump");
+  EXPECT_EQ(1, GetNumFiles(temp_dir_generator_.path(),
+                           kDevCoredumpFilePattern));
+  GenerateDevCoredump("devcd1");
+  HandleCrash("ACTION=add:KERNEL_NUMBER=1:SUBSYSTEM=devcoredump");
+  EXPECT_EQ(2, GetNumFiles(temp_dir_generator_.path(),
+                           kDevCoredumpFilePattern));
 }
 
 // TODO(sque, crosbug.com/32238) - test wildcard cases, multiple identical udev
