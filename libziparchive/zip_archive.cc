@@ -579,7 +579,6 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
  * Returns 0 on success.
  */
 static int32_t ParseZipArchive(ZipArchive* archive) {
-  int32_t result = -1;
   const uint8_t* const cd_ptr =
       reinterpret_cast<const uint8_t*>(archive->directory_map.getDataPtr());
   const size_t cd_length = archive->directory_map.getDataLength();
@@ -605,19 +604,19 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
         reinterpret_cast<const CentralDirectoryRecord*>(ptr);
     if (cdr->record_signature != CentralDirectoryRecord::kSignature) {
       ALOGW("Zip: missed a central dir sig (at %" PRIu16 ")", i);
-      goto bail;
+      return -1;
     }
 
     if (ptr + sizeof(CentralDirectoryRecord) > cd_end) {
       ALOGW("Zip: ran off the end (at %" PRIu16 ")", i);
-      goto bail;
+      return -1;
     }
 
     const off64_t local_header_offset = cdr->local_file_header_offset;
     if (local_header_offset >= archive->directory_offset) {
       ALOGW("Zip: bad LFH offset %" PRId64 " at entry %" PRIu16,
           static_cast<int64_t>(local_header_offset), i);
-      goto bail;
+      return -1;
     }
 
     const uint16_t file_name_length = cdr->file_name_length;
@@ -627,7 +626,7 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
 
     /* check that file name is valid UTF-8 and doesn't contain NUL (U+0000) characters */
     if (!IsValidEntryName(file_name, file_name_length)) {
-      goto bail;
+      return -1;
     }
 
     /* add the CDE filename to the hash table */
@@ -636,25 +635,21 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
     entry_name.name_length = file_name_length;
     const int add_result = AddToHash(archive->hash_table,
         archive->hash_table_size, entry_name);
-    if (add_result) {
+    if (add_result != 0) {
       ALOGW("Zip: Error adding entry to hash table %d", add_result);
-      result = add_result;
-      goto bail;
+      return add_result;
     }
 
     ptr += sizeof(CentralDirectoryRecord) + file_name_length + extra_length + comment_length;
     if ((ptr - cd_ptr) > static_cast<int64_t>(cd_length)) {
       ALOGW("Zip: bad CD advance (%tu vs %zu) at entry %" PRIu16,
           ptr - cd_ptr, cd_length, i);
-      goto bail;
+      return -1;
     }
   }
   ALOGV("+++ zip good scan %" PRIu16 " entries", num_entries);
 
-  result = 0;
-
-bail:
-  return result;
+  return 0;
 }
 
 static int32_t OpenArchiveInternal(ZipArchive* archive,
