@@ -970,6 +970,14 @@ int32_t Next(void* cookie, ZipEntry* data, ZipEntryName* name) {
   return kIterationEnd;
 }
 
+// This method is using libz macros with old-style-casts
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+static inline int zlib_inflateInit2(z_stream* stream, int window_bits) {
+  return inflateInit2(stream, window_bits);
+}
+#pragma GCC diagnostic pop
+
 static int32_t InflateToFile(int fd, const ZipEntry* entry,
                              uint8_t* begin, uint32_t length,
                              uint64_t* crc_out) {
@@ -997,7 +1005,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
    * Use the undocumented "negative window bits" feature to tell zlib
    * that there's no zlib header waiting for it.
    */
-  zerr = inflateInit2(&zstream, -MAX_WBITS);
+  zerr = zlib_inflateInit2(&zstream, -MAX_WBITS);
   if (zerr != Z_OK) {
     if (zerr == Z_VERSION_ERROR) {
       ALOGE("Installed zlib is not compatible with linked version (%s)",
