@@ -20,7 +20,6 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <ctype.h>
-#include <endian.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -417,6 +416,27 @@ int android_log_processLogBuffer(struct logger_entry *buf,
 }
 
 /*
+ * Extract a 4-byte value from a byte stream.
+ */
+static inline uint32_t get4LE(const uint8_t* src)
+{
+    return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
+}
+
+/*
+ * Extract an 8-byte value from a byte stream.
+ */
+static inline uint64_t get8LE(const uint8_t* src)
+{
+    uint32_t low, high;
+
+    low = src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
+    high = src[4] | (src[5] << 8) | (src[6] << 16) | (src[7] << 24);
+    return ((long long) high << 32) | (long long) low;
+}
+
+
+/*
  * Recursively convert binary log data to printable form.
  *
  * This needs to be recursive because you can have lists of lists.
@@ -453,7 +473,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
 
             if (eventDataLen < 4)
                 return -1;
-            ival = le32toh(*((int32_t *)eventData));
+            ival = get4LE(eventData);
             eventData += 4;
             eventDataLen -= 4;
 
@@ -474,7 +494,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
 
             if (eventDataLen < 8)
                 return -1;
-            lval = le64toh(*((int64_t *)eventData));
+            lval = get8LE(eventData);
             eventData += 8;
             eventDataLen -= 8;
 
@@ -495,7 +515,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
 
             if (eventDataLen < 4)
                 return -1;
-            strLen = le32toh(*((int32_t *)eventData));
+            strLen = get4LE(eventData);
             eventData += 4;
             eventDataLen -= 4;
 
@@ -610,7 +630,7 @@ int android_log_processBinaryLogBuffer(struct logger_entry *buf,
     inCount = buf->len;
     if (inCount < 4)
         return -1;
-    tagIndex = le32toh(*((int32_t *)eventData));
+    tagIndex = get4LE(eventData);
     eventData += 4;
     inCount -= 4;
 
