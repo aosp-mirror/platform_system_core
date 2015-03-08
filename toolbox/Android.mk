@@ -72,7 +72,6 @@ OUR_TOOLS := \
     umount \
     uptime \
     watchprops \
-    wipe \
 
 ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
 
