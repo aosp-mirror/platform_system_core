@@ -293,7 +293,7 @@ struct ZipArchive {
 
   /* mapped central directory area */
   off64_t directory_offset;
-  android::FileMap* directory_map;
+  android::FileMap directory_map;
 
   /* number of entries in the Zip archive */
   uint16_t num_entries;
@@ -311,7 +311,6 @@ struct ZipArchive {
       fd(fd),
       close_file(assume_ownership),
       directory_offset(0),
-      directory_map(NULL),
       num_entries(0),
       hash_table_size(0),
       hash_table(NULL) {}
@@ -321,24 +320,9 @@ struct ZipArchive {
       close(fd);
     }
 
-    delete directory_map;
     free(hash_table);
   }
 };
-
-// Returns 0 on success and negative values on failure.
-static android::FileMap* MapFileSegment(const int fd, const off64_t start,
-                                        const size_t length, const bool read_only,
-                                        const char* debug_file_name) {
-  android::FileMap* file_map = new android::FileMap;
-  const bool success = file_map->create(debug_file_name, fd, start, length, read_only);
-  if (!success) {
-    delete file_map;
-    return NULL;
-  }
-
-  return file_map;
-}
 
 static int32_t CopyFileToFile(int fd, uint8_t* begin, const uint32_t length, uint64_t *crc_out) {
   static const uint32_t kBufSize = 32768;
@@ -521,16 +505,12 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
    * It all looks good.  Create a mapping for the CD, and set the fields
    * in archive.
    */
-  android::FileMap* map = MapFileSegment(fd,
-      static_cast<off64_t>(eocd->cd_start_offset),
-      static_cast<size_t>(eocd->cd_size),
-      true /* read only */, debug_file_name);
-  if (map == NULL) {
-    archive->directory_map = NULL;
+  if (!archive->directory_map.create(debug_file_name, fd,
+          static_cast<off64_t>(eocd->cd_start_offset),
+          static_cast<size_t>(eocd->cd_size), true /* read only */) ) {
     return kMmapFailed;
   }
 
-  archive->directory_map = map;
   archive->num_entries = eocd->num_records;
   archive->directory_offset = eocd->cd_start_offset;
 
@@ -600,8 +580,8 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
  */
 static int32_t ParseZipArchive(ZipArchive* archive) {
   int32_t result = -1;
-  const uint8_t* const cd_ptr = (const uint8_t*) archive->directory_map->getDataPtr();
-  const size_t cd_length = archive->directory_map->getDataLength();
+  const uint8_t* const cd_ptr = (const uint8_t*) archive->directory_map.getDataPtr();
+  const size_t cd_length = archive->directory_map.getDataLength();
   const uint16_t num_entries = archive->num_entries;
 
   /*
@@ -774,8 +754,8 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   // the name that's in the hash table is a pointer to a location within
   // this mapped region.
   const uint8_t* base_ptr = reinterpret_cast<const uint8_t*>(
-    archive->directory_map->getDataPtr());
-  if (ptr < base_ptr || ptr > base_ptr + archive->directory_map->getDataLength()) {
+    archive->directory_map.getDataPtr());
+  if (ptr < base_ptr || ptr > base_ptr + archive->directory_map.getDataLength()) {
     ALOGW("Zip: Invalid entry pointer");
     return kInvalidOffset;
   }
@@ -1159,16 +1139,14 @@ int32_t ExtractEntryToFile(ZipArchiveHandle handle,
       return 0;
   }
 
-  android::FileMap* map  = MapFileSegment(fd, current_offset, declared_length,
-                                          false, kTempMappingFileName);
-  if (map == NULL) {
+  android::FileMap map;
+  if (!map.create(kTempMappingFileName, fd, current_offset, declared_length, false)) {
     return kMmapFailed;
   }
 
   const int32_t error = ExtractToMemory(handle, entry,
-                                        reinterpret_cast<uint8_t*>(map->getDataPtr()),
-                                        map->getDataLength());
-  delete map;
+                                        reinterpret_cast<uint8_t*>(map.getDataPtr()),
+                                        map.getDataLength());
   return error;
 }
 
