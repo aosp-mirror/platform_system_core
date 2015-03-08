@@ -537,7 +537,7 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
     return kInvalidFile;
   }
 
-  if (file_length > (off64_t) 0xffffffff) {
+  if (file_length > static_cast<off64_t>(0xffffffff)) {
     ALOGV("Zip: zip file too long %" PRId64, static_cast<int64_t>(file_length));
     return kInvalidFile;
   }
@@ -580,7 +580,8 @@ static int32_t MapCentralDirectory(int fd, const char* debug_file_name,
  */
 static int32_t ParseZipArchive(ZipArchive* archive) {
   int32_t result = -1;
-  const uint8_t* const cd_ptr = (const uint8_t*) archive->directory_map.getDataPtr();
+  const uint8_t* const cd_ptr =
+      reinterpret_cast<const uint8_t*>(archive->directory_map.getDataPtr());
   const size_t cd_length = archive->directory_map.getDataLength();
   const uint16_t num_entries = archive->num_entries;
 
@@ -590,8 +591,8 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
    * least one unused entry to avoid an infinite loop during creation.
    */
   archive->hash_table_size = RoundUpPower2(1 + (num_entries * 4) / 3);
-  archive->hash_table = (ZipEntryName*) calloc(archive->hash_table_size,
-      sizeof(ZipEntryName));
+  archive->hash_table = reinterpret_cast<ZipEntryName*>(calloc(archive->hash_table_size,
+      sizeof(ZipEntryName)));
 
   /*
    * Walk through the central directory, adding entries to the hash
@@ -614,7 +615,8 @@ static int32_t ParseZipArchive(ZipArchive* archive) {
 
     const off64_t local_header_offset = cdr->local_file_header_offset;
     if (local_header_offset >= archive->directory_offset) {
-      ALOGW("Zip: bad LFH offset %" PRId64 " at entry %" PRIu16, (int64_t)local_header_offset, i);
+      ALOGW("Zip: bad LFH offset %" PRId64 " at entry %" PRIu16,
+          static_cast<int64_t>(local_header_offset), i);
       goto bail;
     }
 
@@ -693,7 +695,7 @@ int32_t OpenArchive(const char* fileName, ZipArchiveHandle* handle) {
  * Close a ZipArchive, closing the file and freeing the contents.
  */
 void CloseArchive(ZipArchiveHandle handle) {
-  ZipArchive* archive = (ZipArchive*) handle;
+  ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
   ALOGV("Closing archive %p", archive);
   delete archive;
 }
@@ -790,7 +792,8 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   ssize_t actual = ReadAtOffset(archive->fd, lfh_buf, sizeof(lfh_buf),
                                  local_header_offset);
   if (actual != sizeof(lfh_buf)) {
-    ALOGW("Zip: failed reading lfh name from offset %" PRId64, (int64_t)local_header_offset);
+    ALOGW("Zip: failed reading lfh name from offset %" PRId64,
+        static_cast<int64_t>(local_header_offset));
     return kIoError;
   }
 
@@ -828,12 +831,12 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
       return kInvalidOffset;
     }
 
-    uint8_t* name_buf = (uint8_t*) malloc(nameLen);
+    uint8_t* name_buf = reinterpret_cast<uint8_t*>(malloc(nameLen));
     ssize_t actual = ReadAtOffset(archive->fd, name_buf, nameLen,
                                   name_offset);
 
     if (actual != nameLen) {
-      ALOGW("Zip: failed reading lfh name from offset %" PRId64, (int64_t)name_offset);
+      ALOGW("Zip: failed reading lfh name from offset %" PRId64, static_cast<int64_t>(name_offset));
       free(name_buf);
       return kIoError;
     }
@@ -852,20 +855,21 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   const off64_t data_offset = local_header_offset + sizeof(LocalFileHeader)
       + lfh->file_name_length + lfh->extra_field_length;
   if (data_offset > cd_offset) {
-    ALOGW("Zip: bad data offset %" PRId64 " in zip", (int64_t)data_offset);
+    ALOGW("Zip: bad data offset %" PRId64 " in zip", static_cast<int64_t>(data_offset));
     return kInvalidOffset;
   }
 
-  if ((off64_t)(data_offset + data->compressed_length) > cd_offset) {
+  if (static_cast<off64_t>(data_offset + data->compressed_length) > cd_offset) {
     ALOGW("Zip: bad compressed length in zip (%" PRId64 " + %" PRIu32 " > %" PRId64 ")",
-      (int64_t)data_offset, data->compressed_length, (int64_t)cd_offset);
+      static_cast<int64_t>(data_offset), data->compressed_length, static_cast<int64_t>(cd_offset));
     return kInvalidOffset;
   }
 
   if (data->method == kCompressStored &&
-    (off64_t)(data_offset + data->uncompressed_length) > cd_offset) {
+    static_cast<off64_t>(data_offset + data->uncompressed_length) > cd_offset) {
      ALOGW("Zip: bad uncompressed length in zip (%" PRId64 " + %" PRIu32 " > %" PRId64 ")",
-       (int64_t)data_offset, data->uncompressed_length, (int64_t)cd_offset);
+       static_cast<int64_t>(data_offset), data->uncompressed_length,
+       static_cast<int64_t>(cd_offset));
      return kInvalidOffset;
   }
 
@@ -897,7 +901,7 @@ struct IterationHandle {
 
 int32_t StartIteration(ZipArchiveHandle handle, void** cookie_ptr,
                        const ZipEntryName* optional_prefix) {
-  ZipArchive* archive = (ZipArchive *) handle;
+  ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
 
   if (archive == NULL || archive->hash_table == NULL) {
     ALOGW("Zip: Invalid ZipArchiveHandle");
@@ -919,7 +923,7 @@ void EndIteration(void* cookie) {
 
 int32_t FindEntry(const ZipArchiveHandle handle, const ZipEntryName& entryName,
                   ZipEntry* data) {
-  const ZipArchive* archive = (ZipArchive*) handle;
+  const ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
   if (entryName.name_length == 0) {
     ALOGW("Zip: Invalid filename %.*s", entryName.name_length, entryName.name);
     return kInvalidEntryName;
@@ -937,7 +941,7 @@ int32_t FindEntry(const ZipArchiveHandle handle, const ZipEntryName& entryName,
 }
 
 int32_t Next(void* cookie, ZipEntry* data, ZipEntryName* name) {
-  IterationHandle* handle = (IterationHandle *) cookie;
+  IterationHandle* handle = reinterpret_cast<IterationHandle*>(cookie);
   if (handle == NULL) {
     return kInvalidHandle;
   }
@@ -990,7 +994,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
   zstream.opaque = Z_NULL;
   zstream.next_in = NULL;
   zstream.avail_in = 0;
-  zstream.next_out = (Bytef*) write_buf;
+  zstream.next_out = reinterpret_cast<Bytef*>(write_buf);
   zstream.avail_out = kBufSize;
   zstream.data_type = Z_UNKNOWN;
 
@@ -1079,12 +1083,12 @@ z_bail:
 
 int32_t ExtractToMemory(ZipArchiveHandle handle,
                         ZipEntry* entry, uint8_t* begin, uint32_t size) {
-  ZipArchive* archive = (ZipArchive*) handle;
+  ZipArchive* archive = reinterpret_cast<ZipArchive*>(handle);
   const uint16_t method = entry->method;
   off64_t data_offset = entry->offset;
 
   if (lseek64(archive->fd, data_offset, SEEK_SET) != data_offset) {
-    ALOGW("Zip: lseek to data at %" PRId64 " failed", (int64_t)data_offset);
+    ALOGW("Zip: lseek to data at %" PRId64 " failed", static_cast<int64_t>(data_offset));
     return kIoError;
   }
 
@@ -1128,7 +1132,7 @@ int32_t ExtractEntryToFile(ZipArchiveHandle handle,
   int result = TEMP_FAILURE_RETRY(ftruncate(fd, declared_length + current_offset));
   if (result == -1) {
     ALOGW("Zip: unable to truncate file to %" PRId64 ": %s",
-          (int64_t)(declared_length + current_offset), strerror(errno));
+          static_cast<int64_t>(declared_length + current_offset), strerror(errno));
     return kIoError;
   }
 
@@ -1159,6 +1163,6 @@ const char* ErrorCodeString(int32_t error_code) {
 }
 
 int GetFileDescriptor(const ZipArchiveHandle handle) {
-  return ((ZipArchive*) handle)->fd;
+  return reinterpret_cast<ZipArchive*>(handle)->fd;
 }
 
