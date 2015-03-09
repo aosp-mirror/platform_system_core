@@ -151,7 +151,7 @@ done:
     msg.dent.size = 0;
     msg.dent.time = 0;
     msg.dent.namelen = 0;
-    return !WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ? 0 : -1;
+    return WriteFdExactly(s, &msg.dent, sizeof(msg.dent)) ? 0 : -1;
 }
 
 static int fail_message(int s, const char *reason)
