@@ -491,7 +491,7 @@ void __android_log_assert(const char *cond, const char *tag,
     }
 
     __android_log_write(ANDROID_LOG_FATAL, tag, buf);
-    __builtin_trap(); /* trap so we have a chance to debug the situation */
+    abort(); /* abort so we have a chance to debug the situation */
     /* NOTREACHED */
 }
 
