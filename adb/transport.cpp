@@ -221,7 +221,7 @@ write_packet(int  fd, const char* name, apacket** ppacket)
 
 static void transport_socket_events(int fd, unsigned events, void *_t)
 {
-    atransport *t = _t;
+    atransport *t = reinterpret_cast<atransport*>(_t);
     D("transport_socket_events(fd=%d, events=%04x,...)\n", fd, events);
     if(events & FDE_READ){
         apacket *p = 0;
@@ -278,7 +278,7 @@ void send_packet(apacket *p, atransport *t)
 
 static void *output_thread(void *_t)
 {
-    atransport *t = _t;
+    atransport *t = reinterpret_cast<atransport*>(_t);
     apacket *p;
 
     D("%s: starting transport output thread on fd %d, SYNC online (%d)\n",
@@ -333,7 +333,7 @@ oops:
 
 static void *input_thread(void *_t)
 {
-    atransport *t = _t;
+    atransport *t = reinterpret_cast<atransport*>(_t);
     apacket *p;
     int active = 0;
 
@@ -494,7 +494,8 @@ device_tracker_ready( asocket*  socket )
 asocket*
 create_device_tracker(void)
 {
-    device_tracker*  tracker = calloc(1,sizeof(*tracker));
+    device_tracker* tracker = reinterpret_cast<device_tracker*>(
+        calloc(1, sizeof(*tracker)));
 
     if(tracker == 0) fatal("cannot allocate device tracker");
 
@@ -799,7 +800,8 @@ static int qual_match(const char *to_test,
     return !*to_test;
 }
 
-atransport *acquire_one_transport(int state, transport_type ttype, const char* serial, char** error_out)
+atransport *acquire_one_transport(int state, transport_type ttype,
+                                  const char* serial, const char** error_out)
 {
     atransport *t;
     atransport *result = NULL;
@@ -1007,7 +1009,8 @@ void close_usb_devices()
 
 int register_socket_transport(int s, const char *serial, int port, int local)
 {
-    atransport *t = calloc(1, sizeof(atransport));
+    atransport *t = reinterpret_cast<atransport*>(
+        calloc(1, sizeof(atransport)));
     atransport *n;
     char buff[32];
 
@@ -1106,7 +1109,8 @@ void unregister_all_tcp_transports()
 
 void register_usb_transport(usb_handle *usb, const char *serial, const char *devpath, unsigned writeable)
 {
-    atransport *t = calloc(1, sizeof(atransport));
+    atransport *t = reinterpret_cast<atransport*>(
+        calloc(1, sizeof(atransport)));
     D("transport: %p init'ing for usb_handle %p (sn='%s')\n", t, usb,
       serial ? serial : "");
     init_usb_transport(t, usb, (writeable ? CS_OFFLINE : CS_NOPERM));

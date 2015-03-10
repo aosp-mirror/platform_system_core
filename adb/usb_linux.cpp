@@ -574,7 +574,6 @@ static void register_device(const char *dev_name, const char *devpath,
                             unsigned char ep_in, unsigned char ep_out,
                             int interface, int serial_index, unsigned zero_mask)
 {
-    usb_handle* usb = 0;
     int n = 0;
     char serial[256];
 
@@ -587,8 +586,9 @@ static void register_device(const char *dev_name, const char *devpath,
         ** name, we have no further work to do.
         */
     adb_mutex_lock(&usb_lock);
-    for(usb = handle_list.next; usb != &handle_list; usb = usb->next){
-        if(!strcmp(usb->fname, dev_name)) {
+    for (usb_handle* usb = handle_list.next; usb != &handle_list;
+         usb = usb->next) {
+        if (!strcmp(usb->fname, dev_name)) {
             adb_mutex_unlock(&usb_lock);
             return;
         }
@@ -597,7 +597,8 @@ static void register_device(const char *dev_name, const char *devpath,
 
     D("[ usb located new device %s (%d/%d/%d) ]\n",
         dev_name, ep_in, ep_out, interface);
-    usb = calloc(1, sizeof(usb_handle));
+    usb_handle* usb = reinterpret_cast<usb_handle*>(
+        calloc(1, sizeof(usb_handle)));
     strcpy(usb->fname, dev_name);
     usb->ep_in = ep_in;
     usb->ep_out = ep_out;
