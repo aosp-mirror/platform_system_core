@@ -140,7 +140,7 @@ static int set_verity_enabled_state(int fd, const char *block_device,
     if (magic_number != VERITY_METADATA_MAGIC_NUMBER
             && magic_number != VERITY_METADATA_MAGIC_DISABLE) {
         write_console(fd,
-                      "Couldn't find verity metadata at offset %"PRIu64"!\n",
+                      "Couldn't find verity metadata at offset %" PRIu64 "!\n",
                       device_length);
         goto errout;
     }

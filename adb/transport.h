@@ -37,7 +37,7 @@ void dump_hex(const unsigned char* ptr, size_t  len);
  * If no suitable transport is found, error is set.
  */
 atransport* acquire_one_transport(int state, transport_type ttype,
-                                  const char* serial, char** error_out);
+                                  const char* serial, const char** error_out);
 void add_transport_disconnect(atransport* t, adisconnect* dis);
 void remove_transport_disconnect(atransport* t, adisconnect* dis);
 void kick_transport(atransport* t);

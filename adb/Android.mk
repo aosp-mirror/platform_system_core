@@ -17,14 +17,14 @@ ADB_CLANG :=
 # small by moving common files into a static library. Hopefully some day we can
 # get enough of adb in here that we no longer need minadb. https://b/17626262
 LIBADB_SRC_FILES := \
-    adb.c \
-    adb_auth.c \
+    adb.cpp \
+    adb_auth.cpp \
     adb_io.cpp \
-    adb_listeners.c \
-    sockets.c \
-    transport.c \
-    transport_local.c \
-    transport_usb.c \
+    adb_listeners.cpp \
+    sockets.cpp \
+    transport.cpp \
+    transport_local.cpp \
+    transport_usb.cpp \
 
 LIBADB_CFLAGS := \
     -Wall -Werror \
@@ -32,9 +32,20 @@ LIBADB_CFLAGS := \
     -Wno-missing-field-initializers \
     -fvisibility=hidden \
 
-LIBADB_darwin_SRC_FILES := fdevent.cpp get_my_path_darwin.c usb_osx.c
-LIBADB_linux_SRC_FILES := fdevent.cpp get_my_path_linux.c usb_linux.c
-LIBADB_windows_SRC_FILES := get_my_path_windows.c sysdeps_win32.c usb_windows.c
+LIBADB_darwin_SRC_FILES := \
+    fdevent.cpp \
+    get_my_path_darwin.c \
+    usb_osx.c \
+
+LIBADB_linux_SRC_FILES := \
+    fdevent.cpp \
+    get_my_path_linux.cpp \
+    usb_linux.cpp \
+
+LIBADB_windows_SRC_FILES := \
+    get_my_path_windows.cpp \
+    sysdeps_win32.c \
+    usb_windows.cpp \
 
 include $(CLEAR_VARS)
 LOCAL_CLANG := $(ADB_CLANG)
@@ -42,10 +53,10 @@ LOCAL_MODULE := libadbd
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
-    adb_auth_client.c \
+    adb_auth_client.cpp \
     fdevent.cpp \
-    jdwp_service.c \
-    qemu_tracing.c \
+    jdwp_service.cpp \
+    qemu_tracing.cpp \
     usb_linux_client.c \
 
 include $(BUILD_STATIC_LIBRARY)
@@ -57,7 +68,7 @@ LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
     $(LIBADB_$(HOST_OS)_SRC_FILES) \
-    adb_auth_host.c \
+    adb_auth_host.cpp \
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the SSL includes to our path.
@@ -86,7 +97,7 @@ include $(CLEAR_VARS)
 LOCAL_CLANG := $(ADB_CLANG)
 LOCAL_MODULE := adb_test
 LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
-LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS) services.c
+LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS) services.cpp
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_STATIC_LIBRARIES := \
     libadb \
@@ -126,16 +137,12 @@ endif
 LOCAL_CLANG := $(ADB_CLANG)
 
 LOCAL_SRC_FILES := \
-	adb_main.c \
-	console.c \
-	commandline.c \
-	adb_client.c \
-	services.c \
-	file_sync_client.c \
-
-ifneq ($(USE_SYSDEPS_WIN32),)
-  LOCAL_SRC_FILES += sysdeps_win32.c
-endif
+    adb_main.cpp \
+    console.cpp \
+    commandline.cpp \
+    adb_client.cpp \
+    services.cpp \
+    file_sync_client.cpp \
 
 LOCAL_CFLAGS += \
     -Wall -Werror \
@@ -153,7 +160,7 @@ LOCAL_STATIC_LIBRARIES := \
     $(EXTRA_STATIC_LIBS) \
 
 ifeq ($(USE_SYSDEPS_WIN32),)
-	LOCAL_STATIC_LIBRARIES += libcutils
+    LOCAL_STATIC_LIBRARIES += libcutils
 endif
 
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
@@ -176,19 +183,19 @@ include $(CLEAR_VARS)
 LOCAL_CLANG := $(ADB_CLANG)
 
 LOCAL_SRC_FILES := \
-	adb_main.c \
-	services.c \
-	file_sync_service.c \
-	framebuffer_service.c \
-	remount_service.c \
-	set_verity_enable_state_service.c \
+    adb_main.cpp \
+    services.cpp \
+    file_sync_service.cpp \
+    framebuffer_service.cpp \
+    remount_service.cpp \
+    set_verity_enable_state_service.cpp \
 
 LOCAL_CFLAGS := \
-	-O2 \
-	-g \
-	-DADB_HOST=0 \
-	-D_GNU_SOURCE \
-	-Wall -Wno-unused-parameter -Werror -Wno-deprecated-declarations \
+    -DADB_HOST=0 \
+    -D_GNU_SOURCE \
+    -Wall -Werror \
+    -Wno-unused-parameter \
+    -Wno-deprecated-declarations \
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_ADBD_ROOT=1

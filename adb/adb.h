@@ -239,8 +239,8 @@ struct alistener
     fdevent fde;
     int fd;
 
-    const char *local_name;
-    const char *connect_to;
+    char *local_name;
+    char *connect_to;
     atransport *transport;
     adisconnect  disconnect;
 };
@@ -348,7 +348,7 @@ void usb_kick(usb_handle *h);
 int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_protocol);
 #endif
 
-int adb_commandline(int argc, char **argv);
+int adb_commandline(int argc, const char **argv);
 
 int connection_state(atransport *t);
 
