@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -192,7 +193,7 @@ static int ps_line(int pid, int tid, char *namefilter)
             wchan[wchan_len = 0] = '\0';
         }
         close(fd);
-        printf(" %10.*s %0*lx %s ", (int) wchan_len, wchan, (int) PC_WIDTH, eip, state);
+        printf(" %10.*s %0*" PRIxPTR " %s ", (int) wchan_len, wchan, (int) PC_WIDTH, eip, state);
         if (display_flags & SHOW_ABI) {
             print_exe_abi(pid);
         }
