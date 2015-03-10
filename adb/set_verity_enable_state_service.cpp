@@ -90,7 +90,7 @@ static int set_verity_enabled_state(int fd, const char *block_device,
     uint32_t magic_number;
     const uint32_t new_magic = enable ? VERITY_METADATA_MAGIC_NUMBER
                                       : VERITY_METADATA_MAGIC_DISABLE;
-    uint64_t device_length;
+    uint64_t device_length = 0;
     int device = -1;
     int retval = -1;
 
