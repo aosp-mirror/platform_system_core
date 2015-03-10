@@ -26,8 +26,10 @@
 #define ABI_STRING "arm"
 #elif defined(__aarch64__)
 #define ABI_STRING "arm64"
-#elif defined(__mips__)
+#elif defined(__mips__) && !defined(__LP64__)
 #define ABI_STRING "mips"
+#elif defined(__mips__) && defined(__LP64__)
+#define ABI_STRING "mips64"
 #elif defined(__i386__)
 #define ABI_STRING "x86"
 #elif defined(__x86_64__)
