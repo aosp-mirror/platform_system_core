@@ -284,98 +284,101 @@ static void local_socket_close_locked(asocket *s)
     insert_local_socket(s, &local_socket_closing_list);
 }
 
-static void local_socket_event_func(int fd, unsigned ev, void *_s)
+static void local_socket_event_func(int fd, unsigned ev, void* _s)
 {
-    asocket *s = _s;
-
+    asocket* s = reinterpret_cast<asocket*>(_s);
     D("LS(%d): event_func(fd=%d(==%d), ev=%04x)\n", s->id, s->fd, fd, ev);
 
     /* put the FDE_WRITE processing before the FDE_READ
     ** in order to simplify the code.
     */
-    if(ev & FDE_WRITE){
-        apacket *p;
-
-        while((p = s->pkt_first) != 0) {
-            while(p->len > 0) {
+    if (ev & FDE_WRITE) {
+        apacket* p;
+        while ((p = s->pkt_first) != nullptr) {
+            while (p->len > 0) {
                 int r = adb_write(fd, p->ptr, p->len);
-                if(r > 0) {
+                if (r == -1) {
+                    /* returning here is ok because FDE_READ will
+                    ** be processed in the next iteration loop
+                    */
+                    if (errno == EAGAIN) {
+                        return;
+                    }
+                } else if (r > 0) {
                     p->ptr += r;
                     p->len -= r;
                     continue;
                 }
-                if(r < 0) {
-                    /* returning here is ok because FDE_READ will
-                    ** be processed in the next iteration loop
-                    */
-                    if(errno == EAGAIN) return;
-                    if(errno == EINTR) continue;
-                }
+
                 D(" closing after write because r=%d and errno is %d\n", r, errno);
                 s->close(s);
                 return;
             }
 
-            if(p->len == 0) {
+            if (p->len == 0) {
                 s->pkt_first = p->next;
-                if(s->pkt_first == 0) s->pkt_last = 0;
+                if (s->pkt_first == 0) {
+                    s->pkt_last = 0;
+                }
                 put_apacket(p);
             }
         }
 
-            /* if we sent the last packet of a closing socket,
-            ** we can now destroy it.
-            */
+        /* if we sent the last packet of a closing socket,
+        ** we can now destroy it.
+        */
         if (s->closing) {
             D(" closing because 'closing' is set after write\n");
             s->close(s);
             return;
         }
 
-            /* no more packets queued, so we can ignore
-            ** writable events again and tell our peer
-            ** to resume writing
-            */
+        /* no more packets queued, so we can ignore
+        ** writable events again and tell our peer
+        ** to resume writing
+        */
         fdevent_del(&s->fde, FDE_WRITE);
         s->peer->ready(s->peer);
     }
 
 
-    if(ev & FDE_READ){
+    if (ev & FDE_READ) {
         apacket *p = get_apacket();
         unsigned char *x = p->data;
         size_t avail = MAX_PAYLOAD;
         int r;
         int is_eof = 0;
 
-        while(avail > 0) {
+        while (avail > 0) {
             r = adb_read(fd, x, avail);
-            D("LS(%d): post adb_read(fd=%d,...) r=%d (errno=%d) avail=%zu\n", s->id, s->fd, r, r<0?errno:0, avail);
-            if(r > 0) {
+            D("LS(%d): post adb_read(fd=%d,...) r=%d (errno=%d) avail=%zu\n",
+              s->id, s->fd, r, r < 0 ? errno : 0, avail);
+            if (r == -1) {
+                if (errno == EAGAIN) {
+                    break;
+                }
+            } else if (r > 0) {
                 avail -= r;
                 x += r;
                 continue;
             }
-            if(r < 0) {
-                if(errno == EAGAIN) break;
-                if(errno == EINTR) continue;
-            }
 
-                /* r = 0 or unhandled error */
+            /* r = 0 or unhandled error */
             is_eof = 1;
             break;
         }
         D("LS(%d): fd=%d post avail loop. r=%d is_eof=%d forced_eof=%d\n",
           s->id, s->fd, r, is_eof, s->fde.force_eof);
-        if((avail == MAX_PAYLOAD) || (s->peer == 0)) {
+        if ((avail == MAX_PAYLOAD) || (s->peer == 0)) {
             put_apacket(p);
         } else {
             p->len = MAX_PAYLOAD - avail;
 
             r = s->peer->enqueue(s->peer, p);
-            D("LS(%d): fd=%d post peer->enqueue(). r=%d\n", s->id, s->fd, r);
+            D("LS(%d): fd=%d post peer->enqueue(). r=%d\n", s->id, s->fd,
+              r);
 
-            if(r < 0) {
+            if (r < 0) {
                     /* error return means they closed us as a side-effect
                     ** and we must return immediately.
                     **
@@ -387,7 +390,7 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
                 return;
             }
 
-            if(r > 0) {
+            if (r > 0) {
                     /* if the remote cannot accept further events,
                     ** we disable notification of READs.  They'll
                     ** be enabled again when we get a call to ready()
@@ -396,13 +399,14 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
             }
         }
         /* Don't allow a forced eof if data is still there */
-        if((s->fde.force_eof && !r) || is_eof) {
-            D(" closing because is_eof=%d r=%d s->fde.force_eof=%d\n", is_eof, r, s->fde.force_eof);
+        if ((s->fde.force_eof && !r) || is_eof) {
+            D(" closing because is_eof=%d r=%d s->fde.force_eof=%d\n",
+              is_eof, r, s->fde.force_eof);
             s->close(s);
         }
     }
 
-    if(ev & FDE_ERROR){
+    if (ev & FDE_ERROR){
             /* this should be caught be the next read or write
             ** catching it here means we may skip the last few
             ** bytes of readable data.
@@ -415,7 +419,7 @@ static void local_socket_event_func(int fd, unsigned ev, void *_s)
 
 asocket *create_local_socket(int fd)
 {
-    asocket *s = calloc(1, sizeof(asocket));
+    asocket *s = reinterpret_cast<asocket*>(calloc(1, sizeof(asocket)));
     if (s == NULL) fatal("cannot allocate socket");
     s->fd = fd;
     s->enqueue = local_socket_enqueue;
@@ -539,8 +543,8 @@ static void remote_socket_close(asocket *s)
 
 static void remote_socket_disconnect(void*  _s, atransport*  t)
 {
-    asocket*  s    = _s;
-    asocket*  peer = s->peer;
+    asocket* s = reinterpret_cast<asocket*>(_s);
+    asocket* peer = s->peer;
 
     D("remote_socket_disconnect RS(%d)\n", s->id);
     if (peer) {
@@ -557,12 +561,9 @@ static void remote_socket_disconnect(void*  _s, atransport*  t)
    Returns a new non-NULL asocket handle. */
 asocket *create_remote_socket(unsigned id, atransport *t)
 {
-    asocket* s;
-    adisconnect* dis;
-
     if (id == 0) fatal("invalid remote socket id (0)");
-    s = calloc(1, sizeof(aremotesocket));
-    dis = &((aremotesocket*)s)->disconnect;
+    asocket* s = reinterpret_cast<asocket*>(calloc(1, sizeof(aremotesocket)));
+    adisconnect* dis = &reinterpret_cast<aremotesocket*>(s)->disconnect;
 
     if (s == NULL) fatal("cannot allocate socket");
     s->id = id;
@@ -824,7 +825,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
     }
 #else /* !ADB_HOST */
     if (s->transport == NULL) {
-        char* error_string = "unknown failure";
+        const char* error_string = "unknown failure";
         s->transport = acquire_one_transport (CS_ANY,
                 kTransportAny, NULL, &error_string);
 
@@ -892,7 +893,7 @@ static void smart_socket_close(asocket *s)
 static asocket *create_smart_socket(void)
 {
     D("Creating smart socket \n");
-    asocket *s = calloc(1, sizeof(asocket));
+    asocket *s = reinterpret_cast<asocket*>(calloc(1, sizeof(asocket)));
     if (s == NULL) fatal("cannot allocate socket");
     s->enqueue = smart_socket_enqueue;
     s->ready = smart_socket_ready;

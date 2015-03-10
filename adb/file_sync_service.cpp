@@ -420,7 +420,7 @@ void file_sync_service(int fd, void *cookie)
     char name[1025];
     unsigned namelen;
 
-    char *buffer = malloc(SYNC_DATA_MAX);
+    char *buffer = reinterpret_cast<char*>(malloc(SYNC_DATA_MAX));
     if(buffer == 0) goto fail;
 
     for(;;) {

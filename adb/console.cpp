@@ -24,7 +24,7 @@ static int  connect_to_console(void)
 }
 
 
-int  adb_send_emulator_command(int  argc, char**  argv)
+int  adb_send_emulator_command(int  argc, const char**  argv)
 {
     int   fd, nn;
 

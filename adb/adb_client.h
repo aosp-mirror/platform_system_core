@@ -47,7 +47,7 @@ int  adb_get_emulator_console_port(void);
  * is zero, or more than one emulator connected (or if you use -s <serial>
  * with a <serial> that does not designate an emulator)
  */
-int  adb_send_emulator_command(int  argc, char**  argv);
+int  adb_send_emulator_command(int  argc, const char**  argv);
 
 /* return verbose error string from last operation */
 const char *adb_error(void);

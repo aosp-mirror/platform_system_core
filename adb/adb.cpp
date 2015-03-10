@@ -140,10 +140,13 @@ void  adb_trace_init(void)
     }
 }
 
-apacket *get_apacket(void)
+apacket* get_apacket(void)
 {
-    apacket *p = malloc(sizeof(apacket));
-    if(p == 0) fatal("failed to allocate an apacket");
+    apacket* p = reinterpret_cast<apacket*>(malloc(sizeof(apacket)));
+    if (p == nullptr) {
+      fatal("failed to allocate an apacket");
+    }
+
     memset(p, 0, sizeof(apacket) - MAX_PAYLOAD);
     return p;
 }
@@ -293,7 +296,7 @@ void send_connect(atransport *t)
 }
 
 #if ADB_HOST
-static char *connection_state_name(atransport *t)
+static const char* connection_state_name(atransport *t)
 {
     if (t == NULL) {
         return "unknown";
@@ -713,8 +716,8 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
         // Create the list of forward redirections.
         int buffer_size = format_listeners(NULL, 0);
         // Add one byte for the trailing zero.
-        char* buffer = malloc(buffer_size + 1);
-        if (buffer == NULL) {
+        char* buffer = reinterpret_cast<char*>(malloc(buffer_size + 1));
+        if (buffer == nullptr) {
             sendfailmsg(reply_fd, "not enough memory");
             return 1;
         }
@@ -740,7 +743,7 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
 
     if (!strncmp(service, "forward:",8) ||
         !strncmp(service, "killforward:",12)) {
-        char *local, *remote, *err;
+        char *local, *remote;
         int r;
         atransport *transport;
 
@@ -777,6 +780,7 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
             }
         }
 
+        const char* err;
         transport = acquire_one_transport(CS_ANY, ttype, serial, &err);
         if (!transport) {
             sendfailmsg(reply_fd, err);
@@ -835,7 +839,6 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     // "transport-local:" is used for switching transport to the only local transport
     // "transport-any:" is used for switching transport to the only transport
     if (!strncmp(service, "transport", strlen("transport"))) {
-        char* error_string = "unknown failure";
         transport_type type = kTransportAny;
 
         if (!strncmp(service, "transport-usb", strlen("transport-usb"))) {
@@ -849,6 +852,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
             serial = service;
         }
 
+        const char* error_string = "unknown failure";
         transport = acquire_one_transport(CS_ANY, type, serial, &error_string);
 
         if (transport) {
@@ -911,8 +915,8 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     }
 
     if(!strncmp(service,"get-serialno",strlen("get-serialno"))) {
-        char *out = "unknown";
-         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
+        const char *out = "unknown";
+        transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
        if (transport && transport->serial) {
             out = transport->serial;
         }
@@ -920,8 +924,8 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         return 0;
     }
     if(!strncmp(service,"get-devpath",strlen("get-devpath"))) {
-        char *out = "unknown";
-         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
+        const char *out = "unknown";
+        transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
        if (transport && transport->devpath) {
             out = transport->devpath;
         }
@@ -938,7 +942,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
 
     if(!strncmp(service,"get-state",strlen("get-state"))) {
         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
-        char *state = connection_state_name(transport);
+        const char *state = connection_state_name(transport);
         send_msg_with_okay(reply_fd, state, strlen(state));
         return 0;
     }

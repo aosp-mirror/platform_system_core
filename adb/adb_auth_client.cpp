@@ -37,7 +37,7 @@ struct adb_public_key {
     RSAPublicKey key;
 };
 
-static char *key_paths[] = {
+static const char *key_paths[] = {
     "/adb_keys",
     "/data/misc/adb/adb_keys",
     NULL
@@ -53,7 +53,6 @@ static bool needs_retry = false;
 
 static void read_keys(const char *file, struct listnode *list)
 {
-    struct adb_public_key *key;
     FILE *f;
     char buf[MAX_PAYLOAD];
     char *sep;
@@ -67,8 +66,9 @@ static void read_keys(const char *file, struct listnode *list)
 
     while (fgets(buf, sizeof(buf), f)) {
         /* Allocate 4 extra bytes to decode the base64 data in-place */
-        key = calloc(1, sizeof(*key) + 4);
-        if (!key) {
+        auto key = reinterpret_cast<adb_public_key*>(
+            calloc(1, sizeof(adb_public_key) + 4));
+        if (key == nullptr) {
             D("Can't malloc key\n");
             break;
         }
@@ -109,8 +109,8 @@ static void free_keys(struct listnode *list)
 
 static void load_keys(struct listnode *list)
 {
-    char *path;
-    char **paths = key_paths;
+    const char* path;
+    const char** paths = key_paths;
     struct stat buf;
 
     list_init(list);
@@ -138,10 +138,9 @@ int adb_auth_generate_token(void *token, size_t token_size)
     return ret * token_size;
 }
 
-int adb_auth_verify(void *token, void *sig, int siglen)
+int adb_auth_verify(uint8_t* token, uint8_t* sig, int siglen)
 {
     struct listnode *item;
-    struct adb_public_key *key;
     struct listnode key_list;
     int ret = 0;
 
@@ -151,7 +150,7 @@ int adb_auth_verify(void *token, void *sig, int siglen)
     load_keys(&key_list);
 
     list_for_each(item, &key_list) {
-        key = node_to_item(item, struct adb_public_key, node);
+        adb_public_key* key = node_to_item(item, struct adb_public_key, node);
         ret = RSA_verify(&key->key, sig, siglen, token, SHA_DIGEST_SIZE);
         if (ret)
             break;
