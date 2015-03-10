@@ -29,6 +29,12 @@ static char *nexttok(char **strp)
 #define SHOW_NUMERIC_UID 32
 #define SHOW_ABI 64
 
+#if __LP64__
+#define PC_WIDTH 10 /* Realistically, the top bits will be 0, so don't waste space. */
+#else
+#define PC_WIDTH (2*sizeof(uintptr_t))
+#endif
+
 static int display_flags = 0;
 static int ppid_filter = 0;
 
@@ -44,7 +50,8 @@ static int ps_line(int pid, int tid, char *namefilter)
     int fd, r;
     char *ptr, *name, *state;
     int ppid;
-    unsigned wchan, rss, vss, eip;
+    unsigned rss, vss;
+    uintptr_t eip;
     unsigned utime, stime;
     int prio, nice, rtprio, sched, psr;
     struct passwd *pw;
@@ -124,7 +131,7 @@ static int ps_line(int pid, int tid, char *namefilter)
     nexttok(&ptr); // blocked
     nexttok(&ptr); // sigignore
     nexttok(&ptr); // sigcatch
-    wchan = strtoul(nexttok(&ptr), 0, 10); // wchan
+    nexttok(&ptr); // wchan
     nexttok(&ptr); // nswap
     nexttok(&ptr); // cnswap
     nexttok(&ptr); // exit signal
@@ -176,7 +183,16 @@ static int ps_line(int pid, int tid, char *namefilter)
             else
                 printf(" %.2s ", get_sched_policy_name(p));
         }
-        printf(" %08x %08x %s ", wchan, eip, state);
+        char path[PATH_MAX];
+        snprintf(path, sizeof(path), "/proc/%d/wchan", pid);
+        char wchan[10];
+        int fd = open(path, O_RDONLY);
+        ssize_t wchan_len = read(fd, wchan, sizeof(wchan));
+        if (wchan_len == -1) {
+            wchan[wchan_len = 0] = '\0';
+        }
+        close(fd);
+        printf(" %10.*s %0*lx %s ", (int) wchan_len, wchan, (int) PC_WIDTH, eip, state);
         if (display_flags & SHOW_ABI) {
             print_exe_abi(pid);
         }
@@ -285,12 +301,13 @@ int ps_main(int argc, char **argv)
     }
 
     if (display_flags & SHOW_MACLABEL) {
-        printf("LABEL                          USER     PID   PPID  NAME\n");
+        printf("LABEL                          USER      PID   PPID  NAME\n");
     } else {
-        printf("USER     PID   PPID  VSIZE  RSS   %s%s %s WCHAN    PC        %sNAME\n",
+        printf("USER      PID   PPID  VSIZE  RSS  %s%s %sWCHAN      %*s  %sNAME\n",
                (display_flags&SHOW_CPU)?"CPU ":"",
                (display_flags&SHOW_PRIO)?"PRIO  NICE  RTPRI SCHED ":"",
                (display_flags&SHOW_POLICY)?"PCY " : "",
+               (int) PC_WIDTH, "PC",
                (display_flags&SHOW_ABI)?"ABI " : "");
     }
     while((de = readdir(d)) != 0){
