@@ -12,7 +12,7 @@ LOCAL_SRC_FILES:= \
 LOCAL_SRC_FILES_arm    := arm/machine.cpp
 LOCAL_SRC_FILES_arm64  := arm64/machine.cpp
 LOCAL_SRC_FILES_mips   := mips/machine.cpp
-LOCAL_SRC_FILES_mips64 := mips/machine.cpp
+LOCAL_SRC_FILES_mips64 := mips64/machine.cpp
 LOCAL_SRC_FILES_x86    := x86/machine.cpp
 LOCAL_SRC_FILES_x86_64 := x86_64/machine.cpp
 
@@ -49,7 +49,7 @@ LOCAL_SRC_FILES := crasher.c
 LOCAL_SRC_FILES_arm    := arm/crashglue.S
 LOCAL_SRC_FILES_arm64  := arm64/crashglue.S
 LOCAL_SRC_FILES_mips   := mips/crashglue.S
-LOCAL_SRC_FILES_mips64 := mips/crashglue.S
+LOCAL_SRC_FILES_mips64 := mips64/crashglue.S
 LOCAL_SRC_FILES_x86    := x86/crashglue.S
 LOCAL_SRC_FILES_x86_64 := x86_64/crashglue.S
 LOCAL_MODULE_PATH := $(TARGET_OUT_OPTIONAL_EXECUTABLES)
