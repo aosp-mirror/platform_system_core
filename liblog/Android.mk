@@ -83,6 +83,10 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_WHOLE_STATIC_LIBRARIES := liblog
 LOCAL_CFLAGS := -Werror $(liblog_cflags)
+
+# TODO: This is to work around b/19059885. Remove after root cause is fixed
+LOCAL_LDFLAGS := -Wl,--hash-style=both
+
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call first-makefiles-under,$(LOCAL_PATH))
