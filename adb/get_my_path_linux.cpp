@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-#include <sys/types.h>
-#include <unistd.h>
 #include <limits.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include "adb.h"
 
 void get_my_path(char *exe, size_t maxLen)
 {

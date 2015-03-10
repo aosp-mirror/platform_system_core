@@ -157,7 +157,7 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
     RSAPublicKey pkey;
     FILE *outfile = NULL;
     char path[PATH_MAX], info[MAX_PAYLOAD];
-    uint8_t *encoded = NULL;
+    uint8_t* encoded = nullptr;
     size_t encoded_length;
     int ret = 0;
 
@@ -191,8 +191,8 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
     encoded_length = 1 + ((sizeof(pkey) + 2) / 3 * 4);
 #endif
 
-    encoded = malloc(encoded_length);
-    if (encoded == NULL) {
+    encoded = reinterpret_cast<uint8_t*>(malloc(encoded_length));
+    if (encoded == nullptr) {
         D("Allocation failure");
         goto out;
     }
@@ -272,18 +272,16 @@ out:
 
 static int read_key(const char *file, struct listnode *list)
 {
-    struct adb_private_key *key;
-    FILE *f;
-
     D("read_key '%s'\n", file);
 
-    f = fopen(file, "r");
+    FILE* f = fopen(file, "r");
     if (!f) {
         D("Failed to open '%s'\n", file);
         return 0;
     }
 
-    key = malloc(sizeof(*key));
+    adb_private_key* key = reinterpret_cast<adb_private_key*>(
+        malloc(sizeof(adb_private_key)));
     if (!key) {
         D("Failed to alloc key\n");
         fclose(f);
@@ -390,7 +388,8 @@ static void get_vendor_keys(struct listnode *list)
     }
 }
 
-int adb_auth_sign(void *node, void *token, size_t token_size, void *sig)
+int adb_auth_sign(void *node, const unsigned char* token, size_t token_size,
+                  unsigned char* sig)
 {
     unsigned int len;
     struct adb_private_key *key = node_to_item(node, struct adb_private_key, node);
@@ -433,31 +432,33 @@ void *adb_auth_nextkey(void *current)
 int adb_auth_get_userkey(unsigned char *data, size_t len)
 {
     char path[PATH_MAX];
-    char *file;
-    int ret;
-
-    ret = get_user_keyfilepath(path, sizeof(path) - 4);
+    int ret = get_user_keyfilepath(path, sizeof(path) - 4);
     if (ret < 0 || ret >= (signed)(sizeof(path) - 4)) {
         D("Error getting user key filename");
         return 0;
     }
     strcat(path, ".pub");
 
-    file = load_file(path, (unsigned*)&ret);
-    if (!file) {
+    // TODO(danalbert): ReadFileToString
+    unsigned size;
+    char* file_data = reinterpret_cast<char*>(load_file(path, &size));
+    if (file_data == nullptr) {
         D("Can't load '%s'\n", path);
         return 0;
     }
 
-    if (len < (size_t)(ret + 1)) {
-        D("%s: Content too large ret=%d\n", path, ret);
+    if (len < (size_t)(size + 1)) {
+        D("%s: Content too large ret=%d\n", path, size);
+        free(file_data);
         return 0;
     }
 
-    memcpy(data, file, ret);
-    data[ret] = '\0';
+    memcpy(data, file_data, size);
+    free(file_data);
+    file_data = nullptr;
+    data[size] = '\0';
 
-    return ret + 1;
+    return size + 1;
 }
 
 int adb_auth_keygen(const char* filename) {

@@ -580,7 +580,8 @@ copyinfo *mkcopyinfo(const char *spath, const char *dpath,
     int ssize = slen + nlen + 2;
     int dsize = dlen + nlen + 2;
 
-    copyinfo *ci = malloc(sizeof(copyinfo) + ssize + dsize);
+    copyinfo *ci = reinterpret_cast<copyinfo*>(
+        malloc(sizeof(copyinfo) + ssize + dsize));
     if(ci == 0) {
         fprintf(stderr,"out of memory\n");
         abort();
@@ -684,14 +685,14 @@ static int copy_local_dir_remote(int fd, const char *lpath, const char *rpath, i
     if((lpath[0] == 0) || (rpath[0] == 0)) return -1;
     if(lpath[strlen(lpath) - 1] != '/') {
         int  tmplen = strlen(lpath)+2;
-        char *tmp = malloc(tmplen);
+        char *tmp = reinterpret_cast<char*>(malloc(tmplen));
         if(tmp == 0) return -1;
         snprintf(tmp, tmplen, "%s/",lpath);
         lpath = tmp;
     }
     if(rpath[strlen(rpath) - 1] != '/') {
         int tmplen = strlen(rpath)+2;
-        char *tmp = malloc(tmplen);
+        char *tmp = reinterpret_cast<char*>(malloc(tmplen));
         if(tmp == 0) return -1;
         snprintf(tmp, tmplen, "%s/",rpath);
         rpath = tmp;
@@ -784,7 +785,8 @@ int do_sync_push(const char *lpath, const char *rpath, int show_progress)
                 name++;
             }
             int  tmplen = strlen(name) + strlen(rpath) + 2;
-            char *tmp = malloc(strlen(name) + strlen(rpath) + 2);
+            char *tmp = reinterpret_cast<char*>(
+                malloc(strlen(name) + strlen(rpath) + 2));
             if(tmp == 0) return 1;
             snprintf(tmp, tmplen, "%s/%s", rpath, name);
             rpath = tmp;
@@ -872,7 +874,7 @@ static int remote_build_list(int syncfd, copyinfo **filelist,
     return 0;
 }
 
-static int set_time_and_mode(const char *lpath, unsigned int time, unsigned int mode)
+static int set_time_and_mode(const char *lpath, time_t time, unsigned int mode)
 {
     struct utimbuf times = { time, time };
     int r1 = utime(lpath, &times);
@@ -890,7 +892,7 @@ static char *add_slash_to_path(const char *path)
 {
     if (path[strlen(path) - 1] != '/') {
         size_t len = strlen(path) + 2;
-        char *path_with_slash = malloc(len);
+        char *path_with_slash = reinterpret_cast<char*>(malloc(len));
         if (path_with_slash == NULL)
             return NULL;
         snprintf(path_with_slash, len, "%s/", path);
@@ -999,7 +1001,7 @@ int do_sync_pull(const char *rpath, const char *lpath, int show_progress, int co
                     name++;
                 }
                 int  tmplen = strlen(name) + strlen(lpath) + 2;
-                char *tmp = malloc(tmplen);
+                char *tmp = reinterpret_cast<char*>(malloc(tmplen));
                 if(tmp == 0) return 1;
                 snprintf(tmp, tmplen, "%s/%s", lpath, name);
                 lpath = tmp;

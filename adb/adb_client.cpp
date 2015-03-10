@@ -115,7 +115,7 @@ static int switch_socket_transport(int fd)
     if (__adb_serial)
         snprintf(service, sizeof service, "host:transport:%s", __adb_serial);
     else {
-        char* transport_type = "???";
+        const char* transport_type = "???";
 
          switch (__adb_transport) {
             case kTransportUsb:
@@ -328,8 +328,8 @@ int adb_command(const char *service)
 char *adb_query(const char *service)
 {
     char buf[5];
-    unsigned n;
-    char *tmp;
+    unsigned long n;
+    char* tmp;
 
     D("adb_query: %s\n", service);
     int fd = adb_connect(service);
@@ -347,7 +347,7 @@ char *adb_query(const char *service)
         goto oops;
     }
 
-    tmp = malloc(n + 1);
+    tmp = reinterpret_cast<char*>(malloc(n + 1));
     if(tmp == 0) goto oops;
 
     if(!ReadFdExactly(fd, tmp, n) == 0) {

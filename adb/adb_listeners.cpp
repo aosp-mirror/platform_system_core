@@ -54,24 +54,26 @@ void ss_listener_event_func(int _fd, unsigned ev, void *_l)
     }
 }
 
-void listener_event_func(int _fd, unsigned ev, void *_l)
+void listener_event_func(int _fd, unsigned ev, void* _l)
 {
-    alistener *l = _l;
+    alistener* listener = reinterpret_cast<alistener*>(_l);
     asocket *s;
 
-    if(ev & FDE_READ) {
+    if (ev & FDE_READ) {
         struct sockaddr addr;
         socklen_t alen;
         int fd;
 
         alen = sizeof(addr);
         fd = adb_socket_accept(_fd, &addr, &alen);
-        if(fd < 0) return;
+        if (fd < 0) {
+            return;
+        }
 
         s = create_local_socket(fd);
-        if(s) {
-            s->transport = l->transport;
-            connect_to_remote(s, l->connect_to);
+        if (s) {
+            s->transport = listener->transport;
+            connect_to_remote(s, listener->connect_to);
             return;
         }
 
@@ -102,11 +104,9 @@ static void  free_listener(alistener*  l)
     free(l);
 }
 
-void listener_disconnect(void*  _l, atransport*  t)
+void listener_disconnect(void* listener, atransport*  t)
 {
-    alistener*  l = _l;
-
-    free_listener(l);
+    free_listener(reinterpret_cast<alistener*>(listener));
 }
 
 int local_name_to_fd(const char *name)
@@ -220,20 +220,16 @@ install_status_t install_listener(const char *local_name,
                                   atransport* transport,
                                   int no_rebind)
 {
-    alistener *l;
+    for (alistener* l = listener_list.next; l != &listener_list; l = l->next) {
+        if (strcmp(local_name, l->local_name) == 0) {
+            char* cto;
 
-    //printf("install_listener('%s','%s')\n", local_name, connect_to);
-
-    for(l = listener_list.next; l != &listener_list; l = l->next){
-        if(strcmp(local_name, l->local_name) == 0) {
-            char *cto;
-
-                /* can't repurpose a smartsocket */
+            /* can't repurpose a smartsocket */
             if(l->connect_to[0] == '*') {
                 return INSTALL_STATUS_INTERNAL_ERROR;
             }
 
-                /* can't repurpose a listener if 'no_rebind' is true */
+            /* can't repurpose a listener if 'no_rebind' is true */
             if (no_rebind) {
                 return INSTALL_STATUS_CANNOT_REBIND;
             }
@@ -243,7 +239,6 @@ install_status_t install_listener(const char *local_name,
                 return INSTALL_STATUS_INTERNAL_ERROR;
             }
 
-            //printf("rebinding '%s' to '%s'\n", local_name, connect_to);
             free((void*) l->connect_to);
             l->connect_to = cto;
             if (l->transport != transport) {
@@ -255,38 +250,51 @@ install_status_t install_listener(const char *local_name,
         }
     }
 
-    if((l = calloc(1, sizeof(alistener))) == 0) goto nomem;
-    if((l->local_name = strdup(local_name)) == 0) goto nomem;
-    if((l->connect_to = strdup(connect_to)) == 0) goto nomem;
+    alistener* listener = reinterpret_cast<alistener*>(
+        calloc(1, sizeof(alistener)));
+    if (listener == nullptr) {
+        goto nomem;
+    }
 
+    listener->local_name = strdup(local_name);
+    if (listener->local_name == nullptr) {
+        goto nomem;
+    }
 
-    l->fd = local_name_to_fd(local_name);
-    if(l->fd < 0) {
-        free((void*) l->local_name);
-        free((void*) l->connect_to);
-        free(l);
+    listener->connect_to = strdup(connect_to);
+    if (listener->connect_to == nullptr) {
+        goto nomem;
+    }
+
+    listener->fd = local_name_to_fd(local_name);
+    if (listener->fd < 0) {
+        free(listener->local_name);
+        free(listener->connect_to);
+        free(listener);
         printf("cannot bind '%s'\n", local_name);
-        return -2;
+        return INSTALL_STATUS_CANNOT_BIND;
     }
 
-    close_on_exec(l->fd);
-    if(!strcmp(l->connect_to, "*smartsocket*")) {
-        fdevent_install(&l->fde, l->fd, ss_listener_event_func, l);
+    close_on_exec(listener->fd);
+    if (!strcmp(listener->connect_to, "*smartsocket*")) {
+        fdevent_install(&listener->fde, listener->fd, ss_listener_event_func,
+                        listener);
     } else {
-        fdevent_install(&l->fde, l->fd, listener_event_func, l);
+        fdevent_install(&listener->fde, listener->fd, listener_event_func,
+                        listener);
     }
-    fdevent_set(&l->fde, FDE_READ);
+    fdevent_set(&listener->fde, FDE_READ);
 
-    l->next = &listener_list;
-    l->prev = listener_list.prev;
-    l->next->prev = l;
-    l->prev->next = l;
-    l->transport = transport;
+    listener->next = &listener_list;
+    listener->prev = listener_list.prev;
+    listener->next->prev = listener;
+    listener->prev->next = listener;
+    listener->transport = transport;
 
     if (transport) {
-        l->disconnect.opaque = l;
-        l->disconnect.func   = listener_disconnect;
-        add_transport_disconnect(transport, &l->disconnect);
+        listener->disconnect.opaque = listener;
+        listener->disconnect.func   = listener_disconnect;
+        add_transport_disconnect(transport, &listener->disconnect);
     }
     return INSTALL_STATUS_OK;
 

@@ -194,7 +194,8 @@ static void  jdwp_process_event(int, unsigned, void*);  /* forward */
 static JdwpProcess*
 jdwp_process_alloc( int  socket )
 {
-    JdwpProcess*  proc = calloc(1,sizeof(*proc));
+    JdwpProcess* proc = reinterpret_cast<JdwpProcess*>(
+        calloc(1, sizeof(*proc)));
 
     if (proc == NULL) {
         D("not enough memory to create new JDWP process\n");
@@ -234,7 +235,7 @@ jdwp_process_alloc( int  socket )
 static void
 jdwp_process_event( int  socket, unsigned  events, void*  _proc )
 {
-    JdwpProcess*  proc = _proc;
+    JdwpProcess*  proc = reinterpret_cast<JdwpProcess*>(_proc);
 
     if (events & FDE_READ) {
         if (proc->pid < 0) {
@@ -601,7 +602,7 @@ jdwp_socket_ready( asocket*  s )
 asocket*
 create_jdwp_service_socket( void )
 {
-    JdwpSocket*  s = calloc(sizeof(*s),1);
+    JdwpSocket* s = reinterpret_cast<JdwpSocket*>(calloc(sizeof(*s), 1));
 
     if (s == NULL)
         return NULL;
@@ -696,7 +697,7 @@ jdwp_tracker_enqueue( asocket*  s, apacket*  p )
 asocket*
 create_jdwp_tracker_service_socket( void )
 {
-    JdwpTracker*  t = calloc(sizeof(*t),1);
+    JdwpTracker* t = reinterpret_cast<JdwpTracker*>(calloc(sizeof(*t), 1));
 
     if (t == NULL)
         return NULL;

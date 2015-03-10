@@ -33,7 +33,7 @@ bool ReadFdExactly(int fd, void* buf, size_t len) {
 
     D("readx: fd=%d wanted=%zu\n", fd, len);
     while (len > 0) {
-        int r = TEMP_FAILURE_RETRY(adb_read(fd, p, len));
+        int r = adb_read(fd, p, len);
         if (r > 0) {
             len -= r;
             p += r;
@@ -69,7 +69,7 @@ bool WriteFdExactly(int fd, const void* buf, size_t len) {
 #endif
 
     while (len > 0) {
-        r = TEMP_FAILURE_RETRY(adb_write(fd, p, len));
+        r = adb_write(fd, p, len);
         if (r == -1) {
             D("writex: fd=%d error %d: %s\n", fd, errno, strerror(errno));
             if (errno == EAGAIN) {

@@ -51,7 +51,7 @@ struct stinfo {
 
 void *service_bootstrap_func(void *x)
 {
-    stinfo *sti = x;
+    stinfo* sti = reinterpret_cast<stinfo*>(x);
     sti->func(sti->fd, sti->cookie);
     free(sti);
     return 0;
@@ -161,7 +161,7 @@ cleanup:
 
 void reverse_service(int fd, void* arg)
 {
-    const char* command = arg;
+    const char* command = reinterpret_cast<const char*>(arg);
 
     if (handle_forward_request(command, kTransportAny, NULL, fd) < 0) {
         sendfailmsg(fd, "not a reverse forwarding command");
@@ -174,23 +174,23 @@ void reverse_service(int fd, void* arg)
 
 static int create_service_thread(void (*func)(int, void *), void *cookie)
 {
-    stinfo *sti;
-    adb_thread_t t;
     int s[2];
-
-    if(adb_socketpair(s)) {
+    if (adb_socketpair(s)) {
         printf("cannot create service socket pair\n");
         return -1;
     }
     D("socketpair: (%d,%d)", s[0], s[1]);
 
-    sti = malloc(sizeof(stinfo));
-    if(sti == 0) fatal("cannot allocate stinfo");
+    stinfo* sti = reinterpret_cast<stinfo*>(malloc(sizeof(stinfo)));
+    if (sti == nullptr) {
+        fatal("cannot allocate stinfo");
+    }
     sti->func = func;
     sti->cookie = cookie;
     sti->fd = s[1];
 
-    if(adb_thread_create( &t, service_bootstrap_func, sti)){
+    adb_thread_t t;
+    if (adb_thread_create(&t, service_bootstrap_func, sti)) {
         free(sti);
         adb_close(s[0]);
         adb_close(s[1]);
@@ -359,7 +359,6 @@ static void subproc_waiter_service(int fd, void *cookie)
 
 static int create_subproc_thread(const char *name, const subproc_mode mode)
 {
-    stinfo *sti;
     adb_thread_t t;
     int ret_fd;
     pid_t pid = -1;
@@ -384,7 +383,7 @@ static int create_subproc_thread(const char *name, const subproc_mode mode)
     }
     D("create_subproc ret_fd=%d pid=%d\n", ret_fd, pid);
 
-    sti = malloc(sizeof(stinfo));
+    stinfo* sti = reinterpret_cast<stinfo*>(malloc(sizeof(stinfo)));
     if(sti == 0) fatal("cannot allocate stinfo");
     sti->func = subproc_waiter_service;
     sti->cookie = (void*) (uintptr_t) pid;
@@ -512,11 +511,11 @@ struct state_info {
 
 static void wait_for_state(int fd, void* cookie)
 {
-    struct state_info* sinfo = cookie;
-    char* err = "unknown error";
+    state_info* sinfo = reinterpret_cast<state_info*>(cookie);
 
     D("wait_for_state %d\n", sinfo->state);
 
+    const char* err = "unknown error";
     atransport *t = acquire_one_transport(sinfo->state, sinfo->transport, sinfo->serial, &err);
     if(t != 0) {
         WriteFdExactly(fd, "OKAY", 4);
@@ -635,7 +634,7 @@ static void connect_service(int fd, void* cookie)
 {
     char buf[4096];
     char resp[4096];
-    char *host = cookie;
+    char *host = reinterpret_cast<char*>(cookie);
 
     if (!strncmp(host, "emu:", 4)) {
         connect_emulator(host + 4, buf, sizeof(buf));
@@ -656,7 +655,7 @@ asocket*  host_service_to_socket(const char*  name, const char *serial)
     if (!strcmp(name,"track-devices")) {
         return create_device_tracker();
     } else if (!strncmp(name, "wait-for-", strlen("wait-for-"))) {
-        struct state_info* sinfo = malloc(sizeof(struct state_info));
+        auto sinfo = reinterpret_cast<state_info*>(malloc(sizeof(state_info)));
 
         if (serial)
             sinfo->serial = strdup(serial);

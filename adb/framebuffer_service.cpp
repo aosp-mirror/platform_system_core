@@ -62,10 +62,11 @@ void framebuffer_service(int fd, void *cookie)
     int fd_screencap;
     int w, h, f;
     int fds[2];
+    pid_t pid;
 
     if (pipe2(fds, O_CLOEXEC) < 0) goto pipefail;
 
-    pid_t pid = fork();
+    pid = fork();
     if (pid < 0) goto done;
 
     if (pid == 0) {
