@@ -420,6 +420,7 @@ private:
     struct Request {
         int fd;
         int ident;
+        int seq;
         sp<LooperCallback> callback;
         void* data;
     };
@@ -458,6 +459,7 @@ private:
 
     // Locked list of file descriptor monitoring requests.
     KeyedVector<int, Request> mRequests;  // guarded by mLock
+    int mNextRequestSeq;
 
     // This state is only used privately by pollOnce and does not require a lock since
     // it runs on a single thread.
@@ -466,6 +468,7 @@ private:
     nsecs_t mNextMessageUptime; // set to LLONG_MAX when none
 
     int pollInner(int timeoutMillis);
+    int removeFd(int fd, int seq);
     void awoken();
     void pushResponse(int events, const Request& request);
 

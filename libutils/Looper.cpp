@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <inttypes.h>
 
 
 namespace android {
@@ -68,7 +69,7 @@ static pthread_key_t gTLSKey = 0;
 
 Looper::Looper(bool allowNonCallbacks) :
         mAllowNonCallbacks(allowNonCallbacks), mSendingMessage(false),
-        mResponseIndex(0), mNextMessageUptime(LLONG_MAX) {
+        mNextRequestSeq(0), mResponseIndex(0), mNextMessageUptime(LLONG_MAX) {
     int wakeFds[2];
     int result = pipe(wakeFds);
     LOG_ALWAYS_FATAL_IF(result != 0, "Could not create wake pipe.  errno=%d", errno);
@@ -206,7 +207,7 @@ int Looper::pollInner(int timeoutMillis) {
             timeoutMillis = messageTimeoutMillis;
         }
 #if DEBUG_POLL_AND_WAKE
-        ALOGD("%p ~ pollOnce - next message in %lldns, adjusted timeout: timeoutMillis=%d",
+        ALOGD("%p ~ pollOnce - next message in %" PRId64 "ns, adjusted timeout: timeoutMillis=%d",
                 this, mNextMessageUptime - now, timeoutMillis);
 #endif
     }
@@ -326,10 +327,14 @@ Done: ;
             ALOGD("%p ~ pollOnce - invoking fd event callback %p: fd=%d, events=0x%x, data=%p",
                     this, response.request.callback.get(), fd, events, data);
 #endif
+            // Invoke the callback.  Note that the file descriptor may be closed by
+            // the callback (and potentially even reused) before the function returns so
+            // we need to be a little careful when removing the file descriptor afterwards.
             int callbackResult = response.request.callback->handleEvent(fd, events, data);
             if (callbackResult == 0) {
-                removeFd(fd);
+                removeFd(fd, response.request.seq);
             }
+
             // Clear the callback reference in the response structure promptly because we
             // will not clear the response vector itself until the next poll.
             response.request.callback.clear();
@@ -437,6 +442,8 @@ int Looper::addFd(int fd, int ident, int events, const sp<LooperCallback>& callb
         request.ident = ident;
         request.callback = callback;
         request.data = data;
+        request.seq = mNextRequestSeq++;
+        if (mNextRequestSeq == -1) mNextRequestSeq = 0; // reserve sequence number -1
 
         struct epoll_event eventItem;
         memset(& eventItem, 0, sizeof(epoll_event)); // zero out unused members of data field union
@@ -454,8 +461,29 @@ int Looper::addFd(int fd, int ident, int events, const sp<LooperCallback>& callb
         } else {
             int epollResult = epoll_ctl(mEpollFd, EPOLL_CTL_MOD, fd, & eventItem);
             if (epollResult < 0) {
-                ALOGE("Error modifying epoll events for fd %d, errno=%d", fd, errno);
-                return -1;
+                if (errno == ENOENT) {
+                    // Ignore ENOENT because it means that the file descriptor was
+                    // closed before its callback was unregistered and meanwhile a new
+                    // file descriptor with the same number has been created and is now
+                    // being registered for the first time.  We tolerate the error since
+                    // it may occur naturally when a callback has the side-effect of
+                    // closing the file descriptor before returning and unregistering itself.
+                    // Callback sequence number checks further ensure that the race is benign.
+#if DEBUG_CALLBACKS
+                    ALOGD("%p ~ addFd - EPOLL_CTL_MOD failed due to file descriptor "
+                            "being recycled, falling back on EPOLL_CTL_ADD, errno=%d",
+                            this, errno);
+#endif
+                    epollResult = epoll_ctl(mEpollFd, EPOLL_CTL_ADD, fd, & eventItem);
+                    if (epollResult < 0) {
+                        ALOGE("Error modifying or adding epoll events for fd %d, errno=%d",
+                                fd, errno);
+                        return -1;
+                    }
+                } else {
+                    ALOGE("Error modifying epoll events for fd %d, errno=%d", fd, errno);
+                    return -1;
+                }
             }
             mRequests.replaceValueAt(requestIndex, request);
         }
@@ -464,8 +492,12 @@ int Looper::addFd(int fd, int ident, int events, const sp<LooperCallback>& callb
 }
 
 int Looper::removeFd(int fd) {
+    return removeFd(fd, -1);
+}
+
+int Looper::removeFd(int fd, int seq) {
 #if DEBUG_CALLBACKS
-    ALOGD("%p ~ removeFd - fd=%d", this, fd);
+    ALOGD("%p ~ removeFd - fd=%d, seq=%d", this, fd, seq);
 #endif
 
     { // acquire lock
@@ -475,13 +507,36 @@ int Looper::removeFd(int fd) {
             return 0;
         }
 
-        int epollResult = epoll_ctl(mEpollFd, EPOLL_CTL_DEL, fd, NULL);
-        if (epollResult < 0) {
-            ALOGE("Error removing epoll events for fd %d, errno=%d", fd, errno);
-            return -1;
+        // Check the sequence number if one was given.
+        if (seq != -1 && mRequests.valueAt(requestIndex).seq != seq) {
+#if DEBUG_CALLBACKS
+            ALOGD("%p ~ removeFd - sequence number mismatch, oldSeq=%d",
+                    this, mRequests.valueAt(requestIndex).seq);
+#endif
+            return 0;
         }
 
+        // Always remove the FD from the request map even if an error occurs while
+        // updating the epoll set so that we avoid accidentally leaking callbacks.
         mRequests.removeItemsAt(requestIndex);
+
+        int epollResult = epoll_ctl(mEpollFd, EPOLL_CTL_DEL, fd, NULL);
+        if (epollResult < 0) {
+            if (seq != -1 && (errno == EBADF || errno == ENOENT)) {
+                // Ignore EBADF or ENOENT when the sequence number is known because it
+                // means that the file descriptor was closed before its callback was
+                // unregistered.  We tolerate the error since it may occur naturally when
+                // a callback has the side-effect of closing the file descriptor before
+                // returning and unregistering itself.
+#if DEBUG_CALLBACKS
+                ALOGD("%p ~ removeFd - EPOLL_CTL_DEL failed due to file descriptor "
+                        "being closed, ignoring error, errno=%d", this, errno);
+#endif
+            } else {
+                ALOGE("Error removing epoll events for fd %d, errno=%d", fd, errno);
+                return -1;
+            }
+        }
     } // release lock
     return 1;
 }
@@ -500,7 +555,7 @@ void Looper::sendMessageDelayed(nsecs_t uptimeDelay, const sp<MessageHandler>& h
 void Looper::sendMessageAtTime(nsecs_t uptime, const sp<MessageHandler>& handler,
         const Message& message) {
 #if DEBUG_CALLBACKS
-    ALOGD("%p ~ sendMessageAtTime - uptime=%lld, handler=%p, what=%d",
+    ALOGD("%p ~ sendMessageAtTime - uptime=%" PRId64 ", handler=%p, what=%d",
             this, uptime, handler.get(), message.what);
 #endif
 
