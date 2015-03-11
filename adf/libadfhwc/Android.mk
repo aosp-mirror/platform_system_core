@@ -19,7 +19,7 @@ LOCAL_SRC_FILES := adfhwc.cpp
 LOCAL_MODULE := libadfhwc
 LOCAL_MODULE_TAGS := optional
 LOCAL_STATIC_LIBRARIES := libadf liblog libutils
-LOCAL_CFLAGS += -DLOG_TAG=\"adfhwc\"
+LOCAL_CFLAGS += -DLOG_TAG=\"adfhwc\" -Werror
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_C_INCLUDES += $(LOCAL_EXPORT_C_INCLUDE_DIRS)
 include $(BUILD_STATIC_LIBRARY)
