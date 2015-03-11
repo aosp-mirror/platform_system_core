@@ -381,27 +381,6 @@ static int test_access(char *device) {
     return -1;
 }
 
-static int set_verified_property(char *name) {
-    int ret;
-    char *key;
-    ret = asprintf(&key, "partition.%s.verified", name);
-    if (ret < 0) {
-        ERROR("Error formatting verified property\n");
-        return ret;
-    }
-    ret = PROP_NAME_MAX - strlen(key);
-    if (ret < 0) {
-        ERROR("Verified property name is too long\n");
-        free(key);
-        return -1;
-    }
-    ret = property_set(key, "1");
-    if (ret < 0)
-        ERROR("Error setting verified property %s: %d\n", key, ret);
-    free(key);
-    return ret;
-}
-
 static int check_verity_restart(const char *fname)
 {
     char buffer[VERITY_KMSG_BUFSIZE + 1];
@@ -774,12 +753,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
         goto out;
     }
 
-    if (mode == VERITY_MODE_LOGGING) {
-        retval = FS_MGR_SETUP_VERITY_SUCCESS;
-    } else {
-        // set the property indicating that the partition is verified
-        retval = set_verified_property(mount_point);
-    }
+    retval = FS_MGR_SETUP_VERITY_SUCCESS;
 
 out:
     if (fd != -1) {
