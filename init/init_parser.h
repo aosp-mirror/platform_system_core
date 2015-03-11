@@ -20,6 +20,7 @@
 #define INIT_PARSER_MAXARGS 64
 
 struct action;
+struct service;
 
 struct action *action_remove_queue_head(void);
 void action_add_queue_tail(struct action *act);
@@ -32,5 +33,7 @@ void queue_builtin_action(int (*func)(int nargs, char **args), const char *name)
 
 int init_parse_config_file(const char *fn);
 int expand_props(char *dst, const char *src, int len);
+
+service* make_exec_oneshot_service(int argc, char** argv);
 
 #endif

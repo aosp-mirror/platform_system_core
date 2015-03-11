@@ -75,6 +75,7 @@ include $(BUILD_EXECUTABLE)
 include $(CLEAR_VARS)
 LOCAL_MODULE := init_tests
 LOCAL_SRC_FILES := \
+    init_parser_test.cpp \
     util_test.cpp \
 
 LOCAL_SHARED_LIBRARIES += \

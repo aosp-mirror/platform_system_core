@@ -35,3 +35,9 @@ TEST(util, read_file_success) {
   s[5] = 0;
   EXPECT_STREQ("Linux", s.c_str());
 }
+
+TEST(util, decode_uid) {
+  EXPECT_EQ(0U, decode_uid("root"));
+  EXPECT_EQ(-1U, decode_uid("toot"));
+  EXPECT_EQ(123U, decode_uid("123"));
+}
