@@ -215,7 +215,7 @@ static void show_help(const char *cmd)
 
     fprintf(stderr, "options include:\n"
                     "  -s              Set default filter to silent.\n"
-                    "                  Like specifying filterspec '*:s'\n"
+                    "                  Like specifying filterspec '*:S'\n"
                     "  -f <filename>   Log to file. Default to stdout\n"
                     "  -r [<kbytes>]   Rotate log every kbytes. (16 if unspecified). Requires -f\n"
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
@@ -250,21 +250,19 @@ static void show_help(const char *cmd)
     fprintf(stderr,"\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
                    "where <tag> is a log component tag (or * for all) and priority is:\n"
-                   "  V    Verbose\n"
-                   "  D    Debug\n"
+                   "  V    Verbose (default for <tag>)\n"
+                   "  D    Debug (default for '*')\n"
                    "  I    Info\n"
                    "  W    Warn\n"
                    "  E    Error\n"
                    "  F    Fatal\n"
-                   "  S    Silent (supress all output)\n"
-                   "\n'*' means '*:d' and <tag> by itself means <tag>:v\n"
-                   "\nIf not specified on the commandline, filterspec is set from ANDROID_LOG_TAGS.\n"
-                   "If no filterspec is found, filter defaults to '*:I'\n"
-                   "\nIf not specified with -v, format is set from ANDROID_PRINTF_LOG\n"
+                   "  S    Silent (suppress all output)\n"
+                   "\n'*' by itself means '*:D' and <tag> by itself means <tag>:V.\n"
+                   "If no '*' filterspec or -s on command line, all filter defaults to '*:V'.\n"
+                   "eg: '*:S <tag>' prints only <tag>, '<tag>:S' suppresses all <tag> log messages.\n"
+                   "\nIf not specified on the command line, filterspec is set from ANDROID_LOG_TAGS.\n"
+                   "\nIf not specified with -v on command line, format is set from ANDROID_PRINTF_LOG\n"
                    "or defaults to \"threadtime\"\n\n");
-
-
-
 }
 
 
