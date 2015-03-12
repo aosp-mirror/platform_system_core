@@ -70,11 +70,11 @@ disabled
 setenv <name> <value>
    Set the environment variable <name> to <value> in the launched process.
 
-socket <name> <type> <perm> [ <user> [ <group> [ <context> ] ] ]
+socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]
    Create a unix domain socket named /dev/socket/<name> and pass
    its fd to the launched process.  <type> must be "dgram", "stream" or "seqpacket".
    User and group default to 0.
-   Context is the SELinux security context for the socket.
+   'seclabel' is the SELinux security context for the socket.
    It defaults to the service security context, as specified by seclabel or
    computed based on the service executable file security context.
 
@@ -91,8 +91,8 @@ group <groupname> [ <groupname> ]*
    supplemental groups of the process (via setgroups()).
    Currently defaults to root.  (??? probably should default to nobody)
 
-seclabel <securitycontext>
-  Change to securitycontext before exec'ing this service.
+seclabel <seclabel>
+  Change to 'seclabel' before exec'ing this service.
   Primarily for use by services run from the rootfs, e.g. ueventd, adbd.
   Services on the system partition can instead use policy-defined transitions
   based on their file security context.
@@ -137,14 +137,17 @@ boot
 Commands
 --------
 
-exec <path> [ <argument> ]*
-   This command is not implemented.
+exec [ <seclabel> [ <user> [ <group> ]* ] ] -- <command> [ <argument> ]*
+   Fork and execute command with the given arguments. The command starts
+   after "--" so that an optional security context, user, and supplementary
+   groups can be provided. No other commands will be run until this one
+   finishes.
 
 execonce <path> [ <argument> ]*
    Fork and execute a program (<path>).  This will block until
    the program completes execution.  This command can be run at most
    once during init's lifetime. Subsequent invocations are ignored.
-   It is best to avoid exec as unlike the builtin commands, it runs
+   It is best to avoid execonce as unlike the builtin commands, it runs
    the risk of getting init "stuck".
 
 export <name> <value>
@@ -220,7 +223,7 @@ restorecon_recursive <path> [ <path> ]*
    Recursively restore the directory tree named by <path> to the
    security contexts specified in the file_contexts configuration.
 
-setcon <securitycontext>
+setcon <seclabel>
    Set the current process security context to the specified string.
    This is typically only used from early-init to set the init context
    before any other process is started.
@@ -275,7 +278,7 @@ Properties
 Init updates some system properties to provide some insight into
 what it's doing:
 
-init.action 
+init.action
    Equal to the name of the action currently being executed or "" if none
 
 init.command

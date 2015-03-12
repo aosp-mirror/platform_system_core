@@ -14,40 +14,40 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <libgen.h>
+#include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <ctype.h>
-#include <signal.h>
-#include <sys/wait.h>
 #include <sys/mount.h>
-#include <sys/stat.h>
 #include <sys/poll.h>
-#include <errno.h>
-#include <stdarg.h>
-#include <mtd/mtd-user.h>
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/un.h>
-#include <dirent.h>
+#include <sys/wait.h>
+#include <termios.h>
+#include <unistd.h>
 
 #include <memory>
+
+#include <mtd/mtd-user.h>
 
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 #include <selinux/android.h>
 
-#include <libgen.h>
-
-#include <cutils/list.h>
 #include <cutils/android_reboot.h>
-#include <cutils/sockets.h>
-#include <cutils/iosched_policy.h>
 #include <cutils/fs.h>
+#include <cutils/iosched_policy.h>
+#include <cutils/list.h>
+#include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
-#include <termios.h>
 #include <utils/file.h>
 #include <utils/stringprintf.h>
 
@@ -75,21 +75,34 @@ static char qemu[32];
 static struct action *cur_action = NULL;
 static struct command *cur_command = NULL;
 
-void notify_service_state(const char *name, const char *state)
-{
-    char pname[PROP_NAME_MAX];
-    int len = strlen(name);
-    if ((len + 10) > PROP_NAME_MAX)
-        return;
-    snprintf(pname, sizeof(pname), "init.svc.%s", name);
-    property_set(pname, state);
-}
-
 static int have_console;
 static char console_name[PROP_VALUE_MAX] = "/dev/console";
 static time_t process_needs_restart;
 
 static const char *ENV[32];
+
+bool waiting_for_exec = false;
+
+void service::NotifyStateChange(const char* new_state) {
+    if (!properties_inited()) {
+        // If properties aren't available yet, we can't set them.
+        return;
+    }
+
+    if ((flags & SVC_EXEC) != 0) {
+        // 'exec' commands don't have properties tracking their state.
+        return;
+    }
+
+    char prop_name[PROP_NAME_MAX];
+    if (snprintf(prop_name, sizeof(prop_name), "init.svc.%s", name) >= PROP_NAME_MAX) {
+        // If the property name would be too long, we can't set it.
+        ERROR("Property name \"init.svc.%s\" too long; not setting to %s\n", name, new_state);
+        return;
+    }
+
+    property_set(prop_name, new_state);
+}
 
 /* add_environment - add "key=value" to the current environment */
 int add_environment(const char *key, const char *val)
@@ -163,35 +176,26 @@ static void publish_socket(const char *name, int fd)
 
 void service_start(struct service *svc, const char *dynamic_args)
 {
-    struct stat s;
-    pid_t pid;
-    int needs_console;
-    char *scon = NULL;
-    int rc;
-
-        /* starting a service removes it from the disabled or reset
-         * state and immediately takes it out of the restarting
-         * state if it was in there
-         */
+    // Starting a service removes it from the disabled or reset state and
+    // immediately takes it out of the restarting state if it was in there.
     svc->flags &= (~(SVC_DISABLED|SVC_RESTARTING|SVC_RESET|SVC_RESTART|SVC_DISABLED_START));
     svc->time_started = 0;
 
-        /* running processes require no additional work -- if
-         * they're in the process of exiting, we've ensured
-         * that they will immediately restart on exit, unless
-         * they are ONESHOT
-         */
+    // Running processes require no additional work --- if they're in the
+    // process of exiting, we've ensured that they will immediately restart
+    // on exit, unless they are ONESHOT.
     if (svc->flags & SVC_RUNNING) {
         return;
     }
 
-    needs_console = (svc->flags & SVC_CONSOLE) ? 1 : 0;
-    if (needs_console && (!have_console)) {
+    bool needs_console = (svc->flags & SVC_CONSOLE);
+    if (needs_console && !have_console) {
         ERROR("service '%s' requires console\n", svc->name);
         svc->flags |= SVC_DISABLED;
         return;
     }
 
+    struct stat s;
     if (stat(svc->args[0], &s) != 0) {
         ERROR("cannot find '%s', disabling '%s'\n", svc->args[0], svc->name);
         svc->flags |= SVC_DISABLED;
@@ -205,6 +209,7 @@ void service_start(struct service *svc, const char *dynamic_args)
         return;
     }
 
+    char* scon = NULL;
     if (is_selinux_enabled() > 0) {
         if (svc->seclabel) {
             scon = strdup(svc->seclabel);
@@ -216,7 +221,7 @@ void service_start(struct service *svc, const char *dynamic_args)
             char *mycon = NULL, *fcon = NULL;
 
             INFO("computing context for service '%s'\n", svc->args[0]);
-            rc = getcon(&mycon);
+            int rc = getcon(&mycon);
             if (rc < 0) {
                 ERROR("could not get context while starting '%s'\n", svc->name);
                 return;
@@ -244,8 +249,7 @@ void service_start(struct service *svc, const char *dynamic_args)
 
     NOTICE("starting '%s'\n", svc->name);
 
-    pid = fork();
-
+    pid_t pid = fork();
     if (pid == 0) {
         struct socketinfo *si;
         struct svcenvinfo *ei;
@@ -301,7 +305,7 @@ void service_start(struct service *svc, const char *dynamic_args)
 
         setpgid(0, getpid());
 
-    /* as requested, set our gid, supplemental gids, and uid */
+        // As requested, set our gid, supplemental gids, and uid.
         if (svc->gid) {
             if (setgid(svc->gid) != 0) {
                 ERROR("setgid failed: %s\n", strerror(errno));
@@ -364,8 +368,13 @@ void service_start(struct service *svc, const char *dynamic_args)
     svc->pid = pid;
     svc->flags |= SVC_RUNNING;
 
-    if (properties_inited())
-        notify_service_state(svc->name, "running");
+    if ((svc->flags & SVC_EXEC) != 0) {
+        INFO("SVC_EXEC pid %d (uid %d gid %d+%d context %s) started; waiting...\n",
+             svc->pid, svc->uid, svc->gid, svc->nr_supp_gids, svc->seclabel);
+        waiting_for_exec = true;
+    }
+
+    svc->NotifyStateChange("running");
 }
 
 /* The how field should be either SVC_DISABLED, SVC_RESET, or SVC_RESTART */
@@ -391,9 +400,9 @@ static void service_stop_or_reset(struct service *svc, int how)
     if (svc->pid) {
         NOTICE("service '%s' is being killed\n", svc->name);
         kill(-svc->pid, SIGKILL);
-        notify_service_state(svc->name, "stopping");
+        svc->NotifyStateChange("stopping");
     } else {
-        notify_service_state(svc->name, "stopped");
+        svc->NotifyStateChange("stopped");
     }
 }
 
@@ -993,28 +1002,18 @@ static void selinux_initialize(void)
     security_setenforce(is_enforcing);
 }
 
-int main(int argc, char **argv)
-{
-    size_t fd_count = 0;
-    struct pollfd ufds[4];
-    int property_set_fd_init = 0;
-    int signal_fd_init = 0;
-    int keychord_fd_init = 0;
-    bool is_charger = false;
-
+int main(int argc, char** argv) {
     if (!strcmp(basename(argv[0]), "ueventd"))
         return ueventd_main(argc, argv);
 
     if (!strcmp(basename(argv[0]), "watchdogd"))
         return watchdogd_main(argc, argv);
 
-    /* clear the umask */
+    // Clear the umask.
     umask(0);
 
-        /* Get the basic filesystem setup we need put
-         * together in the initramdisk on / and then we'll
-         * let the rc file figure out the rest.
-         */
+    // Get the basic filesystem setup we need put together in the initramdisk
+    // on / and then we'll let the rc file figure out the rest.
     mkdir("/dev", 0755);
     mkdir("/proc", 0755);
     mkdir("/sys", 0755);
@@ -1026,15 +1025,13 @@ int main(int argc, char **argv)
     mount("proc", "/proc", "proc", 0, NULL);
     mount("sysfs", "/sys", "sysfs", 0, NULL);
 
-        /* indicate that booting is in progress to background fw loaders, etc */
+    // Indicate that booting is in progress to background fw loaders, etc.
     close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
 
-        /* We must have some place other than / to create the
-         * device nodes for kmsg and null, otherwise we won't
-         * be able to remount / read-only later on.
-         * Now that tmpfs is mounted on /dev, we can actually
-         * talk to the outside world.
-         */
+    // We must have some place other than / to create the device nodes for
+    // kmsg and null, otherwise we won't be able to remount / read-only
+    // later on. Now that tmpfs is mounted on /dev, we can actually talk
+    // to the outside world.
     open_devnull_stdio();
     klog_init();
     property_init();
@@ -1050,24 +1047,21 @@ int main(int argc, char **argv)
      */
     export_kernel_boot_props();
 
-    union selinux_callback cb;
+    selinux_callback cb;
     cb.func_log = log_callback;
     selinux_set_callback(SELINUX_CB_LOG, cb);
-
     cb.func_audit = audit_callback;
     selinux_set_callback(SELINUX_CB_AUDIT, cb);
 
     selinux_initialize();
-    /* These directories were necessarily created before initial policy load
-     * and therefore need their security context restored to the proper value.
-     * This must happen before /dev is populated by ueventd.
-     */
+
+    // These directories were necessarily created before initial policy load
+    // and therefore need their security context restored to the proper value.
+    // This must happen before /dev is populated by ueventd.
     restorecon("/dev");
     restorecon("/dev/socket");
     restorecon("/dev/__properties__");
     restorecon_recursive("/sys");
-
-    is_charger = !strcmp(bootmode, "charger");
 
     INFO("property init\n");
     property_load_boot_defaults();
@@ -1081,50 +1075,58 @@ int main(int argc, char **argv)
     queue_builtin_action(keychord_init_action, "keychord_init");
     queue_builtin_action(console_init_action, "console_init");
 
-    /* execute all the boot actions to get us started */
+    // Execute all the boot actions to get us started.
     action_for_each_trigger("init", action_add_queue_tail);
 
-    /* Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
-     * wasn't ready immediately after wait_for_coldboot_done
-     */
+    // Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
+    // wasn't ready immediately after wait_for_coldboot_done
     queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
     queue_builtin_action(property_service_init_action, "property_service_init");
     queue_builtin_action(signal_init_action, "signal_init");
 
-    /* Don't mount filesystems or start core system services if in charger mode. */
-    if (is_charger) {
+    // Don't mount filesystems or start core system services in charger mode.
+    if (strcmp(bootmode, "charger") == 0) {
         action_for_each_trigger("charger", action_add_queue_tail);
     } else {
         action_for_each_trigger("late-init", action_add_queue_tail);
     }
 
-    /* run all property triggers based on current state of the properties */
+    // Run all property triggers based on current state of the properties.
     queue_builtin_action(queue_property_triggers_action, "queue_property_triggers");
 
+    // TODO: why do we only initialize ufds after execute_one_command and restart_processes?
+    size_t fd_count = 0;
+    struct pollfd ufds[3];
+    bool property_set_fd_init = false;
+    bool signal_fd_init = false;
+    bool keychord_fd_init = false;
+
     for (;;) {
-        execute_one_command();
-        restart_processes();
+        if (!waiting_for_exec) {
+            execute_one_command();
+            restart_processes();
+        }
 
         if (!property_set_fd_init && get_property_set_fd() > 0) {
             ufds[fd_count].fd = get_property_set_fd();
             ufds[fd_count].events = POLLIN;
             ufds[fd_count].revents = 0;
             fd_count++;
-            property_set_fd_init = 1;
+            property_set_fd_init = true;
         }
         if (!signal_fd_init && get_signal_fd() > 0) {
             ufds[fd_count].fd = get_signal_fd();
             ufds[fd_count].events = POLLIN;
             ufds[fd_count].revents = 0;
             fd_count++;
-            signal_fd_init = 1;
+            signal_fd_init = true;
         }
         if (!keychord_fd_init && get_keychord_fd() > 0) {
             ufds[fd_count].fd = get_keychord_fd();
             ufds[fd_count].events = POLLIN;
             ufds[fd_count].revents = 0;
             fd_count++;
-            keychord_fd_init = 1;
+            keychord_fd_init = true;
         }
 
         int timeout = -1;
