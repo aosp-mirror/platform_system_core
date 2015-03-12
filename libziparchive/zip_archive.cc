@@ -19,6 +19,7 @@
  */
 
 #include <memory>
+#include <vector>
 
 #include <assert.h>
 #include <errno.h>
@@ -983,9 +984,9 @@ static inline int zlib_inflateInit2(z_stream* stream, int window_bits) {
 static int32_t InflateToFile(int fd, const ZipEntry* entry,
                              uint8_t* begin, uint32_t length,
                              uint64_t* crc_out) {
-  const uint32_t kBufSize = 32768;
-  uint8_t read_buf[kBufSize];
-  uint8_t write_buf[kBufSize];
+  const size_t kBufSize = 32768;
+  std::vector<uint8_t> read_buf(kBufSize);
+  std::vector<uint8_t> write_buf(kBufSize);
   z_stream zstream;
   int zerr;
 
@@ -998,7 +999,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
   zstream.opaque = Z_NULL;
   zstream.next_in = NULL;
   zstream.avail_in = 0;
-  zstream.next_out = reinterpret_cast<Bytef*>(write_buf);
+  zstream.next_out = &write_buf[0];
   zstream.avail_out = kBufSize;
   zstream.data_type = Z_UNKNOWN;
 
@@ -1032,7 +1033,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
     /* read as much as we can */
     if (zstream.avail_in == 0) {
       const ZD_TYPE getSize = (compressed_length > kBufSize) ? kBufSize : compressed_length;
-      const ZD_TYPE actual = TEMP_FAILURE_RETRY(read(fd, read_buf, getSize));
+      const ZD_TYPE actual = TEMP_FAILURE_RETRY(read(fd, &read_buf[0], getSize));
       if (actual != getSize) {
         ALOGW("Zip: inflate read failed (" ZD " vs " ZD ")", actual, getSize);
         return kIoError;
@@ -1040,7 +1041,7 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
 
       compressed_length -= getSize;
 
-      zstream.next_in = read_buf;
+      zstream.next_in = &read_buf[0];
       zstream.avail_in = getSize;
     }
 
@@ -1056,15 +1057,15 @@ static int32_t InflateToFile(int fd, const ZipEntry* entry,
     /* write when we're full or when we're done */
     if (zstream.avail_out == 0 ||
       (zerr == Z_STREAM_END && zstream.avail_out != kBufSize)) {
-      const size_t write_size = zstream.next_out - write_buf;
+      const size_t write_size = zstream.next_out - &write_buf[0];
       // The file might have declared a bogus length.
       if (write_size + write_count > length) {
         return -1;
       }
-      memcpy(begin + write_count, write_buf, write_size);
+      memcpy(begin + write_count, &write_buf[0], write_size);
       write_count += write_size;
 
-      zstream.next_out = write_buf;
+      zstream.next_out = &write_buf[0];
       zstream.avail_out = kBufSize;
     }
   } while (zerr == Z_OK);
