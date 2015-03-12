@@ -164,6 +164,7 @@ on property:sys.boot_from_charger_mode=1
 # Load properties from /system/ + /factory after fs mount.
 on load_all_props_action
     load_all_props
+    start logd-reinit
 
 # Indicate to fw loaders that the relevant mounts are up.
 on firmware_mounts_complete
@@ -430,6 +431,7 @@ on property:vold.decrypt=trigger_reset_main
 
 on property:vold.decrypt=trigger_load_persist_props
     load_persist_props
+    start logd-reinit
 
 on property:vold.decrypt=trigger_post_fs_data
     trigger post-fs-data
@@ -471,6 +473,10 @@ service logd /system/bin/logd
     socket logd stream 0666 logd logd
     socket logdr seqpacket 0666 logd logd
     socket logdw dgram 0222 logd logd
+
+service logd-reinit /system/bin/logd --reinit
+    oneshot
+    disabled
 
 service healthd /sbin/healthd
     class core
