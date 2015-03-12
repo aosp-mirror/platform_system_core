@@ -505,12 +505,14 @@ TEST(logcat, logrotate) {
             while (fgets(buffer, sizeof(buffer), fp)) {
                 static const char match_1[] = "4 log.txt";
                 static const char match_2[] = "8 log.txt";
-                static const char match_3[] = "16 log.txt";
+                static const char match_3[] = "12 log.txt";
+                static const char match_4[] = "16 log.txt";
                 static const char total[] = "total ";
 
                 if (!strncmp(buffer, match_1, sizeof(match_1) - 1)
                  || !strncmp(buffer, match_2, sizeof(match_2) - 1)
-                 || !strncmp(buffer, match_3, sizeof(match_3) - 1)) {
+                 || !strncmp(buffer, match_3, sizeof(match_3) - 1)
+                 || !strncmp(buffer, match_4, sizeof(match_4) - 1)) {
                     ++count;
                 } else if (strncmp(buffer, total, sizeof(total) - 1)) {
                     fprintf(stderr, "WARNING: Parse error: %s", buffer);
