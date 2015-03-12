@@ -571,15 +571,6 @@ int do_setcon(int nargs, char **args) {
     return 0;
 }
 
-int do_setenforce(int nargs, char **args) {
-    if (is_selinux_enabled() <= 0)
-        return 0;
-    if (security_setenforce(atoi(args[1])) < 0) {
-        return -errno;
-    }
-    return 0;
-}
-
 int do_setkey(int nargs, char **args)
 {
     struct kbentry kbe;

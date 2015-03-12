@@ -186,7 +186,6 @@ static int lookup_keyword(const char *s)
         if (!strcmp(s, "eclabel")) return K_seclabel;
         if (!strcmp(s, "ervice")) return K_service;
         if (!strcmp(s, "etcon")) return K_setcon;
-        if (!strcmp(s, "etenforce")) return K_setenforce;
         if (!strcmp(s, "etenv")) return K_setenv;
         if (!strcmp(s, "etkey")) return K_setkey;
         if (!strcmp(s, "etprop")) return K_setprop;
