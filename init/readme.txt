@@ -228,10 +228,6 @@ setcon <seclabel>
    This is typically only used from early-init to set the init context
    before any other process is started.
 
-setenforce 0|1
-   Set the SELinux system-wide enforcing status.
-   0 is permissive (i.e. log but do not deny), 1 is enforcing.
-
 setkey
    TBD
 
