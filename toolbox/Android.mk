@@ -44,7 +44,6 @@ OUR_TOOLS := \
     df \
     getevent \
     getprop \
-    getsebool \
     iftop \
     ioctl \
     ionice \
@@ -64,7 +63,6 @@ OUR_TOOLS := \
     schedtop \
     sendevent \
     setprop \
-    setsebool \
     smd \
     start \
     stop \

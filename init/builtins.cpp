@@ -854,34 +854,6 @@ int do_restorecon_recursive(int nargs, char **args) {
     return ret;
 }
 
-int do_setsebool(int nargs, char **args) {
-    const char *name = args[1];
-    const char *value = args[2];
-    SELboolean b;
-    int ret;
-
-    if (is_selinux_enabled() <= 0)
-        return 0;
-
-    b.name = name;
-    if (!strcmp(value, "1") || !strcasecmp(value, "true") || !strcasecmp(value, "on"))
-        b.value = 1;
-    else if (!strcmp(value, "0") || !strcasecmp(value, "false") || !strcasecmp(value, "off"))
-        b.value = 0;
-    else {
-        ERROR("setsebool: invalid value %s\n", value);
-        return -EINVAL;
-    }
-
-    if (security_set_boolean_list(1, &b, 0) < 0) {
-        ret = -errno;
-        ERROR("setsebool: could not set %s to %s\n", name, value);
-        return ret;
-    }
-
-    return 0;
-}
-
 int do_loglevel(int nargs, char **args) {
     int log_level;
     char log_level_str[PROP_VALUE_MAX] = "";
