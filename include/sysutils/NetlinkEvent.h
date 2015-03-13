@@ -21,25 +21,29 @@
 #define NL_PARAMS_MAX 32
 
 class NetlinkEvent {
+public:
+    enum class Action {
+        kUnknown = 0,
+        kAdd = 1,
+        kRemove = 2,
+        kChange = 3,
+        kLinkUp = 4,
+        kLinkDown = 5,
+        kAddressUpdated = 6,
+        kAddressRemoved = 7,
+        kRdnss = 8,
+        kRouteUpdated = 9,
+        kRouteRemoved = 10,
+    };
+
+private:
     int  mSeq;
     char *mPath;
-    int  mAction;
+    Action mAction;
     char *mSubsystem;
     char *mParams[NL_PARAMS_MAX];
 
 public:
-    const static int NlActionUnknown;
-    const static int NlActionAdd;
-    const static int NlActionRemove;
-    const static int NlActionChange;
-    const static int NlActionLinkDown;
-    const static int NlActionLinkUp;
-    const static int NlActionAddressUpdated;
-    const static int NlActionAddressRemoved;
-    const static int NlActionRdnss;
-    const static int NlActionRouteUpdated;
-    const static int NlActionRouteRemoved;
-
     NetlinkEvent();
     virtual ~NetlinkEvent();
 
@@ -47,7 +51,7 @@ public:
     const char *findParam(const char *paramName);
 
     const char *getSubsystem() { return mSubsystem; }
-    int getAction() { return mAction; }
+    Action getAction() { return mAction; }
 
     void dump();
 
