@@ -178,6 +178,10 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
     static pid_t last_pid = (pid_t) -1;
     static atomic_int_fast32_t dropped;
 
+    if (!nr) {
+        return -EINVAL;
+    }
+
     if (last_uid == AID_ROOT) { /* have we called to get the UID yet? */
         last_uid = getuid();
     }
