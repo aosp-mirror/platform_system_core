@@ -155,7 +155,6 @@ LOCAL_MODULE_TAGS := debug
 
 LOCAL_STATIC_LIBRARIES := \
     libadb \
-    libzipfile \
     libcrypto_static \
     $(EXTRA_STATIC_LIBS) \
 
