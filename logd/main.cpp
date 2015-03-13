@@ -29,6 +29,7 @@
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #include <cutils/properties.h>
@@ -40,6 +41,12 @@
 #include "LogBuffer.h"
 #include "LogListener.h"
 #include "LogAudit.h"
+
+#define KMSG_PRIORITY(PRI)                            \
+    '<',                                              \
+    '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) / 10, \
+    '0' + LOG_MAKEPRI(LOG_DAEMON, LOG_PRI(PRI)) % 10, \
+    '>'
 
 //
 //  The service is designed to be run by init, it does not respond well
@@ -131,6 +138,11 @@ static bool property_get_bool(const char *key, bool def) {
     return def;
 }
 
+// Remove the static, and use this variable
+// globally for debugging if necessary. eg:
+//   write(fdDmesg, "I am here\n", 10);
+static int fdDmesg = -1;
+
 static sem_t reinit;
 static bool reinit_running = false;
 static LogBuffer *logBuf = NULL;
@@ -143,6 +155,13 @@ static void *reinit_thread_start(void * /*obj*/) {
     setuid(AID_LOGD);
 
     while (reinit_running && !sem_wait(&reinit) && reinit_running) {
+        if (fdDmesg >= 0) {
+            static const char reinit_message[] = { KMSG_PRIORITY(LOG_INFO),
+                'l', 'o', 'g', 'd', '.', 'd', 'a', 'e', 'm', 'o', 'n', ':',
+                ' ', 'r', 'e', 'i', 'n', 'i', 't', '\n' };
+            write(fdDmesg, reinit_message, sizeof(reinit_message));
+        }
+
         // Anything that reads persist.<property>
         if (logBuf) {
             logBuf->init();
@@ -157,11 +176,6 @@ static void *reinit_thread_start(void * /*obj*/) {
 void reinit_signal_handler(int /*signal*/) {
     sem_post(&reinit);
 }
-
-// Remove the static, and use this variable
-// globally for debugging if necessary. eg:
-//   write(fdDmesg, "I am here\n", 10);
-static int fdDmesg = -1;
 
 // Foreground waits for exit of the main persistent threads
 // that are started here. The threads are created to manage
