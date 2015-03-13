@@ -46,6 +46,7 @@ public:
     LastLogTimes &mTimes;
 
     LogBuffer(LastLogTimes *times);
+    void init();
 
     void log(log_id_t log_id, log_time realtime,
              uid_t uid, pid_t pid, pid_t tid,

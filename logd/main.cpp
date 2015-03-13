@@ -17,7 +17,10 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <sched.h>
+#include <semaphore.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +33,7 @@
 
 #include <cutils/properties.h>
 #include <cutils/sched_policy.h>
+#include <cutils/sockets.h>
 
 #include "private/android_filesystem_config.h"
 #include "CommandListener.h"
@@ -127,17 +131,100 @@ static bool property_get_bool(const char *key, bool def) {
     return def;
 }
 
-// Foreground waits for exit of the three main persistent threads that
-// are started here.  The three threads are created to manage UNIX
-// domain client sockets for writing, reading and controlling the user
-// space logger.  Additional transitory per-client threads are created
-// for each reader once they register.
-int main() {
-    bool auditd = property_get_bool("logd.auditd", true);
+static sem_t reinit;
+static bool reinit_running = false;
+static LogBuffer *logBuf = NULL;
 
-    int fdDmesg = -1;
-    if (auditd && property_get_bool("logd.auditd.dmesg", true)) {
-        fdDmesg = open("/dev/kmsg", O_WRONLY);
+static void *reinit_thread_start(void * /*obj*/) {
+    prctl(PR_SET_NAME, "logd.daemon");
+    set_sched_policy(0, SP_BACKGROUND);
+
+    setgid(AID_LOGD);
+    setuid(AID_LOGD);
+
+    while (reinit_running && !sem_wait(&reinit) && reinit_running) {
+        // Anything that reads persist.<property>
+        if (logBuf) {
+            logBuf->init();
+        }
+    }
+
+    return NULL;
+}
+
+// Serves as a global method to trigger reinitialization
+// and as a function that can be provided to signal().
+void reinit_signal_handler(int /*signal*/) {
+    sem_post(&reinit);
+}
+
+// Remove the static, and use this variable
+// globally for debugging if necessary. eg:
+//   write(fdDmesg, "I am here\n", 10);
+static int fdDmesg = -1;
+
+// Foreground waits for exit of the main persistent threads
+// that are started here. The threads are created to manage
+// UNIX domain client sockets for writing, reading and
+// controlling the user space logger, and for any additional
+// logging plugins like auditd and restart control. Additional
+// transitory per-client threads are created for each reader.
+int main(int argc, char *argv[]) {
+    fdDmesg = open("/dev/kmsg", O_WRONLY);
+
+    // issue reinit command. KISS argument parsing.
+    if ((argc > 1) && argv[1] && !strcmp(argv[1], "--reinit")) {
+        int sock = TEMP_FAILURE_RETRY(
+            socket_local_client("logd",
+                                ANDROID_SOCKET_NAMESPACE_RESERVED,
+                                SOCK_STREAM));
+        if (sock < 0) {
+            return -errno;
+        }
+        static const char reinit[] = "reinit";
+        ssize_t ret = TEMP_FAILURE_RETRY(write(sock, reinit, sizeof(reinit)));
+        if (ret < 0) {
+            return -errno;
+        }
+        struct pollfd p;
+        memset(&p, 0, sizeof(p));
+        p.fd = sock;
+        p.events = POLLIN;
+        ret = TEMP_FAILURE_RETRY(poll(&p, 1, 100));
+        if (ret < 0) {
+            return -errno;
+        }
+        if ((ret == 0) || !(p.revents & POLLIN)) {
+            return -ETIME;
+        }
+        static const char success[] = "success";
+        char buffer[sizeof(success) - 1];
+        memset(buffer, 0, sizeof(buffer));
+        ret = TEMP_FAILURE_RETRY(read(sock, buffer, sizeof(buffer)));
+        if (ret < 0) {
+            return -errno;
+        }
+        return strncmp(buffer, success, sizeof(success) - 1) != 0;
+    }
+
+    // Reinit Thread
+    sem_init(&reinit, 0, 0);
+    pthread_attr_t attr;
+    if (!pthread_attr_init(&attr)) {
+        struct sched_param param;
+
+        memset(&param, 0, sizeof(param));
+        pthread_attr_setschedparam(&attr, &param);
+        pthread_attr_setschedpolicy(&attr, SCHED_BATCH);
+        if (!pthread_attr_setdetachstate(&attr,
+                                         PTHREAD_CREATE_DETACHED)) {
+            pthread_t thread;
+            reinit_running = true;
+            if (pthread_create(&thread, &attr, reinit_thread_start, NULL)) {
+                reinit_running = false;
+            }
+        }
+        pthread_attr_destroy(&attr);
     }
 
     if (drop_privs() != 0) {
@@ -153,7 +240,9 @@ int main() {
     // LogBuffer is the object which is responsible for holding all
     // log entries.
 
-    LogBuffer *logBuf = new LogBuffer(times);
+    logBuf = new LogBuffer(times);
+
+    signal(SIGHUP, reinit_signal_handler);
 
     {
         char property[PROPERTY_VALUE_MAX];
@@ -195,9 +284,13 @@ int main() {
     // initiated log messages. New log entries are added to LogBuffer
     // and LogReader is notified to send updates to connected clients.
 
+    bool auditd = property_get_bool("logd.auditd", true);
+
     if (auditd) {
+        bool dmesg = property_get_bool("logd.auditd.dmesg", true);
+
         // failure is an option ... messages are in dmesg (required by standard)
-        LogAudit *al = new LogAudit(logBuf, reader, fdDmesg);
+        LogAudit *al = new LogAudit(logBuf, reader, dmesg ? fdDmesg : -1);
 
         int len = klogctl(KLOG_SIZE_BUFFER, NULL, 0);
         if (len > 0) {
@@ -217,11 +310,10 @@ int main() {
 
         if (al->startListener()) {
             delete al;
-            close(fdDmesg);
         }
     }
 
-    pause();
+    TEMP_FAILURE_RETRY(pause());
+
     exit(0);
 }
-

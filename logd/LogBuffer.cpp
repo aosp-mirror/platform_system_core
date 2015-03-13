@@ -92,10 +92,7 @@ static unsigned long property_get_size(const char *key) {
     return value;
 }
 
-LogBuffer::LogBuffer(LastLogTimes *times)
-        : mTimes(*times) {
-    pthread_mutex_init(&mLogElementsLock, NULL);
-
+void LogBuffer::init() {
     static const char global_tuneable[] = "persist.logd.size"; // Settings App
     static const char global_default[] = "ro.logd.size";       // BoardConfig.mk
 
@@ -129,6 +126,13 @@ LogBuffer::LogBuffer(LastLogTimes *times)
             setSize(i, LOG_BUFFER_MIN_SIZE);
         }
     }
+}
+
+LogBuffer::LogBuffer(LastLogTimes *times)
+        : mTimes(*times) {
+    pthread_mutex_init(&mLogElementsLock, NULL);
+
+    init();
 }
 
 void LogBuffer::log(log_id_t log_id, log_time realtime,
