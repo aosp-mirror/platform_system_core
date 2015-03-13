@@ -420,9 +420,12 @@ private:
     struct Request {
         int fd;
         int ident;
+        int events;
         int seq;
         sp<LooperCallback> callback;
         void* data;
+
+        void initEventItem(struct epoll_event* eventItem) const;
     };
 
     struct Response {
@@ -455,7 +458,8 @@ private:
     // any use of it is racy anyway.
     volatile bool mPolling;
 
-    int mEpollFd; // immutable
+    int mEpollFd; // guarded by mLock but only modified on the looper thread
+    bool mEpollRebuildRequired; // guarded by mLock
 
     // Locked list of file descriptor monitoring requests.
     KeyedVector<int, Request> mRequests;  // guarded by mLock
@@ -471,9 +475,12 @@ private:
     int removeFd(int fd, int seq);
     void awoken();
     void pushResponse(int events, const Request& request);
+    void rebuildEpollLocked();
+    void scheduleEpollRebuildLocked();
 
     static void initTLSKey();
     static void threadDestructor(void *st);
+    static void initEpollEvent(struct epoll_event* eventItem);
 };
 
 } // namespace android
