@@ -28,7 +28,6 @@
 #define  TRACE_TAG  TRACE_ADB
 #include "adb_client.h"
 #include "adb_io.h"
-#include "zipfile/zipfile.h"
 
 static transport_type __adb_transport = kTransportAny;
 static const char* __adb_serial = NULL;
