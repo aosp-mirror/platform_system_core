@@ -47,20 +47,8 @@ const int LOCAL_NFLOG_PACKET = NFNL_SUBSYS_ULOG << 8 | NFULNL_MSG_PACKET;
 #include <netlink/handlers.h>
 #include <netlink/msg.h>
 
-const int NetlinkEvent::NlActionUnknown = 0;
-const int NetlinkEvent::NlActionAdd = 1;
-const int NetlinkEvent::NlActionRemove = 2;
-const int NetlinkEvent::NlActionChange = 3;
-const int NetlinkEvent::NlActionLinkUp = 4;
-const int NetlinkEvent::NlActionLinkDown = 5;
-const int NetlinkEvent::NlActionAddressUpdated = 6;
-const int NetlinkEvent::NlActionAddressRemoved = 7;
-const int NetlinkEvent::NlActionRdnss = 8;
-const int NetlinkEvent::NlActionRouteUpdated = 9;
-const int NetlinkEvent::NlActionRouteRemoved = 10;
-
 NetlinkEvent::NetlinkEvent() {
-    mAction = NlActionUnknown;
+    mAction = Action::kUnknown;
     memset(mParams, 0, sizeof(mParams));
     mPath = NULL;
     mSubsystem = NULL;
@@ -154,8 +142,8 @@ bool NetlinkEvent::parseIfInfoMessage(const struct nlmsghdr *nh) {
         switch(rta->rta_type) {
             case IFLA_IFNAME:
                 asprintf(&mParams[0], "INTERFACE=%s", (char *) RTA_DATA(rta));
-                mAction = (ifi->ifi_flags & IFF_LOWER_UP) ?  NlActionLinkUp :
-                                                             NlActionLinkDown;
+                mAction = (ifi->ifi_flags & IFF_LOWER_UP) ? Action::kLinkUp :
+                                                            Action::kLinkDown;
                 mSubsystem = strdup("net");
                 return true;
         }
@@ -244,8 +232,8 @@ bool NetlinkEvent::parseIfAddrMessage(const struct nlmsghdr *nh) {
     }
 
     // Fill in netlink event information.
-    mAction = (type == RTM_NEWADDR) ? NlActionAddressUpdated :
-                                      NlActionAddressRemoved;
+    mAction = (type == RTM_NEWADDR) ? Action::kAddressUpdated :
+                                      Action::kAddressRemoved;
     mSubsystem = strdup("net");
     asprintf(&mParams[0], "ADDRESS=%s/%d", addrstr,
              ifaddr->ifa_prefixlen);
@@ -276,7 +264,7 @@ bool NetlinkEvent::parseUlogPacketMessage(const struct nlmsghdr *nh) {
     asprintf(&mParams[0], "ALERT_NAME=%s", pm->prefix);
     asprintf(&mParams[1], "INTERFACE=%s", devname);
     mSubsystem = strdup("qlog");
-    mAction = NlActionChange;
+    mAction = Action::kChange;
     return true;
 }
 
@@ -311,7 +299,7 @@ bool NetlinkEvent::parseNfPacketMessage(struct nlmsghdr *nh) {
     asprintf(&mParams[0], "UID=%d", uid);
     mParams[1] = hex;
     mSubsystem = strdup("strict");
-    mAction = NlActionChange;
+    mAction = Action::kChange;
     return true;
 }
 
@@ -397,8 +385,8 @@ bool NetlinkEvent::parseRtMessage(const struct nlmsghdr *nh) {
         return false;
 
     // Fill in netlink event information.
-    mAction = (type == RTM_NEWROUTE) ? NlActionRouteUpdated :
-                                       NlActionRouteRemoved;
+    mAction = (type == RTM_NEWROUTE) ? Action::kRouteUpdated :
+                                       Action::kRouteRemoved;
     mSubsystem = strdup("net");
     asprintf(&mParams[0], "ROUTE=%s/%d", dst, prefixLength);
     asprintf(&mParams[1], "GATEWAY=%s", (*gw) ? gw : "");
@@ -497,7 +485,7 @@ bool NetlinkEvent::parseNdUserOptMessage(const struct nlmsghdr *nh) {
         }
         buf[pos] = '\0';
 
-        mAction = NlActionRdnss;
+        mAction = Action::kRdnss;
         mSubsystem = strdup("net");
         asprintf(&mParams[0], "INTERFACE=%s", ifname);
         asprintf(&mParams[1], "LIFETIME=%u", lifetime);
@@ -617,11 +605,11 @@ bool NetlinkEvent::parseAsciiNetlinkMessage(char *buffer, int size) {
             const char* a;
             if ((a = HAS_CONST_PREFIX(s, end, "ACTION=")) != NULL) {
                 if (!strcmp(a, "add"))
-                    mAction = NlActionAdd;
+                    mAction = Action::kAdd;
                 else if (!strcmp(a, "remove"))
-                    mAction = NlActionRemove;
+                    mAction = Action::kRemove;
                 else if (!strcmp(a, "change"))
-                    mAction = NlActionChange;
+                    mAction = Action::kChange;
             } else if ((a = HAS_CONST_PREFIX(s, end, "SEQNUM=")) != NULL) {
                 mSeq = atoi(a);
             } else if ((a = HAS_CONST_PREFIX(s, end, "SUBSYSTEM=")) != NULL) {
