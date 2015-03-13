@@ -32,7 +32,6 @@
 #include "adb_client.h"
 #include "adb_io.h"
 #include "file_sync_service.h"
-#include "zipfile/zipfile.h"
 
 static unsigned long long total_bytes;
 static long long start_time;
