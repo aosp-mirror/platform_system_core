@@ -39,6 +39,7 @@
 #include <android/set_abort_message.h>
 #endif
 
+#include <log/event_tag_map.h>
 #include <log/logd.h>
 #include <log/logger.h>
 #include <log/log_read.h>
@@ -71,6 +72,11 @@ static void lock()
     pthread_mutex_lock(&log_init_lock);
 }
 
+static int trylock()
+{
+    return pthread_mutex_trylock(&log_init_lock);
+}
+
 static void unlock()
 {
     pthread_mutex_unlock(&log_init_lock);
@@ -79,6 +85,7 @@ static void unlock()
 #else   /* !defined(_WIN32) */
 
 #define lock() ((void)0)
+#define trylock() (0) /* success */
 #define unlock() ((void)0)
 
 #endif  /* !defined(_WIN32) */
@@ -194,6 +201,9 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
         last_pid = getpid();
     }
     if (log_id == LOG_ID_SECURITY) {
+        if (vec[0].iov_len < 4) {
+            return -EINVAL;
+        }
         if ((last_uid != AID_SYSTEM) && (last_uid != AID_ROOT)) {
             uid_t uid = geteuid();
             if ((uid != AID_SYSTEM) && (uid != AID_ROOT)) {
@@ -207,9 +217,86 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
             }
         }
         if (!__android_log_security()) {
+            atomic_store(&dropped_security, 0);
+            return -EPERM;
+        }
+    } else if (log_id == LOG_ID_EVENTS) {
+        static atomic_uintptr_t map;
+        int ret;
+        const char *tag;
+        EventTagMap *m, *f;
+
+        if (vec[0].iov_len < 4) {
+            return -EINVAL;
+        }
+
+        tag = NULL;
+        f = NULL;
+        m = (EventTagMap *)atomic_load(&map);
+
+        if (!m) {
+            ret = trylock();
+            m = (EventTagMap *)atomic_load(&map); /* trylock flush cache */
+            if (!m) {
+                m = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+                if (ret) { /* trylock failed, use local copy, mark for close */
+                    f = m;
+                } else {
+                    if (!m) { /* One chance to open map file */
+                        m = (EventTagMap *)(uintptr_t)-1LL;
+                    }
+                    atomic_store(&map, (uintptr_t)m);
+                }
+            }
+            if (!ret) { /* trylock succeeded, unlock */
+                unlock();
+            }
+        }
+        if (m && (m != (EventTagMap *)(uintptr_t)-1LL)) {
+            tag = android_lookupEventTag(
+                                    m,
+                                    htole32(((uint32_t *)vec[0].iov_base)[0]));
+        }
+        ret = __android_log_is_loggable(ANDROID_LOG_INFO,
+                                        tag,
+                                        ANDROID_LOG_VERBOSE);
+        if (f) { /* local copy marked for close */
+            android_closeEventTagMap(f);
+        }
+        if (!ret) {
+            return -EPERM;
+        }
+    } else {
+        /* Validate the incoming tag, tag content can not split across iovec */
+        char prio = ANDROID_LOG_VERBOSE;
+        const char *tag = vec[0].iov_base;
+        size_t len = vec[0].iov_len;
+        if (!tag) {
+            len = 0;
+        }
+        if (len > 0) {
+            prio = *tag;
+            if (len > 1) {
+                --len;
+                ++tag;
+            } else {
+                len = vec[1].iov_len;
+                tag = ((const char *)vec[1].iov_base);
+                if (!tag) {
+                    len = 0;
+                }
+            }
+        }
+        /* tag must be nul terminated */
+        if (strnlen(tag, len) >= len) {
+            tag = NULL;
+        }
+
+        if (!__android_log_is_loggable(prio, tag, ANDROID_LOG_VERBOSE)) {
             return -EPERM;
         }
     }
+
     /*
      *  struct {
      *      // what we provide to pstore
@@ -267,7 +354,9 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
             }
         }
         snapshot = atomic_exchange_explicit(&dropped, 0, memory_order_relaxed);
-        if (snapshot) {
+        if (snapshot && __android_log_is_loggable(ANDROID_LOG_INFO,
+                                                  "liblog",
+                                                  ANDROID_LOG_VERBOSE)) {
             android_log_event_int_t buffer;
 
             header.id = LOG_ID_EVENTS;
