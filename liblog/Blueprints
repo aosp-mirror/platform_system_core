@@ -1,0 +1,81 @@
+//
+// Copyright (C) 2008-2014 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+// ANDROIDMK TRANSLATION ERROR: unsupported conditional
+// ifneq ($(TARGET_USES_LOGD),false)
+liblog_sources = ["logd_write.c"]
+// ANDROIDMK TRANSLATION ERROR: else from unsupported contitional
+// else
+//liblog_sources = ["logd_write_kern.c"]
+// ANDROIDMK TRANSLATION ERROR: endif from unsupported contitional
+// endif
+
+// some files must not be compiled when building against Mingw
+// they correspond to features not used by our host development tools
+// which are also hard or even impossible to port to native Win32
+liblog_non_windows_sources = [
+    "logprint.c",
+    "event_tag_map.c",
+]
+
+liblog_windows_sources = ["uio.c"]
+
+liblog_host_sources = ["fake_log_device.c"]
+liblog_target_sources = ["log_time.cpp"]
+
+// ANDROIDMK TRANSLATION ERROR: unsupported conditional
+// ifneq ($(TARGET_USES_LOGD),false)
+liblog_target_sources += ["log_read.c"]
+// ANDROIDMK TRANSLATION ERROR: else from unsupported contitional
+// else
+//liblog_target_sources += ["log_read_kern.c"]
+// ANDROIDMK TRANSLATION ERROR: endif from unsupported contitional
+// endif
+
+// Shared and static library for host and device
+// ========================================================
+cc_library {
+    name: "liblog",
+    host_supported: true,
+
+    srcs: liblog_sources,
+
+    target: {
+        host: {
+            srcs: liblog_host_sources,
+            cflags: ["-DFAKE_LOG_DEVICE=1"],
+        },
+        android: {
+            srcs: liblog_target_sources + liblog_non_windows_sources,
+        },
+        windows: {
+            srcs: liblog_windows_sources,
+        },
+        not_windows: {
+            srcs: liblog_non_windows_sources,
+        },
+        linux: {
+            host_ldlibs: ["-lrt"],
+        },
+    },
+
+    cflags: [
+        "-Werror",
+    ],
+    compile_multilib: "both",
+}
+
+subdirs = ["tests"]
