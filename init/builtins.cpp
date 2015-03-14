@@ -67,20 +67,6 @@ static int insmod(const char *filename, char *options)
     return init_module(&module[0], module.size(), options);
 }
 
-static int setkey(struct kbentry *kbe)
-{
-    int fd, ret;
-
-    fd = open("/dev/tty0", O_RDWR | O_SYNC | O_CLOEXEC);
-    if (fd < 0)
-        return -1;
-
-    ret = ioctl(fd, KDSKBENT, kbe);
-
-    close(fd);
-    return ret;
-}
-
 static int __ifupdown(const char *interface, int up)
 {
     struct ifreq ifr;
@@ -569,15 +555,6 @@ int do_setcon(int nargs, char **args) {
         return -errno;
     }
     return 0;
-}
-
-int do_setkey(int nargs, char **args)
-{
-    struct kbentry kbe;
-    kbe.kb_table = strtoul(args[1], 0, 0);
-    kbe.kb_index = strtoul(args[2], 0, 0);
-    kbe.kb_value = strtoul(args[3], 0, 0);
-    return setkey(&kbe);
 }
 
 int do_setprop(int nargs, char **args)
