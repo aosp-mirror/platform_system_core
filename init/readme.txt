@@ -228,9 +228,6 @@ setcon <seclabel>
    This is typically only used from early-init to set the init context
    before any other process is started.
 
-setkey
-   TBD
-
 setprop <name> <value>
    Set system property <name> to <value>. Properties are expanded
    within <value>.
