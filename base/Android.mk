@@ -19,10 +19,12 @@ LOCAL_PATH := $(call my-dir)
 libbase_src_files := \
     file.cpp \
     stringprintf.cpp \
+    strings.cpp \
 
 libbase_test_src_files := \
     file_test.cpp \
     stringprintf_test.cpp \
+    strings_test.cpp \
 
 libbase_cppflags := \
     -Wall \
