@@ -164,9 +164,6 @@ import <filename>
 hostname <name>
    Set the host name.
 
-chdir <directory>
-   Change working directory.
-
 chmod <octal-mode> <path>
    Change file access permissions.
 
