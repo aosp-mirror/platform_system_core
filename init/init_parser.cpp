@@ -121,7 +121,6 @@ static int lookup_keyword(const char *s)
     case 'c':
         if (!strcmp(s, "opy")) return K_copy;
         if (!strcmp(s, "apability")) return K_capability;
-        if (!strcmp(s, "hdir")) return K_chdir;
         if (!strcmp(s, "hroot")) return K_chroot;
         if (!strcmp(s, "lass")) return K_class;
         if (!strcmp(s, "lass_start")) return K_class_start;
