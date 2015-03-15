@@ -207,11 +207,13 @@ mkdir <path> [mode] [owner] [group]
    group. If not provided, the directory is created with permissions 755 and
    owned by the root user and root group.
 
-mount <type> <device> <dir> [ <mountoption> ]*
+mount <type> <device> <dir> [ <flag> ]* [<options>]
    Attempt to mount the named device at the directory <dir>
    <device> may be of the form mtd@name to specify a mtd block
    device by name.
-   <mountoption>s include "ro", "rw", "remount", "noatime", ...
+   <flag>s include "ro", "rw", "remount", "noatime", ...
+   <options> include "barrier=1", "noauto_da_alloc", "discard", ... as
+   a comma separated string, eg: barrier=1,noauto_da_alloc
 
 restorecon <path> [ <path> ]*
    Restore the file named by <path> to the security context specified
