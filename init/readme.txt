@@ -205,7 +205,8 @@ loglevel <level>
 mkdir <path> [mode] [owner] [group]
    Create a directory at <path>, optionally with the given mode, owner, and
    group. If not provided, the directory is created with permissions 755 and
-   owned by the root user and root group.
+   owned by the root user and root group. If provided, the mode, owner and group
+   will be updated if the directory exists already.
 
 mount <type> <device> <dir> [ <flag> ]* [<options>]
    Attempt to mount the named device at the directory <dir>
