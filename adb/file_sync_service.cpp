@@ -33,15 +33,11 @@
 #include "file_sync_service.h"
 #include "private/android_filesystem_config.h"
 
-/* TODO: use fs_config to configure permissions on /data */
-static bool is_on_system(const char *name) {
-    const char *SYSTEM = "/system/";
-    return (strncmp(SYSTEM, name, strlen(SYSTEM)) == 0);
-}
-
-static bool is_on_vendor(const char *name) {
-    const char *VENDOR = "/vendor/";
-    return (strncmp(VENDOR, name, strlen(VENDOR)) == 0);
+static bool should_use_fs_config(const char* path) {
+    // TODO: use fs_config to configure permissions on /data.
+    return strncmp("/system/", path, strlen("/system/")) == 0 ||
+           strncmp("/vendor/", path, strlen("/vendor/")) == 0 ||
+           strncmp("/oem/", path, strlen("/oem/")) == 0;
 }
 
 static int mkdirs(char *name)
@@ -59,7 +55,7 @@ static int mkdirs(char *name)
         x = adb_dirstart(x);
         if(x == 0) return 0;
         *x = 0;
-        if (is_on_system(name) || is_on_vendor(name)) {
+        if (should_use_fs_config(name)) {
             fs_config(name, 1, &uid, &gid, &mode, &cap);
         }
         ret = adb_mkdir(name, mode);
@@ -368,7 +364,7 @@ static int do_send(int s, char *path, char *buffer)
     if(*tmp == '/') {
         tmp++;
     }
-    if (is_on_system(path) || is_on_vendor(path)) {
+    if (should_use_fs_config(path)) {
         fs_config(tmp, 0, &uid, &gid, &mode, &cap);
     }
     return handle_send_file(s, path, uid, gid, mode, buffer, do_unlink);
