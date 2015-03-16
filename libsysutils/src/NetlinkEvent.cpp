@@ -47,6 +47,19 @@ const int LOCAL_NFLOG_PACKET = NFNL_SUBSYS_ULOG << 8 | NFULNL_MSG_PACKET;
 #include <netlink/handlers.h>
 #include <netlink/msg.h>
 
+// STOPSHIP: remove these deprecated constants once we have updated prebuilts
+const int NetlinkEvent::NlActionUnknown = static_cast<int>(Action::kUnknown);
+const int NetlinkEvent::NlActionAdd = static_cast<int>(Action::kAdd);
+const int NetlinkEvent::NlActionRemove = static_cast<int>(Action::kRemove);
+const int NetlinkEvent::NlActionChange = static_cast<int>(Action::kChange);
+const int NetlinkEvent::NlActionLinkDown = static_cast<int>(Action::kLinkDown);
+const int NetlinkEvent::NlActionLinkUp = static_cast<int>(Action::kLinkUp);
+const int NetlinkEvent::NlActionAddressUpdated = static_cast<int>(Action::kAddressUpdated);
+const int NetlinkEvent::NlActionAddressRemoved = static_cast<int>(Action::kAddressRemoved);
+const int NetlinkEvent::NlActionRdnss = static_cast<int>(Action::kRdnss);
+const int NetlinkEvent::NlActionRouteUpdated = static_cast<int>(Action::kRouteUpdated);
+const int NetlinkEvent::NlActionRouteRemoved = static_cast<int>(Action::kRouteRemoved);
+
 NetlinkEvent::NetlinkEvent() {
     mAction = Action::kUnknown;
     memset(mParams, 0, sizeof(mParams));
