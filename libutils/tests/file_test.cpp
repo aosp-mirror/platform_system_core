@@ -14,15 +14,12 @@
  * limitations under the License.
  */
 
-#include "base/file.h"
-
-#include <gtest/gtest.h>
+#include "utils/file.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
-
-#include <string>
+#include <gtest/gtest.h>
 
 class TemporaryFile {
  public:
@@ -51,14 +48,14 @@ class TemporaryFile {
 TEST(file, ReadFileToString_ENOENT) {
   std::string s("hello");
   errno = 0;
-  ASSERT_FALSE(android::base::ReadFileToString("/proc/does-not-exist", &s));
+  ASSERT_FALSE(android::ReadFileToString("/proc/does-not-exist", &s));
   EXPECT_EQ(ENOENT, errno);
-  EXPECT_EQ("", s);  // s was cleared.
+  EXPECT_EQ("", s); // s was cleared.
 }
 
 TEST(file, ReadFileToString_success) {
   std::string s("hello");
-  ASSERT_TRUE(android::base::ReadFileToString("/proc/version", &s)) << errno;
+  ASSERT_TRUE(android::ReadFileToString("/proc/version", &s)) << errno;
   EXPECT_GT(s.length(), 6U);
   EXPECT_EQ('\n', s[s.length() - 1]);
   s[5] = 0;
@@ -68,36 +65,34 @@ TEST(file, ReadFileToString_success) {
 TEST(file, WriteStringToFile) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
-  ASSERT_TRUE(android::base::WriteStringToFile("abc", tf.filename)) << errno;
+  ASSERT_TRUE(android::WriteStringToFile("abc", tf.filename)) << errno;
   std::string s;
-  ASSERT_TRUE(android::base::ReadFileToString(tf.filename, &s)) << errno;
+  ASSERT_TRUE(android::ReadFileToString(tf.filename, &s)) << errno;
   EXPECT_EQ("abc", s);
 }
 
 TEST(file, WriteStringToFile2) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
-  ASSERT_TRUE(android::base::WriteStringToFile("abc", tf.filename, 0660,
-                                               getuid(), getgid()))
-      << errno;
+  ASSERT_TRUE(android::WriteStringToFile("abc", tf.filename, 0660, getuid(), getgid())) << errno;
   struct stat sb;
   ASSERT_EQ(0, stat(tf.filename, &sb));
   ASSERT_EQ(0660U, (sb.st_mode & ~S_IFMT));
   ASSERT_EQ(getuid(), sb.st_uid);
   ASSERT_EQ(getgid(), sb.st_gid);
   std::string s;
-  ASSERT_TRUE(android::base::ReadFileToString(tf.filename, &s)) << errno;
+  ASSERT_TRUE(android::ReadFileToString(tf.filename, &s)) << errno;
   EXPECT_EQ("abc", s);
 }
 
 TEST(file, WriteStringToFd) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
-  ASSERT_TRUE(android::base::WriteStringToFd("abc", tf.fd));
+  ASSERT_TRUE(android::WriteStringToFd("abc", tf.fd));
 
   ASSERT_EQ(0, lseek(tf.fd, 0, SEEK_SET)) << errno;
 
   std::string s;
-  ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s)) << errno;
+  ASSERT_TRUE(android::ReadFdToString(tf.fd, &s)) << errno;
   EXPECT_EQ("abc", s);
 }
