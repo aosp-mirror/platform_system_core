@@ -43,8 +43,7 @@
 static int do_cmd(transport_type ttype, const char* serial, const char *cmd, ...);
 
 int find_sync_dirs(const char *srcarg,
-        char **system_srcdir_out, char **data_srcdir_out, char **vendor_srcdir_out,
-        char **oem_srcdir_out);
+        char **android_srcdir_out, char **data_srcdir_out, char **vendor_srcdir_out);
 int install_app(transport_type transport, const char* serial, int argc,
                 const char** argv);
 int install_multiple_app(transport_type transport, const char* serial, int argc,
@@ -207,7 +206,7 @@ void help()
         "  adb get-serialno             - prints: <serial-number>\n"
         "  adb get-devpath              - prints: <device-path>\n"
         "  adb status-window            - continuously print device status for a specified device\n"
-        "  adb remount                  - remounts the /system, /vendor (if present) and /oem (if present) partitions on the device read-write\n"
+        "  adb remount                  - remounts the /system and /vendor (if present) partitions on the device read-write\n"
         "  adb reboot [bootloader|recovery] - reboots the device, optionally into the bootloader or recovery program\n"
         "  adb reboot-bootloader        - reboots the device into the bootloader\n"
         "  adb root                     - restarts the adbd daemon with root permissions\n"
@@ -223,9 +222,9 @@ void help()
         "adb sync notes: adb sync [ <directory> ]\n"
         "  <localdir> can be interpreted in several ways:\n"
         "\n"
-        "  - If <directory> is not specified, /system, /vendor (if present), /oem (if present) and /data partitions will be updated.\n"
+        "  - If <directory> is not specified, /system, /vendor (if present), and /data partitions will be updated.\n"
         "\n"
-        "  - If it is \"system\", \"vendor\", \"oem\" or \"data\", only the corresponding partition\n"
+        "  - If it is \"system\", \"vendor\" or \"data\", only the corresponding partition\n"
         "    is updated.\n"
         "\n"
         "environmental variables:\n"
@@ -1634,8 +1633,7 @@ int adb_commandline(int argc, const char **argv)
     }
     else if (!strcmp(argv[0], "sync")) {
         const char* srcarg;
-        char *system_srcpath, *data_srcpath, *vendor_srcpath, *oem_srcpath;
-
+        char *android_srcpath, *data_srcpath, *vendor_srcpath;
         int listonly = 0;
 
         int ret;
@@ -1655,22 +1653,18 @@ int adb_commandline(int argc, const char **argv)
         } else {
             return usage();
         }
-        ret = find_sync_dirs(srcarg, &system_srcpath, &data_srcpath, &vendor_srcpath,
-                &oem_srcpath);
+        ret = find_sync_dirs(srcarg, &android_srcpath, &data_srcpath, &vendor_srcpath);
         if (ret != 0) return usage();
 
-        if (system_srcpath != NULL)
-            ret = do_sync_sync(system_srcpath, "/system", listonly);
+        if (android_srcpath != NULL)
+            ret = do_sync_sync(android_srcpath, "/system", listonly);
         if (ret == 0 && vendor_srcpath != NULL)
             ret = do_sync_sync(vendor_srcpath, "/vendor", listonly);
-        if(ret == 0 && oem_srcpath != NULL)
-            ret = do_sync_sync(oem_srcpath, "/oem", listonly);
         if (ret == 0 && data_srcpath != NULL)
             ret = do_sync_sync(data_srcpath, "/data", listonly);
 
-        free(system_srcpath);
+        free(android_srcpath);
         free(vendor_srcpath);
-        free(oem_srcpath);
         free(data_srcpath);
         return ret;
     }
@@ -1776,60 +1770,49 @@ static int do_cmd(transport_type ttype, const char* serial, const char *cmd, ...
 }
 
 int find_sync_dirs(const char *srcarg,
-        char **system_srcdir_out, char **data_srcdir_out, char **vendor_srcdir_out,
-        char **oem_srcdir_out)
+        char **android_srcdir_out, char **data_srcdir_out, char **vendor_srcdir_out)
 {
-    char *system_srcdir = NULL, *data_srcdir = NULL, *vendor_srcdir = NULL, *oem_srcdir = NULL;
+    char *android_srcdir = NULL, *data_srcdir = NULL, *vendor_srcdir = NULL;
     struct stat st;
 
     if(srcarg == NULL) {
-        system_srcdir = product_file("system");
+        android_srcdir = product_file("system");
         data_srcdir = product_file("data");
         vendor_srcdir = product_file("vendor");
-        oem_srcdir = product_file("oem");
-        // Check if vendor partition exists.
+        /* Check if vendor partition exists */
         if (lstat(vendor_srcdir, &st) || !S_ISDIR(st.st_mode))
             vendor_srcdir = NULL;
-        // Check if oem partition exists.
-        if (lstat(oem_srcdir, &st) || !S_ISDIR(st.st_mode))
-            oem_srcdir = NULL;
     } else {
-        // srcarg may be "data", "system", "vendor", "oem" or NULL.
-        // If srcarg is NULL, then all partitions are synced.
+        /* srcarg may be "data", "system" or NULL.
+         * if srcarg is NULL, then both data and system are synced
+         */
         if(strcmp(srcarg, "system") == 0) {
-            system_srcdir = product_file("system");
+            android_srcdir = product_file("system");
         } else if(strcmp(srcarg, "data") == 0) {
             data_srcdir = product_file("data");
         } else if(strcmp(srcarg, "vendor") == 0) {
             vendor_srcdir = product_file("vendor");
-        } else if(strcmp(srcarg, "oem") == 0) {
-            oem_srcdir = product_file("oem");
         } else {
-            // It's not "system", "data", "vendor", or "oem".
+            /* It's not "system", "vendor", or "data".
+             */
             return 1;
         }
     }
 
-    if(system_srcdir_out != NULL)
-        *system_srcdir_out = system_srcdir;
+    if(android_srcdir_out != NULL)
+        *android_srcdir_out = android_srcdir;
     else
-        free(system_srcdir);
+        free(android_srcdir);
 
     if(vendor_srcdir_out != NULL)
         *vendor_srcdir_out = vendor_srcdir;
     else
         free(vendor_srcdir);
 
-    if(oem_srcdir_out != NULL)
-        *oem_srcdir_out = oem_srcdir;
-    else
-        free(oem_srcdir);
-
     if(data_srcdir_out != NULL)
-        *data_srcdir_out = data_srcdir;
-    else
-        free(data_srcdir);
-
+            *data_srcdir_out = data_srcdir;
+        else
+            free(data_srcdir);
     return 0;
 }
 
