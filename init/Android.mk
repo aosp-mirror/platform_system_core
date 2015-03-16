@@ -27,7 +27,6 @@ LOCAL_SRC_FILES:= \
     parser.cpp \
     util.cpp \
 
-LOCAL_STATIC_LIBRARIES := libbase
 LOCAL_MODULE := libinit
 include $(BUILD_STATIC_LIBRARY)
 
@@ -56,7 +55,7 @@ LOCAL_STATIC_LIBRARIES := \
     libfs_mgr \
     liblogwrap \
     libcutils \
-    libbase \
+    libutils \
     liblog \
     libc \
     libselinux \
@@ -81,7 +80,7 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SHARED_LIBRARIES += \
     libcutils \
-    libbase \
+    libutils \
 
 LOCAL_STATIC_LIBRARIES := libinit
 include $(BUILD_NATIVE_TEST)

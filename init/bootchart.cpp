@@ -32,7 +32,7 @@
 
 #include <string>
 
-#include <base/file.h>
+#include <utils/file.h>
 
 #define LOG_ROOT        "/data/bootchart"
 #define LOG_STAT        LOG_ROOT"/proc_stat.log"
@@ -59,7 +59,7 @@ static FILE* log_disks;
 
 static long long get_uptime_jiffies() {
     std::string uptime;
-    if (!android::base::ReadFileToString("/proc/uptime", &uptime)) {
+    if (!android::ReadFileToString("/proc/uptime", &uptime)) {
         return 0;
     }
     return 100LL * strtod(uptime.c_str(), NULL);
@@ -82,7 +82,7 @@ static void log_header() {
     }
 
     std::string kernel_cmdline;
-    android::base::ReadFileToString("/proc/cmdline", &kernel_cmdline);
+    android::ReadFileToString("/proc/cmdline", &kernel_cmdline);
 
     FILE* out = fopen(LOG_HEADER, "we");
     if (out == NULL) {
@@ -106,7 +106,7 @@ static void do_log_file(FILE* log, const char* procfile) {
     do_log_uptime(log);
 
     std::string content;
-    if (android::base::ReadFileToString(procfile, &content)) {
+    if (android::ReadFileToString(procfile, &content)) {
         fprintf(log, "%s\n", content.c_str());
     }
 }
@@ -127,13 +127,13 @@ static void do_log_procs(FILE* log) {
             // name from /proc/<pid>/cmdline.
             snprintf(filename, sizeof(filename), "/proc/%d/cmdline", pid);
             std::string cmdline;
-            android::base::ReadFileToString(filename, &cmdline);
+            android::ReadFileToString(filename, &cmdline);
             const char* full_name = cmdline.c_str(); // So we stop at the first NUL.
 
             // Read process stat line.
             snprintf(filename, sizeof(filename), "/proc/%d/stat", pid);
             std::string stat;
-            if (android::base::ReadFileToString(filename, &stat)) {
+            if (android::ReadFileToString(filename, &stat)) {
                 if (!cmdline.empty()) {
                     // Substitute the process name with its real name.
                     size_t open = stat.find('(');
@@ -155,7 +155,7 @@ static int bootchart_init() {
     int timeout = 0;
 
     std::string start;
-    android::base::ReadFileToString(LOG_STARTFILE, &start);
+    android::ReadFileToString(LOG_STARTFILE, &start);
     if (!start.empty()) {
         timeout = atoi(start.c_str());
     } else {
@@ -164,7 +164,7 @@ static int bootchart_init() {
         // timeout. this is useful when using -wipe-data since the /data
         // partition is fresh.
         std::string cmdline;
-        android::base::ReadFileToString("/proc/cmdline", &cmdline);
+        android::ReadFileToString("/proc/cmdline", &cmdline);
 #define KERNEL_OPTION  "androidboot.bootchart="
         if (strstr(cmdline.c_str(), KERNEL_OPTION) != NULL) {
             timeout = atoi(cmdline.c_str() + sizeof(KERNEL_OPTION) - 1);
@@ -226,7 +226,7 @@ static int bootchart_step() {
 
     // Stop if /data/bootchart/stop contains 1.
     std::string stop;
-    if (android::base::ReadFileToString(LOG_STOPFILE, &stop) && stop == "1") {
+    if (android::ReadFileToString(LOG_STOPFILE, &stop) && stop == "1") {
         return -1;
     }
 
