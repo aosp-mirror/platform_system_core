@@ -1,16 +1,16 @@
 /*
  * Copyright 2008, The Android Open Source Project
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0 
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -33,7 +33,7 @@ static const char DHCP_CONFIG_PATH[]   = "/system/etc/dhcpcd/dhcpcd.conf";
 static const int NAP_TIME = 200;   /* wait for 200ms at a time */
                                   /* when polling for property values */
 static const char DAEMON_NAME_RENEW[]  = "iprenew";
-static char errmsg[100];
+static char errmsg[100] = "\0";
 /* interface length for dhcpcd daemon start (dhcpcd_<interface> as defined in init.rc file)
  * or for filling up system properties dhcpcd.<interface>.ipaddress, dhcpcd.<interface>.dns1
  * and other properties on a successful bind
@@ -75,7 +75,7 @@ static int wait_for_property(const char *name, const char *desired_value, int ma
     while (maxnaps-- > 0) {
         usleep(NAP_TIME * 1000);
         if (property_get(name, value, NULL)) {
-            if (desired_value == NULL || 
+            if (desired_value == NULL ||
                     strcmp(value, desired_value) == 0) {
                 return 0;
             }
@@ -167,6 +167,47 @@ static int fill_ip_info(const char *interface,
 }
 
 /*
+ * Get any available DHCP results.
+ */
+int dhcp_get_results(const char *interface,
+                     char *ipaddr,
+                     char *gateway,
+                     uint32_t *prefixLength,
+                     char *dns[],
+                     char *server,
+                     uint32_t *lease,
+                     char *vendorInfo,
+                     char *domain,
+                     char *mtu)
+{
+    char result_prop_name[PROPERTY_KEY_MAX];
+    char prop_value[PROPERTY_VALUE_MAX];
+
+    /* Interface name after converting p2p0-p2p0-X to p2p to reuse system properties */
+    char p2p_interface[MAX_INTERFACE_LENGTH];
+    get_p2p_interface_replacement(interface, p2p_interface);
+    snprintf(result_prop_name, sizeof(result_prop_name), "%s.%s.result",
+            DHCP_PROP_NAME_PREFIX,
+            p2p_interface);
+
+    memset(prop_value, '\0', PROPERTY_VALUE_MAX);
+    if (!property_get(result_prop_name, prop_value, NULL)) {
+        snprintf(errmsg, sizeof(errmsg), "%s", "DHCP result property was not set");
+        return -1;
+    }
+    if (strcmp(prop_value, "ok") == 0) {
+        if (fill_ip_info(interface, ipaddr, gateway, prefixLength, dns,
+                server, lease, vendorInfo, domain, mtu) == -1) {
+            return -1;
+        }
+        return 0;
+    } else {
+        snprintf(errmsg, sizeof(errmsg), "DHCP result was %s", prop_value);
+        return -1;
+    }
+}
+
+/*
  * Start the dhcp client daemon, and wait for it to finish
  * configuring the interface.
  *
@@ -175,16 +216,7 @@ static int fill_ip_info(const char *interface,
  * Example:
  * service dhcpcd_<interface> /system/bin/dhcpcd -ABKL -f dhcpcd.conf
  */
-int dhcp_do_request(const char *interface,
-                    char *ipaddr,
-                    char *gateway,
-                    uint32_t *prefixLength,
-                    char *dns[],
-                    char *server,
-                    uint32_t *lease,
-                    char *vendorInfo,
-                    char *domain,
-                    char *mtu)
+int dhcp_start(const char *interface)
 {
     char result_prop_name[PROPERTY_KEY_MAX];
     char daemon_prop_name[PROPERTY_KEY_MAX];
@@ -228,21 +260,7 @@ int dhcp_do_request(const char *interface,
         return -1;
     }
 
-    if (!property_get(result_prop_name, prop_value, NULL)) {
-        /* shouldn't ever happen, given the success of wait_for_property() */
-        snprintf(errmsg, sizeof(errmsg), "%s", "DHCP result property was not set");
-        return -1;
-    }
-    if (strcmp(prop_value, "ok") == 0) {
-        if (fill_ip_info(interface, ipaddr, gateway, prefixLength, dns,
-                server, lease, vendorInfo, domain, mtu) == -1) {
-            return -1;
-        }
-        return 0;
-    } else {
-        snprintf(errmsg, sizeof(errmsg), "DHCP result was %s", prop_value);
-        return -1;
-    }
+    return 0;
 }
 
 /**
@@ -318,16 +336,7 @@ char *dhcp_get_errmsg() {
  * service iprenew_<interface> /system/bin/dhcpcd -n
  *
  */
-int dhcp_do_request_renew(const char *interface,
-                    char *ipaddr,
-                    char *gateway,
-                    uint32_t *prefixLength,
-                    char *dns[],
-                    char *server,
-                    uint32_t *lease,
-                    char *vendorInfo,
-                    char *domain,
-                    char *mtu)
+int dhcp_start_renew(const char *interface)
 {
     char result_prop_name[PROPERTY_KEY_MAX];
     char prop_value[PROPERTY_VALUE_MAX] = {'\0'};
@@ -357,16 +366,5 @@ int dhcp_do_request_renew(const char *interface,
         return -1;
     }
 
-    if (!property_get(result_prop_name, prop_value, NULL)) {
-        /* shouldn't ever happen, given the success of wait_for_property() */
-        snprintf(errmsg, sizeof(errmsg), "%s", "DHCP Renew result property was not set");
-        return -1;
-    }
-    if (strcmp(prop_value, "ok") == 0) {
-        return fill_ip_info(interface, ipaddr, gateway, prefixLength, dns,
-                server, lease, vendorInfo, domain, mtu);
-    } else {
-        snprintf(errmsg, sizeof(errmsg), "DHCP Renew result was %s", prop_value);
-        return -1;
-    }
+    return 0;
 }
