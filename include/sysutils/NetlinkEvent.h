@@ -44,6 +44,19 @@ private:
     char *mParams[NL_PARAMS_MAX];
 
 public:
+    // STOPSHIP: remove these deprecated constants once we have updated prebuilts
+    const static int NlActionUnknown;
+    const static int NlActionAdd;
+    const static int NlActionRemove;
+    const static int NlActionChange;
+    const static int NlActionLinkDown;
+    const static int NlActionLinkUp;
+    const static int NlActionAddressUpdated;
+    const static int NlActionAddressRemoved;
+    const static int NlActionRdnss;
+    const static int NlActionRouteUpdated;
+    const static int NlActionRouteRemoved;
+
     NetlinkEvent();
     virtual ~NetlinkEvent();
 
