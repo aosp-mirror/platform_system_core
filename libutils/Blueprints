@@ -1,0 +1,90 @@
+// Copyright (C) 2008 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// libutils is a little unique: It's built twice, once for the host
+// and once for the device.
+
+commonSources = [
+    "BasicHashtable.cpp",
+    "BlobCache.cpp",
+    "CallStack.cpp",
+    "FileMap.cpp",
+    "JenkinsHash.cpp",
+    "LinearAllocator.cpp",
+    "LinearTransform.cpp",
+    "Log.cpp",
+    "NativeHandle.cpp",
+    "Printer.cpp",
+    "ProcessCallStack.cpp",
+    "PropertyMap.cpp",
+    "RefBase.cpp",
+    "SharedBuffer.cpp",
+    "Static.cpp",
+    "StopWatch.cpp",
+    "String8.cpp",
+    "String16.cpp",
+    "SystemClock.cpp",
+    "Threads.cpp",
+    "Timers.cpp",
+    "Tokenizer.cpp",
+    "Unicode.cpp",
+    "VectorImpl.cpp",
+    "misc.cpp",
+]
+
+cc_library {
+    name: "libutils",
+    host_supported: true,
+    srcs: commonSources,
+    cflags: ["-Werror"],
+    compile_multilib: "both",
+    include_dirs: ["libnativehelper/include/nativehelper"],
+
+    target: {
+        android: {
+            srcs: [
+                "Looper.cpp",
+                "Trace.cpp",
+            ],
+            shared_libs: [
+                "libbacktrace",
+                "liblog",
+                "libdl",
+            ],
+            static_libs: ["libcutils"],
+        },
+        linux: {
+            srcs: ["Looper.cpp"],
+        },
+        darwin: {
+            cflags: ["-Wno-unused-parameter"],
+        },
+        windows: {
+            // Under MinGW, ctype.h doesn't need multi-byte support
+            cflags: ["-DMB_CUR_MAX=1"],
+        },
+        host: {
+            static_libs: ["liblog"],
+            cflags: ["-DLIBUTILS_NATIVE=1"],
+        }
+    },
+
+    arch: {
+        mips: {
+            cflags: ["-DALIGN_DOUBLE"],
+        },
+    },
+}
+
+subdirs = ["tests"]
