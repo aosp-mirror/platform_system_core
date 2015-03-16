@@ -13,7 +13,7 @@ LOCAL_SHARED_LIBRARIES := \
     libpixelflinger
 
 LOCAL_C_INCLUDES := \
-    $(LOCAL_PATH)/../../..
+    system/core/libpixelflinger
 
 LOCAL_MODULE:= test-pixelflinger-arm64-assembler-test
 
