@@ -32,10 +32,10 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#include <base/file.h>
+
 /* for ANDROID_SOCKET_* */
 #include <cutils/sockets.h>
-
-#include <utils/file.h>
 
 #include <private/android_filesystem_config.h>
 
@@ -168,7 +168,7 @@ bool read_file(const char* path, std::string* content) {
         return false;
     }
 
-    bool okay = android::ReadFdToString(fd, content);
+    bool okay = android::base::ReadFdToString(fd, content);
     TEMP_FAILURE_RETRY(close(fd));
     if (okay) {
         content->append("\n", 1);
@@ -181,7 +181,7 @@ int write_file(const char* path, const char* content) {
     if (fd == -1) {
         return -errno;
     }
-    int result = android::WriteStringToFd(content, fd) ? 0 : -errno;
+    int result = android::base::WriteStringToFd(content, fd) ? 0 : -errno;
     TEMP_FAILURE_RETRY(close(fd));
     return result;
 }
