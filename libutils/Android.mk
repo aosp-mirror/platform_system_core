@@ -39,9 +39,7 @@ commonSources:= \
 	Tokenizer.cpp \
 	Unicode.cpp \
 	VectorImpl.cpp \
-	file.cpp \
 	misc.cpp \
-	stringprintf.cpp \
 
 host_commonCflags := -DLIBUTILS_NATIVE=1 $(TOOL_CFLAGS) -Werror
 
