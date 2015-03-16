@@ -34,7 +34,10 @@ liblog_non_windows_sources = [
 liblog_windows_sources = ["uio.c"]
 
 liblog_host_sources = ["fake_log_device.c"]
-liblog_target_sources = ["log_time.cpp"]
+liblog_target_sources = [
+    "log_time.cpp",
+    "log_is_loggable.c",
+]
 
 // ANDROIDMK TRANSLATION ERROR: unsupported conditional
 // ifneq ($(TARGET_USES_LOGD),false)
@@ -74,6 +77,7 @@ cc_library {
 
     cflags: [
         "-Werror",
+        "-DLIBLOG_LOG_TAG=1005",
     ],
     compile_multilib: "both",
 }

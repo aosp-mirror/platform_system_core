@@ -61,7 +61,6 @@ cc_library_shared {
                 "libunwind",
                 "libunwind-ptrace",
                 "libcutils",
-                "libgccdemangle",
             ],
         },
         host: {
