@@ -174,7 +174,7 @@ bool SerializationUtils::WriteMetricToFile(const MetricSample& sample,
                                       READ_WRITE_ALL_FILE_FLAGS));
 
   if (file_descriptor.get() < 0) {
-    DLOG(ERROR) << "error opening the file";
+    DPLOG(ERROR) << filename << ": cannot open";
     return false;
   }
 
@@ -183,7 +183,7 @@ bool SerializationUtils::WriteMetricToFile(const MetricSample& sample,
   // underneath us. Keep the file locked as briefly as possible.
   // Freeing file_descriptor will close the file and and remove the lock.
   if (HANDLE_EINTR(flock(file_descriptor.get(), LOCK_EX)) < 0) {
-    DLOG(ERROR) << "error locking" << filename << " : " << errno;
+    DPLOG(ERROR) << filename << ": cannot lock";
     return false;
   }
 
