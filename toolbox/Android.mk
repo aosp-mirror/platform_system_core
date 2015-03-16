@@ -63,7 +63,6 @@ OUR_TOOLS := \
     schedtop \
     sendevent \
     setprop \
-    smd \
     start \
     stop \
     top \
