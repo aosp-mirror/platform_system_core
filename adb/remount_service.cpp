@@ -23,6 +23,8 @@
 #include <sys/mount.h>
 #include <unistd.h>
 
+#include <string>
+
 #include "sysdeps.h"
 
 #define  TRACE_TAG  TRACE_ADB
@@ -32,10 +34,10 @@
 
 static int system_ro = 1;
 static int vendor_ro = 1;
+static int oem_ro = 1;
 
 /* Returns the device used to mount a directory in /proc/mounts */
-static char *find_mount(const char *dir)
-{
+static std::string find_mount(const char *dir) {
     FILE* fp;
     struct mntent* mentry;
     char* device = NULL;
@@ -45,7 +47,7 @@ static char *find_mount(const char *dir)
     }
     while ((mentry = getmntent(fp)) != NULL) {
         if (strcmp(dir, mentry->mnt_dir) == 0) {
-            device = strdup(mentry->mnt_fsname);
+            device = mentry->mnt_fsname;
             break;
         }
     }
@@ -53,64 +55,53 @@ static char *find_mount(const char *dir)
     return device;
 }
 
-static int hasVendorPartition()
-{
-    struct stat info;
-    if (!lstat("/vendor", &info))
-        if ((info.st_mode & S_IFMT) == S_IFDIR)
-          return true;
-    return false;
+static bool has_partition(const char* path) {
+    struct stat sb;
+    return (lstat(path, &sb) == 0 && S_ISDIR(sb.st_mode));
 }
 
-int make_block_device_writable(const char* dev)
-{
-    int fd = -1;
+int make_block_device_writable(const std::string& dev) {
+    int fd = unix_open(dev.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd == -1) {
+        return -1;
+    }
+
+    int result = -1;
     int OFF = 0;
-    int rc = -1;
-
-    if (!dev)
-        goto errout;
-
-    fd = unix_open(dev, O_RDONLY | O_CLOEXEC);
-    if (fd < 0)
-        goto errout;
-
-    if (ioctl(fd, BLKROSET, &OFF)) {
-        goto errout;
+    if (!ioctl(fd, BLKROSET, &OFF)) {
+        result = 0;
     }
+    adb_close(fd);
 
-    rc = 0;
-
-errout:
-    if (fd >= 0) {
-        adb_close(fd);
-    }
-    return rc;
+    return result;
 }
 
-/* Init mounts /system as read only, remount to enable writes. */
-static int remount(const char* dir, int* dir_ro)
-{
-    char *dev = 0;
-    int rc = -1;
-
-    dev = find_mount(dir);
-
-    if (!dev || make_block_device_writable(dev)) {
-        goto errout;
+// Init mounts /system as read only, remount to enable writes.
+static int remount(const char* dir, int* dir_ro) {
+    std::string dev(find_mount(dir));
+    if (dev.empty() || make_block_device_writable(dev)) {
+        return -1;
     }
 
-    rc = mount(dev, dir, "none", MS_REMOUNT, NULL);
+    int rc = mount(dev.c_str(), dir, "none", MS_REMOUNT, NULL);
     *dir_ro = rc;
-
-errout:
-    free(dev);
     return rc;
 }
 
-void remount_service(int fd, void *cookie)
-{
-    char buffer[200];
+static bool remount_partition(int fd, const char* partition, int* ro) {
+  if (!has_partition(partition)) {
+    return true;
+  }
+  if (remount(partition, ro)) {
+    char buf[200];
+    snprintf(buf, sizeof(buf), "remount of %s failed: %s\n", partition, strerror(errno));
+    WriteStringFully(fd, buf);
+    return false;
+  }
+  return true;
+}
+
+void remount_service(int fd, void* cookie) {
     char prop_buf[PROPERTY_VALUE_MAX];
 
     if (getuid() != 0) {
@@ -133,6 +124,7 @@ void remount_service(int fd, void *cookie)
     if (system_verified || vendor_verified) {
         // Allow remount but warn of likely bad effects
         bool both = system_verified && vendor_verified;
+        char buffer[200];
         snprintf(buffer, sizeof(buffer),
                  "dm_verity is enabled on the %s%s%s partition%s.\n",
                  system_verified ? "system" : "",
@@ -147,23 +139,12 @@ void remount_service(int fd, void *cookie)
         WriteStringFully(fd, buffer);
     }
 
-    if (remount("/system", &system_ro)) {
-        snprintf(buffer, sizeof(buffer), "remount of system failed: %s\n",strerror(errno));
-        WriteStringFully(fd, buffer);
-    }
+    bool success = true;
+    success &= remount_partition(fd, "/system", &system_ro);
+    success &= remount_partition(fd, "/vendor", &vendor_ro);
+    success &= remount_partition(fd, "/oem", &oem_ro);
 
-    if (hasVendorPartition()) {
-        if (remount("/vendor", &vendor_ro)) {
-            snprintf(buffer, sizeof(buffer), "remount of vendor failed: %s\n",strerror(errno));
-            WriteStringFully(fd, buffer);
-        }
-    }
-
-    if (!system_ro && (!vendor_ro || !hasVendorPartition()))
-        WriteStringFully(fd, "remount succeeded\n");
-    else {
-        WriteStringFully(fd, "remount failed\n");
-    }
+    WriteStringFully(fd, success ? "remount succeeded\n" : "remount failed\n");
 
     adb_close(fd);
 }
