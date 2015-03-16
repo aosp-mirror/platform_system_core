@@ -15,7 +15,6 @@
  */
 
 #include <ctype.h>
-#include <malloc.h>
 
 #include <utils/String8.h>
 

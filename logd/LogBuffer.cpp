@@ -297,6 +297,8 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         }
 
         bool kick = false;
+        bool leading = true;
+        LogBufferElement *last = NULL;
         for(it = mLogElements.begin(); it != mLogElements.end();) {
             LogBufferElement *e = *it;
 
@@ -309,26 +311,87 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
-            uid_t uid = e->getUid();
+            unsigned short dropped = e->getDropped();
 
-            // !Worst and !BlackListed?
-            if ((uid != worst) && (!hasBlacklist || !mPrune.naughty(e))) {
+            // remove any leading drops
+            if (leading && dropped) {
+                it = erase(it);
+                continue;
+            }
+
+            pid_t pid = e->getPid();
+
+            // merge any drops
+            if (last && dropped
+             && ((dropped + last->getDropped()) < USHRT_MAX)
+             && (last->getPid() == pid)
+             && (last->getTid() == e->getTid())) {
+                it = mLogElements.erase(it);
+                stats.erase(e);
+                delete e;
+                last->setDropped(dropped + last->getDropped());
+                continue;
+            }
+
+            leading = false;
+
+            if (hasBlacklist && mPrune.naughty(e)) {
+                last = NULL;
+                it = erase(it);
+                if (dropped) {
+                    continue;
+                }
+
+                pruneRows--;
+                if (pruneRows == 0) {
+                    break;
+                }
+
+                if (e->getUid() == worst) {
+                    kick = true;
+                    if (worst_sizes < second_worst_sizes) {
+                        break;
+                    }
+                    worst_sizes -= e->getMsgLen();
+                }
+                continue;
+            }
+
+            if (dropped) {
+                last = e;
                 ++it;
                 continue;
             }
 
-            unsigned short len = e->getMsgLen();
-            it = erase(it);
+            if (e->getUid() != worst) {
+                last = NULL;
+                ++it;
+                continue;
+            }
+
             pruneRows--;
             if (pruneRows == 0) {
                 break;
             }
 
-            if (uid != worst) {
-                continue;
-            }
-
             kick = true;
+
+            unsigned short len = e->getMsgLen();
+            stats.drop(e);
+            e->setDropped(1);
+            // merge any drops
+            if (last
+             && (last->getDropped() < (USHRT_MAX - 1))
+             && (last->getPid() == pid)
+             && (last->getTid() == e->getTid())) {
+                it = mLogElements.erase(it);
+                stats.erase(e);
+                delete e;
+                last->setDropped(last->getDropped() + 1);
+            } else {
+                last = e;
+                ++it;
+            }
             if (worst_sizes < second_worst_sizes) {
                 break;
             }
