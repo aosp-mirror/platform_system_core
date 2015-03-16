@@ -5,7 +5,7 @@ on init
     export ANDROID_ASSETS /system/app
     export ANDROID_DATA /data
     export ANDROID_STORAGE /storage
+    export EXTERNAL_STORAGE /sdcard
     export ASEC_MOUNTPOINT /mnt/asec
-    export LOOP_MOUNTPOINT /mnt/obb
     export BOOTCLASSPATH %BOOTCLASSPATH%
     export SYSTEMSERVERCLASSPATH %SYSTEMSERVERCLASSPATH%

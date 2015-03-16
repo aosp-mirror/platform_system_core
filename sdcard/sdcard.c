@@ -471,6 +471,7 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
         node->perm = PERM_ROOT;
         node->userid = strtoul(node->name, NULL, 10);
         node->gid = multiuser_get_uid(node->userid, AID_SDCARD_R);
+        node->mode = 0771;
         break;
     case PERM_ROOT:
         /* Assume masked off by default. */
@@ -741,7 +742,7 @@ static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
          * places user_id at the top directory level, with the actual roots
          * just below that. Shared OBB path is also at top level. */
         fuse->root.perm = PERM_LEGACY_PRE_ROOT;
-        fuse->root.mode = 0771;
+        fuse->root.mode = 0711;
         fuse->root.gid = AID_SDCARD_R;
         fuse->package_to_appid = hashmapCreate(256, str_hash, str_icase_equals);
         fuse->uid_with_rw = hashmapCreate(128, int_hash, int_equals);
