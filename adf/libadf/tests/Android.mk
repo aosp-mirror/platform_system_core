@@ -19,4 +19,5 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := adf_test.cpp
 LOCAL_MODULE := adf-unit-tests
 LOCAL_STATIC_LIBRARIES := libadf
+LOCAL_CFLAGS += -Werror
 include $(BUILD_NATIVE_TEST)

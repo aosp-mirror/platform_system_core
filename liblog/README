@@ -111,24 +111,56 @@ DESCRIPTION
        ger_list_alloc,  calling  in  turn the android_logger_open for each log
        id.  Each entry can be retrieved  with  android_logger_list_read.   The
        log(s) can be closed with android_logger_list_free.  The logs should be
-       opened with an O_RDONLY mode.  O_NDELAY mode will report when  the  log
-       reading  is  done  with  an  EAGAIN  error  return  code, otherwise the
-       android_logger_list_read call will block for new entries.
+       opened  with an  ANDROID_LOG_RDONLY  mode.   ANDROID_LOG_NONBLOCK  mode
+       will report when the  log reading is done with an  EAGAIN  error return
+       code,  otherwise the  android_logger_list_read  call will block for new
+       entries.
+
+       The  ANDROID_LOG_PSTORE mode flag to the android_logger_open is used to
+       switch from the active logs to the persistent logs from before the last
+       reboot.
 
        The value returned by android_logger_open can be used as a parameter to
        the  android_logger_clear  function to empty the sub-log.  It is recom‐
-       mended to only open log O_WRONLY.
+       mended to only open log ANDROID_LOG_WRONLY in that case.
 
        The value returned by android_logger_open can be used as a parameter to
        the android_logger_get_log_(size|readable_size|version) to retrieve the
        sub-log maximum size, readable size and log buffer format protocol ver‐
        sion  respectively.  android_logger_get_id returns the id that was used
-       when opening the sub-log.  It is recommended to open the  log  O_RDONLY
-       in these cases.
+       when  opening  the  sub-log.    It  is  recommended  to  open  the  log
+       ANDROID_LOG_RDONLY in these cases.
+
+ERRORS
+       If messages fail, a negative error code will be returned to the caller.
+
+       The -ENOTCONN return code indicates that the logger daemon is stopped.
+
+       The  -EBADF return code indicates that the log access point can not be
+       opened, or the log buffer id is out of range.
+
+       For the  -EAGAIN  return code,  this means that the logging message was
+       temporarily backed-up either because of Denial Of Service (DOS) logging
+       pressure from some chatty application or service in the Android system,
+       or if too small of a value is set in /proc/sys/net/unix/max_dgram_qlen.
+       To aid in diagnosing the occurence of this,  a binary event from liblog
+       will be sent to the  log  daemon  once a  new  message  can get through
+       indicating how many  messages were  dropped  as a result.   Please take
+       action to resolve the structural problems at the source.
+
+       It is generally not advised for the caller to retry the  -EAGAIN return
+       code as  this  will  only  make the  problem(s)  worse  and  cause your
+       application to temporarily drop to the  logger daemon  priority,  BATCH
+       scheduling policy and background task cgroup. If you require a group of
+       messages to be passed atomically,  merge  them  into  one  message with
+       embedded newlines to the maximum length LOGGER_ENTRY_MAX_PAYLOAD.
+
+       Other return codes  from  writing operation can be returned.  Since the
+       library retries on EINTR, -EINTR should never be returned.
 
 SEE ALSO
        syslogd(8)
 
 
 
-                                  17 Dec 2013                        LIBLOG(3)
+                                  24 Jan 2014                        LIBLOG(3)

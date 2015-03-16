@@ -8,11 +8,11 @@ import hashlib
 import os
 import random
 import re
+import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
-import sys
-import shlex
 
 
 def trace(cmd):
@@ -181,6 +181,12 @@ class AdbWrapper(object):
     def usb(self):
         return call_checked(self.adb_cmd + "usb")
 
+    def root(self):
+        return call_checked(self.adb_cmd + "root")
+
+    def unroot(self):
+        return call_checked(self.adb_cmd + "unroot")
+
     def forward_remove(self, local):
         return call_checked(self.adb_cmd + "forward --remove {}".format(local))
 
@@ -209,15 +215,13 @@ class AdbWrapper(object):
 
 
 class AdbBasic(unittest.TestCase):
-    def test_devices(self):
-        """Get uptime for each device plugged in from /proc/uptime."""
-        dev_list = get_device_list()
-        for device in dev_list:
-            out = call_checked(
-                "adb -s {} shell cat /proc/uptime".format(device))
-            self.assertEqual(len(out.split()), 2)
-            self.assertGreater(float(out.split()[0]), 0.0)
-            self.assertGreater(float(out.split()[1]), 0.0)
+    def test_shell(self):
+        """Check that we can at least cat a file."""
+        adb = AdbWrapper()
+        out = adb.shell("cat /proc/uptime")
+        self.assertEqual(len(out.split()), 2)
+        self.assertGreater(float(out.split()[0]), 0.0)
+        self.assertGreater(float(out.split()[1]), 0.0)
 
     def test_help(self):
         """Make sure we get _something_ out of help."""
@@ -233,6 +237,36 @@ class AdbBasic(unittest.TestCase):
                 version_num = True
         self.assertTrue(version_num)
 
+    def _test_root(self):
+        adb = AdbWrapper()
+        adb.root()
+        adb.wait()
+        self.assertEqual("root", adb.shell("id -un").strip())
+
+    def _test_unroot(self):
+        adb = AdbWrapper()
+        adb.unroot()
+        adb.wait()
+        self.assertEqual("shell", adb.shell("id -un").strip())
+
+    def test_root_unroot(self):
+        """Make sure that adb root and adb unroot work, using id(1)."""
+        adb = AdbWrapper()
+        original_user = adb.shell("id -un").strip()
+        try:
+            if original_user == "root":
+                self._test_unroot()
+                self._test_root()
+            elif original_user == "shell":
+                self._test_root()
+                self._test_unroot()
+        finally:
+            if original_user == "root":
+                adb.root()
+            else:
+                adb.unroot()
+            adb.wait()
+
 
 class AdbFile(unittest.TestCase):
     SCRATCH_DIR = "/data/local/tmp"
@@ -240,15 +274,9 @@ class AdbFile(unittest.TestCase):
     DEVICE_TEMP_DIR = SCRATCH_DIR + "/adb_test_dir"
 
     def test_push(self):
-        """Push a file to all attached devices."""
-        dev_list = get_device_list()
-        for device in dev_list:
-            self.push_with_device(device)
-
-    def push_with_device(self, device):
         """Push a randomly generated file to specified device."""
         kbytes = 512
-        adb = AdbWrapper(device)
+        adb = AdbWrapper()
         with tempfile.NamedTemporaryFile(mode="w") as tmp:
             rand_str = os.urandom(1024 * kbytes)
             tmp.write(rand_str)
@@ -267,15 +295,9 @@ class AdbFile(unittest.TestCase):
     # TODO: write push directory test.
 
     def test_pull(self):
-        """Pull a file from all attached devices."""
-        dev_list = get_device_list()
-        for device in dev_list:
-            self.pull_with_device(device)
-
-    def pull_with_device(self, device):
         """Pull a randomly generated file from specified device."""
         kbytes = 512
-        adb = AdbWrapper(device)
+        adb = AdbWrapper()
         adb.shell_nocheck("rm -r {}".format(AdbFile.DEVICE_TEMP_FILE))
         try:
             adb.shell("dd if=/dev/urandom of={} bs=1024 count={}".format(
@@ -293,14 +315,8 @@ class AdbFile(unittest.TestCase):
             adb.shell_nocheck("rm {}".format(AdbFile.DEVICE_TEMP_FILE))
 
     def test_pull_dir(self):
-        """Pull a directory from all attached devices."""
-        dev_list = get_device_list()
-        for device in dev_list:
-            self.pull_dir_with_device(device)
-
-    def pull_dir_with_device(self, device):
         """Pull a randomly generated directory of files from the device."""
-        adb = AdbWrapper(device)
+        adb = AdbWrapper()
         temp_files = {}
         host_dir = None
         try:
@@ -333,15 +349,9 @@ class AdbFile(unittest.TestCase):
                 os.removedirs(host_dir)
 
     def test_sync(self):
-        """Sync a directory with all attached devices."""
-        dev_list = get_device_list()
-        for device in dev_list:
-            self.sync_dir_with_device(device)
-
-    def sync_dir_with_device(self, device):
         """Sync a randomly generated directory of files to specified device."""
         try:
-            adb = AdbWrapper(device)
+            adb = AdbWrapper()
             temp_files = {}
 
             # create temporary host directory
@@ -356,7 +366,7 @@ class AdbFile(unittest.TestCase):
                                                 num_files=32)
 
             # clean up any trash on the device
-            adb = AdbWrapper(device, out_dir=base_dir)
+            adb = AdbWrapper(out_dir=base_dir)
             adb.shell_nocheck("rm -r {}".format(AdbFile.DEVICE_TEMP_DIR))
 
             # issue the sync

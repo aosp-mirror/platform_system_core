@@ -1,4 +1,4 @@
-// Copyright 2006-2014 The Android Open Source Project
+// Copyright 2006-2015 The Android Open Source Project
 
 #include <assert.h>
 #include <ctype.h>
@@ -38,14 +38,12 @@ struct log_device_t {
     struct logger *logger;
     struct logger_list *logger_list;
     bool printed;
-    char label;
 
     log_device_t* next;
 
-    log_device_t(const char* d, bool b, char l) {
+    log_device_t(const char* d, bool b) {
         device = d;
         binary = b;
-        label = l;
         next = NULL;
         printed = false;
     }
@@ -61,9 +59,7 @@ static int g_maxRotatedLogs = DEFAULT_MAX_ROTATED_LOGS; // 0 means "unbounded"
 static int g_outFD = -1;
 static off_t g_outByteCount = 0;
 static int g_printBinary = 0;
-static int g_devCount = 0;
-
-static EventTagMap* g_eventTagMap = NULL;
+static int g_devCount = 0;                              // >1 means multiple
 
 static int openLogFile (const char *pathname)
 {
@@ -133,8 +129,15 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
     char binaryMsgBuf[1024];
 
     if (dev->binary) {
+        static bool hasOpenedEventTagMap = false;
+        static EventTagMap *eventTagMap = NULL;
+
+        if (!eventTagMap && !hasOpenedEventTagMap) {
+            eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+            hasOpenedEventTagMap = true;
+        }
         err = android_log_processBinaryLogBuffer(&buf->entry_v1, &entry,
-                                                 g_eventTagMap,
+                                                 eventTagMap,
                                                  binaryMsgBuf,
                                                  sizeof(binaryMsgBuf));
         //printf(">>> pri=%d len=%d msg='%s'\n",
@@ -147,16 +150,6 @@ static void processBuffer(log_device_t* dev, struct log_msg *buf)
     }
 
     if (android_log_shouldPrintLine(g_logformat, entry.tag, entry.priority)) {
-        if (false && g_devCount > 1) {
-            binaryMsgBuf[0] = dev->label;
-            binaryMsgBuf[1] = ' ';
-            bytesWritten = write(g_outFD, binaryMsgBuf, 2);
-            if (bytesWritten < 0) {
-                perror("output error");
-                exit(-1);
-            }
-        }
-
         bytesWritten = android_log_printLogLine(g_logformat, g_outFD, &entry);
 
         if (bytesWritten < 0) {
@@ -178,18 +171,19 @@ error:
     return;
 }
 
-static void maybePrintStart(log_device_t* dev) {
-    if (!dev->printed) {
-        dev->printed = true;
+static void maybePrintStart(log_device_t* dev, bool printDividers) {
+    if (!dev->printed || printDividers) {
         if (g_devCount > 1 && !g_printBinary) {
             char buf[1024];
-            snprintf(buf, sizeof(buf), "--------- beginning of %s\n",
+            snprintf(buf, sizeof(buf), "--------- %s %s\n",
+                     dev->printed ? "switch to" : "beginning of",
                      dev->device);
             if (write(g_outFD, buf, strlen(buf)) < 0) {
                 perror("output error");
                 exit(-1);
             }
         }
+        dev->printed = true;
     }
 }
 
@@ -221,12 +215,13 @@ static void show_help(const char *cmd)
 
     fprintf(stderr, "options include:\n"
                     "  -s              Set default filter to silent.\n"
-                    "                  Like specifying filterspec '*:s'\n"
+                    "                  Like specifying filterspec '*:S'\n"
                     "  -f <filename>   Log to file. Default to stdout\n"
                     "  -r [<kbytes>]   Rotate log every kbytes. (16 if unspecified). Requires -f\n"
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
                     "  -v <format>     Sets the log print format, where <format> is:\n\n"
                     "                  brief color long process raw tag thread threadtime time\n\n"
+                    "  -D              print dividers between each log buffer\n"
                     "  -c              clear (flush) the entire log and exit\n"
                     "  -d              dump the log and then exit (don't block)\n"
                     "  -t <count>      print only the most recent <count> lines (implies -d)\n"
@@ -235,6 +230,7 @@ static void show_help(const char *cmd)
                     "  -T '<time>'     print most recent lines since specified time (not imply -d)\n"
                     "                  count is pure numerical, time is 'MM-DD hh:mm:ss.mmm'\n"
                     "  -g              get the size of the log's ring buffer and exit\n"
+                    "  -L              dump logs from prior to last reboot\n"
                     "  -b <buffer>     Request alternate ring buffer, 'main', 'system', 'radio',\n"
                     "                  'events', 'crash' or 'all'. Multiple -b parameters are\n"
                     "                  allowed and results are interleaved. The default is\n"
@@ -254,21 +250,19 @@ static void show_help(const char *cmd)
     fprintf(stderr,"\nfilterspecs are a series of \n"
                    "  <tag>[:priority]\n\n"
                    "where <tag> is a log component tag (or * for all) and priority is:\n"
-                   "  V    Verbose\n"
-                   "  D    Debug\n"
+                   "  V    Verbose (default for <tag>)\n"
+                   "  D    Debug (default for '*')\n"
                    "  I    Info\n"
                    "  W    Warn\n"
                    "  E    Error\n"
                    "  F    Fatal\n"
-                   "  S    Silent (supress all output)\n"
-                   "\n'*' means '*:d' and <tag> by itself means <tag>:v\n"
-                   "\nIf not specified on the commandline, filterspec is set from ANDROID_LOG_TAGS.\n"
-                   "If no filterspec is found, filter defaults to '*:I'\n"
-                   "\nIf not specified with -v, format is set from ANDROID_PRINTF_LOG\n"
+                   "  S    Silent (suppress all output)\n"
+                   "\n'*' by itself means '*:D' and <tag> by itself means <tag>:V.\n"
+                   "If no '*' filterspec or -s on command line, all filter defaults to '*:V'.\n"
+                   "eg: '*:S <tag>' prints only <tag>, '<tag>:S' suppresses all <tag> log messages.\n"
+                   "\nIf not specified on the command line, filterspec is set from ANDROID_LOG_TAGS.\n"
+                   "\nIf not specified with -v on command line, format is set from ANDROID_PRINTF_LOG\n"
                    "or defaults to \"threadtime\"\n\n");
-
-
-
 }
 
 
@@ -324,11 +318,11 @@ int main(int argc, char **argv)
     int getPruneList = 0;
     char *setPruneList = NULL;
     int printStatistics = 0;
-    int mode = O_RDONLY;
+    int mode = ANDROID_LOG_RDONLY;
     const char *forceFilters = NULL;
     log_device_t* devices = NULL;
     log_device_t* dev;
-    bool needBinary = false;
+    bool printDividers = false;
     struct logger_list *logger_list;
     unsigned int tail_lines = 0;
     log_time tail_time(log_time::EPOCH);
@@ -345,7 +339,7 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, "cdt:T:gG:sQf:r:n:v:b:BSpP:");
+        ret = getopt(argc, argv, "cdDLt:T:gG:sQf:r:n:v:b:BSpP:");
 
         if (ret < 0) {
             break;
@@ -359,15 +353,19 @@ int main(int argc, char **argv)
 
             case 'c':
                 clearLog = 1;
-                mode = O_WRONLY;
+                mode |= ANDROID_LOG_WRONLY;
+            break;
+
+            case 'L':
+                mode |= ANDROID_LOG_PSTORE;
             break;
 
             case 'd':
-                mode = O_RDONLY | O_NDELAY;
+                mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
             break;
 
             case 't':
-                mode = O_RDONLY | O_NDELAY;
+                mode |= ANDROID_LOG_RDONLY | ANDROID_LOG_NONBLOCK;
                 /* FALLTHRU */
             case 'T':
                 if (strspn(optarg, "0123456789") != strlen(optarg)) {
@@ -396,6 +394,10 @@ int main(int argc, char **argv)
                         tail_lines = 1;
                     }
                 }
+            break;
+
+            case 'D':
+                printDividers = true;
             break;
 
             case 'g':
@@ -457,7 +459,6 @@ int main(int argc, char **argv)
 
                     devices = dev = NULL;
                     android::g_devCount = 0;
-                    needBinary = false;
                     for(int i = LOG_ID_MIN; i < LOG_ID_MAX; ++i) {
                         const char *name = android_log_id_to_name((log_id_t)i);
                         log_id_t log_id = android_name_to_log_id(name);
@@ -467,7 +468,7 @@ int main(int argc, char **argv)
                         }
 
                         bool binary = strcmp(name, "events") == 0;
-                        log_device_t* d = new log_device_t(name, binary, *name);
+                        log_device_t* d = new log_device_t(name, binary);
 
                         if (dev) {
                             dev->next = d;
@@ -476,26 +477,20 @@ int main(int argc, char **argv)
                             devices = dev = d;
                         }
                         android::g_devCount++;
-                        if (binary) {
-                            needBinary = true;
-                        }
                     }
                     break;
                 }
 
                 bool binary = strcmp(optarg, "events") == 0;
-                if (binary) {
-                    needBinary = true;
-                }
 
                 if (devices) {
                     dev = devices;
                     while (dev->next) {
                         dev = dev->next;
                     }
-                    dev->next = new log_device_t(optarg, binary, optarg[0]);
+                    dev->next = new log_device_t(optarg, binary);
                 } else {
-                    devices = new log_device_t(optarg, binary, optarg[0]);
+                    devices = new log_device_t(optarg, binary);
                 }
                 android::g_devCount++;
             }
@@ -629,14 +624,14 @@ int main(int argc, char **argv)
     }
 
     if (!devices) {
-        dev = devices = new log_device_t("main", false, 'm');
+        dev = devices = new log_device_t("main", false);
         android::g_devCount = 1;
         if (android_name_to_log_id("system") == LOG_ID_SYSTEM) {
-            dev = dev->next = new log_device_t("system", false, 's');
+            dev = dev->next = new log_device_t("system", false);
             android::g_devCount++;
         }
         if (android_name_to_log_id("crash") == LOG_ID_CRASH) {
-            dev = dev->next = new log_device_t("crash", false, 'c');
+            dev = dev->next = new log_device_t("crash", false);
             android::g_devCount++;
         }
     }
@@ -836,15 +831,15 @@ int main(int argc, char **argv)
     //LOG_EVENT_LONG(11, 0x1122334455667788LL);
     //LOG_EVENT_STRING(0, "whassup, doc?");
 
-    if (needBinary)
-        android::g_eventTagMap = android_openEventTagMap(EVENT_TAG_MAP_FILE);
-
+    dev = NULL;
+    log_device_t unexpected("unexpected", false);
     while (1) {
         struct log_msg log_msg;
+        log_device_t* d;
         int ret = android_logger_list_read(logger_list, &log_msg);
 
         if (ret == 0) {
-            fprintf(stderr, "read: Unexpected EOF!\n");
+            fprintf(stderr, "read: unexpected EOF!\n");
             exit(EXIT_FAILURE);
         }
 
@@ -854,7 +849,7 @@ int main(int argc, char **argv)
             }
 
             if (ret == -EIO) {
-                fprintf(stderr, "read: Unexpected EOF!\n");
+                fprintf(stderr, "read: unexpected EOF!\n");
                 exit(EXIT_FAILURE);
             }
             if (ret == -EINVAL) {
@@ -865,17 +860,21 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        for(dev = devices; dev; dev = dev->next) {
-            if (android_name_to_log_id(dev->device) == log_msg.id()) {
+        for(d = devices; d; d = d->next) {
+            if (android_name_to_log_id(d->device) == log_msg.id()) {
                 break;
             }
         }
-        if (!dev) {
-            fprintf(stderr, "read: Unexpected log ID!\n");
-            exit(EXIT_FAILURE);
+        if (!d) {
+            android::g_devCount = 2; // set to Multiple
+            d = &unexpected;
+            d->binary = log_msg.id() == LOG_ID_EVENTS;
         }
 
-        android::maybePrintStart(dev);
+        if (dev != d) {
+            dev = d;
+            android::maybePrintStart(dev, printDividers);
+        }
         if (android::g_printBinary) {
             android::printBinary(&log_msg);
         } else {

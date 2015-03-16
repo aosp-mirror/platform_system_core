@@ -1,13 +1,13 @@
-
 #ifndef KEYWORD
+int do_bootchart_init(int nargs, char **args);
 int do_chroot(int nargs, char **args);
-int do_chdir(int nargs, char **args);
 int do_class_start(int nargs, char **args);
 int do_class_stop(int nargs, char **args);
 int do_class_reset(int nargs, char **args);
 int do_domainname(int nargs, char **args);
 int do_enable(int nargs, char **args);
 int do_exec(int nargs, char **args);
+int do_execonce(int nargs, char **args);
 int do_export(int nargs, char **args);
 int do_hostname(int nargs, char **args);
 int do_ifup(int nargs, char **args);
@@ -22,11 +22,8 @@ int do_restorecon_recursive(int nargs, char **args);
 int do_rm(int nargs, char **args);
 int do_rmdir(int nargs, char **args);
 int do_setcon(int nargs, char **args);
-int do_setenforce(int nargs, char **args);
-int do_setkey(int nargs, char **args);
 int do_setprop(int nargs, char **args);
 int do_setrlimit(int nargs, char **args);
-int do_setsebool(int nargs, char **args);
 int do_start(int nargs, char **args);
 int do_stop(int nargs, char **args);
 int do_swapon_all(int nargs, char **args);
@@ -40,6 +37,7 @@ int do_chmod(int nargs, char **args);
 int do_loglevel(int nargs, char **args);
 int do_load_persist_props(int nargs, char **args);
 int do_load_all_props(int nargs, char **args);
+int do_verity_load_state(int nargs, char **args);
 int do_wait(int nargs, char **args);
 #define __MAKE_KEYWORD_ENUM__
 #define KEYWORD(symbol, flags, nargs, func) K_##symbol,
@@ -47,7 +45,6 @@ enum {
     K_UNKNOWN,
 #endif
     KEYWORD(capability,  OPTION,  0, 0)
-    KEYWORD(chdir,       COMMAND, 1, do_chdir)
     KEYWORD(chroot,      COMMAND, 1, do_chroot)
     KEYWORD(class,       OPTION,  0, 0)
     KEYWORD(class_start, COMMAND, 1, do_class_start)
@@ -59,6 +56,7 @@ enum {
     KEYWORD(domainname,  COMMAND, 1, do_domainname)
     KEYWORD(enable,      COMMAND, 1, do_enable)
     KEYWORD(exec,        COMMAND, 1, do_exec)
+    KEYWORD(execonce,    COMMAND, 1, do_execonce)
     KEYWORD(export,      COMMAND, 2, do_export)
     KEYWORD(group,       OPTION,  0, 0)
     KEYWORD(hostname,    COMMAND, 1, do_hostname)
@@ -81,12 +79,9 @@ enum {
     KEYWORD(seclabel,    OPTION,  0, 0)
     KEYWORD(service,     SECTION, 0, 0)
     KEYWORD(setcon,      COMMAND, 1, do_setcon)
-    KEYWORD(setenforce,  COMMAND, 1, do_setenforce)
     KEYWORD(setenv,      OPTION,  2, 0)
-    KEYWORD(setkey,      COMMAND, 0, do_setkey)
     KEYWORD(setprop,     COMMAND, 2, do_setprop)
     KEYWORD(setrlimit,   COMMAND, 3, do_setrlimit)
-    KEYWORD(setsebool,   COMMAND, 2, do_setsebool)
     KEYWORD(socket,      OPTION,  0, 0)
     KEYWORD(start,       COMMAND, 1, do_start)
     KEYWORD(stop,        COMMAND, 1, do_stop)
@@ -95,6 +90,7 @@ enum {
     KEYWORD(symlink,     COMMAND, 1, do_symlink)
     KEYWORD(sysclktz,    COMMAND, 1, do_sysclktz)
     KEYWORD(user,        OPTION,  0, 0)
+    KEYWORD(verity_load_state,      COMMAND, 0, do_verity_load_state)
     KEYWORD(wait,        COMMAND, 1, do_wait)
     KEYWORD(write,       COMMAND, 2, do_write)
     KEYWORD(copy,        COMMAND, 2, do_copy)
@@ -104,10 +100,10 @@ enum {
     KEYWORD(load_persist_props,    COMMAND, 0, do_load_persist_props)
     KEYWORD(load_all_props,        COMMAND, 0, do_load_all_props)
     KEYWORD(ioprio,      OPTION,  0, 0)
+    KEYWORD(bootchart_init,        COMMAND, 0, do_bootchart_init)
 #ifdef __MAKE_KEYWORD_ENUM__
     KEYWORD_COUNT,
 };
 #undef __MAKE_KEYWORD_ENUM__
 #undef KEYWORD
 #endif
-

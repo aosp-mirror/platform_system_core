@@ -3,6 +3,10 @@
 
 #include "adb.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* connect to adb, connect to the named service, and return
 ** a valid fd for interacting with that service upon success
 ** or a negative number on failure
@@ -43,7 +47,7 @@ int  adb_get_emulator_console_port(void);
  * is zero, or more than one emulator connected (or if you use -s <serial>
  * with a <serial> that does not designate an emulator)
  */
-int  adb_send_emulator_command(int  argc, char**  argv);
+int  adb_send_emulator_command(int  argc, const char**  argv);
 
 /* return verbose error string from last operation */
 const char *adb_error(void);
@@ -53,5 +57,9 @@ const char *adb_error(void);
 ** or protocol error
 */
 int adb_status(int fd);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

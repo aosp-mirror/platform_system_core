@@ -76,7 +76,7 @@ enum {
 };
 
 static int
-uninflate(unsigned char* out, int unlen, const unsigned char* in, int clen)
+inflate_wrapper(unsigned char* out, int unlen, const unsigned char* in, int clen)
 {
     z_stream zstream;
     int err = 0;
@@ -121,7 +121,7 @@ decompress_zipentry(zipentry_t e, void* buf, int bufsize)
             memcpy(buf, entry->data, entry->uncompressedSize);
             return 0;
         case DEFLATED:
-            return uninflate(buf, bufsize, entry->data, entry->compressedSize);
+            return inflate_wrapper(buf, bufsize, entry->data, entry->compressedSize);
         default:
             return -1;
     }

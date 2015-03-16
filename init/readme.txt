@@ -70,11 +70,11 @@ disabled
 setenv <name> <value>
    Set the environment variable <name> to <value> in the launched process.
 
-socket <name> <type> <perm> [ <user> [ <group> [ <context> ] ] ]
+socket <name> <type> <perm> [ <user> [ <group> [ <seclabel> ] ] ]
    Create a unix domain socket named /dev/socket/<name> and pass
    its fd to the launched process.  <type> must be "dgram", "stream" or "seqpacket".
    User and group default to 0.
-   Context is the SELinux security context for the socket.
+   'seclabel' is the SELinux security context for the socket.
    It defaults to the service security context, as specified by seclabel or
    computed based on the service executable file security context.
 
@@ -91,8 +91,8 @@ group <groupname> [ <groupname> ]*
    supplemental groups of the process (via setgroups()).
    Currently defaults to root.  (??? probably should default to nobody)
 
-seclabel <securitycontext>
-  Change to securitycontext before exec'ing this service.
+seclabel <seclabel>
+  Change to 'seclabel' before exec'ing this service.
   Primarily for use by services run from the rootfs, e.g. ueventd, adbd.
   Services on the system partition can instead use policy-defined transitions
   based on their file security context.
@@ -110,6 +110,7 @@ class <name>
 onrestart
     Execute a Command (see below) when service restarts.
 
+
 Triggers
 --------
    Triggers are strings which can be used to match certain kinds
@@ -123,14 +124,31 @@ boot
    Triggers of this form occur when the property <name> is set
    to the specific value <value>.
 
+   One can also test multiple properties to execute a group
+   of commands. For example:
+
+   on property:test.a=1 && property:test.b=1
+       setprop test.c 1
+
+   The above stub sets test.c to 1 only when
+   both test.a=1 and test.b=1
+
+
 Commands
 --------
 
-exec <path> [ <argument> ]*
+exec [ <seclabel> [ <user> [ <group> ]* ] ] -- <command> [ <argument> ]*
+   Fork and execute command with the given arguments. The command starts
+   after "--" so that an optional security context, user, and supplementary
+   groups can be provided. No other commands will be run until this one
+   finishes.
+
+execonce <path> [ <argument> ]*
    Fork and execute a program (<path>).  This will block until
-   the program completes execution.  It is best to avoid exec
-   as unlike the builtin commands, it runs the risk of getting
-   init "stuck". (??? maybe there should be a timeout?)
+   the program completes execution.  This command can be run at most
+   once during init's lifetime. Subsequent invocations are ignored.
+   It is best to avoid execonce as unlike the builtin commands, it runs
+   the risk of getting init "stuck".
 
 export <name> <value>
    Set the environment variable <name> equal to <value> in the
@@ -145,9 +163,6 @@ import <filename>
 
 hostname <name>
    Set the host name.
-
-chdir <directory>
-   Change working directory.
 
 chmod <octal-mode> <path>
    Change file access permissions.
@@ -178,20 +193,25 @@ enable <servicename>
      on property:ro.boot.myfancyhardware=1
         enable my_fancy_service_for_my_fancy_hardware
 
-
 insmod <path>
    Install the module at <path>
+
+loglevel <level>
+   Sets the kernel log level to level. Properties are expanded within <level>.
 
 mkdir <path> [mode] [owner] [group]
    Create a directory at <path>, optionally with the given mode, owner, and
    group. If not provided, the directory is created with permissions 755 and
-   owned by the root user and root group.
+   owned by the root user and root group. If provided, the mode, owner and group
+   will be updated if the directory exists already.
 
-mount <type> <device> <dir> [ <mountoption> ]*
+mount <type> <device> <dir> [ <flag> ]* [<options>]
    Attempt to mount the named device at the directory <dir>
    <device> may be of the form mtd@name to specify a mtd block
    device by name.
-   <mountoption>s include "ro", "rw", "remount", "noatime", ...
+   <flag>s include "ro", "rw", "remount", "noatime", ...
+   <options> include "barrier=1", "noauto_da_alloc", "discard", ... as
+   a comma separated string, eg: barrier=1,noauto_da_alloc
 
 restorecon <path> [ <path> ]*
    Restore the file named by <path> to the security context specified
@@ -203,27 +223,17 @@ restorecon_recursive <path> [ <path> ]*
    Recursively restore the directory tree named by <path> to the
    security contexts specified in the file_contexts configuration.
 
-setcon <securitycontext>
+setcon <seclabel>
    Set the current process security context to the specified string.
    This is typically only used from early-init to set the init context
    before any other process is started.
 
-setenforce 0|1
-   Set the SELinux system-wide enforcing status.
-   0 is permissive (i.e. log but do not deny), 1 is enforcing.
-
-setkey
-   TBD
-
 setprop <name> <value>
-   Set system property <name> to <value>.
+   Set system property <name> to <value>. Properties are expanded
+   within <value>.
 
 setrlimit <resource> <cur> <max>
    Set the rlimit for a resource.
-
-setsebool <name> <value>
-   Set SELinux boolean <name> to <value>.
-   <value> may be 1|true|on or 0|false|off
 
 start <service>
    Start a service running if it is not already running.
@@ -246,9 +256,10 @@ wait <path> [ <timeout> ]
   or the timeout has been reached. If timeout is not specified it
   currently defaults to five seconds.
 
-write <path> <string>
-   Open the file at <path> and write a string to it with write(2)
-   without appending.
+write <path> <content>
+   Open the file at <path> and write a string to it with write(2).
+   If the file does not exist, it will be created. If it does exist,
+   it will be truncated. Properties are expanded within <content>.
 
 
 Properties
@@ -256,7 +267,7 @@ Properties
 Init updates some system properties to provide some insight into
 what it's doing:
 
-init.action 
+init.action
    Equal to the name of the action currently being executed or "" if none
 
 init.command
@@ -266,67 +277,59 @@ init.svc.<name>
    State of a named service ("stopped", "running", "restarting")
 
 
-Example init.conf
------------------
+Bootcharting
+------------
 
-# not complete -- just providing some examples of usage
-#
-on boot
-   export PATH /sbin:/system/sbin:/system/bin
-   export LD_LIBRARY_PATH /system/lib
+This version of init contains code to perform "bootcharting": generating log
+files that can be later processed by the tools provided by www.bootchart.org.
 
-   mkdir /dev
-   mkdir /proc
-   mkdir /sys
+On the emulator, use the new -bootchart <timeout> option to boot with
+bootcharting activated for <timeout> seconds.
 
-   mount tmpfs tmpfs /dev
-   mkdir /dev/pts
-   mkdir /dev/socket
-   mount devpts devpts /dev/pts
-   mount proc proc /proc
-   mount sysfs sysfs /sys
+On a device, create /data/bootchart/start with a command like the following:
 
-   write /proc/cpu/alignment 4
+  adb shell 'echo $TIMEOUT > /data/bootchart/start'
 
-   ifup lo
+Where the value of $TIMEOUT corresponds to the desired bootcharted period in
+seconds. Bootcharting will stop after that many seconds have elapsed.
+You can also stop the bootcharting at any moment by doing the following:
 
-   hostname localhost
-   domainname localhost
+  adb shell 'echo 1 > /data/bootchart/stop'
 
-   mount yaffs2 mtd@system /system
-   mount yaffs2 mtd@userdata /data
+Note that /data/bootchart/stop is deleted automatically by init at the end of
+the bootcharting. This is not the case with /data/bootchart/start, so don't
+forget to delete it when you're done collecting data.
 
-   import /system/etc/init.conf
+The log files are written to /data/bootchart/. A script is provided to
+retrieve them and create a bootchart.tgz file that can be used with the
+bootchart command-line utility:
 
-   class_start default
+  sudo apt-get install pybootchartgui
+  ANDROID_SERIAL=<device serial number>
+  $ANDROID_BUILD_TOP/system/core/init/grab-bootchart.sh
 
-service adbd /sbin/adbd
-   user adb
-   group adb
 
-service usbd /system/bin/usbd -r
-   user usbd
-   group usbd
-   socket usbd 666
-
-service zygote /system/bin/app_process -Xzygote /system/bin --zygote
-   socket zygote 666
-
-service runtime /system/bin/runtime
-   user system
-   group system
-
-service akmd /sbin/akmd
-   disabled
-   user akmd
-   group akmd
-
-Debugging notes
----------------
+Debugging init
+--------------
 By default, programs executed by init will drop stdout and stderr into
 /dev/null. To help with debugging, you can execute your program via the
-Andoird program logwrapper. This will redirect stdout/stderr into the
+Android program logwrapper. This will redirect stdout/stderr into the
 Android logging system (accessed via logcat).
 
 For example
 service akmd /system/bin/logwrapper /sbin/akmd
+
+For quicker turnaround when working on init itself, use:
+
+  mm -j
+  m ramdisk-nodeps
+  m bootimage-nodeps
+  adb reboot bootloader
+  fastboot boot $ANDROID_PRODUCT_OUT/boot.img
+
+Alternatively, use the emulator:
+
+  emulator -partition-size 1024 -verbose -show-kernel -no-window
+
+You might want to call klog_set_level(6) after the klog_init() call
+so you see the kernel logging in dmesg (or the emulator output).

@@ -1,35 +1,49 @@
 # Copyright 2005 The Android Open Source Project
 
 LOCAL_PATH:= $(call my-dir)
-include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:= \
-	builtins.c \
-	init.c \
-	devices.c \
-	property_service.c \
-	util.c \
-	parser.c \
-	keychords.c \
-	signal_handler.c \
-	init_parser.c \
-	ueventd.c \
-	ueventd_parser.c \
-	watchdogd.c
-
-LOCAL_CFLAGS    += -Wno-unused-parameter
-
-ifeq ($(strip $(INIT_BOOTCHART)),true)
-LOCAL_SRC_FILES += bootchart.c
-LOCAL_CFLAGS    += -DBOOTCHART=1
-endif
+# --
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
-LOCAL_CFLAGS += -DALLOW_LOCAL_PROP_OVERRIDE=1 -DALLOW_DISABLE_SELINUX=1
+init_options += -DALLOW_LOCAL_PROP_OVERRIDE=1 -DALLOW_DISABLE_SELINUX=1
+else
+init_options += -DALLOW_LOCAL_PROP_OVERRIDE=0 -DALLOW_DISABLE_SELINUX=0
 endif
 
-# Enable ueventd logging
-#LOCAL_CFLAGS += -DLOG_UEVENTS=1
+init_options += -DLOG_UEVENTS=0
+
+init_cflags += \
+    $(init_options) \
+    -Wall -Wextra \
+    -Wno-unused-parameter \
+    -Werror \
+
+# --
+
+include $(CLEAR_VARS)
+LOCAL_CPPFLAGS := $(init_cflags)
+LOCAL_SRC_FILES:= \
+    init_parser.cpp \
+    parser.cpp \
+    util.cpp \
+
+LOCAL_STATIC_LIBRARIES := libbase
+LOCAL_MODULE := libinit
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_CPPFLAGS := $(init_cflags)
+LOCAL_SRC_FILES:= \
+    bootchart.cpp \
+    builtins.cpp \
+    devices.cpp \
+    init.cpp \
+    keychords.cpp \
+    property_service.cpp \
+    signal_handler.cpp \
+    ueventd.cpp \
+    ueventd_parser.cpp \
+    watchdogd.cpp \
 
 LOCAL_MODULE:= init
 
@@ -38,14 +52,16 @@ LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
 
 LOCAL_STATIC_LIBRARIES := \
-	libfs_mgr \
-	liblogwrap \
-	libcutils \
-	liblog \
-	libc \
-	libselinux \
-	libmincrypt \
-	libext4_utils_static
+    libinit \
+    libfs_mgr \
+    liblogwrap \
+    libcutils \
+    libbase \
+    liblog \
+    libc \
+    libselinux \
+    libmincrypt \
+    libext4_utils_static
 
 # Create symlinks
 LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
@@ -53,3 +69,19 @@ LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
     ln -sf ../init $(TARGET_ROOT_OUT)/sbin/watchdogd
 
 include $(BUILD_EXECUTABLE)
+
+
+
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := init_tests
+LOCAL_SRC_FILES := \
+    init_parser_test.cpp \
+    util_test.cpp \
+
+LOCAL_SHARED_LIBRARIES += \
+    libcutils \
+    libbase \
+
+LOCAL_STATIC_LIBRARIES := libinit
+include $(BUILD_NATIVE_TEST)

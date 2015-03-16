@@ -68,14 +68,13 @@ char *locale;
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
 #define BATTERY_FULL_THRESH     95
-#define SCREEN_ON_BATTERY_THRESH 0
 
 #define LAST_KMSG_PATH          "/proc/last_kmsg"
 #define LAST_KMSG_PSTORE_PATH   "/sys/fs/pstore/console-ramoops"
 #define LAST_KMSG_MAX_SZ        (32 * 1024)
 
 #define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
-#define LOGI(x...) do { KLOG_INFO("charger", x); } while (0)
+#define LOGW(x...) do { KLOG_WARNING("charger", x); } while (0)
 #define LOGV(x...) do { KLOG_DEBUG("charger", x); } while (0)
 
 struct key_state {
@@ -109,7 +108,6 @@ struct animation {
 struct charger {
     bool have_battery_state;
     bool charger_connected;
-    int capacity;
     int64_t next_screen_transition;
     int64_t next_key_check;
     int64_t next_pwr_check;
@@ -170,7 +168,8 @@ static struct animation battery_animation = {
 };
 
 static struct charger charger_state;
-
+static struct healthd_config *healthd_config;
+static struct android::BatteryProperties *batt_prop;
 static int char_width;
 static int char_height;
 static bool minui_inited;
@@ -198,15 +197,15 @@ static void dump_last_kmsg(void)
     unsigned sz = 0;
     int len;
 
-    LOGI("\n");
-    LOGI("*************** LAST KMSG ***************\n");
-    LOGI("\n");
+    LOGW("\n");
+    LOGW("*************** LAST KMSG ***************\n");
+    LOGW("\n");
     buf = (char *)load_file(LAST_KMSG_PSTORE_PATH, &sz);
 
     if (!buf || !sz) {
         buf = (char *)load_file(LAST_KMSG_PATH, &sz);
         if (!buf || !sz) {
-            LOGI("last_kmsg not found. Cold reset?\n");
+            LOGW("last_kmsg not found. Cold reset?\n");
             goto out;
         }
     }
@@ -225,7 +224,7 @@ static void dump_last_kmsg(void)
 
         yoink = ptr[cnt];
         ptr[cnt] = '\0';
-        klog_write(6, "<6>%s", ptr);
+        klog_write(6, "<4>%s", ptr);
         ptr[cnt] = yoink;
 
         len -= cnt;
@@ -235,14 +234,9 @@ static void dump_last_kmsg(void)
     free(buf);
 
 out:
-    LOGI("\n");
-    LOGI("************* END LAST KMSG *************\n");
-    LOGI("\n");
-}
-
-static int get_battery_capacity()
-{
-    return charger_state.capacity;
+    LOGW("\n");
+    LOGW("************* END LAST KMSG *************\n");
+    LOGW("\n");
 }
 
 #ifdef CHARGER_ENABLE_SUSPEND
@@ -356,15 +350,16 @@ static void update_screen_state(struct charger *charger, int64_t now)
         return;
 
     if (!minui_inited) {
-        int batt_cap = get_battery_capacity();
 
-        if (batt_cap < SCREEN_ON_BATTERY_THRESH) {
-            LOGV("[%" PRId64 "] level %d, leave screen off\n", now, batt_cap);
-            batt_anim->run = false;
-            charger->next_screen_transition = -1;
-            if (charger->charger_connected)
-                request_suspend(true);
-            return;
+        if (healthd_config && healthd_config->screen_on) {
+            if (!healthd_config->screen_on(batt_prop)) {
+                LOGV("[%" PRId64 "] leave screen off\n", now);
+                batt_anim->run = false;
+                charger->next_screen_transition = -1;
+                if (charger->charger_connected)
+                    request_suspend(true);
+                return;
+            }
         }
 
         gr_init();
@@ -391,16 +386,14 @@ static void update_screen_state(struct charger *charger, int64_t now)
 
     /* animation starting, set up the animation */
     if (batt_anim->cur_frame == 0) {
-        int batt_cap;
 
         LOGV("[%" PRId64 "] animation starting\n", now);
-        batt_cap = get_battery_capacity();
-        if (batt_cap >= 0 && batt_anim->num_frames != 0) {
+        if (batt_prop && batt_prop->batteryLevel >= 0 && batt_anim->num_frames != 0) {
             int i;
 
             /* find first frame given current capacity */
             for (i = 1; i < batt_anim->num_frames; i++) {
-                if (batt_cap < batt_anim->frames[i].min_capacity)
+                if (batt_prop->batteryLevel < batt_anim->frames[i].min_capacity)
                     break;
             }
             batt_anim->cur_frame = i - 1;
@@ -408,8 +401,8 @@ static void update_screen_state(struct charger *charger, int64_t now)
             /* show the first frame for twice as long */
             disp_time = batt_anim->frames[batt_anim->cur_frame].disp_time * 2;
         }
-
-        batt_anim->capacity = batt_cap;
+        if (batt_prop)
+            batt_anim->capacity = batt_prop->batteryLevel;
     }
 
     /* unblank the screen  on first cycle */
@@ -524,10 +517,10 @@ static void process_key(struct charger *charger, int code, int64_t now)
                    all devices. Check the property and continue booting or reboot
                    accordingly. */
                 if (property_get_bool("ro.enable_boot_charger_mode", false)) {
-                    LOGI("[%" PRId64 "] booting from charger mode\n", now);
+                    LOGW("[%" PRId64 "] booting from charger mode\n", now);
                     property_set("sys.boot_from_charger_mode", "1");
                 } else {
-                    LOGI("[%" PRId64 "] rebooting\n", now);
+                    LOGW("[%" PRId64 "] rebooting\n", now);
                     android_reboot(ANDROID_RB_RESTART, 0, 0);
                 }
             } else {
@@ -565,10 +558,10 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
         request_suspend(false);
         if (charger->next_pwr_check == -1) {
             charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
-            LOGI("[%" PRId64 "] device unplugged: shutting down in %" PRId64 " (@ %" PRId64 ")\n",
+            LOGW("[%" PRId64 "] device unplugged: shutting down in %" PRId64 " (@ %" PRId64 ")\n",
                  now, (int64_t)UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
         } else if (now >= charger->next_pwr_check) {
-            LOGI("[%" PRId64 "] shutting down\n", now);
+            LOGW("[%" PRId64 "] shutting down\n", now);
             android_reboot(ANDROID_RB_POWEROFF, 0, 0);
         } else {
             /* otherwise we already have a shutdown timer scheduled */
@@ -576,7 +569,7 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
     } else {
         /* online supply present, reset shutdown timer if set */
         if (charger->next_pwr_check != -1) {
-            LOGI("[%" PRId64 "] device plugged in: shutdown cancelled\n", now);
+            LOGW("[%" PRId64 "] device plugged in: shutdown cancelled\n", now);
             kick_animation(charger->batt_anim);
         }
         charger->next_pwr_check = -1;
@@ -605,7 +598,6 @@ void healthd_mode_charger_battery_update(
     charger->charger_connected =
         props->chargerAcOnline || props->chargerUsbOnline ||
         props->chargerWirelessOnline;
-    charger->capacity = props->batteryLevel;
 
     if (!charger->have_battery_state) {
         charger->have_battery_state = true;
@@ -613,6 +605,7 @@ void healthd_mode_charger_battery_update(
         reset_animation(charger->batt_anim);
         kick_animation(charger->batt_anim);
     }
+    batt_prop = props;
 }
 
 int healthd_mode_charger_preparetowait(void)
@@ -663,7 +656,7 @@ static void charger_event_handler(uint32_t /*epevents*/)
         ev_dispatch();
 }
 
-void healthd_mode_charger_init(struct healthd_config* /*config*/)
+void healthd_mode_charger_init(struct healthd_config* config)
 {
     int ret;
     struct charger *charger = &charger_state;
@@ -672,7 +665,7 @@ void healthd_mode_charger_init(struct healthd_config* /*config*/)
 
     dump_last_kmsg();
 
-    LOGI("--------------- STARTING CHARGER MODE ---------------\n");
+    LOGW("--------------- STARTING CHARGER MODE ---------------\n");
 
     ret = ev_init(input_callback, charger);
     if (!ret) {
@@ -711,4 +704,5 @@ void healthd_mode_charger_init(struct healthd_config* /*config*/)
     charger->next_screen_transition = -1;
     charger->next_key_check = -1;
     charger->next_pwr_check = -1;
+    healthd_config = config;
 }

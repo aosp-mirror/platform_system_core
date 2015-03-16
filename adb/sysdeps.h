@@ -24,6 +24,21 @@
 #  undef _WIN32
 #endif
 
+/*
+ * TEMP_FAILURE_RETRY is defined by some, but not all, versions of
+ * <unistd.h>. (Alas, it is not as standard as we'd hoped!) So, if it's
+ * not already defined, then define it here.
+ */
+#ifndef TEMP_FAILURE_RETRY
+/* Used to retry syscalls that can return EINTR. */
+#define TEMP_FAILURE_RETRY(exp) ({         \
+    typeof (exp) _rc;                      \
+    do {                                   \
+        _rc = (exp);                       \
+    } while (_rc == -1 && errno == EINTR); \
+    _rc; })
+#endif
+
 #ifdef _WIN32
 
 #include <ctype.h>
@@ -38,6 +53,10 @@
 #include <ws2tcpip.h>
 
 #include "fdevent.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define OS_PATH_SEPARATOR '\\'
 #define OS_PATH_SEPARATOR_STR "\\"
@@ -279,19 +298,8 @@ extern char*  adb_strtok_r(char *str, const char *delim, char **saveptr);
 #include <string.h>
 #include <unistd.h>
 
-/*
- * TEMP_FAILURE_RETRY is defined by some, but not all, versions of
- * <unistd.h>. (Alas, it is not as standard as we'd hoped!) So, if it's
- * not already defined, then define it here.
- */
-#ifndef TEMP_FAILURE_RETRY
-/* Used to retry syscalls that can return EINTR. */
-#define TEMP_FAILURE_RETRY(exp) ({         \
-    typeof (exp) _rc;                      \
-    do {                                   \
-        _rc = (exp);                       \
-    } while (_rc == -1 && errno == EINTR); \
-    _rc; })
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 #define OS_PATH_SEPARATOR '/'
@@ -533,5 +541,9 @@ static __inline__ unsigned long adb_thread_id()
 #define  strtok_r  ___xxx_strtok_r
 
 #endif /* !_WIN32 */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _ADB_SYSDEPS_H */

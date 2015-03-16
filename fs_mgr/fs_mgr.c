@@ -119,7 +119,17 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
         ret = mount(blk_device, target, fs_type, tmpmnt_flags, tmpmnt_opts);
         INFO("%s(): mount(%s,%s,%s)=%d\n", __func__, blk_device, target, fs_type, ret);
         if (!ret) {
-            umount(target);
+            int i;
+            for (i = 0; i < 5; i++) {
+                // Try to umount 5 times before continuing on.
+                // Should we try rebooting if all attempts fail?
+                int result = umount(target);
+                if (result == 0) {
+                    break;
+                }
+                ERROR("%s(): umount(%s)=%d: %s\n", __func__, target, result, strerror(errno));
+                sleep(1);
+            }
         }
 
         /*
@@ -144,9 +154,10 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
     } else if (!strcmp(fs_type, "f2fs")) {
             char *f2fs_fsck_argv[] = {
                     F2FS_FSCK_BIN,
+                    "-f",
                     blk_device
             };
-        INFO("Running %s on %s\n", F2FS_FSCK_BIN, blk_device);
+        INFO("Running %s -f %s\n", F2FS_FSCK_BIN, blk_device);
 
         ret = android_fork_execvp_ext(ARRAY_SIZE(f2fs_fsck_argv), f2fs_fsck_argv,
                                       &status, true, LOG_KLOG | LOG_FILE,
@@ -175,19 +186,22 @@ static void remove_trailing_slashes(char *n)
  * Mark the given block device as read-only, using the BLKROSET ioctl.
  * Return 0 on success, and -1 on error.
  */
-static void fs_set_blk_ro(const char *blockdev)
+int fs_mgr_set_blk_ro(const char *blockdev)
 {
     int fd;
+    int rc = -1;
     int ON = 1;
 
-    fd = open(blockdev, O_RDONLY);
+    fd = TEMP_FAILURE_RETRY(open(blockdev, O_RDONLY | O_CLOEXEC));
     if (fd < 0) {
         // should never happen
-        return;
+        return rc;
     }
 
-    ioctl(fd, BLKROSET, &ON);
-    close(fd);
+    rc = ioctl(fd, BLKROSET, &ON);
+    TEMP_FAILURE_RETRY(close(fd));
+
+    return rc;
 }
 
 /*
@@ -213,7 +227,7 @@ static int __mount(const char *source, const char *target, const struct fstab_re
     save_errno = errno;
     INFO("%s(source=%s,target=%s,type=%s)=%d\n", __func__, source, target, rec->fs_type, ret);
     if ((ret == 0) && (mountflags & MS_RDONLY) != 0) {
-        fs_set_blk_ro(source);
+        fs_mgr_set_blk_ro(source);
     }
     errno = save_errno;
     return ret;
@@ -477,7 +491,9 @@ int fs_mgr_mount_all(struct fstab *fstab)
         /* Deal with encryptability. */
         if (!mret) {
             /* If this is encryptable, need to trigger encryption */
-          if (fs_mgr_is_encryptable(&fstab->recs[attempted_idx])) {
+            if (   (fstab->recs[attempted_idx].fs_mgr_flags & MF_FORCECRYPT)
+                || (device_is_force_encrypted()
+                    && fs_mgr_is_encryptable(&fstab->recs[attempted_idx]))) {
                 if (umount(fstab->recs[attempted_idx].mount_point) == 0) {
                     if (encryptable == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
                         ERROR("Will try to encrypt %s %s\n", fstab->recs[attempted_idx].mount_point,
@@ -488,8 +504,8 @@ int fs_mgr_mount_all(struct fstab *fstab)
                         encryptable = FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED;
                     }
                 } else {
-                    INFO("Could not umount %s - allow continue unencrypted\n",
-                         fstab->recs[attempted_idx].mount_point);
+                    WARNING("Could not umount %s (%s) - allow continue unencrypted\n",
+                            fstab->recs[attempted_idx].mount_point, strerror(errno));
                     continue;
                 }
             }

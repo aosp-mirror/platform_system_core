@@ -13,12 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#if (FAKE_LOG_DEVICE == 0)
+#include <endian.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #if !defined(_WIN32)
 #include <pthread.h>
 #endif
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,6 +77,7 @@ static int pstore_fd = -1;
 static enum {
     kLogUninitialized, kLogNotAvailable, kLogAvailable
 } g_log_status = kLogUninitialized;
+
 int __android_log_dev_available(void)
 {
     if (g_log_status == kLogUninitialized) {
@@ -145,7 +150,7 @@ static int __write_to_log_initialize()
     return ret;
 }
 
-static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
+static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
 {
     ssize_t ret;
 #if FAKE_LOG_DEVICE
@@ -171,6 +176,7 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     size_t i, payload_size;
     static uid_t last_uid = AID_ROOT; /* logd *always* starts up as AID_ROOT */
     static pid_t last_pid = (pid_t) -1;
+    static atomic_int_fast32_t dropped;
 
     if (last_uid == AID_ROOT) { /* have we called to get the UID yet? */
         last_uid = getuid();
@@ -180,7 +186,7 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     }
     /*
      *  struct {
-     *      // whate we provire to pstore
+     *      // what we provide to pstore
      *      android_pmsg_log_header_t pmsg_header;
      *      // what we provide to socket
      *      android_log_header_t header;
@@ -205,7 +211,6 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     pmsg_header.uid = last_uid;
     pmsg_header.pid = last_pid;
 
-    header.id = log_id;
     header.tid = gettid();
     header.realtime.tv_sec = ts.tv_sec;
     header.realtime.tv_nsec = ts.tv_nsec;
@@ -214,6 +219,28 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
     newVec[0].iov_len    = sizeof(pmsg_header);
     newVec[1].iov_base   = (unsigned char *) &header;
     newVec[1].iov_len    = sizeof(header);
+
+    if (logd_fd > 0) {
+        int32_t snapshot = atomic_exchange_explicit(&dropped, 0, memory_order_relaxed);
+        if (snapshot) {
+            android_log_event_int_t buffer;
+
+            header.id = LOG_ID_EVENTS;
+            buffer.header.tag = htole32(LIBLOG_LOG_TAG);
+            buffer.payload.type = EVENT_TYPE_INT;
+            buffer.payload.data = htole32(snapshot);
+
+            newVec[2].iov_base = &buffer;
+            newVec[2].iov_len  = sizeof(buffer);
+
+            ret = TEMP_FAILURE_RETRY(writev(logd_fd, newVec + 1, 2));
+            if (ret != (ssize_t)(sizeof(header) + sizeof(buffer))) {
+                atomic_fetch_add_explicit(&dropped, snapshot, memory_order_relaxed);
+            }
+        }
+    }
+
+    header.id = log_id;
 
     for (payload_size = 0, i = header_length; i < nr + header_length; i++) {
         newVec[i].iov_base = vec[i - header_length].iov_base;
@@ -280,6 +307,8 @@ static int __write_to_log_kernel(log_id_t log_id, struct iovec *vec, size_t nr)
 
     if (ret > (ssize_t)sizeof(header)) {
         ret -= sizeof(header);
+    } else if (ret == -EAGAIN) {
+        atomic_fetch_add_explicit(&dropped, 1, memory_order_relaxed);
     }
 #endif
 
@@ -321,7 +350,7 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
             return ret;
         }
 
-        write_to_log = __write_to_log_kernel;
+        write_to_log = __write_to_log_daemon;
     }
 
 #if !defined(_WIN32)
@@ -462,7 +491,7 @@ void __android_log_assert(const char *cond, const char *tag,
     }
 
     __android_log_write(ANDROID_LOG_FATAL, tag, buf);
-    __builtin_trap(); /* trap so we have a chance to debug the situation */
+    abort(); /* abort so we have a chance to debug the situation */
     /* NOTREACHED */
 }
 

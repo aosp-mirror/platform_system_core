@@ -17,6 +17,7 @@
 #include "ziparchive/zip_archive.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -86,6 +87,26 @@ TEST(ziparchive, OpenMissing) {
 
   // Confirm the file descriptor is not going to be mistaken for a valid one.
   ASSERT_EQ(-1, GetFileDescriptor(handle));
+}
+
+TEST(ziparchive, OpenAssumeFdOwnership) {
+  int fd = open((test_data_dir + "/" + kValidZip).c_str(), O_RDONLY);
+  ASSERT_NE(-1, fd);
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(fd, "OpenWithAssumeFdOwnership", &handle));
+  CloseArchive(handle);
+  ASSERT_EQ(-1, lseek(fd, 0, SEEK_SET));
+  ASSERT_EQ(EBADF, errno);
+}
+
+TEST(ziparchive, OpenDoNotAssumeFdOwnership) {
+  int fd = open((test_data_dir + "/" + kValidZip).c_str(), O_RDONLY);
+  ASSERT_NE(-1, fd);
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(fd, "OpenWithAssumeFdOwnership", &handle, false));
+  CloseArchive(handle);
+  ASSERT_EQ(0, lseek(fd, 0, SEEK_SET));
+  close(fd);
 }
 
 TEST(ziparchive, Iteration) {

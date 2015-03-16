@@ -21,6 +21,7 @@
 #include <fs_mgr.h>
 
 #define INFO(x...)    KLOG_INFO("fs_mgr", x)
+#define WARNING(x...) KLOG_WARNING("fs_mgr", x)
 #define ERROR(x...)   KLOG_ERROR("fs_mgr", x)
 
 #define CRYPTO_TMPFS_OPTIONS "size=256m,mode=0771,uid=1000,gid=1000"
@@ -77,6 +78,8 @@
                                  external storage */
 
 #define DM_BUF_SIZE 4096
+
+int fs_mgr_set_blk_ro(const char *blockdev);
 
 #endif /* __CORE_FS_MGR_PRIV_H */
 
