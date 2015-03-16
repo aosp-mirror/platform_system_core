@@ -14,16 +14,11 @@
  * limitations under the License.
  */
 
-#include "base/stringprintf.h"
+#include <utils/stringprintf.h>
 
 #include <stdio.h>
 
-#include <string>
-
-namespace android {
-namespace base {
-
-void StringAppendV(std::string* dst, const char* format, va_list ap) {
+void android::StringAppendV(std::string* dst, const char* format, va_list ap) {
   // First try with a small fixed size buffer
   char space[1024];
 
@@ -50,7 +45,7 @@ void StringAppendV(std::string* dst, const char* format, va_list ap) {
 
   // Increase the buffer size to the size requested by vsnprintf,
   // plus one for the closing \0.
-  int length = result + 1;
+  int length = result+1;
   char* buf = new char[length];
 
   // Restore the va_list before we use it again
@@ -65,7 +60,7 @@ void StringAppendV(std::string* dst, const char* format, va_list ap) {
   delete[] buf;
 }
 
-std::string StringPrintf(const char* fmt, ...) {
+std::string android::StringPrintf(const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   std::string result;
@@ -74,12 +69,9 @@ std::string StringPrintf(const char* fmt, ...) {
   return result;
 }
 
-void StringAppendF(std::string* dst, const char* format, ...) {
+void android::StringAppendF(std::string* dst, const char* format, ...) {
   va_list ap;
   va_start(ap, format);
   StringAppendV(dst, format, ap);
   va_end(ap);
 }
-
-}  // namespace base
-}  // namespace android

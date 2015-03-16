@@ -14,27 +14,25 @@
  * limitations under the License.
  */
 
-#include "base/stringprintf.h"
+#include <utils/stringprintf.h>
 
 #include <gtest/gtest.h>
 
-#include <string>
-
 TEST(StringPrintfTest, HexSizeT) {
   size_t size = 0x00107e59;
-  EXPECT_EQ("00107e59", android::base::StringPrintf("%08zx", size));
-  EXPECT_EQ("0x00107e59", android::base::StringPrintf("0x%08zx", size));
+  EXPECT_EQ("00107e59", android::StringPrintf("%08zx", size));
+  EXPECT_EQ("0x00107e59", android::StringPrintf("0x%08zx", size));
 }
 
 TEST(StringPrintfTest, StringAppendF) {
   std::string s("a");
-  android::base::StringAppendF(&s, "b");
+  android::StringAppendF(&s, "b");
   EXPECT_EQ("ab", s);
 }
 
 TEST(StringPrintfTest, Errno) {
   errno = 123;
-  android::base::StringPrintf("hello %s", "world");
+  android::StringPrintf("hello %s", "world");
   EXPECT_EQ(123, errno);
 }
 
@@ -42,7 +40,7 @@ void TestN(size_t n) {
   char* buf = new char[n + 1];
   memset(buf, 'x', n);
   buf[n] = '\0';
-  std::string s(android::base::StringPrintf("%s", buf));
+  std::string s(android::StringPrintf("%s", buf));
   EXPECT_EQ(buf, s);
   delete[] buf;
 }

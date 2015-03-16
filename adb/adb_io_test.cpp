@@ -24,7 +24,7 @@
 
 #include <string>
 
-#include "base/file.h"
+#include "utils/file.h"
 
 class TemporaryFile {
  public:
@@ -55,7 +55,7 @@ TEST(io, ReadFdExactly_whole) {
   TemporaryFile tf;
   ASSERT_NE(-1, tf.fd);
 
-  ASSERT_TRUE(android::base::WriteStringToFd(expected, tf.fd)) << strerror(errno);
+  ASSERT_TRUE(android::WriteStringToFd(expected, tf.fd)) << strerror(errno);
   ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
 
   // Test reading the whole file.
@@ -69,7 +69,7 @@ TEST(io, ReadFdExactly_eof) {
   TemporaryFile tf;
   ASSERT_NE(-1, tf.fd);
 
-  ASSERT_TRUE(android::base::WriteStringToFd(expected, tf.fd)) << strerror(errno);
+  ASSERT_TRUE(android::WriteStringToFd(expected, tf.fd)) << strerror(errno);
   ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
 
   // Test that not having enough data will fail.
@@ -83,7 +83,7 @@ TEST(io, ReadFdExactly_partial) {
   TemporaryFile tf;
   ASSERT_NE(-1, tf.fd);
 
-  ASSERT_TRUE(android::base::WriteStringToFd(input, tf.fd)) << strerror(errno);
+  ASSERT_TRUE(android::WriteStringToFd(input, tf.fd)) << strerror(errno);
   ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
 
   // Test reading a partial file.
@@ -106,7 +106,7 @@ TEST(io, WriteFdExactly_whole) {
   ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
 
   std::string s;
-  ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s));
+  ASSERT_TRUE(android::ReadFdToString(tf.fd, &s));
   EXPECT_STREQ(expected, s.c_str());
 }
 
@@ -123,7 +123,7 @@ TEST(io, WriteFdExactly_partial) {
   expected.pop_back();
 
   std::string s;
-  ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s));
+  ASSERT_TRUE(android::ReadFdToString(tf.fd, &s));
   EXPECT_EQ(expected, s);
 }
 
@@ -137,6 +137,6 @@ TEST(io, WriteStringFully) {
   ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
 
   std::string s;
-  ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s));
+  ASSERT_TRUE(android::ReadFdToString(tf.fd, &s));
   EXPECT_STREQ(str, s.c_str());
 }
