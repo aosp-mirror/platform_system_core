@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef UTILS_FILE_H
-#define UTILS_FILE_H
+#ifndef BASE_FILE_H
+#define BASE_FILE_H
 
-#include <string>
 #include <sys/stat.h>
+#include <string>
 
 namespace android {
+namespace base {
 
 bool ReadFdToString(int fd, std::string* content);
 bool ReadFileToString(const std::string& path, std::string* content);
@@ -33,6 +34,7 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
                        mode_t mode, uid_t owner, gid_t group);
 #endif
 
-} // namespace android
+}  // namespace base
+}  // namespace android
 
-#endif
+#endif  // BASE_FILE_H
