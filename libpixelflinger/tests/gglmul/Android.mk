@@ -7,7 +7,7 @@ LOCAL_SRC_FILES:= \
 LOCAL_SHARED_LIBRARIES :=
 
 LOCAL_C_INCLUDES := \
-	$(LOCAL_PATH)/../../include
+	system/core/libpixelflinger
 
 LOCAL_MODULE:= test-pixelflinger-gglmul
 
