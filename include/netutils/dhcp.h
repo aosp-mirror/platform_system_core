@@ -23,26 +23,18 @@
 __BEGIN_DECLS
 
 extern int do_dhcp(char *iname);
-extern int dhcp_do_request(const char *ifname,
-                          char *ipaddr,
-                          char *gateway,
-                          uint32_t *prefixLength,
-                          char *dns[],
-                          char *server,
-                          uint32_t *lease,
-                          char *vendorInfo,
-                          char *domain,
-                          char *mtu);
-extern int dhcp_do_request_renew(const char *ifname,
-                                char *ipaddr,
-                                char *gateway,
-                                uint32_t *prefixLength,
-                                char *dns[],
-                                char *server,
-                                uint32_t *lease,
-                                char *vendorInfo,
-                                char *domain,
-                                char *mtu);
+extern int dhcp_start(const char *ifname);
+extern int dhcp_start_renew(const char *ifname);
+extern int dhcp_get_results(const char *ifname,
+                            char *ipaddr,
+                            char *gateway,
+                            uint32_t *prefixLength,
+                            char *dns[],
+                            char *server,
+                            uint32_t *lease,
+                            char *vendorInfo,
+                            char *domain,
+                            char *mtu);
 extern int dhcp_stop(const char *ifname);
 extern int dhcp_release_lease(const char *ifname);
 extern char *dhcp_get_errmsg();
