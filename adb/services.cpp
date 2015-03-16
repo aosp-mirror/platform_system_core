@@ -38,6 +38,7 @@
 #include "adb.h"
 #include "adb_io.h"
 #include "file_sync_service.h"
+#include "remount_service.h"
 #include "transport.h"
 
 typedef struct stinfo stinfo;

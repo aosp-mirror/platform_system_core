@@ -26,6 +26,7 @@
 #include "cutils/properties.h"
 #include "ext4_sb.h"
 #include "fs_mgr.h"
+#include "remount_service.h"
 #include "sysdeps.h"
 
 #define FSTAB_PREFIX "/fstab."
