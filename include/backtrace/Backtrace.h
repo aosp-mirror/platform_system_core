@@ -84,6 +84,12 @@ public:
   // Read the data at a specific address.
   virtual bool ReadWord(uintptr_t ptr, word_t* out_value) = 0;
 
+  // Read arbitrary data from a specific address. If a read request would
+  // span from one map to another, this call only reads up until the end
+  // of the current map.
+  // Returns the total number of bytes actually read.
+  virtual size_t Read(uintptr_t addr, uint8_t* buffer, size_t bytes) = 0;
+
   // Create a string representing the formatted line of backtrace information
   // for a single frame.
   virtual std::string FormatFrameData(size_t frame_num);
