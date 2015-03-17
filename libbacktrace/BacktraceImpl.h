@@ -56,6 +56,8 @@ public:
   BacktraceCurrent(BacktraceImpl* impl, BacktraceMap* map);
   virtual ~BacktraceCurrent();
 
+  size_t Read(uintptr_t addr, uint8_t* buffer, size_t bytes);
+
   bool ReadWord(uintptr_t ptr, word_t* out_value);
 };
 
@@ -63,6 +65,8 @@ class BacktracePtrace : public Backtrace {
 public:
   BacktracePtrace(BacktraceImpl* impl, pid_t pid, pid_t tid, BacktraceMap* map);
   virtual ~BacktracePtrace();
+
+  size_t Read(uintptr_t addr, uint8_t* buffer, size_t bytes);
 
   bool ReadWord(uintptr_t ptr, word_t* out_value);
 };
