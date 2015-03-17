@@ -31,7 +31,6 @@
 
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
-#include <UniquePtr.h>
 
 // For the THREAD_SIGNAL definition.
 #include "BacktraceThread.h"
@@ -40,6 +39,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 #include "thread_utils.h"
@@ -60,6 +60,7 @@ struct thread_t {
   pid_t tid;
   int32_t state;
   pthread_t threadId;
+  void* data;
 };
 
 struct dump_thread_t {
@@ -142,9 +143,9 @@ void VerifyLevelDump(Backtrace* backtrace) {
 }
 
 void VerifyLevelBacktrace(void*) {
-  UniquePtr<Backtrace> backtrace(
+  std::unique_ptr<Backtrace> backtrace(
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
-  ASSERT_TRUE(backtrace.get() != NULL);
+  ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
 
   VerifyLevelDump(backtrace.get());
@@ -162,9 +163,9 @@ void VerifyMaxDump(Backtrace* backtrace) {
 }
 
 void VerifyMaxBacktrace(void*) {
-  UniquePtr<Backtrace> backtrace(
+  std::unique_ptr<Backtrace> backtrace(
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
-  ASSERT_TRUE(backtrace.get() != NULL);
+  ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
 
   VerifyMaxDump(backtrace.get());
@@ -180,8 +181,8 @@ void ThreadSetState(void* data) {
 }
 
 void VerifyThreadTest(pid_t tid, void (*VerifyFunc)(Backtrace*)) {
-  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), tid));
-  ASSERT_TRUE(backtrace.get() != NULL);
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), tid));
+  ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
 
   VerifyFunc(backtrace.get());
@@ -198,7 +199,7 @@ bool WaitForNonZero(int32_t* value, uint64_t seconds) {
 }
 
 TEST(libbacktrace, local_trace) {
-  ASSERT_NE(test_level_one(1, 2, 3, 4, VerifyLevelBacktrace, NULL), 0);
+  ASSERT_NE(test_level_one(1, 2, 3, 4, VerifyLevelBacktrace, nullptr), 0);
 }
 
 void VerifyIgnoreFrames(
@@ -208,7 +209,7 @@ void VerifyIgnoreFrames(
   EXPECT_EQ(bt_all->NumFrames(), bt_ign2->NumFrames() + 2);
 
   // Check all of the frames are the same > the current frame.
-  bool check = (cur_proc == NULL);
+  bool check = (cur_proc == nullptr);
   for (size_t i = 0; i < bt_ign2->NumFrames(); i++) {
     if (check) {
       EXPECT_EQ(bt_ign2->GetFrame(i)->pc, bt_ign1->GetFrame(i+1)->pc);
@@ -226,30 +227,30 @@ void VerifyIgnoreFrames(
 }
 
 void VerifyLevelIgnoreFrames(void*) {
-  UniquePtr<Backtrace> all(
+  std::unique_ptr<Backtrace> all(
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
-  ASSERT_TRUE(all.get() != NULL);
+  ASSERT_TRUE(all.get() != nullptr);
   ASSERT_TRUE(all->Unwind(0));
 
-  UniquePtr<Backtrace> ign1(
+  std::unique_ptr<Backtrace> ign1(
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
-  ASSERT_TRUE(ign1.get() != NULL);
+  ASSERT_TRUE(ign1.get() != nullptr);
   ASSERT_TRUE(ign1->Unwind(1));
 
-  UniquePtr<Backtrace> ign2(
+  std::unique_ptr<Backtrace> ign2(
       Backtrace::Create(BACKTRACE_CURRENT_PROCESS, BACKTRACE_CURRENT_THREAD));
-  ASSERT_TRUE(ign2.get() != NULL);
+  ASSERT_TRUE(ign2.get() != nullptr);
   ASSERT_TRUE(ign2->Unwind(2));
 
   VerifyIgnoreFrames(all.get(), ign1.get(), ign2.get(), "VerifyLevelIgnoreFrames");
 }
 
 TEST(libbacktrace, local_trace_ignore_frames) {
-  ASSERT_NE(test_level_one(1, 2, 3, 4, VerifyLevelIgnoreFrames, NULL), 0);
+  ASSERT_NE(test_level_one(1, 2, 3, 4, VerifyLevelIgnoreFrames, nullptr), 0);
 }
 
 TEST(libbacktrace, local_max_trace) {
-  ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, VerifyMaxBacktrace, NULL), 0);
+  ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, VerifyMaxBacktrace, nullptr), 0);
 }
 
 void VerifyProcTest(pid_t pid, pid_t tid, bool share_map,
@@ -269,13 +270,13 @@ void VerifyProcTest(pid_t pid, pid_t tid, bool share_map,
       // Wait for the process to get to a stopping point.
       WaitForStop(ptrace_tid);
 
-      UniquePtr<BacktraceMap> map;
+      std::unique_ptr<BacktraceMap> map;
       if (share_map) {
         map.reset(BacktraceMap::Create(pid));
       }
-      UniquePtr<Backtrace> backtrace(Backtrace::Create(pid, tid, map.get()));
+      std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map.get()));
       ASSERT_TRUE(backtrace->Unwind(0));
-      ASSERT_TRUE(backtrace.get() != NULL);
+      ASSERT_TRUE(backtrace.get() != nullptr);
       if (ReadyFunc(backtrace.get())) {
         VerifyFunc(backtrace.get());
         verified = true;
@@ -291,7 +292,7 @@ void VerifyProcTest(pid_t pid, pid_t tid, bool share_map,
 TEST(libbacktrace, ptrace_trace) {
   pid_t pid;
   if ((pid = fork()) == 0) {
-    ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
+    ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
     _exit(1);
   }
   VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyLevelBacktrace, VerifyLevelDump);
@@ -304,7 +305,7 @@ TEST(libbacktrace, ptrace_trace) {
 TEST(libbacktrace, ptrace_trace_shared_map) {
   pid_t pid;
   if ((pid = fork()) == 0) {
-    ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
+    ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
     _exit(1);
   }
 
@@ -318,7 +319,7 @@ TEST(libbacktrace, ptrace_trace_shared_map) {
 TEST(libbacktrace, ptrace_max_trace) {
   pid_t pid;
   if ((pid = fork()) == 0) {
-    ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, NULL, NULL), 0);
+    ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, nullptr, nullptr), 0);
     _exit(1);
   }
   VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyMaxBacktrace, VerifyMaxDump);
@@ -329,21 +330,21 @@ TEST(libbacktrace, ptrace_max_trace) {
 }
 
 void VerifyProcessIgnoreFrames(Backtrace* bt_all) {
-  UniquePtr<Backtrace> ign1(Backtrace::Create(bt_all->Pid(), BACKTRACE_CURRENT_THREAD));
-  ASSERT_TRUE(ign1.get() != NULL);
+  std::unique_ptr<Backtrace> ign1(Backtrace::Create(bt_all->Pid(), BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(ign1.get() != nullptr);
   ASSERT_TRUE(ign1->Unwind(1));
 
-  UniquePtr<Backtrace> ign2(Backtrace::Create(bt_all->Pid(), BACKTRACE_CURRENT_THREAD));
-  ASSERT_TRUE(ign2.get() != NULL);
+  std::unique_ptr<Backtrace> ign2(Backtrace::Create(bt_all->Pid(), BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(ign2.get() != nullptr);
   ASSERT_TRUE(ign2->Unwind(2));
 
-  VerifyIgnoreFrames(bt_all, ign1.get(), ign2.get(), NULL);
+  VerifyIgnoreFrames(bt_all, ign1.get(), ign2.get(), nullptr);
 }
 
 TEST(libbacktrace, ptrace_ignore_frames) {
   pid_t pid;
   if ((pid = fork()) == 0) {
-    ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
+    ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
     _exit(1);
   }
   VerifyProcTest(pid, BACKTRACE_CURRENT_THREAD, false, ReadyLevelBacktrace, VerifyProcessIgnoreFrames);
@@ -355,8 +356,8 @@ TEST(libbacktrace, ptrace_ignore_frames) {
 
 // Create a process with multiple threads and dump all of the threads.
 void* PtraceThreadLevelRun(void*) {
-  EXPECT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
-  return NULL;
+  EXPECT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
+  return nullptr;
 }
 
 void GetThreads(pid_t pid, std::vector<pid_t>* threads) {
@@ -365,9 +366,9 @@ void GetThreads(pid_t pid, std::vector<pid_t>* threads) {
   snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
 
   DIR* tasks_dir = opendir(task_path);
-  ASSERT_TRUE(tasks_dir != NULL);
+  ASSERT_TRUE(tasks_dir != nullptr);
   struct dirent* entry;
-  while ((entry = readdir(tasks_dir)) != NULL) {
+  while ((entry = readdir(tasks_dir)) != nullptr) {
     char* end;
     pid_t tid = strtoul(entry->d_name, &end, 10);
     if (*end == '\0') {
@@ -386,9 +387,9 @@ TEST(libbacktrace, ptrace_threads) {
       pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
       pthread_t thread;
-      ASSERT_TRUE(pthread_create(&thread, &attr, PtraceThreadLevelRun, NULL) == 0);
+      ASSERT_TRUE(pthread_create(&thread, &attr, PtraceThreadLevelRun, nullptr) == 0);
     }
-    ASSERT_NE(test_level_one(1, 2, 3, 4, NULL, NULL), 0);
+    ASSERT_NE(test_level_one(1, 2, 3, 4, nullptr, nullptr), 0);
     _exit(1);
   }
 
@@ -420,27 +421,27 @@ TEST(libbacktrace, ptrace_threads) {
 }
 
 void VerifyLevelThread(void*) {
-  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
-  ASSERT_TRUE(backtrace.get() != NULL);
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
+  ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
 
   VerifyLevelDump(backtrace.get());
 }
 
 TEST(libbacktrace, thread_current_level) {
-  ASSERT_NE(test_level_one(1, 2, 3, 4, VerifyLevelThread, NULL), 0);
+  ASSERT_NE(test_level_one(1, 2, 3, 4, VerifyLevelThread, nullptr), 0);
 }
 
 void VerifyMaxThread(void*) {
-  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
-  ASSERT_TRUE(backtrace.get() != NULL);
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), gettid()));
+  ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
 
   VerifyMaxDump(backtrace.get());
 }
 
 TEST(libbacktrace, thread_current_max) {
-  ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, VerifyMaxThread, NULL), 0);
+  ASSERT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, VerifyMaxThread, nullptr), 0);
 }
 
 void* ThreadLevelRun(void* data) {
@@ -448,7 +449,7 @@ void* ThreadLevelRun(void* data) {
 
   thread->tid = gettid();
   EXPECT_NE(test_level_one(1, 2, 3, 4, ThreadSetState, data), 0);
-  return NULL;
+  return nullptr;
 }
 
 TEST(libbacktrace, thread_level_trace) {
@@ -456,7 +457,7 @@ TEST(libbacktrace, thread_level_trace) {
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-  thread_t thread_data = { 0, 0, 0 };
+  thread_t thread_data = { 0, 0, 0, nullptr };
   pthread_t thread;
   ASSERT_TRUE(pthread_create(&thread, &attr, ThreadLevelRun, &thread_data) == 0);
 
@@ -471,10 +472,10 @@ TEST(libbacktrace, thread_level_trace) {
 
   // Save the current signal action and make sure it is restored afterwards.
   struct sigaction cur_action;
-  ASSERT_TRUE(sigaction(THREAD_SIGNAL, NULL, &cur_action) == 0);
+  ASSERT_TRUE(sigaction(THREAD_SIGNAL, nullptr, &cur_action) == 0);
 
-  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
-  ASSERT_TRUE(backtrace.get() != NULL);
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
 
   VerifyLevelDump(backtrace.get());
@@ -484,7 +485,7 @@ TEST(libbacktrace, thread_level_trace) {
 
   // Verify that the old action was restored.
   struct sigaction new_action;
-  ASSERT_TRUE(sigaction(THREAD_SIGNAL, NULL, &new_action) == 0);
+  ASSERT_TRUE(sigaction(THREAD_SIGNAL, nullptr, &new_action) == 0);
   EXPECT_EQ(cur_action.sa_sigaction, new_action.sa_sigaction);
   // The SA_RESTORER flag gets set behind our back, so a direct comparison
   // doesn't work unless we mask the value off. Mips doesn't have this
@@ -501,26 +502,26 @@ TEST(libbacktrace, thread_ignore_frames) {
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-  thread_t thread_data = { 0, 0, 0 };
+  thread_t thread_data = { 0, 0, 0, nullptr };
   pthread_t thread;
   ASSERT_TRUE(pthread_create(&thread, &attr, ThreadLevelRun, &thread_data) == 0);
 
   // Wait up to 2 seconds for the tid to be set.
   ASSERT_TRUE(WaitForNonZero(&thread_data.state, 2));
 
-  UniquePtr<Backtrace> all(Backtrace::Create(getpid(), thread_data.tid));
-  ASSERT_TRUE(all.get() != NULL);
+  std::unique_ptr<Backtrace> all(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(all.get() != nullptr);
   ASSERT_TRUE(all->Unwind(0));
 
-  UniquePtr<Backtrace> ign1(Backtrace::Create(getpid(), thread_data.tid));
-  ASSERT_TRUE(ign1.get() != NULL);
+  std::unique_ptr<Backtrace> ign1(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(ign1.get() != nullptr);
   ASSERT_TRUE(ign1->Unwind(1));
 
-  UniquePtr<Backtrace> ign2(Backtrace::Create(getpid(), thread_data.tid));
-  ASSERT_TRUE(ign2.get() != NULL);
+  std::unique_ptr<Backtrace> ign2(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(ign2.get() != nullptr);
   ASSERT_TRUE(ign2->Unwind(2));
 
-  VerifyIgnoreFrames(all.get(), ign1.get(), ign2.get(), NULL);
+  VerifyIgnoreFrames(all.get(), ign1.get(), ign2.get(), nullptr);
 
   // Tell the thread to exit its infinite loop.
   android_atomic_acquire_store(0, &thread_data.state);
@@ -531,7 +532,7 @@ void* ThreadMaxRun(void* data) {
 
   thread->tid = gettid();
   EXPECT_NE(test_recursive_call(MAX_BACKTRACE_FRAMES+10, ThreadSetState, data), 0);
-  return NULL;
+  return nullptr;
 }
 
 TEST(libbacktrace, thread_max_trace) {
@@ -539,15 +540,15 @@ TEST(libbacktrace, thread_max_trace) {
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-  thread_t thread_data = { 0, 0, 0 };
+  thread_t thread_data = { 0, 0, 0, nullptr };
   pthread_t thread;
   ASSERT_TRUE(pthread_create(&thread, &attr, ThreadMaxRun, &thread_data) == 0);
 
   // Wait for the tid to be set.
   ASSERT_TRUE(WaitForNonZero(&thread_data.state, 2));
 
-  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
-  ASSERT_TRUE(backtrace.get() != NULL);
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
 
   VerifyMaxDump(backtrace.get());
@@ -570,7 +571,7 @@ void* ThreadDump(void* data) {
 
   android_atomic_acquire_store(1, &dump->done);
 
-  return NULL;
+  return nullptr;
 }
 
 TEST(libbacktrace, thread_multiple_dump) {
@@ -614,11 +615,11 @@ TEST(libbacktrace, thread_multiple_dump) {
     // Tell the runner thread to exit its infinite loop.
     android_atomic_acquire_store(0, &runners[i].state);
 
-    ASSERT_TRUE(dumpers[i].backtrace != NULL);
+    ASSERT_TRUE(dumpers[i].backtrace != nullptr);
     VerifyMaxDump(dumpers[i].backtrace);
 
     delete dumpers[i].backtrace;
-    dumpers[i].backtrace = NULL;
+    dumpers[i].backtrace = nullptr;
   }
 }
 
@@ -654,11 +655,11 @@ TEST(libbacktrace, thread_multiple_dump_same_thread) {
   for (size_t i = 0; i < NUM_THREADS; i++) {
     ASSERT_TRUE(WaitForNonZero(&dumpers[i].done, 30));
 
-    ASSERT_TRUE(dumpers[i].backtrace != NULL);
+    ASSERT_TRUE(dumpers[i].backtrace != nullptr);
     VerifyMaxDump(dumpers[i].backtrace);
 
     delete dumpers[i].backtrace;
-    dumpers[i].backtrace = NULL;
+    dumpers[i].backtrace = nullptr;
   }
 
   // Tell the runner thread to exit its infinite loop.
@@ -708,8 +709,8 @@ TEST(libbacktrace, fillin_erases) {
 }
 
 TEST(libbacktrace, format_test) {
-  UniquePtr<Backtrace> backtrace(Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD));
-  ASSERT_TRUE(backtrace.get() != NULL);
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(backtrace.get() != nullptr);
 
   backtrace_frame_data_t frame;
   frame.num = 1;
@@ -778,12 +779,12 @@ bool map_sort(map_test_t i, map_test_t j) {
   return i.start < j.start;
 }
 
-static void VerifyMap(pid_t pid) {
+void VerifyMap(pid_t pid) {
   char buffer[4096];
   snprintf(buffer, sizeof(buffer), "/proc/%d/maps", pid);
 
   FILE* map_file = fopen(buffer, "r");
-  ASSERT_TRUE(map_file != NULL);
+  ASSERT_TRUE(map_file != nullptr);
   std::vector<map_test_t> test_maps;
   while (fgets(buffer, sizeof(buffer), map_file)) {
     map_test_t map;
@@ -793,7 +794,7 @@ static void VerifyMap(pid_t pid) {
   fclose(map_file);
   std::sort(test_maps.begin(), test_maps.end(), map_sort);
 
-  UniquePtr<BacktraceMap> map(BacktraceMap::Create(pid));
+  std::unique_ptr<BacktraceMap> map(BacktraceMap::Create(pid));
 
   // Basic test that verifies that the map is in the expected order.
   std::vector<map_test_t>::const_iterator test_it = test_maps.begin();
@@ -827,7 +828,167 @@ TEST(libbacktrace, verify_map_remote) {
   ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
 
   kill(pid, SIGKILL);
-  ASSERT_EQ(waitpid(pid, NULL, 0), pid);
+  ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
+}
+
+void* ThreadReadTest(void* data) {
+  thread_t* thread_data = reinterpret_cast<thread_t*>(data);
+
+  thread_data->tid = gettid();
+
+  // Create two map pages.
+  // Mark the second page as not-readable.
+  size_t pagesize = static_cast<size_t>(sysconf(_SC_PAGE_SIZE));
+  uint8_t* memory;
+  if (posix_memalign(reinterpret_cast<void**>(&memory), pagesize, 2 * pagesize) != 0) {
+    return reinterpret_cast<void*>(-1);
+  }
+
+  if (mprotect(&memory[pagesize], pagesize, PROT_NONE) != 0) {
+    return reinterpret_cast<void*>(-1);
+  }
+
+  // Set up a simple pattern in memory.
+  for (size_t i = 0; i < pagesize; i++) {
+    memory[i] = i;
+  }
+
+  thread_data->data = memory;
+
+  // Tell the caller it's okay to start reading memory.
+  android_atomic_acquire_store(1, &thread_data->state);
+
+  // Loop waiting for everything
+  while (thread_data->state) {
+  }
+
+  free(memory);
+
+  android_atomic_acquire_store(1, &thread_data->state);
+
+  return nullptr;
+}
+
+void RunReadTest(Backtrace* backtrace, uintptr_t read_addr) {
+  size_t pagesize = static_cast<size_t>(sysconf(_SC_PAGE_SIZE));
+
+  // Create a page of data to use to do quick compares.
+  uint8_t* expected = new uint8_t[pagesize];
+  for (size_t i = 0; i < pagesize; i++) {
+    expected[i] = i;
+  }
+  uint8_t* data = new uint8_t[2*pagesize];
+  // Verify that we can only read one page worth of data.
+  size_t bytes_read = backtrace->Read(read_addr, data, 2 * pagesize);
+  ASSERT_EQ(pagesize, bytes_read);
+  ASSERT_TRUE(memcmp(data, expected, pagesize) == 0);
+
+  // Verify unaligned reads.
+  for (size_t i = 1; i < sizeof(word_t); i++) {
+    bytes_read = backtrace->Read(read_addr + i, data, 2 * sizeof(word_t));
+    ASSERT_EQ(2 * sizeof(word_t), bytes_read);
+    ASSERT_TRUE(memcmp(data, &expected[i], 2 * sizeof(word_t)) == 0)
+        << "Offset at " << i << " failed";
+  }
+  delete data;
+  delete expected;
+}
+
+TEST(libbacktrace, thread_read) {
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+  pthread_t thread;
+  thread_t thread_data = { 0, 0, 0, nullptr };
+  ASSERT_TRUE(pthread_create(&thread, &attr, ThreadReadTest, &thread_data) == 0);
+
+  ASSERT_TRUE(WaitForNonZero(&thread_data.state, 10));
+
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), thread_data.tid));
+  ASSERT_TRUE(backtrace.get() != nullptr);
+
+  RunReadTest(backtrace.get(), reinterpret_cast<uintptr_t>(thread_data.data));
+
+  android_atomic_acquire_store(0, &thread_data.state);
+
+  ASSERT_TRUE(WaitForNonZero(&thread_data.state, 10));
+}
+
+volatile uintptr_t g_ready = 0;
+volatile uintptr_t g_addr = 0;
+
+void ForkedReadTest() {
+  // Create two map pages.
+  size_t pagesize = static_cast<size_t>(sysconf(_SC_PAGE_SIZE));
+  uint8_t* memory;
+  if (posix_memalign(reinterpret_cast<void**>(&memory), pagesize, 2 * pagesize) != 0) {
+    perror("Failed to allocate memory\n");
+    exit(1);
+  }
+
+  // Mark the second page as not-readable.
+  if (mprotect(&memory[pagesize], pagesize, PROT_NONE) != 0) {
+    perror("Failed to mprotect memory\n");
+    exit(1);
+  }
+
+  // Set up a simple pattern in memory.
+  for (size_t i = 0; i < pagesize; i++) {
+    memory[i] = i;
+  }
+
+  g_addr = reinterpret_cast<uintptr_t>(memory);
+  g_ready = 1;
+
+  while (1) {
+    usleep(US_PER_MSEC);
+  }
+}
+
+TEST(libbacktrace, process_read) {
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    ForkedReadTest();
+    exit(0);
+  }
+  ASSERT_NE(-1, pid);
+
+  bool test_executed = false;
+  uint64_t start = NanoTime();
+  while (1) {
+    if (ptrace(PTRACE_ATTACH, pid, 0, 0) == 0) {
+      WaitForStop(pid);
+
+      std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, pid));
+
+      uintptr_t read_addr;
+      size_t bytes_read = backtrace->Read(reinterpret_cast<uintptr_t>(&g_ready),
+                                          reinterpret_cast<uint8_t*>(&read_addr),
+                                          sizeof(uintptr_t));
+      ASSERT_EQ(sizeof(uintptr_t), bytes_read);
+      if (read_addr) {
+        // The forked process is ready to be read.
+        bytes_read = backtrace->Read(reinterpret_cast<uintptr_t>(&g_addr),
+                                     reinterpret_cast<uint8_t*>(&read_addr),
+                                     sizeof(uintptr_t));
+        ASSERT_EQ(sizeof(uintptr_t), bytes_read);
+
+        RunReadTest(backtrace.get(), read_addr);
+
+        test_executed = true;
+        break;
+      }
+      ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
+    }
+    if ((NanoTime() - start) > 5 * NS_PER_SEC) {
+      break;
+    }
+    usleep(US_PER_MSEC);
+  }
+  kill(pid, SIGKILL);
+  ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
+
+  ASSERT_TRUE(test_executed);
 }
 
 #if defined(ENABLE_PSS_TESTS)
@@ -835,11 +996,11 @@ TEST(libbacktrace, verify_map_remote) {
 
 #define MAX_LEAK_BYTES 32*1024UL
 
-static void CheckForLeak(pid_t pid, pid_t tid) {
+void CheckForLeak(pid_t pid, pid_t tid) {
   // Do a few runs to get the PSS stable.
   for (size_t i = 0; i < 100; i++) {
     Backtrace* backtrace = Backtrace::Create(pid, tid);
-    ASSERT_TRUE(backtrace != NULL);
+    ASSERT_TRUE(backtrace != nullptr);
     ASSERT_TRUE(backtrace->Unwind(0));
     delete backtrace;
   }
@@ -848,7 +1009,7 @@ static void CheckForLeak(pid_t pid, pid_t tid) {
   // Loop enough that even a small leak should be detectable.
   for (size_t i = 0; i < 4096; i++) {
     Backtrace* backtrace = Backtrace::Create(pid, tid);
-    ASSERT_TRUE(backtrace != NULL);
+    ASSERT_TRUE(backtrace != nullptr);
     ASSERT_TRUE(backtrace->Unwind(0));
     delete backtrace;
   }
@@ -863,9 +1024,9 @@ TEST(libbacktrace, check_for_leak_local) {
 }
 
 TEST(libbacktrace, check_for_leak_local_thread) {
-  thread_t thread_data = { 0, 0, 0 };
+  thread_t thread_data = { 0, 0, 0, nullptr };
   pthread_t thread;
-  ASSERT_TRUE(pthread_create(&thread, NULL, ThreadLevelRun, &thread_data) == 0);
+  ASSERT_TRUE(pthread_create(&thread, nullptr, ThreadLevelRun, &thread_data) == 0);
 
   // Wait up to 2 seconds for the tid to be set.
   ASSERT_TRUE(WaitForNonZero(&thread_data.state, 2));
@@ -875,7 +1036,7 @@ TEST(libbacktrace, check_for_leak_local_thread) {
   // Tell the thread to exit its infinite loop.
   android_atomic_acquire_store(0, &thread_data.state);
 
-  ASSERT_TRUE(pthread_join(thread, NULL) == 0);
+  ASSERT_TRUE(pthread_join(thread, nullptr) == 0);
 }
 
 TEST(libbacktrace, check_for_leak_remote) {
@@ -898,6 +1059,6 @@ TEST(libbacktrace, check_for_leak_remote) {
   ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
 
   kill(pid, SIGKILL);
-  ASSERT_EQ(waitpid(pid, NULL, 0), pid);
+  ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
 }
 #endif
