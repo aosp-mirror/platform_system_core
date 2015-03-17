@@ -35,8 +35,8 @@
 #include <cutils/properties.h>
 #include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
+#include <private/android_filesystem_config.h>
 
-#include "private/android_filesystem_config.h"
 #include "CommandListener.h"
 #include "LogBuffer.h"
 #include "LogListener.h"

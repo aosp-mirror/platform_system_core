@@ -24,6 +24,7 @@
 #include <sys/uio.h>
 #include <syslog.h>
 
+#include <private/android_filesystem_config.h>
 #include <private/android_logger.h>
 
 #include "libaudit.h"
@@ -110,7 +111,7 @@ int LogAudit::logPrint(const char *fmt, ...) {
 
     pid_t pid = getpid();
     pid_t tid = gettid();
-    uid_t uid = getuid();
+    uid_t uid = AID_LOGD;
     log_time now;
 
     static const char audit_str[] = " audit(";
