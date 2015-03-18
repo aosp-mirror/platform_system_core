@@ -230,21 +230,14 @@ static const struct fs_path_config android_dirs[] = {
 static const struct fs_path_config android_files[] = {
     { 00440, AID_ROOT,      AID_SHELL,     0, "system/etc/init.goldfish.rc" },
     { 00550, AID_ROOT,      AID_SHELL,     0, "system/etc/init.goldfish.sh" },
-    { 00440, AID_ROOT,      AID_SHELL,     0, "system/etc/init.trout.rc" },
     { 00550, AID_ROOT,      AID_SHELL,     0, "system/etc/init.ril" },
     { 00550, AID_DHCP,      AID_SHELL,     0, "system/etc/dhcpcd/dhcpcd-run-hooks" },
-    { 00444, AID_RADIO,     AID_AUDIO,     0, "system/etc/AudioPara4.csv" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/ppp/*" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/rc.*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app/*" },
     { 00644, AID_MEDIA_RW,  AID_MEDIA_RW,  0, "data/media/*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-private/*" },
     { 00644, AID_APP,       AID_APP,       0, "data/data/*" },
-    { 00755, AID_ROOT,      AID_ROOT,      0, "system/bin/ping" },
-
-    /* the following file is INTENTIONALLY set-gid and not set-uid.
-     * Do not change. */
-    { 02750, AID_ROOT,      AID_INET,      0, "system/bin/netcfg" },
 
     /* the following five files are INTENTIONALLY set-uid, but they
      * are NOT included on user builds. */
