@@ -51,9 +51,9 @@ public:
     void log(log_id_t log_id, log_time realtime,
              uid_t uid, pid_t pid, pid_t tid,
              const char *msg, unsigned short len);
-    log_time flushTo(SocketClient *writer, const log_time start,
+    uint64_t flushTo(SocketClient *writer, const uint64_t start,
                      bool privileged,
-                     bool (*filter)(const LogBufferElement *element, void *arg) = NULL,
+                     int (*filter)(const LogBufferElement *element, void *arg) = NULL,
                      void *arg = NULL);
 
     void clear(log_id_t id, uid_t uid = AID_ROOT);
