@@ -31,7 +31,7 @@ class FlushCommand : public SocketClientCommand {
     unsigned long mTail;
     unsigned int mLogMask;
     pid_t mPid;
-    log_time mStart;
+    uint64_t mStart;
 
 public:
     FlushCommand(LogReader &mReader,
@@ -39,7 +39,7 @@ public:
                  unsigned long tail = -1,
                  unsigned int logMask = -1,
                  pid_t pid = 0,
-                 log_time start = LogTimeEntry::EPOCH);
+                 uint64_t start = 1);
     virtual void runSocketCommand(SocketClient *client);
 
     static bool hasReadLogs(SocketClient *client);

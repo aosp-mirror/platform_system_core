@@ -161,7 +161,7 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
     if (last == mLogElements.end()) {
         mLogElements.push_back(elem);
     } else {
-        log_time end = log_time::EPOCH;
+        uint64_t end = 1;
         bool end_set = false;
         bool end_always = false;
 
@@ -184,7 +184,7 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
         }
 
         if (end_always
-                || (end_set && (end >= (*last)->getMonotonicTime()))) {
+                || (end_set && (end >= (*last)->getSequence()))) {
             mLogElements.push_back(elem);
         } else {
             mLogElements.insert(last,elem);
@@ -241,7 +241,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         for(it = mLogElements.begin(); it != mLogElements.end();) {
             LogBufferElement *e = *it;
 
-            if (oldest && (oldest->mStart <= e->getMonotonicTime())) {
+            if (oldest && (oldest->mStart <= e->getSequence())) {
                 break;
             }
 
@@ -293,7 +293,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         for(it = mLogElements.begin(); it != mLogElements.end();) {
             LogBufferElement *e = *it;
 
-            if (oldest && (oldest->mStart <= e->getMonotonicTime())) {
+            if (oldest && (oldest->mStart <= e->getSequence())) {
                 break;
             }
 
@@ -334,7 +334,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     while((pruneRows > 0) && (it != mLogElements.end())) {
         LogBufferElement *e = *it;
         if (e->getLogId() == id) {
-            if (oldest && (oldest->mStart <= e->getMonotonicTime())) {
+            if (oldest && (oldest->mStart <= e->getSequence())) {
                 if (!whitelist) {
                     if (stats.sizes(id) > (2 * log_buffer_size(id))) {
                         // kick a misbehaving log reader client off the island
@@ -366,7 +366,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         while((it != mLogElements.end()) && (pruneRows > 0)) {
             LogBufferElement *e = *it;
             if (e->getLogId() == id) {
-                if (oldest && (oldest->mStart <= e->getMonotonicTime())) {
+                if (oldest && (oldest->mStart <= e->getSequence())) {
                     if (stats.sizes(id) > (2 * log_buffer_size(id))) {
                         // kick a misbehaving log reader client off the island
                         oldest->release_Locked();
@@ -423,16 +423,16 @@ unsigned long LogBuffer::getSize(log_id_t id) {
     return retval;
 }
 
-log_time LogBuffer::flushTo(
-        SocketClient *reader, const log_time start, bool privileged,
-        bool (*filter)(const LogBufferElement *element, void *arg), void *arg) {
+uint64_t LogBuffer::flushTo(
+        SocketClient *reader, const uint64_t start, bool privileged,
+        int (*filter)(const LogBufferElement *element, void *arg), void *arg) {
     LogBufferElementCollection::iterator it;
-    log_time max = start;
+    uint64_t max = start;
     uid_t uid = reader->getUid();
 
     pthread_mutex_lock(&mLogElementsLock);
 
-    if (start == LogTimeEntry::EPOCH) {
+    if (start <= 1) {
         // client wants to start from the beginning
         it = mLogElements.begin();
     } else {
@@ -441,7 +441,7 @@ log_time LogBuffer::flushTo(
         for (it = mLogElements.end(); it != mLogElements.begin(); /* do nothing */) {
             --it;
             LogBufferElement *element = *it;
-            if (element->getMonotonicTime() <= start) {
+            if (element->getSequence() <= start) {
                 it++;
                 break;
             }
@@ -455,13 +455,19 @@ log_time LogBuffer::flushTo(
             continue;
         }
 
-        if (element->getMonotonicTime() <= start) {
+        if (element->getSequence() <= start) {
             continue;
         }
 
         // NB: calling out to another object with mLogElementsLock held (safe)
-        if (filter && !(*filter)(element, arg)) {
-            continue;
+        if (filter) {
+            int ret = (*filter)(element, arg);
+            if (ret == false) {
+                continue;
+            }
+            if (ret != true) {
+                break;
+            }
         }
 
         pthread_mutex_unlock(&mLogElementsLock);
@@ -481,7 +487,7 @@ log_time LogBuffer::flushTo(
 }
 
 void LogBuffer::formatStatistics(char **strp, uid_t uid, unsigned int logMask) {
-    log_time oldest(CLOCK_MONOTONIC);
+    uint64_t oldest = UINT64_MAX;
 
     pthread_mutex_lock(&mLogElementsLock);
 
@@ -491,7 +497,7 @@ void LogBuffer::formatStatistics(char **strp, uid_t uid, unsigned int logMask) {
         LogBufferElement *element = *it;
 
         if ((logMask & (1 << element->getLogId()))) {
-            oldest = element->getMonotonicTime();
+            oldest = element->getSequence();
             break;
         }
     }
