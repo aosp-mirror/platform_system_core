@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <paths.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -987,6 +988,8 @@ int main(int argc, char** argv) {
 
     // Clear the umask.
     umask(0);
+
+    add_environment("PATH", _PATH_DEFPATH);
 
     // Get the basic filesystem setup we need put together in the initramdisk
     // on / and then we'll let the rc file figure out the rest.
