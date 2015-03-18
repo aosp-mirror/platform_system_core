@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <ucontext.h>
@@ -159,6 +160,17 @@ bool BacktraceCurrent::ReadWord(uintptr_t ptr, word_t* out_value) {
   }
 }
 
+size_t BacktraceCurrent::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
+  backtrace_map_t map;
+  FillInMap(addr, &map);
+  if (!BacktraceMap::IsValid(map) || !(map.flags & PROT_READ)) {
+    return 0;
+  }
+  bytes = MIN(map.end - addr, bytes);
+  memcpy(buffer, reinterpret_cast<uint8_t*>(addr), bytes);
+  return bytes;
+}
+
 //-------------------------------------------------------------------------
 // BacktracePtrace functions.
 //-------------------------------------------------------------------------
@@ -171,25 +183,88 @@ BacktracePtrace::BacktracePtrace(
 BacktracePtrace::~BacktracePtrace() {
 }
 
-bool BacktracePtrace::ReadWord(uintptr_t ptr, word_t* out_value) {
-  if (!VerifyReadWordArgs(ptr, out_value)) {
+#if !defined(__APPLE__)
+static bool PtraceRead(pid_t tid, uintptr_t addr, word_t* out_value) {
+  // ptrace() returns -1 and sets errno when the operation fails.
+  // To disambiguate -1 from a valid result, we clear errno beforehand.
+  errno = 0;
+  *out_value = ptrace(PTRACE_PEEKTEXT, tid, reinterpret_cast<void*>(addr), NULL);
+  if (*out_value == static_cast<word_t>(-1) && errno) {
+    BACK_LOGW("invalid pointer %p reading from tid %d, ptrace() strerror(errno)=%s",
+              reinterpret_cast<void*>(addr), tid, strerror(errno));
     return false;
   }
+  return true;
+}
+#endif
 
+bool BacktracePtrace::ReadWord(uintptr_t ptr, word_t* out_value) {
 #if defined(__APPLE__)
   BACK_LOGW("MacOS does not support reading from another pid.");
   return false;
 #else
-  // ptrace() returns -1 and sets errno when the operation fails.
-  // To disambiguate -1 from a valid result, we clear errno beforehand.
-  errno = 0;
-  *out_value = ptrace(PTRACE_PEEKTEXT, Tid(), reinterpret_cast<void*>(ptr), NULL);
-  if (*out_value == static_cast<word_t>(-1) && errno) {
-    BACK_LOGW("invalid pointer %p reading from tid %d, ptrace() strerror(errno)=%s",
-              reinterpret_cast<void*>(ptr), Tid(), strerror(errno));
+  if (!VerifyReadWordArgs(ptr, out_value)) {
     return false;
   }
-  return true;
+
+  backtrace_map_t map;
+  FillInMap(ptr, &map);
+  if (!BacktraceMap::IsValid(map) || !(map.flags & PROT_READ)) {
+    return false;
+  }
+
+  return PtraceRead(Tid(), ptr, out_value);
+#endif
+}
+
+size_t BacktracePtrace::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
+#if defined(__APPLE__)
+  BACK_LOGW("MacOS does not support reading from another pid.");
+  return 0;
+#else
+  backtrace_map_t map;
+  FillInMap(addr, &map);
+  if (!BacktraceMap::IsValid(map) || !(map.flags & PROT_READ)) {
+    return 0;
+  }
+
+  bytes = MIN(map.end - addr, bytes);
+  size_t bytes_read = 0;
+  word_t data_word;
+  size_t align_bytes = addr & (sizeof(word_t) - 1);
+  if (align_bytes != 0) {
+    if (!PtraceRead(Tid(), addr & ~(sizeof(word_t) - 1), &data_word)) {
+      return 0;
+    }
+    align_bytes = sizeof(word_t) - align_bytes;
+    memcpy(buffer, reinterpret_cast<uint8_t*>(&data_word) + sizeof(word_t) - align_bytes,
+           align_bytes);
+    addr += align_bytes;
+    buffer += align_bytes;
+    bytes -= align_bytes;
+    bytes_read += align_bytes;
+  }
+
+  size_t num_words = bytes / sizeof(word_t);
+  for (size_t i = 0; i < num_words; i++) {
+    if (!PtraceRead(Tid(), addr, &data_word)) {
+      return bytes_read;
+    }
+    memcpy(buffer, &data_word, sizeof(word_t));
+    buffer += sizeof(word_t);
+    addr += sizeof(word_t);
+    bytes_read += sizeof(word_t);
+  }
+
+  size_t left_over = bytes & (sizeof(word_t) - 1);
+  if (left_over) {
+    if (!PtraceRead(Tid(), addr, &data_word)) {
+      return bytes_read;
+    }
+    memcpy(buffer, &data_word, left_over);
+    bytes_read += left_over;
+  }
+  return bytes_read;
 #endif
 }
 
