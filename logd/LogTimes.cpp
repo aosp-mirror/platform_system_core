@@ -23,12 +23,10 @@
 
 pthread_mutex_t LogTimeEntry::timesLock = PTHREAD_MUTEX_INITIALIZER;
 
-const struct timespec LogTimeEntry::EPOCH = { 0, 1 };
-
 LogTimeEntry::LogTimeEntry(LogReader &reader, SocketClient *client,
                            bool nonBlock, unsigned long tail,
                            unsigned int logMask, pid_t pid,
-                           log_time start)
+                           uint64_t start)
         : mRefCount(1)
         , mRelease(false)
         , mError(false)
@@ -42,7 +40,7 @@ LogTimeEntry::LogTimeEntry(LogReader &reader, SocketClient *client,
         , mClient(client)
         , mStart(start)
         , mNonBlock(nonBlock)
-        , mEnd(CLOCK_MONOTONIC)
+        , mEnd(LogBufferElement::getCurrentSequence())
 {
         pthread_cond_init(&threadTriggeredCondition, NULL);
         cleanSkip_Locked();
@@ -129,7 +127,7 @@ void *LogTimeEntry::threadStart(void *obj) {
     lock();
 
     while (me->threadRunning && !me->isError_Locked()) {
-        log_time start = me->mStart;
+        uint64_t start = me->mStart;
 
         unlock();
 
@@ -161,13 +159,13 @@ void *LogTimeEntry::threadStart(void *obj) {
 }
 
 // A first pass to count the number of elements
-bool LogTimeEntry::FilterFirstPass(const LogBufferElement *element, void *obj) {
+int LogTimeEntry::FilterFirstPass(const LogBufferElement *element, void *obj) {
     LogTimeEntry *me = reinterpret_cast<LogTimeEntry *>(obj);
 
     LogTimeEntry::lock();
 
     if (me->mCount == 0) {
-        me->mStart = element->getMonotonicTime();
+        me->mStart = element->getSequence();
     }
 
     if ((!me->mPid || (me->mPid == element->getPid()))
@@ -181,12 +179,12 @@ bool LogTimeEntry::FilterFirstPass(const LogBufferElement *element, void *obj) {
 }
 
 // A second pass to send the selected elements
-bool LogTimeEntry::FilterSecondPass(const LogBufferElement *element, void *obj) {
+int LogTimeEntry::FilterSecondPass(const LogBufferElement *element, void *obj) {
     LogTimeEntry *me = reinterpret_cast<LogTimeEntry *>(obj);
 
     LogTimeEntry::lock();
 
-    me->mStart = element->getMonotonicTime();
+    me->mStart = element->getSequence();
 
     if (me->skipAhead[element->getLogId()]) {
         me->skipAhead[element->getLogId()]--;
@@ -195,7 +193,7 @@ bool LogTimeEntry::FilterSecondPass(const LogBufferElement *element, void *obj) 
 
     // Truncate to close race between first and second pass
     if (me->mNonBlock && me->mTail && (me->mIndex >= me->mCount)) {
-        goto skip;
+        goto stop;
     }
 
     if (!me->isWatching(element->getLogId())) {
@@ -207,7 +205,7 @@ bool LogTimeEntry::FilterSecondPass(const LogBufferElement *element, void *obj) 
     }
 
     if (me->isError_Locked()) {
-        goto skip;
+        goto stop;
     }
 
     if (!me->mTail) {
@@ -234,6 +232,10 @@ ok:
 skip:
     LogTimeEntry::unlock();
     return false;
+
+stop:
+    LogTimeEntry::unlock();
+    return -1;
 }
 
 void LogTimeEntry::cleanSkip_Locked(void) {
