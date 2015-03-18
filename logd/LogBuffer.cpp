@@ -279,7 +279,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         size_t worst_sizes = 0;
         size_t second_worst_sizes = 0;
 
-        if ((id != LOG_ID_CRASH) && mPrune.worstUidEnabled()) {
+        if (worstUidEnabledForLogid(id) && mPrune.worstUidEnabled()) {
             std::unique_ptr<const UidEntry *[]> sorted = stats.sort(2, id);
 
             if (sorted.get()) {

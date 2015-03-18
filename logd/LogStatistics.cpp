@@ -340,7 +340,7 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
                 android::String8 name("UID");
                 android::String8 size("Size");
                 android::String8 pruned("Pruned");
-                if (id == LOG_ID_CRASH) {
+                if (!worstUidEnabledForLogid(id)) {
                     pruned.setTo("");
                 }
                 format_line(output, name, size, pruned);

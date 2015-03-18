@@ -33,6 +33,10 @@ char *uidToName(uid_t uid);
 
 }
 
+static inline bool worstUidEnabledForLogid(log_id_t id) {
+    return (id != LOG_ID_CRASH) && (id != LOG_ID_EVENTS);
+}
+
 class LogBufferElement {
     const log_id_t mLogId;
     const uid_t mUid;
