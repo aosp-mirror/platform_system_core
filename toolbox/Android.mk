@@ -60,7 +60,6 @@ OUR_TOOLS := \
     restorecon \
     route \
     runcon \
-    schedtop \
     sendevent \
     setprop \
     start \
