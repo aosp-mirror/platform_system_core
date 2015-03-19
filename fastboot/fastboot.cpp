@@ -701,13 +701,7 @@ void do_update(usb_handle *usb, const char *filename, int erase_first)
     unsigned sz;
     void* data = unzip_file(zip, "android-info.txt", &sz);
     if (data == 0) {
-            /* fallback for older zipfiles */
-        data = unzip_file(zip, "android-product.txt", &sz);
-        if ((data == 0) || (sz < 1)) {
-            die("update package has no android-info.txt or android-product.txt");
-        }
-        data = mkmsg("board=%sversion-baseband=0.66.04.19\n", reinterpret_cast<char*>(data));
-        sz = strlen(reinterpret_cast<char*>(data));
+        die("update package '%s' has no android-info.txt", filename);
     }
 
     setup_requirements(reinterpret_cast<char*>(data), sz);
