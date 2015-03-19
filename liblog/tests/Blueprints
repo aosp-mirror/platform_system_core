@@ -80,11 +80,11 @@ test_c_flags += ["-DTARGET_USES_LOGD"]
 // endif
 // Build tests for the device (with .so). Run with:
 //   adb shell /data/nativetest/liblog-unit-tests/liblog-unit-tests
-/*cc_test {
+cc_test {
     name: test_module_prefix + "unit-tests",
     tags: test_tags,
 
     cflags: test_c_flags,
     shared_libs: ["liblog"],
     srcs: test_src_files,
-}*/
+}
