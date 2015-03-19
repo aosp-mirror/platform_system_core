@@ -824,7 +824,7 @@ static int32_t FindEntry(const ZipArchive* archive, const int ent,
   // name in the central directory.
   if (lfh->file_name_length == nameLen) {
     const off64_t name_offset = local_header_offset + sizeof(LocalFileHeader);
-    if (name_offset + lfh->file_name_length >= cd_offset) {
+    if (name_offset + lfh->file_name_length > cd_offset) {
       ALOGW("Zip: Invalid declared length");
       return kInvalidOffset;
     }
