@@ -72,13 +72,15 @@ static int wait_for_property(const char *name, const char *desired_value, int ma
         maxnaps = 1;
     }
 
-    while (maxnaps-- > 0) {
-        usleep(NAP_TIME * 1000);
+    while (maxnaps-- >= 0) {
         if (property_get(name, value, NULL)) {
             if (desired_value == NULL ||
                     strcmp(value, desired_value) == 0) {
                 return 0;
             }
+        }
+        if (maxnaps >= 0) {
+            usleep(NAP_TIME * 1000);
         }
     }
     return -1; /* failure */
