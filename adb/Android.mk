@@ -77,6 +77,10 @@ LOCAL_SRC_FILES := \
 
 LOCAL_SHARED_LIBRARIES := libbase
 
+# Even though we're building a static library (and thus there's no link step for
+# this to take effect), this adds the includes to our path.
+LOCAL_STATIC_LIBRARIES := libbase
+
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -91,8 +95,8 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES := libbase
 
 # Even though we're building a static library (and thus there's no link step for
-# this to take effect), this adds the SSL includes to our path.
-LOCAL_STATIC_LIBRARIES := libcrypto_static
+# this to take effect), this adds the includes to our path.
+LOCAL_STATIC_LIBRARIES := libcrypto_static libbase
 
 ifeq ($(HOST_OS),windows)
     LOCAL_C_INCLUDES += development/host/windows/usb/api/
@@ -254,10 +258,10 @@ LOCAL_STATIC_LIBRARIES := \
     libbase \
     libfs_mgr \
     liblog \
-    libcutils \
-    libc \
     libmincrypt \
     libselinux \
     libext4_utils_static \
+    libcutils \
+    libbase \
 
 include $(BUILD_EXECUTABLE)
