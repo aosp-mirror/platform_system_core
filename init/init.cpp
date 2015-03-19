@@ -15,6 +15,7 @@
  */
 
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
@@ -40,12 +41,16 @@
 #include <selinux/label.h>
 #include <selinux/android.h>
 
+#include <base/file.h>
+#include <base/stringprintf.h>
 #include <cutils/android_reboot.h>
 #include <cutils/fs.h>
 #include <cutils/iosched_policy.h>
 #include <cutils/list.h>
 #include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
+
+#include <memory>
 
 #include "devices.h"
 #include "init.h"
@@ -800,6 +805,40 @@ static void export_kernel_boot_props(void)
         property_set("ro.factorytest", "0");
 }
 
+static void process_kernel_dt(void)
+{
+    static const char android_dir[] = "/proc/device-tree/firmware/android";
+
+    std::string file_name = android::base::StringPrintf("%s/compatible", android_dir);
+
+    std::string dt_file;
+    android::base::ReadFileToString(file_name, &dt_file);
+    if (!dt_file.compare("android,firmware")) {
+        ERROR("firmware/android is not compatible with 'android,firmware'\n");
+        return;
+    }
+
+    std::unique_ptr<DIR, int(*)(DIR*)>dir(opendir(android_dir), closedir);
+    if (!dir)
+        return;
+
+    struct dirent *dp;
+    while ((dp = readdir(dir.get())) != NULL) {
+        if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible"))
+            continue;
+
+        file_name = android::base::StringPrintf("%s/%s", android_dir, dp->d_name);
+
+        android::base::ReadFileToString(file_name, &dt_file);
+        std::replace(dt_file.begin(), dt_file.end(), ',', '.');
+
+        std::string property_name = android::base::StringPrintf("ro.boot.%s", dp->d_name);
+        if (property_set(property_name.c_str(), dt_file.c_str())) {
+            ERROR("Could not set property %s to value %s", property_name.c_str(), dt_file.c_str());
+        }
+    }
+}
+
 static void process_kernel_cmdline(void)
 {
     /* don't expose the raw commandline to nonpriv processes */
@@ -812,11 +851,6 @@ static void process_kernel_cmdline(void)
     import_kernel_cmdline(0, import_kernel_nv);
     if (qemu[0])
         import_kernel_cmdline(1, import_kernel_nv);
-
-    /* now propogate the info given on command line to internal variables
-     * used by init as well as the current required properties
-     */
-    export_kernel_boot_props();
 }
 
 static int property_service_init_action(int nargs, char **args)
@@ -1004,7 +1038,16 @@ int main(int argc, char** argv) {
     klog_init();
     property_init();
 
+    process_kernel_dt();
+    /* in case one is passing arguments both on the command line and in DT
+     * Properties set in DT always have priority over the command-line ones
+     */
     process_kernel_cmdline();
+
+    /* now propogate the kernel variables to internal variables
+     * used by init as well as the current required properties
+     */
+    export_kernel_boot_props();
 
     selinux_callback cb;
     cb.func_log = log_callback;
