@@ -49,7 +49,6 @@ cc_library {
     srcs: commonSources,
     cflags: ["-Werror"],
     compile_multilib: "both",
-    include_dirs: ["libnativehelper/include/nativehelper"],
 
     target: {
         android: {

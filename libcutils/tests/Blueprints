@@ -17,7 +17,7 @@ test_src_files = [
     "PropertiesTest.cpp",
 ]
 
-/*cc_test {
+cc_test {
 
     name: "libcutils_test",
     srcs: test_src_files,
@@ -36,7 +36,7 @@ test_src_files = [
             stem: "libcutils_test64",
         },
     },
-}*/
+}
 
 // The static libcutils tests cannot be built when using libc++ because there are
 // multiple symbol definition errors between libc++ and libgcc. b/18389856

@@ -16,7 +16,7 @@
 
 // Build the unit tests.
 
-/*cc_test {
+cc_test {
 
     name: "libutils_tests",
 
@@ -37,4 +37,4 @@
         "libcutils",
         "libutils",
     ],
-}*/
+}
