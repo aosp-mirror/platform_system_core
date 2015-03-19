@@ -379,12 +379,12 @@ void *load_bootable_image(const char *kernel, const char *ramdisk,
     return bdata;
 }
 
-static void *unzip_file(ZipArchiveHandle zip, const char *name, unsigned *sz)
+static void* unzip_file(ZipArchiveHandle zip, const char* entry_name, unsigned* sz)
 {
-    ZipEntryName zip_entry_name(name);
+    ZipEntryName zip_entry_name(entry_name);
     ZipEntry zip_entry;
     if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
-        fprintf(stderr, "archive does not contain '%s'\n", name);
+        fprintf(stderr, "archive does not contain '%s'\n", entry_name);
         return 0;
     }
 
@@ -392,12 +392,13 @@ static void *unzip_file(ZipArchiveHandle zip, const char *name, unsigned *sz)
 
     uint8_t* data = reinterpret_cast<uint8_t*>(malloc(zip_entry.uncompressed_length));
     if (data == NULL) {
-        fprintf(stderr, "failed to allocate %d bytes\n", *sz);
+        fprintf(stderr, "failed to allocate %u bytes for '%s'\n", *sz, entry_name);
         return 0;
     }
 
-    if (ExtractToMemory(zip, &zip_entry, data, zip_entry.uncompressed_length) != 0) {
-        fprintf(stderr, "failed to unzip '%s' from archive\n", name);
+    int error = ExtractToMemory(zip, &zip_entry, data, zip_entry.uncompressed_length);
+    if (error != 0) {
+        fprintf(stderr, "failed to extract '%s': %s\n", entry_name, ErrorCodeString(error));
         free(data);
         return 0;
     }
@@ -405,24 +406,28 @@ static void *unzip_file(ZipArchiveHandle zip, const char *name, unsigned *sz)
     return data;
 }
 
-static int unzip_to_file(ZipArchiveHandle zip, char *name)
-{
-    int fd = fileno(tmpfile());
-    if (fd < 0) {
+static int unzip_to_file(ZipArchiveHandle zip, char* entry_name) {
+    FILE* fp = tmpfile();
+    if (fp == NULL) {
+        fprintf(stderr, "failed to create temporary file for '%s': %s\n",
+                entry_name, strerror(errno));
         return -1;
     }
 
-    unsigned sz;
-    void* data = unzip_file(zip, name, &sz);
-    if (data == 0) {
+    ZipEntryName zip_entry_name(entry_name);
+    ZipEntry zip_entry;
+    if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
+        fprintf(stderr, "archive does not contain '%s'\n", entry_name);
         return -1;
     }
 
-    if (write(fd, data, sz) != (ssize_t)sz) {
-        fd = -1;
+    int fd = fileno(fp);
+    int error = ExtractEntryToFile(zip, &zip_entry, fd);
+    if (error != 0) {
+        fprintf(stderr, "failed to extract '%s': %s\n", entry_name, ErrorCodeString(error));
+        return -1;
     }
 
-    free(data);
     lseek(fd, 0, SEEK_SET);
     return fd;
 }
@@ -704,8 +709,9 @@ void do_update(usb_handle *usb, const char *filename, int erase_first)
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
     ZipArchiveHandle zip;
-    if (OpenArchive(filename, &zip) != 0) {
-        die("failed to open zip file '%s': %s", filename, strerror(errno));
+    int error = OpenArchive(filename, &zip);
+    if (error != 0) {
+        die("failed to open zip file '%s': %s", filename, ErrorCodeString(error));
     }
 
     unsigned sz;
