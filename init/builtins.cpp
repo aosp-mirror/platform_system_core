@@ -687,6 +687,30 @@ int do_verity_load_state(int nargs, char **args) {
     return -1;
 }
 
+static void verity_update_property(struct fstab_rec *fstab,
+                    const char *mount_point, int status) {
+    char key[PROP_NAME_MAX];
+    int ret;
+
+    ret = snprintf(key, PROP_NAME_MAX, "partition.%s.verified", mount_point);
+    if (ret >= PROP_NAME_MAX) {
+        ERROR("Error setting verified property for %s: name too long\n",
+            mount_point);
+        return;
+    }
+
+    ret = property_set(key, "1");
+    if (ret < 0)
+        ERROR("Error setting verified property %s: %d\n", key, ret);
+}
+
+int do_verity_update_state(int nargs, char **args) {
+    if (nargs == 1) {
+        return fs_mgr_update_verity_state(verity_update_property);
+    }
+    return -1;
+}
+
 int do_write(int nargs, char **args)
 {
     const char *path = args[1];

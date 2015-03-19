@@ -591,7 +591,7 @@ out:
     return rc;
 }
 
-int fs_mgr_update_verity_state()
+int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
 {
     _Alignas(struct dm_ioctl) char buffer[DM_BUF_SIZE];
     char fstab_filename[PROPERTY_VALUE_MAX + sizeof(FSTAB_PREFIX)];
@@ -645,7 +645,14 @@ int fs_mgr_update_verity_state()
 
         if (*status == 'C') {
             rc = write_verity_state(state_loc, offset, VERITY_MODE_LOGGING);
-            goto out;
+
+            if (rc == -1) {
+                goto out;
+            }
+        }
+
+        if (callback) {
+            callback(&fstab->recs[i], mount_point, *status);
         }
     }
 
@@ -728,6 +735,8 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     if (fs_mgr_load_verity_state(&mode) < 0) {
         mode = VERITY_MODE_RESTART; /* default dm-verity mode */
     }
+
+    INFO("Enabling dm-verity for %s (mode %d)\n",  mount_point, mode);
 
     // load the verity mapping table
     if (load_verity_table(io, mount_point, fstab->blk_device, fd, verity_table,
