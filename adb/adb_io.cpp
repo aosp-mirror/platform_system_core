@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG  TRACE_RWX
+#define TRACE_TAG TRACE_RWX
 
 #include "sysdeps.h"
 #include "adb_io.h"

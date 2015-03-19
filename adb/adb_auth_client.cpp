@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_AUTH
+
+#include "sysdeps.h"
+#include "adb_auth.h"
+
 #include <resolv.h>
 #include <stdio.h>
 #include <string.h>
 
-#include "sysdeps.h"
-
-#include "adb.h"
-#include "adb_auth.h"
 #include "cutils/list.h"
 #include "cutils/sockets.h"
-#include "fdevent.h"
 #include "mincrypt/rsa.h"
 #include "mincrypt/sha.h"
+
+#include "adb.h"
+#include "fdevent.h"
 #include "transport.h"
-
-#define TRACE_TAG TRACE_AUTH
-
 
 struct adb_public_key {
     struct listnode node;

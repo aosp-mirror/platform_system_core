@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_SYNC
+
+#include "sysdeps.h"
+#include "file_sync_service.h"
+
 #include <dirent.h>
 #include <errno.h>
 #include <selinux/android.h>
@@ -25,12 +30,8 @@
 #include <unistd.h>
 #include <utime.h>
 
-#include "sysdeps.h"
-
-#define TRACE_TAG  TRACE_SYNC
 #include "adb.h"
 #include "adb_io.h"
-#include "file_sync_service.h"
 #include "private/android_filesystem_config.h"
 
 static bool should_use_fs_config(const char* path) {

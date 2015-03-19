@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_TRANSPORT
+
+#include "sysdeps.h"
+#include "transport.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <sysdeps.h>
-
-#define  TRACE_TAG  TRACE_TRANSPORT
 #include "adb.h"
-#include "transport.h"
 
 static int remote_read(apacket *p, atransport *t)
 {

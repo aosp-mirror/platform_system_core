@@ -14,8 +14,14 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_AUTH
+
+#include "sysdeps.h"
+#include "adb_auth.h"
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef _WIN32
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -28,11 +34,8 @@
 #  include <sys/stat.h>
 #  include <unistd.h>
 #endif
-#include <string.h>
 
-#include "sysdeps.h"
 #include "adb.h"
-#include "adb_auth.h"
 
 /* HACK: we need the RSAPublicKey struct
  * but RSA_verify conflits with openssl */
@@ -52,11 +55,8 @@
 #include <openssl/base64.h>
 #endif
 
-#define TRACE_TAG TRACE_AUTH
-
 #define ANDROID_PATH   ".android"
 #define ADB_KEY_FILE   "adbkey"
-
 
 struct adb_private_key {
     struct listnode node;

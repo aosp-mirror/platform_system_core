@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_ADB
+
+#include "sysdeps.h"
+
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
@@ -31,9 +35,6 @@
 #include <unistd.h>
 #endif
 
-#include "sysdeps.h"
-
-#define  TRACE_TAG  TRACE_ADB
 #include "adb.h"
 #include "adb_auth.h"
 #include "adb_client.h"
