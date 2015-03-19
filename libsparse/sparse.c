@@ -101,26 +101,32 @@ unsigned int sparse_count_chunks(struct sparse_file *s)
 	return chunks;
 }
 
-static void sparse_file_write_block(struct output_file *out,
+static int sparse_file_write_block(struct output_file *out,
 		struct backed_block *bb)
 {
+	int ret = -EINVAL;
+
 	switch (backed_block_type(bb)) {
 	case BACKED_BLOCK_DATA:
-		write_data_chunk(out, backed_block_len(bb), backed_block_data(bb));
+		ret = write_data_chunk(out, backed_block_len(bb), backed_block_data(bb));
 		break;
 	case BACKED_BLOCK_FILE:
-		write_file_chunk(out, backed_block_len(bb),
-				backed_block_filename(bb), backed_block_file_offset(bb));
+		ret = write_file_chunk(out, backed_block_len(bb),
+				       backed_block_filename(bb),
+				       backed_block_file_offset(bb));
 		break;
 	case BACKED_BLOCK_FD:
-		write_fd_chunk(out, backed_block_len(bb),
-				backed_block_fd(bb), backed_block_file_offset(bb));
+		ret = write_fd_chunk(out, backed_block_len(bb),
+				     backed_block_fd(bb),
+				     backed_block_file_offset(bb));
 		break;
 	case BACKED_BLOCK_FILL:
-		write_fill_chunk(out, backed_block_len(bb),
-				backed_block_fill_val(bb));
+		ret = write_fill_chunk(out, backed_block_len(bb),
+				       backed_block_fill_val(bb));
 		break;
 	}
+
+	return ret;
 }
 
 static int write_all_blocks(struct sparse_file *s, struct output_file *out)
@@ -128,6 +134,7 @@ static int write_all_blocks(struct sparse_file *s, struct output_file *out)
 	struct backed_block *bb;
 	unsigned int last_block = 0;
 	int64_t pad;
+	int ret = 0;
 
 	for (bb = backed_block_iter_new(s->backed_block_list); bb;
 			bb = backed_block_iter_next(bb)) {
@@ -135,7 +142,9 @@ static int write_all_blocks(struct sparse_file *s, struct output_file *out)
 			unsigned int blocks = backed_block_block(bb) - last_block;
 			write_skip_chunk(out, (int64_t)blocks * s->block_size);
 		}
-		sparse_file_write_block(out, bb);
+		ret = sparse_file_write_block(out, bb);
+		if (ret)
+			return ret;
 		last_block = backed_block_block(bb) +
 				DIV_ROUND_UP(backed_block_len(bb), s->block_size);
 	}
@@ -230,6 +239,7 @@ static struct backed_block *move_chunks_up_to_len(struct sparse_file *from,
 	struct backed_block *bb;
 	struct backed_block *start;
 	int64_t file_len = 0;
+	int ret;
 
 	/*
 	 * overhead is sparse file header, initial skip chunk, split chunk, end
@@ -249,7 +259,11 @@ static struct backed_block *move_chunks_up_to_len(struct sparse_file *from,
 	for (bb = start; bb; bb = backed_block_iter_next(bb)) {
 		count = 0;
 		/* will call out_counter_write to update count */
-		sparse_file_write_block(out_counter, bb);
+		ret = sparse_file_write_block(out_counter, bb);
+		if (ret) {
+			bb = NULL;
+			goto out;
+		}
 		if (file_len + count > len) {
 			/*
 			 * If the remaining available size is more than 1/8th of the
@@ -260,16 +274,17 @@ static struct backed_block *move_chunks_up_to_len(struct sparse_file *from,
 				backed_block_split(from->backed_block_list, bb, len - file_len);
 				last_bb = bb;
 			}
-			goto out;
+			goto move;
 		}
 		file_len += count;
 		last_bb = bb;
 	}
 
-out:
+move:
 	backed_block_list_move(from->backed_block_list,
 		to->backed_block_list, start, last_bb);
 
+out:
 	output_file_close(out_counter);
 
 	return bb;
