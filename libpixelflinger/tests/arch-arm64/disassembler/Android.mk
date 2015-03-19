@@ -7,9 +7,6 @@ LOCAL_SRC_FILES:= \
 
 LOCAL_SHARED_LIBRARIES :=
 
-LOCAL_C_INCLUDES := \
-    system/core/libpixelflinger/codeflinger
-
 LOCAL_MODULE:= test-pixelflinger-arm64-disassembler-test
 
 LOCAL_MODULE_TAGS := tests
