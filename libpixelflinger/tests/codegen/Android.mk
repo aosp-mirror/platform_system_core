@@ -9,7 +9,7 @@ LOCAL_SHARED_LIBRARIES := \
     libpixelflinger
 
 LOCAL_C_INCLUDES := \
-	system/core/libpixelflinger
+	$(LOCAL_PATH)/../..
 
 LOCAL_MODULE:= test-opengl-codegen
 
