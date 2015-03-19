@@ -23,7 +23,7 @@ LOCAL_SRC_FILES := protocol.c engine.c bootimg_utils.cpp fastboot.cpp util.c fs.
 LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 LOCAL_CONLYFLAGS += -std=gnu99
-LOCAL_CFLAGS += -Wall -Werror
+LOCAL_CFLAGS += -Wall -Wextra -Werror
 
 ifeq ($(HOST_OS),linux)
   LOCAL_SRC_FILES += usb_linux.c util_linux.c
@@ -53,9 +53,11 @@ endif
 
 LOCAL_STATIC_LIBRARIES := \
     $(EXTRA_STATIC_LIBS) \
-    libzipfile \
+    libziparchive-host \
     libext4_utils_host \
     libsparse_host \
+    libutils \
+    liblog \
     libz
 
 ifneq ($(HOST_OS),windows)
