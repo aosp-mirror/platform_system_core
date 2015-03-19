@@ -44,10 +44,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <bootimg.h>
 #include <sparse/sparse.h>
 #include <zipfile/zipfile.h>
 
+#include "bootimg_utils.h"
 #include "fastboot.h"
 #include "fs.h"
 
@@ -58,14 +58,6 @@
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(*(a)))
 
 char cur_product[FB_RESPONSE_SZ + 1];
-
-void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline);
-
-boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size, unsigned kernel_offset,
-                        void *ramdisk, unsigned ramdisk_size, unsigned ramdisk_offset,
-                        void *second, unsigned second_size, unsigned second_offset,
-                        unsigned page_size, unsigned base, unsigned tags_offset,
-                        unsigned *bootimg_size);
 
 static usb_handle *usb = 0;
 static const char *serial = 0;
@@ -106,12 +98,10 @@ static struct {
     {"vendor.img", "vendor.sig", "vendor", true},
 };
 
-void get_my_path(char *path);
-
 char *find_item(const char *item, const char *product)
 {
     char *dir;
-    char *fn;
+    const char *fn;
     char path[PATH_MAX + 128];
 
     if(!strcmp(item,"boot")) {
@@ -234,7 +224,7 @@ int match_fastboot(usb_ifc_info *info)
 int list_devices_callback(usb_ifc_info *info)
 {
     if (match_fastboot_with_serial(info, NULL) == 0) {
-        char* serial = info->serial_number;
+        const char* serial = info->serial_number;
         if (!info->writable) {
             serial = "no permissions"; // like "adb devices"
         }
@@ -389,7 +379,7 @@ void *load_bootable_image(const char *kernel, const char *ramdisk,
     return bdata;
 }
 
-void *unzip_file(zipfile_t zip, const char *name, unsigned *sz)
+static void *unzip_file(zipfile_t zip, const char *name, unsigned *sz)
 {
     void *data;
     zipentry_t entry;
@@ -422,16 +412,13 @@ void *unzip_file(zipfile_t zip, const char *name, unsigned *sz)
 
 static int unzip_to_file(zipfile_t zip, char *name)
 {
-    int fd;
-    char *data;
-    unsigned sz;
-
-    fd = fileno(tmpfile());
+    int fd = fileno(tmpfile());
     if (fd < 0) {
         return -1;
     }
 
-    data = unzip_file(zip, name, &sz);
+    unsigned sz;
+    void* data = unzip_file(zip, name, &sz);
     if (data == 0) {
         return -1;
     }
@@ -461,7 +448,6 @@ static char *strip(char *s)
 static int setup_requirement_line(char *name)
 {
     char *val[MAX_OPTIONS];
-    const char **out;
     char *prod = NULL;
     unsigned n, count;
     char *x;
@@ -501,10 +487,11 @@ static int setup_requirement_line(char *name)
     name = strip(name);
     if (name == 0) return -1;
 
-        /* work around an unfortunate name mismatch */
-    if (!strcmp(name,"board")) name = "product";
+    const char* var = name;
+    // Work around an unfortunate name mismatch.
+    if (!strcmp(name,"board")) var = "product";
 
-    out = malloc(sizeof(char*) * count);
+    const char** out = reinterpret_cast<const char**>(malloc(sizeof(char*) * count));
     if (out == 0) return -1;
 
     for(n = 0; n < count; n++) {
@@ -518,7 +505,7 @@ static int setup_requirement_line(char *name)
         }
     }
 
-    fb_queue_require(prod, name, invert, n, out);
+    fb_queue_require(prod, var, invert, n, out);
     return 0;
 }
 
@@ -551,21 +538,17 @@ void queue_info_dump(void)
 
 static struct sparse_file **load_sparse_files(int fd, int max_size)
 {
-    struct sparse_file *s;
-    int files;
-    struct sparse_file **out_s;
-
-    s = sparse_file_import_auto(fd, false);
+    struct sparse_file* s = sparse_file_import_auto(fd, false);
     if (!s) {
         die("cannot sparse read file\n");
     }
 
-    files = sparse_file_resparse(s, max_size, NULL, 0);
+    int files = sparse_file_resparse(s, max_size, NULL, 0);
     if (files < 0) {
         die("Failed to resparse\n");
     }
 
-    out_s = calloc(sizeof(struct sparse_file *), files + 1);
+    sparse_file** out_s = reinterpret_cast<sparse_file**>(calloc(sizeof(struct sparse_file *), files + 1));
     if (!out_s) {
         die("Failed to allocate sparse file array\n");
     }
@@ -682,11 +665,11 @@ static int load_buf(usb_handle *usb, const char *fname,
 
 static void flash_buf(const char *pname, struct fastboot_buffer *buf)
 {
-    struct sparse_file **s;
+    sparse_file** s;
 
     switch (buf->type) {
         case FB_BUFFER_SPARSE:
-            s = buf->data;
+            s = reinterpret_cast<sparse_file**>(buf->data);
             while (*s) {
                 int64_t sz64 = sparse_file_len(*s, true, false);
                 fb_queue_flash_sparse(pname, *s++, sz64);
@@ -720,53 +703,42 @@ void do_update_signature(zipfile_t zip, char *fn)
     fb_queue_command("signature", "installing signature");
 }
 
-void do_update(usb_handle *usb, char *fn, int erase_first)
+void do_update(usb_handle *usb, const char *filename, int erase_first)
 {
-    void *zdata;
-    unsigned zsize;
-    void *data;
-    unsigned sz;
-    zipfile_t zip;
-    int fd;
-    int rc;
-    struct fastboot_buffer buf;
-    size_t i;
-
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
-    zdata = load_file(fn, &zsize);
-    if (zdata == 0) die("failed to load '%s': %s", fn, strerror(errno));
+    unsigned zsize;
+    void* zdata = load_file(filename, &zsize);
+    if (zdata == 0) die("failed to load '%s': %s", filename, strerror(errno));
 
-    zip = init_zipfile(zdata, zsize);
-    if(zip == 0) die("failed to access zipdata in '%s'");
+    zipfile_t zip = init_zipfile(zdata, zsize);
+    if (zip == 0) die("failed to access zipdata in '%s'");
 
-    data = unzip_file(zip, "android-info.txt", &sz);
+    unsigned sz;
+    void* data = unzip_file(zip, "android-info.txt", &sz);
     if (data == 0) {
-        char *tmp;
             /* fallback for older zipfiles */
         data = unzip_file(zip, "android-product.txt", &sz);
         if ((data == 0) || (sz < 1)) {
             die("update package has no android-info.txt or android-product.txt");
         }
-        tmp = malloc(sz + 128);
-        if (tmp == 0) die("out of memory");
-        sprintf(tmp,"board=%sversion-baseband=0.66.04.19\n",(char*)data);
-        data = tmp;
-        sz = strlen(tmp);
+        data = mkmsg("board=%sversion-baseband=0.66.04.19\n", reinterpret_cast<char*>(data));
+        sz = strlen(reinterpret_cast<char*>(data));
     }
 
-    setup_requirements(data, sz);
+    setup_requirements(reinterpret_cast<char*>(data), sz);
 
-    for (i = 0; i < ARRAY_SIZE(images); i++) {
-        fd = unzip_to_file(zip, images[i].img_name);
+    for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
+        int fd = unzip_to_file(zip, images[i].img_name);
         if (fd < 0) {
             if (images[i].is_optional)
                 continue;
             die("update package missing %s", images[i].img_name);
         }
-        rc = load_buf_fd(usb, fd, &buf);
+        fastboot_buffer buf;
+        int rc = load_buf_fd(usb, fd, &buf);
         if (rc) die("cannot load %s from flash", images[i].img_name);
         do_update_signature(zip, images[i].sig_name);
         if (erase_first && needs_erase(images[i].part_name)) {
@@ -800,24 +772,22 @@ void do_send_signature(char *fn)
 
 void do_flashall(usb_handle *usb, int erase_first)
 {
-    char *fname;
-    void *data;
-    unsigned sz;
-    struct fastboot_buffer buf;
-    size_t i;
-
     queue_info_dump();
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
-    fname = find_item("info", product);
+    char* fname = find_item("info", product);
     if (fname == 0) die("cannot find android-info.txt");
-    data = load_file(fname, &sz);
-    if (data == 0) die("could not load android-info.txt: %s", strerror(errno));
-    setup_requirements(data, sz);
 
-    for (i = 0; i < ARRAY_SIZE(images); i++) {
+    unsigned sz;
+    void* data = load_file(fname, &sz);
+    if (data == 0) die("could not load android-info.txt: %s", strerror(errno));
+
+    setup_requirements(reinterpret_cast<char*>(data), sz);
+
+    for (size_t i = 0; i < ARRAY_SIZE(images); i++) {
         fname = find_item(images[i].part_name, product);
+        fastboot_buffer buf;
         if (load_buf(usb, fname, &buf)) {
             if (images[i].is_optional)
                 continue;
