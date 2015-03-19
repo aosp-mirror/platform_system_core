@@ -45,7 +45,7 @@
 #include <unistd.h>
 
 #include <sparse/sparse.h>
-#include <zipfile/zipfile.h>
+#include <ziparchive/zip_archive.h>
 
 #include "bootimg_utils.h"
 #include "fastboot.h"
@@ -379,29 +379,24 @@ void *load_bootable_image(const char *kernel, const char *ramdisk,
     return bdata;
 }
 
-static void *unzip_file(zipfile_t zip, const char *name, unsigned *sz)
+static void *unzip_file(ZipArchiveHandle zip, const char *name, unsigned *sz)
 {
-    void *data;
-    zipentry_t entry;
-    unsigned datasz;
-
-    entry = lookup_zipentry(zip, name);
-    if (entry == NULL) {
+    ZipEntryName zip_entry_name(name);
+    ZipEntry zip_entry;
+    if (FindEntry(zip, zip_entry_name, &zip_entry) != 0) {
         fprintf(stderr, "archive does not contain '%s'\n", name);
         return 0;
     }
 
-    *sz = get_zipentry_size(entry);
+    *sz = zip_entry.uncompressed_length;
 
-    datasz = *sz * 1.001;
-    data = malloc(datasz);
-
-    if(data == 0) {
+    uint8_t* data = reinterpret_cast<uint8_t*>(malloc(zip_entry.uncompressed_length));
+    if (data == NULL) {
         fprintf(stderr, "failed to allocate %d bytes\n", *sz);
         return 0;
     }
 
-    if (decompress_zipentry(entry, data, datasz)) {
+    if (ExtractToMemory(zip, &zip_entry, data, zip_entry.uncompressed_length) != 0) {
         fprintf(stderr, "failed to unzip '%s' from archive\n", name);
         free(data);
         return 0;
@@ -410,7 +405,7 @@ static void *unzip_file(zipfile_t zip, const char *name, unsigned *sz)
     return data;
 }
 
-static int unzip_to_file(zipfile_t zip, char *name)
+static int unzip_to_file(ZipArchiveHandle zip, char *name)
 {
     int fd = fileno(tmpfile());
     if (fd < 0) {
@@ -693,11 +688,10 @@ void do_flash(usb_handle *usb, const char *pname, const char *fname)
     flash_buf(pname, &buf);
 }
 
-void do_update_signature(zipfile_t zip, char *fn)
+void do_update_signature(ZipArchiveHandle zip, char *fn)
 {
-    void *data;
     unsigned sz;
-    data = unzip_file(zip, fn, &sz);
+    void* data = unzip_file(zip, fn, &sz);
     if (data == 0) return;
     fb_queue_download("signature", data, sz);
     fb_queue_command("signature", "installing signature");
@@ -709,12 +703,10 @@ void do_update(usb_handle *usb, const char *filename, int erase_first)
 
     fb_queue_query_save("product", cur_product, sizeof(cur_product));
 
-    unsigned zsize;
-    void* zdata = load_file(filename, &zsize);
-    if (zdata == 0) die("failed to load '%s': %s", filename, strerror(errno));
-
-    zipfile_t zip = init_zipfile(zdata, zsize);
-    if (zip == 0) die("failed to access zipdata in '%s'");
+    ZipArchiveHandle zip;
+    if (OpenArchive(filename, &zip) != 0) {
+        die("failed to open zip file '%s': %s", filename, strerror(errno));
+    }
 
     unsigned sz;
     void* data = unzip_file(zip, "android-info.txt", &sz);
@@ -750,6 +742,8 @@ void do_update(usb_handle *usb, const char *filename, int erase_first)
          * program exits.
          */
     }
+
+    CloseArchive(zip);
 }
 
 void do_send_signature(char *fn)
