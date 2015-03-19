@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
+ * Copyright (C) 2015 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,62 +26,24 @@
  * SUCH DAMAGE.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#ifndef _FASTBOOT_BOOTIMG_UTILS_H_
+#define _FASTBOOT_BOOTIMG_UTILS_H_
 
 #include <bootimg.h>
 
-void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline)
-{
-    strcpy((char*) h->cmdline, cmdline);
-}
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
+void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline);
 boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size, unsigned kernel_offset,
                         void *ramdisk, unsigned ramdisk_size, unsigned ramdisk_offset,
                         void *second, unsigned second_size, unsigned second_offset,
                         unsigned page_size, unsigned base, unsigned tags_offset,
-                        unsigned *bootimg_size)
-{
-    unsigned kernel_actual;
-    unsigned ramdisk_actual;
-    unsigned second_actual;
-    unsigned page_mask;
-    boot_img_hdr *hdr;
+                        unsigned *bootimg_size);
 
-    page_mask = page_size - 1;
-
-    kernel_actual = (kernel_size + page_mask) & (~page_mask);
-    ramdisk_actual = (ramdisk_size + page_mask) & (~page_mask);
-    second_actual = (second_size + page_mask) & (~page_mask);
-
-    *bootimg_size = page_size + kernel_actual + ramdisk_actual + second_actual;
-
-    hdr = calloc(*bootimg_size, 1);
-
-    if(hdr == 0) {
-        return hdr;
-    }
-
-    memcpy(hdr->magic, BOOT_MAGIC, BOOT_MAGIC_SIZE);
-
-    hdr->kernel_size =  kernel_size;
-    hdr->ramdisk_size = ramdisk_size;
-    hdr->second_size =  second_size;
-
-    hdr->kernel_addr =  base + kernel_offset;
-    hdr->ramdisk_addr = base + ramdisk_offset;
-    hdr->second_addr =  base + second_offset;
-    hdr->tags_addr =    base + tags_offset;
-
-    hdr->page_size =    page_size;
-
-
-    memcpy(hdr->magic + page_size,
-           kernel, kernel_size);
-    memcpy(hdr->magic + page_size + kernel_actual,
-           ramdisk, ramdisk_size);
-    memcpy(hdr->magic + page_size + kernel_actual + ramdisk_actual,
-           second, second_size);
-    return hdr;
+#if defined(__cplusplus)
 }
+#endif
+
+#endif
