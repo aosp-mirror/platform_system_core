@@ -587,6 +587,7 @@ void fdevent_destroy(fdevent *fde)
         FATAL("fde %p not created by fdevent_create()\n", fde);
     }
     fdevent_remove(fde);
+    free(fde);
 }
 
 void fdevent_install(fdevent *fde, int fd, fd_func func, void *arg)
