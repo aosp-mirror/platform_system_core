@@ -19,10 +19,11 @@ include $(CLEAR_VARS)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
   $(LOCAL_PATH)/../../extras/ext4_utils \
   $(LOCAL_PATH)/../../extras/f2fs_utils
-LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c util.c fs.c
+LOCAL_SRC_FILES := protocol.c engine.c bootimg_utils.cpp fastboot.cpp util.c fs.c
 LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
-LOCAL_CFLAGS += -std=gnu99 -Werror
+LOCAL_CONLYFLAGS += -std=gnu99
+LOCAL_CFLAGS += -Wall -Werror
 
 ifeq ($(HOST_OS),linux)
   LOCAL_SRC_FILES += usb_linux.c util_linux.c
