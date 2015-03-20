@@ -14,30 +14,30 @@
  * limitations under the License.
  */
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdio.h>
-#include <linux/kd.h>
 #include <errno.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <linux/if.h>
-#include <arpa/inet.h>
+#include <fcntl.h>
+#include <net/if.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
 #include <sys/mount.h>
 #include <sys/resource.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #include <linux/loop.h>
-#include <cutils/partition_utils.h>
-#include <cutils/android_reboot.h>
-#include <fs_mgr.h>
 
 #include <selinux/selinux.h>
 #include <selinux/label.h>
+
+#include <fs_mgr.h>
+#include <base/stringprintf.h>
+#include <cutils/partition_utils.h>
+#include <cutils/android_reboot.h>
+#include <private/android_filesystem_config.h>
 
 #include "init.h"
 #include "keywords.h"
@@ -46,8 +46,6 @@
 #include "init_parser.h"
 #include "util.h"
 #include "log.h"
-
-#include <private/android_filesystem_config.h>
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
 
@@ -674,41 +672,20 @@ int do_sysclktz(int nargs, char **args)
 }
 
 int do_verity_load_state(int nargs, char **args) {
-    if (nargs == 1) {
-        int mode = -1;
-        int rc = fs_mgr_load_verity_state(&mode);
-
-        if (rc == 0 && mode == VERITY_MODE_LOGGING) {
-            action_for_each_trigger("verity-logging", action_add_queue_tail);
-        }
-
-        return rc;
+    int mode = -1;
+    int rc = fs_mgr_load_verity_state(&mode);
+    if (rc == 0 && mode == VERITY_MODE_LOGGING) {
+        action_for_each_trigger("verity-logging", action_add_queue_tail);
     }
-    return -1;
+    return rc;
 }
 
-static void verity_update_property(struct fstab_rec *fstab,
-                    const char *mount_point, int status) {
-    char key[PROP_NAME_MAX];
-    int ret;
-
-    ret = snprintf(key, PROP_NAME_MAX, "partition.%s.verified", mount_point);
-    if (ret >= PROP_NAME_MAX) {
-        ERROR("Error setting verified property for %s: name too long\n",
-            mount_point);
-        return;
-    }
-
-    ret = property_set(key, "1");
-    if (ret < 0)
-        ERROR("Error setting verified property %s: %d\n", key, ret);
+static void verity_update_property(fstab_rec *fstab, const char *mount_point, int status) {
+    property_set(android::base::StringPrintf("partition.%s.verified", mount_point).c_str(), "1");
 }
 
-int do_verity_update_state(int nargs, char **args) {
-    if (nargs == 1) {
-        return fs_mgr_update_verity_state(verity_update_property);
-    }
-    return -1;
+int do_verity_update_state(int nargs, char** args) {
+    return fs_mgr_update_verity_state(verity_update_property);
 }
 
 int do_write(int nargs, char **args)
