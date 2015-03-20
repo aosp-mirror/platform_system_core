@@ -199,18 +199,14 @@ static bool is_legal_property_name(const char* name, size_t namelen)
     return true;
 }
 
-int property_set(const char *name, const char *value)
-{
-    prop_info *pi;
-    int ret;
-
+static int property_set_impl(const char* name, const char* value) {
     size_t namelen = strlen(name);
     size_t valuelen = strlen(value);
 
     if (!is_legal_property_name(name, namelen)) return -1;
     if (valuelen >= PROP_VALUE_MAX) return -1;
 
-    pi = (prop_info*) __system_property_find(name);
+    prop_info* pi = (prop_info*) __system_property_find(name);
 
     if(pi != 0) {
         /* ro.* properties may NEVER be modified once set */
@@ -218,10 +214,9 @@ int property_set(const char *name, const char *value)
 
         __system_property_update(pi, value, valuelen);
     } else {
-        ret = __system_property_add(name, namelen, value, valuelen);
-        if (ret < 0) {
-            ERROR("Failed to set '%s'='%s'\n", name, value);
-            return ret;
+        int rc = __system_property_add(name, namelen, value, valuelen);
+        if (rc < 0) {
+            return rc;
         }
     }
     /* If name starts with "net." treat as a DNS property. */
@@ -248,6 +243,14 @@ int property_set(const char *name, const char *value)
     }
     property_changed(name, value);
     return 0;
+}
+
+int property_set(const char* name, const char* value) {
+    int rc = property_set_impl(name, value);
+    if (rc == -1) {
+        ERROR("property_set(\"%s\", \"%s\" failed\n", name, value);
+    }
+    return rc;
 }
 
 void handle_property_set_fd()
