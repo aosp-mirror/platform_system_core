@@ -336,9 +336,9 @@ on boot
     write /proc/sys/vm/overcommit_memory 1
     write /proc/sys/vm/min_free_order_shift 4
     chown root system /sys/module/lowmemorykiller/parameters/adj
-    chmod 0220 /sys/module/lowmemorykiller/parameters/adj
+    chmod 0664 /sys/module/lowmemorykiller/parameters/adj
     chown root system /sys/module/lowmemorykiller/parameters/minfree
-    chmod 0220 /sys/module/lowmemorykiller/parameters/minfree
+    chmod 0664 /sys/module/lowmemorykiller/parameters/minfree
 
     # Tweak background writeout
     write /proc/sys/vm/dirty_expire_centisecs 200
