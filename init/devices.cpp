@@ -49,9 +49,9 @@
 #include "log.h"
 
 #define SYSFS_PREFIX    "/sys"
-#define FIRMWARE_DIR1   "/etc/firmware"
-#define FIRMWARE_DIR2   "/vendor/firmware"
-#define FIRMWARE_DIR3   "/firmware/image"
+static const char *firmware_dirs[] = { "/etc/firmware",
+                                       "/vendor/firmware",
+                                       "/firmware/image" };
 
 extern struct selabel_handle *sehandle;
 
@@ -818,8 +818,9 @@ static int is_booting(void)
 
 static void process_firmware_event(struct uevent *uevent)
 {
-    char *root, *loading, *data, *file1 = NULL, *file2 = NULL, *file3 = NULL;
+    char *root, *loading, *data;
     int l, loading_fd, data_fd, fw_fd;
+    size_t i;
     int booting = is_booting();
 
     INFO("firmware: loading '%s' for '%s'\n",
@@ -837,62 +838,49 @@ static void process_firmware_event(struct uevent *uevent)
     if (l == -1)
         goto loading_free_out;
 
-    l = asprintf(&file1, FIRMWARE_DIR1"/%s", uevent->firmware);
-    if (l == -1)
-        goto data_free_out;
-
-    l = asprintf(&file2, FIRMWARE_DIR2"/%s", uevent->firmware);
-    if (l == -1)
-        goto data_free_out;
-
-    l = asprintf(&file3, FIRMWARE_DIR3"/%s", uevent->firmware);
-    if (l == -1)
-        goto data_free_out;
-
     loading_fd = open(loading, O_WRONLY|O_CLOEXEC);
     if(loading_fd < 0)
-        goto file_free_out;
+        goto data_free_out;
 
     data_fd = open(data, O_WRONLY|O_CLOEXEC);
     if(data_fd < 0)
         goto loading_close_out;
 
 try_loading_again:
-    fw_fd = open(file1, O_RDONLY|O_CLOEXEC);
-    if(fw_fd < 0) {
-        fw_fd = open(file2, O_RDONLY|O_CLOEXEC);
-        if (fw_fd < 0) {
-            fw_fd = open(file3, O_RDONLY|O_CLOEXEC);
-            if (fw_fd < 0) {
-                if (booting) {
-                        /* If we're not fully booted, we may be missing
-                         * filesystems needed for firmware, wait and retry.
-                         */
-                    usleep(100000);
-                    booting = is_booting();
-                    goto try_loading_again;
-                }
-                INFO("firmware: could not open '%s' %d\n", uevent->firmware, errno);
-                write(loading_fd, "-1", 2);
-                goto data_close_out;
-            }
+    for (i = 0; i < ARRAY_SIZE(firmware_dirs); i++) {
+        char *file = NULL;
+        l = asprintf(&file, "%s/%s", firmware_dirs[i], uevent->firmware);
+        if (l == -1)
+            goto data_free_out;
+        fw_fd = open(file, O_RDONLY|O_CLOEXEC);
+        free(file);
+        if (fw_fd >= 0) {
+            if(!load_firmware(fw_fd, loading_fd, data_fd))
+                INFO("firmware: copy success { '%s', '%s' }\n", root, uevent->firmware);
+            else
+                INFO("firmware: copy failure { '%s', '%s' }\n", root, uevent->firmware);
+            break;
         }
     }
-
-    if(!load_firmware(fw_fd, loading_fd, data_fd))
-        INFO("firmware: copy success { '%s', '%s' }\n", root, uevent->firmware);
-    else
-        INFO("firmware: copy failure { '%s', '%s' }\n", root, uevent->firmware);
+    if (fw_fd < 0) {
+        if (booting) {
+            /* If we're not fully booted, we may be missing
+             * filesystems needed for firmware, wait and retry.
+             */
+            usleep(100000);
+            booting = is_booting();
+            goto try_loading_again;
+        }
+        INFO("firmware: could not open '%s' %d\n", uevent->firmware, errno);
+        write(loading_fd, "-1", 2);
+        goto data_close_out;
+    }
 
     close(fw_fd);
 data_close_out:
     close(data_fd);
 loading_close_out:
     close(loading_fd);
-file_free_out:
-    free(file1);
-    free(file2);
-    free(file3);
 data_free_out:
     free(data);
 loading_free_out:
