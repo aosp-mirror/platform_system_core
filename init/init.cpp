@@ -807,9 +807,7 @@ static void process_kernel_dt(void)
         std::replace(dt_file.begin(), dt_file.end(), ',', '.');
 
         std::string property_name = android::base::StringPrintf("ro.boot.%s", dp->d_name);
-        if (property_set(property_name.c_str(), dt_file.c_str())) {
-            ERROR("Could not set property %s to value %s", property_name.c_str(), dt_file.c_str());
-        }
+        property_set(property_name.c_str(), dt_file.c_str());
     }
 }
 
