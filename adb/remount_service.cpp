@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_ADB
+
+#include "sysdeps.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <mntent.h>
@@ -25,9 +29,6 @@
 
 #include <string>
 
-#include "sysdeps.h"
-
-#define  TRACE_TAG  TRACE_ADB
 #include "adb.h"
 #include "adb_io.h"
 #include "cutils/properties.h"

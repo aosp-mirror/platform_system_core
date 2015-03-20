@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_SOCKETS
+
+#include "sysdeps.h"
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
@@ -21,14 +25,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "sysdeps.h"
-
-#define  TRACE_TAG  TRACE_SOCKETS
-#include "adb.h"
-#include "adb_io.h"
 #if !ADB_HOST
 #include "cutils/properties.h"
 #endif
+
+#include "adb.h"
+#include "adb_io.h"
 #include "transport.h"
 
 ADB_MUTEX_DEFINE( socket_list_lock );

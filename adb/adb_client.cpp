@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_ADB
+
+#include "sysdeps.h"
+#include "adb_client.h"
+
 #include <errno.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -23,10 +28,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "sysdeps.h"
-
-#define  TRACE_TAG  TRACE_ADB
-#include "adb_client.h"
 #include "adb_io.h"
 
 static transport_type __adb_transport = kTransportAny;

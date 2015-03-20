@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_ADB
+
+#include "sysdeps.h"
+
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdarg.h>
@@ -21,13 +25,12 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
-#define  TRACE_TAG  TRACE_ADB
-#include "adb.h"
 #include "cutils/properties.h"
+
+#include "adb.h"
 #include "ext4_sb.h"
 #include "fs_mgr.h"
 #include "remount_service.h"
-#include "sysdeps.h"
 
 #define FSTAB_PREFIX "/fstab."
 struct fstab *fstab;

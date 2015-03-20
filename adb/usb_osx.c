@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_USB
+
+#include "sysdeps.h"
+
 #include <CoreFoundation/CoreFoundation.h>
 
 #include <IOKit/IOKitLib.h>
@@ -24,9 +28,6 @@
 
 #include <stdio.h>
 
-#include "sysdeps.h"
-
-#define TRACE_TAG   TRACE_USB
 #include "adb.h"
 #include "transport.h"
 
