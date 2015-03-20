@@ -61,7 +61,9 @@ public:
     int init(char *str);
 
     bool naughty(LogBufferElement *element);
+    bool naughty(void) { return !mNaughty.empty(); }
     bool nice(LogBufferElement *element);
+    bool nice(void) { return !mNice.empty(); }
     bool worstUidEnabled() const { return mWorstUidEnabled; }
 
     // *strp is malloc'd, use free to release

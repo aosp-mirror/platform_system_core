@@ -27,8 +27,6 @@
 
 #include "LogBuffer.h"
 #include "LogReader.h"
-#include "LogStatistics.h"
-#include "LogWhiteBlackList.h"
 
 // Default
 #define LOG_BUFFER_SIZE (256 * 1024) // Tuned on a per-platform basis here?
@@ -193,7 +191,7 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
         LogTimeEntry::unlock();
     }
 
-    stats.add(len, log_id, uid, pid);
+    stats.add(elem);
     maybePrune(log_id);
     pthread_mutex_unlock(&mLogElementsLock);
 }
@@ -214,6 +212,16 @@ void LogBuffer::maybePrune(log_id_t id) {
         }
         prune(id, pruneRows);
     }
+}
+
+LogBufferElementCollection::iterator LogBuffer::erase(LogBufferElementCollection::iterator it) {
+    LogBufferElement *e = *it;
+
+    it = mLogElements.erase(it);
+    stats.subtract(e);
+    delete e;
+
+    return it;
 }
 
 // prune "pruneRows" of type "id" from the buffer.
@@ -250,12 +258,8 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
                 continue;
             }
 
-            uid_t uid = e->getUid();
-
-            if (uid == caller_uid) {
-                it = mLogElements.erase(it);
-                stats.subtract(e->getMsgLen(), id, uid, e->getPid());
-                delete e;
+            if (e->getUid() == caller_uid) {
+                it = erase(it);
                 pruneRows--;
                 if (pruneRows == 0) {
                     break;
@@ -269,6 +273,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     }
 
     // prune by worst offender by uid
+    bool hasBlacklist = mPrune.naughty();
     while (pruneRows > 0) {
         // recalculate the worst offender on every batched pass
         uid_t worst = (uid_t) -1;
@@ -276,17 +281,21 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         size_t second_worst_sizes = 0;
 
         if ((id != LOG_ID_CRASH) && mPrune.worstUidEnabled()) {
-            LidStatistics &l = stats.id(id);
-            l.sort();
-            UidStatisticsCollection::iterator iu = l.begin();
-            if (iu != l.end()) {
-                UidStatistics *u = *iu;
-                worst = u->getUid();
-                worst_sizes = u->sizes();
-                if (++iu != l.end()) {
-                    second_worst_sizes = (*iu)->sizes();
+            const UidEntry **sorted = stats.sort(2, id);
+
+            if (sorted) {
+                if (sorted[0] && sorted[1]) {
+                    worst = sorted[0]->getKey();
+                    worst_sizes = sorted[0]->getSizes();
+                    second_worst_sizes = sorted[1]->getSizes();
                 }
+                delete [] sorted;
             }
+        }
+
+        // skip if we have neither worst nor naughty filters
+        if ((worst == (uid_t) -1) && !hasBlacklist) {
+            break;
         }
 
         bool kick = false;
@@ -304,24 +313,28 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
             uid_t uid = e->getUid();
 
-            if ((uid == worst) || mPrune.naughty(e)) { // Worst or BlackListed
-                it = mLogElements.erase(it);
-                unsigned short len = e->getMsgLen();
-                stats.subtract(len, id, uid, e->getPid());
-                delete e;
-                pruneRows--;
-                if (uid == worst) {
-                    kick = true;
-                    if ((pruneRows == 0) || (worst_sizes < second_worst_sizes)) {
-                        break;
-                    }
-                    worst_sizes -= len;
-                } else if (pruneRows == 0) {
-                    break;
-                }
-            } else {
+            // !Worst and !BlackListed?
+            if ((uid != worst) && (!hasBlacklist || !mPrune.naughty(e))) {
                 ++it;
+                continue;
             }
+
+            unsigned short len = e->getMsgLen();
+            it = erase(it);
+            pruneRows--;
+            if (pruneRows == 0) {
+                break;
+            }
+
+            if (uid != worst) {
+                continue;
+            }
+
+            kick = true;
+            if (worst_sizes < second_worst_sizes) {
+                break;
+            }
+            worst_sizes -= len;
         }
 
         if (!kick || !mPrune.worstUidEnabled()) {
@@ -330,58 +343,63 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
     }
 
     bool whitelist = false;
+    bool hasWhitelist = mPrune.nice();
     it = mLogElements.begin();
     while((pruneRows > 0) && (it != mLogElements.end())) {
         LogBufferElement *e = *it;
-        if (e->getLogId() == id) {
-            if (oldest && (oldest->mStart <= e->getSequence())) {
-                if (!whitelist) {
-                    if (stats.sizes(id) > (2 * log_buffer_size(id))) {
-                        // kick a misbehaving log reader client off the island
-                        oldest->release_Locked();
-                    } else {
-                        oldest->triggerSkip_Locked(id, pruneRows);
-                    }
-                }
+
+        if (e->getLogId() != id) {
+            it++;
+            continue;
+        }
+
+        if (oldest && (oldest->mStart <= e->getSequence())) {
+            if (whitelist) {
                 break;
             }
 
-            if (mPrune.nice(e)) { // WhiteListed
-                whitelist = true;
-                it++;
-                continue;
+            if (stats.sizes(id) > (2 * log_buffer_size(id))) {
+                // kick a misbehaving log reader client off the island
+                oldest->release_Locked();
+            } else {
+                oldest->triggerSkip_Locked(id, pruneRows);
             }
-
-            it = mLogElements.erase(it);
-            stats.subtract(e->getMsgLen(), id, e->getUid(), e->getPid());
-            delete e;
-            pruneRows--;
-        } else {
-            it++;
+            break;
         }
+
+        if (hasWhitelist && mPrune.nice(e)) { // WhiteListed
+            whitelist = true;
+            it++;
+            continue;
+        }
+
+        it = erase(it);
+        pruneRows--;
     }
 
+    // Do not save the whitelist if we are reader range limited
     if (whitelist && (pruneRows > 0)) {
         it = mLogElements.begin();
         while((it != mLogElements.end()) && (pruneRows > 0)) {
             LogBufferElement *e = *it;
-            if (e->getLogId() == id) {
-                if (oldest && (oldest->mStart <= e->getSequence())) {
-                    if (stats.sizes(id) > (2 * log_buffer_size(id))) {
-                        // kick a misbehaving log reader client off the island
-                        oldest->release_Locked();
-                    } else {
-                        oldest->triggerSkip_Locked(id, pruneRows);
-                    }
-                    break;
-                }
-                it = mLogElements.erase(it);
-                stats.subtract(e->getMsgLen(), id, e->getUid(), e->getPid());
-                delete e;
-                pruneRows--;
-            } else {
-                it++;
+
+            if (e->getLogId() != id) {
+                ++it;
+                continue;
             }
+
+            if (oldest && (oldest->mStart <= e->getSequence())) {
+                if (stats.sizes(id) > (2 * log_buffer_size(id))) {
+                    // kick a misbehaving log reader client off the island
+                    oldest->release_Locked();
+                } else {
+                    oldest->triggerSkip_Locked(id, pruneRows);
+                }
+                break;
+            }
+
+            it = erase(it);
+            pruneRows--;
         }
     }
 
@@ -487,22 +505,9 @@ uint64_t LogBuffer::flushTo(
 }
 
 void LogBuffer::formatStatistics(char **strp, uid_t uid, unsigned int logMask) {
-    uint64_t oldest = UINT64_MAX;
-
     pthread_mutex_lock(&mLogElementsLock);
 
-    // Find oldest element in the log(s)
-    LogBufferElementCollection::iterator it;
-    for (it = mLogElements.begin(); it != mLogElements.end(); ++it) {
-        LogBufferElement *element = *it;
-
-        if ((logMask & (1 << element->getLogId()))) {
-            oldest = element->getSequence();
-            break;
-        }
-    }
-
-    stats.format(strp, uid, logMask, oldest);
+    stats.format(strp, uid, logMask);
 
     pthread_mutex_unlock(&mLogElementsLock);
 }
