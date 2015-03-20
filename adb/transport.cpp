@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-#include "sysdeps.h"
+#define TRACE_TAG TRACE_TRANSPORT
 
+#include "sysdeps.h"
 #include "transport.h"
 
 #include <ctype.h>
@@ -25,7 +26,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#define   TRACE_TAG  TRACE_TRANSPORT
 #include "adb.h"
 
 static void transport_unref(atransport *t);

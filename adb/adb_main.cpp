@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#define  TRACE_TAG   TRACE_ADB
+#define TRACE_TAG TRACE_ADB
+
+#include "sysdeps.h"
 
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "sysdeps.h"
 
 #include "adb.h"
 #include "adb_auth.h"

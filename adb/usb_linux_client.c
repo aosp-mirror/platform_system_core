@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_USB
+
+#include "sysdeps.h"
+
 #include <dirent.h>
 #include <errno.h>
 #include <linux/usb/ch9.h>
@@ -25,9 +29,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "sysdeps.h"
-
-#define   TRACE_TAG  TRACE_USB
 #include "adb.h"
 #include "transport.h"
 

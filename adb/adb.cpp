@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-#define  TRACE_TAG   TRACE_ADB
+#define TRACE_TAG TRACE_ADB
+
+#include "sysdeps.h"
+#include "adb.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,8 +30,6 @@
 #include <sys/time.h>
 #include <stdint.h>
 
-#include "sysdeps.h"
-#include "adb.h"
 #include "adb_auth.h"
 #include "adb_io.h"
 #include "adb_listeners.h"

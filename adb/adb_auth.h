@@ -17,6 +17,8 @@
 #ifndef __ADB_AUTH_H
 #define __ADB_AUTH_H
 
+#include "adb.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

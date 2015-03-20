@@ -15,25 +15,23 @@
 ** limitations under the License.
 */
 
-#include <sys/ioctl.h>
+#define TRACE_TAG TRACE_FDEVENT
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
+#include "sysdeps.h"
+#include "fdevent.h"
+
 #include <errno.h>
-
 #include <fcntl.h>
-
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
 
 #include "adb_io.h"
 #include "adb_trace.h"
-#include "fdevent.h"
-#include "sysdeps.h"
-
-#define TRACE_TAG  TRACE_FDEVENT
 
 /* !!! Do not enable DEBUG for the adb that will run as the server:
 ** both stdout and stderr are used to communicate between the client
