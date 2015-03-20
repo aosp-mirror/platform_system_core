@@ -56,7 +56,6 @@ include $(BUILD_SHARED_LIBRARY)
 # ------------------------------------------------------------------------------
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase
-LOCAL_CLANG := true
 LOCAL_SRC_FILES := $(libbase_src_files)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_CPPFLAGS := $(libbase_cppflags)
@@ -66,7 +65,6 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase
-LOCAL_CLANG := true
 LOCAL_WHOLE_STATIC_LIBRARIES := libbase
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
@@ -88,7 +86,6 @@ include $(BUILD_NATIVE_TEST)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase_test
-LOCAL_CLANG := true
 LOCAL_SRC_FILES := $(libbase_test_src_files)
 LOCAL_CPPFLAGS := $(libbase_cppflags)
 LOCAL_SHARED_LIBRARIES := libbase
