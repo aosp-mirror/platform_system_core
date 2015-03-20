@@ -148,42 +148,6 @@ static bool should_drop_privileges() {
     return true; // "adb root" not allowed, always drop privileges.
 #endif /* ALLOW_ADBD_ROOT */
 }
-
-void start_device_log(void)
-{
-    int fd;
-    char    path[PATH_MAX];
-    struct tm now;
-    time_t t;
-    char value[PROPERTY_VALUE_MAX];
-
-    // read the trace mask from persistent property persist.adb.trace_mask
-    // give up if the property is not set or cannot be parsed
-    property_get("persist.adb.trace_mask", value, "");
-    if (sscanf(value, "%x", &adb_trace_mask) != 1)
-        return;
-
-    adb_mkdir("/data/adb", 0775);
-    tzset();
-    time(&t);
-    localtime_r(&t, &now);
-    strftime(path, sizeof(path),
-                "/data/adb/adb-%Y-%m-%d-%H-%M-%S.txt",
-                &now);
-    fd = unix_open(path, O_WRONLY | O_CREAT | O_TRUNC, 0640);
-    if (fd < 0)
-        return;
-
-    // redirect stdout and stderr to the log file
-    dup2(fd, 1);
-    dup2(fd, 2);
-    fprintf(stderr,"--- adb starting (pid %d) ---\n", getpid());
-    adb_close(fd);
-
-    fd = unix_open("/dev/null", O_RDONLY);
-    dup2(fd, 0);
-    adb_close(fd);
-}
 #endif /* ADB_HOST */
 
 /* Constructs a local name of form tcp:port.
@@ -385,18 +349,20 @@ int adb_main(int is_daemon, int server_port)
     return 0;
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
 #if ADB_HOST
     adb_sysdeps_init();
+#endif
     adb_trace_init();
+
+#if ADB_HOST
     D("Handling commandline()\n");
     return adb_commandline(argc - 1, const_cast<const char**>(argv + 1));
 #else
     /* If adbd runs inside the emulator this will enable adb tracing via
      * adb-debug qemud service in the emulator. */
     adb_qemu_trace_init();
-    while(1) {
+    while (1) {
         int c;
         int option_index = 0;
         static struct option opts[] = {
@@ -418,7 +384,6 @@ int main(int argc, char **argv)
         }
     }
 
-    start_device_log();
     D("Handling main()\n");
     return adb_main(0, DEFAULT_ADB_PORT);
 #endif
