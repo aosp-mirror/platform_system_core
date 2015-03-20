@@ -37,6 +37,7 @@ int do_loglevel(int nargs, char **args);
 int do_load_persist_props(int nargs, char **args);
 int do_load_all_props(int nargs, char **args);
 int do_verity_load_state(int nargs, char **args);
+int do_verity_update_state(int nargs, char **args);
 int do_wait(int nargs, char **args);
 #define __MAKE_KEYWORD_ENUM__
 #define KEYWORD(symbol, flags, nargs, func) K_##symbol,
@@ -89,6 +90,7 @@ enum {
     KEYWORD(sysclktz,    COMMAND, 1, do_sysclktz)
     KEYWORD(user,        OPTION,  0, 0)
     KEYWORD(verity_load_state,      COMMAND, 0, do_verity_load_state)
+    KEYWORD(verity_update_state,    COMMAND, 0, do_verity_update_state)
     KEYWORD(wait,        COMMAND, 1, do_wait)
     KEYWORD(write,       COMMAND, 2, do_write)
     KEYWORD(copy,        COMMAND, 2, do_copy)
