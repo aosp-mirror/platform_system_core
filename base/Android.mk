@@ -18,13 +18,17 @@ LOCAL_PATH := $(call my-dir)
 
 libbase_src_files := \
     file.cpp \
+    logging.cpp \
     stringprintf.cpp \
     strings.cpp \
 
 libbase_test_src_files := \
     file_test.cpp \
+    logging_test.cpp \
     stringprintf_test.cpp \
     strings_test.cpp \
+    test_main.cpp \
+    test_utils.cpp \
 
 libbase_cppflags := \
     -Wall \
@@ -77,6 +81,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libbase_test
 LOCAL_CLANG := true
 LOCAL_SRC_FILES := $(libbase_test_src_files)
+LOCAL_C_INCLUDES := $(LOCAL_PATH)
 LOCAL_CPPFLAGS := $(libbase_cppflags)
 LOCAL_SHARED_LIBRARIES := libbase
 LOCAL_MULTILIB := both
@@ -87,6 +92,7 @@ include $(BUILD_NATIVE_TEST)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase_test
 LOCAL_SRC_FILES := $(libbase_test_src_files)
+LOCAL_C_INCLUDES := $(LOCAL_PATH)
 LOCAL_CPPFLAGS := $(libbase_cppflags)
 LOCAL_SHARED_LIBRARIES := libbase
 LOCAL_MULTILIB := both
