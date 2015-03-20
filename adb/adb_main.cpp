@@ -349,9 +349,23 @@ int adb_main(int is_daemon, int server_port)
     return 0;
 }
 
+#if !ADB_HOST
+void close_stdin() {
+    int fd = unix_open("/dev/null", O_RDONLY);
+    if (fd == -1) {
+        perror("failed to open /dev/null, stdin will remain open");
+        return;
+    }
+    dup2(fd, 0);
+    adb_close(fd);
+}
+#endif
+
 int main(int argc, char **argv) {
 #if ADB_HOST
     adb_sysdeps_init();
+#else
+    close_stdin();
 #endif
     adb_trace_init();
 
