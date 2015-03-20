@@ -154,7 +154,7 @@ static void format_line(android::String8 &output,
     static const size_t total_len = 70;
 
     output.appendFormat("%s%*s\n", name.string(),
-        (int)std::max(total_len - name.length() - 1, size.length() + 1)
+        (int)std::max(total_len - name.length() - 1, size.length() + 1),
         size.string());
 }
 
