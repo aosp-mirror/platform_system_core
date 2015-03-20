@@ -202,6 +202,7 @@ static int lookup_keyword(const char *s)
         break;
     case 'v':
         if (!strcmp(s, "erity_load_state")) return K_verity_load_state;
+        if (!strcmp(s, "erity_update_state")) return K_verity_update_state;
         break;
     case 'w':
         if (!strcmp(s, "rite")) return K_write;

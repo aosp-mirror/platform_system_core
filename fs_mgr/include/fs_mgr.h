@@ -27,6 +27,10 @@
 // turn verity off in userdebug builds.
 #define VERITY_METADATA_MAGIC_DISABLE 0x46464f56 // "VOFF"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Verity modes
 enum verity_mode {
     VERITY_MODE_EIO = 0,
@@ -34,10 +38,6 @@ enum verity_mode {
     VERITY_MODE_RESTART = 2,
     VERITY_MODE_LAST = VERITY_MODE_RESTART
 };
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /*
  * The entries must be kept in the same order as they were seen in the fstab.
@@ -66,6 +66,10 @@ struct fstab_rec {
     unsigned int zram_size;
 };
 
+// Callback function for verity status
+typedef void (*fs_mgr_verity_state_callback)(struct fstab_rec *fstab,
+        const char *mount_point, int status);
+
 struct fstab *fs_mgr_read_fstab(const char *fstab_path);
 void fs_mgr_free_fstab(struct fstab *fstab);
 
@@ -84,7 +88,7 @@ int fs_mgr_unmount_all(struct fstab *fstab);
 int fs_mgr_get_crypt_info(struct fstab *fstab, char *key_loc,
                           char *real_blk_device, int size);
 int fs_mgr_load_verity_state(int *mode);
-int fs_mgr_update_verity_state();
+int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback);
 int fs_mgr_add_entry(struct fstab *fstab,
                      const char *mount_point, const char *fs_type,
                      const char *blk_device);
