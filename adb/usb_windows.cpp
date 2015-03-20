@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_USB
+
+#include "sysdeps.h"
+
 #include <winsock2.h>  // winsock.h *must* be included before windows.h.
 #include <adb_api.h>
 #include <errno.h>
@@ -23,9 +27,6 @@
 #include <windows.h>
 #include <winerror.h>
 
-#include "sysdeps.h"
-
-#define   TRACE_TAG  TRACE_USB
 #include "adb.h"
 #include "transport.h"
 

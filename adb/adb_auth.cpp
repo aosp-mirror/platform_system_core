@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-#define  TRACE_TAG   TRACE_ADB
+#define TRACE_TAG TRACE_ADB
+
+#include "sysdeps.h"
+#include "adb_auth.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -23,9 +26,7 @@
 #include <unistd.h>
 
 #include "adb.h"
-#include "adb_auth.h"
 #include "transport.h"
-#include "sysdeps.h"
 
 int auth_enabled = 0;
 
