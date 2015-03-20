@@ -69,8 +69,6 @@ struct selabel_handle *sehandle_prop;
 
 static int property_triggers_enabled = 0;
 
-static char console[32];
-static char bootmode[32];
 static char qemu[32];
 
 static struct action *cur_action = NULL;
@@ -693,13 +691,12 @@ static int keychord_init_action(int nargs, char **args)
 
 static int console_init_action(int nargs, char **args)
 {
-    int fd;
-
-    if (console[0]) {
+    char console[PROP_VALUE_MAX];
+    if (property_get("ro.boot.console", console) > 0) {
         snprintf(console_name, sizeof(console_name), "/dev/%s", console);
     }
 
-    fd = open(console_name, O_RDWR | O_CLOEXEC);
+    int fd = open(console_name, O_RDWR | O_CLOEXEC);
     if (fd >= 0)
         have_console = 1;
     close(fd);
@@ -762,47 +759,24 @@ static void import_kernel_nv(char *name, int for_emulator)
     }
 }
 
-static void export_kernel_boot_props(void)
-{
-    char tmp[PROP_VALUE_MAX];
-    int ret;
-    unsigned i;
+static void export_kernel_boot_props() {
     struct {
         const char *src_prop;
-        const char *dest_prop;
-        const char *def_val;
+        const char *dst_prop;
+        const char *default_value;
     } prop_map[] = {
-        { "ro.boot.serialno", "ro.serialno", "", },
-        { "ro.boot.mode", "ro.bootmode", "unknown", },
-        { "ro.boot.baseband", "ro.baseband", "unknown", },
+        { "ro.boot.serialno",   "ro.serialno",   "", },
+        { "ro.boot.mode",       "ro.bootmode",   "unknown", },
+        { "ro.boot.baseband",   "ro.baseband",   "unknown", },
         { "ro.boot.bootloader", "ro.bootloader", "unknown", },
-        { "ro.boot.hardware", "ro.hardware", "unknown", },
-        { "ro.boot.revision", "ro.revision", "0", },
+        { "ro.boot.hardware",   "ro.hardware",   "unknown", },
+        { "ro.boot.revision",   "ro.revision",   "0", },
     };
-
-    for (i = 0; i < ARRAY_SIZE(prop_map); i++) {
-        ret = property_get(prop_map[i].src_prop, tmp);
-        if (ret > 0)
-            property_set(prop_map[i].dest_prop, tmp);
-        else
-            property_set(prop_map[i].dest_prop, prop_map[i].def_val);
+    for (size_t i = 0; i < ARRAY_SIZE(prop_map); i++) {
+        char value[PROP_VALUE_MAX];
+        int rc = property_get(prop_map[i].src_prop, value);
+        property_set(prop_map[i].dst_prop, (rc > 0) ? value : prop_map[i].default_value);
     }
-
-    ret = property_get("ro.boot.console", tmp);
-    if (ret)
-        strlcpy(console, tmp, sizeof(console));
-
-    /* save a copy for init's usage during boot */
-    property_get("ro.bootmode", tmp);
-    strlcpy(bootmode, tmp, sizeof(bootmode));
-
-    /* TODO: these are obsolete. We should delete them */
-    if (!strcmp(bootmode,"factory"))
-        property_set("ro.factorytest", "1");
-    else if (!strcmp(bootmode,"factory2"))
-        property_set("ro.factorytest", "2");
-    else
-        property_set("ro.factorytest", "0");
 }
 
 static void process_kernel_dt(void)
@@ -1087,7 +1061,8 @@ int main(int argc, char** argv) {
     queue_builtin_action(signal_init_action, "signal_init");
 
     // Don't mount filesystems or start core system services in charger mode.
-    if (strcmp(bootmode, "charger") == 0) {
+    char bootmode[PROP_VALUE_MAX];
+    if (property_get("ro.bootmode", bootmode) > 0 && strcmp(bootmode, "charger") == 0) {
         action_for_each_trigger("charger", action_add_queue_tail);
     } else {
         action_for_each_trigger("late-init", action_add_queue_tail);
