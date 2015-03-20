@@ -79,6 +79,8 @@ bool WriteFdExactly(int fd, const void* buf, size_t len) {
                 D("writex: fd=%d disconnected\n", fd);
                 errno = 0;
                 return false;
+            } else {
+                return false;
             }
         } else {
             len -= r;
