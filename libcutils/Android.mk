@@ -59,7 +59,8 @@ ifneq ($(WINDOWS_HOST_ONLY),1)
         sockets.c \
 
     commonHostSources += \
-        ashmem-host.c
+        ashmem-host.c \
+        trace-host.c
 
 endif
 
@@ -116,7 +117,7 @@ LOCAL_SRC_FILES := $(commonSources) \
         partition_utils.c \
         properties.c \
         qtaguid.c \
-        trace.c \
+        trace-dev.c \
         uevent.c \
 
 LOCAL_SRC_FILES_arm += \
