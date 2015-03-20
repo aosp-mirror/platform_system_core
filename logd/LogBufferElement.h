@@ -17,8 +17,9 @@
 #ifndef _LOGD_LOG_BUFFER_ELEMENT_H__
 #define _LOGD_LOG_BUFFER_ELEMENT_H__
 
-#include <sys/types.h>
 #include <stdatomic.h>
+#include <sys/types.h>
+
 #include <sysutils/SocketClient.h>
 #include <log/log.h>
 #include <log/log_read.h>
