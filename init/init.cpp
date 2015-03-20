@@ -35,8 +35,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <memory>
-
 #include <mtd/mtd-user.h>
 
 #include <selinux/selinux.h>
@@ -52,6 +50,8 @@
 #include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
 
+#include <memory>
+
 #include "devices.h"
 #include "init.h"
 #include "log.h"
@@ -63,9 +63,6 @@
 #include "util.h"
 #include "ueventd.h"
 #include "watchdogd.h"
-
-using android::base::ReadFileToString;
-using android::base::StringPrintf;
 
 struct selabel_handle *sehandle;
 struct selabel_handle *sehandle_prop;
@@ -812,10 +809,10 @@ static void process_kernel_dt(void)
 {
     static const char android_dir[] = "/proc/device-tree/firmware/android";
 
-    std::string file_name = StringPrintf("%s/compatible", android_dir);
+    std::string file_name = android::base::StringPrintf("%s/compatible", android_dir);
 
     std::string dt_file;
-    ReadFileToString(file_name, &dt_file);
+    android::base::ReadFileToString(file_name, &dt_file);
     if (!dt_file.compare("android,firmware")) {
         ERROR("firmware/android is not compatible with 'android,firmware'\n");
         return;
@@ -830,12 +827,12 @@ static void process_kernel_dt(void)
         if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible"))
             continue;
 
-        file_name = StringPrintf("%s/%s", android_dir, dp->d_name);
+        file_name = android::base::StringPrintf("%s/%s", android_dir, dp->d_name);
 
-        ReadFileToString(file_name, &dt_file);
+        android::base::ReadFileToString(file_name, &dt_file);
         std::replace(dt_file.begin(), dt_file.end(), ',', '.');
 
-        std::string property_name = StringPrintf("ro.boot.%s", dp->d_name);
+        std::string property_name = android::base::StringPrintf("ro.boot.%s", dp->d_name);
         if (property_set(property_name.c_str(), dt_file.c_str())) {
             ERROR("Could not set property %s to value %s", property_name.c_str(), dt_file.c_str());
         }
