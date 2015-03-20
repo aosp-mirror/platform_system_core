@@ -18,8 +18,11 @@
 
 #include <gtest/gtest.h>
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <string>
@@ -125,6 +128,15 @@ TEST(io, WriteFdExactly_partial) {
   std::string s;
   ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s));
   EXPECT_EQ(expected, s);
+}
+
+TEST(io, WriteFdExactly_ENOSPC) {
+    int fd = open("/dev/full", O_WRONLY);
+    ASSERT_NE(-1, fd);
+
+    char buf[] = "foo";
+    ASSERT_FALSE(WriteFdExactly(fd, buf, sizeof(buf)));
+    ASSERT_EQ(ENOSPC, errno);
 }
 
 TEST(io, WriteStringFully) {
