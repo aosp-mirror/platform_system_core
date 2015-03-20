@@ -244,6 +244,56 @@ enum {
     HAL_PIXEL_FORMAT_RAW10 = 0x25,
 
     /*
+     * Android RAW12 format:
+     *
+     * This format is exposed outside of camera HAL to applications.
+     *
+     * RAW12 is a single-channel, 12-bit per pixel, densely packed in each row,
+     * unprocessed format, usually representing raw Bayer-pattern images coming from
+     * an image sensor.
+     *
+     * In an image buffer with this format, starting from the first pixel of each
+     * row, each two consecutive pixels are packed into 3 bytes (24 bits). The first
+     * and second byte contains the top 8 bits of first and second pixel. The third
+     * byte contains the 4 least significant bits of the two pixels, the exact layout
+     * data for each two consecutive pixels is illustrated below (Pi[j] stands for
+     * the jth bit of the ith pixel):
+     *
+     *           bit 7                                            bit 0
+     *          ======|======|======|======|======|======|======|======|
+     * Byte 0: |P0[11]|P0[10]|P0[ 9]|P0[ 8]|P0[ 7]|P0[ 6]|P0[ 5]|P0[ 4]|
+     *         |------|------|------|------|------|------|------|------|
+     * Byte 1: |P1[11]|P1[10]|P1[ 9]|P1[ 8]|P1[ 7]|P1[ 6]|P1[ 5]|P1[ 4]|
+     *         |------|------|------|------|------|------|------|------|
+     * Byte 2: |P1[ 3]|P1[ 2]|P1[ 1]|P1[ 0]|P0[ 3]|P0[ 2]|P0[ 1]|P0[ 0]|
+     *          =======================================================
+     *
+     * This format assumes:
+     * - a width multiple of 4 pixels
+     * - an even height
+     * - a vertical stride equal to the height
+     * - strides are specified in bytes, not in pixels
+     *
+     *   size = stride * height
+     *
+     * When stride is equal to width * (12 / 8), there will be no padding bytes at
+     * the end of each row, the entire image data is densely packed. When stride is
+     * larger than width * (12 / 8), padding bytes will be present at the end of
+     * each row (including the last row).
+     *
+     * This format must be accepted by the gralloc module when used with the
+     * following usage flags:
+     *    - GRALLOC_USAGE_HW_CAMERA_*
+     *    - GRALLOC_USAGE_SW_*
+     *    - GRALLOC_USAGE_RENDERSCRIPT
+     *
+     * When used with ANativeWindow, the dataSpace field should be
+     * HAL_DATASPACE_ARBITRARY, as raw image sensor buffers require substantial
+     * extra metadata to define.
+     */
+    HAL_PIXEL_FORMAT_RAW12 = 0x26,
+
+    /*
      * Android opaque RAW format:
      *
      * This format is exposed outside of the camera HAL to applications.
