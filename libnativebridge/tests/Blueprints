@@ -1,0 +1,50 @@
+// Build the unit tests.
+
+cc_test {
+    name: "libnativebridge_tests",
+    srcs: [
+        "CodeCacheCreate_test.cpp",
+        "CodeCacheExists_test.cpp",
+        "CompleteFlow_test.cpp",
+        "InvalidCharsNativeBridge_test.cpp",
+        "NeedsNativeBridge_test.cpp",
+        "PreInitializeNativeBridge_test.cpp",
+        "PreInitializeNativeBridgeFail1_test.cpp",
+        "PreInitializeNativeBridgeFail2_test.cpp",
+        "ReSetupNativeBridge_test.cpp",
+        "UnavailableNativeBridge_test.cpp",
+        "ValidNameNativeBridge_test.cpp",
+    ],
+    clang: true,
+    cppflags: ["-std=gnu++11"],
+    shared_libs: [
+        "liblog",
+        "libnativebridge",
+        "libnativebridge-dummy",
+    ],
+    host_supported: true,
+    test_per_src: true,
+}
+
+cc_library {
+    name: "libnativebridge-dummy",
+    host_supported: true,
+    srcs: ["DummyNativeBridge.cpp"],
+    clang: true,
+    cflags: [
+        "-Werror",
+        "-Wall",
+    ],
+    cppflags: [
+        "-std=gnu++11",
+        "-fvisibility=protected",
+    ],
+    target: {
+        android: {
+            shared_libs: ["libdl"],
+        },
+        host: {
+            host_ldlibs: ["-ldl"],
+        },
+    },
+}

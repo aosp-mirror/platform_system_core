@@ -49,7 +49,7 @@ libbacktrace_src_files = [
 
 cc_library_shared {
     name: "libbacktrace",
-
+    host_supported: true,
     cflags: common_cflags,
     conlyflags: common_conlyflags,
     cppflags: common_cppflags,
@@ -89,7 +89,7 @@ cc_library_shared {
 // The libbacktrace_test library needed by backtrace_test.
 //-------------------------------------------------------------------------
 cc_library_shared {
-    // TODO: host
+    host_supported: true,
     name: "libbacktrace_test",
     srcs: ["backtrace_testlib.c"],
     cflags: common_cflags,
