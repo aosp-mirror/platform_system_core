@@ -26,6 +26,8 @@
 #include <errno.h>
 #include <sys/poll.h>
 
+#include <memory>
+
 #include <cutils/misc.h>
 #include <cutils/sockets.h>
 #include <cutils/multiuser.h>
@@ -425,64 +427,62 @@ static void load_properties_from_file(const char *fn, const char *filter)
     }
 }
 
-static void load_persistent_properties()
-{
-    DIR* dir = opendir(PERSISTENT_PROPERTY_DIR);
-    int dir_fd;
-    struct dirent*  entry;
-    char value[PROP_VALUE_MAX];
-    int fd, length;
-    struct stat sb;
+static void load_persistent_properties() {
+    persistent_properties_loaded = 1;
 
-    if (dir) {
-        dir_fd = dirfd(dir);
-        while ((entry = readdir(dir)) != NULL) {
-            if (strncmp("persist.", entry->d_name, strlen("persist.")))
-                continue;
-            if (entry->d_type != DT_REG)
-                continue;
-            /* open the file and read the property value */
-            fd = openat(dir_fd, entry->d_name, O_RDONLY | O_NOFOLLOW);
-            if (fd < 0) {
-                ERROR("Unable to open persistent property file \"%s\" errno: %d\n",
-                      entry->d_name, errno);
-                continue;
-            }
-            if (fstat(fd, &sb) < 0) {
-                ERROR("fstat on property file \"%s\" failed errno: %d\n", entry->d_name, errno);
-                close(fd);
-                continue;
-            }
-
-            // File must not be accessible to others, be owned by root/root, and
-            // not be a hard link to any other file.
-            if (((sb.st_mode & (S_IRWXG | S_IRWXO)) != 0)
-                    || (sb.st_uid != 0)
-                    || (sb.st_gid != 0)
-                    || (sb.st_nlink != 1)) {
-                ERROR("skipping insecure property file %s (uid=%u gid=%u nlink=%u mode=%o)\n",
-                      entry->d_name, (unsigned int)sb.st_uid, (unsigned int)sb.st_gid,
-                      (unsigned int)sb.st_nlink, sb.st_mode);
-                close(fd);
-                continue;
-            }
-
-            length = read(fd, value, sizeof(value) - 1);
-            if (length >= 0) {
-                value[length] = 0;
-                property_set(entry->d_name, value);
-            } else {
-                ERROR("Unable to read persistent property file %s errno: %d\n",
-                      entry->d_name, errno);
-            }
-            close(fd);
-        }
-        closedir(dir);
-    } else {
-        ERROR("Unable to open persistent property directory %s errno: %d\n", PERSISTENT_PROPERTY_DIR, errno);
+    std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir(PERSISTENT_PROPERTY_DIR), closedir);
+    if (!dir) {
+        ERROR("Unable to open persistent property directory \"%s\": %s\n",
+              PERSISTENT_PROPERTY_DIR, strerror(errno));
+        return;
     }
 
-    persistent_properties_loaded = 1;
+    struct dirent* entry;
+    while ((entry = readdir(dir.get())) != NULL) {
+        if (strncmp("persist.", entry->d_name, strlen("persist."))) {
+            continue;
+        }
+        if (entry->d_type != DT_REG) {
+            continue;
+        }
+
+        // Open the file and read the property value.
+        int fd = openat(dirfd(dir.get()), entry->d_name, O_RDONLY | O_NOFOLLOW);
+        if (fd == -1) {
+            ERROR("Unable to open persistent property file \"%s\": %s\n",
+                  entry->d_name, strerror(errno));
+            continue;
+        }
+
+        struct stat sb;
+        if (fstat(fd, &sb) == -1) {
+            ERROR("fstat on property file \"%s\" failed: %s\n", entry->d_name, strerror(errno));
+            close(fd);
+            continue;
+        }
+
+        // File must not be accessible to others, be owned by root/root, and
+        // not be a hard link to any other file.
+        if (((sb.st_mode & (S_IRWXG | S_IRWXO)) != 0) || (sb.st_uid != 0) || (sb.st_gid != 0) ||
+                (sb.st_nlink != 1)) {
+            ERROR("skipping insecure property file %s (uid=%u gid=%u nlink=%u mode=%o)\n",
+                  entry->d_name, (unsigned int)sb.st_uid, (unsigned int)sb.st_gid,
+                  (unsigned int)sb.st_nlink, sb.st_mode);
+            close(fd);
+            continue;
+        }
+
+        char value[PROP_VALUE_MAX];
+        int length = read(fd, value, sizeof(value) - 1);
+        if (length >= 0) {
+            value[length] = 0;
+            property_set(entry->d_name, value);
+        } else {
+            ERROR("Unable to read persistent property file %s: %s\n",
+                  entry->d_name, strerror(errno));
+        }
+        close(fd);
+    }
 }
 
 void property_init(void)

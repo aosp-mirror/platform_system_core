@@ -30,6 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <memory>
 #include <string>
 
 #include <base/file.h>
@@ -114,9 +115,9 @@ static void do_log_file(FILE* log, const char* procfile) {
 static void do_log_procs(FILE* log) {
     do_log_uptime(log);
 
-    DIR* dir = opendir("/proc");
+    std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir("/proc"), closedir);
     struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
+    while ((entry = readdir(dir.get())) != NULL) {
         // Only match numeric values.
         char* end;
         int pid = strtol(entry->d_name, &end, 10);
@@ -146,7 +147,6 @@ static void do_log_procs(FILE* log) {
             }
         }
     }
-    closedir(dir);
 
     fputc('\n', log);
 }
