@@ -161,7 +161,7 @@ static void write_persistent_property(const char *name, const char *value)
     snprintf(tempPath, sizeof(tempPath), "%s/.temp.XXXXXX", PERSISTENT_PROPERTY_DIR);
     fd = mkstemp(tempPath);
     if (fd < 0) {
-        ERROR("Unable to write persistent property to temp file %s errno: %d\n", tempPath, errno);
+        ERROR("Unable to write persistent property to temp file %s: %s\n", tempPath, strerror(errno));
         return;
     }
     write(fd, value, strlen(value));
@@ -289,15 +289,15 @@ void handle_property_set_fd()
         close(s);
         return;
     } else if (nr < 0) {
-        ERROR("sys_prop: error waiting for uid=%d to send property message. err=%d %s\n", cr.uid, errno, strerror(errno));
+        ERROR("sys_prop: error waiting for uid=%d to send property message: %s\n", cr.uid, strerror(errno));
         close(s);
         return;
     }
 
     r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), MSG_DONTWAIT));
     if(r != sizeof(prop_msg)) {
-        ERROR("sys_prop: mis-match msg size received: %d expected: %zu errno: %d\n",
-              r, sizeof(prop_msg), errno);
+        ERROR("sys_prop: mis-match msg size received: %d expected: %zu: %s\n",
+              r, sizeof(prop_msg), strerror(errno));
         close(s);
         return;
     }
