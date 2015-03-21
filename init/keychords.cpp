@@ -80,7 +80,7 @@ void keychord_init()
 
     ret = write(fd, keychords, keychords_length);
     if (ret != keychords_length) {
-        ERROR("could not configure /dev/keychord %d (%d)\n", ret, errno);
+        ERROR("could not configure /dev/keychord %d: %s\n", ret, strerror(errno));
         close(fd);
         fd = -1;
     }
