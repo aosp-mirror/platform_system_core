@@ -23,6 +23,7 @@
 #include "AvailabilityMacros.h"  // For MAC_OS_X_VERSION_MAX_ALLOWED
 #include <sys/syscall.h>
 #include <sys/time.h>
+#include <unistd.h>
 #elif defined(__linux__) && !defined(__ANDROID__)
 #include <syscall.h>
 #include <unistd.h>
