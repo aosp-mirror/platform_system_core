@@ -475,7 +475,7 @@ int do_mount_all(int nargs, char **args)
         int wp_ret = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
         if (wp_ret < 0) {
             /* Unexpected error code. We will continue anyway. */
-            NOTICE("waitpid failed rc=%d, errno=%d\n", wp_ret, errno);
+            NOTICE("waitpid failed rc=%d: %s\n", wp_ret, strerror(errno));
         }
 
         if (WIFEXITED(status)) {

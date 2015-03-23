@@ -871,7 +871,7 @@ try_loading_again:
             booting = is_booting();
             goto try_loading_again;
         }
-        INFO("firmware: could not open '%s' %d\n", uevent->firmware, errno);
+        INFO("firmware: could not open '%s': %s\n", uevent->firmware, strerror(errno));
         write(loading_fd, "-1", 2);
         goto data_close_out;
     }
