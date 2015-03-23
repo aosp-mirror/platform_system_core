@@ -90,15 +90,6 @@ int __android_log_dev_available(void)
     return (g_log_status == kLogAvailable);
 }
 
-#if !FAKE_LOG_DEVICE
-/* give up, resources too limited */
-static int __write_to_log_null(log_id_t log_fd __unused, struct iovec *vec __unused,
-                               size_t nr __unused)
-{
-    return -1;
-}
-#endif
-
 /* log_init_lock assumed */
 static int __write_to_log_initialize()
 {
@@ -111,40 +102,32 @@ static int __write_to_log_initialize()
         log_fds[i] = fakeLogOpen(buf, O_WRONLY);
     }
 #else
-    if (logd_fd >= 0) {
-        i = logd_fd;
-        logd_fd = -1;
-        close(i);
+    if (pstore_fd < 0) {
+        pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
     }
-    if (pstore_fd >= 0) {
-        i = pstore_fd;
-        pstore_fd = -1;
-        close(i);
-    }
-    pstore_fd = open("/dev/pmsg0", O_WRONLY);
 
-    i = socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-    if (i < 0) {
-        ret = -errno;
-        write_to_log = __write_to_log_null;
-    } else if (fcntl(i, F_SETFL, O_NONBLOCK) < 0) {
-        ret = -errno;
-        close(i);
-        i = -1;
-        write_to_log = __write_to_log_null;
-    } else {
-        struct sockaddr_un un;
-        memset(&un, 0, sizeof(struct sockaddr_un));
-        un.sun_family = AF_UNIX;
-        strcpy(un.sun_path, "/dev/socket/logdw");
-
-        if (connect(i, (struct sockaddr *)&un, sizeof(struct sockaddr_un)) < 0) {
+    if (logd_fd < 0) {
+        i = TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0));
+        if (i < 0) {
+            ret = -errno;
+        } else if (TEMP_FAILURE_RETRY(fcntl(i, F_SETFL, O_NONBLOCK)) < 0) {
             ret = -errno;
             close(i);
-            i = -1;
+        } else {
+            struct sockaddr_un un;
+            memset(&un, 0, sizeof(struct sockaddr_un));
+            un.sun_family = AF_UNIX;
+            strcpy(un.sun_path, "/dev/socket/logdw");
+
+            if (TEMP_FAILURE_RETRY(connect(i, (struct sockaddr *)&un,
+                                           sizeof(struct sockaddr_un))) < 0) {
+                ret = -errno;
+                close(i);
+            } else {
+                logd_fd = i;
+            }
         }
     }
-    logd_fd = i;
 #endif
 
     return ret;
@@ -293,6 +276,8 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
 #if !defined(_WIN32)
             pthread_mutex_lock(&log_init_lock);
 #endif
+            close(logd_fd);
+            logd_fd = -1;
             ret = __write_to_log_initialize();
 #if !defined(_WIN32)
             pthread_mutex_unlock(&log_init_lock);
@@ -350,6 +335,11 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
         if (ret < 0) {
 #if !defined(_WIN32)
             pthread_mutex_unlock(&log_init_lock);
+#endif
+#if (FAKE_LOG_DEVICE == 0)
+            if (pstore_fd >= 0) {
+                __write_to_log_daemon(log_id, vec, nr);
+            }
 #endif
             return ret;
         }
