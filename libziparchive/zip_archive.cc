@@ -1123,7 +1123,7 @@ int32_t ExtractToMemory(ZipArchiveHandle handle,
 
 int32_t ExtractEntryToFile(ZipArchiveHandle handle,
                            ZipEntry* entry, int fd) {
-  const int32_t declared_length = entry->uncompressed_length;
+  const uint32_t declared_length = entry->uncompressed_length;
 
   const off64_t current_offset = lseek64(fd, 0, SEEK_CUR);
   if (current_offset == -1) {
