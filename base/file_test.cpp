@@ -24,29 +24,7 @@
 
 #include <string>
 
-class TemporaryFile {
- public:
-  TemporaryFile() {
-    init("/data/local/tmp");
-    if (fd == -1) {
-      init("/tmp");
-    }
-  }
-
-  ~TemporaryFile() {
-    close(fd);
-    unlink(filename);
-  }
-
-  int fd;
-  char filename[1024];
-
- private:
-  void init(const char* tmp_dir) {
-    snprintf(filename, sizeof(filename), "%s/TemporaryFile-XXXXXX", tmp_dir);
-    fd = mkstemp(filename);
-  }
-};
+#include "test_utils.h"
 
 TEST(file, ReadFileToString_ENOENT) {
   std::string s("hello");
