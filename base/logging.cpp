@@ -108,8 +108,7 @@ void InitLogging(char* argv[]) {
     return;
   }
 
-  std::vector<std::string> specs;
-  Split(tags, ' ', &specs);
+  std::vector<std::string> specs = Split(tags, " ");
   for (size_t i = 0; i < specs.size(); ++i) {
     // "tag-pattern:[vdiwefs]"
     std::string spec(specs[i]);
