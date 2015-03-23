@@ -146,8 +146,6 @@ typedef enum {
     PERM_ANDROID_OBB,
     /* This node is "/Android/media" */
     PERM_ANDROID_MEDIA,
-    /* This node is "/Android/user" */
-    PERM_ANDROID_USER,
 } perm_t;
 
 /* Permissions structure to derive */
@@ -250,7 +248,7 @@ struct fuse {
     __u32 inode_ctr;
 
     Hashmap* package_to_appid;
-    Hashmap* appid_with_rw;
+    Hashmap* uid_with_rw;
 };
 
 /* Private data used by a single fuse handler. */
@@ -472,6 +470,7 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
         /* Legacy internal layout places users at top level */
         node->perm = PERM_ROOT;
         node->userid = strtoul(node->name, NULL, 10);
+        node->gid = multiuser_get_uid(node->userid, AID_SDCARD_R);
         break;
     case PERM_ROOT:
         /* Assume masked off by default. */
@@ -483,14 +482,14 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
         } else if (fuse->split_perms) {
             if (!strcasecmp(node->name, "DCIM")
                     || !strcasecmp(node->name, "Pictures")) {
-                node->gid = AID_SDCARD_PICS;
+                node->gid = multiuser_get_uid(node->userid, AID_SDCARD_PICS);
             } else if (!strcasecmp(node->name, "Alarms")
                     || !strcasecmp(node->name, "Movies")
                     || !strcasecmp(node->name, "Music")
                     || !strcasecmp(node->name, "Notifications")
                     || !strcasecmp(node->name, "Podcasts")
                     || !strcasecmp(node->name, "Ringtones")) {
-                node->gid = AID_SDCARD_AV;
+                node->gid = multiuser_get_uid(node->userid, AID_SDCARD_AV);
             }
         }
         break;
@@ -510,13 +509,6 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
             /* App-specific directories inside; let anyone traverse */
             node->perm = PERM_ANDROID_MEDIA;
             node->mode = 0771;
-        } else if (!strcasecmp(node->name, "user")) {
-            /* User directories must only be accessible to system, protected
-             * by sdcard_all. Zygote will bind mount the appropriate user-
-             * specific path. */
-            node->perm = PERM_ANDROID_USER;
-            node->gid = AID_SDCARD_ALL;
-            node->mode = 0770;
         }
         break;
     case PERM_ANDROID_DATA:
@@ -528,13 +520,6 @@ static void derive_permissions_locked(struct fuse* fuse, struct node *parent,
         }
         node->mode = 0770;
         break;
-    case PERM_ANDROID_USER:
-        /* Root of a secondary user */
-        node->perm = PERM_ROOT;
-        node->userid = strtoul(node->name, NULL, 10);
-        node->gid = AID_SDCARD_R;
-        node->mode = 0771;
-        break;
     }
 }
 
@@ -545,8 +530,7 @@ static bool get_caller_has_rw_locked(struct fuse* fuse, const struct fuse_in_hea
         return true;
     }
 
-    appid_t appid = multiuser_get_app_id(hdr->uid);
-    return hashmapContainsKey(fuse->appid_with_rw, (void*) (uintptr_t) appid);
+    return hashmapContainsKey(fuse->uid_with_rw, (void*) (uintptr_t) hdr->uid);
 }
 
 /* Kernel has already enforced everything we returned through
@@ -725,7 +709,7 @@ static struct node* acquire_or_create_child_locked(
 }
 
 static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
-        gid_t write_gid, derive_t derive, bool split_perms) {
+        gid_t write_gid, userid_t owner_user, derive_t derive, bool split_perms) {
     pthread_mutex_init(&fuse->lock, NULL);
 
     fuse->fd = fd;
@@ -760,7 +744,7 @@ static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
         fuse->root.mode = 0771;
         fuse->root.gid = AID_SDCARD_R;
         fuse->package_to_appid = hashmapCreate(256, str_hash, str_icase_equals);
-        fuse->appid_with_rw = hashmapCreate(128, int_hash, int_equals);
+        fuse->uid_with_rw = hashmapCreate(128, int_hash, int_equals);
         snprintf(fuse->obbpath, sizeof(fuse->obbpath), "%s/obb", source_path);
         fs_prepare_dir(fuse->obbpath, 0775, getuid(), getgid());
         break;
@@ -769,9 +753,10 @@ static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
          * /Android/user and shared OBB path under /Android/obb. */
         fuse->root.perm = PERM_ROOT;
         fuse->root.mode = 0771;
-        fuse->root.gid = AID_SDCARD_R;
+        fuse->root.userid = owner_user;
+        fuse->root.gid = multiuser_get_uid(owner_userid, AID_SDCARD_R);
         fuse->package_to_appid = hashmapCreate(256, str_hash, str_icase_equals);
-        fuse->appid_with_rw = hashmapCreate(128, int_hash, int_equals);
+        fuse->uid_with_rw = hashmapCreate(128, int_hash, int_equals);
         snprintf(fuse->obbpath, sizeof(fuse->obbpath), "%s/Android/obb", source_path);
         break;
     }
@@ -1692,7 +1677,7 @@ static int read_package_list(struct fuse *fuse) {
     pthread_mutex_lock(&fuse->lock);
 
     hashmapForEach(fuse->package_to_appid, remove_str_to_int, fuse->package_to_appid);
-    hashmapForEach(fuse->appid_with_rw, remove_int_to_null, fuse->appid_with_rw);
+    hashmapForEach(fuse->uid_with_rw, remove_int_to_null, fuse->uid_with_rw);
 
     FILE* file = fopen(kPackagesListFile, "r");
     if (!file) {
@@ -1713,8 +1698,14 @@ static int read_package_list(struct fuse *fuse) {
 
             char* token = strtok(gids, ",");
             while (token != NULL) {
-                if (strtoul(token, NULL, 10) == fuse->write_gid) {
-                    hashmapPut(fuse->appid_with_rw, (void*) (uintptr_t) appid, (void*) (uintptr_t) 1);
+                // Current packages.list format is a bit funky; it blends per
+                // user GID membership into a single per-app line. Here we
+                // work backwards from the groups to build the per-user UIDs
+                // that have write permission.
+                gid_t gid = strtoul(token, NULL, 10);
+                if (multiuser_get_app_id(gid) == fuse->write_gid) {
+                    uid_t uid = multiuser_get_uid(multiuser_get_user_id(gid), appid);
+                    hashmapPut(fuse->uid_with_rw, (void*) (uintptr_t) uid, (void*) (uintptr_t) 1);
                     break;
                 }
                 token = strtok(NULL, ",");
@@ -1724,7 +1715,7 @@ static int read_package_list(struct fuse *fuse) {
 
     TRACE("read_package_list: found %zu packages, %zu with write_gid\n",
             hashmapSize(fuse->package_to_appid),
-            hashmapSize(fuse->appid_with_rw));
+            hashmapSize(fuse->uid_with_rw));
     fclose(file);
     pthread_mutex_unlock(&fuse->lock);
     return 0;
@@ -1849,7 +1840,7 @@ static int usage()
 }
 
 static int run(const char* source_path, const char* dest_path, uid_t uid,
-        gid_t gid, gid_t write_gid, int num_threads, derive_t derive,
+        gid_t gid, gid_t write_gid, userid_t owner_user, int num_threads, derive_t derive,
         bool split_perms) {
     int fd;
     char opts[256];
@@ -1893,7 +1884,7 @@ static int run(const char* source_path, const char* dest_path, uid_t uid,
         goto error;
     }
 
-    fuse_init(&fuse, fd, source_path, write_gid, derive, split_perms);
+    fuse_init(&fuse, fd, source_path, write_gid, owner_user, derive, split_perms);
 
     umask(0);
     res = ignite_fuse(&fuse, num_threads);
@@ -1914,6 +1905,7 @@ int main(int argc, char **argv)
     uid_t uid = 0;
     gid_t gid = 0;
     gid_t write_gid = AID_SDCARD_RW;
+    userid_t owner_user = 0;
     int num_threads = DEFAULT_NUM_THREADS;
     derive_t derive = DERIVE_NONE;
     bool split_perms = false;
@@ -1922,7 +1914,7 @@ int main(int argc, char **argv)
     int fs_version;
 
     int opt;
-    while ((opt = getopt(argc, argv, "u:g:w:t:dls")) != -1) {
+    while ((opt = getopt(argc, argv, "u:g:w:o:t:dls")) != -1) {
         switch (opt) {
             case 'u':
                 uid = strtoul(optarg, NULL, 10);
@@ -1932,6 +1924,9 @@ int main(int argc, char **argv)
                 break;
             case 'w':
                 write_gid = strtoul(optarg, NULL, 10);
+                break;
+            case 'o':
+                owner_user = strtoul(optarg, NULL, 10);
                 break;
             case 't':
                 num_threads = strtoul(optarg, NULL, 10);
@@ -1999,6 +1994,7 @@ int main(int argc, char **argv)
         sleep(1);
     }
 
-    res = run(source_path, dest_path, uid, gid, write_gid, num_threads, derive, split_perms);
+    res = run(source_path, dest_path, uid, gid, write_gid, owner_user,
+            num_threads, derive, split_perms);
     return res < 0 ? 1 : 0;
 }
