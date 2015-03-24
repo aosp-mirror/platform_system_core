@@ -754,7 +754,7 @@ static void fuse_init(struct fuse *fuse, int fd, const char *source_path,
         fuse->root.perm = PERM_ROOT;
         fuse->root.mode = 0771;
         fuse->root.userid = owner_user;
-        fuse->root.gid = multiuser_get_uid(owner_userid, AID_SDCARD_R);
+        fuse->root.gid = multiuser_get_uid(owner_user, AID_SDCARD_R);
         fuse->package_to_appid = hashmapCreate(256, str_hash, str_icase_equals);
         fuse->uid_with_rw = hashmapCreate(128, int_hash, int_equals);
         snprintf(fuse->obbpath, sizeof(fuse->obbpath), "%s/Android/obb", source_path);
