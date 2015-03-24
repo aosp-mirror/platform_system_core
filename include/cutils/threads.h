@@ -32,6 +32,7 @@ extern "C" {
 #if !defined(_WIN32)
 
 #include  <pthread.h>
+#include  <sys/types.h>
 
 typedef struct {
     pthread_mutex_t   lock;
