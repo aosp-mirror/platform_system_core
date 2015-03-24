@@ -64,7 +64,7 @@ ifneq ($(WINDOWS_HOST_ONLY),1)
 endif
 
 
-# Static library for host
+# Shared and static library for host
 # ========================================================
 LOCAL_MODULE := libcutils
 LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
@@ -76,6 +76,16 @@ LOCAL_MULTILIB := both
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_HOST_STATIC_LIBRARY)
 
+include $(CLEAR_VARS)
+LOCAL_MODULE := libcutils
+LOCAL_SRC_FILES := $(commonSources) $(commonHostSources) dlmalloc_stubs.c
+LOCAL_SHARED_LIBRARIES := liblog
+ifneq ($(HOST_OS),windows)
+LOCAL_CFLAGS += -Werror
+endif
+LOCAL_MULTILIB := both
+LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
+include $(BUILD_HOST_SHARED_LIBRARY)
 
 # Tests for host
 # ========================================================
