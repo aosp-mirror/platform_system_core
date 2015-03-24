@@ -23,7 +23,6 @@
 #include "AvailabilityMacros.h"  // For MAC_OS_X_VERSION_MAX_ALLOWED
 #include <sys/syscall.h>
 #include <sys/time.h>
-#include "base/logging.h"
 #elif defined(__linux__) && !defined(__ANDROID__)
 #include <syscall.h>
 #include <unistd.h>
@@ -61,7 +60,10 @@ extern void   thread_store_set( thread_store_t*          store,
 pid_t gettid() {
 #if defined(__APPLE__)
   uint64_t owner;
-  CHECK_PTHREAD_CALL(pthread_threadid_np, (NULL, &owner), __FUNCTION__);
+  int rc = pthread_threadid_np(NULL, &owner);
+  if (rc != 0) {
+    abort();
+  }
   return owner;
 #elif defined(__linux__)
   return syscall(__NR_gettid);
