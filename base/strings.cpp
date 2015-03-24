@@ -16,27 +16,39 @@
 
 #include "base/strings.h"
 
+#include <stdlib.h>
+
 #include <string>
 #include <vector>
 
 namespace android {
 namespace base {
 
-void Split(const std::string& s, char separator,
-           std::vector<std::string>* result) {
-  const char* p = s.data();
-  const char* end = p + s.size();
-  while (p != end) {
-    if (*p == separator) {
-      ++p;
-    } else {
-      const char* start = p;
-      while (++p != end && *p != separator) {
-        // Skip to the next occurrence of the separator.
-      }
-      result->push_back(std::string(start, p - start));
-    }
+#define CHECK_NE(a, b) \
+  if ((a) == (b)) abort();
+
+std::vector<std::string> Split(const std::string& s,
+                               const std::string& delimiters) {
+  CHECK_NE(delimiters.size(), 0U);
+
+  std::vector<std::string> split;
+  if (s.size() == 0) {
+    // Split("", d) returns {} rather than {""}.
+    return split;
   }
+
+  size_t base = 0;
+  size_t found;
+  do {
+    found = s.find_first_of(delimiters, base);
+    if (found != base) {
+      split.push_back(s.substr(base, found - base));
+    }
+
+    base = found + 1;
+  } while (found != s.npos);
+
+  return split;
 }
 
 std::string Trim(const std::string& s) {

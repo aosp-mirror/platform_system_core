@@ -23,10 +23,15 @@
 namespace android {
 namespace base {
 
-// Splits a string using the given separator character into a vector of strings.
-// Empty strings will be omitted.
-void Split(const std::string& s, char separator,
-           std::vector<std::string>* result);
+// Splits a string into a vector of strings.
+//
+// The string is split at each occurence of a character in delimiters.
+//
+// Empty splits will be omitted. I.e. Split("a,,b", ",") -> {"a", "b"}
+//
+// The empty string is not a valid delimiter list.
+std::vector<std::string> Split(const std::string& s,
+                               const std::string& delimiters);
 
 // Trims whitespace off both ends of the given string.
 std::string Trim(const std::string& s);
