@@ -21,6 +21,8 @@
 // For gettid.
 #if defined(__APPLE__)
 #include "AvailabilityMacros.h"  // For MAC_OS_X_VERSION_MAX_ALLOWED
+#include <stdint.h>
+#include <stdlib.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <unistd.h>
