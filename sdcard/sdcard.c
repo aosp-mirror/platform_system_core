@@ -1706,7 +1706,6 @@ static int read_package_list(struct fuse *fuse) {
                 if (multiuser_get_app_id(gid) == fuse->write_gid) {
                     uid_t uid = multiuser_get_uid(multiuser_get_user_id(gid), appid);
                     hashmapPut(fuse->uid_with_rw, (void*) (uintptr_t) uid, (void*) (uintptr_t) 1);
-                    break;
                 }
                 token = strtok(NULL, ",");
             }
