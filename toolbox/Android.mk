@@ -59,7 +59,6 @@ OUR_TOOLS := \
     renice \
     restorecon \
     route \
-    runcon \
     sendevent \
     setprop \
     start \
