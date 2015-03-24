@@ -250,7 +250,7 @@ static int property_set_impl(const char* name, const char* value) {
 int property_set(const char* name, const char* value) {
     int rc = property_set_impl(name, value);
     if (rc == -1) {
-        ERROR("property_set(\"%s\", \"%s\" failed\n", name, value);
+        ERROR("property_set(\"%s\", \"%s\") failed\n", name, value);
     }
     return rc;
 }
