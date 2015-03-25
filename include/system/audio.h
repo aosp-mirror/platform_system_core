@@ -872,7 +872,7 @@ typedef enum {
 typedef int audio_port_handle_t;
 #define AUDIO_PORT_HANDLE_NONE 0
 
-/* the maximum length for the human-readable device name. i.e. "Alesis iO4"*/
+/* the maximum length for the human-readable device name */
 #define AUDIO_PORT_MAX_NAME_LEN 128
 
 /* maximum audio device address length */
