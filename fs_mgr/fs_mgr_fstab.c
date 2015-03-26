@@ -24,6 +24,7 @@
 
 struct fs_mgr_flag_values {
     char *key_loc;
+    char *verity_loc;
     long long part_length;
     char *label;
     int partnum;
@@ -108,6 +109,14 @@ static int parse_flags(char *flags, struct flag_list *fl,
                      * location of the keys.  Get it and return it.
                      */
                     flag_vals->key_loc = strdup(strchr(p, '=') + 1);
+                } else if ((fl[i].flag == MF_VERIFY) && flag_vals) {
+                    /* If the verify flag is followed by an = and the
+                     * location for the verity state,  get it and return it.
+                     */
+                    char *start = strchr(p, '=');
+                    if (start) {
+                        flag_vals->verity_loc = strdup(start + 1);
+                    }
                 } else if ((fl[i].flag == MF_FORCECRYPT) && flag_vals) {
                     /* The forceencrypt flag is followed by an = and the
                      * location of the keys.  Get it and return it.
@@ -292,6 +301,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         fstab->recs[cnt].fs_mgr_flags = parse_flags(p, fs_mgr_flags,
                                                     &flag_vals, NULL, 0);
         fstab->recs[cnt].key_loc = flag_vals.key_loc;
+        fstab->recs[cnt].verity_loc = flag_vals.verity_loc;
         fstab->recs[cnt].length = flag_vals.part_length;
         fstab->recs[cnt].label = flag_vals.label;
         fstab->recs[cnt].partnum = flag_vals.partnum;
