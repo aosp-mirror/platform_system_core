@@ -102,6 +102,14 @@ $(TOOLS_H): $(LOCAL_PATH)/Android.mk
 $(TOOLS_H):
 	$(transform-generated-source)
 
+$(LOCAL_PATH)/getevent.c: $(intermediates)/input.h-labels.h
+
+INPUT_H_LABELS_H := $(intermediates)/input.h-labels.h
+$(INPUT_H_LABELS_H): PRIVATE_LOCAL_PATH := $(LOCAL_PATH)
+$(INPUT_H_LABELS_H): PRIVATE_CUSTOM_TOOL = $(PRIVATE_LOCAL_PATH)/generate-input.h-labels.py > $@
+$(INPUT_H_LABELS_H): $(LOCAL_PATH)/Android.mk $(LOCAL_PATH)/generate-input.h-labels.py
+$(INPUT_H_LABELS_H):
+	$(transform-generated-source)
 
 # We only want 'r' on userdebug and eng builds.
 include $(CLEAR_VARS)
