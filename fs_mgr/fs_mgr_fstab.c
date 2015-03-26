@@ -60,7 +60,6 @@ static struct flag_list fs_mgr_flags[] = {
     { "check",       MF_CHECK },
     { "encryptable=",MF_CRYPT },
     { "forceencrypt=",MF_FORCECRYPT },
-    { "fileencryption",MF_FILEENCRYPTION },
     { "nonremovable",MF_NONREMOVABLE },
     { "voldmanaged=",MF_VOLDMANAGED},
     { "length=",     MF_LENGTH },
@@ -410,37 +409,32 @@ struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const ch
     return fs_mgr_get_entry_for_mount_point_after(NULL, fstab, path);
 }
 
-int fs_mgr_is_voldmanaged(const struct fstab_rec *fstab)
+int fs_mgr_is_voldmanaged(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_VOLDMANAGED;
 }
 
-int fs_mgr_is_nonremovable(const struct fstab_rec *fstab)
+int fs_mgr_is_nonremovable(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_NONREMOVABLE;
 }
 
-int fs_mgr_is_verified(const struct fstab_rec *fstab)
+int fs_mgr_is_verified(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_VERIFY;
 }
 
-int fs_mgr_is_encryptable(const struct fstab_rec *fstab)
+int fs_mgr_is_encryptable(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT);
 }
 
-int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab)
-{
-    return fstab->fs_mgr_flags & MF_FILEENCRYPTION;
-}
-
-int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab)
+int fs_mgr_is_noemulatedsd(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_NOEMULATEDSD;
 }
 
-int fs_mgr_is_notrim(const struct fstab_rec *fstab)
+int fs_mgr_is_notrim(struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_NOTRIM;
 }
