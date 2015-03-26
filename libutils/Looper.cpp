@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <inttypes.h>
+#include <sys/eventfd.h>
 
 
 namespace android {
@@ -71,28 +72,15 @@ Looper::Looper(bool allowNonCallbacks) :
         mAllowNonCallbacks(allowNonCallbacks), mSendingMessage(false),
         mPolling(false), mEpollFd(-1), mEpollRebuildRequired(false),
         mNextRequestSeq(0), mResponseIndex(0), mNextMessageUptime(LLONG_MAX) {
-    int wakeFds[2];
-    int result = pipe(wakeFds);
-    LOG_ALWAYS_FATAL_IF(result != 0, "Could not create wake pipe.  errno=%d", errno);
-
-    mWakeReadPipeFd = wakeFds[0];
-    mWakeWritePipeFd = wakeFds[1];
-
-    result = fcntl(mWakeReadPipeFd, F_SETFL, O_NONBLOCK);
-    LOG_ALWAYS_FATAL_IF(result != 0, "Could not make wake read pipe non-blocking.  errno=%d",
-            errno);
-
-    result = fcntl(mWakeWritePipeFd, F_SETFL, O_NONBLOCK);
-    LOG_ALWAYS_FATAL_IF(result != 0, "Could not make wake write pipe non-blocking.  errno=%d",
-            errno);
+    mWakeEventFd = eventfd(0, EFD_NONBLOCK);
+    LOG_ALWAYS_FATAL_IF(mWakeEventFd < 0, "Could not make wake event fd.  errno=%d", errno);
 
     AutoMutex _l(mLock);
     rebuildEpollLocked();
 }
 
 Looper::~Looper() {
-    close(mWakeReadPipeFd);
-    close(mWakeWritePipeFd);
+    close(mWakeEventFd);
     if (mEpollFd >= 0) {
         close(mEpollFd);
     }
@@ -165,9 +153,9 @@ void Looper::rebuildEpollLocked() {
     struct epoll_event eventItem;
     memset(& eventItem, 0, sizeof(epoll_event)); // zero out unused members of data field union
     eventItem.events = EPOLLIN;
-    eventItem.data.fd = mWakeReadPipeFd;
-    int result = epoll_ctl(mEpollFd, EPOLL_CTL_ADD, mWakeReadPipeFd, & eventItem);
-    LOG_ALWAYS_FATAL_IF(result != 0, "Could not add wake read pipe to epoll instance.  errno=%d",
+    eventItem.data.fd = mWakeEventFd;
+    int result = epoll_ctl(mEpollFd, EPOLL_CTL_ADD, mWakeEventFd, & eventItem);
+    LOG_ALWAYS_FATAL_IF(result != 0, "Could not add wake event fd to epoll instance.  errno=%d",
             errno);
 
     for (size_t i = 0; i < mRequests.size(); i++) {
@@ -299,11 +287,11 @@ int Looper::pollInner(int timeoutMillis) {
     for (int i = 0; i < eventCount; i++) {
         int fd = eventItems[i].data.fd;
         uint32_t epollEvents = eventItems[i].events;
-        if (fd == mWakeReadPipeFd) {
+        if (fd == mWakeEventFd) {
             if (epollEvents & EPOLLIN) {
                 awoken();
             } else {
-                ALOGW("Ignoring unexpected epoll events 0x%x on wake read pipe.", epollEvents);
+                ALOGW("Ignoring unexpected epoll events 0x%x on wake event fd.", epollEvents);
             }
         } else {
             ssize_t requestIndex = mRequests.indexOfKey(fd);
@@ -418,12 +406,9 @@ void Looper::wake() {
     ALOGD("%p ~ wake", this);
 #endif
 
-    ssize_t nWrite;
-    do {
-        nWrite = write(mWakeWritePipeFd, "W", 1);
-    } while (nWrite == -1 && errno == EINTR);
-
-    if (nWrite != 1) {
+    uint64_t inc = 1;
+    ssize_t nWrite = TEMP_FAILURE_RETRY(write(mWakeEventFd, &inc, sizeof(uint64_t)));
+    if (nWrite != sizeof(uint64_t)) {
         if (errno != EAGAIN) {
             ALOGW("Could not write wake signal, errno=%d", errno);
         }
@@ -435,11 +420,8 @@ void Looper::awoken() {
     ALOGD("%p ~ awoken", this);
 #endif
 
-    char buffer[16];
-    ssize_t nRead;
-    do {
-        nRead = read(mWakeReadPipeFd, buffer, sizeof(buffer));
-    } while ((nRead == -1 && errno == EINTR) || nRead == sizeof(buffer));
+    uint64_t counter;
+    TEMP_FAILURE_RETRY(read(mWakeEventFd, &counter, sizeof(uint64_t)));
 }
 
 void Looper::pushResponse(int events, const Request& request) {
