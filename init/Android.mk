@@ -46,7 +46,7 @@ LOCAL_SRC_FILES:= \
     watchdogd.cpp \
 
 LOCAL_MODULE:= init
-
+LOCAL_C_INCLUDES += system/extras/ext4_utils
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
@@ -57,11 +57,13 @@ LOCAL_STATIC_LIBRARIES := \
     liblogwrap \
     libcutils \
     libbase \
+    libext4_utils_static \
+    libutils \
     liblog \
     libc \
     libselinux \
     libmincrypt \
-    libext4_utils_static
+    libc++_static
 
 # Create symlinks
 LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
