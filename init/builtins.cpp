@@ -29,6 +29,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <linux/loop.h>
+#include <ext4_crypt.h>
 
 #include <selinux/selinux.h>
 #include <selinux/label.h>
@@ -302,7 +303,7 @@ int do_mkdir(int nargs, char **args)
         }
     }
 
-    return 0;
+    return e4crypt_set_directory_policy(args[1]);
 }
 
 static struct {
@@ -446,6 +447,17 @@ static int wipe_data_via_recovery()
     while (1) { pause(); }  // never reached
 }
 
+/*
+ * Callback to make a directory from the ext4 code
+ */
+static int do_mount_alls_make_dir(const char* dir)
+{
+    if (make_dir(dir, 0700) && errno != EEXIST) {
+        return -1;
+    }
+
+    return 0;
+}
 
 /*
  * This function might request a reboot, in which case it will
@@ -514,6 +526,37 @@ int do_mount_all(int nargs, char **args)
         ERROR("fs_mgr_mount_all suggested recovery, so wiping data via recovery.\n");
         ret = wipe_data_via_recovery();
         /* If reboot worked, there is no return. */
+    } else if (ret == FS_MGR_MNTALL_DEV_DEFAULT_FILE_ENCRYPTED) {
+        // We have to create the key files here. Only init can call make_dir,
+        // and we can't do it from fs_mgr as then fs_mgr would depend on
+        // make_dir creating a circular dependency.
+        fstab = fs_mgr_read_fstab(args[1]);
+        for (int i = 0; i < fstab->num_entries; ++i) {
+            if (fs_mgr_is_file_encrypted(&fstab->recs[i])) {
+              if (e4crypt_create_device_key(fstab->recs[i].mount_point,
+                                            do_mount_alls_make_dir)) {
+                    ERROR("Could not create device key on %s"
+                          " - continue unencrypted\n",
+                          fstab->recs[i].mount_point);
+                }
+            }
+        }
+        fs_mgr_free_fstab(fstab);
+
+        if (e4crypt_install_keyring()) {
+            return -1;
+        }
+        property_set("ro.crypto.state", "encrypted");
+
+        // Although encrypted, we have device key, so we do not need to
+        // do anything different from the nonencrypted case.
+        action_for_each_trigger("nonencrypted", action_add_queue_tail);
+    } else if (ret == FS_MGR_MNTALL_DEV_NON_DEFAULT_FILE_ENCRYPTED) {
+        if (e4crypt_install_keyring()) {
+            return -1;
+        }
+        property_set("ro.crypto.state", "encrypted");
+        property_set("vold.decrypt", "trigger_restart_min_framework");
     } else if (ret > 0) {
         ERROR("fs_mgr_mount_all returned unexpected error %d\n", ret);
     }
@@ -865,4 +908,13 @@ int do_wait(int nargs, char **args)
         return wait_for_file(args[1], atoi(args[2]));
     } else
         return -1;
+}
+
+int do_installkey(int nargs, char **args)
+{
+    if (nargs == 2) {
+        return e4crypt_install_key(args[1]);
+    }
+
+    return -1;
 }
