@@ -31,7 +31,6 @@
 #include <dirent.h>
 #include <ext4.h>
 #include <ext4_sb.h>
-#include <ext4_crypt.h>
 
 #include <linux/loop.h>
 #include <private/android_filesystem_config.h>
@@ -429,73 +428,6 @@ out:
     return ret;
 }
 
-// Check to see if a mountable volume has encryption requirements
-static int handle_encryptable(struct fstab *fstab, const struct fstab_rec* rec)
-{
-    /* If this is block encryptable, need to trigger encryption */
-    if (   (rec->fs_mgr_flags & MF_FORCECRYPT)
-        || (device_is_force_encrypted() && fs_mgr_is_encryptable(rec))) {
-        if (umount(rec->mount_point) == 0) {
-            return FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION;
-        } else {
-            WARNING("Could not umount %s (%s) - allow continue unencrypted\n",
-                    rec->mount_point, strerror(errno));
-            return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
-        }
-    }
-
-    // Deal with file level encryption
-    if (rec->fs_mgr_flags & MF_FILEENCRYPTION) {
-        // Default or not yet initialized encryption requires no more work here
-        if (!e4crypt_non_default_key(rec->mount_point)) {
-            INFO("%s is default file encrypted\n", rec->mount_point);
-            return FS_MGR_MNTALL_DEV_DEFAULT_FILE_ENCRYPTED;
-        }
-
-        INFO("%s is non-default file encrypted\n", rec->mount_point);
-
-        // Uses non-default key, so must unmount and set up temp file system
-        if (umount(rec->mount_point)) {
-            ERROR("Failed to umount %s - rebooting\n", rec->mount_point);
-            return FS_MGR_MNTALL_FAIL;
-        }
-
-        if (fs_mgr_do_tmpfs_mount(rec->mount_point) != 0) {
-            ERROR("Failed to mount a tmpfs at %s\n", rec->mount_point);
-            return FS_MGR_MNTALL_FAIL;
-        }
-
-        // Mount data temporarily so we can access unencrypted dir
-        char tmp_mnt[PATH_MAX];
-        strlcpy(tmp_mnt, rec->mount_point, sizeof(tmp_mnt));
-        strlcat(tmp_mnt, "/tmp_mnt", sizeof(tmp_mnt));
-        if (mkdir(tmp_mnt, 0700)) {
-            ERROR("Failed to create temp mount point\n");
-            return FS_MGR_MNTALL_FAIL;
-        }
-
-        if (fs_mgr_do_mount(fstab, rec->mount_point,
-                            rec->blk_device, tmp_mnt)) {
-            ERROR("Error temp mounting encrypted file system\n");
-            return FS_MGR_MNTALL_FAIL;
-        }
-
-        // Link it to the normal place so ext4_crypt functions work normally
-        strlcat(tmp_mnt, "/unencrypted", sizeof(tmp_mnt));
-        char link_path[PATH_MAX];
-        strlcpy(link_path, rec->mount_point, sizeof(link_path));
-        strlcat(link_path, "/unencrypted", sizeof(link_path));
-        if (symlink(tmp_mnt, link_path)) {
-            ERROR("Error creating symlink to unencrypted directory\n");
-            return FS_MGR_MNTALL_FAIL;
-        }
-
-        return FS_MGR_MNTALL_DEV_NON_DEFAULT_FILE_ENCRYPTED;
-    }
-
-    return FS_MGR_MNTALL_DEV_NOT_ENCRYPTED;
-}
-
 /* When multiple fstab records share the same mount_point, it will
  * try to mount each one in turn, and ignore any duplicates after a
  * first successful mount.
@@ -558,20 +490,25 @@ int fs_mgr_mount_all(struct fstab *fstab)
 
         /* Deal with encryptability. */
         if (!mret) {
-            int status = handle_encryptable(fstab, &fstab->recs[attempted_idx]);
-
-            if (status == FS_MGR_MNTALL_FAIL) {
-                /* Fatal error - no point continuing */
-                return status;
+            /* If this is encryptable, need to trigger encryption */
+            if (   (fstab->recs[attempted_idx].fs_mgr_flags & MF_FORCECRYPT)
+                || (device_is_force_encrypted()
+                    && fs_mgr_is_encryptable(&fstab->recs[attempted_idx]))) {
+                if (umount(fstab->recs[attempted_idx].mount_point) == 0) {
+                    if (encryptable == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
+                        ERROR("Will try to encrypt %s %s\n", fstab->recs[attempted_idx].mount_point,
+                              fstab->recs[attempted_idx].fs_type);
+                        encryptable = FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION;
+                    } else {
+                        ERROR("Only one encryptable/encrypted partition supported\n");
+                        encryptable = FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED;
+                    }
+                } else {
+                    WARNING("Could not umount %s (%s) - allow continue unencrypted\n",
+                            fstab->recs[attempted_idx].mount_point, strerror(errno));
+                    continue;
+                }
             }
-
-            if (   status != FS_MGR_MNTALL_DEV_NOT_ENCRYPTED
-                && encryptable != FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
-                ERROR("Only one encryptable/encrypted partition supported\n");
-            }
-
-            encryptable = status;
-
             /* Success!  Go get the next one */
             continue;
         }
