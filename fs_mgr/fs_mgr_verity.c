@@ -463,15 +463,15 @@ static int was_verity_restart()
 static int metadata_add(FILE *fp, long start, const char *tag,
         unsigned int length, off64_t *offset)
 {
-    if (TEMP_FAILURE_RETRY(fseek(fp, start, SEEK_SET)) < 0 ||
-        TEMP_FAILURE_RETRY(fprintf(fp, "%s %u\n", tag, length)) < 0) {
+    if (fseek(fp, start, SEEK_SET) < 0 ||
+        fprintf(fp, "%s %u\n", tag, length) < 0) {
         return -1;
     }
 
     *offset = ftell(fp);
 
-    if (TEMP_FAILURE_RETRY(fseek(fp, length, SEEK_CUR)) < 0 ||
-        TEMP_FAILURE_RETRY(fprintf(fp, METADATA_EOD " 0\n")) < 0) {
+    if (fseek(fp, length, SEEK_CUR) < 0 ||
+        fprintf(fp, METADATA_EOD " 0\n") < 0) {
         return -1;
     }
 
@@ -493,7 +493,7 @@ static int metadata_find(const char *fname, const char *stag,
         return -1;
     }
 
-    fp = TEMP_FAILURE_RETRY(fopen(fname, "r+"));
+    fp = fopen(fname, "r+");
 
     if (!fp) {
         ERROR("Failed to open %s (%s)\n", fname, strerror(errno));
@@ -501,8 +501,8 @@ static int metadata_find(const char *fname, const char *stag,
     }
 
     /* check magic */
-    if (TEMP_FAILURE_RETRY(fseek(fp, start, SEEK_SET)) < 0 ||
-        TEMP_FAILURE_RETRY(fread(&magic, sizeof(magic), 1, fp)) != 1) {
+    if (fseek(fp, start, SEEK_SET) < 0 ||
+        fread(&magic, sizeof(magic), 1, fp) != 1) {
         ERROR("Failed to read magic from %s (%s)\n", fname, strerror(errno));
         goto out;
     }
@@ -510,8 +510,8 @@ static int metadata_find(const char *fname, const char *stag,
     if (magic != METADATA_MAGIC) {
         magic = METADATA_MAGIC;
 
-        if (TEMP_FAILURE_RETRY(fseek(fp, start, SEEK_SET)) < 0 ||
-            TEMP_FAILURE_RETRY(fwrite(&magic, sizeof(magic), 1, fp)) != 1) {
+        if (fseek(fp, start, SEEK_SET) < 0 ||
+            fwrite(&magic, sizeof(magic), 1, fp) != 1) {
             ERROR("Failed to write magic to %s (%s)\n", fname, strerror(errno));
             goto out;
         }
@@ -527,9 +527,8 @@ static int metadata_find(const char *fname, const char *stag,
     start += sizeof(magic);
 
     while (1) {
-        n = TEMP_FAILURE_RETRY(fscanf(fp,
-                "%" STRINGIFY(METADATA_TAG_MAX_LENGTH) "s %u\n",
-                tag, &length));
+        n = fscanf(fp, "%" STRINGIFY(METADATA_TAG_MAX_LENGTH) "s %u\n",
+                tag, &length);
 
         if (n == 2 && strcmp(tag, METADATA_EOD)) {
             /* found a tag */
@@ -543,7 +542,7 @@ static int metadata_find(const char *fname, const char *stag,
 
             start += length;
 
-            if (TEMP_FAILURE_RETRY(fseek(fp, length, SEEK_CUR)) < 0) {
+            if (fseek(fp, length, SEEK_CUR) < 0) {
                 ERROR("Failed to seek %s (%s)\n", fname, strerror(errno));
                 goto out;
             }
@@ -559,8 +558,8 @@ static int metadata_find(const char *fname, const char *stag,
 
 out:
     if (fp) {
-        TEMP_FAILURE_RETRY(fflush(fp));
-        TEMP_FAILURE_RETRY(fclose(fp));
+        fflush(fp);
+        fclose(fp);
     }
 
     return rc;
