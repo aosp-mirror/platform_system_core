@@ -36,7 +36,7 @@ ff_list = []
 
 r = re.compile(r'#define\s+(\S+)\s+((?:0x)?\d+)')
 
-with open(os.environ['ANDROID_BUILD_TOP'] + '/bionic/libc/kernel/uapi/linux/input.h', 'r') as f:
+with open('bionic/libc/kernel/uapi/linux/input.h', 'r') as f:
   for line in f:
     m = r.match(line)
     if m:
