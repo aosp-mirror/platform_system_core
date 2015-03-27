@@ -68,9 +68,6 @@ ifeq ($(build_type),host)
   # Only build if host builds are supported.
   ifeq ($(build_host),true)
     LOCAL_CFLAGS += -Wno-extern-c-compat -fno-omit-frame-pointer
-    ifneq ($($(module)_libc++),)
-      include external/libcxx/libcxx.mk
-    endif
     include $(BUILD_HOST_$(build_target))
   endif
 endif
