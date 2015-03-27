@@ -26,6 +26,7 @@
 #include "base/macros.h"  // For TEMP_FAILURE_RETRY on Darwin.
 #define LOG_TAG "base.file"
 #include "cutils/log.h"
+#include "utils/Compat.h"
 
 namespace android {
 namespace base {
