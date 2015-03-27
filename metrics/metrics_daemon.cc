@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// For PRIu64 in inttypes.h, used by scanf.  TODO(semenzato): replace
-// with libchromeos methods.
-#define __STDC_FORMAT_MACROS
-
 #include "metrics/metrics_daemon.h"
 
 #include <fcntl.h>
