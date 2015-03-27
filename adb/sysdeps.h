@@ -150,10 +150,8 @@ static __inline__ int  unix_close(int fd)
 #undef   close
 #define  close   ____xxx_close
 
-static __inline__  int  unix_read(int  fd, void*  buf, size_t  len)
-{
-    return read(fd, buf, len);
-}
+extern int  unix_read(int  fd, void*  buf, size_t  len);
+
 #undef   read
 #define  read  ___xxx_read
 
