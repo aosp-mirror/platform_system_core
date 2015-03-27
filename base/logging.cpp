@@ -21,6 +21,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/strings.h"
@@ -39,6 +40,12 @@ namespace android {
 namespace base {
 
 static std::mutex logging_lock;
+
+#ifdef __ANDROID__
+static LogFunction gLogger = LogdLogger();
+#else
+static LogFunction gLogger = StderrLogger;
+#endif
 
 static LogSeverity gMinimumLogSeverity = INFO;
 static std::unique_ptr<std::string> gCmdLine;
@@ -59,6 +66,58 @@ const char* ProgramInvocationShortName() {
   return (gProgramInvocationShortName.get() != nullptr)
              ? gProgramInvocationShortName->c_str()
              : "unknown";
+}
+
+void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
+                  unsigned int line, const char* message) {
+  static const char* log_characters = "VDIWEF";
+  CHECK_EQ(strlen(log_characters), FATAL + 1U);
+  char severity_char = log_characters[severity];
+  fprintf(stderr, "%s %c %5d %5d %s:%u] %s\n", ProgramInvocationShortName(),
+          severity_char, getpid(), gettid(), file, line, message);
+}
+
+
+#ifdef __ANDROID__
+LogdLogger::LogdLogger(LogId default_log_id) : default_log_id_(default_log_id) {
+}
+
+static const android_LogPriority kLogSeverityToAndroidLogPriority[] = {
+    ANDROID_LOG_VERBOSE, ANDROID_LOG_DEBUG, ANDROID_LOG_INFO,
+    ANDROID_LOG_WARN,    ANDROID_LOG_ERROR, ANDROID_LOG_FATAL,
+};
+static_assert(arraysize(kLogSeverityToAndroidLogPriority) == FATAL + 1,
+              "Mismatch in size of kLogSeverityToAndroidLogPriority and values "
+              "in LogSeverity");
+
+static const log_id kLogIdToAndroidLogId[] = {
+    LOG_ID_MAX, LOG_ID_MAIN, LOG_ID_SYSTEM,
+};
+static_assert(arraysize(kLogIdToAndroidLogId) == SYSTEM + 1,
+              "Mismatch in size of kLogIdToAndroidLogId and values in LogId");
+
+void LogdLogger::operator()(LogId id, LogSeverity severity, const char* tag,
+                            const char* file, unsigned int line,
+                            const char* message) {
+  int priority = kLogSeverityToAndroidLogPriority[severity];
+  if (id == DEFAULT) {
+    id = default_log_id_;
+  }
+
+  log_id lg_id = kLogIdToAndroidLogId[id];
+
+  if (priority == ANDROID_LOG_FATAL) {
+    __android_log_buf_print(lg_id, priority, tag, "%s:%u] %s", file, line,
+                            message);
+  } else {
+    __android_log_buf_print(lg_id, priority, tag, "%s", message);
+  }
+}
+#endif
+
+void InitLogging(char* argv[], LogFunction&& logger) {
+  SetLogger(std::forward<LogFunction>(logger));
+  InitLogging(argv);
 }
 
 void InitLogging(char* argv[]) {
@@ -122,6 +181,11 @@ void InitLogging(char* argv[]) {
     LOG(FATAL) << "unsupported '" << spec << "' in ANDROID_LOG_TAGS (" << tags
                << ")";
   }
+}
+
+void SetLogger(LogFunction&& logger) {
+  std::lock_guard<std::mutex> lock(logging_lock);
+  gLogger = std::move(logger);
 }
 
 // This indirection greatly reduces the stack impact of having lots of
@@ -194,22 +258,18 @@ LogMessage::~LogMessage() {
   }
   std::string msg(data_->ToString());
 
-  // Do the actual logging with the lock held.
-  {
-    std::lock_guard<std::mutex> lock(logging_lock);
-    if (msg.find('\n') == std::string::npos) {
+  if (msg.find('\n') == std::string::npos) {
+    LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
+            data_->GetSeverity(), msg.c_str());
+  } else {
+    msg += '\n';
+    size_t i = 0;
+    while (i < msg.size()) {
+      size_t nl = msg.find('\n', i);
+      msg[nl] = '\0';
       LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
-              data_->GetSeverity(), msg.c_str());
-    } else {
-      msg += '\n';
-      size_t i = 0;
-      while (i < msg.size()) {
-        size_t nl = msg.find('\n', i);
-        msg[nl] = '\0';
-        LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
-                data_->GetSeverity(), &msg[i]);
-        i = nl + 1;
-      }
+              data_->GetSeverity(), &msg[i]);
+      i = nl + 1;
     }
   }
 
@@ -226,39 +286,11 @@ std::ostream& LogMessage::stream() {
   return data_->GetBuffer();
 }
 
-#ifdef __ANDROID__
-static const android_LogPriority kLogSeverityToAndroidLogPriority[] = {
-    ANDROID_LOG_VERBOSE, ANDROID_LOG_DEBUG, ANDROID_LOG_INFO,
-    ANDROID_LOG_WARN,    ANDROID_LOG_ERROR, ANDROID_LOG_FATAL};
-static_assert(arraysize(kLogSeverityToAndroidLogPriority) == FATAL + 1,
-              "Mismatch in size of kLogSeverityToAndroidLogPriority and values "
-              "in LogSeverity");
-
-static const log_id kLogIdToAndroidLogId[] = {LOG_ID_MAIN, LOG_ID_SYSTEM};
-static_assert(arraysize(kLogIdToAndroidLogId) == SYSTEM + 1,
-              "Mismatch in size of kLogIdToAndroidLogId and values "
-              "in LogSeverity");
-#endif
-
 void LogMessage::LogLine(const char* file, unsigned int line, LogId id,
-                         LogSeverity log_severity, const char* message) {
-#ifdef __ANDROID__
+                         LogSeverity severity, const char* message) {
   const char* tag = ProgramInvocationShortName();
-  int priority = kLogSeverityToAndroidLogPriority[log_severity];
-  log_id lg_id = kLogIdToAndroidLogId[id];
-  if (priority == ANDROID_LOG_FATAL) {
-    __android_log_buf_print(lg_id, priority, tag, "%s:%u] %s", file, line, message);
-  } else {
-    __android_log_buf_print(lg_id, priority, tag, "%s", message);
-  }
-#else
-  UNUSED(id);
-  static const char* log_characters = "VDIWEF";
-  CHECK_EQ(strlen(log_characters), FATAL + 1U);
-  char severity = log_characters[log_severity];
-  fprintf(stderr, "%s %c %5d %5d %s:%u] %s\n", ProgramInvocationShortName(),
-          severity, getpid(), gettid(), file, line, message);
-#endif
+  std::lock_guard<std::mutex> lock(logging_lock);
+  gLogger(id, severity, tag, file, line, message);
 }
 
 ScopedLogSeverity::ScopedLogSeverity(LogSeverity level) {
