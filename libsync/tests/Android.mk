@@ -17,7 +17,6 @@
 LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
-include external/libcxx/libcxx.mk
 LOCAL_CLANG := true
 LOCAL_MODULE := sync-unit-tests
 LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
