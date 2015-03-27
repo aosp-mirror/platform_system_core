@@ -6,7 +6,6 @@
 
 #include <dirent.h>
 #include <fcntl.h>  // For file creation modes.
-#define __STDC_FORMAT_MACROS  // PRId64
 #include <inttypes.h>
 #include <linux/limits.h>  // PATH_MAX
 #include <pwd.h>  // For struct passwd.
