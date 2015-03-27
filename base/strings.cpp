@@ -17,6 +17,7 @@
 #include "base/strings.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include <string>
 #include <vector>
