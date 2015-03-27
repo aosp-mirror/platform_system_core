@@ -128,9 +128,13 @@ void InitLogging(char* argv[]) {
 // checks/logging in a function.
 class LogMessageData {
  public:
-  LogMessageData(const char* file, unsigned int line, LogSeverity severity,
-                 int error)
-      : file_(file), line_number_(line), severity_(severity), error_(error) {
+  LogMessageData(const char* file, unsigned int line, LogId id,
+                 LogSeverity severity, int error)
+      : file_(file),
+        line_number_(line),
+        id_(id),
+        severity_(severity),
+        error_(error) {
     const char* last_slash = strrchr(file, '/');
     file = (last_slash == nullptr) ? file : last_slash + 1;
   }
@@ -145,6 +149,10 @@ class LogMessageData {
 
   LogSeverity GetSeverity() const {
     return severity_;
+  }
+
+  LogId GetId() const {
+    return id_;
   }
 
   int GetError() const {
@@ -163,15 +171,16 @@ class LogMessageData {
   std::ostringstream buffer_;
   const char* const file_;
   const unsigned int line_number_;
+  const LogId id_;
   const LogSeverity severity_;
   const int error_;
 
   DISALLOW_COPY_AND_ASSIGN(LogMessageData);
 };
 
-LogMessage::LogMessage(const char* file, unsigned int line,
+LogMessage::LogMessage(const char* file, unsigned int line, LogId id,
                        LogSeverity severity, int error)
-    : data_(new LogMessageData(file, line, severity, error)) {
+    : data_(new LogMessageData(file, line, id, severity, error)) {
 }
 
 LogMessage::~LogMessage() {
@@ -189,16 +198,16 @@ LogMessage::~LogMessage() {
   {
     std::lock_guard<std::mutex> lock(logging_lock);
     if (msg.find('\n') == std::string::npos) {
-      LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetSeverity(),
-              msg.c_str());
+      LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
+              data_->GetSeverity(), msg.c_str());
     } else {
       msg += '\n';
       size_t i = 0;
       while (i < msg.size()) {
         size_t nl = msg.find('\n', i);
         msg[nl] = '\0';
-        LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetSeverity(),
-                &msg[i]);
+        LogLine(data_->GetFile(), data_->GetLineNumber(), data_->GetId(),
+                data_->GetSeverity(), &msg[i]);
         i = nl + 1;
       }
     }
@@ -224,19 +233,26 @@ static const android_LogPriority kLogSeverityToAndroidLogPriority[] = {
 static_assert(arraysize(kLogSeverityToAndroidLogPriority) == FATAL + 1,
               "Mismatch in size of kLogSeverityToAndroidLogPriority and values "
               "in LogSeverity");
+
+static const log_id kLogIdToAndroidLogId[] = {LOG_ID_MAIN, LOG_ID_SYSTEM};
+static_assert(arraysize(kLogIdToAndroidLogId) == SYSTEM + 1,
+              "Mismatch in size of kLogIdToAndroidLogId and values "
+              "in LogSeverity");
 #endif
 
-void LogMessage::LogLine(const char* file, unsigned int line,
+void LogMessage::LogLine(const char* file, unsigned int line, LogId id,
                          LogSeverity log_severity, const char* message) {
 #ifdef __ANDROID__
   const char* tag = ProgramInvocationShortName();
   int priority = kLogSeverityToAndroidLogPriority[log_severity];
+  log_id lg_id = kLogIdToAndroidLogId[id];
   if (priority == ANDROID_LOG_FATAL) {
-    LOG_PRI(priority, tag, "%s:%u] %s", file, line, message);
+    __android_log_buf_print(lg_id, priority, tag, "%s:%u] %s", file, line, message);
   } else {
-    LOG_PRI(priority, tag, "%s", message);
+    __android_log_buf_print(lg_id, priority, tag, "%s", message);
   }
 #else
+  UNUSED(id);
   static const char* log_characters = "VDIWEF";
   CHECK_EQ(strlen(log_characters), FATAL + 1U);
   char severity = log_characters[log_severity];
