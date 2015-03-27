@@ -245,13 +245,10 @@ int usage()
 
 #if defined(_WIN32)
 
-// Windows does not have <termio.h>.
-static void stdin_raw_init(int fd) {
-
-}
-
-static void stdin_raw_restore(int fd) {
-
+// Implemented in sysdeps_win32.c.
+extern "C" {
+void stdin_raw_init(int fd);
+void stdin_raw_restore(int fd);
 }
 
 #else
