@@ -992,22 +992,22 @@ void device_init() {
 
     /* is 256K enough? udev uses 16MB! */
     device_fd = uevent_open_socket(256*1024, true);
-    if(device_fd < 0)
+    if (device_fd == -1) {
         return;
-
+    }
     fcntl(device_fd, F_SETFL, O_NONBLOCK);
 
-    struct stat info;
-    if (stat(COLDBOOT_DONE, &info) < 0) {
-        Timer t;
-        coldboot("/sys/class");
-        coldboot("/sys/block");
-        coldboot("/sys/devices");
-        close(open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000));
-        NOTICE("Coldboot took %.2fs.\n", t.duration());
-    } else {
+    if (access(COLDBOOT_DONE, F_OK) == 0) {
         NOTICE("Skipping coldboot, already done!\n");
+        return;
     }
+
+    Timer t;
+    coldboot("/sys/class");
+    coldboot("/sys/block");
+    coldboot("/sys/devices");
+    close(open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000));
+    NOTICE("Coldboot took %.2fs.\n", t.duration());
 }
 
 int get_device_fd()
