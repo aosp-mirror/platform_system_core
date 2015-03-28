@@ -47,7 +47,6 @@ OUR_TOOLS := \
     iftop \
     ioctl \
     ionice \
-    load_policy \
     log \
     ls \
     lsof \
