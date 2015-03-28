@@ -323,12 +323,11 @@ init.svc.<name>
 
 Bootcharting
 ------------
-
 This version of init contains code to perform "bootcharting": generating log
 files that can be later processed by the tools provided by www.bootchart.org.
 
-On the emulator, use the new -bootchart <timeout> option to boot with
-bootcharting activated for <timeout> seconds.
+On the emulator, use the -bootchart <timeout> option to boot with bootcharting
+activated for <timeout> seconds.
 
 On a device, create /data/bootchart/start with a command like the following:
 
@@ -349,8 +348,12 @@ retrieve them and create a bootchart.tgz file that can be used with the
 bootchart command-line utility:
 
   sudo apt-get install pybootchartgui
-  ANDROID_SERIAL=<device serial number>
+  # grab-bootchart.sh uses $ANDROID_SERIAL.
   $ANDROID_BUILD_TOP/system/core/init/grab-bootchart.sh
+
+One thing to watch for is that the bootchart will show init as if it started
+running at 0s. You'll have to look at dmesg to work out when the kernel
+actually started init.
 
 
 Debugging init
