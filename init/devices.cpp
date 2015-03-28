@@ -983,12 +983,7 @@ static void coldboot(const char *path)
     }
 }
 
-void device_init(void)
-{
-    suseconds_t t0, t1;
-    struct stat info;
-    int fd;
-
+void device_init() {
     sehandle = NULL;
     if (is_selinux_enabled() > 0) {
         sehandle = selinux_android_file_context_handle();
@@ -1000,16 +995,15 @@ void device_init(void)
     if(device_fd < 0)
         return;
 
-    fcntl(device_fd, F_SETFD, FD_CLOEXEC);
     fcntl(device_fd, F_SETFL, O_NONBLOCK);
 
+    struct stat info;
     if (stat(COLDBOOT_DONE, &info) < 0) {
         Timer t;
         coldboot("/sys/class");
         coldboot("/sys/block");
         coldboot("/sys/devices");
-        fd = open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000);
-        close(fd);
+        close(open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000));
         NOTICE("Coldboot took %.2fs.\n", t.duration());
     } else {
         NOTICE("Skipping coldboot, already done!\n");
