@@ -83,7 +83,7 @@ static const char *ENV[32];
 bool waiting_for_exec = false;
 
 void service::NotifyStateChange(const char* new_state) {
-    if (!properties_inited()) {
+    if (!properties_initialized()) {
         // If properties aren't available yet, we can't set them.
         return;
     }
@@ -246,7 +246,7 @@ void service_start(struct service *svc, const char *dynamic_args)
         }
     }
 
-    NOTICE("starting '%s'\n", svc->name);
+    NOTICE("Starting service '%s'...\n", svc->name);
 
     pid_t pid = fork();
     if (pid == 0) {
@@ -256,7 +256,7 @@ void service_start(struct service *svc, const char *dynamic_args)
         int fd, sz;
 
         umask(077);
-        if (properties_inited()) {
+        if (properties_initialized()) {
             get_property_workspace(&fd, &sz);
             snprintf(tmp, sizeof(tmp), "%d,%d", dup(fd), sz);
             add_environment("ANDROID_PROPERTY_WORKSPACE", tmp);
@@ -397,7 +397,7 @@ static void service_stop_or_reset(struct service *svc, int how)
     }
 
     if (svc->pid) {
-        NOTICE("service '%s' is being killed\n", svc->name);
+        NOTICE("Service '%s' is being killed...\n", svc->name);
         kill(-svc->pid, SIGKILL);
         svc->NotifyStateChange("stopping");
     } else {
@@ -559,17 +559,18 @@ void build_triggers_string(char *name_str, int length, struct action *cur_action
     }
 }
 
-void execute_one_command(void)
-{
-    int ret, i;
+void execute_one_command() {
+    Timer t;
+
     char cmd_str[256] = "";
     char name_str[256] = "";
 
     if (!cur_action || !cur_command || is_last_command(cur_action, cur_command)) {
         cur_action = action_remove_queue_head();
         cur_command = NULL;
-        if (!cur_action)
+        if (!cur_action) {
             return;
+        }
 
         build_triggers_string(name_str, sizeof(name_str), cur_action);
 
@@ -579,20 +580,26 @@ void execute_one_command(void)
         cur_command = get_next_command(cur_action, cur_command);
     }
 
-    if (!cur_command)
+    if (!cur_command) {
         return;
+    }
 
-    ret = cur_command->func(cur_command->nargs, cur_command->args);
+    int result = cur_command->func(cur_command->nargs, cur_command->args);
     if (klog_get_level() >= KLOG_INFO_LEVEL) {
-        for (i = 0; i < cur_command->nargs; i++) {
+        for (int i = 0; i < cur_command->nargs; i++) {
             strlcat(cmd_str, cur_command->args[i], sizeof(cmd_str));
             if (i < cur_command->nargs - 1) {
                 strlcat(cmd_str, " ", sizeof(cmd_str));
             }
         }
-        INFO("command '%s' action=%s status=%d (%s:%d)\n",
-             cmd_str, cur_action ? name_str : "", ret, cur_command->filename,
-             cur_command->line);
+        char source[256];
+        if (cur_command->filename) {
+            snprintf(source, sizeof(source), " (%s:%d)", cur_command->filename, cur_command->line);
+        } else {
+            *source = '\0';
+        }
+        INFO("Command '%s' action=%s%s returned %d took %.2fs\n",
+             cmd_str, cur_action ? name_str : "", source, result, t.duration());
     }
 }
 
@@ -928,40 +935,25 @@ int selinux_reload_policy(void)
     return 0;
 }
 
-static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_t len)
-{
+static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_t len) {
     snprintf(buf, len, "property=%s", !data ? "NULL" : (char *)data);
     return 0;
 }
 
-int log_callback(int type, const char *fmt, ...)
-{
-    int level;
-    va_list ap;
-    switch (type) {
-    case SELINUX_WARNING:
-        level = KLOG_WARNING_LEVEL;
-        break;
-    case SELINUX_INFO:
-        level = KLOG_INFO_LEVEL;
-        break;
-    default:
-        level = KLOG_ERROR_LEVEL;
-        break;
-    }
-    va_start(ap, fmt);
-    klog_vwrite(level, fmt, ap);
-    va_end(ap);
-    return 0;
-}
+static void selinux_initialize() {
+    Timer t;
 
-static void selinux_initialize(void)
-{
+    selinux_callback cb;
+    cb.func_log = selinux_klog_callback;
+    selinux_set_callback(SELINUX_CB_LOG, cb);
+    cb.func_audit = audit_callback;
+    selinux_set_callback(SELINUX_CB_AUDIT, cb);
+
     if (selinux_is_disabled()) {
         return;
     }
 
-    INFO("loading selinux policy\n");
+    INFO("Loading SELinux policy...\n");
     if (selinux_android_load_policy() < 0) {
         ERROR("SELinux: Failed to load policy; rebooting into recovery mode\n");
         android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
@@ -972,14 +964,18 @@ static void selinux_initialize(void)
     bool is_enforcing = selinux_is_enforcing();
     INFO("SELinux: security_setenforce(%d)\n", is_enforcing);
     security_setenforce(is_enforcing);
+
+    NOTICE("(Initializing SELinux took %.2fs.)\n", t.duration());
 }
 
 int main(int argc, char** argv) {
-    if (!strcmp(basename(argv[0]), "ueventd"))
+    if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
+    }
 
-    if (!strcmp(basename(argv[0]), "watchdogd"))
+    if (!strcmp(basename(argv[0]), "watchdogd")) {
         return watchdogd_main(argc, argv);
+    }
 
     // Clear the umask.
     umask(0);
@@ -1008,36 +1004,32 @@ int main(int argc, char** argv) {
     // to the outside world.
     open_devnull_stdio();
     klog_init();
+    klog_set_level(KLOG_NOTICE_LEVEL);
+
+    NOTICE("init started!\n");
+
     property_init();
 
+    // If arguments are passed both on the command line and in DT,
+    // properties set in DT always have priority over the command-line ones.
     process_kernel_dt();
-    /* in case one is passing arguments both on the command line and in DT
-     * Properties set in DT always have priority over the command-line ones
-     */
     process_kernel_cmdline();
 
-    /* now propogate the kernel variables to internal variables
-     * used by init as well as the current required properties
-     */
+    // Propogate the kernel variables to internal variables
+    // used by init as well as the current required properties.
     export_kernel_boot_props();
-
-    selinux_callback cb;
-    cb.func_log = log_callback;
-    selinux_set_callback(SELINUX_CB_LOG, cb);
-    cb.func_audit = audit_callback;
-    selinux_set_callback(SELINUX_CB_AUDIT, cb);
 
     selinux_initialize();
 
     // These directories were necessarily created before initial policy load
     // and therefore need their security context restored to the proper value.
     // This must happen before /dev is populated by ueventd.
+    INFO("Running restorecon...\n");
     restorecon("/dev");
     restorecon("/dev/socket");
     restorecon("/dev/__properties__");
     restorecon_recursive("/sys");
 
-    INFO("property init\n");
     property_load_boot_defaults();
 
     init_parse_config_file("/init.rc");
@@ -1049,7 +1041,7 @@ int main(int argc, char** argv) {
     queue_builtin_action(keychord_init_action, "keychord_init");
     queue_builtin_action(console_init_action, "console_init");
 
-    // Execute all the boot actions to get us started.
+    // Trigger all the boot actions to get us started.
     action_for_each_trigger("init", action_add_queue_tail);
 
     // Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random

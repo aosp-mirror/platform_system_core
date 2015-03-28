@@ -24,6 +24,7 @@ include $(CLEAR_VARS)
 LOCAL_CPPFLAGS := $(init_cflags)
 LOCAL_SRC_FILES:= \
     init_parser.cpp \
+    log.cpp \
     parser.cpp \
     util.cpp \
 

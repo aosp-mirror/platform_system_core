@@ -364,13 +364,6 @@ static int find_pci_device_prefix(const char *path, char *buf, ssize_t buf_sz)
     return 0;
 }
 
-static inline suseconds_t get_usecs(void)
-{
-    struct timeval tv;
-    gettimeofday(&tv, 0);
-    return tv.tv_sec * (suseconds_t) 1000000 + tv.tv_usec;
-}
-
 static void parse_event(const char *msg, struct uevent *uevent)
 {
     uevent->action = "";
@@ -1011,18 +1004,15 @@ void device_init(void)
     fcntl(device_fd, F_SETFL, O_NONBLOCK);
 
     if (stat(COLDBOOT_DONE, &info) < 0) {
-        t0 = get_usecs();
+        Timer t;
         coldboot("/sys/class");
         coldboot("/sys/block");
         coldboot("/sys/devices");
-        t1 = get_usecs();
         fd = open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000);
         close(fd);
-        if (LOG_UEVENTS) {
-            INFO("coldboot %ld uS\n", ((long) (t1 - t0)));
-        }
-    } else if (LOG_UEVENTS) {
-        INFO("skipping coldboot, already done\n");
+        NOTICE("Coldboot took %.2fs.\n", t.duration());
+    } else {
+        NOTICE("Skipping coldboot, already done!\n");
     }
 }
 

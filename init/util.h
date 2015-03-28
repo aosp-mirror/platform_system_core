@@ -33,7 +33,22 @@ int create_socket(const char *name, int type, mode_t perm,
 bool read_file(const char* path, std::string* content);
 int write_file(const char* path, const char* content);
 
-time_t gettime(void);
+time_t gettime();
+uint64_t gettime_ns();
+
+class Timer {
+ public:
+  Timer() : t0(gettime_ns()) {
+  }
+
+  double duration() {
+    return static_cast<double>(gettime_ns() - t0) / 1000000000.0;
+  }
+
+ private:
+  uint64_t t0;
+};
+
 unsigned int decode_uid(const char *s);
 
 int mkdir_recursive(const char *pathname, mode_t mode);
