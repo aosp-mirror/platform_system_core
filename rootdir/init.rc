@@ -32,8 +32,6 @@ on early-init
 on init
     sysclktz 0
 
-    loglevel 3
-
     # Backward compatibility.
     symlink /system/etc /etc
     symlink /sys/kernel/debug /d

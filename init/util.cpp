@@ -258,22 +258,16 @@ int mtd_name_to_number(const char *name)
     return -1;
 }
 
-/*
- * gettime() - returns the time in seconds of the system's monotonic clock or
- * zero on error.
- */
-time_t gettime(void)
-{
-    struct timespec ts;
-    int ret;
+time_t gettime() {
+    timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return now.tv_sec;
+}
 
-    ret = clock_gettime(CLOCK_MONOTONIC, &ts);
-    if (ret < 0) {
-        ERROR("clock_gettime(CLOCK_MONOTONIC) failed: %s\n", strerror(errno));
-        return 0;
-    }
-
-    return ts.tv_sec;
+uint64_t gettime_ns() {
+    timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return static_cast<uint64_t>(now.tv_sec) * UINT64_C(1000000000) + now.tv_nsec;
 }
 
 int mkdir_recursive(const char *pathname, mode_t mode)
