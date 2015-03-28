@@ -27,52 +27,45 @@
 
 #define DEV_NAME "/dev/watchdog"
 
-int watchdogd_main(int argc, char **argv)
-{
-    int fd;
-    int ret;
-    int interval = 10;
-    int margin = 10;
-    int timeout;
-
+int watchdogd_main(int argc, char **argv) {
     open_devnull_stdio();
     klog_init();
+    klog_set_level(KLOG_NOTICE_LEVEL);
 
-    INFO("Starting watchdogd\n");
+    int interval = 10;
+    if (argc >= 2) interval = atoi(argv[1]);
 
-    if (argc >= 2)
-        interval = atoi(argv[1]);
+    int margin = 10;
+    if (argc >= 3) margin = atoi(argv[2]);
 
-    if (argc >= 3)
-        margin = atoi(argv[2]);
+    NOTICE("watchdogd started (interval %d, margin %d)!\n", interval, margin);
 
-    timeout = interval + margin;
-
-    fd = open(DEV_NAME, O_RDWR|O_CLOEXEC);
-    if (fd < 0) {
+    int fd = open(DEV_NAME, O_RDWR|O_CLOEXEC);
+    if (fd == -1) {
         ERROR("watchdogd: Failed to open %s: %s\n", DEV_NAME, strerror(errno));
         return 1;
     }
 
-    ret = ioctl(fd, WDIOC_SETTIMEOUT, &timeout);
+    int timeout = interval + margin;
+    int ret = ioctl(fd, WDIOC_SETTIMEOUT, &timeout);
     if (ret) {
         ERROR("watchdogd: Failed to set timeout to %d: %s\n", timeout, strerror(errno));
         ret = ioctl(fd, WDIOC_GETTIMEOUT, &timeout);
         if (ret) {
             ERROR("watchdogd: Failed to get timeout: %s\n", strerror(errno));
         } else {
-            if (timeout > margin)
+            if (timeout > margin) {
                 interval = timeout - margin;
-            else
+            } else {
                 interval = 1;
+            }
             ERROR("watchdogd: Adjusted interval to timeout returned by driver: timeout %d, interval %d, margin %d\n",
                   timeout, interval, margin);
         }
     }
 
-    while(1) {
+    while (true) {
         write(fd, "", 1);
         sleep(interval);
     }
 }
-

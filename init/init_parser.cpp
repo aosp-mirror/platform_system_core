@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdarg.h>
 #include <string.h>
-#include <stddef.h>
-#include <ctype.h>
+#include <unistd.h>
 
 #include "init.h"
 #include "parser.h"
@@ -351,7 +352,7 @@ static void parse_import(struct parse_state *state, int nargs, char **args)
     struct import* import = (struct import*) calloc(1, sizeof(struct import));
     import->filename = strdup(conf_file);
     list_add_tail(import_list, &import->list);
-    INFO("found import '%s', adding to import list", import->filename);
+    INFO("Added '%s' to import list\n", import->filename);
 }
 
 static void parse_new_section(struct parse_state *state, int kw,
@@ -439,6 +440,7 @@ parser_done:
 
 int init_parse_config_file(const char* path) {
     INFO("Parsing %s...\n", path);
+    Timer t;
     std::string data;
     if (!read_file(path, &data)) {
         return -1;
@@ -446,6 +448,8 @@ int init_parse_config_file(const char* path) {
 
     parse_config(path, data);
     dump_parser_state();
+
+    NOTICE("(Parsing %s took %.2fs.)\n", path, t.duration());
     return 0;
 }
 

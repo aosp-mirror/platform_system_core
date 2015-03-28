@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-#include <poll.h>
-#include <fcntl.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
 #include <ctype.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
-#include <selinux/selinux.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include <base/stringprintf.h>
 #include <private/android_filesystem_config.h>
+#include <selinux/selinux.h>
 
 #include "ueventd.h"
 #include "log.h"
@@ -34,11 +35,6 @@
 
 int ueventd_main(int argc, char **argv)
 {
-    struct pollfd ufd;
-    int nr;
-    char hardware[PROP_VALUE_MAX];
-    char tmp[32];
-
     /*
      * init sets the umask to 077 for forked processes. We need to
      * create files with exact permissions, without modification by
@@ -55,38 +51,35 @@ int ueventd_main(int argc, char **argv)
 
     open_devnull_stdio();
     klog_init();
-    if (LOG_UEVENTS) {
-        /* Ensure we're at a logging level that will show the events */
-        if (klog_get_level() < KLOG_INFO_LEVEL) {
-            klog_set_level(KLOG_INFO_LEVEL);
-        }
-    }
+    klog_set_level(KLOG_NOTICE_LEVEL);
 
-    union selinux_callback cb;
-    cb.func_log = log_callback;
+    NOTICE("ueventd started!\n");
+
+    selinux_callback cb;
+    cb.func_log = selinux_klog_callback;
     selinux_set_callback(SELINUX_CB_LOG, cb);
 
-    INFO("starting ueventd\n");
-
+    char hardware[PROP_VALUE_MAX];
     property_get("ro.hardware", hardware);
 
     ueventd_parse_config_file("/ueventd.rc");
-
-    snprintf(tmp, sizeof(tmp), "/ueventd.%s.rc", hardware);
-    ueventd_parse_config_file(tmp);
+    ueventd_parse_config_file(android::base::StringPrintf("/ueventd.%s.rc", hardware).c_str());
 
     device_init();
 
+    pollfd ufd;
     ufd.events = POLLIN;
     ufd.fd = get_device_fd();
 
-    while(1) {
+    while (true) {
         ufd.revents = 0;
-        nr = poll(&ufd, 1, -1);
-        if (nr <= 0)
+        int nr = poll(&ufd, 1, -1);
+        if (nr <= 0) {
             continue;
-        if (ufd.revents & POLLIN)
-               handle_device_fd();
+        }
+        if (ufd.revents & POLLIN) {
+            handle_device_fd();
+        }
     }
 
     return 0;
