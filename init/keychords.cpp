@@ -109,7 +109,7 @@ void handle_keychord()
     if (!strcmp(adb_enabled, "running")) {
         svc = service_find_by_keychord(id);
         if (svc) {
-            INFO("starting service %s from keychord\n", svc->name);
+            INFO("Starting service %s from keychord\n", svc->name);
             service_start(svc, NULL);
         } else {
             ERROR("service for keychord %d not found\n", id);

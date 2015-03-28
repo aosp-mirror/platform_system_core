@@ -54,7 +54,7 @@
 #define PERSISTENT_PROPERTY_DIR  "/data/property"
 
 static int persistent_properties_loaded = 0;
-static int property_area_inited = 0;
+static bool property_area_initialized = false;
 
 static int property_set_fd = -1;
 
@@ -63,34 +63,25 @@ struct workspace {
     int fd;
 };
 
-static int init_workspace(workspace *w, size_t size)
-{
-    int fd = open(PROP_FILENAME, O_RDONLY | O_NOFOLLOW);
-    if (fd < 0)
-        return -1;
-
-    w->size = size;
-    w->fd = fd;
-    return 0;
-}
-
 static workspace pa_workspace;
 
-static int init_property_area(void)
-{
-    if (property_area_inited)
-        return -1;
+void property_init() {
+    if (property_area_initialized) {
+        return;
+    }
 
-    if(__system_property_area_init())
-        return -1;
+    property_area_initialized = true;
 
-    if(init_workspace(&pa_workspace, 0))
-        return -1;
+    if (__system_property_area_init()) {
+        return;
+    }
 
-    fcntl(pa_workspace.fd, F_SETFD, FD_CLOEXEC);
-
-    property_area_inited = 1;
-    return 0;
+    pa_workspace.size = 0;
+    pa_workspace.fd = open(PROP_FILENAME, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (pa_workspace.fd == -1) {
+        ERROR("Failed to open %s: %s\n", PROP_FILENAME, strerror(errno));
+        return;
+    }
 }
 
 static int check_mac_perms(const char *name, char *sctx)
@@ -419,12 +410,13 @@ static void load_properties(char *data, const char *filter)
  * Filter is used to decide which properties to load: NULL loads all keys,
  * "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
  */
-static void load_properties_from_file(const char *fn, const char *filter)
-{
+static void load_properties_from_file(const char* filename, const char* filter) {
+    Timer t;
     std::string data;
-    if (read_file(fn, &data)) {
+    if (read_file(filename, &data)) {
         load_properties(&data[0], filter);
     }
+    NOTICE("(Loading properties from %s took %.2fs.)\n", filename, t.duration());
 }
 
 static void load_persistent_properties() {
@@ -485,19 +477,12 @@ static void load_persistent_properties() {
     }
 }
 
-void property_init(void)
-{
-    init_property_area();
-}
-
-void property_load_boot_defaults(void)
-{
+void property_load_boot_defaults() {
     load_properties_from_file(PROP_PATH_RAMDISK_DEFAULT, NULL);
 }
 
-int properties_inited(void)
-{
-    return property_area_inited;
+bool properties_initialized() {
+    return property_area_initialized;
 }
 
 static void load_override_properties() {
@@ -510,21 +495,18 @@ static void load_override_properties() {
     }
 }
 
-
 /* When booting an encrypted system, /data is not mounted when the
  * property service is started, so any properties stored there are
  * not loaded.  Vold triggers init to load these properties once it
  * has mounted /data.
  */
-void load_persist_props(void)
-{
+void load_persist_props(void) {
     load_override_properties();
     /* Read persistent properties after all default values have been loaded. */
     load_persistent_properties();
 }
 
-void load_all_props(void)
-{
+void load_all_props() {
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
     load_properties_from_file(PROP_PATH_SYSTEM_DEFAULT, NULL);
     load_properties_from_file(PROP_PATH_VENDOR_BUILD, NULL);
@@ -537,12 +519,10 @@ void load_all_props(void)
     load_persistent_properties();
 }
 
-void start_property_service(void)
-{
-    int fd;
+void start_property_service() {
+    int fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM, 0666, 0, 0, NULL);
+    if (fd == -1) return;
 
-    fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM, 0666, 0, 0, NULL);
-    if(fd < 0) return;
     fcntl(fd, F_SETFD, FD_CLOEXEC);
     fcntl(fd, F_SETFL, O_NONBLOCK);
 
@@ -550,7 +530,6 @@ void start_property_service(void)
     property_set_fd = fd;
 }
 
-int get_property_set_fd()
-{
+int get_property_set_fd() {
     return property_set_fd;
 }
