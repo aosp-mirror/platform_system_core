@@ -18,17 +18,22 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <sys/wait.h>
-#include <cutils/sockets.h>
+#include <unistd.h>
+
+#include <base/stringprintf.h>
 #include <cutils/android_reboot.h>
 #include <cutils/list.h>
+#include <cutils/sockets.h>
 
 #include "init.h"
 #include "log.h"
 #include "util.h"
+
+#define CRITICAL_CRASH_THRESHOLD    4       /* if we crash >4 times ... */
+#define CRITICAL_CRASH_WINDOW       (4*60)  /* ... in 4 minutes, goto recovery */
 
 static int signal_fd = -1;
 static int signal_recv_fd = -1;
@@ -37,8 +42,17 @@ static void sigchld_handler(int s) {
     write(signal_fd, &s, 1);
 }
 
-#define CRITICAL_CRASH_THRESHOLD    4       /* if we crash >4 times ... */
-#define CRITICAL_CRASH_WINDOW       (4*60)  /* ... in 4 minutes, goto recovery */
+std::string DescribeStatus(int status) {
+    if (WIFEXITED(status)) {
+        return android::base::StringPrintf("exited with status %d", WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+        return android::base::StringPrintf("killed by signal %d", WTERMSIG(status));
+    } else if (WIFSTOPPED(status)) {
+        return android::base::StringPrintf("stopped by signal %d", WSTOPSIG(status));
+    } else {
+        return "state changed";
+    }
+}
 
 static int wait_for_one_process() {
     int status;
@@ -46,28 +60,26 @@ static int wait_for_one_process() {
     if (pid <= 0) {
         return -1;
     }
-    INFO("waitpid returned pid %d, status = %08x\n", pid, status);
 
     service* svc = service_find_by_pid(pid);
+
+    std::string name;
+    if (svc) {
+        name = android::base::StringPrintf("Service '%s' (pid %d)", svc->name, pid);
+    } else {
+        name = android::base::StringPrintf("Untracked pid %d", pid);
+    }
+
+    NOTICE("%s %s\n", name.c_str(), DescribeStatus(status).c_str());
+
     if (!svc) {
-        if (WIFEXITED(status)) {
-            ERROR("untracked pid %d exited with status %d\n", pid, WEXITSTATUS(status));
-        } else if (WIFSIGNALED(status)) {
-            ERROR("untracked pid %d killed by signal %d\n", pid, WTERMSIG(status));
-        } else if (WIFSTOPPED(status)) {
-            ERROR("untracked pid %d stopped by signal %d\n", pid, WSTOPSIG(status));
-        } else {
-            ERROR("untracked pid %d state changed\n", pid);
-        }
         return 0;
     }
 
     // TODO: all the code from here down should be a member function on service.
 
-    NOTICE("process '%s', pid %d exited\n", svc->name, pid);
-
     if (!(svc->flags & SVC_ONESHOT) || (svc->flags & SVC_RESTART)) {
-        NOTICE("process '%s' killing any children in process group\n", svc->name);
+        NOTICE("Service '%s' (pid %d) killing any children in process group\n", svc->name, pid);
         kill(-pid, SIGKILL);
     }
 
