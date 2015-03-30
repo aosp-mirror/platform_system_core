@@ -40,12 +40,9 @@ void klog_set_level(int level) {
 void klog_init(void) {
     if (klog_fd >= 0) return; /* Already initialized */
 
-    static const char *name = "/dev/__kmsg__";
+    static const char* name = "/dev/__kmsg__";
     if (mknod(name, S_IFCHR | 0600, (1 << 8) | 11) == 0) {
         klog_fd = open(name, O_WRONLY | O_CLOEXEC);
-        if (klog_fd == -1) {
-            return;
-        }
         unlink(name);
     }
 }
