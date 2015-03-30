@@ -447,8 +447,7 @@ private:
 
     const bool mAllowNonCallbacks; // immutable
 
-    int mWakeReadPipeFd;  // immutable
-    int mWakeWritePipeFd; // immutable
+    int mWakeEventFd;  // immutable
     Mutex mLock;
 
     Vector<MessageEnvelope> mMessageEnvelopes; // guarded by mLock
