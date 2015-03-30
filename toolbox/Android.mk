@@ -57,7 +57,6 @@ OUR_TOOLS := \
     prlimit \
     renice \
     restorecon \
-    route \
     sendevent \
     setprop \
     start \
