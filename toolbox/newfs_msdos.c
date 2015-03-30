@@ -798,6 +798,7 @@ static void getdiskinfo(int fd, const char *fname, const char *dtype,
                         __unused int oflag,struct bpb *bpb)
 {
     struct hd_geometry geom;
+    u_long block_size;
 
     if (ioctl(fd, BLKSSZGET, &bpb->bps)) {
         fprintf(stderr, "Error getting bytes / sector (%s)\n", strerror(errno));
@@ -806,10 +807,17 @@ static void getdiskinfo(int fd, const char *fname, const char *dtype,
 
     ckgeom(fname, bpb->bps, "bytes/sector");
 
-    if (ioctl(fd, BLKGETSIZE, &bpb->bsec)) {
+    if (ioctl(fd, BLKGETSIZE, &block_size)) {
         fprintf(stderr, "Error getting blocksize (%s)\n", strerror(errno));
         exit(1);
     }
+
+    if (block_size > UINT32_MAX) {
+        fprintf(stderr, "Error blocksize too large: %lu\n", block_size);
+        exit(1);
+    }
+
+    bpb->bsec = (u_int)block_size;
 
     if (ioctl(fd, HDIO_GETGEO, &geom)) {
         fprintf(stderr, "Error getting gemoetry (%s) - trying sane values\n", strerror(errno));
