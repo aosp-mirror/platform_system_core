@@ -680,8 +680,9 @@ int do_verity_load_state(int nargs, char **args) {
     return rc;
 }
 
-static void verity_update_property(fstab_rec *fstab, const char *mount_point, int status) {
-    property_set(android::base::StringPrintf("partition.%s.verified", mount_point).c_str(), "1");
+static void verity_update_property(fstab_rec *fstab, const char *mount_point, int mode, int status) {
+    property_set(android::base::StringPrintf("partition.%s.verified", mount_point).c_str(),
+                 android::base::StringPrintf("%d", mode).c_str());
 }
 
 int do_verity_update_state(int nargs, char** args) {

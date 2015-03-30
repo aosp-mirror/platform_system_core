@@ -594,46 +594,29 @@ out:
     return rc;
 }
 
-static int load_verity_state(struct fstab_rec *fstab, int *mode)
+static int read_verity_state(const char *fname, off64_t offset, int *mode)
 {
     int fd = -1;
     int rc = -1;
-    off64_t offset = 0;
     struct verity_state s;
 
-    if (metadata_find(fstab->verity_loc, VERITY_STATE_TAG, sizeof(s),
-            &offset) < 0) {
-        /* fall back to stateless behavior */
-        *mode = VERITY_MODE_EIO;
-        rc = 0;
-        goto out;
-    }
-
-    if (was_verity_restart()) {
-        /* device was restarted after dm-verity detected a corrupted
-         * block, so switch to logging mode */
-        *mode = VERITY_MODE_LOGGING;
-        rc = write_verity_state(fstab->verity_loc, offset, *mode);
-        goto out;
-    }
-
-    fd = TEMP_FAILURE_RETRY(open(fstab->verity_loc, O_RDONLY | O_CLOEXEC));
+    fd = TEMP_FAILURE_RETRY(open(fname, O_RDONLY | O_CLOEXEC));
 
     if (fd == -1) {
-        ERROR("Failed to open %s (%s)\n", fstab->verity_loc, strerror(errno));
+        ERROR("Failed to open %s (%s)\n", fname, strerror(errno));
         goto out;
     }
 
     if (TEMP_FAILURE_RETRY(pread64(fd, &s, sizeof(s), offset)) != sizeof(s)) {
         ERROR("Failed to read %zu bytes from %s offset %" PRIu64 " (%s)\n",
-            sizeof(s), fstab->verity_loc, offset, strerror(errno));
+            sizeof(s), fname, offset, strerror(errno));
         goto out;
     }
 
     if (s.header != VERITY_STATE_HEADER) {
         /* space allocated, but no state written. write default state */
         *mode = VERITY_MODE_DEFAULT;
-        rc = write_verity_state(fstab->verity_loc, offset, *mode);
+        rc = write_verity_state(fname, offset, *mode);
         goto out;
     }
 
@@ -657,6 +640,27 @@ out:
     }
 
     return rc;
+}
+
+static int load_verity_state(struct fstab_rec *fstab, int *mode)
+{
+    off64_t offset = 0;
+
+    if (metadata_find(fstab->verity_loc, VERITY_STATE_TAG,
+            sizeof(struct verity_state), &offset) < 0) {
+        /* fall back to stateless behavior */
+        *mode = VERITY_MODE_EIO;
+        return 0;
+    }
+
+    if (was_verity_restart()) {
+        /* device was restarted after dm-verity detected a corrupted
+         * block, so switch to logging mode */
+        *mode = VERITY_MODE_LOGGING;
+        return write_verity_state(fstab->verity_loc, offset, *mode);
+    }
+
+    return read_verity_state(fstab->verity_loc, offset, mode);
 }
 
 int fs_mgr_load_verity_state(int *mode)
@@ -717,6 +721,7 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
     char *status;
     int fd = -1;
     int i;
+    int mode;
     int rc = -1;
     off64_t offset = 0;
     struct dm_ioctl *io = (struct dm_ioctl *) buffer;
@@ -749,32 +754,33 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
             continue;
         }
 
+        if (read_verity_state(fstab->recs[i].verity_loc, offset, &mode) < 0) {
+            continue;
+        }
+
         mount_point = basename(fstab->recs[i].mount_point);
         verity_ioctl_init(io, mount_point, 0);
 
         if (ioctl(fd, DM_TABLE_STATUS, io)) {
             ERROR("Failed to query DM_TABLE_STATUS for %s (%s)\n", mount_point,
                 strerror(errno));
-            goto out;
+            continue;
         }
 
         status = &buffer[io->data_start + sizeof(struct dm_target_spec)];
 
         if (*status == 'C') {
-            rc = write_verity_state(fstab->recs[i].verity_loc, offset,
-                    VERITY_MODE_LOGGING);
-
-            if (rc == -1) {
-                goto out;
+            if (write_verity_state(fstab->recs[i].verity_loc, offset,
+                    VERITY_MODE_LOGGING) < 0) {
+                continue;
             }
         }
 
         if (callback) {
-            callback(&fstab->recs[i], mount_point, *status);
+            callback(&fstab->recs[i], mount_point, mode, *status);
         }
     }
 
-    /* Don't overwrite possible previous state if there's no corruption. */
     rc = 0;
 
 out:
