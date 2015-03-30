@@ -31,7 +31,7 @@
 #include <dirent.h>
 #include <ext4.h>
 #include <ext4_sb.h>
-#include <ext4_crypt.h>
+#include <ext4_crypt_init_extensions.h>
 
 #include <linux/loop.h>
 #include <private/android_filesystem_config.h>
@@ -477,16 +477,6 @@ static int handle_encryptable(struct fstab *fstab, const struct fstab_rec* rec)
         if (fs_mgr_do_mount(fstab, rec->mount_point,
                             rec->blk_device, tmp_mnt)) {
             ERROR("Error temp mounting encrypted file system\n");
-            return FS_MGR_MNTALL_FAIL;
-        }
-
-        // Link it to the normal place so ext4_crypt functions work normally
-        strlcat(tmp_mnt, "/unencrypted", sizeof(tmp_mnt));
-        char link_path[PATH_MAX];
-        strlcpy(link_path, rec->mount_point, sizeof(link_path));
-        strlcat(link_path, "/unencrypted", sizeof(link_path));
-        if (symlink(tmp_mnt, link_path)) {
-            ERROR("Error creating symlink to unencrypted directory\n");
             return FS_MGR_MNTALL_FAIL;
         }
 
