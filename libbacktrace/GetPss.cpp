@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-#include <assert.h>
 #include <inttypes.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -46,13 +45,22 @@ static bool ReadData(int fd, unsigned long place, uint64_t *data) {
 
 size_t GetPssBytes() {
   FILE* maps = fopen("/proc/self/maps", "r");
-  assert(maps != NULL);
+  if (maps == nullptr) {
+    return 0;
+  }
 
   int pagecount_fd = open("/proc/kpagecount", O_RDONLY);
-  assert(pagecount_fd >= 0);
+  if (pagecount_fd == -1) {
+    fclose(maps);
+    return 0;
+  }
 
   int pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
-  assert(pagemap_fd >= 0);
+  if (pagemap_fd == -1) {
+    fclose(maps);
+    close(pagecount_fd);
+    return 0;
+  }
 
   char line[4096];
   size_t total_pss = 0;

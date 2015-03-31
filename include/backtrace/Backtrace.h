@@ -44,9 +44,6 @@ struct backtrace_frame_data_t {
   uintptr_t func_offset;  // pc relative to the start of the function, only valid if func_name is not NULL.
 };
 
-// Forward declarations.
-class BacktraceImpl;
-
 #if defined(__APPLE__)
 struct __darwin_ucontext;
 typedef __darwin_ucontext ucontext_t;
@@ -72,7 +69,7 @@ public:
   virtual ~Backtrace();
 
   // Get the current stack trace and store in the backtrace_ structure.
-  virtual bool Unwind(size_t num_ignore_frames, ucontext_t* context = NULL);
+  virtual bool Unwind(size_t num_ignore_frames, ucontext_t* context = NULL) = 0;
 
   // Get the function name and offset into the function given the pc.
   // If the string is empty, then no valid function name was found.
@@ -95,9 +92,9 @@ public:
   virtual std::string FormatFrameData(size_t frame_num);
   virtual std::string FormatFrameData(const backtrace_frame_data_t* frame);
 
-  pid_t Pid() { return pid_; }
-  pid_t Tid() { return tid_; }
-  size_t NumFrames() { return frames_.size(); }
+  pid_t Pid() const { return pid_; }
+  pid_t Tid() const { return tid_; }
+  size_t NumFrames() const { return frames_.size(); }
 
   const backtrace_frame_data_t* GetFrame(size_t frame_num) {
     if (frame_num >= frames_.size()) {
@@ -117,7 +114,11 @@ public:
   BacktraceMap* GetMap() { return map_; }
 
 protected:
-  Backtrace(BacktraceImpl* impl, pid_t pid, BacktraceMap* map);
+  Backtrace(pid_t pid, pid_t tid, BacktraceMap* map);
+
+  // The name returned is not demangled, GetFunctionName() takes care of
+  // demangling the name.
+  virtual std::string GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) = 0;
 
   virtual bool VerifyReadWordArgs(uintptr_t ptr, word_t* out_value);
 
@@ -130,10 +131,6 @@ protected:
   bool map_shared_;
 
   std::vector<backtrace_frame_data_t> frames_;
-
-  BacktraceImpl* impl_;
-
-  friend class BacktraceImpl;
 };
 
 #endif // _BACKTRACE_BACKTRACE_H

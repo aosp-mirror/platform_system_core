@@ -14,41 +14,30 @@
  * limitations under the License.
  */
 
-#include <sys/types.h>
+#include <stdint.h>
 #include <ucontext.h>
 
-#include <backtrace/Backtrace.h>
-#include <backtrace/BacktraceMap.h>
+#include <memory>
+#include <string>
 
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 
+#include <backtrace/Backtrace.h>
+
 #include "BacktraceLog.h"
-#include "BacktraceThread.h"
 #include "UnwindCurrent.h"
-#include "UnwindMap.h"
 
-//-------------------------------------------------------------------------
-// UnwindCurrent functions.
-//-------------------------------------------------------------------------
-UnwindCurrent::UnwindCurrent() {
-}
-
-UnwindCurrent::~UnwindCurrent() {
-}
-
-bool UnwindCurrent::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
-  if (!ucontext) {
-    int ret = unw_getcontext(&context_);
-    if (ret < 0) {
-      BACK_LOGW("unw_getcontext failed %d", ret);
-      return false;
-    }
+std::string UnwindCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
+  *offset = 0;
+  char buf[512];
+  unw_word_t value;
+  if (unw_get_proc_name_by_ip(unw_local_addr_space, pc, buf, sizeof(buf),
+                              &value, &context_) >= 0 && buf[0] != '\0') {
+    *offset = static_cast<uintptr_t>(value);
+    return buf;
   }
-  else {
-    GetUnwContextFromUcontext(ucontext);
-  }
-  return UnwindFromContext(num_ignore_frames, false);
+  return "";
 }
 
 void UnwindCurrent::GetUnwContextFromUcontext(const ucontext_t* ucontext) {
@@ -76,54 +65,43 @@ void UnwindCurrent::GetUnwContextFromUcontext(const ucontext_t* ucontext) {
 #endif
 }
 
-std::string UnwindCurrent::GetFunctionNameRaw(uintptr_t pc, uintptr_t* offset) {
-  *offset = 0;
-  char buf[512];
-  unw_word_t value;
-  if (unw_get_proc_name_by_ip(unw_local_addr_space, pc, buf, sizeof(buf),
-                              &value, &context_) >= 0 && buf[0] != '\0') {
-    *offset = static_cast<uintptr_t>(value);
-    return buf;
-  }
-  return "";
-}
-
-bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool within_handler) {
-  // The cursor structure is pretty large, do not put it on the stack.
-  unw_cursor_t* cursor = new unw_cursor_t;
-  int ret = unw_init_local(cursor, &context_);
-  if (ret < 0) {
-    if (!within_handler) {
-      BACK_LOGW("unw_init_local failed %d", ret);
+bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucontext) {
+  if (ucontext == nullptr) {
+    int ret = unw_getcontext(&context_);
+    if (ret < 0) {
+      BACK_LOGW("unw_getcontext failed %d", ret);
+      return false;
     }
-    delete cursor;
+  } else {
+    GetUnwContextFromUcontext(ucontext);
+  }
+
+  // The cursor structure is pretty large, do not put it on the stack.
+  std::unique_ptr<unw_cursor_t> cursor(new unw_cursor_t);
+  int ret = unw_init_local(cursor.get(), &context_);
+  if (ret < 0) {
+    BACK_LOGW("unw_init_local failed %d", ret);
     return false;
   }
 
-  std::vector<backtrace_frame_data_t>* frames = GetFrames();
-  frames->reserve(MAX_BACKTRACE_FRAMES);
   size_t num_frames = 0;
   do {
     unw_word_t pc;
-    ret = unw_get_reg(cursor, UNW_REG_IP, &pc);
+    ret = unw_get_reg(cursor.get(), UNW_REG_IP, &pc);
     if (ret < 0) {
-      if (!within_handler) {
-        BACK_LOGW("Failed to read IP %d", ret);
-      }
+      BACK_LOGW("Failed to read IP %d", ret);
       break;
     }
     unw_word_t sp;
-    ret = unw_get_reg(cursor, UNW_REG_SP, &sp);
+    ret = unw_get_reg(cursor.get(), UNW_REG_SP, &sp);
     if (ret < 0) {
-      if (!within_handler) {
-        BACK_LOGW("Failed to read SP %d", ret);
-      }
+      BACK_LOGW("Failed to read SP %d", ret);
       break;
     }
 
     if (num_ignore_frames == 0) {
-      frames->resize(num_frames+1);
-      backtrace_frame_data_t* frame = &frames->at(num_frames);
+      frames_.resize(num_frames+1);
+      backtrace_frame_data_t* frame = &frames_.at(num_frames);
       frame->num = num_frames;
       frame->pc = static_cast<uintptr_t>(pc);
       frame->sp = static_cast<uintptr_t>(sp);
@@ -131,34 +109,18 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, bool within_hand
 
       if (num_frames > 0) {
         // Set the stack size for the previous frame.
-        backtrace_frame_data_t* prev = &frames->at(num_frames-1);
+        backtrace_frame_data_t* prev = &frames_.at(num_frames-1);
         prev->stack_size = frame->sp - prev->sp;
       }
 
-      if (!within_handler) {
-        frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
-        FillInMap(frame->pc, &frame->map);
-      } else {
-        frame->func_offset = 0;
-      }
+      frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
+      FillInMap(frame->pc, &frame->map);
       num_frames++;
     } else {
       num_ignore_frames--;
     }
-    ret = unw_step (cursor);
+    ret = unw_step (cursor.get());
   } while (ret > 0 && num_frames < MAX_BACKTRACE_FRAMES);
 
-  delete cursor;
   return true;
-}
-
-//-------------------------------------------------------------------------
-// C++ object creation function.
-//-------------------------------------------------------------------------
-Backtrace* CreateCurrentObj(BacktraceMap* map) {
-  return new BacktraceCurrent(new UnwindCurrent(), map);
-}
-
-Backtrace* CreateThreadObj(pid_t tid, BacktraceMap* map) {
-  return new BacktraceThread(new UnwindCurrent(), tid, map);
 }
