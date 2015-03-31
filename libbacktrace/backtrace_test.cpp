@@ -33,13 +33,14 @@
 #include <backtrace/BacktraceMap.h>
 
 // For the THREAD_SIGNAL definition.
-#include "BacktraceThread.h"
+#include "BacktraceCurrent.h"
 
 #include <cutils/atomic.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "thread_utils.h"
@@ -83,15 +84,16 @@ uint64_t NanoTime() {
   return static_cast<uint64_t>(t.tv_sec * NS_PER_SEC + t.tv_nsec);
 }
 
-void DumpFrames(Backtrace* backtrace) {
+std::string DumpFrames(Backtrace* backtrace) {
   if (backtrace->NumFrames() == 0) {
-    printf("    No frames to dump\n");
-    return;
+    return "   No frames to dump\n";
   }
 
+  std::string frame;
   for (size_t i = 0; i < backtrace->NumFrames(); i++) {
-    printf("    %s\n", backtrace->FormatFrameData(i).c_str());
+    frame += "   " + backtrace->FormatFrameData(i) + '\n';
   }
+  return frame;
 }
 
 void WaitForStop(pid_t pid) {
@@ -133,8 +135,8 @@ void VerifyLevelDump(Backtrace* backtrace) {
       break;
     }
   }
-  ASSERT_LT(static_cast<size_t>(0), frame_num);
-  ASSERT_LE(static_cast<size_t>(3), frame_num);
+  ASSERT_LT(static_cast<size_t>(0), frame_num) << DumpFrames(backtrace);
+  ASSERT_LE(static_cast<size_t>(3), frame_num) << DumpFrames(backtrace);
 
   ASSERT_EQ(backtrace->GetFrame(frame_num)->func_name, "test_level_one");
   ASSERT_EQ(backtrace->GetFrame(frame_num-1)->func_name, "test_level_two");
@@ -490,9 +492,13 @@ TEST(libbacktrace, thread_level_trace) {
   // The SA_RESTORER flag gets set behind our back, so a direct comparison
   // doesn't work unless we mask the value off. Mips doesn't have this
   // flag, so skip this on that platform.
-#ifdef SA_RESTORER
+#if defined(SA_RESTORER)
   cur_action.sa_flags &= ~SA_RESTORER;
   new_action.sa_flags &= ~SA_RESTORER;
+#elif defined(__GLIBC__)
+  // Our host compiler doesn't appear to define this flag for some reason.
+  cur_action.sa_flags &= ~0x04000000;
+  new_action.sa_flags &= ~0x04000000;
 #endif
   EXPECT_EQ(cur_action.sa_flags, new_action.sa_flags);
 }
@@ -858,10 +864,15 @@ void* ThreadReadTest(void* data) {
   // Tell the caller it's okay to start reading memory.
   android_atomic_acquire_store(1, &thread_data->state);
 
-  // Loop waiting for everything
+  // Loop waiting for the caller to finish reading the memory.
   while (thread_data->state) {
   }
 
+  // Re-enable read-write on the page so that we don't crash if we try
+  // and access data on this page when freeing the memory.
+  if (mprotect(&memory[pagesize], pagesize, PROT_READ | PROT_WRITE) != 0) {
+    return reinterpret_cast<void*>(-1);
+  }
   free(memory);
 
   android_atomic_acquire_store(1, &thread_data->state);
@@ -1005,6 +1016,7 @@ void CheckForLeak(pid_t pid, pid_t tid) {
     delete backtrace;
   }
   size_t stable_pss = GetPssBytes();
+  ASSERT_TRUE(stable_pss != 0);
 
   // Loop enough that even a small leak should be detectable.
   for (size_t i = 0; i < 4096; i++) {
@@ -1014,6 +1026,7 @@ void CheckForLeak(pid_t pid, pid_t tid) {
     delete backtrace;
   }
   size_t new_pss = GetPssBytes();
+  ASSERT_TRUE(new_pss != 0);
   size_t abs_diff = (new_pss > stable_pss) ? new_pss - stable_pss : stable_pss - new_pss;
   // As long as the new pss is within a certain amount, consider everything okay.
   ASSERT_LE(abs_diff, MAX_LEAK_BYTES);

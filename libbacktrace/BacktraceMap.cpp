@@ -15,18 +15,15 @@
  */
 
 #include <ctype.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-#include <string>
-#include <vector>
 
 #include <backtrace/backtrace_constants.h>
 #include <backtrace/BacktraceMap.h>
 #include <log/log.h>
 
 #include "thread_utils.h"
-#include "BacktraceImpl.h"
 
 BacktraceMap::BacktraceMap(pid_t pid) : pid_(pid) {
   if (pid_ < 0) {
@@ -116,7 +113,7 @@ bool BacktraceMap::Build() {
   snprintf(path, sizeof(path), "/proc/%d/maps", pid_);
   FILE* fp = fopen(path, "r");
 #endif
-  if (fp == NULL) {
+  if (fp == nullptr) {
     return false;
   }
 
@@ -142,7 +139,7 @@ BacktraceMap* BacktraceMap::Create(pid_t pid, bool uncached) {
   BacktraceMap* map = new BacktraceMap(pid);
   if (!map->Build()) {
     delete map;
-    return NULL;
+    return nullptr;
   }
   return map;
 }
