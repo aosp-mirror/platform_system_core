@@ -29,6 +29,9 @@ LOCAL_CFLAGS := \
     $($(module)_cflags) \
     $($(module)_cflags_$(build_type)) \
 
+LOCAL_CLANG_CFLAGS += \
+    $(libbacktrace_common_clang_cflags) \
+
 LOCAL_CONLYFLAGS += \
     $(common_conlyflags) \
     $($(module)_conlyflags) \
