@@ -234,6 +234,7 @@ typedef enum {
     AUDIO_FORMAT_VORBIS_SUB_NONE         = 0x0,
 } audio_format_vorbis_sub_fmt_t;
 
+
 /* Audio format consists of a main format field (upper 8 bits) and a sub format
  * field (lower 24 bits).
  *
@@ -257,6 +258,8 @@ typedef enum {
     AUDIO_FORMAT_OPUS                = 0x08000000UL,
     AUDIO_FORMAT_AC3                 = 0x09000000UL,
     AUDIO_FORMAT_E_AC3               = 0x0A000000UL,
+    AUDIO_FORMAT_DTS                 = 0x0B000000UL,
+    AUDIO_FORMAT_DTS_HD              = 0x0C000000UL,
     AUDIO_FORMAT_MAIN_MASK           = 0xFF000000UL,
     AUDIO_FORMAT_SUB_MASK            = 0x00FFFFFFUL,
 
@@ -1315,6 +1318,8 @@ static inline bool audio_is_valid_format(audio_format_t format)
     case AUDIO_FORMAT_OPUS:
     case AUDIO_FORMAT_AC3:
     case AUDIO_FORMAT_E_AC3:
+    case AUDIO_FORMAT_DTS:
+    case AUDIO_FORMAT_DTS_HD:
         return true;
     default:
         return false;
