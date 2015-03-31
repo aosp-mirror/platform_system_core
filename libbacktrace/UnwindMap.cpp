@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <pthread.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -142,7 +142,7 @@ BacktraceMap* BacktraceMap::Create(pid_t pid, bool uncached) {
   }
   if (!map->Build()) {
     delete map;
-    return NULL;
+    return nullptr;
   }
   return map;
 }

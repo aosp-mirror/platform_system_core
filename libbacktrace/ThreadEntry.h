@@ -14,25 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef _LIBBACKTRACE_BACKTRACE_THREAD_H
-#define _LIBBACKTRACE_BACKTRACE_THREAD_H
+#ifndef _LIBBACKTRACE_THREAD_ENTRY_H
+#define _LIBBACKTRACE_THREAD_ENTRY_H
 
-#include <inttypes.h>
 #include <pthread.h>
-#include <signal.h>
-#include <string.h>
 #include <sys/types.h>
 #include <ucontext.h>
-
-#include "BacktraceImpl.h"
-
-// The signal used to cause a thread to dump the stack.
-#if defined(__GLIBC__)
-// GLIBC reserves __SIGRTMIN signals, so use SIGRTMIN to avoid errors.
-#define THREAD_SIGNAL SIGRTMIN
-#else
-#define THREAD_SIGNAL (__SIGRTMIN+1)
-#endif
 
 class ThreadEntry {
 public:
@@ -81,12 +68,4 @@ private:
   static pthread_mutex_t list_mutex_;
 };
 
-class BacktraceThread : public BacktraceCurrent {
-public:
-  BacktraceThread(BacktraceImpl* impl, pid_t tid, BacktraceMap* map);
-  virtual ~BacktraceThread();
-
-  virtual bool Unwind(size_t num_ignore_frames, ucontext_t* ucontext);
-};
-
-#endif // _LIBBACKTRACE_BACKTRACE_THREAD_H
+#endif // _LIBBACKTRACE_THREAD_ENTRY_H
