@@ -26,6 +26,10 @@ common_conlyflags := \
 common_cppflags := \
 	-std=gnu++11 \
 
+# The latest clang (r230699) does not allow SP/PC to be declared in inline asm lists.
+libbacktrace_common_clang_cflags += \
+    -Wno-inline-asm
+
 build_host := false
 ifeq ($(HOST_OS),linux)
 ifeq ($(HOST_ARCH),$(filter $(HOST_ARCH),x86 x86_64))
