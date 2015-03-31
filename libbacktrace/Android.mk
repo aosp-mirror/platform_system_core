@@ -16,14 +16,14 @@
 
 LOCAL_PATH:= $(call my-dir)
 
-common_cflags := \
+libbacktrace_common_cflags := \
 	-Wall \
 	-Werror \
 
-common_conlyflags := \
+libbacktrace_common_conlyflags := \
 	-std=gnu99 \
 
-common_cppflags := \
+libbacktrace_common_cppflags := \
 	-std=gnu++11 \
 
 # The latest clang (r230699) does not allow SP/PC to be declared in inline asm lists.
@@ -41,20 +41,21 @@ endif
 # The libbacktrace library.
 #-------------------------------------------------------------------------
 libbacktrace_src_files := \
-	BacktraceImpl.cpp \
+	Backtrace.cpp \
+	BacktraceCurrent.cpp \
 	BacktraceMap.cpp \
-	BacktraceThread.cpp \
+	BacktracePtrace.cpp \
 	thread_utils.c \
-
-libbacktrace_shared_libraries_target := \
-	libcutils \
-
-libbacktrace_src_files += \
+	ThreadEntry.cpp \
 	UnwindCurrent.cpp \
 	UnwindMap.cpp \
 	UnwindPtrace.cpp \
 
+libbacktrace_shared_libraries_target := \
+	libcutils \
+
 libbacktrace_shared_libraries := \
+	libbase \
 	libunwind \
 	libunwind-ptrace \
 
@@ -90,6 +91,7 @@ module := libbacktrace_test
 module_tag := debug
 build_type := target
 build_target := SHARED_LIBRARY
+libbacktrace_test_multilib := both
 include $(LOCAL_PATH)/Android.build.mk
 build_type := host
 include $(LOCAL_PATH)/Android.build.mk
@@ -128,6 +130,7 @@ module := backtrace_test
 module_tag := debug
 build_type := target
 build_target := NATIVE_TEST
+backtrace_test_multilib := both
 include $(LOCAL_PATH)/Android.build.mk
 build_type := host
 include $(LOCAL_PATH)/Android.build.mk
