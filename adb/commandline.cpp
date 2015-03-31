@@ -209,7 +209,11 @@ void help()
         "  adb get-devpath              - prints: <device-path>\n"
         "  adb status-window            - continuously print device status for a specified device\n"
         "  adb remount                  - remounts the /system, /vendor (if present) and /oem (if present) partitions on the device read-write\n"
-        "  adb reboot [bootloader|recovery] - reboots the device, optionally into the bootloader or recovery program\n"
+        "  adb reboot [bootloader|recovery]\n"
+        "                               - reboots the device, optionally into the bootloader or recovery program.\n"
+        "  adb reboot sideload          - reboots the device into the sideload mode in recovery program (adb root required).\n"
+        "  adb reboot sideload-auto-reboot\n"
+        "                               - reboots into the sideload mode, then reboots automatically after the sideload regardless of the result.\n"
         "  adb reboot-bootloader        - reboots the device into the bootloader\n"
         "  adb root                     - restarts the adbd daemon with root permissions\n"
         "  adb unroot                   - restarts the adbd daemon without root permissions\n"
@@ -1126,6 +1130,17 @@ static void parse_push_pull_args(const char **arg, int narg, char const **path1,
     }
 }
 
+static int adb_connect_command(const char* command) {
+    int fd = adb_connect(command);
+    if (fd != -1) {
+        read_and_dump(fd);
+        adb_close(fd);
+        return 0;
+    }
+    fprintf(stderr, "Error: %s\n", adb_error());
+    return 1;
+}
+
 int adb_commandline(int argc, const char **argv)
 {
     char buf[4096];
@@ -1475,20 +1490,14 @@ int adb_commandline(int argc, const char **argv)
              !strcmp(argv[0], "disable-verity") ||
              !strcmp(argv[0], "enable-verity")) {
         char command[100];
-        if (!strcmp(argv[0], "reboot-bootloader"))
+        if (!strcmp(argv[0], "reboot-bootloader")) {
             snprintf(command, sizeof(command), "reboot:bootloader");
-        else if (argc > 1)
+        } else if (argc > 1) {
             snprintf(command, sizeof(command), "%s:%s", argv[0], argv[1]);
-        else
+        } else {
             snprintf(command, sizeof(command), "%s:", argv[0]);
-        int fd = adb_connect(command);
-        if (fd >= 0) {
-            read_and_dump(fd);
-            adb_close(fd);
-            return 0;
         }
-        fprintf(stderr,"error: %s\n", adb_error());
-        return 1;
+        return adb_connect_command(command);
     }
     else if (!strcmp(argv[0], "bugreport")) {
         if (argc != 1) return usage();
@@ -1713,15 +1722,7 @@ int adb_commandline(int argc, const char **argv)
         return adb_auth_keygen(argv[1]);
     }
     else if (!strcmp(argv[0], "jdwp")) {
-        int  fd = adb_connect("jdwp");
-        if (fd >= 0) {
-            read_and_dump(fd);
-            adb_close(fd);
-            return 0;
-        } else {
-            fprintf(stderr, "error: %s\n", adb_error());
-            return -1;
-        }
+        return adb_connect_command("jdwp");
     }
     /* "adb /?" is a common idiom under Windows */
     else if (!strcmp(argv[0], "help") || !strcmp(argv[0], "/?")) {
