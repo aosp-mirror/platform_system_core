@@ -15,22 +15,25 @@
 ** limitations under the License.
 */
 
-#define PROGNAME  "run-as"
-#define LOG_TAG   PROGNAME
+#define PROGNAME "run-as"
+#define LOG_TAG  PROGNAME
 
+#include <dirent.h>
+#include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
+#include <sys/capability.h>
+#include <sys/cdefs.h>
 #include <sys/stat.h>
-#include <dirent.h>
-#include <errno.h>
-#include <unistd.h>
+#include <sys/types.h>
 #include <time.h>
-#include <stdarg.h>
+#include <unistd.h>
 
-#include <selinux/android.h>
 #include <private/android_filesystem_config.h>
+#include <selinux/android.h>
+
 #include "package.h"
 
 /*
@@ -83,37 +86,37 @@
  *  - Run the 'gdbserver' binary executable to allow native debugging
  */
 
-static void
-usage(void)
-{
-    const char*  str = "Usage: " PROGNAME " <package-name> <command> [<args>]\n\n";
-    write(1, str, strlen(str));
-    exit(1);
-}
-
-
-static void
+__noreturn static void
 panic(const char* format, ...)
 {
     va_list args;
+    int e = errno;
 
     fprintf(stderr, "%s: ", PROGNAME);
     va_start(args, format);
     vfprintf(stderr, format, args);
     va_end(args);
-    exit(1);
+    exit(e ? -e : 1);
 }
 
+static void
+usage(void)
+{
+    panic("Usage:\n    " PROGNAME " <package-name> <command> [<args>]\n");
+}
 
 int main(int argc, char **argv)
 {
     const char* pkgname;
     int myuid, uid, gid;
     PackageInfo info;
+    struct __user_cap_header_struct capheader;
+    struct __user_cap_data_struct capdata[2];
 
     /* check arguments */
-    if (argc < 2)
+    if (argc < 2) {
         usage();
+    }
 
     /* check userid of caller - must be 'shell' or 'root' */
     myuid = getuid();
@@ -121,29 +124,37 @@ int main(int argc, char **argv)
         panic("only 'shell' or 'root' users can run this program\n");
     }
 
-    /* retrieve package information from system */
+    memset(&capheader, 0, sizeof(capheader));
+    memset(&capdata, 0, sizeof(capdata));
+    capheader.version = _LINUX_CAPABILITY_VERSION_3;
+    capdata[CAP_TO_INDEX(CAP_SETUID)].effective |= CAP_TO_MASK(CAP_SETUID);
+    capdata[CAP_TO_INDEX(CAP_SETGID)].effective |= CAP_TO_MASK(CAP_SETGID);
+    capdata[CAP_TO_INDEX(CAP_SETUID)].permitted |= CAP_TO_MASK(CAP_SETUID);
+    capdata[CAP_TO_INDEX(CAP_SETGID)].permitted |= CAP_TO_MASK(CAP_SETGID);
+
+    if (capset(&capheader, &capdata[0]) < 0) {
+        panic("Could not set capabilities: %s\n", strerror(errno));
+    }
+
+    /* retrieve package information from system (does setegid) */
     pkgname = argv[1];
     if (get_package_info(pkgname, &info) < 0) {
         panic("Package '%s' is unknown\n", pkgname);
-        return 1;
     }
 
     /* reject system packages */
     if (info.uid < AID_APP) {
         panic("Package '%s' is not an application\n", pkgname);
-        return 1;
     }
 
     /* reject any non-debuggable package */
     if (!info.isDebuggable) {
         panic("Package '%s' is not debuggable\n", pkgname);
-        return 1;
     }
 
     /* check that the data directory path is valid */
     if (check_data_path(info.dataDir, info.uid) < 0) {
         panic("Package '%s' has corrupt installation\n", pkgname);
-        return 1;
     }
 
     /* Ensure that we change all real/effective/saved IDs at the
@@ -152,38 +163,30 @@ int main(int argc, char **argv)
     uid = gid = info.uid;
     if(setresgid(gid,gid,gid) || setresuid(uid,uid,uid)) {
         panic("Permission denied\n");
-        return 1;
+    }
+
+    /* Required if caller has uid and gid all non-zero */
+    memset(&capdata, 0, sizeof(capdata));
+    if (capset(&capheader, &capdata[0]) < 0) {
+        panic("Could not clear all capabilities: %s\n", strerror(errno));
     }
 
     if (selinux_android_setcontext(uid, 0, info.seinfo, pkgname) < 0) {
-        panic("Could not set SELinux security context:  %s\n", strerror(errno));
-        return 1;
+        panic("Could not set SELinux security context: %s\n", strerror(errno));
     }
 
     /* cd into the data directory */
-    {
-        int ret;
-        do {
-            ret = chdir(info.dataDir);
-        } while (ret < 0 && errno == EINTR);
-
-        if (ret < 0) {
-            panic("Could not cd to package's data directory: %s\n", strerror(errno));
-            return 1;
-        }
+    if (TEMP_FAILURE_RETRY(chdir(info.dataDir)) < 0) {
+        panic("Could not cd to package's data directory: %s\n", strerror(errno));
     }
 
     /* User specified command for exec. */
-    if (argc >= 3 ) {
-        if (execvp(argv[2], argv+2) < 0) {
-            panic("exec failed for %s Error:%s\n", argv[2], strerror(errno));
-            return -errno;
-        }
+    if ((argc >= 3) && (execvp(argv[2], argv+2) < 0)) {
+        panic("exec failed for %s: %s\n", argv[2], strerror(errno));
     }
 
     /* Default exec shell. */
     execlp("/system/bin/sh", "sh", NULL);
 
-    panic("exec failed\n");
-    return 1;
+    panic("exec failed: %s\n", strerror(errno));
 }
