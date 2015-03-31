@@ -208,10 +208,11 @@ LOCAL_MODULE := adbd
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
-LOCAL_C_INCLUDES += system/extras/ext4_utils system/core/fs_mgr/include
+LOCAL_C_INCLUDES += system/extras/ext4_utils
 
 LOCAL_STATIC_LIBRARIES := \
     libadbd \
+    libbase \
     libfs_mgr \
     liblog \
     libcutils \
