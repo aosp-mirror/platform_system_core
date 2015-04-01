@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define _GNU_SOURCE 1
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
@@ -71,6 +72,16 @@ bool BacktraceCurrent::Unwind(size_t num_ignore_frames, ucontext_t* ucontext) {
   }
 
   return UnwindFromContext(num_ignore_frames, nullptr);
+}
+
+bool BacktraceCurrent::DiscardFrame(const backtrace_frame_data_t& frame) {
+  if (BacktraceMap::IsValid(frame.map)) {
+    const std::string library = basename(frame.map.name.c_str());
+    if (library == "libunwind.so" || library == "libbacktrace.so") {
+      return true;
+    }
+  }
+  return false;
 }
 
 static pthread_mutex_t g_sigaction_mutex = PTHREAD_MUTEX_INITIALIZER;

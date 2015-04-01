@@ -99,25 +99,30 @@ bool UnwindCurrent::UnwindFromContext(size_t num_ignore_frames, ucontext_t* ucon
       break;
     }
 
-    if (num_ignore_frames == 0) {
-      frames_.resize(num_frames+1);
-      backtrace_frame_data_t* frame = &frames_.at(num_frames);
-      frame->num = num_frames;
-      frame->pc = static_cast<uintptr_t>(pc);
-      frame->sp = static_cast<uintptr_t>(sp);
-      frame->stack_size = 0;
+    frames_.resize(num_frames+1);
+    backtrace_frame_data_t* frame = &frames_.at(num_frames);
+    frame->num = num_frames;
+    frame->pc = static_cast<uintptr_t>(pc);
+    frame->sp = static_cast<uintptr_t>(sp);
+    frame->stack_size = 0;
 
-      if (num_frames > 0) {
-        // Set the stack size for the previous frame.
-        backtrace_frame_data_t* prev = &frames_.at(num_frames-1);
-        prev->stack_size = frame->sp - prev->sp;
+    FillInMap(frame->pc, &frame->map);
+    // Check to see if we should skip this frame because it's coming
+    // from within the library, and we are doing a local unwind.
+    if (ucontext != nullptr || num_frames != 0 || !DiscardFrame(*frame)) {
+      if (num_ignore_frames == 0) {
+        // GetFunctionName is an expensive call, only do it if we are
+        // keeping the frame.
+        frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
+        if (num_frames > 0) {
+          // Set the stack size for the previous frame.
+          backtrace_frame_data_t* prev = &frames_.at(num_frames-1);
+          prev->stack_size = frame->sp - prev->sp;
+        }
+        num_frames++;
+      } else {
+        num_ignore_frames--;
       }
-
-      frame->func_name = GetFunctionName(frame->pc, &frame->func_offset);
-      FillInMap(frame->pc, &frame->map);
-      num_frames++;
-    } else {
-      num_ignore_frames--;
     }
     ret = unw_step (cursor.get());
   } while (ret > 0 && num_frames < MAX_BACKTRACE_FRAMES);
