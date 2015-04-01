@@ -528,7 +528,7 @@ void queue_info_dump(void)
 
 static struct sparse_file **load_sparse_files(int fd, int max_size)
 {
-    struct sparse_file* s = sparse_file_import_auto(fd, false);
+    struct sparse_file* s = sparse_file_import_auto(fd, false, true);
     if (!s) {
         die("cannot sparse read file\n");
     }

@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    sparse_output = sparse_file_import_auto(output, true);
+    sparse_output = sparse_file_import_auto(output, true, true);
     if (!sparse_output) {
         fprintf(stderr, "Couldn't import output file\n");
         exit(-1);
