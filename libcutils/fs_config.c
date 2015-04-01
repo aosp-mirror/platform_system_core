@@ -19,22 +19,11 @@
 ** by the device side of adb.
 */
 
-#define EXCLUDE_FS_CONFIG_STRUCTURES
-
 #include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
 
 #include <private/android_filesystem_config.h>
-
-/* Temporary while EXCLUDE_FS_CONFIG_STRUCTURES is defined */
-struct fs_path_config {
-    unsigned mode;
-    unsigned uid;
-    unsigned gid;
-    uint64_t capabilities;
-    const char *prefix;
-};
 
 /* Rules for directories.
 ** These rules are applied based on "first match", so they
