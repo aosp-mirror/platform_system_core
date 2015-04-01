@@ -44,7 +44,6 @@ int do_wait(int nargs, char **args);
 enum {
     K_UNKNOWN,
 #endif
-    KEYWORD(capability,  OPTION,  0, 0)
     KEYWORD(class,       OPTION,  0, 0)
     KEYWORD(class_start, COMMAND, 1, do_class_start)
     KEYWORD(class_stop,  COMMAND, 1, do_class_stop)
