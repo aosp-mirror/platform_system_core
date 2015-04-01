@@ -153,6 +153,7 @@ static int lookup_keyword(const char *s)
         if (!strcmp(s, "fup")) return K_ifup;
         if (!strcmp(s, "nsmod")) return K_insmod;
         if (!strcmp(s, "mport")) return K_import;
+        if (!strcmp(s, "nstallkey")) return K_installkey;
         break;
     case 'k':
         if (!strcmp(s, "eycodes")) return K_keycodes;
