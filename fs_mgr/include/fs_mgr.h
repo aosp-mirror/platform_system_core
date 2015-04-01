@@ -74,10 +74,13 @@ typedef void (*fs_mgr_verity_state_callback)(struct fstab_rec *fstab,
 struct fstab *fs_mgr_read_fstab(const char *fstab_path);
 void fs_mgr_free_fstab(struct fstab *fstab);
 
+#define FS_MGR_MNTALL_DEV_NON_DEFAULT_FILE_ENCRYPTED 5
+#define FS_MGR_MNTALL_DEV_DEFAULT_FILE_ENCRYPTED 4
 #define FS_MGR_MNTALL_DEV_NEEDS_RECOVERY 3
 #define FS_MGR_MNTALL_DEV_NEEDS_ENCRYPTION 2
 #define FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED 1
 #define FS_MGR_MNTALL_DEV_NOT_ENCRYPTED 0
+#define FS_MGR_MNTALL_FAIL -1
 int fs_mgr_mount_all(struct fstab *fstab);
 
 #define FS_MGR_DOMNT_FAILED -1
@@ -94,11 +97,12 @@ int fs_mgr_add_entry(struct fstab *fstab,
                      const char *mount_point, const char *fs_type,
                      const char *blk_device);
 struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const char *path);
-int fs_mgr_is_voldmanaged(struct fstab_rec *fstab);
-int fs_mgr_is_nonremovable(struct fstab_rec *fstab);
-int fs_mgr_is_verified(struct fstab_rec *fstab);
-int fs_mgr_is_encryptable(struct fstab_rec *fstab);
-int fs_mgr_is_noemulatedsd(struct fstab_rec *fstab);
+int fs_mgr_is_voldmanaged(const struct fstab_rec *fstab);
+int fs_mgr_is_nonremovable(const struct fstab_rec *fstab);
+int fs_mgr_is_verified(const struct fstab_rec *fstab);
+int fs_mgr_is_encryptable(const struct fstab_rec *fstab);
+int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab);
+int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab);
 int fs_mgr_swapon_all(struct fstab *fstab);
 #ifdef __cplusplus
 }
