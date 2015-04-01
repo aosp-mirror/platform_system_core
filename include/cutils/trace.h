@@ -80,7 +80,6 @@ __BEGIN_DECLS
 #error ATRACE_TAG must be defined to be one of the tags defined in cutils/trace.h
 #endif
 
-#ifdef HAVE_ANDROID_OS
 /**
  * Opens the trace file for writing and reads the property for initial tags.
  * The atrace.tags.enableflags property sets the tags to trace.
@@ -247,19 +246,6 @@ static inline void atrace_int64(uint64_t tag, const char* name, int64_t value)
         atrace_int64_body(name, value);
     }
 }
-
-#else // not HAVE_ANDROID_OS
-
-#define ATRACE_INIT()
-#define ATRACE_GET_ENABLED_TAGS()
-#define ATRACE_ENABLED() 0
-#define ATRACE_BEGIN(name)
-#define ATRACE_END()
-#define ATRACE_ASYNC_BEGIN(name, cookie)
-#define ATRACE_ASYNC_END(name, cookie)
-#define ATRACE_INT(name, value)
-
-#endif // not HAVE_ANDROID_OS
 
 __END_DECLS
 
