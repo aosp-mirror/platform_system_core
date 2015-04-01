@@ -122,7 +122,6 @@ static int lookup_keyword(const char *s)
         break;
     case 'c':
         if (!strcmp(s, "opy")) return K_copy;
-        if (!strcmp(s, "apability")) return K_capability;
         if (!strcmp(s, "lass")) return K_class;
         if (!strcmp(s, "lass_start")) return K_class_start;
         if (!strcmp(s, "lass_stop")) return K_class_stop;
@@ -776,8 +775,6 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
 
     kw = lookup_keyword(args[0]);
     switch (kw) {
-    case K_capability:
-        break;
     case K_class:
         if (nargs != 2) {
             parse_error(state, "class option requires a classname\n");
