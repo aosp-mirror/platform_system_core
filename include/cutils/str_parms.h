@@ -18,6 +18,9 @@
 #define __CUTILS_STR_PARMS_H
 
 #include <stdint.h>
+#include <sys/cdefs.h>
+
+__BEGIN_DECLS
 
 struct str_parms;
 
@@ -51,5 +54,7 @@ char *str_parms_to_str(struct str_parms *str_parms);
 
 /* debug */
 void str_parms_dump(struct str_parms *str_parms);
+
+__END_DECLS
 
 #endif /* __CUTILS_STR_PARMS_H */
