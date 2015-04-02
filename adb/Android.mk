@@ -161,7 +161,6 @@ ifeq ($(USE_SYSDEPS_WIN32),)
     LOCAL_STATIC_LIBRARIES += libcutils
 endif
 
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 include $(BUILD_HOST_EXECUTABLE)
 
 $(call dist-for-goals,dist_files sdk,$(LOCAL_BUILT_MODULE))
@@ -220,7 +219,5 @@ LOCAL_STATIC_LIBRARIES := \
     libmincrypt \
     libselinux \
     libext4_utils_static \
-
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 
 include $(BUILD_EXECUTABLE)
