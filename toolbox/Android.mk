@@ -23,14 +23,12 @@ LOCAL_SRC_FILES := \
     upstream-netbsd/lib/libutil/raise_default_signal.c
 LOCAL_CFLAGS += $(common_cflags) -Dmain=dd_main -DNO_CONV
 LOCAL_MODULE := libtoolbox_dd
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := upstream-netbsd/usr.bin/du/du.c
 LOCAL_CFLAGS += $(common_cflags) -Dmain=du_main
 LOCAL_MODULE := libtoolbox_du
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_STATIC_LIBRARY)
 
 
@@ -82,7 +80,6 @@ LOCAL_SHARED_LIBRARIES := \
 LOCAL_WHOLE_STATIC_LIBRARIES := $(patsubst %,libtoolbox_%,$(BSD_TOOLS))
 
 LOCAL_MODULE := toolbox
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 
 # Install the symlinks.
 LOCAL_POST_INSTALL_CMD := $(hide) $(foreach t,$(ALL_TOOLS),ln -sf toolbox $(TARGET_OUT)/bin/$(t);)
@@ -115,7 +112,6 @@ LOCAL_SRC_FILES := r.c
 LOCAL_CFLAGS += $(common_cflags)
 LOCAL_MODULE := r
 LOCAL_MODULE_TAGS := debug
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 include $(BUILD_EXECUTABLE)
 
 
