@@ -245,8 +245,8 @@ static bool ShowBrowserProxies(std::string url, base::TimeDelta timeout) {
 }  // namespace
 
 int main(int argc, char *argv[]) {
-  CommandLine::Init(argc, argv);
-  CommandLine* cl = CommandLine::ForCurrentProcess();
+  base::CommandLine::Init(argc, argv);
+  base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
 
   if (cl->HasSwitch(kHelp)) {
     LOG(INFO) << kHelpMessage;
@@ -273,7 +273,7 @@ int main(int argc, char *argv[]) {
   chromeos::InitLog(init_flags);
 
   std::string url;
-  CommandLine::StringVector urls = cl->GetArgs();
+  base::CommandLine::StringVector urls = cl->GetArgs();
   if (!urls.empty()) {
     url = urls[0];
     LOG(INFO) << "Resolving proxies for URL: " << url;
