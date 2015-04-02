@@ -22,7 +22,7 @@ commonSources := \
 	native_handle.c \
 	config_utils.c \
 	load_file.c \
-	memory.c \
+	strlcpy.c \
 	open_memstream.c \
 	strdup16to8.c \
 	strdup8to16.c \
