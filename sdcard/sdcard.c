@@ -1869,7 +1869,8 @@ static int run(const char* source_path, const char* dest_path, uid_t uid,
             "fd=%i,rootmode=40000,default_permissions,allow_other,user_id=%d,group_id=%d",
             fd, uid, gid);
 
-    res = mount("/dev/fuse", dest_path, "fuse", MS_NOSUID | MS_NODEV | MS_NOEXEC, opts);
+    res = mount("/dev/fuse", dest_path, "fuse", MS_NOSUID | MS_NODEV | MS_NOEXEC |
+            MS_NOATIME, opts);
     if (res < 0) {
         ERROR("cannot mount fuse filesystem: %s\n", strerror(errno));
         goto error;
