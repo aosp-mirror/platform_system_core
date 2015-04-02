@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2013 The Android Open Source Project
+ * Copyright (C) 2011 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -357,51 +357,3 @@ void str_parms_dump(struct str_parms *str_parms)
 {
     hashmapForEach(str_parms->map, dump_entry, str_parms);
 }
-
-#ifdef TEST_STR_PARMS
-static void test_str_parms_str(const char *str)
-{
-    struct str_parms *str_parms;
-    char *out_str;
-
-    str_parms = str_parms_create_str(str);
-    str_parms_add_str(str_parms, "dude", "woah");
-    str_parms_add_str(str_parms, "dude", "woah");
-    str_parms_del(str_parms, "dude");
-    str_parms_dump(str_parms);
-    out_str = str_parms_to_str(str_parms);
-    str_parms_destroy(str_parms);
-    ALOGI("%s: '%s' stringified is '%s'", __func__, str, out_str);
-    free(out_str);
-}
-
-int main(void)
-{
-    test_str_parms_str("");
-    test_str_parms_str(";");
-    test_str_parms_str("=");
-    test_str_parms_str("=;");
-    test_str_parms_str("=bar");
-    test_str_parms_str("=bar;");
-    test_str_parms_str("foo=");
-    test_str_parms_str("foo=;");
-    test_str_parms_str("foo=bar");
-    test_str_parms_str("foo=bar;");
-    test_str_parms_str("foo=bar;baz");
-    test_str_parms_str("foo=bar;baz=");
-    test_str_parms_str("foo=bar;baz=bat");
-    test_str_parms_str("foo=bar;baz=bat;");
-    test_str_parms_str("foo=bar;baz=bat;foo=bar");
-
-    // hashmapPut reports errors by setting errno to ENOMEM.
-    // Test that we're not confused by running in an environment where this is already true.
-    errno = ENOMEM;
-    test_str_parms_str("foo=bar;baz=");
-    if (errno != ENOMEM) {
-        abort();
-    }
-    test_str_parms_str("foo=bar;baz=");
-
-    return 0;
-}
-#endif
