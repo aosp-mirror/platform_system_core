@@ -15,36 +15,59 @@
 LOCAL_PATH := $(call my-dir)
 
 test_src_files := \
+    test_str_parms.cpp \
+
+test_target_only_src_files := \
     MemsetTest.cpp \
     PropertiesTest.cpp \
 
-include $(CLEAR_VARS)
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
-LOCAL_MODULE := libcutils_test
-LOCAL_SRC_FILES := $(test_src_files)
-LOCAL_SHARED_LIBRARIES := \
-    libcutils \
-    liblog \
-    libutils \
+test_libraries := libcutils liblog
 
+
+#
+# Target.
+#
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libcutils_test
+LOCAL_SRC_FILES := $(test_src_files) $(test_target_only_src_files)
+LOCAL_SHARED_LIBRARIES := $(test_libraries)
 LOCAL_MULTILIB := both
 LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
 LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
 include $(BUILD_NATIVE_TEST)
 
 include $(CLEAR_VARS)
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_MODULE := libcutils_test_static
 LOCAL_FORCE_STATIC_EXECUTABLE := true
-LOCAL_SRC_FILES := $(test_src_files)
-LOCAL_STATIC_LIBRARIES := \
-    libc \
-    libcutils \
-    liblog \
-    libutils \
-
+LOCAL_SRC_FILES := $(test_src_files) $(test_target_only_src_files)
+LOCAL_STATIC_LIBRARIES := libc $(test_libraries)
 LOCAL_CXX_STL := libc++_static
 LOCAL_MULTILIB := both
 LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
 LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
 include $(BUILD_NATIVE_TEST)
+
+
+#
+# Host.
+#
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libcutils_test
+LOCAL_SRC_FILES := $(test_src_files)
+LOCAL_SHARED_LIBRARIES := $(test_libraries)
+LOCAL_MULTILIB := both
+LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
+LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
+include $(BUILD_HOST_NATIVE_TEST)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libcutils_test_static
+LOCAL_SRC_FILES := $(test_src_files)
+LOCAL_STATIC_LIBRARIES := $(test_libraries)
+LOCAL_CXX_STL := libc++_static
+LOCAL_MULTILIB := both
+LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
+LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
+include $(BUILD_HOST_NATIVE_TEST)
