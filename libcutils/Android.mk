@@ -22,6 +22,7 @@ commonSources := \
 	native_handle.c \
 	config_utils.c \
 	load_file.c \
+	memory.c \
 	open_memstream.c \
 	strdup16to8.c \
 	strdup8to16.c \
@@ -113,7 +114,6 @@ LOCAL_SRC_FILES := $(commonSources) \
         ashmem-dev.c \
         debugger.c \
         klog.c \
-        memory.c \
         partition_utils.c \
         properties.c \
         qtaguid.c \
