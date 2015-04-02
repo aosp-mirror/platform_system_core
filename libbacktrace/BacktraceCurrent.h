@@ -46,6 +46,9 @@ public:
 
   bool Unwind(size_t num_ignore_frames, ucontext_t* ucontext) override;
 
+protected:
+  bool DiscardFrame(const backtrace_frame_data_t& frame);
+
 private:
   bool UnwindThread(size_t num_ignore_frames);
 
