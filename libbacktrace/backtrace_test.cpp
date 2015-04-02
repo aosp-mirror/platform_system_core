@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define _GNU_SOURCE 1
 #include <dirent.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -198,6 +199,23 @@ bool WaitForNonZero(int32_t* value, uint64_t seconds) {
     }
   } while ((NanoTime() - start) < seconds * NS_PER_SEC);
   return false;
+}
+
+TEST(libbacktrace, local_no_unwind_frames) {
+  // Verify that a local unwind does not include any frames within
+  // libunwind or libbacktrace.
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), getpid()));
+  ASSERT_TRUE(backtrace->Unwind(0));
+
+  ASSERT_TRUE(backtrace->NumFrames() != 0);
+  for (const auto& frame : *backtrace ) {
+    if (BacktraceMap::IsValid(frame.map)) {
+      const std::string name = basename(frame.map.name.c_str());
+      ASSERT_TRUE(name != "libunwind.so" && name != "libbacktrace.so")
+        << DumpFrames(backtrace.get());
+    }
+    break;
+  }
 }
 
 TEST(libbacktrace, local_trace) {
