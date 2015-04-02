@@ -18,7 +18,6 @@ LOCAL_PATH := $(call my-dir)
 source_files := zip_archive.cc
 
 include $(CLEAR_VARS)
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
 LOCAL_STATIC_LIBRARIES := libz
@@ -29,7 +28,6 @@ LOCAL_CPPFLAGS := -Wold-style-cast
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
 LOCAL_STATIC_LIBRARIES := libz libutils
@@ -42,7 +40,6 @@ LOCAL_MULTILIB := both
 include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
 LOCAL_STATIC_LIBRARIES := libz libutils
@@ -54,7 +51,6 @@ include $(BUILD_HOST_SHARED_LIBRARY)
 
 # Tests.
 include $(CLEAR_VARS)
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_MODULE := ziparchive-tests
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS := -Werror
@@ -64,7 +60,6 @@ LOCAL_STATIC_LIBRARIES := libziparchive libz libutils
 include $(BUILD_NATIVE_TEST)
 
 include $(CLEAR_VARS)
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_MODULE := ziparchive-tests-host
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS += \
