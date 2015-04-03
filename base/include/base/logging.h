@@ -241,10 +241,6 @@ class LogMessage {
   static void LogLine(const char* file, unsigned int line, LogSeverity severity,
                       const char* msg);
 
-  // A variant of the above for use with little stack.
-  static void LogLineLowStack(const char* file, unsigned int line,
-                              LogSeverity severity, const char* msg);
-
  private:
   const std::unique_ptr<LogMessageData> data_;
 
