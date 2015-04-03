@@ -14,11 +14,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <features.h>
+#include <sys/types.h>
 
 #if defined(__GLIBC__) || defined(_WIN32)
 
-#include <sys/types.h>
 #include <string.h>
 
 #include <cutils/memory.h>
