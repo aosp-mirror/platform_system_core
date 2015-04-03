@@ -41,12 +41,12 @@ static inline ssize_t pread64(int fd, void* buf, size_t nbytes, off64_t offset) 
 #define DEFFILEMODE 0666
 #endif /* _WIN32 */
 
-#if HAVE_PRINTF_ZD
-#  define ZD "%zd"
-#  define ZD_TYPE ssize_t
+#if defined(_WIN32)
+#define ZD "%ld"
+#define ZD_TYPE long
 #else
-#  define ZD "%ld"
-#  define ZD_TYPE long
+#define ZD "%zd"
+#define ZD_TYPE ssize_t
 #endif
 
 /*
