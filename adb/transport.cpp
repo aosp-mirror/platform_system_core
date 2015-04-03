@@ -772,7 +772,7 @@ void remove_transport_disconnect(atransport*  t, adisconnect*  dis)
 }
 
 static int qual_match(const char *to_test,
-                      const char *prefix, const char *qual, int sanitize_qual)
+                      const char *prefix, const char *qual, bool sanitize_qual)
 {
     if (!to_test || !*to_test)
         /* Return true if both the qual and to_test are null strings. */
@@ -790,7 +790,7 @@ static int qual_match(const char *to_test,
 
     while (*qual) {
         char ch = *qual++;
-        if (sanitize_qual && isalnum(ch))
+        if (sanitize_qual && !isalnum(ch))
             ch = '_';
         if (ch != *to_test++)
             return 0;
@@ -823,9 +823,9 @@ retry:
         if (serial) {
             if ((t->serial && !strcmp(serial, t->serial)) ||
                 (t->devpath && !strcmp(serial, t->devpath)) ||
-                qual_match(serial, "product:", t->product, 0) ||
-                qual_match(serial, "model:", t->model, 1) ||
-                qual_match(serial, "device:", t->device, 0)) {
+                qual_match(serial, "product:", t->product, false) ||
+                qual_match(serial, "model:", t->model, true) ||
+                qual_match(serial, "device:", t->device, false)) {
                 if (result) {
                     if (error_out)
                         *error_out = "more than one device";
@@ -918,20 +918,17 @@ static const char *statename(atransport *t)
 }
 
 static void add_qual(char **buf, size_t *buf_size,
-                     const char *prefix, const char *qual, int sanitize_qual)
+                     const char *prefix, const char *qual, bool sanitize_qual)
 {
-    size_t len;
-    int prefix_len;
-
     if (!buf || !*buf || !buf_size || !*buf_size || !qual || !*qual)
         return;
 
-    len = snprintf(*buf, *buf_size, "%s%n%s", prefix, &prefix_len, qual);
+    int prefix_len;
+    size_t len = snprintf(*buf, *buf_size, "%s%n%s", prefix, &prefix_len, qual);
 
     if (sanitize_qual) {
-        char *cp;
-        for (cp = *buf + prefix_len; cp < *buf + len; cp++) {
-            if (isalnum(*cp))
+        for (char* cp = *buf + prefix_len; cp < *buf + len; cp++) {
+            if (!isalnum(*cp))
                 *cp = '_';
         }
     }
@@ -956,10 +953,10 @@ static size_t format_transport(atransport *t, char *buf, size_t bufsize,
         remaining -= len;
         buf += len;
 
-        add_qual(&buf, &remaining, " ", t->devpath, 0);
-        add_qual(&buf, &remaining, " product:", t->product, 0);
-        add_qual(&buf, &remaining, " model:", t->model, 1);
-        add_qual(&buf, &remaining, " device:", t->device, 0);
+        add_qual(&buf, &remaining, " ", t->devpath, false);
+        add_qual(&buf, &remaining, " product:", t->product, false);
+        add_qual(&buf, &remaining, " model:", t->model, true);
+        add_qual(&buf, &remaining, " device:", t->device, false);
 
         len = snprintf(buf, remaining, "\n");
         remaining -= len;
