@@ -87,7 +87,7 @@ uint64_t NanoTime() {
 
 std::string DumpFrames(Backtrace* backtrace) {
   if (backtrace->NumFrames() == 0) {
-    return "   No frames to dump\n";
+    return "   No frames to dump.\n";
   }
 
   std::string frame;
@@ -124,8 +124,10 @@ bool ReadyLevelBacktrace(Backtrace* backtrace) {
 }
 
 void VerifyLevelDump(Backtrace* backtrace) {
-  ASSERT_GT(backtrace->NumFrames(), static_cast<size_t>(0));
-  ASSERT_LT(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES));
+  ASSERT_GT(backtrace->NumFrames(), static_cast<size_t>(0))
+    << DumpFrames(backtrace);
+  ASSERT_LT(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES))
+    << DumpFrames(backtrace);
 
   // Look through the frames starting at the highest to find the
   // frame we want.
@@ -139,10 +141,14 @@ void VerifyLevelDump(Backtrace* backtrace) {
   ASSERT_LT(static_cast<size_t>(0), frame_num) << DumpFrames(backtrace);
   ASSERT_LE(static_cast<size_t>(3), frame_num) << DumpFrames(backtrace);
 
-  ASSERT_EQ(backtrace->GetFrame(frame_num)->func_name, "test_level_one");
-  ASSERT_EQ(backtrace->GetFrame(frame_num-1)->func_name, "test_level_two");
-  ASSERT_EQ(backtrace->GetFrame(frame_num-2)->func_name, "test_level_three");
-  ASSERT_EQ(backtrace->GetFrame(frame_num-3)->func_name, "test_level_four");
+  ASSERT_EQ(backtrace->GetFrame(frame_num)->func_name, "test_level_one")
+    << DumpFrames(backtrace);
+  ASSERT_EQ(backtrace->GetFrame(frame_num-1)->func_name, "test_level_two")
+    << DumpFrames(backtrace);
+  ASSERT_EQ(backtrace->GetFrame(frame_num-2)->func_name, "test_level_three")
+    << DumpFrames(backtrace);
+  ASSERT_EQ(backtrace->GetFrame(frame_num-3)->func_name, "test_level_four")
+    << DumpFrames(backtrace);
 }
 
 void VerifyLevelBacktrace(void*) {
@@ -159,10 +165,11 @@ bool ReadyMaxBacktrace(Backtrace* backtrace) {
 }
 
 void VerifyMaxDump(Backtrace* backtrace) {
-  ASSERT_EQ(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES));
+  ASSERT_EQ(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES))
+    << DumpFrames(backtrace);
   // Verify that the last frame is our recursive call.
-  ASSERT_EQ(backtrace->GetFrame(MAX_BACKTRACE_FRAMES-1)->func_name,
-            "test_recursive_call");
+  ASSERT_EQ(backtrace->GetFrame(MAX_BACKTRACE_FRAMES-1)->func_name, "test_recursive_call")
+    << DumpFrames(backtrace);
 }
 
 void VerifyMaxBacktrace(void*) {
@@ -205,6 +212,7 @@ TEST(libbacktrace, local_no_unwind_frames) {
   // Verify that a local unwind does not include any frames within
   // libunwind or libbacktrace.
   std::unique_ptr<Backtrace> backtrace(Backtrace::Create(getpid(), getpid()));
+  ASSERT_TRUE(backtrace.get() != nullptr);
   ASSERT_TRUE(backtrace->Unwind(0));
 
   ASSERT_TRUE(backtrace->NumFrames() != 0);
@@ -225,8 +233,10 @@ TEST(libbacktrace, local_trace) {
 void VerifyIgnoreFrames(
     Backtrace* bt_all, Backtrace* bt_ign1,
     Backtrace* bt_ign2, const char* cur_proc) {
-  EXPECT_EQ(bt_all->NumFrames(), bt_ign1->NumFrames() + 1);
-  EXPECT_EQ(bt_all->NumFrames(), bt_ign2->NumFrames() + 2);
+  EXPECT_EQ(bt_all->NumFrames(), bt_ign1->NumFrames() + 1)
+    << "All backtrace:\n" << DumpFrames(bt_all) << "Ignore 1 backtrace:\n" << DumpFrames(bt_ign1);
+  EXPECT_EQ(bt_all->NumFrames(), bt_ign2->NumFrames() + 2)
+    << "All backtrace:\n" << DumpFrames(bt_all) << "Ignore 2 backtrace:\n" << DumpFrames(bt_ign2);
 
   // Check all of the frames are the same > the current frame.
   bool check = (cur_proc == nullptr);
@@ -284,6 +294,7 @@ void VerifyProcTest(pid_t pid, pid_t tid, bool share_map,
   }
   uint64_t start = NanoTime();
   bool verified = false;
+  std::string last_dump;
   do {
     usleep(US_PER_MSEC);
     if (ptrace(PTRACE_ATTACH, ptrace_tid, 0, 0) == 0) {
@@ -295,18 +306,20 @@ void VerifyProcTest(pid_t pid, pid_t tid, bool share_map,
         map.reset(BacktraceMap::Create(pid));
       }
       std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, tid, map.get()));
-      ASSERT_TRUE(backtrace->Unwind(0));
       ASSERT_TRUE(backtrace.get() != nullptr);
+      ASSERT_TRUE(backtrace->Unwind(0));
       if (ReadyFunc(backtrace.get())) {
         VerifyFunc(backtrace.get());
         verified = true;
+      } else {
+        last_dump = DumpFrames(backtrace.get());
       }
 
       ASSERT_TRUE(ptrace(PTRACE_DETACH, ptrace_tid, 0, 0) == 0);
     }
     // If 5 seconds have passed, then we are done.
   } while (!verified && (NanoTime() - start) <= 5 * NS_PER_SEC);
-  ASSERT_TRUE(verified);
+  ASSERT_TRUE(verified) << "Last backtrace:\n" << last_dump;
 }
 
 TEST(libbacktrace, ptrace_trace) {
@@ -698,16 +711,19 @@ TEST(libbacktrace, simultaneous_maps) {
   BacktraceMap* map3 = BacktraceMap::Create(getpid());
 
   Backtrace* back1 = Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD, map1);
+  ASSERT_TRUE(back1 != nullptr);
   EXPECT_TRUE(back1->Unwind(0));
   delete back1;
   delete map1;
 
   Backtrace* back2 = Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD, map2);
+  ASSERT_TRUE(back2 != nullptr);
   EXPECT_TRUE(back2->Unwind(0));
   delete back2;
   delete map2;
 
   Backtrace* back3 = Backtrace::Create(getpid(), BACKTRACE_CURRENT_THREAD, map3);
+  ASSERT_TRUE(back3 != nullptr);
   EXPECT_TRUE(back3->Unwind(0));
   delete back3;
   delete map3;
@@ -989,6 +1005,7 @@ TEST(libbacktrace, process_read) {
       WaitForStop(pid);
 
       std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, pid));
+      ASSERT_TRUE(backtrace.get() != nullptr);
 
       uintptr_t read_addr;
       size_t bytes_read = backtrace->Read(reinterpret_cast<uintptr_t>(&g_ready),
