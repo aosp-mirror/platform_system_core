@@ -34,6 +34,11 @@ enum LogSeverity {
   FATAL,
 };
 
+enum LogId {
+  MAIN,
+  SYSTEM,
+};
+
 // Configure logging based on ANDROID_LOG_TAGS environment variable.
 // We need to parse a string that looks like
 //
@@ -60,15 +65,26 @@ extern const char* ProgramInvocationShortName();
 // FATAL it also causes an abort. For example:
 //
 //     LOG(FATAL) << "We didn't expect to reach here";
-#define LOG(severity)                                                        \
-  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::severity, \
-                              -1).stream()
+#define LOG(severity)                                                    \
+  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::MAIN, \
+                              ::android::base::severity, -1).stream()
+
+// Logs a message to logcat with the specified log ID on Android otherwise to
+// stderr. If the severity is FATAL it also causes an abort.
+#define LOG_TO(dest, severity)                                           \
+  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::dest, \
+                              ::android::base::severity, -1).stream()
 
 // A variant of LOG that also logs the current errno value. To be used when
 // library calls fail.
-#define PLOG(severity)                                                       \
-  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::severity, \
-                              errno).stream()
+#define PLOG(severity)                                                   \
+  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::MAIN, \
+                              ::android::base::severity, errno).stream()
+
+// Behaves like PLOG, but logs to the specified log ID.
+#define PLOG_TO(dest, severity)                                          \
+  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::dest, \
+                              ::android::base::severity, errno).stream()
 
 // Marker that code is yet to be implemented.
 #define UNIMPLEMENTED(level) \
@@ -80,20 +96,20 @@ extern const char* ProgramInvocationShortName();
 //
 //     CHECK(false == true) results in a log message of
 //       "Check failed: false == true".
-#define CHECK(x)                                                            \
-  if (UNLIKELY(!(x)))                                                       \
-    ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::FATAL, \
-                                -1).stream()                                \
-        << "Check failed: " #x << " "
+#define CHECK(x)                                                         \
+  if (UNLIKELY(!(x)))                                                    \
+  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::MAIN, \
+                              ::android::base::FATAL, -1).stream()       \
+      << "Check failed: " #x << " "
 
 // Helper for CHECK_xx(x,y) macros.
-#define CHECK_OP(LHS, RHS, OP)                                                \
-  for (auto _values = ::android::base::MakeEagerEvaluator(LHS, RHS);          \
-       UNLIKELY(!(_values.lhs OP _values.rhs));                               \
-       /* empty */)                                                           \
-  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::FATAL, -1) \
-          .stream()                                                           \
-      << "Check failed: " << #LHS << " " << #OP << " " << #RHS                \
+#define CHECK_OP(LHS, RHS, OP)                                           \
+  for (auto _values = ::android::base::MakeEagerEvaluator(LHS, RHS);     \
+       UNLIKELY(!(_values.lhs OP _values.rhs));                          \
+       /* empty */)                                                      \
+  ::android::base::LogMessage(__FILE__, __LINE__, ::android::base::MAIN, \
+                              ::android::base::FATAL, -1).stream()       \
+      << "Check failed: " << #LHS << " " << #OP << " " << #RHS           \
       << " (" #LHS "=" << _values.lhs << ", " #RHS "=" << _values.rhs << ") "
 
 // Check whether a condition holds between x and y, LOG(FATAL) if not. The value
@@ -228,8 +244,8 @@ class LogMessageData;
 // of a CHECK. The destructor will abort if the severity is FATAL.
 class LogMessage {
  public:
-  LogMessage(const char* file, unsigned int line, LogSeverity severity,
-             int error);
+  LogMessage(const char* file, unsigned int line, LogId id,
+             LogSeverity severity, int error);
 
   ~LogMessage();
 
@@ -238,8 +254,8 @@ class LogMessage {
   std::ostream& stream();
 
   // The routine that performs the actual logging.
-  static void LogLine(const char* file, unsigned int line, LogSeverity severity,
-                      const char* msg);
+  static void LogLine(const char* file, unsigned int line, LogId id,
+                      LogSeverity severity, const char* msg);
 
  private:
   const std::unique_ptr<LogMessageData> data_;
