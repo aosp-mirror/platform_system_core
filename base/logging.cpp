@@ -16,6 +16,15 @@
 
 #include "base/logging.h"
 
+#include <libgen.h>
+
+// For getprogname(3) or program_invocation_short_name.
+#if defined(__ANDROID__) || defined(__APPLE__)
+#include <stdlib.h>
+#elif defined(__GLIBC__)
+#include <errno.h>
+#endif
+
 #include <iostream>
 #include <limits>
 #include <mutex>
@@ -47,25 +56,22 @@ static LogFunction gLogger = LogdLogger();
 static LogFunction gLogger = StderrLogger;
 #endif
 
+static bool gInitialized = false;
 static LogSeverity gMinimumLogSeverity = INFO;
-static std::unique_ptr<std::string> gCmdLine;
 static std::unique_ptr<std::string> gProgramInvocationName;
-static std::unique_ptr<std::string> gProgramInvocationShortName;
 
-const char* GetCmdLine() {
-  return (gCmdLine.get() != nullptr) ? gCmdLine->c_str() : nullptr;
+#if defined(__GLIBC__)
+static const char* getprogname() {
+  return program_invocation_short_name;
 }
+#endif
 
-const char* ProgramInvocationName() {
-  return (gProgramInvocationName.get() != nullptr)
-             ? gProgramInvocationName->c_str()
-             : "unknown";
-}
+static const char* ProgramInvocationName() {
+  if (gProgramInvocationName == nullptr) {
+    gProgramInvocationName.reset(new std::string(getprogname()));
+  }
 
-const char* ProgramInvocationShortName() {
-  return (gProgramInvocationShortName.get() != nullptr)
-             ? gProgramInvocationShortName->c_str()
-             : "unknown";
+  return gProgramInvocationName->c_str();
 }
 
 void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
@@ -73,7 +79,7 @@ void StderrLogger(LogId, LogSeverity severity, const char*, const char* file,
   static const char* log_characters = "VDIWEF";
   CHECK_EQ(strlen(log_characters), FATAL + 1U);
   char severity_char = log_characters[severity];
-  fprintf(stderr, "%s %c %5d %5d %s:%u] %s\n", ProgramInvocationShortName(),
+  fprintf(stderr, "%s %c %5d %5d %s:%u] %s\n", ProgramInvocationName(),
           severity_char, getpid(), gettid(), file, line, message);
 }
 
@@ -121,27 +127,19 @@ void InitLogging(char* argv[], LogFunction&& logger) {
 }
 
 void InitLogging(char* argv[]) {
-  if (gCmdLine.get() != nullptr) {
+  if (gInitialized) {
     return;
   }
+
+  gInitialized = true;
 
   // Stash the command line for later use. We can use /proc/self/cmdline on
   // Linux to recover this, but we don't have that luxury on the Mac, and there
   // are a couple of argv[0] variants that are commonly used.
   if (argv != nullptr) {
-    gCmdLine.reset(new std::string(argv[0]));
-    for (size_t i = 1; argv[i] != nullptr; ++i) {
-      gCmdLine->append(" ");
-      gCmdLine->append(argv[i]);
-    }
-    gProgramInvocationName.reset(new std::string(argv[0]));
-    const char* last_slash = strrchr(argv[0], '/');
-    gProgramInvocationShortName.reset(
-        new std::string((last_slash != nullptr) ? last_slash + 1 : argv[0]));
-  } else {
-    // TODO: fall back to /proc/self/cmdline when argv is NULL on Linux.
-    gCmdLine.reset(new std::string("<unset>"));
+    gProgramInvocationName.reset(new std::string(basename(argv[0])));
   }
+
   const char* tags = getenv("ANDROID_LOG_TAGS");
   if (tags == nullptr) {
     return;
@@ -288,7 +286,7 @@ std::ostream& LogMessage::stream() {
 
 void LogMessage::LogLine(const char* file, unsigned int line, LogId id,
                          LogSeverity severity, const char* message) {
-  const char* tag = ProgramInvocationShortName();
+  const char* tag = ProgramInvocationName();
   std::lock_guard<std::mutex> lock(logging_lock);
   gLogger(id, severity, tag, file, line, message);
 }
