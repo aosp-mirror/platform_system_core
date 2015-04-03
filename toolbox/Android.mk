@@ -60,7 +60,6 @@ OUR_TOOLS := \
     start \
     stop \
     top \
-    umount \
     uptime \
     watchprops \
 
