@@ -154,68 +154,6 @@ int do_exec(int nargs, char** args) {
     return 0;
 }
 
-// TODO: remove execonce when exec is available.
-int do_execonce(int nargs, char **args)
-{
-    pid_t child;
-    int child_status = 0;
-    static int already_done;
-
-    if (already_done) {
-      return -1;
-    }
-    already_done = 1;
-    if (!(child = fork())) {
-        /*
-         * Child process.
-         */
-        zap_stdio();
-        char *exec_args[100];
-        size_t num_process_args = nargs;
-
-        memset(exec_args, 0, sizeof(exec_args));
-        if (num_process_args > ARRAY_SIZE(exec_args) - 1) {
-            ERROR("exec called with %zu args, limit is %zu", num_process_args,
-                  ARRAY_SIZE(exec_args) - 1);
-            _exit(1);
-        }
-        for (size_t i = 1; i < num_process_args; i++)
-            exec_args[i - 1] = args[i];
-
-        if (execv(exec_args[0], exec_args) == -1) {
-            ERROR("Failed to execv '%s' (%s)", exec_args[0], strerror(errno));
-            _exit(1);
-        }
-        ERROR("Returned from execv()!");
-        _exit(1);
-    }
-
-    /*
-     * Parent process.
-     */
-    if (child == -1) {
-        ERROR("Fork failed\n");
-        return -1;
-    }
-
-    if (TEMP_FAILURE_RETRY(waitpid(child, &child_status, 0)) == -1) {
-        ERROR("waitpid(): failed (%s)\n", strerror(errno));
-        return -1;
-    }
-
-    if (WIFSIGNALED(child_status)) {
-        INFO("Child exited due to signal %d\n", WTERMSIG(child_status));
-        return -1;
-    } else if (WIFEXITED(child_status)) {
-        INFO("Child exited normally (exit code %d)\n", WEXITSTATUS(child_status));
-        return WEXITSTATUS(child_status);
-    }
-
-    ERROR("Abnormal child process exit\n");
-
-    return -1;
-}
-
 int do_export(int nargs, char **args)
 {
     return add_environment(args[1], args[2]);
