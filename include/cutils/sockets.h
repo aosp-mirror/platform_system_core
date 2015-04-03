@@ -18,6 +18,7 @@
 #define __CUTILS_SOCKETS_H
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -46,30 +47,19 @@ extern "C" {
  */
 static inline int android_get_control_socket(const char *name)
 {
-	char key[64] = ANDROID_SOCKET_ENV_PREFIX;
-	const char *val;
-	int fd;
+	char key[64];
+	snprintf(key, sizeof(key), ANDROID_SOCKET_ENV_PREFIX "%s", name);
 
-	/* build our environment variable, counting cycles like a wolf ... */
-#if HAVE_STRLCPY
-	strlcpy(key + sizeof(ANDROID_SOCKET_ENV_PREFIX) - 1,
-		name,
-		sizeof(key) - sizeof(ANDROID_SOCKET_ENV_PREFIX));
-#else	/* for the host, which may lack the almightly strncpy ... */
-	strncpy(key + sizeof(ANDROID_SOCKET_ENV_PREFIX) - 1,
-		name,
-		sizeof(key) - sizeof(ANDROID_SOCKET_ENV_PREFIX));
-	key[sizeof(key)-1] = '\0';
-#endif
-
-	val = getenv(key);
-	if (!val)
+	const char* val = getenv(key);
+	if (!val) {
 		return -1;
+	}
 
 	errno = 0;
-	fd = strtol(val, NULL, 10);
-	if (errno)
+	int fd = strtol(val, NULL, 10);
+	if (errno) {
 		return -1;
+	}
 
 	return fd;
 }
