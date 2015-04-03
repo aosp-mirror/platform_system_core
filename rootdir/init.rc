@@ -605,6 +605,10 @@ service bootanim /system/bin/bootanimation
     disabled
     oneshot
 
+service gatekeeperd /system/bin/gatekeeperd
+    class main
+    user system
+
 service installd /system/bin/installd
     class main
     socket installd stream 600 system system
