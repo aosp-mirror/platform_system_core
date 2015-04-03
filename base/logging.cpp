@@ -245,50 +245,6 @@ void LogMessage::LogLine(const char* file, unsigned int line,
 #endif
 }
 
-void LogMessage::LogLineLowStack(const char* file, unsigned int line,
-                                 LogSeverity log_severity, const char* message) {
-#ifdef __ANDROID__
-  // Use android_writeLog() to avoid stack-based buffers used by
-  // android_printLog().
-  const char* tag = ProgramInvocationShortName();
-  int priority = kLogSeverityToAndroidLogPriority[log_severity];
-  char* buf = nullptr;
-  size_t buf_size = 0u;
-  if (priority == ANDROID_LOG_FATAL) {
-    // Allocate buffer for snprintf(buf, buf_size, "%s:%u] %s", file, line,
-    // message) below.  If allocation fails, fall back to printing only the
-    // message.
-    buf_size = strlen(file) + 1 /* ':' */ +
-               std::numeric_limits<typeof(line)>::max_digits10 + 2 /* "] " */ +
-               strlen(message) + 1 /* terminating 0 */;
-    buf = reinterpret_cast<char*>(malloc(buf_size));
-  }
-  if (buf != nullptr) {
-    snprintf(buf, buf_size, "%s:%u] %s", file, line, message);
-    android_writeLog(priority, tag, buf);
-    free(buf);
-  } else {
-    android_writeLog(priority, tag, message);
-  }
-#else
-  static const char* log_characters = "VDIWEF";
-  CHECK_EQ(strlen(log_characters), FATAL + 1U);
-
-  const char* program_name = ProgramInvocationShortName();
-  write(STDERR_FILENO, program_name, strlen(program_name));
-  write(STDERR_FILENO, " ", 1);
-  write(STDERR_FILENO, &log_characters[log_severity], 1);
-  write(STDERR_FILENO, " ", 1);
-  // TODO: pid and tid.
-  write(STDERR_FILENO, file, strlen(file));
-  // TODO: line.
-  UNUSED(line);
-  write(STDERR_FILENO, "] ", 2);
-  write(STDERR_FILENO, message, strlen(message));
-  write(STDERR_FILENO, "\n", 1);
-#endif
-}
-
 ScopedLogSeverity::ScopedLogSeverity(LogSeverity level) {
   old_ = gMinimumLogSeverity;
   gMinimumLogSeverity = level;
