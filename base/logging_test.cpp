@@ -61,7 +61,7 @@ class CapturedStderr {
   int old_stderr_;
 };
 
-HOST_TEST(logging, CHECK) {
+TEST(logging, CHECK) {
   ASSERT_DEATH(CHECK(false), "Check failed: false ");
   CHECK(true);
 
@@ -82,7 +82,7 @@ std::string make_log_pattern(android::base::LogSeverity severity,
       log_char, message);
 }
 
-HOST_TEST(logging, LOG) {
+TEST(logging, LOG) {
   ASSERT_DEATH(LOG(FATAL) << "foobar", "foobar");
 
   {
@@ -136,7 +136,7 @@ HOST_TEST(logging, LOG) {
   }
 }
 
-HOST_TEST(logging, PLOG) {
+TEST(logging, PLOG) {
   {
     CapturedStderr cap;
     errno = ENOENT;
@@ -152,7 +152,7 @@ HOST_TEST(logging, PLOG) {
   }
 }
 
-HOST_TEST(logging, UNIMPLEMENTED) {
+TEST(logging, UNIMPLEMENTED) {
   {
     CapturedStderr cap;
     errno = ENOENT;
