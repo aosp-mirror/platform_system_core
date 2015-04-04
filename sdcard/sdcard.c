@@ -197,6 +197,8 @@ struct node {
      * position. Used to support things like OBB. */
     char* graft_path;
     size_t graft_pathlen;
+
+    bool deleted;
 };
 
 static int str_hash(void *key) {
@@ -616,6 +618,8 @@ struct node *create_node_locked(struct fuse* fuse,
     node->ino = fuse->inode_ctr++;
     node->gen = fuse->next_generation++;
 
+    node->deleted = false;
+
     derive_permissions_locked(fuse, parent, node);
     acquire_node_locked(node);
     add_node_to_parent_locked(node, parent);
@@ -689,7 +693,7 @@ static struct node *lookup_child_by_name_locked(struct node *node, const char *n
          * must be considered distinct even if they refer to the same
          * underlying file as otherwise operations such as "mv x x"
          * will not work because the source and target nodes are the same. */
-        if (!strcmp(name, node->name)) {
+        if (!strcmp(name, node->name) && !node->deleted) {
             return node;
         }
     }
@@ -1056,6 +1060,7 @@ static int handle_unlink(struct fuse* fuse, struct fuse_handler* handler,
 {
     bool has_rw;
     struct node* parent_node;
+    struct node* child_node;
     char parent_path[PATH_MAX];
     char child_path[PATH_MAX];
 
@@ -1077,6 +1082,12 @@ static int handle_unlink(struct fuse* fuse, struct fuse_handler* handler,
     if (unlink(child_path) < 0) {
         return -errno;
     }
+    pthread_mutex_lock(&fuse->lock);
+    child_node = lookup_child_by_name_locked(parent_node, name);
+    if (child_node) {
+        child_node->deleted = true;
+    }
+    pthread_mutex_unlock(&fuse->lock);
     return 0;
 }
 
@@ -1084,6 +1095,7 @@ static int handle_rmdir(struct fuse* fuse, struct fuse_handler* handler,
         const struct fuse_in_header* hdr, const char* name)
 {
     bool has_rw;
+    struct node* child_node;
     struct node* parent_node;
     char parent_path[PATH_MAX];
     char child_path[PATH_MAX];
@@ -1106,6 +1118,12 @@ static int handle_rmdir(struct fuse* fuse, struct fuse_handler* handler,
     if (rmdir(child_path) < 0) {
         return -errno;
     }
+    pthread_mutex_lock(&fuse->lock);
+    child_node = lookup_child_by_name_locked(parent_node, name);
+    if (child_node) {
+        child_node->deleted = true;
+    }
+    pthread_mutex_unlock(&fuse->lock);
     return 0;
 }
 
