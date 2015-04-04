@@ -182,10 +182,6 @@ exec [ <seclabel> [ <user> [ <group> ]* ] ] -- <command> [ <argument> ]*
    groups can be provided. No other commands will be run until this one
    finishes.
 
-execonce <path> [ <argument> ]*
-   Use exec instead. This command will be removed after existing callers have
-   moved to exec.
-
 export <name> <value>
    Set the environment variable <name> equal to <value> in the
    global environment (which will be inherited by all processes
