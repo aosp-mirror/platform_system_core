@@ -256,29 +256,25 @@ void stdin_raw_restore(int fd);
 }
 
 #else
-static struct termios tio_save;
+static termios g_saved_terminal_state;
 
-static void stdin_raw_init(int fd)
-{
-    struct termios tio;
+static void stdin_raw_init(int fd) {
+    if (tcgetattr(fd, &g_saved_terminal_state)) return;
 
-    if(tcgetattr(fd, &tio)) return;
-    if(tcgetattr(fd, &tio_save)) return;
+    termios tio;
+    if (tcgetattr(fd, &tio)) return;
 
-    tio.c_lflag = 0; /* disable CANON, ECHO*, etc */
+    cfmakeraw(&tio);
 
-        /* no timeout but request at least one character per read */
+    // No timeout but request at least one character per read.
     tio.c_cc[VTIME] = 0;
     tio.c_cc[VMIN] = 1;
 
-    tcsetattr(fd, TCSANOW, &tio);
-    tcflush(fd, TCIFLUSH);
+    tcsetattr(fd, TCSAFLUSH, &tio);
 }
 
-static void stdin_raw_restore(int fd)
-{
-    tcsetattr(fd, TCSANOW, &tio_save);
-    tcflush(fd, TCIFLUSH);
+static void stdin_raw_restore(int fd) {
+    tcsetattr(fd, TCSAFLUSH, &g_saved_terminal_state);
 }
 #endif
 
