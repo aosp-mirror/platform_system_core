@@ -79,18 +79,6 @@ extern void InitLogging(char* argv[]);
 // Replace the current logger.
 extern void SetLogger(LogFunction&& logger);
 
-// Returns the command line used to invoke the current tool or nullptr if
-// InitLogging hasn't been performed.
-extern const char* GetCmdLine();
-
-// The command used to start the program, such as "/system/bin/dalvikvm". If
-// InitLogging hasn't been performed then just returns "unknown"
-extern const char* ProgramInvocationName();
-
-// A short version of the command used to start the program, such as "dalvikvm".
-// If InitLogging hasn't been performed then just returns "unknown"
-extern const char* ProgramInvocationShortName();
-
 // Logs a message to logcat on Android otherwise to stderr. If the severity is
 // FATAL it also causes an abort. For example:
 //
