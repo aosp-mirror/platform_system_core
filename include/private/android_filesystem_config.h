@@ -22,6 +22,7 @@
 #ifndef _ANDROID_FILESYSTEM_CONFIG_H_
 #define _ANDROID_FILESYSTEM_CONFIG_H_
 
+#include <sys/cdefs.h>
 #include <sys/types.h>
 #include <stdint.h>
 
@@ -199,9 +200,7 @@ struct fs_path_config {
 
 /* Rules for directories and files has moved to system/code/libcutils/fs_config.c */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+__BEGIN_DECLS
 
 /*
  * Used in:
@@ -216,9 +215,7 @@ extern "C" {
 void fs_config(const char *path, int dir,
                unsigned *uid, unsigned *gid, unsigned *mode, uint64_t *capabilities);
 
-#ifdef __cplusplus
-}
-#endif
+__END_DECLS
 
 #endif
 #endif
