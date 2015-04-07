@@ -51,6 +51,8 @@
 #define METADATA_TAG_MAX_LENGTH 63
 #define METADATA_EOD "eod"
 
+#define VERITY_LASTSIG_TAG "verity_lastsig"
+
 #define VERITY_STATE_TAG "verity_state"
 #define VERITY_STATE_HEADER 0x83c0ae9d
 #define VERITY_STATE_VERSION 1
@@ -179,8 +181,12 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
     int protocol_version;
     int device;
     int retval = FS_MGR_SETUP_VERITY_FAIL;
-    *signature = 0;
-    *table = 0;
+
+    *signature = NULL;
+
+    if (table) {
+        *table = NULL;
+    }
 
     device = TEMP_FAILURE_RETRY(open(block_device, O_RDONLY | O_CLOEXEC));
     if (device == -1) {
@@ -241,6 +247,11 @@ static int read_verity_metadata(char *block_device, char **signature, char **tab
         goto out;
     }
 
+    if (!table) {
+        retval = FS_MGR_SETUP_VERITY_SUCCESS;
+        goto out;
+    }
+
     // get the size of the table
     if (TEMP_FAILURE_RETRY(read(device, &table_length, sizeof(table_length))) !=
             sizeof(table_length)) {
@@ -268,10 +279,13 @@ out:
         TEMP_FAILURE_RETRY(close(device));
 
     if (retval != FS_MGR_SETUP_VERITY_SUCCESS) {
-        free(*table);
         free(*signature);
-        *table = 0;
-        *signature = 0;
+        *signature = NULL;
+
+        if (table) {
+            free(*table);
+            *table = NULL;
+        }
     }
 
     return retval;
@@ -642,12 +656,94 @@ out:
     return rc;
 }
 
+static int compare_last_signature(struct fstab_rec *fstab, int *match)
+{
+    char tag[METADATA_TAG_MAX_LENGTH + 1];
+    char *signature = NULL;
+    int fd = -1;
+    int rc = -1;
+    uint8_t curr[SHA256_DIGEST_SIZE];
+    uint8_t prev[SHA256_DIGEST_SIZE];
+    off64_t offset = 0;
+
+    *match = 1;
+
+    if (read_verity_metadata(fstab->blk_device, &signature, NULL) < 0) {
+        ERROR("Failed to read verity signature from %s\n", fstab->mount_point);
+        goto out;
+    }
+
+    SHA256_hash(signature, RSANUMBYTES, curr);
+
+    if (snprintf(tag, sizeof(tag), VERITY_LASTSIG_TAG "_%s",
+            basename(fstab->mount_point)) >= (int)sizeof(tag)) {
+        ERROR("Metadata tag name too long for %s\n", fstab->mount_point);
+        goto out;
+    }
+
+    if (metadata_find(fstab->verity_loc, tag, SHA256_DIGEST_SIZE,
+            &offset) < 0) {
+        goto out;
+    }
+
+    fd = TEMP_FAILURE_RETRY(open(fstab->verity_loc, O_RDWR | O_SYNC | O_CLOEXEC));
+
+    if (fd == -1) {
+        ERROR("Failed to open %s: %s\n", fstab->verity_loc, strerror(errno));
+        goto out;
+    }
+
+    if (TEMP_FAILURE_RETRY(pread64(fd, prev, sizeof(prev),
+            offset)) != sizeof(prev)) {
+        ERROR("Failed to read %zu bytes from %s offset %" PRIu64 " (%s)\n",
+            sizeof(prev), fstab->verity_loc, offset, strerror(errno));
+        goto out;
+    }
+
+    *match = !memcmp(curr, prev, SHA256_DIGEST_SIZE);
+
+    if (!*match) {
+        /* update current signature hash */
+        if (TEMP_FAILURE_RETRY(pwrite64(fd, curr, sizeof(curr),
+                offset)) != sizeof(curr)) {
+            ERROR("Failed to write %zu bytes to %s offset %" PRIu64 " (%s)\n",
+                sizeof(curr), fstab->verity_loc, offset, strerror(errno));
+            goto out;
+        }
+    }
+
+    rc = 0;
+
+out:
+    free(signature);
+
+    if (fd != -1) {
+        TEMP_FAILURE_RETRY(close(fd));
+    }
+
+    return rc;
+}
+
+static int get_verity_state_offset(struct fstab_rec *fstab, off64_t *offset)
+{
+    char tag[METADATA_TAG_MAX_LENGTH + 1];
+
+    if (snprintf(tag, sizeof(tag), VERITY_STATE_TAG "_%s",
+            basename(fstab->mount_point)) >= (int)sizeof(tag)) {
+        ERROR("Metadata tag name too long for %s\n", fstab->mount_point);
+        return -1;
+    }
+
+    return metadata_find(fstab->verity_loc, tag, sizeof(struct verity_state),
+                offset);
+}
+
 static int load_verity_state(struct fstab_rec *fstab, int *mode)
 {
     off64_t offset = 0;
+    int match = 0;
 
-    if (metadata_find(fstab->verity_loc, VERITY_STATE_TAG,
-            sizeof(struct verity_state), &offset) < 0) {
+    if (get_verity_state_offset(fstab, &offset) < 0) {
         /* fall back to stateless behavior */
         *mode = VERITY_MODE_EIO;
         return 0;
@@ -660,6 +756,12 @@ static int load_verity_state(struct fstab_rec *fstab, int *mode)
         return write_verity_state(fstab->verity_loc, offset, *mode);
     }
 
+    if (!compare_last_signature(fstab, &match) && !match) {
+        /* partition has been reflashed, reset dm-verity state */
+        *mode = VERITY_MODE_DEFAULT;
+        return write_verity_state(fstab->verity_loc, offset, *mode);
+    }
+
     return read_verity_state(fstab->verity_loc, offset, mode);
 }
 
@@ -669,8 +771,11 @@ int fs_mgr_load_verity_state(int *mode)
     char propbuf[PROPERTY_VALUE_MAX];
     int rc = -1;
     int i;
+    int current;
     struct fstab *fstab = NULL;
 
+    /* return the default mode, unless any of the verified partitions are in
+     * logging mode, in which case return that */
     *mode = VERITY_MODE_DEFAULT;
 
     property_get("ro.hardware", propbuf, "");
@@ -688,20 +793,16 @@ int fs_mgr_load_verity_state(int *mode)
             continue;
         }
 
-        rc = load_verity_state(&fstab->recs[i], mode);
+        rc = load_verity_state(&fstab->recs[i], &current);
         if (rc < 0) {
             continue;
         }
 
-        /* if any of the verified partitions are in logging mode, return */
-        if (*mode == VERITY_MODE_LOGGING) {
-            rc = 0;
-            goto out;
+        if (current == VERITY_MODE_LOGGING) {
+            *mode = current;
         }
     }
 
-    /* if there were multiple partitions, all in non-logging mode, return the
-     * state of the last one */
     rc = 0;
 
 out:
@@ -749,12 +850,8 @@ int fs_mgr_update_verity_state(fs_mgr_verity_state_callback callback)
             continue;
         }
 
-        if (metadata_find(fstab->recs[i].verity_loc, VERITY_STATE_TAG,
-                sizeof(struct verity_state), &offset) < 0) {
-            continue;
-        }
-
-        if (read_verity_state(fstab->recs[i].verity_loc, offset, &mode) < 0) {
+        if (get_verity_state_offset(&fstab->recs[i], &offset) < 0 ||
+            read_verity_state(fstab->recs[i].verity_loc, offset, &mode) < 0) {
             continue;
         }
 
