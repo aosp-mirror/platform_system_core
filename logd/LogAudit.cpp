@@ -150,9 +150,9 @@ int LogAudit::logPrint(const char *fmt, ...) {
         rc = -ENOMEM;
     } else {
         event->header.tag = htole32(AUDITD_LOG_TAG);
-        event->payload.type = EVENT_TYPE_STRING;
-        event->payload.length = htole32(l);
-        memcpy(event->payload.data, str, l);
+        event->type = EVENT_TYPE_STRING;
+        event->length = htole32(l);
+        memcpy(event->data, str, l);
 
         logbuf->log(LOG_ID_EVENTS, now, uid, pid, tid,
                     reinterpret_cast<char *>(event),
