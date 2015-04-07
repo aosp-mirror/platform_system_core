@@ -54,7 +54,6 @@ OUR_TOOLS := \
     ps \
     prlimit \
     renice \
-    restorecon \
     sendevent \
     setprop \
     start \
