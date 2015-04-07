@@ -72,6 +72,7 @@ on init
     mkdir /mnt/media_rw 0750 root media_rw
     mkdir /mnt/user 0755 root root
     mkdir /mnt/user/0 0755 root root
+    mkdir /mnt/expand 0771 system system
 
     # sdcard_r is GID 1028
     mkdir /storage 0751 root sdcard_r
