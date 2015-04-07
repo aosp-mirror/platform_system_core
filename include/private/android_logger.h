@@ -70,7 +70,17 @@ typedef struct __attribute__((__packed__)) {
     android_event_long_t payload;
 } android_log_event_long_t;
 
-/* Event payload EVENT_TYPE_STRING */
+/*
+ * Event payload EVENT_TYPE_STRING
+ *
+ * Danger: do not embed this structure into another structure.
+ * This structure uses a flexible array member, and when
+ * compiled using g++, __builtin_object_size(data, 1) returns
+ * a bad value. This is possibly a g++ bug, or a bug due to
+ * the fact that flexible array members are not supported
+ * in C++.
+ * http://stackoverflow.com/questions/4412749/are-flexible-array-members-valid-in-c
+ */
 typedef struct __attribute__((__packed__)) {
     int8_t type;    // EVENT_TYPE_STRING;
     int32_t length; // Little Endian Order
@@ -80,7 +90,9 @@ typedef struct __attribute__((__packed__)) {
 /* Event with single EVENT_TYPE_STRING */
 typedef struct __attribute__((__packed__)) {
     android_event_header_t header;
-    android_event_string_t payload;
+    int8_t type;    // EVENT_TYPE_STRING;
+    int32_t length; // Little Endian Order
+    char data[];
 } android_log_event_string_t;
 
 #endif
