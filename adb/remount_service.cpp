@@ -112,13 +112,13 @@ void remount_service(int fd, void* cookie) {
     }
 
     bool system_verified = false, vendor_verified = false;
-    property_get("partition.system.verified", prop_buf, "0");
-    if (!strcmp(prop_buf, "1")) {
+    property_get("partition.system.verified", prop_buf, "");
+    if (strlen(prop_buf) > 0) {
         system_verified = true;
     }
 
-    property_get("partition.vendor.verified", prop_buf, "0");
-    if (!strcmp(prop_buf, "1")) {
+    property_get("partition.vendor.verified", prop_buf, "");
+    if (strlen(prop_buf) > 0) {
         vendor_verified = true;
     }
 
