@@ -55,7 +55,6 @@ OUR_TOOLS := \
     prlimit \
     renice \
     sendevent \
-    setprop \
     start \
     stop \
     top \
