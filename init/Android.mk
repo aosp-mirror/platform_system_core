@@ -58,7 +58,6 @@ LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
 LOCAL_STATIC_LIBRARIES := \
     libinit \
     libfs_mgr \
-    libsquashfs_utils \
     liblogwrap \
     libcutils \
     libbase \
