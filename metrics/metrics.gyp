@@ -83,7 +83,7 @@
       'target_name': 'metrics_proto',
       'type': 'static_library',
       'variables': {
-        'proto_in_dir': 'components/metrics/proto/',
+        'proto_in_dir': '../../components/metrics/proto/',
         'proto_out_dir': 'include/components/metrics/proto',
       },
       'sources': [
