@@ -38,7 +38,6 @@
 #include "mincrypt/sha256.h"
 
 #include "ext4_sb.h"
-#include "squashfs_utils.h"
 
 #include "fs_mgr_priv.h"
 #include "fs_mgr_priv_verity.h"
@@ -139,19 +138,7 @@ out:
     return retval;
 }
 
-static int squashfs_get_target_device_size(char *blk_device, uint64_t *device_size)
-{
-    struct squashfs_info sq_info;
-
-    if (squashfs_parse_sb(blk_device, &sq_info) >= 0) {
-        *device_size = sq_info.bytes_used_4K_padded;
-        return 0;
-    } else {
-        return -1;
-    }
-}
-
-static int ext4_get_target_device_size(char *blk_device, uint64_t *device_size)
+static int get_target_device_size(char *blk_device, uint64_t *device_size)
 {
     int data_device;
     struct ext4_super_block sb;
@@ -184,11 +171,11 @@ static int ext4_get_target_device_size(char *blk_device, uint64_t *device_size)
     return 0;
 }
 
-static int read_verity_metadata(uint64_t device_size, char *block_device, char **signature,
-        char **table)
+static int read_verity_metadata(char *block_device, char **signature, char **table)
 {
     unsigned magic_number;
     unsigned table_length;
+    uint64_t device_length;
     int protocol_version;
     int device;
     int retval = FS_MGR_SETUP_VERITY_FAIL;
@@ -201,7 +188,12 @@ static int read_verity_metadata(uint64_t device_size, char *block_device, char *
         goto out;
     }
 
-    if (TEMP_FAILURE_RETRY(lseek64(device, device_size, SEEK_SET)) < 0) {
+    // find the start of the verity metadata
+    if (get_target_device_size(block_device, &device_length) < 0) {
+        ERROR("Could not get target device size.\n");
+        goto out;
+    }
+    if (TEMP_FAILURE_RETRY(lseek64(device, device_length, SEEK_SET)) < 0) {
         ERROR("Could not seek to start of verity metadata block.\n");
         goto out;
     }
@@ -222,7 +214,8 @@ static int read_verity_metadata(uint64_t device_size, char *block_device, char *
 #endif
 
     if (magic_number != VERITY_METADATA_MAGIC_NUMBER) {
-        ERROR("Couldn't find verity metadata at offset %"PRIu64"!\n", device_size);
+        ERROR("Couldn't find verity metadata at offset %"PRIu64"!\n",
+              device_length);
         goto out;
     }
 
@@ -323,12 +316,17 @@ static int get_verity_device_name(struct dm_ioctl *io, char *name, int fd, char 
     return 0;
 }
 
-static int load_verity_table(struct dm_ioctl *io, char *name, uint64_t device_size, int fd, char *table,
+static int load_verity_table(struct dm_ioctl *io, char *name, char *blockdev, int fd, char *table,
         int mode)
 {
     char *verity_params;
     char *buffer = (char*) io;
     size_t bufsize;
+    uint64_t device_size = 0;
+
+    if (get_target_device_size(blockdev, &device_size) < 0) {
+        return -1;
+    }
 
     verity_ioctl_init(io, name, DM_STATUS_TABLE_FLAG);
 
@@ -800,7 +798,6 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     char *verity_blk_name = 0;
     char *verity_table = 0;
     char *verity_table_signature = 0;
-    uint64_t device_size = 0;
 
     _Alignas(struct dm_ioctl) char buffer[DM_BUF_SIZE];
     struct dm_ioctl *io = (struct dm_ioctl *) buffer;
@@ -810,26 +807,16 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     io->flags |= 1;
     io->target_count = 1;
 
-    // check the verity device's filesystem
-    if (!strcmp(fstab->fs_type, "ext4")) {
-        if (ext4_get_target_device_size(fstab->blk_device, &device_size) < 0) {
-            ERROR("Failed to get ext4 fs size on %s.", fstab->blk_device);
-            return retval;
-        }
-    } else if (!strcmp(fstab->fs_type, "squashfs")) {
-        if (squashfs_get_target_device_size(fstab->blk_device, &device_size) < 0) {
-            ERROR("Failed to get squashfs fs size on %s.", fstab->blk_device);
-            return retval;
-        }
-    } else {
-        ERROR("%s: Unsupported filesystem for verity.", fstab->fs_type);
+    // check to ensure that the verity device is ext4
+    // TODO: support non-ext4 filesystems
+    if (strcmp(fstab->fs_type, "ext4")) {
+        ERROR("Cannot verify non-ext4 device (%s)", fstab->fs_type);
         return retval;
     }
 
     // read the verity block at the end of the block device
     // send error code up the chain so we can detect attempts to disable verity
-    retval = read_verity_metadata(device_size,
-                                  fstab->blk_device,
+    retval = read_verity_metadata(fstab->blk_device,
                                   &verity_table_signature,
                                   &verity_table);
     if (retval < 0) {
@@ -874,7 +861,7 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     INFO("Enabling dm-verity for %s (mode %d)\n",  mount_point, mode);
 
     // load the verity mapping table
-    if (load_verity_table(io, mount_point, device_size, fd, verity_table,
+    if (load_verity_table(io, mount_point, fstab->blk_device, fd, verity_table,
             mode) < 0) {
         goto out;
     }
