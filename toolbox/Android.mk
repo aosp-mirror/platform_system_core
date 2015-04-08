@@ -41,7 +41,6 @@ BSD_TOOLS := \
 OUR_TOOLS := \
     df \
     getevent \
-    getprop \
     iftop \
     ioctl \
     ionice \
