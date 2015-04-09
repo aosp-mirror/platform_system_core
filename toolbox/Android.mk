@@ -63,7 +63,6 @@ OUR_TOOLS := \
 ALL_TOOLS = $(BSD_TOOLS) $(OUR_TOOLS)
 
 LOCAL_SRC_FILES := \
-    dynarray.c \
     toolbox.c \
     $(patsubst %,%.c,$(OUR_TOOLS)) \
 
