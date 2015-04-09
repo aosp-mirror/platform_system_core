@@ -330,8 +330,7 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
                 }
                 android::String8 name("  PID/UID");
                 android::String8 size("Size");
-                android::String8 pruned("Pruned");
-                format_line(output, name, size, pruned);
+                format_line(output, name, size);
                 headerPrinted = true;
             }
 
