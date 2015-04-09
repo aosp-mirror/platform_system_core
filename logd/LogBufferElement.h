@@ -24,6 +24,14 @@
 #include <log/log.h>
 #include <log/log_read.h>
 
+namespace android {
+
+// Furnished in main.cpp. Caller must own and free returned value
+// This function is designed for a single caller and is NOT thread-safe
+char *uidToName(uid_t uid);
+
+}
+
 class LogBufferElement {
     const log_id_t mLogId;
     const uid_t mUid;
