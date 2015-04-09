@@ -1,0 +1,20 @@
+cc_library_shared {
+    srcs: ["sync.c"],
+    name: "libsync",
+    shared_libs: ["liblog"],
+    local_include_dirs: ["include"],
+    export_include_dirs: ["include"],
+    cflags: ["-Werror"],
+}
+
+cc_binary {
+    srcs: [
+        "sync.c",
+        "sync_test.c",
+    ],
+    name: "sync_test",
+    tags: ["tests"],
+    shared_libs: ["liblog"],
+    local_include_dirs: ["include"],
+    cflags: ["-Werror"],
+}
