@@ -161,7 +161,11 @@ char *LogStatistics::uidToName(uid_t uid) {
         ++info;
     }
 
-    char *name = NULL;
+    // Parse /data/system/packages.list
+    char *name = android::uidToName(uid);
+    if (name) {
+        return name;
+    }
 
     // report uid -> pid(s) -> pidToName if unique
     ssize_t index = -1;

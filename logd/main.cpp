@@ -143,6 +143,10 @@ static bool property_get_bool(const char *key, bool def) {
 //   write(fdDmesg, "I am here\n", 10);
 static int fdDmesg = -1;
 
+static sem_t uidName;
+static uid_t uid;
+static char *name;
+
 static sem_t reinit;
 static bool reinit_running = false;
 static LogBuffer *logBuf = NULL;
@@ -151,10 +155,45 @@ static void *reinit_thread_start(void * /*obj*/) {
     prctl(PR_SET_NAME, "logd.daemon");
     set_sched_policy(0, SP_BACKGROUND);
 
-    setgid(AID_LOGD);
-    setuid(AID_LOGD);
+    setgid(AID_SYSTEM);
+    setuid(AID_SYSTEM);
 
     while (reinit_running && !sem_wait(&reinit) && reinit_running) {
+
+        // uidToName Privileged Worker
+        if (uid) {
+            name = NULL;
+
+            FILE *fp = fopen("/data/system/packages.list", "r");
+            if (fp) {
+                // This simple parser is sensitive to format changes in
+                // frameworks/base/services/core/java/com/android/server/pm/Settings.java
+                // A dependency note has been added to that file to correct
+                // this parser.
+
+                char *buffer = NULL;
+                size_t len;
+                while (getline(&buffer, &len, fp) > 0) {
+                    char *userId = strchr(buffer, ' ');
+                    if (!userId) {
+                        continue;
+                    }
+                    *userId = '\0';
+                    unsigned long value = strtoul(userId + 1, NULL, 10);
+                    if (value != uid) {
+                        continue;
+                    }
+                    name = strdup(buffer);
+                    break;
+                }
+                free(buffer);
+                fclose(fp);
+            }
+            uid = 0;
+            sem_post(&uidName);
+            continue;
+        }
+
         if (fdDmesg >= 0) {
             static const char reinit_message[] = { KMSG_PRIORITY(LOG_INFO),
                 'l', 'o', 'g', 'd', '.', 'd', 'a', 'e', 'm', 'o', 'n', ':',
@@ -169,6 +208,20 @@ static void *reinit_thread_start(void * /*obj*/) {
     }
 
     return NULL;
+}
+
+char *android::uidToName(uid_t u) {
+    if (!u || !reinit_running) {
+        return NULL;
+    }
+
+    // Not multi-thread safe, we know there is only one caller
+    uid = u;
+
+    name = NULL;
+    sem_post(&reinit);
+    sem_wait(&uidName);
+    return name;
 }
 
 // Serves as a global method to trigger reinitialization
@@ -223,6 +276,7 @@ int main(int argc, char *argv[]) {
 
     // Reinit Thread
     sem_init(&reinit, 0, 0);
+    sem_init(&uidName, 0, 0);
     pthread_attr_t attr;
     if (!pthread_attr_init(&attr)) {
         struct sched_param param;
