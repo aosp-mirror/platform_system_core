@@ -16,7 +16,6 @@
 
 #include <ctype.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/user.h>
 #include <time.h>
@@ -281,15 +280,14 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
         size_t second_worst_sizes = 0;
 
         if ((id != LOG_ID_CRASH) && mPrune.worstUidEnabled()) {
-            const UidEntry **sorted = stats.sort(2, id);
+            std::unique_ptr<const UidEntry *[]> sorted = stats.sort(2, id);
 
-            if (sorted) {
+            if (sorted.get()) {
                 if (sorted[0] && sorted[1]) {
                     worst = sorted[0]->getKey();
                     worst_sizes = sorted[0]->getSizes();
                     second_worst_sizes = sorted[1]->getSizes();
                 }
-                delete [] sorted;
             }
         }
 
