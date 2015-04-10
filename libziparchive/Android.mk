@@ -21,7 +21,7 @@ include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
 LOCAL_STATIC_LIBRARIES := libz
-LOCAL_SHARED_LIBRARIES := libutils
+LOCAL_SHARED_LIBRARIES := libutils libbase
 LOCAL_MODULE:= libziparchive
 LOCAL_CFLAGS := -Werror -Wall
 LOCAL_CPPFLAGS := -Wold-style-cast
@@ -30,7 +30,7 @@ include $(BUILD_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
-LOCAL_STATIC_LIBRARIES := libz libutils
+LOCAL_STATIC_LIBRARIES := libz libutils libbase
 LOCAL_MODULE:= libziparchive-host
 LOCAL_CFLAGS := -Werror
 ifneq ($(strip $(USE_MINGW)),)
@@ -43,7 +43,7 @@ include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_SRC_FILES := ${source_files}
 LOCAL_STATIC_LIBRARIES := libz libutils
-LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_SHARED_LIBRARIES := liblog libbase
 LOCAL_MODULE:= libziparchive-host
 LOCAL_CFLAGS := -Werror
 LOCAL_MULTILIB := both
@@ -55,7 +55,7 @@ LOCAL_MODULE := ziparchive-tests
 LOCAL_CPP_EXTENSION := .cc
 LOCAL_CFLAGS := -Werror
 LOCAL_SRC_FILES := zip_archive_test.cc entry_name_utils_test.cc
-LOCAL_SHARED_LIBRARIES := liblog
+LOCAL_SHARED_LIBRARIES := liblog libbase
 LOCAL_STATIC_LIBRARIES := libziparchive libz libutils
 include $(BUILD_NATIVE_TEST)
 
@@ -66,7 +66,7 @@ LOCAL_CFLAGS += \
     -Werror \
     -Wno-unnamed-type-template-args
 LOCAL_SRC_FILES := zip_archive_test.cc entry_name_utils_test.cc
-LOCAL_SHARED_LIBRARIES := libziparchive-host liblog
+LOCAL_SHARED_LIBRARIES := libziparchive-host liblog libbase
 LOCAL_STATIC_LIBRARIES := \
     libz \
     libutils

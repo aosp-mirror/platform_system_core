@@ -18,38 +18,35 @@
  * Read-only access to Zip archives, with minimal heap allocation.
  */
 
-#include <memory>
-#include <vector>
-
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
-#include <log/log.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <utils/Compat.h>
-#include <utils/FileMap.h>
-#include <zlib.h>
 
-#include <JNIHelp.h>  // TEMP_FAILURE_RETRY may or may not be in unistd
+#include <memory>
+#include <vector>
+
+#include "base/macros.h"  // TEMP_FAILURE_RETRY may or may not be in unistd
+#include "base/memory.h"
+#include "log/log.h"
+#include "utils/Compat.h"
+#include "utils/FileMap.h"
+#include "zlib.h"
 
 #include "entry_name_utils-inl.h"
 #include "ziparchive/zip_archive.h"
 
+using android::base::get_unaligned;
 
 // This is for windows. If we don't open a file in binary mode, weird
 // things will happen.
 #ifndef O_BINARY
 #define O_BINARY 0
 #endif
-
-#define DISALLOW_IMPLICIT_CONSTRUCTORS(TypeName) \
-    TypeName(); \
-    TypeName(const TypeName&); \
-    void operator=(const TypeName&)
 
 // The "end of central directory" (EOCD) record. Each archive
 // contains exactly once such record which appears at the end of
@@ -462,10 +459,12 @@ static int32_t MapCentralDirectory0(int fd, const char* debug_file_name,
    */
   int i = read_amount - sizeof(EocdRecord);
   for (; i >= 0; i--) {
-    if (scan_buffer[i] == 0x50 &&
-        ((*reinterpret_cast<uint32_t*>(&scan_buffer[i])) == EocdRecord::kSignature)) {
-      ALOGV("+++ Found EOCD at buf+%d", i);
-      break;
+    if (scan_buffer[i] == 0x50) {
+      uint32_t* sig_addr = reinterpret_cast<uint32_t*>(&scan_buffer[i]);
+      if (get_unaligned<uint32_t>(sig_addr) == EocdRecord::kSignature) {
+        ALOGV("+++ Found EOCD at buf+%d", i);
+        break;
+      }
     }
   }
   if (i < 0) {
