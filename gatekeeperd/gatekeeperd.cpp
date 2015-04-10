@@ -71,7 +71,7 @@ public:
         return ret >= 0 ? NO_ERROR : UNKNOWN_ERROR;
     }
 
-    virtual status_t verify(uint32_t uid,
+    virtual status_t verify(uint32_t uid, uint64_t challenge,
             const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
             const uint8_t *provided_password, uint32_t provided_password_length) {
         IPCThreadState* ipc = IPCThreadState::self();
@@ -87,7 +87,7 @@ public:
 
         uint8_t *auth_token;
         uint32_t auth_token_length;
-        int ret = device->verify(device, uid,
+        int ret = device->verify(device, uid, challenge,
                 enrolled_password_handle, enrolled_password_handle_length,
                 provided_password, provided_password_length, &auth_token, &auth_token_length);
 

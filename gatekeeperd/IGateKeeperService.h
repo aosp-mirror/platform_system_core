@@ -51,7 +51,7 @@ public:
      * Verifies a password previously enrolled with the GateKeeper.
      * Returns 0 on success, negative on failure.
      */
-    virtual status_t verify(uint32_t uid,
+    virtual status_t verify(uint32_t uid, uint64_t challenge,
             const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
             const uint8_t *provided_password, uint32_t provided_password_length) = 0;
 };

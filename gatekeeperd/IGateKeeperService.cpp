@@ -68,6 +68,7 @@ status_t BnGateKeeperService::onTransact(
         case VERIFY: {
             CHECK_INTERFACE(IGateKeeperService, data, reply);
             uint32_t uid = data.readInt32();
+            uint64_t challenge = data.readInt64();
             ssize_t currentPasswordHandleSize = data.readInt32();
             const uint8_t *currentPasswordHandle =
                     static_cast<const uint8_t *>(data.readInplace(currentPasswordHandleSize));
@@ -78,8 +79,8 @@ status_t BnGateKeeperService::onTransact(
                 static_cast<const uint8_t *>(data.readInplace(currentPasswordSize));
             if (!currentPassword) currentPasswordSize = 0;
 
-            status_t ret = verify(uid, (uint8_t *) currentPasswordHandle, currentPasswordHandleSize,
-                    (uint8_t *) currentPassword, currentPasswordSize);
+            status_t ret = verify(uid, challenge, (uint8_t *) currentPasswordHandle,
+                    currentPasswordHandleSize, (uint8_t *) currentPassword, currentPasswordSize);
             reply->writeNoException();
             reply->writeInt32(ret == NO_ERROR ? 1 : 0);
             return NO_ERROR;
