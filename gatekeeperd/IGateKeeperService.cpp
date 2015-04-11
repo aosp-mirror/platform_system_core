@@ -68,6 +68,25 @@ status_t BnGateKeeperService::onTransact(
         case VERIFY: {
             CHECK_INTERFACE(IGateKeeperService, data, reply);
             uint32_t uid = data.readInt32();
+            ssize_t currentPasswordHandleSize = data.readInt32();
+            const uint8_t *currentPasswordHandle =
+                    static_cast<const uint8_t *>(data.readInplace(currentPasswordHandleSize));
+            if (!currentPasswordHandle) currentPasswordHandleSize = 0;
+
+            ssize_t currentPasswordSize = data.readInt32();
+            const uint8_t *currentPassword =
+                static_cast<const uint8_t *>(data.readInplace(currentPasswordSize));
+            if (!currentPassword) currentPasswordSize = 0;
+
+            status_t ret = verify(uid, (uint8_t *) currentPasswordHandle,
+                    currentPasswordHandleSize, (uint8_t *) currentPassword, currentPasswordSize);
+            reply->writeNoException();
+            reply->writeInt32(ret == NO_ERROR ? 1 : 0);
+            return NO_ERROR;
+        }
+        case VERIFY_CHALLENGE: {
+            CHECK_INTERFACE(IGateKeeperService, data, reply);
+            uint32_t uid = data.readInt32();
             uint64_t challenge = data.readInt64();
             ssize_t currentPasswordHandleSize = data.readInt32();
             const uint8_t *currentPasswordHandle =
@@ -79,10 +98,21 @@ status_t BnGateKeeperService::onTransact(
                 static_cast<const uint8_t *>(data.readInplace(currentPasswordSize));
             if (!currentPassword) currentPasswordSize = 0;
 
-            status_t ret = verify(uid, challenge, (uint8_t *) currentPasswordHandle,
-                    currentPasswordHandleSize, (uint8_t *) currentPassword, currentPasswordSize);
+
+            uint8_t *out = NULL;
+            uint32_t outSize = 0;
+            status_t ret = verifyChallenge(uid, challenge, (uint8_t *) currentPasswordHandle,
+                    currentPasswordHandleSize, (uint8_t *) currentPassword, currentPasswordSize,
+                    &out, &outSize);
             reply->writeNoException();
-            reply->writeInt32(ret == NO_ERROR ? 1 : 0);
+            if (ret == NO_ERROR && outSize > 0 && out != NULL) {
+                reply->writeInt32(outSize);
+                void *buf = reply->writeInplace(outSize);
+                memcpy(buf, out, outSize);
+                free(out);
+            } else {
+                reply->writeInt32(-1);
+            }
             return NO_ERROR;
         }
         default:

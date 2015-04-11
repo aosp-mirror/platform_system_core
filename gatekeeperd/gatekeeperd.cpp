@@ -71,9 +71,20 @@ public:
         return ret >= 0 ? NO_ERROR : UNKNOWN_ERROR;
     }
 
-    virtual status_t verify(uint32_t uid, uint64_t challenge,
+    virtual status_t verify(uint32_t uid,
             const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
             const uint8_t *provided_password, uint32_t provided_password_length) {
+        uint8_t *auth_token;
+        uint32_t auth_token_length;
+        return verifyChallenge(uid, 0, enrolled_password_handle, enrolled_password_handle_length,
+                provided_password, provided_password_length,
+                &auth_token, &auth_token_length);
+    }
+
+    virtual status_t verifyChallenge(uint32_t uid, uint64_t challenge,
+            const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
+            const uint8_t *provided_password, uint32_t provided_password_length,
+            uint8_t **auth_token, uint32_t *auth_token_length) {
         IPCThreadState* ipc = IPCThreadState::self();
         const int calling_pid = ipc->getCallingPid();
         const int calling_uid = ipc->getCallingUid();
@@ -85,19 +96,17 @@ public:
         if ((enrolled_password_handle_length | provided_password_length) == 0)
             return -EINVAL;
 
-        uint8_t *auth_token;
-        uint32_t auth_token_length;
         int ret = device->verify(device, uid, challenge,
                 enrolled_password_handle, enrolled_password_handle_length,
-                provided_password, provided_password_length, &auth_token, &auth_token_length);
+                provided_password, provided_password_length, auth_token, auth_token_length);
 
-        if (ret >= 0 && auth_token != NULL && auth_token_length > 0) {
+        if (ret >= 0 && *auth_token != NULL && *auth_token_length > 0) {
             // TODO: cache service?
             sp<IServiceManager> sm = defaultServiceManager();
             sp<IBinder> binder = sm->getService(String16("android.security.keystore"));
             sp<IKeystoreService> service = interface_cast<IKeystoreService>(binder);
             if (service != NULL) {
-                if (service->addAuthToken(auth_token, auth_token_length) != NO_ERROR) {
+                if (service->addAuthToken(*auth_token, *auth_token_length) != NO_ERROR) {
                     ALOGE("Falure sending auth token to KeyStore");
                 }
             } else {

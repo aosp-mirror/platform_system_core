@@ -30,6 +30,7 @@ public:
     enum {
         ENROLL = IBinder::FIRST_CALL_TRANSACTION + 0,
         VERIFY = IBinder::FIRST_CALL_TRANSACTION + 1,
+        VERIFY_CHALLENGE = IBinder::FIRST_CALL_TRANSACTION + 2,
     };
 
     // DECLARE_META_INTERFACE - C++ client interface not needed
@@ -51,9 +52,18 @@ public:
      * Verifies a password previously enrolled with the GateKeeper.
      * Returns 0 on success, negative on failure.
      */
-    virtual status_t verify(uint32_t uid, uint64_t challenge,
-            const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
+    virtual status_t verify(uint32_t uid, const uint8_t *enrolled_password_handle,
+            uint32_t enrolled_password_handle_length,
             const uint8_t *provided_password, uint32_t provided_password_length) = 0;
+
+    /**
+     * Verifies a password previously enrolled with the GateKeeper.
+     * Returns 0 on success, negative on failure.
+     */
+    virtual status_t verifyChallenge(uint32_t uid, uint64_t challenge,
+            const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
+            const uint8_t *provided_password, uint32_t provided_password_length,
+            uint8_t **auth_token, uint32_t *auth_token_length) = 0;
 };
 
 // ----------------------------------------------------------------------------
