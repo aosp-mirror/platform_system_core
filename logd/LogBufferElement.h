@@ -25,6 +25,9 @@
 #include <log/log.h>
 #include <log/log_read.h>
 
+// Hijack this header as a common include file used by most all sources
+// to report some utilities defined here and there.
+
 namespace android {
 
 // Furnished in main.cpp. Caller must own and free returned value
