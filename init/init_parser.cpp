@@ -946,7 +946,14 @@ static void *parse_action(struct parse_state *state, int nargs, char **args)
     for (i = 1; i < nargs; i++) {
         if (!(i % 2)) {
             if (strcmp(args[i], "&&")) {
+                struct listnode *node;
+                struct listnode *node2;
                 parse_error(state, "& is the only symbol allowed to concatenate actions\n");
+                list_for_each_safe(node, node2, &act->triggers) {
+                    struct trigger *trigger = node_to_item(node, struct trigger, nlist);
+                    free(trigger);
+                }
+                free(act);
                 return 0;
             } else
                 continue;
