@@ -69,7 +69,9 @@ LOCAL_STATIC_LIBRARIES := \
     libselinux \
     libmincrypt \
     libc++_static \
-    libdl
+    libdl \
+    libsparse_static \
+    libz
 
 # Create symlinks
 LOCAL_POST_INSTALL_CMD := $(hide) mkdir -p $(TARGET_ROOT_OUT)/sbin; \
