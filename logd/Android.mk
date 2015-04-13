@@ -32,8 +32,9 @@ LOCAL_SHARED_LIBRARIES := \
 #        "s/^\([0-9]*\)[ \t]*$1[ \t].*/-D`echo $1 | tr a-z A-Z`_LOG_TAG=\1/p" \
 #        $(LOCAL_PATH)/$2/event.logtags)
 #  event_flag := $(call event_logtags,auditd)
+#  event_flag += $(call event_logtags,logd)
 # so make sure we do not regret hard-coding it as follows:
-event_flag := -DAUDITD_LOG_TAG=1003
+event_flag := -DAUDITD_LOG_TAG=1003 -DLOGD_LOG_TAG=1004
 
 LOCAL_CFLAGS := -Werror $(event_flag)
 

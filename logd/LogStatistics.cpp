@@ -71,16 +71,19 @@ void LogStatistics::add(LogBufferElement *e) {
     ++mElements[log_id];
 
     uid_t uid = e->getUid();
+    unsigned short dropped = e->getDropped();
     android::hash_t hash = android::hash_type(uid);
     uidTable_t &table = uidTable[log_id];
     ssize_t index = table.find(-1, hash, uid);
     if (index == -1) {
         UidEntry initEntry(uid);
         initEntry.add(size);
+        initEntry.add_dropped(dropped);
         table.add(hash, initEntry);
     } else {
         UidEntry &entry = table.editEntryAt(index);
         entry.add(size);
+        entry.add_dropped(dropped);
     }
 
     mSizesTotal[log_id] += size;
@@ -96,6 +99,7 @@ void LogStatistics::add(LogBufferElement *e) {
     if (index == -1) {
         PidEntry initEntry(pid, uid, android::pidToName(pid));
         initEntry.add(size);
+        initEntry.add_dropped(dropped);
         pidTable.add(hash, initEntry);
     } else {
         PidEntry &entry = pidTable.editEntryAt(index);
@@ -109,6 +113,7 @@ void LogStatistics::add(LogBufferElement *e) {
             }
         }
         entry.add(size);
+        entry.add_dropped(dropped);
     }
 }
 
@@ -119,12 +124,13 @@ void LogStatistics::subtract(LogBufferElement *e) {
     --mElements[log_id];
 
     uid_t uid = e->getUid();
+    unsigned short dropped = e->getDropped();
     android::hash_t hash = android::hash_type(uid);
     uidTable_t &table = uidTable[log_id];
     ssize_t index = table.find(-1, hash, uid);
     if (index != -1) {
         UidEntry &entry = table.editEntryAt(index);
-        if (entry.subtract(size)) {
+        if (entry.subtract(size) || entry.subtract_dropped(dropped)) {
             table.removeAt(index);
         }
     }
@@ -138,9 +144,40 @@ void LogStatistics::subtract(LogBufferElement *e) {
     index = pidTable.find(-1, hash, pid);
     if (index != -1) {
         PidEntry &entry = pidTable.editEntryAt(index);
-        if (entry.subtract(size)) {
+        if (entry.subtract(size) || entry.subtract_dropped(dropped)) {
             pidTable.removeAt(index);
         }
+    }
+}
+
+// Atomically set an entry to drop
+// entry->setDropped(1) must follow this call, caller should do this explicitly.
+void LogStatistics::drop(LogBufferElement *e) {
+    log_id_t log_id = e->getLogId();
+    unsigned short size = e->getMsgLen();
+    mSizes[log_id] -= size;
+
+    uid_t uid = e->getUid();
+    android::hash_t hash = android::hash_type(uid);
+    typeof uidTable[0] &table = uidTable[log_id];
+    ssize_t index = table.find(-1, hash, uid);
+    if (index != -1) {
+        UidEntry &entry = table.editEntryAt(index);
+        entry.subtract(size);
+        entry.add_dropped(1);
+    }
+
+    if (!enable) {
+        return;
+    }
+
+    pid_t pid = e->getPid();
+    hash = android::hash_type(pid);
+    index = pidTable.find(-1, hash, pid);
+    if (index != -1) {
+        PidEntry &entry = pidTable.editEntryAt(index);
+        entry.subtract(size);
+        entry.add_dropped(1);
     }
 }
 
@@ -191,12 +228,22 @@ char *LogStatistics::uidToName(uid_t uid) {
 }
 
 static void format_line(android::String8 &output,
-        android::String8 &name, android::String8 &size) {
-    static const size_t total_len = 70;
+        android::String8 &name, android::String8 &size, android::String8 &pruned) {
+    static const size_t pruned_len = 6;
+    static const size_t total_len = 70 + pruned_len;
 
-    output.appendFormat("%s%*s\n", name.string(),
-        (int)std::max(total_len - name.length() - 1, size.length() + 1),
-        size.string());
+    ssize_t drop_len = std::max(pruned.length() + 1, pruned_len);
+    ssize_t size_len = std::max(size.length() + 1,
+                                total_len - name.length() - drop_len - 1);
+
+    if (pruned.length()) {
+        output.appendFormat("%s%*s%*s\n", name.string(),
+                                          (int)size_len, size.string(),
+                                          (int)drop_len, pruned.string());
+    } else {
+        output.appendFormat("%s%*s\n", name.string(),
+                                       (int)size_len, size.string());
+    }
 }
 
 void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
@@ -285,14 +332,18 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
                     output.appendFormat(
                         "\n\nChattiest UIDs in %s:\n",
                         android_log_id_to_name(id));
-                    android::String8 name("UID");
-                    android::String8 size("Size");
-                    format_line(output, name, size);
                 } else {
                     output.appendFormat(
                         "\n\nLogging for your UID in %s:\n",
                         android_log_id_to_name(id));
                 }
+                android::String8 name("UID");
+                android::String8 size("Size");
+                android::String8 pruned("Pruned");
+                if (!worstUidEnabledForLogid(id)) {
+                    pruned.setTo("");
+                }
+                format_line(output, name, size, pruned);
                 headerPrinted = true;
             }
 
@@ -307,7 +358,13 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
             android::String8 size("");
             size.appendFormat("%zu", entry->getSizes());
 
-            format_line(output, name, size);
+            android::String8 pruned("");
+            size_t dropped = entry->getDropped();
+            if (dropped) {
+                pruned.appendFormat("%zu", dropped);
+            }
+
+            format_line(output, name, size, pruned);
         }
     }
 
@@ -330,7 +387,8 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
                 }
                 android::String8 name("  PID/UID");
                 android::String8 size("Size");
-                format_line(output, name, size);
+                android::String8 pruned("Pruned");
+                format_line(output, name, size, pruned);
                 headerPrinted = true;
             }
 
@@ -350,7 +408,13 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
             android::String8 size("");
             size.appendFormat("%zu", entry->getSizes());
 
-            format_line(output, name, size);
+            android::String8 pruned("");
+            size_t dropped = entry->getDropped();
+            if (dropped) {
+                pruned.appendFormat("%zu", dropped);
+            }
+
+            format_line(output, name, size, pruned);
         }
     }
 
