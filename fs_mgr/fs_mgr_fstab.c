@@ -70,6 +70,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "zramsize=",   MF_ZRAMSIZE },
     { "verify",      MF_VERIFY },
     { "noemulatedsd", MF_NOEMULATEDSD },
+    { "formattable", MF_FORMATTABLE },
     { "defaults",    0 },
     { 0,             0 },
 };
@@ -447,4 +448,9 @@ int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab)
 int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_NOEMULATEDSD;
+}
+
+int fs_mgr_is_formattable(struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & (MF_FORMATTABLE);
 }
