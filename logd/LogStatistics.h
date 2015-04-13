@@ -78,13 +78,18 @@ public:
 struct UidEntry {
     const uid_t uid;
     size_t size;
+    size_t dropped;
 
-    UidEntry(uid_t uid):uid(uid),size(0) { }
+    UidEntry(uid_t uid):uid(uid),size(0),dropped(0) { }
 
     inline const uid_t&getKey() const { return uid; }
     size_t getSizes() const { return size; }
+    size_t getDropped() const { return dropped; }
+
     inline void add(size_t s) { size += s; }
-    inline bool subtract(size_t s) { size -= s; return !size; }
+    inline void add_dropped(size_t d) { dropped += d; }
+    inline bool subtract(size_t s) { size -= s; return !dropped && !size; }
+    inline bool subtract_dropped(size_t d) { dropped -= d; return !dropped && !size; }
 };
 
 struct PidEntry {
@@ -92,13 +97,15 @@ struct PidEntry {
     uid_t uid;
     char *name;
     size_t size;
+    size_t dropped;
 
-    PidEntry(pid_t p, uid_t u, char *n):pid(p),uid(u),name(n),size(0) { }
+    PidEntry(pid_t p, uid_t u, char *n):pid(p),uid(u),name(n),size(0),dropped(0) { }
     PidEntry(const PidEntry &c):
         pid(c.pid),
         uid(c.uid),
         name(c.name ? strdup(c.name) : NULL),
-        size(c.size) { }
+        size(c.size),
+        dropped(c.dropped) { }
     ~PidEntry() { free(name); }
 
     const pid_t&getKey() const { return pid; }
@@ -107,8 +114,11 @@ struct PidEntry {
     const char*getName() const { return name; }
     char *setName(char *n) { free(name); return name = n; }
     size_t getSizes() const { return size; }
+    size_t getDropped() const { return dropped; }
     inline void add(size_t s) { size += s; }
-    inline bool subtract(size_t s) { size -= s; return !size; }
+    inline void add_dropped(size_t d) { dropped += d; }
+    inline bool subtract(size_t s) { size -= s; return !dropped && !size; }
+    inline bool subtract_dropped(size_t d) { dropped -= d; return !dropped && !size; }
 };
 
 // Log Statistics
@@ -134,6 +144,10 @@ public:
 
     void add(LogBufferElement *entry);
     void subtract(LogBufferElement *entry);
+    // entry->setDropped(1) must follow this call
+    void drop(LogBufferElement *entry);
+    // Correct for merging two entries referencing dropped content
+    void erase(LogBufferElement *e) { --mElements[e->getLogId()]; }
 
     std::unique_ptr<const UidEntry *[]> sort(size_t n, log_id i) { return uidTable[i].sort(n); }
 

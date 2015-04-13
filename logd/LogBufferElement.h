@@ -18,6 +18,7 @@
 #define _LOGD_LOG_BUFFER_ELEMENT_H__
 
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <sys/types.h>
 
 #include <sysutils/SocketClient.h>
@@ -32,16 +33,26 @@ char *uidToName(uid_t uid);
 
 }
 
+static inline bool worstUidEnabledForLogid(log_id_t id) {
+    return (id != LOG_ID_CRASH) && (id != LOG_ID_EVENTS);
+}
+
 class LogBufferElement {
     const log_id_t mLogId;
     const uid_t mUid;
     const pid_t mPid;
     const pid_t mTid;
     char *mMsg;
-    const unsigned short mMsgLen;
+    union {
+        const unsigned short mMsgLen; // mMSg != NULL
+        unsigned short mDropped;      // mMsg == NULL
+    };
     const uint64_t mSequence;
     const log_time mRealTime;
     static atomic_int_fast64_t sequence;
+
+    // assumption: mMsg == NULL
+    size_t populateDroppedMessage(char *&buffer, bool privileged);
 
 public:
     LogBufferElement(log_id_t log_id, log_time realtime,
@@ -53,7 +64,15 @@ public:
     uid_t getUid(void) const { return mUid; }
     pid_t getPid(void) const { return mPid; }
     pid_t getTid(void) const { return mTid; }
-    unsigned short getMsgLen() const { return mMsgLen; }
+    unsigned short getDropped(void) const { return mMsg ? 0 : mDropped; }
+    unsigned short setDropped(unsigned short value) {
+        if (mMsg) {
+            free(mMsg);
+            mMsg = NULL;
+        }
+        return mDropped = value;
+    }
+    unsigned short getMsgLen() const { return mMsg ? mMsgLen : 0; }
     uint64_t getSequence(void) const { return mSequence; }
     static uint64_t getCurrentSequence(void) { return sequence.load(memory_order_relaxed); }
     log_time getRealTime(void) const { return mRealTime; }
