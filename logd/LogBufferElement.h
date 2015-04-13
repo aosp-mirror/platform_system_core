@@ -36,6 +36,9 @@ char *uidToName(uid_t uid);
 // Furnished in LogStatistics.cpp. Caller must own and free returned value
 char *pidToName(pid_t pid);
 
+// Furnished in main.cpp. Thread safe.
+const char *tagToName(uint32_t tag);
+
 }
 
 static inline bool worstUidEnabledForLogid(log_id_t id) {
@@ -84,6 +87,8 @@ public:
     uint64_t getSequence(void) const { return mSequence; }
     static uint64_t getCurrentSequence(void) { return sequence.load(memory_order_relaxed); }
     log_time getRealTime(void) const { return mRealTime; }
+
+    uint32_t getTag(void) const;
 
     static const uint64_t FLUSH_ERROR;
     uint64_t flushTo(SocketClient *writer, LogBuffer *parent);

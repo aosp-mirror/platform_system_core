@@ -50,6 +50,13 @@ LogBufferElement::~LogBufferElement() {
     delete [] mMsg;
 }
 
+uint32_t LogBufferElement::getTag() const {
+    if ((mLogId != LOG_ID_EVENTS) || !mMsg || (mMsgLen < sizeof(uint32_t))) {
+        return 0;
+    }
+    return le32toh(reinterpret_cast<android_event_header_t *>(mMsg)->tag);
+}
+
 // caller must own and free character string
 static char *tidToName(pid_t tid) {
     char *retval = NULL;
