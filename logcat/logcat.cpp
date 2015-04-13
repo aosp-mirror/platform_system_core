@@ -342,12 +342,10 @@ static bool getSizeTArg(char *ptr, size_t *val, size_t min = 0,
 
 static void logcat_panic(bool showHelp, const char *fmt, ...)
 {
-    if (fmt) {
-        va_list  args;
-        va_start(args, fmt);
-        vfprintf(stderr, fmt,  args);
-        va_end(args);
-    }
+    va_list  args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt,  args);
+    va_end(args);
 
     if (showHelp) {
        show_help(getprogname());
