@@ -29,6 +29,8 @@
 
 #include "elf_utils.h"
 
+#define NOTE_ALIGN(size)  ((size + 3) & ~3)
+
 template <typename HdrType, typename PhdrType, typename NhdrType>
 static bool get_build_id(
     Backtrace* backtrace, uintptr_t base_addr, uint8_t* e_ident, std::string* build_id) {
@@ -60,7 +62,7 @@ static bool get_build_id(
         addr += sizeof(nhdr);
         if (nhdr.n_type == NT_GNU_BUILD_ID) {
           // Skip the name (which is the owner and should be "GNU").
-          addr += nhdr.n_namesz;
+          addr += NOTE_ALIGN(nhdr.n_namesz);
           uint8_t build_id_data[128];
           if (nhdr.n_namesz > sizeof(build_id_data)) {
             ALOGE("Possible corrupted note, name size value is too large: %u",
@@ -80,7 +82,7 @@ static bool get_build_id(
         } else {
           // Move past the extra note data.
           hdr_size -= sizeof(nhdr);
-          size_t skip_bytes = nhdr.n_namesz + nhdr.n_descsz;
+          size_t skip_bytes = NOTE_ALIGN(nhdr.n_namesz) + NOTE_ALIGN(nhdr.n_descsz);
           addr += skip_bytes;
           if (hdr_size < skip_bytes) {
             break;
