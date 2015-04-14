@@ -430,7 +430,7 @@ uid_t pidToUid(pid_t pid) {
     if (fp) {
         while (fgets(buffer, sizeof(buffer), fp)) {
             int uid;
-            if (sscanf(buffer, "Groups: %d", &uid) == 1) {
+            if (sscanf(buffer, "Uid: %d", &uid) == 1) {
                 fclose(fp);
                 return uid;
             }
