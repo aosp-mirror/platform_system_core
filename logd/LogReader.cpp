@@ -37,7 +37,11 @@ void LogReader::notifyNewLog() {
 }
 
 bool LogReader::onDataAvailable(SocketClient *cli) {
-    prctl(PR_SET_NAME, "logd.reader");
+    static bool name_set;
+    if (!name_set) {
+        prctl(PR_SET_NAME, "logd.reader");
+        name_set = true;
+    }
 
     char buffer[255];
 
