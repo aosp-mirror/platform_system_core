@@ -16,6 +16,7 @@ LOCAL_PATH := $(call my-dir)
 
 test_src_files := \
     test_str_parms.cpp \
+    EndianTest.cpp
 
 test_target_only_src_files := \
     MemsetTest.cpp \
