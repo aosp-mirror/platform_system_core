@@ -19,11 +19,35 @@
 ** by the device side of adb.
 */
 
-#include <stdint.h>
-#include <string.h>
-#include <sys/stat.h>
+#define LOG_TAG "fs_config"
 
+#define _GNU_SOURCE
+
+#include <endian.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include <cutils/fs.h>
+#include <log/log.h>
 #include <private/android_filesystem_config.h>
+
+/* The following structure is stored little endian */
+struct fs_path_config_from_file {
+    uint16_t len;
+    uint16_t mode;
+    uint16_t uid;
+    uint16_t gid;
+    uint64_t capabilities;
+    char prefix[];
+} __attribute__((__aligned__(sizeof(uint64_t))));
 
 /* Rules for directories.
 ** These rules are applied based on "first match", so they
@@ -61,6 +85,9 @@ static const struct fs_path_config android_dirs[] = {
 ** way up to the root. Prefixes ending in * denotes wildcard
 ** and will allow partial matches.
 */
+static const char conf_dir[] = "/system/etc/fs_config_dirs";
+static const char conf_file[] = "/system/etc/fs_config_files";
+
 static const struct fs_path_config android_files[] = {
     { 00440, AID_ROOT,      AID_SHELL,     0, "system/etc/init.goldfish.rc" },
     { 00550, AID_ROOT,      AID_SHELL,     0, "system/etc/init.goldfish.sh" },
@@ -68,6 +95,8 @@ static const struct fs_path_config android_files[] = {
     { 00550, AID_DHCP,      AID_SHELL,     0, "system/etc/dhcpcd/dhcpcd-run-hooks" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/ppp/*" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/rc.*" },
+    { 00444, AID_ROOT,      AID_ROOT,      0, conf_dir + 1 },
+    { 00444, AID_ROOT,      AID_ROOT,      0, conf_file + 1 },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app/*" },
     { 00644, AID_MEDIA_RW,  AID_MEDIA_RW,  0, "data/media/*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app-private/*" },
@@ -101,30 +130,114 @@ static const struct fs_path_config android_files[] = {
     { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
 };
 
+static int fs_config_open(int dir)
+{
+    int fd = -1;
+
+    const char *out = getenv("OUT");
+    if (out && *out) {
+        char *name = NULL;
+        asprintf(&name, "%s%s", out, dir ? conf_dir : conf_file);
+        if (name) {
+            fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY));
+            free(name);
+        }
+    }
+    if (fd < 0) {
+        fd = TEMP_FAILURE_RETRY(open(dir ? conf_dir : conf_file, O_RDONLY));
+    }
+    return fd;
+}
+
+static bool fs_config_cmp(bool dir, const char *prefix, size_t len,
+                                    const char *path, size_t plen)
+{
+    if (dir) {
+        if (plen < len) {
+            return false;
+        }
+    } else {
+        /* If name ends in * then allow partial matches. */
+        if (prefix[len - 1] == '*') {
+            return !strncmp(prefix, path, len - 1);
+        }
+        if (plen != len) {
+            return false;
+        }
+    }
+    return !strncmp(prefix, path, len);
+}
+
 void fs_config(const char *path, int dir,
                unsigned *uid, unsigned *gid, unsigned *mode, uint64_t *capabilities)
 {
     const struct fs_path_config *pc;
     int plen;
+    struct stat st;
+    void *address = NULL;
+
+    int fd = fs_config_open(dir);
+    if ((fd >= 0)
+     && (TEMP_FAILURE_RETRY(fstat(fd, &st)) >= 0)
+     && (size_t)st.st_size) {
+        address = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+        if (address == MAP_FAILED) {
+            address = NULL;
+        }
+    } else if (fd >= 0) {
+        close(fd);
+    }
 
     if (path[0] == '/') {
         path++;
     }
 
-    pc = dir ? android_dirs : android_files;
     plen = strlen(path);
-    for(; pc->prefix; pc++){
-        int len = strlen(pc->prefix);
-        if (dir) {
-            if(plen < len) continue;
-            if(!strncmp(pc->prefix, path, len)) break;
-            continue;
+
+    if (address) {
+        const struct fs_path_config_from_file *p = (const struct fs_path_config_from_file *)
+            address;
+        const char *end = (const char *)address + st.st_size;
+        const struct fs_path_config_from_file *e = (const struct fs_path_config_from_file *)
+            (end - sizeof(*p));
+        for (; p < e; p = (const struct fs_path_config_from_file *)(((const char *)p) + le16toh(p->len))) {
+            ssize_t len, remainder = le16toh(p->len) - sizeof(*p);
+            if (remainder <= 0) {
+                ALOGE("%s is truncated", dir ? conf_dir : conf_file);
+                p = e;
+                break;
+            }
+            len = (const char *)e - (const char *)p;
+            if (remainder > len) {
+                remainder = len;
+            }
+            len = strnlen(p->prefix, remainder);
+            if (len >= remainder) { /* missing a terminating null */
+                ALOGE("%s is corrupted", dir ? conf_dir : conf_file);
+                p = e;
+                break;
+            }
+            if (fs_config_cmp(dir, p->prefix, len, path, plen)) {
+                break;
+            }
         }
-        /* If name ends in * then allow partial matches. */
-        if (pc->prefix[len -1] == '*') {
-            if(!strncmp(pc->prefix, path, len - 1)) break;
-        } else if (plen == len){
-            if(!strncmp(pc->prefix, path, len)) break;
+        if (p < e) {
+            *uid = le16toh(p->uid);
+            *gid = le16toh(p->gid);
+            *mode = (*mode & (~07777)) | le16toh(p->mode);
+            *capabilities = le64toh(p->capabilities);
+        }
+        munmap(address, st.st_size);
+        close(fd);
+        if (p < e) {
+            return;
+        }
+    }
+
+    pc = dir ? android_dirs : android_files;
+    for(; pc->prefix; pc++){
+        if (fs_config_cmp(dir, pc->prefix, strlen(pc->prefix), path, plen)) {
+            break;
         }
     }
     *uid = pc->uid;
