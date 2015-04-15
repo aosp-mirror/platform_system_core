@@ -300,7 +300,8 @@ enum {
     NATIVE_WINDOW_SET_POST_TRANSFORM_CROP   = 16,   /* private */
     NATIVE_WINDOW_SET_BUFFERS_STICKY_TRANSFORM = 17,/* private */
     NATIVE_WINDOW_SET_SIDEBAND_STREAM       = 18,
-    NATIVE_WINDOW_SET_BUFFERS_DATASPACE     = 19
+    NATIVE_WINDOW_SET_BUFFERS_DATASPACE     = 19,
+    NATIVE_WINDOW_SET_SURFACE_DAMAGE        = 20,   /* private */
 };
 
 /* parameter for NATIVE_WINDOW_[API_][DIS]CONNECT */
@@ -493,31 +494,12 @@ struct ANativeWindow
      * DO NOT CALL THIS HOOK DIRECTLY.  Instead, use the helper functions
      * defined below.
      *
-     *  (*perform)() returns -ENOENT if the 'what' parameter is not supported
-     *  by the surface's implementation.
+     * (*perform)() returns -ENOENT if the 'what' parameter is not supported
+     * by the surface's implementation.
      *
-     * The valid operations are:
-     *     NATIVE_WINDOW_SET_USAGE
-     *     NATIVE_WINDOW_CONNECT               (deprecated)
-     *     NATIVE_WINDOW_DISCONNECT            (deprecated)
-     *     NATIVE_WINDOW_SET_CROP              (private)
-     *     NATIVE_WINDOW_SET_BUFFER_COUNT
-     *     NATIVE_WINDOW_SET_BUFFERS_GEOMETRY  (deprecated)
-     *     NATIVE_WINDOW_SET_BUFFERS_TRANSFORM
-     *     NATIVE_WINDOW_SET_BUFFERS_TIMESTAMP
-     *     NATIVE_WINDOW_SET_BUFFERS_DATASPACE
-     *     NATIVE_WINDOW_SET_BUFFERS_DIMENSIONS
-     *     NATIVE_WINDOW_SET_BUFFERS_FORMAT
-     *     NATIVE_WINDOW_SET_SCALING_MODE       (private)
-     *     NATIVE_WINDOW_LOCK                   (private)
-     *     NATIVE_WINDOW_UNLOCK_AND_POST        (private)
-     *     NATIVE_WINDOW_API_CONNECT            (private)
-     *     NATIVE_WINDOW_API_DISCONNECT         (private)
-     *     NATIVE_WINDOW_SET_BUFFERS_USER_DIMENSIONS (private)
-     *     NATIVE_WINDOW_SET_POST_TRANSFORM_CROP (private)
-     *
+     * See above for a list of valid operations, such as
+     * NATIVE_WINDOW_SET_USAGE or NATIVE_WINDOW_CONNECT
      */
-
     int     (*perform)(struct ANativeWindow* window,
                 int operation, ... );
 
@@ -932,6 +914,30 @@ static inline int native_window_set_sideband_stream(
 {
     return window->perform(window, NATIVE_WINDOW_SET_SIDEBAND_STREAM,
             sidebandHandle);
+}
+
+/*
+ * native_window_set_surface_damage(..., android_native_rect_t* rects, int numRects)
+ * Set the surface damage (i.e., the region of the surface that has changed
+ * since the previous frame). The damage set by this call will be reset (to the
+ * default of full-surface damage) after calling queue, so this must be called
+ * prior to every frame with damage that does not cover the whole surface if the
+ * caller desires downstream consumers to use this optimization.
+ *
+ * The damage region is specified as an array of rectangles, with the important
+ * caveat that the origin of the surface is considered to be the bottom-left
+ * corner, as in OpenGL ES.
+ *
+ * If numRects is set to 0, rects may be NULL, and the surface damage will be
+ * set to the full surface (the same as if this function had not been called for
+ * this frame).
+ */
+static inline int native_window_set_surface_damage(
+        struct ANativeWindow* window,
+        const android_native_rect_t* rects, size_t numRects)
+{
+    return window->perform(window, NATIVE_WINDOW_SET_SURFACE_DAMAGE,
+            rects, numRects);
 }
 
 __END_DECLS
