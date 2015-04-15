@@ -437,7 +437,7 @@ uid_t pidToUid(pid_t pid) {
         }
         fclose(fp);
     }
-    return getuid(); // associate this with the logger
+    return AID_LOGD; // associate this with the logger
 }
 
 }
