@@ -18,11 +18,11 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <cutils/atomic.h>
 #include <cutils/compiler.h>
 #include <cutils/properties.h>
 #include <cutils/trace.h>
@@ -37,11 +37,11 @@
  */
 #define ATRACE_MESSAGE_LENGTH 1024
 
-volatile int32_t        atrace_is_ready      = 0;
+atomic_bool             atrace_is_ready      = ATOMIC_VAR_INIT(false);
 int                     atrace_marker_fd     = -1;
 uint64_t                atrace_enabled_tags  = ATRACE_TAG_NOT_READY;
 static bool             atrace_is_debuggable = false;
-static volatile int32_t atrace_is_enabled    = 1;
+static atomic_bool      atrace_is_enabled    = ATOMIC_VAR_INIT(true);
 static pthread_once_t   atrace_once_control  = PTHREAD_ONCE_INIT;
 static pthread_mutex_t  atrace_tags_mutex    = PTHREAD_MUTEX_INITIALIZER;
 
@@ -58,7 +58,7 @@ void atrace_set_debuggable(bool debuggable)
 // the Zygote process from tracing.
 void atrace_set_tracing_enabled(bool enabled)
 {
-    android_atomic_release_store(enabled ? 1 : 0, &atrace_is_enabled);
+    atomic_store_explicit(&atrace_is_enabled, enabled, memory_order_release);
     atrace_update_tags();
 }
 
@@ -155,8 +155,8 @@ static uint64_t atrace_get_property()
 void atrace_update_tags()
 {
     uint64_t tags;
-    if (CC_UNLIKELY(android_atomic_acquire_load(&atrace_is_ready))) {
-        if (android_atomic_acquire_load(&atrace_is_enabled)) {
+    if (CC_UNLIKELY(atomic_load_explicit(&atrace_is_ready, memory_order_acquire))) {
+        if (atomic_load_explicit(&atrace_is_enabled, memory_order_acquire)) {
             tags = atrace_get_property();
             pthread_mutex_lock(&atrace_tags_mutex);
             atrace_enabled_tags = tags;
@@ -183,7 +183,7 @@ static void atrace_init_once()
     atrace_enabled_tags = atrace_get_property();
 
 done:
-    android_atomic_release_store(1, &atrace_is_ready);
+    atomic_store_explicit(&atrace_is_ready, true, memory_order_release);
 }
 
 void atrace_setup()
