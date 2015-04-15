@@ -57,7 +57,6 @@ libbacktrace_shared_libraries_target := \
 libbacktrace_shared_libraries := \
 	libbase \
 	libunwind \
-	libunwind-ptrace \
 
 libbacktrace_shared_libraries_host := \
 	liblog \
