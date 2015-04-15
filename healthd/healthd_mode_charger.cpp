@@ -88,7 +88,7 @@ struct frame {
     int min_capacity;
     bool level_only;
 
-    gr_surface surface;
+    GRSurface* surface;
 };
 
 struct animation {
@@ -115,7 +115,7 @@ struct charger {
     struct key_state keys[KEY_MAX + 1];
 
     struct animation *batt_anim;
-    gr_surface surf_unknown;
+    GRSurface* surf_unknown;
     int boot_min_cap;
 };
 
@@ -274,7 +274,7 @@ static void android_green(void)
 }
 
 /* returns the last y-offset of where the surface ends */
-static int draw_surface_centered(struct charger* /*charger*/, gr_surface surface)
+static int draw_surface_centered(struct charger* /*charger*/, GRSurface* surface)
 {
     int w;
     int h;
@@ -697,7 +697,7 @@ void healthd_mode_charger_init(struct healthd_config* config)
 
     charger->batt_anim = &battery_animation;
 
-    gr_surface* scale_frames;
+    GRSurface** scale_frames;
     int scale_count;
     ret = res_create_multi_display_surface("charger/battery_scale", &scale_count, &scale_frames);
     if (ret < 0) {
