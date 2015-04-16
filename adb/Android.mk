@@ -34,7 +34,7 @@ LIBADB_CFLAGS := \
 
 LIBADB_darwin_SRC_FILES := \
     fdevent.cpp \
-    get_my_path_darwin.c \
+    get_my_path_darwin.cpp \
     usb_osx.c \
 
 LIBADB_linux_SRC_FILES := \
