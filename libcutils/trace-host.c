@@ -20,7 +20,7 @@
 #define __unused __attribute__((__unused__))
 #endif
 
-volatile int32_t        atrace_is_ready      = 1;
+atomic_bool             atrace_is_ready      = ATOMIC_VAR_INIT(true);
 int                     atrace_marker_fd     = -1;
 uint64_t                atrace_enabled_tags  = 0;
 
