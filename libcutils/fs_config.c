@@ -37,6 +37,10 @@
 #include <private/android_filesystem_config.h>
 #include <utils/Compat.h>
 
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+
 /* The following structure is stored little endian */
 struct fs_path_config_from_file {
     uint16_t len;
@@ -154,12 +158,12 @@ static int fs_config_open(int dir)
         char *name = NULL;
         asprintf(&name, "%s%s", out, dir ? conf_dir : conf_file);
         if (name) {
-            fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY));
+            fd = TEMP_FAILURE_RETRY(open(name, O_RDONLY | O_BINARY));
             free(name);
         }
     }
     if (fd < 0) {
-        fd = TEMP_FAILURE_RETRY(open(dir ? conf_dir : conf_file, O_RDONLY));
+        fd = TEMP_FAILURE_RETRY(open(dir ? conf_dir : conf_file, O_RDONLY | O_BINARY));
     }
     return fd;
 }
