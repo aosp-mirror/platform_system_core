@@ -173,6 +173,17 @@ public:
         return read_sid(uid);
     }
 
+    virtual void clearSecureUserId(uint32_t uid) {
+        IPCThreadState* ipc = IPCThreadState::self();
+        const int calling_pid = ipc->getCallingPid();
+        const int calling_uid = ipc->getCallingUid();
+        if (!PermissionCache::checkPermission(KEYGUARD_PERMISSION, calling_pid, calling_uid)) {
+            ALOGE("%s: permission denied for [%d:%d]", __func__, calling_pid, calling_uid);
+            return;
+        }
+        store_sid(uid, 0);
+    }
+
     virtual status_t dump(int fd, const Vector<String16> &) {
         IPCThreadState* ipc = IPCThreadState::self();
         const int pid = ipc->getCallingPid();

@@ -123,6 +123,13 @@ status_t BnGateKeeperService::onTransact(
             reply->writeInt64(sid);
             return NO_ERROR;
         }
+        case CLEAR_SECURE_USER_ID: {
+            CHECK_INTERFACE(IGateKeeperService, data, reply);
+            uint32_t uid = data.readInt32();
+            clearSecureUserId(uid);
+            reply->writeNoException();
+            return NO_ERROR;
+        }
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }
