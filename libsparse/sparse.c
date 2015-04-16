@@ -238,14 +238,15 @@ static struct backed_block *move_chunks_up_to_len(struct sparse_file *from,
 	struct backed_block *last_bb = NULL;
 	struct backed_block *bb;
 	struct backed_block *start;
+	unsigned int last_block = 0;
 	int64_t file_len = 0;
 	int ret;
 
 	/*
-	 * overhead is sparse file header, initial skip chunk, split chunk, end
-	 * skip chunk, and crc chunk.
+	 * overhead is sparse file header, the potential end skip
+	 * chunk and crc chunk.
 	 */
-	int overhead = sizeof(sparse_header_t) + 4 * sizeof(chunk_header_t) +
+	int overhead = sizeof(sparse_header_t) + 2 * sizeof(chunk_header_t) +
 			sizeof(uint32_t);
 	len -= overhead;
 
@@ -258,6 +259,11 @@ static struct backed_block *move_chunks_up_to_len(struct sparse_file *from,
 
 	for (bb = start; bb; bb = backed_block_iter_next(bb)) {
 		count = 0;
+		if (backed_block_block(bb) > last_block)
+			count += sizeof(chunk_header_t);
+		last_block = backed_block_block(bb) +
+				DIV_ROUND_UP(backed_block_len(bb), to->block_size);
+
 		/* will call out_counter_write to update count */
 		ret = sparse_file_write_block(out_counter, bb);
 		if (ret) {
@@ -270,6 +276,7 @@ static struct backed_block *move_chunks_up_to_len(struct sparse_file *from,
 			 * requested size, split the chunk.  Results in sparse files that
 			 * are at least 7/8ths of the requested size
 			 */
+			file_len += sizeof(chunk_header_t);
 			if (!last_bb || (len - file_len > (len / 8))) {
 				backed_block_split(from->backed_block_list, bb, len - file_len);
 				last_bb = bb;
