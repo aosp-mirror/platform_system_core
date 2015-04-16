@@ -33,9 +33,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <cutils/fs.h>
 #include <log/log.h>
 #include <private/android_filesystem_config.h>
+#include <utils/Compat.h>
 
 /* The following structure is stored little endian */
 struct fs_path_config_from_file {
