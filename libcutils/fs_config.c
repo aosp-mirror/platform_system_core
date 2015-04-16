@@ -30,7 +30,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -188,21 +187,7 @@ void fs_config(const char *path, int dir,
                unsigned *uid, unsigned *gid, unsigned *mode, uint64_t *capabilities)
 {
     const struct fs_path_config *pc;
-    int plen;
-    struct stat st;
-    void *address = NULL;
-
-    int fd = fs_config_open(dir);
-    if ((fd >= 0)
-     && (TEMP_FAILURE_RETRY(fstat(fd, &st)) >= 0)
-     && (size_t)st.st_size) {
-        address = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-        if (address == MAP_FAILED) {
-            address = NULL;
-        }
-    } else if (fd >= 0) {
-        close(fd);
-    }
+    int fd, plen;
 
     if (path[0] == '/') {
         path++;
@@ -210,46 +195,46 @@ void fs_config(const char *path, int dir,
 
     plen = strlen(path);
 
-    if (address) {
-        const struct fs_path_config_from_file *p = (const struct fs_path_config_from_file *)
-            address;
-        const char *end = (const char *)address + st.st_size;
-        const struct fs_path_config_from_file *e = (const struct fs_path_config_from_file *)
-            (end - sizeof(*p));
-        uint16_t host_len = sizeof(*p);
-        for (; p < e; p = (const struct fs_path_config_from_file *)(((const char *)p) + host_len)) {
-            host_len = get2LE((const uint8_t *)&(p->len));
-            ssize_t len, remainder = host_len - sizeof(*p);
+    fd = fs_config_open(dir);
+    if (fd >= 0) {
+        struct fs_path_config_from_file header;
+
+        while (TEMP_FAILURE_RETRY(read(fd, &header, sizeof(header))) == sizeof(header)) {
+            char *prefix;
+            uint16_t host_len = get2LE((const uint8_t *)&header.len);
+            ssize_t len, remainder = host_len - sizeof(header);
             if (remainder <= 0) {
-                ALOGE("%s is truncated", dir ? conf_dir : conf_file);
-                p = e;
+                ALOGE("%s len is corrupted", dir ? conf_dir : conf_file);
                 break;
             }
-            len = (const char *)e - (const char *)p;
-            if (remainder > len) {
-                remainder = len;
+            prefix = calloc(1, remainder);
+            if (!prefix) {
+                ALOGE("%s out of memory", dir ? conf_dir : conf_file);
+                break;
             }
-            len = strnlen(p->prefix, remainder);
+            if (TEMP_FAILURE_RETRY(read(fd, prefix, remainder)) != remainder) {
+                free(prefix);
+                ALOGE("%s prefix is truncated", dir ? conf_dir : conf_file);
+                break;
+            }
+            len = strnlen(prefix, remainder);
             if (len >= remainder) { /* missing a terminating null */
+                free(prefix);
                 ALOGE("%s is corrupted", dir ? conf_dir : conf_file);
-                p = e;
                 break;
             }
-            if (fs_config_cmp(dir, p->prefix, len, path, plen)) {
-                break;
+            if (fs_config_cmp(dir, prefix, len, path, plen)) {
+                free(prefix);
+                close(fd);
+                *uid = get2LE((const uint8_t *)&(header.uid));
+                *gid = get2LE((const uint8_t *)&(header.gid));
+                *mode = (*mode & (~07777)) | get2LE((const uint8_t *)&(header.mode));
+                *capabilities = get8LE((const uint8_t *)&(header.capabilities));
+                return;
             }
+            free(prefix);
         }
-        if (p < e) {
-            *uid = get2LE((const uint8_t *)&(p->uid));
-            *gid = get2LE((const uint8_t *)&(p->gid));
-            *mode = (*mode & (~07777)) | get2LE((const uint8_t *)&(p->mode));
-            *capabilities = get8LE((const uint8_t *)&(p->capabilities));
-        }
-        munmap(address, st.st_size);
         close(fd);
-        if (p < e) {
-            return;
-        }
     }
 
     pc = dir ? android_dirs : android_files;
