@@ -48,7 +48,7 @@ LIBADB_windows_SRC_FILES := \
     usb_windows.cpp \
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := true
 LOCAL_MODULE := libadbd
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := \
@@ -57,7 +57,7 @@ LOCAL_SRC_FILES := \
     fdevent.cpp \
     jdwp_service.cpp \
     qemu_tracing.cpp \
-    usb_linux_client.c \
+    usb_linux_client.cpp \
 
 include $(BUILD_STATIC_LIBRARY)
 
