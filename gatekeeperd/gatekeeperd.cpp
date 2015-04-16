@@ -18,6 +18,12 @@
 
 #include "IGateKeeperService.h"
 
+#include <errno.h>
+#include <stdint.h>
+#include <inttypes.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <cutils/log.h>
 #include <utils/Log.h>
 
@@ -28,7 +34,9 @@
 
 #include <keystore/IKeystoreService.h>
 #include <keystore/keystore.h> // For error code
+#include <gatekeeper/password_handle.h> // for password_handle_t
 #include <hardware/gatekeeper.h>
+#include <hardware/hw_auth_token.h>
 
 namespace android {
 
@@ -50,6 +58,36 @@ public:
         gatekeeper_close(device);
     }
 
+    void store_sid(uint32_t uid, uint64_t sid) {
+        char filename[21];
+        sprintf(filename, "%u", uid);
+        int fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
+        if (fd < 0) {
+            ALOGW("could not open file: %s: %s", filename, strerror(errno));
+            return;
+        }
+        write(fd, &sid, sizeof(sid));
+        close(fd);
+    }
+
+    void maybe_store_sid(uint32_t uid, uint64_t sid) {
+        char filename[21];
+        sprintf(filename, "%u", uid);
+        if (access(filename, F_OK) == -1) {
+            store_sid(uid, sid);
+        }
+    }
+
+    uint64_t read_sid(uint32_t uid) {
+        char filename[21];
+        uint64_t sid;
+        sprintf(filename, "%u", uid);
+        int fd = open(filename, O_RDONLY);
+        if (fd < 0) return 0;
+        read(fd, &sid, sizeof(sid));
+        return sid;
+    }
+
     virtual status_t enroll(uint32_t uid,
             const uint8_t *current_password_handle, uint32_t current_password_handle_length,
             const uint8_t *current_password, uint32_t current_password_length,
@@ -69,7 +107,13 @@ public:
                 current_password, current_password_length,
                 desired_password, desired_password_length,
                 enrolled_password_handle, enrolled_password_handle_length);
-        return ret >= 0 ? NO_ERROR : UNKNOWN_ERROR;
+        if (ret >= 0) {
+            gatekeeper::password_handle_t *handle =
+                    reinterpret_cast<gatekeeper::password_handle_t *>(*enrolled_password_handle);
+            store_sid(uid, handle->user_id);
+            return NO_ERROR;
+        }
+        return UNKNOWN_ERROR;
     }
 
     virtual status_t verify(uint32_t uid,
@@ -116,7 +160,17 @@ public:
             }
         }
 
-        return ret >= 0 ? NO_ERROR : UNKNOWN_ERROR;
+        if (ret >= 0) {
+            maybe_store_sid(uid, reinterpret_cast<const gatekeeper::password_handle_t *>(
+                        enrolled_password_handle)->user_id);
+            return NO_ERROR;
+        }
+
+        return UNKNOWN_ERROR;
+    }
+
+    virtual uint64_t getSecureUserId(uint32_t uid) {
+        return read_sid(uid);
     }
 
     virtual status_t dump(int fd, const Vector<String16> &) {
@@ -144,8 +198,17 @@ private:
 };
 }// namespace android
 
-int main() {
+int main(int argc, char* argv[]) {
     ALOGI("Starting gatekeeperd...");
+    if (argc < 2) {
+        ALOGE("A directory must be specified!");
+        return 1;
+    }
+    if (chdir(argv[1]) == -1) {
+        ALOGE("chdir: %s: %s", argv[1], strerror(errno));
+        return 1;
+    }
+
     android::sp<android::IServiceManager> sm = android::defaultServiceManager();
     android::sp<android::GateKeeperProxy> proxy = new android::GateKeeperProxy();
     android::status_t ret = sm->addService(

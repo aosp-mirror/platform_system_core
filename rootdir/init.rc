@@ -254,6 +254,7 @@ on post-fs-data
     mkdir /data/misc/bluedroid 0770 bluetooth net_bt_stack
     mkdir /data/misc/bluetooth 0770 system system
     mkdir /data/misc/keystore 0700 keystore keystore
+    mkdir /data/misc/gatekeeper 0700 system system
     mkdir /data/misc/keychain 0771 system system
     mkdir /data/misc/net 0750 root shell
     mkdir /data/misc/radio 0770 system radio
@@ -608,7 +609,7 @@ service bootanim /system/bin/bootanimation
     disabled
     oneshot
 
-service gatekeeperd /system/bin/gatekeeperd
+service gatekeeperd /system/bin/gatekeeperd /data/misc/gatekeeper
     class main
     user system
 
