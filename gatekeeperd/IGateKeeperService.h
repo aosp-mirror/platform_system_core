@@ -32,6 +32,7 @@ public:
         VERIFY = IBinder::FIRST_CALL_TRANSACTION + 1,
         VERIFY_CHALLENGE = IBinder::FIRST_CALL_TRANSACTION + 2,
         GET_SECURE_USER_ID = IBinder::FIRST_CALL_TRANSACTION + 3,
+        CLEAR_SECURE_USER_ID = IBinder::FIRST_CALL_TRANSACTION + 4,
     };
 
     // DECLARE_META_INTERFACE - C++ client interface not needed
@@ -70,6 +71,11 @@ public:
      * Returns the secure user ID for the provided android user
      */
     virtual uint64_t getSecureUserId(uint32_t uid) = 0;
+
+    /**
+     * Clears the secure user ID associated with the user.
+     */
+    virtual void clearSecureUserId(uint32_t uid) = 0;
 };
 
 // ----------------------------------------------------------------------------
