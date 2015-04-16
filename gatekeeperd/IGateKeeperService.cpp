@@ -115,6 +115,14 @@ status_t BnGateKeeperService::onTransact(
             }
             return NO_ERROR;
         }
+        case GET_SECURE_USER_ID: {
+            CHECK_INTERFACE(IGateKeeperService, data, reply);
+            uint32_t uid = data.readInt32();
+            uint64_t sid = getSecureUserId(uid);
+            reply->writeNoException();
+            reply->writeInt64(sid);
+            return NO_ERROR;
+        }
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }

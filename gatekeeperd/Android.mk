@@ -26,4 +26,6 @@ LOCAL_SHARED_LIBRARIES := \
 	libhardware \
 	libutils \
 	libkeystore_binder
+LOCAL_C_INCLUDES := \
+	system/gatekeeper/include
 include $(BUILD_EXECUTABLE)

@@ -31,6 +31,7 @@ public:
         ENROLL = IBinder::FIRST_CALL_TRANSACTION + 0,
         VERIFY = IBinder::FIRST_CALL_TRANSACTION + 1,
         VERIFY_CHALLENGE = IBinder::FIRST_CALL_TRANSACTION + 2,
+        GET_SECURE_USER_ID = IBinder::FIRST_CALL_TRANSACTION + 3,
     };
 
     // DECLARE_META_INTERFACE - C++ client interface not needed
@@ -64,6 +65,11 @@ public:
             const uint8_t *enrolled_password_handle, uint32_t enrolled_password_handle_length,
             const uint8_t *provided_password, uint32_t provided_password_length,
             uint8_t **auth_token, uint32_t *auth_token_length) = 0;
+
+    /**
+     * Returns the secure user ID for the provided android user
+     */
+    virtual uint64_t getSecureUserId(uint32_t uid) = 0;
 };
 
 // ----------------------------------------------------------------------------
