@@ -15,6 +15,7 @@
  */
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/user.h>
@@ -132,11 +133,11 @@ LogBuffer::LogBuffer(LastLogTimes *times)
     init();
 }
 
-void LogBuffer::log(log_id_t log_id, log_time realtime,
-                    uid_t uid, pid_t pid, pid_t tid,
-                    const char *msg, unsigned short len) {
+int LogBuffer::log(log_id_t log_id, log_time realtime,
+                   uid_t uid, pid_t pid, pid_t tid,
+                   const char *msg, unsigned short len) {
     if ((log_id >= LOG_ID_MAX) || (log_id < 0)) {
-        return;
+        return -EINVAL;
     }
     LogBufferElement *elem = new LogBufferElement(log_id, realtime,
                                                   uid, pid, tid, msg, len);
@@ -193,6 +194,8 @@ void LogBuffer::log(log_id_t log_id, log_time realtime,
     stats.add(elem);
     maybePrune(log_id);
     pthread_mutex_unlock(&mLogElementsLock);
+
+    return len;
 }
 
 // If we're using more than 256K of memory for log entries, prune

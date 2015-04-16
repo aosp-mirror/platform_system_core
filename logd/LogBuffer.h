@@ -48,9 +48,9 @@ public:
     LogBuffer(LastLogTimes *times);
     void init();
 
-    void log(log_id_t log_id, log_time realtime,
-             uid_t uid, pid_t pid, pid_t tid,
-             const char *msg, unsigned short len);
+    int log(log_id_t log_id, log_time realtime,
+            uid_t uid, pid_t pid, pid_t tid,
+            const char *msg, unsigned short len);
     uint64_t flushTo(SocketClient *writer, const uint64_t start,
                      bool privileged,
                      int (*filter)(const LogBufferElement *element, void *arg) = NULL,
