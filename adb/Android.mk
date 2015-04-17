@@ -108,6 +108,10 @@ ifeq ($(HOST_OS),linux)
   LOCAL_LDLIBS += -lrt -ldl -lpthread
 endif
 
+ifeq ($(HOST_OS),darwin)
+  LOCAL_LDLIBS += -framework CoreFoundation -framework IOKit
+endif
+
 include $(BUILD_HOST_NATIVE_TEST)
 
 # adb host tool
