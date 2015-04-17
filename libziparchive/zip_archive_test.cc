@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <vector>
 
+#include <base/file.h>
 #include <gtest/gtest.h>
 
 static std::string test_data_dir;
@@ -228,6 +229,44 @@ static const uint32_t kEmptyEntriesZip[] = {
       0x54557478, 0x13030005, 0x7552e25c, 0x01000b78, 0x00428904, 0x13880400,
       0x4b500000, 0x00000605, 0x00010000, 0x004f0001, 0x00430000, 0x00000000 };
 
+// This is a zip file containing a single entry (ab.txt) that contains
+// 90072 repetitions of the string "ab\n" and has an uncompressed length
+// of 270216 bytes.
+static const uint16_t kAbZip[] = {
+  0x4b50, 0x0403, 0x0014, 0x0000, 0x0008, 0x51d2, 0x4698, 0xc4b0,
+  0x2cda, 0x011b, 0x0000, 0x1f88, 0x0004, 0x0006, 0x001c, 0x6261,
+  0x742e, 0x7478, 0x5455, 0x0009, 0x7c03, 0x3a09, 0x7c55, 0x3a09,
+  0x7555, 0x0b78, 0x0100, 0x8904, 0x0042, 0x0400, 0x1388, 0x0000,
+  0xc2ed, 0x0d31, 0x0000, 0x030c, 0x7fa0, 0x3b2e, 0x22ff, 0xa2aa,
+  0x841f, 0x45fc, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555, 0x5555,
+  0x5555, 0x5555, 0x5555, 0x5555, 0xdd55, 0x502c, 0x014b, 0x1e02,
+  0x1403, 0x0000, 0x0800, 0xd200, 0x9851, 0xb046, 0xdac4, 0x1b2c,
+  0x0001, 0x8800, 0x041f, 0x0600, 0x1800, 0x0000, 0x0000, 0x0100,
+  0x0000, 0xa000, 0x0081, 0x0000, 0x6100, 0x2e62, 0x7874, 0x5574,
+  0x0554, 0x0300, 0x097c, 0x553a, 0x7875, 0x000b, 0x0401, 0x4289,
+  0x0000, 0x8804, 0x0013, 0x5000, 0x054b, 0x0006, 0x0000, 0x0100,
+  0x0100, 0x4c00, 0x0000, 0x5b00, 0x0001, 0x0000, 0x0000
+};
+
+static const uint8_t kAbTxtName[] = { 'a', 'b', '.', 't', 'x', 't' };
+static const uint16_t kAbTxtNameLength = sizeof(kAbTxtName);
+static const size_t kAbUncompressedSize = 270216;
+
 static int make_temporary_file(const char* file_name_pattern) {
   char full_path[1024];
   // Account for differences between the host and the target.
@@ -270,6 +309,55 @@ TEST(ziparchive, EmptyEntries) {
   struct stat stat_buf;
   ASSERT_EQ(0, fstat(output_fd, &stat_buf));
   ASSERT_EQ(0, stat_buf.st_size);
+
+  close(fd);
+  close(output_fd);
+}
+
+TEST(ziparchive, EntryLargerThan32K) {
+  char temp_file_pattern[] = "entry_larger_than_32k_test_XXXXXX";
+  int fd = make_temporary_file(temp_file_pattern);
+  ASSERT_NE(-1, fd);
+  ASSERT_TRUE(android::base::WriteFully(fd, reinterpret_cast<const uint8_t*>(kAbZip),
+                         sizeof(kAbZip) - 1));
+  ZipArchiveHandle handle;
+  ASSERT_EQ(0, OpenArchiveFd(fd, "EntryLargerThan32KTest", &handle));
+
+  ZipEntry entry;
+  ZipEntryName ab_name;
+  ab_name.name = kAbTxtName;
+  ab_name.name_length = kAbTxtNameLength;
+  ASSERT_EQ(0, FindEntry(handle, ab_name, &entry));
+  ASSERT_EQ(kAbUncompressedSize, entry.uncompressed_length);
+
+  // Extract the entry to memory.
+  std::vector<uint8_t> buffer(kAbUncompressedSize);
+  ASSERT_EQ(0, ExtractToMemory(handle, &entry, &buffer[0], buffer.size()));
+
+  // Extract the entry to a file.
+  char output_file_pattern[] = "entry_larger_than_32k_test_output_XXXXXX";
+  int output_fd = make_temporary_file(output_file_pattern);
+  ASSERT_NE(-1, output_fd);
+  ASSERT_EQ(0, ExtractEntryToFile(handle, &entry, output_fd));
+
+  // Make sure the extracted file size is as expected.
+  struct stat stat_buf;
+  ASSERT_EQ(0, fstat(output_fd, &stat_buf));
+  ASSERT_EQ(kAbUncompressedSize, static_cast<size_t>(stat_buf.st_size));
+
+  // Read the file back to a buffer and make sure the contents are
+  // the same as the memory buffer we extracted directly to.
+  std::vector<uint8_t> file_contents(kAbUncompressedSize);
+  ASSERT_EQ(0, lseek64(output_fd, 0, SEEK_SET));
+  ASSERT_TRUE(android::base::ReadFully(output_fd, &file_contents[0], file_contents.size()));
+  ASSERT_EQ(file_contents, buffer);
+
+  for (int i = 0; i < 90072; ++i) {
+    const uint8_t* line = &file_contents[0] + (3 * i);
+    ASSERT_EQ('a', line[0]);
+    ASSERT_EQ('b', line[1]);
+    ASSERT_EQ('\n', line[2]);
+  }
 
   close(fd);
   close(output_fd);
