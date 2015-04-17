@@ -249,11 +249,9 @@ int usage()
 
 #if defined(_WIN32)
 
-// Implemented in sysdeps_win32.c.
-extern "C" {
+// Implemented in sysdeps_win32.cpp.
 void stdin_raw_init(int fd);
 void stdin_raw_restore(int fd);
-}
 
 #else
 static termios g_saved_terminal_state;
