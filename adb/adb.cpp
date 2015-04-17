@@ -838,10 +838,10 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
             }
         }
 
-        const char* err;
-        transport = acquire_one_transport(CS_ANY, ttype, serial, &err);
+        std::string error_msg;
+        transport = acquire_one_transport(CS_ANY, ttype, serial, &error_msg);
         if (!transport) {
-            sendfailmsg(reply_fd, err);
+            sendfailmsg(reply_fd, error_msg.c_str());
             return 1;
         }
 
@@ -910,14 +910,14 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
             serial = service;
         }
 
-        const char* error_string = "unknown failure";
-        transport = acquire_one_transport(CS_ANY, type, serial, &error_string);
+        std::string error_msg = "unknown failure";
+        transport = acquire_one_transport(CS_ANY, type, serial, &error_msg);
 
         if (transport) {
             s->transport = transport;
             adb_write(reply_fd, "OKAY", 4);
         } else {
-            sendfailmsg(reply_fd, error_string);
+            sendfailmsg(reply_fd, error_msg.c_str());
         }
         return 1;
     }
@@ -975,7 +975,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     if(!strncmp(service,"get-serialno",strlen("get-serialno"))) {
         const char *out = "unknown";
         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
-       if (transport && transport->serial) {
+        if (transport && transport->serial) {
             out = transport->serial;
         }
         send_msg_with_okay(reply_fd, out, strlen(out));
@@ -984,7 +984,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     if(!strncmp(service,"get-devpath",strlen("get-devpath"))) {
         const char *out = "unknown";
         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
-       if (transport && transport->devpath) {
+        if (transport && transport->devpath) {
             out = transport->devpath;
         }
         send_msg_with_okay(reply_fd, out, strlen(out));

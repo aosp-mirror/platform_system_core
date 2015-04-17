@@ -559,12 +559,12 @@ static void wait_for_state(int fd, void* cookie)
 
     D("wait_for_state %d\n", sinfo->state);
 
-    const char* err = "unknown error";
-    atransport *t = acquire_one_transport(sinfo->state, sinfo->transport, sinfo->serial, &err);
-    if(t != 0) {
+    std::string error_msg = "unknown error";
+    atransport* t = acquire_one_transport(sinfo->state, sinfo->transport, sinfo->serial, &error_msg);
+    if (t != 0) {
         WriteFdExactly(fd, "OKAY", 4);
     } else {
-        sendfailmsg(fd, err);
+        sendfailmsg(fd, error_msg.c_str());
     }
 
     if (sinfo->serial)
