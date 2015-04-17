@@ -827,12 +827,11 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
     }
 #else /* !ADB_HOST */
     if (s->transport == NULL) {
-        const char* error_string = "unknown failure";
-        s->transport = acquire_one_transport (CS_ANY,
-                kTransportAny, NULL, &error_string);
+        std::string error_msg = "unknown failure";
+        s->transport = acquire_one_transport(CS_ANY, kTransportAny, NULL, &error_msg);
 
         if (s->transport == NULL) {
-            sendfailmsg(s->peer->fd, error_string);
+            sendfailmsg(s->peer->fd, error_msg.c_str());
             goto fail;
         }
     }

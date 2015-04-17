@@ -800,22 +800,20 @@ static int qual_match(const char *to_test,
     return !*to_test;
 }
 
-atransport *acquire_one_transport(int state, transport_type ttype,
-                                  const char* serial, const char** error_out)
+atransport* acquire_one_transport(int state, transport_type ttype,
+                                  const char* serial, std::string* error_out)
 {
     atransport *t;
     atransport *result = NULL;
     int ambiguous = 0;
 
 retry:
-    if (error_out)
-        *error_out = "device not found";
+    if (error_out) *error_out = "device not found";
 
     adb_mutex_lock(&transport_lock);
     for (t = transport_list.next; t != &transport_list; t = t->next) {
         if (t->connection_state == CS_NOPERM) {
-        if (error_out)
-            *error_out = "insufficient permissions for device";
+            if (error_out) *error_out = "insufficient permissions for device";
             continue;
         }
 
@@ -827,8 +825,7 @@ retry:
                 qual_match(serial, "model:", t->model, true) ||
                 qual_match(serial, "device:", t->device, false)) {
                 if (result) {
-                    if (error_out)
-                        *error_out = "more than one device";
+                    if (error_out) *error_out = "more than one device";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -838,8 +835,7 @@ retry:
         } else {
             if (ttype == kTransportUsb && t->type == kTransportUsb) {
                 if (result) {
-                    if (error_out)
-                        *error_out = "more than one device";
+                    if (error_out) *error_out = "more than one device";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -847,8 +843,7 @@ retry:
                 result = t;
             } else if (ttype == kTransportLocal && t->type == kTransportLocal) {
                 if (result) {
-                    if (error_out)
-                        *error_out = "more than one emulator";
+                    if (error_out) *error_out = "more than one emulator";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -856,8 +851,7 @@ retry:
                 result = t;
             } else if (ttype == kTransportAny) {
                 if (result) {
-                    if (error_out)
-                        *error_out = "more than one device and emulator";
+                    if (error_out) *error_out = "more than one device and emulator";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -870,29 +864,33 @@ retry:
 
     if (result) {
         if (result->connection_state == CS_UNAUTHORIZED) {
-            if (error_out)
-                *error_out = "device unauthorized. Please check the confirmation dialog on your device.";
+            if (error_out) {
+                *error_out = "device unauthorized.\n";
+                char* ADB_VENDOR_KEYS = getenv("ADB_VENDOR_KEYS");
+                *error_out += "This adbd's $ADB_VENDOR_KEYS is ";
+                *error_out += ADB_VENDOR_KEYS ? ADB_VENDOR_KEYS : "not set";
+                *error_out += "; try 'adb kill-server' if that seems wrong.\n";
+                *error_out += "Otherwise check for a confirmation dialog on your device.";
+            }
             result = NULL;
         }
 
-         /* offline devices are ignored -- they are either being born or dying */
+        /* offline devices are ignored -- they are either being born or dying */
         if (result && result->connection_state == CS_OFFLINE) {
-            if (error_out)
-                *error_out = "device offline";
+            if (error_out) *error_out = "device offline";
             result = NULL;
         }
-         /* check for required connection state */
+
+        /* check for required connection state */
         if (result && state != CS_ANY && result->connection_state != state) {
-            if (error_out)
-                *error_out = "invalid device state";
+            if (error_out) *error_out = "invalid device state";
             result = NULL;
         }
     }
 
     if (result) {
         /* found one that we can take */
-        if (error_out)
-            *error_out = NULL;
+        if (error_out) *error_out = "success";
     } else if (state != CS_ANY && (serial || !ambiguous)) {
         adb_sleep_ms(1000);
         goto retry;
