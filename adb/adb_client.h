@@ -3,10 +3,6 @@
 
 #include "adb.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* connect to adb, connect to the named service, and return
 ** a valid fd for interacting with that service upon success
 ** or a negative number on failure
@@ -57,9 +53,5 @@ const char *adb_error(void);
 ** or protocol error
 */
 int adb_status(int fd);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

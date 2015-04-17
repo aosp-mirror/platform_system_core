@@ -19,17 +19,13 @@
 
 #include "adb.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // error/status codes for install_listener.
-typedef enum {
+enum install_status_t {
   INSTALL_STATUS_OK = 0,
   INSTALL_STATUS_INTERNAL_ERROR = -1,
   INSTALL_STATUS_CANNOT_BIND = -2,
   INSTALL_STATUS_CANNOT_REBIND = -3,
-} install_status_t;
+};
 
 extern alistener listener_list;
 
@@ -46,9 +42,5 @@ int format_listeners(char* buf, size_t buflen);
 
 int remove_listener(const char *local_name, atransport* transport);
 void remove_all_listeners(void);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* __ADB_LISTENERS_H */
