@@ -30,6 +30,53 @@
 
 extern void fatal(const char *fmt, ...);
 
+/* forward declarations */
+
+typedef const struct FHClassRec_* FHClass;
+typedef struct FHRec_* FH;
+typedef struct EventHookRec_* EventHook;
+
+typedef struct FHClassRec_ {
+    void (*_fh_init)(FH);
+    int (*_fh_close)(FH);
+    int (*_fh_lseek)(FH, int, int);
+    int (*_fh_read)(FH, void*, int);
+    int (*_fh_write)(FH, const void*, int);
+    void (*_fh_hook)(FH, int, EventHook);
+} FHClassRec;
+
+static void _fh_file_init(FH);
+static int _fh_file_close(FH);
+static int _fh_file_lseek(FH, int, int);
+static int _fh_file_read(FH, void*, int);
+static int _fh_file_write(FH, const void*, int);
+static void _fh_file_hook(FH, int, EventHook);
+
+static const FHClassRec _fh_file_class = {
+    _fh_file_init,
+    _fh_file_close,
+    _fh_file_lseek,
+    _fh_file_read,
+    _fh_file_write,
+    _fh_file_hook
+};
+
+static void _fh_socket_init(FH);
+static int _fh_socket_close(FH);
+static int _fh_socket_lseek(FH, int, int);
+static int _fh_socket_read(FH, void*, int);
+static int _fh_socket_write(FH, const void*, int);
+static void _fh_socket_hook(FH, int, EventHook);
+
+static const FHClassRec _fh_socket_class = {
+    _fh_socket_init,
+    _fh_socket_close,
+    _fh_socket_lseek,
+    _fh_socket_read,
+    _fh_socket_write,
+    _fh_socket_hook
+};
+
 #define assert(cond)  do { if (!(cond)) fatal( "assertion failed '%s' on %s:%ld\n", #cond, __FILE__, __LINE__ ); } while (0)
 
 /**************************************************************************/
@@ -91,23 +138,6 @@ void *load_file(const char *fn, unsigned *_sz)
 /*****                                                                *****/
 /**************************************************************************/
 /**************************************************************************/
-
-typedef const struct FHClassRec_*   FHClass;
-
-typedef struct FHRec_*          FH;
-
-typedef struct EventHookRec_*  EventHook;
-
-typedef struct FHClassRec_
-{
-    void (*_fh_init) ( FH  f );
-    int  (*_fh_close)( FH  f );
-    int  (*_fh_lseek)( FH  f, int  pos, int  origin );
-    int  (*_fh_read) ( FH  f, void*  buf, int  len );
-    int  (*_fh_write)( FH  f, const void*  buf, int  len );
-    void (*_fh_hook) ( FH  f, int  events, EventHook  hook );
-
-} FHClassRec;
 
 /* used to emulate unix-domain socket pairs */
 typedef struct SocketPairRec_*  SocketPair;
@@ -220,10 +250,6 @@ _fh_close( FH   f )
     return 0;
 }
 
-/* forward definitions */
-static const FHClassRec   _fh_file_class;
-static const FHClassRec   _fh_socket_class;
-
 /**************************************************************************/
 /**************************************************************************/
 /*****                                                                *****/
@@ -232,23 +258,17 @@ static const FHClassRec   _fh_socket_class;
 /**************************************************************************/
 /**************************************************************************/
 
-static void
-_fh_file_init( FH  f )
-{
+static void _fh_file_init( FH  f ) {
     f->fh_handle = INVALID_HANDLE_VALUE;
 }
 
-static int
-_fh_file_close( FH  f )
-{
+static int _fh_file_close( FH  f ) {
     CloseHandle( f->fh_handle );
     f->fh_handle = INVALID_HANDLE_VALUE;
     return 0;
 }
 
-static int
-_fh_file_read( FH  f,  void*  buf, int   len )
-{
+static int _fh_file_read( FH  f,  void*  buf, int   len ) {
     DWORD  read_bytes;
 
     if ( !ReadFile( f->fh_handle, buf, (DWORD)len, &read_bytes, NULL ) ) {
@@ -261,9 +281,7 @@ _fh_file_read( FH  f,  void*  buf, int   len )
     return (int)read_bytes;
 }
 
-static int
-_fh_file_write( FH  f,  const void*  buf, int   len )
-{
+static int _fh_file_write( FH  f,  const void*  buf, int   len ) {
     DWORD  wrote_bytes;
 
     if ( !WriteFile( f->fh_handle, buf, (DWORD)len, &wrote_bytes, NULL ) ) {
@@ -276,9 +294,7 @@ _fh_file_write( FH  f,  const void*  buf, int   len )
     return  (int)wrote_bytes;
 }
 
-static int
-_fh_file_lseek( FH  f, int  pos, int  origin )
-{
+static int _fh_file_lseek( FH  f, int  pos, int  origin ) {
     DWORD  method;
     DWORD  result;
 
@@ -302,17 +318,6 @@ _fh_file_lseek( FH  f, int  pos, int  origin )
     return (int)result;
 }
 
-static void  _fh_file_hook( FH  f, int  event, EventHook  eventhook );  /* forward */
-
-static const FHClassRec  _fh_file_class =
-{
-    _fh_file_init,
-    _fh_file_close,
-    _fh_file_lseek,
-    _fh_file_read,
-    _fh_file_write,
-    _fh_file_hook
-};
 
 /**************************************************************************/
 /**************************************************************************/
@@ -495,9 +500,7 @@ int  adb_close(int  fd)
 
 #undef setsockopt
 
-static void
-_socket_set_errno( void )
-{
+static void _socket_set_errno( void ) {
     switch (WSAGetLastError()) {
     case 0:              errno = 0; break;
     case WSAEWOULDBLOCK: errno = EAGAIN; break;
@@ -508,17 +511,13 @@ _socket_set_errno( void )
     }
 }
 
-static void
-_fh_socket_init( FH  f )
-{
+static void _fh_socket_init( FH  f ) {
     f->fh_socket = INVALID_SOCKET;
     f->event     = WSACreateEvent();
     f->mask      = 0;
 }
 
-static int
-_fh_socket_close( FH  f )
-{
+static int _fh_socket_close( FH  f ) {
     /* gently tell any peer that we're closing the socket */
     shutdown( f->fh_socket, SD_BOTH );
     closesocket( f->fh_socket );
@@ -528,17 +527,13 @@ _fh_socket_close( FH  f )
     return 0;
 }
 
-static int
-_fh_socket_lseek( FH  f, int pos, int origin )
-{
+static int _fh_socket_lseek( FH  f, int pos, int origin ) {
     errno = EPIPE;
     return -1;
 }
 
-static int
-_fh_socket_read( FH  f, void*  buf, int  len )
-{
-    int  result = recv( f->fh_socket, buf, len, 0 );
+static int _fh_socket_read(FH f, void* buf, int len) {
+    int  result = recv(f->fh_socket, reinterpret_cast<char*>(buf), len, 0);
     if (result == SOCKET_ERROR) {
         _socket_set_errno();
         result = -1;
@@ -546,28 +541,14 @@ _fh_socket_read( FH  f, void*  buf, int  len )
     return  result;
 }
 
-static int
-_fh_socket_write( FH  f, const void*  buf, int  len )
-{
-    int  result = send( f->fh_socket, buf, len, 0 );
+static int _fh_socket_write(FH f, const void* buf, int len) {
+    int  result = send(f->fh_socket, reinterpret_cast<const char*>(buf), len, 0);
     if (result == SOCKET_ERROR) {
         _socket_set_errno();
         result = -1;
     }
     return result;
 }
-
-static void  _fh_socket_hook( FH  f, int  event, EventHook  hook );  /* forward */
-
-static const FHClassRec  _fh_socket_class =
-{
-    _fh_socket_init,
-    _fh_socket_close,
-    _fh_socket_lseek,
-    _fh_socket_read,
-    _fh_socket_write,
-    _fh_socket_hook
-};
 
 /**************************************************************************/
 /**************************************************************************/
@@ -819,7 +800,7 @@ int  adb_setsockopt( int  fd, int  level, int  optname, const void*  optval, soc
         return -1;
     }
 
-    return setsockopt( fh->fh_socket, level, optname, optval, optlen );
+    return setsockopt( fh->fh_socket, level, optname, reinterpret_cast<const char*>(optval), optlen );
 }
 
 /**************************************************************************/
@@ -1219,18 +1200,16 @@ static const FHClassRec  _fh_socketpair_class =
 };
 
 
-int  adb_socketpair( int  sv[2] )
-{
-    FH          fa, fb;
-    SocketPair  pair;
+int  adb_socketpair(int sv[2]) {
+    SocketPair pair;
 
-    fa = _fh_alloc( &_fh_socketpair_class );
-    fb = _fh_alloc( &_fh_socketpair_class );
+    FH fa = _fh_alloc(&_fh_socketpair_class);
+    FH fb = _fh_alloc(&_fh_socketpair_class);
 
     if (!fa || !fb)
         goto Fail;
 
-    pair = malloc( sizeof(*pair) );
+    pair = reinterpret_cast<SocketPair>(malloc(sizeof(*pair)));
     if (pair == NULL) {
         D("adb_socketpair: not enough memory to allocate pipes\n" );
         goto Fail;
@@ -1328,13 +1307,12 @@ typedef struct EventHookRec_
 static EventHook  _free_hooks;
 
 static EventHook
-event_hook_alloc( FH  fh )
-{
-    EventHook  hook = _free_hooks;
-    if (hook != NULL)
+event_hook_alloc(FH fh) {
+    EventHook hook = _free_hooks;
+    if (hook != NULL) {
         _free_hooks = hook->next;
-    else {
-        hook = malloc( sizeof(*hook) );
+    } else {
+        hook = reinterpret_cast<EventHook>(malloc(sizeof(*hook)));
         if (hook == NULL)
             fatal( "could not allocate event hook\n" );
     }
@@ -1796,7 +1774,7 @@ static void fdevent_register(fdevent *fde)
         while(fd_table_max <= fd) {
             fd_table_max *= 2;
         }
-        fd_table = realloc(fd_table, sizeof(fdevent*) * fd_table_max);
+        fd_table = reinterpret_cast<fdevent**>(realloc(fd_table, sizeof(fdevent*) * fd_table_max));
         if(fd_table == 0) {
             FATAL("could not expand fd_table to %d entries\n", fd_table_max);
         }
