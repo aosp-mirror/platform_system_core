@@ -5,7 +5,7 @@
 
 LOCAL_PATH:= $(call my-dir)
 
-ADB_CLANG :=
+ADB_CLANG := true
 
 # libadb
 # =========================================================
