@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -1897,7 +1898,7 @@ int install_multiple_app(transport_type transport, const char* serial, int argc,
 {
     int i;
     struct stat sb;
-    unsigned long long total_size = 0;
+    uint64_t total_size = 0;
 
     // Find all APK arguments starting at end.
     // All other arguments passed through verbatim.
@@ -1923,7 +1924,7 @@ int install_multiple_app(transport_type transport, const char* serial, int argc,
         return 1;
     }
 
-    std::string cmd = android::base::StringPrintf("exec:pm install-create -S %lld", total_size);
+    std::string cmd = android::base::StringPrintf("exec:pm install-create -S %" PRIu64, total_size);
     for (i = 1; i < first_apk; i++) {
         cmd += " ";
         cmd += escape_arg(argv[i]);
@@ -1964,8 +1965,9 @@ int install_multiple_app(transport_type transport, const char* serial, int argc,
             goto finalize_session;
         }
 
-        std::string cmd = android::base::StringPrintf("exec:pm install-write -S %lld %d %d_%s -",
-                (long long int) sb.st_size, session_id, i, get_basename(file));
+        std::string cmd = android::base::StringPrintf(
+                "exec:pm install-write -S %" PRIu64 " %d %d_%s -",
+                static_cast<uint64_t>(sb.st_size), session_id, i, get_basename(file));
 
         int localFd = adb_open(file, O_RDONLY);
         if (localFd < 0) {
