@@ -21,6 +21,7 @@ LIBADB_SRC_FILES := \
     adb_auth.cpp \
     adb_io.cpp \
     adb_listeners.cpp \
+    adb_utils.cpp \
     sockets.cpp \
     transport.cpp \
     transport_local.cpp \
@@ -82,6 +83,7 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 
 LIBADB_TEST_SRCS := \
     adb_io_test.cpp \
+    adb_utils_test.cpp \
     transport_test.cpp \
 
 include $(CLEAR_VARS)
