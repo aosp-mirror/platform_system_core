@@ -121,7 +121,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-typedef struct JdwpProcess  JdwpProcess;
 struct JdwpProcess {
     JdwpProcess*  next;
     JdwpProcess*  prev;
@@ -455,11 +454,10 @@ FoundIt:
 #define  JDWP_CONTROL_NAME      "\0jdwp-control"
 #define  JDWP_CONTROL_NAME_LEN  (sizeof(JDWP_CONTROL_NAME)-1)
 
-typedef struct {
+struct JdwpControl {
     int       listen_socket;
     fdevent*  fde;
-
-} JdwpControl;
+};
 
 
 static void
@@ -570,10 +568,10 @@ static JdwpControl   _jdwp_control;
  ** this simply returns the list of known JDWP process pids
  **/
 
-typedef struct {
+struct JdwpSocket {
     asocket  socket;
     int      pass;
-} JdwpSocket;
+};
 
 static void
 jdwp_socket_close( asocket*  s )
@@ -641,8 +639,6 @@ create_jdwp_service_socket( void )
  ** this periodically sends the list of known JDWP process pids
  ** to the client...
  **/
-
-typedef struct JdwpTracker  JdwpTracker;
 
 struct JdwpTracker {
     asocket       socket;
@@ -754,4 +750,3 @@ init_jdwp(void)
 }
 
 #endif /* !ADB_HOST */
-

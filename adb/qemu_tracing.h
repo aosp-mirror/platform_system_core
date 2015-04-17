@@ -21,16 +21,8 @@
 #ifndef __QEMU_TRACING_H
 #define __QEMU_TRACING_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Initializes connection with the adb-debug qemud service in the emulator. */
 int adb_qemu_trace_init(void);
 void adb_qemu_trace(const char* fmt, ...);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* __QEMU_TRACING_H */

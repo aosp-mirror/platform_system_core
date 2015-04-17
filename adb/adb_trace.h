@@ -23,10 +23,6 @@
 #include <stdio.h>
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* define ADB_TRACE to 1 to enable tracing support, or 0 to disable it */
 #define  ADB_TRACE    1
 
@@ -34,7 +30,7 @@ extern "C" {
  * forget to update the corresponding 'tags' table in
  * the adb_trace_init() function implemented in adb.c
  */
-typedef enum {
+enum AdbTrace {
     TRACE_ADB = 0,   /* 0x001 */
     TRACE_SOCKETS,
     TRACE_PACKETS,
@@ -47,7 +43,7 @@ typedef enum {
     TRACE_SERVICES,
     TRACE_AUTH,
     TRACE_FDEVENT,
-} AdbTrace;
+} ;
 
 #if ADB_TRACE
 
@@ -147,9 +143,5 @@ void    adb_trace_init(void);
 #  define  DD(...)         ((void)0)
 #  define  ADB_TRACING     0
 #endif /* ADB_TRACE */
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* __ADB_TRACE_H */
