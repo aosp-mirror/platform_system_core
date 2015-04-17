@@ -406,7 +406,6 @@ static int list_transports_msg(char*  buffer, size_t  bufferlen)
  * number of client connections that want it through a single
  * live TCP connection
  */
-typedef struct device_tracker  device_tracker;
 struct device_tracker {
     asocket          socket;
     int              update_needed;
@@ -536,7 +535,6 @@ void  update_transports(void)
 }
 #endif // ADB_HOST
 
-typedef struct tmsg tmsg;
 struct tmsg
 {
     atransport *transport;

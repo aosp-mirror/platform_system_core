@@ -54,10 +54,6 @@
 
 #include "fdevent.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define OS_PATH_SEPARATOR '\\'
 #define OS_PATH_SEPARATOR_STR "\\"
 #define ENV_PATH_SEPARATOR_STR ";"
@@ -295,10 +291,6 @@ extern char*  adb_strtok_r(char *str, const char *delim, char **saveptr);
 #include <netinet/tcp.h>
 #include <string.h>
 #include <unistd.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #define OS_PATH_SEPARATOR '/'
 #define OS_PATH_SEPARATOR_STR "/"
@@ -539,9 +531,5 @@ static __inline__ unsigned long adb_thread_id()
 #define  strtok_r  ___xxx_strtok_r
 
 #endif /* !_WIN32 */
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* _ADB_SYSDEPS_H */

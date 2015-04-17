@@ -23,10 +23,6 @@
 #include "adb_trace.h"
 #include "fdevent.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define MAX_PAYLOAD 4096
 
 #define A_SYNC 0x434e5953
@@ -47,14 +43,8 @@ extern "C" {
 // Increment this when we want to force users to start a new adb server.
 #define ADB_SERVER_VERSION 32
 
-typedef struct amessage amessage;
-typedef struct apacket apacket;
-typedef struct asocket asocket;
-typedef struct alistener alistener;
-typedef struct aservice aservice;
-typedef struct atransport atransport;
-typedef struct adisconnect  adisconnect;
-typedef struct usb_handle usb_handle;
+struct atransport;
+struct usb_handle;
 
 struct amessage {
     unsigned command;       /* command identifier constant      */
@@ -171,12 +161,12 @@ struct  adisconnect
 ** object, it's a special value used to indicate that a client wants to
 ** connect to a service implemented within the ADB server itself.
 */
-typedef enum transport_type {
+enum transport_type {
         kTransportUsb,
         kTransportLocal,
         kTransportAny,
         kTransportHost,
-} transport_type;
+};
 
 #define TOKEN_SIZE 20
 
@@ -363,10 +353,10 @@ extern const char *adb_device_banner;
 extern int HOST;
 extern int SHELL_EXIT_NOTIFY_FD;
 
-typedef enum {
+enum subproc_mode {
     SUBPROC_PTY = 0,
     SUBPROC_RAW = 1,
-} subproc_mode;
+} ;
 
 #define CHUNK_SIZE (64*1024)
 
@@ -388,9 +378,5 @@ void handle_online(atransport *t);
 void handle_offline(atransport *t);
 
 void send_connect(atransport *t);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif
