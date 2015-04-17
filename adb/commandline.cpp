@@ -43,49 +43,38 @@
 #include "adb_auth.h"
 #include "adb_client.h"
 #include "adb_io.h"
+#include "adb_utils.h"
 #include "file_sync_service.h"
 
 static int do_cmd(transport_type ttype, const char* serial, const char *cmd, ...);
 
-int find_sync_dirs(const char *srcarg,
-        char **system_srcdir_out, char **data_srcdir_out, char **vendor_srcdir_out,
-        char **oem_srcdir_out);
-int install_app(transport_type transport, const char* serial, int argc,
-                const char** argv);
-int install_multiple_app(transport_type transport, const char* serial, int argc,
+static int install_app(transport_type transport, const char* serial, int argc,
+                       const char** argv);
+static int install_multiple_app(transport_type transport, const char* serial, int argc,
+                                const char** argv);
+static int uninstall_app(transport_type transport, const char* serial, int argc,
                          const char** argv);
-int uninstall_app(transport_type transport, const char* serial, int argc,
-                  const char** argv);
 
-static const char *gProductOutPath = NULL;
+static std::string gProductOutPath;
 extern int gListenAll;
 
-static char *product_file(const char *extra)
-{
-    if (gProductOutPath == NULL) {
+static std::string product_file(const char *extra) {
+    if (gProductOutPath.empty()) {
         fprintf(stderr, "adb: Product directory not specified; "
                 "use -p or define ANDROID_PRODUCT_OUT\n");
         exit(1);
     }
 
-    int n = strlen(gProductOutPath) + strlen(extra) + 2;
-    char* x = reinterpret_cast<char*>(malloc(n));
-    if (x == 0) {
-        fprintf(stderr, "adb: Out of memory (product_file())\n");
-        exit(1);
-    }
-
-    snprintf(x, (size_t)n, "%s" OS_PATH_SEPARATOR_STR "%s", gProductOutPath, extra);
-    return x;
+    return android::base::StringPrintf("%s%s%s",
+                                       gProductOutPath.c_str(), OS_PATH_SEPARATOR_STR, extra);
 }
 
-void version(FILE * out) {
+static void version(FILE* out) {
     fprintf(out, "Android Debug Bridge version %d.%d.%d\n",
-         ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION);
+            ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION);
 }
 
-void help()
-{
+static void help() {
     version(stderr);
 
     fprintf(stderr,
@@ -245,8 +234,7 @@ void help()
         );
 }
 
-int usage()
-{
+static int usage() {
     help();
     return 1;
 }
@@ -418,8 +406,7 @@ static void *stdin_read_thread(void *x)
     return 0;
 }
 
-int interactive_shell(void)
-{
+static int interactive_shell() {
     adb_thread_t thr;
     int fdi, fd;
 
@@ -457,8 +444,8 @@ static void format_host_command(char* buffer, size_t  buflen, const char* comman
     }
 }
 
-int adb_download_buffer(const char *service, const char *fn, const void* data, int sz,
-                        unsigned progress)
+static int adb_download_buffer(const char *service, const char *fn, const void* data, int sz,
+                               unsigned progress)
 {
     char buf[4096];
     unsigned total;
@@ -516,23 +503,6 @@ int adb_download_buffer(const char *service, const char *fn, const void* data, i
     return 0;
 }
 
-
-int adb_download(const char *service, const char *fn, unsigned progress)
-{
-    void *data;
-    unsigned sz;
-
-    data = load_file(fn, &sz);
-    if(data == 0) {
-        fprintf(stderr,"* cannot read '%s' *\n", fn);
-        return -1;
-    }
-
-    int status = adb_download_buffer(service, fn, data, sz, progress);
-    free(data);
-    return status;
-}
-
 #define SIDELOAD_HOST_BLOCK_SIZE (CHUNK_SIZE)
 
 /*
@@ -554,7 +524,7 @@ int adb_download(const char *service, const char *fn, unsigned progress)
  * - When the other side sends "DONEDONE" instead of a block number,
  *   we hang up.
  */
-int adb_sideload_host(const char* fn) {
+static int adb_sideload_host(const char* fn) {
     unsigned sz;
     size_t xfer = 0;
     int status;
@@ -685,24 +655,6 @@ static void status_window(transport_type ttype, const char* serial)
     }
 }
 
-static int should_escape(const char c)
-{
-    return (c == ' ' || c == '\'' || c == '"' || c == '\\' || c == '(' || c == ')');
-}
-
-static std::string escape_arg(const std::string& s) {
-    // Preserve empty arguments.
-    if (s.empty()) return "\"\"";
-
-    std::string result(s);
-    for (auto it = result.begin(); it != result.end(); ++it) {
-        if (should_escape(*it)) {
-            it = result.insert(it, '\\') + 1;
-        }
-    }
-    return result;
-}
-
 /**
  * Run ppp in "notty" mode against a resource listed as the first parameter
  * eg:
@@ -710,8 +662,7 @@ static std::string escape_arg(const std::string& s) {
  * ppp dev:/dev/omap_csmi_tty0 <ppp options>
  *
  */
-int ppp(int argc, const char **argv)
-{
+static int ppp(int argc, const char** argv) {
 #if defined(_WIN32)
     fprintf(stderr, "error: adb %s not implemented on Win32\n", argv[0]);
     return -1;
@@ -1003,62 +954,52 @@ TODO: debug?  sooner-debug, sooner:debug?
  * Given <hint>, try to construct an absolute path to the
  * ANDROID_PRODUCT_OUT dir.
  */
-static const char *find_product_out_path(const char *hint)
-{
-    static char path_buf[PATH_MAX];
-
+static std::string find_product_out_path(const char* hint) {
     if (hint == NULL || hint[0] == '\0') {
-        return NULL;
+        return "";
     }
 
-    /* If it's already absolute, don't bother doing any work.
-     */
+    // If it's already absolute, don't bother doing any work.
     if (adb_is_absolute_host_path(hint)) {
-        strcpy(path_buf, hint);
-        return path_buf;
+        return hint;
     }
 
-    /* If there are any slashes in it, assume it's a relative path;
-     * make it absolute.
-     */
+    // If there are any slashes in it, assume it's a relative path;
+    // make it absolute.
     if (adb_dirstart(hint) != NULL) {
-        if (getcwd(path_buf, sizeof(path_buf)) == NULL) {
+        char cwd[PATH_MAX];
+        if (getcwd(cwd, sizeof(cwd)) == NULL) {
             fprintf(stderr, "adb: Couldn't get CWD: %s\n", strerror(errno));
-            return NULL;
+            return "";
         }
-        if (strlen(path_buf) + 1 + strlen(hint) >= sizeof(path_buf)) {
-            fprintf(stderr, "adb: Couldn't assemble path\n");
-            return NULL;
-        }
-        strcat(path_buf, OS_PATH_SEPARATOR_STR);
-        strcat(path_buf, hint);
-        return path_buf;
+        return android::base::StringPrintf("%s%s%s", cwd, OS_PATH_SEPARATOR_STR, hint);
     }
 
-    /* It's a string without any slashes.  Try to do something with it.
-     *
-     * Try to find the root of the build tree, and build a PRODUCT_OUT
-     * path from there.
-     */
+    // It's a string without any slashes.  Try to do something with it.
+    //
+    // Try to find the root of the build tree, and build a PRODUCT_OUT
+    // path from there.
     char top_buf[PATH_MAX];
-    const char *top = find_top(top_buf);
-    if (top == NULL) {
+    const char* top = find_top(top_buf);
+    if (top == nullptr) {
         fprintf(stderr, "adb: Couldn't find top of build tree\n");
+        return "";
+    }
+    std::string path = top_buf;
+    path += OS_PATH_SEPARATOR_STR;
+    path += "out";
+    path += OS_PATH_SEPARATOR_STR;
+    path += "target";
+    path += OS_PATH_SEPARATOR_STR;
+    path += "product";
+    path += OS_PATH_SEPARATOR_STR;
+    path += hint;
+    if (!directory_exists(path)) {
+        fprintf(stderr, "adb: Couldn't find a product dir based on -p %s; "
+                        "\"%s\" doesn't exist\n", hint, path.c_str());
         return NULL;
     }
-//TODO: if we have a way to indicate debug, look in out/debug/target/...
-    snprintf(path_buf, sizeof(path_buf),
-            "%s" OS_PATH_SEPARATOR_STR
-            "out" OS_PATH_SEPARATOR_STR
-            "target" OS_PATH_SEPARATOR_STR
-            "product" OS_PATH_SEPARATOR_STR
-            "%s", top_buf, hint);
-    if (access(path_buf, F_OK) < 0) {
-        fprintf(stderr, "adb: Couldn't find a product dir "
-                "based on \"-p %s\"; \"%s\" doesn't exist\n", hint, path_buf);
-        return NULL;
-    }
-    return path_buf;
+    return path;
 }
 
 static void parse_push_pull_args(const char **arg, int narg, char const **path1,
@@ -1113,15 +1054,14 @@ int adb_commandline(int argc, const char **argv)
     const char* serial = NULL;
     const char* server_port_str = NULL;
 
-        /* If defined, this should be an absolute path to
-         * the directory containing all of the various system images
-         * for a particular product.  If not defined, and the adb
-         * command requires this information, then the user must
-         * specify the path using "-p".
-         */
-    gProductOutPath = getenv("ANDROID_PRODUCT_OUT");
-    if (gProductOutPath == NULL || gProductOutPath[0] == '\0') {
-        gProductOutPath = NULL;
+    // If defined, this should be an absolute path to
+    // the directory containing all of the various system images
+    // for a particular product.  If not defined, and the adb
+    // command requires this information, then the user must
+    // specify the path using "-p".
+    char* ANDROID_PRODUCT_OUT = getenv("ANDROID_PRODUCT_OUT");
+    if (ANDROID_PRODUCT_OUT != nullptr) {
+        gProductOutPath = ANDROID_PRODUCT_OUT;
     }
     // TODO: also try TARGET_PRODUCT/TARGET_DEVICE as a hint
 
@@ -1162,9 +1102,8 @@ int adb_commandline(int argc, const char **argv)
                 product = argv[0] + 2;
             }
             gProductOutPath = find_product_out_path(product);
-            if (gProductOutPath == NULL) {
-                fprintf(stderr, "adb: could not resolve \"-p %s\"\n",
-                        product);
+            if (gProductOutPath.empty()) {
+                fprintf(stderr, "adb: could not resolve \"-p %s\"\n", product);
                 return usage();
             }
         } else if (argv[0][0]=='-' && argv[0][1]=='s') {
@@ -1595,46 +1534,55 @@ int adb_commandline(int argc, const char **argv)
         return uninstall_app(ttype, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "sync")) {
-        const char* srcarg;
-        char *system_srcpath, *data_srcpath, *vendor_srcpath, *oem_srcpath;
-
-        int listonly = 0;
-
-        int ret;
+        std::string src_arg;
+        bool list_only = false;
         if (argc < 2) {
-            /* No local path was specified. */
-            srcarg = NULL;
+            // No local path was specified.
+            src_arg = "";
         } else if (argc >= 2 && strcmp(argv[1], "-l") == 0) {
-            listonly = 1;
+            list_only = 1;
             if (argc == 3) {
-                srcarg = argv[2];
+                src_arg = argv[2];
             } else {
-                srcarg = NULL;
+                src_arg = "";
             }
         } else if (argc == 2) {
-            /* A local path or "android"/"data" arg was specified. */
-            srcarg = argv[1];
+            // A local path or "android"/"data" arg was specified.
+            src_arg = argv[1];
         } else {
             return usage();
         }
-        ret = find_sync_dirs(srcarg, &system_srcpath, &data_srcpath, &vendor_srcpath,
-                &oem_srcpath);
-        if (ret != 0) return usage();
 
-        if (system_srcpath != NULL)
-            ret = do_sync_sync(system_srcpath, "/system", listonly);
-        if (ret == 0 && vendor_srcpath != NULL)
-            ret = do_sync_sync(vendor_srcpath, "/vendor", listonly);
-        if(ret == 0 && oem_srcpath != NULL)
-            ret = do_sync_sync(oem_srcpath, "/oem", listonly);
-        if (ret == 0 && data_srcpath != NULL)
-            ret = do_sync_sync(data_srcpath, "/data", listonly);
+        if (src_arg != "" &&
+            src_arg != "system" && src_arg != "data" && src_arg != "vendor" && src_arg != "oem") {
+            return usage();
+        }
 
-        free(system_srcpath);
-        free(vendor_srcpath);
-        free(oem_srcpath);
-        free(data_srcpath);
-        return ret;
+        std::string system_src_path = product_file("system");
+        std::string data_src_path = product_file("data");
+        std::string vendor_src_path = product_file("vendor");
+        std::string oem_src_path = product_file("oem");
+        if (!directory_exists(vendor_src_path)) {
+            vendor_src_path = "";
+        }
+        if (!directory_exists(oem_src_path)) {
+            oem_src_path = "";
+        }
+
+        int rc = 0;
+        if (rc == 0 && (src_arg.empty() || src_arg == "system")) {
+            rc = do_sync_sync(system_src_path.c_str(), "/system", list_only);
+        }
+        if (rc == 0 && (src_arg.empty() || src_arg == "vendor")) {
+            rc = do_sync_sync(vendor_src_path.c_str(), "/vendor", list_only);
+        }
+        if(rc == 0 && (src_arg.empty() || src_arg == "oem")) {
+            rc = do_sync_sync(oem_src_path.c_str(), "/oem", list_only);
+        }
+        if (rc == 0 && (src_arg.empty() || src_arg == "data")) {
+            rc = do_sync_sync(data_src_path.c_str(), "/data", list_only);
+        }
+        return rc;
     }
     /* passthrough commands */
     else if (!strcmp(argv[0],"get-state") ||
@@ -1729,64 +1677,6 @@ static int do_cmd(transport_type ttype, const char* serial, const char *cmd, ...
     return adb_commandline(argc, argv);
 }
 
-int find_sync_dirs(const char *srcarg,
-        char **system_srcdir_out, char **data_srcdir_out, char **vendor_srcdir_out,
-        char **oem_srcdir_out)
-{
-    char *system_srcdir = NULL, *data_srcdir = NULL, *vendor_srcdir = NULL, *oem_srcdir = NULL;
-    struct stat st;
-
-    if(srcarg == NULL) {
-        system_srcdir = product_file("system");
-        data_srcdir = product_file("data");
-        vendor_srcdir = product_file("vendor");
-        oem_srcdir = product_file("oem");
-        // Check if vendor partition exists.
-        if (lstat(vendor_srcdir, &st) || !S_ISDIR(st.st_mode))
-            vendor_srcdir = NULL;
-        // Check if oem partition exists.
-        if (lstat(oem_srcdir, &st) || !S_ISDIR(st.st_mode))
-            oem_srcdir = NULL;
-    } else {
-        // srcarg may be "data", "system", "vendor", "oem" or NULL.
-        // If srcarg is NULL, then all partitions are synced.
-        if(strcmp(srcarg, "system") == 0) {
-            system_srcdir = product_file("system");
-        } else if(strcmp(srcarg, "data") == 0) {
-            data_srcdir = product_file("data");
-        } else if(strcmp(srcarg, "vendor") == 0) {
-            vendor_srcdir = product_file("vendor");
-        } else if(strcmp(srcarg, "oem") == 0) {
-            oem_srcdir = product_file("oem");
-        } else {
-            // It's not "system", "data", "vendor", or "oem".
-            return 1;
-        }
-    }
-
-    if(system_srcdir_out != NULL)
-        *system_srcdir_out = system_srcdir;
-    else
-        free(system_srcdir);
-
-    if(vendor_srcdir_out != NULL)
-        *vendor_srcdir_out = vendor_srcdir;
-    else
-        free(vendor_srcdir);
-
-    if(oem_srcdir_out != NULL)
-        *oem_srcdir_out = oem_srcdir;
-    else
-        free(oem_srcdir);
-
-    if(data_srcdir_out != NULL)
-        *data_srcdir_out = data_srcdir;
-    else
-        free(data_srcdir);
-
-    return 0;
-}
-
 static int pm_command(transport_type transport, const char* serial,
                       int argc, const char** argv)
 {
@@ -1801,8 +1691,8 @@ static int pm_command(transport_type transport, const char* serial,
     return 0;
 }
 
-int uninstall_app(transport_type transport, const char* serial, int argc,
-                  const char** argv)
+static int uninstall_app(transport_type transport, const char* serial, int argc,
+                         const char** argv)
 {
     /* if the user choose the -k option, we refuse to do it until devices are
        out with the option to uninstall the remaining data somehow (adb/ui) */
@@ -1838,8 +1728,8 @@ static const char* get_basename(const char* filename)
     }
 }
 
-int install_app(transport_type transport, const char* serial, int argc,
-                const char** argv)
+static int install_app(transport_type transport, const char* serial, int argc,
+                       const char** argv)
 {
     static const char *const DATA_DEST = "/data/local/tmp/%s";
     static const char *const SD_DEST = "/sdcard/tmp/%s";
@@ -1892,8 +1782,8 @@ cleanup_apk:
     return err;
 }
 
-int install_multiple_app(transport_type transport, const char* serial, int argc,
-                         const char** argv)
+static int install_multiple_app(transport_type transport, const char* serial, int argc,
+                                const char** argv)
 {
     int i;
     struct stat sb;

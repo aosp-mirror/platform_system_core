@@ -31,6 +31,7 @@
 
 #include "adb.h"
 #include "adb_io.h"
+#include "adb_utils.h"
 #include "cutils/properties.h"
 
 static int system_ro = 1;
@@ -54,11 +55,6 @@ static std::string find_mount(const char *dir) {
     }
     endmntent(fp);
     return device;
-}
-
-static bool has_partition(const char* path) {
-    struct stat sb;
-    return (lstat(path, &sb) == 0 && S_ISDIR(sb.st_mode));
 }
 
 int make_block_device_writable(const std::string& dev) {
@@ -90,7 +86,7 @@ static int remount(const char* dir, int* dir_ro) {
 }
 
 static bool remount_partition(int fd, const char* partition, int* ro) {
-  if (!has_partition(partition)) {
+  if (!directory_exists(partition)) {
     return true;
   }
   if (remount(partition, ro)) {
