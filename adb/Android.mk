@@ -44,7 +44,7 @@ LIBADB_linux_SRC_FILES := \
 
 LIBADB_windows_SRC_FILES := \
     get_my_path_windows.cpp \
-    sysdeps_win32.c \
+    sysdeps_win32.cpp \
     usb_windows.cpp \
 
 include $(CLEAR_VARS)
