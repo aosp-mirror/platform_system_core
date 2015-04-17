@@ -487,10 +487,10 @@ static asocket *create_host_service_socket(const char *name, const char* serial)
 /* a Remote socket is used to send/receive data to/from a given transport object
 ** it needs to be closed when the transport is forcibly destroyed by the user
 */
-typedef struct aremotesocket {
+struct aremotesocket {
     asocket      socket;
     adisconnect  disconnect;
-} aremotesocket;
+};
 
 static int remote_socket_enqueue(asocket *s, apacket *p)
 {

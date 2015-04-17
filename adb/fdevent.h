@@ -19,10 +19,6 @@
 
 #include <stdint.h>  /* for int64_t */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* events that may be observed */
 #define FDE_READ              0x0001
 #define FDE_WRITE             0x0002
@@ -32,7 +28,7 @@ extern "C" {
 /* features that may be set (via the events set/add/del interface) */
 #define FDE_DONT_CLOSE        0x0080
 
-typedef struct fdevent fdevent;
+struct fdevent;
 
 typedef void (*fd_func)(int fd, unsigned events, void *userdata);
 
@@ -81,9 +77,5 @@ struct fdevent {
     fd_func func;
     void *arg;
 };
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

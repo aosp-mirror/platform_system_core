@@ -20,10 +20,6 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /*
  * Reads exactly len bytes from fd into buf.
  *
@@ -45,9 +41,5 @@ bool WriteFdExactly(int fd, const void *buf, size_t len);
 
 /* Same as WriteFdExactly, but with an implicit len = strlen(buf). */
 bool WriteStringFully(int fd, const char* str);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* ADB_IO_H */
