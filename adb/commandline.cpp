@@ -30,6 +30,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <string>
+
+#include <base/stringprintf.h>
+
 #if !defined(_WIN32)
 #include <termios.h>
 #include <unistd.h>
@@ -686,43 +690,17 @@ static int should_escape(const char c)
     return (c == ' ' || c == '\'' || c == '"' || c == '\\' || c == '(' || c == ')');
 }
 
-/* Duplicate and escape given argument. */
-static char *escape_arg(const char *s)
-{
-    const char *ts;
-    size_t alloc_len;
-    char *ret;
-    char *dest;
+static std::string escape_arg(const std::string& s) {
+    // Preserve empty arguments.
+    if (s.empty()) return "\"\"";
 
-    alloc_len = 0;
-    for (ts = s; *ts != '\0'; ts++) {
-        alloc_len++;
-        if (should_escape(*ts)) {
-            alloc_len++;
+    std::string result(s);
+    for (auto it = result.begin(); it != result.end(); ++it) {
+        if (should_escape(*it)) {
+            it = result.insert(it, '\\') + 1;
         }
     }
-
-    if (alloc_len == 0) {
-        // Preserve empty arguments
-        ret = (char *) malloc(3);
-        ret[0] = '\"';
-        ret[1] = '\"';
-        ret[2] = '\0';
-        return ret;
-    }
-
-    ret = (char *) malloc(alloc_len + 1);
-    dest = ret;
-
-    for (ts = s; *ts != '\0'; ts++) {
-        if (should_escape(*ts)) {
-            *dest++ = '\\';
-        }
-        *dest++ = *ts;
-    }
-    *dest++ = '\0';
-
-    return ret;
+    return result;
 }
 
 /**
@@ -798,14 +776,12 @@ int ppp(int argc, const char **argv)
 #endif /* !defined(_WIN32) */
 }
 
-static int send_shellcommand(transport_type transport, const char* serial,
-                             char* buf)
-{
-    int fd, ret;
-
-    for(;;) {
-        fd = adb_connect(buf);
-        if(fd >= 0)
+static int send_shell_command(transport_type transport, const char* serial,
+                              const std::string& command) {
+    int fd;
+    while (true) {
+        fd = adb_connect(command.c_str());
+        if (fd >= 0)
             break;
         fprintf(stderr,"- waiting for device -\n");
         adb_sleep_ms(1000);
@@ -813,41 +789,31 @@ static int send_shellcommand(transport_type transport, const char* serial,
     }
 
     read_and_dump(fd);
-    ret = adb_close(fd);
-    if (ret)
+    int rc = adb_close(fd);
+    if (rc) {
         perror("close");
-
-    return ret;
+    }
+    return rc;
 }
 
-static int logcat(transport_type transport, const char* serial, int argc,
-                  const char** argv)
-{
-    char buf[4096];
+static int logcat(transport_type transport, const char* serial, int argc, const char** argv) {
+    char* log_tags = getenv("ANDROID_LOG_TAGS");
+    std::string quoted = escape_arg(log_tags == nullptr ? "" : log_tags);
 
-    char *log_tags;
-    char *quoted;
-
-    log_tags = getenv("ANDROID_LOG_TAGS");
-    quoted = escape_arg(log_tags == NULL ? "" : log_tags);
-    snprintf(buf, sizeof(buf),
-            "shell:export ANDROID_LOG_TAGS=\"%s\"; exec logcat", quoted);
-    free(quoted);
+    std::string cmd = "shell:export ANDROID_LOG_TAGS=\"" + quoted + "\"; exec logcat";
 
     if (!strcmp(argv[0], "longcat")) {
-        strncat(buf, " -v long", sizeof(buf) - 1);
+        cmd += " -v long";
     }
 
     argc -= 1;
     argv += 1;
-    while(argc-- > 0) {
-        quoted = escape_arg(*argv++);
-        strncat(buf, " ", sizeof(buf) - 1);
-        strncat(buf, quoted, sizeof(buf) - 1);
-        free(quoted);
+    while (argc-- > 0) {
+        cmd += " ";
+        cmd += escape_arg(*argv++);
     }
 
-    send_shellcommand(transport, serial, buf);
+    send_shell_command(transport, serial, cmd);
     return 0;
 }
 
@@ -1370,9 +1336,6 @@ int adb_commandline(int argc, const char **argv)
         return adb_send_emulator_command(argc, argv);
     }
     else if (!strcmp(argv[0], "shell") || !strcmp(argv[0], "hell")) {
-        int r;
-        int fd;
-
         char h = (argv[0][0] == 'h');
 
         if (h) {
@@ -1390,19 +1353,19 @@ int adb_commandline(int argc, const char **argv)
             return r;
         }
 
-        snprintf(buf, sizeof(buf), "shell:%s", argv[1]);
+        std::string cmd = "shell:";
+        cmd += argv[1];
         argc -= 2;
         argv += 2;
         while (argc-- > 0) {
-            char *quoted = escape_arg(*argv++);
-            strncat(buf, " ", sizeof(buf) - 1);
-            strncat(buf, quoted, sizeof(buf) - 1);
-            free(quoted);
+            cmd += " ";
+            cmd += escape_arg(*argv++);
         }
 
-        for(;;) {
-            D("interactive shell loop. buff=%s\n", buf);
-            fd = adb_connect(buf);
+        while (true) {
+            D("interactive shell loop. cmd=%s\n", cmd.c_str());
+            int fd = adb_connect(cmd.c_str());
+            int r;
             if (fd >= 0) {
                 D("about to read_and_dump(fd=%d)\n", fd);
                 read_and_dump(fd);
@@ -1430,19 +1393,17 @@ int adb_commandline(int argc, const char **argv)
     }
     else if (!strcmp(argv[0], "exec-in") || !strcmp(argv[0], "exec-out")) {
         int exec_in = !strcmp(argv[0], "exec-in");
-        int fd;
 
-        snprintf(buf, sizeof buf, "exec:%s", argv[1]);
+        std::string cmd = "exec:";
+        cmd += argv[1];
         argc -= 2;
         argv += 2;
         while (argc-- > 0) {
-            char *quoted = escape_arg(*argv++);
-            strncat(buf, " ", sizeof(buf) - 1);
-            strncat(buf, quoted, sizeof(buf) - 1);
-            free(quoted);
+            cmd += " ";
+            cmd += escape_arg(*argv++);
         }
 
-        fd = adb_connect(buf);
+        int fd = adb_connect(cmd.c_str());
         if (fd < 0) {
             fprintf(stderr, "error: %s\n", adb_error());
             return -1;
@@ -1829,18 +1790,14 @@ int find_sync_dirs(const char *srcarg,
 static int pm_command(transport_type transport, const char* serial,
                       int argc, const char** argv)
 {
-    char buf[4096];
+    std::string cmd = "shell:pm";
 
-    snprintf(buf, sizeof(buf), "shell:pm");
-
-    while(argc-- > 0) {
-        char *quoted = escape_arg(*argv++);
-        strncat(buf, " ", sizeof(buf) - 1);
-        strncat(buf, quoted, sizeof(buf) - 1);
-        free(quoted);
+    while (argc-- > 0) {
+        cmd += " ";
+        cmd += escape_arg(*argv++);
     }
 
-    send_shellcommand(transport, serial, buf);
+    send_shell_command(transport, serial, cmd);
     return 0;
 }
 
@@ -1865,15 +1822,8 @@ int uninstall_app(transport_type transport, const char* serial, int argc,
 
 static int delete_file(transport_type transport, const char* serial, char* filename)
 {
-    char buf[4096];
-    char* quoted;
-
-    snprintf(buf, sizeof(buf), "shell:rm -f ");
-    quoted = escape_arg(filename);
-    strncat(buf, quoted, sizeof(buf)-1);
-    free(quoted);
-
-    send_shellcommand(transport, serial, buf);
+    std::string cmd = "shell:rm -f " + escape_arg(filename);
+    send_shell_command(transport, serial, cmd);
     return 0;
 }
 
@@ -1945,7 +1895,6 @@ cleanup_apk:
 int install_multiple_app(transport_type transport, const char* serial, int argc,
                          const char** argv)
 {
-    char buf[1024];
     int i;
     struct stat sb;
     unsigned long long total_size = 0;
@@ -1974,20 +1923,19 @@ int install_multiple_app(transport_type transport, const char* serial, int argc,
         return 1;
     }
 
-    snprintf(buf, sizeof(buf), "exec:pm install-create -S %lld", total_size);
+    std::string cmd = android::base::StringPrintf("exec:pm install-create -S %lld", total_size);
     for (i = 1; i < first_apk; i++) {
-        char *quoted = escape_arg(argv[i]);
-        strncat(buf, " ", sizeof(buf) - 1);
-        strncat(buf, quoted, sizeof(buf) - 1);
-        free(quoted);
+        cmd += " ";
+        cmd += escape_arg(argv[i]);
     }
 
     // Create install session
-    int fd = adb_connect(buf);
+    int fd = adb_connect(cmd.c_str());
     if (fd < 0) {
         fprintf(stderr, "Connect error for create: %s\n", adb_error());
         return -1;
     }
+    char buf[BUFSIZ];
     read_status_line(fd, buf, sizeof(buf));
     adb_close(fd);
 
@@ -2016,7 +1964,7 @@ int install_multiple_app(transport_type transport, const char* serial, int argc,
             goto finalize_session;
         }
 
-        snprintf(buf, sizeof(buf), "exec:pm install-write -S %lld %d %d_%s -",
+        std::string cmd = android::base::StringPrintf("exec:pm install-write -S %lld %d %d_%s -",
                 (long long int) sb.st_size, session_id, i, get_basename(file));
 
         int localFd = adb_open(file, O_RDONLY);
@@ -2026,7 +1974,7 @@ int install_multiple_app(transport_type transport, const char* serial, int argc,
             goto finalize_session;
         }
 
-        int remoteFd = adb_connect(buf);
+        int remoteFd = adb_connect(cmd.c_str());
         if (remoteFd < 0) {
             fprintf(stderr, "Connect error for write: %s\n", adb_error());
             adb_close(localFd);
