@@ -17,14 +17,11 @@
 #ifndef __TRANSPORT_H
 #define __TRANSPORT_H
 
-#include <stdbool.h>
 #include <sys/types.h>
 
-#include "adb.h"
+#include <string>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "adb.h"
 
 #if ADB_TRACE
 void dump_hex(const unsigned char* ptr, size_t  len);
@@ -37,7 +34,7 @@ void dump_hex(const unsigned char* ptr, size_t  len);
  * If no suitable transport is found, error is set.
  */
 atransport* acquire_one_transport(int state, transport_type ttype,
-                                  const char* serial, const char** error_out);
+                                  const char* serial, std::string* error_out);
 void add_transport_disconnect(atransport* t, adisconnect* dis);
 void remove_transport_disconnect(atransport* t, adisconnect* dis);
 void kick_transport(atransport* t);
@@ -73,9 +70,5 @@ void close_usb_devices();
 void send_packet(apacket* p, atransport* t);
 
 asocket* create_device_tracker(void);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif   /* __TRANSPORT_H */
