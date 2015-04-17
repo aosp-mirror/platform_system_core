@@ -43,8 +43,6 @@
 #include "remount_service.h"
 #include "transport.h"
 
-typedef struct stinfo stinfo;
-
 struct stinfo {
     void (*func)(int fd, void *cookie);
     int fd;

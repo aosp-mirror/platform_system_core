@@ -19,10 +19,6 @@
 
 #include "adb.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 extern int auth_enabled;
 
 int adb_auth_keygen(const char* filename);
@@ -67,9 +63,5 @@ int adb_auth_verify(uint8_t* token, uint8_t* sig, int siglen);
 void adb_auth_confirm_key(unsigned char *data, size_t len, atransport *t);
 
 #endif // ADB_HOST
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // __ADB_AUTH_H

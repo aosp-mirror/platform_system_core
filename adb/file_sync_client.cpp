@@ -130,8 +130,6 @@ fail:
     return -1;
 }
 
-typedef struct syncsendbuf syncsendbuf;
-
 struct syncsendbuf {
     unsigned id;
     unsigned size;
@@ -557,8 +555,6 @@ int do_sync_ls(const char *path)
     }
 }
 
-typedef struct copyinfo copyinfo;
-
 struct copyinfo
 {
     copyinfo *next;
@@ -804,12 +800,12 @@ int do_sync_push(const char *lpath, const char *rpath, int show_progress)
 }
 
 
-typedef struct {
+struct sync_ls_build_list_cb_args {
     copyinfo **filelist;
     copyinfo **dirlist;
     const char *rpath;
     const char *lpath;
-} sync_ls_build_list_cb_args;
+};
 
 void
 sync_ls_build_list_cb(unsigned mode, unsigned size, unsigned time,
