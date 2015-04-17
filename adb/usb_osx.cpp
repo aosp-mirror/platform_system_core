@@ -26,6 +26,7 @@
 #include <IOKit/IOMessage.h>
 #include <mach/mach_port.h>
 
+#include <inttypes.h>
 #include <stdio.h>
 
 #include "adb.h"
@@ -111,7 +112,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
     HRESULT                  result;
     SInt32                   score;
     UInt32                   locationId;
-    UInt8                    class, subclass, protocol;
+    UInt8                    if_class, subclass, protocol;
     UInt16                   vendor;
     UInt16                   product;
     UInt8                    serialIndex;
@@ -132,9 +133,9 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         }
 
         //* This gets us the interface object
-        result = (*plugInInterface)->QueryInterface(plugInInterface,
-                CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID), (LPVOID)
-                &iface);
+        result = (*plugInInterface)->QueryInterface(
+            plugInInterface,
+            CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID), (LPVOID*)&iface);
         //* We only needed the plugin to get the interface, so discard it
         (*plugInInterface)->Release(plugInInterface);
         if (result || !iface) {
@@ -142,12 +143,12 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
             continue;
         }
 
-        kr = (*iface)->GetInterfaceClass(iface, &class);
+        kr = (*iface)->GetInterfaceClass(iface, &if_class);
         kr = (*iface)->GetInterfaceSubClass(iface, &subclass);
         kr = (*iface)->GetInterfaceProtocol(iface, &protocol);
-        if(class != ADB_CLASS || subclass != ADB_SUBCLASS || protocol != ADB_PROTOCOL) {
+        if(if_class != ADB_CLASS || subclass != ADB_SUBCLASS || protocol != ADB_PROTOCOL) {
             // Ignore non-ADB devices.
-            DBG("Ignoring interface with incorrect class/subclass/protocol - %d, %d, %d\n", class, subclass, protocol);
+            DBG("Ignoring interface with incorrect class/subclass/protocol - %d, %d, %d\n", if_class, subclass, protocol);
             (*iface)->Release(iface);
             continue;
         }
@@ -177,7 +178,7 @@ AndroidInterfaceAdded(void *refCon, io_iterator_t iterator)
         }
 
         result = (*plugInInterface)->QueryInterface(plugInInterface,
-                CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID), (LPVOID) &dev);
+            CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID), (LPVOID*)&dev);
         //* only needed this to query the plugin
         (*plugInInterface)->Release(plugInInterface);
         if (result || !dev) {
@@ -334,7 +335,7 @@ CheckInterface(IOUSBInterfaceInterface **interface, UInt16 vendor, UInt16 produc
                 interfaceSubClass, interfaceProtocol))
         goto err_bad_adb_interface;
 
-    handle = calloc(1, sizeof(usb_handle));
+    handle = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
 
     //* Iterate over the endpoints for this interface and find the first
     //* bulk in/out pipes available.  These will be our read/write pipes.
