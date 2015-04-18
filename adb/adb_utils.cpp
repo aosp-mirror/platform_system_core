@@ -16,9 +16,17 @@
 
 #include "adb_utils.h"
 
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+bool getcwd(std::string* s) {
+  char* cwd = getcwd(nullptr, 0);
+  if (cwd != nullptr) *s = cwd;
+  free(cwd);
+  return (cwd != nullptr);
+}
 
 bool directory_exists(const std::string& path) {
   struct stat sb;
