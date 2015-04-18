@@ -758,11 +758,10 @@ static int logcat(transport_type transport, const char* serial, int argc, const 
         cmd += " -v long";
     }
 
-    argc -= 1;
-    argv += 1;
+    --argc;
+    ++argv;
     while (argc-- > 0) {
-        cmd += " ";
-        cmd += escape_arg(*argv++);
+        cmd += " " + escape_arg(*argv++);
     }
 
     send_shell_command(transport, serial, cmd);
@@ -789,21 +788,17 @@ static int mkdirs(const char *path)
 }
 
 static int backup(int argc, const char** argv) {
-    char buf[4096];
-    char default_name[32];
-    const char* filename = strcpy(default_name, "./backup.ab");
-    int fd, outFd;
-    int i, j;
+    const char* filename = "./backup.ab";
 
     /* find, extract, and use any -f argument */
-    for (i = 1; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         if (!strcmp("-f", argv[i])) {
             if (i == argc-1) {
                 fprintf(stderr, "adb: -f passed with no filename\n");
                 return usage();
             }
             filename = argv[i+1];
-            for (j = i+2; j <= argc; ) {
+            for (int j = i+2; j <= argc; ) {
                 argv[i++] = argv[j++];
             }
             argc -= 2;
@@ -816,20 +811,21 @@ static int backup(int argc, const char** argv) {
 
     adb_unlink(filename);
     mkdirs(filename);
-    outFd = adb_creat(filename, 0640);
+    int outFd = adb_creat(filename, 0640);
     if (outFd < 0) {
         fprintf(stderr, "adb: unable to open file %s\n", filename);
         return -1;
     }
 
-    snprintf(buf, sizeof(buf), "backup");
-    for (argc--, argv++; argc; argc--, argv++) {
-        strncat(buf, ":", sizeof(buf) - strlen(buf) - 1);
-        strncat(buf, argv[0], sizeof(buf) - strlen(buf) - 1);
+    std::string cmd = "backup:";
+    --argc;
+    ++argv;
+    while (argc-- > 0) {
+        cmd += " " + escape_arg(*argv++);
     }
 
-    D("backup. filename=%s buf=%s\n", filename, buf);
-    fd = adb_connect(buf);
+    D("backup. filename=%s cmd=%s\n", filename, cmd.c_str());
+    int fd = adb_connect(cmd.c_str());
     if (fd < 0) {
         fprintf(stderr, "adb: unable to connect for backup\n");
         adb_close(outFd);
@@ -1226,8 +1222,7 @@ int adb_commandline(int argc, const char **argv)
         argc -= 2;
         argv += 2;
         while (argc-- > 0) {
-            cmd += " ";
-            cmd += escape_arg(*argv++);
+            cmd += " " + escape_arg(*argv++);
         }
 
         while (true) {
@@ -1267,8 +1262,7 @@ int adb_commandline(int argc, const char **argv)
         argc -= 2;
         argv += 2;
         while (argc-- > 0) {
-            cmd += " ";
-            cmd += escape_arg(*argv++);
+            cmd += " " + escape_arg(*argv++);
         }
 
         int fd = adb_connect(cmd.c_str());
@@ -1612,8 +1606,7 @@ static int pm_command(transport_type transport, const char* serial,
     std::string cmd = "shell:pm";
 
     while (argc-- > 0) {
-        cmd += " ";
-        cmd += escape_arg(*argv++);
+        cmd += " " + escape_arg(*argv++);
     }
 
     send_shell_command(transport, serial, cmd);
@@ -1744,8 +1737,7 @@ static int install_multiple_app(transport_type transport, const char* serial, in
 
     std::string cmd = android::base::StringPrintf("exec:pm install-create -S %" PRIu64, total_size);
     for (i = 1; i < first_apk; i++) {
-        cmd += " ";
-        cmd += escape_arg(argv[i]);
+        cmd += " " + escape_arg(argv[i]);
     }
 
     // Create install session
