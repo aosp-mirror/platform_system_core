@@ -321,7 +321,7 @@ static void copy_to_file(int inFd, int outFd) {
         stdin_raw_init(STDIN_FILENO);
     }
 
-    for (;;) {
+    while (true) {
         if (inFd == STDIN_FILENO) {
             len = unix_read(inFd, buf, BUFSIZE);
         } else {
@@ -554,7 +554,7 @@ static int adb_sideload_host(const char* fn) {
 
     opt = adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
 
-    for (;;) {
+    while (true) {
         if (!ReadFdExactly(fd, buf, 8)) {
             fprintf(stderr, "* failed to read command: %s\n", adb_error());
             status = -1;
@@ -872,81 +872,9 @@ static int restore(int argc, const char** argv) {
     return 0;
 }
 
-#define SENTINEL_FILE "config" OS_PATH_SEPARATOR_STR "envsetup.make"
-static int top_works(const char *top)
-{
-    if (top != NULL && adb_is_absolute_host_path(top)) {
-        char path_buf[PATH_MAX];
-        snprintf(path_buf, sizeof(path_buf),
-                "%s" OS_PATH_SEPARATOR_STR SENTINEL_FILE, top);
-        return access(path_buf, F_OK) == 0;
-    }
-    return 0;
-}
-
-static char *find_top_from(const char *indir, char path_buf[PATH_MAX])
-{
-    strcpy(path_buf, indir);
-    while (1) {
-        if (top_works(path_buf)) {
-            return path_buf;
-        }
-        char *s = adb_dirstop(path_buf);
-        if (s != NULL) {
-            *s = '\0';
-        } else {
-            path_buf[0] = '\0';
-            return NULL;
-        }
-    }
-}
-
-static char *find_top(char path_buf[PATH_MAX])
-{
-    char *top = getenv("ANDROID_BUILD_TOP");
-    if (top != NULL && top[0] != '\0') {
-        if (!top_works(top)) {
-            fprintf(stderr, "adb: bad ANDROID_BUILD_TOP value \"%s\"\n", top);
-            return NULL;
-        }
-    } else {
-        top = getenv("TOP");
-        if (top != NULL && top[0] != '\0') {
-            if (!top_works(top)) {
-                fprintf(stderr, "adb: bad TOP value \"%s\"\n", top);
-                return NULL;
-            }
-        } else {
-            top = NULL;
-        }
-    }
-
-    if (top != NULL) {
-        /* The environment pointed to a top directory that works.
-         */
-        strcpy(path_buf, top);
-        return path_buf;
-    }
-
-    /* The environment didn't help.  Walk up the tree from the CWD
-     * to see if we can find the top.
-     */
-    char dir[PATH_MAX];
-    top = find_top_from(getcwd(dir, sizeof(dir)), path_buf);
-    if (top == NULL) {
-        /* If the CWD isn't under a good-looking top, see if the
-         * executable is.
-         */
-        get_my_path(dir, PATH_MAX);
-        top = find_top_from(dir, path_buf);
-    }
-    return top;
-}
-
 /* <hint> may be:
  * - A simple product name
  *   e.g., "sooner"
-TODO: debug?  sooner-debug, sooner:debug?
  * - A relative path from the CWD to the ANDROID_PRODUCT_OUT dir
  *   e.g., "out/target/product/sooner"
  * - An absolute path to the PRODUCT_OUT dir
@@ -967,26 +895,26 @@ static std::string find_product_out_path(const char* hint) {
 
     // If there are any slashes in it, assume it's a relative path;
     // make it absolute.
-    if (adb_dirstart(hint) != NULL) {
-        char cwd[PATH_MAX];
-        if (getcwd(cwd, sizeof(cwd)) == NULL) {
-            fprintf(stderr, "adb: Couldn't get CWD: %s\n", strerror(errno));
+    if (adb_dirstart(hint) != nullptr) {
+        std::string cwd;
+        if (!getcwd(&cwd)) {
+            fprintf(stderr, "adb: getcwd failed: %s\n", strerror(errno));
             return "";
         }
-        return android::base::StringPrintf("%s%s%s", cwd, OS_PATH_SEPARATOR_STR, hint);
+        return android::base::StringPrintf("%s%s%s", cwd.c_str(), OS_PATH_SEPARATOR_STR, hint);
     }
 
     // It's a string without any slashes.  Try to do something with it.
     //
     // Try to find the root of the build tree, and build a PRODUCT_OUT
     // path from there.
-    char top_buf[PATH_MAX];
-    const char* top = find_top(top_buf);
+    char* top = getenv("ANDROID_BUILD_TOP");
     if (top == nullptr) {
-        fprintf(stderr, "adb: Couldn't find top of build tree\n");
+        fprintf(stderr, "adb: ANDROID_BUILD_TOP not set!\n");
         return "";
     }
-    std::string path = top_buf;
+
+    std::string path = top;
     path += OS_PATH_SEPARATOR_STR;
     path += "out";
     path += OS_PATH_SEPARATOR_STR;
@@ -998,7 +926,7 @@ static std::string find_product_out_path(const char* hint) {
     if (!directory_exists(path)) {
         fprintf(stderr, "adb: Couldn't find a product dir based on -p %s; "
                         "\"%s\" doesn't exist\n", hint, path.c_str());
-        return NULL;
+        return "";
     }
     return path;
 }
