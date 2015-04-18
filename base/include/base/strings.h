@@ -25,7 +25,7 @@ namespace base {
 
 // Splits a string into a vector of strings.
 //
-// The string is split at each occurence of a character in delimiters.
+// The string is split at each occurrence of a character in delimiters.
 //
 // Empty splits will be omitted. I.e. Split("a,,b", ",") -> {"a", "b"}
 //
