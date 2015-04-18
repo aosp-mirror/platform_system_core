@@ -192,7 +192,7 @@ void reboot_service(int fd, void* arg)
     if (reboot_service_impl(fd, static_cast<const char*>(arg))) {
         // Don't return early. Give the reboot command time to take effect
         // to avoid messing up scripts which do "adb reboot && adb wait-for-device"
-        while (1) {
+        while (true) {
             pause();
         }
     }
@@ -373,7 +373,7 @@ static void subproc_waiter_service(int fd, void *cookie)
     pid_t pid = (pid_t) (uintptr_t) cookie;
 
     D("entered. fd=%d of pid=%d\n", fd, pid);
-    for (;;) {
+    while (true) {
         int status;
         pid_t p = waitpid(pid, &status, 0);
         if (p == pid) {

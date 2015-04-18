@@ -163,7 +163,7 @@ static void *usb_adb_open_thread(void *x)
     struct usb_handle *usb = (struct usb_handle *)x;
     int fd;
 
-    while (1) {
+    while (true) {
         // wait until the USB device needs opening
         adb_mutex_lock(&usb->lock);
         while (usb->fd != -1)
@@ -347,14 +347,14 @@ static void *usb_ffs_open_thread(void *x)
 {
     struct usb_handle *usb = (struct usb_handle *)x;
 
-    while (1) {
+    while (true) {
         // wait until the USB device needs opening
         adb_mutex_lock(&usb->lock);
         while (usb->control != -1 && usb->bulk_in != -1 && usb->bulk_out != -1)
             adb_cond_wait(&usb->notify, &usb->lock);
         adb_mutex_unlock(&usb->lock);
 
-        while (1) {
+        while (true) {
             init_functionfs(usb);
 
             if (usb->control >= 0 && usb->bulk_in >= 0 && usb->bulk_out >= 0)

@@ -383,7 +383,7 @@ int main(int argc, char **argv) {
     /* If adbd runs inside the emulator this will enable adb tracing via
      * adb-debug qemud service in the emulator. */
     adb_qemu_trace_init();
-    while (1) {
+    while (true) {
         int c;
         int option_index = 0;
         static struct option opts[] = {
