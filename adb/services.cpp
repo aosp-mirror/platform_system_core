@@ -31,6 +31,8 @@
 #include <unistd.h>
 #endif
 
+#include <base/stringprintf.h>
+
 #if !ADB_HOST
 #include "base/file.h"
 #include "cutils/android_reboot.h"
@@ -499,19 +501,8 @@ int service_to_fd(const char *name)
     } else if(!strncmp(name, "unroot:", 7)) {
         ret = create_service_thread(restart_unroot_service, NULL);
     } else if(!strncmp(name, "backup:", 7)) {
-        char* arg = strdup(name + 7);
-        if (arg == NULL) return -1;
-        char* c = arg;
-        for (; *c != '\0'; c++) {
-            if (*c == ':')
-                *c = ' ';
-        }
-        char* cmd;
-        if (asprintf(&cmd, "/system/bin/bu backup %s", arg) != -1) {
-            ret = create_subproc_thread(cmd, SUBPROC_RAW);
-            free(cmd);
-        }
-        free(arg);
+        ret = create_subproc_thread(android::base::StringPrintf("/system/bin/bu backup %s",
+                                                                (name + 7)).c_str(), SUBPROC_RAW);
     } else if(!strncmp(name, "restore:", 8)) {
         ret = create_subproc_thread("/system/bin/bu restore", SUBPROC_RAW);
     } else if(!strncmp(name, "tcpip:", 6)) {
