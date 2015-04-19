@@ -21,6 +21,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "sysdeps.h"
+
 bool getcwd(std::string* s) {
   char* cwd = getcwd(nullptr, 0);
   if (cwd != nullptr) *s = cwd;
