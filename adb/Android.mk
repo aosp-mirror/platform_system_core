@@ -5,7 +5,11 @@
 
 LOCAL_PATH:= $(call my-dir)
 
-ADB_CLANG := true
+ifeq ($(HOST_OS),windows)
+  adb_host_clang := false  # libc++ for mingw not ready yet.
+else
+  adb_host_clang := true
+endif
 
 # libadb
 # =========================================================
@@ -26,6 +30,11 @@ LIBADB_SRC_FILES := \
     transport.cpp \
     transport_local.cpp \
     transport_usb.cpp \
+
+LIBADB_TEST_SRCS := \
+    adb_io_test.cpp \
+    adb_utils_test.cpp \
+    transport_test.cpp \
 
 LIBADB_CFLAGS := \
     -Wall -Werror \
@@ -63,7 +72,7 @@ LOCAL_SRC_FILES := \
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := $(adb_host_clang)
 LOCAL_MODULE := libadb
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
 LOCAL_SRC_FILES := \
@@ -81,13 +90,8 @@ endif
 
 include $(BUILD_HOST_STATIC_LIBRARY)
 
-LIBADB_TEST_SRCS := \
-    adb_io_test.cpp \
-    adb_utils_test.cpp \
-    transport_test.cpp \
-
 include $(CLEAR_VARS)
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := true
 LOCAL_MODULE := adbd_test
 LOCAL_CFLAGS := -DADB_HOST=0 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS)
@@ -96,7 +100,7 @@ LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := $(adb_host_clang)
 LOCAL_MODULE := adb_test
 LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS) services.cpp
@@ -131,15 +135,11 @@ ifeq ($(HOST_OS),darwin)
 endif
 
 ifeq ($(HOST_OS),windows)
+  LOCAL_LDLIBS += -lws2_32 -lgdi32
   EXTRA_STATIC_LIBS := AdbWinApi
-  ifneq ($(strip $(USE_MINGW)),)
-    # MinGW under Linux case
-    LOCAL_LDLIBS += -lws2_32 -lgdi32
-    USE_SYSDEPS_WIN32 := 1
-  endif
 endif
 
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := $(adb_host_clang)
 
 LOCAL_SRC_FILES := \
     adb_main.cpp \
@@ -162,11 +162,8 @@ LOCAL_STATIC_LIBRARIES := \
     libadb \
     libbase \
     libcrypto_static \
+    libcutils \
     $(EXTRA_STATIC_LIBS) \
-
-ifeq ($(USE_SYSDEPS_WIN32),)
-    LOCAL_STATIC_LIBRARIES += libcutils
-endif
 
 include $(BUILD_HOST_EXECUTABLE)
 
@@ -184,7 +181,7 @@ endif
 
 include $(CLEAR_VARS)
 
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := true
 
 LOCAL_SRC_FILES := \
     adb_main.cpp \

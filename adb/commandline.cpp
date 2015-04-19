@@ -1735,7 +1735,11 @@ static int install_multiple_app(transport_type transport, const char* serial, in
         return 1;
     }
 
+#if defined(_WIN32) // Remove when we're using clang for Win32.
+    std::string cmd = android::base::StringPrintf("exec:pm install-create -S %u", (unsigned) total_size);
+#else
     std::string cmd = android::base::StringPrintf("exec:pm install-create -S %" PRIu64, total_size);
+#endif
     for (i = 1; i < first_apk; i++) {
         cmd += " " + escape_arg(argv[i]);
     }
@@ -1775,9 +1779,15 @@ static int install_multiple_app(transport_type transport, const char* serial, in
             goto finalize_session;
         }
 
+#if defined(_WIN32) // Remove when we're using clang for Win32.
+        std::string cmd = android::base::StringPrintf(
+                "exec:pm install-write -S %u %d %d_%s -",
+                (unsigned) sb.st_size, session_id, i, get_basename(file));
+#else
         std::string cmd = android::base::StringPrintf(
                 "exec:pm install-write -S %" PRIu64 " %d %d_%s -",
                 static_cast<uint64_t>(sb.st_size), session_id, i, get_basename(file));
+#endif
 
         int localFd = adb_open(file, O_RDONLY);
         if (localFd < 0) {
