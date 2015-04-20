@@ -186,6 +186,10 @@ struct PidEntry : public EntryBaseDropped {
     const char*getName() const { return name; }
 
     inline void add(pid_t p) {
+        if (name && !strncmp(name, "zygote", 6)) {
+            free(name);
+            name = NULL;
+        }
         if (!name) {
             char *n = android::pidToName(p);
             if (n) {
