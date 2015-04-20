@@ -39,7 +39,7 @@ LogStatistics::LogStatistics()
 namespace android {
 
 // caller must own and free character string
-static char *pidToName(pid_t pid) {
+char *pidToName(pid_t pid) {
     char *retval = NULL;
     if (pid == 0) { // special case from auditd for kernel
         retval = strdup("logd.auditd");
