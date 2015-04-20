@@ -74,7 +74,10 @@ LOCAL_REQUIRED_MODULES := libf2fs_fmt_host_dyn
 LOCAL_STATIC_LIBRARIES += libf2fs_utils_host libf2fs_ioutils_host libf2fs_dlutils_host
 endif
 
-LOCAL_CXX_STL := libc++_static
+# libc++ not available on windows yet
+ifneq ($(HOST_OS),windows)
+    LOCAL_CXX_STL := libc++_static
+endif
 
 # Don't add anything here, we don't want additional shared dependencies
 # on the host fastboot tool, and shared libraries that link against libc++
