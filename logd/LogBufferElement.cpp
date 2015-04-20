@@ -58,7 +58,7 @@ uint32_t LogBufferElement::getTag() const {
 }
 
 // caller must own and free character string
-static char *tidToName(pid_t tid) {
+char *android::tidToName(pid_t tid) {
     char *retval = NULL;
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "/proc/%u/comm", tid);
@@ -108,9 +108,9 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer,
     static const char format_uid[] = "uid=%u%s too chatty%s, expire %u line%s";
 
     char *name = parent->uidToName(mUid);
-    char *commName = tidToName(mTid);
+    char *commName = android::tidToName(mTid);
     if (!commName && (mTid != mPid)) {
-        commName = tidToName(mPid);
+        commName = android::tidToName(mPid);
     }
     if (!commName) {
         commName = parent->pidToName(mPid);
