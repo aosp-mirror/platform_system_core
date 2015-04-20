@@ -121,7 +121,7 @@ ssize_t memtrack_proc_gl_total(struct memtrack_proc *p);
 ssize_t memtrack_proc_gl_pss(struct memtrack_proc *p);
 
 /**
- * memtrack_proc_gl_total
+ * memtrack_proc_other_total
  *
  * Same as memtrack_proc_graphics_total, but counts miscellaneous memory
  * not tracked by gl or graphics calls above.
@@ -131,7 +131,7 @@ ssize_t memtrack_proc_gl_pss(struct memtrack_proc *p);
 ssize_t memtrack_proc_other_total(struct memtrack_proc *p);
 
 /**
- * memtrack_proc_gl_pss
+ * memtrack_proc_other_pss
  *
  * Same as memtrack_proc_graphics_total, but counts miscellaneous memory
  * not tracked by gl or graphics calls above.
