@@ -74,6 +74,13 @@ LOCAL_REQUIRED_MODULES := libf2fs_fmt_host_dyn
 LOCAL_STATIC_LIBRARIES += libf2fs_utils_host libf2fs_ioutils_host libf2fs_dlutils_host
 endif
 
+LOCAL_CXX_STL := libc++_static
+
+# Don't add anything here, we don't want additional shared dependencies
+# on the host fastboot tool, and shared libraries that link against libc++
+# will violate ODR
+LOCAL_SHARED_LIBRARIES :=
+
 include $(BUILD_HOST_EXECUTABLE)
 
 my_dist_files := $(LOCAL_BUILT_MODULE)
