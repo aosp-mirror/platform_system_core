@@ -35,6 +35,7 @@ char *uidToName(uid_t uid);
 
 // Furnished in LogStatistics.cpp. Caller must own and free returned value
 char *pidToName(pid_t pid);
+char *tidToName(pid_t tid);
 
 // Furnished in main.cpp. Thread safe.
 const char *tagToName(uint32_t tag);
