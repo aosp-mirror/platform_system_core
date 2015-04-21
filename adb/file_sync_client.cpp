@@ -1027,18 +1027,18 @@ int do_sync_pull(const char *rpath, const char *lpath, int show_progress, int co
     }
 }
 
-int do_sync_sync(const char *lpath, const char *rpath, int listonly)
+int do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_only)
 {
-    fprintf(stderr,"syncing %s...\n",rpath);
+    fprintf(stderr, "syncing %s...\n", rpath.c_str());
 
     int fd = adb_connect("sync:");
-    if(fd < 0) {
-        fprintf(stderr,"error: %s\n", adb_error());
+    if (fd < 0) {
+        fprintf(stderr, "error: %s\n", adb_error());
         return 1;
     }
 
     BEGIN();
-    if(copy_local_dir_remote(fd, lpath, rpath, 1, listonly)){
+    if (copy_local_dir_remote(fd, lpath.c_str(), rpath.c_str(), 1, list_only)) {
         return 1;
     } else {
         END();
