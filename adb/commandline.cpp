@@ -1457,27 +1457,27 @@ int adb_commandline(int argc, const char **argv)
         return uninstall_app(ttype, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "sync")) {
-        std::string src_arg;
+        std::string src;
         bool list_only = false;
         if (argc < 2) {
             // No local path was specified.
-            src_arg = "";
+            src = "";
         } else if (argc >= 2 && strcmp(argv[1], "-l") == 0) {
-            list_only = 1;
+            list_only = true;
             if (argc == 3) {
-                src_arg = argv[2];
+                src = argv[2];
             } else {
-                src_arg = "";
+                src = "";
             }
         } else if (argc == 2) {
             // A local path or "android"/"data" arg was specified.
-            src_arg = argv[1];
+            src = argv[1];
         } else {
             return usage();
         }
 
-        if (src_arg != "" &&
-            src_arg != "system" && src_arg != "data" && src_arg != "vendor" && src_arg != "oem") {
+        if (src != "" &&
+            src != "system" && src != "data" && src != "vendor" && src != "oem") {
             return usage();
         }
 
@@ -1485,25 +1485,19 @@ int adb_commandline(int argc, const char **argv)
         std::string data_src_path = product_file("data");
         std::string vendor_src_path = product_file("vendor");
         std::string oem_src_path = product_file("oem");
-        if (!directory_exists(vendor_src_path)) {
-            vendor_src_path = "";
-        }
-        if (!directory_exists(oem_src_path)) {
-            oem_src_path = "";
-        }
 
         int rc = 0;
-        if (rc == 0 && (src_arg.empty() || src_arg == "system")) {
-            rc = do_sync_sync(system_src_path.c_str(), "/system", list_only);
+        if (rc == 0 && (src.empty() || src == "system")) {
+            rc = do_sync_sync(system_src_path, "/system", list_only);
         }
-        if (rc == 0 && (src_arg.empty() || src_arg == "vendor")) {
-            rc = do_sync_sync(vendor_src_path.c_str(), "/vendor", list_only);
+        if (rc == 0 && (src.empty() || src == "vendor") && directory_exists(vendor_src_path)) {
+            rc = do_sync_sync(vendor_src_path, "/vendor", list_only);
         }
-        if(rc == 0 && (src_arg.empty() || src_arg == "oem")) {
-            rc = do_sync_sync(oem_src_path.c_str(), "/oem", list_only);
+        if (rc == 0 && (src.empty() || src == "oem") && directory_exists(oem_src_path)) {
+            rc = do_sync_sync(oem_src_path, "/oem", list_only);
         }
-        if (rc == 0 && (src_arg.empty() || src_arg == "data")) {
-            rc = do_sync_sync(data_src_path.c_str(), "/data", list_only);
+        if (rc == 0 && (src.empty() || src == "data")) {
+            rc = do_sync_sync(data_src_path, "/data", list_only);
         }
         return rc;
     }
