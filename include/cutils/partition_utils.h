@@ -20,7 +20,6 @@
 __BEGIN_DECLS
 
 int partition_wiped(char *source);
-void erase_footer(const char *dev_path, long long size);
 
 __END_DECLS
 
