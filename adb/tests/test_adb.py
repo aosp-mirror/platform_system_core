@@ -275,6 +275,10 @@ class AdbBasic(unittest.TestCase):
         result = adb.shell("sh -c 'echo hello; echo world'").splitlines()
         self.assertEqual(["hello", "world"], result)
 
+        # http://b/15479704
+        self.assertEqual('t', adb.shell("'true && echo t'").strip())
+        self.assertEqual('t', adb.shell("sh -c 'true && echo t'").strip())
+
 
 class AdbFile(unittest.TestCase):
     SCRATCH_DIR = "/data/local/tmp"
