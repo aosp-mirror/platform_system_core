@@ -328,22 +328,32 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
             }
 
             if (!headerPrinted) {
+                output.appendFormat("\n\n");
+                android::String8 name("");
                 if (uid == AID_ROOT) {
-                    output.appendFormat(
-                        "\n\nChattiest UIDs in %s:\n",
+                    name.appendFormat(
+                        "Chattiest UIDs in %s log buffer:",
                         android_log_id_to_name(id));
                 } else {
-                    output.appendFormat(
-                        "\n\nLogging for your UID in %s:\n",
+                    name.appendFormat(
+                        "Logging for your UID in %s log buffer:",
                         android_log_id_to_name(id));
                 }
-                android::String8 name("UID");
                 android::String8 size("Size");
                 android::String8 pruned("Pruned");
                 if (!worstUidEnabledForLogid(id)) {
                     pruned.setTo("");
                 }
                 format_line(output, name, size, pruned);
+
+                name.setTo("UID   PACKAGE");
+                size.setTo("BYTES");
+                pruned.setTo("LINES");
+                if (!worstUidEnabledForLogid(id)) {
+                    pruned.setTo("");
+                }
+                format_line(output, name, size, pruned);
+
                 headerPrinted = true;
             }
 
@@ -380,15 +390,22 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
             }
 
             if (!headerPrinted) {
+                output.appendFormat("\n\n");
+                android::String8 name("");
                 if (uid == AID_ROOT) {
-                    output.appendFormat("\n\nChattiest PIDs:\n");
+                    name.appendFormat("Chattiest PIDs:");
                 } else {
-                    output.appendFormat("\n\nLogging for this PID:\n");
+                    name.appendFormat("Logging for this PID:");
                 }
-                android::String8 name("  PID/UID");
                 android::String8 size("Size");
                 android::String8 pruned("Pruned");
                 format_line(output, name, size, pruned);
+
+                name.setTo("  PID/UID   COMMAND LINE");
+                size.setTo("BYTES");
+                pruned.setTo("LINES");
+                format_line(output, name, size, pruned);
+
                 headerPrinted = true;
             }
 
