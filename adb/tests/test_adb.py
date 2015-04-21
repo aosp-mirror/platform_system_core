@@ -267,6 +267,14 @@ class AdbBasic(unittest.TestCase):
                 adb.unroot()
             adb.wait()
 
+    def test_argument_escaping(self):
+        """Make sure that argument escaping is somewhat sane."""
+        adb = AdbWrapper()
+
+        # http://b/19734868
+        result = adb.shell("sh -c 'echo hello; echo world'").splitlines()
+        self.assertEqual(["hello", "world"], result)
+
 
 class AdbFile(unittest.TestCase):
     SCRATCH_DIR = "/data/local/tmp"
