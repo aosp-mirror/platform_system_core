@@ -25,6 +25,7 @@ enum install_status_t {
   INSTALL_STATUS_INTERNAL_ERROR = -1,
   INSTALL_STATUS_CANNOT_BIND = -2,
   INSTALL_STATUS_CANNOT_REBIND = -3,
+  INSTALL_STATUS_LISTENER_NOT_FOUND = -4,
 };
 
 extern alistener listener_list;
@@ -40,7 +41,7 @@ install_status_t install_listener(const char *local_name,
 
 int format_listeners(char* buf, size_t buflen);
 
-int remove_listener(const char *local_name, atransport* transport);
+install_status_t remove_listener(const char* local_name, atransport* transport);
 void remove_all_listeners(void);
 
 #endif /* __ADB_LISTENERS_H */

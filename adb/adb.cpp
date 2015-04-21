@@ -32,6 +32,8 @@
 
 #include <string>
 
+#include <base/stringprintf.h>
+
 #include "adb_auth.h"
 #include "adb_io.h"
 #include "adb_listeners.h"
@@ -802,7 +804,6 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
     if (!strncmp(service, "forward:",8) ||
         !strncmp(service, "killforward:",12)) {
         char *local, *remote;
-        int r;
         atransport *transport;
 
         int createForward = strncmp(service, "kill", 4);
@@ -845,12 +846,13 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
             return 1;
         }
 
+        install_status_t r;
         if (createForward) {
             r = install_listener(local, remote, transport, no_rebind);
         } else {
             r = remove_listener(local, transport);
         }
-        if(r == 0) {
+        if (r == INSTALL_STATUS_OK) {
 #if ADB_HOST
             /* On the host: 1st OKAY is connect, 2nd OKAY is status */
             WriteFdExactly(reply_fd, "OKAY", 4);
@@ -859,22 +861,19 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
             return 1;
         }
 
-        if (createForward) {
-            const char* message;
-            switch (r) {
-              case INSTALL_STATUS_CANNOT_BIND:
-                message = "cannot bind to socket";
-                break;
-              case INSTALL_STATUS_CANNOT_REBIND:
-                message = "cannot rebind existing socket";
-                break;
-              default:
-                message = "internal error";
-            }
-            sendfailmsg(reply_fd, message);
-        } else {
-            sendfailmsg(reply_fd, "cannot remove listener");
+        std::string message;
+        switch (r) {
+          case INSTALL_STATUS_OK: message = " "; break;
+          case INSTALL_STATUS_INTERNAL_ERROR: message = "internal error"; break;
+          case INSTALL_STATUS_CANNOT_BIND:
+            message = android::base::StringPrintf("cannot bind to socket: %s", strerror(errno));
+            break;
+          case INSTALL_STATUS_CANNOT_REBIND:
+            message = android::base::StringPrintf("cannot rebind existing socket: %s", strerror(errno));
+            break;
+          case INSTALL_STATUS_LISTENER_NOT_FOUND: message = "listener not found"; break;
         }
+        sendfailmsg(reply_fd, message.c_str());
         return 1;
     }
     return 0;
