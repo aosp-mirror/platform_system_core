@@ -337,6 +337,14 @@ on post-fs-data
     # won't work.
     # Set indication (checked by vold) that we have finished this action
     #setprop vold.post_fs_data_done 1
+    # STOPSHIP: Temporarily disabled b/20416721
+    setprop log.tag.WifiStateMachine S
+    setprop log.tag.HS2J S
+    setprop log.tag.native S
+    setprop log.tag.ConnectivityService S
+    setprop log.tag.WifiService S
+    setprop log.tag.WifiNative-HAL S
+    setprop log.tag.WifiHAL S
 
 on boot
     # basic network init
