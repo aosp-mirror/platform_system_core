@@ -69,6 +69,8 @@ LOCAL_SRC_FILES := \
     qemu_tracing.cpp \
     usb_linux_client.cpp \
 
+LOCAL_SHARED_LIBRARIES := libbase
+
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
@@ -79,6 +81,8 @@ LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
     $(LIBADB_$(HOST_OS)_SRC_FILES) \
     adb_auth_host.cpp \
+
+LOCAL_SHARED_LIBRARIES := libbase
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the SSL includes to our path.

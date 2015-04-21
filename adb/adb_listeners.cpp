@@ -190,17 +190,17 @@ int format_listeners(char* buf, size_t buflen)
     return result;
 }
 
-int remove_listener(const char *local_name, atransport* transport)
+install_status_t remove_listener(const char *local_name, atransport* transport)
 {
     alistener *l;
 
     for (l = listener_list.next; l != &listener_list; l = l->next) {
         if (!strcmp(local_name, l->local_name)) {
             listener_disconnect(l, l->transport);
-            return 0;
+            return INSTALL_STATUS_OK;
         }
     }
-    return -1;
+    return INSTALL_STATUS_LISTENER_NOT_FOUND;
 }
 
 void remove_all_listeners(void)
@@ -268,10 +268,10 @@ install_status_t install_listener(const char *local_name,
 
     listener->fd = local_name_to_fd(local_name);
     if (listener->fd < 0) {
+        printf("cannot bind '%s': %s\n", local_name, strerror(errno));
         free(listener->local_name);
         free(listener->connect_to);
         free(listener);
-        printf("cannot bind '%s'\n", local_name);
         return INSTALL_STATUS_CANNOT_BIND;
     }
 
