@@ -18,6 +18,7 @@
 
 #include "sysdeps.h"
 
+#include <cutils/properties.h>
 #include <dirent.h>
 #include <errno.h>
 #include <linux/usb/ch9.h>
@@ -362,6 +363,7 @@ static void *usb_ffs_open_thread(void *x)
 
             adb_sleep_ms(1000);
         }
+        property_set("sys.usb.ffs.ready", "1");
 
         D("[ usb_thread - registering device ]\n");
         register_usb_transport(usb, 0, 0, 1);
