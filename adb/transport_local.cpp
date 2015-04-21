@@ -144,7 +144,7 @@ static void *server_socket_thread(void * arg)
         if(serverfd == -1) {
             serverfd = socket_inaddr_any_server(port, SOCK_STREAM);
             if(serverfd < 0) {
-                D("server: cannot bind socket yet\n");
+                D("server: cannot bind socket yet: %s\n", strerror(errno));
                 adb_sleep_ms(1000);
                 continue;
             }
