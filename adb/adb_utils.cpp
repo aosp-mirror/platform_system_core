@@ -35,19 +35,18 @@ bool directory_exists(const std::string& path) {
   return lstat(path.c_str(), &sb) != -1 && S_ISDIR(sb.st_mode);
 }
 
-static bool should_escape(const char c) {
-  return (c == ' ' || c == '\'' || c == '"' || c == '\\' || c == '(' || c == ')');
-}
-
 std::string escape_arg(const std::string& s) {
-  // Preserve empty arguments.
-  if (s.empty()) return "\"\"";
+  std::string result = s;
 
-  std::string result(s);
+  // Insert a \ before any ' in the string.
   for (auto it = result.begin(); it != result.end(); ++it) {
-      if (should_escape(*it)) {
+      if (*it == '\'') {
           it = result.insert(it, '\\') + 1;
       }
   }
+
+  // Prefix and suffix the whole string with '.
+  result.insert(result.begin(), '\'');
+  result.push_back('\'');
   return result;
 }
