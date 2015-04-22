@@ -493,10 +493,8 @@ device_tracker_ready( asocket*  socket )
 asocket*
 create_device_tracker(void)
 {
-    device_tracker* tracker = reinterpret_cast<device_tracker*>(
-        calloc(1, sizeof(*tracker)));
-
-    if(tracker == 0) fatal("cannot allocate device tracker");
+    device_tracker* tracker = reinterpret_cast<device_tracker*>(calloc(1, sizeof(*tracker)));
+    if (tracker == nullptr) fatal("cannot allocate device tracker");
 
     D( "device tracker %p created\n", tracker);
 
@@ -1002,8 +1000,11 @@ void close_usb_devices()
 
 int register_socket_transport(int s, const char *serial, int port, int local)
 {
-    atransport *t = reinterpret_cast<atransport*>(
-        calloc(1, sizeof(atransport)));
+    atransport *t = reinterpret_cast<atransport*>(calloc(1, sizeof(atransport)));
+    if (t == nullptr) {
+        return -1;
+    }
+
     atransport *n;
     char buff[32];
 
@@ -1102,8 +1103,8 @@ void unregister_all_tcp_transports()
 
 void register_usb_transport(usb_handle *usb, const char *serial, const char *devpath, unsigned writeable)
 {
-    atransport *t = reinterpret_cast<atransport*>(
-        calloc(1, sizeof(atransport)));
+    atransport *t = reinterpret_cast<atransport*>(calloc(1, sizeof(atransport)));
+    if (t == nullptr) fatal("cannot allocate USB atransport");
     D("transport: %p init'ing for usb_handle %p (sn='%s')\n", t, usb,
       serial ? serial : "");
     init_usb_transport(t, usb, (writeable ? CS_OFFLINE : CS_NOPERM));

@@ -336,6 +336,7 @@ CheckInterface(IOUSBInterfaceInterface **interface, UInt16 vendor, UInt16 produc
         goto err_bad_adb_interface;
 
     handle = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
+    if (handle == nullptr) goto err_bad_adb_interface;
 
     //* Iterate over the endpoints for this interface and find the first
     //* bulk in/out pipes available.  These will be our read/write pipes.

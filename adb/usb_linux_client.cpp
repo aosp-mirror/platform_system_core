@@ -241,6 +241,8 @@ static void usb_adb_kick(usb_handle *h)
 static void usb_adb_init()
 {
     usb_handle* h = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
+    if (h == nullptr) fatal("couldn't allocate usb_handle");
+
     h->write = usb_adb_write;
     h->read = usb_adb_read;
     h->kick = usb_adb_kick;
@@ -468,6 +470,8 @@ static void usb_ffs_init()
     D("[ usb_init - using FunctionFS ]\n");
 
     usb_handle* h = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
+    if (h == nullptr) fatal("couldn't allocate usb_handle");
+
     h->write = usb_ffs_write;
     h->read = usb_ffs_read;
     h->kick = usb_ffs_kick;
