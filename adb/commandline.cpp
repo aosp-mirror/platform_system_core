@@ -764,8 +764,7 @@ static int logcat(transport_type transport, const char* serial, int argc, const 
         cmd += " " + escape_arg(*argv++);
     }
 
-    send_shell_command(transport, serial, cmd);
-    return 0;
+    return send_shell_command(transport, serial, cmd);
 }
 
 static int mkdirs(const char *path)
@@ -1603,8 +1602,7 @@ static int pm_command(transport_type transport, const char* serial,
         cmd += " " + escape_arg(*argv++);
     }
 
-    send_shell_command(transport, serial, cmd);
-    return 0;
+    return send_shell_command(transport, serial, cmd);
 }
 
 static int uninstall_app(transport_type transport, const char* serial, int argc,
@@ -1629,8 +1627,7 @@ static int uninstall_app(transport_type transport, const char* serial, int argc,
 static int delete_file(transport_type transport, const char* serial, char* filename)
 {
     std::string cmd = "shell:rm -f " + escape_arg(filename);
-    send_shell_command(transport, serial, cmd);
-    return 0;
+    return send_shell_command(transport, serial, cmd);
 }
 
 static const char* get_basename(const char* filename)
@@ -1691,7 +1688,7 @@ static int install_app(transport_type transport, const char* serial, int argc,
         argv[last_apk] = apk_dest; /* destination name, not source location */
     }
 
-    pm_command(transport, serial, argc, argv);
+    err = pm_command(transport, serial, argc, argv);
 
 cleanup_apk:
     delete_file(transport, serial, apk_dest);
