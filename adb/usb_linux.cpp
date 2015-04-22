@@ -598,8 +598,8 @@ static void register_device(const char *dev_name, const char *devpath,
 
     D("[ usb located new device %s (%d/%d/%d) ]\n",
         dev_name, ep_in, ep_out, interface);
-    usb_handle* usb = reinterpret_cast<usb_handle*>(
-        calloc(1, sizeof(usb_handle)));
+    usb_handle* usb = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
+    if (usb == nullptr) fatal("couldn't allocate usb_handle");
     strcpy(usb->fname, dev_name);
     usb->ep_in = ep_in;
     usb->ep_out = ep_out;

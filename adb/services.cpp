@@ -689,6 +689,10 @@ asocket*  host_service_to_socket(const char*  name, const char *serial)
         return create_device_tracker();
     } else if (!strncmp(name, "wait-for-", strlen("wait-for-"))) {
         auto sinfo = reinterpret_cast<state_info*>(malloc(sizeof(state_info)));
+        if (sinfo == nullptr) {
+            fprintf(stderr, "couldn't allocate state_info: %s", strerror(errno));
+            return NULL;
+        }
 
         if (serial)
             sinfo->serial = strdup(serial);
