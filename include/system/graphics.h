@@ -358,11 +358,11 @@ enum {
     HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED = 0x22,
 
     /*
-     * Android flexible YCbCr formats
+     * Android flexible YCbCr 4:2:0 formats
      *
-     * This format allows platforms to use an efficient YCbCr/YCrCb buffer
-     * layout, while still describing the buffer layout in a way accessible to
-     * the CPU in a device-independent manner.  While called YCbCr, it can be
+     * This format allows platforms to use an efficient YCbCr/YCrCb 4:2:0
+     * buffer layout, while still describing the general format in a
+     * layout-independent manner.  While called YCbCr, it can be
      * used to describe formats with either chromatic ordering, as well as
      * whole planar or semiplanar layouts.
      *
@@ -378,6 +378,62 @@ enum {
      * space of the buffer.
      */
     HAL_PIXEL_FORMAT_YCbCr_420_888 = 0x23,
+
+    /*
+     * Android flexible YCbCr 4:2:2 formats
+     *
+     * This format allows platforms to use an efficient YCbCr/YCrCb 4:2:2
+     * buffer layout, while still describing the general format in a
+     * layout-independent manner.  While called YCbCr, it can be
+     * used to describe formats with either chromatic ordering, as well as
+     * whole planar or semiplanar layouts.
+     *
+     * This format is currently only used by SW readable buffers
+     * produced by MediaCodecs, so the gralloc module can ignore this format.
+     */
+    HAL_PIXEL_FORMAT_YCbCr_422_888 = 0x27,
+
+    /*
+     * Android flexible YCbCr 4:4:4 formats
+     *
+     * This format allows platforms to use an efficient YCbCr/YCrCb 4:4:4
+     * buffer layout, while still describing the general format in a
+     * layout-independent manner.  While called YCbCr, it can be
+     * used to describe formats with either chromatic ordering, as well as
+     * whole planar or semiplanar layouts.
+     *
+     * This format is currently only used by SW readable buffers
+     * produced by MediaCodecs, so the gralloc module can ignore this format.
+     */
+    HAL_PIXEL_FORMAT_YCbCr_444_888 = 0x28,
+
+    /*
+     * Android flexible RGB 888 formats
+     *
+     * This format allows platforms to use an efficient RGB/BGR/RGBX/BGRX
+     * buffer layout, while still describing the general format in a
+     * layout-independent manner.  While called RGB, it can be
+     * used to describe formats with either color ordering and optional
+     * padding, as well as whole planar layout.
+     *
+     * This format is currently only used by SW readable buffers
+     * produced by MediaCodecs, so the gralloc module can ignore this format.
+     */
+    HAL_PIXEL_FORMAT_FLEX_RGB_888 = 0x29,
+
+    /*
+     * Android flexible RGBA 8888 formats
+     *
+     * This format allows platforms to use an efficient RGBA/BGRA/ARGB/ABGR
+     * buffer layout, while still describing the general format in a
+     * layout-independent manner.  While called RGBA, it can be
+     * used to describe formats with any of the component orderings, as
+     * well as whole planar layout.
+     *
+     * This format is currently only used by SW readable buffers
+     * produced by MediaCodecs, so the gralloc module can ignore this format.
+     */
+    HAL_PIXEL_FORMAT_FLEX_RGBA_8888 = 0x2A,
 
     /* Legacy formats (deprecated), used by ImageFormat.java */
     HAL_PIXEL_FORMAT_YCbCr_422_SP       = 0x10, // NV16
