@@ -247,7 +247,7 @@ public:
     uint64_t getKey() { return value; }
 };
 
-struct LogBufferElementEntry {
+class LogBufferElementEntry {
     const uint64_t key;
     LogBufferElement *last;
 
@@ -259,8 +259,9 @@ public:
     LogBufferElement *getLast() { return last; }
 };
 
-struct LogBufferElementLast : public android::BasicHashtable<uint64_t, LogBufferElementEntry> {
+class LogBufferElementLast : public android::BasicHashtable<uint64_t, LogBufferElementEntry> {
 
+public:
     bool merge(LogBufferElement *e, unsigned short dropped) {
         LogBufferElementKey key(e->getUid(), e->getPid(), e->getTid());
         android::hash_t hash = android::hash_type(key.getKey());
@@ -284,6 +285,21 @@ struct LogBufferElementLast : public android::BasicHashtable<uint64_t, LogBuffer
         android::hash_t hash = android::hash_type(key.getKey());
         return android::BasicHashtable<uint64_t, LogBufferElementEntry>::
             add(hash, LogBufferElementEntry(key.getKey(), e));
+    }
+
+    inline void clear() {
+        android::BasicHashtable<uint64_t, LogBufferElementEntry>::clear();
+    }
+
+    void clear(LogBufferElement *e) {
+        uint64_t current = e->getRealTime().nsec() - NS_PER_SEC;
+        ssize_t index = -1;
+        while((index = next(index)) >= 0) {
+            if (current > editEntryAt(index).getLast()->getRealTime().nsec()) {
+                removeAt(index);
+                index = -1;
+            }
+        }
     }
 
 };
@@ -395,7 +411,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             leading = false;
 
             if (hasBlacklist && mPrune.naughty(e)) {
-                last.clear();
+                last.clear(e);
                 it = erase(it);
                 if (dropped) {
                     continue;
@@ -423,7 +439,7 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
             }
 
             if (e->getUid() != worst) {
-                last.clear();
+                last.clear(e);
                 ++it;
                 continue;
             }
