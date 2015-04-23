@@ -365,9 +365,16 @@ void LogBuffer::prune(log_id_t id, unsigned long pruneRows, uid_t caller_uid) {
 
             if (sorted.get()) {
                 if (sorted[0] && sorted[1]) {
-                    worst = sorted[0]->getKey();
                     worst_sizes = sorted[0]->getSizes();
-                    second_worst_sizes = sorted[1]->getSizes();
+                    // Calculate threshold as 12.5% of available storage
+                    size_t threshold = log_buffer_size(id) / 8;
+                    if (worst_sizes > threshold) {
+                        worst = sorted[0]->getKey();
+                        second_worst_sizes = sorted[1]->getSizes();
+                        if (second_worst_sizes < threshold) {
+                            second_worst_sizes = threshold;
+                        }
+                    }
                 }
             }
         }
