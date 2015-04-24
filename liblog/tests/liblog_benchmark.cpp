@@ -266,3 +266,17 @@ static void BM_log_delay(int iters) {
     android_logger_list_free(logger_list);
 }
 BENCHMARK(BM_log_delay);
+
+/*
+ *	Measure the time it takes for __android_log_is_loggable.
+ */
+static void BM_is_loggable(int iters) {
+    StartBenchmarkTiming();
+
+    for (int i = 0; i < iters; ++i) {
+        __android_log_is_loggable(ANDROID_LOG_WARN, "logd", ANDROID_LOG_VERBOSE);
+    }
+
+    StopBenchmarkTiming();
+}
+BENCHMARK(BM_is_loggable);
