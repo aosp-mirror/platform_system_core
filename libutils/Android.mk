@@ -20,7 +20,6 @@ commonSources:= \
 	CallStack.cpp \
 	FileMap.cpp \
 	JenkinsHash.cpp \
-	LinearAllocator.cpp \
 	LinearTransform.cpp \
 	Log.cpp \
 	NativeHandle.cpp \
