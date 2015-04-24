@@ -20,6 +20,7 @@ int do_restorecon(int nargs, char **args);
 int do_restorecon_recursive(int nargs, char **args);
 int do_rm(int nargs, char **args);
 int do_rmdir(int nargs, char **args);
+int do_setcon(int nargs, char **args);
 int do_setprop(int nargs, char **args);
 int do_setrlimit(int nargs, char **args);
 int do_start(int nargs, char **args);
@@ -75,6 +76,7 @@ enum {
     KEYWORD(rmdir,       COMMAND, 1, do_rmdir)
     KEYWORD(seclabel,    OPTION,  0, 0)
     KEYWORD(service,     SECTION, 0, 0)
+    KEYWORD(setcon,      COMMAND, 1, do_setcon)
     KEYWORD(setenv,      OPTION,  2, 0)
     KEYWORD(setprop,     COMMAND, 2, do_setprop)
     KEYWORD(setrlimit,   COMMAND, 3, do_setrlimit)
