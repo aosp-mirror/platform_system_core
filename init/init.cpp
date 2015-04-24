@@ -940,13 +940,7 @@ static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_
     return 0;
 }
 
-static void security_failure() {
-    ERROR("Security failure; rebooting into recovery mode...\n");
-    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
-    while (true) { pause(); }  // never reached
-}
-
-static void selinux_initialize(bool in_kernel_domain) {
+static void selinux_initialize() {
     Timer t;
 
     selinux_callback cb;
@@ -959,27 +953,19 @@ static void selinux_initialize(bool in_kernel_domain) {
         return;
     }
 
-    if (in_kernel_domain) {
-        if (write_file("/sys/fs/selinux/checkreqprot", "0") == -1) {
-            ERROR("couldn't write to /sys/fs/selinux/checkreqprot: %s\n",
-                  strerror(errno));
-            security_failure();
-        }
-
-        INFO("Loading SELinux policy...\n");
-        if (selinux_android_load_policy() < 0) {
-            ERROR("failed to load policy: %s\n", strerror(errno));
-            security_failure();
-        }
-
-        bool is_enforcing = selinux_is_enforcing();
-        security_setenforce(is_enforcing);
-
-        NOTICE("(Initializing SELinux %s took %.2fs.)\n",
-               is_enforcing ? "enforcing" : "non-enforcing", t.duration());
-    } else {
-        selinux_init_all_handles();
+    INFO("Loading SELinux policy...\n");
+    if (selinux_android_load_policy() < 0) {
+        ERROR("SELinux: Failed to load policy; rebooting into recovery mode\n");
+        android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
+        while (1) { pause(); }  // never reached
     }
+
+    selinux_init_all_handles();
+    bool is_enforcing = selinux_is_enforcing();
+    INFO("SELinux: security_setenforce(%d)\n", is_enforcing);
+    security_setenforce(is_enforcing);
+
+    NOTICE("(Initializing SELinux took %.2fs.)\n", t.duration());
 }
 
 int main(int argc, char** argv) {
@@ -1020,8 +1006,7 @@ int main(int argc, char** argv) {
     klog_init();
     klog_set_level(KLOG_NOTICE_LEVEL);
 
-    bool is_first_stage = (argc == 1);
-    NOTICE("init%s started!\n", is_first_stage ? "" : " second stage");
+    NOTICE("init started!\n");
 
     property_init();
 
@@ -1034,23 +1019,7 @@ int main(int argc, char** argv) {
     // used by init as well as the current required properties.
     export_kernel_boot_props();
 
-    // Set up SELinux, including loading the SELinux policy if we're in the kernel domain.
-    selinux_initialize(is_first_stage);
-
-    // If we're in the kernel domain, re-exec init to transition to the init domain now
-    // that the SELinux policy has been loaded.
-    if (is_first_stage) {
-        if (restorecon("/init") == -1) {
-            ERROR("restorecon failed: %s\n", strerror(errno));
-            security_failure();
-        }
-        char* path = argv[0];
-        char* args[] = { path, const_cast<char*>("--second-stage"), nullptr };
-        if (execv(path, args) == -1) {
-            ERROR("execv(\"%s\") failed: %s\n", path, strerror(errno));
-            security_failure();
-        }
-    }
+    selinux_initialize();
 
     // These directories were necessarily created before initial policy load
     // and therefore need their security context restored to the proper value.
