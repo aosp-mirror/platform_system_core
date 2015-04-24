@@ -63,7 +63,7 @@ public:
         sprintf(filename, "%u", uid);
         int fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IWUSR);
         if (fd < 0) {
-            ALOGW("could not open file: %s: %s", filename, strerror(errno));
+            ALOGE("could not open file: %s: %s", filename, strerror(errno));
             return;
         }
         write(fd, &sid, sizeof(sid));
@@ -86,6 +86,15 @@ public:
         if (fd < 0) return 0;
         read(fd, &sid, sizeof(sid));
         return sid;
+    }
+
+    void clear_sid(uint32_t uid) {
+        char filename[21];
+        sprintf(filename, "%u", uid);
+        if (remove(filename) < 0) {
+            ALOGE("%s: could not remove file [%s], attempting 0 write", __func__, strerror(errno));
+            store_sid(uid, 0);
+        }
     }
 
     virtual status_t enroll(uint32_t uid,
@@ -181,7 +190,7 @@ public:
             ALOGE("%s: permission denied for [%d:%d]", __func__, calling_pid, calling_uid);
             return;
         }
-        store_sid(uid, 0);
+        clear_sid(uid);
     }
 
     virtual status_t dump(int fd, const Vector<String16> &) {
