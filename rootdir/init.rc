@@ -341,11 +341,10 @@ on post-fs-data
     setprop log.tag.WifiStateMachine S
     setprop log.tag.HS2J S
     setprop log.tag.native S
+    setprop log.tag.ConnectivityService S
     setprop log.tag.WifiService S
     setprop log.tag.WifiNative-HAL S
     setprop log.tag.WifiHAL S
-    setprop log.tag.WifiScanner S
-    setprop log.tag.WifiScanningService S
 
 on boot
     # basic network init
