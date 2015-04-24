@@ -1875,7 +1875,7 @@ static int run(const char* source_path, const char* dest_path, uid_t uid,
     struct fuse fuse;
 
     /* cleanup from previous instance, if necessary */
-    umount2(dest_path, 2);
+    umount2(dest_path, MNT_DETACH);
 
     fd = open("/dev/fuse", O_RDWR);
     if (fd < 0){
