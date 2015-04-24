@@ -266,7 +266,6 @@ static void make_device(const char *path,
 static void add_platform_device(const char *path)
 {
     int path_len = strlen(path);
-    struct listnode *node;
     struct platform_node *bus;
     const char *name = path;
 
@@ -274,15 +273,6 @@ static void add_platform_device(const char *path)
         name += 9;
         if (!strncmp(name, "platform/", 9))
             name += 9;
-    }
-
-    list_for_each_reverse(node, &platform_names) {
-        bus = node_to_item(node, struct platform_node, list);
-        if ((bus->path_len < path_len) &&
-                (path[bus->path_len] == '/') &&
-                !strncmp(path, bus->path, bus->path_len))
-            /* subdevice of an existing platform, ignore it */
-            return;
     }
 
     INFO("adding platform device %s (%s)\n", name, path);
