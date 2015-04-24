@@ -117,8 +117,10 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
          * filesytsem due to an error, e2fsck is still run to do a full check
          * fix the filesystem.
          */
+        errno = 0;
         ret = mount(blk_device, target, fs_type, tmpmnt_flags, tmpmnt_opts);
-        INFO("%s(): mount(%s,%s,%s)=%d\n", __func__, blk_device, target, fs_type, ret);
+        INFO("%s(): mount(%s,%s,%s)=%d: %s\n",
+             __func__, blk_device, target, fs_type, ret, strerror(errno));
         if (!ret) {
             int i;
             for (i = 0; i < 5; i++) {
@@ -126,6 +128,7 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
                 // Should we try rebooting if all attempts fail?
                 int result = umount(target);
                 if (result == 0) {
+                    INFO("%s(): unmount(%s) succeeded\n", __func__, target);
                     break;
                 }
                 ERROR("%s(): umount(%s)=%d: %s\n", __func__, target, result, strerror(errno));
