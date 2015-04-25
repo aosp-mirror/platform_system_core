@@ -1065,6 +1065,9 @@ int main(int argc, char** argv) {
 
     init_parse_config_file("/init.rc");
 
+    // Setup signal handler before any exec command or we'll deadlock
+    queue_builtin_action(signal_init_action, "signal_init");
+
     action_for_each_trigger("early-init", action_add_queue_tail);
 
     queue_builtin_action(wait_for_coldboot_done_action, "wait_for_coldboot_done");
@@ -1079,7 +1082,6 @@ int main(int argc, char** argv) {
     // wasn't ready immediately after wait_for_coldboot_done
     queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
     queue_builtin_action(property_service_init_action, "property_service_init");
-    queue_builtin_action(signal_init_action, "signal_init");
 
     // Don't mount filesystems or start core system services in charger mode.
     char bootmode[PROP_VALUE_MAX];
