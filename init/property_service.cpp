@@ -246,7 +246,7 @@ int property_set(const char* name, const char* value) {
     return rc;
 }
 
-void handle_property_set_fd()
+static void handle_property_set_fd()
 {
     prop_msg msg;
     int s;
@@ -527,8 +527,6 @@ void start_property_service() {
     }
 
     listen(property_set_fd, 8);
-}
 
-int get_property_set_fd() {
-    return property_set_fd;
+    register_epoll_handler(property_set_fd, handle_property_set_fd);
 }
