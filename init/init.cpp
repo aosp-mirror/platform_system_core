@@ -25,8 +25,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/epoll.h>
 #include <sys/mount.h>
-#include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -81,6 +81,17 @@ static time_t process_needs_restart;
 static const char *ENV[32];
 
 bool waiting_for_exec = false;
+
+static int epoll_fd = -1;
+
+void register_epoll_handler(int fd, void (*fn)()) {
+    epoll_event ev;
+    ev.events = EPOLLIN;
+    ev.data.ptr = reinterpret_cast<void*>(fn);
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+        ERROR("epoll_ctl failed: %s\n", strerror(errno));
+    }
+}
 
 void service::NotifyStateChange(const char* new_state) {
     if (!properties_initialized()) {
@@ -1037,7 +1048,13 @@ int main(int argc, char** argv) {
     restorecon("/dev/__properties__");
     restorecon_recursive("/sys");
 
-    signal_init();
+    epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+    if (epoll_fd == -1) {
+        ERROR("epoll_create1 failed: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    signal_handler_init();
 
     property_load_boot_defaults();
     start_property_service();
@@ -1071,25 +1088,10 @@ int main(int argc, char** argv) {
     // Run all property triggers based on current state of the properties.
     queue_builtin_action(queue_property_triggers_action, "queue_property_triggers");
 
-    size_t fd_count = 0;
-    struct pollfd ufds[3];
-    ufds[fd_count++] = { .fd = get_signal_fd(), .events = POLLIN, .revents = 0 };
-    ufds[fd_count++] = { .fd = get_property_set_fd(), .events = POLLIN, .revents = 0 };
-    // TODO: can we work out when /dev/keychord is first accessible and open this fd then?
-    bool keychord_fd_init = false;
-
     while (true) {
         if (!waiting_for_exec) {
             execute_one_command();
             restart_processes();
-        }
-
-        if (!keychord_fd_init && get_keychord_fd() > 0) {
-            ufds[fd_count].fd = get_keychord_fd();
-            ufds[fd_count].events = POLLIN;
-            ufds[fd_count].revents = 0;
-            fd_count++;
-            keychord_fd_init = true;
         }
 
         int timeout = -1;
@@ -1105,24 +1107,12 @@ int main(int argc, char** argv) {
 
         bootchart_sample(&timeout);
 
-        int nr = TEMP_FAILURE_RETRY(poll(ufds, fd_count, timeout));
-        if (nr <= 0) {
-            if (nr == -1) {
-                ERROR("poll failed: %s\n", strerror(errno));
-            }
-            continue;
-        }
-
-        for (size_t i = 0; i < fd_count; i++) {
-            if (ufds[i].revents & POLLIN) {
-                if (ufds[i].fd == get_property_set_fd()) {
-                    handle_property_set_fd();
-                } else if (ufds[i].fd == get_keychord_fd()) {
-                    handle_keychord();
-                } else if (ufds[i].fd == get_signal_fd()) {
-                    handle_signal();
-                }
-            }
+        epoll_event ev;
+        int nr = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd, &ev, 1, timeout));
+        if (nr == -1) {
+            ERROR("epoll_wait failed: %s\n", strerror(errno));
+        } else if (nr == 1) {
+            ((void (*)()) ev.data.ptr)();
         }
     }
 
