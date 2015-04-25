@@ -23,7 +23,8 @@
 
 TEST(strings, split_empty) {
   std::vector<std::string> parts = android::base::Split("", ",");
-  ASSERT_EQ(0U, parts.size());
+  ASSERT_EQ(1U, parts.size());
+  ASSERT_EQ("", parts[0]);
 }
 
 TEST(strings, split_single) {
@@ -42,9 +43,10 @@ TEST(strings, split_simple) {
 
 TEST(strings, split_with_empty_part) {
   std::vector<std::string> parts = android::base::Split("foo,,bar", ",");
-  ASSERT_EQ(2U, parts.size());
+  ASSERT_EQ(3U, parts.size());
   ASSERT_EQ("foo", parts[0]);
-  ASSERT_EQ("bar", parts[1]);
+  ASSERT_EQ("", parts[1]);
+  ASSERT_EQ("bar", parts[2]);
 }
 
 TEST(strings, split_null_char) {
@@ -65,9 +67,10 @@ TEST(strings, split_any) {
 
 TEST(strings, split_any_with_empty_part) {
   std::vector<std::string> parts = android::base::Split("foo:,bar", ",:");
-  ASSERT_EQ(2U, parts.size());
+  ASSERT_EQ(3U, parts.size());
   ASSERT_EQ("foo", parts[0]);
-  ASSERT_EQ("bar", parts[1]);
+  ASSERT_EQ("", parts[1]);
+  ASSERT_EQ("bar", parts[2]);
 }
 
 TEST(strings, trim_empty) {
