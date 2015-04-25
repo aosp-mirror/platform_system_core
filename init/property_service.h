@@ -20,7 +20,6 @@
 #include <stddef.h>
 #include <sys/system_properties.h>
 
-extern void handle_property_set_fd(void);
 extern void property_init(void);
 extern void property_load_boot_defaults(void);
 extern void load_persist_props(void);
@@ -30,7 +29,6 @@ void get_property_workspace(int *fd, int *sz);
 extern int __property_get(const char *name, char *value);
 extern int property_set(const char *name, const char *value);
 extern bool properties_initialized();
-int get_property_set_fd(void);
 
 #ifndef __clang__
 extern void __property_get_size_error()
