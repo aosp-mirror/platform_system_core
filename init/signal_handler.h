@@ -17,8 +17,6 @@
 #ifndef _INIT_SIGNAL_HANDLER_H_
 #define _INIT_SIGNAL_HANDLER_H_
 
-void signal_init(void);
-void handle_signal(void);
-int get_signal_fd(void);
+void signal_handler_init(void);
 
 #endif

@@ -147,7 +147,7 @@ static void reap_any_outstanding_children() {
     }
 }
 
-void handle_signal() {
+static void handle_signal() {
     // Clear outstanding requests.
     char buf[32];
     read(signal_read_fd, buf, sizeof(buf));
@@ -161,7 +161,7 @@ static void SIGCHLD_handler(int) {
     }
 }
 
-void signal_init() {
+void signal_handler_init() {
     // Create a signalling mechanism for SIGCHLD.
     int s[2];
     if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, s) == -1) {
@@ -180,8 +180,6 @@ void signal_init() {
     sigaction(SIGCHLD, &act, 0);
 
     reap_any_outstanding_children();
-}
 
-int get_signal_fd() {
-    return signal_read_fd;
+    register_epoll_handler(signal_read_fd, handle_signal);
 }
