@@ -519,14 +519,14 @@ void load_all_props() {
 }
 
 void start_property_service() {
-    int fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM, 0666, 0, 0, NULL);
-    if (fd == -1) return;
+    property_set_fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+                                    0666, 0, 0, NULL);
+    if (property_set_fd == -1) {
+        ERROR("start_property_service socket creation failed: %s\n", strerror(errno));
+        exit(1);
+    }
 
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
-    fcntl(fd, F_SETFL, O_NONBLOCK);
-
-    listen(fd, 8);
-    property_set_fd = fd;
+    listen(property_set_fd, 8);
 }
 
 int get_property_set_fd() {
