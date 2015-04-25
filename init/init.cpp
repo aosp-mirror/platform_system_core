@@ -848,16 +848,6 @@ static int property_service_init_action(int nargs, char **args)
     return 0;
 }
 
-static int signal_init_action(int nargs, char **args)
-{
-    signal_init();
-    if (get_signal_fd() < 0) {
-        ERROR("signal_init() failed\n");
-        exit(1);
-    }
-    return 0;
-}
-
 static int queue_property_triggers_action(int nargs, char **args)
 {
     queue_all_property_triggers();
@@ -1061,12 +1051,11 @@ int main(int argc, char** argv) {
     restorecon("/dev/__properties__");
     restorecon_recursive("/sys");
 
+    signal_init();
+
     property_load_boot_defaults();
 
     init_parse_config_file("/init.rc");
-
-    // Setup signal handler before any exec command or we'll deadlock
-    queue_builtin_action(signal_init_action, "signal_init");
 
     action_for_each_trigger("early-init", action_add_queue_tail);
 
@@ -1097,8 +1086,8 @@ int main(int argc, char** argv) {
     // TODO: why do we only initialize ufds after execute_one_command and restart_processes?
     size_t fd_count = 0;
     struct pollfd ufds[3];
+    ufds[fd_count++] = { .fd = get_signal_fd(), .events = POLLIN, .revents = 0 };
     bool property_set_fd_init = false;
-    bool signal_fd_init = false;
     bool keychord_fd_init = false;
 
     for (;;) {
@@ -1113,13 +1102,6 @@ int main(int argc, char** argv) {
             ufds[fd_count].revents = 0;
             fd_count++;
             property_set_fd_init = true;
-        }
-        if (!signal_fd_init && get_signal_fd() > 0) {
-            ufds[fd_count].fd = get_signal_fd();
-            ufds[fd_count].events = POLLIN;
-            ufds[fd_count].revents = 0;
-            fd_count++;
-            signal_fd_init = true;
         }
         if (!keychord_fd_init && get_keychord_fd() > 0) {
             ufds[fd_count].fd = get_keychord_fd();
