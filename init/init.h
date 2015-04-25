@@ -155,4 +155,6 @@ int selinux_reload_policy(void);
 
 void zap_stdio(void);
 
+void register_epoll_handler(int fd, void (*fn)());
+
 #endif	/* _INIT_INIT_H */

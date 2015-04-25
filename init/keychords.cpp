@@ -62,37 +62,7 @@ void add_service_keycodes(struct service *svc)
     }
 }
 
-void keychord_init()
-{
-    int fd, ret;
-
-    service_for_each(add_service_keycodes);
-
-    /* nothing to do if no services require keychords */
-    if (!keychords)
-        return;
-
-    fd = open("/dev/keychord", O_RDWR | O_CLOEXEC);
-    if (fd < 0) {
-        ERROR("could not open /dev/keychord\n");
-        return;
-    }
-
-    ret = write(fd, keychords, keychords_length);
-    if (ret != keychords_length) {
-        ERROR("could not configure /dev/keychord %d: %s\n", ret, strerror(errno));
-        close(fd);
-        fd = -1;
-    }
-
-    free(keychords);
-    keychords = 0;
-
-    keychord_fd = fd;
-}
-
-void handle_keychord()
-{
+static void handle_keychord() {
     struct service *svc;
     char adb_enabled[PROP_VALUE_MAX];
     int ret;
@@ -117,7 +87,28 @@ void handle_keychord()
     }
 }
 
-int get_keychord_fd()
-{
-    return keychord_fd;
+void keychord_init() {
+    service_for_each(add_service_keycodes);
+
+    // Nothing to do if no services require keychords.
+    if (!keychords) {
+        return;
+    }
+
+    keychord_fd = TEMP_FAILURE_RETRY(open("/dev/keychord", O_RDWR | O_CLOEXEC));
+    if (keychord_fd == -1) {
+        ERROR("could not open /dev/keychord: %s\n", strerror(errno));
+        return;
+    }
+
+    int ret = write(keychord_fd, keychords, keychords_length);
+    if (ret != keychords_length) {
+        ERROR("could not configure /dev/keychord %d: %s\n", ret, strerror(errno));
+        close(keychord_fd);
+    }
+
+    free(keychords);
+    keychords = nullptr;
+
+    register_epoll_handler(keychord_fd, handle_keychord);
 }
