@@ -26,24 +26,11 @@
 #include <sys/wait.h>
 
 #include <backtrace/Backtrace.h>
+#include <base/file.h>
 #include <log/log.h>
 
 const int SLEEP_TIME_USEC = 50000;         // 0.05 seconds
 const int MAX_TOTAL_SLEEP_USEC = 10000000; // 10 seconds
-
-static int write_to_am(int fd, const char* buf, int len) {
-  int to_write = len;
-  while (to_write > 0) {
-    int written = TEMP_FAILURE_RETRY(write(fd, buf + len - to_write, to_write));
-    if (written < 0) {
-      // hard failure
-      ALOGE("AM write failure (%d / %s)\n", errno, strerror(errno));
-      return -1;
-    }
-    to_write -= written;
-  }
-  return len;
-}
 
 // Whitelist output desired in the logcat output.
 bool is_allowed_in_logcat(enum logtype ltype) {
@@ -82,9 +69,9 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   if (write_to_logcat) {
     __android_log_buf_write(LOG_ID_CRASH, ANDROID_LOG_INFO, LOG_TAG, buf);
     if (write_to_activitymanager) {
-      int written = write_to_am(log->amfd, buf, len);
-      if (written <= 0) {
+      if (!android::base::WriteFully(log->amfd, buf, len)) {
         // timeout or other failure on write; stop informing the activity manager
+        ALOGE("AM write failed: %s", strerror(errno));
         log->amfd = -1;
       }
     }
