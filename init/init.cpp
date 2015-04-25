@@ -947,12 +947,6 @@ static void selinux_initialize(bool in_kernel_domain) {
     }
 
     if (in_kernel_domain) {
-        if (write_file("/sys/fs/selinux/checkreqprot", "0") == -1) {
-            ERROR("couldn't write to /sys/fs/selinux/checkreqprot: %s\n",
-                  strerror(errno));
-            security_failure();
-        }
-
         INFO("Loading SELinux policy...\n");
         if (selinux_android_load_policy() < 0) {
             ERROR("failed to load policy: %s\n", strerror(errno));
@@ -961,6 +955,10 @@ static void selinux_initialize(bool in_kernel_domain) {
 
         bool is_enforcing = selinux_is_enforcing();
         security_setenforce(is_enforcing);
+
+        if (write_file("/sys/fs/selinux/checkreqprot", "0") == -1) {
+            security_failure();
+        }
 
         NOTICE("(Initializing SELinux %s took %.2fs.)\n",
                is_enforcing ? "enforcing" : "non-enforcing", t.duration());
