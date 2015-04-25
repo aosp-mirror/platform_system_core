@@ -985,10 +985,6 @@ int main(int argc, char** argv) {
 
     // Get the basic filesystem setup we need put together in the initramdisk
     // on / and then we'll let the rc file figure out the rest.
-    mkdir("/dev", 0755);
-    mkdir("/proc", 0755);
-    mkdir("/sys", 0755);
-
     mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755");
     mkdir("/dev/pts", 0755);
     mkdir("/dev/socket", 0755);
