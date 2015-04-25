@@ -114,10 +114,6 @@ static void kick_disconnected_devices()
 
 }
 
-static void register_device(const char *dev_name, const char *devpath,
-                            unsigned char ep_in, unsigned char ep_out,
-                            int ifc, int serial_index, unsigned zero_mask);
-
 static inline int badname(const char *name)
 {
     while(*name) {
@@ -587,8 +583,7 @@ static void register_device(const char *dev_name, const char *devpath,
         ** name, we have no further work to do.
         */
     adb_mutex_lock(&usb_lock);
-    for (usb_handle* usb = handle_list.next; usb != &handle_list;
-         usb = usb->next) {
+    for (usb_handle* usb = handle_list.next; usb != &handle_list; usb = usb->next) {
         if (!strcmp(usb->fname, dev_name)) {
             adb_mutex_unlock(&usb_lock);
             return;
@@ -596,8 +591,7 @@ static void register_device(const char *dev_name, const char *devpath,
     }
     adb_mutex_unlock(&usb_lock);
 
-    D("[ usb located new device %s (%d/%d/%d) ]\n",
-        dev_name, ep_in, ep_out, interface);
+    D("[ usb located new device %s (%d/%d/%d) ]\n", dev_name, ep_in, ep_out, interface);
     usb_handle* usb = reinterpret_cast<usb_handle*>(calloc(1, sizeof(usb_handle)));
     if (usb == nullptr) fatal("couldn't allocate usb_handle");
     strcpy(usb->fname, dev_name);
@@ -613,16 +607,27 @@ static void register_device(const char *dev_name, const char *devpath,
     usb->reaper_thread = 0;
 
     usb->desc = unix_open(usb->fname, O_RDWR | O_CLOEXEC);
-    if(usb->desc < 0) {
-        /* if we fail, see if have read-only access */
+    if (usb->desc == -1) {
+        // Opening RW failed, so see if we have RO access.
         usb->desc = unix_open(usb->fname, O_RDONLY | O_CLOEXEC);
-        if(usb->desc < 0) goto fail;
+        if (usb->desc == -1) {
+            D("[ usb open %s failed: %s]\n", usb->fname, strerror(errno));
+            free(usb);
+            return;
+        }
         usb->writeable = 0;
-        D("[ usb open read-only %s fd = %d]\n", usb->fname, usb->desc);
-    } else {
-        D("[ usb open %s fd = %d]\n", usb->fname, usb->desc);
+    }
+
+    D("[ usb opened %s%s, fd=%d]\n", usb->fname, (usb->writeable ? "" : " (read-only)"), usb->desc);
+
+    if (usb->writeable) {
         n = ioctl(usb->desc, USBDEVFS_CLAIMINTERFACE, &interface);
-        if(n != 0) goto fail;
+        if (n != 0) {
+            D("[ usb ioctl(%d, USBDEVFS_CLAIMINTERFACE) failed: %s]\n", usb->desc, strerror(errno));
+            adb_close(usb->desc);
+            free(usb);
+            return;
+        }
     }
 
         /* read the device's serial number */
@@ -685,15 +690,6 @@ static void register_device(const char *dev_name, const char *devpath,
     adb_mutex_unlock(&usb_lock);
 
     register_usb_transport(usb, serial, devpath, usb->writeable);
-    return;
-
-fail:
-    D("[ usb open %s error=%d, err_str = %s]\n",
-        usb->fname,  errno, strerror(errno));
-    if(usb->desc >= 0) {
-        adb_close(usb->desc);
-    }
-    free(usb);
 }
 
 void* device_poll_thread(void* unused)
