@@ -35,14 +35,10 @@
 #define CRITICAL_CRASH_THRESHOLD    4       /* if we crash >4 times ... */
 #define CRITICAL_CRASH_WINDOW       (4*60)  /* ... in 4 minutes, goto recovery */
 
-static int signal_fd = -1;
-static int signal_recv_fd = -1;
+static int signal_write_fd = -1;
+static int signal_read_fd = -1;
 
-static void sigchld_handler(int s) {
-    write(signal_fd, &s, 1);
-}
-
-std::string DescribeStatus(int status) {
+static std::string DescribeStatus(int status) {
     if (WIFEXITED(status)) {
         return android::base::StringPrintf("exited with status %d", WEXITSTATUS(status));
     } else if (WIFSIGNALED(status)) {
@@ -54,11 +50,14 @@ std::string DescribeStatus(int status) {
     }
 }
 
-static int wait_for_one_process() {
+static bool wait_for_one_process() {
     int status;
     pid_t pid = TEMP_FAILURE_RETRY(waitpid(-1, &status, WNOHANG));
-    if (pid <= 0) {
-        return -1;
+    if (pid == 0) {
+        return false;
+    } else if (pid == -1) {
+        ERROR("waitpid failed: %s\n", strerror(errno));
+        return false;
     }
 
     service* svc = service_find_by_pid(pid);
@@ -73,7 +72,7 @@ static int wait_for_one_process() {
     NOTICE("%s %s\n", name.c_str(), DescribeStatus(status).c_str());
 
     if (!svc) {
-        return 0;
+        return true;
     }
 
     // TODO: all the code from here down should be a member function on service.
@@ -96,7 +95,7 @@ static int wait_for_one_process() {
         list_remove(&svc->slist);
         free(svc->name);
         free(svc);
-        return 0;
+        return true;
     }
 
     svc->pid = 0;
@@ -111,7 +110,7 @@ static int wait_for_one_process() {
     // Disabled and reset processes do not get restarted automatically.
     if (svc->flags & (SVC_DISABLED | SVC_RESET))  {
         svc->NotifyStateChange("stopped");
-        return 0;
+        return true;
     }
 
     time_t now = gettime();
@@ -122,7 +121,7 @@ static int wait_for_one_process() {
                       "rebooting into recovery mode\n", svc->name,
                       CRITICAL_CRASH_THRESHOLD, CRITICAL_CRASH_WINDOW / 60);
                 android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
-                return 0;
+                return true;
             }
         } else {
             svc->time_crashed = now;
@@ -140,34 +139,49 @@ static int wait_for_one_process() {
         cmd->func(cmd->nargs, cmd->args);
     }
     svc->NotifyStateChange("restarting");
-    return 0;
+    return true;
+}
+
+static void reap_any_outstanding_children() {
+    while (wait_for_one_process()) {
+    }
 }
 
 void handle_signal() {
-    // We got a SIGCHLD - reap and restart as needed.
-    char tmp[32];
-    read(signal_recv_fd, tmp, sizeof(tmp));
-    while (!wait_for_one_process()) {
+    // Clear outstanding requests.
+    char buf[32];
+    read(signal_read_fd, buf, sizeof(buf));
+
+    reap_any_outstanding_children();
+}
+
+static void SIGCHLD_handler(int) {
+    if (TEMP_FAILURE_RETRY(write(signal_write_fd, "1", 1)) == -1) {
+        ERROR("write(signal_write_fd) failed: %s\n", strerror(errno));
     }
 }
 
 void signal_init() {
+    // Create a signalling mechanism for SIGCHLD.
+    int s[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, s) == -1) {
+        ERROR("socketpair failed: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    signal_write_fd = s[0];
+    signal_read_fd = s[1];
+
+    // Write to signal_write_fd if we catch SIGCHLD.
     struct sigaction act;
     memset(&act, 0, sizeof(act));
-    act.sa_handler = sigchld_handler;
+    act.sa_handler = SIGCHLD_handler;
     act.sa_flags = SA_NOCLDSTOP;
     sigaction(SIGCHLD, &act, 0);
 
-    // Create a signalling mechanism for the sigchld handler.
-    int s[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, s) == 0) {
-        signal_fd = s[0];
-        signal_recv_fd = s[1];
-    }
-
-    handle_signal();
+    reap_any_outstanding_children();
 }
 
 int get_signal_fd() {
-    return signal_recv_fd;
+    return signal_read_fd;
 }
