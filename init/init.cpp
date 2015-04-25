@@ -603,14 +603,16 @@ void execute_one_command() {
     }
 }
 
-static int wait_for_coldboot_done_action(int nargs, char **args)
-{
-    int ret;
-    INFO("wait for %s\n", COLDBOOT_DONE);
-    ret = wait_for_file(COLDBOOT_DONE, COMMAND_RETRY_TIMEOUT);
-    if (ret)
+static int wait_for_coldboot_done_action(int nargs, char **args) {
+    Timer t;
+
+    NOTICE("Waiting for %s...\n", COLDBOOT_DONE);
+    if (wait_for_file(COLDBOOT_DONE, COMMAND_RETRY_TIMEOUT)) {
         ERROR("Timed out waiting for %s\n", COLDBOOT_DONE);
-    return ret;
+    }
+
+    NOTICE("Waiting for %s took %.2fs.\n", COLDBOOT_DONE, t.duration());
+    return 0;
 }
 
 /*
@@ -832,22 +834,6 @@ static void process_kernel_cmdline(void)
         import_kernel_cmdline(1, import_kernel_nv);
 }
 
-static int property_service_init_action(int nargs, char **args)
-{
-    /* read any property files on system or data and
-     * fire up the property service.  This must happen
-     * after the ro.foo properties are set above so
-     * that /data/local.prop cannot interfere with them.
-     */
-    start_property_service();
-    if (get_property_set_fd() < 0) {
-        ERROR("start_property_service() failed\n");
-        exit(1);
-    }
-
-    return 0;
-}
-
 static int queue_property_triggers_action(int nargs, char **args)
 {
     queue_all_property_triggers();
@@ -856,7 +842,7 @@ static int queue_property_triggers_action(int nargs, char **args)
     return 0;
 }
 
-void selinux_init_all_handles(void)
+static void selinux_init_all_handles(void)
 {
     sehandle = selinux_android_file_context_handle();
     selinux_android_set_sehandle(sehandle);
@@ -1054,12 +1040,15 @@ int main(int argc, char** argv) {
     signal_init();
 
     property_load_boot_defaults();
+    start_property_service();
 
     init_parse_config_file("/init.rc");
 
     action_for_each_trigger("early-init", action_add_queue_tail);
 
+    // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
     queue_builtin_action(wait_for_coldboot_done_action, "wait_for_coldboot_done");
+    // ... so that we can start queuing up actions that require stuff from /dev.
     queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
     queue_builtin_action(keychord_init_action, "keychord_init");
     queue_builtin_action(console_init_action, "console_init");
@@ -1070,7 +1059,6 @@ int main(int argc, char** argv) {
     // Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
     // wasn't ready immediately after wait_for_coldboot_done
     queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
-    queue_builtin_action(property_service_init_action, "property_service_init");
 
     // Don't mount filesystems or start core system services in charger mode.
     char bootmode[PROP_VALUE_MAX];
@@ -1083,26 +1071,19 @@ int main(int argc, char** argv) {
     // Run all property triggers based on current state of the properties.
     queue_builtin_action(queue_property_triggers_action, "queue_property_triggers");
 
-    // TODO: why do we only initialize ufds after execute_one_command and restart_processes?
     size_t fd_count = 0;
     struct pollfd ufds[3];
     ufds[fd_count++] = { .fd = get_signal_fd(), .events = POLLIN, .revents = 0 };
-    bool property_set_fd_init = false;
+    ufds[fd_count++] = { .fd = get_property_set_fd(), .events = POLLIN, .revents = 0 };
+    // TODO: can we work out when /dev/keychord is first accessible and open this fd then?
     bool keychord_fd_init = false;
 
-    for (;;) {
+    while (true) {
         if (!waiting_for_exec) {
             execute_one_command();
             restart_processes();
         }
 
-        if (!property_set_fd_init && get_property_set_fd() > 0) {
-            ufds[fd_count].fd = get_property_set_fd();
-            ufds[fd_count].events = POLLIN;
-            ufds[fd_count].revents = 0;
-            fd_count++;
-            property_set_fd_init = true;
-        }
         if (!keychord_fd_init && get_keychord_fd() > 0) {
             ufds[fd_count].fd = get_keychord_fd();
             ufds[fd_count].events = POLLIN;
@@ -1124,8 +1105,11 @@ int main(int argc, char** argv) {
 
         bootchart_sample(&timeout);
 
-        int nr = poll(ufds, fd_count, timeout);
+        int nr = TEMP_FAILURE_RETRY(poll(ufds, fd_count, timeout));
         if (nr <= 0) {
+            if (nr == -1) {
+                ERROR("poll failed: %s\n", strerror(errno));
+            }
             continue;
         }
 
