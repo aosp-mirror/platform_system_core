@@ -120,5 +120,29 @@ bool WriteStringToFile(const std::string& content, const std::string& path) {
   return result || CleanUpAfterFailedWrite(path);
 }
 
+bool ReadFully(int fd, void* data, size_t byte_count) {
+  uint8_t* p = reinterpret_cast<uint8_t*>(data);
+  size_t remaining = byte_count;
+  while (remaining > 0) {
+    ssize_t n = TEMP_FAILURE_RETRY(read(fd, p, remaining));
+    if (n <= 0) return false;
+    p += n;
+    remaining -= n;
+  }
+  return true;
+}
+
+bool WriteFully(int fd, const void* data, size_t byte_count) {
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
+  size_t remaining = byte_count;
+  while (remaining > 0) {
+    ssize_t n = TEMP_FAILURE_RETRY(write(fd, p, remaining));
+    if (n == -1) return false;
+    p += n;
+    remaining -= n;
+  }
+  return true;
+}
+
 }  // namespace base
 }  // namespace android
