@@ -403,8 +403,7 @@ void open_devnull_stdio(void)
     }
 }
 
-void import_kernel_cmdline(int in_qemu,
-                           void (*import_kernel_nv)(char *name, int in_qemu))
+void import_kernel_cmdline(bool in_qemu, std::function<void(char*,bool)> import_kernel_nv)
 {
     char cmdline[2048];
     char *ptr;
