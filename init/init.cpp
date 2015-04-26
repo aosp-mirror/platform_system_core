@@ -746,7 +746,7 @@ static int console_init_action(int nargs, char **args)
     return 0;
 }
 
-static void import_kernel_nv(char *name, int for_emulator)
+static void import_kernel_nv(char *name, bool for_emulator)
 {
     char *value = strchr(name, '=');
     int name_len = strlen(name);
@@ -840,9 +840,9 @@ static void process_kernel_cmdline(void)
      * second pass is only necessary for qemu to export all kernel params
      * as props.
      */
-    import_kernel_cmdline(0, import_kernel_nv);
+    import_kernel_cmdline(false, import_kernel_nv);
     if (qemu[0])
-        import_kernel_cmdline(1, import_kernel_nv);
+        import_kernel_cmdline(true, import_kernel_nv);
 }
 
 static int queue_property_triggers_action(int nargs, char **args)
@@ -860,6 +860,29 @@ static void selinux_init_all_handles(void)
     sehandle_prop = selinux_android_prop_context_handle();
 }
 
+enum selinux_enforcing_status { SELINUX_DISABLED, SELINUX_PERMISSIVE, SELINUX_ENFORCING };
+
+static selinux_enforcing_status selinux_status_from_cmdline() {
+    selinux_enforcing_status status = SELINUX_ENFORCING;
+
+    std::function<void(char*,bool)> fn = [&](char* name, bool in_qemu) {
+        char *value = strchr(name, '=');
+        if (value == nullptr) { return; }
+        *value++ = '\0';
+        if (strcmp(name, "androidboot.selinux") == 0) {
+            if (strcmp(value, "disabled") == 0) {
+                status = SELINUX_DISABLED;
+            } else if (strcmp(value, "permissive") == 0) {
+                status = SELINUX_PERMISSIVE;
+            }
+        }
+    };
+    import_kernel_cmdline(false, fn);
+
+    return status;
+}
+
+
 static bool selinux_is_disabled(void)
 {
     if (ALLOW_DISABLE_SELINUX) {
@@ -868,12 +891,7 @@ static bool selinux_is_disabled(void)
             // via the kernel command line "selinux=0".
             return true;
         }
-
-        char tmp[PROP_VALUE_MAX];
-        if ((property_get("ro.boot.selinux", tmp) != 0) && (strcmp(tmp, "disabled") == 0)) {
-            // SELinux is compiled into the kernel, but we've been told to disable it.
-            return true;
-        }
+        return selinux_status_from_cmdline() == SELINUX_DISABLED;
     }
 
     return false;
@@ -882,20 +900,7 @@ static bool selinux_is_disabled(void)
 static bool selinux_is_enforcing(void)
 {
     if (ALLOW_DISABLE_SELINUX) {
-        char tmp[PROP_VALUE_MAX];
-        if (property_get("ro.boot.selinux", tmp) == 0) {
-            // Property is not set.  Assume enforcing.
-            return true;
-        }
-
-        if (strcmp(tmp, "permissive") == 0) {
-            // SELinux is in the kernel, but we've been told to go into permissive mode.
-            return false;
-        }
-
-        if (strcmp(tmp, "enforcing") != 0) {
-            ERROR("SELinux: Unknown value of ro.boot.selinux. Got: \"%s\". Assuming enforcing.\n", tmp);
-        }
+        return selinux_status_from_cmdline() == SELINUX_ENFORCING;
     }
     return true;
 }
@@ -985,19 +990,14 @@ int main(int argc, char** argv) {
 
     // Get the basic filesystem setup we need put together in the initramdisk
     // on / and then we'll let the rc file figure out the rest.
-    // TODO: avoid mounting tmpfs twice, once in the first stage, and once in the
-    // second stage.
-    mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755");
-    mkdir("/dev/pts", 0755);
-    mkdir("/dev/socket", 0755);
-    mount("devpts", "/dev/pts", "devpts", 0, NULL);
     if (is_first_stage) {
+        mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755");
+        mkdir("/dev/pts", 0755);
+        mkdir("/dev/socket", 0755);
+        mount("devpts", "/dev/pts", "devpts", 0, NULL);
         mount("proc", "/proc", "proc", 0, NULL);
         mount("sysfs", "/sys", "sysfs", 0, NULL);
     }
-
-    // Indicate that booting is in progress to background fw loaders, etc.
-    close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
 
     // We must have some place other than / to create the device nodes for
     // kmsg and null, otherwise we won't be able to remount / read-only
@@ -1009,16 +1009,21 @@ int main(int argc, char** argv) {
 
     NOTICE("init%s started!\n", is_first_stage ? "" : " second stage");
 
-    property_init();
+    if (!is_first_stage) {
+        // Indicate that booting is in progress to background fw loaders, etc.
+        close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
 
-    // If arguments are passed both on the command line and in DT,
-    // properties set in DT always have priority over the command-line ones.
-    process_kernel_dt();
-    process_kernel_cmdline();
+        property_init();
 
-    // Propogate the kernel variables to internal variables
-    // used by init as well as the current required properties.
-    export_kernel_boot_props();
+        // If arguments are passed both on the command line and in DT,
+        // properties set in DT always have priority over the command-line ones.
+        process_kernel_dt();
+        process_kernel_cmdline();
+
+        // Propogate the kernel variables to internal variables
+        // used by init as well as the current required properties.
+        export_kernel_boot_props();
+    }
 
     // Set up SELinux, including loading the SELinux policy if we're in the kernel domain.
     selinux_initialize(is_first_stage);
