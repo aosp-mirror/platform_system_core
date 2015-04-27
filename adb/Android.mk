@@ -167,6 +167,7 @@ LOCAL_STATIC_LIBRARIES := \
     libbase \
     libcrypto_static \
     libcutils \
+    liblog \
     $(EXTRA_STATIC_LIBS) \
 
 # libc++ not available on windows yet

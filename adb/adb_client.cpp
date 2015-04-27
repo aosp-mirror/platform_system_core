@@ -28,6 +28,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <string>
+
 #include "adb_io.h"
 
 static transport_type __adb_transport = kTransportAny;
@@ -108,44 +110,40 @@ const char *adb_error(void)
 
 static int switch_socket_transport(int fd)
 {
-    char service[64];
-    char tmp[5];
-    int len;
-
-    if (__adb_serial)
-        snprintf(service, sizeof service, "host:transport:%s", __adb_serial);
-    else {
+    std::string service;
+    if (__adb_serial) {
+        service += "host:transport:";
+        service += __adb_serial;
+    } else {
         const char* transport_type = "???";
-
-         switch (__adb_transport) {
-            case kTransportUsb:
-                transport_type = "transport-usb";
-                break;
-            case kTransportLocal:
-                transport_type = "transport-local";
-                break;
-            case kTransportAny:
-                transport_type = "transport-any";
-                break;
-            case kTransportHost:
-                // no switch necessary
-                return 0;
-                break;
+        switch (__adb_transport) {
+          case kTransportUsb:
+            transport_type = "transport-usb";
+            break;
+          case kTransportLocal:
+            transport_type = "transport-local";
+            break;
+          case kTransportAny:
+            transport_type = "transport-any";
+            break;
+          case kTransportHost:
+            // no switch necessary
+            return 0;
         }
-
-        snprintf(service, sizeof service, "host:%s", transport_type);
+        service += "host:";
+        service += transport_type;
     }
-    len = strlen(service);
-    snprintf(tmp, sizeof tmp, "%04x", len);
 
-    if(!WriteFdExactly(fd, tmp, 4) || !WriteFdExactly(fd, service, len)) {
+    char tmp[5];
+    snprintf(tmp, sizeof(tmp), "%04zx", service.size());
+    if (!WriteFdExactly(fd, tmp, 4) || !WriteFdExactly(fd, service.c_str(), service.size())) {
         strcpy(__adb_error, "write failure during connection");
         adb_close(fd);
         return -1;
     }
     D("Switch transport in progress\n");
 
-    if(adb_status(fd)) {
+    if (adb_status(fd)) {
         adb_close(fd);
         D("Switch transport failed\n");
         return -1;
