@@ -268,8 +268,6 @@ static const int32_t kMmapFailed = -12;
 
 static const int32_t kErrorMessageLowerBound = -13;
 
-static const char kTempMappingFileName[] = "zip: ExtractFileToFile";
-
 /*
  * A Read-only Zip archive.
  *
@@ -1038,7 +1036,6 @@ class FileWriter : public Writer {
     // Keep track of the start position so we can calculate the
     // total number of bytes written.
     const uint8_t* const start = buf;
-    size_t bytes_written = 0;
     while (buf_size > 0) {
       ssize_t bytes_written = TEMP_FAILURE_RETRY(write(fd_, buf, buf_size));
       if (bytes_written == -1) {
@@ -1122,7 +1119,6 @@ static int32_t InflateEntryToWriter(int fd, const ZipEntry* entry,
   const uint32_t uncompressed_length = entry->uncompressed_length;
 
   uint32_t compressed_length = entry->compressed_length;
-  uint32_t write_count = 0;
   do {
     /* read as much as we can */
     if (zstream.avail_in == 0) {
