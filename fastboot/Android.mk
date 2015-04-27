@@ -58,7 +58,8 @@ LOCAL_STATIC_LIBRARIES := \
     libsparse_host \
     libutils \
     liblog \
-    libz
+    libz \
+    libbase
 
 ifneq ($(HOST_OS),windows)
 LOCAL_STATIC_LIBRARIES += libselinux
