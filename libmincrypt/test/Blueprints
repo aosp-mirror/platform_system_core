@@ -1,0 +1,13 @@
+// Copyright 2013 The Android Open Source Project
+
+cc_test_host {
+    name: "rsa_test",
+    srcs: ["rsa_test.c"],
+    static_libs: ["libmincrypt"],
+}
+
+cc_test_host {
+    name: "ecdsa_test",
+    srcs: ["ecdsa_test.c"],
+    static_libs: ["libmincrypt"],
+}
