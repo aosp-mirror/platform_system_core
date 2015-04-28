@@ -223,19 +223,17 @@ on post-fs
     mkdir /cache/lost+found 0770 root root
 
 on post-fs-data
+    installkey /data
+
     # We chown/chmod /data again so because mount is run as root + defaults
     chown system system /data
     chmod 0771 /data
     # We restorecon /data in case the userdata partition has been reset.
     restorecon /data
 
-    # Make sure we have the device encryption key
-    start logd
-    start vold
-    installkey /data
-
     # Emulated internal storage area
     mkdir /data/media 0770 media_rw media_rw
+
     # Start bootcharting as soon as possible after the data partition is
     # mounted to collect more data.
     mkdir /data/bootchart 0755 shell shell
@@ -458,6 +456,7 @@ on property:vold.decrypt=trigger_restart_min_framework
     class_start main
 
 on property:vold.decrypt=trigger_restart_framework
+    installkey /data
     class_start main
     class_start late_start
 
