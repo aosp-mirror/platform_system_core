@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 #include <sys/param.h>
 
 #include <log/logd.h>
@@ -432,7 +433,7 @@ static inline uint64_t get8LE(const uint8_t* src)
 
     low = src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
     high = src[4] | (src[5] << 8) | (src[6] << 16) | (src[7] << 24);
-    return ((long long) high << 32) | (long long) low;
+    return ((uint64_t) high << 32) | (uint64_t) low;
 }
 
 
@@ -490,7 +491,7 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
     case EVENT_TYPE_LONG:
         /* 64-bit signed long */
         {
-            long long lval;
+            uint64_t lval;
 
             if (eventDataLen < 8)
                 return -1;
@@ -498,7 +499,30 @@ static int android_log_printBinaryEvent(const unsigned char** pEventData,
             eventData += 8;
             eventDataLen -= 8;
 
-            outCount = snprintf(outBuf, outBufLen, "%lld", lval);
+            outCount = snprintf(outBuf, outBufLen, "%" PRId64, lval);
+            if (outCount < outBufLen) {
+                outBuf += outCount;
+                outBufLen -= outCount;
+            } else {
+                /* halt output */
+                goto no_room;
+            }
+        }
+        break;
+    case EVENT_TYPE_FLOAT:
+        /* float */
+        {
+            uint32_t ival;
+            float fval;
+
+            if (eventDataLen < 4)
+                return -1;
+            ival = get4LE(eventData);
+            fval = *(float*)&ival;
+            eventData += 4;
+            eventDataLen -= 4;
+
+            outCount = snprintf(outBuf, outBufLen, "%f", fval);
             if (outCount < outBufLen) {
                 outBuf += outCount;
                 outBufLen -= outCount;
