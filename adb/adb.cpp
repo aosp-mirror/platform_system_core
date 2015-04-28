@@ -33,6 +33,7 @@
 #include <string>
 
 #include <base/stringprintf.h>
+#include <base/strings.h>
 
 #include "adb_auth.h"
 #include "adb_io.h"
@@ -381,84 +382,60 @@ static const char* connection_state_name(atransport *t)
 }
 #endif // ADB_HOST
 
-/* qual_overwrite is used to overwrite a qualifier string.  dst is a
- * pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
- * was malloc'ed and needs to freed.  *dst will be set to a dup of src.
- */
-static void qual_overwrite(char **dst, const char *src)
-{
-    if (!dst)
-        return;
-
+// qual_overwrite is used to overwrite a qualifier string.  dst is a
+// pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
+// was malloc'ed and needs to freed.  *dst will be set to a dup of src.
+// TODO: switch to std::string for these atransport fields instead.
+static void qual_overwrite(char** dst, const std::string& src) {
     free(*dst);
-    *dst = NULL;
-
-    if (!src || !*src)
-        return;
-
-    *dst = strdup(src);
+    *dst = strdup(src.c_str());
 }
 
-void parse_banner(char *banner, atransport *t)
-{
-    static const char *prop_seps = ";";
-    static const char key_val_sep = '=';
-    char *cp;
-    char *type;
-
+void parse_banner(const char* banner, atransport* t) {
     D("parse_banner: %s\n", banner);
-    type = banner;
-    cp = strchr(type, ':');
-    if (cp) {
-        *cp++ = 0;
-        /* Nothing is done with second field. */
-        cp = strchr(cp, ':');
-        if (cp) {
-            char *save;
-            char *key;
-            key = adb_strtok_r(cp + 1, prop_seps, &save);
-            while (key) {
-                cp = strchr(key, key_val_sep);
-                if (cp) {
-                    *cp++ = '\0';
-                    if (!strcmp(key, "ro.product.name"))
-                        qual_overwrite(&t->product, cp);
-                    else if (!strcmp(key, "ro.product.model"))
-                        qual_overwrite(&t->model, cp);
-                    else if (!strcmp(key, "ro.product.device"))
-                        qual_overwrite(&t->device, cp);
-                }
-                key = adb_strtok_r(NULL, prop_seps, &save);
+
+    // The format is something like:
+    // "device::ro.product.name=x;ro.product.model=y;ro.product.device=z;".
+    std::vector<std::string> pieces = android::base::Split(banner, ":");
+
+    if (pieces.size() > 2) {
+        const std::string& props = pieces[2];
+        for (auto& prop : android::base::Split(props, ";")) {
+            // The list of properties was traditionally ;-terminated rather than ;-separated.
+            if (prop.empty()) continue;
+
+            std::vector<std::string> key_value = android::base::Split(prop, "=");
+            if (key_value.size() != 2) continue;
+
+            const std::string& key = key_value[0];
+            const std::string& value = key_value[1];
+            if (key == "ro.product.name") {
+                qual_overwrite(&t->product, value);
+            } else if (key == "ro.product.model") {
+                qual_overwrite(&t->model, value);
+            } else if (key == "ro.product.device") {
+                qual_overwrite(&t->device, value);
             }
         }
     }
 
-    if(!strcmp(type, "bootloader")){
+    const std::string& type = pieces[0];
+    if (type == "bootloader") {
         D("setting connection_state to CS_BOOTLOADER\n");
         t->connection_state = CS_BOOTLOADER;
         update_transports();
-        return;
-    }
-
-    if(!strcmp(type, "device")) {
+    } else if (type == "device") {
         D("setting connection_state to CS_DEVICE\n");
         t->connection_state = CS_DEVICE;
         update_transports();
-        return;
-    }
-
-    if(!strcmp(type, "recovery")) {
+    } else if (type == "recovery") {
         D("setting connection_state to CS_RECOVERY\n");
         t->connection_state = CS_RECOVERY;
         update_transports();
-        return;
-    }
-
-    if(!strcmp(type, "sideload")) {
+    } else if (type == "sideload") {
         D("setting connection_state to CS_SIDELOAD\n");
         t->connection_state = CS_SIDELOAD;
         update_transports();
-        return;
     }
 
     t->connection_state = CS_HOST;
@@ -493,7 +470,7 @@ void handle_packet(apacket *p, atransport *t)
             handle_offline(t);
         }
 
-        parse_banner((char*) p->data, t);
+        parse_banner(reinterpret_cast<const char*>(p->data), t);
 
         if (HOST || !auth_enabled) {
             handle_online(t);

@@ -43,6 +43,7 @@
 #include "mincrypt/rsa.h"
 #undef RSA_verify
 
+#include <base/strings.h>
 #include <cutils/list.h>
 
 #include <openssl/evp.h>
@@ -172,7 +173,7 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
         return 0;
     }
 
-    outfile = fopen(path, "w");
+    outfile = fopen(path, "we");
     if (!outfile) {
         D("Failed to open '%s'\n", path);
         return 0;
@@ -191,7 +192,7 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
     encoded_length = 1 + ((sizeof(pkey) + 2) / 3 * 4);
 #endif
 
-    encoded = reinterpret_cast<uint8_t*>(malloc(encoded_length));
+    encoded = new uint8_t[encoded_length];
     if (encoded == nullptr) {
         D("Allocation failure");
         goto out;
@@ -212,9 +213,7 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
     if (outfile != NULL) {
         fclose(outfile);
     }
-    if (encoded != NULL) {
-        free(encoded);
-    }
+    delete[] encoded;
     return ret;
 }
 
@@ -240,7 +239,7 @@ static int generate_key(const char *file)
 
     old_mask = umask(077);
 
-    f = fopen(file, "w");
+    f = fopen(file, "we");
     if (!f) {
         D("Failed to open '%s'\n", file);
         umask(old_mask);
@@ -274,30 +273,24 @@ static int read_key(const char *file, struct listnode *list)
 {
     D("read_key '%s'\n", file);
 
-    FILE* f = fopen(file, "r");
-    if (!f) {
-        D("Failed to open '%s'\n", file);
+    FILE* fp = fopen(file, "re");
+    if (!fp) {
+        D("Failed to open '%s': %s\n", file, strerror(errno));
         return 0;
     }
 
-    adb_private_key* key = reinterpret_cast<adb_private_key*>(
-        malloc(sizeof(adb_private_key)));
-    if (!key) {
-        D("Failed to alloc key\n");
-        fclose(f);
-        return 0;
-    }
+    adb_private_key* key = new adb_private_key;
     key->rsa = RSA_new();
 
-    if (!PEM_read_RSAPrivateKey(f, &key->rsa, NULL, NULL)) {
+    if (!PEM_read_RSAPrivateKey(fp, &key->rsa, NULL, NULL)) {
         D("Failed to read key\n");
-        fclose(f);
+        fclose(fp);
         RSA_free(key->rsa);
-        free(key);
+        delete key;
         return 0;
     }
 
-    fclose(f);
+    fclose(fp);
     list_add_tail(list, &key->node);
     return 1;
 }
@@ -362,29 +355,16 @@ static int get_user_key(struct listnode *list)
     return read_key(path, list);
 }
 
-static void get_vendor_keys(struct listnode *list)
-{
-    const char *adb_keys_path;
-    char keys_path[MAX_PAYLOAD];
-    char *path;
-    char *save;
-    struct stat buf;
-
-    adb_keys_path = getenv("ADB_VENDOR_KEYS");
-    if (!adb_keys_path)
+static void get_vendor_keys(struct listnode* key_list) {
+    const char* adb_keys_path = getenv("ADB_VENDOR_KEYS");
+    if (adb_keys_path == nullptr) {
         return;
-    strncpy(keys_path, adb_keys_path, sizeof(keys_path));
+    }
 
-    path = adb_strtok_r(keys_path, ENV_PATH_SEPARATOR_STR, &save);
-    while (path) {
-        D("Reading: '%s'\n", path);
-
-        if (stat(path, &buf))
-            D("Can't read '%s'\n", path);
-        else if (!read_key(path, list))
-            D("Failed to read '%s'\n", path);
-
-        path = adb_strtok_r(NULL, ENV_PATH_SEPARATOR_STR, &save);
+    for (auto& path : android::base::Split(adb_keys_path, ENV_PATH_SEPARATOR_STR)) {
+        if (!read_key(path.c_str(), key_list)) {
+            D("Failed to read '%s'\n", path.c_str());
+        }
     }
 }
 

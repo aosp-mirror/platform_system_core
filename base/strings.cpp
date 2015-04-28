@@ -32,24 +32,17 @@ std::vector<std::string> Split(const std::string& s,
                                const std::string& delimiters) {
   CHECK_NE(delimiters.size(), 0U);
 
-  std::vector<std::string> split;
-  if (s.size() == 0) {
-    // Split("", d) returns {} rather than {""}.
-    return split;
-  }
+  std::vector<std::string> result;
 
   size_t base = 0;
   size_t found;
   do {
     found = s.find_first_of(delimiters, base);
-    if (found != base) {
-      split.push_back(s.substr(base, found - base));
-    }
-
+    result.push_back(s.substr(base, found - base));
     base = found + 1;
   } while (found != s.npos);
 
-  return split;
+  return result;
 }
 
 std::string Trim(const std::string& s) {
