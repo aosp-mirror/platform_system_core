@@ -43,7 +43,7 @@
             'proxy_output_file': 'include/session_manager/dbus-proxies.h'
           },
           'sources': [
-            '../login_manager/dbus_bindings/org.chromium.SessionManager.xml',
+            '../login_manager/org.chromium.SessionManagerInterface.xml',
           ],
           'includes': ['../common-mk/generate-dbus-proxies.gypi'],
         },
