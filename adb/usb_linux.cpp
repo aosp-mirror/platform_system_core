@@ -31,11 +31,11 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 20)
 #include <linux/usb/ch9.h>
-#else
-#include <linux/usb_ch9.h>
-#endif
+
+#include <base/file.h>
+#include <base/stringprintf.h>
+#include <base/strings.h>
 
 #include "adb.h"
 #include "transport.h"
@@ -567,13 +567,10 @@ int usb_close(usb_handle *h)
     return 0;
 }
 
-static void register_device(const char *dev_name, const char *devpath,
+static void register_device(const char* dev_name, const char* dev_path,
                             unsigned char ep_in, unsigned char ep_out,
                             int interface, int serial_index, unsigned zero_mask)
 {
-    int n = 0;
-    char serial[256];
-
         /* Since Linux will not reassign the device ID (and dev_name)
         ** as long as the device is open, we can add to the list here
         ** once we open it and remove from the list when we're finally
@@ -621,8 +618,7 @@ static void register_device(const char *dev_name, const char *devpath,
     D("[ usb opened %s%s, fd=%d]\n", usb->fname, (usb->writeable ? "" : " (read-only)"), usb->desc);
 
     if (usb->writeable) {
-        n = ioctl(usb->desc, USBDEVFS_CLAIMINTERFACE, &interface);
-        if (n != 0) {
+        if (ioctl(usb->desc, USBDEVFS_CLAIMINTERFACE, &interface) != 0) {
             D("[ usb ioctl(%d, USBDEVFS_CLAIMINTERFACE) failed: %s]\n", usb->desc, strerror(errno));
             adb_close(usb->desc);
             free(usb);
@@ -630,56 +626,17 @@ static void register_device(const char *dev_name, const char *devpath,
         }
     }
 
-        /* read the device's serial number */
-    serial[0] = 0;
-    memset(serial, 0, sizeof(serial));
-    if (serial_index) {
-        struct usbdevfs_ctrltransfer  ctrl;
-        __u16 buffer[128];
-        __u16 languages[128];
-        int i, result;
-        int languageCount = 0;
-
-        memset(languages, 0, sizeof(languages));
-        memset(&ctrl, 0, sizeof(ctrl));
-
-            // read list of supported languages
-        ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
-        ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
-        ctrl.wValue = (USB_DT_STRING << 8) | 0;
-        ctrl.wIndex = 0;
-        ctrl.wLength = sizeof(languages);
-        ctrl.data = languages;
-        ctrl.timeout = 1000;
-
-        result = ioctl(usb->desc, USBDEVFS_CONTROL, &ctrl);
-        if (result > 0)
-            languageCount = (result - 2) / 2;
-
-        for (i = 1; i <= languageCount; i++) {
-            memset(buffer, 0, sizeof(buffer));
-            memset(&ctrl, 0, sizeof(ctrl));
-
-            ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
-            ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
-            ctrl.wValue = (USB_DT_STRING << 8) | serial_index;
-            ctrl.wIndex = __le16_to_cpu(languages[i]);
-            ctrl.wLength = sizeof(buffer);
-            ctrl.data = buffer;
-            ctrl.timeout = 1000;
-
-            result = ioctl(usb->desc, USBDEVFS_CONTROL, &ctrl);
-            if (result > 0) {
-                int i;
-                // skip first word, and copy the rest to the serial string, changing shorts to bytes.
-                result /= 2;
-                for (i = 1; i < result; i++)
-                    serial[i - 1] = __le16_to_cpu(buffer[i]);
-                serial[i - 1] = 0;
-                break;
-            }
-        }
+    // Read the device's serial number.
+    std::string serial_path =
+            android::base::StringPrintf("/sys/bus/usb/devices/%s/serial", dev_path + 4);
+    std::string serial;
+    if (!android::base::ReadFileToString(serial_path, &serial)) {
+        D("[ usb read %s failed: %s ]\n", serial_path.c_str(), strerror(errno));
+        adb_close(usb->desc);
+        free(usb);
+        return;
     }
+    serial = android::base::Trim(serial);
 
         /* add to the end of the active handles */
     adb_mutex_lock(&usb_lock);
@@ -689,10 +646,10 @@ static void register_device(const char *dev_name, const char *devpath,
     usb->next->prev = usb;
     adb_mutex_unlock(&usb_lock);
 
-    register_usb_transport(usb, serial, devpath, usb->writeable);
+    register_usb_transport(usb, serial.c_str(), dev_path, usb->writeable);
 }
 
-void* device_poll_thread(void* unused)
+static void* device_poll_thread(void* unused)
 {
     D("Created device thread\n");
     for(;;) {
