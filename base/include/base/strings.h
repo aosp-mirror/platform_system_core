@@ -27,8 +27,6 @@ namespace base {
 //
 // The string is split at each occurrence of a character in delimiters.
 //
-// Empty splits will be omitted. I.e. Split("a,,b", ",") -> {"a", "b"}
-//
 // The empty string is not a valid delimiter list.
 std::vector<std::string> Split(const std::string& s,
                                const std::string& delimiters);
