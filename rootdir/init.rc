@@ -655,3 +655,11 @@ service pre-recovery /system/bin/uncrypt
     class main
     disabled
     oneshot
+
+on property:ro.debuggable=1
+    start perfprofd
+
+service perfprofd /system/xbin/perfprofd
+    disabled
+    user root
+    oneshot
