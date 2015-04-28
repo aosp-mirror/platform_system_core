@@ -17,11 +17,15 @@
 libbase_src_files = [
     "file.cpp",
     "stringprintf.cpp",
+    "strings.cpp",
 ]
 
 libbase_test_src_files = [
     "file_test.cpp",
     "stringprintf_test.cpp",
+    "strings_test.cpp",
+    "test_main.cpp",
+    "test_utils.cpp",
 ]
 
 libbase_cppflags = [
@@ -33,22 +37,43 @@ libbase_cppflags = [
 cc_library {
     name: "libbase",
     host_supported: true,
-    clang: true,
     srcs: libbase_src_files,
     local_include_dirs: ["include"],
     cppflags: libbase_cppflags,
     export_include_dirs: ["include"],
-    shared_libs: ["liblog"],
+    shared_libs: [
+        "libcutils",
+        "liblog",
+    ],
+    target: {
+        android: {
+            clang: true,
+            srcs: ["logging.cpp"],
+        },
+        not_windows: {
+            srcs: ["logging.cpp"],
+        },
+    },
 }
 
 cc_test {
     name: "libbase_test",
     host_supported: true,
-    clang: true,
     srcs: libbase_test_src_files,
     cppflags: libbase_cppflags,
     shared_libs: ["libbase"],
+    static_libs: ["libcutils"],
     compile_multilib: "both",
+    local_include_dirs: ["."],
+    target: {
+        android: {
+            srcs: ["logging_test.cpp"],
+            clang: true,
+        },
+        not_windows: {
+            srcs: ["logging_test.cpp"],
+        },
+    },
     multilib: {
         lib32: {
             suffix: "32",

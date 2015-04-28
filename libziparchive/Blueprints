@@ -21,6 +21,7 @@ cc_library {
     shared_libs: [
         "liblog",
         "libutils",
+        "libbase",
     ],
     cflags: [
         "-Werror",
@@ -45,7 +46,10 @@ cc_test {
         "zip_archive_test.cc",
         "entry_name_utils_test.cc",
     ],
-    shared_libs: ["liblog"],
+    shared_libs: [
+        "liblog",
+        "libbase",
+    ],
     static_libs: [
         "libziparchive",
         "libz",
