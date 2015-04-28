@@ -860,7 +860,7 @@ static void selinux_init_all_handles(void)
     sehandle_prop = selinux_android_prop_context_handle();
 }
 
-enum selinux_enforcing_status { SELINUX_DISABLED, SELINUX_PERMISSIVE, SELINUX_ENFORCING };
+enum selinux_enforcing_status { SELINUX_PERMISSIVE, SELINUX_ENFORCING };
 
 static selinux_enforcing_status selinux_status_from_cmdline() {
     selinux_enforcing_status status = SELINUX_ENFORCING;
@@ -870,9 +870,7 @@ static selinux_enforcing_status selinux_status_from_cmdline() {
         if (value == nullptr) { return; }
         *value++ = '\0';
         if (strcmp(name, "androidboot.selinux") == 0) {
-            if (strcmp(value, "disabled") == 0) {
-                status = SELINUX_DISABLED;
-            } else if (strcmp(value, "permissive") == 0) {
+            if (strcmp(value, "permissive") == 0) {
                 status = SELINUX_PERMISSIVE;
             }
         }
@@ -882,24 +880,9 @@ static selinux_enforcing_status selinux_status_from_cmdline() {
     return status;
 }
 
-
-static bool selinux_is_disabled(void)
-{
-    if (ALLOW_DISABLE_SELINUX) {
-        if (access("/sys/fs/selinux", F_OK) != 0) {
-            // SELinux is not compiled into the kernel, or has been disabled
-            // via the kernel command line "selinux=0".
-            return true;
-        }
-        return selinux_status_from_cmdline() == SELINUX_DISABLED;
-    }
-
-    return false;
-}
-
 static bool selinux_is_enforcing(void)
 {
-    if (ALLOW_DISABLE_SELINUX) {
+    if (ALLOW_PERMISSIVE_SELINUX) {
         return selinux_status_from_cmdline() == SELINUX_ENFORCING;
     }
     return true;
@@ -907,10 +890,6 @@ static bool selinux_is_enforcing(void)
 
 int selinux_reload_policy(void)
 {
-    if (selinux_is_disabled()) {
-        return -1;
-    }
-
     INFO("SELinux: Attempting to reload policy files\n");
 
     if (selinux_android_reload_policy() == -1) {
@@ -947,10 +926,6 @@ static void selinux_initialize(bool in_kernel_domain) {
     cb.func_audit = audit_callback;
     selinux_set_callback(SELINUX_CB_AUDIT, cb);
 
-    if (selinux_is_disabled()) {
-        return;
-    }
-
     if (in_kernel_domain) {
         INFO("Loading SELinux policy...\n");
         if (selinux_android_load_policy() < 0) {
@@ -958,8 +933,15 @@ static void selinux_initialize(bool in_kernel_domain) {
             security_failure();
         }
 
+        bool kernel_enforcing = (security_getenforce() == 1);
         bool is_enforcing = selinux_is_enforcing();
-        security_setenforce(is_enforcing);
+        if (kernel_enforcing != is_enforcing) {
+            if (security_setenforce(is_enforcing)) {
+                ERROR("security_setenforce(%s) failed: %s\n",
+                      is_enforcing ? "true" : "false", strerror(errno));
+                security_failure();
+            }
+        }
 
         if (write_file("/sys/fs/selinux/checkreqprot", "0") == -1) {
             security_failure();
