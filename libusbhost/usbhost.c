@@ -498,6 +498,12 @@ char* usb_device_get_product_name(struct usb_device *device)
     return usb_device_get_string(device, desc->iProduct);
 }
 
+int usb_device_get_version(struct usb_device *device)
+{
+    struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
+    return desc->bcdUSB;
+}
+
 char* usb_device_get_serial(struct usb_device *device)
 {
     struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
