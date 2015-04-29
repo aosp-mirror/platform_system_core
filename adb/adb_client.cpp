@@ -191,7 +191,7 @@ int _adb_connect(const char *service, std::string* error) {
     D("_adb_connect: %s\n", service);
     size_t len = strlen(service);
     if ((len < 1) || (len > 1024)) {
-        *error = android::base::StringPrintf("service name too long (%zd)", len);
+        *error = android::base::StringPrintf("service name too long (%d)", static_cast<int>(len));
         return -1;
     }
     snprintf(tmp, sizeof tmp, "%04zx", len);
