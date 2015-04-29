@@ -20,11 +20,14 @@
 
 #include <string>
 
+// The z size sepcifier isn't supported on Windows, so this test isn't useful.
+#if !defined(_WIN32)
 TEST(StringPrintfTest, HexSizeT) {
   size_t size = 0x00107e59;
   EXPECT_EQ("00107e59", android::base::StringPrintf("%08zx", size));
   EXPECT_EQ("0x00107e59", android::base::StringPrintf("0x%08zx", size));
 }
+#endif
 
 TEST(StringPrintfTest, StringAppendF) {
   std::string s("a");
