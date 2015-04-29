@@ -29,6 +29,9 @@
 #include <sys/types.h>
 
 #include <string>
+#include <vector>
+
+#include <base/stringprintf.h>
 
 #include "adb_io.h"
 
@@ -63,10 +66,11 @@ int  adb_get_emulator_console_port(void)
         /* if no specific device was specified, we need to look at */
         /* the list of connected devices, and extract an emulator  */
         /* name from it. two emulators is an error                 */
-        char*  tmp = adb_query("host:devices");
+        std::string error;
+        char*  tmp = adb_query("host:devices", &error);
         char*  p   = tmp;
-        if(!tmp) {
-            printf("no emulator connected\n");
+        if (!tmp) {
+            printf("no emulator connected: %s\n", error.c_str());
             return -1;
         }
         while (*p) {
@@ -101,15 +105,11 @@ int  adb_get_emulator_console_port(void)
     return port;
 }
 
-static char __adb_error[256] = { 0 };
-
-const char *adb_error(void)
-{
-    return __adb_error;
+std::string perror_str(const char* msg) {
+    return android::base::StringPrintf("%s: %s", msg, strerror(errno));
 }
 
-static int switch_socket_transport(int fd)
-{
+static int switch_socket_transport(int fd, std::string* error) {
     std::string service;
     if (__adb_serial) {
         service += "host:transport:";
@@ -137,70 +137,64 @@ static int switch_socket_transport(int fd)
     char tmp[5];
     snprintf(tmp, sizeof(tmp), "%04zx", service.size());
     if (!WriteFdExactly(fd, tmp, 4) || !WriteFdExactly(fd, service.c_str(), service.size())) {
-        strcpy(__adb_error, "write failure during connection");
+        *error = perror_str("write failure during connection");
         adb_close(fd);
         return -1;
     }
     D("Switch transport in progress\n");
 
-    if (adb_status(fd)) {
+    if (!adb_status(fd, error)) {
         adb_close(fd);
-        D("Switch transport failed\n");
+        D("Switch transport failed: %s\n", error->c_str());
         return -1;
     }
     D("Switch transport success\n");
     return 0;
 }
 
-int adb_status(int fd)
-{
-    unsigned char buf[5];
-    unsigned len;
+bool adb_status(int fd, std::string* error) {
+    char buf[5];
 
-    if(!ReadFdExactly(fd, buf, 4)) {
-        strcpy(__adb_error, "protocol fault (no status)");
-        return -1;
+    if (!ReadFdExactly(fd, buf, 4)) {
+        *error = perror_str("protocol fault (couldn't read status)");
+        return false;
     }
 
-    if(!memcmp(buf, "OKAY", 4)) {
-        return 0;
+    if (!memcmp(buf, "OKAY", 4)) {
+        return true;
     }
 
-    if(memcmp(buf, "FAIL", 4)) {
-        sprintf(__adb_error,
-                "protocol fault (status %02x %02x %02x %02x?!)",
-                buf[0], buf[1], buf[2], buf[3]);
-        return -1;
+    if (memcmp(buf, "FAIL", 4)) {
+        *error = android::base::StringPrintf("protocol fault (status %02x %02x %02x %02x?!)",
+                                             buf[0], buf[1], buf[2], buf[3]);
+        return false;
     }
 
-    if(!ReadFdExactly(fd, buf, 4)) {
-        strcpy(__adb_error, "protocol fault (status len)");
-        return -1;
+    if (!ReadFdExactly(fd, buf, 4)) {
+        *error = perror_str("protocol fault (couldn't read status length)");
+        return false;
     }
     buf[4] = 0;
-    len = strtoul((char*)buf, 0, 16);
-    if(len > 255) len = 255;
-    if(!ReadFdExactly(fd, __adb_error, len)) {
-        strcpy(__adb_error, "protocol fault (status read)");
-        return -1;
+
+    unsigned long len = strtoul(buf, 0, 16);
+    error->resize(len + 1, '\0'); // Ensure NUL-termination.
+    if (!ReadFdExactly(fd, &(*error)[0], len)) {
+        *error = perror_str("protocol fault (couldn't read status message)");
     }
-    __adb_error[len] = 0;
-    return -1;
+    return false;
 }
 
-int _adb_connect(const char *service)
-{
+int _adb_connect(const char *service, std::string* error) {
     char tmp[5];
-    int len;
     int fd;
 
     D("_adb_connect: %s\n", service);
-    len = strlen(service);
-    if((len < 1) || (len > 1024)) {
-        strcpy(__adb_error, "service name too long");
+    size_t len = strlen(service);
+    if ((len < 1) || (len > 1024)) {
+        *error = android::base::StringPrintf("service name too long (%zd)", len);
         return -1;
     }
-    snprintf(tmp, sizeof tmp, "%04x", len);
+    snprintf(tmp, sizeof tmp, "%04zx", len);
 
     if (__adb_server_name)
         fd = socket_network_client(__adb_server_name, __adb_server_port, SOCK_STREAM);
@@ -208,21 +202,21 @@ int _adb_connect(const char *service)
         fd = socket_loopback_client(__adb_server_port, SOCK_STREAM);
 
     if(fd < 0) {
-        strcpy(__adb_error, "cannot connect to daemon");
+        *error = perror_str("cannot connect to daemon");
         return -2;
     }
 
-    if (memcmp(service,"host",4) != 0 && switch_socket_transport(fd)) {
+    if (memcmp(service,"host",4) != 0 && switch_socket_transport(fd, error)) {
         return -1;
     }
 
     if(!WriteFdExactly(fd, tmp, 4) || !WriteFdExactly(fd, service, len)) {
-        strcpy(__adb_error, "write failure during connection");
+        *error = perror_str("write failure during connection");
         adb_close(fd);
         return -1;
     }
 
-    if(adb_status(fd)) {
+    if (!adb_status(fd, error)) {
         adb_close(fd);
         return -1;
     }
@@ -231,20 +225,19 @@ int _adb_connect(const char *service)
     return fd;
 }
 
-int adb_connect(const char *service)
-{
+int adb_connect(const char* service, std::string* error) {
     // first query the adb server's version
-    int fd = _adb_connect("host:version");
+    int fd = _adb_connect("host:version", error);
 
     D("adb_connect: service %s\n", service);
-    if(fd == -2 && __adb_server_name) {
+    if (fd == -2 && __adb_server_name) {
         fprintf(stderr,"** Cannot start server on remote host\n");
         return fd;
-    } else if(fd == -2) {
+    } else if (fd == -2) {
         fprintf(stdout,"* daemon not running. starting it now on port %d *\n",
                 __adb_server_port);
     start_server:
-        if(launch_server(__adb_server_port)) {
+        if (launch_server(__adb_server_port)) {
             fprintf(stderr,"* failed to start daemon *\n");
             return -1;
         } else {
@@ -260,7 +253,7 @@ int adb_connect(const char *service)
         int version = ADB_SERVER_VERSION - 1;
 
         // if we have a file descriptor, then parse version result
-        if(fd >= 0) {
+        if (fd >= 0) {
             if(!ReadFdExactly(fd, buf, 4)) goto error;
 
             buf[4] = 0;
@@ -273,13 +266,14 @@ int adb_connect(const char *service)
         } else {
             // if fd is -1, then check for "unknown host service",
             // which would indicate a version of adb that does not support the version command
-            if (strcmp(__adb_error, "unknown host service") != 0)
+            if (*error == "unknown host service") {
                 return fd;
+            }
         }
 
         if(version != ADB_SERVER_VERSION) {
             printf("adb server is out of date.  killing...\n");
-            fd = _adb_connect("host:kill");
+            fd = _adb_connect("host:kill", error);
             adb_close(fd);
 
             /* XXX can we better detect its death? */
@@ -289,12 +283,13 @@ int adb_connect(const char *service)
     }
 
     // if the command is start-server, we are done.
-    if (!strcmp(service, "host:start-server"))
+    if (!strcmp(service, "host:start-server")) {
         return 0;
+    }
 
-    fd = _adb_connect(service);
-    if(fd == -1) {
-        D("_adb_connect error: %s", __adb_error);
+    fd = _adb_connect(service, error);
+    if (fd == -1) {
+        D("_adb_connect error: %s", error->c_str());
     } else if(fd == -2) {
         fprintf(stderr,"** daemon still not running\n");
     }
@@ -307,15 +302,14 @@ error:
 }
 
 
-int adb_command(const char *service)
-{
-    int fd = adb_connect(service);
-    if(fd < 0) {
-        fprintf(stderr, "error: %s\n", adb_error());
+int adb_command(const char* service, std::string* error) {
+    int fd = adb_connect(service, error);
+    if (fd < 0) {
+        fprintf(stderr, "error: %s\n", error->c_str());
         return -1;
     }
 
-    if(adb_status(fd)) {
+    if (!adb_status(fd, error)) {
         adb_close(fd);
         return -1;
     }
@@ -323,25 +317,25 @@ int adb_command(const char *service)
     return 0;
 }
 
-char *adb_query(const char *service)
-{
+char* adb_query(const char* service, std::string* error) {
     char buf[5];
     unsigned long n;
     char* tmp;
 
     D("adb_query: %s\n", service);
-    int fd = adb_connect(service);
-    if(fd < 0) {
-        fprintf(stderr,"error: %s\n", __adb_error);
+    int fd = adb_connect(service, error);
+    if (fd < 0) {
+        fprintf(stderr,"error: %s\n", error->c_str());
         return 0;
     }
 
-    if(!ReadFdExactly(fd, buf, 4)) goto oops;
+    if (!ReadFdExactly(fd, buf, 4)) goto oops;
 
     buf[4] = 0;
     n = strtoul(buf, 0, 16);
-    if(n >= 0xffff) {
-        strcpy(__adb_error, "reply is too long (>= 64kB)");
+    // TODO: given that we just read a 4-byte hex length 0x????, why the test?
+    if (n >= 0xffff) {
+        *error = "reply is too long (>= 64KiB)";
         goto oops;
     }
 

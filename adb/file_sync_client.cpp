@@ -539,11 +539,11 @@ static void do_sync_ls_cb(unsigned mode, unsigned size, unsigned time,
     printf("%08x %08x %08x %s\n", mode, size, time, name);
 }
 
-int do_sync_ls(const char *path)
-{
-    int fd = adb_connect("sync:");
-    if(fd < 0) {
-        fprintf(stderr,"error: %s\n", adb_error());
+int do_sync_ls(const char* path) {
+    std::string error;
+    int fd = adb_connect("sync:", &error);
+    if (fd < 0) {
+        fprintf(stderr,"error: %s\n", error.c_str());
         return 1;
     }
 
@@ -743,11 +743,11 @@ int do_sync_push(const char *lpath, const char *rpath, int show_progress)
 {
     struct stat st;
     unsigned mode;
-    int fd;
 
-    fd = adb_connect("sync:");
-    if(fd < 0) {
-        fprintf(stderr,"error: %s\n", adb_error());
+    std::string error;
+    int fd = adb_connect("sync:", &error);
+    if (fd < 0) {
+        fprintf(stderr,"error: %s\n", error.c_str());
         return 1;
     }
 
@@ -967,11 +967,10 @@ int do_sync_pull(const char *rpath, const char *lpath, int show_progress, int co
     unsigned mode, time;
     struct stat st;
 
-    int fd;
-
-    fd = adb_connect("sync:");
-    if(fd < 0) {
-        fprintf(stderr,"error: %s\n", adb_error());
+    std::string error;
+    int fd = adb_connect("sync:", &error);
+    if (fd < 0) {
+        fprintf(stderr,"error: %s\n", error.c_str());
         return 1;
     }
 
@@ -1031,9 +1030,10 @@ int do_sync_sync(const std::string& lpath, const std::string& rpath, bool list_o
 {
     fprintf(stderr, "syncing %s...\n", rpath.c_str());
 
-    int fd = adb_connect("sync:");
+    std::string error;
+    int fd = adb_connect("sync:", &error);
     if (fd < 0) {
-        fprintf(stderr, "error: %s\n", adb_error());
+        fprintf(stderr, "error: %s\n", error.c_str());
         return 1;
     }
 
