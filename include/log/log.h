@@ -492,6 +492,7 @@ typedef enum {
     EVENT_TYPE_LONG     = 1,
     EVENT_TYPE_STRING   = 2,
     EVENT_TYPE_LIST     = 3,
+    EVENT_TYPE_FLOAT    = 4,
 } AndroidEventLogType;
 #define sizeof_AndroidEventLogType sizeof(typeof_AndroidEventLogType)
 #define typeof_AndroidEventLogType unsigned char
@@ -508,6 +509,13 @@ typedef enum {
         long long longBuf = _value;                                         \
         (void) android_btWriteLog(_tag, EVENT_TYPE_LONG, &longBuf,          \
             sizeof(longBuf));                                               \
+    }
+#endif
+#ifndef LOG_EVENT_FLOAT
+#define LOG_EVENT_FLOAT(_tag, _value) {                                     \
+        float floatBuf = _value;                                            \
+        (void) android_btWriteLog(_tag, EVENT_TYPE_FLOAT, &floatBuf,        \
+            sizeof(floatBuf));                                              \
     }
 #endif
 #ifndef LOG_EVENT_STRING
