@@ -30,6 +30,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/file.h"
 #include "base/macros.h"  // TEMP_FAILURE_RETRY may or may not be in unistd
 #include "base/memory.h"
 #include "log/log.h"
@@ -1033,24 +1034,14 @@ class FileWriter : public Writer {
       return false;
     }
 
-    // Keep track of the start position so we can calculate the
-    // total number of bytes written.
-    const uint8_t* const start = buf;
-    while (buf_size > 0) {
-      ssize_t bytes_written = TEMP_FAILURE_RETRY(write(fd_, buf, buf_size));
-      if (bytes_written == -1) {
-        ALOGW("Zip: unable to write " ZD " bytes to file; %s", buf_size, strerror(errno));
-        return false;
-      }
-
-      buf_size -= bytes_written;
-      buf += bytes_written;
+    const bool result = android::base::WriteFully(fd_, buf, buf_size);
+    if (result) {
+      total_bytes_written_ += buf_size;
+    } else {
+      ALOGW("Zip: unable to write " ZD " bytes to file; %s", buf_size, strerror(errno));
     }
 
-    total_bytes_written_ += static_cast<size_t>(
-        reinterpret_cast<uintptr_t>(buf) - reinterpret_cast<uintptr_t>(start));
-
-    return true;
+    return result;
   }
  private:
   FileWriter(const int fd, const size_t declared_length) :
