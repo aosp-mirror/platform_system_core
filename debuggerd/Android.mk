@@ -5,6 +5,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= \
     backtrace.cpp \
     debuggerd.cpp \
+    elf_utils.cpp \
     getevent.cpp \
     tombstone.cpp \
     utility.cpp \
@@ -28,6 +29,7 @@ endif
 
 LOCAL_SHARED_LIBRARIES := \
     libbacktrace \
+    libbase \
     libcutils \
     liblog \
     libselinux \
@@ -38,7 +40,6 @@ LOCAL_MODULE := debuggerd
 LOCAL_MODULE_STEM_32 := debuggerd
 LOCAL_MODULE_STEM_64 := debuggerd64
 LOCAL_MULTILIB := both
-LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
 
 include $(BUILD_EXECUTABLE)
 

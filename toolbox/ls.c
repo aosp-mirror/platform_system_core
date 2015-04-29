@@ -1,23 +1,119 @@
+#include <dirent.h>
+#include <errno.h>
+#include <grp.h>
+#include <limits.h>
+#include <pwd.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <sys/types.h>
-#include <dirent.h>
-#include <errno.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <selinux/selinux.h>
 
-#include <sys/stat.h>
-#include <unistd.h>
-#include <time.h>
+// simple dynamic array of strings.
+typedef struct {
+    int count;
+    int capacity;
+    void** items;
+} strlist_t;
 
-#include <pwd.h>
-#include <grp.h>
+#define STRLIST_INITIALIZER { 0, 0, NULL }
 
-#include <linux/kdev_t.h>
-#include <limits.h>
+/* Used to iterate over a strlist_t
+ * _list   :: pointer to strlist_t object
+ * _item   :: name of local variable name defined within the loop with
+ *            type 'char*'
+ * _stmnt  :: C statement executed in each iteration
+ *
+ * This macro is only intended for simple uses. Do not add or remove items
+ * to/from the list during iteration.
+ */
+#define  STRLIST_FOREACH(_list,_item,_stmnt) \
+    do { \
+        int _nn_##__LINE__ = 0; \
+        for (;_nn_##__LINE__ < (_list)->count; ++ _nn_##__LINE__) { \
+            char* _item = (char*)(_list)->items[_nn_##__LINE__]; \
+            _stmnt; \
+        } \
+    } while (0)
 
-#include "dynarray.h"
+static void dynarray_reserve_more( strlist_t *a, int count ) {
+    int old_cap = a->capacity;
+    int new_cap = old_cap;
+    const int max_cap = INT_MAX/sizeof(void*);
+    void** new_items;
+    int new_count = a->count + count;
+
+    if (count <= 0)
+        return;
+
+    if (count > max_cap - a->count)
+        abort();
+
+    new_count = a->count + count;
+
+    while (new_cap < new_count) {
+        old_cap = new_cap;
+        new_cap += (new_cap >> 2) + 4;
+        if (new_cap < old_cap || new_cap > max_cap) {
+            new_cap = max_cap;
+        }
+    }
+    new_items = realloc(a->items, new_cap*sizeof(void*));
+    if (new_items == NULL)
+        abort();
+
+    a->items = new_items;
+    a->capacity = new_cap;
+}
+
+void strlist_init( strlist_t *list ) {
+    list->count = list->capacity = 0;
+    list->items = NULL;
+}
+
+// append a new string made of the first 'slen' characters from 'str'
+// followed by a trailing zero.
+void strlist_append_b( strlist_t *list, const void* str, size_t  slen ) {
+    char *copy = malloc(slen+1);
+    memcpy(copy, str, slen);
+    copy[slen] = '\0';
+    if (list->count >= list->capacity)
+        dynarray_reserve_more(list, 1);
+    list->items[list->count++] = copy;
+}
+
+// append the copy of a given input string to a strlist_t.
+void strlist_append_dup( strlist_t *list, const char *str) {
+    strlist_append_b(list, str, strlen(str));
+}
+
+// note: strlist_done will free all the strings owned by the list.
+void strlist_done( strlist_t *list ) {
+    STRLIST_FOREACH(list, string, free(string));
+    free(list->items);
+    list->items = NULL;
+    list->count = list->capacity = 0;
+}
+
+static int strlist_compare_strings(const void* a, const void* b) {
+    const char *sa = *(const char **)a;
+    const char *sb = *(const char **)b;
+    return strcmp(sa, sb);
+}
+
+/* sort the strings in a given list (using strcmp) */
+void strlist_sort( strlist_t *list ) {
+    if (list->count > 0) {
+        qsort(list->items, (size_t)list->count, sizeof(void*), strlist_compare_strings);
+    }
+}
+
 
 // bits for flags argument
 #define LIST_LONG           (1 << 0)
@@ -200,7 +296,7 @@ static int listfile_long(const char *path, struct stat *s, int flags)
     case S_IFCHR:
         printf("%s %-8s %-8s %3d, %3d %s %s\n",
                mode, user, group,
-               (int) MAJOR(s->st_rdev), (int) MINOR(s->st_rdev),
+               major(s->st_rdev), minor(s->st_rdev),
                date, name);
         break;
     case S_IFREG:

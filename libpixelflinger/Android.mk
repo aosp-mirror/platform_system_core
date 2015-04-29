@@ -62,6 +62,8 @@ LOCAL_SRC_FILES_arm := $(PIXELFLINGER_SRC_FILES_arm)
 LOCAL_SRC_FILES_arm64 := $(PIXELFLINGER_SRC_FILES_arm64)
 LOCAL_SRC_FILES_mips := $(PIXELFLINGER_SRC_FILES_mips)
 LOCAL_CFLAGS := $(PIXELFLINGER_CFLAGS)
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
+LOCAL_C_INCLUDES += $(LOCAL_EXPORT_C_INCLUDE_DIRS)
 LOCAL_SHARED_LIBRARIES := libcutils liblog
 
 # Really this should go away entirely or at least not depend on
@@ -73,23 +75,5 @@ LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
 # arch-arm64/col32cb16blend.S does not compile with Clang.
 LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
 include $(BUILD_SHARED_LIBRARY)
-
-#
-# Static library version
-#
-
-include $(CLEAR_VARS)
-LOCAL_MODULE:= libpixelflinger_static
-LOCAL_SRC_FILES := $(PIXELFLINGER_SRC_FILES)
-LOCAL_SRC_FILES_arm := $(PIXELFLINGER_SRC_FILES_arm)
-LOCAL_SRC_FILES_arm64 := $(PIXELFLINGER_SRC_FILES_arm64)
-LOCAL_SRC_FILES_mips := $(PIXELFLINGER_SRC_FILES_mips)
-LOCAL_CFLAGS := $(PIXELFLINGER_CFLAGS)
-# t32cb16blend.S does not compile with Clang.
-LOCAL_CLANG_ASFLAGS_arm += -no-integrated-as
-# arch-arm64/col32cb16blend.S does not compile with Clang.
-LOCAL_CLANG_ASFLAGS_arm64 += -no-integrated-as
-include $(BUILD_STATIC_LIBRARY)
-
 
 include $(call all-makefiles-under,$(LOCAL_PATH))

@@ -90,15 +90,6 @@ int __android_log_dev_available(void)
     return (g_log_status == kLogAvailable);
 }
 
-#if !FAKE_LOG_DEVICE
-/* give up, resources too limited */
-static int __write_to_log_null(log_id_t log_fd __unused, struct iovec *vec __unused,
-                               size_t nr __unused)
-{
-    return -1;
-}
-#endif
-
 /* log_init_lock assumed */
 static int __write_to_log_initialize()
 {
@@ -111,40 +102,32 @@ static int __write_to_log_initialize()
         log_fds[i] = fakeLogOpen(buf, O_WRONLY);
     }
 #else
-    if (logd_fd >= 0) {
-        i = logd_fd;
-        logd_fd = -1;
-        close(i);
+    if (pstore_fd < 0) {
+        pstore_fd = TEMP_FAILURE_RETRY(open("/dev/pmsg0", O_WRONLY));
     }
-    if (pstore_fd >= 0) {
-        i = pstore_fd;
-        pstore_fd = -1;
-        close(i);
-    }
-    pstore_fd = open("/dev/pmsg0", O_WRONLY);
 
-    i = socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-    if (i < 0) {
-        ret = -errno;
-        write_to_log = __write_to_log_null;
-    } else if (fcntl(i, F_SETFL, O_NONBLOCK) < 0) {
-        ret = -errno;
-        close(i);
-        i = -1;
-        write_to_log = __write_to_log_null;
-    } else {
-        struct sockaddr_un un;
-        memset(&un, 0, sizeof(struct sockaddr_un));
-        un.sun_family = AF_UNIX;
-        strcpy(un.sun_path, "/dev/socket/logdw");
-
-        if (connect(i, (struct sockaddr *)&un, sizeof(struct sockaddr_un)) < 0) {
+    if (logd_fd < 0) {
+        i = TEMP_FAILURE_RETRY(socket(PF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0));
+        if (i < 0) {
+            ret = -errno;
+        } else if (TEMP_FAILURE_RETRY(fcntl(i, F_SETFL, O_NONBLOCK)) < 0) {
             ret = -errno;
             close(i);
-            i = -1;
+        } else {
+            struct sockaddr_un un;
+            memset(&un, 0, sizeof(struct sockaddr_un));
+            un.sun_family = AF_UNIX;
+            strcpy(un.sun_path, "/dev/socket/logdw");
+
+            if (TEMP_FAILURE_RETRY(connect(i, (struct sockaddr *)&un,
+                                           sizeof(struct sockaddr_un))) < 0) {
+                ret = -errno;
+                close(i);
+            } else {
+                logd_fd = i;
+            }
         }
     }
-    logd_fd = i;
 #endif
 
     return ret;
@@ -177,6 +160,10 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
     static uid_t last_uid = AID_ROOT; /* logd *always* starts up as AID_ROOT */
     static pid_t last_pid = (pid_t) -1;
     static atomic_int_fast32_t dropped;
+
+    if (!nr) {
+        return -EINVAL;
+    }
 
     if (last_uid == AID_ROOT) { /* have we called to get the UID yet? */
         last_uid = getuid();
@@ -289,6 +276,8 @@ static int __write_to_log_daemon(log_id_t log_id, struct iovec *vec, size_t nr)
 #if !defined(_WIN32)
             pthread_mutex_lock(&log_init_lock);
 #endif
+            close(logd_fd);
+            logd_fd = -1;
             ret = __write_to_log_initialize();
 #if !defined(_WIN32)
             pthread_mutex_unlock(&log_init_lock);
@@ -347,6 +336,11 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 #if !defined(_WIN32)
             pthread_mutex_unlock(&log_init_lock);
 #endif
+#if (FAKE_LOG_DEVICE == 0)
+            if (pstore_fd >= 0) {
+                __write_to_log_daemon(log_id, vec, nr);
+            }
+#endif
             return ret;
         }
 
@@ -362,43 +356,7 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 
 int __android_log_write(int prio, const char *tag, const char *msg)
 {
-    struct iovec vec[3];
-    log_id_t log_id = LOG_ID_MAIN;
-    char tmp_tag[32];
-
-    if (!tag)
-        tag = "";
-
-    /* XXX: This needs to go! */
-    if (!strcmp(tag, "HTC_RIL") ||
-        !strncmp(tag, "RIL", 3) || /* Any log tag with "RIL" as the prefix */
-        !strncmp(tag, "IMS", 3) || /* Any log tag with "IMS" as the prefix */
-        !strcmp(tag, "AT") ||
-        !strcmp(tag, "GSM") ||
-        !strcmp(tag, "STK") ||
-        !strcmp(tag, "CDMA") ||
-        !strcmp(tag, "PHONE") ||
-        !strcmp(tag, "SMS")) {
-            log_id = LOG_ID_RADIO;
-            /* Inform third party apps/ril/radio.. to use Rlog or RLOG */
-            snprintf(tmp_tag, sizeof(tmp_tag), "use-Rlog/RLOG-%s", tag);
-            tag = tmp_tag;
-    }
-
-#if __BIONIC__
-    if (prio == ANDROID_LOG_FATAL) {
-        android_set_abort_message(msg);
-    }
-#endif
-
-    vec[0].iov_base   = (unsigned char *) &prio;
-    vec[0].iov_len    = 1;
-    vec[1].iov_base   = (void *) tag;
-    vec[1].iov_len    = strlen(tag) + 1;
-    vec[2].iov_base   = (void *) msg;
-    vec[2].iov_len    = strlen(msg) + 1;
-
-    return write_to_log(log_id, vec, 3);
+    return __android_log_buf_write(LOG_ID_MAIN, prio, tag, msg);
 }
 
 int __android_log_buf_write(int bufID, int prio, const char *tag, const char *msg)
@@ -425,6 +383,12 @@ int __android_log_buf_write(int bufID, int prio, const char *tag, const char *ms
             snprintf(tmp_tag, sizeof(tmp_tag), "use-Rlog/RLOG-%s", tag);
             tag = tmp_tag;
     }
+
+#if __BIONIC__
+    if (prio == ANDROID_LOG_FATAL) {
+        android_set_abort_message(msg);
+    }
+#endif
 
     vec[0].iov_base   = (unsigned char *) &prio;
     vec[0].iov_len    = 1;

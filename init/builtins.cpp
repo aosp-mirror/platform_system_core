@@ -14,30 +14,31 @@
  * limitations under the License.
  */
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdio.h>
-#include <linux/kd.h>
 #include <errno.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <linux/if.h>
-#include <arpa/inet.h>
+#include <fcntl.h>
+#include <net/if.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
 #include <sys/mount.h>
 #include <sys/resource.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #include <linux/loop.h>
-#include <cutils/partition_utils.h>
-#include <cutils/android_reboot.h>
-#include <fs_mgr.h>
+#include <ext4_crypt_init_extensions.h>
 
 #include <selinux/selinux.h>
 #include <selinux/label.h>
+
+#include <fs_mgr.h>
+#include <base/stringprintf.h>
+#include <cutils/partition_utils.h>
+#include <cutils/android_reboot.h>
+#include <private/android_filesystem_config.h>
 
 #include "init.h"
 #include "keywords.h"
@@ -46,8 +47,6 @@
 #include "init_parser.h"
 #include "util.h"
 #include "log.h"
-
-#include <private/android_filesystem_config.h>
 
 #define chmod DO_NOT_USE_CHMOD_USE_FCHMODAT_SYMLINK_NOFOLLOW
 
@@ -104,12 +103,6 @@ static void service_start_if_not_disabled(struct service *svc)
     }
 }
 
-int do_chroot(int nargs, char **args)
-{
-    chroot(args[1]);
-    return 0;
-}
-
 int do_class_start(int nargs, char **args)
 {
         /* Starting a class does not start services
@@ -159,68 +152,6 @@ int do_exec(int nargs, char** args) {
     }
     service_start(svc, NULL);
     return 0;
-}
-
-// TODO: remove execonce when exec is available.
-int do_execonce(int nargs, char **args)
-{
-    pid_t child;
-    int child_status = 0;
-    static int already_done;
-
-    if (already_done) {
-      return -1;
-    }
-    already_done = 1;
-    if (!(child = fork())) {
-        /*
-         * Child process.
-         */
-        zap_stdio();
-        char *exec_args[100];
-        size_t num_process_args = nargs;
-
-        memset(exec_args, 0, sizeof(exec_args));
-        if (num_process_args > ARRAY_SIZE(exec_args) - 1) {
-            ERROR("exec called with %zu args, limit is %zu", num_process_args,
-                  ARRAY_SIZE(exec_args) - 1);
-            _exit(1);
-        }
-        for (size_t i = 1; i < num_process_args; i++)
-            exec_args[i - 1] = args[i];
-
-        if (execv(exec_args[0], exec_args) == -1) {
-            ERROR("Failed to execv '%s' (%s)", exec_args[0], strerror(errno));
-            _exit(1);
-        }
-        ERROR("Returned from execv()!");
-        _exit(1);
-    }
-
-    /*
-     * Parent process.
-     */
-    if (child == -1) {
-        ERROR("Fork failed\n");
-        return -1;
-    }
-
-    if (TEMP_FAILURE_RETRY(waitpid(child, &child_status, 0)) == -1) {
-        ERROR("waitpid(): failed (%s)\n", strerror(errno));
-        return -1;
-    }
-
-    if (WIFSIGNALED(child_status)) {
-        INFO("Child exited due to signal %d\n", WTERMSIG(child_status));
-        return -1;
-    } else if (WIFEXITED(child_status)) {
-        INFO("Child exited normally (exit code %d)\n", WEXITSTATUS(child_status));
-        return WEXITSTATUS(child_status);
-    }
-
-    ERROR("Abnormal child process exit\n");
-
-    return -1;
 }
 
 int do_export(int nargs, char **args)
@@ -310,7 +241,7 @@ int do_mkdir(int nargs, char **args)
         }
     }
 
-    return 0;
+    return e4crypt_set_directory_policy(args[1]);
 }
 
 static struct {
@@ -454,7 +385,6 @@ static int wipe_data_via_recovery()
     while (1) { pause(); }  // never reached
 }
 
-
 /*
  * This function might request a reboot, in which case it will
  * not return.
@@ -483,7 +413,7 @@ int do_mount_all(int nargs, char **args)
         int wp_ret = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
         if (wp_ret < 0) {
             /* Unexpected error code. We will continue anyway. */
-            NOTICE("waitpid failed rc=%d, errno=%d\n", wp_ret, errno);
+            NOTICE("waitpid failed rc=%d: %s\n", wp_ret, strerror(errno));
         }
 
         if (WIFEXITED(status)) {
@@ -510,6 +440,7 @@ int do_mount_all(int nargs, char **args)
         property_set("vold.decrypt", "trigger_encryption");
     } else if (ret == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
         property_set("ro.crypto.state", "encrypted");
+        property_set("ro.crypto.type", "block");
         property_set("vold.decrypt", "trigger_default_encryption");
     } else if (ret == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
         property_set("ro.crypto.state", "unencrypted");
@@ -522,6 +453,23 @@ int do_mount_all(int nargs, char **args)
         ERROR("fs_mgr_mount_all suggested recovery, so wiping data via recovery.\n");
         ret = wipe_data_via_recovery();
         /* If reboot worked, there is no return. */
+    } else if (ret == FS_MGR_MNTALL_DEV_DEFAULT_FILE_ENCRYPTED) {
+        if (e4crypt_install_keyring()) {
+            return -1;
+        }
+        property_set("ro.crypto.state", "encrypted");
+        property_set("ro.crypto.type", "file");
+
+        // Although encrypted, we have device key, so we do not need to
+        // do anything different from the nonencrypted case.
+        action_for_each_trigger("nonencrypted", action_add_queue_tail);
+    } else if (ret == FS_MGR_MNTALL_DEV_NON_DEFAULT_FILE_ENCRYPTED) {
+        if (e4crypt_install_keyring()) {
+            return -1;
+        }
+        property_set("ro.crypto.state", "encrypted");
+        property_set("ro.crypto.type", "file");
+        property_set("vold.decrypt", "trigger_restart_min_framework");
     } else if (ret > 0) {
         ERROR("fs_mgr_mount_all returned unexpected error %d\n", ret);
     }
@@ -540,15 +488,6 @@ int do_swapon_all(int nargs, char **args)
     fs_mgr_free_fstab(fstab);
 
     return ret;
-}
-
-int do_setcon(int nargs, char **args) {
-    if (is_selinux_enabled() <= 0)
-        return 0;
-    if (setcon(args[1]) < 0) {
-        return -errno;
-    }
-    return 0;
 }
 
 int do_setprop(int nargs, char **args)
@@ -680,17 +619,21 @@ int do_sysclktz(int nargs, char **args)
 }
 
 int do_verity_load_state(int nargs, char **args) {
-    if (nargs == 1) {
-        int mode = -1;
-        int rc = fs_mgr_load_verity_state(&mode);
-
-        if (rc == 0 && mode == VERITY_MODE_LOGGING) {
-            action_for_each_trigger("verity-logging", action_add_queue_tail);
-        }
-
-        return rc;
+    int mode = -1;
+    int rc = fs_mgr_load_verity_state(&mode);
+    if (rc == 0 && mode == VERITY_MODE_LOGGING) {
+        action_for_each_trigger("verity-logging", action_add_queue_tail);
     }
-    return -1;
+    return rc;
+}
+
+static void verity_update_property(fstab_rec *fstab, const char *mount_point, int mode, int status) {
+    property_set(android::base::StringPrintf("partition.%s.verified", mount_point).c_str(),
+                 android::base::StringPrintf("%d", mode).c_str());
+}
+
+int do_verity_update_state(int nargs, char** args) {
+    return fs_mgr_update_verity_state(verity_update_property);
 }
 
 int do_write(int nargs, char **args)
@@ -870,4 +813,32 @@ int do_wait(int nargs, char **args)
         return wait_for_file(args[1], atoi(args[2]));
     } else
         return -1;
+}
+
+/*
+ * Callback to make a directory from the ext4 code
+ */
+static int do_installkeys_ensure_dir_exists(const char* dir)
+{
+    if (make_dir(dir, 0700) && errno != EEXIST) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int do_installkey(int nargs, char **args)
+{
+    if (nargs != 2) {
+        return -1;
+    }
+
+    char prop_value[PROP_VALUE_MAX] = {0};
+    property_get("ro.crypto.type", prop_value);
+    if (strcmp(prop_value, "file")) {
+        return 0;
+    }
+
+    return e4crypt_create_device_key(args[1],
+                                     do_installkeys_ensure_dir_exists);
 }

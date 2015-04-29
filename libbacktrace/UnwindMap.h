@@ -17,6 +17,9 @@
 #ifndef _LIBBACKTRACE_UNWIND_MAP_H
 #define _LIBBACKTRACE_UNWIND_MAP_H
 
+#include <stdint.h>
+#include <sys/types.h>
+
 #include <backtrace/BacktraceMap.h>
 
 // The unw_map_cursor_t structure is different depending on whether it is

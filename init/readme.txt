@@ -137,32 +137,9 @@ boot
 Commands
 --------
 
-exec [ <seclabel> [ <user> [ <group> ]* ] ] -- <command> [ <argument> ]*
-   Fork and execute command with the given arguments. The command starts
-   after "--" so that an optional security context, user, and supplementary
-   groups can be provided. No other commands will be run until this one
-   finishes.
-
-execonce <path> [ <argument> ]*
-   Fork and execute a program (<path>).  This will block until
-   the program completes execution.  This command can be run at most
-   once during init's lifetime. Subsequent invocations are ignored.
-   It is best to avoid execonce as unlike the builtin commands, it runs
-   the risk of getting init "stuck".
-
-export <name> <value>
-   Set the environment variable <name> equal to <value> in the
-   global environment (which will be inherited by all processes
-   started after this command is executed)
-
-ifup <interface>
-   Bring the network interface <interface> online.
-
-import <filename>
-   Parse an init config file, extending the current configuration.
-
-hostname <name>
-   Set the host name.
+bootchart_init
+   Start bootcharting if configured (see below).
+   This is included in the default init.rc.
 
 chmod <octal-mode> <path>
    Change file access permissions.
@@ -170,16 +147,22 @@ chmod <octal-mode> <path>
 chown <owner> <group> <path>
    Change file owner and group.
 
-chroot <directory>
-  Change process root directory.
-
 class_start <serviceclass>
    Start all services of the specified class if they are
    not already running.
 
 class_stop <serviceclass>
-   Stop all services of the specified class if they are
+   Stop and disable all services of the specified class if they are
    currently running.
+
+class_reset <serviceclass>
+   Stop all services of the specified class if they are
+   currently running, without disabling them. They can be restarted
+   later using class_start.
+
+copy <src> <dst>
+   Copies a file. Similar to write, but useful for binary/large
+   amounts of data.
 
 domainname <name>
    Set the domain name.
@@ -193,8 +176,36 @@ enable <servicename>
      on property:ro.boot.myfancyhardware=1
         enable my_fancy_service_for_my_fancy_hardware
 
+exec [ <seclabel> [ <user> [ <group> ]* ] ] -- <command> [ <argument> ]*
+   Fork and execute command with the given arguments. The command starts
+   after "--" so that an optional security context, user, and supplementary
+   groups can be provided. No other commands will be run until this one
+   finishes.
+
+export <name> <value>
+   Set the environment variable <name> equal to <value> in the
+   global environment (which will be inherited by all processes
+   started after this command is executed)
+
+hostname <name>
+   Set the host name.
+
+ifup <interface>
+   Bring the network interface <interface> online.
+
+import <filename>
+   Parse an init config file, extending the current configuration.
+
 insmod <path>
    Install the module at <path>
+
+load_all_props
+   Loads properties from /system, /vendor, et cetera.
+   This is included in the default init.rc.
+
+load_persist_props
+   Loads persistent properties when /data has been decrypted.
+   This is included in the default init.rc.
 
 loglevel <level>
    Sets the kernel log level to level. Properties are expanded within <level>.
@@ -205,6 +216,9 @@ mkdir <path> [mode] [owner] [group]
    owned by the root user and root group. If provided, the mode, owner and group
    will be updated if the directory exists already.
 
+mount_all <fstab>
+   Calls fs_mgr_mount_all on the given fs_mgr-format fstab.
+
 mount <type> <device> <dir> [ <flag> ]* [<options>]
    Attempt to mount the named device at the directory <dir>
    <device> may be of the form mtd@name to specify a mtd block
@@ -212,6 +226,13 @@ mount <type> <device> <dir> [ <flag> ]* [<options>]
    <flag>s include "ro", "rw", "remount", "noatime", ...
    <options> include "barrier=1", "noauto_da_alloc", "discard", ... as
    a comma separated string, eg: barrier=1,noauto_da_alloc
+
+powerctl
+   Internal implementation detail used to respond to changes to the
+   "sys.powerctl" system property, used to implement rebooting.
+
+restart <service>
+   Like stop, but doesn't disable the service.
 
 restorecon <path> [ <path> ]*
    Restore the file named by <path> to the security context specified
@@ -223,10 +244,13 @@ restorecon_recursive <path> [ <path> ]*
    Recursively restore the directory tree named by <path> to the
    security contexts specified in the file_contexts configuration.
 
-setcon <seclabel>
-   Set the current process security context to the specified string.
-   This is typically only used from early-init to set the init context
-   before any other process is started.
+rm <path>
+   Calls unlink(2) on the given path. You might want to
+   use "exec -- rm ..." instead (provided the system partition is
+   already mounted).
+
+rmdir <path>
+   Calls rmdir(2) on the given path.
 
 setprop <name> <value>
    Set system property <name> to <value>. Properties are expanded
@@ -241,6 +265,9 @@ start <service>
 stop <service>
    Stop a service from running if it is currently running.
 
+swapon_all <fstab>
+   Calls fs_mgr_swapon_all on the given fstab file.
+
 symlink <target> <path>
    Create a symbolic link at <path> with the value <target>
 
@@ -251,10 +278,18 @@ trigger <event>
    Trigger an event.  Used to queue an action from another
    action.
 
+verity_load_state
+   Internal implementation detail used to load dm-verity state.
+
+verity_update_state <mount_point>
+   Internal implementation detail used to update dm-verity state and
+   set the partition.<mount_point>.verified properties used by adb remount
+   because fs_mgr can't set them directly itself.
+
 wait <path> [ <timeout> ]
-  Poll for the existence of the given file and return when found,
-  or the timeout has been reached. If timeout is not specified it
-  currently defaults to five seconds.
+   Poll for the existence of the given file and return when found,
+   or the timeout has been reached. If timeout is not specified it
+   currently defaults to five seconds.
 
 write <path> <content>
    Open the file at <path> and write a string to it with write(2).
@@ -279,12 +314,11 @@ init.svc.<name>
 
 Bootcharting
 ------------
-
 This version of init contains code to perform "bootcharting": generating log
 files that can be later processed by the tools provided by www.bootchart.org.
 
-On the emulator, use the new -bootchart <timeout> option to boot with
-bootcharting activated for <timeout> seconds.
+On the emulator, use the -bootchart <timeout> option to boot with bootcharting
+activated for <timeout> seconds.
 
 On a device, create /data/bootchart/start with a command like the following:
 
@@ -305,8 +339,12 @@ retrieve them and create a bootchart.tgz file that can be used with the
 bootchart command-line utility:
 
   sudo apt-get install pybootchartgui
-  ANDROID_SERIAL=<device serial number>
+  # grab-bootchart.sh uses $ANDROID_SERIAL.
   $ANDROID_BUILD_TOP/system/core/init/grab-bootchart.sh
+
+One thing to watch for is that the bootchart will show init as if it started
+running at 0s. You'll have to look at dmesg to work out when the kernel
+actually started init.
 
 
 Debugging init

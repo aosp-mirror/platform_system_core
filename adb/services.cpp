@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_SERVICES
+
+#include "sysdeps.h"
+
 #include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -27,20 +31,19 @@
 #include <unistd.h>
 #endif
 
+#include <base/stringprintf.h>
+
 #if !ADB_HOST
+#include "base/file.h"
 #include "cutils/android_reboot.h"
 #include "cutils/properties.h"
 #endif
 
-#include "sysdeps.h"
-
-#define  TRACE_TAG  TRACE_SERVICES
 #include "adb.h"
 #include "adb_io.h"
 #include "file_sync_service.h"
+#include "remount_service.h"
 #include "transport.h"
-
-typedef struct stinfo stinfo;
 
 struct stinfo {
     void (*func)(int fd, void *cookie);
@@ -130,31 +133,72 @@ void restart_usb_service(int fd, void *cookie)
     adb_close(fd);
 }
 
-void reboot_service(int fd, void *arg)
-{
+static bool reboot_service_impl(int fd, const char* arg) {
+    const char* reboot_arg = arg;
+    bool auto_reboot = false;
+
+    if (strcmp(reboot_arg, "sideload-auto-reboot") == 0) {
+        auto_reboot = true;
+        reboot_arg = "sideload";
+    }
+
     char buf[100];
-    char property_val[PROPERTY_VALUE_MAX];
-    int ret;
+    // It reboots into sideload mode by setting "--sideload" or "--sideload_auto_reboot"
+    // in the command file.
+    if (strcmp(reboot_arg, "sideload") == 0) {
+        if (getuid() != 0) {
+            snprintf(buf, sizeof(buf), "'adb root' is required for 'adb reboot sideload'.\n");
+            WriteStringFully(fd, buf);
+            return false;
+        }
+
+        const char* const recovery_dir = "/cache/recovery";
+        const char* const command_file = "/cache/recovery/command";
+        // Ensure /cache/recovery exists.
+        if (adb_mkdir(recovery_dir, 0770) == -1 && errno != EEXIST) {
+            D("Failed to create directory '%s': %s\n", recovery_dir, strerror(errno));
+            return false;
+        }
+
+        bool write_status = android::base::WriteStringToFile(
+                auto_reboot ? "--sideload_auto_reboot" : "--sideload", command_file);
+        if (!write_status) {
+            return false;
+        }
+
+        reboot_arg = "recovery";
+    }
 
     sync();
 
-    ret = snprintf(property_val, sizeof(property_val), "reboot,%s", (char *) arg);
-    if (ret >= (int) sizeof(property_val)) {
+    char property_val[PROPERTY_VALUE_MAX];
+    int ret = snprintf(property_val, sizeof(property_val), "reboot,%s", reboot_arg);
+    if (ret >= static_cast<int>(sizeof(property_val))) {
         snprintf(buf, sizeof(buf), "reboot string too long. length=%d\n", ret);
-        WriteFdExactly(fd, buf, strlen(buf));
-        goto cleanup;
+        WriteStringFully(fd, buf);
+        return false;
     }
 
     ret = property_set(ANDROID_RB_PROPERTY, property_val);
     if (ret < 0) {
         snprintf(buf, sizeof(buf), "reboot failed: %d\n", ret);
-        WriteFdExactly(fd, buf, strlen(buf));
-        goto cleanup;
+        WriteStringFully(fd, buf);
+        return false;
     }
-    // Don't return early. Give the reboot command time to take effect
-    // to avoid messing up scripts which do "adb reboot && adb wait-for-device"
-    while(1) { pause(); }
-cleanup:
+
+    return true;
+}
+
+void reboot_service(int fd, void* arg)
+{
+    if (reboot_service_impl(fd, static_cast<const char*>(arg))) {
+        // Don't return early. Give the reboot command time to take effect
+        // to avoid messing up scripts which do "adb reboot && adb wait-for-device"
+        while (true) {
+            pause();
+        }
+    }
+
     free(arg);
     adb_close(fd);
 }
@@ -331,7 +375,7 @@ static void subproc_waiter_service(int fd, void *cookie)
     pid_t pid = (pid_t) (uintptr_t) cookie;
 
     D("entered. fd=%d of pid=%d\n", fd, pid);
-    for (;;) {
+    while (true) {
         int status;
         pid_t p = waitpid(pid, &status, 0);
         if (p == pid) {
@@ -457,19 +501,8 @@ int service_to_fd(const char *name)
     } else if(!strncmp(name, "unroot:", 7)) {
         ret = create_service_thread(restart_unroot_service, NULL);
     } else if(!strncmp(name, "backup:", 7)) {
-        char* arg = strdup(name + 7);
-        if (arg == NULL) return -1;
-        char* c = arg;
-        for (; *c != '\0'; c++) {
-            if (*c == ':')
-                *c = ' ';
-        }
-        char* cmd;
-        if (asprintf(&cmd, "/system/bin/bu backup %s", arg) != -1) {
-            ret = create_subproc_thread(cmd, SUBPROC_RAW);
-            free(cmd);
-        }
-        free(arg);
+        ret = create_subproc_thread(android::base::StringPrintf("/system/bin/bu backup %s",
+                                                                (name + 7)).c_str(), SUBPROC_RAW);
     } else if(!strncmp(name, "restore:", 8)) {
         ret = create_subproc_thread("/system/bin/bu restore", SUBPROC_RAW);
     } else if(!strncmp(name, "tcpip:", 6)) {
@@ -515,12 +548,12 @@ static void wait_for_state(int fd, void* cookie)
 
     D("wait_for_state %d\n", sinfo->state);
 
-    const char* err = "unknown error";
-    atransport *t = acquire_one_transport(sinfo->state, sinfo->transport, sinfo->serial, &err);
-    if(t != 0) {
+    std::string error_msg = "unknown error";
+    atransport* t = acquire_one_transport(sinfo->state, sinfo->transport, sinfo->serial, &error_msg);
+    if (t != 0) {
         WriteFdExactly(fd, "OKAY", 4);
     } else {
-        sendfailmsg(fd, err);
+        sendfailmsg(fd, error_msg.c_str());
     }
 
     if (sinfo->serial)
@@ -656,6 +689,10 @@ asocket*  host_service_to_socket(const char*  name, const char *serial)
         return create_device_tracker();
     } else if (!strncmp(name, "wait-for-", strlen("wait-for-"))) {
         auto sinfo = reinterpret_cast<state_info*>(malloc(sizeof(state_info)));
+        if (sinfo == nullptr) {
+            fprintf(stderr, "couldn't allocate state_info: %s", strerror(errno));
+            return NULL;
+        }
 
         if (serial)
             sinfo->serial = strdup(serial);

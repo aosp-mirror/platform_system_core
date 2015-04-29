@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define TRACE_TAG  TRACE_RWX
+#define TRACE_TAG TRACE_RWX
 
 #include "sysdeps.h"
 #include "adb_io.h"
@@ -78,6 +78,8 @@ bool WriteFdExactly(int fd, const void* buf, size_t len) {
             } else if (errno == EPIPE) {
                 D("writex: fd=%d disconnected\n", fd);
                 errno = 0;
+                return false;
+            } else {
                 return false;
             }
         } else {

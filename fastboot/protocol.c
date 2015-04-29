@@ -305,7 +305,10 @@ int fb_download_data_sparse(usb_handle *usb, struct sparse_file *s)
         return -1;
     }
 
-    fb_download_data_sparse_flush(usb);
+    r = fb_download_data_sparse_flush(usb);
+    if (r < 0) {
+        return -1;
+    }
 
     return _command_end(usb);
 }

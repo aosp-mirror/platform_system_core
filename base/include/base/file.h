@@ -34,6 +34,9 @@ bool WriteStringToFile(const std::string& content, const std::string& path,
                        mode_t mode, uid_t owner, gid_t group);
 #endif
 
+bool ReadFully(int fd, void* data, size_t byte_count);
+bool WriteFully(int fd, const void* data, size_t byte_count);
+
 }  // namespace base
 }  // namespace android
 

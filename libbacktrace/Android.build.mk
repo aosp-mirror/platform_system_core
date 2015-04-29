@@ -19,28 +19,37 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := $(module)
 LOCAL_MODULE_TAGS := $(module_tag)
 LOCAL_MULTILIB := $($(module)_multilib)
+ifeq ($(LOCAL_MULTILIB),both)
+ifneq ($(build_target),$(filter $(build_target),SHARED_LIBRARY STATIC_LIBRRARY))
+  LOCAL_MODULE_STEM_32 := $(LOCAL_MODULE)32
+  LOCAL_MODULE_STEM_64 := $(LOCAL_MODULE)64
+endif
+endif
 
 LOCAL_ADDITIONAL_DEPENDENCIES := \
     $(LOCAL_PATH)/Android.mk \
     $(LOCAL_PATH)/Android.build.mk \
 
 LOCAL_CFLAGS := \
-    $(common_cflags) \
+    $(libbacktrace_common_cflags) \
     $($(module)_cflags) \
     $($(module)_cflags_$(build_type)) \
 
+LOCAL_CLANG_CFLAGS += \
+    $(libbacktrace_common_clang_cflags) \
+
 LOCAL_CONLYFLAGS += \
-    $(common_conlyflags) \
+    $(libbacktrace_common_conlyflags) \
     $($(module)_conlyflags) \
     $($(module)_conlyflags_$(build_type)) \
 
 LOCAL_CPPFLAGS += \
-    $(common_cppflags) \
+    $(libbacktrace_common_cppflags) \
     $($(module)_cppflags) \
     $($(module)_cppflags_$(build_type)) \
 
 LOCAL_C_INCLUDES := \
-    $(common_c_includes) \
+    $(libbacktrace_common_c_includes) \
     $($(module)_c_includes) \
     $($(module)_c_includes_$(build_type)) \
 
@@ -67,10 +76,7 @@ endif
 ifeq ($(build_type),host)
   # Only build if host builds are supported.
   ifeq ($(build_host),true)
-    LOCAL_CFLAGS += -Wno-extern-c-compat
-    ifneq ($($(module)_libc++),)
-      include external/libcxx/libcxx.mk
-    endif
+    LOCAL_CFLAGS += -Wno-extern-c-compat -fno-omit-frame-pointer
     include $(BUILD_HOST_$(build_target))
   endif
 endif

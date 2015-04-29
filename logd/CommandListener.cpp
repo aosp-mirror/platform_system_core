@@ -69,7 +69,11 @@ CommandListener::ClearCmd::ClearCmd(LogBuffer *buf)
 { }
 
 static void setname() {
-    prctl(PR_SET_NAME, "logd.control");
+    static bool name_set;
+    if (!name_set) {
+        prctl(PR_SET_NAME, "logd.control");
+        name_set = true;
+    }
 }
 
 int CommandListener::ClearCmd::runCommand(SocketClient *cli,

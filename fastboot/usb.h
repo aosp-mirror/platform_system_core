@@ -29,6 +29,10 @@
 #ifndef _USB_H_
 #define _USB_H_
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 typedef struct usb_handle usb_handle;
 
 typedef struct usb_ifc_info usb_ifc_info;
@@ -63,5 +67,9 @@ int usb_close(usb_handle *h);
 int usb_read(usb_handle *h, void *_data, int len);
 int usb_write(usb_handle *h, const void *_data, int len);
 int usb_wait_for_disconnect(usb_handle *h);
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif

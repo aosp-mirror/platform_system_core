@@ -109,14 +109,8 @@ static int proc_thr_cmp(const void *a, const void *b);
 static int numcmp(long long a, long long b);
 static void usage(char *cmd);
 
-static void exit_top(int signal) {
-  exit(EXIT_FAILURE);
-}
-
 int top_main(int argc, char *argv[]) {
     num_used_procs = num_free_procs = 0;
-
-    signal(SIGPIPE, exit_top);
 
     max_procs = 0;
     delay = 3;

@@ -21,6 +21,7 @@
 #include <sys/types.h>
 
 #include <string>
+#include <functional>
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
 
@@ -33,7 +34,22 @@ int create_socket(const char *name, int type, mode_t perm,
 bool read_file(const char* path, std::string* content);
 int write_file(const char* path, const char* content);
 
-time_t gettime(void);
+time_t gettime();
+uint64_t gettime_ns();
+
+class Timer {
+ public:
+  Timer() : t0(gettime_ns()) {
+  }
+
+  double duration() {
+    return static_cast<double>(gettime_ns() - t0) / 1000000000.0;
+  }
+
+ private:
+  uint64_t t0;
+};
+
 unsigned int decode_uid(const char *s);
 
 int mkdir_recursive(const char *pathname, mode_t mode);
@@ -42,8 +58,7 @@ void make_link(const char *oldpath, const char *newpath);
 void remove_link(const char *oldpath, const char *newpath);
 int wait_for_file(const char *filename, int timeout);
 void open_devnull_stdio(void);
-void get_hardware_name(char *hardware, unsigned int *revision);
-void import_kernel_cmdline(int in_qemu, void (*import_kernel_nv)(char *name, int in_qemu));
+void import_kernel_cmdline(bool in_qemu, std::function<void(char*,bool)>);
 int make_dir(const char *path, mode_t mode);
 int restorecon(const char *pathname);
 int restorecon_recursive(const char *pathname);

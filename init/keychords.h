@@ -19,9 +19,7 @@
 
 struct service;
 
-void add_service_keycodes(struct service *svc);
-void keychord_init(void);
-void handle_keychord(void);
-int get_keychord_fd(void);
+void add_service_keycodes(service*);
+void keychord_init();
 
 #endif

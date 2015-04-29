@@ -48,12 +48,12 @@ public:
     LogBuffer(LastLogTimes *times);
     void init();
 
-    void log(log_id_t log_id, log_time realtime,
-             uid_t uid, pid_t pid, pid_t tid,
-             const char *msg, unsigned short len);
-    log_time flushTo(SocketClient *writer, const log_time start,
+    int log(log_id_t log_id, log_time realtime,
+            uid_t uid, pid_t pid, pid_t tid,
+            const char *msg, unsigned short len);
+    uint64_t flushTo(SocketClient *writer, const uint64_t start,
                      bool privileged,
-                     bool (*filter)(const LogBufferElement *element, void *arg) = NULL,
+                     int (*filter)(const LogBufferElement *element, void *arg) = NULL,
                      void *arg = NULL);
 
     void clear(log_id_t id, uid_t uid = AID_ROOT);
@@ -78,7 +78,7 @@ public:
 private:
     void maybePrune(log_id_t id);
     void prune(log_id_t id, unsigned long pruneRows, uid_t uid = AID_ROOT);
-
+    LogBufferElementCollection::iterator erase(LogBufferElementCollection::iterator it);
 };
 
 #endif // _LOGD_LOG_BUFFER_H__

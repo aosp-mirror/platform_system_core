@@ -8,7 +8,6 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 LOCAL_CFLAGS := -Wall -Werror
 LOCAL_REQUIRED_MODULE := processgroup_cleanup
-include external/libcxx/libcxx.mk
 include $(BUILD_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)

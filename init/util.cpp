@@ -179,9 +179,13 @@ bool read_file(const char* path, std::string* content) {
 int write_file(const char* path, const char* content) {
     int fd = TEMP_FAILURE_RETRY(open(path, O_WRONLY|O_CREAT|O_NOFOLLOW|O_CLOEXEC, 0600));
     if (fd == -1) {
-        return -errno;
+        NOTICE("write_file: Unable to open '%s': %s\n", path, strerror(errno));
+        return -1;
     }
-    int result = android::base::WriteStringToFd(content, fd) ? 0 : -errno;
+    int result = android::base::WriteStringToFd(content, fd) ? 0 : -1;
+    if (result == -1) {
+        NOTICE("write_file: Unable to write to '%s': %s\n", path, strerror(errno));
+    }
     TEMP_FAILURE_RETRY(close(fd));
     return result;
 }
@@ -258,22 +262,16 @@ int mtd_name_to_number(const char *name)
     return -1;
 }
 
-/*
- * gettime() - returns the time in seconds of the system's monotonic clock or
- * zero on error.
- */
-time_t gettime(void)
-{
-    struct timespec ts;
-    int ret;
+time_t gettime() {
+    timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return now.tv_sec;
+}
 
-    ret = clock_gettime(CLOCK_MONOTONIC, &ts);
-    if (ret < 0) {
-        ERROR("clock_gettime(CLOCK_MONOTONIC) failed: %s\n", strerror(errno));
-        return 0;
-    }
-
-    return ts.tv_sec;
+uint64_t gettime_ns() {
+    timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return static_cast<uint64_t>(now.tv_sec) * UINT64_C(1000000000) + now.tv_nsec;
 }
 
 int mkdir_recursive(const char *pathname, mode_t mode)
@@ -381,60 +379,31 @@ int wait_for_file(const char *filename, int timeout)
 
 void open_devnull_stdio(void)
 {
-    int fd;
-    static const char *name = "/dev/__null__";
-    if (mknod(name, S_IFCHR | 0600, (1 << 8) | 3) == 0) {
-        fd = open(name, O_RDWR);
-        unlink(name);
-        if (fd >= 0) {
-            dup2(fd, 0);
-            dup2(fd, 1);
-            dup2(fd, 2);
-            if (fd > 2) {
-                close(fd);
-            }
-            return;
+    // Try to avoid the mknod() call if we can. Since SELinux makes
+    // a /dev/null replacement available for free, let's use it.
+    int fd = open("/sys/fs/selinux/null", O_RDWR);
+    if (fd == -1) {
+        // OOPS, /sys/fs/selinux/null isn't available, likely because
+        // /sys/fs/selinux isn't mounted. Fall back to mknod.
+        static const char *name = "/dev/__null__";
+        if (mknod(name, S_IFCHR | 0600, (1 << 8) | 3) == 0) {
+            fd = open(name, O_RDWR);
+            unlink(name);
+        }
+        if (fd == -1) {
+            exit(1);
         }
     }
 
-    exit(1);
-}
-
-void get_hardware_name(char *hardware, unsigned int *revision) {
-  // Hardware string was provided on kernel command line.
-  if (hardware[0]) {
-    return;
-  }
-
-  FILE* fp = fopen("/proc/cpuinfo", "re");
-  if (fp == NULL) {
-    return;
-  }
-  char buf[1024];
-  while (fgets(buf, sizeof(buf), fp) != NULL) {
-    if (strncmp(buf, "Hardware", 8) == 0) {
-      const char* hw = strstr(buf, ": ");
-      if (hw) {
-        hw += 2;
-        size_t n = 0;
-        while (*hw) {
-          if (!isspace(*hw)) {
-            hardware[n++] = tolower(*hw);
-          }
-          hw++;
-          if (n == 31) break;
-        }
-        hardware[n] = 0;
-      }
-    } else if (strncmp(buf, "Revision", 8) == 0) {
-      sscanf(buf, "Revision : %ux", revision);
+    dup2(fd, 0);
+    dup2(fd, 1);
+    dup2(fd, 2);
+    if (fd > 2) {
+        close(fd);
     }
-  }
-  fclose(fp);
 }
 
-void import_kernel_cmdline(int in_qemu,
-                           void (*import_kernel_nv)(char *name, int in_qemu))
+void import_kernel_cmdline(bool in_qemu, std::function<void(char*,bool)> import_kernel_nv)
 {
     char cmdline[2048];
     char *ptr;

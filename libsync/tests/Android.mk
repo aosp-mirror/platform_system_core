@@ -17,10 +17,8 @@
 LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
-include external/libcxx/libcxx.mk
 LOCAL_CLANG := true
 LOCAL_MODULE := sync-unit-tests
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 LOCAL_CFLAGS += -g -Wall -Werror -std=gnu++11 -Wno-missing-field-initializers -Wno-sign-compare
 LOCAL_SHARED_LIBRARIES += libsync
 LOCAL_STATIC_LIBRARIES += libgtest_main

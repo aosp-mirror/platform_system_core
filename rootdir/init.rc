@@ -14,13 +14,6 @@ on early-init
     # Set init and its forked children's oom_adj.
     write /proc/1/oom_score_adj -1000
 
-    # Apply strict SELinux checking of PROT_EXEC on mmap/mprotect calls.
-    write /sys/fs/selinux/checkreqprot 0
-
-    # Set the security context for the init process.
-    # This should occur before anything else (e.g. ueventd) is started.
-    setcon u:r:init:s0
-
     # Set the security context of /adb_keys if present.
     restorecon /adb_keys
 
@@ -31,8 +24,6 @@ on early-init
 
 on init
     sysclktz 0
-
-    loglevel 3
 
     # Backward compatibility.
     symlink /system/etc /etc
@@ -164,6 +155,7 @@ on property:sys.boot_from_charger_mode=1
 # Load properties from /system/ + /factory after fs mount.
 on load_all_props_action
     load_all_props
+    start logd
     start logd-reinit
 
 # Indicate to fw loaders that the relevant mounts are up.
@@ -190,6 +182,7 @@ on late-init
 
 
 on post-fs
+    start logd
     # once everything is setup, no need to modify /
     mount rootfs rootfs / ro remount
     # mount shared so changes propagate into child namespaces
@@ -233,6 +226,11 @@ on post-fs-data
     # We restorecon /data in case the userdata partition has been reset.
     restorecon /data
 
+    # Make sure we have the device encryption key
+    start logd
+    start vold
+    installkey /data
+
     # Start bootcharting as soon as possible after the data partition is
     # mounted to collect more data.
     mkdir /data/bootchart 0755 shell shell
@@ -247,6 +245,7 @@ on post-fs-data
     mkdir /data/misc/bluedroid 0770 bluetooth net_bt_stack
     mkdir /data/misc/bluetooth 0770 system system
     mkdir /data/misc/keystore 0700 keystore keystore
+    mkdir /data/misc/gatekeeper 0700 system system
     mkdir /data/misc/keychain 0771 system system
     mkdir /data/misc/net 0750 root shell
     mkdir /data/misc/radio 0770 system radio
@@ -305,11 +304,23 @@ on post-fs-data
     # Separate location for storing security policy files on data
     mkdir /data/security 0711 system system
 
+    # Create all remaining /data root dirs so that they are made through init
+    # and get proper encryption policy installed
+    mkdir /data/backup 0700 system system
+    mkdir /data/media 0770 media_rw media_rw
+    mkdir /data/ss 0700 system system
+    mkdir /data/system 0775 system system
+    mkdir /data/system/heapdump 0700 system system
+    mkdir /data/user 0711 system system
+
     # Reload policy from /data/security if present.
     setprop selinux.reload_policy 1
 
     # Set SELinux security contexts on upgrade or policy update.
     restorecon_recursive /data
+
+    # Check any timezone data in /data is newer than the copy in /system, delete if not.
+    exec u:r:tzdatacheck:s0 system system -- /system/bin/tzdatacheck /system/usr/share/zoneinfo /data/misc/zoneinfo
 
     # If there is no fs-post-data action in the init.<device>.rc file, you
     # must uncomment this line, otherwise encrypted filesystems
@@ -431,6 +442,7 @@ on property:vold.decrypt=trigger_reset_main
 
 on property:vold.decrypt=trigger_load_persist_props
     load_persist_props
+    start logd
     start logd-reinit
 
 on property:vold.decrypt=trigger_post_fs_data

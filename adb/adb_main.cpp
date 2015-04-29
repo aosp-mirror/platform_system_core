@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#define  TRACE_TAG   TRACE_ADB
+#define TRACE_TAG TRACE_ADB
+
+#include "sysdeps.h"
 
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "sysdeps.h"
 
 #include "adb.h"
 #include "adb_auth.h"
@@ -110,6 +110,13 @@ static bool should_drop_privileges() {
 #if defined(ALLOW_ADBD_ROOT)
     char value[PROPERTY_VALUE_MAX];
 
+    // The emulator is never secure, so don't drop privileges there.
+    // TODO: this seems like a bug --- shouldn't the emulator behave like a device?
+    property_get("ro.kernel.qemu", value, "");
+    if (strcmp(value, "1") == 0) {
+        return false;
+    }
+
     // The properties that affect `adb root` and `adb unroot` are ro.secure and
     // ro.debuggable. In this context the names don't make the expected behavior
     // particularly obvious.
@@ -147,42 +154,6 @@ static bool should_drop_privileges() {
 #else
     return true; // "adb root" not allowed, always drop privileges.
 #endif /* ALLOW_ADBD_ROOT */
-}
-
-void start_device_log(void)
-{
-    int fd;
-    char    path[PATH_MAX];
-    struct tm now;
-    time_t t;
-    char value[PROPERTY_VALUE_MAX];
-
-    // read the trace mask from persistent property persist.adb.trace_mask
-    // give up if the property is not set or cannot be parsed
-    property_get("persist.adb.trace_mask", value, "");
-    if (sscanf(value, "%x", &adb_trace_mask) != 1)
-        return;
-
-    adb_mkdir("/data/adb", 0775);
-    tzset();
-    time(&t);
-    localtime_r(&t, &now);
-    strftime(path, sizeof(path),
-                "/data/adb/adb-%Y-%m-%d-%H-%M-%S.txt",
-                &now);
-    fd = unix_open(path, O_WRONLY | O_CREAT | O_TRUNC, 0640);
-    if (fd < 0)
-        return;
-
-    // redirect stdout and stderr to the log file
-    dup2(fd, 1);
-    dup2(fd, 2);
-    fprintf(stderr,"--- adb starting (pid %d) ---\n", getpid());
-    adb_close(fd);
-
-    fd = unix_open("/dev/null", O_RDONLY);
-    dup2(fd, 0);
-    adb_close(fd);
 }
 #endif /* ADB_HOST */
 
@@ -273,10 +244,14 @@ int adb_main(int is_daemon, int server_port)
         exit(1);
     }
 #else
+    // We need to call this even if auth isn't enabled because the file
+    // descriptor will always be open.
+    adbd_cloexec_auth_socket();
+
     property_get("ro.adb.secure", value, "0");
     auth_enabled = !strcmp(value, "1");
     if (auth_enabled)
-        adb_auth_init();
+        adbd_auth_init();
 
     // Our external storage path may be different than apps, since
     // we aren't able to bind mount after dropping root.
@@ -381,18 +356,34 @@ int adb_main(int is_daemon, int server_port)
     return 0;
 }
 
-int main(int argc, char **argv)
-{
+#if !ADB_HOST
+void close_stdin() {
+    int fd = unix_open("/dev/null", O_RDONLY);
+    if (fd == -1) {
+        perror("failed to open /dev/null, stdin will remain open");
+        return;
+    }
+    dup2(fd, 0);
+    adb_close(fd);
+}
+#endif
+
+int main(int argc, char **argv) {
 #if ADB_HOST
     adb_sysdeps_init();
+#else
+    close_stdin();
+#endif
     adb_trace_init();
+
+#if ADB_HOST
     D("Handling commandline()\n");
     return adb_commandline(argc - 1, const_cast<const char**>(argv + 1));
 #else
     /* If adbd runs inside the emulator this will enable adb tracing via
      * adb-debug qemud service in the emulator. */
     adb_qemu_trace_init();
-    while(1) {
+    while (true) {
         int c;
         int option_index = 0;
         static struct option opts[] = {
@@ -414,7 +405,6 @@ int main(int argc, char **argv)
         }
     }
 
-    start_device_log();
     D("Handling main()\n");
     return adb_main(0, DEFAULT_ADB_PORT);
 #endif

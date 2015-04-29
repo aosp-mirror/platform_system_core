@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_SOCKETS
+
+#include "sysdeps.h"
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
@@ -21,14 +25,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "sysdeps.h"
-
-#define  TRACE_TAG  TRACE_SOCKETS
-#include "adb.h"
-#include "adb_io.h"
 #if !ADB_HOST
 #include "cutils/properties.h"
 #endif
+
+#include "adb.h"
+#include "adb_io.h"
 #include "transport.h"
 
 ADB_MUTEX_DEFINE( socket_list_lock );
@@ -485,10 +487,10 @@ static asocket *create_host_service_socket(const char *name, const char* serial)
 /* a Remote socket is used to send/receive data to/from a given transport object
 ** it needs to be closed when the transport is forcibly destroyed by the user
 */
-typedef struct aremotesocket {
+struct aremotesocket {
     asocket      socket;
     adisconnect  disconnect;
-} aremotesocket;
+};
 
 static int remote_socket_enqueue(asocket *s, apacket *p)
 {
@@ -825,12 +827,11 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
     }
 #else /* !ADB_HOST */
     if (s->transport == NULL) {
-        const char* error_string = "unknown failure";
-        s->transport = acquire_one_transport (CS_ANY,
-                kTransportAny, NULL, &error_string);
+        std::string error_msg = "unknown failure";
+        s->transport = acquire_one_transport(CS_ANY, kTransportAny, NULL, &error_msg);
 
         if (s->transport == NULL) {
-            sendfailmsg(s->peer->fd, error_string);
+            sendfailmsg(s->peer->fd, error_msg.c_str());
             goto fail;
         }
     }

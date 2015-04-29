@@ -26,6 +26,7 @@
 #include "base/macros.h"  // For TEMP_FAILURE_RETRY on Darwin.
 #define LOG_TAG "base.file"
 #include "cutils/log.h"
+#include "utils/Compat.h"
 
 namespace android {
 namespace base {
@@ -117,6 +118,30 @@ bool WriteStringToFile(const std::string& content, const std::string& path) {
   bool result = WriteStringToFd(content, fd);
   TEMP_FAILURE_RETRY(close(fd));
   return result || CleanUpAfterFailedWrite(path);
+}
+
+bool ReadFully(int fd, void* data, size_t byte_count) {
+  uint8_t* p = reinterpret_cast<uint8_t*>(data);
+  size_t remaining = byte_count;
+  while (remaining > 0) {
+    ssize_t n = TEMP_FAILURE_RETRY(read(fd, p, remaining));
+    if (n <= 0) return false;
+    p += n;
+    remaining -= n;
+  }
+  return true;
+}
+
+bool WriteFully(int fd, const void* data, size_t byte_count) {
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
+  size_t remaining = byte_count;
+  while (remaining > 0) {
+    ssize_t n = TEMP_FAILURE_RETRY(write(fd, p, remaining));
+    if (n == -1) return false;
+    p += n;
+    remaining -= n;
+  }
+  return true;
 }
 
 }  // namespace base

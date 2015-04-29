@@ -5,7 +5,11 @@
 
 LOCAL_PATH:= $(call my-dir)
 
-ADB_CLANG :=
+ifeq ($(HOST_OS),windows)
+  adb_host_clang := false  # libc++ for mingw not ready yet.
+else
+  adb_host_clang := true
+endif
 
 # libadb
 # =========================================================
@@ -21,10 +25,16 @@ LIBADB_SRC_FILES := \
     adb_auth.cpp \
     adb_io.cpp \
     adb_listeners.cpp \
+    adb_utils.cpp \
     sockets.cpp \
     transport.cpp \
     transport_local.cpp \
     transport_usb.cpp \
+
+LIBADB_TEST_SRCS := \
+    adb_io_test.cpp \
+    adb_utils_test.cpp \
+    transport_test.cpp \
 
 LIBADB_CFLAGS := \
     -Wall -Werror \
@@ -34,8 +44,8 @@ LIBADB_CFLAGS := \
 
 LIBADB_darwin_SRC_FILES := \
     fdevent.cpp \
-    get_my_path_darwin.c \
-    usb_osx.c \
+    get_my_path_darwin.cpp \
+    usb_osx.cpp \
 
 LIBADB_linux_SRC_FILES := \
     fdevent.cpp \
@@ -44,11 +54,11 @@ LIBADB_linux_SRC_FILES := \
 
 LIBADB_windows_SRC_FILES := \
     get_my_path_windows.cpp \
-    sysdeps_win32.c \
+    sysdeps_win32.cpp \
     usb_windows.cpp \
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := true
 LOCAL_MODULE := libadbd
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=0
 LOCAL_SRC_FILES := \
@@ -57,18 +67,22 @@ LOCAL_SRC_FILES := \
     fdevent.cpp \
     jdwp_service.cpp \
     qemu_tracing.cpp \
-    usb_linux_client.c \
+    usb_linux_client.cpp \
+
+LOCAL_SHARED_LIBRARIES := libbase
 
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := $(adb_host_clang)
 LOCAL_MODULE := libadb
 LOCAL_CFLAGS := $(LIBADB_CFLAGS) -DADB_HOST=1
 LOCAL_SRC_FILES := \
     $(LIBADB_SRC_FILES) \
     $(LIBADB_$(HOST_OS)_SRC_FILES) \
     adb_auth_host.cpp \
+
+LOCAL_SHARED_LIBRARIES := libbase
 
 # Even though we're building a static library (and thus there's no link step for
 # this to take effect), this adds the SSL includes to our path.
@@ -80,12 +94,8 @@ endif
 
 include $(BUILD_HOST_STATIC_LIBRARY)
 
-LIBADB_TEST_SRCS := \
-    adb_io_test.cpp \
-    transport_test.cpp \
-
 include $(CLEAR_VARS)
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := true
 LOCAL_MODULE := adbd_test
 LOCAL_CFLAGS := -DADB_HOST=0 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS)
@@ -94,7 +104,7 @@ LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
 include $(CLEAR_VARS)
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := $(adb_host_clang)
 LOCAL_MODULE := adb_test
 LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
 LOCAL_SRC_FILES := $(LIBADB_TEST_SRCS) services.cpp
@@ -106,6 +116,10 @@ LOCAL_STATIC_LIBRARIES := \
 
 ifeq ($(HOST_OS),linux)
   LOCAL_LDLIBS += -lrt -ldl -lpthread
+endif
+
+ifeq ($(HOST_OS),darwin)
+  LOCAL_LDLIBS += -framework CoreFoundation -framework IOKit
 endif
 
 include $(BUILD_HOST_NATIVE_TEST)
@@ -125,15 +139,11 @@ ifeq ($(HOST_OS),darwin)
 endif
 
 ifeq ($(HOST_OS),windows)
+  LOCAL_LDLIBS += -lws2_32 -lgdi32
   EXTRA_STATIC_LIBS := AdbWinApi
-  ifneq ($(strip $(USE_MINGW)),)
-    # MinGW under Linux case
-    LOCAL_LDLIBS += -lws2_32 -lgdi32
-    USE_SYSDEPS_WIN32 := 1
-  endif
 endif
 
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := $(adb_host_clang)
 
 LOCAL_SRC_FILES := \
     adb_main.cpp \
@@ -154,14 +164,22 @@ LOCAL_MODULE_TAGS := debug
 
 LOCAL_STATIC_LIBRARIES := \
     libadb \
+    libbase \
     libcrypto_static \
+    libcutils \
+    liblog \
     $(EXTRA_STATIC_LIBS) \
 
-ifeq ($(USE_SYSDEPS_WIN32),)
-    LOCAL_STATIC_LIBRARIES += libcutils
+# libc++ not available on windows yet
+ifneq ($(HOST_OS),windows)
+    LOCAL_CXX_STL := libc++_static
 endif
 
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
+# Don't add anything here, we don't want additional shared dependencies
+# on the host adb tool, and shared libraries that link against libc++
+# will violate ODR
+LOCAL_SHARED_LIBRARIES :=
+
 include $(BUILD_HOST_EXECUTABLE)
 
 $(call dist-for-goals,dist_files sdk,$(LOCAL_BUILT_MODULE))
@@ -178,7 +196,7 @@ endif
 
 include $(CLEAR_VARS)
 
-LOCAL_CLANG := $(ADB_CLANG)
+LOCAL_CLANG := true
 
 LOCAL_SRC_FILES := \
     adb_main.cpp \
@@ -199,7 +217,7 @@ ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_ADBD_ROOT=1
 endif
 
-ifneq (,$(filter userdebug,$(TARGET_BUILD_VARIANT)))
+ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_ADBD_DISABLE_VERITY=1
 endif
 
@@ -208,10 +226,11 @@ LOCAL_MODULE := adbd
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT_SBIN)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_SBIN_UNSTRIPPED)
-LOCAL_C_INCLUDES += system/extras/ext4_utils system/core/fs_mgr/include
+LOCAL_C_INCLUDES += system/extras/ext4_utils
 
 LOCAL_STATIC_LIBRARIES := \
     libadbd \
+    libbase \
     libfs_mgr \
     liblog \
     libcutils \
@@ -219,7 +238,5 @@ LOCAL_STATIC_LIBRARIES := \
     libmincrypt \
     libselinux \
     libext4_utils_static \
-
-LOCAL_ADDITIONAL_DEPENDENCIES := $(LOCAL_PATH)/Android.mk
 
 include $(BUILD_EXECUTABLE)

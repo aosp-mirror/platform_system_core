@@ -67,6 +67,23 @@ extern "C" {
 
 // ---------------------------------------------------------------------
 
+#ifndef __predict_false
+#define __predict_false(exp) __builtin_expect((exp) != 0, 0)
+#endif
+
+/*
+ *      -DLINT_RLOG in sources that you want to enforce that all logging
+ * goes to the radio log buffer. If any logging goes to any of the other
+ * log buffers, there will be a compile or link error to highlight the
+ * problem. This is not a replacement for a full audit of the code since
+ * this only catches compiled code, not ifdef'd debug code. Options to
+ * defining this, either temporarily to do a spot check, or permanently
+ * to enforce, in all the communications trees; We have hopes to ensure
+ * that by supplying just the radio log buffer that the communications
+ * teams will have their one-stop shop for triaging issues.
+ */
+#ifndef LINT_RLOG
+
 /*
  * Simplified macro to send a verbose log message using the current LOG_TAG.
  */
@@ -77,10 +94,6 @@ extern "C" {
 #else
 #define ALOGV(...) __ALOGV(__VA_ARGS__)
 #endif
-#endif
-
-#ifndef __predict_false
-#define __predict_false(exp) __builtin_expect((exp) != 0, 0)
 #endif
 
 #ifndef ALOGV_IF
@@ -283,6 +296,8 @@ extern "C" {
     : (void)0 )
 #endif
 
+#endif /* !LINT_RLOG */
+
 // ---------------------------------------------------------------------
 
 /*
@@ -477,6 +492,7 @@ typedef enum {
     EVENT_TYPE_LONG     = 1,
     EVENT_TYPE_STRING   = 2,
     EVENT_TYPE_LIST     = 3,
+    EVENT_TYPE_FLOAT    = 4,
 } AndroidEventLogType;
 #define sizeof_AndroidEventLogType sizeof(typeof_AndroidEventLogType)
 #define typeof_AndroidEventLogType unsigned char
@@ -493,6 +509,13 @@ typedef enum {
         long long longBuf = _value;                                         \
         (void) android_btWriteLog(_tag, EVENT_TYPE_LONG, &longBuf,          \
             sizeof(longBuf));                                               \
+    }
+#endif
+#ifndef LOG_EVENT_FLOAT
+#define LOG_EVENT_FLOAT(_tag, _value) {                                     \
+        float floatBuf = _value;                                            \
+        (void) android_btWriteLog(_tag, EVENT_TYPE_FLOAT, &floatBuf,        \
+            sizeof(floatBuf));                                              \
     }
 #endif
 #ifndef LOG_EVENT_STRING
@@ -567,11 +590,15 @@ typedef enum {
 typedef enum log_id {
     LOG_ID_MIN = 0,
 
+#ifndef LINT_RLOG
     LOG_ID_MAIN = 0,
+#endif
     LOG_ID_RADIO = 1,
+#ifndef LINT_RLOG
     LOG_ID_EVENTS = 2,
     LOG_ID_SYSTEM = 3,
     LOG_ID_CRASH = 4,
+#endif
 
     LOG_ID_MAX
 } log_id_t;

@@ -15,16 +15,18 @@
  */
 
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <paths.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/epoll.h>
 #include <sys/mount.h>
-#include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -39,12 +41,16 @@
 #include <selinux/label.h>
 #include <selinux/android.h>
 
+#include <base/file.h>
+#include <base/stringprintf.h>
 #include <cutils/android_reboot.h>
 #include <cutils/fs.h>
 #include <cutils/iosched_policy.h>
 #include <cutils/list.h>
 #include <cutils/sockets.h>
 #include <private/android_filesystem_config.h>
+
+#include <memory>
 
 #include "devices.h"
 #include "init.h"
@@ -63,10 +69,6 @@ struct selabel_handle *sehandle_prop;
 
 static int property_triggers_enabled = 0;
 
-static char console[32];
-static char bootmode[32];
-static char hardware[32];
-static unsigned revision = 0;
 static char qemu[32];
 
 static struct action *cur_action = NULL;
@@ -80,8 +82,19 @@ static const char *ENV[32];
 
 bool waiting_for_exec = false;
 
+static int epoll_fd = -1;
+
+void register_epoll_handler(int fd, void (*fn)()) {
+    epoll_event ev;
+    ev.events = EPOLLIN;
+    ev.data.ptr = reinterpret_cast<void*>(fn);
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+        ERROR("epoll_ctl failed: %s\n", strerror(errno));
+    }
+}
+
 void service::NotifyStateChange(const char* new_state) {
-    if (!properties_inited()) {
+    if (!properties_initialized()) {
         // If properties aren't available yet, we can't set them.
         return;
     }
@@ -244,7 +257,7 @@ void service_start(struct service *svc, const char *dynamic_args)
         }
     }
 
-    NOTICE("starting '%s'\n", svc->name);
+    NOTICE("Starting service '%s'...\n", svc->name);
 
     pid_t pid = fork();
     if (pid == 0) {
@@ -254,7 +267,7 @@ void service_start(struct service *svc, const char *dynamic_args)
         int fd, sz;
 
         umask(077);
-        if (properties_inited()) {
+        if (properties_initialized()) {
             get_property_workspace(&fd, &sz);
             snprintf(tmp, sizeof(tmp), "%d,%d", dup(fd), sz);
             add_environment("ANDROID_PROPERTY_WORKSPACE", tmp);
@@ -395,7 +408,7 @@ static void service_stop_or_reset(struct service *svc, int how)
     }
 
     if (svc->pid) {
-        NOTICE("service '%s' is being killed\n", svc->name);
+        NOTICE("Service '%s' is being killed...\n", svc->name);
         kill(-svc->pid, SIGKILL);
         svc->NotifyStateChange("stopping");
     } else {
@@ -557,17 +570,18 @@ void build_triggers_string(char *name_str, int length, struct action *cur_action
     }
 }
 
-void execute_one_command(void)
-{
-    int ret, i;
+void execute_one_command() {
+    Timer t;
+
     char cmd_str[256] = "";
     char name_str[256] = "";
 
     if (!cur_action || !cur_command || is_last_command(cur_action, cur_command)) {
         cur_action = action_remove_queue_head();
         cur_command = NULL;
-        if (!cur_action)
+        if (!cur_action) {
             return;
+        }
 
         build_triggers_string(name_str, sizeof(name_str), cur_action);
 
@@ -577,31 +591,39 @@ void execute_one_command(void)
         cur_command = get_next_command(cur_action, cur_command);
     }
 
-    if (!cur_command)
+    if (!cur_command) {
         return;
+    }
 
-    ret = cur_command->func(cur_command->nargs, cur_command->args);
+    int result = cur_command->func(cur_command->nargs, cur_command->args);
     if (klog_get_level() >= KLOG_INFO_LEVEL) {
-        for (i = 0; i < cur_command->nargs; i++) {
+        for (int i = 0; i < cur_command->nargs; i++) {
             strlcat(cmd_str, cur_command->args[i], sizeof(cmd_str));
             if (i < cur_command->nargs - 1) {
                 strlcat(cmd_str, " ", sizeof(cmd_str));
             }
         }
-        INFO("command '%s' action=%s status=%d (%s:%d)\n",
-             cmd_str, cur_action ? name_str : "", ret, cur_command->filename,
-             cur_command->line);
+        char source[256];
+        if (cur_command->filename) {
+            snprintf(source, sizeof(source), " (%s:%d)", cur_command->filename, cur_command->line);
+        } else {
+            *source = '\0';
+        }
+        INFO("Command '%s' action=%s%s returned %d took %.2fs\n",
+             cmd_str, cur_action ? name_str : "", source, result, t.duration());
     }
 }
 
-static int wait_for_coldboot_done_action(int nargs, char **args)
-{
-    int ret;
-    INFO("wait for %s\n", COLDBOOT_DONE);
-    ret = wait_for_file(COLDBOOT_DONE, COMMAND_RETRY_TIMEOUT);
-    if (ret)
+static int wait_for_coldboot_done_action(int nargs, char **args) {
+    Timer t;
+
+    NOTICE("Waiting for %s...\n", COLDBOOT_DONE);
+    if (wait_for_file(COLDBOOT_DONE, COMMAND_RETRY_TIMEOUT)) {
         ERROR("Timed out waiting for %s\n", COLDBOOT_DONE);
-    return ret;
+    }
+
+    NOTICE("Waiting for %s took %.2fs.\n", COLDBOOT_DONE, t.duration());
+    return 0;
 }
 
 /*
@@ -678,7 +700,6 @@ ret:
     if (urandom_fd != -1) {
         close(urandom_fd);
     }
-    memset(buf, 0, sizeof(buf));
     return result;
 }
 
@@ -690,13 +711,12 @@ static int keychord_init_action(int nargs, char **args)
 
 static int console_init_action(int nargs, char **args)
 {
-    int fd;
-
-    if (console[0]) {
+    char console[PROP_VALUE_MAX];
+    if (property_get("ro.boot.console", console) > 0) {
         snprintf(console_name, sizeof(console_name), "/dev/%s", console);
     }
 
-    fd = open(console_name, O_RDWR | O_CLOEXEC);
+    int fd = open(console_name, O_RDWR | O_CLOEXEC);
     if (fd >= 0)
         have_console = 1;
     close(fd);
@@ -726,7 +746,7 @@ static int console_init_action(int nargs, char **args)
     return 0;
 }
 
-static void import_kernel_nv(char *name, int for_emulator)
+static void import_kernel_nv(char *name, bool for_emulator)
 {
     char *value = strchr(name, '=');
     int name_len = strlen(name);
@@ -759,55 +779,56 @@ static void import_kernel_nv(char *name, int for_emulator)
     }
 }
 
-static void export_kernel_boot_props(void)
-{
-    char tmp[PROP_VALUE_MAX];
-    int ret;
-    unsigned i;
+static void export_kernel_boot_props() {
     struct {
         const char *src_prop;
-        const char *dest_prop;
-        const char *def_val;
+        const char *dst_prop;
+        const char *default_value;
     } prop_map[] = {
-        { "ro.boot.serialno", "ro.serialno", "", },
-        { "ro.boot.mode", "ro.bootmode", "unknown", },
-        { "ro.boot.baseband", "ro.baseband", "unknown", },
+        { "ro.boot.serialno",   "ro.serialno",   "", },
+        { "ro.boot.mode",       "ro.bootmode",   "unknown", },
+        { "ro.boot.baseband",   "ro.baseband",   "unknown", },
         { "ro.boot.bootloader", "ro.bootloader", "unknown", },
+        { "ro.boot.hardware",   "ro.hardware",   "unknown", },
+        { "ro.boot.revision",   "ro.revision",   "0", },
     };
+    for (size_t i = 0; i < ARRAY_SIZE(prop_map); i++) {
+        char value[PROP_VALUE_MAX];
+        int rc = property_get(prop_map[i].src_prop, value);
+        property_set(prop_map[i].dst_prop, (rc > 0) ? value : prop_map[i].default_value);
+    }
+}
 
-    for (i = 0; i < ARRAY_SIZE(prop_map); i++) {
-        ret = property_get(prop_map[i].src_prop, tmp);
-        if (ret > 0)
-            property_set(prop_map[i].dest_prop, tmp);
-        else
-            property_set(prop_map[i].dest_prop, prop_map[i].def_val);
+static void process_kernel_dt(void)
+{
+    static const char android_dir[] = "/proc/device-tree/firmware/android";
+
+    std::string file_name = android::base::StringPrintf("%s/compatible", android_dir);
+
+    std::string dt_file;
+    android::base::ReadFileToString(file_name, &dt_file);
+    if (!dt_file.compare("android,firmware")) {
+        ERROR("firmware/android is not compatible with 'android,firmware'\n");
+        return;
     }
 
-    ret = property_get("ro.boot.console", tmp);
-    if (ret)
-        strlcpy(console, tmp, sizeof(console));
+    std::unique_ptr<DIR, int(*)(DIR*)>dir(opendir(android_dir), closedir);
+    if (!dir)
+        return;
 
-    /* save a copy for init's usage during boot */
-    property_get("ro.bootmode", tmp);
-    strlcpy(bootmode, tmp, sizeof(bootmode));
+    struct dirent *dp;
+    while ((dp = readdir(dir.get())) != NULL) {
+        if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible"))
+            continue;
 
-    /* if this was given on kernel command line, override what we read
-     * before (e.g. from /proc/cpuinfo), if anything */
-    ret = property_get("ro.boot.hardware", tmp);
-    if (ret)
-        strlcpy(hardware, tmp, sizeof(hardware));
-    property_set("ro.hardware", hardware);
+        file_name = android::base::StringPrintf("%s/%s", android_dir, dp->d_name);
 
-    snprintf(tmp, PROP_VALUE_MAX, "%d", revision);
-    property_set("ro.revision", tmp);
+        android::base::ReadFileToString(file_name, &dt_file);
+        std::replace(dt_file.begin(), dt_file.end(), ',', '.');
 
-    /* TODO: these are obsolete. We should delete them */
-    if (!strcmp(bootmode,"factory"))
-        property_set("ro.factorytest", "1");
-    else if (!strcmp(bootmode,"factory2"))
-        property_set("ro.factorytest", "2");
-    else
-        property_set("ro.factorytest", "0");
+        std::string property_name = android::base::StringPrintf("ro.boot.%s", dp->d_name);
+        property_set(property_name.c_str(), dt_file.c_str());
+    }
 }
 
 static void process_kernel_cmdline(void)
@@ -819,40 +840,9 @@ static void process_kernel_cmdline(void)
      * second pass is only necessary for qemu to export all kernel params
      * as props.
      */
-    import_kernel_cmdline(0, import_kernel_nv);
+    import_kernel_cmdline(false, import_kernel_nv);
     if (qemu[0])
-        import_kernel_cmdline(1, import_kernel_nv);
-
-    /* now propogate the info given on command line to internal variables
-     * used by init as well as the current required properties
-     */
-    export_kernel_boot_props();
-}
-
-static int property_service_init_action(int nargs, char **args)
-{
-    /* read any property files on system or data and
-     * fire up the property service.  This must happen
-     * after the ro.foo properties are set above so
-     * that /data/local.prop cannot interfere with them.
-     */
-    start_property_service();
-    if (get_property_set_fd() < 0) {
-        ERROR("start_property_service() failed\n");
-        exit(1);
-    }
-
-    return 0;
-}
-
-static int signal_init_action(int nargs, char **args)
-{
-    signal_init();
-    if (get_signal_fd() < 0) {
-        ERROR("signal_init() failed\n");
-        exit(1);
-    }
-    return 0;
+        import_kernel_cmdline(true, import_kernel_nv);
 }
 
 static int queue_property_triggers_action(int nargs, char **args)
@@ -863,59 +853,43 @@ static int queue_property_triggers_action(int nargs, char **args)
     return 0;
 }
 
-void selinux_init_all_handles(void)
+static void selinux_init_all_handles(void)
 {
     sehandle = selinux_android_file_context_handle();
     selinux_android_set_sehandle(sehandle);
     sehandle_prop = selinux_android_prop_context_handle();
 }
 
-static bool selinux_is_disabled(void)
-{
-    if (ALLOW_DISABLE_SELINUX) {
-        if (access("/sys/fs/selinux", F_OK) != 0) {
-            // SELinux is not compiled into the kernel, or has been disabled
-            // via the kernel command line "selinux=0".
-            return true;
-        }
+enum selinux_enforcing_status { SELINUX_PERMISSIVE, SELINUX_ENFORCING };
 
-        char tmp[PROP_VALUE_MAX];
-        if ((property_get("ro.boot.selinux", tmp) != 0) && (strcmp(tmp, "disabled") == 0)) {
-            // SELinux is compiled into the kernel, but we've been told to disable it.
-            return true;
-        }
-    }
+static selinux_enforcing_status selinux_status_from_cmdline() {
+    selinux_enforcing_status status = SELINUX_ENFORCING;
 
-    return false;
+    std::function<void(char*,bool)> fn = [&](char* name, bool in_qemu) {
+        char *value = strchr(name, '=');
+        if (value == nullptr) { return; }
+        *value++ = '\0';
+        if (strcmp(name, "androidboot.selinux") == 0) {
+            if (strcmp(value, "permissive") == 0) {
+                status = SELINUX_PERMISSIVE;
+            }
+        }
+    };
+    import_kernel_cmdline(false, fn);
+
+    return status;
 }
 
 static bool selinux_is_enforcing(void)
 {
-    if (ALLOW_DISABLE_SELINUX) {
-        char tmp[PROP_VALUE_MAX];
-        if (property_get("ro.boot.selinux", tmp) == 0) {
-            // Property is not set.  Assume enforcing.
-            return true;
-        }
-
-        if (strcmp(tmp, "permissive") == 0) {
-            // SELinux is in the kernel, but we've been told to go into permissive mode.
-            return false;
-        }
-
-        if (strcmp(tmp, "enforcing") != 0) {
-            ERROR("SELinux: Unknown value of ro.boot.selinux. Got: \"%s\". Assuming enforcing.\n", tmp);
-        }
+    if (ALLOW_PERMISSIVE_SELINUX) {
+        return selinux_status_from_cmdline() == SELINUX_ENFORCING;
     }
     return true;
 }
 
 int selinux_reload_policy(void)
 {
-    if (selinux_is_disabled()) {
-        return -1;
-    }
-
     INFO("SELinux: Attempting to reload policy files\n");
 
     if (selinux_android_reload_policy() == -1) {
@@ -932,77 +906,80 @@ int selinux_reload_policy(void)
     return 0;
 }
 
-static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_t len)
-{
+static int audit_callback(void *data, security_class_t /*cls*/, char *buf, size_t len) {
     snprintf(buf, len, "property=%s", !data ? "NULL" : (char *)data);
     return 0;
 }
 
-int log_callback(int type, const char *fmt, ...)
-{
-    int level;
-    va_list ap;
-    switch (type) {
-    case SELINUX_WARNING:
-        level = KLOG_WARNING_LEVEL;
-        break;
-    case SELINUX_INFO:
-        level = KLOG_INFO_LEVEL;
-        break;
-    default:
-        level = KLOG_ERROR_LEVEL;
-        break;
-    }
-    va_start(ap, fmt);
-    klog_vwrite(level, fmt, ap);
-    va_end(ap);
-    return 0;
+static void security_failure() {
+    ERROR("Security failure; rebooting into recovery mode...\n");
+    android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
+    while (true) { pause(); }  // never reached
 }
 
-static void selinux_initialize(void)
-{
-    if (selinux_is_disabled()) {
-        return;
-    }
+static void selinux_initialize(bool in_kernel_domain) {
+    Timer t;
 
-    INFO("loading selinux policy\n");
-    if (selinux_android_load_policy() < 0) {
-        ERROR("SELinux: Failed to load policy; rebooting into recovery mode\n");
-        android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
-        while (1) { pause(); }  // never reached
-    }
+    selinux_callback cb;
+    cb.func_log = selinux_klog_callback;
+    selinux_set_callback(SELINUX_CB_LOG, cb);
+    cb.func_audit = audit_callback;
+    selinux_set_callback(SELINUX_CB_AUDIT, cb);
 
-    selinux_init_all_handles();
-    bool is_enforcing = selinux_is_enforcing();
-    INFO("SELinux: security_setenforce(%d)\n", is_enforcing);
-    security_setenforce(is_enforcing);
+    if (in_kernel_domain) {
+        INFO("Loading SELinux policy...\n");
+        if (selinux_android_load_policy() < 0) {
+            ERROR("failed to load policy: %s\n", strerror(errno));
+            security_failure();
+        }
+
+        bool kernel_enforcing = (security_getenforce() == 1);
+        bool is_enforcing = selinux_is_enforcing();
+        if (kernel_enforcing != is_enforcing) {
+            if (security_setenforce(is_enforcing)) {
+                ERROR("security_setenforce(%s) failed: %s\n",
+                      is_enforcing ? "true" : "false", strerror(errno));
+                security_failure();
+            }
+        }
+
+        if (write_file("/sys/fs/selinux/checkreqprot", "0") == -1) {
+            security_failure();
+        }
+
+        NOTICE("(Initializing SELinux %s took %.2fs.)\n",
+               is_enforcing ? "enforcing" : "non-enforcing", t.duration());
+    } else {
+        selinux_init_all_handles();
+    }
 }
 
 int main(int argc, char** argv) {
-    if (!strcmp(basename(argv[0]), "ueventd"))
+    if (!strcmp(basename(argv[0]), "ueventd")) {
         return ueventd_main(argc, argv);
+    }
 
-    if (!strcmp(basename(argv[0]), "watchdogd"))
+    if (!strcmp(basename(argv[0]), "watchdogd")) {
         return watchdogd_main(argc, argv);
+    }
 
     // Clear the umask.
     umask(0);
 
+    add_environment("PATH", _PATH_DEFPATH);
+
+    bool is_first_stage = (argc == 1) || (strcmp(argv[1], "--second-stage") != 0);
+
     // Get the basic filesystem setup we need put together in the initramdisk
     // on / and then we'll let the rc file figure out the rest.
-    mkdir("/dev", 0755);
-    mkdir("/proc", 0755);
-    mkdir("/sys", 0755);
-
-    mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755");
-    mkdir("/dev/pts", 0755);
-    mkdir("/dev/socket", 0755);
-    mount("devpts", "/dev/pts", "devpts", 0, NULL);
-    mount("proc", "/proc", "proc", 0, NULL);
-    mount("sysfs", "/sys", "sysfs", 0, NULL);
-
-    // Indicate that booting is in progress to background fw loaders, etc.
-    close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
+    if (is_first_stage) {
+        mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755");
+        mkdir("/dev/pts", 0755);
+        mkdir("/dev/socket", 0755);
+        mount("devpts", "/dev/pts", "devpts", 0, NULL);
+        mount("proc", "/proc", "proc", 0, NULL);
+        mount("sysfs", "/sys", "sysfs", 0, NULL);
+    }
 
     // We must have some place other than / to create the device nodes for
     // kmsg and null, otherwise we won't be able to remount / read-only
@@ -1010,51 +987,85 @@ int main(int argc, char** argv) {
     // to the outside world.
     open_devnull_stdio();
     klog_init();
-    property_init();
+    klog_set_level(KLOG_NOTICE_LEVEL);
 
-    get_hardware_name(hardware, &revision);
+    NOTICE("init%s started!\n", is_first_stage ? "" : " second stage");
 
-    process_kernel_cmdline();
+    if (!is_first_stage) {
+        // Indicate that booting is in progress to background fw loaders, etc.
+        close(open("/dev/.booting", O_WRONLY | O_CREAT | O_CLOEXEC, 0000));
 
-    selinux_callback cb;
-    cb.func_log = log_callback;
-    selinux_set_callback(SELINUX_CB_LOG, cb);
-    cb.func_audit = audit_callback;
-    selinux_set_callback(SELINUX_CB_AUDIT, cb);
+        property_init();
 
-    selinux_initialize();
+        // If arguments are passed both on the command line and in DT,
+        // properties set in DT always have priority over the command-line ones.
+        process_kernel_dt();
+        process_kernel_cmdline();
+
+        // Propogate the kernel variables to internal variables
+        // used by init as well as the current required properties.
+        export_kernel_boot_props();
+    }
+
+    // Set up SELinux, including loading the SELinux policy if we're in the kernel domain.
+    selinux_initialize(is_first_stage);
+
+    // If we're in the kernel domain, re-exec init to transition to the init domain now
+    // that the SELinux policy has been loaded.
+    if (is_first_stage) {
+        if (restorecon("/init") == -1) {
+            ERROR("restorecon failed: %s\n", strerror(errno));
+            security_failure();
+        }
+        char* path = argv[0];
+        char* args[] = { path, const_cast<char*>("--second-stage"), nullptr };
+        if (execv(path, args) == -1) {
+            ERROR("execv(\"%s\") failed: %s\n", path, strerror(errno));
+            security_failure();
+        }
+    }
 
     // These directories were necessarily created before initial policy load
     // and therefore need their security context restored to the proper value.
     // This must happen before /dev is populated by ueventd.
+    INFO("Running restorecon...\n");
     restorecon("/dev");
     restorecon("/dev/socket");
     restorecon("/dev/__properties__");
     restorecon_recursive("/sys");
 
-    INFO("property init\n");
+    epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+    if (epoll_fd == -1) {
+        ERROR("epoll_create1 failed: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    signal_handler_init();
+
     property_load_boot_defaults();
+    start_property_service();
 
     init_parse_config_file("/init.rc");
 
     action_for_each_trigger("early-init", action_add_queue_tail);
 
+    // Queue an action that waits for coldboot done so we know ueventd has set up all of /dev...
     queue_builtin_action(wait_for_coldboot_done_action, "wait_for_coldboot_done");
+    // ... so that we can start queuing up actions that require stuff from /dev.
     queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
     queue_builtin_action(keychord_init_action, "keychord_init");
     queue_builtin_action(console_init_action, "console_init");
 
-    // Execute all the boot actions to get us started.
+    // Trigger all the boot actions to get us started.
     action_for_each_trigger("init", action_add_queue_tail);
 
     // Repeat mix_hwrng_into_linux_rng in case /dev/hw_random or /dev/random
     // wasn't ready immediately after wait_for_coldboot_done
     queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
-    queue_builtin_action(property_service_init_action, "property_service_init");
-    queue_builtin_action(signal_init_action, "signal_init");
 
     // Don't mount filesystems or start core system services in charger mode.
-    if (strcmp(bootmode, "charger") == 0) {
+    char bootmode[PROP_VALUE_MAX];
+    if (property_get("ro.bootmode", bootmode) > 0 && strcmp(bootmode, "charger") == 0) {
         action_for_each_trigger("charger", action_add_queue_tail);
     } else {
         action_for_each_trigger("late-init", action_add_queue_tail);
@@ -1063,39 +1074,10 @@ int main(int argc, char** argv) {
     // Run all property triggers based on current state of the properties.
     queue_builtin_action(queue_property_triggers_action, "queue_property_triggers");
 
-    // TODO: why do we only initialize ufds after execute_one_command and restart_processes?
-    size_t fd_count = 0;
-    struct pollfd ufds[3];
-    bool property_set_fd_init = false;
-    bool signal_fd_init = false;
-    bool keychord_fd_init = false;
-
-    for (;;) {
+    while (true) {
         if (!waiting_for_exec) {
             execute_one_command();
             restart_processes();
-        }
-
-        if (!property_set_fd_init && get_property_set_fd() > 0) {
-            ufds[fd_count].fd = get_property_set_fd();
-            ufds[fd_count].events = POLLIN;
-            ufds[fd_count].revents = 0;
-            fd_count++;
-            property_set_fd_init = true;
-        }
-        if (!signal_fd_init && get_signal_fd() > 0) {
-            ufds[fd_count].fd = get_signal_fd();
-            ufds[fd_count].events = POLLIN;
-            ufds[fd_count].revents = 0;
-            fd_count++;
-            signal_fd_init = true;
-        }
-        if (!keychord_fd_init && get_keychord_fd() > 0) {
-            ufds[fd_count].fd = get_keychord_fd();
-            ufds[fd_count].events = POLLIN;
-            ufds[fd_count].revents = 0;
-            fd_count++;
-            keychord_fd_init = true;
         }
 
         int timeout = -1;
@@ -1111,21 +1093,12 @@ int main(int argc, char** argv) {
 
         bootchart_sample(&timeout);
 
-        int nr = poll(ufds, fd_count, timeout);
-        if (nr <= 0) {
-            continue;
-        }
-
-        for (size_t i = 0; i < fd_count; i++) {
-            if (ufds[i].revents & POLLIN) {
-                if (ufds[i].fd == get_property_set_fd()) {
-                    handle_property_set_fd();
-                } else if (ufds[i].fd == get_keychord_fd()) {
-                    handle_keychord();
-                } else if (ufds[i].fd == get_signal_fd()) {
-                    handle_signal();
-                }
-            }
+        epoll_event ev;
+        int nr = TEMP_FAILURE_RETRY(epoll_wait(epoll_fd, &ev, 1, timeout));
+        if (nr == -1) {
+            ERROR("epoll_wait failed: %s\n", strerror(errno));
+        } else if (nr == 1) {
+            ((void (*)()) ev.data.ptr)();
         }
     }
 

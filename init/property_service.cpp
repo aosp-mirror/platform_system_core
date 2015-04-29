@@ -26,6 +26,8 @@
 #include <errno.h>
 #include <sys/poll.h>
 
+#include <memory>
+
 #include <cutils/misc.h>
 #include <cutils/sockets.h>
 #include <cutils/multiuser.h>
@@ -52,7 +54,7 @@
 #define PERSISTENT_PROPERTY_DIR  "/data/property"
 
 static int persistent_properties_loaded = 0;
-static int property_area_inited = 0;
+static bool property_area_initialized = false;
 
 static int property_set_fd = -1;
 
@@ -61,34 +63,25 @@ struct workspace {
     int fd;
 };
 
-static int init_workspace(workspace *w, size_t size)
-{
-    int fd = open(PROP_FILENAME, O_RDONLY | O_NOFOLLOW);
-    if (fd < 0)
-        return -1;
-
-    w->size = size;
-    w->fd = fd;
-    return 0;
-}
-
 static workspace pa_workspace;
 
-static int init_property_area(void)
-{
-    if (property_area_inited)
-        return -1;
+void property_init() {
+    if (property_area_initialized) {
+        return;
+    }
 
-    if(__system_property_area_init())
-        return -1;
+    property_area_initialized = true;
 
-    if(init_workspace(&pa_workspace, 0))
-        return -1;
+    if (__system_property_area_init()) {
+        return;
+    }
 
-    fcntl(pa_workspace.fd, F_SETFD, FD_CLOEXEC);
-
-    property_area_inited = 1;
-    return 0;
+    pa_workspace.size = 0;
+    pa_workspace.fd = open(PROP_FILENAME, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (pa_workspace.fd == -1) {
+        ERROR("Failed to open %s: %s\n", PROP_FILENAME, strerror(errno));
+        return;
+    }
 }
 
 static int check_mac_perms(const char *name, char *sctx)
@@ -159,7 +152,7 @@ static void write_persistent_property(const char *name, const char *value)
     snprintf(tempPath, sizeof(tempPath), "%s/.temp.XXXXXX", PERSISTENT_PROPERTY_DIR);
     fd = mkstemp(tempPath);
     if (fd < 0) {
-        ERROR("Unable to write persistent property to temp file %s errno: %d\n", tempPath, errno);
+        ERROR("Unable to write persistent property to temp file %s: %s\n", tempPath, strerror(errno));
         return;
     }
     write(fd, value, strlen(value));
@@ -199,18 +192,14 @@ static bool is_legal_property_name(const char* name, size_t namelen)
     return true;
 }
 
-int property_set(const char *name, const char *value)
-{
-    prop_info *pi;
-    int ret;
-
+static int property_set_impl(const char* name, const char* value) {
     size_t namelen = strlen(name);
     size_t valuelen = strlen(value);
 
     if (!is_legal_property_name(name, namelen)) return -1;
     if (valuelen >= PROP_VALUE_MAX) return -1;
 
-    pi = (prop_info*) __system_property_find(name);
+    prop_info* pi = (prop_info*) __system_property_find(name);
 
     if(pi != 0) {
         /* ro.* properties may NEVER be modified once set */
@@ -218,10 +207,9 @@ int property_set(const char *name, const char *value)
 
         __system_property_update(pi, value, valuelen);
     } else {
-        ret = __system_property_add(name, namelen, value, valuelen);
-        if (ret < 0) {
-            ERROR("Failed to set '%s'='%s'\n", name, value);
-            return ret;
+        int rc = __system_property_add(name, namelen, value, valuelen);
+        if (rc < 0) {
+            return rc;
         }
     }
     /* If name starts with "net." treat as a DNS property. */
@@ -250,7 +238,15 @@ int property_set(const char *name, const char *value)
     return 0;
 }
 
-void handle_property_set_fd()
+int property_set(const char* name, const char* value) {
+    int rc = property_set_impl(name, value);
+    if (rc == -1) {
+        ERROR("property_set(\"%s\", \"%s\") failed\n", name, value);
+    }
+    return rc;
+}
+
+static void handle_property_set_fd()
 {
     prop_msg msg;
     int s;
@@ -284,15 +280,15 @@ void handle_property_set_fd()
         close(s);
         return;
     } else if (nr < 0) {
-        ERROR("sys_prop: error waiting for uid=%d to send property message. err=%d %s\n", cr.uid, errno, strerror(errno));
+        ERROR("sys_prop: error waiting for uid=%d to send property message: %s\n", cr.uid, strerror(errno));
         close(s);
         return;
     }
 
     r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), MSG_DONTWAIT));
     if(r != sizeof(prop_msg)) {
-        ERROR("sys_prop: mis-match msg size received: %d expected: %zu errno: %d\n",
-              r, sizeof(prop_msg), errno);
+        ERROR("sys_prop: mis-match msg size received: %d expected: %zu: %s\n",
+              r, sizeof(prop_msg), strerror(errno));
         close(s);
         return;
     }
@@ -414,87 +410,79 @@ static void load_properties(char *data, const char *filter)
  * Filter is used to decide which properties to load: NULL loads all keys,
  * "ro.foo.*" is a prefix match, and "ro.foo.bar" is an exact match.
  */
-static void load_properties_from_file(const char *fn, const char *filter)
-{
+static void load_properties_from_file(const char* filename, const char* filter) {
+    Timer t;
     std::string data;
-    if (read_file(fn, &data)) {
+    if (read_file(filename, &data)) {
         load_properties(&data[0], filter);
     }
+    NOTICE("(Loading properties from %s took %.2fs.)\n", filename, t.duration());
 }
 
-static void load_persistent_properties()
-{
-    DIR* dir = opendir(PERSISTENT_PROPERTY_DIR);
-    int dir_fd;
-    struct dirent*  entry;
-    char value[PROP_VALUE_MAX];
-    int fd, length;
-    struct stat sb;
+static void load_persistent_properties() {
+    persistent_properties_loaded = 1;
 
-    if (dir) {
-        dir_fd = dirfd(dir);
-        while ((entry = readdir(dir)) != NULL) {
-            if (strncmp("persist.", entry->d_name, strlen("persist.")))
-                continue;
-            if (entry->d_type != DT_REG)
-                continue;
-            /* open the file and read the property value */
-            fd = openat(dir_fd, entry->d_name, O_RDONLY | O_NOFOLLOW);
-            if (fd < 0) {
-                ERROR("Unable to open persistent property file \"%s\" errno: %d\n",
-                      entry->d_name, errno);
-                continue;
-            }
-            if (fstat(fd, &sb) < 0) {
-                ERROR("fstat on property file \"%s\" failed errno: %d\n", entry->d_name, errno);
-                close(fd);
-                continue;
-            }
-
-            // File must not be accessible to others, be owned by root/root, and
-            // not be a hard link to any other file.
-            if (((sb.st_mode & (S_IRWXG | S_IRWXO)) != 0)
-                    || (sb.st_uid != 0)
-                    || (sb.st_gid != 0)
-                    || (sb.st_nlink != 1)) {
-                ERROR("skipping insecure property file %s (uid=%u gid=%u nlink=%u mode=%o)\n",
-                      entry->d_name, (unsigned int)sb.st_uid, (unsigned int)sb.st_gid,
-                      (unsigned int)sb.st_nlink, sb.st_mode);
-                close(fd);
-                continue;
-            }
-
-            length = read(fd, value, sizeof(value) - 1);
-            if (length >= 0) {
-                value[length] = 0;
-                property_set(entry->d_name, value);
-            } else {
-                ERROR("Unable to read persistent property file %s errno: %d\n",
-                      entry->d_name, errno);
-            }
-            close(fd);
-        }
-        closedir(dir);
-    } else {
-        ERROR("Unable to open persistent property directory %s errno: %d\n", PERSISTENT_PROPERTY_DIR, errno);
+    std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir(PERSISTENT_PROPERTY_DIR), closedir);
+    if (!dir) {
+        ERROR("Unable to open persistent property directory \"%s\": %s\n",
+              PERSISTENT_PROPERTY_DIR, strerror(errno));
+        return;
     }
 
-    persistent_properties_loaded = 1;
+    struct dirent* entry;
+    while ((entry = readdir(dir.get())) != NULL) {
+        if (strncmp("persist.", entry->d_name, strlen("persist."))) {
+            continue;
+        }
+        if (entry->d_type != DT_REG) {
+            continue;
+        }
+
+        // Open the file and read the property value.
+        int fd = openat(dirfd(dir.get()), entry->d_name, O_RDONLY | O_NOFOLLOW);
+        if (fd == -1) {
+            ERROR("Unable to open persistent property file \"%s\": %s\n",
+                  entry->d_name, strerror(errno));
+            continue;
+        }
+
+        struct stat sb;
+        if (fstat(fd, &sb) == -1) {
+            ERROR("fstat on property file \"%s\" failed: %s\n", entry->d_name, strerror(errno));
+            close(fd);
+            continue;
+        }
+
+        // File must not be accessible to others, be owned by root/root, and
+        // not be a hard link to any other file.
+        if (((sb.st_mode & (S_IRWXG | S_IRWXO)) != 0) || (sb.st_uid != 0) || (sb.st_gid != 0) ||
+                (sb.st_nlink != 1)) {
+            ERROR("skipping insecure property file %s (uid=%u gid=%u nlink=%u mode=%o)\n",
+                  entry->d_name, (unsigned int)sb.st_uid, (unsigned int)sb.st_gid,
+                  (unsigned int)sb.st_nlink, sb.st_mode);
+            close(fd);
+            continue;
+        }
+
+        char value[PROP_VALUE_MAX];
+        int length = read(fd, value, sizeof(value) - 1);
+        if (length >= 0) {
+            value[length] = 0;
+            property_set(entry->d_name, value);
+        } else {
+            ERROR("Unable to read persistent property file %s: %s\n",
+                  entry->d_name, strerror(errno));
+        }
+        close(fd);
+    }
 }
 
-void property_init(void)
-{
-    init_property_area();
-}
-
-void property_load_boot_defaults(void)
-{
+void property_load_boot_defaults() {
     load_properties_from_file(PROP_PATH_RAMDISK_DEFAULT, NULL);
 }
 
-int properties_inited(void)
-{
-    return property_area_inited;
+bool properties_initialized() {
+    return property_area_initialized;
 }
 
 static void load_override_properties() {
@@ -507,23 +495,19 @@ static void load_override_properties() {
     }
 }
 
-
 /* When booting an encrypted system, /data is not mounted when the
  * property service is started, so any properties stored there are
  * not loaded.  Vold triggers init to load these properties once it
  * has mounted /data.
  */
-void load_persist_props(void)
-{
+void load_persist_props(void) {
     load_override_properties();
     /* Read persistent properties after all default values have been loaded. */
     load_persistent_properties();
 }
 
-void load_all_props(void)
-{
+void load_all_props() {
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
-    load_properties_from_file(PROP_PATH_SYSTEM_DEFAULT, NULL);
     load_properties_from_file(PROP_PATH_VENDOR_BUILD, NULL);
     load_properties_from_file(PROP_PATH_BOOTIMAGE_BUILD, NULL);
     load_properties_from_file(PROP_PATH_FACTORY, "ro.*");
@@ -534,20 +518,15 @@ void load_all_props(void)
     load_persistent_properties();
 }
 
-void start_property_service(void)
-{
-    int fd;
+void start_property_service() {
+    property_set_fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
+                                    0666, 0, 0, NULL);
+    if (property_set_fd == -1) {
+        ERROR("start_property_service socket creation failed: %s\n", strerror(errno));
+        exit(1);
+    }
 
-    fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM, 0666, 0, 0, NULL);
-    if(fd < 0) return;
-    fcntl(fd, F_SETFD, FD_CLOEXEC);
-    fcntl(fd, F_SETFL, O_NONBLOCK);
+    listen(property_set_fd, 8);
 
-    listen(fd, 8);
-    property_set_fd = fd;
-}
-
-int get_property_set_fd()
-{
-    return property_set_fd;
+    register_epoll_handler(property_set_fd, handle_property_set_fd);
 }

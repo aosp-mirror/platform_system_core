@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdarg.h>
 #include <string.h>
-#include <stddef.h>
-#include <ctype.h>
+#include <unistd.h>
 
 #include "init.h"
 #include "parser.h"
@@ -118,10 +119,9 @@ static int lookup_keyword(const char *s)
     switch (*s++) {
     case 'b':
         if (!strcmp(s, "ootchart_init")) return K_bootchart_init;
+        break;
     case 'c':
         if (!strcmp(s, "opy")) return K_copy;
-        if (!strcmp(s, "apability")) return K_capability;
-        if (!strcmp(s, "hroot")) return K_chroot;
         if (!strcmp(s, "lass")) return K_class;
         if (!strcmp(s, "lass_start")) return K_class_start;
         if (!strcmp(s, "lass_stop")) return K_class_stop;
@@ -138,7 +138,6 @@ static int lookup_keyword(const char *s)
     case 'e':
         if (!strcmp(s, "nable")) return K_enable;
         if (!strcmp(s, "xec")) return K_exec;
-        if (!strcmp(s, "xeconce")) return K_execonce;
         if (!strcmp(s, "xport")) return K_export;
         break;
     case 'g':
@@ -152,6 +151,7 @@ static int lookup_keyword(const char *s)
         if (!strcmp(s, "fup")) return K_ifup;
         if (!strcmp(s, "nsmod")) return K_insmod;
         if (!strcmp(s, "mport")) return K_import;
+        if (!strcmp(s, "nstallkey")) return K_installkey;
         break;
     case 'k':
         if (!strcmp(s, "eycodes")) return K_keycodes;
@@ -184,7 +184,6 @@ static int lookup_keyword(const char *s)
     case 's':
         if (!strcmp(s, "eclabel")) return K_seclabel;
         if (!strcmp(s, "ervice")) return K_service;
-        if (!strcmp(s, "etcon")) return K_setcon;
         if (!strcmp(s, "etenv")) return K_setenv;
         if (!strcmp(s, "etprop")) return K_setprop;
         if (!strcmp(s, "etrlimit")) return K_setrlimit;
@@ -203,6 +202,7 @@ static int lookup_keyword(const char *s)
         break;
     case 'v':
         if (!strcmp(s, "erity_load_state")) return K_verity_load_state;
+        if (!strcmp(s, "erity_update_state")) return K_verity_update_state;
         break;
     case 'w':
         if (!strcmp(s, "rite")) return K_write;
@@ -350,7 +350,7 @@ static void parse_import(struct parse_state *state, int nargs, char **args)
     struct import* import = (struct import*) calloc(1, sizeof(struct import));
     import->filename = strdup(conf_file);
     list_add_tail(import_list, &import->list);
-    INFO("found import '%s', adding to import list", import->filename);
+    INFO("Added '%s' to import list\n", import->filename);
 }
 
 static void parse_new_section(struct parse_state *state, int kw,
@@ -438,6 +438,7 @@ parser_done:
 
 int init_parse_config_file(const char* path) {
     INFO("Parsing %s...\n", path);
+    Timer t;
     std::string data;
     if (!read_file(path, &data)) {
         return -1;
@@ -445,6 +446,8 @@ int init_parse_config_file(const char* path) {
 
     parse_config(path, data);
     dump_parser_state();
+
+    NOTICE("(Parsing %s took %.2fs.)\n", path, t.duration());
     return 0;
 }
 
@@ -770,8 +773,6 @@ static void parse_line_service(struct parse_state *state, int nargs, char **args
 
     kw = lookup_keyword(args[0]);
     switch (kw) {
-    case K_capability:
-        break;
     case K_class:
         if (nargs != 2) {
             parse_error(state, "class option requires a classname\n");
@@ -944,7 +945,14 @@ static void *parse_action(struct parse_state *state, int nargs, char **args)
     for (i = 1; i < nargs; i++) {
         if (!(i % 2)) {
             if (strcmp(args[i], "&&")) {
+                struct listnode *node;
+                struct listnode *node2;
                 parse_error(state, "& is the only symbol allowed to concatenate actions\n");
+                list_for_each_safe(node, node2, &act->triggers) {
+                    struct trigger *trigger = node_to_item(node, struct trigger, nlist);
+                    free(trigger);
+                }
+                free(act);
                 return 0;
             } else
                 continue;

@@ -10,6 +10,8 @@ LOCAL_MODULE := mkbootfs
 
 LOCAL_CFLAGS := -Werror
 
+LOCAL_SHARED_LIBRARIES := libcutils
+
 include $(BUILD_HOST_EXECUTABLE)
 
 $(call dist-for-goals,dist_files,$(LOCAL_BUILT_MODULE))

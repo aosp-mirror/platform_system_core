@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
+#define TRACE_TAG TRACE_AUTH
+
+#include "sysdeps.h"
+#include "adb_auth.h"
+
 #include <resolv.h>
 #include <stdio.h>
 #include <string.h>
 
-#include "sysdeps.h"
-
-#include "adb.h"
-#include "adb_auth.h"
 #include "cutils/list.h"
 #include "cutils/sockets.h"
-#include "fdevent.h"
 #include "mincrypt/rsa.h"
 #include "mincrypt/sha.h"
+
+#include "adb.h"
+#include "fdevent.h"
 #include "transport.h"
-
-#define TRACE_TAG TRACE_AUTH
-
 
 struct adb_public_key {
     struct listnode node;
@@ -249,19 +249,23 @@ static void adb_auth_listener(int fd, unsigned events, void *data)
     }
 }
 
-void adb_auth_init(void)
-{
-    int fd, ret;
-
-    fd = android_get_control_socket("adbd");
-    if (fd < 0) {
+void adbd_cloexec_auth_socket() {
+    int fd = android_get_control_socket("adbd");
+    if (fd == -1) {
         D("Failed to get adbd socket\n");
         return;
     }
     fcntl(fd, F_SETFD, FD_CLOEXEC);
+}
 
-    ret = listen(fd, 4);
-    if (ret < 0) {
+void adbd_auth_init(void) {
+    int fd = android_get_control_socket("adbd");
+    if (fd == -1) {
+        D("Failed to get adbd socket\n");
+        return;
+    }
+
+    if (listen(fd, 4) == -1) {
         D("Failed to listen on '%d'\n", fd);
         return;
     }

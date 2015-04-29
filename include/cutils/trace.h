@@ -18,6 +18,7 @@
 #define _LIBS_CUTILS_TRACE_H
 
 #include <inttypes.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -25,7 +26,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cutils/atomic.h>
 #include <cutils/compiler.h>
 
 __BEGIN_DECLS
@@ -80,7 +80,6 @@ __BEGIN_DECLS
 #error ATRACE_TAG must be defined to be one of the tags defined in cutils/trace.h
 #endif
 
-#ifdef HAVE_ANDROID_OS
 /**
  * Opens the trace file for writing and reads the property for initial tags.
  * The atrace.tags.enableflags property sets the tags to trace.
@@ -114,7 +113,7 @@ void atrace_set_tracing_enabled(bool enabled);
  * Nonzero indicates setup has completed.
  * Note: This does NOT indicate whether or not setup was successful.
  */
-extern volatile int32_t atrace_is_ready;
+extern atomic_bool atrace_is_ready;
 
 /**
  * Set of ATRACE_TAG flags to trace for, initialized to ATRACE_TAG_NOT_READY.
@@ -137,7 +136,7 @@ extern int atrace_marker_fd;
 #define ATRACE_INIT() atrace_init()
 static inline void atrace_init()
 {
-    if (CC_UNLIKELY(!android_atomic_acquire_load(&atrace_is_ready))) {
+    if (CC_UNLIKELY(!atomic_load_explicit(&atrace_is_ready, memory_order_acquire))) {
         atrace_setup();
     }
 }
@@ -247,19 +246,6 @@ static inline void atrace_int64(uint64_t tag, const char* name, int64_t value)
         atrace_int64_body(name, value);
     }
 }
-
-#else // not HAVE_ANDROID_OS
-
-#define ATRACE_INIT()
-#define ATRACE_GET_ENABLED_TAGS()
-#define ATRACE_ENABLED() 0
-#define ATRACE_BEGIN(name)
-#define ATRACE_END()
-#define ATRACE_ASYNC_BEGIN(name, cookie)
-#define ATRACE_ASYNC_END(name, cookie)
-#define ATRACE_INT(name, value)
-
-#endif // not HAVE_ANDROID_OS
 
 __END_DECLS
 

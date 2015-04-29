@@ -24,29 +24,7 @@
 
 #include <string>
 
-class TemporaryFile {
- public:
-  TemporaryFile() {
-    init("/data/local/tmp");
-    if (fd == -1) {
-      init("/tmp");
-    }
-  }
-
-  ~TemporaryFile() {
-    close(fd);
-    unlink(filename);
-  }
-
-  int fd;
-  char filename[1024];
-
- private:
-  void init(const char* tmp_dir) {
-    snprintf(filename, sizeof(filename), "%s/TemporaryFile-XXXXXX", tmp_dir);
-    fd = mkstemp(filename);
-  }
-};
+#include "test_utils.h"
 
 TEST(file, ReadFileToString_ENOENT) {
   std::string s("hello");
@@ -99,5 +77,30 @@ TEST(file, WriteStringToFd) {
 
   std::string s;
   ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s)) << errno;
+  EXPECT_EQ("abc", s);
+}
+
+TEST(file, ReadFully) {
+  int fd = open("/proc/version", O_RDONLY);
+  ASSERT_NE(-1, fd) << strerror(errno);
+
+  char buf[1024];
+  memset(buf, 0, sizeof(buf));
+  ASSERT_TRUE(android::base::ReadFully(fd, buf, 5));
+  ASSERT_STREQ("Linux", buf);
+
+  ASSERT_EQ(0, lseek(fd, 0, SEEK_SET)) << strerror(errno);
+
+  ASSERT_FALSE(android::base::ReadFully(fd, buf, sizeof(buf)));
+
+  close(fd);
+}
+
+TEST(file, WriteFully) {
+  TemporaryFile tf;
+  ASSERT_TRUE(tf.fd != -1);
+  ASSERT_TRUE(android::base::WriteFully(tf.fd, "abc", 3));
+  std::string s;
+  ASSERT_TRUE(android::base::ReadFileToString(tf.filename, &s)) << errno;
   EXPECT_EQ("abc", s);
 }

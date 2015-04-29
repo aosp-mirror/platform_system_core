@@ -17,3 +17,10 @@ LOCAL_MODULE := libnetutils
 LOCAL_CFLAGS := -Werror
 
 include $(BUILD_SHARED_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := dhcptool.c
+LOCAL_SHARED_LIBRARIES := libnetutils
+LOCAL_MODULE := dhcptool
+LOCAL_MODULE_TAGS := debug
+include $(BUILD_EXECUTABLE)

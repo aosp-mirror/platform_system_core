@@ -30,6 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <memory>
 #include <string>
 
 #include <base/file.h>
@@ -114,9 +115,9 @@ static void do_log_file(FILE* log, const char* procfile) {
 static void do_log_procs(FILE* log) {
     do_log_uptime(log);
 
-    DIR* dir = opendir("/proc");
+    std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir("/proc"), closedir);
     struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
+    while ((entry = readdir(dir.get())) != NULL) {
         // Only match numeric values.
         char* end;
         int pid = strtol(entry->d_name, &end, 10);
@@ -146,7 +147,6 @@ static void do_log_procs(FILE* log) {
             }
         }
     }
-    closedir(dir);
 
     fputc('\n', log);
 }
@@ -195,13 +195,8 @@ static int bootchart_init() {
     }
 
     // Create kernel process accounting file.
-    {
-        int  fd = open( LOG_ACCT, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC,0644);
-        if (fd >= 0) {
-            close(fd);
-            acct( LOG_ACCT );
-        }
-    }
+    close(open(LOG_ACCT, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644));
+    acct(LOG_ACCT);
 
     log_header();
     return count;
@@ -210,11 +205,12 @@ static int bootchart_init() {
 int do_bootchart_init(int nargs, char** args) {
     g_remaining_samples = bootchart_init();
     if (g_remaining_samples < 0) {
-        ERROR("bootcharting init failure: %s\n", strerror(errno));
+        ERROR("Bootcharting init failure: %s\n", strerror(errno));
     } else if (g_remaining_samples > 0) {
-        NOTICE("bootcharting started (will run for %d ms)\n", g_remaining_samples*BOOTCHART_POLLING_MS);
+        NOTICE("Bootcharting started (will run for %d s).\n",
+               (g_remaining_samples * BOOTCHART_POLLING_MS) / 1000);
     } else {
-        NOTICE("bootcharting ignored\n");
+        NOTICE("Not bootcharting.\n");
     }
     return 0;
 }

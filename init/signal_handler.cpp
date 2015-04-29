@@ -18,56 +18,67 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <sys/wait.h>
-#include <cutils/sockets.h>
+#include <unistd.h>
+
+#include <base/stringprintf.h>
 #include <cutils/android_reboot.h>
 #include <cutils/list.h>
+#include <cutils/sockets.h>
 
 #include "init.h"
 #include "log.h"
 #include "util.h"
 
-static int signal_fd = -1;
-static int signal_recv_fd = -1;
-
-static void sigchld_handler(int s) {
-    write(signal_fd, &s, 1);
-}
-
 #define CRITICAL_CRASH_THRESHOLD    4       /* if we crash >4 times ... */
 #define CRITICAL_CRASH_WINDOW       (4*60)  /* ... in 4 minutes, goto recovery */
 
-static int wait_for_one_process() {
+static int signal_write_fd = -1;
+static int signal_read_fd = -1;
+
+static std::string DescribeStatus(int status) {
+    if (WIFEXITED(status)) {
+        return android::base::StringPrintf("exited with status %d", WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+        return android::base::StringPrintf("killed by signal %d", WTERMSIG(status));
+    } else if (WIFSTOPPED(status)) {
+        return android::base::StringPrintf("stopped by signal %d", WSTOPSIG(status));
+    } else {
+        return "state changed";
+    }
+}
+
+static bool wait_for_one_process() {
     int status;
     pid_t pid = TEMP_FAILURE_RETRY(waitpid(-1, &status, WNOHANG));
-    if (pid <= 0) {
-        return -1;
+    if (pid == 0) {
+        return false;
+    } else if (pid == -1) {
+        ERROR("waitpid failed: %s\n", strerror(errno));
+        return false;
     }
-    INFO("waitpid returned pid %d, status = %08x\n", pid, status);
 
     service* svc = service_find_by_pid(pid);
+
+    std::string name;
+    if (svc) {
+        name = android::base::StringPrintf("Service '%s' (pid %d)", svc->name, pid);
+    } else {
+        name = android::base::StringPrintf("Untracked pid %d", pid);
+    }
+
+    NOTICE("%s %s\n", name.c_str(), DescribeStatus(status).c_str());
+
     if (!svc) {
-        if (WIFEXITED(status)) {
-            ERROR("untracked pid %d exited with status %d\n", pid, WEXITSTATUS(status));
-        } else if (WIFSIGNALED(status)) {
-            ERROR("untracked pid %d killed by signal %d\n", pid, WTERMSIG(status));
-        } else if (WIFSTOPPED(status)) {
-            ERROR("untracked pid %d stopped by signal %d\n", pid, WSTOPSIG(status));
-        } else {
-            ERROR("untracked pid %d state changed\n", pid);
-        }
-        return 0;
+        return true;
     }
 
     // TODO: all the code from here down should be a member function on service.
 
-    NOTICE("process '%s', pid %d exited\n", svc->name, pid);
-
     if (!(svc->flags & SVC_ONESHOT) || (svc->flags & SVC_RESTART)) {
-        NOTICE("process '%s' killing any children in process group\n", svc->name);
+        NOTICE("Service '%s' (pid %d) killing any children in process group\n", svc->name, pid);
         kill(-pid, SIGKILL);
     }
 
@@ -84,7 +95,7 @@ static int wait_for_one_process() {
         list_remove(&svc->slist);
         free(svc->name);
         free(svc);
-        return 0;
+        return true;
     }
 
     svc->pid = 0;
@@ -99,7 +110,7 @@ static int wait_for_one_process() {
     // Disabled and reset processes do not get restarted automatically.
     if (svc->flags & (SVC_DISABLED | SVC_RESET))  {
         svc->NotifyStateChange("stopped");
-        return 0;
+        return true;
     }
 
     time_t now = gettime();
@@ -110,7 +121,7 @@ static int wait_for_one_process() {
                       "rebooting into recovery mode\n", svc->name,
                       CRITICAL_CRASH_THRESHOLD, CRITICAL_CRASH_WINDOW / 60);
                 android_reboot(ANDROID_RB_RESTART2, 0, "recovery");
-                return 0;
+                return true;
             }
         } else {
             svc->time_crashed = now;
@@ -128,34 +139,47 @@ static int wait_for_one_process() {
         cmd->func(cmd->nargs, cmd->args);
     }
     svc->NotifyStateChange("restarting");
-    return 0;
+    return true;
 }
 
-void handle_signal() {
-    // We got a SIGCHLD - reap and restart as needed.
-    char tmp[32];
-    read(signal_recv_fd, tmp, sizeof(tmp));
-    while (!wait_for_one_process()) {
+static void reap_any_outstanding_children() {
+    while (wait_for_one_process()) {
     }
 }
 
-void signal_init() {
+static void handle_signal() {
+    // Clear outstanding requests.
+    char buf[32];
+    read(signal_read_fd, buf, sizeof(buf));
+
+    reap_any_outstanding_children();
+}
+
+static void SIGCHLD_handler(int) {
+    if (TEMP_FAILURE_RETRY(write(signal_write_fd, "1", 1)) == -1) {
+        ERROR("write(signal_write_fd) failed: %s\n", strerror(errno));
+    }
+}
+
+void signal_handler_init() {
+    // Create a signalling mechanism for SIGCHLD.
+    int s[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, s) == -1) {
+        ERROR("socketpair failed: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    signal_write_fd = s[0];
+    signal_read_fd = s[1];
+
+    // Write to signal_write_fd if we catch SIGCHLD.
     struct sigaction act;
     memset(&act, 0, sizeof(act));
-    act.sa_handler = sigchld_handler;
+    act.sa_handler = SIGCHLD_handler;
     act.sa_flags = SA_NOCLDSTOP;
     sigaction(SIGCHLD, &act, 0);
 
-    // Create a signalling mechanism for the sigchld handler.
-    int s[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, s) == 0) {
-        signal_fd = s[0];
-        signal_recv_fd = s[1];
-    }
+    reap_any_outstanding_children();
 
-    handle_signal();
-}
-
-int get_signal_fd() {
-    return signal_recv_fd;
+    register_epoll_handler(signal_read_fd, handle_signal);
 }

@@ -49,9 +49,9 @@
 #include "log.h"
 
 #define SYSFS_PREFIX    "/sys"
-#define FIRMWARE_DIR1   "/etc/firmware"
-#define FIRMWARE_DIR2   "/vendor/firmware"
-#define FIRMWARE_DIR3   "/firmware/image"
+static const char *firmware_dirs[] = { "/etc/firmware",
+                                       "/vendor/firmware",
+                                       "/firmware/image" };
 
 extern struct selabel_handle *sehandle;
 
@@ -266,7 +266,6 @@ static void make_device(const char *path,
 static void add_platform_device(const char *path)
 {
     int path_len = strlen(path);
-    struct listnode *node;
     struct platform_node *bus;
     const char *name = path;
 
@@ -274,15 +273,6 @@ static void add_platform_device(const char *path)
         name += 9;
         if (!strncmp(name, "platform/", 9))
             name += 9;
-    }
-
-    list_for_each_reverse(node, &platform_names) {
-        bus = node_to_item(node, struct platform_node, list);
-        if ((bus->path_len < path_len) &&
-                (path[bus->path_len] == '/') &&
-                !strncmp(path, bus->path, bus->path_len))
-            /* subdevice of an existing platform, ignore it */
-            return;
     }
 
     INFO("adding platform device %s (%s)\n", name, path);
@@ -362,13 +352,6 @@ static int find_pci_device_prefix(const char *path, char *buf, ssize_t buf_sz)
     strncpy(buf, start, end - start);
     buf[end - start] = '\0';
     return 0;
-}
-
-static inline suseconds_t get_usecs(void)
-{
-    struct timeval tv;
-    gettimeofday(&tv, 0);
-    return tv.tv_sec * (suseconds_t) 1000000 + tv.tv_usec;
 }
 
 static void parse_event(const char *msg, struct uevent *uevent)
@@ -818,8 +801,9 @@ static int is_booting(void)
 
 static void process_firmware_event(struct uevent *uevent)
 {
-    char *root, *loading, *data, *file1 = NULL, *file2 = NULL, *file3 = NULL;
+    char *root, *loading, *data;
     int l, loading_fd, data_fd, fw_fd;
+    size_t i;
     int booting = is_booting();
 
     INFO("firmware: loading '%s' for '%s'\n",
@@ -837,62 +821,49 @@ static void process_firmware_event(struct uevent *uevent)
     if (l == -1)
         goto loading_free_out;
 
-    l = asprintf(&file1, FIRMWARE_DIR1"/%s", uevent->firmware);
-    if (l == -1)
-        goto data_free_out;
-
-    l = asprintf(&file2, FIRMWARE_DIR2"/%s", uevent->firmware);
-    if (l == -1)
-        goto data_free_out;
-
-    l = asprintf(&file3, FIRMWARE_DIR3"/%s", uevent->firmware);
-    if (l == -1)
-        goto data_free_out;
-
     loading_fd = open(loading, O_WRONLY|O_CLOEXEC);
     if(loading_fd < 0)
-        goto file_free_out;
+        goto data_free_out;
 
     data_fd = open(data, O_WRONLY|O_CLOEXEC);
     if(data_fd < 0)
         goto loading_close_out;
 
 try_loading_again:
-    fw_fd = open(file1, O_RDONLY|O_CLOEXEC);
-    if(fw_fd < 0) {
-        fw_fd = open(file2, O_RDONLY|O_CLOEXEC);
-        if (fw_fd < 0) {
-            fw_fd = open(file3, O_RDONLY|O_CLOEXEC);
-            if (fw_fd < 0) {
-                if (booting) {
-                        /* If we're not fully booted, we may be missing
-                         * filesystems needed for firmware, wait and retry.
-                         */
-                    usleep(100000);
-                    booting = is_booting();
-                    goto try_loading_again;
-                }
-                INFO("firmware: could not open '%s' %d\n", uevent->firmware, errno);
-                write(loading_fd, "-1", 2);
-                goto data_close_out;
-            }
+    for (i = 0; i < ARRAY_SIZE(firmware_dirs); i++) {
+        char *file = NULL;
+        l = asprintf(&file, "%s/%s", firmware_dirs[i], uevent->firmware);
+        if (l == -1)
+            goto data_free_out;
+        fw_fd = open(file, O_RDONLY|O_CLOEXEC);
+        free(file);
+        if (fw_fd >= 0) {
+            if(!load_firmware(fw_fd, loading_fd, data_fd))
+                INFO("firmware: copy success { '%s', '%s' }\n", root, uevent->firmware);
+            else
+                INFO("firmware: copy failure { '%s', '%s' }\n", root, uevent->firmware);
+            break;
         }
     }
-
-    if(!load_firmware(fw_fd, loading_fd, data_fd))
-        INFO("firmware: copy success { '%s', '%s' }\n", root, uevent->firmware);
-    else
-        INFO("firmware: copy failure { '%s', '%s' }\n", root, uevent->firmware);
+    if (fw_fd < 0) {
+        if (booting) {
+            /* If we're not fully booted, we may be missing
+             * filesystems needed for firmware, wait and retry.
+             */
+            usleep(100000);
+            booting = is_booting();
+            goto try_loading_again;
+        }
+        INFO("firmware: could not open '%s': %s\n", uevent->firmware, strerror(errno));
+        write(loading_fd, "-1", 2);
+        goto data_close_out;
+    }
 
     close(fw_fd);
 data_close_out:
     close(data_fd);
 loading_close_out:
     close(loading_fd);
-file_free_out:
-    free(file1);
-    free(file2);
-    free(file3);
 data_free_out:
     free(data);
 loading_free_out:
@@ -1002,12 +973,7 @@ static void coldboot(const char *path)
     }
 }
 
-void device_init(void)
-{
-    suseconds_t t0, t1;
-    struct stat info;
-    int fd;
-
+void device_init() {
     sehandle = NULL;
     if (is_selinux_enabled() > 0) {
         sehandle = selinux_android_file_context_handle();
@@ -1016,26 +982,22 @@ void device_init(void)
 
     /* is 256K enough? udev uses 16MB! */
     device_fd = uevent_open_socket(256*1024, true);
-    if(device_fd < 0)
+    if (device_fd == -1) {
         return;
-
-    fcntl(device_fd, F_SETFD, FD_CLOEXEC);
+    }
     fcntl(device_fd, F_SETFL, O_NONBLOCK);
 
-    if (stat(COLDBOOT_DONE, &info) < 0) {
-        t0 = get_usecs();
-        coldboot("/sys/class");
-        coldboot("/sys/block");
-        coldboot("/sys/devices");
-        t1 = get_usecs();
-        fd = open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000);
-        close(fd);
-        if (LOG_UEVENTS) {
-            INFO("coldboot %ld uS\n", ((long) (t1 - t0)));
-        }
-    } else if (LOG_UEVENTS) {
-        INFO("skipping coldboot, already done\n");
+    if (access(COLDBOOT_DONE, F_OK) == 0) {
+        NOTICE("Skipping coldboot, already done!\n");
+        return;
     }
+
+    Timer t;
+    coldboot("/sys/class");
+    coldboot("/sys/block");
+    coldboot("/sys/devices");
+    close(open(COLDBOOT_DONE, O_WRONLY|O_CREAT|O_CLOEXEC, 0000));
+    NOTICE("Coldboot took %.2fs.\n", t.duration());
 }
 
 int get_device_fd()

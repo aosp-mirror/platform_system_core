@@ -1,11 +1,31 @@
+/*
+ * Copyright (C) 2015 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 /* implement the "debug-ports" and "track-debug-ports" device services */
+
+#define TRACE_TAG TRACE_JDWP
+
 #include "sysdeps.h"
-#define  TRACE_TAG   TRACE_JDWP
-#include "adb.h"
+
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+
+#include "adb.h"
 
 /* here's how these things work.
 
@@ -101,7 +121,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-typedef struct JdwpProcess  JdwpProcess;
 struct JdwpProcess {
     JdwpProcess*  next;
     JdwpProcess*  prev;
@@ -435,11 +454,10 @@ FoundIt:
 #define  JDWP_CONTROL_NAME      "\0jdwp-control"
 #define  JDWP_CONTROL_NAME_LEN  (sizeof(JDWP_CONTROL_NAME)-1)
 
-typedef struct {
+struct JdwpControl {
     int       listen_socket;
     fdevent*  fde;
-
-} JdwpControl;
+};
 
 
 static void
@@ -550,10 +568,10 @@ static JdwpControl   _jdwp_control;
  ** this simply returns the list of known JDWP process pids
  **/
 
-typedef struct {
+struct JdwpSocket {
     asocket  socket;
     int      pass;
-} JdwpSocket;
+};
 
 static void
 jdwp_socket_close( asocket*  s )
@@ -621,8 +639,6 @@ create_jdwp_service_socket( void )
  ** this periodically sends the list of known JDWP process pids
  ** to the client...
  **/
-
-typedef struct JdwpTracker  JdwpTracker;
 
 struct JdwpTracker {
     asocket       socket;
@@ -734,4 +750,3 @@ init_jdwp(void)
 }
 
 #endif /* !ADB_HOST */
-

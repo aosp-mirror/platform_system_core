@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-#include "sysdeps.h"
+#define TRACE_TAG TRACE_TRANSPORT
 
+#include "sysdeps.h"
 #include "transport.h"
 
 #include <ctype.h>
@@ -25,7 +26,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#define   TRACE_TAG  TRACE_TRANSPORT
 #include "adb.h"
 
 static void transport_unref(atransport *t);
@@ -406,7 +406,6 @@ static int list_transports_msg(char*  buffer, size_t  bufferlen)
  * number of client connections that want it through a single
  * live TCP connection
  */
-typedef struct device_tracker  device_tracker;
 struct device_tracker {
     asocket          socket;
     int              update_needed;
@@ -494,10 +493,8 @@ device_tracker_ready( asocket*  socket )
 asocket*
 create_device_tracker(void)
 {
-    device_tracker* tracker = reinterpret_cast<device_tracker*>(
-        calloc(1, sizeof(*tracker)));
-
-    if(tracker == 0) fatal("cannot allocate device tracker");
+    device_tracker* tracker = reinterpret_cast<device_tracker*>(calloc(1, sizeof(*tracker)));
+    if (tracker == nullptr) fatal("cannot allocate device tracker");
 
     D( "device tracker %p created\n", tracker);
 
@@ -536,7 +533,6 @@ void  update_transports(void)
 }
 #endif // ADB_HOST
 
-typedef struct tmsg tmsg;
 struct tmsg
 {
     atransport *transport;
@@ -772,7 +768,7 @@ void remove_transport_disconnect(atransport*  t, adisconnect*  dis)
 }
 
 static int qual_match(const char *to_test,
-                      const char *prefix, const char *qual, int sanitize_qual)
+                      const char *prefix, const char *qual, bool sanitize_qual)
 {
     if (!to_test || !*to_test)
         /* Return true if both the qual and to_test are null strings. */
@@ -790,7 +786,7 @@ static int qual_match(const char *to_test,
 
     while (*qual) {
         char ch = *qual++;
-        if (sanitize_qual && isalnum(ch))
+        if (sanitize_qual && !isalnum(ch))
             ch = '_';
         if (ch != *to_test++)
             return 0;
@@ -800,22 +796,20 @@ static int qual_match(const char *to_test,
     return !*to_test;
 }
 
-atransport *acquire_one_transport(int state, transport_type ttype,
-                                  const char* serial, const char** error_out)
+atransport* acquire_one_transport(int state, transport_type ttype,
+                                  const char* serial, std::string* error_out)
 {
     atransport *t;
     atransport *result = NULL;
     int ambiguous = 0;
 
 retry:
-    if (error_out)
-        *error_out = "device not found";
+    if (error_out) *error_out = "device not found";
 
     adb_mutex_lock(&transport_lock);
     for (t = transport_list.next; t != &transport_list; t = t->next) {
         if (t->connection_state == CS_NOPERM) {
-        if (error_out)
-            *error_out = "insufficient permissions for device";
+            if (error_out) *error_out = "insufficient permissions for device";
             continue;
         }
 
@@ -823,12 +817,11 @@ retry:
         if (serial) {
             if ((t->serial && !strcmp(serial, t->serial)) ||
                 (t->devpath && !strcmp(serial, t->devpath)) ||
-                qual_match(serial, "product:", t->product, 0) ||
-                qual_match(serial, "model:", t->model, 1) ||
-                qual_match(serial, "device:", t->device, 0)) {
+                qual_match(serial, "product:", t->product, false) ||
+                qual_match(serial, "model:", t->model, true) ||
+                qual_match(serial, "device:", t->device, false)) {
                 if (result) {
-                    if (error_out)
-                        *error_out = "more than one device";
+                    if (error_out) *error_out = "more than one device";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -838,8 +831,7 @@ retry:
         } else {
             if (ttype == kTransportUsb && t->type == kTransportUsb) {
                 if (result) {
-                    if (error_out)
-                        *error_out = "more than one device";
+                    if (error_out) *error_out = "more than one device";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -847,8 +839,7 @@ retry:
                 result = t;
             } else if (ttype == kTransportLocal && t->type == kTransportLocal) {
                 if (result) {
-                    if (error_out)
-                        *error_out = "more than one emulator";
+                    if (error_out) *error_out = "more than one emulator";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -856,8 +847,7 @@ retry:
                 result = t;
             } else if (ttype == kTransportAny) {
                 if (result) {
-                    if (error_out)
-                        *error_out = "more than one device and emulator";
+                    if (error_out) *error_out = "more than one device and emulator";
                     ambiguous = 1;
                     result = NULL;
                     break;
@@ -870,29 +860,33 @@ retry:
 
     if (result) {
         if (result->connection_state == CS_UNAUTHORIZED) {
-            if (error_out)
-                *error_out = "device unauthorized. Please check the confirmation dialog on your device.";
+            if (error_out) {
+                *error_out = "device unauthorized.\n";
+                char* ADB_VENDOR_KEYS = getenv("ADB_VENDOR_KEYS");
+                *error_out += "This adbd's $ADB_VENDOR_KEYS is ";
+                *error_out += ADB_VENDOR_KEYS ? ADB_VENDOR_KEYS : "not set";
+                *error_out += "; try 'adb kill-server' if that seems wrong.\n";
+                *error_out += "Otherwise check for a confirmation dialog on your device.";
+            }
             result = NULL;
         }
 
-         /* offline devices are ignored -- they are either being born or dying */
+        /* offline devices are ignored -- they are either being born or dying */
         if (result && result->connection_state == CS_OFFLINE) {
-            if (error_out)
-                *error_out = "device offline";
+            if (error_out) *error_out = "device offline";
             result = NULL;
         }
-         /* check for required connection state */
+
+        /* check for required connection state */
         if (result && state != CS_ANY && result->connection_state != state) {
-            if (error_out)
-                *error_out = "invalid device state";
+            if (error_out) *error_out = "invalid device state";
             result = NULL;
         }
     }
 
     if (result) {
         /* found one that we can take */
-        if (error_out)
-            *error_out = NULL;
+        if (error_out) *error_out = "success";
     } else if (state != CS_ANY && (serial || !ambiguous)) {
         adb_sleep_ms(1000);
         goto retry;
@@ -918,20 +912,17 @@ static const char *statename(atransport *t)
 }
 
 static void add_qual(char **buf, size_t *buf_size,
-                     const char *prefix, const char *qual, int sanitize_qual)
+                     const char *prefix, const char *qual, bool sanitize_qual)
 {
-    size_t len;
-    int prefix_len;
-
     if (!buf || !*buf || !buf_size || !*buf_size || !qual || !*qual)
         return;
 
-    len = snprintf(*buf, *buf_size, "%s%n%s", prefix, &prefix_len, qual);
+    int prefix_len;
+    size_t len = snprintf(*buf, *buf_size, "%s%n%s", prefix, &prefix_len, qual);
 
     if (sanitize_qual) {
-        char *cp;
-        for (cp = *buf + prefix_len; cp < *buf + len; cp++) {
-            if (isalnum(*cp))
+        for (char* cp = *buf + prefix_len; cp < *buf + len; cp++) {
+            if (!isalnum(*cp))
                 *cp = '_';
         }
     }
@@ -956,10 +947,10 @@ static size_t format_transport(atransport *t, char *buf, size_t bufsize,
         remaining -= len;
         buf += len;
 
-        add_qual(&buf, &remaining, " ", t->devpath, 0);
-        add_qual(&buf, &remaining, " product:", t->product, 0);
-        add_qual(&buf, &remaining, " model:", t->model, 1);
-        add_qual(&buf, &remaining, " device:", t->device, 0);
+        add_qual(&buf, &remaining, " ", t->devpath, false);
+        add_qual(&buf, &remaining, " product:", t->product, false);
+        add_qual(&buf, &remaining, " model:", t->model, true);
+        add_qual(&buf, &remaining, " device:", t->device, false);
 
         len = snprintf(buf, remaining, "\n");
         remaining -= len;
@@ -1009,8 +1000,11 @@ void close_usb_devices()
 
 int register_socket_transport(int s, const char *serial, int port, int local)
 {
-    atransport *t = reinterpret_cast<atransport*>(
-        calloc(1, sizeof(atransport)));
+    atransport *t = reinterpret_cast<atransport*>(calloc(1, sizeof(atransport)));
+    if (t == nullptr) {
+        return -1;
+    }
+
     atransport *n;
     char buff[32];
 
@@ -1109,8 +1103,8 @@ void unregister_all_tcp_transports()
 
 void register_usb_transport(usb_handle *usb, const char *serial, const char *devpath, unsigned writeable)
 {
-    atransport *t = reinterpret_cast<atransport*>(
-        calloc(1, sizeof(atransport)));
+    atransport *t = reinterpret_cast<atransport*>(calloc(1, sizeof(atransport)));
+    if (t == nullptr) fatal("cannot allocate USB atransport");
     D("transport: %p init'ing for usb_handle %p (sn='%s')\n", t, usb,
       serial ? serial : "");
     init_usb_transport(t, usb, (writeable ? CS_OFFLINE : CS_NOPERM));

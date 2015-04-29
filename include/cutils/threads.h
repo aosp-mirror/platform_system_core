@@ -32,13 +32,15 @@ extern "C" {
 #if !defined(_WIN32)
 
 #include  <pthread.h>
+#include  <sys/types.h>
 
 typedef struct {
     pthread_mutex_t   lock;
     int               has_tls;
     pthread_key_t     tls;
-
 } thread_store_t;
+
+extern pid_t gettid();
 
 #define  THREAD_STORE_INITIALIZER  { PTHREAD_MUTEX_INITIALIZER, 0, 0 }
 
@@ -51,7 +53,6 @@ typedef struct {
     int               has_tls;
     DWORD             tls;
     CRITICAL_SECTION  lock;
-
 } thread_store_t;
 
 #define  THREAD_STORE_INITIALIZER  { 0, 0, 0, {0, 0, 0, 0, 0, 0} }

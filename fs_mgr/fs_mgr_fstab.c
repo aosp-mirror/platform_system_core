@@ -24,6 +24,7 @@
 
 struct fs_mgr_flag_values {
     char *key_loc;
+    char *verity_loc;
     long long part_length;
     char *label;
     int partnum;
@@ -60,6 +61,7 @@ static struct flag_list fs_mgr_flags[] = {
     { "check",       MF_CHECK },
     { "encryptable=",MF_CRYPT },
     { "forceencrypt=",MF_FORCECRYPT },
+    { "fileencryption",MF_FILEENCRYPTION },
     { "nonremovable",MF_NONREMOVABLE },
     { "voldmanaged=",MF_VOLDMANAGED},
     { "length=",     MF_LENGTH },
@@ -107,6 +109,14 @@ static int parse_flags(char *flags, struct flag_list *fl,
                      * location of the keys.  Get it and return it.
                      */
                     flag_vals->key_loc = strdup(strchr(p, '=') + 1);
+                } else if ((fl[i].flag == MF_VERIFY) && flag_vals) {
+                    /* If the verify flag is followed by an = and the
+                     * location for the verity state,  get it and return it.
+                     */
+                    char *start = strchr(p, '=');
+                    if (start) {
+                        flag_vals->verity_loc = strdup(start + 1);
+                    }
                 } else if ((fl[i].flag == MF_FORCECRYPT) && flag_vals) {
                     /* The forceencrypt flag is followed by an = and the
                      * location of the keys.  Get it and return it.
@@ -291,6 +301,7 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         fstab->recs[cnt].fs_mgr_flags = parse_flags(p, fs_mgr_flags,
                                                     &flag_vals, NULL, 0);
         fstab->recs[cnt].key_loc = flag_vals.key_loc;
+        fstab->recs[cnt].verity_loc = flag_vals.verity_loc;
         fstab->recs[cnt].length = flag_vals.part_length;
         fstab->recs[cnt].label = flag_vals.label;
         fstab->recs[cnt].partnum = flag_vals.partnum;
@@ -408,27 +419,32 @@ struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const ch
     return fs_mgr_get_entry_for_mount_point_after(NULL, fstab, path);
 }
 
-int fs_mgr_is_voldmanaged(struct fstab_rec *fstab)
+int fs_mgr_is_voldmanaged(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_VOLDMANAGED;
 }
 
-int fs_mgr_is_nonremovable(struct fstab_rec *fstab)
+int fs_mgr_is_nonremovable(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_NONREMOVABLE;
 }
 
-int fs_mgr_is_verified(struct fstab_rec *fstab)
+int fs_mgr_is_verified(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_VERIFY;
 }
 
-int fs_mgr_is_encryptable(struct fstab_rec *fstab)
+int fs_mgr_is_encryptable(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & (MF_CRYPT | MF_FORCECRYPT);
 }
 
-int fs_mgr_is_noemulatedsd(struct fstab_rec *fstab)
+int fs_mgr_is_file_encrypted(const struct fstab_rec *fstab)
+{
+    return fstab->fs_mgr_flags & MF_FILEENCRYPTION;
+}
+
+int fs_mgr_is_noemulatedsd(const struct fstab_rec *fstab)
 {
     return fstab->fs_mgr_flags & MF_NOEMULATEDSD;
 }
