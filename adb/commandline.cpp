@@ -410,11 +410,12 @@ static void *stdin_read_thread(void *x)
 
 static int interactive_shell() {
     adb_thread_t thr;
-    int fdi, fd;
+    int fdi;
 
-    fd = adb_connect("shell:");
-    if(fd < 0) {
-        fprintf(stderr,"error: %s\n", adb_error());
+    std::string error;
+    int fd = adb_connect("shell:", &error);
+    if (fd < 0) {
+        fprintf(stderr,"error: %s\n", error.c_str());
         return 1;
     }
     fdi = 0; //dup(0);
@@ -452,16 +453,17 @@ static void format_host_command(char* buffer, size_t  buflen, const char* comman
 }
 
 static int adb_download_buffer(const char *service, const char *fn, const void* data, int sz,
-                               unsigned progress)
+                               bool show_progress)
 {
     char buf[4096];
     unsigned total;
-    int fd;
 
     sprintf(buf,"%s:%d", service, sz);
-    fd = adb_connect(buf);
-    if(fd < 0) {
-        fprintf(stderr,"error: %s\n", adb_error());
+
+    std::string error;
+    int fd = adb_connect(buf, &error);
+    if (fd < 0) {
+        fprintf(stderr,"error: %s\n", error.c_str());
         return -1;
     }
 
@@ -471,26 +473,27 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
     total = sz;
     const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
 
-    if(progress) {
+    if (show_progress) {
         char *x = strrchr(service, ':');
         if(x) service = x + 1;
     }
 
     while(sz > 0) {
         unsigned xfer = (sz > CHUNK_SIZE) ? CHUNK_SIZE : sz;
-        if(!WriteFdExactly(fd, ptr, xfer)) {
-            adb_status(fd);
-            fprintf(stderr,"* failed to write data '%s' *\n", adb_error());
+        if (!WriteFdExactly(fd, ptr, xfer)) {
+            std::string error;
+            adb_status(fd, &error);
+            fprintf(stderr,"* failed to write data '%s' *\n", error.c_str());
             return -1;
         }
         sz -= xfer;
         ptr += xfer;
-        if(progress) {
+        if (show_progress) {
             printf("sending: '%s' %4d%%    \r", fn, (int)(100LL - ((100LL * sz) / (total))));
             fflush(stdout);
         }
     }
-    if(progress) {
+    if (show_progress) {
         printf("\n");
     }
 
@@ -549,12 +552,13 @@ static int adb_sideload_host(const char* fn) {
 
     char buf[100];
     sprintf(buf, "sideload-host:%d:%d", sz, SIDELOAD_HOST_BLOCK_SIZE);
-    int fd = adb_connect(buf);
+    std::string error;
+    int fd = adb_connect(buf, &error);
     if (fd < 0) {
         // Try falling back to the older sideload method.  Maybe this
         // is an older device that doesn't support sideload-host.
         printf("\n");
-        status = adb_download_buffer("sideload", fn, data, sz, 1);
+        status = adb_download_buffer("sideload", fn, data, sz, true);
         goto done;
     }
 
@@ -562,7 +566,7 @@ static int adb_sideload_host(const char* fn) {
 
     while (true) {
         if (!ReadFdExactly(fd, buf, 8)) {
-            fprintf(stderr, "* failed to read command: %s\n", adb_error());
+            fprintf(stderr, "* failed to read command: %s\n", strerror(errno));
             status = -1;
             goto done;
         }
@@ -577,7 +581,7 @@ static int adb_sideload_host(const char* fn) {
 
         size_t offset = block * SIDELOAD_HOST_BLOCK_SIZE;
         if (offset >= sz) {
-            fprintf(stderr, "* attempt to read past end: %s\n", adb_error());
+            fprintf(stderr, "* attempt to read block %d past end\n", block);
             status = -1;
             goto done;
         }
@@ -589,8 +593,8 @@ static int adb_sideload_host(const char* fn) {
         }
 
         if(!WriteFdExactly(fd, start, to_write)) {
-            adb_status(fd);
-            fprintf(stderr,"* failed to write data '%s' *\n", adb_error());
+            adb_status(fd, &error);
+            fprintf(stderr,"* failed to write data '%s' *\n", error.c_str());
             status = -1;
             goto done;
         }
@@ -636,21 +640,22 @@ static void status_window(transport_type ttype, const char* serial)
 
     format_host_command(command, sizeof command, "get-state", ttype, serial);
 
-    for(;;) {
+    while (true) {
         adb_sleep_ms(250);
 
-        if(state) {
+        if (state) {
             free(state);
             state = 0;
         }
 
-        state = adb_query(command);
+        std::string error;
+        state = adb_query(command, &error);
 
-        if(state) {
-            if(laststate && !strcmp(state,laststate)){
+        if (state) {
+            if (laststate && !strcmp(state,laststate)){
                 continue;
             } else {
-                if(laststate) free(laststate);
+                if (laststate) free(laststate);
                 laststate = strdup(state);
             }
         }
@@ -674,9 +679,6 @@ static int ppp(int argc, const char** argv) {
     fprintf(stderr, "error: adb %s not implemented on Win32\n", argv[0]);
     return -1;
 #else
-    pid_t pid;
-    int fd;
-
     if (argc < 2) {
         fprintf(stderr, "usage: adb %s <adb service name> [ppp opts]\n",
                 argv[0]);
@@ -685,15 +687,15 @@ static int ppp(int argc, const char** argv) {
     }
 
     const char* adb_service_name = argv[1];
-    fd = adb_connect(adb_service_name);
-
-    if(fd < 0) {
+    std::string error;
+    int fd = adb_connect(adb_service_name, &error);
+    if (fd < 0) {
         fprintf(stderr,"Error: Could not open adb service: %s. Error: %s\n",
-                adb_service_name, adb_error());
+                adb_service_name, error.c_str());
         return 1;
     }
 
-    pid = fork();
+    pid_t pid = fork();
 
     if (pid < 0) {
         perror("from fork()");
@@ -738,9 +740,11 @@ static int send_shell_command(transport_type transport, const char* serial,
                               const std::string& command) {
     int fd;
     while (true) {
-        fd = adb_connect(command.c_str());
-        if (fd >= 0)
+        std::string error;
+        fd = adb_connect(command.c_str(), &error);
+        if (fd >= 0) {
             break;
+        }
         fprintf(stderr,"- waiting for device -\n");
         adb_sleep_ms(1000);
         do_cmd(transport, serial, "wait-for-device", 0);
@@ -830,9 +834,10 @@ static int backup(int argc, const char** argv) {
     }
 
     D("backup. filename=%s cmd=%s\n", filename, cmd.c_str());
-    int fd = adb_connect(cmd.c_str());
+    std::string error;
+    int fd = adb_connect(cmd.c_str(), &error);
     if (fd < 0) {
-        fprintf(stderr, "adb: unable to connect for backup\n");
+        fprintf(stderr, "adb: unable to connect for backup: %s\n", error.c_str());
         adb_close(outFd);
         return -1;
     }
@@ -846,21 +851,19 @@ static int backup(int argc, const char** argv) {
 }
 
 static int restore(int argc, const char** argv) {
-    const char* filename;
-    int fd, tarFd;
-
     if (argc != 2) return usage();
 
-    filename = argv[1];
-    tarFd = adb_open(filename, O_RDONLY);
+    const char* filename = argv[1];
+    int tarFd = adb_open(filename, O_RDONLY);
     if (tarFd < 0) {
-        fprintf(stderr, "adb: unable to open file %s\n", filename);
+        fprintf(stderr, "adb: unable to open file %s: %s\n", filename, strerror(errno));
         return -1;
     }
 
-    fd = adb_connect("restore:");
+    std::string error;
+    int fd = adb_connect("restore:", &error);
     if (fd < 0) {
-        fprintf(stderr, "adb: unable to connect for restore\n");
+        fprintf(stderr, "adb: unable to connect for restore: %s\n", error.c_str());
         adb_close(tarFd);
         return -1;
     }
@@ -962,13 +965,14 @@ static void parse_push_pull_args(const char **arg, int narg, char const **path1,
 }
 
 static int adb_connect_command(const char* command) {
-    int fd = adb_connect(command);
+    std::string error;
+    int fd = adb_connect(command, &error);
     if (fd != -1) {
         read_and_dump(fd);
         adb_close(fd);
         return 0;
     }
-    fprintf(stderr, "Error: %s\n", adb_error());
+    fprintf(stderr, "Error: %s\n", error.c_str());
     return 1;
 }
 
@@ -1127,9 +1131,10 @@ int adb_commandline(int argc, const char **argv)
 
         format_host_command(buf, sizeof buf, service, ttype, serial);
 
-        if (adb_command(buf)) {
-            D("failure: %s *\n",adb_error());
-            fprintf(stderr,"error: %s\n", adb_error());
+        std::string error;
+        if (adb_command(buf, &error)) {
+            D("failure: %s *\n", error.c_str());
+            fprintf(stderr,"error: %s\n", error.c_str());
             return 1;
         }
 
@@ -1158,7 +1163,8 @@ int adb_commandline(int argc, const char **argv)
             return 1;
         }
         snprintf(buf, sizeof buf, "host:%s%s", argv[0], listopt);
-        tmp = adb_query(buf);
+        std::string error;
+        tmp = adb_query(buf, &error);
         if (tmp) {
             printf("List of devices attached \n");
             printf("%s\n", tmp);
@@ -1174,7 +1180,8 @@ int adb_commandline(int argc, const char **argv)
             return 1;
         }
         snprintf(buf, sizeof buf, "host:connect:%s", argv[1]);
-        tmp = adb_query(buf);
+        std::string error;
+        tmp = adb_query(buf, &error);
         if (tmp) {
             printf("%s\n", tmp);
             return 0;
@@ -1193,7 +1200,8 @@ int adb_commandline(int argc, const char **argv)
         } else {
             snprintf(buf, sizeof buf, "host:disconnect:");
         }
-        tmp = adb_query(buf);
+        std::string error;
+        tmp = adb_query(buf, &error);
         if (tmp) {
             printf("%s\n", tmp);
             return 0;
@@ -1232,7 +1240,8 @@ int adb_commandline(int argc, const char **argv)
 
         while (true) {
             D("interactive shell loop. cmd=%s\n", cmd.c_str());
-            int fd = adb_connect(cmd.c_str());
+            std::string error;
+            int fd = adb_connect(cmd.c_str(), &error);
             int r;
             if (fd >= 0) {
                 D("about to read_and_dump(fd=%d)\n", fd);
@@ -1241,7 +1250,7 @@ int adb_commandline(int argc, const char **argv)
                 adb_close(fd);
                 r = 0;
             } else {
-                fprintf(stderr,"error: %s\n", adb_error());
+                fprintf(stderr,"error: %s\n", error.c_str());
                 r = -1;
             }
 
@@ -1270,9 +1279,10 @@ int adb_commandline(int argc, const char **argv)
             cmd += " " + escape_arg(*argv++);
         }
 
-        int fd = adb_connect(cmd.c_str());
+        std::string error;
+        int fd = adb_connect(cmd.c_str(), &error);
         if (fd < 0) {
-            fprintf(stderr, "error: %s\n", adb_error());
+            fprintf(stderr, "error: %s\n", error.c_str());
             return -1;
         }
 
@@ -1286,8 +1296,8 @@ int adb_commandline(int argc, const char **argv)
         return 0;
     }
     else if (!strcmp(argv[0], "kill-server")) {
-        int fd;
-        fd = _adb_connect("host:kill");
+        std::string error;
+        int fd = _adb_connect("host:kill", &error);
         if (fd == -1) {
             fprintf(stderr,"* server not running *\n");
             return 1;
@@ -1378,9 +1388,10 @@ int adb_commandline(int argc, const char **argv)
             if (argc != 1)
                 return usage();
             snprintf(buf, sizeof buf, "%s:list-forward", host_prefix);
-            char* forwards = adb_query(buf);
+            std::string error;
+            char* forwards = adb_query(buf, &error);
             if (forwards == NULL) {
-                fprintf(stderr, "error: %s\n", adb_error());
+                fprintf(stderr, "error: %s\n", error.c_str());
                 return 1;
             }
             printf("%s", forwards);
@@ -1412,8 +1423,9 @@ int adb_commandline(int argc, const char **argv)
           snprintf(buf, sizeof buf, "%s:%s:%s;%s", host_prefix, command, argv[1], argv[2]);
         }
 
-        if (adb_command(buf)) {
-            fprintf(stderr,"error: %s\n", adb_error());
+        std::string error;
+        if (adb_command(buf, &error)) {
+            fprintf(stderr,"error: %s\n", error.c_str());
             return 1;
         }
         return 0;
@@ -1511,10 +1523,9 @@ int adb_commandline(int argc, const char **argv)
         !strcmp(argv[0],"get-serialno") ||
         !strcmp(argv[0],"get-devpath"))
     {
-        char *tmp;
-
         format_host_command(buf, sizeof buf, argv[0], ttype, serial);
-        tmp = adb_query(buf);
+        std::string error;
+        char* tmp = adb_query(buf, &error);
         if (tmp) {
             printf("%s\n", tmp);
             return 0;
@@ -1534,7 +1545,8 @@ int adb_commandline(int argc, const char **argv)
         return ppp(argc, argv);
     }
     else if (!strcmp(argv[0], "start-server")) {
-        return adb_connect("host:start-server");
+        std::string error;
+        return adb_connect("host:start-server", &error);
     }
     else if (!strcmp(argv[0], "backup")) {
         return backup(argc, argv);
@@ -1742,9 +1754,10 @@ static int install_multiple_app(transport_type transport, const char* serial, in
     }
 
     // Create install session
-    int fd = adb_connect(cmd.c_str());
+    std::string error;
+    int fd = adb_connect(cmd.c_str(), &error);
     if (fd < 0) {
-        fprintf(stderr, "Connect error for create: %s\n", adb_error());
+        fprintf(stderr, "Connect error for create: %s\n", error.c_str());
         return -1;
     }
     char buf[BUFSIZ];
@@ -1788,14 +1801,15 @@ static int install_multiple_app(transport_type transport, const char* serial, in
 
         int localFd = adb_open(file, O_RDONLY);
         if (localFd < 0) {
-            fprintf(stderr, "Failed to open %s: %s\n", file, adb_error());
+            fprintf(stderr, "Failed to open %s: %s\n", file, strerror(errno));
             success = 0;
             goto finalize_session;
         }
 
-        int remoteFd = adb_connect(cmd.c_str());
+        std::string error;
+        int remoteFd = adb_connect(cmd.c_str(), &error);
         if (remoteFd < 0) {
-            fprintf(stderr, "Connect error for write: %s\n", adb_error());
+            fprintf(stderr, "Connect error for write: %s\n", error.c_str());
             adb_close(localFd);
             success = 0;
             goto finalize_session;
@@ -1823,9 +1837,9 @@ finalize_session:
         snprintf(buf, sizeof(buf), "exec:pm install-abandon %d", session_id);
     }
 
-    fd = adb_connect(buf);
+    fd = adb_connect(buf, &error);
     if (fd < 0) {
-        fprintf(stderr, "Connect error for finalize: %s\n", adb_error());
+        fprintf(stderr, "Connect error for finalize: %s\n", error.c_str());
         return -1;
     }
     read_status_line(fd, buf, sizeof(buf));
