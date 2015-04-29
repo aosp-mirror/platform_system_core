@@ -29,7 +29,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <linux/loop.h>
-#include <ext4_crypt.h>
+#include <ext4_crypt_init_extensions.h>
 
 #include <selinux/selinux.h>
 #include <selinux/label.h>
@@ -386,18 +386,6 @@ static int wipe_data_via_recovery()
 }
 
 /*
- * Callback to make a directory from the ext4 code
- */
-static int do_mount_alls_make_dir(const char* dir)
-{
-    if (make_dir(dir, 0700) && errno != EEXIST) {
-        return -1;
-    }
-
-    return 0;
-}
-
-/*
  * This function might request a reboot, in which case it will
  * not return.
  */
@@ -452,6 +440,7 @@ int do_mount_all(int nargs, char **args)
         property_set("vold.decrypt", "trigger_encryption");
     } else if (ret == FS_MGR_MNTALL_DEV_MIGHT_BE_ENCRYPTED) {
         property_set("ro.crypto.state", "encrypted");
+        property_set("ro.crypto.type", "block");
         property_set("vold.decrypt", "trigger_default_encryption");
     } else if (ret == FS_MGR_MNTALL_DEV_NOT_ENCRYPTED) {
         property_set("ro.crypto.state", "unencrypted");
@@ -465,26 +454,11 @@ int do_mount_all(int nargs, char **args)
         ret = wipe_data_via_recovery();
         /* If reboot worked, there is no return. */
     } else if (ret == FS_MGR_MNTALL_DEV_DEFAULT_FILE_ENCRYPTED) {
-        // We have to create the key files here. Only init can call make_dir,
-        // and we can't do it from fs_mgr as then fs_mgr would depend on
-        // make_dir creating a circular dependency.
-        fstab = fs_mgr_read_fstab(args[1]);
-        for (int i = 0; i < fstab->num_entries; ++i) {
-            if (fs_mgr_is_file_encrypted(&fstab->recs[i])) {
-              if (e4crypt_create_device_key(fstab->recs[i].mount_point,
-                                            do_mount_alls_make_dir)) {
-                    ERROR("Could not create device key on %s"
-                          " - continue unencrypted\n",
-                          fstab->recs[i].mount_point);
-                }
-            }
-        }
-        fs_mgr_free_fstab(fstab);
-
         if (e4crypt_install_keyring()) {
             return -1;
         }
         property_set("ro.crypto.state", "encrypted");
+        property_set("ro.crypto.type", "file");
 
         // Although encrypted, we have device key, so we do not need to
         // do anything different from the nonencrypted case.
@@ -494,6 +468,7 @@ int do_mount_all(int nargs, char **args)
             return -1;
         }
         property_set("ro.crypto.state", "encrypted");
+        property_set("ro.crypto.type", "file");
         property_set("vold.decrypt", "trigger_restart_min_framework");
     } else if (ret > 0) {
         ERROR("fs_mgr_mount_all returned unexpected error %d\n", ret);
@@ -840,11 +815,30 @@ int do_wait(int nargs, char **args)
         return -1;
 }
 
-int do_installkey(int nargs, char **args)
+/*
+ * Callback to make a directory from the ext4 code
+ */
+static int do_installkeys_ensure_dir_exists(const char* dir)
 {
-    if (nargs == 2) {
-        return e4crypt_install_key(args[1]);
+    if (make_dir(dir, 0700) && errno != EEXIST) {
+        return -1;
     }
 
-    return -1;
+    return 0;
+}
+
+int do_installkey(int nargs, char **args)
+{
+    if (nargs != 2) {
+        return -1;
+    }
+
+    char prop_value[PROP_VALUE_MAX] = {0};
+    property_get("ro.crypto.type", prop_value);
+    if (strcmp(prop_value, "file")) {
+        return 0;
+    }
+
+    return e4crypt_create_device_key(args[1],
+                                     do_installkeys_ensure_dir_exists);
 }
