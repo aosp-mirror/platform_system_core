@@ -3,23 +3,25 @@
 
 #include "adb.h"
 
+#include <string>
+
 /* connect to adb, connect to the named service, and return
 ** a valid fd for interacting with that service upon success
 ** or a negative number on failure
 */
-int adb_connect(const char *service);
-int _adb_connect(const char *service);
+int adb_connect(const char* service, std::string* error);
+int _adb_connect(const char* service, std::string* error);
 
 /* connect to adb, connect to the named service, return 0 if
 ** the connection succeeded AND the service returned OKAY
 */
-int adb_command(const char *service);
+int adb_command(const char* service, std::string* error);
 
 /* connect to adb, connect to the named service, return
 ** a malloc'd string of its response upon success or NULL
 ** on failure.
 */
-char *adb_query(const char *service);
+char* adb_query(const char* service, std::string* error);
 
 /* Set the preferred transport to connect to.
 */
@@ -45,13 +47,9 @@ int  adb_get_emulator_console_port(void);
  */
 int  adb_send_emulator_command(int  argc, const char**  argv);
 
-/* return verbose error string from last operation */
-const char *adb_error(void);
-
-/* read a standard adb status response (OKAY|FAIL) and
-** return 0 in the event of OKAY, -1 in the event of FAIL
-** or protocol error
-*/
-int adb_status(int fd);
+// Reads a standard adb status response (OKAY|FAIL) and
+// returns true in the event of OKAY, false in the event of FAIL
+// or protocol error.
+bool adb_status(int fd, std::string* error);
 
 #endif
