@@ -156,6 +156,10 @@ char* usb_device_get_manufacturer_name(struct usb_device *device);
  */
 char* usb_device_get_product_name(struct usb_device *device);
 
+/* Returns the version number for the USB device.
+ */
+int usb_device_get_version(struct usb_device *device);
+
 /* Returns the USB serial number for the USB device.
  * Call free() to free the result when you are done with it.
  */
