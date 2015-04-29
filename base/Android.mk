@@ -18,11 +18,13 @@ LOCAL_PATH := $(call my-dir)
 
 libbase_src_files := \
     file.cpp \
+    logging.cpp \
     stringprintf.cpp \
     strings.cpp \
 
 libbase_test_src_files := \
     file_test.cpp \
+    logging_test.cpp \
     stringprintf_test.cpp \
     strings_test.cpp \
     test_main.cpp \
@@ -38,7 +40,7 @@ libbase_cppflags := \
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase
 LOCAL_CLANG := true
-LOCAL_SRC_FILES := $(libbase_src_files) logging.cpp
+LOCAL_SRC_FILES := $(libbase_src_files)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_CPPFLAGS := $(libbase_cppflags)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
@@ -61,9 +63,6 @@ include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase
 LOCAL_SRC_FILES := $(libbase_src_files)
-ifneq ($(HOST_OS),windows)
-    LOCAL_SRC_FILES += logging.cpp
-endif
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 LOCAL_CPPFLAGS := $(libbase_cppflags)
 LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
@@ -85,7 +84,7 @@ include $(BUILD_HOST_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase_test
 LOCAL_CLANG := true
-LOCAL_SRC_FILES := $(libbase_test_src_files) logging_test.cpp
+LOCAL_SRC_FILES := $(libbase_test_src_files)
 LOCAL_C_INCLUDES := $(LOCAL_PATH)
 LOCAL_CPPFLAGS := $(libbase_cppflags)
 LOCAL_SHARED_LIBRARIES := libbase
@@ -97,9 +96,6 @@ include $(BUILD_NATIVE_TEST)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libbase_test
 LOCAL_SRC_FILES := $(libbase_test_src_files)
-ifneq ($(HOST_OS),windows)
-    LOCAL_SRC_FILES += logging_test.cpp
-endif
 LOCAL_C_INCLUDES := $(LOCAL_PATH)
 LOCAL_CPPFLAGS := $(libbase_cppflags)
 LOCAL_SHARED_LIBRARIES := libbase

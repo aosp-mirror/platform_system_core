@@ -20,11 +20,6 @@
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
-
-  // No logging on Windows yet.
-#if !defined(_WIN32)
   android::base::InitLogging(argv, android::base::StderrLogger);
-#endif
-
   return RUN_ALL_TESTS();
 }

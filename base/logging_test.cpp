@@ -85,6 +85,9 @@ std::string make_log_pattern(android::base::LogSeverity severity,
 TEST(logging, LOG) {
   ASSERT_DEATH(LOG(FATAL) << "foobar", "foobar");
 
+  // We can't usefully check the output of any of these on Windows because we
+  // don't have std::regex, but we can at least make sure we printed at least as
+  // many characters are in the log message.
   {
     CapturedStderr cap;
     LOG(WARNING) << "foobar";
@@ -92,10 +95,13 @@ TEST(logging, LOG) {
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
+    ASSERT_GT(output.length(), strlen("foobar"));
 
+#if !defined(_WIN32)
     std::regex message_regex(
         make_log_pattern(android::base::WARNING, "foobar"));
     ASSERT_TRUE(std::regex_search(output, message_regex));
+#endif
   }
 
   {
@@ -105,10 +111,13 @@ TEST(logging, LOG) {
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
+    ASSERT_GT(output.length(), strlen("foobar"));
 
+#if !defined(_WIN32)
     std::regex message_regex(
         make_log_pattern(android::base::INFO, "foobar"));
     ASSERT_TRUE(std::regex_search(output, message_regex));
+#endif
   }
 
   {
@@ -129,10 +138,13 @@ TEST(logging, LOG) {
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
+    ASSERT_GT(output.length(), strlen("foobar"));
 
+#if !defined(_WIN32)
     std::regex message_regex(
         make_log_pattern(android::base::DEBUG, "foobar"));
     ASSERT_TRUE(std::regex_search(output, message_regex));
+#endif
   }
 }
 
@@ -145,10 +157,13 @@ TEST(logging, PLOG) {
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
+    ASSERT_GT(output.length(), strlen("foobar"));
 
+#if !defined(_WIN32)
     std::regex message_regex(make_log_pattern(
         android::base::INFO, "foobar: No such file or directory"));
     ASSERT_TRUE(std::regex_search(output, message_regex));
+#endif
   }
 }
 
@@ -161,11 +176,14 @@ TEST(logging, UNIMPLEMENTED) {
 
     std::string output;
     android::base::ReadFdToString(cap.fd(), &output);
+    ASSERT_GT(output.length(), strlen("unimplemented"));
 
+#if !defined(_WIN32)
     std::string expected_message =
         android::base::StringPrintf("%s unimplemented ", __PRETTY_FUNCTION__);
     std::regex message_regex(
         make_log_pattern(android::base::ERROR, expected_message.c_str()));
     ASSERT_TRUE(std::regex_search(output, message_regex));
+#endif
   }
 }
