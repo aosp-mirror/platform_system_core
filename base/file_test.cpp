@@ -66,7 +66,7 @@ TEST(file, WriteStringToFile2) {
       << strerror(errno);
   struct stat sb;
   ASSERT_EQ(0, stat(tf.filename, &sb));
-  ASSERT_EQ(0660U, (sb.st_mode & ~S_IFMT));
+  ASSERT_EQ(0660U, static_cast<unsigned int>(sb.st_mode & ~S_IFMT));
   ASSERT_EQ(getuid(), sb.st_uid);
   ASSERT_EQ(getgid(), sb.st_gid);
   std::string s;
