@@ -74,6 +74,7 @@ public:
     // helper
     char *pidToName(pid_t pid) { return stats.pidToName(pid); }
     uid_t pidToUid(pid_t pid) { return stats.pidToUid(pid); }
+    char *uidToName(uid_t uid) { return stats.uidToName(uid); }
 
 private:
     void maybePrune(log_id_t id);

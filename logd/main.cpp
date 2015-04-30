@@ -210,18 +210,26 @@ static void *reinit_thread_start(void * /*obj*/) {
     return NULL;
 }
 
+static sem_t sem_name;
+
 char *android::uidToName(uid_t u) {
     if (!u || !reinit_running) {
         return NULL;
     }
 
-    // Not multi-thread safe, we know there is only one caller
+    sem_wait(&sem_name);
+
+    // Not multi-thread safe, we use sem_name to protect
     uid = u;
 
     name = NULL;
     sem_post(&reinit);
     sem_wait(&uidName);
-    return name;
+    char *ret = name;
+
+    sem_post(&sem_name);
+
+    return ret;
 }
 
 // Serves as a global method to trigger reinitialization
@@ -277,6 +285,7 @@ int main(int argc, char *argv[]) {
     // Reinit Thread
     sem_init(&reinit, 0, 0);
     sem_init(&uidName, 0, 0);
+    sem_init(&sem_name, 0, 1);
     pthread_attr_t attr;
     if (!pthread_attr_init(&attr)) {
         struct sched_param param;
