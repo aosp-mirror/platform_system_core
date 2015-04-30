@@ -18,7 +18,6 @@
 commonSources = [
     "BasicHashtable.cpp",
     "BlobCache.cpp",
-    "CallStack.cpp",
     "FileMap.cpp",
     "JenkinsHash.cpp",
     "LinearAllocator.cpp",
@@ -26,7 +25,6 @@ commonSources = [
     "Log.cpp",
     "NativeHandle.cpp",
     "Printer.cpp",
-    "ProcessCallStack.cpp",
     "PropertyMap.cpp",
     "RefBase.cpp",
     "SharedBuffer.cpp",
@@ -53,7 +51,9 @@ cc_library {
     target: {
         android: {
             srcs: [
+                "CallStack.cpp",
                 "Looper.cpp",
+                "ProcessCallStack.cpp",
                 "Trace.cpp",
             ],
             shared_libs: [
@@ -64,7 +64,11 @@ cc_library {
             static_libs: ["libcutils"],
         },
         linux: {
-            srcs: ["Looper.cpp"],
+            srcs: [
+                "CallStack.cpp",
+                "ProcessCallStack.cpp",
+                "Looper.cpp",
+            ],
         },
         darwin: {
             cflags: ["-Wno-unused-parameter"],
@@ -74,7 +78,13 @@ cc_library {
             cflags: ["-DMB_CUR_MAX=1"],
         },
         host: {
-            static_libs: ["liblog"],
+            static_libs: [
+                "liblog",
+                "libcutils",
+            ],
+            shared_libs: [
+                "libbacktrace",
+            ],
             cflags: ["-DLIBUTILS_NATIVE=1"],
         }
     },
