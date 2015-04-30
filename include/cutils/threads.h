@@ -17,6 +17,14 @@
 #ifndef _LIBS_CUTILS_THREADS_H
 #define _LIBS_CUTILS_THREADS_H
 
+#include  <sys/types.h>
+
+#if !defined(_WIN32)
+#include <pthread.h>
+#else
+#include <windows.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -29,10 +37,9 @@ extern "C" {
 /***********************************************************************/
 /***********************************************************************/
 
-#if !defined(_WIN32)
+extern pid_t gettid();
 
-#include  <pthread.h>
-#include  <sys/types.h>
+#if !defined(_WIN32)
 
 typedef struct {
     pthread_mutex_t   lock;
@@ -40,13 +47,9 @@ typedef struct {
     pthread_key_t     tls;
 } thread_store_t;
 
-extern pid_t gettid();
-
 #define  THREAD_STORE_INITIALIZER  { PTHREAD_MUTEX_INITIALIZER, 0, 0 }
 
 #else // !defined(_WIN32)
-
-#include <windows.h>
 
 typedef struct {
     int               lock_init;
