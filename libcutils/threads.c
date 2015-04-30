@@ -16,8 +16,6 @@
 
 #include "cutils/threads.h"
 
-#if !defined(_WIN32)
-
 // For gettid.
 #if defined(__APPLE__)
 #include "AvailabilityMacros.h"  // For MAC_OS_X_VERSION_MAX_ALLOWED
@@ -30,8 +28,28 @@
 #include <syscall.h>
 #include <unistd.h>
 #elif defined(_WIN32)
-#include <Windows.h>
+#include <windows.h>
 #endif
+
+// No definition needed for Android because we'll just pick up bionic's copy.
+#ifndef __ANDROID__
+pid_t gettid() {
+#if defined(__APPLE__)
+  uint64_t owner;
+  int rc = pthread_threadid_np(NULL, &owner);
+  if (rc != 0) {
+    abort();
+  }
+  return owner;
+#elif defined(__linux__)
+  return syscall(__NR_gettid);
+#elif defined(_WIN32)
+  return GetCurrentThreadId();
+#endif
+}
+#endif  // __ANDROID__
+
+#if !defined(_WIN32)
 
 void*  thread_store_get( thread_store_t*  store )
 {
@@ -57,24 +75,6 @@ extern void   thread_store_set( thread_store_t*          store,
 
     pthread_setspecific( store->tls, value );
 }
-
-// No definition needed for Android because we'll just pick up bionic's copy.
-#ifndef __ANDROID__
-pid_t gettid() {
-#if defined(__APPLE__)
-  uint64_t owner;
-  int rc = pthread_threadid_np(NULL, &owner);
-  if (rc != 0) {
-    abort();
-  }
-  return owner;
-#elif defined(__linux__)
-  return syscall(__NR_gettid);
-#elif defined(_WIN32)
-  return (pid_t)GetCurrentThreadId();
-#endif
-}
-#endif  // __ANDROID__
 
 #else /* !defined(_WIN32) */
 void*  thread_store_get( thread_store_t*  store )
