@@ -55,6 +55,9 @@ TEST(file, WriteStringToFile) {
   EXPECT_EQ("abc", s);
 }
 
+// WriteStringToFile2 is explicitly for setting Unix permissions, which make no
+// sense on Windows.
+#if !defined(_WIN32)
 TEST(file, WriteStringToFile2) {
   TemporaryFile tf;
   ASSERT_TRUE(tf.fd != -1);
@@ -71,6 +74,7 @@ TEST(file, WriteStringToFile2) {
     << strerror(errno);
   EXPECT_EQ("abc", s);
 }
+#endif
 
 TEST(file, WriteStringToFd) {
   TemporaryFile tf;
