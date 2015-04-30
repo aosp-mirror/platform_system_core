@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+#include <ctype.h>
 #include <endian.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -48,18 +50,88 @@ LogBufferElement::~LogBufferElement() {
     delete [] mMsg;
 }
 
-// assumption: mMsg == NULL
-size_t LogBufferElement::populateDroppedMessage(char *&buffer, bool privileged) {
-    static const char format_uid[] = "uid=%u dropped=%u";
-    static const size_t unprivileged_offset = 7;
-    static const char tag[] = "logd";
-
-    size_t len;
-    if (privileged) {
-        len = snprintf(NULL, 0, format_uid, mUid, mDropped);
-    } else {
-        len = snprintf(NULL, 0, format_uid + unprivileged_offset, mDropped);
+// caller must own and free character string
+static char *tidToName(pid_t tid) {
+    char *retval = NULL;
+    char buffer[256];
+    snprintf(buffer, sizeof(buffer), "/proc/%u/comm", tid);
+    int fd = open(buffer, O_RDONLY);
+    if (fd >= 0) {
+        ssize_t ret = read(fd, buffer, sizeof(buffer));
+        if (ret >= (ssize_t)sizeof(buffer)) {
+            ret = sizeof(buffer) - 1;
+        }
+        while ((ret > 0) && isspace(buffer[ret - 1])) {
+            --ret;
+        }
+        if (ret > 0) {
+            buffer[ret] = '\0';
+            retval = strdup(buffer);
+        }
+        close(fd);
     }
+
+    // if nothing for comm, check out cmdline
+    char *name = android::pidToName(tid);
+    if (!retval) {
+        retval = name;
+        name = NULL;
+    }
+
+    // check if comm is truncated, see if cmdline has full representation
+    if (name) {
+        // impossible for retval to be NULL if name not NULL
+        size_t retval_len = strlen(retval);
+        size_t name_len = strlen(name);
+        // KISS: ToDo: Only checks prefix truncated, not suffix, or both
+        if ((retval_len < name_len) && !strcmp(retval, name + name_len - retval_len)) {
+            free(retval);
+            retval = name;
+        } else {
+            free(name);
+        }
+    }
+    return retval;
+}
+
+// assumption: mMsg == NULL
+size_t LogBufferElement::populateDroppedMessage(char *&buffer,
+        LogBuffer *parent) {
+    static const char tag[] = "logd";
+    static const char format_uid[] = "uid=%u%s too chatty%s, expire %u line%s";
+
+    char *name = parent->uidToName(mUid);
+    char *commName = tidToName(mTid);
+    if (!commName && (mTid != mPid)) {
+        commName = tidToName(mPid);
+    }
+    if (!commName) {
+        commName = parent->pidToName(mPid);
+    }
+    if (name && commName && !strcmp(name, commName)) {
+        free(commName);
+        commName = NULL;
+    }
+    if (name) {
+        char *p = NULL;
+        asprintf(&p, "(%s)", name);
+        if (p) {
+            free(name);
+            name = p;
+        }
+    }
+    if (commName) {
+        char *p = NULL;
+        asprintf(&p, " comm=%s", commName);
+        if (p) {
+            free(commName);
+            commName = p;
+        }
+    }
+    // identical to below to calculate the buffer size required
+    size_t len = snprintf(NULL, 0, format_uid, mUid, name ? name : "",
+                          commName ? commName : "",
+                          mDropped, (mDropped > 1) ? "s" : "");
 
     size_t hdrLen;
     if (mLogId == LOG_ID_EVENTS) {
@@ -70,6 +142,8 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer, bool privileged) 
 
     buffer = static_cast<char *>(calloc(1, hdrLen + len + 1));
     if (!buffer) {
+        free(name);
+        free(commName);
         return 0;
     }
 
@@ -86,16 +160,16 @@ size_t LogBufferElement::populateDroppedMessage(char *&buffer, bool privileged) 
         strcpy(buffer + 1, tag);
     }
 
-    if (privileged) {
-        snprintf(buffer + hdrLen, len + 1, format_uid, mUid, mDropped);
-    } else {
-        snprintf(buffer + hdrLen, len + 1, format_uid + unprivileged_offset, mDropped);
-    }
+    snprintf(buffer + hdrLen, len + 1, format_uid, mUid, name ? name : "",
+             commName ? commName : "",
+             mDropped, (mDropped > 1) ? "s" : "");
+    free(name);
+    free(commName);
 
     return retval;
 }
 
-uint64_t LogBufferElement::flushTo(SocketClient *reader) {
+uint64_t LogBufferElement::flushTo(SocketClient *reader, LogBuffer *parent) {
     struct logger_entry_v3 entry;
 
     memset(&entry, 0, sizeof(struct logger_entry_v3));
@@ -114,7 +188,7 @@ uint64_t LogBufferElement::flushTo(SocketClient *reader) {
     char *buffer = NULL;
 
     if (!mMsg) {
-        entry.len = populateDroppedMessage(buffer, clientHasLogCredentials(reader));
+        entry.len = populateDroppedMessage(buffer, parent);
         if (!entry.len) {
             return mSequence;
         }
