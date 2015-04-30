@@ -436,9 +436,10 @@ void parse_banner(const char* banner, atransport* t) {
         D("setting connection_state to CS_SIDELOAD\n");
         t->connection_state = CS_SIDELOAD;
         update_transports();
+    } else {
+        D("setting connection_state to CS_HOST\n");
+        t->connection_state = CS_HOST;
     }
-
-    t->connection_state = CS_HOST;
 }
 
 void handle_packet(apacket *p, atransport *t)
