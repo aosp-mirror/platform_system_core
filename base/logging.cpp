@@ -27,12 +27,19 @@
 
 #include <iostream>
 #include <limits>
-#include <mutex>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+#ifndef _WIN32
+#include <mutex>
+#else
+#define NOGDI // Suppress the evil ERROR macro.
+#include <windows.h>
+#endif
+
+#include "base/macros.h"
 #include "base/strings.h"
 #include "cutils/threads.h"
 
@@ -45,10 +52,79 @@
 #include <unistd.h>
 #endif
 
+namespace {
+#ifndef _WIN32
+using std::mutex;
+using std::lock_guard;
+
+#if defined(__GLIBC__)
+const char* getprogname() {
+  return program_invocation_short_name;
+}
+#endif
+
+#else
+const char* getprogname() {
+  static bool first = true;
+  static char progname[MAX_PATH] = {};
+
+  if (first) {
+    // TODO(danalbert): This is a full path on Windows. Just get the basename.
+    DWORD nchars = GetModuleFileName(nullptr, progname, sizeof(progname));
+    DCHECK_GT(nchars, 0U);
+    first = false;
+  }
+
+  return progname;
+}
+
+class mutex {
+ public:
+  mutex() {
+    semaphore_ = CreateSemaphore(nullptr, 1, 1, nullptr);
+    CHECK(semaphore_ != nullptr) << "Failed to create Mutex";
+  }
+  ~mutex() {
+    CloseHandle(semaphore_);
+  }
+
+  void lock() {
+    DWORD result = WaitForSingleObject(semaphore_, INFINITE);
+    CHECK_EQ(result, WAIT_OBJECT_0) << GetLastError();
+  }
+
+  void unlock() {
+    bool result = ReleaseSemaphore(semaphore_, 1, nullptr);
+    CHECK(result);
+  }
+
+ private:
+  HANDLE semaphore_;
+};
+
+template <typename LockT>
+class lock_guard {
+ public:
+  explicit lock_guard(LockT& lock) : lock_(lock) {
+    lock_.lock();
+  }
+
+  ~lock_guard() {
+    lock_.unlock();
+  }
+
+ private:
+  LockT& lock_;
+
+  DISALLOW_COPY_AND_ASSIGN(lock_guard);
+};
+#endif
+} // namespace
+
 namespace android {
 namespace base {
 
-static std::mutex logging_lock;
+static mutex logging_lock;
 
 #ifdef __ANDROID__
 static LogFunction gLogger = LogdLogger();
@@ -59,12 +135,6 @@ static LogFunction gLogger = StderrLogger;
 static bool gInitialized = false;
 static LogSeverity gMinimumLogSeverity = INFO;
 static std::unique_ptr<std::string> gProgramInvocationName;
-
-#if defined(__GLIBC__)
-static const char* getprogname() {
-  return program_invocation_short_name;
-}
-#endif
 
 static const char* ProgramInvocationName() {
   if (gProgramInvocationName == nullptr) {
@@ -182,7 +252,7 @@ void InitLogging(char* argv[]) {
 }
 
 void SetLogger(LogFunction&& logger) {
-  std::lock_guard<std::mutex> lock(logging_lock);
+  lock_guard<mutex> lock(logging_lock);
   gLogger = std::move(logger);
 }
 
@@ -287,7 +357,7 @@ std::ostream& LogMessage::stream() {
 void LogMessage::LogLine(const char* file, unsigned int line, LogId id,
                          LogSeverity severity, const char* message) {
   const char* tag = ProgramInvocationName();
-  std::lock_guard<std::mutex> lock(logging_lock);
+  lock_guard<mutex> lock(logging_lock);
   gLogger(id, severity, tag, file, line, message);
 }
 
