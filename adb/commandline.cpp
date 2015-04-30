@@ -201,7 +201,6 @@ static void help() {
         "  adb get-state                - prints: offline | bootloader | device\n"
         "  adb get-serialno             - prints: <serial-number>\n"
         "  adb get-devpath              - prints: <device-path>\n"
-        "  adb status-window            - continuously print device status for a specified device\n"
         "  adb remount                  - remounts the /system, /vendor (if present) and /oem (if present) partitions on the device read-write\n"
         "  adb reboot [bootloader|recovery]\n"
         "                               - reboots the device, optionally into the bootloader or recovery program.\n"
@@ -437,31 +436,25 @@ static int interactive_shell() {
 }
 
 
-static void format_host_command(char* buffer, size_t  buflen, const char* command, transport_type ttype, const char* serial)
-{
+static std::string format_host_command(const char* command, transport_type type, const char* serial) {
     if (serial) {
-        snprintf(buffer, buflen, "host-serial:%s:%s", serial, command);
-    } else {
-        const char* prefix = "host";
-        if (ttype == kTransportUsb)
-            prefix = "host-usb";
-        else if (ttype == kTransportLocal)
-            prefix = "host-local";
-
-        snprintf(buffer, buflen, "%s:%s", prefix, command);
+        return android::base::StringPrintf("host-serial:%s:%s", serial, command);
     }
+
+    const char* prefix = "host";
+    if (type == kTransportUsb) {
+        prefix = "host-usb";
+    } else if (type == kTransportLocal) {
+        prefix = "host-local";
+    }
+    return android::base::StringPrintf("%s:%s", prefix, command);
 }
 
-static int adb_download_buffer(const char *service, const char *fn, const void* data, int sz,
+static int adb_download_buffer(const char *service, const char *fn, const void* data, unsigned sz,
                                bool show_progress)
 {
-    char buf[4096];
-    unsigned total;
-
-    sprintf(buf,"%s:%d", service, sz);
-
     std::string error;
-    int fd = adb_connect(buf, &error);
+    int fd = adb_connect(android::base::StringPrintf("%s:%d", service, sz), &error);
     if (fd < 0) {
         fprintf(stderr,"error: %s\n", error.c_str());
         return -1;
@@ -470,7 +463,7 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
     int opt = CHUNK_SIZE;
     opt = adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
 
-    total = sz;
+    unsigned total = sz;
     const uint8_t* ptr = reinterpret_cast<const uint8_t*>(data);
 
     if (show_progress) {
@@ -478,7 +471,7 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
         if(x) service = x + 1;
     }
 
-    while(sz > 0) {
+    while (sz > 0) {
         unsigned xfer = (sz > CHUNK_SIZE) ? CHUNK_SIZE : sz;
         if (!WriteFdExactly(fd, ptr, xfer)) {
             std::string error;
@@ -497,6 +490,8 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
         printf("\n");
     }
 
+    // TODO: should this be adb_status?
+    char buf[5];
     if(!ReadFdExactly(fd, buf, 4)){
         fprintf(stderr,"* error reading response *\n");
         adb_close(fd);
@@ -550,10 +545,10 @@ static int adb_sideload_host(const char* fn) {
         return -1;
     }
 
-    char buf[100];
-    sprintf(buf, "sideload-host:%d:%d", sz, SIDELOAD_HOST_BLOCK_SIZE);
+    std::string service =
+            android::base::StringPrintf("sideload-host:%d:%d", sz, SIDELOAD_HOST_BLOCK_SIZE);
     std::string error;
-    int fd = adb_connect(buf, &error);
+    int fd = adb_connect(service, &error);
     if (fd < 0) {
         // Try falling back to the older sideload method.  Maybe this
         // is an older device that doesn't support sideload-host.
@@ -565,18 +560,19 @@ static int adb_sideload_host(const char* fn) {
     opt = adb_setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (const void *) &opt, sizeof(opt));
 
     while (true) {
+        char buf[9];
         if (!ReadFdExactly(fd, buf, 8)) {
             fprintf(stderr, "* failed to read command: %s\n", strerror(errno));
             status = -1;
             goto done;
         }
+        buf[8] = '\0';
 
-        if (strncmp("DONEDONE", buf, 8) == 0) {
+        if (strcmp("DONEDONE", buf) == 0) {
             status = 0;
             break;
         }
 
-        buf[8] = '\0';
         int block = strtol(buf, NULL, 10);
 
         size_t offset = block * SIDELOAD_HOST_BLOCK_SIZE;
@@ -620,51 +616,6 @@ static int adb_sideload_host(const char* fn) {
     if (fd >= 0) adb_close(fd);
     free(data);
     return status;
-}
-
-static void status_window(transport_type ttype, const char* serial)
-{
-    char command[4096];
-    char *state = 0;
-    char *laststate = 0;
-
-        /* silence stderr */
-#ifdef _WIN32
-    /* XXX: TODO */
-#else
-    int  fd;
-    fd = unix_open("/dev/null", O_WRONLY);
-    dup2(fd, 2);
-    adb_close(fd);
-#endif
-
-    format_host_command(command, sizeof command, "get-state", ttype, serial);
-
-    while (true) {
-        adb_sleep_ms(250);
-
-        if (state) {
-            free(state);
-            state = 0;
-        }
-
-        std::string error;
-        state = adb_query(command, &error);
-
-        if (state) {
-            if (laststate && !strcmp(state,laststate)){
-                continue;
-            } else {
-                if (laststate) free(laststate);
-                laststate = strdup(state);
-            }
-        }
-
-        printf("%c[2J%c[2H", 27, 27);
-        printf("Android Debug Bridge\n");
-        printf("State: %s\n", state ? state : "offline");
-        fflush(stdout);
-    }
 }
 
 /**
@@ -741,7 +692,7 @@ static int send_shell_command(transport_type transport, const char* serial,
     int fd;
     while (true) {
         std::string error;
-        fd = adb_connect(command.c_str(), &error);
+        fd = adb_connect(command, &error);
         if (fd >= 0) {
             break;
         }
@@ -835,7 +786,7 @@ static int backup(int argc, const char** argv) {
 
     D("backup. filename=%s cmd=%s\n", filename, cmd.c_str());
     std::string error;
-    int fd = adb_connect(cmd.c_str(), &error);
+    int fd = adb_connect(cmd, &error);
     if (fd < 0) {
         fprintf(stderr, "adb: unable to connect for backup: %s\n", error.c_str());
         adb_close(outFd);
@@ -964,7 +915,7 @@ static void parse_push_pull_args(const char **arg, int narg, char const **path1,
     }
 }
 
-static int adb_connect_command(const char* command) {
+static int adb_connect_command(const std::string& command) {
     std::string error;
     int fd = adb_connect(command, &error);
     if (fd != -1) {
@@ -974,6 +925,17 @@ static int adb_connect_command(const char* command) {
     }
     fprintf(stderr, "Error: %s\n", error.c_str());
     return 1;
+}
+
+static int adb_query_command(const std::string& command) {
+    std::string result;
+    std::string error;
+    if (!adb_query(command, &result, &error)) {
+        fprintf(stderr, "error: %s\n", error.c_str());
+        return 1;
+    }
+    printf("%s\n", result.c_str());
+    return 0;
 }
 
 int adb_commandline(int argc, const char **argv)
@@ -1129,10 +1091,9 @@ int adb_commandline(int argc, const char **argv)
             }
         }
 
-        format_host_command(buf, sizeof buf, service, ttype, serial);
-
+        std::string cmd = format_host_command(service, ttype, serial);
         std::string error;
-        if (adb_command(buf, &error)) {
+        if (adb_command(cmd, &error)) {
             D("failure: %s *\n", error.c_str());
             fprintf(stderr,"error: %s\n", error.c_str());
             return 1;
@@ -1152,62 +1113,38 @@ int adb_commandline(int argc, const char **argv)
 
     /* adb_connect() commands */
     if (!strcmp(argv[0], "devices")) {
-        char *tmp;
         const char *listopt;
-        if (argc < 2)
+        if (argc < 2) {
             listopt = "";
-        else if (argc == 2 && !strcmp(argv[1], "-l"))
+        } else if (argc == 2 && !strcmp(argv[1], "-l")) {
             listopt = argv[1];
-        else {
+        } else {
             fprintf(stderr, "Usage: adb devices [-l]\n");
             return 1;
         }
-        snprintf(buf, sizeof buf, "host:%s%s", argv[0], listopt);
-        std::string error;
-        tmp = adb_query(buf, &error);
-        if (tmp) {
-            printf("List of devices attached \n");
-            printf("%s\n", tmp);
-            return 0;
-        } else {
-            return 1;
-        }
+
+        std::string query = android::base::StringPrintf("host:%s%s", argv[0], listopt);
+        printf("List of devices attached\n");
+        return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "connect")) {
-        char *tmp;
         if (argc != 2) {
             fprintf(stderr, "Usage: adb connect <host>[:<port>]\n");
             return 1;
         }
-        snprintf(buf, sizeof buf, "host:connect:%s", argv[1]);
-        std::string error;
-        tmp = adb_query(buf, &error);
-        if (tmp) {
-            printf("%s\n", tmp);
-            return 0;
-        } else {
-            return 1;
-        }
+
+        std::string query = android::base::StringPrintf("host:connect:%s", argv[1]);
+        return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "disconnect")) {
-        char *tmp;
         if (argc > 2) {
             fprintf(stderr, "Usage: adb disconnect [<host>[:<port>]]\n");
             return 1;
         }
-        if (argc == 2) {
-            snprintf(buf, sizeof buf, "host:disconnect:%s", argv[1]);
-        } else {
-            snprintf(buf, sizeof buf, "host:disconnect:");
-        }
-        std::string error;
-        tmp = adb_query(buf, &error);
-        if (tmp) {
-            printf("%s\n", tmp);
-            return 0;
-        } else {
-            return 1;
-        }
+
+        std::string query = android::base::StringPrintf("host:disconnect:%s",
+                                                        (argc == 2) ? argv[1] : "");
+        return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "emu")) {
         return adb_send_emulator_command(argc, argv);
@@ -1241,7 +1178,7 @@ int adb_commandline(int argc, const char **argv)
         while (true) {
             D("interactive shell loop. cmd=%s\n", cmd.c_str());
             std::string error;
-            int fd = adb_connect(cmd.c_str(), &error);
+            int fd = adb_connect(cmd, &error);
             int r;
             if (fd >= 0) {
                 D("about to read_and_dump(fd=%d)\n", fd);
@@ -1280,7 +1217,7 @@ int adb_commandline(int argc, const char **argv)
         }
 
         std::string error;
-        int fd = adb_connect(cmd.c_str(), &error);
+        int fd = adb_connect(cmd, &error);
         if (fd < 0) {
             fprintf(stderr, "error: %s\n", error.c_str());
             return -1;
@@ -1385,18 +1322,12 @@ int adb_commandline(int argc, const char **argv)
 
         // Implement forward --list
         if (list) {
-            if (argc != 1)
+            if (argc != 1) {
                 return usage();
-            snprintf(buf, sizeof buf, "%s:list-forward", host_prefix);
-            std::string error;
-            char* forwards = adb_query(buf, &error);
-            if (forwards == NULL) {
-                fprintf(stderr, "error: %s\n", error.c_str());
-                return 1;
             }
-            printf("%s", forwards);
-            free(forwards);
-            return 0;
+
+            std::string query = android::base::StringPrintf("%s:list-forward", host_prefix);
+            return adb_query_command(query);
         }
 
         // Implement forward --remove-all
@@ -1523,21 +1454,9 @@ int adb_commandline(int argc, const char **argv)
         !strcmp(argv[0],"get-serialno") ||
         !strcmp(argv[0],"get-devpath"))
     {
-        format_host_command(buf, sizeof buf, argv[0], ttype, serial);
-        std::string error;
-        char* tmp = adb_query(buf, &error);
-        if (tmp) {
-            printf("%s\n", tmp);
-            return 0;
-        } else {
-            return 1;
-        }
+        return adb_query_command(format_host_command(argv[0], ttype, serial));
     }
     /* other commands */
-    else if (!strcmp(argv[0],"status-window")) {
-        status_window(ttype, serial);
-        return 0;
-    }
     else if (!strcmp(argv[0],"logcat") || !strcmp(argv[0],"lolcat") || !strcmp(argv[0],"longcat")) {
         return logcat(ttype, serial, argc, argv);
     }
@@ -1755,7 +1674,7 @@ static int install_multiple_app(transport_type transport, const char* serial, in
 
     // Create install session
     std::string error;
-    int fd = adb_connect(cmd.c_str(), &error);
+    int fd = adb_connect(cmd, &error);
     if (fd < 0) {
         fprintf(stderr, "Connect error for create: %s\n", error.c_str());
         return -1;
@@ -1807,7 +1726,7 @@ static int install_multiple_app(transport_type transport, const char* serial, in
         }
 
         std::string error;
-        int remoteFd = adb_connect(cmd.c_str(), &error);
+        int remoteFd = adb_connect(cmd, &error);
         if (remoteFd < 0) {
             fprintf(stderr, "Connect error for write: %s\n", error.c_str());
             adb_close(localFd);
@@ -1831,13 +1750,10 @@ static int install_multiple_app(transport_type transport, const char* serial, in
 
 finalize_session:
     // Commit session if we streamed everything okay; otherwise abandon
-    if (success) {
-        snprintf(buf, sizeof(buf), "exec:pm install-commit %d", session_id);
-    } else {
-        snprintf(buf, sizeof(buf), "exec:pm install-abandon %d", session_id);
-    }
-
-    fd = adb_connect(buf, &error);
+    std::string service =
+            android::base::StringPrintf("exec:pm install-%s %d",
+                                        success ? "commit" : "abandon", session_id);
+    fd = adb_connect(service, &error);
     if (fd < 0) {
         fprintf(stderr, "Connect error for finalize: %s\n", error.c_str());
         return -1;

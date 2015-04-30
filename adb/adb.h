@@ -243,8 +243,6 @@ void install_local_socket(asocket *s);
 void remove_socket(asocket *s);
 void close_all_sockets(atransport *t);
 
-#define  LOCAL_CLIENT_PREFIX  "emulator-"
-
 asocket *create_local_socket(int fd);
 asocket *create_local_service_socket(const char *destination);
 
