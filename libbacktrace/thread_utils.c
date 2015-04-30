@@ -16,24 +16,11 @@
 
 #include "thread_utils.h"
 
-#if defined(__APPLE__)
+#if !defined(__BIONIC__)
 
-#include <sys/syscall.h>
-
-// Mac OS >= 10.6 has a system call equivalent to Linux's gettid().
-pid_t gettid() {
-  return syscall(SYS_thread_selfid);
-}
-
-#elif !defined(__BIONIC__)
-
-// glibc doesn't implement or export either gettid or tgkill.
+// glibc doesn't implement or export tgkill.
 #include <unistd.h>
 #include <sys/syscall.h>
-
-pid_t gettid() {
-  return syscall(__NR_gettid);
-}
 
 int tgkill(int tgid, int tid, int sig) {
   return syscall(__NR_tgkill, tgid, tid, sig);

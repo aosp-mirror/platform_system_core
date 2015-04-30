@@ -30,20 +30,21 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <backtrace/Backtrace.h>
-#include <backtrace/BacktraceMap.h>
-
-// For the THREAD_SIGNAL definition.
-#include "BacktraceCurrent.h"
-
-#include <cutils/atomic.h>
-#include <gtest/gtest.h>
-
 #include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include <backtrace/Backtrace.h>
+#include <backtrace/BacktraceMap.h>
+
+#include <cutils/atomic.h>
+#include <cutils/threads.h>
+
+#include <gtest/gtest.h>
+
+// For the THREAD_SIGNAL definition.
+#include "BacktraceCurrent.h"
 #include "thread_utils.h"
 
 // Number of microseconds per milliseconds.
