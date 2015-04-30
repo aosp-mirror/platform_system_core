@@ -16,15 +16,26 @@
 
 #include "test_utils.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 TemporaryFile::TemporaryFile() {
+#if defined(__ANDROID__)
   init("/data/local/tmp");
-  if (fd == -1) {
-    init("/tmp");
-  }
+#elif defined(_WIN32)
+  char wd[MAX_PATH] = {};
+  _getcwd(wd, sizeof(wd));
+  init(wd);
+#else
+  init("/tmp");
+#endif
 }
 
 TemporaryFile::~TemporaryFile() {
@@ -34,5 +45,15 @@ TemporaryFile::~TemporaryFile() {
 
 void TemporaryFile::init(const char* tmp_dir) {
   snprintf(filename, sizeof(filename), "%s/TemporaryFile-XXXXXX", tmp_dir);
+#if !defined(_WIN32)
   fd = mkstemp(filename);
+#else
+  // Windows doesn't have mkstemp, and tmpfile creates the file in the root
+  // directory, requiring root (?!) permissions. We have to settle for mktemp.
+  if (mktemp(filename) == nullptr) {
+    abort();
+  }
+
+  fd = open(filename, O_RDWR | O_NOINHERIT | O_CREAT, _S_IREAD | _S_IWRITE);
+#endif
 }
