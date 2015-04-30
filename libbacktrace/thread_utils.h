@@ -23,8 +23,6 @@ __BEGIN_DECLS
 
 int tgkill(int tgid, int tid, int sig);
 
-pid_t gettid();
-
 __END_DECLS
 
 #endif /* _LIBBACKTRACE_THREAD_UTILS_H */
