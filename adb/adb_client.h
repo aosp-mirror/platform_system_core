@@ -9,19 +9,17 @@
 ** a valid fd for interacting with that service upon success
 ** or a negative number on failure
 */
-int adb_connect(const char* service, std::string* error);
-int _adb_connect(const char* service, std::string* error);
+int adb_connect(const std::string& service, std::string* error);
+int _adb_connect(const std::string& service, std::string* error);
 
 /* connect to adb, connect to the named service, return 0 if
 ** the connection succeeded AND the service returned OKAY
 */
-int adb_command(const char* service, std::string* error);
+int adb_command(const std::string& service, std::string* error);
 
-/* connect to adb, connect to the named service, return
-** a malloc'd string of its response upon success or NULL
-** on failure.
-*/
-char* adb_query(const char* service, std::string* error);
+// Connects to the named adb service and fills 'result' with the response.
+// Returns true on success; returns false and fills 'error' on failure.
+bool adb_query(const std::string& service, std::string* result, std::string* error);
 
 /* Set the preferred transport to connect to.
 */

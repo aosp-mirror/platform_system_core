@@ -847,7 +847,7 @@ retry:
                 result = t;
             } else if (ttype == kTransportAny) {
                 if (result) {
-                    if (error_out) *error_out = "more than one device and emulator";
+                    if (error_out) *error_out = "more than one device/emulator";
                     ambiguous = 1;
                     result = NULL;
                     break;
