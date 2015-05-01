@@ -295,7 +295,8 @@ public:
         uint64_t current = e->getRealTime().nsec() - NS_PER_SEC;
         ssize_t index = -1;
         while((index = next(index)) >= 0) {
-            if (current > editEntryAt(index).getLast()->getRealTime().nsec()) {
+            LogBufferElement *l = editEntryAt(index).getLast();
+            if ((l->getDropped() >= 4) && (current > l->getRealTime().nsec())) {
                 removeAt(index);
                 index = -1;
             }
