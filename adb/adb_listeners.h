@@ -19,6 +19,8 @@
 
 #include "adb.h"
 
+#include <string>
+
 // error/status codes for install_listener.
 enum install_status_t {
   INSTALL_STATUS_OK = 0,
@@ -39,7 +41,7 @@ install_status_t install_listener(const char *local_name,
                                   atransport* transport,
                                   int no_rebind);
 
-int format_listeners(char* buf, size_t buflen);
+std::string format_listeners();
 
 install_status_t remove_listener(const char* local_name, atransport* transport);
 void remove_all_listeners(void);

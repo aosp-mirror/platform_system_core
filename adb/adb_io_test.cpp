@@ -139,13 +139,13 @@ TEST(io, WriteFdExactly_ENOSPC) {
     ASSERT_EQ(ENOSPC, errno);
 }
 
-TEST(io, WriteStringFully) {
+TEST(io, WriteFdExactly_string) {
   const char str[] = "Foobar";
   TemporaryFile tf;
   ASSERT_NE(-1, tf.fd);
 
   // Test writing a partial string to the file.
-  ASSERT_TRUE(WriteStringFully(tf.fd, str)) << strerror(errno);
+  ASSERT_TRUE(WriteFdExactly(tf.fd, str)) << strerror(errno);
   ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
 
   std::string s;

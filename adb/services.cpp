@@ -31,10 +31,11 @@
 #include <unistd.h>
 #endif
 
+#include <base/file.h>
 #include <base/stringprintf.h>
+#include <base/strings.h>
 
 #if !ADB_HOST
-#include "base/file.h"
 #include "cutils/android_reboot.h"
 #include "cutils/properties.h"
 #endif
@@ -147,8 +148,7 @@ static bool reboot_service_impl(int fd, const char* arg) {
     // in the command file.
     if (strcmp(reboot_arg, "sideload") == 0) {
         if (getuid() != 0) {
-            snprintf(buf, sizeof(buf), "'adb root' is required for 'adb reboot sideload'.\n");
-            WriteStringFully(fd, buf);
+            WriteFdExactly(fd, "'adb root' is required for 'adb reboot sideload'.\n");
             return false;
         }
 
@@ -175,14 +175,14 @@ static bool reboot_service_impl(int fd, const char* arg) {
     int ret = snprintf(property_val, sizeof(property_val), "reboot,%s", reboot_arg);
     if (ret >= static_cast<int>(sizeof(property_val))) {
         snprintf(buf, sizeof(buf), "reboot string too long. length=%d\n", ret);
-        WriteStringFully(fd, buf);
+        WriteFdExactly(fd, buf);
         return false;
     }
 
     ret = property_set(ANDROID_RB_PROPERTY, property_val);
     if (ret < 0) {
         snprintf(buf, sizeof(buf), "reboot failed: %d\n", ret);
-        WriteStringFully(fd, buf);
+        WriteFdExactly(fd, buf);
         return false;
     }
 
@@ -208,7 +208,7 @@ void reverse_service(int fd, void* arg)
     const char* command = reinterpret_cast<const char*>(arg);
 
     if (handle_forward_request(command, kTransportAny, NULL, fd) < 0) {
-        sendfailmsg(fd, "not a reverse forwarding command");
+        SendFail(fd, "not a reverse forwarding command");
     }
     free(arg);
     adb_close(fd);
@@ -551,9 +551,9 @@ static void wait_for_state(int fd, void* cookie)
     std::string error_msg = "unknown error";
     atransport* t = acquire_one_transport(sinfo->state, sinfo->transport, sinfo->serial, &error_msg);
     if (t != 0) {
-        WriteFdExactly(fd, "OKAY", 4);
+        SendOkay(fd);
     } else {
-        sendfailmsg(fd, error_msg.c_str());
+        SendFail(fd, error_msg);
     }
 
     if (sinfo->serial)
@@ -563,35 +563,31 @@ static void wait_for_state(int fd, void* cookie)
     D("wait_for_state is done\n");
 }
 
-static void connect_device(char* host, char* buffer, int buffer_size)
-{
-    int port, fd;
-    char* portstr = strchr(host, ':');
-    char hostbuf[100];
-    char serial[100];
-    int ret;
-
-    strncpy(hostbuf, host, sizeof(hostbuf) - 1);
-    if (portstr) {
-        if (portstr - host >= (ptrdiff_t)sizeof(hostbuf)) {
-            snprintf(buffer, buffer_size, "bad host name %s", host);
-            return;
-        }
-        // zero terminate the host at the point we found the colon
-        hostbuf[portstr - host] = 0;
-        if (sscanf(portstr + 1, "%d", &port) != 1) {
-            snprintf(buffer, buffer_size, "bad port number %s", portstr);
-            return;
-        }
-    } else {
-        port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
+static void connect_device(const std::string& host, std::string* response) {
+    if (host.empty()) {
+        *response = "empty host name";
+        return;
     }
 
-    snprintf(serial, sizeof(serial), "%s:%d", hostbuf, port);
+    std::vector<std::string> pieces = android::base::Split(host, ":");
+    const std::string& hostname = pieces[0];
 
-    fd = socket_network_client_timeout(hostbuf, port, SOCK_STREAM, 10);
+    int port = DEFAULT_ADB_LOCAL_TRANSPORT_PORT;
+    if (pieces.size() > 1) {
+        if (sscanf(pieces[1].c_str(), "%d", &port) != 1) {
+            *response = android::base::StringPrintf("bad port number %s", pieces[1].c_str());
+            return;
+        }
+    }
+
+    // This may look like we're putting 'host' back together,
+    // but we're actually inserting the default port if necessary.
+    std::string serial = android::base::StringPrintf("%s:%d", hostname.c_str(), port);
+
+    int fd = socket_network_client_timeout(hostname.c_str(), port, SOCK_STREAM, 10);
     if (fd < 0) {
-        snprintf(buffer, buffer_size, "unable to connect to %s:%d", host, port);
+        *response = android::base::StringPrintf("unable to connect to %s:%d",
+                                                hostname.c_str(), port);
         return;
     }
 
@@ -599,85 +595,74 @@ static void connect_device(char* host, char* buffer, int buffer_size)
     close_on_exec(fd);
     disable_tcp_nagle(fd);
 
-    ret = register_socket_transport(fd, serial, port, 0);
+    int ret = register_socket_transport(fd, serial.c_str(), port, 0);
     if (ret < 0) {
         adb_close(fd);
-        snprintf(buffer, buffer_size, "already connected to %s", serial);
+        *response = android::base::StringPrintf("already connected to %s", serial.c_str());
     } else {
-        snprintf(buffer, buffer_size, "connected to %s", serial);
+        *response = android::base::StringPrintf("connected to %s", serial.c_str());
     }
 }
 
-void connect_emulator(char* port_spec, char* buffer, int buffer_size)
-{
-    char* port_separator = strchr(port_spec, ',');
-    if (!port_separator) {
-        snprintf(buffer, buffer_size,
-                "unable to parse '%s' as <console port>,<adb port>",
-                port_spec);
+void connect_emulator(const std::string& port_spec, std::string* response) {
+    std::vector<std::string> pieces = android::base::Split(port_spec, ",");
+    if (pieces.size() != 2) {
+        *response = android::base::StringPrintf("unable to parse '%s' as <console port>,<adb port>",
+                                                port_spec.c_str());
         return;
     }
 
-    // Zero-terminate console port and make port_separator point to 2nd port.
-    *port_separator++ = 0;
-    int console_port = strtol(port_spec, NULL, 0);
-    int adb_port = strtol(port_separator, NULL, 0);
-    if (!(console_port > 0 && adb_port > 0)) {
-        *(port_separator - 1) = ',';
-        snprintf(buffer, buffer_size,
-                "Invalid port numbers: Expected positive numbers, got '%s'",
-                port_spec);
+    int console_port = strtol(pieces[0].c_str(), NULL, 0);
+    int adb_port = strtol(pieces[1].c_str(), NULL, 0);
+    if (console_port <= 0 || adb_port <= 0) {
+        *response = android::base::StringPrintf("Invalid port numbers: %s", port_spec.c_str());
         return;
     }
 
-    /* Check if the emulator is already known.
-     * Note: There's a small but harmless race condition here: An emulator not
-     * present just yet could be registered by another invocation right
-     * after doing this check here. However, local_connect protects
-     * against double-registration too. From here, a better error message
-     * can be produced. In the case of the race condition, the very specific
-     * error message won't be shown, but the data doesn't get corrupted. */
+    // Check if the emulator is already known.
+    // Note: There's a small but harmless race condition here: An emulator not
+    // present just yet could be registered by another invocation right
+    // after doing this check here. However, local_connect protects
+    // against double-registration too. From here, a better error message
+    // can be produced. In the case of the race condition, the very specific
+    // error message won't be shown, but the data doesn't get corrupted.
     atransport* known_emulator = find_emulator_transport_by_adb_port(adb_port);
-    if (known_emulator != NULL) {
-        snprintf(buffer, buffer_size,
-                "Emulator on port %d already registered.", adb_port);
+    if (known_emulator != nullptr) {
+        *response = android::base::StringPrintf("Emulator already registered on port %d", adb_port);
         return;
     }
 
-    /* Check if more emulators can be registered. Similar unproblematic
-     * race condition as above. */
+    // Check if more emulators can be registered. Similar unproblematic
+    // race condition as above.
     int candidate_slot = get_available_local_transport_index();
     if (candidate_slot < 0) {
-        snprintf(buffer, buffer_size, "Cannot accept more emulators.");
+        *response = "Cannot accept more emulators";
         return;
     }
 
-    /* Preconditions met, try to connect to the emulator. */
+    // Preconditions met, try to connect to the emulator.
     if (!local_connect_arbitrary_ports(console_port, adb_port)) {
-        snprintf(buffer, buffer_size,
-                "Connected to emulator on ports %d,%d", console_port, adb_port);
+        *response = android::base::StringPrintf("Connected to emulator on ports %d,%d",
+                                                console_port, adb_port);
     } else {
-        snprintf(buffer, buffer_size,
-                "Could not connect to emulator on ports %d,%d",
-                console_port, adb_port);
+        *response = android::base::StringPrintf("Could not connect to emulator on ports %d,%d",
+                                                console_port, adb_port);
     }
 }
 
 static void connect_service(int fd, void* cookie)
 {
-    char buf[4096];
-    char resp[4096];
     char *host = reinterpret_cast<char*>(cookie);
 
+    std::string response;
     if (!strncmp(host, "emu:", 4)) {
-        connect_emulator(host + 4, buf, sizeof(buf));
+        connect_emulator(host + 4, &response);
     } else {
-        connect_device(host, buf, sizeof(buf));
+        connect_device(host, &response);
     }
 
     // Send response for emulator and device
-    snprintf(resp, sizeof(resp), "%04x%s",(unsigned)strlen(buf), buf);
-    WriteFdExactly(fd, resp, strlen(resp));
+    SendProtocolString(fd, response);
     adb_close(fd);
 }
 #endif
