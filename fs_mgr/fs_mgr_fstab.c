@@ -15,10 +15,12 @@
  */
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <unistd.h>
 
 #include "fs_mgr_priv.h"
 
@@ -71,6 +73,19 @@ static struct flag_list fs_mgr_flags[] = {
     { "defaults",    0 },
     { 0,             0 },
 };
+
+static uint64_t calculate_zram_size(unsigned int percentage)
+{
+    uint64_t total;
+
+    total  = sysconf(_SC_PHYS_PAGES);
+    total *= percentage;
+    total /= 100;
+
+    total *= sysconf(_SC_PAGESIZE);
+
+    return total;
+}
 
 static int parse_flags(char *flags, struct flag_list *fl,
                        struct fs_mgr_flag_values *flag_vals,
@@ -145,7 +160,12 @@ static int parse_flags(char *flags, struct flag_list *fl,
                 } else if ((fl[i].flag == MF_SWAPPRIO) && flag_vals) {
                     flag_vals->swap_prio = strtoll(strchr(p, '=') + 1, NULL, 0);
                 } else if ((fl[i].flag == MF_ZRAMSIZE) && flag_vals) {
-                    flag_vals->zram_size = strtoll(strchr(p, '=') + 1, NULL, 0);
+                    int is_percent = !!strrchr(p, '%');
+                    unsigned int val = strtoll(strchr(p, '=') + 1, NULL, 0);
+                    if (is_percent)
+                        flag_vals->zram_size = calculate_zram_size(val);
+                    else
+                        flag_vals->zram_size = val;
                 }
                 break;
             }
