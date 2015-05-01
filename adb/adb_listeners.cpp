@@ -19,6 +19,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <base/stringprintf.h>
+
 #include "sysdeps.h"
 #include "transport.h"
 
@@ -143,49 +145,17 @@ int local_name_to_fd(const char *name)
     return -1;
 }
 
-// Write a single line describing a listener to a user-provided buffer.
-// Appends a trailing zero, even in case of truncation, but the function
-// returns the full line length.
-// If |buffer| is NULL, does not write but returns required size.
-static int format_listener(alistener* l, char* buffer, size_t buffer_len) {
-    // Format is simply:
-    //
-    //  <device-serial> " " <local-name> " " <remote-name> "\n"
-    //
-    int local_len = strlen(l->local_name);
-    int connect_len = strlen(l->connect_to);
-    int serial_len = strlen(l->transport->serial);
-
-    if (buffer != NULL) {
-        snprintf(buffer, buffer_len, "%s %s %s\n",
-                l->transport->serial, l->local_name, l->connect_to);
-    }
-    // NOTE: snprintf() on Windows returns -1 in case of truncation, so
-    // return the computed line length instead.
-    return local_len + connect_len + serial_len + 3;
-}
-
-// Write the list of current listeners (network redirections) into a
-// user-provided buffer. Appends a trailing zero, even in case of
-// trunctaion, but return the full size in bytes.
-// If |buffer| is NULL, does not write but returns required size.
-int format_listeners(char* buf, size_t buflen)
-{
-    alistener* l;
-    int result = 0;
-    for (l = listener_list.next; l != &listener_list; l = l->next) {
+// Write the list of current listeners (network redirections) into a string.
+std::string format_listeners() {
+    std::string result;
+    for (alistener* l = listener_list.next; l != &listener_list; l = l->next) {
         // Ignore special listeners like those for *smartsocket*
-        if (l->connect_to[0] == '*')
-          continue;
-        int len = format_listener(l, buf, buflen);
-        // Ensure there is space for the trailing zero.
-        result += len;
-        if (buf != NULL) {
-          buf += len;
-          buflen -= len;
-          if (buflen <= 0)
-              break;
+        if (l->connect_to[0] == '*') {
+            continue;
         }
+        //  <device-serial> " " <local-name> " " <remote-name> "\n"
+        android::base::StringAppendF(&result, "%s %s %s\n",
+                                     l->transport->serial, l->local_name, l->connect_to);
     }
     return result;
 }

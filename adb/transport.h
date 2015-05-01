@@ -23,10 +23,6 @@
 
 #include "adb.h"
 
-#if ADB_TRACE
-void dump_hex(const unsigned char* ptr, size_t  len);
-#endif
-
 /*
  * Obtain a transport from the available transports.
  * If state is != CS_ANY, only transports in that state are considered.
@@ -45,7 +41,7 @@ void update_transports(void);
 ** get_device_transport does an acquire on your behalf before returning
 */
 void init_transport_registration(void);
-int list_transports(char* buf, size_t bufsize, int long_listing);
+std::string list_transports(bool long_listing);
 atransport* find_transport(const char* serial);
 
 void register_usb_transport(usb_handle* h, const char* serial,
