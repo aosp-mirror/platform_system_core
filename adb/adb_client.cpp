@@ -56,7 +56,7 @@ static bool ReadProtocolString(int fd, std::string* s, std::string* error) {
     buf[4] = 0;
 
     unsigned long len = strtoul(buf, 0, 16);
-    s->resize(len + 1, '\0'); // Ensure NUL-termination.
+    s->resize(len, '\0');
     if (!ReadFdExactly(fd, &(*s)[0], len)) {
         *error = perror_str("protocol fault (couldn't read status message)");
         return false;
@@ -136,9 +136,7 @@ static int switch_socket_transport(int fd, std::string* error) {
         service += transport_type;
     }
 
-    char tmp[5];
-    snprintf(tmp, sizeof(tmp), "%04zx", service.size());
-    if (!WriteFdExactly(fd, tmp, 4) || !WriteFdExactly(fd, service.c_str(), service.size())) {
+    if (!SendProtocolString(fd, service)) {
         *error = perror_str("write failure during connection");
         adb_close(fd);
         return -1;
@@ -199,9 +197,7 @@ int _adb_connect(const std::string& service, std::string* error) {
         return -1;
     }
 
-    char tmp[5];
-    snprintf(tmp, sizeof(tmp), "%04zx", service.size());
-    if(!WriteFdExactly(fd, tmp, 4) || !WriteFdExactly(fd, &service[0], service.size())) {
+    if(!SendProtocolString(fd, service)) {
         *error = perror_str("write failure during connection");
         adb_close(fd);
         return -1;

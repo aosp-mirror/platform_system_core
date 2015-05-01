@@ -22,14 +22,31 @@
 #include <unistd.h>
 
 #include "adb_trace.h"
-#include "transport.h"
+#include "adb_utils.h"
+
+bool SendProtocolString(int fd, const std::string& s) {
+    int length = s.size();
+    if (length > 0xffff) {
+        length = 0xffff;
+    }
+
+    char buf[5];
+    snprintf(buf, sizeof(buf), "%04x", length);
+    return WriteFdExactly(fd, buf, 4) && WriteFdExactly(fd, s);
+}
+
+bool SendOkay(int fd) {
+    return WriteFdExactly(fd, "OKAY", 4);
+}
+
+bool SendFail(int fd, const std::string& reason) {
+    return WriteFdExactly(fd, "FAIL", 4) && SendProtocolString(fd, reason);
+}
 
 bool ReadFdExactly(int fd, void* buf, size_t len) {
     char* p = reinterpret_cast<char*>(buf);
 
-#if ADB_TRACE
     size_t len0 = len;
-#endif
 
     D("readx: fd=%d wanted=%zu\n", fd, len);
     while (len > 0) {
@@ -47,12 +64,10 @@ bool ReadFdExactly(int fd, void* buf, size_t len) {
         }
     }
 
-#if ADB_TRACE
     D("readx: fd=%d wanted=%zu got=%zu\n", fd, len0, len0 - len);
     if (ADB_TRACING) {
         dump_hex(reinterpret_cast<const unsigned char*>(buf), len0);
     }
-#endif
 
     return true;
 }
@@ -61,12 +76,10 @@ bool WriteFdExactly(int fd, const void* buf, size_t len) {
     const char* p = reinterpret_cast<const char*>(buf);
     int r;
 
-#if ADB_TRACE
     D("writex: fd=%d len=%d: ", fd, (int)len);
     if (ADB_TRACING) {
         dump_hex(reinterpret_cast<const unsigned char*>(buf), len);
     }
-#endif
 
     while (len > 0) {
         r = adb_write(fd, p, len);
@@ -88,6 +101,14 @@ bool WriteFdExactly(int fd, const void* buf, size_t len) {
         }
     }
     return true;
+}
+
+bool WriteFdExactly(int fd, const char* str) {
+    return WriteFdExactly(fd, str, strlen(str));
+}
+
+bool WriteFdExactly(int fd, const std::string& str) {
+    return WriteFdExactly(fd, str.c_str(), str.size());
 }
 
 bool WriteStringFully(int fd, const char* str) {

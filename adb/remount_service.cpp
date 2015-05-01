@@ -92,7 +92,7 @@ static bool remount_partition(int fd, const char* partition, int* ro) {
   if (remount(partition, ro)) {
     char buf[200];
     snprintf(buf, sizeof(buf), "remount of %s failed: %s\n", partition, strerror(errno));
-    WriteStringFully(fd, buf);
+    WriteFdExactly(fd, buf);
     return false;
   }
   return true;
@@ -102,7 +102,7 @@ void remount_service(int fd, void* cookie) {
     char prop_buf[PROPERTY_VALUE_MAX];
 
     if (getuid() != 0) {
-        WriteStringFully(fd, "Not running as root. Try \"adb root\" first.\n");
+        WriteFdExactly(fd, "Not running as root. Try \"adb root\" first.\n");
         adb_close(fd);
         return;
     }
@@ -128,12 +128,11 @@ void remount_service(int fd, void* cookie) {
                  both ? " and " : "",
                  vendor_verified ? "vendor" : "",
                  both ? "s" : "");
-        WriteStringFully(fd, buffer);
-        snprintf(buffer, sizeof(buffer),
-                 "Use \"adb disable-verity\" to disable verity.\n"
-                 "If you do not, remount may succeed, however, you will still "
-                 "not be able to write to these volumes.\n");
-        WriteStringFully(fd, buffer);
+        WriteFdExactly(fd, buffer);
+        WriteFdExactly(fd,
+                       "Use \"adb disable-verity\" to disable verity.\n"
+                       "If you do not, remount may succeed, however, you will still "
+                       "not be able to write to these volumes.\n");
     }
 
     bool success = true;
@@ -141,7 +140,7 @@ void remount_service(int fd, void* cookie) {
     success &= remount_partition(fd, "/vendor", &vendor_ro);
     success &= remount_partition(fd, "/oem", &oem_ro);
 
-    WriteStringFully(fd, success ? "remount succeeded\n" : "remount failed\n");
+    WriteFdExactly(fd, success ? "remount succeeded\n" : "remount failed\n");
 
     adb_close(fd);
 }

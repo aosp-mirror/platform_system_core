@@ -124,6 +124,21 @@ endif
 
 include $(BUILD_HOST_NATIVE_TEST)
 
+# adb device tracker (used by ddms) test tool
+# =========================================================
+
+ifeq ($(HOST_OS),linux)
+include $(CLEAR_VARS)
+LOCAL_CLANG := $(adb_host_clang)
+LOCAL_MODULE := adb_device_tracker_test
+LOCAL_CFLAGS := -DADB_HOST=1 $(LIBADB_CFLAGS)
+LOCAL_SRC_FILES := test_track_devices.cpp
+LOCAL_SHARED_LIBRARIES := liblog libbase
+LOCAL_STATIC_LIBRARIES := libadb libcrypto_static libcutils
+LOCAL_LDLIBS += -lrt -ldl -lpthread
+include $(BUILD_HOST_EXECUTABLE)
+endif
+
 # adb host tool
 # =========================================================
 include $(CLEAR_VARS)

@@ -24,4 +24,6 @@ bool directory_exists(const std::string& path);
 
 std::string escape_arg(const std::string& s);
 
+void dump_hex(const void* ptr, size_t byte_count);
+
 #endif
