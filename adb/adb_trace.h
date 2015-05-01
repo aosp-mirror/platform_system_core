@@ -23,9 +23,6 @@
 #include <stdio.h>
 #endif
 
-/* define ADB_TRACE to 1 to enable tracing support, or 0 to disable it */
-#define  ADB_TRACE    1
-
 /* IMPORTANT: if you change the following list, don't
  * forget to update the corresponding 'tags' table in
  * the adb_trace_init() function implemented in adb.c
@@ -44,8 +41,6 @@ enum AdbTrace {
     TRACE_AUTH,
     TRACE_FDEVENT,
 } ;
-
-#if ADB_TRACE
 
 #if !ADB_HOST
 /*
@@ -97,19 +92,6 @@ void    adb_trace_init(void);
                 errno = save_errno;                    \
            }                                           \
         } while (0)
-#  define  DD(...)                                     \
-        do {                                           \
-            int save_errno = errno;                    \
-            adb_mutex_lock(&D_lock);                   \
-            fprintf(stderr, "%16s: %5d:%5lu | ",       \
-                    __FUNCTION__,                      \
-                    getpid(), adb_thread_id());        \
-            errno = save_errno;                        \
-            fprintf(stderr, __VA_ARGS__ );             \
-            fflush(stderr);                            \
-            adb_mutex_unlock(&D_lock);                 \
-            errno = save_errno;                        \
-        } while (0)
 #else
 #  define  D(...)                                      \
         do {                                           \
@@ -129,19 +111,6 @@ void    adb_trace_init(void);
                     __VA_ARGS__ );                     \
             }                                          \
         } while (0)
-#  define  DD(...)                                     \
-        do {                                           \
-          __android_log_print(                         \
-              ANDROID_LOG_INFO,                        \
-              __FUNCTION__,                            \
-              __VA_ARGS__ );                           \
-        } while (0)
 #endif /* ADB_HOST */
-#else
-#  define  D(...)          ((void)0)
-#  define  DR(...)         ((void)0)
-#  define  DD(...)         ((void)0)
-#  define  ADB_TRACING     0
-#endif /* ADB_TRACE */
 
 #endif /* __ADB_TRACE_H */
