@@ -209,6 +209,8 @@ struct atransport
     unsigned char token[TOKEN_SIZE];
     fdevent auth_fde;
     unsigned failed_auth_attempts;
+
+    const char* connection_state_name() const;
 };
 
 
@@ -369,7 +371,6 @@ enum subproc_mode {
 #define USB_FFS_ADB_IN    USB_FFS_ADB_EP(ep2)
 #endif
 
-int sendfailmsg(int fd, const char *reason);
 int handle_host_request(char *service, transport_type ttype, char* serial, int reply_fd, asocket *s);
 
 void handle_online(atransport *t);

@@ -26,7 +26,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <base/stringprintf.h>
+
 #include "adb.h"
+#include "adb_utils.h"
 
 static void transport_unref(atransport *t);
 
@@ -41,34 +44,6 @@ static atransport pending_list = {
 };
 
 ADB_MUTEX_DEFINE( transport_lock );
-
-#if ADB_TRACE
-#define MAX_DUMP_HEX_LEN 16
-void dump_hex(const unsigned char* ptr, size_t  len)
-{
-    int  nn, len2 = len;
-    // Build a string instead of logging each character.
-    // MAX chars in 2 digit hex, one space, MAX chars, one '\0'.
-    char buffer[MAX_DUMP_HEX_LEN *2 + 1 + MAX_DUMP_HEX_LEN + 1 ], *pb = buffer;
-
-    if (len2 > MAX_DUMP_HEX_LEN) len2 = MAX_DUMP_HEX_LEN;
-
-    for (nn = 0; nn < len2; nn++) {
-        sprintf(pb, "%02x", ptr[nn]);
-        pb += 2;
-    }
-    sprintf(pb++, " ");
-
-    for (nn = 0; nn < len2; nn++) {
-        int  c = ptr[nn];
-        if (c < 32 || c > 127)
-            c = '.';
-        *pb++ =  c;
-    }
-    *pb++ = '\0';
-    DR("%s\n", buffer);
-}
-#endif
 
 void kick_transport(atransport* t)
 {
@@ -117,10 +92,7 @@ void run_transport_disconnects(atransport* t)
     }
 }
 
-#if ADB_TRACE
-static void
-dump_packet(const char* name, const char* func, apacket* p)
-{
+static void dump_packet(const char* name, const char* func, apacket* p) {
     unsigned  command = p->msg.command;
     int       len     = p->msg.data_length;
     char      cmd[9];
@@ -155,7 +127,6 @@ dump_packet(const char* name, const char* func, apacket* p)
         name, func, cmd, arg0, arg1, len);
     dump_hex(p->data, len);
 }
-#endif /* ADB_TRACE */
 
 static int
 read_packet(int  fd, const char* name, apacket** ppacket)
@@ -180,11 +151,9 @@ read_packet(int  fd, const char* name, apacket** ppacket)
         }
     }
 
-#if ADB_TRACE
     if (ADB_TRACING) {
         dump_packet(name, "from remote", *ppacket);
     }
-#endif
     return 0;
 }
 
@@ -199,11 +168,9 @@ write_packet(int  fd, const char* name, apacket** ppacket)
         name = buff;
     }
 
-#if ADB_TRACE
     if (ADB_TRACING) {
         dump_packet(name, "to remote", *ppacket);
     }
-#endif
     len = sizeof(ppacket);
     while(len > 0) {
         r = adb_write(fd, p, len);
@@ -389,17 +356,6 @@ static fdevent transport_registration_fde;
 
 
 #if ADB_HOST
-static int list_transports_msg(char*  buffer, size_t  bufferlen)
-{
-    char  head[5];
-    int   len;
-
-    len = list_transports(buffer+4, bufferlen-4, 0);
-    snprintf(head, sizeof(head), "%04x", len);
-    memcpy(buffer, head, 4);
-    len += 4;
-    return len;
-}
 
 /* this adds support required by the 'track-devices' service.
  * this is used to send the content of "list_transport" to any
@@ -457,38 +413,28 @@ device_tracker_enqueue( asocket*  socket, apacket*  p )
     return -1;
 }
 
-static int
-device_tracker_send( device_tracker*  tracker,
-                     const char*      buffer,
-                     int              len )
-{
-    apacket*  p = get_apacket();
-    asocket*  peer = tracker->socket.peer;
+static int device_tracker_send(device_tracker* tracker, const std::string& string) {
+    apacket* p = get_apacket();
+    asocket* peer = tracker->socket.peer;
 
-    memcpy(p->data, buffer, len);
-    p->len = len;
-    return peer->enqueue( peer, p );
+    snprintf(reinterpret_cast<char*>(p->data), 5, "%04x", static_cast<int>(string.size()));
+    memcpy(&p->data[4], string.data(), string.size());
+    p->len = 4 + string.size();
+    return peer->enqueue(peer, p);
 }
 
+static void device_tracker_ready(asocket* socket) {
+    device_tracker* tracker = reinterpret_cast<device_tracker*>(socket);
 
-static void
-device_tracker_ready( asocket*  socket )
-{
-    device_tracker*  tracker = (device_tracker*) socket;
-
-    /* we want to send the device list when the tracker connects
-    * for the first time, even if no update occured */
+    // We want to send the device list when the tracker connects
+    // for the first time, even if no update occurred.
     if (tracker->update_needed > 0) {
-        char  buffer[1024];
-        int   len;
-
         tracker->update_needed = 0;
 
-        len = list_transports_msg(buffer, sizeof(buffer));
-        device_tracker_send(tracker, buffer, len);
+        std::string transports = list_transports(false);
+        device_tracker_send(tracker, transports);
     }
 }
-
 
 asocket*
 create_device_tracker(void)
@@ -510,27 +456,25 @@ create_device_tracker(void)
 }
 
 
-/* call this function each time the transport list has changed */
-void update_transports(void) {
-    char             buffer[1024];
-    int              len;
-    device_tracker*  tracker;
+// Call this function each time the transport list has changed.
+void update_transports() {
+    std::string transports = list_transports(false);
 
-    len = list_transports_msg(buffer, sizeof(buffer));
-
-    tracker = device_tracker_list;
-    while (tracker != NULL) {
-        device_tracker*  next = tracker->next;
-        /* note: this may destroy the tracker if the connection is closed */
-        device_tracker_send(tracker, buffer, len);
+    device_tracker* tracker = device_tracker_list;
+    while (tracker != nullptr) {
+        device_tracker* next = tracker->next;
+        // This may destroy the tracker if the connection is closed.
+        device_tracker_send(tracker, transports);
         tracker = next;
     }
 }
+
 #else
-void  update_transports(void)
-{
-    // nothing to do on the device side
+
+void update_transports() {
+    // Nothing to do on the device side.
 }
+
 #endif // ADB_HOST
 
 struct tmsg
@@ -895,100 +839,71 @@ retry:
     return result;
 }
 
-#if ADB_HOST
-static const char *statename(atransport *t)
-{
-    switch(t->connection_state){
+const char* atransport::connection_state_name() const {
+    switch (connection_state) {
     case CS_OFFLINE: return "offline";
     case CS_BOOTLOADER: return "bootloader";
     case CS_DEVICE: return "device";
     case CS_HOST: return "host";
     case CS_RECOVERY: return "recovery";
-    case CS_SIDELOAD: return "sideload";
     case CS_NOPERM: return "no permissions";
+    case CS_SIDELOAD: return "sideload";
     case CS_UNAUTHORIZED: return "unauthorized";
     default: return "unknown";
     }
 }
 
-static void add_qual(char **buf, size_t *buf_size,
-                     const char *prefix, const char *qual, bool sanitize_qual)
-{
-    if (!buf || !*buf || !buf_size || !*buf_size || !qual || !*qual)
+#if ADB_HOST
+
+static void append_transport_info(std::string* result, const char* key, const char* value, bool sanitize) {
+    if (value == nullptr || *value == '\0') {
         return;
-
-    int prefix_len;
-    size_t len = snprintf(*buf, *buf_size, "%s%n%s", prefix, &prefix_len, qual);
-
-    if (sanitize_qual) {
-        for (char* cp = *buf + prefix_len; cp < *buf + len; cp++) {
-            if (!isalnum(*cp))
-                *cp = '_';
-        }
     }
 
-    *buf_size -= len;
-    *buf += len;
+    *result += ' ';
+    *result += key;
+
+    for (const char* p = value; *p; ++p) {
+        result->push_back((!sanitize || isalnum(*p)) ? *p : '_');
+    }
 }
 
-static size_t format_transport(atransport *t, char *buf, size_t bufsize,
-                               int long_listing)
-{
+static void append_transport(atransport* t, std::string* result, bool long_listing) {
     const char* serial = t->serial;
-    if (!serial || !serial[0])
+    if (!serial || !serial[0]) {
         serial = "????????????";
+    }
 
     if (!long_listing) {
-        return snprintf(buf, bufsize, "%s\t%s\n", serial, statename(t));
+        *result += serial;
+        *result += '\t';
+        *result += t->connection_state_name();
     } else {
-        size_t len, remaining = bufsize;
+        android::base::StringAppendF(result, "%-22s %s", serial, t->connection_state_name());
 
-        len = snprintf(buf, remaining, "%-22s %s", serial, statename(t));
-        remaining -= len;
-        buf += len;
-
-        add_qual(&buf, &remaining, " ", t->devpath, false);
-        add_qual(&buf, &remaining, " product:", t->product, false);
-        add_qual(&buf, &remaining, " model:", t->model, true);
-        add_qual(&buf, &remaining, " device:", t->device, false);
-
-        len = snprintf(buf, remaining, "\n");
-        remaining -= len;
-
-        return bufsize - remaining;
+        append_transport_info(result, "", t->devpath, false);
+        append_transport_info(result, "product:", t->product, false);
+        append_transport_info(result, "model:", t->model, true);
+        append_transport_info(result, "device:", t->device, false);
     }
+    *result += '\n';
 }
 
-int list_transports(char *buf, size_t  bufsize, int long_listing)
-{
-    char*       p   = buf;
-    char*       end = buf + bufsize;
-    int         len;
-    atransport *t;
-
-        /* XXX OVERRUN PROBLEMS XXX */
+std::string list_transports(bool long_listing) {
+    std::string result;
     adb_mutex_lock(&transport_lock);
-    for(t = transport_list.next; t != &transport_list; t = t->next) {
-        len = format_transport(t, p, end - p, long_listing);
-        if (p + len >= end) {
-            /* discard last line if buffer is too short */
-            break;
-        }
-        p += len;
+    for (atransport* t = transport_list.next; t != &transport_list; t = t->next) {
+        append_transport(t, &result, long_listing);
     }
-    p[0] = 0;
     adb_mutex_unlock(&transport_lock);
-    return p - buf;
+    return result;
 }
-
 
 /* hack for osx */
 void close_usb_devices()
 {
-    atransport *t;
-
     adb_mutex_lock(&transport_lock);
-    for(t = transport_list.next; t != &transport_list; t = t->next) {
+    for (atransport* t = transport_list.next; t != &transport_list; t = t->next) {
         if ( !t->kicked ) {
             t->kicked = 1;
             t->kick(t);

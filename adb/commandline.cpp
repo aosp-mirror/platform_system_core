@@ -490,17 +490,8 @@ static int adb_download_buffer(const char *service, const char *fn, const void* 
         printf("\n");
     }
 
-    // TODO: should this be adb_status?
-    char buf[5];
-    if(!ReadFdExactly(fd, buf, 4)){
-        fprintf(stderr,"* error reading response *\n");
-        adb_close(fd);
-        return -1;
-    }
-    if(memcmp(buf, "OKAY", 4)) {
-        buf[4] = 0;
-        fprintf(stderr,"* error response '%s' *\n", buf);
-        adb_close(fd);
+    if (!adb_status(fd, &error)) {
+        fprintf(stderr,"* error response '%s' *\n", error.c_str());
         return -1;
     }
 

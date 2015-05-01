@@ -17,8 +17,18 @@
 #ifndef ADB_IO_H
 #define ADB_IO_H
 
-#include <stdbool.h>
 #include <sys/types.h>
+
+#include <string>
+
+// Sends the protocol "OKAY" message.
+bool SendOkay(int fd);
+
+// Sends the protocol "FAIL" message, with the given failure reason.
+bool SendFail(int fd, const std::string& reason);
+
+// Writes a protocol-format string; a four hex digit length followed by the string data.
+bool SendProtocolString(int fd, const std::string& s);
 
 /*
  * Reads exactly len bytes from fd into buf.
@@ -37,9 +47,13 @@ bool ReadFdExactly(int fd, void *buf, size_t len);
  * completed. If the other end of the fd (such as in a socket, pipe, or fifo),
  * is closed, errno will be set to 0.
  */
-bool WriteFdExactly(int fd, const void *buf, size_t len);
+bool WriteFdExactly(int fd, const void* buf, size_t len);
 
-/* Same as WriteFdExactly, but with an implicit len = strlen(buf). */
+/* Same as above, but with an implicit len = strlen(buf). */
+bool WriteFdExactly(int fd, const char* s);
+bool WriteFdExactly(int fd, const std::string& s);
+
+// TODO: move minadb off this and remove it.
 bool WriteStringFully(int fd, const char* str);
 
 #endif /* ADB_IO_H */
