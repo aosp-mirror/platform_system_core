@@ -48,9 +48,7 @@
 #include <sys/mount.h>
 #endif
 
-#if ADB_TRACE
 ADB_MUTEX_DEFINE( D_lock );
-#endif
 
 int HOST = 0;
 
@@ -322,28 +320,6 @@ static size_t fill_connect_data(char *buf, size_t bufsize)
 #endif
 }
 
-#if !ADB_HOST
-static void send_msg_with_header(int fd, const char* msg, size_t msglen) {
-    char header[5];
-    if (msglen > 0xffff)
-        msglen = 0xffff;
-    snprintf(header, sizeof(header), "%04x", (unsigned)msglen);
-    WriteFdExactly(fd, header, 4);
-    WriteFdExactly(fd, msg, msglen);
-}
-#endif
-
-#if ADB_HOST
-static void send_msg_with_okay(int fd, const char* msg, size_t msglen) {
-    char header[9];
-    if (msglen > 0xffff)
-        msglen = 0xffff;
-    snprintf(header, sizeof(header), "OKAY%04x", (unsigned)msglen);
-    WriteFdExactly(fd, header, 8);
-    WriteFdExactly(fd, msg, msglen);
-}
-#endif // ADB_HOST
-
 void send_connect(atransport *t)
 {
     D("Calling send_connect \n");
@@ -355,32 +331,6 @@ void send_connect(atransport *t)
                                             sizeof(cp->data));
     send_packet(cp, t);
 }
-
-#if ADB_HOST
-static const char* connection_state_name(atransport *t)
-{
-    if (t == NULL) {
-        return "unknown";
-    }
-
-    switch(t->connection_state) {
-    case CS_BOOTLOADER:
-        return "bootloader";
-    case CS_DEVICE:
-        return "device";
-    case CS_RECOVERY:
-        return "recovery";
-    case CS_SIDELOAD:
-        return "sideload";
-    case CS_OFFLINE:
-        return "offline";
-    case CS_UNAUTHORIZED:
-        return "unauthorized";
-    default:
-        return "unknown";
-    }
-}
-#endif // ADB_HOST
 
 // qual_overwrite is used to overwrite a qualifier string.  dst is a
 // pointer to a char pointer.  It is assumed that if *dst is non-NULL, it
@@ -752,20 +702,11 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
 {
     if (!strcmp(service, "list-forward")) {
         // Create the list of forward redirections.
-        int buffer_size = format_listeners(NULL, 0);
-        // Add one byte for the trailing zero.
-        char* buffer = reinterpret_cast<char*>(malloc(buffer_size + 1));
-        if (buffer == nullptr) {
-            sendfailmsg(reply_fd, "not enough memory");
-            return 1;
-        }
-        (void) format_listeners(buffer, buffer_size + 1);
+        std::string listeners = format_listeners();
 #if ADB_HOST
-        send_msg_with_okay(reply_fd, buffer, buffer_size);
-#else
-        send_msg_with_header(reply_fd, buffer, buffer_size);
+        SendOkay(reply_fd);
 #endif
-        free(buffer);
+        SendProtocolString(reply_fd, listeners);
         return 1;
     }
 
@@ -773,9 +714,9 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
         remove_all_listeners();
 #if ADB_HOST
         /* On the host: 1st OKAY is connect, 2nd OKAY is status */
-        adb_write(reply_fd, "OKAY", 4);
+        SendOkay(reply_fd);
 #endif
-        adb_write(reply_fd, "OKAY", 4);
+        SendOkay(reply_fd);
         return 1;
     }
 
@@ -800,19 +741,19 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
         if (createForward) {
             // Check forward: parameter format: '<local>;<remote>'
             if(remote == 0) {
-                sendfailmsg(reply_fd, "malformed forward spec");
+                SendFail(reply_fd, "malformed forward spec");
                 return 1;
             }
 
             *remote++ = 0;
             if((local[0] == 0) || (remote[0] == 0) || (remote[0] == '*')) {
-                sendfailmsg(reply_fd, "malformed forward spec");
+                SendFail(reply_fd, "malformed forward spec");
                 return 1;
             }
         } else {
             // Check killforward: parameter format: '<local>'
             if (local[0] == 0) {
-                sendfailmsg(reply_fd, "malformed forward spec");
+                SendFail(reply_fd, "malformed forward spec");
                 return 1;
             }
         }
@@ -820,7 +761,7 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
         std::string error_msg;
         transport = acquire_one_transport(CS_ANY, ttype, serial, &error_msg);
         if (!transport) {
-            sendfailmsg(reply_fd, error_msg.c_str());
+            SendFail(reply_fd, error_msg);
             return 1;
         }
 
@@ -833,9 +774,9 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
         if (r == INSTALL_STATUS_OK) {
 #if ADB_HOST
             /* On the host: 1st OKAY is connect, 2nd OKAY is status */
-            WriteFdExactly(reply_fd, "OKAY", 4);
+            SendOkay(reply_fd);
 #endif
-            WriteFdExactly(reply_fd, "OKAY", 4);
+            SendOkay(reply_fd);
             return 1;
         }
 
@@ -851,7 +792,7 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
             break;
           case INSTALL_STATUS_LISTENER_NOT_FOUND: message = "listener not found"; break;
         }
-        sendfailmsg(reply_fd, message.c_str());
+        SendFail(reply_fd, message);
         return 1;
     }
     return 0;
@@ -862,7 +803,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     if(!strcmp(service, "kill")) {
         fprintf(stderr,"adb server killed by remote request\n");
         fflush(stdout);
-        adb_write(reply_fd, "OKAY", 4);
+        SendOkay(reply_fd);
         usb_cleanup();
         exit(0);
     }
@@ -892,25 +833,25 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
 
         if (transport) {
             s->transport = transport;
-            adb_write(reply_fd, "OKAY", 4);
+            SendOkay(reply_fd);
         } else {
-            sendfailmsg(reply_fd, error_msg.c_str());
+            SendFail(reply_fd, error_msg);
         }
         return 1;
     }
 
     // return a list of all connected devices
     if (!strncmp(service, "devices", 7)) {
-        char buffer[4096];
-        int use_long = !strcmp(service+7, "-l");
-        if (use_long || service[7] == 0) {
-            memset(buffer, 0, sizeof(buffer));
-            D("Getting device list \n");
-            list_transports(buffer, sizeof(buffer), use_long);
-            D("Wrote device list \n");
-            send_msg_with_okay(reply_fd, buffer, strlen(buffer));
+        bool long_listing = (strcmp(service+7, "-l") == 0);
+        if (long_listing || service[7] == 0) {
+            D("Getting device list...\n");
+            std::string device_list = list_transports(long_listing);
+            D("Sending device list...\n");
+            SendOkay(reply_fd);
+            SendProtocolString(reply_fd, device_list);
             return 0;
         }
+        return 1;
     }
 
     // remove TCP transport
@@ -937,15 +878,15 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
             }
         }
 
-        send_msg_with_okay(reply_fd, buffer, strlen(buffer));
+        SendOkay(reply_fd);
+        SendProtocolString(reply_fd, buffer);
         return 0;
     }
 
     // returns our value for ADB_SERVER_VERSION
     if (!strcmp(service, "version")) {
-        char version[12];
-        snprintf(version, sizeof version, "%04x", ADB_SERVER_VERSION);
-        send_msg_with_okay(reply_fd, version, strlen(version));
+        SendOkay(reply_fd);
+        SendProtocolString(reply_fd, android::base::StringPrintf("%04x", ADB_SERVER_VERSION));
         return 0;
     }
 
@@ -955,7 +896,8 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         if (transport && transport->serial) {
             out = transport->serial;
         }
-        send_msg_with_okay(reply_fd, out, strlen(out));
+        SendOkay(reply_fd);
+        SendProtocolString(reply_fd, out);
         return 0;
     }
     if(!strncmp(service,"get-devpath",strlen("get-devpath"))) {
@@ -964,7 +906,8 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         if (transport && transport->devpath) {
             out = transport->devpath;
         }
-        send_msg_with_okay(reply_fd, out, strlen(out));
+        SendOkay(reply_fd);
+        SendProtocolString(reply_fd, out);
         return 0;
     }
     // indicates a new emulator instance has started
@@ -977,8 +920,8 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
 
     if(!strncmp(service,"get-state",strlen("get-state"))) {
         transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
-        const char *state = connection_state_name(transport);
-        send_msg_with_okay(reply_fd, state, strlen(state));
+        SendOkay(reply_fd);
+        SendProtocolString(reply_fd, transport->connection_state_name());
         return 0;
     }
 #endif // ADB_HOST

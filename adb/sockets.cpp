@@ -37,23 +37,6 @@ ADB_MUTEX_DEFINE( socket_list_lock );
 
 static void local_socket_close_locked(asocket *s);
 
-int sendfailmsg(int fd, const char *reason)
-{
-    char buf[9];
-    int len;
-    len = strlen(reason);
-    if (len > 0xffff) {
-        len = 0xffff;
-    }
-
-    snprintf(buf, sizeof buf, "FAIL%04x", len);
-    if (!WriteFdExactly(fd, buf, 8)) {
-        return -1;
-    }
-
-    return WriteFdExactly(fd, reason, len) ? 0 : -1;
-}
-
 static unsigned local_socket_next_id = 1;
 
 static asocket local_socket_list = {
@@ -608,7 +591,7 @@ static void local_socket_ready_notify(asocket *s)
     s->ready = local_socket_ready;
     s->shutdown = NULL;
     s->close = local_socket_close;
-    adb_write(s->fd, "OKAY", 4);
+    SendOkay(s->fd);
     s->ready(s);
 }
 
@@ -620,11 +603,11 @@ static void local_socket_close_notify(asocket *s)
     s->ready = local_socket_ready;
     s->shutdown = NULL;
     s->close = local_socket_close;
-    sendfailmsg(s->fd, "closed");
+    SendFail(s->fd, "closed");
     s->close(s);
 }
 
-unsigned unhex(unsigned char *s, int len)
+static unsigned unhex(unsigned char *s, int len)
 {
     unsigned n = 0, c;
 
@@ -654,6 +637,8 @@ unsigned unhex(unsigned char *s, int len)
     return n;
 }
 
+#if ADB_HOST
+
 #define PREFIX(str) { str, sizeof(str) - 1 }
 static const struct prefix_struct {
     const char *str;
@@ -670,7 +655,7 @@ static const int num_prefixes = (sizeof(prefixes) / sizeof(prefixes[0]));
    skipping over the 'serial' parameter in the ADB protocol,
    where parameter string may be a host:port string containing
    the protocol delimiter (colon). */
-char *skip_host_serial(char *service) {
+static char *skip_host_serial(char *service) {
     char *first_colon, *serial_end;
     int i;
 
@@ -697,6 +682,8 @@ char *skip_host_serial(char *service) {
     }
     return serial_end;
 }
+
+#endif // ADB_HOST
 
 static int smart_socket_enqueue(asocket *s, apacket *p)
 {
@@ -799,7 +786,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
         s2 = create_host_service_socket(service, serial);
         if(s2 == 0) {
             D( "SS(%d): couldn't create host service '%s'\n", s->id, service );
-            sendfailmsg(s->peer->fd, "unknown host service");
+            SendFail(s->peer->fd, "unknown host service");
             goto fail;
         }
 
@@ -810,7 +797,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
             ** connection, and close this smart socket now
             ** that its work is done.
             */
-        adb_write(s->peer->fd, "OKAY", 4);
+        SendOkay(s->peer->fd);
 
         s->peer->ready = local_socket_ready;
         s->peer->shutdown = NULL;
@@ -831,7 +818,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
         s->transport = acquire_one_transport(CS_ANY, kTransportAny, NULL, &error_msg);
 
         if (s->transport == NULL) {
-            sendfailmsg(s->peer->fd, error_msg.c_str());
+            SendFail(s->peer->fd, error_msg);
             goto fail;
         }
     }
@@ -841,7 +828,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
            /* if there's no remote we fail the connection
             ** right here and terminate it
             */
-        sendfailmsg(s->peer->fd, "device offline (x)");
+        SendFail(s->peer->fd, "device offline (x)");
         goto fail;
     }
 
