@@ -18,6 +18,7 @@
 #define NATIVE_BRIDGE_H_
 
 #include "jni.h"
+#include <signal.h>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -25,6 +26,12 @@ namespace android {
 
 struct NativeBridgeRuntimeCallbacks;
 struct NativeBridgeRuntimeValues;
+
+// Function pointer type for sigaction. This is mostly the signature of a signal handler, except
+// for the return type. The runtime needs to know whether the signal was handled or should be given
+// to the chain.
+typedef bool (*NativeBridgeSignalHandlerFn)(int, siginfo_t*, void*);
+
 
 // Open the native bridge, if any. Should be called by Runtime::Init(). A null library filename
 // signals that we do not want to load a native bridge.
@@ -62,6 +69,16 @@ void* NativeBridgeGetTrampoline(void* handle, const char* name, const char* shor
 
 // True if native library is valid and is for an ABI that is supported by native bridge.
 bool NativeBridgeIsSupported(const char* libpath);
+
+// Returns the version number of the native bridge. This information is available after a
+// successful LoadNativeBridge() and before closing it, that is, as long as NativeBridgeAvailable()
+// returns true. Returns 0 otherwise.
+uint32_t NativeBridgeGetVersion();
+
+// Returns a signal handler that the bridge would like to be managed. Only valid for a native
+// bridge supporting the version 2 interface. Will return null if the bridge does not support
+// version 2, or if it doesn't have a signal handler it wants to be known.
+NativeBridgeSignalHandlerFn NativeBridgeGetSignalHandler(int signal);
 
 // Returns whether we have seen a native bridge error. This could happen because the library
 // was not found, rejected, could not be initialized and so on.
@@ -127,6 +144,31 @@ struct NativeBridgeCallbacks {
   //    NULL if not supported by native bridge.
   //    Otherwise, return all environment values to be set after fork.
   const struct NativeBridgeRuntimeValues* (*getAppEnv)(const char* instruction_set);
+
+  // Added callbacks in version 2.
+
+  // Check whether the bridge is compatible with the given version. A bridge may decide not to be
+  // forwards- or backwards-compatible, and libnativebridge will then stop using it.
+  //
+  // Parameters:
+  //     bridge_version [IN] the version of libnativebridge.
+  // Returns:
+  //     true iff the native bridge supports the given version of libnativebridge.
+  bool (*isCompatibleWith)(uint32_t bridge_version);
+
+  // A callback to retrieve a native bridge's signal handler for the specified signal. The runtime
+  // will ensure that the signal handler is being called after the runtime's own handler, but before
+  // all chained handlers. The native bridge should not try to install the handler by itself, as
+  // that will potentially lead to cycles.
+  //
+  // Parameters:
+  //     signal [IN] the signal for which the handler is asked for. Currently, only SIGSEGV is
+  //                 supported by the runtime.
+  // Returns:
+  //     NULL if the native bridge doesn't use a handler or doesn't want it to be managed by the
+  //     runtime.
+  //     Otherwise, a pointer to the signal handler.
+  NativeBridgeSignalHandlerFn (*getSignalHandler)(int signal);
 };
 
 // Runtime interfaces to native bridge.
