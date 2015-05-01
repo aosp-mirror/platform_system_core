@@ -51,18 +51,10 @@ libbacktrace_src_files := \
 	UnwindMap.cpp \
 	UnwindPtrace.cpp \
 
-libbacktrace_shared_libraries_target := \
-	libcutils \
-
 libbacktrace_shared_libraries := \
 	libbase \
-	libunwind \
-
-libbacktrace_shared_libraries_host := \
 	liblog \
-
-libbacktrace_static_libraries_host := \
-	libcutils \
+	libunwind \
 
 libbacktrace_ldlibs_host := \
 	-lpthread \
