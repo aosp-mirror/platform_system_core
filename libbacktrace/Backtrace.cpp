@@ -99,12 +99,7 @@ std::string Backtrace::FormatFrameData(const backtrace_frame_data_t* frame) {
     map_name = "<unknown>";
   }
 
-  uintptr_t relative_pc;
-  if (BacktraceMap::IsValid(frame->map)) {
-    relative_pc = frame->pc - frame->map.start;
-  } else {
-    relative_pc = frame->pc;
-  }
+  uintptr_t relative_pc = BacktraceMap::GetRelativePc(frame->map, frame->pc);
 
   std::string line(StringPrintf("#%02zu pc %" PRIPTR "  %s", frame->num, relative_pc, map_name));
   if (!frame->func_name.empty()) {
