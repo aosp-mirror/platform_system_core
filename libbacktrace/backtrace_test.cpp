@@ -772,6 +772,7 @@ TEST(libbacktrace, format_test) {
   // Check map name empty, but exists.
   frame.map.start = 1;
   frame.map.end = 1;
+  frame.map.load_base = 0;
 #if defined(__LP64__)
   EXPECT_EQ("#01 pc 0000000000000001  <unknown>",
 #else
@@ -807,6 +808,16 @@ TEST(libbacktrace, format_test) {
   EXPECT_EQ("#01 pc 0000000012345678  MapFake (ProcFake+645)",
 #else
   EXPECT_EQ("#01 pc 12345678  MapFake (ProcFake+645)",
+#endif
+            backtrace->FormatFrameData(&frame));
+
+  // Check func_name is set, func offset is non-zero, and load_base is non-zero.
+  frame.func_offset = 645;
+  frame.map.load_base = 100;
+#if defined(__LP64__)
+  EXPECT_EQ("#01 pc 00000000123456dc  MapFake (ProcFake+645)",
+#else
+  EXPECT_EQ("#01 pc 123456dc  MapFake (ProcFake+645)",
 #endif
             backtrace->FormatFrameData(&frame));
 }
