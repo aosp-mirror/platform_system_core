@@ -152,3 +152,16 @@ TEST(io, WriteFdExactly_string) {
   ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s));
   EXPECT_STREQ(str, s.c_str());
 }
+
+TEST(io, WriteFdFmt) {
+    TemporaryFile tf;
+    ASSERT_NE(-1, tf.fd);
+
+    // Test writing a partial string to the file.
+    ASSERT_TRUE(WriteFdFmt(tf.fd, "Foo%s%d", "bar", 123)) << strerror(errno);
+    ASSERT_EQ(0, lseek(tf.fd, SEEK_SET, 0));
+
+    std::string s;
+    ASSERT_TRUE(android::base::ReadFdToString(tf.fd, &s));
+    EXPECT_STREQ("Foobar123", s.c_str());
+}
