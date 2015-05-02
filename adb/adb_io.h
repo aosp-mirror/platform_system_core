@@ -49,11 +49,11 @@ bool ReadFdExactly(int fd, void *buf, size_t len);
  */
 bool WriteFdExactly(int fd, const void* buf, size_t len);
 
-/* Same as above, but with an implicit len = strlen(buf). */
+// Same as above, but for strings.
 bool WriteFdExactly(int fd, const char* s);
 bool WriteFdExactly(int fd, const std::string& s);
 
-// TODO: move minadb off this and remove it.
-bool WriteStringFully(int fd, const char* str);
+// Same as above, but formats the string to send.
+bool WriteFdFmt(int fd, const char* fmt, ...) __attribute__((__format__(__printf__, 2, 3)));
 
 #endif /* ADB_IO_H */
