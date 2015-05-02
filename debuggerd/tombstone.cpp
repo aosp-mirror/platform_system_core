@@ -379,6 +379,9 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
         line += " (BuildId: " + build_id + ")";
       }
     }
+    if (it->load_base != 0) {
+      line += android::base::StringPrintf(" (load base 0x%" PRIxPTR ")", it->load_base);
+    }
     _LOG(log, logtype::MAPS, "%s\n", line.c_str());
   }
   if (print_fault_address_marker) {

@@ -51,6 +51,7 @@ bool UnwindMap::GenerateMap() {
 
     map.start = unw_map.start;
     map.end = unw_map.end;
+    map.load_base = unw_map.load_base;
     map.flags = unw_map.flags;
     map.name = unw_map.path;
 
@@ -91,6 +92,7 @@ bool UnwindMapLocal::GenerateMap() {
 
       map.start = unw_map.start;
       map.end = unw_map.end;
+      map.load_base = unw_map.load_base;
       map.flags = unw_map.flags;
       map.name = unw_map.path;
 
