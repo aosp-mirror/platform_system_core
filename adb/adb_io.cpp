@@ -16,13 +16,15 @@
 
 #define TRACE_TAG TRACE_RWX
 
-#include "sysdeps.h"
 #include "adb_io.h"
 
 #include <unistd.h>
 
+#include <base/stringprintf.h>
+
 #include "adb_trace.h"
 #include "adb_utils.h"
+#include "sysdeps.h"
 
 bool SendProtocolString(int fd, const std::string& s) {
     int length = s.size();
@@ -30,9 +32,7 @@ bool SendProtocolString(int fd, const std::string& s) {
         length = 0xffff;
     }
 
-    char buf[5];
-    snprintf(buf, sizeof(buf), "%04x", length);
-    return WriteFdExactly(fd, buf, 4) && WriteFdExactly(fd, s);
+    return WriteFdFmt(fd, "%04x", length) && WriteFdExactly(fd, s);
 }
 
 bool SendOkay(int fd) {
@@ -111,6 +111,13 @@ bool WriteFdExactly(int fd, const std::string& str) {
     return WriteFdExactly(fd, str.c_str(), str.size());
 }
 
-bool WriteStringFully(int fd, const char* str) {
-    return WriteFdExactly(fd, str, strlen(str));
+bool WriteFdFmt(int fd, const char* fmt, ...) {
+    std::string str;
+
+    va_list ap;
+    va_start(ap, fmt);
+    android::base::StringAppendV(&str, fmt, ap);
+    va_end(ap);
+
+    return WriteFdExactly(fd, str);
 }

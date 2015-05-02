@@ -185,13 +185,13 @@ void remove_all_listeners(void)
     }
 }
 
-install_status_t install_listener(const char *local_name,
+install_status_t install_listener(const std::string& local_name,
                                   const char *connect_to,
                                   atransport* transport,
                                   int no_rebind)
 {
     for (alistener* l = listener_list.next; l != &listener_list; l = l->next) {
-        if (strcmp(local_name, l->local_name) == 0) {
+        if (local_name == l->local_name) {
             char* cto;
 
             /* can't repurpose a smartsocket */
@@ -226,7 +226,7 @@ install_status_t install_listener(const char *local_name,
         goto nomem;
     }
 
-    listener->local_name = strdup(local_name);
+    listener->local_name = strdup(local_name.c_str());
     if (listener->local_name == nullptr) {
         goto nomem;
     }
@@ -236,9 +236,9 @@ install_status_t install_listener(const char *local_name,
         goto nomem;
     }
 
-    listener->fd = local_name_to_fd(local_name);
+    listener->fd = local_name_to_fd(listener->local_name);
     if (listener->fd < 0) {
-        printf("cannot bind '%s': %s\n", local_name, strerror(errno));
+        printf("cannot bind '%s': %s\n", listener->local_name, strerror(errno));
         free(listener->local_name);
         free(listener->connect_to);
         free(listener);

@@ -89,10 +89,8 @@ void start_device_log(void) {
     char timestamp[PATH_MAX];
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%d-%H-%M-%S", &now);
 
-    char path[PATH_MAX];
-    snprintf(path, sizeof(path), "/data/adb/adb-%s-%d", timestamp, getpid());
-
-    int fd = unix_open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0640);
+    std::string path = android::base::StringPrintf("/data/adb/adb-%s-%d", timestamp, getpid());
+    int fd = unix_open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0640);
     if (fd == -1) {
         return;
     }

@@ -48,7 +48,6 @@ static std::string perror_str(const char* msg) {
 
 static bool ReadProtocolString(int fd, std::string* s, std::string* error) {
     char buf[5];
-
     if (!ReadFdExactly(fd, buf, 4)) {
         *error = perror_str("protocol fault (couldn't read status length)");
         return false;
@@ -154,7 +153,6 @@ static int switch_socket_transport(int fd, std::string* error) {
 
 bool adb_status(int fd, std::string* error) {
     char buf[5];
-
     if (!ReadFdExactly(fd, buf, 4)) {
         *error = perror_str("protocol fault (couldn't read status)");
         return false;
