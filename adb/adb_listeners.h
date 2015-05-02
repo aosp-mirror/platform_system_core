@@ -36,8 +36,8 @@ void listener_disconnect(void*  _l, atransport*  t);
 void listener_event_func(int _fd, unsigned ev, void *_l);
 void ss_listener_event_func(int _fd, unsigned ev, void *_l);
 
-install_status_t install_listener(const char *local_name,
-                                  const char *connect_to,
+install_status_t install_listener(const std::string& local_name,
+                                  const char* connect_to,
                                   atransport* transport,
                                   int no_rebind);
 

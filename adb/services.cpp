@@ -63,74 +63,54 @@ void *service_bootstrap_func(void *x)
 
 #if !ADB_HOST
 
-void restart_root_service(int fd, void *cookie)
-{
-    char buf[100];
-    char value[PROPERTY_VALUE_MAX];
-
+void restart_root_service(int fd, void *cookie) {
     if (getuid() == 0) {
-        snprintf(buf, sizeof(buf), "adbd is already running as root\n");
-        WriteFdExactly(fd, buf, strlen(buf));
+        WriteFdExactly(fd, "adbd is already running as root\n");
         adb_close(fd);
     } else {
+        char value[PROPERTY_VALUE_MAX];
         property_get("ro.debuggable", value, "");
         if (strcmp(value, "1") != 0) {
-            snprintf(buf, sizeof(buf), "adbd cannot run as root in production builds\n");
-            WriteFdExactly(fd, buf, strlen(buf));
+            WriteFdExactly(fd, "adbd cannot run as root in production builds\n");
             adb_close(fd);
             return;
         }
 
         property_set("service.adb.root", "1");
-        snprintf(buf, sizeof(buf), "restarting adbd as root\n");
-        WriteFdExactly(fd, buf, strlen(buf));
+        WriteFdExactly(fd, "restarting adbd as root\n");
         adb_close(fd);
     }
 }
 
-void restart_unroot_service(int fd, void *cookie)
-{
-    char buf[100];
-
+void restart_unroot_service(int fd, void *cookie) {
     if (getuid() != 0) {
-        snprintf(buf, sizeof(buf), "adbd not running as root\n");
-        WriteFdExactly(fd, buf, strlen(buf));
+        WriteFdExactly(fd, "adbd not running as root\n");
         adb_close(fd);
     } else {
         property_set("service.adb.root", "0");
-        snprintf(buf, sizeof(buf), "restarting adbd as non root\n");
-        WriteFdExactly(fd, buf, strlen(buf));
+        WriteFdExactly(fd, "restarting adbd as non root\n");
         adb_close(fd);
     }
 }
 
-void restart_tcp_service(int fd, void *cookie)
-{
-    char buf[100];
-    char value[PROPERTY_VALUE_MAX];
+void restart_tcp_service(int fd, void *cookie) {
     int port = (int) (uintptr_t) cookie;
-
     if (port <= 0) {
-        snprintf(buf, sizeof(buf), "invalid port\n");
-        WriteFdExactly(fd, buf, strlen(buf));
+        WriteFdFmt(fd, "invalid port %d\n", port);
         adb_close(fd);
         return;
     }
 
+    char value[PROPERTY_VALUE_MAX];
     snprintf(value, sizeof(value), "%d", port);
     property_set("service.adb.tcp.port", value);
-    snprintf(buf, sizeof(buf), "restarting in TCP mode port: %d\n", port);
-    WriteFdExactly(fd, buf, strlen(buf));
+    WriteFdFmt(fd, "restarting in TCP mode port: %d\n", port);
     adb_close(fd);
 }
 
-void restart_usb_service(int fd, void *cookie)
-{
-    char buf[100];
-
+void restart_usb_service(int fd, void *cookie) {
     property_set("service.adb.tcp.port", "0");
-    snprintf(buf, sizeof(buf), "restarting in USB mode\n");
-    WriteFdExactly(fd, buf, strlen(buf));
+    WriteFdExactly(fd, "restarting in USB mode\n");
     adb_close(fd);
 }
 
@@ -143,7 +123,6 @@ static bool reboot_service_impl(int fd, const char* arg) {
         reboot_arg = "sideload";
     }
 
-    char buf[100];
     // It reboots into sideload mode by setting "--sideload" or "--sideload_auto_reboot"
     // in the command file.
     if (strcmp(reboot_arg, "sideload") == 0) {
@@ -174,15 +153,13 @@ static bool reboot_service_impl(int fd, const char* arg) {
     char property_val[PROPERTY_VALUE_MAX];
     int ret = snprintf(property_val, sizeof(property_val), "reboot,%s", reboot_arg);
     if (ret >= static_cast<int>(sizeof(property_val))) {
-        snprintf(buf, sizeof(buf), "reboot string too long. length=%d\n", ret);
-        WriteFdExactly(fd, buf);
+        WriteFdFmt(fd, "reboot string too long: %d\n", ret);
         return false;
     }
 
     ret = property_set(ANDROID_RB_PROPERTY, property_val);
     if (ret < 0) {
-        snprintf(buf, sizeof(buf), "reboot failed: %d\n", ret);
-        WriteFdExactly(fd, buf);
+        WriteFdFmt(fd, "reboot failed: %d\n", ret);
         return false;
     }
 
