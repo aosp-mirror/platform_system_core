@@ -929,9 +929,7 @@ static int adb_query_command(const std::string& command) {
     return 0;
 }
 
-int adb_commandline(int argc, const char **argv)
-{
-    char buf[4096];
+int adb_commandline(int argc, const char **argv) {
     int no_daemon = 0;
     int is_daemon = 0;
     int is_server = 0;
@@ -1266,6 +1264,7 @@ int adb_commandline(int argc, const char **argv)
     }
     /* adb_command() wrapper commands */
     else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
+        std::string cmd;
         char host_prefix[64];
         char reverse = (char) !strcmp(argv[0], "reverse");
         char remove = 0;
@@ -1323,31 +1322,27 @@ int adb_commandline(int argc, const char **argv)
 
         // Implement forward --remove-all
         else if (remove_all) {
-            if (argc != 1)
-                return usage();
-            snprintf(buf, sizeof buf, "%s:killforward-all", host_prefix);
+            if (argc != 1) return usage();
+            cmd = android::base::StringPrintf("%s:killforward-all", host_prefix);
         }
 
         // Implement forward --remove <local>
         else if (remove) {
-            if (argc != 2)
-                return usage();
-            snprintf(buf, sizeof buf, "%s:killforward:%s", host_prefix, argv[1]);
+            if (argc != 2) return usage();
+            cmd = android::base::StringPrintf("%s:killforward:%s", host_prefix, argv[1]);
         }
         // Or implement one of:
         //    forward <local> <remote>
         //    forward --no-rebind <local> <remote>
-        else
-        {
-          if (argc != 3)
-            return usage();
-          const char* command = no_rebind ? "forward:norebind" : "forward";
-          snprintf(buf, sizeof buf, "%s:%s:%s;%s", host_prefix, command, argv[1], argv[2]);
+        else {
+            if (argc != 3) return usage();
+            const char* command = no_rebind ? "forward:norebind" : "forward";
+            cmd = android::base::StringPrintf("%s:%s:%s;%s", host_prefix, command, argv[1], argv[2]);
         }
 
         std::string error;
-        if (adb_command(buf, &error)) {
-            fprintf(stderr,"error: %s\n", error.c_str());
+        if (adb_command(cmd, &error)) {
+            fprintf(stderr, "error: %s\n", error.c_str());
             return 1;
         }
         return 0;

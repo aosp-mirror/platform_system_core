@@ -25,6 +25,8 @@
 #include <string.h>
 #include <sys/types.h>
 
+#include <base/stringprintf.h>
+
 #if !ADB_HOST
 #include "cutils/properties.h"
 #endif
@@ -88,7 +90,6 @@ int local_connect(int port) {
 
 int local_connect_arbitrary_ports(int console_port, int adb_port)
 {
-    char buf[64];
     int  fd = -1;
 
 #if ADB_HOST
@@ -105,8 +106,8 @@ int local_connect_arbitrary_ports(int console_port, int adb_port)
         D("client: connected on remote on fd %d\n", fd);
         close_on_exec(fd);
         disable_tcp_nagle(fd);
-        snprintf(buf, sizeof buf, "emulator-%d", console_port);
-        register_socket_transport(fd, buf, adb_port, 1);
+        std::string serial = android::base::StringPrintf("emulator-%d", console_port);
+        register_socket_transport(fd, serial.c_str(), adb_port, 1);
         return 0;
     }
     return -1;
