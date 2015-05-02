@@ -28,6 +28,8 @@
 #include "adb_listeners.h"
 #include "transport.h"
 
+#include <base/stringprintf.h>
+
 #if !ADB_HOST
 #include <getopt.h>
 #include <sys/prctl.h>
@@ -157,16 +159,6 @@ static bool should_drop_privileges() {
 }
 #endif /* ADB_HOST */
 
-/* Constructs a local name of form tcp:port.
- * target_str points to the target string, it's content will be overwritten.
- * target_size is the capacity of the target string.
- * server_port is the port number to use for the local name.
- */
-void build_local_name(char* target_str, size_t target_size, int server_port)
-{
-  snprintf(target_str, target_size, "tcp:%d", server_port);
-}
-
 void start_logging(void)
 {
 #if defined(_WIN32)
@@ -238,9 +230,8 @@ int adb_main(int is_daemon, int server_port)
     local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
     adb_auth_init();
 
-    char local_name[30];
-    build_local_name(local_name, sizeof(local_name), server_port);
-    if(install_listener(local_name, "*smartsocket*", NULL, 0)) {
+    std::string local_name = android::base::StringPrintf("tcp:%d", server_port);
+    if (install_listener(local_name, "*smartsocket*", NULL, 0)) {
         exit(1);
     }
 #else
@@ -295,15 +286,14 @@ int adb_main(int is_daemon, int server_port)
 
         D("Local port disabled\n");
     } else {
-        char local_name[30];
         if ((root_seclabel != NULL) && (is_selinux_enabled() > 0)) {
             // b/12587913: fix setcon to allow const pointers
             if (setcon((char *)root_seclabel) < 0) {
                 exit(1);
             }
         }
-        build_local_name(local_name, sizeof(local_name), server_port);
-        if(install_listener(local_name, "*smartsocket*", NULL, 0)) {
+        std::string local_name = android::base::StringPrintf("tcp:%d", server_port);
+        if (install_listener(local_name, "*smartsocket*", NULL, 0)) {
             exit(1);
         }
     }

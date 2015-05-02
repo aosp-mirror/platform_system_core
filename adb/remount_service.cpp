@@ -90,9 +90,7 @@ static bool remount_partition(int fd, const char* partition, int* ro) {
     return true;
   }
   if (remount(partition, ro)) {
-    char buf[200];
-    snprintf(buf, sizeof(buf), "remount of %s failed: %s\n", partition, strerror(errno));
-    WriteFdExactly(fd, buf);
+    WriteFdFmt(fd, "remount of %s failed: %s\n", partition, strerror(errno));
     return false;
   }
   return true;
@@ -121,14 +119,12 @@ void remount_service(int fd, void* cookie) {
     if (system_verified || vendor_verified) {
         // Allow remount but warn of likely bad effects
         bool both = system_verified && vendor_verified;
-        char buffer[200];
-        snprintf(buffer, sizeof(buffer),
-                 "dm_verity is enabled on the %s%s%s partition%s.\n",
-                 system_verified ? "system" : "",
-                 both ? " and " : "",
-                 vendor_verified ? "vendor" : "",
-                 both ? "s" : "");
-        WriteFdExactly(fd, buffer);
+        WriteFdFmt(fd,
+                   "dm_verity is enabled on the %s%s%s partition%s.\n",
+                   system_verified ? "system" : "",
+                   both ? " and " : "",
+                   vendor_verified ? "vendor" : "",
+                   both ? "s" : "");
         WriteFdExactly(fd,
                        "Use \"adb disable-verity\" to disable verity.\n"
                        "If you do not, remount may succeed, however, you will still "
