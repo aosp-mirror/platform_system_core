@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
         if (!android::base::ReadFully(s, buffer, len))
             panic("could not read data");
 
-        printf( "received header %.*s (%d bytes):\n%.*s", 4, head, len, len, buffer );
+        printf( "received header %.*s (%d bytes):\n%.*s----\n", 4, head, len, len, buffer );
     }
     close(s);
 }
