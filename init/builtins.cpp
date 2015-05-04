@@ -58,7 +58,16 @@ extern "C" int init_module(void *, unsigned long, const char *);
 static int insmod(const char *filename, char *options)
 {
     std::string module;
-    if (!read_file(filename, &module)) {
+    char filename_val[PROP_VALUE_MAX];
+    int ret;
+
+    ret = expand_props(filename_val, filename, sizeof(filename_val));
+    if (ret) {
+        ERROR("insmod: cannot expand '%s'\n", filename);
+        return -EINVAL;
+    }
+
+    if (!read_file(filename_val, &module)) {
         return -1;
     }
 
