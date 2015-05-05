@@ -35,7 +35,6 @@
 #ifndef _WIN32
 #include <mutex>
 #else
-#define NOGDI // Suppress the evil ERROR macro.
 #include <windows.h>
 #endif
 
