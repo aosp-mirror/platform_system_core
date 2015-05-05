@@ -272,12 +272,23 @@ class AdbBasic(unittest.TestCase):
         adb = AdbWrapper()
 
         # http://b/19734868
+        # Note that this actually matches ssh(1)'s behavior --- it's
+        # converted to "sh -c echo hello; echo world" which sh interprets
+        # as "sh -c echo" (with an argument to that shell of "hello"),
+        # and then "echo world" back in the first shell.
         result = adb.shell("sh -c 'echo hello; echo world'").splitlines()
+        self.assertEqual(["", "world"], result)
+        # If you really wanted "hello" and "world", here's what you'd do:
+        result = adb.shell("echo hello\;echo world").splitlines()
         self.assertEqual(["hello", "world"], result)
 
         # http://b/15479704
         self.assertEqual('t', adb.shell("'true && echo t'").strip())
         self.assertEqual('t', adb.shell("sh -c 'true && echo t'").strip())
+
+        # http://b/20564385
+        self.assertEqual('t', adb.shell("FOO=a BAR=b echo t").strip())
+        self.assertEqual('123Linux', adb.shell("echo -n 123\;uname").strip())
 
 
 class AdbFile(unittest.TestCase):
