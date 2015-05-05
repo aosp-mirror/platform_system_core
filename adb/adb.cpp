@@ -696,7 +696,7 @@ int launch_server(int server_port)
 // Try to handle a network forwarding request.
 // This returns 1 on success, 0 on failure, and -1 to indicate this is not
 // a forwarding-related request.
-int handle_forward_request(const char* service, transport_type ttype, char* serial, int reply_fd)
+int handle_forward_request(const char* service, TransportType type, char* serial, int reply_fd)
 {
     if (!strcmp(service, "list-forward")) {
         // Create the list of forward redirections.
@@ -757,13 +757,13 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
         }
 
         std::string error_msg;
-        transport = acquire_one_transport(CS_ANY, ttype, serial, &error_msg);
+        transport = acquire_one_transport(CS_ANY, type, serial, &error_msg);
         if (!transport) {
             SendFail(reply_fd, error_msg);
             return 1;
         }
 
-        install_status_t r;
+        InstallStatus r;
         if (createForward) {
             r = install_listener(local, remote, transport, no_rebind);
         } else {
@@ -796,7 +796,7 @@ int handle_forward_request(const char* service, transport_type ttype, char* seri
     return 0;
 }
 
-int handle_host_request(char *service, transport_type ttype, char* serial, int reply_fd, asocket *s)
+int handle_host_request(char *service, TransportType type, char* serial, int reply_fd, asocket *s)
 {
     if(!strcmp(service, "kill")) {
         fprintf(stderr,"adb server killed by remote request\n");
@@ -813,7 +813,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     // "transport-local:" is used for switching transport to the only local transport
     // "transport-any:" is used for switching transport to the only transport
     if (!strncmp(service, "transport", strlen("transport"))) {
-        transport_type type = kTransportAny;
+        TransportType type = kTransportAny;
 
         if (!strncmp(service, "transport-usb", strlen("transport-usb"))) {
             type = kTransportUsb;
@@ -890,7 +890,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
 
     if(!strncmp(service,"get-serialno",strlen("get-serialno"))) {
         const char *out = "unknown";
-        transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
+        transport = acquire_one_transport(CS_ANY, type, serial, NULL);
         if (transport && transport->serial) {
             out = transport->serial;
         }
@@ -900,7 +900,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     }
     if(!strncmp(service,"get-devpath",strlen("get-devpath"))) {
         const char *out = "unknown";
-        transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
+        transport = acquire_one_transport(CS_ANY, type, serial, NULL);
         if (transport && transport->devpath) {
             out = transport->devpath;
         }
@@ -917,14 +917,14 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     }
 
     if(!strncmp(service,"get-state",strlen("get-state"))) {
-        transport = acquire_one_transport(CS_ANY, ttype, serial, NULL);
+        transport = acquire_one_transport(CS_ANY, type, serial, NULL);
         SendOkay(reply_fd);
         SendProtocolString(reply_fd, transport->connection_state_name());
         return 0;
     }
 #endif // ADB_HOST
 
-    int ret = handle_forward_request(service, ttype, serial, reply_fd);
+    int ret = handle_forward_request(service, type, serial, reply_fd);
     if (ret >= 0)
       return ret - 1;
     return -1;
