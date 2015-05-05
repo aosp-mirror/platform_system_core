@@ -67,7 +67,7 @@ void _LOG(log_t* log, enum logtype ltype, const char* fmt, ...) {
   }
 
   if (write_to_logcat) {
-    __android_log_buf_write(LOG_ID_CRASH, ANDROID_LOG_INFO, LOG_TAG, buf);
+    __android_log_buf_write(LOG_ID_CRASH, ANDROID_LOG_FATAL, LOG_TAG, buf);
     if (write_to_activitymanager) {
       if (!android::base::WriteFully(log->amfd, buf, len)) {
         // timeout or other failure on write; stop informing the activity manager
