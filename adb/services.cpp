@@ -378,12 +378,7 @@ static void subproc_waiter_service(int fd, void *cookie)
     }
 }
 
-static int create_subproc_thread(const char *name, const subproc_mode mode)
-{
-    adb_thread_t t;
-    int ret_fd;
-    pid_t pid = -1;
-
+static int create_subproc_thread(const char *name, bool pty = false) {
     const char *arg0, *arg1;
     if (name == 0 || *name == 0) {
         arg0 = "-"; arg1 = 0;
@@ -391,16 +386,12 @@ static int create_subproc_thread(const char *name, const subproc_mode mode)
         arg0 = "-c"; arg1 = name;
     }
 
-    switch (mode) {
-    case SUBPROC_PTY:
+    pid_t pid = -1;
+    int ret_fd;
+    if (pty) {
         ret_fd = create_subproc_pty(SHELL_COMMAND, arg0, arg1, &pid);
-        break;
-    case SUBPROC_RAW:
+    } else {
         ret_fd = create_subproc_raw(SHELL_COMMAND, arg0, arg1, &pid);
-        break;
-    default:
-        fprintf(stderr, "invalid subproc_mode %d\n", mode);
-        return -1;
     }
     D("create_subproc ret_fd=%d pid=%d\n", ret_fd, pid);
 
@@ -410,6 +401,7 @@ static int create_subproc_thread(const char *name, const subproc_mode mode)
     sti->cookie = (void*) (uintptr_t) pid;
     sti->fd = ret_fd;
 
+    adb_thread_t t;
     if (adb_thread_create(&t, service_bootstrap_func, sti)) {
         free(sti);
         adb_close(ret_fd);
@@ -462,9 +454,9 @@ int service_to_fd(const char *name)
     } else if (!strncmp(name, "jdwp:", 5)) {
         ret = create_jdwp_connection_fd(atoi(name+5));
     } else if(!HOST && !strncmp(name, "shell:", 6)) {
-        ret = create_subproc_thread(name + 6, SUBPROC_PTY);
+        ret = create_subproc_thread(name + 6, true);
     } else if(!HOST && !strncmp(name, "exec:", 5)) {
-        ret = create_subproc_thread(name + 5, SUBPROC_RAW);
+        ret = create_subproc_thread(name + 5);
     } else if(!strncmp(name, "sync:", 5)) {
         ret = create_service_thread(file_sync_service, NULL);
     } else if(!strncmp(name, "remount:", 8)) {
@@ -479,9 +471,9 @@ int service_to_fd(const char *name)
         ret = create_service_thread(restart_unroot_service, NULL);
     } else if(!strncmp(name, "backup:", 7)) {
         ret = create_subproc_thread(android::base::StringPrintf("/system/bin/bu backup %s",
-                                                                (name + 7)).c_str(), SUBPROC_RAW);
+                                                                (name + 7)).c_str());
     } else if(!strncmp(name, "restore:", 8)) {
-        ret = create_subproc_thread("/system/bin/bu restore", SUBPROC_RAW);
+        ret = create_subproc_thread("/system/bin/bu restore");
     } else if(!strncmp(name, "tcpip:", 6)) {
         int port;
         if (sscanf(name + 6, "%d", &port) != 1) {
@@ -514,7 +506,7 @@ int service_to_fd(const char *name)
 
 #if ADB_HOST
 struct state_info {
-    transport_type transport;
+    TransportType transport_type;
     char* serial;
     int state;
 };
@@ -526,7 +518,8 @@ static void wait_for_state(int fd, void* cookie)
     D("wait_for_state %d\n", sinfo->state);
 
     std::string error_msg = "unknown error";
-    atransport* t = acquire_one_transport(sinfo->state, sinfo->transport, sinfo->serial, &error_msg);
+    atransport* t = acquire_one_transport(sinfo->state, sinfo->transport_type, sinfo->serial,
+                                          &error_msg);
     if (t != 0) {
         SendOkay(fd);
     } else {
@@ -664,13 +657,13 @@ asocket*  host_service_to_socket(const char*  name, const char *serial)
         name += strlen("wait-for-");
 
         if (!strncmp(name, "local", strlen("local"))) {
-            sinfo->transport = kTransportLocal;
+            sinfo->transport_type = kTransportLocal;
             sinfo->state = CS_DEVICE;
         } else if (!strncmp(name, "usb", strlen("usb"))) {
-            sinfo->transport = kTransportUsb;
+            sinfo->transport_type = kTransportUsb;
             sinfo->state = CS_DEVICE;
         } else if (!strncmp(name, "any", strlen("any"))) {
-            sinfo->transport = kTransportAny;
+            sinfo->transport_type = kTransportAny;
             sinfo->state = CS_DEVICE;
         } else {
             free(sinfo);

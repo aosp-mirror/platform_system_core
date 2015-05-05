@@ -740,7 +740,7 @@ static int qual_match(const char *to_test,
     return !*to_test;
 }
 
-atransport* acquire_one_transport(int state, transport_type ttype,
+atransport* acquire_one_transport(int state, TransportType type,
                                   const char* serial, std::string* error_out)
 {
     atransport *t;
@@ -773,7 +773,7 @@ retry:
                 result = t;
             }
         } else {
-            if (ttype == kTransportUsb && t->type == kTransportUsb) {
+            if (type == kTransportUsb && t->type == kTransportUsb) {
                 if (result) {
                     if (error_out) *error_out = "more than one device";
                     ambiguous = 1;
@@ -781,7 +781,7 @@ retry:
                     break;
                 }
                 result = t;
-            } else if (ttype == kTransportLocal && t->type == kTransportLocal) {
+            } else if (type == kTransportLocal && t->type == kTransportLocal) {
                 if (result) {
                     if (error_out) *error_out = "more than one emulator";
                     ambiguous = 1;
@@ -789,7 +789,7 @@ retry:
                     break;
                 }
                 result = t;
-            } else if (ttype == kTransportAny) {
+            } else if (type == kTransportAny) {
                 if (result) {
                     if (error_out) *error_out = "more than one device/emulator";
                     ambiguous = 1;
