@@ -952,7 +952,6 @@ int adb_commandline(int argc, const char **argv) {
     int no_daemon = 0;
     int is_daemon = 0;
     int is_server = 0;
-    int persist = 0;
     int r;
     transport_type ttype = kTransportAny;
     const char* serial = NULL;
@@ -993,8 +992,6 @@ int adb_commandline(int argc, const char **argv) {
         } else if (!strcmp(argv[0], "fork-server")) {
             /* this is a special flag used only when the ADB client launches the ADB Server */
             is_daemon = 1;
-        } else if (!strcmp(argv[0],"persist")) {
-            persist = 1;
         } else if (!strncmp(argv[0], "-p", 2)) {
             const char *product = NULL;
             if (argv[0][2] == '\0') {
@@ -1186,18 +1183,12 @@ int adb_commandline(int argc, const char **argv) {
                 r = -1;
             }
 
-            if (persist) {
-                fprintf(stderr,"\n- waiting for device -\n");
-                adb_sleep_ms(1000);
-                wait_for_device("wait-for-device", ttype, serial);
-            } else {
-                if (h) {
-                    printf("\x1b[0m");
-                    fflush(stdout);
-                }
-                D("interactive shell loop. return r=%d\n", r);
-                return r;
+            if (h) {
+                printf("\x1b[0m");
+                fflush(stdout);
             }
+            D("interactive shell loop. return r=%d\n", r);
+            return r;
         }
     }
     else if (!strcmp(argv[0], "exec-in") || !strcmp(argv[0], "exec-out")) {
