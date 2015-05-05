@@ -795,7 +795,7 @@ char* engrave_tombstone(pid_t pid, pid_t tid, int signal, int original_si_code,
   *detach_failed = dump_crash(&log, pid, tid, signal, original_si_code, abort_msg_address,
                               dump_sibling_threads, total_sleep_time_usec);
 
-  ALOGI("\nTombstone written to: %s\n", path);
+  _LOG(&log, logtype::BACKTRACE, "\nTombstone written to: %s\n", path);
 
   // Either of these file descriptors can be -1, any error is ignored.
   close(amfd);
