@@ -6,9 +6,9 @@
 LOCAL_PATH:= $(call my-dir)
 
 ifeq ($(HOST_OS),windows)
-  adb_host_clang := false  # libc++ for mingw not ready yet.
+    adb_host_clang := false  # libc++ for mingw not ready yet.
 else
-  adb_host_clang := true
+    adb_host_clang := true
 endif
 
 # libadb
@@ -103,6 +103,7 @@ LOCAL_STATIC_LIBRARIES := libadbd
 LOCAL_SHARED_LIBRARIES := liblog libbase libcutils
 include $(BUILD_NATIVE_TEST)
 
+ifneq ($(HOST_OS),windows)
 include $(CLEAR_VARS)
 LOCAL_CLANG := $(adb_host_clang)
 LOCAL_MODULE := adb_test
@@ -115,14 +116,15 @@ LOCAL_STATIC_LIBRARIES := \
     libcutils \
 
 ifeq ($(HOST_OS),linux)
-  LOCAL_LDLIBS += -lrt -ldl -lpthread
+    LOCAL_LDLIBS += -lrt -ldl -lpthread
 endif
 
 ifeq ($(HOST_OS),darwin)
-  LOCAL_LDLIBS += -framework CoreFoundation -framework IOKit
+    LOCAL_LDLIBS += -framework CoreFoundation -framework IOKit
 endif
 
 include $(BUILD_HOST_NATIVE_TEST)
+endif
 
 # adb device tracker (used by ddms) test tool
 # =========================================================
