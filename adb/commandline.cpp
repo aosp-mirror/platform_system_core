@@ -47,9 +47,9 @@
 #include "adb_utils.h"
 #include "file_sync_service.h"
 
-static int install_app(transport_type t, const char* serial, int argc, const char** argv);
-static int install_multiple_app(transport_type t, const char* serial, int argc, const char** argv);
-static int uninstall_app(transport_type t, const char* serial, int argc, const char** argv);
+static int install_app(TransportType t, const char* serial, int argc, const char** argv);
+static int install_multiple_app(TransportType t, const char* serial, int argc, const char** argv);
+static int uninstall_app(TransportType t, const char* serial, int argc, const char** argv);
 
 static std::string gProductOutPath;
 extern int gListenAll;
@@ -431,7 +431,7 @@ static int interactive_shell() {
 }
 
 
-static std::string format_host_command(const char* command, transport_type type, const char* serial) {
+static std::string format_host_command(const char* command, TransportType type, const char* serial) {
     if (serial) {
         return android::base::StringPrintf("host-serial:%s:%s", serial, command);
     }
@@ -673,7 +673,7 @@ static int ppp(int argc, const char** argv) {
 #endif /* !defined(_WIN32) */
 }
 
-static bool wait_for_device(const char* service, transport_type t, const char* serial) {
+static bool wait_for_device(const char* service, TransportType t, const char* serial) {
     // Was the caller vague about what they'd like us to wait for?
     // If so, check they weren't more specific in their choice of transport type.
     if (strcmp(service, "wait-for-device") == 0) {
@@ -697,7 +697,7 @@ static bool wait_for_device(const char* service, transport_type t, const char* s
     return true;
 }
 
-static int send_shell_command(transport_type transport_type, const char* serial,
+static int send_shell_command(TransportType transport_type, const char* serial,
                               const std::string& command) {
     int fd;
     while (true) {
@@ -719,7 +719,7 @@ static int send_shell_command(transport_type transport_type, const char* serial,
     return rc;
 }
 
-static int logcat(transport_type transport, const char* serial, int argc, const char** argv) {
+static int logcat(TransportType transport, const char* serial, int argc, const char** argv) {
     char* log_tags = getenv("ANDROID_LOG_TAGS");
     std::string quoted = escape_arg(log_tags == nullptr ? "" : log_tags);
 
@@ -953,9 +953,7 @@ int adb_commandline(int argc, const char **argv) {
     int is_daemon = 0;
     int is_server = 0;
     int r;
-    transport_type ttype = kTransportAny;
-    const char* serial = NULL;
-    const char* server_port_str = NULL;
+    TransportType transport_type = kTransportAny;
 
     // If defined, this should be an absolute path to
     // the directory containing all of the various system images
@@ -968,10 +966,10 @@ int adb_commandline(int argc, const char **argv) {
     }
     // TODO: also try TARGET_PRODUCT/TARGET_DEVICE as a hint
 
-    serial = getenv("ANDROID_SERIAL");
+    const char* serial = getenv("ANDROID_SERIAL");
 
     /* Validate and assign the server port */
-    server_port_str = getenv("ANDROID_ADB_SERVER_PORT");
+    const char* server_port_str = getenv("ANDROID_ADB_SERVER_PORT");
     int server_port = DEFAULT_ADB_PORT;
     if (server_port_str && strlen(server_port_str) > 0) {
         server_port = (int) strtol(server_port_str, NULL, 0);
@@ -1017,9 +1015,9 @@ int adb_commandline(int argc, const char **argv) {
                 argv++;
             }
         } else if (!strcmp(argv[0],"-d")) {
-            ttype = kTransportUsb;
+            transport_type = kTransportUsb;
         } else if (!strcmp(argv[0],"-e")) {
-            ttype = kTransportLocal;
+            transport_type = kTransportLocal;
         } else if (!strcmp(argv[0],"-a")) {
             gListenAll = 1;
         } else if (!strncmp(argv[0], "-H", 2)) {
@@ -1064,7 +1062,7 @@ int adb_commandline(int argc, const char **argv) {
         argv++;
     }
 
-    adb_set_transport(ttype, serial);
+    adb_set_transport(transport_type, serial);
     adb_set_tcp_specifics(server_port);
 
     if (is_server) {
@@ -1087,7 +1085,7 @@ int adb_commandline(int argc, const char **argv) {
     if (!strncmp(argv[0], "wait-for-", strlen("wait-for-"))) {
         const char* service = argv[0];
 
-        if (!wait_for_device(service, ttype, serial)) {
+        if (!wait_for_device(service, transport_type, serial)) {
             return 1;
         }
 
@@ -1256,7 +1254,7 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "bugreport")) {
         if (argc != 1) return usage();
-        return send_shell_command(ttype, serial, "shell:bugreport");
+        return send_shell_command(transport_type, serial, "shell:bugreport");
     }
     /* adb_command() wrapper commands */
     else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
@@ -1297,9 +1295,9 @@ int adb_commandline(int argc, const char **argv) {
             if (serial) {
                 snprintf(host_prefix, sizeof host_prefix, "host-serial:%s",
                         serial);
-            } else if (ttype == kTransportUsb) {
+            } else if (transport_type == kTransportUsb) {
                 snprintf(host_prefix, sizeof host_prefix, "host-usb");
-            } else if (ttype == kTransportLocal) {
+            } else if (transport_type == kTransportLocal) {
                 snprintf(host_prefix, sizeof host_prefix, "host-local");
             } else {
                 snprintf(host_prefix, sizeof host_prefix, "host");
@@ -1376,15 +1374,15 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "install")) {
         if (argc < 2) return usage();
-        return install_app(ttype, serial, argc, argv);
+        return install_app(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "install-multiple")) {
         if (argc < 2) return usage();
-        return install_multiple_app(ttype, serial, argc, argv);
+        return install_multiple_app(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "uninstall")) {
         if (argc < 2) return usage();
-        return uninstall_app(ttype, serial, argc, argv);
+        return uninstall_app(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0], "sync")) {
         std::string src;
@@ -1436,11 +1434,11 @@ int adb_commandline(int argc, const char **argv) {
         !strcmp(argv[0],"get-serialno") ||
         !strcmp(argv[0],"get-devpath"))
     {
-        return adb_query_command(format_host_command(argv[0], ttype, serial));
+        return adb_query_command(format_host_command(argv[0], transport_type, serial));
     }
     /* other commands */
     else if (!strcmp(argv[0],"logcat") || !strcmp(argv[0],"lolcat") || !strcmp(argv[0],"longcat")) {
-        return logcat(ttype, serial, argc, argv);
+        return logcat(transport_type, serial, argc, argv);
     }
     else if (!strcmp(argv[0],"ppp")) {
         return ppp(argc, argv);
@@ -1476,9 +1474,7 @@ int adb_commandline(int argc, const char **argv) {
     return 1;
 }
 
-static int pm_command(transport_type transport, const char* serial,
-                      int argc, const char** argv)
-{
+static int pm_command(TransportType transport, const char* serial, int argc, const char** argv) {
     std::string cmd = "shell:pm";
 
     while (argc-- > 0) {
@@ -1488,9 +1484,7 @@ static int pm_command(transport_type transport, const char* serial,
     return send_shell_command(transport, serial, cmd);
 }
 
-static int uninstall_app(transport_type transport, const char* serial, int argc,
-                         const char** argv)
-{
+static int uninstall_app(TransportType transport, const char* serial, int argc, const char** argv) {
     /* if the user choose the -k option, we refuse to do it until devices are
        out with the option to uninstall the remaining data somehow (adb/ui) */
     if (argc == 3 && strcmp(argv[1], "-k") == 0)
@@ -1507,8 +1501,7 @@ static int uninstall_app(transport_type transport, const char* serial, int argc,
     return pm_command(transport, serial, argc, argv);
 }
 
-static int delete_file(transport_type transport, const char* serial, char* filename)
-{
+static int delete_file(TransportType transport, const char* serial, char* filename) {
     std::string cmd = "shell:rm -f " + escape_arg(filename);
     return send_shell_command(transport, serial, cmd);
 }
@@ -1524,9 +1517,7 @@ static const char* get_basename(const char* filename)
     }
 }
 
-static int install_app(transport_type transport, const char* serial, int argc,
-                       const char** argv)
-{
+static int install_app(TransportType transport, const char* serial, int argc, const char** argv) {
     static const char *const DATA_DEST = "/data/local/tmp/%s";
     static const char *const SD_DEST = "/sdcard/tmp/%s";
     const char* where = DATA_DEST;
@@ -1578,7 +1569,7 @@ cleanup_apk:
     return err;
 }
 
-static int install_multiple_app(transport_type transport, const char* serial, int argc,
+static int install_multiple_app(TransportType transport, const char* serial, int argc,
                                 const char** argv)
 {
     int i;

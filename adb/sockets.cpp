@@ -691,7 +691,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
 #if ADB_HOST
     char *service = NULL;
     char* serial = NULL;
-    transport_type ttype = kTransportAny;
+    TransportType type = kTransportAny;
 #endif
 
     D("SS(%d): enqueue %d\n", s->id, p->len);
@@ -748,13 +748,13 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
             service = serial_end + 1;
         }
     } else if (!strncmp(service, "host-usb:", strlen("host-usb:"))) {
-        ttype = kTransportUsb;
+        type = kTransportUsb;
         service += strlen("host-usb:");
     } else if (!strncmp(service, "host-local:", strlen("host-local:"))) {
-        ttype = kTransportLocal;
+        type = kTransportLocal;
         service += strlen("host-local:");
     } else if (!strncmp(service, "host:", strlen("host:"))) {
-        ttype = kTransportAny;
+        type = kTransportAny;
         service += strlen("host:");
     } else {
         service = NULL;
@@ -768,7 +768,7 @@ static int smart_socket_enqueue(asocket *s, apacket *p)
             ** the OKAY or FAIL message and all we have to do
             ** is clean up.
             */
-        if(handle_host_request(service, ttype, serial, s->peer->fd, s) == 0) {
+        if(handle_host_request(service, type, serial, s->peer->fd, s) == 0) {
                 /* XXX fail message? */
             D( "SS(%d): handled host service '%s'\n", s->id, service );
             goto fail;
