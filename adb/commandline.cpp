@@ -47,14 +47,9 @@
 #include "adb_utils.h"
 #include "file_sync_service.h"
 
-static int do_cmd(transport_type ttype, const char* serial, const char *cmd, ...);
-
-static int install_app(transport_type transport, const char* serial, int argc,
-                       const char** argv);
-static int install_multiple_app(transport_type transport, const char* serial, int argc,
-                                const char** argv);
-static int uninstall_app(transport_type transport, const char* serial, int argc,
-                         const char** argv);
+static int install_app(transport_type t, const char* serial, int argc, const char** argv);
+static int install_multiple_app(transport_type t, const char* serial, int argc, const char** argv);
+static int uninstall_app(transport_type t, const char* serial, int argc, const char** argv);
 
 static std::string gProductOutPath;
 extern int gListenAll;
@@ -678,7 +673,31 @@ static int ppp(int argc, const char** argv) {
 #endif /* !defined(_WIN32) */
 }
 
-static int send_shell_command(transport_type transport, const char* serial,
+static bool wait_for_device(const char* service, transport_type t, const char* serial) {
+    // Was the caller vague about what they'd like us to wait for?
+    // If so, check they weren't more specific in their choice of transport type.
+    if (strcmp(service, "wait-for-device") == 0) {
+        if (t == kTransportUsb) {
+            service = "wait-for-usb";
+        } else if (t == kTransportLocal) {
+            service = "wait-for-local";
+        } else {
+            service = "wait-for-any";
+        }
+    }
+
+    std::string cmd = format_host_command(service, t, serial);
+    std::string error;
+    if (adb_command(cmd, &error)) {
+        D("failure: %s *\n", error.c_str());
+        fprintf(stderr,"error: %s\n", error.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+static int send_shell_command(transport_type transport_type, const char* serial,
                               const std::string& command) {
     int fd;
     while (true) {
@@ -689,7 +708,7 @@ static int send_shell_command(transport_type transport, const char* serial,
         }
         fprintf(stderr,"- waiting for device -\n");
         adb_sleep_ms(1000);
-        do_cmd(transport, serial, "wait-for-device", 0);
+        wait_for_device("wait-for-device", transport_type, serial);
     }
 
     read_and_dump(fd);
@@ -1070,27 +1089,13 @@ int adb_commandline(int argc, const char **argv) {
     /* handle wait-for-* prefix */
     if (!strncmp(argv[0], "wait-for-", strlen("wait-for-"))) {
         const char* service = argv[0];
-        if (!strncmp(service, "wait-for-device", strlen("wait-for-device"))) {
-            if (ttype == kTransportUsb) {
-                service = "wait-for-usb";
-            } else if (ttype == kTransportLocal) {
-                service = "wait-for-local";
-            } else {
-                service = "wait-for-any";
-            }
-        }
 
-        std::string cmd = format_host_command(service, ttype, serial);
-        std::string error;
-        if (adb_command(cmd, &error)) {
-            D("failure: %s *\n", error.c_str());
-            fprintf(stderr,"error: %s\n", error.c_str());
+        if (!wait_for_device(service, ttype, serial)) {
             return 1;
         }
 
-        /* Allow a command to be run after wait-for-device,
-            * e.g. 'adb wait-for-device shell'.
-            */
+        // Allow a command to be run after wait-for-device,
+        // e.g. 'adb wait-for-device shell'.
         if (argc == 1) {
             return 0;
         }
@@ -1157,11 +1162,12 @@ int adb_commandline(int argc, const char **argv) {
         }
 
         std::string cmd = "shell:";
-        cmd += argv[1];
-        argc -= 2;
-        argv += 2;
+        --argc;
+        ++argv;
         while (argc-- > 0) {
-            cmd += " " + escape_arg(*argv++);
+            // We don't escape here, just like ssh(1). http://b/20564385.
+            cmd += *argv++;
+            if (*argv) cmd += " ";
         }
 
         while (true) {
@@ -1183,7 +1189,7 @@ int adb_commandline(int argc, const char **argv) {
             if (persist) {
                 fprintf(stderr,"\n- waiting for device -\n");
                 adb_sleep_ms(1000);
-                do_cmd(ttype, serial, "wait-for-device", 0);
+                wait_for_device("wait-for-device", ttype, serial);
             } else {
                 if (h) {
                     printf("\x1b[0m");
@@ -1259,8 +1265,7 @@ int adb_commandline(int argc, const char **argv) {
     }
     else if (!strcmp(argv[0], "bugreport")) {
         if (argc != 1) return usage();
-        do_cmd(ttype, serial, "shell", "bugreport", 0);
-        return 0;
+        return send_shell_command(ttype, serial, "shell:bugreport");
     }
     /* adb_command() wrapper commands */
     else if (!strcmp(argv[0], "forward") || !strcmp(argv[0], "reverse")) {
@@ -1478,42 +1483,6 @@ int adb_commandline(int argc, const char **argv) {
 
     usage();
     return 1;
-}
-
-#define MAX_ARGV_LENGTH 16
-static int do_cmd(transport_type ttype, const char* serial, const char *cmd, ...)
-{
-    const char *argv[MAX_ARGV_LENGTH];
-    int argc;
-    va_list ap;
-
-    va_start(ap, cmd);
-    argc = 0;
-
-    if (serial) {
-        argv[argc++] = "-s";
-        argv[argc++] = serial;
-    } else if (ttype == kTransportUsb) {
-        argv[argc++] = "-d";
-    } else if (ttype == kTransportLocal) {
-        argv[argc++] = "-e";
-    }
-
-    argv[argc++] = cmd;
-    while(argc < MAX_ARGV_LENGTH &&
-        (argv[argc] = va_arg(ap, char*)) != 0) argc++;
-    assert(argc < MAX_ARGV_LENGTH);
-    va_end(ap);
-
-#if 0
-    int n;
-    fprintf(stderr,"argc = %d\n",argc);
-    for(n = 0; n < argc; n++) {
-        fprintf(stderr,"argv[%d] = \"%s\"\n", n, argv[n]);
-    }
-#endif
-
-    return adb_commandline(argc, argv);
 }
 
 static int pm_command(transport_type transport, const char* serial,
