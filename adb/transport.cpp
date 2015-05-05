@@ -530,8 +530,6 @@ transport_write_action(int  fd, struct tmsg*  m)
 static void transport_registration_func(int _fd, unsigned ev, void *data)
 {
     tmsg m;
-    adb_thread_t output_thread_ptr;
-    adb_thread_t input_thread_ptr;
     int s[2];
     atransport *t;
 
@@ -600,11 +598,11 @@ static void transport_registration_func(int _fd, unsigned ev, void *data)
 
         fdevent_set(&(t->transport_fde), FDE_READ);
 
-        if(adb_thread_create(&input_thread_ptr, input_thread, t)){
+        if (!adb_thread_create(input_thread, t)) {
             fatal_errno("cannot create input thread");
         }
 
-        if(adb_thread_create(&output_thread_ptr, output_thread, t)){
+        if (!adb_thread_create(output_thread, t)) {
             fatal_errno("cannot create output thread");
         }
     }
