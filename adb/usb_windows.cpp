@@ -181,9 +181,7 @@ void* device_poll_thread(void* unused) {
 }
 
 void usb_init() {
-  adb_thread_t tid;
-
-  if(adb_thread_create(&tid, device_poll_thread, NULL)) {
+  if (!adb_thread_create(device_poll_thread, nullptr)) {
     fatal_errno("cannot create input thread");
   }
 }

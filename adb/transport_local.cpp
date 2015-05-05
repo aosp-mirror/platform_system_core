@@ -234,9 +234,8 @@ static const char _ok_resp[]    = "ok";
     if (fd < 0) {
         /* This could be an older version of the emulator, that doesn't
          * implement adb QEMUD service. Fall back to the old TCP way. */
-        adb_thread_t thr;
         D("adb service is not available. Falling back to TCP socket.\n");
-        adb_thread_create(&thr, server_socket_thread, arg);
+        adb_thread_create(server_socket_thread, arg);
         return 0;
     }
 
@@ -279,7 +278,6 @@ static const char _ok_resp[]    = "ok";
 
 void local_init(int port)
 {
-    adb_thread_t thr;
     void* (*func)(void *);
 
     if(HOST) {
@@ -304,9 +302,8 @@ void local_init(int port)
 
     D("transport: local %s init\n", HOST ? "client" : "server");
 
-    if(adb_thread_create(&thr, func, (void *) (uintptr_t) port)) {
-        fatal_errno("cannot create local socket %s thread",
-                    HOST ? "client" : "server");
+    if (!adb_thread_create(func, (void *) (uintptr_t) port)) {
+        fatal_errno("cannot create local socket %s thread", HOST ? "client" : "server");
     }
 }
 

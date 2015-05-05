@@ -398,22 +398,20 @@ void* RunLoopThread(void* unused)
     IONotificationPortDestroy(notificationPort);
 
     DBG("RunLoopThread done\n");
-    return NULL;    
+    return NULL;
 }
 
 
 static int initialized = 0;
-void usb_init()
-{
+void usb_init() {
     if (!initialized)
     {
-        adb_thread_t    tid;
-
         adb_mutex_init(&start_lock, NULL);
         adb_cond_init(&start_cond, NULL);
 
-        if(adb_thread_create(&tid, RunLoopThread, NULL))
+        if (!adb_thread_create(RunLoopThread, nullptr)) {
             fatal_errno("cannot create input thread");
+        }
 
         // Wait for initialization to finish
         adb_mutex_lock(&start_lock);

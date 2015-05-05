@@ -668,7 +668,6 @@ static void sigalrm_handler(int signo)
 
 void usb_init()
 {
-    adb_thread_t tid;
     struct sigaction    actions;
 
     memset(&actions, 0, sizeof(actions));
@@ -677,7 +676,7 @@ void usb_init()
     actions.sa_handler = sigalrm_handler;
     sigaction(SIGALRM,& actions, NULL);
 
-    if(adb_thread_create(&tid, device_poll_thread, NULL)){
+    if (!adb_thread_create(device_poll_thread, nullptr)) {
         fatal_errno("cannot create input thread");
     }
 }

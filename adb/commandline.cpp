@@ -403,7 +403,6 @@ static void *stdin_read_thread(void *x)
 }
 
 static int interactive_shell() {
-    adb_thread_t thr;
     int fdi;
 
     std::string error;
@@ -424,7 +423,8 @@ static int interactive_shell() {
     fds[1] = fdi;
 
     stdin_raw_init(fdi);
-    adb_thread_create(&thr, stdin_read_thread, fds);
+
+    adb_thread_create(stdin_read_thread, fds);
     read_and_dump(fd);
     stdin_raw_restore(fdi);
     return 0;
