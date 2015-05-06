@@ -11,6 +11,13 @@ else
   adb_host_clang := true
 endif
 
+adb_version := $(shell git -C $(LOCAL_PATH) rev-parse --short=12 HEAD 2>/dev/null)-android
+
+ADB_COMMON_CFLAGS := \
+    -Wall -Werror \
+    -Wno-unused-parameter \
+    -DADB_REVISION='"$(adb_version)"' \
+
 # libadb
 # =========================================================
 
@@ -37,8 +44,7 @@ LIBADB_TEST_SRCS := \
     transport_test.cpp \
 
 LIBADB_CFLAGS := \
-    -Wall -Werror \
-    -Wno-unused-parameter \
+    $(ADB_COMMON_CFLAGS) \
     -Wno-missing-field-initializers \
     -fvisibility=hidden \
 
@@ -169,8 +175,7 @@ LOCAL_SRC_FILES := \
     file_sync_client.cpp \
 
 LOCAL_CFLAGS += \
-    -Wall -Werror \
-    -Wno-unused-parameter \
+    $(ADB_COMMON_CFLAGS) \
     -D_GNU_SOURCE \
     -DADB_HOST=1 \
 
@@ -222,10 +227,9 @@ LOCAL_SRC_FILES := \
     set_verity_enable_state_service.cpp \
 
 LOCAL_CFLAGS := \
+    $(ADB_COMMON_CFLAGS) \
     -DADB_HOST=0 \
     -D_GNU_SOURCE \
-    -Wall -Werror \
-    -Wno-unused-parameter \
     -Wno-deprecated-declarations \
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
