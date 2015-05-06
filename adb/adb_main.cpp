@@ -358,29 +358,25 @@ void close_stdin() {
 }
 #endif
 
+// TODO(danalbert): Split this file up into adb_main.cpp and adbd_main.cpp.
 int main(int argc, char **argv) {
 #if ADB_HOST
+    // adb client/server
     adb_sysdeps_init();
-#else
-    close_stdin();
-#endif
     adb_trace_init();
-
-#if ADB_HOST
     D("Handling commandline()\n");
     return adb_commandline(argc - 1, const_cast<const char**>(argv + 1));
 #else
-    /* If adbd runs inside the emulator this will enable adb tracing via
-     * adb-debug qemud service in the emulator. */
-    adb_qemu_trace_init();
+    // adbd
     while (true) {
-        int c;
-        int option_index = 0;
         static struct option opts[] = {
-            {"root_seclabel", required_argument, 0, 's' },
-            {"device_banner", required_argument, 0, 'b' }
+            {"root_seclabel", required_argument, nullptr, 's'},
+            {"device_banner", required_argument, nullptr, 'b'},
+            {"version", no_argument, nullptr, 'v'},
         };
-        c = getopt_long(argc, argv, "", opts, &option_index);
+
+        int option_index = 0;
+        int c = getopt_long(argc, argv, "", opts, &option_index);
         if (c == -1)
             break;
         switch (c) {
@@ -390,10 +386,23 @@ int main(int argc, char **argv) {
         case 'b':
             adb_device_banner = optarg;
             break;
+        case 'v':
+            printf("Android Debug Bridge Daemon version %d.%d.%d %s\n",
+                   ADB_VERSION_MAJOR, ADB_VERSION_MINOR, ADB_SERVER_VERSION,
+                   ADB_REVISION);
+            return 0;
         default:
             break;
         }
     }
+
+    close_stdin();
+
+    adb_trace_init();
+
+    /* If adbd runs inside the emulator this will enable adb tracing via
+     * adb-debug qemud service in the emulator. */
+    adb_qemu_trace_init();
 
     D("Handling main()\n");
     return adb_main(0, DEFAULT_ADB_PORT);
