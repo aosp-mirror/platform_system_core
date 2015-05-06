@@ -84,8 +84,8 @@ typedef  void*  (*adb_thread_func_t)(void*  arg);
 typedef  void (*win_thread_func_t)(void*  arg);
 
 static __inline__ bool adb_thread_create(adb_thread_func_t func, void* arg) {
-    unsigned tid = _beginthread( (win_thread_func_t)func, 0, arg );
-    return (tid != (unsigned)-1L);
+    uintptr_t tid = _beginthread((win_thread_func_t)func, 0, arg);
+    return (tid != static_cast<uintptr_t>(-1L));
 }
 
 static __inline__  unsigned long adb_thread_id()
