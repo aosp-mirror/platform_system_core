@@ -82,7 +82,7 @@ struct desc_v2 {
     struct func_desc fs_descs, hs_descs;
 } __attribute__((packed));
 
-struct func_desc fs_descriptors = {
+static struct func_desc fs_descriptors = {
     .intf = {
         .bLength = sizeof(fs_descriptors.intf),
         .bDescriptorType = USB_DT_INTERFACE,
@@ -109,7 +109,7 @@ struct func_desc fs_descriptors = {
     },
 };
 
-struct func_desc hs_descriptors = {
+static struct func_desc hs_descriptors = {
     .intf = {
         .bLength = sizeof(hs_descriptors.intf),
         .bDescriptorType = USB_DT_INTERFACE,

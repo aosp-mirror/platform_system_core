@@ -79,8 +79,7 @@ static void print_transfer_progress(unsigned long long bytes_current,
     fflush(stderr);
 }
 
-void sync_quit(int fd)
-{
+static void sync_quit(int fd) {
     syncmsg msg;
 
     msg.req.id = ID_QUIT;
@@ -91,8 +90,7 @@ void sync_quit(int fd)
 
 typedef void (*sync_ls_cb)(unsigned mode, unsigned size, unsigned time, const char *name, void *cookie);
 
-int sync_ls(int fd, const char *path, sync_ls_cb func, void *cookie)
-{
+static int sync_ls(int fd, const char* path, sync_ls_cb func, void* cookie) {
     syncmsg msg;
     char buf[257];
     int len;
@@ -138,9 +136,7 @@ struct syncsendbuf {
 
 static syncsendbuf send_buffer;
 
-int sync_readtime(int fd, const char *path, unsigned int *timestamp,
-                  unsigned int *mode)
-{
+static int sync_readtime(int fd, const char* path, unsigned int* timestamp, unsigned int* mode) {
     syncmsg msg;
     int len = strlen(path);
 
@@ -199,8 +195,7 @@ static int sync_finish_readtime(int fd, unsigned int *timestamp,
     return 0;
 }
 
-int sync_readmode(int fd, const char *path, unsigned *mode)
-{
+static int sync_readmode(int fd, const char* path, unsigned* mode) {
     syncmsg msg;
     int len = strlen(path);
 
@@ -419,8 +414,7 @@ static int mkdirs(const char *name)
     return 0;
 }
 
-int sync_recv(int fd, const char *rpath, const char *lpath, int show_progress)
-{
+static int sync_recv(int fd, const char* rpath, const char* lpath, int show_progress) {
     syncmsg msg;
     int len;
     int lfd = -1;
@@ -566,17 +560,14 @@ struct copyinfo
     int flag;
 };
 
-copyinfo *mkcopyinfo(const char *spath, const char *dpath,
-                     const char *name, int isdir)
-{
+static copyinfo* mkcopyinfo(const char* spath, const char* dpath, const char* name, int isdir) {
     int slen = strlen(spath);
     int dlen = strlen(dpath);
     int nlen = strlen(name);
     int ssize = slen + nlen + 2;
     int dsize = dlen + nlen + 2;
 
-    copyinfo *ci = reinterpret_cast<copyinfo*>(
-        malloc(sizeof(copyinfo) + ssize + dsize));
+    copyinfo *ci = reinterpret_cast<copyinfo*>(malloc(sizeof(copyinfo) + ssize + dsize));
     if(ci == 0) {
         fprintf(stderr,"out of memory\n");
         abort();
@@ -807,9 +798,8 @@ struct sync_ls_build_list_cb_args {
     const char *lpath;
 };
 
-void
-sync_ls_build_list_cb(unsigned mode, unsigned size, unsigned time,
-                      const char *name, void *cookie)
+static void sync_ls_build_list_cb(unsigned mode, unsigned size, unsigned time,
+                                  const char* name, void* cookie)
 {
     sync_ls_build_list_cb_args *args = (sync_ls_build_list_cb_args *)cookie;
     copyinfo *ci;
