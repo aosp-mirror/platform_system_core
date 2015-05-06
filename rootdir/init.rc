@@ -583,7 +583,7 @@ service inputflinger /system/bin/inputflinger
     class main
     user system
     group input
-    onrestart restart zygote
+#    onrestart restart zygote
 
 service drm /system/bin/drmserver
     class main
