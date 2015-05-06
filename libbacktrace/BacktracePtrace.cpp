@@ -83,13 +83,12 @@ size_t BacktracePtrace::Read(uintptr_t addr, uint8_t* buffer, size_t bytes) {
     if (!PtraceRead(Tid(), addr & ~(sizeof(word_t) - 1), &data_word)) {
       return 0;
     }
-    align_bytes = sizeof(word_t) - align_bytes;
-    memcpy(buffer, reinterpret_cast<uint8_t*>(&data_word) + sizeof(word_t) - align_bytes,
-           align_bytes);
-    addr += align_bytes;
-    buffer += align_bytes;
-    bytes -= align_bytes;
-    bytes_read += align_bytes;
+    size_t copy_bytes = MIN(sizeof(word_t) - align_bytes, bytes);
+    memcpy(buffer, reinterpret_cast<uint8_t*>(&data_word) + align_bytes, copy_bytes);
+    addr += copy_bytes;
+    buffer += copy_bytes;
+    bytes -= copy_bytes;
+    bytes_read += copy_bytes;
   }
 
   size_t num_words = bytes / sizeof(word_t);
