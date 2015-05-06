@@ -37,6 +37,7 @@ struct backtrace_map_t {
 
   uintptr_t start;
   uintptr_t end;
+  uintptr_t offset;
   uintptr_t load_base;
   int flags;
   std::string name;
