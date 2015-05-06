@@ -160,8 +160,7 @@ std::string format_listeners() {
     return result;
 }
 
-install_status_t remove_listener(const char *local_name, atransport* transport)
-{
+InstallStatus remove_listener(const char *local_name, atransport* transport) {
     alistener *l;
 
     for (l = listener_list.next; l != &listener_list; l = l->next) {
@@ -185,7 +184,7 @@ void remove_all_listeners(void)
     }
 }
 
-install_status_t install_listener(const std::string& local_name,
+InstallStatus install_listener(const std::string& local_name,
                                   const char *connect_to,
                                   atransport* transport,
                                   int no_rebind)

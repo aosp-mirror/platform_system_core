@@ -22,7 +22,7 @@
 #include <string>
 
 // error/status codes for install_listener.
-enum install_status_t {
+enum InstallStatus {
   INSTALL_STATUS_OK = 0,
   INSTALL_STATUS_INTERNAL_ERROR = -1,
   INSTALL_STATUS_CANNOT_BIND = -2,
@@ -36,14 +36,14 @@ void listener_disconnect(void*  _l, atransport*  t);
 void listener_event_func(int _fd, unsigned ev, void *_l);
 void ss_listener_event_func(int _fd, unsigned ev, void *_l);
 
-install_status_t install_listener(const std::string& local_name,
-                                  const char* connect_to,
-                                  atransport* transport,
-                                  int no_rebind);
+InstallStatus install_listener(const std::string& local_name,
+                               const char* connect_to,
+                               atransport* transport,
+                               int no_rebind);
 
 std::string format_listeners();
 
-install_status_t remove_listener(const char* local_name, atransport* transport);
+InstallStatus remove_listener(const char* local_name, atransport* transport);
 void remove_all_listeners(void);
 
 #endif /* __ADB_LISTENERS_H */

@@ -36,7 +36,7 @@
 
 #include "adb_io.h"
 
-static transport_type __adb_transport = kTransportAny;
+static TransportType __adb_transport = kTransportAny;
 static const char* __adb_serial = NULL;
 
 static int __adb_server_port = DEFAULT_ADB_PORT;
@@ -64,7 +64,7 @@ static bool ReadProtocolString(int fd, std::string* s, std::string* error) {
     return true;
 }
 
-void adb_set_transport(transport_type type, const char* serial)
+void adb_set_transport(TransportType type, const char* serial)
 {
     __adb_transport = type;
     __adb_serial = serial;
