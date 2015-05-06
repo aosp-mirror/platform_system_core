@@ -724,25 +724,6 @@ static int logcat(TransportType transport, const char* serial, int argc, const c
     return send_shell_command(transport, serial, cmd);
 }
 
-static int mkdirs(const char *path)
-{
-    int ret;
-    char *x = (char *)path + 1;
-
-    for(;;) {
-        x = adb_dirstart(x);
-        if(x == 0) return 0;
-        *x = 0;
-        ret = adb_mkdir(path, 0775);
-        *x = OS_PATH_SEPARATOR;
-        if((ret < 0) && (errno != EEXIST)) {
-            return ret;
-        }
-        x++;
-    }
-    return 0;
-}
-
 static int backup(int argc, const char** argv) {
     const char* filename = "./backup.ab";
 
