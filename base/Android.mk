@@ -21,6 +21,7 @@ libbase_src_files := \
     logging.cpp \
     stringprintf.cpp \
     strings.cpp \
+    test_utils.cpp \
 
 libbase_test_src_files := \
     file_test.cpp \
@@ -28,7 +29,6 @@ libbase_test_src_files := \
     stringprintf_test.cpp \
     strings_test.cpp \
     test_main.cpp \
-    test_utils.cpp \
 
 libbase_cppflags := \
     -Wall \

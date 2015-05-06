@@ -17,16 +17,37 @@
 #ifndef TEST_UTILS_H
 #define TEST_UTILS_H
 
+#include <string>
+
+#include <base/macros.h>
+
 class TemporaryFile {
  public:
   TemporaryFile();
   ~TemporaryFile();
 
   int fd;
-  char filename[1024];
+  char path[1024];
 
  private:
-  void init(const char* tmp_dir);
+  void init(const std::string& tmp_dir);
+
+  DISALLOW_COPY_AND_ASSIGN(TemporaryFile);
 };
+
+#if !defined(_WIN32)
+class TemporaryDir {
+ public:
+  TemporaryDir();
+  ~TemporaryDir();
+
+  char path[1024];
+
+ private:
+  bool init(const std::string& tmp_dir);
+
+  DISALLOW_COPY_AND_ASSIGN(TemporaryDir);
+};
+#endif
 
 #endif // TEST_UTILS_H
