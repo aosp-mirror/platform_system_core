@@ -29,7 +29,7 @@
  * If serial is non-NULL then only the device with that serial will be chosen.
  * If no suitable transport is found, error is set.
  */
-atransport* acquire_one_transport(int state, transport_type ttype,
+atransport* acquire_one_transport(int state, TransportType type,
                                   const char* serial, std::string* error_out);
 void add_transport_disconnect(atransport* t, adisconnect* dis);
 void remove_transport_disconnect(atransport* t, adisconnect* dis);

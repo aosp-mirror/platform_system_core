@@ -21,9 +21,8 @@ int adb_command(const std::string& service, std::string* error);
 // Returns true on success; returns false and fills 'error' on failure.
 bool adb_query(const std::string& service, std::string* result, std::string* error);
 
-/* Set the preferred transport to connect to.
-*/
-void adb_set_transport(transport_type type, const char* serial);
+// Set the preferred transport to connect to.
+void adb_set_transport(TransportType type, const char* serial);
 
 /* Set TCP specifics of the transport to use
 */
