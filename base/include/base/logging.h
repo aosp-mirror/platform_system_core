@@ -17,6 +17,15 @@
 #ifndef BASE_LOGGING_H
 #define BASE_LOGGING_H
 
+#ifdef ERROR
+#error ERROR is already defined. If this is Windows code, #define NOGDI before \
+including anything.
+#endif
+
+#ifdef _WIN32
+#define NOGDI // Suppress the evil ERROR macro.
+#endif
+
 #include <functional>
 #include <memory>
 #include <ostream>
