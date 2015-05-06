@@ -264,8 +264,7 @@ static void usb_adb_init()
     }
 
     D("[ usb_init - starting thread ]\n");
-    adb_thread_t tid;
-    if(adb_thread_create(&tid, usb_adb_open_thread, h)){
+    if (!adb_thread_create(usb_adb_open_thread, h)) {
         fatal_errno("cannot create usb thread");
     }
 }
@@ -483,8 +482,7 @@ static void usb_ffs_init()
     adb_mutex_init(&h->lock, 0);
 
     D("[ usb_init - starting thread ]\n");
-    adb_thread_t tid;
-    if (adb_thread_create(&tid, usb_ffs_open_thread, h)){
+    if (!adb_thread_create(usb_ffs_open_thread, h)) {
         fatal_errno("[ cannot create usb thread ]\n");
     }
 }

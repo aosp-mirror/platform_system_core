@@ -79,19 +79,13 @@ static __inline__ void  adb_mutex_unlock( adb_mutex_t*  lock )
     LeaveCriticalSection( lock );
 }
 
-typedef struct { unsigned  tid; }  adb_thread_t;
-
 typedef  void*  (*adb_thread_func_t)(void*  arg);
 
 typedef  void (*win_thread_func_t)(void*  arg);
 
-static __inline__ int  adb_thread_create( adb_thread_t  *thread, adb_thread_func_t  func, void*  arg)
-{
-    thread->tid = _beginthread( (win_thread_func_t)func, 0, arg );
-    if (thread->tid == (unsigned)-1L) {
-        return -1;
-    }
-    return 0;
+static __inline__ bool adb_thread_create(adb_thread_func_t func, void* arg) {
+    unsigned tid = _beginthread( (win_thread_func_t)func, 0, arg );
+    return (tid != (unsigned)-1L);
 }
 
 static __inline__  unsigned long adb_thread_id()
@@ -429,18 +423,16 @@ static __inline__ int  adb_socket_accept(int  serverfd, struct sockaddr*  addr, 
 #define  unix_write  adb_write
 #define  unix_close  adb_close
 
-typedef  pthread_t                 adb_thread_t;
-
 typedef void*  (*adb_thread_func_t)( void*  arg );
 
-static __inline__ int  adb_thread_create( adb_thread_t  *pthread, adb_thread_func_t  start, void*  arg )
-{
-    pthread_attr_t   attr;
+static __inline__ bool adb_thread_create(adb_thread_func_t start, void* arg) {
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    pthread_attr_init (&attr);
-    pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
-
-    return pthread_create( pthread, &attr, start, arg );
+    pthread_t thread;
+    errno = pthread_create(&thread, &attr, start, arg);
+    return (errno == 0);
 }
 
 static __inline__  int  adb_socket_setbufsize( int   fd, int  bufsize )
