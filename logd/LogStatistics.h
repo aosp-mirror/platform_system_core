@@ -73,52 +73,139 @@ public:
     ssize_t next(ssize_t index) {
         return android::BasicHashtable<TKey, TEntry>::next(index);
     }
+
+    size_t add(TKey key, LogBufferElement *e) {
+        android::hash_t hash = android::hash_type(key);
+        ssize_t index = android::BasicHashtable<TKey, TEntry>::find(-1, hash, key);
+        if (index == -1) {
+            return android::BasicHashtable<TKey, TEntry>::add(hash, TEntry(e));
+        }
+        android::BasicHashtable<TKey, TEntry>::editEntryAt(index).add(e);
+        return index;
+    }
+
+    inline size_t add(TKey key) {
+        android::hash_t hash = android::hash_type(key);
+        ssize_t index = android::BasicHashtable<TKey, TEntry>::find(-1, hash, key);
+        if (index == -1) {
+            return android::BasicHashtable<TKey, TEntry>::add(hash, TEntry(key));
+        }
+        android::BasicHashtable<TKey, TEntry>::editEntryAt(index).add(key);
+        return index;
+    }
+
+    void subtract(TKey key, LogBufferElement *e) {
+        ssize_t index = android::BasicHashtable<TKey, TEntry>::find(-1, android::hash_type(key), key);
+        if ((index != -1)
+         && android::BasicHashtable<TKey, TEntry>::editEntryAt(index).subtract(e)) {
+            android::BasicHashtable<TKey, TEntry>::removeAt(index);
+        }
+    }
+
+    inline void drop(TKey key, LogBufferElement *e) {
+        ssize_t index = android::BasicHashtable<TKey, TEntry>::find(-1, android::hash_type(key), key);
+        if (index != -1) {
+            android::BasicHashtable<TKey, TEntry>::editEntryAt(index).drop(e);
+        }
+    }
+
 };
 
-struct UidEntry {
-    const uid_t uid;
+struct EntryBase {
     size_t size;
+
+    EntryBase():size(0) { }
+    EntryBase(LogBufferElement *e):size(e->getMsgLen()) { }
+
+    size_t getSizes() const { return size; }
+
+    inline void add(LogBufferElement *e) { size += e->getMsgLen(); }
+    inline bool subtract(LogBufferElement *e) { size -= e->getMsgLen(); return !size; }
+};
+
+struct EntryBaseDropped : public EntryBase {
     size_t dropped;
 
-    UidEntry(uid_t uid):uid(uid),size(0),dropped(0) { }
+    EntryBaseDropped():dropped(0) { }
+    EntryBaseDropped(LogBufferElement *e):EntryBase(e),dropped(e->getDropped()){ }
 
-    inline const uid_t&getKey() const { return uid; }
-    size_t getSizes() const { return size; }
     size_t getDropped() const { return dropped; }
 
-    inline void add(size_t s) { size += s; }
-    inline void add_dropped(size_t d) { dropped += d; }
-    inline bool subtract(size_t s) { size -= s; return !dropped && !size; }
-    inline bool subtract_dropped(size_t d) { dropped -= d; return !dropped && !size; }
+    inline void add(LogBufferElement *e) {
+        dropped += e->getDropped();
+        EntryBase::add(e);
+    }
+    inline bool subtract(LogBufferElement *e) {
+        dropped -= e->getDropped();
+        return EntryBase::subtract(e) && !dropped;
+    }
+    inline void drop(LogBufferElement *e) {
+        dropped += 1;
+        EntryBase::subtract(e);
+    }
 };
 
-struct PidEntry {
+struct UidEntry : public EntryBaseDropped {
+    const uid_t uid;
+
+    UidEntry(LogBufferElement *e):EntryBaseDropped(e),uid(e->getUid()) { }
+
+    inline const uid_t&getKey() const { return uid; }
+};
+
+namespace android {
+// caller must own and free character string
+char *pidToName(pid_t pid);
+uid_t pidToUid(pid_t pid);
+}
+
+struct PidEntry : public EntryBaseDropped {
     const pid_t pid;
     uid_t uid;
     char *name;
-    size_t size;
-    size_t dropped;
 
-    PidEntry(pid_t p, uid_t u, char *n):pid(p),uid(u),name(n),size(0),dropped(0) { }
+    PidEntry(pid_t p):
+        EntryBaseDropped(),
+        pid(p),
+        uid(android::pidToUid(p)),
+        name(android::pidToName(pid)) { }
+    PidEntry(LogBufferElement *e):
+        EntryBaseDropped(e),
+        pid(e->getPid()),
+        uid(e->getUid()),
+        name(android::pidToName(e->getPid())) { }
     PidEntry(const PidEntry &c):
+        EntryBaseDropped(c),
         pid(c.pid),
         uid(c.uid),
-        name(c.name ? strdup(c.name) : NULL),
-        size(c.size),
-        dropped(c.dropped) { }
+        name(c.name ? strdup(c.name) : NULL) { }
     ~PidEntry() { free(name); }
 
     const pid_t&getKey() const { return pid; }
     const uid_t&getUid() const { return uid; }
-    uid_t&setUid(uid_t u) { return uid = u; }
     const char*getName() const { return name; }
-    char *setName(char *n) { free(name); return name = n; }
-    size_t getSizes() const { return size; }
-    size_t getDropped() const { return dropped; }
-    inline void add(size_t s) { size += s; }
-    inline void add_dropped(size_t d) { dropped += d; }
-    inline bool subtract(size_t s) { size -= s; return !dropped && !size; }
-    inline bool subtract_dropped(size_t d) { dropped -= d; return !dropped && !size; }
+
+    inline void add(pid_t p) {
+        if (!name) {
+            char *n = android::pidToName(p);
+            if (n) {
+                name = n;
+            }
+        }
+    }
+
+    inline void add(LogBufferElement *e) {
+        uid_t u = e->getUid();
+        if (getUid() != u) {
+            uid = u;
+            free(name);
+            name = android::pidToName(e->getPid());
+        } else {
+            add(e->getPid());
+        }
+        EntryBaseDropped::add(e);
+    }
+
 };
 
 // Log Statistics
