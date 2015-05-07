@@ -371,7 +371,8 @@ static void dump_all_maps(Backtrace* backtrace, BacktraceMap* map, log_t* log, p
     } else {
       line += '-';
     }
-    line += android::base::StringPrintf("  %8" PRIxPTR, it->end - it->start);
+    line += android::base::StringPrintf("  %8" PRIxPTR "  %8" PRIxPTR,
+                                        it->offset, it->end - it->start);
     if (it->name.length() > 0) {
       line += "  " + it->name;
       std::string build_id;
