@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <stdbool.h>
 
 #include "mincrypt/sha.h"
 #include "bootimg.h"
@@ -65,6 +66,7 @@ int usage(void)
             "       [ --board <boardname> ]\n"
             "       [ --base <address> ]\n"
             "       [ --pagesize <pagesize> ]\n"
+            "       [ --id ]\n"
             "       -o|--output <filename>\n"
             );
     return 1;
@@ -73,6 +75,14 @@ int usage(void)
 
 
 static unsigned char padding[16384] = { 0, };
+
+static void print_id(const uint8_t *id, size_t id_len) {
+    printf("0x");
+    for (unsigned i = 0; i < id_len; i++) {
+        printf("%02x", id[i]);
+    }
+    printf("\n");
+}
 
 int write_padding(int fd, unsigned pagesize, unsigned itemsize)
 {
@@ -121,42 +131,48 @@ int main(int argc, char **argv)
 
     memset(&hdr, 0, sizeof(hdr));
 
+    bool get_id = false;
     while(argc > 0){
         char *arg = argv[0];
-        char *val = argv[1];
-        if(argc < 2) {
-            return usage();
-        }
-        argc -= 2;
-        argv += 2;
-        if(!strcmp(arg, "--output") || !strcmp(arg, "-o")) {
-            bootimg = val;
-        } else if(!strcmp(arg, "--kernel")) {
-            kernel_fn = val;
-        } else if(!strcmp(arg, "--ramdisk")) {
-            ramdisk_fn = val;
-        } else if(!strcmp(arg, "--second")) {
-            second_fn = val;
-        } else if(!strcmp(arg, "--cmdline")) {
-            cmdline = val;
-        } else if(!strcmp(arg, "--base")) {
-            base = strtoul(val, 0, 16);
-        } else if(!strcmp(arg, "--kernel_offset")) {
-            kernel_offset = strtoul(val, 0, 16);
-        } else if(!strcmp(arg, "--ramdisk_offset")) {
-            ramdisk_offset = strtoul(val, 0, 16);
-        } else if(!strcmp(arg, "--second_offset")) {
-            second_offset = strtoul(val, 0, 16);
-        } else if(!strcmp(arg, "--tags_offset")) {
-            tags_offset = strtoul(val, 0, 16);
-        } else if(!strcmp(arg, "--board")) {
-            board = val;
-        } else if(!strcmp(arg,"--pagesize")) {
-            pagesize = strtoul(val, 0, 10);
-            if ((pagesize != 2048) && (pagesize != 4096)
-                && (pagesize != 8192) && (pagesize != 16384)) {
-                fprintf(stderr,"error: unsupported page size %d\n", pagesize);
-                return -1;
+        if (!strcmp(arg, "--id")) {
+            get_id = true;
+            argc -= 1;
+            argv += 1;
+        } else if(argc >= 2) {
+            char *val = argv[1];
+            argc -= 2;
+            argv += 2;
+            if(!strcmp(arg, "--output") || !strcmp(arg, "-o")) {
+                bootimg = val;
+            } else if(!strcmp(arg, "--kernel")) {
+                kernel_fn = val;
+            } else if(!strcmp(arg, "--ramdisk")) {
+                ramdisk_fn = val;
+            } else if(!strcmp(arg, "--second")) {
+                second_fn = val;
+            } else if(!strcmp(arg, "--cmdline")) {
+                cmdline = val;
+            } else if(!strcmp(arg, "--base")) {
+                base = strtoul(val, 0, 16);
+            } else if(!strcmp(arg, "--kernel_offset")) {
+                kernel_offset = strtoul(val, 0, 16);
+            } else if(!strcmp(arg, "--ramdisk_offset")) {
+                ramdisk_offset = strtoul(val, 0, 16);
+            } else if(!strcmp(arg, "--second_offset")) {
+                second_offset = strtoul(val, 0, 16);
+            } else if(!strcmp(arg, "--tags_offset")) {
+                tags_offset = strtoul(val, 0, 16);
+            } else if(!strcmp(arg, "--board")) {
+                board = val;
+            } else if(!strcmp(arg,"--pagesize")) {
+                pagesize = strtoul(val, 0, 10);
+                if ((pagesize != 2048) && (pagesize != 4096)
+                    && (pagesize != 8192) && (pagesize != 16384)) {
+                    fprintf(stderr,"error: unsupported page size %d\n", pagesize);
+                    return -1;
+                }
+            } else {
+                return usage();
             }
         } else {
             return usage();
@@ -259,6 +275,10 @@ int main(int argc, char **argv)
     if(second_data) {
         if(write(fd, second_data, hdr.second_size) != (ssize_t) hdr.second_size) goto fail;
         if(write_padding(fd, pagesize, hdr.second_size)) goto fail;
+    }
+
+    if (get_id) {
+        print_id(sha, sizeof(hdr.id));
     }
 
     return 0;
