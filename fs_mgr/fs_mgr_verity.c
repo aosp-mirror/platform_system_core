@@ -934,10 +934,6 @@ int fs_mgr_setup_verity(struct fstab_rec *fstab) {
     struct dm_ioctl *io = (struct dm_ioctl *) buffer;
     char *mount_point = basename(fstab->mount_point);
 
-    // set the dm_ioctl flags
-    io->flags |= 1;
-    io->target_count = 1;
-
     // get verity filesystem size
     if (get_fs_size(fstab->fs_type, fstab->blk_device, &device_size) < 0) {
         return retval;
