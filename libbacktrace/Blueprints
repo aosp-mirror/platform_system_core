@@ -83,6 +83,12 @@ cc_library_shared {
         darwin: {
             srcs: ["BacktraceMap.cpp"],
         },
+        host: {
+            cflags: [
+                "-Wno-extern-c-compat",
+                "-fno-omit-frame-pointer",
+            ],
+        },
     },
 }
 
@@ -96,6 +102,17 @@ cc_library_shared {
     cflags: libbacktrace_common_cflags,
     conlyflags: libbacktrace_common_conlyflags,
     cppflags: libbacktrace_common_cppflags,
+    target: {
+        host: {
+            cflags: [
+                "-Wno-extern-c-compat",
+                "-fno-omit-frame-pointer",
+            ],
+        },
+        darwin: {
+            disabled: true,
+        },
+    },
 }
 
 //-------------------------------------------------------------------------
@@ -126,6 +143,13 @@ cc_test {
             static_libs: [
                 "libcutils",
             ],
+            cflags: [
+                "-Wno-extern-c-compat",
+                "-fno-omit-frame-pointer",
+            ],
+        },
+        darwin: {
+            disabled: true,
         },
     },
 
