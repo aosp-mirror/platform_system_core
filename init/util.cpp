@@ -33,6 +33,7 @@
 #include <sys/un.h>
 
 #include <base/file.h>
+#include <base/strings.h>
 
 /* for ANDROID_SOCKET_* */
 #include <cutils/sockets.h>
@@ -403,32 +404,16 @@ void open_devnull_stdio(void)
     }
 }
 
-void import_kernel_cmdline(bool in_qemu, std::function<void(char*,bool)> import_kernel_nv)
-{
-    char cmdline[2048];
-    char *ptr;
-    int fd;
+void import_kernel_cmdline(bool in_qemu,
+                           std::function<void(const std::string&, const std::string&, bool)> fn) {
+    std::string cmdline;
+    android::base::ReadFileToString("/proc/cmdline", &cmdline);
 
-    fd = open("/proc/cmdline", O_RDONLY | O_CLOEXEC);
-    if (fd >= 0) {
-        int n = read(fd, cmdline, sizeof(cmdline) - 1);
-        if (n < 0) n = 0;
-
-        /* get rid of trailing newline, it happens */
-        if (n > 0 && cmdline[n-1] == '\n') n--;
-
-        cmdline[n] = 0;
-        close(fd);
-    } else {
-        cmdline[0] = 0;
-    }
-
-    ptr = cmdline;
-    while (ptr && *ptr) {
-        char *x = strchr(ptr, ' ');
-        if (x != 0) *x++ = 0;
-        import_kernel_nv(ptr, in_qemu);
-        ptr = x;
+    for (const auto& entry : android::base::Split(android::base::Trim(cmdline), " ")) {
+        std::vector<std::string> pieces = android::base::Split(entry, "=");
+        if (pieces.size() == 2) {
+            fn(pieces[0], pieces[1], in_qemu);
+        }
     }
 }
 

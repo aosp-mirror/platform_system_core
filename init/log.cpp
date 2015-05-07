@@ -14,30 +14,35 @@
  * limitations under the License.
  */
 
+#include "log.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <sys/uio.h>
 
 #include <selinux/selinux.h>
 
-#include "log.h"
+#include <base/stringprintf.h>
 
 static void init_klog_vwrite(int level, const char* fmt, va_list ap) {
     static const char* tag = basename(getprogname());
 
-    char prefix[64];
-    snprintf(prefix, sizeof(prefix), "<%d>%s: ", level, tag);
+    // The kernel's printk buffer is only 1024 bytes.
+    // TODO: should we automatically break up long lines into multiple lines?
+    // Or we could log but with something like "..." at the end?
+    char buf[1024];
+    size_t prefix_size = snprintf(buf, sizeof(buf), "<%d>%s: ", level, tag);
+    size_t msg_size = vsnprintf(buf + prefix_size, sizeof(buf) - prefix_size, fmt, ap);
+    if (msg_size >= sizeof(buf) - prefix_size) {
+        msg_size = snprintf(buf + prefix_size, sizeof(buf) - prefix_size,
+                            "(%zu-byte message too long for printk)\n", msg_size);
+    }
 
-    char msg[512];
-    vsnprintf(msg, sizeof(msg), fmt, ap);
+    iovec iov[1];
+    iov[0].iov_base = buf;
+    iov[0].iov_len = prefix_size + msg_size;
 
-    iovec iov[2];
-    iov[0].iov_base = prefix;
-    iov[0].iov_len = strlen(prefix);
-    iov[1].iov_base = msg;
-    iov[1].iov_len = strlen(msg);
-
-    klog_writev(level, iov, 2);
+    klog_writev(level, iov, 1);
 }
 
 void init_klog_write(int level, const char* fmt, ...) {

@@ -31,7 +31,7 @@ void queue_property_triggers(const char *name, const char *value);
 void queue_all_property_triggers();
 void queue_builtin_action(int (*func)(int nargs, char **args), const char *name);
 
-int init_parse_config_file(const char *fn);
+bool init_parse_config_file(const char* path);
 int expand_props(char *dst, const char *src, int len);
 
 service* make_exec_oneshot_service(int argc, char** argv);
