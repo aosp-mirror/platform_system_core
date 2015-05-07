@@ -883,6 +883,17 @@ TEST(libbacktrace, verify_map_remote) {
   ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
 }
 
+void InitMemory(uint8_t* memory, size_t bytes) {
+  for (size_t i = 0; i < bytes; i++) {
+    memory[i] = i;
+    if (memory[i] == '\0') {
+      // Don't use '\0' in our data so we can verify that an overread doesn't
+      // occur by using a '\0' as the character after the read data.
+      memory[i] = 23;
+    }
+  }
+}
+
 void* ThreadReadTest(void* data) {
   thread_t* thread_data = reinterpret_cast<thread_t*>(data);
 
@@ -901,9 +912,7 @@ void* ThreadReadTest(void* data) {
   }
 
   // Set up a simple pattern in memory.
-  for (size_t i = 0; i < pagesize; i++) {
-    memory[i] = i;
-  }
+  InitMemory(memory, pagesize);
 
   thread_data->data = memory;
 
@@ -931,9 +940,8 @@ void RunReadTest(Backtrace* backtrace, uintptr_t read_addr) {
 
   // Create a page of data to use to do quick compares.
   uint8_t* expected = new uint8_t[pagesize];
-  for (size_t i = 0; i < pagesize; i++) {
-    expected[i] = i;
-  }
+  InitMemory(expected, pagesize);
+
   uint8_t* data = new uint8_t[2*pagesize];
   // Verify that we can only read one page worth of data.
   size_t bytes_read = backtrace->Read(read_addr, data, 2 * pagesize);
@@ -946,6 +954,20 @@ void RunReadTest(Backtrace* backtrace, uintptr_t read_addr) {
     ASSERT_EQ(2 * sizeof(word_t), bytes_read);
     ASSERT_TRUE(memcmp(data, &expected[i], 2 * sizeof(word_t)) == 0)
         << "Offset at " << i << " failed";
+  }
+
+  // Verify small unaligned reads.
+  for (size_t i = 1; i < sizeof(word_t); i++) {
+    for (size_t j = 1; j < sizeof(word_t); j++) {
+      // Set one byte past what we expect to read, to guarantee we don't overread.
+      data[j] = '\0';
+      bytes_read = backtrace->Read(read_addr + i, data, j);
+      ASSERT_EQ(j, bytes_read);
+      ASSERT_TRUE(memcmp(data, &expected[i], j) == 0)
+          << "Offset at " << i << " length " << j << " miscompared";
+      ASSERT_EQ('\0', data[j])
+          << "Offset at " << i << " length " << j << " wrote too much data";
+    }
   }
   delete data;
   delete expected;
@@ -990,9 +1012,7 @@ void ForkedReadTest() {
   }
 
   // Set up a simple pattern in memory.
-  for (size_t i = 0; i < pagesize; i++) {
-    memory[i] = i;
-  }
+  InitMemory(memory, pagesize);
 
   g_addr = reinterpret_cast<uintptr_t>(memory);
   g_ready = 1;
