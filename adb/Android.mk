@@ -96,6 +96,9 @@ LOCAL_STATIC_LIBRARIES := libcrypto_static
 
 ifeq ($(HOST_OS),windows)
     LOCAL_C_INCLUDES += development/host/windows/usb/api/
+    # Windows.h defines an awful ERROR macro that collides with base/logging.h.
+    # Suppress it with NOGDI.
+    LOCAL_CFLAGS += -DNOGDI
 endif
 
 include $(BUILD_HOST_STATIC_LIBRARY)
@@ -152,18 +155,21 @@ endif
 include $(CLEAR_VARS)
 
 ifeq ($(HOST_OS),linux)
-  LOCAL_LDLIBS += -lrt -ldl -lpthread
-  LOCAL_CFLAGS += -DWORKAROUND_BUG6558362
+    LOCAL_LDLIBS += -lrt -ldl -lpthread
+    LOCAL_CFLAGS += -DWORKAROUND_BUG6558362
 endif
 
 ifeq ($(HOST_OS),darwin)
-  LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
-  LOCAL_CFLAGS += -Wno-sizeof-pointer-memaccess -Wno-unused-parameter
+    LOCAL_LDLIBS += -lpthread -framework CoreFoundation -framework IOKit -framework Carbon
+    LOCAL_CFLAGS += -Wno-sizeof-pointer-memaccess -Wno-unused-parameter
 endif
 
 ifeq ($(HOST_OS),windows)
-  LOCAL_LDLIBS += -lws2_32 -lgdi32
-  EXTRA_STATIC_LIBS := AdbWinApi
+    # Windows.h defines an awful ERROR macro that collides with base/logging.h.
+    # Suppress it with NOGDI.
+    LOCAL_CFLAGS += -DNOGDI
+    LOCAL_LDLIBS += -lws2_32 -lgdi32
+    EXTRA_STATIC_LIBS := AdbWinApi
 endif
 
 LOCAL_CLANG := $(adb_host_clang)
