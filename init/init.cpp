@@ -43,6 +43,7 @@
 
 #include <base/file.h>
 #include <base/stringprintf.h>
+#include <base/strings.h>
 #include <cutils/android_reboot.h>
 #include <cutils/fs.h>
 #include <cutils/iosched_policy.h>
@@ -205,16 +206,15 @@ void service_start(struct service *svc, const char *dynamic_args)
         return;
     }
 
-    struct stat s;
-    if (stat(svc->args[0], &s) != 0) {
-        ERROR("cannot find '%s', disabling '%s'\n", svc->args[0], svc->name);
+    struct stat sb;
+    if (stat(svc->args[0], &sb) == -1) {
+        ERROR("cannot find '%s' (%s), disabling '%s'\n", svc->args[0], strerror(errno), svc->name);
         svc->flags |= SVC_DISABLED;
         return;
     }
 
     if ((!(svc->flags & SVC_ONESHOT)) && dynamic_args) {
-        ERROR("service '%s' must be one-shot to use dynamic args, disabling\n",
-               svc->args[0]);
+        ERROR("service '%s' must be one-shot to use dynamic args, disabling\n", svc->args[0]);
         svc->flags |= SVC_DISABLED;
         return;
     }
@@ -746,36 +746,20 @@ static int console_init_action(int nargs, char **args)
     return 0;
 }
 
-static void import_kernel_nv(char *name, bool for_emulator)
-{
-    char *value = strchr(name, '=');
-    int name_len = strlen(name);
-
-    if (value == 0) return;
-    *value++ = 0;
-    if (name_len == 0) return;
+static void import_kernel_nv(const std::string& key, const std::string& value, bool for_emulator) {
+    if (key.empty()) return;
 
     if (for_emulator) {
-        /* in the emulator, export any kernel option with the
-         * ro.kernel. prefix */
-        char buff[PROP_NAME_MAX];
-        int len = snprintf( buff, sizeof(buff), "ro.kernel.%s", name );
-
-        if (len < (int)sizeof(buff))
-            property_set( buff, value );
+        // In the emulator, export any kernel option with the "ro.kernel." prefix.
+        property_set(android::base::StringPrintf("ro.kernel.%s", key.c_str()).c_str(), value.c_str());
         return;
     }
 
-    if (!strcmp(name,"qemu")) {
-        strlcpy(qemu, value, sizeof(qemu));
-    } else if (!strncmp(name, "androidboot.", 12) && name_len > 12) {
-        const char *boot_prop_name = name + 12;
-        char prop[PROP_NAME_MAX];
-        int cnt;
-
-        cnt = snprintf(prop, sizeof(prop), "ro.boot.%s", boot_prop_name);
-        if (cnt < PROP_NAME_MAX)
-            property_set(prop, value);
+    if (key == "qemu") {
+        strlcpy(qemu, value.c_str(), sizeof(qemu));
+    } else if (android::base::StartsWith(key, "androidboot.")) {
+        property_set(android::base::StringPrintf("ro.boot.%s", key.c_str() + 12).c_str(),
+                     value.c_str());
     }
 }
 
@@ -799,8 +783,7 @@ static void export_kernel_boot_props() {
     }
 }
 
-static void process_kernel_dt(void)
-{
+static void process_kernel_dt() {
     static const char android_dir[] = "/proc/device-tree/firmware/android";
 
     std::string file_name = android::base::StringPrintf("%s/compatible", android_dir);
@@ -813,13 +796,13 @@ static void process_kernel_dt(void)
     }
 
     std::unique_ptr<DIR, int(*)(DIR*)>dir(opendir(android_dir), closedir);
-    if (!dir)
-        return;
+    if (!dir) return;
 
     struct dirent *dp;
     while ((dp = readdir(dir.get())) != NULL) {
-        if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible"))
+        if (dp->d_type != DT_REG || !strcmp(dp->d_name, "compatible")) {
             continue;
+        }
 
         file_name = android::base::StringPrintf("%s/%s", android_dir, dp->d_name);
 
@@ -831,18 +814,15 @@ static void process_kernel_dt(void)
     }
 }
 
-static void process_kernel_cmdline(void)
-{
-    /* don't expose the raw commandline to nonpriv processes */
+static void process_kernel_cmdline() {
+    // Don't expose the raw commandline to unprivileged processes.
     chmod("/proc/cmdline", 0440);
 
-    /* first pass does the common stuff, and finds if we are in qemu.
-     * second pass is only necessary for qemu to export all kernel params
-     * as props.
-     */
+    // The first pass does the common stuff, and finds if we are in qemu.
+    // The second pass is only necessary for qemu to export all kernel params
+    // as properties.
     import_kernel_cmdline(false, import_kernel_nv);
-    if (qemu[0])
-        import_kernel_cmdline(true, import_kernel_nv);
+    if (qemu[0]) import_kernel_cmdline(true, import_kernel_nv);
 }
 
 static int queue_property_triggers_action(int nargs, char **args)
@@ -865,17 +845,11 @@ enum selinux_enforcing_status { SELINUX_PERMISSIVE, SELINUX_ENFORCING };
 static selinux_enforcing_status selinux_status_from_cmdline() {
     selinux_enforcing_status status = SELINUX_ENFORCING;
 
-    std::function<void(char*,bool)> fn = [&](char* name, bool in_qemu) {
-        char *value = strchr(name, '=');
-        if (value == nullptr) { return; }
-        *value++ = '\0';
-        if (strcmp(name, "androidboot.selinux") == 0) {
-            if (strcmp(value, "permissive") == 0) {
-                status = SELINUX_PERMISSIVE;
-            }
+    import_kernel_cmdline(false, [&](const std::string& key, const std::string& value, bool in_qemu) {
+        if (key == "androidboot.selinux" && value == "permissive") {
+            status = SELINUX_PERMISSIVE;
         }
-    };
-    import_kernel_cmdline(false, fn);
+    });
 
     return status;
 }
@@ -989,7 +963,7 @@ int main(int argc, char** argv) {
     klog_init();
     klog_set_level(KLOG_NOTICE_LEVEL);
 
-    NOTICE("init%s started!\n", is_first_stage ? "" : " second stage");
+    NOTICE("init %s started!\n", is_first_stage ? "first stage" : "second stage");
 
     if (!is_first_stage) {
         // Indicate that booting is in progress to background fw loaders, etc.
@@ -1002,7 +976,7 @@ int main(int argc, char** argv) {
         process_kernel_dt();
         process_kernel_cmdline();
 
-        // Propogate the kernel variables to internal variables
+        // Propagate the kernel variables to internal variables
         // used by init as well as the current required properties.
         export_kernel_boot_props();
     }
@@ -1028,7 +1002,7 @@ int main(int argc, char** argv) {
     // These directories were necessarily created before initial policy load
     // and therefore need their security context restored to the proper value.
     // This must happen before /dev is populated by ueventd.
-    INFO("Running restorecon...\n");
+    NOTICE("Running restorecon...\n");
     restorecon("/dev");
     restorecon("/dev/socket");
     restorecon("/dev/__properties__");
