@@ -853,7 +853,8 @@ const char* atransport::connection_state_name() const {
 
 #if ADB_HOST
 
-static void append_transport_info(std::string* result, const char* key, const char* value, bool sanitize) {
+static void append_transport_info(std::string* result, const char* key,
+                                  const char* value, bool sanitize) {
     if (value == nullptr || *value == '\0') {
         return;
     }
@@ -869,7 +870,7 @@ static void append_transport_info(std::string* result, const char* key, const ch
 static void append_transport(atransport* t, std::string* result, bool long_listing) {
     const char* serial = t->serial;
     if (!serial || !serial[0]) {
-        serial = "????????????";
+        serial = "(no serial number)";
     }
 
     if (!long_listing) {
