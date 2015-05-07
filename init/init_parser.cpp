@@ -426,29 +426,27 @@ static void parse_config(const char *fn, const std::string& data)
 
 parser_done:
     list_for_each(node, &import_list) {
-         struct import *import = node_to_item(node, struct import, list);
-         int ret;
-
-         ret = init_parse_config_file(import->filename);
-         if (ret)
-             ERROR("could not import file '%s' from '%s'\n",
-                   import->filename, fn);
+         struct import* import = node_to_item(node, struct import, list);
+         if (!init_parse_config_file(import->filename)) {
+             ERROR("could not import file '%s' from '%s': %s\n",
+                   import->filename, fn, strerror(errno));
+         }
     }
 }
 
-int init_parse_config_file(const char* path) {
+bool init_parse_config_file(const char* path) {
     INFO("Parsing %s...\n", path);
     Timer t;
     std::string data;
     if (!read_file(path, &data)) {
-        return -1;
+        return false;
     }
 
     parse_config(path, data);
     dump_parser_state();
 
     NOTICE("(Parsing %s took %.2fs.)\n", path, t.duration());
-    return 0;
+    return true;
 }
 
 static int valid_name(const char *name)
