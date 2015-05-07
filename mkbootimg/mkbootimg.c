@@ -96,24 +96,24 @@ int main(int argc, char **argv)
 {
     boot_img_hdr hdr;
 
-    char *kernel_fn = 0;
-    void *kernel_data = 0;
-    char *ramdisk_fn = 0;
-    void *ramdisk_data = 0;
-    char *second_fn = 0;
-    void *second_data = 0;
+    char *kernel_fn = NULL;
+    void *kernel_data = NULL;
+    char *ramdisk_fn = NULL;
+    void *ramdisk_data = NULL;
+    char *second_fn = NULL;
+    void *second_data = NULL;
     char *cmdline = "";
-    char *bootimg = 0;
+    char *bootimg = NULL;
     char *board = "";
-    unsigned pagesize = 2048;
+    uint32_t pagesize = 2048;
     int fd;
     SHA_CTX ctx;
     const uint8_t* sha;
-    unsigned base           = 0x10000000;
-    unsigned kernel_offset  = 0x00008000;
-    unsigned ramdisk_offset = 0x01000000;
-    unsigned second_offset  = 0x00f00000;
-    unsigned tags_offset    = 0x00000100;
+    uint32_t base           = 0x10000000U;
+    uint32_t kernel_offset  = 0x00008000U;
+    uint32_t ramdisk_offset = 0x01000000U;
+    uint32_t second_offset  = 0x00f00000U;
+    uint32_t tags_offset    = 0x00000100U;
     size_t cmdlen;
 
     argc--;
