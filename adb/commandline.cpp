@@ -1136,7 +1136,7 @@ int adb_commandline(int argc, const char **argv) {
         return adb_query_command(query);
     }
     else if (!strcmp(argv[0], "emu")) {
-        return adb_send_emulator_command(argc, argv);
+        return adb_send_emulator_command(argc, argv, serial);
     }
     else if (!strcmp(argv[0], "shell") || !strcmp(argv[0], "hell")) {
         char h = (argv[0][0] == 'h');

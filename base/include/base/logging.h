@@ -23,7 +23,9 @@ including anything.
 #endif
 
 #ifdef _WIN32
+#ifndef NOGDI
 #define NOGDI // Suppress the evil ERROR macro.
+#endif
 #endif
 
 #include <functional>
