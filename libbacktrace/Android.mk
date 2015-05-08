@@ -118,12 +118,14 @@ backtrace_test_ldlibs_host := \
 backtrace_test_shared_libraries := \
 	libbacktrace_test \
 	libbacktrace \
-
-backtrace_test_shared_libraries_target := \
+	libbase \
 	libcutils \
 
-backtrace_test_static_libraries_host := \
-	libcutils \
+backtrace_test_shared_libraries_target += \
+	libdl \
+
+backtrace_test_ldlibs_host += \
+	-ldl \
 
 module := backtrace_test
 module_tag := debug

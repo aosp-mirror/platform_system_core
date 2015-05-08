@@ -16,7 +16,9 @@
 
 #define _GNU_SOURCE 1
 #include <dirent.h>
+#include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <pthread.h>
 #include <signal.h>
@@ -25,12 +27,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ptrace.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
 #include <algorithm>
+#include <list>
 #include <memory>
 #include <string>
 #include <vector>
@@ -38,6 +42,7 @@
 #include <backtrace/Backtrace.h>
 #include <backtrace/BacktraceMap.h>
 
+#include <base/stringprintf.h>
 #include <cutils/atomic.h>
 #include <cutils/threads.h>
 
@@ -1023,6 +1028,7 @@ void ForkedReadTest() {
 }
 
 TEST(libbacktrace, process_read) {
+  g_ready = 0;
   pid_t pid;
   if ((pid = fork()) == 0) {
     ForkedReadTest();
@@ -1067,6 +1073,297 @@ TEST(libbacktrace, process_read) {
   ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
 
   ASSERT_TRUE(test_executed);
+}
+
+void VerifyFunctionsFound(const std::vector<std::string>& found_functions) {
+  // We expect to find these functions in libbacktrace_test. If we don't
+  // find them, that's a bug in the memory read handling code in libunwind.
+  std::list<std::string> expected_functions;
+  expected_functions.push_back("test_recursive_call");
+  expected_functions.push_back("test_level_one");
+  expected_functions.push_back("test_level_two");
+  expected_functions.push_back("test_level_three");
+  expected_functions.push_back("test_level_four");
+  for (const auto& found_function : found_functions) {
+    for (const auto& expected_function : expected_functions) {
+      if (found_function == expected_function) {
+        expected_functions.remove(found_function);
+        break;
+      }
+    }
+  }
+  ASSERT_TRUE(expected_functions.empty()) << "Not all functions found in shared library.";
+}
+
+const char* CopySharedLibrary() {
+#if defined(__LP64__)
+  const char* lib_name = "lib64";
+#else
+  const char* lib_name = "lib";
+#endif
+
+#if defined(__BIONIC__)
+  const char* tmp_so_name = "/data/local/tmp/libbacktrace_test.so";
+  std::string cp_cmd = android::base::StringPrintf("cp /system/%s/libbacktrace_test.so %s",
+                                                   lib_name, tmp_so_name);
+#else
+  const char* tmp_so_name = "/tmp/libbacktrace_test.so";
+  if (getenv("ANDROID_HOST_OUT") == NULL) {
+    fprintf(stderr, "ANDROID_HOST_OUT not set, make sure you run lunch.");
+    return nullptr;
+  }
+  std::string cp_cmd = android::base::StringPrintf("cp %s/%s/libbacktrace_test.so %s",
+                                                   getenv("ANDROID_HOST_OUT"), lib_name,
+                                                   tmp_so_name);
+#endif
+
+  // Copy the shared so to a tempory directory.
+  system(cp_cmd.c_str());
+
+  return tmp_so_name;
+}
+
+TEST(libbacktrace, check_unreadable_elf_local) {
+  const char* tmp_so_name = CopySharedLibrary();
+  ASSERT_TRUE(tmp_so_name != nullptr);
+
+  struct stat buf;
+  ASSERT_TRUE(stat(tmp_so_name, &buf) != -1);
+  uintptr_t map_size = buf.st_size;
+
+  int fd = open(tmp_so_name, O_RDONLY);
+  ASSERT_TRUE(fd != -1);
+
+  void* map = mmap(NULL, map_size, PROT_READ, MAP_PRIVATE, fd, 0);
+  ASSERT_TRUE(map != MAP_FAILED);
+  close(fd);
+  ASSERT_TRUE(unlink(tmp_so_name) != -1);
+
+  std::vector<std::string> found_functions;
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS,
+                                                         BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(backtrace.get() != nullptr);
+
+  // Needed before GetFunctionName will work.
+  backtrace->Unwind(0);
+
+  // Loop through the entire map, and get every function we can find.
+  map_size += reinterpret_cast<uintptr_t>(map);
+  std::string last_func;
+  for (uintptr_t read_addr = reinterpret_cast<uintptr_t>(map);
+       read_addr < map_size; read_addr += 4) {
+    uintptr_t offset;
+    std::string func_name = backtrace->GetFunctionName(read_addr, &offset);
+    if (!func_name.empty() && last_func != func_name) {
+      found_functions.push_back(func_name);
+    }
+    last_func = func_name;
+  }
+
+  ASSERT_TRUE(munmap(map, map_size - reinterpret_cast<uintptr_t>(map)) == 0);
+
+  VerifyFunctionsFound(found_functions);
+}
+
+TEST(libbacktrace, check_unreadable_elf_remote) {
+  const char* tmp_so_name = CopySharedLibrary();
+  ASSERT_TRUE(tmp_so_name != nullptr);
+
+  g_ready = 0;
+
+  struct stat buf;
+  ASSERT_TRUE(stat(tmp_so_name, &buf) != -1);
+  uintptr_t map_size = buf.st_size;
+
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    int fd = open(tmp_so_name, O_RDONLY);
+    if (fd == -1) {
+      fprintf(stderr, "Failed to open file %s: %s\n", tmp_so_name, strerror(errno));
+      unlink(tmp_so_name);
+      exit(0);
+    }
+
+    void* map = mmap(NULL, map_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map == MAP_FAILED) {
+      fprintf(stderr, "Failed to map in memory: %s\n", strerror(errno));
+      unlink(tmp_so_name);
+      exit(0);
+    }
+    close(fd);
+    if (unlink(tmp_so_name) == -1) {
+      fprintf(stderr, "Failed to unlink: %s\n", strerror(errno));
+      exit(0);
+    }
+
+    g_addr = reinterpret_cast<uintptr_t>(map);
+    g_ready = 1;
+    while (true) {
+      usleep(US_PER_MSEC);
+    }
+    exit(0);
+  }
+  ASSERT_TRUE(pid > 0);
+
+  std::vector<std::string> found_functions;
+  uint64_t start = NanoTime();
+  while (true) {
+    ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) == 0);
+
+    // Wait for the process to get to a stopping point.
+    WaitForStop(pid);
+
+    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, BACKTRACE_CURRENT_THREAD));
+    ASSERT_TRUE(backtrace.get() != nullptr);
+
+    uintptr_t read_addr;
+    ASSERT_EQ(sizeof(uintptr_t), backtrace->Read(reinterpret_cast<uintptr_t>(&g_ready), reinterpret_cast<uint8_t*>(&read_addr), sizeof(uintptr_t)));
+    if (read_addr) {
+      ASSERT_EQ(sizeof(uintptr_t), backtrace->Read(reinterpret_cast<uintptr_t>(&g_addr), reinterpret_cast<uint8_t*>(&read_addr), sizeof(uintptr_t)));
+
+      // Needed before GetFunctionName will work.
+      backtrace->Unwind(0);
+
+      // Loop through the entire map, and get every function we can find.
+      map_size += read_addr;
+      std::string last_func;
+      for (; read_addr < map_size; read_addr += 4) {
+        uintptr_t offset;
+        std::string func_name = backtrace->GetFunctionName(read_addr, &offset);
+        if (!func_name.empty() && last_func != func_name) {
+          found_functions.push_back(func_name);
+        }
+        last_func = func_name;
+      }
+      break;
+    }
+    ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
+
+    if ((NanoTime() - start) > 5 * NS_PER_SEC) {
+      break;
+    }
+    usleep(US_PER_MSEC);
+  }
+
+  kill(pid, SIGKILL);
+  ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
+
+  VerifyFunctionsFound(found_functions);
+}
+
+bool FindFuncFrameInBacktrace(Backtrace* backtrace, uintptr_t test_func, size_t* frame_num) {
+  backtrace_map_t map;
+  backtrace->FillInMap(test_func, &map);
+  if (!BacktraceMap::IsValid(map)) {
+    return false;
+  }
+
+  // Loop through the frames, and find the one that is in the map.
+  *frame_num = 0;
+  for (Backtrace::const_iterator it = backtrace->begin(); it != backtrace->end(); ++it) {
+    if (BacktraceMap::IsValid(it->map) && map.start == it->map.start &&
+        it->pc >= test_func) {
+      *frame_num = it->num;
+      return true;
+    }
+  }
+  return false;
+}
+
+void VerifyUnreadableElfFrame(Backtrace* backtrace, uintptr_t test_func, size_t frame_num) {
+  ASSERT_LT(backtrace->NumFrames(), static_cast<size_t>(MAX_BACKTRACE_FRAMES))
+    << DumpFrames(backtrace);
+
+  ASSERT_TRUE(frame_num != 0) << DumpFrames(backtrace);
+  // Make sure that there is at least one more frame above the test func call.
+  ASSERT_LT(frame_num, backtrace->NumFrames()) << DumpFrames(backtrace);
+
+  uintptr_t diff = backtrace->GetFrame(frame_num)->pc - test_func;
+  ASSERT_LT(diff, 200U) << DumpFrames(backtrace);
+}
+
+void VerifyUnreadableElfBacktrace(uintptr_t test_func) {
+  std::unique_ptr<Backtrace> backtrace(Backtrace::Create(BACKTRACE_CURRENT_PROCESS,
+                                                         BACKTRACE_CURRENT_THREAD));
+  ASSERT_TRUE(backtrace.get() != nullptr);
+  ASSERT_TRUE(backtrace->Unwind(0));
+
+  size_t frame_num;
+  ASSERT_TRUE(FindFuncFrameInBacktrace(backtrace.get(), test_func, &frame_num));
+
+  VerifyUnreadableElfFrame(backtrace.get(), test_func, frame_num);
+}
+
+typedef int (*test_func_t)(int, int, int, int, void (*)(uintptr_t), uintptr_t);
+
+TEST(libbacktrace, unwind_through_unreadable_elf_local) {
+  const char* tmp_so_name = CopySharedLibrary();
+  ASSERT_TRUE(tmp_so_name != nullptr);
+  void* lib_handle = dlopen(tmp_so_name, RTLD_NOW);
+  ASSERT_TRUE(lib_handle != nullptr);
+  ASSERT_TRUE(unlink(tmp_so_name) != -1);
+
+  test_func_t test_func;
+  test_func = reinterpret_cast<test_func_t>(dlsym(lib_handle, "test_level_one"));
+  ASSERT_TRUE(test_func != nullptr);
+
+  ASSERT_NE(test_func(1, 2, 3, 4, VerifyUnreadableElfBacktrace,
+                      reinterpret_cast<uintptr_t>(test_func)), 0);
+
+  ASSERT_TRUE(dlclose(lib_handle) == 0);
+}
+
+TEST(libbacktrace, unwind_through_unreadable_elf_remote) {
+  const char* tmp_so_name = CopySharedLibrary();
+  ASSERT_TRUE(tmp_so_name != nullptr);
+  void* lib_handle = dlopen(tmp_so_name, RTLD_NOW);
+  ASSERT_TRUE(lib_handle != nullptr);
+  ASSERT_TRUE(unlink(tmp_so_name) != -1);
+
+  test_func_t test_func;
+  test_func = reinterpret_cast<test_func_t>(dlsym(lib_handle, "test_level_one"));
+  ASSERT_TRUE(test_func != nullptr);
+
+  pid_t pid;
+  if ((pid = fork()) == 0) {
+    test_func(1, 2, 3, 4, 0, 0);
+    exit(0);
+  }
+  ASSERT_TRUE(pid > 0);
+  ASSERT_TRUE(dlclose(lib_handle) == 0);
+
+  uint64_t start = NanoTime();
+  bool done = false;
+  while (!done) {
+    ASSERT_TRUE(ptrace(PTRACE_ATTACH, pid, 0, 0) == 0);
+
+    // Wait for the process to get to a stopping point.
+    WaitForStop(pid);
+
+    std::unique_ptr<Backtrace> backtrace(Backtrace::Create(pid, BACKTRACE_CURRENT_THREAD));
+    ASSERT_TRUE(backtrace.get() != nullptr);
+    ASSERT_TRUE(backtrace->Unwind(0));
+
+    size_t frame_num;
+    if (FindFuncFrameInBacktrace(backtrace.get(),
+                                 reinterpret_cast<uintptr_t>(test_func), &frame_num)) {
+
+      VerifyUnreadableElfFrame(backtrace.get(), reinterpret_cast<uintptr_t>(test_func), frame_num);
+      done = true;
+    }
+
+    ASSERT_TRUE(ptrace(PTRACE_DETACH, pid, 0, 0) == 0);
+
+    if ((NanoTime() - start) > 5 * NS_PER_SEC) {
+      break;
+    }
+    usleep(US_PER_MSEC);
+  }
+
+  kill(pid, SIGKILL);
+  ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
+
+  ASSERT_TRUE(done) << "Test function never found in unwind.";
 }
 
 #if defined(ENABLE_PSS_TESTS)
@@ -1142,3 +1439,4 @@ TEST(libbacktrace, check_for_leak_remote) {
   ASSERT_EQ(waitpid(pid, nullptr, 0), pid);
 }
 #endif
+
