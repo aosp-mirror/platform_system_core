@@ -796,13 +796,12 @@ int handle_forward_request(const char* service, TransportType type, const char* 
     return 0;
 }
 
-int handle_host_request(const char* service, TransportType type, const char* serial, int reply_fd, asocket *s)
-{
-    if(!strcmp(service, "kill")) {
-        fprintf(stderr,"adb server killed by remote request\n");
+int handle_host_request(const char* service, TransportType type,
+                        const char* serial, int reply_fd, asocket* s) {
+    if (strcmp(service, "kill") == 0) {
+        fprintf(stderr, "adb server killed by remote request\n");
         fflush(stdout);
         SendOkay(reply_fd);
-        usb_cleanup();
         exit(0);
     }
 
