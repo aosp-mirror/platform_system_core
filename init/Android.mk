@@ -50,7 +50,10 @@ LOCAL_SRC_FILES:= \
     watchdogd.cpp \
 
 LOCAL_MODULE:= init
-LOCAL_C_INCLUDES += system/extras/ext4_utils
+LOCAL_C_INCLUDES += \
+    system/extras/ext4_utils \
+    system/core/mkbootimg
+
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_MODULE_PATH := $(TARGET_ROOT_OUT)
 LOCAL_UNSTRIPPED_PATH := $(TARGET_ROOT_OUT_UNSTRIPPED)
