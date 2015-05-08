@@ -38,23 +38,20 @@ static int system_ro = 1;
 static int vendor_ro = 1;
 static int oem_ro = 1;
 
-/* Returns the device used to mount a directory in /proc/mounts */
-static std::string find_mount(const char *dir) {
-    FILE* fp;
-    struct mntent* mentry;
-    char* device = NULL;
-
-    if ((fp = setmntent("/proc/mounts", "r")) == NULL) {
-        return NULL;
+// Returns the device used to mount a directory in /proc/mounts.
+static std::string find_mount(const char* dir) {
+    std::unique_ptr<FILE, int(*)(FILE*)> fp(setmntent("/proc/mounts", "r"), endmntent);
+    if (!fp) {
+        return "";
     }
-    while ((mentry = getmntent(fp)) != NULL) {
-        if (strcmp(dir, mentry->mnt_dir) == 0) {
-            device = mentry->mnt_fsname;
-            break;
+
+    mntent* e;
+    while ((e = getmntent(fp.get())) != nullptr) {
+        if (strcmp(dir, e->mnt_dir) == 0) {
+            return e->mnt_fsname;
         }
     }
-    endmntent(fp);
-    return device;
+    return "";
 }
 
 int make_block_device_writable(const std::string& dev) {
@@ -75,7 +72,7 @@ int make_block_device_writable(const std::string& dev) {
 
 // Init mounts /system as read only, remount to enable writes.
 static int remount(const char* dir, int* dir_ro) {
-    std::string dev(find_mount(dir));
+    std::string dev = find_mount(dir);
     if (dev.empty() || make_block_device_writable(dev)) {
         return -1;
     }
@@ -86,35 +83,29 @@ static int remount(const char* dir, int* dir_ro) {
 }
 
 static bool remount_partition(int fd, const char* partition, int* ro) {
-  if (!directory_exists(partition)) {
+    if (!directory_exists(partition)) {
+        return true;
+    }
+    if (remount(partition, ro)) {
+        WriteFdFmt(fd, "remount of %s failed: %s\n", partition, strerror(errno));
+        return false;
+    }
     return true;
-  }
-  if (remount(partition, ro)) {
-    WriteFdFmt(fd, "remount of %s failed: %s\n", partition, strerror(errno));
-    return false;
-  }
-  return true;
 }
 
 void remount_service(int fd, void* cookie) {
-    char prop_buf[PROPERTY_VALUE_MAX];
-
     if (getuid() != 0) {
         WriteFdExactly(fd, "Not running as root. Try \"adb root\" first.\n");
         adb_close(fd);
         return;
     }
 
-    bool system_verified = false, vendor_verified = false;
+    char prop_buf[PROPERTY_VALUE_MAX];
     property_get("partition.system.verified", prop_buf, "");
-    if (strlen(prop_buf) > 0) {
-        system_verified = true;
-    }
+    bool system_verified = (strlen(prop_buf) > 0);
 
     property_get("partition.vendor.verified", prop_buf, "");
-    if (strlen(prop_buf) > 0) {
-        vendor_verified = true;
-    }
+    bool vendor_verified = (strlen(prop_buf) > 0);
 
     if (system_verified || vendor_verified) {
         // Allow remount but warn of likely bad effects
