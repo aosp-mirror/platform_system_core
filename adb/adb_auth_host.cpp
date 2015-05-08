@@ -173,7 +173,7 @@ static int write_public_keyfile(RSA *private_key, const char *private_key_path)
         return 0;
     }
 
-    outfile = fopen(path, "we");
+    outfile = fopen(path, "w");
     if (!outfile) {
         D("Failed to open '%s'\n", path);
         return 0;
@@ -239,7 +239,7 @@ static int generate_key(const char *file)
 
     old_mask = umask(077);
 
-    f = fopen(file, "we");
+    f = fopen(file, "w");
     if (!f) {
         D("Failed to open '%s'\n", file);
         umask(old_mask);
@@ -273,7 +273,7 @@ static int read_key(const char *file, struct listnode *list)
 {
     D("read_key '%s'\n", file);
 
-    FILE* fp = fopen(file, "re");
+    FILE* fp = fopen(file, "r");
     if (!fp) {
         D("Failed to open '%s': %s\n", file, strerror(errno));
         return 0;
