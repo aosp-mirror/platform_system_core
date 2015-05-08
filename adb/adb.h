@@ -284,7 +284,7 @@ asocket*  create_jdwp_tracker_service_socket();
 int       create_jdwp_connection_fd(int  jdwp_pid);
 #endif
 
-int handle_forward_request(const char* service, TransportType type, char* serial, int reply_fd);
+int handle_forward_request(const char* service, TransportType type, const char* serial, int reply_fd);
 
 #if !ADB_HOST
 void framebuffer_service(int fd, void *cookie);
@@ -366,7 +366,7 @@ extern int SHELL_EXIT_NOTIFY_FD;
 #define USB_FFS_ADB_IN    USB_FFS_ADB_EP(ep2)
 #endif
 
-int handle_host_request(char *service, TransportType type, char* serial, int reply_fd, asocket *s);
+int handle_host_request(const char* service, TransportType type, const char* serial, int reply_fd, asocket *s);
 
 void handle_online(atransport *t);
 void handle_offline(atransport *t);
