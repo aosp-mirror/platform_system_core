@@ -401,11 +401,18 @@ void* RunLoopThread(void* unused)
     return NULL;
 }
 
+static void usb_cleanup() {
+    DBG("usb_cleanup\n");
+    close_usb_devices();
+    if (currentRunLoop)
+        CFRunLoopStop(currentRunLoop);
+}
 
-static int initialized = 0;
 void usb_init() {
-    if (!initialized)
-    {
+    static bool initialized = false;
+    if (!initialized) {
+        atexit(usb_cleanup);
+
         adb_mutex_init(&start_lock, NULL);
         adb_cond_init(&start_cond, NULL);
 
@@ -421,16 +428,8 @@ void usb_init() {
         adb_mutex_destroy(&start_lock);
         adb_cond_destroy(&start_cond);
 
-        initialized = 1;
+        initialized = true;
     }
-}
-
-void usb_cleanup()
-{
-    DBG("usb_cleanup\n");
-    close_usb_devices();
-    if (currentRunLoop)
-        CFRunLoopStop(currentRunLoop);
 }
 
 int usb_write(usb_handle *handle, const void *buf, int len)
