@@ -569,16 +569,15 @@ int usb_close(usb_handle *h)
 
 static void register_device(const char* dev_name, const char* dev_path,
                             unsigned char ep_in, unsigned char ep_out,
-                            int interface, int serial_index, unsigned zero_mask)
-{
-        /* Since Linux will not reassign the device ID (and dev_name)
-        ** as long as the device is open, we can add to the list here
-        ** once we open it and remove from the list when we're finally
-        ** closed and everything will work out fine.
-        **
-        ** If we have a usb_handle on the list 'o handles with a matching
-        ** name, we have no further work to do.
-        */
+                            int interface, int serial_index,
+                            unsigned zero_mask) {
+    // Since Linux will not reassign the device ID (and dev_name) as long as the
+    // device is open, we can add to the list here once we open it and remove
+    // from the list when we're finally closed and everything will work out
+    // fine.
+    //
+    // If we have a usb_handle on the list 'o handles with a matching name, we
+    // have no further work to do.
     adb_mutex_lock(&usb_lock);
     for (usb_handle* usb = handle_list.next; usb != &handle_list; usb = usb->next) {
         if (!strcmp(usb->fname, dev_name)) {
@@ -599,7 +598,8 @@ static void register_device(const char* dev_name, const char* dev_path,
 
     adb_cond_init(&usb->notify, 0);
     adb_mutex_init(&usb->lock, 0);
-    /* initialize mark to 1 so we don't get garbage collected after the device scan */
+    // Initialize mark to 1 so we don't get garbage collected after the device
+    // scan.
     usb->mark = 1;
     usb->reaper_thread = 0;
 
@@ -615,11 +615,13 @@ static void register_device(const char* dev_name, const char* dev_path,
         usb->writeable = 0;
     }
 
-    D("[ usb opened %s%s, fd=%d]\n", usb->fname, (usb->writeable ? "" : " (read-only)"), usb->desc);
+    D("[ usb opened %s%s, fd=%d]\n", usb->fname,
+      (usb->writeable ? "" : " (read-only)"), usb->desc);
 
     if (usb->writeable) {
         if (ioctl(usb->desc, USBDEVFS_CLAIMINTERFACE, &interface) != 0) {
-            D("[ usb ioctl(%d, USBDEVFS_CLAIMINTERFACE) failed: %s]\n", usb->desc, strerror(errno));
+            D("[ usb ioctl(%d, USBDEVFS_CLAIMINTERFACE) failed: %s]\n",
+              usb->desc, strerror(errno));
             adb_close(usb->desc);
             free(usb);
             return;
@@ -627,18 +629,19 @@ static void register_device(const char* dev_name, const char* dev_path,
     }
 
     // Read the device's serial number.
-    std::string serial_path =
-            android::base::StringPrintf("/sys/bus/usb/devices/%s/serial", dev_path + 4);
+    std::string serial_path = android::base::StringPrintf(
+        "/sys/bus/usb/devices/%s/serial", dev_path + 4);
     std::string serial;
     if (!android::base::ReadFileToString(serial_path, &serial)) {
         D("[ usb read %s failed: %s ]\n", serial_path.c_str(), strerror(errno));
-        adb_close(usb->desc);
-        free(usb);
-        return;
+        // We don't actually want to treat an unknown serial as an error because
+        // devices aren't able to communicate a serial number in early bringup.
+        // http://b/20883914
+        serial = "";
     }
     serial = android::base::Trim(serial);
 
-        /* add to the end of the active handles */
+    // Add to the end of the active handles.
     adb_mutex_lock(&usb_lock);
     usb->next = &handle_list;
     usb->prev = handle_list.prev;
@@ -649,20 +652,18 @@ static void register_device(const char* dev_name, const char* dev_path,
     register_usb_transport(usb, serial.c_str(), dev_path, usb->writeable);
 }
 
-static void* device_poll_thread(void* unused)
-{
+static void* device_poll_thread(void* unused) {
     D("Created device thread\n");
-    for(;;) {
-            /* XXX use inotify */
+    while (true) {
+        // TODO: Use inotify.
         find_usb_device("/dev/bus/usb", register_device);
         kick_disconnected_devices();
         sleep(1);
     }
-    return NULL;
+    return nullptr;
 }
 
-static void sigalrm_handler(int signo)
-{
+static void sigalrm_handler(int signo) {
     // don't need to do anything here
 }
 
