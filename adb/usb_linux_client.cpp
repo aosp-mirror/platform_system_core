@@ -495,6 +495,10 @@ void usb_init()
         usb_adb_init();
 }
 
+void usb_cleanup()
+{
+}
+
 int usb_write(usb_handle *h, const void *data, int len)
 {
     return h->write(h, data, len);
