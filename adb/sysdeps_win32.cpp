@@ -16,6 +16,9 @@
 
 #define TRACE_TAG TRACE_SYSDEPS
 
+// For whatever reason this blocks the definition of ToAscii...
+#undef NOGDI
+
 #include "sysdeps.h"
 
 #include <winsock2.h> /* winsock.h *must* be included before windows.h. */

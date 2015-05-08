@@ -80,36 +80,6 @@ void adb_set_tcp_name(const char* hostname)
     __adb_server_name = hostname;
 }
 
-int adb_get_emulator_console_port() {
-    if (__adb_serial) {
-        // The user specified a serial number; is it an emulator?
-        int port;
-        return (sscanf(__adb_serial, "emulator-%d", &port) == 1) ? port : -1;
-    }
-
-    // No specific device was given, so get the list of connected
-    // devices and search for emulators. If there's one, we'll
-    // take it. If there are more than one, that's an error.
-    std::string devices;
-    std::string error;
-    if (!adb_query("host:devices", &devices, &error)) {
-        printf("no emulator connected: %s\n", error.c_str());
-        return -1;
-    }
-
-    int port;
-    size_t emulator_count = 0;
-    for (auto& device : android::base::Split(devices, "\n")) {
-        if (sscanf(device.c_str(), "emulator-%d", &port) == 1) {
-            if (++emulator_count > 1) {
-                return -2;
-            }
-        }
-    }
-    if (emulator_count == 0) return -1;
-    return port;
-}
-
 static int switch_socket_transport(int fd, std::string* error) {
     std::string service;
     if (__adb_serial) {
