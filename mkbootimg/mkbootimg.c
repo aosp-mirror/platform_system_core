@@ -278,7 +278,7 @@ int main(int argc, char **argv)
     }
 
     if (get_id) {
-        print_id(sha, sizeof(hdr.id));
+        print_id((uint8_t *) hdr.id, sizeof(hdr.id));
     }
 
     return 0;
