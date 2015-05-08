@@ -696,7 +696,7 @@ int launch_server(int server_port)
 // Try to handle a network forwarding request.
 // This returns 1 on success, 0 on failure, and -1 to indicate this is not
 // a forwarding-related request.
-int handle_forward_request(const char* service, TransportType type, char* serial, int reply_fd)
+int handle_forward_request(const char* service, TransportType type, const char* serial, int reply_fd)
 {
     if (!strcmp(service, "list-forward")) {
         // Create the list of forward redirections.
@@ -796,7 +796,7 @@ int handle_forward_request(const char* service, TransportType type, char* serial
     return 0;
 }
 
-int handle_host_request(char *service, TransportType type, char* serial, int reply_fd, asocket *s)
+int handle_host_request(const char* service, TransportType type, const char* serial, int reply_fd, asocket *s)
 {
     if(!strcmp(service, "kill")) {
         fprintf(stderr,"adb server killed by remote request\n");
@@ -856,7 +856,7 @@ int handle_host_request(char *service, TransportType type, char* serial, int rep
     if (!strncmp(service, "disconnect:", 11)) {
         char buffer[4096];
         memset(buffer, 0, sizeof(buffer));
-        char* serial = service + 11;
+        const char* serial = service + 11;
         if (serial[0] == 0) {
             // disconnect from all TCP devices
             unregister_all_tcp_transports();
