@@ -310,6 +310,10 @@ static void find_usb_device(const char *base,
     closedir(busdir);
 }
 
+void usb_cleanup()
+{
+}
+
 static int usb_bulk_write(usb_handle *h, const void *data, int len)
 {
     struct usbdevfs_urb *urb = &h->urb_out;
