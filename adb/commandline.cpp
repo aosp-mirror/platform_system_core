@@ -263,23 +263,16 @@ static void stdin_raw_restore(int fd) {
 }
 #endif
 
-static void read_and_dump(int fd)
-{
-    char buf[4096];
-    int len;
-
-    while(fd >= 0) {
+static void read_and_dump(int fd) {
+    while (fd >= 0) {
         D("read_and_dump(): pre adb_read(fd=%d)\n", fd);
-        len = adb_read(fd, buf, 4096);
+        char buf[BUFSIZ];
+        int len = adb_read(fd, buf, sizeof(buf));
         D("read_and_dump(): post adb_read(fd=%d): len=%d\n", fd, len);
-        if(len == 0) {
+        if (len <= 0) {
             break;
         }
 
-        if(len < 0) {
-            if(errno == EINTR) continue;
-            break;
-        }
         fwrite(buf, 1, len, stdout);
         fflush(stdout);
     }
@@ -928,13 +921,13 @@ static void parse_push_pull_args(const char **arg, int narg, char const **path1,
 static int adb_connect_command(const std::string& command) {
     std::string error;
     int fd = adb_connect(command, &error);
-    if (fd != -1) {
-        read_and_dump(fd);
-        adb_close(fd);
-        return 0;
+    if (fd < 0) {
+        fprintf(stderr, "error: %s\n", error.c_str());
+        return 1;
     }
-    fprintf(stderr, "Error: %s\n", error.c_str());
-    return 1;
+    read_and_dump(fd);
+    adb_close(fd);
+    return 0;
 }
 
 static int adb_query_command(const std::string& command) {
@@ -1242,13 +1235,13 @@ int adb_commandline(int argc, const char **argv) {
              !strcmp(argv[0], "unroot") ||
              !strcmp(argv[0], "disable-verity") ||
              !strcmp(argv[0], "enable-verity")) {
-        char command[100];
+        std::string command;
         if (!strcmp(argv[0], "reboot-bootloader")) {
-            snprintf(command, sizeof(command), "reboot:bootloader");
+            command = "reboot:bootloader";
         } else if (argc > 1) {
-            snprintf(command, sizeof(command), "%s:%s", argv[0], argv[1]);
+            command = android::base::StringPrintf("%s:%s", argv[0], argv[1]);
         } else {
-            snprintf(command, sizeof(command), "%s:", argv[0]);
+            command = android::base::StringPrintf("%s:", argv[0]);
         }
         return adb_connect_command(command);
     }
