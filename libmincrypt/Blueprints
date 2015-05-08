@@ -1,0 +1,27 @@
+// Copyright 2008 The Android Open Source Project
+//
+
+cc_library_static {
+    name: "libmincrypt",
+    host_supported: true,
+    srcs: [
+        "dsa_sig.c",
+        "p256.c",
+        "p256_ec.c",
+        "p256_ecdsa.c",
+        "rsa.c",
+        "sha.c",
+        "sha256.c",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    // Clang's slp-vectorize phase has segmentation fault when compiling p256_ec.c.
+    clang_cflags: ["-fno-slp-vectorize"],
+}
+
+subdirs = [
+    "tools",
+    "test",
+]
