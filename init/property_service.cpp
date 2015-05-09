@@ -46,12 +46,18 @@
 #include <selinux/selinux.h>
 #include <selinux/label.h>
 
+#include <fs_mgr.h>
+#include <base/file.h>
+#include "bootimg.h"
+
 #include "property_service.h"
 #include "init.h"
 #include "util.h"
 #include "log.h"
 
 #define PERSISTENT_PROPERTY_DIR  "/data/property"
+#define FSTAB_PREFIX "/fstab."
+#define RECOVERY_MOUNT_POINT "/recovery"
 
 static int persistent_properties_loaded = 0;
 static bool property_area_initialized = false;
@@ -506,6 +512,46 @@ void load_persist_props(void) {
     load_persistent_properties();
 }
 
+void load_recovery_id_prop() {
+    char fstab_filename[PROP_VALUE_MAX + sizeof(FSTAB_PREFIX)];
+    char propbuf[PROP_VALUE_MAX];
+    int ret = property_get("ro.hardware", propbuf);
+    if (!ret) {
+        ERROR("ro.hardware not set - unable to load recovery id\n");
+        return;
+    }
+    snprintf(fstab_filename, sizeof(fstab_filename), FSTAB_PREFIX "%s", propbuf);
+
+    std::unique_ptr<fstab, void(*)(fstab*)> tab(fs_mgr_read_fstab(fstab_filename),
+            fs_mgr_free_fstab);
+    if (!tab) {
+        ERROR("unable to read fstab %s: %s\n", fstab_filename, strerror(errno));
+        return;
+    }
+
+    fstab_rec* rec = fs_mgr_get_entry_for_mount_point(tab.get(), RECOVERY_MOUNT_POINT);
+    if (rec == NULL) {
+        ERROR("/recovery not specified in fstab\n");
+        return;
+    }
+
+    int fd = open(rec->blk_device, O_RDONLY);
+    if (fd == -1) {
+        ERROR("error opening block device %s: %s\n", rec->blk_device, strerror(errno));
+        return;
+    }
+
+    boot_img_hdr hdr;
+    if (android::base::ReadFully(fd, &hdr, sizeof(hdr))) {
+        std::string hex = bytes_to_hex(reinterpret_cast<uint8_t*>(hdr.id), sizeof(hdr.id));
+        property_set("ro.recovery_id", hex.c_str());
+    } else {
+        ERROR("error reading /recovery: %s\n", strerror(errno));
+    }
+
+    close(fd);
+}
+
 void load_all_props() {
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
     load_properties_from_file(PROP_PATH_VENDOR_BUILD, NULL);
@@ -515,6 +561,8 @@ void load_all_props() {
 
     /* Read persistent properties after all default values have been loaded. */
     load_persistent_properties();
+
+    load_recovery_id_prop();
 }
 
 void start_property_service() {
