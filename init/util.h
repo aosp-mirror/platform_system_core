@@ -62,4 +62,5 @@ void import_kernel_cmdline(bool in_qemu, std::function<void(char*,bool)>);
 int make_dir(const char *path, mode_t mode);
 int restorecon(const char *pathname);
 int restorecon_recursive(const char *pathname);
+std::string bytes_to_hex(const uint8_t *bytes, size_t bytes_len);
 #endif
