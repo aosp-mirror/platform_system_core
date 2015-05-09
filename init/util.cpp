@@ -37,6 +37,7 @@
 
 /* for ANDROID_SOCKET_* */
 #include <cutils/sockets.h>
+#include <base/stringprintf.h>
 
 #include <private/android_filesystem_config.h>
 
@@ -449,3 +450,14 @@ int restorecon_recursive(const char* pathname)
 {
     return selinux_android_restorecon(pathname, SELINUX_ANDROID_RESTORECON_RECURSE);
 }
+
+/*
+ * Writes hex_len hex characters (1/2 byte) to hex from bytes.
+ */
+std::string bytes_to_hex(const uint8_t* bytes, size_t bytes_len) {
+    std::string hex("0x");
+    for (size_t i = 0; i < bytes_len; i++)
+        android::base::StringAppendF(&hex, "%02x", bytes[i]);
+    return hex;
+}
+
