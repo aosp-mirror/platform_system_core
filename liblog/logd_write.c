@@ -310,7 +310,8 @@ static const char *LOG_NAME[LOG_ID_MAX] = {
     [LOG_ID_RADIO] = "radio",
     [LOG_ID_EVENTS] = "events",
     [LOG_ID_SYSTEM] = "system",
-    [LOG_ID_CRASH] = "crash"
+    [LOG_ID_CRASH] = "crash",
+    [LOG_ID_KERNEL] = "kernel",
 };
 
 const char *android_log_id_to_name(log_id_t log_id)
