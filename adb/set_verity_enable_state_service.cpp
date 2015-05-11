@@ -86,7 +86,7 @@ static int set_verity_enabled_state(int fd, const char *block_device,
     int device = -1;
     int retval = -1;
 
-    if (make_block_device_writable(block_device)) {
+    if (!make_block_device_writable(block_device)) {
         WriteFdFmt(fd, "Could not make block device %s writable (%s).\n",
                    block_device, strerror(errno));
         goto errout;
