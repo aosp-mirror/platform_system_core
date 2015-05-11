@@ -618,16 +618,15 @@ void connect_emulator(const std::string& port_spec, std::string* response) {
     }
 }
 
-static void connect_service(int fd, void* cookie)
-{
-    char *host = reinterpret_cast<char*>(cookie);
-
+static void connect_service(int fd, void* data) {
+    char* host = reinterpret_cast<char*>(data);
     std::string response;
     if (!strncmp(host, "emu:", 4)) {
         connect_emulator(host + 4, &response);
     } else {
         connect_device(host, &response);
     }
+    free(host);
 
     // Send response for emulator and device
     SendProtocolString(fd, response);
@@ -664,6 +663,9 @@ asocket*  host_service_to_socket(const char*  name, const char *serial)
             sinfo->transport_type = kTransportAny;
             sinfo->state = CS_DEVICE;
         } else {
+            if (sinfo->serial) {
+                free(sinfo->serial);
+            }
             free(sinfo);
             return NULL;
         }
@@ -671,8 +673,8 @@ asocket*  host_service_to_socket(const char*  name, const char *serial)
         int fd = create_service_thread(wait_for_state, sinfo);
         return create_local_socket(fd);
     } else if (!strncmp(name, "connect:", 8)) {
-        const char *host = name + 8;
-        int fd = create_service_thread(connect_service, (void *)host);
+        char* host = strdup(name + 8);
+        int fd = create_service_thread(connect_service, host);
         return create_local_socket(fd);
     }
     return NULL;
