@@ -34,10 +34,6 @@
 #include "adb_utils.h"
 #include "cutils/properties.h"
 
-static int system_ro = 1;
-static int vendor_ro = 1;
-static int oem_ro = 1;
-
 // Returns the device used to mount a directory in /proc/mounts.
 static std::string find_mount(const char* dir) {
     std::unique_ptr<FILE, int(*)(FILE*)> fp(setmntent("/proc/mounts", "r"), endmntent);
@@ -54,40 +50,33 @@ static std::string find_mount(const char* dir) {
     return "";
 }
 
-int make_block_device_writable(const std::string& dev) {
+bool make_block_device_writable(const std::string& dev) {
     int fd = unix_open(dev.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd == -1) {
-        return -1;
+        return false;
     }
 
-    int result = -1;
     int OFF = 0;
-    if (!ioctl(fd, BLKROSET, &OFF)) {
-        result = 0;
-    }
+    bool result = (ioctl(fd, BLKROSET, &OFF) != -1);
     adb_close(fd);
-
     return result;
 }
 
-// Init mounts /system as read only, remount to enable writes.
-static int remount(const char* dir, int* dir_ro) {
-    std::string dev = find_mount(dir);
-    if (dev.empty() || make_block_device_writable(dev)) {
-        return -1;
-    }
-
-    int rc = mount(dev.c_str(), dir, "none", MS_REMOUNT, NULL);
-    *dir_ro = rc;
-    return rc;
-}
-
-static bool remount_partition(int fd, const char* partition, int* ro) {
-    if (!directory_exists(partition)) {
+static bool remount_partition(int fd, const char* dir) {
+    if (!directory_exists(dir)) {
         return true;
     }
-    if (remount(partition, ro)) {
-        WriteFdFmt(fd, "remount of %s failed: %s\n", partition, strerror(errno));
+    std::string dev = find_mount(dir);
+    if (dev.empty()) {
+        return true;
+    }
+    if (!make_block_device_writable(dev)) {
+        WriteFdFmt(fd, "remount of %s failed; couldn't make block device %s writable: %s\n",
+                   dir, dev.c_str(), strerror(errno));
+        return false;
+    }
+    if (mount(dev.c_str(), dir, "none", MS_REMOUNT, nullptr) == -1) {
+        WriteFdFmt(fd, "remount of %s failed: %s\n", dir, strerror(errno));
         return false;
     }
     return true;
@@ -123,9 +112,9 @@ void remount_service(int fd, void* cookie) {
     }
 
     bool success = true;
-    success &= remount_partition(fd, "/system", &system_ro);
-    success &= remount_partition(fd, "/vendor", &vendor_ro);
-    success &= remount_partition(fd, "/oem", &oem_ro);
+    success &= remount_partition(fd, "/system");
+    success &= remount_partition(fd, "/vendor");
+    success &= remount_partition(fd, "/oem");
 
     WriteFdExactly(fd, success ? "remount succeeded\n" : "remount failed\n");
 
