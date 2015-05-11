@@ -19,7 +19,7 @@
 
 #include <string>
 
-int make_block_device_writable(const std::string&);
+bool make_block_device_writable(const std::string&);
 void remount_service(int, void*);
 
 #endif
