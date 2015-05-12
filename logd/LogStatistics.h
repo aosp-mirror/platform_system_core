@@ -154,8 +154,6 @@ struct UidEntry : public EntryBaseDropped {
 };
 
 namespace android {
-// caller must own and free character string
-char *pidToName(pid_t pid);
 uid_t pidToUid(pid_t pid);
 }
 
@@ -209,7 +207,28 @@ struct PidEntry : public EntryBaseDropped {
         }
         EntryBaseDropped::add(e);
     }
+};
 
+struct TagEntry : public EntryBase {
+    const uint32_t tag;
+    uid_t uid;
+
+    TagEntry(LogBufferElement *e):
+        EntryBase(e),
+        tag(e->getTag()),
+        uid(e->getUid()) { }
+
+    const uint32_t&getKey() const { return tag; }
+    const uid_t&getUid() const { return uid; }
+    const char*getName() const { return android::tagToName(tag); }
+
+    inline void add(LogBufferElement *e) {
+        uid_t u = e->getUid();
+        if (uid != u) {
+            uid = -1;
+        }
+        EntryBase::add(e);
+    }
 };
 
 // Log Statistics
@@ -227,6 +246,10 @@ class LogStatistics {
     // pid to uid list
     typedef LogHashtable<pid_t, PidEntry> pidTable_t;
     pidTable_t pidTable;
+
+    // tag list
+    typedef LogHashtable<uint32_t, TagEntry> tagTable_t;
+    tagTable_t tagTable;
 
 public:
     LogStatistics();
