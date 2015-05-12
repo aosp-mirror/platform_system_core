@@ -38,16 +38,16 @@ static const char priority_message[] = { KMSG_PRIORITY(LOG_INFO), '\0' };
 
 log_time LogKlog::correction = log_time(CLOCK_REALTIME) - log_time(CLOCK_MONOTONIC);
 
-LogKlog::LogKlog(LogBuffer *buf, LogReader *reader, int fdWrite, int fdRead, bool auditd)
-        : SocketListener(fdRead, false)
-        , logbuf(buf)
-        , reader(reader)
-        , signature(CLOCK_MONOTONIC)
-        , fdWrite(fdWrite)
-        , fdRead(fdRead)
-        , initialized(false)
-        , enableLogging(true)
-        , auditd(auditd) {
+LogKlog::LogKlog(LogBuffer *buf, LogReader *reader, int fdWrite, int fdRead, bool auditd) :
+        SocketListener(fdRead, false),
+        logbuf(buf),
+        reader(reader),
+        signature(CLOCK_MONOTONIC),
+        fdWrite(fdWrite),
+        fdRead(fdRead),
+        initialized(false),
+        enableLogging(true),
+        auditd(auditd) {
     static const char klogd_message[] = "%slogd.klogd: %" PRIu64 "\n";
     char buffer[sizeof(priority_message) + sizeof(klogd_message) + 20 - 4];
     snprintf(buffer, sizeof(buffer), klogd_message, priority_message,
