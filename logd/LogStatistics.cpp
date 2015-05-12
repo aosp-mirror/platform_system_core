@@ -26,8 +26,7 @@
 
 #include "LogStatistics.h"
 
-LogStatistics::LogStatistics()
-        : enable(false) {
+LogStatistics::LogStatistics() : enable(false) {
     log_id_for_each(id) {
         mSizes[id] = 0;
         mElements[id] = 0;

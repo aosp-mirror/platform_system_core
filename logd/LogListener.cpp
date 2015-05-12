@@ -28,11 +28,11 @@
 
 #include "LogListener.h"
 
-LogListener::LogListener(LogBuffer *buf, LogReader *reader)
-        : SocketListener(getLogSocket(), false)
-        , logbuf(buf)
-        , reader(reader)
-{  }
+LogListener::LogListener(LogBuffer *buf, LogReader *reader) :
+        SocketListener(getLogSocket(), false),
+        logbuf(buf),
+        reader(reader) {
+}
 
 bool LogListener::onDataAvailable(SocketClient *cli) {
     static bool name_set;

@@ -37,12 +37,12 @@
     '0' + LOG_MAKEPRI(LOG_AUTH, LOG_PRI(PRI)) % 10, \
     '>'
 
-LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg)
-        : SocketListener(getLogSocket(), false)
-        , logbuf(buf)
-        , reader(reader)
-        , fdDmesg(fdDmesg)
-        , initialized(false) {
+LogAudit::LogAudit(LogBuffer *buf, LogReader *reader, int fdDmesg) :
+        SocketListener(getLogSocket(), false),
+        logbuf(buf),
+        reader(reader),
+        fdDmesg(fdDmesg),
+        initialized(false) {
     static const char auditd_message[] = { KMSG_PRIORITY(LOG_INFO),
         'l', 'o', 'g', 'd', '.', 'a', 'u', 'd', 'i', 't', 'd', ':',
         ' ', 's', 't', 'a', 'r', 't', '\n' };

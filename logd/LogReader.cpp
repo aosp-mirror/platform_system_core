@@ -24,10 +24,10 @@
 #include "LogReader.h"
 #include "FlushCommand.h"
 
-LogReader::LogReader(LogBuffer *logbuf)
-        : SocketListener(getLogSocket(), true)
-        , mLogbuf(*logbuf)
-{ }
+LogReader::LogReader(LogBuffer *logbuf) :
+        SocketListener(getLogSocket(), true),
+        mLogbuf(*logbuf) {
+}
 
 // When we are notified a new log entry is available, inform
 // all of our listening sockets.
@@ -116,14 +116,14 @@ bool LogReader::onDataAvailable(SocketClient *cli) {
             uint64_t last;
 
         public:
-            LogFindStart(unsigned logMask, pid_t pid, log_time &start, uint64_t &sequence)
-                    : mPid(pid)
-                    , mLogMask(logMask)
-                    , startTimeSet(false)
-                    , start(start)
-                    , sequence(sequence)
-                    , last(sequence)
-            { }
+            LogFindStart(unsigned logMask, pid_t pid, log_time &start, uint64_t &sequence) :
+                    mPid(pid),
+                    mLogMask(logMask),
+                    startTimeSet(false),
+                    start(start),
+                    sequence(sequence),
+                    last(sequence) {
+            }
 
             static int callback(const LogBufferElement *element, void *obj) {
                 LogFindStart *me = reinterpret_cast<LogFindStart *>(obj);
