@@ -131,7 +131,11 @@ char *LogStatistics::uidToName(uid_t uid) {
     }
 
     // Parse /data/system/packages.list
-    char *name = android::uidToName(uid);
+    uid_t userId = uid % AID_USER;
+    char *name = android::uidToName(userId);
+    if (!name && (userId > (AID_SHARED_GID_START - AID_APP))) {
+        name = android::uidToName(userId - (AID_SHARED_GID_START - AID_APP));
+    }
     if (name) {
         return name;
     }
@@ -149,7 +153,8 @@ char *LogStatistics::uidToName(uid_t uid) {
                     name = strdup(n);
                 } else if (strcmp(name, n)) {
                     free(name);
-                    return NULL;
+                    name = NULL;
+                    break;
                 }
             }
         }
