@@ -382,13 +382,13 @@ static void parse_new_section(struct parse_state *state, int kw,
 
 static void parse_config(const char *fn, const std::string& data)
 {
-    struct parse_state state;
     struct listnode import_list;
     struct listnode *node;
     char *args[INIT_PARSER_MAXARGS];
-    int nargs;
 
-    nargs = 0;
+    int nargs = 0;
+
+    parse_state state;
     state.filename = fn;
     state.line = 0;
     state.ptr = strdup(data.c_str());  // TODO: fix this code!
@@ -444,6 +444,7 @@ int init_parse_config_file(const char* path) {
         return -1;
     }
 
+    data.push_back('\n'); // TODO: fix parse_config.
     parse_config(path, data);
     dump_parser_state();
 
