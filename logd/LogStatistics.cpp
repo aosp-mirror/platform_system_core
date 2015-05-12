@@ -80,6 +80,11 @@ void LogStatistics::add(LogBufferElement *e) {
     }
 
     pidTable.add(e->getPid(), e);
+
+    uint32_t tag = e->getTag();
+    if (tag) {
+        tagTable.add(tag, e);
+    }
 }
 
 void LogStatistics::subtract(LogBufferElement *e) {
@@ -95,6 +100,11 @@ void LogStatistics::subtract(LogBufferElement *e) {
     }
 
     pidTable.subtract(e->getPid(), e);
+
+    uint32_t tag = e->getTag();
+    if (tag) {
+        tagTable.subtract(tag, e);
+    }
 }
 
 // Atomically set an entry to drop
@@ -368,6 +378,51 @@ void LogStatistics::format(char **buf, uid_t uid, unsigned int logMask) {
             if (dropped) {
                 pruned.appendFormat("%zu", dropped);
             }
+
+            format_line(output, name, size, pruned);
+        }
+    }
+
+    if (enable && (logMask & (1 << LOG_ID_EVENTS))) {
+        // Tag table
+        bool headerPrinted = false;
+        std::unique_ptr<const TagEntry *[]> sorted = tagTable.sort(maximum_sorted_entries);
+        ssize_t index = -1;
+        while ((index = tagTable.next(index, sorted, maximum_sorted_entries)) >= 0) {
+            const TagEntry *entry = sorted[index];
+            uid_t u = entry->getUid();
+            if ((uid != AID_ROOT) && (u != uid)) {
+                continue;
+            }
+
+            android::String8 pruned("");
+
+            if (!headerPrinted) {
+                output.appendFormat("\n\n");
+                android::String8 name("Chattiest events log buffer TAGs:");
+                android::String8 size("Size");
+                format_line(output, name, size, pruned);
+
+                name.setTo("    TAG/UID   TAGNAME");
+                size.setTo("BYTES");
+                format_line(output, name, size, pruned);
+
+                headerPrinted = true;
+            }
+
+            android::String8 name("");
+            if (u == (uid_t)-1) {
+                name.appendFormat("%7u", entry->getKey());
+            } else {
+                name.appendFormat("%7u/%u", entry->getKey(), u);
+            }
+            const char *n = entry->getName();
+            if (n) {
+                name.appendFormat("%*s%s", (int)std::max(14 - name.length(), (size_t)1), "", n);
+            }
+
+            android::String8 size("");
+            size.appendFormat("%zu", entry->getSizes());
 
             format_line(output, name, size, pruned);
         }

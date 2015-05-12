@@ -35,6 +35,7 @@
 #include <cutils/properties.h>
 #include <cutils/sched_policy.h>
 #include <cutils/sockets.h>
+#include <log/event_tag_map.h>
 #include <private/android_filesystem_config.h>
 
 #include "CommandListener.h"
@@ -236,6 +237,23 @@ char *android::uidToName(uid_t u) {
 // and as a function that can be provided to signal().
 void reinit_signal_handler(int /*signal*/) {
     sem_post(&reinit);
+}
+
+// tagToName converts an events tag into a name
+const char *android::tagToName(uint32_t tag) {
+    static const EventTagMap *map;
+
+    if (!map) {
+        sem_wait(&sem_name);
+        if (!map) {
+            map = android_openEventTagMap(EVENT_TAG_MAP_FILE);
+        }
+        sem_post(&sem_name);
+        if (!map) {
+            return NULL;
+        }
+    }
+    return android_lookupEventTag(map, tag);
 }
 
 // Foreground waits for exit of the main persistent threads
