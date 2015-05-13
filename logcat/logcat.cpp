@@ -235,7 +235,7 @@ static void show_help(const char *cmd)
                     "  -r <kbytes>     Rotate log every kbytes. Requires -f\n"
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
                     "  -v <format>     Sets the log print format, where <format> is:\n\n"
-                    "                  brief color long process raw tag thread threadtime time\n\n"
+                    "                  brief color long process raw tag thread threadtime time usec\n\n"
                     "  -D              print dividers between each log buffer\n"
                     "  -c              clear (flush) the entire log and exit\n"
                     "  -d              dump the log and then exit (don't block)\n"
@@ -291,9 +291,7 @@ static int setLogFormat(const char * formatString)
         return -1;
     }
 
-    android_log_setPrintFormat(g_logformat, format);
-
-    return 0;
+    return android_log_setPrintFormat(g_logformat, format);
 }
 
 static const char multipliers[][2] = {
@@ -569,10 +567,7 @@ int main(int argc, char **argv)
                 if (err < 0) {
                     logcat_panic(true, "Invalid parameter %s to -v\n", optarg);
                 }
-
-                if (strcmp("color", optarg)) { // exception for modifiers
-                    hasSetLogFormat = 1;
-                }
+                hasSetLogFormat |= err;
             break;
 
             case 'Q':

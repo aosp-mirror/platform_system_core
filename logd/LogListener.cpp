@@ -28,11 +28,11 @@
 
 #include "LogListener.h"
 
-LogListener::LogListener(LogBuffer *buf, LogReader *reader)
-        : SocketListener(getLogSocket(), false)
-        , logbuf(buf)
-        , reader(reader)
-{  }
+LogListener::LogListener(LogBuffer *buf, LogReader *reader) :
+        SocketListener(getLogSocket(), false),
+        logbuf(buf),
+        reader(reader) {
+}
 
 bool LogListener::onDataAvailable(SocketClient *cli) {
     static bool name_set;
@@ -88,7 +88,7 @@ bool LogListener::onDataAvailable(SocketClient *cli) {
     }
 
     android_log_header_t *header = reinterpret_cast<android_log_header_t *>(buffer);
-    if (/* header->id < LOG_ID_MIN || */ header->id >= LOG_ID_MAX) {
+    if (/* header->id < LOG_ID_MIN || */ header->id >= LOG_ID_MAX || header->id == LOG_ID_KERNEL) {
         return false;
     }
 

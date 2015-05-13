@@ -36,7 +36,9 @@ typedef enum {
     FORMAT_TIME,
     FORMAT_THREADTIME,
     FORMAT_LONG,
-    FORMAT_COLOR,
+    /* The following two are modifiers to above formats */
+    FORMAT_MODIFIER_COLOR,     /* converts priority to color */
+    FORMAT_MODIFIER_TIME_USEC, /* switches from msec to usec time precision */
 } AndroidLogPrintFormat;
 
 typedef struct AndroidLogFormat_t AndroidLogFormat;
@@ -56,7 +58,8 @@ AndroidLogFormat *android_log_format_new();
 
 void android_log_format_free(AndroidLogFormat *p_format);
 
-void android_log_setPrintFormat(AndroidLogFormat *p_format, 
+/* currently returns 0 if format is a modifier, 1 if not */
+int android_log_setPrintFormat(AndroidLogFormat *p_format,
         AndroidLogPrintFormat format);
 
 /**
@@ -64,7 +67,7 @@ void android_log_setPrintFormat(AndroidLogFormat *p_format,
  */
 AndroidLogPrintFormat android_log_formatFromString(const char *s);
 
-/** 
+/**
  * filterExpression: a single filter expression
  * eg "AT:d"
  *
@@ -74,12 +77,12 @@ AndroidLogPrintFormat android_log_formatFromString(const char *s);
  *
  */
 
-int android_log_addFilterRule(AndroidLogFormat *p_format, 
+int android_log_addFilterRule(AndroidLogFormat *p_format,
         const char *filterExpression);
 
 
-/** 
- * filterString: a whitespace-separated set of filter expressions 
+/**
+ * filterString: a whitespace-separated set of filter expressions
  * eg "AT:d *:i"
  *
  * returns 0 on success and -1 on invalid expression
@@ -92,7 +95,7 @@ int android_log_addFilterString(AndroidLogFormat *p_format,
         const char *filterString);
 
 
-/** 
+/**
  * returns 1 if this log line should be printed based on its priority
  * and tag, and 0 if it should not
  */
@@ -129,7 +132,7 @@ int android_log_processBinaryLogBuffer(struct logger_entry *buf,
  * Returns NULL on malloc error
  */
 
-char *android_log_formatLogLine (    
+char *android_log_formatLogLine (
     AndroidLogFormat *p_format,
     char *defaultBuffer,
     size_t defaultBufferSize,

@@ -43,6 +43,7 @@ struct AndroidLogFormat_t {
     FilterInfo *filters;
     AndroidLogPrintFormat format;
     bool colored_output;
+    bool usec_time_output;
 };
 
 /*
@@ -185,6 +186,7 @@ AndroidLogFormat *android_log_format_new()
     p_ret->global_pri = ANDROID_LOG_VERBOSE;
     p_ret->format = FORMAT_BRIEF;
     p_ret->colored_output = false;
+    p_ret->usec_time_output = false;
 
     return p_ret;
 }
@@ -207,13 +209,19 @@ void android_log_format_free(AndroidLogFormat *p_format)
 
 
 
-void android_log_setPrintFormat(AndroidLogFormat *p_format,
+int android_log_setPrintFormat(AndroidLogFormat *p_format,
         AndroidLogPrintFormat format)
 {
-    if (format == FORMAT_COLOR)
+    if (format == FORMAT_MODIFIER_COLOR) {
         p_format->colored_output = true;
-    else
-        p_format->format = format;
+        return 0;
+    }
+    if (format == FORMAT_MODIFIER_TIME_USEC) {
+        p_format->usec_time_output = true;
+        return 0;
+    }
+    p_format->format = format;
+    return 1;
 }
 
 /**
@@ -231,7 +239,8 @@ AndroidLogPrintFormat android_log_formatFromString(const char * formatString)
     else if (strcmp(formatString, "time") == 0) format = FORMAT_TIME;
     else if (strcmp(formatString, "threadtime") == 0) format = FORMAT_THREADTIME;
     else if (strcmp(formatString, "long") == 0) format = FORMAT_LONG;
-    else if (strcmp(formatString, "color") == 0) format = FORMAT_COLOR;
+    else if (strcmp(formatString, "color") == 0) format = FORMAT_MODIFIER_COLOR;
+    else if (strcmp(formatString, "usec") == 0) format = FORMAT_MODIFIER_TIME_USEC;
     else format = FORMAT_OFF;
 
     return format;
@@ -745,7 +754,7 @@ char *android_log_formatLogLine (
     struct tm tmBuf;
 #endif
     struct tm* ptm;
-    char timeBuf[32];
+    char timeBuf[32]; /* good margin, 23+nul for msec, 26+nul for usec */
     char prefixBuf[128], suffixBuf[128];
     char priChar;
     int prefixSuffixIsHeaderFooter = 0;
@@ -771,6 +780,14 @@ char *android_log_formatLogLine (
 #endif
     //strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", ptm);
     strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", ptm);
+    len = strlen(timeBuf);
+    if (p_format->usec_time_output) {
+        snprintf(timeBuf + len, sizeof(timeBuf) - len,
+                 ".%06ld", entry->tv_nsec / 1000);
+    } else {
+        snprintf(timeBuf + len, sizeof(timeBuf) - len,
+                 ".%03ld", entry->tv_nsec / 1000000);
+    }
 
     /*
      * Construct a buffer containing the log header and log message.
@@ -811,23 +828,21 @@ char *android_log_formatLogLine (
             break;
         case FORMAT_TIME:
             len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
-                "%s.%03ld %c/%-8s(%5d): ", timeBuf, entry->tv_nsec / 1000000,
-                priChar, entry->tag, entry->pid);
+                "%s %c/%-8s(%5d): ", timeBuf, priChar, entry->tag, entry->pid);
             strcpy(suffixBuf + suffixLen, "\n");
             ++suffixLen;
             break;
         case FORMAT_THREADTIME:
             len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
-                "%s.%03ld %5d %5d %c %-8s: ", timeBuf, entry->tv_nsec / 1000000,
+                "%s %5d %5d %c %-8s: ", timeBuf,
                 entry->pid, entry->tid, priChar, entry->tag);
             strcpy(suffixBuf + suffixLen, "\n");
             ++suffixLen;
             break;
         case FORMAT_LONG:
             len = snprintf(prefixBuf + prefixLen, sizeof(prefixBuf) - prefixLen,
-                "[ %s.%03ld %5d:%5d %c/%-8s ]\n",
-                timeBuf, entry->tv_nsec / 1000000, entry->pid,
-                entry->tid, priChar, entry->tag);
+                "[ %s %5d:%5d %c/%-8s ]\n",
+                timeBuf, entry->pid, entry->tid, priChar, entry->tag);
             strcpy(suffixBuf + suffixLen, "\n\n");
             suffixLen += 2;
             prefixSuffixIsHeaderFooter = 1;
