@@ -126,8 +126,7 @@ void LogBuffer::init() {
     }
 }
 
-LogBuffer::LogBuffer(LastLogTimes *times)
-        : mTimes(*times) {
+LogBuffer::LogBuffer(LastLogTimes *times) : mTimes(*times) {
     pthread_mutex_init(&mLogElementsLock, NULL);
 
     init();

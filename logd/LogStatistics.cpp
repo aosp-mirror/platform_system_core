@@ -26,8 +26,7 @@
 
 #include "LogStatistics.h"
 
-LogStatistics::LogStatistics()
-        : enable(false) {
+LogStatistics::LogStatistics() : enable(false) {
     log_id_for_each(id) {
         mSizes[id] = 0;
         mElements[id] = 0;
@@ -41,8 +40,8 @@ namespace android {
 // caller must own and free character string
 char *pidToName(pid_t pid) {
     char *retval = NULL;
-    if (pid == 0) { // special case from auditd for kernel
-        retval = strdup("logd.auditd");
+    if (pid == 0) { // special case from auditd/klogd for kernel
+        retval = strdup("logd");
     } else {
         char buffer[512];
         snprintf(buffer, sizeof(buffer), "/proc/%u/cmdline", pid);
@@ -70,10 +69,14 @@ void LogStatistics::add(LogBufferElement *e) {
     mSizes[log_id] += size;
     ++mElements[log_id];
 
-    uidTable[log_id].add(e->getUid(), e);
-
     mSizesTotal[log_id] += size;
     ++mElementsTotal[log_id];
+
+    if (log_id == LOG_ID_KERNEL) {
+        return;
+    }
+
+    uidTable[log_id].add(e->getUid(), e);
 
     if (!enable) {
         return;
@@ -92,6 +95,10 @@ void LogStatistics::subtract(LogBufferElement *e) {
     unsigned short size = e->getMsgLen();
     mSizes[log_id] -= size;
     --mElements[log_id];
+
+    if (log_id == LOG_ID_KERNEL) {
+        return;
+    }
 
     uidTable[log_id].subtract(e->getUid(), e);
 

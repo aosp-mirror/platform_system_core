@@ -26,24 +26,23 @@ pthread_mutex_t LogTimeEntry::timesLock = PTHREAD_MUTEX_INITIALIZER;
 LogTimeEntry::LogTimeEntry(LogReader &reader, SocketClient *client,
                            bool nonBlock, unsigned long tail,
                            unsigned int logMask, pid_t pid,
-                           uint64_t start)
-        : mRefCount(1)
-        , mRelease(false)
-        , mError(false)
-        , threadRunning(false)
-        , mReader(reader)
-        , mLogMask(logMask)
-        , mPid(pid)
-        , mCount(0)
-        , mTail(tail)
-        , mIndex(0)
-        , mClient(client)
-        , mStart(start)
-        , mNonBlock(nonBlock)
-        , mEnd(LogBufferElement::getCurrentSequence())
-{
-        pthread_cond_init(&threadTriggeredCondition, NULL);
-        cleanSkip_Locked();
+                           uint64_t start) :
+        mRefCount(1),
+        mRelease(false),
+        mError(false),
+        threadRunning(false),
+        mReader(reader),
+        mLogMask(logMask),
+        mPid(pid),
+        mCount(0),
+        mTail(tail),
+        mIndex(0),
+        mClient(client),
+        mStart(start),
+        mNonBlock(nonBlock),
+        mEnd(LogBufferElement::getCurrentSequence()) {
+    pthread_cond_init(&threadTriggeredCondition, NULL);
+    cleanSkip_Locked();
 }
 
 void LogTimeEntry::startReader_Locked(void) {
