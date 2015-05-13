@@ -4,9 +4,12 @@ name                       type default  description
 logd.auditd                 bool  true   Enable selinux audit daemon
 logd.auditd.dmesg           bool  true   selinux audit messages duplicated and
                                          sent on to dmesg log
+logd.klogd                  bool depends Enable klogd daemon
 logd.statistics             bool depends Enable logcat -S statistics.
-ro.config.low_ram           bool  false  if true, logd.statistics default false
-ro.build.type               string       if user, logd.statistics default false
+ro.config.low_ram           bool  false  if true, logd.statistics & logd.klogd
+                                         default false
+ro.build.type               string       if user, logd.statistics & logd.klogd
+                                         default false
 persist.logd.size          number 256K   default size of the buffer for all
                                          log ids at initial startup, at runtime
                                          use: logcat -b all -G <value>
